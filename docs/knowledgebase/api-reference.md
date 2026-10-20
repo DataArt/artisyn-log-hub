@@ -309,6 +309,15 @@ interface PostLogsQuery {
                             //   uploads (value = the wf-id folder name, e.g. "wf_b4978a0b-2af")
                             //   sets workflow_run_id on the sessions row at upsert time,
                             //   independently of parentSessionId (both can be set on one row)
+  snapshotId?: string;      // optional; sent by hook 2.22.0+ on every artisyn upload of the
+                            //   current session (harness snapshot, see
+                            //   docs/knowledgebase/hook-system-overview.md's "Context injection").
+                            //   64-char lowercase-hex, DD-2's content-addressed id. An invalid
+                            //   value (wrong shape) is silently ignored — never a 400 — and
+                            //   treated the same as if it were absent.
+  snapshotFull?: '1';       // optional; present only when the body's harness-snapshot line is
+                            //   the FULL snapshot (not just a harness-snapshot-ref). Ignored
+                            //   unless snapshotId is also present and valid.
 }
 // Request body: raw NDJSON stream, Content-Type: application/x-ndjson (required)
 //   AppModule registers express.text() for this content-type only; a body sent as
@@ -362,17 +371,29 @@ interface PostLogsChunkQuery {
                          //   ALWAYS uncompressed bytes, whatever encoding the chunks use,
                          //   so reassembly and upload_queue.size_bytes stay truthful.
 }
-response: { warnings: string[] } | { complete: boolean; warnings?: string[] }
-// Non-chunked path (no chunk params sent) — UNCHANGED: { warnings: string[] }.
+response: { warnings: string[]; unknownSnapshotId?: string } | { complete: boolean; warnings?: string[]; unknownSnapshotId?: string }
+// Non-chunked path (no chunk params sent) — otherwise UNCHANGED: { warnings: string[] }.
 //   warnings — one message per outstanding status='failed' upload_queue row for
 //   the calling API key's userId (from a PREVIOUS upload's parse/upsert
 //   failure), formatted "Hook uploaded broken file: <fileName> — <errorMessage>".
 //   Empty array when there are no outstanding failures. A malformed NDJSON
 //   body no longer 400s synchronously on this route — it becomes a failed
 //   queue row surfaced via this array on a later call instead.
-// Chunked path, intermediate chunk: { complete: false }
-// Chunked path, final chunk (the one completing the set): { complete: true, warnings: string[] }
-//   — same warnings semantics as the non-chunked path.
+//   unknownSnapshotId — additive, present only when ALL of (DD-8):
+//     - the request's snapshotId query param is present and format-valid;
+//     - snapshotFull was NOT '1' on this request (i.e. this was a ref-only upload);
+//     - the server has no harness_snapshots row for (this API key's userId, snapshotId);
+//     - the server has no upload_queue row for (userId, that snapshotId,
+//       status IN ('pending','processing','partially_uploaded')) either.
+//   Telling the hook "I don't have the body behind this id" is what makes it resend the
+//   full harness-snapshot line on its next upload (see hook-api-versioning.md). Never
+//   present when snapshotId was absent/invalid, or when this request itself carried
+//   snapshotFull=1 — the server does not ask back for what the same request just sent.
+// Chunked path, intermediate chunk: { complete: false } — unchanged, never carries unknownSnapshotId.
+// Chunked path, final chunk (the one completing the set): { complete: true, warnings: string[], unknownSnapshotId?: string }
+//   — same warnings/unknownSnapshotId semantics as the non-chunked path, evaluated once
+//   for the whole reassembled upload (every chunk carries the same snapshotId/snapshotFull
+//   query params — see hook-api-versioning.md).
 // Errors:
 //   400 — missing sessionId/type query param, or empty/non-string body;
 //         chunked path also 400s on: an incomplete uploadId/chunkIndex/totalChunks
@@ -2029,8 +2050,10 @@ response: ChangeSurfaceReportData
 // /reports/executive-summary and /reports/cache-read-ratio (team visibility gate applies).
 //
 // One row per harness element (skill/rule/MCP server/tool) the repo(s) have ever self-reported
-// via the hook's inventory events (skill-definitions/mcp-config/system-context), merged with
-// real per-session usage/token facts from session_harness_usage. `harness_elements` supplies
+// via the hook's harness-snapshot / harness-snapshot-ref lines (hook 2.22.0+; see
+// docs/knowledgebase/hook-system-overview.md's "Context injection" — the four older
+// skill-definitions/agent-definitions/mcp-config/system-context events are no longer sent or
+// read), merged with real per-session usage/token facts from session_harness_usage. `harness_elements` supplies
 // every zero-usage row; a usage fact with no matching inventory row still gets a row (e.g. an
 // old-hook MCP tool call with no self-reported inventory).
 //
@@ -2440,6 +2463,62 @@ interface SessionLogsResponse {
                                       // state (feature off -> failed -> unevaluated -> stale ->
                                       // evaluated, in that priority order) without an extra
                                       // fetch.
+  harnessSnapshot: HarnessSnapshot | null; // the root session's bound harness snapshot (DD-12),
+                                      // shaped exactly as the hook's `harness-snapshot` NDJSON
+                                      // line minus its `type` discriminant (DD-1) — see
+                                      // "Context injection" in hook-system-overview.md. null when
+                                      // the session has no bound snapshot_id, the referenced row
+                                      // no longer exists (DD-21's accepted race), or the session
+                                      // predates hook 2.22.0 (no backfill, DD-17). Same access
+                                      // checks as the rest of this response: owner, admin, team
+                                      // scope. Client type: HarnessSnapshot in
+                                      // client/src/viewer/api.ts; server type:
+                                      // HarnessSnapshotBody in server/src/logs/harness-snapshot.ts.
+}
+interface HarnessSnapshot {
+  snapshotId: string;
+  schemaVersion: number;
+  perToolDetailSupported: boolean;    // capability flag; NOT part of the snapshotId (DD-2)
+  skills: HarnessSnapshotSkill[];
+  agents: HarnessSnapshotAgent[];
+  mcpServers: HarnessSnapshotMcpServer[];
+  systemContext: { totalBytes: number; files: HarnessSnapshotFile[] } | null;
+}
+interface HarnessSnapshotSkill {
+  name: string;                       // plugin entries are "<pluginName>:<name>"
+  kind: 'skill' | 'workflow' | 'command';
+  source: 'project' | 'user' | 'plugin';
+  description: string;
+  argumentHint?: string;
+  body: string;                       // file text after frontmatter; workflow = whole .js text
+  path: string;                       // DD-3 path, shaped per source
+  bytes: number;
+  contentHash: string;                // sha256 hex of the raw UTF-8 file text
+  plugin?: { id: string; name: string; marketplace: string; version: string; gitCommitSha?: string };
+}
+interface HarnessSnapshotAgent {
+  name: string;
+  description: string;
+  body: string;
+  path: string;
+  bytes: number;
+  contentHash: string;
+  source: 'project';
+}
+interface HarnessSnapshotMcpServer {
+  name: string;
+  command: string;
+  args: string[];
+  url?: string;
+  configSource: 'project' | 'user';
+  connected?: boolean;                // absent on a ref-only resend (the probe never re-ran)
+  tools?: { name: string; schemaSizeTokens: number }[];
+}
+interface HarnessSnapshotFile {
+  path: string;
+  bytes: number;
+  contentHash: string;
+  content?: string;                   // rule-file contents only
 }
 interface TurnEndAdvisorResult {
   generatedAt: string;               // the run's startedAt, ISO 8601

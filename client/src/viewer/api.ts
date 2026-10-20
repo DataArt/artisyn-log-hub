@@ -1163,6 +1163,83 @@ export interface SessionRootStats {
   diffLinesTotalCalls: number;
 }
 
+/**
+ * DD-1 (`docs/tasks/todo/2026-10-16-sysctx-skill-source/impl-plan.md`): the hook's self-reported
+ * skill/agent/MCP/system-context inventory, read back verbatim from `harness_snapshots.body`
+ * (minus its `type` discriminant). Mirrors the server's `HarnessSnapshotBody`
+ * (`server/src/logs/harness-snapshot.ts`) and the hook's JSDoc `@typedef HarnessSnapshot`
+ * (`harness-snapshot.js`). Kept in sync by convention — the three packages are isolated (see
+ * `client.md`), so nothing imports across them.
+ */
+export interface HarnessSnapshotPlugin {
+  id: string;
+  name: string;
+  marketplace: string;
+  version: string;
+  gitCommitSha?: string;
+}
+
+export interface HarnessSnapshotSkill {
+  /** Plugin entries are `<pluginName>:<name>` (DD-1). */
+  name: string;
+  kind: 'skill' | 'workflow' | 'command';
+  source: 'project' | 'user' | 'plugin';
+  description: string;
+  argumentHint?: string;
+  /** File text after frontmatter; a workflow's `body` is the whole `.js` text. */
+  body: string;
+  /** DD-3 path, shaped per the entry's `source`. */
+  path: string;
+  bytes: number;
+  contentHash: string;
+  plugin?: HarnessSnapshotPlugin;
+}
+
+export interface HarnessSnapshotAgent {
+  name: string;
+  description: string;
+  body: string;
+  path: string;
+  bytes: number;
+  contentHash: string;
+  source: 'project';
+}
+
+export interface HarnessSnapshotMcpTool {
+  name: string;
+  schemaSizeTokens: number;
+}
+
+export interface HarnessSnapshotMcpServer {
+  name: string;
+  command: string;
+  args: string;
+  url?: string;
+  configSource?: 'project' | 'user';
+  /** `undefined` — the probe never ran for this snapshot (a ref-only resend). */
+  connected?: boolean;
+  tools?: HarnessSnapshotMcpTool[];
+}
+
+export interface HarnessSnapshotFile {
+  path: string;
+  bytes: number;
+  contentHash: string;
+  /** Rule file contents only (DD-13's `claudeMd`); other files carry no `content`. */
+  content?: string;
+}
+
+export interface HarnessSnapshot {
+  snapshotId: string;
+  schemaVersion: number;
+  /** Capability flag — explicitly NOT part of the DD-2 id. */
+  perToolDetailSupported: boolean;
+  skills: HarnessSnapshotSkill[];
+  agents: HarnessSnapshotAgent[];
+  mcpServers: HarnessSnapshotMcpServer[];
+  systemContext: { totalBytes: number; files: HarnessSnapshotFile[] } | null;
+}
+
 export interface SessionLogsData {
   main: Record<string, unknown>[];
   subagents: {
@@ -1224,6 +1301,12 @@ export interface SessionLogsData {
     currentWatermark: number | null;
     lastRun: SessionAttributionLastRun | null;
   };
+  /**
+   * DD-12: the root session's bound harness snapshot, loaded server-side from
+   * `harness_snapshots.body`. `null` when the session has no bound snapshot (old hook, or never
+   * uploaded) or the owning user's row is gone — there is no fallback or backfill (DD-17).
+   */
+  harnessSnapshot?: HarnessSnapshot | null;
 }
 
 export async function fetchSessionLogs(

@@ -181,130 +181,154 @@ evaluation at all.
 
 ---
 
-## Synthetic events injected at upload time
+## Harness snapshot — the one synthetic event injected at upload time
 
-Before uploading, `send-logs-hook.js` prepends synthetic events to the NDJSON payload. These are **never written to the local JSONL file** — they exist only in the uploaded payload, for the `artisyn` namespace only.
+Before uploading the *current session's own* `artisyn` file, `send-logs-hook.js` prepends one or
+two synthetic lines built from `harness-snapshot.js` + `skill-catalog.js`. These are **never
+written to the local JSONL file** — they exist only in the uploaded payload, for the `artisyn`
+namespace only, and only for the session's own current-run upload (a backlog session's re-upload
+carries neither line).
 
-### `system-context` — CLAUDE.md files and rules
-
-Reads all `CLAUDE.md` / `CLAUDE.local.md` files found in the project root and common subdirectories (`client/`, `server/`, `hook/`) plus any `.md` files in `.claude/rules/`. Rule files include their full `content` field.
+**`harness-snapshot-ref`** is sent on every such upload — just the id:
 
 ```json
-{
-  "type": "system-context",
-  "claudeMd": {
-    "totalBytes": 12800,
-    "files": [
-      { "path": "/project/CLAUDE.md", "bytes": 9800, "lastModified": 1749999000000 },
-      { "path": "/project/.claude/rules/installer.md", "bytes": 455, "lastModified": 1749999000000, "content": "# Rule content..." }
-    ]
-  }
-}
+{ "type": "harness-snapshot-ref", "snapshotId": "3f9c2a1e..." }
 ```
 
-### `skill-definitions` — project, personal and plugin skill definitions
-
-The catalog builder (`buildSkillDefinitions()`) lives in its own module, `skill-catalog.js` —
-shared with the turn-end-analysis worker (`post-turn-analysis-worker.js`), which resolves
-invoked skill names against the same catalog to attach their `description` to its `claude -p`
-prompts. `send-logs-hook.js` imports it unchanged; behavior for the two original sources below is
-identical to before the extraction.
-
-Collects skills from four sources:
-- **Project skills** — `.claude/skills/<name>/SKILL.md`, tagged `source: "project"`. Always wins
-  on a name clash with any other source.
-- **Personal skills** — `~/.claude/skills/<name>/SKILL.md`, tagged `source: "user"`.
-- **Plugin skills (git/github-cached)** — `~/.claude/plugins/` scanned recursively (depth ≤ 8) for
-  `SKILL.md` files, tagged `source: "plugin"`. This already covers any plugin whose marketplace
-  source type is `github`/git-based, since Claude Code caches those under
-  `~/.claude/plugins/marketplaces/`, inside this same recursive scan's root.
-- **Plugin skills (directory-sourced marketplace)** — for every plugin enabled in the project's
-  own `{cwd}/.claude/settings.json` / `.claude/settings.local.json` (`enabledPlugins["<id>@<marketplace>"]:
-  true`) whose marketplace resolves, via those same files' `extraKnownMarketplaces`, to a
-  `source.source === "directory"` entry, scans `<marketplaceDir>/plugins/<id>/**/SKILL.md` and
-  tags results `source: "plugin"` too. This repo's own dogfooded plugin
-  (`log-hub-hooks@artisyn`, sourced from `./.artisyn/marketplace`) is exactly this case. A
-  marketplace registered only in the user's own *global* `~/.claude/settings.json` (not read here
-  — project scope only) is an accepted residual limitation: it is silently skipped, same
-  fail-open treatment as an unresolvable skill name.
-
-Project skills always win a name clash; user/plugin duplicates of each other are not deduplicated
-against one another, only against the project set.
-
-Extracts frontmatter fields `name`, `description`, `argument-hint` plus body text. Omitted when no skills are found.
+**`harness-snapshot`** (the full body) is sent *in addition*, only when that id is not yet known to
+have reached the server (tracked in `harness-state.json`'s `knownSnapshotIds`, see "Hook diagnostic
+log" / `harness-state.js` below). It describes the harness itself — the skill/workflow/command
+catalog, project agents, MCP servers and CLAUDE.md/rules context — not anything about the session:
 
 ```json
 {
-  "type": "skill-definitions",
-  "projectRoot": "/project",
+  "type": "harness-snapshot",
+  "snapshotId": "3f9c2a1e...64 lowercase hex...",
+  "schemaVersion": 1,
+  "perToolDetailSupported": true,
   "skills": [
     {
       "name": "task-implement",
+      "kind": "skill",
+      "source": "project",
       "description": "Implement a task plan chunk-by-chunk",
       "argumentHint": "T-N",
       "body": "...",
-      "path": "/project/.claude/skills/task-implement/SKILL.md",
+      "path": ".claude/skills/task-implement/SKILL.md",
       "bytes": 1234,
-      "lastModified": 1749999000000,
-      "source": "project"
+      "contentHash": "a94a8f..."
+    },
+    {
+      "name": "adlc-lh:tracker",
+      "kind": "skill",
+      "source": "plugin",
+      "description": "...",
+      "body": "...",
+      "path": "adlc-lh@1.3.1/skills/tracker/SKILL.md",
+      "bytes": 2048,
+      "contentHash": "b7e23e...",
+      "plugin": { "id": "adlc-lh@artisyn", "name": "adlc-lh", "marketplace": "artisyn", "version": "1.3.1" }
     }
-  ]
-}
-```
-
-### `agent-definitions` — project agent definitions
-
-Reads `.claude/agents/<name>/AGENT.md` and extracts frontmatter `name`, `description`, body text. Omitted when no agents exist.
-
-```json
-{
-  "type": "agent-definitions",
-  "projectRoot": "/project",
+  ],
   "agents": [
     {
       "name": "task-implement-orchestrator",
       "description": "Orchestrate chunk-by-chunk implementation of a task plan",
       "body": "...",
-      "path": "/project/.claude/agents/task-implement-orchestrator/AGENT.md",
+      "path": ".claude/agents/task-implement-orchestrator/AGENT.md",
       "bytes": 2100,
-      "lastModified": 1749999000000
+      "contentHash": "c4ca42...",
+      "source": "project"
     }
-  ]
+  ],
+  "mcpServers": [
+    { "name": "postgres", "command": "npx", "args": ["-y", "@modelcontextprotocol/server-postgres", "postgresql://localhost/mydb"], "configSource": "project", "connected": true, "tools": [{ "name": "query", "schemaSizeTokens": 42 }] },
+    { "name": "playwright", "command": "npx", "args": ["@playwright/mcp"], "configSource": "user", "connected": false, "tools": [] }
+  ],
+  "systemContext": {
+    "totalBytes": 12800,
+    "files": [
+      { "path": "CLAUDE.md", "bytes": 9800, "contentHash": "d41d8c..." },
+      { "path": ".claude/rules/installer.md", "bytes": 455, "contentHash": "e2fc71...", "content": "# Rule content..." }
+    ]
+  }
 }
 ```
 
-### `mcp-config` — MCP server definitions
+No field anywhere is an absolute local path, and there is no `lastModified`/mtime field — every
+path is already relative (see "Paths" below) and change detection is by `contentHash` equality
+(a touch with no content change reproduces the same `snapshotId`; a content edit always produces a
+new one, even if it preserves the file's mtime).
 
-Reads MCP servers from three sources (higher-priority entries shadow lower-priority ones of the same name):
+### Catalog scan (`skill-catalog.js`'s `buildSkillCatalog()`)
 
-1. Project-level: `.mcp.json` → `mcpServers`, tagged `configSource: "project"`
-2. User-level (dedicated): `~/.claude/mcp.json` → `mcpServers`, tagged `configSource: "user"`
-3. User-level (settings): `~/.claude/settings.json` → `mcpServers`, tagged `configSource: "user"`
+Collects skills/workflows/commands from three kinds of source:
+- **Project** — `.claude/skills/<name>/SKILL.md` (kind `skill`), `.claude/workflows/*.js` (kind
+  `workflow`; name/description parsed from the file's `meta = {...}` block by regex — the file is
+  never executed), top-level `.claude/commands/*.md` (kind `command`). Tagged `source: "project"`.
+  Always wins on a name clash with any other source.
+- **User** — the same three folders under `<claudeConfigDir>/.claude/` (or wherever
+  `CLAUDE_CONFIG_DIR` points — see `claude-config-dir.js`). Tagged `source: "user"`, path shaped
+  `~/.claude/<rel>`.
+- **Plugin** — for every plugin this project has *actually enabled*: `enabledPlugins` is merged
+  from `<claudeConfigDir>/settings.json`, then the project's own `.claude/settings.json`, then
+  `.claude/settings.local.json` (a later file's `false` disables an earlier `true`); each surviving
+  `<name>@<marketplace>` is then resolved against `<claudeConfigDir>/plugins/installed_plugins.json`
+  (scope order: `local` with a matching `projectPath`, then `project`, then `user`) to find its
+  `installPath`. An enabled-but-unresolved plugin is skipped with a `hook.log` line, never a thrown
+  error. The same three folders are scanned under that `installPath`, plus any extra paths the
+  plugin's own `plugin.json` lists under `skills`/`commands`. Entries are named
+  `<pluginName>:<name>` and tagged `source: "plugin"`, with a `plugin` object
+  (`{id, name, marketplace, version, gitCommitSha?}`).
 
-Credentials in args (e.g. `postgresql://user:pass@host/db`) are scrubbed to `postgresql://host/db`.
+A project/user name collision resolves **project wins**. This replaces the old recursive scan of
+`~/.claude/plugins/` and the directory-marketplace working-copy scan from earlier hook versions —
+only a project's own *resolved, enabled* plugin install is read now.
 
-**Live `tools/list` probe (2.7.0+):** for each server with a `command` (stdio transport only — a
-`url`/SSE-based server is left without `connected`/`tools`, same as an old hook), the hook spawns
-it, sends a JSON-RPC `initialize` then `tools/list` over stdin, and merges the result onto that
+### Paths (per source)
+
+| Source | Path format |
+|---|---|
+| `project` | Relative to the project root, forward slashes. |
+| `user` | `~/.claude/<rel>`. |
+| `plugin` | `<pluginName>@<version>/<rel inside installPath>`. |
+
+### MCP servers and the live `tools/list` probe
+
+Reads MCP servers from three sources (higher-priority entries shadow lower-priority ones of the
+same name): project-level `.mcp.json`, user-level `<claudeConfigDir>/mcp.json`, user-level
+`<claudeConfigDir>/settings.json` — tagged `configSource: "project"`/`"user"` respectively.
+Credentials in args (e.g. `postgresql://user:pass@host/db`) are scrubbed to
+`postgresql://host/db`.
+
+**Live `tools/list` probe (2.7.0+; run per-snapshot, not per-file, since 2.22.0):** only once the
+snapshot's id turns out unknown (never for a ref-only upload — the body isn't being resent, so
+there's nothing to probe for), for each server with a `command` (stdio transport only — a
+`url`/SSE-based server is left without `connected`/`tools`, same as an old hook) the hook spawns it,
+sends a JSON-RPC `initialize` then `tools/list` over stdin, and merges the result onto that
 server's entry — sequentially, one server at a time, each capped at `mcpProbeTimeoutMs` (default
 `3000`, see the config table above). Any failure (spawn error, timeout, malformed response)
 resolves `connected: false, tools: []` rather than throwing. `schemaSizeTokens` is a fixed, coarse
 `÷4` estimate of `JSON.stringify({name, description, inputSchema})`'s length — deliberately a
-different constant from the per-model token-estimation ratios used elsewhere. The event's
+different constant from the per-model token-estimation ratios used elsewhere. The snapshot's
 top-level `perToolDetailSupported: true` flag is what tells a server-side reader "this hook
 attempted the probe" apart from "old hook, never tried" — see
 `docs/knowledgebase/hook-api-versioning.md`'s `perToolDetailSupported` section in the main repo.
 
-```json
-{
-  "type": "mcp-config",
-  "perToolDetailSupported": true,
-  "servers": [
-    { "name": "postgres", "command": "npx", "args": "-y @modelcontextprotocol/server-postgres postgresql://localhost/mydb", "configSource": "project", "connected": true, "tools": [{ "name": "query", "schemaSizeTokens": 42 }] },
-    { "name": "playwright", "command": "npx", "args": "@playwright/mcp", "configSource": "user", "connected": false, "tools": [] }
-  ]
-}
-```
+### `snapshotId` (DD-2) and known-state (DD-6)
+
+`snapshotId = sha256Hex(JSON.stringify(canon))`, where `canon` is a fixed, sorted projection of
+`skills`/`agents`/`mcpServers`/`systemContext.files` built from each entry's `contentHash` (never
+the raw body text) — deliberately excluding the MCP probe's `connected`/`tools` and
+`perToolDetailSupported`, so probing or getting a different probe result never changes the id. The
+server **never recomputes** this id; it only format-validates it. `harness-state.json` (v2) tracks
+`knownSnapshotIds` (most-recent-first, capped at 20) and `sessionSnapshots` (per-session last-sent
+id, used by the prompt-triggered background upload below to send a ref-only line without rebuilding
+the catalog or re-running the probe). An id is recorded as known only after a successful upload
+that carried the full snapshot, and forgotten again if the server ever answers back
+`unknownSnapshotId` for it (see `docs/knowledgebase/hook-api-versioning.md`'s
+`snapshotId`/`snapshotFull`/`unknownSnapshotId` section) — the next upload then resends the full
+body.
 
 ---
 

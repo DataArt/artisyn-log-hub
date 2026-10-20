@@ -338,6 +338,32 @@ export const f17Sessions: ContractFamily = {
       expect: { status: 403 },
     },
     {
+      // DD-12: s04 is bound to the seeded harness_snapshots row, and the response's
+      // `harnessSnapshot` is that row's `body` verbatim (no `type`, carries its own `snapshotId`).
+      id: 'F17-session-logs-snapshot',
+      route: 'GET /api/v1/repositories/:repoId/sessions/:sessionId/logs',
+      actor: 'owner',
+      params: { repoId: '@R1.id', sessionId: '@s04.sessionId' },
+      expect: { status: 200 },
+      read: {
+        sql: `SELECT body AS harness_snapshot FROM harness_snapshots
+               WHERE user_id = $1 AND snapshot_id = $2`,
+        args: ['@owner.id', '@harnessSnapshotId'],
+        shape: 'object',
+        fields: { harnessSnapshot: { col: 'harness_snapshot', as: 'json' } },
+      },
+    },
+    {
+      // s01 predates the snapshot feature (no harness_snapshot_id bound) — DD-12 answers null,
+      // not an empty object.
+      id: 'F17-session-logs-no-snapshot',
+      route: 'GET /api/v1/repositories/:repoId/sessions/:sessionId/logs',
+      actor: 'owner',
+      params: { repoId: '@R1.id', sessionId: '@s01.sessionId' },
+      expect: { status: 200, bodyMatches: { harnessSnapshot: null } },
+      noDb: true,
+    },
+    {
       id: 'F17-export-scope',
       route: 'GET /api/v1/repositories/:repoId/sessions/export-scope',
       actor: 'owner',

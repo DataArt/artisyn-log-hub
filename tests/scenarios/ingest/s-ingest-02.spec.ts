@@ -270,4 +270,109 @@ test('@S-INGEST-02 first v2 upload: repository, branch, user, context; re-upload
     expect(sessionsA.map((s) => s.sessionId).sort()).toEqual([sidLate, sidX].sort());
     expect(await ownerRepos()).toBe(1);
   });
+
+  await test.step('10. Harness snapshot: the same snapshotId from two owners stores two isolated rows (each session reads its own body); a later ref to a different id never moves an already-bound session (COALESCE)', async () => {
+    const SNAP_SHARED = 'b7cd7696dff2d64be4ad428f8f3dde1cc104ac5ad42a33284561258b9aa963c9';
+    const SNAP_OTHER = 'f4a647d9a2a0ae48b469cab6fd8491f7bc70d9de14e3d988b654cf0813c51971';
+    const sidSnapA = `sess-snap-a-${run}`;
+    const sidSnapB = `sess-snap-b-${run}`;
+
+    const refLine = (snapshotId: string) => ({ type: 'harness-snapshot-ref', snapshotId });
+    const snapshotLine = (snapshotId: string, skillName: string) => ({
+      type: 'harness-snapshot',
+      snapshotId,
+      schemaVersion: 1,
+      perToolDetailSupported: true,
+      skills: [
+        {
+          name: skillName,
+          kind: 'skill',
+          source: 'project',
+          description: 'A test skill',
+          body: '',
+          path: `.claude/skills/${skillName}/SKILL.md`,
+          bytes: 10,
+          contentHash: skillName.padEnd(64, '0'),
+        },
+      ],
+      agents: [],
+      mcpServers: [],
+      systemContext: null,
+    });
+    const snapArtisyn = (sessionId: string, skillName: string) =>
+      ndjson([
+        {
+          event: 'prompt_start',
+          timestamp: at('14:00:00'),
+          session_id: sessionId,
+          prompt: `Snapshot test ${run}`,
+          git: { repo: httpsUrl, branch: 'main' },
+        },
+        refLine(SNAP_SHARED),
+        snapshotLine(SNAP_SHARED, skillName),
+      ]);
+    const boundIdOf = async (sessionId: string) =>
+      (
+        await db.query<{ harness_snapshot_id: string | null }>(
+          'SELECT harness_snapshot_id FROM sessions WHERE session_id = $1',
+          [sessionId],
+        )
+      ).rows[0]?.harness_snapshot_id;
+
+    const resA = await postLogs(
+      api,
+      key.key,
+      { sessionId: sidSnapA, type: 'artisyn', snapshotId: SNAP_SHARED, snapshotFull: '1' },
+      snapArtisyn(sidSnapA, 'owner-only-skill'),
+    );
+    expect(resA.status()).toBe(201);
+    await queueA();
+
+    const resB = await postLogs(
+      api,
+      keyB.key,
+      { sessionId: sidSnapB, type: 'artisyn', snapshotId: SNAP_SHARED, snapshotFull: '1' },
+      snapArtisyn(sidSnapB, 'userb-only-skill'),
+    );
+    expect(resB.status()).toBe(201);
+    await waitForQueueIdle(db, userB.id);
+
+    // GET …/sessions/:sessionId/logs 404s without a `claude` log (Step 2's `if (!claudeLog)`
+    // guard) — give each session one so `harnessSnapshot` is reachable.
+    await send(key.key, sidSnapA, 'claude', claudeFor(sidSnapA, `Snapshot test ${run}`, '14:00:00'));
+    await queueA();
+    await send(keyB.key, sidSnapB, 'claude', claudeFor(sidSnapB, `Snapshot test ${run}`, '14:01:00'));
+    await waitForQueueIdle(db, userB.id);
+
+    expect(
+      await countRows(db, 'SELECT count(*) AS n FROM harness_snapshots WHERE snapshot_id = $1', [SNAP_SHARED]),
+      'one harness_snapshots row per owner, same snapshotId',
+    ).toBe(2);
+    expect(await boundIdOf(sidSnapA)).toBe(SNAP_SHARED);
+    expect(await boundIdOf(sidSnapB)).toBe(SNAP_SHARED);
+
+    const repoBId = await ownRepoId(userB.api, canonical);
+    const logsA = (await (await owner.api.get(`${base}/sessions/${sidSnapA}/logs`)).json()) as {
+      harnessSnapshot?: { skills: Array<{ name: string }> } | null;
+    };
+    const logsB = (await (await userB.api.get(`/api/v1/repositories/${repoBId}/sessions/${sidSnapB}/logs`)).json()) as {
+      harnessSnapshot?: { skills: Array<{ name: string }> } | null;
+    };
+    expect(logsA.harnessSnapshot?.skills.map((s) => s.name), 'owner reads its own body').toEqual(['owner-only-skill']);
+    expect(logsB.harnessSnapshot?.skills.map((s) => s.name), 'user B reads its own body').toEqual(['userb-only-skill']);
+
+    const resRef = await postLogs(
+      api,
+      key.key,
+      { sessionId: sidSnapA, type: 'artisyn', snapshotId: SNAP_OTHER },
+      ndjson([refLine(SNAP_OTHER)]),
+    );
+    expect(resRef.status()).toBe(201);
+    expect((await resRef.json()).unknownSnapshotId, 'SNAP_OTHER was never stored or queued').toBe(SNAP_OTHER);
+    await queueA();
+    expect(
+      await boundIdOf(sidSnapA),
+      'COALESCE: an already-bound session never moves to a later ref',
+    ).toBe(SNAP_SHARED);
+  });
 });

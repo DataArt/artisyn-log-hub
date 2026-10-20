@@ -63,7 +63,12 @@ export function CallTreeView({
   compact = false,
 }: Props) {
   const parsed = useMemo(
-    () => (logsData !== undefined ? parseSessionLogs(logsData.main) : null),
+    () =>
+      logsData !== undefined
+        ? parseSessionLogs(logsData.main, {
+            harnessSnapshot: logsData.harnessSnapshot ?? null,
+          })
+        : null,
     [logsData],
   );
 

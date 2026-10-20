@@ -29,6 +29,13 @@ import {
   selectEditResultRecordsForSession,
 } from './artisyn-extractor';
 import {
+  bindSessionSnapshot,
+  extractHarnessSnapshot,
+  extractHarnessSnapshotRef,
+  loadHarnessSnapshot,
+  storeHarnessSnapshot,
+} from './harness-snapshot';
+import {
   loadSessionTreeEditRecords,
   resolveSessionRepoRoots,
 } from './change-surface/changed-paths.sql';
@@ -565,83 +572,119 @@ export class LogsService {
         );
       }
 
-      // Step 5d — Harness element inventory upsert + capability columns. Fires for new
-      // inserts and re-uploads, across every repo currently linked to this log (via
+      // Step 5d — Harness snapshot store/bind + element inventory upsert (DD-9). Fires for
+      // new inserts and re-uploads, across every repo currently linked to this log (via
       // `log_repositories`, same scope as 5b/5c) — not just repos linked by *this* upload's
-      // own `git.repo` URL, since a chunk carrying inventory events can arrive after the chunk
-      // that established the link. Skipped entirely (no writer call, no repositories UPDATE)
-      // when none of the three inventory-bearing events are present — mirrors 5c's "never
-      // overwrite with NULL" rule: an old/partial upload must not erase previously-reported
-      // inventory or capability state.
-      const ruleInventory = extractHarnessRuleInventory(lines);
-      const skillInventory = extractHarnessSkillInventory(lines);
-      const mcpInventory = extractHarnessMcpInventory(lines);
-      const hasHarnessInventory =
-        ruleInventory.length > 0 ||
-        skillInventory.length > 0 ||
-        mcpInventory.length > 0;
+      // own `git.repo` URL, since a chunk carrying the ref can arrive after the chunk that
+      // established the link.
+      //
+      // 1. Store — a full `harness-snapshot` line in *this* upload is persisted verbatim,
+      //    scoped to the uploading owner (content-addressed id, `ON CONFLICT DO NOTHING`).
+      // 2. Bind — the session is bound to the first id ever known for it (the ref line, or
+      //    the full snapshot's own id when there's no separate ref). Once bound it stays
+      //    bound (`harness_snapshot_id IS NULL` guard), so a later re-ref can never move it
+      //    (DD-21's accepted race: a purge between "known" and bind leaves the session
+      //    pointed at a since-deleted row until the next upload self-heals it).
+      // 3. Inventory — runs on *every* upload that carries a ref or a full snapshot, not just
+      //    the one that first bound the session: it re-reads the session's *current* bound
+      //    id and, if that row still exists, upserts inventory from it into every repo
+      //    currently linked — so a repo linked by a later upload still gets inventory, same
+      //    as the old per-upload Step 5d. Skipped entirely (no writer call, no repositories
+      //    UPDATE) when this upload carries neither line, or the bound row no longer exists
+      //    (DD-21) — mirrors 5c's "never overwrite with a lesser signal" rule.
+      // 4. Capability columns — `harness_inventory_reported_at` is always set alongside the
+      //    inventory upsert; `harness_mcp_per_tool_supported` only flips to `true` when
+      //    *this* upload's own full snapshot explicitly carries `perToolDetailSupported:
+      //    true` (an old/incapable hook, or a ref-only upload, leaves it untouched).
+      const harnessSnapshotLine = extractHarnessSnapshot(lines);
+      if (harnessSnapshotLine !== null) {
+        await storeHarnessSnapshot(tx, userId, harnessSnapshotLine);
+      }
 
-      if (hasHarnessInventory) {
-        const linkedRepoRows = await tx
-          .select({ repoId: logRepositories.repoId })
-          .from(logRepositories)
-          .where(eq(logRepositories.logId, logResult.id));
+      const harnessSnapshotRef =
+        extractHarnessSnapshotRef(lines) ??
+        harnessSnapshotLine?.snapshotId ??
+        null;
+      if (harnessSnapshotRef !== null) {
+        await bindSessionSnapshot(tx, sessionRowId, harnessSnapshotRef);
+      }
 
-        const elements: HarnessElementInput[] = [
-          ...ruleInventory.map((rule) => ({
-            kind: 'rule' as const,
-            name: rule.name,
-          })),
-          ...skillInventory.map((skill) => ({
-            kind: 'skill' as const,
-            name: skill.name,
-            source: skill.source,
-          })),
-          ...mcpInventory.flatMap((server) => [
-            {
-              kind: 'mcp' as const,
-              name: server.name,
-              mcpConnected: server.connected ?? null,
-            },
-            ...server.tools.map((tool) => ({
-              kind: 'tool' as const,
-              name: tool.name,
-              mcpServer: server.name,
-              schemaSizeTokens: tool.schemaSizeTokens,
+      if (harnessSnapshotRef !== null) {
+        const [boundSessionRow] = await tx
+          .select({ harnessSnapshotId: sessions.harnessSnapshotId })
+          .from(sessions)
+          .where(eq(sessions.id, sessionRowId));
+        const boundSnapshotId = boundSessionRow?.harnessSnapshotId ?? null;
+        const boundSnapshot = boundSnapshotId
+          ? await loadHarnessSnapshot(tx, userId, boundSnapshotId)
+          : null;
+
+        if (boundSnapshot !== null) {
+          const ruleInventory = extractHarnessRuleInventory(boundSnapshot);
+          const skillInventory = extractHarnessSkillInventory(boundSnapshot);
+          const mcpInventory = extractHarnessMcpInventory(boundSnapshot);
+
+          const linkedRepoRows = await tx
+            .select({ repoId: logRepositories.repoId })
+            .from(logRepositories)
+            .where(eq(logRepositories.logId, logResult.id));
+
+          const elements: HarnessElementInput[] = [
+            ...ruleInventory.map((rule) => ({
+              kind: 'rule' as const,
+              name: rule.name,
             })),
-          ]),
-        ];
+            ...skillInventory.map((skill) => ({
+              kind: 'skill' as const,
+              name: skill.name,
+              source: skill.source,
+            })),
+            ...mcpInventory.flatMap((server) => [
+              {
+                kind: 'mcp' as const,
+                name: server.name,
+                mcpConnected: server.connected ?? null,
+              },
+              ...server.tools.map((tool) => ({
+                kind: 'tool' as const,
+                name: tool.name,
+                mcpServer: server.name,
+                schemaSizeTokens: tool.schemaSizeTokens,
+              })),
+            ]),
+          ];
 
-        const reportedAt = new Date();
-        for (const { repoId } of linkedRepoRows) {
-          await upsertHarnessElements(tx, repoId, elements, reportedAt);
-        }
+          const reportedAt = new Date();
+          for (const { repoId } of linkedRepoRows) {
+            await upsertHarnessElements(tx, repoId, elements, reportedAt);
+          }
 
-        // Only flip the capability flag to `true` when *this* upload's own
-        // mcp-config event(s) explicitly carried `perToolDetailSupported: true` (a capable
-        // hook) — an old hook's mcp-config event (field absent) leaves the column untouched,
-        // same "skip rather than overwrite with a lesser signal" reasoning as 5c.
-        const perToolDetailSupportedThisUpload = mcpInventory.some(
-          (server) => server.perToolDetailSupported === true,
-        );
+          // Only flip the capability flag to `true` when *this* upload's own
+          // harness-snapshot line explicitly carried `perToolDetailSupported: true` (a
+          // capable hook) — an old hook, or a ref-only upload with no full snapshot line,
+          // leaves the column untouched, same "skip rather than overwrite with a lesser
+          // signal" reasoning as 5c.
+          const perToolDetailSupportedThisUpload =
+            harnessSnapshotLine?.perToolDetailSupported === true;
 
-        if (perToolDetailSupportedThisUpload) {
-          await tx.execute(
-            sql`UPDATE repositories
-                SET harness_inventory_reported_at = ${reportedAt},
-                    harness_mcp_per_tool_supported = true
-                FROM log_repositories
-                WHERE log_repositories.log_id = ${logResult.id}
-                  AND log_repositories.repo_id = repositories.id`,
-          );
-        } else {
-          await tx.execute(
-            sql`UPDATE repositories
-                SET harness_inventory_reported_at = ${reportedAt}
-                FROM log_repositories
-                WHERE log_repositories.log_id = ${logResult.id}
-                  AND log_repositories.repo_id = repositories.id`,
-          );
+          if (perToolDetailSupportedThisUpload) {
+            await tx.execute(
+              sql`UPDATE repositories
+                  SET harness_inventory_reported_at = ${reportedAt},
+                      harness_mcp_per_tool_supported = true
+                  FROM log_repositories
+                  WHERE log_repositories.log_id = ${logResult.id}
+                    AND log_repositories.repo_id = repositories.id`,
+            );
+          } else {
+            await tx.execute(
+              sql`UPDATE repositories
+                  SET harness_inventory_reported_at = ${reportedAt}
+                  FROM log_repositories
+                  WHERE log_repositories.log_id = ${logResult.id}
+                    AND log_repositories.repo_id = repositories.id`,
+            );
+          }
         }
       }
 
@@ -1015,6 +1058,21 @@ export class LogsService {
     // user + current repo's repoUrl rather than extracting git.repo from body
     // content. Runs regardless of `wrote` (see importSession()).
     if (logType !== 'artisyn') return;
+
+    // DD-14: import runs DD-9 steps 1-2 (store + bind) for artisyn logs, scoped to the
+    // archive's resolved author (`log.resolvedUserId`) — not `effectiveUserId`, though the
+    // two agree in every current code path (`importOneSession`'s `resolvedUserId` already
+    // collapses to `targetUserId` whenever `effectiveUserId` would). Step 3 (inventory
+    // upsert) is intentionally not run here: an imported session's inventory is populated
+    // lazily, the same read path (DD-12) every other session uses.
+    const snap = extractHarnessSnapshot(lines);
+    if (snap !== null) {
+      await storeHarnessSnapshot(tx, log.resolvedUserId, snap);
+    }
+    const ref = extractHarnessSnapshotRef(lines) ?? snap?.snapshotId ?? null;
+    if (ref !== null) {
+      await bindSessionSnapshot(tx, sessionRowId, ref);
+    }
 
     await tx
       .insert(repositories)

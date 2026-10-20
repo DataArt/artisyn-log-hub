@@ -19,7 +19,7 @@ import { join } from 'path';
  */
 
 export const IMMUTABLE_MESSAGE =
-  'миграции неизменяемы — создайте новую миграцию';
+  'migrations are immutable — create a new migration';
 
 const LOCK_FILE = 'meta/migrations.lock.json';
 const RESET_HINT =

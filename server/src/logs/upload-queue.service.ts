@@ -14,6 +14,8 @@ export interface SaveRawUploadMeta {
   userId: number;
   parentSessionId?: string;
   workflowRunId?: string;
+  /** DD-8: set only when the upload's `snapshotFull=1` and `snapshotId` is valid. */
+  harnessSnapshotId?: string;
 }
 
 export interface SaveChunkMeta {
@@ -26,6 +28,8 @@ export interface SaveChunkMeta {
   chunkIndex: number;
   totalChunks: number;
   totalSize?: number;
+  /** DD-8: set only when the upload's `snapshotFull=1` and `snapshotId` is valid. */
+  harnessSnapshotId?: string;
 }
 
 /**
@@ -106,6 +110,7 @@ export class UploadQueueService {
       parentSessionId: meta.parentSessionId,
       workflowRunId: meta.workflowRunId,
       status: 'pending',
+      harnessSnapshotId: meta.harnessSnapshotId,
     });
   }
 
@@ -175,6 +180,7 @@ export class UploadQueueService {
           uploadId: meta.uploadId,
           chunksReceived,
           totalChunks: meta.totalChunks,
+          harnessSnapshotId: meta.harnessSnapshotId,
         });
       }
     } else {

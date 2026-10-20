@@ -38,10 +38,12 @@ const fs = require('fs');
 const path = require('path');
 
 const { loadConfig, resolveTelemetryDir } = require('./env-context');
+const { getWorkDirPath } = require('./git-context');
 const { collectScopedFiles } = require('./session-files');
 const { hookLog } = require('./hook-log');
 const { uploadFileMaybeCompressed, uploadFileChunked, CHUNK_SIZE_BYTES, acquireUploadLock, releaseUploadLock, formatServerOrigin } = require('./upload-logs');
 const { sanitizeNdjson, formatDroppedLines } = require('./ndjson-sanitize');
+const { readSessionSnapshot, forgetSnapshot } = require('./harness-state');
 
 const HOOK_FILE = 'prompt-upload-hook.js';
 
@@ -116,6 +118,14 @@ function formatUploadResultLine(manifestKey, result) {
 async function runUploads(cwd, sessionId, serverUrl, apiKey, timeoutMs, telemetryDir) {
   const files = collectScopedFiles(cwd, sessionId, telemetryDir);
 
+  // DD-19: this fast path never builds the catalog or runs the MCP probe — it only reads back
+  // whichever snapshot id `send-logs-hook.js` last recorded for THIS session (`harness-state.js`'s
+  // `sessionSnapshots`), and prepends a ref-only line to the artisyn body when one is known. A
+  // session that has never been through a `Stop` yet has no recorded id, so it adds nothing here
+  // and binds at the next `Stop` instead.
+  const workDir = getWorkDirPath(cwd);
+  const recordedSnapshotId = readSessionSnapshot(workDir, sessionId);
+
   let uploadedCount = 0;
   let failedCount = 0;
 
@@ -147,18 +157,35 @@ async function runUploads(cwd, sessionId, serverUrl, apiKey, timeoutMs, telemetr
       continue;
     }
 
+    // DD-19: the artisyn file, and only when a snapshot id has already been recorded for this
+    // session, gets the ref prepended and the query params sent — never `snapshotFull`, since this
+    // path must stay fast (no catalog build, no probe) even on the id's first appearance here.
+    let snapshotQuery = null;
+    if (namespace === 'artisyn' && recordedSnapshotId) {
+      const refLine = Buffer.from(JSON.stringify({ type: 'harness-snapshot-ref', snapshotId: recordedSnapshotId }) + '\n', 'utf8');
+      body = Buffer.concat([refLine, body]);
+      snapshotQuery = { snapshotId: recordedSnapshotId, snapshotFull: false };
+    }
+
     const bodyBytes = Buffer.byteLength(body);
 
     // The routing test stays the *uncompressed* size: `uploadFileMaybeCompressed()` decides for
     // itself whether the single request it sends is gzipped.
     const result = bodyBytes > CHUNK_SIZE_BYTES
-      ? await uploadFileChunked(serverUrl, apiKey, namespace, sessionId, body, timeoutMs, sessionId, cwd, null, null, telemetryDir, manifestKey)
-      : await uploadFileMaybeCompressed(serverUrl, apiKey, namespace, sessionId, body, timeoutMs, sessionId, cwd, null, null);
-    const { success, reason } = result;
+      ? await uploadFileChunked(serverUrl, apiKey, namespace, sessionId, body, timeoutMs, sessionId, cwd, null, null, telemetryDir, manifestKey, snapshotQuery)
+      : await uploadFileMaybeCompressed(serverUrl, apiKey, namespace, sessionId, body, timeoutMs, sessionId, cwd, null, null, snapshotQuery);
+    const { success, reason, unknownSnapshotId } = result;
 
     if (success) {
       uploadedCount++;
       hookLog(HOOK_FILE, sessionId, 'result', formatUploadResultLine(manifestKey, result), cwd);
+      // DD-21's self-heal: the server told us a purge dropped the row this ref pointed at —
+      // forget it so the next `Stop` (or the next prompt, once a `Stop` re-records a fresh id)
+      // resends the full body instead of the ref again.
+      if (snapshotQuery && unknownSnapshotId === snapshotQuery.snapshotId) {
+        forgetSnapshot(workDir, unknownSnapshotId);
+        hookLog(HOOK_FILE, sessionId, 'result', `harness: snapshot ${unknownSnapshotId.slice(0, 12)} unknown on server — will resend`, cwd);
+      }
     } else {
       failedCount++;
       hookLog(HOOK_FILE, sessionId, 'fail', `${manifestKey}: ${reason}`, cwd);

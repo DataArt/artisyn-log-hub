@@ -253,9 +253,19 @@ test('@S-HOOK-09 the installed hook reaches the real server and the session show
       expect(named('mcp', 'fake-mcp')[0].mcpConnected).toBe(true);
       expect(named('tool', 'fake_tool')).toHaveLength(1);
       expect(named('tool', 'fake_tool')[0].mcpServer).toBe('fake-mcp');
-      const artisyn = (await storedBody(db, sid, 'artisyn')) ?? [];
-      const agentDefs = artisyn.filter((e) => isRecord(e) && e.type === 'agent-definitions');
-      expect(JSON.stringify(agentDefs)).toContain('"rev"');
+      // DD-9: the full harness-snapshot the hook sent on its first Stop is stored once, keyed by
+      // the uploading owner, and the session is bound to it.
+      const snap = await db.query<{ snapshot_id: string; body: { agents: Array<{ name: string }> } }>(
+        'SELECT snapshot_id, body FROM harness_snapshots WHERE user_id = $1',
+        [owner.id],
+      );
+      expect(snap.rows, 'one harness_snapshots row for the owner').toHaveLength(1);
+      expect(snap.rows[0].body.agents.map((a) => a.name), 'the project agent rev is in the snapshot').toContain('rev');
+      const bound = await db.query<{ harness_snapshot_id: string | null }>(
+        'SELECT harness_snapshot_id FROM sessions WHERE session_id = $1',
+        [sid],
+      );
+      expect(bound.rows[0]?.harness_snapshot_id, 'the session is bound to that snapshot').toBe(snap.rows[0].snapshot_id);
 
       await openSession(page, owner, repoId, sid, { tab: 'harness-usage' });
       await expect(page.getByTestId('harness-usage-tab')).toBeVisible();
@@ -271,7 +281,15 @@ test('@S-HOOK-09 the installed hook reaches the real server and the session show
       const after = await db.query<{ n: string }>('SELECT count(*) AS n FROM harness_elements WHERE repo_id = $1', [repoId]);
       expect(after.rows[0].n).toBe(elements.rows[0].n);
       const artisyn = (await storedBody(db, sid, 'artisyn')) ?? [];
-      expect(artisyn.filter((e) => isRecord(e) && e.type === 'skill-definitions').length).toBeLessThanOrEqual(1);
+      // DD-6/DD-7: the id is already known, so this Stop sends only harness-snapshot-ref — the
+      // full harness-snapshot line (sent on the very first Stop) is never repeated.
+      expect(artisyn.filter((e) => isRecord(e) && e.type === 'harness-snapshot').length, 'full snapshot sent only once').toBeLessThanOrEqual(1);
+      const snapCount = await db.query<{ n: string }>('SELECT count(*) AS n FROM harness_snapshots WHERE user_id = $1', [owner.id]);
+      expect(Number(snapCount.rows[0].n), 'no new harness_snapshots row from an unchanged harness').toBe(1);
+      const logs = (await (await owner.api.get(`/api/v1/repositories/${repoId}/sessions/${sid}/logs`)).json()) as {
+        harnessSnapshot?: unknown;
+      };
+      expect(logs.harnessSnapshot, 'GET logs still returns the harness snapshot').toBeTruthy();
     });
 
     await test.step('6. Installed Hooks page: version = plugin version.json, up to date, no issue badge', async () => {

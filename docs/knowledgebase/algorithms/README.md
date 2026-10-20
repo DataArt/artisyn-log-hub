@@ -39,6 +39,7 @@ format where the two differ).
 | [auth-startup-config](auth-startup-config.md) | `server/src/auth/config/auth-startup-validation.ts` | jest |
 | [local-request-detection](local-request-detection.md) | `server/src/auth/utils/localhost.util.ts`, `container-gateway.util.ts` | jest |
 | [release-link-token](release-link-token.md) | `server/src/releases/release-token.ts` | jest |
+| [harness-snapshot](harness-snapshot.md) | hook `skill-catalog.js`, `harness-snapshot.js` | `node --test` |
 
 ## File layout
 

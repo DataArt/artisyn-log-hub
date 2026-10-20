@@ -2,6 +2,10 @@
 // that consumes it (a hook record is an input to extraction). Nothing is
 // imported the other way, so this introduces no cycle.
 import type { HookEditRecord } from './claude-extractor';
+// Type-only import — the harness inventory extractors below consume an already-loaded,
+// already-validated `HarnessSnapshotBody` (DD-9/DD-10); they never read artisyn lines
+// themselves for this purpose any more.
+import type { HarnessSnapshotBody } from './harness-snapshot';
 
 type AnyRecord = Record<string, unknown>;
 
@@ -86,6 +90,12 @@ const NON_ACTIVITY_LINE_TYPES = new Set([
   'skill-definitions',
   'agent-definitions',
   'mcp-config',
+  // The harness snapshot — `harness-snapshot` (full body) and `harness-snapshot-ref` (the
+  // ref-only line most uploads carry) — is the hook's self-reported skill/agent/MCP/rule
+  // inventory (DD-1 in docs/tasks/todo/2026-10-16-sysctx-skill-source/impl-plan.md). Neither
+  // is session activity.
+  'harness-snapshot',
+  'harness-snapshot-ref',
   // The code-inventory snapshot is a throttled repo-size report the hook prefixes
   // onto an upload, not session activity. Its `capturedAt`/`timestamp` can predate the
   // session by up to the 6h throttle window, so counting it would stretch the session's
@@ -319,8 +329,8 @@ export function extractHookStatus(lines: object[]): HookStatusEvent | null {
 }
 
 // ---------------------------------------------------------------------------
-// Harness element inventory — self-reported skill/rule/MCP inventory, extracted from
-// existing artisyn events (no new hook event type). These extractors only
+// Harness element inventory — self-reported skill/rule/MCP inventory, mapped from the
+// loaded harness snapshot (DD-9, DD-10; `harness-snapshot.ts`). These extractors only
 // produce the *inventory* shape; usage/token attribution is computed separately from the
 // `claude` transcript at ingest time (`claude-extractor.ts`).
 // ---------------------------------------------------------------------------
@@ -352,36 +362,30 @@ export interface HarnessRuleInventoryEntry {
 }
 
 /**
- * Rule inventory: classified server-side from the existing
- * `system-context` event's `claudeMd.files[]` — zero hook change. Only files whose path
- * contains `.claude/rules/` (any depth, backslash-normalized for Windows-authored paths)
- * count as rules; `CLAUDE.md`/`CLAUDE.local.md` files are not rule rows.
+ * Rule inventory: classified server-side from the loaded snapshot's
+ * `systemContext.files[]` (DD-10). Only files whose path contains `.claude/rules/` (any
+ * depth, backslash-normalized for Windows-authored paths) count as rules;
+ * `CLAUDE.md`/`CLAUDE.local.md` files are not rule rows.
  */
 export function extractHarnessRuleInventory(
-  lines: object[],
+  body: HarnessSnapshotBody,
 ): HarnessRuleInventoryEntry[] {
   const seen = new Set<string>();
   const result: HarnessRuleInventoryEntry[] = [];
-  for (const line of lines) {
-    const rec = line as AnyRecord;
-    if (rec['type'] !== 'system-context') continue;
-    const claudeMd = asRecord(rec['claudeMd']);
-    const files = claudeMd?.['files'];
-    if (!Array.isArray(files)) continue;
+  const files = body.systemContext?.files;
+  if (!Array.isArray(files)) return result;
 
-    for (const entry of files) {
-      const file = asRecord(entry);
-      const rawPath = file?.['path'];
-      if (typeof rawPath !== 'string' || rawPath === '') continue;
-      const normalized = rawPath.replace(/\\/g, '/');
-      if (!normalized.includes(CLAUDE_RULES_PATH_MARKER)) continue;
+  for (const file of files) {
+    const rawPath = file?.path;
+    if (typeof rawPath !== 'string' || rawPath === '') continue;
+    const normalized = rawPath.replace(/\\/g, '/');
+    if (!normalized.includes(CLAUDE_RULES_PATH_MARKER)) continue;
 
-      const name = ruleNameFromPath(rawPath);
-      if (name === '' || seen.has(name)) continue;
-      seen.add(name);
-      const bytes = typeof file?.['bytes'] === 'number' ? file['bytes'] : 0;
-      result.push({ name, path: rawPath, bytes });
-    }
+    const name = ruleNameFromPath(rawPath);
+    if (name === '' || seen.has(name)) continue;
+    seen.add(name);
+    const bytes = typeof file?.bytes === 'number' ? file.bytes : 0;
+    result.push({ name, path: rawPath, bytes });
   }
   return result;
 }
@@ -395,37 +399,36 @@ export interface HarnessSkillInventoryEntry {
    */
   bytes: number;
   /**
-   * The hook's existing `skills[].source` field (`buildSkillDefinitions()` in
-   * `send-logs-hook.js` already emits `'project'` for `.claude/skills/` and `'plugin'` for
-   * `~/.claude/plugins/`) — no hook change needed. `null` for an older hook whose payload
-   * never carried this field.
+   * The snapshot skill entry's own `source` (DD-1/DD-10): `'project' | 'user' | 'plugin'`.
+   * `null` only if a malformed entry's `source` isn't one of those three strings.
    */
-  source: 'project' | 'plugin' | null;
+  source: 'project' | 'user' | 'plugin' | null;
 }
 
-/** Skill inventory: from the existing `skill-definitions` event. */
+/**
+ * Skill inventory: from the loaded snapshot's `skills[]` (DD-10). Workflow entries
+ * (`kind === 'workflow'`) are left out — harness-usage tracks those as workflow runs, not
+ * skill-context injections.
+ */
 export function extractHarnessSkillInventory(
-  lines: object[],
+  body: HarnessSnapshotBody,
 ): HarnessSkillInventoryEntry[] {
   const seen = new Set<string>();
   const result: HarnessSkillInventoryEntry[] = [];
-  for (const line of lines) {
-    const rec = line as AnyRecord;
-    if (rec['type'] !== 'skill-definitions') continue;
-    const skills = rec['skills'];
-    if (!Array.isArray(skills)) continue;
+  if (!Array.isArray(body.skills)) return result;
 
-    for (const entry of skills) {
-      const skill = asRecord(entry);
-      const name = skill?.['name'];
-      if (typeof name !== 'string' || name === '' || seen.has(name)) continue;
-      seen.add(name);
-      const bytes = typeof skill?.['bytes'] === 'number' ? skill['bytes'] : 0;
-      const rawSource = skill?.['source'];
-      const source =
-        rawSource === 'project' || rawSource === 'plugin' ? rawSource : null;
-      result.push({ name, bytes, source });
-    }
+  for (const skill of body.skills) {
+    if (skill?.kind === 'workflow') continue;
+    const name = skill?.name;
+    if (typeof name !== 'string' || name === '' || seen.has(name)) continue;
+    seen.add(name);
+    const bytes = typeof skill?.bytes === 'number' ? skill.bytes : 0;
+    const rawSource: unknown = skill?.source;
+    const source =
+      rawSource === 'project' || rawSource === 'user' || rawSource === 'plugin'
+        ? rawSource
+        : null;
+    result.push({ name, bytes, source });
   }
   return result;
 }
@@ -437,66 +440,49 @@ export interface HarnessMcpToolInventoryEntry {
 
 export interface HarnessMcpServerInventoryEntry {
   name: string;
-  /** `undefined` = old hook, capability never attempted for this server. */
+  /** `undefined` — the probe never ran for this snapshot (a ref-only resend, or an old hook). */
   connected: boolean | undefined;
-  /**
-   * The `mcp-config` event's top-level capability flag, copied onto every
-   * server entry from that event for caller convenience. `undefined` = old hook, this event
-   * never attempted the per-tool `tools/list` probe at all.
-   */
-  perToolDetailSupported: boolean | undefined;
   tools: HarnessMcpToolInventoryEntry[];
 }
 
 /**
- * MCP inventory: from the existing `mcp-config` event. A server entry
- * absent `connected`/`tools` in an old hook's payload surfaces as `undefined` on those
- * fields — the entire backward-compatibility contract for the per-tool probe capability.
+ * MCP inventory: from the loaded snapshot's `mcpServers[]` (DD-10) — same shape as the
+ * `mcp-config` event it replaces. The snapshot's top-level `perToolDetailSupported` capability
+ * flag (DD-9 step 4) is read directly off the `HarnessSnapshotBody` by the ingest step, not
+ * through this extractor, since it is no longer a per-event flag duplicated onto every server.
  */
 export function extractHarnessMcpInventory(
-  lines: object[],
+  body: HarnessSnapshotBody,
 ): HarnessMcpServerInventoryEntry[] {
   const byName = new Map<string, HarnessMcpServerInventoryEntry>();
-  for (const line of lines) {
-    const rec = line as AnyRecord;
-    if (rec['type'] !== 'mcp-config') continue;
-    const servers = rec['servers'];
-    if (!Array.isArray(servers)) continue;
-    const perToolDetailSupported =
-      rec['perToolDetailSupported'] === true ? true : undefined;
+  if (!Array.isArray(body.mcpServers)) return [];
 
-    for (const entry of servers) {
-      const server = asRecord(entry);
-      const name = server?.['name'];
-      if (typeof name !== 'string' || name === '') continue;
+  for (const server of body.mcpServers) {
+    const name = server?.name;
+    if (typeof name !== 'string' || name === '') continue;
 
-      const connected =
-        typeof server?.['connected'] === 'boolean'
-          ? server['connected']
-          : undefined;
+    const connected =
+      typeof server?.connected === 'boolean' ? server.connected : undefined;
 
-      const rawTools = server?.['tools'];
-      const tools: HarnessMcpToolInventoryEntry[] = Array.isArray(rawTools)
-        ? rawTools
-            .map((t) => {
-              const tool = asRecord(t);
-              const toolName = tool?.['name'];
-              if (typeof toolName !== 'string' || toolName === '') {
-                return null;
-              }
-              const schemaSizeTokens =
-                typeof tool?.['schemaSizeTokens'] === 'number'
-                  ? tool['schemaSizeTokens']
-                  : 0;
-              return { name: toolName, schemaSizeTokens };
-            })
-            .filter((v): v is HarnessMcpToolInventoryEntry => v !== null)
-        : [];
+    const rawTools: unknown = server?.tools;
+    const tools: HarnessMcpToolInventoryEntry[] = Array.isArray(rawTools)
+      ? rawTools
+          .map((t: unknown) => {
+            const tool = asRecord(t);
+            const toolName = tool?.['name'];
+            if (typeof toolName !== 'string' || toolName === '') return null;
+            const schemaSizeTokens =
+              typeof tool?.['schemaSizeTokens'] === 'number'
+                ? tool['schemaSizeTokens']
+                : 0;
+            return { name: toolName, schemaSizeTokens };
+          })
+          .filter((v): v is HarnessMcpToolInventoryEntry => v !== null)
+      : [];
 
-      // Last occurrence wins across multiple mcp-config lines in the same upload — matches
-      // the "last self-report wins" convention used for hook-state columns elsewhere.
-      byName.set(name, { name, connected, perToolDetailSupported, tools });
-    }
+    // Last occurrence wins — matches the "last self-report wins" convention used for
+    // hook-state columns elsewhere; a well-formed snapshot never repeats a server name.
+    byName.set(name, { name, connected, tools });
   }
   return [...byName.values()];
 }

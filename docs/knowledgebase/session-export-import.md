@@ -64,6 +64,43 @@ Scope is `all`, a date range or a list of session ids. `GET …/export-import/sc
 session count and approximate size before a job starts. Sessions are processed in batches of
 `EXPORT_IMPORT_CHUNK_SIZE` (25), yielding the event loop between batches.
 
+### Harness snapshot in the exported archive
+
+When an exported session has a bound `sessions.harness_snapshot_id`, `buildExportHarnessSnapshotLines()`
+prepends up to two lines to that session's exported `artisyn.jsonl`, read from the `harness_snapshots`
+table (see [db-tables.md](db-tables.md#harness_snapshots)) keyed by the **artisyn log's owner** (not
+necessarily the exporting user — a team export covers every member's sessions):
+
+- a full `harness-snapshot` line, built from the stored row's `body` (the DD-1 shape, `type` added
+  back in);
+- a `harness-snapshot-ref` line, but only when the live body does not already carry one — most
+  artisyn uploads do, since the hook sends a ref with every upload and the full snapshot only once
+  (see `docs/knowledgebase/hook-system-overview.md`), so re-exporting never doubles the ref up.
+
+This makes the archive self-sufficient even though the session's live body usually holds only the
+ref: the full snapshot was sent to the server just once, on whichever upload first saw an unknown
+id. Nothing is added when the session has no bound snapshot id, or the row no longer exists (the
+accepted purge race — see [data-retention.md](data-retention.md) § "Orphan harness-snapshot
+cleanup").
+
+### Import binding
+
+For an `artisyn` log, `LogsService.importSession()` additionally re-runs the ingest store-and-bind
+steps (the same ones ordinary upload ingest runs — see
+`docs/knowledgebase/algorithms/harness-snapshot.md` and `db-tables.md` § `harness_snapshots`),
+scoped to the archive's resolved author (`log.resolvedUserId`):
+
+1. If the imported `artisyn.jsonl` carries a `harness-snapshot` line, it is stored via
+   `storeHarnessSnapshot(tx, resolvedUserId, snap)` (insert-or-ignore, keyed by
+   `(user_id, snapshot_id)`).
+2. If a `harness-snapshot-ref` line is present (or, failing that, the stored snapshot's own id), the
+   session is bound to it via `bindSessionSnapshot(tx, sessionRowId, ref)` (only when the session's
+   `harness_snapshot_id` is still `NULL`).
+
+The inventory upsert (ingest step 3 of DD-9) is **not** re-run on import: an imported session's
+`repo_code_inventory` rows are populated lazily the next time the session's logs are read, the same
+read path every other session uses.
+
 ### Jobs
 
 Export and import run as background jobs. A job row in `export_import_jobs` (kind `export`,

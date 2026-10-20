@@ -512,6 +512,13 @@
       "when": 1790726400000,
       "tag": "0072_team_repo_config",
       "breakpoints": true
+    },
+    {
+      "idx": 73,
+      "version": "7",
+      "when": 1790812800000,
+      "tag": "0073_harness_snapshots",
+      "breakpoints": true
     }
   ]
 }

@@ -30,7 +30,7 @@ const MIGRATIONS_FOLDER = path.resolve(__dirname, '..', 'server', 'drizzle', 'mi
 const MIGRATIONS_REL = 'server/drizzle/migrations';
 const JOURNAL_REL = 'meta/_journal.json';
 const LOCK_REL = 'meta/migrations.lock.json';
-const IMMUTABLE_MESSAGE = 'миграции неизменяемы — создайте новую миграцию';
+const IMMUTABLE_MESSAGE = 'migrations are immutable — create a new migration';
 
 function sha256(text) {
   return crypto.createHash('sha256').update(text).digest('hex');

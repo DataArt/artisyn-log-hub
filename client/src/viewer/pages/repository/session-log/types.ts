@@ -244,6 +244,15 @@ export interface ImageAccess {
   estInputTokens?: number;
 }
 
+/** DD-1's plugin provenance, present only on a `plugin`-source skill/entry. */
+export interface SkillDefinitionPlugin {
+  id: string;
+  name: string;
+  marketplace: string;
+  version: string;
+  gitCommitSha?: string;
+}
+
 export interface SkillDefinition {
   name: string;
   description: string;
@@ -251,8 +260,12 @@ export interface SkillDefinition {
   body: string;
   path: string;
   bytes: number;
-  source: 'project' | 'builtin' | 'plugin';
-  lastModified?: number;
+  source: 'project' | 'user' | 'plugin';
+  /** Absent only for a pre-snapshot definition that predates DD-1's kind field. */
+  kind?: 'skill' | 'workflow' | 'command';
+  /** `plugin`-source entries only (DD-1/DD-3). */
+  plugin?: SkillDefinitionPlugin;
+  contentHash?: string;
 }
 
 export interface AgentDefinition {
@@ -261,8 +274,8 @@ export interface AgentDefinition {
   body: string;
   path: string;
   bytes: number;
-  source?: 'project' | 'builtin' | 'plugin';
-  lastModified?: number;
+  source?: 'project' | 'user' | 'plugin';
+  contentHash?: string;
 }
 
 export interface McpServerConfig {
@@ -340,6 +353,10 @@ export interface SessionSummary {
   skillDefinitions?: Map<string, SkillDefinition>;
   agentDefinitions?: Map<string, AgentDefinition>;
   mcpConfig?: McpServerConfig[];
+  /** DD-13: snapshot skills visible to this session (`registeredSkills`-filtered), sorted by name. */
+  visibleSkills?: SkillDefinition[];
+  /** DD-13: snapshot agents visible to this session (`registeredAgents`-filtered), sorted by name. */
+  visibleAgents?: AgentDefinition[];
 }
 
 export interface ClaudeMdFile {

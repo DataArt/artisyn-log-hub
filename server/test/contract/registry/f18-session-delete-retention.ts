@@ -22,12 +22,17 @@ const SESSION_TABLES = [
   'session_prompt_watermark',
   'user_favorite_sessions',
   'deleted_session_log',
+  // DD-11 steps g/h: every purge unconditionally nulls the deleted session's
+  // harness_snapshot_id and sweeps harness_snapshots rows no session references any more.
+  'harness_snapshots',
 ];
 
 function deleteSession(
   pk: string,
   sessionId: string,
   actor: string,
+  /** `@ref` of the snapshot id this session was bound to, if the sweep should delete its row. */
+  boundSnapshotRef?: string,
 ): WriteSpec {
   return {
     watch: SESSION_TABLES,
@@ -36,11 +41,19 @@ function deleteSession(
         {
           table: 'sessions',
           where: `id = ${pk}`,
-          changed: { deleted: true },
+          changed: { deleted: true, harness_snapshot_id: null },
         },
       ],
       deleted: [
         { table: 'logs', where: `session_id = ${pk}`, count: 'all' },
+        ...(boundSnapshotRef
+          ? [
+              {
+                table: 'harness_snapshots',
+                where: `snapshot_id = ${boundSnapshotRef}`,
+              },
+            ]
+          : []),
         {
           table: 'log_repositories',
           where: `log_id IN (SELECT id FROM logs WHERE session_id = ${pk})`,
@@ -107,7 +120,12 @@ export const f18SessionDeleteRetention: ContractFamily = {
       actor: 'admin',
       params: { sessionId: '@s04.sessionId' },
       expect: { status: 204 },
-      write: deleteSession('@s04.id', 'w1-s04-favorite', '@admin.id'),
+      write: deleteSession(
+        '@s04.id',
+        'w1-s04-favorite',
+        '@admin.id',
+        '@harnessSnapshotId',
+      ),
     },
     {
       id: 'F18-delete-not-owner',

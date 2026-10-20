@@ -281,6 +281,14 @@ test('@S-COMPAT-01 frozen 1.6.2 and 2.6.1 hooks against the current server @mode
       expect(by.get(v26.inner)?.parent_session_id, 'meta parentAgentId → the parent agent').toBe(v26.outer);
       expect(by.get(v26.wfAgent)?.parent_session_id).toBe(v26.sid);
       expect(by.get(v26.wfAgent)?.workflow_run_id).toBe(v26.wfRun);
+
+      // 2.6.1 predates the harness-snapshot lines (DD-1): it never sends snapshotId, so the
+      // session is never bound to one.
+      const bound = await db.query<{ harness_snapshot_id: string | null }>(
+        'SELECT harness_snapshot_id FROM sessions WHERE session_id = $1',
+        [v26.sid],
+      );
+      expect(bound.rows[0]?.harness_snapshot_id).toBeNull();
     });
 
     await test.step('9. response form of a single v2 request: 201, JSON, {warnings: [...]} — what 2.6.1 parses', async () => {

@@ -138,12 +138,49 @@ export const sessions = pgTable(
     parentSessionId: varchar('parent_session_id', { length: 255 }),
     workflowRunId: varchar('workflow_run_id', { length: 255 }),
     deleted: boolean('deleted').notNull().default(false),
+    // Migration 0073: the DD-2 id of the harness_snapshots row this session is bound to.
+    // No FK — the row is looked up by (owning user_id, this id) in application code, and an
+    // orphan sweep (deleteOrphanHarnessSnapshots) can delete that row out from under this
+    // column by design (DD-11, DD-21). NULL until the first artisyn upload that carries a
+    // snapshot or snapshot ref binds it (COALESCE-bound: never overwritten afterwards).
+    harnessSnapshotId: varchar('harness_snapshot_id', { length: 64 }),
   },
   (table) => [
     index('sessions_parent_session_id_idx').on(table.parentSessionId),
     // No WHERE/JOIN consumer yet — mirrors parent_session_id's shape ahead of
     // anticipated ad-hoc/debug lookups by workflow run.
     index('sessions_workflow_run_id_idx').on(table.workflowRunId),
+    // Read path (getSessionLogs) looks up a session's snapshot by this column on every
+    // session-logs request.
+    index('sessions_harness_snapshot_id_idx').on(table.harnessSnapshotId),
+  ],
+);
+
+// One row per (owner user_id, snapshot_id): the whole DD-1 harness snapshot body the hook
+// built and uploaded, stored verbatim in `body`. `snapshotId` is computed by the hook (DD-2)
+// and only format-validated here, never recomputed. UNIQUE (user_id, snapshot_id) makes the
+// ingest-time insert an upsert (`ON CONFLICT DO NOTHING`); the plain index on snapshot_id
+// alone backs the cross-owner "is this id known anywhere" lookups used by orphan cleanup
+// (migration 0073).
+export const harnessSnapshots = pgTable(
+  'harness_snapshots',
+  {
+    id: serial('id').primaryKey(),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    snapshotId: varchar('snapshot_id', { length: 64 }).notNull(),
+    body: jsonb('body').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    unique('harness_snapshots_user_id_snapshot_id_key').on(
+      table.userId,
+      table.snapshotId,
+    ),
+    index('idx_harness_snapshots_snapshot_id').on(table.snapshotId),
   ],
 );
 
@@ -1196,6 +1233,13 @@ export const uploadQueue = pgTable(
     // Migration 0068: set true once a `rejected_foreign_session` row's warning has been
     // returned to the hook, so each rejection is reported exactly once.
     warningDelivered: boolean('warning_delivered').notNull().default(false),
+    // Migration 0073: set only when the upload's `snapshotFull=1` query param carried a full
+    // harness-snapshot body (DD-8), so isHarnessSnapshotKnown can treat a snapshot id as
+    // "already in flight" while its upload_queue row is pending/processing/partially_uploaded,
+    // even before the ingest transaction has stored the harness_snapshots row. No FK and no
+    // index: only matched together with user_id and status in that check, on a bounded-size
+    // queue table.
+    harnessSnapshotId: varchar('harness_snapshot_id', { length: 64 }),
   },
   (table) => [
     index('idx_upload_queue_status_received_at').on(

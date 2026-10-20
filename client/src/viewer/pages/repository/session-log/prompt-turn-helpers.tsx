@@ -280,8 +280,13 @@ export function buildSkillDefinitionRows(
       ? 'PROJECT'
       : def.source === 'plugin'
         ? 'PLUGIN'
-        : 'BUILT-IN';
+        : 'USER';
   const rows: DetailRow[] = [{ label: 'Source', value: sourceLabel }];
+  if (def.source === 'plugin' && def.plugin)
+    rows.push({
+      label: 'Plugin',
+      value: `${def.plugin.id} v${def.plugin.version}`,
+    });
   if (def.path) rows.push({ label: 'Path', value: def.path });
   if (def.bytes > 0) {
     rows.push({

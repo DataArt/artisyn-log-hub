@@ -1,6 +1,7 @@
 import type { RepoConfig } from '../../../../models/repositories';
 import type { WorkflowRun } from '../../../../models/workflows';
 import type { ModelPricingMap } from '../../../../models/pricing';
+import type { HarnessSnapshot } from '../../../api';
 import { computeCost, formatLocalTimestamp } from '../../../lib/format';
 import type {
   AgentActivation,
@@ -31,6 +32,13 @@ import type {
 } from './types';
 
 export const BYTES_PER_TOKEN = 3.5;
+
+/**
+ * DD-16: `anthropic-skills:*` plugin entries are filtered out of every snapshot-derived
+ * `skillDefinitions` map (and so out of `visibleSkills` and the turn-chip resolution) — they are
+ * Claude's own bundled skills, not something a System Context viewer needs to inspect.
+ */
+export const HIDDEN_SKILL_PREFIX = 'anthropic-skills:';
 
 // Resolves the per-model chars-per-token estimation ratio, falling back to
 // BYTES_PER_TOKEN when the model is unrecognized/third-party or no pricing
@@ -1773,6 +1781,14 @@ export function parseSessionLogs(
     subagentLogs?: Map<string, Record<string, unknown>[]>;
     /** Model pricing map, used to resolve the session's per-model chars-per-token ratio. */
     pricing?: ModelPricingMap;
+    /**
+     * The root session's bound harness snapshot (DD-12), server-loaded and passed straight
+     * through from `SessionLogsData.harnessSnapshot`. `undefined`/`null` means no bound snapshot
+     * (old hook, or a session that never bound one) — System Context then builds nothing from it
+     * (DD-13, DD-17). Never supplied for a sub-agent's own log (a snapshot is a root-session-only
+     * concept).
+     */
+    harnessSnapshot?: HarnessSnapshot | null;
   },
 ): ParsedSession {
   const isSubagent = options?.isSubagent ?? false;
@@ -1782,11 +1798,11 @@ export function parseSessionLogs(
   const workflowsOption = options?.workflows;
   const subagentLogsOption = options?.subagentLogs;
   const pricingOption = options?.pricing;
+  const harnessSnapshot = options?.harnessSnapshot ?? null;
 
   let skillDefinitionsMap: Map<string, SkillDefinition> | undefined;
   let agentDefinitionsMap: Map<string, AgentDefinition> | undefined;
   let mcpConfigList: McpServerConfig[] | undefined;
-  let skillListingContent: string | undefined;
 
   // 1. Filter and cast events
   const events = raw
@@ -2386,147 +2402,80 @@ export function parseSessionLogs(
   }
 
   // 6. Compute summary
-  // CLAUDE.md context: extracted from the synthetic system-context event injected by the hook
+  // System Context (DD-13): claudeMd, skillDefinitions, agentDefinitions and mcpConfig are all
+  // built from the hook-reported harness snapshot (DD-1), loaded server-side and passed in as
+  // `options.harnessSnapshot`. With no snapshot (old hook, or a session that never bound one —
+  // DD-17), every one of these stays undefined and the corresponding System Context tabs do not
+  // render. There is no fallback to the old per-event or `skill_listing` sources any more.
   let claudeMd: ClaudeMdContext | undefined;
-  for (const e of events) {
-    if (e.type === 'system-context') {
-      const sc = e as {
-        type: string;
-        claudeMd?: {
-          totalBytes?: number;
-          files?: Array<{
-            path: string;
-            bytes: number;
-            lastModified?: number;
-            content?: string;
-          }>;
-        };
-      };
-      if (sc.claudeMd?.totalBytes && sc.claudeMd.totalBytes > 0) {
-        claudeMd = {
-          totalBytes: sc.claudeMd.totalBytes,
-          estTokens: Math.round(sc.claudeMd.totalBytes / charsPerToken),
-          files: (sc.claudeMd.files ?? []).map((f) => ({
-            path: f.path,
-            bytes: f.bytes,
-            role: classifyClaudeMdRole(f.path),
-            ...(f.lastModified !== undefined
-              ? { lastModified: f.lastModified }
-              : {}),
-            ...(f.content !== undefined ? { content: f.content } : {}),
-          })),
-        };
-      }
-      break;
-    }
+  if (
+    harnessSnapshot?.systemContext &&
+    harnessSnapshot.systemContext.totalBytes > 0
+  ) {
+    claudeMd = {
+      totalBytes: harnessSnapshot.systemContext.totalBytes,
+      estTokens: Math.round(
+        harnessSnapshot.systemContext.totalBytes / charsPerToken,
+      ),
+      files: harnessSnapshot.systemContext.files.map((f) => ({
+        path: f.path,
+        bytes: f.bytes,
+        role: classifyClaudeMdRole(f.path),
+        ...(f.content !== undefined ? { content: f.content } : {}),
+      })),
+    };
   }
 
-  for (const e of events) {
-    if (e.type === 'skill-definitions') {
-      const sd = e as {
-        type: string;
-        projectRoot?: string;
-        skills?: Array<{
-          name: string;
-          description: string;
-          argumentHint?: string;
-          body: string;
-          path: string;
-          bytes: number;
-          lastModified?: number;
-          source?: string;
-        }>;
-      };
-      if (Array.isArray(sd.skills) && sd.skills.length > 0) {
-        const root = (sd.projectRoot ?? '')
-          .replace(/\\/g, '/')
-          .replace(/\/?$/, '/');
-        skillDefinitionsMap = new Map();
-        for (const s of sd.skills) {
-          const src: SkillDefinition['source'] =
-            s.source === 'plugin' ? 'plugin' : 'project';
-          skillDefinitionsMap.set(s.name, {
-            name: s.name,
-            description: s.description ?? '',
-            ...(s.argumentHint ? { argumentHint: s.argumentHint } : {}),
-            body: s.body ?? '',
-            path: normaliseClientPath(s.path, root),
-            bytes: s.bytes ?? 0,
-            source: src,
-            ...(s.lastModified !== undefined
-              ? { lastModified: s.lastModified }
-              : {}),
-          });
-        }
+  if (harnessSnapshot?.skills && harnessSnapshot.skills.length > 0) {
+    const visible = harnessSnapshot.skills.filter(
+      (s) => !s.name.startsWith(HIDDEN_SKILL_PREFIX),
+    );
+    if (visible.length > 0) {
+      skillDefinitionsMap = new Map();
+      for (const s of visible) {
+        skillDefinitionsMap.set(s.name, {
+          name: s.name,
+          description: s.description ?? '',
+          ...(s.argumentHint ? { argumentHint: s.argumentHint } : {}),
+          body: s.body ?? '',
+          path: s.path,
+          bytes: s.bytes ?? 0,
+          source: s.source,
+          kind: s.kind,
+          ...(s.plugin ? { plugin: s.plugin } : {}),
+          ...(s.contentHash ? { contentHash: s.contentHash } : {}),
+        });
       }
     }
   }
 
-  for (const e of events) {
-    if (e.type === 'agent-definitions') {
-      const ad = e as {
-        type: string;
-        projectRoot?: string;
-        agents?: Array<{
-          name: string;
-          description: string;
-          body: string;
-          path: string;
-          bytes: number;
-          lastModified?: number;
-          source?: string;
-        }>;
-      };
-      if (Array.isArray(ad.agents) && ad.agents.length > 0) {
-        const root = (ad.projectRoot ?? '')
-          .replace(/\\/g, '/')
-          .replace(/\/?$/, '/');
-        agentDefinitionsMap = new Map();
-        for (const a of ad.agents) {
-          const src: AgentDefinition['source'] =
-            a.source === 'plugin' ? 'plugin' : 'project';
-          agentDefinitionsMap.set(a.name, {
-            name: a.name,
-            description: a.description ?? '',
-            body: a.body ?? '',
-            path: normaliseClientPath(a.path, root),
-            bytes: a.bytes ?? 0,
-            source: src,
-            ...(a.lastModified !== undefined
-              ? { lastModified: a.lastModified }
-              : {}),
-          });
-        }
-      }
+  if (harnessSnapshot?.agents && harnessSnapshot.agents.length > 0) {
+    agentDefinitionsMap = new Map();
+    for (const a of harnessSnapshot.agents) {
+      agentDefinitionsMap.set(a.name, {
+        name: a.name,
+        description: a.description ?? '',
+        body: a.body ?? '',
+        path: a.path,
+        bytes: a.bytes ?? 0,
+        source: a.source,
+        ...(a.contentHash ? { contentHash: a.contentHash } : {}),
+      });
     }
   }
 
-  for (const e of events) {
-    if (e.type === 'mcp-config') {
-      const mc = e as {
-        type: string;
-        servers?: Array<{
-          name: string;
-          command: string;
-          args: string;
-          url?: string;
-          configSource?: 'project' | 'user';
-        }>;
-      };
-      if (Array.isArray(mc.servers) && mc.servers.length > 0) {
-        mcpConfigList = mc.servers
-          .filter((s) => s && typeof s.name === 'string')
-          .map((s) => ({
-            name: s.name,
-            command: s.command ?? '',
-            args: s.args ?? '',
-            ...(s.url !== undefined ? { url: s.url } : {}),
-            ...(s.configSource !== undefined
-              ? { configSource: s.configSource }
-              : {}),
-          }));
-      }
-    }
+  if (harnessSnapshot?.mcpServers && harnessSnapshot.mcpServers.length > 0) {
+    mcpConfigList = harnessSnapshot.mcpServers
+      .filter((s) => s && typeof s.name === 'string')
+      .map((s) => ({
+        name: s.name,
+        command: s.command ?? '',
+        args: s.args ?? '',
+        ...(s.url !== undefined ? { url: s.url } : {}),
+        ...(s.configSource !== undefined
+          ? { configSource: s.configSource }
+          : {}),
+      }));
   }
 
   // Token breakdown across all events (not scoped to turns)
@@ -2735,24 +2684,39 @@ export function parseSessionLogs(
         type?: string;
         names?: string[];
         isInitial?: boolean;
-        content?: string;
       };
     };
     if (ae.attachment?.type !== 'skill_listing') continue;
     const names = ae.attachment.names ?? [];
     if (ae.attachment.isInitial === true) {
       registeredSkills = names;
-      if (typeof ae.attachment.content === 'string') {
-        skillListingContent = ae.attachment.content;
-      }
       break;
     }
     lastSkillNames = names;
-    if (typeof ae.attachment.content === 'string') {
-      skillListingContent = ae.attachment.content;
-    }
   }
   if (registeredSkills.length === 0) registeredSkills = lastSkillNames;
+
+  // visibleSkills / visibleAgents (DD-13): snapshot-derived definitions filtered down to what
+  // this session actually registered. When the session reported no listing at all (empty
+  // registeredSkills/registeredAgents — e.g. a log predating the attachment events), every
+  // snapshot definition is shown instead of none, so a merely-older session still gets its
+  // Skills/Agents tabs.
+  const visibleSkills: SkillDefinition[] | undefined = skillDefinitionsMap
+    ? Array.from(skillDefinitionsMap.values())
+        .filter(
+          (s) =>
+            registeredSkills.length === 0 || registeredSkills.includes(s.name),
+        )
+        .sort((a, b) => a.name.localeCompare(b.name))
+    : undefined;
+  const visibleAgents: AgentDefinition[] | undefined = agentDefinitionsMap
+    ? Array.from(agentDefinitionsMap.values())
+        .filter(
+          (a) =>
+            registeredAgents.length === 0 || registeredAgents.includes(a.name),
+        )
+        .sort((a, b) => a.name.localeCompare(b.name))
+    : undefined;
 
   // mcpCalls: count tool_use blocks in assistant messages whose name matches /^mcp__/
   const mcpCalls: Record<string, number> = {};
@@ -2764,65 +2728,6 @@ export function parseSessionLogs(
       if (block.type === 'tool_use' && block.name?.startsWith('mcp__')) {
         mcpCalls[block.name] = (mcpCalls[block.name] ?? 0) + 1;
       }
-    }
-  }
-
-  // Build skill definitions from skill_listing.content for skills not already in skillDefinitionsMap.
-  // Handles two formats:
-  //   Old flat:  "- skill-name: description text" (no section headers at all — in practice this
-  //              format is used for project/plugin skills just as often as true built-ins, so
-  //              default to 'project' rather than assuming the absence of a header means built-in)
-  //   New tree:  section header "Project" or "Built-in" followed by
-  //              "├ skill-name: ~N tokens" / "└ skill-name: ~N tokens" (always preceded by a
-  //              header in practice, so the default below is never actually exercised here)
-  if (skillListingContent) {
-    const builtinMap = new Map<string, SkillDefinition>();
-    const knownNames = new Set(registeredSkills);
-    let currentSection: 'project' | 'builtin' = 'project';
-    const lines = skillListingContent.split('\n');
-    for (const line of lines) {
-      const trimmed = line.trim();
-      // Detect tree-format section headers
-      if (/^project$/i.test(trimmed)) {
-        currentSection = 'project';
-        continue;
-      }
-      if (/^built-?in$/i.test(trimmed)) {
-        currentSection = 'builtin';
-        continue;
-      }
-
-      let name: string;
-      let desc: string;
-
-      // Old flat format: "- skill-name: description"
-      const oldFmt = trimmed.match(/^-\s+([\w-]+):\s*(.*)$/);
-      if (oldFmt) {
-        name = oldFmt[1];
-        desc = oldFmt[2];
-      } else {
-        // New tree format: "├ skill-name: ..." or "└ skill-name: ..."
-        const treeFmt = trimmed.match(/^[├└]\s+([\w-]+):/);
-        if (!treeFmt) continue;
-        name = treeFmt[1];
-        desc = '';
-      }
-
-      if (!knownNames.has(name)) continue; // guard against spurious matches
-      if (skillDefinitionsMap?.has(name)) continue; // project skill-definitions take priority
-
-      builtinMap.set(name, {
-        name,
-        description: desc.trim(),
-        body: '',
-        path: '',
-        bytes: 0,
-        source: currentSection,
-      });
-    }
-    if (builtinMap.size > 0) {
-      if (!skillDefinitionsMap) skillDefinitionsMap = new Map();
-      for (const [k, v] of builtinMap) skillDefinitionsMap.set(k, v);
     }
   }
 
@@ -2858,6 +2763,8 @@ export function parseSessionLogs(
       agentDefinitions: agentDefinitionsMap,
     }),
     ...(mcpConfigList !== undefined && { mcpConfig: mcpConfigList }),
+    ...(visibleSkills !== undefined && { visibleSkills }),
+    ...(visibleAgents !== undefined && { visibleAgents }),
   };
 
   // ---------------------------------------------------------------------------

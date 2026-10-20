@@ -39,6 +39,7 @@ import {
 } from './export-import-zip';
 import { ExportImportJobsService } from './export-import-jobs.service';
 import { getImportLimits, ImportLimitError } from './import-limits';
+import { loadHarnessSnapshot } from './harness-snapshot';
 import {
   findForeignAuthorEmails,
   findForeignSessionIds,
@@ -72,6 +73,8 @@ interface MatchingSessionRow {
   sessionId: string;
   parentSessionId: string | null;
   workflowRunId: string | null;
+  /** DD-14: non-null when a harness snapshot (DD-9) is bound to this session. */
+  harnessSnapshotId: string | null;
 }
 
 /**
@@ -788,6 +791,7 @@ export class RepositoryExportImportService {
         sessionRowId: logs.sessionId,
         logType: logs.logType,
         body: logs.body,
+        userId: logs.userId,
         userEmail: users.email,
         firstPrompt: logs.firstPrompt,
         startTime: logs.startTime,
@@ -929,11 +933,56 @@ export class RepositoryExportImportService {
         });
       }
       if (artisynLog) {
-        archive.append(serializeArrayToJsonl(artisynLog.body as unknown[]), {
-          name: `${baseDir}/artisyn.jsonl`,
-        });
+        const artisynBodyLines = artisynLog.body as unknown[];
+        const snapshotLines = await this.buildExportHarnessSnapshotLines(
+          session.harnessSnapshotId,
+          artisynLog.userId,
+          artisynBodyLines,
+        );
+        archive.append(
+          serializeArrayToJsonl([...snapshotLines, ...artisynBodyLines]),
+          { name: `${baseDir}/artisyn.jsonl` },
+        );
       }
     }
+  }
+
+  /**
+   * DD-14: prepends the session's stored harness snapshot to its exported `artisyn.jsonl` —
+   * a full `harness-snapshot` line built from the `harness_snapshots` table row, keyed by
+   * the artisyn log's owner (not necessarily the exporting user: a team export covers every
+   * member's sessions). This makes the archive self-sufficient even though the live body
+   * usually carries only the ref-only line, since the full snapshot is sent just once (to
+   * whichever upload first saw an unknown id). A `harness-snapshot-ref` line is added only
+   * when the body doesn't already carry one — most artisyn uploads do (DD-7) — so
+   * re-importing it never doubles the ref up. Returns `[]` when the session has no bound
+   * snapshot, or the row no longer exists (DD-21's accepted race).
+   */
+  private async buildExportHarnessSnapshotLines(
+    harnessSnapshotId: string | null,
+    ownerUserId: number,
+    bodyLines: unknown[],
+  ): Promise<object[]> {
+    if (harnessSnapshotId === null) return [];
+    const body = await loadHarnessSnapshot(
+      this.db,
+      ownerUserId,
+      harnessSnapshotId,
+    );
+    if (body === null) return [];
+
+    const lines: object[] = [{ type: 'harness-snapshot', ...body }];
+    const hasRef = bodyLines.some(
+      (line) =>
+        (line as { type?: unknown } | null)?.type === 'harness-snapshot-ref',
+    );
+    if (!hasRef) {
+      lines.push({
+        type: 'harness-snapshot-ref',
+        snapshotId: harnessSnapshotId,
+      });
+    }
+    return lines;
   }
 
   private async sumLogBytes(sessionRowIds: number[]): Promise<number> {
@@ -993,6 +1042,7 @@ export class RepositoryExportImportService {
         sessionId: sessions.sessionId,
         parentSessionId: sessions.parentSessionId,
         workflowRunId: sessions.workflowRunId,
+        harnessSnapshotId: sessions.harnessSnapshotId,
       })
       .from(sessions)
       .innerJoin(logs, eq(logs.sessionId, sessions.id))

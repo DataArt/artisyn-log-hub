@@ -71,6 +71,7 @@ export function SessionLogView({
             workflows: logsData.workflows,
             subagentLogs: subagentLogsMap,
             pricing,
+            harnessSnapshot: logsData.harnessSnapshot ?? null,
           })
         : null,
     [logsData, repoConfig, subagentLogsMap, pricing],

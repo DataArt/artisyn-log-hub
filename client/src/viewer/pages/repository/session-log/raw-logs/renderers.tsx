@@ -7,7 +7,12 @@ import { JsonBlock } from './primitives';
 import { AssistantExpanded } from './assistant';
 import { AttachmentExpanded } from './attachment';
 import { UserExpanded } from './user';
-import { SystemExpanded, SystemContextExpanded } from './system';
+import {
+  SystemExpanded,
+  SystemContextExpanded,
+  HarnessSnapshotExpanded,
+  HarnessSnapshotRefExpanded,
+} from './system';
 import {
   AiTitleExpanded,
   FileHistorySnapshotExpanded,
@@ -45,6 +50,10 @@ export function RawLogsExpandedView({
       return <SystemExpanded entry={entry} />;
     case 'system-context':
       return <SystemContextExpanded entry={entry} />;
+    case 'harness-snapshot':
+      return <HarnessSnapshotExpanded entry={entry} />;
+    case 'harness-snapshot-ref':
+      return <HarnessSnapshotRefExpanded entry={entry} />;
     case 'user':
       return <UserExpanded entry={entry} />;
     default:

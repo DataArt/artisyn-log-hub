@@ -250,9 +250,20 @@ Two fixed limits on the upload side are not config keys:
   than 40 MB, `send-logs-hook.js` writes a `warn` line to `hook.log` and to stderr naming the size, then uploads it
   anyway. It is a signal, not a cap: bodies above `CHUNK_SIZE_BYTES` go through the chunked path, and the server's
   limits are per route (see `hook-api-versioning.md`) and per repository (`repositories.max_upload_bytes`).
-- **Plugin-skill scan depth.** The skill catalog the hook uploads scans `~/.claude/plugins/` recursively for
-  `SKILL.md` files down to `PLUGIN_SKILL_MAX_DEPTH` directory levels (environment variable, default `30`;
-  `skill-catalog.js`). Project skills win over user and plugin skills of the same name.
+- **Plugin resolution for the harness snapshot (hook `2.22.0`+, DD-4).** The catalog the hook
+  uploads (as part of the `harness-snapshot` line — see `docs/knowledgebase/hook-system-overview.md`'s
+  "Context injection") no longer does a recursive, depth-bounded scan of `~/.claude/plugins/`.
+  Instead, for each `<name>@<marketplace>` left enabled after merging `enabledPlugins` from
+  `<claudeConfigDir>/settings.json`, the project's own `.claude/settings.json`, then
+  `.claude/settings.local.json` (a later file's `false` disables an earlier `true`),
+  `skill-catalog.js` resolves the plugin's actual install location from
+  `<claudeConfigDir>/plugins/installed_plugins.json` (v2): it picks the first `plugins["<id>"]`
+  entry that matches, in order, a `local`-scope entry whose `projectPath` matches this project, a
+  `project`-scope entry whose `projectPath` matches, then a `user`-scope entry — and reads only
+  that entry's `installPath`. There is no depth limit and no `PLUGIN_SKILL_MAX_DEPTH` env var any
+  more; a plugin enabled but not resolvable this way is skipped with one `hook.log` line
+  (`harness: plugin <id> enabled but not installed for this project — skipped`), never a scan
+  failure. Project skills still win over user and plugin skills of the same name.
 
 ### OTEL Settings
 

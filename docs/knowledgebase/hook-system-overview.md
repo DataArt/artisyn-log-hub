@@ -315,39 +315,105 @@ releasing it in a `finally`. This keeps a Stop-triggered upload and a background
 above) mutually exclusive — see `prompt-upload-hook.js`'s section for the lock's staleness/recovery mechanics, which
 are identical for both callers.
 
-**Context injection:** before uploading `artisyn` namespace files, several synthetic events are prepended: a `system-context` event (file sizes of all `CLAUDE.md` / `CLAUDE.local.md` files found in the project tree), `skill-definitions`, `agent-definitions`, and `mcp-config` events. `claude` and `claude-subagent` namespaces are uploaded as-is without modification. This metadata supports context analysis on the server.
+**Context injection (hook `2.22.0`+ — harness snapshot):** before uploading an `artisyn` namespace
+file of the *current* session, the hook prepends a `harness-snapshot-ref` line (just `{ type:
+'harness-snapshot-ref', snapshotId }`) to every upload, and prepends the full `harness-snapshot`
+line (DD-1 in `docs/tasks/todo/2026-10-16-sysctx-skill-source/impl-plan.md` — the design the rest
+of this section follows) only when that id is not yet known to have reached the server. `claude`
+and `claude-subagent` namespaces are uploaded as-is without modification. A backlog session (not
+the current run's own session) carries neither line — same restriction the four events this
+replaced had. This metadata supports context analysis on the server.
 
-**Since hook `2.12.0` these four events are reported at most ONCE PER SESSION, on the
-current session's own `artisyn` body only** — a backlog session's log carries none of them. They
-describe the HARNESS, not the session, and the server upserts them **per repository**
-(`upsertHarnessElements(tx, repoId, …)` in `logs.service.ts`), skipping the upsert entirely when
-they are absent rather than clearing what it knows — so attaching them to 2,399 old logs produced
-one identical repo-level upsert 2,399 times, at 573 KB a copy (an 1,811-byte session log shipped as
-581 KB; ~1.3 GB across the backlog).
+**Snapshot shape (DD-1).** One JSON object, uploaded as the `harness-snapshot` line's body (the
+line is `{ type: 'harness-snapshot', ...body }`; `harness_snapshots.body` stores `body` verbatim,
+without `type`):
 
-Change detection is by **last-modified time**, in `harness-state.js`: the three file-based builders
-already stat everything they describe and carry `lastModified` per entry, so the fingerprint costs
-nothing beyond a walk that was happening anyway and never reads the 521 KB of skill bodies. mtime is
-not a perfect oracle (a touch re-reports; an mtime-preserving edit does not) — accepted, since the
-consequence is one redundant or one delayed catalog upsert, never wrong session data. MCP is
-fingerprinted from the mtimes of `.mcp.json`, `~/.claude/mcp.json` and `~/.claude/settings.json`,
-because `buildMcpConfig()` returns live probe results that no file mtime reflects.
+```jsonc
+{
+  "snapshotId": "<64 lowercase hex>",
+  "schemaVersion": 1,
+  "perToolDetailSupported": true,        // capability flag, NOT part of the id — see
+                                          // hook-api-versioning.md's "perToolDetailSupported" section
+  "skills": [{ "name", "kind": "skill"|"workflow"|"command",
+               "source": "project"|"user"|"plugin",
+               "description", "argumentHint"?, "body", "path", "bytes", "contentHash",
+               "plugin"? }],             // plugin entries only: {id, name, marketplace, version, gitCommitSha?}
+  "agents": [{ "name", "description", "body", "path", "bytes", "contentHash", "source": "project" }],
+  "mcpServers": [{ "name", "command", "args", "url"?, "configSource": "project"|"user",
+                   "connected"?, "tools"? }],   // connected/tools absent on a ref-only resend
+  "systemContext": { "totalBytes", "files": [{ "path", "bytes", "contentHash", "content"? }] } | null
+}
+```
 
-The decision is **frozen for the session** at its first full upload run: a skill edited mid-session
-is reported by the NEXT session, not by this session's next `Stop`. State lives in one JSON,
-`.artisyn/ai_work_dir/harness-state.json` (`{version, fingerprint, decidedForSessionId, reported,
-updatedAt}`), written temp-file + rename, and committed only **after** the upload carrying the
-report succeeded — same commit-after-success rule as the manifest.
+No `projectRoot` or `lastModified` field exists anywhere in the shape — every path is already
+relative (DD-3), and change detection no longer uses mtime (see below). A skill/workflow/command
+entry under a plugin is named `<pluginName>:<name>`.
 
-**Code-inventory injection (hook `2.16.0`+) — a FIFTH prepended event, on its OWN throttle.**
+**`snapshotId` is content-addressed, not a counter (DD-2).** The hook computes
+`snapshotId = sha256Hex(JSON.stringify(canon))` from a canonical projection — skills sorted by
+`(source, name)` as `[name, source, plugin ? "<id>@<version>" : '', contentHash]`, agents sorted by
+path, MCP servers sorted by name, and `systemContext` files sorted by path — where each
+`contentHash` is the sha256 hex of the *whole* raw UTF-8 file text (frontmatter included). MCP probe
+results (`connected`/`tools`) and `perToolDetailSupported` are deliberately excluded from the
+canon, so neither changes the id. **The server never recomputes this id** — `extractHarnessSnapshot`
+only format-validates `^[0-9a-f]{64}$` and trusts the hook's value (see
+`server/src/logs/harness-snapshot.ts`).
+
+**Which plugins/skills the catalog scans (DD-4, DD-5) — `skill-catalog.js`'s `buildSkillCatalog()`.**
+A plugin counts as enabled only when it survives three gates, in order: (1) `enabledPlugins` merged
+from `<claudeConfigDir>/settings.json`, then `<projectRoot>/.claude/settings.json`, then
+`.claude/settings.local.json` — a later file's `false` disables a plugin the earlier ones enabled;
+(2) `<claudeConfigDir>/plugins/installed_plugins.json` (v2) has a `plugins["<id>"]` entry whose
+`scope`/`projectPath` matches this project — `local` wins over `project` wins over `user`, with
+`projectPath` normalised (`path.resolve`, backslashes to `/`, trailing `/` stripped, lower-cased on
+win32) before comparing; (3) that entry actually resolves to an `installPath` on disk. An enabled-
+but-unresolved plugin is skipped with one `hook.log` line
+(`harness: plugin <id> enabled but not installed for this project — skipped`), never a thrown
+error. For each surviving source (project, user, each enabled plugin) the scanner reads
+`skills/<dir>/SKILL.md` (kind `skill`), `workflows/*.js` (kind `workflow`, name/description parsed
+by regex off the file's `meta = {...}` block — the file is never executed) and top-level
+`commands/*.md` (kind `command`), plus any extra paths a plugin's `plugin.json` lists under
+`skills`/`commands`. A project/user name collision resolves **project wins**. The recursive scan of
+`~/.claude/plugins/` and the reading of directory-marketplace working copies from earlier hook
+versions are gone — DD-4/DD-5 read only the resolved `installPath`.
+
+**Change detection is now content-hash equality, not mtime.** Every scanned entry already carries
+its `contentHash` (used in the canon above), so a touch with no content change reproduces the same
+`snapshotId` and a content edit — even one that preserves the file's mtime — always produces a new
+one. This replaces the pre-2.22.0 `lastModified`/fingerprint scheme entirely; `harness-state.js` no
+longer computes or stores a fingerprint.
+
+**Hook-side known-state and per-run flow (DD-6, DD-7).** `harness-state.json` is now v2:
+`{ version: 2, knownSnapshotIds: string[], sessionSnapshots: { [sessionId]: snapshotId } }`.
+`knownSnapshotIds` is most-recent-first and capped at `HARNESS_KNOWN_SNAPSHOTS_MAX = 20`; a v1 file,
+or one missing/corrupt, reads as empty (so the full snapshot is sent once more, never a crash). Per
+run: (1) build the static snapshot (catalog, agents, systemContext, static MCP config) and compute
+`snapshotId`; (2) if that id is already known, send only the ref (`snapshotId=<id>` query param,
+`[ref]` log prefix); (3) otherwise run the MCP probe (`perToolDetailSupported: true` in the full
+body), send both lines (`snapshotId=<id>&snapshotFull=1`, `[ref, full]` prefix) — the probe runs at
+most once per run, its result memoised; (4) the prefix keeps the old harness position in the log
+line, after `hook-status` and before `code-inventory`; (5) every chunk of a chunked upload carries
+the same query params. The id is added to `knownSnapshotIds` only **after** a successful upload that
+carried the full snapshot — same commit-after-success rule the old harness-state and manifest used
+— and removed again if a later response's `unknownSnapshotId` names it (the server lost the row;
+see `hook-api-versioning.md`'s new snapshot section). `sessionSnapshots` records, per session id,
+the last snapshot sent — `prompt-upload-hook.js` reads it to prepend a ref-only line on a
+UserPromptSubmit upload without ever building the catalog or running the probe.
+
+**Pre-`2.22.0` hooks send none of this.** Their `artisyn` uploads still succeed; the server simply
+never sees a `harness-snapshot`/`harness-snapshot-ref` line, so the session binds to no snapshot and
+`harness_elements` is not fed from it (DD-17 — an explicit, scoped exception to this repo's normal
+hook-backward-compatibility rule; see `hook-api-versioning.md`).
+
+**Code-inventory injection (hook `2.16.0`+) — a separate prepended event, on its OWN throttle.**
 `send-logs-hook.js` also prepends
 `{ type: 'code-inventory', projectRoot, trackedFiles, trackedLines, trackedBinaryFiles, commitSha,
 branch, capturedAt }` when its own time window has elapsed. It is the **denominator** behind the
 Change Surface report's two "share of the codebase touched" indicators (see
 [`change-surface.md`](change-surface.md)), and it is deliberately **not** hung off the harness
-fingerprint above:
+snapshot's change detection above:
 
-- That fingerprint covers CLAUDE.md / skills / agents / MCP config, which on a working repo almost
+- The snapshot covers CLAUDE.md / skills / agents / MCP config, which on a working repo almost
   never change. An inventory gated on it would be measured once and then go stale for weeks while
   the codebase it describes grew — and a stale denominator silently skews every percentage computed
   from it. A plain **time window** is the right gate for a measurement of something that changes
@@ -369,37 +435,46 @@ case of no commits yet) yields `null` and **no event at all** — the report the
 `n/a · denominator unavailable` rather than a codebase of zero files that would make every
 percentage `Infinity` or `0 %`.
 
-**Do not move the build back inside the per-file loop.** `buildMcpConfig()` spawns every stdio MCP
-server and waits for an `initialize` + `tools/list` handshake, sequentially, bounded by
-`mcpProbeTimeoutMs` each — measured at 4,690 ms for 4 servers, and it was paid per uploaded file.
-That put upload lines in `hook.log` exactly 4.7–4.9 s apart and turned 2,399 artisyn files into a
-~188-minute run that never once reached its own `done:` line. The build is also **lazy**, so a run
-with nothing to report spawns no probe at all. Pinned by the `per-run context prepends` tests
-in `__tests__/send-logs-hook.test.js`.
+**Do not move the probe back inside the per-file loop.** `probeMcpServerTools()` spawns every
+stdio MCP server and waits for an `initialize` + `tools/list` handshake, sequentially, bounded by
+`mcpProbeTimeoutMs` each — measured at 4,690 ms for 4 servers, and paying that per uploaded file
+(the old, pre-snapshot design) put upload lines in `hook.log` exactly 4.7–4.9 s apart and turned
+2,399 artisyn files into a ~188-minute run that never once reached its own `done:` line. DD-7's
+per-*run* (not per-file) flow and the once-per-run memoisation described above exist specifically
+to keep this cost paid at most once. Pinned by the `per-run context prepends` tests in
+`__tests__/send-logs-hook.test.js`.
 
-**`mcp-config`'s live `tools/list` probe (hook `2.7.0`+):** for each server declared in
-`.mcp.json` / `~/.claude/mcp.json` / `~/.claude/settings.json` with a `command` (stdio transport
-only — `url`/SSE-based servers are out of scope and keep `connected`/`tools` `undefined`, same as
-an old hook), `buildMcpConfig()` calls `probeMcpServerTools(name, cfg, mcpProbeTimeoutMs)`
-**sequentially, one server at a time** (bounds added latency to `mcpProbeTimeoutMs × serverCount`,
-default `3000`ms per server, configurable via `env-context.js`'s `mcpProbeTimeoutMs` option): spawn
-`cfg.command` with `cfg.args`, write a JSON-RPC `initialize` request followed by `tools/list` to
-its stdin (newline-delimited JSON, MCP's stdio transport), read stdout until the matching
-`tools/list` response arrives or the timeout fires, then kill the process. Any failure (spawn
-error, timeout, malformed response) resolves `{connected: false, tools: []}` rather than throwing
-— fail-open, exactly like every other hook capability. A successful probe adds
-`connected: true` and `tools: [{name, schemaSizeTokens}]` to that server's `mcp-config` entry,
-where `schemaSizeTokens = Math.round(JSON.stringify({name, description, inputSchema}).length /
-MCP_SCHEMA_CHARS_PER_TOKEN)` — a deliberately coarse, fixed `÷4` estimate (`MCP_SCHEMA_CHARS_PER_TOKEN`
-in `send-logs-hook.js`), distinct from the per-model `chars_per_token` ratios in
-`token-byte-ratio.md` that drive token estimation everywhere else.
+**The live `tools/list` probe itself (hook `2.7.0`+, now part of the harness snapshot's
+`mcpServers` since `2.22.0`):** for each server declared in `.mcp.json` / `~/.claude/mcp.json` /
+`~/.claude/settings.json` with a `command` (stdio transport only — `url`/SSE-based servers are out
+of scope and keep `connected`/`tools` `undefined`, same as an old hook),
+`readMcpServersStatic(projectRoot, env)` (`harness-snapshot.js`) first builds the static
+`{servers, rawConfigByName}` shape with no probe, then — only when the run's `snapshotId` is
+unknown (DD-7 step 3) — `send-logs-hook.js` calls `probeMcpServerTools(name, cfg,
+mcpProbeTimeoutMs)` over `rawConfigByName`, **sequentially, one server at a time** (bounds added
+latency to `mcpProbeTimeoutMs × serverCount`, default `3000`ms per server, configurable via
+`env-context.js`'s `mcpProbeTimeoutMs` option): spawn `cfg.command` with `cfg.args`, write a
+JSON-RPC `initialize` request followed by `tools/list` to its stdin (newline-delimited JSON, MCP's
+stdio transport), read stdout until the matching `tools/list` response arrives or the timeout
+fires, then kill the process. Any failure (spawn error, timeout, malformed response) resolves
+`{connected: false, tools: []}` rather than throwing — fail-open, exactly like every other hook
+capability. A successful probe adds `connected: true` and `tools: [{name, schemaSizeTokens}]` to
+that server's `mcpServers` entry in the full snapshot body, where `schemaSizeTokens =
+Math.round(JSON.stringify({name, description, inputSchema}).length / MCP_SCHEMA_CHARS_PER_TOKEN)`
+— a deliberately coarse, fixed `÷4` estimate (`MCP_SCHEMA_CHARS_PER_TOKEN` in `send-logs-hook.js`),
+distinct from the per-model `chars_per_token` ratios in `token-byte-ratio.md` that drive token
+estimation everywhere else. A ref-only upload (the id was already known) carries no `mcpServers`
+probe fields at all — the snapshot body isn't resent, only its ref.
 
-The `mcp-config` event also gains a top-level `perToolDetailSupported: true` flag whenever this
-probe code ran at all (regardless of whether any individual server connected) — see
-`hook-api-versioning.md`'s `perToolDetailSupported` section for the exact backward-compatibility
-contract this flag exists to provide. Server-side: `extractHarnessMcpInventory()`
-(`artisyn-extractor.ts`) reads the extended shape; `harness-elements-writer.ts` upserts `mcp`- and
-MCP-sourced `tool`-kind rows into `harness_elements`; see `docs/knowledgebase/db-tables.md`.
+The snapshot's top-level `perToolDetailSupported: true` flag (DD-1) is set whenever this probe code
+ran at all for the full body being sent (regardless of whether any individual server connected) —
+see `hook-api-versioning.md`'s `perToolDetailSupported` section (now updated for its move from the
+old `mcp-config` event to the snapshot root) for the exact backward-compatibility contract this
+flag exists to provide. Server-side: `extractHarnessMcpInventory()` (`artisyn-extractor.ts`) now
+reads it off the loaded `HarnessSnapshotBody` (DD-10) instead of a `mcp-config` event;
+`upsertHarnessElements()` (`harness-elements-writer.ts`, called from `logs.service.ts`'s Step 5d)
+upserts `mcp`- and MCP-sourced `tool`-kind rows into `harness_elements`; see
+`docs/knowledgebase/db-tables.md`.
 
 **Sub-agent linking (v1.5.0+):** Claude Code can spawn agents that themselves spawn further agents (orchestrator → chunk-agent → research-agent, 3+ levels). For each sub-agent file (regular or workflow), the hook reads the sibling `<agent-id>.meta.json` and extracts `parentAgentId`; when present, the upload's `parentSessionId` query param is set to `agent-<parentAgentId>` — the true immediate spawning session/agent, not always the root. When `.meta.json` is missing, has no `parentAgentId` (older Claude Code versions, or a true depth-1 agent), or fails to parse, the hook falls back to the previous behavior (`parentSessionId = <main-session-id>`) — fail-open, per this hook's design principles. The server links child sessions to their parent via `sessions.parent_session_id`, using a recursive (any-depth) descendant query rather than a single-level match, since a grandchild's `parent_session_id` now points at its direct parent agent, not the root.
 

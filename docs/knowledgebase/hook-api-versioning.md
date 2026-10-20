@@ -222,25 +222,31 @@ in-place edit.
 
 ---
 
-## `perToolDetailSupported` — MCP per-tool detail capability flag (hook `2.7.0`+)
+## `perToolDetailSupported` — MCP per-tool detail capability flag (hook `2.7.0`+; moved to the snapshot root in `2.22.0`)
 
-A third capability-versioning problem, distinct from both routes above: the `mcp-config` synthetic
-event (see `hook-system-overview.md`'s "Context injection") gained per-server `connected`/`tools`
-fields and a top-level `perToolDetailSupported: true` flag when the hook added a live `tools/list`
-probe of each configured MCP server. The server needs to tell two zero-shaped outcomes apart that
-would otherwise look identical:
+A third capability-versioning problem, distinct from both routes above: the hook's MCP reporting
+(originally the standalone `mcp-config` synthetic event; since hook `2.22.0` the `mcpServers` array
+of the `harness-snapshot` body — see `hook-system-overview.md`'s "Context injection" and the new
+snapshot section below) gained per-server `connected`/`tools` fields and a top-level
+`perToolDetailSupported: true` flag when the hook added a live `tools/list` probe of each
+configured MCP server. **`2.22.0` moved `perToolDetailSupported` from the `mcp-config` event's own
+top level to the `harness-snapshot` body's top level** (DD-1) — same name, same meaning, new home;
+nothing below in this section changed because of that move except where the flag is read from. The
+server needs to tell two zero-shaped outcomes apart that would otherwise look identical:
 
-1. **Old hook** (`< 2.7.0`) — never attempted the probe. Its `mcp-config` payload simply has no
-   `connected`/`tools`/`perToolDetailSupported` keys at all.
+1. **Old hook** (`< 2.7.0`, or any pre-`2.22.0` hook that never sends a snapshot at all — see
+   below) — never attempted the probe. Its MCP payload (the old `mcp-config` event, where one
+   exists) simply has no `connected`/`tools`/`perToolDetailSupported` keys at all.
 2. **Capable hook, zero result** — the probe ran but the server had 0 tools, or failed to connect
    (`connected: false, tools: []`). This is a real, known count, not missing data.
 
-**The flag, not the version string, is the signal.** `perToolDetailSupported`'s *presence* on the
-event — not `hookVersion`, and not whether individual servers report `connected: true` — is what
-the server checks (`extractHarnessMcpInventory()` in `artisyn-extractor.ts`). Rationale: a hook
-could in principle ship the capability but have it disabled/fail entirely for a given run,
-so gating on the hook version string would be one layer removed from what actually happened on
-this specific upload.
+**The flag, not the version string, is the signal.** `perToolDetailSupported`'s *presence* — not
+`hookVersion`, and not whether individual servers report `connected: true` — is what the server
+checks. `extractHarnessMcpInventory()` (`artisyn-extractor.ts`) reads it off the loaded
+`HarnessSnapshotBody` (DD-10; pre-`2.22.0`, it read the `mcp-config` event instead — same check,
+different source object). Rationale: a hook could in principle ship the capability but have it
+disabled/fail entirely for a given run, so gating on the hook version string would be one layer
+removed from what actually happened on this specific upload.
 
 **Storage and rendering consequence** (`repositories.harness_mcp_per_tool_supported`, "last
 self-report wins" — see `db-tables.md`):
@@ -255,13 +261,88 @@ This is the same "distinguish absent-because-old from present-but-zero" shape `h
 `hook_last_activity` already solve for the Hook State Panel — `perToolDetailSupported` is a second,
 independent instance of that pattern, scoped to one feature rather than the whole hook.
 
-Backward compatibility is automatic and requires no version-detection branching in application
-code: an old hook's `mcp-config` entries are simply missing the new fields, which is
-`undefined` on the parsed object — exactly the same "old hook, new field absent" shape every other
-additive event-field change in this hook uses. No new route was
-needed for this change, unlike the `v1`/`v2` split above, because an old hook reading a `201` never
-inspects `mcp-config`-specific response fields — the risk that motivated the route split does not
-apply here.
+Within the `2.7.0`–`2.21.x` range, backward compatibility was automatic and required no
+version-detection branching in application code: an old hook's `mcp-config` entries were simply
+missing the new fields, which is `undefined` on the parsed object — exactly the same "old hook, new
+field absent" shape every other additive event-field change in this hook uses. No new route was
+needed for that change, unlike the `v1`/`v2` split above, because an old hook reading a `201` never
+inspected `mcp-config`-specific response fields.
+
+**`2.22.0` is a sharper line, by explicit exception (DD-17 in the sysctx-skill-source plan — see
+the new section below).** A pre-`2.22.0` hook doesn't send a payload *missing the new field*; it
+sends no `harness-snapshot`/`harness-snapshot-ref` line at all, because that whole event replaced
+`mcp-config` (and three siblings) outright. Its uploads still succeed, but the session binds to no
+snapshot, `harness_mcp_per_tool_supported` is never touched for it, and `perToolDetailSupported`'s
+absence in that case is really "no snapshot was reported", not "the probe didn't run" — the two
+read the same in storage (the column is left unchanged either way) but have different causes.
+
+---
+
+## `snapshotId` / `snapshotFull` / `unknownSnapshotId` — harness snapshot query params (hook `2.22.0`+)
+
+The harness-snapshot flow (DD-1–DD-9 in
+`docs/tasks/todo/2026-10-16-sysctx-skill-source/impl-plan.md`; see `hook-system-overview.md`'s
+"Context injection" for the full shape and per-run flow) adds a fourth query param pair to
+`POST /api/v2/logs`, on top of the existing `type`/`sessionId`/`parentSessionId`/`workflowRunId`
+and the hook-`1.8.0`+ chunk params — see `docs/knowledgebase/api-reference.md` for the full
+`PostLogsQuery` shape:
+
+| Query param | Sent when | Server behaviour |
+|---|---|---|
+| `snapshotId` | Every upload of the current session's own `artisyn` file, hook `2.22.0`+ | Format-validated against `^[0-9a-f]{64}$` (`SNAPSHOT_ID_RE`); an invalid value is **silently ignored, never a `400`** — same "never break an old or malformed caller" posture as every other query param on this route |
+| `snapshotFull=1` | Only when the body's `harness-snapshot` line is the FULL snapshot (the id was unknown to the hook) — a ref-only upload omits it | Gates `upload_queue.harness_snapshot_id` (set only when `snapshotFull==='1'` **and** `snapshotId` is valid) and gates whether the server will even consider answering `unknownSnapshotId` (see below) |
+
+**`unknownSnapshotId` — the response half of the same loop.** Returned, additively, on the
+single-upload response and the chunk-complete response only (never on an intermediate chunk,
+never on a foreign-session response) when **all four** hold:
+
+1. `snapshotId` is present and format-valid;
+2. `snapshotFull !== '1'` (this was a ref-only upload — the server never asks back for what the
+   same request just sent in full);
+3. no `harness_snapshots` row exists yet for (this API key's `userId`, that id);
+4. no `upload_queue` row exists for (`userId`, that id,
+   `status IN ('pending','processing','partially_uploaded')`) either — a full snapshot upload still
+   in flight also counts as "known", so the hook isn't told to resend something already on its way.
+
+This is `isHarnessSnapshotKnown()` in `server/src/logs/harness-snapshot.ts`, called synchronously
+inside `LogsV2Controller.postLogs()`.
+
+**Why this needs a response field at all, unlike the plain-additive fields above.** Every other
+field in this document is either purely additive on the request (safe to ignore by an old hook)
+or purely additive on the response (safe to ignore by an old hook that doesn't read it). This one
+is different: the *hook* needs the server's answer to decide whether to resend a potentially large
+body next time, and the server has no other channel to tell it "I don't actually have that id" —
+so, symmetrically with `warnings` (the `broken-upload-file` channel above),
+`unknownSnapshotId` rides the same `201` JSON the hook already parses. An old hook (pre-`2.22.0`)
+never sends `snapshotId`, so condition 1 above never holds for it and it never receives the field
+— the same "old hook, new field absent" shape, just gated on the hook choosing to ask rather than
+on its version.
+
+**Hook-side consumption (DD-7, DD-19) — self-healing, not a retry.** `upload-logs.js` parses
+`unknownSnapshotId` off the `201` body the same way it already parses `warnings`. On the hook side:
+
+- On success with the **full** snapshot sent: the id is added to `harness-state.json`'s
+  `knownSnapshotIds` (capped at `HARNESS_KNOWN_SNAPSHOTS_MAX = 20`, most-recent-first) — `rememberSnapshot()`.
+- If the response's `unknownSnapshotId` equals the id this upload just sent (ref-only case): the id
+  is removed from `knownSnapshotIds` — `forgetSnapshot()` — so the **next** upload of that session
+  (the next `Stop`, or the next `prompt-upload-hook.js` run) treats the id as unknown again and
+  resends the full body with `snapshotFull=1`.
+- `recordSessionSnapshot()` always records the id just sent against the session id in
+  `sessionSnapshots`, regardless of outcome — this is what lets `prompt-upload-hook.js` send a
+  ref-only upload without ever touching the catalog or the MCP probe (DD-19).
+
+**DD-21's accepted race:** a purge (`deleteOrphanHarnessSnapshots`) can delete the
+`harness_snapshots` row between the controller's "known" answer on one upload and the ingest of a
+later ref-only upload that relied on it. That session is then bound to an id with no row behind it.
+The *next* upload of that session self-heals: the controller (re-checking fresh) now reports the id
+unknown, the hook resends the full snapshot, and ingest re-stores the row. A session that never
+uploads again simply stays without a usable snapshot — accepted, not fixed, since nothing queries
+it again either.
+
+**Pre-`2.22.0` hooks and this whole mechanism:** they send none of `snapshotId`/`snapshotFull`,
+so `unknownSnapshotId` is never computed for their uploads (step 1 above fails immediately) and
+every other part of this section is a no-op for them — their uploads succeed exactly as before,
+with no snapshot bound to the session (DD-17).
 
 ---
 

@@ -98,6 +98,7 @@ async function buildSessionRecord(
     subagentStats: logsData.subagentStats,
     workflows: logsData.workflows,
     subagentLogs: subagentLogsMap,
+    harnessSnapshot: logsData.harnessSnapshot ?? null,
   });
 
   const session: RepositorySession = {

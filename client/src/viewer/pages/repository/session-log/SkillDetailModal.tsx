@@ -15,14 +15,6 @@ interface Props {
   charsPerToken?: number;
 }
 
-function formatDate(ms: number): string {
-  return new Date(ms).toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  });
-}
-
 export function SkillDetailModal({
   skill,
   onClose,
@@ -38,7 +30,7 @@ export function SkillDetailModal({
         if (!open) onClose();
       }}
     >
-      <DialogContent className="max-w-2xl">
+      <DialogContent className="max-w-2xl" data-testid="skill-detail-modal">
         <DialogHeader>
           <DialogTitle className="font-mono text-base">
             {skill.name}
@@ -70,16 +62,32 @@ export function SkillDetailModal({
                       ? 'bg-sky-50 text-sky-700 border-sky-200 dark:bg-sky-950 dark:text-sky-300 dark:border-sky-700'
                       : skill.source === 'plugin'
                         ? 'bg-violet-50 text-violet-700 border-violet-200 dark:bg-violet-950 dark:text-violet-300 dark:border-violet-700'
-                        : 'bg-muted text-muted-foreground border-border',
+                        : 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950 dark:text-amber-300 dark:border-amber-700',
                   )}
                 >
                   {skill.source === 'project'
                     ? 'PROJECT'
                     : skill.source === 'plugin'
                       ? 'PLUGIN'
-                      : 'BUILT-IN'}
+                      : 'USER'}
                 </span>
               </div>
+              {skill.source === 'plugin' && skill.plugin && (
+                <div
+                  className="flex gap-3 text-xs"
+                  data-testid="skill-detail-plugin"
+                >
+                  <span className="w-24 shrink-0 text-muted-foreground">
+                    Plugin
+                  </span>
+                  <span className="font-mono text-foreground">
+                    {skill.plugin.id} · v{skill.plugin.version}
+                    {skill.plugin.gitCommitSha
+                      ? ` · ${skill.plugin.gitCommitSha.slice(0, 7)}`
+                      : ''}
+                  </span>
+                </div>
+              )}
               {skill.path && (
                 <div className="flex gap-3 text-xs">
                   <span className="w-24 shrink-0 text-muted-foreground">
@@ -97,16 +105,6 @@ export function SkillDetailModal({
                   </span>
                   <span className="font-mono text-foreground">
                     {formatBytes(skill.bytes)} · ~{formatCompact(estTokens)} tok
-                  </span>
-                </div>
-              )}
-              {skill.lastModified != null && (
-                <div className="flex gap-3 text-xs">
-                  <span className="w-24 shrink-0 text-muted-foreground">
-                    Modified
-                  </span>
-                  <span className="font-mono text-foreground">
-                    {formatDate(skill.lastModified)}
                   </span>
                 </div>
               )}

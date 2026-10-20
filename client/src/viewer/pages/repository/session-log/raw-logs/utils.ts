@@ -10,6 +10,7 @@ import {
   ArrowLeftRight,
   Terminal,
   FileCode,
+  Link,
   User,
   HelpCircle,
 } from 'lucide-react';
@@ -26,6 +27,8 @@ export const TYPE_ICONS: Record<string, LucideIcon> = {
   'queue-operation': ArrowLeftRight,
   system: Terminal,
   'system-context': FileCode,
+  'harness-snapshot': FileCode,
+  'harness-snapshot-ref': Link,
   user: User,
 };
 
@@ -78,6 +81,24 @@ export function getCollapsedSummary(entry: Record<string, unknown>): string {
       return String(entry.subtype ?? '');
     case 'system-context':
       return `${String(claudeMd?.totalBytes ?? 0)} bytes`;
+    case 'harness-snapshot': {
+      const id = String(entry.snapshotId ?? '').slice(0, 12);
+      const skillCount = Array.isArray(entry.skills) ? entry.skills.length : 0;
+      const agentCount = Array.isArray(entry.agents) ? entry.agents.length : 0;
+      const mcpCount = Array.isArray(entry.mcpServers)
+        ? entry.mcpServers.length
+        : 0;
+      const systemContext = entry.systemContext as
+        | { files?: unknown[] }
+        | null
+        | undefined;
+      const fileCount = Array.isArray(systemContext?.files)
+        ? systemContext.files.length
+        : 0;
+      return `${id} · ${skillCount} skills, ${agentCount} agents, ${mcpCount} mcp, ${fileCount} files`;
+    }
+    case 'harness-snapshot-ref':
+      return String(entry.snapshotId ?? '').slice(0, 12);
     case 'user': {
       const content = msg?.content;
       if (Array.isArray(content)) {
