@@ -37,11 +37,31 @@ function MismatchChip({ breakdown }: { breakdown: CostBreakdown }) {
     <span
       data-testid="cost-mismatch-chip"
       className="inline-flex items-center gap-1 rounded border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 font-sans text-[10px] font-normal text-amber-700 dark:text-amber-400"
-      title="The calculated total (main thread + sub-agents + utility calls) and the telemetry-reported total differ by at least $0.01."
+      title="The calculated total (main thread + sub-agents + utility calls) and the telemetry-reported total differ by more than $0.05 and 1% of the telemetry total."
     >
       <span aria-hidden="true">⚠</span> mismatch
       {delta != null && ` ${formatCost(delta)}`}
     </span>
+  );
+}
+
+/**
+ * Muted footnote explaining a flagged mismatch: OTEL meters the root process's real billed
+ * calls in one pass, while the calculated total is reconstructed independently per session
+ * (main thread, each sub-agent, utility calls) from its own extracted token counts and
+ * `model_pricing` rates. The two pipelines normally land within ~5-25% of each other — wider
+ * on sessions with several sub-agents, where more independently-extracted parts are summed.
+ * See `otel-cost.sql.ts`'s `OTEL_INCOMPLETE_RATIO` comment for the measured band.
+ */
+function MismatchNote({ breakdown }: { breakdown: CostBreakdown }) {
+  if (!breakdown.mismatch) return null;
+  return (
+    <p className="text-[10px] leading-snug text-muted-foreground/70">
+      *(OTEL and calculated price can mismatch by roughly 5-25% — wider on
+      sessions with several sub-agents — because OTEL meters the real billed
+      calls in one pass while the calculated total is reconstructed separately
+      per sub-agent from its own tokens and pricing)
+    </p>
   );
 }
 
@@ -122,6 +142,7 @@ export function CostReconciliation({
             )}
           </span>
         )}
+        <MismatchNote breakdown={breakdown} />
       </div>
     );
   }
@@ -178,6 +199,13 @@ export function CostReconciliation({
             </td>
             <td className={cn(amountCell, 'pt-0.5')}>
               {formatCost(breakdown.telemetryCost)}
+            </td>
+          </tr>
+        )}
+        {hasTelemetry && breakdown.mismatch && (
+          <tr>
+            <td colSpan={2} className="pt-1">
+              <MismatchNote breakdown={breakdown} />
             </td>
           </tr>
         )}
