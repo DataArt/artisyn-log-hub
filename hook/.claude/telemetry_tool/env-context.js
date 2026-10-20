@@ -306,7 +306,8 @@ function resolveTelemetryDir(cwd, config) {
 
 // Never-installed / probe-exhausted fallback for the loopback receiver port. The
 // installer normally allocates a random port per project and writes it into both
-// `log-hub.json` (`otelReceiverPort`) and `.claude/settings.json`'s endpoint URLs;
+// `log-hub.json` (`otelReceiverPort`) and `.claude/settings.local.json`'s endpoint URLs
+// (older installs wrote them to `.claude/settings.json`);
 // this value only applies when it never did. Mirrored (not imported — these files
 // cannot require each other) in `otel-receiver.js` and the installer.
 const OTEL_FALLBACK_PORT = 25317;

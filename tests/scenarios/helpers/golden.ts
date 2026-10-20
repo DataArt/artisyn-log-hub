@@ -104,6 +104,8 @@ export interface GoldenLines {
 export interface GoldenNodeExpected {
   key: string;
   parent?: string;
+  /** Workflow name for a workflow agent (a node launched by a `Workflow` tool call). */
+  workflow?: string;
   model: string;
   tokens: GoldenTokens;
   costUsd: number | null;

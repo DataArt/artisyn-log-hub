@@ -1,0 +1,75 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="500" viewBox="0 0 1120 500" font-family="Inter, Segoe UI, Arial, sans-serif">
+  <style>
+    .t { fill: #1f2937; }
+    .muted { fill: #6b7280; }
+    .lbl { fill: #6b7280; font-size: 10px; letter-spacing: 0.5px; }
+    .val { fill: #111827; font-size: 12px; font-weight: 700; font-family: 'JetBrains Mono', Consolas, monospace; }
+    .dim { fill: #9ca3af; }
+    .note { fill: #92400e; font-size: 12px; }
+  </style>
+  <rect width="1120" height="500" fill="#ffffff"/>
+
+  <text x="24" y="32" font-size="18" font-weight="700" class="t">Session detail header: FR-5 start at the first real prompt (session &lt;row A&gt;)</text>
+  <text x="24" y="54" font-size="12" class="muted">Wireframe, light theme. Same header fields and layout as today; only START (and the span derived from it) moves.</text>
+
+  <!-- BEFORE -->
+  <text x="24" y="92" font-size="13" font-weight="700" class="muted">Today</text>
+  <rect x="24" y="102" width="1072" height="100" fill="#f9fafb" stroke="#e5e7eb"/>
+  <text x="40" y="124" class="lbl">START</text>
+  <text x="40" y="142" class="val">2026-09-26 17:08:59</text>
+  <text x="194" y="124" class="lbl">END</text>
+  <text x="194" y="142" class="val">2026-09-26 19:15:10</text>
+  <text x="348" y="124" class="lbl">USER</text>
+  <text x="348" y="142" class="val">muaddib@arrakis.test</text>
+  <line x1="510" y1="114" x2="510" y2="148" stroke="#e5e7eb"/>
+  <text x="526" y="124" class="lbl">MODEL</text>
+  <text x="526" y="142" class="val">claude-opus-5-5</text>
+  <text x="40" y="166" class="lbl">PROMPTS</text>
+  <text x="40" y="184" class="val">1</text>
+  <text x="108" y="166" class="lbl">WORK TIME</text>
+  <text x="108" y="184" class="val">0:00:21</text>
+  <text x="188" y="166" class="lbl">TOKENS IN/OUT/CACHE</text>
+  <text x="188" y="184" class="val">6 / 134 / <tspan class="dim">41,310 / 12,004</tspan></text>
+  <text x="440" y="166" class="lbl">COST</text>
+  <text x="440" y="184" class="val">$0.1889</text>
+  <text x="510" y="166" class="lbl">MAX CONTEXT</text>
+  <text x="510" y="184" class="val">53,450</text>
+  <rect x="34" y="128" width="152" height="20" fill="none" stroke="#dc2626" stroke-width="1.5" rx="3"/>
+  <text x="720" y="136" font-size="12" fill="#dc2626">span 2h 6m, of which ~2h 5m is idle before</text>
+  <text x="720" y="154" font-size="12" fill="#dc2626">the first prompt (/clear at 17:08:59, first</text>
+  <text x="720" y="172" font-size="12" fill="#dc2626">real prompt at 19:14:02)</text>
+
+  <!-- AFTER -->
+  <text x="24" y="240" font-size="13" font-weight="700" class="t">After fix (newly ingested session of the same shape)</text>
+  <rect x="24" y="250" width="1072" height="100" fill="#f9fafb" stroke="#e5e7eb"/>
+  <rect x="32" y="258" width="158" height="42" rx="4" fill="#fffbeb" stroke="#fcd34d"/>
+  <text x="40" y="272" class="lbl">START</text>
+  <text x="40" y="290" class="val">2026-09-26 19:14:02</text>
+  <text x="194" y="272" class="lbl">END</text>
+  <text x="194" y="290" class="val">2026-09-26 19:15:10</text>
+  <text x="348" y="272" class="lbl">USER</text>
+  <text x="348" y="290" class="val">muaddib@arrakis.test</text>
+  <line x1="510" y1="262" x2="510" y2="296" stroke="#e5e7eb"/>
+  <text x="526" y="272" class="lbl">MODEL</text>
+  <text x="526" y="290" class="val">claude-opus-5-5</text>
+  <text x="40" y="314" class="lbl">PROMPTS</text>
+  <text x="40" y="332" class="val">1</text>
+  <text x="108" y="314" class="lbl">WORK TIME</text>
+  <text x="108" y="332" class="val">0:00:21</text>
+  <text x="188" y="314" class="lbl">TOKENS IN/OUT/CACHE</text>
+  <text x="188" y="332" class="val">6 / 134 / <tspan class="dim">41,310 / 12,004</tspan></text>
+  <text x="440" y="314" class="lbl">COST</text>
+  <text x="440" y="332" class="val">$0.1889</text>
+  <text x="510" y="314" class="lbl">MAX CONTEXT</text>
+  <text x="510" y="332" class="val">53,450</text>
+  <text x="720" y="284" font-size="12" fill="#047857">span 1m 8s: START = first prompt_start</text>
+  <text x="720" y="302" font-size="12" fill="#047857">(or legacy prompt) hook line</text>
+
+  <!-- Notes -->
+  <rect x="24" y="372" width="1072" height="112" rx="6" fill="#fffbeb" stroke="#fcd34d"/>
+  <text x="40" y="394" font-size="13" font-weight="700" fill="#92400e">FR-5 notes</text>
+  <text x="40" y="414" class="note">- No new fields or controls. The stored logs.start_time changes, so every consumer (this header, the list span, date-range filters, analytics) follows it.</text>
+  <text x="40" y="432" class="note">- Built-in local commands such as /clear emit no prompt_start and are skipped. A session with no prompt line keeps today's start (min over activity lines).</text>
+  <text x="40" y="450" class="note">- The sessions-list row's own timestamp is the END time, so it does not move. END, WORK TIME, tokens and cost are unchanged.</text>
+  <text x="40" y="468" class="note">- Already-ingested sessions (such as &lt;row A&gt; itself) keep their stored start: no backfill. Sample values are illustrative.</text>
+</svg>

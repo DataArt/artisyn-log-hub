@@ -92,6 +92,12 @@ const OTEL_ENV = (port: number) => ({
   OTEL_METRIC_EXPORT_INTERVAL: '10000',
 });
 
+/** The installer's OTEL env keys present in a settings file's `env` (absent `env` → none). */
+const otelKeysIn = (env: unknown): string[] => {
+  const keys = new Set(Object.keys(OTEL_ENV(0)));
+  return env && typeof env === 'object' ? Object.keys(env).filter((k) => keys.has(k)) : [];
+};
+
 test('@S-INST-01 a clean install keeps the user settings, writes exactly its own files and the installed hook works @mode-a', async ({ stand }) => {
   test.setTimeout(240_000);
   const dirs = tempDirs();
@@ -145,6 +151,7 @@ test('@S-INST-01 a clean install keeps the user settings, writes exactly its own
     const repo = makeFakeGitRepo(dirs, { remote: REMOTE });
     const settingsFile = writeClaudeSettings(repo, USER_SETTINGS);
     const settingsBefore = fs.readFileSync(settingsFile, 'utf8');
+    const localSettingsFile = path.join(repo, '.claude', 'settings.local.json');
     const configDir = path.join(repo, '.artisyn', 'config');
     const plugin = pluginRoot(repo);
 
@@ -196,7 +203,7 @@ test('@S-INST-01 a clean install keeps the user settings, writes exactly its own
       expect(installedMarketplaceName(repo), 'the per-repo marketplace name is stable').toBe(EXPECTED_MARKETPLACE);
     });
 
-    await test.step('6. .claude/settings.json: the user’s permissions, hook and customKey byte for byte; the plugin keys and nine OTEL env keys added; .bak holds the original', async () => {
+    await test.step('6. .claude/settings.json: the user’s permissions, hook and customKey byte for byte; the plugin keys added and no OTEL env key; the nine OTEL env keys in .claude/settings.local.json; .bak holds the original', async () => {
       const settings = readJson(settingsFile);
       expect(JSON.stringify(settings.permissions)).toBe(JSON.stringify(USER_SETTINGS.permissions));
       expect(JSON.stringify(settings.hooks)).toBe(JSON.stringify(USER_SETTINGS.hooks));
@@ -205,7 +212,8 @@ test('@S-INST-01 a clean install keeps the user settings, writes exactly its own
       expect(settings.extraKnownMarketplaces).toEqual({
         [EXPECTED_MARKETPLACE]: { source: { source: 'directory', path: './.artisyn/marketplace' } },
       });
-      expect(settings.env).toEqual(OTEL_ENV(port));
+      expect(otelKeysIn(settings.env), 'the committed file carries no per-checkout OTEL key').toEqual([]);
+      expect(readJson(localSettingsFile).env).toEqual(OTEL_ENV(port));
       expect(install.bak, 'the first install backed up the user file byte for byte').toBe(settingsBefore);
     });
 
@@ -217,6 +225,38 @@ test('@S-INST-01 a clean install keeps the user settings, writes exactly its own
         expect(normalizePath(pair[0][3])).toBe(normalizePath(path.join(repo, '.artisyn', 'marketplace')));
         expect(pair[1]).toEqual(['plugin', 'install', `${build.PLUGIN_NAME}@${EXPECTED_MARKETPLACE}`, '--scope', 'project']);
       }
+    });
+
+    // 6b and 6c re-run install in this repo, so they come after step 7's call count. 6c puts the
+    // original port back, which 8b relies on.
+    const portFile = path.join(configDir, 'otel-port.json');
+    await test.step('6b. the recorded port drifts to another in-range port B: install repoints both endpoints in settings.local.json to B and says so', async () => {
+      const drifted = port === 65535 ? port - 1 : port + 1;
+      fs.writeFileSync(portFile, JSON.stringify({ ...readJson(portFile), port: drifted }, null, 2));
+      const res = await runInstaller(cli, repo, ['install'], { home, fakeClaudeDir: fakeClaude.dir });
+      expect(res.code, res.output).toBe(0);
+      const env = readJson<{ env: Record<string, string> }>(localSettingsFile).env;
+      expect(env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT).toBe(`http://127.0.0.1:${drifted}/v1/logs`);
+      expect(env.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT).toBe(`http://127.0.0.1:${drifted}/v1/metrics`);
+      expect(env).toEqual(OTEL_ENV(drifted));
+      expect(res.stdout).toContain(
+        'Note: rewrote stale Artisyn OTEL endpoints in .claude/settings.local.json (' +
+        `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT: ${port} → ${drifted}, OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: ${port} → ${drifted}).`,
+      );
+      expect(otelKeysIn(readJson(settingsFile).env)).toEqual([]);
+    });
+
+    await test.step('6c. a legacy layout (the nine OTEL keys on a stale port in settings.json, no settings.local.json): install moves them to settings.local.json on the current port and says so', async () => {
+      fs.writeFileSync(portFile, JSON.stringify({ ...readJson(portFile), port }, null, 2));
+      fs.rmSync(localSettingsFile, { force: true });
+      const stale = port === 30001 ? 30002 : 30001;
+      fs.writeFileSync(settingsFile, `${JSON.stringify({ ...readJson(settingsFile), env: OTEL_ENV(stale) }, null, 2)}\n`);
+      const res = await runInstaller(cli, repo, ['install'], { home, fakeClaudeDir: fakeClaude.dir });
+      expect(res.code, res.output).toBe(0);
+      expect(otelKeysIn(readJson(settingsFile).env), 'every legacy OTEL key left settings.json').toEqual([]);
+      expect(readJson(localSettingsFile).env).toEqual(OTEL_ENV(port));
+      expect(res.stdout).toContain('Note: moved the Artisyn OTEL env keys from .claude/settings.json to .claude/settings.local.json.');
+      expect(readJson(path.join(configDir, 'log-hub.json')).otelReceiverPort, 'the original port is back for 8b').toBe(port);
     });
 
     await test.step('8a. the post-install receiver smoke test passed on the allocated port', async () => {

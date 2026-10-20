@@ -249,15 +249,23 @@ against throwaway git projects with a fake `claude` and a fake log hub. S-INST-0
 `.claude/` prompt, the exact plugin tree and the manifests the build script defines —
 `scripts/build-hooks-installer.js` is `require`d for `MARKETPLACE_NAME`, `PLUGIN_NAME`,
 `HOOK_JS_FILES`, `buildPluginJson`, `buildMarketplaceJson` and the `INSTALL_HOOK.md` event parser —
-the user's settings byte for byte, the OTEL env block, two `claude plugin` calls, the receiver smoke
-test, the installed Stop command uploading with the configured key); a second test runs the real
-`claude plugin validate` on the installed marketplace and plugin and is skipped when no `claude` is
-on PATH. S-INST-02 (the key only in `log-hub.local.json`, 0o600 on POSIX, git status and
-`.gitignore` entries, destination-change warning, key replacement, a tracked local config aborts);
-its step 9 (atomic writes under a concurrent reader) is a separate test pinned with `test.fail` on
-Windows — it found a product bug (task Notes). S-INST-04 (uninstall removes only its own files and
-keys, keeps a user hook sharing the installer's matcher group, leaves a foreign OTEL collector alone,
-survives a locked plugin file — PowerShell `FileShare.None` on Windows, a 0o500 directory on POSIX).
+the user's settings byte for byte, the nine OTEL env keys in the gitignored
+`.claude/settings.local.json` and none in `.claude/settings.json` (step 6), a drifted recorded port
+repointing both local endpoints with the «rewrote stale Artisyn OTEL endpoints» Note (6b), a legacy
+layout with the keys in `settings.json` moved to `settings.local.json` with the «moved the Artisyn
+OTEL env keys» Note (6c), two `claude plugin` calls, the receiver smoke test, the installed Stop
+command uploading with the configured key); a second test runs the real `claude plugin validate` on
+the installed marketplace and plugin and is skipped when no `claude` is on PATH. S-INST-02 (the key
+only in `log-hub.local.json`, 0o600 on POSIX, git status and `.gitignore` entries — neither
+`.claude/settings.local.json` nor its `.bak` shows up — destination-change warning, key
+replacement, a tracked local config aborts); its step 9 (atomic writes under a concurrent reader) is
+a separate test pinned with `test.fail` on Windows — it found a product bug (task Notes). S-INST-04
+(uninstall removes only its own files and keys — the OTEL keys from `settings.local.json` too —
+keeps a user hook sharing the installer's matcher group, leaves a foreign OTEL collector alone: a
+non-loopback logs endpoint in `settings.json` (no local shadow written, step 3), a loopback one on a
+non-Artisyn port in `settings.local.json` (3b), all nine keys committed on the user's own collector
+(`settings.json` env identical after install and uninstall, no local OTEL key, 3c) — and survives a
+locked plugin file — PowerShell `FileShare.None` on Windows, a 0o500 directory on POSIX).
 
 Each root's `artisyn.jsonl` carries the hook's `SessionStart`/`SessionEnd` lifecycle lines at the
 transcript's first and last timestamp. Without them the session's end time is its last

@@ -682,18 +682,24 @@ async function applyHooksUpdate(
     : { base: {} as Record<string, unknown>, local: {} as Record<string, unknown> };
 
   // Resolved once per run and used twice below: it is written into
-  // `log-hub.json` and into the `.claude/settings.json` env block, which is what keeps the two in
-  // agreement. This sits on the shared install/upgrade path deliberately: upgrade is the only
+  // `log-hub.json` and into the `.claude/settings.local.json` env block, which is what keeps the two
+  // in agreement. This sits on the shared install/upgrade path deliberately: upgrade is the only
   // route by which an existing user starts receiving OTEL, so it must allocate and write exactly
   // as a fresh install does.
   //
   // Resolved before extraction so the stop-before-install step immediately
   // below has a port to target — a stale receiver from a previous install must be stopped before
   // its own files are overwritten on disk.
+  //
+  // The recorded ports are read first: `resolveInstallOtelPort` overwrites the store, and a
+  // previously allocated port must still count as ours when the settings merge below judges which
+  // OTEL endpoints are stale Artisyn values.
+  const ownedPorts = readRecordedOtelPorts(cwd);
   const otelPort = await resolveInstallOtelPort(
     overrides['OTEL_PORT'] ? { otelPort: Number(overrides['OTEL_PORT']) } : undefined,
     cwd,
   );
+  ownedPorts.add(otelPort);
 
   // Required-but-non-fatal: stop any receiver already running on the resolved
   // port before its files are overwritten, so an older-version process isn't left holding the port
@@ -748,9 +754,9 @@ async function applyHooksUpdate(
     if (willWriteLocal) verifyWrittenJson(logHubLocalJsonPath);
   }
 
-  // --- Step 2: single read-modify-write of `.claude/settings.json`. ---
+  // --- Step 2: read-modify-write of `.claude/settings.local.json` (OTEL env), then `.claude/settings.json`. ---
   const listedPlugins = marketplacePluginNames(cwd);
-  mergeSettings(claudeDir, otelPort, marketplaceName, listedPlugins);
+  mergeSettings(claudeDir, otelPort, ownedPorts, marketplaceName, listedPlugins);
 
   // Design decision 8 — required, non-fatal, immediately after the settings write, for both a
   // fresh install and a migration.
@@ -1040,6 +1046,7 @@ export async function runUpgrade(): Promise<void> {
     console.log(`  Previous version: v${currentVersion}`);
     console.log(`  New version:      v${newVersion}`);
   }
+  console.log('Note: Claude Code sessions that are already running keep their old OTEL endpoint until restarted.');
   printDataCollectionNotice(serverUrl);
 }
 
@@ -1065,7 +1072,11 @@ export function runUninstall(): void {
   const foreignMarketplacePlugins = readForeignMarketplacePlugins(cwd);
   const keepMarketplace = foreignMarketplacePlugins.length > 0;
   const marketplaceName = installedMarketplaceName(cwd) ?? LEGACY_MARKETPLACE_NAME;
-  removePluginSettingsKeys(claudeDir, marketplaceName, { keepMarketplace });
+  // Read before anything below removes the port store / config directory.
+  const ownedPorts = readRecordedOtelPorts(cwd);
+  removePluginSettingsKeys(claudeDir, marketplaceName, ownedPorts, { keepMarketplace });
+  // Unconditional — `settings.local.json` holds the OTEL keys whether or not `settings.json` exists.
+  removeOtelEnvKeys(claudeDir, 'settings.local.json', ownedPorts);
   removeStoredOtelPort(cwd);
 
   if (keepMarketplace) {
@@ -1513,9 +1524,12 @@ function removeStoredOtelPort(cwd: string): void {
   }
 }
 
-// The `env` block the installer writes into `.claude/settings.json`. Claude
-// Code exposes these to the hook process as real env vars, which is how the spawning hook learns
-// the endpoint the exporter actually posts to.
+// The `env` block the installer writes into the gitignored `.claude/settings.local.json` (never the
+// committed `.claude/settings.json`: the port is per-checkout, so a committed endpoint would point
+// every other checkout at a port that is not theirs). Claude Code exposes these to the hook
+// process as real env vars, which is how the spawning hook learns the endpoint the exporter
+// actually posts to. Older installers wrote them into `.claude/settings.json`; `mergeOtelEnv`
+// moves the ones that are still ours.
 //
 // `OTEL_EXPORTER_OTLP_COMPRESSION` is set explicitly so the payload encoding never depends on an
 // exporter default; the receiver still handles gzip/deflate, so a user who overrides it is not
@@ -1540,10 +1554,65 @@ export function OTEL_ENV_KEYS(port: number): Record<string, string> {
   };
 }
 
-// Uninstall guard: the nine keys are removed only while the logs endpoint
-// still points at a loopback receiver — i.e. it is still ours. If the user has repointed it at
-// their own collector, the whole `env` block is left untouched.
-const OTEL_LOOPBACK_LOGS_ENDPOINT_RE = /^https?:\/\/(?:127\.0\.0\.1|localhost):\d{1,5}\/v1\/logs$/;
+// The two OTEL env keys that carry a receiver endpoint (and therefore a port). Every other key of
+// `OTEL_ENV_KEYS` has a port-independent value.
+export const OTEL_ENDPOINT_KEYS = ['OTEL_EXPORTER_OTLP_LOGS_ENDPOINT', 'OTEL_EXPORTER_OTLP_METRICS_ENDPOINT'] as const;
+
+// A loopback OTLP logs/metrics endpoint — the shape the installer writes. Capture group 1 is the
+// port. Matching it is necessary but not sufficient for ownership: see `isArtisynOwnedOtelValue`.
+const OTEL_LOOPBACK_ENDPOINT_RE = /^https?:\/\/(?:127\.0\.0\.1|localhost):(\d{1,5})\/v1\/(?:logs|metrics)$/;
+
+// Every port this project has on record as its own OTEL receiver port: the gitignored
+// `.artisyn/config/otel-port.json` store and the `otelReceiverPort` in `.artisyn/config/log-hub.json`.
+// Both are kept when they disagree (a store rewritten by a newer allocation, a hand-edited config),
+// and only values that are a usable port number count. Must be read before `resolveInstallOtelPort`
+// overwrites the store, so a previously allocated port is still recognised as ours.
+function readRecordedOtelPorts(cwd: string): Set<number> {
+  const ports = new Set<number>();
+  const stored = readStoredOtelPort(cwd);
+  if (stored !== null) {
+    ports.add(stored);
+  }
+  const configured = readJsonConfig(path.join(cwd, '.artisyn', 'config', 'log-hub.json'))['otelReceiverPort'];
+  if (isUsablePortNumber(configured)) {
+    ports.add(configured);
+  }
+  return ports;
+}
+
+function isOtelEndpointKey(key: string): boolean {
+  return (OTEL_ENDPOINT_KEYS as readonly string[]).includes(key);
+}
+
+// Whether `env[key]` (one file's `env` object) holds a value this installer wrote, judged per key
+// and per file:
+//  - an endpoint key is ours while it is a loopback endpoint whose port is in the allocation range
+//    or is one of the project's recorded ports (`ownedPorts`);
+//  - any other OTEL key is ours while it carries exactly the value the installer writes AND every
+//    endpoint key present in the same `env` is ours — a file whose endpoint points at the user's
+//    own collector keeps its exporter/protocol keys, because they are the user's too.
+function isArtisynOwnedOtelValue(key: string, env: Record<string, unknown>, ownedPorts: Set<number>): boolean {
+  if (isOtelEndpointKey(key)) {
+    const value = env[key];
+    if (typeof value !== 'string') {
+      return false;
+    }
+    const match = OTEL_LOOPBACK_ENDPOINT_RE.exec(value);
+    if (!match) {
+      return false;
+    }
+    const port = Number(match[1]);
+    return (port >= OTEL_PORT_MIN && port <= OTEL_PORT_MAX) || ownedPorts.has(port);
+  }
+
+  const expected = OTEL_ENV_KEYS(0)[key];
+  if (expected === undefined || env[key] !== expected) {
+    return false;
+  }
+  return OTEL_ENDPOINT_KEYS.every(
+    endpointKey => env[endpointKey] === undefined || isArtisynOwnedOtelValue(endpointKey, env, ownedPorts),
+  );
+}
 
 // Post-install smoke test: spawn the *real* `otel-receiver.js` from the installed plugin tree with
 // a short idle timeout, POST a synthetic `/artisyn/register`, and confirm `200`. This verifies the
@@ -1818,32 +1887,216 @@ function warnIfClaudeCodeLikelyRunning(): void {
   }
 }
 
-// Reads `.claude/settings.json` for a mutation: a parse failure hard-aborts (no silent `{}`
-// fallback) and a `.claude/settings.json.bak` snapshot is written before the caller mutates
-// anything. Shared by `mergeSettings` (install/upgrade) and `removePluginSettingsKeys` (uninstall)
-// so both go through the same abort/backup contract.
-function readSettingsForMutation(claudeDir: string): { settingsPath: string; existing: Record<string, unknown> } {
-  const settingsPath = path.join(claudeDir, 'settings.json');
+// Reads `.claude/settings.json` or `.claude/settings.local.json` for a mutation: a parse failure
+// hard-aborts (no silent `{}` fallback) and a `.claude/<fileName>.bak` snapshot is written before
+// the caller mutates anything. Shared by `mergeSettings` (install/upgrade) and
+// `removePluginSettingsKeys` (uninstall) so every settings write goes through the same
+// abort/backup contract.
+//
+// `opts.snapshot: false` defers the `.bak` to the caller (which then writes `raw` itself), for a
+// caller that rewrites the file only when something actually changed.
+function readSettingsForMutation(
+  claudeDir: string,
+  fileName: SettingsFileName,
+  opts: { snapshot?: boolean } = {},
+): { settingsPath: string; existing: Record<string, unknown>; raw: string | null } {
+  const settingsPath = path.join(claudeDir, fileName);
 
   let existing: Record<string, unknown> = {};
+  let raw: string | null = null;
   if (fs.existsSync(settingsPath)) {
-    const raw = fs.readFileSync(settingsPath, 'utf8');
+    raw = fs.readFileSync(settingsPath, 'utf8');
     try {
       existing = JSON.parse(raw) as Record<string, unknown>;
     } catch {
-      console.error('Error: .claude/settings.json is not valid JSON - fix it and re-run');
+      console.error(`Error: .claude/${fileName} is not valid JSON - fix it and re-run`);
       process.exit(1);
     }
     if (!isPlainObject(existing)) {
-      console.error('Error: .claude/settings.json is not valid JSON - fix it and re-run');
+      console.error(`Error: .claude/${fileName} is not valid JSON - fix it and re-run`);
       process.exit(1);
     }
 
     // Snapshot before any mutation, so a bad merge or crash mid-write can always be recovered from.
-    atomicWrite(`${settingsPath}.bak`, raw);
+    if (opts.snapshot !== false) {
+      atomicWrite(`${settingsPath}.bak`, raw);
+    }
   }
 
-  return { settingsPath, existing };
+  return { settingsPath, existing, raw };
+}
+
+type SettingsFileName = 'settings.json' | 'settings.local.json';
+
+// Port of a loopback OTEL endpoint value, for the rewrite Note; the raw value when it has none.
+function otelEndpointPortLabel(value: unknown): string {
+  const match = typeof value === 'string' ? OTEL_LOOPBACK_ENDPOINT_RE.exec(value) : null;
+  return match ? match[1] : String(value);
+}
+
+// The OTEL `env` merge for install/upgrade (Design Decisions 4, 5 and 7 of the OTEL-port task).
+// `sharedEnv` is the committed `.claude/settings.json` `env`; the Artisyn keys belong in the
+// gitignored `.claude/settings.local.json`. Ownership (`isArtisynOwnedOtelValue`) is judged per key
+// and per file, on each file's env as read, before anything is changed. For each key:
+//  (a) an Artisyn-owned value in `settings.json` is deleted from it (migration of the old layout);
+//  (b) a user value in `settings.json` wins: it stays, nothing is written for that key in
+//      `settings.local.json`, and an owned value there is dropped so it cannot shadow it;
+//  (c) an endpoint key is (re)written in `settings.local.json` while it is absent or still ours —
+//      which is what repoints a stale Artisyn port — and a user value there is kept;
+//  (d) any other key is filled in `settings.local.json` only when absent.
+// Writes `settings.local.json` (creating it when there is something to write, deleting an emptied
+// `env`), makes sure it and its `.bak` are git-ignored, and returns the cleaned `settings.json` env
+// for the caller to write — the local file is always written first.
+function mergeOtelEnv(
+  cwd: string,
+  claudeDir: string,
+  otelPort: number,
+  ownedPorts: Set<number>,
+  sharedEnv: Record<string, unknown>,
+): Record<string, unknown> {
+  const { settingsPath: localPath, existing: localExisting, raw: localRaw } =
+    readSettingsForMutation(claudeDir, 'settings.local.json');
+  const localEnv = isPlainObject(localExisting['env'])
+    ? (localExisting['env'] as Record<string, unknown>)
+    : {};
+
+  const has = (env: Record<string, unknown>, key: string): boolean =>
+    Object.prototype.hasOwnProperty.call(env, key);
+
+  const nextShared: Record<string, unknown> = { ...sharedEnv };
+  const nextLocal: Record<string, unknown> = { ...localEnv };
+  const migrated: string[] = [];
+  const keptShared: string[] = [];
+  const keptLocal: string[] = [];
+  const rewritten: string[] = [];
+
+  for (const [key, desired] of Object.entries(OTEL_ENV_KEYS(otelPort))) {
+    const sharedOwned = has(sharedEnv, key) && isArtisynOwnedOtelValue(key, sharedEnv, ownedPorts);
+    const localOwned = has(localEnv, key) && isArtisynOwnedOtelValue(key, localEnv, ownedPorts);
+
+    if (has(sharedEnv, key) && !sharedOwned) {
+      // (b) the user's own value in the committed file.
+      keptShared.push(key);
+      if (localOwned) delete nextLocal[key];
+      continue;
+    }
+    if (sharedOwned) {
+      // (a) migrate: drop it from the committed file, then fall through to the local merge.
+      delete nextShared[key];
+      migrated.push(key);
+    }
+
+    if (isOtelEndpointKey(key)) {
+      // (c)
+      if (!has(localEnv, key) || localOwned) {
+        if (localOwned && localEnv[key] !== desired) {
+          rewritten.push(`${key}: ${otelEndpointPortLabel(localEnv[key])} → ${otelPort}`);
+        }
+        nextLocal[key] = desired;
+      } else {
+        keptLocal.push(key);
+      }
+    } else if (!has(localEnv, key)) {
+      // (d)
+      nextLocal[key] = desired;
+    } else if (localEnv[key] !== desired) {
+      keptLocal.push(key);
+    }
+  }
+
+  const nextLocalFile: Record<string, unknown> = { ...localExisting };
+  if (Object.keys(nextLocal).length > 0) {
+    nextLocalFile['env'] = nextLocal;
+  } else {
+    delete nextLocalFile['env'];
+  }
+  const serialized = JSON.stringify(nextLocalFile, null, 2) + '\n';
+  const shouldWrite = localRaw !== null
+    ? serialized !== localRaw
+    : Object.keys(nextLocalFile).length > 0;
+  if (shouldWrite) {
+    atomicWrite(localPath, serialized);
+  }
+  if (fs.existsSync(localPath)) {
+    ensureConfigIgnored(cwd, localPath, { secret: false });
+    ensureConfigIgnored(cwd, `${localPath}.bak`, { secret: false });
+  }
+
+  if (migrated.length > 0) {
+    console.log('Note: moved the Artisyn OTEL env keys from .claude/settings.json to .claude/settings.local.json.');
+  }
+  if (rewritten.length > 0) {
+    console.log(`Note: rewrote stale Artisyn OTEL endpoints in .claude/settings.local.json (${rewritten.join(', ')}).`);
+  }
+  if (keptShared.length > 0) {
+    console.log(
+      `Note: kept your existing .claude/settings.json env values for ${keptShared.join(', ')} — ` +
+      'remove them and re-run the installer if you want the Artisyn OTEL defaults instead.',
+    );
+  }
+  if (keptLocal.length > 0) {
+    console.log(
+      `Note: kept your existing .claude/settings.local.json env values for ${keptLocal.join(', ')} — ` +
+      'remove them and re-run the installer if you want the Artisyn OTEL defaults instead.',
+    );
+  }
+
+  return nextShared;
+}
+
+// Strips every Artisyn-owned OTEL key from one settings file's `env` (ownership judged on that env
+// as read, before any deletion), printing a Note for each endpoint key that is set to something
+// that is not ours. Returns the remaining env (`undefined` when it is left empty) and how many keys
+// were removed. Pure apart from the Notes — the caller writes the file.
+function stripOwnedOtelEnvKeys(
+  env: Record<string, unknown>,
+  fileName: SettingsFileName,
+  ownedPorts: Set<number>,
+): { env: Record<string, unknown> | undefined; removed: number } {
+  const next: Record<string, unknown> = { ...env };
+  let removed = 0;
+  for (const key of Object.keys(OTEL_ENV_KEYS(OTEL_FALLBACK_PORT_INSTALLER))) {
+    if (!Object.prototype.hasOwnProperty.call(env, key)) continue;
+    if (isArtisynOwnedOtelValue(key, env, ownedPorts)) {
+      delete next[key];
+      removed++;
+    } else if (isOtelEndpointKey(key)) {
+      console.log(
+        `Note: .claude/${fileName} env.${key} is "${String(env[key])}", which is not an Artisyn loopback ` +
+        'receiver — leaving it untouched.',
+      );
+    }
+  }
+  return { env: Object.keys(next).length > 0 ? next : undefined, removed };
+}
+
+// Uninstall-side cleanup of the Artisyn OTEL env keys in one `.claude/<fileName>` (Design
+// Decision 6). The file is rewritten — after a `.bak` snapshot — only when at least one key was
+// removed, and is never deleted; an absent file is a no-op. Same abort-on-invalid-JSON contract as
+// every other settings mutation.
+function removeOtelEnvKeys(claudeDir: string, fileName: SettingsFileName, ownedPorts: Set<number>): void {
+  const settingsPath = path.join(claudeDir, fileName);
+  if (!fs.existsSync(settingsPath)) {
+    return;
+  }
+  const { existing, raw } = readSettingsForMutation(claudeDir, fileName, { snapshot: false });
+  if (!isPlainObject(existing['env'])) {
+    return;
+  }
+  const { env, removed } = stripOwnedOtelEnvKeys(existing['env'] as Record<string, unknown>, fileName, ownedPorts);
+  if (removed === 0) {
+    return;
+  }
+  const next: Record<string, unknown> = { ...existing };
+  if (env) {
+    next['env'] = env;
+  } else {
+    delete next['env'];
+  }
+  if (raw !== null) {
+    atomicWrite(`${settingsPath}.bak`, raw);
+  }
+  atomicWrite(settingsPath, JSON.stringify(next, null, 2) + '\n');
 }
 
 // Surgical read-modify-write of `.claude/settings.json`:
@@ -1857,15 +2110,19 @@ function readSettingsForMutation(claudeDir: string): { settingsPath: string; exi
 //  - `enabledPlugins['log-hub-hooks@<marketplaceName>']` is set to `true` (re-enabling it, with a
 //    notice, if it had been explicitly disabled) and `extraKnownMarketplaces.<marketplaceName>` is
 //    (re)pointed at the bundled marketplace directory, warning if it previously pointed elsewhere.
-//  - The OTEL `env` block is merged per-key fill-if-absent: the user's own
-//    values always win, and the keys left untouched are reported in one `Note:` line.
+//  - The OTEL `env` keys go to the gitignored `.claude/settings.local.json` (see `mergeOtelEnv`,
+//    which writes that file before this one): Artisyn-owned keys still in this file are moved
+//    there, stale Artisyn endpoints are repointed at `otelPort`, the user's own values always win
+//    and are reported in a `Note:` line, and an emptied `env` is deleted. `ownedPorts` are the
+//    ports this project has on record as its own (`readRecordedOtelPorts` plus `otelPort`).
 function mergeSettings(
   claudeDir: string,
   otelPort: number,
+  ownedPorts: Set<number>,
   marketplaceName: string,
   listedPlugins: Set<string>,
 ): void {
-  const { settingsPath, existing } = readSettingsForMutation(claudeDir);
+  const { settingsPath, existing } = readSettingsForMutation(claudeDir, 'settings.json');
 
   const merged: Record<string, unknown> = { ...existing };
 
@@ -1935,29 +2192,20 @@ function mergeSettings(
   }
   merged['extraKnownMarketplaces'] = { ...marketplaces, [marketplaceName]: MARKETPLACE_SOURCE };
 
-  // OTEL `env` block — per-key fill-if-absent. A key the user already set (their own collector,
-  // their own protocol, a hand-picked port) is never overwritten; we only fill the gaps and say
-  // which keys we left alone, so a partially-configured setup is visible rather than silently
-  // half-ours. Same spread-and-warn shape as the two blocks above.
-  const existingEnv = isPlainObject(existing['env'])
-    ? (existing['env'] as Record<string, unknown>)
-    : {};
-  const mergedEnv: Record<string, unknown> = { ...existingEnv };
-  const preservedEnvKeys: string[] = [];
-  for (const [key, value] of Object.entries(OTEL_ENV_KEYS(otelPort))) {
-    if (Object.prototype.hasOwnProperty.call(existingEnv, key)) {
-      preservedEnvKeys.push(key);
+  // OTEL `env` block — the Artisyn keys live in `.claude/settings.local.json` (written first, by
+  // `mergeOtelEnv`); this file only loses the ones that are still ours. A user's own value here
+  // (their collector, their protocol) is never touched. A non-object `env` is left as it is.
+  if (isPlainObject(existing['env']) || existing['env'] === undefined) {
+    const sharedEnv = isPlainObject(existing['env'])
+      ? (existing['env'] as Record<string, unknown>)
+      : {};
+    const cleanedEnv = mergeOtelEnv(path.dirname(claudeDir), claudeDir, otelPort, ownedPorts, sharedEnv);
+    if (Object.keys(cleanedEnv).length > 0) {
+      merged['env'] = cleanedEnv;
     } else {
-      mergedEnv[key] = value;
+      delete merged['env'];
     }
   }
-  if (preservedEnvKeys.length > 0) {
-    console.log(
-      `Note: kept your existing .claude/settings.json env values for ${preservedEnvKeys.join(', ')} — ` +
-      'remove them and re-run the installer if you want the Artisyn OTEL defaults instead.',
-    );
-  }
-  merged['env'] = mergedEnv;
 
   atomicWrite(settingsPath, JSON.stringify(merged, null, 2) + '\n');
 
@@ -1974,6 +2222,7 @@ function mergeSettings(
 function removePluginSettingsKeys(
   claudeDir: string,
   marketplaceName: string,
+  ownedPorts: Set<number>,
   opts: { keepMarketplace?: boolean } = {},
 ): void {
   const settingsPath = path.join(claudeDir, 'settings.json');
@@ -1981,7 +2230,7 @@ function removePluginSettingsKeys(
     return;
   }
 
-  const { existing } = readSettingsForMutation(claudeDir);
+  const { existing } = readSettingsForMutation(claudeDir, 'settings.json');
   const merged: Record<string, unknown> = { ...existing };
 
   if (isPlainObject(merged['enabledPlugins'])) {
@@ -2010,30 +2259,16 @@ function removePluginSettingsKeys(
     }
   }
 
-  // OTEL `env` block — removed only while the logs endpoint still points at
-  // a loopback receiver, i.e. it is still ours. If the user has since repointed it at their own
-  // collector, the whole block is left alone and we say so: stripping the keys would silently
-  // break a setup we no longer own.
+  // OTEL `env` block (a legacy-layout install kept it here) — only the keys that are still
+  // Artisyn-owned, judged per key (`isArtisynOwnedOtelValue`). A key the user repointed at their
+  // own collector, and the exporter/protocol keys alongside it, are left alone: stripping them
+  // would silently break a setup we no longer own.
   if (isPlainObject(merged['env'])) {
-    const env = { ...(merged['env'] as Record<string, unknown>) };
-    const logsEndpoint = env['OTEL_EXPORTER_OTLP_LOGS_ENDPOINT'];
-    const isOurs = typeof logsEndpoint === 'string' && OTEL_LOOPBACK_LOGS_ENDPOINT_RE.test(logsEndpoint);
-
-    if (isOurs) {
-      for (const key of Object.keys(OTEL_ENV_KEYS(OTEL_FALLBACK_PORT_INSTALLER))) {
-        delete env[key];
-      }
-      if (Object.keys(env).length > 0) {
-        merged['env'] = env;
-      } else {
-        delete merged['env'];
-      }
-    } else if (logsEndpoint !== undefined) {
-      console.log(
-        `Note: .claude/settings.json env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT is "${String(logsEndpoint)}", ` +
-        'which is not an Artisyn loopback receiver — leaving the env block untouched. Remove the ' +
-        'OTEL_* keys by hand if you no longer want them.',
-      );
+    const { env } = stripOwnedOtelEnvKeys(merged['env'] as Record<string, unknown>, 'settings.json', ownedPorts);
+    if (env) {
+      merged['env'] = env;
+    } else {
+      delete merged['env'];
     }
   }
 

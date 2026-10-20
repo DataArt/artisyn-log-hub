@@ -103,26 +103,50 @@ const NON_ACTIVITY_LINE_TYPES = new Set([
   'code-inventory',
 ]);
 
+/**
+ * The session time span of one artisyn upload — the "session time span" rule documented
+ * (with its worked examples, which are the test cases) in
+ * `docs/knowledgebase/algorithms/session-time-span.md`.
+ *
+ * Only activity lines count: a line whose `type` is in {@link NON_ACTIVITY_LINE_TYPES}, or
+ * whose `timestamp` is missing, empty or unparseable, is skipped.
+ *
+ * - `startTime` — the smallest timestamp among the `prompt_start` / legacy `prompt` lines
+ *   (whatever their prompt text), so the idle gap between `SessionStart` (or a `/clear`) and
+ *   the first submitted prompt is not part of the span. With no such line it falls back to
+ *   the smallest timestamp of any activity line.
+ * - `endTime` — the largest timestamp of any activity line.
+ *
+ * "Smallest"/"largest" are by parsed value, not file order. Both are `null` when no activity
+ * line has a usable timestamp.
+ */
 export function extractTimestampRange(lines: object[]): {
   startTime: string | null;
   endTime: string | null;
 } {
   let minTs: number | null = null;
   let maxTs: number | null = null;
+  let minPromptTs: number | null = null;
 
   for (const line of lines) {
-    if (NON_ACTIVITY_LINE_TYPES.has((line as AnyRecord)['type'] as string))
-      continue;
-    const ts = (line as AnyRecord)['timestamp'];
+    const rec = line as AnyRecord;
+    if (NON_ACTIVITY_LINE_TYPES.has(rec['type'] as string)) continue;
+    const ts = rec['timestamp'];
     if (typeof ts !== 'string' || ts === '') continue;
     const ms = Date.parse(ts);
     if (isNaN(ms)) continue;
     if (minTs === null || ms < minTs) minTs = ms;
     if (maxTs === null || ms > maxTs) maxTs = ms;
+    const isPromptLine =
+      rec['event'] === 'prompt_start' || rec['event'] === 'prompt';
+    if (isPromptLine && (minPromptTs === null || ms < minPromptTs)) {
+      minPromptTs = ms;
+    }
   }
 
+  const startTs = minPromptTs ?? minTs;
   return {
-    startTime: minTs !== null ? new Date(minTs).toISOString() : null,
+    startTime: startTs !== null ? new Date(startTs).toISOString() : null,
     endTime: maxTs !== null ? new Date(maxTs).toISOString() : null,
   };
 }

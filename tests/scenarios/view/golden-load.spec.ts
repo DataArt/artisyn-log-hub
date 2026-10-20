@@ -125,6 +125,7 @@ test('GOLDEN-LOAD sessions list: cost, branch, start/end and version of every ro
     costUnavailableReason: string | null;
     claudeVersion: string | null;
     costBreakdown: { mainCost: number; subagentCost: number } | null;
+    hasWorkflow: boolean;
   }
   const rows = await getJson<SessionRow[]>(golden, '/sessions');
   expect(rows.map((r) => r.sessionId).sort()).toEqual(golden.roots.map((r) => r.sessionId).sort());
@@ -137,6 +138,11 @@ test('GOLDEN-LOAD sessions list: cost, branch, start/end and version of every ro
     expect.soft(row.claudeVersion, `${at}.claudeVersion`).toBe(e.claudeVersion);
     expect.soft(row.startTime, `${at}.startTime`).toBe(shiftGoldenTime(e.start, golden.deltaDays).toISOString());
     expect.soft(row.endTime, `${at}.endTime`).toBe(shiftGoldenTime(e.end, golden.deltaDays).toISOString());
+    // FR-1: only a real Workflow tool_use sets the badge — GS-01's prompt_snapshot lists the
+    // Workflow tool as offered and must stay false.
+    expect
+      .soft(row.hasWorkflow, `${at}.hasWorkflow`)
+      .toBe(e.nodes.some((n) => n.workflow !== undefined));
     if (e.costUsd !== null && e.ownCostUsd !== null) {
       close(row.costBreakdown?.mainCost, e.ownCostUsd, `${at}.costBreakdown.mainCost`);
       close(row.costBreakdown?.subagentCost, e.costUsd - e.ownCostUsd, `${at}.costBreakdown.subagentCost`);

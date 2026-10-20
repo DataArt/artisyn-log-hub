@@ -310,14 +310,22 @@ export function check({ dir = GOLDEN_DIR } = {}) {
         eq(`${at}.delegationShare`, (exp.costUsd - exp.ownCostUsd) / exp.costUsd, exp.delegationShare);
       }
 
-      // Times: the session spans the transcript; prompts and work time add up.
+      // Times (docs/knowledgebase/algorithms/session-time-span.md): the session starts at the first
+      // artisyn prompt_start (falling back to the earliest artisyn line) and ends at the last line,
+      // which is the same in the transcript and in artisyn; prompts and work time add up.
       const stamps = rootLines.map((l) => l.timestamp).filter(Boolean).sort();
-      eq(`${at}.start`, stamps[0], exp.start);
-      eq(`${at}.end`, stamps.at(-1), exp.end);
+      const artisynStamps = artisyn.map((l) => l.timestamp).filter(Boolean).sort();
+      const promptStamps = artisyn
+        .filter((l) => l.event === 'prompt_start')
+        .map((l) => l.timestamp)
+        .filter(Boolean)
+        .sort();
+      eq(`${at}.start(first artisyn prompt_start)`, promptStamps[0] ?? artisynStamps[0], exp.start);
+      eq(`${at}.end(last transcript line)`, stamps.at(-1), exp.end);
+      eq(`${at}.end(last artisyn line)`, artisynStamps.at(-1), exp.end);
+      eq(`${at}.transcript first line <= start`, stamps[0] <= exp.start, true);
       eq(`${at}.durationMs`, Date.parse(exp.end) - Date.parse(exp.start), exp.durationMs);
       eq(`${at}.prompts(artisyn prompt_start)`, artisyn.filter((l) => l.event === 'prompt_start').length, exp.prompts);
-      const artisynStamps = artisyn.map((l) => l.timestamp).filter(Boolean).sort();
-      eq(`${at}.artisyn span = transcript span`, [artisynStamps[0], artisynStamps.at(-1)], [exp.start, exp.end]);
       if (exp.perPrompt) {
         eq(`${at}.perPrompt.workTimeMs sum`, exp.perPrompt.reduce((s, p) => s + p.workTimeMs, 0), exp.workTimeMs);
         if (exp.perPrompt.every((p) => p.tokens)) {
