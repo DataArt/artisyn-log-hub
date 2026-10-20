@@ -512,7 +512,35 @@ export function resolveClaudeInvocation(args: string[]): ClaudeInvocation {
 // warning naming both exact remediation commands, in order — this must never throw out of
 // runInstall/runUpgrade, since the settings/config files are already correctly written by the
 // time this runs.
-function runClaudePluginActivation(cwd: string, marketplaceName: string): void {
+// `claude plugin marketplace add <path>` dedups by directory path, not by the name declared in
+// marketplace.json: if this exact path is already known at the user level under a DIFFERENT name
+// (the pre-per-repo-name legacy `artisyn`, or a second plugin this same marketplace lists that got
+// registered separately), `add` is a silent no-op that reports "already on disk" and keeps the OLD
+// name — the current `marketplaceName` is never created, so every later `claude plugin install
+// <x>@<marketplaceName>` fails with "not found in marketplace". Scans the user-level
+// `extraKnownMarketplaces` (same source `checkUserLevelMarketplaceCollision` reads) for an entry
+// whose path matches ours under a name other than the one we're activating now.
+function findStaleUserLevelMarketplaceName(cwd: string, marketplaceName: string): string | undefined {
+  const userSettings = readSettingsFileSafe(getUserSettingsPath());
+  const userMarketplaces = isPlainObject(userSettings?.extraKnownMarketplaces)
+    ? (userSettings!.extraKnownMarketplaces as Record<string, unknown>)
+    : {};
+  const norm = (p: string): string => {
+    const resolved = path.resolve(cwd, p).replace(/[\\/]+$/, '');
+    return process.platform === 'win32' ? resolved.toLowerCase() : resolved;
+  };
+  const ourPath = norm(relToPath(cwd, MARKETPLACE_ROOT_REL));
+  for (const [name, entry] of Object.entries(userMarketplaces)) {
+    if (name === marketplaceName) continue;
+    const entryPath = isPlainObject(entry) && isPlainObject(entry['source'])
+      ? (entry['source'] as Record<string, unknown>)['path']
+      : undefined;
+    if (typeof entryPath === 'string' && norm(entryPath) === ourPath) return name;
+  }
+  return undefined;
+}
+
+function runClaudePluginActivation(cwd: string, marketplaceName: string, listedPlugins: Set<string>): void {
   const marketplacePath = path.join(cwd, '.artisyn', 'marketplace');
   const marketplaceAddArgs = ['plugin', 'marketplace', 'add', marketplacePath];
   const pluginInstallArgs = ['plugin', 'install', pluginKey(marketplaceName), '--scope', 'project'];
@@ -531,6 +559,20 @@ function runClaudePluginActivation(cwd: string, marketplaceName: string): void {
     execFileSync(inv.file, inv.args, { cwd, stdio: 'ignore', ...inv.options });
   };
 
+  // Clear a stale same-path registration first so `add` below actually creates the current name
+  // instead of silently confirming the old one. Failure here just falls through to the same
+  // "already on disk" no-op `add` would have hit anyway, so it's safe to ignore.
+  const staleName = findStaleUserLevelMarketplaceName(cwd, marketplaceName);
+  let rebindSiblings = false;
+  if (staleName) {
+    try {
+      runClaude(['plugin', 'marketplace', 'remove', staleName]);
+      rebindSiblings = true;
+    } catch {
+      // fall through — `add` will report the pre-existing state, same as if there were no stale name
+    }
+  }
+
   try {
     runClaude(marketplaceAddArgs);
   } catch {
@@ -542,6 +584,26 @@ function runClaudePluginActivation(cwd: string, marketplaceName: string): void {
     runClaude(pluginInstallArgs);
   } catch {
     warnManualSteps();
+    return;
+  }
+
+  // Removing the stale marketplace name above also drops every OTHER plugin that was registered
+  // under it (e.g. a second plugin this repo's own marketplace lists) — `mergeSettings` already
+  // renamed their `enabledPlugins` keys to the current name, but renaming alone doesn't re-cache
+  // them, so reinstall each one or it just silently disappears.
+  if (rebindSiblings) {
+    for (const plugin of listedPlugins) {
+      if (plugin === PLUGIN_NAME) continue;
+      try {
+        runClaude(['plugin', 'install', `${plugin}@${marketplaceName}`, '--scope', 'project']);
+      } catch {
+        console.warn(
+          `Warning: could not automatically reinstall "${plugin}@${marketplaceName}" after moving it off ` +
+          `the legacy "${staleName}" marketplace name. Run manually:\n` +
+          `  claude plugin install ${plugin}@${marketplaceName} --scope project`,
+        );
+      }
+    }
   }
 }
 
@@ -687,11 +749,12 @@ async function applyHooksUpdate(
   }
 
   // --- Step 2: single read-modify-write of `.claude/settings.json`. ---
-  mergeSettings(claudeDir, otelPort, marketplaceName, marketplacePluginNames(cwd));
+  const listedPlugins = marketplacePluginNames(cwd);
+  mergeSettings(claudeDir, otelPort, marketplaceName, listedPlugins);
 
   // Design decision 8 — required, non-fatal, immediately after the settings write, for both a
   // fresh install and a migration.
-  runClaudePluginActivation(cwd, marketplaceName);
+  runClaudePluginActivation(cwd, marketplaceName, listedPlugins);
 
   // The post-install smoke test — same required-but-non-fatal contract as the
   // activation above, and for the same reason: by now the port is written everywhere, so a
@@ -1836,7 +1899,11 @@ function mergeSettings(
     for (const key of Object.keys(enabledPlugins)) {
       if (!key.endsWith(legacySuffix)) continue;
       const plugin = key.slice(0, -legacySuffix.length);
-      if (plugin !== PLUGIN_NAME && !(legacyIsOurs && listedPlugins.has(plugin))) continue;
+      // Moved whenever the plugin is ours or is one this marketplace itself lists — independent of
+      // `legacyIsOurs` (a signal read from THIS file), because a sibling plugin's `@artisyn` key can
+      // persist here even after an earlier run already dropped `extraKnownMarketplaces.artisyn` (e.g.
+      // it was (re)enabled under the legacy name afterwards, by a separate `claude plugin install`).
+      if (plugin !== PLUGIN_NAME && !listedPlugins.has(plugin)) continue;
       const next = `${plugin}@${marketplaceName}`;
       if (!Object.prototype.hasOwnProperty.call(enabledPlugins, next)) enabledPlugins[next] = enabledPlugins[key];
       delete enabledPlugins[key];
