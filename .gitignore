@@ -46,6 +46,11 @@ server/src/public/static/*.tar.gz
 # Local Azure SSO reference data — real client secrets, never commit.
 /docs/login-sso-data/
 
+# Personal skill: writes/reads task open-questions docs in Russian (open-questions-ru skill).
+# Neither the skill itself nor the files it produces are shared with the team.
+/.claude/skills/open-questions-ru/
+**/open_questions_ru.md
+
 # Claude Code runtime state (per machine, never committed)
 **/.claude/scheduled_tasks.lock
 **/.claude/scheduled_tasks.json

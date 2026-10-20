@@ -1,0 +1,104 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="860" viewBox="0 0 1120 860" font-family="Inter, Segoe UI, Arial, sans-serif">
+  <style>
+    .t { fill: #1f2937; }
+    .muted { fill: #6b7280; }
+    .lbl { fill: #6b7280; font-size: 11px; font-weight: 600; }
+    .mono { font-family: 'JetBrains Mono', Consolas, monospace; }
+    .id { fill: #111827; font-size: 12px; font-weight: 600; }
+    .dur { fill: #6b7280; font-size: 12px; }
+    .note { fill: #92400e; font-size: 12px; }
+    .problem { fill: #b91c1c; font-size: 12px; }
+    .task { fill: #111827; font-size: 12px; }
+    .sub { fill: #9ca3af; font-size: 10px; }
+    .num { fill: #7e22ce; font-size: 12px; font-weight: 700; }
+    .chosen { fill: #15803d; font-size: 12px; font-weight: 700; }
+  </style>
+  <rect width="1120" height="860" fill="#ffffff"/>
+
+  <text x="24" y="32" font-size="18" font-weight="700" class="t">Workflow "Agents (N)" drill-down — variant B (table), chosen</text>
+  <text x="24" y="54" font-size="12" class="muted">Wireframe, light theme. Logs tab, WorkflowNode → "Agents (N)" section. Same collapsible section header; only the agent list inside changes.</text>
+
+  <!-- BEFORE -->
+  <text x="24" y="92" font-size="13" font-weight="700" class="muted">Today</text>
+  <rect x="24" y="102" width="1072" height="190" fill="#f9fafb" stroke="#e5e7eb"/>
+  <text x="40" y="124" font-size="12" class="muted">&#9662; Agents (7)</text>
+  <text x="40" y="150" class="mono id">&#9656; a0cd2e5e0dff&#8230;</text>
+  <text x="1080" y="150" text-anchor="end" class="mono dur">00:42</text>
+  <text x="40" y="172" class="mono id">&#9656; a2306a194821&#8230;</text>
+  <text x="1080" y="172" text-anchor="end" class="mono dur">01:15</text>
+  <text x="40" y="194" class="mono id">&#9656; a589b7579c67&#8230;</text>
+  <text x="1080" y="194" text-anchor="end" class="mono dur">00:58</text>
+  <text x="40" y="216" class="mono id">&#9656; b14f0a2c88d1&#8230;</text>
+  <text x="1080" y="216" text-anchor="end" class="mono dur">00:33</text>
+  <text x="40" y="242" font-style="italic" class="muted" font-size="11">&#8230; +3 more rows, same shape (c7e912ab&#8230;, d35a6e1f&#8230;, e82c4d7a&#8230;)</text>
+  <text x="40" y="270" class="problem">Problem: every row looks the same — no order, no task, nothing without expanding</text>
+  <text x="40" y="286" class="problem">every single node one by one.</text>
+
+  <!-- AFTER -->
+  <text x="24" y="330" font-size="13" font-weight="700" class="t">After — variant B: table</text>
+  <text x="200" y="330" class="chosen">&#10003; chosen (picked after comparing 3 mockups: minimal list / table / timeline)</text>
+  <rect x="24" y="340" width="1072" height="260" fill="#f9fafb" stroke="#e5e7eb"/>
+  <text x="40" y="362" font-size="12" class="muted">&#9662; Agents (7)</text>
+
+  <!-- table header -->
+  <text x="56" y="388" text-anchor="end" class="lbl">#</text>
+  <text x="80" y="388" class="lbl">TASK (PROMPT START)</text>
+  <text x="760" y="388" text-anchor="end" class="lbl">DURATION</text>
+  <text x="860" y="388" text-anchor="end" class="lbl">TOKENS</text>
+  <text x="960" y="388" text-anchor="end" class="lbl">COST</text>
+  <line x1="40" y1="396" x2="1080" y2="396" stroke="#e5e7eb"/>
+
+  <!-- row 1 -->
+  <text x="56" y="416" text-anchor="end" class="num">1</text>
+  <text x="80" y="416" class="task">Review client code for workflow session readability&#8230;</text>
+  <text x="80" y="430" class="mono sub">a0cd2e5e&#8230; &#10697;</text>
+  <text x="760" y="416" text-anchor="end" class="mono dur">00:42</text>
+  <text x="860" y="416" text-anchor="end" class="mono dur">12.3K</text>
+  <text x="960" y="416" text-anchor="end" class="mono dur">$0.04</text>
+
+  <!-- row 2 -->
+  <text x="56" y="456" text-anchor="end" class="num">2</text>
+  <text x="80" y="456" class="task">Check server workflow-extractor.ts for agentSessionIds&#8230;</text>
+  <text x="80" y="470" class="mono sub">a2306a19&#8230; &#10697;</text>
+  <text x="760" y="456" text-anchor="end" class="mono dur">01:15</text>
+  <text x="860" y="456" text-anchor="end" class="mono dur">18.9K</text>
+  <text x="960" y="456" text-anchor="end" class="mono dur">$0.07</text>
+
+  <!-- row 3 -->
+  <text x="56" y="496" text-anchor="end" class="num">3</text>
+  <text x="80" y="496" class="task">Verify SessionInfoWorkflowsSection table layout matches&#8230;</text>
+  <text x="80" y="510" class="mono sub">a589b757&#8230; &#10697;</text>
+  <text x="760" y="496" text-anchor="end" class="mono dur">00:58</text>
+  <text x="860" y="496" text-anchor="end" class="mono dur">9.1K</text>
+  <text x="960" y="496" text-anchor="end" class="mono dur">$0.03</text>
+
+  <!-- row 3.1 nested -->
+  <text x="56" y="528" text-anchor="end" class="num" fill="#9333ea" font-size="11">3.1</text>
+  <text x="110" y="528" class="task" font-size="11">&#8618; Check nested Task sub-agent spawned inside #3&#8230;</text>
+  <text x="760" y="528" text-anchor="end" class="mono dur" font-size="11">00:12</text>
+  <text x="860" y="528" text-anchor="end" class="mono dur" font-size="11">2.0K</text>
+  <text x="960" y="528" text-anchor="end" class="mono dur" font-size="11">$0.01</text>
+
+  <!-- row 4 -->
+  <text x="56" y="558" text-anchor="end" class="num">4</text>
+  <text x="80" y="558" class="task">Draft open questions for review&#8230;</text>
+  <text x="80" y="572" class="mono sub">c7e912ab&#8230; &#10697;</text>
+  <text x="760" y="558" text-anchor="end" class="mono dur">00:33</text>
+  <text x="860" y="558" text-anchor="end" class="mono dur">4.7K</text>
+  <text x="960" y="558" text-anchor="end" class="mono dur">$0.01</text>
+
+  <text x="40" y="592" font-style="italic" class="muted" font-size="11">Click a row to expand: full prompt, model, tool calls, files, skills, plus a "&#128269; View raw logs" action (FR-5) — same content &#9656; SubAgentNode shows today, no new network request.</text>
+
+  <!-- Notes -->
+  <rect x="24" y="624" width="1072" height="214" rx="6" fill="#fffbeb" stroke="#fcd34d"/>
+  <text x="40" y="646" font-size="13" font-weight="700" fill="#92400e">Notes</text>
+  <text x="40" y="666" class="note">- Order (#1, #2, &#8230;) reflects real start order, derived from the first timestamped record in each agent's own transcript (startMs) —</text>
+  <text x="40" y="684" class="note">  not the current agentSessionIds array order, which is a BFS discovery order and does not track real start time.</text>
+  <text x="40" y="702" class="note">- A nested agent (SubAgentNode.children) is its own indented row right below its parent, prefixed "&#8618;", numbered "#N.M" (deeper: "#N.M.K").</text>
+  <text x="40" y="720" class="note">- The raw agent id stays visible as small secondary mono text under the task label, for copy/technical lookup — never removed.</text>
+  <text x="40" y="738" class="note">- An agent with no derivable prompt and/or startMs falls back to the raw id as its label and to its current (BFS) position, appended</text>
+  <text x="40" y="756" class="note">  at the end of its sibling group — same graceful-degradation standard as the rest of this component.</text>
+  <text x="40" y="774" class="note">- No new network request: startMs, the label and FR-5's raw-log view all come from subagentLogsMap, already loaded for this drill-down.</text>
+  <text x="40" y="792" class="note">- FR-5 "View raw logs" (added after the user asked to see a sub-agent's own logs, not just the derived summary) opens a modal reusing the</text>
+  <text x="40" y="810" class="note">  existing Raw Logs tab renderer (RawLogsTab + raw-logs/*), scoped to just that one agent's own transcript — no second raw-log viewer built.</text>
+</svg>
