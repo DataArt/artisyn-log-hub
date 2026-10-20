@@ -12,7 +12,9 @@
     "MCP_TIMEOUT": "90000"
   },
   "enabledPlugins": {
-    "typescript-lsp@claude-plugins-official": true
+    "typescript-lsp@claude-plugins-official": true,
+    "adlc-lh@artisyn": true,
+    "log-hub-hooks@artisyn": true
   },
   "extraKnownMarketplaces": {}
 }
