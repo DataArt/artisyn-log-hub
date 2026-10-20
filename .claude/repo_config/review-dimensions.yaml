@@ -1,0 +1,31 @@
+dimensions:
+  - key: completeness
+    label: Completeness
+    guidance: |
+      - Are all acceptance criteria present and verifiable (measurable, not vague)?
+      - Does each functional requirement have at least one corresponding acceptance criterion?
+      - Are Status, Priority, Type, Module, Owner, and Created fields filled in?
+      - Are there any gaps in calculations, like missing numbers/inputs/etc?
+      - Any gaps in API calls, missing parameters?
+      - Read the actual code this task touches and flag any parameter, field, or input the doc
+        never mentions but the implementation would need.
+
+  - key: technical-accuracy
+    label: Technical accuracy
+    guidance: |
+      - Are API changes explicit (endpoint, HTTP method, request/response shape, field types)?
+      - Are database/schema changes described (table, columns, types, constraints, migrations)?
+      - Are UI changes described with enough detail to implement without guessing?
+      - Read the actual code this task touches (entities, controllers, routes, components) and
+        flag anything the doc claims that doesn't match reality, or real technical detail the doc
+        is missing.
+
+  - key: clarity-and-edge-cases
+    label: Clarity & edge cases
+    guidance: |
+      - Is there any vague language: "some", "may", "etc.", "as needed", "appropriate"?
+      - Are pronouns or referents unclear ("it", "they", "the item")?
+      - Are any requirements contradictory or overlapping?
+      - Are error states handled (what happens on failure, network error, empty result)?
+      - Are boundary values covered (empty list, single item, max items, concurrent requests)?
+      - Are permission/auth constraints mentioned if the feature touches access control?

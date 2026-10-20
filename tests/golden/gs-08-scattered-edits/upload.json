@@ -1,0 +1,12 @@
+{
+  "fixture": "GS-08",
+  "roots": [
+    {
+      "key": "gs08",
+      "sessionId": "{{RUN}}-gs08",
+      "artisyn": "artisyn.jsonl",
+      "claude": "session.jsonl",
+      "subagents": []
+    }
+  ]
+}

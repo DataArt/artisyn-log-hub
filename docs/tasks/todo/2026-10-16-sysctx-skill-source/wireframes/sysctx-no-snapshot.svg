@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="330" viewBox="0 0 1000 330" font-family="Inter, Segoe UI, Arial, sans-serif">
+  <style>
+    .mono { font-family: Consolas, 'JetBrains Mono', monospace; }
+    .muted { fill: #6b7280; }
+    .fg { fill: #1f2937; }
+    .note { fill: #b45309; font-size: 11px; font-style: italic; }
+  </style>
+  <rect width="1000" height="330" fill="#ffffff"/>
+
+  <text x="20" y="22" font-size="12" font-weight="600" class="muted">Session without a harness snapshot (e.g. ffff6666-…, or uploaded by an old hook)</text>
+
+  <rect x="20" y="36" width="640" height="276" fill="#f7f5fd" stroke="#e5e7eb"/>
+  <rect x="38" y="56" width="10" height="13" rx="2" fill="none" stroke="#8b5cf6" stroke-width="1.5"/>
+  <text x="58" y="68" font-size="14" font-weight="600" class="fg">System Context</text>
+  <text x="178" y="68" font-size="12" class="muted">23 tools</text>
+  <text x="40" y="94" font-size="12" class="muted">⌄  Hide details</text>
+  <line x1="38" y1="108" x2="642" y2="108" stroke="#e5e7eb"/>
+
+  <rect x="38" y="120" width="64" height="32" rx="6" fill="#ece9f3"/>
+  <rect x="42" y="124" width="56" height="24" rx="4" fill="#ffffff"/>
+  <text x="70" y="141" font-size="12" font-weight="600" class="fg" text-anchor="middle">Tools</text>
+
+  <g font-size="12" class="mono">
+    <text x="38" y="178" fill="#374151">AskUserQuestion</text>
+    <text x="38" y="196" fill="#374151">CronCreate</text>
+    <text x="38" y="214" fill="#374151">EnterWorktree</text>
+    <text x="38" y="232" fill="#374151">Monitor</text>
+    <text x="38" y="250" fill="#374151">WebFetch</text>
+    <text x="38" y="268" class="muted">…</text>
+  </g>
+
+  <g class="note">
+    <line x1="240" y1="68" x2="690" y2="68" stroke="#f59e0b" stroke-dasharray="3 3"/>
+    <text x="696" y="64">No "N skills", "N MCP", "N agents" chips —</text>
+    <text x="696" y="78">those come only from the snapshot (FR-14, FR-18)</text>
+
+    <line x1="110" y1="136" x2="690" y2="130" stroke="#f59e0b" stroke-dasharray="3 3"/>
+    <text x="696" y="120">Skills / Files / MCP / Agents / Rules tabs are not</text>
+    <text x="696" y="134">rendered. No fallback to skill_listing or</text>
+    <text x="696" y="148">per-repo harness_elements; no error, no empty state</text>
+
+    <text x="696" y="178">Tools (deferred tools from the session log) is</text>
+    <text x="696" y="192">not part of the snapshot and stays as today</text>
+
+    <text x="696" y="224">If nothing at all is left, the panel is hidden</text>
+    <text x="696" y="238">as it is today for an empty context</text>
+  </g>
+</svg>

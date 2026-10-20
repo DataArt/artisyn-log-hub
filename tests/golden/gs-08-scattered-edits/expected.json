@@ -1,0 +1,71 @@
+{
+  "$comment": "GS-08 windows (sonnet-4-6, repo root C:\\work\\acme-shop): Windows paths, one file under two spellings, a file outside the repo, scattered change surface. Literals; costs from the DD D3 rates, the rest from scenarios/03 §2.3. Times are fixture-relative (A = 2026-01-05).",
+  "fixture": "GS-08",
+  "roots": [
+    {
+      "key": "gs08",
+      "branch": "fix/windows",
+      "week": "W2",
+      "start": "2026-01-14T10:00:00.000Z",
+      "end": "2026-01-14T10:02:40.000Z",
+      "durationMs": 160000,
+      "model": "claude-sonnet-4-6",
+      "claudeVersion": "2.1.99",
+      "prompts": 2,
+      "workTimeMs": 100000,
+      "costUsd": 0.03,
+      "ownCostUsd": 0.03,
+      "costUnavailableReason": null,
+      "nodes": [
+        {
+          "key": "root",
+          "model": "claude-sonnet-4-6",
+          "tokens": { "input": 2000, "output": 1000, "cacheRead": 5000, "cacheWrite5m": 2000, "cacheWrite1h": 0, "inputFast": 0, "outputFast": 0, "webSearch": 0 },
+          "costUsd": 0.03
+        }
+      ],
+      "tokens": {
+        "own": { "input": 2000, "output": 1000, "cacheRead": 5000, "cacheWrite5m": 2000, "cacheWrite1h": 0, "inputFast": 0, "outputFast": 0, "webSearch": 0 },
+        "tree": { "input": 2000, "output": 1000, "cacheRead": 5000, "cacheWrite5m": 2000, "cacheWrite1h": 0, "inputFast": 0, "outputFast": 0, "webSearch": 0 }
+      },
+      "cacheRatio": { "own": 0.714286, "tree": 0.714286 },
+      "perPrompt": [
+        { "workTimeMs": 60000 },
+        { "workTimeMs": 40000 }
+      ],
+      "edits": [
+        { "tool": "Edit", "path": "C:\\work\\acme-shop\\api\\users.ts", "added": 5, "removed": 1, "written": 5 },
+        { "tool": "Edit", "path": "C:\\work\\acme-shop\\web\\Cart.tsx", "added": 8, "removed": 3, "written": 8 },
+        { "tool": "Edit", "path": "c:/work/acme-shop/web/Cart.tsx", "added": 2, "removed": 0, "written": 3 },
+        { "tool": "Write", "path": "C:\\work\\acme-shop\\db\\migrations\\001_init.sql", "added": 30, "removed": 0, "written": 30 },
+        { "tool": "Edit", "path": "C:\\work\\acme-shop\\infra\\deploy.yml", "added": 2, "removed": 2, "written": 2 },
+        { "tool": "Edit", "path": "C:\\work\\acme-shop\\docs\\changelog.md", "added": 4, "removed": 0, "written": 5 },
+        { "tool": "Write", "path": "C:\\work\\acme-shop\\scripts\\seed.js", "added": 10, "removed": 0, "written": 10 },
+        { "tool": "Write", "path": "C:\\Users\\dev\\.claude\\plans\\p.md", "added": 12, "removed": 0, "written": 12, "outsideRepo": true }
+      ],
+      "tools": {
+        "Edit": { "calls": 5, "successes": 5, "failures": 0, "unresolved": 0 },
+        "Write": { "calls": 3, "successes": 3, "failures": 0, "unresolved": 0 },
+        "Bash": { "calls": 1, "successes": 1, "failures": 0, "unresolved": 0 }
+      },
+      "commits": 1,
+      "pullRequests": 0,
+      "lines": { "written": 75, "writtenOwn": 75, "added": 73, "removed": 6, "editWriteCalls": 8 },
+      "changeSurface": {
+        "changedFiles": 6,
+        "foldersTouched": 6,
+        "topLevelModules": 6,
+        "singleFileFolders": 6,
+        "folders": { "api": 1, "web": 1, "db/migrations": 1, "infra": 1, "docs": 1, "scripts": 1 },
+        "linesAdded": 61,
+        "linesRemoved": 6,
+        "outsideRepoFiles": 1,
+        "outsideRepoLinesAdded": 12,
+        "outsideRepoLinesRemoved": 0,
+        "concentration": 8,
+        "band": "scattered",
+        "detectors": ["spread", "modules", "single-file-folders"]
+      }
+    }
+  ]
+}

@@ -1,0 +1,3 @@
+#!/bin/sh
+# Migration immutability guard: see scripts/migrations-lock.js.
+exec node scripts/migrations-lock.js --pre-commit

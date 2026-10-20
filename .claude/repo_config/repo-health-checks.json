@@ -1,0 +1,162 @@
+{
+  "preCheckSkills": [],
+  "postCheckSkills": [
+    {
+      "skillName": "server-e2e-tests",
+      "finalOnly": true
+    }
+  ],
+  "environmentNotes": "Server and client are NOT kept running — start them yourself in the background when a check needs them (server: npm run start:dev from server/, client: bun run dev from client/, http://localhost:5173). Temp files go in tmp/ (gitignored), never in the project root. The scenarios-* checks (npm run test:scenarios) build and start their own isolated stand (own port, own scn_* schema in DATABASE_URL, needs Postgres and — for mode b — Mailpit, e.g. docker compose -f tests/scenarios/docker-compose.yml up -d); they do not depend on the dev server and never touch it. Iterative runs (finalRun false) are the FAST SET: every `static` check plus `build` — no DB, no stand, no dev app. contract, scenarios-a/b/c, e2e-fast and e2e-full are finalOnly and run only in the final verification. While iterating on behaviour, run just the touched scenario: npm run test:scenarios -- --mode <a|b|c> --only scenarios --grep \"<@S-TAG>\".",
+  "checks": [
+    {
+      "name": "build",
+      "dir": ".",
+      "module": "Full monorepo build",
+      "command": "npm run build",
+      "group": "app",
+      "timeoutSeconds": 300,
+      "instructions": "Zero compilation errors allowed across all packages. Runs first in the `app` group because it rewrites server/src/public/static/*, which the watched dev backend reloads on — it must never overlap an e2e run."
+    },
+    {
+      "name": "e2e-fast",
+      "dir": ".",
+      "module": "Fast e2e @core suite",
+      "command": "npm run test:e2e",
+      "group": "app",
+      "timeoutSeconds": 300,
+      "instructions": "Fast @core loop (<3min). Drives the running dev app and the real DB — the `app` group keeps it serial with the build and the other suites.",
+      "finalOnly": true
+    },
+    {
+      "name": "e2e-full",
+      "dir": ".",
+      "module": "Full e2e suite",
+      "command": "npm run test:e2e:full",
+      "group": "app",
+      "timeoutSeconds": 600,
+      "instructions": "Full suite — run once right before declaring a work cycle done, not every iteration. Drives the running dev app and the real DB — the `app` group keeps it serial with the build and the other suites.",
+      "finalOnly": true
+    },
+    {
+      "name": "scenarios-a",
+      "dir": ".",
+      "module": "Scenarios, auth mode none",
+      "command": "npm run test:scenarios -- --mode a --only scenarios,corpus",
+      "group": "app",
+      "timeoutSeconds": 600,
+      "instructions": "Isolated stand in auth mode none: run.mjs builds tmp/scenarios/stand/, starts its own server on a free port in a fresh scn_* schema and drops it afterwards — it does not use or touch the dev server, the dev DB's public schema or server/src/public/static (the run fails if either changed). Exit 2 = preflight (Postgres/Mailpit/Chromium/stray tmp/scenarios/.env.local) — fix the environment, not the tests. The stand build rewrites the installer in place like npm run build, hence the `app` group. If a mode outgrows 600 s, split it by --grep into areas.",
+      "finalOnly": true
+    },
+    {
+      "name": "scenarios-b",
+      "dir": ".",
+      "module": "Scenarios, auth mode password-confirm",
+      "command": "npm run test:scenarios -- --mode b --only scenarios",
+      "group": "app",
+      "timeoutSeconds": 600,
+      "instructions": "Isolated stand in auth mode password-confirm: run.mjs builds tmp/scenarios/stand/, starts its own server on a free port in a fresh scn_* schema and drops it afterwards — it does not use or touch the dev server, the dev DB's public schema or server/src/public/static (the run fails if either changed). Exit 2 = preflight (Postgres/Mailpit/Chromium/stray tmp/scenarios/.env.local) — fix the environment, not the tests. The stand build rewrites the installer in place like npm run build, hence the `app` group. If a mode outgrows 600 s, split it by --grep into areas.",
+      "finalOnly": true
+    },
+    {
+      "name": "scenarios-c",
+      "dir": ".",
+      "module": "Scenarios, auth mode password",
+      "command": "npm run test:scenarios -- --mode c --only scenarios",
+      "group": "app",
+      "timeoutSeconds": 600,
+      "instructions": "Isolated stand in auth mode password: run.mjs builds tmp/scenarios/stand/, starts its own server on a free port in a fresh scn_* schema and drops it afterwards — it does not use or touch the dev server, the dev DB's public schema or server/src/public/static (the run fails if either changed). Exit 2 = preflight (Postgres/Mailpit/Chromium/stray tmp/scenarios/.env.local) — fix the environment, not the tests. The stand build rewrites the installer in place like npm run build, hence the `app` group. If a mode outgrows 600 s, split it by --grep into areas.",
+      "finalOnly": true
+    },
+    {
+      "name": "contract",
+      "dir": "server",
+      "module": "API vs DB contract suite",
+      "command": "npm run test:contract",
+      "group": "app",
+      "timeoutSeconds": 600,
+      "instructions": "Isolated: jest -c jest.contract.config.js boots its own app on a free port in a fresh contract_<uuid> schema (loaded with the world-v1 fixture, dropped afterwards) and never touches the dev server or the dev DB's public schema. Needs only Postgres. It shares Postgres with the server tests and e2e, hence the `app` group. A failing registry row prints its id, route, actor and every response-vs-SQL difference; the meta-test (routes.contract-spec.ts) lists every router route without a row — add the row to server/test/contract/registry/* (see server/test/contract/README.md), never loosen the meta-test. Jest's 'did not exit one second after the test run' warning alone is NOT a failure — judge by the exit code.",
+      "finalOnly": true
+    },
+    {
+      "name": "client-lint",
+      "dir": "client",
+      "module": "Client lint",
+      "command": "bun run lint",
+      "group": "static",
+      "timeoutSeconds": 180,
+      "instructions": "Fix all lint errors."
+    },
+    {
+      "name": "client-typecheck",
+      "dir": "client",
+      "module": "Client typecheck (tsc)",
+      "command": "bun run typecheck",
+      "group": "static",
+      "timeoutSeconds": 180,
+      "instructions": "Zero type errors. `vite build` strips types WITHOUT checking them and eslint here is not type-aware, so this is the only check that typechecks the client — never weaken a type or add `any`/`as` to silence it, fix the root cause. Note tsc reports only the first incompatible property of an object literal at a time: after fixing one, re-run, as more may surface behind it."
+    },
+    {
+      "name": "server-lint",
+      "dir": "server",
+      "module": "Server lint",
+      "command": "npm run lint",
+      "group": "static",
+      "timeoutSeconds": 180,
+      "instructions": "Fix all lint errors."
+    },
+    {
+      "name": "server-typecheck",
+      "dir": "server",
+      "module": "Server typecheck (tsc)",
+      "command": "npm run typecheck",
+      "group": "static",
+      "timeoutSeconds": 180,
+      "instructions": "Zero type errors. The root build compiles via ncc from server/src/main.ts, so it only ever sees that module graph — this check is the only one covering server/test/** and any file not reachable from main.ts. Never weaken a type or add `any` to silence it, fix the root cause."
+    },
+    {
+      "name": "server-unit",
+      "dir": "server",
+      "module": "Server algorithm tests (jest)",
+      "command": "npm run test",
+      "group": "static",
+      "timeoutSeconds": 120,
+      "instructions": "Only doc-driven algorithm tests (*.algo.spec.ts) plus the migration lock check remain — behaviour is covered by scenarios and contracts, never add other specs. No global setup, no DB, no dev app: pure in-process jest, safe alongside the `app` group."
+    },
+    {
+      "name": "client-unit",
+      "dir": "client",
+      "module": "Client algorithm tests (vitest)",
+      "command": "bun run test",
+      "group": "static",
+      "timeoutSeconds": 180,
+      "instructions": "Only doc-driven algorithm tests (*.algo.test.ts) remain — client behaviour is covered by scenarios and tours, never add other client tests. Runs in-process against the sources — it does not touch the DB or the running dev app."
+    },
+    {
+      "name": "tests-typecheck",
+      "dir": ".",
+      "module": "Tests typecheck (tsc)",
+      "command": "npm run typecheck:tests",
+      "group": "static",
+      "timeoutSeconds": 180,
+      "instructions": "Zero type errors. tsc -p tests/tsconfig.json covers tests/e2e, tests/scenarios, tests/golden and playwright.scenarios.config.ts — Playwright strips types without checking them, so this is the only check that typechecks the browser suites. Never weaken a type or add `any`/`as` to silence it, fix the root cause."
+    },
+    {
+      "name": "scripts-unit",
+      "dir": ".",
+      "module": "Build-script unit tests (node --test)",
+      "command": "npm run test:scripts",
+      "group": "static",
+      "timeoutSeconds": 120,
+      "instructions": "Node's built-in test runner over scripts/__tests__/*.test.js and client/scripts/__tests__/*.test.cjs. Pure helper coverage for the build/release scripts — it never shells out to docker, never touches the DB and never touches the running dev app."
+    },
+    {
+      "name": "hook-tests",
+      "dir": "hook",
+      "module": "Hook algorithm tests (node:test)",
+      "command": "npm test",
+      "group": "static",
+      "timeoutSeconds": 300,
+      "instructions": "Only doc-driven algorithm tests (*.algo.test.js) remain in hook/.claude/telemetry_tool/__tests__ (rows owned by the server side are skipped by design) — hook behaviour is covered by tests/scenarios/hook. The file list is collected by hook/scripts/run-tests.js. Needs neither the dev server nor the DB."
+    }
+  ]
+}

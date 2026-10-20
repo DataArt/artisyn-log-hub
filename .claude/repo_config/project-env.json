@@ -1,0 +1,11 @@
+{
+  "appUrl": "http://localhost:5173",
+  "tmpDir": "tmp/",
+  "credentialsNote": "Test login credentials (user/password for the local app) are in CLAUDE.local.md.",
+  "kbIndexPath": "docs/knowledgebase/index.md",
+  "simpleTrack": {
+    "fileCountWarnThreshold": 20
+  },
+  "granularReview": false,
+  "preImplHealthCheck": false
+}

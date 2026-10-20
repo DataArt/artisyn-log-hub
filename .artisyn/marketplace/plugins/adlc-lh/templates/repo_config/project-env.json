@@ -1,0 +1,15 @@
+{
+  "appUrl": "http://localhost:3000",
+  "tmpDir": "tmp/",
+  "credentialsNote": "Where a developer/agent finds test login credentials (free text; never the credentials themselves).",
+  "kbIndexPath": "docs/knowledgebase/index.md",
+  "taskDetailsSkill": "",
+  "paths": {
+    "tasksRoot": "docs/tasks"
+  },
+  "simpleTrack": {
+    "fileCountWarnThreshold": 20
+  },
+  "granularReview": false,
+  "preImplHealthCheck": false
+}

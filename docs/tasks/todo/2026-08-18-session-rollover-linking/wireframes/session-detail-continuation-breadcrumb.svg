@@ -1,0 +1,162 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1060" height="812" viewBox="0 0 1060 812" font-family="system-ui, 'Segoe UI', Roboto, sans-serif">
+  <style>
+    .lbl   { font-size: 9px; fill: #6b7280; letter-spacing: .09em; }
+    .val   { font-size: 12px; fill: #111827; font-family: 'JetBrains Mono', ui-monospace, Consolas, monospace; }
+    .txt   { font-size: 12px; fill: #374151; }
+    .muted { font-size: 11px; fill: #9ca3af; }
+    .link  { font-size: 12px; fill: #2563eb; font-family: 'JetBrains Mono', ui-monospace, Consolas, monospace; }
+    .linku { font-size: 12px; fill: #2563eb; font-family: 'JetBrains Mono', ui-monospace, Consolas, monospace; text-decoration: underline; }
+    .h1    { font-size: 15px; fill: #111827; font-weight: 600; }
+    .h2    { font-size: 12px; fill: #111827; font-weight: 600; }
+    .note  { font-size: 10px; fill: #6b7280; font-style: italic; }
+    .tab   { font-size: 12px; fill: #6b7280; }
+    .tabon { font-size: 12px; fill: #111827; font-weight: 600; }
+    .chip  { font-size: 10px; font-family: 'JetBrains Mono', ui-monospace, Consolas, monospace; }
+    .ann   { font-size: 10px; fill: #b45309; }
+  </style>
+  <rect width="1060" height="812" fill="#ffffff"/>
+
+  <text x="24" y="28" class="h1">T-102 · Session detail — continuation breadcrumb (Option A)</text>
+  <text x="24" y="45" class="note">Light theme. New element = the single indigo row; everything else is today's SessionDetailHeader / SessionDetailPane, unchanged.</text>
+
+  <!-- ============ MAIN MOCK ============ -->
+  <rect x="24" y="60" width="1012" height="262" fill="#ffffff" stroke="#e5e7eb" rx="4"/>
+
+  <!-- stat strip row 1 -->
+  <text x="44"  y="82" class="lbl">START</text>
+  <text x="44"  y="98" class="val">2026-08-18 02:21:54</text>
+  <text x="204" y="82" class="lbl">END</text>
+  <text x="204" y="98" class="val">2026-08-18 11:00:09</text>
+  <text x="364" y="82" class="lbl">USER</text>
+  <text x="364" y="98" class="val">muaddib@arrakis.test</text>
+  <text x="524" y="82" class="lbl">MODEL</text>
+  <text x="524" y="98" class="val">claude-sonnet-5</text>
+  <text x="676" y="82" class="lbl">PROMPTS</text>
+  <text x="676" y="98" class="val">3</text>
+  <text x="752" y="82" class="lbl">WORK TIME</text>
+  <text x="752" y="98" class="val">0:18:24</text>
+
+  <!-- stat strip row 2 -->
+  <text x="44"  y="122" class="lbl">TOKENS IN/OUT/CACHE (main thread)</text>
+  <text x="44"  y="138" class="val">138 / 95,202 / 16,662,072 / 613,774</text>
+  <text x="364" y="122" class="lbl">COST</text>
+  <text x="364" y="138" class="val">$12.3400</text>
+  <text x="434" y="138" class="val" fill="#b45309" font-size="9">+sub-agents ⚠</text>
+  <text x="524" y="122" class="lbl">MAX CONTEXT</text>
+  <text x="524" y="138" class="val">359,684</text>
+  <text x="676" y="122" class="lbl">SKILLS</text>
+  <rect x="676" y="128" width="86" height="15" rx="3" fill="#f3f4f6" stroke="#e5e7eb"/>
+  <text x="682" y="139" class="chip" fill="#374151">task-tracker</text>
+  <rect x="768" y="128" width="112" height="15" rx="3" fill="#f3f4f6" stroke="#e5e7eb"/>
+  <text x="774" y="139" class="chip" fill="#374151">hook:task-tracker</text>
+
+  <text x="44" y="162" class="muted">Not yet evaluated</text>
+
+  <!-- NEW: continuation breadcrumb row -->
+  <rect x="36" y="174" width="988" height="34" rx="4" fill="#eef2ff" stroke="#c7d2fe"/>
+  <text x="50" y="195" font-size="13" fill="#4338ca">⇄</text>
+  <text x="70" y="195" class="txt" fill="#3730a3">Continues from</text>
+  <text x="164" y="195" class="linku">aaaa1111 · 2026-08-18 02:21:49 · /adlc-lh:implement-deep…</text>
+  <text x="516" y="195" class="muted" fill="#6366f1">·</text>
+  <rect x="528" y="181" width="112" height="19" rx="9" fill="#e0e7ff" stroke="#c7d2fe"/>
+  <text x="538" y="194" class="chip" fill="#3730a3">rollover · 5s gap</text>
+  <text x="660" y="195" class="txt" fill="#3730a3">·</text>
+  <text x="672" y="195" class="txt" fill="#3730a3">Chain</text>
+  <text x="712" y="195" class="linku">1 of 2</text>
+  <text x="770" y="195" class="txt" fill="#3730a3">·</text>
+  <text x="782" y="195" class="linku">View whole chain →</text>
+
+  <!-- tab bar -->
+  <line x1="24" y1="222" x2="1036" y2="222" stroke="#f3f4f6"/>
+  <circle cx="52" cy="244" r="9" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="47" y="248" font-size="10" fill="#6b7280">☆</text>
+  <circle cx="80" cy="244" r="9" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="75" y="248" font-size="10" fill="#6b7280">⟳</text>
+  <text x="108" y="248" class="tabon">Summary</text>
+  <text x="186" y="248" class="tab">Logs</text>
+  <text x="236" y="248" class="tab">Call Tree</text>
+  <text x="314" y="248" class="tab">Charts</text>
+  <text x="376" y="248" class="tab">Usage</text>
+  <text x="432" y="248" class="tab">Info</text>
+  <text x="480" y="248" class="tab">🔒 Raw Logs</text>
+  <line x1="104" y1="258" x2="164" y2="258" stroke="#111827" stroke-width="2"/>
+  <rect x="928" y="234" width="88" height="21" rx="4" fill="#ffffff" stroke="#fca5a5"/>
+  <text x="940" y="248" class="txt" fill="#dc2626" font-size="11">🗑 Remove</text>
+
+  <!-- summary tiles hint -->
+  <rect x="44" y="276" width="150" height="34" rx="4" fill="#f0fdf4" stroke="#bbf7d0"/>
+  <text x="56" y="290" class="muted" fill="#15803d">Cost</text>
+  <text x="56" y="304" class="val" fill="#111827">$12.3400</text>
+  <rect x="204" y="276" width="150" height="34" rx="4" fill="#fff7ed" stroke="#fed7aa"/>
+  <text x="216" y="290" class="muted" fill="#c2410c">Peak context</text>
+  <text x="216" y="304" class="val">359,684</text>
+  <rect x="364" y="276" width="150" height="34" rx="4" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="376" y="290" class="muted">Turns</text>
+  <text x="376" y="304" class="val">3 prompts</text>
+  <text x="530" y="300" class="note">…existing Summary tiles unchanged (Option A adds no cost/stat change)</text>
+
+  <!-- callout -->
+  <text x="24" y="342" class="ann">▲ Placement: one row between the attribution row and the tab bar — visible on every tab, so the link is reachable from Summary / Logs / Info alike.</text>
+
+  <!-- ============ STATES ============ -->
+  <text x="24" y="378" class="h1">Breadcrumb states</text>
+  <text x="24" y="395" class="note">Same row, one state at a time. Row is omitted entirely when the session has no continuation link in either direction.</text>
+
+  <!-- state 1 -->
+  <text x="24" y="424" class="h2">1 · Later session (has an origin)</text>
+  <rect x="24" y="432" width="1012" height="34" rx="4" fill="#eef2ff" stroke="#c7d2fe"/>
+  <text x="38" y="453" font-size="13" fill="#4338ca">⇄</text>
+  <text x="58" y="453" class="txt" fill="#3730a3">Continues from</text>
+  <text x="152" y="453" class="linku">aaaa1111 · /adlc-lh:implement-deep…</text>
+  <rect x="404" y="439" width="112" height="19" rx="9" fill="#e0e7ff" stroke="#c7d2fe"/>
+  <text x="414" y="452" class="chip" fill="#3730a3">rollover · 5s gap</text>
+
+  <!-- state 2 -->
+  <text x="24" y="494" class="h2">2 · Earlier session (has a successor)</text>
+  <rect x="24" y="502" width="1012" height="34" rx="4" fill="#eef2ff" stroke="#c7d2fe"/>
+  <text x="38" y="523" font-size="13" fill="#4338ca">⇄</text>
+  <text x="58" y="523" class="txt" fill="#3730a3">Continued in</text>
+  <text x="142" y="523" class="linku">bbbb2222 · 2026-08-18 11:00:09 · $12.3400 →</text>
+  <rect x="440" y="509" width="112" height="19" rx="9" fill="#e0e7ff" stroke="#c7d2fe"/>
+  <text x="450" y="522" class="chip" fill="#3730a3">rollover · 5s gap</text>
+
+  <!-- state 3 -->
+  <text x="24" y="564" class="h2">3 · Middle of a chain (both directions) + resume kind</text>
+  <rect x="24" y="572" width="1012" height="34" rx="4" fill="#eef2ff" stroke="#c7d2fe"/>
+  <text x="38" y="593" font-size="13" fill="#4338ca">⇄</text>
+  <text x="58" y="593" class="txt" fill="#3730a3">←</text>
+  <text x="74" y="593" class="linku">aaaa1111</text>
+  <text x="146" y="593" class="txt" fill="#3730a3">· this session ·</text>
+  <text x="242" y="593" class="linku">eeee5555 →</text>
+  <rect x="330" y="579" width="132" height="19" rx="9" fill="#ede9fe" stroke="#ddd6fe"/>
+  <text x="340" y="592" class="chip" fill="#5b21b6">resume · 2h 14m gap</text>
+  <text x="476" y="593" class="txt" fill="#3730a3">·</text>
+  <text x="488" y="593" class="txt" fill="#3730a3">Chain</text>
+  <text x="528" y="593" class="linku">2 of 3</text>
+  <text x="580" y="593" class="txt" fill="#3730a3">·</text>
+  <text x="592" y="593" class="linku">View whole chain →</text>
+
+  <!-- state 4 -->
+  <text x="24" y="634" class="h2">4 · Target exists but is not visible here (other owner / other repo / deleted)</text>
+  <rect x="24" y="642" width="1012" height="34" rx="4" fill="#f9fafb" stroke="#e5e7eb"/>
+  <text x="38" y="663" font-size="13" fill="#9ca3af">⇄</text>
+  <text x="58" y="663" class="txt" fill="#6b7280">Continues from</text>
+  <text x="152" y="663" class="val" fill="#6b7280">aaaa1111-1111-4111-8111-111111111111</text>
+  <text x="420" y="663" font-size="11" fill="#9ca3af">ⓘ</text>
+  <rect x="436" y="646" width="292" height="26" rx="4" fill="#111827"/>
+  <text x="446" y="663" font-size="10" fill="#f9fafb">Not available in this view — different owner or repo</text>
+  <text x="742" y="663" class="note">← plain, non-clickable id + tooltip; never a dead link</text>
+
+  <!-- state 5 -->
+  <text x="24" y="704" class="h2">5 · Detected but unconfirmed / ambiguous (candidate did not resolve)</text>
+  <rect x="24" y="712" width="1012" height="34" rx="4" fill="#fffbeb" stroke="#fcd34d"/>
+  <text x="38" y="733" font-size="12" fill="#b45309">⚠</text>
+  <text x="58" y="733" class="txt" fill="#92400e">Possible continuation of</text>
+  <text x="196" y="733" class="val" fill="#92400e">cccc3333…</text>
+  <text x="284" y="733" class="txt" fill="#92400e">— unverified (no matching session, or several candidates)</text>
+  <text x="660" y="733" font-size="11" fill="#b45309">ⓘ</text>
+  <text x="680" y="733" class="note">no navigation offered; never affects cost or stats</text>
+
+  <text x="24" y="778" class="note">6 · No link detected → the entire row is absent; header collapses back to today's layout (no empty placeholder, no "None" text).</text>
+  <text x="24" y="796" class="note">Copy rule: "Continues from" / "Continued in" for both kinds; the kind + measured gap live only in the pill, so a wrong kind guess never changes the primary wording.</text>
+</svg>

@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "CommonJS",
+    "moduleResolution": "Node",
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "ignoreDeprecations": "6.0",
+    "allowImportingTsExtensions": true,
+    "types": ["node", "@playwright/test"]
+  },
+  "include": [
+    "e2e/**/*.ts",
+    "scenarios/**/*.ts",
+    "golden/**/*.ts",
+    "../playwright.scenarios.config.ts"
+  ]
+}

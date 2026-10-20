@@ -1,0 +1,19 @@
+{
+  "name": "artisyn",
+  "owner": {
+    "name": "Artisyn"
+  },
+  "description": "Local marketplace for the artisyn-log-hub telemetry hook plugin.",
+  "plugins": [
+    {
+      "name": "log-hub-hooks",
+      "source": "./plugins/log-hub-hooks",
+      "description": "Records Claude Code session telemetry and uploads it to artisyn-log-hub."
+    },
+    {
+      "name": "adlc-lh",
+      "source": "./plugins/adlc-lh",
+      "description": "Local copy of the adlc task-lifecycle plugin (scratch, review, plan, implement, check, archive), renamed to adlc-lh."
+    }
+  ]
+}

@@ -1,0 +1,27 @@
+{
+  "fixture": "GS-05",
+  "roots": [
+    {
+      "key": "gs05",
+      "sessionId": "{{RUN}}-gs05",
+      "artisyn": "artisyn.jsonl",
+      "claude": "session.jsonl",
+      "subagents": [
+        {
+          "key": "w1",
+          "sessionId": "agent-{{RUN}}-gs05w1",
+          "file": "subagents/workflows/wf-gs05/agent-gs05w1.jsonl",
+          "parentSessionId": "{{RUN}}-gs05",
+          "workflowRunId": "wf_{{RUN}}-gs05"
+        },
+        {
+          "key": "w2",
+          "sessionId": "agent-{{RUN}}-gs05w2",
+          "file": "subagents/workflows/wf-gs05/agent-gs05w2.jsonl",
+          "parentSessionId": "{{RUN}}-gs05",
+          "workflowRunId": "wf_{{RUN}}-gs05"
+        }
+      ]
+    }
+  ]
+}

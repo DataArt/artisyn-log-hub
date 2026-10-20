@@ -1,0 +1,75 @@
+{
+  "$comment": "GS-03 compaction (haiku-4-5, 200K window, legacy usage = all cache writes 5m). Literals; costs from the DD D3 rates, the rest from scenarios/03 §2.3. Times are fixture-relative (A = 2026-01-05).",
+  "fixture": "GS-03",
+  "roots": [
+    {
+      "key": "gs03",
+      "branch": "feature/billing",
+      "week": "W1",
+      "start": "2026-01-07T10:00:00.000Z",
+      "end": "2026-01-07T11:06:30.000Z",
+      "durationMs": 3990000,
+      "model": "claude-haiku-4-5",
+      "claudeVersion": "2.1.99",
+      "prompts": 12,
+      "workTimeMs": 360000,
+      "costUsd": 1.049,
+      "ownCostUsd": 1.049,
+      "costUnavailableReason": null,
+      "nodes": [
+        {
+          "key": "root",
+          "model": "claude-haiku-4-5",
+          "tokens": { "input": 1200, "output": 6010, "cacheRead": 255000, "cacheWrite5m": 793800, "cacheWrite1h": 0, "inputFast": 0, "outputFast": 0, "webSearch": 0 },
+          "costUsd": 1.049
+        }
+      ],
+      "tokens": {
+        "own": { "input": 1200, "output": 6010, "cacheRead": 255000, "cacheWrite5m": 793800, "cacheWrite1h": 0, "inputFast": 0, "outputFast": 0, "webSearch": 0 },
+        "tree": { "input": 1200, "output": 6010, "cacheRead": 255000, "cacheWrite5m": 793800, "cacheWrite1h": 0, "inputFast": 0, "outputFast": 0, "webSearch": 0 }
+      },
+      "cacheRatio": { "own": 0.243135, "tree": 0.243135 },
+      "turns": [
+        { "turn": 1, "input": 100, "cacheRead": 5000, "cacheWrite": 14900, "context": 20000 },
+        { "turn": 2, "input": 100, "cacheRead": 10000, "cacheWrite": 29900, "context": 40000 },
+        { "turn": 3, "input": 100, "cacheRead": 15000, "cacheWrite": 44900, "context": 60000 },
+        { "turn": 4, "input": 100, "cacheRead": 22500, "cacheWrite": 67400, "context": 90000 },
+        { "turn": 5, "input": 100, "cacheRead": 41250, "cacheWrite": 123650, "context": 165000 },
+        { "turn": 6, "input": 100, "cacheRead": 42500, "cacheWrite": 127400, "context": 170000 },
+        { "turn": 7, "input": 100, "cacheRead": 43750, "cacheWrite": 131150, "context": 175000 },
+        { "turn": 8, "input": 100, "cacheRead": 45000, "cacheWrite": 134900, "context": 180000 },
+        { "turn": 9, "input": 100, "cacheRead": 0, "cacheWrite": 29900, "context": 30000 },
+        { "turn": 10, "input": 100, "cacheRead": 8750, "cacheWrite": 26150, "context": 35000 },
+        { "turn": 11, "input": 100, "cacheRead": 10000, "cacheWrite": 29900, "context": 40000 },
+        { "turn": 12, "input": 100, "cacheRead": 11250, "cacheWrite": 33650, "context": 45000 }
+      ],
+      "compaction": { "afterTurn": 8, "preTokens": 180000, "trigger": "auto" },
+      "contextWindow": 200000,
+      "peakContext": 180000,
+      "turnsNearCeiling": 4,
+      "summaryDetectors": ["context-compacted", "low-cache-reuse", "near-context-ceiling"],
+      "cacheCreationCauses": {
+        "threshold25000": { "compaction": 29900, "fileReread": 29900, "unattributed": 734000 },
+        "threshold30000": { "compaction": 0, "fileReread": 0, "unattributed": 793800 }
+      },
+      "tools": {
+        "Read": { "calls": 2, "successes": 2, "failures": 0, "unresolved": 0 }
+      },
+      "commits": 0,
+      "pullRequests": 0,
+      "lines": { "written": 0, "writtenOwn": 0, "added": 0, "removed": 0, "editWriteCalls": 0 },
+      "changeSurface": {
+        "changedFiles": 0,
+        "foldersTouched": 0,
+        "topLevelModules": 0,
+        "singleFileFolders": 0,
+        "folders": {},
+        "linesAdded": 0,
+        "linesRemoved": 0,
+        "outsideRepoFiles": 0,
+        "concentration": null,
+        "band": null
+      }
+    }
+  ]
+}

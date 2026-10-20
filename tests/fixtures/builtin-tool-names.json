@@ -1,0 +1,23 @@
+[
+  "Read",
+  "Write",
+  "Edit",
+  "Bash",
+  "Glob",
+  "Grep",
+  "Agent",
+  "ToolSearch",
+  "Skill",
+  "PlanMode",
+  "AskUserQuestion",
+  "advisor",
+  "WebFetch",
+  "WebSearch",
+  "TaskCreate",
+  "TaskUpdate",
+  "TaskList",
+  "TaskGet",
+  "NotebookEdit",
+  "LSP",
+  "LoadedRule"
+]

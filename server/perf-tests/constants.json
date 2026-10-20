@@ -1,0 +1,11 @@
+{
+  "parallelRunsPerScenario": 5,
+  "baseUrl": "http://localhost:3000",
+  "iterations": 500,
+  "warmupIterations": 100,
+  "outputDir": "tmp/perftests",
+  "testUser": {
+    "email": "perf@arrakis.test",
+    "password": "12345678"
+  }
+}

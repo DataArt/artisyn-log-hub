@@ -1,0 +1,21 @@
+services:
+  db:
+    # Pinned major and libc (Debian, not -alpine): an existing cluster cannot change either.
+    image: postgres:18.4
+    environment:
+      POSTGRES_DB: a-log
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: pw
+      # Fixed, version-independent PGDATA subdirectory: the postgres image's own data path
+      # moves on every major-version bump (e.g. /var/lib/postgresql/data on pg17,
+      # /var/lib/postgresql/18/docker on pg18). Mounting the parent dir and pinning PGDATA
+      # to a stable child path means the bind mount always holds the real cluster, on any
+      # postgres major version. Same reasoning as release-template/docker-compose.yml.
+      # The child path also lets initdb create (and chown) the cluster dir itself, which is
+      # what makes a Windows/Docker Desktop bind mount work at all.
+      PGDATA: /var/lib/postgresql/data/pgdata
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      # Relative to this compose file -> server/artisyn-log-run-local/data/pgdata (gitignored).
+      - ./data/pgdata:/var/lib/postgresql/data

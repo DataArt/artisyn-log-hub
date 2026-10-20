@@ -1,0 +1,5 @@
+{
+  "$comment": "Models used by the big-prod-e2e-test skill itself, by role. Values are Claude Code model aliases (opus | sonnet | haiku | fable) or full model ids. 'analysis' = reasoning-heavy work: the SKILL.md subagent that analyzes _report/ and explains failures. 'verify' = atomic per-case checks: the nested `claude -p` UI verifier run once per session S1-S6. The S1-S6 scenario models are test data (the matrix must cover sonnet/haiku/opus, AC FR-8) and live in scripts/scenarios.mjs, not here.",
+  "analysis": "opus",
+  "verify": "sonnet"
+}

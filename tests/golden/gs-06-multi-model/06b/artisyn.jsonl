@@ -1,0 +1,3 @@
+{"type":"artisyn","hook_event_name":"SessionStart","timestamp":"2026-01-12T11:00:00.000Z","session_id":"{{RUN}}-gs06b","git":{"repo":"{{REPO}}","root":"/work/repo-gold","worktreeRoot":"/work/repo-gold","branch":"feature/billing","user":"Golden Tester"}}
+{"event":"prompt_start","timestamp":"2026-01-12T11:00:00.000Z","session_id":"{{RUN}}-gs06b","prompt":"List the open billing TODOs","git":{"repo":"{{REPO}}","root":"/work/repo-gold","worktreeRoot":"/work/repo-gold","branch":"feature/billing","user":"Golden Tester"}}
+{"type":"artisyn","hook_event_name":"SessionEnd","timestamp":"2026-01-12T11:00:30.000Z","session_id":"{{RUN}}-gs06b"}

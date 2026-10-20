@@ -1,0 +1,63 @@
+{
+  "$comment": "GS-01 plain. Literals, never formulas (scenarios/03 §2.1 p.3). Costs from the DD D3 rates; the rest from scenarios/03 §2.3. tests/golden/check-arithmetic.mjs re-derives tokens, costs and ratios; tests/scenarios/view/golden-load.spec.ts compares the API. Times are fixture-relative (A = 2026-01-05).",
+  "fixture": "GS-01",
+  "roots": [
+    {
+      "key": "gs01",
+      "branch": "main",
+      "week": "W1",
+      "start": "2026-01-05T10:00:00.000Z",
+      "end": "2026-01-05T10:10:30.000Z",
+      "durationMs": 630000,
+      "model": "claude-sonnet-4-6",
+      "claudeVersion": "2.1.99",
+      "prompts": 3,
+      "workTimeMs": 165000,
+      "costUsd": 0.0825,
+      "ownCostUsd": 0.0825,
+      "costUnavailableReason": null,
+      "nodes": [
+        {
+          "key": "root",
+          "model": "claude-sonnet-4-6",
+          "tokens": { "input": 3000, "output": 2000, "cacheRead": 20000, "cacheWrite5m": 10000, "cacheWrite1h": 0, "inputFast": 0, "outputFast": 0, "webSearch": 0 },
+          "costUsd": 0.0825
+        }
+      ],
+      "tokens": {
+        "own": { "input": 3000, "output": 2000, "cacheRead": 20000, "cacheWrite5m": 10000, "cacheWrite1h": 0, "inputFast": 0, "outputFast": 0, "webSearch": 0 },
+        "tree": { "input": 3000, "output": 2000, "cacheRead": 20000, "cacheWrite5m": 10000, "cacheWrite1h": 0, "inputFast": 0, "outputFast": 0, "webSearch": 0 }
+      },
+      "cacheRatio": { "own": 0.666667, "tree": 0.666667 },
+      "perPrompt": [
+        { "at": "2026-01-05T10:00:00.000Z", "workTimeMs": 90000, "tokens": { "input": 1500, "output": 900, "cacheRead": 8000, "cacheWrite5m": 6000, "cacheWrite1h": 0, "inputFast": 0, "outputFast": 0, "webSearch": 0 }, "costUsd": 0.0429, "cacheRatio": 0.571429 },
+        { "at": "2026-01-05T10:05:00.000Z", "workTimeMs": 45000, "tokens": { "input": 1000, "output": 700, "cacheRead": 8000, "cacheWrite5m": 2880, "cacheWrite1h": 0, "inputFast": 0, "outputFast": 0, "webSearch": 0 }, "costUsd": 0.0267, "cacheRatio": 0.735294 },
+        { "at": "2026-01-05T10:10:00.000Z", "workTimeMs": 30000, "tokens": { "input": 500, "output": 400, "cacheRead": 4000, "cacheWrite5m": 1120, "cacheWrite1h": 0, "inputFast": 0, "outputFast": 0, "webSearch": 0 }, "costUsd": 0.0129, "cacheRatio": 0.78125 }
+      ],
+      "nonQualifyingUserLines": { "isMeta": 1 },
+      "tools": {
+        "Read": { "calls": 3, "successes": 3, "failures": 0, "unresolved": 0 },
+        "Write": { "calls": 1, "successes": 1, "failures": 0, "unresolved": 0 },
+        "Edit": { "calls": 2, "successes": 2, "failures": 0, "unresolved": 0 },
+        "Bash": { "calls": 2, "successes": 2, "failures": 0, "unresolved": 0 }
+      },
+      "commits": 1,
+      "pullRequests": 1,
+      "files": { "src/app.ts": { "accessCount": 2 }, "docs/api.md": { "category": "docs" } },
+      "lines": { "written": 19, "writtenOwn": 19, "added": 17, "removed": 1, "editWriteCalls": 3 },
+      "changeSurface": {
+        "changedFiles": 3,
+        "foldersTouched": 1,
+        "topLevelModules": 1,
+        "singleFileFolders": 0,
+        "folders": { "src": 3 },
+        "linesAdded": 17,
+        "linesRemoved": 1,
+        "outsideRepoFiles": 0,
+        "concentration": 100,
+        "band": "focused"
+      },
+      "rawLogServiceLines": ["mode", "ai-title", "permission-mode", "system-context", "attachment", "user", "assistant"]
+    }
+  ]
+}

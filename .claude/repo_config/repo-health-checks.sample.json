@@ -1,0 +1,72 @@
+{
+  "preCheckSkills": [
+    { "skillName": "some-pre-skill" },
+    { "skillName": "final-only-pre-skill", "finalOnly": true }
+  ],
+  "postCheckSkills": [
+    { "skillName": "some-post-skill", "finalOnly": false },
+    { "skillName": "final-only-post-skill", "finalOnly": true }
+  ],
+  "environmentNotes": "Free-text notes passed into every check's prompt (shared resources, do-not-restart services, temp file locations, etc.).",
+  "checks": [
+    {
+      "name": "example-fast-check",
+      "dir": ".",
+      "module": "Runs every time, iterative or final (finalOnly absent = always run)",
+      "command": "npm run example:fast",
+      "instructions": "Fix the root cause of any failure; do not weaken assertions to make it pass."
+    },
+    {
+      "name": "example-explicit-always-check",
+      "dir": ".",
+      "module": "Same as above, but explicit about it",
+      "command": "npm run example:always",
+      "instructions": "Fix the root cause of any failure.",
+      "finalOnly": false
+    },
+    {
+      "name": "example-slow-check",
+      "dir": ".",
+      "module": "Only runs on the final verification pass (finalRun: true)",
+      "command": "npm run example:slow-full-suite",
+      "instructions": "Slow/expensive check — skip on every iterative pass, run once before declaring done.",
+      "finalOnly": true,
+      "timeoutSeconds": 600
+    },
+    {
+      "name": "example-grouped-check-a",
+      "dir": ".",
+      "module": "group = the concurrency unit: different groups run at the SAME time, checks inside one group run IN ORDER. Put every check that touches the same shared mutable resource (a real DB, a running dev server, a build output others consume) in one group.",
+      "command": "npm run example:db-suite",
+      "instructions": "Fix the root cause of any failure.",
+      "group": "shared-db",
+      "timeoutSeconds": 300
+    },
+    {
+      "name": "example-grouped-check-b",
+      "dir": ".",
+      "module": "Same group as the check above, so it is guaranteed never to run at the same time as it. If this one's predecessor fails unfixably, this check is skipped and reported in the result's `skipped` list.",
+      "command": "npm run example:other-db-suite",
+      "instructions": "Fix the root cause of any failure.",
+      "group": "shared-db",
+      "timeoutSeconds": 300
+    },
+    {
+      "name": "example-independent-check",
+      "dir": ".",
+      "module": "A different group, so it runs concurrently with the shared-db group. Checks that only READ sources (lint, in-process unit tests) belong here. A check with no `group` at all falls into a shared `_default` group, i.e. fully serial — which is what a config written before this field existed expects.",
+      "command": "npm run example:lint",
+      "instructions": "Fix the root cause of any failure.",
+      "group": "read-only",
+      "timeoutSeconds": 180
+    },
+    {
+      "name": "example-timeout-check",
+      "dir": ".",
+      "module": "timeoutSeconds caps the single foreground call that runs this check; past it the command is killed and reported as a timed-out failure instead of hanging. Max 600 (the Bash tool's ceiling).",
+      "command": "npm run example:might-hang",
+      "instructions": "Fix the root cause of any failure. A timeout usually points to the process not exiting after finishing its work (e.g. an unclosed DB connection or uncleared timer), not a real test regression — check the output collected before the kill.",
+      "timeoutSeconds": 180
+    }
+  ]
+}

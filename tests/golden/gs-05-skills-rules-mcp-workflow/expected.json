@@ -1,0 +1,114 @@
+{
+  "$comment": "GS-05 harness (sonnet-4-6 root, two haiku-4-5 workflow agents). Literals; costs from the DD D3 rates, the rest from scenarios/03 §2.3. Times are fixture-relative (A = 2026-01-05).",
+  "fixture": "GS-05",
+  "roots": [
+    {
+      "key": "gs05",
+      "branch": "feature/billing",
+      "week": "W1",
+      "start": "2026-01-08T10:00:00.000Z",
+      "end": "2026-01-08T10:03:30.000Z",
+      "durationMs": 210000,
+      "model": "claude-sonnet-4-6",
+      "claudeVersion": "2.1.99",
+      "prompts": 2,
+      "workTimeMs": 150000,
+      "costUsd": 0.086,
+      "ownCostUsd": 0.0735,
+      "costUnavailableReason": null,
+      "nodes": [
+        {
+          "key": "root",
+          "model": "claude-sonnet-4-6",
+          "tokens": { "input": 4000, "output": 1500, "cacheRead": 30000, "cacheWrite5m": 8000, "cacheWrite1h": 0, "inputFast": 0, "outputFast": 0, "webSearch": 0 },
+          "costUsd": 0.0735
+        },
+        {
+          "key": "w1",
+          "parent": "root",
+          "workflow": "ResearchWorkflow",
+          "model": "claude-haiku-4-5",
+          "tokens": { "input": 3000, "output": 1000, "cacheRead": 0, "cacheWrite5m": 0, "cacheWrite1h": 0, "inputFast": 0, "outputFast": 0, "webSearch": 0 },
+          "costUsd": 0.008,
+          "lines": { "written": 4, "added": 1, "removed": 0, "editWriteCalls": 1, "filesEditedWritten": 1 }
+        },
+        {
+          "key": "w2",
+          "parent": "root",
+          "workflow": "ResearchWorkflow",
+          "model": "claude-haiku-4-5",
+          "tokens": { "input": 2000, "output": 500, "cacheRead": 0, "cacheWrite5m": 0, "cacheWrite1h": 0, "inputFast": 0, "outputFast": 0, "webSearch": 0 },
+          "costUsd": 0.0045,
+          "lines": { "written": 0, "added": 0, "removed": 0, "editWriteCalls": 0, "filesEditedWritten": 0 }
+        }
+      ],
+      "tokens": {
+        "own": { "input": 4000, "output": 1500, "cacheRead": 30000, "cacheWrite5m": 8000, "cacheWrite1h": 0, "inputFast": 0, "outputFast": 0, "webSearch": 0 },
+        "tree": { "input": 9000, "output": 3000, "cacheRead": 30000, "cacheWrite5m": 8000, "cacheWrite1h": 0, "inputFast": 0, "outputFast": 0, "webSearch": 0 }
+      },
+      "cacheRatio": { "own": 0.789474, "tree": 0.789474 },
+      "perPrompt": [
+        { "at": "2026-01-08T10:00:10.000Z", "kind": "slash-command", "text": "/adlc:review src/", "workTimeMs": 60000 },
+        { "at": "2026-01-08T10:02:00.000Z", "kind": "prompt", "text": "Research the billing flow", "workTimeMs": 90000 }
+      ],
+      "notPrompts": ["/clear"],
+      "mcpCallsOwn": 3,
+      "context": {
+        "claudeMd": { "bytes": 3500, "tokens": 1000 },
+        "rules": { ".claude/rules/db.md": { "bytes": 700, "tokens": 200 }, ".claude/rules/ui.md": { "bytes": 1400, "tokens": 400 } },
+        "skills": { "adlc:review-deep": { "bytes": 1750, "tokens": 500 } },
+        "deferredTools": { "servers": 2, "tools": ["mcp__postgres__query", "mcp__postgres__list_tables", "mcp__playwright__browser_click"], "tokens": 450 }
+      },
+      "inventory": { "skills": ["adlc:review-deep", "adlc:review", "unused-skill"], "mcpServers": ["postgres", "playwright"] },
+      "harnessUsage": {
+        "rootOnly": [
+          { "kind": "skill", "element": "adlc:review", "count": 1 },
+          { "kind": "skill", "element": "adlc:review-deep", "count": 1 },
+          { "kind": "rule", "element": "db.md", "count": 1 },
+          { "kind": "rule", "element": "ui.md", "count": 1 },
+          { "kind": "workflow", "element": "ResearchWorkflow", "count": 1 },
+          { "kind": "mcp", "element": "postgres:query", "count": 2 },
+          { "kind": "mcp", "element": "playwright:browser_click", "count": 1 },
+          { "kind": "tool", "element": "Read", "count": 1 }
+        ],
+        "withSubSessions": [
+          { "kind": "skill", "element": "adlc:review", "count": 1 },
+          { "kind": "skill", "element": "adlc:review-deep", "count": 2 },
+          { "kind": "rule", "element": "db.md", "count": 1 },
+          { "kind": "rule", "element": "ui.md", "count": 1 },
+          { "kind": "workflow", "element": "ResearchWorkflow", "count": 1 },
+          { "kind": "mcp", "element": "postgres:query", "count": 2 },
+          { "kind": "mcp", "element": "playwright:browser_click", "count": 1 },
+          { "kind": "tool", "element": "Read", "count": 2 },
+          { "kind": "tool", "element": "Edit", "count": 1 }
+        ]
+      },
+      "workflows": [
+        { "name": "ResearchWorkflow", "status": "completed", "durationMs": 45000, "agentCount": 2, "subagentTokens": 6500, "toolUses": 2 }
+      ],
+      "tools": {
+        "Skill": { "calls": 2, "successes": 2, "failures": 0, "unresolved": 0 },
+        "Read": { "calls": 2, "successes": 2, "failures": 0, "unresolved": 0 },
+        "Edit": { "calls": 1, "successes": 1, "failures": 0, "unresolved": 0 },
+        "Workflow": { "calls": 1, "successes": 1, "failures": 0, "unresolved": 0 },
+        "mcp__postgres__query": { "calls": 2, "successes": 2, "failures": 0, "unresolved": 0 },
+        "mcp__playwright__browser_click": { "calls": 1, "successes": 1, "failures": 0, "unresolved": 0 }
+      },
+      "commits": 0,
+      "pullRequests": 0,
+      "lines": { "written": 4, "writtenOwn": 0, "added": 1, "removed": 0, "editWriteCalls": 1 },
+      "changeSurface": {
+        "changedFiles": 1,
+        "foldersTouched": 1,
+        "topLevelModules": 1,
+        "singleFileFolders": 1,
+        "folders": { "src": 1 },
+        "linesAdded": 1,
+        "linesRemoved": 0,
+        "outsideRepoFiles": 0,
+        "concentration": 100,
+        "band": "focused"
+      }
+    }
+  ]
+}

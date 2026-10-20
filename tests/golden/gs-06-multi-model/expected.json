@@ -1,0 +1,99 @@
+{
+  "$comment": "GS-06a model switch (priced by the FIRST model, sonnet-4-6) and GS-06b unpriced model (cost null, not 0). Literals; costs from the DD D3 rates, the rest from scenarios/03 §2.3. Times are fixture-relative (A = 2026-01-05).",
+  "fixture": "GS-06",
+  "roots": [
+    {
+      "key": "gs06a",
+      "branch": "feature/billing",
+      "week": "W2",
+      "start": "2026-01-12T10:00:00.000Z",
+      "end": "2026-01-12T10:03:50.000Z",
+      "durationMs": 230000,
+      "model": "claude-sonnet-4-6",
+      "claudeVersion": "2.1.99",
+      "prompts": 2,
+      "workTimeMs": 90000,
+      "costUsd": 0.126,
+      "ownCostUsd": 0.126,
+      "costUnavailableReason": null,
+      "wrongCostsUsd": { "pricedByOpus5": 0.21, "pricedByAlphabeticallyFirstModel": 0.21 },
+      "events": [
+        { "at": "2026-01-12T10:00:00.000Z", "model": "claude-sonnet-4-6", "workTimeMs": 40000, "tokens": { "input": 2000, "output": 1000, "cacheRead": 0, "cacheWrite5m": 10000, "cacheWrite1h": 0, "inputFast": 0, "outputFast": 0, "webSearch": 0 } },
+        { "at": "2026-01-12T10:03:00.000Z", "model": "claude-opus-5", "workTimeMs": 50000, "tokens": { "input": 4000, "output": 2000, "cacheRead": 10000, "cacheWrite5m": 6000, "cacheWrite1h": 0, "inputFast": 0, "outputFast": 0, "webSearch": 0 } }
+      ],
+      "nodes": [
+        {
+          "key": "root",
+          "model": "claude-sonnet-4-6",
+          "tokens": { "input": 6000, "output": 3000, "cacheRead": 10000, "cacheWrite5m": 16000, "cacheWrite1h": 0, "inputFast": 0, "outputFast": 0, "webSearch": 0 },
+          "costUsd": 0.126
+        }
+      ],
+      "tokens": {
+        "own": { "input": 6000, "output": 3000, "cacheRead": 10000, "cacheWrite5m": 16000, "cacheWrite1h": 0, "inputFast": 0, "outputFast": 0, "webSearch": 0 },
+        "tree": { "input": 6000, "output": 3000, "cacheRead": 10000, "cacheWrite5m": 16000, "cacheWrite1h": 0, "inputFast": 0, "outputFast": 0, "webSearch": 0 }
+      },
+      "cacheRatio": { "own": 0.384615, "tree": 0.384615 },
+      "tools": {},
+      "commits": 0,
+      "pullRequests": 0,
+      "lines": { "written": 0, "writtenOwn": 0, "added": 0, "removed": 0, "editWriteCalls": 0 },
+      "changeSurface": {
+        "changedFiles": 0,
+        "foldersTouched": 0,
+        "topLevelModules": 0,
+        "singleFileFolders": 0,
+        "folders": {},
+        "linesAdded": 0,
+        "linesRemoved": 0,
+        "outsideRepoFiles": 0,
+        "concentration": null,
+        "band": null
+      }
+    },
+    {
+      "key": "gs06b",
+      "branch": "feature/billing",
+      "week": "W2",
+      "start": "2026-01-12T11:00:00.000Z",
+      "end": "2026-01-12T11:00:30.000Z",
+      "durationMs": 30000,
+      "model": "claude-unreleased-9",
+      "claudeVersion": "2.1.99",
+      "prompts": 1,
+      "workTimeMs": 30000,
+      "costUsd": null,
+      "ownCostUsd": null,
+      "costUnavailableReason": "unknown-model",
+      "nodes": [
+        {
+          "key": "root",
+          "model": "claude-unreleased-9",
+          "tokens": { "input": 1000, "output": 500, "cacheRead": 0, "cacheWrite5m": 0, "cacheWrite1h": 0, "inputFast": 0, "outputFast": 0, "webSearch": 0 },
+          "costUsd": null
+        }
+      ],
+      "tokens": {
+        "own": { "input": 1000, "output": 500, "cacheRead": 0, "cacheWrite5m": 0, "cacheWrite1h": 0, "inputFast": 0, "outputFast": 0, "webSearch": 0 },
+        "tree": { "input": 1000, "output": 500, "cacheRead": 0, "cacheWrite5m": 0, "cacheWrite1h": 0, "inputFast": 0, "outputFast": 0, "webSearch": 0 }
+      },
+      "cacheRatio": { "own": null, "tree": null },
+      "tools": {},
+      "commits": 0,
+      "pullRequests": 0,
+      "lines": { "written": 0, "writtenOwn": 0, "added": 0, "removed": 0, "editWriteCalls": 0 },
+      "changeSurface": {
+        "changedFiles": 0,
+        "foldersTouched": 0,
+        "topLevelModules": 0,
+        "singleFileFolders": 0,
+        "folders": {},
+        "linesAdded": 0,
+        "linesRemoved": 0,
+        "outsideRepoFiles": 0,
+        "concentration": null,
+        "band": null
+      }
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "fixture": "GS-06",
+  "roots": [
+    {
+      "key": "gs06a",
+      "sessionId": "{{RUN}}-gs06a",
+      "artisyn": "06a/artisyn.jsonl",
+      "claude": "06a/session.jsonl",
+      "subagents": []
+    },
+    {
+      "key": "gs06b",
+      "sessionId": "{{RUN}}-gs06b",
+      "artisyn": "06b/artisyn.jsonl",
+      "claude": "06b/session.jsonl",
+      "subagents": []
+    }
+  ]
+}

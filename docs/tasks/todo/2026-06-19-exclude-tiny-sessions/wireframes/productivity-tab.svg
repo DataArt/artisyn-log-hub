@@ -1,0 +1,157 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="560" viewBox="0 0 900 560" font-family="Arial, sans-serif">
+  <!-- Background -->
+  <rect width="900" height="560" fill="#f8f9fa" rx="4"/>
+
+  <!-- === Analytics Header Bar === -->
+  <rect x="0" y="0" width="900" height="44" fill="#ffffff" stroke="#e2e8f0" stroke-width="1"/>
+  <text x="16" y="27" font-size="13" fill="#374151" font-weight="600">Repository Analytics</text>
+
+  <!-- Date range selector -->
+  <rect x="220" y="10" width="90" height="24" rx="4" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+  <text x="240" y="26" font-size="11" fill="#475569">Last 7 days</text>
+  <text x="298" y="27" font-size="10" fill="#94a3b8">▼</text>
+
+  <!-- Group by selector -->
+  <rect x="320" y="10" width="100" height="24" rx="4" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+  <text x="335" y="26" font-size="11" fill="#475569">Group: none</text>
+  <text x="406" y="27" font-size="10" fill="#94a3b8">▼</text>
+
+  <!-- Branch filter -->
+  <rect x="430" y="10" width="90" height="24" rx="4" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+  <text x="448" y="26" font-size="11" fill="#475569">Branches</text>
+  <text x="506" y="27" font-size="10" fill="#94a3b8">▼</text>
+
+  <!-- Layout toggle -->
+  <rect x="840" y="10" width="24" height="24" rx="4" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+  <text x="847" y="26" font-size="12" fill="#64748b">≡</text>
+  <rect x="868" y="10" width="24" height="24" rx="4" fill="#e2e8f0" stroke="#cbd5e1" stroke-width="1"/>
+  <text x="875" y="26" font-size="12" fill="#374151">⊟</text>
+
+  <!-- === Sub-tab bar === -->
+  <rect x="0" y="44" width="900" height="38" fill="#ffffff" stroke="#e2e8f0" stroke-width="1"/>
+
+  <!-- Tabs -->
+  <text x="24" y="68" font-size="12" fill="#94a3b8">Work Time</text>
+  <text x="110" y="68" font-size="12" fill="#94a3b8">Cost</text>
+  <text x="148" y="68" font-size="12" fill="#94a3b8">Files</text>
+  <text x="190" y="68" font-size="12" fill="#94a3b8">Vision</text>
+  <text x="236" y="68" font-size="12" fill="#94a3b8">MCP</text>
+
+  <!-- Active tab: Productivity -->
+  <rect x="270" y="44" width="90" height="38" fill="#ffffff"/>
+  <text x="284" y="68" font-size="12" fill="#3b82f6" font-weight="600">Productivity</text>
+  <rect x="270" y="80" width="90" height="2" fill="#3b82f6"/>
+
+  <text x="368" y="68" font-size="12" fill="#94a3b8">Log Lines</text>
+
+  <!-- === Productivity sub-tab controls === -->
+  <rect x="0" y="82" width="900" height="48" fill="#ffffff" stroke="#e2e8f0" stroke-width="1"/>
+
+  <!-- Metric selector toggle group -->
+  <text x="16" y="98" font-size="10" fill="#94a3b8" font-style="italic">Metric</text>
+  <rect x="16" y="104" width="72" height="20" rx="4" fill="#3b82f6"/>
+  <text x="32" y="118" font-size="11" fill="#ffffff" font-weight="600">lines/hr</text>
+  <rect x="91" y="104" width="52" height="20" rx="4" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+  <text x="103" y="118" font-size="11" fill="#475569">$/hr</text>
+  <rect x="146" y="104" width="58" height="20" rx="4" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+  <text x="158" y="118" font-size="11" fill="#475569">$/line</text>
+
+  <!-- Divider -->
+  <line x1="230" y1="94" x2="230" y2="122" stroke="#e2e8f0" stroke-width="1"/>
+
+  <!-- Exclude tiny sessions toggle -->
+  <text x="244" y="98" font-size="10" fill="#94a3b8" font-style="italic">Filter</text>
+
+  <!-- Toggle switch (ON state) -->
+  <rect x="244" y="104" width="32" height="18" rx="9" fill="#3b82f6"/>
+  <circle cx="266" cy="113" r="7" fill="#ffffff"/>
+
+  <text x="282" y="117" font-size="12" fill="#374151">Exclude tiny sessions</text>
+
+  <!-- Threshold badge -->
+  <rect x="424" y="105" width="52" height="16" rx="8" fill="#dbeafe" stroke="#93c5fd" stroke-width="1"/>
+  <text x="431" y="117" font-size="10" fill="#1d4ed8">&lt; 1 min</text>
+
+  <!-- Excluded count badge -->
+  <rect x="490" y="105" width="108" height="16" rx="8" fill="#fef3c7" stroke="#fcd34d" stroke-width="1"/>
+  <text x="498" y="117" font-size="10" fill="#92400e">3 sessions hidden</text>
+
+  <!-- === Chart area === -->
+  <rect x="0" y="130" width="900" height="430" fill="#ffffff"/>
+
+  <!-- Y-axis label -->
+  <text x="8" y="360" font-size="11" fill="#94a3b8" transform="rotate(-90 8 360)">lines/hr</text>
+
+  <!-- Y-axis gridlines + labels -->
+  <line x1="56" y1="150" x2="56" y2="530" stroke="#e2e8f0" stroke-width="1"/>
+  <line x1="56" y1="170" x2="880" y2="170" stroke="#f1f5f9" stroke-width="1" stroke-dasharray="4,4"/>
+  <line x1="56" y1="250" x2="880" y2="250" stroke="#f1f5f9" stroke-width="1" stroke-dasharray="4,4"/>
+  <line x1="56" y1="330" x2="880" y2="330" stroke="#f1f5f9" stroke-width="1" stroke-dasharray="4,4"/>
+  <line x1="56" y1="410" x2="880" y2="410" stroke="#f1f5f9" stroke-width="1" stroke-dasharray="4,4"/>
+  <text x="38" y="174" font-size="10" fill="#94a3b8" text-anchor="end">120</text>
+  <text x="38" y="254" font-size="10" fill="#94a3b8" text-anchor="end">80</text>
+  <text x="38" y="334" font-size="10" fill="#94a3b8" text-anchor="end">40</text>
+  <text x="38" y="414" font-size="10" fill="#94a3b8" text-anchor="end">0</text>
+
+  <!-- X-axis -->
+  <line x1="56" y1="490" x2="880" y2="490" stroke="#e2e8f0" stroke-width="1"/>
+
+  <!-- Chart bars (sample data) -->
+  <!-- Bar group at each hour -->
+  <!-- Hour 09:00 -->
+  <rect x="70" y="310" width="60" height="180" rx="2" fill="#4ade80" opacity="0.85"/>
+  <text x="100" y="505" font-size="10" fill="#94a3b8" text-anchor="middle">09:00</text>
+
+  <!-- Hour 10:00 -->
+  <rect x="150" y="230" width="60" height="260" rx="2" fill="#4ade80" opacity="0.85"/>
+  <text x="180" y="505" font-size="10" fill="#94a3b8" text-anchor="middle">10:00</text>
+
+  <!-- Hour 11:00 – excluded (grayed out / removed) -->
+  <!-- This slot is empty because tiny session was excluded -->
+  <rect x="230" y="490" width="60" height="0" rx="2" fill="#e2e8f0"/>
+  <text x="260" y="505" font-size="10" fill="#94a3b8" text-anchor="middle">11:00</text>
+
+  <!-- Hour 12:00 -->
+  <rect x="310" y="200" width="60" height="290" rx="2" fill="#60a5fa" opacity="0.85"/>
+  <text x="340" y="505" font-size="10" fill="#94a3b8" text-anchor="middle">12:00</text>
+
+  <!-- Hour 13:00 -->
+  <rect x="390" y="270" width="60" height="220" rx="2" fill="#60a5fa" opacity="0.85"/>
+  <text x="420" y="505" font-size="10" fill="#94a3b8" text-anchor="middle">13:00</text>
+
+  <!-- Hour 14:00 -->
+  <rect x="470" y="350" width="60" height="140" rx="2" fill="#f97316" opacity="0.85"/>
+  <text x="500" y="505" font-size="10" fill="#94a3b8" text-anchor="middle">14:00</text>
+
+  <!-- Hour 15:00 -->
+  <rect x="550" y="290" width="60" height="200" rx="2" fill="#60a5fa" opacity="0.85"/>
+  <text x="580" y="505" font-size="10" fill="#94a3b8" text-anchor="middle">15:00</text>
+
+  <!-- Hour 16:00 -->
+  <rect x="630" y="380" width="60" height="110" rx="2" fill="#4ade80" opacity="0.85"/>
+  <text x="660" y="505" font-size="10" fill="#94a3b8" text-anchor="middle">16:00</text>
+
+  <!-- Hour 17:00 -->
+  <rect x="710" y="430" width="60" height="60" rx="2" fill="#4ade80" opacity="0.85"/>
+  <text x="740" y="505" font-size="10" fill="#94a3b8" text-anchor="middle">17:00</text>
+
+  <!-- Color legend -->
+  <rect x="57" y="515" width="12" height="12" rx="2" fill="#4ade80"/>
+  <text x="73" y="525" font-size="10" fill="#475569">Low utilization</text>
+  <rect x="167" y="515" width="12" height="12" rx="2" fill="#60a5fa"/>
+  <text x="183" y="525" font-size="10" fill="#475569">Normal</text>
+  <rect x="247" y="515" width="12" height="12" rx="2" fill="#f97316"/>
+  <text x="263" y="525" font-size="10" fill="#475569">High utilization</text>
+
+  <!-- Annotation: excluded slot -->
+  <rect x="218" y="460" width="80" height="28" rx="4" fill="#fef9c3" stroke="#fde047" stroke-width="1"/>
+  <text x="258" y="470" font-size="9" fill="#92400e" text-anchor="middle">tiny session</text>
+  <text x="258" y="483" font-size="9" fill="#92400e" text-anchor="middle">excluded</text>
+  <line x1="258" y1="490" x2="258" y2="488" stroke="#fde047" stroke-width="1" stroke-dasharray="2,2"/>
+
+  <!-- Title / legend annotation -->
+  <rect x="580" y="516" width="290" height="28" rx="4" fill="#f0f9ff" stroke="#bae6fd" stroke-width="1"/>
+  <text x="590" y="527" font-size="10" fill="#0369a1">Toggle OFF: all sessions shown (no hidden count)</text>
+  <text x="590" y="540" font-size="10" fill="#0369a1">Toggle ON: tiny sessions removed, count shown</text>
+
+</svg>

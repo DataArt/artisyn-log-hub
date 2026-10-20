@@ -1,0 +1,31 @@
+{
+  "fixture": "GS-02",
+  "roots": [
+    {
+      "key": "gs02",
+      "sessionId": "{{RUN}}-gs02",
+      "artisyn": "artisyn.jsonl",
+      "claude": "session.jsonl",
+      "subagents": [
+        {
+          "key": "a",
+          "sessionId": "agent-{{RUN}}-gs02a",
+          "file": "subagents/agent-gs02a.jsonl",
+          "parentSessionId": "{{RUN}}-gs02"
+        },
+        {
+          "key": "b",
+          "sessionId": "agent-{{RUN}}-gs02b",
+          "file": "subagents/agent-gs02b.jsonl",
+          "parentSessionId": "agent-{{RUN}}-gs02a"
+        },
+        {
+          "key": "d",
+          "sessionId": "agent-{{RUN}}-gs02d",
+          "file": "subagents/agent-gs02d.jsonl",
+          "parentSessionId": "{{RUN}}-gs02"
+        }
+      ]
+    }
+  ]
+}

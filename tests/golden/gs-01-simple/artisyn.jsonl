@@ -1,0 +1,5 @@
+{"type":"artisyn","hook_event_name":"SessionStart","timestamp":"2026-01-05T10:00:00.000Z","session_id":"{{RUN}}-gs01","git":{"repo":"{{REPO}}","root":"/work/repo-gold","worktreeRoot":"/work/repo-gold","branch":"main","user":"Golden Tester"}}
+{"event":"prompt_start","timestamp":"2026-01-05T10:00:00.000Z","session_id":"{{RUN}}-gs01","prompt":"Add a /health endpoint to the app and document it","git":{"repo":"{{REPO}}","root":"/work/repo-gold","worktreeRoot":"/work/repo-gold","branch":"main","user":"Golden Tester"}}
+{"event":"prompt_start","timestamp":"2026-01-05T10:05:00.000Z","session_id":"{{RUN}}-gs01","prompt":"Wire the health route into main.ts as well","git":{"repo":"{{REPO}}","root":"/work/repo-gold","worktreeRoot":"/work/repo-gold","branch":"main","user":"Golden Tester"}}
+{"event":"prompt_start","timestamp":"2026-01-05T10:10:00.000Z","session_id":"{{RUN}}-gs01","prompt":"Commit the change and open a pull request","git":{"repo":"{{REPO}}","root":"/work/repo-gold","worktreeRoot":"/work/repo-gold","branch":"main","user":"Golden Tester"}}
+{"type":"artisyn","hook_event_name":"SessionEnd","timestamp":"2026-01-05T10:10:30.000Z","session_id":"{{RUN}}-gs01"}

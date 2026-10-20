@@ -1,0 +1,26 @@
+{
+  "$comment": "Session scenarios of the monthly corpus (docs/qaa-overview/scenarios/08-session-corpus.md). Each entry runs once per set as `claude -p` in a copy of the fixture repo `repo` (from .claude/skills/big-prod-e2e-test/fixtures). `expect` is the structural expectation of the scenario: it holds on every set, whatever the LLM answered (S-CORPUS-01/04).",
+  "scenarios": [
+    {
+      "id": "plain-edit",
+      "repo": "node-service",
+      "model": "haiku",
+      "prompt": "Add `multiply(a, b)` to `src/calc.js` and a node:test case for it in `tests/calc.test.js`. Do not use subagents, skills or workflows; do not install packages; do not run any commands.",
+      "expect": { "minSubagents": 0, "maxSubagents": 0, "tools": ["Edit|Write|MultiEdit"], "minChangedFiles": 1 }
+    },
+    {
+      "id": "read-only-qa",
+      "repo": "js-cli",
+      "model": "haiku",
+      "prompt": "Read `lib/args.js` and explain in three sentences what it does. Do not modify any file, do not use subagents and do not run any commands.",
+      "expect": { "minSubagents": 0, "maxSubagents": 0, "tools": ["Read"], "maxChangedFiles": 0 }
+    },
+    {
+      "id": "fan-out",
+      "repo": "ts-webapp",
+      "model": "sonnet",
+      "prompt": "Use the Agent tool to spawn two subagents in parallel: the first one lists the exported functions of `packages/core/src/index.ts`, the second one lists the functions used in `packages/web/src/app.ts`. When both have answered, summarize which core functions the web package does not use. Do not modify any file and do not run any commands.",
+      "expect": { "minSubagents": 2, "tools": ["Agent|Task"], "maxChangedFiles": 0 }
+    }
+  ]
+}

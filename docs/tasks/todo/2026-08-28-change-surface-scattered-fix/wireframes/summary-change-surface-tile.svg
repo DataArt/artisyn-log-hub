@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="340" viewBox="0 0 1100 340" font-family="Segoe UI, Arial, sans-serif">
+  <rect x="0" y="0" width="1100" height="340" fill="#ffffff"/>
+
+  <text x="24" y="34" font-size="18" font-weight="700" fill="#111827">T-120 — Session Summary tab: “Change surface” tile (same server band as the tab headline)</text>
+  <text x="24" y="56" font-size="12" fill="#6b7280">The tile re-renders the server-computed concentration + band (T-117 DD-13: bands are server-only), so it flips together with the Change surface tab.</text>
+
+  <!-- BEFORE tile -->
+  <text x="24" y="92" font-size="13" font-weight="700" fill="#111827">BEFORE (current bug)</text>
+  <rect x="24" y="102" width="500" height="118" rx="8" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="44" y="130" font-size="11" fill="#6b7280" text-decoration="underline" style="text-decoration-style: dotted">Change surface</text>
+  <text x="44" y="160" font-size="18" font-weight="700" fill="#111827" font-family="Consolas, monospace">3 files · 3 folders</text>
+  <text x="44" y="186" font-size="12" fill="#6b7280">Concentration 28 / 100 <tspan fill="#ea580c" font-weight="600">scattered</tspan></text>
+  <rect x="44" y="198" width="460" height="6" rx="3" fill="#e5e7eb"/>
+  <rect x="44" y="198" width="129" height="6" rx="3" fill="#f97316"/>
+
+  <!-- AFTER tile -->
+  <text x="576" y="92" font-size="13" font-weight="700" fill="#111827">AFTER (fixed — illustrative)</text>
+  <rect x="576" y="102" width="500" height="118" rx="8" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="596" y="130" font-size="11" fill="#6b7280" text-decoration="underline" style="text-decoration-style: dotted">Change surface</text>
+  <text x="596" y="160" font-size="18" font-weight="700" fill="#111827" font-family="Consolas, monospace">3 files · 3 folders</text>
+  <text x="596" y="186" font-size="12" fill="#6b7280">Concentration 62 / 100 <tspan fill="#16a34a" font-weight="600">focused</tspan></text>
+  <rect x="596" y="198" width="460" height="6" rx="3" fill="#e5e7eb"/>
+  <rect x="596" y="198" width="285" height="6" rx="3" fill="#22c55e"/>
+  <rect x="576" y="102" width="500" height="118" rx="8" fill="none" stroke="#16a34a" stroke-dasharray="6 4" stroke-width="1.5"/>
+
+  <!-- arrow between tiles -->
+  <line x1="534" y1="161" x2="566" y2="161" stroke="#9ca3af" stroke-width="1.5"/>
+  <path d="M 566 161 l -8 -5 v 10 z" fill="#9ca3af"/>
+
+  <!-- notes -->
+  <rect x="24" y="244" width="1052" height="72" rx="8" fill="#f9fafb" stroke="#e5e7eb"/>
+  <text x="44" y="268" font-size="12" fill="#374151">• “62 / 100 focused” is illustrative — any non-“scattered” band (incl. “mixed”, blue) may satisfy AC-1; exact score/threshold is an open question.</text>
+  <text x="44" y="288" font-size="12" fill="#374151">• Summary detector CS-1 (change-surface-spread) already does not fire here (guard: foldersTouched ≥ 5) — AC-1’s detector clause is a no-regression check.</text>
+  <text x="44" y="308" font-size="12" fill="#374151">• No layout change anywhere: only the classification (score/band) coming from the server changes; tile, tab, reports and analytics chart pick it up as-is.</text>
+</svg>

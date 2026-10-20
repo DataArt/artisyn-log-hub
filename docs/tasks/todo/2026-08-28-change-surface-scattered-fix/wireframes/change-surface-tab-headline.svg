@@ -1,0 +1,109 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="660" viewBox="0 0 1100 660" font-family="Segoe UI, Arial, sans-serif">
+  <rect x="0" y="0" width="1100" height="660" fill="#ffffff"/>
+
+  <text x="24" y="34" font-size="18" font-weight="700" fill="#111827">T-120 — Change surface tab, headline row: revised “scattered” classification</text>
+  <text x="24" y="56" font-size="12" fill="#6b7280">Reported session eeee5555… (3 files, 2 top-level modules: client / doc). Only the Concentration cell changes — the rest of the tab layout stays as-is.</text>
+
+  <!-- ============ PANEL A: BEFORE ============ -->
+  <text x="24" y="92" font-size="13" font-weight="700" fill="#111827">1 · BEFORE (current bug) — small focused change lands in the scattered band</text>
+  <rect x="24" y="102" width="1052" height="92" rx="8" fill="#ffffff" stroke="#e5e7eb"/>
+  <!-- separators -->
+  <line x1="203" y1="116" x2="203" y2="180" stroke="#e5e7eb"/>
+  <line x1="372" y1="116" x2="372" y2="180" stroke="#e5e7eb"/>
+  <line x1="541" y1="116" x2="541" y2="180" stroke="#e5e7eb"/>
+  <line x1="710" y1="116" x2="710" y2="180" stroke="#e5e7eb"/>
+  <line x1="879" y1="116" x2="879" y2="180" stroke="#e5e7eb"/>
+  <!-- cell 1 -->
+  <text x="44" y="128" font-size="10.5" fill="#6b7280" letter-spacing="0.6">CHANGED FILES</text>
+  <text x="44" y="154" font-size="19" font-weight="700" fill="#111827" font-family="Consolas, monospace">3</text>
+  <text x="44" y="176" font-size="10.5" fill="#6b7280">distinct paths, whole tree</text>
+  <!-- cell 2 -->
+  <text x="213" y="128" font-size="10.5" fill="#6b7280" letter-spacing="0.6">FOLDERS TOUCHED</text>
+  <text x="213" y="154" font-size="19" font-weight="700" fill="#111827" font-family="Consolas, monospace">3</text>
+  <text x="213" y="176" font-size="10.5" fill="#6b7280">full dir paths, siblings distinct</text>
+  <!-- cell 3 (highlighted) -->
+  <rect x="378" y="108" width="157" height="80" rx="6" fill="none" stroke="#ea580c" stroke-dasharray="5 4" stroke-width="1.5"/>
+  <text x="388" y="128" font-size="10.5" fill="#6b7280" letter-spacing="0.6">CONCENTRATION</text>
+  <text x="388" y="154" font-size="19" font-weight="700" fill="#111827" font-family="Consolas, monospace">28 / 100</text>
+  <text x="388" y="176" font-size="11" font-weight="600" fill="#ea580c">scattered</text>
+  <!-- cell 4 -->
+  <text x="551" y="128" font-size="10.5" fill="#6b7280" letter-spacing="0.6">LINES +/−</text>
+  <text x="551" y="154" font-size="19" font-weight="700" font-family="Consolas, monospace"><tspan fill="#16a34a">+36</tspan> <tspan fill="#dc2626">−2</tspan></text>
+  <text x="551" y="176" font-size="10.5" fill="#6b7280">diff-based, 3 of 3 files covered</text>
+  <!-- cell 5 -->
+  <text x="720" y="128" font-size="10.5" fill="#6b7280" letter-spacing="0.6">TOP-LEVEL MODULES</text>
+  <text x="720" y="154" font-size="19" font-weight="700" fill="#111827" font-family="Consolas, monospace">2</text>
+  <text x="720" y="176" font-size="10.5" fill="#6b7280">client / doc</text>
+  <!-- cell 6 -->
+  <text x="889" y="128" font-size="10.5" fill="#6b7280" letter-spacing="0.6">COMMON ANCESTOR</text>
+  <text x="889" y="154" font-size="19" font-weight="700" fill="#111827" font-family="Consolas, monospace">depth 0</text>
+  <text x="889" y="176" font-size="10.5" fill="#6b7280">repo root — reaches everywhere</text>
+  <!-- callout A -->
+  <line x1="456" y1="188" x2="456" y2="206" stroke="#ea580c" stroke-width="1"/>
+  <text x="44" y="220" font-size="12" fill="#ea580c">3 files across 2 top-level folders is flagged “scattered” — reads as a very focused change, not a scattered one.</text>
+
+  <!-- ============ PANEL B: AFTER ============ -->
+  <text x="24" y="260" font-size="13" font-weight="700" fill="#111827">2 · AFTER (fixed) — same session: few files + few top-level folders ⇒ not scattered (FR-1…FR-3 / AC-1)</text>
+  <rect x="24" y="270" width="1052" height="92" rx="8" fill="#ffffff" stroke="#e5e7eb"/>
+  <line x1="203" y1="284" x2="203" y2="348" stroke="#e5e7eb"/>
+  <line x1="372" y1="284" x2="372" y2="348" stroke="#e5e7eb"/>
+  <line x1="541" y1="284" x2="541" y2="348" stroke="#e5e7eb"/>
+  <line x1="710" y1="284" x2="710" y2="348" stroke="#e5e7eb"/>
+  <line x1="879" y1="284" x2="879" y2="348" stroke="#e5e7eb"/>
+  <text x="44" y="296" font-size="10.5" fill="#6b7280" letter-spacing="0.6">CHANGED FILES</text>
+  <text x="44" y="322" font-size="19" font-weight="700" fill="#111827" font-family="Consolas, monospace">3</text>
+  <text x="44" y="344" font-size="10.5" fill="#6b7280">distinct paths, whole tree</text>
+  <text x="213" y="296" font-size="10.5" fill="#6b7280" letter-spacing="0.6">FOLDERS TOUCHED</text>
+  <text x="213" y="322" font-size="19" font-weight="700" fill="#111827" font-family="Consolas, monospace">3</text>
+  <text x="213" y="344" font-size="10.5" fill="#6b7280">full dir paths, siblings distinct</text>
+  <rect x="378" y="276" width="157" height="80" rx="6" fill="none" stroke="#16a34a" stroke-dasharray="5 4" stroke-width="1.5"/>
+  <text x="388" y="296" font-size="10.5" fill="#6b7280" letter-spacing="0.6">CONCENTRATION</text>
+  <text x="388" y="322" font-size="19" font-weight="700" fill="#111827" font-family="Consolas, monospace">62 / 100</text>
+  <text x="388" y="344" font-size="11" font-weight="600" fill="#16a34a">focused</text>
+  <text x="551" y="296" font-size="10.5" fill="#6b7280" letter-spacing="0.6">LINES +/−</text>
+  <text x="551" y="322" font-size="19" font-weight="700" font-family="Consolas, monospace"><tspan fill="#16a34a">+36</tspan> <tspan fill="#dc2626">−2</tspan></text>
+  <text x="551" y="344" font-size="10.5" fill="#6b7280">diff-based, 3 of 3 files covered</text>
+  <text x="720" y="296" font-size="10.5" fill="#6b7280" letter-spacing="0.6">TOP-LEVEL MODULES</text>
+  <text x="720" y="322" font-size="19" font-weight="700" fill="#111827" font-family="Consolas, monospace">2</text>
+  <text x="720" y="344" font-size="10.5" fill="#6b7280">client / doc</text>
+  <text x="889" y="296" font-size="10.5" fill="#6b7280" letter-spacing="0.6">COMMON ANCESTOR</text>
+  <text x="889" y="322" font-size="19" font-weight="700" fill="#111827" font-family="Consolas, monospace">depth 0</text>
+  <text x="889" y="344" font-size="10.5" fill="#6b7280">repo root — reaches everywhere</text>
+  <line x1="456" y1="356" x2="456" y2="374" stroke="#16a34a" stroke-width="1"/>
+  <text x="44" y="388" font-size="12" fill="#16a34a">Rule now weighs top-level folders touched + total files changed. Score “62 / focused” is illustrative — any non-“scattered” band and exact numbers are an open question.</text>
+
+  <!-- ============ PANEL C: NO REGRESSION ============ -->
+  <text x="24" y="428" font-size="13" font-weight="700" fill="#111827">3 · AFTER — genuinely scattered session stays scattered (FR-4 / AC-2, no regression)</text>
+  <rect x="24" y="438" width="1052" height="92" rx="8" fill="#ffffff" stroke="#e5e7eb"/>
+  <line x1="203" y1="452" x2="203" y2="516" stroke="#e5e7eb"/>
+  <line x1="372" y1="452" x2="372" y2="516" stroke="#e5e7eb"/>
+  <line x1="541" y1="452" x2="541" y2="516" stroke="#e5e7eb"/>
+  <line x1="710" y1="452" x2="710" y2="516" stroke="#e5e7eb"/>
+  <line x1="879" y1="452" x2="879" y2="516" stroke="#e5e7eb"/>
+  <text x="44" y="464" font-size="10.5" fill="#6b7280" letter-spacing="0.6">CHANGED FILES</text>
+  <text x="44" y="490" font-size="19" font-weight="700" fill="#111827" font-family="Consolas, monospace">14</text>
+  <text x="44" y="512" font-size="10.5" fill="#6b7280">distinct paths, whole tree</text>
+  <text x="213" y="464" font-size="10.5" fill="#6b7280" letter-spacing="0.6">FOLDERS TOUCHED</text>
+  <text x="213" y="490" font-size="19" font-weight="700" fill="#111827" font-family="Consolas, monospace">11</text>
+  <text x="213" y="512" font-size="10.5" fill="#6b7280">full dir paths, siblings distinct</text>
+  <rect x="378" y="444" width="157" height="80" rx="6" fill="none" stroke="#ea580c" stroke-dasharray="5 4" stroke-width="1.5"/>
+  <text x="388" y="464" font-size="10.5" fill="#6b7280" letter-spacing="0.6">CONCENTRATION</text>
+  <text x="388" y="490" font-size="19" font-weight="700" fill="#111827" font-family="Consolas, monospace">8 / 100</text>
+  <text x="388" y="512" font-size="11" font-weight="600" fill="#ea580c">scattered</text>
+  <text x="551" y="464" font-size="10.5" fill="#6b7280" letter-spacing="0.6">LINES +/−</text>
+  <text x="551" y="490" font-size="19" font-weight="700" font-family="Consolas, monospace"><tspan fill="#16a34a">+120</tspan> <tspan fill="#dc2626">−45</tspan></text>
+  <text x="551" y="512" font-size="10.5" fill="#6b7280">diff-based, 14 of 14 files covered</text>
+  <text x="720" y="464" font-size="10.5" fill="#6b7280" letter-spacing="0.6">TOP-LEVEL MODULES</text>
+  <text x="720" y="490" font-size="19" font-weight="700" fill="#111827" font-family="Consolas, monospace">6</text>
+  <text x="720" y="512" font-size="10.5" fill="#6b7280">client / server / doc / hook / …</text>
+  <text x="889" y="464" font-size="10.5" fill="#6b7280" letter-spacing="0.6">COMMON ANCESTOR</text>
+  <text x="889" y="490" font-size="19" font-weight="700" fill="#111827" font-family="Consolas, monospace">depth 0</text>
+  <text x="889" y="512" font-size="10.5" fill="#6b7280">repo root — reaches everywhere</text>
+  <line x1="456" y1="524" x2="456" y2="542" stroke="#ea580c" stroke-width="1"/>
+  <text x="44" y="556" font-size="12" fill="#374151">Many files across many unrelated top-level folders: still classified “scattered” — the threshold is refined, the band is not removed.</text>
+
+  <!-- footer rule box -->
+  <rect x="24" y="576" width="1052" height="62" rx="8" fill="#f9fafb" stroke="#e5e7eb"/>
+  <text x="44" y="600" font-size="12" font-weight="700" fill="#374151">New guard (FR-3, sketch):  topLevelFolders ≤ N  AND  changedFiles ≤ M   ⇒   band is never “scattered”.</text>
+  <text x="44" y="622" font-size="12" fill="#6b7280">Exact N / M, whether “top-level folders” means topLevelModules (T = 2 here) or foldersTouched (K = 3), and whether the 2-files/2-modules pinned case flips — open questions.</text>
+</svg>

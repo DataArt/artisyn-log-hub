@@ -1,0 +1,12 @@
+{
+  "name": "js-cli",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Tiny greeting CLI used as a big-prod-e2e-test fixture",
+  "bin": {
+    "js-cli": "bin/cli.js"
+  },
+  "scripts": {
+    "start": "node bin/cli.js"
+  }
+}

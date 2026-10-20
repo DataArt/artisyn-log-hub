@@ -1,0 +1,5 @@
+{"type":"artisyn","hook_event_name":"SessionStart","timestamp":"2026-01-13T10:00:00.000Z","session_id":"{{RUN}}-gs07","git":{"repo":"{{REPO}}","root":"/work/repo-gold","worktreeRoot":"/work/repo-gold","branch":"fix/windows","user":"Golden Tester"}}
+{"event":"prompt_start","timestamp":"2026-01-13T10:00:00.000Z","session_id":"{{RUN}}-gs07","prompt":"Run the test suite","git":{"repo":"{{REPO}}","root":"/work/repo-gold","worktreeRoot":"/work/repo-gold","branch":"fix/windows","user":"Golden Tester"}}
+{"event":"prompt_start","timestamp":"2026-01-13T10:01:00.000Z","session_id":"{{RUN}}-gs07","prompt":"Clean the build folder and check the sources","git":{"repo":"{{REPO}}","root":"/work/repo-gold","worktreeRoot":"/work/repo-gold","branch":"fix/windows","user":"Golden Tester"}}
+{"event":"prompt_start","timestamp":"2026-01-13T10:02:00.000Z","session_id":"{{RUN}}-gs07","prompt":"Print ok","git":{"repo":"{{REPO}}","root":"/work/repo-gold","worktreeRoot":"/work/repo-gold","branch":"fix/windows","user":"Golden Tester"}}
+{"type":"artisyn","hook_event_name":"SessionEnd","timestamp":"2026-01-13T10:07:00.000Z","session_id":"{{RUN}}-gs07"}

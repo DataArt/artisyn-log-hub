@@ -1,0 +1,73 @@
+{
+  "$comment": "GS-07 errors (sonnet-4-6): failures vs user denials, an unresolved call, a sidechain pair, an isMeta line, a late task-notification and a split (duplicate message.id) answer. Literals; costs from the DD D3 rates, the rest from scenarios/03 §2.3. Times are fixture-relative (A = 2026-01-05).",
+  "fixture": "GS-07",
+  "roots": [
+    {
+      "key": "gs07",
+      "branch": "fix/windows",
+      "week": "W2",
+      "start": "2026-01-13T10:00:00.000Z",
+      "end": "2026-01-13T10:07:00.000Z",
+      "durationMs": 420000,
+      "model": "claude-sonnet-4-6",
+      "claudeVersion": "2.1.99",
+      "prompts": 3,
+      "turnCount": 3,
+      "workTimeMs": 60000,
+      "costUsd": 0.0456,
+      "ownCostUsd": 0.0456,
+      "costUnavailableReason": null,
+      "excludedFromTotals": {
+        "sidechainPair": { "input": 50000, "output": 10000 },
+        "isMetaUser": 1,
+        "taskNotification": 1,
+        "duplicateAssistantLine": 1
+      },
+      "nodes": [
+        {
+          "key": "root",
+          "model": "claude-sonnet-4-6",
+          "tokens": { "input": 3000, "output": 1200, "cacheRead": 12000, "cacheWrite5m": 4000, "cacheWrite1h": 0, "inputFast": 0, "outputFast": 0, "webSearch": 0 },
+          "costUsd": 0.0456
+        }
+      ],
+      "tokens": {
+        "own": { "input": 3000, "output": 1200, "cacheRead": 12000, "cacheWrite5m": 4000, "cacheWrite1h": 0, "inputFast": 0, "outputFast": 0, "webSearch": 0 },
+        "tree": { "input": 3000, "output": 1200, "cacheRead": 12000, "cacheWrite5m": 4000, "cacheWrite1h": 0, "inputFast": 0, "outputFast": 0, "webSearch": 0 }
+      },
+      "cacheRatio": { "own": 0.75, "tree": 0.75 },
+      "perPrompt": [
+        { "workTimeMs": 20000 },
+        { "workTimeMs": 30000 },
+        { "workTimeMs": 10000 }
+      ],
+      "toolOutcomes": [
+        { "tool": "Bash", "input": "npm test", "outcome": "failure" },
+        { "tool": "Bash", "input": "ls /root", "outcome": "failure" },
+        { "tool": "Bash", "input": "rm -rf build", "outcome": "unresolved" },
+        { "tool": "Bash", "input": "echo ok", "outcome": "success" },
+        { "tool": "Read", "input": "src/ok.ts", "outcome": "success" },
+        { "tool": "Read", "input": "src/other.ts", "outcome": "unresolved" }
+      ],
+      "tools": {
+        "Bash": { "calls": 4, "successes": 1, "failures": 2, "unresolved": 1, "failureRate": 0.666667 },
+        "Read": { "calls": 2, "successes": 1, "failures": 0, "unresolved": 1, "failureRate": 0 }
+      },
+      "commits": 0,
+      "pullRequests": 0,
+      "lines": { "written": 0, "writtenOwn": 0, "added": 0, "removed": 0, "editWriteCalls": 0 },
+      "changeSurface": {
+        "changedFiles": 0,
+        "foldersTouched": 0,
+        "topLevelModules": 0,
+        "singleFileFolders": 0,
+        "folders": {},
+        "linesAdded": 0,
+        "linesRemoved": 0,
+        "outsideRepoFiles": 0,
+        "concentration": null,
+        "band": null
+      }
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+{
+  "name": "ts-webapp",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "build": "tsc -p packages/core && tsc -p packages/web"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.0"
+  }
+}

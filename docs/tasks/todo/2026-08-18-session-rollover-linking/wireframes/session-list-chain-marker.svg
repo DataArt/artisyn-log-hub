@@ -1,0 +1,141 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1060" height="700" viewBox="0 0 1060 700" font-family="system-ui, 'Segoe UI', Roboto, sans-serif">
+  <style>
+    .h1    { font-size: 15px; fill: #111827; font-weight: 600; }
+    .h2    { font-size: 12px; fill: #111827; font-weight: 600; }
+    .note  { font-size: 10px; fill: #6b7280; font-style: italic; }
+    .ts    { font-size: 12px; fill: #111827; font-weight: 600; font-family: 'JetBrains Mono', ui-monospace, Consolas, monospace; }
+    .cost  { font-size: 12px; font-family: 'JetBrains Mono', ui-monospace, Consolas, monospace; }
+    .prompt{ font-size: 11px; fill: #6b7280; }
+    .chip  { font-size: 9px; font-family: 'JetBrains Mono', ui-monospace, Consolas, monospace; }
+    .muted { font-size: 10px; fill: #9ca3af; }
+    .ann   { font-size: 10px; fill: #b45309; }
+    .txt   { font-size: 11px; fill: #374151; }
+  </style>
+  <rect width="1060" height="700" fill="#ffffff"/>
+
+  <text x="24" y="28" class="h1">T-102 · Session list — rollover chain marker &amp; inherited first prompt</text>
+  <text x="24" y="45" class="note">Same SessionItem row geometry as today (session-list-helpers.tsx). Only two additions: the ⇄ chain marker and the inherited-prompt line.</text>
+
+  <!-- ================= TODAY ================= -->
+  <text x="24" y="80" class="h2">Today — the two rows read as unrelated work</text>
+  <rect x="24" y="90" width="470" height="252" fill="#ffffff" stroke="#e5e7eb" rx="4"/>
+
+  <!-- select -->
+  <rect x="36" y="102" width="446" height="24" rx="4" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="46" y="118" class="txt">By branch</text>
+  <text x="466" y="118" class="txt">⌄</text>
+
+  <!-- row A -->
+  <line x1="24" y1="136" x2="494" y2="136" stroke="#f3f4f6"/>
+  <text x="40" y="156" class="ts">2026-08-18 11:00:09</text>
+  <text x="196" y="156" class="muted">|</text>
+  <text x="212" y="156" class="cost" fill="#c2410c">$12.3400</text>
+  <text x="40" y="174" class="prompt">&lt;task-notification&gt; &lt;task-id&gt;t0example&lt;…</text>
+  <rect x="40" y="182" width="170" height="15" rx="3" fill="#dcfce7"/>
+  <text x="46" y="193" class="chip" fill="#166534">T-100-denormalized-cost</text>
+  <rect x="218" y="182" width="72" height="15" rx="3" fill="#fce7f3"/>
+  <text x="224" y="193" class="chip" fill="#9d174d">⚡ Workflow</text>
+
+  <!-- row B -->
+  <line x1="24" y1="208" x2="494" y2="208" stroke="#f3f4f6"/>
+  <text x="40" y="228" class="ts">2026-08-18 02:21:49</text>
+  <text x="196" y="228" class="muted">|</text>
+  <text x="212" y="228" class="cost" fill="#2563eb">$8.5600</text>
+  <text x="40" y="246" class="prompt">/adlc-lh:implement-deep 2026-08-01-upload-retry</text>
+  <rect x="40" y="254" width="170" height="15" rx="3" fill="#dcfce7"/>
+  <text x="46" y="265" class="chip" fill="#166534">T-100-denormalized-cost</text>
+  <rect x="218" y="254" width="72" height="15" rx="3" fill="#fce7f3"/>
+  <text x="224" y="265" class="chip" fill="#9d174d">⚡ Workflow</text>
+
+  <line x1="24" y1="280" x2="494" y2="280" stroke="#f3f4f6"/>
+  <text x="40" y="300" class="ts">2026-08-17 23:33:36</text>
+  <text x="196" y="300" class="muted">|</text>
+  <text x="212" y="300" class="cost" fill="#16a34a">$3.1972</text>
+  <text x="40" y="318" class="prompt">add retry handling to the upload worker and…</text>
+
+  <text x="24" y="362" class="ann">▲ The 11:00 row's "first prompt" is a synthetic &lt;task-notification&gt; block — the real prompt lives in the 02:21 row.</text>
+
+  <!-- ================= PROPOSED ================= -->
+  <text x="566" y="80" class="h2">Proposed — chain marker + inherited prompt</text>
+  <rect x="566" y="90" width="470" height="252" fill="#ffffff" stroke="#e5e7eb" rx="4"/>
+
+  <rect x="578" y="102" width="446" height="24" rx="4" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="588" y="118" class="txt">By branch</text>
+  <text x="1008" y="118" class="txt">⌄</text>
+
+  <!-- row A (later session) -->
+  <line x1="566" y1="136" x2="1036" y2="136" stroke="#f3f4f6"/>
+  <rect x="566" y="136" width="3" height="72" fill="#6366f1"/>
+  <text x="582" y="156" class="ts">2026-08-18 11:00:09</text>
+  <text x="738" y="156" class="muted">|</text>
+  <text x="754" y="156" class="cost" fill="#c2410c">$12.3400</text>
+  <text x="836" y="156" font-size="12" fill="#4338ca">⇄</text>
+  <rect x="850" y="144" width="86" height="16" rx="8" fill="#e0e7ff" stroke="#c7d2fe"/>
+  <text x="857" y="156" class="chip" fill="#3730a3">continuation</text>
+  <text x="582" y="174" class="prompt" fill="#6b7280" font-style="italic">↳ /adlc-lh:implement-deep up…</text>
+  <text x="762" y="174" class="muted" font-style="italic">inherited from aaaa1111</text>
+  <rect x="582" y="182" width="170" height="15" rx="3" fill="#dcfce7"/>
+  <text x="588" y="193" class="chip" fill="#166534">T-100-denormalized-cost</text>
+  <rect x="760" y="182" width="72" height="15" rx="3" fill="#fce7f3"/>
+  <text x="766" y="193" class="chip" fill="#9d174d">⚡ Workflow</text>
+
+  <!-- row B (origin session) -->
+  <line x1="566" y1="208" x2="1036" y2="208" stroke="#f3f4f6"/>
+  <rect x="566" y="208" width="3" height="72" fill="#c7d2fe"/>
+  <text x="582" y="228" class="ts">2026-08-18 02:21:49</text>
+  <text x="738" y="228" class="muted">|</text>
+  <text x="754" y="228" class="cost" fill="#2563eb">$8.5600</text>
+  <text x="836" y="228" font-size="12" fill="#4338ca">⇄</text>
+  <rect x="850" y="216" width="86" height="16" rx="8" fill="#e0e7ff" stroke="#c7d2fe"/>
+  <text x="857" y="228" class="chip" fill="#3730a3">continuation</text>
+  <text x="582" y="246" class="prompt">/adlc-lh:implement-deep 2026-08-01-upload-retry</text>
+  <rect x="582" y="254" width="170" height="15" rx="3" fill="#dcfce7"/>
+  <text x="588" y="265" class="chip" fill="#166534">T-100-denormalized-cost</text>
+  <rect x="760" y="254" width="72" height="15" rx="3" fill="#fce7f3"/>
+  <text x="766" y="265" class="chip" fill="#9d174d">⚡ Workflow</text>
+
+  <line x1="566" y1="280" x2="1036" y2="280" stroke="#f3f4f6"/>
+  <text x="582" y="300" class="ts">2026-08-17 23:33:36</text>
+  <text x="738" y="300" class="muted">|</text>
+  <text x="754" y="300" class="cost" fill="#16a34a">$3.1972</text>
+  <text x="582" y="318" class="prompt">add retry handling to the upload worker and…</text>
+
+  <text x="566" y="362" class="ann">▲ Costs stay per-row and unchanged. Only the prompt text is borrowed, and it is explicitly labelled as inherited.</text>
+
+  <!-- ================= HOVER TOOLTIP ================= -->
+  <text x="24" y="404" class="h2">Chain marker hover (reuses HoverPopover / ViewportPopover — no new popup machinery)</text>
+  <rect x="24" y="416" width="330" height="126" rx="6" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="40" y="438" class="h2">Continuation chain · 2 sessions</text>
+  <line x1="40" y1="446" x2="338" y2="446" stroke="#f3f4f6"/>
+  <text x="40" y="466" class="txt">1.</text>
+  <text x="58" y="466" class="cost" fill="#2563eb">aaaa1111</text>
+  <text x="130" y="466" class="txt">02:21:49 · $8.5600</text>
+  <text x="298" y="466" class="muted">origin</text>
+  <text x="40" y="486" class="txt">2.</text>
+  <text x="58" y="486" class="cost" fill="#111827">bbbb2222</text>
+  <text x="130" y="486" class="txt">11:00:09 · $12.3400</text>
+  <text x="288" y="486" class="muted">this one</text>
+  <line x1="40" y1="498" x2="338" y2="498" stroke="#f3f4f6"/>
+  <text x="40" y="516" class="txt">Kind</text>
+  <text x="110" y="516" class="txt">rollover (5s gap)</text>
+  <text x="40" y="532" class="txt">Chain total</text>
+  <text x="110" y="532" class="cost" fill="#111827">$20.9000</text>
+  <text x="212" y="532" class="muted">display only</text>
+
+  <text x="380" y="438" class="note">Rules carried from ui-principles.md:</text>
+  <text x="380" y="458" class="note">· light surfaces only; indigo (#6366f1 / #eef2ff) is the continuation accent, reused from the existing refresh banner.</text>
+  <text x="380" y="476" class="note">· the ⇄ marker appears in every list mode (branch / date / user / plain) and in BranchSection rows.</text>
+  <text x="380" y="494" class="note">· attribute chips, cost colouring and cost thresholds are untouched.</text>
+  <text x="380" y="512" class="note">· no clickable link inside the row itself — clicking the row still opens that session; navigation between chain members happens in the detail breadcrumb.</text>
+  <text x="380" y="530" class="note">· "Chain total" in the tooltip is a rendered sum, never a stored/aggregated figure (Option A adds no aggregation).</text>
+
+  <!-- ================= EMPTY / UNRESOLVED ================= -->
+  <text x="24" y="580" class="h2">Marker states</text>
+  <rect x="24" y="592" width="1012" height="88" rx="4" fill="#f9fafb" stroke="#e5e7eb"/>
+  <text x="40" y="614" font-size="12" fill="#4338ca">⇄</text>
+  <text x="60" y="614" class="txt">resolved link in either direction — indigo marker + left edge bar, hover shows the chain</text>
+  <text x="40" y="638" font-size="12" fill="#b45309">⚠</text>
+  <text x="60" y="638" class="txt">unverified candidate — amber marker, tooltip says "possible continuation, unverified"; no chain list, no inherited prompt</text>
+  <text x="40" y="662" class="muted">(none)</text>
+  <text x="100" y="662" class="txt">no link — row renders exactly as today, including its own first prompt whatever it is</text>
+</svg>

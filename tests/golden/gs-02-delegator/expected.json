@@ -1,0 +1,89 @@
+{
+  "$comment": "GS-02 tree: root -> A -> B (grandchild) and root -> D. Literals; costs from the DD D3 rates, the rest from scenarios/03 §2.3. Times are fixture-relative (A = 2026-01-05).",
+  "fixture": "GS-02",
+  "roots": [
+    {
+      "key": "gs02",
+      "branch": "main",
+      "week": "W1",
+      "start": "2026-01-06T10:00:00.000Z",
+      "end": "2026-01-06T10:05:00.000Z",
+      "durationMs": 300000,
+      "model": "claude-sonnet-4-6",
+      "claudeVersion": "2.1.99",
+      "prompts": 2,
+      "workTimeMs": 180000,
+      "costUsd": 0.1173,
+      "ownCostUsd": 0.039,
+      "costUnavailableReason": null,
+      "delegationShare": 0.667519,
+      "nodes": [
+        {
+          "key": "root",
+          "model": "claude-sonnet-4-6",
+          "tokens": { "input": 2000, "output": 1000, "cacheRead": 10000, "cacheWrite5m": 4000, "cacheWrite1h": 0, "inputFast": 0, "outputFast": 0, "webSearch": 0 },
+          "costUsd": 0.039
+        },
+        {
+          "key": "a",
+          "parent": "root",
+          "model": "claude-haiku-4-5",
+          "tokens": { "input": 10000, "output": 4000, "cacheRead": 20000, "cacheWrite5m": 4800, "cacheWrite1h": 0, "inputFast": 0, "outputFast": 0, "webSearch": 0 },
+          "costUsd": 0.038,
+          "lines": { "written": 6, "added": 2, "removed": 2, "editWriteCalls": 1, "filesEditedWritten": 1 }
+        },
+        {
+          "key": "b",
+          "parent": "a",
+          "model": "claude-haiku-4-5",
+          "tokens": { "input": 6000, "output": 2000, "cacheRead": 8000, "cacheWrite5m": 0, "cacheWrite1h": 3000, "inputFast": 0, "outputFast": 0, "webSearch": 0 },
+          "costUsd": 0.0228,
+          "lines": { "written": 25, "added": 21, "removed": 1, "editWriteCalls": 2, "filesEditedWritten": 2 }
+        },
+        {
+          "key": "d",
+          "parent": "root",
+          "model": "claude-opus-5",
+          "tokens": { "input": 1000, "output": 500, "cacheRead": 0, "cacheWrite5m": 0, "cacheWrite1h": 0, "inputFast": 0, "outputFast": 0, "webSearch": 0 },
+          "costUsd": 0.0175,
+          "lines": { "written": 5, "added": 4, "removed": 0, "editWriteCalls": 1, "filesEditedWritten": 1 }
+        }
+      ],
+      "tokens": {
+        "own": { "input": 2000, "output": 1000, "cacheRead": 10000, "cacheWrite5m": 4000, "cacheWrite1h": 0, "inputFast": 0, "outputFast": 0, "webSearch": 0 },
+        "tree": { "input": 19000, "output": 7500, "cacheRead": 38000, "cacheWrite5m": 8800, "cacheWrite1h": 3000, "inputFast": 0, "outputFast": 0, "webSearch": 0 }
+      },
+      "cacheRatio": { "own": 0.714286, "tree": 0.763052 },
+      "perPrompt": [
+        { "at": "2026-01-06T10:00:00.000Z", "workTimeMs": 120000, "tokens": { "input": 1200, "output": 600, "cacheRead": 4000, "cacheWrite5m": 2400, "cacheWrite1h": 0, "inputFast": 0, "outputFast": 0, "webSearch": 0 }, "costUsd": 0.0228, "subagents": ["a", "b"], "costWithSubagentsUsd": 0.0836 },
+        { "at": "2026-01-06T10:04:00.000Z", "workTimeMs": 60000, "tokens": { "input": 800, "output": 400, "cacheRead": 6000, "cacheWrite5m": 1600, "cacheWrite1h": 0, "inputFast": 0, "outputFast": 0, "webSearch": 0 }, "costUsd": 0.0162, "subagents": ["d"], "costWithSubagentsUsd": 0.0337 }
+      ],
+      "tools": {
+        "Agent": { "calls": 3, "successes": 3, "failures": 0, "unresolved": 0 },
+        "Read": { "calls": 5, "successes": 5, "failures": 0, "unresolved": 0 },
+        "Edit": { "calls": 3, "successes": 3, "failures": 0, "unresolved": 0 },
+        "Write": { "calls": 1, "successes": 1, "failures": 0, "unresolved": 0 },
+        "Bash": { "calls": 1, "successes": 1, "failures": 0, "unresolved": 0 }
+      },
+      "commits": 1,
+      "pullRequests": 0,
+      "subAgentsSpawned": 3,
+      "lines": { "written": 36, "writtenOwn": 0, "added": 27, "removed": 3, "editWriteCalls": 4 },
+      "linesPerAutonomousHour": 720,
+      "costPerLineUsd": 0.0033,
+      "changeSurface": {
+        "changedFiles": 3,
+        "foldersTouched": 2,
+        "topLevelModules": 1,
+        "singleFileFolders": 1,
+        "folders": { "src/billing": 2, "src/api": 1 },
+        "linesAdded": 27,
+        "linesRemoved": 3,
+        "outsideRepoFiles": 0,
+        "concentration": 62,
+        "band": "focused",
+        "commonAncestor": "src"
+      }
+    }
+  ]
+}

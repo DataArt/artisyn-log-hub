@@ -1,0 +1,61 @@
+services:
+  db:
+    image: postgres:18.2-alpine
+    container_name: artisyn-log-hub-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-a-log}
+      # Fixed, version-independent PGDATA subdirectory: the postgres image's own data path
+      # moves on every major-version bump (e.g. /var/lib/postgresql/data on pg17,
+      # /var/lib/postgresql/18/docker on pg18). Mounting the parent dir and pinning PGDATA
+      # to a stable child path means the bind mount always holds the real cluster, on any
+      # postgres major version.
+      PGDATA: /var/lib/postgresql/data/pgdata
+    volumes:
+      - ${LOG_HUB_DATA_DIR:?set LOG_HUB_DATA_DIR in .env}/pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    image: artisyn-log-hub:latest
+    container_name: artisyn-log-hub
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB:-a-log}
+      # Optional: when empty, the app generates a secret on first start and keeps it in the DB.
+      SESSION_SECRET: ${SESSION_SECRET:-}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      # false (default) | true | hop count (e.g. 1) | IP/CIDR list — when enabled it overrides
+      # COOKIE_SECURE (cookie secure flag follows X-Forwarded-Proto) and fixes the client IP.
+      TRUST_PROXY: ${TRUST_PROXY:-false}
+      # none | password | password-confirm | azure-oauth — see docs/knowledgebase/
+      # authorization-and-authentificaiton.md. Defaults to Mode 2 (password), matching every
+      # install that predates this setting; set explicitly in .env only to change modes.
+      AUTH_MODE: ${AUTH_MODE:-password}
+      # Optional settings — empty means the app's built-in default (see .env.example).
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-}
+      ALLOWED_EMAIL_DOMAINS: ${ALLOWED_EMAIL_DOMAINS:-}
+      RELEASE_LINK_SECRET: ${RELEASE_LINK_SECRET:-}
+      AUTH_RATE_LIMIT_POINTS: ${AUTH_RATE_LIMIT_POINTS:-}
+      AUTH_RATE_LIMIT_WINDOW_SEC: ${AUTH_RATE_LIMIT_WINDOW_SEC:-}
+      IMPORT_MAX_UPLOAD_BYTES: ${IMPORT_MAX_UPLOAD_BYTES:-}
+      IMPORT_MAX_ENTRIES: ${IMPORT_MAX_ENTRIES:-}
+      IMPORT_MAX_UNCOMPRESSED_BYTES: ${IMPORT_MAX_UNCOMPRESSED_BYTES:-}
+      IMPORT_MAX_ENTRY_BYTES: ${IMPORT_MAX_ENTRY_BYTES:-}
+    ports:
+      - "127.0.0.1:5003:3000"
+    volumes:
+      - ${LOG_HUB_DATA_DIR:?set LOG_HUB_DATA_DIR in .env}/upload-queue:/app/dist/upload-queue
+      - ${LOG_HUB_DATA_DIR:?set LOG_HUB_DATA_DIR in .env}/logs:/app/dist/logs
+      # Optional: drop release zips here to offer them from Admin > System > Release Downloads.
+      # Read-only — the app only ever lists and streams them.
+      - ${LOG_HUB_DATA_DIR:?set LOG_HUB_DATA_DIR in .env}/releases:/app/dist/releases:ro

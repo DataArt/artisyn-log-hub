@@ -1,0 +1,13 @@
+{
+  "fixture": "GS-09",
+  "generatedBy": "tests/golden/gen-gs09.mjs",
+  "roots": [
+    {
+      "key": "gs09",
+      "sessionId": "{{RUN}}-gs09",
+      "artisyn": "artisyn.jsonl",
+      "claude": "session.jsonl",
+      "subagents": []
+    }
+  ]
+}

@@ -1,0 +1,113 @@
+{
+  "note": "One definition of 'how many lines did this edit change'. The server counts an edit call's lines from the transcript's toolUseResult (server/src/logs/tool-stats.ts -> countPatchLines, the source of truth); the hook counts the same thing from the CLI's tool_response (hook/.claude/telemetry_tool/edit-result-counts.js -> countPatchLines, a verbatim port), because a workflow-agent transcript never carries a usable toolUseResult. Two implementations that disagreed would make a session's numbers depend on which side happened to cover the call. These cases run through BOTH implementations: server/src/logs/tool-stats.spec.ts and hook/.claude/telemetry_tool/__tests__/edit-result-counts.test.js. Update the fixture together with whichever side actually changed; a mismatch means one of them drifted.",
+  "cases": [
+    {
+      "name": "single hunk, mixed added/removed/context lines",
+      "toolUseResult": {
+        "filePath": "/repo/src/a.ts",
+        "structuredPatch": [
+          {
+            "oldStart": 1,
+            "lines": [" const a = 1;", "-const b = 2;", "+const b = 3;", "+const c = 4;", " export {};"]
+          }
+        ]
+      },
+      "expected": { "added": 2, "removed": 1 }
+    },
+    {
+      "name": "two hunks accumulate",
+      "toolUseResult": {
+        "filePath": "/repo/src/b.ts",
+        "structuredPatch": [
+          { "lines": ["-one", "+uno"] },
+          { "lines": ["-two", "-three", "+dos", "+tres", "+quatro"] }
+        ]
+      },
+      "expected": { "added": 4, "removed": 3 }
+    },
+    {
+      "name": "pure deletion hunk",
+      "toolUseResult": {
+        "structuredPatch": [{ "lines": [" keep", "-gone", "-also gone"] }]
+      },
+      "expected": { "added": 0, "removed": 2 }
+    },
+    {
+      "name": "empty and non-string hunk lines are skipped, not counted",
+      "toolUseResult": {
+        "structuredPatch": [{ "lines": ["", "+real", null, 42, "-real"] }]
+      },
+      "expected": { "added": 1, "removed": 1 }
+    },
+    {
+      "name": "a hunk with no lines array contributes nothing",
+      "toolUseResult": {
+        "structuredPatch": [{ "lines": ["+kept"] }, { "oldStart": 9 }]
+      },
+      "expected": { "added": 1, "removed": 0 }
+    },
+    {
+      "name": "Write create — content line count, no removals",
+      "toolUseResult": {
+        "type": "create",
+        "filePath": "/repo/src/new.ts",
+        "content": "line one\nline two\nline three"
+      },
+      "expected": { "added": 3, "removed": 0 }
+    },
+    {
+      "name": "Write create with a trailing newline counts the empty last line",
+      "toolUseResult": { "type": "create", "content": "only\n" },
+      "expected": { "added": 2, "removed": 0 }
+    },
+    {
+      "name": "Write create of an empty file is zero lines, not one",
+      "toolUseResult": { "type": "create", "content": "" },
+      "expected": { "added": 0, "removed": 0 }
+    },
+    {
+      "name": "a non-empty structuredPatch wins over type: create",
+      "toolUseResult": {
+        "type": "create",
+        "content": "a\nb\nc\nd\ne",
+        "structuredPatch": [{ "lines": ["+a", "+b"] }]
+      },
+      "expected": { "added": 2, "removed": 0 }
+    },
+    {
+      "name": "empty structuredPatch on an update — uncovered, not +0/-0",
+      "toolUseResult": { "type": "update", "filePath": "/repo/src/c.ts", "structuredPatch": [] },
+      "expected": null
+    },
+    {
+      "name": "absent structuredPatch — uncovered",
+      "toolUseResult": { "filePath": "/repo/src/c.ts", "oldString": "a", "newString": "b" },
+      "expected": null
+    },
+    {
+      "name": "structuredPatch present but not an array — uncovered",
+      "toolUseResult": { "structuredPatch": "@@ -1 +1 @@" },
+      "expected": null
+    },
+    {
+      "name": "create with no content — uncovered",
+      "toolUseResult": { "type": "create", "filePath": "/repo/src/new.ts" },
+      "expected": null
+    },
+    {
+      "name": "string payload (the workflow-agent shape) — uncovered",
+      "toolUseResult": "The file /repo/src/c.ts has been updated.",
+      "expected": null
+    },
+    {
+      "name": "null payload — uncovered",
+      "toolUseResult": null,
+      "expected": null
+    },
+    {
+      "name": "array payload — uncovered",
+      "toolUseResult": [{ "structuredPatch": [{ "lines": ["+x"] }] }],
+      "expected": null
+    }
+  ]
+}

@@ -1,0 +1,14 @@
+node_modules
+**/node_modules
+tmp
+.git
+docs/tasks
+**/.env
+**/.ai_work_dir
+# Runtime log folders. server/src/logs is source code and must stay in the build context.
+**/logs
+!server/src/logs
+# Runtime export/import zips (dev fallback of EXPORT_IMPORT_DIR).
+server/export-import
+*.stackdump
+.vite

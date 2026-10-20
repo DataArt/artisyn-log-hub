@@ -1,0 +1,26 @@
+{
+  "$schema": "./node_modules/@stryker-mutator/core/schema/stryker-schema.json",
+  "packageManager": "npm",
+  "testRunner": "jest",
+  "jest": {
+    "projectType": "custom",
+    "configFile": "jest.stryker.config.js",
+    "enableFindRelatedTests": true
+  },
+  "mutate": [
+    "src/logs/cost.sql.ts",
+    "src/logs/otel-cost.sql.ts",
+    "src/auth/login-backoff.service.ts",
+    "src/auth/utils/password-policy.ts",
+    "src/logs/change-surface/change-surface-metrics.ts",
+    "src/logs/repo-url-normalizer.ts"
+  ],
+  "ignorePatterns": ["/dist", "/coverage", "/logs", "/upload-queue", "/export-import", "/releases", "/perf-tests", "/artisyn-log-run-local"],
+  "concurrency": 2,
+  "coverageAnalysis": "perTest",
+  "reporters": ["json", "clear-text", "progress"],
+  "jsonReporter": { "fileName": "../tmp/stryker/mutation.json" },
+  "tempDirName": "../tmp/stryker/sandbox",
+  "cleanTempDir": "always",
+  "timeoutMS": 10000
+}

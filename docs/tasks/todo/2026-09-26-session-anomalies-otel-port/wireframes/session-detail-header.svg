@@ -1,0 +1,72 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="470" viewBox="0 0 1120 470" font-family="Inter, Segoe UI, Arial, sans-serif">
+  <style>
+    .mono { font-family: 'JetBrains Mono', Consolas, monospace; }
+    .t { fill: #1f2937; }
+    .muted { fill: #6b7280; }
+    .lbl { fill: #6b7280; font-size: 10px; letter-spacing: 0.5px; }
+    .val { fill: #1f2937; font-size: 12px; font-family: 'JetBrains Mono', Consolas, monospace; }
+    .note { fill: #92400e; font-size: 12px; }
+  </style>
+  <rect width="1120" height="470" fill="#ffffff"/>
+
+  <text x="24" y="32" font-size="18" font-weight="700" class="t">Session detail header - FR-5 (session &lt;row A&gt;)</text>
+  <text x="24" y="54" font-size="12" class="muted">Wireframe, light theme. Same header fields as today; START (and the derived span) begin at the first real user prompt.</text>
+
+  <!-- BEFORE -->
+  <text x="24" y="92" font-size="13" font-weight="700" class="muted">Today</text>
+  <rect x="24" y="102" width="1072" height="96" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="40" y="126" class="lbl">START</text>
+  <text x="40" y="144" class="val">2026-09-26 17:08:59</text>
+  <text x="196" y="126" class="lbl">END</text>
+  <text x="196" y="144" class="val">2026-09-26 19:15:10</text>
+  <text x="352" y="126" class="lbl">USER</text>
+  <text x="352" y="144" class="val">muaddib@arrakis.test</text>
+  <line x1="480" y1="116" x2="480" y2="150" stroke="#e5e7eb"/>
+  <text x="496" y="126" class="lbl">MODEL</text>
+  <text x="496" y="144" class="val">claude-opus-5-5</text>
+  <text x="640" y="126" class="lbl">PROMPTS</text>
+  <text x="640" y="144" class="val">1</text>
+  <text x="712" y="126" class="lbl">WORK TIME</text>
+  <text x="712" y="144" class="val">0:00:21</text>
+  <text x="40" y="170" class="lbl">TOKENS IN/OUT/CACHE</text>
+  <text x="40" y="188" class="val">6 / 134 / <tspan fill="#9ca3af">41,310 / 12,004</tspan></text>
+  <text x="248" y="170" class="lbl">COST</text>
+  <text x="248" y="188" class="val">$0.1889</text>
+  <text x="352" y="170" class="lbl">MAX CONTEXT</text>
+  <text x="352" y="188" class="val">53,450</text>
+  <rect x="36" y="130" width="148" height="20" fill="none" stroke="#dc2626" stroke-width="1.5" rx="3"/>
+  <text x="820" y="144" font-size="12" fill="#dc2626">span 2h 6m, of which ~2h 5m is idle</text>
+  <text x="820" y="162" font-size="12" fill="#dc2626">before the first prompt (/clear at 17:08)</text>
+
+  <!-- AFTER -->
+  <text x="24" y="236" font-size="13" font-weight="700" class="t">After fix</text>
+  <rect x="24" y="246" width="1072" height="96" fill="#ffffff" stroke="#e5e7eb"/>
+  <rect x="32" y="254" width="156" height="42" rx="4" fill="#fffbeb" stroke="#fcd34d"/>
+  <text x="40" y="270" class="lbl">START</text>
+  <text x="40" y="288" class="val">2026-09-26 19:14:02</text>
+  <text x="196" y="270" class="lbl">END</text>
+  <text x="196" y="288" class="val">2026-09-26 19:15:10</text>
+  <text x="352" y="270" class="lbl">USER</text>
+  <text x="352" y="288" class="val">muaddib@arrakis.test</text>
+  <line x1="480" y1="260" x2="480" y2="294" stroke="#e5e7eb"/>
+  <text x="496" y="270" class="lbl">MODEL</text>
+  <text x="496" y="288" class="val">claude-opus-5-5</text>
+  <text x="640" y="270" class="lbl">PROMPTS</text>
+  <text x="640" y="288" class="val">1</text>
+  <text x="712" y="270" class="lbl">WORK TIME</text>
+  <text x="712" y="288" class="val">0:00:21</text>
+  <text x="40" y="314" class="lbl">TOKENS IN/OUT/CACHE</text>
+  <text x="40" y="332" class="val">6 / 134 / <tspan fill="#9ca3af">41,310 / 12,004</tspan></text>
+  <text x="248" y="314" class="lbl">COST</text>
+  <text x="248" y="332" class="val">$0.1889</text>
+  <text x="352" y="314" class="lbl">MAX CONTEXT</text>
+  <text x="352" y="332" class="val">53,450</text>
+  <text x="820" y="288" font-size="12" fill="#047857">span 1m 8s</text>
+
+  <!-- Notes -->
+  <rect x="24" y="362" width="1072" height="92" rx="6" fill="#fffbeb" stroke="#fcd34d"/>
+  <text x="40" y="384" font-size="13" font-weight="700" fill="#92400e">FR-5 notes</text>
+  <text x="40" y="404" class="note">- No new fields or controls. START in the header and the row time in the sessions list use the same adjusted start.</text>
+  <text x="40" y="422" class="note">- Leading /clear and other non-prompt startup events are skipped. Which built-in commands count, and the fallback when there is no real prompt, are open questions.</text>
+  <text x="40" y="440" class="note">- END, WORK TIME, tokens and cost are unchanged. Sample values are illustrative.</text>
+</svg>

@@ -1,0 +1,12 @@
+{
+  "fixture": "GS-03",
+  "roots": [
+    {
+      "key": "gs03",
+      "sessionId": "{{RUN}}-gs03",
+      "artisyn": "artisyn.jsonl",
+      "claude": "session.jsonl",
+      "subagents": []
+    }
+  ]
+}

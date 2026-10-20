@@ -1,0 +1,309 @@
+@import "tailwindcss";
+@plugin "@tailwindcss/typography";
+
+@theme inline {
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: "SF Mono", "Cascadia Code", "Fira Code", Consolas, monospace;
+  --radius: 0.5rem;
+
+  --color-background: hsl(var(--background));
+  --color-foreground: hsl(var(--foreground));
+  --color-card: hsl(var(--card));
+  --color-card-foreground: hsl(var(--card-foreground));
+  --color-popover: hsl(var(--popover));
+  --color-popover-foreground: hsl(var(--popover-foreground));
+  --color-primary: hsl(var(--primary));
+  --color-primary-foreground: hsl(var(--primary-foreground));
+  --color-secondary: hsl(var(--secondary));
+  --color-secondary-foreground: hsl(var(--secondary-foreground));
+  --color-muted: hsl(var(--muted));
+  --color-muted-foreground: hsl(var(--muted-foreground));
+  --color-accent: hsl(var(--accent));
+  --color-accent-foreground: hsl(var(--accent-foreground));
+  --color-destructive: hsl(var(--destructive));
+  --color-destructive-foreground: hsl(var(--destructive-foreground));
+  --color-success: hsl(var(--success));
+  --color-success-foreground: hsl(var(--success-foreground));
+  --color-warning: hsl(var(--warning));
+  --color-warning-foreground: hsl(var(--warning-foreground));
+  --color-border: hsl(var(--border));
+  --color-input: hsl(var(--input));
+  --color-ring: hsl(var(--ring));
+  --color-chart-1: hsl(var(--chart-1));
+  --color-chart-2: hsl(var(--chart-2));
+  --color-chart-3: hsl(var(--chart-3));
+  --color-chart-4: hsl(var(--chart-4));
+  --color-cat-file: hsl(var(--cat-file));
+  --color-cat-search: hsl(var(--cat-search));
+  --color-cat-exec: hsl(var(--cat-exec));
+  --color-cat-agent: hsl(var(--cat-agent));
+  --color-cat-mcp: hsl(var(--cat-mcp));
+  --color-cat-context: hsl(var(--cat-context));
+  --color-command: hsl(var(--command));
+  --color-source-cursor: hsl(var(--source-cursor));
+  --color-ctx-system:         hsl(var(--ctx-system));
+  --color-ctx-tool-results:   hsl(var(--ctx-tool-results));
+  --color-ctx-vision:         hsl(var(--ctx-vision));
+  --color-ctx-skills:         hsl(var(--ctx-skills));
+  --color-ctx-rules-injected: hsl(var(--ctx-rules-injected));
+  --color-ctx-mcp-tools:      hsl(var(--ctx-mcp-tools));
+  --color-ctx-prompt-text:    hsl(var(--ctx-prompt-text));
+  --color-ctx-conversation-history: hsl(var(--ctx-conversation-history));
+  --color-ctx-files:          hsl(var(--ctx-files));
+  --color-ctx-other:          hsl(var(--ctx-other));
+}
+
+:root {
+  --background: 0 0% 100%;
+  --foreground: 240 10% 4%;
+  --card: 0 0% 98%;
+  --card-foreground: 240 10% 4%;
+  --popover: 0 0% 100%;
+  --popover-foreground: 240 10% 4%;
+  --primary: 228 60% 50%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 240 5% 93%;
+  --secondary-foreground: 240 6% 10%;
+  --muted: 240 5% 93%;
+  --muted-foreground: 240 4% 46%;
+  --accent: 240 5% 93%;
+  --accent-foreground: 240 6% 10%;
+  --destructive: 0 72% 51%;
+  --destructive-foreground: 0 0% 100%;
+  --success: 142 70% 40%;
+  --success-foreground: 0 0% 100%;
+  --warning: 38 92% 50%;
+  --warning-foreground: 38 20% 10%;
+  --border: 240 6% 90%;
+  --input: 240 6% 90%;
+  --ring: 228 60% 50%;
+  --chart-1: 142 60% 42%;
+  --chart-2: 210 70% 50%;
+  --chart-3: 38 80% 50%;
+  --chart-4: 270 50% 55%;
+  --chart-slow: 0 72% 51%;
+
+  --cat-file: 210 70% 50%;
+  --cat-search: 38 80% 50%;
+  --cat-exec: 25 80% 50%;
+  --cat-agent: 270 50% 55%;
+  --cat-mcp: 175 60% 40%;
+  --cat-context: 38 80% 45%;
+  --command: 258 90% 66%;
+  --source-cursor: 210 70% 50%;
+
+  --diff-add-bg: 142 40% 94%;
+  --diff-add-text: 142 60% 30%;
+  --diff-remove-bg: 0 40% 94%;
+  --diff-remove-text: 0 60% 35%;
+
+  /* Context Usage chart colours */
+  --ctx-system:         239 84% 67%;
+  --ctx-tool-results:   38 92% 50%;
+  --ctx-vision:         25 95% 53%;
+  --ctx-skills:         217 91% 60%;
+  --ctx-rules-injected: 258 90% 66%;
+  --ctx-mcp-tools:      330 81% 60%;
+  --ctx-prompt-text:    172 66% 50%;
+  --ctx-conversation-history: 142 71% 45%;   /* #22c55e green */
+  --ctx-files: 199 89% 48%;   /* #0ea5e9 sky-blue */
+  --ctx-other:          215 20% 65%;
+}
+
+.dark {
+  --background: 240 10% 8%;
+  --foreground: 0 0% 90%;
+  --card: 240 8% 11%;
+  --card-foreground: 0 0% 90%;
+  --popover: 240 8% 11%;
+  --popover-foreground: 0 0% 90%;
+  --primary: 228 60% 62%;
+  --primary-foreground: 0 0% 100%;
+  --secondary: 240 5% 17%;
+  --secondary-foreground: 0 0% 90%;
+  --muted: 240 5% 17%;
+  --muted-foreground: 240 4% 55%;
+  --accent: 240 5% 20%;
+  --accent-foreground: 0 0% 90%;
+  --destructive: 0 62% 55%;
+  --destructive-foreground: 0 0% 95%;
+  --success: 142 60% 50%;
+  --success-foreground: 142 20% 10%;
+  --warning: 38 80% 55%;
+  --warning-foreground: 38 20% 10%;
+  --border: 240 5% 18%;
+  --input: 240 5% 18%;
+  --ring: 228 60% 62%;
+  --chart-1: 142 55% 50%;
+  --chart-2: 210 65% 60%;
+  --chart-3: 38 75% 55%;
+  --chart-4: 270 55% 65%;
+  --chart-slow: 0 70% 60%;
+
+  --cat-file: 210 65% 60%;
+  --cat-search: 38 75% 55%;
+  --cat-exec: 25 75% 55%;
+  --cat-agent: 270 55% 65%;
+  --cat-mcp: 175 55% 50%;
+  --cat-context: 38 75% 50%;
+  --command: 258 85% 75%;
+  --source-cursor: 210 65% 60%;
+
+  --diff-add-bg: 142 30% 14%;
+  --diff-add-text: 142 60% 65%;
+  --diff-remove-bg: 0 30% 14%;
+  --diff-remove-text: 0 60% 65%;
+
+  --ctx-system:         239 84% 72%;
+  --ctx-tool-results:   38 92% 58%;
+  --ctx-vision:         25 95% 60%;
+  --ctx-skills:         217 91% 68%;
+  --ctx-rules-injected: 258 90% 72%;
+  --ctx-mcp-tools:      330 81% 67%;
+  --ctx-prompt-text:    172 66% 57%;
+  --ctx-conversation-history: 142 71% 52%;
+  --ctx-files: 199 89% 55%;
+  --ctx-other:          215 20% 70%;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  overflow: hidden;
+}
+
+.prose {
+  --tw-prose-body: hsl(var(--foreground));
+  --tw-prose-headings: hsl(var(--foreground));
+  --tw-prose-bold: hsl(var(--foreground));
+  --tw-prose-code: hsl(var(--foreground));
+  --tw-prose-pre-bg: hsl(var(--muted));
+  --tw-prose-pre-code: hsl(var(--foreground));
+  --tw-prose-links: hsl(var(--primary));
+  --tw-prose-counters: hsl(var(--muted-foreground));
+  --tw-prose-bullets: hsl(var(--muted-foreground));
+  --tw-prose-quotes: hsl(var(--muted-foreground));
+  --tw-prose-quote-borders: hsl(var(--border));
+  --tw-prose-th-borders: hsl(var(--border));
+  --tw-prose-td-borders: hsl(var(--border));
+}
+
+.prose :where(code):not(:where(pre *)) {
+  background: hsl(var(--muted));
+  border: 1px solid hsl(var(--border));
+  padding: 0.0625rem 0.3125rem;
+  border-radius: 0.1875rem;
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+}
+
+.prose :where(code):not(:where(pre *))::before,
+.prose :where(code):not(:where(pre *))::after {
+  content: none;
+}
+
+.prose :where(pre) {
+  background: hsl(var(--muted));
+  border: 1px solid hsl(var(--border));
+  border-radius: 0.375rem;
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+}
+
+.diff-view {
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+}
+
+.diff-line-remove {
+  background: hsl(var(--diff-remove-bg));
+  color: hsl(var(--diff-remove-text));
+  padding: 0 0.5rem;
+}
+
+.diff-line-add {
+  background: hsl(var(--diff-add-bg));
+  color: hsl(var(--diff-add-text));
+  padding: 0 0.5rem;
+}
+
+.diff-line-remove > span:last-child::before {
+  content: "- ";
+}
+
+.diff-line-add > span:last-child::before {
+  content: "+ ";
+}
+
+.diff-line-number {
+  font-size: 0.6875rem;
+  line-height: 1.5;
+}
+
+/* Radix ScrollArea Viewport renders an inner div with display: table (inline style),
+   which breaks width containment — table layout ignores max-width and min-w-0.
+   Override to block so flex/overflow constraints propagate correctly.
+   See: https://github.com/radix-ui/primitives/issues/3646 */
+[data-slot="scroll-area-viewport"] > div {
+  display: block !important;
+}
+
+/* Gantt slow-turn breathing animation */
+@keyframes gantt-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.7; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-testid="gantt-bar"][data-slow="true"] {
+    animation: none !important;
+  }
+}
+
+/* New-user nudge: a ~3s gradient sweep across the "Give Me String" button,
+   after which the button settles back into its normal appearance. */
+@keyframes give-me-string-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
+
+.give-me-string-shimmer {
+  background-image: linear-gradient(
+    100deg,
+    hsl(var(--primary)) 0%,
+    hsl(var(--primary)) 35%,
+    color-mix(in srgb, hsl(var(--primary-foreground)) 45%, hsl(var(--primary))) 50%,
+    hsl(var(--primary)) 65%,
+    hsl(var(--primary)) 100%
+  );
+  background-size: 200% 100%;
+  animation: give-me-string-shimmer 1.5s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-nudge="shimmer"] {
+    animation: none !important;
+    background-image: none;
+    box-shadow: 0 0 0 2px hsl(var(--primary));
+  }
+}
+
+::-webkit-scrollbar {
+  width: 0.375rem;
+  height: 0.375rem;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: hsl(var(--border));
+  border-radius: 0.1875rem;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--muted-foreground));
+}

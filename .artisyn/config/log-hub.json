@@ -1,0 +1,6 @@
+{
+  "serverUrl": "http://localhost:5173",
+  "telemetryDir": "",
+  "context": [],
+  "otelReceiverPort": 58603
+}

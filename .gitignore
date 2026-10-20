@@ -1,0 +1,60 @@
+.idea
+tmp
+/dist
+/release
+# Release zips served from Admin > System > Release Downloads: /releases is the local
+# docker-compose default for RELEASES_HOST_DIR (Docker creates it root-owned on first up),
+# /server/releases is the dev/jest fallback of resolveReleasesDir().
+/releases/
+/server/releases/
+/node_modules/
+/client/.ai_work_dir/
+/test-results/
+/docs/perftests/
+/server/perf-tests/dist/
+server/perf-tests/*.js
+.claude/settings.local.json
+*.stackdump
+.vite/
+.mcp.json.tmp
+/server/logs/
+/logs/
+# Repo export/import zips: the dev/jest fallback of resolveExportImportStagingDir() (EXPORT_IMPORT_DIR unset).
+/server/export-import/
+# Local dev postgres cluster (bind-mounted by server/artisyn-log-run-local/docker-compose.yml).
+/server/artisyn-log-run-local/data/
+/Claude.local.md
+/.playwright-work-folder/
+.playwright-work-folder/
+/artisyn-hooks-installer/node_modules/
+artisyn-hooks-installer/node_modules/
+artisyn-hooks-installer/dist/
+server/src/public/static/*.tgz
+server/src/public/static/*.tar.gz
+/artisyn-hooks-installer/dist/
+
+# E2E run scratch — never commit (storageState carries session cookies;
+# lock dir + run-id are per-run only).
+/tests/e2e/.auth/
+/tests/e2e/.e2e-run.lock/
+/tests/e2e/.e2e-run-id
+
+# Session corpus sets: recorded locally by `npm run corpus:bootstrap` (claude -p), never committed
+# (tests/corpus/README.md). The scenarios, known-format.json and the README stay tracked.
+/tests/corpus/sets/
+
+# Local Azure SSO reference data — real client secrets, never commit.
+/docs/login-sso-data/
+
+# Claude Code runtime state (per machine, never committed)
+**/.claude/scheduled_tasks.lock
+**/.claude/scheduled_tasks.json
+**/.claude/routines/.state/
+**/.claude/worktrees/
+**/.claude/checkpoints/
+**/.claude/mailbox/
+**/.claude/agent-registry.json
+**/.claude/agent-memory-local
+**/.claude/first-run
+**/.claude/assistant-daemon-state.json
+/CLAUDE.local.md

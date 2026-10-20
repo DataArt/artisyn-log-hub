@@ -1,0 +1,4 @@
+{"type":"artisyn","hook_event_name":"SessionStart","timestamp":"2026-01-06T10:00:00.000Z","session_id":"{{RUN}}-gs02","git":{"repo":"{{REPO}}","root":"/work/repo-gold","worktreeRoot":"/work/repo-gold","branch":"main","user":"Golden Tester"}}
+{"event":"prompt_start","timestamp":"2026-01-06T10:00:00.000Z","session_id":"{{RUN}}-gs02","prompt":"Split the invoice tax calculation into its own module","git":{"repo":"{{REPO}}","root":"/work/repo-gold","worktreeRoot":"/work/repo-gold","branch":"main","user":"Golden Tester"}}
+{"event":"prompt_start","timestamp":"2026-01-06T10:04:00.000Z","session_id":"{{RUN}}-gs02","prompt":"Add an API route for the tax preview, then commit","git":{"repo":"{{REPO}}","root":"/work/repo-gold","worktreeRoot":"/work/repo-gold","branch":"main","user":"Golden Tester"}}
+{"type":"artisyn","hook_event_name":"SessionEnd","timestamp":"2026-01-06T10:05:00.000Z","session_id":"{{RUN}}-gs02"}

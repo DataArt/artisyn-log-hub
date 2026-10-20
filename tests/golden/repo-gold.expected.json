@@ -1,0 +1,71 @@
+{
+  "$comment": "REPO-GOLD totals over A..A+13d (all 10 roots of GS-01..GS-09, one owner). Literals from DD D3 and scenarios/03 §2.4; check-arithmetic.mjs re-derives each from the per-fixture expected.json files. Dates are fixture-relative (A = 2026-01-05); the loader shifts them by whole days.",
+  "range": { "start": "2026-01-05T00:00:00.000Z", "end": "2026-01-18T23:59:59.999Z" },
+  "rootSessions": 10,
+  "sessionsWithDescendants": 15,
+  "costUsd": 2.9469,
+  "costByBranch": { "main": 1.5998, "feature/billing": 1.261, "fix/windows": 0.0861 },
+  "sessionsByBranch": { "main": 3, "feature/billing": 4, "fix/windows": 3 },
+  "workTimeMsByBranch": { "main": 470000, "feature/billing": 630000, "fix/windows": 360000 },
+  "linesWrittenByBranch": { "main": 55, "feature/billing": 4, "fix/windows": 475 },
+  "costByWeek": { "W1": 2.7348, "W2": 0.2121 },
+  "sessionsByWeek": { "W1": 5, "W2": 5 },
+  "costByRootModel": {
+    "claude-sonnet-4-6": { "sessions": 7, "costUsd": 0.4979 },
+    "claude-haiku-4-5": { "sessions": 1, "costUsd": 1.049 },
+    "claude-opus-5": { "sessions": 1, "costUsd": 1.4 },
+    "claude-unreleased-9": { "sessions": 1, "costUsd": null }
+  },
+  "excludedSessionCount": 1,
+  "excludedModels": ["claude-unreleased-9"],
+  "topSessionsByCost": [
+    { "key": "gs04", "costUsd": 1.4 },
+    { "key": "gs03", "costUsd": 1.049 },
+    { "key": "gs06a", "costUsd": 0.126 },
+    { "key": "gs02", "costUsd": 0.1173 },
+    { "key": "gs05", "costUsd": 0.086 }
+  ],
+  "tokens": {
+    "tree": { "input": 61400, "output": 28270, "cacheRead": 590000, "cacheWrite": 965600, "cacheWrite5m": 882600, "cacheWrite1h": 83000 },
+    "root": { "cacheRead": 562000, "cacheWrite": 957800, "cacheWrite5m": 877800, "cacheWrite1h": 80000 }
+  },
+  "cacheRatio": { "root": 0.369785, "withDescendants": 0.379275, "meanOfSessionRatiosTrap": 0.61369 },
+  "undefinedRatioSessions": 2,
+  "cacheCreationCausesRootThreshold25000": { "compaction": 29900, "fileReread": 29900, "unattributed": 898000 },
+  "workTimeMs": 1460000,
+  "avgSessionLengthMs": 146000,
+  "workTimeMinutesByDay": {
+    "2026-01-05": 2.75,
+    "2026-01-06": 3.083333,
+    "2026-01-07": 6,
+    "2026-01-08": 2.5,
+    "2026-01-09": 0,
+    "2026-01-10": 0,
+    "2026-01-11": 0,
+    "2026-01-12": 2,
+    "2026-01-13": 1,
+    "2026-01-14": 1.666667,
+    "2026-01-15": 3.333333,
+    "2026-01-16": 0,
+    "2026-01-17": 0,
+    "2026-01-18": 0
+  },
+  "lines": { "written": 534, "added": 518, "removed": 410, "editWriteCalls": 416, "diffCoveredCalls": 416 },
+  "commits": 3,
+  "pullRequests": 1,
+  "tools": {
+    "Bash": { "calls": 8, "successes": 5, "failures": 2, "unresolved": 1, "failureRate": 0.285714 },
+    "Read": { "calls": 14, "successes": 13, "failures": 0, "unresolved": 1, "failureRate": 0 },
+    "Edit": { "calls": 411, "successes": 411, "failures": 0, "unresolved": 0, "failureRate": 0 },
+    "Write": { "calls": 5, "successes": 5, "failures": 0, "unresolved": 0, "failureRate": 0 },
+    "Agent": { "calls": 3, "successes": 3, "failures": 0, "unresolved": 0, "failureRate": 0 },
+    "Skill": { "calls": 2, "successes": 2, "failures": 0, "unresolved": 0, "failureRate": 0 },
+    "Workflow": { "calls": 1, "successes": 1, "failures": 0, "unresolved": 0, "failureRate": 0 },
+    "mcp__postgres__query": { "calls": 2, "successes": 2, "failures": 0, "unresolved": 0, "failureRate": 0 },
+    "mcp__playwright__browser_click": { "calls": 1, "successes": 1, "failures": 0, "unresolved": 0, "failureRate": 0 }
+  },
+  "toolCalls": 447,
+  "avgCostPerSessionUsd": 0.29469,
+  "avgCostPerLineUsd": 0.005519,
+  "avgLinesPerHour": 1316.712329
+}

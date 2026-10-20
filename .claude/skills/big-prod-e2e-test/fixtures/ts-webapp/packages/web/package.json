@@ -1,0 +1,9 @@
+{
+  "name": "@ts-webapp/web",
+  "version": "0.1.0",
+  "private": true,
+  "main": "src/app.ts",
+  "dependencies": {
+    "@ts-webapp/core": "0.1.0"
+  }
+}

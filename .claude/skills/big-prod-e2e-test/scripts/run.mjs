@@ -1,0 +1,798 @@
+#!/usr/bin/env node
+// Big reproducible pre-prod e2e test — the orchestrator.
+//
+//   node .claude/skills/big-prod-e2e-test/scripts/run.mjs [--keep]
+//
+// Runs phases P0–P12 in order, rewrites `_report/report.json` + `_report/index.md` after every
+// phase and once more after teardown, and exits 0 (PASS), 1 (FAIL) or 2 (any infra failure).
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import {
+  DB_PORT, FC_REPO, FC_SCENARIO, MODELS, REPOS, REPO_NAMES, REMOTE_URL, RESTAMP_WAIT_MS, STAND_HOST, STAND_URL, STORED_URL, TEAMS,
+  TIMEOUTS, USERS, USER_ORDER, FIXTURES_DIR, gitRoot, releaseStamp, resolveRun,
+} from './lib/config.mjs';
+import { run, runAsync } from './lib/proc.mjs';
+import { createApiClient } from './lib/api.mjs';
+import {
+  createReport, exitCodeFor, recordAc, recordCase, recordInfra, recordSession, recordVisibility, writeReport,
+} from './lib/report.mjs';
+import { ensureMcpDb, warmMcpServer } from './lib/mcpdb.mjs';
+import { runFileCategories } from './lib/filecategories.mjs';
+import {
+  checkPortsFree, checkTools, childEnv, compareDevPorts, isListening, prepareClaudeConfig, snapshotDevPorts,
+} from './lib/preflight.mjs';
+import { assertDown, buildImage, down, downCommand, killOtelReceivers, saveAppLogs, up, waitReady } from './lib/stand.mjs';
+import { createRepos, listFiles, mapFixturePath } from './lib/repos.mjs';
+import {
+  acceptConsent, assertRole, getOneLiner, launch, newUserContext, redactOneLiner, signup,
+} from './lib/browser.mjs';
+import { installHook } from './lib/hooks.mjs';
+import { acceptInvite, createTeam, invite, linkRepo, openTeam, setTransparent } from './lib/teams.mjs';
+import { needsVerification, runScenario } from './lib/sessions.mjs';
+import { VERIFY_STATUS, verifySession } from './lib/verify.mjs';
+import { VISIBILITY_ROWS, runVisibility } from './lib/visibility.mjs';
+import { SCENARIOS } from './scenarios.mjs';
+
+const USAGE = 'usage: node .claude/skills/big-prod-e2e-test/scripts/run.mjs [--keep]';
+const MODEL_ALIASES = Object.freeze(['sonnet', 'haiku', 'opus']);
+const NOT_INGESTED = 'fail: not ingested';
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
+/** Which phases contribute to each AC row; used to flag rows not fully evaluated. */
+const AC_PHASES = Object.freeze({
+  'FR-2': ['P1'],
+  'FR-3': ['P0', 'P11'],
+  'FR-4': ['P2', 'P11'],
+  'FR-5': ['P2', 'P4'],
+  'FR-6': ['P3'],
+  'FR-7': ['P4', 'P5', 'P10'],
+  'FR-7a': ['P6'],
+  'FR-8': ['P8'],
+  'FR-9': ['P9'],
+  'FR-9b': ['P10'],
+  'FR-FC1': ['P9b'],
+  'FR-FC2': ['P9b'],
+  'FR-10': ['P11'],
+  'FR-11': ['P12'],
+});
+
+// ---- CLI ----------------------------------------------------------------------------------------
+
+export function parseArgs(argv) {
+  const opts = { keep: false };
+  for (const arg of argv) {
+    if (arg === '--keep') opts.keep = true;
+    else if (arg === '--help' || arg === '-h') opts.help = true;
+    else throw new Error(`unknown argument "${arg}"\n${USAGE}`);
+  }
+  return opts;
+}
+
+// ---- Logging ------------------------------------------------------------------------------------
+
+let logFile = null;
+function log(step, msg) {
+  const line = `[${step}] ${msg}`;
+  process.stdout.write(`${line}\n`);
+  if (logFile) {
+    try {
+      fs.appendFileSync(logFile, `${new Date().toISOString()} ${line}\n`);
+    } catch {
+      /* the log file is a convenience only */
+    }
+  }
+}
+const logger = (step) => (msg) => log(step, msg);
+
+/** One readable line for the report: no ANSI codes, no Playwright "Call log:" dump, bounded. */
+export function shortError(err) {
+  const text = String(err && err.message ? err.message : err)
+    // eslint-disable-next-line no-control-regex
+    .replace(/\u001b\[[0-9;]*m/g, '')
+    .split(/\r?\nCall log:/)[0]
+    .trim();
+  return text.length > 600 ? `${text.slice(0, 600)}…` : text;
+}
+
+// ---- Shared run context ---------------------------------------------------------------------------
+
+const ctx = {
+  opts: { keep: false },
+  report: null,
+  runPaths: null,
+  env: null,
+  state: null,
+  devPortsBefore: null,
+  gitStatusBefore: null,
+  browser: null,
+  pages: {},
+  results: {},
+  mcpDb: null,
+  acParts: new Map(),
+  phasesRun: new Set(),
+  tornDown: false,
+};
+
+function saveReport() {
+  if (!ctx.report || !ctx.runPaths || !fs.existsSync(ctx.runPaths.runDir)) return;
+  try {
+    writeReport(ctx.report, ctx.runPaths.reportDir);
+  } catch (err) {
+    log('report', `could not write the report: ${err.message}`);
+  }
+}
+
+function saveState() {
+  if (!ctx.state || !ctx.runPaths) return;
+  fs.mkdirSync(ctx.runPaths.stateDir, { recursive: true });
+  fs.writeFileSync(ctx.runPaths.runStateFile, `${JSON.stringify(ctx.state, null, 2)}\n`);
+}
+
+/** Adds one phase's part to an AC row and re-records the combined row (fail if any part failed). */
+function ac(id, phase, ok, detail) {
+  const parts = ctx.acParts.get(id) ?? [];
+  const i = parts.findIndex((p) => p.phase === phase && p.detail === detail);
+  if (i >= 0) parts.splice(i, 1);
+  parts.push({ phase, ok: Boolean(ok), detail });
+  ctx.acParts.set(id, parts);
+  const status = parts.every((p) => p.ok) ? 'pass' : 'fail';
+  recordAc(ctx.report, id, status, parts.map((p) => `${p.phase}: ${p.ok ? '' : 'FAIL — '}${p.detail}`).join('; '));
+}
+
+/** Marks every AC row whose contributing phases did not all run as failed ("not evaluated"). */
+function finalizeAcRows() {
+  for (const [id, phases] of Object.entries(AC_PHASES)) {
+    const missing = phases.filter((p) => !(ctx.acParts.get(id) ?? []).some((x) => x.phase === p));
+    for (const p of missing) ac(id, p, false, 'not evaluated (phase skipped or crashed)');
+  }
+  const order = Object.keys(AC_PHASES);
+  ctx.report.acChecks.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id));
+}
+
+async function phase(id, step, fn) {
+  log(step, `${id} started`);
+  const started = Date.now();
+  ctx.phasesRun.add(id);
+  try {
+    const detail = await fn();
+    if (step && !id.match(/^P(8|9|9b|10|11)$/)) recordInfra(ctx.report, step, 'pass', null, detail ?? null);
+    log(step, `${id} done in ${Math.round((Date.now() - started) / 1000)}s${detail ? ` — ${detail}` : ''}`);
+  } finally {
+    saveReport();
+  }
+}
+
+// ---- P0 preflight ---------------------------------------------------------------------------------
+
+function gitStatusPaths(root) {
+  const res = run('git', ['status', '--porcelain', '--untracked-files=all'], { cwd: root, allowFail: true });
+  if (res.status !== 0) return null;
+  return res.stdout.split(/\r?\n/).filter(Boolean).map((l) => l.slice(3).trim());
+}
+
+async function p0Preflight() {
+  const step = 'preflight';
+  const tools = checkTools();
+  log(step, `tools ok (chromium ${tools.chromium})`);
+  await checkPortsFree();
+  log(step, 'stand ports 3001 / 5433 are free');
+  ctx.devPortsBefore = await snapshotDevPorts();
+  log(step, `dev ports before: ${JSON.stringify(ctx.devPortsBefore)}`);
+
+  const root = gitRoot();
+  ctx.gitStatusBefore = gitStatusPaths(root);
+  let runPaths = resolveRun(releaseStamp(), root);
+  while (fs.existsSync(runPaths.runDir)) {
+    await sleep(RESTAMP_WAIT_MS);
+    runPaths = resolveRun(releaseStamp(), root);
+  }
+  fs.mkdirSync(runPaths.runDir, { recursive: true });
+  for (const d of [runPaths.stateDir, runPaths.sessionsDir, runPaths.verifyDir, runPaths.reportDir]) {
+    fs.mkdirSync(d, { recursive: true });
+  }
+  ctx.runPaths = runPaths;
+  logFile = path.join(runPaths.stateDir, 'run.log');
+  Object.assign(ctx.report, { stamp: runPaths.stamp, runDir: runPaths.runDir, image: runPaths.imageRef });
+  log(step, `run dir: ${runPaths.runDir}`);
+  log(step, `report: ${runPaths.indexMd}`);
+
+  const expectedDir = path.resolve(root, '..', path.basename(runPaths.runDir));
+  ac('FR-3', 'P0', fs.existsSync(runPaths.runDir) && expectedDir === runPaths.runDir, `run dir ${runPaths.runDir}`);
+
+  const creds = prepareClaudeConfig(runPaths);
+  ctx.env = childEnv(runPaths);
+  log(step, `isolated Claude config at ${creds.dir} (credentials from ${creds.mode === 'env' ? creds.keys.join(', ') : creds.source})`);
+
+  // S7's MCP target: additive only — never dropped, the user removes it by hand if ever.
+  const db = await ensureMcpDb();
+  ctx.mcpDb = db;
+  log(step, `MCP test database ${db.masked} (${db.created ? 'created' : 'already there'}, ${db.rows} products; from ${db.source})`);
+  const warm = await warmMcpServer(db.url, { cwd: runPaths.verifyDir, logFile: path.join(runPaths.stateDir, 'mcp-warmup.log') });
+  if (warm.timedOut) throw new Error('warming the Postgres MCP server package (npx -y) timed out');
+  log(step, `Postgres MCP server package ready (exit ${warm.exitCode})`);
+  return `run dir ${runPaths.runDir}`;
+}
+
+// ---- P1 build / P2 stand ---------------------------------------------------------------------------
+
+async function p1Build() {
+  try {
+    const r = await buildImage(ctx.runPaths.stamp, { root: ctx.runPaths.gitRoot, logFile: ctx.runPaths.standUpLog });
+    ac('FR-2', 'P1', true, `${r.imageRef} is ${r.architecture}; artisyn-log-hub:latest unchanged (${r.latestBefore})`);
+    return `${r.imageRef} (${r.architecture})`;
+  } catch (err) {
+    if (err.result) {
+      ac('FR-2', 'P1', false, `${err.message} (arch ${err.result.architecture}, latest ${err.result.latestBefore} → ${err.result.latestAfter})`);
+    }
+    throw err;
+  }
+}
+
+async function p2Stand() {
+  up(ctx.runPaths);
+  log('stand', `compose project ${ctx.runPaths.composeProject} is up, waiting for ${STAND_URL}`);
+  const body = await waitReady({ runPaths: ctx.runPaths });
+  ac('FR-5', 'P2', body.mode === 'password', `auth/config → ${JSON.stringify(body)}`);
+  const dbOk = await isListening(DB_PORT, STAND_HOST);
+  ac('FR-4', 'P2', dbOk, `auth/config answers on ${STAND_URL}; ${STAND_HOST}:${DB_PORT} ${dbOk ? 'accepts' : 'refuses'} TCP`);
+  if (!dbOk) throw new Error(`stand db port ${STAND_HOST}:${DB_PORT} does not accept TCP`);
+  return `${STAND_URL} ready (mode ${body.mode})`;
+}
+
+// ---- P3 repos ---------------------------------------------------------------------------------------
+
+function expectedHarnessFiles(repo) {
+  const dir = path.join(FIXTURES_DIR, repo, 'dot-claude');
+  if (!fs.existsSync(dir)) return [];
+  return listFiles(dir).map((rel) => mapFixturePath(path.join('dot-claude', rel)));
+}
+
+async function p3Repos() {
+  const created = createRepos(ctx.runPaths);
+  const problems = [];
+  for (const repo of REPO_NAMES) {
+    const dir = ctx.runPaths.repoDir(repo);
+    if (!fs.existsSync(path.join(dir, '.git'))) problems.push(`${repo} has no .git`);
+    for (const rel of expectedHarnessFiles(repo)) {
+      if (!fs.existsSync(path.join(dir, rel))) problems.push(`${repo} is missing ${rel}`);
+    }
+    if (fs.existsSync(path.join(dir, 'CLAUDE.md'))) problems.push(`${repo} has a CLAUDE.md`);
+  }
+  if (created.length !== REPO_NAMES.length) problems.push(`${created.length}/${REPO_NAMES.length} repos created`);
+  const harness = created.map((r) => `${r.repo}: ${r.harnessFiles.length ? r.harnessFiles.join(', ') : 'no harness'}`).join('; ');
+  ac('FR-6', 'P3', problems.length === 0, problems.length ? problems.join('; ') : `5 git repos, no CLAUDE.md; ${harness}`);
+
+  ctx.state.repos = Object.fromEntries(
+    created.map((r) => [
+      r.repo,
+      { owner: REPOS[r.repo], dir: r.dir, remoteUrl: r.remoteUrl, storedUrl: STORED_URL(r.repo), repoId: null },
+    ]),
+  );
+  if (problems.length) throw new Error(problems.join('; '));
+  return `${created.length} repos`;
+}
+
+// ---- P4 onboarding --------------------------------------------------------------------------------
+
+async function p4Onboarding() {
+  const step = 'onboarding';
+  ctx.browser = await launch();
+  const roleProblems = [];
+  let u1LoginOk = false;
+  for (const key of USER_ORDER) {
+    const user = USERS[key];
+    const { context, page } = await newUserContext(ctx.browser);
+    ctx.pages[key] = { context, page };
+    const s = await signup(page, user);
+    const consent = await acceptConsent(page);
+    log(step, `${key} ${user.email} signed up (logged in via ${s.loggedInVia}${consent ? ', consent accepted' : ''})`);
+
+    const entry = { email: user.email, password: user.password, role: user.role };
+    try {
+      await assertRole(user.email, user.password, user.role);
+      if (key === 'U1') u1LoginOk = true;
+    } catch (err) {
+      roleProblems.push(err.message);
+    }
+    if (key !== 'admin') {
+      const one = await getOneLiner(page);
+      entry.apiKey = one.apiKey;
+      entry.installCommand = one.command;
+      log(step, `${key} one-liner: ${redactOneLiner(one.command)}`);
+      if (one.serverUrl.replace(/\/+$/, '') !== STAND_URL) {
+        throw new Error(`${key} one-liner points at ${one.serverUrl}, expected ${STAND_URL}`);
+      }
+    }
+    ctx.state.users[key] = entry;
+  }
+  ac('FR-5', 'P4', u1LoginOk, u1LoginOk ? 'U1 signed up and logged in with no verification step' : 'U1 login failed');
+  ac(
+    'FR-7',
+    'P4',
+    roleProblems.length === 0,
+    roleProblems.length ? roleProblems.join('; ') : 'admin has role admin; U1–U3 have role user',
+  );
+  saveState();
+  if (roleProblems.length) throw new Error(roleProblems.join('; '));
+  return `${USER_ORDER.length} users onboarded`;
+}
+
+// ---- P5 hooks ---------------------------------------------------------------------------------------
+
+async function p5Hooks() {
+  const done = [];
+  try {
+    for (const repo of REPO_NAMES) {
+      const owner = ctx.state.users[REPOS[repo]];
+      const res = await installHook(ctx.runPaths.repoDir(repo), owner.installCommand, ctx.env, {
+        logFile: ctx.runPaths.installerLog(repo),
+      });
+      for (const w of res.warnings) log('hooks', `${repo} installer warning: ${w}`);
+      log('hooks', `${repo}: hook installed for ${owner.email}`);
+      done.push(repo);
+    }
+  } finally {
+    const ok = done.length === REPO_NAMES.length;
+    ac('FR-7', 'P5', ok, `hook installed in ${done.length}/${REPO_NAMES.length} repos${ok ? '' : ` (${done.join(', ') || 'none'})`}`);
+  }
+  return `${done.length} hooks`;
+}
+
+// ---- P6 teams ---------------------------------------------------------------------------------------
+
+async function checkTeamsApi() {
+  const problems = [];
+  for (const [name, def] of Object.entries(TEAMS)) {
+    const owner = USERS[def.owner];
+    const member = USERS[def.member];
+    const api = createApiClient(STAND_URL);
+    await api.login(owner.email, owner.password);
+    const teams = await api.getJson('/api/v1/teams');
+    const team = Array.isArray(teams) ? teams.find((t) => t.name === name) : null;
+    if (!team) {
+      problems.push(`${name}: not in GET /api/v1/teams for ${owner.email}`);
+      continue;
+    }
+    if (team.accessMode !== def.accessMode) problems.push(`${name}: accessMode ${team.accessMode}, expected ${def.accessMode}`);
+    const members = await api.getJson(`/api/v1/teams/${team.id}/members`);
+    const m = Array.isArray(members) ? members.find((x) => x.email === member.email) : null;
+    if (!m) problems.push(`${name}: ${member.email} is not a member`);
+    else {
+      if (m.isOwner || m.isManager || m.isAdlcTrainer) {
+        problems.push(`${name}: ${member.email} has unexpected flags owner=${m.isOwner} manager=${m.isManager} trainer=${m.isAdlcTrainer}`);
+      }
+      if (!m.disclosureAcknowledgedAt) problems.push(`${name}: ${member.email} has no disclosureAcknowledgedAt`);
+    }
+    const repos = await api.getJson(`/api/v1/teams/${team.id}/repositories`);
+    const urls = (Array.isArray(repos) ? repos.map((r) => r.repoUrl) : []).sort();
+    const want = def.repos.map((r) => STORED_URL(r)).sort();
+    if (JSON.stringify(urls) !== JSON.stringify(want)) problems.push(`${name}: repos ${urls.join(', ') || 'none'}, expected ${want.join(', ')}`);
+  }
+  return problems;
+}
+
+async function p6Teams() {
+  const step = 'teams';
+  for (const [name, def] of Object.entries(TEAMS)) {
+    const ownerPage = ctx.pages[def.owner].page;
+    const memberPage = ctx.pages[def.member].page;
+    const { teamId } = await createTeam(ownerPage, name);
+    log(step, `${name}: created (#${teamId}) by ${def.owner}`);
+    if (def.accessMode === 'transparent') {
+      await setTransparent(ownerPage);
+      log(step, `${name}: access mode set to transparent`);
+    }
+    await invite(ownerPage, USERS[def.member].email);
+    log(step, `${name}: invited ${def.member}`);
+    await acceptInvite(memberPage, name, { email: USERS[def.member].email });
+    log(step, `${name}: ${def.member} accepted`);
+    await openTeam(ownerPage, teamId, name);
+    for (const repo of def.repos) {
+      await linkRepo(ownerPage, REMOTE_URL(repo));
+      log(step, `${name}: linked ${repo}`);
+    }
+    ctx.state.teams[name] = { id: teamId, owner: def.owner, member: def.member, accessMode: def.accessMode, repos: [...def.repos] };
+    saveState();
+  }
+  const problems = await checkTeamsApi();
+  ac('FR-7a', 'P6', problems.length === 0, problems.length ? problems.join('; ') : 'both teams have the expected mode, member and repos');
+  // The onboarding/team contexts are no longer needed; visibility opens fresh ones.
+  for (const { context } of Object.values(ctx.pages)) await context.close().catch(() => {});
+  ctx.pages = {};
+  if (problems.length) throw new Error(problems.join('; '));
+  return `${Object.keys(TEAMS).length} teams`;
+}
+
+// ---- P7 smoke ---------------------------------------------------------------------------------------
+
+async function p7Smoke() {
+  const command = ['claude', '-p', '--model', MODELS.verify, '--output-format', 'json', '--strict-mcp-config'].join(' ');
+  const res = await runAsync(command, [], {
+    cwd: ctx.runPaths.verifyDir,
+    env: ctx.env,
+    input: 'Reply with OK',
+    shell: true,
+    timeoutMs: TIMEOUTS.smokeMs,
+    stdoutFile: ctx.runPaths.smokeStdout,
+    stderrFile: ctx.runPaths.smokeStderr,
+  });
+  if (res.timedOut) throw new Error(`smoke claude -p timed out after ${TIMEOUTS.smokeMs / 1000}s`);
+  if (res.exitCode !== 0) throw new Error(`smoke claude -p exited with ${res.exitCode} (see ${ctx.runPaths.smokeStderr})`);
+  let out = null;
+  try {
+    out = JSON.parse(fs.readFileSync(ctx.runPaths.smokeStdout, 'utf8'));
+  } catch {
+    throw new Error(`smoke claude -p printed no JSON (see ${ctx.runPaths.smokeStdout})`);
+  }
+  if (out.is_error) throw new Error(`smoke claude -p returned an error: ${String(out.result).slice(0, 300)}`);
+  return `isolated claude -p answered "${String(out.result ?? '').trim().slice(0, 40)}"`;
+}
+
+// ---- P8 sessions ------------------------------------------------------------------------------------
+
+function sessionRow(scenario, r, extra = {}) {
+  return {
+    id: scenario.id,
+    title: scenario.title,
+    repo: scenario.repo,
+    owner: r?.owner ?? USERS[scenario.owner].email,
+    model: r?.expected?.model ?? scenario.model,
+    status: r?.status ?? 'fail: session error',
+    attempts: r?.attempts ?? [],
+    isolation: r?.isolation,
+    error: r?.error ?? null,
+    ...extra,
+  };
+}
+
+async function p8Sessions() {
+  const step = 'sessions';
+  for (const scenario of SCENARIOS) {
+    let r;
+    try {
+      r = await runScenario(scenario, ctx.runPaths, ctx.env, { log: logger(step), mcpDbUrl: ctx.mcpDb?.url ?? null });
+    } catch (err) {
+      r = { id: scenario.id, status: 'fail: session error', attempts: [], error: err.message, expected: null };
+      log(step, `${scenario.id}: crashed — ${err.message}`);
+    }
+    ctx.results[scenario.id] = r;
+    recordSession(ctx.report, sessionRow(scenario, r));
+    saveReport();
+  }
+
+  // FR-8: fixed-format expected params, model/harness coverage and isolation.
+  const problems = [];
+  const aliases = new Set();
+  const covered = { subagent: false, skill: false, workflow: false, rule: false, mcp: false };
+  for (const scenario of SCENARIOS) {
+    const file = ctx.runPaths.expectedFile(scenario.id);
+    let exp = null;
+    try {
+      exp = JSON.parse(fs.readFileSync(file, 'utf8'));
+    } catch {
+      problems.push(`${scenario.id}: no expected.json`);
+    }
+    if (exp) {
+      if (!exp.session_id) problems.push(`${scenario.id}: expected.json has no session_id`);
+      for (const a of MODEL_ALIASES) if (String(exp.model ?? '').includes(a)) aliases.add(a);
+      if (exp.subagents > 0) covered.subagent = true;
+      if (exp.skills?.length) covered.skill = true;
+      if (exp.workflows?.length) covered.workflow = true;
+      if (exp.rules?.length) covered.rule = true;
+      if (exp.mcp?.length) covered.mcp = true;
+    }
+    const iso = ctx.results[scenario.id]?.isolation;
+    if (!iso || iso.status !== 'pass') problems.push(`${scenario.id}: isolation ${iso ? `${iso.status} — ${iso.detail}` : 'not checked'}`);
+  }
+  const missingAliases = MODEL_ALIASES.filter((a) => !aliases.has(a));
+  if (missingAliases.length) problems.push(`models not covered: ${missingAliases.join(', ')}`);
+  const missingKinds = Object.entries(covered).filter(([, v]) => !v).map(([k]) => k);
+  if (missingKinds.length) problems.push(`harness kinds not exercised: ${missingKinds.join(', ')}`);
+  ac(
+    'FR-8',
+    'P8',
+    problems.length === 0,
+    problems.length
+      ? problems.join('; ')
+      : `${SCENARIOS.length} expected.json files; models sonnet/haiku/opus; subagent, skill, workflow, rule and MCP exercised; isolation pass`,
+  );
+}
+
+// ---- P9 ingestion + verification -------------------------------------------------------------------
+
+function writeResult(id, r) {
+  const { expected, ...result } = r;
+  fs.writeFileSync(ctx.runPaths.resultFile(id), `${JSON.stringify(result, null, 2)}\n`);
+}
+
+async function p9Verify() {
+  const step = 'verify';
+  const apis = new Map();
+  const apiFor = async (ownerKey) => {
+    if (!apis.has(ownerKey)) {
+      const api = createApiClient(STAND_URL);
+      await api.login(USERS[ownerKey].email, USERS[ownerKey].password);
+      apis.set(ownerKey, api);
+    }
+    return apis.get(ownerKey);
+  };
+
+  const verdictProblems = [];
+  let reached = 0;
+  for (const scenario of SCENARIOS) {
+    const r = ctx.results[scenario.id];
+    if (!r || !needsVerification(r) || !r.expected?.session_id) {
+      log(step, `${scenario.id}: skipped (${r?.status ?? 'did not run'})`);
+      continue;
+    }
+    const extra = {};
+    try {
+      const api = await apiFor(scenario.owner);
+      log(step, `${scenario.id}: waiting for ingestion of ${r.expected.session_id}`);
+      const { rid } = await api.waitForIngestion({
+        rid: ctx.state.repos[scenario.repo]?.repoId ?? null,
+        storedUrl: STORED_URL(scenario.repo),
+        sid: r.expected.session_id,
+        expectedSubagents: r.expected.subagents,
+      });
+      ctx.state.repos[scenario.repo].repoId = rid;
+      saveState();
+      reached++;
+      const v = await verifySession(scenario, r.expected, rid, scenario.owner, ctx.runPaths, ctx.env, {
+        isolation: r.isolation,
+        priorStatus: r.status,
+        log: logger(step),
+      });
+      r.status = v.status;
+      r.verdict = v.verdict;
+      if (v.error) r.error = v.error;
+      extra.evidence = v.evidence;
+      extra.mismatches = v.mismatches;
+      if (v.status === VERIFY_STATUS.verifierError || !v.verdict) verdictProblems.push(`${scenario.id}: ${v.error ?? 'no verdict'}`);
+    } catch (err) {
+      if (err.code === 'NOT_INGESTED') {
+        r.status = NOT_INGESTED;
+        r.error = err.message;
+      } else {
+        reached++;
+        r.status = VERIFY_STATUS.verifierError;
+        r.error = err.message;
+        verdictProblems.push(`${scenario.id}: ${err.message}`);
+      }
+      log(step, `${scenario.id}: ${r.status} — ${err.message}`);
+    }
+    writeResult(scenario.id, r);
+    recordSession(ctx.report, sessionRow(scenario, r, extra));
+    saveReport();
+  }
+  ac(
+    'FR-9',
+    'P9',
+    verdictProblems.length === 0,
+    verdictProblems.length ? verdictProblems.join('; ') : `${reached} verified session(s) have a valid verdict`,
+  );
+}
+
+// ---- P9b file categories ----------------------------------------------------------------------------
+
+async function p9bFileCategories() {
+  const step = 'file-categories';
+  if (!ctx.browser) ctx.browser = await launch();
+  const r = ctx.results[FC_SCENARIO];
+  const ownerKey = REPOS[FC_REPO];
+  const out = await runFileCategories({
+    browser: ctx.browser,
+    owner: { email: USERS[ownerKey].email, password: USERS[ownerKey].password },
+    repoId: ctx.state.repos[FC_REPO]?.repoId ?? null,
+    sessionId: r?.expected?.session_id ?? null,
+    fcDir: ctx.runPaths.fcDir,
+    log: logger(step),
+  });
+  recordCase(ctx.report, out.case);
+  for (const a of out.ac) ac(a.id, 'P9b', a.ok, a.detail);
+  log(step, `FC: ${out.case.status} — ${out.case.detail}`);
+}
+
+// ---- P10 visibility ---------------------------------------------------------------------------------
+
+async function p10Visibility() {
+  const step = 'visibility';
+  if (!ctx.browser) ctx.browser = await launch();
+  const sessions = SCENARIOS.map((s) => ctx.results[s.id]).filter(Boolean);
+  try {
+    const { rows, acCheck } = await runVisibility(ctx.browser, ctx.state, sessions, {
+      visibilityDir: ctx.runPaths.visibilityDir,
+      log: logger(step),
+    });
+    for (const row of rows) recordVisibility(ctx.report, row);
+    ac('FR-7', 'P10', acCheck.status === 'pass', acCheck.detail);
+  } catch (err) {
+    log(step, `visibility crashed — ${err.message}`);
+    for (const def of VISIBILITY_ROWS) {
+      if (!ctx.report.visibility.some((v) => v.id === def.id)) {
+        recordVisibility(ctx.report, { id: def.id, viewer: def.viewer, view: def.view, status: 'fail', detail: `not evaluated: ${err.message}` });
+      }
+    }
+    ac('FR-7', 'P10', false, `owner visibility not evaluated: ${err.message}`);
+  }
+  const ids = new Set(ctx.report.visibility.map((v) => v.id));
+  const missing = VISIBILITY_ROWS.map((r) => r.id).filter((id) => !ids.has(id));
+  ac('FR-9b', 'P10', missing.length === 0, missing.length ? `rows missing: ${missing.join(', ')}` : 'rows V1–V7 evaluated');
+}
+
+// ---- P11 final AC checks ----------------------------------------------------------------------------
+
+async function p11Final() {
+  const after = await snapshotDevPorts();
+  const cmp = compareDevPorts(ctx.devPortsBefore, after);
+  ac(
+    'FR-4',
+    'P11',
+    cmp.equal,
+    cmp.equal
+      ? `dev ports unchanged ${JSON.stringify(after)}`
+      : `dev ports changed: ${cmp.diff.map((d) => `${d.port} ${d.before}→${d.after}`).join(', ')}`,
+  );
+
+  const now = gitStatusPaths(ctx.runPaths.gitRoot);
+  if (now === null || ctx.gitStatusBefore === null) {
+    ac('FR-3', 'P11', false, 'git status --porcelain failed');
+  } else {
+    const before = new Set(ctx.gitStatusBefore);
+    const added = now.filter((p) => !before.has(p));
+    ac('FR-3', 'P11', added.length === 0, added.length ? `new paths in the git root: ${added.join(', ')}` : 'no new path in the git root');
+  }
+
+  // FR-10 is checked on the index.md written right now, before the final rewrite.
+  saveReport();
+  let md = '';
+  try {
+    md = fs.readFileSync(ctx.runPaths.indexMd, 'utf8');
+  } catch {
+    md = '';
+  }
+  const ids = [...SCENARIOS.map((s) => s.id), 'FC', ...VISIBILITY_ROWS.map((r) => r.id)];
+  const absent = ids.filter((id) => !md.includes(id));
+  ac('FR-10', 'P11', md !== '' && absent.length === 0, md === '' ? 'index.md not written' : absent.length ? `index.md lacks ${absent.join(', ')}` : `index.md lists ${ids[0]}–${SCENARIOS[SCENARIOS.length - 1].id}, FC and V1–V7`);
+}
+
+// ---- P12 teardown -------------------------------------------------------------------------------------
+
+/** Synchronous so it can also run from a signal handler. Never throws. */
+function teardown() {
+  if (ctx.tornDown) return;
+  ctx.tornDown = true;
+  const step = 'teardown';
+  if (!ctx.report) return;
+  ctx.phasesRun.add('P12');
+  const rp = ctx.runPaths;
+  try {
+    if (rp) {
+      const killed = killOtelReceivers(rp.runDir);
+      if (killed.length) log(step, `killed otel-receiver pid(s) ${killed.join(', ')}`);
+    }
+    if (!rp || !fs.existsSync(rp.composeFile)) {
+      recordInfra(ctx.report, step, 'pass', null, 'nothing to tear down (stand was never started)');
+      ac('FR-11', 'P12', true, 'no stand was started');
+    } else if (ctx.opts.keep) {
+      recordInfra(ctx.report, step, 'pass', null, 'kept');
+      ac('FR-11', 'P12', true, `kept (--keep): ${STAND_URL}; stop with ${downCommand(rp)}`);
+      log(step, `stand kept at ${STAND_URL}; stop it with: ${downCommand(rp)}`);
+    } else {
+      saveAppLogs(rp);
+      down(rp);
+      assertDown(rp);
+      recordInfra(ctx.report, step, 'pass', null, `compose project ${rp.composeProject} is down`);
+      ac('FR-11', 'P12', true, `compose project ${rp.composeProject} has no containers`);
+      log(step, `compose project ${rp.composeProject} is down`);
+    }
+  } catch (err) {
+    recordInfra(ctx.report, step, 'fail', shortError(err));
+    ac('FR-11', 'P12', false, shortError(err));
+    log(step, `FAILED — ${err.message}`);
+  }
+  finalizeAcRows();
+  ctx.report.finishedAt = new Date().toISOString();
+  saveReport();
+}
+
+// ---- main -----------------------------------------------------------------------------------------
+
+const INFRA_PHASES = [
+  ['P0', 'preflight', p0Preflight],
+  ['P1', 'build', p1Build],
+  ['P2', 'stand', p2Stand],
+  ['P3', 'repos', p3Repos],
+  ['P4', 'onboarding', p4Onboarding],
+  ['P5', 'hooks', p5Hooks],
+  ['P6', 'teams', p6Teams],
+  ['P7', 'smoke', p7Smoke],
+];
+
+async function main() {
+  let opts;
+  try {
+    opts = parseArgs(process.argv.slice(2));
+  } catch (err) {
+    process.stderr.write(`${err.message}\n`);
+    return 2;
+  }
+  if (opts.help) {
+    process.stdout.write(`${USAGE}\n`);
+    return 0;
+  }
+  ctx.opts = opts;
+  ctx.report = createReport({ keep: opts.keep });
+  ctx.state = { stamp: null, standUrl: STAND_URL, composeProject: null, imageTag: null, users: {}, repos: {}, teams: {} };
+  ctx.results = {};
+
+  const onSignal = (sig) => {
+    log('run', `received ${sig}, tearing down`);
+    recordInfra(ctx.report, 'interrupted', 'fail', `received ${sig}`);
+    teardown();
+    process.exit(2);
+  };
+  process.once('SIGINT', onSignal);
+  process.once('SIGTERM', onSignal);
+
+  try {
+    let infraOk = true;
+    for (const [id, step, fn] of INFRA_PHASES) {
+      try {
+        await phase(id, step, async () => {
+          const detail = await fn();
+          if (id === 'P0') {
+            Object.assign(ctx.state, {
+              stamp: ctx.runPaths.stamp,
+              composeProject: ctx.runPaths.composeProject,
+              imageTag: ctx.runPaths.imageRef,
+            });
+          }
+          return detail;
+        });
+      } catch (err) {
+        recordInfra(ctx.report, step, 'fail', shortError(err));
+        log(step, `FAILED — ${err.stack || err.message}`);
+        log('run', 'infra failure: skipping sessions, verification and visibility');
+        saveReport();
+        infraOk = false;
+        break;
+      }
+    }
+    if (infraOk) {
+      await phase('P8', 'sessions', p8Sessions);
+      await phase('P9', 'verify', p9Verify);
+      await phase('P9b', 'file-categories', p9bFileCategories);
+      await phase('P10', 'visibility', p10Visibility);
+      await phase('P11', 'final', p11Final);
+    }
+  } catch (err) {
+    // Only an orchestrator bug reaches here: P8–P11 handle their own per-case failures.
+    recordInfra(ctx.report, 'orchestrator', 'fail', shortError(err));
+    log('run', `orchestrator error — ${err.stack || err.message}`);
+  } finally {
+    if (ctx.browser) await ctx.browser.close().catch(() => {});
+    teardown();
+  }
+
+  const code = exitCodeFor(ctx.report);
+  log('run', `overall ${ctx.report.overall} — exit ${code}`);
+  if (ctx.runPaths) {
+    log('run', `report: ${ctx.runPaths.indexMd}`);
+    log('run', `image kept: docker image rm ${ctx.runPaths.imageRef}`);
+  }
+  return code;
+}
+
+// Run only when executed directly, never on import (unit tests may import parseArgs).
+const invokedDirectly = Boolean(process.argv[1]) && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (invokedDirectly) {
+  main().then(
+    (code) => process.exit(code),
+    (err) => {
+      process.stderr.write(`${err.stack || err.message}\n`);
+      process.exit(2);
+    },
+  );
+}

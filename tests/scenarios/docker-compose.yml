@@ -1,0 +1,17 @@
+# Prerequisites for `npm run test:scenarios` on a contributor machine:
+#   docker compose -f tests/scenarios/docker-compose.yml up -d
+# Postgres matches the runner's default DATABASE_URL
+# (postgresql://postgres:pw@localhost:5432/postgres); Mailpit matches MAILPIT_SMTP
+# (localhost:1025) and MAILPIT_URL (http://localhost:8025), used by stand mode b.
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_PASSWORD: pw
+    ports:
+      - "5432:5432"
+  mailpit:
+    image: axllent/mailpit
+    ports:
+      - "1025:1025"
+      - "8025:8025"

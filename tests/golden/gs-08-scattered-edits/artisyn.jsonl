@@ -1,0 +1,4 @@
+{"type":"artisyn","hook_event_name":"SessionStart","timestamp":"2026-01-14T10:00:00.000Z","session_id":"{{RUN}}-gs08","git":{"repo":"{{REPO}}","root":"C:\\work\\acme-shop","worktreeRoot":"C:\\work\\acme-shop","branch":"fix/windows","user":"Golden Tester"}}
+{"event":"prompt_start","timestamp":"2026-01-14T10:00:00.000Z","session_id":"{{RUN}}-gs08","prompt":"Add user lookup and cart totals","git":{"repo":"{{REPO}}","root":"C:\\work\\acme-shop","worktreeRoot":"C:\\work\\acme-shop","branch":"fix/windows","user":"Golden Tester"}}
+{"event":"prompt_start","timestamp":"2026-01-14T10:02:00.000Z","session_id":"{{RUN}}-gs08","prompt":"Update deploy, changelog and the seed script, then commit","git":{"repo":"{{REPO}}","root":"C:\\work\\acme-shop","worktreeRoot":"C:\\work\\acme-shop","branch":"fix/windows","user":"Golden Tester"}}
+{"type":"artisyn","hook_event_name":"SessionEnd","timestamp":"2026-01-14T10:02:40.000Z","session_id":"{{RUN}}-gs08"}

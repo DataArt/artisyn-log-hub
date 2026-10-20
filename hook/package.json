@@ -1,0 +1,20 @@
+{
+  "name": "artisyn-log-hub-hook",
+  "private": true,
+  "description": "Claude Code plugin hooks that record session telemetry and upload it to an Artisyn Log Hub server",
+  "author": "Denis Tsyplakov",
+  "license": "MIT",
+  "main": ".claude/telemetry_tool/telemetry-hook.js",
+  "scripts": {
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix",
+    "test": "node scripts/run-tests.js"
+  },
+  "engines": {
+    "node": ">=18.19"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.0.0",
+    "eslint": "^9.0.0"
+  }
+}

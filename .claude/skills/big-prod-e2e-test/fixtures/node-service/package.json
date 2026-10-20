@@ -1,0 +1,11 @@
+{
+  "name": "node-service",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Tiny calculator service used as a big-prod-e2e-test fixture",
+  "main": "src/index.js",
+  "scripts": {
+    "test": "node --test"
+  }
+}

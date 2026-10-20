@@ -1,0 +1,2 @@
+server/drizzle/migrations/*.sql text eol=lf
+.githooks/* text eol=lf

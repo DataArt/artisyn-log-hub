@@ -1,0 +1,57 @@
+{
+  "$comment": "GS-04 ttl (opus-5): 5m/1h cache writes, fast mode (x2 on input and output), $0.01 per web search. Literals; costs from the DD D3 rates, the rest from scenarios/03 §2.3. Times are fixture-relative (A = 2026-01-05).",
+  "fixture": "GS-04",
+  "roots": [
+    {
+      "key": "gs04",
+      "branch": "main",
+      "week": "W1",
+      "start": "2026-01-06T10:01:00.000Z",
+      "end": "2026-01-06T10:04:05.000Z",
+      "durationMs": 185000,
+      "model": "claude-opus-5",
+      "claudeVersion": "2.1.99",
+      "prompts": 4,
+      "workTimeMs": 125000,
+      "costUsd": 1.4,
+      "ownCostUsd": 1.4,
+      "costUnavailableReason": null,
+      "wrongCostsUsd": { "oneHourAtFiveMinuteRate": 1.1, "noFastSurcharge": 1.35, "flatCacheWrite": 1.1 },
+      "nodes": [
+        {
+          "key": "root",
+          "model": "claude-opus-5",
+          "tokens": { "input": 16200, "output": 3560, "cacheRead": 220000, "cacheWrite5m": 40000, "cacheWrite1h": 80000, "inputFast": 5000, "outputFast": 1000, "webSearch": 2 },
+          "costUsd": 1.4
+        }
+      ],
+      "tokens": {
+        "own": { "input": 16200, "output": 3560, "cacheRead": 220000, "cacheWrite5m": 40000, "cacheWrite1h": 80000, "inputFast": 5000, "outputFast": 1000, "webSearch": 2 },
+        "tree": { "input": 16200, "output": 3560, "cacheRead": 220000, "cacheWrite5m": 40000, "cacheWrite1h": 80000, "inputFast": 5000, "outputFast": 1000, "webSearch": 2 }
+      },
+      "cacheRatio": { "own": 0.647059, "tree": 0.647059 },
+      "perPrompt": [
+        { "workTimeMs": 40000, "tokens": { "input": 10000, "output": 2000, "cacheRead": 0, "cacheWrite5m": 40000, "cacheWrite1h": 60000, "inputFast": 0, "outputFast": 0, "webSearch": 0 }, "costUsd": 0.95, "cacheRatio": 0 },
+        { "workTimeMs": 60000, "tokens": { "input": 5000, "output": 1000, "cacheRead": 100000, "cacheWrite5m": 0, "cacheWrite1h": 20000, "inputFast": 5000, "outputFast": 1000, "webSearch": 2 }, "costUsd": 0.37, "cacheRatio": 0.833333 },
+        { "workTimeMs": 20000, "tokens": { "input": 1000, "output": 500, "cacheRead": 120000, "cacheWrite5m": 0, "cacheWrite1h": 0, "inputFast": 0, "outputFast": 0, "webSearch": 0 }, "costUsd": 0.0775, "cacheRatio": 1 },
+        { "workTimeMs": 5000, "tokens": { "input": 200, "output": 60, "cacheRead": 0, "cacheWrite5m": 0, "cacheWrite1h": 0, "inputFast": 0, "outputFast": 0, "webSearch": 0 }, "costUsd": 0.0025, "cacheRatio": null }
+      ],
+      "tools": {},
+      "commits": 0,
+      "pullRequests": 0,
+      "lines": { "written": 0, "writtenOwn": 0, "added": 0, "removed": 0, "editWriteCalls": 0 },
+      "changeSurface": {
+        "changedFiles": 0,
+        "foldersTouched": 0,
+        "topLevelModules": 0,
+        "singleFileFolders": 0,
+        "folders": {},
+        "linesAdded": 0,
+        "linesRemoved": 0,
+        "outsideRepoFiles": 0,
+        "concentration": null,
+        "band": null
+      }
+    }
+  ]
+}

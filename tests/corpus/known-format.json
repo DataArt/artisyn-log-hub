@@ -1,0 +1,122 @@
+{
+  "lineTypes": [
+    "assistant",
+    "atis-latch",
+    "attachment",
+    "cost-state",
+    "last-prompt",
+    "queue-operation",
+    "user"
+  ],
+  "keysByType": {
+    "assistant": [
+      "agentId",
+      "apiBlockIndex",
+      "attributionAgent",
+      "cwd",
+      "effort",
+      "entrypoint",
+      "gitBranch",
+      "isSidechain",
+      "message",
+      "parentUuid",
+      "perTurnEffort",
+      "requestId",
+      "sessionId",
+      "timestamp",
+      "type",
+      "userType",
+      "uuid",
+      "version",
+      "wireToolInputs"
+    ],
+    "atis-latch": [
+      "atis",
+      "sessionId",
+      "type"
+    ],
+    "attachment": [
+      "agentId",
+      "attachment",
+      "cwd",
+      "entrypoint",
+      "gitBranch",
+      "isSidechain",
+      "parentUuid",
+      "rendered",
+      "sessionId",
+      "timestamp",
+      "type",
+      "userType",
+      "uuid",
+      "version"
+    ],
+    "cost-state": [
+      "hasUnknownModelCost",
+      "modelUsage",
+      "sessionId",
+      "startTime",
+      "totalAPIDuration",
+      "totalAPIDurationWithoutRetries",
+      "totalCostUSD",
+      "totalDuration",
+      "totalLinesAdded",
+      "totalLinesRemoved",
+      "totalToolDuration",
+      "type"
+    ],
+    "last-prompt": [
+      "lastPrompt",
+      "leafUuid",
+      "sessionId",
+      "type"
+    ],
+    "queue-operation": [
+      "content",
+      "operation",
+      "sessionId",
+      "timestamp",
+      "type"
+    ],
+    "user": [
+      "agentId",
+      "cwd",
+      "entrypoint",
+      "gitBranch",
+      "isSidechain",
+      "message",
+      "parentUuid",
+      "permissionMode",
+      "promptId",
+      "promptSource",
+      "sessionId",
+      "sourceToolAssistantUUID",
+      "timestamp",
+      "toolUseResult",
+      "turnOrigin",
+      "type",
+      "userType",
+      "uuid",
+      "version"
+    ]
+  },
+  "contentBlockTypes": [
+    "text",
+    "thinking",
+    "tool_result",
+    "tool_use"
+  ],
+  "attachmentTypes": [
+    "agent_listing_delta",
+    "date",
+    "deferred_tools_delta",
+    "environment",
+    "model",
+    "nested_memory",
+    "prompt_snapshot",
+    "remote_session_change",
+    "session_context",
+    "skill_listing",
+    "total_tokens_reminder"
+  ]
+}

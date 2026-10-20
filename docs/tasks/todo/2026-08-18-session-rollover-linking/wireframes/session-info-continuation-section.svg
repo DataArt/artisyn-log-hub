@@ -1,0 +1,120 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1060" height="700" viewBox="0 0 1060 700" font-family="system-ui, 'Segoe UI', Roboto, sans-serif">
+  <style>
+    .h1    { font-size: 15px; fill: #111827; font-weight: 600; }
+    .sec   { font-size: 10px; fill: #6b7280; letter-spacing: .09em; }
+    .lab   { font-size: 11px; fill: #6b7280; }
+    .val   { font-size: 12px; fill: #111827; font-family: 'JetBrains Mono', ui-monospace, Consolas, monospace; }
+    .link  { font-size: 12px; fill: #2563eb; font-family: 'JetBrains Mono', ui-monospace, Consolas, monospace; text-decoration: underline; }
+    .note  { font-size: 10px; fill: #6b7280; font-style: italic; }
+    .h2    { font-size: 12px; fill: #111827; font-weight: 600; }
+    .txt   { font-size: 11px; fill: #374151; }
+    .chip  { font-size: 9px; font-family: 'JetBrains Mono', ui-monospace, Consolas, monospace; }
+    .ann   { font-size: 10px; fill: #b45309; }
+  </style>
+  <rect width="1060" height="700" fill="#ffffff"/>
+
+  <text x="24" y="28" class="h1">T-102 · Info tab — "Continuation" collapsible section</text>
+  <text x="24" y="45" class="note">New CollapsibleSection + InfoRows only (session-info-primitives.tsx). Inserted between IDENTITY and TIMELINE; absent entirely when no link and no candidate.</text>
+
+  <rect x="24" y="60" width="700" height="480" fill="#ffffff" stroke="#e5e7eb" rx="4"/>
+
+  <!-- IDENTITY (existing) -->
+  <text x="42" y="86" class="sec">⌄ IDENTITY</text>
+  <text x="42" y="108" class="lab">UUID</text>
+  <text x="220" y="108" class="val">bbbb2222-2222-4222-8222-222222222222</text>
+  <text x="42" y="128" class="lab">Repository</text>
+  <text x="220" y="128" class="val">…/example-org/sample-app</text>
+  <text x="42" y="148" class="lab">Branch</text>
+  <text x="220" y="148" class="val">T-100-denormalized-cost</text>
+  <text x="42" y="168" class="lab">User</text>
+  <text x="220" y="168" class="val">muaddib@arrakis.test</text>
+
+  <!-- CONTINUATION (new) -->
+  <rect x="30" y="184" width="688" height="212" rx="4" fill="#f8f9ff" stroke="#c7d2fe"/>
+  <text x="42" y="206" class="sec" fill="#3730a3">⌄ CONTINUATION</text>
+  <rect x="170" y="196" width="46" height="14" rx="7" fill="#e0e7ff" stroke="#c7d2fe"/>
+  <text x="177" y="207" class="chip" fill="#3730a3">new</text>
+
+  <text x="42" y="230" class="lab">Kind</text>
+  <text x="220" y="230" class="val">rollover</text>
+  <text x="300" y="230" class="note">· gap between previous end and this start: 5s</text>
+
+  <text x="42" y="250" class="lab">Continues from</text>
+  <text x="220" y="250" class="link">aaaa1111-1111-4111-8111-111111111111</text>
+  <text x="500" y="250" class="note">→ opens that session</text>
+
+  <text x="42" y="270" class="lab">Continued in</text>
+  <text x="220" y="270" class="val" fill="#9ca3af">—</text>
+  <text x="300" y="270" class="note">(this is the newest session in the chain)</text>
+
+  <text x="42" y="290" class="lab">Chain</text>
+  <text x="220" y="290" class="val">2 sessions · position 2 of 2</text>
+
+  <text x="42" y="310" class="lab">Chain cost (display)</text>
+  <text x="220" y="310" class="val">$20.9000</text>
+  <text x="320" y="310" class="note">= $8.5600 + $12.3400 · sum of the rows as shown, not an aggregation change</text>
+
+  <text x="42" y="330" class="lab">First prompt source</text>
+  <text x="220" y="330" class="val">inherited from aaaa1111</text>
+
+  <text x="42" y="350" class="lab">Detected by</text>
+  <text x="220" y="350" class="val">transcript uuid overlap</text>
+  <text x="392" y="350" class="note">33 shared leading uuids · linked via continuation marker</text>
+
+  <text x="42" y="370" class="lab">Detected at</text>
+  <text x="220" y="370" class="val">2026-08-18 11:04:02</text>
+  <text x="392" y="370" class="note">ingest of the claude log</text>
+
+  <text x="42" y="388" class="note">Every row above is read-only evidence; none of it feeds cost, stats or analytics.</text>
+
+  <!-- TIMELINE (existing) -->
+  <text x="42" y="424" class="sec">⌄ TIMELINE</text>
+  <text x="42" y="446" class="lab">Start</text>
+  <text x="220" y="446" class="val">2026-08-18 02:21:54</text>
+  <text x="42" y="466" class="lab">End</text>
+  <text x="220" y="466" class="val">2026-08-18 11:00:09</text>
+  <text x="42" y="486" class="lab">Duration</text>
+  <text x="220" y="486" class="val">8:38:14</text>
+  <text x="42" y="506" class="lab">Autonomous work time</text>
+  <text x="220" y="506" class="val">0:18:24</text>
+  <text x="42" y="526" class="sec">⌄ ACTIVITY …</text>
+
+  <!-- RIGHT: variants -->
+  <text x="748" y="86" class="h2">Section variants</text>
+
+  <rect x="748" y="98" width="288" height="112" rx="4" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="760" y="118" class="sec">⌄ CONTINUATION</text>
+  <text x="760" y="140" class="lab">Kind</text>
+  <text x="860" y="140" class="val">resume</text>
+  <text x="760" y="160" class="lab">Continues from</text>
+  <text x="860" y="160" class="link">ffff6666…</text>
+  <text x="760" y="180" class="lab">Continued in</text>
+  <text x="860" y="180" class="link">eeee5555…</text>
+  <text x="760" y="200" class="lab">Chain</text>
+  <text x="860" y="200" class="val">3 sessions · pos 2</text>
+
+  <rect x="748" y="224" width="288" height="92" rx="4" fill="#fffbeb" stroke="#fcd34d"/>
+  <text x="760" y="244" class="sec" fill="#92400e">⌄ CONTINUATION (UNVERIFIED)</text>
+  <text x="760" y="266" class="lab">Candidate origin</text>
+  <text x="880" y="266" class="val" fill="#92400e">cccc3333…</text>
+  <text x="760" y="286" class="lab">Resolution</text>
+  <text x="880" y="286" class="val" fill="#92400e">no session row</text>
+  <text x="760" y="306" class="note">stored raw, resolved at read time; no link rendered</text>
+
+  <rect x="748" y="330" width="288" height="76" rx="4" fill="#fffbeb" stroke="#fcd34d"/>
+  <text x="760" y="350" class="sec" fill="#92400e">⌄ CONTINUATION (AMBIGUOUS)</text>
+  <text x="760" y="372" class="lab">Candidates</text>
+  <text x="880" y="372" class="val" fill="#92400e">2 found</text>
+  <text x="760" y="392" class="note">none chosen · logged warning · link suppressed</text>
+
+  <rect x="748" y="420" width="288" height="58" rx="4" fill="#f9fafb" stroke="#e5e7eb"/>
+  <text x="760" y="442" class="txt">No link, no candidate:</text>
+  <text x="760" y="462" class="note">section not rendered at all — Info tab looks exactly as today.</text>
+
+  <text x="24" y="568" class="ann">▲ The Info tab is where the *evidence* lives (signal, gap, chain position); the header breadcrumb is where *navigation* lives. Deliberately no duplication of the pill wording.</text>
+
+  <text x="24" y="600" class="h2">Export / round-trip note surfaced in the same section</text>
+  <rect x="24" y="612" width="1012" height="62" rx="4" fill="#f9fafb" stroke="#e5e7eb"/>
+  <text x="40" y="634" class="txt">A session exported and re-imported keeps its continuation rows: the persisted column travels in session.json, and unresolved raw ids stay raw</text>
+  <text x="40" y="652" class="txt">so an origin session imported later can still resolve at read time. No UI affordance for this — it is only a correctness expectation for this section.</text>
+</svg>

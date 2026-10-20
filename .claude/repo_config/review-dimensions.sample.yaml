@@ -1,0 +1,13 @@
+dimensions:
+  - key: completeness
+    label: Completeness
+    guidance: |
+      - Are all acceptance criteria present and verifiable (measurable, not vague)?
+      - Does each functional requirement have at least one corresponding acceptance criterion?
+
+  - key: technical-clarity
+    label: Technical clarity
+    guidance: |
+      - Are API/schema/UI changes described with enough detail to implement without guessing?
+      - Read the actual code this task touches and flag anything the doc claims that doesn't
+        match reality, or real technical detail the doc is missing.

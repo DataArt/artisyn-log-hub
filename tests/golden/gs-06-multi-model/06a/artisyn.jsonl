@@ -1,0 +1,4 @@
+{"type":"artisyn","hook_event_name":"SessionStart","timestamp":"2026-01-12T10:00:00.000Z","session_id":"{{RUN}}-gs06a","git":{"repo":"{{REPO}}","root":"/work/repo-gold","worktreeRoot":"/work/repo-gold","branch":"feature/billing","user":"Golden Tester"}}
+{"event":"prompt_start","timestamp":"2026-01-12T10:00:00.000Z","session_id":"{{RUN}}-gs06a","prompt":"Draft the refund policy text","git":{"repo":"{{REPO}}","root":"/work/repo-gold","worktreeRoot":"/work/repo-gold","branch":"feature/billing","user":"Golden Tester"}}
+{"event":"prompt_start","timestamp":"2026-01-12T10:03:00.000Z","session_id":"{{RUN}}-gs06a","prompt":"Now tighten the wording for legal review","git":{"repo":"{{REPO}}","root":"/work/repo-gold","worktreeRoot":"/work/repo-gold","branch":"feature/billing","user":"Golden Tester"}}
+{"type":"artisyn","hook_event_name":"SessionEnd","timestamp":"2026-01-12T10:03:50.000Z","session_id":"{{RUN}}-gs06a"}

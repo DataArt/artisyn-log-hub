@@ -1,0 +1,21 @@
+-- T-111 follow-up: drop the unused session_id index on upload_queue_measurements.
+--
+-- Index-only change: no table, column, constraint or row is touched, so there is no data
+-- risk and the change is trivially reversible (recreate the index).
+--
+-- Why: no production code path filters this table by session_id. The column exists for
+-- diagnostics and is written on every attempt, but the only query that reads by it is the
+-- e2e cleanup helper (cleanupUploadQueueMeasurementsForSessions), and at realistic table
+-- sizes the planner resolves that IN (...) delete with a seq scan anyway. pg_stat_user_indexes
+-- confirmed idx_scan = 0. Meanwhile the index was maintained on every INSERT on the upload
+-- hot path, with random-UUID keys — the page-split-heavy case — for zero reads.
+--
+-- The 15-minute/7-day windows and the retention prune all key off finished_at and are served
+-- by idx_upload_queue_measurements_finished_at, which is kept.
+--
+-- Not CONCURRENTLY: Drizzle wraps migrations in BEGIN/COMMIT, and DROP INDEX CONCURRENTLY
+-- cannot run inside a transaction (raises 25001 and crashes startup). A plain DROP INDEX
+-- takes ACCESS EXCLUSIVE on the table, but it is a catalog update plus a file unlink —
+-- milliseconds — and migrations run before the NestJS context (and so the scheduler) exists.
+
+DROP INDEX IF EXISTS idx_upload_queue_measurements_session_id;
