@@ -7,7 +7,9 @@
  * trace — the exporter pushes over HTTP, does not spool, and nothing ever errors visibly. Measured
  * case: a project whose committed `.claude/settings.json` pointed at `:50280` while its gitignored
  * `.artisyn/config/otel-port.json` (and so the receiver) said `50962`; two days of OTEL data went
- * nowhere.
+ * nowhere. That is why the installer now writes the endpoints to the gitignored, per-checkout
+ * `.claude/settings.local.json` instead (older installs still have them in `.claude/settings.json`,
+ * and the next installer "upgrade" moves them).
  *
  * Why the check reads the settings files instead of `process.env`: Claude Code does not pass the
  * `OTEL_*` keys of a settings `env` block on to hook processes (measured on 2.1.280 —
@@ -16,9 +18,10 @@
  * `otelReceiverPort`. `process.env` is still consulted, last, for the case it IS set there (a shell
  * export, or a Claude Code version that forwards it).
  *
- * Detection only: the hook never rewrites `.claude/settings.json`. That file is usually committed,
- * the port is per checkout, and a rewrite would not reach the already-running exporter anyway —
- * Claude Code reads its env once, at startup.
+ * Detection only: the hook never rewrites any settings file. The installer owns the endpoints it
+ * writes to `.claude/settings.local.json`, `.claude/settings.json` is usually committed, and a
+ * rewrite would not reach the already-running exporter anyway — Claude Code reads its env once, at
+ * startup.
  */
 
 const fs = require('fs');
@@ -158,9 +161,8 @@ function formatProblems(receiverPort, problems) {
     ? `${p.key} is not set`
     : `${p.source} sets ${p.key}=${p.value}`));
   return 'Artisyn log-hub: OTEL telemetry of this session will be lost — this project\'s OTEL receiver listens on ' +
-    `127.0.0.1:${receiverPort}, but ${details.join('; ')}. Fix: set ${LOGS_KEY}=http://127.0.0.1:${receiverPort}/v1/logs ` +
-    `and ${METRICS_KEY}=http://127.0.0.1:${receiverPort}/v1/metrics in .claude/settings.json (or remove both and re-run ` +
-    'the log-hub installer "upgrade"), then restart Claude Code.';
+    `127.0.0.1:${receiverPort}, but ${details.join('; ')}. Fix: re-run the log-hub installer "upgrade" (it writes ` +
+    `${LOGS_KEY}/${METRICS_KEY} for port ${receiverPort} to .claude/settings.local.json), then restart Claude Code.`;
 }
 
 /**

@@ -14,6 +14,10 @@ timestamp: "2026-06-15T14:10:06+04:00"
 > **Auto-generated** from live database on 2026-06-15.
 > Filtered to Claude version **2.1.175** (latest found in logs).
 > Based on 2219 log sessions, 10,345 entries.
+>
+> **Hand-maintained after the snapshot.** Entries added after the 2026-06-15 snapshot are maintained by hand
+> (no generator re-run): `atis-latch` and `cost-state`, first seen in Claude Code 2.1.280. Their counts are not
+> part of the snapshot statistics above.
 
 ## Overview
 
@@ -24,7 +28,9 @@ Each array element is a log entry with a `type` field that determines its shape.
 
 - [`ai-title`](#type-ai-title) — 679 entries
 - [`assistant`](#type-assistant) — 4252 entries
+- [`atis-latch`](#type-atis-latch) — hand-maintained (Claude Code 2.1.280+)
 - [`attachment`](#type-attachment) — 783 entries
+- [`cost-state`](#type-cost-state) — hand-maintained (Claude Code 2.1.280+)
 - [`file-history-snapshot`](#type-file-history-snapshot) — 262 entries
 - [`last-prompt`](#type-last-prompt) — 632 entries
 - [`mode`](#type-mode) — 691 entries
@@ -112,6 +118,24 @@ Each array element is a log entry with a `type` field that determines its shape.
 
 ---
 
+## Type: `atis-latch`
+
+**Hand-maintained** — not part of the 2026-06-15 snapshot. First seen in Claude Code 2.1.280.
+
+A session-level marker line. It has **no `timestamp`**, so it never affects a session's time span, and no
+extractor reads it: it feeds no metric (tokens, cost, turns, work time). The raw-logs viewer shows it as a
+collapsed row through the generic JSON fallback, with no special renderer.
+
+### Mandatory Fields
+
+| Field | Type | Sample Values |
+|-------|------|---------------|
+| `atis` | string | opaque value set by Claude Code (present on 10,396/10,396 lines on the dev DB, 2026-10-21) |
+| `sessionId` | string | "5b7c77b5-3133-482f-8420-4b74520c9e10" |
+| `type` | string | "atis-latch" |
+
+---
+
 ## Type: `attachment`
 
 **Entries analyzed:** 783
@@ -193,6 +217,35 @@ Each array element is a log entry with a `type` field that determines its shape.
   "displayPath": "\".claude\\\\rules\\\\server.md\""
 }
 ```
+
+---
+
+## Type: `cost-state`
+
+**Hand-maintained** — not part of the 2026-06-15 snapshot. First seen in Claude Code 2.1.280.
+
+Claude Code's own running cost/usage counters for the session. It has **no `timestamp`**, so it never affects a
+session's time span.
+
+**Never a cost source.** Log Hub computes tokens and cost only from `assistant` `message.usage` (and OTEL cost
+where configured); `totalCostUSD` / `modelUsage` here are Claude Code's client-side estimate and must never be read
+into any metric, cost total or token count. No extractor reads this line. The raw-logs viewer shows it as a
+collapsed row through the generic JSON fallback, with no special renderer.
+
+### Mandatory Fields
+
+| Field | Type | Sample Values |
+|-------|------|---------------|
+| `modelUsage` | object | per-model usage counters (`{ "<model-id>": { … } }`) |
+| `sessionId` | string | "5b7c77b5-3133-482f-8420-4b74520c9e10" |
+| `startTime` | number | session start as recorded by Claude Code (epoch ms) |
+| `totalCostUSD` | number | 0.4213 |
+| `totalDuration` | number | wall-clock duration in ms |
+| `type` | string | "cost-state" |
+
+Also present on every line seen so far (404/404 on the dev DB, 2026-10-21; same list in
+`tests/corpus/known-format.json` → `keysByType`): `hasUnknownModelCost` (boolean), `totalAPIDuration`,
+`totalAPIDurationWithoutRetries`, `totalLinesAdded`, `totalLinesRemoved`, `totalToolDuration` (numbers).
 
 ---
 

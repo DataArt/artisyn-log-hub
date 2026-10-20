@@ -13,6 +13,15 @@ A plain root session on `main` (claude-sonnet-4-6), W1 Monday 10:00:00–10:10:3
   concentration 100, focused.
 - Service lines for Raw Logs: `mode`, `permission-mode`, `system-context`, `attachment`, `ai-title`,
   `last-prompt`. Claude Code version `2.1.99` on every transcript line.
+- Newer Claude Code event types (2.1.280+, see `docs/knowledgebase/log-schema/`), one line each, that
+  must feed **no** metric — tokens, cost, turns, work time and the span above stay as they are:
+  - `attachment/prompt_snapshot` (10:00:00) — its `tools` lists `{"name":"Workflow"}` as *offered*, so
+    the sessions list must keep `hasWorkflow: false` (FR-1 regression);
+  - `attachment/total_tokens_reminder` (10:00:20), `attachment/silent_turn_reminder` (10:01:30),
+    `attachment/deferred_tools_record` (10:05:45), `attachment/remote_session_change` (10:10:30) —
+    each a leaf child of an existing line, at that line's timestamp;
+  - top-level `atis-latch` and `cost-state` (no timestamp, before `ai-title`); `cost-state` carries
+    `totalCostUSD: 99`, so any leak into cost is visible.
 
 Checks: prompt qualification, work time, legacy TTL fallback, cache ratio, file categories,
 written vs diff lines, commits and PRs, change surface 100.

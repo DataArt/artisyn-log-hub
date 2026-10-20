@@ -103,7 +103,9 @@ receiving nothing), then `config.otelReceiverPort` when it is a positive integer
 endpoint vs. config, and a metrics endpoint pointing at a different port than the logs endpoint
 (only one port is bound, so metrics would not be captured). The hook never reads
 `.artisyn/config/otel-port.json` at runtime — that file is the installer's record, and the endpoint
-it wrote into `.claude/settings.json` is already the authority.
+it wrote into the gitignored `.claude/settings.local.json` (installer `1.0.72`+; older installers
+wrote `.claude/settings.json`, and the next `install`/`upgrade` moves the keys and rewrites a stale
+Artisyn endpoint to the recorded port) is already the authority.
 
 ## The `409 owner-mismatch` guard
 
@@ -126,8 +128,9 @@ compares the caller's `gitRoot` against its own:
 On a `409` the hook writes exactly one `warn` line naming the port and the owning repo, and telling
 the user to re-run the installer with `--otel-port <n>`. **Detection and logging only** — no
 automatic re-allocation, no takeover, no retry. The hook could not fix it at runtime anyway: Claude
-Code's exporter is already pointed at that port by `.claude/settings.json`, so only an install-time
-change moves it.
+Code's exporter is already pointed at that port by the `env` block in `.claude/settings.local.json`,
+so only an install-time change moves it (`install --otel-port <n>` rewrites the Artisyn-owned
+endpoints there; running sessions must be restarted).
 
 **Documented residual:** records arriving on `/v1/logs` and `/v1/metrics` are not attributable to a
 project and are accepted as-is, so between a collision starting and the user acting on the warning,
@@ -297,6 +300,6 @@ they buy.
 - [hook-system-overview.md](hook-system-overview.md) — the rest of the hook, file table and upload
   namespaces
 - [hook-installation.md](hook-installation.md) — OTEL settings, port allocation and the
-  `.claude/settings.json` `env` block
+  `.claude/settings.local.json` `env` block (ownership, per-key merge, stale-endpoint rewrite)
 - [hook-api-versioning.md](hook-api-versioning.md) — hook ↔ receiver cross-version contract
 - [upload-queue.md](upload-queue.md) — what happens to a chunk once the server receives it

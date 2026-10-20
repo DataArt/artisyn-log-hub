@@ -132,6 +132,25 @@ Thin dispatcher — the only file imported by `RawLogsTab.tsx` for rendering.
 | `RawLogsExpandedView` | Switches on `entry.type` and returns the matching `*Expanded` component (including `harness-snapshot` → `HarnessSnapshotExpanded` and `harness-snapshot-ref` → `HarnessSnapshotRefExpanded`, both from `system.tsx`). Falls back to `JsonBlock` (imported directly from `primitives.tsx`) for unknown types. |
 | `getAttachmentDetail` | Re-exported from `attachment.tsx`. Currently unused elsewhere — `utils.ts` imports `getAttachmentDetail` directly from `attachment.tsx`, bypassing this re-export. |
 
+### Types with no special renderer (Claude Code 2.1.280+)
+
+Seven event types first seen in Claude Code 2.1.280 have **no dedicated renderer** by design. Each shows as an
+ordinary collapsed row and expands through the generic fallbacks; none of them feeds a metric. Field shapes:
+`log-schema/claude-log-message-types.md` and `log-schema/attachment-types.md`.
+
+| Type | Kind | Collapsed row | Expanded body |
+|---|---|---|---|
+| `atis-latch` | top-level, no `timestamp` | type string (`getCollapsedSummary` default) | `JsonBlock` (`RawLogsExpandedView` fallback) |
+| `cost-state` | top-level, no `timestamp` | type string (`getCollapsedSummary` default) | `JsonBlock` (`RawLogsExpandedView` fallback) |
+| `prompt_snapshot` | attachment | attachment sub-type (`getAttachmentDetail` returns `''`) | `CommonFields` + `JsonBlock` (`AttachmentBody` fallback) |
+| `total_tokens_reminder` | attachment | attachment sub-type | `CommonFields` + `JsonBlock` |
+| `silent_turn_reminder` | attachment | attachment sub-type | `CommonFields` + `JsonBlock` |
+| `deferred_tools_record` | attachment | attachment sub-type | `CommonFields` + `JsonBlock` |
+| `remote_session_change` | attachment | attachment sub-type | `CommonFields` + `JsonBlock` |
+
+The two top-level types have no `timestamp`, so `sortRawLogs` keeps them inline with the preceding line. To give one
+of them a structured view later, follow "Adding a new entry type" / "Adding a new attachment sub-type" below.
+
 ---
 
 ## Dependency Graph

@@ -31,7 +31,27 @@ export const f17Sessions: ContractFamily = {
                               WHERE f.session_id = r.id AND f.user_id = $2) AS is_favorite,
                      EXISTS (SELECT 1 FROM logs h WHERE h.session_id = r.id
                                 AND h.body @> '[{"event":"hook_service"}]') AS is_hook_service,
-                     r.workflow_run_id IS NOT NULL AS has_workflow,
+                     -- Same predicate as repositories.controller.ts (hasWorkflowSet): an
+                     -- assistant tool_use block named Workflow with a non-empty string id in
+                     -- one of the session's claude logs — never a text match.
+                     EXISTS (SELECT 1 FROM logs cl
+                              WHERE cl.session_id = r.id AND cl.log_type = 'claude'
+                                AND cl.body @> '[{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Workflow"}]}}]'::jsonb
+                                AND EXISTS (
+                                  SELECT 1
+                                    FROM jsonb_array_elements(
+                                           CASE WHEN jsonb_typeof(cl.body) = 'array' THEN cl.body ELSE '[]'::jsonb END
+                                         ) AS ev(e),
+                                         jsonb_array_elements(
+                                           CASE WHEN jsonb_typeof(ev.e -> 'message' -> 'content') = 'array'
+                                                THEN ev.e -> 'message' -> 'content' ELSE '[]'::jsonb END
+                                         ) AS blk(tu)
+                                   WHERE ev.e ->> 'type' = 'assistant'
+                                     AND blk.tu ->> 'type' = 'tool_use'
+                                     AND blk.tu ->> 'name' = 'Workflow'
+                                     AND jsonb_typeof(blk.tu -> 'id') = 'string'
+                                     AND blk.tu ->> 'id' <> ''))
+                       AS has_workflow,
                      EXISTS (SELECT 1 FROM turn_end_advisor_runs t
                               WHERE t.session_id = r.session_id AND t.outcome = 'submitted')
                        AS has_advice,

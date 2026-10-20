@@ -102,9 +102,10 @@ npx "<server-origin>/static/artisyn-hooks-installer.tgz" install --server-url "<
 7. Ensures `.artisyn/config/log-hub.local.json` is git-ignored (via `.artisyn/config/.gitignore`); hard-aborts with
    a remediation message if that file is already tracked by git.
 8. Merges `enabledPlugins["log-hub-hooks@artisyn-<hash>"] = true`,
-   `extraKnownMarketplaces["artisyn-<hash>"].source.path = "./.artisyn/marketplace"` and the nine-key OTEL `env`
-   block into `.claude/settings.json` (all other keys, including any hooks you wired yourself, are left untouched);
-   writes `.claude/settings.json.bak` first. An install made before the per-repo name (legacy shared `artisyn`) is
+   `extraKnownMarketplaces["artisyn-<hash>"].source.path = "./.artisyn/marketplace"` into `.claude/settings.json`
+   (all other keys, including any hooks you wired yourself, are left untouched); writes `.claude/settings.json.bak`
+   first. The nine-key OTEL `env` block goes into the gitignored, per-checkout `.claude/settings.local.json` instead
+   (written first, with its own `.bak`; see [the `env` block](#the-claudesettingslocaljson-env-block)). An install made before the per-repo name (legacy shared `artisyn`) is
    migrated here: `extraKnownMarketplaces.artisyn` pointing at `./.artisyn/marketplace` is dropped and the
    `<plugin>@artisyn` keys of `log-hub-hooks` and of every other plugin listed in this marketplace move to
    `<plugin>@artisyn-<hash>`, keeping their value. The old user-level `artisyn` registration is left alone —
@@ -161,10 +162,14 @@ surgically removes `enabledPlugins["log-hub-hooks@artisyn-<hash>"]` / `extraKnow
 (and the same keys under the legacy shared `artisyn` name) from `.claude/settings.json`, leaving every other
 setting untouched.
 
-The nine OTEL `env` keys are removed too — but only while `env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` still points at a
-loopback receiver (`http(s)://127.0.0.1|localhost:<port>/v1/logs`), i.e. it is still ours. If you have repointed it
-at your own collector, the whole `env` block is left untouched and a `Note:` line says so. An `env` block left
-empty by the removal is dropped entirely.
+The nine OTEL `env` keys are removed too, from both `.claude/settings.local.json` and `.claude/settings.json`
+(older installs wrote them there) — but only the keys that are still ours, judged per key and per file. An endpoint
+key is ours while it points at a loopback receiver (`http(s)://127.0.0.1|localhost:<port>/v1/logs|metrics`) on a
+port in the installer's allocation range or recorded in `otel-port.json` / `log-hub.json`. Any other key is ours
+while it holds the installer's value and every endpoint key in the same file is ours. An endpoint repointed at your
+own collector is left untouched, with a `Note:` line saying so, and so are the exporter keys beside it. An `env`
+block left empty by the removal is dropped; `.claude/settings.local.json` is rewritten (with a `.bak`) only when a
+key was actually removed, and is never deleted.
 
 If a leftover file can't be deleted (locked by an open editor or a running hook),
 the settings-key removal still succeeds and is reported; a warning names the leftover path and the next
@@ -482,9 +487,10 @@ If two projects do collide, the receiver detects it: the second project's regist
 Fix it by re-installing that project with `--otel-port <n>`. Detection only — nothing is moved automatically,
 because the exporter's endpoint can only be changed at install time.
 
-### The `.claude/settings.json` `env` block
+### The `.claude/settings.local.json` `env` block
 
-Written by `install` and `upgrade`, with `<port>` substituted:
+Written by `install` and `upgrade` to `.claude/settings.local.json` (not the usually committed
+`.claude/settings.json` — the port is per checkout), with `<port>` substituted:
 
 ```json
 {
@@ -496,33 +502,48 @@ Written by `install` and `upgrade`, with `<port>` substituted:
     "OTEL_EXPORTER_OTLP_COMPRESSION": "none",
     "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://127.0.0.1:<port>/v1/logs",
     "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT": "http://127.0.0.1:<port>/v1/metrics",
-    "OTEL_LOG_TOOL_DETAILS": "1"
+    "OTEL_LOG_TOOL_DETAILS": "1",
+    "OTEL_METRIC_EXPORT_INTERVAL": "10000"
   }
 }
 ```
 
-Merging is **per-key fill-if-absent**: your existing `env` is preserved and only keys not already present are
-written, with one `Note:` line listing what was left alone — so any `OTEL_*` value you set yourself always wins.
-`OTEL_EXPORTER_OTLP_COMPRESSION` is set explicitly so the encoding never depends on an exporter default; the
-receiver still accepts `gzip`/`deflate` if you override it.
+Merging is **per key**, and any `OTEL_*` value you set yourself always wins ("ours" is the ownership rule from
+[Uninstall](#3-uninstall)):
 
-That rule also covers the installer's own earlier values: if the port changes later (a lost/regenerated
-`otel-port.json`, `--otel-port`, or a committed `settings.json` carrying another checkout's port), the old endpoints
-stay put. **Endpoint self-check (since hook `2.18.0`):** on every `SessionStart` (when `otelEnabled`), the hook
+- A key in `.claude/settings.json` that is still ours (an older install wrote it there) is moved out of that file;
+  `Note: moved the Artisyn OTEL env keys from .claude/settings.json to .claude/settings.local.json.`
+- A key in `.claude/settings.json` that is yours is kept, nothing is written for it to `settings.local.json`, and a
+  `Note: kept your existing .claude/settings.json env values for …` line lists it.
+- Otherwise an endpoint in `settings.local.json` that is absent or ours is set to the current receiver port. A stale
+  port is rewritten, with
+  `Note: rewrote stale Artisyn OTEL endpoints in .claude/settings.local.json (<KEY>: <old> → <new>, …).`
+- Any other key is filled only if absent; a value of yours is kept and listed in
+  `Note: kept your existing .claude/settings.local.json env values for …`.
+
+`.claude/settings.local.json` is created when absent, and it and its `.bak` are added to `.claude/.gitignore` when
+git does not already ignore them. Either file not being valid JSON aborts the run before any write.
+`OTEL_EXPORTER_OTLP_COMPRESSION` is set explicitly so the encoding never depends on an exporter default; the
+receiver still accepts `gzip`/`deflate` if you override it. `upgrade` also prints
+`Note: Claude Code sessions that are already running keep their old OTEL endpoint until restarted.` — Claude Code
+reads its env once, at startup.
+
+**Endpoint self-check (since hook `2.18.0`):** on every `SessionStart` (when `otelEnabled`), the hook
 reads the effective `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` / `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT` from
 `.claude/settings.local.json` → `.claude/settings.json` → `~/.claude/settings.json` (`$CLAUDE_CONFIG_DIR/settings.json` when set) → process env. It reads the files
 because Claude Code does not forward the `OTEL_*` keys to hook processes. If an endpoint is missing, or is a loopback
 endpoint on a different port than the receiver, the hook writes one `warn` line to `hook.log` **and** shows a
-`systemMessage` warning in Claude Code with the exact values to set. A non-loopback endpoint (your own collector) is
-never reported. It only detects the problem and never rewrites `settings.json`. Fix the endpoints (or remove both
-and run `upgrade`), then restart Claude Code.
+`systemMessage` warning in Claude Code ending with `Fix: re-run the log-hub installer "upgrade" (it writes
+OTEL_EXPORTER_OTLP_LOGS_ENDPOINT/OTEL_EXPORTER_OTLP_METRICS_ENDPOINT for port <port> to .claude/settings.local.json),
+then restart Claude Code.` A non-loopback endpoint (your own collector) is never reported. The hook only detects the
+problem and never rewrites any settings file.
 
 ### Disabling OTEL
 
 `otelEnabled: false` is **runtime-only** — it stops the hook spawning the receiver, registering, uploading and
 pruning, but does not retract the `env` block, so Claude Code keeps exporting to a port nothing listens on. That is
 harmless (the port is a random high one, not `4317`/`4318`). To disable it fully, set `otelEnabled: false` **and**
-delete the eight `env` keys, or just run `uninstall`.
+delete the nine `env` keys from `.claude/settings.local.json`, or just run `uninstall`.
 
 ### Receiver diagnostics
 

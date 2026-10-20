@@ -76,11 +76,14 @@ test('@S-INST-02 the API key lives only in log-hub.local.json, a tracked secret 
       }
     });
 
-    await test.step('4. git status: log-hub.json is a new file, log-hub.local.json and otel-port.json are ignored', async () => {
+    await test.step('4. git status: log-hub.json is a new file, log-hub.local.json, otel-port.json, .claude/settings.local.json and its .bak are ignored', async () => {
       const status = git(repo, ['status', '--porcelain', '--untracked-files=all']).split(/\r?\n/);
       expect(status).toContain('?? .artisyn/config/log-hub.json');
       expect(status.some((l) => l.includes('log-hub.local.json'))).toBe(false);
       expect(status.some((l) => l.includes('otel-port.json'))).toBe(false);
+      expect(fs.existsSync(path.join(repo, '.claude', 'settings.local.json')), 'install wrote the OTEL env there').toBe(true);
+      expect(status.some((l) => l.includes('.claude/settings.local.json'))).toBe(false);
+      expect(status.some((l) => l.includes('.claude/settings.local.json.bak'))).toBe(false);
     });
 
     await test.step('5. a root .gitignore that already ignores the file → no duplicate entry; an existing .artisyn/config/.gitignore is appended once', async () => {

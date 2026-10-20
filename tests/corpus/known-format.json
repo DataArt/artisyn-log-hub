@@ -110,12 +110,14 @@
     "agent_listing_delta",
     "date",
     "deferred_tools_delta",
+    "deferred_tools_record",
     "environment",
     "model",
     "nested_memory",
     "prompt_snapshot",
     "remote_session_change",
     "session_context",
+    "silent_turn_reminder",
     "skill_listing",
     "total_tokens_reminder"
   ]

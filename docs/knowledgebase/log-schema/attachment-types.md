@@ -1,7 +1,7 @@
 ---
 type: "Log Schema Reference"
 title: "Attachment Types in Claude Logs"
-description: "Auto-generated reference for all 20 attachment.type sub-types: field schemas, sample values, and UI display strategies."
+description: "Reference for all 25 attachment.type sub-types (20 auto-generated, 5 hand-maintained): field schemas, sample values, and UI display strategies."
 tags:
   - logs
   - schema
@@ -13,6 +13,13 @@ timestamp: "2026-06-15T14:10:06+04:00"
 
 > **Auto-generated** from live database on 2026-06-15.
 > Based on 2219 log sessions, 2435 attachment entries.
+>
+> **Hand-maintained after the snapshot.** Entries added after the 2026-06-15 snapshot are maintained by hand
+> (no generator re-run): `deferred_tools_record`, `prompt_snapshot`, `remote_session_change`,
+> `silent_turn_reminder` and `total_tokens_reminder`, first seen in Claude Code 2.1.280. Their field lists come from
+> read-only queries on the dev DB (2026-10-21); their counts are not part of the snapshot statistics above. None of
+> them feeds a metric (tokens, cost, turns, work time), and the raw-logs viewer shows each as a collapsed row through
+> the generic JSON fallback, with no special renderer.
 
 ## Overview
 
@@ -23,6 +30,10 @@ All top-level keys seen across all attachment types:
 
 `addedLines`, `addedNames`, `addedTypes`, `allowedTools`, `command`, `commandMode`, `content`, `displayPath`, `durationMs`, `exitCode`, `filename`, `files`, `hookEvent`, `hookName`, `ideName`, `isInitial`, `isNew`, `isSubAgent`, `itemCount`, `lineEnd`, `lineStart`, `names`, `newDate`, `path`, `pendingMcpServers`, `planExists`, `planFilePath`, `prompt`, `readdedNames`, `reminderType`, `removedNames`, `removedTypes`, `showConcurrencyNote`, `skillCount`, `skillDir`, `skillNames`, `skills`, `snippet`, `stderr`, `stdout`, `toolUseID`, `type`
 
+Added by the hand-maintained types: `cliPrefix`, `commit`, `contextRendering`, `echoWireToolInputs`, `entries`,
+`inlineTools`, `keptReminders`, `managedCommit`, `managedPr`, `nameOnlyAnnouncements`, `pr`, `reminderFold`,
+`sendUserFileHint`, `systemPrompt`, `systemTurns`, `text`, `toolChangeHeader`, `toolInputCopies`, `tools`, `url`
+
 ## Attachment Types
 
 - [`agent_listing_delta`](#attachment-type-agent_listing_delta) — 213 entries
@@ -31,6 +42,7 @@ All top-level keys seen across all attachment types:
 - [`compact_file_reference`](#attachment-type-compact_file_reference) — 21 entries
 - [`date_change`](#attachment-type-date_change) — 8 entries
 - [`deferred_tools_delta`](#attachment-type-deferred_tools_delta) — 214 entries
+- [`deferred_tools_record`](#attachment-type-deferred_tools_record) — hand-maintained (Claude Code 2.1.280+)
 - [`diagnostics`](#attachment-type-diagnostics) — 149 entries
 - [`dynamic_skill`](#attachment-type-dynamic_skill) — 12 entries
 - [`edited_text_file`](#attachment-type-edited_text_file) — 109 entries
@@ -41,10 +53,14 @@ All top-level keys seen across all attachment types:
 - [`opened_file_in_ide`](#attachment-type-opened_file_in_ide) — 125 entries
 - [`plan_mode`](#attachment-type-plan_mode) — 1 entries
 - [`plan_mode_exit`](#attachment-type-plan_mode_exit) — 1 entries
+- [`prompt_snapshot`](#attachment-type-prompt_snapshot) — hand-maintained (Claude Code 2.1.280+)
 - [`queued_command`](#attachment-type-queued_command) — 5 entries
+- [`remote_session_change`](#attachment-type-remote_session_change) — hand-maintained (Claude Code 2.1.280+)
 - [`selected_lines_in_ide`](#attachment-type-selected_lines_in_ide) — 15 entries
+- [`silent_turn_reminder`](#attachment-type-silent_turn_reminder) — hand-maintained (Claude Code 2.1.280+)
 - [`skill_listing`](#attachment-type-skill_listing) — 200 entries
 - [`task_reminder`](#attachment-type-task_reminder) — 1015 entries
+- [`total_tokens_reminder`](#attachment-type-total_tokens_reminder) — hand-maintained (Claude Code 2.1.280+)
 
 ---
 
@@ -136,6 +152,31 @@ All top-level keys seen across all attachment types:
 | Field | Type | Present in | Sample Values |
 |-------|------|------------|---------------|
 | `pendingMcpServers` | array | 204/214 (95%) | [], ["postgres"] |
+
+---
+
+## Attachment type: `deferred_tools_record`
+
+**Hand-maintained** — Claude Code 2.1.280+. Dev DB (2026-10-21): 607 entries.
+
+A distinct, additive type: it is emitted **alongside** `deferred_tools_delta` and does not replace it (every session
+seen with a `record` also has a `delta`), so `walkDeferredToolsDelta` and the client parsers keep reading the delta
+only. It carries a tool catalogue (names, descriptions and input schemas), so — like `prompt_snapshot` — it must never
+be text-matched for tool usage: a tool listed here was offered, not called.
+
+### Mandatory Fields
+
+| Field | Type | Sample Values |
+|-------|------|---------------|
+| `entries` | array | [{"name":"CronCreate","description":"…","input_schema":{…},"defer_loading":true,"eager_input_streaming":false}, …] |
+| `type` | string | "deferred_tools_record" |
+
+### Optional Fields
+
+| Field | Type | Present in | Sample Values |
+|-------|------|------------|---------------|
+| `nameOnlyAnnouncements` | array | 15/607 (2%) | tool names announced without a schema |
+| `toolInputCopies` | array | 6/607 (1%) | copied tool inputs |
 
 ---
 
@@ -332,6 +373,37 @@ All top-level keys seen across all attachment types:
 
 ---
 
+## Attachment type: `prompt_snapshot`
+
+**Hand-maintained** — Claude Code 2.1.280+. Dev DB (2026-10-21): 754 entries.
+
+A snapshot of the system prompt and the tool catalogue Claude Code sent to the model. `tools` lists every tool that
+was **offered** (including `{"name":"Workflow", …}` in most sessions), so it must never be text-matched for tool usage
+— that was the FR-1 false "⚡ Workflow" badge. Real usage comes only from `assistant` `tool_use` blocks.
+
+### Mandatory Fields
+
+| Field | Type | Sample Values |
+|-------|------|---------------|
+| `systemPrompt` | array | system prompt blocks |
+| `type` | string | "prompt_snapshot" |
+
+### Optional Fields
+
+| Field | Type | Present in | Sample Values |
+|-------|------|------------|---------------|
+| `cliPrefix` | string | 375/754 (50%) | the CLI identity prefix of the system prompt |
+| `contextRendering` | string | 2/754 (0%) | rendering mode name |
+| `echoWireToolInputs` | boolean | 2/754 (0%) | true, false |
+| `inlineTools` | boolean | 1/754 (0%) | true, false |
+| `keptReminders` | boolean | 1/754 (0%) | true, false |
+| `reminderFold` | boolean | 2/754 (0%) | true, false |
+| `systemTurns` | boolean | 1/754 (0%) | true, false |
+| `toolChangeHeader` | boolean | 1/754 (0%) | true, false |
+| `tools` | array | 375/754 (50%) | [{"name":"Workflow","schema":{…}}, {"name":"Read", …}, …] |
+
+---
+
 ## Attachment type: `queued_command`
 
 **Entries analyzed:** 5
@@ -343,6 +415,26 @@ All top-level keys seen across all attachment types:
 | `commandMode` | string | "prompt", "task-notification" |
 | `prompt` | string | "where is controller that return logs", "<task-notification>\n<task-id>bk7osmflx</task-id>\n<tool-use-id>toolu_01Ez3jTGb…, "<task-notification>\n<task-id>boo8p0nkg</task-id>\n<tool-use-id>toolu_01AKtKwz6…, "<task-notification>\n<task-id>buqfq9bs6</task-id>\n<tool-use-id>toolu_01HrNA6rM…, "make default view for  tools, code, docs view - collapsed" |
 | `type` | string | "queued_command" |
+
+---
+
+## Attachment type: `remote_session_change`
+
+**Hand-maintained** — Claude Code 2.1.280+. Dev DB (2026-10-21): 374 entries.
+
+Remote-session (commit / PR handoff) settings for the session. Informational only.
+
+### Mandatory Fields
+
+| Field | Type | Sample Values |
+|-------|------|---------------|
+| `commit` | string | commit handling mode |
+| `managedCommit` | boolean | true, false |
+| `managedPr` | boolean | true, false |
+| `pr` | string | PR handling mode |
+| `sendUserFileHint` | boolean | true, false |
+| `type` | string | "remote_session_change" |
+| `url` | string \| null | null |
 
 ---
 
@@ -361,6 +453,21 @@ All top-level keys seen across all attachment types:
 | `lineEnd` | number | 2, 1, 27, 12, 71 |
 | `lineStart` | number | 0, 1, 27, 12, 71 |
 | `type` | string | "selected_lines_in_ide" |
+
+---
+
+## Attachment type: `silent_turn_reminder`
+
+**Hand-maintained** — Claude Code 2.1.280+. Dev DB (2026-10-21): 1,106 entries.
+
+A system reminder injected into a turn without user-visible output. Not a user prompt and not a turn boundary.
+
+### Mandatory Fields
+
+| Field | Type | Sample Values |
+|-------|------|---------------|
+| `text` | string | reminder text |
+| `type` | string | "silent_turn_reminder" |
 
 ---
 
@@ -391,6 +498,22 @@ All top-level keys seen across all attachment types:
 | `content` | array | [], [{"id":"1","blocks":[],"status":"in_progress","subject":"Fix session cost discrepancy: header shows ~$21 (main only) vs … |
 | `itemCount` | number | 0, 1 |
 | `type` | string | "task_reminder" |
+
+---
+
+## Attachment type: `total_tokens_reminder`
+
+**Hand-maintained** — Claude Code 2.1.280+. Dev DB (2026-10-21): 20,543 entries.
+
+A reminder of the context-window token total, injected for the model. **Never a token source**: Log Hub counts
+tokens only from `assistant` `message.usage`.
+
+### Mandatory Fields
+
+| Field | Type | Sample Values |
+|-------|------|---------------|
+| `text` | string | reminder text with the running token total |
+| `type` | string | "total_tokens_reminder" |
 
 ---
 
@@ -441,6 +564,16 @@ Based on the field analysis, here is how each attachment type can be rendered in
 | `pendingMcpServers` | Collapsible list or badge count |
 | `readdedNames` | Collapsible list or badge count |
 | `removedNames` | Collapsible list or badge count |
+
+### `deferred_tools_record`
+
+Collapsed row by default (no special renderer today; generic JSON fallback).
+
+| Field | Suggested Rendering |
+|-------|---------------------|
+| `entries` | Badge count; expand to a collapsible list of tool names (hide `input_schema` behind a second expand) |
+| `nameOnlyAnnouncements` | Collapsible list or badge count |
+| `toolInputCopies` | Collapsible list or badge count |
 
 ### `diagnostics`
 
@@ -522,12 +655,37 @@ Based on the field analysis, here is how each attachment type can be rendered in
 | `planExists` | Badge (green/gray) or ✓/✗ icon |
 | `planFilePath` | Monospace path label, truncate long paths from the left |
 
+### `prompt_snapshot`
+
+Collapsed row by default (no special renderer today; generic JSON fallback). Large — never expand automatically.
+
+| Field | Suggested Rendering |
+|-------|---------------------|
+| `cliPrefix` | Monospace label row |
+| `contextRendering` | Monospace label row |
+| `echoWireToolInputs`, `inlineTools`, `keptReminders`, `reminderFold`, `systemTurns`, `toolChangeHeader` | Badge (green/gray) or ✓/✗ icon |
+| `systemPrompt` | Scrollable pre block (max-height), collapsed |
+| `tools` | Badge count; expand to a collapsible list of tool names ("offered", not "used") |
+
 ### `queued_command`
 
 | Field | Suggested Rendering |
 |-------|---------------------|
 | `commandMode` | Monospace label row |
 | `prompt` | Monospace label row |
+
+### `remote_session_change`
+
+Collapsed row by default (no special renderer today; generic JSON fallback).
+
+| Field | Suggested Rendering |
+|-------|---------------------|
+| `commit` | Monospace label row |
+| `managedCommit` | Badge (green/gray) or ✓/✗ icon |
+| `managedPr` | Badge (green/gray) or ✓/✗ icon |
+| `pr` | Monospace label row |
+| `sendUserFileHint` | Badge (green/gray) or ✓/✗ icon |
+| `url` | Link when non-null, otherwise hidden |
 
 ### `selected_lines_in_ide`
 
@@ -539,6 +697,14 @@ Based on the field analysis, here is how each attachment type can be rendered in
 | `ideName` | Monospace label row |
 | `lineEnd` | Plain number, right-aligned; format large numbers with commas |
 | `lineStart` | Plain number, right-aligned; format large numbers with commas |
+
+### `silent_turn_reminder`
+
+Collapsed row by default (no special renderer today; generic JSON fallback).
+
+| Field | Suggested Rendering |
+|-------|---------------------|
+| `text` | Scrollable pre block (max-height), collapsed |
 
 ### `skill_listing`
 
@@ -555,6 +721,14 @@ Based on the field analysis, here is how each attachment type can be rendered in
 |-------|---------------------|
 | `content` | Scrollable pre block (max-height), with syntax hint if language known |
 | `itemCount` | Plain number, right-aligned; format large numbers with commas |
+
+### `total_tokens_reminder`
+
+Collapsed row by default (no special renderer today; generic JSON fallback).
+
+| Field | Suggested Rendering |
+|-------|---------------------|
+| `text` | Single monospace label row (short text) |
 
 ---
 

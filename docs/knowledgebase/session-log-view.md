@@ -5,7 +5,7 @@ description: "Session log view (Logs tab): component architecture, log parser, t
 tags:
   - client
   - logs
-timestamp: "2026-07-20T17:04:19+04:00"
+timestamp: "2026-10-21T02:00:00+04:00"
 ---
 
 # Session Log View
@@ -212,6 +212,48 @@ own model's rate, deduplicated across activations within a turn via a `counted` 
 `agentParentMap` is unavailable (e.g. an older cached response), sources 2-3 still apply; if all
 three come up empty, the activation's own tokens are used, the simplest fallback.
 
+### Nested `claude -p` runs are separate sessions (not grouped, by decision)
+
+A session (or one of its sub-agents / workflow agents) can start another Claude Code process through
+the Bash or PowerShell tool, e.g. `claude -p --allowedTools "Read,Grep,Glob" < prompt.txt`. Such a run
+is **not** a sub-agent and is intentionally shown as an ordinary top-level session in the session
+list, not nested under the session that launched it.
+
+Why no linkage exists:
+
+- To Claude Code it is a brand-new standalone session: its transcript is a top-level
+  `~/.claude/projects/<slug>/<session-id>.jsonl`, not `<parent-session-id>/subagents/<agent-id>.jsonl`,
+  and there is no sibling `.meta.json`. The hook therefore uploads it in the `claude` namespace, not
+  `claude-subagent`, and `sessions.parent_session_id` stays `NULL` (the server writes that column only
+  for `claude-subagent` uploads, `logs.service.ts` `upsert()`).
+- The parent's transcript only holds a Bash `tool_use` with the command line, never the child's
+  session id, so none of the three sources in "Sub-agent nesting" above can find it.
+
+Recognising one: a top-level session whose first prompt is a templated instruction (for example the
+algorithm-doc reviewer prompt from `scripts/algo-docs/review-prompt.md`), with `parent_session_id` and
+`workflow_run_id` both `NULL`, whose time span falls inside another session of the same repo and user.
+To confirm, grep the suspected parent's transcript directory (including `subagents/**`) for `claude -p`.
+Observed example: the five reviewer sessions of 2026-10-20 21:23–21:34 UTC were started by agent
+`a841ae90eb294635f` of workflow `wf_12ca9b05-ef4` inside session `5a834865-…` (`/adlc-lh:implement-deep`).
+
+Research (2026-10-21, Claude Code on Windows), kept for the case the decision is revisited:
+
+- In a hook of the nested process, `CLAUDE_CODE_SESSION_ID` and `CLAUDE_PID` are the **child's own**
+  values; Claude Code overwrites them, so the parent id is not visible there. Hook input (stdin)
+  carries only the child's `session_id`. No documented hook field, env var or registry file holds
+  the parent session id of a separately launched CLI process.
+- Non-`CLAUDE_*` environment variables **are** inherited. A parent `SessionStart` hook that appends
+  `export SOME_VAR=<session_id>` to `$CLAUDE_ENV_FILE` makes the variable visible to the parent's Bash
+  tool, and the nested `claude -p`'s hooks read it (verified end to end). Untested: whether the PowerShell
+  tool applies `CLAUDE_ENV_FILE` (a `.sh` file), and the link would point at the root session, not the
+  workflow agent that ran the command.
+- Alternatives considered: walking the OS process tree to the parent `claude` process (per-OS code,
+  PID reuse), and a time-window heuristic in the UI (wrong when several sessions run in parallel in
+  one repo).
+
+Decision: none of these is implemented. A `claude -p` run is its own session and its cost is **not**
+rolled into the launching session's tree (see `session-metrics-scope.md`).
+
 ### Exported utility functions
 
 | Function | Purpose |
@@ -409,6 +451,7 @@ Collapsible section, omitted entirely when the session ran no workflows (`workfl
 
 - `isMeta=true` on `user` events: injected context (e.g., skill output delivered to model) — excluded from qualifying user event check.
 - `attachment` events with `attachment.type=nested_memory`: CLAUDE.md / rule files injected into context — collected as `RuleInjection[]` per turn.
+- The Claude Code 2.1.280 types `atis-latch`, `cost-state` (top-level) and the attachments `prompt_snapshot`, `total_tokens_reminder`, `silent_turn_reminder`, `deferred_tools_record`, `remote_session_change` are not read by the log parser (every loop is gated on its own type) and feed no metric — in particular `cost-state.totalCostUSD` is never a cost source and the tool catalogues in `prompt_snapshot` / `deferred_tools_record` never count as tool usage. In Raw Logs they are collapsed rows with no special renderer (`docs/knowledgebase/raw-logs-renderers.md` § "Types with no special renderer").
 - System Context data (Skills, Agents, MCP, Files, Rules tabs) is **not** parsed from log lines any more. It comes from the `harnessSnapshot` field of the `GET .../logs` response (a `HarnessSnapshot | null`, built server-side from the `harness_snapshots` table — see `docs/knowledgebase/db-tables.md` and the `harness-snapshot` algorithm doc, `docs/knowledgebase/algorithms/harness-snapshot.md`). `parseSessionLogs(raw, { harnessSnapshot })` builds, from that one object: `skillDefinitions` (every snapshot skill except `anthropic-skills:*`), `visibleSkills`/`visibleAgents` (filtered against `registeredSkills`/`registeredAgents`, or all when that set is empty), `agentDefinitions`, `mcpConfig` (`snapshot.mcpServers`) and `claudeMd` (`snapshot.systemContext`). With no snapshot, all of these are empty/`undefined` and the corresponding tabs do not render.
 - The old `skill_listing` attachment fallback (reading "Project"/"Built-in" section headers out of the listing `content` to backfill `skillDefinitions`) has been **removed**, along with the parsing of the four synthetic hook events that used to carry this data: `system-context`, `skill-definitions`, `agent-definitions`, `mcp-config`. Sessions uploaded by a hook older than 2.22.0 carry only those old events and no `harnessSnapshot` — they lose their Skills, Agents, MCP, Files and Rules tabs with no fallback and no backfill (an explicit, owner-accepted exception to the usual hook backward-compatibility rule, for this change only). Their raw event lines are unaffected and still render in Raw Logs through the existing renderers (`docs/knowledgebase/raw-logs-renderers.md`).
 

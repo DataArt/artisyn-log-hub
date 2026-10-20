@@ -1,14 +1,5 @@
 {
   "env": {
-    "CLAUDE_CODE_ENABLE_TELEMETRY": "1",
-    "OTEL_LOGS_EXPORTER": "otlp",
-    "OTEL_METRICS_EXPORTER": "otlp",
-    "OTEL_EXPORTER_OTLP_PROTOCOL": "http/json",
-    "OTEL_EXPORTER_OTLP_COMPRESSION": "none",
-    "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://127.0.0.1:58603/v1/logs",
-    "OTEL_EXPORTER_OTLP_METRICS_ENDPOINT": "http://127.0.0.1:58603/v1/metrics",
-    "OTEL_LOG_TOOL_DETAILS": "1",
-    "OTEL_METRIC_EXPORT_INTERVAL": "10000",
     "MCP_TIMEOUT": "90000"
   },
   "enabledPlugins": {

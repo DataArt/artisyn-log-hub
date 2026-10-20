@@ -64,10 +64,11 @@ npx "<server-origin>/static/artisyn-hooks-installer.tgz" install --server-url "<
    resolved port) and (if a secret needs persisting) `.artisyn/config/log-hub.local.json`.
 6. Ensures `log-hub.local.json` is git-ignored (`.artisyn/config/.gitignore`); hard-aborts with a remediation
    message if it's already tracked by git.
-7. Merges `enabledPlugins["log-hub-hooks@artisyn-<hash>"] = true`,
-   `extraKnownMarketplaces["artisyn-<hash>"].source.path = "./.artisyn/marketplace"` and the nine-key OTEL `env` block
-   into `.claude/settings.json` — every other key (including hooks you wired yourself) is preserved;
-   `.claude/settings.json.bak` is written first.
+7. Merges the nine-key OTEL `env` block into the gitignored `.claude/settings.local.json` (created when absent,
+   `.claude/settings.local.json.bak` written first; installer `1.0.72`+ — see "The `.claude/settings.local.json`
+   `env` block" below), then merges `enabledPlugins["log-hub-hooks@artisyn-<hash>"] = true` and
+   `extraKnownMarketplaces["artisyn-<hash>"].source.path = "./.artisyn/marketplace"` into `.claude/settings.json` —
+   every other key (including hooks you wired yourself) is preserved; `.claude/settings.json.bak` is written first.
 8. Runs `claude plugin marketplace add ./.artisyn/marketplace` then
    `claude plugin install log-hub-hooks@artisyn-<hash> --scope project`. **This step is required** — declaring the two
    settings keys alone does not register or cache the plugin, so no hook fires without it. A failure here (e.g.
@@ -116,8 +117,12 @@ pre-plugin install is detected, `upgrade` performs the same migration `install` 
 `.claude/telemetry_tool/version.json` to exist. Running `upgrade` a second time with nothing to do is a no-op.
 
 `upgrade` also resolves/allocates the OTEL port and writes the `env` block exactly as `install` does — this is the
-only route by which an already-installed project starts receiving OTEL, so it deliberately shares that code path.
-An existing `.artisyn/config/otel-port.json` is reused, so upgrading never moves a project's port.
+only route by which an already-installed project starts receiving OTEL, and the route that moves the keys out of
+`.claude/settings.json` and rewrites a stale Artisyn endpoint, so it deliberately shares that code path.
+An existing `.artisyn/config/otel-port.json` is reused, so upgrading never moves a project's port. After the
+success lines `upgrade` always prints
+`Note: Claude Code sessions that are already running keep their old OTEL endpoint until restarted.` — a running
+session's exporter does not pick up a rewritten endpoint.
 
 ---
 
@@ -141,10 +146,16 @@ since extraction only writes `plugins/log-hub-hooks/`. While another entry is li
 still overwrites `marketplace.json` (dropping the foreign entries) and `uninstall` deletes the whole
 `.artisyn/marketplace/`.
 
-The nine OTEL `env` keys are removed too — but **only** while `env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` still
-matches `http(s)://127.0.0.1|localhost:<port>/v1/logs`, i.e. it is still pointing at our receiver. If you have
-repointed it at your own collector, the whole `env` block is left untouched and a `Note:` line says so — you can
-remove the `OTEL_*` keys by hand. An `env` block left empty by the removal is dropped entirely.
+The nine OTEL `env` keys are removed too, **per key and per file**, from both `.claude/settings.json` (legacy
+location) and `.claude/settings.local.json` (`removeOtelEnvKeys` in `artisyn-hooks-installer/src/install.ts`,
+installer `1.0.72`+). The recorded ports are read before `.artisyn/config/` is deleted, and each key is removed only
+while it is Artisyn-owned by the ownership rule in "The `.claude/settings.local.json` `env` block" below, judged on
+that file's `env` as read. So a collector of your own survives: an endpoint you repointed (non-loopback, or a
+loopback port outside the Artisyn range) stays, together with the exporter/protocol keys in the same file, and a
+`Note: .claude/<file> env.<KEY> is "<value>", which is not an Artisyn loopback receiver — leaving it untouched.`
+line names it. A file is rewritten (after its `.bak`) only when at least one key was removed and is never deleted;
+an `env` block left empty by the removal is dropped entirely. `settings.local.json` is cleaned whether or not
+`settings.json` exists.
 
 If a leftover file can't be deleted (locked by an editor or a running hook), the
 settings-key removal still succeeds and is reported; a warning names the leftover path and the next
@@ -175,8 +186,9 @@ rewritten — only reported: `Warning: telemetry hooks also found in <file> — 
 twice.`
 
 A `.claude/settings.json` that fails to parse aborts the whole run with
-`Error: .claude/settings.json is not valid JSON — fix it and re-run`, leaving the file untouched (no silent `{}`
-fallback).
+`Error: .claude/settings.json is not valid JSON - fix it and re-run`, leaving the file untouched (no silent `{}`
+fallback). The same rule applies to `.claude/settings.local.json`, which the installer now also writes (the OTEL
+`env` block): `Error: .claude/settings.local.json is not valid JSON - fix it and re-run`.
 
 Migrating twice changes nothing the second time — idempotent by design.
 
@@ -279,10 +291,10 @@ See `docs/knowledgebase/otel-receiver.md` for what they gate.
 | `otelRetentionDays` | `7` | `<telemetryDir>/otel/*.jsonl` older than this (by mtime) are deleted on a later `Stop` run. `0` means "use the default". See `docs/knowledgebase/data-retention.md`. |
 
 **`otelEnabled: false` is runtime-only.** It stops the hook from spawning the receiver, registering, uploading and
-pruning — but it does **not** retract the `env` block from `.claude/settings.json`, so Claude Code keeps exporting
-to a port nothing listens on. That is harmless by design: the port is a random high one (below), so there is no
-realistic chance of it later colliding with a collector of your own on `4317`/`4318`. To disable OTEL fully, set
-`otelEnabled: false` **and** remove the eight `env` keys, or just run `uninstall`.
+pruning — but it does **not** retract the `env` block from `.claude/settings.local.json`, so Claude Code keeps
+exporting to a port nothing listens on. That is harmless by design: the port is a random high one (below), so there
+is no realistic chance of it later colliding with a collector of your own on `4317`/`4318`. To disable OTEL fully,
+set `otelEnabled: false` **and** remove the nine `env` keys, or just run `uninstall`.
 
 #### Port allocation
 
@@ -312,11 +324,13 @@ Two projects can still collide by chance. That case is detected — not repaired
 `409 owner-mismatch` guard, which writes one `hook.log` warning telling you to re-install with `--otel-port <n>`.
 See `docs/knowledgebase/otel-receiver.md` § "The `409 owner-mismatch` guard".
 
-#### The `.claude/settings.json` `env` block
+#### The `.claude/settings.local.json` `env` block
 
 Claude Code exposes a settings `env` block to the session as real environment variables, which is how its OTLP
 exporter is pointed at the local receiver (and how the hook learns the endpoint the exporter actually uses). The
-installer writes these nine keys, with `<port>` substituted from the resolution above:
+installer (`1.0.72`+) writes these nine keys into the **gitignored `.claude/settings.local.json`**, with `<port>`
+substituted from the resolution above. Older installers wrote them into the committed `.claude/settings.json`; the
+next `install`/`upgrade` moves them (see "Migration from `.claude/settings.json`" below).
 
 | Key | Value |
 |---|---|
@@ -336,22 +350,69 @@ since the Stop upload can land seconds after the last export. 10 s bounds that l
 record volume than the 5 s logs stream (`OTEL_LOGS_EXPORT_INTERVAL`, left at its default). Per-request cost comes
 from the `api_request` log events and is unaffected by this setting.
 
-**Merge granularity is per-key fill-if-absent**: your existing `env` is spread first and only keys *not already
-present* are written, with one `Note:` line listing the keys left untouched. So an `OTEL_*` value you set yourself
-always wins. `OTEL_EXPORTER_OTLP_COMPRESSION` is written explicitly so the payload encoding never depends on an
-exporter default — the receiver still accepts `gzip`/`deflate`, so overriding it is not silently dropped.
+`OTEL_EXPORTER_OTLP_COMPRESSION` is written explicitly so the payload encoding never depends on an exporter default
+— the receiver still accepts `gzip`/`deflate`, so overriding it is not silently dropped.
 
-**Known gap: the stale-endpoint trap.** Fill-if-absent also keeps the installer's *own* earlier endpoints. If the
-port changes later (a lost `otel-port.json`, `--otel-port`, or a committed `settings.json` that carries another
-checkout's random port, since `otel-port.json` is gitignored per checkout), the exporter keeps posting to a port
-nothing listens on. All OTEL data is then lost silently. Measured case: `at.authors`, where settings said `:50280`
-and the receiver was on `50962`. Claude Code (2.1.280) also does **not** forward a settings `env` block's `OTEL_*`
-keys to hook processes (`CLAUDE_CODE_ENABLE_TELEMETRY` does arrive), so `resolveOtelPort`'s endpoint cross-check in
+**Why `settings.local.json`.** The endpoints carry this checkout's random port, and `otel-port.json` is gitignored
+per checkout. A committed `settings.json` carried one checkout's port to every teammate and every second checkout,
+whose receivers listen elsewhere, so their exporters posted to a port nothing listens on and all OTEL data was lost
+silently (measured case: `at.authors`, settings said `:50280`, the receiver was on `50962`). A local file per
+checkout cannot drift that way. After writing it, the installer adds `settings.local.json` and
+`settings.local.json.bak` to `.claude/.gitignore` when `git check-ignore` does not already ignore them
+(`ensureConfigIgnored`), so neither shows up in `git status`.
+
+**Ownership — which values are "ours"** (`isArtisynOwnedOtelValue`, judged per key and per file, on that file's
+`env`):
+
+- An endpoint key (`OTEL_EXPORTER_OTLP_LOGS_ENDPOINT`, `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT`) is Artisyn-owned when it
+  is a loopback receiver URL — `http(s)://127.0.0.1|localhost:<port>/v1/logs|metrics` (`OTEL_LOOPBACK_ENDPOINT_RE`)
+  — whose port is in the allocation range `25000`–`65535` **or** is a port the installer recorded earlier
+  (`readRecordedOtelPorts`: `otel-port.json` `port` and `log-hub.json` `otelReceiverPort`, both when they disagree,
+  read before the port is resolved because resolution overwrites the store; the newly resolved port counts too).
+  A collector of your own on `localhost:4318` is therefore not ours.
+- Any of the other seven keys is Artisyn-owned only when its value equals the installer default **and** every
+  endpoint key present in the same `env` is owned. A file whose endpoint points at your collector keeps its
+  exporter/protocol keys: they are yours.
+
+**Per-key merge on `install`/`upgrade`** (`mergeOtelEnv`). For each of the nine keys, with `shared` =
+`.claude/settings.json` `env` and `local` = `.claude/settings.local.json` `env`:
+
+1. `shared` has it and it is owned → it is deleted from `shared` (migration, below).
+2. `shared` has it and it is not owned → it is your value: kept, not written to `local` (an owned `local` copy is
+   deleted so it cannot shadow yours), and listed in
+   `Note: kept your existing .claude/settings.json env values for <KEYS> — …`.
+3. Otherwise, an endpoint key is (re)written in `local` while it is absent or owned — this is the **stale-endpoint
+   rewrite**: an owned endpoint on another port is moved to the resolved port and reported as
+   `Note: rewrote stale Artisyn OTEL endpoints in .claude/settings.local.json (<KEY>: <oldPort> → <newPort>, …).`
+   A non-owned endpoint in `local` is kept and listed in
+   `Note: kept your existing .claude/settings.local.json env values for <KEYS> — …`.
+4. Otherwise, a non-endpoint key is filled in `local` only when absent; a different existing value is kept and goes
+   into that same `settings.local.json` Note.
+
+So an `OTEL_*` value you set yourself still always wins, while the installer's own stale endpoints no longer do.
+`settings.local.json` is written first (created when absent), then `settings.json`; each gets a `.bak` before any
+mutation, and an `env` object left empty is deleted from either file.
+
+**Migration from `.claude/settings.json`.** A project installed by an older installer has the nine keys in
+`.claude/settings.json`. The next `install`/`upgrade` deletes every owned one there, writes `local`, and prints
+`Note: moved the Artisyn OTEL env keys from .claude/settings.json to .claude/settings.local.json.` Commit the
+resulting `settings.json` change so teammates stop inheriting your port. Running sessions keep the old endpoint
+until restarted (the `upgrade` restart Note above).
+
+**Hook-side detection (FR-7).** Claude Code (2.1.280) does **not** forward a settings `env` block's `OTEL_*` keys to
+hook processes (`CLAUDE_CODE_ENABLE_TELEMETRY` does arrive), so `resolveOtelPort`'s endpoint cross-check in
 `env-context.js` never sees the endpoint. Since hook `2.18.0`, `otel-endpoint-check.js` (called by
 `lifecycle-hook.js` on `SessionStart`) reads the settings files directly: local → project → user → process env. It
 reports a missing endpoint, or a loopback endpoint on a port other than the receiver's, as a `hook.log` `warn` plus a
-`systemMessage` shown to the user. It only detects and never rewrites. The installer-side fix (rewrite a stale
-Artisyn loopback endpoint on `install`/`upgrade`) is not implemented.
+`systemMessage` shown to the user. It only detects and never rewrites — the installer's stale-endpoint rewrite above
+is the repair. Since hook `2.22.1` the warning ends with the fix that matches it:
+
+```
+Fix: re-run the log-hub installer "upgrade" (it writes OTEL_EXPORTER_OTLP_LOGS_ENDPOINT/OTEL_EXPORTER_OTLP_METRICS_ENDPOINT for port <receiverPort> to .claude/settings.local.json), then restart Claude Code.
+```
+
+Detection logic is unchanged in `2.22.1`; only the text (and the comments naming `.claude/settings.local.json` as
+where the installer writes the endpoints) changed.
 
 ### Post-Turn Analysis Settings
 

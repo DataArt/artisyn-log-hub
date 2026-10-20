@@ -55,7 +55,8 @@ installing it, and before asking anyone else to.
 
 - **Post-turn analysis.** When the server asks for it, the hook runs a local `claude -p` (cost advisor
   and session attribution) using your Claude Code account and sends the result to the server.
-- **OTEL export.** The installer adds an `env` block to `.claude/settings.json` that turns on Claude
+- **OTEL export.** The installer adds an `env` block to `.claude/settings.local.json` (gitignored,
+  per checkout) that turns on Claude
   Code's OpenTelemetry export to a loopback receiver, with `OTEL_LOG_TOOL_DETAILS=1` (tool names and
   parameters). The receiver writes the records to disk and the hook uploads them.
 - **Code inventory.** The number of git-tracked files and lines (`trackedFiles`, `trackedLines`),

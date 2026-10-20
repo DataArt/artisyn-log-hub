@@ -19,7 +19,7 @@ All roots belong to one repository, `REPO-GOLD` (10 root sessions in 9 fixtures)
 | GS-02 | `gs-02-delegator/` | W1 Tue 10:00:00 | main | sub-agents three levels deep, tree totals |
 | GS-03 | `gs-03-compaction/` | W1 Wed 10:00:00 | feature/billing | 12 prompts, compaction, context ceiling |
 | GS-04 | `gs-04-cache-5m-1h/` | W1 Tue 10:01:00 | main | 5m/1h cache writes, fast mode, web search |
-| GS-05 | `gs-05-skills-rules-mcp-workflow/` | W1 Thu 10:00:00 | feature/billing | skills, rules, MCP, workflow agents |
+| GS-05 | `gs-05-skills-rules-mcp-workflow/` | W1 Thu 10:00:10 | feature/billing | skills, rules, MCP, workflow agents |
 | GS-06 | `gs-06-multi-model/` (`06a/`, `06b/`) | W2 Mon 10:00 / 11:00 | feature/billing | model switch; unpriced model |
 | GS-07 | `gs-07-sidechain-denials/` | W2 Tue 10:00:00 | fix/windows | failures vs denials, sidechain, duplicates |
 | GS-08 | `gs-08-scattered-edits/` | W2 Wed 10:00:00 | fix/windows | Windows paths, scattered change surface |
