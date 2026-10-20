@@ -31,6 +31,7 @@ import {
   sessions,
   userFavoriteSessions,
 } from '../database/schema/index';
+import { deleteOrphanHarnessSnapshots } from '../logs/harness-snapshot';
 import { getDescendantSessionIds } from '../logs/session-tree.sql';
 import { UploadQueueService } from '../logs/upload-queue.service';
 
@@ -214,6 +215,17 @@ export class SessionsService {
       tx,
       sessionIdRows.map((row) => row.sessionId),
     );
+
+    // g. Clear the harness snapshot reference on these sessions (DD-11) — must run before
+    // h, since h's orphan test is "no session references this snapshot id any more".
+    await tx
+      .update(sessions)
+      .set({ harnessSnapshotId: null })
+      .where(inArray(sessions.id, ids));
+
+    // h. Delete every harness_snapshots row no session references any more (DD-11), across
+    // all owners — shared with the team-repo orphan sweep (`teams.service.ts`).
+    await deleteOrphanHarnessSnapshots(tx);
   }
 
   /**

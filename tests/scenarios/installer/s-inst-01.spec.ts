@@ -263,7 +263,7 @@ test('@S-INST-01 a clean install keeps the user settings, writes exactly its own
       expect(Object.keys(hooksJson.hooks).sort()).toEqual([...documented].sort());
     });
 
-    await test.step('12. a legacy install under the shared «artisyn» name: reinstall moves it and the marketplace’s other plugin to the per-repo name, the disabled state carried over and re-enabled', async () => {
+    await test.step('12. a legacy install under the shared «artisyn» name: reinstall moves it and the marketplace’s other plugin to the per-repo name, the disabled state carried over and re-enabled; a stale «artisyn» also registered at the user level (the real `claude plugin marketplace add` dedups by path and would otherwise keep that old name forever) is removed and both plugins reinstalled fresh under the new name, with no manual-steps warning', async () => {
       const legacy = makeFakeGitRepo(dirs, { remote: 'https://git.arrakis.test/scn/inst01/legacy.git' });
       const legacySource = { source: { source: 'directory', path: './.artisyn/marketplace' } };
       writeClaudeSettings(legacy, {
@@ -275,6 +275,14 @@ test('@S-INST-01 a clean install keeps the user settings, writes exactly its own
         ...build.buildMarketplaceJson(),
         plugins: [{ name: 'other-tool', source: './plugins/other-tool' }],
       }, null, 2));
+      // The user-level registration the real CLI would already hold for this exact path, under the
+      // legacy name — `checkUserLevelMarketplaceCollision`'s own source, not the project settings
+      // file above. Nothing else in this suite writes to it, so seeding it here only affects this step.
+      const legacyMarketplacePath = path.join(legacy, '.artisyn', 'marketplace');
+      writeClaudeSettings(home, {
+        extraKnownMarketplaces: { artisyn: { source: { source: 'directory', path: legacyMarketplacePath } } },
+      });
+      const callsBefore = fakeClaudeCalls(fakeClaude.callsLog).length;
 
       const res = await runInstaller(cli, legacy, ['install'], { home, fakeClaudeDir: fakeClaude.dir });
       expect(res.code, res.output).toBe(0);
@@ -290,6 +298,15 @@ test('@S-INST-01 a clean install keeps the user settings, writes exactly its own
       expect(settings.enabledPlugins).toEqual({ [`log-hub-hooks@${name}`]: true, [`other-tool@${name}`]: true, 'mine@elsewhere': true });
       expect(Object.keys(settings.extraKnownMarketplaces).sort()).toEqual(['elsewhere', name].sort());
       expect(res.output).not.toContain('marketplace is already registered');
+      expect(res.output, 'the stale user-level name is cleared without any manual step').not.toContain('could not automatically register/activate');
+
+      const newCalls = fakeClaudeCalls(fakeClaude.callsLog).slice(callsBefore);
+      expect(newCalls).toEqual([
+        ['plugin', 'marketplace', 'remove', 'artisyn'],
+        ['plugin', 'marketplace', 'add', legacyMarketplacePath],
+        ['plugin', 'install', `log-hub-hooks@${name}`, '--scope', 'project'],
+        ['plugin', 'install', `other-tool@${name}`, '--scope', 'project'],
+      ]);
     });
 
     await test.step('8b. a broken otel-receiver.js in the archive: a warning with the command to reproduce, exit 0, the port is not re-allocated', async () => {

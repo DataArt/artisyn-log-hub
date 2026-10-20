@@ -95,10 +95,12 @@ export const f14Repositories: ContractFamily = {
           id: 'id',
           repoUrl: 'repo_url',
           hookVersion: 'hook_version',
-          issueCount: { col: 'issue_count', as: 'number' },
         },
         strict: true,
-        ignore: ['outdated'],
+        // issueCount folds in `outdated` (see hook-state.service.ts computeIssueCount), which
+        // itself depends on the checkout's build-state baseline (latest-hook-version.json /
+        // installer-version.json) — not reproducible from the DB alone, so neither is compared.
+        ignore: ['outdated', 'issueCount'],
       },
     },
     {

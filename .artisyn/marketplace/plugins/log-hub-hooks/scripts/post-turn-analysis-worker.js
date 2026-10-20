@@ -39,9 +39,9 @@ const https = require('https');
 const { spawnSync } = require('child_process');
 
 const { loadConfig, resolveTelemetryDir } = require('./env-context');
-const { getGitContext } = require('./git-context');
+const { getGitContext, getGitRoot } = require('./git-context');
 const { hookLog, hookLogTo } = require('./hook-log');
-const { buildSkillDefinitions } = require('./skill-catalog');
+const { buildSkillCatalog } = require('./skill-catalog');
 const { callLlmAsync, describeLlmFailure } = require('./claude-invoke-async');
 const {
   isBlockedByFailureCap,
@@ -422,16 +422,16 @@ function buildPromptTurns(entries) {
 /**
  * Find every `Skill` tool-call entry anywhere in the transcript, resolve
  * each invoked name against the shared skill catalog (`skill-catalog.js`'s
- * `buildSkillDefinitions(cwd)`), and return one deduplicated `{name, description}[]`. A name with
- * no catalog match is dropped entirely (the caller falls back to the turn's raw literal text) —
- * only `description` is ever returned, never the skill's full `body`.
+ * `buildSkillCatalog({projectRoot, cwd})`), and return one deduplicated `{name, description}[]`.
+ * A name with no catalog match is dropped entirely (the caller falls back to the turn's raw
+ * literal text) — only `description` is ever returned, never the skill's full `body`.
  * @param {string} transcriptPath
  * @param {string} cwd
  * @returns {Array<{ name: string, description: string }>}
  */
 function resolveSkillInvocations(transcriptPath, cwd) {
   const entries = readTranscriptEntries(transcriptPath);
-  const catalog = buildSkillDefinitions(cwd) || [];
+  const catalog = buildSkillCatalog({ projectRoot: getGitRoot(cwd), cwd }) || [];
   const catalogByName = new Map(catalog.map((s) => [s.name, s.description]));
 
   const seen = new Set();

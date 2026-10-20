@@ -3,6 +3,7 @@ import {
   Controller,
   Body,
   HttpCode,
+  Inject,
   Logger,
   Post,
   Query,
@@ -11,8 +12,11 @@ import {
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { ApiKeyAuthGuard } from '../api-keys/api-key-auth.guard';
+import { DRIZZLE } from '../database/database.constants';
+import type { DrizzleDb } from '../database/database.module';
 import { UploadQueueService } from './upload-queue.service';
 import { FOREIGN_SESSION_WARNING } from './upload-warnings';
+import { SNAPSHOT_ID_RE, isHarnessSnapshotKnown } from './harness-snapshot';
 
 /**
  * `POST /api/v2/logs` — the log upload route: async stage-then-queue.
@@ -29,7 +33,10 @@ import { FOREIGN_SESSION_WARNING } from './upload-warnings';
 export class LogsV2Controller {
   private readonly logger = new Logger(LogsV2Controller.name);
 
-  constructor(private readonly uploadQueueService: UploadQueueService) {}
+  constructor(
+    private readonly uploadQueueService: UploadQueueService,
+    @Inject(DRIZZLE) private readonly db: DrizzleDb,
+  ) {}
 
   @Post('logs')
   @HttpCode(201)
@@ -43,10 +50,13 @@ export class LogsV2Controller {
     @Query('chunkIndex') chunkIndexRaw: string | undefined,
     @Query('totalChunks') totalChunksRaw: string | undefined,
     @Query('totalSize') totalSizeRaw: string | undefined,
+    @Query('snapshotId') snapshotIdRaw: string | undefined,
+    @Query('snapshotFull') snapshotFullRaw: string | undefined,
     @Body() rawBody: unknown,
     @Req() req: Request & { userId: number },
   ): Promise<
-    { warnings: string[] } | { complete: boolean; warnings?: string[] }
+    | { warnings: string[]; unknownSnapshotId?: string }
+    | { complete: boolean; warnings?: string[]; unknownSnapshotId?: string }
   > {
     if (!sessionId) {
       this.logger.warn(`userId=${req.userId} missing sessionId`);
@@ -70,6 +80,17 @@ export class LogsV2Controller {
     const chunkParamsPresent = [uploadId, chunkIndexRaw, totalChunksRaw].some(
       (v) => v !== undefined,
     );
+
+    // DD-8: an invalid snapshotId is silently ignored — never a 400 — and treated
+    // the same as it being absent everywhere below.
+    const snapshotId =
+      snapshotIdRaw && SNAPSHOT_ID_RE.test(snapshotIdRaw)
+        ? snapshotIdRaw
+        : undefined;
+    const snapshotFull = snapshotFullRaw === '1';
+    // `upload_queue.harness_snapshot_id` is set only on a full-snapshot upload (DD-8).
+    const harnessSnapshotId =
+      snapshotFull && snapshotId ? snapshotId : undefined;
 
     // Open-source readiness: a session owned by another user is
     // rejected before anything is staged. Lock-free — `LogsService.upsert()` repeats the
@@ -97,13 +118,20 @@ export class LogsV2Controller {
         userId: req.userId,
         parentSessionId,
         workflowRunId,
+        harnessSnapshotId,
       });
 
       const warnings = await this.uploadQueueService.getPendingWarnings(
         req.userId,
       );
 
-      return { warnings };
+      const unknownSnapshotId = await this.resolveUnknownSnapshotId(
+        snapshotId,
+        snapshotFull,
+        req.userId,
+      );
+
+      return { warnings, ...(unknownSnapshotId ? { unknownSnapshotId } : {}) };
     }
 
     if (
@@ -197,6 +225,7 @@ export class LogsV2Controller {
       chunkIndex,
       totalChunks,
       totalSize,
+      harnessSnapshotId,
     });
 
     if (!complete) {
@@ -207,7 +236,17 @@ export class LogsV2Controller {
       req.userId,
     );
 
-    return { complete, warnings };
+    const unknownSnapshotId = await this.resolveUnknownSnapshotId(
+      snapshotId,
+      snapshotFull,
+      req.userId,
+    );
+
+    return {
+      complete,
+      warnings,
+      ...(unknownSnapshotId ? { unknownSnapshotId } : {}),
+    };
   }
 
   /** The foreign-session warning first, followed by any other pending warnings. */
@@ -219,5 +258,24 @@ export class LogsV2Controller {
       req.userId,
     );
     return [FOREIGN_SESSION_WARNING(sessionId), ...pending];
+  }
+
+  /**
+   * DD-8: `unknownSnapshotId` is returned only when the id is valid, this upload was
+   * ref-only (`snapshotFull !== '1'`), and the id is not yet known — neither stored nor
+   * in flight via another upload (`isHarnessSnapshotKnown`). Called only from the
+   * single-upload and chunk-complete response paths, never for intermediate chunks or
+   * foreign-session responses.
+   */
+  private async resolveUnknownSnapshotId(
+    snapshotId: string | undefined,
+    snapshotFull: boolean,
+    userId: number,
+  ): Promise<string | undefined> {
+    if (!snapshotId || snapshotFull) {
+      return undefined;
+    }
+    const known = await isHarnessSnapshotKnown(this.db, userId, snapshotId);
+    return known ? undefined : snapshotId;
   }
 }

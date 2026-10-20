@@ -1,6 +1,6 @@
 ---
 name: post-impl-check-cost-calc-no-auto
-description: "Сheck skill calculations"
+description: "Check skill calculations"
 ---
 
 open URL http://localhost:5173/#/repos/1 using playwright 

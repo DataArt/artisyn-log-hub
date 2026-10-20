@@ -740,6 +740,16 @@
         "098f93c8da59c9cc56005d0fdc97b30f89bc0007bd9eff93424e44d7e4d39867",
         "349b72c8ddb34871b4166a13057bf49ad3a3fdf7db70f3e9600293904baaa447"
       ]
+    },
+    {
+      "idx": 73,
+      "tag": "0073_harness_snapshots",
+      "when": 1790812800000,
+      "sha256": "068015354fbf2e426a5c205fef704e81acf0d825a8fa4380778b819e96351194",
+      "acceptedHashes": [
+        "068015354fbf2e426a5c205fef704e81acf0d825a8fa4380778b819e96351194",
+        "2527cdafeea490cacb283501d18a1750ad198dd6ad9869870f1319154358fc36"
+      ]
     }
   ]
 }

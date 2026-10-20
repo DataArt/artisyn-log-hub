@@ -122,7 +122,9 @@ const HOOK_JS_FILES = [
   'session-attribution-state.js',
   // Provenance markers for, and reliable tree-kill of, every child process the hooks spawn.
   'process-marker.js',
-  // Harness-element change detection + once-per-session report state.
+  // Harness snapshot builder (catalog + agents + system context + static MCP config, DD-2 id) and
+  // its known-snapshot-ids / per-session-id state.
+  'harness-snapshot.js',
   'harness-state.js',
   // Pre-upload drop of malformed NDJSON lines, shared by both upload hooks.
   'ndjson-sanitize.js',

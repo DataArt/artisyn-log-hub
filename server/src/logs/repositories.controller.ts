@@ -88,6 +88,7 @@ import {
   validateAttributeFilterTypes,
 } from './attribute-filter.sql';
 import { SessionAttributionService } from './session-attribution/session-attribution.service';
+import { loadHarnessSnapshot } from './harness-snapshot';
 import {
   ChangeSurfaceAggregateService,
   resolveChangeSurfaceBucket,
@@ -1783,7 +1784,10 @@ export class RepositoriesController {
     // (Only artisyn logs are linked in log_repositories; claude logs share the session row.)
     // Also reject if the session has been soft-deleted.
     const [sessionCheck] = await this.db
-      .select({ sessionRowId: schema.sessions.id })
+      .select({
+        sessionRowId: schema.sessions.id,
+        harnessSnapshotId: schema.sessions.harnessSnapshotId,
+      })
       .from(schema.sessions)
       .innerJoin(schema.logs, eq(schema.logs.sessionId, schema.sessions.id))
       .innerJoin(
@@ -1857,6 +1861,17 @@ export class RepositoriesController {
         throw new ForbiddenException();
       }
     }
+
+    // DD-12: the harness snapshot, keyed by the artisyn log owner (not the caller) —
+    // same access checks as the rest of this route, computed only once they pass.
+    const harnessSnapshot =
+      sessionCheck.harnessSnapshotId && sessionOwnerRow?.userId
+        ? await loadHarnessSnapshot(
+            this.db,
+            sessionOwnerRow.userId,
+            sessionCheck.harnessSnapshotId,
+          )
+        : null;
 
     // Step 2: fetch the artisyn and claude log bodies for this session.
     // The artisyn log carries metadata events (skill-definitions, mcp-config, etc.)
@@ -2240,7 +2255,7 @@ export class RepositoriesController {
         : null,
     );
     res.end(
-      `{"main":${mainText},"subagents":[${subagentJson}],"subagentStats":${subagentStatsJson},"rootStats":${rootStatsJson},"workflows":${JSON.stringify(workflows)},"turnEndAdvisor":${JSON.stringify(turnEndAdvisor)},"sessionAttribution":${JSON.stringify(sessionAttribution)}}`,
+      `{"main":${mainText},"subagents":[${subagentJson}],"subagentStats":${subagentStatsJson},"rootStats":${rootStatsJson},"workflows":${JSON.stringify(workflows)},"turnEndAdvisor":${JSON.stringify(turnEndAdvisor)},"sessionAttribution":${JSON.stringify(sessionAttribution)},"harnessSnapshot":${JSON.stringify(harnessSnapshot ?? null)}}`,
     );
   }
 

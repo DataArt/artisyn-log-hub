@@ -13,8 +13,15 @@
   },
   "enabledPlugins": {
     "typescript-lsp@claude-plugins-official": true,
-    "adlc-lh@artisyn": true,
-    "log-hub-hooks@artisyn": true
+    "log-hub-hooks@artisyn-e798dd87": true,
+    "adlc-lh@artisyn-e798dd87": true
   },
-  "extraKnownMarketplaces": {}
+  "extraKnownMarketplaces": {
+    "artisyn-e798dd87": {
+      "source": {
+        "source": "directory",
+        "path": "./.artisyn/marketplace"
+      }
+    }
+  }
 }

@@ -49,8 +49,9 @@ import {
   uploadZip,
   type UploadSummary,
 } from '../helpers/export-import';
-import { ownRepoId, uploadPromptSession, type PromptSession } from '../helpers/prompt-session';
-import { buildExportZip } from '../helpers/zip';
+import { ndjson } from '../helpers/ingest';
+import { ownRepoId, promptSessionBodies, uploadPromptSession, type PromptSession } from '../helpers/prompt-session';
+import { buildExportZip, buildZip } from '../helpers/zip';
 
 interface ConflictBody {
   statusCode: number;
@@ -364,5 +365,73 @@ test('@S-REPO-11 import conflicts: the longer log wins; bootstrap import creates
     expect(res.status()).toBe(422);
     expect(((await res.json()) as { message: string }).message).toContain(dup.sessionId);
     expect(await sessionRowCount(dup.sessionId)).toBe(0);
+  });
+
+  await test.step('16. Importing an archive whose artisyn.jsonl carries snapshot lines (DD-14) stores the snapshot and binds the session', async () => {
+    const snapSid = `r11-${run}-snap`;
+    const snapSession: PromptSession = { sessionId: snapSid, prompt: `snap ${run}`, repoUrl };
+    const bodies = promptSessionBodies(snapSession);
+    const snapshotId = randomBytes(32).toString('hex');
+    const artisynWithSnapshot =
+      bodies.artisyn +
+      ndjson([
+        { type: 'harness-snapshot-ref', snapshotId },
+        {
+          type: 'harness-snapshot',
+          snapshotId,
+          schemaVersion: 1,
+          perToolDetailSupported: true,
+          skills: [],
+          agents: [],
+          mcpServers: [],
+          systemContext: null,
+        },
+      ]);
+    const at = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const end = new Date(at.getTime() + 60_000);
+    const zip = buildZip([
+      {
+        name: 'meta.json',
+        data: JSON.stringify({
+          formatVersion: 1,
+          createdAt: new Date().toISOString(),
+          sourceHost: 'scenario-suite',
+          sourceRepoUrl: repoUrl,
+          sourceRepoContext: { type: 'personal' },
+          sessionCount: 1,
+          approxUncompressedBytes: bodies.claude.length + artisynWithSnapshot.length,
+        }),
+      },
+      {
+        name: `sessions/${snapSid}/session.json`,
+        data: JSON.stringify({
+          sessionId: snapSid,
+          parentSessionId: null,
+          workflowRunId: null,
+          firstPrompt: snapSession.prompt,
+          startTime: at.toISOString(),
+          endTime: end.toISOString(),
+          gitBranch: 'main',
+          stats: null,
+          logs: { claude: { userEmail: owner.email }, artisyn: { userEmail: owner.email } },
+        }),
+      },
+      { name: `sessions/${snapSid}/claude.jsonl`, data: bodies.claude },
+      { name: `sessions/${snapSid}/artisyn.jsonl`, data: artisynWithSnapshot },
+    ]);
+
+    const status = await importZip(owner.api, repoA, zip);
+    expect(status).toMatchObject({ status: 'done', processed: 1, total: 1 });
+
+    const snap = await db.query<{ snapshot_id: string }>(
+      'SELECT snapshot_id FROM harness_snapshots WHERE user_id = $1 AND snapshot_id = $2',
+      [owner.id, snapshotId],
+    );
+    expect(snap.rows, 'the importer owns a harness_snapshots row for this id').toHaveLength(1);
+    const bound = await db.query<{ harness_snapshot_id: string | null }>(
+      'SELECT harness_snapshot_id FROM sessions WHERE session_id = $1',
+      [snapSid],
+    );
+    expect(bound.rows[0]?.harness_snapshot_id, 'the imported session is bound to it').toBe(snapshotId);
   });
 });

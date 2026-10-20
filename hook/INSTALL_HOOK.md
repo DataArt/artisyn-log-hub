@@ -227,6 +227,7 @@ The installer extracts this tree, generated at build time from `hook/.claude/tel
         │   ├── throttle-state.js
         │   ├── claude-invoke-async.js
         │   ├── skill-catalog.js
+        │   ├── harness-snapshot.js
         │   ├── post-turn-analysis-hook.js
         │   ├── post-turn-analysis-worker.js
         │   ├── session-attribution-state.js
@@ -339,7 +340,7 @@ remaining lifecycle events, and `send-logs-hook.js` + `post-turn-analysis-hook.j
 ```
 
 `prompt-upload-hook.js`, `otel-receiver.js`, `otel-register.js`, `otel-endpoint-check.js`, `otel-restart.js`, `session-files.js`,
-`throttle-state.js`, `claude-invoke-async.js`, `skill-catalog.js`, `post-turn-analysis-worker.js`,
+`throttle-state.js`, `claude-invoke-async.js`, `skill-catalog.js`, `harness-snapshot.js`, `post-turn-analysis-worker.js`,
 `session-attribution-state.js`, `process-marker.js`, `harness-state.js`, `ndjson-sanitize.js`, `code-inventory.js`,
 `edit-result-counts.js` and `claude-config-dir.js` are **not** wired to any event — they are detached child processes / shared modules
 launched by the hooks above, so they never appear in `hooks.json`.

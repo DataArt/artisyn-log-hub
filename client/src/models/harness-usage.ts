@@ -30,8 +30,11 @@ export interface HarnessUsageRow {
   lastSeen: string | null;
   /** `lastSeen` older than the repo's latest self-report. */
   removed: boolean;
-  /** `kind='skill'` only: `'project' | 'plugin' | null` (older hook, or not a skill row). */
-  source: 'project' | 'plugin' | null;
+  /**
+   * `kind='skill'` only: `'project' | 'user' | 'plugin' | null` (older hook, or not a skill
+   * row). `'user'` was added alongside the harness-snapshot source rework.
+   */
+  source: 'project' | 'user' | 'plugin' | null;
 }
 
 export interface HarnessUsageGroup {

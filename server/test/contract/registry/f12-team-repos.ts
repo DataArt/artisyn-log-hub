@@ -160,6 +160,44 @@ export const f12TeamRepos: ContractFamily = {
       },
     },
     {
+      // Wider still (DD-11, 05 §F12 chunk 13): Rorphan's only log belongs to w1-s09-orphan, so
+      // removing T1's only link to it also orphans that session, and the sweep that follows
+      // (`deleteOrphanHarnessSnapshots`) deletes the harness_snapshots row s09 was bound to —
+      // s04's own snapshot (a different id, still referenced by s04) is untouched.
+      id: 'F12-remove-orphaned-sessions',
+      route: 'DELETE /api/v1/teams/:teamId/repositories/:repoId',
+      actor: 'owner',
+      params: { teamId: '@T1.id', repoId: 4 },
+      expect: { status: 204 },
+      write: {
+        watch: [
+          'team_repositories',
+          'repositories',
+          'logs',
+          'log_repositories',
+          'sessions',
+          'harness_snapshots',
+        ],
+        delta: {
+          deleted: [
+            { table: 'team_repositories', where: 'id = 4' },
+            { table: 'repositories', where: 'id = @Rorphan.id' },
+            { table: 'logs', where: 'session_id = @s09.id', count: 'all' },
+            {
+              table: 'log_repositories',
+              where: 'repo_id = @Rorphan.id',
+              count: 'all',
+            },
+            { table: 'sessions', where: 'id = @s09.id' },
+            {
+              table: 'harness_snapshots',
+              where: 'snapshot_id = @harnessSnapshotIdOrphan',
+            },
+          ],
+        },
+      },
+    },
+    {
       id: 'F12-remove-outsider',
       route: 'DELETE /api/v1/teams/:teamId/repositories/:repoId',
       actor: 'outsider',

@@ -45,7 +45,7 @@ import {
 } from '../helpers/hook-process';
 
 const API_KEY = 'k-test-123456';
-const HARNESS_TYPES = ['system-context', 'skill-definitions', 'agent-definitions', 'mcp-config'];
+const HARNESS_TYPES = ['harness-snapshot-ref', 'harness-snapshot'];
 
 function line(obj: object): string {
   return `${JSON.stringify(obj)}\n`;
@@ -59,6 +59,7 @@ test('@S-HOOK-01 a Stop run uploads the right files in the right order and never
   test.setTimeout(120_000);
   const dirs = tempDirs();
   let hub: FakeLogHub | undefined;
+  let snapshotId = '';
   try {
     hub = await startFakeLogHub();
     const toolDir = copyToolDir(dirs);
@@ -157,6 +158,14 @@ test('@S-HOOK-01 a Stop run uploads the right files in the right order and never
       const oldTypes = bodyTypes(old);
       expect(oldTypes).not.toContain('hook-status');
       for (const t of HARNESS_TYPES) expect(oldTypes, t).not.toContain(t);
+
+      // DD-7: the id is unknown on this first run (no harness-state.json yet), so the query
+      // carries snapshotFull=1 alongside the full harness-snapshot line.
+      const snapshotLine = ndjsonLines(cur.body.toString('utf8')).find((e) => e.type === 'harness-snapshot')!;
+      snapshotId = String(snapshotLine.snapshotId);
+      expect(snapshotId).toMatch(/^[0-9a-f]{64}$/);
+      expect(cur.query.get('snapshotId')).toBe(snapshotId);
+      expect(cur.query.get('snapshotFull')).toBe('1');
     });
 
     await test.step('5. second Stop, cur transcript grew: only cur artisyn and the grown transcript go out', async () => {
@@ -165,6 +174,41 @@ test('@S-HOOK-01 a Stop run uploads the right files in the right order and never
       hub!.requests.length = 0;
       expect((await run('Stop')).code).toBe(0);
       expect(hub!.uploads().sort()).toEqual(['artisyn/cur', 'claude/cur']);
+
+      // DD-6/DD-7: the id is now known, so this run sends only the ref — no full snapshot, no
+      // snapshotFull query param — but the same snapshotId.
+      const cur = hub!.requests.find((r) => r.type === 'artisyn' && r.sessionId === 'cur')!;
+      const curTypes = bodyTypes(cur);
+      expect(curTypes).toContain('harness-snapshot-ref');
+      expect(curTypes).not.toContain('harness-snapshot');
+      expect(cur.query.get('snapshotId')).toBe(snapshotId);
+      expect(cur.query.get('snapshotFull')).toBeNull();
+    });
+
+    await test.step('5b. the hub reports the snapshot unknown → the next Stop resends the full harness-snapshot (DD-21)', async () => {
+      hub!.respond((req) => {
+        if (req.type === 'artisyn' && req.sessionId === 'cur') {
+          return { status: 201, body: JSON.stringify({ warnings: [], unknownSnapshotId: snapshotId }) };
+        }
+        return { status: 201, body: JSON.stringify({ warnings: [] }) };
+      });
+      hub!.requests.length = 0;
+      expect((await run('Stop')).code).toBe(0);
+      // The id was still known locally when this run built its request, so it still sent ref-only —
+      // the server's unknownSnapshotId answer only takes effect on the NEXT run.
+      const firstRunCur = hub!.requests.find((r) => r.type === 'artisyn' && r.sessionId === 'cur')!;
+      expect(bodyTypes(firstRunCur)).not.toContain('harness-snapshot');
+      expect(firstRunCur.query.get('snapshotId')).toBe(snapshotId);
+
+      hub!.respond(() => ({ status: 201, body: JSON.stringify({ warnings: [] }) }));
+      hub!.requests.length = 0;
+      expect((await run('Stop')).code).toBe(0);
+      const secondRunCur = hub!.requests.find((r) => r.type === 'artisyn' && r.sessionId === 'cur')!;
+      const secondRunTypes = bodyTypes(secondRunCur);
+      expect(secondRunTypes).toContain('harness-snapshot-ref');
+      expect(secondRunTypes).toContain('harness-snapshot');
+      expect(secondRunCur.query.get('snapshotId')).toBe(snapshotId);
+      expect(secondRunCur.query.get('snapshotFull')).toBe('1');
     });
 
     await test.step('6. a line appended to the old transcript → exactly that file (plus the always-sent cur artisyn)', async () => {
@@ -232,9 +276,9 @@ test('@S-HOOK-01 a Stop run uploads the right files in the right order and never
 
     await test.step('11. hook.log: an activate line per run and a closing line with the counters', async () => {
       const lines = readHookLog(repo, 'send-logs-hook.js');
-      // Runs above: steps 1, 5, 6, 7, 8, 9 (×2), 10 (×2) = 9.
-      expect(lines.filter((l) => /\[activate\] (Stop|SessionEnd) event received/.test(l))).toHaveLength(9);
-      expect(lines.filter((l) => /\[result\] done: uploaded=\d+ skipped=\d+ failed=0 total=\d+ target=http:\/\/127\.0\.0\.1:\d+/.test(l)).length).toBe(5);
+      // Runs above: steps 1, 5, 5b (×2), 6, 7, 8, 9 (×2), 10 (×2) = 11.
+      expect(lines.filter((l) => /\[activate\] (Stop|SessionEnd) event received/.test(l))).toHaveLength(11);
+      expect(lines.filter((l) => /\[result\] done: uploaded=\d+ skipped=\d+ failed=0 total=\d+ target=http:\/\/127\.0\.0\.1:\d+/.test(l)).length).toBe(7);
       expect(lines.some((l) => /claude\/cur\.jsonl: uploaded \d+ KB uncompressed in 1 request$/.test(l))).toBe(true);
       expect(lines.some((l) => /session-end flush done: uploaded=2 failed=0 total=2/.test(l))).toBe(true);
     });

@@ -92,12 +92,15 @@ Expanded view for `type=user` entries.
 | `UserExpanded` | Full renderer: promptId, isMeta, isCompactSummary, isVisibleInTranscriptOnly, interruptedMessageId, permissionMode, promptSource, sourceToolAssistantUUID/ID, compact-entry fallback, message content, toolUseResult, origin |
 
 ### `system.tsx`
-Expanded view for `type=system` and `type=system-context` entries.
+Expanded view for `type=system`, `type=system-context`, `type=harness-snapshot` and
+`type=harness-snapshot-ref` entries.
 
 | Export | Purpose |
 |---|---|
 | `SystemExpanded` | Renders subtype, isMeta, level, durationMs, hasOutput, hookCount, hookErrors, hookInfos, hookAdditionalContext, messageCount, preventedContinuation, stopReason, toolUseID, logicalParentUuid, pendingBackgroundAgentCount, content `<pre>`, compactMetadata |
 | `SystemContextExpanded` | Renders `claudeMd` object: totalBytes + files list |
+| `HarnessSnapshotExpanded` | Compact view of a DD-1 `harness-snapshot` line (the full catalog, uploaded at most once per snapshot id — see `docs/knowledgebase/algorithms/harness-snapshot.md`): the id's first 12 characters, `schemaVersion` and `perToolDetailSupported` when present, then just the **counts** of `skills`/`agents`/`mcpServers`/`systemContext.files` — no file bodies or skill text, those render in the System Context tabs instead |
+| `HarnessSnapshotRefExpanded` | Compact view of a `harness-snapshot-ref` line — just the id's first 12 characters. Every artisyn upload of the current session carries one of these, pointing at whichever upload carried the full snapshot |
 
 ### `simple-renderers.tsx`
 One small renderer per minor entry type — no shared state between them.
@@ -116,9 +119,9 @@ Pure logic — no JSX. Used by `RawLogsTab.tsx` to populate the collapsed table 
 
 | Export | Purpose |
 |---|---|
-| `TYPE_ICONS` | Map of entry `type` string → Lucide icon component |
+| `TYPE_ICONS` | Map of entry `type` string → Lucide icon component (`harness-snapshot` → `FileCode`, `harness-snapshot-ref` → `Link`) |
 | `getIcon` | Safe lookup into `TYPE_ICONS`, falls back to `HelpCircle` |
-| `getCollapsedSummary` | Returns a one-line summary string for each entry type shown in the collapsed row. Handles all known types; falls back to the type string itself. |
+| `getCollapsedSummary` | Returns a one-line summary string for each entry type shown in the collapsed row. Handles all known types — including `harness-snapshot` (`<id12> · N skills, N agents, N mcp, N files`) and `harness-snapshot-ref` (just `<id12>`) — falling back to the type string itself for unknown ones. |
 | `sortRawLogs` | Stable sort by timestamp. Entries without a timestamp inherit the last-seen timestamp so they stay inline with their neighbours. |
 
 ### `renderers.tsx`
@@ -126,7 +129,7 @@ Thin dispatcher — the only file imported by `RawLogsTab.tsx` for rendering.
 
 | Export | Purpose |
 |---|---|
-| `RawLogsExpandedView` | Switches on `entry.type` and returns the matching `*Expanded` component. Falls back to `JsonBlock` (imported directly from `primitives.tsx`) for unknown types. |
+| `RawLogsExpandedView` | Switches on `entry.type` and returns the matching `*Expanded` component (including `harness-snapshot` → `HarnessSnapshotExpanded` and `harness-snapshot-ref` → `HarnessSnapshotRefExpanded`, both from `system.tsx`). Falls back to `JsonBlock` (imported directly from `primitives.tsx`) for unknown types. |
 | `getAttachmentDetail` | Re-exported from `attachment.tsx`. Currently unused elsewhere — `utils.ts` imports `getAttachmentDetail` directly from `attachment.tsx`, bypassing this re-export. |
 
 ---

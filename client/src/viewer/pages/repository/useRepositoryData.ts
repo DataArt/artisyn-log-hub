@@ -314,6 +314,7 @@ export function useRepositoryData({
       subagentStats: logsQuery.data.subagentStats,
       workflows: logsQuery.data.workflows,
       subagentLogs: subagentLogsMap,
+      harnessSnapshot: logsQuery.data.harnessSnapshot ?? null,
     });
   }, [logsQuery.data, repoDetailQuery.data, subagentLogsMap]);
 

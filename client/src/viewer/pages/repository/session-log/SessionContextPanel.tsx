@@ -70,15 +70,15 @@ export function SessionContextPanel({ summary, mcpCalls, pricing }: Props) {
   const claudeMdFiles = summary.claudeMd?.files ?? [];
   const nonRuleFiles = claudeMdFiles.filter((f) => f.role !== 'rule');
   const ruleFiles = claudeMdFiles.filter((f) => f.role === 'rule');
+  const visibleSkills = summary.visibleSkills ?? [];
+  const visibleAgents = summary.visibleAgents ?? [];
 
   const hasFiles = nonRuleFiles.length > 0;
   const hasRules = ruleFiles.length > 0;
-  const hasMcpTools = deferredTools.some((t) => t.startsWith('mcp__'));
-  const hasMcpConfig = (summary.mcpConfig?.length ?? 0) > 0;
-  const hasMcp = hasMcpTools || hasMcpConfig;
+  const hasMcp = (summary.mcpConfig?.length ?? 0) > 0;
   const hasNonMcpTools = deferredTools.some((t) => !t.startsWith('mcp__'));
-  const hasAgents = summary.registeredAgents.length > 0;
-  const hasSkills = summary.registeredSkills.length > 0;
+  const hasAgents = visibleAgents.length > 0;
+  const hasSkills = visibleSkills.length > 0;
 
   if (
     !hasFiles &&
@@ -97,20 +97,15 @@ export function SessionContextPanel({ summary, mcpCalls, pricing }: Props) {
     chips.push(`${n} ${n === 1 ? 'file' : 'files'}`);
   }
   if (hasMcp) {
-    const serverCount = new Set([
-      ...deferredTools
-        .filter((t) => t.startsWith('mcp__'))
-        .map((t) => t.split('__')[1]),
-      ...(summary.mcpConfig?.map((c) => c.name) ?? []),
-    ]).size;
+    const serverCount = summary.mcpConfig?.length ?? 0;
     chips.push(`${serverCount} MCP`);
   }
   if (hasNonMcpTools)
     chips.push(
       `${deferredTools.filter((t) => !t.startsWith('mcp__')).length} tools`,
     );
-  if (hasSkills) chips.push(`${summary.registeredSkills.length} skills`);
-  if (hasAgents) chips.push(`${summary.registeredAgents.length} agents`);
+  if (hasSkills) chips.push(`${visibleSkills.length} skills`);
+  if (hasAgents) chips.push(`${visibleAgents.length} agents`);
 
   const defaultTab = hasFiles
     ? 'files'
@@ -157,7 +152,10 @@ export function SessionContextPanel({ summary, mcpCalls, pricing }: Props) {
   const filePaths = nonRuleFiles.map((f) => f.path);
 
   return (
-    <div className="border-b border-border bg-violet-500/5 px-4 py-3">
+    <div
+      data-testid="sysctx-panel"
+      className="border-b border-border bg-violet-500/5 px-4 py-3"
+    >
       <div className="flex items-center gap-2">
         <FileText className="size-3.5 shrink-0 text-violet-500" />
         <span className="text-sm font-semibold text-foreground">
@@ -187,32 +185,56 @@ export function SessionContextPanel({ summary, mcpCalls, pricing }: Props) {
           <Tabs defaultValue={defaultTab}>
             <TabsList className="h-7 gap-0.5">
               {hasFiles && (
-                <TabsTrigger value="files" className="h-6 px-2.5 text-xs">
+                <TabsTrigger
+                  value="files"
+                  data-testid="sysctx-tab-files"
+                  className="h-6 px-2.5 text-xs"
+                >
                   Files
                 </TabsTrigger>
               )}
               {hasMcp && (
-                <TabsTrigger value="mcp" className="h-6 px-2.5 text-xs">
+                <TabsTrigger
+                  value="mcp"
+                  data-testid="sysctx-tab-mcp"
+                  className="h-6 px-2.5 text-xs"
+                >
                   MCP
                 </TabsTrigger>
               )}
               {hasNonMcpTools && (
-                <TabsTrigger value="tools" className="h-6 px-2.5 text-xs">
+                <TabsTrigger
+                  value="tools"
+                  data-testid="sysctx-tab-tools"
+                  className="h-6 px-2.5 text-xs"
+                >
                   Tools
                 </TabsTrigger>
               )}
               {hasSkills && (
-                <TabsTrigger value="skills" className="h-6 px-2.5 text-xs">
+                <TabsTrigger
+                  value="skills"
+                  data-testid="sysctx-tab-skills"
+                  className="h-6 px-2.5 text-xs"
+                >
                   Skills
                 </TabsTrigger>
               )}
               {hasAgents && (
-                <TabsTrigger value="agents" className="h-6 px-2.5 text-xs">
+                <TabsTrigger
+                  value="agents"
+                  data-testid="sysctx-tab-agents"
+                  className="h-6 px-2.5 text-xs"
+                >
                   Agents
                 </TabsTrigger>
               )}
               {hasRules && (
-                <TabsTrigger value="rules" className="h-6 px-2.5 text-xs">
+                <TabsTrigger
+                  value="rules"
+                  data-testid="sysctx-tab-rules"
+                  className="h-6 px-2.5 text-xs"
+                >
                   Rules
                 </TabsTrigger>
               )}
@@ -375,27 +397,23 @@ export function SessionContextPanel({ summary, mcpCalls, pricing }: Props) {
                     </tr>
                   </thead>
                   <tbody>
-                    {summary.registeredSkills.map((name) => {
-                      const def = summary.skillDefinitions?.get(name);
-                      const tokens = def?.bytes
+                    {visibleSkills.map((def) => {
+                      const tokens = def.bytes
                         ? Math.round(def.bytes / charsPerToken)
                         : null;
                       return (
                         <tr
-                          key={name}
-                          className={cn(
-                            'group',
-                            def && 'cursor-pointer hover:bg-muted/30',
-                          )}
-                          onClick={
-                            def ? () => setSelectedSkill(def) : undefined
-                          }
+                          key={def.name}
+                          data-testid="sysctx-skill-row"
+                          data-skill-name={def.name}
+                          className="group cursor-pointer hover:bg-muted/30"
+                          onClick={() => setSelectedSkill(def)}
                         >
                           <td className="py-1 pr-3 font-mono text-foreground/80 group-hover:text-foreground">
-                            {name}
+                            {def.name}
                           </td>
                           <td className="py-1 pr-3">
-                            <SourceBadge source={def?.source} />
+                            <SourceBadge source={def.source} />
                           </td>
                           <td className="py-1 whitespace-nowrap text-right font-mono text-muted-foreground">
                             {tokens !== null
@@ -431,30 +449,25 @@ export function SessionContextPanel({ summary, mcpCalls, pricing }: Props) {
                     </tr>
                   </thead>
                   <tbody>
-                    {summary.registeredAgents.map((name) => {
-                      const def = summary.agentDefinitions?.get(name);
-                      const tokens = def?.bytes
+                    {visibleAgents.map((def) => {
+                      const tokens = def.bytes
                         ? Math.round(def.bytes / charsPerToken)
                         : null;
                       return (
                         <tr
-                          key={name}
-                          className={cn(
-                            'group',
-                            def && 'cursor-pointer hover:bg-muted/30',
-                          )}
-                          onClick={
-                            def ? () => setSelectedAgent(def) : undefined
-                          }
+                          key={def.name}
+                          data-testid="sysctx-agent-row"
+                          className="group cursor-pointer hover:bg-muted/30"
+                          onClick={() => setSelectedAgent(def)}
                         >
                           <td className="py-1 pr-3 font-mono text-foreground/80 group-hover:text-foreground">
-                            {name}
+                            {def.name}
                           </td>
                           <td className="py-1 pr-3">
-                            <SourceBadge source={def?.source} />
+                            <SourceBadge source={def.source} />
                           </td>
                           <td className="py-1 pr-3 max-w-[180px] truncate text-muted-foreground">
-                            {def?.description ?? ''}
+                            {def.description ?? ''}
                           </td>
                           <td className="py-1 whitespace-nowrap text-right font-mono text-muted-foreground">
                             {tokens !== null

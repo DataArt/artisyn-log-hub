@@ -1,72 +1,81 @@
 'use strict';
 /**
- * Claude Code Hook helper — "have the harness elements changed, and did we already report them
- * this session?" (not a hook entry point itself).
+ * Claude Code Hook helper — "has this harness snapshot id already been fully uploaded, and what
+ * id did this session last upload?" (not a hook entry point itself).
  *
- * The four project-context events an `artisyn` upload can carry — `system-context`,
- * `skill-definitions`, `agent-definitions`, `mcp-config` — describe the HARNESS (CLAUDE.md files,
- * the skill and agent catalogs, the MCP server list), not the session. Previously they were
- * prepended to every uploaded `artisyn` body, so a repo with a large skill catalog re-sent hundreds
- * of KB of identical bytes with every small session log. The server has always upserted this data
- * **per repository**
- * (`upsertHarnessElements(tx, repoId, …)` in `logs.service.ts`) and explicitly skips the upsert when
- * the events are absent rather than clearing what it already knows, so sending them once is not a
- * data loss — it is what the receiving side was already built for.
+ * v2 (DD-6 of the `2026-10-16-sysctx-skill-source` plan), replacing the v1 once-per-session
+ * fingerprint/mtime scheme (`computeHarnessFingerprint`, removed here): DD-2 gives every harness
+ * snapshot a content-derived, stable id, so "have we sent the full body for this id before" is now
+ * a simple membership check against a remembered list of ids, instead of a once-per-session
+ * mtime-based guess.
  *
- * Change detection is by **last-modified time**, deliberately: the three builders already stat every
- * file they describe and carry `lastModified` on each entry, so the fingerprint costs nothing beyond
- * the walk that was happening anyway, and needs no content hashing of the skill bodies.
- * mtime is not a perfect change oracle (a touch with no edit re-reports; an edit that preserves
- * mtime does not) — accepted for this use, since the consequence either way is one redundant or one
- * delayed catalog upsert, never wrong session data.
+ * Two independent pieces of state live in the same file:
+ *   - `knownSnapshotIds` — ids this workspace has successfully uploaded the FULL body for. A
+ *     `send-logs-hook.js` run that computes an id already in this list sends only the cheap
+ *     `harness-snapshot-ref` line (DD-7); one that doesn't, sends the full snapshot (after the MCP
+ *     probe) and remembers the id on success.
+ *   - `sessionSnapshots` — per-session `{ sessionId: snapshotId }`, so `prompt-upload-hook.js`
+ *     (DD-19) can prepend a ref to every UserPromptSubmit re-upload of the CURRENT session without
+ *     recomputing the catalog or re-probing MCP servers on that fast path.
  *
- * Reported at most ONCE PER SESSION, and the decision is frozen at the session's first full upload
- * run: a skill edited mid-session is reported by the NEXT session, not by this session's next
- * `Stop`. That is what keeps a long session with many `Stop`s from re-sending the catalog repeatedly, and
- * it is why the state records which session it was decided for, not just the fingerprint.
+ * Both are capped at `HARNESS_KNOWN_SNAPSHOTS_MAX`, most-recently-used kept.
+ *
+ * Fail-open throughout, same as v1 and the other hook state files (`code-inventory-state.json`,
+ * the upload manifest): a missing, unreadable, malformed, or wrong-version file reads as empty
+ * state — which costs one redundant full-snapshot resend, never a lost upload — and a write never
+ * throws, using the same temp-file + rename pattern as the rest of this hook's state files.
  */
 const fs = require('fs');
 const path = require('path');
-const crypto = require('crypto');
 
 /** Single JSON file, alongside the hook's other state, inside the gitignored work dir. */
 const HARNESS_STATE_FILE = 'harness-state.json';
 
-/**
- * Bumped only if the on-disk shape changes incompatibly. An unrecognised version is treated as
- * "no state", which re-reports the harness once — the same fail-open direction as a missing file,
- * since over-reporting is harmless and under-reporting silently loses catalog data.
- */
-const HARNESS_STATE_VERSION = 1;
+/** DD-16: bumped only if the on-disk shape changes incompatibly. */
+const HARNESS_STATE_VERSION = 2;
+
+/** DD-16: cap on both `knownSnapshotIds` and `sessionSnapshots`, most-recent-kept. */
+const HARNESS_KNOWN_SNAPSHOTS_MAX = 20;
 
 /** @param {string} workDir @returns {string} */
 function harnessStatePath(workDir) {
   return path.join(workDir, HARNESS_STATE_FILE);
 }
 
+/** @returns {{ knownSnapshotIds: string[], sessionSnapshots: Record<string, string> }} neutral "nothing known yet" state. */
+function emptyState() {
+  return { knownSnapshotIds: [], sessionSnapshots: {} };
+}
+
 /**
- * Read the recorded state, or a neutral "nothing known yet" value.
- *
- * Fail-open on every error (missing, unreadable, malformed, wrong version): the caller then treats
- * the harness as changed and reports it once, which costs one redundant upsert. The opposite
- * default would drop catalog data on a corrupt file and give no signal that it happened.
+ * Read the full v2 state, or {@link emptyState} on any problem — including a v1 file (wrong
+ * `version`), which is deliberately NOT migrated: the old fingerprint has no mapping to a DD-2 id,
+ * so there is nothing valid to carry forward, and re-sending the full snapshot once is harmless.
  *
  * @param {string} workDir
- * @returns {{ fingerprint: string|null, decidedForSessionId: string|null }}
+ * @returns {{ knownSnapshotIds: string[], sessionSnapshots: Record<string, string> }}
  */
-function readHarnessState(workDir) {
-  const empty = { fingerprint: null, decidedForSessionId: null };
+function readState(workDir) {
   try {
     const parsed = JSON.parse(fs.readFileSync(harnessStatePath(workDir), 'utf8'));
-    if (!parsed || typeof parsed !== 'object') return empty;
-    if (parsed.version !== HARNESS_STATE_VERSION) return empty;
-    return {
-      fingerprint: typeof parsed.fingerprint === 'string' ? parsed.fingerprint : null,
-      decidedForSessionId:
-        typeof parsed.decidedForSessionId === 'string' ? parsed.decidedForSessionId : null,
-    };
+    if (!parsed || typeof parsed !== 'object') return emptyState();
+    if (parsed.version !== HARNESS_STATE_VERSION) return emptyState();
+
+    const knownSnapshotIds = Array.isArray(parsed.knownSnapshotIds)
+      ? parsed.knownSnapshotIds.filter((id) => typeof id === 'string' && id)
+      : [];
+    const sessionSnapshots =
+      parsed.sessionSnapshots && typeof parsed.sessionSnapshots === 'object' && !Array.isArray(parsed.sessionSnapshots)
+        ? Object.fromEntries(
+            Object.entries(parsed.sessionSnapshots).filter(
+              ([sessionId, id]) => typeof sessionId === 'string' && typeof id === 'string' && id,
+            ),
+          )
+        : {};
+
+    return { knownSnapshotIds, sessionSnapshots };
   } catch {
-    return empty;
+    return emptyState();
   }
 }
 
@@ -74,23 +83,22 @@ function readHarnessState(workDir) {
  * Persist the state with a temp-file + rename, so a crash mid-write can never leave a truncated
  * JSON that the next run would have to treat as "no state".
  *
- * Never throws: failing to record the report is a redundant re-report next session, which must not
- * be allowed to fail an upload run that already succeeded.
+ * Never throws: failing to record the report costs a redundant resend or a missed fast-path ref
+ * next run, which must not be allowed to fail an upload that already succeeded.
  *
  * @param {string} workDir
- * @param {{ fingerprint: string, decidedForSessionId: string|null, reported: boolean }} state
+ * @param {{ knownSnapshotIds: string[], sessionSnapshots: Record<string, string> }} state
  * @returns {boolean} true when the state reached disk
  */
-function writeHarnessState(workDir, state) {
+function writeState(workDir, state) {
   const target = harnessStatePath(workDir);
   const tmp = `${target}.tmp`;
   try {
     fs.mkdirSync(workDir, { recursive: true });
     const doc = {
       version: HARNESS_STATE_VERSION,
-      fingerprint: state.fingerprint,
-      decidedForSessionId: state.decidedForSessionId,
-      reported: state.reported === true,
+      knownSnapshotIds: state.knownSnapshotIds,
+      sessionSnapshots: state.sessionSnapshots,
       updatedAt: new Date().toISOString(),
     };
     fs.writeFileSync(tmp, JSON.stringify(doc, null, 2) + '\n', 'utf8');
@@ -107,56 +115,98 @@ function writeHarnessState(workDir, state) {
 }
 
 /**
- * Fingerprint the harness from the builders' own output.
+ * The ids this workspace has already uploaded the full snapshot body for, most-recent-first.
+ * Callers check membership (`.includes(snapshotId)`), not order, but the order is kept so
+ * {@link rememberSnapshot}'s cap evicts the least-recently-confirmed id first.
  *
- * Only identity + mtime + size go into the digest, never the bodies: the point is to decide whether
- * to ship the catalog, so the decision must not itself cost a read of the whole catalog. `mcpConfigFiles`
- * are stat'ed here rather than taken from a builder because `buildMcpConfig()` returns live probe
- * results (a server's tool list can change with no config edit) — the config files' mtimes are the
- * only file-based signal available for it, which is the documented limit of this approach.
- *
- * @param {{
- *   claudeMd?: { files?: Array<{path?: string, bytes?: number, lastModified?: number}> }|null,
- *   skills?: Array<{path?: string, bytes?: number, lastModified?: number}>|null,
- *   agents?: Array<{path?: string, bytes?: number, lastModified?: number}>|null,
- *   mcpConfigFiles?: string[],
- * }} inputs
- * @returns {string} hex digest
+ * @param {string} workDir
+ * @returns {string[]}
  */
-function computeHarnessFingerprint(inputs) {
-  /** @param {{path?: string, bytes?: number, lastModified?: number}} e */
-  const stamp = (e) => `${e && e.path ? e.path : ''}|${e && e.bytes != null ? e.bytes : ''}|${e && e.lastModified != null ? e.lastModified : ''}`;
+function readKnownSnapshots(workDir) {
+  return readState(workDir).knownSnapshotIds;
+}
 
-  const parts = [];
+/**
+ * Record that `snapshotId`'s full body was just uploaded successfully (DD-6: "added only after a
+ * successful upload that carried the full snapshot"). Moves the id to the front if it was already
+ * present, then caps the list at {@link HARNESS_KNOWN_SNAPSHOTS_MAX}, dropping the oldest.
+ *
+ * @param {string} workDir
+ * @param {string} snapshotId
+ * @returns {boolean} true when the state reached disk
+ */
+function rememberSnapshot(workDir, snapshotId) {
+  const state = readState(workDir);
+  const withoutId = state.knownSnapshotIds.filter((id) => id !== snapshotId);
+  withoutId.unshift(snapshotId);
+  state.knownSnapshotIds = withoutId.slice(0, HARNESS_KNOWN_SNAPSHOTS_MAX);
+  return writeState(workDir, state);
+}
 
-  const claudeMdFiles = inputs.claudeMd && Array.isArray(inputs.claudeMd.files)
-    ? inputs.claudeMd.files
-    : [];
-  // Sorted so a directory-order difference between machines or runs is not mistaken for a change.
-  parts.push('claudeMd:' + claudeMdFiles.map(stamp).sort().join(','));
-  parts.push('skills:' + (Array.isArray(inputs.skills) ? inputs.skills.map(stamp).sort() : []).join(','));
-  parts.push('agents:' + (Array.isArray(inputs.agents) ? inputs.agents.map(stamp).sort() : []).join(','));
+/**
+ * Remove `snapshotId` from the known list (DD-6: "removed, and the file persisted, when the
+ * response carries `unknownSnapshotId` equal to it") — the server told us a purge dropped the
+ * stored row, so the next upload of this id must resend the full body (DD-21's self-heal).
+ *
+ * @param {string} workDir
+ * @param {string} snapshotId
+ * @returns {boolean} true when the state reached disk
+ */
+function forgetSnapshot(workDir, snapshotId) {
+  const state = readState(workDir);
+  state.knownSnapshotIds = state.knownSnapshotIds.filter((id) => id !== snapshotId);
+  return writeState(workDir, state);
+}
 
-  const mcpStamps = [];
-  for (const file of inputs.mcpConfigFiles || []) {
-    try {
-      const st = fs.statSync(file);
-      mcpStamps.push(`${file}|${st.size}|${st.mtimeMs}`);
-    } catch {
-      // Absent config files are part of the fingerprint too — one appearing later IS a change.
-      mcpStamps.push(`${file}|absent`);
+/**
+ * Record which snapshot id the CURRENT session last uploaded — DD-19's fast path for
+ * `prompt-upload-hook.js`, which reads this back via {@link readSessionSnapshot} to prepend a ref
+ * without recomputing anything. Re-setting an existing session's id bumps it to "most recent" for
+ * the cap below; once more than {@link HARNESS_KNOWN_SNAPSHOTS_MAX} sessions are tracked, the
+ * least-recently-touched one is evicted (insertion order in a plain object is preserved for string
+ * keys, so the first remaining key is always the oldest).
+ *
+ * @param {string} workDir
+ * @param {string} sessionId
+ * @param {string} snapshotId
+ * @returns {boolean} true when the state reached disk
+ */
+function recordSessionSnapshot(workDir, sessionId, snapshotId) {
+  const state = readState(workDir);
+  delete state.sessionSnapshots[sessionId];
+  state.sessionSnapshots[sessionId] = snapshotId;
+
+  const keys = Object.keys(state.sessionSnapshots);
+  if (keys.length > HARNESS_KNOWN_SNAPSHOTS_MAX) {
+    for (const oldest of keys.slice(0, keys.length - HARNESS_KNOWN_SNAPSHOTS_MAX)) {
+      delete state.sessionSnapshots[oldest];
     }
   }
-  parts.push('mcp:' + mcpStamps.sort().join(','));
 
-  return crypto.createHash('sha256').update(parts.join('\n'), 'utf8').digest('hex');
+  return writeState(workDir, state);
+}
+
+/**
+ * The snapshot id the given session last recorded via {@link recordSessionSnapshot}, or `null` if
+ * none is known (never uploaded yet, evicted by the cap, or a missing/corrupt state file).
+ *
+ * @param {string} workDir
+ * @param {string} sessionId
+ * @returns {string|null}
+ */
+function readSessionSnapshot(workDir, sessionId) {
+  const id = readState(workDir).sessionSnapshots[sessionId];
+  return typeof id === 'string' ? id : null;
 }
 
 module.exports = {
   HARNESS_STATE_FILE,
   HARNESS_STATE_VERSION,
+  HARNESS_KNOWN_SNAPSHOTS_MAX,
   harnessStatePath,
-  readHarnessState,
-  writeHarnessState,
-  computeHarnessFingerprint,
+  readKnownSnapshots,
+  rememberSnapshot,
+  forgetSnapshot,
+  recordSessionSnapshot,
+  readSessionSnapshot,
 };

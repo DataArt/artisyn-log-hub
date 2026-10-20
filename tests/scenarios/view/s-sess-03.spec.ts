@@ -55,8 +55,11 @@ test('@S-SESS-03 Logs: what counts as a prompt, what is hidden, how a turn reads
   const G7 = loadExpected('gs-07').roots[0];
   const G1 = loadExpected('gs-01').roots[0];
   const owner = await users.user('user', { label: 'ss03-owner' });
+  const pageErrors: string[] = [];
+  page.on('pageerror', (err) => pageErrors.push(err.message));
 
-  const repo = await test.step('1. upload GS-07 and GS-01', async () => uploadGoldenRepo(api, db, owner, ['gs-07', 'gs-01']));
+  const repo = await test.step('1. upload GS-07, GS-01 and GS-05', async () =>
+    uploadGoldenRepo(api, db, owner, ['gs-07', 'gs-01', 'gs-05']));
   const sid7 = repo.rootId('gs-07');
 
   await test.step('2. GET .../logs of GS-07 keeps the raw data whole: sidechain pair, isMeta, task-notification, duplicate message.id', async () => {
@@ -149,5 +152,36 @@ test('@S-SESS-03 Logs: what counts as a prompt, what is hidden, how a turn reads
     expect(files['docs/api.md'].category).toBe('docs');
     await group('Docs').getByRole('button', { name: /Docs/ }).click();
     await expect(group('Docs').locator('tr', { hasText: 'docs/api.md' })).toHaveCount(1);
+  });
+
+  await test.step('8. GS-05 System Context: Skills is snapshot ∩ skill_listing (unused-skill hidden); plugin badge and tokens shown; modal has a Plugin row and no Modified row', async () => {
+    await openSession(page, owner, repo.repoId, repo.rootId('gs-05'), { tab: 'logs' });
+    const panel = page.getByTestId('sysctx-panel');
+    await expect(panel).toBeVisible();
+    await panel.getByRole('button', { name: /show details/i }).click();
+    await panel.getByTestId('sysctx-tab-skills').click();
+    const rows = panel.getByTestId('sysctx-skill-row');
+    await expect(rows, 'only the registered skills, unused-skill hidden').toHaveCount(2);
+    await expect(rows.filter({ hasText: 'unused-skill' })).toHaveCount(0);
+    const reviewDeepRow = panel.locator('[data-skill-name="adlc:review-deep"]');
+    await expect(reviewDeepRow).toBeVisible();
+    await expect(reviewDeepRow, 'plugin badge').toContainText('plugin');
+    await expect(reviewDeepRow, 'token estimate').toContainText('tok');
+    await reviewDeepRow.click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByTestId('skill-detail-plugin')).toBeVisible();
+    await expect(dialog).toContainText('adlc@artisyn');
+    await expect(dialog, 'no Modified row').not.toContainText('Modified');
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+  });
+
+  await test.step('9. GS-01 (no harness snapshot): no Skills, Agents or MCP tab, and no page error', async () => {
+    await openSession(page, owner, repo.repoId, repo.rootId('gs-01'), { tab: 'logs' });
+    await expect(page.getByTestId('sysctx-tab-skills')).toHaveCount(0);
+    await expect(page.getByTestId('sysctx-tab-agents')).toHaveCount(0);
+    await expect(page.getByTestId('sysctx-tab-mcp')).toHaveCount(0);
+    expect(pageErrors, pageErrors.join('\n')).toEqual([]);
   });
 });

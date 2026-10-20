@@ -15,14 +15,6 @@ interface Props {
   charsPerToken?: number;
 }
 
-function formatDate(ms: number): string {
-  return new Date(ms).toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'short',
-    day: 'numeric',
-  });
-}
-
 export function AgentDetailModal({
   agent,
   onClose,
@@ -97,16 +89,6 @@ export function AgentDetailModal({
                   </span>
                   <span className="font-mono text-foreground">
                     {formatBytes(agent.bytes)} · ~{formatCompact(estTokens)} tok
-                  </span>
-                </div>
-              )}
-              {agent.lastModified != null && (
-                <div className="flex gap-3 text-xs">
-                  <span className="w-24 shrink-0 text-muted-foreground">
-                    Modified
-                  </span>
-                  <span className="font-mono text-foreground">
-                    {formatDate(agent.lastModified)}
                   </span>
                 </div>
               )}

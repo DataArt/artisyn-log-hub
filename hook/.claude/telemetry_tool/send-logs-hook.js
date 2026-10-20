@@ -50,7 +50,8 @@ const { uploadFile, uploadFileChunked, uploadFileMaybeCompressed, CHUNK_SIZE_BYT
 const { collectScopedFiles, findProjectSlugDirs, transcriptBelongsToRepo } = require('./session-files');
 const { sanitizeNdjson, formatDroppedLines } = require('./ndjson-sanitize');
 const { buildProcessMarkerEnv, killProcessTree } = require('./process-marker');
-const { readHarnessState, writeHarnessState, computeHarnessFingerprint } = require('./harness-state');
+const { readKnownSnapshots, rememberSnapshot, forgetSnapshot, recordSessionSnapshot } = require('./harness-state');
+const { buildHarnessSnapshot, HARNESS_SNAPSHOT_SCHEMA_VERSION } = require('./harness-snapshot');
 const { buildCodeInventory } = require('./code-inventory');
 const { claudeConfigDir } = require('./claude-config-dir');
 
@@ -221,142 +222,14 @@ function writeManifest(telemetryDir, manifestPath, map, sessionId, cwd) {
 }
 
 // ---------------------------------------------------------------------------
-// CLAUDE.md context helpers
+// MCP probe helpers
 // ---------------------------------------------------------------------------
-
-/**
- * Scan the project directory for CLAUDE.md / CLAUDE.local.md files and return
- * their sizes.  Looks in cwd, common sub-directories, and up to one parent dir.
- * @param {string|null} cwd
- * @param {string|null} [projectRoot] Git root, when known — used for the `.claude/rules/`
- *   scan below so a monorepo-subdirectory `cwd` (e.g. `client/`, which has no `.claude/rules`
- *   of its own) doesn't silently report zero rule files. Falls back to `cwd` when absent.
- * @returns {{ totalBytes: number, files: { path: string, bytes: number }[] }|null}
- */
-function buildClaudeMdContext(cwd, projectRoot) {
-  if (!cwd) return null;
-
-  const candidates = new Set();
-  const roots = [cwd, path.dirname(cwd)];
-  const subs = ['', 'client', 'server', 'hook'];
-  for (const root of roots) {
-    for (const sub of subs) {
-      const dir = sub ? path.join(root, sub) : root;
-      candidates.add(path.join(dir, 'CLAUDE.md'));
-      candidates.add(path.join(dir, 'CLAUDE.local.md'));
-    }
-  }
-
-  const found = [];
-  for (const filePath of candidates) {
-    try {
-      const stat = fs.statSync(filePath);
-      if (stat.isFile() && stat.size > 0) {
-        found.push({ path: filePath, bytes: stat.size, lastModified: stat.mtimeMs });
-      }
-    } catch {
-      // file absent
-    }
-  }
-
-  // Also scan .claude/rules/*.md — include content for rule files. Uses `projectRoot` (the
-  // git root), not raw `cwd`: `.claude/rules/` lives at the repo root, so a session whose
-  // cwd is a monorepo subdirectory (e.g. `client/`) would otherwise find nothing here and
-  // silently report zero rules for that session.
-  const rulesDir = path.join(projectRoot || cwd, '.claude', 'rules');
-  try {
-    const entries = fs.readdirSync(rulesDir, { withFileTypes: true });
-    for (const e of entries) {
-      if (e.isFile() && e.name.endsWith('.md')) {
-        const rp = path.join(rulesDir, e.name);
-        try {
-          const stat = fs.statSync(rp);
-          if (stat.isFile() && stat.size > 0) {
-            let content;
-            try { content = fs.readFileSync(rp, 'utf8'); } catch { /* skip */ }
-            found.push({ path: rp, bytes: stat.size, lastModified: stat.mtimeMs, ...(content !== undefined ? { content } : {}) });
-          }
-        } catch { /* skip */ }
-      }
-    }
-  } catch { /* rules dir absent */ }
-
-  if (found.length === 0) return null;
-
-  const totalBytes = found.reduce((s, f) => s + f.bytes, 0);
-  return { totalBytes, files: found };
-}
-
-// ---------------------------------------------------------------------------
-// Skill / Agent / MCP helpers
-// ---------------------------------------------------------------------------
-
-// `parseFrontmatter`/`findSkillFiles`/`buildSkillDefinitions` were lifted out to
-// `skill-catalog.js` so `post-turn-analysis-worker.js` can share the
-// same catalog. Imported here so this file's existing `skill-definitions` upload keeps working
-// unchanged; `parseFrontmatter` is re-used below by `buildAgentDefinitions`.
-const { parseFrontmatter, buildSkillDefinitions } = require('./skill-catalog');
-
-/**
- * Collect agent definitions from .claude/agents/<name>/AGENT.md.
- * @param {string} cwd
- * @returns {Array<{ name: string, description: string, body: string, path: string, bytes: number }>|null}
- */
-function buildAgentDefinitions(cwd) {
-  const agentsDir = path.join(cwd, '.claude', 'agents');
-  let subdirs;
-  try {
-    subdirs = fs.readdirSync(agentsDir, { withFileTypes: true }).filter((e) => e.isDirectory());
-  } catch {
-    return null;
-  }
-
-  const agents = [];
-  for (const subdir of subdirs) {
-    const agentFile = path.join(agentsDir, subdir.name, 'AGENT.md');
-    try {
-      const stat = fs.statSync(agentFile);
-      if (!stat.isFile() || stat.size === 0) continue;
-      const text = fs.readFileSync(agentFile, 'utf8');
-      const { fm, body } = parseFrontmatter(text);
-      agents.push({
-        name: fm['name'] || subdir.name,
-        description: fm['description'] || '',
-        body,
-        path: agentFile,
-        bytes: stat.size,
-        lastModified: stat.mtimeMs,
-      });
-    } catch (err) {
-      process.stderr.write(`[agent-definitions] skipping ${agentFile}: ${err.message}\n`);
-    }
-  }
-
-  return agents.length > 0 ? agents : null;
-}
-
-/**
- * Extract MCP servers from a parsed JSON object (mcpServers key), with scrubbed credentials.
- * @param {Record<string, unknown>} mcpServers
- * @param {'project'|'user'} configSource
- * @returns {Array<{ name: string, command: string, args: string, configSource: string }>}
- */
-function extractMcpServers(mcpServers, configSource) {
-  const servers = [];
-  for (const [name, cfg] of Object.entries(mcpServers)) {
-    if (!cfg || typeof cfg !== 'object') continue;
-    const command = typeof cfg.command === 'string' ? cfg.command : '';
-    const rawArgs = Array.isArray(cfg.args) ? cfg.args : [];
-    const scrubbedArgs = rawArgs.map((a) =>
-      typeof a === 'string' ? a.replace(/:\/\/[^@]+@/g, '://') : String(a)
-    );
-    const url = typeof cfg.url === 'string' ? cfg.url.replace(/:\/\/[^@]+@/g, '://') : undefined;
-    const entry = { name, command, args: scrubbedArgs.join(' '), configSource };
-    if (url !== undefined) entry.url = url;
-    servers.push(entry);
-  }
-  return servers;
-}
+//
+// The static catalog/agents/systemContext/MCP-config builders that used to live here
+// (`buildClaudeMdContext`, `buildAgentDefinitions`, `extractMcpServers`, the static half of
+// `buildMcpConfig`) moved to `harness-snapshot.js` (`buildHarnessSnapshot`) per DD-1–DD-3 of the
+// `2026-10-16-sysctx-skill-source` plan. Only the live MCP probe stays here: DD-7 runs it at most
+// once per run, and only when the computed `snapshotId` turns out unknown.
 
 /**
  * On Windows, a bare/extensionless command (e.g. `npx`) or one resolving to a `.cmd`/`.bat`/
@@ -504,86 +377,6 @@ function probeMcpServerTools(name, cfg, timeoutMs, markerMeta = {}) {
       finish({ connected: false, tools: [] });
     }
   });
-}
-
-/**
- * Read .mcp.json (project), ~/.claude/mcp.json and ~/.claude/settings.json (user) for MCP server
- * definitions, then probe each stdio-transport server's live `tools/list`.
- *
- * A server without a `command` (an `url`/SSE-based server) is not probed at all — it keeps
- * `connected`/`tools` `undefined`, identical to what an old (pre-probe) hook would have reported.
- * Probes run sequentially, one server at a time, so total added latency is bounded by
- * `mcpProbeTimeoutMs × serverCount`, not parallel spawn fan-out.
- *
- * @param {string} cwd
- * @param {number} mcpProbeTimeoutMs
- * @param {{sessionId?: string|null}} [markerMeta] - forwarded to each probe child's environment
- * @returns {Promise<Array<{ name: string, command: string, args: string, configSource: string, connected?: boolean, tools?: Array<{name: string, schemaSizeTokens: number}> }>|null>}
- */
-async function buildMcpConfig(cwd, mcpProbeTimeoutMs, markerMeta = {}) {
-  const servers = [];
-  // First-source-wins raw (unscrubbed) config per server name, mirroring the same
-  // project > ~/.claude/mcp.json > ~/.claude/settings.json precedence used below — this is what
-  // actually gets spawned for the probe, since scrubbing (extractMcpServers) exists only to
-  // sanitize what gets uploaded, not to change what the server is invoked with.
-  const rawConfigByName = new Map();
-
-  /**
-   * @param {Record<string, unknown>|null} mcpServers
-   * @param {'project'|'user'} configSource
-   * @param {boolean} dedupe - true for the two user-level sources, which must not shadow an
-   *   already-known (higher-priority) server name
-   */
-  function ingestSource(mcpServers, configSource, dedupe) {
-    if (!mcpServers || typeof mcpServers !== 'object') return;
-    const knownNames = dedupe ? new Set(servers.map((s) => s.name)) : null;
-    const extracted = extractMcpServers(mcpServers, configSource).filter(
-      (s) => !knownNames || !knownNames.has(s.name),
-    );
-    for (const entry of extracted) {
-      servers.push(entry);
-      if (!rawConfigByName.has(entry.name)) {
-        rawConfigByName.set(entry.name, mcpServers[entry.name]);
-      }
-    }
-  }
-
-  // Project-level .mcp.json
-  try {
-    const raw = fs.readFileSync(path.join(cwd, '.mcp.json'), 'utf8');
-    const parsed = JSON.parse(raw);
-    ingestSource(parsed && typeof parsed === 'object' ? parsed.mcpServers : null, 'project', false);
-  } catch { /* absent or invalid */ }
-
-  // User-level <claude config dir>/mcp.json (dedicated MCP config; higher priority than settings.json)
-  try {
-    const userMcpJson = path.join(claudeConfigDir(), 'mcp.json');
-    const raw = fs.readFileSync(userMcpJson, 'utf8');
-    const parsed = JSON.parse(raw);
-    ingestSource(parsed && typeof parsed === 'object' ? parsed.mcpServers : null, 'user', true);
-  } catch { /* absent or invalid */ }
-
-  // User-level <claude config dir>/settings.json (fallback; deduplicates against project + mcp.json)
-  try {
-    const userSettings = path.join(claudeConfigDir(), 'settings.json');
-    const raw = fs.readFileSync(userSettings, 'utf8');
-    const parsed = JSON.parse(raw);
-    ingestSource(parsed && typeof parsed === 'object' ? parsed.mcpServers : null, 'user', true);
-  } catch { /* absent or invalid */ }
-
-  if (servers.length === 0) return null;
-
-  // Sequential, not parallel: keeps the Stop hook's added latency bounded and predictable.
-  for (const entry of servers) {
-    const rawCfg = rawConfigByName.get(entry.name);
-    const hasCommand = !!(rawCfg && typeof rawCfg.command === 'string' && rawCfg.command.trim());
-    if (!hasCommand) continue; // url/SSE-based server — out of scope for the probe, left undefined
-    const { connected, tools } = await probeMcpServerTools(entry.name, rawCfg, mcpProbeTimeoutMs, markerMeta);
-    entry.connected = connected;
-    entry.tools = tools;
-  }
-
-  return servers;
 }
 
 // ---------------------------------------------------------------------------
@@ -1359,40 +1152,36 @@ async function runUpload(cwd, hookSessionId, serverUrl, apiKey, timeoutMs, telem
   }
 
   /**
-   * The harness-element prepends (`mcp-config`, `agent-definitions`, `skill-definitions`,
-   * `system-context`) — built at most ONCE PER RUN and attached to at most ONE upload per SESSION.
+   * The harness-snapshot prepends (`harness-snapshot-ref`, plus `harness-snapshot` when the id is
+   * unknown) — built at most ONCE PER RUN and attached to at most ONE upload per SESSION: the
+   * current session's own artisyn body (DD-7 of the `2026-10-16-sysctx-skill-source` plan).
    *
    * Two separate limits, for two separate costs:
    *
-   * 1. Once per run, lazily. `buildMcpConfig()` spawns every stdio MCP server and waits for a
-   *    JSON-RPC `initialize` + `tools/list` handshake, sequentially, bounded by
-   *    `mcpProbeTimeoutMs` each — measured at 4,690 ms for 4 servers. Rebuilding that per file put
-   *    upload lines in hook.log exactly 4.7-4.9 s apart and turned 2,399 artisyn files into a
-   *    ~188-minute run that never reached its own `done:` line. Lazy so a run that ships nothing
-   *    spawns no probe at all.
-   * 2. Once per session, and only on the CURRENT session's `artisyn` body. These events describe
-   *    the harness, not the session, and the server upserts them per REPOSITORY
-   *    (`upsertHarnessElements(tx, repoId, …)`), skipping the upsert entirely when they are absent
-   *    rather than clearing what it knows. Prepending them to every file meant 573 KB of identical
-   *    bytes per upload — an 1,811-byte log shipped as 581 KB, ~1.3 GB across a 2,399-file
-   *    backlog. Change detection is by mtime (see `harness-state.js`), and the decision is frozen
-   *    for the whole session: a skill edited mid-session is reported by the NEXT session, not by
-   *    this session's next `Stop`.
+   * 1. Once per run, lazily. The MCP probe (`probeMcpServerTools`) spawns every stdio MCP server
+   *    and waits for a JSON-RPC `initialize` + `tools/list` handshake, sequentially, bounded by
+   *    `mcpProbeTimeoutMs` each — measured at 4,690 ms for 4 servers under the old once-per-run
+   *    scheme this replaces. `getHarnessPrefix()` memoises its result so the probe never runs
+   *    twice in one run, and DD-7 step 2 skips it entirely when the snapshot id is already known
+   *    (`harness-state.json`'s `knownSnapshotIds`).
+   * 2. Once per session, and only on the CURRENT session's `artisyn` body. `harness-snapshot`
+   *    describes the harness, not the session, and the server stores it once per (user, id) and
+   *    upserts `harness_elements` per REPOSITORY — prepending the full body to every file would
+   *    repeat the same bytes across a whole backlog for one identical upsert.
    *
-   * `harnessReportPending` is the run's decision; `harnessFingerprint` is what to persist once the
-   * upload carrying it has actually succeeded.
+   * `snapshotQuery` is threaded into `uploadFile`/`uploadFileChunked` (DD-7 step 6) so the server
+   * can answer `unknownSnapshotId` (DD-8); `commitHarnessReport()` is what
+   * `rememberSnapshot`/`forgetSnapshot`/`recordSessionSnapshot` key off, after the upload that
+   * carried `harnessPrefix` actually succeeded.
    */
   const workDir = getWorkDirPath(cwd);
-  const harnessState = readHarnessState(workDir);
-  // Frozen decision: if this session has already been decided (reported or deliberately not), the
-  // answer for every later run in the same session is "no". A null hookSessionId cannot be pinned
-  // to a session, so it never reports — it would re-report on every such run.
-  const harnessDecidedThisSession =
-    hookSessionId !== null && harnessState.decidedForSessionId === hookSessionId;
-  /** @type {string|null} */
-  let harnessFingerprint = null;
-  let harnessReportPending = false;
 
+  /** The snapshot id `getHarnessPrefix()` computed this run, or null until it has run. */
+  let resolvedSnapshotId = null;
+  /** True once `getHarnessPrefix()` decided the id was unknown and shipped the full body. */
+  let sentFullSnapshot = false;
+  /** @type {{ snapshotId: string, snapshotFull: boolean }|null} */
+  let snapshotQuery = null;
   /** @type {Buffer|null} */
   let harnessPrefix = null;
 
@@ -1404,109 +1193,113 @@ async function runUpload(cwd, hookSessionId, serverUrl, apiKey, timeoutMs, telem
   let codeInventoryPending = false;
 
   /**
-   * Build the harness prefix for the current session's artisyn body, or an empty buffer when there
-   * is nothing to report this session. Memoised, so the MCP probe runs at most once per run.
+   * Build the harness-snapshot prefix for the current session's artisyn body (DD-7 steps 1–4),
+   * or an empty buffer when there is no current session to pin it to. Memoised, so the static
+   * build and the MCP probe each run at most once per run.
    * @returns {Promise<Buffer>}
    */
   async function getHarnessPrefix() {
     if (harnessPrefix) return harnessPrefix;
-    if (harnessDecidedThisSession) {
+    if (hookSessionId === null) {
       harnessPrefix = Buffer.alloc(0);
       return harnessPrefix;
     }
 
-    // Resolve the true repo root: cwd is often a monorepo subdirectory (e.g. `client/`),
-    // whose own .claude/skills, .claude/agents and .mcp.json don't exist, so scanning raw
-    // cwd silently misses every project-level skill/agent/MCP definition that actually
-    // lives at the repo root.
+    // Resolve the true repo root: cwd is often a monorepo subdirectory (e.g. `client/`), whose
+    // own .claude/skills, .claude/agents and .mcp.json don't exist, so scanning raw cwd silently
+    // misses every project-level skill/agent/MCP definition that actually lives at the repo root.
     const projectRoot = getGitRoot(cwd || process.cwd());
-
-    // The three file-based builders run first and are cheap (~50 ms total); their output already
-    // carries `lastModified` per entry, which is the fingerprint input. Only if the fingerprint
-    // says something changed do we pay for the MCP probe.
-    const claudeMdCtx = buildClaudeMdContext(cwd, projectRoot);
-    const skillDefs = buildSkillDefinitions(projectRoot);
-    const agentDefs = buildAgentDefinitions(projectRoot);
-
-    harnessFingerprint = computeHarnessFingerprint({
-      claudeMd: claudeMdCtx,
-      skills: skillDefs,
-      agents: agentDefs,
-      mcpConfigFiles: [
-        path.join(projectRoot, '.mcp.json'),
-        path.join(claudeConfigDir(), 'mcp.json'),
-        path.join(claudeConfigDir(), 'settings.json'),
-      ],
+    const snapshot = buildHarnessSnapshot({
+      projectRoot,
+      cwd,
+      env: process.env,
+      log: (line) => hookLog(HOOK_FILE, hookSessionId, 'result', line, cwd),
     });
+    resolvedSnapshotId = snapshot.snapshotId;
 
-    if (harnessFingerprint === harnessState.fingerprint) {
-      // Unchanged since the last report — nothing to ship, and no probe.
-      harnessReportPending = false;
-      harnessPrefix = Buffer.alloc(0);
+    const parts = [
+      Buffer.from(JSON.stringify({ type: 'harness-snapshot-ref', snapshotId: snapshot.snapshotId }) + '\n', 'utf8'),
+    ];
+
+    if (readKnownSnapshots(workDir).includes(snapshot.snapshotId)) {
+      // DD-7 step 2: already known — ship only the cheap ref, never probe.
+      snapshotQuery = { snapshotId: snapshot.snapshotId, snapshotFull: false };
+      harnessPrefix = Buffer.concat(parts);
       return harnessPrefix;
     }
 
-    const mcpCfg = await buildMcpConfig(projectRoot, config.mcpProbeTimeoutMs, {
-      sessionId: hookSessionId,
-    });
-
-    // Pushed in final byte order. The old per-file code prepended each line onto the body in the
-    // reverse of this order (system-context first, mcp-config last), which left exactly this
-    // sequence ahead of the original body — the server tolerates any order, but keeping it
-    // identical means a recorded payload from an older hook still diffs cleanly against a new one.
-    const parts = [];
-    if (mcpCfg) {
-      // perToolDetailSupported: true is the capability flag — its presence,
-      // not the hookVersion string, is what lets the server tell "old hook, per-tool detail
-      // never attempted" apart from "capable hook, this server had zero tools / failed to
-      // connect".
-      parts.push(Buffer.from(JSON.stringify({ type: 'mcp-config', servers: mcpCfg, perToolDetailSupported: true }) + '\n', 'utf8'));
-    }
-    if (agentDefs) {
-      parts.push(Buffer.from(JSON.stringify({ type: 'agent-definitions', projectRoot, agents: agentDefs }) + '\n', 'utf8'));
-    }
-    if (skillDefs) {
-      parts.push(Buffer.from(JSON.stringify({ type: 'skill-definitions', projectRoot, skills: skillDefs }) + '\n', 'utf8'));
-    }
-    if (claudeMdCtx) {
-      parts.push(Buffer.from(JSON.stringify({ type: 'system-context', claudeMd: claudeMdCtx }) + '\n', 'utf8'));
+    // DD-7 step 3: unknown — probe every stdio-transport MCP server, sequentially (bounded total
+    // latency by `mcpProbeTimeoutMs × serverCount`), before shipping the full body.
+    const mcpServers = [];
+    for (const entry of snapshot.mcpServers) {
+      const rawCfg = snapshot.rawConfigByName.get(entry.name);
+      const hasCommand = !!(rawCfg && typeof rawCfg.command === 'string' && rawCfg.command.trim());
+      if (!hasCommand) {
+        mcpServers.push(entry); // url/SSE-based server — out of scope for the probe, left undefined
+        continue;
+      }
+      const { connected, tools } = await probeMcpServerTools(
+        entry.name, rawCfg, config.mcpProbeTimeoutMs, { sessionId: hookSessionId },
+      );
+      mcpServers.push({ ...entry, connected, tools });
     }
 
-    // A changed fingerprint with nothing to send (every catalog emptied) still counts as reported,
-    // so the empty state is recorded rather than re-derived on every future session.
-    harnessReportPending = true;
+    parts.push(Buffer.from(JSON.stringify({
+      type: 'harness-snapshot',
+      snapshotId: snapshot.snapshotId,
+      schemaVersion: HARNESS_SNAPSHOT_SCHEMA_VERSION,
+      // perToolDetailSupported: true is the capability flag — its presence, not the hookVersion
+      // string, is what lets the server tell "old hook, per-tool detail never attempted" apart
+      // from "capable hook, this server had zero tools / failed to connect".
+      perToolDetailSupported: true,
+      skills: snapshot.skills,
+      agents: snapshot.agents || [],
+      mcpServers,
+      systemContext: snapshot.systemContext,
+    }) + '\n', 'utf8'));
+
+    sentFullSnapshot = true;
+    snapshotQuery = { snapshotId: snapshot.snapshotId, snapshotFull: true };
     harnessPrefix = Buffer.concat(parts);
     return harnessPrefix;
   }
 
   /**
-   * Record the harness report after the upload that carried it succeeded — same
-   * commit-after-success rule the manifest uses, so a failed upload is retried by the next run
-   * instead of being silently marked as delivered.
+   * Record the outcome of the current-session artisyn upload that just carried `getHarnessPrefix()`
+   * (DD-7/DD-19), after that upload succeeded — same commit-after-success rule the manifest uses,
+   * so a failed upload is retried by the next run instead of being silently marked as delivered.
+   * @param {string|undefined} unknownSnapshotId - from the server's response (DD-8).
    */
-  function commitHarnessReport() {
-    if (!harnessReportPending || harnessFingerprint === null) return;
-    const persisted = writeHarnessState(workDir, {
-      fingerprint: harnessFingerprint,
-      decidedForSessionId: hookSessionId,
-      reported: true,
-    });
-    harnessReportPending = false;
-    // Logged either way: "reported once this session" is the whole contract, and a failed state
-    // write means it will be reported again next session — worth seeing rather than inferring.
-    hookLog(HOOK_FILE, hookSessionId, 'result',
-      `harness: reported (${harnessPrefix ? harnessPrefix.length : 0} bytes, fingerprint `
-      + `${harnessFingerprint.slice(0, 12)}), state ${persisted ? 'saved' : 'NOT saved — will re-report next session'}`,
-      cwd);
+  function commitHarnessReport(unknownSnapshotId) {
+    if (resolvedSnapshotId === null) return;
+    const id12 = resolvedSnapshotId.slice(0, 12);
+
+    if (unknownSnapshotId === resolvedSnapshotId) {
+      // DD-21's self-heal: a purge raced the controller's "known" answer. Forget it so the next
+      // upload of this session resends the full body.
+      forgetSnapshot(workDir, resolvedSnapshotId);
+      hookLog(HOOK_FILE, hookSessionId, 'result', `harness: snapshot ${id12} unknown on server — will resend`, cwd);
+    } else if (sentFullSnapshot) {
+      rememberSnapshot(workDir, resolvedSnapshotId);
+      hookLog(HOOK_FILE, hookSessionId, 'result', `harness: snapshot ${id12} sent`, cwd);
+    } else {
+      hookLog(HOOK_FILE, hookSessionId, 'result', `harness: snapshot ${id12} known`, cwd);
+    }
+
+    // DD-19: always recorded, regardless of the outcome above, so prompt-upload-hook.js's fast
+    // path can prepend this session's ref without recomputing anything.
+    if (hookSessionId !== null) {
+      recordSessionSnapshot(workDir, hookSessionId, resolvedSnapshotId);
+    }
   }
 
   /**
    * The `code-inventory` prepend — how big the repo's tracked codebase is, measured
    * at most once per `CODE_INVENTORY_THROTTLE_MS` per repo root.
    *
-   * It is deliberately NOT hung off `getHarnessPrefix()`'s fingerprint. That fingerprint covers
-   * CLAUDE.md / skills / agents / MCP config, which on a working repo almost never change, so an
-   * inventory gated on it would be measured once and then go stale for weeks while the codebase it
+   * It is deliberately NOT hung off `getHarnessPrefix()`'s snapshot id. That id covers CLAUDE.md /
+   * skills / agents / MCP config, which on a working repo almost never change, so an inventory
+   * gated on it would be measured once and then go stale for weeks while the codebase it
    * describes grew — and it is a *denominator*, so a stale one silently skews every percentage
    * computed from it. A plain time window is the right gate for a measurement of something that
    * changes with every commit.
@@ -1573,7 +1366,9 @@ async function runUpload(cwd, hookSessionId, serverUrl, apiKey, timeoutMs, telem
    * (the latter carries the hook-status event as an extra prepend).
    * @param {object} entry - one of filesToProcess
    * @param {object[]} extraEvents - extra JSON objects to prepend to an artisyn body
-   * @returns {Promise<{ success: boolean, reason: string|null, warnings?: string[] }>}
+   * @returns {Promise<{ success: boolean, reason: string|null, warnings?: string[], unknownSnapshotId?: string }>}
+   *   `unknownSnapshotId` is only ever set on the current-session artisyn upload — every other
+   *   call passes no `snapshotQuery`, so the server never returns the field for them.
    */
   async function processFile(entry, extraEvents) {
     const { namespace, sessionId, filePath, size, isCurrentSession, manifestKey: mkOverride, parentSessionId, workflowRunId } = entry;
@@ -1643,10 +1438,10 @@ async function runUpload(cwd, hookSessionId, serverUrl, apiKey, timeoutMs, telem
       return { success: false, reason };
     }
 
-    // For artisyn sessions only, prepend project-context events (system-context, skill/agent/mcp
-    // definitions, plus any extraEvents such as the current-session hook-status event). The
-    // artisyn log is the metadata carrier; the server merges it with the claude log when
-    // serving session data to the viewer.
+    // For artisyn sessions only, prepend project-context events (harness-snapshot-ref, plus the
+    // full harness-snapshot when unknown, plus any extraEvents such as the current-session
+    // hook-status event). The artisyn log is the metadata carrier; the server merges it with the
+    // claude log when serving session data to the viewer.
     if (namespace === 'artisyn') {
       const parts = [];
       // extraEvents land ahead of the harness prefix, LAST event first: the old per-file code
@@ -1655,14 +1450,13 @@ async function runUpload(cwd, hookSessionId, serverUrl, apiKey, timeoutMs, telem
       for (let i = extraEvents.length - 1; i >= 0; i--) {
         parts.push(Buffer.from(JSON.stringify(extraEvents[i]) + '\n', 'utf8'));
       }
-      // Harness events ride ONLY on the current session's own artisyn body, and only when they
-      // changed and have not been reported for this session yet. A backlog session's log gets no
-      // harness prefix: those events describe the repo's harness at upload time, not that
-      // session's, and the server upserts them per repo — attaching them to 2,399 old logs shipped
-      // the same 573 KB catalog 2,399 times to produce one identical upsert.
+      // The harness-snapshot prepend rides ONLY on the current session's own artisyn body: it
+      // describes the repo's harness at upload time, not that session's, and the server upserts
+      // `harness_elements` per repo — attaching it to every backlog file would repeat the same
+      // bytes across a whole backlog for one identical upsert.
       if (isCurrentSession) {
         parts.push(await getHarnessPrefix());
-        // Same carrier, different gate: the harness prefix is fingerprint- and session-scoped,
+        // Same carrier, different gate: the harness prefix is snapshot-id- and session-scoped,
         // the inventory is a six-hourly measurement of the repo.
         // Pushed after it so the pre-existing events keep their exact byte order.
         parts.push(getCodeInventoryPrefix());
@@ -1682,9 +1476,9 @@ async function runUpload(cwd, hookSessionId, serverUrl, apiKey, timeoutMs, telem
     // The routing test stays the *uncompressed* size: `uploadFileMaybeCompressed()` decides for
     // itself whether the single request it sends is gzipped.
     const result = bodyBytes > CHUNK_SIZE_BYTES
-      ? await uploadFileChunked(serverUrl, apiKey, namespace, sessionId, body, timeoutMs, hookSessionId, cwd, parentSessionId || null, workflowRunId || null, telemetryDir, manifestKey)
-      : await uploadFileMaybeCompressed(serverUrl, apiKey, namespace, sessionId, body, timeoutMs, hookSessionId, cwd, parentSessionId || null, workflowRunId || null);
-    const { success, reason, warnings } = result;
+      ? await uploadFileChunked(serverUrl, apiKey, namespace, sessionId, body, timeoutMs, hookSessionId, cwd, parentSessionId || null, workflowRunId || null, telemetryDir, manifestKey, snapshotQuery)
+      : await uploadFileMaybeCompressed(serverUrl, apiKey, namespace, sessionId, body, timeoutMs, hookSessionId, cwd, parentSessionId || null, workflowRunId || null, snapshotQuery);
+    const { success, reason, warnings, unknownSnapshotId } = result;
 
     if (success) {
       // `claude-otel` chunks are DELETED once uploaded, not fingerprinted. Unlike a session
@@ -1732,7 +1526,7 @@ async function runUpload(cwd, hookSessionId, serverUrl, apiKey, timeoutMs, telem
       failedCount++;
     }
 
-    return { success, reason, warnings };
+    return { success, reason, warnings, unknownSnapshotId };
   }
 
   // The current session's own artisyn file is processed last, once every other
@@ -1815,26 +1609,17 @@ async function runUpload(cwd, hookSessionId, serverUrl, apiKey, timeoutMs, telem
   };
 
   for (const entry of currentArtisynEntries) {
-    const { success, warnings } = await processFile(entry, [hookStatusEvent]);
+    const { success, warnings, unknownSnapshotId } = await processFile(entry, [hookStatusEvent]);
     if (warnings && warnings.length > 0) {
       allWarnings.push(...warnings);
     }
-    // This is the only upload that can carry the harness prefix, so this is where the report is
-    // committed — after it succeeded. A failure leaves the state untouched and the next run
-    // retries, rather than recording a report the server never received.
+    // This is the only upload that can carry the harness-snapshot prefix, so this is where the
+    // report is committed — after it succeeded. A failure leaves the state untouched and the
+    // next run retries, rather than recording a report the server never received.
     if (success) {
-      commitHarnessReport();
+      commitHarnessReport(unknownSnapshotId);
       commitCodeInventoryReport();
     }
-  }
-
-  // No current-session artisyn file (e.g. a run whose session never wrote one): the harness had
-  // no carrier this run, so leave the state alone and let a later run report it. Logged because a
-  // silently unreported harness change is otherwise invisible.
-  if (harnessReportPending) {
-    hookLog(HOOK_FILE, hookSessionId, 'result',
-      'harness: change detected but no current-session artisyn upload carried it — deferred to the next run',
-      cwd);
   }
 
   // Surface any server-reported broken-upload warnings the same way `timeout-on-upload`

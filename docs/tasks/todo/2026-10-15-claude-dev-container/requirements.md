@@ -171,3 +171,21 @@ ports `3000`/`5173` are published to the outside.
 
 **2026-10-20:** Design notes previously kept in a separate `notes.md` folded into the FRs above;
 `notes.md` removed.
+
+**2026-10-20:** Open consideration from a side discussion — running several parallel task sessions
+via `git worktree` (one branch per worktree, isolates working-tree state so unrelated changes don't
+get mixed, which actually happened this session: two other sessions' edits landed in this checkout
+and had to be untangled by hand before committing). The current design (FR-A1/FR-B4: fixed
+`log-hub-postgres`/`log-hub-mailpit` container/hostnames, fixed host ports `3000`/`5173`/`5432`/
+`1025`/`8025`) assumes one active container for the whole repo, consistent with FR-B10's "only one
+watch backend active on port 3000 at a time" — i.e. worktrees are explicitly out of scope for this
+design as written. If multi-worktree parallel sessions become routine, each worktree would need its
+own compose project name + port offset (the `tests/scenarios` stand already does exactly this per
+test run — own port, own `scn_*` schema — and is a usable reference pattern) to avoid the port
+collision this session hit directly (`scenarios-postgres-1` failing to bind 5432 because a
+manually-run dev-DB container already held it).
+Separately, not container-related: the installer's per-repo marketplace name
+(`resolveMarketplaceName`, a hash of `git remote get-url origin`) is identical across every worktree
+of this same repo, so switching which worktree's Claude session is active will keep re-triggering
+the stale-user-level-registration path (now handled automatically, see the
+`findStaleUserLevelMarketplaceName` fix) — expected friction, not a bug, if worktrees get adopted.

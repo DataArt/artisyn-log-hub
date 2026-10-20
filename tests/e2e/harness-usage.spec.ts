@@ -128,33 +128,74 @@ function harnessClaudeTranscript(): Record<string, unknown>[] {
   ];
 }
 
+// DD-1/DD-9/DD-10: the self-reported skill/rule/MCP inventory now travels as one
+// `harness-snapshot` line (plus its `harness-snapshot-ref`), replacing the old separate
+// `skill-definitions`/`system-context`/`mcp-config` events. The stored inventory the assertions
+// below check (skill-alpha/skill-beta, the `demo` rule, the `playwright`/`postgres` MCP servers
+// and their tools) stays the same — only the wire shape changed.
 function harnessArtisynEvents(): Record<string, unknown>[] {
+  const snapshotId = crypto.randomBytes(32).toString('hex');
   return [
+    { type: 'harness-snapshot-ref', snapshotId },
     {
-      type: 'skill-definitions',
-      skills: [
-        { name: 'skill-alpha', bytes: 300, source: 'project' },
-        { name: 'skill-beta', bytes: 100, source: 'plugin' },
-      ],
-    },
-    {
-      type: 'system-context',
-      claudeMd: { files: [{ path: '.claude/rules/demo.md', bytes: 200 }] },
-    },
-    {
-      type: 'mcp-config',
+      type: 'harness-snapshot',
+      snapshotId,
+      schemaVersion: 1,
       perToolDetailSupported: true,
-      servers: [
+      skills: [
+        {
+          name: 'skill-alpha',
+          kind: 'skill',
+          source: 'project',
+          description: 'skill-alpha',
+          body: '',
+          path: '.claude/skills/skill-alpha/SKILL.md',
+          bytes: 300,
+          contentHash: 'a'.repeat(64),
+        },
+        {
+          name: 'skill-beta',
+          kind: 'skill',
+          source: 'plugin',
+          description: 'skill-beta',
+          body: '',
+          path: 'demo-plugin@1.0.0/skills/skill-beta/SKILL.md',
+          bytes: 100,
+          contentHash: 'b'.repeat(64),
+          plugin: {
+            id: 'demo-plugin@demo-marketplace',
+            name: 'demo-plugin',
+            marketplace: 'demo-marketplace',
+            version: '1.0.0',
+          },
+        },
+      ],
+      agents: [],
+      mcpServers: [
         {
           name: 'playwright',
+          command: '',
+          args: [],
+          configSource: 'project',
           connected: true,
           tools: [
             { name: 'browser_click', schemaSizeTokens: 12 },
             { name: 'browser_navigate', schemaSizeTokens: 20 },
           ],
         },
-        { name: 'postgres', connected: false, tools: [] },
+        {
+          name: 'postgres',
+          command: '',
+          args: [],
+          configSource: 'project',
+          connected: false,
+          tools: [],
+        },
       ],
+      systemContext: {
+        totalBytes: 200,
+        files: [{ path: '.claude/rules/demo.md', bytes: 200, contentHash: 'c'.repeat(64) }],
+      },
     },
   ];
 }

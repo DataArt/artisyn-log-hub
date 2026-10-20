@@ -9,6 +9,9 @@ import type { ContractFamily } from '../types';
 const NDJSON =
   '{"type":"user","sessionId":"w1-new-upload","message":{"role":"user","content":"hello"}}\n';
 
+/** A syntactically valid but never-stored snapshot id (DD-2/DD-8). */
+const UNKNOWN_SNAPSHOT_ID = 'd'.repeat(64);
+
 export const f15Ingest: ContractFamily = {
   id: 'F15',
   name: 'ingest',
@@ -70,6 +73,103 @@ export const f15Ingest: ContractFamily = {
       },
     },
     {
+      // DD-8: a valid but never-stored id, ref-only (no snapshotFull) — the hook is told to
+      // resend the full snapshot next time. The queue row still has no harness_snapshot_id:
+      // that column is only set on a snapshotFull=1 upload.
+      id: 'F15-upload-unknown-snapshot',
+      route: 'POST /api/v2/logs',
+      actor: 'authorKey',
+      query: {
+        sessionId: 'w1-new-upload-unknown-snapshot',
+        type: 'claude',
+        snapshotId: UNKNOWN_SNAPSHOT_ID,
+      },
+      headers: { 'Content-Type': 'application/x-ndjson' },
+      body: NDJSON,
+      expect: {
+        status: 201,
+        bodyMatches: { warnings: [], unknownSnapshotId: UNKNOWN_SNAPSHOT_ID },
+      },
+      write: {
+        watch: ['upload_queue'],
+        delta: {
+          inserted: [
+            {
+              table: 'upload_queue',
+              where: `session_id = 'w1-new-upload-unknown-snapshot'`,
+              check: [`status = 'pending'`, 'harness_snapshot_id IS NULL'],
+            },
+          ],
+        },
+      },
+    },
+    {
+      // The world-seeded id (s04's owner) is already known — no unknownSnapshotId comes back.
+      // `warnings` is not asserted: the owner's world data already has a `failed` upload_queue
+      // row (w1-q-failed-1), which every owner upload reports as a pending warning regardless.
+      id: 'F15-upload-known-snapshot',
+      route: 'POST /api/v2/logs',
+      actor: 'ownerKey',
+      query: {
+        sessionId: 'w1-new-upload-known-snapshot',
+        type: 'claude',
+        snapshotId: '@harnessSnapshotId',
+      },
+      headers: { 'Content-Type': 'application/x-ndjson' },
+      body: NDJSON,
+      expect: {
+        status: 201,
+        bodyMatches: { unknownSnapshotId: undefined },
+      },
+      write: {
+        watch: ['upload_queue'],
+        delta: {
+          inserted: [
+            {
+              table: 'upload_queue',
+              where: `session_id = 'w1-new-upload-known-snapshot'`,
+              check: [`status = 'pending'`, 'harness_snapshot_id IS NULL'],
+            },
+          ],
+        },
+      },
+    },
+    {
+      // snapshotFull=1: the queue row records the id (so a concurrent upload of the same id
+      // reads as "known" via isHarnessSnapshotKnown's queue check), and unknownSnapshotId is
+      // never returned for a full-snapshot upload, known or not (DD-8).
+      id: 'F15-upload-snapshot-full',
+      route: 'POST /api/v2/logs',
+      actor: 'authorKey',
+      query: {
+        sessionId: 'w1-new-upload-snapshot-full',
+        type: 'claude',
+        snapshotId: UNKNOWN_SNAPSHOT_ID,
+        snapshotFull: '1',
+      },
+      headers: { 'Content-Type': 'application/x-ndjson' },
+      body: NDJSON,
+      expect: {
+        status: 201,
+        bodyMatches: { warnings: [], unknownSnapshotId: undefined },
+      },
+      write: {
+        watch: ['upload_queue'],
+        delta: {
+          inserted: [
+            {
+              table: 'upload_queue',
+              where: `session_id = 'w1-new-upload-snapshot-full'`,
+              check: [
+                `status = 'pending'`,
+                `harness_snapshot_id = '${UNKNOWN_SNAPSHOT_ID}'`,
+              ],
+            },
+          ],
+        },
+      },
+    },
+    {
       // First chunk of a two-part upload: the row waits as `partially_uploaded`.
       id: 'F15-upload-first-chunk',
       route: 'POST /api/v2/logs',
@@ -97,6 +197,45 @@ export const f15Ingest: ContractFamily = {
                 'chunks_received = 1',
                 'total_chunks = 2',
                 `session_id = 'w1-new-chunked'`,
+              ],
+            },
+          ],
+        },
+      },
+    },
+    {
+      // A single-chunk upload (chunkIndex=0, totalChunks=1) completes in one call, same as a
+      // plain upload, so the chunk-complete response carries unknownSnapshotId exactly as the
+      // single-upload path does.
+      id: 'F15-upload-single-chunk-unknown-snapshot',
+      route: 'POST /api/v2/logs',
+      actor: 'authorKey',
+      query: {
+        sessionId: 'w1-new-upload-chunk-unknown-snapshot',
+        type: 'claude',
+        uploadId: 'w1-upload-0002',
+        chunkIndex: '0',
+        totalChunks: '1',
+        totalSize: String(Buffer.byteLength(NDJSON)),
+        snapshotId: UNKNOWN_SNAPSHOT_ID,
+      },
+      headers: { 'Content-Type': 'application/x-ndjson' },
+      body: NDJSON,
+      expect: {
+        status: 201,
+        bodyMatches: { complete: true, unknownSnapshotId: UNKNOWN_SNAPSHOT_ID },
+      },
+      write: {
+        watch: ['upload_queue'],
+        delta: {
+          inserted: [
+            {
+              table: 'upload_queue',
+              where: `upload_id = 'w1-upload-0002'`,
+              check: [
+                `status = 'pending'`,
+                `session_id = 'w1-new-upload-chunk-unknown-snapshot'`,
+                'harness_snapshot_id IS NULL',
               ],
             },
           ],

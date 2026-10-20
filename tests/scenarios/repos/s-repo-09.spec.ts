@@ -27,7 +27,9 @@ import fs from 'fs';
 import type { Page } from '@playwright/test';
 import { test, expect } from '../fixtures';
 import { createApiKey } from '../helpers/api-key';
-import { ownRepoId, uploadPromptSession, uploadSubagent } from '../helpers/prompt-session';
+import { ndjson, postLogs } from '../helpers/ingest';
+import { ownRepoId, promptSessionBodies, uploadPromptSession, uploadSubagent } from '../helpers/prompt-session';
+import { waitForQueueIdle } from '../helpers/queue';
 import { addTeamRepo, browserAs, createTeam, inviteAndAccept, skipNewUserNudge } from '../helpers/teams';
 import { readZip } from '../helpers/zip';
 
@@ -55,12 +57,40 @@ test('@S-REPO-09 owner exports a repository to zip and imports it into another o
   const sid = (n: string) => `r09-${run}-${n}`;
   const prompts = { fix: `Fix login ${run}`, add: `Add export ${run}`, refactor: `Refactor db ${run}`, other: `Other ${run}` };
   const agentId = sid('fix-agent');
+  const snapshotId = randomBytes(32).toString('hex');
 
   const { repoA, repoB, teamId } = await test.step('setup: A with 3 sessions (main, feat/x, one with a sub-agent), B with 1, transparent Team-X with A', async () => {
     const key = await createApiKey(owner.api);
     const queue = { db, userId: owner.id };
     await uploadPromptSession(api, key.key, { sessionId: sid('fix'), prompt: prompts.fix, repoUrl: urlA, branch: 'main' }, queue);
     await uploadSubagent(api, key.key, { sessionId: agentId, parentSessionId: sid('fix'), prompt: `agent of ${run}` }, queue);
+    // DD-14: give one exported session (the one with the sub-agent) a harness snapshot, so step
+    // 2 can pin that the export carries a `harness-snapshot` line. The real hook always
+    // prepends the snapshot lines to the current session's FULL artisyn body (DD-7), never
+    // uploads them alone — doing the same here keeps the session's branch/prompt extraction
+    // (re-derived from every upload's own lines) unaffected.
+    const snapshotLines = ndjson([
+      { type: 'harness-snapshot-ref', snapshotId },
+      {
+        type: 'harness-snapshot',
+        snapshotId,
+        schemaVersion: 1,
+        perToolDetailSupported: true,
+        skills: [],
+        agents: [],
+        mcpServers: [],
+        systemContext: null,
+      },
+    ]);
+    const fixArtisyn = promptSessionBodies({ sessionId: sid('fix'), prompt: prompts.fix, repoUrl: urlA, branch: 'main' }).artisyn;
+    const res = await postLogs(
+      api,
+      key.key,
+      { sessionId: sid('fix'), type: 'artisyn', snapshotId, snapshotFull: '1' },
+      snapshotLines + fixArtisyn,
+    );
+    expect(res.status()).toBe(201);
+    await waitForQueueIdle(db, owner.id);
     await uploadPromptSession(api, key.key, { sessionId: sid('add'), prompt: prompts.add, repoUrl: urlA, branch: 'feat/x' }, queue);
     await uploadPromptSession(api, key.key, { sessionId: sid('refactor'), prompt: prompts.refactor, repoUrl: urlA, branch: 'main' }, queue);
     await uploadPromptSession(api, key.key, { sessionId: sid('other'), prompt: prompts.other, repoUrl: urlB }, queue);
@@ -108,6 +138,9 @@ test('@S-REPO-09 owner exports a repository to zip and imports it into another o
     expect(folders.sort()).toEqual([sid('add'), sid('fix'), sid('refactor')].sort());
     // KNOWN DEVIATION: the sub-agent's log does not travel in the archive.
     expect([...entries.keys()].some((n) => n.includes(agentId))).toBe(false);
+    // DD-14: the exported artisyn.jsonl of the snapshot session carries a harness-snapshot line.
+    const fixArtisyn = entries.get(`sessions/${sid('fix')}/artisyn.jsonl`)!.toString('utf8');
+    expect(fixArtisyn.split('\n').some((l) => l.trim() !== '' && (JSON.parse(l) as { type?: string }).type === 'harness-snapshot')).toBe(true);
   });
 
   await test.step('3. B → Import session → choose the zip: preview «3 sessions», from A (personal)', async () => {

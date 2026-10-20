@@ -8,9 +8,12 @@ W1 Thursday 10:00:00–10:03:30.
   P2 "Research the billing flow" with `Skill(adlc:review-deep)`, `Read`, `mcp__postgres__query` ×2,
   `mcp__playwright__browser_click` ×1 and `Workflow(ResearchWorkflow)`.
 - Rules `.claude/rules/db.md` (700 B) and `ui.md` (1400 B) arrive as `nested_memory` attachments; the
-  skill body is 1750 B; a `deferred_tools_delta` lists the three MCP tools.
-- The artisyn log carries the harness self-report: `mcp-config` (postgres, playwright),
-  `skill-definitions` (`adlc:review-deep`, `adlc:review`, `unused-skill`) and `system-context`
+  skill body is 1750 B; a `deferred_tools_delta` lists the three MCP tools. An `isInitial: true`
+  `skill_listing` attachment names `adlc:review-deep` and `adlc:review` — `unused-skill` is in the
+  harness snapshot but never registered, so it stays out of `visibleSkills`.
+- The artisyn log carries the harness self-report as one fixed-id `harness-snapshot` (plus its
+  `harness-snapshot-ref`): skills `adlc:review-deep` and `adlc:review` (`plugin`, `adlc@1.0.0`) and
+  `unused-skill` (`project`), MCP servers `postgres` and `playwright`, and `systemContext`
   (CLAUDE.md 3500 B plus the two rules).
 - Workflow agents are uploaded with `workflowRunId`: W1 edits `src/report.ts` **without** a
   `toolUseResult` (+1 −0 from the inputs), W2 runs `Skill(adlc:review-deep)` and `Read`. The

@@ -86,6 +86,17 @@ export const WORLD_V1 = {
       userId: 3,
       url: 'https://github.com/arrakis/spice-harvester',
     },
+    /**
+     * Owner's repo used only to prove DD-11's orphan-session sweep (05 §F12 chunk 13): linked
+     * to exactly one team (T1, link id 4), with one log whose session (s09) has nothing else
+     * keeping it alive, so removing the team link deletes the repo, the log, the now-orphaned
+     * session and (via `deleteOrphanHarnessSnapshots`) the harness_snapshots row s09 is bound to.
+     */
+    Rorphan: {
+      id: 6,
+      userId: 2,
+      url: 'https://github.com/arrakis/orphan-outpost',
+    },
   },
   sessions: {
     s01: { id: 1, sessionId: 'w1-s01-plain' },
@@ -96,6 +107,8 @@ export const WORLD_V1 = {
     s06: { id: 6, sessionId: 'w1-s06-member' },
     s07: { id: 7, sessionId: 'w1-s07-author' },
     s08: { id: 8, sessionId: 'w1-s08-outsider' },
+    /** Rorphan's only session (05 §F12 chunk 13); see Rorphan's comment above. */
+    s09: { id: 9, sessionId: 'w1-s09-orphan' },
     s10: { id: 10, sessionId: 'w1-s10-member-claude-only' },
   },
   models: {
@@ -110,6 +123,10 @@ export const WORLD_V1 = {
   pendingConfirmationToken: 'world-v1-confirm-token-pending',
   /** An unused password-reset token of the author (05 §F02 reset-password). */
   authorResetToken: 'world-v1-reset-token-author',
+  /** DD-2 id of the harness_snapshots row s04's owner is bound to (05 §F15/F17/F18 chunk 13). */
+  harnessSnapshotId: 'b'.repeat(64),
+  /** DD-2 id of the harness_snapshots row bound only to the orphan session s09 (05 §F12 chunk 13). */
+  harnessSnapshotIdOrphan: 'c'.repeat(64),
   /** Export/import jobs of R1 (05 §F23); none has a file on disk. */
   jobs: {
     exportDone: { id: 'w1-job-export-done' },
@@ -155,6 +172,8 @@ export const WORLD_V1_REFS: Readonly<Record<string, string | number>> = (() => {
   }
   refs['pendingConfirmationToken'] = WORLD_V1.pendingConfirmationToken;
   refs['authorResetToken'] = WORLD_V1.authorResetToken;
+  refs['harnessSnapshotId'] = WORLD_V1.harnessSnapshotId;
+  refs['harnessSnapshotIdOrphan'] = WORLD_V1.harnessSnapshotIdOrphan;
   // Every world user's password hash, so a row can prove a password-changing call replaced it.
   refs['worldPasswordHash'] = PASSWORD_HASH;
   return refs;
@@ -304,6 +323,69 @@ function totals(s: SessionSpec) {
 const R = WORLD_V1.repos;
 const U = WORLD_V1.users;
 const M = WORLD_V1.models;
+
+/**
+ * Minimal DD-1 `harness-snapshot` body bound to s04's owner (05 §F15/F17/F18 chunk 13): one
+ * skill of each `source`, no agents/MCP/systemContext — enough to prove the read path (F17)
+ * returns the stored body verbatim and the retention path (F18) deletes it with its session.
+ */
+const HARNESS_SNAPSHOT_BODY = {
+  snapshotId: WORLD_V1.harnessSnapshotId,
+  schemaVersion: 1,
+  perToolDetailSupported: true,
+  skills: [
+    {
+      name: 'deploy',
+      kind: 'skill',
+      source: 'project',
+      description: 'Deploy the app',
+      body: '# Deploy\n\nDeploy steps.',
+      path: '.claude/skills/deploy/SKILL.md',
+      bytes: 24,
+      contentHash: '1'.repeat(64),
+    },
+    {
+      name: 'notes',
+      kind: 'skill',
+      source: 'user',
+      description: 'Personal scratch notes',
+      body: '# Notes',
+      path: '~/.claude/skills/notes/SKILL.md',
+      bytes: 7,
+      contentHash: '2'.repeat(64),
+    },
+    {
+      name: 'adlc-lh:tracker',
+      kind: 'skill',
+      source: 'plugin',
+      description: 'Task tracker',
+      body: '# Tracker',
+      path: 'adlc-lh@1.3.1/skills/tracker/SKILL.md',
+      bytes: 9,
+      contentHash: '3'.repeat(64),
+      plugin: {
+        id: 'adlc-lh@artisyn',
+        name: 'adlc-lh',
+        marketplace: 'artisyn',
+        version: '1.3.1',
+      },
+    },
+  ],
+  agents: [] as unknown[],
+  mcpServers: [] as unknown[],
+  systemContext: null,
+};
+
+/** Minimal DD-1 body bound only to the orphan session s09 (05 §F12 chunk 13). */
+const HARNESS_SNAPSHOT_BODY_ORPHAN = {
+  snapshotId: WORLD_V1.harnessSnapshotIdOrphan,
+  schemaVersion: 1,
+  perToolDetailSupported: false,
+  skills: [] as unknown[],
+  agents: [] as unknown[],
+  mcpServers: [] as unknown[],
+  systemContext: null,
+};
 
 /** Every session that has logs (w1-s05 is deleted: no logs, only its audit row). */
 const SESSIONS: SessionSpec[] = [
@@ -875,6 +957,19 @@ function buildStatements(): WorldStatement[] {
           null,
           null,
         ],
+        [
+          R.Rorphan.id,
+          R.Rorphan.url,
+          R.Rorphan.userId,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+          null,
+        ],
       ],
     ),
   );
@@ -886,27 +981,54 @@ function buildStatements(): WorldStatement[] {
         [1, T.T1.id, R.R1.url, '2026-01-02T11:00:00.000Z'],
         [2, T.T2.id, R.R1.url, '2026-01-02T11:30:00.000Z'],
         [3, T.T1.id, R.R2.url, '2026-01-02T12:00:00.000Z'],
+        // T1's only link to Rorphan (05 §F12 chunk 13): removing it has no other team
+        // reference left, so the repo, its one log and the now-orphaned session s09 go too.
+        [4, T.T1.id, R.Rorphan.url, '2026-01-02T12:15:00.000Z'],
       ],
     ),
   );
 
   // Sessions: s05 is soft-deleted (its data is gone, only the audit row remains, exactly as
-  // SessionsService.deleteSession leaves it); s03 is s02's child.
+  // SessionsService.deleteSession leaves it); s03 is s02's child. harness_snapshot_id: only s04
+  // (HARNESS_SNAPSHOT_BODY) and s09 (HARNESS_SNAPSHOT_BODY_ORPHAN) are bound (05 §F17/F18/F12
+  // chunk 13); every other session predates the snapshot feature and stays NULL.
   const S = WORLD_V1.sessions;
   out.push(
     insert(
       'sessions',
-      ['id', 'session_id', 'parent_session_id', 'workflow_run_id', 'deleted'],
       [
-        [S.s01.id, S.s01.sessionId, null, null, false],
-        [S.s02.id, S.s02.sessionId, null, null, false],
-        [S.s03.id, S.s03.sessionId, S.s02.sessionId, null, false],
-        [S.s04.id, S.s04.sessionId, null, null, false],
-        [S.s05.id, S.s05.sessionId, null, null, true],
-        [S.s06.id, S.s06.sessionId, null, null, false],
-        [S.s07.id, S.s07.sessionId, null, null, false],
-        [S.s08.id, S.s08.sessionId, null, null, false],
-        [S.s10.id, S.s10.sessionId, null, null, false],
+        'id',
+        'session_id',
+        'parent_session_id',
+        'workflow_run_id',
+        'deleted',
+        'harness_snapshot_id',
+      ],
+      [
+        [S.s01.id, S.s01.sessionId, null, null, false, null],
+        [S.s02.id, S.s02.sessionId, null, null, false, null],
+        [S.s03.id, S.s03.sessionId, S.s02.sessionId, null, false, null],
+        [
+          S.s04.id,
+          S.s04.sessionId,
+          null,
+          null,
+          false,
+          WORLD_V1.harnessSnapshotId,
+        ],
+        [S.s05.id, S.s05.sessionId, null, null, true, null],
+        [S.s06.id, S.s06.sessionId, null, null, false, null],
+        [S.s07.id, S.s07.sessionId, null, null, false, null],
+        [S.s08.id, S.s08.sessionId, null, null, false, null],
+        [
+          S.s09.id,
+          S.s09.sessionId,
+          null,
+          null,
+          false,
+          WORLD_V1.harnessSnapshotIdOrphan,
+        ],
+        [S.s10.id, S.s10.sessionId, null, null, false, null],
       ],
     ),
   );
@@ -991,6 +1113,34 @@ function buildStatements(): WorldStatement[] {
     logRepoRows.push([logId, s.repoId]);
     logIdBySession[s.key] = ids;
   }
+  // Orphan-session fixture (05 §F12 chunk 13): s09's one log, linked only to Rorphan. It is
+  // not in SESSIONS (no session_stats/turns needed) — just enough for F08's admin aggregate and
+  // the orphan-sweep delete path to see a real log/session to remove.
+  logId += 1;
+  const orphanLogId = logId;
+  logRows.push([
+    orphanLogId,
+    '2026-01-15T10:00:00.000Z',
+    '2026-01-15T10:00:00.000Z',
+    S.s09.id,
+    'artisyn',
+    json([
+      {
+        type: 'artisyn',
+        hook_event_name: 'SessionStart',
+        timestamp: '2026-01-15T10:00:00.000Z',
+        session_id: S.s09.sessionId,
+      },
+    ]),
+    U.owner.id,
+    'Orphan-session fixture',
+    '2026-01-15T10:00:00.000Z',
+    '2026-01-15T10:00:00.000Z',
+    'main',
+    ROOT,
+    ROOT,
+  ]);
+  logRepoRows.push([orphanLogId, R.Rorphan.id]);
   out.push(
     insert(
       'logs',
@@ -1305,6 +1455,32 @@ function buildStatements(): WorldStatement[] {
           10_000,
           2,
           '2026-01-09T00:00:00.000Z',
+        ],
+      ],
+    ),
+  );
+
+  // harness_snapshots: one row per owner/snapshot (05 §F15/F17/F18/F12 chunk 13). s04 is bound
+  // to the first (F17-session-logs-snapshot reads it back, F18-delete-by-admin deletes it with
+  // s04); s09 is bound to the second, which only the F12 orphan-sweep row ever deletes.
+  out.push(
+    insert(
+      'harness_snapshots',
+      ['id', 'user_id', 'snapshot_id', 'body', 'created_at'],
+      [
+        [
+          1,
+          U.owner.id,
+          WORLD_V1.harnessSnapshotId,
+          json(HARNESS_SNAPSHOT_BODY),
+          '2026-01-12T14:00:00.000Z',
+        ],
+        [
+          2,
+          U.owner.id,
+          WORLD_V1.harnessSnapshotIdOrphan,
+          json(HARNESS_SNAPSHOT_BODY_ORPHAN),
+          '2026-01-15T10:00:00.000Z',
         ],
       ],
     ),

@@ -91,6 +91,33 @@ reverse proxies, which the hook cannot detect — see [hook-api-versioning.md](h
 The hook can also gzip a request body (`uploadFileMaybeCompressed`); the server's gzip sniffer
 decompresses it before staging.
 
+## Harness snapshot known-check
+
+`POST /api/v2/logs` also accepts two optional query params that are orthogonal to staging and
+unrelated to the chunk-reassembly params above: `snapshotId` (64-char hex, the hook's harness
+snapshot id — see `docs/knowledgebase/algorithms/harness-snapshot.md`) and `snapshotFull` (`'1'`
+when the uploaded body's `artisyn` file carries the full `harness-snapshot` line, not just a
+`harness-snapshot-ref`).
+
+- `harnessSnapshotId` is threaded into the `upload_queue` insert (both the single-upload path and
+  chunk 0 of a chunked upload) **only** when `snapshotFull === '1'` and the id passes
+  `SNAPSHOT_ID_RE`; a ref-only upload leaves the column `NULL`.
+- On the `201` response of a single upload, or the chunk-complete response of a chunked one (never
+  on an intermediate `{ complete: false }` chunk, and never on a foreign-session response), the
+  controller computes `unknownSnapshotId` via `isHarnessSnapshotKnown(db, userId, snapshotId)`
+  (`server/src/logs/harness-snapshot.ts`) and adds it to the JSON body when the id is unknown. The
+  field is additive — an old hook that sends no `snapshotId` never gets it.
+- An id counts as **known** when either holds: a `harness_snapshots` row already exists for
+  (`userId`, id), or an `upload_queue` row for that user already names that
+  `harness_snapshot_id` with status `pending`, `processing` or `partially_uploaded` — i.e. another
+  upload is already carrying the full snapshot through the pipeline, so asking for it again would
+  be redundant.
+- An invalid `snapshotId` (wrong shape) is silently ignored, never a `400`, and is treated the same
+  as no `snapshotId` at all.
+- The hook reacts to `unknownSnapshotId` by forgetting the id from its local known-state file and
+  resending the full snapshot on its next upload — see
+  `docs/knowledgebase/hook-system-overview.md`.
+
 ## Malformed lines
 
 Concurrent hook appends to one session `.jsonl` can tear a few lines on filesystems where
