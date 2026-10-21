@@ -217,11 +217,15 @@ function buildSessionSystemSlice(
   acc: TurnAccumulator,
   charsPerToken: number,
 ): ContextSlice | null {
-  const files = summary.claudeMd?.files ?? [];
+  // On-demand files are already counted per turn via `rulesInjected` (acc.rulesBytes).
+  const files = (summary.claudeMd?.files ?? []).filter((f) => !f.onDemand);
 
-  // System Files = claude-md + local-md roles
+  // System Files = claude-md + local-md + user-md roles
   const systemFilesBytes = files
-    .filter((f) => f.role === 'claude-md' || f.role === 'local-md')
+    .filter(
+      (f) =>
+        f.role === 'claude-md' || f.role === 'local-md' || f.role === 'user-md',
+    )
     .reduce((sum, f) => sum + f.bytes, 0);
   const systemFilesTokens = Math.round(systemFilesBytes / charsPerToken);
 

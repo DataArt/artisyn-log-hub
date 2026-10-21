@@ -218,6 +218,25 @@ collapsed row through the generic JSON fallback, with no special renderer.
 }
 ```
 
+`content` here is `{ path, type, content }` — `type` is `Project` / `User` / `Local`; the client
+keeps it as `RuleInjection.type` (never the text).
+
+**Sample 6 (hand-maintained, Claude Code ≥ ~2.1.280):** the initial instruction files.
+```json
+{
+  "type": "\"instructions\"",
+  "files": [
+    { "path": "C:\\Users\\<name>\\.claude\\CLAUDE.md", "type": "User", "content": "…" },
+    { "path": "C:\\work\\project\\CLAUDE.md", "type": "Project", "content": "…" },
+    { "path": "C:\\work\\project\\CLAUDE.local.md", "type": "Local", "content": "…" }
+  ]
+}
+```
+
+Read by the client only for the System Context Files/Rules tabs (path, type, UTF-8 size of
+`content`; the text is dropped, a `User` path becomes `~/.claude/…`) — see
+`docs/knowledgebase/session-log-view.md` § "System Context Files / Rules — sources and merge".
+
 ---
 
 ## Type: `cost-state`

@@ -7,7 +7,7 @@ import type {
   AgentActivation,
   AgentDefinition,
   AssistantEvent,
-  ClaudeMdContext,
+  ClaudeMdFile,
   CompactBoundary,
   FileAccess,
   FileCategoryStats,
@@ -30,6 +30,13 @@ import type {
   TokenUsage,
   UserEvent,
 } from './types';
+import {
+  classifyInstructionRole,
+  extractInstructionFiles,
+  mergeInstructionFiles,
+  rulesToInstructionFiles,
+  toUserDisplayPath,
+} from './instruction-files';
 
 export const BYTES_PER_TOKEN = 3.5;
 
@@ -962,7 +969,7 @@ function extractRulesInjected(
         type?: string;
         path?: string;
         displayPath?: string;
-        content?: { content?: string };
+        content?: { type?: string; content?: string };
       };
     };
     if (ae.attachment?.type !== 'nested_memory') continue;
@@ -970,11 +977,18 @@ function extractRulesInjected(
     const label = normalizeRuleName(raw);
     if (!label || seen.has(label)) continue;
     seen.add(label);
+    const fileType = ae.attachment.content?.type;
+    // A User-type file lives under the home directory: never keep its absolute path.
+    const path =
+      fileType?.toLowerCase() === 'user'
+        ? toUserDisplayPath(ae.attachment.path ?? raw)
+        : raw;
     const text = ae.attachment.content?.content ?? '';
     const bytes = text ? new TextEncoder().encode(text).length : undefined;
     result.push({
       name: label,
-      ...(raw && { path: raw }),
+      ...(path && { path }),
+      ...(fileType && { type: fileType }),
       ...(bytes !== undefined &&
         bytes > 0 && {
           bytes,
@@ -1730,15 +1744,6 @@ export function computeWorkflowCostPerToken(
   return mainTokens > 0 ? mainCost / mainTokens : null;
 }
 
-function classifyClaudeMdRole(
-  rawPath: string,
-): 'claude-md' | 'local-md' | 'rule' {
-  const norm = rawPath.replace(/\\/g, '/');
-  if (norm.includes('.claude/rules/')) return 'rule';
-  if (/CLAUDE\.local\.md$/i.test(norm)) return 'local-md';
-  return 'claude-md';
-}
-
 // Main exported function
 // ---------------------------------------------------------------------------
 
@@ -2402,29 +2407,26 @@ export function parseSessionLogs(
   }
 
   // 6. Compute summary
-  // System Context (DD-13): claudeMd, skillDefinitions, agentDefinitions and mcpConfig are all
-  // built from the hook-reported harness snapshot (DD-1), loaded server-side and passed in as
+  // System Context (DD-13): skillDefinitions, agentDefinitions and mcpConfig are built from the
+  // hook-reported harness snapshot (DD-1), loaded server-side and passed in as
   // `options.harnessSnapshot`. With no snapshot (old hook, or a session that never bound one —
-  // DD-17), every one of these stays undefined and the corresponding System Context tabs do not
-  // render. There is no fallback to the old per-event or `skill_listing` sources any more.
-  let claudeMd: ClaudeMdContext | undefined;
-  if (
+  // DD-17), they stay undefined and the corresponding System Context tabs do not render.
+  // `claudeMd` (Files/Rules tabs) merges three sources — the snapshot's `systemContext`, the Claude
+  // log `instructions` attachment and the per-turn `nested_memory` injections (on demand); the merge
+  // runs after path normalisation below, so its key is the repo-relative path. No text is kept.
+  const snapshotInstructionFiles: ClaudeMdFile[] =
     harnessSnapshot?.systemContext &&
     harnessSnapshot.systemContext.totalBytes > 0
-  ) {
-    claudeMd = {
-      totalBytes: harnessSnapshot.systemContext.totalBytes,
-      estTokens: Math.round(
-        harnessSnapshot.systemContext.totalBytes / charsPerToken,
-      ),
-      files: harnessSnapshot.systemContext.files.map((f) => ({
-        path: f.path,
-        bytes: f.bytes,
-        role: classifyClaudeMdRole(f.path),
-        ...(f.content !== undefined ? { content: f.content } : {}),
-      })),
-    };
-  }
+      ? harnessSnapshot.systemContext.files.map((f) => ({
+          path: f.path,
+          bytes: f.bytes,
+          role: classifyInstructionRole(f.path),
+        }))
+      : [];
+  const logInstructionFiles = extractInstructionFiles(events);
+  const onDemandInstructionFiles = rulesToInstructionFiles(
+    turns.flatMap((t) => t.rulesInjected),
+  );
 
   if (harnessSnapshot?.skills && harnessSnapshot.skills.length > 0) {
     const visible = harnessSnapshot.skills.filter(
@@ -2755,7 +2757,6 @@ export function parseSessionLogs(
     registeredAgents,
     registeredSkills,
     ...(sessionModel !== undefined && { model: sessionModel }),
-    ...(claudeMd !== undefined && { claudeMd }),
     ...(skillDefinitionsMap !== undefined && {
       skillDefinitions: skillDefinitionsMap,
     }),
@@ -2777,7 +2778,13 @@ export function parseSessionLogs(
       for (const f of turn.files) allAbsPaths.push(f.path);
       for (const r of turn.rulesInjected) if (r.path) allAbsPaths.push(r.path);
     }
-    for (const f of claudeMd?.files ?? []) allAbsPaths.push(f.path);
+    // `~/…` (User-type) paths are already display paths — never part of root detection.
+    const instructionFiles = [
+      ...snapshotInstructionFiles,
+      ...logInstructionFiles,
+      ...onDemandInstructionFiles,
+    ];
+    for (const f of instructionFiles) allAbsPaths.push(f.path);
 
     // Prefer caller-supplied repoRoot; otherwise auto-detect from the session data.
     const effectiveRoot =
@@ -2831,14 +2838,31 @@ export function parseSessionLogs(
           f.path = normaliseClientPath(f.path, effectiveRoot);
         }
         for (const r of turn.rulesInjected) {
-          if (r.path) r.path = normaliseClientPath(r.path, effectiveRoot);
+          if (r.path && !r.path.startsWith('~/'))
+            r.path = normaliseClientPath(r.path, effectiveRoot);
         }
       }
-      if (claudeMd) {
-        for (const f of claudeMd.files) {
+      for (const f of instructionFiles) {
+        if (!f.path.startsWith('~/'))
           f.path = normaliseClientPath(f.path, effectiveRoot);
-        }
       }
+    }
+  }
+
+  // Merge after normalisation (DD-3): snapshot first, then the log overwrites per path.
+  {
+    const files = mergeInstructionFiles([
+      snapshotInstructionFiles,
+      logInstructionFiles,
+      onDemandInstructionFiles,
+    ]);
+    if (files.length > 0) {
+      const totalBytes = files.reduce((s, f) => s + f.bytes, 0);
+      summary.claudeMd = {
+        totalBytes,
+        estTokens: Math.round(totalBytes / charsPerToken),
+        files,
+      };
     }
   }
 

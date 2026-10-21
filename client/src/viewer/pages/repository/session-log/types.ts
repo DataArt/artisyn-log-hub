@@ -224,8 +224,10 @@ export interface SubAgentNode {
 export interface RuleInjection {
   /** Short label, e.g. "server", "client", "hook" */
   name: string;
-  /** Full file path from the attachment event */
+  /** Full file path from the attachment event (`~/.claude/…` for a User-type file) */
   path?: string;
+  /** Attachment `content.type` as logged, e.g. "Project", "User", "Local" */
+  type?: string;
   /** Byte length of the injected rule content */
   bytes?: number;
   /** Estimated token count: bytes ÷ the session model's chars-per-token ratio */
@@ -362,9 +364,15 @@ export interface SessionSummary {
 export interface ClaudeMdFile {
   path: string;
   bytes: number;
-  role?: 'claude-md' | 'local-md' | 'rule';
+  role?: 'claude-md' | 'local-md' | 'user-md' | 'rule';
+  /** Lowercased attachment `type` (`user` / `project` / `local` / …); absent for snapshot-only files. */
+  typeLabel?: string;
+  /**
+   * Came from a per-turn `nested_memory` injection. Not shown in the UI — only lets Call Tree and
+   * Context Usage skip it, since those bytes are already counted per turn via `rulesInjected`.
+   */
+  onDemand?: boolean;
   lastModified?: number;
-  content?: string;
 }
 
 export interface ClaudeMdContext {

@@ -152,7 +152,7 @@ Events: `/clear` (the `<command-name>` line comes first, it does **not** qualify
 |---|---|
 | Root tokens | 4000 / 1500 / 30000 / 8000 / 0 → 0.0735; W1 3000/1000 → 0.0080; W2 2000/500 → 0.0045; **tree 0.0860** |
 | Work time | P1 60 s + P2 90 s = **150 s** |
-| Context | CLAUDE.md 3500 bytes → ~1000 tok; rules `.claude/rules/db.md` 700 B → ~200 tok, `.claude/rules/ui.md` 1400 B → ~400 tok (both loaded by `nested_memory`); skill `adlc:review-deep` 1750 B → ~500 tok; deferred tools: `mcp__postgres__query`, `mcp__postgres__list_tables`, `mcp__playwright__browser_click` → 2 servers, ~450 tok (3 × 150) |
+| Context | instruction files from the `instructions` attachment (merged with the snapshot's `systemContext`, one row per path): `~/.claude/CLAUDE.md` (user) 1050 B → ~300 tok, `CLAUDE.md` (project) 3500 bytes → ~1000 tok, `CLAUDE.local.md` (local) 700 B → ~200 tok — System Files 5250 B → ~1500 tok; rules `.claude/rules/db.md` 700 B → ~200 tok, `.claude/rules/ui.md` 1400 B → ~400 tok (both loaded by `nested_memory`); skill `adlc:review-deep` 1750 B → ~500 tok; deferred tools: `mcp__postgres__query`, `mcp__postgres__list_tables`, `mcp__playwright__browser_click` → 2 servers, ~450 tok (3 × 150) |
 | Inventory (the hook's self-report) | skills: `adlc:review-deep`, `adlc:review`, `unused-skill`; MCP: postgres, playwright |
 | Harness usage, root without sub-sessions | skill `adlc:review` 1 (slash), skill `adlc:review-deep` 1, rule `db.md` 1, rule `ui.md` 1, workflow `ResearchWorkflow` 1, mcp `postgres:query` 2, mcp `playwright:browser_click` 1, tool `Read` 1; `/clear` is absent |
 | The same with "Include sub-sessions" | `adlc:review-deep` 2, `Read` 2, `Edit` 1; the rest unchanged |
@@ -426,7 +426,7 @@ Common setup for every scenario unless stated otherwise: user U1 is logged in (s
   4. Expand the `ResearchWorkflow` workflow: statistics, the "Agents (2)" section, and the Skills section inside W2.
   5. Info: the Workflows and MCP Usage sections.
 - **Checks:**
-  - The context panel: CLAUDE.md ~1000 tok, Rules: `db.md ~200 tok`, `ui.md ~400 tok`, Skills 3 registered, MCP Servers 2, deferred tools 3 (~450 tokens).
+  - The context panel: Files — three rows `~/.claude/CLAUDE.md` (user, ~300 tok), `CLAUDE.md` (project, ~1000 tok), `CLAUDE.local.md` (local, ~200 tok), no file text anywhere; Rules: `db.md ~200 tok`, `ui.md ~400 tok` (name, size, tokens only); Skills 3 registered, MCP Servers 2, deferred tools 3 (~450 tokens).
   - The P1 turn header contains `adlc:review` as the invoked command; `/clear` is not shown as a turn.
   - Turn P2: Skills "1 skill" (`adlc:review-deep`, ~500 tok), Tools: Read, mcp `postgres:query` ×2, `playwright:browser_click` ×1 (labels with `:`, a purple badge).
   - Workflow: the badge `⚡ ResearchWorkflow`, status completed, duration 45 s, "2 agents · 6.5K tokens · 2 tool uses", "Agents (2)".
@@ -617,7 +617,7 @@ Common setup for every scenario unless stated otherwise: user U1 is logged in (s
   3. GS-03, Context Growth: the per-turn values.
   4. Compare the peak with the Info value "Max context used" and the Summary Peak context tile.
 - **Checks:**
-  - Context Usage: CLAUDE.md **1000**, rule `db.md` **200**, `ui.md` **400**, skill `adlc:review-deep` **500**, deferred tools 3 × 150 = **450** (estimates by `bytes / 3.5`); no rounding along the way, the total = the sum of the parts.
+  - Context Usage: System Files (user + project + local CLAUDE.md) **1500**, rule `db.md` **200**, `ui.md` **400**, skill `adlc:review-deep` **500**, deferred tools 3 × 150 = **450** (estimates by `bytes / 3.5`); no rounding along the way, the total = the sum of the parts.
   - Context Growth (GS-03): the turn values match the table (20K … 180K, after compaction 30K, 35K, 40K, 45K).
   - The Context Growth peak = Info "Max context used" = Summary "Peak context" = **180 000**.
 - **Replaces:** `CU/context-data.test.ts` (49, remainder), `ContextGrowthChart.test.ts`, 4 Context Usage e2e cases (question G10 from the inventory). Closes gap F.3 #24. ≈ 20.

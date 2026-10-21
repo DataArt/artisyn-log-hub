@@ -279,8 +279,9 @@ McpServerModal.tsx              3-tab MCP server detail modal (Overview / Raw Co
 SkillDetailModal.tsx            2-tab skill detail modal (Overview / Full Text); opened by clicking a skill row in SessionContextPanel
 AgentDetailModal.tsx            2-tab agent detail modal (Overview / Body); opened by clicking an agent row in SessionContextPanel
 ToolCallDetailModal.tsx         Modal showing full INPUT (JSON) + RESULT for a single tool call; opened by clicking a ToolCallRow in PromptTurnItem
-FileDetailModal.tsx             Modal showing detail for a CLAUDE.md file (path, type, size, tokens, body); opened by clicking a file row in SessionContextPanel
-RuleDetailModal.tsx             2-tab modal (Overview / Full Text) for a rule file; opened by clicking a rule row in SessionContextPanel
+SystemContextFilesTab.tsx       `InstructionFilesTable` (Files tab: path / type user·project·local / size / tokens; `~/…` user paths shown as-is, repo paths shortened against each other) and `RulesTable` (Rules tab); rows `sysctx-file-row` / `sysctx-rule-row` with `data-file-type`; no loaded/on-demand marking; never shows file text
+FileDetailModal.tsx             Metadata-only modal for a CLAUDE.md file (path, type via `instructionTypeMeta`, size, tokens); no file text; opened by clicking a file row in SessionContextPanel
+RuleDetailModal.tsx             Metadata-only modal for a rule file (path, type, size, tokens, Loaded); no Body tab, no rule text; opened by clicking a rule row in SessionContextPanel
 SourceBadge.tsx                 Small inline badge showing source type: project / plugin / built-in; used by SessionContextPanel skill/agent rows
 TurnHeader.tsx                  Header row for a prompt turn: turn index, model, token counts, cost, duration; used by PromptTurnItem
 PromptTurnItem.tsx              Single turn row in prompt list; clicking a tool call row opens ToolCallDetailModal; StopFailureBanner rendered when hasStopFailure=true
@@ -321,7 +322,8 @@ raw-logs/                       Per-type expanded view renderers for RawLogsTab 
   simple-renderers.tsx          Small renderers for ai-title, file-history-snapshot, last-prompt, mode, permission-mode, queue-operation
 log-parser.ts                   Parses raw log events into structured turn list
 types.ts                        Turn and session log local types
-context-panel-helpers.ts        Pure helpers for SessionContextPanel: shortenClaudeMdPath, getRuleShortName
+context-panel-helpers.ts        Pure helpers for SessionContextPanel: shortenClaudeMdPath, getRuleShortName, instructionTypeMeta (type label + color of an instruction file)
+instruction-files.ts            Pure helpers building `summary.claudeMd` from the snapshot + the `instructions` attachment + on-demand `nested_memory` rules: extractInstructionFiles, rulesToInstructionFiles, mergeInstructionFiles, toUserDisplayPath, classifyInstructionRole
 session-logs-error.ts           `getSessionLogsErrorMessage(error)` — 403→'No access', 422→unavailable text, else generic; lifted out of SessionLogView.tsx (still its own consumer) so CallTreeView.tsx and the new Summary tab share one mapping instead of three copies
 compact-boundary-placement.ts   `compactBoundariesBetween(turnTs, nextTs, boundaries)` (consumed by PromptTurnList.tsx, replacing its former inline filter) and `findBoundaryTurnIndex(visibleTurns, boundary)` (consumed by the `context-compression` detector) — both apply the same "a boundary belongs to the visible turn it follows" rule, so the Logs tab's divider placement and the Summary tab's deep-link target can never disagree
 turn-anchor.ts                  Pure `resolveTurnAnchor(visibleTurns, targetIndex): TurnAnchor` — the DOM-free scroll-target resolution consumed by SessionLogView.tsx's cross-tab scroll effect (exact hit / nearest-following-turn / top-of-list / none)

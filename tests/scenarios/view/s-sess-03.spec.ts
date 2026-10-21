@@ -177,6 +177,36 @@ test('@S-SESS-03 Logs: what counts as a prompt, what is hidden, how a turn reads
     await expect(dialog).toHaveCount(0);
   });
 
+  await test.step('8a. GS-05 System Context Files/Rules: instructions attachment merged with the snapshot (user / project / local, no duplicate CLAUDE.md), rules with sizes, no file text and no absolute path', async () => {
+    const panel = page.getByTestId('sysctx-panel');
+    await panel.getByTestId('sysctx-tab-files').click();
+    const files = panel.getByTestId('sysctx-file-row');
+    await expect(files, 'snapshot CLAUDE.md and the log one are one row').toHaveCount(3);
+    const fileRow = (type: string) => files.and(panel.locator(`[data-file-type="${type}"]`));
+    await expect(fileRow('user')).toContainText('~/.claude/CLAUDE.md');
+    await expect(fileRow('user')).toContainText('1.0 KB');
+    await expect(fileRow('project')).toContainText('CLAUDE.md');
+    await expect(fileRow('project')).toContainText('3.4 KB');
+    await expect(fileRow('local')).toContainText('CLAUDE.local.md');
+    await expect(fileRow('local')).toContainText('700 B');
+    await expect(files.filter({ hasText: /\/home\/|\/work\// }), 'no absolute path').toHaveCount(0);
+
+    await panel.getByTestId('sysctx-tab-rules').click();
+    const rules = panel.getByTestId('sysctx-rule-row');
+    await expect(rules).toHaveCount(2);
+    await expect(rules.filter({ hasText: 'db' })).toContainText('700 B');
+    await expect(rules.filter({ hasText: 'ui' })).toContainText('1.4 KB');
+    await rules.filter({ hasText: 'db' }).click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    await expect(dialog.getByRole('tab', { name: 'Body' }), 'no rule text tab').toHaveCount(0);
+    await expect(dialog).not.toContainText('Use parameterised queries only');
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+    for (const text of ['GS05-LOCAL-MARKER', 'GS05-USER-MARKER', 'Use parameterised queries only'])
+      await expect(panel, `no file text: ${text}`).not.toContainText(text);
+  });
+
   await test.step('9. GS-01 (no harness snapshot): no Skills, Agents or MCP tab, and no page error', async () => {
     await openSession(page, owner, repo.repoId, repo.rootId('gs-01'), { tab: 'logs' });
     await expect(page.getByTestId('sysctx-tab-skills')).toHaveCount(0);

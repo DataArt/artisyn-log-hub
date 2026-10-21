@@ -314,7 +314,11 @@ export function useCallTreeNodes(
       });
     }
 
-    for (const file of parsed.summary.claudeMd?.files ?? []) {
+    // On-demand files are already per-turn rule rows (`rulesInjected`) — count them once.
+    const initialFiles = (parsed.summary.claudeMd?.files ?? []).filter(
+      (f) => !f.onDemand,
+    );
+    for (const file of initialFiles) {
       const tokens = Math.round(file.bytes / 3.5);
       systemChildren.push({
         type: 'claude-md',

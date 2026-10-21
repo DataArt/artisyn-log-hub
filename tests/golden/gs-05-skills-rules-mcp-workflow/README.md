@@ -7,6 +7,11 @@ W1 Thursday 10:00:00–10:03:30.
   `/adlc:review src/` in the new `<command-message>`-first shape (a prompt, tracked as a skill), then
   P2 "Research the billing flow" with `Skill(adlc:review-deep)`, `Read`, `mcp__postgres__query` ×2,
   `mcp__playwright__browser_click` ×1 and `Workflow(ResearchWorkflow)`.
+- An `instructions` attachment (`gs05-0000i`, right after the `skill_listing` one) lists the initial
+  instruction files: User `/home/golden/.claude/CLAUDE.md` (1050 B, shown as `~/.claude/CLAUDE.md`),
+  Project `/work/repo-gold/CLAUDE.md` (3500 B — the same file as the snapshot's `CLAUDE.md`, so the
+  System Context Files tab shows it once) and Local `/work/repo-gold/CLAUDE.local.md` (700 B, contains
+  `GS05-LOCAL-MARKER`, which must never appear in the panel).
 - Rules `.claude/rules/db.md` (700 B) and `ui.md` (1400 B) arrive as `nested_memory` attachments; the
   skill body is 1750 B; a `deferred_tools_delta` lists the three MCP tools. An `isInitial: true`
   `skill_listing` attachment names `adlc:review-deep` and `adlc:review` — `unused-skill` is in the
