@@ -4,7 +4,8 @@
 //
 // Data: GS-07 (main: three prompts with failures, a denial, an unresolved call, plus distractors —
 // a sidechain pair of 50 000 / 10 000 tokens, an isMeta line, a late <task-notification> and an
-// answer split over two lines with one `message.id`) and GS-01 (files). Uploaded through
+// answer split over two lines with one `message.id`), GS-01 (files) and GS-05 (System Context, and
+// the ResearchWorkflow run with its two workflow agents W1/W2 for the Agents table). Uploaded through
 // POST /api/v2/logs (DD SC3); the numbers come from their expected.json (DD D3).
 //
 // Code facts that differ from the design text:
@@ -28,7 +29,7 @@
 //   - tests/e2e/session-log-view.spec.ts (basic Logs checks: ≈ 6)
 import { test, expect } from '../fixtures';
 import { loadExpected } from '../helpers/golden';
-import { hms, int, logTurns, num, openSession, turnMetric, uploadGoldenRepo } from '../helpers/session-view';
+import { hms, int, logTurns, num, openSession, turnMetric, uploadGoldenRepo, usd4 } from '../helpers/session-view';
 
 const HIDDEN_TEXTS = [
   'Side task: summarise the build log', // sidechain user line
@@ -205,6 +206,67 @@ test('@S-SESS-03 Logs: what counts as a prompt, what is hidden, how a turn reads
     await expect(dialog).toHaveCount(0);
     for (const text of ['GS05-LOCAL-MARKER', 'GS05-USER-MARKER', 'Use parameterised queries only'])
       await expect(panel, `no file text: ${text}`).not.toContainText(text);
+  });
+
+  await test.step('8b. GS-05 workflow Agents table: shown as soon as the workflow opens; one row per agent with label, duration, tokens and cost; numbers 1/2 and 12-char ids; a row opens a modal with the agent Logs and Raw logs tabs; no extra request', async () => {
+    const G5 = loadExpected('gs-05').roots[0];
+    const node = (key: string) => {
+      const n = G5.nodes.find((x) => x.key === key);
+      if (!n || n.costUsd === null) throw new Error(`gs-05 expected.json has no priced node "${key}"`);
+      return { ...n, costUsd: n.costUsd };
+    };
+    const apiRequests: string[] = [];
+    const onRequest = (req: { url(): string }) => {
+      if (req.url().includes('/api/')) apiRequests.push(req.url());
+    };
+    page.on('request', onRequest);
+
+    await page.getByText('⚡ ResearchWorkflow', { exact: true }).click();
+    await expect(page.getByText('Agents (2)', { exact: true })).toBeVisible();
+    const rows = page.getByTestId('workflow-agent-row');
+    await expect(rows).toHaveCount(2);
+    const expectedRows = [
+      { key: 'w1', label: 'Add a billing section to src/report.ts', duration: '0:00:18' },
+      { key: 'w2', label: 'Review the billing flow in depth', duration: '0:00:23' },
+    ];
+    for (const { key, label, duration } of expectedRows) {
+      const row = page.locator(`[data-testid="workflow-agent-row"][data-agent-id$="gs05${key}"]`);
+      await expect(row, `${key} row`).toHaveCount(1);
+      const cells = row.locator(':scope > td');
+      const n = node(key);
+      await expect(cells.nth(1), `${key} label`).toContainText(label);
+      await expect(cells.nth(2), `${key} duration`).toHaveText(duration);
+      const t = n.tokens;
+      const tokens = t.input + t.output + t.cacheRead + t.cacheWrite5m + t.cacheWrite1h;
+      await expect(cells.nth(3), `${key} tokens`).toHaveText(`${(tokens / 1000).toFixed(1)}K`);
+      await expect(cells.nth(4), `${key} cost`).toHaveText(usd4(n.costUsd));
+      const agentId = (await row.getAttribute('data-agent-id'))!;
+      await expect(cells.nth(1), `${key} id line`).toContainText(`${agentId.slice(0, 12)}…`);
+    }
+    const numbers = await rows.evaluateAll((trs) => trs.map((tr) => tr.querySelector('td')?.textContent?.trim()));
+    expect(new Set(numbers), 'the # cells (both agents start together: order is AO-02, not checked here)').toEqual(new Set(['1', '2']));
+
+    const w1 = page.locator('[data-testid="workflow-agent-row"][data-agent-id$="gs05w1"]');
+    await w1.click();
+    const dialog = page.getByRole('dialog');
+    await expect(dialog).toBeVisible();
+    await expect(dialog).toContainText(expectedRows[0].label);
+    // "Logs" tab (default): the agent's own turn, rendered like the session's Logs tab.
+    const agentLogs = dialog.getByTestId('workflow-agent-logs');
+    await expect(agentLogs).toContainText(expectedRows[0].label);
+    // "Raw logs" tab: the agent's transcript, rendered like the session's Raw Logs tab.
+    await dialog.getByRole('tab', { name: 'Raw logs' }).click();
+    const rawLogs = dialog.getByTestId('workflow-agent-raw-logs');
+    await expect(rawLogs, 'the TurnHeader row').toContainText('Turn #1');
+    const records = rawLogs.locator('tbody tr.cursor-pointer');
+    await expect(records, "W1's 4 records, header row excluded").toHaveCount(4);
+    await records.last().click();
+    await expect(rawLogs).toContainText('Billing section added.');
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
+
+    page.off('request', onRequest);
+    expect(apiRequests, 'the table and the agent modal reuse the loaded Logs payload').toEqual([]);
   });
 
   await test.step('9. GS-01 (no harness snapshot): no Skills, Agents or MCP tab, and no page error', async () => {

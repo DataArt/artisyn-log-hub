@@ -41,6 +41,7 @@ format where the two differ).
 | [local-request-detection](local-request-detection.md) | `server/src/auth/utils/localhost.util.ts`, `container-gateway.util.ts` | jest |
 | [release-link-token](release-link-token.md) | `server/src/releases/release-token.ts` | jest |
 | [harness-snapshot](harness-snapshot.md) | hook `skill-catalog.js`, `harness-snapshot.js` | `node --test` |
+| [workflow-agent-rows](workflow-agent-rows.md) | `client/.../session-log/workflow-agent-rows.ts` | vitest |
 
 ## File layout
 

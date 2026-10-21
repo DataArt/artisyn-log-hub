@@ -204,6 +204,8 @@ export interface SubAgentNode {
   model?: string;
   tokens?: TokenBreakdown;
   durationMs?: number;
+  /** Epoch ms of the agent's first timestamped transcript record. */
+  startMs?: number;
   toolUseID?: string;
   parentToolUseID?: string;
   /** Tool calls made across the agent's own transcript, when available (e.g. workflow agents). */

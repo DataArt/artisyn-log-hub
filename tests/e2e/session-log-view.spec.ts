@@ -603,7 +603,7 @@ test.describe('Session Log View — Workflow agent visibility', () => {
     });
   }
 
-  test('@core Logs tab: expanding a workflow run with linked agents shows an Agents section with an expandable agent row', async ({
+  test('@core Logs tab: expanding a workflow run with linked agents shows an Agents table whose row opens the agent modal', async ({
     page,
   }) => {
     await openWfSession(page, WORKFLOW_ROOT_LIST_LABEL, WORKFLOW_ROOT_PROMPT);
@@ -611,22 +611,23 @@ test.describe('Session Log View — Workflow agent visibility', () => {
     // Expand the workflow's own collapsible row (the "⚡ <name>" pill trigger).
     await page.getByText(`⚡ ${WORKFLOW_NAME}`).click();
 
-    // The "Agents (N)" drill-down section appears with the linked direct agent.
-    const agentsTrigger = page.getByText('Agents (1)');
-    await expect(agentsTrigger).toBeVisible({ timeout: 5_000 });
-    await agentsTrigger.click();
+    // The "Agents (N)" table is shown right away with the linked direct agent.
+    await expect(page.getByText('Agents (1)')).toBeVisible({ timeout: 5_000 });
 
-    // Expand the agent row itself to reveal its own prompt (sourced from its own
-    // transcript — buildAgentNodesForIds / firstUserPromptText).
-    // Scoped to the trigger button's exact accessible name — a plain getByText substring
-    // match also hits the left-nav repo link, whose URL embeds this same e2e-generated id.
+    // Clicking the agent row opens its modal, whose Logs tab shows the agent's own prompt (from
+    // its own transcript). The row is addressed by its bare agent id; the prompt is also the row
+    // label, so the assertion is scoped to the modal's Logs tab.
     await page
-      .getByRole('button', {
-        name: wfAgentSessionId.replace('agent-', ''),
-        exact: true,
-      })
+      .locator(
+        `[data-testid="workflow-agent-row"][data-agent-id="${wfAgentSessionId.replace('agent-', '')}"]`,
+      )
       .click();
-    await expect(page.getByText(WORKFLOW_AGENT_PROMPT)).toBeVisible({
+    await expect(
+      page
+        .getByRole('dialog')
+        .getByTestId('workflow-agent-logs')
+        .getByText(WORKFLOW_AGENT_PROMPT),
+    ).toBeVisible({
       timeout: 5_000,
     });
   });

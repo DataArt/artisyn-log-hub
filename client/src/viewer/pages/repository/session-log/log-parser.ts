@@ -1341,6 +1341,31 @@ function firstUserPromptText(logs: Record<string, unknown>[]): string {
 }
 
 /**
+ * Time span of a single agent's own raw transcript: `startMs` is the minimum and `endMs` the
+ * maximum of every record's `timestamp` that is a string `Date.parse` accepts (not `NaN`). Records
+ * without such a timestamp are ignored; when none qualify, both fields are absent.
+ */
+export function agentLogTimeSpan(logs: Record<string, unknown>[]): {
+  startMs?: number;
+  endMs?: number;
+} {
+  let startMs: number | undefined;
+  let endMs: number | undefined;
+  for (const rec of logs) {
+    const ts = rec['timestamp'];
+    if (typeof ts !== 'string') continue;
+    const ms = Date.parse(ts);
+    if (Number.isNaN(ms)) continue;
+    if (startMs === undefined || ms < startMs) startMs = ms;
+    if (endMs === undefined || ms > endMs) endMs = ms;
+  }
+  return {
+    ...(startMs !== undefined ? { startMs } : {}),
+    ...(endMs !== undefined ? { endMs } : {}),
+  };
+}
+
+/**
  * Builds a `SubAgentNode[]` forest restricted to exactly the given `agentIds` (bare ids, no
  * "agent-" prefix) — used to render `WorkflowRun.agentSessionIds` in the Logs tab, where there is
  * no `agent_progress`/`Agent` tool_use tree to walk (see `firstUserPromptText` doc above).
@@ -1354,6 +1379,12 @@ function firstUserPromptText(logs: Record<string, unknown>[]): string {
  * falling back to `subagentStats['agent-'+agentId]` (the `session_stats`-derived totals) when the
  * transcript itself carries no usage. An id with no entry in `subagentLogsMap` is skipped — it
  * cannot be rendered without a transcript to source a prompt from.
+ *
+ * Timing also comes from the agent's own log via `agentLogTimeSpan`: `startMs` is set when the
+ * log has a parseable timestamp, and `durationMs = endMs − startMs` when both ends are known.
+ *
+ * Output order (roots and each node's `children`) stays the `agentIds` input order — this function
+ * never sorts; chronological ordering and numbering live in `orderAgentRows`.
  */
 export function buildAgentNodesForIds(
   agentIds: string[],
@@ -1411,12 +1442,17 @@ export function buildAgentNodesForIds(
     // onto the node, which is why a workflow agent's skill loads were invisible in the Logs tab.
     const skills = parsed.turns.flatMap((t) => t.skills);
     const rulesInjected = parsed.turns.flatMap((t) => t.rulesInjected);
+    const { startMs, endMs } = agentLogTimeSpan(logs);
 
     nodeMap.set(agentId, {
       agentId,
       prompt,
       ...(model !== null ? { model } : {}),
       ...(tokens !== undefined ? { tokens } : {}),
+      ...(startMs !== undefined ? { startMs } : {}),
+      ...(startMs !== undefined && endMs !== undefined
+        ? { durationMs: endMs - startMs }
+        : {}),
       ...(toolCalls.length > 0 ? { toolCalls } : {}),
       ...(files.length > 0 ? { files } : {}),
       ...(skills.length > 0 ? { skills } : {}),
