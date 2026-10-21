@@ -1271,7 +1271,7 @@ function buildAdvisorPrompt(aggregate, contextUsage, skillInvocations, promptTur
     '',
     'Do not claim WHEN in the session (e.g. "before any tool calls", "upfront", "early") a',
     'token/usage figure was reached unless the prompt explicitly gives you a number for that exact',
-    'point in time — only the labeled Initial/Current/Peak context lines above are timed data',
+    'point in time — only the labeled Initial/Current/Peak context lines below are timed data',
     'points; no other statistic below has timing information attached.',
     '',
     'Session usage summary:',
