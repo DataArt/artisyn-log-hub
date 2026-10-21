@@ -8,7 +8,7 @@ import type {
   AgentDefinition,
   SessionSummary,
 } from './types';
-import { formatBytes, formatCompact, resolveCharsPerToken } from './log-parser';
+import { formatCompact, resolveCharsPerToken } from './log-parser';
 import { cn } from '../../../lib/cn';
 import { McpServerModal } from './McpServerModal';
 import { SkillDetailModal } from './SkillDetailModal';
@@ -16,7 +16,7 @@ import { AgentDetailModal } from './AgentDetailModal';
 import { FileDetailModal } from './FileDetailModal';
 import { RuleDetailModal } from './RuleDetailModal';
 import { SourceBadge } from './SourceBadge';
-import { shortenClaudeMdPath, getRuleShortName } from './context-panel-helpers';
+import { InstructionFilesTable, RulesTable } from './SystemContextFilesTab';
 import type { ModelPricingMap } from '../../../../models/pricing';
 
 interface Props {
@@ -149,7 +149,6 @@ export function SessionContextPanel({ summary, mcpCalls, pricing }: Props) {
     };
 
   const nonMcpTools = deferredTools.filter((t) => !t.startsWith('mcp__'));
-  const filePaths = nonRuleFiles.map((f) => f.path);
 
   return (
     <div
@@ -243,65 +242,11 @@ export function SessionContextPanel({ summary, mcpCalls, pricing }: Props) {
             {/* Files */}
             {hasFiles && (
               <TabsContent value="files" className="mt-2">
-                <table className="text-xs">
-                  <thead>
-                    <tr className="border-b border-border/50">
-                      <th className="pb-1 pr-3 text-left font-medium text-muted-foreground">
-                        Path
-                      </th>
-                      <th className="pb-1 pr-3 text-left font-medium text-muted-foreground">
-                        Type
-                      </th>
-                      <th className="pb-1 pr-3 text-right font-medium text-muted-foreground">
-                        Size
-                      </th>
-                      <th className="pb-1 text-right font-medium text-muted-foreground">
-                        Tokens
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {nonRuleFiles.map((file, i) => {
-                      const displayPath = shortenClaudeMdPath(
-                        file.path,
-                        filePaths,
-                      );
-                      const estTok = Math.round(file.bytes / charsPerToken);
-                      const roleMeta =
-                        file.role === 'local-md'
-                          ? {
-                              label: 'local',
-                              cls: 'text-orange-600 dark:text-orange-400',
-                            }
-                          : {
-                              label: 'project',
-                              cls: 'text-emerald-600 dark:text-emerald-400',
-                            };
-                      return (
-                        <tr
-                          key={i}
-                          className="cursor-pointer hover:bg-muted/30"
-                          onClick={() => setSelectedFile(file)}
-                        >
-                          <td className="py-1 pr-3 font-mono text-foreground/80">
-                            {displayPath}
-                          </td>
-                          <td className="py-1 pr-3">
-                            <span className={cn('text-xs', roleMeta.cls)}>
-                              {roleMeta.label}
-                            </span>
-                          </td>
-                          <td className="py-1 pr-3 whitespace-nowrap text-right font-mono text-muted-foreground">
-                            {formatBytes(file.bytes)}
-                          </td>
-                          <td className="py-1 whitespace-nowrap text-right font-mono text-muted-foreground">
-                            ~{formatCompact(estTok)} tok
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                <InstructionFilesTable
+                  files={nonRuleFiles}
+                  charsPerToken={charsPerToken}
+                  onSelect={setSelectedFile}
+                />
               </TabsContent>
             )}
 
@@ -485,44 +430,11 @@ export function SessionContextPanel({ summary, mcpCalls, pricing }: Props) {
             {/* Rules */}
             {hasRules && (
               <TabsContent value="rules" className="mt-2">
-                <table className="text-xs">
-                  <thead>
-                    <tr className="border-b border-border/50">
-                      <th className="pb-1 pr-3 text-left font-medium text-muted-foreground">
-                        Name
-                      </th>
-                      <th className="pb-1 pr-3 text-right font-medium text-muted-foreground">
-                        Size
-                      </th>
-                      <th className="pb-1 text-right font-medium text-muted-foreground">
-                        Tokens
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {ruleFiles.map((file, i) => {
-                      const name = getRuleShortName(file.path);
-                      const estTok = Math.round(file.bytes / charsPerToken);
-                      return (
-                        <tr
-                          key={i}
-                          className="cursor-pointer hover:bg-muted/30"
-                          onClick={() => setSelectedRule(file)}
-                        >
-                          <td className="py-1 pr-3 font-mono text-foreground/80">
-                            {name}
-                          </td>
-                          <td className="py-1 pr-3 whitespace-nowrap text-right font-mono text-muted-foreground">
-                            {formatBytes(file.bytes)}
-                          </td>
-                          <td className="py-1 whitespace-nowrap text-right font-mono text-muted-foreground">
-                            ~{formatCompact(estTok)} tok
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                <RulesTable
+                  files={ruleFiles}
+                  charsPerToken={charsPerToken}
+                  onSelect={setSelectedRule}
+                />
               </TabsContent>
             )}
           </Tabs>

@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="760" viewBox="0 0 1440 760" font-family="Segoe UI, system-ui, sans-serif">
+  <rect width="1440" height="760" fill="#ffffff"/>
+  <text x="20" y="28" font-size="15" font-weight="600" fill="#111">A. Admin opens #/repos/&lt;id&gt;?users=all for another user's private repo (FR-2, FR-5, FR-6, AC-1, AC-6)</text>
+
+  <!-- frame A -->
+  <rect x="20" y="40" width="1400" height="330" fill="#fff" stroke="#d4d4d4"/>
+  <rect x="20" y="40" width="1400" height="40" fill="#fafafa"/>
+  <line x1="20" y1="80" x2="1420" y2="80" stroke="#e5e5e5"/>
+  <circle cx="42" cy="60" r="7" fill="#3b4bd8"/>
+  <text x="58" y="65" font-size="13" font-weight="600" fill="#111">[local] Artisyn Log Hub</text>
+  <text x="1320" y="65" font-size="12" fill="#666" text-anchor="end">admin@example.com</text>
+  <text x="1340" y="65" font-size="12" font-weight="600" fill="#111">Edit email</text>
+  <rect x="20" y="81" width="280" height="289" fill="#fff"/>
+  <line x1="301" y1="81" x2="301" y2="370" stroke="#e5e5e5" stroke-width="4"/>
+  <rect x="20" y="96" width="280" height="24" fill="#f5f5f5"/>
+  <text x="44" y="113" font-size="11" fill="#888">MY REPOS</text>
+  <text x="32" y="142" font-size="12" fill="#333">https://github.com/acme/admin-tools</text>
+  <text x="32" y="168" font-size="12" fill="#333">Import repo sessions</text>
+  <text x="32" y="200" font-size="11" fill="#7c3aed">(alice's repo is not listed)</text>
+
+  <rect x="320" y="96" width="250" height="26" rx="13" fill="#fff5f5" stroke="#dc2626" stroke-dasharray="4 3"/>
+  <text x="334" y="113" font-size="11" fill="#dc2626" text-decoration="line-through">Private repo view</text>
+  <text x="440" y="113" font-size="11" fill="#dc2626">not shown</text>
+
+  <text x="780" y="230" font-size="14" fill="#666">Repository not found</text>
+  <rect x="580" y="268" width="560" height="80" rx="6" fill="#f5f3ff" stroke="#7c3aed"/>
+  <text x="596" y="290" font-size="12" font-weight="600" fill="#5b21b6">Reuses the existing "Repository not found" empty state.</text>
+  <text x="596" y="310" font-size="12" fill="#5b21b6">Server returns 403/404 for summary, sessions, branches, contexts,</text>
+  <text x="596" y="328" font-size="12" fill="#5b21b6">analytics and reports; no header, tabs or session list render.</text>
+
+  <text x="20" y="410" font-size="15" font-weight="600" fill="#111">B. Owner opens their own private repo — data unchanged (AC-2)</text>
+  <!-- frame B -->
+  <rect x="20" y="422" width="1400" height="320" fill="#fff" stroke="#d4d4d4"/>
+  <rect x="21" y="423" width="279" height="318" fill="#fff"/>
+  <line x1="301" y1="422" x2="301" y2="742" stroke="#e5e5e5" stroke-width="4"/>
+  <rect x="21" y="436" width="279" height="24" fill="#f5f5f5"/>
+  <text x="44" y="453" font-size="11" fill="#888">MY REPOS</text>
+  <rect x="21" y="466" width="279" height="28" fill="#f0f0f0"/>
+  <text x="32" y="485" font-size="12" font-weight="600" fill="#111">https://github.com/acme/billing</text>
+
+  <!-- repo header -->
+  <rect x="318" y="436" width="126" height="24" rx="12" fill="#ffffff" stroke="#d97706" stroke-dasharray="4 3"/>
+  <text x="330" y="452" font-size="11" fill="#92400e">badge: open question</text>
+  <text x="456" y="453" font-size="13" font-family="Consolas, monospace" fill="#111">https://github.com/acme/billing</text>
+  <text x="1270" y="453" font-size="12" fill="#666">Sessions: 84   Users: 1</text>
+  <line x1="304" y1="470" x2="1420" y2="470" stroke="#e5e5e5"/>
+  <rect x="318" y="480" width="22" height="22" rx="4" fill="#fff" stroke="#d4d4d4"/>
+  <text x="360" y="497" font-size="13" font-weight="600" fill="#111">Sessions</text>
+  <rect x="352" y="506" width="70" height="2" fill="#111"/>
+  <text x="440" y="497" font-size="13" fill="#555">Analytics</text>
+  <text x="520" y="497" font-size="13" fill="#555">Reports</text>
+  <text x="592" y="497" font-size="13" fill="#555">Settings</text>
+  <line x1="304" y1="510" x2="1420" y2="510" stroke="#e5e5e5"/>
+  <rect x="312" y="520" width="282" height="30" rx="4" fill="#fff" stroke="#d4d4d4"/>
+  <text x="324" y="540" font-size="12" fill="#333">By branch</text>
+  <text x="336" y="578" font-size="13" font-family="Consolas, monospace" font-weight="600" fill="#111">main</text>
+  <text x="336" y="596" font-size="11" font-family="Consolas, monospace" fill="#555">2026-10-19 20:33 · 5380m · $871.05</text>
+  <text x="336" y="634" font-size="13" font-family="Consolas, monospace" font-weight="600" fill="#111">master</text>
+  <line x1="600" y1="510" x2="600" y2="742" stroke="#e5e5e5" stroke-width="3"/>
+  <text x="920" y="620" font-size="13" fill="#666">Select a session to view details</text>
+  <rect x="980" y="660" width="430" height="70" rx="6" fill="#fffbeb" stroke="#d97706"/>
+  <text x="994" y="682" font-size="12" fill="#92400e">Open questions: drop the "Private repo view" badge for everyone</text>
+  <text x="994" y="700" font-size="12" fill="#92400e">or keep / replace it for the owner; whether the ?users=all toggle</text>
+  <text x="994" y="718" font-size="12" fill="#92400e">stays for the owner (server ignores / 403 for non-owners).</text>
+</svg>

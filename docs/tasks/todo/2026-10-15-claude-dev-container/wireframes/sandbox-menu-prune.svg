@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="867.1999999999999" height="472" viewBox="0 0 867.1999999999999 472" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="13">
+<title>claude-docker menu — prune plan</title>
+<rect x="0" y="0" width="867.1999999999999" height="472" fill="#f6f7f9"/>
+<rect x="8" y="8" width="851.1999999999999" height="298" rx="8" fill="#ffffff" stroke="#c9ced6"/>
+<path d="M8 16 a8 8 0 0 1 8 -8 h835.1999999999999 a8 8 0 0 1 8 8 v16 h-851.1999999999999 z" fill="#eceff3"/>
+<line x1="8" y1="32" x2="859.1999999999999" y2="32" stroke="#c9ced6"/>
+<circle cx="26" cy="20" r="5" fill="#ff5f57"/>
+<circle cx="44" cy="20" r="5" fill="#febc2e"/>
+<circle cx="62" cy="20" r="5" fill="#28c840"/>
+<text x="433.59999999999997" y="24" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#57606a">Terminal — scripts/claude-docker.ps1</text>
+<text x="35.8" y="59" fill="#8e24aa" font-weight="bold" xml:space="preserve">✻ Prune plan</text>
+<text x="145.0" y="59" fill="#8a8f98" xml:space="preserve">inactive sandboxes (no running claude session)</text>
+<line x1="28" y1="73" x2="839.2" y2="73" stroke="#c9ced6"/>
+<text x="35.8" y="95" fill="#c62828" font-weight="bold" xml:space="preserve">Will remove</text>
+<text x="129.4" y="95" fill="#8a8f98" xml:space="preserve">(container, volumes, worktree, branch)</text>
+<text x="51.4" y="113" fill="#c62828" xml:space="preserve">✗</text>
+<text x="67.0" y="113" fill="#1f2328" xml:space="preserve">r3-otel-port</text>
+<text x="293.2" y="113" fill="#8a8f98" xml:space="preserve">no changes, no commits · 2 d ago</text>
+<text x="51.4" y="131" fill="#c62828" xml:space="preserve">✗</text>
+<text x="67.0" y="131" fill="#1f2328" xml:space="preserve">r4-old-review</text>
+<text x="293.2" y="131" fill="#8a8f98" xml:space="preserve">no changes, no commits · 9 d ago</text>
+<text x="51.4" y="149" fill="#c62828" xml:space="preserve">✗</text>
+<text x="67.0" y="149" fill="#1f2328" xml:space="preserve">r6-merged-review</text>
+<text x="293.2" y="149" fill="#8a8f98" xml:space="preserve">merged into main · 12 d ago</text>
+<text x="35.8" y="185" fill="#2e7d32" font-weight="bold" xml:space="preserve">Will keep</text>
+<text x="51.4" y="203" fill="#2e7d32" xml:space="preserve">✓</text>
+<text x="67.0" y="203" fill="#1f2328" xml:space="preserve">r2-sysctx-review</text>
+<text x="293.2" y="203" fill="#00838f" xml:space="preserve">has work: 1 file</text>
+<text x="527.2" y="203" fill="#8a8f98" xml:space="preserve">→ M merge · F removes anyway, keeps branch</text>
+<text x="51.4" y="221" fill="#2e7d32" xml:space="preserve">✓</text>
+<text x="67.0" y="221" fill="#1f2328" xml:space="preserve">r5-forgotten-spike</text>
+<text x="293.2" y="221" fill="#00838f" xml:space="preserve">has work: 4 files, 2 commits</text>
+<text x="527.2" y="221" fill="#8a8f98" xml:space="preserve">→ M merge · F removes anyway, keeps branch</text>
+<text x="51.4" y="239" fill="#2e7d32" xml:space="preserve">✓</text>
+<text x="67.0" y="239" fill="#1f2328" xml:space="preserve">r1-claude-dev-container</text>
+<text x="293.2" y="239" fill="#8a8f98" xml:space="preserve">active claude session</text>
+<line x1="28" y1="253" x2="839.2" y2="253" stroke="#c9ced6"/>
+<text x="35.8" y="275" fill="#1f2328" xml:space="preserve">Remove 3 sandbox(es)?</text>
+<text x="207.4" y="275" fill="#1f2328" font-weight="bold" xml:space="preserve">y</text>
+<text x="223.0" y="275" fill="#8a8f98" xml:space="preserve">yes</text>
+<text x="262.0" y="275" fill="#1f2328" font-weight="bold" xml:space="preserve">F</text>
+<text x="277.6" y="275" fill="#8a8f98" xml:space="preserve">yes, including ones with work</text>
+<text x="519.4" y="275" fill="#1f2328" font-weight="bold" xml:space="preserve">Esc</text>
+<text x="550.6" y="275" fill="#8a8f98" xml:space="preserve">back</text>
+<rect x="8" y="322" width="851.1999999999999" height="142" rx="6" fill="#fffbe6" stroke="#e3c96b"/>
+<text x="24" y="344" font-family="Segoe UI, Arial, sans-serif" font-size="13" font-weight="bold" fill="#5c4b00">Notes</text>
+<text x="24" y="366" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#3d3a2e" xml:space="preserve">• P on the list opens the same plan that --prune prints (FR-E5); nothing is removed before y or F.</text>
+<text x="24" y="386" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#3d3a2e" xml:space="preserve">• Will remove = nothing to lose: clean worktree, branch merged into its base or without own commits → full --remove incl. branch.</text>
+<text x="24" y="406" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#3d3a2e" xml:space="preserve">• Will keep = has work (changed files / unmerged commits, with the merge hint) or a live claude session.</text>
+<text x="24" y="426" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#3d3a2e" xml:space="preserve">• F = --force: also removes the ones with work, keeping their branches. Orphan resources (no worktree) are listed under Will remove.</text>
+<text x="24" y="446" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#3d3a2e" xml:space="preserve">• Esc returns to the list unchanged; after y / F the list shows "✓ pruned N sandbox(es)" in its status line.</text>
+</svg>

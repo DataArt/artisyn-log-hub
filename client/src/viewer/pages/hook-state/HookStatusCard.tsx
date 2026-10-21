@@ -31,22 +31,25 @@ export function HookStatusCard({
       ? 'Hook has open issues'
       : 'Hook up to date';
 
+  // Theme tokens (not Tailwind `dark:` variants): `dark:` follows the OS
+  // prefers-color-scheme, while the app theme is the `.dark` class — mixing them
+  // put dark-palette text on the light card.
   const tone = hasIssues
     ? {
-        card: 'bg-orange-50 dark:bg-orange-950/20 border-orange-300 dark:border-orange-900',
-        badge: 'bg-orange-500',
-        title: 'text-orange-900 dark:text-orange-300',
-        body: 'text-orange-800 dark:text-orange-400',
+        card: 'bg-warning/10 border-warning/50',
+        badge: 'bg-warning',
+        title: 'text-foreground',
+        body: 'text-muted-foreground',
         button:
-          'border-orange-300 dark:border-orange-900 bg-white dark:bg-transparent text-orange-700 dark:text-orange-400 hover:bg-orange-100 dark:hover:bg-orange-950/30',
+          'border-warning/50 bg-background text-foreground hover:bg-warning/15',
       }
     : {
-        card: 'bg-green-50 dark:bg-green-950/20 border-green-300 dark:border-green-900',
-        badge: 'bg-green-500',
-        title: 'text-green-900 dark:text-green-300',
-        body: 'text-green-800 dark:text-green-400',
+        card: 'bg-success/10 border-success/50',
+        badge: 'bg-success',
+        title: 'text-foreground',
+        body: 'text-muted-foreground',
         button:
-          'border-green-300 dark:border-green-900 bg-white dark:bg-transparent text-green-700 dark:text-green-400 hover:bg-green-100 dark:hover:bg-green-950/30',
+          'border-success/50 bg-background text-foreground hover:bg-success/15',
       };
 
   return (

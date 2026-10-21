@@ -7,7 +7,7 @@ import {
 import type { ClaudeMdFile } from './types';
 import { BYTES_PER_TOKEN, formatBytes, formatCompact } from './log-parser';
 import { cn } from '../../../lib/cn';
-import { formatDate } from './context-panel-helpers';
+import { formatDate, instructionTypeMeta } from './context-panel-helpers';
 
 export function FileDetailModal({
   file,
@@ -19,16 +19,7 @@ export function FileDetailModal({
   charsPerToken?: number;
 }) {
   const estTokens = Math.round(file.bytes / charsPerToken);
-  const roleMeta =
-    file.role === 'local-md'
-      ? {
-          label: 'local',
-          cls: 'text-orange-600 dark:text-orange-400',
-        }
-      : {
-          label: 'project',
-          cls: 'text-emerald-600 dark:text-emerald-400',
-        };
+  const roleMeta = instructionTypeMeta(file);
   return (
     <Dialog
       open

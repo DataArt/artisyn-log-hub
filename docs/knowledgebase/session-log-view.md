@@ -23,7 +23,8 @@ Key files live in `client/src/viewer/pages/repository/session-log/`:
 | `types.ts` | All TypeScript types for log events, turns, and summary |
 | `log-parser.ts` | `parseSessionLogs()` — parses raw event array into `ParsedSession` |
 | `SessionLogView.tsx` | Root container; renders loading/error states, calls parser, renders `SessionContextPanel` + `PromptTurnList` |
-| `SessionContextPanel.tsx` | Collapsible context panel at the top — CLAUDE.md files, rules, MCP tools, skills, agents registered in the session |
+| `SessionContextPanel.tsx` | Collapsible context panel at the top — CLAUDE.md files, rules, MCP tools, skills, agents registered in the session; the Files/Rules tables live in `SystemContextFilesTab.tsx` |
+| `instruction-files.ts` | Pure helpers for the Files/Rules tabs: `extractInstructionFiles` (`instructions` attachment), `rulesToInstructionFiles` (on-demand `nested_memory`), `mergeInstructionFiles`, `toUserDisplayPath`, `classifyInstructionRole` |
 | `PromptTurnList.tsx` | Scrollable list of prompt turns |
 | `PromptTurnItem.tsx` | Single turn row (header + metrics + skills + rules + tools + files + images + agent activations + sub-agents + workflows); clicking a tool row opens `ToolCallDetailModal` |
 | `ToolCallDetailModal.tsx` | Modal for a single tool call — INPUT (JSON) + RESULT blocks with copy and truncation toggle |
@@ -344,6 +345,28 @@ Session-level summary metrics are displayed in `SessionInfoTab.tsx` (the Info ta
 
 `SessionContextPanel.tsx` (rendered at the top of the Logs tab in `SessionLogView.tsx`) shows the session context burden — CLAUDE.md files, rules, registered skills, registered agents, and MCP server configuration. It is collapsible and is distinct from the summary stats panel.
 
+### System Context Files / Rules — sources and merge
+
+`summary.claudeMd` (Files + Rules tabs, the `N files` chip, Session Info, Call Tree, Context Usage)
+is the union of three sources, built in `log-parser.ts` with the helpers in `instruction-files.ts`:
+
+1. the harness snapshot's `systemContext` (hook ≥ 2.22.0; the only source for Claude Code versions
+   before ~2.1.280);
+2. every `attachment.type === "instructions"` line of the Claude log — `files[]` with `path`, `type`
+   (`User` / `Project` / `Local`) and `content` — the initial context;
+3. the per-turn `nested_memory` injections (`turn.rulesInjected`) — loaded during the session; they
+   carry an internal `onDemand: true` that the UI does **not** show (the tabs and modals do not track
+   whether a file was loaded — only name/path, type, size and tokens).
+
+Only path, type (`typeLabel` = attachment `type` lowercased; snapshot-only files fall back to the
+role: `local-md` → `local`, `user-md` → `user`, else `project`) and UTF-8 size are kept — **file text is never stored or shown**, from any source (the rule `content` the snapshot
+carries is dropped; `RuleDetailModal` has no Body tab). User-type paths are rewritten to
+`~/.claude/<rest>` at extraction time and are skipped by the repo-root auto-detection and path
+normalisation. The merge runs after normalisation, keyed by the path with `\` → `/` lowercased, in
+the order snapshot → `instructions` → on-demand (later wins, first-seen order kept); `totalBytes` is
+the sum over the merged set. Call Tree and Context Usage skip `onDemand` files because those bytes
+are already counted per turn via `rulesInjected`.
+
 ---
 
 ## Prompt text extraction pipeline
@@ -450,9 +473,10 @@ Collapsible section, omitted entirely when the session ran no workflows (`workfl
 ## Special log event fields
 
 - `isMeta=true` on `user` events: injected context (e.g., skill output delivered to model) — excluded from qualifying user event check.
-- `attachment` events with `attachment.type=nested_memory`: CLAUDE.md / rule files injected into context — collected as `RuleInjection[]` per turn.
+- `attachment` events with `attachment.type=nested_memory`: CLAUDE.md / rule files injected into context — collected as `RuleInjection[]` per turn (with `content.type` as `RuleInjection.type`; a `User` file's path becomes `~/.claude/…`), and also fed into the System Context Files/Rules tabs.
+- `attachment` events with `attachment.type=instructions`: the initial instruction files (`files[]` with `path`, `type`, `content`) — feed the System Context Files/Rules tabs (see "System Context Files / Rules — sources and merge").
 - The Claude Code 2.1.280 types `atis-latch`, `cost-state` (top-level) and the attachments `prompt_snapshot`, `total_tokens_reminder`, `silent_turn_reminder`, `deferred_tools_record`, `remote_session_change` are not read by the log parser (every loop is gated on its own type) and feed no metric — in particular `cost-state.totalCostUSD` is never a cost source and the tool catalogues in `prompt_snapshot` / `deferred_tools_record` never count as tool usage. In Raw Logs they are collapsed rows with no special renderer (`docs/knowledgebase/raw-logs-renderers.md` § "Types with no special renderer").
-- System Context data (Skills, Agents, MCP, Files, Rules tabs) is **not** parsed from log lines any more. It comes from the `harnessSnapshot` field of the `GET .../logs` response (a `HarnessSnapshot | null`, built server-side from the `harness_snapshots` table — see `docs/knowledgebase/db-tables.md` and the `harness-snapshot` algorithm doc, `docs/knowledgebase/algorithms/harness-snapshot.md`). `parseSessionLogs(raw, { harnessSnapshot })` builds, from that one object: `skillDefinitions` (every snapshot skill except `anthropic-skills:*`), `visibleSkills`/`visibleAgents` (filtered against `registeredSkills`/`registeredAgents`, or all when that set is empty), `agentDefinitions`, `mcpConfig` (`snapshot.mcpServers`) and `claudeMd` (`snapshot.systemContext`). With no snapshot, all of these are empty/`undefined` and the corresponding tabs do not render.
+- System Context data for the Skills, Agents and MCP tabs is **not** parsed from log lines any more (the Files and Rules tabs additionally read the `instructions` / `nested_memory` attachments — see above). It comes from the `harnessSnapshot` field of the `GET .../logs` response (a `HarnessSnapshot | null`, built server-side from the `harness_snapshots` table — see `docs/knowledgebase/db-tables.md` and the `harness-snapshot` algorithm doc, `docs/knowledgebase/algorithms/harness-snapshot.md`). `parseSessionLogs(raw, { harnessSnapshot })` builds, from that one object: `skillDefinitions` (every snapshot skill except `anthropic-skills:*`), `visibleSkills`/`visibleAgents` (filtered against `registeredSkills`/`registeredAgents`, or all when that set is empty), `agentDefinitions`, `mcpConfig` (`snapshot.mcpServers`) and `claudeMd` (`snapshot.systemContext`). With no snapshot, all of these are empty/`undefined` and the corresponding tabs do not render.
 - The old `skill_listing` attachment fallback (reading "Project"/"Built-in" section headers out of the listing `content` to backfill `skillDefinitions`) has been **removed**, along with the parsing of the four synthetic hook events that used to carry this data: `system-context`, `skill-definitions`, `agent-definitions`, `mcp-config`. Sessions uploaded by a hook older than 2.22.0 carry only those old events and no `harnessSnapshot` — they lose their Skills, Agents, MCP, Files and Rules tabs with no fallback and no backfill (an explicit, owner-accepted exception to the usual hook backward-compatibility rule, for this change only). Their raw event lines are unaffected and still render in Raw Logs through the existing renderers (`docs/knowledgebase/raw-logs-renderers.md`).
 
 ---

@@ -7,8 +7,10 @@ reviewer: none
 
 ## Purpose
 
-System Context (Skills, Agents, MCP, Files, Rules) is built entirely from one `harness-snapshot`
-line the hook uploads, never from older per-tab events. Two things decide what shows up and
+System Context (Skills, Agents, MCP, Files, Rules) is built from one `harness-snapshot` line the
+hook uploads, never from older per-tab events; the Files and Rules tabs additionally merge the
+Claude log's own `instructions` / `nested_memory` attachments (log wins per path — see
+`docs/knowledgebase/session-log-view.md` § "System Context Files / Rules — sources and merge"). Two things decide what shows up and
 whether a resend is needed: **which** project/user/plugin skills, workflows and commands the
 catalog scanner finds (and under what name and path), and the **content-only** id that lets the
 hook send the full snapshot just once per distinct harness and a cheap ref on every other upload.
@@ -289,7 +291,8 @@ Three `kind`s:
 ## Where the result is visible
 
 - Session -> System Context: the Skills, Agents, MCP, Files and Rules tabs, built from the hook's
-  `harness-snapshot` line (see `docs/knowledgebase/session-log-view.md`).
+  `harness-snapshot` line (Files and Rules merged with the Claude log's `instructions` /
+  `nested_memory` attachments; see `docs/knowledgebase/session-log-view.md`).
 - API: `GET /api/v1/repositories/:repoId/sessions/:sessionId/logs`'s `harnessSnapshot` field, and
   `POST /api/v2/logs`'s `unknownSnapshotId` (whether a resend was needed).
 - Not here: the server-side extraction of rule/skill/MCP inventory rows from a stored snapshot
