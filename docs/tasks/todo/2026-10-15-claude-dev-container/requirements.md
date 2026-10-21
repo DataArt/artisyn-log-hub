@@ -1,11 +1,7 @@
 # 2026-10-15: Claude Code Dev Container (docker-dev + local infra + hook)
 
-**Status:** todo
-**Priority:**
-**Type:** feature
-**Module(s):** infra / dev environment, hook
-**Owner:** denis.tsyplakov
-**Created:** 2026-10-15
+**Status:** todo **Priority:**
+**Type:** feature **Module (s):** infra / dev environment, hook **Owner:** denis.tsyplakov **Created:** 2026-10-15
 
 ## Description
 
@@ -37,68 +33,66 @@ DB `a-log`, data is a bind mount from the Windows disk).
 
 The first deliverable is a minimal sandbox in which Claude reviews a task (e.g.
 `/adlc-lh:review-deep <task>`) in its own worktree and branch, with no servers and no code changes;
-the result is merged back and everything is cleaned up. Phases 2+ (the rest of this document) build
-on it.
+the developer then merges the result back (outside the launcher, see "Merging" below) and removes
+the sandbox. Phases 2+ (the rest of this document) build on it.
+
+**Merging is out of the launcher's scope (user decision, all phases).** The launcher has no
+`--merge` command and no merge action in the menu; it never commits or merges. The developer
+commits and merges a sandbox's branch on the host with their own agent, then removes the sandbox
+with `--remove <name> [--delete-branch]` or `--prune`. Claude inside a sandbox never makes git
+writes (as in the repo `CLAUDE.md`).
 
 - PoC-1. **Scope.** From the FRs below only: FR-W1 (no DB, no ports), FR-W2, FR-W3, FR-B1 (slim image:
   Node/npm, Claude Code, git ≥ 2.48, `jq`, `ripgrep` — no Chrome, Playwright, Mailpit, bun),
   FR-B3, FR-B6 (no socat, no dev stack, no `node_modules` volumes), FR-B8, FR-B9, FR-D1. Out of the
   PoC: section A (no Postgres needed), FR-W4–W6, FR-B2, FR-B4, FR-B10, section C (no server, so no
-  telemetry: the entrypoint disables `log-hub-hooks` for the worktree with a local-scope
-  `enabledPlugins` override; no hook changes), `--serve`. Cleanup
-  (section E, without the DB steps) is in the PoC.
-- PoC-2. **Plugins.** The project plugins enabled in `.claude/settings.json` (`adlc-lh`,
-  `log-hub-hooks`) are registered and installed into the shared `claude-home` by the entrypoint
-  (`claude plugin marketplace add` / `claude plugin install --scope project`, idempotent), so the
-  `/adlc-lh:*` skills and the `Workflow` tool work in the sandbox.
+  telemetry: the entrypoint disables `log-hub-hooks` and `typescript-lsp` — the slim image has no
+  language server — for the worktree with a local-scope `enabledPlugins` override; no hook
+  changes), `--serve`. Cleanup (section E, without the DB steps) is in the PoC.
+- PoC-2. **Plugins.** The entrypoint registers and installs the project plugins enabled in
+  `.claude/settings.json` (`adlc-lh`, `log-hub-hooks`) on every container start
+  (`claude plugin marketplace add` / `claude plugin install --scope project`, idempotent) into the
+  sandbox's own plugin state as described in FR-B6, so the `/adlc-lh:*` skills and the `Workflow`
+  tool work in the sandbox.
 - PoC-3. **Review-only guard.** The container guide (FR-B7, PoC version) says: review mode — only
   files under `docs/` may be changed; do not start servers, do not run builds or tests; no git write
   commands (as in the repo `CLAUDE.md`).
-- PoC-4. **Launcher commands.** `claude-docker <name> [--from <ref>]` (create/start + Claude session),
-  `--shell <name>`, `--stop <name>`, `--list`, `--remove <name> [--force]`, `--prune`, the stale-sandbox
-  reminder (section E without the DB steps), `--continue`/`--resume` passed to `claude`, the
-  interactive menu (FR-W8, without `--serve`), and a new
-  `--merge <name>`:
-  1. refuses if the branch or the uncommitted worktree changes touch anything outside `docs/`;
-  2. commits all worktree changes on the host with the host git identity (Claude in the container
-     never commits), message `review: <name>`;
-  3. merges the branch into the base branch the sandbox was created from (recorded at creation); the
-     main checkout must be on that branch, and git's own refusal on conflicting local changes stops
-     the merge with a message; on a content conflict the launcher runs `git merge --abort`, keeps
-     the sandbox, worktree and branch, prints the conflicting files and exits non-zero; a re-run
-     with nothing left to commit skips step 2;
-  4. on success runs `--remove <name>` and deletes the merged branch (`git branch -d`).
-  Every git write is done by the launcher, i.e. by the user's command, never by Claude.
-- PoC-5. **Host prerequisite.** Host git ≥ 2.48 (`worktree.useRelativePaths`); the launcher checks it
-  (FR-W2). The host currently has 2.45.1 and must be upgraded first.
+- PoC-4. **Launcher commands.** `claude-docker <name> [--branch <branch>] [--from <ref>]` (create/start
+  + Claude session), `--shell <name>`, `--stop <name>`, `--list`, `--remove <name> [--force]
+  [--delete-branch]`, `--prune`, the stale-sandbox reminder (section E without the DB steps),
+  `--continue`/`--resume` passed to `claude`, and the interactive menu (FR-W8, without `--serve`).
+- PoC-5. **Host prerequisite.** Host git ≥ 2.48 (`worktree.useRelativePaths`), checked by the
+  launcher (FR-W2).
 
 PoC acceptance criteria:
 
 - [ ] `claude-docker r1` creates worktree + branch `r1` from the current `HEAD` and opens Claude in the
-      container; `/adlc-lh:review-deep <task>` runs to completion there and changes only files under
-      `docs/` of the worktree.
+  container; `/adlc-lh:review-deep <task>` runs to completion there and changes only files under
+  `docs/` of the worktree.
 - [ ] The main checkout's working tree is untouched while `r1` works; `git worktree list` on the host
-      shows `r1` and `git -C <worktree> status` works from the host.
-- [ ] `--merge r1` commits the review result, merges it into the base branch, removes the container,
-      the worktree and the branch; afterwards `git worktree list` and `--list` show no `r1`, and no
-      `r1` container or volume is left in `docker ps -a` / `docker volume ls`.
-- [ ] `--merge` refuses a branch that touches files outside `docs/`, and refuses when the main checkout
-      is on another branch; a conflicting merge leaves the main checkout clean and the sandbox intact.
+  shows `r1` and `git -C <worktree> status` works from the host.
+- [ ] After the developer has committed and merged `r1`'s work on the host (outside the launcher),
+  `--remove r1 --delete-branch` removes the container, the worktree and the branch; afterwards
+  `git worktree list` and `--list` show no `r1`, and no `r1` container or volume is left in
+  `docker ps -a` / `docker volume ls`.
+- [ ] `claude-docker r3 --branch <existing branch>` checks that branch out in the new worktree instead
+  of creating one; a branch already checked out in the main checkout or another worktree is refused
+  with a message.
 - [ ] A review session in `r1` produces no hook errors and creates nothing outside the worktree.
 - [ ] `--remove r2` on an unmerged sandbox removes container and worktree, keeps branch `r2`, and
-      refuses on uncommitted changes without `--force`.
+  refuses on uncommitted changes without `--force`.
 - [ ] No launch ever removes a sandbox. Power-loss simulation: `docker kill` the container in the
-      middle of a session that has not changed any file yet (and, separately, leave Claude with
-      Ctrl+C); after any number of launches the sandbox still exists, and
-      `claude-docker r1 --continue` reopens that conversation in the same worktree so the review can
-      be finished and merged.
+  middle of a session that has not changed any file yet (and, separately, leave Claude with
+  Ctrl+C); after any number of launches the sandbox still exists, and
+  `claude-docker r1 --continue` reopens that conversation in the same worktree so the review can
+  be finished.
 - [ ] With the threshold set to a few minutes (env), a launch prints the stale sandboxes with branch,
-      last activity and pending work, and ends with the exact `--prune --older-than …` command;
-      running that command shows the plan, asks for confirmation, removes the nothing-to-lose ones
-      and keeps the ones with work unless `--force`.
+  last activity and pending work, and ends with the exact `--prune --older-than …` command;
+  running that command shows the plan, asks for confirmation, removes the nothing-to-lose ones
+  and keeps the ones with work unless `--force`.
 - [ ] `claude-docker` without arguments opens the menu: it lists the sandboxes, creates a new one,
-      continues an existing one (Claude opens in the same terminal), merges, removes and prunes —
-      each destructive action only after a confirmation; Esc/`Q` leaves without changes.
+  continues an existing one (Claude opens in the same terminal), removes and prunes —
+  each destructive action only after a confirmation; Esc/`Q` leaves without changes.
 
 ## Functional Requirements
 
@@ -131,18 +125,28 @@ PoC acceptance criteria:
 
 ### W. Sandbox
 
-- FR-W1. **Identity.** A sandbox is identified by a name (`[a-z0-9-]`, validated by the launcher). It
-  owns: container `log-hub-dev-<name>`, branch `<name>` (or the one given with `--branch`),
-  worktree, databases `log_hub_<name>` and `log_hub_<name>_test` (dashes → underscores), its `node_modules` volumes and its
-  host port pair.
-- FR-W2. **Worktree.** Created by the launcher on first launch with `git worktree add` from the main
-  checkout's current `HEAD` (or `--from <ref>`); an existing branch is checked out instead of
-  created. Location: a sibling directory of the repo, `<repo-parent>/<repo-name>-worktrees/<name>`
+- FR-W1. **Identity.** A sandbox is identified by a name matching `^[a-z0-9][a-z0-9-]{0,39}$` and not
+  ending in `-test` (so no main DB name can equal another sandbox's test DB), validated by the
+  launcher. It
+  owns: container `log-hub-dev-<name>`, one branch, worktree, databases `log_hub_<name>` and
+  `log_hub_<name>_test` (dashes → underscores), its `node_modules` volumes and its host port
+  triple. The branch is `<name>` by default or the one given on creation with
+  `claude-docker <name> --branch <branch> [--from <ref>]` (existing or new); it is recorded in the
+  sandbox state file (FR-E4) and used by `--list`, `--remove --delete-branch` and the prune
+  "merged" check. The state file also records `branchCreated` (true only when the launcher created the branch) and
+  the **base branch**: for a new branch, the branch named by `--from`, otherwise the branch checked
+  out in the main checkout at creation; none for an existing branch, a tag/sha `--from` or a
+  detached HEAD.
+- FR-W2. **Worktree.** Created by the launcher on first launch with `git worktree add`: an existing
+  branch is checked out; a new one is created from the main checkout's current `HEAD` (or
+  `--from <ref>`). If the branch is already checked out in the main checkout or another worktree,
+  git refuses and the launcher exits with that message. The host-side command is
+  `git -c core.autocrlf=input worktree add --relative-paths …`, so the worktree's files are LF from
+  the start and no host git config is changed. Location: a sibling directory of the repo, `<repo-parent>/<repo-name>-worktrees/<name>`
   (overridable by an env variable), so the main checkout's tools and IDE never index it. The worktree
   links (`<worktree>/.git` and `.git/worktrees/<name>/gitdir`) are **relative**
   (`worktree.useRelativePaths`, git ≥ 2.48), so the same worktree works from the Windows host and
-  from the container; the launcher checks the host git version and exits with a message if it is
-  older (see PoC-5).
+  from the container; the launcher exits with a message if the host git is older.
 - FR-W3. **Mounts.** Only the sandbox's worktree and the main repo's `.git` directory are mounted,
   read-write, at container paths that mirror their relative host layout (so the relative links
   resolve); the main checkout's working tree is not mounted. Nothing else of the host file system is
@@ -152,17 +156,19 @@ PoC acceptance criteria:
   `DATABASE_URL=postgresql://postgres:pw@localhost:5432/log_hub_<name>` (through the socat forward,
   FR-B4) as an environment variable; the server, contract and scenarios already honour
   `DATABASE_URL` from the environment. The worktree's git-ignored `server/.env` is generated by the
-  launcher on creation (`AUTH_MODE=none`, no secrets copied from the host checkout). Mirroring the
+  launcher on creation with exactly `AUTH_MODE=none`, `COOKIE_SECURE=false` and `PORT=3000`
+  (`DATABASE_URL` comes from the container env, `SESSION_SECRET` is generated by the server; nothing
+  is copied from the host checkout). Mirroring the
   host split (runner on `postgres`, dev server on `a-log`), the launcher also creates
   `log_hub_<name>_test` for the test runners: the backend and the e2e helpers use `log_hub_<name>`,
   the scenario and contract runners get the test DB through an explicit env variable (named in the
   plan), so the scenario runner's schema fingerprint never sees the live backend's hook uploads. All
   test schemas (`contract_*`, `scn_*`) of a sandbox live in its own DBs, so stale-schema cleanup in
   one sandbox never touches another sandbox's run.
-- FR-W5. **In-container dev stack.** The entrypoint starts, as user `dev`, the backend
-  (`npm run start:dev`, `3000`), the Vite client (`bun run dev`, `5173`, bound to `0.0.0.0` through an
-  env-driven `server.host` in `client/vite.config.ts` that only the launcher sets) and Mailpit
-  (`1025`/`8025`, binary in the image) under a small supervisor; logs go to `/var/log/dev/*.log`. A
+- FR-W5. **In-container dev stack.** The entrypoint starts, as user `dev`, the backend (`npm run start:dev`, `3000`),
+  the Vite client (`bun run dev`, `5173`, bound to `0.0.0.0` through an
+  env-driven `server.host` in `client/vite.config.ts` that only the launcher sets) and Mailpit (`1025`/`8025`, binary in
+  the image) under a small supervisor; logs go to `/var/log/dev/*.log`. A
   helper `devctl status|restart|stop|logs <server|client|mailpit>` lets Claude manage them. They stop
   when the container stops and start again when it starts.
 - FR-W6. **Host ports.** Inside the container the ports are the usual `3000`/`5173`/`8025`, so all
@@ -174,31 +180,42 @@ PoC acceptance criteria:
   allocation holds an exclusive lock file in `.sandboxes/` from choosing the slot until the state
   file is written. Host ports `3000`/`5173` stay free for a host dev server.
 - FR-W7. **Lifecycle.** Launcher commands:
-  - `claude-docker <name> [args]` — create or start the sandbox and open a Claude session in it;
-    running it again in another terminal opens one more session in the same container. Prints the
-    sandbox URLs.
-  - `--serve <name>` — start the sandbox (dev stack up) without a Claude session, to look at its UI.
-  - `--shell <name>` — a bash shell in the sandbox.
-  - `--stop <name>` — stop the container (and with it the dev stack and sessions).
-  - `--list`, `--remove`, `--prune` — see section E.
-  - `--reset <name>` — rebuild the image with cache and recreate the container; keeps worktree, DB
-    and volumes; refused while `pgrep -x claude` finds a process in the container.
-  The container keeps running after the last Claude session exits, until `--stop`.
+    - `claude-docker <name> [args]` — create or start the sandbox and open a Claude session in it;
+      running it again in another terminal opens one more session in the same container. Prints the
+      sandbox URLs.
+    - `--serve <name>` — start the sandbox (dev stack up) without a Claude session, to look at its UI.
+    - `--shell <name>` — a bash shell in the sandbox.
+    - `--stop <name>` — stop the container (and with it the dev stack and sessions). `--stop` and
+      `--remove` refuse while `pgrep -x claude` finds a process in the container, naming the number
+      of live sessions, unless `--force`; in the menu `T`/`D` on such a sandbox ask for a
+      confirmation that names those sessions.
+    - **Re-launch** of an existing sandbox never silently diverges from its state file:
+      `--branch`/`--from` that differ from it are an error (matching ones are ignored with a note);
+      a kept host port that is no longer bindable fails the start naming the port, with no
+      re-allocation; a state file without its worktree, or a worktree without a state file, is
+      refused with a hint to run `--remove <name>` or `--prune`. Worktree creation, DB creation and
+      the state-file write run under the same `.sandboxes/` lock as port allocation.
+    - `--list`, `--remove`, `--prune` — see section E.
+    - `--reset <name>` — rebuild the image with cache and recreate the container; keeps worktree, DB
+      and volumes; refused while `pgrep -x claude` finds a process in the container.
+      The container keeps running after the last Claude session exits, until `--stop`.
 - FR-W8. **Interactive mode.** `claude-docker` without arguments opens a full-screen terminal menu in
   the Claude Code style (keyboard-driven, single list, hotkey footer):
-  - the list of sandboxes with the `--list` columns (FR-E6), stale ones (FR-E4) highlighted;
-  - on the selected sandbox: Enter = continue (`--continue`), `R` = pick a session (`--resume`),
-    `S` = shell, `T` = stop, `M` = merge, `D` = remove; a "+ New sandbox" row asks for the name (and
-    optionally the base ref);
-  - `P` = prune: shows the `--prune` plan in the menu and runs it only after a confirmation; every
-    destructive action (`D`, `M`, `P`, anything with `--force`) asks for a confirmation that names
-    what will be lost;
-  - choosing a session leaves the menu and hands the terminal to `docker exec -it … claude`; when
-    Claude exits, the launcher returns to the shell (not to the menu).
-  Every menu action calls the same code path as its command-line flag; the flags stay for scripting.
-  The layout, key map and dialogs follow the approved UI prototype
-  `docs/pocs/2026-10-21-1316-sandbox-menu-tui/` (zero-dependency Node: raw ANSI + readline keypress,
-  alternate screen); without a TTY the menu prints a hint and exits 1.
+    - the list of sandboxes with the `--list` columns (FR-E6), stale ones (FR-E4) highlighted;
+    - on the selected sandbox: Enter = continue (`--continue`), `R` = pick a session (`--resume`),
+      `S` = shell, `T` = stop, `D` = remove; a "+ New sandbox" row asks for the name (and
+      optionally the branch and the base ref);
+    - `P` = prune: shows the `--prune` plan in the menu and runs it only after a confirmation; every
+      destructive action (`D`, `P`, anything with `--force`) asks for a confirmation that names
+      what will be lost;
+    - choosing a session leaves the menu and hands the terminal to `docker exec -it … claude`; when
+      Claude exits, the launcher returns to the shell (not to the menu).
+      Every menu action calls the same code path as its command-line flag; the flags stay for scripting.
+      `--serve` and `--reset` stay CLI-only (not in the approved prototype).
+      The layout, key map and dialogs follow the approved UI prototype
+      `docs/pocs/2026-10-21-1316-sandbox-menu-tui/` (zero-dependency Node: raw ANSI + readline keypress,
+      alternate screen), minus its merge action and merge dialogs; without a TTY the menu prints a
+      hint and exits 1.
 
   ![Sandbox menu — list](wireframes/sandbox-menu-list.svg)
 
@@ -214,18 +231,19 @@ PoC acceptance criteria:
   server for `typescript-lsp`, `postgresql-client`, `socat`, `jq`, `ripgrep`.
   `Dockerfile.dockerignore` is an allow-list. No Python. One image serves all sandboxes.
   Design notes:
-  - Split downloads across parallel BuildKit stages; a multi-connection downloader (e.g.
-    `aria2c -x16 -s16`) helps when sites throttle per-connection speed.
-  - Verify every downloaded archive against its official sha256.
-  - Claude Code: the official native binary, verified against its release manifest, laid out the
-    same way `claude install` does so that auto-update works.
-  - Chrome: the official `.deb` plus its dependencies fetched with `apt-get install --download-only`
-    and installed offline (list `libasound2t64` explicitly on 24.04).
+    - Split downloads across parallel BuildKit stages; a multi-connection downloader (e.g.
+      `aria2c -x16 -s16`) helps when sites throttle per-connection speed.
+    - Verify every downloaded archive against its official sha256.
+    - Claude Code: the official native binary, verified against its release manifest, laid out the
+      same way `claude install` does so that auto-update works.
+    - Chrome: the official `.deb` plus its dependencies fetched with `apt-get install --download-only`
+      and installed offline (list `libasound2t64` explicitly on 24.04).
 - FR-B2. **Volumes**: per sandbox, five `node_modules` volumes (root, `client/`, `server/`, `hook/`,
   `artisyn-hooks-installer/`) mounted over the worktree; shared across sandboxes, the caches `~/.npm`,
   `~/.bun`, `~/.cache/ms-playwright`. The entrypoint stores a hash of the matching lockfile in each
-  `node_modules` volume and runs `npm ci` / `bun install --frozen-lockfile` when the volume is empty
-  or the hash differs.
+  `node_modules` volume and runs its install command when the volume is empty or the hash differs:
+  root, `server/`, `hook/`, `artisyn-hooks-installer/` → their `package-lock.json` → `npm ci`;
+  `client/` → `client/bun.lock` → `bun install --frozen-lockfile`. The root `bun.lock` is ignored.
 - FR-B3. **Host TEMP** read-only at `/host-tmp` + the `HOST_TEMP` variable, for images pasted with
   Ctrl+V (they arrive as Windows paths); the guide (FR-B7) explains how to translate a Windows path
   to `/host-tmp/…`.
@@ -236,7 +254,8 @@ PoC acceptance criteria:
   DB round trip and make tests several times slower).
 - FR-B5. **Launch script**: the logic is a Node script `scripts/claude-docker.mjs` (Node is on the host
   anyway; the FR-W8 menu is built with Node built-ins only, as in the approved prototype), with
-  thin `scripts/claude-docker.ps1` / `.cmd` wrappers; it implements the commands of FR-W7 and FR-W8. On every launch it brings up the infrastructure
+  thin `scripts/claude-docker.ps1` / `.cmd` wrappers; it implements the commands of FR-W7 and FR-W8. On every launch it
+  brings up the infrastructure
   with `docker compose up -d --no-recreate` (without `--no-recreate` a changed compose would recreate
   a service that running sandboxes depend on) and builds the image if it is missing. The image
   carries a hash of `docker-dev/*` as a label; a normal launch never rebuilds, but warns and suggests
@@ -246,7 +265,14 @@ PoC acceptance criteria:
   `docker-dev/settings.template.json` into the profile with `jq -s '.[0] * .[1]'` (user keys win),
   starts the socat forwards (FR-B4) and the dev stack (FR-W5). `CLAUDE_CONFIG_DIR` points to the
   main checkout's `docker-dev/claude-home` (git-ignored, mounted into every sandbox), so the login and
-  history are shared by all sandboxes and survive `--reset`/`--remove`. The project plugins
+  history are shared by all sandboxes and survive `--reset`/`--remove`. Plugin and marketplace state
+  is **not** shared: each sandbox has its own (e.g. a per-sandbox volume over the plugin directory of
+  the profile, removed with the sandbox), and on every container start the entrypoint re-registers
+  the project marketplace from the sandbox's own worktree and installs the plugins into it — a
+  snapshot of the worktree's `.artisyn/marketplace` as of that start (a later change there takes
+  effect on the next start). The entrypoint also registers the `claude-plugins-official` marketplace
+  and installs `typescript-lsp` into the same per-sandbox state on every start (idempotent); a
+  failed network install logs a warning and does not block the session. The project plugins
   (`log-hub-hooks`, `adlc-lh`, `typescript-lsp`) work; a shim `npx.cmd` → `npx` for Playwright MCP.
   The entrypoint registers a local-scope `postgres` MCP server for the worktree path
   (`claude mcp add --scope local postgres … /log_hub_<name>`), which overrides the tracked
@@ -258,7 +284,11 @@ PoC acceptance criteria:
   in the sandbox against its own DB; `/host-tmp` for images; Docker is not available from inside; the
   WebStorm MCP and the `web-storm-mcp` skill are unavailable (use Read/Edit/Grep and `typescript-lsp`).
 - FR-B8. **Git**: `safe.directory` for the worktree path, `core.autocrlf input`, `core.filemode false`,
-  `worktree.useRelativePaths true`, author taken from the host `git config`.
+  `core.ignorecase false`, `worktree.useRelativePaths true`, author taken from the host `git config`.
+  They are container-only: the image's global gitconfig plus `GIT_CONFIG_COUNT`/`GIT_CONFIG_KEY_n`/
+  `GIT_CONFIG_VALUE_n` env vars set by the launcher (needed to override repo-level keys such as
+  `core.ignorecase = true` in the shared `.git/config`). Nothing is ever written to the shared
+  `.git/config`.
 - FR-B9. Everything in `docker-dev/`, `local-run/` and the launch script is checked-in, with no
   developer machine paths (they are taken from the environment).
 - FR-B10. **Build isolation**: `npm run build` in a sandbox must not disrupt its own backend running in
@@ -281,36 +311,42 @@ PoC acceptance criteria:
   and old hook installs are unaffected. The launcher sets it to the worktree path, so in a sandbox
   the hook reads the worktree's own config (tracked `log-hub.json` + git-ignored
   `log-hub.local.json`, `otel-port.json`) and keeps its state in the worktree's own
-  `.artisyn/ai_work_dir/` — never shared with the host checkout or another sandbox. The sandbox key
-  is not a temporary override of the host's files: the main checkout's `.artisyn/` is never mounted,
-  copied or rewritten. The plan checks the other `getGitRoot` users (code inventory, skill catalog,
-  OTEL registration, session-file matching) behave correctly with the override.
+  `.artisyn/ai_work_dir/` — never shared with the host checkout or another sandbox; the main
+  checkout's `.artisyn/` is never mounted, copied or rewritten. The override applies in `resolveRootFromCommonDir`, so `getGitRoot` and
+  `getGitContext().root` (uploaded as `gitRoot`) agree on the worktree. The plan checks that the
+  `getGitRoot` users (code inventory, skill catalog, OTEL registration, session-file matching) and
+  the `getGitContext` users (`lifecycle-hook.js`, `post-turn-analysis-hook.js`,
+  `post-turn-analysis-worker.js`) behave correctly with the override.
 - FR-C3. **Provisioning.** After the sandbox backend is healthy, the entrypoint provisions the hook,
   idempotently:
-  - identifies (`POST /api/v1/auth/identify`, the server runs with `AUTH_MODE=none`) as the host
-    git `user.email`, passed by the launcher — on a fresh DB the first user becomes admin, and the
-    developer sees the sandbox sessions in the browser by identifying with the same email;
-  - creates an API key (`POST /api/v1/api-keys`) and writes only the git-ignored hook files of the
-    worktree: `.artisyn/config/log-hub.local.json` (`apiKey`), `.artisyn/config/otel-port.json` and the
-    OTEL `env` keys of `.claude/settings.local.json`, in the installer's formats; tracked files
-    (`.claude/settings.json`, `log-hub.json`) are not modified;
-  - reuses an existing key if the server accepts it, otherwise (e.g. the DB was recreated) creates a
-    new one;
-  - writes a readiness marker; the launcher opens a Claude session only after it exists, because the
-    hook silently skips uploads while `apiKey` is empty. The wait is bounded (env-configurable,
-    e.g. 180 s) and shows progress; on timeout the launcher prints the failing component and the
-    `devctl logs <server|client>` hint and opens the session anyway with a warning that telemetry
-    upload is off. The entrypoint retries provisioning whenever the backend later becomes healthy.
+    - identifies (`POST /api/v1/auth/identify`, the server runs with `AUTH_MODE=none`) as the host
+      git `user.email`, passed by the launcher — on a fresh DB the first user becomes admin, and the
+      developer sees the sandbox sessions in the browser by identifying with the same email;
+    - creates an API key (`POST /api/v1/api-keys`) and writes only the git-ignored hook files of the
+      worktree: `.artisyn/config/log-hub.local.json` (`apiKey`), `.artisyn/config/otel-port.json` and the
+      OTEL `env` keys of `.claude/settings.local.json`, in the installer's formats; tracked files
+      (`.claude/settings.json`, `log-hub.json`) are not modified;
+    - reuses an existing key if the server accepts it, otherwise (e.g. the DB was recreated) creates a
+      new one;
+    - writes a readiness marker; the launcher opens a Claude session only after it exists, because the
+      hook silently skips uploads while `apiKey` is empty. The wait is bounded (env-configurable,
+      e.g. 180 s) and shows progress; on timeout the launcher prints the failing component and the
+      `devctl logs <server|client>` hint and opens the session anyway with a warning that telemetry
+      upload is off. The entrypoint retries provisioning whenever the backend later becomes healthy.
 - FR-C4. Hook changes (FR-C2): in `hook/` with tests,
   `npm run build:hooks-installer`, update of the dogfood install; the upload format is backward
   compatible.
 
 ### E. Cleanup
 
-- FR-E1. `--remove <name> [--force] [--delete-branch]`, in this order: stop and remove the container;
-  remove its `node_modules` volumes; drop `log_hub_<name>` and `log_hub_<name>_test` (`dropdb --force`,
+- FR-E1. `--remove <name> [--force] [--delete-branch]`. Before any destructive step it checks the
+  worktree (`git status --porcelain`) and, with `--delete-branch`, that the branch is merged; if a
+  check fails and `--force` is not given, it exits non-zero listing what is pending and removes
+  nothing. Then, in this order: stop and remove the container;
+  remove its `node_modules` volumes and its own plugin state (FR-B6); drop `log_hub_<name>` and `log_hub_<name>_test` (`dropdb --force`,
   terminating open connections); `git worktree remove` (refused on uncommitted or untracked changes
-  unless `--force`) and `git worktree prune`; release the host ports (delete the sandbox state file). The branch is kept; `--delete-branch` deletes it
+  unless `--force`) and `git worktree prune`; release the host ports (delete the sandbox state file). The branch is
+  kept; `--delete-branch` deletes it
   with `git branch -d` (refuses an unmerged branch). Everything a sandbox wrote — its DB (sessions,
   test schemas), `ai_work_dir`, server logs — goes with it. Shared caches are never touched.
 - FR-E2. Each step of `--remove` is idempotent and tolerates the resource already being gone, so a
@@ -322,7 +358,7 @@ PoC acceptance criteria:
   passes the flag to `claude`, which finds the transcript because `claude-home` is shared and the
   worktree path inside the container is stable.
 - FR-E4. **Stale-sandbox reminder.** The launcher keeps per-sandbox state on the host, outside the
-  worktree (e.g. `<worktrees-dir>/.sandboxes/<name>/`: base branch, ports, creation time, last
+  worktree (e.g. `<worktrees-dir>/.sandboxes/<name>/`: branch, base branch, ports, creation time, last
   activity = the last start or end of a Claude session or `--shell`). On every launch, if any
   sandbox has had no activity for longer than a threshold (default 7 days, configurable by env), the
   launcher prints the list — name, branch, last activity, pending work (changed files / unmerged
@@ -330,22 +366,26 @@ PoC acceptance criteria:
   `scripts/claude-docker.ps1 --prune --older-than 7d`. It does not ask and does not remove anything.
 - FR-E5. **`--prune [--older-than <age>] [--force] [--yes] [--include-running]`** removes inactive
   sandboxes in one call.
-  - **Candidates** by default are sandboxes whose container is stopped or missing.
-    `--include-running` adds running containers with no `claude` process (`pgrep -x claude`; from
-    phase 2 their UI may be open in a browser). A container with a live `claude` process is never
-    pruned, even with `--force`. `--older-than` limits it to sandboxes whose last activity is older
-    than `<age>`.
-  - Each candidate is classified:
-    - **nothing to lose** — the worktree is clean and the branch is merged into its base branch or
-      has no commits of its own → full `--remove` including the branch;
-    - **has work** — uncommitted/untracked changes or unmerged commits → kept and listed with what is
-      pending and the hint `--merge <name>`; removed (keeping the branch) only with `--force`.
-  - **Orphans** are found by cross-checking sandbox resources by name — `log-hub-dev-*` containers,
-    their volumes, `log_hub_*` databases, worktrees under the worktrees directory, git worktree
-    metadata (`git worktree prune`) — and resources without a worktree are removed. A worktree is
-    never treated as an orphan.
-  - It always prints the plan first (what will be removed, what is kept and why) and asks for
-    confirmation unless `--yes`. Each step reuses the idempotent `--remove` steps (FR-E2).
+    - **Candidates** by default are sandboxes whose container is stopped or missing.
+      `--include-running` adds running containers with no `claude` process (`pgrep -x claude`; from
+      phase 2 their UI may be open in a browser). A container with a live `claude` process is never
+      pruned, even with `--force`. `--older-than` limits it to sandboxes whose last activity is older
+      than `<age>`.
+    - Each candidate is classified:
+        - **nothing to lose** — the worktree is clean and the branch is merged into its base branch
+          (`git merge-base --is-ancestor <branch> <base>` against the base's current tip) or has no
+          commits of its own → full `--remove`, including the branch only if `branchCreated`;
+          a sandbox with no base branch is classified as having work;
+        - **has work** — uncommitted/untracked changes or unmerged commits → kept and listed with what is
+          pending; removed (keeping the branch)
+          only with `--force`.
+    - **Orphans** are found by cross-checking sandbox resources by name — `log-hub-dev-*` containers,
+      their volumes, `log_hub_*` databases, worktrees under the worktrees directory, git worktree
+      metadata (`git worktree prune`) — and resources without a worktree are removed. A DB belongs
+      to sandbox `n` only if it is `log_hub_<n>` or `log_hub_<n>_test` for a name `n` from a state
+      file or worktree. A worktree is never treated as an orphan.
+    - It always prints the plan first (what will be removed, what is kept and why) and asks for
+      confirmation unless `--yes`. Each step reuses the idempotent `--remove` steps (FR-E2).
 - FR-E6. `--list` shows, per sandbox, branch, base branch, state, active `claude` sessions, last
   activity, pending work (changed files / unmerged commits), URLs, worktree path and DB size.
 
@@ -364,74 +404,87 @@ PoC acceptance criteria:
 ## Non-Functional Requirements
 
 - The container has no Docker socket and no private keys or credentials beyond the Claude login.
-- Tests in a sandbox are not noticeably slower than on the host (`nodelay` on socat is mandatory).
-- At least three sandboxes can run their full test sets in parallel without interfering.
+- The container design does not depend on the repo's test suites (user decision: they may change or
+  be deleted without affecting the sandbox); there is no test-speed requirement. Sandboxes only
+  provide isolation (own DB, ports, Mailpit, worktree) so that whatever checks exist can run in
+  them.
+- At least three sandboxes can run in parallel without interfering.
 
 ## Acceptance Criteria
 
 - [ ] `claude-docker a` from scratch brings up `log-hub-postgres` (data in `log-hub-pgdata`) and
-      `log-hub-mailpit`, builds the image, creates worktree + branch `a` and DB `log_hub_a`, starts the
-      in-container backend, client and Mailpit and opens Claude; the printed URL opens the sandbox UI
-      from the host; a second console is a second session in the same sandbox.
+  `log-hub-mailpit`, builds the image, creates worktree + branch `a` and DB `log_hub_a`, starts the
+  in-container backend, client and Mailpit and opens Claude; the printed URL opens the sandbox UI
+  from the host; a second console is a second session in the same sandbox.
 - [ ] Sandboxes `a`, `b` and `c` run in parallel with different host ports, branches and DBs; a change
-      committed in `a` is not visible in `b`'s working tree; their full test sets pass concurrently.
+  committed in `a` is not visible in `b`'s working tree; their full test sets pass concurrently.
 - [ ] `devctl restart server` restarts the backend and `devctl logs client` shows the Vite log; after
-      `--stop` and a new start all three services are up again.
+  `--stop` and a new start all three services are up again.
 - [ ] Changing one of the five lockfiles makes the next start reinstall only that `node_modules`
-      volume; an unchanged lockfile skips the install.
+  volume; an unchanged lockfile skips the install.
 - [ ] `--stop a` stops the backend, client and Mailpit of `a`; the worktree stays readable on the host
-      and `git status`/`git log` work there; `--serve a` brings the UI back on the same ports with the
-      same data.
-- [ ] `--list` shows every sandbox with branch, state, URLs, worktree path, DB size and last start;
-      `--remove a` drops `log_hub_a` (even with an open connection), removes the container, volumes
-      and worktree, keeps branch `a`, and refuses on uncommitted changes without `--force`; re-running
-      an interrupted `--remove a` completes it.
+  and `git status`/`git log` work there; `--serve a` brings the UI back on the same ports with the
+  same data.
+- [ ] A new sandbox `a` has both `log_hub_a` and `log_hub_a_test`; the contract and scenario runners
+  use only `log_hub_a_test`.
+- [ ] `--list` shows every FR-E6 column; a sandbox with one open session shows 1 active session and
+  an uncommitted edit shows up in pending work.
+- [ ] `--remove a` drops `log_hub_a` and `log_hub_a_test` (even with an open connection), removes
+  the container, volumes and worktree, keeps branch `a`; on uncommitted changes without `--force`
+  it exits non-zero and removes nothing; with a live `claude` session it refuses without `--force`;
+  re-running an interrupted `--remove a` completes it.
+- [ ] On the host, with only `local-run/docker-compose.yml` up: the host dev server starts on
+  `a-log`, `npm run test:contract` and `npm run test:scenarios -- --mode b` pass, the host postgres
+  MCP returns `a-log`, and no file references `server/artisyn-log-run-local` or
+  `tests/scenarios/docker-compose.yml`.
+- [ ] The menu highlights stale sandboxes, and each of its keys gives the same result as its flag.
+- [ ] In a fresh sandbox the `typescript-lsp` LSP tool answers a go-to-definition query on a `.ts`
+  file.
 - [ ] With sandboxes in every state — running with a session, stopped and merged, stopped with no
-      commits, stopped with uncommitted changes, stopped with unmerged commits, and an orphan whose
-      worktree was deleted manually — `--prune` removes exactly the merged, the no-commit and the
-      orphan ones (container, volumes, DB, worktree, branch), keeps the rest, and prints why each
-      kept one was kept; with `--force` it also removes the ones with work but keeps their branches;
-      `--include-running` also takes a running sandbox with no `claude` process, never one with a
-      live session.
+  commits, stopped with uncommitted changes, stopped with unmerged commits, and an orphan whose
+  worktree was deleted manually — `--prune` removes exactly the merged, the no-commit and the
+  orphan ones (container, volumes, both DBs, worktree, branch if created by the launcher), keeps
+  the rest and never drops another sandbox's `_test` DB, and prints why each
+  kept one was kept; with `--force` it also removes the ones with work but keeps their branches;
+  `--include-running` also takes a running sandbox with no `claude` process, never one with a
+  live session.
 - [ ] The old `server/artisyn-log-run-local/docker-compose.yml` and `tests/scenarios/docker-compose.yml`
-      are deleted; the cluster is still in `log-hub-pgdata` after `docker compose down -v && up -d`.
+  are deleted; the cluster is still in `log-hub-pgdata` after `docker compose down -v && up -d`.
 - [ ] `log-hub-postgres` reports healthy; `docker compose stop` logs `database system is shut down`
-      without a forced kill.
+  without a forced kill.
 - [ ] In a sandbox the fast set and the full set (`contract`, `scenarios-a/b/c`, `e2e-fast`,
-      `e2e-full`) pass; `npm run build` passes and does not drop the running watch backend mid-suite.
+  `e2e-full`) pass; `npm run build` passes and does not drop the running watch backend mid-suite.
 - [ ] An image pasted with Ctrl+V is readable by Claude in the sandbox through `/host-tmp`.
 - [ ] Playwright MCP and postgres MCP work in the sandbox; `select current_database()` through the
-      postgres MCP in sandbox `a` returns `log_hub_a`; the Claude login is shared by all sandboxes
-      and survives `--reset`.
+  postgres MCP in sandbox `a` returns `log_hub_a`; the Claude login is shared by all sandboxes
+  and survives `--reset`.
+- [ ] Plugins are per sandbox: after `--remove a`, sandbox `b` still loads `/adlc-lh:*` and the hook
+  from its own snapshot; a marketplace change committed in `a`'s worktree does not reach `b`, and
+  reaches `a` on its next container start.
 - [ ] A sandbox whose server fails to start still opens Claude after the readiness timeout with a
-      warning; after the fix (`devctl restart server`) provisioning completes and uploads resume.
+  warning; after the fix (`devctl restart server`) provisioning completes and uploads resume.
 - [ ] A tampered sha256 fails the image build; `which python3` is empty in the image.
 - [ ] The launcher refuses an invalid sandbox name and a host git older than 2.48 with a message;
-      `--reset` with a live `claude` exits non-zero with a message; an edited `docker-dev/*` file
-      triggers the stale-image warning.
+  `--reset` with a live `claude` exits non-zero with a message; an edited `docker-dev/*` file
+  triggers the stale-image warning.
 - [ ] The main checkout's working tree and `node_modules` are untouched by sandbox work; the host
-      `git status` shows no false changes and no `docker-dev/claude-home/`; a commit made in a sandbox
-      has the host author and LF line endings.
+  `git status` shows no false changes and no `docker-dev/claude-home/`; a commit made in a sandbox
+  has the host author and LF line endings.
 - [ ] `docker-dev/`, `local-run/` and the launch script contain no developer machine paths or user
-      names.
+  names.
 - [ ] A session from sandbox `a` is visible, with logs, cost and OTEL data, in `a`'s own UI after
-      identifying with the host git email from the host browser; it is absent from the host Log Hub
-      and from sandbox `b`; host sessions keep uploading to the host Log Hub.
+  identifying with the host git email from the host browser; it is absent from the host Log Hub
+  and from sandbox `b`; host sessions keep uploading to the host Log Hub.
 - [ ] Recreating `log_hub_a` (drop + restart of the sandbox) re-provisions a new API key and uploads
-      resume; no tracked file in the worktree changes due to provisioning.
+  resume; no tracked file in the worktree changes due to provisioning.
 - [ ] Without the root override (host sessions, including a host session inside a linked worktree)
-      the hook reads config and writes state exactly as before; the main checkout's `.artisyn/` is
-      unchanged after sandbox work.
+  the hook reads config and writes state exactly as before; the main checkout's `.artisyn/` is
+  unchanged after sandbox work.
 - [ ] The KB article and index are updated.
 
 ## Open Questions
 
 - What priority should this task have (e.g. `medium` or `high`)?
-- In phase 2 (sandboxes that change code), how does `--merge <name>` behave, and should it be listed in FR-W7? Does the "only files under `docs/`" guard of the PoC stay always, stay only for sandboxes created in review mode (e.g. with `--review`), or go away? What is the commit message for code changes (e.g. `sandbox: <name>`, or asked from the user)? Does a successful merge still run `--remove` and delete the branch automatically, or only on request (e.g. `--merge <name> [--keep]`)?
-- In a phase-2 sandbox, may Claude make git commits itself (the PoC guide forbids any git write by Claude)? If yes, should `--merge` commit only the remaining uncommitted changes? Should the merge into the base branch be a fast-forward when possible or always a merge commit?
-- What measurable threshold should replace "tests in a sandbox are not noticeably slower than on the host" (e.g. server `npm run test:contract` in a sandbox takes at most 1.3x the host time)?
-- Should the `--branch` option mentioned in FR-W1 be dropped (the branch name always equals the sandbox name), or defined as `claude-docker <name> --branch <existing-or-new> [--from <ref>]`? If kept: is the branch name recorded in the sandbox state, what does the launcher do when that branch is already checked out in the main checkout or another worktree, and how do `--remove --delete-branch` and the prune "merged" check use it?
-- All sandboxes register the directory marketplace from `.claude/settings.json` (`./.artisyn/marketplace`, relative to the project) into one shared `claude-home`, each from its own worktree path, so the same marketplace name ends up pointing at whichever worktree registered last (or first, if the add skips an existing name), possibly a removed sandbox. How should this be resolved: re-point the marketplace at the current worktree on every container start, mount every worktree at one stable container path such as `/workspace` (which conflicts with the mirrored layout of FR-W3), or give each sandbox its own plugin and marketplace state while sharing only credentials and history? Should there be an acceptance criterion that after `--remove a`, sandbox `b` still loads `/adlc-lh:*` and the hook from its own worktree?
 
 ## Common sense considerations
 
@@ -448,13 +501,19 @@ PoC acceptance criteria:
 - The container outlives its last Claude session so the UI stays viewable until `--stop`.
 - `--remove` keeps the branch; work is never lost by removing a sandbox.
 - With the hook root pointed at the worktree, each sandbox has its own `ai_work_dir` and hook config.
-- Sandbox telemetry goes to the sandbox's own server (user decision, for isolation); losing it on `--remove` is accepted.
-- The sandbox user is the host git `user.email`, so the developer sees the sessions in the browser without switching identity.
+- Sandbox telemetry goes to the sandbox's own server (user decision, for isolation); losing it on `--remove` is
+  accepted.
+- The sandbox user is the host git `user.email`, so the developer sees the sessions in the browser without switching
+  identity.
 - Provisioning writes only git-ignored files, so it never shows up in the worktree's `git status`.
-- No automatic cleanup (user decision): the launcher only reminds about sandboxes idle > 7 days and prints the `--prune` command.
+- No automatic cleanup (user decision): the launcher only reminds about sandboxes idle > 7 days and prints the `--prune`
+  command.
 - Pending work is removed only with an explicit `--force`; branches with unmerged commits are never deleted by prune.
 - The sandbox postgres MCP targets `log_hub_<name>` via a local-scope override; the tracked `.mcp.json` is untouched.
-- `--merge` on a content conflict aborts the merge, keeps the sandbox and exits non-zero; a re-run skips an empty commit.
+- The launcher never commits or merges (user decision); the developer merges with their own agent on the host.
+- Each sandbox gets its own plugin/marketplace state, snapshotted from its worktree on every container start (user
+  decision); only the login and history are shared.
+- The container design does not depend on the test suites; there is no test-speed requirement (user decision).
 - The parallel AC uses three sandboxes, matching the NFR.
 - `devctl` and the lockfile-driven volume refresh each get an acceptance criterion.
 - Each sandbox has a separate test DB `log_hub_<name>_test`, mirroring the host runner/dev-server split.
@@ -463,6 +522,21 @@ PoC acceptance criteria:
 - The readiness wait is bounded; on timeout Claude opens anyway with a telemetry-off warning.
 - Prune never touches a container with a live `claude` process; `--include-running` adds only idle running ones.
 - The sandbox state file is the source of truth for ports; slot allocation is guarded by a lock file.
+- Sandbox names match `^[a-z0-9][a-z0-9-]{0,39}$` and cannot end in `-test`, so DB names never collide.
+- Prune maps a `log_hub_*` DB to a sandbox only by exact `log_hub_<n>` / `log_hub_<n>_test` match.
+- The generated sandbox `server/.env` is `AUTH_MODE=none`, `COOKIE_SECURE=false`, `PORT=3000`.
+- Root `node_modules` uses `npm ci` from `package-lock.json`; the root `bun.lock` is ignored.
+- Container git settings live in the image gitconfig and `GIT_CONFIG_*` env; the shared `.git/config` is never written.
+- The host creates worktrees with `--relative-paths` and `-c core.autocrlf=input` (LF files, no host config change).
+- The hook root override applies in `resolveRootFromCommonDir`, so `getGitRoot` and `getGitContext().root` agree.
+- `--remove` runs all refusal checks before any destructive step.
+- The state file records `branchCreated` and the base branch; prune deletes only launcher-created branches; no base → has work.
+- "Merged" is checked against the base branch's current tip.
+- `--stop`/`--remove` refuse with live `claude` sessions unless `--force`; menu `T`/`D` confirm naming them.
+- A re-launch that disagrees with the state file fails with a message instead of silently re-creating or re-allocating.
+- `typescript-lsp` is installed per sandbox on each start (warn on failure); the PoC disables it.
+- `--serve` and `--reset` stay CLI-only; the menu follows the approved prototype.
+- The `--list`, test-DB, host-side `local-run/`, menu and LSP behaviours each get an acceptance criterion.
 
 ## Notes
 

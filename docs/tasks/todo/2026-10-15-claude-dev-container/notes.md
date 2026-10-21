@@ -37,3 +37,7 @@ stale-user-level-registration path (now handled automatically by the
 its own DB in the shared Postgres server and its own in-container backend/client; sandboxes run in
 parallel. This replaced the earlier single-container design (whole project mounted, fixed host ports
 `3000`/`5173`, worktrees out of scope) and removed the shared-`ai_work_dir` problem.
+
+## 2026-10-21 (moved from requirements.md, second distillation)
+
+- Host git version observed when PoC-5 (host git ≥ 2.48) was written: 2.56.0.
