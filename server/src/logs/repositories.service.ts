@@ -137,9 +137,11 @@ export class RepositoriesService {
 
   /**
    * Loads `repoId`, throwing if it doesn't exist or the caller has no access to it.
-   * Admins always pass. Without `teamId`, the caller must personally own the repo.
-   * With `teamId`, the caller must be a member of that team and the team must have
-   * a linked repository sharing the same `repoUrl`.
+   * The rule is per route and ignores the caller's app role (the admin role grants
+   * no data access). Without `teamId` (personal route), only the `repositories` row
+   * owner passes — even when a team links the same repo URL. With `teamId` (team
+   * route), the caller must be a member of that team and the team must have a
+   * linked repository sharing the same `repoUrl`.
    */
   async assertRepoAccess(
     user: AuthUser,
@@ -153,10 +155,6 @@ export class RepositoriesService {
 
     if (!repo) {
       throw new NotFoundException('Repository not found');
-    }
-
-    if (user.role === 'admin') {
-      return repo;
     }
 
     if (teamId === undefined) {
@@ -195,17 +193,18 @@ export class RepositoriesService {
 
   /**
    * Like {@link assertRepoAccess}, but when `teamId` is provided the caller must be
-   * that team's owner (or an admin) — not merely a member. Used by endpoints whose
-   * requirements are stricter than plain team visibility (export/import).
+   * that team's owner — not merely a member. Without `teamId` the caller must own
+   * the repo. Used by endpoints whose requirements are stricter than plain team
+   * visibility (export/import).
    */
-  async assertRepoOwnerOrAdmin(
+  async assertRepoOwnerOrTeamOwner(
     user: AuthUser,
     repoId: number,
     teamId?: number,
   ): Promise<RepositoryRow> {
     const repo = await this.assertRepoAccess(user, repoId, teamId);
 
-    if (teamId !== undefined && user.role !== 'admin') {
+    if (teamId !== undefined) {
       const [team] = await this.db
         .select({ ownerId: teams.ownerId })
         .from(teams)
@@ -306,10 +305,9 @@ export class RepositoriesService {
    * A `null` `visibleUserIds` means "emit no user predicate at all", preserving the
    * exact SQL a `transparent` team produced before access modes existed.
    *
-   * The app-level `admin` is deliberately **not** special-cased here: the admin
-   * bypass lives in `TeamAccessGuard`, `assertRepoAccess`, the session-logs endpoint,
-   * `sessions/export-scope` and `recompute-all-sessions`, and widening it here would
-   * silently grow admin reach beyond that list.
+   * The app-level `admin` is deliberately **not** special-cased here: the admin role
+   * grants no data access anywhere, so an admin is scoped by their team role like
+   * any other member.
    */
   async resolveTeamScope(
     user: AuthUser,
@@ -331,7 +329,7 @@ export class RepositoriesService {
     }
 
     // One query: the team plus the caller's own membership row (absent for a
-    // non-member reaching in, and for an admin who is not on the team).
+    // non-member reaching in).
     const [row] = await this.db
       .select({
         accessMode: teams.accessMode,
@@ -421,11 +419,11 @@ export class RepositoriesService {
    * `teamId` — `GET :repoId/sessions/export-scope` and the ZIP `POST :repoId/export`.
    *
    * Those two routes deliberately bypass the per-caller visibility
-   * narrowing (they are `assertRepoOwnerOrAdmin`/team-owner gated and keep returning
+   * narrowing (they are `assertRepoOwnerOrTeamOwner`/team-owner gated and keep returning
    * prompts in full), but the disclosure-acknowledgement gate still reaches them — a member who
    * has not acknowledged the disclosure is invisible to the team owner everywhere,
-   * exports included. Unlike {@link resolveTeamScope} this is caller-independent, so the
-   * app-admin bypass on those routes keeps working.
+   * exports included. Unlike {@link resolveTeamScope} this is caller-independent: the
+   * route's own gate already restricts the caller to the team owner.
    *
    * Returns `null` for a `transparent` team — "emit no user predicate at all", the exact
    * SQL those queries ran before access modes existed.
@@ -509,9 +507,9 @@ export class RepositoriesService {
    * (visibleUserIds)` in a `restricted` team — which is `[user.id]` for a plain member,
    * and the acknowledged members for an owner/manager/trainer — and nothing at all in a
    * `transparent` team, preserving the exact SQL that ran before access modes existed.
-   * It stays gated on `teamId !== undefined`: in the personal view an app admin may read
-   * another user's repository (`assertRepoAccess`), so narrowing to the caller's
-   * own id there would silently empty that admin's list.
+   * It stays gated on `teamId !== undefined`: the personal route is owner-only
+   * (`assertRepoAccess` admits only the `repositories` row owner, whatever their app
+   * role), so that gate is the whole personal-view rule and no extra row filter applies.
    */
   async buildSessionListConditions(
     user: AuthUser,
@@ -1146,7 +1144,7 @@ export class RepositoriesService {
    * Lists sessions in scope for the "Session Statistics Export" feature.
    *
    * Callers reach this method only after the controller has already verified the
-   * caller is the repo's owner (personal view) or the team owner/an app admin (team
+   * caller is the repo's owner (personal view) or the team owner (team
    * view) — see `getSessionsExportScope` in repositories.controller.ts. Given that,
    * this deliberately does NOT apply the per-caller visibility narrowing that
    * `getRepositorySessions`/`buildSessionListConditions` enforce for ordinary
@@ -1274,7 +1272,7 @@ export class RepositoriesService {
    * for the scoped `session_file_stats` table) this is scope-independent.
    *
    * Callers reach this method only after the controller has already verified the
-   * caller is the repo's owner (personal view) or the team owner/an app admin (team
+   * caller is the repo's owner (personal view) or the team owner (team
    * view) — see `recomputeAllSessions` in repositories.controller.ts.
    */
   async recomputeAllSessionStats(

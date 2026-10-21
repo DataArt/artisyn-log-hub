@@ -465,5 +465,57 @@ export const f14Repositories: ContractFamily = {
       params: { repoId: '@R1.id' },
       expect: { status: 403 },
     },
+    {
+      // The admin role grants no data access (2026-10-21-private-repo-visibility). Personal route: only the repositories row owner (R1 is owner's, R3 outsider's).
+      id: 'F14-get-admin',
+      route: 'GET /api/v1/repositories/:repoId',
+      actor: 'admin',
+      params: { repoId: '@R1.id' },
+      expect: { status: 403 },
+    },
+    {
+      id: 'F14-get-admin-r3',
+      route: 'GET /api/v1/repositories/:repoId',
+      actor: 'admin',
+      params: { repoId: '@R3.id' },
+      expect: { status: 403 },
+    },
+    {
+      id: 'F14-summary-admin',
+      route: 'GET /api/v1/repositories/:repoId/summary',
+      actor: 'admin',
+      params: { repoId: '@R1.id' },
+      expect: { status: 403 },
+    },
+    {
+      id: 'F14-summary-admin-r3',
+      route: 'GET /api/v1/repositories/:repoId/summary',
+      actor: 'admin',
+      params: { repoId: '@R3.id' },
+      expect: { status: 403 },
+    },
+    {
+      id: 'F14-contexts-admin',
+      route: 'GET /api/v1/repositories/:repoId/contexts',
+      actor: 'admin',
+      params: { repoId: '@R1.id' },
+      expect: { status: 403 },
+    },
+    {
+      id: 'F14-contexts-admin-r3',
+      route: 'GET /api/v1/repositories/:repoId/contexts',
+      actor: 'admin',
+      params: { repoId: '@R3.id' },
+      expect: { status: 403 },
+    },
+    {
+      // Team route: a non-member admin is an outsider to T1.
+      id: 'F14-settings-team-admin',
+      route: 'GET /api/v1/repositories/:repoId/settings',
+      actor: 'admin',
+      params: { repoId: '@R1.id' },
+      query: { teamId: '@T1.id' },
+      expect: { status: 403 },
+    },
   ],
 };

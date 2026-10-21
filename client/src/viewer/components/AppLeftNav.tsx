@@ -26,7 +26,7 @@ import { CreateTeamDialog } from './CreateTeamDialog';
 import { ImportRepoSessionsDialog } from './ImportRepoSessionsDialog';
 import { TeamAccordionList } from './TeamAccordion';
 
-// Stable empty-array default prevents useMemo(adminOnlyTeams) from getting a new
+// Stable empty-array default prevents useMemo(myTeams) from getting a new
 // reference on every render while the teams query is still loading.
 const EMPTY_TEAMS: Team[] = [];
 
@@ -38,7 +38,6 @@ export function AppLeftNav({ isCollapsed = false }: { isCollapsed?: boolean }) {
   const [expandedTeamIds, setExpandedTeamIds] = useState<Set<number>>(
     new Set(),
   );
-  const [adminSectionOpen, setAdminSectionOpen] = useState(false);
   const [myReposOpen, setMyReposOpen] = useState(true);
   const [hookSectionOpen, setHookSectionOpen] = useState(true);
   const [creating, setCreating] = useState(false);
@@ -71,10 +70,6 @@ export function AppLeftNav({ isCollapsed = false }: { isCollapsed?: boolean }) {
     () => teams.filter((t: Team) => t.isMember !== false),
     [teams],
   );
-  const adminOnlyTeams = useMemo(
-    () => (isAdmin ? teams.filter((t: Team) => t.isMember === false) : []),
-    [teams, isAdmin],
-  );
 
   const activeTeamId = params.teamId ? parseInt(params.teamId, 10) : null;
   const activeRepoId = params.repoId ? parseInt(params.repoId, 10) : null;
@@ -90,11 +85,8 @@ export function AppLeftNav({ isCollapsed = false }: { isCollapsed?: boolean }) {
   useEffect(() => {
     if (activeTeamId != null) {
       setExpandedTeamIds((prev) => new Set([...prev, activeTeamId]));
-      if (adminOnlyTeams.some((t) => t.id === activeTeamId)) {
-        setAdminSectionOpen(true);
-      }
     }
-  }, [activeTeamId, adminOnlyTeams]);
+  }, [activeTeamId]);
 
   const {
     data: myRepos = [],
@@ -251,36 +243,6 @@ export function AppLeftNav({ isCollapsed = false }: { isCollapsed?: boolean }) {
         open={importingRepo}
         onClose={() => setImportingRepo(false)}
       />
-
-      {/* Teams as Admin accordion — admin-only */}
-      {isAdmin && adminOnlyTeams.length > 0 && (
-        <>
-          <button
-            className="flex items-center gap-1.5 px-3 py-1.5 mt-1 w-full text-xs font-semibold uppercase tracking-wide text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/20 border-y border-blue-200 dark:border-blue-900 hover:bg-blue-100 dark:hover:bg-blue-950/30 transition-colors"
-            onClick={() => setAdminSectionOpen((v) => !v)}
-          >
-            {adminSectionOpen ? (
-              <ChevronDown className="size-3 shrink-0" />
-            ) : (
-              <ChevronRight className="size-3 shrink-0" />
-            )}
-            Teams as Admin
-          </button>
-
-          {adminSectionOpen && (
-            <div className="flex flex-col mt-0.5">
-              <TeamAccordionList
-                teams={adminOnlyTeams}
-                expandedTeamIds={expandedTeamIds}
-                onToggleTeam={toggleTeam}
-                activeTeamId={activeTeamId}
-                activeRepoId={activeRepoId}
-                activeItemRef={activeItemRef}
-              />
-            </div>
-          )}
-        </>
-      )}
 
       {/* Divider */}
       <div className="my-1 mx-3 border-t border-border" />

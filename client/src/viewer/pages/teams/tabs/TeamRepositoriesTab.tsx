@@ -14,7 +14,6 @@ import { ConfirmDialog } from '../../../ui/confirm-dialog';
 interface TeamRepositoriesTabProps {
   teamId: number;
   isOwner: boolean;
-  isAdmin: boolean;
 }
 
 type RepoAction = { repo: TeamRepository; action: 'remove' | 'unlink' };
@@ -22,7 +21,6 @@ type RepoAction = { repo: TeamRepository; action: 'remove' | 'unlink' };
 export function TeamRepositoriesTab({
   teamId,
   isOwner,
-  isAdmin,
 }: TeamRepositoriesTabProps) {
   const queryClient = useQueryClient();
   const [repoUrl, setRepoUrl] = useState('');
@@ -30,7 +28,7 @@ export function TeamRepositoriesTab({
   const [repoAction, setRepoAction] = useState<RepoAction | null>(null);
   const [removeError, setRemoveError] = useState('');
 
-  const canRemove = isOwner || isAdmin;
+  const canRemove = isOwner;
 
   const { data: repos = [] } = useQuery({
     queryKey: ['team-repos', teamId],

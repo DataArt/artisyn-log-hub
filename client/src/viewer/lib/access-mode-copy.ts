@@ -41,10 +41,11 @@ export const transparentLockNote = (n: number) =>
   `This team has ${n} member${n === 1 ? '' : 's'} besides you. They joined under the restricted privacy promise and it cannot be revoked.`;
 
 export const DISCLOSURE_RESTRICTED_BULLETS = [
-  'The team owner and application administrators can read all of your sessions, including your prompts.',
+  'The team owner can read all of your sessions, including your prompts.',
   'Any member holding the ADLC trainer role can read all of your sessions, including your prompts — now and for everything you have already written.',
   'A member holding the manager role sees your sessions and their statistics, but never your prompt text.',
   'No other team member sees your sessions at all.',
+  'Application administrators get no access through their admin role — only through a role they hold in this team.',
 ];
 
 export const DISCLOSURE_TRANSPARENT_BULLETS = [

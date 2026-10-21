@@ -13,6 +13,7 @@ export type {
   AdminAuthConfig,
   AdminRepo,
   AdminTeam,
+  AdminTeamMember,
   AdminUser,
   DataRetentionDailyBucket,
   DataRetentionStats,

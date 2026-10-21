@@ -65,11 +65,12 @@
 
     - **Your own repositories are private to you.** In LogHub, their sessions, prompts and
       transcripts are visible only to you, whatever role anyone else holds in LogHub.
-    - **Repositories shared into a team follow that team's access mode.** In a `transparent` team
-      every member can read your sessions, including your prompts. In a `restricted` team the team
-      owner and members holding the ADLC trainer role can read your sessions and prompts, members
-      holding the manager role see your sessions and their statistics but not your prompt text, and
-      other members do not see your sessions.
+    - **In a team, what others see depends on the team's access mode.**
+      - **`transparent` team:** every member sees your sessions, including your prompts.
+      - **`restricted` team:**
+        - the team owner and ADLC trainers see your sessions, including your prompts;
+        - managers see your sessions and their statistics, but your prompts are hidden from them;
+        - all other members do not see your sessions at all.
     - **Administrators get no access to session data through their admin role.** The admin panel
       covers users, retention and system settings and shows only counts and totals (sessions,
       tokens, cost). An administrator sees your team sessions only through a role they hold in
@@ -233,80 +234,80 @@ Only two of the three allowed kinds apply (CLAUDE.md → Test policy). No algori
 | 10 | Tests: scenarios (admin panel, legacy) | 4 | — |
 
 ### Chunk 1 — Repo & session access checks
-- [ ] `server/src/logs/repositories.service.ts`: delete the admin early return l.158-160; rewrite the doc comment l.140 to state per-route rules (Design Decision 1).
-- [ ] Same file: rename `assertRepoOwnerOrAdmin` → `assertRepoOwnerOrTeamOwner`, drop `&& user.role !== 'admin'` (l.208), update its doc comment; update the six callers in `repository-export-import.controller.ts` (l.243, 266, 321, 360, 415, 481) and the comment at `repository-export-import.service.ts:1020`.
-- [ ] Same file: rewrite admin-justifying comments at l.309-312, 356, 424-428, 512-514, 537-540 to say the personal route is owner-only.
-- [ ] `repositories.controller.ts` l.1808-1836: gate becomes `sessionOwnerRow?.userId !== user.id`; update comments l.1808, 1819-1820, 1835-1836 to drop admin references.
-- [ ] `repositories.controller.ts` export-scope l.2296-2307 and recompute-all-sessions l.2318-2342: remove `user.role !== 'admin' &&`; update comments to "team owner" only.
-- [ ] `repositories.controller.ts`: reword admin comments at l.140-150 (`teamScopeUserFilterSql`) and l.1658-1669 (`assertSessionVisibleBySessionId`).
-- [ ] `server/src/sessions/sessions.service.ts` `deleteSession` (l.78-112): remove `requesterRole` param and the admin override (l.108); update caller `sessions.controller.ts:42`.
+- [x] `server/src/logs/repositories.service.ts`: delete the admin early return l.158-160; rewrite the doc comment l.140 to state per-route rules (Design Decision 1).
+- [x] Same file: rename `assertRepoOwnerOrAdmin` → `assertRepoOwnerOrTeamOwner`, drop `&& user.role !== 'admin'` (l.208), update its doc comment; update the six callers in `repository-export-import.controller.ts` (l.243, 266, 321, 360, 415, 481) and the comment at `repository-export-import.service.ts:1020`.
+- [x] Same file: rewrite admin-justifying comments at l.309-312, 356, 424-428, 512-514, 537-540 to say the personal route is owner-only.
+- [x] `repositories.controller.ts` l.1808-1836: gate becomes `sessionOwnerRow?.userId !== user.id`; update comments l.1808, 1819-1820, 1835-1836 to drop admin references.
+- [x] `repositories.controller.ts` export-scope l.2296-2307 and recompute-all-sessions l.2318-2342: remove `user.role !== 'admin' &&`; update comments to "team owner" only.
+- [x] `repositories.controller.ts`: reword admin comments at l.140-150 (`teamScopeUserFilterSql`) and l.1658-1669 (`assertSessionVisibleBySessionId`).
+- [x] `server/src/sessions/sessions.service.ts` `deleteSession` (l.78-112): remove `requesterRole` param and the admin override (l.108); update caller `sessions.controller.ts:42`.
 
 ### Chunk 2 — Team access
-- [ ] `server/src/common/guards/team-access.guard.ts`: remove the admin branch l.40-43 and narrow the `user` type to `{ id: number }`.
-- [ ] `teams.controller.ts`: replace `TeamOwnerOrAdminGuard` with `TeamOwnerGuard` on the routes at l.108, 173, 183; delete `server/src/common/guards/team-owner-or-admin.guard.ts`; remove it from `teams.module.ts` providers/imports.
-- [ ] `teams.service.ts` `listTeams` (l.84-126): drop `isAdmin` param and admin branch (Design Decision 4); `teams.controller.ts:45` calls `listTeams(user.id)`.
-- [ ] `teams.service.ts` `getMembers` (l.232-267): `canSeeAcknowledgement = caller !== undefined && caller.id === team.ownerId`; update doc comment.
-- [ ] `teams.service.ts` `sendInvitation` (l.684) and `cancelInvitation` (l.798-801): remove the role override and the role parameters plus their controller arguments; message "Only the team owner…".
-- [ ] `teams.service.ts` l.978-979: rewrite the "An app admin passes TeamAccessGuard" comment.
+- [x] `server/src/common/guards/team-access.guard.ts`: remove the admin branch l.40-43 and narrow the `user` type to `{ id: number }`.
+- [x] `teams.controller.ts`: replace `TeamOwnerOrAdminGuard` with `TeamOwnerGuard` on the routes at l.108, 173, 183; delete `server/src/common/guards/team-owner-or-admin.guard.ts`; remove it from `teams.module.ts` providers/imports.
+- [x] `teams.service.ts` `listTeams` (l.84-126): drop `isAdmin` param and admin branch (Design Decision 4); `teams.controller.ts:45` calls `listTeams(user.id)`.
+- [x] `teams.service.ts` `getMembers` (l.232-267): `canSeeAcknowledgement = caller !== undefined && caller.id === team.ownerId`; update doc comment.
+- [x] `teams.service.ts` `sendInvitation` (l.684) and `cancelInvitation` (l.798-801): remove the role override and the role parameters plus their controller arguments; message "Only the team owner…".
+- [x] `teams.service.ts` l.978-979: rewrite the "An app admin passes TeamAccessGuard" comment.
 
 ### Chunk 3 — Admin panel API
-- [ ] `admin.module.ts`: add `TeamsModule` to `imports` per Design Decision 13; inject `TeamsService` into `AdminService`.
-- [ ] `admin.service.ts` `getRepos`: add `teamName` to real rows per Design Decision 11 (sub-select in the select list); keep orphan rows unchanged; extend `RepoRow` type.
-- [ ] `admin.service.ts`: add `getTeamMembers(teamId)` and `setTeamOwner(teamId, userId)` per Design Decision 13.
-- [ ] `admin.service.ts`: add `removeOrphanTeamRepo(teamRepoId)` per Design Decision 12.
-- [ ] `admin-panel.controller.ts`: add `GET teams/:teamId/members`, `POST teams/:teamId/owner` (`@HttpCode(200)`, `TransferOwnershipDto`), `DELETE team-repos/:teamRepoId` (`@HttpCode(204)`), all with `ParseIntPipe`, per API changes.
+- [x] `admin.module.ts`: add `TeamsModule` to `imports` per Design Decision 13; inject `TeamsService` into `AdminService`.
+- [x] `admin.service.ts` `getRepos`: add `teamName` to real rows per Design Decision 11 (sub-select in the select list); keep orphan rows unchanged; extend `RepoRow` type.
+- [x] `admin.service.ts`: add `getTeamMembers(teamId)` and `setTeamOwner(teamId, userId)` per Design Decision 13.
+- [x] `admin.service.ts`: add `removeOrphanTeamRepo(teamRepoId)` per Design Decision 12.
+- [x] `admin-panel.controller.ts`: add `GET teams/:teamId/members`, `POST teams/:teamId/owner` (`@HttpCode(200)`, `TransferOwnershipDto`), `DELETE team-repos/:teamRepoId` (`@HttpCode(204)`), all with `ParseIntPipe`, per API changes.
 
 ### Chunk 4 — Client: remove admin browsing UI
-- [ ] `RepositoryHeader.tsx`: delete the "Private repo view" badge (l.25-27) and any now-unused imports/props.
-- [ ] `RepositoryView.tsx` l.93-112: remove `isAppAdmin` from `canSeeTeamWideTabs` and `showRestrictedNotice`; fix the l.95 comment.
-- [ ] `SessionDetailPane.tsx`: remove `user?.role === 'admin' ||` from `canSeeRawLogs` (l.124) and from the Delete-button condition (l.342).
-- [ ] `AppLeftNav.tsx`: remove `adminSectionOpen` (l.41), `adminOnlyTeams` (l.29-30 default and comment, l.74-76, l.93-97 effect) and the "Teams as Admin" accordion (l.255-283); keep `isAdmin` for the Admin Panel link (l.153, 361).
-- [ ] `TeamsPage.tsx`: remove roleLabel `'Admin'` (l.23), `AdminTeamCard` (l.51-60), `adminOnlyTeams` (l.83-86), the "View as Admin" badge (l.94-96), the section l.124-131; empty state checks `myTeams` only.
-- [ ] `TeamDetailPage.tsx`: remove `isAdmin`, `viewingAsAdmin` and the "Viewing as Admin" banner (l.40, 49-59); stop passing `isAdmin` (l.74, 84, 92).
-- [ ] `TeamMembersTab.tsx` (`canRemove={isOwner}`), `TeamRepositoriesTab.tsx` (`canRemove = isOwner`), `TeamInvitationsTab.tsx` (cancel when `isOwner`): drop the `isAdmin` prop from each.
+- [x] `RepositoryHeader.tsx`: delete the "Private repo view" badge (l.25-27) and any now-unused imports/props.
+- [x] `RepositoryView.tsx` l.93-112: remove `isAppAdmin` from `canSeeTeamWideTabs` and `showRestrictedNotice`; fix the l.95 comment.
+- [x] `SessionDetailPane.tsx`: remove `user?.role === 'admin' ||` from `canSeeRawLogs` (l.124) and from the Delete-button condition (l.342).
+- [x] `AppLeftNav.tsx`: remove `adminSectionOpen` (l.41), `adminOnlyTeams` (l.29-30 default and comment, l.74-76, l.93-97 effect) and the "Teams as Admin" accordion (l.255-283); keep `isAdmin` for the Admin Panel link (l.153, 361).
+- [x] `TeamsPage.tsx`: remove roleLabel `'Admin'` (l.23), `AdminTeamCard` (l.51-60), `adminOnlyTeams` (l.83-86), the "View as Admin" badge (l.94-96), the section l.124-131; empty state checks `myTeams` only.
+- [x] `TeamDetailPage.tsx`: remove `isAdmin`, `viewingAsAdmin` and the "Viewing as Admin" banner (l.40, 49-59); stop passing `isAdmin` (l.74, 84, 92).
+- [x] `TeamMembersTab.tsx` (`canRemove={isOwner}`), `TeamRepositoriesTab.tsx` (`canRemove = isOwner`), `TeamInvitationsTab.tsx` (cancel when `isOwner`): drop the `isAdmin` prop from each.
 
 ### Chunk 5 — Client: admin panel
-- [ ] `client/src/models/admin.ts`: add `AdminTeamMember { userId: number; email: string; isOwner: boolean }`; change `AdminRepo.teamName` to `teamName?: string | null`; widen the `AdminReposTab.tsx` l.94 cell cast to `string | null | undefined`.
-- [ ] `client/src/viewer/api.ts`: add `fetchAdminTeamMembers(teamId)`, `setAdminTeamOwner(teamId, userId)`, `removeAdminOrphanTeamRepo(teamRepoId)` following `removeAdminRepo`.
-- [ ] `AdminReposTab.tsx` l.33-37: orphan branch calls `removeAdminOrphanTeamRepo(row.teamRepoId!)`; drop the `removeTeamRepository` import.
-- [ ] Create `AdminSetTeamOwnerDialog.tsx` (props `team: AdminTeam`, `open`, `onOpenChange`): `useQuery(['admin-team-members', team.id], enabled: open)`, select of non-owner members, mutation `setAdminTeamOwner`, states per Visual/UX notes.
-- [ ] `AdminTeamsTab.tsx`: add `actions` column (`enableSorting: false`, `enableGlobalFilter: false`) rendering a "Set new owner" button that opens `AdminSetTeamOwnerDialog`.
+- [x] `client/src/models/admin.ts`: add `AdminTeamMember { userId: number; email: string; isOwner: boolean }`; change `AdminRepo.teamName` to `teamName?: string | null`; widen the `AdminReposTab.tsx` l.94 cell cast to `string | null | undefined`.
+- [x] `client/src/viewer/api.ts`: add `fetchAdminTeamMembers(teamId)`, `setAdminTeamOwner(teamId, userId)`, `removeAdminOrphanTeamRepo(teamRepoId)` following `removeAdminRepo`.
+- [x] `AdminReposTab.tsx` l.33-37: orphan branch calls `removeAdminOrphanTeamRepo(row.teamRepoId!)`; drop the `removeTeamRepository` import.
+- [x] Create `AdminSetTeamOwnerDialog.tsx` (props `team: AdminTeam`, `open`, `onOpenChange`): `useQuery(['admin-team-members', team.id], enabled: open)`, select of non-owner members, mutation `setAdminTeamOwner`, states per Visual/UX notes.
+- [x] `AdminTeamsTab.tsx`: add `actions` column (`enableSorting: false`, `enableGlobalFilter: false`) rendering a "Set new owner" button that opens `AdminSetTeamOwnerDialog`.
 
 ### Chunk 6 — Texts
-- [ ] `client/public/help/data-collection-notice.md`: replace the "Who can see it" section with the exact text in Design Decision 14.
-- [ ] `client/src/viewer/lib/access-mode-copy.ts`: update `DISCLOSURE_RESTRICTED_BULLETS` per Design Decision 15.
-- [ ] `client/public/help/security-hardening.md` l.281-282 and `README.md` l.198: wording per Design Decision 16.
-- [ ] Doc comments `client/src/models/teams.ts:33`, `client/src/viewer/api.ts:1345, 1376`, `TeamMemberRow.tsx:23`: acknowledgement is visible to the team owner only; drop admin-sees-all phrasing.
-- [ ] `client/src/viewer/pages/repository/RepositoryView.tsx` l.95 comment: drop "app admin" wording if Chunk 4 left any.
+- [x] `client/public/help/data-collection-notice.md`: replace the "Who can see it" section with the exact text in Design Decision 14.
+- [x] `client/src/viewer/lib/access-mode-copy.ts`: update `DISCLOSURE_RESTRICTED_BULLETS` per Design Decision 15.
+- [x] `client/public/help/security-hardening.md` l.281-282 and `README.md` l.198: wording per Design Decision 16.
+- [x] Doc comments `client/src/models/teams.ts:33`, `client/src/viewer/api.ts:1345, 1376`, `TeamMemberRow.tsx:23`: acknowledgement is visible to the team owner only; drop admin-sees-all phrasing.
+- [x] `client/src/viewer/pages/repository/RepositoryView.tsx` l.95 comment: drop "app admin" wording if Chunk 4 left any.
 
 ### Chunk 7 — KB & design docs
-- [ ] `docs/knowledgebase/authorization-and-authentificaiton.md`: rewrite §"What the app-level admin bypass…" (l.375-387) as "The admin role grants no data access" (Design Decisions 1-8, plus the privacy boundary of Design Decision 10); l.411-413 per Design Decision 2, l.425-427 per Design Decision 1, l.441-443 per Design Decision 8; list the three new admin routes.
-- [ ] `server-endpoint-map.md` / `api-reference.md`: document the three new admin routes and `teamName` (API changes); fix guard legend l.28 and admin notes at endpoint-map l.444, 459, 740, 762, 834, 840, 841, 848, 850; api-reference l.1058-1166, 2386, 2588, 2621-2623.
-- [ ] `client-component-map.md`: l.141, 399, 460-461 per Chunks 4-5; add `AdminSetTeamOwnerDialog`.
-- [ ] `ui-principles.md` l.26-28: remove the "Context badge — personal route" rule; `legacy-design-decisions-map.md` l.38: mark T-7 badge "removed (2026-10-21-private-repo-visibility)".
-- [ ] `upload-queue.md` l.64-66: note the staged-file download is debugging data outside the privacy boundary (Design Decision 10); `session-export-import.md`: "owner-or-team-owner gate".
-- [ ] `docs/qaa-overview/scenarios/01-auth-access-admin.md` (S-ACC-01 step 4 per Chunk 9; S-TEAM-07 l.521-538 rewritten as "non-member admin: no team in `GET /teams`, 403 on team routes; Set new owner only via Admin → Teams"; l.379 per Design Decision 15), `02-repos-sessions.md` l.92-93, 432, `03-…golden.md` S-SESS-12 step 6, `05-api-db-contract.md` l.25, 148.
+- [x] `docs/knowledgebase/authorization-and-authentificaiton.md`: rewrite §"What the app-level admin bypass…" (l.375-387) as "The admin role grants no data access" (Design Decisions 1-8, plus the privacy boundary of Design Decision 10); l.411-413 per Design Decision 2, l.425-427 per Design Decision 1, l.441-443 per Design Decision 8; list the three new admin routes.
+- [x] `server-endpoint-map.md` / `api-reference.md`: document the three new admin routes and `teamName` (API changes); fix guard legend l.28 and admin notes at endpoint-map l.444, 459, 740, 762, 834, 840, 841, 848, 850; api-reference l.1058-1166, 2386, 2588, 2621-2623.
+- [x] `client-component-map.md`: l.141, 399, 460-461 per Chunks 4-5; add `AdminSetTeamOwnerDialog`.
+- [x] `ui-principles.md` l.26-28: remove the "Context badge — personal route" rule; `legacy-design-decisions-map.md` l.38: mark T-7 badge "removed (2026-10-21-private-repo-visibility)".
+- [x] `upload-queue.md` l.64-66: note the staged-file download is debugging data outside the privacy boundary (Design Decision 10); `session-export-import.md`: "owner-or-team-owner gate".
+- [x] `docs/qaa-overview/scenarios/01-auth-access-admin.md` (S-ACC-01 step 4 per Chunk 9; S-TEAM-07 l.521-538 rewritten as "non-member admin: no team in `GET /teams`, 403 on team routes; Set new owner only via Admin → Teams"; l.379 per Design Decision 15), `02-repos-sessions.md` l.92-93, 432, `03-…golden.md` S-SESS-12 step 6, `05-api-db-contract.md` l.25, 148.
 
 ### Chunk 8 — Tests: contract registry
-- [ ] `f10-teams-core.ts`: F10-list-admin → `expect: { status: 200, bodyText: '[]' }` (drop `read`); F10-get-admin → `expect: { status: 403 }`.
-- [ ] `f11-team-members.ts` F11-remove-admin (reword its l.133 `TeamOwnerOrAdminGuard` comment to `TeamOwnerGuard`) and `f18-session-delete-retention.ts` F18-delete-by-admin → `expect: { status: 403 }`, remove `write`.
-- [ ] `f08-admin-repos-teams.ts` F08-repos: add `team_name` sub-select per Design Decision 11 and field `teamName: 'team_name'`.
-- [ ] `f08-admin-repos-teams.ts`: add rows for the three new admin routes per Test coverage plan → New routes.
-- [ ] `f14-repositories.ts`, `f17-sessions.ts`: add `*-admin` 403 rows mirroring the existing `*-outsider` rows (R1 personal, R1 `?teamId=@T1.id`, R3).
-- [ ] `f17-sessions.ts` (export-scope, recompute-all-sessions on R1, personal and `?teamId=@T1.id`) and `f23-export-import.ts` (export/import routes on R1): add admin 403 rows.
-- [ ] `f12-team-repos.ts` (unlink/remove), `f13-invitations.ts` (T2 invitation), `F20-timeline-admin` in `f20-analytics.ts`, `F21-executive-summary-admin` in `f21-reports.ts`: add admin 403 rows mirroring the `*-outsider` rows.
+- [x] `f10-teams-core.ts`: F10-list-admin → `expect: { status: 200, bodyText: '[]' }` (drop `read`); F10-get-admin → `expect: { status: 403 }`.
+- [x] `f11-team-members.ts` F11-remove-admin (reword its l.133 `TeamOwnerOrAdminGuard` comment to `TeamOwnerGuard`) and `f18-session-delete-retention.ts` F18-delete-by-admin → `expect: { status: 403 }`, remove `write`.
+- [x] `f08-admin-repos-teams.ts` F08-repos: add `team_name` sub-select per Design Decision 11 and field `teamName: 'team_name'`.
+- [x] `f08-admin-repos-teams.ts`: add rows for the three new admin routes per Test coverage plan → New routes.
+- [x] `f14-repositories.ts`, `f17-sessions.ts`: add `*-admin` 403 rows mirroring the existing `*-outsider` rows (R1 personal, R1 `?teamId=@T1.id`, R3).
+- [x] `f17-sessions.ts` (export-scope, recompute-all-sessions on R1, personal and `?teamId=@T1.id`) and `f23-export-import.ts` (export/import routes on R1): add admin 403 rows.
+- [x] `f12-team-repos.ts` (unlink/remove), `f13-invitations.ts` (T2 invitation), `F20-timeline-admin` in `f20-analytics.ts`, `F21-executive-summary-admin` in `f21-reports.ts`: add admin 403 rows mirroring the `*-outsider` rows.
 
 ### Chunk 9 — Tests: scenarios (access)
-- [ ] `tests/scenarios/auth/s-acc-01.spec.ts` step 4: admin GETs every path in `reads` → 403 and no response contains `sessions[0].prompt`; rename the step; update header comment.
-- [ ] `tests/scenarios/view/s-sess-12.spec.ts` step 6: admin opens the session → no `tab-session-raw-logs`, no `FIRST_PROMPT`; `logsPath()` and `logsPath(teamId)` → 403.
-- [ ] `tests/scenarios/sessions/s-slife-06.spec.ts` step 6 (l.137-138): admin DELETE → 403 and the session stays; `s-slife-08.spec.ts` l.58, 88: perform the child delete as the owner.
-- [ ] `tests/scenarios/repos/s-repo-07.spec.ts` l.182: admin GET settings `?teamId` → 403.
-- [ ] `tests/scenarios/auth/s-team-02.spec.ts`: new step — non-member admin: team absent from `GET /api/v1/teams`; 403 on team detail, members, repositories, session list `?teamId`, invitation create, remove member, unlink team repo.
-- [ ] `s-team-02.spec.ts`: new step — an admin invited and accepted as a plain member gets the same session list and prompt visibility as m1; their `GET /teams/:id/members` rows have `disclosureAcknowledgedAt` null (Design Decision 5).
-- [ ] `s-team-02.spec.ts`: new UI step — the non-member admin (via `browserAs`) sees no "Teams as Admin" in the left nav and no "View as Admin" on `#/teams`; `#/teams/<id>` shows no "Viewing as Admin" and no member list.
+- [x] `tests/scenarios/auth/s-acc-01.spec.ts` step 4: admin GETs every path in `reads` → 403 and no response contains `sessions[0].prompt`; rename the step; update header comment.
+- [x] `tests/scenarios/view/s-sess-12.spec.ts` step 6: admin opens the session → no `tab-session-raw-logs`, no `FIRST_PROMPT`; `logsPath()` and `logsPath(teamId)` → 403.
+- [x] `tests/scenarios/sessions/s-slife-06.spec.ts` step 6 (l.137-138): admin DELETE → 403 and the session stays; `s-slife-08.spec.ts` l.58, 88: perform the child delete as the owner.
+- [x] `tests/scenarios/repos/s-repo-07.spec.ts` l.182: admin GET settings `?teamId` → 403.
+- [x] `tests/scenarios/auth/s-team-02.spec.ts`: new step — non-member admin: team absent from `GET /api/v1/teams`; 403 on team detail, members, repositories, session list `?teamId`, invitation create, remove member, unlink team repo.
+- [x] `s-team-02.spec.ts`: new step — an admin invited and accepted as a plain member gets the same session list and prompt visibility as m1; their `GET /teams/:id/members` rows have `disclosureAcknowledgedAt` null (Design Decision 5).
+- [x] `s-team-02.spec.ts`: new UI step — the non-member admin (via `browserAs`) sees no "Teams as Admin" in the left nav and no "View as Admin" on `#/teams`; `#/teams/<id>` shows no "Viewing as Admin" and no member list.
 
 ### Chunk 10 — Tests: scenarios (admin panel, legacy)
-- [ ] `tests/scenarios/auth/s-adm-01.spec.ts`: new step — teamOwner invites `regular`; admin opens Admin → Teams, "Set new owner" → `regular`; `GET /api/v1/teams/:id` as regular shows `ownerId === regular.id`; API set-owner to a non-member → 400.
-- [ ] `s-adm-01.spec.ts`: new step — teamOwner links a never-uploaded URL; Admin → Repos shows it with the team name and no link; admin deletes it; row gone.
-- [ ] `tests/scenarios/repos/s-repo-12.spec.ts` l.8 header comment: `assertRepoOwnerOrAdmin` → `assertRepoOwnerOrTeamOwner`.
-- [ ] `tests/e2e/repo-panel.spec.ts`: delete the two "Private repo view" badge tests (l.128-153).
+- [x] `tests/scenarios/auth/s-adm-01.spec.ts`: new step — teamOwner invites `regular`; admin opens Admin → Teams, "Set new owner" → `regular`; `GET /api/v1/teams/:id` as regular shows `ownerId === regular.id`; API set-owner to a non-member → 400.
+- [x] `s-adm-01.spec.ts`: new step — teamOwner links a never-uploaded URL; Admin → Repos shows it with the team name and no link; admin deletes it; row gone.
+- [x] `tests/scenarios/repos/s-repo-12.spec.ts` l.8 header comment: `assertRepoOwnerOrAdmin` → `assertRepoOwnerOrTeamOwner`.
+- [x] `tests/e2e/repo-panel.spec.ts`: delete the two "Private repo view" badge tests (l.128-153).

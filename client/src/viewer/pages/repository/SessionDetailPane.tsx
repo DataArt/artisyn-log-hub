@@ -116,12 +116,12 @@ export function SessionDetailPane({
   const { user } = useAuth();
   const queryClient = useQueryClient();
 
-  // The server decides who may read a session's logs (owner, admin, any member of a
-  // transparent team, the restricted-team roles); in a team view the tab follows that answer.
+  // The server decides who may read a session's logs (owner, any member of a transparent
+  // team, the restricted-team roles — never the app admin role as such); in a team view
+  // the tab follows that answer.
   const canSeeRawLogs =
     !!selectedSession.userId &&
     (user?.id === selectedSession.userId ||
-      user?.role === 'admin' ||
       (teamId !== undefined && logsQuery.isSuccess));
 
   // Cross-tab turn targeting — transient, not a URL param.
@@ -339,7 +339,7 @@ export function SessionDetailPane({
             </Tooltip>
           </TooltipProvider>
         )}
-        {(user?.id === selectedSession.userId || user?.role === 'admin') && (
+        {user?.id === selectedSession.userId && (
           <button
             onClick={onDeleteRequest}
             className="ml-auto flex items-center gap-1.5 rounded px-2 py-1 text-xs font-medium text-destructive hover:bg-destructive/10 border border-destructive/30"

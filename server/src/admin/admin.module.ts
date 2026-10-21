@@ -7,6 +7,7 @@ import { MailModule } from '../mail/mail.module';
 import { ReleasesModule } from '../releases/releases.module';
 import { SessionsModule } from '../sessions/sessions.module';
 import { SystemInfoModule } from '../system-info/system-info.module';
+import { TeamsModule } from '../teams/teams.module';
 import { UsersModule } from '../users/users.module';
 import { AdminController } from './admin.controller';
 import { AdminPanelController } from './admin-panel.controller';
@@ -24,6 +25,7 @@ import { UploadQueueStatsService } from './upload-queue-stats.service';
     AuthModule,
     ReleasesModule,
     SessionsModule,
+    TeamsModule,
   ],
   controllers: [AdminController, AdminPanelController],
   providers: [

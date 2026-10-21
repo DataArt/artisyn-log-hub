@@ -18,7 +18,7 @@ export class TeamAccessGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<Request>();
-    const user = request.user as { id: number; role: string } | undefined;
+    const user = request.user as { id: number } | undefined;
     const teamId = Number((request.params as Record<string, string>)['teamId']);
 
     const teams = await this.db
@@ -37,12 +37,8 @@ export class TeamAccessGuard implements CanActivate {
       throw new ForbiddenException();
     }
 
-    // Admins always have access
-    if (user.role === 'admin') {
-      return true;
-    }
-
-    // Check membership
+    // Membership is the whole rule — the app admin role grants no bypass
+    // (an admin manages teams only through the admin panel).
     const members = await this.db
       .select()
       .from(schema.teamMembers)

@@ -278,9 +278,10 @@ No telemetry is sent to the project maintainers or any other third party.
 
 ## 5. Authorization and data visibility
 
-- **Roles**: `admin` (admin panel, user management, pricing, retention, system info, can read
-  any session's logs) and `user`. Keep the number of admins small; the last admin cannot be
-  deleted.
+- **Roles**: `admin` (admin panel, user management, pricing, retention, system info) and `user`.
+  The admin role grants no access to session data in the app; admins see sessions only through
+  their own repositories or a team role (server operators can still reach the database and logs
+  directly). Keep the number of admins small; the last admin cannot be deleted.
 - **Ownership**: repositories and sessions are visible to their owner only, unless shared
   through a team.
 - **Team access modes**:

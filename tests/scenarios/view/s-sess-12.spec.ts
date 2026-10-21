@@ -4,7 +4,8 @@
 //
 // Data: GS-01 uploaded by its owner U1 through POST /api/v2/logs (DD SC3). Team T is `restricted`
 // (the default) and owned by TO, who adds the repository URL; U1 is a member (acknowledged by
-// accepting), U2 is a member with the `manager` flag, U3 a plain member; plus an app admin.
+// accepting), U2 is a member with the `manager` flag, U3 a plain member; plus an app admin who is
+// not in T — the admin role grants no data access (2026-10-21-private-repo-visibility).
 //
 // Who is «the second user» (design: «участник общей команды, ограниченной по доступу»): in a
 // restricted team a plain member does not see other members' sessions at all, so U2 is a manager —
@@ -138,18 +139,22 @@ test('@S-SESS-12 Raw Logs only for the owner; anyone else gets 403 @mode-a @mode
     }
   });
 
-  await test.step('6. the app admin opens the same session: the Raw Logs tab is there', async () => {
+  await test.step('6. the app admin (not in T) opens the same session: «No access», no Raw Logs tab, no prompt; the API → 403 with and without teamId', async () => {
     const context = await browser.newContext({ baseURL: stand.url });
     try {
       const other = await context.newPage();
       await openSession(other, admin, repo.repoId, sid, { tab: 'raw-logs' });
-      await expect(other.getByTestId('tab-session-raw-logs')).toBeVisible();
-      await expect(rawLogRows(other).first()).toBeVisible();
-      expect(await rowTypes(other)).toContain('assistant');
+      await expect(other.getByText('No access')).toBeVisible();
+      await expect(other.getByTestId('tab-session-raw-logs')).toHaveCount(0);
+      await expect(other.getByText(FIRST_PROMPT)).toHaveCount(0);
     } finally {
       await context.close();
     }
-    expect((await admin.api.get(logsPath())).status()).toBe(200);
+    for (const path of [logsPath(), logsPath(teamId)]) {
+      const res = await admin.api.get(path);
+      expect(res.status(), path).toBe(403);
+      expect(await res.text(), path).not.toContain(FIRST_PROMPT);
+    }
   });
 
   await test.step('7. with ?teamId=: the team owner gets the logs (200), a plain member does not (403)', async () => {

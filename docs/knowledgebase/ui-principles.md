@@ -23,12 +23,6 @@ if API call fails due to access error - got to login page
 
 ---
 
-## Context badge — personal route
-
-When a page is scoped to the current user's personal data (no team context), render an orange `<Badge className="bg-orange-500 text-white">` in the page header to signal the restricted scope. Example: "Private repo view" badge in `RepositoryView.tsx` when `teamId === undefined`.
-
----
-
 ## Zone-color pattern (bar charts)
 
 When a bar chart ranks items by a metric value, colour each bar relative to the max value in the current dataset:

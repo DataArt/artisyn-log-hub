@@ -1017,7 +1017,7 @@ export class RepositoryExportImportService {
       );
 
     // This is one of the two owner-only export surfaces: it is
-    // `assertRepoOwnerOrAdmin`-gated (see `repository-export-import.controller.ts:266`)
+    // `assertRepoOwnerOrTeamOwner`-gated (see `repository-export-import.controller.ts:266`)
     // and therefore deliberately does NOT take `buildSessionListConditions`' per-caller
     // `ownerCondition`. The one access-mode rule that does reach it is the
     // disclosure-acknowledgement gate — a member who has not acknowledged the disclosure is

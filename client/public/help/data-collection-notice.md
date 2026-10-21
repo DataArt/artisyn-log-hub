@@ -17,12 +17,29 @@ recomputed later.
 
 ## Who can see it
 
-- **Your own repositories are private to you.** Their sessions, prompts and transcripts are
-  visible only to you.
-- **Repositories you share into a team are visible to that team's members.** Anyone in the team
-  can open those sessions and read their prompts and transcripts.
-- **Administrators do not get access to your private repository data.** The admin panel covers
-  users, retention and system settings — not the contents of another user's private repositories.
+- **Your own repositories are private to you.** In LogHub, their sessions, prompts and
+  transcripts are visible only to you, whatever role anyone else holds in LogHub.
+- **In a team, what others see depends on the team's access mode.**
+  - **`transparent` team:** every member sees your sessions, including your prompts.
+  - **`restricted` team:**
+    - the team owner and ADLC trainers see your sessions, including your prompts;
+    - managers see your sessions and their statistics, but your prompts are hidden from them;
+    - all other members do not see your sessions at all.
+- **Administrators get no access to session data through their admin role.** The admin panel
+  covers users, retention and system settings and shows only counts and totals (sessions,
+  tokens, cost). An administrator sees your team sessions only through a role they hold in
+  that team, like anyone else.
+- **Anyone with access to the LogHub database can read everything.** The rules above describe
+  what the LogHub application shows. Whoever has direct access to the LogHub database or
+  server — typically the people who operate it — can read all stored sessions of all users,
+  including every prompt and transcript, regardless of these rules. Debugging data is not
+  covered by these rules either: administrators can download the raw file of an upload that is
+  queued or failed to process, and server logs may contain fragments of session data.
+- **Administrators can reset your password.** An admin can issue a password-reset link for any
+  account; whoever uses that link can sign in as you.
+- **Identify-only sign-in does not verify identity.** If this server runs without passwords
+  (identify-only sign-in), whoever signs in with your email address acts as you and sees what
+  you see.
 
 ## If the assistant handles secrets
 

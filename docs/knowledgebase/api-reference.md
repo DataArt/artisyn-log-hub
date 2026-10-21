@@ -52,8 +52,7 @@ interface Team {
                               // auto-created import teams.
   myIsManager: boolean;       // the CALLER's own role flags on this team, denormalised onto the
   myIsAdlcTrainer: boolean;   // team row so the client can gate its UI without a second
-                              // GET :teamId/members round-trip. Both false when the caller is an
-                              // admin who is not a member. Meaningful only when
+                              // GET :teamId/members round-trip. Meaningful only when
                               // accessMode === 'restricted' — a transparent team ignores roles.
 }
 
@@ -66,7 +65,7 @@ interface TeamMember {
                            // The two stack; both are ignored while accessMode is 'transparent'.
   disclosureAcknowledgedAt: string | null; // ISO 8601, or null when the member has not yet
                            // acknowledged the access-mode disclosure. Returned verbatim ONLY to the
-                           // team owner and an app admin — null for every other caller, so one
+                           // team owner — null for every other caller, so one
                            // member cannot read another's acknowledgement state.
   joinedAt: string; // ISO 8601
   isOwner: boolean;
@@ -660,7 +659,7 @@ Unauthenticated requests return 401. API key auth is not accepted.
 
 ```ts
 // DELETE /api/v1/sessions/:sessionId — 204
-// Requires: authenticated session; caller must be the session owner or role='admin'
+// Requires: authenticated session; caller must be the session owner (no admin override)
 // :sessionId — the public session_id string (not the numeric PK)
 // Purges all associated data (logs, session_stats, user_favorite_sessions,
 //   session_file_stats, orphan contexts) and marks the session row as deleted.
@@ -668,7 +667,7 @@ Unauthenticated requests return 401. API key auth is not accepted.
 // Re-uploading a deleted sessionId is silently ignored (no new data inserted).
 // Errors:
 //   401 — not authenticated
-//   403 — caller is not the session owner and is not admin
+//   403 — caller is not the session owner (admins included)
 //   404 — session not found or already deleted
 ```
 
@@ -709,14 +708,18 @@ Non-admin requests return 403. Unauthenticated requests return 401.
 
 ```ts
 interface AdminRepo {
-  id: number;
+  id: number | null;                  // null = orphan team link (team_repositories row, no repositories row)
   repoUrl: string;
-  ownerEmail: string;
+  ownerEmail: string | null;
   sessionCount: number;
   logSize: number;                    // total size in bytes of all log bodies for the repository (0 when no logs)
   maxUploadBytes: number | null;      // largest single artisyn upload body in bytes; null until first artisyn upload
   lastSession: string | null;         // ISO 8601
   firstSeen: string | null;           // ISO 8601
+  teamId?: number;                    // orphan rows only
+  teamRepoId?: number;                // orphan rows only
+  teamName?: string | null;           // orphan: the linking team; real rows: every team linking the URL,
+                                      // comma-joined by name, or null when none
 }
 
 interface AdminTeam {
@@ -726,6 +729,12 @@ interface AdminTeam {
   createdAt: string;   // ISO 8601
   memberCount: number;
   repoCount: number;
+}
+
+interface AdminTeamMember {   // identity only — no session data
+  userId: number;
+  email: string;
+  isOwner: boolean;
 }
 
 interface AdminUser {
@@ -777,6 +786,23 @@ response: AdminRepo[]
 // GET /api/v1/admin/teams — 200
 // Returns all teams with member and repository counts.
 response: AdminTeam[]
+
+// GET /api/v1/admin/teams/:teamId/members — 200
+// Member identity only, ordered by email. Backs the Admin → Teams "Set new owner" picker.
+response: AdminTeamMember[]
+// Errors: 404 team not found, 403 caller is not admin
+
+// POST /api/v1/admin/teams/:teamId/owner — 200
+// FR-8 "Set new owner": any admin, member of the team or not. Same rule as the owner's own
+// transfer — the new owner must be a current member; the previous owner stays a member.
+body: { userId: number }
+response: { id: number; name: string; ownerId: number; createdAt: string; accessMode: TeamAccessMode }
+// Errors: 400 'New owner must be a current team member', 404 team not found, 403 not admin
+
+// DELETE /api/v1/admin/team-repos/:teamRepoId — 204
+// Deletes an ORPHAN team link only (no repositories row has its repo_url); team_repo_config
+// goes by FK cascade. A linked repo with data is removed only via DELETE /admin/repos/:id.
+// Errors: 404 link missing or not an orphan, 403 not admin
 
 // GET /api/v1/admin/users — 200
 // Returns all registered users with team membership count and last activity timestamp.
@@ -1051,11 +1077,12 @@ response: Team
 // Errors: 409 team name taken
 
 // GET /api/v1/teams — 200
-// Returns teams the caller belongs to (owner or member). Admins see all teams.
+// Returns teams the caller belongs to (owner or member) — admins included; the admin role
+// grants no team visibility (admins see every team only in GET /api/v1/admin/teams).
 response: Team[]
 
 // GET /api/v1/teams/:teamId — 200
-// Requires: team member or admin
+// Requires: team member (TeamAccessGuard — no admin bypass)
 response: Team
 // Errors: 403 not a member, 404 team not found
 
@@ -1077,8 +1104,8 @@ response: Team
 // Errors: 403 not owner
 
 // GET /api/v1/teams/:teamId/members — 200
-// Requires: team member or admin
-// disclosureAcknowledgedAt is returned verbatim only to the team owner and an app admin;
+// Requires: team member
+// disclosureAcknowledgedAt is returned verbatim only to the team owner;
 //   every other caller gets null on every row.
 response: TeamMember[]
 // Errors: 403, 404
@@ -1105,7 +1132,7 @@ response: Array<{ teamId: number; teamName: string; accessMode: TeamAccessMode; 
 // Errors: 401
 
 // POST /api/v1/teams/:teamId/acknowledge-disclosure — 200
-// Requires: team member or admin (TeamAccessGuard)
+// Requires: team member (TeamAccessGuard)
 body: { acknowledgedAccessMode: TeamAccessMode }
 // Stamps team_members.disclosure_acknowledged_at = now() for the CALLER's own row.
 // acknowledgedAccessMode must equal the team's live access_mode, so a modal rendered before the
@@ -1114,11 +1141,11 @@ response: { acknowledged: true }
 // Errors:
 //   400 — acknowledgedAccessMode differs from the team's current mode, or is not one of the two
 //         enum values
-//   403 — not a member and not an admin
-//   404 — no membership row for the caller (an admin who is not a member has nothing to ack)
+//   403 — not a member
+//   404 — no membership row for the caller
 
 // DELETE /api/v1/teams/:teamId/members/:userId — 204
-// Requires: team owner OR admin
+// Requires: team owner (TeamOwnerGuard)
 // Also cancels pending invitations for the removed user in this team
 // Errors: 403, 404
 
@@ -1133,7 +1160,7 @@ response: Team
 // Errors: 400 new owner not a member, 403
 
 // GET /api/v1/teams/:teamId/repositories — 200
-// Requires: team member or admin
+// Requires: team member
 response: TeamRepository[]
 // Errors: 403, 404
 
@@ -1144,13 +1171,13 @@ response: TeamRepository
 // Idempotent: returns existing row if URL already in team
 
 // DELETE /api/v1/teams/:teamId/repositories/:repoId — 204
-// Requires: team owner or server admin (TeamOwnerOrAdminGuard)
+// Requires: team owner (TeamOwnerGuard)
 // Hard-deletes the underlying repositories row if no other team references the URL.
-// Errors: 403 (not owner/admin), 404
+// Errors: 403 (not owner), 404
 
 // POST /api/v1/teams/:teamId/invitations — 201
-// Requires: team member or admin
-// Permission to invite: owner OR member with canInvite=true OR admin
+// Requires: team member
+// Permission to invite: owner OR member with canInvite=true
 body: { email: string, force?: boolean }
 response: Invitation
 // Errors:
@@ -1163,7 +1190,7 @@ response: Invitation
 //   auto-identify/OAuth callback), not via the usual PATCH .../invitations/:invId accept step.
 
 // DELETE /api/v1/teams/:teamId/invitations/:invId — 204
-// Requires: team owner OR admin
+// Requires: team owner ('Only the team owner can cancel invitations')
 // Sets invitation status to 'cancelled'
 // Errors: 403, 404
 ```
@@ -1199,7 +1226,7 @@ response: HookRepositorySummary[]
 // resolution" below): with teamId, team T's config → default; without it, personal → the
 // caller's lowest-id team linking the URL → default.
 // Access: without teamId the caller must own repoId; with teamId the caller must be a member
-// of T and T must link the repo URL (admins pass both).
+// of T and T must link the repo URL (no admin bypass).
 interface GetRepositoryResponse {
   id: number;
   repoUrl: string;
@@ -1251,7 +1278,7 @@ response: HookStateDetail
 //   teamId            — the resolved team (T, else the lowest-id team), or null
 //   canEditTeamConfig — the caller owns that team
 // Access: without teamId the caller must own repoId; with teamId the caller must be a member
-// of T and T must link the repo URL (admins pass both).
+// of T and T must link the repo URL (no admin bypass).
 response: RepoSettingsResponse
 // Errors:
 //   400 — teamId is not a positive integer
@@ -2380,10 +2407,10 @@ interface ClaudeVersionUsageResponse {
 // parent_session_id, not a single-level match. A sub-agent can itself spawn further sub-agents
 // (3+ levels), and each one's parent_session_id points at its true immediate parent, not
 // always :sessionId directly; subagentStats uses the same recursive descendant lookup.
-// Access control: owner-only, with a team-owner exception. Non-owner non-admin
-// callers receive 403 Forbidden UNLESS the request includes ?teamId and the caller is
+// Access control: owner-only, with a team-owner exception. Non-owner callers
+// (admins included) receive 403 Forbidden UNLESS the request includes ?teamId and the caller is
 // the owner of that team (RepositoriesService.isTeamOwner) — that caller may fetch any
-// team member's session logs, same as an app admin. Enables the "Session Statistics
+// team member's session logs. Enables the "Session Statistics
 // Export" feature (export-scope below) to read another member's full logs.
 // Team access modes (2026-09-22, extended 2026-10-12): with ?teamId of a TRANSPARENT team any
 // team member gets 200 for any member's session (every member sees everything, raw logs
@@ -2470,7 +2497,7 @@ interface SessionLogsResponse {
                                       // the session has no bound snapshot_id, the referenced row
                                       // no longer exists (DD-21's accepted race), or the session
                                       // predates hook 2.22.0 (no backfill, DD-17). Same access
-                                      // checks as the rest of this response: owner, admin, team
+                                      // checks as the rest of this response: owner, team
                                       // scope. Client type: HarnessSnapshot in
                                       // client/src/viewer/api.ts; server type:
                                       // HarnessSnapshotBody in server/src/logs/harness-snapshot.ts.
@@ -2555,7 +2582,7 @@ interface SessionAttributionState {
 response: SessionLogsResponse
 // Errors:
 //   400, 401 — same as /sessions
-//   403 — repo exists but caller lacks access, OR caller is not the session owner (and not admin)
+//   403 — repo exists but caller lacks access, OR caller is not the session owner
 //   404 — session/log not found; primary claude log not found
 //   422 — primary claude log row exists but body is NULL
 
@@ -2565,10 +2592,10 @@ response: SessionLogsResponse
 // BYPASSES the per-team access mode, returning every matching member's sessions in the date
 // range with prompts intact, regardless of whether the team is restricted. Its ONE new
 // restriction: members who have not acknowledged the access-mode disclosure are excluded from
-// the result set. Authorization is unchanged (team-owner-or-admin), so no manager or plain
+// the result set. Authorization: team owner (team view) or repo owner, so no manager or plain
 // member ever reaches it.
 interface GetSessionsExportScopeQuery {
-  teamId?: number;   // optional; when present, activates the team-owner-or-admin check below
+  teamId?: number;   // optional; when present, activates the team-owner check below
   from: string;       // required; ISO 8601 date-time, inclusive lower bound on logs.startTime
   to: string;         // required; ISO 8601 date-time, inclusive upper bound on logs.startTime
   userId?: number;    // optional; filter to one uploader's sessions
@@ -2583,13 +2610,13 @@ interface ExportSessionRow {
 }
 response: ExportSessionRow[]
 // Access control:
-//   - Personal view (no teamId): assertRepoAccess's owner-or-admin check (same as GET .../sessions).
+//   - Personal view (no teamId): assertRepoAccess's owner check (same as GET .../sessions).
 //   - Team view (teamId present): caller must be that team's owner (RepositoriesService.isTeamOwner)
-//     or an app admin — a regular team member is 403'd even though assertRepoAccess alone would pass.
+//     — no admin bypass; a regular team member is 403'd even though assertRepoAccess alone would pass.
 // Errors:
 //   400 — teamId not a positive integer; from/to missing or not ISO 8601
 //   401 — not authenticated
-//   403 — repo exists but caller lacks access, OR (team view) caller is not that team's owner/admin
+//   403 — repo exists but caller lacks access, OR (team view) caller is not that team's owner
 //   404 — repoId not found
 
 // POST /api/v1/repositories/:repoId/recompute-all-sessions — 200
@@ -2598,18 +2625,18 @@ response: ExportSessionRow[]
 // (unscoped — that table has one row per session, no team/user column) for every session
 // linked to this repo.
 interface RecomputeAllSessionsQuery {
-  teamId?: number; // optional; when present, activates the team-owner-or-admin check below
+  teamId?: number; // optional; when present, activates the team-owner check below
 }
 interface RecomputeAllSessionsResponse {
   recomputed: number; // count of sessions whose session_stats row was recomputed
 }
 response: RecomputeAllSessionsResponse
-// Access control: same shape as export-scope above — team-owner-or-admin when teamId is
-// present, else assertRepoAccess's personal owner-or-admin check.
+// Access control: same shape as export-scope above — team owner when teamId is
+// present, else assertRepoAccess's personal owner check.
 // Errors:
 //   400 — teamId not a positive integer
 //   401 — not authenticated
-//   403 — repo exists but caller lacks access, OR (team view) caller is not that team's owner/admin
+//   403 — repo exists but caller lacks access, OR (team view) caller is not that team's owner
 //   404 — repoId not found
 ```
 
@@ -2618,9 +2645,9 @@ response: RecomputeAllSessionsResponse
 ## Repository Export/Import
 
 All routes require a session cookie (`SessionAuthGuard`) AND pass
-`RepositoriesService.assertRepoOwnerOrAdmin(user, repoId, teamId?)` — stricter than the plain
+`RepositoriesService.assertRepoOwnerOrTeamOwner(user, repoId, teamId?)` — stricter than the plain
 `assertRepoAccess` used elsewhere under `/api/v1/repositories`: without `teamId` the caller must
-personally own the repo; with `teamId` the caller must be that **team's owner** (or an app admin) —
+personally own the repo; with `teamId` the caller must be that **team's owner** (no admin bypass) —
 a regular team member is 403'd even if team session visibility is otherwise enabled for them.
 `teamId` must be passed on every request against a team repo (query param on GETs, body field on
 POSTs) — omitting it falls through to the personal-owner branch and 403s a legitimate team owner.
@@ -2660,7 +2687,7 @@ response: ScopeSummary
 //   400 — teamId not a positive integer; scope not one of the three values;
 //         from/to missing for dateRange; sessionIds missing for sessionIds
 //   401 — not authenticated
-//   403 — repo exists but caller lacks owner/admin access
+//   403 — repo exists but caller lacks owner access
 //   404 — repoId not found
 
 // POST /api/v1/repositories/:repoId/export — 202
@@ -2684,7 +2711,7 @@ response: { jobId: string }
 //   400 — teamId not a positive integer; scope not one of the three values;
 //         from/to missing for dateRange; sessionIds missing for sessionIds
 //   401 — not authenticated
-//   403 — repo exists but caller lacks owner/admin access
+//   403 — repo exists but caller lacks owner access
 //   404 — repoId not found
 
 // GET /api/v1/repositories/:repoId/export/:jobId/status — 200
@@ -2706,7 +2733,7 @@ response: JobStatusResponse
 // Errors:
 //   400 — teamId not a positive integer
 //   401 — not authenticated
-//   403 — repo exists but caller lacks owner/admin access
+//   403 — repo exists but caller lacks owner access
 //   404 — repoId not found; jobId not found, wrong repo, or wrong kind
 
 // GET /api/v1/repositories/:repoId/export/:jobId/download
@@ -2721,7 +2748,7 @@ response: <zip file stream>
 // Errors:
 //   400 — teamId not a positive integer
 //   401 — not authenticated
-//   403 — repo exists but caller lacks owner/admin access
+//   403 — repo exists but caller lacks owner access
 //   404 — repoId not found; jobId not found or not kind: 'export'
 //   409 — job exists but status !== 'done' yet
 
@@ -2750,7 +2777,7 @@ response: UploadImportZipResponse
 // Errors:
 //   400 — teamId not a positive integer; file field missing
 //   401 — not authenticated
-//   403 — repo exists but caller lacks owner/admin access
+//   403 — repo exists but caller lacks owner access
 //   404 — repoId not found
 //   409 — ownership conflict (not under AUTH_MODE=none): the archive holds a session
 //         another user owns (foreign-session), a log authored by another registered user's
@@ -2793,7 +2820,7 @@ response: { jobId: string }
 // Errors:
 //   400 — teamId not a positive integer
 //   401 — not authenticated
-//   403 — repo exists but caller lacks owner/admin access
+//   403 — repo exists but caller lacks owner access
 //   404 — repoId not found; uploadToken has expired or was never staged; the upload is
 //         no longer status: 'staged' (e.g. blocked by a 409/422) — message is the stored
 //         errorMessage, so a second confirm repeats the same text
@@ -2816,7 +2843,7 @@ response: { jobId: string }
 
 // --- "Bootstrap import" — no existing target repoId -----------------------
 // Same 3-step upload/confirm/status shape as above, but these routes don't call
-// assertRepoOwnerOrAdmin (there's no repo to check access on yet) — auth is just
+// assertRepoOwnerOrTeamOwner (there's no repo to check access on yet) — auth is just
 // SessionAuthGuard, scoped to the caller's own uploads/jobs by userId. The target repo
 // is always PERSONAL (no teamId), resolved/created at confirm time from the zip's own
 // meta.sourceRepoUrl via RepositoriesService.resolveOrCreatePersonalRepo(). Lets a

@@ -17,8 +17,9 @@
 // State with no public read is taken from the stand schema (`db`): EMPTY is a `sessions` row
 // without logs (the API never creates one — DD 1), the `deleted_session_log` audit rows (there is
 // no admin API for them), and SOFT's bare soft-deleted row. A soft-deleted sub-agent of OLD covers
-// the design's «no audit row for an already soft-deleted descendant»; only an admin can delete a
-// bare sub-agent session (its owner is resolved from an artisyn log it does not have).
+// the design's «no audit row for an already soft-deleted descendant»; it is deleted by its owner —
+// a bare sub-agent session has no artisyn log, so its owner is resolved from its other logs
+// (deleting is owner-only since 2026-10-21-private-repo-visibility).
 //
 // The design's step 6 (two concurrent purges) cannot be driven through the stand; what is
 // observable is that later ticks add no second audit row (`session_pk` is the claim).
@@ -79,13 +80,13 @@ test('@S-SLIFE-08 retention removes an old session tree and leaves young, empty 
   const queueRows = async (sid: string) =>
     (await db.query<{ status: string }>('SELECT status FROM upload_queue WHERE session_id = $1', [sid])).rows.map((r) => r.status);
 
-  const { repoId, uploadId } = await test.step('setup: OLD (root + child + grandchild + an admin-deleted child), OLD2 with a stuck chunked upload, YOUNG, SOFT (owner-deleted), EMPTY', async () => {
+  const { repoId, uploadId } = await test.step('setup: OLD (root + child + grandchild + an owner-deleted child), OLD2 with a stuck chunked upload, YOUNG, SOFT (owner-deleted), EMPTY', async () => {
     const key = await createApiKey(owner.api);
     for (const s of [OLD, OLD2, YOUNG, SOFT]) await uploadPromptSession(api, key.key, s, queue);
     await uploadSubagent(api, key.key, { sessionId: child, parentSessionId: OLD.sessionId, prompt: `child ${run}` }, queue);
     await uploadSubagent(api, key.key, { sessionId: grandchild, parentSessionId: child, prompt: `grandchild ${run}` }, queue);
     await uploadSubagent(api, key.key, { sessionId: softChild, parentSessionId: OLD.sessionId, prompt: `soft child ${run}` }, queue);
-    expect((await admin.api.delete(`/api/v1/sessions/${softChild}`)).status()).toBe(204);
+    expect((await owner.api.delete(`/api/v1/sessions/${softChild}`)).status()).toBe(204);
     expect((await owner.api.delete(`/api/v1/sessions/${SOFT.sessionId}`)).status()).toBe(204);
 
     const uploadId = randomUUID();
@@ -148,11 +149,11 @@ test('@S-SLIFE-08 retention removes an old session tree and leaves young, empty 
     expect(await sessionRow(SOFT.sessionId)).toMatchObject({ deleted: true });
   });
 
-  await test.step('5. audit: one automatic row (deleted_by null) per active session of OLD’s tree; none added for the admin-deleted child or SOFT', async () => {
+  await test.step('5. audit: one automatic row (deleted_by null) per active session of OLD’s tree; none added for the owner-deleted child or SOFT', async () => {
     for (const sid of [OLD.sessionId, child, grandchild, OLD2.sessionId]) {
       expect(await audit(sid), sid).toEqual([{ session_id: sid, deleted_by_user_id: null }]);
     }
-    expect(await audit(softChild)).toEqual([{ session_id: softChild, deleted_by_user_id: admin.id }]);
+    expect(await audit(softChild)).toEqual([{ session_id: softChild, deleted_by_user_id: owner.id }]);
     expect(await audit(SOFT.sessionId)).toEqual([{ session_id: SOFT.sessionId, deleted_by_user_id: owner.id }]);
   });
 

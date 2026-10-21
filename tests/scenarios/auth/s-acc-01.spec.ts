@@ -1,5 +1,6 @@
-// S-ACC-01. Someone else's personal repository is closed, and the route guards do not depend on
-// the kind of credential (docs/qaa-overview/scenarios/01-auth-access-admin.md §S-ACC-01; any
+// S-ACC-01. Someone else's personal repository is closed — to an admin too, since the admin role
+// grants no data access (2026-10-21-private-repo-visibility) — and the route guards do not depend
+// on the kind of credential (docs/qaa-overview/scenarios/01-auth-access-admin.md §S-ACC-01; any
 // mode → A and C, DD SC4).
 //
 // Uploads go through POST /api/v2/logs (impl-plan DD SC3); the anonymous and cookie checks of the
@@ -70,10 +71,18 @@ test('@S-ACC-01 a foreign personal repo is closed; guards do not mix credentials
     expect(await status(stranger, `${base}/sessions/export-scope?from=${from}&to=${to}`)).toBe(403);
   });
 
-  await test.step('4. ADMIN: raw logs of any session → 200', async () => {
-    const res = await admin.api.get(`${base}/sessions/${sessions[0].sessionId}/logs`);
-    expect(res.status()).toBe(200);
-    expect(await res.text()).toContain(sessions[0].prompt);
+  await test.step('4. ADMIN: every read of the foreign repo, recompute and export-scope → 403, no prompt text', async () => {
+    for (const path of reads) {
+      const res = await admin.api.get(path);
+      expect(res.status(), path).toBe(403);
+      expect(await res.text(), path).not.toContain(sessions[0].prompt);
+    }
+    expect((await admin.api.post(`${base}/recompute-all-sessions`)).status()).toBe(403);
+    const from = new Date(Date.now() - 5 * DAY_MS).toISOString();
+    const to = new Date(Date.now() + DAY_MS).toISOString();
+    expect(await status(admin, `${base}/sessions/export-scope?from=${from}&to=${to}`)).toBe(403);
+    const own = (await (await admin.api.get('/api/v1/repositories')).json()) as Array<{ id: number }>;
+    expect(own.map((r) => r.id)).not.toContain(repoId);
   });
 
   await test.step('5. Anonymous: one route of every family → 401', async () => {

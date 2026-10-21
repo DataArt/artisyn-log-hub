@@ -281,5 +281,21 @@ export const f13Invitations: ContractFamily = {
       body: { action: 'decline' },
       expect: { status: 400 },
     },
+    {
+      // The admin role grants no data access (2026-10-21-private-repo-visibility). A non-member admin has no invitation powers.
+      id: 'F13-invite-admin',
+      route: 'POST /api/v1/teams/:teamId/invitations',
+      actor: 'admin',
+      params: { teamId: '@T2.id' },
+      body: { email: '@outsider.email' },
+      expect: { status: 403 },
+    },
+    {
+      id: 'F13-cancel-admin',
+      route: 'DELETE /api/v1/teams/:teamId/invitations/:invId',
+      actor: 'admin',
+      params: { teamId: '@T2.id', invId: 2 },
+      expect: { status: 403 },
+    },
   ],
 };

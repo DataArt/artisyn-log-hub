@@ -15,7 +15,6 @@ import type { Request } from 'express';
 import { SessionAuthGuard } from '../auth/guards/session-auth.guard';
 import { TeamAccessGuard } from '../common/guards/team-access.guard';
 import { TeamOwnerGuard } from '../common/guards/team-owner.guard';
-import { TeamOwnerOrAdminGuard } from '../common/guards/team-owner-or-admin.guard';
 import { AcknowledgeDisclosureDto } from './dto/acknowledge-disclosure.dto';
 import { AddRepoDto } from './dto/add-repo.dto';
 import { CreateTeamDto } from './dto/create-team.dto';
@@ -42,7 +41,7 @@ export class TeamsController {
   @Get()
   listTeams(@Req() req: Request) {
     const user = req.user as AuthUser;
-    return this.teamsService.listTeams(user.id, user.role === 'admin');
+    return this.teamsService.listTeams(user.id);
   }
 
   /**
@@ -105,7 +104,7 @@ export class TeamsController {
 
   @Delete(':teamId/members/:userId')
   @HttpCode(204)
-  @UseGuards(TeamOwnerOrAdminGuard)
+  @UseGuards(TeamOwnerGuard)
   async removeMember(
     @Param('teamId', ParseIntPipe) teamId: number,
     @Param('userId', ParseIntPipe) userId: number,
@@ -170,7 +169,7 @@ export class TeamsController {
 
   @Delete(':teamId/repositories/:repoId/link')
   @HttpCode(204)
-  @UseGuards(TeamOwnerOrAdminGuard)
+  @UseGuards(TeamOwnerGuard)
   async unlinkTeamRepository(
     @Param('teamId', ParseIntPipe) teamId: number,
     @Param('repoId', ParseIntPipe) repoId: number,
@@ -180,7 +179,7 @@ export class TeamsController {
 
   @Delete(':teamId/repositories/:repoId')
   @HttpCode(204)
-  @UseGuards(TeamOwnerOrAdminGuard)
+  @UseGuards(TeamOwnerGuard)
   async removeTeamRepository(
     @Param('teamId', ParseIntPipe) teamId: number,
     @Param('repoId', ParseIntPipe) repoId: number,
@@ -201,7 +200,6 @@ export class TeamsController {
       teamId,
       user.id,
       dto.email,
-      user.role,
       dto.force,
     );
   }
@@ -215,6 +213,6 @@ export class TeamsController {
     @Param('invId', ParseIntPipe) invId: number,
   ) {
     const user = req.user as AuthUser;
-    await this.teamsService.cancelInvitation(teamId, invId, user.id, user.role);
+    await this.teamsService.cancelInvitation(teamId, invId, user.id);
   }
 }

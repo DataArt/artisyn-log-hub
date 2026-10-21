@@ -81,31 +81,12 @@ export class TeamsService {
     }
   }
 
-  async listTeams(userId: number, isAdmin: boolean) {
-    if (isAdmin) {
-      const [allTeams, memberRows] = await Promise.all([
-        this.db.select().from(schema.teams),
-        this.db
-          .select({
-            teamId: schema.teamMembers.teamId,
-            isManager: schema.teamMembers.isManager,
-            isAdlcTrainer: schema.teamMembers.isAdlcTrainer,
-          })
-          .from(schema.teamMembers)
-          .where(eq(schema.teamMembers.userId, userId)),
-      ]);
-      const memberMap = new Map(memberRows.map((r) => [r.teamId, r]));
-      return allTeams.map((t) => {
-        const membership = memberMap.get(t.id);
-        return {
-          ...t,
-          isMember: membership !== undefined,
-          myIsManager: membership?.isManager ?? false,
-          myIsAdlcTrainer: membership?.isAdlcTrainer ?? false,
-        };
-      });
-    }
-
+  /**
+   * The caller's own teams only — for every app role (the admin role grants no
+   * team visibility; admins see all teams only in the admin panel). `isMember` is
+   * always `true` and kept in the response for older clients.
+   */
+  async listTeams(userId: number) {
     const rows = await this.db
       .selectDistinct({
         id: schema.teams.id,
@@ -231,12 +212,12 @@ export class TeamsService {
 
   /**
    * `caller` decides whether `disclosureAcknowledgedAt` is returned verbatim
-   * or nulled out: only the team owner and an app admin may see who has yet to
-   * acknowledge the access-mode disclosure, so one member cannot read another
-   * member's acknowledgement state. Omitting `caller`
+   * or nulled out: only the team owner may see who has yet to acknowledge the
+   * access-mode disclosure (the app admin role grants nothing here), so one member
+   * cannot read another member's acknowledgement state. Omitting `caller`
    * takes the safe branch and nulls every timestamp.
    */
-  async getMembers(teamId: number, caller?: { id: number; role: string }) {
+  async getMembers(teamId: number, caller?: { id: number }) {
     const rows = await this.db
       .select({
         userId: schema.teamMembers.userId,
@@ -254,8 +235,7 @@ export class TeamsService {
     const team = await this.getTeam(teamId);
 
     const canSeeAcknowledgement =
-      caller !== undefined &&
-      (caller.id === team.ownerId || caller.role === 'admin');
+      caller !== undefined && caller.id === team.ownerId;
 
     return rows.map((r) => ({
       ...r,
@@ -675,13 +655,13 @@ export class TeamsService {
     teamId: number,
     inviterId: number,
     inviteeEmail: string,
-    inviterRole: string,
     force = false,
   ) {
     const team = await this.getTeam(teamId);
 
-    // Check invite permission
-    if (inviterRole !== 'admin' && team.ownerId !== inviterId) {
+    // Check invite permission — the team owner, or a member with `canInvite`
+    // (the app admin role grants no override)
+    if (team.ownerId !== inviterId) {
       const membership = await this.db
         .select()
         .from(schema.teamMembers)
@@ -777,12 +757,7 @@ export class TeamsService {
     }
   }
 
-  async cancelInvitation(
-    teamId: number,
-    invId: number,
-    callerId: number,
-    callerRole: string,
-  ) {
+  async cancelInvitation(teamId: number, invId: number, callerId: number) {
     const invitation = await this.db
       .select()
       .from(schema.invitations)
@@ -795,9 +770,9 @@ export class TeamsService {
     if (!invitation[0]) throw new NotFoundException('Invitation not found');
 
     const team = await this.getTeam(teamId);
-    if (team.ownerId !== callerId && callerRole !== 'admin') {
+    if (team.ownerId !== callerId) {
       throw new ForbiddenException(
-        'Only the team owner or an admin can cancel invitations',
+        'Only the team owner can cancel invitations',
       );
     }
 
@@ -975,8 +950,8 @@ export class TeamsService {
         ),
       )
       .returning();
-    // An app admin passes TeamAccessGuard without being a member; there is
-    // nothing to acknowledge in that case.
+    // TeamAccessGuard already admits members only; a missing row means the
+    // membership vanished between the guard and this update.
     if (!rows[0]) throw new NotFoundException('Member not found');
 
     return { acknowledged: true as const };

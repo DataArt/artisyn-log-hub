@@ -398,5 +398,14 @@ export const f20Analytics: ContractFamily = {
       query: MONTH,
       expect: { status: 403 },
     },
+    {
+      // The admin role grants no data access (2026-10-21-private-repo-visibility).
+      id: 'F20-timeline-admin',
+      route: 'GET /api/v1/repositories/:repoId/analytics/timeline',
+      actor: 'admin',
+      params: { repoId: '@R1.id' },
+      query: MONTH,
+      expect: { status: 403 },
+    },
   ],
 };

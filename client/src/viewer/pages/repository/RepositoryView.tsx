@@ -90,14 +90,13 @@ export function RepositoryView() {
     currentTeam !== undefined &&
     user != null &&
     currentTeam.ownerId === user.id;
-  const isAppAdmin = user?.role === 'admin';
 
-  /** Owner, app admin and `manager` keep Analytics / Reports / Settings. */
+  /**
+   * Team owner and `manager` keep Analytics / Reports / Settings. The app admin role
+   * grants nothing here — an admin is scoped by their team role like anyone else.
+   */
   const canSeeTeamWideTabs =
-    !isRestrictedTeam ||
-    isTeamOwner ||
-    isAppAdmin ||
-    (currentTeam?.myIsManager ?? false);
+    !isRestrictedTeam || isTeamOwner || (currentTeam?.myIsManager ?? false);
 
   /**
    * Only a caller whose scope really is `own-only` gets the notice — a `manager`
@@ -107,7 +106,6 @@ export function RepositoryView() {
   const showRestrictedNotice =
     isRestrictedTeam &&
     !isTeamOwner &&
-    !isAppAdmin &&
     !currentTeam?.myIsManager &&
     !currentTeam?.myIsAdlcTrainer;
 
@@ -337,7 +335,6 @@ export function RepositoryView() {
         sessionCountDisplay={sessionCountDisplay}
         userCountDisplay={userCountDisplay}
         repoContexts={repoContexts}
-        teamId={teamId}
       />
 
       {showRestrictedNotice && (

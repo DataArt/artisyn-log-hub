@@ -77,7 +77,6 @@ export class SessionsService {
 
   async deleteSession(
     requesterId: number,
-    requesterRole: 'admin' | 'user',
     sessionIdStr: string,
   ): Promise<void> {
     // Step 1: Look up the session row (must exist and not be deleted)
@@ -95,17 +94,21 @@ export class SessionsService {
 
     const parentId = sessionRow.id;
 
-    // Step 2: Look up owner via artisyn log
+    // Step 2: Look up the owner — the artisyn log's uploader, else any log's: a bare
+    // sub-agent session has no artisyn log, and every log of a session carries the
+    // uploading user (same rule as `RepositoriesService.assertSessionVisible`). Without
+    // this fallback, owner-only deletion would leave such a session deletable by nobody.
     const [ownerRow] = await this.db
       .select({ userId: logs.userId })
       .from(logs)
-      .where(and(eq(logs.sessionId, parentId), eq(logs.logType, 'artisyn')))
+      .where(eq(logs.sessionId, parentId))
+      .orderBy(sql`CASE WHEN ${logs.logType} = 'artisyn' THEN 0 ELSE 1 END`)
       .limit(1);
 
     const ownerUserId = ownerRow?.userId;
 
-    // Step 3: Authorisation check
-    if (requesterId !== ownerUserId && requesterRole !== 'admin') {
+    // Step 3: Authorisation check — owner-only; the app admin role grants no override
+    if (requesterId !== ownerUserId) {
       throw new ForbiddenException(
         'You do not have permission to delete this session',
       );

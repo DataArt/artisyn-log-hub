@@ -125,12 +125,6 @@ test.afterAll(async () => {
 // ────────────────────────────────────────────────────────────
 
 test.describe('Repository View — personal route', () => {
-  test('shows "Private repo view" badge on personal route', async ({ page }) => {
-    await page.goto(`/#/repos/${repoId}`);
-    await page.waitForSelector('[data-slot="resizable-handle"]', { timeout: 10_000 });
-    await expect(page.getByText('Private repo view')).toBeVisible();
-  });
-
   test('404 state when navigating to a non-existent repoId', async ({
     page,
   }) => {
@@ -139,18 +133,6 @@ test.describe('Repository View — personal route', () => {
     await expect(page.getByText('Repository not found')).toBeVisible({
       timeout: 8_000,
     });
-  });
-});
-
-// ────────────────────────────────────────────────────────────
-// Repository View — team route
-// ────────────────────────────────────────────────────────────
-
-test.describe('Repository View — team route', () => {
-  test('does not show "Private repo view" badge on team route', async ({ page }) => {
-    await page.goto(`/#/teams/${teamId}/repos/${repoId}`);
-    await page.waitForSelector('[data-slot="resizable-handle"]', { timeout: 10_000 });
-    await expect(page.getByText('Private repo view')).not.toBeAttached();
   });
 });
 

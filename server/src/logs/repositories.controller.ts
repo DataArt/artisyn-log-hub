@@ -131,9 +131,9 @@ const EMPTY_COST_BREAKDOWN: Readonly<CostBreakdown> = Object.freeze({
  * `AND <alias>.user_id = ANY('{…}'::int[])`, matching the `{…}::int[]` literal form the
  * repo filters beside it already use (one bind parameter, not N).
  *
- * The `teamId !== undefined` guard is deliberate: in the personal view an app admin may
- * read another user's repository (`assertRepoAccess`), and narrowing to the
- * caller's own id there would silently empty that admin's results.
+ * The `teamId !== undefined` guard is deliberate: the personal view is owner-only
+ * (`assertRepoAccess` admits only the `repositories` row owner, whatever their app
+ * role), so that gate is the whole personal-view rule and no extra row filter applies.
  *
  * @param logsAlias the `logs` table alias used by the surrounding query.
  */
@@ -1661,9 +1661,8 @@ export class RepositoriesController {
     teamId: number | undefined,
     sessionId: string,
   ): Promise<void> {
-    // Personal view: `assertRepoAccess` is the whole gate, and an app admin is allowed
-    // through it onto another user's repository. Narrowing to the caller's own
-    // id here would turn that documented bypass into a 403.
+    // Personal view: `assertRepoAccess` is the whole gate — it admits only the
+    // `repositories` row owner (no app-role bypass), so no further narrowing applies.
     if (teamId === undefined || scope.visibleUserIds === null) {
       return;
     }
@@ -1805,7 +1804,8 @@ export class RepositoriesController {
 
     if (!sessionCheck) throw new NotFoundException('Session logs not found');
 
-    // Step 1b: owner-only guard — non-owner, non-admin callers receive 403 Forbidden.
+    // Step 1b: owner-only guard — non-owner callers receive 403 Forbidden unless a
+    // team rule below admits them. The app admin role grants no bypass.
     const [sessionOwnerRow] = await this.db
       .select({ userId: schema.logs.userId })
       .from(schema.logs)
@@ -1815,9 +1815,9 @@ export class RepositoriesController {
           eq(schema.logs.logType, 'artisyn'),
         ),
       );
-    if (user.role !== 'admin' && sessionOwnerRow?.userId !== user.id) {
+    if (sessionOwnerRow?.userId !== user.id) {
       // Team-owner exception: the owner of the team this repo/session is shared with
-      // may fetch any member's session logs, same as an app admin.
+      // may fetch any member's session logs.
       const isTeamOwnerCaller =
         teamId !== undefined &&
         (await this.repositoriesService.isTeamOwner(user.id, teamId));
@@ -1832,8 +1832,7 @@ export class RepositoriesController {
       //   team owner), under the same acknowledgement condition.
       //
       // A `manager` resolves to `team-no-prompts` and so still gets 403 here (the
-      // conversation body is not returned). The unconditional `user.role === 'admin'`
-      // bypass above is untouched.
+      // conversation body is not returned).
       //
       // In a `transparent` team every member sees everything, raw logs included — the old
       // "raw logs stay owner-only" rule no longer applies there. Team membership
@@ -2080,7 +2079,7 @@ export class RepositoriesController {
     // `null` when the session has never had a successful evaluation.
     // Only runs recorded by the session owner count (open-source readiness):
     // the filter compares against the session owner, not the viewer, so
-    // team/admin visibility is unchanged, and a NULL `user_id` never matches.
+    // team visibility is unchanged, and a NULL `user_id` never matches.
     const advisorOwnerId = sessionOwnerRow?.userId;
     const [turnEndAdvisorRow] =
       advisorOwnerId === undefined
@@ -2260,7 +2259,7 @@ export class RepositoriesController {
   }
 
   // Lists sessions in scope for the "Session Statistics Export" feature.
-  // Gated by isTeamOwner-or-admin in team view, or assertRepoAccess's personal-owner
+  // Gated by isTeamOwner in team view, or assertRepoAccess's personal-owner
   // check in personal view — deliberately more restrictive than the plain
   // getRepositorySessions listing, since the result set it returns bypasses the
   // per-team allowMemberSessionVisibility restriction.
@@ -2293,14 +2292,13 @@ export class RepositoriesController {
     }
 
     const user = req.user as AuthUser;
-    // Personal view: throws unless the caller owns repoId (or is an admin).
-    // Team view: only verifies team membership — the stronger team-owner-or-admin
+    // Personal view: throws unless the caller owns repoId.
+    // Team view: only verifies team membership — the stronger team-owner
     // check below is what actually gates this privileged, visibility-bypassing route.
     await this.repositoriesService.assertRepoAccess(user, repoId, teamId);
 
     if (
       teamId !== undefined &&
-      user.role !== 'admin' &&
       !(await this.repositoriesService.isTeamOwner(user.id, teamId))
     ) {
       throw new ForbiddenException();
@@ -2315,7 +2313,7 @@ export class RepositoriesController {
 
   // Recomputes session_file_stats (scoped, via recomputeForRepo) and session_stats
   // (unscoped, via recomputeAllSessionStats) for every session in this repo.
-  // Gated by isTeamOwner-or-admin in team view, or assertRepoAccess's personal-owner
+  // Gated by isTeamOwner in team view, or assertRepoAccess's personal-owner
   // check in personal view — same authorization shape as the export-scope endpoint above.
   @Post(':repoId/recompute-all-sessions')
   async recomputeAllSessions(
@@ -2328,14 +2326,13 @@ export class RepositoriesController {
     }
 
     const user = req.user as AuthUser;
-    // Personal view: throws unless the caller owns repoId (or is an admin).
-    // Team view: only verifies team membership — the stronger team-owner-or-admin
+    // Personal view: throws unless the caller owns repoId.
+    // Team view: only verifies team membership — the stronger team-owner
     // check below is what actually gates this privileged, repo-wide maintenance route.
     await this.repositoriesService.assertRepoAccess(user, repoId, teamId);
 
     if (
       teamId !== undefined &&
-      user.role !== 'admin' &&
       !(await this.repositoriesService.isTeamOwner(user.id, teamId))
     ) {
       throw new ForbiddenException();

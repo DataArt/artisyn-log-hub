@@ -179,7 +179,8 @@ test('@S-REPO-07 team settings reach every member in team view, personal ones ov
     expect((await nonowner.api.get(`/api/v1/repositories/${repoOf(owner)}/settings${team}`)).status()).toBe(403);
     expect((await regular.api.get(`/api/v1/repositories/${repoOf(regular)}/settings?teamId=0`)).status()).toBe(400);
     expect((await putTeam(regular, teamDocs, repoOf(owner), team)).status()).toBe(403);
-    expect((await admin.api.get(`/api/v1/repositories/${repoOf(owner)}/settings${team}`)).status()).toBe(200);
+    // A non-member admin is an outsider on the team route (no admin bypass).
+    expect((await admin.api.get(`/api/v1/repositories/${repoOf(owner)}/settings${team}`)).status()).toBe(403);
   });
 
   await test.step('7. AC-11: PUT settings/team?teamId null → teamConfig null, team view on the defaults, re-adding does not seed', async () => {

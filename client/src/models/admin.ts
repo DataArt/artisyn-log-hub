@@ -8,9 +8,14 @@ export interface AdminRepo {
   maxUploadBytes: number | null;
   lastSession: string | null;
   firstSeen: string | null;
+  /** Orphan rows (`id === null`) only — the `team_repositories` link they stand for. */
   teamId?: number;
   teamRepoId?: number;
-  teamName?: string;
+  /**
+   * Orphan rows: the linking team's name. Real rows: every team linking the URL,
+   * comma-joined, or `null` when none does (absent from older servers).
+   */
+  teamName?: string | null;
 }
 
 export interface AdminTeam {
@@ -20,6 +25,13 @@ export interface AdminTeam {
   createdAt: string;
   memberCount: number;
   repoCount: number;
+}
+
+/** `GET /api/v1/admin/teams/:teamId/members` — member identity only, no session data. */
+export interface AdminTeamMember {
+  userId: number;
+  email: string;
+  isOwner: boolean;
 }
 
 export interface AdminUser {
