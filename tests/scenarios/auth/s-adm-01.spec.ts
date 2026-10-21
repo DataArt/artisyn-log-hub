@@ -17,7 +17,7 @@
 import type { Page } from '@playwright/test';
 import { randomBytes } from 'crypto';
 import { test, expect } from '../fixtures';
-import { skipNewUserNudge } from '../helpers/teams';
+import { addTeamRepo, inviteAndAccept, skipNewUserNudge } from '../helpers/teams';
 import { ADMIN_TABS } from '../../../client/src/viewer/tab-ids';
 
 const TAB_LABELS: Record<(typeof ADMIN_TABS)[number], string> = {
@@ -136,6 +136,47 @@ test('@S-ADM-01 admin panel only for admins, tabs and deep links work @mode-a @m
     await expect(page).toHaveURL(/#\/admin\?tab=all-users$/);
     await page.goBack();
     await expect(page).toHaveURL(/#\/teams$/);
+    expect(pageErrors).toEqual([]);
+  });
+
+  const teamName = `Adm1-${runId}`;
+  const teamId = ((await (await teamOwner.api.get('/api/v1/teams')).json()) as Array<{ id: number; name: string }>).find(
+    (t) => t.name === teamName,
+  )!.id;
+
+  await test.step('9. UI: an orphan team link (never uploaded) is a Repos row with the team name and no link; the admin removes it', async () => {
+    const orphanUrl = `https://git.arrakis.test/scn/${runId}/never-uploaded`;
+    await addTeamRepo(teamOwner, teamId, orphanUrl);
+    await page.goto('/#/admin?tab=all-repos');
+    await page.getByPlaceholder('Filter by repository URL…').fill(orphanUrl);
+    const row = page.locator('tbody tr', { hasText: orphanUrl });
+    await expect(row).toHaveCount(1);
+    await expect(row).toContainText(teamName);
+    await expect(row.locator('a')).toHaveCount(0);
+    await row.getByRole('button', { name: 'Remove' }).click();
+    await page.getByPlaceholder('Type "confirm" to confirm').fill('confirm');
+    await page.getByRole('button', { name: 'Delete', exact: true }).click();
+    await expect(row).toHaveCount(0);
+    expect((await (await teamOwner.api.get(`/api/v1/teams/${teamId}/repositories`)).json()) as unknown[]).toEqual([]);
+  });
+
+  await test.step('10. UI: Admin → Teams «Set new owner» hands the team to a member; a non-member is refused (400)', async () => {
+    await inviteAndAccept(teamOwner, regular, teamId);
+    await page.goto('/#/admin?tab=all-teams');
+    await page.getByPlaceholder('Filter by team name…').fill(teamName);
+    const row = page.locator('tbody tr', { hasText: teamName });
+    await expect(row).toHaveCount(1);
+    await row.getByRole('button', { name: 'Set new owner' }).click();
+    const dialog = page.getByTestId('admin-set-team-owner-dialog');
+    await expect(dialog).toContainText(`Current owner: ${teamOwner.email}`);
+    await dialog.getByLabel('New owner').selectOption({ label: regular.email });
+    await dialog.getByRole('button', { name: 'Set owner' }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(row).toContainText(regular.email);
+    const team = (await (await regular.api.get(`/api/v1/teams/${teamId}`)).json()) as { ownerId: number };
+    expect(team.ownerId).toBe(regular.id);
+    const refused = await admin.api.post(`/api/v1/admin/teams/${teamId}/owner`, { data: { userId: admin.id } });
+    expect(refused.status()).toBe(400);
     expect(pageErrors).toEqual([]);
   });
 });

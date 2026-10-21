@@ -5,7 +5,7 @@
 // Uploads go through POST /api/v2/logs (impl-plan DD SC3).
 //
 // Code facts that differ from the design text:
-//   - step 3: every job route runs `assertRepoOwnerOrAdmin` before it looks the job up, so a
+//   - step 3: every job route runs `assertRepoOwnerOrTeamOwner` before it looks the job up, so a
 //     stranger asking for the owner's job under the owner's repository gets 403; asked under the
 //     stranger's own repository the same job id is 404 (`job.repoId` mismatch) — both checked;
 //   - step 6: `sessions/export-scope` requires `from` and `to`; without `teamId` it is the

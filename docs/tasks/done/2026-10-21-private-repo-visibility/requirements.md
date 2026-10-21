@@ -149,3 +149,5 @@ sessions and their contents.
 ## Notes
 
 <!-- Append timestamped notes here as work progresses -->
+
+- 2026-10-21 — implemented via adlc-lh:implement; checks green.

@@ -27,7 +27,6 @@ interface TeamMembersTabProps {
   teamName: string;
   members: TeamMember[];
   isOwner: boolean;
-  isAdmin: boolean;
   isMember: boolean;
   accessMode: TeamAccessMode;
 }
@@ -37,7 +36,6 @@ export function TeamMembersTab({
   teamName,
   members,
   isOwner,
-  isAdmin,
   isMember,
   accessMode,
 }: TeamMembersTabProps) {
@@ -133,7 +131,7 @@ export function TeamMembersTab({
               key={m.userId}
               member={m}
               canEditRoles={isOwner}
-              canRemove={isOwner || isAdmin}
+              canRemove={isOwner}
               showDisclosureState={isOwner}
               onToggleRole={(userId, flags) =>
                 toggleRoleMut.mutate({ userId, flags })

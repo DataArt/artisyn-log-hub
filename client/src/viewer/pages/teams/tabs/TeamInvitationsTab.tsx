@@ -18,13 +18,11 @@ import { ConfirmDialog } from '../../../ui/confirm-dialog';
 interface TeamInvitationsTabProps {
   teamId: number;
   isOwner: boolean;
-  isAdmin: boolean;
 }
 
 export function TeamInvitationsTab({
   teamId,
   isOwner,
-  isAdmin,
 }: TeamInvitationsTabProps) {
   const queryClient = useQueryClient();
   const [inviteEmail, setInviteEmail] = useState('');
@@ -89,7 +87,7 @@ export function TeamInvitationsTab({
                   {inv.status}
                 </p>
               </div>
-              {inv.status === 'pending' && (isOwner || isAdmin) && (
+              {inv.status === 'pending' && isOwner && (
                 <Button
                   variant="ghost"
                   size="sm"

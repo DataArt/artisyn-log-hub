@@ -195,7 +195,9 @@ hook (`npx <server-origin>/static/artisyn-hooks-installer.tgz uninstall`).
   as trustworthy as that server and the connection to it.
 - **Inside the server,** you see your own sessions. Teams can share sessions between members: a
   member becomes visible to the team only after accepting a disclosure notice, and the team's access
-  mode and roles decide who sees prompts and reports. The app admin can read any session's raw logs.
+  mode and roles decide who sees prompts and reports. The admin role grants no access to session
+  data in the app; admins see sessions only through their own repositories or a team role (server
+  operators can still reach the database and logs directly).
 - **The OTEL receiver listens on `127.0.0.1` only** and has no token, so another local process
   running as you could post to it.
 

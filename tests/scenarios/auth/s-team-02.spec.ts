@@ -204,4 +204,56 @@ test('@S-TEAM-02 restricted team: who sees what (member, owner, trainer, manager
       await context.close();
     }
   });
+
+  // The admin role grants no data access and no team powers (2026-10-21-private-repo-visibility).
+  const admin = await users.user('admin', { label: 'rst-admin' });
+
+  await test.step('12. API (ADMIN, not a member): no team in GET /teams; team detail, members, repositories, sessions, logs → 403; invite, remove member, unlink → 403', async () => {
+    const teams = (await (await admin.api.get('/api/v1/teams')).json()) as Array<{ id: number }>;
+    expect(teams.map((t) => t.id)).not.toContain(teamId);
+    for (const path of [
+      `/api/v1/teams/${teamId}`,
+      `/api/v1/teams/${teamId}/members`,
+      `/api/v1/teams/${teamId}/repositories`,
+      `${base}/sessions?teamId=${teamId}`,
+      logsOf('m2'),
+      teamWide[0],
+    ]) {
+      const res = await admin.api.get(path);
+      expect(res.status(), path).toBe(403);
+      expect(await res.text(), path).not.toContain(prompt('m2'));
+    }
+    const links = (await (await owner.api.get(`/api/v1/teams/${teamId}/repositories`)).json()) as Array<{ id: number }>;
+    expect((await admin.api.post(`/api/v1/teams/${teamId}/invitations`, { data: { email: x.email } })).status()).toBe(403);
+    expect((await admin.api.delete(`/api/v1/teams/${teamId}/members/${m2.id}`)).status()).toBe(403);
+    expect((await admin.api.delete(`/api/v1/teams/${teamId}/repositories/${links[0].id}/link`)).status()).toBe(403);
+    expect((await (await owner.api.get(`/api/v1/teams/${teamId}/repositories`)).json()) as unknown[]).toHaveLength(links.length);
+  });
+
+  await test.step('13. UI (ADMIN, not a member): no «Teams as Admin», no «View as Admin», the team page shows no «Viewing as Admin» and no member', async () => {
+    const { context, page } = await browserAs(browser, stand.url, admin, '/#/teams');
+    try {
+      await expect(page.getByRole('heading', { name: 'Teams', exact: true })).toBeVisible();
+      await expect(page.getByText('Teams as Admin')).toHaveCount(0);
+      await expect(page.getByText('View as Admin')).toHaveCount(0);
+      await expect(page.getByText(`Restricted-${runId}`)).toHaveCount(0);
+      await page.goto(`/#/teams/${teamId}`);
+      await expect(page.getByText('Viewing as Admin')).toHaveCount(0);
+      await expect(page.getByText(m2.email)).toHaveCount(0);
+    } finally {
+      await context.close();
+    }
+  });
+
+  await test.step('14. API (ADMIN as a plain member): sees what a plain member sees — only own rows, other prompts and logs closed; no acknowledgement data', async () => {
+    await inviteAndAccept(owner, admin, teamId);
+    expect(((await (await admin.api.get('/api/v1/teams')).json()) as Array<{ id: number }>).map((t) => t.id)).toContain(teamId);
+    expect(await list(admin)).toEqual([]);
+    expect((await list(m2)).map((r) => r.sessionId)).toEqual([sid('m2')]);
+    for (const path of perSession('m2')) expect(await status(admin, path), path).toBe(403);
+    for (const path of teamWide) expect(await status(admin, path), path).toBe(403);
+    const members = (await (await admin.api.get(`/api/v1/teams/${teamId}/members`)).json()) as Array<{ disclosureAcknowledgedAt: string | null }>;
+    expect(members.length).toBeGreaterThan(1);
+    expect(members.every((m) => m.disclosureAcknowledgedAt === null)).toBe(true);
+  });
 });

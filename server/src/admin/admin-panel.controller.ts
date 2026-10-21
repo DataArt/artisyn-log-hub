@@ -31,6 +31,7 @@ import {
   signReleaseToken,
 } from '../releases/release-token';
 import { ReleasesService } from '../releases/releases.service';
+import { TransferOwnershipDto } from '../teams/dto/transfer-ownership.dto';
 import type {
   ReleaseDownloadLinkResponse,
   ReleaseInventoryResponse,
@@ -192,9 +193,34 @@ export class AdminPanelController {
     await this.adminService.removeRepo(id);
   }
 
+  /** Orphan team link only (no `repositories` row for its URL) — 404 otherwise. */
+  @Delete('team-repos/:teamRepoId')
+  @HttpCode(204)
+  async removeOrphanTeamRepo(
+    @Param('teamRepoId', ParseIntPipe) teamRepoId: number,
+  ) {
+    await this.adminService.removeOrphanTeamRepo(teamRepoId);
+  }
+
   @Get('teams')
   getTeams() {
     return this.adminService.getTeams();
+  }
+
+  /** Member identity only (no session data) — backs the "Set new owner" picker. */
+  @Get('teams/:teamId/members')
+  getTeamMembers(@Param('teamId', ParseIntPipe) teamId: number) {
+    return this.adminService.getTeamMembers(teamId);
+  }
+
+  /** FR-8: any admin may hand a team to one of its current members. */
+  @Post('teams/:teamId/owner')
+  @HttpCode(200)
+  setTeamOwner(
+    @Param('teamId', ParseIntPipe) teamId: number,
+    @Body() dto: TransferOwnershipDto,
+  ) {
+    return this.adminService.setTeamOwner(teamId, dto.userId);
   }
 
   @Get('auth')

@@ -134,9 +134,8 @@ test('@S-SLIFE-06 the owner removes a session from the UI, another user cannot, 
     }
   });
 
-  await test.step('6. ADMIN: DELETE «Keep me» → 204; REGULAR no longer has it', async () => {
-    expect((await admin.api.delete(`/api/v1/sessions/${keep.sessionId}`)).status()).toBe(204);
-    expect(await listed()).toEqual([]);
-    expect(await sessionCount()).toBe(0);
+  await test.step('6. ADMIN: DELETE «Keep me» → 403 (deleting is owner-only); REGULAR still has it', async () => {
+    expect((await admin.api.delete(`/api/v1/sessions/${keep.sessionId}`)).status()).toBe(403);
+    expect(await listed()).toEqual([keep.sessionId]);
   });
 });

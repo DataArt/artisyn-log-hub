@@ -2,8 +2,8 @@
 // member, member is an ADLC trainer) and T2 (restricted; owner + member + manager; the member has
 // not acknowledged T2's disclosure yet). Both teams are owned by `owner`.
 //
-// Guards: TeamAccessGuard (member of the team, or admin) answers 403 to an outsider and 404 for
-// an unknown team; TeamOwnerGuard admits the owner only — no admin bypass.
+// Guards: TeamAccessGuard (member of the team — no admin bypass) answers 403 to an outsider and
+// 404 for an unknown team; TeamOwnerGuard admits the owner only — no admin bypass either.
 import type { ContractFamily, ReadSpec } from '../types';
 
 /** One team as its members see it: the caller's own flags come from their membership row. */
@@ -97,32 +97,13 @@ export const f10TeamsCore: ContractFamily = {
       },
     },
     {
-      // An admin sees every team, flagged by whether they are a member.
+      // The admin role grants no team visibility: an admin lists only their own teams, and the
+      // world-v1 admin is in none.
       id: 'F10-list-admin',
       route: 'GET /api/v1/teams',
       actor: 'admin',
-      expect: { status: 200, minRows: 2 },
-      read: {
-        sql: `SELECT t.id, t.name, t.owner_id, t.created_at, t.access_mode::text AS access_mode,
-                     coalesce(m.is_manager, false) AS is_manager,
-                     coalesce(m.is_adlc_trainer, false) AS is_adlc_trainer,
-                     m.user_id IS NOT NULL AS is_member
-                FROM teams t LEFT JOIN team_members m ON m.team_id = t.id AND m.user_id = $1`,
-        args: ['@admin.id'],
-        shape: 'array',
-        sortBy: 'id',
-        fields: {
-          id: 'id',
-          name: 'name',
-          ownerId: 'owner_id',
-          createdAt: { col: 'created_at', as: 'iso' },
-          accessMode: 'access_mode',
-          myIsManager: 'is_manager',
-          myIsAdlcTrainer: 'is_adlc_trainer',
-          isMember: 'is_member',
-        },
-        strict: true,
-      },
+      expect: { status: 200, bodyText: '[]' },
+      noDb: true,
     },
     {
       id: 'F10-pending-disclosures',
@@ -156,12 +137,12 @@ export const f10TeamsCore: ContractFamily = {
       read: { ...TEAM_FOR_MEMBER, args: ['@T1.id', '@member.id'] },
     },
     {
+      // A non-member admin is an outsider to the team.
       id: 'F10-get-admin',
       route: 'GET /api/v1/teams/:teamId',
       actor: 'admin',
       params: { teamId: '@T2.id' },
-      expect: { status: 200, bodyMatches: { id: 2, name: 'T2 Atreides' } },
-      noDb: true,
+      expect: { status: 403 },
     },
     {
       id: 'F10-get-outsider',

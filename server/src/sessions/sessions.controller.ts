@@ -39,6 +39,6 @@ export class SessionsController {
     @Param('sessionId') sessionId: string,
   ): Promise<void> {
     const user = req.user as AuthUser;
-    await this.sessionsService.deleteSession(user.id, user.role, sessionId);
+    await this.sessionsService.deleteSession(user.id, sessionId);
   }
 }

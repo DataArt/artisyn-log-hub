@@ -4,8 +4,8 @@ import type { ColumnDef } from '@tanstack/react-table';
 import type { AdminRepo } from '../../../../models/admin';
 import {
   fetchAdminRepos,
+  removeAdminOrphanTeamRepo,
   removeAdminRepo,
-  removeTeamRepository,
 } from '../../../api';
 import { useDebounce } from '../../../hooks/useDebounce';
 import { PageState } from '../../../components/PageState';
@@ -33,7 +33,9 @@ function RemoveButton({ row }: { row: AdminRepo }) {
       if (row.id !== null) {
         await removeAdminRepo(row.id);
       } else {
-        await removeTeamRepository(row.teamId!, row.teamRepoId!);
+        // Orphan team link (nothing uploaded) — removed through the admin route; the
+        // team route is owner-only.
+        await removeAdminOrphanTeamRepo(row.teamRepoId!);
       }
       setOpen(false);
       await queryClient.invalidateQueries({ queryKey: ['admin-repos'] });
@@ -91,7 +93,7 @@ const columns: ColumnDef<AdminRepo, unknown>[] = [
     accessorKey: 'teamName',
     header: 'Team',
     enableGlobalFilter: false,
-    cell: ({ getValue }) => (getValue() as string | undefined) ?? '—',
+    cell: ({ getValue }) => (getValue() as string | null | undefined) ?? '—',
   },
   {
     id: 'sessionCount',

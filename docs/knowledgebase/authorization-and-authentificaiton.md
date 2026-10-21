@@ -372,19 +372,38 @@ it cannot be revoked afterwards. The reverse direction (`transparent → restric
 exposure and is never blocked — which is also why an acknowledgement is recorded once and never
 re-asked (no copy-version hash, unlike the consent notice).
 
-### What the app-level admin bypass does and does not cover
+### The admin role grants no data access
 
-`resolveTeamScope()` deliberately does **not** special-case `user.role === 'admin'`: an admin querying
-a team they are not a member of resolves to `own-only`, exactly as they did before this feature. The
-admin bypasses that already existed are unchanged and are the complete list — `TeamAccessGuard`,
-`RepositoriesService.assertRepoAccess()`, the unconditional `user.role === 'admin'` clause on the
-session-logs route, `sessions/export-scope`, and `recompute-all-sessions`. Role grants themselves are
-the one place an admin is *narrower* than usual: `PATCH /teams/:teamId/members/:userId` is
-`TeamOwnerGuard` only, with no admin bypass.
+Since `2026-10-21-private-repo-visibility` the app-level `admin` role only *administers* (users,
+retention, system settings, pricing, server operation) and never widens what session data a caller
+can read. No access check special-cases `user.role === 'admin'`:
 
-Note what this means for reading a raw conversation: an app admin can read any session's logs, a team
-owner or ADLC trainer can read an acknowledged member's, and a `manager` cannot — a manager resolves
-to "team, no prompts", and the session-logs route keeps 403ing for them.
+- **Personal route (no `teamId`)** — `RepositoriesService.assertRepoAccess()` admits only the
+  `repositories` row owner, whatever their role, even when a team links the same repo URL.
+- **Team route (`teamId`)** — team membership plus the team policy (`resolveTeamScope()`), nothing
+  else. `TeamAccessGuard` is membership-only; the former `TeamOwnerOrAdminGuard` was deleted and its
+  routes (remove member, unlink / remove team repo) use `TeamOwnerGuard`.
+- `assertRepoOwnerOrTeamOwner()` (export/import), the session-logs route, `sessions/export-scope` and
+  `recompute-all-sessions` have no admin clause; `DELETE /api/v1/sessions/:sessionId` is owner-only.
+- `GET /api/v1/teams` returns only the caller's own teams, admins included; `getMembers()` returns
+  `disclosureAcknowledgedAt` to the team owner only; invitations are owner (or `canInvite` member)
+  only.
+- An admin who is a team member gets exactly the rights of their team role.
+
+What the admin keeps: the admin panel (aggregates only — counts, tokens, cost), retention routes under
+`AdminOrTeamOwnerGuard`, the password-reset link, `DELETE /admin/repos/:id`, and three team-admin
+routes that read no session data — `GET /admin/teams/:teamId/members` (identity only),
+`POST /admin/teams/:teamId/owner` ("Set new owner", the new owner must be a member) and
+`DELETE /admin/team-repos/:teamRepoId` (orphan team link only).
+
+**Privacy boundary.** These rules cover the application's session-data views (UI + API). Debugging
+data stays outside them: `GET /admin/upload-queue/:id/file` still returns the staged raw payload and
+server / error logs are not scrubbed. The Data Collection Notice discloses both, and that anyone with
+direct database access can read everything.
+
+For a raw conversation this means: the session's uploader, a team owner or ADLC trainer for an
+acknowledged member's session, and every member of a `transparent` team can read it; a `manager`
+cannot (they resolve to "team, no prompts").
 
 ## Team visibility and restricted access
 
@@ -409,8 +428,8 @@ returns a `TeamScope` (`server/src/logs/team-scope.ts`) whose `visibility` is on
 - A missing team row resolves to the restrictive default instead of throwing; authorization itself is
   `assertRepoAccess()` / `TeamAccessGuard`'s job, not the resolver's.
 - The two owner-only export surfaces use `resolveExportVisibleUserIds(teamId)` instead, which is
-  caller-independent (so the admin bypass on them keeps working) but still applies the disclosure
-  gate: acknowledged members plus the team owner, or `null` for a `transparent` team.
+  caller-independent (the routes' own `assertRepoOwnerOrTeamOwner()` / team-owner gate already
+  restricts the caller) but still applies the disclosure gate: acknowledged members plus the team owner, or `null` for a `transparent` team.
 
 ### Repository matching by URL in team context
 
@@ -422,9 +441,9 @@ requested id alone when none are found). `buildSessionListConditions()` combines
 with the row filter `logs.user_id IN (visibleUserIds)`, which it adds only when a `teamId` is present
 and `visibleUserIds` is not `null`.
 
-Without a `teamId` only the requested row is used. The row filter is not applied there either, because
-an app admin may open another user's repository in the personal view (`assertRepoAccess()`); narrowing
-to the caller's own id would empty that admin's list.
+Without a `teamId` only the requested row is used. The row filter is not applied there either: the
+personal view is owner-only (`assertRepoAccess()` admits only the `repositories` row owner), so that
+gate is the whole rule.
 
 ### Prompt masking and single-session reads
 
@@ -439,5 +458,5 @@ to the caller's own id would empty that admin's list.
   uploader is the caller or is in `visibleUserIds`, which also stops an owner or trainer from opening a
   session of a member who has not acknowledged the disclosure.
 - **Raw session logs stay owner-only outside the team grants.** The Raw Logs tab and
-  `GET .../sessions/:sessionId/logs` answer 403 to everyone except the session's owner, an app admin,
-  and the team-wide-with-prompts roles described above.
+  `GET .../sessions/:sessionId/logs` answer 403 to everyone except the session's owner and the
+  team-wide-with-prompts roles described above (no app-admin exception).

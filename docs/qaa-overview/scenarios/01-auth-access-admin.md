@@ -376,7 +376,7 @@ Convention for the text below: a "UI step" is what a person clicks by hand; an "
   - Step 4: the repository is in the team list, `sessionCount = 1`.
   - Step 5: the invitation is created (status pending on the Invitations tab), the repeat gives the error 409 "duplicate pending invitation".
   - Step 7: M1's bell shows the badge "1" (invitations sent by M1 themselves and other people's do not count), the panel has a row with the team name and the "Restricted" badge. OWNER has no badge (they are the author).
-  - Step 8: **Accept** opens the disclosure dialog listing who reads prompts (four restricted items: the owner and the app admin read everything; a trainer reads everything; a manager without text; the others see nothing); the "Accept invitation" button is unavailable without the check box "I have read and understood who can see my prompts in this team"; after confirmation the request goes out with `acknowledgedAccessMode: 'restricted'`, the badge disappears, M1 appears in Members with labels.
+  - Step 8: **Accept** opens the disclosure dialog listing who reads prompts (five restricted items: the owner reads everything; a trainer reads everything; a manager without text; the others see nothing; application administrators get no access through their admin role); the "Accept invitation" button is unavailable without the check box "I have read and understood who can see my prompts in this team"; after confirmation the request goes out with `acknowledgedAccessMode: 'restricted'`, the badge disappears, M1 appears in Members with labels.
   - Step 9: "Decline" does not open the consent dialog, M2 is not a member, the badge disappeared.
   - Step 10: after Decline M2 is not in Members; the invitation can be sent again (re-invite 201).
   - Step 11: the team and the repository are visible to M1; the "owner prompt" session is **not** visible to M1 (restricted, S-TEAM-02).
@@ -400,6 +400,9 @@ Convention for the text below: a "UI step" is what a person clicks by hand; an "
   9. API (OWNER): grant M1 the trainer role **after** the upload (PATCH member `isAdlcTrainer: true`), M1 reads M2's logs.
   10. API (OWNER): the personal view without `teamId`.
   11. UI (OWNER): the team page, Members: the badge tooltip.
+  12. API (ADMIN, not a member): `GET /teams`; team detail, members, repositories, the session list and logs by `teamId`, analytics; invite, remove a member, unlink a team repository.
+  13. UI (ADMIN, not a member): `/#/teams` and `/#/teams/<T>`.
+  14. API (ADMIN invited and accepted as a plain member): the session list, other members' logs/contexts/change-surface, analytics; `GET /teams/<T>/members`.
 - **Checks:**
   - Steps 1-2: M1 sees **only their own** session `prompt-m1`; the team repository page keeps the Sessions tab and the notice "Restricted team — you see only your own sessions"; there are no Analytics and Reports tabs; a manual `?tab=analytics` falls back to Sessions; the "Restricted" badge on the team route.
   - Step 3: other people's logs/contexts/change-surface/change-surface/files = **403**; own ones 200; analytics and reports = **403**.
@@ -411,6 +414,9 @@ Convention for the text below: a "UI step" is what a person clicks by hand; an "
   - Step 9: the trainer role granted after the upload immediately gives access to the already existing sessions (retroactively).
   - Step 10: without `teamId` everyone sees only their own sessions, analytics is available.
   - Step 11: the badge tooltip names the owner and the trainers, does not name the managers and members (text "Analytics and reports: owner and managers only").
+  - Step 12: the team is absent from the admin's `GET /teams`; every read is **403** without prompt text; invite, remove member and unlink are **403** and change nothing (the admin role grants no data access — 2026-10-21-private-repo-visibility).
+  - Step 13: no "Teams as Admin", "View as Admin" or "Viewing as Admin"; the team page shows no member.
+  - Step 14: the admin sees exactly what a plain member sees — only their own rows (none), other members' logs and analytics 403; `disclosureAcknowledgedAt` is `null` on every member row (only the team owner sees it).
 - **Replaces:** `server/test/team-access-mode.e2e-spec.ts` (46 → ≈ 32: AC-1/2/4/5/6/7/8/9/9a/9b/19 and the general list), the restricted group of `client/.../components/repository-view.test.tsx` (≈ 15 of 52), `access-mode-badge.test.tsx` (13).
 - **What we lose:** `AC-2` itself (writing a team row directly into the DB gives `restricted` by the column DEFAULT) and each analytics route separately (the old tests checked 403 on all ~20 routes; the scenario takes 4 representatives). I suggest one parameterised "guard test" over the route list (owner's decision G-21), or accepting the loss of route coverage: every route goes through the single `resolveTeamScope`.
 
@@ -521,19 +527,18 @@ Convention for the text below: a "UI step" is what a person clicks by hand; an "
 ### S-TEAM-07. The app admin and someone else's team: what they can and cannot do
 - **Layer:** UI+API (any mode)
 - **Priority:** P1
+- **Status:** covered by S-TEAM-02 steps 12-14 and S-ADM-01 step 10 (the admin role grants no data access — 2026-10-21-private-repo-visibility); no separate scenario file.
 - **Data/roles:** ADMIN (not a team member), OWNER, M1; team `Admin-<runId>` restricted with sessions of OWNER and M1 (prompts `prompt-owner`, `prompt-m1`), a team repository.
 - **Steps:**
-  1. UI (ADMIN): `/#/teams`: the "Teams as Admin" section with the team and the "Admin" label, the "View as Admin" header.
-  2. UI (ADMIN): open the team.
-  3. API (ADMIN): `GET .../sessions/<m1>/logs?teamId=<T>`; `GET .../sessions/export-scope`.
-  4. API (ADMIN): `GET .../sessions?teamId=<T>` and analytics.
-  5. API (ADMIN): PATCH a member's role; PATCH the access mode; remove a member; remove a repository from the team through unlink.
+  1. UI (ADMIN): `/#/teams` and the team page.
+  2. API (ADMIN): `GET /teams`; team detail, members, repositories; `GET .../sessions/<m1>/logs?teamId=<T>`; `GET .../sessions?teamId=<T>` and analytics.
+  3. API (ADMIN): PATCH a member's role; PATCH the access mode; remove a member; unlink a team repository; invitations.
+  4. UI (ADMIN): Admin → Teams → "Set new owner".
 - **Checks:**
-  - Steps 1-2: the team is visible under "Teams as Admin"; the page opens (unlike for a regular non-member: 403).
-  - Step 3: the raw conversation of a restricted team **is readable** by the admin (AC-17), `export-scope` 200 with the session; this is an existing documented bypass.
-  - Step 4: the list and analytics by `teamId` for the admin = "own only" (an admin who is not a member gets own-only: the bypass does not extend to the team list), i.e. 0 sessions and analytics 403.
-  - Step 5: roles and mode **403** (even for the admin); removing a member and unlink 200 (TeamOwnerOrAdminGuard).
-  - We record the bypass boundaries: "can read logs, cannot manage roles, does not see the team list and analytics without membership".
+  - Step 1: no "Teams as Admin", "View as Admin" or "Viewing as Admin"; the team is not listed and its page shows nothing.
+  - Step 2: the team is absent from `GET /teams`; every team route and every team-scoped session/analytics read is **403** (a non-member admin is an outsider).
+  - Step 3: all **403** (`TeamOwnerGuard` / `TeamAccessGuard`, no admin bypass).
+  - Step 4: the one team action an admin has without membership: any current member can be made the owner (`POST /admin/teams/:teamId/owner`); a non-member is refused (400).
 - **Replaces:** `server/test/access-management.e2e-spec.ts` AC-17 (3), "admin sees all teams", "admin can view teams they do not belong to", "admin can remove member" (≈ 4) and `team-access-mode` AC-10 for the admin.
 - **What we lose:** the `recompute-all-sessions` check for the admin (not about privacy; in the repositories group).
 
@@ -549,7 +554,7 @@ Convention for the text below: a "UI step" is what a person clicks by hand; an "
   1. OWNER: `GET /repositories/:id`, `.../sessions`, `.../sessions/<s>/logs`, `.../summary`, `.../contexts`.
   2. STRANGER: the same requests + `GET /repositories` (their own list).
   3. STRANGER: `PUT /repositories/:id/settings/team` and `.../settings/user`; `POST .../recompute-all-sessions`; `GET .../sessions/export-scope`.
-  4. ADMIN: `GET .../sessions/<s>/logs`.
+  4. ADMIN: every read of step 1, `POST .../recompute-all-sessions`, `GET .../sessions/export-scope`, `GET /repositories` (their own list).
   5. Anonymous: each of the families: `GET /repositories`, `GET /teams`, `GET /api-keys`, `GET /admin/repos`, `GET /user-settings`, `GET /api/v1/ai-tool-versions/claude-code`, `POST /api/v1/logs`.
   6. Key K1 (`X-API-Key`) instead of a cookie on the same session routes; a cookie instead of a key on `POST /api/v1/logs`, `/api/v2/logs`, `GET /api/v2/post-turn-analysis/config`.
   7. OWNER and STRANGER: `PUT /user-settings/theme` with different values, a `PUT` with `userId` in the body; a value larger than 64 KB; a name outside `[A-Za-z0-9._-]`.
@@ -558,7 +563,7 @@ Convention for the text below: a "UI step" is what a person clicks by hand; an "
   - Step 1: all 200.
   - Step 2: someone else's repository, sessions, `summary`, `contexts` = **403**; raw logs 403; OWNER's repository is absent from STRANGER's `GET /repositories`.
   - Step 3: editing the team configuration as a non-owner is **403** (F.1 #8), someone else's `export-scope` and `recompute` 403.
-  - Step 4: the app admin reads the raw logs of any session (200).
+  - Step 4: the app admin gets **403** on every read, recompute and export-scope, and no response carries the prompt text; the repository is absent from the admin's own list (the admin role grants no data access — 2026-10-21-private-repo-visibility).
   - Step 5: **401** everywhere.
   - Step 6: a key on session routes gives **401**, a cookie on key routes gives **401** (the two "doors" do not mix).
   - Step 7: user settings are isolated (STRANGER reads their own `theme`, not OWNER's), `userId` in the body is ignored, 64 KB+ gives 400, a bad name 400.
@@ -584,6 +589,8 @@ Convention for the text below: a "UI step" is what a person clicks by hand; an "
   6. UI: click Teams, then go back to System Info.
   7. UI: open `/#/admin?tab=all-teams` and `/#/admin?tab=bogus`.
   8. UI: press "Back" after switching tabs.
+  9. UI: TEAMOWNER links a never-uploaded URL to their team; Admin → Repos, filter by the URL, "Remove".
+  10. UI: TEAMOWNER invites REGULAR; Admin → Teams, "Set new owner" → REGULAR; API: set a non-member as owner.
 - **Checks:**
   - Step 1: no link, the URL immediately becomes `#/main` (the `AdminGuard` redirect).
   - Step 2: **403** for REGULAR and **401** for the anonymous context on every listed route.
@@ -593,6 +600,8 @@ Convention for the text below: a "UI step" is what a person clicks by hand; an "
   - Step 6: Teams puts `tab=all-teams` into the hash; going back to System Info **removes** the `tab` parameter from the hash.
   - Step 7: `?tab=all-teams` opens Teams, a garbage value opens System Info and the hash is not rewritten.
   - Step 8: "Back" returns to the previous tab (the tab state lives in the URL).
+  - Step 9: the orphan link is one Repos row with the team name and no link into any content; "Remove" deletes it (`DELETE /admin/team-repos/:teamRepoId`), the team has no repository left.
+  - Step 10: the dialog shows "Current owner: <TEAMOWNER>"; after "Set owner" the Teams row shows REGULAR as owner and `GET /teams/<T>`.`ownerId` is REGULAR; a non-member gives **400**.
 - **Replaces:** `tests/e2e/admin-panel.spec.ts` (≈ 9 of 17: the link, the redirect, 4 tabs, deep-link ×3, no-tab, the Data Retention tab, nav click, no-console-errors, guard-regular ×2), the `server/test/admin-panel.e2e-spec.ts` 403/401 blocks (≈ 9), `client/.../use-admin-tab-state.test.ts` (2 of 8: the other 6 are about the hook internals).
 - **What we lose:** sorting by clicking a column and the filter (moved to S-ADM-04), the specific column headers.
 

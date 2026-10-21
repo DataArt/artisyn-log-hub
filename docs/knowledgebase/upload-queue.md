@@ -63,7 +63,11 @@ scheduler stops the interval and awaits the in-flight tick before the DB pool cl
 
 Admins manage failed rows from the Upload Queue tab: `DELETE /api/v1/admin/upload-queue/failed`
 clears them, `POST /api/v1/admin/upload-queue/reprocess-failed` re-queues them, and
-`GET /api/v1/admin/upload-queue/:id/file` downloads the staged file behind one row.
+`GET /api/v1/admin/upload-queue/:id/file` downloads the staged file behind one row. That staged
+file is debugging data and sits outside the privacy boundary of the access model (the admin role
+otherwise grants no session-data access — see
+[authorization-and-authentificaiton.md](authorization-and-authentificaiton.md)); the Data Collection
+Notice discloses it.
 
 ## Chunked upload
 

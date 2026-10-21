@@ -19,8 +19,8 @@ interface TeamMemberRowProps {
   canEditRoles: boolean;
   canRemove: boolean;
   /**
-   * `disclosureAcknowledgedAt` is only meaningful for the team owner and an
-   * app admin; every other caller gets `null` regardless,
+   * `disclosureAcknowledgedAt` is only meaningful for the team owner; every
+   * other caller gets `null` regardless,
    * so the marker must not be rendered for them.
    */
   showDisclosureState: boolean;

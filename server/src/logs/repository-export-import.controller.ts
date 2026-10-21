@@ -61,7 +61,7 @@ interface JobStatusResponse {
 /**
  * The 7 export/import endpoints (API changes table) — a new
  * sibling controller to `RepositoriesController`, not more methods on it. Every
- * handler calls `RepositoriesService.assertRepoOwnerOrAdmin()` first
+ * handler calls `RepositoriesService.assertRepoOwnerOrTeamOwner()` first
  * — stricter than plain team membership, since export/import can
  * read/write every team member's sessions. `teamId` is threaded through every
  * route (query param on GETs, body field on POSTs) since the team-owner check
@@ -82,7 +82,7 @@ export class RepositoryExportImportController {
   // ---------------------------------------------------------------------------
   // "Bootstrap import" — import a previously exported zip with no existing
   // target repoId. Unlike every route below, these three don't call
-  // `assertRepoOwnerOrAdmin` (there's nothing to check access on yet): the
+  // `assertRepoOwnerOrTeamOwner` (there's nothing to check access on yet): the
   // target repo is resolved/created from the zip's own `meta.sourceRepoUrl`,
   // scoped to the current user's *personal* repos only (no `teamId`), letting
   // sessions land on an empty server or under a brand-new personal repo.
@@ -240,7 +240,11 @@ export class RepositoryExportImportController {
   ) {
     this.assertTeamIdValid(teamId);
     const user = req.user as AuthUser;
-    await this.repositoriesService.assertRepoOwnerOrAdmin(user, repoId, teamId);
+    await this.repositoriesService.assertRepoOwnerOrTeamOwner(
+      user,
+      repoId,
+      teamId,
+    );
 
     const scope = this.parseScopeEnum(scopeParam);
     const filters = this.buildFiltersFromQuery(scope, from, to, sessionIdsCsv);
@@ -263,7 +267,7 @@ export class RepositoryExportImportController {
   ): Promise<{ jobId: string }> {
     this.assertTeamIdValid(body?.teamId);
     const user = req.user as AuthUser;
-    const repo = await this.repositoriesService.assertRepoOwnerOrAdmin(
+    const repo = await this.repositoriesService.assertRepoOwnerOrTeamOwner(
       user,
       repoId,
       body?.teamId,
@@ -318,7 +322,11 @@ export class RepositoryExportImportController {
   ): Promise<void> {
     this.assertTeamIdValid(teamId);
     const user = req.user as AuthUser;
-    await this.repositoriesService.assertRepoOwnerOrAdmin(user, repoId, teamId);
+    await this.repositoriesService.assertRepoOwnerOrTeamOwner(
+      user,
+      repoId,
+      teamId,
+    );
 
     const job = await this.exportImportJobsService.get(jobId);
     if (!job || job.repoId !== repoId || job.kind !== 'export') {
@@ -357,7 +365,11 @@ export class RepositoryExportImportController {
   }> {
     this.assertTeamIdValid(teamId);
     const user = req.user as AuthUser;
-    await this.repositoriesService.assertRepoOwnerOrAdmin(user, repoId, teamId);
+    await this.repositoriesService.assertRepoOwnerOrTeamOwner(
+      user,
+      repoId,
+      teamId,
+    );
 
     if (!file) {
       throw new BadRequestException('file is required');
@@ -412,7 +424,7 @@ export class RepositoryExportImportController {
   ): Promise<{ jobId: string }> {
     this.assertTeamIdValid(body?.teamId);
     const user = req.user as AuthUser;
-    const repo = await this.repositoriesService.assertRepoOwnerOrAdmin(
+    const repo = await this.repositoriesService.assertRepoOwnerOrTeamOwner(
       user,
       repoId,
       body?.teamId,
@@ -478,7 +490,11 @@ export class RepositoryExportImportController {
   ): Promise<JobStatusResponse> {
     this.assertTeamIdValid(teamId);
     const user = req.user as AuthUser;
-    await this.repositoriesService.assertRepoOwnerOrAdmin(user, repoId, teamId);
+    await this.repositoriesService.assertRepoOwnerOrTeamOwner(
+      user,
+      repoId,
+      teamId,
+    );
 
     const job = await this.exportImportJobsService.get(jobId);
     if (!job || job.repoId !== repoId || job.kind !== expectedKind) {

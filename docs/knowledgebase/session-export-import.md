@@ -1,7 +1,7 @@
 ---
 type: "Reference"
 title: "Session Export, Import and Statistics Export"
-description: "Moving a repository's sessions between Log Hub instances: the zip format synthesised from stored logs, background jobs tracked in export_import_jobs, the owner-or-admin gate, import validation (format version, zip limits, zip-slip guard, strict JSONL), the session.json pre-check and ownership conflicts (409), single-user-mode reassignment, the keep-longer merge and author resolution, bootstrap import; plus the client-side Session Statistics Export."
+description: "Moving a repository's sessions between Log Hub instances: the zip format synthesised from stored logs, background jobs tracked in export_import_jobs, the owner-or-team-owner gate, import validation (format version, zip limits, zip-slip guard, strict JSONL), the session.json pre-check and ownership conflicts (409), single-user-mode reassignment, the keep-longer merge and author resolution, bootstrap import; plus the client-side Session Statistics Export."
 tags:
   - server
   - client
@@ -33,9 +33,9 @@ features:
 
 ### Access
 
-Every repository route calls `RepositoriesService.assertRepoOwnerOrAdmin()` first: repository
-access as for any read, and — when a `teamId` is passed — the caller must be that team's owner or
-an app admin. A plain team member cannot export or import, because both read or write every
+Every repository route calls `RepositoriesService.assertRepoOwnerOrTeamOwner()` first (the
+owner-or-team-owner gate): repository access as for any read, and — when a `teamId` is passed — the
+caller must be that team's owner. There is no admin bypass. A plain team member cannot export or import, because both read or write every
 member's sessions. In a `restricted` team, members who have not acknowledged the disclosure are
 left out of the export (see
 [authorization-and-authentificaiton.md](authorization-and-authentificaiton.md)).
@@ -160,7 +160,7 @@ Such an archive used to fail only later, as a job `error`.
 #### Ownership conflicts
 
 Outside single-user mode an import may never touch another user's data. The **importer** is the
-handler's `req.user.id` on every route, admin and team-owner imports included (there is no admin
+handler's `req.user.id` on every route, team-owner imports included (there is no admin
 bypass): upload checks against the uploader, confirm checks again against the confirmer.
 
 `findImportConflicts(stagedFilePath, importerId)` reports one `{ sessionId, reason }` per
@@ -247,4 +247,4 @@ statistics).
 - Statistics only: the first prompt, CLAUDE.md files and each workflow's arguments, summary and
   findings are left out.
 - To make this possible, a **team owner may read members' session logs** (in a `restricted` team,
-  only members who acknowledged the disclosure), the same as an app admin.
+  only members who acknowledged the disclosure).

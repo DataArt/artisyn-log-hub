@@ -550,13 +550,13 @@ Common setup for every scenario unless stated otherwise: user U1 is logged in (s
   3. Make sure the `type: artisyn` lines are not shown.
   4. Add `tab=raw-logs` to the URL as U2: open the same session.
   5. U2: `GET /repositories/:id/sessions/:sid/logs` directly.
-  6. The administrator opens the same session.
+  6. The administrator (not in the team) opens the same session; `GET .../logs` with and without `teamId`.
   7. The team owner (through `?teamId=`) requests logs for the export mode (see T-70).
 - **Checks:**
   - The owner sees the tab; line types: `mode`, `ai-title`, `permission-mode`, `system-context`, `attachment`, `user`, `assistant`; the expanded assistant line shows the Stop reason, the model, usage by token type (including the TTL buckets), the content blocks.
   - There are no `type: artisyn` lines; records without a timestamp come first.
   - U2: no Raw Logs tab; the deep link `tab=raw-logs` redirects to Summary; `GET .../logs` returns **403** without leaking prompts or code (the body has no prompt text).
-  - The admin sees the tab.
+  - The admin gets "No access", no Raw Logs tab and no prompt; the API answers **403** with and without `teamId` (the admin role grants no data access — 2026-10-21-private-repo-visibility).
   - The team owner with `?teamId=` gets the logs (200), a regular member does not.
 - **Replaces:** `E2E/raw-logs-owner-api.spec.ts` (5), `E2E/session-raw-logs.spec.ts` (13), `CC/RawLogsTab.test.tsx` (19), `CU/raw-logs.test.ts` (38, part ≈ 18). Closes F.1 #9. ≈ 55.
 - **What we lose:** the labels of all 10+ line types and the collapsed previews (`CU/raw-logs.test.ts`), the 422 message "Log data is unavailable", the behaviour with thousands of lines. Acceptable (a renderer, not meaning); the scenario keeps exactly 4 types.

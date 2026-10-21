@@ -45,7 +45,7 @@ export const f23ExportImport: ContractFamily = {
       expect: { status: 400 },
     },
     {
-      // Export and import are owner-or-admin: a team member is refused.
+      // Export and import are owner-or-team-owner: a team member is refused.
       id: 'F23-scope-member',
       route: 'GET /api/v1/repositories/:repoId/export-import/scope',
       actor: 'member',
@@ -282,6 +282,53 @@ export const f23ExportImport: ContractFamily = {
       route: 'POST /api/v1/repositories/:repoId/recompute-all-sessions',
       actor: 'outsider',
       params: { repoId: '@R1.id' },
+      expect: { status: 403 },
+    },
+    {
+      // The admin role grants no data access (2026-10-21-private-repo-visibility). assertRepoOwnerOrTeamOwner has no admin bypass.
+      id: 'F23-scope-admin',
+      route: 'GET /api/v1/repositories/:repoId/export-import/scope',
+      actor: 'admin',
+      params: { repoId: '@R1.id' },
+      query: { scope: 'all' },
+      expect: { status: 403 },
+    },
+    {
+      id: 'F23-scope-admin-team',
+      route: 'GET /api/v1/repositories/:repoId/export-import/scope',
+      actor: 'admin',
+      params: { repoId: '@R1.id' },
+      query: { scope: 'all', teamId: '@T1.id' },
+      expect: { status: 403 },
+    },
+    {
+      id: 'F23-export-admin',
+      route: 'POST /api/v1/repositories/:repoId/export',
+      actor: 'admin',
+      params: { repoId: '@R1.id' },
+      body: { scope: 'all' },
+      expect: { status: 403 },
+    },
+    {
+      id: 'F23-import-upload-admin',
+      route: 'POST /api/v1/repositories/:repoId/import/upload',
+      actor: 'admin',
+      params: { repoId: '@R1.id' },
+      expect: { status: 403 },
+    },
+    {
+      id: 'F23-recompute-admin',
+      route: 'POST /api/v1/repositories/:repoId/recompute-all-sessions',
+      actor: 'admin',
+      params: { repoId: '@R1.id' },
+      expect: { status: 403 },
+    },
+    {
+      id: 'F23-recompute-admin-team',
+      route: 'POST /api/v1/repositories/:repoId/recompute-all-sessions',
+      actor: 'admin',
+      params: { repoId: '@R1.id' },
+      query: { teamId: '@T1.id' },
       expect: { status: 403 },
     },
   ],

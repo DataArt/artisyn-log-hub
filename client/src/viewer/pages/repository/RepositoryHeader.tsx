@@ -1,5 +1,3 @@
-import { Badge } from '../../ui/badge';
-
 export interface RepoContext {
   key: string;
   value: string;
@@ -10,7 +8,6 @@ export interface RepositoryHeaderProps {
   sessionCountDisplay: React.ReactNode;
   userCountDisplay: React.ReactNode;
   repoContexts: RepoContext[];
-  teamId?: number;
 }
 
 export function RepositoryHeader({
@@ -18,13 +15,9 @@ export function RepositoryHeader({
   sessionCountDisplay,
   userCountDisplay,
   repoContexts,
-  teamId,
 }: RepositoryHeaderProps) {
   return (
     <div className="px-4 py-3 border-b border-border flex flex-wrap items-center gap-3 shrink-0">
-      {teamId === undefined && (
-        <Badge className="bg-orange-500 text-white">Private repo view</Badge>
-      )}
       {/* No access-mode badge here: `AccessModeBadge` in `MainNav` already covers
           the `/teams/:teamId/repos/:repoId` route, and exactly one such badge
           renders per route. */}

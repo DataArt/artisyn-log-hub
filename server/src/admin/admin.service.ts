@@ -24,6 +24,7 @@ import { EmailConfirmationTokensService } from '../auth/email-confirmation-token
 import { TooManyRequestsException } from '../auth/exceptions/too-many-requests.exception';
 import { UsersService } from '../users/users.service';
 import { SessionsService } from '../sessions/sessions.service';
+import { TeamsService } from '../teams/teams.service';
 import { getDescendantSessionIds } from '../logs/session-tree.sql';
 import { DRIZZLE } from '../database/database.constants';
 import type { DrizzleDb } from '../database/database.module';
@@ -66,9 +67,21 @@ export interface RepoRow {
   maxUploadBytes: number | null;
   lastSession: Date | null;
   firstSeen: Date | null;
+  /** Orphan rows (`id === null`) only — the `team_repositories` link they stand for. */
   teamId?: number;
   teamRepoId?: number;
-  teamName?: string;
+  /**
+   * Orphan rows: the linking team's name. Real rows: every team linking the URL,
+   * comma-joined by name, or `null` when no team links it.
+   */
+  teamName?: string | null;
+}
+
+/** Member identity only — the admin "Set new owner" picker never sees session data. */
+export interface AdminTeamMemberRow {
+  userId: number;
+  email: string;
+  isOwner: boolean;
 }
 
 export interface TeamRow {
@@ -100,6 +113,7 @@ export class AdminService {
     private readonly emailConfirmationTokensService: EmailConfirmationTokensService,
     private readonly mailService: MailService,
     private readonly sessionsService: SessionsService,
+    private readonly teamsService: TeamsService,
   ) {}
 
   getAuthConfig(): AdminAuthConfig {
@@ -228,6 +242,12 @@ export class AdminService {
         maxUploadBytes: max(repositories.maxUploadBytes),
         lastSession: max(logs.endTime),
         firstSeen: min(logs.startTime),
+        teamName: sql<string | null>`(
+          SELECT string_agg(t.name, ', ' ORDER BY t.name)
+          FROM team_repositories tr
+          INNER JOIN teams t ON t.id = tr.team_id
+          WHERE tr.repo_url = ${repositories.repoUrl}
+        )`,
       })
       .from(repositories)
       .innerJoin(users, eq(users.id, repositories.userId))
@@ -248,6 +268,7 @@ export class AdminService {
         r.maxUploadBytes !== null ? Number(r.maxUploadBytes) : null,
       lastSession: r.lastSession,
       firstSeen: r.firstSeen,
+      teamName: r.teamName,
     }));
 
     const orphanRows = await this.db
@@ -374,6 +395,68 @@ export class AdminService {
       memberCount: Number(r.memberCount),
       repoCount: Number(r.repoCount),
     }));
+  }
+
+  /** Members of `teamId` by identity only, ordered by email. 404 for an unknown team. */
+  async getTeamMembers(teamId: number): Promise<AdminTeamMemberRow[]> {
+    const [team] = await this.db
+      .select({ ownerId: teams.ownerId })
+      .from(teams)
+      .where(eq(teams.id, teamId));
+    if (!team) throw new NotFoundException('Team not found');
+
+    const rows = await this.db
+      .select({ userId: teamMembers.userId, email: users.email })
+      .from(teamMembers)
+      .innerJoin(users, eq(users.id, teamMembers.userId))
+      .where(eq(teamMembers.teamId, teamId))
+      .orderBy(asc(users.email))
+      .execute();
+
+    return rows.map((r) => ({
+      userId: r.userId,
+      email: r.email,
+      isOwner: r.userId === team.ownerId,
+    }));
+  }
+
+  /**
+   * FR-8 "Set new owner": the one team action an admin has without being a member.
+   * Same rule as the owner's own transfer — the new owner must already be a member
+   * (400 otherwise); the previous owner stays a member. 404 for an unknown team.
+   */
+  async setTeamOwner(teamId: number, userId: number) {
+    const [team] = await this.db
+      .select({ ownerId: teams.ownerId })
+      .from(teams)
+      .where(eq(teams.id, teamId));
+    if (!team) throw new NotFoundException('Team not found');
+
+    return this.teamsService.transferOwnership(teamId, team.ownerId, userId);
+  }
+
+  /**
+   * Deletes an orphan team link — a `team_repositories` row whose URL has no
+   * `repositories` row (nothing was ever uploaded). Its `team_repo_config` goes by FK
+   * cascade. 404 when the link is missing or is not an orphan: a linked repo with data
+   * is removed only through {@link removeRepo}.
+   */
+  async removeOrphanTeamRepo(teamRepoId: number): Promise<void> {
+    const deleted = await this.db
+      .delete(teamRepositories)
+      .where(
+        and(
+          eq(teamRepositories.id, teamRepoId),
+          sql`NOT EXISTS (
+            SELECT 1 FROM repositories r
+            WHERE r.repo_url = ${teamRepositories.repoUrl}
+          )`,
+        ),
+      )
+      .returning({ id: teamRepositories.id });
+    if (deleted.length === 0) {
+      throw new NotFoundException('Orphan team repository link not found');
+    }
   }
 
   async getUsers(): Promise<UserRow[]> {

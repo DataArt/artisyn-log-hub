@@ -115,17 +115,26 @@ export const f18SessionDeleteRetention: ContractFamily = {
       write: deleteSession('@s01.id', 'w1-s01-plain', '@owner.id'),
     },
     {
-      id: 'F18-delete-by-admin',
+      // s04 is bound to a harness snapshot: deleting it also sweeps that snapshot row.
+      id: 'F18-delete-bound-snapshot',
       route: 'DELETE /api/v1/sessions/:sessionId',
-      actor: 'admin',
+      actor: 'owner',
       params: { sessionId: '@s04.sessionId' },
       expect: { status: 204 },
       write: deleteSession(
         '@s04.id',
         'w1-s04-favorite',
-        '@admin.id',
+        '@owner.id',
         '@harnessSnapshotId',
       ),
+    },
+    {
+      // Deleting a session is owner-only: the admin role grants no override.
+      id: 'F18-delete-by-admin',
+      route: 'DELETE /api/v1/sessions/:sessionId',
+      actor: 'admin',
+      params: { sessionId: '@s04.sessionId' },
+      expect: { status: 403 },
     },
     {
       id: 'F18-delete-not-owner',

@@ -204,5 +204,27 @@ export const f12TeamRepos: ContractFamily = {
       params: { teamId: '@T1.id', repoId: 3 },
       expect: { status: 403 },
     },
+    {
+      // The admin role grants no data access (2026-10-21-private-repo-visibility). A non-member admin cannot read or change a team's links.
+      id: 'F12-list-admin',
+      route: 'GET /api/v1/teams/:teamId/repositories',
+      actor: 'admin',
+      params: { teamId: '@T1.id' },
+      expect: { status: 403 },
+    },
+    {
+      id: 'F12-unlink-admin',
+      route: 'DELETE /api/v1/teams/:teamId/repositories/:repoId/link',
+      actor: 'admin',
+      params: { teamId: '@T1.id', repoId: 3 },
+      expect: { status: 403 },
+    },
+    {
+      id: 'F12-remove-admin',
+      route: 'DELETE /api/v1/teams/:teamId/repositories/:repoId',
+      actor: 'admin',
+      params: { teamId: '@T1.id', repoId: 3 },
+      expect: { status: 403 },
+    },
   ],
 };

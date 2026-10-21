@@ -30,7 +30,7 @@ export interface TeamMember {
   isAdlcTrainer: boolean;
   /**
    * When this member acknowledged the access-mode disclosure. Returned
-   * verbatim only to the team owner and an app admin; `null` for every other
+   * verbatim only to the team owner; `null` for every other
    * caller, so a null here is "unknown" as often as it is
    * "not yet acknowledged".
    */

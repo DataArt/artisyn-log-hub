@@ -130,23 +130,12 @@ export const f11TeamMembers: ContractFamily = {
       },
     },
     {
-      // TeamOwnerOrAdminGuard: an admin may remove members of a team they do not own.
+      // TeamOwnerGuard: a non-owner admin cannot remove members (no admin bypass).
       id: 'F11-remove-admin',
       route: 'DELETE /api/v1/teams/:teamId/members/:userId',
       actor: 'admin',
       params: { teamId: '@T1.id', userId: '@member.id' },
-      expect: { status: 204 },
-      write: {
-        watch: ['team_members', 'invitations'],
-        delta: {
-          deleted: [
-            {
-              table: 'team_members',
-              where: 'team_id = @T1.id AND user_id = @member.id',
-            },
-          ],
-        },
-      },
+      expect: { status: 403 },
     },
     {
       id: 'F11-remove-member',

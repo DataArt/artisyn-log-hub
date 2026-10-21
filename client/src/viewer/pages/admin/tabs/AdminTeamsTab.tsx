@@ -7,6 +7,20 @@ import { useDebounce } from '../../../hooks/useDebounce';
 import { PageState } from '../../../components/PageState';
 import { DateTime } from '../../../components/DateTime';
 import { AdminDataTable } from '../AdminDataTable';
+import { Button } from '../../../ui/button';
+import { AdminSetTeamOwnerDialog } from './AdminSetTeamOwnerDialog';
+
+function SetOwnerButton({ team }: { team: AdminTeam }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Button size="sm" variant="outline" onClick={() => setOpen(true)}>
+        Set new owner
+      </Button>
+      <AdminSetTeamOwnerDialog team={team} open={open} onOpenChange={setOpen} />
+    </>
+  );
+}
 
 const columns: ColumnDef<AdminTeam, unknown>[] = [
   {
@@ -39,6 +53,13 @@ const columns: ColumnDef<AdminTeam, unknown>[] = [
     accessorKey: 'repoCount',
     header: 'Repos',
     enableGlobalFilter: false,
+  },
+  {
+    id: 'actions',
+    header: 'Actions',
+    enableGlobalFilter: false,
+    enableSorting: false,
+    cell: ({ row }) => <SetOwnerButton team={row.original} />,
   },
 ];
 

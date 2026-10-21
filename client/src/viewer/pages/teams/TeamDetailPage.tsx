@@ -37,7 +37,6 @@ export function TeamDetailPage() {
   });
 
   const isOwner = team?.ownerId === user?.id;
-  const isAdmin = user?.role === 'admin';
   const isMember = members.some((m: TeamMember) => m.userId === user?.id);
 
   if (!team) {
@@ -46,17 +45,10 @@ export function TeamDetailPage() {
     );
   }
 
-  const viewingAsAdmin = isAdmin && !isOwner && !isMember;
-
   return (
     <div className="flex flex-col h-full p-6 gap-6">
       <div className="flex items-center gap-3">
         <h1 className="text-xl font-semibold">{team.name}</h1>
-        {viewingAsAdmin && (
-          <span className="text-xs font-medium text-blue-600 dark:text-blue-400 border border-blue-400 rounded px-1.5 py-0.5">
-            Viewing as Admin
-          </span>
-        )}
       </div>
 
       <PageTabs
@@ -71,26 +63,17 @@ export function TeamDetailPage() {
             teamName={team.name}
             members={members}
             isOwner={isOwner}
-            isAdmin={isAdmin ?? false}
             isMember={isMember}
             accessMode={team.accessMode}
           />
         </PageTabsContent>
 
         <PageTabsContent value="repositories">
-          <TeamRepositoriesTab
-            teamId={teamId}
-            isOwner={isOwner}
-            isAdmin={isAdmin ?? false}
-          />
+          <TeamRepositoriesTab teamId={teamId} isOwner={isOwner} />
         </PageTabsContent>
 
         <PageTabsContent value="invitations">
-          <TeamInvitationsTab
-            teamId={teamId}
-            isOwner={isOwner}
-            isAdmin={isAdmin ?? false}
-          />
+          <TeamInvitationsTab teamId={teamId} isOwner={isOwner} />
         </PageTabsContent>
       </PageTabs>
     </div>

@@ -53,6 +53,7 @@ import type { HarnessUsageReportData } from '../models/harness-usage';
 import type {
   AdminRepo,
   AdminTeam,
+  AdminTeamMember,
   AdminUser,
   DataRetentionStats,
   ErrorLogEntry,
@@ -1342,7 +1343,7 @@ export interface ExportScopeSession {
 
 /**
  * Lists sessions in scope for the "Session Statistics Export" feature. Privileged —
- * only the repo's owner (personal view) or the team owner/an app admin (team view) may call
+ * only the repo's owner (personal view) or the team owner (team view) may call
  * this; the result bypasses the per-team access-mode restriction that the ordinary session-list
  * endpoint enforces, though it still excludes members who have not acknowledged the disclosure.
  */
@@ -1373,7 +1374,7 @@ export interface RecomputeAllSessionsResult {
  * Recomputes `session_file_stats` (scoped) and `session_stats` (unscoped) for every
  * session in this repo. Privileged — same authorization shape as
  * {@link fetchSessionsExportScope}: the repo's owner (personal view) or the team
- * owner/an app admin (team view).
+ * owner (team view).
  */
 export async function recomputeAllSessions(
   repoId: number,
@@ -1894,10 +1895,47 @@ export async function removeAdminRepo(repoId: number): Promise<void> {
   }
 }
 
+/** Deletes an orphan team link (no `repositories` row for its URL); 404 otherwise. */
+export async function removeAdminOrphanTeamRepo(
+  teamRepoId: number,
+): Promise<void> {
+  const res = await apiFetch(`/api/v1/admin/team-repos/${teamRepoId}`, {
+    method: 'DELETE',
+  });
+  if (!res.ok && res.status !== 204) {
+    const body = (await res.json().catch(() => ({}))) as { message?: string };
+    throw new ApiError(res.status, body.message ?? '');
+  }
+}
+
 export async function fetchAdminTeams(): Promise<AdminTeam[]> {
   const res = await apiFetch('/api/v1/admin/teams');
   if (!res.ok) throw new ApiError(res.status);
   return res.json() as Promise<AdminTeam[]>;
+}
+
+export async function fetchAdminTeamMembers(
+  teamId: number,
+): Promise<AdminTeamMember[]> {
+  const res = await apiFetch(`/api/v1/admin/teams/${teamId}/members`);
+  if (!res.ok) throw new ApiError(res.status);
+  return res.json() as Promise<AdminTeamMember[]>;
+}
+
+/** FR-8 "Set new owner" — the new owner must already be a team member (400 otherwise). */
+export async function setAdminTeamOwner(
+  teamId: number,
+  userId: number,
+): Promise<void> {
+  const res = await apiFetch(`/api/v1/admin/teams/${teamId}/owner`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ userId }),
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => ({}))) as { message?: string };
+    throw new ApiError(res.status, body.message ?? '');
+  }
 }
 
 export async function fetchAdminUsers(): Promise<AdminUser[]> {

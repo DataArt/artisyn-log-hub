@@ -89,8 +89,8 @@ Count by priority: P0 = REPO-01, 03, 05, 07, 09, 11, 12, SESS-06, 07, 08, 09, 10
   1. As `owner` open `/#/main`: "Select an item from the left panel" is visible.
   2. In the left panel expand the "My Repos" section: check the 3 rows (A, B, C), collapse and expand.
   3. Expand `Team-X`: the repositories load on expand (the request `GET /teams/:id/repositories` is not sent while the team is collapsed). A and D are visible.
-  4. Click A in "My Repos": the URL becomes `#/repos/<A>`, the header shows the repo URL, "3 sessions", "1 user", the "Private repo view" badge; row A is highlighted.
-  5. Click A inside `Team-X`: URL `#/teams/<tid>/repos/<A>`, no "Private repo view" badge, the row is highlighted in the team.
+  4. Click A in "My Repos": the URL becomes `#/repos/<A>`, the header shows the repo URL, "3 sessions", "1 user" (no "Private repo view" badge — removed by 2026-10-21-private-repo-visibility); row A is highlighted.
+  5. Click A inside `Team-X`: URL `#/teams/<tid>/repos/<A>`, the row is highlighted in the team.
   6. Click B: the session list and the selection are reset (the selected session of A does not stay).
   7. Type `#/repos/999999999` by hand: a page with the "not found / no access" state, the left panel stays alive.
   8. As `regular` open `#/teams/<tid>/repos/<A>`: they see the session list according to the team mode (details in S-SLIFE-10); this repo is not in their "My Repos".
@@ -429,8 +429,8 @@ Count by priority: P0 = REPO-01, 03, 05, 07, 09, 11, 12, SESS-06, 07, 08, 09, 10
   3. `POST /api/v1/logs?sessionId=S2&type=claude` with the same API key (a repeated upload): the response is 2xx, but the data does not come back (S2 is still not in the list, there are no new `logs` rows).
   4. `DELETE /api/v1/sessions/<S2>` once more → 404; a non-existent id → 404; without a cookie → 401.
   5. As `nonowner` (has access to the URL, but is not the session owner): `DELETE /sessions/<S1>` → 403; the "Remove" button is not shown in the UI on `#/repos/<A>` (if there is access at all).
-  6. As `owner` (admin): `DELETE /sessions/<S1>` → 204; S1 is gone for `regular`.
-- **Check:** the dialog text, the disappearance from the list and the counters, 404 on the logs, a repeated upload does not resurrect, 403 for an outsider, admin can.
+  6. As an admin who is not the session owner: `DELETE /sessions/<S1>` → 403; S1 stays for `regular` (the admin role grants no data access — 2026-10-21-private-repo-visibility).
+- **Check:** the dialog text, the disappearance from the list and the counters, 404 on the logs, a repeated upload does not resurrect, 403 for an outsider and for an admin (deleting is owner-only).
 - **Replaces:** `server/test/session-delete.e2e-spec.ts` (6 of 12: owner, admin, 403, 404, 404 repeated, re-upload, 401, "no longer appears in list"; the other 4 are in S-SLIFE-07); it closes the gap "no e2e of deletion from the UI".
 - **What we lose:** nothing.
 

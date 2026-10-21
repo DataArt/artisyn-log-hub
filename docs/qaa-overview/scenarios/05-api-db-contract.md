@@ -21,8 +21,8 @@ Auth legend:
 - **A** = `SessionAuthGuard + AdminGuard` (role `admin`);
 - **K** = `ApiKeyAuthGuard` (header `X-API-Key`, key from `api_keys`, argon2 check by `slug`);
 - **P** = public;
-- **TA** = `TeamAccessGuard` (404 if the team does not exist; admin always passes; otherwise a row in `team_members` is needed; otherwise 403);
-- **TO** = `TeamOwnerGuard` (owner, WITHOUT an admin bypass per the KB); **TOA** = owner or admin;
+- **TA** = `TeamAccessGuard` (404 if the team does not exist; a row in `team_members` is needed — no admin bypass; otherwise 403);
+- **TO** = `TeamOwnerGuard` (owner, WITHOUT an admin bypass); **TOA** = the former `TeamOwnerOrAdminGuard`, deleted by 2026-10-21-private-repo-visibility — its routes are TO now;
 - **AM(...)** = `AuthModeGuard`: in an inactive mode the route returns 404.
 - "scope" (for repositories) = `assertRepoAccess`: the repository owner, or a log author, or a team member with `?teamId=` subject to the team's `access_mode` **(inference from reading `repositories.service.ts`; the details of the access rules are in the access-management test)**.
 
@@ -145,7 +145,7 @@ Auth: A. Tables `upload_queue`, `upload_queue_measurements`, files of the stagin
 | GET /api/v1/admin/upload-queue/stats | R a CTE over `upload_queue_measurements` | 15-minute windows: throughput/utilization/latency. The fixture inserts measurements with fixed `now()-interval`; the expected values are computed with our own SQL (`count`, `avg`, `percentile`) |
 | DELETE /api/v1/admin/upload-queue/failed | W DELETE `status='failed'` | only `pending/processing` remain; the number deleted == `count` before |
 | POST /api/v1/admin/upload-queue/reprocess-failed | W UPDATE `failed -> pending`, `error_message=NULL` | delta: exactly the failed rows changed status |
-| GET /api/v1/admin/upload-queue/:id/file | R `upload_queue` + a file on disk | 200 and the bytes == the content of the staged file; 404 if there is no row or file. It reads a FILE, not only the DB |
+| GET /api/v1/admin/upload-queue/:id/file | R `upload_queue` + a file on disk | 200 and the bytes == the content of the staged file; 404 if there is no row or file. It reads a FILE, not only the DB. Debugging data, outside the privacy boundary of the access model |
 
 The background worker (`UploadQueueSchedulerService`, interval 50 ms in the harness) competes with the fixture: `pending` rows will be consumed. The fixture inserts only `failed`/`partially_uploaded`, or the test pauses the worker first (open question 6).
 
