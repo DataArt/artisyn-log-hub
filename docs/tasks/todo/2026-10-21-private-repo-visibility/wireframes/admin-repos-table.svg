@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="640" viewBox="0 0 1440 640" font-family="Segoe UI, system-ui, sans-serif">
+  <rect width="1440" height="640" fill="#ffffff"/>
+  <rect x="0" y="0" width="1440" height="48" fill="#fafafa"/>
+  <line x1="0" y1="48" x2="1440" y2="48" stroke="#e5e5e5"/>
+  <circle cx="24" cy="24" r="8" fill="#3b4bd8"/>
+  <text x="44" y="29" font-size="14" font-weight="600" fill="#111">[local] Artisyn Log Hub</text>
+  <text x="1205" y="29" font-size="13" fill="#666" text-anchor="end">admin@example.com</text>
+  <text x="1349" y="29" font-size="13" font-weight="600" fill="#111">Edit email</text>
+
+  <!-- collapsed sidebar stub -->
+  <rect x="0" y="49" width="64" height="591" fill="#ffffff"/>
+  <line x1="65" y1="49" x2="65" y2="640" stroke="#e5e5e5" stroke-width="4"/>
+  <text x="16" y="80" font-size="11" fill="#aaa">nav</text>
+
+  <!-- tabs -->
+  <g font-size="14" fill="#444">
+    <text x="96" y="72">System Info</text>
+    <text x="193" y="72" font-weight="600" fill="#111">Repos</text>
+    <text x="254" y="72">Teams</text>
+    <text x="316" y="72">Users</text>
+    <text x="372" y="72">Error Logs</text>
+    <text x="459" y="72">Upload Queue</text>
+    <text x="573" y="72">Data Retention</text>
+    <text x="690" y="72">Auth</text>
+    <text x="743" y="72">Model Pricing</text>
+  </g>
+  <rect x="186" y="83" width="54" height="2" fill="#111"/>
+  <line x1="66" y1="86" x2="1440" y2="86" stroke="#e5e5e5"/>
+
+  <rect x="86" y="110" width="255" height="34" rx="6" fill="#fff" stroke="#e5e5e5"/>
+  <text x="98" y="132" font-size="13" fill="#999">Filter by repository URL...</text>
+
+  <!-- table header -->
+  <g font-size="13" font-weight="600" fill="#111">
+    <text x="94" y="185">Repository ↑</text>
+    <text x="440" y="185">Owner</text>
+    <text x="640" y="185">Team</text>
+    <text x="760" y="185">Sessions</text>
+    <text x="840" y="185">Raw Uploads</text>
+    <text x="945" y="185">Log Size</text>
+    <text x="1025" y="185">Max Upload</text>
+    <text x="1115" y="185">Last Session</text>
+    <text x="1225" y="185">First Seen</text>
+    <text x="1325" y="185">Actions</text>
+  </g>
+  <line x1="86" y1="201" x2="1420" y2="201" stroke="#111"/>
+
+  <g font-size="13" fill="#333">
+    <!-- row 1: another user's private repo -->
+    <text x="94" y="230">https://github.com/acme/billing</text>
+    <text x="440" y="230">alice@example.com</text>
+    <text x="640" y="230">—</text>
+    <text x="760" y="230">84</text><text x="840" y="230">96</text><text x="945" y="230">7.6 MB</text>
+    <text x="1025" y="230">3.3 MB</text><text x="1115" y="230">2026-10-19</text><text x="1225" y="230">2026-08-02</text>
+    <text x="1325" y="230" fill="#dc2626">Delete ?</text>
+    <line x1="86" y1="249" x2="1420" y2="249" stroke="#e5e5e5"/>
+    <!-- row 2: team repo -->
+    <text x="94" y="279">https://github.com/acme/web-app</text>
+    <text x="440" y="279">bob@example.com</text>
+    <text x="640" y="279">Platform Team</text>
+    <text x="760" y="279">146</text><text x="840" y="279">258</text><text x="945" y="279">24.0 MB</text>
+    <text x="1025" y="279">3.6 MB</text><text x="1115" y="279">2026-10-20</text><text x="1225" y="279">2026-06-11</text>
+    <text x="1325" y="279" fill="#dc2626">Delete ?</text>
+    <line x1="86" y1="298" x2="1420" y2="298" stroke="#e5e5e5"/>
+    <!-- row 3: admin's own repo -->
+    <text x="94" y="328">https://github.com/acme/admin-tools</text>
+    <text x="440" y="328">admin@example.com</text>
+    <text x="640" y="328">—</text>
+    <text x="760" y="328">32</text><text x="840" y="328">33</text><text x="945" y="328">1.2 MB</text>
+    <text x="1025" y="328">2.7 MB</text><text x="1115" y="328">2026-10-18</text><text x="1225" y="328">2026-09-01</text>
+    <text x="1325" y="328" fill="#dc2626">Delete</text>
+    <line x1="86" y1="347" x2="1420" y2="347" stroke="#e5e5e5"/>
+  </g>
+  <!-- zero-sessions row keeps existing orange highlight -->
+  <rect x="87" y="348" width="1333" height="48" fill="#fff7ed"/>
+  <line x1="87" y1="348" x2="87" y2="396" stroke="#f97316" stroke-width="2"/>
+  <g font-size="13" fill="#333">
+    <text x="94" y="377">https://github.com/acme/sandbox</text>
+    <text x="440" y="377">carol@example.com</text>
+    <text x="640" y="377">—</text>
+    <text x="760" y="377">0</text><text x="840" y="377">0</text><text x="945" y="377">0 B</text>
+    <text x="1025" y="377">59.4 KB</text><text x="1115" y="377">—</text><text x="1225" y="377">2026-10-01</text>
+    <text x="1325" y="377" fill="#dc2626">Delete ?</text>
+  </g>
+
+  <!-- annotations -->
+  <rect x="86" y="430" width="560" height="170" rx="6" fill="#f5f3ff" stroke="#7c3aed"/>
+  <text x="102" y="454" font-size="12" font-weight="600" fill="#5b21b6">Repos tab = existence + aggregates only (FR-1, FR-3, AC-3, AC-7)</text>
+  <text x="102" y="476" font-size="12" fill="#5b21b6">• Rows are plain text: no link, no row click, no hover affordance into</text>
+  <text x="114" y="494" font-size="12" fill="#5b21b6">#/repos/&lt;id&gt; or #/teams/&lt;id&gt;/repos/&lt;id&gt;.</text>
+  <text x="102" y="514" font-size="12" fill="#5b21b6">• Columns are metadata and numeric aggregates only (counts, sizes,</text>
+  <text x="114" y="532" font-size="12" fill="#5b21b6">dates). No prompt, transcript or session text anywhere on the tab.</text>
+  <text x="102" y="552" font-size="12" fill="#5b21b6">• Other users' private repos appear here and nowhere else in the</text>
+  <text x="114" y="570" font-size="12" fill="#5b21b6">admin's UI.</text>
+
+  <rect x="676" y="430" width="560" height="130" rx="6" fill="#fffbeb" stroke="#d97706"/>
+  <text x="692" y="454" font-size="12" font-weight="600" fill="#92400e">Open questions (see requirements)</text>
+  <text x="692" y="476" font-size="12" fill="#92400e">• "Delete ?" — keep the Delete action for other users' repos?</text>
+  <text x="692" y="496" font-size="12" fill="#92400e">• Which rows are listed and which metadata columns stay?</text>
+  <text x="692" y="516" font-size="12" fill="#92400e">• Team column: what to show when the URL is linked by a team</text>
+  <text x="704" y="534" font-size="12" fill="#92400e">its owner is not on; "—" = private (no team_repositories match).</text>
+</svg>

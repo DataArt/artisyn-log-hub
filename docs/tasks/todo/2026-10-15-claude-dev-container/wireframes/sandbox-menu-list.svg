@@ -1,0 +1,87 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="867.1999999999999" height="636" viewBox="0 0 867.1999999999999 636" font-family="Consolas, 'DejaVu Sans Mono', Menlo, monospace" font-size="13">
+<title>claude-docker menu — sandbox list</title>
+<rect x="0" y="0" width="867.1999999999999" height="636" fill="#f6f7f9"/>
+<rect x="8" y="8" width="851.1999999999999" height="442" rx="8" fill="#ffffff" stroke="#c9ced6"/>
+<path d="M8 16 a8 8 0 0 1 8 -8 h835.1999999999999 a8 8 0 0 1 8 8 v16 h-851.1999999999999 z" fill="#eceff3"/>
+<line x1="8" y1="32" x2="859.1999999999999" y2="32" stroke="#c9ced6"/>
+<circle cx="26" cy="20" r="5" fill="#ff5f57"/>
+<circle cx="44" cy="20" r="5" fill="#febc2e"/>
+<circle cx="62" cy="20" r="5" fill="#28c840"/>
+<text x="433.59999999999997" y="24" text-anchor="middle" font-family="Segoe UI, Arial, sans-serif" font-size="12" fill="#57606a">Terminal — scripts/claude-docker.ps1</text>
+<text x="35.8" y="59" fill="#8e24aa" font-weight="bold" xml:space="preserve">✻ Claude sandboxes</text>
+<text x="191.8" y="59" fill="#8a8f98" xml:space="preserve">Artisyn-LogHub · 6 sandboxes · stale &gt; 7 d</text>
+<line x1="28" y1="73" x2="839.2" y2="73" stroke="#c9ced6"/>
+<text x="51.4" y="95" fill="#8a8f98" xml:space="preserve">NAME / BRANCH</text>
+<text x="277.6" y="95" fill="#8a8f98" xml:space="preserve">STATE</text>
+<text x="371.2" y="95" fill="#8a8f98" xml:space="preserve">SESS</text>
+<text x="418.0" y="95" fill="#8a8f98" xml:space="preserve">LAST ACTIVE</text>
+<text x="519.4" y="95" fill="#8a8f98" xml:space="preserve">PENDING WORK</text>
+<rect x="28" y="100" width="811.2" height="18" fill="#e6f4f5"/>
+<text x="35.8" y="113" fill="#00838f" font-weight="bold" xml:space="preserve">❯</text>
+<text x="51.4" y="113" fill="#00838f" font-weight="bold" xml:space="preserve">r1-claude-dev-container</text>
+<text x="277.6" y="113" fill="#2e7d32" xml:space="preserve">● running</text>
+<text x="371.2" y="113" fill="#1f2328" xml:space="preserve">1</text>
+<text x="418.0" y="113" fill="#1f2328" xml:space="preserve">2 min ago</text>
+<text x="519.4" y="113" fill="#00838f" xml:space="preserve">3 files</text>
+<text x="51.4" y="131" fill="#1f2328" xml:space="preserve">r2-sysctx-review</text>
+<text x="277.6" y="131" fill="#8a8f98" xml:space="preserve">○ stopped</text>
+<text x="371.2" y="131" fill="#1f2328" xml:space="preserve"></text>
+<text x="418.0" y="131" fill="#1f2328" xml:space="preserve">5 h ago</text>
+<text x="519.4" y="131" fill="#00838f" xml:space="preserve">1 file</text>
+<text x="51.4" y="149" fill="#1f2328" xml:space="preserve">r3-otel-port</text>
+<text x="277.6" y="149" fill="#8a8f98" xml:space="preserve">○ stopped</text>
+<text x="371.2" y="149" fill="#1f2328" xml:space="preserve"></text>
+<text x="418.0" y="149" fill="#1f2328" xml:space="preserve">2 d ago</text>
+<text x="519.4" y="149" fill="#8a8f98" xml:space="preserve">—</text>
+<text x="51.4" y="167" fill="#1f2328" xml:space="preserve">r4-old-review</text>
+<text x="277.6" y="167" fill="#8a8f98" xml:space="preserve">○ stopped</text>
+<text x="371.2" y="167" fill="#1f2328" xml:space="preserve"></text>
+<text x="418.0" y="167" fill="#b26a00" xml:space="preserve">⚠ 9 d ago</text>
+<text x="519.4" y="167" fill="#8a8f98" xml:space="preserve">—</text>
+<text x="51.4" y="185" fill="#1f2328" xml:space="preserve">r5-forgotten-spike</text>
+<text x="277.6" y="185" fill="#8a8f98" xml:space="preserve">○ stopped</text>
+<text x="371.2" y="185" fill="#1f2328" xml:space="preserve"></text>
+<text x="418.0" y="185" fill="#b26a00" xml:space="preserve">⚠ 23 d ago</text>
+<text x="519.4" y="185" fill="#00838f" xml:space="preserve">4 files, 2 commits</text>
+<text x="51.4" y="203" fill="#1f2328" xml:space="preserve">r6-merged-review</text>
+<text x="277.6" y="203" fill="#8a8f98" xml:space="preserve">○ stopped</text>
+<text x="371.2" y="203" fill="#1f2328" xml:space="preserve"></text>
+<text x="418.0" y="203" fill="#b26a00" xml:space="preserve">⚠ 12 d ago</text>
+<text x="519.4" y="203" fill="#2e7d32" xml:space="preserve">merged</text>
+<text x="51.4" y="221" fill="#8a8f98" xml:space="preserve">+ New sandbox</text>
+<line x1="28" y1="235" x2="839.2" y2="235" stroke="#c9ced6"/>
+<text x="35.8" y="257" fill="#1f2328" font-weight="bold" xml:space="preserve">r1-claude-dev-container</text>
+<text x="230.8" y="257" fill="#8a8f98" xml:space="preserve">branch r1-claude-dev-container ← main · container log-hub-dev-r1-claude-dev-container</text>
+<text x="35.8" y="275" fill="#8a8f98" xml:space="preserve">worktree &lt;repo-parent&gt;\&lt;repo-name&gt;-worktrees\r1-claude-dev-container</text>
+<text x="35.8" y="311" fill="#b26a00" xml:space="preserve">⚠ 3 sandbox(es) idle &gt; 7 d: r4-old-review, r5-forgotten-spike, r6-merged-review</text>
+<text x="51.4" y="329" fill="#8a8f98" xml:space="preserve">clean up:</text>
+<text x="129.4" y="329" fill="#1f2328" xml:space="preserve">scripts/claude-docker.ps1 --prune --older-than 7d</text>
+<text x="542.8" y="329" fill="#8a8f98" xml:space="preserve">(or press P)</text>
+<line x1="28" y1="397" x2="839.2" y2="397" stroke="#c9ced6"/>
+<text x="35.8" y="419" fill="#1f2328" font-weight="bold" xml:space="preserve">↑↓</text>
+<text x="59.2" y="419" fill="#8a8f98" xml:space="preserve">select</text>
+<text x="121.6" y="419" fill="#1f2328" font-weight="bold" xml:space="preserve">Enter</text>
+<text x="168.4" y="419" fill="#8a8f98" xml:space="preserve">continue</text>
+<text x="246.4" y="419" fill="#1f2328" font-weight="bold" xml:space="preserve">R</text>
+<text x="262.0" y="419" fill="#8a8f98" xml:space="preserve">resume…</text>
+<text x="332.2" y="419" fill="#1f2328" font-weight="bold" xml:space="preserve">S</text>
+<text x="347.8" y="419" fill="#8a8f98" xml:space="preserve">shell</text>
+<text x="402.4" y="419" fill="#1f2328" font-weight="bold" xml:space="preserve">T</text>
+<text x="418.0" y="419" fill="#8a8f98" xml:space="preserve">stop</text>
+<text x="464.8" y="419" fill="#1f2328" font-weight="bold" xml:space="preserve">M</text>
+<text x="480.4" y="419" fill="#8a8f98" xml:space="preserve">merge</text>
+<text x="535.0" y="419" fill="#1f2328" font-weight="bold" xml:space="preserve">D</text>
+<text x="550.6" y="419" fill="#8a8f98" xml:space="preserve">remove</text>
+<text x="613.0" y="419" fill="#1f2328" font-weight="bold" xml:space="preserve">P</text>
+<text x="628.6" y="419" fill="#8a8f98" xml:space="preserve">prune</text>
+<text x="683.2" y="419" fill="#1f2328" font-weight="bold" xml:space="preserve">Q</text>
+<text x="698.8" y="419" fill="#8a8f98" xml:space="preserve">quit</text>
+<rect x="8" y="466" width="851.1999999999999" height="162" rx="6" fill="#fffbe6" stroke="#e3c96b"/>
+<text x="24" y="488" font-family="Segoe UI, Arial, sans-serif" font-size="13" font-weight="bold" fill="#5c4b00">Notes</text>
+<text x="24" y="510" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#3d3a2e" xml:space="preserve">• `claude-docker` with no arguments opens this full-screen menu (alternate screen); without a TTY it prints a hint and exits 1.</text>
+<text x="24" y="530" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#3d3a2e" xml:space="preserve">• Columns come from `--list` (FR-E6); rows idle longer than the threshold get an amber ⚠ on LAST ACTIVE and the reminder below (FR-E4).</text>
+<text x="24" y="550" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#3d3a2e" xml:space="preserve">• The detail block shows the selected sandbox: branch ← base branch, container name, worktree path.</text>
+<text x="24" y="570" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#3d3a2e" xml:space="preserve">• Enter = continue (claude --continue), R = Claude session picker (--resume); both leave the menu and hand the terminal to</text>
+<text x="24" y="590" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#3d3a2e" xml:space="preserve">   docker exec -it … claude; when Claude exits the user is back in the shell, not in the menu.</text>
+<text x="24" y="610" font-family="Segoe UI, Arial, sans-serif" font-size="12.5" fill="#3d3a2e" xml:space="preserve">• On the "+ New sandbox" row the footer shrinks to: ↑↓ select · Enter create · P prune · Q quit. Esc / Q / Ctrl+C leave without changes.</text>
+</svg>

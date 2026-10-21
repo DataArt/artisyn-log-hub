@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="540" viewBox="0 0 1100 540" font-family="Segoe UI, system-ui, sans-serif">
+  <rect width="1100" height="540" fill="#ffffff"/>
+  <rect width="620" height="540" fill="#000" opacity="0.25"/>
+  <!-- dialog -->
+  <rect x="30" y="40" width="560" height="460" rx="10" fill="#ffffff" stroke="#e5e5e5"/>
+  <text x="54" y="80" font-size="18" font-weight="600" fill="#111">Before you join Platform Team</text>
+  <rect x="330" y="64" width="78" height="22" rx="6" fill="#d97706"/>
+  <text x="341" y="79" font-size="12" font-weight="600" fill="#fff">Restricted</text>
+  <text x="54" y="108" font-size="13" fill="#666">Your sessions stay visible to you at all times.</text>
+
+  <g font-size="13" fill="#111">
+    <circle cx="64" cy="140" r="2.5" fill="#111"/>
+    <rect x="72" y="124" width="500" height="44" rx="4" fill="#ecfdf5" stroke="#16a34a"/>
+    <text x="80" y="144">The team owner can read all of your sessions, including your</text>
+    <text x="80" y="160">prompts.</text>
+    <circle cx="64" cy="190" r="2.5" fill="#111"/>
+    <text x="74" y="194">Any member holding the ADLC trainer role can read all of your</text>
+    <text x="74" y="210">sessions, including your prompts — now and for everything you</text>
+    <text x="74" y="226">have already written.</text>
+    <circle cx="64" cy="252" r="2.5" fill="#111"/>
+    <text x="74" y="256">A member holding the manager role sees your sessions and their</text>
+    <text x="74" y="272">statistics, but never your prompt text.</text>
+    <circle cx="64" cy="298" r="2.5" fill="#111"/>
+    <text x="74" y="302">No other team member sees your sessions at all.</text>
+    <circle cx="64" cy="328" r="2.5" fill="#111"/>
+    <rect x="72" y="312" width="500" height="44" rx="4" fill="#ecfdf5" stroke="#16a34a"/>
+    <text x="80" y="332">Application administrators get no access through their admin</text>
+    <text x="80" y="348">role — only through a role they hold in this team.</text>
+  </g>
+
+  <rect x="54" y="378" width="13" height="13" rx="2" fill="#fff" stroke="#999"/>
+  <text x="76" y="389" font-size="13" fill="#111">I have read and understood who can see my prompts in this team</text>
+
+  <rect x="390" y="440" width="80" height="36" rx="6" fill="#fff" stroke="#d4d4d4"/>
+  <text x="408" y="463" font-size="13" fill="#111">Cancel</text>
+  <rect x="480" y="440" width="90" height="36" rx="6" fill="#18181b" opacity="0.5"/>
+  <text x="496" y="463" font-size="13" fill="#fff">Join team</text>
+
+  <!-- annotations -->
+  <rect x="640" y="60" width="440" height="200" rx="6" fill="#f5f3ff" stroke="#7c3aed"/>
+  <text x="656" y="84" font-size="12" font-weight="600" fill="#5b21b6">TeamDisclosureModal, restricted mode (FR-7, AC-8)</text>
+  <text x="656" y="106" font-size="12" fill="#5b21b6">Green = changed copy in DISCLOSURE_RESTRICTED_BULLETS</text>
+  <text x="656" y="124" font-size="12" fill="#5b21b6">(client/src/viewer/lib/access-mode-copy.ts).</text>
+  <text x="656" y="148" font-size="12" fill="#5b21b6">Bullet 1 no longer says "and application administrators".</text>
+  <text x="656" y="170" font-size="12" fill="#5b21b6">Optional new last bullet states the admin rule explicitly,</text>
+  <text x="656" y="188" font-size="12" fill="#5b21b6">matching Help → Data Collection Notice.</text>
+  <text x="656" y="212" font-size="12" fill="#5b21b6">Wording is illustrative; layout, checkbox and buttons</text>
+  <text x="656" y="230" font-size="12" fill="#5b21b6">are unchanged. Transparent-mode bullets need no change.</text>
+
+  <rect x="640" y="284" width="440" height="108" rx="6" fill="#fffbeb" stroke="#d97706"/>
+  <text x="656" y="308" font-size="12" font-weight="600" fill="#92400e">Same model must appear in</text>
+  <text x="656" y="328" font-size="12" fill="#92400e">Help → Data Collection Notice, other consent / notice texts,</text>
+  <text x="656" y="346" font-size="12" fill="#92400e">installer / README texts and the access-model KB articles.</text>
+  <text x="656" y="368" font-size="12" fill="#92400e">Auth mode "none" wording: see Open Questions.</text>
+</svg>
