@@ -16,8 +16,8 @@ to see how the agent's work looks; a stopped sandbox is brought back for viewing
 
 The work has these parts:
 
-- **A. Local infrastructure:** a checked-in compose file with the shared Postgres server (data on a
-  persistent named Docker volume) and a Mailpit for host use.
+- **A. Local infrastructure:** the existing host compose file, unchanged except for a fixed container
+  name, network name and `max_connections`, so sandboxes can share its Postgres server.
 - **W. Sandbox:** worktree, database, in-container dev stack, host ports and lifecycle per sandbox.
 - **B. Dev image and launcher:** a Linux image with Node/npm, bun, Claude Code, Chrome, Playwright and
   Mailpit; OS-dependent directories on container volumes; the host TEMP directory mounted for pasted
@@ -98,30 +98,20 @@ PoC acceptance criteria:
 
 ### A. Infrastructure
 
-- FR-A1. Compose file `local-run/docker-compose.yml` (checked-in) with `postgres` and `mailpit`;
-  fixed `container_name`/`hostname` (`log-hub-postgres`, `log-hub-mailpit`) and network name, so that
-  sandbox containers connect by name. Replaces `server/artisyn-log-run-local/docker-compose.yml`:
-  the old compose and its data directory are deleted together with the database, references to them
-  are updated.
-- FR-A2. `postgres:18.4`, data in an external named volume `log-hub-pgdata` (`external: true`, so
-  `docker compose down -v` does not delete it), mounted at `/var/lib/postgresql` with the image's
-  default `PGDATA` (postgres 18 refuses a mount at the old `/var/lib/postgresql/data`); the volume is
-  created by an idempotent `docker volume create`. Not a bind mount: a Windows bind mount does not
-  honor fsync and lists a changing directory inconsistently, so after a power loss the cluster may
-  fail WAL recovery (`could not create file …: File exists`). The DB is created from scratch, the
-  schema is applied by the server migrations on startup.
-- FR-A3. Host-side ports and credentials are unchanged: `5432` (`a-log`, `postgres`/`pw`), Mailpit
-  `1025`/`8025`; published only on `127.0.0.1`. The host `server/.env`, `.mcp.json`, jest and
-  scenarios work without changes.
-- FR-A4. healthcheck (`pg_isready`), `restart: unless-stopped`, `stop_grace_period` (e.g. `2m`, so
-  Postgres can shut down cleanly); `max_connections` sized for several sandboxes running test suites
-  in parallel.
-- FR-A5. `local-run/` is the only local infra stack: `tests/scenarios/docker-compose.yml` is deleted,
-  and on the host scenarios, corpus and contract use `log-hub-postgres` and `log-hub-mailpit`. Every
-  reference to the deleted compose is updated: `CLAUDE.md`, `repo-health-checks.json →
-  environmentNotes`, `docs/knowledgebase/test/scenarios.md`, `tests/scenarios/README.md`,
-  `tests/corpus/README.md`, `tests/scenarios/helpers/mailpit.ts`, `scripts/scenarios/preflight.mjs`,
-  `scripts/corpus/bootstrap.js`.
+- FR-A1. **The host workflow does not change (user decision).** `server/artisyn-log-run-local/docker-compose.yml`
+  stays where it is and keeps its service `db`, image, env, `PGDATA`, the `./data` bind mount and
+  the data in it. The developer still runs `docker compose up -d` there and then the server and
+  client on the host, with no knowledge of sandboxes.
+- FR-A2. The only changes to that file are additive/cosmetic, so sandbox containers can reach the DB
+  by name: `container_name`/`hostname` `log-hub-postgres`, a fixed network name `log-hub-net`, and
+  `command: postgres -c max_connections=300` (several sandboxes running test suites in parallel).
+  Recreating the container with these changes keeps the data (same bind mount).
+- FR-A3. Host-side ports and credentials are unchanged: `127.0.0.1:5432` (`a-log`, `postgres`/`pw`).
+  The host `server/.env`, `.mcp.json`, jest and scenarios work without changes.
+- FR-A4. The launcher waits for the DB with `docker exec log-hub-postgres pg_isready` (the compose
+  gets no healthcheck).
+- FR-A5. `tests/scenarios/docker-compose.yml` and its references are not changed. Sandboxes do not
+  need a host Mailpit (each runs its own, FR-W5).
 
 ### W. Sandbox
 
@@ -289,7 +279,7 @@ PoC acceptance criteria:
   `GIT_CONFIG_VALUE_n` env vars set by the launcher (needed to override repo-level keys such as
   `core.ignorecase = true` in the shared `.git/config`). Nothing is ever written to the shared
   `.git/config`.
-- FR-B9. Everything in `docker-dev/`, `local-run/` and the launch script is checked-in, with no
+- FR-B9. Everything in `docker-dev/`, the host compose file and the launch script is checked-in, with no
   developer machine paths (they are taken from the environment).
 - FR-B10. **Build isolation**: `npm run build` in a sandbox must not disrupt its own backend running in
   watch mode (the build rewrites `server/src/public/static/*`, which the watch backend reloads on).
@@ -394,12 +384,10 @@ PoC acceptance criteria:
 - FR-D1. `.gitignore`: `docker-dev/claude-home/`.
 - FR-D2. KB article `docs/knowledgebase/docker-dev-container.md` (sandbox model, launcher commands,
   what is mounted, ports, volumes, DB per sandbox, limitations) + a line in `index.md`; references in
-  `CLAUDE.md`/`README.md` to the new compose and the launcher.
+  `CLAUDE.md`/`README.md` to the launcher.
 - FR-D3. `CLAUDE.md` and `repo-health-checks.json → environmentNotes` say Claude starts the server and
   client itself when needed on the host; in a sandbox they are already running (FR-B7).
-- FR-D4. After the DB is recreated, the user wipes the working directories (old DB data,
-  `.artisyn/ai_work_dir/`, etc.) and reinstalls the hook (new API key) themselves; this is out of the
-  task scope; the old state does not need to be migrated or preserved.
+- FR-D4. The host DB and its data are kept (FR-A1); no migration or reinstall is needed on the host.
 
 ## Non-Functional Requirements
 
@@ -412,8 +400,7 @@ PoC acceptance criteria:
 
 ## Acceptance Criteria
 
-- [ ] `claude-docker a` from scratch brings up `log-hub-postgres` (data in `log-hub-pgdata`) and
-  `log-hub-mailpit`, builds the image, creates worktree + branch `a` and DB `log_hub_a`, starts the
+- [ ] `claude-docker a` from scratch brings up `log-hub-postgres` (the host compose), builds the image, creates worktree + branch `a` and DB `log_hub_a`, starts the
   in-container backend, client and Mailpit and opens Claude; the printed URL opens the sandbox UI
   from the host; a second console is a second session in the same sandbox.
 - [ ] Sandboxes `a`, `b` and `c` run in parallel with different host ports, branches and DBs; a change
@@ -433,10 +420,9 @@ PoC acceptance criteria:
   the container, volumes and worktree, keeps branch `a`; on uncommitted changes without `--force`
   it exits non-zero and removes nothing; with a live `claude` session it refuses without `--force`;
   re-running an interrupted `--remove a` completes it.
-- [ ] On the host, with only `local-run/docker-compose.yml` up: the host dev server starts on
-  `a-log`, `npm run test:contract` and `npm run test:scenarios -- --mode b` pass, the host postgres
-  MCP returns `a-log`, and no file references `server/artisyn-log-run-local` or
-  `tests/scenarios/docker-compose.yml`.
+- [ ] On the host, after only `docker compose up -d` in `server/artisyn-log-run-local/`: the host dev
+  server starts on `a-log`, `npm run test:contract` and `npm run test:scenarios -- --mode b` pass, the
+  host postgres MCP returns `a-log` with the data that was there before the change.
 - [ ] The menu highlights stale sandboxes, and each of its keys gives the same result as its flag.
 - [ ] In a fresh sandbox the `typescript-lsp` LSP tool answers a go-to-definition query on a `.ts`
   file.
@@ -448,10 +434,8 @@ PoC acceptance criteria:
   kept one was kept; with `--force` it also removes the ones with work but keeps their branches;
   `--include-running` also takes a running sandbox with no `claude` process, never one with a
   live session.
-- [ ] The old `server/artisyn-log-run-local/docker-compose.yml` and `tests/scenarios/docker-compose.yml`
-  are deleted; the cluster is still in `log-hub-pgdata` after `docker compose down -v && up -d`.
-- [ ] `log-hub-postgres` reports healthy; `docker compose stop` logs `database system is shut down`
-  without a forced kill.
+- [ ] The host compose differs from before only by `container_name`/`hostname`, the network name and
+  `max_connections`; `show max_connections` returns `300`.
 - [ ] In a sandbox the fast set and the full set (`contract`, `scenarios-a/b/c`, `e2e-fast`,
   `e2e-full`) pass; `npm run build` passes and does not drop the running watch backend mid-suite.
 - [ ] An image pasted with Ctrl+V is readable by Claude in the sandbox through `/host-tmp`.
@@ -470,7 +454,7 @@ PoC acceptance criteria:
 - [ ] The main checkout's working tree and `node_modules` are untouched by sandbox work; the host
   `git status` shows no false changes and no `docker-dev/claude-home/`; a commit made in a sandbox
   has the host author and LF line endings.
-- [ ] `docker-dev/`, `local-run/` and the launch script contain no developer machine paths or user
+- [ ] `docker-dev/`, the host compose file and the launch script contain no developer machine paths or user
   names.
 - [ ] A session from sandbox `a` is visible, with logs, cost and OTEL data, in `a`'s own UI after
   identifying with the host git email from the host browser; it is absent from the host Log Hub
@@ -488,9 +472,9 @@ PoC acceptance criteria:
 
 ## Common sense considerations
 
-- `log-hub-pgdata` is mounted at `/var/lib/postgresql` with the postgres 18 default `PGDATA`.
 - Vite binds `0.0.0.0` in the container via an env-driven `server.host` set only by the launcher.
-- `tests/scenarios/docker-compose.yml` is deleted; `local-run/` is the single local infra stack.
+- The host workflow and host compose stay as they are (bind mount, data, `db` service); only name, network and `max_connections` are added (user decision).
+- `tests/scenarios/docker-compose.yml` is not touched; sandboxes have their own Mailpit.
 - `node_modules` volumes are refreshed on lockfile-hash change; `--reset` keeps all volumes.
 - "claude alive" means `pgrep -x claude` in the container; hook background processes don't block `--reset`.
 - A normal launch warns on a stale image (hash label), never rebuilds.
@@ -536,7 +520,7 @@ PoC acceptance criteria:
 - A re-launch that disagrees with the state file fails with a message instead of silently re-creating or re-allocating.
 - `typescript-lsp` is installed per sandbox on each start (warn on failure); the PoC disables it.
 - `--serve` and `--reset` stay CLI-only; the menu follows the approved prototype.
-- The `--list`, test-DB, host-side `local-run/`, menu and LSP behaviours each get an acceptance criterion.
+- The `--list`, test-DB, host-side compose, menu and LSP behaviours each get an acceptance criterion.
 
 ## Notes
 

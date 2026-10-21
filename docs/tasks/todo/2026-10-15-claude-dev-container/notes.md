@@ -41,3 +41,12 @@ parallel. This replaced the earlier single-container design (whole project mount
 ## 2026-10-21 (moved from requirements.md, second distillation)
 
 - Host git version observed when PoC-5 (host git ≥ 2.48) was written: 2.56.0.
+
+
+## 2026-10-21 — host compose kept in place
+
+User decision: the host workflow must stay exactly as today (`docker compose up -d` in `server/artisyn-log-run-local/`, then server/client on the host), with no knowledge of sandboxes. So the compose is updated in place instead of moving to `local-run/`, and the `log-hub-pgdata` volume is created by compose (not `external`) so no `docker volume create` step is needed. Old data is not needed.
+
+## 2026-10-21 — host compose: cosmetic changes only
+
+User decision (supersedes the entry above): the host compose keeps its bind mount, `PGDATA` and data; only `container_name`/`hostname` `log-hub-postgres`, network `log-hub-net` and `max_connections=300` are added. No named volume, no healthcheck, no Mailpit in it; `tests/scenarios/docker-compose.yml` is untouched. The earlier named-volume rationale (Windows bind mounts and fsync after power loss) was dropped by the user.

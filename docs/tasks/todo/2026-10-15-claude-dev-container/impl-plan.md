@@ -9,9 +9,7 @@
 - **New image tree** `docker-dev/`:
   - `Dockerfile`, an allow-list `Dockerfile.dockerignore`, `entrypoint.sh`, `devctl`, `provision.mjs`, `npx.cmd`, `settings.template.json`, `gitconfig`, `CLAUDE.container.md`;
   - downloads are verified against pinned sha256 values, git comes from the signed git-core PPA, no Python.
-- **New local infra** `local-run/docker-compose.yml`:
-  - `log-hub-postgres` (postgres 18.4, external volume `log-hub-pgdata`, `max_connections=300`) and `log-hub-mailpit` on network `log-hub-net`;
-  - deletes `server/artisyn-log-run-local/docker-compose.yml` and `tests/scenarios/docker-compose.yml`, plus a 13-file reference sweep.
+- **Host compose: three additive lines only** in `server/artisyn-log-run-local/docker-compose.yml`: `container_name`/`hostname` `log-hub-postgres`, network `log-hub-net`, `max_connections=300`. The bind mount, data and host workflow are unchanged; `tests/scenarios/docker-compose.yml` is untouched.
 - **Hook change (blast radius: every hook install):**
   - new env override `ARTISYN_PROJECT_ROOT`, applied in `resolveRootFromCommonDir` only when the cwd is inside that root;
   - unset means byte-identical behaviour;
@@ -26,7 +24,6 @@
   - `client/vite.config.ts` gets `server.host` from the env `LOG_HUB_VITE_HOST`;
   - the launcher generates a per-sandbox `server/.env`;
   - installer patch bump;
-  - `.gitignore` and `server/stryker.config.json` lose the old compose path;
   - new KB article `docs/knowledgebase/docker-dev-container.md`;
   - no DB schema change, no new API route, no new npm package.
 
@@ -275,7 +272,7 @@ The launcher refuses to create or start a sandbox while the host `user.name` or 
 **`claude-docker <name> [--branch b] [--from ref] [--continue|--resume]`**
 1. Check prerequisites: git ≥ 2.48, `docker info`.
 2. Validate the name.
-3. *(Phase 2)* `docker volume create log-hub-pgdata`, `docker compose -f local-run/docker-compose.yml up -d --no-recreate`, then wait for healthy.
+3. *(Phase 2)* `docker compose -f server/artisyn-log-run-local/docker-compose.yml up -d --no-recreate`, then poll `docker exec log-hub-postgres pg_isready -U postgres` (DD-3 infra timeout).
 4. Under the lock:
    - reconcile with the state file (DD-1 and FR-W7 re-launch rules);
    - create the worktree (`git -c core.autocrlf=input worktree add --relative-paths …`);
@@ -341,8 +338,7 @@ Every step tolerates the resource already being gone.
 | `scripts/claude-docker/prune.mjs` | `classifyPruneCandidate`, plan, orphans, execution | DD-6 |
 | `scripts/claude-docker/menu.mjs` | FR-W8 TUI | Ported from the PoC |
 | `scripts/claude-docker.ps1`, `scripts/claude-docker.cmd` | Thin wrappers | |
-| `local-run/docker-compose.yml` | Shared Postgres + Mailpit | Phase 2 |
-| `server/artisyn-log-run-local/docker-compose.yml`, `tests/scenarios/docker-compose.yml` | **Delete** | FR-A1/A5 |
+| `server/artisyn-log-run-local/docker-compose.yml` | Add name, network, `max_connections` | Phase 2, FR-A2 |
 | `hook/.claude/telemetry_tool/project-root-override.js` | Root override helper | DD-9 |
 | `hook/.claude/telemetry_tool/git-context.js` | Use the override in `resolveRootFromCommonDir` | :49 |
 | `hook/.claude/telemetry_tool/version.json` | 2.23.0 | |
@@ -363,8 +359,7 @@ Every step tolerates the resource already being gone.
 | `docs/knowledgebase/docker-dev-container.md` + `index.md` | New KB article | FR-D2 |
 | `docs/knowledgebase/hook-system-overview.md`, `hook-api-versioning.md`, `legacy-design-decisions-map.md` | Override documentation | :40-99, :349-367, :110 |
 | `docs/knowledgebase/test/scenarios.md`, `test/contract-tests.md` | Compose path, `TEST_DATABASE_URL` | |
-| Reference sweep | Old compose paths → `local-run/` | Chunk 9 list |
-| `.gitignore` | `docker-dev/claude-home/`; drop the `artisyn-log-run-local` lines | FR-D1 |
+| `.gitignore` | `docker-dev/claude-home/` | FR-D1 |
 | `CLAUDE.md`, `.claude/repo_config/repo-health-checks.json`, `README.md` | Compose command, launcher, environment note | FR-D2/D3 |
 
 ## API changes
@@ -384,9 +379,7 @@ No schema or migration change.
 - dropped with `dropdb -U postgres --if-exists --force <db>`.
 
 **Shared cluster**
-- The cluster moves to the external volume `log-hub-pgdata`.
-- `a-log` is created from scratch (`POSTGRES_DB`) and migrated by the server on startup.
-- Old data is not migrated (FR-D4).
+- The host cluster, its bind mount and its data stay as they are (FR-A1).
 
 ## Test coverage plan
 
@@ -457,8 +450,8 @@ Order: each phase follows Services → Frontend (menu) → Tests/docs on its own
 | 5 | Prune, stale reminder, wrappers | 6 | Needs 4 |
 | 6 | Interactive menu | 6 | Needs 3–5 (same code paths) |
 | 7 | PoC tests, docs and acceptance | 5 | Phase 1 sign-off |
-| 8 | Local infra compose | 6 | Phase 2 start |
-| 9 | Reference sweep for the old composes | 6 | Needs 8 |
+| 8 | Host compose additions | 4 | Phase 2 start |
+| 9 | Host-facing docs | 4 | Needs 8 |
 | 10 | Hook root override | 7 | Independent of 8–9 |
 | 11 | Test-DB variable, Vite host, installer otel-env | 6 | Needed by 13–14 |
 | 12 | Full image | 6 | Extends chunk 1 |
@@ -548,23 +541,17 @@ Order: each phase follows Services → Frontend (menu) → Tests/docs on its own
 - [ ] Run `npm run test:scripts` and fix any failures.
 - [ ] Run the Phase 1 PoC acceptance criteria from requirements.md manually (r1/r2/r3, `docker kill` plus `--continue`, the stale threshold via `CLAUDE_DOCKER_STALE_AFTER=2m`, the menu) and record the results in the task `notes.md`.
 
-### Chunk 8 — Local infra compose
-- [ ] Create `local-run/docker-compose.yml`:
-  - `name: log-hub-local`;
-  - service `postgres`: image `postgres:18.4`, `container_name`/`hostname` `log-hub-postgres`, env `POSTGRES_DB=a-log`/`POSTGRES_USER=postgres`/`POSTGRES_PASSWORD=pw`, command `postgres -c max_connections=300`, ports `127.0.0.1:5432:5432`, volume `log-hub-pgdata:/var/lib/postgresql`.
-- [ ] Add to the postgres service: a healthcheck `pg_isready -U postgres -d a-log` (interval 5s, retries 30), `restart: unless-stopped`, `stop_grace_period: 2m`. Declare `volumes: log-hub-pgdata: {external: true, name: log-hub-pgdata}` and `networks: default: {name: log-hub-net}`.
-- [ ] Add service `mailpit` to the compose file: image `axllent/mailpit:<MAILPIT_VERSION>`, `container_name`/`hostname` `log-hub-mailpit`, ports `127.0.0.1:1025:1025` and `127.0.0.1:8025:8025`, `restart: unless-stopped`. Add a header comment: run `docker volume create log-hub-pgdata` first.
-- [ ] Before deleting anything, stop the old stacks: `docker compose -f server/artisyn-log-run-local/docker-compose.yml down` and `docker compose -f tests/scenarios/docker-compose.yml down` (no `-v`). Check with `docker ps` that ports 5432, 1025 and 8025 are free.
-- [ ] Delete `server/artisyn-log-run-local/docker-compose.yml` and `tests/scenarios/docker-compose.yml`. Leave `server/artisyn-log-run-local/data/` for the user to delete (FR-D4) and mention it in the final report.
-- [ ] Remove `server/artisyn-log-run-local` from `.gitignore:24-25` and from the `server/stryker.config.json:18` ignorePatterns.
+### Chunk 8 — Host compose additions
+- [ ] In `server/artisyn-log-run-local/docker-compose.yml` service `db`, add `container_name: log-hub-postgres` and `hostname: log-hub-postgres`. Change nothing else in the service (image, env, `PGDATA`, ports, `./data` bind stay).
+- [ ] In the same service, add `command: ["postgres", "-c", "max_connections=300"]` (DD-11).
+- [ ] Add a top-level `networks: default: {name: log-hub-net}` to the same file.
+- [ ] Run `docker compose up -d` in `server/artisyn-log-run-local/` (this recreates the container on the same bind mount). Confirm `a-log` still has its tables and `show max_connections` returns 300.
 
-### Chunk 9 — Reference sweep for the old composes
-- [ ] Update the compose command to `docker volume create log-hub-pgdata && docker compose -f local-run/docker-compose.yml up -d` in `CLAUDE.md:128` and `.claude/repo_config/repo-health-checks.json:9` (`environmentNotes`). Add FR-D3 there: on the host Claude starts server and client itself; in a sandbox they already run.
-- [ ] Update `docs/knowledgebase/test/scenarios.md:19`, `tests/scenarios/README.md:23,33,39` and `tests/corpus/README.md:39` to the `local-run/` compose and the container names.
-- [ ] Update the messages and comments in `tests/scenarios/helpers/mailpit.ts:7,75` and `scripts/scenarios/preflight.mjs:48,65` to point at `local-run/docker-compose.yml`.
-- [ ] Update `scripts/corpus/bootstrap.js:10`, `tests/README.md:45` and `server/README.md:14-19` to the `local-run/` compose.
-- [ ] Update `README.md:249`: the new compose plus a short "Claude sandboxes" pointer to `scripts/claude-docker.ps1` and the KB article.
-- [ ] Grep the repo (excluding `docs/tasks/`) for `artisyn-log-run-local` and `tests/scenarios/docker-compose`. Zero hits are expected; fix any remaining one.
+### Chunk 9 — Host-facing docs
+- [ ] In `CLAUDE.md` and `.claude/repo_config/repo-health-checks.json` (`environmentNotes`), add FR-D3: on the host Claude starts server and client itself; in a sandbox they already run. Keep the existing compose commands unchanged.
+- [ ] In `server/README.md:14-19`, add one line: the container is named `log-hub-postgres` on network `log-hub-net` so sandboxes can share it; the usage stays the same.
+- [ ] In `README.md`, add a short optional "Claude sandboxes" pointer to `scripts/claude-docker.ps1` and the KB article, stating the host workflow is unchanged.
+- [ ] Grep the repo (excluding `docs/tasks/`) for `docker exec` / `docker ps` usages that assume the old auto-generated container name (e.g. `artisyn-log-run-local-db-1`) and switch them to `log-hub-postgres`.
 
 ### Chunk 10 — Hook root override
 - [ ] Create `hook/.claude/telemetry_tool/project-root-override.js` exporting `projectRootOverride(cwd, env = process.env)` per DD-9, with a header comment in the `claude-config-dir.js` style.
@@ -612,7 +599,7 @@ Order: each phase follows Services → Frontend (menu) → Tests/docs on its own
 - [ ] Confirm that `.claude/settings.local.json`, `server/.env`, `.artisyn/config/log-hub.local.json` and `.artisyn/config/otel-port.json` are git-ignored (`git check-ignore -v`). Add any missing entry to the matching `.gitignore`.
 
 ### Chunk 14 — Launcher Phase 2: infra, DB, ports, readiness
-- [ ] In `docker.mjs`, add `ensureInfra()`: `docker volume create log-hub-pgdata`, then `docker compose -f local-run/docker-compose.yml up -d --no-recreate`, then poll `docker inspect -f {{.State.Health.Status}} log-hub-postgres` until `healthy` (120 s timeout).
+- [ ] In `docker.mjs`, add `ensureInfra()`: `docker compose -f server/artisyn-log-run-local/docker-compose.yml up -d --no-recreate`, then poll `docker exec log-hub-postgres pg_isready -U postgres` until it succeeds (120 s timeout).
 - [ ] In `docker.mjs`, add `ensureDb(db)`, `dropDb(db)`, `dbSize(db)` and `listSandboxDbs()` per Database changes, all through `docker exec log-hub-postgres`.
 - [ ] In `sandbox.mjs` `createOrStart`, under the lock: `ensureInfra`, write `server/.env` (DD-16) when it is missing, `ensureDb` for both DBs, `allocateSlot`, and write state `v: 2`. A `v: 1` state is refused per DD-1.
 - [ ] In `runContainer`, add `--network log-hub-net`, the three `127.0.0.1` port publishes from the state, the DD-8 Phase 2 env, the five `nm-*` volumes and the three shared cache volumes (each created with its labels from DD-3).
@@ -647,7 +634,7 @@ Order: each phase follows Services → Frontend (menu) → Tests/docs on its own
   - git ≥ 2.48 on the host.
 - [ ] Update `docs/knowledgebase/hook-system-overview.md:40,52-56,92,99`, `hook-api-versioning.md:349-367` (`git.root` equals the worktree under the override) and `legacy-design-decisions-map.md:110` with the `ARTISYN_PROJECT_ROOT` override.
 - [ ] Update `docs/knowledgebase/test/scenarios.md` and `docs/knowledgebase/test/contract-tests.md` (plus `server/test/contract/README.md`) with the `TEST_DATABASE_URL` precedence.
-- [ ] Add a short "Claude sandboxes" section to `CLAUDE.md` pointing to the launcher and the KB article. Check `docker-dev/`, `local-run/` and `scripts/claude-docker*` for machine paths and user names (FR-B9).
+- [ ] Add a short "Claude sandboxes" section to `CLAUDE.md` pointing to the launcher and the KB article. Check `docker-dev/`, `server/artisyn-log-run-local/docker-compose.yml` and `scripts/claude-docker*` for machine paths and user names (FR-B9).
 - [ ] Run the full set via `adlc-lh:check-health` (`finalRun: true`) on the host and fix any failures.
 - [ ] Run the requirements' acceptance criteria manually (three parallel sandboxes, `devctl`, lockfile refresh, `--list`, `--remove`, `--prune` states, the full set inside a sandbox, MCPs, telemetry isolation, re-provisioning) and record the results in `notes.md`.
 - [ ] Confirm that the host `git status` shows no `docker-dev/claude-home/` and no false changes, and that the main checkout's `.artisyn/` is unchanged.
