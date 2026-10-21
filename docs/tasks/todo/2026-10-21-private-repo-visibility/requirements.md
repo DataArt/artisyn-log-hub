@@ -30,9 +30,13 @@ but grants **no access to session data** (FR-1…FR-7).
   admin role covers only administration: users, retention, system settings and server operation.
   Aggregates in the admin panel are allowed. These are numbers such as per-user or per-repo session
   counts, token usage and cost, and they never include session content, prompts or transcripts.
-  Admin operational endpoints follow the same rule: `GET /api/v1/admin/upload-queue/:id/file` no
-  longer returns the raw payload (the upload-queue tab shows metadata only), and server/error logs
-  (`logs-archive`, `error-logs`) must not contain prompt or transcript text.
+  **Privacy boundary:** these rules apply to the application's session-data views (UI and the API
+  behind it). Debugging/operational data is out of scope and stays as is, because an admin usually
+  has direct access to the server VM and the database anyway: `GET /api/v1/admin/upload-queue/:id/file`
+  keeps returning the staged raw payload, and server/error logs (`logs-archive`, `error-logs`) are
+  not scrubbed. The Data Collection Notice discloses both and states explicitly that anyone with
+  direct access to the database can read all sessions of all users, prompts and transcripts
+  included.
 - **FR-2 — Private repo sessions are owner-only.** For a repository that is not part of any team,
   all of that data is returned only to the repo owner.
 - **FR-3 — Admin sees existence only, on the admin tab.** An administrator can see that another
@@ -98,7 +102,8 @@ but grants **no access to session data** (FR-1…FR-7).
   "Viewing as Admin" UI remains. The owner still has the `?users=all` toggle on their own repo.
 - [ ] AC-7 (FR-1): The admin panel still works for users, retention and system settings, and it
   still shows aggregates (session counts, token usage, cost). No prompt, transcript or session
-  content is reachable from it, including via `upload-queue/:id/file`.
+  content is reachable from it, except debugging data outside the privacy boundary (FR-1): the
+  staged raw file of an upload-queue row (`upload-queue/:id/file`) and the server/error logs.
 - [ ] AC-8 (FR-7): Help → Data Collection Notice, the team invitation text and every other
   visibility disclaimer or doc describe exactly the FR-1…FR-4 model. A text search for visibility
   statements (e.g. "administrator", "admin can") finds no contradicting wording.
@@ -129,8 +134,8 @@ sessions and their contents.
 
 ## Common sense considerations
 
-- `GET /api/v1/admin/upload-queue/:id/file` stops returning the raw payload; upload-queue rows are metadata only.
-- Server and error logs must not contain prompt or transcript text.
+- `GET /api/v1/admin/upload-queue/:id/file` keeps returning the staged raw payload (debugging data; admins usually have VM access anyway); the notice discloses it.
+- Server and error logs are not scrubbed (debugging data, outside the privacy boundary; disclosed in the notice).
 - Deleting a session (`DELETE /api/v1/sessions/:sessionId`) is owner-only; the admin override is removed.
 - The admin tab's "Delete repo" action stays.
 - Export-scope and recompute-all-sessions lose the admin bypass; retention routes keep admin access.
