@@ -444,45 +444,43 @@ test.describe('Harness usage tab — no extra requests', () => {
 });
 
 test.describe('Logs tab — a sub-agent’s own skills and rules', () => {
-  test('@core expanding a workflow agent that loaded a skill shows a Skills section; one that loaded none shows no section', async ({
+  test('@core opening a workflow agent that loaded a skill shows a Skills section; one that loaded none shows no section', async ({
     page,
   }) => {
     await page.goto(`/#/repos/${repoId}?session=${rootSessionId}&tab=logs`);
     await expect(page.getByText(ROOT_PROMPT)).toBeVisible({ timeout: 20_000 });
 
     await page.getByText(`⚡ ${WORKFLOW_NAME}`).click();
-    const agentsTrigger = page.getByText('Agents (2)');
-    await expect(agentsTrigger).toBeVisible({ timeout: 10_000 });
-    await agentsTrigger.click();
+    await expect(page.getByText('Agents (2)')).toBeVisible({ timeout: 10_000 });
 
-    // The root turn has a Skills section of its own (it loaded ROOT_SKILL), so the assertion is
-    // relative: expanding an agent that loaded a skill must add exactly one more.
-    const skillsSections = page.getByRole('button', { name: /Skills/ });
-    const before = await skillsSections.count();
+    // The agents are a table: one `workflow-agent-row` per agent (keyed by its bare id);
+    // clicking a row opens a modal whose Logs tab (`workflow-agent-logs`) renders that agent's
+    // turns with their sections, so the Skills assertions are scoped to it.
+    const agentRow = (agentId: string) =>
+      page.locator(
+        `[data-testid="workflow-agent-row"][data-agent-id="${agentId.replace('agent-', '')}"]`,
+      );
+    const dialog = page.getByRole('dialog');
+    const detail = dialog.getByTestId('workflow-agent-logs');
+    const skillsSections = detail.getByRole('button', { name: /Skills/ });
 
     // Agent A loaded a skill — a Skills section appears and names it.
-    await page
-      .getByRole('button', {
-        name: wfAgentAId.replace('agent-', ''),
-        exact: true,
-      })
-      .click();
-    await expect(skillsSections).toHaveCount(before + 1, { timeout: 10_000 });
-    await skillsSections.last().click();
-    await expect(page.getByText(`.claude/skills/${AGENT_SKILL}`)).toBeVisible({
+    await agentRow(wfAgentAId).click();
+    await expect(detail).toBeVisible({ timeout: 10_000 });
+    await expect(skillsSections).toHaveCount(1, { timeout: 10_000 });
+    await skillsSections.click();
+    await expect(detail.getByText(`.claude/skills/${AGENT_SKILL}`)).toBeVisible({
       timeout: 10_000,
     });
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
 
-    // Agent B loaded none — no empty Skills section is rendered for it.
-    await page
-      .getByRole('button', {
-        name: wfAgentBId.replace('agent-', ''),
-        exact: true,
-      })
-      .click();
-    await expect(page.getByText('e2e workflow agent B task')).toBeVisible({
+    // Agent B loaded none — no empty Skills section is rendered for it. (Its prompt is also the
+    // row label, so the prompt check is scoped to the modal's Logs tab.)
+    await agentRow(wfAgentBId).click();
+    await expect(detail.getByText('e2e workflow agent B task')).toBeVisible({
       timeout: 10_000,
     });
-    await expect(skillsSections).toHaveCount(before + 1);
+    await expect(skillsSections).toHaveCount(0);
   });
 });

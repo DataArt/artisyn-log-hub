@@ -21,6 +21,17 @@ All files live under `client/src/viewer/pages/repository/session-log/raw-logs/`.
 
 The subsystem renders the **Raw Logs tab** (`RawLogsTab.tsx`): a Kibana-style table where every log entry can be expanded to show structured field-level detail. It is split into eleven files that mostly follow a layering rule (higher layers import from lower ones) — with one exception: `assistant.tsx` and `assistant-sections.tsx` import from each other (`assistant-sections.tsx` needs `UsageFields`/`ContentBlocks` from `assistant.tsx`, which in turn imports the section components back from `assistant-sections.tsx`).
 
+### `RawLogsTab` consumers
+
+`RawLogsTab` (props `rawLogs`, `isLoading`, `parsedSession`, `pricing`, `sessionModel`) is rendered in two places, always as the same component — never copied, forked or wrapped in a variant:
+
+| Consumer | `rawLogs` | `parsedSession` |
+|---|---|---|
+| Raw Logs tab (`SessionDetailPane.tsx`) | The whole session's log array | The session's `parseSessionLogs` result — one `TurnHeader` per prompt turn |
+| `WorkflowAgentModal.tsx` (workflow "Agents (N)" table → row click → "Raw logs" tab) | One workflow agent's log array (`subagentLogsMap.get(agentId)`, already loaded with `/logs`) | That agent's own `parseSessionLogs(logs, { isSubagent: true, pricing, subagentLogs })`, memoized while the modal is open — one `TurnHeader` per turn of the agent (`Turn #1`, …) |
+
+The modal passes `isLoading={false}` and `sessionModel = agent.model ?? sessionModel`; the same parse feeds its "Logs" tab (`PromptTurnList`). See `session-log-view.md` § Workflow "Agents (N)" drill-down.
+
 ---
 
 ## File Map

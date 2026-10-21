@@ -29,8 +29,12 @@ Key files live in `client/src/viewer/pages/repository/session-log/`:
 | `PromptTurnItem.tsx` | Single turn row (header + metrics + skills + rules + tools + files + images + agent activations + sub-agents + workflows); clicking a tool row opens `ToolCallDetailModal` |
 | `ToolCallDetailModal.tsx` | Modal for a single tool call — INPUT (JSON) + RESULT blocks with copy and truncation toggle |
 | `prompt-turn-helpers.tsx` | Extracted helper components: `ToolCallRow`, `FileRow`, `ImageRow`, `SectionHeader`, summary builders |
-| `SubAgentNode.tsx` | Collapsible sub-agent node (supports arbitrary nesting depth) |
-| `WorkflowNode.tsx` | Collapsible workflow run node; shows name pill + status badge + duration; expands to show args (question), stats strip, summary, and findings |
+| `SubAgentNode.tsx` | Collapsible sub-agent node for the turn-level Sub-agents section (supports arbitrary nesting depth); trigger + `children` recursion, the body is `SubAgentDetail` |
+| `SubAgentDetail.tsx` | Sub-agent detail body of `SubAgentNode` — prompt (200-char collapse), model, tokens + cost tooltip, duration, Skills, Rules, Tools (`ToolCallDetailModal`), Files |
+| `WorkflowNode.tsx` | Collapsible workflow run node; shows name pill + status badge + duration; expands to show args (captioned "Args"), stats strip, summary, the "Agents (N)" table (`WorkflowAgentsTable`, not collapsible), and findings |
+| `WorkflowAgentsTable.tsx` | Workflow "Agents (N)" table — `#`, Task, Duration, Tokens, Cost; a row click opens `WorkflowAgentModal` (no inline expansion) |
+| `workflow-agent-rows.ts` | Pure row logic for the table: `orderAgentRows` (ordering + `N.M` numbering) and `agentRowLabel` — see `algorithms/workflow-agent-rows.md` |
+| `WorkflowAgentModal.tsx` | Modal with one workflow agent's session in two tabs: "Logs" (the same `PromptTurnList` as the Logs tab) and "Raw logs" (the same `RawLogsTab` as the Raw Logs tab) |
 | `AgentActivationItem.tsx` | Agent activation row inside session log |
 | `CallTreeView.tsx` | Call Tree tab — hierarchical token-cost breakdown tree |
 | `SessionInfoTab.tsx` | Info tab — session metadata panel with summary stats (prompts, tokens, work time, cost, max context, etc.), computed via the extracted pure function `computeSessionInfoDerived` (`session-info-derive.ts`) so the same derivation also backs the "Session Statistics Export" feature (`session-export-runner.ts`, see `client-component-map.md`); delegates the Tokens & Cost, Workflows, MCP, and Vision sections to the components below |
@@ -428,9 +432,11 @@ When a `WorkflowRun` is expanded, the stats strip shows: `N agents · M tokens �
 
 `WorkflowRun.agentSessionIds` (server-resolved, `agent-<id>`-prefixed, full multi-level linkage — a
 workflow's direct agents plus their own regular Task-tool sub-agents at any depth) is turned into a
-`SubAgentNode[]` forest per workflow and rendered as a collapsible "Agents (N)" section inside
-`WorkflowNode`, sitting between the Summary and Findings blocks — same collapsible/row style as the
-top-level Sub-agents section, not a new visual pattern. Omitted entirely when the forest is empty
+`SubAgentNode[]` forest per workflow and rendered as an "Agents (N)" block inside `WorkflowNode`,
+sitting between the Summary and Findings blocks. It is not collapsible: a plain "Agents (N)" caption
+followed by a table (`WorkflowAgentsTable.tsx`), shown as soon as the workflow node is open (one
+nesting level less than the old Agents collapsible). It is not the `SubAgentNode` tree (the
+turn-level Sub-agents section keeps the tree). Omitted entirely when the forest is empty
 (running workflow, pre-migration/legacy session, or an unresolvable link) — no error state.
 
 - `PromptTurnItem.tsx` computes this per workflow: `wf.agentSessionIds.map(stripAgentPrefix)` (the
@@ -446,11 +452,62 @@ top-level Sub-agents section, not a new visual pattern. Omitted entirely when th
   prompt from the usual way; tokens/model come from `extractSubagentStats` on the same transcript,
   falling back to `subagentStats['agent-'+agentId]` (the `session_stats`-derived totals) when the
   transcript itself carries no inline usage. An id absent from `subagentLogsMap` is skipped.
+  Output order is the `agentIds` input order (the server's BFS order); sorting happens only in
+  `orderAgentRows` (below).
+- **Timing.** `agentLogTimeSpan(logs)` (`log-parser.ts`) scans the same transcript: only records
+  whose `timestamp` is a string `Date.parse` accepts count; `startMs` is the minimum and `endMs`
+  the maximum. `buildAgentNodesForIds` spreads `startMs` when defined and
+  `durationMs = endMs − startMs` when both are — so the agent modal's Duration line now shows
+  for workflow agents too.
 - `subagentStats` is threaded `SessionLogView.tsx` (`logsData?.subagentStats`) →
   `PromptTurnList.tsx` → `PromptTurnItem.tsx`, alongside the existing `subagentLogsMap`/
-  `agentParentMap`/`pricing`/`sessionModel` props.
-- `WorkflowNode` renders one `<SubAgentNode depth={0}>` per resolved root, passing through
-  `pricing`/`sessionModel` for cost/model display exactly as the top-level Sub-agents section does.
+  `agentParentMap`/`pricing`/`sessionModel` props. `PromptTurnItem` also passes `subagentLogsMap`
+  to `WorkflowNode`, which passes it with `pricing`/`sessionModel` to `WorkflowAgentsTable`.
+
+#### The agents table (`WorkflowAgentsTable.tsx`)
+
+- **Columns:** `#`, Task, Duration, Tokens, Cost. Styling follows `SessionInfoWorkflowsSection`
+  (`border-collapse`, uppercase `text-[10px]` muted header, right-aligned mono numeric cells,
+  `hover:bg-muted/30` rows); the table is `table-fixed` and capped at `max-w-4xl`.
+- **Ordering and numbering:** `orderAgentRows(agentNodes)` (`workflow-agent-rows.ts`, memoized)
+  sorts each sibling group stably by `startMs` ascending (nodes without `startMs` last, in input
+  order), walks depth-first so a parent is followed by its own children, and numbers rows `1`,
+  `2`, `2.1`, `2.1.1`. Nesting is never changed. Full contract and examples:
+  [algorithms/workflow-agent-rows.md](algorithms/workflow-agent-rows.md).
+- **`#` cell:** a `<button aria-haspopup="dialog" aria-label="Open agent N">` holding the number
+  in `font-semibold text-purple-700 dark:text-purple-300` — the keyboard way to open the modal.
+- **Task cell:** the label from `agentRowLabel(node)` — `cleanText(node.prompt)`, falling back to
+  `agentId` when that is empty, truncated to 59 chars + `…` when longer than 60
+  (`AGENT_LABEL_LIMIT`); the cell's `title` is the untruncated cleaned text (or the id). Under it,
+  the id line: `truncateAgentId` (12 chars, `prompt-turn-helpers.tsx`) plus a `CopyButton` that
+  copies the full bare id. Nested rows are indented 16px per depth level, get a muted `↳ ` prefix
+  and an 11px label (12px for roots).
+- **Formats:** Duration is `formatDuration(durationMs)` from `log-parser.ts` (`h:mm:ss`, the same
+  formatter as the detail's Duration line); Tokens is `formatTokens(input + output + cacheRead +
+  cacheWrite)`; Cost is `formatCost(computeCost(tokens, pricing[node.model ?? sessionModel]))`
+  (4 decimals). Missing data shows `–`.
+- **No inline expansion:** rows never expand in place (an inline detail row inside the already
+  nested workflow node was unreadable). A row click or the `#` button sets the table's `openAgent`
+  state and opens that agent in `WorkflowAgentModal`. Nested agent rows are always rendered.
+- **Test hooks:** each agent row is `<tr data-testid="workflow-agent-row" data-agent-id={bareId}>`.
+
+#### One agent's session (`WorkflowAgentModal.tsx`)
+
+- Props: the `agent` node, the row label, `logs = subagentLogsMap.get(agentId) ?? []`, the whole
+  `subagentLogsMap` (so the agent's own sub-agents resolve), `pricing`, `sessionModel`; both tabs
+  use `model = agent.model ?? sessionModel`.
+- No extra network call and no extra access gate: the logs are the ones the session's `/logs`
+  payload already loaded for this viewer.
+- Parsing: `parseSessionLogs(logs, { isSubagent: true, pricing, subagentLogs })`, memoized while
+  the modal is open; the one result feeds both tabs.
+- Layout: `Dialog` with `DialogContent` `max-w-5xl h-[85vh] flex flex-col`; the title shows the
+  label and the id in `font-mono text-xs`. Below it, two tabs with local state (a transient modal,
+  not page state, so not in the URL), "Logs" by default:
+  - **Logs** (`data-testid="workflow-agent-logs"`): the very same `PromptTurnList` the Logs tab
+    renders, over the agent's own turns — header, tokens/cost, Skills, Rules, Tools, Files.
+  - **Raw logs** (`data-testid="workflow-agent-raw-logs"`): the very same `RawLogsTab` the Raw Logs
+    tab renders, with `parsedSession` = that parse, so the records group under `TurnHeader` rows.
+- Not to be confused with `AgentDetailModal.tsx`, the System Context panel's agent-definition modal.
 
 ### SessionInfoTab cost table
 

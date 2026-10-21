@@ -28,6 +28,13 @@ export function cleanText(text: string): string {
     .trim();
 }
 
+/** Max visible characters of an agent id before it is cut with `…`. */
+export const AGENT_ID_LIMIT = 12;
+
+export function truncateAgentId(id: string): string {
+  return id.length > AGENT_ID_LIMIT ? id.slice(0, AGENT_ID_LIMIT) + '…' : id;
+}
+
 export function shortenPath(path: string): { display: string; full: string } {
   const normalized = path.replace(/\\/g, '/');
   return { display: normalized, full: normalized };

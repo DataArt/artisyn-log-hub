@@ -353,14 +353,15 @@ Common setup for every scenario unless stated otherwise: user U1 is logged in (s
 ### S-SESS-03. Logs: what counts as a prompt, what is hidden, how a turn reads
 - **Layer:** UI+API
 - **Priority:** P0
-- **Data/roles:** GS-07 (main), GS-01 (comparison), U1
+- **Data/roles:** GS-07 (main), GS-01 (comparison), GS-05 (System Context and the `ResearchWorkflow` run with its two workflow agents W1/W2), U1
 - **Steps:**
-  1. Upload GS-07 and GS-01.
+  1. Upload GS-07, GS-01 and GS-05.
   2. `GET .../sessions/:sid/logs` for GS-07: find the raw events; make sure the response contains the sidechain pair, `isMeta`, the `<task-notification>` and the duplicate `message.id` (the API has the data in full).
   3. Open Logs: count the turns.
   4. Expand the prompt of each turn (collapsed by default), read the tokens and the cache_ratio, hover over the cost (tooltip).
   5. Expand the Tools of turn P2, click the `Bash` row: a modal opens with INPUT and RESULT and a copy button.
   6. Close the modal; in GS-01 expand the Files section: `src/app.ts` with an indicator of 2 accesses, `docs/api.md` in the docs group.
+  7. (8b in the spec) In GS-05 Logs, with a counter of `/api/` requests running: expand `⚡ ResearchWorkflow` (the `Agents (2)` table is shown right away, not collapsible); read the agents table; click the W1 row (a modal opens on its `Logs` tab); switch to `Raw logs`; expand the last record; press Escape.
 - **Checks:**
   - GS-07 Logs has exactly **3** turns; not visible: the sidechain pair, `isMeta`, `<task-notification>`.
   - The sum of the turn tokens equals 3000 / 1200 / 12000 / 4000 (the duplicate `message.id` is counted once, the sidechain with in 50 000 is not included).
@@ -368,6 +369,10 @@ Common setup for every scenario unless stated otherwise: user U1 is logged in (s
   - The cost tooltip: a breakdown by the four token types, the turn total = the sum of the breakdown.
   - The modal: INPUT contains the command, RESULT contains the result text (for the rejection, the text about "user doesn't want to proceed").
   - GS-01: Files, `src/app.ts` accessCount 2, `docs/api.md` in docs.
+  - GS-05 workflow Agents table: exactly 2 `workflow-agent-row` rows — W1 `Add a billing section to src/report.ts`, `0:00:18`, `4.0K`, `$0.0080`; W2 `Review the billing flow in depth`, `0:00:23`, `2.5K`, `$0.0045` (tokens and costs from `expected.json`); the `#` cells are `{1, 2}` as a set (both agents start at the same second, so their order is pinned by the algorithm row AO-02, not here); each row shows the first 12 characters of its id followed by `…`.
+  - The W1 modal shows the label; its `Logs` tab renders W1's turn with that prompt; its `Raw logs` tab shows a `Turn #1` header, W1's 4 records and `Billing section added.`; Escape closes it.
+  - No `/api/` request is sent while the table and the dialog are used (both reuse the loaded Logs payload).
+  - Nested workflow agents (`↳`, indent, `N.M`) are not in any golden fixture: numbering is covered by the `workflow-agent-rows` algorithm rows AO-04/05/07, the rendering by the work-cycle visual check.
 - **Replaces:** the `CU/log-parser.test.ts` blocks `qualifying user event rules`, `slash command full-command reconstruction`, `turn index is global`, `token double-count prevention`, `parentUuid BFS assignment`, `per-turn token scoping`, `uuid absent`, `toolCalls`, `toolCalls result capture`, `file bytes and estTokens` (≈ 70 of 161), `CC/prompt-turn-item.test.tsx` (18), `CC/cost-breakdown-tooltip.test.tsx` (8), `CU/turn-anchor.test.ts` (5), `SRV/logs/claude-extractor.spec.ts` dedup and sidechain (≈ 20), the basic Logs checks of `E2E/session-log-view.spec.ts` (≈ 6). ≈ 100.
 - **What we lose:** rare prompt forms (a content array of several text blocks, an empty array, a string prompt without tags) and three `getPromptText` unit tests; a prompt without a `uuid`. Not critical: such forms hardly occur in real logs, and they break without a crash.
 

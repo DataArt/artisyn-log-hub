@@ -1,6 +1,6 @@
 # 2026-10-21: Workflow Session Readability
 
-**Status:** todo
+**Status:** done
 **Priority:**
 **Type:** feature
 **Module(s):** client
@@ -141,3 +141,14 @@ See `wireframes/agents-table.svg` for the before/after wireframe of what follows
 - 2026-10-21: FR-5 (per-agent "View raw logs" action, reusing the Raw Logs tab renderer) added
   after the user asked, mid-review, to also be able to view a sub-agent's own raw logs — not just
   the derived prompt/tokens/tool-calls summary `SubAgentNode` already shows.
+- 2026-10-21 (implementation, after the user's visual review): deviations from `impl-plan.md`.
+  - The "Agents (N)" collapsible is gone; the table shows as soon as the workflow node is open.
+  - Rows never expand inline. A row click (or its `#` button) opens `WorkflowAgentModal.tsx`
+    (replaces the planned `AgentRawLogsModal.tsx`) with two tabs: "Logs" (the same
+    `PromptTurnList` as the Logs tab, over the agent's own turns) and "Raw logs" (the same
+    `RawLogsTab`). There is no "View raw logs" button; `SubAgentDetail` now serves only `SubAgentNode`.
+  - The `WorkflowNode` args caption "Question" was renamed to "Args".
+  - The table is `w-full max-w-4xl` (not `w-auto`), so `table-fixed` truncation works.
+  - Identical labels for workflow agents (shared harness-relay prompt) are addressed in the
+    follow-up task 2026-10-21-workflow-agent-meta-labels.
+  - The algorithm doc `workflow-agent-rows.md` passed the AI review and the owner sign-off.

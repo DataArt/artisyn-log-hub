@@ -4,7 +4,7 @@ import type { WorkflowRun } from '../../../../models/workflows';
 import type { ModelPricingMap } from '../../../../models/pricing';
 import { formatWorkflowDuration } from './log-parser';
 import type { SubAgentNode as SubAgentNodeType } from './types';
-import { SubAgentNode } from './SubAgentNode';
+import { WorkflowAgentsTable } from './WorkflowAgentsTable';
 import {
   Collapsible,
   CollapsibleTrigger,
@@ -22,6 +22,8 @@ interface Props {
   agentNodes?: SubAgentNodeType[];
   pricing?: ModelPricingMap;
   sessionModel?: string;
+  /** Bare-id-keyed agent transcripts (from the Logs payload), for the agents table's raw-logs modal. */
+  subagentLogsMap?: Map<string, Record<string, unknown>[]>;
 }
 
 function confidenceBadgeClass(confidence: string): string {
@@ -66,11 +68,11 @@ export function WorkflowNode({
   agentNodes = [],
   pricing,
   sessionModel,
+  subagentLogsMap,
 }: Props) {
   const [open, setOpen] = useState(false);
   const [showMore, setShowMore] = useState(false);
   const [findingsOpen, setFindingsOpen] = useState(false);
-  const [agentsOpen, setAgentsOpen] = useState(false);
 
   const hasArgs = workflow.args !== null && workflow.args.length > 0;
   const isLongArgs = hasArgs && workflow.args!.length > ARGS_PREVIEW_LIMIT;
@@ -113,7 +115,7 @@ export function WorkflowNode({
           {/* Args row */}
           {hasArgs && (
             <div>
-              <span className="text-xs text-muted-foreground">Question </span>
+              <span className="text-xs text-muted-foreground">Args </span>
               <span className="whitespace-pre-wrap break-words text-xs text-foreground">
                 {argsDisplay}
                 {isLongArgs && !showMore && '…'}
@@ -173,31 +175,20 @@ export function WorkflowNode({
           )}
 
           {/* Agents */}
+          {/* Agents: shown directly once the workflow is open — no extra collapsible level;
+              each row opens its agent in a modal. */}
           {hasAgents && (
-            <Collapsible open={agentsOpen} onOpenChange={setAgentsOpen}>
-              <CollapsibleTrigger className="flex items-center gap-1 text-xs text-muted-foreground hover:text-foreground">
-                <ChevronRight
-                  className={cn(
-                    'size-3 shrink-0 transition-transform',
-                    agentsOpen && 'rotate-90',
-                  )}
-                />
+            <div>
+              <div className="text-xs text-muted-foreground">
                 Agents ({agentNodes.length})
-              </CollapsibleTrigger>
-              <CollapsibleContent>
-                <div className="mt-1 flex flex-col gap-0.5">
-                  {agentNodes.map((agent) => (
-                    <SubAgentNode
-                      key={agent.agentId}
-                      agent={agent}
-                      depth={0}
-                      pricing={pricing}
-                      sessionModel={sessionModel}
-                    />
-                  ))}
-                </div>
-              </CollapsibleContent>
-            </Collapsible>
+              </div>
+              <WorkflowAgentsTable
+                agentNodes={agentNodes}
+                subagentLogsMap={subagentLogsMap}
+                pricing={pricing}
+                sessionModel={sessionModel}
+              />
+            </div>
           )}
 
           {/* Findings */}

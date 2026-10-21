@@ -268,6 +268,7 @@ export function PromptTurnItem({
                 agentNodes={workflowAgentNodes.get(wf.toolUseId) ?? []}
                 pricing={pricing}
                 sessionModel={sessionModel}
+                subagentLogsMap={subagentLogsMap}
               />
             ))}
           </div>
