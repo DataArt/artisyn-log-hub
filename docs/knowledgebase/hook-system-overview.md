@@ -48,7 +48,7 @@ The hook ships as a Claude Code plugin (`log-hub-hooks`), extracted by the insta
 | `config-template/log-hub.json` | Blanked config template the installer reconciles into the project's own `.artisyn/config/log-hub.json` |
 
 The project's own `.artisyn/config/log-hub.json` (tracked) and `.artisyn/config/log-hub.local.json` (gitignored,
-`apiKey`) live outside the plugin tree, at the repo root, alongside `.artisyn/marketplace/`.
+per developer: `apiKey`, `serverUrl`, `otelReceiverPort` — installer `1.0.75`+) live outside the plugin tree, at the repo root, alongside `.artisyn/marketplace/`.
 
 Hook commands resolve config/output paths via `git rev-parse --git-common-dir` (parent of the resolved `.git`
 directory), not `${CLAUDE_PLUGIN_ROOT}` (which points into `~/.claude/plugins/cache/` and changes on every plugin

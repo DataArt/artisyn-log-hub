@@ -98,7 +98,8 @@ Every register outcome is non-fatal and never retried: a connection refusal (no 
 
 **Port resolution at runtime** (`resolveOtelPort(config, env, cwd)`), first match wins: the port
 parsed out of `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` (the authority — binding anything else means
-receiving nothing), then `config.otelReceiverPort` when it is a positive integer, then
+receiving nothing), then `config.otelReceiverPort` when it is a positive integer (the installer
+writes it into the gitignored `log-hub.local.json` since `1.0.75`, into `log-hub.json` before), then
 `OTEL_FALLBACK_PORT` (`25317`). Two disagreements each produce at most one `hook.log` `warn` line:
 endpoint vs. config, and a metrics endpoint pointing at a different port than the logs endpoint
 (only one port is bound, so metrics would not be captured). The hook never reads

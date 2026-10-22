@@ -108,12 +108,13 @@ test('@S-INST-02 the API key lives only in log-hub.local.json, a tracked secret 
       expect(ignore.filter((l) => l === 'otel-port.json')).toHaveLength(1);
     });
 
-    await test.step('7. reinstall with --server-url http://b:3000 only: the destination warning, the key kept, serverUrl = b; the same URL with a slash → no warning', async () => {
+    await test.step('7. reinstall with --server-url http://b:3000 only: the destination warning, the key kept, serverUrl = b in log-hub.local.json, log-hub.json untouched; the same URL with a slash → no warning', async () => {
       const res = await install(['--server-url', 'http://b:3000']);
       expect(res.code, res.output).toBe(0);
       expect(res.output).toContain('this changes the telemetry destination: http://a:3000 -> http://b:3000');
       expect(readJson(local).apiKey).toBe('SECRET-KEY-1');
-      expect(readJson(base).serverUrl).toBe('http://b:3000');
+      expect(readJson(local).serverUrl).toBe('http://b:3000');
+      expect(readJson(base).serverUrl).toBe('');
       const same = await install(['--server-url', 'http://b:3000/']);
       expect(same.code).toBe(0);
       expect(same.output).not.toContain('changes the telemetry destination');
@@ -124,8 +125,12 @@ test('@S-INST-02 the API key lives only in log-hub.local.json, a tracked secret 
       fs.writeFileSync(local, JSON.stringify({ ...readJson(local), myKey: 1 }, null, 2));
       const res = await install(['--api-key', 'SECRET-KEY-2']);
       expect(res.code, res.output).toBe(0);
-      expect(readJson(local)).toEqual({ apiKey: 'SECRET-KEY-2', myKey: 1 });
-      expect(readJson(base).serverUrl).toBe('http://b:3000');
+      expect(readJson(local)).toEqual({
+        apiKey: 'SECRET-KEY-2',
+        serverUrl: 'http://b:3000',
+        otelReceiverPort: readJson(path.join(configDir, 'otel-port.json')).port,
+        myKey: 1,
+      });
       expect(readJson(base).myKey).toBe(1);
       expect(filesContaining(repo, 'SECRET-KEY-1')).toEqual([]);
     });

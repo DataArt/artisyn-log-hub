@@ -435,8 +435,8 @@ at `CLAUDE_CONFIG_DIR=/home/dev/.claude-home`). It survives `--reset` and `--rem
 
 ## Hook in the sandbox and provisioning
 
-**Own Log Hub.** The tracked `.artisyn/config/log-hub.json` `serverUrl` (`http://localhost:5173`)
-resolves inside the container to the sandbox client, which proxies to the sandbox backend. Sessions
+**Own Log Hub.** The `serverUrl` that `provision.mjs --static` writes into the worktree's gitignored
+`.artisyn/config/log-hub.local.json` (`http://localhost:5173`) resolves inside the container to the sandbox client, which proxies to the sandbox backend. Sessions
 from a sandbox (transcript, prompts, OTEL through the receiver inside the container) reach only the
 sandbox's own Log Hub, never the host one or another sandbox. The developer sees them at the
 sandbox `app` URL after identifying with the host git email.
@@ -452,15 +452,19 @@ checkout (`git rev-parse --git-common-dir`), which is not mounted. `ARTISYN_PROJ
 **Provisioning** (`docker-dev/provision.mjs`) writes only git-ignored worktree files, in the
 installer's formats, keeping every other key:
 
-- `--static` (entrypoint): `.artisyn/config/otel-port.json` with the tracked `otelReceiverPort`
-  (each container has its own loopback, so no allocation) and the OTEL `env` keys in
-  `.claude/settings.local.json`, imported at runtime from the worktree's
-  `artisyn-hooks-installer/src/otel-env.ts`;
+- `--static` (entrypoint): picks the port — the existing `otel-port.json` `port`, else a legacy
+  tracked `log-hub.json` `otelReceiverPort` (branches made before installer `1.0.75`), else the
+  fixed `25317` (the hook's `OTEL_FALLBACK_PORT`; each container has its own loopback, so no
+  allocation) — and writes it into `.artisyn/config/otel-port.json`; writes `serverUrl`
+  `http://localhost:5173` and `otelReceiverPort` into `.artisyn/config/log-hub.local.json`; and the
+  OTEL `env` keys into `.claude/settings.local.json`, imported at runtime from the worktree's
+  `artisyn-hooks-installer/src/otel-env.ts`. Takes effect once the sandbox image is rebuilt;
+
 - `--loop` (`devctl` service, every 10 s): skip while `GET /api/v1/auth/config` is not 200; if
   `log-hub.local.json` has an `apiKey` that `POST /api/v1/log-echo` accepts, touch
   `/run/dev/provisioned`; otherwise `POST /api/v1/auth/identify` as `SANDBOX_HOST_EMAIL` (on a
   fresh DB the first user becomes admin), `POST /api/v1/api-keys {"name":"sandbox-<name>"}`, write
-  `.artisyn/config/log-hub.local.json` `{apiKey}` and touch the marker. So a recreated DB gets a new
+  `apiKey` into `.artisyn/config/log-hub.local.json` and touch the marker. So a recreated DB gets a new
   key automatically, and a server that becomes healthy later (after `devctl restart server`) is
   provisioned on the next round. Each round is logged to `/var/log/dev/provision.log`.
 

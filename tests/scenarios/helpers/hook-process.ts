@@ -254,8 +254,9 @@ export const QUIET_HOOK_CONFIG: Readonly<HookConfig> = {
 };
 
 /**
- * The `ARTISYN` config a real install writes: `serverUrl` (and the rest) in the tracked
- * `log-hub.json`, the API key only in the git-ignored `log-hub.local.json`.
+ * A working `ARTISYN` config: `serverUrl` (and the rest) in the tracked `log-hub.json`, the API
+ * key only in the git-ignored `log-hub.local.json`. A current installer writes `serverUrl` into the
+ * local file instead; the hook merges local over base per key, so both layouts behave the same.
  */
 export function writeStandConfig(repoDir: string, serverUrl: string, apiKey: string, extra: HookConfig = {}): void {
   writeConfig(repoDir, {
