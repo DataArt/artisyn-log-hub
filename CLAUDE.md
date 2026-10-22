@@ -13,6 +13,12 @@ do not save anything to user memory. Keep all tuning for this prject in claude.m
 
 You can run only read-only git commands. Never use git commands that do any file changes, revert, commit, push, etc
 
+# changelog
+
+When a change is finished and ready to push, or the user says "push" — follow the `changelog`
+skill: write (or re-check, if one already exists for the task) a one-line summary in
+`docs/changelog/<YYYY-MM-DD-HHmm>-<task-slug>.md` before the push.
+
 # task tracking
 
 ALWAYS use the `adlc-lh:tracker` skill for any task/issue/bug tracking. `adlc-lh:tracker` also documents
