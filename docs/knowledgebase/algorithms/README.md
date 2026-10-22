@@ -42,6 +42,7 @@ format where the two differ).
 | [release-link-token](release-link-token.md) | `server/src/releases/release-token.ts` | jest |
 | [harness-snapshot](harness-snapshot.md) | hook `skill-catalog.js`, `harness-snapshot.js` | `node --test` |
 | [workflow-agent-rows](workflow-agent-rows.md) | `client/.../session-log/workflow-agent-rows.ts` | vitest |
+| [sandbox-prune-classification](sandbox-prune-classification.md) | `scripts/claude-docker/prune.mjs` | `node --test` (`npm run test:scripts`) |
 
 ## File layout
 

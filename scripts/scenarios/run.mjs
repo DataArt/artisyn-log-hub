@@ -363,6 +363,13 @@ function installSignalHandlers() {
   process.on('SIGTERM', onSignal);
 }
 
+// The database the runner (preflight, fingerprints, stand, contract step) uses. TEST_DATABASE_URL
+// wins so a dev container can point tests at a test DB while its live DATABASE_URL stays on the
+// dev DB; on the host neither is usually set and the default applies.
+export function resolveRunnerDatabaseUrl(env = process.env) {
+  return env.TEST_DATABASE_URL || env.DATABASE_URL || DEFAULT_DATABASE_URL;
+}
+
 export async function main(argv = process.argv.slice(2)) {
   let opts;
   try {
@@ -373,7 +380,7 @@ export async function main(argv = process.argv.slice(2)) {
     return USAGE_EXIT_CODE;
   }
 
-  const databaseUrl = process.env.DATABASE_URL || DEFAULT_DATABASE_URL;
+  const databaseUrl = resolveRunnerDatabaseUrl();
   const env = { DATABASE_URL: databaseUrl, MAILPIT_URL: process.env.MAILPIT_URL || DEFAULT_MAILPIT_URL };
   const passes = standPasses(opts);
   const withScenarios = passes.length > 0;

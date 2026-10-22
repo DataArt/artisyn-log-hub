@@ -94,50 +94,74 @@ creates the summary, and updates both indexes.
 
 ## Progress tracking
 
-Every `/adlc-lh:*` skill tracks its own steps as a task list, so the user watches progress as
-checkboxes.
+Every `/adlc-lh:*` skill reports its progress as plain text in the conversation — there is no
+task-list tool. Do not look for `TaskCreate`/`TaskUpdate`/`TodoWrite`.
 
-Once the invoking skill's clean-context check passes (or immediately, if it has none — e.g.
-`archive`), before step 1, create the checklist the skill declared —
-every task in a single message via `TaskCreate`, so the whole list appears at once. Where the
-skill says a task list is revealed only by a later step (plan chunk items, discovered checks),
-create the known tasks now and the rest in the same message that finishes the revealing step,
-so task IDs stay in execution order.
+**Step lines.** Once the invoking skill's clean-context check passes (or immediately, if it has
+none — e.g. `archive`), write one short line before starting each step the skill declared — and,
+where the skill works through plan chunks itself, before each chunk:
+
+```
+→ <step or chunk name> (<n>/<total>)
+```
+
+Step lines count the skill's steps; chunk lines count the plan chunks (`<n>/<total chunks>`).
+Where the total is revealed only by a later step (plan chunks), omit `/<total>` until it is known.
+A skill may append a short detail after the counter (e.g. the names of the checks about to run).
+
+**15-minute status.** Only the skills that say so — `implement-deep`, `post-impl-check`,
+`review-deep` — schedule it; each names its own status sources. Other skills that launch a
+`Workflow` (e.g. `adlc-lh:check-health`, also when called from inside one of those three) never
+schedule a cron of their own. The skill schedules, in the same message as its `Workflow` call, a
+recurring status with `CronCreate` (load its schema first with
+`ToolSearch("select:CronCreate,CronDelete")`):
+
+- `cron`: four minutes 15 apart, offset from the current minute so it does not land on :00/:30 —
+  e.g. started at 10:07 → `"22,37,52,7 * * * *"`.
+- `recurring: true`.
+- `prompt`: `"[adlc-lh progress] Write the 15-minute status of the running <skill name> workflow
+  for <TASK> (see Progress tracking in the adlc-lh:tracker skill and the skill's own status
+  sources). Do not start, stop or change anything."`, where `<TASK>` is the task folder name, or
+  the task id the skill was invoked with if the folder is not resolved yet.
+
+Remember the returned job id as `PROGRESS_CRON_ID`. If `CronCreate` is unavailable or fails, say
+so in one line and carry on — the status is a convenience, never a blocker. Then end your turn.
+
+Each time the cron prompt fires (only while the session is idle), reply with a status of **3–4
+sentences** built only from read-only sources — never touch code, task docs or the workflow while
+doing it: how long the workflow has been running, what it is working on now and what changed since
+the previous status (from the sources the skill names), and whether it looks to be progressing or
+stuck — just flag it, do not intervene. Judge "stuck" only by the signal the skill names; where
+the skill says no file changes are expected, their absence is not a stuck signal.
+
+Every status ends with a **sanity check** — step back and ask whether anything you saw is
+implausible: a result too fast or too clean for the work it claims (a gigabyte DB import done in
+one second, a test suite "passing" with zero tests run, an implementation chunk finished with no
+file changes), files changed far outside the task's scope, deleted or emptied files, a sudden huge diff,
+or a blocker that keeps reappearing. If something looks suspicious, add one sentence prefixed
+`⚠ Suspicious:` naming what and why; otherwise add `Sanity check: nothing suspicious.` Only flag
+it — do not intervene. If the workflow has already finished when the prompt
+fires, do not write a status — `CronDelete` the job and process the completion notification. On
+completion (any outcome), `CronDelete(PROGRESS_CRON_ID)` before anything else.
 
 Rules:
 
-- Mark a task `in_progress` (`TaskUpdate`) before starting it, `completed` the moment it is
-  done. Keep exactly one of your own tasks `in_progress` at a time; workflow agents each own
-  one task and may hold theirs `in_progress` concurrently.
-- Never mark a task `completed` when it failed, was blocked, or was only partly done. Leave it
-  `in_progress` and `TaskCreate` a task naming the blocker.
-- This list is a progress display, not a work queue. Do not add steps the skill does not
-  perform, do not re-derive the list from its step headings, and do not let another skill in
-  context (`adlc-lh:check-health`, a `taskDetailsSkill`, a post-impl check, `adlc-lh:workcycle`) add
-  tasks of its own.
-- A step the skill legitimately skips (config disabled, no UI change, no tracker) is
-  `completed` — say "skipped, because …" in the report. Only genuine failure stays open.
-- Stopping to ask the user something the session will continue after (ambiguous id, a
-  clarification): leave the current task `in_progress` and later tasks `pending`. Stopping
-  for good (task archived, missing requirements/plan, hard blocker): leave the current task
-  `in_progress` and set every later task to `deleted`, so the user is not shown phantom
-  pending work.
-- A workflow script has no `Task*` hook, but the agents it spawns may. When a skill hands a
-  `taskId` to a workflow agent, that agent owns the task: it loads the schema first
-  (`ToolSearch("select:TaskUpdate")`), sets `in_progress` when it starts and `completed` only
-  when it genuinely finished. If the tool is not found or the call fails, skip all task
-  updates silently — a tracking failure is never a blocker and must not affect the agent's
-  result. One task, one owner — never hand the same task to two agents.
-- After a workflow returns, reconcile: an agent that died leaves its task `in_progress`
-  forever, so set every task's final status from the workflow's returned results.
-- Before your final report, confirm no task is left `pending` or `in_progress` unexplained.
+- Never report a step as done when it failed, was blocked, or was only partly done — say so and
+  name the blocker.
+- These lines are a progress display, not a work queue. Do not add steps the skill does not
+  perform, and do not let another skill in context (`adlc-lh:check-health`, a `taskDetailsSkill`,
+  a post-impl check, `adlc-lh:workcycle`) add step lines of its own.
+- A step the skill legitimately skips (config disabled, no UI change, no tracker) gets a line
+  saying "skipped, because …".
+- Workflow agents do not report progress to the session; their results are reported once the
+  workflow returns.
 
 ## The `/adlc-lh:*` skill family
 
 This skill is the entry point into a larger family of `/adlc-lh:*` skills that carry a task through
 its full lifecycle. After completing any command above (or any `/adlc-lh:*` skill), always tell the
 user which `/adlc-lh:*` command(s) make sense next — don't assume they already know the flow.
-Every skill in the family declares its own checklist and follows the Progress tracking rules
+Every skill in the family declares its own steps and follows the Progress tracking rules
 above.
 
 Unified workflow:

@@ -242,6 +242,7 @@ The installer extracts this tree, generated at build time from `hook/.claude/tel
         │   ├── code-inventory.js
         │   ├── edit-result-counts.js
         │   ├── claude-config-dir.js
+        │   ├── project-root-override.js
         │   └── version.json
         └── config-template/
             └── log-hub.json
@@ -347,7 +348,7 @@ remaining lifecycle events, and `send-logs-hook.js` + `post-turn-analysis-hook.j
 `prompt-upload-hook.js`, `otel-receiver.js`, `otel-register.js`, `otel-endpoint-check.js`, `otel-restart.js`, `session-files.js`,
 `throttle-state.js`, `claude-invoke-async.js`, `skill-catalog.js`, `harness-snapshot.js`, `post-turn-analysis-worker.js`,
 `session-attribution-state.js`, `process-marker.js`, `harness-state.js`, `ndjson-sanitize.js`, `code-inventory.js`,
-`edit-result-counts.js` and `claude-config-dir.js` are **not** wired to any event — they are detached child processes / shared modules
+`edit-result-counts.js`, `claude-config-dir.js` and `project-root-override.js` are **not** wired to any event — they are detached child processes / shared modules
 launched by the hooks above, so they never appear in `hooks.json`.
 
 `send-logs-hook.js` is wired to two events and behaves differently on each:
@@ -405,6 +406,20 @@ To add your credentials manually:
 ```json
 { "apiKey": "<your-api-key>" }
 ```
+
+### Project root and linked worktrees (`ARTISYN_PROJECT_ROOT`)
+
+The "git repo root" above is the **main checkout**: inside a linked git worktree the hook resolves the root from
+`git rev-parse --git-common-dir`, so a worktree session reads the main checkout's `.artisyn/config/`, writes to its
+`.artisyn/ai_work_dir/` and uploads `git.root` = the main checkout.
+
+Since hook `2.23.0`, the environment variable `ARTISYN_PROJECT_ROOT` overrides this. When it is set, non-blank, and
+the hook's `cwd` is that directory or inside it, the hook uses that directory as the project root instead — for
+config, the work dir, the OTEL receiver owner, Claude's transcript-project lookup and the uploaded `git.root`. It is
+meant for an environment that can see only one worktree (e.g. a dev sandbox container), where the main checkout
+is not available. When the `cwd` is outside the directory, or the variable is unset or blank, the variable is
+ignored and nothing changes, so a container-wide value does not affect other repos run from the same environment.
+It is read from the hook process's environment (inherited from Claude Code), not from the config files.
 
 ### Config keys and defaults
 

@@ -45,23 +45,6 @@ const CHECK_RESULT_SCHEMA = {
   required: ['status', 'findings', 'hardBlockerReason', 'summary'],
 }
 
-// Optional live progress: when the skill created a session task for this check, the check agent
-// owns it and moves its status. Best-effort by design — the instruction is defensive so a missing
-// Task* tool surface or a failed call can never stall the real check.
-function progressTaskLines(taskId) {
-  if (!taskId) return ''
-  return `
-
-### Progress task
-
-Session task \`${taskId}\` shows this check as a checkbox in the user's task list, and you own it.
-Before anything else, load the tool schema with \`ToolSearch("select:TaskUpdate")\`, then call
-\`TaskUpdate({ taskId: '${taskId}', status: 'in_progress' })\`. Set it \`completed\` only when the
-check genuinely ran to completion; if it could not, leave it \`in_progress\`. If ToolSearch does not
-find TaskUpdate or any call fails, silently skip all further task updates — a tracking failure is
-never a hard blocker and must not affect your reported result.`
-}
-
 function buildCheckPrompt(check, taskLabel, index, total) {
   return `You are running post-implementation check **${index + 1}/${total}: ${check.name}** for task ${taskLabel}.
 
@@ -84,7 +67,7 @@ report status "hard-blocker" with the reason instead of guessing.
   "hard-blocker". Ordinary findings are NOT a hard blocker; report them via \`findings\` with status "ok".
 - \`findings\`: every issue found, with severity, a description, and the file it applies to (if any).
 - \`hardBlockerReason\`: why, when status is "hard-blocker". Empty string when status is "ok".
-- \`summary\`: what you checked and what you found, in one or two sentences.${progressTaskLines(check.taskId)}`
+- \`summary\`: what you checked and what you found, in one or two sentences.`
 }
 
 // This workflow needs a structured `checks` array, so a bare slash-command argument

@@ -19,6 +19,9 @@ web client.
   docker compose -f artisyn-log-run-local/docker-compose.yml up -d
   ```
 
+  The container is named `log-hub-postgres` on the Docker network `log-hub-net`, so Claude
+  sandboxes (`scripts/claude-docker`) can share it; the usage above stays the same.
+
 ## Setup
 
 ```sh

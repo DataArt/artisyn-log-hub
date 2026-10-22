@@ -21,6 +21,14 @@ npm run test:scenarios -- --only contract   # the same, as the runner's `contrac
 ```
 
 Needs only Postgres. Health check `contract` (`dir server`, group `app`, 600 s, `finalOnly`).
+
+**Database URL precedence** (`setup/global-setup.ts`, read from the env snapshot taken before the
+`AppModule` import): **`TEST_DATABASE_URL` → `DATABASE_URL` → `server/.env(.local)`**. A URL from the
+caller's environment overrides whatever `server/.env` loads. A Claude sandbox sets
+`TEST_DATABASE_URL` to its `log_hub_<name>_test` DB while `DATABASE_URL` stays its live dev DB, so the
+`contract_<uuid>` schemas (and the stale `contract_%` cleanup) never touch the live DB or another
+sandbox ([docker-dev-container.md](../docker-dev-container.md)). On the host neither is usually
+set and `server/.env` applies.
 The main `npm run test` never picks the suite up (`*.contract-spec.ts` is outside its `testRegex`).
 
 # Pieces

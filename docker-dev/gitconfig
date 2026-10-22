@@ -1,0 +1,5 @@
+# Image-wide /etc/gitconfig (container-only, never written to the shared .git/config).
+# The worktree and the main repo's .git are bind mounts owned by the host user, so git inside
+# the container would otherwise refuse them as "dubious ownership".
+[safe]
+	directory = *

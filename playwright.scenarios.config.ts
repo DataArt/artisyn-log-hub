@@ -7,6 +7,7 @@
 // project greps its tag. The `corpus` project always runs on the mode-A stand.
 import { defineConfig, devices } from '@playwright/test';
 import * as path from 'path';
+import { scaled } from './tests/timeout-scale';
 
 const ROOT = __dirname;
 const SCENARIOS_TMP = path.join(ROOT, 'tmp', 'scenarios');
@@ -23,8 +24,10 @@ const modeProject = (mode: 'a' | 'b' | 'c') => ({
 export default defineConfig({
   testDir: path.join(ROOT, 'tests', 'scenarios'),
   outputDir: path.join(SCENARIOS_TMP, 'test-results', reportLabel),
-  timeout: 60_000,
-  expect: { timeout: 10_000 },
+  // ×LOG_HUB_TEST_TIMEOUT_SCALE (5 in a Claude sandbox, 1 on the host); per-test
+  // test.setTimeout() calls are scaled by the auto fixture in tests/scenarios/fixtures.
+  timeout: scaled(60_000),
+  expect: { timeout: scaled(10_000) },
   fullyParallel: false,
   workers: 1,
   retries: 0,

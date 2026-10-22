@@ -83,6 +83,8 @@ export function runInstaller(cli: InstallerCli, cwd: string, args: string[], opt
   const { home, fakeClaudeDir, stdin = '', env = {}, timeoutMs = 90_000 } = opts;
   const childEnv: Record<string, string | undefined> = {
     ...process.env,
+    // Also blanks ARTISYN_PROJECT_ROOT (a dev sandbox container sets it container-wide), so the
+    // hook processes the installer starts never resolve their root from it.
     ...fakeHomeEnv(home),
     ...pathWithoutClaude(fakeClaudeDir),
     CLAUDECODE: '',

@@ -25,22 +25,17 @@ Only proceed past this point once confirmed this is the first user message of th
 
 Follow the Progress tracking rules of the `adlc-lh:tracker` skill. If they are not already in
 context, read them: `${CLAUDE_PLUGIN_ROOT}/skills/tracker/SKILL.md`, section
-`## Progress tracking`. If the file cannot be read, apply the minimum: create the checklist
-below with `TaskCreate`, keep exactly one task `in_progress`, and never mark a failed step
-`completed`.
+`## Progress tracking`. If the file cannot be read, apply the minimum: write one line before
+each step below and never report a failed step as done.
 
-This skill's checklist:
+This skill's steps:
 
-- Phase A (known up front): `Run pre-run health check (if enabled)` · `Locate the
-  implementation plan` · `Extract the chunk list`
-- Phase B (in the same message that finishes step 2, once the chunks are known): one task per
-  chunk (subject = chunk name), then `Verify (health checks + judge)` and `Report chunk and
-  verification results`. Remember each created task's id — step 3 hands them to the workflow
-  agents, who mark their own task live from inside the workflow.
-- After the workflow returns, reconcile: set every chunk/verify task's final status from the
-  returned `chunks[]` and `verification` — an agent that died leaves its task `in_progress`
-  forever otherwise. On `halted`, leave the halting task `in_progress` and set the later ones
-  to `deleted` before asking the user how to proceed.
+- `Run pre-run health check (if enabled)`
+- `Locate the implementation plan`
+- `Extract the chunk list`
+- `Run the workflow (chunks + verify)` — the chunks run inside the workflow, so their progress
+  shows up in the 15-minute status, not as step lines
+- `Report chunk and verification results`
 
 ## Steps
 
@@ -136,55 +131,32 @@ Workflow({
   args: {
     planFile: '<the IMPL_PLAN path from step 1>',
     taskLabel: '$ARGUMENTS',
-    chunks: [ { name: '<chunk name>', items: ['<item 1>', '<item 2>', ...], taskId: '<its Phase B task id>' }, ... ],
-    verifyTaskId: '<the Verify task id from Phase B>',
+    chunks: [ { name: '<chunk name>', items: ['<item 1>', '<item 2>', ...] }, ... ],
   }
 })
 ```
-
-`taskId` and `verifyTaskId` are the session task ids created in Phase B of Progress tracking —
-each chunk agent (and the verify runner) updates its own task's status live. They are optional:
-if the checklist was not created, omit them and the workflow runs the same.
 
 This runs in the background. Do not poll, re-invoke it, or call `ScheduleWakeup` while waiting —
 that tool is only for `/loop` and does not apply here. The harness notifies you and resumes you
 automatically when it completes.
 
-#### Progress summary every 15 minutes
+#### Status every 15 minutes
 
-In the same message as the `Workflow` call, schedule a recurring progress summary with
-`CronCreate` (load its schema first with `ToolSearch("select:CronCreate,CronDelete")`):
+In the same message as the `Workflow` call, schedule the 15-minute status cron (Progress tracking
+in `adlc-lh:tracker`), then end your turn. Its status sources for this skill, all read-only:
 
-- `cron`: four minutes 15 apart, offset from the current minute so it does not land on :00/:30 —
-  e.g. started at 10:07 → `"22,37,52,7 * * * *"`.
-- `recurring: true`.
-- `prompt`: `"[implement-deep progress] Summarize what is happening inside the running
-  implement-deep workflow for <TASK_FOLDER_NAME> (see the 'Progress summary every 15 minutes'
-  section of the adlc-lh:implement-deep skill). Do not start, stop or change anything."`
-
-Remember the returned job id as `PROGRESS_CRON_ID`. If `CronCreate` is unavailable or fails, say so
-in one line and carry on without it — the summary is a convenience, never a blocker.
-
-Then end your turn. Each time the cron prompt fires (only while the session is idle), reply with a
-**short** summary (5–10 lines) built only from read-only sources — never touch code, tasks or the
-workflow while doing it:
-
-- Elapsed time since the workflow started.
-- Chunk progress from `TaskList` (the chunk agents mark their own tasks live): which chunks are
-  `completed`, which one is `in_progress` now, how many remain; whether Verify has started.
-- What the current chunk is touching: `git status --short` and `git diff --stat` (read-only git
-  only), compared with the previous summary — new/changed files since then.
+- `git status --short` and `git diff --stat` (read-only git only), compared with the previous
+  status — new/changed files since then. Match them against the chunk list to tell which chunk
+  is running now and how many remain.
 - Any new entry in `docs/BLOCKED.md`.
-- A one-line read: progressing normally / looks stuck (no new file changes and the same chunk
-  `in_progress` across two summaries) — just flag it, do not intervene.
-
-If the workflow has already finished when the prompt fires, do not summarize — `CronDelete` the
-job and wait for (or process) the completion notification.
+- "Looks stuck" means no new file changes across two statuses while chunks are still running.
+  Once the changes cover the last chunk, the workflow is in Verify (health checks + judge), which
+  runs long and normally changes no files — there, no changes is not a stuck signal.
 
 ### 4 — Wait and report
 
 First thing on completion (any outcome, including `halted`): `CronDelete(PROGRESS_CRON_ID)` if a
-progress cron was created, so no summaries fire after the run is over.
+status cron was created, so no statuses fire after the run is over.
 
 When the workflow completes, its result is:
 

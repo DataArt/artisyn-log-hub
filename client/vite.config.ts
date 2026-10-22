@@ -19,6 +19,9 @@ export default defineConfig({
   },
   server: {
     port: 5173,
+    // Set (e.g. to 0.0.0.0) inside the dev container so the published port reaches Vite;
+    // unset on the host, where Vite keeps its default.
+    host: process.env.LOG_HUB_VITE_HOST || undefined,
     proxy: {
       '/api': 'http://localhost:3000',
       '/static': 'http://localhost:3000',

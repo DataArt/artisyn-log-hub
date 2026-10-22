@@ -21,11 +21,10 @@ for the requirements doc, not noise.
 
 Follow the Progress tracking rules of the `adlc-lh:tracker` skill. If they are not already in
 context, read them: `${CLAUDE_PLUGIN_ROOT}/skills/tracker/SKILL.md`, section
-`## Progress tracking`. If the file cannot be read, apply the minimum: create the checklist
-below with `TaskCreate`, keep exactly one task `in_progress`, and never mark a failed step
-`completed`.
+`## Progress tracking`. If the file cannot be read, apply the minimum: write one line before
+each step below and never report a failed step as done.
 
-This skill's checklist:
+This skill's steps:
 
 - `Resolve the idea source (config, mode, tracker lookup)` — steps 1–3
 - `Derive task id, slug and title` — steps 4–6

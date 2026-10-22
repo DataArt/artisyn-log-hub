@@ -21,6 +21,11 @@
 //     workflowRunId ×2, journal, v2 route, current-first order, current/backlog, manifest ×4,
 //     SessionEnd ×4, upload lock ×4, hook-status, one-line-per-run logging ×4 (≈ 35)
 //   - hook/.claude/telemetry_tool/__tests__/manifest-bounded.test.js (5)
+//
+// Steps 12–15 cover the ARTISYN_PROJECT_ROOT override (git-context.js / project-root-override.js):
+// in a linked worktree it makes the worktree the project root, and it is ignored when unset or
+// when it does not contain the cwd.
+import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { test, expect } from '../fixtures';
@@ -29,14 +34,18 @@ import {
   copyToolDir,
   makeFakeGitRepo,
   makeFakeHome,
+  isRecord,
   ndjsonLines,
+  normalizePath,
   readHookLog,
   readManifest,
   runHook,
+  runScript,
   startFakeLogHub,
   subagentsDir,
   telemetryDir,
   tempDirs,
+  workDir,
   writeConfig,
   writeFakeMcpServer,
   QUIET_HOOK_CONFIG,
@@ -281,6 +290,77 @@ test('@S-HOOK-01 a Stop run uploads the right files in the right order and never
       expect(lines.filter((l) => /\[result\] done: uploaded=\d+ skipped=\d+ failed=0 total=\d+ target=http:\/\/127\.0\.0\.1:\d+/.test(l)).length).toBe(7);
       expect(lines.some((l) => /claude\/cur\.jsonl: uploaded \d+ KB uncompressed in 1 request$/.test(l))).toBe(true);
       expect(lines.some((l) => /session-end flush done: uploaded=2 failed=0 total=2/.test(l))).toBe(true);
+    });
+
+    // Steps 12–15: the ARTISYN_PROJECT_ROOT override (a dev sandbox mounts one linked worktree and
+    // points the variable at it). A separate fake repo with a linked worktree, each with its own
+    // config whose API key tells which config the hook read; a third, unrelated dir has a config
+    // too, so reading it would show. The prompt_start line telemetry-hook.js writes carries
+    // `git.root`, and the Stop run uploads it in the artisyn body.
+    const mainRepo = makeFakeGitRepo(dirs, { remote: 'git@git.arrakis.test:scn/hook01/wt.git' });
+    const worktree = path.join(dirs.make('hook-wt'), 'wt');
+    const elsewhere = dirs.make('hook-elsewhere');
+    const KEYS = { main: 'k-main-111111', worktree: 'k-worktree-222222', elsewhere: 'k-elsewhere-333333' };
+
+    /** UserPromptSubmit then Stop for `sid` in the worktree; returns this round's requests. */
+    const promptAndStop = async (sid: string, projectRoot: string): Promise<FakeRequest[]> => {
+      const env = { ARTISYN_PROJECT_ROOT: projectRoot };
+      const input = { session_id: sid, cwd: worktree };
+      hub!.requests.length = 0;
+      const prompt = await runScript(toolDir, 'telemetry-hook.js', { ...input, hook_event_name: 'UserPromptSubmit', prompt: 'wt' }, { home, env });
+      expect(prompt.code, prompt.stderr).toBe(0);
+      const stop = await runHook(toolDir, { ...input, hook_event_name: 'Stop' }, { home, env });
+      expect(stop.code, stop.stderr).toBe(0);
+      return [...hub!.requests];
+    };
+
+    /** `git` of the prompt_start line in the artisyn upload of `sid`. */
+    const uploadedGit = (requests: FakeRequest[], sid: string): Record<string, unknown> => {
+      const artisyn = requests.find((r) => r.type === 'artisyn' && r.sessionId === sid);
+      expect(artisyn, `artisyn/${sid} uploaded: ${requests.map((r) => `${r.type}/${r.sessionId}`).join(', ')}`).toBeDefined();
+      const promptStart = ndjsonLines(artisyn!.body.toString('utf8')).find((e) => e.event === 'prompt_start');
+      expect(promptStart, 'prompt_start line in the artisyn body').toBeDefined();
+      const gitInfo = promptStart?.git;
+      if (!isRecord(gitInfo)) throw new Error(`prompt_start of ${sid} has no git object: ${JSON.stringify(promptStart)}`);
+      return gitInfo;
+    };
+
+    await test.step('12. setup: a linked worktree of a fake repo; main repo, worktree and an unrelated dir each with its own config', async () => {
+      const add = spawnSync('git', ['worktree', 'add', '-q', '-b', 'sandbox', worktree], { cwd: mainRepo, encoding: 'utf8' });
+      expect(add.status, add.stderr).toBe(0);
+      writeConfig(mainRepo, { base: { ...QUIET_HOOK_CONFIG, serverUrl: hub!.url, sendLogsTimeoutMs: 5000 }, local: { apiKey: KEYS.main } });
+      writeConfig(worktree, { base: { ...QUIET_HOOK_CONFIG, serverUrl: hub!.url, sendLogsTimeoutMs: 5000 }, local: { apiKey: KEYS.worktree } });
+      writeConfig(elsewhere, { base: { ...QUIET_HOOK_CONFIG, serverUrl: hub!.url, sendLogsTimeoutMs: 5000 }, local: { apiKey: KEYS.elsewhere } });
+    });
+
+    await test.step('13. ARTISYN_PROJECT_ROOT = the worktree → the worktree\'s config and work dir; uploaded git.root == the worktree', async () => {
+      const requests = await promptAndStop('wt-override', worktree);
+      expect(requests.length).toBeGreaterThan(0);
+      for (const r of requests) expect(r.headers['x-api-key']).toBe(KEYS.worktree);
+      const gitInfo = uploadedGit(requests, 'wt-override');
+      expect(normalizePath(String(gitInfo.root))).toBe(normalizePath(worktree));
+      expect(normalizePath(String(gitInfo.worktreeRoot))).toBe(normalizePath(worktree));
+      expect(readHookLog(worktree, 'send-logs-hook.js').length).toBeGreaterThan(0);
+      expect(fs.existsSync(workDir(mainRepo)), 'nothing written into the main checkout').toBe(false);
+    });
+
+    await test.step('14. ARTISYN_PROJECT_ROOT unset → the same worktree resolves to the main fake repo, as before', async () => {
+      const requests = await promptAndStop('wt-unset', '');
+      expect(requests.length).toBeGreaterThan(0);
+      for (const r of requests) expect(r.headers['x-api-key']).toBe(KEYS.main);
+      const gitInfo = uploadedGit(requests, 'wt-unset');
+      expect(normalizePath(String(gitInfo.root))).toBe(normalizePath(mainRepo));
+      expect(normalizePath(String(gitInfo.worktreeRoot))).toBe(normalizePath(worktree));
+      expect(readHookLog(mainRepo, 'send-logs-hook.js').length).toBeGreaterThan(0);
+    });
+
+    await test.step('15. ARTISYN_PROJECT_ROOT = a dir that does not contain the cwd → ignored, the main fake repo again', async () => {
+      const requests = await promptAndStop('wt-foreign', elsewhere);
+      expect(requests.length).toBeGreaterThan(0);
+      for (const r of requests) expect(r.headers['x-api-key']).toBe(KEYS.main);
+      const gitInfo = uploadedGit(requests, 'wt-foreign');
+      expect(normalizePath(String(gitInfo.root))).toBe(normalizePath(mainRepo));
+      expect(fs.existsSync(workDir(elsewhere)), 'nothing written into the unrelated dir').toBe(false);
     });
   } finally {
     await hub?.close();

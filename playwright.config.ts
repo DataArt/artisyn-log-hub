@@ -1,8 +1,11 @@
 import { defineConfig, devices } from '@playwright/test';
+import { scaled } from './tests/timeout-scale';
 
 export default defineConfig({
   testDir: './tests/e2e',
-  timeout: 30_000,
+  // ×LOG_HUB_TEST_TIMEOUT_SCALE (5 in a Claude sandbox, 1 on the host).
+  timeout: scaled(30_000),
+  expect: { timeout: scaled(5_000) },
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 2 : 0,

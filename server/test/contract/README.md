@@ -15,8 +15,11 @@ cd server
 npm run test:contract        # jest -c jest.contract.config.js --runInBand
 ```
 
-Needs Postgres (`DATABASE_URL` from `server/.env`, or the one passed in by the caller —
-`npm run test:scenarios -- --only contract` from the repo root passes the runner's). It needs
+Needs Postgres. The database URL is, in this order: `TEST_DATABASE_URL` from the caller's
+environment, then `DATABASE_URL` from the caller's environment
+(`npm run test:scenarios -- --only contract` from the repo root passes the runner's), then
+`DATABASE_URL` from `server/.env`. A Claude sandbox sets `TEST_DATABASE_URL` to its own test DB so
+contract schemas never land in its live dev DB (`docs/knowledgebase/docker-dev-container.md`). It needs
 neither the dev server nor Mailpit. The main `npm run test` never picks these specs up: their
 names end in `.contract-spec.ts`, which the main jest `testRegex` does not match.
 

@@ -38,10 +38,14 @@ async function dropStaleContractSchemas(pool: Pool): Promise<void> {
 }
 
 export default async function globalSetup(): Promise<void> {
-  // A DATABASE_URL handed in by the caller (scripts/scenarios/run.mjs passes the one its
-  // preflight checked) wins over whatever server/.env(.local) loaded during the AppModule import.
-  if (envBeforeAppModule.DATABASE_URL) {
-    process.env.DATABASE_URL = envBeforeAppModule.DATABASE_URL;
+  // A database URL handed in by the caller wins over whatever server/.env(.local) loaded during
+  // the AppModule import. TEST_DATABASE_URL comes first (a dev container points tests at its test
+  // DB with it while DATABASE_URL stays the live dev DB), then DATABASE_URL
+  // (scripts/scenarios/run.mjs passes the one its preflight checked).
+  const callerDatabaseUrl =
+    envBeforeAppModule.TEST_DATABASE_URL || envBeforeAppModule.DATABASE_URL;
+  if (callerDatabaseUrl) {
+    process.env.DATABASE_URL = callerDatabaseUrl;
   }
 
   // The upload-queue worker is parked (one tick per hour, i.e. never within a run). A contract

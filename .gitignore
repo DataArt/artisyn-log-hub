@@ -23,6 +23,9 @@ server/perf-tests/*.js
 /server/export-import/
 # Local dev postgres cluster (bind-mounted by server/artisyn-log-run-local/docker-compose.yml).
 /server/artisyn-log-run-local/data/
+# Shared Claude profile of the dev sandboxes (login, history), mounted into every container
+# by scripts/claude-docker.mjs as CLAUDE_CONFIG_DIR.
+/docker-dev/claude-home/
 /Claude.local.md
 /.playwright-work-folder/
 .playwright-work-folder/
@@ -31,6 +34,9 @@ artisyn-hooks-installer/node_modules/
 artisyn-hooks-installer/dist/
 server/src/public/static/*.tgz
 server/src/public/static/*.tar.gz
+# Written by build-hooks-installer.js and on every backend start (a fresh sandbox worktree has no
+# local ignore file for it).
+server/src/public/static/installer-version.json
 /artisyn-hooks-installer/dist/
 
 # E2E run scratch — never commit (storageState carries session cookies;

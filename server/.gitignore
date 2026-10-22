@@ -46,6 +46,8 @@ lerna-debug.log*
 .tmp
 
 # Runtime data
+# Default UPLOAD_QUEUE_DIR of the dev backend (raw uploads waiting to be ingested)
+/upload-queue/
 pids
 *.pid
 *.seed

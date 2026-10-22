@@ -363,6 +363,16 @@ application code, and an un-updated install keeps uploading exactly what it alwa
 | `git.root` | `getGitRoot()` — `git rev-parse --git-common-dir` | The repo root of the machine that ran the session. Without it the server cannot tell a repo-relative path from an absolute one, so **no** path can be normalised |
 | `git.worktreeRoot` | `git rev-parse --show-toplevel` | `--git-common-dir` deliberately returns the **primary** checkout's root, so a session run inside a *linked worktree* would otherwise have every path classified out-of-repo |
 
+**`ARTISYN_PROJECT_ROOT` override (hook `2.23.0`+).** When the env variable is set and the session
+`cwd` is inside it, `getGitRoot()` returns that directory instead of the `--git-common-dir` root
+(`project-root-override.js`, applied in `resolveRootFromCommonDir`). The Claude sandbox launcher sets
+it to the sandbox's linked worktree, so a sandbox upload has **`git.root` equal to
+`git.worktreeRoot`** (both the worktree). This is not a format change — same keys, same types — and
+the server needs no branch: `resolveSessionRepoRoots()` simply sees one root instead of two, and
+paths inside the worktree still normalise. Without the variable (every host session, including a
+host session inside a linked worktree) the values are exactly as above. See
+[`docker-dev-container.md`](docker-dev-container.md).
+
 The server extracts both with `extractGitRoots(lines)` — a copy of `extractGitBranch`'s shape — into
 `logs.git_repo_root` / `logs.git_worktree_root`, exactly as `git_branch` is stored today. Note the
 pre-existing shape: the uploaded `repo` is `git.remote || git.root`, so before this change the root

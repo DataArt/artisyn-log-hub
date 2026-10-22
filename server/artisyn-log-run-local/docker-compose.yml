@@ -2,6 +2,12 @@ services:
   db:
     # Pinned major and libc (Debian, not -alpine): an existing cluster cannot change either.
     image: postgres:18.4
+    # Fixed name + hostname on the named network below, so Claude dev-container sandboxes
+    # (docker-dev/) can reach this same Postgres as log-hub-postgres:5432.
+    container_name: log-hub-postgres
+    hostname: log-hub-postgres
+    # Sized for the host dev server plus up to ~4 sandboxes (50 connections each).
+    command: ["postgres", "-c", "max_connections=300"]
     environment:
       POSTGRES_DB: a-log
       POSTGRES_USER: postgres
@@ -19,3 +25,7 @@ services:
     volumes:
       # Relative to this compose file -> server/artisyn-log-run-local/data/pgdata (gitignored).
       - ./data/pgdata:/var/lib/postgresql/data
+
+networks:
+  default:
+    name: log-hub-net

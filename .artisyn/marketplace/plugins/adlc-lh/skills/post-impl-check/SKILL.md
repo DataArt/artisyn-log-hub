@@ -24,20 +24,15 @@ Only proceed past this point once confirmed this is the first user message of th
 
 Follow the Progress tracking rules of the `adlc-lh:tracker` skill. If they are not already in
 context, read them: `${CLAUDE_PLUGIN_ROOT}/skills/tracker/SKILL.md`, section
-`## Progress tracking`. If the file cannot be read, apply the minimum: create the checklist
-below with `TaskCreate`, keep exactly one task `in_progress`, and never mark a failed step
-`completed`.
+`## Progress tracking`. If the file cannot be read, apply the minimum: write one line before
+each step below and never report a failed step as done.
 
-This skill's checklist:
+This skill's steps:
 
-- Phase A (known up front): `Discover available checks`
-- Phase B (in the same message that finishes step 1, once the checks are known): one task per
-  discovered check (subject = the check's `name`, description = its `description` + `skill`),
-  then `Report the check summary`. Remember each created task's id — step 2 hands them to the
-  check agents, who mark their own task live from inside the workflow.
-- After the workflow returns, reconcile: set every check task's final status from the returned
-  `checks[]`. On `halted`, leave the halting task `in_progress` and set the later ones to
-  `deleted` before asking the user how to proceed.
+- `Discover available checks`
+- `Run the checks workflow` — the checks run inside the workflow, so their progress shows up in
+  the 15-minute status, not as step lines
+- `Report the check summary`
 
 ## Steps
 
@@ -74,8 +69,9 @@ If the script exits with code 1, or if `checks` is an empty array, stop and tell
 
 ### 2 — Run the checks workflow
 
-The Phase B task list you just created *is* the display of what will run, in order — do not
-print a separate list of checks.
+In the step line, append the discovered check names in run order — e.g.
+`→ Run the checks workflow (2/3): Docker-build Check, Cost-calc Check` — that is the display of
+what will run.
 
 Call the `Workflow` tool:
 
@@ -84,14 +80,16 @@ Workflow({
   name: 'adlc-lh:post-impl-check-wf',
   args: {
     taskLabel: '$ARGUMENTS',
-    checks: [ { id, name, description, skill, taskId }, ... ],  // the discovered checks array from step 1
+    checks: [ { id, name, description, skill }, ... ],  // the discovered checks array from step 1
   }
 })
 ```
 
-`taskId` is each check's session task id from Phase B of Progress tracking — the check agent
-updates its own task's status live. It is optional: if the checklist was not created, omit it
-and the workflow runs the same.
+In the same message, schedule the 15-minute status cron (Progress tracking in `adlc-lh:tracker`).
+Its status sources for this skill, all read-only: elapsed time against the number of checks, any
+new entry in `docs/BLOCKED.md`, and `git status --short` (read-only git only). Checks are audits
+and normally change no files, so no file changes is not a stuck signal here — but a check that
+does change files is worth a `⚠ Suspicious:` line.
 
 Each check runs as its own subagent, one at a time in order, fully automatically — there is
 **no pause between checks**, even when a check reports findings. The only thing that stops the
@@ -104,6 +102,9 @@ Do not poll, re-invoke the workflow, or call `ScheduleWakeup` while waiting — 
 automatically when it completes.
 
 ### 3 — Wait and report
+
+First thing on completion (any outcome, including `halted`): `CronDelete(PROGRESS_CRON_ID)` if a
+status cron was created.
 
 When the workflow completes, its result is:
 

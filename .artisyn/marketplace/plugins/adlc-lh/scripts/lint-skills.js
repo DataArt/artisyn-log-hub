@@ -26,7 +26,7 @@
 //
 // 3. Progress-tracking wiring between the lifecycle skills and tracker. Every
 // lifecycle skill carries a `## Progress tracking` section that POINTS at the
-// shared rules in tracker/SKILL.md and carries a TaskCreate fallback line — the
+// shared rules in tracker/SKILL.md and carries a minimal fallback line — the
 // rules themselves live only in tracker. A missing section, a pointer at a
 // section tracker no longer has, or a pasted copy of the shared rules (the
 // distill-prompt.md mistake, repeated) are all silent breakage across nine
@@ -96,6 +96,8 @@ const LIFECYCLE_SKILLS = ['scratch', 'review', 'review-deep', 'plan', 'plan-deep
 // A phrase that exists only in tracker's shared rules — its presence in a
 // lifecycle skill means the rules were copied instead of pointed at.
 const SHARED_RULES_MARKER = 'progress display, not a work queue';
+// The minimal rule each lifecycle skill keeps for when tracker cannot be read.
+const FALLBACK_MARKER = 'never report a failed step as done';
 const progressTracking = [];
 for (const name of LIFECYCLE_SKILLS) {
   const file = path.join(ROOT, 'skills', name, 'SKILL.md');
@@ -109,8 +111,8 @@ for (const name of LIFECYCLE_SKILLS) {
   if (!text.includes('skills/tracker/SKILL.md')) {
     progressTracking.push(`${relative}: Progress tracking does not point at tracker/SKILL.md`);
   }
-  if (!text.includes('TaskCreate')) {
-    progressTracking.push(`${relative}: no TaskCreate fallback line in Progress tracking`);
+  if (!text.includes(FALLBACK_MARKER)) {
+    progressTracking.push(`${relative}: no fallback line in Progress tracking`);
   }
   if (text.includes(SHARED_RULES_MARKER)) {
     progressTracking.push(`${relative}: contains a copy of tracker's shared rules — keep only the pointer`);
@@ -120,6 +122,24 @@ const trackerFile = path.join(ROOT, 'skills', 'tracker', 'SKILL.md');
 const trackerText = fs.existsSync(trackerFile) ? fs.readFileSync(trackerFile, 'utf8') : '';
 if (!/^## Progress tracking$/m.test(trackerText) || !trackerText.includes(SHARED_RULES_MARKER)) {
   progressTracking.push('skills/tracker/SKILL.md: shared "## Progress tracking" rules section missing — nine skills point at it');
+}
+// The session has no task-list tool any more: no skill or workflow prompt may tell
+// the model or an agent to use one. tracker names them once, only to say they are
+// gone — that line is the single allowed mention.
+const TASK_TOOL = /\bTask(Create|Update|List)\b/;
+const TASK_TOOL_ALLOWED_LINE = 'Do not look for `TaskCreate`';
+const taskToolFiles = [
+  ...fs.readdirSync(path.join(ROOT, 'skills')).map((name) => path.join(ROOT, 'skills', name, 'SKILL.md')),
+  ...fs.readdirSync(path.join(ROOT, 'workflows')).filter((name) => name.endsWith('.js'))
+    .map((name) => path.join(ROOT, 'workflows', name)),
+].filter((file) => fs.existsSync(file));
+for (const file of taskToolFiles) {
+  const lines = fs.readFileSync(file, 'utf8').split(/\r?\n/);
+  lines.forEach((line, i) => {
+    if (TASK_TOOL.test(line) && !line.includes(TASK_TOOL_ALLOWED_LINE)) {
+      progressTracking.push(`${path.relative(ROOT, file)}:${i + 1}: refers to a Task* tool — the session has no task-list tool`);
+    }
+  });
 }
 
 if (hardcodedPaths.length) {

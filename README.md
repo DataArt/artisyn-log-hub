@@ -278,6 +278,13 @@ Hub (dogfooding).
 
 The canonical build, lint and test commands are listed in `CLAUDE.md`.
 
+**Optional: Claude sandboxes.** `scripts/claude-docker.ps1` (or `.cmd`) runs Claude Code in an
+isolated Docker container per git worktree; see
+[`docs/knowledgebase/docker-dev-container.md`](docs/knowledgebase/docker-dev-container.md). It is
+opt-in: the host workflow above is unchanged. The very first run builds the sandbox image, which
+takes ~20–30 min; later runs reuse it and start in seconds. A sandbox never works on a branch
+listed in `.claude/claude-isolation.json` (by default `main`).
+
 ## Licence
 
 Artisyn Log Hub is released under the MIT licence; see [LICENSE](LICENSE). Third-party packages and
