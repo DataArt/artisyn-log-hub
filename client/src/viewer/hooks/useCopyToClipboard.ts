@@ -1,6 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 
-export function useCopyToClipboard(text: string): {
+export function useCopyToClipboard(
+  text: string,
+  resetMs = 1500,
+): {
   copied: boolean;
   copy: () => void;
 } {
@@ -19,7 +22,7 @@ export function useCopyToClipboard(text: string): {
       await navigator.clipboard.writeText(text);
       setCopied(true);
       if (timerRef.current) clearTimeout(timerRef.current);
-      timerRef.current = setTimeout(() => setCopied(false), 1500);
+      timerRef.current = setTimeout(() => setCopied(false), resetMs);
     } catch {
       /* clipboard not available */
     }

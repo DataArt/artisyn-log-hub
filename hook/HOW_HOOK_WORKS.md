@@ -135,6 +135,13 @@ have nothing to link against and stay invisible on the repo's session list. Adde
 older hooks omit the field and servers that do not read it are unaffected. Like `prompt_start`, a
 `SessionStart` outside a git repo also carries a top-level `cwd` (hook `2.21.0`+).
 
+**Call identity on failure/denial events (hook `2.24.0`+).** `PostToolUseFailure` carries `tool_name`,
+`tool_input`, `error` and `tool_use_id`. `PermissionDenied` (fired by Claude Code only for auto-mode
+classifier denials) carries `tool_name`, `tool_input`, `tool_use_id` and `reason`. `PermissionRequest`
+still carries only `tool_name` and `tool_input` — Claude Code sends no `tool_use_id` for it. The new
+fields are `null` when Claude Code does not send them, and older hooks omit them; the viewer then falls
+back to matching the event to its tool call by name + input.
+
 ---
 
 ### `hook_service` — marks a session spawned by a hook-triggered `claude -p` call

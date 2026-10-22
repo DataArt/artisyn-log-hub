@@ -12,6 +12,8 @@ export const SESSION_TABS = [
   // The default landing tab; absent `tab` param means `summary`.
   'summary',
   'logs',
+  // Every Bash command of the session tree (main + sub-agents), one per row; always shown.
+  'bash',
   'info',
   // Legacy deep-link alias only: Call Tree moved into a Charts sub-tab, and the pane
   // redirects `tab=call-tree` to Charts. No trigger is rendered for it.

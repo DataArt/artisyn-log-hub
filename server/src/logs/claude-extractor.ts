@@ -336,6 +336,8 @@ interface ToolResultRecord {
   text: string;
   resultTs: number | null;
   toolUseResult: AnyRecord | null;
+  /** The result line's top-level `toolDenialKind`, when Claude Code recorded one. */
+  denialKind: string | null;
 }
 
 /**
@@ -1012,6 +1014,7 @@ export function extractClaudeStats(
       const promptId = asString(rec['promptId']);
       const isMeta = rec['isMeta'];
       const toolUseResult = asRecord(rec['toolUseResult']);
+      const denialKind = asString(rec['toolDenialKind']);
       const isSubagentResult =
         toolUseResult !== null && toolUseResult['agentId'] != null;
 
@@ -1051,6 +1054,7 @@ export function extractClaudeStats(
               text: flattenToolResultText(b['content']),
               resultTs: isNaN(resultTs) ? null : resultTs,
               toolUseResult,
+              denialKind,
             });
           }
 
@@ -1155,6 +1159,7 @@ export function extractClaudeStats(
             isError: result.isError,
             text: result.text,
             interrupted: result.toolUseResult?.['interrupted'] === true,
+            denialKind: result.denialKind ?? undefined,
           },
     );
     const duration = resolveToolDuration({

@@ -6,7 +6,7 @@ tags:
   - metrics
   - sub-agents
   - aggregation
-timestamp: "2026-08-22T00:00:00+04:00"
+timestamp: "2026-10-22T00:00:00+04:00"
 ---
 
 # Session Metric Scope (root vs tree)
@@ -276,7 +276,10 @@ the post-rollup world.
   `old_string` against `new_string` — validated at **99.6 % exact agreement with the native
   patch counts over 1 878 real calls**. Three rules make this safe, and none may be dropped:
   the native patch always wins when present; the fallback only applies to a call whose outcome
-  is `success`, so a rejected/errored/unresolved edit is never credited; and `Write` is excluded
+  is `success`, so a rejected/errored/unresolved edit is never credited — under the outcome rule
+  of [algorithms/tool-call-outcome.md](algorithms/tool-call-outcome.md) a call is unresolved when
+  its result line has a `toolDenialKind` or the interrupted flag, or is `is_error` with a
+  rejection marker; marker text in a non-error result no longer withholds the credit; and `Write` is excluded
   entirely, because its input has no prior content and an overwrite's removals are unknowable
   (a real one measured `+142 / −164`). This is *not* the rejected "count the new text" fallback
   — that reproduced the native counts on 0 % of the same calls.
@@ -422,9 +425,15 @@ hold most tool calls on delegating sessions, so a root-only figure reads as near
 
 Display rules these views follow, and which new views should reuse:
 
-- **`unresolved` is not a failure.** A call with no `tool_result`, or one the user rejected or
-  interrupted, gets its own column and is excluded from the success-rate denominator. Counting it
-  as a failure (as `log-parser.ts` does for its own purposes) inflates failure rates.
+- **`unresolved` is not a failure.** A call with no `tool_result`, or one the user or a
+  permission rule rejected or the user interrupted, gets its own column and is excluded from the
+  success-rate denominator. The client follows the same rule: the Logs parser no longer counts
+  rejected or unresolved calls as failures — its status is `'missing'` (no result), `'rejected'`
+  (a `toolDenialKind`, the interrupted flag, or a rejection marker on an `is_error` result) or
+  `'error'`, from the shared `classifyToolOutcome` in `session-log/tool-outcome.ts` (the server
+  twin is `server/src/logs/tool-stats.ts`). A rejection marker in a result that is not
+  `is_error` is ordinary output and stays a success. Rules and examples:
+  [algorithms/tool-call-outcome.md](algorithms/tool-call-outcome.md).
 - **No summed "total tool time" anywhere.** One assistant message can issue several `tool_use`
   blocks that run concurrently, so their durations overlap in wall-clock time. Rows with such calls
   get an "overlapping" badge instead (`ToolAnalyticsView.tsx`, `parallelBatchCalls`).

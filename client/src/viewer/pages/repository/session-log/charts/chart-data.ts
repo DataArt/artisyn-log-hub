@@ -183,15 +183,9 @@ function userTurnText(turn: PromptTurn): string {
   return '';
 }
 
-/** Total tool calls a turn issued, across every category the parser tracks. */
+/** Total tool calls a turn issued — every `tool_use` of the turn (DD-21a). */
 export function turnToolCallCount(turn: PromptTurn): number {
-  return (
-    turn.toolCalls.length +
-    turn.skills.length +
-    turn.files.length +
-    turn.images.length +
-    turn.agentActivations.length
-  );
+  return turn.allToolCalls.length;
 }
 
 /** Map of tool-name → count for a single turn (drives the heatmap). */
@@ -200,12 +194,7 @@ function turnToolCounts(turn: PromptTurn): Map<string, number> {
   const add = (name: string, n = 1) =>
     counts.set(name, (counts.get(name) ?? 0) + n);
 
-  for (const t of turn.toolCalls) add(t.name);
-  for (const f of turn.files) add(f.tool);
-  if (turn.skills.length > 0) add('Skill', turn.skills.length);
-  for (const img of turn.images) add(img.toolName);
-  if (turn.agentActivations.length > 0)
-    add('Agent', turn.agentActivations.length);
+  for (const t of turn.allToolCalls) add(t.name);
   return counts;
 }
 

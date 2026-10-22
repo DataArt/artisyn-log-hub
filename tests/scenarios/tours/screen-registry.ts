@@ -613,6 +613,14 @@ const SESSION_TAB_ROWS: Array<Omit<ScreenRow, 'story' | 'role' | 'modes' | 'rout
     screenshot: true,
   },
   {
+    id: 'session.bash',
+    query: `${SESSION_QUERY}&tab=bash`,
+    tab: { group: 'session', id: 'bash' },
+    title: 'Session: Bash',
+    expectTestId: 'session-bash-tab',
+    docRef: { file: SESSION_DOC, heading: 'Bash' },
+  },
+  {
     id: 'session.charts',
     query: `${SESSION_QUERY}&tab=charts`,
     tab: { group: 'session', id: 'charts' },

@@ -1,17 +1,25 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import {
   buildFileSummary,
   FileRow,
   SectionHeader,
 } from './prompt-turn-helpers';
-import type { FileAccess } from './types';
+import type { FileAccess, ToolCallDetail } from './types';
 
 interface Props {
   files: FileAccess[];
+  /** The calls each file's `toolUseId` is resolved in (`allToolCalls`); rows without one are not clickable. */
+  calls?: ToolCallDetail[];
+  onOpenCall?: (call: ToolCallDetail) => void;
 }
 
-export function PromptTurnFilesSection({ files }: Props) {
+export function PromptTurnFilesSection({ files, calls, onOpenCall }: Props) {
   const [catOpen, setCatOpen] = useState<Record<string, boolean>>({});
+  const callsById = useMemo(() => {
+    const map = new Map<string, ToolCallDetail>();
+    for (const c of calls ?? []) if (c.id) map.set(c.id, c);
+    return map;
+  }, [calls]);
 
   if (files.length === 0) return null;
 
@@ -57,7 +65,16 @@ export function PromptTurnFilesSection({ files }: Props) {
                 <table className="mt-1 w-full">
                   <tbody>
                     {catFiles.map((file, i) => (
-                      <FileRow key={i} file={file} />
+                      <FileRow
+                        key={i}
+                        file={file}
+                        call={
+                          file.toolUseId
+                            ? callsById.get(file.toolUseId)
+                            : undefined
+                        }
+                        onOpen={onOpenCall}
+                      />
                     ))}
                   </tbody>
                 </table>

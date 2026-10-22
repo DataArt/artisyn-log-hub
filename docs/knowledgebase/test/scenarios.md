@@ -190,7 +190,10 @@ repository of their own (`helpers/session-view.ts`) and compare the UI tabs with
 S-SESS-01 (GS-01: Summary, Info, Statistics, Logs), S-SESS-03 (GS-07 hidden lines, turn tokens,
 cost tooltip, tool modal; GS-01 files), S-SESS-04 (GS-02 nesting and tree cost), S-SESS-09 (GS-08
 Windows change surface and its three warnings; GS-09 path normalisation), S-SESS-12 (Raw Logs
-owner-only, a restricted-team manager refused).
+owner-only, a restricted-team manager refused). S-SESS-14 (`s-sess-14.spec.ts`, modes A and C)
+builds its own session instead of a golden fixture: the Context Growth step modal, the Bash view,
+call statuses in Logs (a failed Edit in Files, an orphan Agent call) and the Bash tab with its
+`bashCall` URL param.
 
 The cost, analytics and report scenarios (`tests/scenarios/view/s-cost-*.spec.ts`,
 `s-anlt-01.spec.ts`, `s-rept-0[12].spec.ts`, helpers in `helpers/reports.ts`) load several

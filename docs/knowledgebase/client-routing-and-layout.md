@@ -5,7 +5,7 @@ description: "React SPA routing, layout, provider hierarchy, major page componen
 tags:
   - client
   - routing
-timestamp: "2026-07-20T22:24:25+04:00"
+timestamp: "2026-10-22T00:00:00+04:00"
 ---
 
 # Client Component Hierarchy
@@ -87,7 +87,16 @@ Grouping uses barrel files because Rollup merges dynamic-import targets only whe
 **In-page chunks.** Three heavy tabs are boundaries inside their host page, each in its own
 `<Suspense fallback={<LazyFallback />}>` (not full-screen, so it fills the tab content area):
 `RepositoryView`'s Analytics tab (`RepositoryAnalytics`) and Reports tab (`ReportsPanel`), and
-`SessionDetailPane`'s Charts sub-tab (`SessionChartsTab`). Their code is fetched only when the tab opens.
+`SessionDetailPane`'s Charts, Change surface, Harness usage and Bash tabs (`SessionChartsTab`,
+`SessionChangeSurfaceTab`, `SessionHarnessUsageTab`, `SessionBashTab`). Their code is fetched only when the
+tab opens.
+
+**Bash parser chunk.** The Bash command view's tree-sitter parser (`web-tree-sitter` runtime ~210 KB WASM and
+the `tree-sitter-bash` grammar ~1.36 MB WASM, `client/src/viewer/lib/bash-view/browser-parser.ts`) is reached
+only through `import()` from `useBashView`, so it loads the first time a Bash call is shown (Logs modal,
+Context Growth step modal or Bash tab), never with the main bundle. The `.wasm` files are Vite `?url` assets;
+`vite.config.ts` excludes `web-tree-sitter` from `optimizeDeps`. The Bash tab's count in the tab bar needs no
+WASM (`collectBashCalls` is pure).
 
 **Help chunk.** `HelpModal` (with `react-markdown` and `remark-gfm`) is lazy in `MainNav.tsx`, but it is
 mounted only after `helpLoaded` flips true on the first click. `helpOpen` and `helpLoaded` are separate flags so
@@ -153,8 +162,9 @@ Main content for a repository. Reads `repoId` and optional `teamId` from react-r
 **Tab layout** via `PageTabs`:
 - **Sessions tab** — left column: scrollable session list (date, first prompt, branch); right panel:
   - **Top summary strip** (always visible when session selected): start time, end time, user email, session context key:value pairs.
-  - **Inner tab bar**: Logs | Call Tree | Charts | Info | Usage | Raw Logs tabs.
+  - **Inner tab bar** (`SessionTabBar.tsx`, ids in `tab-ids.ts` `SESSION_TABS`): Summary | Info | Logs | Bash | Charts | [Advisor] | Statistics | Change surface | Harness usage | [Raw Logs]. The entries below describe the older core tabs; Call Tree is now a Charts sub-tab (`tab=call-tree` redirects to Charts).
     - **Logs tab** (`SessionLogView`): structured prompt-turn list with context side panel.
+    - **Bash tab** (`SessionBashTab`, tab id `bash`): every Bash command of the session tree (main + sub-agents) in a keyboard-navigable list, with the readable command view of the selected one. The selected call lives in the `bashCall` search param (`useBashCallParam`, `setSearchParams(next, { replace: true })`); a missing or unknown id selects the first row without rewriting the URL.
     - **Call Tree tab** (`CallTreeView`): hierarchical token-cost breakdown tree (System Context → Prompt turns → per-turn children). Token counts and cost-share percentages with progress bars. Expandable rows for prompt turns, groups (Skills, Rules, Code, Docs), and sub-agent rows.
     - **Charts tab** (`SessionChartsTab`): five sub-tabs (Timeline, Agent Tree, Tool Heatmap, Context Usage, Context Growth).
     - **Info tab** (`SessionInfoTab`): session metadata panel with sections — Identity, Timeline, Activity, Tokens & Cost, Files & Tools, MCP Usage, Vision, Productivity, CLAUDE.md Context.

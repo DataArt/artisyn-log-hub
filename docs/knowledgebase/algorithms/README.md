@@ -42,6 +42,9 @@ format where the two differ).
 | [release-link-token](release-link-token.md) | `server/src/releases/release-token.ts` | jest |
 | [harness-snapshot](harness-snapshot.md) | hook `skill-catalog.js`, `harness-snapshot.js` | `node --test` |
 | [workflow-agent-rows](workflow-agent-rows.md) | `client/.../session-log/workflow-agent-rows.ts` | vitest |
+| [tool-call-sections](tool-call-sections.md) | `client/.../session-log/tool-calls.ts` | vitest |
+| [tool-call-outcome](tool-call-outcome.md) | `client/.../session-log/tool-outcome.ts`; twin `server/src/logs/tool-stats.ts` | vitest, jest |
+| [bash-command-view](bash-command-view.md) | `client/src/viewer/lib/bash-view/*` | vitest |
 | [sandbox-prune-classification](sandbox-prune-classification.md) | `scripts/claude-docker/prune.mjs` | `node --test` (`npm run test:scripts`) |
 
 ## File layout

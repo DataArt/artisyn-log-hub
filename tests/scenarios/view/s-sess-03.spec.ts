@@ -16,8 +16,11 @@
 //   - the per-turn costs of GS-07 are not literals of expected.json (only the session total is): the
 //     scenario checks that the three turn costs add up to it and that each tooltip's rows add up to
 //     its turn.
-//   - a denied call is rendered «✗ error» in the tool modal (the result text is the denial), the same
-//     as a failure; the outcome split (failure vs unresolved) is the Statistics tab's job (S-SESS-08).
+//   - a denied call (an is_error result with Claude Code's rejection sentence) is rendered «⊘ rejected»
+//     in the tool modal, not «✗ error» (algorithm doc tool-call-outcome.md); the Statistics tab's
+//     outcome split (failure vs unresolved) is S-SESS-08's job.
+//   - a Bash call's modal is the Bash view (bash-command-view.md): caption, FILES (Changes), the
+//     COMMAND with a Formatted | Raw toggle and «Copy original», then OUTPUT — not the input JSON.
 //
 // Replaces:
 //   - client/src/viewer/__tests__/unit/log-parser.test.ts (qualifying user event rules, slash command
@@ -129,18 +132,31 @@ test('@S-SESS-03 Logs: what counts as a prompt, what is hidden, how a turn reads
     await page.mouse.move(0, 0);
   });
 
-  await test.step('6. turn 2 Tools → Bash row opens a modal with INPUT (the command) and RESULT (the denial), with copy', async () => {
+  await test.step('6. turn 2 Tools → Bash row opens the Bash view: «⊘ rejected», COMMAND rm -rf build, Changes build, Formatted | Raw, Copy original, OUTPUT (the denial) with copy', async () => {
     const turn = logTurns(page).nth(1);
     await turn.getByRole('button', { name: /Tools/ }).click();
     await turn.locator('tr', { hasText: 'Bash' }).first().click();
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible();
     await expect(dialog).toContainText('Bash');
-    await expect(dialog).toContainText('Input');
-    await expect(dialog).toContainText('"command": "rm -rf build"');
-    await expect(dialog).toContainText('Result');
-    await expect(dialog).toContainText("The user doesn't want to proceed with this tool use");
-    await expect(dialog.getByRole('button', { name: 'copy' })).toBeVisible();
+    // is_error + the rejection sentence → rejected, not error (tool-call-outcome.md TO-04).
+    await expect(dialog.getByTestId('tool-status-badge')).toHaveText('⊘ rejected');
+    await expect(dialog).not.toContainText('✗ error');
+    const view = dialog.getByTestId('bash-command-view');
+    await expect(view.getByTestId('bash-caption')).toHaveText('Remove the build folder');
+    // The parser loads lazily; FILES and the toggle appear once the view is ready.
+    await expect(view.getByTestId('bash-files-changes')).toContainText('build');
+    await expect(view.getByTestId('bash-highlighted-script')).toContainText('rm -rf build');
+    const formatted = view.getByRole('button', { name: 'formatted' });
+    const raw = view.getByRole('button', { name: 'raw' });
+    await expect(formatted).toHaveAttribute('aria-pressed', 'true');
+    await raw.click();
+    await expect(raw).toHaveAttribute('aria-pressed', 'true');
+    await expect(view.getByTestId('bash-highlighted-script')).toContainText('rm -rf build');
+    await expect(view.getByRole('button', { name: '⧉ Copy original' })).toBeVisible();
+    const output = view.getByTestId('tool-output-block');
+    await expect(output).toContainText("The user doesn't want to proceed with this tool use");
+    await expect(output.getByRole('button', { name: 'copy' })).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(dialog).toHaveCount(0);
   });

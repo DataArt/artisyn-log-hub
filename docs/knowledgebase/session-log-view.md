@@ -1,11 +1,11 @@
 ---
 type: "Architecture Guide"
 title: "Session Log View"
-description: "Session log view (Logs tab): component architecture, log parser, types, text extraction, and MCP handling."
+description: "Session log view (Logs tab): component architecture, log parser, tool-call core (sections, status, permission attribution), types, the shared tool view, Context Growth steps, the Bash tab, text extraction, and MCP handling."
 tags:
   - client
   - logs
-timestamp: "2026-10-21T02:00:00+04:00"
+timestamp: "2026-10-22T00:00:00+04:00"
 ---
 
 # Session Log View
@@ -26,9 +26,13 @@ Key files live in `client/src/viewer/pages/repository/session-log/`:
 | `SessionContextPanel.tsx` | Collapsible context panel at the top — CLAUDE.md files, rules, MCP tools, skills, agents registered in the session; the Files/Rules tables live in `SystemContextFilesTab.tsx` |
 | `instruction-files.ts` | Pure helpers for the Files/Rules tabs: `extractInstructionFiles` (`instructions` attachment), `rulesToInstructionFiles` (on-demand `nested_memory`), `mergeInstructionFiles`, `toUserDisplayPath`, `classifyInstructionRole` |
 | `PromptTurnList.tsx` | Scrollable list of prompt turns |
-| `PromptTurnItem.tsx` | Single turn row (header + metrics + skills + rules + tools + files + images + agent activations + sub-agents + workflows); clicking a tool row opens `ToolCallDetailModal` |
-| `ToolCallDetailModal.tsx` | Modal for a single tool call — INPUT (JSON) + RESULT blocks with copy and truncation toggle |
-| `prompt-turn-helpers.tsx` | Extracted helper components: `ToolCallRow`, `FileRow`, `ImageRow`, `SectionHeader`, summary builders |
+| `PromptTurnItem.tsx` | Single turn row (header + metrics + skills + rules + tools + files + images + agent activations + sub-agents + workflows); clicking a tool, file, skill or orphan Agent-call row opens `ToolCallDetailModal` |
+| `tool-calls.ts` | Tool-call core: `TOOL_SECTION` / `toolSection`, `FILE_TOOL_NAMES`, `buildToolResultIndex`, `extractRawToolCalls`, `buildAllToolCalls`, `extractPermissionEvents`, `attributePermissionEvents`, `deepEqual` / `deepSubset` — see [Tool calls](#tool-calls-tool-callsts-tool-outcomets) and `algorithms/tool-call-sections.md` |
+| `tool-outcome.ts` | `classifyToolOutcome` / `outcomeToStatus` / `REJECTION_MARKERS` — shared by the parser and the Statistics walker; see `algorithms/tool-call-outcome.md` |
+| `tool-call-view/` | The shared tool view (`ToolCallView`, `ToolViewProvider` / `useToolView`, `StatusBadge` / `StatusMark`, `ToolOutputBlock`, `BashCommandView`, `tool-bodies.tsx`, `useBashView`) used by the Logs modal, `SubAgentDetail`, the Context Growth step modal and the Bash tab |
+| `ToolCallDetailModal.tsx` | Modal shell for one tool call: `Dialog` + `ToolCallView` (header with badges, a body per tool, the output block) |
+| `prompt-turn-helpers.tsx` | Extracted helper components: `ToolCallRow`, `FileRow` (status mark, clickable when it has a call), `ImageRow`, `SectionHeader`, summary builders |
+| `bash-tab/` | The session Bash tab: `collectBashCalls`, `SessionBashTab`, `BashCallList`, `useBashCallParam` — see [Bash tab](#bash-tab) |
 | `SubAgentNode.tsx` | Collapsible sub-agent node for the turn-level Sub-agents section (supports arbitrary nesting depth); trigger + `children` recursion, the body is `SubAgentDetail` |
 | `SubAgentDetail.tsx` | Sub-agent detail body of `SubAgentNode` — prompt (200-char collapse), model, tokens + cost tooltip, duration, Skills, Rules, Tools (`ToolCallDetailModal`), Files |
 | `WorkflowNode.tsx` | Collapsible workflow run node; shows name pill + status badge + duration; expands to show args (captioned "Args"), stats strip, summary, the "Agents (N)" table (`WorkflowAgentsTable`, not collapsible), and findings |
@@ -278,28 +282,109 @@ rolled into the launching session's tree (see `session-metrics-scope.md`).
 
 ---
 
+## Tool calls (`tool-calls.ts`, `tool-outcome.ts`)
+
+One module decides where a tool call is shown, how it is joined to its result and which call a
+permission event belongs to. Nothing else in the client hard-codes tool names for this (the old
+`SKIP` set, `fileToolNames` and `name === 'Agent'` checks are gone).
+
+- **`allToolCalls` is the source.** `PromptTurn.allToolCalls` holds every call of the turn in call
+  order (stable sort by `startedAt`, calls without a timestamp last), built by
+  `buildAllToolCalls(extractRawToolCalls(events, {uuidSet}), buildToolResultIndex(events))`.
+  `SubAgentNode.allToolCalls` is the same over the agent's own transcript, deduped by id (fork
+  sub-agents repeat their parent's ids). Everything else derives from it:
+  - `toolCalls` = section `'tool'`;
+  - `files` = section `'file'` (`Read`/`Edit`/`Write`/`MultiEdit`/`Glob`) → `FileAccess`;
+  - `skills` = section `'skill'` → `SkillInvocation` (skill content bytes as before);
+  - section `'agent'` calls link to `agentActivations` / `subAgents` by `toolUseId`.
+  - Chart counts read `allToolCalls` too: `turnToolCallCount` and the heatmap in
+    `charts/chart-data.ts` (an image no longer counts on top of the call that returned it);
+    the Summary band says "N other tool calls" for `toolCalls`.
+- **Sections** (`toolSection(name)`): `TOOL_SECTION` maps the five file tools, `Skill` and
+  `Agent`; every other name (Bash, PowerShell, MCP, `NotebookEdit`, the legacy `Task`, new tools)
+  is `'tool'`. Rules and examples: `algorithms/tool-call-sections.md`.
+- **Result index** (`buildToolResultIndex`): one pass per log, `tool_use_id` → `{content,
+  isBinary, isError, timestamp, interrupted, bytes, uuid, denialKind}`; the first result for an id
+  wins. `denialKind` is the result line's top-level `toolDenialKind` (`user-rejected`,
+  `permission-rule`, `automode-blocked`, `interrupted`). It replaced four per-call linear scans
+  and is also used by the Bash tab.
+- **Status** (`outcomeToStatus` over `classifyToolOutcome`): no result → `'missing'` ("output not
+  captured"); `interrupted`, a `denialKind`, or a rejection marker on an `is_error` result →
+  `'rejected'` ("⊘ rejected", "⏸ interrupted" when `interrupted`, tooltip from `denialKind`);
+  other `is_error` → `'error'` ("✗ error"); else `'success'`. A marker in a successful result is
+  ordinary output. The Statistics walker (`usage/session-usage-derive.ts`) and the server twin
+  `server/src/logs/tool-stats.ts` use the same rule. Rules and examples:
+  `algorithms/tool-call-outcome.md`.
+- **Timing:** `startedAt` = the `tool_use` line's timestamp, `endedAt` = the `tool_result` line's,
+  `durationMs` = their difference when both exist and it is ≥ 0.
+- **Section rows carry status (DD-21):** `FileAccess`, `SkillInvocation` and `AgentActivation`
+  gain `toolUseId`; files and skills also `status`, and files `error` (the result's first line, cut
+  to `FILE_ERROR_MAX_CHARS` = 200). A failed or rejected Read gets no `bytes` / `estTokens`.
+- **Permission attribution** (`attributePermissionEvents`, once per log — main and each
+  sub-agent): artisyn `PermissionRequest` / `PermissionDenied` events (`extractPermissionEvents`)
+  set `permissionRequested` / `permissionDenied` on the call they belong to, in any section. An
+  event with `tool_use_id` (`PermissionDenied` from hook 2.24.0) takes that call; otherwise the
+  same-name calls pending within `PERMISSION_WINDOW_MS` = 2000 are scored by input (equal 3,
+  subset 2, no input 1), the best wins and a tie goes to the latest start at or before the
+  event. No match → counted in `ParsedSession.unattributedPermissionEvents` (diagnostics only);
+  there is no name-only fallback.
+- **Steps:** each `AssistantStep` has `toolCallIds` parallel to `toolCallNames` /
+  `toolCallSummaries` / `toolCallInputs` (named `tool_use` blocks only; `''` for a block without
+  an id), concatenated when consecutive lines of one response are merged. The Context Growth step
+  modal looks them up in `turn.allToolCalls`.
+- **`ParsedSession.repoRoot`** (display only): the effective repo root of path normalisation when
+  non-empty, else the first main event's `cwd`; forward slashes, no trailing slash, `''` when
+  unknown. `ToolViewProvider` passes it to the tool views, which show paths repo-relative with
+  `toRepoRelative` (`lib/bash-view/display-paths.ts`). Copy actions use the original text.
+
+### Shared tool view (`tool-call-view/`)
+
+- **`ToolViewProvider`** is mounted by `SessionDetailPane` around the whole tab content, so every
+  tool view of every tab (Logs, all three `ContextGrowthChart` mounts, Bash) gets
+  `{repoRoot, openSubAgent}`. It owns one `WorkflowAgentModal` that `openSubAgent(agentId,
+  label?)` opens with the agent's transcript from `subagentLogsMap` (a no-op without one).
+  Outside a provider `useToolView()` returns `{repoRoot: ''}`.
+- **`ToolCallView`** `{call, charsPerToken, turnFiles?, subAgents?, defaultOpen?}`: header =
+  tool badge, `StatusBadge` (status and permission badges), `≈N tok`, and `⏱` duration for
+  Bash. Body by tool: `Bash` → `BashCommandView`; `PowerShell` → `BashCommandView` with
+  `forceFallback`; section `'file'` → `FileToolBody` (repo-relative path, range, size from
+  `turnFiles`, input JSON, "File content is not stored" for Read); `Agent` → `AgentToolBody`
+  (description, prompt, "Open sub-agent →"); anything else → `GenericToolBody` (JSON). Output
+  always goes through `ToolOutputBlock` (`TRUNCATE_AT` = 20 000 chars, show all / less, copy of
+  the full output, `N lines · X KB · ≈Yk tok`).
+- **`BashCommandView`**: caption (`description`, `timeout` / background chips) → WORKING DIR →
+  FILES (`BashFileSummary`) → COMMAND (Formatted | Raw toggle, "N lines (was M)", "⧉ Copy
+  original" = `input.command`, `HighlightedScript` with line numbers, heredoc folds and a colour
+  legend) → OUTPUT. `useBashView` lazy-loads the tree-sitter parser (`lib/bash-view/`,
+  `import()` + WASM `?url` assets, never in the main bundle) and shows the raw text while loading
+  and for unparseable / PowerShell commands. Rules and examples: `algorithms/bash-command-view.md`.
+
+---
+
 ## Types (`types.ts`)
 
 Key types:
 
 - `TelemetryEvent` — union of `UserEvent | AssistantEvent | SystemTurnDurationEvent | SystemCompactBoundaryEvent | ProgressAgentEvent | BaseEvent`
-- `PromptTurn` — one user prompt with `workTimeMs`, `tokenBreakdown`, `ownTokenBreakdown: TokenBreakdown | null` (main-session assistant events only — see above), `contextTokens`, `skills`, `files`, `subAgents`, `agentActivations`, `toolCalls: ToolCallDetail[]`, `rulesInjected`, `linesChanged`, `workflows?: WorkflowRun[]`
+- `PromptTurn` — one user prompt with `workTimeMs`, `tokenBreakdown`, `ownTokenBreakdown: TokenBreakdown | null` (main-session assistant events only — see above), `contextTokens`, `contextTokensStart`, `assistantSteps: AssistantStep[]`, `skills`, `files`, `subAgents`, `agentActivations`, `allToolCalls: ToolCallDetail[]` (every call, the source of the derived lists), `toolCalls: ToolCallDetail[]` (section `'tool'` only), `rulesInjected`, `linesChanged`, `workflows?: WorkflowRun[]`
+- `ToolCallDetail` — `id?`, `name`, `input`, `section: ToolSection` (`'file' | 'skill' | 'agent' | 'tool'`), `result?`, `status: ToolCallStatus` (`'success' | 'error' | 'rejected' | 'missing'`), `startedAt?`, `endedAt?`, `durationMs?`, `interrupted?: true`, `denialKind?`, `permissionRequested?`, `permissionDenied?`
+- `AssistantStep` (exported) — `contextTokens`, `text`, `stopReason`, `timestamp`, and the parallel arrays `toolCallNames` / `toolCallSummaries` / `toolCallInputs` / `toolCallIds` over the step's named `tool_use` blocks
 - `TokenBreakdown` — `input`, `output`, `cacheRead`, `cacheWrite`, plus the required TTL split `cacheWrite5m` / `cacheWrite1h` and the required `webSearchRequests` / `inputFast` / `outputFast` (the fast pair are subsets of `input` / `output`, see above)
 - `TokenUsage` — the raw on-wire shape; carries the optional `cache_creation?: { ephemeral_5m_input_tokens?, ephemeral_1h_input_tokens? }` object the TTL split reads, plus `server_tool_use?: { web_search_requests?: number }` and `speed?: 'standard' | 'fast'`
 - `WorkflowRun` — re-exported from `client/src/models/workflows.ts`; attached to `PromptTurn.workflows` by log parser during post-turn pass
 - `SessionSummary` — session-wide aggregates: `promptCount`, `totalTokens`, `tokenBreakdown`, `totalWorkTimeMs`, `maxContextTokens`, `skillsUsed`, `fileStats`, `linesChanged`, `model?`, `claudeMd?`, `deferredTools: string[]` (tool names announced via `deferred_tools_delta` events)
-- `FileAccess` — `path`, `tool`, `accessCount` (1-based), `category: string` (free-form, from `resolveFileCategory`/`RepoConfig`; default config yields `'knowledgebase'`, `'docs'`, or fallback `'code'` — not a fixed `'code'|'doc'` union), `globMatchCount?`, `bytes?`, `estTokens?`
+- `FileAccess` — `path`, `tool`, `accessCount` (1-based), `category: string` (free-form, from `resolveFileCategory`/`RepoConfig`; default config yields `'knowledgebase'`, `'docs'`, or fallback `'code'` — not a fixed `'code'|'doc'` union), `globMatchCount?`, `bytes?`, `estTokens?` (both absent unless the Read succeeded), `toolUseId?`, `status?`, `error?` (first result line, ≤ 200 chars, only when status ≠ success)
 - `SkillDefinition` — `name`, `description`, `argumentHint?`, `body`, `path`, `bytes`, `source: 'project'|'builtin'|'plugin'`
 - `AgentDefinition` — `name`, `description`, `body`, `path`, `bytes`
 - `McpServerConfig` — `name`, `command`, `args` (pre-joined string, credentials scrubbed by hook)
-- `SkillInvocation` — `name`, `isDuplicate`, `path?`, `bytes?`, `estTokens?`, `definition?: SkillDefinition` (resolved post-parse)
-- `SubAgentNode` — `agentId`, `prompt`, `model?`, `tokens?`, `durationMs?`, `toolUseID?`, `parentToolUseID?`, `children: SubAgentNode[]`
-- `AgentActivation` — `agentId`, `description?`, `prompt`, `resultText?`, `tokens?`, `totalTokens?`, `durationMs?`
+- `SkillInvocation` — `name`, `isDuplicate`, `path?`, `bytes?`, `estTokens?`, `definition?: SkillDefinition` (resolved post-parse), `toolUseId?`, `status?` (of the `Skill` call)
+- `SubAgentNode` — `agentId`, `prompt`, `model?`, `tokens?`, `durationMs?`, `toolUseID?`, `parentToolUseID?`, `allToolCalls?` (deduped by id; the source of its `toolCalls` / `files` / `skills`), `children: SubAgentNode[]`
+- `AgentActivation` — `toolUseId?` (the `Agent` call), `agentId`, `description?`, `prompt`, `resultText?`, `tokens?`, `totalTokens?`, `durationMs?`
 - `RuleInjection` — `name`, `path?`, `bytes?`, `estTokens?`
 - `ClaudeMdFile` — `path`, `bytes`, `role?: 'claude-md'|'local-md'|'rule'` (classified by parser; absent = `'claude-md'` for old sessions)
 - `ClaudeMdContext` — `totalBytes`, `estTokens`, `files: ClaudeMdFile[]`
 - `SessionSummary` — additionally carries `skillDefinitions?: Map<string, SkillDefinition>`, `agentDefinitions?: Map<string, AgentDefinition>`, `mcpConfig?: McpServerConfig[]` (all optional; absent for sessions uploaded by hooks that do not emit the definition events)
-- `ParsedSession` includes `mcpCalls: Record<string, number>` — map of `mcp__<server>__<tool>` names → invocation count, accumulated from `tool_use` blocks across all assistant events
+- `ParsedSession` includes `mcpCalls: Record<string, number>` — map of `mcp__<server>__<tool>` names → invocation count, accumulated from `tool_use` blocks across all assistant events; `repoRoot: string` (display-only repo root, see [Tool calls](#tool-calls-tool-callsts-tool-outcomets)); `unattributedPermissionEvents: number` (diagnostics)
 
 ---
 
@@ -419,12 +504,12 @@ Each qualifying user event renders:
   - Cost format when no extras: `Cost $X.XX` (violet, with `CostBreakdownTooltip`)
   - Cost format when subagents or workflows present: `$main + $subagents + ~$workflows = $total`; subagent in orange, workflow estimate in amber with `~` prefix
   - Workflow cost rate uses `subAgentCost / totalWorkflowTokens` (DB-accurate) when `session.totalCost` is available; falls back to main session average rate otherwise. Passed as `costPerToken` via `SessionLogView → PromptTurnList → PromptTurnItem`. `subAgentCost` here is `sessionTotalCost - mainCost - directAgentCost`, where `directAgentCost` is the sum of `computeTurnDirectAgentCost` across every turn (the same directly-activated-agent cost already shown per-turn as "+subagent") — subtracted so that cost doesn't also leak into the workflow-only rate's numerator.
-- Skills section (omitted if empty): skill name + estimated tokens; duplicate occurrences show a `"dup"` text badge in `text-muted-foreground/60`
+- Skills section (omitted if empty): skill name + estimated tokens; duplicate occurrences show a `"dup"` text badge in `text-muted-foreground/60`; a failed / rejected `Skill` call shows a red ✗ / amber ⊘ (`StatusMark`); a row with a call is clickable and opens `ToolCallDetailModal`
 - Rules section (omitted if empty): rule name + estimated tokens
-- Tools section (omitted if empty): tool call rows; clicking opens `ToolCallDetailModal`
-- Files section (omitted if empty): grouped by category (`'code'` first, then others); Glob entries append `(N)` — the raw `globMatchCount`, no unit word
+- Tools section (omitted if empty): tool call rows (`StatusBadge`: status and permission badges); the preview cell (`tool-call-row-preview`) leads with `input.description` when it is a non-empty string, then the remaining input as muted `key=value` text; clicking opens `ToolCallDetailModal`
+- Files section (omitted if empty): grouped by category (`'code'` first, then others); Glob entries append `(N)` — the raw `globMatchCount`, no unit word; a failed / rejected call shows a red ✗ / amber ⊘ before the path (`title` = `error`) plus its permission badges; a row with a call (`toolUseId` found in `allToolCalls`) is clickable and opens `ToolCallDetailModal`
 - Images section (omitted if empty)
-- Agent activations section (omitted if empty): `<AgentActivationItem>` per activation
+- Agent activations section (omitted if empty): `<AgentActivationItem>` per activation; Agent calls with neither an activation nor a sub-agent node (e.g. "Concurrent subagent limit reached", a background fork) are listed under the Agents header as compact clickable rows (`Agent` badge, description, `StatusBadge`)
 - Sub-agents section (omitted if empty): `<SubAgentNode depth={0}>` per root agent
 - Workflows section (omitted if `turn.workflows` is empty): purple left-border section; `<WorkflowNode>` per run; turn header also shows `⚡ N workflow(s) · duration` badge in purple when present
 
@@ -528,6 +613,60 @@ The Tokens & Cost table shows a **Sub-agents** row (`session.totalCost - derived
 ### SessionInfoTab Workflows section
 
 Collapsible section, omitted entirely when the session ran no workflows (`workflowStats === null`, computed by flattening every `turn.workflows[]` across the session). Shows: a "Workflows run" count (with failed/running counts appended when non-zero); a table with one row per `WorkflowRun` — name (⚡ prefixed), status pill (green completed / red failed / blue running), duration, agent count (`agentSessionIds.length` when resolved, else the self-reported `agentCount` — same authority rule as design decision 8 elsewhere), tool uses, tokens — plus a totals row and an "Est. workflow cost" row reusing the same `workflowEstimatedCost` value as the cost table above.
+
+---
+
+## Context Growth steps (`charts/context-usage/`)
+
+The Context Growth chart (`ContextGrowthChart.tsx`; mounted by the Charts tab, the Charts
+dashboard and the Summary tab's extended details) composes `TurnBreakdownDialog`,
+`ContextGrowthSubStepRow`, `StepDetailsModal`, `step-bars.ts` and `step-label.ts`.
+
+- **Step delta rule** (`stepBars(turn)`): step row `si` before the last has `prior =
+  steps[si].contextTokens`, `total = steps[si+1].contextTokens`, `delta = total − prior` — the
+  step's own output plus the tool results it brought back. The last row has `delta = null` and
+  shows `—` with no growth segment. Negative deltas are kept (`−3k`, zero-width segment).
+  `formatStepDelta` prints `Math.round(delta / 1000)` + `k`, with `+` / `−`. The bar, the right
+  label, the tooltip line and the modal header all use it. The sum of the deltas equals
+  `contextTokens − contextTokensStart` except in compaction turns.
+- **Clickable step rows** (`ContextGrowthSubStepRow`): `role="button"`, `tabIndex=0`, hover
+  highlight and a "details →" hint; click or Enter / Space opens `StepDetailsModal`. The tooltip
+  stays. Single-step turns, turn rows and compaction rows are not clickable.
+- **Step modal** (`StepDetailsModal`, a sibling `Dialog` so the chart's expansion and scroll
+  survive): title `Turn #N · Step k`, the delta and the time; one collapsible `ToolCallView` per
+  `step.toolCallIds` entry looked up in `turn.allToolCalls` (an empty or unknown id renders from
+  the step's name and input with status `'missing'`); a single call is expanded, with several the
+  largest result is expanded and tagged "largest" and "Expand all / Collapse all" appears; the
+  assistant text and `stop: <reason>` come last.
+
+---
+
+## Bash tab
+
+Session tab `bash` (after Logs, always shown; label `Bash` plus a muted count). Files in
+`session-log/bash-tab/`; the tab bar is `SessionTabBar.tsx`.
+
+- **Collection** (`collectBashCalls(mainLogs, subagentLogsMap)`): per log — the main transcript,
+  then each sub-agent's — `buildAllToolCalls(extractRawToolCalls(events, {skipSidechain}),
+  buildToolResultIndex(events))`, where `skipSidechain` is true only for the main transcript (every
+  line of a sub-agent transcript is `isSidechain: true`, as in the parser and the server), with the same per-log permission attribution as Logs, filtered to
+  `name === 'Bash'`. Rows are deduped by id, stably sorted by `startedAt` (missing last) and
+  numbered `n` after sorting. Sub-agent rows carry `agentId` and `agentLabel` (`Agent · <type>`
+  from `collectAgentTypes` / `collectSpawnedAgentTypes` in `harness-session-tree.ts`, else
+  `Agent <8 chars>`). Pure and WASM-free: `SessionDetailPane` memoises the length for the tab
+  count.
+- **UI** (`SessionBashTab`, `data-testid="session-bash-tab"`, lazy-loaded): a 340 px `listbox`
+  (`BashCallList`, rows `bash-call-row` with `data-call-id`) — `#n`, time, duration, status mark,
+  "changes N", a preview (`description`, else the first formatted statement, else the first raw
+  line) and a sub-agent badge; ↑ / ↓ move the selection. `useBashViews(rows)` loads the parser
+  once; until then there are no chips and previews are raw. The right pane shows the sub-agent
+  badge, "Open sub-agent →" (`openSubAgent`) and `ToolCallView`. Empty state: "No Bash commands
+  in this session". The list sits beside the details only when the tab is at least 42rem wide
+  (container query `@container/bash` + `@2xl/bash:`); below that, e.g. at 1024 px with the sidebar
+  and the session list open, it stacks above them at up to 40 % of the height.
+- **URL:** the selected call is the `bashCall` search param (`useBashCallParam`,
+  `setSearchParams(next, {replace: true})`); a missing or unknown id selects row 1 without
+  rewriting the URL.
 
 ---
 

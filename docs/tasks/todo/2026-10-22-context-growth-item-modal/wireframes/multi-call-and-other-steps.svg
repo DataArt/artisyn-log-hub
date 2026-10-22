@@ -1,0 +1,222 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1220" height="1340" viewBox="0 0 1220 1340" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="12">
+  <defs>
+    <marker id="ar" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <path d="M0,0 L8,4 L0,8 z" fill="#7c3aed"/>
+    </marker>
+  </defs>
+  <rect width="1220" height="1340" fill="#ffffff"/>
+  <rect width="880" height="830" fill="#18181b" opacity="0.45"/>
+
+  <!-- ================= Multi-call step dialog ================= -->
+  <rect x="30" y="24" width="820" height="782" rx="8" fill="#ffffff" stroke="#e4e4e7"/>
+  <rect x="812" y="38" width="24" height="24" rx="12" fill="#ffffff" stroke="#2563eb"/>
+  <text x="824" y="55" font-size="14" fill="#18181b" text-anchor="middle">✕</text>
+  <text x="54" y="62" font-size="18" font-weight="600" fill="#18181b">Turn #23 · Step 4 — 5 tool calls</text>
+  <text x="54" y="86" fill="#52525b">15:02:41 · step delta <tspan font-weight="600" fill="#18181b">+20k</tspan> tokens · calls in call order · largest result expanded</text>
+  <rect x="660" y="73" width="88" height="20" rx="4" fill="#f4f4f5"/><text x="704" y="87" font-size="11" fill="#52525b" text-anchor="middle">Expand all</text>
+  <rect x="754" y="73" width="72" height="20" rx="4" fill="#f4f4f5"/><text x="790" y="87" font-size="11" fill="#52525b" text-anchor="middle">Collapse</text>
+
+  <!-- 1 collapsed Bash -->
+  <rect x="54" y="104" width="772" height="34" rx="6" fill="#ffffff" stroke="#e4e4e7"/>
+  <text x="66" y="126" fill="#71717a">▸</text>
+  <text x="80" y="126" font-size="11" fill="#a1a1aa">1</text>
+  <rect x="94" y="112" width="40" height="18" rx="4" fill="#fde68a"/><text x="114" y="125" font-size="11" font-weight="700" fill="#b45309" text-anchor="middle" font-family="Consolas, Menlo, monospace">Bash</text>
+  <text x="144" y="126" font-family="Consolas, Menlo, monospace" fill="#3f3f46">git status --short</text>
+  <rect x="690" y="112" width="36" height="18" rx="4" fill="#dcfce7"/><text x="708" y="125" font-size="10.5" fill="#15803d" text-anchor="middle">✓ ok</text>
+  <text x="814" y="126" fill="#52525b" text-anchor="end">≈0.1k tok</text>
+
+  <!-- 2 expanded Bash (largest) -->
+  <rect x="54" y="146" width="772" height="292" rx="6" fill="#ffffff" stroke="#93c5fd" stroke-width="1.5"/>
+  <text x="66" y="168" fill="#18181b">▾</text>
+  <text x="80" y="168" font-size="11" fill="#a1a1aa">2</text>
+  <rect x="94" y="154" width="40" height="18" rx="4" fill="#fde68a"/><text x="114" y="167" font-size="11" font-weight="700" fill="#b45309" text-anchor="middle" font-family="Consolas, Menlo, monospace">Bash</text>
+  <text x="144" y="168" font-size="12" font-style="italic" fill="#52525b">“Build the client and show the tail”</text>
+  <text x="558" y="167" font-size="11" fill="#52525b" text-anchor="end">⏱ 18.9 s</text>
+  <rect x="616" y="154" width="64" height="18" rx="9" fill="#dbeafe"/><text x="648" y="167" font-size="10" fill="#1d4ed8" text-anchor="middle">largest</text>
+  <rect x="690" y="154" width="36" height="18" rx="4" fill="#dcfce7"/><text x="708" y="167" font-size="10.5" fill="#15803d" text-anchor="middle">✓ ok</text>
+  <text x="814" y="168" fill="#18181b" font-weight="600" text-anchor="end">≈12.4k tok</text>
+
+  <rect x="66" y="180" width="748" height="84" rx="4" fill="#fafafa" stroke="#e4e4e7"/>
+  <text x="76" y="196" font-size="9.5" font-weight="700" fill="#71717a" letter-spacing="0.6">COMMAND</text>
+  <rect x="136" y="186" width="118" height="16" rx="4" fill="#f4f4f5" stroke="#e4e4e7"/>
+  <rect x="137" y="187" width="62" height="14" rx="3" fill="#ffffff" stroke="#d4d4d8"/>
+  <text x="168" y="198" font-size="9.5" font-weight="600" fill="#18181b" text-anchor="middle">Formatted</text>
+  <text x="226" y="198" font-size="9.5" fill="#71717a" text-anchor="middle">Raw</text>
+  <text x="804" y="198" font-size="10" fill="#52525b" text-anchor="end">⧉ Copy original</text>
+  <text x="76" y="222" font-size="9.5" font-weight="700" fill="#71717a" letter-spacing="0.6">WORKING DIR</text>
+  <text x="156" y="222" font-family="Consolas, Menlo, monospace" font-size="11.5" fill="#18181b">client</text>
+  <text x="804" y="222" font-size="10" fill="#a1a1aa" text-anchor="end">lifted from the leading cd</text>
+  <g font-family="Consolas, Menlo, monospace" font-size="12" style="white-space:pre" xml:space="preserve">
+    <text x="78" y="248"><tspan font-weight="700" fill="#18181b">npm</tspan> <tspan fill="#3f3f46">run build</tspan> <tspan fill="#ea580c" font-weight="700">2&gt;&amp;1</tspan> <tspan fill="#2563eb" font-weight="700">|</tspan> <tspan font-weight="700" fill="#18181b">tail</tspan> <tspan fill="#3f3f46">-20</tspan></text>
+  </g>
+  <text x="804" y="248" font-size="10" fill="#a1a1aa" text-anchor="end">under 80 columns → stays on one line</text>
+  <text x="76" y="284" font-size="9.5" font-weight="700" fill="#71717a" letter-spacing="0.6">FILES</text>
+  <rect x="116" y="273" width="44" height="16" rx="4" fill="#ede9fe"/><text x="138" y="285" font-size="10" font-weight="600" fill="#6d28d9" text-anchor="middle">Runs</text>
+  <text x="168" y="285" font-family="Consolas, Menlo, monospace" fill="#18181b">npm run build</text>
+  <text x="290" y="285" font-size="10.5" fill="#a1a1aa">no Changes / Reads (empty groups hidden) · syntax tree only</text>
+
+  <rect x="66" y="296" width="748" height="134" rx="4" fill="#fafafa" stroke="#e4e4e7"/>
+  <text x="76" y="312" font-size="9.5" font-weight="700" fill="#71717a" letter-spacing="0.6">OUTPUT</text>
+  <text x="124" y="312" font-size="10.5" fill="#a1a1aa">20 lines · ≈12.4k tokens incl. stderr</text>
+  <text x="804" y="312" font-size="10" fill="#52525b" text-anchor="end">⧉ copy</text>
+  <g font-family="Consolas, Menlo, monospace" font-size="11.5" fill="#3f3f46" style="white-space:pre" xml:space="preserve">
+    <text x="78" y="332">vite v6.2.1 building for production...</text>
+    <text x="78" y="350">✓ 2 412 modules transformed.</text>
+    <text x="78" y="368">dist/assets/index-B1x9.css&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;96.40 kB │ gzip:&#160;&#160;15.12 kB</text>
+    <text x="78" y="386">dist/assets/index-Cq0f.js&#160;&#160;&#160;&#160;&#160;&#160;1 912.08 kB │ gzip: 541.77 kB</text>
+    <text x="78" y="404">✓ built in 18.32s</text>
+  </g>
+  <text x="78" y="423" font-size="11" fill="#2563eb" text-decoration="underline">▾ Show all (20 lines)</text>
+
+  <!-- 3 expanded Read (file tool, no stored text) -->
+  <rect x="54" y="446" width="772" height="118" rx="6" fill="#ffffff" stroke="#e4e4e7"/>
+  <text x="66" y="468" fill="#18181b">▾</text>
+  <text x="80" y="468" font-size="11" fill="#a1a1aa">3</text>
+  <rect x="94" y="454" width="40" height="18" rx="4" fill="#f4f4f5"/><text x="114" y="467" font-size="11" font-weight="700" fill="#52525b" text-anchor="middle" font-family="Consolas, Menlo, monospace">Read</text>
+  <text x="144" y="468" font-family="Consolas, Menlo, monospace" fill="#18181b">client/src/viewer/…/context-usage/ContextGrowthChart.tsx</text>
+  <rect x="690" y="454" width="36" height="18" rx="4" fill="#dcfce7"/><text x="708" y="467" font-size="10.5" fill="#15803d" text-anchor="middle">✓ ok</text>
+  <text x="814" y="468" fill="#52525b" text-anchor="end">≈6.9k tok</text>
+  <g font-size="11.5">
+    <text x="94" y="494" fill="#71717a">Path</text><text x="180" y="494" font-family="Consolas, Menlo, monospace" fill="#18181b">client/src/viewer/pages/repository/session-log/charts/context-usage/ContextGrowthChart.tsx</text>
+    <text x="94" y="514" fill="#71717a">Range</text><text x="180" y="514" font-family="Consolas, Menlo, monospace" fill="#18181b">offset 1 · limit 200</text>
+    <text x="94" y="534" fill="#71717a">Size</text><text x="180" y="534" fill="#18181b">24.1 KB · ≈6.9k tokens <tspan fill="#a1a1aa">(file category: code)</tspan></text>
+    <text x="94" y="554" font-size="11" font-style="italic" fill="#a1a1aa">File content is not stored — size comes from the session's file stats.</text>
+  </g>
+
+  <!-- 4 collapsed Grep with error -->
+  <rect x="54" y="572" width="772" height="34" rx="6" fill="#ffffff" stroke="#fecaca"/>
+  <text x="66" y="594" fill="#71717a">▸</text>
+  <text x="80" y="594" font-size="11" fill="#a1a1aa">4</text>
+  <rect x="94" y="580" width="40" height="18" rx="4" fill="#f4f4f5"/><text x="114" y="593" font-size="11" font-weight="700" fill="#52525b" text-anchor="middle" font-family="Consolas, Menlo, monospace">Grep</text>
+  <text x="144" y="594" font-family="Consolas, Menlo, monospace" fill="#3f3f46">"GS-07|task-notific" in tests/</text>
+  <rect x="680" y="580" width="46" height="18" rx="4" fill="#fee2e2"/><text x="703" y="593" font-size="10.5" fill="#b91c1c" text-anchor="middle">✗ error</text>
+  <text x="814" y="594" fill="#52525b" text-anchor="end">≈0.1k tok</text>
+
+  <!-- 5 collapsed Bash, output not captured -->
+  <rect x="54" y="614" width="772" height="34" rx="6" fill="#ffffff" stroke="#e4e4e7"/>
+  <text x="66" y="636" fill="#71717a">▸</text>
+  <text x="80" y="636" font-size="11" fill="#a1a1aa">5</text>
+  <rect x="94" y="622" width="40" height="18" rx="4" fill="#fde68a"/><text x="114" y="635" font-size="11" font-weight="700" fill="#b45309" text-anchor="middle" font-family="Consolas, Menlo, monospace">Bash</text>
+  <text x="144" y="636" font-family="Consolas, Menlo, monospace" fill="#3f3f46">node -e "const j = require('./package.json'); …"</text>
+  <text x="726" y="636" font-size="11" font-style="italic" fill="#a1a1aa" text-anchor="end">output not captured</text>
+  <text x="814" y="636" fill="#a1a1aa" text-anchor="end">— tok</text>
+
+  <!-- note about attribution -->
+  <rect x="54" y="664" width="772" height="52" rx="6" fill="#eff6ff" stroke="#bfdbfe"/>
+  <text x="68" y="686" font-size="11.5" fill="#1e40af">ⓘ Step delta +20k = this step's output + the results of its tool calls</text>
+  <text x="68" y="704" font-size="11.5" fill="#1e40af">&#160;&#160;&#160;(context of the next LLM call − context of this one).</text>
+
+  <text x="54" y="744" font-size="11" fill="#71717a">Tool calls are matched to their results by tool_use id. Token sizes are estimated from text length.</text>
+  <text x="54" y="764" font-size="11" fill="#a1a1aa">Collapsed row = badge · one-line summary (formatted first line / path / pattern) · status · size.</text>
+
+  <!-- ================= Variants ================= -->
+  <text x="30" y="862" font-size="15" font-weight="700" fill="#18181b">Other step kinds — same modal shell, different body</text>
+
+  <!-- V1 text-only / final step -->
+  <rect x="30" y="878" width="400" height="250" rx="8" fill="#ffffff" stroke="#e4e4e7"/>
+  <text x="46" y="904" font-size="14" font-weight="600" fill="#18181b">Turn #15 · Step 8 — Text reply</text>
+  <text x="46" y="924" fill="#52525b">14:21:30 · step delta <tspan font-weight="600" fill="#18181b">—</tspan> (last step of the turn) · no tool calls</text>
+  <rect x="46" y="936" width="90" height="18" rx="4" fill="#f4f4f5"/><text x="91" y="949" font-size="10.5" fill="#52525b" text-anchor="middle">stop: end_turn</text>
+  <rect x="46" y="964" width="368" height="148" rx="4" fill="#fafafa" stroke="#e4e4e7"/>
+  <text x="56" y="980" font-size="9.5" font-weight="700" fill="#71717a" letter-spacing="0.6">ASSISTANT TEXT</text>
+  <g font-size="12" fill="#3f3f46">
+    <text x="56" y="1002">Нашёл причину: work time считается по</text>
+    <text x="56" y="1020">последнему assistant-сообщению, а sidechain-</text>
+    <text x="56" y="1038">записи с denial не учитываются.</text>
+    <text x="56" y="1062">Исправил в log-parser.ts:</text>
+    <text x="56" y="1080" font-family="Consolas, Menlo, monospace" font-size="11.5">• computeWorkTime() — учитывает GS-07</text>
+    <text x="56" y="1098" font-family="Consolas, Menlo, monospace" font-size="11.5">• golden-тест обновлён</text>
+  </g>
+
+  <!-- V2 Agent call -->
+  <rect x="450" y="878" width="400" height="160" rx="8" fill="#ffffff" stroke="#e4e4e7"/>
+  <text x="466" y="904" font-size="14" font-weight="600" fill="#18181b">Turn #15 · Step 6 — Agent</text>
+  <rect x="466" y="916" width="48" height="18" rx="4" fill="#f4f4f5"/><text x="490" y="929" font-size="11" font-weight="700" fill="#52525b" text-anchor="middle" font-family="Consolas, Menlo, monospace">Agent</text>
+  <text x="522" y="929" fill="#3f3f46">Explore · “find where workTime is computed”</text>
+  <text x="466" y="958" font-size="9.5" font-weight="700" fill="#71717a" letter-spacing="0.6">PROMPT TO SUB-AGENT</text>
+  <text x="466" y="978" font-size="12" fill="#3f3f46">Find every place in client/src that computes</text>
+  <text x="466" y="996" font-size="12" fill="#3f3f46">workTimeMs and list them with line numbers.</text>
+  <text x="466" y="1024" font-size="12" fill="#2563eb" text-decoration="underline">Open sub-agent agent-a91f (14 turns, ≈38k tok) →</text>
+
+  <!-- V3 generic tool (MCP / unknown) -->
+  <rect x="450" y="1056" width="400" height="260" rx="8" fill="#ffffff" stroke="#e4e4e7"/>
+  <text x="466" y="1082" font-size="14" font-weight="600" fill="#18181b">Turn #31 · Step 2 — MCP tool (generic layout)</text>
+  <rect x="466" y="1094" width="132" height="18" rx="4" fill="#ede9fe"/><text x="532" y="1107" font-size="11" font-weight="700" fill="#6d28d9" text-anchor="middle" font-family="Consolas, Menlo, monospace">postgres:query</text>
+  <rect x="606" y="1094" width="36" height="18" rx="4" fill="#dcfce7"/><text x="624" y="1107" font-size="10.5" fill="#15803d" text-anchor="middle">✓ ok</text>
+  <text x="834" y="1107" fill="#52525b" text-anchor="end">≈3.2k tok</text>
+  <rect x="466" y="1122" width="368" height="78" rx="4" fill="#fafafa" stroke="#e4e4e7"/>
+  <text x="476" y="1138" font-size="9.5" font-weight="700" fill="#71717a" letter-spacing="0.6">INPUT</text>
+  <g font-family="Consolas, Menlo, monospace" font-size="11.5" fill="#3f3f46" style="white-space:pre" xml:space="preserve">
+    <text x="476" y="1156">{</text>
+    <text x="476" y="1172">&#160;&#160;"sql": "SELECT id, status FROM sessions LIMIT 20"</text>
+    <text x="476" y="1188">}</text>
+  </g>
+  <rect x="466" y="1208" width="368" height="96" rx="4" fill="#fafafa" stroke="#e4e4e7"/>
+  <text x="476" y="1224" font-size="9.5" font-weight="700" fill="#71717a" letter-spacing="0.6">OUTPUT</text>
+  <g font-family="Consolas, Menlo, monospace" font-size="11.5" fill="#3f3f46" style="white-space:pre" xml:space="preserve">
+    <text x="476" y="1242">id&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;&#160;status</text>
+    <text x="476" y="1258">184432fe-8b5c-47f6-9596-64cf414293b4&#160;&#160;closed</text>
+    <text x="476" y="1274">47970b52-7538-4697-86d0-1f2a9c0e7b11&#160;&#160;closed</text>
+    <text x="476" y="1294" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="11" fill="#2563eb" text-decoration="underline">▾ Show all (21 lines)</text>
+  </g>
+
+  <rect x="402" y="886" width="20" height="20" rx="10" fill="#7c3aed"/><text x="412" y="900" font-size="11" font-weight="700" fill="#ffffff" text-anchor="middle">F</text>
+  <rect x="822" y="886" width="20" height="20" rx="10" fill="#7c3aed"/><text x="832" y="900" font-size="11" font-weight="700" fill="#ffffff" text-anchor="middle">G</text>
+  <rect x="822" y="1064" width="20" height="20" rx="10" fill="#7c3aed"/><text x="832" y="1078" font-size="11" font-weight="700" fill="#ffffff" text-anchor="middle">H</text>
+  <!-- ================= Annotations ================= -->
+  <g font-size="12" fill="#5b21b6">
+    <rect x="890" y="24" width="314" height="1292" rx="6" fill="#faf5ff" stroke="#ddd6fe"/>
+    <text x="906" y="50" font-size="13" font-weight="700">Several calls in one step</text>
+
+    <text x="906" y="82" font-weight="600">A&#160;&#160;One collapsible block per call</text>
+    <text x="906" y="100" fill="#6d28d9">In call order, numbered. The block</text>
+    <text x="906" y="116" fill="#6d28d9">with the largest result is expanded</text>
+    <text x="906" y="132" fill="#6d28d9">by default; "Expand all / Collapse".</text>
+
+    <text x="906" y="168" font-weight="600">B&#160;&#160;Bash block = Bash view</text>
+    <text x="906" y="186" fill="#6d28d9">Same view as bash-step-modal.svg:</text>
+    <text x="906" y="202" fill="#6d28d9">duration, working dir, Changes / Reads /</text>
+    <text x="906" y="218" fill="#6d28d9">Runs, formatted script, Raw toggle,</text>
+    <text x="906" y="234" fill="#6d28d9">Copy original, output.</text>
+
+    <text x="906" y="270" font-weight="600">C&#160;&#160;File tools (Read/Edit/Write…)</text>
+    <text x="906" y="288" fill="#6d28d9">Repo-relative path, range / edit</text>
+    <text x="906" y="304" fill="#6d28d9">summary from the input, bytes +</text>
+    <text x="906" y="320" fill="#6d28d9">≈tokens from turn.files.</text>
+
+    <text x="906" y="356" font-weight="600">D&#160;&#160;Error / missing output</text>
+    <text x="906" y="374" fill="#6d28d9">Red "✗ error" badge, red border;</text>
+    <text x="906" y="390" fill="#6d28d9">output shown as is when expanded.</text>
+    <text x="906" y="406" fill="#6d28d9">No result → muted "Output not</text>
+    <text x="906" y="422" fill="#6d28d9">captured", size shown as "—".</text>
+
+    <text x="906" y="458" font-weight="600">E&#160;&#160;Delta attribution note</text>
+    <text x="906" y="476" fill="#6d28d9">Step delta = this step's output + the</text>
+    <text x="906" y="492" fill="#6d28d9">results of its tool calls (next step's</text>
+    <text x="906" y="508" fill="#6d28d9">context − this one, FR-2a). Calls are</text>
+    <text x="906" y="524" fill="#6d28d9">matched to results by tool_use id.</text>
+
+    <text x="906" y="876" font-weight="600">F&#160;&#160;Text-only / final step</text>
+    <text x="906" y="894" fill="#6d28d9">Assistant text with line breaks kept,</text>
+    <text x="906" y="910" fill="#6d28d9">plus the stop reason. The last step</text>
+    <text x="906" y="926" fill="#6d28d9">of a turn has no delta ("—"): its</text>
+    <text x="906" y="942" fill="#6d28d9">output lands in the next turn's prior</text>
+    <text x="906" y="958" fill="#6d28d9">context.</text>
+
+    <text x="906" y="994" font-weight="600">G&#160;&#160;Agent call</text>
+    <text x="906" y="1012" fill="#6d28d9">Sub-agent type, description, prompt,</text>
+    <text x="906" y="1028" fill="#6d28d9">and a link to the sub-agent view.</text>
+
+    <text x="906" y="1072" font-weight="600">H&#160;&#160;Generic tools (Grep, MCP, other)</text>
+    <text x="906" y="1090" fill="#6d28d9">Header (name, status, ≈tokens) +</text>
+    <text x="906" y="1106" fill="#6d28d9">input as pretty-printed JSON +</text>
+    <text x="906" y="1122" fill="#6d28d9">output as preformatted text.</text>
+  </g>
+  <g stroke="#7c3aed" stroke-width="1.2" stroke-dasharray="4 3" fill="none">
+    <line x1="890" y1="78" x2="752" y2="90" marker-end="url(#ar)"/>
+    <line x1="890" y1="164" x2="816" y2="230" marker-end="url(#ar)"/>
+    <line x1="890" y1="266" x2="828" y2="500" marker-end="url(#ar)"/>
+    <line x1="890" y1="352" x2="828" y2="590" marker-end="url(#ar)"/>
+    <line x1="890" y1="454" x2="828" y2="690" marker-end="url(#ar)"/>
+  </g>
+</svg>

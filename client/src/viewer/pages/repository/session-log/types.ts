@@ -69,6 +69,8 @@ export interface BaseEvent {
   timestamp?: string;
   isSidechain?: boolean;
   isMeta?: boolean;
+  /** Working directory of the Claude Code process when the line was written. */
+  cwd?: string;
 }
 
 export interface ContentBlock {
@@ -89,7 +91,14 @@ export interface UserEvent extends BaseEvent {
     usage?: TokenUsage;
     totalDurationMs?: number;
     totalTokens?: number;
+    /** The tool call was interrupted by the user. */
+    interrupted?: boolean;
   };
+  /**
+   * Why Claude Code denied the tool call this result answers (`user-rejected`,
+   * `permission-rule`, `automode-blocked`, `interrupted`); absent when it ran.
+   */
+  toolDenialKind?: string;
 }
 
 export interface AssistantEvent extends BaseEvent {
@@ -156,15 +165,43 @@ export interface SkillInvocation {
   bytes?: number;
   estTokens?: number;
   definition?: SkillDefinition;
+  /** Id of the `Skill` tool call that loaded this skill (DD-21). */
+  toolUseId?: string;
+  /** Status of that call (DD-3, DD-21). */
+  status?: ToolCallStatus;
 }
+
+/**
+ * Where a tool call is shown in a turn (DD-1). Decided only by `toolSection` in
+ * `tool-calls.ts`: `'file'` → Files, `'skill'` → Skills, `'agent'` → Agents, `'tool'` → Tools.
+ */
+export type ToolSection = 'file' | 'skill' | 'agent' | 'tool';
+
+/**
+ * Outcome of a tool call (DD-3): `'missing'` = no result captured, `'rejected'` = denied by the
+ * user/a rule or interrupted, `'error'` = `is_error` result, `'success'` otherwise.
+ */
+export type ToolCallStatus = 'success' | 'error' | 'rejected' | 'missing';
 
 export interface ToolCallDetail {
   id?: string;
   name: string;
   input: Record<string, unknown>;
+  /** Section the call belongs to (DD-1). */
+  section: ToolSection;
   /** Tool result as string; absent if no result was captured */
   result?: string;
-  status: 'success' | 'error';
+  status: ToolCallStatus;
+  /** `tool_use` line timestamp (DD-4). */
+  startedAt?: string;
+  /** `tool_result` line timestamp (DD-4). */
+  endedAt?: string;
+  /** `endedAt − startedAt` in ms when both exist and the value is ≥ 0 (DD-4). */
+  durationMs?: number;
+  /** The call was interrupted by the user (`toolUseResult.interrupted`); status is `'rejected'` (DD-3). */
+  interrupted?: true;
+  /** The result line's `toolDenialKind`, copied when status is `'rejected'` (DD-3). */
+  denialKind?: string;
   permissionRequested?: boolean;
   permissionDenied?: boolean;
 }
@@ -176,13 +213,21 @@ export interface FileAccess {
   /** 1-based access count within a turn; ≥2 means repeated read */
   accessCount: number;
   category: string;
-  /** Byte length of tool_result content (Read only) */
+  /** Byte length of tool_result content (Read only; absent when status ≠ `'success'`) */
   bytes?: number;
-  /** Estimated token count: bytes ÷ the session model's chars-per-token ratio (Read only) */
+  /** Estimated token count: bytes ÷ the session model's chars-per-token ratio (Read only; absent when status ≠ `'success'`) */
   estTokens?: number;
+  /** Id of the tool call behind this access (DD-21). */
+  toolUseId?: string;
+  /** Status of that call (DD-3, DD-21). */
+  status?: ToolCallStatus;
+  /** First line of the result, cut to `FILE_ERROR_MAX_CHARS`; set only when status ≠ `'success'` (DD-21). */
+  error?: string;
 }
 
 export interface AgentActivation {
+  /** Id of the `Agent` tool call that started this activation (DD-21). */
+  toolUseId?: string;
   agentId: string;
   description?: string;
   prompt: string;
@@ -208,6 +253,12 @@ export interface SubAgentNode {
   startMs?: number;
   toolUseID?: string;
   parentToolUseID?: string;
+  /**
+   * Every tool call across the agent's own transcript, in call order, deduped by id (fork
+   * sub-agents repeat their parent's ids). The source of the derived `toolCalls`, `files` and
+   * `skills` below (DD-1a).
+   */
+  allToolCalls?: ToolCallDetail[];
   /** Tool calls made across the agent's own transcript, when available (e.g. workflow agents). */
   toolCalls?: ToolCallDetail[];
   /** Files touched across the agent's own transcript, when available (e.g. workflow agents). */
@@ -290,6 +341,23 @@ export interface McpServerConfig {
   configSource?: 'project' | 'user';
 }
 
+/**
+ * One assistant API response within a turn (consecutive transcript lines of the same response
+ * merged). `toolCallNames` / `toolCallSummaries` / `toolCallInputs` / `toolCallIds` are parallel
+ * arrays over the named `tool_use` blocks only (DD-5).
+ */
+export interface AssistantStep {
+  contextTokens: number;
+  text: string | null;
+  stopReason: string | null;
+  toolCallNames: string[];
+  toolCallSummaries: string[];
+  toolCallInputs: Record<string, unknown>[];
+  /** `tool_use` block ids (`''` when a block has none); look up in `PromptTurn.allToolCalls`. */
+  toolCallIds: string[];
+  timestamp: string | null;
+}
+
 export interface PromptTurn {
   index: number;
   userEvent: UserEvent;
@@ -304,20 +372,19 @@ export interface PromptTurn {
   ownTokenBreakdown: TokenBreakdown | null;
   contextTokens: number | null;
   contextTokensStart: number | null;
-  assistantSteps: Array<{
-    contextTokens: number;
-    text: string | null;
-    stopReason: string | null;
-    toolCallNames: string[];
-    toolCallSummaries: string[];
-    toolCallInputs: Record<string, unknown>[];
-    timestamp: string | null;
-  }>;
+  assistantSteps: AssistantStep[];
   skills: SkillInvocation[];
   files: FileAccess[];
   images: ImageAccess[];
   subAgents: SubAgentNode[];
   agentActivations: AgentActivation[];
+  /**
+   * Every tool call of the turn, in call order (stable sort by `startedAt`). The source of the
+   * derived sections: `toolCalls` (section `'tool'`), `files` (`'file'`), `skills` (`'skill'`);
+   * Agent calls link to `agentActivations` / `subAgents` by `toolUseId` (DD-1a).
+   */
+  allToolCalls: ToolCallDetail[];
+  /** Calls of section `'tool'` only, derived from `allToolCalls` (DD-1a). */
   toolCalls: ToolCallDetail[];
   unmatchedSubagentIds?: string[];
   rulesInjected: RuleInjection[];
@@ -389,4 +456,15 @@ export interface ParsedSession {
   mcpCalls: Record<string, number>;
   compactBoundaries: CompactBoundary[];
   hasStopFailure: boolean;
+  /**
+   * Repo root for display only (DD-6): the effective root when non-empty, else the first main
+   * event's `cwd`. Forward slashes, no trailing slash, `''` when unknown. Path normalisation does
+   * not use it.
+   */
+  repoRoot: string;
+  /**
+   * Permission events (main log and every sub-agent log) that `attributePermissionEvents` could
+   * not join to a tool call (DD-22). Diagnostics only.
+   */
+  unattributedPermissionEvents: number;
 }

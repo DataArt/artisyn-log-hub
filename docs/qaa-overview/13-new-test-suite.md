@@ -179,6 +179,7 @@ The ids are made unique (impl-plan of the task `2026-10-14-qaa-test-suite-cleanu
 | S-SESS-11 | Change surface on 400 files: filter, collapsing, sorting | UI+API | P1 |
 | S-SESS-12 | Raw Logs are visible only to the owner; the API answers 403 to anyone else | UI+API | P0 |
 | S-SESS-13 | Advisor: the hook's result appears as a tab and as spend | UI+API | P1 |
+| S-SESS-14 | Tool calls in detail: the Context Growth step modal, the Bash view and tab, call statuses | UI+API | P1 |
 | S-CHART-01 | Charts: Dashboard, Agent Tree, Timeline, Tool Heatmap, Call Tree on an agent tree | UI | P1 |
 | S-CHART-02 | Charts: Context Usage and Context Growth count the same tokens | UI | P1 |
 | S-COST-01 | One session, one cost everywhere | UI+API | P0 |
