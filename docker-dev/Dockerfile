@@ -41,8 +41,8 @@ RUN --mount=type=cache,id=apt-cache-fetch-base,target=/var/cache/apt,sharing=loc
 WORKDIR /dl
 
 FROM fetch-base AS fetch-node
-ARG NODE_VERSION=24.18.1
-ARG NODE_SHA256=d6c664df3f3f61458e8c277585571328522d705166723a7c7823a9253a4d15a0
+ARG NODE_VERSION=24.22.1
+ARG NODE_SHA256=6c172a9ab6718f7b801fb5a7bd486af2ee5e32758086a04b84fcce2aa77095e6
 RUN set -eux; \
     aria2c -x16 -s16 --console-log-level=warn -o node.tar.xz \
       "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz"; \
