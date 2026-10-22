@@ -68,9 +68,9 @@ installing it, and before asking anyone else to.
 
 ### How to stop sending
 
-- Remove `apiKey` from `.artisyn/config/log-hub.local.json` or `serverUrl` from
-  `.artisyn/config/log-hub.json`. With either one missing, the hook keeps recording locally but
-  uploads nothing.
+- Remove `apiKey` or `serverUrl` from `.artisyn/config/log-hub.local.json` (and `serverUrl` from
+  `.artisyn/config/log-hub.json`, if an older install put it there). With either one missing, the
+  hook keeps recording locally but uploads nothing.
 - Or uninstall the hook: `npx <server-origin>/static/artisyn-hooks-installer.tgz uninstall`
   (see [INSTALL_HOOK.md](./INSTALL_HOOK.md)). Delete `.artisyn/ai_work_dir/` too if you want the
   local records gone.

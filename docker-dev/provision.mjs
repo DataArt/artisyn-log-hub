@@ -9,7 +9,7 @@
 // every key they do not own:
 //   - `.artisyn/config/otel-port.json`       {port, allocatedAt}
 //   - `.claude/settings.local.json`          the OTEL `env` keys
-//   - `.artisyn/config/log-hub.local.json`   apiKey
+//   - `.artisyn/config/log-hub.local.json`   serverUrl, otelReceiverPort (--static), apiKey (--loop)
 // Tracked files (`.claude/settings.json`, `.artisyn/config/log-hub.json`) are only read.
 //
 // Env: SANDBOX_WORKTREE (container worktree path), SANDBOX_NAME, SANDBOX_HOST_EMAIL.
@@ -18,6 +18,9 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const SERVER = 'http://127.0.0.1:3000';
+// The hook's own config: the sandbox client URL and the hook's `OTEL_FALLBACK_PORT`.
+const SANDBOX_SERVER_URL = 'http://localhost:5173';
+const SANDBOX_OTEL_PORT = 25317;
 const LOOP_INTERVAL_MS = 10_000;
 const REQUEST_TIMEOUT_MS = 5_000;
 const PROVISIONED_MARKER = '/run/dev/provisioned';
@@ -63,20 +66,31 @@ function writeJson(file, obj) {
 
 // --- --static ---------------------------------------------------------------------------------
 
-async function runStatic() {
-  const port = Number(readJsonObject(logHubJsonPath).otelReceiverPort);
-  if (!Number.isInteger(port) || port <= 0 || port > 65535) {
-    throw new Error(`${logHubJsonPath} has no valid otelReceiverPort`);
-  }
+function isUsablePort(v) {
+  return Number.isInteger(v) && v > 0 && v <= 65535;
+}
 
-  // Each container has its own loopback, so the tracked port is used as is — no allocation.
+async function runStatic() {
+  // Each container has its own loopback, so a fixed port is fine — no allocation. The tracked
+  // `otelReceiverPort` is only read for worktrees of branches made before the installer moved it
+  // to `log-hub.local.json`.
   const existingPort = readJsonObject(otelPortPath);
+  const trackedPort = readJsonObject(logHubJsonPath).otelReceiverPort;
+  const port = isUsablePort(existingPort.port)
+    ? existingPort.port
+    : isUsablePort(trackedPort)
+      ? trackedPort
+      : SANDBOX_OTEL_PORT;
   if (existingPort.port !== port || typeof existingPort.allocatedAt !== 'string') {
     writeJson(otelPortPath, { ...existingPort, port, allocatedAt: new Date().toISOString() });
     log(`wrote ${otelPortPath} (port ${port})`);
   } else {
     log(`${otelPortPath} already has port ${port}`);
   }
+
+  // `serverUrl` resolves to the sandbox client inside the container (its Vite proxy forwards /api).
+  writeJson(logHubLocalPath, { ...readJsonObject(logHubLocalPath), serverUrl: SANDBOX_SERVER_URL, otelReceiverPort: port });
+  log(`wrote serverUrl ${SANDBOX_SERVER_URL} and otelReceiverPort ${port} into ${logHubLocalPath}`);
 
   // The worktree's own installer source, through Node's type stripping (otel-env.ts uses erasable
   // syntax only), so the env keys always match the installer of this branch.

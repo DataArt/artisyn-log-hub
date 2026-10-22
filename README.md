@@ -263,13 +263,13 @@ Hub (dogfooding).
    the project-local marketplace in `.artisyn/marketplace/`, a copy of `hook/`. Your Claude Code
    sessions in this repository are therefore uploaded to your local Log Hub. To make that work on
    your machine:
-   - Sign in to your local Log Hub, create an API key and put it in the gitignored
-     `.artisyn/config/log-hub.local.json` as `{ "apiKey": "<key>" }`. Without a key the hook only
-     records locally.
-   - In `.artisyn/config/log-hub.json`, change `serverUrl` if your server is not at
-     `http://localhost:5173`, and `otelReceiverPort` if port `58603` is taken on your machine.
+   - Sign in to your local Log Hub, create an API key and put your per-developer settings in the
+     gitignored `.artisyn/config/log-hub.local.json`:
+     `{ "apiKey": "<key>", "serverUrl": "http://localhost:5173", "otelReceiverPort": <port> }` — your
+     own server URL and a free port. Without a key the hook only records locally. (Installing the hook
+     with `--server-url`/`--api-key` writes this file for you.)
    - If you change `otelReceiverPort`, change the port in the `OTEL_EXPORTER_OTLP_*_ENDPOINT` values in
-     `.claude/settings.json` to match.
+     the gitignored `.claude/settings.local.json` to match.
    - Change other local values (ports, `context` labels) the same way. Keep machine-specific secrets in
      the gitignored `*.local.json` files.
 

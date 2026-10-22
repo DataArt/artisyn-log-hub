@@ -683,7 +683,7 @@ async function applyHooksUpdate(
     : { base: {} as Record<string, unknown>, local: {} as Record<string, unknown> };
 
   // Resolved once per run and used twice below: it is written into
-  // `log-hub.json` and into the `.claude/settings.local.json` env block, which is what keeps the two
+  // `log-hub.local.json` and into the `.claude/settings.local.json` env block, which is what keeps the two
   // in agreement. This sits on the shared install/upgrade path deliberately: upgrade is the only
   // route by which an existing user starts receiving OTEL, so it must allocate and write exactly
   // as a fresh install does.
@@ -726,33 +726,35 @@ async function applyHooksUpdate(
 
   const templateObj = readJsonConfig(relToPath(cwd, CONFIG_TEMPLATE_REL));
 
-  const overridesBase: Record<string, unknown> = {};
-  if (overrides['SERVER_URL']) overridesBase['serverUrl'] = overrides['SERVER_URL'];
+  // Per-developer values (`serverUrl`, `apiKey`, `otelReceiverPort`) go to the gitignored
+  // `log-hub.local.json` only — the tracked `log-hub.json` is shared by every checkout, and the
+  // hook merges local over base per key, so a teammate's tracked `serverUrl` stays a valid fallback.
+  const overridesLocal: Record<string, unknown> = {};
+  if (overrides['SERVER_URL']) overridesLocal['serverUrl'] = overrides['SERVER_URL'];
+  if (overrides['API_KEY']) overridesLocal['apiKey'] = overrides['API_KEY'];
   // Always an override, never a merge input: `otel-port.json` is authoritative, so the project's
   // own `otelReceiverPort` is overwritten from it every run and the two files cannot drift. It
   // must go in as a `Number` — `CONFIG_TYPES.otelReceiverPort` is `'number'` hook-side, and a
   // string would be silently discarded by `matchesType` at runtime.
-  overridesBase['otelReceiverPort'] = Number(otelPort);
-  const overridesLocal: Record<string, unknown> = {};
-  if (overrides['API_KEY']) overridesLocal['apiKey'] = overrides['API_KEY'];
+  overridesLocal['otelReceiverPort'] = Number(otelPort);
 
   const existingBase = readJsonConfig(logHubJsonPath);
   const templateForMerge = migrating ? { ...templateObj, ...legacyParts.base } : templateObj;
-  const mergedBase = mergeConfig(templateForMerge, existingBase, overridesBase);
+  const mergedBase = mergeConfig(templateForMerge, existingBase);
+  // Older installers wrote this checkout's port into the tracked file — drop it on every run so an
+  // upgrade cleans the project up (the port now lives in `log-hub.local.json`).
+  delete mergedBase['otelReceiverPort'];
   writeJsonConfig(logHubJsonPath, mergedBase);
 
   const existingLocal = readJsonConfig(logHubLocalJsonPath);
   const localForMerge = migrating ? { ...legacyParts.local, ...existingLocal } : existingLocal;
   const mergedLocal = mergeConfigLocal(localForMerge, overridesLocal);
-  const willWriteLocal = Object.keys(mergedLocal).length > 0;
-  if (willWriteLocal) {
-    writeJsonConfig(logHubLocalJsonPath, mergedLocal);
-    ensureConfigIgnored(cwd, logHubLocalJsonPath);
-  }
+  writeJsonConfig(logHubLocalJsonPath, mergedLocal);
+  ensureConfigIgnored(cwd, logHubLocalJsonPath);
 
   if (migrating) {
     verifyWrittenJson(logHubJsonPath);
-    if (willWriteLocal) verifyWrittenJson(logHubLocalJsonPath);
+    verifyWrittenJson(logHubLocalJsonPath);
   }
 
   // --- Step 2: read-modify-write of `.claude/settings.local.json` (OTEL env), then `.claude/settings.json`. ---
@@ -889,7 +891,7 @@ export async function runInstall(flags?: CliFlags): Promise<void> {
   console.log(`  enabledPlugins["${pluginKey(marketplaceName)}"] = true`);
   console.log(`  extraKnownMarketplaces.${marketplaceName}.source.path = "${MARKETPLACE_SOURCE.source.path}"`);
   console.log('');
-  console.log('Config written to .artisyn/config/log-hub.json (and log-hub.local.json for secrets)');
+  console.log('Config written to .artisyn/config/log-hub.json and log-hub.local.json (serverUrl, apiKey, otelReceiverPort)');
   // Read back post-update, so this reports what is actually on disk — including a `serverUrl` that
   // was inherited from an existing config or carried over by the legacy `.env` migration rather
   // than passed on this command line.
@@ -908,12 +910,12 @@ export async function runInstall(flags?: CliFlags): Promise<void> {
     console.log('Next step: add your API key to .artisyn/config/log-hub.local.json');
     console.log('  { "apiKey": "<your-key>" }');
   } else if (hasApiKey) {
-    console.log('Next step: set serverUrl in .artisyn/config/log-hub.json');
+    console.log('Next step: set serverUrl in .artisyn/config/log-hub.local.json');
     console.log('  { "serverUrl": "<your-server-url>" }');
   } else {
     console.log('Next step: add your API key to .artisyn/config/log-hub.local.json');
     console.log('  { "apiKey": "<your-key>" }');
-    console.log('and set serverUrl in .artisyn/config/log-hub.json');
+    console.log('and set serverUrl in .artisyn/config/log-hub.local.json');
     console.log('  { "serverUrl": "<your-server-url>" }');
   }
 }
@@ -1496,8 +1498,8 @@ export async function allocateOtelPort(): Promise<number> {
 //   2. the `port` in `.artisyn/config/otel-port.json` — stable across reinstalls and upgrades.
 //   3. a fresh allocation.
 // The result is always persisted (so an override or a first allocation is stable from then on) and
-// the store is always confirmed gitignored. The project's own `otelReceiverPort` in `log-hub.json`
-// is deliberately **not** an input — it is an output, always rewritten from this value, so the two
+// the store is always confirmed gitignored. The project's own `otelReceiverPort` in
+// `log-hub.local.json` is deliberately **not** an input — it is an output, always rewritten from this value, so the two
 // files cannot drift.
 export async function resolveInstallOtelPort(flags: CliFlags | undefined, cwd: string): Promise<number> {
   let port: number;
@@ -1535,8 +1537,9 @@ export { OTEL_ENV_KEYS, OTEL_ENDPOINT_KEYS };
 const OTEL_LOOPBACK_ENDPOINT_RE = /^https?:\/\/(?:127\.0\.0\.1|localhost):(\d{1,5})\/v1\/(?:logs|metrics)$/;
 
 // Every port this project has on record as its own OTEL receiver port: the gitignored
-// `.artisyn/config/otel-port.json` store and the `otelReceiverPort` in `.artisyn/config/log-hub.json`.
-// Both are kept when they disagree (a store rewritten by a newer allocation, a hand-edited config),
+// `.artisyn/config/otel-port.json` store, the `otelReceiverPort` in `.artisyn/config/log-hub.local.json`
+// and the legacy one in `.artisyn/config/log-hub.json` (written there by older installers).
+// All are kept when they disagree (a store rewritten by a newer allocation, a hand-edited config),
 // and only values that are a usable port number count. Must be read before `resolveInstallOtelPort`
 // overwrites the store, so a previously allocated port is still recognised as ours.
 function readRecordedOtelPorts(cwd: string): Set<number> {
@@ -1545,9 +1548,12 @@ function readRecordedOtelPorts(cwd: string): Set<number> {
   if (stored !== null) {
     ports.add(stored);
   }
-  const configured = readJsonConfig(path.join(cwd, '.artisyn', 'config', 'log-hub.json'))['otelReceiverPort'];
-  if (isUsablePortNumber(configured)) {
-    ports.add(configured);
+  const configDir = path.join(cwd, '.artisyn', 'config');
+  for (const file of ['log-hub.local.json', 'log-hub.json']) {
+    const configured = readJsonConfig(path.join(configDir, file))['otelReceiverPort'];
+    if (isUsablePortNumber(configured)) {
+      ports.add(configured);
+    }
   }
   return ports;
 }

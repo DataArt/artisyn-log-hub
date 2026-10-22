@@ -23,7 +23,7 @@ Keys page (Install tab) shows this command pre-filled with the correct origin �
 
 | Flag | Description |
 |---|---|
-| `--server-url <url>` | Writes `serverUrl` into `.artisyn/config/log-hub.json` at install time. Trailing slash is stripped automatically. Repointing an install that already has a different `serverUrl` prints a destination-change warning and asks `continue? [Y/n]` (see below). |
+| `--server-url <url>` | Writes `serverUrl` into the gitignored `.artisyn/config/log-hub.local.json` at install time (installer `1.0.75`+; a `serverUrl` in the tracked `log-hub.json` is left as is). Trailing slash is stripped automatically. Repointing an install that already has a different `serverUrl` prints a destination-change warning and asks `continue? [Y/n]` (see below). |
 | `--api-key <key>` | Writes `apiKey` into `.artisyn/config/log-hub.local.json` at install time (never into the tracked `log-hub.json`). Prints a warning that the key will be visible in shell history. |
 | `--otel-port <n>` | Pins the loopback port this project's OTEL receiver binds (integer `1`–`65535`; anything else exits 1). Overrides the previously allocated port and is persisted to `.artisyn/config/otel-port.json`. Use it to move a project off a port another project already took — see OTEL settings below. |
 | `--help` | Prints usage and exits. |
@@ -96,9 +96,10 @@ npx "<server-origin>/static/artisyn-hooks-installer.tgz" install --server-url "<
    name), or of the checkout path when there is no `origin`. A name already in `marketplace.json` is reused.
    Claude Code registers marketplaces by name at the **user** level, so a single shared name made every repo of a
    user re-point one registration at itself and share one plugin cache; the per-repo name keeps them apart.
-6. Writes/merges `.artisyn/config/log-hub.json` (and `.artisyn/config/log-hub.local.json` if a secret needs
-   persisting), applying `--server-url`/`--api-key` if given. `otelReceiverPort` is always overwritten from the
-   port resolved in step 3, so the two files can never disagree.
+6. Writes/merges `.artisyn/config/log-hub.json` (shared settings; a legacy `otelReceiverPort` left there by an
+   older installer is removed) and the per-developer `.artisyn/config/log-hub.local.json`, applying
+   `--server-url`/`--api-key` to the local file if given. The local file's `otelReceiverPort` is always overwritten
+   from the port resolved in step 3, so it and `otel-port.json` can never disagree.
 7. Ensures `.artisyn/config/log-hub.local.json` is git-ignored (via `.artisyn/config/.gitignore`); hard-aborts with
    a remediation message if that file is already tracked by git.
 8. Merges `enabledPlugins["log-hub-hooks@artisyn-<hash>"] = true`,
@@ -120,8 +121,8 @@ npx "<server-origin>/static/artisyn-hooks-installer.tgz" install --server-url "<
 11. If a pre-plugin install (`.claude/telemetry_tool/`) is detected, migrates it automatically — see Migration below.
 12. Prints a success message describing what was registered and what to do next.
 
-If you skip both flags, add your credentials afterwards to `.artisyn/config/log-hub.local.json` /
-`log-hub.json` as described in Configuration.
+If you skip both flags, add your credentials afterwards to `.artisyn/config/log-hub.local.json` as described in
+Configuration.
 
 ---
 
@@ -165,7 +166,7 @@ setting untouched.
 The nine OTEL `env` keys are removed too, from both `.claude/settings.local.json` and `.claude/settings.json`
 (older installs wrote them there) — but only the keys that are still ours, judged per key and per file. An endpoint
 key is ours while it points at a loopback receiver (`http(s)://127.0.0.1|localhost:<port>/v1/logs|metrics`) on a
-port in the installer's allocation range or recorded in `otel-port.json` / `log-hub.json`. Any other key is ours
+port in the installer's allocation range or recorded in `otel-port.json` / `log-hub.local.json` / `log-hub.json`. Any other key is ours
 while it holds the installer's value and every endpoint key in the same file is ours. An endpoint repointed at your
 own collector is left untouched, with a `Note:` line saying so, and so are the exporter keys beside it. An `env`
 block left empty by the removal is dropped; `.claude/settings.local.json` is rewritten (with a `.bak`) only when a
@@ -384,10 +385,11 @@ every update — this is why hook scripts resolve config/output paths from the g
 Config lives in two project-local JSON files, resolved from the **git repo root** — same anchor as
 `.artisyn/ai_work_dir/`:
 
-- `.artisyn/config/log-hub.json` — tracked, non-secret settings.
-- `.artisyn/config/log-hub.local.json` — gitignored secrets (`apiKey`). Only created when there's an actual secret
-  to persist (an `--api-key` flag, or a migrated value); a fresh install with no flag doesn't create this file at
-  all.
+- `.artisyn/config/log-hub.json` — tracked, non-secret settings shared by every checkout.
+- `.artisyn/config/log-hub.local.json` — gitignored per-developer settings: `apiKey`, `serverUrl` and
+  `otelReceiverPort`. Written by every install (installer `1.0.75`+). Older installers put `serverUrl` and
+  `otelReceiverPort` into `log-hub.json`; that still works, and a `serverUrl` already in the tracked file stays a
+  fallback.
 
 `log-hub.local.json` overrides `log-hub.json` per top-level key (whole-value replacement, including arrays — no
 merge/concatenation). An explicit `null` in the local file means "absent", falling through to the base file's
@@ -395,16 +397,10 @@ value. A file that's missing, unparseable JSON, or has a non-object root falls b
 would have contributed (one `[warn]` line to `.artisyn/ai_work_dir/hook.log` in the malformed case; silent when merely
 absent).
 
-To add your credentials manually:
-
-`.artisyn/config/log-hub.json`:
+To add your credentials manually, merge them into `.artisyn/config/log-hub.local.json` (gitignored — never commit),
+keeping the keys already there:
 ```json
-{ "serverUrl": "<server-origin>" }
-```
-
-`.artisyn/config/log-hub.local.json` (gitignored — never commit):
-```json
-{ "apiKey": "<your-api-key>" }
+{ "serverUrl": "<server-origin>", "apiKey": "<your-api-key>" }
 ```
 
 ### Project root and linked worktrees (`ARTISYN_PROJECT_ROOT`)
@@ -494,8 +490,9 @@ a port blocked by a local proxy or an IPv4/IPv6 mismatch is never persisted.
 
 `.artisyn/config/otel-port.json` (`{"port": 31447, "allocatedAt": "<ISO>"}`) is the authoritative record and is
 **git-ignored** on purpose: a committed port would be inherited by every teammate's checkout and every second
-checkout on one machine, manufacturing exactly the collisions randomisation avoids. `log-hub.json`'s
-`otelReceiverPort` is an output of this file, never an input.
+checkout on one machine, manufacturing exactly the collisions randomisation avoids. `log-hub.local.json`'s
+`otelReceiverPort` is an output of this file, never an input (older installers wrote it into `log-hub.json`; the next
+install removes it from there).
 
 If two projects do collide, the receiver detects it: the second project's register call gets a
 `409 owner-mismatch` and the hook writes one warning to `.artisyn/ai_work_dir/hook.log` naming the owning repo.

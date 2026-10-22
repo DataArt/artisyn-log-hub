@@ -177,12 +177,14 @@ test('@S-INST-01 a clean install keeps the user settings, writes exactly its own
       expect(pluginJson.name).toBe(build.PLUGIN_NAME);
 
       const base = readJson(path.join(configDir, 'log-hub.json'));
-      expect(base.serverUrl).toBe(hub!.url);
+      expect(base.serverUrl, 'the tracked file keeps the template value').toBe('');
       expect(base).not.toHaveProperty('apiKey');
-      const p = Number(base.otelReceiverPort);
+      expect(base).not.toHaveProperty('otelReceiverPort');
+      const local = readJson(path.join(configDir, 'log-hub.local.json'));
+      const p = Number(local.otelReceiverPort);
       expect(p).toBeGreaterThanOrEqual(25000);
       expect(p).toBeLessThanOrEqual(65535);
-      expect(readJson(path.join(configDir, 'log-hub.local.json'))).toEqual({ apiKey: API_KEY });
+      expect(local).toEqual({ apiKey: API_KEY, serverUrl: hub!.url, otelReceiverPort: p });
       expect(fs.readFileSync(path.join(configDir, '.gitignore'), 'utf8').split(/\r?\n/)).toEqual(
         expect.arrayContaining(['log-hub.local.json', 'otel-port.json']),
       );
@@ -190,16 +192,17 @@ test('@S-INST-01 a clean install keeps the user settings, writes exactly its own
       return p;
     });
 
-    await test.step('5. no guardrail* key on a fresh install; one the user already has survives a reinstall unchanged', async () => {
+    await test.step('5. no guardrail* key on a fresh install; one the user already has survives a reinstall unchanged; a legacy otelReceiverPort in log-hub.json is removed, the port stays in log-hub.local.json', async () => {
       const base = readJson(path.join(configDir, 'log-hub.json'));
       expect(Object.keys(base).filter((k) => k.startsWith('guardrail'))).toEqual([]);
-      fs.writeFileSync(path.join(configDir, 'log-hub.json'), JSON.stringify({ ...base, guardrailEnabled: true }, null, 2));
+      fs.writeFileSync(path.join(configDir, 'log-hub.json'), JSON.stringify({ ...base, guardrailEnabled: true, otelReceiverPort: 12345 }, null, 2));
       const again = await runInstaller(cli, repo, ['install'], { home, fakeClaudeDir: fakeClaude.dir });
       expect(again.code, again.output).toBe(0);
       const after = readJson(path.join(configDir, 'log-hub.json'));
       expect(after.guardrailEnabled).toBe(true);
       expect(Object.keys(after).filter((k) => k.startsWith('guardrail'))).toEqual(['guardrailEnabled']);
-      expect(after.otelReceiverPort, 'the remembered port').toBe(port);
+      expect(after, 'an upgrade cleans the tracked file up').not.toHaveProperty('otelReceiverPort');
+      expect(readJson(path.join(configDir, 'log-hub.local.json')).otelReceiverPort, 'the remembered port').toBe(port);
       expect(installedMarketplaceName(repo), 'the per-repo marketplace name is stable').toBe(EXPECTED_MARKETPLACE);
     });
 
@@ -256,14 +259,14 @@ test('@S-INST-01 a clean install keeps the user settings, writes exactly its own
       expect(otelKeysIn(readJson(settingsFile).env), 'every legacy OTEL key left settings.json').toEqual([]);
       expect(readJson(localSettingsFile).env).toEqual(OTEL_ENV(port));
       expect(res.stdout).toContain('Note: moved the Artisyn OTEL env keys from .claude/settings.json to .claude/settings.local.json.');
-      expect(readJson(path.join(configDir, 'log-hub.json')).otelReceiverPort, 'the original port is back for 8b').toBe(port);
+      expect(readJson(path.join(configDir, 'log-hub.local.json')).otelReceiverPort, 'the original port is back for 8b').toBe(port);
     });
 
     await test.step('8a. the post-install receiver smoke test passed on the allocated port', async () => {
       expect(install.stdout).toContain(`✓ OTEL receiver verified on 127.0.0.1:${port}`);
     });
 
-    await test.step('9. the summary: destination URL, «fully configured»; --server-url alone → the API-key hint; no extra input asked', async () => {
+    await test.step('9. the summary: destination URL, «fully configured»; --server-url alone → the API-key hint, serverUrl and the port in log-hub.local.json; no extra input asked', async () => {
       expect(install.stdout).toContain(`Telemetry destination: ${hub!.url}`);
       expect(install.stdout).toContain('Hooks are fully configured and ready to use.');
       expect(install.stdout).not.toContain('[Y/n]');
@@ -272,13 +275,18 @@ test('@S-INST-01 a clean install keeps the user settings, writes exactly its own
       const urlOnly = await runInstaller(cli, other, ['install', '--server-url', hub!.url], { home, fakeClaudeDir: fakeClaude.dir });
       expect(urlOnly.code).toBe(0);
       expect(urlOnly.stdout).toContain('Next step: add your API key to .artisyn/config/log-hub.local.json');
-      expect(fs.existsSync(path.join(other, '.artisyn', 'config', 'log-hub.local.json'))).toBe(false);
+      const otherConfig = path.join(other, '.artisyn', 'config');
+      expect(readJson(path.join(otherConfig, 'log-hub.local.json'))).toEqual({
+        serverUrl: hub!.url,
+        otelReceiverPort: readJson(path.join(otherConfig, 'otel-port.json')).port,
+      });
+      expect(readJson(path.join(otherConfig, 'log-hub.json')).serverUrl).toBe('');
       const otherName = installedMarketplaceName(other);
       expect(otherName, 'a repo without origin still gets a per-repo name').toMatch(MARKETPLACE_NAME_RE);
       expect(otherName, 'two repos never share a marketplace name').not.toBe(EXPECTED_MARKETPLACE);
     });
 
-    await test.step('10. activation: the Stop command of the installed hooks.json sends with the key from log-hub.local.json to the URL from log-hub.json', async () => {
+    await test.step('10. activation: the Stop command of the installed hooks.json sends with the key from log-hub.local.json to the URL from log-hub.local.json', async () => {
       const base = readJson(path.join(configDir, 'log-hub.json'));
       fs.writeFileSync(path.join(configDir, 'log-hub.json'), JSON.stringify({ ...base, otelEnabled: false, sendLogsOnPromptEnabled: false }, null, 2));
       const telemetry = path.join(repo, '.artisyn', 'ai_work_dir', 'telemetry');
@@ -358,7 +366,7 @@ test('@S-INST-01 a clean install keeps the user settings, writes exactly its own
       expect(res.output).toContain(`the OTEL receiver could not be verified on 127.0.0.1:${port}`);
       expect(res.output).toMatch(/node ".*otel-receiver\.js" --port \d+/);
       expect(readJson(path.join(configDir, 'otel-port.json')).port).toBe(port);
-      expect(readJson(path.join(configDir, 'log-hub.json')).otelReceiverPort).toBe(port);
+      expect(readJson(path.join(configDir, 'log-hub.local.json')).otelReceiverPort).toBe(port);
     });
   } finally {
     await hub?.close();

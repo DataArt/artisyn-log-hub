@@ -8,8 +8,9 @@ Technical reference for the artisyn-log-hub hook system. For installation steps 
 
 All configuration lives in two JSON files under `.artisyn/config/`, resolved from the **git repo root**:
 
-- `log-hub.json` — tracked, non-secret settings.
-- `log-hub.local.json` — gitignored secrets (`apiKey`). Overrides `log-hub.json` per top-level key (whole-value
+- `log-hub.json` — tracked, non-secret settings shared by every checkout.
+- `log-hub.local.json` — gitignored per-developer settings: `apiKey`, `serverUrl`, `otelReceiverPort` (the installer
+  writes all three there since installer `1.0.75`). Overrides `log-hub.json` per top-level key (whole-value
   replacement, not a deep merge — an array key like `context` is replaced entirely, never concatenated). An
   explicit `null` in the local file means "absent" and falls through to the base file's value.
 
@@ -50,16 +51,16 @@ lowercased; a non-string `value` is coerced with `String(value)`; an entry with 
 `log-hub.json`:
 ```json
 {
-  "serverUrl": "https://your-server",
   "sendLogsTimeoutMs": 10000,
   "sendLogsOnPromptEnabled": true,
   "sendLogsOnPromptTimeoutMs": 60000
 }
 ```
 
-`log-hub.local.json` — `apiKey` sent as the `X-API-Key` header:
+`log-hub.local.json` — `serverUrl`, and `apiKey` sent as the `X-API-Key` header (a `serverUrl` in `log-hub.json`
+also works, as a shared fallback):
 ```json
-{ "apiKey": "your-api-key" }
+{ "serverUrl": "https://your-server", "apiKey": "your-api-key" }
 ```
 
 - `sendLogsTimeoutMs` (default `10000`) — per-request HTTP timeout for a single upload request (or a single chunk
