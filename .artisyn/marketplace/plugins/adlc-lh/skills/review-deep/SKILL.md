@@ -24,21 +24,21 @@ Only proceed past this point once confirmed this is the first user message of th
 
 Follow the Progress tracking rules of the `adlc-lh:tracker` skill. If they are not already in
 context, read them: `${CLAUDE_PLUGIN_ROOT}/skills/tracker/SKILL.md`, section
-`## Progress tracking`. If the file cannot be read, apply the minimum: create the checklist
-below with `TaskCreate`, keep exactly one task `in_progress`, and never mark a failed step
-`completed`.
+`## Progress tracking`. If the file cannot be read, apply the minimum: write one line before
+each step below and never report a failed step as done.
 
-This skill's checklist:
+This skill's steps:
 
 - `Launch the review workflow`
 - `Report the workflow's findings`
 - `Resolve common-sense Open Questions`
 - `Distill the requirements doc`
 
-The per-dimension tasks are created by the dimension agents themselves, inside the workflow —
-do not pre-create them. After the workflow returns, reconcile: any dimension task still
-`in_progress` (its agent died — see `failedDimensions`) gets its final status set from the
-workflow's returned results.
+While the workflow runs, the 15-minute status reads only: elapsed time and a repo-wide
+`git status --short` (read-only git only), looking for a changed `requirements.md` under the task
+docs directory. The dimension agents edit no files, so the doc changes only near the end of the
+run (Open Questions appended, wireframes drawn) — no file changes before then is not a stuck
+signal, while any file changed outside the task docs is worth a `⚠ Suspicious:` line.
 
 ## Granularity
 
@@ -81,11 +81,17 @@ analysis/notes section — after a review it should contain only its normal sect
 Functional/Non-Functional Requirements, Acceptance Criteria, Open Questions, Notes), with no
 dimension names, "problem → suggestion" pairs, or analysis prose left in it anywhere.
 
+In the same message as the `Workflow` call, schedule the 15-minute status cron (Progress
+tracking in `adlc-lh:tracker`).
+
 Do not poll, re-invoke it, or call `ScheduleWakeup` while waiting — that tool is only for `/loop`
 and does not apply here. Simply end your turn; the harness notifies you and resumes you
 automatically when it completes.
 
 ### 2 — Report the result
+
+First thing on completion (any outcome): `CronDelete(PROGRESS_CRON_ID)` if a status cron was
+created.
 
 The workflow returns:
 

@@ -25,11 +25,10 @@ Only proceed past this point once confirmed this is the first user message of th
 
 Follow the Progress tracking rules of the `adlc-lh:tracker` skill. If they are not already in
 context, read them: `${CLAUDE_PLUGIN_ROOT}/skills/tracker/SKILL.md`, section
-`## Progress tracking`. If the file cannot be read, apply the minimum: create the checklist
-below with `TaskCreate`, keep exactly one task `in_progress`, and never mark a failed step
-`completed`.
+`## Progress tracking`. If the file cannot be read, apply the minimum: write one line before
+each step below and never report a failed step as done.
 
-This skill's checklist:
+This skill's steps:
 
 - `Locate requirements`
 - `Distill check`
@@ -38,9 +37,8 @@ This skill's checklist:
 - `Write the implementation plan`
 - `Review the plan and fix gaps`
 
-If the first review pass reports issues, `TaskCreate` a separate `Second review pass` task for
-the second pass instead of reusing the first — so the extra pass is visible, not hidden inside
-one long checkbox.
+If the first review pass reports issues, write a separate `Second review pass` step line for the
+second pass — so the extra pass is visible, not hidden inside the first.
 
 ## IMPORTANT
 

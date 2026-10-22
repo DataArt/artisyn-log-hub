@@ -27,18 +27,17 @@ Only proceed past this point once confirmed this is the first user message of th
 
 Follow the Progress tracking rules of the `adlc-lh:tracker` skill. If they are not already in
 context, read them: `${CLAUDE_PLUGIN_ROOT}/skills/tracker/SKILL.md`, section
-`## Progress tracking`. If the file cannot be read, apply the minimum: create the checklist
-below with `TaskCreate`, keep exactly one task `in_progress`, and never mark a failed step
-`completed`.
+`## Progress tracking`. If the file cannot be read, apply the minimum: write one line before
+each step below and never report a failed step as done.
 
-This skill's checklist:
+This skill's steps:
 
-- Phase A (known up front): `Locate the plan`
-- Phase B (in the same message that finishes step 1, once the plan is read): one task per
-  `- [ ]` item in the plan's chunks — subject = the item text, description = the full item
-  text plus its chunk name. Then `Run health checks` · `Visual check` · `Wrap up`.
-- If the plan has more than ~25 items, create one task per **chunk** instead (subject = chunk
-  name, description lists its items) — a 12-chunk plan must not flood the list.
+- `Locate the plan`
+- one line per plan **chunk** as you start it (`→ <chunk name> (<n>/<total chunks>)`) — not per
+  item
+- `Run health checks`
+- `Visual check`
+- `Wrap up`
 
 ## Project config
 
@@ -134,8 +133,7 @@ whose triggers apply to what you are doing (code conventions, UI changes, browse
 them as their descriptions demand; this skill does not name them.
 
 After completing each item, tick its checkbox in the plan file at `IMPL_PLAN` (`- [ ]` → `- [x]`)
-and set its task `completed` in the same breath — the plan file and the task list must never
-disagree.
+right away — the plan file is the record of what is done.
 
 ### 3 — Health checks (inline, scoped to what you touched)
 

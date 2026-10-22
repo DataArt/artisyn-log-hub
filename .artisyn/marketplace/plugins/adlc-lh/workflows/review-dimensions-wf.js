@@ -103,14 +103,6 @@ other agents — do not comment on them.
 
 Requirements file: \`${reqFile}\`
 
-### Progress task (best-effort, never a blocker)
-
-The user watches this review as a session task list. Before anything else, load the tools with
-\`ToolSearch("select:TaskCreate,TaskUpdate")\`, then \`TaskCreate\` exactly ONE task with subject
-\`Review dimension: ${dim.label}\` and set it \`in_progress\`. Set it \`completed\` when you finish —
-never create tasks for your internal steps. If ToolSearch does not find the tools or any call
-fails, silently skip all task operations — a tracking failure must not affect your review result.
-
 Read the file. Where relevant to your dimension, also read the actual code, schema, or API files
 this task touches, and treat the source code as ground truth over the doc.
 

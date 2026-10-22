@@ -55,9 +55,11 @@ A simple-track skill that runs into DB/API/cross-module concerns, or past the co
 threshold, does not stop or escalate on its own — it finishes the job and adds a warning to its
 report recommending the deep variant. Your judgment that a task was simple stands.
 
-Every lifecycle skill on both tracks renders its steps as live checkboxes in the session task list —
-including per-chunk and per-check progress reported from inside the deep-track workflows, so you
-never need to open `/workflows` to see where a run is. The shared rules live in `adlc-lh:tracker`'s
+Every lifecycle skill on both tracks writes a short progress line as it moves to its next step (and,
+in `implement`, to the next plan chunk). While a deep-track workflow runs in the background, the
+session posts a 3–4 sentence status every 15 minutes that ends with a sanity check — a flag on
+anything implausible, such as a gigabyte import finished in a second or a test run with zero tests.
+The shared rules live in `adlc-lh:tracker`'s
 `## Progress tracking` section.
 
 ## Task ids and your tracker

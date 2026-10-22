@@ -97,7 +97,7 @@ const JUDGE_SCHEMA = {
   required: ['verdict', 'reasoning', 'concerns'],
 }
 
-function buildHealthCheckRunnerPrompt(taskLabel, verifyTaskId) {
+function buildHealthCheckRunnerPrompt(taskLabel) {
   return `Run the full project health-check suite for task ${taskLabel} before it is reported as done.
 
 Invoke the \`adlc-lh:check-health\` skill via the Skill tool, passing argument \`finalRun: true\`
@@ -107,7 +107,7 @@ When it finishes, report:
   \`docs/BLOCKED.md\`; otherwise "blocked".
 - \`checks\`: name + status for every check the skill ran, in order.
 - \`fixesApplied\`: any real fixes made along the way.
-- \`blockers\`: any entries written to \`docs/BLOCKED.md\` for this run.${progressTaskLines(verifyTaskId)}`
+- \`blockers\`: any entries written to \`docs/BLOCKED.md\` for this run.`
 }
 
 function buildHealthCheckJudgePrompt(taskLabel, runnerResult) {
@@ -127,23 +127,6 @@ ${JSON.stringify(runnerResult, null, 2)}
 Report a \`verdict\`: "ok" only if every configured check appears in the report and truly passed and
 there is no unresolved blocker. Otherwise "not_ok". Give a short \`reasoning\` and list any
 \`concerns\` found (empty array if none).`
-}
-
-// Optional live progress: when the skill created a session task for this agent's work, the agent
-// owns it and moves its status. Best-effort by design — the instruction is defensive so a missing
-// Task* tool surface or a failed call can never stall the real work.
-function progressTaskLines(taskId) {
-  if (!taskId) return ''
-  return `
-
-### Progress task
-
-Session task \`${taskId}\` shows this work as a checkbox in the user's task list, and you own it.
-Before anything else, load the tool schema with \`ToolSearch("select:TaskUpdate")\`, then call
-\`TaskUpdate({ taskId: '${taskId}', status: 'in_progress' })\`. Set it \`completed\` only when you
-genuinely finished; if you end up blocked, leave it \`in_progress\`. If ToolSearch does not find
-TaskUpdate or any call fails, silently skip all further task updates — a tracking failure is never
-a blocker: do not put it in \`blockers\` and do not let it affect your result.`
 }
 
 function itemLines(items) {
@@ -241,7 +224,7 @@ ${doneText}
 
 ${remainingText}
 
-Do NOT implement items outside your task list.${progressTaskLines(chunk.taskId)}`
+Do NOT implement items outside your task list.`
 }
 
 let input
@@ -319,7 +302,7 @@ if (halted) {
 }
 
 phase('Verify')
-const runnerResult = await agent(buildHealthCheckRunnerPrompt(input.taskLabel, input.verifyTaskId), {
+const runnerResult = await agent(buildHealthCheckRunnerPrompt(input.taskLabel), {
   phase: 'Verify',
   label: 'run-health-check',
   schema: HEALTH_CHECK_SCHEMA,
