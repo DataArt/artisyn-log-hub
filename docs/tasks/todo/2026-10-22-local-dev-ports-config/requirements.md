@@ -37,7 +37,7 @@ instead of reading them from the tracked file; this repo's own config migrated; 
   client inside the container) also comes from the tracked file
   (`docs/knowledgebase/docker-dev-container.md`, "Hook in the sandbox and provisioning").
 - This repo's tracked `log-hub.json` currently holds `serverUrl` and `otelReceiverPort`; a local
-  edit (`serverUrl: http://localhost:5003`) is what prompted this task.
+  edit of `serverUrl` is what prompted this task.
 
 ## Functional Requirements
 
