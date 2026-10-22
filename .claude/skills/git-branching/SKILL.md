@@ -32,3 +32,5 @@ Before treating a branch request as `adhoc/`, check whether it is actually a tas
 - Never commit directly to `main`. Always create/use a feature/fix/adhoc branch first.
 - Before creating a new branch, check current branch and status (`git status`, `git branch`) so
   you don't branch off unexpected local changes.
+- Before pushing, follow the `changelog` skill — the `docs/changelog/` entry for the change goes
+  into the same push.
