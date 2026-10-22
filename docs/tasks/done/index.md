@@ -9,3 +9,4 @@ Folders are named `<YYYY-MM-DD>-<slug>` (the day the task was created).
 - [2026-10-21-workflow-session-readability] Workflow Session Readability — archived 2026-10-21
 - [2026-10-15-claude-dev-container] Claude Code Dev Container (docker-dev + local infra + hook) — archived 2026-10-22
 - [2026-10-22-local-dev-ports-config] Per-Developer Log Hub Settings in log-hub.local.json — archived 2026-10-22
+- [2026-10-22-context-growth-item-modal] Context Growth Chart: Item Details Modal — archived 2026-10-23
