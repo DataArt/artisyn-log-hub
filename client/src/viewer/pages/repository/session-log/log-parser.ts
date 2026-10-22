@@ -261,12 +261,16 @@ function isQualifyingUserEvent(e: TelemetryEvent, isSubagent = false): boolean {
 
 /**
  * Same eligibility checks as `isQualifyingUserEvent` (type/sidechain/meta/agentId/non-empty
- * content), but does NOT filter out `<command-name>`/`<task-notification>`-prefixed string
- * content — those events still mark a turn boundary for work-time purposes even though they
- * don't count as a qualifying "prompt". Without this, an async subagent-completion tail
- * injected as a `<task-notification>` after a turn's real work has finished gets folded into
- * that turn's BFS set (because it isn't in `allQualifyingUuids`), inflating `workTimeMs` with
- * the subagent's completion delay.
+ * content), but does NOT filter out `<command-name>`-prefixed string content — such an event
+ * still marks a turn boundary for work-time purposes even though it doesn't count as a
+ * qualifying "prompt".
+ *
+ * A `<task-notification>` is NOT a boundary: when a turn launches a background agent or
+ * workflow, the main thread stops, and the harness later wakes it with a notification to finish
+ * the job. That continuation is still the work the user's prompt asked for, so the turn runs
+ * from the prompt to the last answer before the next prompt — the same rule as the server's
+ * `computeWorkTime`. A notification nobody answers adds nothing (there is no assistant event
+ * after it).
  */
 function isTurnBoundaryUserEvent(
   e: TelemetryEvent,
@@ -279,7 +283,9 @@ function isTurnBoundaryUserEvent(
   if (userEvent.toolUseResult?.agentId) return false;
   const content = userEvent.message?.content;
   if (!content || content.length === 0) return false;
-  if (typeof content === 'string') return true;
+  if (typeof content === 'string') {
+    return !content.trimStart().startsWith('<task-notification>');
+  }
   return content.some((block) => block.type === 'text');
 }
 
@@ -1956,10 +1962,9 @@ export function parseSessionLogs(
     qualifyingEvents.filter((e) => e.uuid).map((e) => e.uuid!),
   );
 
-  // Broader set of all turn-boundary user event UUIDs (includes <command-name>/
-  // <task-notification> events that don't qualify as prompts but still end a turn) — used
-  // only to bound the workTimeMs BFS so trailing async subagent-completion tails don't get
-  // folded into the preceding turn's work-time window.
+  // Broader set of all turn-boundary user event UUIDs (includes <command-name> events that
+  // don't qualify as prompts but still end a turn; <task-notification> is not one) — used
+  // only to bound the workTimeMs BFS.
   const allTurnBoundaryUuids = new Set(
     events
       .filter((e) => isTurnBoundaryUserEvent(e, isSubagent))
@@ -2004,9 +2009,9 @@ export function parseSessionLogs(
     );
 
     // Separate, tighter-bounded uuid set for workTimeMs only: stops at ANY turn-boundary
-    // event (including <command-name>/<task-notification>), not just qualifying prompts, so
-    // a trailing async subagent-completion tail can't extend this turn's work time. Tokens,
-    // context, tool calls, and files below still use the wider `uuidSet`.
+    // event (including <command-name>), not just qualifying prompts. The work a
+    // <task-notification> wakes the main thread for stays in the turn (Enter → final stop).
+    // Tokens, context, tool calls, and files below still use the wider `uuidSet`.
     const otherTurnBoundaryUuids = new Set(allTurnBoundaryUuids);
     otherTurnBoundaryUuids.delete(userEvent.uuid);
     const workTimeUuidSet = collectTurnUuids(
