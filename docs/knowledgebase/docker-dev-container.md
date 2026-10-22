@@ -486,14 +486,19 @@ required branch (an existing one or a new name; protected ones are rejected) and
 ref. Destructive actions confirm and name what is lost and the live sessions. Without a TTY the
 menu prints a hint and exits 1.
 
-**Line menu in JetBrains terminals.** In the WebStorm terminal the whole terminal closed right
-after the full-screen menu switched raw mode off following a real key press (not reproducible in
-conhost or Windows Terminal). So in a JetBrains terminal (`TERMINAL_EMULATOR=JetBrains-JediTerm`)
-the launcher shows a line menu instead: a numbered list and plain line input that never changes
-the console mode — `<n>` opens Claude (`--continue`), `<n>r` the resume picker, `<n>s` a shell,
-`n` creates a sandbox (same name/branch/base prompts and checks), `q` quits; stop/remove/prune are
-pointed to their flags. `CLAUDE_DOCKER_MENU=simple|full` forces either menu. The `--prune` `y/N`
-prompt also reads a plain line for the same reason.
+**Keys on Windows without raw mode.** In the WebStorm terminal the whole terminal closed right
+after the menu (Node) switched raw mode off following a real key press — not reproducible in
+conhost or Windows Terminal, while Claude, `docker exec -it` and PowerShell's own line editor work
+there. So on Windows the menu never calls `process.stdin.setRawMode`: `scripts/claude-docker/keys.mjs`
+starts a small PowerShell child that reads keys with `[Console]::ReadKey($true)` (ReadConsoleInput
+underneath, which returns key events in any console mode, so nobody changes the mode) and streams
+one line per key over a pipe; Node's own stdin is never read. Ctrl+C stays a console signal and
+quits the menu. On Linux/macOS the classic raw-mode keypress stream is used. The `--prune` `y/N`
+prompt reads a plain line for the same reason.
+
+`CLAUDE_DOCKER_MENU=simple` switches to a line menu (numbered list and plain line input: `<n>` opens
+Claude, `<n>r` the resume picker, `<n>s` a shell, `n` a new sandbox, `q` quits) for a terminal where
+the full-screen menu misbehaves anyway.
 
 **Sessions run outside the menu.** Enter / `R` / `S` / create do not start anything inside the
 menu process: the menu ends, restores the console and writes the chosen command (one argument per

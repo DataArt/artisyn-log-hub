@@ -20,6 +20,7 @@ import {
   validateName,
 } from './config.mjs';
 import { FIRST_BUILD_NOTICE, imageMissing } from './docker.mjs';
+import { startKeys } from './keys.mjs';
 import { branchExists, currentBranch } from './git.mjs';
 import { PRUNE_ACTIONS, buildPlan, executePlan, planSize } from './prune.mjs';
 import { checkPrerequisites, listRows, pendingText, remove, servicesText, stop } from './sandbox.mjs';
@@ -206,17 +207,19 @@ class Menu {
     this.restoreOnExit = () => {
       if (this.attached) writeOut(LEAVE_SCREEN);
     };
+    this.onSigint = () => this.quit(true);
   }
 
   // --- terminal ownership ---------------------------------------------------------------------
 
   attach() {
-    readline.emitKeypressEvents(process.stdin);
-    process.stdin.setRawMode(true);
-    process.stdin.on('keypress', this.onKey);
-    process.stdin.resume();
+    // Keys come from keys.mjs: on Windows a PowerShell reader (Node never changes the console
+    // mode), elsewhere Node's raw mode.
+    this.stopKeys = startKeys(this.onKey, (err) => this.fatal(err));
     process.stdout.on('resize', this.onResize);
     process.once('exit', this.restoreOnExit);
+    // Ctrl+C stays a console signal on Windows (the console mode is untouched).
+    process.on('SIGINT', this.onSigint);
     out(ENTER_SCREEN);
     this.attached = true;
   }
@@ -224,15 +227,11 @@ class Menu {
   detach() {
     if (!this.attached) return;
     this.attached = false;
-    process.stdin.off('keypress', this.onKey);
+    this.stopKeys?.();
+    this.stopKeys = null;
     process.stdout.off('resize', this.onResize);
     process.off('exit', this.restoreOnExit);
-    try {
-      process.stdin.setRawMode(false);
-    } catch {
-      // the terminal may already be gone
-    }
-    process.stdin.pause();
+    process.off('SIGINT', this.onSigint);
     out(LEAVE_SCREEN);
   }
 
@@ -730,16 +729,12 @@ class Menu {
 // ---------------------------------------------------------------------------------------------
 
 /**
- * True when the line menu should be used: CLAUDE_DOCKER_MENU=simple, or a JetBrains terminal
- * (TERMINAL_EMULATOR=JetBrains-JediTerm) unless CLAUDE_DOCKER_MENU=full. In the WebStorm terminal
- * the whole terminal closed right after the full-screen menu turned raw mode off following a real
- * key press; the line menu never touches the console mode.
+ * True only with CLAUDE_DOCKER_MENU=simple: a plain line menu (numbered list, line input), kept as a
+ * fallback for terminals where the full-screen menu misbehaves. The full-screen menu is the default
+ * everywhere, the WebStorm terminal included (see keys.mjs).
  */
 export function useSimpleMenu(env = process.env) {
-  const forced = (env.CLAUDE_DOCKER_MENU || '').trim().toLowerCase();
-  if (forced === 'simple') return true;
-  if (forced === 'full') return false;
-  return env.TERMINAL_EMULATOR === 'JetBrains-JediTerm';
+  return (env.CLAUDE_DOCKER_MENU || '').trim().toLowerCase() === 'simple';
 }
 
 /**

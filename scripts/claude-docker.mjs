@@ -184,7 +184,7 @@ async function runShell(name) {
 /** Asks a y/N question on the terminal; resolves true only for y / yes. */
 async function confirm(question) {
   // terminal: false keeps the console in cooked mode: toggling raw mode closed the WebStorm
-  // terminal (see useSimpleMenu in claude-docker/menu.mjs).
+  // terminal (see claude-docker/keys.mjs).
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout, terminal: false });
   try {
     const answer = await rl.question(question);
