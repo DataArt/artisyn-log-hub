@@ -138,6 +138,9 @@ const HOOK_JS_FILES = [
   // plugins, user settings) — `require`d by send-logs-hook, session-files, skill-catalog and
   // otel-endpoint-check.
   'claude-config-dir.js',
+  // `ARTISYN_PROJECT_ROOT` override of the project root — `require`d by git-context.js, so every
+  // hook dies with MODULE_NOT_FOUND without it.
+  'project-root-override.js',
 ];
 
 /**

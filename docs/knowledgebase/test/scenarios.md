@@ -30,6 +30,15 @@ contract` skips the stand build and the Mailpit/browser preflight. Around the co
 from `server/src` rewrites `installer-version.json` with identical bytes, as `npm run test` does. Exit codes: 0 green, 1 a pass
 or step failed or dev state changed, 2 usage or preflight error.
 
+**Runner database URL** (`run.mjs` `resolveRunnerDatabaseUrl`): **`TEST_DATABASE_URL` →
+`DATABASE_URL` → `postgresql://postgres:pw@localhost:5432/postgres`**. The resolved URL is what the
+preflight checks, what the fingerprint reads, what the stands use for their `scn_*` schemas and
+what the `contract` step receives as `DATABASE_URL`; every "`DATABASE_URL`" below means this
+resolved value. A Claude sandbox sets `TEST_DATABASE_URL` to its `log_hub_<name>_test` DB, so the
+fingerprint never sees the live sandbox backend's hook uploads and stale-schema cleanup in one
+sandbox never touches another ([docker-dev-container.md](../docker-dev-container.md)). On the host
+neither variable is usually set.
+
 Health checks: `scenarios-a`, `scenarios-b`, `scenarios-c` in
 `.claude/repo_config/repo-health-checks.json` (`npm run test:scenarios -- --mode <x> --only
 scenarios`, for mode A `--only scenarios,corpus`, group `app`, 600 s, `finalOnly`). The `corpus`

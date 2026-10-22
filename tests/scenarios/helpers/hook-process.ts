@@ -168,7 +168,9 @@ export function makeFakeHome(dirs: TempDirs): string {
 /**
  * Env that points a child hook at `<fakeHome>/.claude`: `os.homedir()` reads HOME / USERPROFILE,
  * and a blank CLAUDE_CONFIG_DIR neutralises one the developer's shell may export. The OTEL
- * endpoint variables Claude Code exports to hooks are blanked for the same reason.
+ * endpoint variables Claude Code exports to hooks are blanked for the same reason, and so is
+ * ARTISYN_PROJECT_ROOT (a dev sandbox container sets it container-wide; a scenario that tests the
+ * override passes it explicitly through `env`).
  */
 export function fakeHomeEnv(fakeHome: string): Record<string, string> {
   return {
@@ -179,6 +181,7 @@ export function fakeHomeEnv(fakeHome: string): Record<string, string> {
     OTEL_EXPORTER_OTLP_LOGS_ENDPOINT: '',
     OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: '',
     ARTISYN_HOOK_SERVICE: '',
+    ARTISYN_PROJECT_ROOT: '',
   };
 }
 

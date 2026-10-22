@@ -1,0 +1,177 @@
+#!/usr/bin/env bash
+# devctl — in-container service supervisor of a log-hub dev sandbox (DD-13 of
+# docs/tasks/todo/2026-10-15-claude-dev-container/impl-plan.md).
+#
+#   devctl start|stop|restart|status|logs  server|client|mailpit|provision|all
+#
+# Each service runs in its own session (setsid) as `dev`, with its pid in /run/dev/<svc>.pid and
+# its output appended to /var/log/dev/<svc>.log. `stop` sends TERM to the whole process group,
+# waits up to 10 s, then sends KILL. Works both as root (the entrypoint) and as `dev` (Claude).
+set -uo pipefail
+
+RUN_DIR=/run/dev
+LOG_DIR=/var/log/dev
+STOP_GRACE_S=10
+SERVICES=(mailpit server client provision)
+
+usage() {
+  cat >&2 <<'EOF'
+usage: devctl <start|stop|restart|status|logs> <server|client|mailpit|provision|all>
+
+  start    start the service(s) unless already running
+  stop     stop the service(s): TERM to the process group, KILL after 10 s
+  restart  stop, then start
+  status   pid and health probe of the service(s)
+  logs     tail -n 200 -f the service log(s) (/var/log/dev/<svc>.log)
+EOF
+  exit 2
+}
+
+[ $# -eq 2 ] || usage
+ACTION="$1"
+TARGET="$2"
+case "$ACTION" in start|stop|restart|status|logs) ;; *) usage ;; esac
+case "$TARGET" in server|client|mailpit|provision|all) ;; *) usage ;; esac
+
+if [ "$TARGET" = all ]; then TARGETS=("${SERVICES[@]}"); else TARGETS=("$TARGET"); fi
+
+# The command line of a service (run by `bash -c` in the service's own session).
+service_cmd() {
+  case "$1" in
+    server)    printf 'cd "$SANDBOX_WORKTREE/server" && exec npm run start:dev' ;;
+    client)    printf 'cd "$SANDBOX_WORKTREE/client" && exec bun run dev' ;;
+    mailpit)   printf 'exec mailpit --smtp 127.0.0.1:1025 --listen 0.0.0.0:8025' ;;
+    provision) printf 'exec node /opt/log-hub-dev/provision.mjs --loop' ;;
+  esac
+}
+
+# The health probe URL of a service (empty: no HTTP probe).
+service_probe_url() {
+  case "$1" in
+    server)  printf 'http://127.0.0.1:3000/api/v1/auth/config' ;;
+    client)  printf 'http://127.0.0.1:5173/' ;;
+    mailpit) printf 'http://127.0.0.1:8025/' ;;
+    *)       printf '' ;;
+  esac
+}
+
+pid_file() { printf '%s/%s.pid' "$RUN_DIR" "$1"; }
+log_file() { printf '%s/%s.log' "$LOG_DIR" "$1"; }
+
+# The recorded pid, if that process is still alive; empty otherwise.
+live_pid() {
+  local f pid
+  f="$(pid_file "$1")"
+  [ -s "$f" ] || return 0
+  pid="$(cat "$f" 2>/dev/null)"
+  if [ -n "$pid" ] && kill -0 "$pid" 2>/dev/null; then printf '%s' "$pid"; fi
+}
+
+# The process group of a pid (a service is started as a session leader, so it is the pid itself,
+# unless setsid had to fork).
+pgid_of() { ps -o pgid= -p "$1" 2>/dev/null | tr -d ' '; }
+
+group_alive() { kill -0 -- "-$1" 2>/dev/null; }
+
+start_one() {
+  local svc="$1" pid cmd log
+  pid="$(live_pid "$svc")"
+  if [ -n "$pid" ]; then
+    echo "devctl: $svc already running (pid $pid)"
+    return 0
+  fi
+  if [ "$svc" != mailpit ]; then
+    : "${SANDBOX_WORKTREE:?SANDBOX_WORKTREE is not set}"
+  fi
+  cmd="$(service_cmd "$svc")"
+  log="$(log_file "$svc")"
+  printf '\n===== %s devctl start %s =====\n' "$(date -Is)" "$svc" >>"$log" 2>/dev/null || true
+  if [ "$(id -u)" = 0 ]; then
+    # From root (the entrypoint): drop to dev without a forking wrapper, so the pid we record is
+    # the session leader and every process of the service belongs to dev.
+    touch "$log" && chown dev:dev "$log"
+    setsid setpriv --reuid=dev --regid=dev --init-groups \
+      env HOME=/home/dev USER=dev LOGNAME=dev bash -c "$cmd" </dev/null >>"$log" 2>&1 &
+  else
+    setsid bash -c "$cmd" </dev/null >>"$log" 2>&1 &
+  fi
+  pid=$!
+  printf '%s\n' "$pid" >"$(pid_file "$svc")"
+  [ "$(id -u)" = 0 ] && chown dev:dev "$(pid_file "$svc")"
+  sleep 0.3
+  if kill -0 "$pid" 2>/dev/null; then
+    echo "devctl: $svc started (pid $pid, log $log)"
+  else
+    echo "devctl: $svc exited right after start; see $log" >&2
+    rm -f "$(pid_file "$svc")"
+    return 1
+  fi
+}
+
+stop_one() {
+  local svc="$1" pid pgid waited=0
+  pid="$(live_pid "$svc")"
+  if [ -z "$pid" ]; then
+    rm -f "$(pid_file "$svc")"
+    echo "devctl: $svc not running"
+    return 0
+  fi
+  pgid="$(pgid_of "$pid")"
+  [ -n "$pgid" ] || pgid="$pid"
+  kill -TERM -- "-$pgid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null
+  while group_alive "$pgid" && [ "$waited" -lt "$STOP_GRACE_S" ]; do
+    sleep 1
+    waited=$((waited + 1))
+  done
+  if group_alive "$pgid"; then
+    kill -KILL -- "-$pgid" 2>/dev/null
+    echo "devctl: $svc killed after ${STOP_GRACE_S}s (pid $pid)"
+  else
+    echo "devctl: $svc stopped (pid $pid)"
+  fi
+  rm -f "$(pid_file "$svc")"
+}
+
+status_one() {
+  local svc="$1" pid url health
+  pid="$(live_pid "$svc")"
+  url="$(service_probe_url "$svc")"
+  if [ -n "$url" ]; then
+    if curl -fsS -o /dev/null -m 3 "$url" 2>/dev/null; then health="healthy ($url)"; else health="not responding ($url)"; fi
+  elif [ "$svc" = provision ]; then
+    if [ -e "$RUN_DIR/provisioned" ]; then health="provisioned"; else health="not provisioned yet"; fi
+  fi
+  if [ -n "$pid" ]; then
+    printf '%-10s running  pid %-7s %s\n' "$svc" "$pid" "$health"
+  else
+    printf '%-10s stopped  %-11s %s\n' "$svc" "" "$health"
+    return 1
+  fi
+  case "$health" in "not responding"*) return 1 ;; esac
+  return 0
+}
+
+rc=0
+case "$ACTION" in
+  start)
+    for s in "${TARGETS[@]}"; do start_one "$s" || rc=1; done ;;
+  stop)
+    for s in "${TARGETS[@]}"; do stop_one "$s" || rc=1; done ;;
+  restart)
+    for s in "${TARGETS[@]}"; do stop_one "$s" || rc=1; done
+    for s in "${TARGETS[@]}"; do start_one "$s" || rc=1; done ;;
+  status)
+    for s in "${TARGETS[@]}"; do status_one "$s" || rc=1; done ;;
+  logs)
+    files=()
+    for s in "${TARGETS[@]}"; do
+      f="$(log_file "$s")"
+      [ -e "$f" ] && files+=("$f")
+    done
+    if [ ${#files[@]} -eq 0 ]; then
+      echo "devctl: no log yet for $TARGET in $LOG_DIR" >&2
+      exit 1
+    fi
+    exec tail -n 200 -f "${files[@]}" ;;
+esac
+exit "$rc"

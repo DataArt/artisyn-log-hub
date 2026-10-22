@@ -160,8 +160,22 @@ start them yourself in the background — server `npm run start:dev` (from `serv
 client `bun run dev` (from `client/`, http://localhost:5173) — and restart them when needed. The scenario
 suite (`npm run test:scenarios`) needs neither: it starts its own isolated stand.
 
+This applies on the host. Inside a Claude sandbox container (`scripts/claude-docker`, see
+`docs/knowledgebase/docker-dev-container.md`) the server and client are already running — do not
+start them again.
+
 (Matches `project-env.json → appUrl` and `repo-health-checks.json → environmentNotes`; keep this
 note in sync with them.)
+
+## Claude sandboxes
+
+Optional, for the developer: `scripts/claude-docker.ps1 <name>` (or `scripts\claude-docker.cmd`,
+`node scripts/claude-docker.mjs`; no arguments = interactive menu) runs Claude Code in a Docker
+sandbox with its own git worktree and branch, its own DBs in the shared `log-hub-postgres`, its own
+backend/client/Mailpit on a per-sandbox `127.0.0.1` port triple and its own Log Hub for the hook.
+`--list`, `--serve`, `--shell`, `--stop`, `--reset`, `--remove`, `--prune`. The host workflow above is
+unchanged. Everything (commands, env vars, mounts, `devctl`, `TEST_DATABASE_URL`, limitations) is in
+`docs/knowledgebase/docker-dev-container.md`; the in-container rules are `docker-dev/CLAUDE.container.md`.
 
 ## Work cycle
 

@@ -37,7 +37,8 @@ The hook ships as a Claude Code plugin (`log-hub-hooks`), extracted by the insta
 | `scripts/process-marker.js` | Shared utility (hook `2.11.0`+): `buildProcessMarkerEnv(role, meta)` returns the `ARTISYN_PROC_*` provenance env vars (`ROLE`, `STARTED_AT`, `STARTED_EPOCH_MS`, `PARENT_PID`, `PARENT_SCRIPT`, `SESSION_ID`, `HOOK_VERSION`) stamped into every child the hooks spawn — inert metadata, never branched on, unlike the `ARTISYN_HOOK_SERVICE` re-entrancy guard. `killProcessTree(child)` is the mandatory replacement for `child.kill()` on any `shell: true` child: on Windows that child is a `cmd.exe` wrapper and the real program is its **grandchild**, so a plain kill orphaned live MCP servers and timed-out `claude -p` calls (six orphans up to five days old were found on the dev machine). Wired into the MCP probe and `claude-invoke-async.js`, and centrally inside `spawnDetachedHidden()` so no `spawn-hidden.js` call site can forget. Note: Windows does not expose another process's environment via `Win32_Process` — these are readable from inside the child, or externally only with a PEB reader (Process Explorer); on Linux/macOS `/proc/<pid>/environ` and `ps eww` show them directly. |
 | `scripts/harness-state.js` | Shared utility (hook `2.12.0`+): mtime-based fingerprint of the harness elements (CLAUDE.md files, skill and agent catalogs, MCP config files) plus the once-per-session report state in `.artisyn/ai_work_dir/harness-state.json`. See "Context injection" below. |
 | `scripts/write-telemetry.js` | Shared utility: appends a JSON event line to a JSONL file. **Suppressed entirely when `ARTISYN_HOOK_SERVICE` is set (hook `2.12.0`+)** — the hook's own `claude -p` evaluation sessions run Claude Code's full hook set and inherit the spawner's environment, so without the suppression each would record a full session log of itself (57.7% of all artisyn files on a measured dev machine), which would then become another session to upload and classify. Since `2.13.0` the one-line `hook_service` marker is not written either, so an evaluation session produces **no artisyn file at all** — the marker only ever existed to let the server hide these sessions, which is moot once they are never uploaded. Reports were never affected: `turn_end_advisor_runs` / `session_attribution_runs` store `invoking_session_id` in their own columns precisely so no report scans `logs.body`. The server's `logs.body @> '[{"event":"hook_service"}]'` check is retained for sessions uploaded by older hooks. |
-| `scripts/git-context.js` | Shared utility: resolves git root, remote URL, branch, user. Since `2.16.0` it also resolves the **worktree** root (`git rev-parse --show-toplevel`) alongside the existing `--git-common-dir` root, and both are uploaded as `git.root` / `git.worktreeRoot` — without the second, every path in a session run inside a linked worktree would be classified out-of-repo |
+| `scripts/git-context.js` | Shared utility: resolves git root, remote URL, branch, user. Since `2.16.0` it also resolves the **worktree** root (`git rev-parse --show-toplevel`) alongside the existing `--git-common-dir` root, and both are uploaded as `git.root` / `git.worktreeRoot` — without the second, every path in a session run inside a linked worktree would be classified out-of-repo. Since `2.23.0` `resolveRootFromCommonDir` returns the `ARTISYN_PROJECT_ROOT` override (below) before asking git, so `getGitRoot`, `getGitContext().root` and `getWorkDirPath` all agree on it |
+| `scripts/project-root-override.js` | Shared utility (hook `2.23.0`+): `projectRootOverride(cwd, env = process.env)` returns `path.normalize(path.resolve(ARTISYN_PROJECT_ROOT))` only when the variable is non-blank **and** `cwd` is inside that directory; otherwise `null` (no override). Set by the Claude sandbox launcher to the container worktree path — see [docker-dev-container.md](docker-dev-container.md) |
 | `scripts/code-inventory.js` | Shared utility (hook `2.16.0`+): `buildCodeInventory(projectRoot)` measures the tracked codebase at HEAD with ONE `git diff --numstat <EMPTY_TREE_SHA> HEAD` call (`EMPTY_TREE_SHA` is git's well-known empty-tree object id, a named constant here) plus a `rev-parse HEAD`. Returns `null` — never a partial or zeroed record — when the repo cannot be measured, so no `code-inventory` event is emitted and the server reports `n/a` instead of a zero denominator. |
 | `scripts/edit-result-counts.js` | Shared utility (hook `2.16.0`+): `deriveEditResultCounts(toolName, toolResponse)` → `{ filePath, added, removed, changeKind }` for `Edit`/`Write`/`MultiEdit` only, `null` for everything else and for an edit with no countable diff. Derived ON THE MACHINE: `structuredPatch`, `originalFile` and every non-edit tool result stay local and are never uploaded. |
 | `scripts/env-context.js` | Shared utility: `loadConfig(cwd)` reads `.artisyn/config/log-hub.json` + `log-hub.local.json` (anchored at the git repo root, not `${CLAUDE_PLUGIN_ROOT}`, since that path changes on every plugin update), resolves telemetry dir, extracts the `context` array. Also owns the OTEL resolvers (`2.3.0`+): `resolveOtelDir(cwd, config)` → `<telemetryDir>/otel`, `resolveOtelPort(config, env, cwd)` and `OTEL_FALLBACK_PORT`. |
@@ -54,6 +55,16 @@ directory), not `${CLAUDE_PLUGIN_ROOT}` (which points into `~/.claude/plugins/ca
 update), so paths resolve correctly regardless of which subdirectory Claude Code opens from, on any OS — and, since
 `--git-common-dir` always points at the main repo's shared `.git` directory, sessions opened inside a linked
 worktree resolve to the main repo root as well, not the worktree's own checkout directory.
+
+**Root override `ARTISYN_PROJECT_ROOT` (hook `2.23.0`+).** When this env variable is set to a non-blank directory
+**and** the hook's `cwd` is inside it, `resolveRootFromCommonDir` (`git-context.js`) returns that directory instead of
+the `--git-common-dir` parent (`project-root-override.js`). The hook then reads `.artisyn/config/*` and writes
+`.artisyn/ai_work_dir/` of that directory, slugifies it for the Claude transcript path, uses it as the OTEL receiver
+owner and the code-inventory/skill-catalog root, and uploads it as `git.root` (equal to `git.worktreeRoot` for a
+linked worktree). The Claude sandbox launcher sets it to the sandbox worktree, whose main checkout is not mounted (see
+[docker-dev-container.md](docker-dev-container.md)). Unset, blank, or a `cwd` outside it → the `--git-common-dir`
+behaviour above, byte-identical to older hooks; the cwd-inside rule keeps child processes in unrelated repos (test
+fixture repos) unaffected even when the variable is set container-wide.
 
 ---
 
@@ -89,7 +100,8 @@ path carried env only (see `spawn-hidden.js`'s row above). The spawn is fire-and
 awaits or reads a result, and it defers its own `process.exit(0)` by one `setImmediate` tick (negligible) so a spawn
 failure surfaced asynchronously on the child's `'error'` event still reaches `hook.log`.
 
-This is also the one detached script that shells out: `loadConfig()`/`getGitRoot()` fork `git.exe`. Because a
+This is also the one detached script that shells out: `loadConfig()`/`getGitRoot()` fork `git.exe` (unless the
+`ARTISYN_PROJECT_ROOT` override applies, which needs no git call). Because a
 detached process has no console to inherit, that call **must** pass `windowsHide: true` or Windows allocates a fresh
 visible console window for it (a visible console flash). Pinned by `__tests__/no-visible-window.test.js`.
 
@@ -97,7 +109,8 @@ visible console window for it (a visible console flash). Pinned by `__tests__/no
 
 Runs as a background process, scoped to exactly two files — `<telemetryDir>/<sessionId>.jsonl` (`artisyn`) and the
 current session's Claude transcript file (same `getGitRoot` → slugify → `~/.claude/projects/<slug>/<sessionId>.jsonl`
-resolution `send-logs-hook.js` uses) — no multi-session scan, no sub-agent/workflow discovery. Both files go through
+resolution `send-logs-hook.js` uses; under the `ARTISYN_PROJECT_ROOT` override `getGitRoot` is the worktree, which is
+also Claude's own project slug there) — no multi-session scan, no sub-agent/workflow discovery. Both files go through
 `upload-logs.js`'s `uploadFileMaybeCompressed()`/`uploadFileChunked()`, gzipped and chunked automatically on exactly
 the same terms as any other upload path.
 Neither file is recorded in `.claude-logs.sent` — this path never reads or writes the manifest at all — so the

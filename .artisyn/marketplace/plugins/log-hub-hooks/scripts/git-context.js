@@ -2,6 +2,7 @@
 const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
+const { projectRootOverride } = require('./project-root-override');
 
 // ---------------------------------------------------------------------------
 // Git context helpers
@@ -42,20 +43,27 @@ function git(args, cwd, timeoutMs = GIT_DEFAULT_TIMEOUT_MS) {
   }
 }
 
-// Resolves the main repo root for the given directory via `--git-common-dir`, which
-// points at the shared `.git` directory even when `cwd` is inside a linked worktree
-// (whereas `--show-toplevel` would resolve to the worktree's own checkout directory).
-// Returns null if `cwd` is not inside a git repo at all.
+// Resolves the project root for the given directory. An `ARTISYN_PROJECT_ROOT` override that
+// contains `cwd` wins (see project-root-override.js) — then a linked worktree is its own project
+// root, which is what a sandbox that sees only that worktree needs. Otherwise it is the main repo
+// root via `--git-common-dir`, which points at the shared `.git` directory even when `cwd` is
+// inside a linked worktree (whereas `--show-toplevel` would resolve to the worktree's own checkout
+// directory). Returns null if there is no override and `cwd` is not inside a git repo at all.
+// Every root lookup in the hook goes through here, so getGitRoot, getGitContext().root and
+// getWorkDirPath always agree.
 function resolveRootFromCommonDir(cwd) {
+  const override = projectRootOverride(cwd);
+  if (override) return override;
   const rawCommonDir = git(['rev-parse', '--git-common-dir'], cwd);
   if (!rawCommonDir) return null;
   const absoluteCommonDir = path.resolve(cwd, rawCommonDir);
   return path.normalize(path.dirname(absoluteCommonDir));
 }
 
-// Resolves the main repo root for the given directory — for linked worktrees this is
+// Resolves the project root for the given directory — for linked worktrees this is
 // the primary checkout's root, not the worktree's own directory, since both share the
-// same `.git` common dir (see resolveRootFromCommonDir). Falls back to cwd if not in a repo.
+// same `.git` common dir, unless `ARTISYN_PROJECT_ROOT` overrides it (see
+// resolveRootFromCommonDir). Falls back to cwd if not in a repo.
 function getGitRoot(cwd) {
   return resolveRootFromCommonDir(cwd) || cwd;
 }
@@ -87,7 +95,8 @@ function getGitContext(cwd) {
   if (!root) return null;
 
   // The *worktree's own* checkout directory, which differs from `root` only inside a linked
-  // worktree. Both are uploaded: a transcript's absolute `file_path`s
+  // worktree without an `ARTISYN_PROJECT_ROOT` override (with the override pointing at the
+  // worktree, `root` already is the worktree and the two are equal). Both are uploaded: a transcript's absolute `file_path`s
   // are written under whichever of the two the session actually ran in, so path normalisation
   // needs both candidates to pick the longest match.
   // `path.normalize` so it comes out in the same separator style as `root` (git reports

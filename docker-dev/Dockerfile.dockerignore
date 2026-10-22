@@ -1,0 +1,13 @@
+# Allow-list build context: everything is excluded, then only the image files are re-included.
+# The `!` entries must equal IMAGE_FILES in scripts/claude-docker/config.mjs (the image hash is
+# computed over exactly that list). claude-home/ is never sent to the daemon.
+*
+!Dockerfile
+!Dockerfile.dockerignore
+!entrypoint.sh
+!settings.template.json
+!gitconfig
+!CLAUDE.container.md
+!devctl
+!provision.mjs
+!npx.cmd

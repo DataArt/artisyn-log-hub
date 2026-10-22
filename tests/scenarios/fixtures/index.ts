@@ -21,6 +21,7 @@ import {
   type AuthMode,
   type StandMode,
 } from '../modes';
+import { timeoutScale } from '../../timeout-scale';
 import { standMode } from '../helpers/auth-mode';
 import { extractTokenFromEmailBody, findLatestMessageTo } from '../helpers/mailpit';
 import { DATA_COLLECTION_NOTICE_SETTING, consentSettingValue } from '../helpers/notice-hash';
@@ -75,6 +76,8 @@ interface WorkerFixtures {
 interface TestFixtures {
   api: APIRequestContext;
   users: UserFactory;
+  /** Auto fixture: scales every test.setTimeout() by LOG_HUB_TEST_TIMEOUT_SCALE. */
+  scaleTimeouts: void;
 }
 
 const SCHEMA_RE = /^scn_[abc]_[0-9a-f]{8}$/;
@@ -154,6 +157,20 @@ export async function loginPastBackoff(ctx: APIRequestContext, email: string, pa
 }
 
 export const test = base.extend<TestFixtures, WorkerFixtures>({
+  // Specs call test.setTimeout(<ms>) with host timings; in a sandbox (LOG_HUB_TEST_TIMEOUT_SCALE)
+  // those are multiplied too, so one variable relaxes every timeout of the suite.
+  scaleTimeouts: [
+    async ({}, use, testInfo) => {
+      const scale = timeoutScale();
+      if (scale !== 1) {
+        const setTimeout = testInfo.setTimeout.bind(testInfo);
+        testInfo.setTimeout = (ms: number) => setTimeout(ms * scale);
+      }
+      await use();
+    },
+    { auto: true },
+  ],
+
   stand: [
     async ({}, use) => {
       await use(readStand());
