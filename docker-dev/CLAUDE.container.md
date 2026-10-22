@@ -14,16 +14,26 @@ You are running inside a log-hub dev sandbox: a Docker container started by
   branch from the host.
 - The sandbox has its **own** dev stack, and it is **already running**:
 
-  | Service | Inside the container | Notes |
+  | Service | Inside the container (you, Playwright MCP, tests) | For the user, on the host |
   |---|---|---|
-  | Backend (`npm run start:dev` in `server/`, watch mode) | `http://localhost:3000` | `server/.env`: `AUTH_MODE=none` |
-  | Client (`bun run dev` in `client/`) | `http://localhost:5173` | proxies `/api` to the backend |
-  | Mailpit | SMTP `127.0.0.1:1025`, UI `http://localhost:8025` | |
-  | Postgres | `localhost:5432` | forwarded to the shared host cluster |
+  | Backend (`npm run start:dev` in `server/`, watch mode; `server/.env`: `AUTH_MODE=none`) | `http://localhost:3000` | `$SANDBOX_API_URL` |
+  | Client (`bun run dev` in `client/`; proxies `/api` to the backend) | `http://localhost:5173` | `$SANDBOX_APP_URL` |
+  | Mailpit | SMTP `127.0.0.1:1025`, UI `http://localhost:8025` | `$SANDBOX_MAILPIT_URL` |
+  | Postgres | `localhost:5432` (forwarded to the shared host cluster) | — |
+
+  **Links you give the user must be the host URLs** (`echo $SANDBOX_APP_URL` etc., e.g.
+  `http://localhost:5200`): the container ports are not published under their own numbers, so
+  `localhost:5173` opens nothing — or the host's own dev server — in the user's browser. Use the
+  container URLs only for what runs inside the container. Files you create in the worktree (e.g.
+  screenshots) are visible to the user at the same relative path under the host worktree.
 
   - The live DB is `$DATABASE_URL` (`log_hub_<name>`); the test DB is `$TEST_DATABASE_URL`
     (`log_hub_<name>_test`). Both belong to this sandbox only.
   - The `postgres` MCP server points at this sandbox's live DB.
+  - The `playwright` MCP server is registered for this sandbox with `--no-sandbox` (Chrome's own
+    sandbox cannot start in an unprivileged container). Just use it; if it still fails with
+    "Failed to move to new namespace", the container predates this setup — ask the user to run
+    `scripts/claude-docker.ps1 --reset <name>` on the host instead of patching Docker files here.
   - The hook is provisioned: Claude sessions in this sandbox are reported to this sandbox's own
     Log Hub (identify in the browser with the developer's git email to see them).
 - **Manage the services with `devctl`; never start a second copy.** Do not run

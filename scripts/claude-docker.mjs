@@ -8,6 +8,8 @@ import readline from 'node:readline/promises';
 import { parseAge, resolvePaths } from './claude-docker/config.mjs';
 import { ensureInfra } from './claude-docker/docker.mjs';
 import { runMenu } from './claude-docker/menu.mjs';
+import { migrateLegacyLayout } from './claude-docker/migrate.mjs';
+import { listStates } from './claude-docker/state.mjs';
 import {
   buildPlan,
   executePlan,
@@ -40,7 +42,8 @@ const USAGE = `Usage:
   claude-docker --prune [--older-than <age>] [--force] [--yes] [--include-running]
                                                   remove old sandboxes that have nothing to lose
   claude-docker --serve <name>                    start (or create) the sandbox without a session, print its URLs
-  claude-docker --reset <name>                    rebuild the image and recreate the container
+  claude-docker --reset [<name>]                  rebuild the image and recreate the container — of <name>,
+                                                  or of every sandbox without a name
                                                   (volumes, databases, worktree and ports are kept)
   claude-docker --help                            this help
 
@@ -112,7 +115,10 @@ function parseArgs(argv) {
       i++;
       return next;
     };
-    if (NAME_COMMANDS.includes(flag)) {
+    if (flag === 'reset' && inline === undefined && (argv[i + 1] === undefined || argv[i + 1].startsWith('-'))) {
+      // --reset without a name resets every sandbox.
+      commands.push({ command: 'reset', name: null });
+    } else if (NAME_COMMANDS.includes(flag)) {
       commands.push({ command: flag, name: takeValue() });
     } else if (BARE_COMMANDS.includes(flag)) {
       if (inline !== undefined) throw new UsageError(`--${flag} takes no value`);
@@ -250,6 +256,36 @@ function handNext(argv) {
   return 0;
 }
 
+/**
+ * `--reset` without a name: --reset of every sandbox with a state file, one after another (the
+ * first rebuilds the image; the others reuse the layer cache). A failing sandbox is reported and
+ * the rest still run. Returns 1 if any failed.
+ */
+async function resetAll() {
+  const names = listStates().map((s) => s.name);
+  if (names.length === 0) {
+    process.stdout.write('no sandboxes to reset\n');
+    return 0;
+  }
+  process.stdout.write(`resetting ${names.length} sandbox(es): ${names.join(', ')}\n`);
+  const failed = [];
+  for (const n of names) {
+    process.stdout.write(`\n=== ${n}\n`);
+    try {
+      await reset(n);
+    } catch (err) {
+      failed.push(n);
+      process.stderr.write(`claude-docker: --reset ${n} failed: ${err.message}\n`);
+    }
+  }
+  if (failed.length > 0) {
+    process.stderr.write(`\nreset failed for: ${failed.join(', ')}\n`);
+    return 1;
+  }
+  process.stdout.write(`\nreset ${names.length} sandbox(es)\n`);
+  return 0;
+}
+
 /** Runs the parsed command; resolves the process exit code. */
 async function dispatch({ command, name, opts }) {
   switch (command) {
@@ -280,7 +316,7 @@ async function dispatch({ command, name, opts }) {
     case 'serve':
       return serve(name);
     case 'reset':
-      return reset(name);
+      return name ? reset(name) : resetAll();
     default:
       throw new UsageError(`unknown command ${command}`);
   }
@@ -326,6 +362,7 @@ async function main() {
     throw err;
   }
   try {
+    if (parsed.command !== 'help') await migrateLegacyLayout();
     process.exitCode = await dispatch(parsed);
   } catch (err) {
     if (err instanceof UsageError) {

@@ -26,6 +26,8 @@ server/perf-tests/*.js
 # Shared Claude profile of the dev sandboxes (login, history), mounted into every container
 # by scripts/claude-docker.mjs as CLAUDE_CONFIG_DIR.
 /docker-dev/claude-home/
+# Claude sandbox worktrees (scripts/claude-docker.mjs)
+/.worktrees/
 /Claude.local.md
 /.playwright-work-folder/
 .playwright-work-folder/

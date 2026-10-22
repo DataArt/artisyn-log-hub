@@ -141,6 +141,11 @@ export function removeWorktree(wt, force = false) {
   throw err;
 }
 
+/** `git worktree move <from> <to>`, keeping the links relative (as `worktree add --relative-paths`). */
+export function moveWorktree(from, to) {
+  git(['-c', 'worktree.useRelativePaths=true', 'worktree', 'move', from, to]);
+}
+
 /** `git worktree prune`; drops admin entries of worktrees whose dirs are gone. */
 export function worktreePrune() {
   git(['worktree', 'prune'], { allowFail: true });

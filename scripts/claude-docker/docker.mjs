@@ -545,6 +545,9 @@ export function runContainer(state, phase = state?.v, paths = resolvePaths()) {
     [CONTAINER_ENV.LOG_HUB_VITE_HOST]: '0.0.0.0',
     [CONTAINER_ENV.SANDBOX_HOST_EMAIL]: identity.email,
     [CONTAINER_ENV.LOG_HUB_TEST_TIMEOUT_SCALE]: String(SANDBOX_TEST_TIMEOUT_SCALE),
+    [CONTAINER_ENV.SANDBOX_APP_URL]: `http://localhost:${state.ports.client}`,
+    [CONTAINER_ENV.SANDBOX_API_URL]: `http://localhost:${state.ports.server}`,
+    [CONTAINER_ENV.SANDBOX_MAILPIT_URL]: `http://localhost:${state.ports.mailpit}`,
   };
 
   const args = [

@@ -60,7 +60,7 @@ against the sandbox DBs, build and e2e/contract never run concurrently, no Docke
 | `docker-dev/entrypoint.sh` | container start (root) |
 | `docker-dev/devctl` | in-container service supervisor → `/usr/local/bin/devctl` |
 | `docker-dev/provision.mjs` | hook provisioning → `/opt/log-hub-dev/provision.mjs` |
-| `docker-dev/npx.cmd` | `npx.cmd` → `npx` shim for the tracked `.mcp.json` (Playwright MCP) |
+| `docker-dev/npx.cmd` | `npx.cmd` → `npx` shim for the tracked `.mcp.json` (Playwright MCP; Chrome runs without its sandbox, see [Image](#image)) |
 | `docker-dev/settings.template.json` | Claude profile defaults merged by the entrypoint (user keys win) |
 | `docker-dev/gitconfig` | image `/etc/gitconfig` (`safe.directory=*`) |
 | `docker-dev/CLAUDE.container.md` | the managed in-container guide |
@@ -172,7 +172,9 @@ branch.
   data.
 - The container keeps running after the last Claude session exits, until `--stop`.
 - `--reset` builds the image first (a failing build leaves the sandbox as it was), then
-  `docker rm -f` and `docker run` from the kept state.
+  `docker rm -f` and `docker run` from the kept state. `--reset` without a name does that for every
+  sandbox, one after another (the first rebuilds the image, the rest reuse the layer cache); a
+  failing sandbox is reported and the others still run.
 
 ### Remove
 
@@ -216,7 +218,7 @@ Everything the sandbox wrote — its DBs (sessions, `contract_*`/`scn_*` test sc
 | Shared cache volumes (label `log-hub.shared=true`, never removed) | `log-hub-dev-cache-npm`, `log-hub-dev-cache-bun`, `log-hub-dev-cache-playwright` |
 | Databases (`-` → `_`) | `log_hub_<name_>`, `log_hub_<name_>_test` |
 | Shared Postgres / network | container `log-hub-postgres` / `log-hub-net` |
-| Worktrees dir | `CLAUDE_DOCKER_WORKTREES_DIR`, else `<repoParent>/<repoName>-worktrees` |
+| Worktrees dir | `CLAUDE_DOCKER_WORKTREES_DIR`, else `<repo>/.worktrees` (git-ignored, visible in the IDE; state in `<repo>/.worktrees/.sandboxes`) |
 | Worktree | `<worktreesDir>/<name>` |
 | In-container markers | `/run/dev/entrypoint-done`, `/run/dev/provisioned` (both deleted at entrypoint start) |
 
@@ -243,7 +245,20 @@ a host dev server.
 
 C is the deepest common ancestor of the repo root and the worktrees dir. Paths under `/work` keep
 their position relative to C, so the relative gitdir links of the worktree resolve inside the
-container. The main checkout's working tree is never mounted.
+container. With the default worktrees dir C is the repo root: `.git` is at `/work/.git` and the
+worktree at `/work/.worktrees/<name>`. The main checkout's working tree is never mounted — only
+`.git` and the sandbox's own worktree, so a container never sees the other sandboxes.
+
+**Where worktrees live, and the migration.** Worktrees are in `<repo>/.worktrees/<name>`: inside
+the clone and git-ignored, so the IDE shows a sandbox's files, nothing is created next to the repo,
+and removing the clone removes its sandboxes. No repo tool scans the root (eslint, tsc and the test
+runners are scoped to their packages; the hook's code inventory reads only git-tracked files). The
+first layout kept them next to the repo in `<repoParent>/<repoName>-worktrees`; at the start of every
+command the launcher moves such sandboxes (`migrate.mjs`): it refuses while a Claude session is
+live, removes the container (volumes, DBs, ports kept), `git worktree move`s the worktree with
+relative links, moves the state dir and fixes its `worktree`, and renames the sandbox's Claude
+history dir in the profile (its name comes from the container path), so `--continue` still works.
+The emptied legacy dirs are removed only if empty.
 
 | Host | Container | Mode |
 |---|---|---|
@@ -275,7 +290,7 @@ replace the `$HOST_TEMP` prefix with `/host-tmp` and turn backslashes into slash
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `CLAUDE_DOCKER_WORKTREES_DIR` | `<repoParent>/<repoName>-worktrees` | where worktrees and `.sandboxes/` live |
+| `CLAUDE_DOCKER_WORKTREES_DIR` | `<repo>/.worktrees` | where worktrees and `.sandboxes/` live; a custom dir must not be a drive root, the repo or inside it, an ancestor of the repo, or the home dir |
 | `CLAUDE_DOCKER_STALE_AFTER` | `7d` | stale-reminder threshold (`<n>m`/`h`/`d`) |
 | `CLAUDE_DOCKER_SETUP_TIMEOUT_S` | `900` | wait for `entrypoint-done` (fatal on timeout) |
 | `CLAUDE_DOCKER_READY_TIMEOUT_S` | `180` | wait for `provisioned` (session opens anyway on timeout) |
@@ -293,6 +308,7 @@ replace the `$HOST_TEMP` prefix with `/host-tmp` and turn backslashes into slash
 | `TEST_DATABASE_URL` | `…/log_hub_<name_>_test` (scenario and contract runners) |
 | `LOG_HUB_VITE_HOST` | `0.0.0.0`, read by `client/vite.config.ts` `server.host` (unset on the host) |
 | `SANDBOX_HOST_EMAIL` | host `git config user.email`, the identity used by provisioning |
+| `SANDBOX_APP_URL`, `SANDBOX_API_URL`, `SANDBOX_MAILPIT_URL` | the sandbox's host URLs (`http://localhost:<slot port>`); the container guide tells Claude to give the user these, never the in-container `localhost:5173`/`3000`/`8025` |
 | `LOG_HUB_TEST_TIMEOUT_SCALE` | `5`: multiplies the Playwright test, `expect` and `test.setTimeout()` timeouts of scenarios and legacy e2e (`tests/timeout-scale.ts`; unset on the host = 1) |
 
 ## Databases and `TEST_DATABASE_URL`
@@ -321,6 +337,17 @@ git ≥ 2.48 from the signed git-core PPA; `typescript-language-server` + `types
 `postgresql-client`, `socat`, `jq`, `ripgrep`, `curl`. Every download is verified against a pinned
 sha256 in parallel BuildKit stages; a tampered sha256 fails the build. The build asserts
 `git --version` ≥ 2.48 and that there is no `python3`.
+
+**Chrome sandbox.** The container cannot create the user/PID namespaces Chrome's own sandbox needs
+(`Failed to move to new namespace … Operation not permitted`, then `Zygote process exited
+prematurely`), so the entrypoint registers the Playwright MCP for each sandbox (local scope, over
+the tracked `.mcp.json` server) with the `.mcp.json` args plus `--no-sandbox`; the container is the
+isolation boundary and the tracked `.mcp.json` stays unchanged for the host. Checked in a sandbox:
+`google-chrome --headless --no-sandbox --screenshot` works, without `--no-sandbox` it fails with
+that error. The explicit flag is used rather than an env variable: `@playwright/mcp`'s README names
+`PLAYWRIGHT_MCP_NO_SANDBOX`, its code was read as `PLAYWRIGHT_MCP_SANDBOX`, and the flag is
+unambiguous. The Playwright test runner (scenarios, legacy e2e) launches Chromium without the
+sandbox by default.
 
 **Build time.** The first build takes **~20–30 min** (it downloads Node, Claude, Chrome, Playwright
 Chromium, bun, Mailpit and the apt packages); the launcher and the menu say so when the image is
@@ -361,6 +388,10 @@ How the build is kept short:
 6. delete the two Phase 1 plugin-disable keys from the worktree's `.claude/settings.local.json`;
 7. register a local-scope `postgres` MCP server for the worktree with the tracked `.mcp.json`
    args, `npx.cmd` → `npx` and the DB path `/log_hub_<name_>` (`.mcp.json` stays unchanged);
+   likewise a local-scope `playwright` MCP server with the `.mcp.json` args plus `--no-sandbox`:
+   Chrome's own sandbox needs new user/PID namespaces, which the unprivileged container cannot
+   create ("Failed to move to new namespace … Operation not permitted"); the container is the
+   isolation boundary;
 8. `provision.mjs --static`, then `devctl start all`;
 9. touch `/run/dev/entrypoint-done`; `exec sleep infinity`.
 
@@ -395,6 +426,12 @@ at `CLAUDE_CONFIG_DIR=/home/dev/.claude-home`). It survives `--reset` and `--rem
   `hasCompletedOnboarding`, and `hasTrustDialogAccepted` for this sandbox's container worktree
   path. Only these keys are written, atomically.
 - Plugin state is per sandbox (the `-plugins` volume over `claude-home/plugins`).
+- **Local settings that follow you in.** The host user settings (`~/.claude/settings.json`) never
+  reach a sandbox, and each worktree has its own git-ignored `.claude/settings.local.json`. Before
+  every session or shell the launcher copies an allow-list of keys (`SHARED_LOCAL_SETTINGS` in
+  `sandbox.mjs`, today `language`) from the main checkout's `.claude/settings.local.json` into the
+  worktree's one, keeping its other keys. So to have, say, Russian replies everywhere for this
+  repo, put `"language": "russian"` into the main checkout's `.claude/settings.local.json`.
 
 ## Hook in the sandbox and provisioning
 

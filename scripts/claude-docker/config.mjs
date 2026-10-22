@@ -31,6 +31,10 @@ export const CONTAINER_ENV = Object.freeze({
   LOG_HUB_VITE_HOST: 'LOG_HUB_VITE_HOST',
   SANDBOX_HOST_EMAIL: 'SANDBOX_HOST_EMAIL',
   LOG_HUB_TEST_TIMEOUT_SCALE: 'LOG_HUB_TEST_TIMEOUT_SCALE',
+  // The sandbox's URLs as the user opens them on the host (published ports of its slot).
+  SANDBOX_APP_URL: 'SANDBOX_APP_URL',
+  SANDBOX_API_URL: 'SANDBOX_API_URL',
+  SANDBOX_MAILPIT_URL: 'SANDBOX_MAILPIT_URL',
 });
 
 export const DEFAULT_STALE_AFTER = '7d';
@@ -198,6 +202,9 @@ export function readyTimeoutS(env = process.env) {
 // ---------------------------------------------------------------------------------------------
 
 const SCRIPT_DIR = path.dirname(fileURLToPath(import.meta.url));
+
+/** Default worktrees dir relative to the repo root (git-ignored). */
+export const DEFAULT_WORKTREES_SUBDIR = Object.freeze(['.worktrees']);
 let cachedPaths = null;
 
 /**
@@ -219,15 +226,19 @@ export function resolvePaths({ env = process.env, refresh = false } = {}) {
   // when the launcher itself runs from a linked worktree.
   const repoRoot = path.resolve(path.dirname(commonDir));
   const fromEnv = (env[ENV.WORKTREES_DIR] || '').trim();
-  const worktreesDir = fromEnv
-    ? path.resolve(fromEnv)
-    : path.join(path.dirname(repoRoot), `${path.basename(repoRoot)}-worktrees`);
-  assertSafeWorktreesDir(worktreesDir, repoRoot);
+  // Default: `<repo>/.worktrees`, inside the clone and git-ignored, so nothing is created next to
+  // the repo, removing the clone removes its sandboxes, and the IDE shows the sandbox files.
+  const defaultDir = path.join(repoRoot, ...DEFAULT_WORKTREES_SUBDIR);
+  const worktreesDir = fromEnv ? path.resolve(fromEnv) : defaultDir;
+  // The default is inside the repo by design; a custom dir must pass the safety check.
+  if (fromEnv && !samePath(worktreesDir, defaultDir)) assertSafeWorktreesDir(worktreesDir, repoRoot);
   const stateDir = path.join(worktreesDir, '.sandboxes');
   cachedPaths = Object.freeze({
     repoRoot,
     gitDir: path.join(repoRoot, '.git'),
     worktreesDir,
+    // The pre-2026-10-22 default (next to the repo); migrated by migrateLegacyLayout().
+    legacyWorktreesDir: fromEnv ? null : path.join(path.dirname(repoRoot), `${path.basename(repoRoot)}-worktrees`),
     stateDir,
     lockFile: path.join(stateDir, '.lock'),
     claudeHome: path.join(repoRoot, 'docker-dev', 'claude-home'),

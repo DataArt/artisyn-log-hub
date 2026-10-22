@@ -519,6 +519,32 @@ function prepareClaudeProfile(containerWorktree, paths) {
 }
 
 /**
+ * Keys of the main checkout's git-ignored `.claude/settings.local.json` that every sandbox worktree
+ * gets too (the worktree has its own settings.local.json, which the entrypoint fills with the
+ * sandbox's OTEL env). Only an allow-list: the rest holds host permissions with Windows paths and
+ * the host's OTEL ports, which would break a sandbox.
+ */
+const SHARED_LOCAL_SETTINGS = ['language'];
+
+/** Copies SHARED_LOCAL_SETTINGS present in the main checkout into the worktree's settings.local.json. */
+function syncLocalSettings(name, paths) {
+  const src = readJsonFile(path.join(paths.repoRoot, '.claude', 'settings.local.json'));
+  const picked = Object.fromEntries(SHARED_LOCAL_SETTINGS.filter((k) => k in src).map((k) => [k, src[k]]));
+  if (Object.keys(picked).length === 0) return;
+  const file = path.join(worktreePath(name, paths), '.claude', 'settings.local.json');
+  let cfg = {};
+  if (fs.existsSync(file)) {
+    // An unreadable file is left alone rather than overwritten (it holds keys we do not own).
+    cfg = JSON.parse(fs.readFileSync(file, 'utf8'));
+  }
+  if (Object.entries(picked).every(([k, v]) => JSON.stringify(cfg[k]) === JSON.stringify(v))) return;
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const tmp = `${file}.tmp-${process.pid}-${Date.now()}`;
+  fs.writeFileSync(tmp, `${JSON.stringify({ ...cfg, ...picked }, null, 2)}\n`, 'utf8');
+  fs.renameSync(tmp, file);
+}
+
+/**
  * `docker exec -it -u dev -w <cwt> log-hub-dev-<name> <command…>` with the launcher's terminal
  * (`-i` only when there is no TTY); lastActivity is updated before and after. Returns the exit code.
  */
@@ -529,6 +555,11 @@ function execInteractive(name, command, paths = resolvePaths()) {
     prepareClaudeProfile(cp.worktree, paths);
   } catch (err) {
     process.stderr.write(`warning: could not prepare the sandbox Claude profile: ${err.message}\n`);
+  }
+  try {
+    syncLocalSettings(name, paths);
+  } catch (err) {
+    process.stderr.write(`warning: could not copy local settings into the sandbox: ${err.message}\n`);
   }
   const tty = Boolean(process.stdin.isTTY && process.stdout.isTTY);
   const args = ['exec', tty ? '-it' : '-i', '-u', CONTAINER_USER, '-w', cp.worktree, containerName(name), ...command];

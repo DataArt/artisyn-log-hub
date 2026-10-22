@@ -212,6 +212,22 @@ else
   warn "$MCP_JSON has no postgres server; MCP registration skipped"
 fi
 
+# Playwright MCP, local scope over the tracked .mcp.json server of the same name: the same args
+# plus --no-sandbox. Chrome's own sandbox needs new user/PID namespaces, which an unprivileged
+# container may not create ("Failed to move to new namespace … Operation not permitted", then the
+# browser dies); the container is the isolation boundary. npx.cmd -> npx as above.
+if [ -f "$MCP_JSON" ] && jq -e '.mcpServers.playwright' "$MCP_JSON" >/dev/null 2>&1; then
+  pw_cmd="$(jq -r '.mcpServers.playwright.command | if . == "npx.cmd" then "npx" else . end' "$MCP_JSON")"
+  mapfile -t pw_args < <(jq -r '.mcpServers.playwright.args[]' "$MCP_JSON")
+  case " ${pw_args[*]} " in *" --no-sandbox "*) ;; *) pw_args+=("--no-sandbox") ;; esac
+  as_dev claude mcp remove --scope local playwright >/dev/null 2>&1 || true
+  if as_dev claude mcp add --scope local playwright -- "$pw_cmd" "${pw_args[@]}"; then
+    log "playwright MCP server registered (--no-sandbox)"
+  else
+    warn "could not register the playwright MCP server"
+  fi
+fi
+
 # --- Step 8: provisioning (static part) and the dev stack ------------------------------------
 if as_dev node "$PROVISION" --static; then
   log "static provisioning done"
