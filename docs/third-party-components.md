@@ -32,7 +32,7 @@ article (`client/public/help/third-party-components.md`); keep the two in sync.
 |---|---|---|---|
 | **PostgreSQL** | **18.4** (Debian build `18.4-1.pgdg13+1`) | PostgreSQL License (permissive, BSD/MIT-style) | The only datastore — sessions, telemetry, users, teams, repo config. Runs as an external service: it is *not* declared in `docker-compose.yml`; the app reaches it via `DATABASE_URL`. |
 | `plpgsql` (PostgreSQL extension) | 1.0 | PostgreSQL License (ships with core) | Default procedural language, used by migrations. The **only** installed extension — no third-party PG extension is used. |
-| **Node.js** | 22 (`node:22-slim`) | MIT (bundled: V8 — BSD-3-Clause, OpenSSL — Apache-2.0, ICU — Unicode-3.0) | Runtime for the server process and for the telemetry hook on the user's machine. |
+| **Node.js** | 22.23.4 (`node:22.23.4-slim`) | MIT (bundled: V8 — BSD-3-Clause, OpenSSL — Apache-2.0, ICU — Unicode-3.0) | Runtime for the server process and for the telemetry hook on the user's machine. |
 | **Debian** (`slim` base) | trixie-based | Mixed DFSG-free (GPL-2.0/GPL-3.0/LGPL/MIT/BSD) | Base operating system inside the container. |
 | **Docker / Docker Compose** | host-provided | Apache-2.0 | Runtime platform — the product is delivered and run as a Docker image. |
 

@@ -1,12 +1,12 @@
 # Stage 1 — client-build
-FROM node:22-slim AS client-build
+FROM node:22.23.4-slim AS client-build
 RUN npm install -g bun
 WORKDIR /app
 COPY client/ ./client/
 RUN cd client && bun install && bun run build
 
 # Stage 2 — hooks-installer build (generates artisyn-hooks-installer.tgz + hooks.tar.gz)
-FROM node:22-slim AS hooks-build
+FROM node:22.23.4-slim AS hooks-build
 WORKDIR /app
 COPY artisyn-hooks-installer/ ./artisyn-hooks-installer/
 COPY hook/ ./hook/
@@ -17,7 +17,7 @@ RUN npm install --no-save typescript
 RUN node scripts/build-hooks-installer.js
 
 # Stage 3 — server-build
-FROM node:22-slim AS server-build
+FROM node:22.23.4-slim AS server-build
 RUN npm install -g @vercel/ncc
 WORKDIR /app
 COPY server/ ./server/
@@ -31,7 +31,7 @@ RUN cp server/node_modules/connect-pg-simple/table.sql /app/dist/table.sql
 RUN node -p "require('./server/package.json').version" > /app/dist/.app-version
 
 # Stage 4 — runtime
-FROM node:22-slim AS runtime
+FROM node:22.23.4-slim AS runtime
 ARG GIT_COMMIT=unknown
 ARG RELEASE_STAMP=unknown
 ENV NODE_ENV=production

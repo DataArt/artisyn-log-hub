@@ -13,8 +13,8 @@ runners and type definitions are not part of the product.
 |---|---|---|---|
 | PostgreSQL | 18.4 | PostgreSQL License | The only datastore — holds all sessions, telemetry, users, teams and repository config. Runs as a separate service, not bundled into the application image. |
 | `plpgsql` | 1.0 | PostgreSQL License | PostgreSQL's built-in procedural language, used by migrations. The only installed database extension. |
-| Node.js | 22 | MIT (bundled: V8 — BSD-3-Clause, OpenSSL — Apache-2.0, ICU — Unicode-3.0) | Runtime for the server process and for the telemetry hook on your own machine. |
-| Debian (`node:22-slim` base) | trixie-based | Mixed DFSG-free (GPL/LGPL/MIT/BSD) | Base operating system inside the container. |
+| Node.js | 22.23.4 | MIT (bundled: V8 — BSD-3-Clause, OpenSSL — Apache-2.0, ICU — Unicode-3.0) | Runtime for the server process and for the telemetry hook on your own machine. |
+| Debian (`node:22.23.4-slim` base) | trixie-based | Mixed DFSG-free (GPL/LGPL/MIT/BSD) | Base operating system inside the container. |
 | Docker / Docker Compose | host-provided | Apache-2.0 | Runtime platform — the product is delivered and run as a Docker image. |
 
 ## Server
