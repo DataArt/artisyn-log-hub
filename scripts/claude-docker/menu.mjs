@@ -1,15 +1,14 @@
 // Interactive sandbox menu (FR-W8): the `claude-docker` TUI shown when the launcher runs with no
 // arguments in a terminal. Ported from the UI prototype docs/pocs/2026-10-21-1316-sandbox-menu-tui/
 // menu.js (renderer, keys, dialogs, prune screen), now driven by the real launcher code paths:
-// listRows() for the data, createOrStart/openSession/shell/stop/remove for the actions and
-// buildPlan/executePlan for the prune screen. The PoC's merge feature is not ported (merge
-// outside the menu).
+// listRows() for the data, stop/remove for the actions and buildPlan/executePlan for the prune
+// screen. The PoC's merge feature is not ported (merge outside the menu).
 //
 // The keypress loop is event-driven (DD-2 allows async here). Actions that print (stop, remove,
 // prune) run with stdout/stderr captured so they do not scribble over the alternate screen; their
-// outcome becomes the status line or a message box. Session keys (Enter/R/S, create) leave the
-// alternate screen first and hand the terminal to `docker exec`; the menu then exits with that
-// command's exit code.
+// outcome becomes the status line or a message box. Session keys (Enter/R/S, create) never start
+// anything here: the menu ends and resolves { next: argv }, and the claude-docker.ps1/.cmd wrapper
+// runs that command as a fresh process (see handOver()).
 import path from 'node:path';
 import readline from 'node:readline';
 import {
@@ -22,19 +21,8 @@ import {
 } from './config.mjs';
 import { FIRST_BUILD_NOTICE, imageMissing } from './docker.mjs';
 import { branchExists, currentBranch } from './git.mjs';
-import { PRUNE_ACTIONS, buildPlan, executePlan, planSize, printStaleReminder } from './prune.mjs';
-import {
-  LauncherError,
-  checkPrerequisites,
-  createOrStart,
-  listRows,
-  openSession,
-  pendingText,
-  remove,
-  servicesText,
-  shell,
-  stop,
-} from './sandbox.mjs';
+import { PRUNE_ACTIONS, buildPlan, executePlan, planSize } from './prune.mjs';
+import { checkPrerequisites, listRows, pendingText, remove, servicesText, stop } from './sandbox.mjs';
 import { readState } from './state.mjs';
 
 const ESC = '\x1b[';
@@ -460,39 +448,6 @@ class Menu {
       .catch((err) => this.fatal(err));
   }
 
-  /**
-   * Leaves the alternate screen and runs `fn` with the terminal (a container start plus a
-   * `docker exec` session or shell). Its result is the menu's exit code. A LauncherError before
-   * anything ran in the container brings the menu back with a red box.
-   */
-  handoff(intro, fn, refusedTitle) {
-    this.busy = true;
-    this.detach();
-    out(`${intro}\n`);
-    fn()
-      .then((code) => {
-        this.done = true;
-        this.resolve(code);
-      })
-      .catch((err) => {
-        if (!(err instanceof LauncherError)) {
-          this.done = true;
-          this.reject(err);
-          return;
-        }
-        try {
-          this.busy = false;
-          this.changed = true;
-          this.refresh();
-          this.attach();
-          this.message(typeof refusedTitle === 'function' ? refusedTitle() : refusedTitle, [err.message], c.red);
-          this.render();
-        } catch (e) {
-          this.fatal(e);
-        }
-      });
-  }
-
   // --- list keys ------------------------------------------------------------------------------
 
   onListKey(str, key) {
@@ -530,28 +485,21 @@ class Menu {
   }
 
   startSession(r, passthrough) {
-    this.handoff(
-      `${c.green}▶ ${r.name}${c.reset} ${c.gray}starting container…${c.reset}`,
-      async () => {
-        await createOrStart(r.name, {}, this.paths);
-        const code = openSession(r.name, passthrough, this.paths);
-        printStaleReminder({ exclude: r.name }, this.paths);
-        return code;
-      },
-      'Cannot start',
-    );
+    this.handOver([r.name, ...passthrough]);
   }
 
   startShell(r) {
-    this.handoff(
-      `${c.green}▶ ${r.name}${c.reset} ${c.gray}shell${c.reset}`,
-      async () => {
-        const code = await shell(r.name, this.paths);
-        printStaleReminder({ exclude: r.name }, this.paths);
-        return code;
-      },
-      'Cannot start',
-    );
+    this.handOver(['--shell', r.name]);
+  }
+
+  /**
+   * Ends the menu and hands the chosen command to the wrapper, which runs it as a fresh
+   * `claude-docker` process. The menu never starts containers or sessions itself: on Windows, child
+   * processes started after the menu has read the console in raw mode killed the whole terminal
+   * (seen in Windows Terminal), while the same command run as its own process works.
+   */
+  handOver(argv) {
+    this.finish({ next: argv }, [`${c.green}▶ claude-docker ${argv.join(' ')}${c.reset}`]);
   }
 
   stopKey(r) {
@@ -691,17 +639,9 @@ class Menu {
 
   create({ name, branch, from }) {
     this.mode = 'list';
-    this.handoff(
-      `${c.green}▶ creating ${name}${c.reset}`,
-      async () => {
-        await createOrStart(name, { branch, from }, this.paths);
-        const code = openSession(name, [], this.paths);
-        printStaleReminder({ exclude: name }, this.paths);
-        return code;
-      },
-      // Nothing created (e.g. git refused the worktree) vs. a failure after the state was written.
-      () => (readState(name, this.paths) ? 'Create failed' : 'Create refused'),
-    );
+    // The same command as `claude-docker <name> --branch <b> [--from <ref>]`; a git refusal (e.g.
+    // the branch is checked out elsewhere) is printed by that run.
+    this.handOver([name, '--branch', branch, ...(from ? ['--from', from] : [])]);
   }
 
   // --- prune screen ---------------------------------------------------------------------------
@@ -785,13 +725,122 @@ class Menu {
   }
 }
 
+// ---------------------------------------------------------------------------------------------
+// Simple (line) menu: no raw mode, no alternate screen
+// ---------------------------------------------------------------------------------------------
+
 /**
- * Runs the interactive menu; resolves the exit code. Needs a TTY on stdin and stdout (the caller
- * prints the hint otherwise). Rendering errors restore the screen and cursor and resolve 1; a
- * LauncherError after a session started rejects, so the CLI reports it as usual.
+ * True when the line menu should be used: CLAUDE_DOCKER_MENU=simple, or a JetBrains terminal
+ * (TERMINAL_EMULATOR=JetBrains-JediTerm) unless CLAUDE_DOCKER_MENU=full. In the WebStorm terminal
+ * the whole terminal closed right after the full-screen menu turned raw mode off following a real
+ * key press; the line menu never touches the console mode.
+ */
+export function useSimpleMenu(env = process.env) {
+  const forced = (env.CLAUDE_DOCKER_MENU || '').trim().toLowerCase();
+  if (forced === 'simple') return true;
+  if (forced === 'full') return false;
+  return env.TERMINAL_EMULATOR === 'JetBrains-JediTerm';
+}
+
+/**
+ * The line menu: a numbered list, then plain line input (readline with terminal: false, so the
+ * console stays in its normal cooked mode). Opening a sandbox, a shell or a new sandbox resolves
+ * { next: argv } like the full menu; stop/remove/prune are pointed to their CLI flags.
+ */
+export async function runSimpleMenu(paths) {
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout, terminal: false });
+  const lines = rl[Symbol.asyncIterator]();
+  const ask = async (q) => {
+    out(q);
+    const { value, done } = await lines.next();
+    return done ? null : String(value).trim();
+  };
+  try {
+    const { value: rows, text } = captureSync(() => listRows(paths));
+    out(`\n${c.bold}claude-docker${c.reset} ${c.gray}· sandboxes of ${path.basename(paths.repoRoot)}${c.reset}\n`);
+    for (const w of text.split(/\r?\n/).filter(Boolean)) out(`${c.gray}${w}${c.reset}\n`);
+    if (imageMissing()) out(`${c.yellow}⚠ image ${IMAGE_NAME} is not built yet — the first start builds it (~20–30 min)${c.reset}\n`);
+    const nameW = Math.max(4, ...rows.map((r) => r.name.length));
+    const branchW = Math.max(6, ...rows.map((r) => (r.branch ?? '-').length));
+    rows.forEach((r, i) => {
+      const st = stateCell(r);
+      const pend = pendingCell(r);
+      out(
+        ` ${c.bold}${String(i + 1).padStart(2)}${c.reset}  ${pad(r.name, nameW)} ${pad(r.branch ?? '-', branchW)} ` +
+          `${st.color}${pad(st.text, 10)}${c.reset} ${pend.color}${pend.text}${c.reset}\n`,
+      );
+    });
+    if (rows.length === 0) out(` ${c.gray}no sandboxes yet${c.reset}\n`);
+    out(
+      `\n ${c.gray}<n> open Claude (--continue) · <n>r resume picker · <n>s shell · n new sandbox · q quit\n` +
+        ` stop/remove/prune: scripts/claude-docker.ps1 --stop|--remove <name>, --prune${c.reset}\n`,
+    );
+    for (;;) {
+      const a = await ask('> ');
+      if (a === null || a === '' || a === 'q') return 0;
+      const m = /^(\d+)\s*([rs]?)$/.exec(a);
+      if (m) {
+        const r = rows[Number(m[1]) - 1];
+        if (!r) {
+          out(`${c.red}no sandbox number ${m[1]}${c.reset}\n`);
+          continue;
+        }
+        if (m[2] === 's') return { next: ['--shell', r.name] };
+        return { next: [r.name, m[2] === 'r' ? '--resume' : '--continue'] };
+      }
+      if (a === 'n') {
+        let name;
+        for (;;) {
+          name = await ask('Name (a-z, 0-9, "-"; the container and worktree name): ');
+          if (name === null || name === '') return 0;
+          const err = validateName(name) ?? (rows.some((r) => r.name === name) ? `a sandbox named ${name} already exists` : null);
+          if (!err) break;
+          out(`${c.red}${err}${c.reset}\n`);
+        }
+        let branch;
+        for (;;) {
+          branch = await ask(`Branch — an existing one or a new name (e.g. ${name}): `);
+          if (branch === null) return 0;
+          let err = branch ? null : 'enter a branch: an existing one or a new name';
+          if (!err) {
+            try {
+              err = protectedBranchError(branch, paths);
+            } catch (e) {
+              err = e.message;
+            }
+          }
+          if (!err) break;
+          out(`${c.red}${err}${c.reset}\n`);
+        }
+        let from;
+        if (!branchExists(branch)) {
+          let def = 'HEAD';
+          try {
+            def = currentBranch(paths.repoRoot) ?? 'HEAD';
+          } catch {
+            // keep HEAD
+          }
+          from = await ask(`Create the new branch from (--from ref; Enter = ${def}): `);
+          if (from === null) return 0;
+        }
+        return { next: [name, '--branch', branch, ...(from ? ['--from', from] : [])] };
+      }
+      out(`${c.red}unknown choice "${a}"${c.reset}\n`);
+    }
+  } finally {
+    rl.close();
+  }
+}
+
+/**
+ * Runs the interactive menu. Resolves an exit code, or { next: argv } when the user picked a
+ * session, shell or new sandbox — the caller hands that command to the wrapper. Needs a TTY on
+ * stdin and stdout (the caller prints the hint otherwise). Rendering errors restore the screen and
+ * cursor and resolve 1.
  */
 export async function runMenu(paths = resolvePaths()) {
   checkPrerequisites();
+  if (useSimpleMenu()) return runSimpleMenu(paths);
   if (imageMissing()) process.stdout.write(FIRST_BUILD_NOTICE);
   return new Promise((resolve, reject) => {
     const menu = new Menu(paths, resolve, reject);

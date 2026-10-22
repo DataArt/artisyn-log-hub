@@ -3,6 +3,7 @@
 // per-sandbox DBs, a 127.0.0.1 port slot and the provisioning readiness wait; state `v: 2`.
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import {
   MARKERS,
@@ -450,7 +451,71 @@ export async function waitForMarker(name, marker, timeoutS, { failOnTimeout = tr
  */
 export function openSession(name, passthrough = [], paths = resolvePaths()) {
   printUrls(name, paths);
-  return execInteractive(name, ['claude', '--dangerously-skip-permissions', ...passthrough], paths);
+  let args = passthrough;
+  // `claude --continue` exits with "No conversation found to continue" in a fresh sandbox; the
+  // menu's Enter always asks to continue, so a sandbox without a conversation yet opens a new one.
+  if (args.includes('--continue') && !hasConversation(containerPaths(name, paths).worktree, paths)) {
+    process.stdout.write('no previous conversation in this sandbox; starting a new one\n');
+    args = args.filter((a) => a !== '--continue');
+  }
+  return execInteractive(name, ['claude', '--dangerously-skip-permissions', ...args], paths);
+}
+
+/**
+ * True when the shared profile holds a conversation transcript of this container worktree:
+ * `<claude-home>/projects/<slug>/*.jsonl`, where Claude's slug is the path with every character
+ * other than a-z, A-Z, 0-9 replaced by `-` (`/work/_repo-worktrees/x` → `-work--repo-worktrees-x`).
+ */
+function hasConversation(containerWorktree, paths) {
+  const dir = path.join(paths.claudeHome, 'projects', containerWorktree.replace(/[^a-zA-Z0-9]/g, '-'));
+  try {
+    return fs.readdirSync(dir).some((f) => f.endsWith('.jsonl'));
+  } catch {
+    return false;
+  }
+}
+
+/** The host's Claude config file: `$CLAUDE_CONFIG_DIR/.claude.json`, else `~/.claude.json`. */
+function hostClaudeJson() {
+  const dir = (process.env.CLAUDE_CONFIG_DIR || '').trim();
+  return dir ? path.join(dir, '.claude.json') : path.join(os.homedir(), '.claude.json');
+}
+
+function readJsonFile(file) {
+  try {
+    const v = JSON.parse(fs.readFileSync(file, 'utf8'));
+    return v && typeof v === 'object' && !Array.isArray(v) ? v : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Before a session, merges into the shared sandbox profile (`docker-dev/claude-home/.claude.json`,
+ * a host bind mount) what a fresh Claude would otherwise ask for: the host's theme, the finished
+ * onboarding, and the trust of this sandbox's worktree (the trust dialog is keyed by the container
+ * path). Only these keys are touched; the write is atomic. Auth is never copied from the host (its
+ * OAuth refresh token rotates): one `/login` inside any sandbox is stored in this shared profile's
+ * `.credentials.json` and serves every sandbox, also after --reset/--remove.
+ */
+function prepareClaudeProfile(containerWorktree, paths) {
+  const file = path.join(paths.claudeHome, '.claude.json');
+  const host = readJsonFile(hostClaudeJson());
+  const cfg = readJsonFile(file);
+  const before = JSON.stringify(cfg);
+  if (typeof host.theme === 'string' && host.theme) cfg.theme = host.theme;
+  cfg.hasCompletedOnboarding = true;
+  if (typeof host.lastOnboardingVersion === 'string') cfg.lastOnboardingVersion = host.lastOnboardingVersion;
+  cfg.projects = cfg.projects && typeof cfg.projects === 'object' ? cfg.projects : {};
+  const project = cfg.projects[containerWorktree] && typeof cfg.projects[containerWorktree] === 'object'
+    ? cfg.projects[containerWorktree]
+    : {};
+  cfg.projects[containerWorktree] = { ...project, hasTrustDialogAccepted: true, hasCompletedProjectOnboarding: true };
+  if (JSON.stringify(cfg) === before) return;
+  fs.mkdirSync(paths.claudeHome, { recursive: true });
+  const tmp = `${file}.tmp-${process.pid}-${Date.now()}`;
+  fs.writeFileSync(tmp, `${JSON.stringify(cfg, null, 2)}\n`, 'utf8');
+  fs.renameSync(tmp, file);
 }
 
 /**
@@ -460,11 +525,21 @@ export function openSession(name, passthrough = [], paths = resolvePaths()) {
 function execInteractive(name, command, paths = resolvePaths()) {
   const cp = containerPaths(name, paths);
   touchActivity(name, paths);
+  try {
+    prepareClaudeProfile(cp.worktree, paths);
+  } catch (err) {
+    process.stderr.write(`warning: could not prepare the sandbox Claude profile: ${err.message}\n`);
+  }
   const tty = Boolean(process.stdin.isTTY && process.stdout.isTTY);
   const args = ['exec', tty ? '-it' : '-i', '-u', CONTAINER_USER, '-w', cp.worktree, containerName(name), ...command];
   let res;
   try {
-    res = spawnSync('docker', args, { stdio: 'inherit', windowsHide: false });
+    // DOCKER_CLI_HINTS=false: no "What's next: Try Docker Debug…" banner after the session.
+    res = spawnSync('docker', args, {
+      stdio: 'inherit',
+      windowsHide: false,
+      env: { ...process.env, DOCKER_CLI_HINTS: 'false' },
+    });
   } finally {
     touchActivity(name, paths);
   }

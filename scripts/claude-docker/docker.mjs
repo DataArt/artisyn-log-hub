@@ -36,7 +36,6 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 function describe(cmd, args) {
   return [cmd, ...(args || [])].join(' ');
 }
-
 /**
  * Synchronous spawn that throws on a spawn error or a non-zero exit (unless allowFail).
  * opts: { cwd, env, input, allowFail, inherit }

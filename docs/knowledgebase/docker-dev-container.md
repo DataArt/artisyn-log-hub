@@ -381,6 +381,21 @@ appended to `/var/log/dev/<svc>.log`. `stop` sends TERM to the process group, wa
 KILL. `logs` is `tail -n 200 -f`. `status` exits non-zero when a service is stopped or not
 responding.
 
+## Claude profile and login
+
+All sandboxes share one Claude profile: `<repo>/docker-dev/claude-home` (git-ignored, a bind mount
+at `CLAUDE_CONFIG_DIR=/home/dev/.claude-home`). It survives `--reset` and `--remove`.
+
+- **Login once.** Run `/login` in the first sandbox session; the token lands in the profile's
+  `.credentials.json` and every sandbox — existing, new, reset — is logged in from then on. The
+  host's login is never copied: its OAuth refresh token rotates, so a copied one would log the
+  host or the sandboxes out. The sandboxes' login is a session of its own.
+- **No first-run screens.** Before every session or shell the launcher merges into the profile's
+  `.claude.json`: the host's `theme` (from `$CLAUDE_CONFIG_DIR/.claude.json` or `~/.claude.json`),
+  `hasCompletedOnboarding`, and `hasTrustDialogAccepted` for this sandbox's container worktree
+  path. Only these keys are written, atomically.
+- Plugin state is per sandbox (the `-plugins` volume over `claude-home/plugins`).
+
 ## Hook in the sandbox and provisioning
 
 **Own Log Hub.** The tracked `.artisyn/config/log-hub.json` `serverUrl` (`http://localhost:5173`)
@@ -466,10 +481,32 @@ same plan (`y` runs it, `F` with force).
 built-ins): the `--list` columns with stale sandboxes highlighted, and a detail block with branch,
 base, container, worktree and `app … · api … · mailpit … · db log_hub_X <size>` (or
 `ports … (stopped)`). Keys: Enter = continue (`--continue`), `R` = resume picker, `S` = shell,
-`T` = stop, `D` = remove, `P` = prune, `Q`/Esc = quit; "+ New sandbox" asks for the name, then an
-optional branch and base ref. Destructive actions confirm and name what is lost and the live
-sessions. Every key calls the same code path as its flag; a session leaves the menu and returns to
-the shell when Claude exits. Without a TTY the menu prints a hint and exits 1.
+`T` = stop, `D` = remove, `P` = prune, `Q`/Esc = quit; "+ New sandbox" asks for the name, then a
+required branch (an existing one or a new name; protected ones are rejected) and an optional base
+ref. Destructive actions confirm and name what is lost and the live sessions. Without a TTY the
+menu prints a hint and exits 1.
+
+**Line menu in JetBrains terminals.** In the WebStorm terminal the whole terminal closed right
+after the full-screen menu switched raw mode off following a real key press (not reproducible in
+conhost or Windows Terminal). So in a JetBrains terminal (`TERMINAL_EMULATOR=JetBrains-JediTerm`)
+the launcher shows a line menu instead: a numbered list and plain line input that never changes
+the console mode — `<n>` opens Claude (`--continue`), `<n>r` the resume picker, `<n>s` a shell,
+`n` creates a sandbox (same name/branch/base prompts and checks), `q` quits; stop/remove/prune are
+pointed to their flags. `CLAUDE_DOCKER_MENU=simple|full` forces either menu. The `--prune` `y/N`
+prompt also reads a plain line for the same reason.
+
+**Sessions run outside the menu.** Enter / `R` / `S` / create do not start anything inside the
+menu process: the menu ends, restores the console and writes the chosen command (one argument per
+line) to the file named by `CLAUDE_DOCKER_NEXT_FILE`; the `claude-docker.ps1`/`.cmd` wrapper sets
+that variable and then runs the command as a fresh `claude-docker` process — exactly
+`claude-docker <name> --continue`, `--shell <name>` or `<name> --branch <b> [--from <ref>]`. Reason:
+on Windows (seen in Windows Terminal), starting containers and `docker exec` from the same process
+after the menu had read the console in raw mode closed the whole terminal. Run without a wrapper
+(`node scripts/claude-docker.mjs`), the menu prints the command instead. Stop, remove and prune
+still run inside the menu.
+
+Any launcher failure is also appended to `<repo>/tmp/claude-docker/launcher-errors.log` (with the
+stack), so it can be read even when the terminal window closed.
 
 ## Limitations
 

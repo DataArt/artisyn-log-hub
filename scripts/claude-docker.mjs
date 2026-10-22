@@ -2,8 +2,10 @@
 // claude-docker — per-task Claude Code sandboxes (git worktree + container) for this repo.
 // Entry point: parses argv, validates flag combinations and dispatches to scripts/claude-docker/*.
 // Usage errors exit 2; command failures exit 1; a session exits with claude's own exit code.
+import fs from 'node:fs';
+import path from 'node:path';
 import readline from 'node:readline/promises';
-import { parseAge } from './claude-docker/config.mjs';
+import { parseAge, resolvePaths } from './claude-docker/config.mjs';
 import { ensureInfra } from './claude-docker/docker.mjs';
 import { runMenu } from './claude-docker/menu.mjs';
 import {
@@ -181,7 +183,9 @@ async function runShell(name) {
 
 /** Asks a y/N question on the terminal; resolves true only for y / yes. */
 async function confirm(question) {
-  const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
+  // terminal: false keeps the console in cooked mode: toggling raw mode closed the WebStorm
+  // terminal (see useSimpleMenu in claude-docker/menu.mjs).
+  const rl = readline.createInterface({ input: process.stdin, output: process.stdout, terminal: false });
   try {
     const answer = await rl.question(question);
     return /^y(es)?$/i.test(answer.trim());
@@ -229,18 +233,38 @@ async function runPrune(opts) {
   return (await executePlan(plan)).exitCode;
 }
 
+/**
+ * The command the menu picked (a session, shell or new sandbox) runs as a fresh process, never
+ * inside the menu's process: on Windows, starting containers and `docker exec` after the menu had
+ * read the console in raw mode closed the whole terminal. The .ps1/.cmd wrappers set
+ * CLAUDE_DOCKER_NEXT_FILE; the command is written there (one argument per line) and the wrapper
+ * runs it. Without a wrapper (plain `node scripts/claude-docker.mjs`) the command is printed.
+ */
+function handNext(argv) {
+  const file = (process.env.CLAUDE_DOCKER_NEXT_FILE || '').trim();
+  if (file) {
+    fs.writeFileSync(file, `${argv.join('\n')}\n`, 'utf8');
+    return 0;
+  }
+  process.stdout.write(`run: scripts/claude-docker.ps1 ${argv.join(' ')}\n`);
+  return 0;
+}
+
 /** Runs the parsed command; resolves the process exit code. */
 async function dispatch({ command, name, opts }) {
   switch (command) {
     case 'help':
       process.stdout.write(USAGE);
       return 0;
-    case 'menu':
+    case 'menu': {
       if (!process.stdin.isTTY || !process.stdout.isTTY) {
         process.stderr.write(MENU_HINT);
         return 1;
       }
-      return runMenu();
+      const result = await runMenu();
+      if (typeof result === 'number') return result;
+      return handNext(result.next);
+    }
     case 'session':
       return runSession(name, opts);
     case 'shell':
@@ -262,6 +286,34 @@ async function dispatch({ command, name, opts }) {
   }
 }
 
+/**
+ * Appends a failure to <repo>/tmp/claude-docker/launcher-errors.log, so it can be read even when
+ * the terminal window closed with the launcher. Best effort: logging never masks the error itself.
+ */
+function logFailure(kind, err) {
+  try {
+    const file = path.join(resolvePaths().repoRoot, 'tmp', 'claude-docker', 'launcher-errors.log');
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.appendFileSync(
+      file,
+      `[${new Date().toISOString()}] ${kind} · argv: ${JSON.stringify(process.argv.slice(2))}\n${err?.stack ?? err}\n\n`,
+    );
+  } catch {
+    // ignore: the message is still printed
+  }
+}
+
+process.on('uncaughtException', (err) => {
+  logFailure('uncaughtException', err);
+  process.stderr.write(`claude-docker: ${err?.stack ?? err}\n`);
+  process.exit(1);
+});
+process.on('unhandledRejection', (err) => {
+  logFailure('unhandledRejection', err);
+  process.stderr.write(`claude-docker: ${err?.stack ?? err}\n`);
+  process.exit(1);
+});
+
 async function main() {
   let parsed;
   try {
@@ -280,9 +332,11 @@ async function main() {
       process.stderr.write(`claude-docker: ${err.message}\n`);
       process.exitCode = 2;
     } else if (err instanceof LauncherError) {
+      logFailure('LauncherError', err);
       process.stderr.write(`claude-docker: ${err.message}\n`);
       process.exitCode = err.exitCode;
     } else {
+      logFailure('error', err);
       process.stderr.write(`claude-docker: ${err?.message ?? err}\n`);
       process.exitCode = 1;
     }

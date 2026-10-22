@@ -301,4 +301,6 @@ module.exports = {
   otherTarget,
   selectedTargets,
   hostArch,
+  gitCommit,
+  generateReleaseEnv,
 };
