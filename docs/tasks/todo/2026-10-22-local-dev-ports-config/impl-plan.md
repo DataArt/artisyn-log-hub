@@ -37,7 +37,7 @@ Requirements: [requirements.md](requirements.md)
 | `artisyn-hooks-installer/package.json` | Patch bump | `1.0.74` → `1.0.75` (`.claude/rules/installer.md`) |
 | `docker-dev/provision.mjs` | Static provisioning port + local file | `runStatic()` `:66-79`; header comment `:8-13` |
 | `.artisyn/config/log-hub.json` | This repo's tracked config | drop `otelReceiverPort`, `serverUrl: ""` |
-| `.artisyn/config/log-hub.local.json` | This repo's local config (gitignored, already exists) | add `serverUrl: "http://localhost:5003"`, `otelReceiverPort: 58603`, keep `apiKey` |
+| `.artisyn/config/log-hub.local.json` | This repo's local config (gitignored, already exists) | add the developer's current `serverUrl` and `otelReceiverPort`, keep `apiKey` |
 | `tests/scenarios/installer/s-inst-01.spec.ts` | Scenario steps 2, 4, 5, 6c, 8b, 9, 10 | read keys from local; upgrade cleanup |
 | `docs/knowledgebase/hook-installation.md` | KB | `:41`, `:63`, `:222`, `:370` |
 | `docs/knowledgebase/docker-dev-container.md` | KB | `:438`, `:455` (+ the `log-hub.local.json` keys list) |
@@ -100,8 +100,8 @@ Only kind 3 (Scenario) — extend existing steps of `tests/scenarios/installer/s
 - [x] `docker-dev/provision.mjs` `runStatic()` `:66-79`: port = `otel-port.json` `port` if a usable
   integer 1-65535, else tracked `log-hub.json` `otelReceiverPort` if usable, else `25317`; no throw.
   Then `writeJson(logHubLocalPath, { ...readJsonObject(logHubLocalPath), serverUrl: 'http://localhost:5173', otelReceiverPort: port })`; log it. Update header comment `:8-13`.
-- [x] `.artisyn/config/log-hub.local.json`: add `"serverUrl": "http://localhost:5003"` and
-  `"otelReceiverPort": 58603`, keep `apiKey` and every other key. Then `.artisyn/config/log-hub.json`:
+- [x] `.artisyn/config/log-hub.local.json`: add the current `serverUrl` and
+  `otelReceiverPort` values from `log-hub.json`, keep `apiKey` and every other key. Then `.artisyn/config/log-hub.json`:
   remove `otelReceiverPort`, set `serverUrl` to `""`.
 - [x] Docs: update every place that says `serverUrl` / `otelReceiverPort` is in `log-hub.json` to
   say `log-hub.local.json` (written by the installer) — `docs/knowledgebase/hook-installation.md`,

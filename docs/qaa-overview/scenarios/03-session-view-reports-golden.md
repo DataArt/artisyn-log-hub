@@ -359,13 +359,15 @@ Common setup for every scenario unless stated otherwise: user U1 is logged in (s
   2. `GET .../sessions/:sid/logs` for GS-07: find the raw events; make sure the response contains the sidechain pair, `isMeta`, the `<task-notification>` and the duplicate `message.id` (the API has the data in full).
   3. Open Logs: count the turns.
   4. Expand the prompt of each turn (collapsed by default), read the tokens and the cache_ratio, hover over the cost (tooltip).
+  6a. Upload a small session of its own: the prompt at 0 s, a background `Agent` launched and the hand-off answer at 10 s, a `<task-notification>` at 300 s and the main thread's last answer at 310 s. Open its Logs and Info.
   5. Expand the Tools of turn P2, click the `Bash` row: a modal opens with INPUT and RESULT and a copy button.
   6. Close the modal; in GS-01 expand the Files section: `src/app.ts` with an indicator of 2 accesses, `docs/api.md` in the docs group.
   7. (8b in the spec) In GS-05 Logs, with a counter of `/api/` requests running: expand `⚡ ResearchWorkflow` (the `Agents (2)` table is shown right away, not collapsible); read the agents table; click the W1 row (a modal opens on its `Logs` tab); switch to `Raw logs`; expand the last record; press Escape.
 - **Checks:**
   - GS-07 Logs has exactly **3** turns; not visible: the sidechain pair, `isMeta`, `<task-notification>`.
   - The sum of the turn tokens equals 3000 / 1200 / 12000 / 4000 (the duplicate `message.id` is counted once, the sidechain with in 50 000 is not included).
-  - The time of each turn is 20 / 30 / 10 s; total 60 s (the tail from `<task-notification>` does not extend P3).
+  - The time of each turn is 20 / 30 / 10 s; total 60 s (a `<task-notification>` nobody answers does not extend P3).
+  - 6a: one turn (the notification is not a prompt); its work time and Info "Autonomous work time" are 0:05:10 — from the prompt to the last answer, not to the hand-off (0:00:10).
   - The cost tooltip: a breakdown by the four token types, the turn total = the sum of the breakdown.
   - The modal: INPUT contains the command, RESULT contains the result text (for the rejection, the text about "user doesn't want to proceed").
   - GS-01: Files, `src/app.ts` accessCount 2, `docs/api.md` in docs.

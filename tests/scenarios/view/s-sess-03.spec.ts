@@ -6,7 +6,9 @@
 // a sidechain pair of 50 000 / 10 000 tokens, an isMeta line, a late <task-notification> and an
 // answer split over two lines with one `message.id`), GS-01 (files) and GS-05 (System Context, and
 // the ResearchWorkflow run with its two workflow agents W1/W2 for the Agents table). Uploaded through
-// POST /api/v2/logs (DD SC3); the numbers come from their expected.json (DD D3).
+// POST /api/v2/logs (DD SC3); the numbers come from their expected.json (DD D3). Step 6a uploads
+// its own small session (a background agent, a <task-notification> and the main thread finishing
+// after it): the turn's work time runs from the prompt to the last answer.
 //
 // Code facts that differ from the design text:
 //   - the prompt text of a turn is shown in its header, not collapsed behind a click; the scenario
@@ -27,9 +29,13 @@
 //   - client/src/viewer/__tests__/unit/turn-anchor.test.ts (5)
 //   - server/src/logs/claude-extractor.spec.ts (dedup and sidechain: ≈ 20)
 //   - tests/e2e/session-log-view.spec.ts (basic Logs checks: ≈ 6)
+import { randomBytes } from 'node:crypto';
 import { test, expect } from '../fixtures';
+import { createApiKey } from '../helpers/api-key';
 import { loadExpected } from '../helpers/golden';
-import { hms, int, logTurns, num, openSession, turnMetric, uploadGoldenRepo, usd4 } from '../helpers/session-view';
+import { ownRepoId, promptSessionBodies, type PromptSession } from '../helpers/prompt-session';
+import { waitForQueueIdle } from '../helpers/queue';
+import { hms, infoValue, int, logTurns, num, openSession, turnMetric, uploadGoldenRepo, usd4 } from '../helpers/session-view';
 
 const HIDDEN_TEXTS = [
   'Side task: summarise the build log', // sidechain user line
@@ -137,6 +143,51 @@ test('@S-SESS-03 Logs: what counts as a prompt, what is hidden, how a turn reads
     await expect(dialog.getByRole('button', { name: 'copy' })).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(dialog).toHaveCount(0);
+  });
+
+  await test.step('6a. a background task the main thread finishes after its <task-notification>: the turn runs from the prompt to the last answer (0:05:10), not to the hand-off (0:00:10)', async () => {
+    const runId = randomBytes(4).toString('hex');
+    const s: PromptSession = {
+      sessionId: `ss03-bg-${runId}`,
+      prompt: `ss03 background task ${runId}`,
+      repoUrl: `https://git.arrakis.test/scn/${runId}/ss03-bg`,
+    };
+    const at = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const t = (sec: number) => new Date(at.getTime() + sec * 1000).toISOString();
+    const id = (n: string) => `${s.sessionId}-${n}`;
+    const answer = (uuid: string, parentUuid: string, sec: number, content: unknown[]) => ({
+      type: 'assistant', uuid: id(uuid), parentUuid: id(parentUuid), sessionId: s.sessionId, timestamp: t(sec),
+      message: { role: 'assistant', model: 'claude-sonnet-4-6', usage: { input_tokens: 10, output_tokens: 5 }, content },
+    });
+    const claude = [
+      { type: 'user', uuid: id('u1'), sessionId: s.sessionId, timestamp: t(0), message: { role: 'user', content: [{ type: 'text', text: s.prompt }] } },
+      answer('a1', 'u1', 5, [{ type: 'tool_use', id: id('bg'), name: 'Agent', input: { prompt: 'research', run_in_background: true } }]),
+      { type: 'user', uuid: id('r1'), parentUuid: id('a1'), sessionId: s.sessionId, timestamp: t(6),
+        message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id('bg'), content: 'Started in the background.' }] } },
+      answer('a2', 'r1', 10, [{ type: 'text', text: 'The research runs in the background.' }]),
+      { type: 'user', uuid: id('n1'), parentUuid: id('a2'), sessionId: s.sessionId, timestamp: t(300),
+        message: { role: 'user', content: `<task-notification>\n<task-id>${id('bg')}</task-id>\n<status>completed</status>\n</task-notification>` } },
+      answer('a3', 'n1', 310, [{ type: 'text', text: 'Research folded in.' }]),
+    ];
+    const key = await createApiKey(owner.api);
+    const bodies = { artisyn: promptSessionBodies({ ...s, at }).artisyn, claude: claude.map((r) => JSON.stringify(r)).join('\n') + '\n' };
+    for (const type of ['artisyn', 'claude'] as const) {
+      const res = await api.post('/api/v2/logs', {
+        params: { sessionId: s.sessionId, type },
+        headers: { 'Content-Type': 'application/x-ndjson', 'X-API-Key': key.key },
+        data: bodies[type],
+      });
+      expect(res.status(), `upload ${type}`).toBe(201);
+    }
+    await waitForQueueIdle(db, owner.id);
+    const repoId = await ownRepoId(owner.api, s.repoUrl);
+
+    await openSession(page, owner, repoId, s.sessionId, { tab: 'logs' });
+    const turns = logTurns(page);
+    await expect(turns, 'the notification is not a prompt').toHaveCount(1);
+    await expect(turns.first()).toContainText(hms(310_000));
+    await openSession(page, owner, repoId, s.sessionId, { tab: 'info' });
+    await expect(infoValue(page, 'Autonomous work time')).toHaveText(hms(310_000));
   });
 
   await test.step('7. GS-01 Files: src/app.ts with its repeat-access mark ×2, docs/api.md in the Docs group', async () => {

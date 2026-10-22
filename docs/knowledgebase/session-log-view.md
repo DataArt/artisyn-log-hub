@@ -143,14 +143,18 @@ across turn boundaries.
 in Raw Logs). A turn's `workTimeMs` is the timestamp of the **last assistant event** in the turn
 minus the qualifying user event's timestamp (`null` when the turn has no later assistant event).
 The assistant events come from a second, tighter BFS (`workTimeUuidSet`) that also stops at every
-other turn-boundary user event — `<command-name>` and `<task-notification>` lines that do not
-qualify as prompts — so an async sub-agent completion arriving after the turn cannot stretch it.
-Tokens, context, tool calls and files keep using the wider per-turn BFS above.
+other turn-boundary user event — `<command-name>` lines that do not qualify as prompts.
+A `<task-notification>` is **not** a boundary: when a turn hands work to a background agent or
+workflow, the main thread stops and is later woken by the notification to finish the job; that
+continuation belongs to the prompt, so the turn runs from the user pressing Enter to the last
+answer before the next prompt. Tokens, context, tool calls and files keep using the wider
+per-turn BFS above.
 `totalWorkTimeMs` is the sum over turns. The server's `session_stats.work_time_ms`
 (`claude-extractor.ts` `computeWorkTime`) follows the same rule without the parent chain: for each
 prompt, the latest assistant timestamp after it and not after the next prompt, minus the prompt's
-timestamp. Golden session GS-07 (`tests/golden/`) pins that a `<task-notification>` five minutes
-after the last prompt does not extend work time.
+timestamp. Golden session GS-07 (`tests/golden/`) pins that a `<task-notification>` nobody answers
+(five minutes after the last prompt) does not extend work time; S-SESS-03 step 6a pins that an
+answered one does.
 
 ### Sub-agent nesting
 

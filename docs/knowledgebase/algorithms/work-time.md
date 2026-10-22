@@ -34,7 +34,9 @@ lost answer makes it look fast.
   deciding what a prompt is, but the client then
   computes a per-turn work time over the parent chain and sums it as `totalWorkTimeMs`
   (see `docs/knowledgebase/session-log-view.md`, "Work time"); that is a different algorithm and
-  is not run against these rows.
+  is not run against these rows. Like the server, it keeps the answers after a
+  `<task-notification>` in the prompt's turn (work time runs from Enter to the final stop,
+  background agents included).
 - Tests:
   - `server/src/logs/claude-extractor.algo.spec.ts`;
   - `hook/.claude/telemetry_tool/__tests__/work-time.algo.test.js`.
