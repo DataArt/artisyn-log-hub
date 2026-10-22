@@ -1,0 +1,150 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="620" viewBox="0 0 1120 620" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="12">
+  <defs>
+    <marker id="ar" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <path d="M0,0 L8,4 L0,8 z" fill="#7c3aed"/>
+    </marker>
+  </defs>
+  <rect width="1120" height="620" fill="#ffffff"/>
+
+  <!-- Sub-tabs (context) -->
+  <text x="24" y="28" font-size="14" fill="#3f3f46">Dashboard</text>
+  <text x="115" y="28" font-size="14" font-weight="600" fill="#18181b">Context Growth</text>
+  <rect x="113" y="36" width="112" height="2" fill="#18181b"/>
+  <text x="243" y="28" font-size="14" fill="#3f3f46">Context Usage</text>
+  <text x="355" y="28" font-size="14" fill="#3f3f46">Agent Tree</text>
+  <text x="443" y="28" font-size="14" fill="#3f3f46">Timeline</text>
+  <rect x="16" y="44" width="784" height="1" fill="#e4e4e7"/>
+
+  <!-- Chart card -->
+  <rect x="16" y="60" width="784" height="540" rx="6" fill="#ffffff" stroke="#e4e4e7"/>
+  <text x="32" y="86" font-size="14" font-weight="600" fill="#18181b">3 LLM calls · peak 171k tokens</text>
+  <rect x="540" y="76" width="10" height="10" rx="2" fill="#bfdbfe"/><text x="555" y="85" fill="#52525b">Prior context</text>
+  <rect x="636" y="76" width="10" height="10" rx="2" fill="#2563eb"/><text x="651" y="85" fill="#52525b">New delta</text>
+  <rect x="716" y="76" width="10" height="10" rx="2" fill="#fde68a" stroke="#f59e0b"/><text x="731" y="85" fill="#52525b">User turn</text>
+
+  <rect x="17" y="98" width="782" height="26" fill="#fafafa"/>
+  <text x="32" y="115" font-size="11" font-weight="600" fill="#71717a">PROMPT</text>
+  <text x="210" y="115" font-size="11" font-weight="600" fill="#71717a">CONTEXT GROWTH</text>
+  <text x="784" y="115" font-size="11" font-weight="600" fill="#71717a" text-anchor="end">TOKENS</text>
+
+  <!-- Turn #4 (collapsed) -->
+  <rect x="17" y="124" width="3" height="28" fill="#f59e0b"/>
+  <text x="28" y="142" fill="#52525b">▶</text>
+  <text x="42" y="142" fill="#18181b">#4 — посмотри на сесси…</text>
+  <rect x="210" y="131" width="136" height="14" rx="2" fill="#bfdbfe"/><rect x="346" y="131" width="58" height="14" rx="2" fill="#2563eb"/>
+  <text x="784" y="142" fill="#52525b" text-anchor="end">54k + 23k</text>
+
+  <!-- Turn #15 (expanded; row click → Context Breakdown, unchanged) -->
+  <rect x="17" y="152" width="782" height="28" fill="#fffbeb"/>
+  <rect x="17" y="152" width="3" height="28" fill="#f59e0b"/>
+  <text x="28" y="170" fill="#52525b">▾</text>
+  <text x="42" y="170" fill="#18181b">#15 — делай прям тут ве…</text>
+  <rect x="210" y="159" width="199" height="14" rx="2" fill="#bfdbfe"/><rect x="409" y="159" width="86" height="14" rx="2" fill="#2563eb"/>
+  <text x="784" y="170" fill="#52525b" text-anchor="end">79k + 34k</text>
+
+  <!-- Sub-step rows: delta = next step's context − this step's context (FR-2a) -->
+  <g font-size="11.5">
+    <text x="48" y="198" fill="#52525b">↳ Skill</text>
+    <rect x="210" y="188" width="199" height="12" rx="2" fill="#dbeafe"/><rect x="409" y="188" width="3" height="12" fill="#2563eb"/>
+    <text x="784" y="196" fill="#18181b" text-anchor="end">+1k</text><text x="784" y="207" font-size="9" fill="#a1a1aa" text-anchor="end">14:17:35</text>
+
+    <!-- HOVERED, clickable sub-step: the Bash call that returned ~20k tokens carries its own delta -->
+    <rect x="22" y="212" width="772" height="30" rx="4" fill="#eff6ff" stroke="#93c5fd"/>
+    <text x="48" y="231" fill="#1d4ed8" font-weight="600" text-decoration="underline">↳ Bash: cd ‹repo›; P="docs/t…</text>
+    <rect x="210" y="221" width="201" height="12" rx="2" fill="#bfdbfe"/><rect x="411" y="221" width="50" height="12" fill="#2563eb"/>
+    <text x="700" y="231" fill="#2563eb" font-size="11" text-anchor="end">details →</text>
+    <text x="784" y="228" fill="#18181b" font-weight="600" text-anchor="end">+20k</text><text x="784" y="239" font-size="9" fill="#a1a1aa" text-anchor="end">14:17:38</text>
+    <!-- pointer cursor -->
+    <path d="M470,229 l0,16 l4,-4 l3,7 l3,-1 l-3,-7 l5,0 z" fill="#ffffff" stroke="#18181b" stroke-width="1"/>
+
+    <text x="48" y="258" fill="#52525b">↳ Read: …ent\src\viewer\…</text>
+    <rect x="210" y="248" width="252" height="12" rx="2" fill="#dbeafe"/><rect x="462" y="248" width="3" height="12" fill="#2563eb"/>
+    <text x="784" y="256" fill="#18181b" text-anchor="end">+1k</text><text x="784" y="267" font-size="9" fill="#a1a1aa" text-anchor="end">14:17:45</text>
+
+    <text x="48" y="288" fill="#52525b">↳ Grep: GS-07|task-notific…</text>
+    <rect x="210" y="278" width="254" height="12" rx="2" fill="#dbeafe"/><rect x="464" y="278" width="15" height="12" fill="#2563eb"/>
+    <text x="784" y="286" fill="#18181b" text-anchor="end">+6k</text><text x="784" y="297" font-size="9" fill="#a1a1aa" text-anchor="end">14:17:50</text>
+
+    <text x="48" y="318" fill="#52525b">↳ Bash: git status --sh… (+4)</text>
+    <rect x="210" y="308" width="269" height="12" rx="2" fill="#dbeafe"/><rect x="479" y="308" width="8" height="12" fill="#2563eb"/>
+    <text x="784" y="316" fill="#18181b" text-anchor="end">+3k</text><text x="784" y="327" font-size="9" fill="#a1a1aa" text-anchor="end">14:17:55</text>
+
+    <text x="48" y="348" fill="#52525b">↳ Bash: node -e "…"</text>
+    <rect x="210" y="338" width="277" height="12" rx="2" fill="#dbeafe"/><rect x="487" y="338" width="5" height="12" fill="#2563eb"/>
+    <text x="784" y="346" fill="#18181b" text-anchor="end">+2k</text><text x="784" y="357" font-size="9" fill="#a1a1aa" text-anchor="end">14:18:44</text>
+
+    <text x="48" y="378" fill="#52525b">↳ Edit: …ent\src\viewer\p…</text>
+    <rect x="210" y="368" width="282" height="12" rx="2" fill="#dbeafe"/><rect x="492" y="368" width="3" height="12" fill="#2563eb"/>
+    <text x="784" y="376" fill="#18181b" text-anchor="end">+1k</text><text x="784" y="387" font-size="9" fill="#a1a1aa" text-anchor="end">14:18:47</text>
+
+    <!-- last step of the turn: no next step in the turn → "—" -->
+    <text x="48" y="408" fill="#52525b">↳ (final answer)</text>
+    <rect x="210" y="398" width="284" height="12" rx="2" fill="#dbeafe"/>
+    <text x="784" y="406" fill="#71717a" text-anchor="end">—</text><text x="784" y="417" font-size="9" fill="#a1a1aa" text-anchor="end">14:21:30</text>
+
+    <!-- sum check -->
+    <text x="48" y="434" font-size="10.5" fill="#71717a">Σ step deltas +1 +20 +1 +6 +3 +2 +1 = <tspan font-weight="600" fill="#18181b">+34k</tspan> = turn delta (113k − 79k) · "—": no next step in this turn</text>
+  </g>
+
+  <!-- Hover tooltip (kept; uses the same delta rule) -->
+  <rect x="500" y="246" width="262" height="48" rx="6" fill="#18181b" opacity="0.92"/>
+  <text x="510" y="264" font-size="10.5" fill="#ffffff" font-family="Consolas, Menlo, monospace">Bash: cd "‹repo›"; P="docs/tasks/todo/…</text>
+  <text x="510" y="282" font-size="10.5" fill="#d4d4d8">+20k tokens · own output + tool results</text>
+
+  <!-- compaction boundary row (stays non-clickable) -->
+  <line x1="22" y1="452" x2="794" y2="452" stroke="#a1a1aa" stroke-dasharray="4 3"/>
+  <rect x="300" y="444" width="220" height="16" rx="8" fill="#f4f4f5" stroke="#d4d4d8"/>
+  <text x="410" y="456" font-size="10.5" fill="#71717a" text-anchor="middle">context compacted · not clickable</text>
+
+  <!-- Turn #71 -->
+  <rect x="17" y="468" width="3" height="28" fill="#f59e0b"/>
+  <text x="28" y="486" fill="#52525b">▶</text>
+  <text x="42" y="486" fill="#18181b">#71 — как закончишь - п…</text>
+  <rect x="210" y="475" width="385" height="14" rx="2" fill="#bfdbfe"/><rect x="595" y="475" width="43" height="14" rx="2" fill="#2563eb"/>
+  <text x="784" y="486" fill="#52525b" text-anchor="end">153k + 17k</text>
+  <line x1="210" y1="520" x2="640" y2="520" stroke="#d4d4d8"/>
+  <text x="210" y="536" font-size="11" fill="#71717a">0</text>
+  <text x="640" y="536" font-size="11" fill="#71717a" text-anchor="end">171k (max)</text>
+
+  <!-- Annotations -->
+  <g font-size="12" fill="#5b21b6">
+    <rect x="820" y="60" width="284" height="540" rx="6" fill="#faf5ff" stroke="#ddd6fe"/>
+    <text x="836" y="86" font-size="13" font-weight="700">What changes</text>
+
+    <text x="836" y="114" font-weight="600">1&#160;&#160;Sub-step rows become clickable</text>
+    <text x="836" y="132" fill="#6d28d9">Hover: light-blue row, pointer cursor,</text>
+    <text x="836" y="148" fill="#6d28d9">underlined label, "details →" hint; the</text>
+    <text x="836" y="164" fill="#6d28d9">hover tooltip is kept. Click → step</text>
+    <text x="836" y="180" fill="#6d28d9">details modal (bash-step-modal.svg,</text>
+    <text x="836" y="196" fill="#6d28d9">multi-call-and-other-steps.svg).</text>
+
+    <text x="836" y="224" font-weight="600">2&#160;&#160;Turn rows: unchanged</text>
+    <text x="836" y="242" fill="#6d28d9">Click still opens "Turn #N — Context</text>
+    <text x="836" y="258" fill="#6d28d9">Breakdown"; ▶/▾ still expands steps.</text>
+
+    <text x="836" y="286" font-weight="600">3&#160;&#160;Compaction rows stay inert</text>
+    <text x="836" y="304" fill="#6d28d9">No hover state, no cursor change.</text>
+
+    <text x="836" y="332" font-weight="600">4&#160;&#160;Delta attribution fix (FR-2a)</text>
+    <text x="836" y="350" fill="#6d28d9">Row delta = next step's context − this</text>
+    <text x="836" y="366" fill="#6d28d9">step's context = its own output + its</text>
+    <text x="836" y="382" fill="#6d28d9">tool results. The Bash call's ~20k is on</text>
+    <text x="836" y="398" fill="#6d28d9">the Bash row (today it shows on the</text>
+    <text x="836" y="414" fill="#6d28d9">Read row below). First row: "+1k", no</text>
+    <text x="836" y="430" fill="#6d28d9">absolute "79k tok"; last row "—". Bar,</text>
+    <text x="836" y="446" fill="#6d28d9">label, tooltip and modal use this rule.</text>
+
+    <text x="836" y="474" font-weight="600">5&#160;&#160;Closing the modal</text>
+    <text x="836" y="492" fill="#6d28d9">Returns to the chart with the same</text>
+    <text x="836" y="508" fill="#6d28d9">expanded turns and scroll position.</text>
+
+    <text x="836" y="536" font-weight="600">6&#160;&#160;Keyboard</text>
+    <text x="836" y="554" fill="#6d28d9">Rows are focusable; Enter opens,</text>
+    <text x="836" y="570" fill="#6d28d9">Esc closes, focus returns to the row.</text>
+  </g>
+  <circle cx="8" cy="227" r="9" fill="#7c3aed"/><text x="8" y="231" font-size="11" font-weight="700" fill="#ffffff" text-anchor="middle">1</text>
+  <circle cx="8" cy="166" r="9" fill="#7c3aed"/><text x="8" y="170" font-size="11" font-weight="700" fill="#ffffff" text-anchor="middle">2</text>
+  <circle cx="536" cy="452" r="9" fill="#7c3aed"/><text x="536" y="456" font-size="11" font-weight="700" fill="#ffffff" text-anchor="middle">3</text>
+  <circle cx="810" cy="224" r="9" fill="#7c3aed"/><text x="810" y="228" font-size="11" font-weight="700" fill="#ffffff" text-anchor="middle">4</text>
+  <circle cx="810" cy="404" r="9" fill="#7c3aed"/><text x="810" y="408" font-size="11" font-weight="700" fill="#ffffff" text-anchor="middle">4</text>
+</svg>

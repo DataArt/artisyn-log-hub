@@ -61,9 +61,10 @@ const REJECTION_MARKERS: readonly string[] = [
 ];
 
 /**
- * True when a `tool_result` body is Claude Code telling us the call never ran because the
- * user rejected it, denied permission, or interrupted it. Such a call is `unresolved`, not
- * a `failure` — it says nothing about the tool.
+ * True when a `tool_result` body contains one of Claude Code's rejection / permission-denial /
+ * interruption sentences. On its own this is not proof the call was rejected: a successful
+ * `Grep`/`Bash` result can quote the sentence as ordinary output. `classifyToolOutcome` is
+ * the only caller and counts a match only on an `is_error` result (DD-21b).
  */
 export function isRejectionText(text: string): boolean {
   if (text === '') return false;
@@ -78,6 +79,11 @@ export interface ToolResultInfo {
   text: string;
   /** `toolUseResult.interrupted === true` — the structured form of an aborted call. */
   interrupted?: boolean;
+  /**
+   * The result line's top-level `toolDenialKind` (`user-rejected`, `permission-rule`, …) —
+   * the structured form of a rejected call. Absent on older transcripts.
+   */
+  denialKind?: string;
 }
 
 /**
@@ -86,18 +92,26 @@ export interface ToolResultInfo {
  * - No matching `tool_result` at all (`null`) → `unresolved`: interrupted, abandoned or
  *   compacted away. This is the rule `log-parser.ts` gets wrong for our purposes (it
  *   reports a missing result as `'error'`), which is why that code is not reused here.
- * - Rejected / permission-denied / interrupted → `unresolved`, checked *before* `isError`
- *   because Claude Code sets `is_error: true` on rejection blocks.
- * - `isError === true` → `failure`.
+ * - Interrupted (`toolUseResult.interrupted`) or a non-empty `denialKind` → `unresolved`.
+ * - `isError === true` → `unresolved` when the text carries a rejection marker (Claude Code
+ *   sets `is_error: true` on rejection blocks), otherwise `failure`. The marker counts only on
+ *   an `is_error` result: a successful `Grep`/`Bash` output can quote the sentence (DD-21b).
  * - Anything else, including a result with no `is_error` field → `success`.
+ *
+ * Mirrored by the client's `session-log/tool-outcome.ts`; both twins are pinned by the
+ * algorithm doc `tool-call-outcome.md`.
  */
 export function classifyToolOutcome(
   result: ToolResultInfo | null,
 ): ToolOutcome {
   if (result === null) return 'unresolved';
   if (result.interrupted === true) return 'unresolved';
-  if (isRejectionText(result.text)) return 'unresolved';
-  if (result.isError === true) return 'failure';
+  if (typeof result.denialKind === 'string' && result.denialKind !== '') {
+    return 'unresolved';
+  }
+  if (result.isError === true) {
+    return isRejectionText(result.text) ? 'unresolved' : 'failure';
+  }
   return 'success';
 }
 

@@ -108,7 +108,11 @@ test('@S-TEAM-01 owner creates a team, invites, a colleague accepts through the 
         const response = page.waitForResponse((r) => r.url().endsWith(`/api/v1/teams/${teamId}/invitations`));
         await inviteBox.getByPlaceholder('Email address').fill(email);
         await inviteBox.getByRole('button', { name: 'Invite' }).click();
-        return (await response).status();
+        const status = (await response).status();
+        // The form clears the field in onSuccess, which can run after Playwright already saw the
+        // response — wait for it, or the next fill is wiped and the click submits nothing.
+        if (status === 201) await expect(inviteBox.getByPlaceholder('Email address')).toHaveValue('');
+        return status;
       };
       expect(await send(m1.email)).toBe(201);
       expect(await send(m1.email)).toBe(409);

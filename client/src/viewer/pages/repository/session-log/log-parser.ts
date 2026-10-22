@@ -7,6 +7,7 @@ import type {
   AgentActivation,
   AgentDefinition,
   AssistantEvent,
+  AssistantStep,
   ClaudeMdFile,
   CompactBoundary,
   FileAccess,
@@ -37,6 +38,17 @@ import {
   rulesToInstructionFiles,
   toUserDisplayPath,
 } from './instruction-files';
+import {
+  FILE_ERROR_MAX_CHARS,
+  attributePermissionEvents,
+  buildAllToolCalls,
+  buildToolResultIndex,
+  extractPermissionEvents,
+  extractRawToolCalls,
+  isFileToolName,
+  toolSection,
+  type ToolResultEntry,
+} from './tool-calls';
 
 export const BYTES_PER_TOKEN = 3.5;
 
@@ -542,194 +554,6 @@ function sumOwnAssistantTokenBreakdown(
     : null;
 }
 
-function extractToolCallsInTurn(
-  events: TelemetryEvent[],
-  uuidSet: Set<string>,
-): Array<{
-  id: string;
-  name: string;
-  input: Record<string, unknown>;
-  timestamp?: string;
-}> {
-  const calls: Array<{
-    id: string;
-    name: string;
-    input: Record<string, unknown>;
-    timestamp?: string;
-  }> = [];
-
-  for (const e of events) {
-    if (e.type !== 'assistant') continue;
-    if (!e.uuid || !uuidSet.has(e.uuid)) continue;
-    const ae = e as AssistantEvent;
-    if (!ae.message?.content) continue;
-    for (const block of ae.message.content) {
-      if (block.type === 'tool_use' && block.id && block.name && block.input) {
-        calls.push({
-          id: block.id,
-          name: block.name,
-          input: block.input,
-          timestamp: ae.timestamp,
-        });
-      }
-    }
-  }
-
-  return calls;
-}
-
-function extractToolResultContent(
-  events: TelemetryEvent[],
-  toolCallId: string,
-): { content: string; isBinary: boolean; isError: boolean; found: boolean } {
-  for (const e of events) {
-    if (e.type !== 'user') continue;
-    const ue = e as UserEvent;
-    const content = ue.message?.content;
-    if (!content || typeof content === 'string') continue;
-    for (const block of content) {
-      if (block.type !== 'tool_result') continue;
-      if (block.tool_use_id !== toolCallId) continue;
-      const isError = block.is_error === true;
-      const c = block.content;
-      if (typeof c === 'string') {
-        const isBin = c.startsWith('data:') || c.includes('\0');
-        if (isBin) {
-          const bytes = Math.floor((c.length * 3) / 4);
-          return {
-            content: `[binary data, ${bytes} bytes]`,
-            isBinary: true,
-            isError,
-            found: true,
-          };
-        }
-        return { content: c, isBinary: false, isError, found: true };
-      }
-      if (Array.isArray(c)) {
-        let text = '';
-        let hasBin = false;
-        for (const item of c) {
-          const it = item as { type?: string; text?: string; data?: string };
-          if (it.type === 'text') {
-            text += (text ? '\n' : '') + (it.text ?? '');
-          } else {
-            hasBin = true;
-            const bytes = it.data ? Math.floor((it.data.length * 3) / 4) : 0;
-            text += (text ? '\n' : '') + `[binary data, ${bytes} bytes]`;
-          }
-        }
-        return { content: text, isBinary: hasBin, isError, found: true };
-      }
-      return { content: '', isBinary: false, isError, found: true };
-    }
-  }
-  return { content: '', isBinary: false, isError: false, found: false };
-}
-
-function buildToolCallDetails(
-  events: TelemetryEvent[],
-  rawCalls: Array<{
-    id: string;
-    name: string;
-    input: Record<string, unknown>;
-    timestamp?: string;
-  }>,
-  permReqs: Array<{ toolName: string; ts: number }>,
-  permDenials: Array<{ toolName: string; ts: number }>,
-): ToolCallDetail[] {
-  const SKIP = new Set([
-    'Skill',
-    'Agent',
-    'Read',
-    'Edit',
-    'Write',
-    'MultiEdit',
-    'Glob',
-  ]);
-  const filtered = rawCalls.filter((c) => !SKIP.has(c.name));
-
-  filtered.sort((a, b) => {
-    if (!a.timestamp && !b.timestamp) return 0;
-    if (!a.timestamp) return 1;
-    if (!b.timestamp) return -1;
-    return a.timestamp < b.timestamp ? -1 : a.timestamp > b.timestamp ? 1 : 0;
-  });
-
-  const unusedReqs = [...permReqs];
-  const unusedDenials = [...permDenials];
-
-  return filtered.map((call) => {
-    const { content, isError, found } = extractToolResultContent(
-      events,
-      call.id,
-    );
-    const status: 'success' | 'error' = !found || isError ? 'error' : 'success';
-
-    const denialIdx = unusedDenials.findIndex((d) => d.toolName === call.name);
-    let permissionDenied: true | undefined;
-    if (denialIdx !== -1) {
-      permissionDenied = true;
-      unusedDenials.splice(denialIdx, 1);
-    }
-
-    const reqIdx = unusedReqs.findIndex((r) => r.toolName === call.name);
-    let permissionRequested: true | undefined;
-    if (reqIdx !== -1) {
-      permissionRequested = true;
-      unusedReqs.splice(reqIdx, 1);
-    }
-
-    return {
-      id: call.id,
-      name: call.name,
-      input: call.input,
-      ...(found && content ? { result: content } : {}),
-      status,
-      ...(permissionDenied ? { permissionDenied } : {}),
-      ...(permissionRequested && !permissionDenied
-        ? { permissionRequested }
-        : {}),
-    };
-  });
-}
-
-function extractArtisynPermissionEvents(
-  events: TelemetryEvent[],
-  windowStart: number,
-  windowEnd: number,
-): {
-  permReqs: Array<{ toolName: string; ts: number }>;
-  permDenials: Array<{ toolName: string; ts: number }>;
-} {
-  const permReqs: Array<{ toolName: string; ts: number }> = [];
-  const permDenials: Array<{ toolName: string; ts: number }> = [];
-  const WIN_START = windowStart - 5000;
-  const WIN_END = windowEnd + 5000;
-
-  for (const e of events) {
-    if (e.type !== 'artisyn') continue;
-    const ae = e as {
-      type: string;
-      hook_event_name?: string;
-      tool_name?: string;
-      timestamp?: string;
-    };
-    if (!ae.hook_event_name || !ae.timestamp) continue;
-    const ts = Date.parse(ae.timestamp);
-    if (Number.isNaN(ts) || ts < WIN_START || ts > WIN_END) continue;
-    if (ae.hook_event_name === 'PermissionRequest') {
-      permReqs.push({ toolName: ae.tool_name ?? '', ts });
-    } else if (ae.hook_event_name === 'PermissionDenied') {
-      permDenials.push({ toolName: ae.tool_name ?? '', ts });
-    }
-  }
-
-  permReqs.sort((a, b) => a.ts - b.ts);
-  permDenials.sort((a, b) => a.ts - b.ts);
-
-  return { permReqs, permDenials };
-}
-
 function extractFilePathFromToolCall(
   name: 'Read' | 'Edit' | 'Write' | 'MultiEdit' | 'Glob',
   input: Record<string, unknown>,
@@ -740,29 +564,37 @@ function extractFilePathFromToolCall(
   return (input.file_path as string) ?? '';
 }
 
-function extractGlobCount(
+/**
+ * DD-22: joins the log's permission events to its calls (flags set on `calls` in place) and
+ * returns how many stayed unattributed. Without `calls`, every call of the log is built just
+ * for the count (a sub-agent log whose own nodes are parsed elsewhere).
+ */
+function attributeLogPermissions(
   events: TelemetryEvent[],
-  toolCallId: string,
+  calls?: ToolCallDetail[],
+): number {
+  const permEvents = extractPermissionEvents(events);
+  if (permEvents.length === 0) return 0;
+  const targets =
+    calls ??
+    buildAllToolCalls(
+      extractRawToolCalls(events),
+      buildToolResultIndex(events),
+    );
+  return attributePermissionEvents(permEvents, targets).unattributed;
+}
+
+/** Glob match count: the length of a JSON-array result, else undefined. */
+function globMatchCount(
+  result: ToolResultEntry | undefined,
 ): number | undefined {
-  for (const e of events) {
-    if (e.type !== 'user') continue;
-    const ue = e as UserEvent;
-    const content = ue.message?.content;
-    if (!content || typeof content === 'string') continue;
-    for (const block of content) {
-      if (block.type !== 'tool_result') continue;
-      if (block.tool_use_id !== toolCallId) continue;
-      try {
-        const parsed: unknown = JSON.parse(block.content as string);
-        if (Array.isArray(parsed)) {
-          return parsed.length;
-        }
-      } catch {
-        return undefined;
-      }
-    }
+  if (!result || result.isBinary) return undefined;
+  try {
+    const parsed: unknown = JSON.parse(result.content);
+    return Array.isArray(parsed) ? parsed.length : undefined;
+  } catch {
+    return undefined;
   }
-  return undefined;
 }
 
 function parsePngDimensions(
@@ -868,58 +700,16 @@ function extractImagesInTurn(
   return images;
 }
 
-function extractToolResultBytes(
-  events: TelemetryEvent[],
-  toolCallId: string,
-): number | undefined {
-  for (const e of events) {
-    if (e.type !== 'user') continue;
-    const ue = e as UserEvent;
-    const content = ue.message?.content;
-    if (!content || typeof content === 'string') continue;
-    for (const block of content) {
-      if (block.type !== 'tool_result') continue;
-      if (block.tool_use_id !== toolCallId) continue;
-      const c = block.content;
-      if (typeof c === 'string') return c.length;
-      if (Array.isArray(c)) {
-        return c.reduce(
-          (sum, b) =>
-            sum +
-            (typeof (b as { text?: unknown }).text === 'string'
-              ? (b as { text: string }).text.length
-              : 0),
-          0,
-        );
-      }
-    }
-  }
-  return undefined;
-}
-
 // Skills inject their content as a child isMeta=true user event following the tool_result.
 // The tool_result itself only contains "Launching skill: X" — we need the child event.
 function extractSkillContentBytes(
   toolCallId: string,
-  events: TelemetryEvent[],
+  resultIndex: Map<string, ToolResultEntry>,
   parentChildMap: Map<string, string[]>,
   eventIndex: Map<string, TelemetryEvent>,
 ): number | undefined {
-  // Step 1: find the UUID of the user event that holds this tool_result
-  let toolResultUuid: string | undefined;
-  for (const e of events) {
-    if (e.type !== 'user') continue;
-    const ue = e as UserEvent;
-    const content = ue.message?.content;
-    if (!content || typeof content === 'string') continue;
-    for (const block of content) {
-      if (block.type === 'tool_result' && block.tool_use_id === toolCallId) {
-        toolResultUuid = ue.uuid;
-        break;
-      }
-    }
-    if (toolResultUuid) break;
-  }
+  // Step 1: the UUID of the user event that holds this tool_result (DD-2 result index)
+  const toolResultUuid = resultIndex.get(toolCallId)?.uuid;
   if (!toolResultUuid) return undefined;
 
   // Step 2: walk immediate children looking for isMeta user events with text content
@@ -1017,7 +807,12 @@ function extractAgentActivations(
     if (!ae.message?.content || typeof ae.message.content === 'string')
       continue;
     for (const block of ae.message.content) {
-      if (block.type === 'tool_use' && block.name === 'Agent' && block.id) {
+      if (
+        block.type === 'tool_use' &&
+        block.name &&
+        toolSection(block.name) === 'agent' &&
+        block.id
+      ) {
         agentCallInfo.set(block.id, {
           description: block.input?.description as string | undefined,
         });
@@ -1074,6 +869,7 @@ function extractAgentActivations(
         : undefined;
 
     activations.push({
+      toolUseId,
       agentId: result?.agentId ?? '',
       ...(info?.description !== undefined && { description: info.description }),
       prompt: result?.prompt ?? '',
@@ -1442,6 +1238,17 @@ export function buildAgentNodesForIds(
     // does for the root session's own turns — a workflow agent has no `Task` tool_use of its own
     // to hang this off of, so it's sourced from the agent's own parsed session instead.
     const parsed = parseSessionLogs(logs, { isSubagent: true, pricing });
+    // Every call of the agent's transcript (DD-1a), deduped by id — fork sub-agents repeat
+    // their parent's ids. `toolCalls` / `files` / `skills` below stay derived per turn.
+    const seenCallIds = new Set<string>();
+    const allToolCalls = parsed.turns
+      .flatMap((t) => t.allToolCalls)
+      .filter((c) => {
+        if (c.id === undefined) return true;
+        if (seenCallIds.has(c.id)) return false;
+        seenCallIds.add(c.id);
+        return true;
+      });
     const toolCalls = parsed.turns.flatMap((t) => t.toolCalls);
     const files = parsed.turns.flatMap((t) => t.files);
     // The same per-turn block already extracts these two; they were simply never carried
@@ -1459,6 +1266,7 @@ export function buildAgentNodesForIds(
       ...(startMs !== undefined && endMs !== undefined
         ? { durationMs: endMs - startMs }
         : {}),
+      ...(allToolCalls.length > 0 ? { allToolCalls } : {}),
       ...(toolCalls.length > 0 ? { toolCalls } : {}),
       ...(files.length > 0 ? { files } : {}),
       ...(skills.length > 0 ? { skills } : {}),
@@ -1507,7 +1315,12 @@ function findDirectChildAgentIds(logs: Record<string, unknown>[]): string[] {
     if (!Array.isArray(content)) continue;
     for (const block of content) {
       const b = block as { type?: string; name?: string; id?: string };
-      if (b.type === 'tool_use' && b.name === 'Agent' && b.id) {
+      if (
+        b.type === 'tool_use' &&
+        b.name &&
+        toolSection(b.name) === 'agent' &&
+        b.id
+      ) {
         agentToolUseIds.add(b.id);
       }
     }
@@ -1861,6 +1674,8 @@ export function parseSessionLogs(
   // 2. Build indexes
   const eventIndex = buildEventIndex(events);
   const parentChildMap = buildParentChildMap(events);
+  // tool_use_id → result, one pass over the log (DD-2)
+  const resultIndex = buildToolResultIndex(events);
 
   // 3. Assign 1-based global index to ALL type=user events
   let userEventCounter = 0;
@@ -1894,6 +1709,9 @@ export function parseSessionLogs(
   // collection below can transitively pull in exactly the ones reachable from that turn's
   // directly-known sub-agents — never events belonging to an unrelated turn's agent tree.
   const nestedProgressByOwner = new Map<string, ProgressAgentEvent[]>();
+  // Permission events no call could be joined to (DD-22), across this log and every
+  // sub-agent log passed in; diagnostics only.
+  let unattributedPermissionEvents = 0;
   if (subagentLogsOption) {
     for (const [ownerAgentId, subRaw] of subagentLogsOption) {
       const subEvents = subRaw
@@ -1925,6 +1743,8 @@ export function parseSessionLogs(
       if (progressInThisLog.length > 0) {
         nestedProgressByOwner.set(ownerAgentId, progressInThisLog);
       }
+
+      unattributedPermissionEvents += attributeLogPermissions(subEvents);
     }
   }
 
@@ -1992,6 +1812,7 @@ export function parseSessionLogs(
         images: [],
         subAgents: [],
         agentActivations: [],
+        allToolCalls: [],
         toolCalls: [],
         rulesInjected: [],
         linesChanged: 0,
@@ -2078,15 +1899,7 @@ export function parseSessionLogs(
     }
 
     // Assistant steps: collect per-LLM-call context sizes in chronological order
-    const assistantSteps: Array<{
-      contextTokens: number;
-      text: string | null;
-      stopReason: string | null;
-      toolCallNames: string[];
-      toolCallSummaries: string[];
-      toolCallInputs: Record<string, unknown>[];
-      timestamp: string | null;
-    }> = [];
+    const assistantSteps: AssistantStep[] = [];
     for (const e of events) {
       if (e.type !== 'assistant' || !e.uuid || !uuidSet.has(e.uuid)) continue;
       const ae = e as AssistantEvent;
@@ -2099,14 +1912,16 @@ export function parseSessionLogs(
         .map((b) => b.text!)
         .join('\n')
         .trim();
-      const toolBlocks = content.filter((b) => b.type === 'tool_use');
-      const toolCallNames = toolBlocks
-        .filter((b) => b.name)
-        .map((b) => b.name!);
+      // Named tool_use blocks only, so the parallel arrays below stay aligned (DD-5).
+      const toolBlocks = content.flatMap((b) =>
+        b.type === 'tool_use' && b.name ? [{ ...b, name: b.name }] : [],
+      );
+      const toolCallNames = toolBlocks.map((b) => b.name);
       const toolCallSummaries = toolBlocks.map((b) =>
-        b.name && b.input ? summarizeToolCall(b.name, b.input) : '',
+        b.input ? summarizeToolCall(b.name, b.input) : '',
       );
       const toolCallInputs = toolBlocks.map((b) => b.input ?? {});
+      const toolCallIds = toolBlocks.map((b) => b.id ?? '');
       const timestamp = typeof ae.timestamp === 'string' ? ae.timestamp : null;
       assistantSteps.push({
         contextTokens: ctx,
@@ -2115,6 +1930,7 @@ export function parseSessionLogs(
         toolCallNames,
         toolCallSummaries,
         toolCallInputs,
+        toolCallIds,
         timestamp,
       });
     }
@@ -2133,6 +1949,7 @@ export function parseSessionLogs(
           ...step.toolCallSummaries,
         ];
         prev.toolCallInputs = [...prev.toolCallInputs, ...step.toolCallInputs];
+        prev.toolCallIds = [...prev.toolCallIds, ...step.toolCallIds];
       } else {
         mergedSteps.push({ ...step });
       }
@@ -2192,12 +2009,14 @@ export function parseSessionLogs(
       }
     }
 
-    // Tool calls in this turn
-    const toolCalls = extractToolCallsInTurn(events, uuidSet);
+    // Tool calls in this turn: every call (DD-1a), the sections derive from it
+    const rawToolCalls = extractRawToolCalls(events, { uuidSet });
+    const allToolCalls = buildAllToolCalls(rawToolCalls, resultIndex);
+    const toolCalls = allToolCalls.filter((c) => c.section === 'tool');
 
     // Lines changed: count lines written by Edit/Write tool calls
     let linesChanged = 0;
-    for (const call of toolCalls) {
+    for (const call of rawToolCalls) {
       if (call.name === 'Edit') {
         const s = call.input.new_string as string | undefined;
         if (typeof s === 'string') linesChanged += s.split('\n').length;
@@ -2218,64 +2037,73 @@ export function parseSessionLogs(
     // Skills
     const seenSkills = new Set<string>();
     const skills: SkillInvocation[] = [];
-    for (const call of toolCalls) {
-      if (call.name === 'Skill') {
-        const skillName = (call.input.skill as string) ?? '';
-        const isDuplicate = seenSkills.has(skillName);
-        seenSkills.add(skillName);
-        const skillBytes = extractSkillContentBytes(
-          call.id,
-          events,
-          parentChildMap,
-          eventIndex,
-        );
-        skills.push({
-          name: skillName,
-          isDuplicate,
-          path: `.claude/skills/${skillName}`,
-          ...(skillBytes !== undefined &&
-            skillBytes > 0 && {
-              bytes: skillBytes,
-              estTokens: Math.round(skillBytes / charsPerToken),
-            }),
-        });
-      }
+    for (const call of allToolCalls) {
+      if (call.section !== 'skill') continue;
+      const skillName = (call.input.skill as string) ?? '';
+      const isDuplicate = seenSkills.has(skillName);
+      seenSkills.add(skillName);
+      const skillBytes =
+        call.id !== undefined
+          ? extractSkillContentBytes(
+              call.id,
+              resultIndex,
+              parentChildMap,
+              eventIndex,
+            )
+          : undefined;
+      skills.push({
+        name: skillName,
+        isDuplicate,
+        path: `.claude/skills/${skillName}`,
+        ...(skillBytes !== undefined &&
+          skillBytes > 0 && {
+            bytes: skillBytes,
+            estTokens: Math.round(skillBytes / charsPerToken),
+          }),
+        ...(call.id !== undefined && { toolUseId: call.id }),
+        status: call.status,
+      });
     }
 
     // Files
     const pathAccessCount = new Map<string, number>();
     const files: FileAccess[] = [];
-    const fileToolNames = new Set([
-      'Read',
-      'Edit',
-      'Write',
-      'MultiEdit',
-      'Glob',
-    ]);
-    for (const call of toolCalls) {
-      if (!fileToolNames.has(call.name)) continue;
-      const toolName = call.name as
-        | 'Read'
-        | 'Edit'
-        | 'Write'
-        | 'MultiEdit'
-        | 'Glob';
+    for (const call of allToolCalls) {
+      if (call.section !== 'file') continue;
+      const toolName = call.name;
+      if (!isFileToolName(toolName)) continue;
       const path = extractFilePathFromToolCall(toolName, call.input);
       const accessCount = (pathAccessCount.get(path) ?? 0) + 1;
       pathAccessCount.set(path, accessCount);
       const category = resolveFileCategory(path, repoRoot, repoConfig);
+      const result =
+        call.id !== undefined ? resultIndex.get(call.id) : undefined;
 
       const fileAccess: FileAccess = {
         path,
         tool: toolName,
         accessCount,
         category,
+        ...(call.id !== undefined && { toolUseId: call.id }),
+        status: call.status,
       };
 
+      if (call.status !== 'success') {
+        // DD-21: the first line of the result, cut; never counted as file bytes.
+        // Claude Code wraps tool errors in `<tool_use_error>…</tool_use_error>`; the tag is noise.
+        const firstLine = (call.result ?? '')
+          .replace(/<\/?tool_use_error>/g, '')
+          .split('\n')[0]
+          .trim();
+        if (firstLine) {
+          fileAccess.error = firstLine.slice(0, FILE_ERROR_MAX_CHARS);
+        }
+      }
+
       if (toolName === 'Glob') {
-        fileAccess.globMatchCount = extractGlobCount(events, call.id);
-      } else if (toolName === 'Read') {
-        const bytes = extractToolResultBytes(events, call.id);
+        fileAccess.globMatchCount = globMatchCount(result);
+      } else if (toolName === 'Read' && call.status === 'success') {
+        const bytes = result?.bytes;
         if (bytes !== undefined) {
           fileAccess.bytes = bytes;
           fileAccess.estTokens = Math.round(bytes / charsPerToken);
@@ -2284,26 +2112,6 @@ export function parseSessionLogs(
 
       files.push(fileAccess);
     }
-
-    // Per-call tool details
-    const turnStartTs = userEvent.timestamp
-      ? Date.parse(userEvent.timestamp)
-      : 0;
-    const lastToolCall = toolCalls[toolCalls.length - 1];
-    const turnEndTs = lastToolCall?.timestamp
-      ? Date.parse(lastToolCall.timestamp)
-      : turnStartTs;
-    const { permReqs, permDenials } = extractArtisynPermissionEvents(
-      events,
-      turnStartTs,
-      turnEndTs,
-    );
-    const callDetails = buildToolCallDetails(
-      events,
-      toolCalls,
-      permReqs,
-      permDenials,
-    );
 
     // Sub-agents: collect agent_progress events in turn uuid set
     // Exclude progress events whose parentUuid is absent from the event index
@@ -2355,7 +2163,7 @@ export function parseSessionLogs(
 
     const rulesInjected = extractRulesInjected(events, uuidSet, charsPerToken);
 
-    const images = extractImagesInTurn(events, uuidSet, toolCalls);
+    const images = extractImagesInTurn(events, uuidSet, rawToolCalls);
 
     uuidSetsByTurnIndex.push(uuidSet);
     turns.push({
@@ -2372,11 +2180,19 @@ export function parseSessionLogs(
       images,
       subAgents,
       agentActivations,
-      toolCalls: callDetails,
+      allToolCalls,
+      toolCalls,
       rulesInjected,
       linesChanged,
     });
   }
+
+  // Post-turn: permission events → the calls they belong to, once for the whole log (DD-22).
+  // The flags land on the shared ToolCallDetail objects, so every derived section sees them.
+  unattributedPermissionEvents += attributeLogPermissions(
+    events,
+    turns.flatMap((t) => t.allToolCalls),
+  );
 
   // Post-turn: attach WorkflowRun objects to turns by matching toolUseId.
   // Scan ALL assistant events (including those inside sub-agent invocations)
@@ -2813,6 +2629,8 @@ export function parseSessionLogs(
   // Path normalisation: strip repoRoot prefix so every consumer receives
   // repo-root-relative paths, regardless of the machine they were captured on.
   // ---------------------------------------------------------------------------
+  // Display-only repo root (DD-6): the effective root below, else the first main event's cwd.
+  let displayRepoRoot = '';
   {
     const allAbsPaths: string[] = [];
     for (const turn of turns) {
@@ -2873,19 +2691,36 @@ export function parseSessionLogs(
         return prefixParts.length > 0 ? prefixParts.join('/') + '/' : '';
       })();
 
-    if (effectiveRoot) {
+    displayRepoRoot = toDisplayRoot(effectiveRoot);
+    if (!displayRepoRoot) {
+      const firstMainCwd = events.find(
+        (e) => e.isSidechain !== true && typeof e.cwd === 'string' && e.cwd,
+      )?.cwd;
+      displayRepoRoot = toDisplayRoot(firstMainCwd ?? '');
+    }
+
+    // A sub-agent transcript often reads a single file and carries no CLAUDE.md path, so the
+    // detection above finds nothing; it runs in its parent's cwd, so that cwd is the root.
+    const subagentCwd = isSubagent
+      ? toDisplayRoot(
+          events.find((e) => typeof e.cwd === 'string' && e.cwd)?.cwd ?? '',
+        )
+      : '';
+    // Trailing `/`, so a sibling `<root>2/…` never matches the prefix.
+    const normRoot = effectiveRoot || (subagentCwd ? `${subagentCwd}/` : '');
+    if (normRoot) {
       for (const turn of turns) {
         for (const f of turn.files) {
-          f.path = normaliseClientPath(f.path, effectiveRoot);
+          f.path = normaliseClientPath(f.path, normRoot);
         }
         for (const r of turn.rulesInjected) {
           if (r.path && !r.path.startsWith('~/'))
-            r.path = normaliseClientPath(r.path, effectiveRoot);
+            r.path = normaliseClientPath(r.path, normRoot);
         }
       }
       for (const f of instructionFiles) {
         if (!f.path.startsWith('~/'))
-          f.path = normaliseClientPath(f.path, effectiveRoot);
+          f.path = normaliseClientPath(f.path, normRoot);
       }
     }
   }
@@ -2949,7 +2784,20 @@ export function parseSessionLogs(
     }
   }
 
-  return { summary, turns, mcpCalls, compactBoundaries, hasStopFailure };
+  return {
+    summary,
+    turns,
+    mcpCalls,
+    compactBoundaries,
+    hasStopFailure,
+    repoRoot: displayRepoRoot,
+    unattributedPermissionEvents,
+  };
+}
+
+/** DD-6 display form of a root: forward slashes, no trailing slash. */
+function toDisplayRoot(root: string): string {
+  return root.replace(/\\/g, '/').replace(/\/+$/, '');
 }
 
 // ---------------------------------------------------------------------------

@@ -459,6 +459,28 @@ the project's otel directory has disappeared (`dir-gone`) instead of recreating 
 prune guard (chunks whose upload failed this run are never pruned). None of these changes the
 upload wire format, so the server needs no version detection.
 
+---
+
+## Call identity on `PostToolUseFailure` / `PermissionDenied` (hook `2.24.0`+)
+
+An additive-field release; no route, no wire-format change, and the server needs no version detection.
+
+- `PostToolUseFailure` adds `tool_use_id` (`input.tool_use_id || null`).
+- `PermissionDenied` (split out of the shared `PermissionRequest` branch) adds `tool_use_id` and
+  `reason` (`input.reason || null`). Claude Code fires it only for auto-mode classifier denials.
+- `PermissionRequest` is unchanged: Claude Code sends no `tool_use_id` for it.
+
+| Combination | Behaviour |
+|---|---|
+| New hook → old server / old client | The extra fields are ignored |
+| Old hook → new client | No `tool_use_id` / `reason`; the viewer attributes the event to its tool call by name + input, as before |
+| New hook on an older Claude Code | The fields are present but `null`; same name + input fallback |
+| New hook → new client | The viewer joins the event to the call with that `tool_use_id` |
+
+Both server readers of artisyn `tool_use_id` (`extractEditResultRecords` in `artisyn-extractor.ts`
+and `change-surface/changed-paths.sql.ts`) filter to `PostToolUse`, so the new ids on other events
+are never mistaken for edit records.
+
 
 ## v1 retirement (done, open-source readiness)
 

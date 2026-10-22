@@ -2,22 +2,10 @@ import { useState, useRef, useEffect } from 'react';
 import { getPromptText, resolveCharsPerToken } from '../../log-parser';
 import type { CompactBoundary, ParsedSession, PromptTurn } from '../../types';
 import type { ModelPricingMap } from '../../../../../../models/pricing';
-import { buildTurnSlices } from './context-data';
-import { ContextUsageTable } from './ContextUsageTable';
-import { ContextPieChart } from './ContextPieChart';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from '@/ui/dialog';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '@/ui/tooltip';
+import { ContextGrowthSubStepRow } from './ContextGrowthSubStepRow';
+import { StepDetailsModal, type StepSelection } from './StepDetailsModal';
+import { TurnBreakdownDialog } from './TurnBreakdownDialog';
+import { stepBars } from './step-bars';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -137,44 +125,6 @@ export function buildGrowthRows(
 }
 
 // ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function fullToolDetail(name: string, input: Record<string, unknown>): string {
-  const s = (v: unknown) => String(v ?? '');
-  switch (name) {
-    case 'Read':
-    case 'Edit':
-    case 'Write':
-    case 'MultiEdit':
-      return s(input.file_path);
-    case 'Bash':
-      return s(input.command);
-    case 'Glob': {
-      const parts = [s(input.pattern)];
-      if (input.path) {
-        const p = s(input.path);
-        // Skip absolute paths (local machine root) — only show relative subdirs
-        if (!/^([A-Za-z]:[\\/]|\/)/.test(p)) parts.push(`in ${p}`);
-      }
-      return parts.join(' ');
-    }
-    case 'Grep': {
-      const parts = [s(input.pattern)];
-      if (input.path) {
-        const p = s(input.path);
-        if (!/^([A-Za-z]:[\\/]|\/)/.test(p)) parts.push(`in ${p}`);
-      }
-      return parts.join(' ');
-    }
-    case 'Agent':
-      return s(input.description ?? input.prompt);
-    default:
-      return '';
-  }
-}
-
-// ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
@@ -194,6 +144,7 @@ export function ContextGrowthChart({ session, pricing }: Props) {
   const charsPerToken = resolveCharsPerToken(pricing, session.summary.model);
   const [hoveredIdx, setHoveredIdx] = useState<number | null>(null);
   const [selectedTurn, setSelectedTurn] = useState<PromptTurn | null>(null);
+  const [selectedStep, setSelectedStep] = useState<StepSelection | null>(null);
   const [expandedTurns, setExpandedTurns] = useState<Set<number>>(new Set());
 
   const containerRef = useRef<HTMLDivElement>(null);
@@ -450,176 +401,23 @@ export function ContextGrowthChart({ session, pricing }: Props) {
               {/* Sub-step rows */}
               {hasSubSteps &&
                 isExpanded &&
-                steps.map((step, si) => {
-                  const prevCtx =
-                    si === 0
-                      ? (turn.contextTokensStart ?? 0)
-                      : steps[si - 1].contextTokens;
-                  const stepPriorPx = Math.round(
-                    (prevCtx / maxContextTokens) * barMaxPx,
-                  );
-                  const stepTotalPx = Math.max(
-                    4,
-                    Math.round(
-                      (step.contextTokens / maxContextTokens) * barMaxPx,
-                    ),
-                  );
-                  const stepDeltaPx = stepTotalPx - stepPriorPx;
-                  const deltaK = Math.round(
-                    (step.contextTokens - prevCtx) / 1000,
-                  );
-
-                  const rawNames = step.toolCallNames;
-                  const rawSummaries = step.toolCallSummaries ?? [];
-                  const rawInputs = step.toolCallInputs ?? [];
-                  let stepLabel: string;
-                  if (rawNames.length === 0) {
-                    stepLabel =
-                      si === steps.length - 1 ? 'final' : `step ${si + 1}`;
-                  } else if (rawNames.length === 1) {
-                    const summary = rawSummaries[0] ?? '';
-                    stepLabel = summary
-                      ? `${rawNames[0]}: ${summary}`
-                      : rawNames[0];
-                  } else {
-                    const first = rawNames[0];
-                    const firstSummary = rawSummaries[0] ?? '';
-                    const firstPart = firstSummary
-                      ? `${first}: ${firstSummary}`
-                      : first;
-                    const truncFirst =
-                      firstPart.length > 28
-                        ? firstPart.slice(0, 28) + '…'
-                        : firstPart;
-                    stepLabel = `${truncFirst} (+${rawNames.length - 1})`;
-                  }
-
-                  const timeLabel = step.timestamp
-                    ? new Date(step.timestamp).toLocaleTimeString('en-US', {
-                        hour: '2-digit',
-                        minute: '2-digit',
-                        second: '2-digit',
-                        hour12: false,
-                      })
-                    : null;
-
-                  // Tooltip content: full tool details + assistant text + stop reason
-                  const tooltipContent = (
-                    <div className="space-y-1.5 max-w-xs">
-                      {step.text && (
-                        <p className="italic text-muted-foreground leading-snug">
-                          {step.text.length > 180
-                            ? step.text.slice(0, 180) + '…'
-                            : step.text}
-                        </p>
-                      )}
-                      {rawNames.length > 0 && (
-                        <div className="space-y-0.5">
-                          {rawNames.slice(0, 12).map((n, i) => {
-                            const detail = rawInputs[i]
-                              ? fullToolDetail(n, rawInputs[i])
-                              : (rawSummaries[i] ?? '');
-                            return (
-                              <div key={i} className="font-mono break-all">
-                                <span className="font-semibold">{n}</span>
-                                {detail && (
-                                  <span className="text-muted-foreground">
-                                    : {detail}
-                                  </span>
-                                )}
-                              </div>
-                            );
-                          })}
-                          {rawNames.length > 12 && (
-                            <div className="text-muted-foreground">
-                              …and {rawNames.length - 12} more
-                            </div>
-                          )}
-                        </div>
-                      )}
-                      {step.stopReason && (
-                        <div className="text-muted-foreground border-t border-border/40 pt-1">
-                          stop: {step.stopReason}
-                        </div>
-                      )}
-                    </div>
-                  );
-
-                  return (
-                    <div
+                (() => {
+                  const bars = stepBars(turn);
+                  return steps.map((step, si) => (
+                    <ContextGrowthSubStepRow
                       key={`step-${turn.index}-${si}`}
-                      className="flex items-center bg-muted/20 hover:bg-muted/40"
-                      style={{ minHeight: 32 }}
-                    >
-                      {/* No accent */}
-                      <div className="w-[3px] shrink-0" />
-                      {/* Label — tooltip trigger only on the label area for correct positioning */}
-                      <TooltipProvider>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <div
-                              className="py-1 pl-6 pr-2 shrink-0 text-xs text-muted-foreground flex flex-col justify-center cursor-default"
-                              style={{ width: LEFT_LABEL_W - 3 }}
-                            >
-                              <div className="flex items-center gap-1 truncate">
-                                <span className="shrink-0 opacity-40 text-[10px]">
-                                  ↳
-                                </span>
-                                <span className="truncate">{stepLabel}</span>
-                              </div>
-                            </div>
-                          </TooltipTrigger>
-                          <TooltipContent
-                            side="bottom"
-                            sideOffset={4}
-                            variant="light"
-                            className="text-xs max-w-sm"
-                          >
-                            {tooltipContent}
-                          </TooltipContent>
-                        </Tooltip>
-                      </TooltipProvider>
-                      {/* Bar */}
-                      <div
-                        className="shrink-0 flex items-center"
-                        style={{ width: barMaxPx }}
-                      >
-                        <div className="flex items-center h-3">
-                          <div
-                            className="h-full rounded-l-sm opacity-40"
-                            style={{
-                              width: stepPriorPx,
-                              background: '#bfdbfe',
-                            }}
-                          />
-                          <div
-                            className="h-full rounded-r-sm"
-                            style={{
-                              width: Math.max(2, stepDeltaPx),
-                              background: '#3b82f6',
-                            }}
-                          />
-                        </div>
-                      </div>
-                      {/* Right label */}
-                      <div
-                        className="px-2 shrink-0 text-right text-muted-foreground"
-                        style={{ width: RIGHT_LABEL_W }}
-                      >
-                        <div className="text-xs">
-                          {si === 0
-                            ? `${Math.round(step.contextTokens / 1000)}k tok`
-                            : `+${Math.max(0, deltaK)}k`}
-                        </div>
-                        {timeLabel && (
-                          <div className="text-[10px] opacity-60 leading-tight">
-                            {timeLabel}
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
+                      step={step}
+                      si={si}
+                      stepCount={steps.length}
+                      bar={bars[si]}
+                      maxContextTokens={maxContextTokens}
+                      barMaxPx={barMaxPx}
+                      leftLabelW={LEFT_LABEL_W}
+                      rightLabelW={RIGHT_LABEL_W}
+                      onOpen={(i) => setSelectedStep({ turn, si: i })}
+                    />
+                  ));
+                })()}
             </div>
           );
         })}
@@ -638,41 +436,17 @@ export function ContextGrowthChart({ session, pricing }: Props) {
         </div>
       </div>
 
-      {/* Click-to-inspect modal */}
-      <Dialog
-        open={selectedTurn !== null}
-        onOpenChange={(open) => {
-          if (!open) setSelectedTurn(null);
-        }}
-      >
-        <DialogContent className="max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>
-              Turn #{selectedTurn ? selectedTurn.index + 1 : ''} &mdash; Context
-              Breakdown
-            </DialogTitle>
-            <DialogDescription>
-              LLM call context at this point in the session
-            </DialogDescription>
-          </DialogHeader>
-          {selectedTurn &&
-            (() => {
-              const slices = buildTurnSlices(selectedTurn, 0, charsPerToken);
-              return (
-                <div className="grid grid-cols-2 gap-6">
-                  <ContextUsageTable slices={slices} />
-                  <div className="flex justify-center">
-                    <ContextPieChart slices={slices} size={220} />
-                  </div>
-                </div>
-              );
-            })()}
-          <p className="text-xs text-muted-foreground mt-2">
-            Raw text is not stored &mdash; breakdown is estimated from token
-            counts
-          </p>
-        </DialogContent>
-      </Dialog>
+      {/* Click-to-inspect modals */}
+      <TurnBreakdownDialog
+        turn={selectedTurn}
+        onClose={() => setSelectedTurn(null)}
+        charsPerToken={charsPerToken}
+      />
+      <StepDetailsModal
+        selection={selectedStep}
+        onClose={() => setSelectedStep(null)}
+        charsPerToken={charsPerToken}
+      />
     </>
   );
 }

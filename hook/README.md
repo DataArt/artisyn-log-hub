@@ -19,8 +19,9 @@ what has been collected.
 | `UserPromptSubmit` | `telemetry-hook.js` | Writes a `prompt_start` record: the prompt text, git context (remote, repo root, branch, `user.name`) and configured `context` values. At most once a minute, starts a background upload (`prompt-upload-hook.js`) and re-arms the OTEL receiver. |
 | `SessionStart` | `lifecycle-hook.js` | Writes a record with the git context (remote, repo root, branch, `user.name`); starts the loopback OTEL receiver when OTEL is enabled and checks that Claude Code's exporter points at it. |
 | `PostToolUse` | `lifecycle-hook.js` | Writes the tool name, tool input, tool-use id, agent id/type and, for edit tools, added/removed line counts. The tool's output is not copied into this record. |
-| `PostToolUseFailure` | `lifecycle-hook.js` | Writes the tool name, tool input and error text. |
-| `PermissionRequest`, `PermissionDenied` | `lifecycle-hook.js` | Writes the tool name and tool input. |
+| `PostToolUseFailure` | `lifecycle-hook.js` | Writes the tool name, tool input, error text and (since `2.24.0`) tool-use id. |
+| `PermissionRequest` | `lifecycle-hook.js` | Writes the tool name and tool input. |
+| `PermissionDenied` | `lifecycle-hook.js` | Writes the tool name and tool input, plus (since `2.24.0`) the tool-use id and the denial reason. |
 | `SubagentStart`, `SubagentStop` | `lifecycle-hook.js` | Writes the subagent id (and type on start). |
 | `PreCompact`, `PostCompact` | `lifecycle-hook.js` | Writes a compaction record with the transcript path. |
 | `PostToolBatch`, `StopFailure`, `SessionEnd` | `lifecycle-hook.js` | Writes a base record (event name, session id, timestamp). |

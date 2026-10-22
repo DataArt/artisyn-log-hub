@@ -284,6 +284,7 @@ Events: `/clear` (the `<command-name>` line comes first, it does **not** qualify
 | S-SESS-11 | Change surface on 400 files: filter, collapsing, sorting | UI+API | P1 | 35 |
 | S-SESS-12 | Only the owner sees Raw Logs; the API answers 403 to a stranger | UI+API | P0 | 55 |
 | S-SESS-13 | Advisor: the hook result appears as a tab and as spend | UI+API | P1 | 35 |
+| S-SESS-14 | Tool calls in detail: the Context Growth step modal, the Bash view and tab, call statuses | UI+API | P1 | 0 |
 | S-CHART-01 | Charts: Dashboard, Agent Tree, Timeline, Tool Heatmap, Call Tree on an agent tree | UI | P1 | 40 |
 | S-CHART-02 | Charts: Context Usage and Context Growth count the same tokens | UI | P1 | 20 |
 | S-COST-01 | One session, one cost everywhere | UI+API | P0 | 55 |
@@ -302,7 +303,7 @@ Events: `/clear` (the `<command-name>` line comes first, it does **not** qualify
 | S-REPT-07 | Session attributes: filter, Attribute Breakdown, Extraction Usage, Advisor tiles | UI+API | P2 | 40 |
 | S-REPT-08 | The reports shell: all 17 reports open, the URL lives, the PDF is not empty | UI | P1 | 20 |
 
-Total: P0 = 11, P1 = 16, P2 = 3. Replaces ≈ 1 545 of the group's ≈ 1 990 existing tests (the rest is lost on purpose or kept as cheap pure unit tests, section 5).
+Total: P0 = 11, P1 = 17, P2 = 3. Replaces ≈ 1 545 of the group's ≈ 1 990 existing tests (the rest is lost on purpose or kept as cheap pure unit tests, section 5).
 
 Dependencies on other groups: S-SESS-12/13 use the second user U2 (the API key and account from the AUTH/KEYS group), S-REPT-07 uses the attribute-definition setting (the REPOS/SETTINGS group).
 
@@ -590,6 +591,29 @@ Common setup for every scenario unless stated otherwise: user U1 is logged in (s
   - The Advisor Spend tile in Executive Summary (S-REPT-01 or S-REPT-07) shows `$0.1234` and 1 evaluation.
 - **Replaces:** `CC/AdvisorTab.test.tsx` (9), `CC/SessionDetailHeader.test.tsx` (16, the part about advisor/attribution labels, the rest in S-REPT-07), `SRV/logs/turn-end-cost-advisor/turn-end-cost-advisor.service.spec.ts` (14, part), `CC/session-item-advisor-badge.test.tsx` (part). Closes gaps F.1 #7 and F.3 #28 (HTTP and UI). ≈ 35.
 - **What we lose:** the unit logic "is an evaluation needed" (`enabled && watermark > evaluated`), orphan cleanup (`orphan-cleanup.scheduler`, 9 tests on a real DB: keep as a server test), the advisor being off by default (settings, the SETTINGS group).
+
+### S-SESS-14. Tool calls in detail: the Context Growth step modal, the Bash view and tab, call statuses
+- **Layer:** UI+API
+- **Priority:** P1
+- **Modes:** A, C
+- **Data/roles:** an own session uploaded through `POST /api/v2/logs` (spec `tests/scenarios/view/s-sess-14.spec.ts`, task 2026-10-22-context-growth-item-modal): one prompt, `cwd: /work/ss14-<runId>`, five assistant steps with context 10 000 / 30 000 / 31 000 / 31 500 / 32 000; a Bash with 70 000 chars of output and Agent A (Explore); Read, Grep, a failing Edit of `src/app.ts` and Agent B (code-reviewer); an interrupted Bash, a PowerShell call and an unparseable Bash with a PermissionRequest for it; an Agent call ("lint") refused with "Concurrent subagent limit reached". Sub-agents A and B each run one Bash. A second session has no Bash. Owner U1.
+- **Steps:**
+  1. Charts → Context Growth: expand the turn.
+  2. Click the `+20k` step row: the step modal.
+  3. Read the modal's paths and FILES; press Escape.
+  4. Open the a3 step row (three calls).
+  5. Logs: open the Code files group and click the `src/app.ts` Edit row; read the Agents section.
+  6. Open `tab=bash`.
+  7. Press ↓ in the list, reload, then open an unknown `bashCall`; open the session without Bash.
+- **Checks:**
+  - Step rows read `+20k`, `+1k`, `+1k`, `+1k`, `—` with a pointer cursor; no `.wasm` request before the first Bash view.
+  - The modal shows the formatted, highlighted command, "show all (70,000 chars)", and the `tree-sitter-bash` WASM is fetched; no `/work/ss14-` text; Changes lists `dist`; Escape keeps the turn expanded and the scroll position.
+  - The a3 modal has three call blocks (Bash, PowerShell, Bash), the first expanded with `⏸ interrupted` and `⏱`; PowerShell and the unparseable command are raw text with no toggle; `⚠ requested` is on the third call only.
+  - Logs: the Edit row has `✗` and opens the modal with "String to replace not found"; the Read row has no mark; the Agents section has one orphan row, "lint", with `✗ error`.
+  - Bash tab: count 5; five rows in time order (main, sub-agent A, sub-agent B, main, main), the sub-agent rows badged `Agent · Explore` / `Agent · code-reviewer`; row 1 selected when the URL has no `bashCall`.
+  - ↓ selects row 2 and writes it to `bashCall`; a reload keeps it; an unknown `bashCall` selects row 1 and is not rewritten; the empty session shows "No Bash commands in this session".
+- **Replaces:** nothing — Context Growth had no spec (S-CHART-02 has none) and the Bash view and tab are new.
+- **What we lose:** real Claude Code payloads (checked manually on the local production instance); the Raw toggle and "Copy original" are covered by S-SESS-03 step 6.
 
 ### S-CHART-01. Charts: Dashboard, Agent Tree, Timeline, Tool Heatmap, Call Tree on an agent tree
 - **Layer:** UI

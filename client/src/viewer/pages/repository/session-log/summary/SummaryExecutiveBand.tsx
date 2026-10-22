@@ -232,7 +232,7 @@ export function SummaryExecutiveBand({
 
   // --- Session shape tile (log-parser's formatDuration) ----------------
   const sessionShapeValue = summary.model ?? 'n/a';
-  const sessionShapeSecondary = `${formatDuration(summary.totalWorkTimeMs)} work time · ${formatInt(derived.toolCalls)} tool calls`;
+  const sessionShapeSecondary = `${formatDuration(summary.totalWorkTimeMs)} work time · ${formatInt(derived.toolCalls)} other tool calls`;
 
   // --- Change surface tile -----------------------------------------
   // Distinct changed **paths**, never call counts, and deliberately no line family — that is

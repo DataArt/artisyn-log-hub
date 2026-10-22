@@ -20,6 +20,7 @@ import {
   ToolCallRow,
   buildImagesSummary,
   ImageRow,
+  OrphanAgentCallRow,
 } from './prompt-turn-helpers';
 import { ToolCallDetailModal } from './ToolCallDetailModal';
 import type { ToolCallDetail } from './types';
@@ -111,6 +112,18 @@ export function PromptTurnItem({
     return map;
   }, [turn.workflows, agentParentMap, subagentLogsMap, subagentStats, pricing]);
 
+  // Agent calls with no activation and no sub-agent node (e.g. a "Concurrent subagent limit
+  // reached" error, or a fork started in the background) — listed as compact rows (DD-21).
+  const orphanAgentCalls = useMemo(() => {
+    const linked = new Set<string>();
+    for (const a of turn.agentActivations)
+      if (a.toolUseId) linked.add(a.toolUseId);
+    for (const n of turn.subAgents) if (n.toolUseID) linked.add(n.toolUseID);
+    return turn.allToolCalls.filter(
+      (c) => c.section === 'agent' && !(c.id && linked.has(c.id)),
+    );
+  }, [turn.allToolCalls, turn.agentActivations, turn.subAgents]);
+
   return (
     <div
       data-turn-index={turn.index}
@@ -147,6 +160,8 @@ export function PromptTurnItem({
       <PromptTurnSkillsSection
         skills={turn.skills}
         charsPerToken={charsPerToken}
+        calls={turn.allToolCalls}
+        onOpenCall={setSelectedCall}
       />
 
       {/* Rules injected */}
@@ -182,7 +197,11 @@ export function PromptTurnItem({
       )}
 
       {/* Files — grouped by category; 'code' first */}
-      <PromptTurnFilesSection files={turn.files} />
+      <PromptTurnFilesSection
+        files={turn.files}
+        calls={turn.allToolCalls}
+        onOpenCall={setSelectedCall}
+      />
 
       {/* Images */}
       {turn.images.length > 0 && (
@@ -209,7 +228,7 @@ export function PromptTurnItem({
       )}
 
       {/* Agent activations */}
-      {turn.agentActivations.length > 0 && (
+      {(turn.agentActivations.length > 0 || orphanAgentCalls.length > 0) && (
         <div className="ml-4 mt-2 border-l-2 border-l-orange-300 pl-2 dark:border-l-orange-700">
           <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted-foreground/60">
             Agents
@@ -225,6 +244,19 @@ export function PromptTurnItem({
                 renderSubTurn={(t) => <PromptTurnItem key={t.index} turn={t} />}
               />
             ))}
+            {orphanAgentCalls.length > 0 && (
+              <table className="w-full">
+                <tbody>
+                  {orphanAgentCalls.map((call, i) => (
+                    <OrphanAgentCallRow
+                      key={call.id ?? i}
+                      call={call}
+                      onClick={() => setSelectedCall(call)}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
         </div>
       )}
@@ -279,6 +311,9 @@ export function PromptTurnItem({
         <ToolCallDetailModal
           call={selectedCall}
           onClose={() => setSelectedCall(null)}
+          charsPerToken={charsPerToken}
+          turnFiles={turn.files}
+          subAgents={turn.subAgents}
         />
       )}
     </div>

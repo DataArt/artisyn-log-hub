@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Loader2, RefreshCw, Star, Trash2, Lock } from 'lucide-react';
+import { Loader2, RefreshCw, Star, Trash2 } from 'lucide-react';
 import {
   lazy,
   Suspense,
@@ -28,15 +28,11 @@ import { computeTreeCodeImpact } from './session-log/tree-code-impact';
 import type { ParsedSession } from './session-log/types';
 import { fetchSessionChangeSurface, type SessionLogsData } from '../../api';
 import type { RepoConfig } from '../../../models/repositories';
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from '../../ui/tooltip';
+import { ToolViewProvider } from './session-log/tool-call-view/ToolViewContext';
+import { SessionTabBar } from './SessionTabBar';
+import { collectBashCalls } from './session-log/bash-tab/collect-bash-calls';
 
 import type { SessionTab } from './useRepositoryViewState';
-import { tabTestId } from '../../tab-ids';
 
 const SessionChartsTab = lazy(() =>
   import('./session-log/SessionChartsTab').then((m) => ({
@@ -57,6 +53,14 @@ const SessionChangeSurfaceTab = lazy(() =>
 const SessionHarnessUsageTab = lazy(() =>
   import('./session-log/harness-usage/SessionHarnessUsageTab').then((m) => ({
     default: m.SessionHarnessUsageTab,
+  })),
+);
+
+// Lazy: the tab pulls the Bash view (and, through it, the tree-sitter parser on first use) and is
+// opened deliberately. Its row count for the tab bar comes from the WASM-free collector below.
+const SessionBashTab = lazy(() =>
+  import('./session-log/bash-tab/SessionBashTab').then((m) => ({
+    default: m.SessionBashTab,
   })),
 );
 
@@ -161,6 +165,12 @@ export function SessionDetailPane({
     [usage, subagentStats, rootStats],
   );
 
+  // Bash command count for the tab bar (DD-20) — the same collector the Bash tab lists, no WASM.
+  const bashCount = useMemo(
+    () => collectBashCalls(mainLogs, subagentLogsMap).length,
+    [mainLogs, subagentLogsMap],
+  );
+
   // Release history for the Summary tab's version detector.
   const claudeReleaseHistory = useAiToolVersions();
 
@@ -211,7 +221,9 @@ export function SessionDetailPane({
         sessionAttribution={logsQuery.data?.sessionAttribution ?? null}
       />
 
-      <div className="shrink-0 flex items-center border-b border-border px-4">
+      {/* flex-wrap: on narrow panes the trailing Remove button moves to a second row instead
+          of being clipped by the pane's overflow-hidden. */}
+      <div className="shrink-0 flex flex-wrap items-center border-b border-border px-4">
         <button
           onClick={() => onFavoriteToggle(!isFavorite)}
           aria-label="Toggle favorite"
@@ -242,103 +254,13 @@ export function SessionDetailPane({
             className={cn('size-3.5', logsQuery.isFetching && 'animate-spin')}
           />
         </button>
-        {(['summary', 'info', 'logs', 'charts'] as const).map((tab) => (
-          <button
-            key={tab}
-            data-testid={tabTestId('session', tab)}
-            onClick={() => onSessionTabChange(tab)}
-            className={cn(
-              'px-4 py-2 text-sm capitalize transition-colors',
-              sessionTab === tab
-                ? 'border-b-2 border-primary font-medium text-foreground'
-                : 'text-muted-foreground hover:text-foreground',
-            )}
-          >
-            {tab.charAt(0).toUpperCase() + tab.slice(1)}
-          </button>
-        ))}
-        {turnEndAdvisor && (
-          <button
-            data-testid={tabTestId('session', 'advisor')}
-            onClick={() => onSessionTabChange('advisor')}
-            className={cn(
-              'px-4 py-2 text-sm transition-colors',
-              sessionTab === 'advisor'
-                ? 'border-b-2 border-primary font-medium text-foreground'
-                : 'text-muted-foreground hover:text-foreground',
-            )}
-          >
-            Advisor
-          </button>
-        )}
-        <button
-          data-testid={tabTestId('session', 'usage')}
-          onClick={() => onSessionTabChange('usage')}
-          className={cn(
-            'px-4 py-2 text-sm transition-colors',
-            sessionTab === 'usage'
-              ? 'border-b-2 border-primary font-medium text-foreground'
-              : 'text-muted-foreground hover:text-foreground',
-          )}
-        >
-          Statistics
-        </button>
-        <button
-          data-testid={tabTestId('session', 'change-surface')}
-          onClick={() => onSessionTabChange('change-surface')}
-          className={cn(
-            'px-4 py-2 text-sm transition-colors',
-            sessionTab === 'change-surface'
-              ? 'border-b-2 border-primary font-medium text-foreground'
-              : 'text-muted-foreground hover:text-foreground',
-          )}
-        >
-          Change surface
-        </button>
-        <button
-          data-testid={tabTestId('session', 'harness-usage')}
-          onClick={() => onSessionTabChange('harness-usage')}
-          className={cn(
-            'px-4 py-2 text-sm transition-colors',
-            sessionTab === 'harness-usage'
-              ? 'border-b-2 border-primary font-medium text-foreground'
-              : 'text-muted-foreground hover:text-foreground',
-          )}
-        >
-          Harness usage
-        </button>
-        {canSeeRawLogs && (
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  data-testid={tabTestId('session', 'raw-logs')}
-                  onClick={() => onSessionTabChange('raw-logs')}
-                  className={cn(
-                    'flex items-center gap-1 px-4 py-2 text-sm transition-colors',
-                    sessionTab === 'raw-logs'
-                      ? 'border-b-2 border-primary font-medium text-foreground'
-                      : 'text-muted-foreground hover:text-foreground',
-                  )}
-                >
-                  <Lock className="size-[1em] text-amber-500 stroke-[2.5]" />
-                  Raw Logs
-                </button>
-              </TooltipTrigger>
-              <TooltipContent
-                side="bottom"
-                variant="light"
-                className="max-w-[280px] bg-amber-50 border-amber-300 text-amber-900"
-              >
-                <p className="font-semibold text-xs">Only visible to you</p>
-                <p className="text-xs mt-0.5">
-                  Raw logs contain unfiltered session data. Other users viewing
-                  this session cannot see this tab.
-                </p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        )}
+        <SessionTabBar
+          sessionTab={sessionTab}
+          onSessionTabChange={onSessionTabChange}
+          showAdvisor={!!turnEndAdvisor}
+          canSeeRawLogs={canSeeRawLogs}
+          bashCount={logsQuery.data ? bashCount : undefined}
+        />
         {user?.id === selectedSession.userId && (
           <button
             onClick={onDeleteRequest}
@@ -369,102 +291,119 @@ export function SessionDetailPane({
       )}
 
       <div className="flex-1 min-h-0 overflow-auto">
-        {sessionTab === 'summary' ? (
-          <SessionSummaryTab
-            selectedSession={selectedSession}
-            parsedLogs={parsedLogs}
-            logsQuery={logsQuery}
-            mainLogs={mainLogs}
-            pricing={pricing}
-            sessionCost={sessionCost}
-            subagentLogsMap={subagentLogsMap}
-            agentParentMap={agentParentMap}
-            onSessionTabChange={onSessionTabChange}
-            onGoToTurn={onGoToTurn}
-            usage={usage}
-            codeImpact={codeImpact}
-            changeSurface={changeSurfaceQuery.data ?? null}
-            changeSurfaceLoading={changeSurfaceQuery.isLoading}
-            claudeReleaseHistory={claudeReleaseHistory}
-          />
-        ) : sessionTab === 'logs' ? (
-          <SessionLogView
-            logsData={logsQuery.data}
-            isLoading={logsQuery.isLoading}
-            error={logsQuery.error}
-            pricing={pricing ?? undefined}
-            repoConfig={repoConfig}
-            sessionSubagentCost={selectedSession.costBreakdown.subagentCost}
-            targetTurnIndex={targetTurnIndex}
-            onTargetTurnConsumed={() => setTargetTurnIndex(null)}
-          />
-        ) : sessionTab === 'charts' ? (
-          <Suspense fallback={<LazyFallback />}>
-            <SessionChartsTab
+        <ToolViewProvider
+          repoRoot={parsedLogs?.repoRoot ?? ''}
+          parsedLogs={parsedLogs}
+          subagentLogsMap={subagentLogsMap}
+          pricing={pricing ?? undefined}
+          sessionModel={parsedLogs?.summary.model}
+        >
+          {sessionTab === 'summary' ? (
+            <SessionSummaryTab
+              selectedSession={selectedSession}
               parsedLogs={parsedLogs}
+              logsQuery={logsQuery}
+              mainLogs={mainLogs}
+              pricing={pricing}
+              sessionCost={sessionCost}
               subagentLogsMap={subagentLogsMap}
               agentParentMap={agentParentMap}
+              onSessionTabChange={onSessionTabChange}
+              onGoToTurn={onGoToTurn}
+              usage={usage}
+              codeImpact={codeImpact}
+              changeSurface={changeSurfaceQuery.data ?? null}
+              changeSurfaceLoading={changeSurfaceQuery.isLoading}
+              claudeReleaseHistory={claudeReleaseHistory}
+            />
+          ) : sessionTab === 'logs' ? (
+            <SessionLogView
+              logsData={logsQuery.data}
               isLoading={logsQuery.isLoading}
               error={logsQuery.error}
-              pricing={pricing ?? null}
-              logsData={logsQuery.data}
-              topN={topN}
-              onTopNChange={onTopNChange}
+              pricing={pricing ?? undefined}
+              repoConfig={repoConfig}
+              sessionSubagentCost={selectedSession.costBreakdown.subagentCost}
+              targetTurnIndex={targetTurnIndex}
+              onTargetTurnConsumed={() => setTargetTurnIndex(null)}
             />
-          </Suspense>
-        ) : sessionTab === 'usage' ? (
-          <SessionUsageTab
-            mainLogs={mainLogs}
-            subagentLogsMap={subagentLogsMap}
-            isLoading={logsQuery.isLoading}
-            error={logsQuery.error}
-            usage={usage}
-            codeImpact={codeImpact}
-          />
-        ) : sessionTab === 'advisor' ? (
-          <AdvisorTab
-            turnEndAdvisor={turnEndAdvisor}
-            isLoading={logsQuery.isLoading}
-            error={logsQuery.error}
-          />
-        ) : sessionTab === 'change-surface' ? (
-          <Suspense fallback={<LazyFallback />}>
-            <SessionChangeSurfaceTab
-              repoId={repoId}
-              sessionId={selectedSession.sessionId}
-              teamId={teamId}
-            />
-          </Suspense>
-        ) : sessionTab === 'harness-usage' ? (
-          <Suspense fallback={<LazyFallback />}>
-            <SessionHarnessUsageTab
+          ) : sessionTab === 'bash' ? (
+            <Suspense fallback={<LazyFallback />}>
+              <SessionBashTab
+                mainLogs={mainLogs}
+                subagentLogsMap={subagentLogsMap}
+                pricing={pricing ?? undefined}
+                sessionModel={parsedLogs?.summary.model}
+              />
+            </Suspense>
+          ) : sessionTab === 'charts' ? (
+            <Suspense fallback={<LazyFallback />}>
+              <SessionChartsTab
+                parsedLogs={parsedLogs}
+                subagentLogsMap={subagentLogsMap}
+                agentParentMap={agentParentMap}
+                isLoading={logsQuery.isLoading}
+                error={logsQuery.error}
+                pricing={pricing ?? null}
+                logsData={logsQuery.data}
+                topN={topN}
+                onTopNChange={onTopNChange}
+              />
+            </Suspense>
+          ) : sessionTab === 'usage' ? (
+            <SessionUsageTab
               mainLogs={mainLogs}
               subagentLogsMap={subagentLogsMap}
-              agentParentMap={agentParentMap}
-              workflows={logsQuery.data?.workflows}
+              isLoading={logsQuery.isLoading}
+              error={logsQuery.error}
+              usage={usage}
+              codeImpact={codeImpact}
+            />
+          ) : sessionTab === 'advisor' ? (
+            <AdvisorTab
+              turnEndAdvisor={turnEndAdvisor}
               isLoading={logsQuery.isLoading}
               error={logsQuery.error}
             />
-          </Suspense>
-        ) : sessionTab === 'raw-logs' ? (
-          <RawLogsTab
-            rawLogs={logsQuery.data?.main ?? []}
-            isLoading={logsQuery.isLoading}
-            parsedSession={parsedLogs}
-            pricing={pricing ?? undefined}
-            sessionModel={parsedLogs?.summary.model}
-          />
-        ) : (
-          <SessionInfoTab
-            session={selectedSession}
-            repoUrl={repoUrl}
-            parsedLogs={parsedLogs}
-            isLoading={logsQuery.isLoading}
-            eventCount={logsQuery.data?.main.length}
-            pricing={pricing ?? undefined}
-            codeImpact={codeImpact}
-          />
-        )}
+          ) : sessionTab === 'change-surface' ? (
+            <Suspense fallback={<LazyFallback />}>
+              <SessionChangeSurfaceTab
+                repoId={repoId}
+                sessionId={selectedSession.sessionId}
+                teamId={teamId}
+              />
+            </Suspense>
+          ) : sessionTab === 'harness-usage' ? (
+            <Suspense fallback={<LazyFallback />}>
+              <SessionHarnessUsageTab
+                mainLogs={mainLogs}
+                subagentLogsMap={subagentLogsMap}
+                agentParentMap={agentParentMap}
+                workflows={logsQuery.data?.workflows}
+                isLoading={logsQuery.isLoading}
+                error={logsQuery.error}
+              />
+            </Suspense>
+          ) : sessionTab === 'raw-logs' ? (
+            <RawLogsTab
+              rawLogs={logsQuery.data?.main ?? []}
+              isLoading={logsQuery.isLoading}
+              parsedSession={parsedLogs}
+              pricing={pricing ?? undefined}
+              sessionModel={parsedLogs?.summary.model}
+            />
+          ) : (
+            <SessionInfoTab
+              session={selectedSession}
+              repoUrl={repoUrl}
+              parsedLogs={parsedLogs}
+              isLoading={logsQuery.isLoading}
+              eventCount={logsQuery.data?.main.length}
+              pricing={pricing ?? undefined}
+              codeImpact={codeImpact}
+            />
+          )}
+        </ToolViewProvider>
       </div>
     </>
   );

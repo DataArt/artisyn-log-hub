@@ -14,13 +14,14 @@
  *    totals stay pinned to top-level `message.usage`, per
  *    `docs/knowledgebase/llm-call-math.md`.
  *
- * It also deliberately does NOT reuse `log-parser.ts`'s `SKIP` set (which tracks
- * Read/Edit/Write/Glob/Skill/Agent separately as file accesses) or its
- * missing-result-means-error rule: the ranking population here is every `tool_use` block, and
- * a missing result is `unresolved`, not a failure.
+ * It also deliberately does NOT split calls by Logs section (`toolSection` in
+ * `../tool-calls.ts`): the ranking population here is every `tool_use` block. The outcome rule
+ * itself is shared with Logs (`../tool-outcome.ts`); a missing result is `unresolved` here
+ * and `'missing'` there.
  */
 
 import { isEditWriteTool, type EditWriteToolName } from '../edit-tools';
+import { classifyToolOutcome, MAX_RESULT_TEXT_SCAN } from '../tool-outcome';
 
 type AnyRecord = Record<string, unknown>;
 
@@ -56,47 +57,9 @@ function parseTs(v: unknown): number | null {
 }
 
 // --- Rules mirrored from server/src/logs/tool-stats.ts -----------------------------------
+// The outcome rule (`classifyToolOutcome`, DD-3) lives in `../tool-outcome.ts`, shared with Logs.
 
-export type ToolOutcome = 'success' | 'failure' | 'unresolved';
 export type DurationSource = 'toolUseResult' | 'taskTotal' | 'timestampDelta';
-
-/**
- * Claude Code's own rejection / permission / interruption sentences, lower-cased. Matched
- * narrowly and sentence-initially: a generic `permission denied` match would catch ordinary
- * `Bash` output and turn real tool failures into "unresolved".
- */
-const REJECTION_MARKERS: readonly string[] = [
-  "doesn't want to proceed with this tool use",
-  'doesn’t want to proceed with this tool use',
-  "doesn't want to take this action",
-  'doesn’t want to take this action',
-  'requested permissions to use',
-  'operation rejected by user',
-  'request interrupted by user',
-];
-
-/** Rejection notices are short and sentence-initial; scanning more is wasted work. */
-const MAX_RESULT_TEXT_SCAN = 200;
-
-export function isRejectionText(text: string): boolean {
-  if (text === '') return false;
-  const lower = text.toLowerCase();
-  return REJECTION_MARKERS.some((marker) => lower.includes(marker));
-}
-
-export function classifyToolOutcome(
-  result: {
-    isError: boolean | null;
-    text: string;
-    interrupted?: boolean;
-  } | null,
-): ToolOutcome {
-  if (result === null) return 'unresolved';
-  if (result.interrupted === true) return 'unresolved';
-  if (isRejectionText(result.text)) return 'unresolved';
-  if (result.isError === true) return 'failure';
-  return 'success';
-}
 
 export function resolveToolDuration(inputs: {
   toolUseResult: AnyRecord | null;
@@ -296,6 +259,8 @@ interface ResultRecord {
   text: string;
   resultTs: number | null;
   toolUseResult: AnyRecord | null;
+  /** The result line's top-level `toolDenialKind` (DD-3). */
+  denialKind: string | null;
 }
 
 function emptyTokens(): SessionTokenTotals {
@@ -514,6 +479,7 @@ function walkTranscript(
           text: flattenResultText(b['content']),
           resultTs: parseTs(line['timestamp']),
           toolUseResult,
+          denialKind: asString(line['toolDenialKind']),
         });
       }
     }
@@ -533,6 +499,9 @@ function walkTranscript(
             isError: result.isError,
             text: result.text,
             interrupted: result.toolUseResult?.['interrupted'] === true,
+            ...(result.denialKind !== null
+              ? { denialKind: result.denialKind }
+              : {}),
           },
     );
     const duration = resolveToolDuration({

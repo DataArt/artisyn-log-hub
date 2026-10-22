@@ -1,0 +1,206 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1220" height="1941" viewBox="0 0 1220 1941" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="12">
+<defs><marker id="ar" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#7c3aed"/></marker><linearGradient id="fade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fafafa" stop-opacity="0"/><stop offset="1" stop-color="#fafafa" stop-opacity="1"/></linearGradient></defs>
+<rect width="1220" height="1941" fill="#ffffff"/>
+<rect width="880" height="1106" fill="#18181b" opacity="0.45"/>
+<rect x="30" y="24" width="820" height="1062" rx="8" fill="#ffffff" stroke="#e4e4e7"/>
+<rect x="812" y="38" width="24" height="24" rx="12" fill="#ffffff" stroke="#2563eb"/><text x="824" y="55" font-size="14" fill="#18181b" text-anchor="middle">✕</text>
+<text x="54" y="62" font-size="18" font-weight="600" fill="#18181b">Turn #15 · Step 2 — Tool call details</text>
+<rect x="54" y="76" width="44" height="20" rx="4" fill="#fde68a"/><text x="76" y="90" font-size="11.5" font-weight="700" fill="#b45309" text-anchor="middle" font-family="Consolas, Menlo, monospace">Bash</text>
+<rect x="104" y="76" width="40" height="20" rx="4" fill="#dcfce7"/><text x="124" y="90" font-size="11" fill="#15803d" text-anchor="middle" font-family="Consolas, Menlo, monospace">✓ ok</text>
+<rect x="150" y="76" width="52" height="20" rx="4" fill="#f4f4f5"/><text x="176" y="90" font-size="11" fill="#3f3f46" text-anchor="middle">⏱ 1.4 s</text>
+<text x="212" y="90" fill="#52525b">14:17:38 · step delta <tspan font-weight="600" fill="#18181b">+20k</tspan> tokens · result ≈19.6k tokens</text>
+<text x="54" y="116" font-size="12.5" font-style="italic" fill="#52525b">“Tick 4 plan items, then read the KB articles to update”</text>
+<rect x="54" y="126" width="84" height="18" rx="9" fill="#f4f4f5" stroke="#e4e4e7"/><text x="96" y="139" font-size="10.5" fill="#52525b" text-anchor="middle">timeout 120 s</text>
+<text x="148" y="139" font-size="10.5" fill="#a1a1aa">(run_in_background chip only when set)</text>
+<rect x="54" y="156" width="772" height="28" rx="6" fill="#f8fafc" stroke="#e2e8f0"/>
+<text x="68" y="174" font-size="10" font-weight="700" fill="#71717a" letter-spacing="0.6">WORKING DIR</text>
+<text x="160" y="175" font-family="Consolas, Menlo, monospace" font-size="12"><tspan fill="#18181b">‹repo›</tspan><tspan font-family="Inter, Segoe UI, Arial, sans-serif" font-size="11" fill="#a1a1aa">  (repo root)</tspan></text>
+<text x="814" y="174" font-size="10.5" fill="#a1a1aa" text-anchor="end">lifted from the leading cd</text>
+<rect x="54" y="194" width="772" height="178" rx="6" fill="#ffffff" stroke="#e4e4e7"/>
+<text x="68" y="216" font-size="10" font-weight="700" fill="#71717a" letter-spacing="0.6">FILES</text>
+<text x="112" y="216" font-size="10.5" fill="#a1a1aa">best effort · derived from the bash syntax tree only — nothing executed, nothing guessed from non-bash code</text>
+<rect x="68" y="228" width="62" height="17" rx="4" fill="#ffedd5"/><text x="99" y="240" font-size="10.5" font-weight="600" fill="#c2410c" text-anchor="middle">Changes</text><text x="150" y="240" font-family="Consolas, Menlo, monospace" font-size="11.5"><tspan fill="#71717a">docs/tasks/todo/2026-10-22-client-files-upload/</tspan> <tspan fill="#18181b">impl-plan.md</tspan></text>
+<rect x="68" y="250" width="62" height="17" rx="4" fill="#dcfce7"/><text x="99" y="262" font-size="10.5" font-weight="600" fill="#15803d" text-anchor="middle">Reads</text><text x="150" y="262" font-family="Consolas, Menlo, monospace" font-size="11.5"><tspan fill="#71717a">docs/kb/components/server/</tspan> <tspan fill="#18181b">index.md, contacts*.md, clients*.md, database-module.md</tspan></text>
+<text x="150" y="281" font-family="Consolas, Menlo, monospace" font-size="11.5"><tspan fill="#71717a">docs/kb/components/</tspan> <tspan fill="#18181b">server</tspan></text>
+<text x="150" y="300" font-family="Consolas, Menlo, monospace" font-size="11.5"><tspan fill="#71717a">docs/kb/components/client/</tspan> <tspan fill="#18181b">pages-clients.md, api-layer.md</tspan></text>
+<text x="150" y="319" font-family="Consolas, Menlo, monospace" font-size="11.5"><tspan fill="#71717a">docs/kb/business/</tspan> <tspan fill="#18181b">considerations.md</tspan></text>
+<text x="150" y="338" font-family="Consolas, Menlo, monospace" font-size="11.5"><tspan fill="#71717a">docs/kb/</tspan> <tspan fill="#18181b">log.md</tspan></text>
+<text x="68" y="362" font-size="10.5" fill="#a1a1aa">no Runs group (empty groups hidden) · "$P" resolved from P="…" · paths after "cd docs/kb" resolved against it · &gt; 3 files grouped by directory</text>
+<rect x="54" y="386" width="772" height="390" rx="6" fill="#fafafa" stroke="#e4e4e7"/>
+<text x="68" y="409" font-size="10" font-weight="700" fill="#71717a" letter-spacing="0.6">COMMAND</text>
+<rect x="140" y="396" width="152" height="22" rx="5" fill="#f4f4f5" stroke="#e4e4e7"/>
+<rect x="142" y="398" width="74" height="18" rx="4" fill="#ffffff" stroke="#d4d4d8"/>
+<text x="179" y="411" font-size="11" font-weight="600" fill="#18181b" text-anchor="middle">Formatted</text>
+<text x="254" y="411" font-size="11" fill="#71717a" text-anchor="middle">Raw</text>
+<text x="304" y="411" font-size="11" fill="#a1a1aa">15 lines (was 1)</text>
+<rect x="716" y="396" width="98" height="22" rx="4" fill="#f4f4f5"/>
+<text x="765" y="411" font-size="11" fill="#52525b" text-anchor="middle">⧉ Copy original</text>
+<rect x="55" y="420" width="34" height="314" fill="#f4f4f5"/>
+<line x1="89" y1="420" x2="89" y2="734" stroke="#e4e4e7"/>
+<g font-family="Consolas, Menlo, monospace" font-size="12.5" xml:space="preserve" style="white-space:pre"><text x="82" y="436" font-size="11" fill="#a1a1aa" text-anchor="end">1</text>
+<text x="100" y="436" fill="#18181b"><tspan fill="#9333ea">P</tspan>=<tspan fill="#15803d">"docs/tasks/todo/2026-10-22-client-files-upload/impl-plan.md"</tspan></text>
+<text x="82" y="456" font-size="11" fill="#a1a1aa" text-anchor="end">2</text>
+<text x="100" y="456" fill="#18181b"><tspan fill="#2563eb" font-weight="700">for</tspan> <tspan fill="#3f3f46">i</tspan> <tspan fill="#2563eb" font-weight="700">in</tspan> <tspan fill="#9333ea">$(seq 4)</tspan><tspan fill="#2563eb" font-weight="700">;</tspan> <tspan fill="#2563eb" font-weight="700">do</tspan></text>
+<text x="82" y="476" font-size="11" fill="#a1a1aa" text-anchor="end">3</text>
+<text x="100" y="476" fill="#18181b">&#160;&#160;<tspan fill="#18181b" font-weight="700">sed</tspan> <tspan fill="#3f3f46">-i</tspan> <tspan fill="#15803d">'0,/^- \[ \]/s//- [x]/'</tspan> <tspan fill="#15803d">"$P"</tspan></text>
+<text x="82" y="496" font-size="11" fill="#a1a1aa" text-anchor="end">4</text>
+<text x="100" y="496" fill="#18181b"><tspan fill="#2563eb" font-weight="700">done</tspan></text>
+<text x="82" y="516" font-size="11" fill="#a1a1aa" text-anchor="end">5</text>
+<text x="100" y="516" fill="#18181b"><tspan fill="#18181b" font-weight="700">cd</tspan> <tspan fill="#3f3f46">docs/kb</tspan></text>
+<text x="82" y="536" font-size="11" fill="#a1a1aa" text-anchor="end">6</text>
+<text x="100" y="536" fill="#18181b"><tspan fill="#18181b" font-weight="700">cat</tspan> <tspan fill="#3f3f46">components/server/index.md</tspan></text>
+<text x="82" y="556" font-size="11" fill="#a1a1aa" text-anchor="end">7</text>
+<text x="100" y="556" fill="#18181b"><tspan fill="#18181b" font-weight="700">ls</tspan> <tspan fill="#3f3f46">components/server</tspan></text>
+<text x="82" y="576" font-size="11" fill="#a1a1aa" text-anchor="end">8</text>
+<text x="100" y="576" fill="#18181b"><tspan fill="#18181b" font-weight="700">cat</tspan> <tspan fill="#3f3f46">components/server/contacts*.md</tspan> <tspan fill="#ea580c" font-weight="700">2&gt;</tspan><tspan fill="#3f3f46">/dev/null</tspan> <tspan fill="#2563eb" font-weight="700">||</tspan></text>
+<text x="82" y="596" font-size="11" fill="#a1a1aa" text-anchor="end">9</text>
+<text x="100" y="596" fill="#18181b">&#160;&#160;<tspan fill="#18181b" font-weight="700">cat</tspan> <tspan fill="#3f3f46">components/server/clients*.md</tspan> <tspan fill="#2563eb" font-weight="700">|</tspan> <tspan fill="#18181b" font-weight="700">head</tspan> <tspan fill="#3f3f46">-40</tspan></text>
+<text x="82" y="616" font-size="11" fill="#a1a1aa" text-anchor="end">10</text>
+<text x="100" y="616" fill="#18181b"><tspan fill="#18181b" font-weight="700">cat</tspan> <tspan fill="#3f3f46">components/server/database-module.md</tspan></text>
+<text x="82" y="636" font-size="11" fill="#a1a1aa" text-anchor="end">11</text>
+<text x="100" y="636" fill="#18181b"><tspan fill="#18181b" font-weight="700">sed</tspan> <tspan fill="#3f3f46">-n</tspan> <tspan fill="#3f3f46">1,30p</tspan> <tspan fill="#3f3f46">components/client/pages-clients.md</tspan></text>
+<text x="82" y="656" font-size="11" fill="#a1a1aa" text-anchor="end">12</text>
+<text x="100" y="656" fill="#18181b"><tspan fill="#18181b" font-weight="700">cat</tspan> <tspan fill="#3f3f46">components/client/api-layer.md</tspan></text>
+<text x="82" y="676" font-size="11" fill="#a1a1aa" text-anchor="end">13</text>
+<text x="100" y="676" fill="#18181b"><tspan fill="#18181b" font-weight="700">sed</tspan> <tspan fill="#3f3f46">-n</tspan> <tspan fill="#3f3f46">1,15p</tspan> <tspan fill="#3f3f46">business/considerations.md</tspan></text>
+<text x="82" y="696" font-size="11" fill="#a1a1aa" text-anchor="end">14</text>
+<text x="100" y="696" fill="#18181b"><tspan fill="#18181b" font-weight="700">tail</tspan> <tspan fill="#3f3f46">-5</tspan> <tspan fill="#3f3f46">business/considerations.md</tspan></text>
+<text x="82" y="716" font-size="11" fill="#a1a1aa" text-anchor="end">15</text>
+<text x="100" y="716" fill="#18181b"><tspan fill="#18181b" font-weight="700">sed</tspan> <tspan fill="#3f3f46">-n</tspan> <tspan fill="#3f3f46">1,25p</tspan> <tspan fill="#3f3f46">log.md</tspan></text></g>
+<text x="474" y="576" font-size="11" fill="#7c3aed">← operator ends the line</text>
+<text x="474" y="596" font-size="11" fill="#7c3aed">← continuation indented</text>
+<text x="274" y="456" font-size="11" fill="#7c3aed">← one-line loop expanded</text>
+<line x1="54" y1="746" x2="826" y2="746" stroke="#e4e4e7"/>
+<g font-size="10.5" fill="#71717a"><text x="68" y="762">only whitespace changed · tint:</text><rect x="236" y="753" width="10" height="10" fill="#2563eb"/><text x="250" y="762">operators / keywords</text><rect x="366" y="753" width="10" height="10" fill="#ea580c"/><text x="380" y="762">redirects</text><rect x="440" y="753" width="10" height="10" fill="#15803d"/><text x="454" y="762">strings</text><rect x="504" y="753" width="10" height="10" fill="#9333ea"/><text x="518" y="762">variables</text></g>
+<rect x="54" y="790" width="772" height="246" rx="6" fill="#fafafa" stroke="#e4e4e7"/>
+<text x="68" y="812" font-size="10" font-weight="700" fill="#71717a" letter-spacing="0.6">OUTPUT</text>
+<text x="124" y="812" font-size="11" fill="#a1a1aa">1 214 lines · 78.2 KB · ≈19.6k tokens</text>
+<rect x="764" y="799" width="50" height="20" rx="4" fill="#f4f4f5"/><text x="789" y="813" font-size="11" fill="#52525b" text-anchor="middle">⧉ copy</text>
+<g font-family="Consolas, Menlo, monospace" font-size="12" fill="#3f3f46" xml:space="preserve" style="white-space:pre"><text x="68" y="838">---</text><text x="68" y="858">type: Index</text><text x="68" y="878">title: Server components</text><text x="68" y="898">---</text><text x="68" y="918">* [Auth](auth.md) - session cookie, AuthGuard, /api/auth/*</text><text x="68" y="938">* [Clients &amp; Contacts](clients.md) - CRUD, archive, CSV export</text><text x="68" y="958">* [Database Module](database-module.md) - drizzle schema, migrations</text></g>
+<rect x="55" y="928" width="770" height="36" fill="url(#fade)"/>
+<rect x="816" y="826" width="4" height="140" rx="2" fill="#e4e4e7"/><rect x="816" y="826" width="4" height="30" rx="2" fill="#a1a1aa"/>
+<text x="68" y="986" font-size="12" fill="#2563eb" text-decoration="underline">▾ Show all (1 214 lines, ≈19.6k tokens)</text>
+<text x="68" y="1004" font-size="10.5" fill="#a1a1aa">showing the first 200 lines / 20 KB · block scrolls, capped at ~60% of the viewport height</text>
+<text x="54" y="1066" font-size="11" fill="#71717a">Token sizes are estimated from text length (chars ÷ chars-per-token, same as Context Breakdown).</text>
+<text x="30" y="1130" font-size="15" font-weight="700" fill="#18181b">Same Bash view — heredocs and inline scripts (real sample cmd-18, 5 855 chars / 74 lines)</text>
+<rect x="30" y="1144" width="820" height="773" rx="8" fill="#ffffff" stroke="#e4e4e7"/>
+<rect x="54" y="1160" width="44" height="20" rx="4" fill="#fde68a"/><text x="76" y="1174" font-size="11.5" font-weight="700" fill="#b45309" text-anchor="middle" font-family="Consolas, Menlo, monospace">Bash</text>
+<rect x="104" y="1160" width="40" height="20" rx="4" fill="#dcfce7"/><text x="124" y="1174" font-size="11" fill="#15803d" text-anchor="middle" font-family="Consolas, Menlo, monospace">✓ ok</text>
+<rect x="150" y="1160" width="52" height="20" rx="4" fill="#f4f4f5"/><text x="176" y="1174" font-size="11" fill="#3f3f46" text-anchor="middle">⏱ 0.6 s</text>
+<text x="212" y="1174" fill="#52525b">header, toggle and output as above (output omitted here)</text>
+<rect x="54" y="1192" width="772" height="28" rx="6" fill="#f8fafc" stroke="#e2e8f0"/>
+<text x="68" y="1210" font-size="10" font-weight="700" fill="#71717a" letter-spacing="0.6">WORKING DIR</text>
+<text x="160" y="1211" font-family="Consolas, Menlo, monospace" font-size="12"><tspan fill="#18181b">docs/kb</tspan></text>
+<text x="814" y="1210" font-size="10.5" fill="#a1a1aa" text-anchor="end">lifted from the leading cd</text>
+<rect x="54" y="1230" width="772" height="128" rx="6" fill="#ffffff" stroke="#e4e4e7"/>
+<text x="68" y="1252" font-size="10" font-weight="700" fill="#71717a" letter-spacing="0.6">FILES</text>
+<text x="112" y="1252" font-size="10.5" fill="#a1a1aa">best effort · derived from the bash syntax tree only — nothing executed, nothing guessed from non-bash code</text>
+<rect x="68" y="1264" width="62" height="17" rx="4" fill="#ffedd5"/><text x="99" y="1276" font-size="10.5" font-weight="600" fill="#c2410c" text-anchor="middle">Changes</text><text x="150" y="1276" font-family="Consolas, Menlo, monospace" font-size="11.5"><tspan fill="#71717a">components/server/</tspan> <tspan fill="#18181b">client-files.md</tspan></text>
+<rect x="68" y="1286" width="62" height="17" rx="4" fill="#ede9fe"/><text x="99" y="1298" font-size="10.5" font-weight="600" fill="#6d28d9" text-anchor="middle">Runs</text><text x="150" y="1298" font-family="Consolas, Menlo, monospace" font-size="11.5" fill="#18181b">python, git diff, git status</text>
+<rect x="68" y="1308" width="62" height="17" rx="4" fill="#f1f5f9"/><text x="99" y="1320" font-size="10.5" font-weight="600" fill="#475569" text-anchor="middle">Inline</text><text x="150" y="1320" font-size="11.5" fill="#475569">inline python script, 24 lines — not analysed</text>
+<text x="150" y="1340" font-size="11.5" fill="#475569">inline python script, 9 lines — not analysed</text>
+<rect x="54" y="1372" width="772" height="503" rx="6" fill="#fafafa" stroke="#e4e4e7"/>
+<text x="68" y="1395" font-size="10" font-weight="700" fill="#71717a" letter-spacing="0.6">COMMAND</text>
+<rect x="140" y="1382" width="152" height="22" rx="5" fill="#f4f4f5" stroke="#e4e4e7"/>
+<rect x="142" y="1384" width="74" height="18" rx="4" fill="#ffffff" stroke="#d4d4d8"/>
+<text x="179" y="1397" font-size="11" font-weight="600" fill="#18181b" text-anchor="middle">Formatted</text>
+<text x="254" y="1397" font-size="11" fill="#71717a" text-anchor="middle">Raw</text>
+<text x="304" y="1397" font-size="11" fill="#a1a1aa">13 lines (was 74)</text>
+<rect x="716" y="1382" width="98" height="22" rx="4" fill="#f4f4f5"/>
+<text x="765" y="1397" font-size="11" fill="#52525b" text-anchor="middle">⧉ Copy original</text>
+<rect x="55" y="1406" width="34" height="261" fill="#f4f4f5"/>
+<line x1="89" y1="1406" x2="89" y2="1667" stroke="#e4e4e7"/>
+<g font-family="Consolas, Menlo, monospace" font-size="12" xml:space="preserve" style="white-space:pre"><text x="82" y="1422" font-size="11" fill="#a1a1aa" text-anchor="end">1</text>
+<text x="100" y="1422" fill="#18181b"><tspan fill="#9333ea">TS</tspan>=<tspan fill="#15803d">"2026-10-22T17:15:00Z"</tspan></text>
+<text x="82" y="1441" font-size="11" fill="#a1a1aa" text-anchor="end">2</text>
+<text x="100" y="1441" fill="#18181b"><tspan fill="#9333ea">GEN</tspan>=<tspan fill="#15803d">"generated: { by: claude-code/claude-opus-5-5, at: $TS }"</tspan></text>
+<text x="82" y="1460" font-size="11" fill="#a1a1aa" text-anchor="end">3</text>
+<text x="100" y="1460" fill="#18181b"><tspan fill="#18181b" font-weight="700">cat</tspan> <tspan fill="#ea580c" font-weight="700">&gt;</tspan> <tspan fill="#3f3f46">components/server/client-files.md</tspan> <tspan fill="#ea580c" font-weight="700">&lt;&lt;</tspan><tspan fill="#3f3f46">EOF</tspan></text>
+<text x="82" y="1479" font-size="11" fill="#a1a1aa" text-anchor="end">4</text>
+<rect x="94" y="1465" width="722" height="19" fill="#fffbeb"/><rect x="94" y="1465" width="3" height="19" fill="#f59e0b"/>
+<text x="100" y="1479" fill="#b45309" font-style="italic"># ▼ block 1: 33 lines, shown below</text>
+<text x="82" y="1498" font-size="11" fill="#a1a1aa" text-anchor="end">5</text>
+<text x="100" y="1498" fill="#ea580c" font-weight="700">EOF</text>
+<text x="82" y="1517" font-size="11" fill="#a1a1aa" text-anchor="end">6</text>
+<text x="100" y="1517" fill="#18181b"><tspan fill="#18181b" font-weight="700">python</tspan> <tspan fill="#3f3f46">-</tspan> <tspan fill="#ea580c" font-weight="700">&lt;&lt;</tspan><tspan fill="#3f3f46">EOF</tspan></text>
+<text x="82" y="1536" font-size="11" fill="#a1a1aa" text-anchor="end">7</text>
+<rect x="94" y="1522" width="722" height="19" fill="#fffbeb"/><rect x="94" y="1522" width="3" height="19" fill="#f59e0b"/>
+<text x="100" y="1536" fill="#b45309" font-style="italic"># ▼ block 2: 24 lines, shown below</text>
+<text x="82" y="1555" font-size="11" fill="#a1a1aa" text-anchor="end">8</text>
+<text x="100" y="1555" fill="#ea580c" font-weight="700">EOF</text>
+<text x="82" y="1574" font-size="11" fill="#a1a1aa" text-anchor="end">9</text>
+<text x="100" y="1574" fill="#18181b"><tspan fill="#18181b" font-weight="700">python</tspan> <tspan fill="#3f3f46">-</tspan> <tspan fill="#ea580c" font-weight="700">&lt;&lt;</tspan><tspan fill="#15803d">'EOF'</tspan></text>
+<text x="82" y="1593" font-size="11" fill="#a1a1aa" text-anchor="end">10</text>
+<rect x="94" y="1579" width="722" height="19" fill="#fffbeb"/><rect x="94" y="1579" width="3" height="19" fill="#f59e0b"/>
+<text x="100" y="1593" fill="#b45309" font-style="italic"># ▼ block 3: 9 lines, shown below</text>
+<text x="82" y="1612" font-size="11" fill="#a1a1aa" text-anchor="end">11</text>
+<text x="100" y="1612" fill="#ea580c" font-weight="700">EOF</text>
+<text x="82" y="1631" font-size="11" fill="#a1a1aa" text-anchor="end">12</text>
+<text x="100" y="1631" fill="#18181b"><tspan fill="#18181b" font-weight="700">git</tspan> <tspan fill="#3f3f46">diff</tspan> <tspan fill="#3f3f46">--stat</tspan> <tspan fill="#3f3f46">.</tspan></text>
+<text x="82" y="1650" font-size="11" fill="#a1a1aa" text-anchor="end">13</text>
+<text x="100" y="1650" fill="#18181b"><tspan fill="#18181b" font-weight="700">git</tspan> <tspan fill="#3f3f46">status</tspan> <tspan fill="#3f3f46">--short</tspan> <tspan fill="#3f3f46">.</tspan></text></g>
+<rect x="64" y="1675" width="752" height="22" rx="4" fill="#ffffff" stroke="#fcd34d"/>
+<text x="76" y="1690" font-size="11.5" fill="#92400e">▸ <tspan font-weight="600">block 1</tspan> <tspan font-family="Consolas, Menlo, monospace" fill="#3f3f46">cat &gt; components/server/client-files.md &lt;&lt;EOF</tspan> <tspan fill="#a1a1aa">· 33 lines</tspan></text>
+<rect x="64" y="1703" width="752" height="22" rx="4" fill="#ffffff" stroke="#fcd34d"/>
+<text x="76" y="1718" font-size="11.5" fill="#92400e">▸ <tspan font-weight="600">block 2</tspan> <tspan font-family="Consolas, Menlo, monospace" fill="#3f3f46">python - &lt;&lt;EOF</tspan> <tspan fill="#a1a1aa">· 24 lines</tspan></text>
+<rect x="64" y="1731" width="752" height="96" rx="4" fill="#ffffff" stroke="#fcd34d"/>
+<text x="76" y="1746" font-size="11.5" fill="#92400e">▾ <tspan font-weight="600">block 3</tspan> <tspan font-family="Consolas, Menlo, monospace" fill="#3f3f46">python - &lt;&lt;'EOF'</tspan> <tspan fill="#a1a1aa">· 9 lines · verbatim, never re-indented</tspan></text>
+<text x="84" y="1767" font-family="Consolas, Menlo, monospace" font-size="11" fill="#3f3f46" xml:space="preserve" style="white-space:pre">p='log.md'; s=open(p,encoding='utf8').read()</text>
+<text x="84" y="1783" font-family="Consolas, Menlo, monospace" font-size="11" fill="#3f3f46" xml:space="preserve" style="white-space:pre">entry="""## 2026-10-22 (Client files upload, Phase 1)</text>
+<text x="84" y="1799" font-family="Consolas, Menlo, monospace" font-size="11" fill="#3f3f46" xml:space="preserve" style="white-space:pre">* **Server components**: new [Client Files](/components/server/client-files.md) (list / …</text>
+<text x="84" y="1815" font-family="Consolas, Menlo, monospace" font-size="11" fill="#a1a1aa" xml:space="preserve" style="white-space:pre">… 6 more lines</text>
+<line x1="54" y1="1845" x2="826" y2="1845" stroke="#e4e4e7"/>
+<g font-size="10.5" fill="#71717a"><text x="68" y="1861">only whitespace changed · tint:</text><rect x="236" y="1852" width="10" height="10" fill="#2563eb"/><text x="250" y="1861">operators / keywords</text><rect x="366" y="1852" width="10" height="10" fill="#ea580c"/><text x="380" y="1861">redirects</text><rect x="440" y="1852" width="10" height="10" fill="#15803d"/><text x="454" y="1861">strings</text><rect x="504" y="1852" width="10" height="10" fill="#9333ea"/><text x="518" y="1861">variables</text></g>
+<g font-size="12" fill="#5b21b6"><rect x="890" y="24" width="314" height="1893" rx="6" fill="#faf5ff" stroke="#ddd6fe"/>
+<text x="906" y="50" font-size="13" font-weight="700">Bash step — details modal</text>
+<text x="906" y="82" font-weight="600">A  Header</text>
+<text x="906" y="100" fill="#6d28d9">Tool badge, status (✓ ok / ✗ error /</text>
+<text x="906" y="116" fill="#6d28d9">⏸ interrupted from the tool result),</text>
+<text x="906" y="132" fill="#6d28d9">duration (tool_use → tool_result),</text>
+<text x="906" y="148" fill="#6d28d9">time, step delta (FR-2a rule), result</text>
+<text x="906" y="164" fill="#6d28d9">≈tokens. description = caption;</text>
+<text x="906" y="180" fill="#6d28d9">timeout / run_in_background chips</text>
+<text x="906" y="196" fill="#6d28d9">only when present.</text>
+<text x="906" y="228" font-weight="600">B  Working dir</text>
+<text x="906" y="246" fill="#6d28d9">A leading `cd &lt;literal&gt;` is lifted out</text>
+<text x="906" y="262" fill="#6d28d9">of the script. The session repo-root</text>
+<text x="906" y="278" fill="#6d28d9">prefix is shown repo-relative</text>
+<text x="906" y="294" fill="#6d28d9">(‹repo› = the repo root itself).</text>
+<text x="906" y="326" font-weight="600">C  Files — parsed</text>
+<text x="906" y="344" fill="#6d28d9">Changes / Reads / Runs from syntax-</text>
+<text x="906" y="360" fill="#6d28d9">tree nodes only: redirect targets and</text>
+<text x="906" y="376" fill="#6d28d9">literal args of known commands; any</text>
+<text x="906" y="392" fill="#6d28d9">other command → Runs. VAR= and for-</text>
+<text x="906" y="408" fill="#6d28d9">words substituted, cd tracked, non-</text>
+<text x="906" y="424" fill="#6d28d9">literal args skipped. &gt; 3 files grouped</text>
+<text x="906" y="440" fill="#6d28d9">by directory; empty groups hidden.</text>
+<text x="906" y="472" font-weight="600">D  Formatted script (default)</text>
+<text x="906" y="490" fill="#6d28d9">Original tokens, only whitespace</text>
+<text x="906" y="506" fill="#6d28d9">changed: one statement per line; a</text>
+<text x="906" y="522" fill="#6d28d9">long &amp;&amp;/||/| chain breaks AFTER the</text>
+<text x="906" y="538" fill="#6d28d9">operator, continuation indented 2;</text>
+<text x="906" y="554" fill="#6d28d9">loop / if bodies indented. Strings,</text>
+<text x="906" y="570" fill="#6d28d9">$( ), heredocs copied verbatim.</text>
+<text x="906" y="602" font-weight="600">E  Formatted / Raw + Copy original</text>
+<text x="906" y="620" fill="#6d28d9">Raw = stored text (repo-relative</text>
+<text x="906" y="636" fill="#6d28d9">paths). Copy = unmodified original.</text>
+<text x="906" y="652" fill="#6d28d9">Parse failure / PowerShell → raw text</text>
+<text x="906" y="668" fill="#6d28d9">only: no toggle, no error banner.</text>
+<text x="906" y="700" font-weight="600">F  Output</text>
+<text x="906" y="718" fill="#6d28d9">Preformatted, existing truncation +</text>
+<text x="906" y="734" fill="#6d28d9">"Show all" + copy, height-capped and</text>
+<text x="906" y="750" fill="#6d28d9">scrollable. No result → muted</text>
+<text x="906" y="766" fill="#6d28d9">"Output not captured".</text>
+<text x="906" y="798" font-weight="600">G  Heredoc bodies &gt; 8 lines</text>
+<text x="906" y="816" fill="#6d28d9">Folded into "block N" (marker line</text>
+<text x="906" y="832" fill="#6d28d9">left in the script), expandable,</text>
+<text x="906" y="848" fill="#6d28d9">verbatim. Inline interpreter scripts:</text>
+<text x="906" y="864" fill="#6d28d9">"inline python script, N lines —</text>
+<text x="906" y="880" fill="#6d28d9">not analysed". Nothing guessed.</text>
+<text x="906" y="912" font-weight="600">H  Close</text>
+<text x="906" y="930" fill="#6d28d9">✕, Esc or overlay click; chart keeps</text>
+<text x="906" y="946" fill="#6d28d9">expanded turns and scroll position.</text>
+<text x="906" y="962" fill="#6d28d9">Parser WASM loads lazily on the first</text>
+<text x="906" y="978" fill="#6d28d9">Bash view (not in the main bundle).</text></g>
+<g stroke="#7c3aed" stroke-width="1.2" stroke-dasharray="4 3" fill="none"><line x1="890" y1="78" x2="206" y2="72" marker-end="url(#ar)"/><line x1="890" y1="224" x2="828" y2="170" marker-end="url(#ar)"/><line x1="890" y1="322" x2="828" y2="224" marker-end="url(#ar)"/><line x1="890" y1="468" x2="600" y2="572" marker-end="url(#ar)"/><line x1="890" y1="598" x2="828" y2="407" marker-end="url(#ar)"/><line x1="890" y1="696" x2="828" y2="812" marker-end="url(#ar)"/><line x1="890" y1="794" x2="828" y2="1475" marker-end="url(#ar)"/></g>
+</svg>

@@ -106,12 +106,24 @@ const HANDLED_EVENTS = new Set([
         event.tool_name = input.tool_name || null;
         event.tool_input = input.tool_input || null;
         event.error = input.error || input.tool_result || '';
+        // Call identity (hook 2.24.0+): lets the viewer join the failure to its exact tool call
+        // instead of matching by name + input. `null` on Claude Code versions that do not send it.
+        event.tool_use_id = input.tool_use_id || null;
         break;
 
       case 'PermissionRequest':
-      case 'PermissionDenied':
+        // Claude Code sends no tool_use_id here, so the viewer joins requests by name + input.
         event.tool_name = input.tool_name || null;
         event.tool_input = input.tool_input || null;
+        break;
+
+      case 'PermissionDenied':
+        // Fires only for auto-mode classifier denials. Hook 2.24.0+ also records the call
+        // identity and the classifier's reason; both are `null` when Claude Code omits them.
+        event.tool_name = input.tool_name || null;
+        event.tool_input = input.tool_input || null;
+        event.tool_use_id = input.tool_use_id || null;
+        event.reason = input.reason || null;
         break;
 
       case 'SubagentStart':

@@ -13,6 +13,10 @@ export default defineConfig({
       '@': path.resolve(dirname, 'src/viewer'),
     },
   },
+  // web-tree-sitter loads its own .wasm via import.meta.url; pre-bundling breaks that path.
+  optimizeDeps: {
+    exclude: ['web-tree-sitter'],
+  },
   build: {
     outDir: 'dist',
     emptyOutDir: true,

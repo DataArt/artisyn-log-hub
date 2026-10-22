@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { formatCompact } from './log-parser';
 import { DetailTooltip } from '../../../components/DetailTooltip';
 import { DefinitionTooltip } from '../../../components/DefinitionTooltip';
@@ -9,15 +9,29 @@ import {
   shortenPath,
   SectionHeader,
 } from './prompt-turn-helpers';
-import type { SkillInvocation } from './types';
+import { StatusBadge, StatusMark } from './tool-call-view/StatusBadge';
+import type { SkillInvocation, ToolCallDetail } from './types';
 
 interface Props {
   skills: SkillInvocation[];
   charsPerToken?: number;
+  /** The calls each skill's `toolUseId` is resolved in (`allToolCalls`); rows without one are not clickable (DD-21). */
+  calls?: ToolCallDetail[];
+  onOpenCall?: (call: ToolCallDetail) => void;
 }
 
-export function PromptTurnSkillsSection({ skills, charsPerToken }: Props) {
+export function PromptTurnSkillsSection({
+  skills,
+  charsPerToken,
+  calls,
+  onOpenCall,
+}: Props) {
   const [skillsOpen, setSkillsOpen] = useState(false);
+  const callsById = useMemo(() => {
+    const map = new Map<string, ToolCallDetail>();
+    for (const c of calls ?? []) if (c.id) map.set(c.id, c);
+    return map;
+  }, [calls]);
 
   if (skills.length === 0) return null;
 
@@ -38,8 +52,24 @@ export function PromptTurnSkillsSection({ skills, charsPerToken }: Props) {
                 const { display, full } = skill.path
                   ? shortenPath(skill.path)
                   : { display: skill.name, full: skill.name };
+                const call = skill.toolUseId
+                  ? callsById.get(skill.toolUseId)
+                  : undefined;
                 return (
-                  <tr key={i} className="transition-colors hover:bg-muted/30">
+                  <tr
+                    key={i}
+                    className={cn(
+                      'transition-colors',
+                      call && onOpenCall
+                        ? 'cursor-pointer hover:bg-muted/40'
+                        : 'hover:bg-muted/30',
+                    )}
+                    onClick={
+                      call && onOpenCall ? () => onOpenCall(call) : undefined
+                    }
+                    data-testid="skill-row"
+                    data-tool-use-id={skill.toolUseId}
+                  >
                     <td className="w-px py-0.5 pr-2 align-middle whitespace-nowrap">
                       <span className="inline-block shrink-0 rounded px-2 py-1 font-mono text-xs font-bold leading-none bg-indigo-500/20 text-indigo-700 dark:text-indigo-300">
                         skill
@@ -67,6 +97,10 @@ export function PromptTurnSkillsSection({ skills, charsPerToken }: Props) {
                       )}
                     </td>
                     <td className="py-0.5 align-middle font-mono text-sm text-foreground">
+                      <StatusMark status={skill.status} />
+                      {(skill.status === 'error' ||
+                        skill.status === 'rejected') &&
+                        ' '}
                       {skill.definition ? (
                         <DefinitionTooltip
                           rows={buildSkillDefinitionRows(
@@ -83,6 +117,16 @@ export function PromptTurnSkillsSection({ skills, charsPerToken }: Props) {
                         >
                           {display}
                         </span>
+                      )}
+                      {call && (
+                        <StatusBadge
+                          call={{
+                            status: 'success',
+                            permissionRequested: call.permissionRequested,
+                            permissionDenied: call.permissionDenied,
+                          }}
+                          className="ml-1.5 align-middle"
+                        />
                       )}
                     </td>
                   </tr>

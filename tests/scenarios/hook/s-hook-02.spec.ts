@@ -214,6 +214,46 @@ test('@S-HOOK-02 the hook repairs torn NDJSON byte-for-byte and keeps secrets ou
       expect(byTool('Edit').tool_input).toEqual({ file_path: file, old_string: 'a', new_string: 'b' });
     });
 
+    await test.step('8a. PostToolUseFailure / PermissionDenied: tool_use_id (and the denial reason) are recorded when Claude Code sends them, null when it does not (DD-25)', async () => {
+      const send = (event: string, command: string, extra: object) =>
+        runScript(
+          toolDir,
+          'lifecycle-hook.js',
+          { hook_event_name: event, session_id: cur, cwd: repo, tool_name: 'Bash', tool_input: { command }, ...extra },
+          { home },
+        );
+      expect((await send('PostToolUseFailure', 'fail-with-id', { tool_use_id: 'tu-fail', error: 'exit 1' })).code).toBe(0);
+      expect((await send('PostToolUseFailure', 'fail-no-id', { error: 'exit 2' })).code).toBe(0);
+      expect((await send('PermissionDenied', 'deny-with-id', { tool_use_id: 'tu-deny', reason: 'classifier: destructive' })).code).toBe(0);
+      expect((await send('PermissionDenied', 'deny-no-id', {})).code).toBe(0);
+
+      const events = ndjsonLines(fs.readFileSync(path.join(telemetry, `${cur}.jsonl`), 'utf8'));
+      const byCommand = (name: string, command: string) => {
+        const found = events.filter(
+          (e) => e.hook_event_name === name && isRecord(e.tool_input) && e.tool_input.command === command,
+        );
+        expect(found, `${name} ${command}`).toHaveLength(1);
+        return found[0];
+      };
+      const failWithId = byCommand('PostToolUseFailure', 'fail-with-id');
+      expect(failWithId.tool_use_id).toBe('tu-fail');
+      expect(failWithId.error).toBe('exit 1');
+      expect(byCommand('PostToolUseFailure', 'fail-no-id').tool_use_id).toBeNull();
+      const denyWithId = byCommand('PermissionDenied', 'deny-with-id');
+      expect(denyWithId.tool_use_id).toBe('tu-deny');
+      expect(denyWithId.reason).toBe('classifier: destructive');
+      const denyNoId = byCommand('PermissionDenied', 'deny-no-id');
+      expect(denyNoId.tool_use_id).toBeNull();
+      expect(denyNoId.reason).toBeNull();
+      // PermissionRequest stays as it was: Claude Code sends no id there, so the hook adds none.
+      expect((await send('PermissionRequest', 'ask', {})).code).toBe(0);
+      const ask = ndjsonLines(fs.readFileSync(path.join(telemetry, `${cur}.jsonl`), 'utf8')).find(
+        (e) => e.hook_event_name === 'PermissionRequest',
+      );
+      expect(ask, 'PermissionRequest record').toBeTruthy();
+      expect(ask!.tool_use_id).toBeUndefined();
+    });
+
     await test.step('9. the local config never reaches telemetry or any uploaded body', async () => {
       hub!.requests.length = 0;
       expect((await runHook(toolDir, { hook_event_name: 'Stop', session_id: cur, cwd: repo }, { home })).code).toBe(0);

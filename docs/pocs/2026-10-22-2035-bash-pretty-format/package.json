@@ -1,0 +1,16 @@
+{
+  "name": "poc-bash-pretty-format",
+  "private": true,
+  "description": "PoC: readable rendering of Claude Code Bash tool commands",
+  "type": "module",
+  "scripts": {
+    "examples": "node format.mjs"
+  },
+  "dependencies": {
+    "tree-sitter-bash": "^0.25.1",
+    "web-tree-sitter": "^0.27.1"
+  },
+  "devDependencies": {
+    "@wasm-fmt/shfmt": "^0.2.7"
+  }
+}

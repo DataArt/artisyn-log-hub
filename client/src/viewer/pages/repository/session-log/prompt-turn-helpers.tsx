@@ -9,6 +9,9 @@ import {
   resolveCharsPerToken,
 } from './log-parser';
 import { DetailTooltip } from '../../../components/DetailTooltip';
+import { StatusBadge, StatusMark } from './tool-call-view/StatusBadge';
+import { useToolView } from './tool-call-view/ToolViewContext';
+import { toRepoRelative } from '../../../lib/bash-view/display-paths';
 import type { DetailRow } from '../../../components/DetailTooltip';
 import type { ModelPricingMap } from '../../../../models/pricing';
 import { formatCost } from '../../../lib/format';
@@ -194,7 +197,20 @@ export function SectionHeader({
   );
 }
 
-export function FileRow({ file }: { file: FileAccess }) {
+/**
+ * One Files-section row (DD-21): the ✗ / ⊘ mark from `file.status` (`title` = the error line),
+ * the permission badges of the resolved `call`, and — when `call` is set — clickable to open it.
+ */
+export function FileRow({
+  file,
+  call,
+  onOpen,
+}: {
+  file: FileAccess;
+  /** The tool call behind this access, resolved by `file.toolUseId`. */
+  call?: ToolCallDetail;
+  onOpen?: (call: ToolCallDetail) => void;
+}) {
   const { display, full } = shortenPath(file.path);
   const label =
     file.tool === 'Glob' && file.globMatchCount !== undefined
@@ -213,10 +229,21 @@ export function FileRow({ file }: { file: FileAccess }) {
           .join(' · ')
       : '—';
   const fullLabel = display !== full ? full : undefined;
+  const clickable = call !== undefined && onOpen !== undefined;
 
   return (
     <DetailTooltip rows={buildFileTooltipRows(file)}>
-      <tr className="cursor-default transition-colors hover:bg-muted/30">
+      <tr
+        className={cn(
+          'transition-colors',
+          clickable
+            ? 'cursor-pointer hover:bg-muted/40'
+            : 'cursor-default hover:bg-muted/30',
+        )}
+        onClick={call && onOpen ? () => onOpen(call) : undefined}
+        data-testid="file-row"
+        data-tool-use-id={file.toolUseId}
+      >
         <td className="w-px py-0.5 pr-2 align-middle whitespace-nowrap">
           <FileBadge tool={file.tool} />
         </td>
@@ -224,6 +251,8 @@ export function FileRow({ file }: { file: FileAccess }) {
           {usage}
         </td>
         <td className="py-0.5 align-middle font-mono text-sm text-foreground break-all">
+          <StatusMark status={file.status} title={file.error} />
+          {(file.status === 'error' || file.status === 'rejected') && ' '}
           <span title={fullLabel} className={cn(fullLabel && 'cursor-help')}>
             {label}
           </span>
@@ -231,6 +260,16 @@ export function FileRow({ file }: { file: FileAccess }) {
             <span className="ml-1.5 font-mono text-xs text-muted-foreground">
               ×{file.accessCount}
             </span>
+          )}
+          {call && (
+            <StatusBadge
+              call={{
+                status: 'success',
+                permissionRequested: call.permissionRequested,
+                permissionDenied: call.permissionDenied,
+              }}
+              className="ml-1.5 align-middle"
+            />
           )}
         </td>
       </tr>
@@ -367,7 +406,15 @@ export function ToolCallRow({
   charsPerToken?: number;
 }) {
   const displayName = formatOtherToolName(call.name);
-  const inputPreview = buildInputPreview(call.input);
+  const { repoRoot } = useToolView();
+  // The model's own one-line `description` (Bash, PowerShell, …) reads better than the raw
+  // input, so it leads and the rest of the input follows as a muted tail.
+  const { description, ...rest } = call.input;
+  const lead = typeof description === 'string' ? description.trim() : '';
+  const inputPreview = toRepoRelative(
+    buildInputPreview(lead ? rest : call.input),
+    repoRoot,
+  );
   const estTok = call.result
     ? Math.round(call.result.length / charsPerToken)
     : 0;
@@ -391,23 +438,60 @@ export function ToolCallRow({
       <td className="w-px py-0.5 pr-3 align-middle whitespace-nowrap text-right font-mono text-xs text-muted-foreground">
         {estTok > 0 ? `${formatCompact(estTok)}tok` : '—'}
       </td>
-      <td className="max-w-0 overflow-hidden py-0.5 pr-2 align-middle font-mono text-xs text-muted-foreground truncate">
-        {inputPreview}
+      <td
+        className="max-w-0 overflow-hidden py-0.5 pr-2 align-middle text-xs truncate"
+        data-testid="tool-call-row-preview"
+      >
+        {lead && <span className="mr-3 text-sm text-foreground">{lead}</span>}
+        <span className="font-mono text-muted-foreground">{inputPreview}</span>
       </td>
       <td className="w-px py-0.5 pr-2 align-middle whitespace-nowrap">
-        {call.permissionDenied ? (
-          <span className="rounded px-1.5 py-0.5 text-xs font-mono bg-yellow-500/20 text-yellow-700 dark:text-yellow-300">
-            ⚠ denied
-          </span>
-        ) : call.permissionRequested ? (
-          <span className="rounded px-1.5 py-0.5 text-xs font-mono bg-yellow-500/20 text-yellow-700 dark:text-yellow-300">
-            ⚠ requested
-          </span>
-        ) : call.status === 'error' ? (
-          <span className="rounded px-1.5 py-0.5 text-xs font-mono bg-red-500/20 text-red-700 dark:text-red-300">
-            ✗ error
-          </span>
-        ) : null}
+        <StatusBadge call={call} />
+      </td>
+      <td className="w-px py-0.5 pl-1 align-middle text-muted-foreground">
+        <ChevronRight className="size-3" />
+      </td>
+    </tr>
+  );
+}
+
+/**
+ * A compact Agents-section row for an `Agent` call with no activation and no sub-agent node
+ * (DD-21): `Agent` badge, description, status; opens the call's modal.
+ */
+export function OrphanAgentCallRow({
+  call,
+  onClick,
+}: {
+  call: ToolCallDetail;
+  onClick: () => void;
+}) {
+  const description =
+    typeof call.input.description === 'string' ? call.input.description : '';
+  return (
+    <tr
+      className="cursor-pointer transition-colors hover:bg-muted/40"
+      onClick={onClick}
+      data-testid="orphan-agent-call-row"
+      data-call-id={call.id}
+    >
+      <td className="w-px py-0.5 pr-2 align-middle">
+        <span
+          className={cn(
+            'inline-block rounded px-2 py-1 font-mono text-xs font-bold leading-none',
+            getOtherToolStyle(call.name),
+          )}
+        >
+          {call.name}
+        </span>
+      </td>
+      <td className="max-w-0 overflow-hidden py-0.5 pr-2 align-middle text-xs text-foreground truncate">
+        {description || (
+          <span className="text-muted-foreground">no description</span>
+        )}
+      </td>
+      <td className="w-px py-0.5 pr-2 align-middle whitespace-nowrap">
+        <StatusBadge call={call} showOk />
       </td>
       <td className="w-px py-0.5 pl-1 align-middle text-muted-foreground">
         <ChevronRight className="size-3" />

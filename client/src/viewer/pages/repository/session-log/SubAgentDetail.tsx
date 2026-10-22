@@ -139,6 +139,8 @@ export function SubAgentDetail({ agent, pricing, sessionModel }: Props) {
         <PromptTurnSkillsSection
           skills={agent.skills}
           charsPerToken={charsPerToken}
+          calls={agent.allToolCalls}
+          onOpenCall={setSelectedCall}
         />
       )}
 
@@ -175,13 +177,20 @@ export function SubAgentDetail({ agent, pricing, sessionModel }: Props) {
       )}
 
       {agent.files && agent.files.length > 0 && (
-        <PromptTurnFilesSection files={agent.files} />
+        <PromptTurnFilesSection
+          files={agent.files}
+          calls={agent.allToolCalls}
+          onOpenCall={setSelectedCall}
+        />
       )}
 
       {selectedCall && (
         <ToolCallDetailModal
           call={selectedCall}
           onClose={() => setSelectedCall(null)}
+          charsPerToken={charsPerToken}
+          turnFiles={agent.files}
+          subAgents={agent.children}
         />
       )}
     </>

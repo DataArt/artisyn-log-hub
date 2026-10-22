@@ -120,7 +120,7 @@ function firstUserTextSnippet(events: RawLogEvent[]): string | undefined {
  * `agentId → agent_type` from artisyn `SubagentStart` hook events — the same correlation
  * `parseSessionLogs` performs to label an `AgentActivation`.
  */
-function collectAgentTypes(
+export function collectAgentTypes(
   events: RawLogEvent[],
   out: Map<string, string>,
 ): void {
@@ -140,7 +140,7 @@ function collectAgentTypes(
  * `toolUseResult.agentId` pairing inside one transcript. The fallback when no `SubagentStart`
  * hook event was recorded.
  */
-function collectSpawnedAgentTypes(
+export function collectSpawnedAgentTypes(
   events: RawLogEvent[],
   out: Map<string, string>,
 ): void {

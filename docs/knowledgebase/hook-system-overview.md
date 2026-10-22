@@ -564,6 +564,13 @@ command output, while the metric needs four derived numbers, not the bytes. `edi
 is never usable; when it is absent the call stays *uncovered* server-side rather than being
 recorded as a confident zero-line change.
 
+**Failure / denial call identity (hook `2.24.0`+).** `PostToolUseFailure` carries `tool_name`,
+`tool_input`, `error` and `tool_use_id`. `PermissionDenied` carries `tool_name`, `tool_input`,
+`tool_use_id` and `reason` (it fires only for auto-mode classifier denials). `PermissionRequest`
+keeps only `tool_name` / `tool_input` — Claude Code sends no id for it. The new fields are `null`
+when Claude Code omits them and absent from older hooks; the viewer then matches the event to its
+call by name + input. See [hook-api-versioning.md](hook-api-versioning.md).
+
 ---
 
 ## Diagnostic Log

@@ -1,0 +1,203 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1580" height="936" viewBox="0 0 1580 936" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="12">
+<defs><marker id="ar" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 z" fill="#7c3aed"/></marker><linearGradient id="fade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fafafa" stop-opacity="0"/><stop offset="1" stop-color="#fafafa" stop-opacity="1"/></linearGradient></defs>
+<rect width="1580" height="936" fill="#ffffff"/>
+<rect x="16" y="16" width="1226" height="30" rx="6" fill="#f4f4f5" stroke="#e4e4e7"/>
+<text x="30" y="36" font-family="Consolas, Menlo, monospace" font-size="11.5" fill="#52525b">/repositories/adlc-demo-app/sessions/184432fe…?tab=bash&amp;bashCall=toolu_01HxV…</text>
+<text x="30" y="78" font-size="18" font-weight="600" fill="#18181b">Session 184432fe · adlc-demo-app</text>
+<text x="330" y="78" fill="#71717a">2026-10-22 13:58 · 2 h 31 m · 3 sub-agents</text>
+<text x="30" y="110" font-size="14" fill="#3f3f46">Summary</text>
+<text x="118.19999999999999" y="110" font-size="14" fill="#3f3f46">Info</text>
+<text x="180.6" y="110" font-size="14" fill="#3f3f46">Logs</text>
+<text x="243" y="110" font-size="14" fill="#3f3f46">Charts</text>
+<text x="322.6" y="110" font-size="14" font-weight="600" fill="#18181b">Bash</text>
+<rect x="320.6" y="118" width="38.4" height="2" fill="#18181b"/><rect x="360.6" y="98" width="20" height="16" rx="8" fill="#e4e4e7"/><text x="370.6" y="110" font-size="10" fill="#3f3f46" text-anchor="middle">10</text>
+<text x="409" y="110" font-size="14" fill="#3f3f46">Files</text>
+<rect x="16" y="124" width="1226" height="1" fill="#e4e4e7"/>
+<text x="484" y="110" font-size="11" fill="#7c3aed">← new tab</text>
+<rect x="30" y="140" width="400" height="630" rx="6" fill="#ffffff" stroke="#e4e4e7"/>
+<text x="44" y="162" font-size="10" font-weight="700" fill="#71717a" letter-spacing="0.6">10 BASH CALLS</text>
+<text x="142" y="162" font-size="10.5" fill="#a1a1aa">main session + sub-agents, merged by time</text>
+<line x1="31" y1="174" x2="429" y2="174" stroke="#f4f4f5"/>
+<text x="44" y="194" font-size="11" fill="#a1a1aa">#1</text>
+<text x="70" y="194" font-size="11" fill="#52525b">14:02:11</text>
+<circle cx="128" cy="190" r="4" fill="#22c55e"/>
+<rect x="378" y="207" width="40" height="15" rx="3" fill="#f4f4f5"/><text x="398" y="218" font-size="9.5" fill="#52525b" text-anchor="middle">1.1 s</text>
+<rect x="311.6" y="207" width="62.4" height="15" rx="3" fill="#f4f4f5"/><text x="342.8" y="218" font-size="9.5" fill="#a1a1aa" text-anchor="middle">changes 0</text>
+<text x="44" y="219" font-size="11.5" fill="#18181b">Read the plan, health checks and tracker s…</text>
+<line x1="31" y1="230" x2="429" y2="230" stroke="#f4f4f5"/>
+<text x="44" y="250" font-size="11" fill="#a1a1aa">#2</text>
+<text x="70" y="250" font-size="11" fill="#52525b">14:03:40</text>
+<circle cx="128" cy="246" r="4" fill="#22c55e"/>
+<rect x="140" y="238" width="196.4" height="15" rx="7.5" fill="#ede9fe"/><text x="147" y="249" font-size="9.5" fill="#6d28d9"><tspan font-weight="700">agent:</tspan> Explore — map server modules</text>
+<rect x="378" y="263" width="40" height="15" rx="3" fill="#f4f4f5"/><text x="398" y="274" font-size="9.5" fill="#52525b" text-anchor="middle">0.4 s</text>
+<rect x="311.6" y="263" width="62.4" height="15" rx="3" fill="#f4f4f5"/><text x="342.8" y="274" font-size="9.5" fill="#a1a1aa" text-anchor="middle">changes 0</text>
+<text x="44" y="275" font-size="10.5" fill="#3f3f46" font-family="Consolas, Menlo, monospace">for f in server/src/database/schema/inde…</text>
+<line x1="31" y1="286" x2="429" y2="286" stroke="#f4f4f5"/>
+<text x="44" y="306" font-size="11" fill="#a1a1aa">#3</text>
+<text x="70" y="306" font-size="11" fill="#52525b">14:09:12</text>
+<circle cx="128" cy="302" r="4" fill="#22c55e"/>
+<rect x="383.6" y="319" width="34.4" height="15" rx="3" fill="#f4f4f5"/><text x="400.8" y="330" font-size="9.5" fill="#52525b" text-anchor="middle">38 s</text>
+<rect x="317.20000000000005" y="319" width="62.4" height="15" rx="3" fill="#ffedd5"/><text x="348.40000000000003" y="330" font-size="9.5" fill="#c2410c" text-anchor="middle">changes 1</text>
+<text x="44" y="331" font-size="11.5" fill="#18181b">Register ClientFilesModule and typecheck</text>
+<line x1="31" y1="342" x2="429" y2="342" stroke="#f4f4f5"/>
+<text x="44" y="362" font-size="11" fill="#a1a1aa">#4</text>
+<text x="70" y="362" font-size="11" fill="#52525b">14:11:05</text>
+<circle cx="128" cy="358" r="4" fill="#22c55e"/>
+<rect x="378" y="375" width="40" height="15" rx="3" fill="#f4f4f5"/><text x="398" y="386" font-size="9.5" fill="#52525b" text-anchor="middle">0.5 s</text>
+<rect x="311.6" y="375" width="62.4" height="15" rx="3" fill="#ffedd5"/><text x="342.8" y="386" font-size="9.5" fill="#c2410c" text-anchor="middle">changes 1</text>
+<text x="44" y="387" font-size="10.5" fill="#3f3f46" font-family="Consolas, Menlo, monospace">P="docs/tasks/todo/2026-10-22-client-fil…</text>
+<line x1="31" y1="398" x2="429" y2="398" stroke="#f4f4f5"/>
+<text x="44" y="418" font-size="11" fill="#a1a1aa">#5</text>
+<text x="70" y="418" font-size="11" fill="#52525b">14:14:30</text>
+<circle cx="128" cy="414" r="4" fill="#22c55e"/>
+<rect x="378" y="431" width="40" height="15" rx="3" fill="#f4f4f5"/><text x="398" y="442" font-size="9.5" fill="#52525b" text-anchor="middle">1.4 s</text>
+<rect x="311.6" y="431" width="62.4" height="15" rx="3" fill="#ffedd5"/><text x="342.8" y="442" font-size="9.5" fill="#c2410c" text-anchor="middle">changes 1</text>
+<text x="44" y="443" font-size="11.5" fill="#18181b">Tick 4 plan items, then read the KB articl…</text>
+<line x1="31" y1="454" x2="429" y2="454" stroke="#f4f4f5"/>
+<text x="44" y="474" font-size="11" fill="#a1a1aa">#6</text>
+<text x="70" y="474" font-size="11" fill="#52525b">14:17:02</text>
+<circle cx="128" cy="470" r="4" fill="#22c55e"/>
+<rect x="378" y="487" width="40" height="15" rx="3" fill="#f4f4f5"/><text x="398" y="498" font-size="9.5" fill="#52525b" text-anchor="middle">0.6 s</text>
+<rect x="311.6" y="487" width="62.4" height="15" rx="3" fill="#ffedd5"/><text x="342.8" y="498" font-size="9.5" fill="#c2410c" text-anchor="middle">changes 1</text>
+<text x="44" y="499" font-size="11.5" fill="#18181b">Write KB article and update indexes</text>
+<line x1="31" y1="510" x2="429" y2="510" stroke="#f4f4f5"/>
+<text x="44" y="530" font-size="11" fill="#a1a1aa">#7</text>
+<text x="70" y="530" font-size="11" fill="#52525b">14:21:40</text>
+<circle cx="128" cy="526" r="4" fill="#ef4444"/>
+<rect x="140" y="518" width="64" height="15" rx="3" fill="#fee2e2"/><text x="172" y="529" font-size="9.5" fill="#b91c1c" text-anchor="middle">interrupted</text>
+<rect x="361.2" y="543" width="56.8" height="15" rx="3" fill="#f4f4f5"/><text x="389.59999999999997" y="554" font-size="9.5" fill="#52525b" text-anchor="middle">1 m 30 s</text>
+<rect x="294.8" y="543" width="62.4" height="15" rx="3" fill="#ffedd5"/><text x="326" y="554" font-size="9.5" fill="#c2410c" text-anchor="middle">changes 1</text>
+<text x="44" y="555" font-size="10.5" fill="#3f3f46" font-family="Consolas, Menlo, monospace">for i in $(seq 90); do curl -sf http:/…</text>
+<line x1="31" y1="566" x2="429" y2="566" stroke="#f4f4f5"/>
+<text x="44" y="586" font-size="11" fill="#a1a1aa">#8</text>
+<text x="70" y="586" font-size="11" fill="#52525b">14:22:15</text>
+<circle cx="128" cy="582" r="4" fill="#22c55e"/>
+<rect x="378" y="599" width="40" height="15" rx="3" fill="#f4f4f5"/><text x="398" y="610" font-size="9.5" fill="#52525b" text-anchor="middle">0.2 s</text>
+<rect x="311.6" y="599" width="62.4" height="15" rx="3" fill="#ffedd5"/><text x="342.8" y="610" font-size="9.5" fill="#c2410c" text-anchor="middle">changes 1</text>
+<text x="44" y="611" font-size="10.5" fill="#3f3f46" font-family="Consolas, Menlo, monospace">R="docs/tasks/todo/2026-10-22-client-fil…</text>
+<rect x="31" y="622" width="398" height="56" fill="#eff6ff"/><rect x="31" y="622" width="3" height="56" fill="#2563eb"/>
+<line x1="31" y1="622" x2="429" y2="622" stroke="#f4f4f5"/>
+<text x="44" y="642" font-size="11" fill="#a1a1aa">#9</text>
+<text x="70" y="642" font-size="11" fill="#52525b">14:24:02</text>
+<circle cx="128" cy="638" r="4" fill="#22c55e"/>
+<rect x="140" y="630" width="222.9" height="15" rx="7.5" fill="#ede9fe"/><text x="147" y="641" font-size="9.5" fill="#6d28d9"><tspan font-weight="700">agent:</tspan> general-purpose — add file delete</text>
+<rect x="378" y="655" width="40" height="15" rx="3" fill="#f4f4f5"/><text x="398" y="666" font-size="9.5" fill="#52525b" text-anchor="middle">0.3 s</text>
+<rect x="311.6" y="655" width="62.4" height="15" rx="3" fill="#ffedd5"/><text x="342.8" y="666" font-size="9.5" fill="#c2410c" text-anchor="middle">changes 1</text>
+<text x="44" y="667" font-size="11.5" fill="#18181b">Add delete API and Delete button to the Fi…</text>
+<line x1="31" y1="678" x2="429" y2="678" stroke="#f4f4f5"/>
+<text x="44" y="698" font-size="11" fill="#a1a1aa">#10</text>
+<text x="70" y="698" font-size="11" fill="#52525b">14:26:48</text>
+<circle cx="128" cy="694" r="4" fill="#22c55e"/>
+<rect x="361.2" y="711" width="56.8" height="15" rx="3" fill="#f4f4f5"/><text x="389.59999999999997" y="722" font-size="9.5" fill="#52525b" text-anchor="middle">2 m 14 s</text>
+<rect x="294.8" y="711" width="62.4" height="15" rx="3" fill="#ffedd5"/><text x="326" y="722" font-size="9.5" fill="#c2410c" text-anchor="middle">changes 6</text>
+<text x="44" y="723" font-size="10.5" fill="#3f3f46" font-family="Consolas, Menlo, monospace">for c in lint typecheck test build; do</text>
+<line x1="31" y1="734" x2="429" y2="734" stroke="#e4e4e7"/>
+<text x="44" y="756" font-size="10.5" fill="#71717a">↑ / ↓ move the selection · click selects · first call selected on open</text>
+<text x="30" y="798" font-size="13" font-weight="700" fill="#18181b">Empty state</text>
+<rect x="30" y="810" width="400" height="96" rx="6" fill="#ffffff" stroke="#e4e4e7" stroke-dasharray="4 3"/>
+<text x="230" y="856" font-size="13" fill="#71717a" text-anchor="middle">No Bash commands in this session</text>
+<text x="230" y="876" font-size="10.5" fill="#a1a1aa" text-anchor="middle">(no list, no details pane)</text>
+<rect x="440" y="140" width="792" height="642" rx="6" fill="#ffffff" stroke="#e4e4e7"/>
+<rect x="454" y="154" width="44" height="20" rx="4" fill="#fde68a"/><text x="476" y="168" font-size="11.5" font-weight="700" fill="#b45309" text-anchor="middle" font-family="Consolas, Menlo, monospace">Bash</text>
+<rect x="504" y="154" width="40" height="20" rx="4" fill="#dcfce7"/><text x="524" y="168" font-size="11" fill="#15803d" text-anchor="middle" font-family="Consolas, Menlo, monospace">✓ ok</text>
+<rect x="550" y="154" width="52" height="20" rx="4" fill="#f4f4f5"/><text x="576" y="168" font-size="11" fill="#3f3f46" text-anchor="middle">⏱ 0.3 s</text>
+<text x="612" y="168" fill="#52525b">#9 · 14:24:02 · result ≈0k tokens</text>
+<rect x="806" y="155" width="250.70000000000002" height="18" rx="9" fill="#ede9fe"/><text x="814" y="168" font-size="10.5" fill="#6d28d9"><tspan font-weight="700">agent:</tspan> general-purpose — add file delete</text>
+<text x="1218" y="168" font-size="11.5" fill="#2563eb" text-decoration="underline" text-anchor="end">Open sub-agent →</text>
+<text x="454" y="196" font-size="12.5" font-style="italic" fill="#52525b">“Add delete API and Delete button to the Files card”</text>
+<rect x="448" y="210" width="776" height="28" rx="6" fill="#f8fafc" stroke="#e2e8f0"/>
+<text x="462" y="228" font-size="10" font-weight="700" fill="#71717a" letter-spacing="0.6">WORKING DIR</text>
+<text x="554" y="229" font-family="Consolas, Menlo, monospace" font-size="12"><tspan fill="#18181b">client/src</tspan></text>
+<text x="1212" y="228" font-size="10.5" fill="#a1a1aa" text-anchor="end">lifted from the leading cd</text>
+<rect x="448" y="248" width="776" height="108" rx="6" fill="#ffffff" stroke="#e4e4e7"/>
+<text x="462" y="270" font-size="10" font-weight="700" fill="#71717a" letter-spacing="0.6">FILES</text>
+<text x="506" y="270" font-size="10.5" fill="#a1a1aa">best effort · derived from the bash syntax tree only — nothing executed, nothing guessed from non-bash code</text>
+<rect x="462" y="282" width="62" height="17" rx="4" fill="#ffedd5"/><text x="493" y="294" font-size="10.5" font-weight="600" fill="#c2410c" text-anchor="middle">Changes</text><text x="544" y="294" font-family="Consolas, Menlo, monospace" font-size="11.5"><tspan fill="#71717a">api/</tspan> <tspan fill="#18181b">clientFiles.ts</tspan></text>
+<rect x="462" y="304" width="62" height="17" rx="4" fill="#ede9fe"/><text x="493" y="316" font-size="10.5" font-weight="600" fill="#6d28d9" text-anchor="middle">Runs</text><text x="544" y="316" font-family="Consolas, Menlo, monospace" font-size="11.5" fill="#18181b">python</text>
+<rect x="462" y="326" width="62" height="17" rx="4" fill="#f1f5f9"/><text x="493" y="338" font-size="10.5" font-weight="600" fill="#475569" text-anchor="middle">Inline</text><text x="544" y="338" font-size="11.5" fill="#475569">inline python script, 45 lines — not analysed</text>
+<rect x="448" y="370" width="776" height="306" rx="6" fill="#fafafa" stroke="#e4e4e7"/>
+<text x="462" y="393" font-size="10" font-weight="700" fill="#71717a" letter-spacing="0.6">COMMAND</text>
+<rect x="534" y="380" width="152" height="22" rx="5" fill="#f4f4f5" stroke="#e4e4e7"/>
+<rect x="536" y="382" width="74" height="18" rx="4" fill="#ffffff" stroke="#d4d4d8"/>
+<text x="573" y="395" font-size="11" font-weight="600" fill="#18181b" text-anchor="middle">Formatted</text>
+<text x="648" y="395" font-size="11" fill="#71717a" text-anchor="middle">Raw</text>
+<text x="698" y="395" font-size="11" fill="#a1a1aa">9 lines (was 53)</text>
+<rect x="1114" y="380" width="98" height="22" rx="4" fill="#f4f4f5"/>
+<text x="1163" y="395" font-size="11" fill="#52525b" text-anchor="middle">⧉ Copy original</text>
+<rect x="449" y="404" width="34" height="194" fill="#f4f4f5"/>
+<line x1="483" y1="404" x2="483" y2="598" stroke="#e4e4e7"/>
+<g font-family="Consolas, Menlo, monospace" font-size="12.5" xml:space="preserve" style="white-space:pre"><text x="476" y="420" font-size="11" fill="#a1a1aa" text-anchor="end">1</text>
+<text x="494" y="420" fill="#18181b"><tspan fill="#18181b" font-weight="700">cat</tspan> <tspan fill="#ea580c" font-weight="700">&gt;&gt;</tspan> <tspan fill="#3f3f46">api/clientFiles.ts</tspan> <tspan fill="#ea580c" font-weight="700">&lt;&lt;</tspan><tspan fill="#15803d">'EOF'</tspan></text>
+<text x="476" y="440" font-size="11" fill="#a1a1aa" text-anchor="end">2</text>
+<rect x="488" y="426" width="726" height="20" fill="#fffbeb"/>
+<text x="494" y="440" fill="#3f3f46"></text>
+<text x="476" y="460" font-size="11" fill="#a1a1aa" text-anchor="end">3</text>
+<rect x="488" y="446" width="726" height="20" fill="#fffbeb"/>
+<text x="494" y="460" fill="#3f3f46">export const deleteClientFile = (clientId: number, fileId: number) =&gt;</text>
+<text x="476" y="480" font-size="11" fill="#a1a1aa" text-anchor="end">4</text>
+<rect x="488" y="466" width="726" height="20" fill="#fffbeb"/>
+<text x="494" y="480" fill="#3f3f46">&#160;&#160;request&lt;void&gt;('DELETE', `/api/clients/${clientId}/files/${fileId}`)</text>
+<text x="476" y="500" font-size="11" fill="#a1a1aa" text-anchor="end">5</text>
+<text x="494" y="500" fill="#ea580c" font-weight="700">EOF</text>
+<text x="476" y="520" font-size="11" fill="#a1a1aa" text-anchor="end">6</text>
+<text x="494" y="520" fill="#18181b"><tspan fill="#18181b" font-weight="700">python</tspan> <tspan fill="#3f3f46">-</tspan> <tspan fill="#ea580c" font-weight="700">&lt;&lt;</tspan><tspan fill="#15803d">'EOF'</tspan></text>
+<text x="476" y="540" font-size="11" fill="#a1a1aa" text-anchor="end">7</text>
+<rect x="488" y="526" width="726" height="19" fill="#fffbeb"/><rect x="488" y="526" width="3" height="19" fill="#f59e0b"/>
+<text x="494" y="540" fill="#b45309" font-style="italic"># ▼ block 1: 45 lines, shown below</text>
+<text x="476" y="560" font-size="11" fill="#a1a1aa" text-anchor="end">8</text>
+<text x="494" y="560" fill="#ea580c" font-weight="700">EOF</text>
+<text x="476" y="580" font-size="11" fill="#a1a1aa" text-anchor="end">9</text>
+<text x="494" y="580" fill="#18181b"><tspan fill="#18181b" font-weight="700">echo</tspan> <tspan fill="#3f3f46">ok</tspan></text></g>
+<rect x="458" y="606" width="756" height="22" rx="4" fill="#ffffff" stroke="#fcd34d"/>
+<text x="470" y="621" font-size="11.5" fill="#92400e">▸ <tspan font-weight="600">block 1</tspan> <tspan font-family="Consolas, Menlo, monospace" fill="#3f3f46">python - &lt;&lt;'EOF'</tspan> <tspan fill="#a1a1aa">· 45 lines</tspan></text>
+<line x1="448" y1="646" x2="1224" y2="646" stroke="#e4e4e7"/>
+<g font-size="10.5" fill="#71717a"><text x="462" y="662">only whitespace changed · tint:</text><rect x="630" y="653" width="10" height="10" fill="#2563eb"/><text x="644" y="662">operators / keywords</text><rect x="760" y="653" width="10" height="10" fill="#ea580c"/><text x="774" y="662">redirects</text><rect x="834" y="653" width="10" height="10" fill="#15803d"/><text x="848" y="662">strings</text><rect x="898" y="653" width="10" height="10" fill="#9333ea"/><text x="912" y="662">variables</text></g>
+<rect x="448" y="690" width="776" height="76" rx="6" fill="#fafafa" stroke="#e4e4e7"/>
+<text x="462" y="712" font-size="10" font-weight="700" fill="#71717a" letter-spacing="0.6">OUTPUT</text>
+<text x="518" y="712" font-size="11" fill="#a1a1aa">1 line · 3 B</text>
+<rect x="1162" y="699" width="50" height="20" rx="4" fill="#f4f4f5"/><text x="1187" y="713" font-size="11" fill="#52525b" text-anchor="middle">⧉ copy</text>
+<g font-family="Consolas, Menlo, monospace" font-size="12" fill="#3f3f46" xml:space="preserve" style="white-space:pre"><text x="462" y="738">ok</text></g>
+<g font-size="12" fill="#5b21b6"><rect x="1262" y="16" width="302" height="904" rx="6" fill="#faf5ff" stroke="#ddd6fe"/>
+<text x="1278" y="46" font-size="13" font-weight="700">Session "Bash" tab — master-detail</text>
+<text x="1278" y="82" font-weight="600">A  New session tab "Bash"</text>
+<text x="1278" y="100" fill="#6d28d9">Next to Summary / Info / Logs / Charts.</text>
+<text x="1278" y="116" fill="#6d28d9">URL: tab=bash&amp;bashCall=&lt;tool_use id&gt;,</text>
+<text x="1278" y="132" fill="#6d28d9">so a link reopens the same command;</text>
+<text x="1278" y="148" fill="#6d28d9">unknown id → first call.</text>
+<text x="1278" y="180" font-weight="600">B  List — one row per Bash call</text>
+<text x="1278" y="198" fill="#6d28d9">Main session + sub-agents merged in</text>
+<text x="1278" y="214" fill="#6d28d9">time order. #index, time, status dot</text>
+<text x="1278" y="230" fill="#6d28d9">(ok / error), one-line preview: the</text>
+<text x="1278" y="246" fill="#6d28d9">description if present (plain text),</text>
+<text x="1278" y="262" fill="#6d28d9">else the first formatted statement</text>
+<text x="1278" y="278" fill="#6d28d9">after the lifted cd (monospace).</text>
+<text x="1278" y="310" font-weight="600">C  Row chips</text>
+<text x="1278" y="328" fill="#6d28d9">changes N = Changes count from the</text>
+<text x="1278" y="344" fill="#6d28d9">file summary; duration (tool_use →</text>
+<text x="1278" y="360" fill="#6d28d9">tool_result); "interrupted" badge</text>
+<text x="1278" y="376" fill="#6d28d9">from the tool result.</text>
+<text x="1278" y="408" font-weight="600">D  Sub-agent badge</text>
+<text x="1278" y="426" fill="#6d28d9">Names the sub-agent (type —</text>
+<text x="1278" y="442" fill="#6d28d9">description, as the sub-agent views</text>
+<text x="1278" y="458" fill="#6d28d9">name it). Details pane shows the same</text>
+<text x="1278" y="474" fill="#6d28d9">badge + "Open sub-agent →".</text>
+<text x="1278" y="506" font-weight="600">E  Selection</text>
+<text x="1278" y="524" fill="#6d28d9">First call selected on open; ↑/↓</text>
+<text x="1278" y="540" fill="#6d28d9">move it, the details pane follows;</text>
+<text x="1278" y="556" fill="#6d28d9">selected row highlighted (blue bar).</text>
+<text x="1278" y="588" font-weight="600">F  Details = the same Bash view</text>
+<text x="1278" y="606" fill="#6d28d9">As in bash-step-modal.svg: header</text>
+<text x="1278" y="622" fill="#6d28d9">with duration / status badge, working</text>
+<text x="1278" y="638" fill="#6d28d9">dir, Changes / Reads / Runs + inline</text>
+<text x="1278" y="654" fill="#6d28d9">scripts "not analysed", Formatted /</text>
+<text x="1278" y="670" fill="#6d28d9">Raw, Copy original, output.</text>
+<text x="1278" y="702" font-weight="600">G  Empty state</text>
+<text x="1278" y="720" fill="#6d28d9">"No Bash commands in this session".</text></g>
+<circle cx="470" cy="104" r="9" fill="#7c3aed"/><text x="470" y="108" font-size="11" font-weight="700" fill="#ffffff" text-anchor="middle">A</text>
+<circle cx="416" cy="158" r="9" fill="#7c3aed"/><text x="416" y="162" font-size="11" font-weight="700" fill="#ffffff" text-anchor="middle">B</text>
+<circle cx="296" cy="327" r="9" fill="#7c3aed"/><text x="296" y="331" font-size="11" font-weight="700" fill="#ffffff" text-anchor="middle">C</text>
+<circle cx="1068" cy="164" r="9" fill="#7c3aed"/><text x="1068" y="168" font-size="11" font-weight="700" fill="#ffffff" text-anchor="middle">D</text>
+<circle cx="22" cy="650" r="9" fill="#7c3aed"/><text x="22" y="654" font-size="11" font-weight="700" fill="#ffffff" text-anchor="middle">E</text>
+<circle cx="1230" cy="230" r="9" fill="#7c3aed"/><text x="1230" y="234" font-size="11" font-weight="700" fill="#ffffff" text-anchor="middle">F</text>
+<circle cx="416" cy="826" r="9" fill="#7c3aed"/><text x="416" y="830" font-size="11" font-weight="700" fill="#ffffff" text-anchor="middle">G</text>
+</svg>
