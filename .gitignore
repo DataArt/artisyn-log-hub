@@ -71,3 +71,5 @@ server/src/public/static/installer-version.json
 **/.claude/first-run
 **/.claude/assistant-daemon-state.json
 /CLAUDE.local.md
+# Personal KB about the developer's own local setup (described in CLAUDE.local.md)
+/kb-local/

@@ -167,10 +167,6 @@ start them again.
 (Matches `project-env.json → appUrl` and `repo-health-checks.json → environmentNotes`; keep this
 note in sync with them.)
 
-**Local prod** ("локальный прод", http://localhost:5003) is a different thing: the maintainer's own
-Docker-deployed Log Hub in the sibling folder `../local-loghub`, holding real session data. Redeploy
-it only when asked, following `docs/knowledgebase/local-prod.md`.
-
 ## Claude sandboxes
 
 Optional, for the developer: `scripts/claude-docker.ps1 <name>` (or `scripts\claude-docker.cmd`,
