@@ -8,7 +8,8 @@
 // the ResearchWorkflow run with its two workflow agents W1/W2 for the Agents table). Uploaded through
 // POST /api/v2/logs (DD SC3); the numbers come from their expected.json (DD D3). Step 6a uploads
 // its own small session (a background agent, a <task-notification> and the main thread finishing
-// after it): the turn's work time runs from the prompt to the last answer.
+// after it): the turn's work time runs from the prompt to the last answer. Step 8c uploads one with
+// a Workflow call rejected before launch and one launched by scriptPath (workflow status and name).
 //
 // Code facts that differ from the design text:
 //   - the prompt text of a turn is shown in its header, not collapsed behind a click; the scenario
@@ -334,6 +335,56 @@ test('@S-SESS-03 Logs: what counts as a prompt, what is hidden, how a turn reads
 
     page.off('request', onRequest);
     expect(apiRequests, 'the table and the agent modal reuse the loaded Logs payload').toEqual([]);
+  });
+
+  await test.step('8c. a Workflow call rejected before launch (is_error, no <task-notification>) is «failed» with its error, not «running»; a call launched by scriptPath (no name input) is named from toolUseResult.workflowName', async () => {
+    const runId = randomBytes(4).toString('hex');
+    const s: PromptSession = {
+      sessionId: `ss03-wf-${runId}`,
+      prompt: `ss03 workflow launch ${runId}`,
+      repoUrl: `https://git.arrakis.test/scn/${runId}/ss03-wf`,
+    };
+    const at = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const t = (sec: number) => new Date(at.getTime() + sec * 1000).toISOString();
+    const id = (n: string) => `${s.sessionId}-${n}`;
+    const answer = (uuid: string, parentUuid: string, sec: number, content: unknown[]) => ({
+      type: 'assistant', uuid: id(uuid), parentUuid: id(parentUuid), sessionId: s.sessionId, timestamp: t(sec),
+      message: { role: 'assistant', model: 'claude-sonnet-4-6', usage: { input_tokens: 10, output_tokens: 5 }, content },
+    });
+    const launchError = 'InputValidationError: script contains control characters';
+    const claude = [
+      { type: 'user', uuid: id('u1'), sessionId: s.sessionId, timestamp: t(0), message: { role: 'user', content: [{ type: 'text', text: s.prompt }] } },
+      answer('a1', 'u1', 5, [{ type: 'tool_use', id: id('wf1'), name: 'Workflow', input: { name: 'RejectedWorkflow' } }]),
+      { type: 'user', uuid: id('r1'), parentUuid: id('a1'), sessionId: s.sessionId, timestamp: t(6), toolUseResult: `Error: ${launchError}`,
+        message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id('wf1'), is_error: true, content: `<tool_use_error>${launchError}</tool_use_error>` }] } },
+      answer('a2', 'r1', 10, [{ type: 'tool_use', id: id('wf2'), name: 'Workflow', input: { scriptPath: '/tmp/scratch/script-file.js' } }]),
+      { type: 'user', uuid: id('r2'), parentUuid: id('a2'), sessionId: s.sessionId, timestamp: t(11),
+        toolUseResult: { status: 'async_launched', taskId: 'wsss03', taskType: 'local_workflow', workflowName: 'ScriptWorkflow', runId: 'wf_ss03' },
+        message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id('wf2'), content: 'Workflow launched in background. Task ID: wsss03' }] } },
+      { type: 'queue-operation', operation: 'enqueue', timestamp: t(60),
+        content: `<task-notification>\n<task-id>wsss03</task-id>\n<tool-use-id>${id('wf2')}</tool-use-id>\n<status>completed</status>\n<summary>Script workflow done</summary>\n</task-notification>` },
+      answer('a3', 'r2', 70, [{ type: 'text', text: 'Both workflow calls are handled.' }]),
+    ];
+    const key = await createApiKey(owner.api);
+    const bodies = { artisyn: promptSessionBodies({ ...s, at }).artisyn, claude: claude.map((r) => JSON.stringify(r)).join('\n') + '\n' };
+    for (const type of ['artisyn', 'claude'] as const) {
+      const res = await api.post('/api/v2/logs', {
+        params: { sessionId: s.sessionId, type },
+        headers: { 'Content-Type': 'application/x-ndjson', 'X-API-Key': key.key },
+        data: bodies[type],
+      });
+      expect(res.status(), `upload ${type}`).toBe(201);
+    }
+    await waitForQueueIdle(db, owner.id);
+    const repoId = await ownRepoId(owner.api, s.repoUrl);
+
+    await openSession(page, owner, repoId, s.sessionId, { tab: 'logs' });
+    const rejected = page.getByRole('button', { name: /⚡ RejectedWorkflow/ });
+    await expect(rejected).toContainText('failed');
+    await expect(rejected).not.toContainText('running');
+    await rejected.click();
+    await expect(page.getByText(launchError, { exact: true }), 'the launch error is the summary, wrapper stripped').toBeVisible();
+    await expect(page.getByRole('button', { name: /⚡ ScriptWorkflow/ })).toContainText('completed');
   });
 
   await test.step('9. GS-01 (no harness snapshot): no Skills, Agents or MCP tab, and no page error', async () => {
