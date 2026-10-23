@@ -91,6 +91,34 @@ function extractWfId(diagnostics: string | null): string | null {
   return null;
 }
 
+// Text of a tool_result block's content (string or array of text blocks).
+function toolResultText(content: unknown): string | null {
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return null;
+  const parts: string[] = [];
+  for (const c of content) {
+    if (!c || typeof c !== 'object') continue;
+    const text = (c as Record<string, unknown>)['text'];
+    if (typeof text === 'string') parts.push(text);
+  }
+  return parts.length > 0 ? parts.join('\n') : null;
+}
+
+// Strips the <tool_use_error> wrapper Claude Code puts around a rejected call.
+function launchErrorText(text: string | null): string | null {
+  if (!text) return null;
+  const inner = extractTagContent(text, 'tool_use_error');
+  return (inner ?? text).trim() || null;
+}
+
+// Name of a workflow launched by `scriptPath` (no `name` input): the file's
+// basename without the extension, e.g. ".../implement-deep-wf.js" → "implement-deep-wf".
+function nameFromScriptPath(scriptPath: unknown): string {
+  if (typeof scriptPath !== 'string') return '';
+  const base = scriptPath.split(/[/\\]/).pop() ?? '';
+  return base.replace(/\.[^.]+$/, '');
+}
+
 // ---------------------------------------------------------------------------
 // Main export
 // ---------------------------------------------------------------------------
@@ -100,6 +128,7 @@ export function extractWorkflows(events: unknown[]): WorkflowRun[] {
   interface WorkflowCall {
     toolUseId: string;
     name: string;
+    scriptName: string;
     args: string | null;
   }
 
@@ -126,6 +155,7 @@ export function extractWorkflows(events: unknown[]): WorkflowRun[] {
 
       const input = b['input'] as Record<string, unknown> | undefined;
       const name = typeof input?.['name'] === 'string' ? input['name'] : '';
+      const scriptName = nameFromScriptPath(input?.['scriptPath']);
 
       let args: string | null = null;
       if (input?.['args'] !== undefined && input['args'] !== null) {
@@ -141,13 +171,58 @@ export function extractWorkflows(events: unknown[]): WorkflowRun[] {
         }
       }
 
-      workflowCalls.push({ toolUseId, name, args });
+      workflowCalls.push({ toolUseId, name, scriptName, args });
     }
   }
 
   if (workflowCalls.length === 0) return [];
 
-  // Step 2: collect queue-operation enqueue events, index by toolUseId
+  // Step 2a: collect the Workflow calls' own tool_result blocks. A call rejected
+  // before launch (is_error, e.g. input validation) never gets a task-notification,
+  // so without this it would stay 'running' forever. A launched call's result
+  // carries the real workflow name (toolUseResult.workflowName).
+  interface LaunchResult {
+    error: string | null;
+    workflowName: string | null;
+  }
+  const callIds = new Set(workflowCalls.map((c) => c.toolUseId));
+  const launchMap = new Map<string, LaunchResult>();
+
+  for (const evt of events) {
+    if (!evt || typeof evt !== 'object') continue;
+    const e = evt as Record<string, unknown>;
+    if (e['type'] !== 'user') continue;
+    const message = e['message'] as Record<string, unknown> | undefined;
+    const content = message?.['content'];
+    if (!Array.isArray(content)) continue;
+
+    for (const block of content) {
+      if (!block || typeof block !== 'object') continue;
+      const b = block as Record<string, unknown>;
+      if (b['type'] !== 'tool_result') continue;
+      const id = b['tool_use_id'];
+      if (typeof id !== 'string' || !callIds.has(id)) continue;
+
+      const tur = e['toolUseResult'];
+      const workflowName =
+        tur && typeof tur === 'object'
+          ? (tur as Record<string, unknown>)['workflowName']
+          : undefined;
+      launchMap.set(id, {
+        error:
+          b['is_error'] === true
+            ? (launchErrorText(toolResultText(b['content'])) ??
+              'failed to launch')
+            : null,
+        workflowName:
+          typeof workflowName === 'string' && workflowName
+            ? workflowName
+            : null,
+      });
+    }
+  }
+
+  // Step 2b: collect queue-operation enqueue events, index by toolUseId
   const enqueueMap = new Map<string, TaskNotification>();
 
   for (const evt of events) {
@@ -169,19 +244,21 @@ export function extractWorkflows(events: unknown[]): WorkflowRun[] {
 
   for (const call of workflowCalls) {
     const notification = enqueueMap.get(call.toolUseId);
+    const launch = launchMap.get(call.toolUseId);
+    const name = call.name || launch?.workflowName || call.scriptName;
 
     if (!notification) {
       runs.push({
         taskId: null,
         toolUseId: call.toolUseId,
-        name: call.name,
+        name,
         args: call.args,
-        status: 'running',
+        status: launch?.error ? 'failed' : 'running',
         durationMs: null,
         agentCount: null,
         subagentTokens: null,
         toolUses: null,
-        summary: null,
+        summary: launch?.error ?? null,
         findings: [],
         wfId: null,
         agentSessionIds: [],
@@ -302,7 +379,7 @@ export function extractWorkflows(events: unknown[]): WorkflowRun[] {
     runs.push({
       taskId: notification.taskId,
       toolUseId: call.toolUseId,
-      name: call.name,
+      name,
       args: call.args,
       status,
       durationMs,
