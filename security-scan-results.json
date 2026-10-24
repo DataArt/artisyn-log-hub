@@ -1,0 +1,215 @@
+{
+  "schema": 1,
+  "commit": "d11c40855ed84c75464cc982ea28f7e3460464d4",
+  "date": "2026-10-24T13:19:20.330Z",
+  "ref": "main",
+  "rows": [
+    {
+      "tool": "snyk-oss",
+      "scope": "prod",
+      "label": "Snyk Open Source (prod)",
+      "status": "pass",
+      "counts": {
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0
+      },
+      "fixable": 0,
+      "note": "no issues",
+      "version": "1.1308.3",
+      "link": "https://github.com/DataArt/artisyn-log-hub/actions/runs/40097423492"
+    },
+    {
+      "tool": "snyk-oss",
+      "scope": "dev",
+      "label": "Snyk Open Source (dev)",
+      "status": "findings",
+      "counts": {
+        "critical": 1,
+        "high": 13,
+        "medium": 14,
+        "low": 1
+      },
+      "fixable": 11,
+      "note": "11 fixable high/critical",
+      "version": "1.1308.3",
+      "link": "https://github.com/DataArt/artisyn-log-hub/actions/runs/40097423492"
+    },
+    {
+      "tool": "snyk-oss",
+      "scope": "kit",
+      "label": "Snyk — installer tarballs",
+      "status": "pass",
+      "counts": {
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0
+      },
+      "fixable": 0,
+      "note": "no issues",
+      "version": "1.1308.3",
+      "link": "https://github.com/DataArt/artisyn-log-hub/actions/runs/40097423492"
+    },
+    {
+      "tool": "config-guard",
+      "scope": "repo",
+      "label": "Executable-config guard",
+      "status": "pass",
+      "counts": {
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0
+      },
+      "fixable": 0,
+      "note": "",
+      "link": "https://github.com/DataArt/artisyn-log-hub/actions/runs/40097423492"
+    },
+    {
+      "tool": "lockfile-lint",
+      "scope": "npm",
+      "label": "Lock-file registry",
+      "status": "pass",
+      "counts": {
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0
+      },
+      "fixable": 0,
+      "note": "ok",
+      "version": "5.1.0",
+      "link": "https://github.com/DataArt/artisyn-log-hub/actions/runs/40097423492"
+    },
+    {
+      "tool": "npm-signatures",
+      "scope": "npm",
+      "label": "npm registry signatures",
+      "status": "pass",
+      "counts": {
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0
+      },
+      "fixable": 0,
+      "note": "ok",
+      "version": "10.9.9",
+      "link": "https://github.com/DataArt/artisyn-log-hub/actions/runs/40097423492"
+    },
+    {
+      "tool": "actionlint",
+      "scope": "workflows",
+      "label": "actionlint",
+      "status": "pass",
+      "counts": {
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0
+      },
+      "fixable": 0,
+      "note": "ok",
+      "version": "1.7.12",
+      "link": "https://github.com/DataArt/artisyn-log-hub/actions/runs/40097423492"
+    },
+    {
+      "tool": "zizmor",
+      "scope": "workflows",
+      "label": "zizmor",
+      "status": "pass",
+      "counts": {
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0
+      },
+      "fixable": 0,
+      "note": "no issues",
+      "version": "1.31.1",
+      "link": "https://github.com/DataArt/artisyn-log-hub/actions/runs/40097423492"
+    },
+    {
+      "tool": "hadolint",
+      "scope": "dockerfiles",
+      "label": "hadolint",
+      "status": "warning",
+      "counts": {
+        "critical": 0,
+        "high": 0,
+        "medium": 20,
+        "low": 4
+      },
+      "fixable": 0,
+      "note": "20 medium, 4 low: DL3016, DL3003, DL3008, DL4006, SC2010",
+      "version": "2.15.1",
+      "link": "https://github.com/DataArt/artisyn-log-hub/actions/runs/40097423492"
+    },
+    {
+      "tool": "compose",
+      "scope": "config",
+      "label": "docker compose config",
+      "status": "pass",
+      "counts": {
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0
+      },
+      "fixable": 0,
+      "note": "ok",
+      "version": "2.38.2",
+      "link": "https://github.com/DataArt/artisyn-log-hub/actions/runs/40097423492"
+    },
+    {
+      "tool": "snyk-container",
+      "scope": "image",
+      "label": "Snyk Container",
+      "status": "findings",
+      "counts": {
+        "critical": 1,
+        "high": 5,
+        "medium": 2,
+        "low": 87
+      },
+      "fixable": 0,
+      "note": "1 critical, 5 high, 2 medium, 87 low",
+      "version": "1.1308.3",
+      "link": "https://github.com/DataArt/artisyn-log-hub/actions/runs/40097423492"
+    },
+    {
+      "tool": "node-runtime",
+      "scope": "dockerfile",
+      "label": "Node runtime (Dockerfile)",
+      "status": "pass",
+      "counts": {
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0
+      },
+      "fixable": 0,
+      "note": "22.23.4 is the latest patch",
+      "version": "22.23.4",
+      "link": "https://github.com/DataArt/artisyn-log-hub/actions/runs/40097423492"
+    },
+    {
+      "tool": "node-runtime",
+      "scope": "docker-dev",
+      "label": "Node runtime (docker-dev)",
+      "status": "pass",
+      "counts": {
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0
+      },
+      "fixable": 0,
+      "note": "24.22.1 is the latest patch",
+      "version": "24.22.1",
+      "link": "https://github.com/DataArt/artisyn-log-hub/actions/runs/40097423492"
+    }
+  ]
+}

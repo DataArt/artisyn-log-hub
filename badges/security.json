@@ -1,0 +1,6 @@
+{
+  "schemaVersion": 1,
+  "label": "security scan",
+  "message": "1 failing",
+  "color": "red"
+}
