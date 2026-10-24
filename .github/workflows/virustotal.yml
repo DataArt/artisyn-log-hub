@@ -7,8 +7,7 @@
 # rows (scripts/ci/virustotal-scan.js); security-report.yml turns them into the PR-description
 # block and a `VirusTotal verdict` check run with conclusion `neutral`.
 #
-# Gate: the jobs run only when the repository variable VIRUSTOTAL_ENABLED is `true`
-# (Settings → Secrets and variables → Actions → Variables).
+# Always on (within the path filter) — there is no enable/disable repository variable.
 # Secret: VIRUS_TOTAL_KEY (scan job only). Fork PRs get no secrets — the scan job then writes
 # `skipped` rows. The tarballs are built in the secret-free build-kit job; the scan job only
 # downloads the `installer-kit` artifact and never runs PR code with the key in its environment.
@@ -38,7 +37,6 @@ env:
 jobs:
   # Uploads `pr-meta` ({"pr": <n>, "sha": "<head sha>"}) for security-report.yml.
   pr-meta:
-    if: vars.VIRUSTOTAL_ENABLED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -63,7 +61,6 @@ jobs:
 
   # Builds the installer tarballs without any secret (Design Decision 6).
   build-kit:
-    if: vars.VIRUSTOTAL_ENABLED == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -100,7 +97,7 @@ jobs:
     needs: build-kit
     # Runs even when build-kit failed: the rows then become `error` rows ("no output").
     if: >-
-      always() && vars.VIRUSTOTAL_ENABLED == 'true'
+      always()
     runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:

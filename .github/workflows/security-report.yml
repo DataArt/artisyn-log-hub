@@ -9,8 +9,7 @@
 # number from `pr-meta` is accepted only when that PR is open on the triggering head SHA, and every
 # row is validated by normalizeRows() (scripts/ci/security-summary.js).
 #
-# Gate: runs when either repository variable SECURITY_SCANS_ENABLED or VIRUSTOTAL_ENABLED is
-# `true`, so VirusTotal rows are reported even when only VirusTotal is enabled.
+# Always on for pull-request runs — there is no enable/disable repository variable.
 # Rules: docs/tasks/todo/2026-10-23-ci-cd-scans/impl-plan.md (Design Decision 13).
 name: security-report
 
@@ -30,7 +29,6 @@ jobs:
   apply-pr:
     if: >-
       github.event.workflow_run.event == 'pull_request'
-      && (vars.SECURITY_SCANS_ENABLED == 'true' || vars.VIRUSTOTAL_ENABLED == 'true')
     runs-on: ubuntu-latest
     timeout-minutes: 5
     permissions:

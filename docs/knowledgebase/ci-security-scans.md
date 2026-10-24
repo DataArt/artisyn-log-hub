@@ -19,16 +19,14 @@ Secret scanning is separate and unchanged: see [Git Hooks and Secret Scanning](g
 
 ## Workflows and triggers
 
-| Workflow (`name:`) | File | Triggers | Gate (job `if:`) |
+| Workflow (`name:`) | File | Triggers | Runs when |
 |---|---|---|---|
-| `security-scans` | `.github/workflows/security-scans.yml` | `pull_request`; `push` to `main`, `release`; nightly `schedule` (`17 3 * * *` UTC); `workflow_dispatch` | `vars.SECURITY_SCANS_ENABLED == 'true' \|\| github.event_name == 'workflow_dispatch'` |
-| `virustotal` | `.github/workflows/virustotal.yml` | `pull_request` with paths `hook/**`, `artisyn-hooks-installer/**`, `release-template/**` | `vars.VIRUSTOTAL_ENABLED == 'true'` |
-| `security-report` | `.github/workflows/security-report.yml` | `workflow_run` (`completed`) of `security-scans` and `virustotal` | the triggering run came from a `pull_request`, and **either** variable is `'true'` |
+| `security-scans` | `.github/workflows/security-scans.yml` | `pull_request`; `push` to `main`, `release`; nightly `schedule` (`17 3 * * *` UTC); `workflow_dispatch` | always |
+| `virustotal` | `.github/workflows/virustotal.yml` | `pull_request` with paths `hook/**`, `artisyn-hooks-installer/**`, `release-template/**` | always (within the path filter) |
+| `security-report` | `.github/workflows/security-report.yml` | `workflow_run` (`completed`) of `security-scans` and `virustotal` | the triggering run came from a `pull_request` |
 
 The workflow `name:` values are matched by `workflow_run` and by the README badge; do not rename
-them. The gate sits on each job (like `gitleaks.yml`), so a disabled workflow costs no runner
-minutes. Scheduled runs also need the variable; a manual "Run workflow" always runs
-`security-scans`. `virustotal` is separate only because a path filter is allowed only on a
+them. There is no enable/disable repository variable: the scans are always on. `virustotal` is separate only because a path filter is allowed only on a
 workflow that is not a required check (FR-30). `security-scans` uses no `paths-ignore`.
 
 ### `security-scans` jobs
@@ -220,8 +218,7 @@ Owner checklist (Settings, not files):
 
 ## Owner rollout
 
-1. Settings → Secrets and variables → Actions → Variables: set `SECURITY_SCANS_ENABLED` = `true`
-   and `VIRUSTOTAL_ENABLED` = `true` (secrets `SNYK_TOKEN` and `VIRUS_TOTAL_KEY` must exist).
+1. Settings → Secrets and variables → Actions → Secrets: `SNYK_TOKEN` and `VIRUS_TOTAL_KEY` must exist.
 2. Run `security-scans` once by `workflow_dispatch` on `main` to bootstrap the `ci-reports`
    branch (the README badge stays broken until then).
 3. Open the acceptance test PRs from the task requirements (seeded CVE dependency, bad config

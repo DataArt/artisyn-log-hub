@@ -2,10 +2,8 @@
 # turned into one "scan row" (scripts/ci/scan-rows.js) and the jobs end green, so no scan ever
 # blocks a merge. security-report.yml collects the `scan-row-*` artifacts into the PR description.
 #
-# Gate: the jobs run on pull_request / push (main, release) / schedule only when the repository
-# variable SECURITY_SCANS_ENABLED is `true` (Settings → Secrets and variables → Actions →
-# Variables). A manual "Run workflow" (workflow_dispatch) always runs. The gate expression sits on
-# every job's `if:` (like gitleaks.yml).
+# Always on: the jobs run on every pull_request, push (main, release), schedule and manual
+# "Run workflow" (workflow_dispatch) — there is no enable/disable repository variable.
 #
 # Secrets: SNYK_TOKEN (snyk-oss, container). Fork PRs get no secrets — those jobs write `skipped`
 # rows instead. Docs-only PRs (every changed path under docs/) skip the tool steps and write
@@ -43,7 +41,6 @@ jobs:
   # (Dockerfile or docker-dev/Dockerfile). Both are `false` outside pull_request.
   # On PRs it also uploads `pr-meta` ({"pr": <n>, "sha": "<head sha>"}) for security-report.yml.
   changes:
-    if: vars.SECURITY_SCANS_ENABLED == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     outputs:
@@ -103,7 +100,6 @@ jobs:
   # Builds the installer tarballs without any secret (Design Decision 6). Jobs holding a secret
   # only download the `installer-kit` artifact.
   build-kit:
-    if: vars.SECURITY_SCANS_ENABLED == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -141,7 +137,6 @@ jobs:
     # Runs even when build-kit failed: the kit row then becomes an `error` row ("no output").
     if: >-
       always() && needs.changes.result == 'success'
-      && (vars.SECURITY_SCANS_ENABLED == 'true' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -374,7 +369,6 @@ jobs:
     needs: changes
     if: >-
       github.event_name == 'pull_request'
-      && (vars.SECURITY_SCANS_ENABLED == 'true' || github.event_name == 'workflow_dispatch')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -464,7 +458,6 @@ jobs:
   # .mcp.json and the untracked log-hub.local.json. Findings become `::warning` annotations.
   config-guard:
     needs: changes
-    if: vars.SECURITY_SCANS_ENABLED == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
@@ -531,7 +524,6 @@ jobs:
   # four npm lock files. Rows: lockfile-lint/npm, npm-signatures/npm.
   supply-chain:
     needs: changes
-    if: vars.SECURITY_SCANS_ENABLED == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     env:
@@ -691,7 +683,6 @@ jobs:
   # scanning, category `zizmor`, outside fork PRs). Rows: actionlint/workflows, zizmor/workflows.
   workflow-lint:
     needs: changes
-    if: vars.SECURITY_SCANS_ENABLED == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
@@ -862,7 +853,6 @@ jobs:
   # Rows: hadolint/dockerfiles, compose/config.
   dockerfile-lint:
     needs: changes
-    if: vars.SECURITY_SCANS_ENABLED == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -1007,7 +997,6 @@ jobs:
   # Rows: node-runtime/dockerfile, node-runtime/docker-dev.
   node-runtime:
     needs: changes
-    if: vars.SECURITY_SCANS_ENABLED == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     env:
@@ -1104,8 +1093,7 @@ jobs:
   container:
     needs: changes
     if: >-
-      (vars.SECURITY_SCANS_ENABLED == 'true' || github.event_name == 'workflow_dispatch')
-      && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+      (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         || (github.event_name == 'pull_request' && needs.changes.outputs.docker_changed == 'true'))
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -1256,7 +1244,6 @@ jobs:
       - container
     if: >-
       always()
-      && (vars.SECURITY_SCANS_ENABLED == 'true' || github.event_name == 'workflow_dispatch')
       && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
       && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
