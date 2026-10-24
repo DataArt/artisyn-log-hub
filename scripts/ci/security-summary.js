@@ -18,13 +18,16 @@
 //     replaceBlock(body, block)    put the block into a PR body (idempotent)
 //     badgeFor(rows)               shields.io endpoint JSON
 //     buildResults(rows, meta)     security-scan-results.json content, meta = {sha, date}
+//     carryOverRows(rows, previous)  this run's rows plus the previous results' missing ones
 //     snykIssues(result)           critical/high issues of one raw Snyk --json result
 //     renderReport(rows, meta, issues)  REPORT.md, the page the README badge links to
 //   node scripts/ci/security-summary.js results --rows <dir> --out <dir> --sha <sha>
-//       [--raw <dir>] [--run-url <url>]
+//       [--raw <dir>] [--run-url <url>] [--previous <dir>]
 //     Reads every row-*.json under <dir> (recursively), writes
-//     <out>/security-scan-results.json, <out>/badges/security.json and <out>/REPORT.md
-//     (Snyk issue lists from the snyk-*.json files under --raw, when given).
+//     <out>/security-scan-results.json, <out>/snyk-issues.json, <out>/badges/security.json and
+//     <out>/REPORT.md (Snyk issue lists from the snyk-*.json files under --raw, when given).
+//     --previous holds the last published security-scan-results.json / snyk-issues.json: rows
+//     (and issue lists) this run did not produce are carried over from it (carryOverRows).
 //   node scripts/ci/security-summary.js apply-pr
 //     Env: GH_TOKEN, REPO (owner/name), RUN_ID (the triggering workflow run),
 //     HEAD_SHA (its head SHA). Reads the pr-meta artifact of RUN_ID, checks the
@@ -371,6 +374,26 @@ function buildResults(rows, meta = {}) {
   return { schema: 1, commit: meta.sha, date: meta.date, ref: 'main', rows: normalizeRows(rows) };
 }
 
+const CARRIED_PREFIX = 'as of ';
+
+/**
+ * Rows of this run plus every row of the previously published results (a
+ * security-scan-results.json object) whose tool/scope this run did not produce — a push to main
+ * runs no Snyk Container and no VirusTotal, so those come from the last nightly run. A carried
+ * row's note starts with `as of <YYYY-MM-DD HH:MM> UTC` (the previous results' date) unless it is
+ * already a carried note, which keeps its original date. Returns normalized rows.
+ */
+function carryOverRows(rows, previous) {
+  const current = normalizeRows(rows);
+  if (!isPlainObject(previous) || !Array.isArray(previous.rows)) return current;
+  const have = new Set(current.map((r) => `${r.tool}/${r.scope}`));
+  const asOf = `${CARRIED_PREFIX}${formatDate(previous.date)} UTC`;
+  const carried = normalizeRows(previous.rows)
+    .filter((r) => !have.has(`${r.tool}/${r.scope}`))
+    .map((r) => (r.note.startsWith(CARRIED_PREFIX) ? r : { ...r, note: r.note ? `${asOf}: ${r.note}` : asOf }));
+  return normalizeRows([...current, ...carried]);
+}
+
 // ---------------------------------------------------------------- CLI ----
 
 const ROW_FILE_MAX_BYTES = 256 * 1024;
@@ -468,19 +491,53 @@ function readSnykIssues(rawDir) {
   return issues;
 }
 
+/** Parsed JSON file `name` in `dir`, or null when it is missing, oversized or invalid. */
+function readJsonFile(dir, name) {
+  if (!dir) return null;
+  const p = path.join(path.resolve(dir), name);
+  try {
+    if (fs.statSync(p).size > RAW_FILE_MAX_BYTES) throw new Error('file too large');
+    return JSON.parse(fs.readFileSync(p, 'utf8'));
+  } catch (err) {
+    if (err.code !== 'ENOENT') process.stderr.write(`security-summary: skipping ${p}: ${err.message}\n`);
+    return null;
+  }
+}
+
+/** A previously published snyk-issues.json list, re-validated entry by entry through snykIssues(). */
+function revalidateIssues(list) {
+  if (!Array.isArray(list)) return null;
+  return list.filter(isPlainObject).flatMap((e) => snykIssues([{
+    displayTargetFile: e.project,
+    vulnerabilities: [{ id: e.id, severity: e.severity, packageName: e.package, version: e.version, title: e.title, fixedIn: e.fixedIn }],
+  }]));
+}
+
 function runResults(argv) {
-  const args = parseArgs(argv, ['rows', 'out', 'sha', 'raw', 'run-url']);
+  const args = parseArgs(argv, ['rows', 'out', 'sha', 'raw', 'run-url', 'previous']);
   if (!args.rows || !args.out || !args.sha) throw new UsageError('results needs --rows <dir> --out <dir> --sha <sha>');
   if (!SHA_RE.test(args.sha)) throw new UsageError('--sha must be a lowercase hex commit SHA');
-  const rows = readRows(path.resolve(args.rows));
   const meta = { sha: args.sha, date: new Date().toISOString(), runUrl: args['run-url'] };
+  const ownRows = normalizeRows(readRows(path.resolve(args.rows)));
+  const rows = carryOverRows(ownRows, readJsonFile(args.previous, 'security-scan-results.json'));
+  // Issue lists follow their rows: this run's raw Snyk output, else the previous publication's.
+  const issues = readSnykIssues(args.raw);
+  const previousIssues = readJsonFile(args.previous, 'snyk-issues.json');
+  const own = new Set(ownRows.map((r) => `${r.tool}/${r.scope}`));
+  for (const [key] of SNYK_REPORT_SCOPES) {
+    if (own.has(key) || issues[key] || !isPlainObject(previousIssues)) continue;
+    const list = revalidateIssues(previousIssues[key]);
+    if (list) issues[key] = list;
+  }
   const out = path.resolve(args.out);
   const results = buildResults(rows, meta);
   writeJson(path.join(out, 'security-scan-results.json'), results);
+  writeJson(path.join(out, 'snyk-issues.json'), issues);
   const badge = badgeFor(rows);
   writeJson(path.join(out, 'badges', 'security.json'), badge);
-  fs.writeFileSync(path.join(out, 'REPORT.md'), renderReport(rows, meta, readSnykIssues(args.raw)), 'utf8');
-  process.stdout.write(`security-summary: ${results.rows.length} row(s), badge "${badge.message}", REPORT.md\n`);
+  fs.writeFileSync(path.join(out, 'REPORT.md'), renderReport(rows, meta, issues), 'utf8');
+  const carried = rows.length - ownRows.length;
+  process.stdout.write(`security-summary: ${results.rows.length} row(s) (${carried} carried over), badge "${badge.message}", REPORT.md\n`);
 }
 
 function gh(args, input) {
@@ -643,7 +700,7 @@ function runApplyPr(argv) {
 }
 
 const USAGE = 'Usage:\n'
-  + '  node scripts/ci/security-summary.js results --rows <dir> --out <dir> --sha <sha> [--raw <dir>] [--run-url <url>]\n'
+  + '  node scripts/ci/security-summary.js results --rows <dir> --out <dir> --sha <sha> [--raw <dir>] [--run-url <url>] [--previous <dir>]\n'
   + '  GH_TOKEN=... REPO=owner/name RUN_ID=<id> HEAD_SHA=<sha> node scripts/ci/security-summary.js apply-pr\n';
 
 function main() {
@@ -674,6 +731,7 @@ module.exports = {
   replaceBlock,
   badgeFor,
   buildResults,
+  carryOverRows,
   snykIssues,
   renderReport,
 };
