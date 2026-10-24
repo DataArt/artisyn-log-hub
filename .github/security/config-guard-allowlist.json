@@ -1,0 +1,6 @@
+{
+  "mcpStdio": [
+    { "commands": ["npx", "npx.cmd"], "package": "@modelcontextprotocol/server-postgres@0.6.2" },
+    { "commands": ["npx", "npx.cmd"], "package": "@playwright/mcp@0.0.83" }
+  ]
+}

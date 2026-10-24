@@ -46,6 +46,8 @@ format where the two differ).
 | [tool-call-outcome](tool-call-outcome.md) | `client/.../session-log/tool-outcome.ts`; twin `server/src/logs/tool-stats.ts` | vitest, jest |
 | [bash-command-view](bash-command-view.md) | `client/src/viewer/lib/bash-view/*` | vitest |
 | [sandbox-prune-classification](sandbox-prune-classification.md) | `scripts/claude-docker/prune.mjs` | `node --test` (`npm run test:scripts`) |
+| [executable-config-guard](executable-config-guard.md) | `scripts/ci/config-guard.js` | `node --test` (`npm run test:scripts`) |
+| [security-scan-summary](security-scan-summary.md) | `scripts/ci/security-summary.js` | `node --test` (`npm run test:scripts`) |
 
 ## File layout
 

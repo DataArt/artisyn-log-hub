@@ -1,0 +1,9 @@
+# Changes to executable config, the hook, the installer, CI and scan policy need the owner's review (FR-5).
+/.artisyn/config/          @denistsyplakov
+/.claude/settings.json     @denistsyplakov
+/.mcp.json                 @denistsyplakov
+/hook/                     @denistsyplakov
+/artisyn-hooks-installer/  @denistsyplakov
+/.github/                  @denistsyplakov
+/.snyk                     @denistsyplakov
+/scripts/ci/               @denistsyplakov

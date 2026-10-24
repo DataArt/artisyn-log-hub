@@ -1,5 +1,8 @@
 # Artisyn Log Hub
 
+[![Security scan](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/DataArt/artisyn-log-hub/ci-reports/badges/security.json)](https://github.com/DataArt/artisyn-log-hub/actions/workflows/security-scans.yml)
+[![security-scans](https://github.com/DataArt/artisyn-log-hub/actions/workflows/security-scans.yml/badge.svg)](https://github.com/DataArt/artisyn-log-hub/actions/workflows/security-scans.yml)
+
 Artisyn Log Hub is a self-hosted server and web viewer for [Claude Code](https://docs.claude.com/en/docs/claude-code)
 sessions. A Claude Code hook, installed into a project, uploads the session transcripts and related
 telemetry to your own Log Hub server. The web app then lets you and your team browse sessions turn by
