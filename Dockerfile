@@ -1,9 +1,12 @@
+# Build tools are pinned to the versions the repo itself builds with: bun = BUN_VERSION of the CI
+# workflows and docker-dev, typescript and @vercel/ncc = the root package-lock.json.
+
 # Stage 1 — client-build
 FROM node:24.22.1-slim AS client-build
-RUN npm install -g bun
-WORKDIR /app
-COPY client/ ./client/
-RUN cd client && bun install && bun run build
+RUN npm install -g bun@1.3.14
+WORKDIR /app/client
+COPY client/ ./
+RUN bun install --frozen-lockfile && bun run build
 
 # Stage 2 — hooks-installer build (generates artisyn-hooks-installer.tgz + hooks.tar.gz)
 FROM node:24.22.1-slim AS hooks-build
@@ -11,24 +14,26 @@ WORKDIR /app
 COPY artisyn-hooks-installer/ ./artisyn-hooks-installer/
 COPY hook/ ./hook/
 COPY scripts/build-hooks-installer.js ./scripts/build-hooks-installer.js
-RUN mkdir -p server/src/public/static
-RUN npm install --prefix artisyn-hooks-installer
-RUN npm install --no-save typescript
-RUN node scripts/build-hooks-installer.js
+RUN mkdir -p server/src/public/static \
+ && npm ci --prefix artisyn-hooks-installer \
+ && npm install --no-save typescript@6.0.3 \
+ && node scripts/build-hooks-installer.js
 
 # Stage 3 — server-build
 FROM node:24.22.1-slim AS server-build
-RUN npm install -g @vercel/ncc
-WORKDIR /app
-COPY server/ ./server/
+RUN npm install -g @vercel/ncc@0.38.4
+WORKDIR /app/server
+COPY server/ ./
 # ncc type-checks every file in server/tsconfig.json, including the *.algo.spec.ts tests that
 # import this loader (only its .d.cts is needed; nothing from it reaches the bundle).
-COPY scripts/algo-docs/ ./scripts/algo-docs/
-RUN cd server && npm ci && ncc build src/main.ts -o /app/dist
-RUN mkdir -p /app/dist/drizzle && cp -r server/drizzle/migrations /app/dist/drizzle/migrations
-RUN mkdir -p /app/dist/prebuilds && cp -r server/node_modules/argon2/prebuilds/* /app/dist/prebuilds/
-RUN cp server/node_modules/connect-pg-simple/table.sql /app/dist/table.sql
-RUN node -p "require('./server/package.json').version" > /app/dist/.app-version
+COPY scripts/algo-docs/ /app/scripts/algo-docs/
+RUN npm ci && ncc build src/main.ts -o /app/dist
+WORKDIR /app
+RUN mkdir -p /app/dist/drizzle /app/dist/prebuilds \
+ && cp -r server/drizzle/migrations /app/dist/drizzle/migrations \
+ && cp -r server/node_modules/argon2/prebuilds/* /app/dist/prebuilds/ \
+ && cp server/node_modules/connect-pg-simple/table.sql /app/dist/table.sql \
+ && node -p "require('./server/package.json').version" > /app/dist/.app-version
 
 # Stage 4 — runtime
 # Alpine, not Debian slim: the Debian base carries util-linux/glibc/zlib/ncurses CVEs that Debian

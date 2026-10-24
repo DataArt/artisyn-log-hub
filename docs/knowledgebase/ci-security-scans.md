@@ -40,7 +40,7 @@ workflow that is not a required check (FR-30). `security-scans` uses no `paths-i
 | `config-guard` | `node scripts/ci/config-guard.js` (executable-config guard, FR-4) | `config-guard/repo` |
 | `supply-chain` | `lockfile-lint` (every `resolved` URL is `registry.npmjs.org`) and `npm audit signatures` | `lockfile-lint/npm`, `npm-signatures/npm` |
 | `workflow-lint` | actionlint and zizmor (SARIF category `zizmor`) | `actionlint/workflows`, `zizmor/workflows` |
-| `dockerfile-lint` | hadolint over the Dockerfiles, `docker compose config` over the compose files | `hadolint/dockerfiles`, `compose/config` |
+| `dockerfile-lint` | hadolint over the Dockerfiles (config `.hadolint.yaml`: DL3008, apt version pinning, is ignored — mirrors drop old versions), `docker compose config` over the compose files | `hadolint/dockerfiles`, `compose/config` |
 | `node-runtime` | `scripts/ci/node-runtime-check.js`: Node version of `Dockerfile` and `docker-dev/Dockerfile` vs `is-my-node-vulnerable` and the latest patch on nodejs.org | `node-runtime/dockerfile`, `/docker-dev` |
 | `container` | Snyk Container on the production image; nightly, dispatch, and PRs with `docker_changed`; SARIF category `snyk-container` | `snyk-container/image` |
 | `virustotal` | VirusTotal verdict of the installer tarballs for the nightly report; nightly and dispatch only (PRs use `virustotal.yml`) | `virustotal/installer-tgz`, `/hooks-tgz` |
