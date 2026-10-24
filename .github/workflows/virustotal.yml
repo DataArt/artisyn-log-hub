@@ -1,0 +1,198 @@
+# VirusTotal scan of the installer tarballs (FR-29 - FR-31) — report-only.
+#
+# FR-30: this workflow is NOT a required check, so it may (and does) use a path filter — it runs
+# only on PRs that touch hook/, artisyn-hooks-installer/ or release-template/. It is kept out of
+# security-scans.yml for exactly that reason.
+# FR-31: a detection never fails the run. Detections, API errors and timeouts become `neutral`
+# rows (scripts/ci/virustotal-scan.js); security-report.yml turns them into the PR-description
+# block and a `VirusTotal verdict` check run with conclusion `neutral`.
+#
+# Gate: the jobs run only when the repository variable VIRUSTOTAL_ENABLED is `true`
+# (Settings → Secrets and variables → Actions → Variables).
+# Secret: VIRUS_TOTAL_KEY (scan job only). Fork PRs get no secrets — the scan job then writes
+# `skipped` rows. The tarballs are built in the secret-free build-kit job; the scan job only
+# downloads the `installer-kit` artifact and never runs PR code with the key in its environment.
+# Rules and row format: docs/tasks/todo/2026-10-23-ci-cd-scans/impl-plan.md (Design Decisions).
+name: virustotal
+
+on:
+  pull_request:
+    paths:
+      - 'hook/**'
+      - 'artisyn-hooks-installer/**'
+      - 'release-template/**'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: virustotal-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+env:
+  RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+  # One markdown table line per scan row, for $GITHUB_STEP_SUMMARY (Design Decision 28).
+  SUMMARY_ROW_JQ: '"| \(.tool) | \(.scope) | \(.status) | \(.counts.critical) | \(.counts.high) | \(.counts.medium) | \(.counts.low) | \(.note | gsub("\\|"; "/")) |"'
+  SUMMARY_HEADER: '| Tool | Scope | Status | Critical | High | Medium | Low | Note |'
+
+jobs:
+  # Uploads `pr-meta` ({"pr": <n>, "sha": "<head sha>"}) for security-report.yml.
+  pr-meta:
+    if: vars.VIRUSTOTAL_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Write pr-meta.json
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -eu
+          mkdir -p "$RUNNER_TEMP/pr-meta"
+          jq -n --argjson pr "$PR_NUMBER" --arg sha "$HEAD_SHA" '{pr: $pr, sha: $sha}' \
+            > "$RUNNER_TEMP/pr-meta/pr-meta.json"
+          cat "$RUNNER_TEMP/pr-meta/pr-meta.json"
+
+      - name: Upload pr-meta
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: pr-meta
+          path: ${{ runner.temp }}/pr-meta/pr-meta.json
+          retention-days: 14
+          if-no-files-found: error
+
+  # Builds the installer tarballs without any secret (Design Decision 6).
+  build-kit:
+    if: vars.VIRUSTOTAL_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Build the installer tarballs
+        run: |
+          set -eu
+          npm ci --ignore-scripts
+          (cd artisyn-hooks-installer && npm ci --ignore-scripts)
+          npm run build:hooks-installer -- --static-dir "$RUNNER_TEMP/kit"
+          ls -l "$RUNNER_TEMP/kit"
+
+      - name: Upload installer-kit
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: installer-kit
+          path: |
+            ${{ runner.temp }}/kit/artisyn-hooks-installer.tgz
+            ${{ runner.temp }}/kit/hooks.tar.gz
+          retention-days: 14
+          if-no-files-found: error
+
+  # VirusTotal lookup / upload of both tarballs. Rows: virustotal/installer-tgz,
+  # virustotal/hooks-tgz. Raw VirusTotal JSON responses go to artifact raw-virustotal.
+  scan:
+    needs: build-kit
+    # Runs even when build-kit failed: the rows then become `error` rows ("no output").
+    if: >-
+      always() && vars.VIRUSTOTAL_ENABLED == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      # Only the repo's own scripts are checked out; the tarballs come from the artifact.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Runs without VIRUS_TOTAL_KEY (fork PRs) write `skipped` rows and skip the scan.
+      - name: Check preconditions
+        id: gate
+        env:
+          VIRUS_TOTAL_KEY: ${{ secrets.VIRUS_TOTAL_KEY }}
+        run: |
+          set -eu
+          if [ -n "$VIRUS_TOTAL_KEY" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "run=false" >> "$GITHUB_OUTPUT"
+          reason="fork PR: no secret"
+          for scope in installer-tgz hooks-tgz; do
+            node scripts/ci/scan-rows.js skipped --tool virustotal --scope "$scope" \
+              --link "$RUN_URL" --out "$RUNNER_TEMP/rows" --note "$reason"
+          done
+          echo "::notice::virustotal skipped: $reason"
+          echo "virustotal skipped: $reason" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Download installer-kit
+        if: steps.gate.outputs.run == 'true'
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: installer-kit
+          path: ${{ runner.temp }}/kit
+
+      # A missing tarball (build-kit or the download failed) becomes an `error` row.
+      - name: VirusTotal scan
+        if: steps.gate.outputs.run == 'true'
+        continue-on-error: true
+        env:
+          VIRUS_TOTAL_KEY: ${{ secrets.VIRUS_TOTAL_KEY }}
+        run: |
+          set -eu
+          mkdir -p "$RUNNER_TEMP/raw"
+          node scripts/ci/virustotal-scan.js --out "$RUNNER_TEMP/rows" --raw "$RUNNER_TEMP/raw" \
+            "$RUNNER_TEMP/kit/artisyn-hooks-installer.tgz" "$RUNNER_TEMP/kit/hooks.tar.gz"
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### VirusTotal"
+            echo ""
+            echo "$SUMMARY_HEADER"
+            echo "|---|---|---|---|---|---|---|---|"
+            for scope in installer-tgz hooks-tgz; do
+              row="$RUNNER_TEMP/rows/row-virustotal-$scope.json"
+              if [ -f "$row" ]; then
+                jq -r "$SUMMARY_ROW_JQ" "$row"
+              else
+                echo "| virustotal | $scope | no row | | | | | |"
+              fi
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload row (installer-tgz)
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: scan-row-virustotal-installer-tgz
+          path: ${{ runner.temp }}/rows/row-virustotal-installer-tgz.json
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Upload row (hooks-tgz)
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: scan-row-virustotal-hooks-tgz
+          path: ${{ runner.temp }}/rows/row-virustotal-hooks-tgz.json
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Upload raw output
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: raw-virustotal
+          path: ${{ runner.temp }}/raw/
+          retention-days: 14
+          if-no-files-found: ignore

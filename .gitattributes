@@ -2,3 +2,4 @@ server/drizzle/migrations/*.sql text eol=lf
 .githooks/* text eol=lf
 # Image files of the dev sandbox run on Linux (CRLF breaks entrypoint.sh) and feed the image hash.
 docker-dev/** text eol=lf
+.github/** text eol=lf

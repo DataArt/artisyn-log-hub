@@ -1,0 +1,5 @@
+# Snyk (https://snyk.io) policy file.
+# Every ignore entry MUST carry a `reason` and an `expires` date — no permanent, unexplained ignores.
+version: v1.25.1
+ignore: {}
+patch: {}

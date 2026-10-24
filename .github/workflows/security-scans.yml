@@ -1,0 +1,1327 @@
+# Security scans — report-only: every tool step has `continue-on-error: true`, its result is
+# turned into one "scan row" (scripts/ci/scan-rows.js) and the jobs end green, so no scan ever
+# blocks a merge. security-report.yml collects the `scan-row-*` artifacts into the PR description.
+#
+# Gate: the jobs run on pull_request / push (main, release) / schedule only when the repository
+# variable SECURITY_SCANS_ENABLED is `true` (Settings → Secrets and variables → Actions →
+# Variables). A manual "Run workflow" (workflow_dispatch) always runs. The gate expression sits on
+# every job's `if:` (like gitleaks.yml).
+#
+# Secrets: SNYK_TOKEN (snyk-oss, container). Fork PRs get no secrets — those jobs write `skipped`
+# rows instead. Docs-only PRs (every changed path under docs/) skip the tool steps and write
+# `skipped` rows. Every scan job uploads its raw tool output as artifact `raw-<job>` (14 days) and
+# writes a one-line-per-row table to the job summary.
+#
+# Nightly (schedule) and manual runs on main publish the results and the badge to the orphan
+# `ci-reports` branch (publish-results job, the only job with `contents: write`).
+# Rules and row format: docs/tasks/todo/2026-10-23-ci-cd-scans/impl-plan.md (Design Decisions).
+name: security-scans
+
+on:
+  pull_request:
+  push:
+    branches: [main, release]
+  schedule:
+    - cron: '17 3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-scans-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+  # One markdown table line per scan row, for $GITHUB_STEP_SUMMARY (Design Decision 28).
+  SUMMARY_ROW_JQ: '"| \(.tool) | \(.scope) | \(.status) | \(.counts.critical) | \(.counts.high) | \(.counts.medium) | \(.counts.low) | \(.note | gsub("\\|"; "/")) |"'
+  SUMMARY_HEADER: '| Tool | Scope | Status | Critical | High | Medium | Low | Note |'
+
+jobs:
+  # What changed in the PR: docs_only (every path under docs/) and docker_changed
+  # (Dockerfile or docker-dev/Dockerfile). Both are `false` outside pull_request.
+  # On PRs it also uploads `pr-meta` ({"pr": <n>, "sha": "<head sha>"}) for security-report.yml.
+  changes:
+    if: vars.SECURITY_SCANS_ENABLED == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      docs_only: ${{ steps.diff.outputs.docs_only }}
+      docker_changed: ${{ steps.diff.outputs.docker_changed }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Classify changed paths
+        id: diff
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -eu
+          docs_only=false
+          docker_changed=false
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            changed="$RUNNER_TEMP/changed-paths.txt"
+            git diff --name-only "${BASE_SHA}...${HEAD_SHA}" > "$changed"
+            if [ -s "$changed" ] && ! grep -qv '^docs/' "$changed"; then
+              docs_only=true
+            fi
+            if grep -qxE 'Dockerfile|docker-dev/Dockerfile' "$changed"; then
+              docker_changed=true
+            fi
+          fi
+          echo "docs_only=$docs_only" >> "$GITHUB_OUTPUT"
+          echo "docker_changed=$docker_changed" >> "$GITHUB_OUTPUT"
+          echo "docs_only=$docs_only, docker_changed=$docker_changed"
+
+      - name: Write pr-meta.json
+        if: github.event_name == 'pull_request'
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -eu
+          mkdir -p "$RUNNER_TEMP/pr-meta"
+          jq -n --argjson pr "$PR_NUMBER" --arg sha "$HEAD_SHA" '{pr: $pr, sha: $sha}' \
+            > "$RUNNER_TEMP/pr-meta/pr-meta.json"
+          cat "$RUNNER_TEMP/pr-meta/pr-meta.json"
+
+      - name: Upload pr-meta
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: pr-meta
+          path: ${{ runner.temp }}/pr-meta/pr-meta.json
+          retention-days: 14
+          if-no-files-found: error
+
+  # Builds the installer tarballs without any secret (Design Decision 6). Jobs holding a secret
+  # only download the `installer-kit` artifact.
+  build-kit:
+    if: vars.SECURITY_SCANS_ENABLED == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Build the installer tarballs
+        run: |
+          set -eu
+          npm ci --ignore-scripts
+          (cd artisyn-hooks-installer && npm ci --ignore-scripts)
+          npm run build:hooks-installer -- --static-dir "$RUNNER_TEMP/kit"
+          ls -l "$RUNNER_TEMP/kit"
+
+      - name: Upload installer-kit
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: installer-kit
+          path: |
+            ${{ runner.temp }}/kit/artisyn-hooks-installer.tgz
+            ${{ runner.temp }}/kit/hooks.tar.gz
+          retention-days: 14
+          if-no-files-found: error
+
+  # Snyk Open Source (FR-1, FR-6): prod and dev dependencies of the repo, plus the manifests
+  # shipped inside the installer tarballs. Rows: snyk-oss/prod, snyk-oss/dev, snyk-oss/kit.
+  snyk-oss:
+    needs: [changes, build-kit]
+    # Runs even when build-kit failed: the kit row then becomes an `error` row ("no output").
+    if: >-
+      always() && needs.changes.result == 'success'
+      && (vars.SECURITY_SCANS_ENABLED == 'true' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+    env:
+      SNYK_VERSION: 1.1308.3
+      SNYK_SHA256: 5f323f45885341ea1473639859271925912ece82a2f77bc146bb4468f9838840
+      BUN_VERSION: 1.3.14
+      SNYK_COMMON_FLAGS: >-
+        --all-projects --detection-depth=4
+        --exclude=node_modules,dist,fixtures,pocs,marketplace,tmp
+        --policy-path=.snyk
+        --remote-repo-url=https://github.com/DataArt/artisyn-log-hub
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Decides whether the tool steps run. Docs-only PRs and runs without SNYK_TOKEN (fork PRs)
+      # write `skipped` rows for all three scopes and skip everything else.
+      - name: Check preconditions
+        id: gate
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+          DOCS_ONLY: ${{ needs.changes.outputs.docs_only }}
+        run: |
+          set -eu
+          reason=""
+          if [ "$DOCS_ONLY" = "true" ]; then
+            reason="docs-only change"
+          elif [ -z "$SNYK_TOKEN" ]; then
+            reason="fork PR: no secret"
+          fi
+          if [ -z "$reason" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "run=false" >> "$GITHUB_OUTPUT"
+          for scope in prod dev kit; do
+            node scripts/ci/scan-rows.js skipped --tool snyk-oss --scope "$scope" \
+              --version "$SNYK_VERSION" --link "$RUN_URL" --out "$RUNNER_TEMP/rows" --note "$reason"
+          done
+          echo "::notice::snyk-oss skipped: $reason"
+          echo "snyk-oss skipped: $reason" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Install Snyk CLI
+        if: steps.gate.outputs.run == 'true'
+        run: |
+          set -eu
+          curl -fsSL -o "$RUNNER_TEMP/snyk" \
+            "https://downloads.snyk.io/cli/v${SNYK_VERSION}/snyk-linux"
+          echo "${SNYK_SHA256}  $RUNNER_TEMP/snyk" | sha256sum -c -
+          chmod +x "$RUNNER_TEMP/snyk"
+          "$RUNNER_TEMP/snyk" --version
+          mkdir -p "$RUNNER_TEMP/raw"
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        if: steps.gate.outputs.run == 'true'
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+          no-cache: true
+
+      # Snyk cannot read bun.lock; it resolves client/ from the installed node_modules.
+      - name: Install client dependencies
+        if: steps.gate.outputs.run == 'true'
+        continue-on-error: true
+        working-directory: client
+        run: bun install --frozen-lockfile --ignore-scripts
+
+      - name: Download installer-kit
+        id: kit_download
+        if: steps.gate.outputs.run == 'true'
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: installer-kit
+          path: ${{ runner.temp }}/kit
+
+      - name: Snyk test (prod)
+        id: snyk_prod
+        if: steps.gate.outputs.run == 'true'
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          read -r -a flags <<< "$SNYK_COMMON_FLAGS"
+          "$RUNNER_TEMP/snyk" test "${flags[@]}" \
+            --json-file-output="$RUNNER_TEMP/raw/snyk-prod.json" \
+            --sarif-file-output="$RUNNER_TEMP/raw/snyk-prod.sarif"
+
+      - name: Snyk test (dev)
+        id: snyk_dev
+        if: steps.gate.outputs.run == 'true'
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          read -r -a flags <<< "$SNYK_COMMON_FLAGS"
+          "$RUNNER_TEMP/snyk" test "${flags[@]}" --dev \
+            --json-file-output="$RUNNER_TEMP/raw/snyk-dev.json"
+
+      # Exit code 3 = no supported manifest in the tarballs; the row is then `pass`.
+      - name: Snyk test (installer tarballs)
+        id: snyk_kit
+        if: steps.gate.outputs.run == 'true' && steps.kit_download.outcome == 'success'
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          set -eu
+          src="$RUNNER_TEMP/kit-src"
+          mkdir -p "$src/installer" "$src/hooks"
+          tar -xzf "$RUNNER_TEMP/kit/artisyn-hooks-installer.tgz" -C "$src/installer"
+          tar -xzf "$RUNNER_TEMP/kit/hooks.tar.gz" -C "$src/hooks"
+          cd "$src"
+          rc=0
+          "$RUNNER_TEMP/snyk" test --all-projects --detection-depth=8 \
+            --policy-path="$GITHUB_WORKSPACE/.snyk" \
+            --json-file-output="$RUNNER_TEMP/raw/snyk-kit.json" || rc=$?
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          exit "$rc"
+
+      - name: Write rows
+        id: rows
+        if: steps.gate.outputs.run == 'true'
+        env:
+          KIT_RC: ${{ steps.snyk_kit.outputs.rc }}
+        run: |
+          set -eu
+          raw="$RUNNER_TEMP/raw"
+          for scope in prod dev; do
+            node scripts/ci/scan-rows.js snyk-oss --tool snyk-oss --scope "$scope" \
+              --version "$SNYK_VERSION" --link "$RUN_URL" --out "$RUNNER_TEMP/rows" \
+              --json "$raw/snyk-$scope.json"
+          done
+          if [ "$KIT_RC" = "3" ]; then
+            node scripts/ci/scan-rows.js outcome --tool snyk-oss --scope kit \
+              --version "$SNYK_VERSION" --link "$RUN_URL" --out "$RUNNER_TEMP/rows" \
+              --outcome success --note "no manifests in tarballs"
+          else
+            node scripts/ci/scan-rows.js snyk-oss --tool snyk-oss --scope kit \
+              --version "$SNYK_VERSION" --link "$RUN_URL" --out "$RUNNER_TEMP/rows" \
+              --json "$raw/snyk-kit.json"
+          fi
+          if [ -s "$raw/snyk-prod.sarif" ]; then
+            echo "sarif=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload SARIF to code scanning
+        if: >-
+          steps.rows.outputs.sarif == 'true'
+          && !github.event.pull_request.head.repo.fork
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          sarif_file: ${{ runner.temp }}/raw/snyk-prod.sarif
+          category: snyk-oss
+
+      - name: Snyk monitor
+        if: >-
+          steps.gate.outputs.run == 'true'
+          && ((github.event_name == 'push' && github.ref == 'refs/heads/main')
+            || github.event_name == 'schedule')
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          read -r -a flags <<< "$SNYK_COMMON_FLAGS"
+          "$RUNNER_TEMP/snyk" monitor "${flags[@]}"
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### Snyk Open Source"
+            echo ""
+            echo "$SUMMARY_HEADER"
+            echo "|---|---|---|---|---|---|---|---|"
+            for scope in prod dev kit; do
+              row="$RUNNER_TEMP/rows/row-snyk-oss-$scope.json"
+              if [ -f "$row" ]; then
+                jq -r "$SUMMARY_ROW_JQ" "$row"
+              else
+                echo "| snyk-oss | $scope | no row | | | | | |"
+              fi
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload row (prod)
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: scan-row-snyk-oss-prod
+          path: ${{ runner.temp }}/rows/row-snyk-oss-prod.json
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Upload row (dev)
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: scan-row-snyk-oss-dev
+          path: ${{ runner.temp }}/rows/row-snyk-oss-dev.json
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Upload row (kit)
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: scan-row-snyk-oss-kit
+          path: ${{ runner.temp }}/rows/row-snyk-oss-kit.json
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Upload raw output
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: raw-snyk-oss
+          path: ${{ runner.temp }}/raw/
+          retention-days: 14
+          if-no-files-found: ignore
+
+  # Dependency review (FR-28), PRs only: new vulnerable runtime dependencies and denied
+  # (GPL/AGPL) licences. warn-only, so the action itself never fails.
+  dependency-review:
+    needs: changes
+    if: >-
+      github.event_name == 'pull_request'
+      && (vars.SECURITY_SCANS_ENABLED == 'true' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Dependency review
+        id: dr
+        if: needs.changes.outputs.docs_only != 'true'
+        continue-on-error: true
+        uses: actions/dependency-review-action@a1d282b36b6f3519aa1f3fc636f609c47dddb294 # v5.0.0
+        with:
+          warn-only: true
+          fail-on-scopes: runtime
+          comment-summary-in-pr: never
+          deny-licenses: >-
+            GPL-1.0-only, GPL-1.0-or-later, GPL-2.0-only, GPL-2.0-or-later,
+            GPL-3.0-only, GPL-3.0-or-later, AGPL-1.0-only, AGPL-1.0-or-later,
+            AGPL-3.0-only, AGPL-3.0-or-later
+
+      - name: Write row
+        if: always()
+        env:
+          DOCS_ONLY: ${{ needs.changes.outputs.docs_only }}
+          DR_OUTCOME: ${{ steps.dr.outcome }}
+          DR_VULNERABLE_CHANGES: ${{ steps.dr.outputs.vulnerable-changes }}
+          DR_INVALID_LICENSE_CHANGES: ${{ steps.dr.outputs.invalid-license-changes }}
+        run: |
+          set -eu
+          if [ "$DOCS_ONLY" = "true" ]; then
+            node scripts/ci/scan-rows.js skipped --tool dependency-review --scope pr \
+              --link "$RUN_URL" --out "$RUNNER_TEMP/rows" --note "docs-only change"
+          else
+            # The action leaves its outputs unset when the PR has no dependency changes.
+            if [ "$DR_OUTCOME" = "success" ] && [ -z "$DR_VULNERABLE_CHANGES" ]; then
+              export DR_VULNERABLE_CHANGES='[]'
+            fi
+            # Raw output: the action's JSON outputs (no secrets in them).
+            mkdir -p "$RUNNER_TEMP/raw"
+            printf '%s\n' "$DR_VULNERABLE_CHANGES" > "$RUNNER_TEMP/raw/vulnerable-changes.json"
+            printf '%s\n' "$DR_INVALID_LICENSE_CHANGES" > "$RUNNER_TEMP/raw/invalid-license-changes.json"
+            node scripts/ci/scan-rows.js dependency-review --tool dependency-review --scope pr \
+              --link "$RUN_URL" --out "$RUNNER_TEMP/rows"
+          fi
+
+      - name: Summary
+        if: always()
+        env:
+          SUMMARY_TITLE: Dependency review
+          SUMMARY_ROWS: dependency-review-pr
+        run: |
+          {
+            echo "### $SUMMARY_TITLE"
+            echo ""
+            echo "$SUMMARY_HEADER"
+            echo "|---|---|---|---|---|---|---|---|"
+            for id in $SUMMARY_ROWS; do
+              row="$RUNNER_TEMP/rows/row-$id.json"
+              if [ -f "$row" ]; then
+                jq -r "$SUMMARY_ROW_JQ" "$row"
+              else
+                echo "| $id | | no row | | | | | |"
+              fi
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload row
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: scan-row-dependency-review-pr
+          path: ${{ runner.temp }}/rows/row-dependency-review-pr.json
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Upload raw output
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: raw-dependency-review
+          path: ${{ runner.temp }}/raw/
+          retention-days: 14
+          if-no-files-found: ignore
+
+  # Executable-config guard (FR-4): .artisyn/config/log-hub.json, .claude/settings.json,
+  # .mcp.json and the untracked log-hub.local.json. Findings become `::warning` annotations.
+  config-guard:
+    needs: changes
+    if: vars.SECURITY_SCANS_ENABLED == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Config guard
+        env:
+          DOCS_ONLY: ${{ needs.changes.outputs.docs_only }}
+        run: |
+          set -eu
+          mkdir -p "$RUNNER_TEMP/raw"
+          if [ "$DOCS_ONLY" = "true" ]; then
+            node scripts/ci/scan-rows.js skipped --tool config-guard --scope repo \
+              --link "$RUN_URL" --out "$RUNNER_TEMP/rows" --note "docs-only change"
+          else
+            node scripts/ci/config-guard.js --out "$RUNNER_TEMP/rows" --link "$RUN_URL" \
+              | tee "$RUNNER_TEMP/raw/config-guard.log"
+            exit "${PIPESTATUS[0]}"
+          fi
+
+      - name: Summary
+        if: always()
+        env:
+          SUMMARY_TITLE: Executable-config guard
+          SUMMARY_ROWS: config-guard-repo
+        run: |
+          {
+            echo "### $SUMMARY_TITLE"
+            echo ""
+            echo "$SUMMARY_HEADER"
+            echo "|---|---|---|---|---|---|---|---|"
+            for id in $SUMMARY_ROWS; do
+              row="$RUNNER_TEMP/rows/row-$id.json"
+              if [ -f "$row" ]; then
+                jq -r "$SUMMARY_ROW_JQ" "$row"
+              else
+                echo "| $id | | no row | | | | | |"
+              fi
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload row
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: scan-row-config-guard-repo
+          path: ${{ runner.temp }}/rows/row-config-guard-repo.json
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Upload raw output
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: raw-config-guard
+          path: ${{ runner.temp }}/raw/
+          retention-days: 14
+          if-no-files-found: ignore
+
+  # npm supply chain (FR-6): lockfile-lint (every resolved URL is https on registry.npmjs.org)
+  # and `npm audit signatures` (registry signatures and provenance of the installed tree) for the
+  # four npm lock files. Rows: lockfile-lint/npm, npm-signatures/npm.
+  supply-chain:
+    needs: changes
+    if: vars.SECURITY_SCANS_ENABLED == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      LOCKFILE_LINT_VERSION: 5.1.0
+      # Directories holding the npm lock files in scope. client/ uses bun.lock (no URLs).
+      LOCK_DIRS: . server hook artisyn-hooks-installer
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Check preconditions
+        id: gate
+        env:
+          DOCS_ONLY: ${{ needs.changes.outputs.docs_only }}
+        run: |
+          set -eu
+          mkdir -p "$RUNNER_TEMP/raw"
+          if [ "$DOCS_ONLY" != "true" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "run=false" >> "$GITHUB_OUTPUT"
+          for tool in lockfile-lint npm-signatures; do
+            node scripts/ci/scan-rows.js skipped --tool "$tool" --scope npm \
+              --link "$RUN_URL" --out "$RUNNER_TEMP/rows" --note "docs-only change"
+          done
+
+      - name: Install lockfile-lint
+        id: ll_install
+        if: steps.gate.outputs.run == 'true'
+        continue-on-error: true
+        # Exact pinned version, no install scripts, CI-only tool (Design Decision 5).
+        run: | # zizmor: ignore[adhoc-packages]
+          npm install --prefix "$RUNNER_TEMP/tools" --ignore-scripts --no-audit --no-fund \
+            "lockfile-lint@${LOCKFILE_LINT_VERSION}"
+
+      - name: lockfile-lint
+        id: ll
+        if: steps.gate.outputs.run == 'true' && steps.ll_install.outcome == 'success'
+        continue-on-error: true
+        run: |
+          log="$RUNNER_TEMP/raw/lockfile-lint.log"
+          failed=0
+          for dir in $LOCK_DIRS; do
+            file="$dir/package-lock.json"
+            [ "$dir" = "." ] && file="package-lock.json"
+            echo "== $file" >> "$log"
+            if ! "$RUNNER_TEMP/tools/node_modules/.bin/lockfile-lint" --type npm \
+                --validate-https --allowed-hosts npm --path "$file" >> "$log" 2>&1; then
+              failed=$((failed + 1))
+              echo "::warning file=$file::lockfile-lint: disallowed host or non-https URL"
+            fi
+          done
+          cat "$log"
+          echo "failed=$failed" >> "$GITHUB_OUTPUT"
+          [ "$failed" -eq 0 ]
+
+      # npm ci --ignore-scripts installs the exact locked tree without running any package script;
+      # npm audit signatures then verifies it. A failing npm ci counts as a failing lock file.
+      - name: npm audit signatures
+        id: sig
+        if: steps.gate.outputs.run == 'true'
+        continue-on-error: true
+        run: |
+          log="$RUNNER_TEMP/raw/npm-signatures.log"
+          failed=0
+          for dir in $LOCK_DIRS; do
+            echo "== $dir" >> "$log"
+            if ! (cd "$dir" && npm ci --ignore-scripts --no-audit --no-fund && npm audit signatures) \
+                >> "$log" 2>&1; then
+              failed=$((failed + 1))
+              echo "::warning::npm audit signatures failed in $dir"
+            fi
+          done
+          cat "$log"
+          echo "failed=$failed" >> "$GITHUB_OUTPUT"
+          [ "$failed" -eq 0 ]
+
+      - name: Write rows
+        if: steps.gate.outputs.run == 'true'
+        env:
+          LL_INSTALL_OUTCOME: ${{ steps.ll_install.outcome }}
+          LL_OUTCOME: ${{ steps.ll.outcome }}
+          LL_FAILED: ${{ steps.ll.outputs.failed }}
+          SIG_OUTCOME: ${{ steps.sig.outcome }}
+          SIG_FAILED: ${{ steps.sig.outputs.failed }}
+        run: |
+          set -eu
+          if [ "$LL_INSTALL_OUTCOME" != "success" ]; then
+            node scripts/ci/scan-rows.js outcome --tool lockfile-lint --scope npm \
+              --version "$LOCKFILE_LINT_VERSION" --link "$RUN_URL" --out "$RUNNER_TEMP/rows" \
+              --outcome error --note "lockfile-lint install failed"
+          else
+            node scripts/ci/scan-rows.js outcome --tool lockfile-lint --scope npm \
+              --version "$LOCKFILE_LINT_VERSION" --link "$RUN_URL" --out "$RUNNER_TEMP/rows" \
+              --outcome "$LL_OUTCOME" --failed "${LL_FAILED:-0}"
+          fi
+          node scripts/ci/scan-rows.js outcome --tool npm-signatures --scope npm \
+            --version "$(npm --version)" --link "$RUN_URL" --out "$RUNNER_TEMP/rows" \
+            --outcome "$SIG_OUTCOME" --failed "${SIG_FAILED:-0}"
+
+      - name: Summary
+        if: always()
+        env:
+          SUMMARY_TITLE: npm supply chain
+          SUMMARY_ROWS: lockfile-lint-npm npm-signatures-npm
+        run: |
+          {
+            echo "### $SUMMARY_TITLE"
+            echo ""
+            echo "$SUMMARY_HEADER"
+            echo "|---|---|---|---|---|---|---|---|"
+            for id in $SUMMARY_ROWS; do
+              row="$RUNNER_TEMP/rows/row-$id.json"
+              if [ -f "$row" ]; then
+                jq -r "$SUMMARY_ROW_JQ" "$row"
+              else
+                echo "| $id | | no row | | | | | |"
+              fi
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload row (lockfile-lint)
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: scan-row-lockfile-lint-npm
+          path: ${{ runner.temp }}/rows/row-lockfile-lint-npm.json
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Upload row (npm signatures)
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: scan-row-npm-signatures-npm
+          path: ${{ runner.temp }}/rows/row-npm-signatures-npm.json
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Upload raw output
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: raw-supply-chain
+          path: ${{ runner.temp }}/raw/
+          retention-days: 14
+          if-no-files-found: ignore
+
+  # Workflow hygiene (FR-7): actionlint over .github/workflows/ and zizmor (SARIF to code
+  # scanning, category `zizmor`, outside fork PRs). Rows: actionlint/workflows, zizmor/workflows.
+  workflow-lint:
+    needs: changes
+    if: vars.SECURITY_SCANS_ENABLED == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+    env:
+      ACTIONLINT_VERSION: 1.7.12
+      ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+      ZIZMOR_VERSION: 1.31.1
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check preconditions
+        id: gate
+        env:
+          DOCS_ONLY: ${{ needs.changes.outputs.docs_only }}
+        run: |
+          set -eu
+          mkdir -p "$RUNNER_TEMP/raw"
+          if [ "$DOCS_ONLY" != "true" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "run=false" >> "$GITHUB_OUTPUT"
+          node scripts/ci/scan-rows.js skipped --tool actionlint --scope workflows \
+            --version "$ACTIONLINT_VERSION" --link "$RUN_URL" --out "$RUNNER_TEMP/rows" \
+            --note "docs-only change"
+          node scripts/ci/scan-rows.js skipped --tool zizmor --scope workflows \
+            --version "$ZIZMOR_VERSION" --link "$RUN_URL" --out "$RUNNER_TEMP/rows" \
+            --note "docs-only change"
+
+      - name: Install actionlint
+        id: actionlint_install
+        if: steps.gate.outputs.run == 'true'
+        continue-on-error: true
+        run: |
+          set -eu
+          archive="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
+          curl -fsSL -o "$RUNNER_TEMP/$archive" \
+            "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/${archive}"
+          echo "${ACTIONLINT_SHA256}  $RUNNER_TEMP/$archive" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP" actionlint
+          "$RUNNER_TEMP/actionlint" -version
+
+      # Exit code 1 = findings; 2 and 3 = actionlint itself failed (the row is then `error`).
+      - name: actionlint
+        id: actionlint
+        if: steps.gate.outputs.run == 'true' && steps.actionlint_install.outcome == 'success'
+        continue-on-error: true
+        run: |
+          log="$RUNNER_TEMP/raw/actionlint.log"
+          rc=0
+          "$RUNNER_TEMP/actionlint" -no-color > "$log" 2>&1 || rc=$?
+          cat "$log"
+          failed=$(grep -oE '^\.github/workflows/[^:]+' "$log" | sort -u | wc -l)
+          echo "rc=$rc" >> "$GITHUB_OUTPUT"
+          echo "failed=$failed" >> "$GITHUB_OUTPUT"
+          exit "$rc"
+
+      # SARIF mode exits 0 on findings and uploads them to code scanning (category `zizmor`).
+      # On fork PRs (no security-events token) it runs in annotation mode instead, and the row
+      # comes from the step outcome.
+      - name: zizmor
+        id: zizmor
+        if: steps.gate.outputs.run == 'true'
+        continue-on-error: true
+        uses: zizmorcore/zizmor-action@53290badfa369cb0bf7ad16342cb62c2fa47ac7b # v0.8.0
+        with:
+          version: ${{ env.ZIZMOR_VERSION }}
+          inputs: .
+          collect: workflows
+          color: false
+          advanced-security: ${{ !github.event.pull_request.head.repo.fork }}
+          annotations: ${{ github.event.pull_request.head.repo.fork == true }}
+
+      - name: Write rows
+        if: steps.gate.outputs.run == 'true'
+        env:
+          AL_INSTALL_OUTCOME: ${{ steps.actionlint_install.outcome }}
+          AL_OUTCOME: ${{ steps.actionlint.outcome }}
+          AL_RC: ${{ steps.actionlint.outputs.rc }}
+          AL_FAILED: ${{ steps.actionlint.outputs.failed }}
+          ZIZMOR_OUTCOME: ${{ steps.zizmor.outcome }}
+          ZIZMOR_SARIF: ${{ steps.zizmor.outputs.output-file }}
+          IS_FORK: ${{ github.event.pull_request.head.repo.fork == true }}
+        run: |
+          set -eu
+          if [ "$AL_INSTALL_OUTCOME" != "success" ]; then
+            al_outcome=error
+            al_note="actionlint install failed"
+          elif [ -n "$AL_RC" ] && [ "$AL_RC" != "0" ] && [ "$AL_RC" != "1" ]; then
+            al_outcome=error
+            al_note="actionlint exit code $AL_RC"
+          else
+            al_outcome="$AL_OUTCOME"
+            al_note=""
+          fi
+          node scripts/ci/scan-rows.js outcome --tool actionlint --scope workflows \
+            --version "$ACTIONLINT_VERSION" --link "$RUN_URL" --out "$RUNNER_TEMP/rows" \
+            --outcome "$al_outcome" --failed "${AL_FAILED:-0}" --note "$al_note"
+          if [ "$IS_FORK" = "true" ]; then
+            node scripts/ci/scan-rows.js outcome --tool zizmor --scope workflows \
+              --version "$ZIZMOR_VERSION" --link "$RUN_URL" --out "$RUNNER_TEMP/rows" \
+              --outcome "$ZIZMOR_OUTCOME" --note "fork PR: annotations only, no SARIF"
+          else
+            sarif="${ZIZMOR_SARIF:-$RUNNER_TEMP/zizmor}"
+            if [ -f "$sarif" ]; then
+              cp "$sarif" "$RUNNER_TEMP/raw/zizmor.sarif"
+            fi
+            node scripts/ci/scan-rows.js zizmor --tool zizmor --scope workflows \
+              --version "$ZIZMOR_VERSION" --link "$RUN_URL" --out "$RUNNER_TEMP/rows" \
+              --sarif "$RUNNER_TEMP/raw/zizmor.sarif"
+          fi
+
+      - name: Summary
+        if: always()
+        env:
+          SUMMARY_TITLE: Workflow lint
+          SUMMARY_ROWS: actionlint-workflows zizmor-workflows
+        run: |
+          {
+            echo "### $SUMMARY_TITLE"
+            echo ""
+            echo "$SUMMARY_HEADER"
+            echo "|---|---|---|---|---|---|---|---|"
+            for id in $SUMMARY_ROWS; do
+              row="$RUNNER_TEMP/rows/row-$id.json"
+              if [ -f "$row" ]; then
+                jq -r "$SUMMARY_ROW_JQ" "$row"
+              else
+                echo "| $id | | no row | | | | | |"
+              fi
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload row (actionlint)
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: scan-row-actionlint-workflows
+          path: ${{ runner.temp }}/rows/row-actionlint-workflows.json
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Upload row (zizmor)
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: scan-row-zizmor-workflows
+          path: ${{ runner.temp }}/rows/row-zizmor-workflows.json
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Upload raw output
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: raw-workflow-lint
+          path: ${{ runner.temp }}/raw/
+          retention-days: 14
+          if-no-files-found: ignore
+
+  # Container definitions (FR-8): hadolint on both Dockerfiles and `docker compose config` on the
+  # three compose files (no interpolation, so no .env is needed).
+  # Rows: hadolint/dockerfiles, compose/config.
+  dockerfile-lint:
+    needs: changes
+    if: vars.SECURITY_SCANS_ENABLED == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      HADOLINT_VERSION: 2.15.1
+      HADOLINT_SHA256: c7187db94eeeeca956519a6af171adc31453941a1e777961f6e680f697c8c507
+      DOCKERFILES: Dockerfile docker-dev/Dockerfile
+      COMPOSE_FILES: >-
+        release-template/docker-compose.yml
+        tests/scenarios/docker-compose.yml
+        server/artisyn-log-run-local/docker-compose.yml
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check preconditions
+        id: gate
+        env:
+          DOCS_ONLY: ${{ needs.changes.outputs.docs_only }}
+        run: |
+          set -eu
+          mkdir -p "$RUNNER_TEMP/raw"
+          if [ "$DOCS_ONLY" != "true" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "run=false" >> "$GITHUB_OUTPUT"
+          node scripts/ci/scan-rows.js skipped --tool hadolint --scope dockerfiles \
+            --version "$HADOLINT_VERSION" --link "$RUN_URL" --out "$RUNNER_TEMP/rows" \
+            --note "docs-only change"
+          node scripts/ci/scan-rows.js skipped --tool compose --scope config \
+            --link "$RUN_URL" --out "$RUNNER_TEMP/rows" --note "docs-only change"
+
+      - name: Install hadolint
+        id: hadolint_install
+        if: steps.gate.outputs.run == 'true'
+        continue-on-error: true
+        run: |
+          set -eu
+          curl -fsSL -o "$RUNNER_TEMP/hadolint" \
+            "https://github.com/hadolint/hadolint/releases/download/v${HADOLINT_VERSION}/hadolint-linux-x86_64"
+          echo "${HADOLINT_SHA256}  $RUNNER_TEMP/hadolint" | sha256sum -c -
+          chmod +x "$RUNNER_TEMP/hadolint"
+          "$RUNNER_TEMP/hadolint" --version
+
+      # --no-fail: findings do not change the exit code, so a failed step means a tool error and
+      # the missing JSON gives an `error` row.
+      - name: hadolint
+        id: hadolint
+        if: steps.gate.outputs.run == 'true' && steps.hadolint_install.outcome == 'success'
+        continue-on-error: true
+        run: |
+          read -r -a files <<< "$DOCKERFILES"
+          rc=0
+          "$RUNNER_TEMP/hadolint" --no-fail --format json "${files[@]}" \
+            > "$RUNNER_TEMP/raw/hadolint.json" || rc=$?
+          cat "$RUNNER_TEMP/raw/hadolint.json"
+          exit "$rc"
+
+      - name: docker compose config
+        id: compose
+        if: steps.gate.outputs.run == 'true'
+        continue-on-error: true
+        run: |
+          log="$RUNNER_TEMP/raw/compose.log"
+          failed=0
+          for file in $COMPOSE_FILES; do
+            echo "== $file" >> "$log"
+            if ! docker compose -f "$file" config --quiet --no-interpolate >> "$log" 2>&1; then
+              failed=$((failed + 1))
+              echo "::warning file=$file::docker compose config failed"
+            fi
+          done
+          cat "$log"
+          echo "failed=$failed" >> "$GITHUB_OUTPUT"
+          [ "$failed" -eq 0 ]
+
+      - name: Write rows
+        if: steps.gate.outputs.run == 'true'
+        env:
+          COMPOSE_OUTCOME: ${{ steps.compose.outcome }}
+          COMPOSE_FAILED: ${{ steps.compose.outputs.failed }}
+        run: |
+          set -eu
+          node scripts/ci/scan-rows.js hadolint --tool hadolint --scope dockerfiles \
+            --version "$HADOLINT_VERSION" --link "$RUN_URL" --out "$RUNNER_TEMP/rows" \
+            --json "$RUNNER_TEMP/raw/hadolint.json"
+          node scripts/ci/scan-rows.js outcome --tool compose --scope config \
+            --version "$(docker compose version --short)" --link "$RUN_URL" \
+            --out "$RUNNER_TEMP/rows" --outcome "$COMPOSE_OUTCOME" --failed "${COMPOSE_FAILED:-0}"
+
+      - name: Summary
+        if: always()
+        env:
+          SUMMARY_TITLE: Dockerfile and compose lint
+          SUMMARY_ROWS: hadolint-dockerfiles compose-config
+        run: |
+          {
+            echo "### $SUMMARY_TITLE"
+            echo ""
+            echo "$SUMMARY_HEADER"
+            echo "|---|---|---|---|---|---|---|---|"
+            for id in $SUMMARY_ROWS; do
+              row="$RUNNER_TEMP/rows/row-$id.json"
+              if [ -f "$row" ]; then
+                jq -r "$SUMMARY_ROW_JQ" "$row"
+              else
+                echo "| $id | | no row | | | | | |"
+              fi
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload row (hadolint)
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: scan-row-hadolint-dockerfiles
+          path: ${{ runner.temp }}/rows/row-hadolint-dockerfiles.json
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Upload row (compose)
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: scan-row-compose-config
+          path: ${{ runner.temp }}/rows/row-compose-config.json
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Upload raw output
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: raw-dockerfile-lint
+          path: ${{ runner.temp }}/raw/
+          retention-days: 14
+          if-no-files-found: ignore
+
+  # Node runtime freshness (FR-35): the Node versions pinned in Dockerfile and
+  # docker-dev/Dockerfile against is-my-node-vulnerable and the newest patch of the same major.
+  # Rows: node-runtime/dockerfile, node-runtime/docker-dev.
+  node-runtime:
+    needs: changes
+    if: vars.SECURITY_SCANS_ENABLED == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      IMNV_VERSION: 1.6.1
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check preconditions
+        id: gate
+        env:
+          DOCS_ONLY: ${{ needs.changes.outputs.docs_only }}
+        run: |
+          set -eu
+          mkdir -p "$RUNNER_TEMP/raw"
+          if [ "$DOCS_ONLY" != "true" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "run=false" >> "$GITHUB_OUTPUT"
+          for scope in dockerfile docker-dev; do
+            node scripts/ci/scan-rows.js skipped --tool node-runtime --scope "$scope" \
+              --link "$RUN_URL" --out "$RUNNER_TEMP/rows" --note "docs-only change"
+          done
+
+      # A failed install leaves the module missing; node-runtime-check.js then writes `error` rows.
+      - name: Install is-my-node-vulnerable
+        if: steps.gate.outputs.run == 'true'
+        continue-on-error: true
+        # Exact pinned version, no install scripts, CI-only tool (Design Decision 5).
+        run: | # zizmor: ignore[adhoc-packages]
+          npm install --prefix "$RUNNER_TEMP/imnv" --ignore-scripts --no-audit --no-fund \
+            "is-my-node-vulnerable@${IMNV_VERSION}"
+
+      - name: Node runtime check
+        if: steps.gate.outputs.run == 'true'
+        continue-on-error: true
+        run: |
+          node scripts/ci/node-runtime-check.js --out "$RUNNER_TEMP/rows" --link "$RUN_URL" \
+            --imnv "$RUNNER_TEMP/imnv/node_modules" 2>&1 | tee "$RUNNER_TEMP/raw/node-runtime.log"
+          exit "${PIPESTATUS[0]}"
+
+      - name: Summary
+        if: always()
+        env:
+          SUMMARY_TITLE: Node runtime
+          SUMMARY_ROWS: node-runtime-dockerfile node-runtime-docker-dev
+        run: |
+          {
+            echo "### $SUMMARY_TITLE"
+            echo ""
+            echo "$SUMMARY_HEADER"
+            echo "|---|---|---|---|---|---|---|---|"
+            for id in $SUMMARY_ROWS; do
+              row="$RUNNER_TEMP/rows/row-$id.json"
+              if [ -f "$row" ]; then
+                jq -r "$SUMMARY_ROW_JQ" "$row"
+              else
+                echo "| $id | | no row | | | | | |"
+              fi
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload row (Dockerfile)
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: scan-row-node-runtime-dockerfile
+          path: ${{ runner.temp }}/rows/row-node-runtime-dockerfile.json
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Upload row (docker-dev)
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: scan-row-node-runtime-docker-dev
+          path: ${{ runner.temp }}/rows/row-node-runtime-docker-dev.json
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Upload raw output
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: raw-node-runtime
+          path: ${{ runner.temp }}/raw/
+          retention-days: 14
+          if-no-files-found: ignore
+
+  # Snyk Container (FR-8) on the production image: nightly, manual runs, and PRs that change a
+  # Dockerfile. SARIF goes to code scanning (category `snyk-container`). Row: snyk-container/image.
+  container:
+    needs: changes
+    if: >-
+      (vars.SECURITY_SCANS_ENABLED == 'true' || github.event_name == 'workflow_dispatch')
+      && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        || (github.event_name == 'pull_request' && needs.changes.outputs.docker_changed == 'true'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      actions: read
+      security-events: write
+    env:
+      SNYK_VERSION: 1.1308.3
+      SNYK_SHA256: 5f323f45885341ea1473639859271925912ece82a2f77bc146bb4468f9838840
+      IMAGE: log-hub:scan
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      # Runs without SNYK_TOKEN (fork PRs) write a `skipped` row and skip everything else.
+      - name: Check preconditions
+        id: gate
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          set -eu
+          mkdir -p "$RUNNER_TEMP/raw"
+          if [ -n "$SNYK_TOKEN" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "run=false" >> "$GITHUB_OUTPUT"
+          node scripts/ci/scan-rows.js skipped --tool snyk-container --scope image \
+            --version "$SNYK_VERSION" --link "$RUN_URL" --out "$RUNNER_TEMP/rows" \
+            --note "fork PR: no secret"
+          echo "::notice::container skipped: fork PR: no secret"
+          echo "container skipped: fork PR: no secret" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Install Snyk CLI
+        if: steps.gate.outputs.run == 'true'
+        run: |
+          set -eu
+          curl -fsSL -o "$RUNNER_TEMP/snyk" \
+            "https://downloads.snyk.io/cli/v${SNYK_VERSION}/snyk-linux"
+          echo "${SNYK_SHA256}  $RUNNER_TEMP/snyk" | sha256sum -c -
+          chmod +x "$RUNNER_TEMP/snyk"
+          "$RUNNER_TEMP/snyk" --version
+
+      # The image build sees no secret (SNYK_TOKEN is only in the scan step's env).
+      - name: Build the image
+        id: build
+        if: steps.gate.outputs.run == 'true'
+        continue-on-error: true
+        run: docker build -t "$IMAGE" .
+
+      - name: Snyk container test
+        id: snyk
+        if: steps.gate.outputs.run == 'true' && steps.build.outcome == 'success'
+        continue-on-error: true
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+        run: |
+          "$RUNNER_TEMP/snyk" container test "$IMAGE" --file=Dockerfile \
+            --policy-path=.snyk \
+            --json-file-output="$RUNNER_TEMP/raw/snyk-container.json" \
+            --sarif-file-output="$RUNNER_TEMP/raw/snyk-container.sarif"
+
+      - name: Write row
+        id: rows
+        if: steps.gate.outputs.run == 'true'
+        env:
+          BUILD_OUTCOME: ${{ steps.build.outcome }}
+        run: |
+          set -eu
+          if [ "$BUILD_OUTCOME" != "success" ]; then
+            node scripts/ci/scan-rows.js outcome --tool snyk-container --scope image \
+              --version "$SNYK_VERSION" --link "$RUN_URL" --out "$RUNNER_TEMP/rows" \
+              --outcome error --note "docker build failed"
+          else
+            node scripts/ci/scan-rows.js snyk-container --tool snyk-container --scope image \
+              --version "$SNYK_VERSION" --link "$RUN_URL" --out "$RUNNER_TEMP/rows" \
+              --json "$RUNNER_TEMP/raw/snyk-container.json"
+          fi
+          if [ -s "$RUNNER_TEMP/raw/snyk-container.sarif" ]; then
+            echo "sarif=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload SARIF to code scanning
+        if: >-
+          steps.rows.outputs.sarif == 'true'
+          && !github.event.pull_request.head.repo.fork
+        continue-on-error: true
+        uses: github/codeql-action/upload-sarif@9b3254085494b55a0f7c4c2b3d2d52cc712ce370 # v4.39.1
+        with:
+          sarif_file: ${{ runner.temp }}/raw/snyk-container.sarif
+          category: snyk-container
+
+      - name: Summary
+        if: always()
+        env:
+          SUMMARY_TITLE: Snyk Container
+          SUMMARY_ROWS: snyk-container-image
+        run: |
+          {
+            echo "### $SUMMARY_TITLE"
+            echo ""
+            echo "$SUMMARY_HEADER"
+            echo "|---|---|---|---|---|---|---|---|"
+            for id in $SUMMARY_ROWS; do
+              row="$RUNNER_TEMP/rows/row-$id.json"
+              if [ -f "$row" ]; then
+                jq -r "$SUMMARY_ROW_JQ" "$row"
+              else
+                echo "| $id | | no row | | | | | |"
+              fi
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload row
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: scan-row-snyk-container-image
+          path: ${{ runner.temp }}/rows/row-snyk-container-image.json
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Upload raw output
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: raw-container
+          path: ${{ runner.temp }}/raw/
+          retention-days: 14
+          if-no-files-found: ignore
+
+  # Publishes security-scan-results.json and badges/security.json to the orphan `ci-reports`
+  # branch (FR-24, Design Decision 17): nightly and manual runs on main only. The only job with
+  # `contents: write`; it pushes through the Git Data API with GITHUB_TOKEN, no git credentials.
+  publish-results:
+    needs:
+      - changes
+      - build-kit
+      - snyk-oss
+      - dependency-review
+      - config-guard
+      - supply-chain
+      - workflow-lint
+      - dockerfile-lint
+      - node-runtime
+      - container
+    if: >-
+      always()
+      && (vars.SECURITY_SCANS_ENABLED == 'true' || github.event_name == 'workflow_dispatch')
+      && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+      && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    concurrency:
+      group: ci-reports
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Download scan rows
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: scan-row-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/rows
+
+      - name: Build results and badge
+        id: results
+        continue-on-error: true
+        run: |
+          set -eu
+          mkdir -p "$RUNNER_TEMP/rows"
+          node scripts/ci/security-summary.js results --rows "$RUNNER_TEMP/rows" \
+            --out "$RUNNER_TEMP/ci-reports" --sha "$GITHUB_SHA"
+
+      - name: Publish to ci-reports
+        if: steps.results.outcome == 'success'
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: node scripts/ci/publish-ci-reports.js --dir "$RUNNER_TEMP/ci-reports" --sha "$GITHUB_SHA"
+
+      - name: Summary
+        if: always()
+        run: |
+          results="$RUNNER_TEMP/ci-reports/security-scan-results.json"
+          badge="$RUNNER_TEMP/ci-reports/badges/security.json"
+          {
+            echo "### Published results (ci-reports)"
+            echo ""
+            echo "$SUMMARY_HEADER"
+            echo "|---|---|---|---|---|---|---|---|"
+            if [ -f "$results" ]; then
+              jq -r ".rows[] | $SUMMARY_ROW_JQ" "$results"
+            else
+              echo "| results | | not built | | | | | |"
+            fi
+            if [ -f "$badge" ]; then
+              echo ""
+              jq -r '"Badge: \(.message) (\(.color))"' "$badge"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload raw output
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: raw-publish-results
+          path: ${{ runner.temp }}/ci-reports/
+          retention-days: 14
+          if-no-files-found: ignore

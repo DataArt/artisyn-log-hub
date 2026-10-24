@@ -1,0 +1,9 @@
+# Docker base-image bumps only. docker-dev/Dockerfile pins Node via ARG NODE_VERSION + NODE_SHA256,
+# which Dependabot cannot bump — update it by hand. Dependabot alerts and security updates are
+# repository settings, not part of this file.
+version: 2
+updates:
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly

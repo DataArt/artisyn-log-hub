@@ -1,0 +1,58 @@
+# Security report (FR-23, FR-31): after a security-scans or virustotal run for a pull request
+# completes, collect the `scan-row-*` artifacts of the latest run of both workflows for that head
+# SHA plus the gitleaks `scan` check run, and write the "Security scan" block into the PR
+# description (between <!-- security-scan:start --> and <!-- security-scan:end -->). When VirusTotal
+# rows exist it also creates or updates the `VirusTotal verdict` check run (neutral on detections).
+#
+# Runs on workflow_run, so it has a write token even for fork PRs — therefore it checks out the
+# DEFAULT branch only and never runs PR code. The artifacts it reads are untrusted data: the PR
+# number from `pr-meta` is accepted only when that PR is open on the triggering head SHA, and every
+# row is validated by normalizeRows() (scripts/ci/security-summary.js).
+#
+# Gate: runs when either repository variable SECURITY_SCANS_ENABLED or VIRUSTOTAL_ENABLED is
+# `true`, so VirusTotal rows are reported even when only VirusTotal is enabled.
+# Rules: docs/tasks/todo/2026-10-23-ci-cd-scans/impl-plan.md (Design Decision 13).
+name: security-report
+
+on:
+  workflow_run:
+    workflows: [security-scans, virustotal]
+    types: [completed]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-report-${{ github.event.workflow_run.head_sha }}
+  cancel-in-progress: false
+
+jobs:
+  apply-pr:
+    if: >-
+      github.event.workflow_run.event == 'pull_request'
+      && (vars.SECURITY_SCANS_ENABLED == 'true' || vars.VIRUSTOTAL_ENABLED == 'true')
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: read
+      actions: read
+      pull-requests: write
+      checks: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Update the PR description
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          HEAD_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: node scripts/ci/security-summary.js apply-pr

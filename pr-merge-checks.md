@@ -4,8 +4,11 @@ What a maintainer checks by hand before merging a pull request into this reposit
 
 Some files in this repository are not just data: Claude Code, the telemetry hook, npm or git
 **execute** them, or read from them where to send data, on the machine of everyone who clones the
-repository and opens it in Claude Code. CI does not catch a malicious change in them. Review every
-change to the files below line by line, whoever the author is.
+repository and opens it in Claude Code. The `security-scans` workflow (config guard, lock-file
+registry check) reports some of them: §1, the `.claude/settings.json` and `.mcp.json` items of §2
+and the lock-file URL item of §4 (see `docs/knowledgebase/ci-security-scans.md`). It is
+report-only and does not catch everything, so manual review stays required: review every change to
+the files below line by line, whoever the author is.
 
 ## 1. Hook config: `.artisyn/config/log-hub.json`
 

@@ -38,6 +38,15 @@ Both hooks are **strict**: a missing `gitleaks` binary blocks too, with install 
 image (`docker-dev/Dockerfile`, stage `fetch-gitleaks`) ships it. Findings are printed redacted.
 `git commit/push --no-verify` skips the hook as a last resort — it also skips the migration guard.
 
+### Custom rule — key files by name
+
+The default rules match provider prefixes or a keyword next to the value, so a file holding only
+a bare token (e.g. a 64-char API key with no `api_key=` around it) passes them. The `key-file`
+rule in `.gitleaks.toml` flags by path alone: any `*.key`, `*.pem`, `*.p12`, `*.pfx`, `*.jks`,
+`*.keystore`, `*.ppk` and `id_rsa`/`id_dsa`/`id_ecdsa`/`id_ed25519`, whatever the content. Local
+key files belong in `.gitignore` (e.g. `/vt.key`); the rule catches a `git add -f` or a key file
+elsewhere in the tree.
+
 ### False positives — `.gitleaks.toml`
 
 The config extends the default rule set (`[extend] useDefault = true`) and holds `[[allowlists]]`
@@ -72,3 +81,6 @@ The repository is public; the setup that goes with it:
 3. Make the `scan` check (the gitleaks job) required for `main` and `release` — done in the
    repository ruleset `protect-main-release` (Settings → Rules → Rulesets), which also requires a
    PR and blocks deletion and force-push on both branches.
+
+The other, report-only security scans (Snyk, dependency review, config guard, lock-file and workflow
+lint, VirusTotal) are in [CI Security Scans](ci-security-scans.md).

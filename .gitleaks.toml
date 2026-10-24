@@ -8,6 +8,13 @@ title = "Artisyn Log Hub"
 [extend]
 useDefault = true
 
+# Content rules miss a bare token with no keyword or provider prefix around it (e.g. a file
+# holding only a 64-char API key), so a key/keystore file is a finding by its name alone.
+[[rules]]
+id = "key-file"
+description = "Private key, keystore or bare API key file committed"
+path = '''(?i)(?:^|/)(?:[^/]+\.(?:key|pem|p12|pfx|jks|keystore|ppk)|id_(?:rsa|dsa|ecdsa|ed25519))$'''
+
 [[allowlists]]
 description = "Public PGP fingerprint of the git-core PPA signing key (docker-dev/Dockerfile)"
 regexTarget = "match"
