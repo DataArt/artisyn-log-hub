@@ -209,7 +209,8 @@ server means editing this file in the same PR.
 
 - `.github/CODEOWNERS`: `@denistsyplakov` reviews `/.artisyn/config/`, `/.claude/settings.json`,
   `/.mcp.json`, `/hook/`, `/artisyn-hooks-installer/`, `/.github/`, `/.snyk`, `/scripts/ci/`.
-- `.github/dependabot.yml`: weekly `docker` updates for `/`. `docker-dev/Dockerfile` pins Node via
+- `.github/dependabot.yml`: weekly `docker` updates for `/`, patch and minor only for `node` (a
+  major bump — the next LTS — is done by hand). `docker-dev/Dockerfile` pins Node via
   `ARG NODE_VERSION` + `NODE_SHA256`, which Dependabot cannot bump; fix its `node-runtime` warning
   by hand.
 - `SECURITY.md`: GitHub private vulnerability reporting as a second reporting channel.
