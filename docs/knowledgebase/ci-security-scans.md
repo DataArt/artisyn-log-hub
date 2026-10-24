@@ -44,7 +44,7 @@ workflow that is not a required check (FR-30). `security-scans` uses no `paths-i
 | `node-runtime` | `scripts/ci/node-runtime-check.js`: Node version of `Dockerfile` and `docker-dev/Dockerfile` vs `is-my-node-vulnerable` and the latest patch on nodejs.org | `node-runtime/dockerfile`, `/docker-dev` |
 | `container` | Snyk Container on the production image; nightly, dispatch, and PRs with `docker_changed`; SARIF category `snyk-container` | `snyk-container/image` |
 | `virustotal` | VirusTotal verdict of the installer tarballs for the nightly report; nightly and dispatch only (PRs use `virustotal.yml`) | `virustotal/installer-tgz`, `/hooks-tgz` |
-| `publish-results` | `needs:` every scan job, `if: always()`; nightly and dispatch on `main` only; pushes to `ci-reports` | — |
+| `publish-results` | `needs:` every scan job, `if: always()`; nightly, dispatch and push on `main` only; pushes to `ci-reports` | — |
 
 On a docs-only PR the scan jobs still run, skip their tool steps and write `skipped` rows with the
 note `docs-only change`. Every scan job uploads its raw tool output as artifact `raw-<job>`
@@ -148,9 +148,13 @@ deliberately the only bot-written place; there are no PR comments.
 
 ## `ci-reports` branch and badge
 
-`publish-results` (nightly and manual runs on `main`) builds `security-scan-results.json`
-(`{schema:1, commit, date, ref:'main', rows}`), `badges/security.json` (a shields.io endpoint
-document) and `REPORT.md` and pushes them to the orphan branch `ci-reports` with
+`publish-results` (nightly, manual and push runs on `main` — so the badge follows every merge)
+builds `security-scan-results.json` (`{schema:1, commit, date, ref:'main', rows}`),
+`snyk-issues.json` (the Snyk issue lists of the report), `badges/security.json` (a shields.io
+endpoint document) and `REPORT.md`. A push run has no Snyk Container and no VirusTotal rows: those
+(and their issue lists) are carried over from the previous publication, which the job fetches from
+`ci-reports` first, with the note `as of <date> UTC` (`carryOverRows`); the next nightly run
+refreshes them. It pushes the files to the orphan branch `ci-reports` with
 `scripts/ci/publish-ci-reports.js`. It uses the Git Data API with `GITHUB_TOKEN` (`contents: write`
 on this job only, no git credentials persisted): a tree without `base_tree`, a commit on the
 current head (or no parent on the first run), a non-forced ref update with up to 3 retries. The

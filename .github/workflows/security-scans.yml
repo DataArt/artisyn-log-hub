@@ -1345,9 +1345,13 @@ jobs:
       - node-runtime
       - container
       - virustotal
+    # Also on push to main (every merge), so the badge and REPORT.md follow main right away; rows
+    # a push run does not produce (Snyk Container, VirusTotal) are carried over from the last
+    # publication with an "as of <date>" note.
     if: >-
       always()
-      && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+      && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+        || github.event_name == 'push')
       && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -1384,15 +1388,31 @@ jobs:
           name: raw-container
           path: ${{ runner.temp }}/raw-in/container
 
+      # The last publication, for rows this run did not produce. Missing on the first run (404).
+      - name: Fetch previous results
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -u
+          mkdir -p "$RUNNER_TEMP/previous"
+          for f in security-scan-results.json snyk-issues.json; do
+            gh api -H "Accept: application/vnd.github.raw" \
+              "repos/$REPO/contents/$f?ref=ci-reports" > "$RUNNER_TEMP/previous/$f" \
+              || rm -f "$RUNNER_TEMP/previous/$f"
+          done
+          ls -la "$RUNNER_TEMP/previous"
+
       - name: Build results, badge and report
         id: results
         continue-on-error: true
         run: |
           set -eu
-          mkdir -p "$RUNNER_TEMP/rows" "$RUNNER_TEMP/raw-in"
+          mkdir -p "$RUNNER_TEMP/rows" "$RUNNER_TEMP/raw-in" "$RUNNER_TEMP/previous"
           node scripts/ci/security-summary.js results --rows "$RUNNER_TEMP/rows" \
             --out "$RUNNER_TEMP/ci-reports" --sha "$GITHUB_SHA" \
-            --raw "$RUNNER_TEMP/raw-in" --run-url "$RUN_URL"
+            --raw "$RUNNER_TEMP/raw-in" --run-url "$RUN_URL" --previous "$RUNNER_TEMP/previous"
 
       - name: Publish to ci-reports
         if: steps.results.outcome == 'success'

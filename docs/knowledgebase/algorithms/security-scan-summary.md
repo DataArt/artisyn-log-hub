@@ -15,7 +15,7 @@ anything is rendered, and the PR author's own description text around the block 
 ## Code
 
 - Implementation: `scripts/ci/security-summary.js` (`normalizeRows`, `renderSummary`,
-  `replaceBlock`, `badgeFor`, `buildResults`, `snykIssues`, `renderReport`); its CLI modes
+  `replaceBlock`, `badgeFor`, `buildResults`, `carryOverRows`, `snykIssues`, `renderReport`); its CLI modes
   `results` (`security-scans.yml`, job `publish-results`) and `apply-pr` (`security-report.yml`)
   call them.
 - Twins: none.
@@ -107,6 +107,18 @@ Returns `{schemaVersion: 1, label: 'security scan', message, color}` by the firs
 **`buildResults(rows, meta)`** returns `{schema: 1, commit: meta.sha, date: meta.date, ref: 'main',
 rows: normalizeRows(rows)}`.
 
+**`carryOverRows(rows, previous)`** — the rows of this run plus the rows of the previously
+published `security-scan-results.json` that this run did not produce (a push to `main` runs no
+Snyk Container and no VirusTotal):
+
+1. When `previous` is not an object with a `rows` array, the result is `normalizeRows(rows)`.
+2. Otherwise every normalized previous row whose `tool/scope` is not among this run's rows is
+   carried. Its note becomes `as of <YYYY-MM-DD HH:MM> UTC: <note>` (`as of <date> UTC` when the
+   note is empty), with the date of `previous.date`; a note that already starts with `as of ` is
+   kept unchanged, so a row carried again keeps its original date.
+3. A row this run produced always wins over the previous one. The result is normalized (sorted by
+   the label table).
+
 **`snykIssues(result)`** — the critical and high issues of one raw Snyk `--json` result (one
 project object or an array of them):
 
@@ -160,6 +172,8 @@ normalized, `meta = {sha, date, runUrl}`, `issues` maps `snyk-oss/prod`, `snyk-o
   vulnerabilities array: SS-32.
 - `renderReport`: issue table, missing list, skipped row and VirusTotal line: SS-33; no rows, bad
   sha and date, foreign run URL: SS-34.
+- `carryOverRows`: own row wins, note prefixes, already-carried note kept: SS-35; previous without
+  rows: SS-36.
 
 ## Examples
 
@@ -390,7 +404,9 @@ notes).
   {"id":"SS-31","input":{"fn":"snykIssues","args":[[{"displayTargetFile":"client/package.json","vulnerabilities":[{"id":"SNYK-JS-B-2","severity":"high","packageName":"zeta","version":"1.0.0","title":"ReDoS | bad","fixedIn":["1.0.1"]},{"id":"SNYK-JS-A-1","severity":"critical","packageName":"alpha","version":"2.0.0","title":"RCE","fixedIn":[]},{"id":"SNYK-JS-C-3","severity":"medium","packageName":"beta","version":"1.0.0","title":"x","fixedIn":[]},{"id":"bad id!","severity":"high","packageName":"gamma","version":"1","title":"x"}]},{"displayTargetFile":"server/package-lock.json","vulnerabilities":[{"id":"SNYK-JS-B-2","severity":"high","packageName":"zeta","version":"1.0.0","title":"dup","fixedIn":["1.0.1"]},{"id":"SNYK-JS-D-4","severity":"high","packageName":"a b","version":"<x>","title":"odd","fixedIn":["ok","b ad"]}]}]]},"expected":{"result":[{"severity":"critical","id":"SNYK-JS-A-1","title":"RCE","package":"alpha","version":"2.0.0","fixedIn":[],"project":"client/package.json"},{"severity":"high","id":"SNYK-JS-D-4","title":"odd","package":"","version":"","fixedIn":["ok"],"project":"server/package-lock.json"},{"severity":"high","id":"SNYK-JS-B-2","title":"ReDoS  bad","package":"zeta","version":"1.0.0","fixedIn":["1.0.1"],"project":"client/package.json"}]},"note":"Two projects: medium dropped; the id with a space dropped; SNYK-JS-B-2 repeated in the second project kept once (first project wins); the package and version failing their pattern become empty, the bad fixedIn entry is dropped; the | in the title is removed; critical first, then by package (empty sorts first) and id."},
   {"id":"SS-32","input":{"fn":"snykIssues","args":[{"ok":true}]},"expected":{"result":[]},"note":"A project without a vulnerabilities array gives no issues."},
   {"id":"SS-33","input":{"fn":"renderReport","args":[[{"tool":"virustotal","scope":"hooks-tgz","status":"pass","note":"0/75 engines","link":"https://www.virustotal.com/gui/file/abc"},{"tool":"snyk-container","scope":"image","status":"skipped","note":"docs-only change"},{"tool":"snyk-oss","scope":"dev","status":"findings","counts":{"high":1}},{"tool":"snyk-oss","scope":"prod","status":"findings","counts":{"critical":1},"link":"https://github.com/DataArt/artisyn-log-hub/actions/runs/1"}],{"sha":"0123456789abcdef0123456789abcdef01234567","date":"2026-10-24T03:17:00.000Z","runUrl":"https://github.com/DataArt/artisyn-log-hub/actions/runs/1"},{"snyk-oss/prod":[{"severity":"critical","id":"SNYK-JS-A-1","title":"RCE","package":"alpha","version":"2.0.0","fixedIn":[],"project":"server/package-lock.json"}]}]},"expected":{"result":"# Security scan report\n\n_Commit [`0123456`](https://github.com/DataArt/artisyn-log-hub/commit/0123456789abcdef0123456789abcdef01234567) on `main` · updated 2026-10-24 03:17 UTC · [workflow run](https://github.com/DataArt/artisyn-log-hub/actions/runs/1)_\n\nThe README badge counts every row below except Snyk Open Source (dev) — devDependencies do not\nship — and skipped rows. How the scans work: [ci-security-scans.md](https://github.com/DataArt/artisyn-log-hub/blob/main/docs/knowledgebase/ci-security-scans.md).\n\n## Summary\n\n| Tool | Status | Critical | High | Medium | Low | Details |\n|---|---|---|---|---|---|---|\n| Snyk Open Source (prod) | ❌ findings | 1 | 0 | 0 | 0 | [link](https://github.com/DataArt/artisyn-log-hub/actions/runs/1) |\n| Snyk Open Source (dev) | ❌ findings | 0 | 1 | 0 | 0 |  |\n| Snyk Container | ⏭️ skipped | 0 | 0 | 0 | 0 | docs-only change |\n| VirusTotal — hooks.tar.gz | ✅ pass | 0 | 0 | 0 | 0 | [link](https://www.virustotal.com/gui/file/abc) 0/75 engines |\n\n## Snyk — critical and high issues\n\n### Snyk Open Source (prod)\n\n| Severity | Issue | Package | Fixed in | Project |\n|---|---|---|---|---|\n| critical | [SNYK-JS-A-1](https://security.snyk.io/vuln/SNYK-JS-A-1) RCE | `alpha@2.0.0` | no fix yet | `server/package-lock.json` |\n\n### Snyk Open Source (dev)\n\n_Issue list not available — see the workflow run._\n\n### Snyk Container\n\n_Skipped: docs-only change._\n\n## VirusTotal\n\n- VirusTotal — hooks.tar.gz: ✅ pass · 0/75 engines · [report](https://www.virustotal.com/gui/file/abc)\n\n## More\n\n- [Code scanning alerts](https://github.com/DataArt/artisyn-log-hub/security/code-scanning) — Snyk and zizmor findings with file and line\n- [Dependabot alerts](https://github.com/DataArt/artisyn-log-hub/security/dependabot)\n"},"note":"Rows sorted by the label table; prod has an issue list (table with project), dev has none (not available), the container row is skipped (its note), the VirusTotal row lists its verdict and permalink."},
-  {"id":"SS-34","input":{"fn":"renderReport","args":[[],{"sha":"zz","date":"x","runUrl":"https://evil.example/"},{}]},"expected":{"result":"# Security scan report\n\n_Commit `unknown` on `main` · updated unknown UTC_\n\nThe README badge counts every row below except Snyk Open Source (dev) — devDependencies do not\nship — and skipped rows. How the scans work: [ci-security-scans.md](https://github.com/DataArt/artisyn-log-hub/blob/main/docs/knowledgebase/ci-security-scans.md).\n\n## Summary\n\n_No scan results yet._\n\n## Snyk — critical and high issues\n\n## VirusTotal\n\n_Not scanned in this run._\n\n## More\n\n- [Code scanning alerts](https://github.com/DataArt/artisyn-log-hub/security/code-scanning) — Snyk and zizmor findings with file and line\n- [Dependabot alerts](https://github.com/DataArt/artisyn-log-hub/security/dependabot)\n"},"note":"No rows: no Snyk sections, VirusTotal not scanned; a non-hex sha gives `unknown`, a bad date `unknown`, a foreign run URL is left out."}
+  {"id":"SS-34","input":{"fn":"renderReport","args":[[],{"sha":"zz","date":"x","runUrl":"https://evil.example/"},{}]},"expected":{"result":"# Security scan report\n\n_Commit `unknown` on `main` · updated unknown UTC_\n\nThe README badge counts every row below except Snyk Open Source (dev) — devDependencies do not\nship — and skipped rows. How the scans work: [ci-security-scans.md](https://github.com/DataArt/artisyn-log-hub/blob/main/docs/knowledgebase/ci-security-scans.md).\n\n## Summary\n\n_No scan results yet._\n\n## Snyk — critical and high issues\n\n## VirusTotal\n\n_Not scanned in this run._\n\n## More\n\n- [Code scanning alerts](https://github.com/DataArt/artisyn-log-hub/security/code-scanning) — Snyk and zizmor findings with file and line\n- [Dependabot alerts](https://github.com/DataArt/artisyn-log-hub/security/dependabot)\n"},"note":"No rows: no Snyk sections, VirusTotal not scanned; a non-hex sha gives `unknown`, a bad date `unknown`, a foreign run URL is left out."},
+  {"id":"SS-35","input":{"fn":"carryOverRows","args":[[{"tool":"snyk-oss","scope":"prod","status":"pass","note":"no issues"}],{"schema":1,"date":"2026-10-24T03:17:00.000Z","rows":[{"tool":"snyk-container","scope":"image","status":"pass","note":"no issues"},{"tool":"virustotal","scope":"hooks-tgz","status":"pass","note":"as of 2026-10-23 03:17 UTC: 0/75 engines","link":"https://www.virustotal.com/gui/file/abc"},{"tool":"snyk-oss","scope":"prod","status":"findings","counts":{"high":2},"note":"old"},{"tool":"config-guard","scope":"repo","status":"pass"}]}]},"expected":{"result":[{"tool":"snyk-oss","scope":"prod","label":"Snyk Open Source (prod)","status":"pass","counts":{"critical":0,"high":0,"medium":0,"low":0},"fixable":0,"note":"no issues"},{"tool":"config-guard","scope":"repo","label":"Executable-config guard","status":"pass","counts":{"critical":0,"high":0,"medium":0,"low":0},"fixable":0,"note":"as of 2026-10-24 03:17 UTC"},{"tool":"snyk-container","scope":"image","label":"Snyk Container","status":"pass","counts":{"critical":0,"high":0,"medium":0,"low":0},"fixable":0,"note":"as of 2026-10-24 03:17 UTC: no issues"},{"tool":"virustotal","scope":"hooks-tgz","label":"VirusTotal — hooks.tar.gz","status":"pass","counts":{"critical":0,"high":0,"medium":0,"low":0},"fixable":0,"note":"as of 2026-10-23 03:17 UTC: 0/75 engines","link":"https://www.virustotal.com/gui/file/abc"}]},"note":"snyk-oss/prod comes from this run (the previous findings row is not carried); the container row gets \"as of <date> UTC: <note>\", config-guard (no note) just \"as of <date> UTC\"; the VirusTotal row already carries an \"as of\" note and keeps its original date. Sorted by the label table."},
+  {"id":"SS-36","input":{"fn":"carryOverRows","args":[[{"tool":"snyk-oss","scope":"prod","status":"pass","note":"no issues"}],{"rows":"x"}]},"expected":{"result":[{"tool":"snyk-oss","scope":"prod","label":"Snyk Open Source (prod)","status":"pass","counts":{"critical":0,"high":0,"medium":0,"low":0},"fixable":0,"note":"no issues"}]},"note":"Previous results without a rows array: only this run's rows, normalized."}
 ]
 ```
 
@@ -412,6 +428,8 @@ notes).
   or sorting high before critical -> SS-31.
 - `renderReport` showing "no issues" for a missing list, ignoring a skipped row's note, or
   keeping a foreign run URL -> SS-33, SS-34.
+- `carryOverRows` letting the previous row win, re-prefixing an already-carried note, or failing
+  on a malformed previous file -> SS-35, SS-36.
 
 ## Where the result is visible
 
