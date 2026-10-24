@@ -188,6 +188,7 @@ describe('findOverlongTarNames', () => {
       `${PLUGIN_ROOT}/.claude-plugin/plugin.json`,
       `${PLUGIN_ROOT}/hooks/hooks.json`,
       `${PLUGIN_ROOT}/scripts/version.json`,
+      `${PLUGIN_ROOT}/scripts/package.json`,
       `${PLUGIN_ROOT}/config-template/log-hub.json`,
       ...HOOK_JS_FILES.map(f => `${PLUGIN_ROOT}/scripts/${f}`),
     ].map(n => [n, '']);
@@ -249,5 +250,14 @@ describe('HOOK_JS_FILES packaging list', () => {
       names.includes(`${PLUGIN_ROOT}/scripts/version.json`),
       'otel-receiver.js reads its receiverVersion from this sibling of its own __dirname',
     );
+    assert.ok(
+      names.includes(`${PLUGIN_ROOT}/scripts/package.json`),
+      'without it the CommonJS scripts inherit a host repo "type": "module" and every hook crashes',
+    );
+  });
+
+  test('scripts/package.json pins the hook scripts to CommonJS', () => {
+    const { SCRIPTS_PACKAGE_JSON } = require('../build-hooks-installer.js');
+    assert.deepEqual({ ...SCRIPTS_PACKAGE_JSON }, { type: 'commonjs' });
   });
 });

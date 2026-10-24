@@ -1,16 +1,33 @@
-// FR-9b visibility rows V1–V7, scripted Playwright in one fresh context per
+// FR-9b visibility rows V1–V8, scripted Playwright in one fresh context per
 // viewer. Personal-view rows are judged only by the left-nav "My Repos" list; team rows expand the
 // team in the nav, open the linked repo, look for the session in the team-scoped session list and
-// open it on `tab=logs`. AC FR-7's "each repo visible to its owner" half comes from V1–V3.
+// open it on `tab=logs`. V8 (admin) also opens another user's session URL directly (the first of
+// S1/S5/S6/S3 its owner can open) and expects a 403 from the logs API and no session content. AC FR-7's "each repo visible to its owner" half comes from
+// V1–V3.
 import fs from 'node:fs';
 import path from 'node:path';
+import { createApiClient } from './api.mjs';
 import { acceptConsent, login, newUserContext } from './browser.mjs';
-import { PROMPT_PREFIX_LEN, REPOS, STAND_URL, STORED_URL, resolveRun } from './config.mjs';
+import {
+  LEGACY_OWNER,
+  LEGACY_REPO,
+  PROMPT_PREFIX_LEN,
+  REPOS,
+  STAND_URL,
+  STORED_URL,
+  resolveRun,
+} from './config.mjs';
+import { SESSION_STATUS } from './sessions.mjs';
 import { SCENARIOS } from '../scenarios.mjs';
 
 const UI_TIMEOUT_MS = 20000;
 const LIST_SETTLE_MS = 15000;
 const POLL_MS = 250;
+// How long V8 watches a directly opened session page for leaked turn content.
+const DIRECT_SETTLE_MS = 5000;
+// V8's directly opened session: the first of these the owner can open (HTTP 200), one per owner and
+// repo, so a product bug that loses one repo's sessions does not stop the check from running.
+export const DIRECT_SESSION_CANDIDATES = Object.freeze(['S1', 'S5', 'S6', 'S3']);
 const OK_SESSION_STATUSES = new Set(['pass', 'scenario not exercised']);
 // SessionListPanel's empty state. In the default "By branch" view the client only requests a
 // per-branch session list when `/sessions/branches` returns a branch, so an empty team view
@@ -20,17 +37,27 @@ const EMPTY_LIST_TEXT = 'No sessions found for this repository';
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /**
- * The V1–V7 matrix. `team`/`repo` only for team views; `sessions` lists scenario ids that must
- * (`see`) or must not (`notSee`) appear; `prompts` are the scenario ids whose prompt must be visible.
+ * The V1–V8 matrix. `team`/`repo` only for team views; `see` / `notSee` list repos (personal
+ * views) or scenario ids (team views) that must or must not appear; `prompts` are the scenario ids
+ * whose prompt must be visible. `directSession` (V8) is the scenario whose session URL the viewer
+ * opens directly and must be refused (Design Decision 15).
  */
 export const VISIBILITY_ROWS = Object.freeze([
-  { id: 'V1', viewer: 'U1', view: 'personal', see: ['node-service', 'ts-webapp', 'java-lib'], notSee: ['js-cli', 'dotnet-api'] },
-  { id: 'V2', viewer: 'U2', view: 'personal', see: ['js-cli'], notSee: ['node-service', 'ts-webapp', 'java-lib', 'dotnet-api'] },
-  { id: 'V3', viewer: 'U3', view: 'personal', see: ['dotnet-api'], notSee: ['node-service', 'ts-webapp', 'java-lib', 'js-cli'] },
-  { id: 'V4', viewer: 'U1', view: 'team', team: 'T-restricted', repo: 'js-cli', see: ['S5'], notSee: [], prompts: ['S5'] },
-  { id: 'V5', viewer: 'U2', view: 'team', team: 'T-restricted', repo: 'node-service', see: [], notSee: ['S1', 'S2', 'S7'], prompts: [] },
-  { id: 'V6', viewer: 'U2', view: 'team', team: 'T-transparent', repo: 'dotnet-api', see: ['S6'], notSee: [], prompts: ['S6'] },
-  { id: 'V7', viewer: 'U3', view: 'team', team: 'T-transparent', repo: 'js-cli', see: ['S5'], notSee: [], prompts: ['S5'] },
+  { id: 'V1', viewer: 'U1', view: 'personal', see: ['node-service', 'ts-webapp', 'java-lib'], notSee: ['js-cli', 'dotnet-api', LEGACY_REPO] },
+  { id: 'V2', viewer: 'U2', view: 'personal', see: ['js-cli'], notSee: ['node-service', 'ts-webapp', 'java-lib', 'dotnet-api', LEGACY_REPO] },
+  { id: 'V3', viewer: 'U3', view: 'personal', see: ['dotnet-api', LEGACY_REPO], notSee: ['node-service', 'ts-webapp', 'java-lib', 'js-cli'] },
+  { id: 'V4', viewer: 'U1', view: 'team', team: 'T-restricted', repo: 'js-cli', see: ['S5', 'S8'], notSee: [], prompts: ['S5', 'S8'] },
+  { id: 'V5', viewer: 'U2', view: 'team', team: 'T-restricted', repo: 'node-service', see: [], notSee: ['S1', 'S2'], prompts: [] },
+  { id: 'V6', viewer: 'U2', view: 'team', team: 'T-transparent', repo: 'dotnet-api', see: ['S6', 'S7'], notSee: [], prompts: ['S6', 'S7'] },
+  { id: 'V7', viewer: 'U3', view: 'team', team: 'T-transparent', repo: 'js-cli', see: ['S5', 'S8'], notSee: [], prompts: ['S5', 'S8'] },
+  {
+    id: 'V8',
+    viewer: 'admin',
+    view: 'personal',
+    see: [],
+    notSee: [...Object.keys(REPOS), LEGACY_REPO],
+    directSession: DIRECT_SESSION_CANDIDATES,
+  },
 ].map((r) => Object.freeze(r)));
 
 /** Personal rows that carry the AC FR-7 "each repo visible to its owner" half. */
@@ -58,7 +85,9 @@ export function judgePersonal(row, listedUrls) {
     status: parts.length ? 'fail' : 'pass',
     missing,
     leaked,
-    detail: parts.length ? parts.join('; ') : `My Repos shows ${row.see.join(', ')} and none of ${row.notSee.join(', ') || '—'}`,
+    detail: parts.length
+      ? parts.join('; ')
+      : `My Repos shows ${row.see.join(', ') || 'no test repo'} and none of ${row.notSee.join(', ') || '—'}`,
   };
 }
 
@@ -79,8 +108,8 @@ export function ownerVisibilityCheck(rows) {
     if (missing === null) problems.push(`${id} (${def.viewer}) could not be judged: ${row.detail}`);
     else if (missing.length) problems.push(`${def.viewer} does not see own ${missing.join(', ')}`);
   }
-  // Every repo must be covered by its owner's row.
-  for (const [repo, owner] of Object.entries(REPOS)) {
+  // Every repo, the legacy-hook repo included, must be covered by its owner's row.
+  for (const [repo, owner] of Object.entries({ ...REPOS, [LEGACY_REPO]: LEGACY_OWNER })) {
     const def = VISIBILITY_ROWS.find((r) => OWNER_VISIBILITY_ROWS.includes(r.id) && r.viewer === owner);
     if (!def || !def.see.includes(repo)) problems.push(`no owner row covers ${repo}`);
   }
@@ -152,6 +181,90 @@ async function evaluatePersonal(page, row) {
   }
   const verdict = judgePersonal(row, listed);
   return { ...verdict, detail: `${verdict.detail} (listed: ${listed.join(', ') || 'none'})`, shotTarget: leftNav(page) };
+}
+
+/**
+ * The first `candidates` scenario whose owner gets HTTP 200 on its session logs: proof the session
+ * is on the server, so the viewer's 403 below means "refused", not "no such session".
+ * Resolves { pick: { sid, rid, info } | null, tried: string[] } — `tried` explains each skip.
+ */
+async function pickDirectSession(candidates, state, sessionIndex, baseURL) {
+  const tried = [];
+  for (const sid of candidates) {
+    const info = sessionIndex.get(sid);
+    const repo = SCENARIOS.find((s) => s.id === sid)?.repo;
+    const rid = state.repos?.[repo]?.repoId ?? null;
+    const owner = state.users?.[REPOS[repo]];
+    if (!info?.sessionId) tried.push(`${sid}: no session id`);
+    else if (rid == null) tried.push(`${sid}: ${repo} has no repo id`);
+    else if (!owner?.email || !owner?.password) tried.push(`${sid}: no credentials for owner ${REPOS[repo]}`);
+    else {
+      try {
+        const api = createApiClient(baseURL);
+        await api.login(owner.email, owner.password);
+        const { status } = await api.getSessionLogs(rid, info.sessionId);
+        if (status === 200) return { pick: { sid, rid, info }, tried };
+        tried.push(`${sid}: owner ${REPOS[repo]} got HTTP ${status}`);
+      } catch (err) {
+        tried.push(`${sid}: owner check failed: ${err.message}`);
+      }
+    }
+  }
+  return { pick: null, tried };
+}
+
+/**
+ * V8 second half (Design Decision 15): picks a session the owner can open (`def.directSession`
+ * candidates), then as `def.viewer` (admin) (a) its logs API answers 403, and (b) its URL, opened
+ * directly, shows none of its first prompt. Resolves { problems, detail }.
+ */
+export async function evaluateDirectSession(page, def, state, sessionIndex, baseURL) {
+  const problems = [];
+  const user = state.users?.[def.viewer];
+  if (!user || !user.email || !user.password) {
+    return { problems: [`no credentials for ${def.viewer} in run state`], detail: '' };
+  }
+  const { pick, tried } = await pickDirectSession(def.directSession, state, sessionIndex, baseURL);
+  if (!pick) {
+    return { problems: [`no direct-URL candidate is on the server (${tried.join('; ')})`], detail: '' };
+  }
+  const { sid, rid, info } = pick;
+
+  // (a) API: the admin has no access to another user's private repo.
+  let apiStatus = null;
+  try {
+    const api = createApiClient(baseURL);
+    await api.login(user.email, user.password);
+    ({ status: apiStatus } = await api.getSessionLogs(rid, info.sessionId));
+    if (apiStatus !== 403) {
+      problems.push(`${sid} logs API as ${def.viewer} returned HTTP ${apiStatus}, expected 403`);
+    }
+  } catch (err) {
+    problems.push(`${def.viewer} API check failed: ${err.message}`);
+  }
+
+  // (b) UI: the direct URL renders none of the session's turn content.
+  const prefix = promptPrefix(info.prompt);
+  if (!prefix) {
+    problems.push(`${sid} has no prompt to look for`);
+  } else {
+    await page.goto(`/#/repos/${encodeURIComponent(rid)}?session=${encodeURIComponent(info.sessionId)}&tab=logs`);
+    await leftNav(page).waitFor({ state: 'visible', timeout: UI_TIMEOUT_MS }).catch(() => {});
+    const deadline = Date.now() + DIRECT_SETTLE_MS;
+    let leaked = await logsShowPrompt(page, prefix);
+    while (!leaked && Date.now() < deadline) {
+      await sleep(POLL_MS);
+      leaked = await logsShowPrompt(page, prefix);
+    }
+    if (leaked) problems.push(`${sid} opened directly shows its first prompt "${prefix}"`);
+  }
+  return {
+    problems,
+    detail: problems.length
+      ? ''
+      : `direct ${sid} URL: owner HTTP 200, ${def.viewer} logs API HTTP ${apiStatus}, no session content shown` +
+        `${tried.length ? ` (skipped ${tried.join('; ')})` : ''}`,
+  };
 }
 
 /** The team's header row in the nav: a div holding the expand toggle and the team-name button. */
@@ -314,6 +427,30 @@ async function screenshot(target, page, file, fullPage) {
   }
 }
 
+/**
+ * Pure: why a row could not see anything it expected to — the ids in its `see` list when EVERY one
+ * of them is blocked: a session (team view) whose status is "not ingested" or whose repo has no
+ * repo id, a repo (personal view) with no repo id. null when `see` is empty or anything in it was
+ * not blocked. The row keeps its own status; this only explains a failure.
+ */
+export function blockedBy(row, state, sessionIndex) {
+  const see = row.see ?? [];
+  if (see.length === 0) return null;
+  const noRepoId = (repo) => (state?.repos?.[repo]?.repoId ?? null) == null;
+  const blocked = see.filter((id) => {
+    if (row.view === 'personal') return noRepoId(id);
+    const repo = SCENARIOS.find((s) => s.id === id)?.repo;
+    return sessionIndex.get(id)?.status === SESSION_STATUS.notIngested || (repo != null && noRepoId(repo));
+  });
+  return blocked.length === see.length ? blocked : null;
+}
+
+/** Pure: `detail` prefixed with "blocked by <ids> (not ingested) — " when the failed row is blocked. */
+export function withBlockedBy(detail, status, blocked) {
+  if (status === 'pass' || !blocked || blocked.length === 0) return detail;
+  return `blocked by ${blocked.join(', ')} (not ingested) — ${detail}`;
+}
+
 /** Notes rows whose referenced sessions did not end `pass` / `scenario not exercised`. */
 function sessionNotes(row, sessionIndex) {
   if (row.view === 'personal') return [];
@@ -327,7 +464,7 @@ function sessionNotes(row, sessionIndex) {
 }
 
 /**
- * Evaluates V1–V7. `browser` is a launched chromium; `state` is the run state (users with
+ * Evaluates V1–V8. `browser` is a launched chromium; `state` is the run state (users with
  * passwords, repos, teams with ids); `sessions` are the scenario results (each with `id`,
  * `status`, `attempts[]` and `expected`).
  * opts (optional): { visibilityDir, baseURL, log }
@@ -392,6 +529,17 @@ export async function runVisibility(browser, state, sessions, opts = {}) {
         row.detail = result.detail;
         if (def.view === 'personal') row.missing = result.missing;
         shotTarget = result.shotTarget ?? null;
+        if (def.directSession) {
+          const direct = await evaluateDirectSession(page, def, state, sessionIndex, baseURL);
+          if (direct.problems.length) {
+            row.status = 'fail';
+            row.detail = `${row.detail}; ${direct.problems.join('; ')}`;
+          } else {
+            row.detail = `${row.detail}; ${direct.detail}`;
+          }
+          // Evidence is the viewport: the directly opened session URL.
+          shotTarget = null;
+        }
       } catch (err) {
         row.status = 'fail';
         row.detail = err.message;
@@ -401,6 +549,7 @@ export async function runVisibility(browser, state, sessions, opts = {}) {
 
       const notes = sessionNotes(def, sessionIndex);
       if (notes.length) row.detail = `${row.detail}${row.detail ? '; ' : ''}session note: ${notes.join('; ')}`;
+      row.detail = withBlockedBy(row.detail, row.status, blockedBy(def, state, sessionIndex));
 
       if (page) {
         if (await screenshot(shotTarget, page, path.join(visibilityDir, shotName), false)) row.screenshot = relShot(shotName);

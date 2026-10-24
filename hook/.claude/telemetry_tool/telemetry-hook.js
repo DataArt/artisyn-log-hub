@@ -32,6 +32,9 @@ const {claimThrottleSlot} = require('./throttle-state');
 
 const HOOK_FILE = 'telemetry-hook.js';
 
+// `--self-check`: the installer's post-install load check — every require above has run.
+require('./hook-log').exitIfSelfCheck(HOOK_FILE);
+
 // Independent of the shared upload lock — this throttles how often a prompt is
 // even allowed to *attempt* spawning a prompt-triggered upload at all. The OTEL
 // re-arm has its own window and state file, both owned by throttle-state.js and shared with the

@@ -1,8 +1,10 @@
 // Run report: an in-memory model (API changes → "Report model"), the overall / exit-code rules
-// and the report.json + index.md writer.
+// and the report.json + index.md + index.html writer (index.html: report-html.mjs).
 import fs from 'node:fs';
 import path from 'node:path';
 import { COMPOSE_PROJECT_PREFIX, STAND_URL } from './config.mjs';
+import { renderIndexHtml } from './report-html.mjs';
+import { CHECKS } from './verify.mjs';
 
 export function createReport({ stamp, runDir, image, keep = false, standUrl = STAND_URL } = {}) {
   return {
@@ -43,10 +45,25 @@ export function recordAc(report, id, status, detail = '') {
   return upsert(report.acChecks, 'id', { id, status, detail: detail ?? '' });
 }
 
+/**
+ * The verdict's per-field outcome, kept small for report.json: `{ <field>: { status, note } }`.
+ * `status` is pass | fail | skipped; `skipped` (cost only) counts as neither pass nor fail.
+ */
+function fieldSummary(fields) {
+  if (!fields || typeof fields !== 'object') return null;
+  const out = {};
+  for (const [key, f] of Object.entries(fields)) {
+    if (!f || typeof f !== 'object') continue;
+    out[key] = { status: f.status ?? null, note: f.note ?? '' };
+  }
+  return out;
+}
+
 export function recordSession(report, s) {
   const attempts = Array.isArray(s.attempts) ? s.attempts.length : (s.attempts ?? 0);
   const sessionIds =
     s.sessionIds ?? (Array.isArray(s.attempts) ? s.attempts.map((a) => a.session_id).filter(Boolean) : []);
+  const prev = report.sessions.find((e) => e.id === s.id);
   return upsert(report.sessions, 'id', {
     id: s.id,
     title: s.title ?? null,
@@ -59,9 +76,32 @@ export function recordSession(report, s) {
     isolation: s.isolation ?? { status: 'fail', detail: 'not checked' },
     error: s.error ?? null,
     checked: s.checked ?? null,
+    // Verifier check ids the session runs (scenario.verifyChecks) and the verdict field outcomes.
+    checks: Array.isArray(s.checks) ? [...s.checks] : (prev?.checks ?? []),
+    fields: s.fields === undefined ? (prev?.fields ?? null) : fieldSummary(s.fields),
     evidence: Array.isArray(s.evidence) ? s.evidence : [],
     mismatches: Array.isArray(s.mismatches) ? s.mismatches : [],
   });
+}
+
+/** Verdict field counts over every session: `skipped` is its own bucket, neither pass nor fail. */
+export function fieldCounts(report) {
+  const counts = { pass: 0, fail: 0, skipped: 0 };
+  for (const s of report.sessions) {
+    for (const f of Object.values(s.fields ?? {})) {
+      if (Object.prototype.hasOwnProperty.call(counts, f.status)) counts[f.status]++;
+    }
+  }
+  return counts;
+}
+
+const FIELD_MARK = Object.freeze({ pass: '✓', fail: '✗', skipped: 'skipped' });
+
+/** "model ✓, cost skipped, bash ✗": one session's verdict fields in check order. */
+function fieldsCell(s) {
+  const entries = Object.entries(s.fields ?? {});
+  if (entries.length === 0) return null;
+  return entries.map(([k, f]) => `${k} ${FIELD_MARK[f.status] ?? f.status ?? '?'}`).join(', ');
 }
 
 /**
@@ -133,7 +173,7 @@ function link(p) {
   return `[${rel}](${encodeURI(rel)})`;
 }
 
-function standCommands(report) {
+export function standCommands(report) {
   const project = report.stamp ? `${COMPOSE_PROJECT_PREFIX}${report.stamp}` : '<project>';
   const logHub = report.runDir ? path.join(report.runDir, '_log_hub') : '<run-dir>/_log_hub';
   const compose = path.join(logHub, 'docker-compose.yml');
@@ -180,7 +220,7 @@ export function renderIndexMd(report) {
   out.push(
     report.sessions.length
       ? table(
-          ['Session', 'Repo', 'Owner', 'Model', 'Status', 'Attempts', 'Session ids', 'Isolation'],
+          ['Session', 'Repo', 'Owner', 'Model', 'Status', 'Attempts', 'Session ids', 'Isolation', 'Verdict fields'],
           report.sessions.map((s) => [
             s.id,
             s.repo,
@@ -190,11 +230,20 @@ export function renderIndexMd(report) {
             s.attempts,
             s.sessionIds,
             s.isolation ? `${s.isolation.status}${s.isolation.detail ? `: ${s.isolation.detail}` : ''}` : null,
+            fieldsCell(s),
           ]),
         )
       : '_No sessions recorded._',
   );
   out.push('');
+  if (report.sessions.some((s) => s.fields)) {
+    const c = fieldCounts(report);
+    out.push(
+      `Verdict fields: ${c.pass} pass, ${c.fail} fail, ${c.skipped} skipped ` +
+        '(`skipped` = nothing comparable, e.g. the telemetry cost did not arrive in time; neither pass nor fail).',
+    );
+    out.push('');
+  }
 
   out.push('## Feature checks');
   out.push('');
@@ -279,8 +328,17 @@ function inline(v) {
   return `\`${JSON.stringify(v)}\``;
 }
 
-function sessionChecked(s) {
+export function sessionChecked(s) {
   if (s.checked) return s.checked;
+  if (s.checks?.length) {
+    const skipped = Object.entries(s.fields ?? {})
+      .filter(([, f]) => f.status === 'skipped')
+      .map(([k]) => k);
+    return (
+      `UI checks ${s.checks.join(', ')} for session ${(s.sessionIds || []).slice(-1)[0] ?? '—'}; ` +
+      `isolation ${s.isolation?.status ?? '—'}${skipped.length ? `; skipped (not judged): ${skipped.join(', ')}` : ''}.`
+    );
+  }
   return (
     `UI shows the expected model, skills, rules, workflows, subagents, MCP servers and prompt for session ` +
     `${(s.sessionIds || []).slice(-1)[0] ?? '—'}; isolation ${s.isolation?.status ?? '—'}.`
@@ -312,11 +370,54 @@ function sessionCase(s) {
   }
   const shown = new Set(pass ? [] : mismatches.map((m) => m.screenshot).filter(Boolean));
   const regular = evidence.filter((e) => e && e.path && !shown.has(e.path));
-  for (const e of regular) lines.push(image(e.label || 'evidence', e.path), '');
+  lines.push(...checkGalleries(s, regular));
   if (regular.length === 0 && shown.size === 0) {
     lines.push(`_No screenshot: ${s.error || s.status || 'the case produced no evidence'}._`, '');
   }
   return lines;
+}
+
+/**
+ * Regular evidence grouped per verifier check (`s.checks`; the shot file stems come from CHECKS),
+ * each group led by a bold line with the check's field outcomes. Evidence no check claims comes
+ * last. Bold lines, not headings: `###` is reserved for the case headings.
+ */
+function checkGalleries(s, regular) {
+  const lines = [];
+  for (const g of checkGroups(s, regular)) {
+    if (g.id) {
+      const outcomes = g.outcomes.map((o) => `${o.field} ${o.status}${o.status === 'skipped' && o.note ? ` (${o.note})` : ''}`);
+      lines.push(`**Check \`${g.id}\`**${outcomes.length ? ` — ${outcomes.join('; ')}` : ''}`, '');
+    }
+    for (const e of g.shots) lines.push(image(e.label || 'evidence', e.path), '');
+  }
+  return lines;
+}
+
+/**
+ * `regular` evidence split per verifier check: `[{ id, outcomes: [{ field, status, note }], shots }]`
+ * in `s.checks` order, then `{ id: null, outcomes: [], shots }` for evidence no check claims.
+ * Shared by the index.md and index.html renderers.
+ */
+export function checkGroups(s, regular) {
+  const groups = [];
+  const left = [...regular];
+  const take = (stem) => {
+    const i = left.findIndex((e) => e.label === stem);
+    return i >= 0 ? left.splice(i, 1)[0] : null;
+  };
+  for (const id of s.checks ?? []) {
+    const def = CHECKS[id];
+    if (!def) continue;
+    const shots = def.shots.map((f) => take(f.replace(/\.[^.]+$/, ''))).filter(Boolean);
+    const outcomes = def.fields
+      .filter((k) => s.fields?.[k])
+      .map((k) => ({ field: k, status: s.fields[k].status, note: s.fields[k].note ?? '' }));
+    if (shots.length === 0 && outcomes.length === 0) continue;
+    groups.push({ id, outcomes, shots });
+  }
+  if (left.length) groups.push({ id: null, outcomes: [], shots: left });
+  return groups;
 }
 
 function featureCase(c) {
@@ -371,13 +472,15 @@ function writeAtomic(file, content) {
   fs.renameSync(tmp, file);
 }
 
-/** Recomputes `overall`, then writes report.json and index.md into `reportDir`. */
+/** Recomputes `overall`, then writes report.json, index.md and index.html into `reportDir`. */
 export function writeReport(report, reportDir) {
   report.overall = computeOverall(report);
   fs.mkdirSync(reportDir, { recursive: true });
   const jsonPath = path.join(reportDir, 'report.json');
   const mdPath = path.join(reportDir, 'index.md');
+  const htmlPath = path.join(reportDir, 'index.html');
   writeAtomic(jsonPath, `${JSON.stringify(report, null, 2)}\n`);
   writeAtomic(mdPath, renderIndexMd(report));
-  return { jsonPath, mdPath };
+  writeAtomic(htmlPath, renderIndexHtml(report));
+  return { jsonPath, mdPath, htmlPath };
 }

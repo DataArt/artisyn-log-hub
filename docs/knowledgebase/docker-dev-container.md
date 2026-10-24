@@ -333,6 +333,7 @@ docker-dev`. The context is `docker-dev/`; the allow-list dockerignore keeps `cl
 
 Contents: `ubuntu:24.04`; Node/npm of the host versions; bun; Claude Code native binary (laid out
 like `claude install`, so auto-update works); Google Chrome and Playwright chromium; Mailpit;
+gitleaks (the repo's git hooks refuse to commit/push without it, see [git-hooks.md](git-hooks.md));
 git ≥ 2.48 from the signed git-core PPA; `typescript-language-server` + `typescript`;
 `postgresql-client`, `socat`, `jq`, `ripgrep`, `curl`. Every download is verified against a pinned
 sha256 in parallel BuildKit stages; a tampered sha256 fails the build. The build asserts

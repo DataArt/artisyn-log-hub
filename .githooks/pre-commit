@@ -1,3 +1,5 @@
 #!/bin/sh
 # Migration immutability guard: see scripts/migrations-lock.js.
-exec node scripts/migrations-lock.js --pre-commit
+node scripts/migrations-lock.js --pre-commit || exit $?
+# Secret scan of the staged changes: see scripts/gitleaks-scan.js.
+exec node scripts/gitleaks-scan.js --pre-commit

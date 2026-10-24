@@ -58,6 +58,86 @@ export function checkTools() {
   return { tools, chromium: chromiumPath };
 }
 
+// ---- base-image pre-pull ------------------------------------------------------------------------
+// Docker Hub's anonymous pull limit (HTTP 429) once killed a run in P1 on `FROM node:…-slim`. P0
+// pulls every missing official base image from the public ECR mirror of the Docker library
+// instead and tags it with its Docker Hub name, so the build and compose find it locally.
+
+const ECR_LIBRARY_MIRROR = 'public.ecr.aws/docker/library';
+const PULL_TIMEOUT_MS = 10 * 60 * 1000;
+
+/**
+ * Pure: the external base images of a Dockerfile's `FROM` lines, in order, without duplicates.
+ * Skips `--platform=…`-style flags, references to an earlier stage (`FROM build AS x`),
+ * `scratch` and images built from an ARG (`$…`).
+ */
+export function dockerfileBaseImages(text) {
+  const stages = new Set();
+  const images = [];
+  for (const raw of String(text ?? '').split(/\r?\n/)) {
+    const tokens = raw.trim().split(/\s+/);
+    if (!tokens[0] || tokens[0].toUpperCase() !== 'FROM') continue;
+    const args = tokens.slice(1).filter((t) => !t.startsWith('--'));
+    const image = args[0];
+    const earlierStage = Boolean(image) && stages.has(image.toLowerCase());
+    if (args.length >= 3 && args[1].toUpperCase() === 'AS') stages.add(args[2].toLowerCase());
+    if (!image || earlierStage || image.includes('$') || image.toLowerCase() === 'scratch') continue;
+    if (!images.includes(image)) images.push(image);
+  }
+  return images;
+}
+
+/**
+ * Pure: the public ECR mirror ref of an official Docker library image (`node:22-slim` →
+ * `public.ecr.aws/docker/library/node:22-slim`, no tag → `:latest`); null for anything with a
+ * registry or namespace (`a/b`, `ghcr.io/…`) or a digest, which is not mirrored.
+ */
+export function mirrorImageRef(image) {
+  if (typeof image !== 'string' || !image || image.includes('/') || image.includes('@')) return null;
+  const [name, tag = 'latest', ...rest] = image.split(':');
+  if (!name || !tag || rest.length) return null;
+  return `${ECR_LIBRARY_MIRROR}/${name}:${tag}`;
+}
+
+/**
+ * For every image not present locally (`docker image inspect`), pulls its mirror
+ * (`--platform linux/amd64`) and `docker tag`s it to the original name. Never throws: a failure
+ * is reported per image so the caller can warn — the build may still find the image itself.
+ * Returns [{ image, action: 'present' | 'pulled' | 'not mirrored' | 'failed', detail }].
+ */
+export function prePullBaseImages(images, { runner = run } = {}) {
+  const out = [];
+  for (const image of images) {
+    const inspect = (() => {
+      try {
+        return runner('docker', ['image', 'inspect', '--format', '{{.Id}}', image], { allowFail: true, timeoutMs: 60000 });
+      } catch (err) {
+        return { status: -1, stderr: err.message };
+      }
+    })();
+    if (inspect.status === 0) {
+      out.push({ image, action: 'present', detail: 'already local' });
+      continue;
+    }
+    const mirror = mirrorImageRef(image);
+    if (!mirror) {
+      out.push({ image, action: 'not mirrored', detail: 'not an official library image; left to the build' });
+      continue;
+    }
+    try {
+      runner('docker', ['pull', '--platform', BUILD_PLATFORM, mirror], { timeoutMs: PULL_TIMEOUT_MS });
+      runner('docker', ['tag', mirror, image], { timeoutMs: 60000 });
+      out.push({ image, action: 'pulled', detail: `pulled ${mirror} (${BUILD_PLATFORM}) and tagged it ${image}` });
+    } catch (err) {
+      // The command line plus the last stderr line (e.g. the 429), not the whole tail.
+      const lines = String(err.message).split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+      const reason = lines.length > 1 ? `${lines[0]} ${lines[lines.length - 1]}` : lines[0] ?? 'unknown error';
+      out.push({ image, action: 'failed', detail: `${mirror}: ${reason}` });
+    }
+  }
+  return out;
+}
+
 function busyMessage(port) {
   return `port ${port} is busy — free it or stop the other stand; nothing was stopped`;
 }

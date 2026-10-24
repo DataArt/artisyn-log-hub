@@ -1,0 +1,47 @@
+# Server-side secret scan — the layer `--no-verify` cannot skip (the local hooks are
+# .githooks/pre-commit and pre-push). Runs the MIT gitleaks binary directly: the official
+# gitleaks-action needs a license key for organization repos.
+#
+# OFF until the repository is public: the job runs on push/PR only when the repository variable
+# GITLEAKS_ENABLED is `true` (Settings → Secrets and variables → Actions → Variables). A manual
+# "Run workflow" always runs. See docs/knowledgebase/git-hooks.md.
+name: gitleaks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    if: vars.GITLEAKS_ENABLED == 'true' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      # Keep equal to the GITLEAKS_VERSION in docker-dev/Dockerfile.
+      GITLEAKS_VERSION: 8.30.1
+      GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install gitleaks
+        run: |
+          set -eu
+          archive="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          curl -fsSL -o "$RUNNER_TEMP/$archive" \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/${archive}"
+          echo "${GITLEAKS_SHA256}  $RUNNER_TEMP/$archive" | sha256sum -c -
+          tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP" gitleaks
+          "$RUNNER_TEMP/gitleaks" version
+
+      - name: Scan the full history
+        run: |
+          "$RUNNER_TEMP/gitleaks" git --config .gitleaks.toml --redact --verbose --no-banner \
+            --log-opts="--all" .

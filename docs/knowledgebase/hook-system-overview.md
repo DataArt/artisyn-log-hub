@@ -5,7 +5,7 @@ description: "Hook system architecture: event triggers, telemetry recording, the
 tags:
   - hooks
   - otel
-timestamp: "2026-09-26T00:00:00+04:00"
+timestamp: "2026-10-24T00:00:00+04:00"
 ---
 
 # Hook System Overview
@@ -42,9 +42,10 @@ The hook ships as a Claude Code plugin (`log-hub-hooks`), extracted by the insta
 | `scripts/code-inventory.js` | Shared utility (hook `2.16.0`+): `buildCodeInventory(projectRoot)` measures the tracked codebase at HEAD with ONE `git diff --numstat <EMPTY_TREE_SHA> HEAD` call (`EMPTY_TREE_SHA` is git's well-known empty-tree object id, a named constant here) plus a `rev-parse HEAD`. Returns `null` — never a partial or zeroed record — when the repo cannot be measured, so no `code-inventory` event is emitted and the server reports `n/a` instead of a zero denominator. |
 | `scripts/edit-result-counts.js` | Shared utility (hook `2.16.0`+): `deriveEditResultCounts(toolName, toolResponse)` → `{ filePath, added, removed, changeKind }` for `Edit`/`Write`/`MultiEdit` only, `null` for everything else and for an edit with no countable diff. Derived ON THE MACHINE: `structuredPatch`, `originalFile` and every non-edit tool result stay local and are never uploaded. |
 | `scripts/env-context.js` | Shared utility: `loadConfig(cwd)` reads `.artisyn/config/log-hub.json` + `log-hub.local.json` (anchored at the git repo root, not `${CLAUDE_PLUGIN_ROOT}`, since that path changes on every plugin update), resolves telemetry dir, extracts the `context` array. Also owns the OTEL resolvers (`2.3.0`+): `resolveOtelDir(cwd, config)` → `<telemetryDir>/otel`, `resolveOtelPort(config, env, cwd)` and `OTEL_FALLBACK_PORT`. |
-| `scripts/hook-log.js` | Shared utility: writes diagnostic lines to `.artisyn/ai_work_dir/hook.log`; also exports `getHookVersion()` (cached read of `version.json`) and `readLogTail(cwd, n)` (last `n` non-empty `hook.log` lines) |
+| `scripts/hook-log.js` | Shared utility: writes diagnostic lines to `.artisyn/ai_work_dir/hook.log`; also exports `getHookVersion()` (cached read of `version.json`) and `readLogTail(cwd, n)` (last `n` non-empty `hook.log` lines), and `exitIfSelfCheck(hookFile)` (hook `2.24.2`+): each hook entry script calls it right after its top-level requires, so `node <script> --self-check` loads the whole module graph, prints `{"selfCheck":"ok",…}` and exits 0 without reading stdin or writing a file — the installer's post-install load check ([hook-installation.md](hook-installation.md), step 9) |
 | `scripts/recommendations.js` | Shared utility: `readRecommendations(cwd)` / `upsertRecommendation(cwd, entry)` — reads/writes `.artisyn/ai_work_dir/hook-recommendations.json` |
 | `scripts/version.json` | Hook content version (must agree with `plugin.json`'s `version`) |
+| `scripts/package.json` | `{"type": "commonjs"}` (hook `2.24.1`+, written by `scripts/build-hooks-installer.js`). The plugin runs from inside the user's repo and Node takes a `.js` file's module type from the nearest `package.json`; without this file a repo whose root `package.json` says `"type": "module"` made every hook die with `require is not defined in ES module scope` and nothing was recorded |
 | `config-template/log-hub.json` | Blanked config template the installer reconciles into the project's own `.artisyn/config/log-hub.json` |
 
 The project's own `.artisyn/config/log-hub.json` (tracked) and `.artisyn/config/log-hub.local.json` (gitignored,
@@ -603,6 +604,26 @@ Two `send-logs-hook.js` line formats changed in hook `2.8.0`:
 
 - **Fail-open** — hooks always exit 0; no hook failure can block Claude Code
 - **No external deps** — only Node.js 18+ built-ins (`fs`, `path`, `child_process`, `http`, `https`, `os`, `zlib`)
+- **Runs on every current Node.js LTS** — the hook must work on every Node.js release line that is
+  an LTS (active or maintenance) at the time of a release; we do not know which one a user has
+  installed. The hooks run with the **user's own `node` from `PATH`** (`hooks.json` `"command":
+  "node"`), never a runtime bundled with Claude Code, so the Node version is whatever the user's
+  machine resolves first. Check the current LTS lines on <https://nodejs.org/en/about/previous-releases>
+  (as of 2026-10: 22.x maintenance and 24.x active; 26.x enters LTS at the end of October 2026); the
+  `engines` floor in `hook/package.json` (`>=18.19`) is older still and is not raised without a
+  decision. Consequences: no API or syntax newer than the oldest supported line; no reliance on
+  version-specific module-loader behaviour (e.g. Node 22+ module-syntax detection) — the scripts are
+  CommonJS and must declare it themselves, because they run from inside the user's repo and would
+  otherwise inherit the repo's `package.json` `"type": "module"` (see task
+  `2026-10-24-post-e2e-test-bugs`); and a fix that depends on Node behaviour is verified on
+  each current LTS line, not only on the developer's Node. Requiring Node.js on the user's machine
+  is a deliberate trade-off of the product (plain, auditable JavaScript instead of a bundled
+  runtime); the user-facing promise is "any current Node.js LTS works" (`hook/INSTALL_HOOK.md`).
+  Rejected alternative (2026-10-24): running the hooks with the runtime inside Claude Code. The
+  native `claude` executable is a Bun-compiled binary, not Node; it does not run an arbitrary
+  script (`BUN_BE_BUN=1 claude.exe script.js` is treated as a prompt), and `CLAUDE_CODE_EXECPATH`
+  only names the binary. Even if it worked it would be an undocumented interface on a non-Node
+  runtime
 - **Transparent code only** — everything the hook ships must be plain, human-readable JavaScript that a user can open and audit in the installed plugin folder. No compiled or opaque artifacts: no native binaries/executables (Rust, Go, C, …), no `.node` addons, no WASM, no minified/obfuscated or bundled blobs. The hook runs on users' machines with access to their repos and session transcripts, so users (and their security teams / AV) must be able to see exactly what it does. Performance-motivated native code (e.g. a Rust JSONL analyzer) belongs on the **server** side, never in the hook
 - **Git-rooted paths** — config and telemetry resolve against the repo root, not session cwd, so subdirectory sessions behave the same
 - **Manifest deduplication** — avoids re-uploading unchanged log files on repeated Stop events

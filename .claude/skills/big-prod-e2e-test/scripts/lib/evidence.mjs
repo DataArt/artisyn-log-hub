@@ -224,6 +224,30 @@ export function mcpServerFromTool(name) {
   return server || null;
 }
 
+/** A tool_result text that says the permission system refused the call (PoC 2026-10-23). */
+export const PERMISSION_DENIAL_RE = /requested permissions to (use|write|read|edit)/i;
+const TASK_NOTIFICATION_PREFIX = '<task-notification>';
+const BACKGROUND_AGENT_TOOLS = new Set(['Agent', 'Task']);
+
+/** Plain text of a tool_result block's `content` (string or text blocks). */
+function toolResultText(block) {
+  const c = block?.content;
+  if (typeof c === 'string') return c;
+  if (!Array.isArray(c)) return '';
+  return c
+    .filter((x) => x?.type === 'text' && typeof x.text === 'string')
+    .map((x) => x.text)
+    .join('\n');
+}
+
+/** True for a user entry whose content (string or a text block) starts with `<task-notification>`. */
+function isTaskNotification(e) {
+  if (e?.type !== 'user') return false;
+  return contentBlocks(e.message).some(
+    (b) => b?.type === 'text' && typeof b.text === 'string' && b.text.trimStart().startsWith(TASK_NOTIFICATION_PREFIX),
+  );
+}
+
 /**
  * Harness use from transcript lines (main AND every subagent transcript):
  *  skills    — `Skill` tool_use `input.skill` + `<command-name>/x</command-name>` user messages
@@ -232,6 +256,15 @@ export function mcpServerFromTool(name) {
  *  subagents — `subagentFileCount` (regular + workflow agent files)
  *  mcp       — MCP server names from `mcp__<server>__<tool>` tool_use names
  *  reads     — `Read` tool_use `input.file_path`s, forward slashes
+ *  bashCalls — count of `Bash` tool_use
+ *  bashErrors — count of `Bash` tool_results with `is_error: true`
+ *  denials   — tool names whose tool_result line has `toolDenialKind` or whose text matches
+ *              PERMISSION_DENIAL_RE
+ *  backgroundAgent — an `Agent`/`Task` tool_use with `input.run_in_background === true`
+ *  toolUseAfterNotification — a main-thread (non-sidechain) tool_use after a user entry that
+ *              starts with `<task-notification>`
+ *  cwd       — the `cwd` of the first entry that has one, forward slashes (null when none; a
+ *              transcript starts with `queue-operation` lines that have no cwd)
  * Arrays are de-duplicated and sorted.
  */
 export function extractHarness(lines, subagentFileCount = 0) {
@@ -240,10 +273,20 @@ export function extractHarness(lines, subagentFileCount = 0) {
   const workflows = [];
   const mcp = [];
   const reads = [];
+  const denials = [];
+  const toolNames = new Map(); // tool_use id → tool name
+  let bashCalls = 0;
+  let bashErrors = 0;
+  let backgroundAgent = false;
+  let notified = false;
+  let toolUseAfterNotification = false;
+  let cwd = null;
   for (const e of parseJsonl(lines)) {
+    if (cwd === null && typeof e.cwd === 'string' && e.cwd !== '') cwd = e.cwd.replace(/\\/g, '/');
     if (e.type === 'assistant') {
       for (const b of contentBlocks(e.message)) {
         if (b?.type !== 'tool_use') continue;
+        if (typeof b.id === 'string') toolNames.set(b.id, b.name);
         if (b.name === 'Skill' && typeof b.input?.skill === 'string') {
           skills.push(b.input.skill.replace(/^\//, ''));
         }
@@ -251,9 +294,19 @@ export function extractHarness(lines, subagentFileCount = 0) {
         const server = mcpServerFromTool(b.name);
         if (server) mcp.push(server);
         if (b.name === 'Read' && typeof b.input?.file_path === 'string') reads.push(b.input.file_path.replace(/\\/g, '/'));
+        if (b.name === 'Bash') bashCalls++;
+        if (BACKGROUND_AGENT_TOOLS.has(b.name) && b.input?.run_in_background === true) backgroundAgent = true;
+        if (notified && e.isSidechain !== true) toolUseAfterNotification = true;
       }
     } else if (e.type === 'user') {
+      if (e.isSidechain !== true && isTaskNotification(e)) notified = true;
       for (const b of contentBlocks(e.message)) {
+        if (b?.type === 'tool_result') {
+          const name = toolNames.get(b.tool_use_id) ?? null;
+          if (name === 'Bash' && b.is_error === true) bashErrors++;
+          if (name && (e.toolDenialKind || PERMISSION_DENIAL_RE.test(toolResultText(b)))) denials.push(name);
+          continue;
+        }
         if (b?.type !== 'text' || typeof b.text !== 'string') continue;
         for (const m of b.text.matchAll(COMMAND_NAME_RE)) skills.push(m[1]);
       }
@@ -269,7 +322,45 @@ export function extractHarness(lines, subagentFileCount = 0) {
     subagents: Number(subagentFileCount) || 0,
     mcp: uniqSorted(mcp),
     reads: uniqSorted(reads),
+    bashCalls,
+    bashErrors,
+    denials: uniqSorted(denials),
+    backgroundAgent,
+    toolUseAfterNotification,
+    cwd,
   };
+}
+
+/**
+ * Work-time window of the turn a background agent extends (FR-7, Design Decision 10):
+ * start = the initial prompt's user entry, end = the last non-sidechain assistant entry after the
+ * `<task-notification>` user entry (a turn ends at an assistant event, never at a tool_result).
+ * Returns { startTs, endTs, seconds } or null when there is no prompt, no notification or no
+ * later assistant entry.
+ */
+export function workTimeWindow(lines) {
+  let start = null;
+  let notified = false;
+  let end = null;
+  for (const e of parseJsonl(lines)) {
+    if (e.isSidechain === true || typeof e.timestamp !== 'string') continue;
+    if (e.type === 'user') {
+      if (isTaskNotification(e)) {
+        if (start) notified = true;
+        continue;
+      }
+      const isPrompt =
+        e.isMeta !== true && contentBlocks(e.message).some((b) => b?.type === 'text' && typeof b.text === 'string');
+      if (!start && isPrompt) start = e;
+    } else if (e.type === 'assistant' && notified) {
+      end = e;
+    }
+  }
+  if (!start || !end) return null;
+  const startMs = Date.parse(start.timestamp);
+  const endMs = Date.parse(end.timestamp);
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) return null;
+  return { startTs: start.timestamp, endTs: end.timestamp, seconds: (endMs - startMs) / 1000 };
 }
 
 /** True when some read path ends with the repo-relative `rel` (on a path-segment boundary). */
@@ -278,58 +369,79 @@ function wasRead(reads, rel) {
   return reads.some((p) => p === want || p.endsWith(`/${want}`));
 }
 
-/**
- * Every `requires` entry is a subset of the actual evidence; `subagent` is a
- * minimum count; `reads` lists repo-relative files a `Read` call must have opened. An
- * empty `requires` (S1) means nothing was used: no skill, rule, workflow, MCP call and zero
- * subagents.
- */
-export function isExercised(requires = {}, actual = {}) {
-  const has = (key) => Array.isArray(actual[key]) ? actual[key] : [];
+function noHarnessGap(actual) {
+  const list = (key) => (Array.isArray(actual[key]) ? actual[key] : []);
   const subagents = Number(actual.subagents) || 0;
-  const keys = Object.keys(requires || {});
-  if (keys.length === 0) {
-    return (
-      has('skills').length === 0 &&
-      has('rules').length === 0 &&
-      has('workflows').length === 0 &&
-      has('mcp').length === 0 &&
-      subagents === 0
-    );
+  const clean =
+    list('skills').length === 0 &&
+    list('rules').length === 0 &&
+    list('workflows').length === 0 &&
+    list('mcp').length === 0 &&
+    subagents === 0;
+  if (clean) return null;
+  return `expected no harness use, got skills=[${list('skills')}] rules=[${list('rules')}] workflows=[${list('workflows')}] mcp=[${list('mcp')}] subagents=${subagents}`;
+}
+
+/** One message per unmet `requires` key ([] when the attempt exercised its scenario). */
+function exercisedGaps(requires = {}, actual = {}) {
+  const req = requires || {};
+  const act = actual || {};
+  const list = (key) => (Array.isArray(act[key]) ? act[key] : []);
+  const gaps = [];
+  // An empty `requires` is the older spelling of `noHarness: true`.
+  if (req.noHarness === true || Object.keys(req).length === 0) {
+    const gap = noHarnessGap(act);
+    if (gap) gaps.push(gap);
   }
   for (const key of ['skills', 'rules', 'workflows', 'mcp']) {
-    const need = requires[key];
+    const need = req[key];
     if (!need) continue;
-    const got = new Set(has(key));
-    if (!need.every((n) => got.has(n))) return false;
+    const got = new Set(list(key));
+    const missing = need.filter((n) => !got.has(n));
+    if (missing.length) gaps.push(`${key} missing ${missing.join(', ')}`);
   }
-  if (requires.subagent != null && subagents < requires.subagent) return false;
-  if (requires.reads && !requires.reads.every((r) => wasRead(has('reads'), r))) return false;
-  return true;
+  if (req.subagent != null && (Number(act.subagents) || 0) < req.subagent) {
+    gaps.push(`subagents ${act.subagents ?? 0} < ${req.subagent}`);
+  }
+  if (req.reads) {
+    const unread = req.reads.filter((r) => !wasRead(list('reads'), r));
+    if (unread.length) gaps.push(`not read: ${unread.join(', ')}`);
+  }
+  if (req.bash != null && (Number(act.bashCalls) || 0) < req.bash) {
+    gaps.push(`Bash calls ${act.bashCalls ?? 0} < ${req.bash}`);
+  }
+  if (req.bashError === true && !((Number(act.bashErrors) || 0) > 0)) {
+    gaps.push('no Bash call ended with is_error');
+  }
+  if (req.denied) {
+    const got = new Set(list('denials'));
+    const missing = req.denied.filter((n) => !got.has(n));
+    if (missing.length) gaps.push(`not denied: ${missing.join(', ')}`);
+  }
+  if (req.background === true) {
+    if (act.backgroundAgent !== true) gaps.push('no Agent call with run_in_background: true');
+    if (act.toolUseAfterNotification !== true) gaps.push('no main-thread tool call after <task-notification>');
+  }
+  if (req.cwd === true && act.cwdOk !== true) {
+    gaps.push(`session cwd not as expected (transcript cwd ${act.cwd ?? 'none'})`);
+  }
+  return gaps;
+}
+
+/**
+ * Every `requires` entry is met by the actual evidence: `skills`/`rules`/`workflows`/`mcp` are
+ * subsets; `subagent` and `bash` are minimum counts; `reads` lists repo-relative files a `Read`
+ * call must have opened; `bashError` needs a Bash result with is_error; `denied` lists tool names
+ * the permission system refused; `background` needs a background Agent plus a main-thread tool
+ * call after its notification; `cwd` needs `actual.cwdOk` (set by the runner); `noHarness` (or an
+ * empty `requires`) means no skill, rule, workflow, MCP call and zero subagents.
+ */
+export function isExercised(requires = {}, actual = {}) {
+  return exercisedGaps(requires, actual).length === 0;
 }
 
 /** Human-readable reason an attempt was not exercised (for result.json / the report). */
 export function exercisedGap(requires = {}, actual = {}) {
-  if (isExercised(requires, actual)) return null;
-  const keys = Object.keys(requires || {});
-  if (keys.length === 0) {
-    return `expected no harness use, got skills=[${actual.skills ?? []}] rules=[${actual.rules ?? []}] workflows=[${actual.workflows ?? []}] mcp=[${actual.mcp ?? []}] subagents=${actual.subagents ?? 0}`;
-  }
-  const gaps = [];
-  for (const key of ['skills', 'rules', 'workflows', 'mcp']) {
-    const need = requires[key];
-    if (!need) continue;
-    const got = new Set(Array.isArray(actual[key]) ? actual[key] : []);
-    const missing = need.filter((n) => !got.has(n));
-    if (missing.length) gaps.push(`${key} missing ${missing.join(', ')}`);
-  }
-  if (requires.subagent != null && (Number(actual.subagents) || 0) < requires.subagent) {
-    gaps.push(`subagents ${actual.subagents ?? 0} < ${requires.subagent}`);
-  }
-  if (requires.reads) {
-    const reads = Array.isArray(actual.reads) ? actual.reads : [];
-    const unread = requires.reads.filter((r) => !wasRead(reads, r));
-    if (unread.length) gaps.push(`not read: ${unread.join(', ')}`);
-  }
-  return gaps.join('; ');
+  const gaps = exercisedGaps(requires, actual);
+  return gaps.length ? gaps.join('; ') : null;
 }

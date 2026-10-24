@@ -57,6 +57,9 @@ const { claudeConfigDir } = require('./claude-config-dir');
 
 const HOOK_FILE = 'send-logs-hook.js';
 
+// `--self-check`: the installer's post-install load check — every require above has run.
+require('./hook-log').exitIfSelfCheck(HOOK_FILE);
+
 // Upload-lock wait budgets (see `acquireUploadLockWithWait`). `Stop` blocks the interactive turn,
 // so it only rides out a lock that is about to be released; `SessionEnd` is the session's last
 // trigger and waits long enough to outlast a contending catch-up run.

@@ -28,6 +28,9 @@ const { spawnDetachedHidden } = require('./spawn-hidden');
 
 const HOOK_FILE = 'post-turn-analysis-hook.js';
 
+// `--self-check`: the installer's post-install load check — every require above has run.
+require('./hook-log').exitIfSelfCheck(HOOK_FILE);
+
 /**
  * Set by every `claude -p` this hook family spawns — `claude-invoke-async.js`'s `callLlmAsync()`
  * (advisor + attribution) — and inherited from there by that

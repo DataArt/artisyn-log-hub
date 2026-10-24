@@ -1,0 +1,3 @@
+#!/bin/sh
+# Secret scan of the commits being pushed: see scripts/gitleaks-scan.js.
+exec node scripts/gitleaks-scan.js --pre-push "$1"

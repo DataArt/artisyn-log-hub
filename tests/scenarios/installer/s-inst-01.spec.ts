@@ -368,6 +368,51 @@ test('@S-INST-01 a clean install keeps the user settings, writes exactly its own
       expect(readJson(path.join(configDir, 'otel-port.json')).port).toBe(port);
       expect(readJson(path.join(configDir, 'log-hub.local.json')).otelReceiverPort).toBe(port);
     });
+
+    await test.step('8c. a project whose package.json says "type": "module": every hook script starts (the plugin pins CommonJS), the summary says ready, and the installed Stop hook uploads', async () => {
+      const esm = makeFakeGitRepo(dirs, { remote: 'git@git.arrakis.test:scn/inst01/esm.git' });
+      fs.writeFileSync(path.join(esm, 'package.json'), `${JSON.stringify({ name: 'esm-app', type: 'module' }, null, 2)}\n`);
+      fs.mkdirSync(path.join(esm, '.claude'));
+      const res = await runInstaller(cli, esm, ['install', '--server-url', hub!.url, '--api-key', API_KEY], { home, fakeClaudeDir: fakeClaude.dir });
+      expect(res.code, res.output).toBe(0);
+      expect(res.stdout).toMatch(/✓ Hook scripts load with node v\d+\.\d+\.\d+ \((\d+)\/\1\)/);
+      expect(res.stdout).toContain('Hooks are fully configured and ready to use.');
+      const esmPlugin = pluginRoot(esm);
+      expect(readJson(path.join(esmPlugin, 'scripts', 'package.json'))).toEqual({ type: 'commonjs' });
+
+      const esmConfig = path.join(esm, '.artisyn', 'config', 'log-hub.json');
+      fs.writeFileSync(esmConfig, JSON.stringify({ ...readJson(esmConfig), otelEnabled: false, sendLogsOnPromptEnabled: false }, null, 2));
+      const telemetry = path.join(esm, '.artisyn', 'ai_work_dir', 'telemetry');
+      fs.mkdirSync(telemetry, { recursive: true });
+      fs.writeFileSync(path.join(telemetry, 'esm1.jsonl'), `${JSON.stringify({ event: 'prompt_start', session_id: 'esm1', prompt: 'hi' })}\n`);
+      const stop = pluginHookCommands(esmPlugin, 'Stop').find((c) => c.args[0]?.endsWith('send-logs-hook.js'));
+      const run = await runNodeScript(stop!.args[0], esm, JSON.stringify({ session_id: 'esm1', cwd: esm, hook_event_name: 'Stop' }), {
+        home,
+        env: { CLAUDE_PLUGIN_ROOT: esmPlugin },
+      });
+      expect(run.code, run.stderr).toBe(0);
+      expect(run.stderr).not.toContain('require is not defined');
+      expect(hub!.requests.filter((r) => r.path === '/api/v2/logs').map((r) => `${r.type}/${r.sessionId}`)).toContain('artisyn/esm1');
+    });
+
+    await test.step('8d. hook scripts that cannot start (an archive whose scripts/package.json says "type": "module"): exit 0, every failing script named with its error and the reproduce command, «not working yet» instead of «ready to use»', async () => {
+      const archive = patchedPluginArchive(cli, dirs, {
+        '.artisyn/marketplace/plugins/log-hub-hooks/scripts/package.json': '{ "type": "module" }\n',
+      });
+      const res = await runInstaller(cli, repo, ['install', '--server-url', hub!.url, '--api-key', API_KEY], {
+        home,
+        fakeClaudeDir: fakeClaude.dir,
+        env: { ARTISYN_HOOKS_ARCHIVE_PATH: archive },
+      });
+      expect(res.code, res.output).toBe(0);
+      expect(res.output).toMatch(/hook script\(s\) do not start with node v\d+/);
+      expect(res.output).toMatch(/scripts\/send-logs-hook\.js: exit 1 — .*require is not defined in ES module scope/);
+      expect(res.output).toMatch(/node ".*-hook\.js" --self-check/);
+      expect(res.output).toMatch(/⚠ Hooks (installed|updated) \(hooks v[\d.]+\), but they are not working in this project yet:/);
+      expect(res.stdout).not.toContain('Hooks are fully configured and ready to use.');
+      expect(res.stdout).toContain('Hooks are configured, but not working yet');
+      expect(res.stdout).not.toMatch(/✓ Hooks (installed|updated) successfully/);
+    });
   } finally {
     await hub?.close();
     dirs.cleanup();
