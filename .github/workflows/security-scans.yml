@@ -924,9 +924,9 @@ jobs:
             # --no-interpolate cannot parse `${VAR:?msg}/x:/y:ro` (the `:?` adds colons), so
             # interpolate instead, with a placeholder for every required `${VAR:?...}` variable.
             placeholders=()
-            for v in $(grep -oE '\$\{[A-Za-z_][A-Za-z0-9_]*:\?' "$file" | sed -E 's/^\$\{//; s/:\?$//' | sort -u); do
-              placeholders+=("$v=/ci-placeholder")
-            done
+            while read -r v; do
+              [ -n "$v" ] && placeholders+=("$v=/ci-placeholder")
+            done < <(grep -oE '\$\{[A-Za-z_][A-Za-z0-9_]*:\?' "$file" | sed -E 's/^\$\{//; s/:\?$//' | sort -u)
             if ! env "${placeholders[@]}" docker compose -f "$file" config --quiet >> "$log" 2>&1; then
               failed=$((failed + 1))
               echo "::warning file=$file::docker compose config failed"
