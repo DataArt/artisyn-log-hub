@@ -1,7 +1,7 @@
 {
   "schema": 1,
-  "commit": "d11c40855ed84c75464cc982ea28f7e3460464d4",
-  "date": "2026-10-24T13:19:20.330Z",
+  "commit": "8975ec51feee178dbb73c69614935b608e116626",
+  "date": "2026-10-24T15:30:20.335Z",
   "ref": "main",
   "rows": [
     {
@@ -18,7 +18,7 @@
       "fixable": 0,
       "note": "no issues",
       "version": "1.1308.3",
-      "link": "https://github.com/DataArt/artisyn-log-hub/actions/runs/40097423492"
+      "link": "https://github.com/DataArt/artisyn-log-hub/actions/runs/40107128729"
     },
     {
       "tool": "snyk-oss",
@@ -34,7 +34,7 @@
       "fixable": 11,
       "note": "11 fixable high/critical",
       "version": "1.1308.3",
-      "link": "https://github.com/DataArt/artisyn-log-hub/actions/runs/40097423492"
+      "link": "https://github.com/DataArt/artisyn-log-hub/actions/runs/40107128729"
     },
     {
       "tool": "snyk-oss",
@@ -50,7 +50,7 @@
       "fixable": 0,
       "note": "no issues",
       "version": "1.1308.3",
-      "link": "https://github.com/DataArt/artisyn-log-hub/actions/runs/40097423492"
+      "link": "https://github.com/DataArt/artisyn-log-hub/actions/runs/40107128729"
     },
     {
       "tool": "config-guard",
@@ -65,7 +65,7 @@
       },
       "fixable": 0,
       "note": "",
-      "link": "https://github.com/DataArt/artisyn-log-hub/actions/runs/40097423492"
+      "link": "https://github.com/DataArt/artisyn-log-hub/actions/runs/40107128729"
     },
     {
       "tool": "lockfile-lint",
@@ -81,7 +81,7 @@
       "fixable": 0,
       "note": "ok",
       "version": "5.1.0",
-      "link": "https://github.com/DataArt/artisyn-log-hub/actions/runs/40097423492"
+      "link": "https://github.com/DataArt/artisyn-log-hub/actions/runs/40107128729"
     },
     {
       "tool": "npm-signatures",
@@ -97,7 +97,7 @@
       "fixable": 0,
       "note": "ok",
       "version": "10.9.9",
-      "link": "https://github.com/DataArt/artisyn-log-hub/actions/runs/40097423492"
+      "link": "https://github.com/DataArt/artisyn-log-hub/actions/runs/40107128729"
     },
     {
       "tool": "actionlint",
@@ -113,7 +113,7 @@
       "fixable": 0,
       "note": "ok",
       "version": "1.7.12",
-      "link": "https://github.com/DataArt/artisyn-log-hub/actions/runs/40097423492"
+      "link": "https://github.com/DataArt/artisyn-log-hub/actions/runs/40107128729"
     },
     {
       "tool": "zizmor",
@@ -129,7 +129,7 @@
       "fixable": 0,
       "note": "no issues",
       "version": "1.31.1",
-      "link": "https://github.com/DataArt/artisyn-log-hub/actions/runs/40097423492"
+      "link": "https://github.com/DataArt/artisyn-log-hub/actions/runs/40107128729"
     },
     {
       "tool": "hadolint",
@@ -145,7 +145,7 @@
       "fixable": 0,
       "note": "20 medium, 4 low: DL3016, DL3003, DL3008, DL4006, SC2010",
       "version": "2.15.1",
-      "link": "https://github.com/DataArt/artisyn-log-hub/actions/runs/40097423492"
+      "link": "https://github.com/DataArt/artisyn-log-hub/actions/runs/40107128729"
     },
     {
       "tool": "compose",
@@ -161,23 +161,23 @@
       "fixable": 0,
       "note": "ok",
       "version": "2.38.2",
-      "link": "https://github.com/DataArt/artisyn-log-hub/actions/runs/40097423492"
+      "link": "https://github.com/DataArt/artisyn-log-hub/actions/runs/40107128729"
     },
     {
       "tool": "snyk-container",
       "scope": "image",
       "label": "Snyk Container",
-      "status": "findings",
+      "status": "pass",
       "counts": {
-        "critical": 1,
-        "high": 5,
-        "medium": 2,
-        "low": 87
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0
       },
       "fixable": 0,
-      "note": "1 critical, 5 high, 2 medium, 87 low",
+      "note": "no issues",
       "version": "1.1308.3",
-      "link": "https://github.com/DataArt/artisyn-log-hub/actions/runs/40097423492"
+      "link": "https://github.com/DataArt/artisyn-log-hub/actions/runs/40107128729"
     },
     {
       "tool": "node-runtime",
@@ -191,9 +191,9 @@
         "low": 0
       },
       "fixable": 0,
-      "note": "22.23.4 is the latest patch",
-      "version": "22.23.4",
-      "link": "https://github.com/DataArt/artisyn-log-hub/actions/runs/40097423492"
+      "note": "24.22.1 is the latest patch",
+      "version": "24.22.1",
+      "link": "https://github.com/DataArt/artisyn-log-hub/actions/runs/40107128729"
     },
     {
       "tool": "node-runtime",
@@ -209,7 +209,37 @@
       "fixable": 0,
       "note": "24.22.1 is the latest patch",
       "version": "24.22.1",
-      "link": "https://github.com/DataArt/artisyn-log-hub/actions/runs/40097423492"
+      "link": "https://github.com/DataArt/artisyn-log-hub/actions/runs/40107128729"
+    },
+    {
+      "tool": "virustotal",
+      "scope": "installer-tgz",
+      "label": "VirusTotal — artisyn-hooks-installer.tgz",
+      "status": "pass",
+      "counts": {
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0
+      },
+      "fixable": 0,
+      "note": "0/75 engines",
+      "link": "https://www.virustotal.com/gui/file/d82efdfdd12004d4e6cb5675e92c4d436bd70e418279dd955e858f85bd1722c9"
+    },
+    {
+      "tool": "virustotal",
+      "scope": "hooks-tgz",
+      "label": "VirusTotal — hooks.tar.gz",
+      "status": "pass",
+      "counts": {
+        "critical": 0,
+        "high": 0,
+        "medium": 0,
+        "low": 0
+      },
+      "fixable": 0,
+      "note": "0/75 engines",
+      "link": "https://www.virustotal.com/gui/file/74f54ca8e38af6896acc493eb193c84029b41e4193e78a02ab1ff66ff358ac79"
     }
   ]
 }
