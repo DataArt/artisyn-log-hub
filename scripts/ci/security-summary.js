@@ -18,9 +18,13 @@
 //     replaceBlock(body, block)    put the block into a PR body (idempotent)
 //     badgeFor(rows)               shields.io endpoint JSON
 //     buildResults(rows, meta)     security-scan-results.json content, meta = {sha, date}
+//     snykIssues(result)           critical/high issues of one raw Snyk --json result
+//     renderReport(rows, meta, issues)  REPORT.md, the page the README badge links to
 //   node scripts/ci/security-summary.js results --rows <dir> --out <dir> --sha <sha>
+//       [--raw <dir>] [--run-url <url>]
 //     Reads every row-*.json under <dir> (recursively), writes
-//     <out>/security-scan-results.json and <out>/badges/security.json.
+//     <out>/security-scan-results.json, <out>/badges/security.json and <out>/REPORT.md
+//     (Snyk issue lists from the snyk-*.json files under --raw, when given).
 //   node scripts/ci/security-summary.js apply-pr
 //     Env: GH_TOKEN, REPO (owner/name), RUN_ID (the triggering workflow run),
 //     HEAD_SHA (its head SHA). Reads the pr-meta artifact of RUN_ID, checks the
@@ -180,6 +184,18 @@ function formatDate(date) {
   return d.toISOString().slice(0, 16).replace('T', ' ');
 }
 
+/** The rows table of the PR block and the report (normalized rows in, lines out). */
+function tableLines(clean) {
+  if (clean.length === 0) return ['_No scan results yet._'];
+  const lines = ['| Tool | Status | Critical | High | Medium | Low | Details |', '|---|---|---|---|---|---|---|'];
+  for (const r of clean) {
+    const details = [r.link ? `[link](${r.link})` : '', r.note].filter(Boolean).join(' ');
+    const c = r.counts;
+    lines.push(`| ${r.label} | ${STATUS_TEXT[r.status]} | ${c.critical} | ${c.high} | ${c.medium} | ${c.low} | ${details} |`);
+  }
+  return lines;
+}
+
 /** Decision 14: the PR-description block, lines joined with `\n`. */
 function renderSummary(rows, meta = {}) {
   const clean = normalizeRows(rows);
@@ -193,18 +209,131 @@ function renderSummary(rows, meta = {}) {
   const pending = Array.isArray(meta.pending) ? meta.pending.map((p) => sanitizeNote(String(p))).filter(Boolean) : [];
   if (pending.length > 0) lines.push(`_Still running: ${pending.join(', ')}_`);
   lines.push('');
-  if (clean.length === 0) {
-    lines.push('_No scan results yet._');
-  } else {
-    lines.push('| Tool | Status | Critical | High | Medium | Low | Details |');
-    lines.push('|---|---|---|---|---|---|---|');
-    for (const r of clean) {
-      const details = [r.link ? `[link](${r.link})` : '', r.note].filter(Boolean).join(' ');
-      const c = r.counts;
-      lines.push(`| ${r.label} | ${STATUS_TEXT[r.status]} | ${c.critical} | ${c.high} | ${c.medium} | ${c.low} | ${details} |`);
+  lines.push(...tableLines(clean));
+  lines.push(END);
+  return lines.join('\n');
+}
+
+// ------------------------------------------------------------- report ----
+
+const REPO_URL = 'https://github.com/DataArt/artisyn-log-hub';
+const SNYK_VULN_URL = 'https://security.snyk.io/vuln/';
+const ISSUE_ID_RE = /^[A-Za-z0-9:_.-]{1,100}$/;
+const PKG_RE = /^[A-Za-z0-9@/._+:~-]{1,214}$/;
+const PROJECT_RE = /^[A-Za-z0-9._/-]{1,200}$/;
+const ISSUES_SHOWN_MAX = 50;
+/** Report sections with Snyk issue lists: the row key and the raw Snyk JSON file name. */
+const SNYK_REPORT_SCOPES = [
+  ['snyk-oss/prod', 'snyk-prod.json'],
+  ['snyk-oss/dev', 'snyk-dev.json'],
+  ['snyk-oss/kit', 'snyk-kit.json'],
+  ['snyk-container/image', 'snyk-container.json'],
+];
+
+function cmp(a, b) {
+  if (a < b) return -1;
+  return a > b ? 1 : 0;
+}
+
+/**
+ * Critical and high issues of one Snyk `--json` result (`snyk test` or `snyk container test`;
+ * one project object or an array of them). One entry per issue id and package, critical first,
+ * then by package and id. Ids, package names and versions that fail their pattern are dropped;
+ * the title is sanitised like a row note.
+ */
+function snykIssues(result) {
+  const projects = Array.isArray(result) ? result : [result];
+  const byKey = new Map();
+  for (const project of projects) {
+    if (!isPlainObject(project) || !Array.isArray(project.vulnerabilities)) continue;
+    const target = typeof project.displayTargetFile === 'string' && PROJECT_RE.test(project.displayTargetFile)
+      ? project.displayTargetFile : '';
+    for (const v of project.vulnerabilities) {
+      if (!isPlainObject(v) || (v.severity !== 'critical' && v.severity !== 'high')) continue;
+      if (typeof v.id !== 'string' || !ISSUE_ID_RE.test(v.id)) continue;
+      const pkg = typeof v.packageName === 'string' && PKG_RE.test(v.packageName) ? v.packageName : '';
+      const key = `${v.id} ${pkg}`;
+      if (byKey.has(key)) continue;
+      byKey.set(key, {
+        severity: v.severity,
+        id: v.id,
+        title: sanitizeNote(v.title),
+        package: pkg,
+        version: typeof v.version === 'string' && PKG_RE.test(v.version) ? v.version : '',
+        fixedIn: Array.isArray(v.fixedIn) ? v.fixedIn.filter((f) => typeof f === 'string' && PKG_RE.test(f)) : [],
+        project: target,
+      });
     }
   }
-  lines.push(END);
+  const rank = (s) => (s === 'critical' ? 0 : 1);
+  return [...byKey.values()].sort((a, b) => rank(a.severity) - rank(b.severity)
+    || cmp(a.package, b.package) || cmp(a.id, b.id));
+}
+
+function issueLines(issues) {
+  if (issues.length === 0) return ['_No critical or high issues._'];
+  const lines = ['| Severity | Issue | Package | Fixed in | Project |', '|---|---|---|---|---|'];
+  for (const i of issues.slice(0, ISSUES_SHOWN_MAX)) {
+    const title = i.title ? ` ${i.title}` : '';
+    const pkg = i.version ? `${i.package}@${i.version}` : i.package;
+    const fixed = i.fixedIn.length > 0 ? i.fixedIn.join(', ') : 'no fix yet';
+    const project = i.project ? `\`${i.project}\`` : '';
+    lines.push(`| ${i.severity} | [${i.id}](${SNYK_VULN_URL}${i.id})${title} | \`${pkg}\` | ${fixed} | ${project} |`);
+  }
+  if (issues.length > ISSUES_SHOWN_MAX) lines.push('', `_…and ${issues.length - ISSUES_SHOWN_MAX} more — see the workflow run._`);
+  return lines;
+}
+
+/**
+ * The `REPORT.md` page on the ci-reports branch that the README badge links to.
+ * meta = {sha, date, runUrl}; issues maps a SNYK_REPORT_SCOPES key to the snykIssues() list of
+ * that scan (a missing key means its raw output was not available).
+ */
+function renderReport(rows, meta = {}, issues = {}) {
+  const clean = normalizeRows(rows);
+  const sha = String(meta.sha || '').replace(/[^0-9a-f]/g, '').slice(0, 40);
+  const runUrl = safeLink(meta.runUrl);
+  const commit = sha ? `[\`${sha.slice(0, 7)}\`](${REPO_URL}/commit/${sha})` : '`unknown`';
+  const lines = [
+    '# Security scan report',
+    '',
+    `_Commit ${commit} on \`main\` · updated ${formatDate(meta.date)} UTC${runUrl ? ` · [workflow run](${runUrl})` : ''}_`,
+    '',
+    'The README badge counts every row below except Snyk Open Source (dev) — devDependencies do not',
+    'ship — and skipped rows. How the scans work: '
+      + `[ci-security-scans.md](${REPO_URL}/blob/main/docs/knowledgebase/ci-security-scans.md).`,
+    '',
+    '## Summary',
+    '',
+    ...tableLines(clean),
+    '',
+    '## Snyk — critical and high issues',
+  ];
+  const byKey = new Map(clean.map((r) => [`${r.tool}/${r.scope}`, r]));
+  for (const [key] of SNYK_REPORT_SCOPES) {
+    const row = byKey.get(key);
+    if (!row) continue;
+    lines.push('', `### ${row.label}`, '');
+    const list = issues[key];
+    if (row.status === 'skipped') lines.push(`_Skipped: ${row.note || 'no reason given'}._`);
+    else if (Array.isArray(list)) lines.push(...issueLines(list));
+    else lines.push('_Issue list not available — see the workflow run._');
+  }
+  lines.push('', '## VirusTotal', '');
+  const vt = clean.filter((r) => r.tool === 'virustotal');
+  if (vt.length === 0) lines.push('_Not scanned in this run._');
+  for (const r of vt) {
+    const parts = [STATUS_TEXT[r.status], r.note, r.link ? `[report](${r.link})` : ''].filter(Boolean);
+    lines.push(`- ${r.label}: ${parts.join(' · ')}`);
+  }
+  lines.push(
+    '',
+    '## More',
+    '',
+    `- [Code scanning alerts](${REPO_URL}/security/code-scanning) — Snyk and zizmor findings with file and line`,
+    `- [Dependabot alerts](${REPO_URL}/security/dependabot)`,
+    '',
+  );
   return lines.join('\n');
 }
 
@@ -306,18 +435,52 @@ function writeJson(file, data) {
   fs.writeFileSync(file, `${JSON.stringify(data, null, 2)}\n`, 'utf8');
 }
 
+const RAW_FILE_MAX_BYTES = 64 * 1024 * 1024;
+
+/** First file named `name` under `dir`, recursively (download-artifact nests per artifact), or null. */
+function findFile(dir, name) {
+  if (!fs.existsSync(dir)) return null;
+  for (const entry of fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => cmp(a.name, b.name))) {
+    const p = path.join(dir, entry.name);
+    if (entry.isFile() && entry.name === name) return p;
+    if (entry.isDirectory()) {
+      const found = findFile(p, name);
+      if (found) return found;
+    }
+  }
+  return null;
+}
+
+/** snykIssues() of every raw Snyk JSON found under `rawDir`, keyed like SNYK_REPORT_SCOPES. */
+function readSnykIssues(rawDir) {
+  const issues = {};
+  if (!rawDir) return issues;
+  for (const [key, file] of SNYK_REPORT_SCOPES) {
+    const p = findFile(path.resolve(rawDir), file);
+    if (!p) continue;
+    try {
+      if (fs.statSync(p).size > RAW_FILE_MAX_BYTES) throw new Error('file too large');
+      issues[key] = snykIssues(JSON.parse(fs.readFileSync(p, 'utf8')));
+    } catch (err) {
+      process.stderr.write(`security-summary: skipping ${p}: ${err.message}\n`);
+    }
+  }
+  return issues;
+}
+
 function runResults(argv) {
-  const args = parseArgs(argv, ['rows', 'out', 'sha']);
+  const args = parseArgs(argv, ['rows', 'out', 'sha', 'raw', 'run-url']);
   if (!args.rows || !args.out || !args.sha) throw new UsageError('results needs --rows <dir> --out <dir> --sha <sha>');
   if (!SHA_RE.test(args.sha)) throw new UsageError('--sha must be a lowercase hex commit SHA');
   const rows = readRows(path.resolve(args.rows));
-  const meta = { sha: args.sha, date: new Date().toISOString() };
+  const meta = { sha: args.sha, date: new Date().toISOString(), runUrl: args['run-url'] };
   const out = path.resolve(args.out);
   const results = buildResults(rows, meta);
   writeJson(path.join(out, 'security-scan-results.json'), results);
   const badge = badgeFor(rows);
   writeJson(path.join(out, 'badges', 'security.json'), badge);
-  process.stdout.write(`security-summary: ${results.rows.length} row(s), badge "${badge.message}"\n`);
+  fs.writeFileSync(path.join(out, 'REPORT.md'), renderReport(rows, meta, readSnykIssues(args.raw)), 'utf8');
+  process.stdout.write(`security-summary: ${results.rows.length} row(s), badge "${badge.message}", REPORT.md\n`);
 }
 
 function gh(args, input) {
@@ -480,7 +643,7 @@ function runApplyPr(argv) {
 }
 
 const USAGE = 'Usage:\n'
-  + '  node scripts/ci/security-summary.js results --rows <dir> --out <dir> --sha <sha>\n'
+  + '  node scripts/ci/security-summary.js results --rows <dir> --out <dir> --sha <sha> [--raw <dir>] [--run-url <url>]\n'
   + '  GH_TOKEN=... REPO=owner/name RUN_ID=<id> HEAD_SHA=<sha> node scripts/ci/security-summary.js apply-pr\n';
 
 function main() {
@@ -511,6 +674,8 @@ module.exports = {
   replaceBlock,
   badgeFor,
   buildResults,
+  snykIssues,
+  renderReport,
 };
 
 if (require.main === module) main();

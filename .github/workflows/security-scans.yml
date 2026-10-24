@@ -1233,9 +1233,105 @@ jobs:
           retention-days: 14
           if-no-files-found: ignore
 
-  # Publishes security-scan-results.json and badges/security.json to the orphan `ci-reports`
-  # branch (FR-24, Design Decision 17): nightly and manual runs on main only. The only job with
-  # `contents: write`; it pushes through the Git Data API with GITHUB_TOKEN, no git credentials.
+  # VirusTotal verdict of the installer tarballs for the nightly report (REPORT.md on ci-reports).
+  # PRs get it from virustotal.yml instead, so this job runs only on schedule and dispatch.
+  # Rows: virustotal/installer-tgz, virustotal/hooks-tgz.
+  virustotal:
+    needs: build-kit
+    if: >-
+      always()
+      && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Check preconditions
+        id: gate
+        env:
+          VIRUS_TOTAL_KEY: ${{ secrets.VIRUS_TOTAL_KEY }}
+        run: |
+          set -eu
+          if [ -n "$VIRUS_TOTAL_KEY" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "run=false" >> "$GITHUB_OUTPUT"
+          for scope in installer-tgz hooks-tgz; do
+            node scripts/ci/scan-rows.js skipped --tool virustotal --scope "$scope" \
+              --link "$RUN_URL" --out "$RUNNER_TEMP/rows" --note "no VIRUS_TOTAL_KEY secret"
+          done
+
+      - name: Download installer-kit
+        if: steps.gate.outputs.run == 'true'
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: installer-kit
+          path: ${{ runner.temp }}/kit
+
+      # A missing tarball (build-kit or the download failed) becomes an `error` row.
+      - name: VirusTotal scan
+        if: steps.gate.outputs.run == 'true'
+        continue-on-error: true
+        env:
+          VIRUS_TOTAL_KEY: ${{ secrets.VIRUS_TOTAL_KEY }}
+        run: |
+          set -eu
+          mkdir -p "$RUNNER_TEMP/raw"
+          node scripts/ci/virustotal-scan.js --out "$RUNNER_TEMP/rows" --raw "$RUNNER_TEMP/raw" \
+            "$RUNNER_TEMP/kit/artisyn-hooks-installer.tgz" "$RUNNER_TEMP/kit/hooks.tar.gz"
+
+      - name: Summary
+        if: always()
+        env:
+          SUMMARY_TITLE: VirusTotal
+          SUMMARY_ROWS: virustotal-installer-tgz virustotal-hooks-tgz
+        run: |
+          {
+            echo "### $SUMMARY_TITLE"
+            echo ""
+            echo "$SUMMARY_HEADER"
+            echo "|---|---|---|---|---|---|---|---|"
+            for name in $SUMMARY_ROWS; do
+              row="$RUNNER_TEMP/rows/row-$name.json"
+              if [ -f "$row" ]; then jq -r "$SUMMARY_ROW_JQ" "$row"; else echo "| $name | | no row | | | | | |"; fi
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload row (installer-tgz)
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: scan-row-virustotal-installer-tgz
+          path: ${{ runner.temp }}/rows/row-virustotal-installer-tgz.json
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Upload row (hooks-tgz)
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: scan-row-virustotal-hooks-tgz
+          path: ${{ runner.temp }}/rows/row-virustotal-hooks-tgz.json
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Upload raw output
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: raw-virustotal
+          path: ${{ runner.temp }}/raw/
+          retention-days: 14
+          if-no-files-found: ignore
+
+  # Publishes security-scan-results.json, badges/security.json and REPORT.md (the page the README
+  # badge links to) to the orphan `ci-reports` branch (FR-24, Design Decision 17): nightly and
+  # manual runs on main only. The only job with `contents: write`; it pushes through the Git Data
+  # API with GITHUB_TOKEN, no git credentials.
   publish-results:
     needs:
       - changes
@@ -1248,6 +1344,7 @@ jobs:
       - dockerfile-lint
       - node-runtime
       - container
+      - virustotal
     if: >-
       always()
       && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
@@ -1272,14 +1369,30 @@ jobs:
           merge-multiple: true
           path: ${{ runner.temp }}/rows
 
-      - name: Build results and badge
+      # Raw Snyk JSON for the issue lists in REPORT.md.
+      - name: Download raw Snyk Open Source output
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: raw-snyk-oss
+          path: ${{ runner.temp }}/raw-in/snyk-oss
+
+      - name: Download raw Snyk Container output
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: raw-container
+          path: ${{ runner.temp }}/raw-in/container
+
+      - name: Build results, badge and report
         id: results
         continue-on-error: true
         run: |
           set -eu
-          mkdir -p "$RUNNER_TEMP/rows"
+          mkdir -p "$RUNNER_TEMP/rows" "$RUNNER_TEMP/raw-in"
           node scripts/ci/security-summary.js results --rows "$RUNNER_TEMP/rows" \
-            --out "$RUNNER_TEMP/ci-reports" --sha "$GITHUB_SHA"
+            --out "$RUNNER_TEMP/ci-reports" --sha "$GITHUB_SHA" \
+            --raw "$RUNNER_TEMP/raw-in" --run-url "$RUN_URL"
 
       - name: Publish to ci-reports
         if: steps.results.outcome == 'success'

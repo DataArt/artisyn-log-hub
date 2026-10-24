@@ -43,6 +43,7 @@ workflow that is not a required check (FR-30). `security-scans` uses no `paths-i
 | `dockerfile-lint` | hadolint over the Dockerfiles, `docker compose config` over the compose files | `hadolint/dockerfiles`, `compose/config` |
 | `node-runtime` | `scripts/ci/node-runtime-check.js`: Node version of `Dockerfile` and `docker-dev/Dockerfile` vs `is-my-node-vulnerable` and the latest patch on nodejs.org | `node-runtime/dockerfile`, `/docker-dev` |
 | `container` | Snyk Container on the production image; nightly, dispatch, and PRs with `docker_changed`; SARIF category `snyk-container` | `snyk-container/image` |
+| `virustotal` | VirusTotal verdict of the installer tarballs for the nightly report; nightly and dispatch only (PRs use `virustotal.yml`) | `virustotal/installer-tgz`, `/hooks-tgz` |
 | `publish-results` | `needs:` every scan job, `if: always()`; nightly and dispatch on `main` only; pushes to `ci-reports` | — |
 
 On a docs-only PR the scan jobs still run, skip their tool steps and write `skipped` rows with the
@@ -118,8 +119,8 @@ note is stripped to `[A-Za-z0-9 .,:;()/_@#+=%'-]`. Any other failure turns the r
 | `snyk-container/image` | Snyk Container | FR-8 | `container` | nightly, dispatch, PR with `docker_changed` |
 | `node-runtime/dockerfile` | Node runtime (Dockerfile) | FR-35 | `node-runtime` | PR, push main, nightly |
 | `node-runtime/docker-dev` | Node runtime (docker-dev) | FR-35 | `node-runtime` | same |
-| `virustotal/installer-tgz` | VirusTotal — artisyn-hooks-installer.tgz | FR-29 | `vt-scan` (virustotal) | PR with path match |
-| `virustotal/hooks-tgz` | VirusTotal — hooks.tar.gz | FR-29 | `vt-scan` (virustotal) | same |
+| `virustotal/installer-tgz` | VirusTotal — artisyn-hooks-installer.tgz | FR-29 | `vt-scan` (virustotal); `virustotal` (scans) | PR with path match; nightly, dispatch |
+| `virustotal/hooks-tgz` | VirusTotal — hooks.tar.gz | FR-29 | same | same |
 
 A new scanner needs a row here and in the label table inside `security-summary.js`; otherwise its
 rows are dropped.
@@ -148,8 +149,8 @@ deliberately the only bot-written place; there are no PR comments.
 ## `ci-reports` branch and badge
 
 `publish-results` (nightly and manual runs on `main`) builds `security-scan-results.json`
-(`{schema:1, commit, date, ref:'main', rows}`) and `badges/security.json` (a shields.io endpoint
-document) and pushes them to the orphan branch `ci-reports` with
+(`{schema:1, commit, date, ref:'main', rows}`), `badges/security.json` (a shields.io endpoint
+document) and `REPORT.md` and pushes them to the orphan branch `ci-reports` with
 `scripts/ci/publish-ci-reports.js`. It uses the Git Data API with `GITHUB_TOKEN` (`contents: write`
 on this job only, no git credentials persisted): a tree without `base_tree`, a commit on the
 current head (or no parent on the first run), a non-forced ref update with up to 3 retries. The
@@ -167,7 +168,17 @@ The badge counts rows whose scope is not `dev` and whose status is not `skipped`
 
 `README.md` shows it through
 `https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/DataArt/artisyn-log-hub/ci-reports/badges/security.json`,
-next to the `security-scans` workflow status badge.
+next to the `security-scans` workflow status badge. A click on the badge opens
+`https://github.com/DataArt/artisyn-log-hub/blob/ci-reports/REPORT.md`: the rows table, the
+critical and high Snyk issues of each scan (prod, dev, installer tarballs, container image; id
+linked to security.snyk.io, package, fixed-in versions, project file) read from the `raw-snyk-oss`
+and `raw-container` artifacts, the VirusTotal verdicts with their permalinks (the nightly
+`virustotal` job), and links to Code scanning and Dependabot alerts. It is rendered by
+`renderReport` / `snykIssues` in `scripts/ci/security-summary.js`.
+
+The `ci-reports` ruleset (Settings → Rules) blocks deletion and force pushes; the publisher only
+fast-forwards, so it is unaffected. Do not add "require a pull request" or "restrict updates" —
+`GITHUB_TOKEN` could no longer push.
 
 ## `.snyk` policy
 
@@ -198,7 +209,8 @@ server means editing this file in the same PR.
 
 - `.github/CODEOWNERS`: `@denistsyplakov` reviews `/.artisyn/config/`, `/.claude/settings.json`,
   `/.mcp.json`, `/hook/`, `/artisyn-hooks-installer/`, `/.github/`, `/.snyk`, `/scripts/ci/`.
-- `.github/dependabot.yml`: weekly `docker` updates for `/`. `docker-dev/Dockerfile` pins Node via
+- `.github/dependabot.yml`: weekly `docker` updates for `/`, patch and minor only for `node` (a
+  major bump — the next LTS — is done by hand). `docker-dev/Dockerfile` pins Node via
   `ARG NODE_VERSION` + `NODE_SHA256`, which Dependabot cannot bump; fix its `node-runtime` warning
   by hand.
 - `SECURITY.md`: GitHub private vulnerability reporting as a second reporting channel.

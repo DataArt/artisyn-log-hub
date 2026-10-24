@@ -1,6 +1,6 @@
 # Artisyn Log Hub
 
-[![Security scan](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/DataArt/artisyn-log-hub/ci-reports/badges/security.json)](https://github.com/DataArt/artisyn-log-hub/actions/workflows/security-scans.yml)
+[![Security scan](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/DataArt/artisyn-log-hub/ci-reports/badges/security.json)](https://github.com/DataArt/artisyn-log-hub/blob/ci-reports/REPORT.md)
 [![security-scans](https://github.com/DataArt/artisyn-log-hub/actions/workflows/security-scans.yml/badge.svg)](https://github.com/DataArt/artisyn-log-hub/actions/workflows/security-scans.yml)
 
 Artisyn Log Hub is a self-hosted server and web viewer for [Claude Code](https://docs.claude.com/en/docs/claude-code)

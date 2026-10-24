@@ -7,3 +7,8 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    # Stay on the current LTS line: patch and minor bumps only. Moving to the next Node major
+    # (the next LTS) is a deliberate change, not a Dependabot PR.
+    ignore:
+      - dependency-name: node
+        update-types: [version-update:semver-major]
