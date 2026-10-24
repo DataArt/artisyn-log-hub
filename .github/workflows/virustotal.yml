@@ -93,7 +93,9 @@ jobs:
 
   # VirusTotal lookup / upload of both tarballs. Rows: virustotal/installer-tgz,
   # virustotal/hooks-tgz. Raw VirusTotal JSON responses go to artifact raw-virustotal.
-  scan:
+  # Not named `scan`: that is the gitleaks job, a required check in the main/release ruleset, and
+  # security-report.yml reads the gitleaks row by that check name.
+  vt-scan:
     needs: build-kit
     # Runs even when build-kit failed: the rows then become `error` rows ("no output").
     if: >-

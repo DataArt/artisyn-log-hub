@@ -1,7 +1,7 @@
 ---
 type: reference
 title: CI Security Scans
-description: The report-only security workflows (security-scans, virustotal, security-report), their triggers and gate variables, the SNYK_TOKEN/VIRUS_TOTAL_KEY secrets, fork behaviour, the unified row format and label table, the PR-description block, the ci-reports branch and badge, the .snyk policy, the config-guard allowlist, the FR-27 repository settings and the owner rollout
+description: The report-only security workflows (security-scans, virustotal, security-report), their triggers, the SNYK_TOKEN/VIRUS_TOTAL_KEY secrets, fork behaviour, the unified row format and label table, the PR-description block, the ci-reports branch and badge, the .snyk policy, the config-guard allowlist, the FR-27 repository settings and the owner rollout
 tags: [ci, security, github-actions, snyk, virustotal, supply-chain]
 timestamp: 2026-10-24
 ---
@@ -55,7 +55,7 @@ with `--ignore-scripts`.
 | Secret | Used by | Note |
 |---|---|---|
 | `SNYK_TOKEN` | `snyk-oss`, `container` | Snyk tests of a public repository do not use the free-plan quota. Projects carry `--remote-repo-url=https://github.com/DataArt/artisyn-log-hub`. |
-| `VIRUS_TOTAL_KEY` | `virustotal` `scan` job | Public API key: 4 requests/min, 500/day, roughly 10 PRs/day. Passed to `curl` on stdin, never in arguments or logs. |
+| `VIRUS_TOTAL_KEY` | `virustotal` `vt-scan` job | Public API key: 4 requests/min, 500/day, roughly 10 PRs/day. Passed to `curl` on stdin, never in arguments or logs. |
 
 Only jobs that download the `installer-kit` artifact hold a secret; the build itself runs
 secret-free. `security-report` uses only `GITHUB_TOKEN`.
@@ -118,8 +118,8 @@ note is stripped to `[A-Za-z0-9 .,:;()/_@#+=%'-]`. Any other failure turns the r
 | `snyk-container/image` | Snyk Container | FR-8 | `container` | nightly, dispatch, PR with `docker_changed` |
 | `node-runtime/dockerfile` | Node runtime (Dockerfile) | FR-35 | `node-runtime` | PR, push main, nightly |
 | `node-runtime/docker-dev` | Node runtime (docker-dev) | FR-35 | `node-runtime` | same |
-| `virustotal/installer-tgz` | VirusTotal — artisyn-hooks-installer.tgz | FR-29 | `scan` (virustotal) | PR with path match |
-| `virustotal/hooks-tgz` | VirusTotal — hooks.tar.gz | FR-29 | `scan` (virustotal) | same |
+| `virustotal/installer-tgz` | VirusTotal — artisyn-hooks-installer.tgz | FR-29 | `vt-scan` (virustotal) | PR with path match |
+| `virustotal/hooks-tgz` | VirusTotal — hooks.tar.gz | FR-29 | `vt-scan` (virustotal) | same |
 
 A new scanner needs a row here and in the label table inside `security-summary.js`; otherwise its
 rows are dropped.

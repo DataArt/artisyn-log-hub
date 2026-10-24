@@ -14,7 +14,9 @@
 name: security-report
 
 on:
-  workflow_run:
+  # workflow_run is deliberate: it needs a write token for fork PRs. It is safe here because the job
+  # checks out only the default branch, never runs PR code, and validates every artifact it reads.
+  workflow_run: # zizmor: ignore[dangerous-triggers]
     workflows: [security-scans, virustotal]
     types: [completed]
 

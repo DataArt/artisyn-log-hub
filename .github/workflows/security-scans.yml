@@ -849,7 +849,7 @@ jobs:
           if-no-files-found: ignore
 
   # Container definitions (FR-8): hadolint on both Dockerfiles and `docker compose config` on the
-  # three compose files (no interpolation, so no .env is needed).
+  # three compose files (required `${VAR:?}` variables get placeholders, so no .env is needed).
   # Rows: hadolint/dockerfiles, compose/config.
   dockerfile-lint:
     needs: changes
@@ -921,7 +921,13 @@ jobs:
           failed=0
           for file in $COMPOSE_FILES; do
             echo "== $file" >> "$log"
-            if ! docker compose -f "$file" config --quiet --no-interpolate >> "$log" 2>&1; then
+            # --no-interpolate cannot parse `${VAR:?msg}/x:/y:ro` (the `:?` adds colons), so
+            # interpolate instead, with a placeholder for every required `${VAR:?...}` variable.
+            placeholders=()
+            for v in $(grep -oE '\$\{[A-Za-z_][A-Za-z0-9_]*:\?' "$file" | sed -E 's/^\$\{//; s/:\?$//' | sort -u); do
+              placeholders+=("$v=/ci-placeholder")
+            done
+            if ! env "${placeholders[@]}" docker compose -f "$file" config --quiet >> "$log" 2>&1; then
               failed=$((failed + 1))
               echo "::warning file=$file::docker compose config failed"
             fi
