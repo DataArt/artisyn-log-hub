@@ -22,6 +22,9 @@ const {checkOtelEndpoints} = require('./otel-endpoint-check');
 
 const HOOK_FILE = 'lifecycle-hook.js';
 
+// `--self-check`: the installer's post-install load check — every require above has run.
+require('./hook-log').exitIfSelfCheck(HOOK_FILE);
+
 const HANDLED_EVENTS = new Set([
   'PostToolUse',
   'PostToolUseFailure',

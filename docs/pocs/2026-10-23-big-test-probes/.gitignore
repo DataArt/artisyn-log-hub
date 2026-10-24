@@ -1,0 +1,18 @@
+# dependencies
+node_modules/
+# build output
+dist/
+build/
+out/
+static/
+*.tgz
+*.tar.gz
+*.tsbuildinfo
+# runtime garbage
+*.log
+.cache/
+coverage/
+.env
+# raw probe output (streams, transcripts, hook logs: local paths, session ids)
+results/
+*.jsonl

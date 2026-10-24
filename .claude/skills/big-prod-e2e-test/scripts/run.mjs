@@ -3,14 +3,15 @@
 //
 //   node .claude/skills/big-prod-e2e-test/scripts/run.mjs [--keep]
 //
-// Runs phases P0–P12 in order, rewrites `_report/report.json` + `_report/index.md` after every
+// Runs phases P0–P12 in order, rewrites `_report/report.json`, `index.md` and `index.html` after every
 // phase and once more after teardown, and exits 0 (PASS), 1 (FAIL) or 2 (any infra failure).
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
-  DB_PORT, FC_REPO, FC_SCENARIO, MODELS, REPOS, REPO_NAMES, REMOTE_URL, RESTAMP_WAIT_MS, STAND_HOST, STAND_URL, STORED_URL, TEAMS,
-  TIMEOUTS, USERS, USER_ORDER, FIXTURES_DIR, gitRoot, releaseStamp, resolveRun,
+  CLAUDE_MD_REPO, DB_PORT, FC_REPO, FC_SCENARIO, GENERATED_CLAUDE_MD, LEGACY_LOG_HUB_JSON, LEGACY_OWNER, LEGACY_REPO, MODELS,
+  PREV_HOOK_VERSION, PREV_INSTALLER_VERSION, PREV_RELEASE_REF, REPOS, REPO_NAMES, REMOTE_URL, RESTAMP_WAIT_MS, STAND_HOST,
+  STAND_URL, STORED_URL, TEAMS, TIMEOUTS, USERS, USER_ORDER, FIXTURES_DIR, POSTGRES_IMAGE, gitRoot, releaseStamp, resolveRun,
 } from './lib/config.mjs';
 import { run, runAsync } from './lib/proc.mjs';
 import { createApiClient } from './lib/api.mjs';
@@ -20,23 +21,27 @@ import {
 import { ensureMcpDb, warmMcpServer } from './lib/mcpdb.mjs';
 import { runFileCategories } from './lib/filecategories.mjs';
 import {
-  checkPortsFree, checkTools, childEnv, compareDevPorts, isListening, prepareClaudeConfig, snapshotDevPorts,
+  checkPortsFree, checkTools, childEnv, compareDevPorts, dockerfileBaseImages, isListening, prePullBaseImages, prepareClaudeConfig,
+  snapshotDevPorts,
 } from './lib/preflight.mjs';
 import { assertDown, buildImage, down, downCommand, killOtelReceivers, saveAppLogs, up, waitReady } from './lib/stand.mjs';
-import { createRepos, listFiles, mapFixturePath } from './lib/repos.mjs';
+import { createRepos, findClaudeMd, listFiles, mapFixturePath, seedLegacyLogHub } from './lib/repos.mjs';
 import {
   acceptConsent, assertRole, getOneLiner, launch, newUserContext, redactOneLiner, signup,
 } from './lib/browser.mjs';
-import { installHook } from './lib/hooks.mjs';
+import { checkLocalConfig, installHook } from './lib/hooks.mjs';
+import { buildPrevInstaller, installPrevHook } from './lib/legacy.mjs';
+import { judgeNodeMatrix, runNodeLtsMatrix } from './lib/node-lts.mjs';
+import { aiWorkDirHasSession, prepareWorktree } from './lib/worktree.mjs';
 import { acceptInvite, createTeam, invite, linkRepo, openTeam, setTransparent } from './lib/teams.mjs';
-import { needsVerification, runScenario } from './lib/sessions.mjs';
-import { VERIFY_STATUS, verifySession } from './lib/verify.mjs';
+import { SESSION_STATUS, needsVerification, runScenario } from './lib/sessions.mjs';
+import { VERIFY_STATUS, applyScriptedJudgements, verifySession } from './lib/verify.mjs';
 import { VISIBILITY_ROWS, runVisibility } from './lib/visibility.mjs';
-import { SCENARIOS } from './scenarios.mjs';
+import { LEGACY_SCENARIO, SCENARIOS } from './scenarios.mjs';
 
 const USAGE = 'usage: node .claude/skills/big-prod-e2e-test/scripts/run.mjs [--keep]';
 const MODEL_ALIASES = Object.freeze(['sonnet', 'haiku', 'opus']);
-const NOT_INGESTED = 'fail: not ingested';
+const NOT_INGESTED = SESSION_STATUS.notIngested;
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 /** Which phases contribute to each AC row; used to flag rows not fully evaluated. */
@@ -55,7 +60,20 @@ const AC_PHASES = Object.freeze({
   'FR-FC2': ['P9b'],
   'FR-10': ['P11'],
   'FR-11': ['P12'],
+  'FR-LC': ['P5'],
+  'FR-UP': ['P5'],
+  'FR-OLD': ['P5b', 'P9'],
+  'FR-NODE': ['P5c'],
+  'FR-WT': ['P8'],
 });
+
+/** The repo whose run-dir copy goes through the FR-12 upgrade (a committed pre-split log-hub.json). */
+const UPGRADE_REPO = 'java-lib';
+/** The repo whose linked worktree S11 runs in (Design Decision 20). */
+const WORKTREE_REPO = 'ts-webapp';
+/** Every session the run knows: S1–S11 plus the legacy-hook session L1. */
+const ALL_SCENARIOS = Object.freeze([...SCENARIOS, LEGACY_SCENARIO]);
+const NOT_RUN_LEGACY = 'fail: legacy hook not installed';
 
 // ---- CLI ----------------------------------------------------------------------------------------
 
@@ -171,6 +189,24 @@ function gitStatusPaths(root) {
   return res.stdout.split(/\r?\n/).filter(Boolean).map((l) => l.slice(3).trim());
 }
 
+/**
+ * Pre-pulls the stand's base images (the root Dockerfile's FROM images + POSTGRES_IMAGE) that are
+ * not local from the public ECR mirror, so Docker Hub's anonymous 429 cannot stop P1/P2. A failure
+ * is only a warning: the build may still pull the image itself.
+ */
+function prePullImages(step, root) {
+  let images = [];
+  try {
+    images = dockerfileBaseImages(fs.readFileSync(path.join(root, 'Dockerfile'), 'utf8'));
+  } catch (err) {
+    log(step, `warning: cannot read the Dockerfile for base images (${err.message})`);
+  }
+  if (!images.includes(POSTGRES_IMAGE)) images.push(POSTGRES_IMAGE);
+  for (const r of prePullBaseImages(images)) {
+    log(step, `${r.action === 'failed' ? 'warning: pre-pull failed for' : 'base image'} ${r.image}: ${r.action === 'failed' ? '' : `${r.action} — `}${r.detail}`);
+  }
+}
+
 async function p0Preflight() {
   const step = 'preflight';
   const tools = checkTools();
@@ -181,6 +217,7 @@ async function p0Preflight() {
   log(step, `dev ports before: ${JSON.stringify(ctx.devPortsBefore)}`);
 
   const root = gitRoot();
+  prePullImages(step, root);
   ctx.gitStatusBefore = gitStatusPaths(root);
   let runPaths = resolveRun(releaseStamp(), root);
   while (fs.existsSync(runPaths.runDir)) {
@@ -195,7 +232,7 @@ async function p0Preflight() {
   logFile = path.join(runPaths.stateDir, 'run.log');
   Object.assign(ctx.report, { stamp: runPaths.stamp, runDir: runPaths.runDir, image: runPaths.imageRef });
   log(step, `run dir: ${runPaths.runDir}`);
-  log(step, `report: ${runPaths.indexMd}`);
+  log(step, `report: ${runPaths.indexHtml} (also index.md)`);
 
   const expectedDir = path.resolve(root, '..', path.basename(runPaths.runDir));
   ac('FR-3', 'P0', fs.existsSync(runPaths.runDir) && expectedDir === runPaths.runDir, `run dir ${runPaths.runDir}`);
@@ -248,29 +285,77 @@ function expectedHarnessFiles(repo) {
   return listFiles(dir).map((rel) => mapFixturePath(path.join('dot-claude', rel)));
 }
 
-async function p3Repos() {
-  const created = createRepos(ctx.runPaths);
+/** FR-4a: the run-dir copy of CLAUDE_MD_REPO gets a generated CLAUDE.md in its fixture commit. */
+function writeGeneratedClaudeMd(repo, dir) {
+  if (repo === CLAUDE_MD_REPO) fs.writeFileSync(path.join(dir, 'CLAUDE.md'), GENERATED_CLAUDE_MD);
+}
+
+/**
+ * FR-6 (P3) CLAUDE.md part: no fixture source carries a CLAUDE.md, only CLAUDE_MD_REPO's run-dir
+ * copy has one, and its content is GENERATED_CLAUDE_MD. Returns the problem lines.
+ */
+function claudeMdProblems(repos) {
   const problems = [];
-  for (const repo of REPO_NAMES) {
+  const inFixtures = findClaudeMd(FIXTURES_DIR);
+  if (inFixtures.length) problems.push(`fixture sources carry CLAUDE.md: ${inFixtures.join(', ')}`);
+  for (const repo of repos) {
+    const found = findClaudeMd(ctx.runPaths.repoDir(repo));
+    if (repo !== CLAUDE_MD_REPO) {
+      if (found.length) problems.push(`${repo} has ${found.join(', ')}`);
+      continue;
+    }
+    const file = path.join(ctx.runPaths.repoDir(repo), 'CLAUDE.md');
+    const extra = found.filter((rel) => rel !== 'CLAUDE.md');
+    if (extra.length) problems.push(`${repo} has extra ${extra.join(', ')}`);
+    if (!fs.existsSync(file)) problems.push(`${repo} has no generated CLAUDE.md`);
+    else if (fs.readFileSync(file, 'utf8') !== GENERATED_CLAUDE_MD) problems.push(`${repo}/CLAUDE.md differs from GENERATED_CLAUDE_MD`);
+  }
+  return problems;
+}
+
+async function p3Repos() {
+  const created = createRepos(ctx.runPaths, { beforeCommit: writeGeneratedClaudeMd });
+  // FR-12: the upgrade repo gets the pre-split log-hub.json as a second, tracked commit.
+  const upgradeHead = seedLegacyLogHub(ctx.runPaths.repoDir(UPGRADE_REPO), LEGACY_LOG_HUB_JSON);
+  log('repos', `${UPGRADE_REPO}: legacy log-hub.json committed (${upgradeHead.slice(0, 8)})`);
+  const legacy = createRepos(ctx.runPaths, { repos: [LEGACY_REPO] });
+  const allRepos = [...REPO_NAMES, LEGACY_REPO];
+
+  const problems = [];
+  for (const repo of allRepos) {
     const dir = ctx.runPaths.repoDir(repo);
     if (!fs.existsSync(path.join(dir, '.git'))) problems.push(`${repo} has no .git`);
     for (const rel of expectedHarnessFiles(repo)) {
       if (!fs.existsSync(path.join(dir, rel))) problems.push(`${repo} is missing ${rel}`);
     }
-    if (fs.existsSync(path.join(dir, 'CLAUDE.md'))) problems.push(`${repo} has a CLAUDE.md`);
   }
   if (created.length !== REPO_NAMES.length) problems.push(`${created.length}/${REPO_NAMES.length} repos created`);
+  if (legacy.length !== 1) problems.push(`${LEGACY_REPO} not created`);
+  problems.push(...claudeMdProblems(allRepos));
   const harness = created.map((r) => `${r.repo}: ${r.harnessFiles.length ? r.harnessFiles.join(', ') : 'no harness'}`).join('; ');
-  ac('FR-6', 'P3', problems.length === 0, problems.length ? problems.join('; ') : `5 git repos, no CLAUDE.md; ${harness}`);
+  ac(
+    'FR-6',
+    'P3',
+    problems.length === 0,
+    problems.length
+      ? problems.join('; ')
+      : `${allRepos.length} git repos; no fixture source has a CLAUDE.md; only ${CLAUDE_MD_REPO} has the generated CLAUDE.md (content matches); ${harness}`,
+  );
 
   ctx.state.repos = Object.fromEntries(
-    created.map((r) => [
+    [...created, ...legacy].map((r) => [
       r.repo,
-      { owner: REPOS[r.repo], dir: r.dir, remoteUrl: r.remoteUrl, storedUrl: STORED_URL(r.repo), repoId: null },
+      {
+        owner: r.repo === LEGACY_REPO ? LEGACY_OWNER : REPOS[r.repo],
+        dir: r.dir,
+        remoteUrl: r.remoteUrl,
+        storedUrl: STORED_URL(r.repo),
+        repoId: null,
+      },
     ]),
   );
   if (problems.length) throw new Error(problems.join('; '));
-  return `${created.length} repos`;
+  return `${created.length + legacy.length} repos`;
 }
 
 // ---- P4 onboarding --------------------------------------------------------------------------------
@@ -336,7 +421,115 @@ async function p5Hooks() {
     const ok = done.length === REPO_NAMES.length;
     ac('FR-7', 'P5', ok, `hook installed in ${done.length}/${REPO_NAMES.length} repos${ok ? '' : ` (${done.join(', ') || 'none'})`}`);
   }
-  return `${done.length} hooks`;
+
+  // FR-11: a fresh install keeps the per-machine values in log-hub.local.json only.
+  const lcProblems = [];
+  const lcFiles = [];
+  for (const repo of REPO_NAMES.filter((r) => r !== UPGRADE_REPO)) {
+    const res = checkLocalConfig(ctx.runPaths.repoDir(repo));
+    lcFiles.push(configFilesDetail(repo, res));
+    for (const p of res.problems) lcProblems.push(`${repo}: ${p}`);
+  }
+  ac('FR-LC', 'P5', lcProblems.length === 0, `${lcProblems.length ? `${lcProblems.join('; ')}; ` : ''}${lcFiles.join('; ')}`);
+
+  // FR-12: the current installer over a committed pre-split log-hub.json (serverUrl may stay there).
+  const up = checkLocalConfig(ctx.runPaths.repoDir(UPGRADE_REPO), { legacy: true });
+  ac(
+    'FR-UP',
+    'P5',
+    up.ok,
+    `${up.ok ? '' : `${up.problems.map((p) => `${UPGRADE_REPO}: ${p}`).join('; ')}; `}${configFilesDetail(UPGRADE_REPO, up)}`,
+  );
+
+  // S11's linked worktree, with its own hook state and OTEL port (Design Decision 20).
+  try {
+    ctx.state.worktree = await prepareWorktree(ctx.runPaths, WORKTREE_REPO);
+    log('hooks', `${WORKTREE_REPO} worktree at ${ctx.state.worktree.dir} (OTEL port ${ctx.state.worktree.port})`);
+  } catch (err) {
+    ctx.state.worktree = { dir: null, port: null, error: shortError(err) };
+    log('hooks', `${WORKTREE_REPO} worktree could not be prepared — ${err.message}`);
+  }
+  saveState();
+  return `${done.length} hooks${ctx.state.worktree.dir ? ', worktree ready' : `, worktree FAILED (${ctx.state.worktree.error})`}`;
+}
+
+/** `<repo>: log-hub.json <json>, log-hub.local.json <json>` — the FR-LC / FR-UP evidence. */
+function configFilesDetail(repo, res) {
+  return `${repo}: log-hub.json ${JSON.stringify(res.base)}, log-hub.local.json ${JSON.stringify(res.local)}`;
+}
+
+// ---- P5b legacy hook --------------------------------------------------------------------------------
+
+/**
+ * FR-13: builds the previous-release installer from git and installs it into LEGACY_REPO with
+ * LEGACY_OWNER's API key. A failure is recorded as FR-OLD (P5b) and never stops the run — L1 is
+ * then not run.
+ */
+async function p5bLegacyHook() {
+  const step = 'legacy-hook';
+  try {
+    const owner = ctx.state.users[LEGACY_OWNER];
+    if (!owner?.apiKey) throw new Error(`infra: install: no API key for ${LEGACY_OWNER} in run state`);
+    const built = await buildPrevInstaller(ctx.runPaths);
+    log(step, `built ${PREV_RELEASE_REF}: installer ${built.installerVersion}, hook ${built.hookVersion} (${built.tgz})`);
+    await installPrevHook(ctx.runPaths.repoDir(LEGACY_REPO), built.tgz, owner.apiKey, ctx.env, {
+      logFile: ctx.runPaths.installerLog(LEGACY_REPO),
+    });
+    ctx.state.legacyHook = { tgz: built.tgz, installerVersion: built.installerVersion, hookVersion: built.hookVersion };
+    saveState();
+    const detail = `${PREV_RELEASE_REF} installer ${built.installerVersion} / hook ${built.hookVersion} installed into ${LEGACY_REPO} for ${owner.email}`;
+    ac('FR-OLD', 'P5b', true, detail);
+    return detail;
+  } catch (err) {
+    const msg = shortError(err);
+    const detail = /^infra:/.test(msg) ? msg : `infra: ${msg}`;
+    ac('FR-OLD', 'P5b', false, `${PREV_RELEASE_REF} (installer ${PREV_INSTALLER_VERSION}, hook ${PREV_HOOK_VERSION}): ${detail}`);
+    log(step, `legacy hook not installed, L1 will not run — ${err.message}`);
+    return `legacy hook not installed (${detail})`;
+  }
+}
+
+/** The repo whose installed plugin P5c runs on every Node LTS (any P5 repo ships the same build). */
+const NODE_LTS_REPO = 'js-cli';
+
+/**
+ * FR-NODE: the plugin this run installed, on every current Node.js LTS line (plus the engines
+ * floor), in Docker: hook algorithm tests and a hook smoke in a CommonJS, an ESM and a
+ * package.json-less repo. Never stops the run; a failure is recorded as FR-NODE (P5c).
+ */
+async function p5cNodeLts() {
+  const step = 'node-lts';
+  const pluginDir = path.join(ctx.runPaths.repoDir(NODE_LTS_REPO), '.artisyn', 'marketplace', 'plugins', 'log-hub-hooks');
+  try {
+    if (!fs.existsSync(path.join(pluginDir, 'scripts', 'version.json'))) {
+      throw new Error(`no installed plugin in ${NODE_LTS_REPO} (${pluginDir})`);
+    }
+    const hookVersion = JSON.parse(fs.readFileSync(path.join(pluginDir, 'scripts', 'version.json'), 'utf8')).version;
+    const out = await runNodeLtsMatrix({
+      pluginDir,
+      gitRoot: ctx.runPaths.gitRoot,
+      resultFile: path.join(ctx.runPaths.stateDir, 'node-lts.json'),
+      log: logger(step),
+    });
+    const verdict = judgeNodeMatrix(out.rows);
+    const nodes = out.rows.map((r) => r.node || r.tag).join(', ');
+    const source = out.scheduleError ? `fallback tags, schedule.json unavailable: ${out.scheduleError}` : 'live lines from schedule.json';
+    const detail = verdict.ok
+      ? `hook ${hookVersion} on ${nodes} (${source}): algo tests + smoke in cjs / esm / no-package.json repos, ${verdict.cells} cells pass`
+      : `hook ${hookVersion} on ${nodes} (${source}): ${verdict.problems.join('; ')}`;
+    ac('FR-NODE', 'P5c', verdict.ok, detail);
+    return verdict.ok ? `${verdict.cells} cells pass on ${nodes}` : `${verdict.problems.length} problem(s), see FR-NODE`;
+  } catch (err) {
+    const detail = `infra: ${shortError(err)}`;
+    ac('FR-NODE', 'P5c', false, detail);
+    log(step, `Node LTS matrix not run — ${err.message}`);
+    return `not run (${detail})`;
+  }
+}
+
+/** True when P5b installed the legacy hook, so L1 can run. */
+function legacyHookReady() {
+  return (ctx.acParts.get('FR-OLD') ?? []).some((p) => p.phase === 'P5b' && p.ok);
 }
 
 // ---- P6 teams ---------------------------------------------------------------------------------------
@@ -442,26 +635,77 @@ function sessionRow(scenario, r, extra = {}) {
     attempts: r?.attempts ?? [],
     isolation: r?.isolation,
     error: r?.error ?? null,
+    checks: scenario.verifyChecks,
+    // Per-field verdict outcomes (pass|fail|skipped) for the report; absent until P9 verified it.
+    fields: r?.verdict?.fields ?? null,
     ...extra,
   };
+}
+
+/** Runs one scenario (never throws), stores and records its result. */
+async function runOneSession(scenario, step) {
+  let r;
+  try {
+    const opts = { log: logger(step), mcpDbUrl: ctx.mcpDb?.url ?? null };
+    if (scenario.useWorktree) {
+      const wt = ctx.state.worktree;
+      if (!wt?.dir) throw new Error(`no linked worktree for ${scenario.repo}: ${wt?.error ?? 'P5 did not prepare it'}`);
+      opts.rootDir = wt.dir;
+    }
+    r = await runScenario(scenario, ctx.runPaths, ctx.env, opts);
+  } catch (err) {
+    r = { id: scenario.id, status: 'fail: session error', attempts: [], error: err.message, expected: null };
+    log(step, `${scenario.id}: crashed — ${err.message}`);
+  }
+  ctx.results[scenario.id] = r;
+  recordSession(ctx.report, sessionRow(scenario, r));
+  saveReport();
+  return r;
+}
+
+/**
+ * FR-WT (Design Decision 21): the S11 session is in the worktree's ai_work_dir/hook.log and not in
+ * the main checkout's. Runs right after S11, before any later main-checkout session could sweep
+ * the worktree transcript.
+ */
+function checkWorktreeOverride(scenario, r) {
+  const sid = r?.expected?.session_id ?? null;
+  const wtDir = ctx.state.worktree?.dir ?? null;
+  const mainDir = ctx.runPaths.repoDir(scenario.repo);
+  if (!sid || !wtDir) {
+    ac('FR-WT', 'P8', false, `${scenario.id}: ${!wtDir ? `no worktree (${ctx.state.worktree?.error ?? 'not prepared'})` : `no session id (${r?.status ?? 'did not run'})`}`);
+    return;
+  }
+  const inWt = aiWorkDirHasSession(wtDir, sid);
+  const inMain = aiWorkDirHasSession(mainDir, sid);
+  ac(
+    'FR-WT',
+    'P8',
+    inWt && !inMain,
+    `${scenario.id} session ${sid}: ${inWt ? 'in' : 'NOT in'} the worktree ai_work_dir/hook.log, ${inMain ? 'ALSO in' : 'not in'} the main ${scenario.repo} hook.log`,
+  );
 }
 
 async function p8Sessions() {
   const step = 'sessions';
   for (const scenario of SCENARIOS) {
-    let r;
-    try {
-      r = await runScenario(scenario, ctx.runPaths, ctx.env, { log: logger(step), mcpDbUrl: ctx.mcpDb?.url ?? null });
-    } catch (err) {
-      r = { id: scenario.id, status: 'fail: session error', attempts: [], error: err.message, expected: null };
-      log(step, `${scenario.id}: crashed — ${err.message}`);
-    }
-    ctx.results[scenario.id] = r;
-    recordSession(ctx.report, sessionRow(scenario, r));
-    saveReport();
+    const r = await runOneSession(scenario, step);
+    if (scenario.useWorktree) checkWorktreeOverride(scenario, r);
   }
 
-  // FR-8: fixed-format expected params, model/harness coverage and isolation.
+  // L1: the legacy-hook session, only when P5b installed the previous-release hook.
+  if (legacyHookReady()) {
+    await runOneSession(LEGACY_SCENARIO, step);
+  } else {
+    const r = { id: LEGACY_SCENARIO.id, status: NOT_RUN_LEGACY, attempts: [], error: 'P5b did not install the legacy hook', expected: null };
+    ctx.results[LEGACY_SCENARIO.id] = r;
+    recordSession(ctx.report, sessionRow(LEGACY_SCENARIO, r));
+    saveReport();
+    log(step, `${LEGACY_SCENARIO.id}: not run — the legacy hook is not installed`);
+  }
+
+  // FR-8: fixed-format expected params, model/harness coverage and isolation — S1–S11 only, L1 is
+  // judged through FR-OLD.
   const problems = [];
   const aliases = new Set();
   const covered = { subagent: false, skill: false, workflow: false, rule: false, mcp: false };
@@ -495,7 +739,7 @@ async function p8Sessions() {
     problems.length === 0,
     problems.length
       ? problems.join('; ')
-      : `${SCENARIOS.length} expected.json files; models sonnet/haiku/opus; subagent, skill, workflow, rule and MCP exercised; isolation pass`,
+      : `${SCENARIOS[0].id}–${SCENARIOS[SCENARIOS.length - 1].id}: ${SCENARIOS.length} expected.json files; models sonnet/haiku/opus; subagent, skill, workflow, rule and MCP exercised; isolation pass`,
   );
 }
 
@@ -520,7 +764,7 @@ async function p9Verify() {
 
   const verdictProblems = [];
   let reached = 0;
-  for (const scenario of SCENARIOS) {
+  for (const scenario of ALL_SCENARIOS) {
     const r = ctx.results[scenario.id];
     if (!r || !needsVerification(r) || !r.expected?.session_id) {
       log(step, `${scenario.id}: skipped (${r?.status ?? 'did not run'})`);
@@ -539,11 +783,19 @@ async function p9Verify() {
       ctx.state.repos[scenario.repo].repoId = rid;
       saveState();
       reached++;
+      // FR-5: the OTEL cost reaches the server after the transcript; a timeout only makes cost `skipped`.
+      if (scenario.verifyChecks.includes('cost')) {
+        const t = await api.waitForTelemetry({ rid, sid: r.expected.session_id });
+        r.telemetryCost = t.telemetryCost;
+        log(step, `${scenario.id}: telemetry cost ${t.timedOut ? `not reported in time (${t.last})` : `$${t.telemetryCost}`}`);
+      }
       const v = await verifySession(scenario, r.expected, rid, scenario.owner, ctx.runPaths, ctx.env, {
         isolation: r.isolation,
         priorStatus: r.status,
         log: logger(step),
       });
+      // verifySession already applies them; idempotent, kept here so the orchestrator owns the rule.
+      if (v.verdict) applyScriptedJudgements(v.verdict, r.expected);
       r.status = v.status;
       r.verdict = v.verdict;
       if (v.error) r.error = v.error;
@@ -572,6 +824,16 @@ async function p9Verify() {
     verdictProblems.length === 0,
     verdictProblems.length ? verdictProblems.join('; ') : `${reached} verified session(s) have a valid verdict`,
   );
+
+  // FR-13: the session recorded by the previous-release hook is ingested and verified.
+  const l1 = ctx.results[LEGACY_SCENARIO.id];
+  const l1Status = l1?.status ?? 'did not run';
+  ac(
+    'FR-OLD',
+    'P9',
+    l1Status === VERIFY_STATUS.pass,
+    `${PREV_RELEASE_REF} (installer ${PREV_INSTALLER_VERSION}, hook ${PREV_HOOK_VERSION}): ${LEGACY_SCENARIO.id} ${l1Status}${l1?.error ? ` — ${shortError(l1.error)}` : ''}`,
+  );
 }
 
 // ---- P9b file categories ----------------------------------------------------------------------------
@@ -581,11 +843,17 @@ async function p9bFileCategories() {
   if (!ctx.browser) ctx.browser = await launch();
   const r = ctx.results[FC_SCENARIO];
   const ownerKey = REPOS[FC_REPO];
+  const sessionId = r?.expected?.session_id ?? null;
+  // The expected stats come from the verified session's own main transcript (the attempt that
+  // produced it), with the repo dir as the root its Read paths are made relative to.
+  const attempt = (r?.attempts ?? []).find((a) => a && a.session_id === sessionId && a.transcript);
   const out = await runFileCategories({
     browser: ctx.browser,
     owner: { email: USERS[ownerKey].email, password: USERS[ownerKey].password },
     repoId: ctx.state.repos[FC_REPO]?.repoId ?? null,
-    sessionId: r?.expected?.session_id ?? null,
+    sessionId,
+    transcriptFile: attempt?.transcript ?? null,
+    repoRoots: [ctx.runPaths.repoDir(FC_REPO)],
     fcDir: ctx.runPaths.fcDir,
     log: logger(step),
   });
@@ -599,7 +867,7 @@ async function p9bFileCategories() {
 async function p10Visibility() {
   const step = 'visibility';
   if (!ctx.browser) ctx.browser = await launch();
-  const sessions = SCENARIOS.map((s) => ctx.results[s.id]).filter(Boolean);
+  const sessions = ALL_SCENARIOS.map((s) => ctx.results[s.id]).filter(Boolean);
   try {
     const { rows, acCheck } = await runVisibility(ctx.browser, ctx.state, sessions, {
       visibilityDir: ctx.runPaths.visibilityDir,
@@ -618,7 +886,7 @@ async function p10Visibility() {
   }
   const ids = new Set(ctx.report.visibility.map((v) => v.id));
   const missing = VISIBILITY_ROWS.map((r) => r.id).filter((id) => !ids.has(id));
-  ac('FR-9b', 'P10', missing.length === 0, missing.length ? `rows missing: ${missing.join(', ')}` : 'rows V1–V7 evaluated');
+  ac('FR-9b', 'P10', missing.length === 0, missing.length ? `rows missing: ${missing.join(', ')}` : `rows ${visibilityRange()} evaluated`);
 }
 
 // ---- P11 final AC checks ----------------------------------------------------------------------------
@@ -652,9 +920,31 @@ async function p11Final() {
   } catch {
     md = '';
   }
-  const ids = [...SCENARIOS.map((s) => s.id), 'FC', ...VISIBILITY_ROWS.map((r) => r.id)];
+  const ids = [...completenessIds(), ...NEW_AC_IDS];
   const absent = ids.filter((id) => !md.includes(id));
-  ac('FR-10', 'P11', md !== '' && absent.length === 0, md === '' ? 'index.md not written' : absent.length ? `index.md lacks ${absent.join(', ')}` : `index.md lists ${ids[0]}–${SCENARIOS[SCENARIOS.length - 1].id}, FC and V1–V7`);
+  ac(
+    'FR-10',
+    'P11',
+    md !== '' && absent.length === 0,
+    md === ''
+      ? 'index.md not written'
+      : absent.length
+        ? `index.md lacks ${absent.join(', ')}`
+        : `index.md lists ${SCENARIOS[0].id}–${SCENARIOS[SCENARIOS.length - 1].id}, ${LEGACY_SCENARIO.id}, FC, ${visibilityRange()} and ${NEW_AC_IDS.join(', ')}`,
+  );
+}
+
+/** AC rows added by this run's new checks; each must appear in index.md (Design Decision 22). */
+const NEW_AC_IDS = Object.freeze(['FR-LC', 'FR-UP', 'FR-OLD', 'FR-WT', 'FR-NODE']);
+
+/** Sessions, the FC case and the V rows that index.md must name (FR-10). */
+function completenessIds() {
+  return [...ALL_SCENARIOS.map((s) => s.id), 'FC', ...VISIBILITY_ROWS.map((r) => r.id)];
+}
+
+/** "V1–V8": the first and last visibility row ids. */
+function visibilityRange() {
+  return `${VISIBILITY_ROWS[0].id}–${VISIBILITY_ROWS[VISIBILITY_ROWS.length - 1].id}`;
 }
 
 // ---- P12 teardown -------------------------------------------------------------------------------------
@@ -706,6 +996,8 @@ const INFRA_PHASES = [
   ['P3', 'repos', p3Repos],
   ['P4', 'onboarding', p4Onboarding],
   ['P5', 'hooks', p5Hooks],
+  ['P5b', 'legacy-hook', p5bLegacyHook],
+  ['P5c', 'node-lts', p5cNodeLts],
   ['P6', 'teams', p6Teams],
   ['P7', 'smoke', p7Smoke],
 ];
@@ -779,7 +1071,7 @@ async function main() {
   const code = exitCodeFor(ctx.report);
   log('run', `overall ${ctx.report.overall} — exit ${code}`);
   if (ctx.runPaths) {
-    log('run', `report: ${ctx.runPaths.indexMd}`);
+    log('run', `report: ${ctx.runPaths.indexHtml} (also index.md)`);
     log('run', `image kept: docker image rm ${ctx.runPaths.imageRef}`);
   }
   return code;

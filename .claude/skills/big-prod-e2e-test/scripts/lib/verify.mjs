@@ -10,25 +10,253 @@ import {
   TIMEOUTS,
   USERS,
   VERIFIER_MODEL,
-  VERIFIER_TOOL_BUDGET,
+  VERIFIER_TOOL_BUDGET_BASE,
 } from './config.mjs';
 import { runAsync } from './proc.mjs';
 
-/** The seven fields every verdict must carry, in report order. */
-export const VERDICT_FIELDS = Object.freeze(['model', 'skills', 'rules', 'workflows', 'subagents', 'mcp', 'prompt']);
+function check(fields, shots, calls, expect) {
+  return Object.freeze({
+    fields: Object.freeze(fields),
+    shots: Object.freeze(shots),
+    calls,
+    // Keys of the session's expected params sent to the verifier for this check (EXPECTED_JSON).
+    expect: Object.freeze(expect),
+  });
+}
+
+/**
+ * Verifier checks (Design Decision 5): each id maps to its verdict fields, its mandatory evidence
+ * screenshots (relative to the scenario's shot dir), its tool-call budget and its prompt fragment
+ * `prompts/checks/<id>.md`. A scenario lists the ones it runs in `verifyChecks`.
+ */
+export const CHECKS = Object.freeze(
+  Object.fromEntries(
+    Object.entries({
+      model: check(['model'], ['summary.png'], 3, ['model']),
+      harness: check(
+        ['skills', 'rules', 'workflows', 'subagents', 'mcp'],
+        ['harness-usage.png'],
+        8,
+        ['skills', 'rules', 'workflows', 'subagents', 'mcp'],
+      ),
+      prompt: check(['prompt'], ['logs.png'], 3, ['prompt']),
+      // Judged by the orchestrator (judgeCost) — the verifier only reports the telemetry total.
+      cost: check(['cost'], ['cost.png'], 4, []),
+      bashTab: check(['bash'], ['bash.png'], 5, ['bash']),
+      contextGrowth: check(['contextGrowth'], ['context-growth.png'], 5, []),
+      agentsTable: check(['agentsTable'], ['agents-table.png', 'agent-modal.png'], 6, ['agents']),
+      systemContext: check(['systemContext'], ['sysctx.png'], 7, ['sysctx']),
+      denied: check(['denied'], ['denied.png'], 4, ['denied']),
+      // Judged by the orchestrator (judgeWorkTime) — the verifier only reports the durations.
+      workTime: check(['workTime'], ['work-time.png'], 3, []),
+      bashPaths: check(['bashPaths'], ['bash-paths.png'], 4, ['bashPaths']),
+    }).map(([id, c]) => [id, Object.freeze({ ...c, fragment: `checks/${id}.md` })]),
+  ),
+);
+
+/** The checks every SCENARIOS session runs unless it lists its own. */
+export const DEFAULT_CHECKS = Object.freeze(['model', 'harness', 'prompt', 'cost']);
+
+/** The only verdict fields that may carry the status `skipped`. */
+export const SKIPPABLE_FIELDS = Object.freeze(['cost']);
+
+/** The expected-params key each verdict field is compared with (for the report's mismatches). */
+const FIELD_EXPECTED_KEY = Object.freeze({
+  bash: 'bash',
+  cost: 'costUsd',
+  contextGrowth: null,
+  agentsTable: 'agents',
+  systemContext: 'sysctx',
+  denied: 'denied',
+  workTime: 'workTime',
+  bashPaths: 'bashPaths',
+});
+
 const STATUSES = new Set(['pass', 'fail']);
 
-/** Mandatory evidence screenshots, one per checked view (relative to the scenario's shot dir). */
-export const EVIDENCE_SHOTS = Object.freeze([
-  Object.freeze({ label: 'summary', file: 'summary.png' }),
-  Object.freeze({ label: 'harness-usage', file: 'harness-usage.png' }),
-  Object.freeze({ label: 'logs', file: 'logs.png' }),
-]);
+function checkDefs(checks) {
+  if (!Array.isArray(checks) || checks.length === 0) throw new Error('verifier checks must be a non-empty list');
+  return checks.map((id) => {
+    const def = CHECKS[id];
+    if (!def) throw new Error(`unknown verifier check "${id}"`);
+    return def;
+  });
+}
 
-// The 3 mandatory screenshots get their own calls on top of the measured budget.
-export const VERIFIER_CALL_BUDGET = VERIFIER_TOOL_BUDGET + EVIDENCE_SHOTS.length + 2;
+/** Verdict field keys of the given checks, in check order, without duplicates. */
+export function fieldsFor(checks) {
+  return [...new Set(checkDefs(checks).flatMap((c) => c.fields))];
+}
+
+/** Mandatory evidence screenshot files of the given checks, in check order, without duplicates. */
+export function shotsFor(checks) {
+  return [...new Set(checkDefs(checks).flatMap((c) => c.shots))];
+}
+
+/** Login calls + every check's calls + one call per mandatory screenshot + 2 for the verdict. */
+export function verifierCallBudget(checks) {
+  const defs = checkDefs(checks);
+  const calls = defs.reduce((sum, c) => sum + c.calls, 0);
+  return VERIFIER_TOOL_BUDGET_BASE + calls + shotsFor(checks).length + 2;
+}
+
+/**
+ * The template variable of a screenshot file: the three original views keep `SHOT_SUMMARY`,
+ * `SHOT_HARNESS` and `SHOT_LOGS`; every other shot is `SHOT_` + its stem in UPPER_SNAKE.
+ */
+export function shotVarName(file) {
+  if (file === 'harness-usage.png') return 'SHOT_HARNESS';
+  const stem = path.basename(file).replace(/\.[^.]+$/, '');
+  return `SHOT_${stem.replace(/[^A-Za-z0-9]+/g, '_').toUpperCase()}`;
+}
+
+/** `{ SHOT_<NAME>: <absolute path> }` for every mandatory screenshot of the given checks. */
+export function shotVars(checks, shotDir) {
+  return Object.fromEntries(shotsFor(checks).map((f) => [shotVarName(f), path.join(shotDir, f)]));
+}
+
+/** The subset of `expected` the verifier needs for the given checks (EXPECTED_JSON). */
+export function expectedForChecks(checks, expected) {
+  const keys = [...new Set(checkDefs(checks).flatMap((c) => c.expect))];
+  return Object.fromEntries(keys.map((k) => [k, k === 'mcp' ? (expected?.mcp ?? []) : (expected?.[k] ?? null)]));
+}
 
 export const VERIFY_TEMPLATE_FILE = path.join(PROMPTS_DIR, 'verify-session.md');
+
+const FRAGMENT_SECTIONS = Object.freeze(['Step', 'Judge', 'Fields']);
+
+/**
+ * Splits a check fragment into its `## Step`, `## Judge` and `## Fields` sections (trimmed
+ * text). Throws when a section is missing or empty.
+ */
+export function parseFragment(text, name = 'fragment') {
+  const src = String(text).replace(/\r\n/g, '\n');
+  const out = {};
+  const re = /^##[ \t]+(\S.*?)[ \t]*$/gm;
+  const heads = [...src.matchAll(re)];
+  heads.forEach((m, i) => {
+    const end = i + 1 < heads.length ? heads[i + 1].index : src.length;
+    out[m[1]] = src.slice(m.index + m[0].length, end).trim();
+  });
+  for (const s of FRAGMENT_SECTIONS) {
+    if (!out[s]) throw new Error(`${name}: section "## ${s}" is missing or empty`);
+  }
+  return { step: out.Step, judge: out.Judge, fields: out.Fields };
+}
+
+function readFragment(id) {
+  const file = path.join(PROMPTS_DIR, CHECKS[id].fragment);
+  return parseFragment(fs.readFileSync(file, 'utf8'), CHECKS[id].fragment);
+}
+
+/** `N. <first line>` with the following lines indented under the number. */
+function numberStep(n, text) {
+  const [first, ...rest] = text.split('\n');
+  return [`${n}. ${first}`, ...rest.map((l) => (l.trim() ? `   ${l}` : ''))].join('\n');
+}
+
+/**
+ * Builds the verifier prompt for the given checks: numbers each fragment's step after the login
+ * step (1), joins the judge rules and the verdict-example field lines into `{{STEPS}}`,
+ * `{{JUDGE}}` and `{{VERDICT_FIELDS}}` of `verify-session.md`, then fills every `{{KEY}}` from
+ * `vars` (fillTemplate — throws on a missing value or a leftover placeholder).
+ */
+export function composeVerifyPrompt(checks, vars, template = fs.readFileSync(VERIFY_TEMPLATE_FILE, 'utf8')) {
+  checkDefs(checks);
+  const frags = checks.map((id) => readFragment(id));
+  const steps = frags.map((f, i) => numberStep(i + 2, f.step)).join('\n');
+  const judge = frags.map((f) => f.judge).join('\n');
+  const fieldLines = frags.flatMap((f) =>
+    f.fields
+      .split('\n')
+      .map((l) => l.trimEnd())
+      .filter((l) => l.trim())
+      .map((l) => l.replace(/,\s*$/, '')),
+  );
+  const verdictFields = fieldLines.map((l) => `    ${l.trim()}`).join(',\n');
+  const tpl = template
+    .replace(/\r\n/g, '\n')
+    .replace('{{STEPS}}', () => steps)
+    .replace('{{JUDGE}}', () => judge)
+    .replace('{{VERDICT_FIELDS}}', () => verdictFields);
+  return fillTemplate(tpl, vars);
+}
+
+const COST_RE = /\$\s*(\d+(?:\.\d+)?)/;
+
+/**
+ * FR-5 (Design Decision 9): compares the UI "Telemetry total" text with the stream's
+ * `total_cost_usd`. Skipped when either side is missing or unparseable; passes iff
+ * |Δ| < max(0.05, 1 % of the telemetry total). Returns { status, note, telemetry }.
+ */
+export function judgeCost(observedText, costUsd) {
+  const m = typeof observedText === 'string' ? observedText.match(COST_RE) : null;
+  const telemetry = m ? Number(m[1]) : null;
+  if (costUsd == null || !Number.isFinite(Number(costUsd))) {
+    return { status: 'skipped', note: 'no stream total_cost_usd to compare', telemetry };
+  }
+  if (telemetry == null || !Number.isFinite(telemetry)) {
+    return { status: 'skipped', note: `no parseable "Telemetry total" in ${JSON.stringify(observedText ?? null)}`, telemetry: null };
+  }
+  // Rounded to 1e-8 so binary float noise (10.1 − 10 = 0.0999…96) cannot flip a boundary row.
+  const round = (x) => Math.round(x * 1e8) / 1e8;
+  const delta = round(Math.abs(telemetry - Number(costUsd)));
+  const tolerance = round(Math.max(0.05, 0.01 * telemetry));
+  const pass = delta < tolerance;
+  return {
+    status: pass ? 'pass' : 'fail',
+    note: `telemetry $${telemetry.toFixed(4)} vs stream $${Number(costUsd).toFixed(4)}: |Δ| ${delta.toFixed(4)} ${pass ? '<' : '≥'} ${tolerance.toFixed(4)}`,
+    telemetry,
+  };
+}
+
+/** Seconds of the first `h:mm:ss` (or `m:ss`) duration in `text`, or null. */
+export function parseDurationSeconds(text) {
+  if (typeof text !== 'string') return null;
+  const hms = text.match(/(\d+):(\d{2}):(\d{2})/);
+  if (hms) return Number(hms[1]) * 3600 + Number(hms[2]) * 60 + Number(hms[3]);
+  const ms = text.match(/(\d+):(\d{2})/);
+  if (ms) return Number(ms[1]) * 60 + Number(ms[2]);
+  return null;
+}
+
+/**
+ * FR-7 (Design Decision 10): the turn-1 header duration (`h:mm:ss`, floored) must be at least
+ * `minSeconds`. Returns { status, note, seconds }.
+ */
+export function judgeWorkTime(observed, minSeconds) {
+  const seconds = parseDurationSeconds(observed);
+  if (minSeconds == null || !Number.isFinite(Number(minSeconds))) {
+    return { status: 'fail', note: 'no expected work-time window (no task notification or no later assistant entry)', seconds };
+  }
+  if (seconds == null) {
+    return { status: 'fail', note: `no h:mm:ss duration in ${JSON.stringify(observed ?? null)}`, seconds: null };
+  }
+  const pass = seconds >= Number(minSeconds);
+  return { status: pass ? 'pass' : 'fail', note: `turn-1 ${seconds}s ${pass ? '≥' : '<'} min ${minSeconds}s`, seconds };
+}
+
+/**
+ * Overwrites the verifier's `cost` / `workTime` statuses and notes with the scripted judgements
+ * (judgeCost / judgeWorkTime) and recomputes `overall` (fail iff any field fails). Mutates and
+ * returns `verdict`; fields the verdict does not carry are left alone. Idempotent.
+ */
+export function applyScriptedJudgements(verdict, expected) {
+  const fields = verdict?.fields;
+  if (!fields || typeof fields !== 'object') return verdict;
+  if (fields.cost && typeof fields.cost === 'object') {
+    const j = judgeCost(fields.cost.observed, expected?.costUsd ?? null);
+    fields.cost.status = j.status;
+    fields.cost.note = j.note;
+  }
+  if (fields.workTime && typeof fields.workTime === 'object') {
+    const j = judgeWorkTime(fields.workTime.observed, expected?.workTime?.minSeconds ?? null);
+    fields.workTime.status = j.status;
+    fields.workTime.note = j.note;
+  }
+  verdict.overall = Object.values(fields).some((f) => f?.status === 'fail') ? 'fail' : 'pass';
+  return verdict;
+}
 
 export const VERIFY_STATUS = Object.freeze({
   pass: 'pass',
@@ -92,10 +320,12 @@ function isRelativeShot(p) {
 }
 
 /**
- * Validates a verdict object against API changes → "Verifier verdict".
+ * Validates a verdict object against API changes → "Verifier verdict" (Design Decision 7):
+ * `fields` must carry exactly `fieldKeys` (default: the DEFAULT_CHECKS fields), each with status
+ * pass|fail (`skipped` only for SKIPPABLE_FIELDS); `overall` is fail iff some field failed.
  * Returns { ok, errors } — never throws.
  */
-export function validateVerdict(json) {
+export function validateVerdict(json, fieldKeys = fieldsFor(DEFAULT_CHECKS)) {
   const errors = [];
   if (!json || typeof json !== 'object' || Array.isArray(json)) {
     return { ok: false, errors: ['verdict is not a JSON object'] };
@@ -107,22 +337,28 @@ export function validateVerdict(json) {
     errors.push('"fields" is missing');
     return { ok: false, errors };
   }
-  for (const key of VERDICT_FIELDS) {
+  for (const key of fieldKeys) {
     const f = fields[key];
     if (!f || typeof f !== 'object') {
       errors.push(`fields.${key} is missing`);
       continue;
     }
-    if (!STATUSES.has(f.status)) errors.push(`fields.${key}.status must be pass|fail, got ${JSON.stringify(f.status)}`);
+    const skippable = SKIPPABLE_FIELDS.includes(key);
+    if (!(STATUSES.has(f.status) || (skippable && f.status === 'skipped'))) {
+      errors.push(`fields.${key}.status must be ${skippable ? 'pass|fail|skipped' : 'pass|fail'}, got ${JSON.stringify(f.status)}`);
+    }
     if (f.observed === undefined) errors.push(`fields.${key}.observed is missing`);
     if (!isRelativeShot(f.screenshot)) {
       errors.push(`fields.${key}.screenshot must be a non-empty relative path, got ${JSON.stringify(f.screenshot)}`);
     }
   }
+  for (const key of Object.keys(fields)) {
+    if (!fieldKeys.includes(key)) errors.push(`fields.${key} is not expected for this scenario`);
+  }
   if (errors.length === 0) {
-    const allPass = VERDICT_FIELDS.every((k) => fields[k].status === 'pass');
-    if (json.overall === 'pass' && !allPass) errors.push('"overall" is pass but a field failed');
-    if (json.overall === 'fail' && allPass) errors.push('"overall" is fail but every field passed');
+    const anyFail = fieldKeys.some((k) => fields[k].status === 'fail');
+    if (json.overall === 'pass' && anyFail) errors.push('"overall" is pass but a field failed');
+    if (json.overall === 'fail' && !anyFail) errors.push('"overall" is fail but no field failed');
   }
   return { ok: errors.length === 0, errors };
 }
@@ -267,7 +503,8 @@ export function settleSessionStatus(priorStatus, verify, isolation) {
 /**
  * Runs the verifier for one session and validates its verdict.
  *
- * scenario — a SCENARIOS entry; expected — the FR-8 expected params (with `session_id`);
+ * scenario — a SCENARIOS entry (its `verifyChecks` pick the fields, screenshots and prompt
+ * fragments; DEFAULT_CHECKS when absent); expected — the FR-8 expected params (with `session_id`);
  * repoId — the owner's repository id; owner — a USERS key, an email, or { email, password }.
  * opts (optional): { claudeCmd, timeoutMs, standUrl, isolation, priorStatus, log }
  *
@@ -296,39 +533,26 @@ export async function verifySession(scenario, expected, repoId, owner, runPaths,
   try {
     if (!expected || !expected.session_id) throw new Error('no expected params / session_id to verify');
     if (repoId == null) throw new Error('no repository id for the session');
+    const checks = scenario.verifyChecks?.length ? [...scenario.verifyChecks] : [...DEFAULT_CHECKS];
+    const fieldKeys = fieldsFor(checks);
     const creds = resolveOwner(owner);
     const { file: mcpFile, shotDir } = writeMcpConfig(runPaths, sid);
     fs.rmSync(verdictPath, { force: true });
     fs.mkdirSync(runPaths.verifyDir, { recursive: true });
 
-    const tpl = fs.readFileSync(VERIFY_TEMPLATE_FILE, 'utf8');
-    const prompt = fillTemplate(tpl, {
-      TOOL_BUDGET: VERIFIER_CALL_BUDGET,
+    const prompt = composeVerifyPrompt(checks, {
+      TOOL_BUDGET: verifierCallBudget(checks),
       SCENARIO_ID: sid,
       STAND_URL: standUrl,
       EMAIL: creds.email,
       PASSWORD: creds.password,
       SESSION_URL: sessionUrl(repoId, expected.session_id, standUrl),
-      EXPECTED_JSON: JSON.stringify(
-        {
-          model: expected.model,
-          skills: expected.skills,
-          rules: expected.rules,
-          workflows: expected.workflows,
-          subagents: expected.subagents,
-          mcp: expected.mcp ?? [],
-          prompt: expected.prompt,
-        },
-        null,
-        2,
-      ),
+      EXPECTED_JSON: JSON.stringify(expectedForChecks(checks, expected), null, 2),
       VERDICT_PATH: verdictPath,
       SHOT_DIR: shotDir,
       SHOT_REL: shotRel,
-      SHOT_SUMMARY: path.join(shotDir, 'summary.png'),
-      SHOT_HARNESS: path.join(shotDir, 'harness-usage.png'),
-      SHOT_LOGS: path.join(shotDir, 'logs.png'),
-      SHOT_MISMATCH_EXAMPLE: path.join(shotDir, 'skills-mismatch.png'),
+      ...shotVars(checks, shotDir),
+      SHOT_MISMATCH_EXAMPLE: path.join(shotDir, `${fieldKeys[0]}-mismatch.png`),
     });
     clearStrayShots(runPaths.verifyDir);
 
@@ -357,29 +581,32 @@ export async function verifySession(scenario, expected, repoId, owner, runPaths,
     } catch (err) {
       throw new Error(`verdict is not valid JSON: ${err.message}`);
     }
-    const check = validateVerdict(verdict);
-    if (!check.ok) throw new Error(`invalid verdict: ${check.errors.join('; ')}`);
+    const validation = validateVerdict(verdict, fieldKeys);
+    if (!validation.ok) throw new Error(`invalid verdict: ${validation.errors.join('; ')}`);
+    applyScriptedJudgements(verdict, expected);
 
     const missingShots = [];
-    for (const key of VERDICT_FIELDS) {
+    for (const key of fieldKeys) {
       const found = resolveShot(reportDir, shotDir, verdict.fields[key].screenshot);
       if (found) verdict.fields[key].screenshot = found;
       else missingShots.push(`${key} → ${verdict.fields[key].screenshot}`);
     }
-    for (const shot of EVIDENCE_SHOTS) {
-      const found = resolveShot(reportDir, shotDir, `${shotRel}/${shot.file}`);
-      if (found) out.evidence.push({ label: shot.label, path: found });
-      else missingShots.push(`${shot.label} → ${shotRel}/${shot.file}`);
+    for (const file of shotsFor(checks)) {
+      const label = file.replace(/\.[^.]+$/, '');
+      const found = resolveShot(reportDir, shotDir, `${shotRel}/${file}`);
+      if (found) out.evidence.push({ label, path: found });
+      else missingShots.push(`${label} → ${shotRel}/${file}`);
     }
     out.verdict = verdict;
     if (missingShots.length) throw new Error(`missing evidence screenshot(s): ${missingShots.join(', ')}`);
 
-    for (const key of VERDICT_FIELDS) {
+    for (const key of fieldKeys) {
       const f = verdict.fields[key];
-      if (f.status !== 'pass') {
+      if (f.status === 'fail') {
+        const expectedKey = Object.prototype.hasOwnProperty.call(FIELD_EXPECTED_KEY, key) ? FIELD_EXPECTED_KEY[key] : key;
         out.mismatches.push({
           field: key,
-          expected: expected[key],
+          expected: expectedKey ? (expected[expectedKey] ?? null) : null,
           observed: f.observed,
           note: f.note || '',
           screenshot: f.screenshot,

@@ -1,5 +1,5 @@
 // Cookie-jar HTTP client for the stand's REST API plus the ingestion-readiness poll.
-import { INGEST_POLL_MS, INGEST_TIMEOUT_MS } from './config.mjs';
+import { INGEST_POLL_MS, INGEST_TIMEOUT_MS, TELEMETRY_WAIT_MS } from './config.mjs';
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
@@ -89,6 +89,36 @@ export class ApiClient {
       `/api/v1/repositories/${encodeURIComponent(rid)}/sessions/${encodeURIComponent(sid)}/logs`,
     );
     return { status: res.status, body: res.body };
+  }
+
+  /** The repository's session list (`GET /api/v1/repositories/:rid/sessions`); throws on non-2xx. */
+  async getSessions(rid) {
+    const body = await this.getJson(`/api/v1/repositories/${encodeURIComponent(rid)}/sessions`);
+    return Array.isArray(body) ? body : [];
+  }
+
+  /**
+   * Polls the session list until the session's `costBreakdown.telemetryCost` is non-null (FR-5:
+   * the OTEL cost arrives after the transcript). Never rejects: a timeout resolves
+   * { telemetryCost: null, timedOut: true, last } so the cost judgement ends `skipped`.
+   */
+  async waitForTelemetry({ rid, sid, pollMs = INGEST_POLL_MS, timeoutMs = TELEMETRY_WAIT_MS }) {
+    if (rid == null || !sid) return { telemetryCost: null, timedOut: true, last: 'rid and sid are required' };
+    const deadline = Date.now() + timeoutMs;
+    let last = 'no response yet';
+    for (;;) {
+      try {
+        const list = await this.getSessions(rid);
+        const row = list.find((r) => r && r.sessionId === sid);
+        const cost = row?.costBreakdown?.telemetryCost;
+        if (cost != null) return { telemetryCost: Number(cost) };
+        last = row ? 'telemetryCost is null' : 'session not listed';
+      } catch (err) {
+        last = err.message;
+      }
+      if (Date.now() + pollMs > deadline) return { telemetryCost: null, timedOut: true, last };
+      await sleep(pollMs);
+    }
   }
 
   /**

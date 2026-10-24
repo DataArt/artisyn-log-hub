@@ -1,13 +1,17 @@
 // File categories check `FC` (phase P9b). The repo owner replaces the repo's file
 // categories through the UI (Repository settings → "File Categories", `FileCategoriesEditor.tsx`,
 // personal view → the user-scoped override), then the API must return exactly that config (AC
-// FR-FC1) and FC_SCENARIO's session must carry read stats under both new categories (AC FR-FC2).
-// Saving triggers the server's recomputeForRepo(), so running after ingestion is fine.
+// FR-FC1) and FC_SCENARIO's session must carry exactly the read stats its own transcript implies
+// under the new categories (AC FR-FC2): per category the number of Read calls and the size of their
+// tool results — what the reads put into the context, not the file size on disk
+// (expectedFileStats below). Saving triggers the server's recomputeForRepo(), so running after
+// ingestion is fine.
 import fs from 'node:fs';
 import path from 'node:path';
 import { acceptConsent, login, newUserContext } from './browser.mjs';
 import { createApiClient } from './api.mjs';
 import { FC_CATEGORIES, FC_STATS_TIMEOUT_MS, STAND_URL } from './config.mjs';
+import { parseJsonl } from './evidence.mjs';
 
 const UI_TIMEOUT_MS = 20000;
 const POLL_MS = 2000;
@@ -24,12 +28,159 @@ export function compareCategories(actual, wanted = FC_CATEGORIES) {
   return a === w ? [] : [`fileCategories are ${a}, expected ${w}`];
 }
 
-/** Pure: problems for one session's `fileStatsByCategory` (each wanted category needs files ≥ 1). */
-export function judgeFileStats(stats, wanted = FC_CATEGORIES) {
+// ---- expected stats: a mirror of the server's session_file_stats rule ----------------------------
+// Mirrors server/src/logs/claude-extractor.ts extractFileStatsByCategory() (:1294) — what
+// session-file-stats-writer.ts writeSessionFileStats() (:73) runs on ingest and on the settings-save
+// recompute — over ONE session node's own transcript: the main one (subagent transcripts are their
+// own session rows, and the timeline reads the main session's rows only).
+//  - files: +1 per assistant `tool_use` named `Read` with a string `input.file_path`, keyed by its
+//    id. No dedup: reading a file twice counts twice; a failed read (is_error) still counts.
+//  - bytes: for every user `tool_result` whose `tool_use_id` is a known Read,
+//    computeToolResultBytes() (:1358): string content → its `.length`; an array → the sum of
+//    `.length` of every `{type:'text'}` block's text (image blocks add nothing), no separator.
+//    `.length` is UTF-16 code units, not UTF-8 bytes. Error results count too.
+//  - category: classifyFile() (:95) — the first category with a regexp that tests the path wins,
+//    invalid patterns are skipped, otherwise "code" — over normaliseReadPath() (:85): the longest
+//    repo root stripped case-insensitively on a "/" boundary (change-surface/path-normalise.ts
+//    stripRepoRootPreservingCase() :135, stripLongestRoot() :87, cleanSegments() :108); a path
+//    outside every root stays absolute with "/" separators; no usable root → the
+//    KNOWN_TOP_LEVEL_DIRS guess of normaliseFilePath() (:48).
+
+const KNOWN_TOP_LEVEL_DIRS = Object.freeze(['server', 'client', 'doc', 'hook', '.claude', 'tests', 'dist', '.playwright-work-folder']);
+
+const toPosix = (p) => String(p).replace(/\\/g, '/');
+
+const isRecord = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
+
+/** Pure: usable repo roots — slash-normalised, trailing "/" dropped, empties and a bare "/" removed. */
+export function usableRepoRoots(roots) {
+  return (roots ?? [])
+    .map((r) => {
+      if (typeof r !== 'string') return '';
+      const p = toPosix(r).trim();
+      if (p === '/') return '';
+      return p.length > 1 && p.endsWith('/') ? p.slice(0, -1) : p;
+    })
+    .filter((r) => r.length > 0);
+}
+
+/** Pure: the server's normaliseReadPath() — a Read `file_path` made repo-relative for classification. */
+export function normaliseReadPath(absPath, repoRoots) {
+  const roots = usableRepoRoots(repoRoots);
+  const posix = toPosix(absPath ?? '');
+  if (roots.length === 0) {
+    for (const dir of KNOWN_TOP_LEVEL_DIRS) {
+      const idx = posix.indexOf(`/${dir}/`);
+      if (idx !== -1) return posix.slice(idx + 1);
+    }
+    return posix.replace(/^\//, '');
+  }
+  const lower = posix.toLowerCase();
+  let bestLen = -1;
+  let best = null;
+  for (const root of roots) {
+    const prefix = `${root.toLowerCase()}/`;
+    if (!lower.startsWith(prefix)) continue;
+    const rest = posix.slice(prefix.length);
+    if (rest.length === 0) continue;
+    if (root.length > bestLen) {
+      bestLen = root.length;
+      best = rest;
+    }
+  }
+  const segments = best === null ? [] : best.split('/').filter((seg) => seg.length > 0 && seg !== '.');
+  return segments.length ? segments.join('/') : posix;
+}
+
+/** Pure: the server's classifyFile() — the first matching category, else "code". */
+export function classifyFile(relativePath, categories = FC_CATEGORIES) {
+  for (const c of categories) {
+    for (const pattern of c.patterns ?? []) {
+      let re;
+      try {
+        re = new RegExp(pattern);
+      } catch {
+        continue;
+      }
+      if (re.test(relativePath)) return c.name;
+    }
+  }
+  return 'code';
+}
+
+/** Pure: the server's computeToolResultBytes() — the length of a tool_result's text content. */
+export function toolResultBytes(content) {
+  if (typeof content === 'string') return content.length;
+  if (!Array.isArray(content)) return 0;
+  let total = 0;
+  for (const b of content) {
+    if (isRecord(b) && b.type === 'text' && typeof b.text === 'string') total += b.text.length;
+  }
+  return total;
+}
+
+/**
+ * Pure: the expected `fileStatsByCategory` ({ [category]: { files, bytes } }, the API's shape) of
+ * one session from its main transcript (JSONL text, lines or parsed events), its repo roots and
+ * the categories. The rule is the server's, see above.
+ */
+export function expectedFileStats(transcript, repoRoots, categories = FC_CATEGORIES) {
+  const result = {};
+  const reads = new Map();
+  const entry = (cat) => (result[cat] ??= { files: 0, bytes: 0 });
+  for (const rec of parseJsonl(transcript)) {
+    const content = isRecord(rec.message) ? rec.message.content : null;
+    if (!Array.isArray(content)) continue;
+    for (const b of content) {
+      if (!isRecord(b)) continue;
+      if (rec.type === 'assistant' && b.type === 'tool_use' && b.name === 'Read') {
+        if (typeof b.id !== 'string' || !isRecord(b.input) || typeof b.input.file_path !== 'string') continue;
+        const cat = classifyFile(normaliseReadPath(b.input.file_path, repoRoots), categories);
+        reads.set(b.id, cat);
+        entry(cat).files += 1;
+      } else if (rec.type === 'user' && b.type === 'tool_result' && reads.has(b.tool_use_id)) {
+        entry(reads.get(b.tool_use_id)).bytes += toolResultBytes(b.content);
+      }
+    }
+  }
+  return result;
+}
+
+/** The expected stats from a transcript file; null when there is no file or it cannot be read. */
+export function expectedFileStatsFromFile(file, repoRoots, categories = FC_CATEGORIES) {
+  if (!file) return null;
+  try {
+    return expectedFileStats(fs.readFileSync(file, 'utf8'), repoRoots, categories);
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Pure: problems for one session's `fileStatsByCategory` ([] = ok). Each wanted category needs
+ * files ≥ 1, and every category in `expected` or `stats` must equal `expected` ({files, bytes}).
+ * `expected` null (no readable transcript) is a problem, never a pass.
+ */
+export function judgeFileStats(stats, expected, wanted = FC_CATEGORIES) {
   const problems = [];
+  const num = (v) => Number(v) || 0;
   for (const c of wanted) {
-    const files = Number(stats?.[c.name]?.files) || 0;
+    const files = num(stats?.[c.name]?.files);
     if (files < 1) problems.push(`category "${c.name}" has ${files} file read(s), expected ≥ 1`);
+  }
+  if (!expected) {
+    problems.push('no expected stats: the session transcript could not be read');
+    return problems;
+  }
+  const names = [...new Set([...Object.keys(expected), ...Object.keys(stats ?? {})])].sort();
+  for (const name of names) {
+    const got = { files: num(stats?.[name]?.files), bytes: num(stats?.[name]?.bytes) };
+    const want = { files: num(expected[name]?.files), bytes: num(expected[name]?.bytes) };
+    if (got.files !== want.files || got.bytes !== want.bytes) {
+      problems.push(
+        `category "${name}" has ${got.files} file(s) / ${got.bytes} B, the transcript gives ${want.files} / ${want.bytes} B`,
+      );
+    }
   }
   return problems;
 }
@@ -104,15 +255,21 @@ async function configureInUi(page, repoId, wanted) {
 
 /**
  * Runs the FC check. `owner` = { email, password }; `repoId` = the owner's repository id;
- * `sessionId` = FC_SCENARIO's verified session id. opts: { browser, fcDir, baseURL, log }.
+ * `sessionId` = FC_SCENARIO's verified session id; `transcriptFile` = that session's local main
+ * transcript and `repoRoots` = the repo root(s) its Read paths are relative to — the source of the
+ * expected per-category stats (expectedFileStats). opts: { browser, fcDir, baseURL, log }.
  * Resolves { case, ac: [{ id, ok, detail }] } — never throws.
  */
-export async function runFileCategories({ browser, owner, repoId, sessionId, fcDir, baseURL = STAND_URL, log = () => {} }) {
+export async function runFileCategories({
+  browser, owner, repoId, sessionId, transcriptFile, repoRoots = [], fcDir, baseURL = STAND_URL, log = () => {},
+}) {
   const wanted = FC_CATEGORIES;
   const problems = [];
   const evidence = [];
   const ac = [];
   const wantedText = wanted.map((c) => `${c.name} → ${c.patterns.join(', ')}`).join('; ');
+  const expected = expectedFileStatsFromFile(transcriptFile, repoRoots, wanted);
+  log(`expected stats from ${transcriptFile ?? 'no transcript'}: ${JSON.stringify(expected)}`);
 
   let context = null;
   try {
@@ -152,7 +309,7 @@ export async function runFileCategories({ browser, owner, repoId, sessionId, fcD
     for (;;) {
       const s = await timelineSession(api, repoId, sessionId);
       stats = s?.fileStatsByCategory ?? null;
-      statsProblems = s ? judgeFileStats(stats) : [`session ${sessionId} is not in the analytics timeline`];
+      statsProblems = s ? judgeFileStats(stats, expected) : [`session ${sessionId} is not in the analytics timeline`];
       if (statsProblems.length === 0 || Date.now() + POLL_MS > deadline) break;
       await sleep(POLL_MS);
     }
@@ -160,7 +317,9 @@ export async function runFileCategories({ browser, owner, repoId, sessionId, fcD
     ac.push({
       id: 'FR-FC2',
       ok: statsProblems.length === 0,
-      detail: statsProblems.length ? statsProblems.join('; ') : `session ${sessionId} fileStatsByCategory ${JSON.stringify(stats)}`,
+      detail: statsProblems.length
+        ? statsProblems.join('; ')
+        : `session ${sessionId} fileStatsByCategory ${JSON.stringify(stats)} = the transcript's Read calls and tool-result sizes`,
     });
     problems.push(...statsProblems);
 
@@ -178,7 +337,7 @@ export async function runFileCategories({ browser, owner, repoId, sessionId, fcD
         title: 'file categories configured in the UI and applied to read stats',
         status,
         detail: status === 'pass' ? `${wantedText}; ${JSON.stringify(stats)}` : problems.join('; '),
-        checked: `owner saved ${wantedText} in Settings → File Categories; the API returns it; session ${sessionId} has reads under both categories ${JSON.stringify(stats)}.`,
+        checked: `owner saved ${wantedText} in Settings → File Categories; the API returns it; session ${sessionId} has reads under both categories ${JSON.stringify(stats)}, equal per category (files, bytes) to the Read calls and tool-result text lengths of its transcript ${JSON.stringify(expected)}.`,
         problems,
         evidence,
       },

@@ -83,6 +83,19 @@ RUN set -eux; \
     tar -xzf mailpit.tar.gz -C /out --no-same-owner mailpit; \
     chmod 0755 /out/mailpit
 
+# gitleaks: the repo's git hooks (.githooks/) refuse to commit or push without it.
+FROM fetch-base AS fetch-gitleaks
+# Keep equal to GITLEAKS_VERSION in .github/workflows/gitleaks.yml.
+ARG GITLEAKS_VERSION=8.30.1
+ARG GITLEAKS_SHA256=551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+RUN set -eux; \
+    aria2c -x16 -s16 --console-log-level=warn -o gitleaks.tar.gz \
+      "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"; \
+    echo "${GITLEAKS_SHA256}  gitleaks.tar.gz" | sha256sum -c -; \
+    mkdir /out; \
+    tar -xzf gitleaks.tar.gz -C /out --no-same-owner gitleaks; \
+    chmod 0755 /out/gitleaks
+
 FROM fetch-base AS fetch-chrome
 ARG CHROME_VERSION=156.0.8078.47-1
 ARG CHROME_SHA256=6c92cd22e90c6e3e255d782991543fa2091db8614e8536a971a7433a5c4d7ac8
@@ -186,10 +199,11 @@ RUN --mount=type=cache,id=apt-cache-final,target=/var/cache/apt,sharing=locked \
     ! ls /etc/apt/sources.list.d | grep -q google; \
     google-chrome --version
 
-# Node + npm (host versions), bun, Mailpit, the TypeScript language server.
+# Node + npm (host versions), bun, Mailpit, gitleaks, the TypeScript language server.
 COPY --from=fetch-node /out/ /usr/local/
 COPY --from=fetch-bun /out/bun /usr/local/bin/bun
 COPY --from=fetch-mailpit /out/mailpit /usr/local/bin/mailpit
+COPY --from=fetch-gitleaks /out/gitleaks /usr/local/bin/gitleaks
 RUN set -eux; \
     ln -s /usr/local/bin/bun /usr/local/bin/bunx; \
     npm install -g "npm@${NPM_VERSION}"; \
@@ -235,6 +249,7 @@ RUN set -eux; \
     npm --version; \
     bun --version; \
     mailpit version; \
+    gitleaks version; \
     psql --version; \
     command -v socat; \
     command -v pgrep; \

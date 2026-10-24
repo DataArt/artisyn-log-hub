@@ -10,3 +10,5 @@ Folders are named `<YYYY-MM-DD>-<slug>` (the day the task was created).
 - [2026-10-15-claude-dev-container] Claude Code Dev Container (docker-dev + local infra + hook) — archived 2026-10-22
 - [2026-10-22-local-dev-ports-config] Per-Developer Log Hub Settings in log-hub.local.json — archived 2026-10-22
 - [2026-10-22-context-growth-item-modal] Context Growth Chart: Item Details Modal — archived 2026-10-23
+- [2026-10-23-big-test-recent-features] Big Pre-Prod E2E Test — Cover Recent Features — archived 2026-10-24
+- [2026-10-24-post-e2e-test-bugs] Post-E2E-Test Bugs (Umbrella) — archived 2026-10-24

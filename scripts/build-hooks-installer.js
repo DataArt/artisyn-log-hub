@@ -396,6 +396,14 @@ function buildMarketplaceJson() {
   };
 }
 
+// `scripts/package.json` in the shipped plugin. The plugin runs from inside the user's repo
+// (`.artisyn/marketplace/plugins/log-hub-hooks/`), and Node resolves a `.js` file's module type
+// from the nearest package.json — without this one, a repo whose root package.json says
+// `"type": "module"` turns every CommonJS hook script into an ES module and every hook dies with
+// "require is not defined in ES module scope". The `type` field is honoured by every Node release
+// since 12, so this holds on every supported LTS (docs/knowledgebase/hook-system-overview.md).
+const SCRIPTS_PACKAGE_JSON = Object.freeze({ type: 'commonjs' });
+
 function buildPluginJson(version) {
   return {
     name: PLUGIN_NAME,
@@ -427,6 +435,7 @@ function packMarketplaceTarball() {
 
   const scriptsVersionJson = Buffer.from(JSON.stringify({ version }) + '\n', 'utf8');
   entries.push([`${PLUGIN_ROOT}/scripts/version.json`, scriptsVersionJson]);
+  entries.push([`${PLUGIN_ROOT}/scripts/package.json`, JSON.stringify(SCRIPTS_PACKAGE_JSON, null, 2) + '\n']);
 
   entries.push([`${PLUGIN_ROOT}/config-template/log-hub.json`, buildConfigTemplate()]);
 
@@ -527,6 +536,7 @@ module.exports = {
   buildConfigTemplate,
   buildMarketplaceJson,
   buildPluginJson,
+  SCRIPTS_PACKAGE_JSON,
   readHookVersion,
   ensureInstallerVersionTracksHook,
   parseStaticDirArg,

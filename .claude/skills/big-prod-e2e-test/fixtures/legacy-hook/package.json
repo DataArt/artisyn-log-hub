@@ -1,0 +1,7 @@
+{
+  "name": "legacy-hook",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Minimal repo the previous-release hook is installed into by big-prod-e2e-test",
+  "type": "commonjs"
+}

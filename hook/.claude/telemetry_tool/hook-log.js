@@ -114,4 +114,20 @@ function readLogTail(cwd, n, logFileName) {
   }
 }
 
-module.exports = { hookLog, hookLogTo, getHookVersion, readLogTail };
+/**
+ * `node <hook script> --self-check` — the installer's post-install load check. Called by each hook
+ * entry script right after its top-level requires, so reaching it proves the script and its whole
+ * module graph load with this `node` in this repo (e.g. not broken by the repo's package.json
+ * `"type": "module"`). Prints one JSON line and exits 0 without reading stdin or touching a file.
+ * A no-op without the flag.
+ * @param {string} hookFile - the entry script's file name
+ */
+function exitIfSelfCheck(hookFile) {
+  if (!process.argv.includes('--self-check')) return;
+  process.stdout.write(
+    JSON.stringify({ selfCheck: 'ok', script: hookFile, hookVersion: getHookVersion(), node: process.version }) + '\n',
+  );
+  process.exit(0);
+}
+
+module.exports = { hookLog, hookLogTo, getHookVersion, readLogTail, exitIfSelfCheck };

@@ -6,7 +6,7 @@
 - **New orchestrator phase P5b** (`p5bLegacyHook`): builds and installs the previous-release hook.
 - **Verifier redesign** (`scripts/lib/verify.mjs` + `scripts/prompts/`): a fixed 7-field verdict becomes a per-scenario list of **checks**. Each check is a prompt fragment under `prompts/checks/`, has its own fields, screenshots and call budget, and can return the new status `skipped`. The orchestrator judges `cost` and `workTime` in JS (`judgeCost`, `judgeWorkTime`), not through the LLM.
 - **Four new haiku sessions S8–S11** plus a **legacy session L1**:
-  - New scenario fields: `permissionArgs`, `cwdRel`, `env`, `useWorktree`, `owner` override, `verifyChecks`, the `{{REPO_ROOT}}` prompt placeholder, and the `requires` keys `bash`, `bashError`, `denied`, `background`, `cwd`, `noHarness`.
+  - New scenario fields: `permissionArgs`, `cwdRel`, `env`, `useWorktree`, `rootSettings`, `owner` override, `verifyChecks`, the `{{REPO_ROOT}}` prompt placeholder, and the `requires` keys `bash`, `bashError`, `denied`, `background`, `cwd`, `noHarness`.
   - L1 is kept outside `SCENARIOS`, in its own `LEGACY_SCENARIO` constant.
 - **New helpers:**
   - `lib/legacy.mjs`: `buildPrevInstaller()` and `installPrevHook()` run `git archive` + `npm ci` + the old `build-hooks-installer.js`.
@@ -51,6 +51,16 @@
    - Expected FILES read: `packages/core/src/index.ts`, with no absolute path shown.
    - `cwdRel` = `packages/web`.
    - S11 fills `{{REPO_ROOT}}` with the worktree root.
+   - **Settings from the root (PoC 2026-10-23, `notes.md`).** Claude Code reads project settings
+     only from `<cwd>/.claude/`, so a session started in `packages/web` gets no plugin, no hooks
+     and no OTEL env. S10 and S11 therefore get the scenario field `rootSettings: true`.
+     - For such a scenario the runner writes `runPaths.sessionSettings(id)`
+       (`_verify/settings-<id>.json`). The file is the session root's `.claude/settings.json` with
+       the `extraKnownMarketplaces.*.source.path` made absolute (forward slashes, `<root>/.artisyn/marketplace`)
+       plus the `env` of its `.claude/settings.local.json`.
+     - The runner then appends `--settings "<file>"` to the argv.
+     - The session root is the repo dir, or the worktree for S11.
+     - Nothing is written into the repo.
 5. **Per-scenario verifier checks.** `verify.mjs` exports `CHECKS`, a frozen map. Each check id maps to `{ fields: string[], shots: string[], calls: number, fragment: 'checks/<id>.md' }`:
 
    | check | fields | shots | calls | used by |
@@ -131,7 +141,12 @@
     - `denials`: the tool names whose tool_result has `toolDenialKind` or whose text matches `PERMISSION_DENIAL_RE` = `/requested permissions to (use|write|read|edit)/i`.
     - `backgroundAgent`: an `Agent`/`Task` tool_use with `input.run_in_background === true`.
     - `toolUseAfterNotification`: a main-thread (non-sidechain) tool_use after a user entry whose content (string or text block) starts with `<task-notification>`.
-    - `cwd`: the first entry's `cwd`, with forward slashes.
+    - `cwd`: the `cwd` of the first entry that has one, with forward slashes. Per the PoC, a
+      transcript starts with `queue-operation` lines that have no `cwd`.
+    - Confirmed by the PoC: the notification is a main-thread `user` line with **string** content
+      (the line also has `origin.kind === 'task-notification'`), and `-p` waits for it. The
+      stream has two `result` events; the last one's `total_cost_usd` equals the server
+      `telemetryCost`.
 
     The `requires` keys are:
     - `bash: n` (minimum);
@@ -147,13 +162,17 @@
     - System Context: `sysctx-panel` with its "Show details" button, `sysctx-tab-files|skills|rules`, `sysctx-file-row`, `sysctx-rule-row`, `sysctx-skill-row[data-skill-name]`, source badge text `project|user|plugin`.
     - Workflow agents: `workflow-agent-row`, modal tabs `workflow-agent-logs` and `workflow-agent-raw-logs`.
     - Cost: the `cost-reconciliation` table, row "Telemetry total".
-14. **S8 denied call:** the constant `S8_DENIED` in `scenarios.mjs` takes one of two shapes:
-    - `{ tool:'Write', target:'denied.txt' }` if the PoC shows that the `Write` denial line carries `toolDenialKind` (or the UI shows ⊘);
-    - otherwise `{ tool:'Bash', target:'git status' }` (user decision: the PoC decides).
+14. **S8 denied call:** `S8_DENIED = { tool:'Write', target:'denied.txt' }` in `scenarios.mjs`.
+    This is decided by the PoC (2026-10-23, `notes.md`):
+    - The denied `Write` result line has a top-level `toolDenialKind: "user-rejected"` and `is_error: true`.
+    - The server keeps it.
+    - The UI shows `tool-status-badge` "⊘ rejected" with `title` "rejected by the user".
+    - The Bash fallback is dropped: `git status` is auto-allowed in `default` mode, so it is never denied.
 
     The prompt is built from it. `requires.denied` = `[S8_DENIED.tool]`.
 
-    `permissionArgs` = `['--permission-mode','default','--allowedTools','"Read"','"Bash(node:*)"']`, with the exact quoting per PoC.
+    `permissionArgs` = `['--permission-mode','default','--allowedTools','"Read"','"Bash(node:*)"']`.
+    The PoC confirmed that this quoting works in the joined `shell: true` string.
 15. **Admin row V8:** `{ id:'V8', viewer:'admin', view:'personal', see:[], notSee:[...REPO_NAMES, LEGACY_REPO], directSession:'S1' }`.
     - `evaluatePersonal` judges My Repos.
     - Then `evaluateDirectSession` opens S1's session URL as admin. It takes the repo id from `state.repos['node-service'].repoId`, the sid from `sessionIndex`, and the credentials from `state.users.admin` (email/password, as in `pageFor`). It checks two things: (a) `GET /api/v1/repositories/<rid>/sessions/<sid>/logs` through an admin `ApiClient` returns 403, and (b) after load the page shows no `logs` turn content, i.e. the first-prompt prefix is absent.
@@ -170,13 +189,16 @@
       4. it reads `_prev-hook/installer-version.json` (expects `version` === `PREV_HOOK_VERSION`) and `git show <ref>:artisyn-hooks-installer/package.json` (expects `PREV_INSTALLER_VERSION`).
 
       Each step throws `infra: <step>: <error>`.
-    - `installPrevHook(repoDir, tgz, apiKey, env)` runs `npx --yes "<tgz>" install --server-url <STAND_URL> --api-key <key>` and expects `serverUrl` in the merged config.
+    - `installPrevHook(repoDir, tgz, apiKey, env)` runs `npx --yes "<tgzUrl>" install --server-url <STAND_URL> --api-key <key>` and expects `serverUrl` in the merged config.
+      - `tgzUrl` = `pathToFileURL(tgz).href`. Per the PoC, `npx` with a bare Windows path (`D:/…/x.tgz`) hangs with no output until it is killed, and a relative path resolves against the npm workspace root.
+      - PoC timings: archive 0.5 s, `npm ci` 2.3 s (warm cache), build 1.3 s. `installer-version.json` = `{"version":"2.21.1"}`.
+      - The 1.0.69 installer writes `serverUrl` and `otelReceiverPort` into `log-hub.json`, only `apiKey` into `log-hub.local.json`, and the OTEL env into `.claude/settings.json`. So `checkLocalConfig` is never applied to `legacy-hook`.
 17. **Legacy session:**
     - `scenario()` takes `owner: s.owner ?? REPOS[s.repo]`, so a repo outside `REPOS` can carry its owner.
     - `createRepos` needs only `REMOTE_URL(repo)`, so the legacy repo goes through it unchanged.
     - P3 writes `ctx.state.repos['legacy-hook'] = { owner: LEGACY_OWNER, dir, remoteUrl, storedUrl: STORED_URL(LEGACY_REPO), repoId: null }`.
     - P5b takes U3's API key from `ctx.state.users[LEGACY_OWNER].apiKey`, set in P4.
-    - L1 runs the normal `checkIsolation`. If the chunk 1 probe shows that the 2.21.1 plugin id does not match `ALLOWED_PLUGIN_SOURCE_RE`, extend that regex to accept it.
+    - L1 runs the normal `checkIsolation`. The PoC confirmed that the 2.21.1 plugin id (`log-hub-hooks@artisyn-<8 hex>`) matches `ALLOWED_PLUGIN_SOURCE_RE`, so the regex stays unchanged.
     - P6 teams never list it.
     - `LEGACY_SCENARIO` = `scenario({ id:'L1', repo:LEGACY_REPO, owner:LEGACY_OWNER, model:'haiku', prompt:'Read `index.js` and say in one sentence what it prints.', requires:{ noHarness:true }, verifyChecks:['model','prompt'] })`.
     - It runs in P8 after `SCENARIOS`, only when `FR-OLD` P5 succeeded.
@@ -193,14 +215,19 @@
     - The fixture CLAUDE.md assert moves to before that call.
 20. **Worktree (S11):** `prepareWorktree(runPaths, repo='ts-webapp')` does the following:
     1. It runs `git -C <repoDir> worktree add -q -b big-test-wt <runDir>/ts-webapp-wt`.
-    2. It copies `.claude/settings.json`, `.claude/settings.local.json`, the whole `.artisyn/` tree (minus `ai_work_dir`) and `.artisyn/config/log-hub.local.json`.
-    3. It allocates a fresh free port, writes it into the worktree's `log-hub.local.json` `otelReceiverPort` and into every OTEL endpoint value in its `settings.local.json` `env`. This avoids the receiver's `409 owner-mismatch`, `docs/knowledgebase/otel-receiver.md`; whether it is needed is confirmed per PoC.
-    4. It returns `{ dir, port }`, stored in `ctx.state.worktree`.
-21. **S11 override proof (`FR-WT`):** `aiWorkDirHasSession(dir, sid)` is true iff some file under `<dir>/.artisyn/ai_work_dir/` contains `sid`. The exact file is confirmed per PoC (`hook.log` expected). Pass iff it is true for the worktree and false for the main `ts-webapp` checkout.
+    2. It creates `<wt>/.claude/` first: the worktree checkout has none when the fixture tracks nothing under `.claude/`, as with ts-webapp. Then it copies `.claude/settings.json`, `.claude/settings.local.json`, the whole `.artisyn/` tree (minus `ai_work_dir`) and `.artisyn/config/log-hub.local.json`.
+    3. It allocates a fresh free port, writes it into the worktree's `log-hub.local.json` `otelReceiverPort` and into every OTEL endpoint value in its `settings.local.json` `env`. This avoids the receiver's `409 owner-mismatch`, `docs/knowledgebase/otel-receiver.md`. The PoC showed that this is needed:
+       - With the copied port, `otel-register.js` logs "the OTEL receiver on port … belongs to another project", and the OTEL records land in the main checkout's `ai_work_dir`.
+       - With a fresh port, everything lands in the worktree's `ai_work_dir`.
+    4. It returns `{ dir, port }`, stored in `ctx.state.worktree`. The S11 `--settings` file (Design Decision 4) is built from these worktree copies after the port rewrite.
+21. **S11 override proof (`FR-WT`):** `aiWorkDirHasSession(dir, sid)` is true iff `<dir>/.artisyn/ai_work_dir/hook.log` contains `sid`. Pass iff it is true for the worktree and false for the main `ts-webapp` checkout.
+    - The PoC confirmed `hook.log`. The sid also appears in `attribution.log`, `analysis.log`, `harness-state.json` and `telemetry/<sid>.jsonl`.
+    - **Ordering constraint (PoC):** a later session in the main `ts-webapp` root sweeps linked-worktree transcripts that are not in its own `.claude-logs.sent` (`session-files.js` prefix rule). It then logs `claude/<sid>.jsonl: uploaded` in the **main** `hook.log`.
+    - So the FR-WT check runs right after S11 in P8, and S11 stays the last session on ts-webapp.
 22. **Report:** session rows S8–S11 and L1 reuse `recordSession`. `FR-LC`/`FR-UP` details carry the JSON of both config files. `FR-OLD` names `PREV_RELEASE_REF`, the installer and hook versions, and the L1 status.
     - The P11 completeness ids are `[...SCENARIOS ids, 'L1', 'FC', ...VISIBILITY_ROWS ids]` plus the AC ids `FR-LC`, `FR-UP`, `FR-OLD`, `FR-WT`.
 23. **AC phase map additions:** `'FR-LC': ['P5']`, `'FR-UP': ['P5']`, `'FR-OLD': ['P5b', 'P9']`, `'FR-WT': ['P8']`. The new phase P5b runs `p5bLegacyHook` right after P5. It is registered in the run's phase list and log step names like the other phases.
-24. **Run-dir additions:** `_prev-src/`, `_prev-hook/`, `legacy-hook/`, `ts-webapp-wt/`. `runPaths` gains `prevSrcDir`, `prevHookDir` and `worktreeDir`. All of these live under the run-dir and never under the git root.
+24. **Run-dir additions:** `_prev-src/`, `_prev-hook/`, `legacy-hook/`, `ts-webapp-wt/`. `runPaths` gains `prevSrcDir`, `prevHookDir`, `worktreeDir` and `sessionSettings(id)` (`_verify/settings-<id>.json`, Design Decision 4). All of these live under the run-dir and never under the git root.
 
 ## Files to create/modify
 
@@ -257,21 +284,21 @@ All paths are relative to `.claude/skills/big-prod-e2e-test/` unless rooted.
 | 10 | Full run + verification | 4 | Last; classify every failure |
 
 ### Chunk 1 — PoC probes
-- [ ] Create `docs/pocs/2026-10-23-big-test-probes/` with a `.gitignore` covering every non-source file, per the `review-poc` skill. Probes run against throwaway copies of the `js-cli` / `ts-webapp` fixtures with the hook installed from a local `npm run build:hooks-installer` tgz, never in the git root.
-- [ ] Probe S8: `claude -p --permission-mode default --allowedTools "Read" "Bash(node:*)"` via a joined `shell: true` string. Record whether the `Write` denial transcript line has `toolDenialKind` and how the UI marks it. Set `S8_DENIED` and the `permissionArgs` quoting per Design Decision 14.
-- [ ] Probe S9: a haiku `claude -p` session with a `run_in_background: true` Agent. Record whether `-p` waits for the notification, the exact `<task-notification>` entry shape (string or text block), and whether the stream has more than one `result` event.
-- [ ] Probe S10/S11: start `claude -p` from `packages/web`, and from a linked-worktree subdirectory with `ARTISYN_PROJECT_ROOT`. Record whether project settings and the plugin load, whether the OTEL port conflicts (409), and which `ai_work_dir` file holds the session id.
-- [ ] Probe FR-13: time `git archive 25146c8` + `npm ci --ignore-scripts` + the old `build-hooks-installer.js --static-dir`, and confirm `installer-version.json` content, that the old tgz installs against the current stand, and that its plugin id matches `ALLOWED_PLUGIN_SOURCE_RE`.
-- [ ] Create or append the task `notes.md` with the dated results of every probe; mark which Design Decisions (14, 17, 20, 21) they confirm or change, and update those decisions in this plan.
-- [ ] If the probe picks the `S8_DENIED` Bash fallback, change requirements.md FR-6 and its AC from "denied `Write`" to "denied Bash call outside the allow list".
+- [x] Create `docs/pocs/2026-10-23-big-test-probes/` with a `.gitignore` covering every non-source file, per the `review-poc` skill. Probes run against throwaway copies of the `js-cli` / `ts-webapp` fixtures with the hook installed from a local `npm run build:hooks-installer` tgz, never in the git root.
+- [x] Probe S8: `claude -p --permission-mode default --allowedTools "Read" "Bash(node:*)"` via a joined `shell: true` string. Record whether the `Write` denial transcript line has `toolDenialKind` and how the UI marks it. Set `S8_DENIED` and the `permissionArgs` quoting per Design Decision 14.
+- [x] Probe S9: a haiku `claude -p` session with a `run_in_background: true` Agent. Record whether `-p` waits for the notification, the exact `<task-notification>` entry shape (string or text block), and whether the stream has more than one `result` event.
+- [x] Probe S10/S11: start `claude -p` from `packages/web`, and from a linked-worktree subdirectory with `ARTISYN_PROJECT_ROOT`. Record whether project settings and the plugin load, whether the OTEL port conflicts (409), and which `ai_work_dir` file holds the session id.
+- [x] Probe FR-13: time `git archive 25146c8` + `npm ci --ignore-scripts` + the old `build-hooks-installer.js --static-dir`, and confirm `installer-version.json` content, that the old tgz installs against the current stand, and that its plugin id matches `ALLOWED_PLUGIN_SOURCE_RE`.
+- [x] Create or append the task `notes.md` with the dated results of every probe; mark which Design Decisions (14, 17, 20, 21) they confirm or change, and update those decisions in this plan.
+- [x] If the probe picks the `S8_DENIED` Bash fallback, change requirements.md FR-6 and its AC from "denied `Write`" to "denied Bash call outside the allow list". — N/A: the probe picked `Write` (2026-10-23, `notes.md`).
 
 ### Chunk 2 — Config + scenarios
 - [ ] `scripts/lib/config.mjs`: add the constants from Design Decisions 11, 16, 18 and 19, plus `VERIFIER_TOOL_BUDGET_BASE = 4`. Add `runPaths` keys `prevSrcDir`, `prevHookDir` and `worktreeDir` per Design Decision 24.
-- [ ] `scripts/scenarios.mjs`: extend the `scenario()` wrapper to freeze `permissionArgs`, `cwdRel`, `env`, `useWorktree` (default false), `expect` (Design Decision 8), `owner` override (Design Decision 17) and `verifyChecks` (default per Design Decision 5). Update the header comment for the new fields and `requires` keys (Design Decision 12).
+- [ ] `scripts/scenarios.mjs`: extend the `scenario()` wrapper to freeze `permissionArgs`, `cwdRel`, `env`, `useWorktree` (default false), `rootSettings` (default false, Design Decision 4), `expect` (Design Decision 8), `owner` override (Design Decision 17) and `verifyChecks` (default per Design Decision 5). Update the header comment for the new fields and `requires` keys (Design Decision 12).
 - [ ] `scenarios.mjs`: in S1, append the Design Decision 3 command to the prompt and set `requires: { bash: 1, noHarness: true }` and `verifyChecks` + `bashTab`, `contextGrowth`. In S2 and S5 add `systemContext`; in S4 add `agentsTable`. Set the `expect` blocks for S1, S2, S4 and S5 per Design Decision 8.
 - [ ] `scenarios.mjs`: add S8 (`js-cli`, haiku). Use `permissionArgs` and `S8_DENIED` from Design Decision 14. The prompt asks for three calls in order without retrying: `node --version`, `node -e "process.exit(3)"`, then the denied call. Set `requires: { bash: 2, bashError: true, denied: [S8_DENIED.tool] }`, add the checks `bashTab` and `denied`, and set `expect.bash` / `expect.denied` per Design Decision 8.
 - [ ] `scenarios.mjs`: add S9 (`ts-webapp`, haiku). The prompt spawns one Agent with `run_in_background: true` to count the lines of `packages/core/src/index.ts`, waits for its notification, then writes the number to `packages/core/LINES.txt`. Set `requires: { background: true, subagent: 1 }` and add the `workTime` check.
-- [ ] `scenarios.mjs`: add S10 and S11 (`ts-webapp`, haiku) with the Design Decision 4 prompt, `cwdRel: 'packages/web'`, `requires: { bash: 1, cwd: true }`, the `bashPaths` check and `expect.bashPaths`. S11 also gets `useWorktree: true` and `env: { ARTISYN_PROJECT_ROOT: '{{REPO_ROOT}}' }`.
+- [ ] `scenarios.mjs`: add S10 and S11 (`ts-webapp`, haiku) with the Design Decision 4 prompt, `cwdRel: 'packages/web'`, `rootSettings: true`, `requires: { bash: 1, cwd: true }`, the `bashPaths` check and `expect.bashPaths`. S11 also gets `useWorktree: true` and `env: { ARTISYN_PROJECT_ROOT: '{{REPO_ROOT}}' }`.
 - [ ] `scenarios.mjs`: add `LEGACY_SCENARIO` per Design Decision 17 and export `promptFor(scenario, rootAbs)` per Design Decision 2 (it also fills `{{REPO_ROOT}}` in `env` values). Create `fixtures/legacy-hook/package.json` (`name`, `version`, `type: commonjs`) and `fixtures/legacy-hook/index.js` (prints one line).
 
 ### Chunk 3 — Evidence + session runner
@@ -279,7 +306,7 @@ All paths are relative to `.claude/skills/big-prod-e2e-test/` unless rooted.
 - [ ] `evidence.mjs`: in `isExercised` / `exercisedGap`, handle the `requires` keys `bash`, `bashError`, `denied`, `background`, `cwd` and `noHarness`. The empty-object branch becomes `noHarness`. A gap message is produced for each unmet key.
 - [ ] `evidence.mjs`: add `workTimeWindow(lines)`. It returns `{ startTs, endTs, seconds }` per Design Decision 10, or null when there is no notification or no later assistant entry.
 - [ ] `scripts/lib/sessions.mjs`: change `sessionArgs(scenario, mcpFile)` to use `scenario.permissionArgs ?? ['--permission-mode','bypassPermissions']`. Update the call site in `runAttempt`.
-- [ ] `sessions.mjs` `runAttempt`: resolve the root (the `runScenario` option `rootDir`, defaulting to `repoDir(repo)`). Set cwd to `root/cwdRel`, set env to `{...env, ...filled scenario.env}` and the input to `promptFor(scenario, root)`. Set `harness.cwdOk` per Design Decision 12.
+- [ ] `sessions.mjs` `runAttempt`: resolve the root (the `runScenario` option `rootDir`, defaulting to `repoDir(repo)`). Set cwd to `root/cwdRel`, set env to `{...env, ...filled scenario.env}` and the input to `promptFor(scenario, root)`. Set `harness.cwdOk` per Design Decision 12. For `rootSettings`, write the `--settings` file and append `--settings "<file>"` to the argv (Design Decision 4).
 - [ ] `sessions.mjs` `buildExpected`: add `costUsd` (`stream.finalResult?.total_cost_usd ?? null`), `workTime` (`workTimeWindow`, S9 only, with `minSeconds` per Design Decision 10) and copies of the `scenario.expect` blocks (Design Decision 8). The prompt is the filled prompt. Persist `costUsd` in `result.json` as well.
 
 ### Chunk 4 — Repos, hook config, legacy, worktree libs

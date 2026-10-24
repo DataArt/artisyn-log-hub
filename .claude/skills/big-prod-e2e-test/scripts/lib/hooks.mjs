@@ -8,6 +8,8 @@ import { redactOneLiner } from './browser.mjs';
 
 export const HOOKS_INSTALLED_MARKER = 'Hooks installed';
 export const LOG_HUB_CONFIG_REL = path.join('.artisyn', 'config', 'log-hub.json');
+// Per-machine overrides (serverUrl, otelReceiverPort, apiKey) written by the current installer.
+export const LOG_HUB_LOCAL_CONFIG_REL = path.join('.artisyn', 'config', 'log-hub.local.json');
 
 /** Adds `--yes` after a leading `npx` so npx never waits for an install confirmation. */
 export function withNpxYes(command) {
@@ -24,20 +26,66 @@ export function installerWarnings(output) {
     .filter((l) => /\bwarn(ing)?\b/i.test(l) || /marketplace.*(collision|already|conflict)/i.test(l));
 }
 
-/** `serverUrl` from the repo's `.artisyn/config/log-hub.json`, or null when unreadable. */
-export function readServerUrl(repoDir) {
-  const file = path.join(repoDir, LOG_HUB_CONFIG_REL);
+function readJsonObject(file) {
   try {
-    const cfg = JSON.parse(fs.readFileSync(file, 'utf8'));
-    return typeof cfg.serverUrl === 'string' ? cfg.serverUrl : null;
+    const value = JSON.parse(fs.readFileSync(file, 'utf8'));
+    return value && typeof value === 'object' && !Array.isArray(value) ? value : null;
   } catch {
     return null;
   }
 }
 
 /**
+ * Both hook config files of a repo: `base` = `log-hub.json` (tracked), `local` =
+ * `log-hub.local.json` (per machine), each null when missing or unreadable, and
+ * `merged = {...base, ...local}` — the value the hook itself uses.
+ */
+export function readLogHubConfig(repoDir) {
+  const base = readJsonObject(path.join(repoDir, LOG_HUB_CONFIG_REL));
+  const local = readJsonObject(path.join(repoDir, LOG_HUB_LOCAL_CONFIG_REL));
+  return { base, local, merged: { ...(base || {}), ...(local || {}) } };
+}
+
+/** The merged `serverUrl` of the repo's hook config (local overrides base), or null. */
+export function readServerUrl(repoDir) {
+  const { merged } = readLogHubConfig(repoDir);
+  return typeof merged.serverUrl === 'string' ? merged.serverUrl : null;
+}
+
+/**
+ * FR-11 / FR-12: the per-machine values must live in `log-hub.local.json` only.
+ * Pass iff local.serverUrl === serverUrl, local.otelReceiverPort is an integer, base has no
+ * otelReceiverPort and — unless `legacy` (FR-12: the committed pre-split file keeps its
+ * serverUrl) — base.serverUrl is absent or empty (the tracked template keeps `"serverUrl": ""`).
+ * Returns { ok, problems: string[], base, local }.
+ */
+export function checkLocalConfig(repoDir, { legacy = false, serverUrl = STAND_URL } = {}) {
+  const { base, local } = readLogHubConfig(repoDir);
+  const problems = [];
+  if (!local) {
+    problems.push(`${LOG_HUB_LOCAL_CONFIG_REL} is missing or unreadable`);
+  } else {
+    if (local.serverUrl !== serverUrl) {
+      problems.push(`${LOG_HUB_LOCAL_CONFIG_REL} serverUrl is ${JSON.stringify(local.serverUrl)}, expected "${serverUrl}"`);
+    }
+    if (!Number.isInteger(local.otelReceiverPort)) {
+      problems.push(`${LOG_HUB_LOCAL_CONFIG_REL} otelReceiverPort is ${JSON.stringify(local.otelReceiverPort)}, expected an integer`);
+    }
+  }
+  const b = base || {};
+  if (b.otelReceiverPort !== undefined) {
+    problems.push(`${LOG_HUB_CONFIG_REL} has otelReceiverPort ${JSON.stringify(b.otelReceiverPort)}, expected none`);
+  }
+  if (!legacy && b.serverUrl) {
+    problems.push(`${LOG_HUB_CONFIG_REL} has serverUrl ${JSON.stringify(b.serverUrl)}, expected none or empty`);
+  }
+  return { ok: problems.length === 0, problems, base, local };
+}
+
+/**
  * Runs the installer one-liner in `repoDir` (`shell: true`, stdin closed, `env` = childEnv()).
- * Success needs exit 0, "Hooks installed" in the output and `log-hub.json` serverUrl === STAND_URL;
+ * Success needs exit 0, "Hooks installed" in the output and the merged serverUrl of
+ * `log-hub.json` + `log-hub.local.json` === STAND_URL;
  * anything else throws (infra step `hooks`). Warnings are logged and returned, never fatal.
  * opts: { logFile, timeoutMs, expectedServerUrl }
  * Returns { exitCode, serverUrl, warnings }.
@@ -81,7 +129,7 @@ export async function installHook(repoDir, command, env, opts = {}) {
   const serverUrl = readServerUrl(repoDir);
   if (serverUrl !== expectedServerUrl) {
     throw new Error(
-      `hook install in ${repo}: ${LOG_HUB_CONFIG_REL} serverUrl is ${JSON.stringify(serverUrl)}, expected "${expectedServerUrl}"${where}`,
+      `hook install in ${repo}: serverUrl merged from ${LOG_HUB_CONFIG_REL} and ${LOG_HUB_LOCAL_CONFIG_REL} is ${JSON.stringify(serverUrl)}, expected "${expectedServerUrl}"${where}`,
     );
   }
   return { exitCode: res.exitCode, serverUrl, warnings };

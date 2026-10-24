@@ -86,24 +86,46 @@ export function gitSetup(repoDir, remoteUrl) {
 }
 
 /**
- * Creates all five test repos under the run-dir. Throws (infra step `repos`) on any failure,
- * including a `CLAUDE.md` anywhere in a repo.
+ * Creates the test repos under the run-dir. Throws (infra step `repos`) on any failure,
+ * including a `CLAUDE.md` anywhere in a fixture.
+ * opts.beforeCommit(repo, dir): called after the fixture is copied and checked, before the
+ * fixture commit, so files it writes (e.g. a generated CLAUDE.md, FR-4a) land in that commit.
  * Returns [{ repo, dir, remoteUrl, head, harnessFiles }], harnessFiles being the `.claude/…`
  * paths (relative to the repo, platform separators).
  */
-export function createRepos(runPaths, { repos = REPO_NAMES, fixturesDir = FIXTURES_DIR } = {}) {
+export function createRepos(runPaths, { repos = REPO_NAMES, fixturesDir = FIXTURES_DIR, beforeCommit = null } = {}) {
   const result = [];
   for (const repo of repos) {
     const dir = runPaths.repoDir(repo);
     const copied = copyFixture(path.join(fixturesDir, repo), dir);
+    // The fixtures themselves must never carry a CLAUDE.md; only beforeCommit may add one.
     const claudeMd = findClaudeMd(dir);
     if (claudeMd.length > 0) {
       throw new Error(`repo ${repo} must not contain CLAUDE.md, found: ${claudeMd.join(', ')}`);
     }
+    if (beforeCommit) beforeCommit(repo, dir);
     const remoteUrl = REMOTE_URL(repo);
     const { head } = gitSetup(dir, remoteUrl);
     const harnessFiles = copied.filter((rel) => rel.split(path.sep)[0] === HARNESS_DIR);
     result.push({ repo, dir, remoteUrl, head, harnessFiles });
   }
   return result;
+}
+
+export const LEGACY_LOG_HUB_COMMIT_MSG = 'legacy log-hub config';
+
+/**
+ * FR-12: writes `json` as the pre-split `.artisyn/config/log-hub.json` into an already committed
+ * repo and commits it as a second commit, so the current installer runs over a tracked legacy config.
+ * Returns the new HEAD.
+ */
+export function seedLegacyLogHub(dir, json) {
+  const rel = path.join('.artisyn', 'config', 'log-hub.json');
+  const file = path.join(dir, rel);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, `${JSON.stringify(json, null, 2)}
+`);
+  git(dir, ['add', '--', rel.split(path.sep).join('/')]);
+  git(dir, ['commit', '-q', '-m', LEGACY_LOG_HUB_COMMIT_MSG]);
+  return git(dir, ['rev-parse', 'HEAD']).stdout.trim();
 }

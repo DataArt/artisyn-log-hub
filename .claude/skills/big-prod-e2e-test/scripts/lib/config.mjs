@@ -141,7 +141,7 @@ export const MCP_WARMUP_MS = 3 * 60 * 1000;
 
 // File categories (phase P9b): set through the UI on FC_REPO by its owner, then checked against
 // FC_SCENARIO's per-category read stats. Patterns are JS regexps on repo-relative paths.
-export const FC_REPO = 'node-service';
+export const FC_REPO = 'dotnet-api';
 export const FC_SCENARIO = 'S7';
 export const FC_CATEGORIES = Object.freeze([
   Object.freeze({ name: 'sources', patterns: Object.freeze(['^src/']) }),
@@ -149,7 +149,25 @@ export const FC_CATEGORIES = Object.freeze([
 ]);
 export const FC_STATS_TIMEOUT_MS = 60000;
 export const MODEL_DATE_SUFFIX_RE = /-\d{8}$/;
-export const VERIFIER_TOOL_BUDGET = 25;
+// Login steps of every verifier run; per-check calls and screenshots are added on top.
+export const VERIFIER_TOOL_BUDGET_BASE = 4;
+// How long to wait for a session's OTEL telemetry cost to reach the server before cost is skipped.
+export const TELEMETRY_WAIT_MS = 120000;
+
+// Legacy hook (FR-13): the previous release, built from git and installed into LEGACY_REPO.
+export const PREV_RELEASE_REF = '25146c8';
+export const PREV_INSTALLER_VERSION = '1.0.69';
+export const PREV_HOOK_VERSION = '2.21.1';
+export const LEGACY_REPO = 'legacy-hook';
+export const LEGACY_OWNER = 'U3';
+
+// Upgrade (FR-12): the pre-split log-hub.json committed into a repo before the current installer runs.
+export const LEGACY_LOG_HUB_JSON = Object.freeze({ serverUrl: STAND_URL, otelReceiverPort: 4318 });
+
+// FR-4a: a CLAUDE.md written into the run-dir copy of CLAUDE_MD_REPO (never into the fixture).
+export const CLAUDE_MD_REPO = 'js-cli';
+export const GENERATED_CLAUDE_MD =
+  '# js-cli\n\nSmall Node.js CLI used by the Log Hub pre-prod test. Source lives in lib/, the entry point in bin/.\n';
 export const OTEL_RECEIVER_MARKER = 'otel-receiver.js';
 export const ENV_SCRUB_RE = /^(CLAUDE|ANTHROPIC_|OTEL_|ARTISYN_)/;
 export const ENV_PASSTHROUGH = Object.freeze(['ANTHROPIC_API_KEY', 'CLAUDE_CODE_OAUTH_TOKEN']);
@@ -209,15 +227,20 @@ export function resolveRun(stamp, root = gitRoot()) {
     verifyDir,
     mcpConfig: (id) => path.join(verifyDir, `mcp-${id}.json`),
     sessionMcpConfig: (id) => path.join(verifyDir, `mcp-session-${id}.json`),
+    sessionSettings: (id) => path.join(verifyDir, `settings-${id}.json`),
     fcDir: path.join(reportDir, 'FC'),
 
     reportDir,
     reportJson: path.join(reportDir, 'report.json'),
     indexMd: path.join(reportDir, 'index.md'),
+    indexHtml: path.join(reportDir, 'index.html'),
     reportSessionDir: (id) => path.join(reportDir, id),
     verdictFile: (id) => path.join(reportDir, id, 'verdict.json'),
     visibilityDir: path.join(reportDir, 'visibility'),
 
     repoDir: (repo) => path.join(runDir, repo),
+    prevSrcDir: path.join(runDir, '_prev-src'),
+    prevHookDir: path.join(runDir, '_prev-hook'),
+    worktreeDir: path.join(runDir, 'ts-webapp-wt'),
   };
 }

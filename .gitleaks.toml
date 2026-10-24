@@ -1,0 +1,18 @@
+# gitleaks config — used by the git hooks (scripts/gitleaks-scan.js) and the CI workflow
+# (.github/workflows/gitleaks.yml). The default rule set plus an allowlist of reviewed false
+# positives. Add an entry only for a value that is verifiably not a secret, keep it as narrow as
+# possible and say what it is. See docs/knowledgebase/git-hooks.md.
+
+title = "Artisyn Log Hub"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Public PGP fingerprint of the git-core PPA signing key (docker-dev/Dockerfile)"
+regexTarget = "match"
+regexes = ['''^GIT_PPA_KEY_FPR=[0-9A-F]{40}$''']
+
+[[allowlists]]
+description = "Prose read as a generic API key (docs/qaa-overview/scenarios/03-session-view-reports-golden.md)"
+regexes = ['''^glob/categories$''']

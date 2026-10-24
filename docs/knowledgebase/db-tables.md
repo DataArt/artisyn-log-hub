@@ -932,7 +932,7 @@ claude-before-artisyn heal and the settings-save recompute share one writer.
 | `session_id`    | integer      | NOT NULL | FK → sessions.id, ON DELETE CASCADE                                    |
 | `category_name` | varchar(64)  | NOT NULL | Category name from the matching `repo_config` (e.g. `"code"`, `"docs"`) |
 | `file_count`    | integer      | NOT NULL | DEFAULT 0 — number of Read tool calls matched to this category         |
-| `byte_count`    | bigint       | NOT NULL | DEFAULT 0 — total bytes returned by matched Read calls                 |
+| `byte_count`    | bigint       | NOT NULL | DEFAULT 0 — total size of the text the matched Read calls returned into the context: `String.length` (UTF-16 code units, not UTF-8 bytes), line-number prefixes included, failed and repeated Reads included — by design, not the file size on disk |
 | `team_id`       | integer      | nullable | FK → teams.id, ON DELETE CASCADE; set when ingested under a team scope |
 | `user_id`       | integer      | nullable | FK → users.id, ON DELETE CASCADE; set when ingested under a user scope |
 

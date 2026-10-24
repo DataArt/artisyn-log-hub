@@ -15,7 +15,9 @@ under `.artisyn/marketplace/`. Configuration lives in JSON files under `.artisyn
 file-copying or `.claude/settings.json` hand-editing step.
 
 Prerequisites:
-- Node.js >= 18.19 in PATH
+- Node.js in PATH — any current LTS release (the user-facing promise in `hook/INSTALL_HOOK.md`; the
+  technical floor is `engines >=18.19`). The hook runs with the user's own `node`; see the
+  "Runs on every current Node.js LTS" principle in [hook-system-overview.md](hook-system-overview.md)
 - Git installed; project must be a git repository
 - Claude Code with plugin support on `PATH` (the installer shells out to `claude plugin marketplace add` /
   `claude plugin install`)
@@ -78,8 +80,21 @@ npx "<server-origin>/static/artisyn-hooks-installer.tgz" install --server-url "<
    throwaway temp directory and POSTs a synthetic `/artisyn/register`, expecting `200`. Required but non-fatal,
    like step 8: on failure it prints the exact foreground command to reproduce the problem, and never
    re-allocates the port.
+   Before it (installer `1.0.78`+ / hook `2.24.2`+), the **hook load check**: every script the installed
+   `hooks/hooks.json` runs is started exactly the way Claude Code starts it — `node` from `PATH`, cwd = the
+   project — with `--self-check` (`exitIfSelfCheck` in `hook-log.js`, called by each entry script right after
+   its top-level requires: prints `{"selfCheck":"ok",…}` and exits 0 without reading stdin or writing a file).
+   It catches what kills every hook before it can log a line: the project's `package.json` `"type": "module"`
+   (the plugin pins CommonJS with its own `scripts/package.json`), no `node` on `PATH`, a Node too old for
+   the hook, a missing file. Success prints `✓ Hook scripts load with node <version> (n/n)`; a failure names
+   each script with its exit code and error line plus a `node "<script>" --self-check` command to reproduce.
+   Same required-but-non-fatal contract as the receiver check (`verifyHookScriptsLoad` in `install.ts`).
 10. If a pre-plugin install is detected, migrates it automatically (see below).
-11. Prints a success summary.
+11. Prints the summary. When the hook load check or the receiver check failed, the headline is
+    `⚠ Hooks installed (hooks vX), but they are not working in this project yet:` with one line per
+    problem, and `Hooks are configured, but not working yet …` replaces `Hooks are fully configured and
+    ready to use.` (`upgrade` prints the same headline). The exit code stays `0`: the files are in place, and
+    scripts that run the installer must not break on a diagnosis.
 
 **Per-repo marketplace name** (installer `1.0.69`+). `claude plugin marketplace add` registers a marketplace by
 its `marketplace.json` name at the **user** level (`known_marketplaces.json`, the user `settings.json`,

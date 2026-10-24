@@ -191,22 +191,22 @@ Features that need coverage and where they came from:
 
 ## Acceptance Criteria
 
-- [ ] FR-1: an S4 verdict has a field for the Agents table and the agent modal, with screenshot evidence; it fails when the table is missing or a modal tab is empty.
-- [ ] FR-2: an S1 verdict has a Bash-tab field with screenshot evidence listing the command, cwd and the repo-relative `tests/calc.test.js`.
-- [ ] FR-3: a verdict has a Context Growth step-modal field with screenshot evidence.
-- [ ] FR-4: S5 and the chosen skill session have a System Context field that checks the rule/skill and its source; for S5 it also checks the generated `CLAUDE.md` on the Files sub-tab.
-- [ ] FR-4a: no fixture source has a CLAUDE.md; P3 writes the generated one only into the run-dir `js-cli`, and the P3 FR-6 row checks that.
-- [ ] FR-5: a cost field passes when UI cost and `costUsd` agree within tolerance, fails otherwise, and is `skipped` when `costUsd` is null.
-- [ ] FR-6: S8 runs with `--permission-mode default` and the `Read` / `Bash(node:*)` allow list, is retried until both a failed Bash call and a denied `Write` happen, and its verdict checks the error and rejected statuses and the denial text.
-- [ ] FR-7: S9 is retried until a background agent and its task-notification happen; its verdict checks the agent in the tree and the work time against `S9.expected.json`.
-- [ ] FR-8: S10 runs from a repo subdirectory and S11 from a linked-worktree subdirectory with `ARTISYN_PROJECT_ROOT`; each verdict checks the repo attribution and root-relative paths.
-- [ ] FR-10: row V8 is in the report and fails if admin sees any U1–U3 repo or session data.
-- [ ] FR-11 / FR-12: AC rows for the local-config and upgrade checks are in the report, with the file contents as detail.
-- [ ] FR-13: a session from the previous-release hook, built from `PREV_RELEASE_REF`, is ingested and verified in the UI; the report names the commit and the hook version used.
-- [ ] FR-14: `index.md` lists every new session, check and V row, and the FR-10 completeness check covers them.
-- [ ] FR-15: the KB article and SKILL.md describe the new phases, sessions and rows.
-- [ ] `npm run test:scripts` passes, including any new helper-lib tests in `scripts/__tests__/big-prod-e2e-test.test.js`.
-- [ ] One full `/big-prod-e2e-test` run passes, or every failure is classified as a product defect or an infrastructure failure and reported.
+- [x] FR-1: an S4 verdict has a field for the Agents table and the agent modal, with screenshot evidence; it fails when the table is missing or a modal tab is empty.
+- [x] FR-2: an S1 verdict has a Bash-tab field with screenshot evidence listing the command, cwd and the repo-relative `tests/calc.test.js`.
+- [x] FR-3: a verdict has a Context Growth step-modal field with screenshot evidence.
+- [x] FR-4: S5 and the chosen skill session have a System Context field that checks the rule/skill and its source; for S5 it also checks the generated `CLAUDE.md` on the Files sub-tab.
+- [x] FR-4a: no fixture source has a CLAUDE.md; P3 writes the generated one only into the run-dir `js-cli`, and the P3 FR-6 row checks that.
+- [x] FR-5: a cost field passes when UI cost and `costUsd` agree within tolerance, fails otherwise, and is `skipped` when `costUsd` is null.
+- [x] FR-6: S8 runs with `--permission-mode default` and the `Read` / `Bash(node:*)` allow list, is retried until both a failed Bash call and a denied `Write` happen, and its verdict checks the error and rejected statuses and the denial text.
+- [x] FR-7: S9 is retried until a background agent and its task-notification happen; its verdict checks the agent in the tree and the work time against `S9.expected.json`.
+- [x] FR-8: S10 runs from a repo subdirectory and S11 from a linked-worktree subdirectory with `ARTISYN_PROJECT_ROOT`; each verdict checks the repo attribution and root-relative paths.
+- [x] FR-10: row V8 is in the report and fails if admin sees any U1–U3 repo or session data.
+- [x] FR-11 / FR-12: AC rows for the local-config and upgrade checks are in the report, with the file contents as detail.
+- [x] FR-13: a session from the previous-release hook, built from `PREV_RELEASE_REF`, is ingested and verified in the UI; the report names the commit and the hook version used.
+- [x] FR-14: `index.md` lists every new session, check and V row, and the FR-10 completeness check covers them.
+- [x] FR-15: the KB article and SKILL.md describe the new phases, sessions and rows.
+- [x] `npm run test:scripts` passes, including any new helper-lib tests in `scripts/__tests__/big-prod-e2e-test.test.js`.
+- [x] One full `/big-prod-e2e-test` run passes, or every failure is classified as a product defect or an infrastructure failure and reported.
 
 ## Common sense considerations
 
@@ -240,3 +240,5 @@ Features that need coverage and where they came from:
 ## Notes
 
 - Origin: a gap review of the skill against the commits since 2026-10-20 (session of 2026-10-23).
+
+**2026-10-24:** FR-2, FR-3, FR-4 proven by `/big-prod-e2e-test` run `20261023-233414` (PASS): S1 `bash` + `contextGrowth`, S2 and S5 `systemContext` fields pass with `S1/bash.png`, `S1/context-growth.png`, `S2/sysctx.png`, `S5/sysctx.png`.

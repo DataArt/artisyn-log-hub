@@ -4,7 +4,14 @@ Records Claude Code sessions and uploads them to artisyn-log-hub. Ships as a **C
 project-local marketplace under `.artisyn/marketplace/` — no manual file copying, no manual `.claude/settings.json`
 editing.
 
-**Requirements:** Node.js ≥ 18.19, Git, Claude Code with plugin support.
+**Requirements:**
+
+- **Node.js — any current LTS release** ([list of LTS lines](https://nodejs.org/en/about/previous-releases)),
+  installed and on `PATH`. Claude Code runs the hook with your own `node`, so Node.js is a hard requirement
+  even if you installed Claude Code with the native installer (which does not need Node itself). Any
+  current LTS works; you do not need a specific version.
+- Git; the project must be a git repository.
+- Claude Code with plugin support.
 
 ---
 
@@ -18,6 +25,11 @@ npx <server-origin>/static/artisyn-hooks-installer.tgz install
 
 Where `<server-origin>` is the base URL of your artisyn-log-hub instance (e.g. `http://localhost:3000`). The API
 Keys page (Install tab) shows this command pre-filled with the correct origin — copy it from there.
+
+After installing, the installer starts every hook once with your `node`, in this project, the way Claude Code
+will (`--self-check`), and checks the OTEL receiver. If something cannot start — for example no `node` on
+`PATH` — it prints `⚠ Hooks installed …, but they are not working in this project yet` with the reason and a
+command to reproduce it, instead of `ready to use`.
 
 ### Optional CLI flags (`install` only)
 

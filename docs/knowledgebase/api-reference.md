@@ -1656,7 +1656,7 @@ interface TimelineSession {
   group: string | null;    // null when groupBy is absent; branch/email when groupBy is set
   workTimeMs: number;      // session_stats.work_time_ms: per-prompt active time from the claude transcript (0 if no claude log)
   totalCost: number | null; // USD cost computed from token usage × model_pricing; null if model unknown
-  fileStatsByCategory: Record<string, { files: number; bytes: number }>; // per-category file read stats; keys are category names from RepoConfig (e.g. "code", "docs"); resolved using the effective config for the caller's scope
+  fileStatsByCategory: Record<string, { files: number; bytes: number }>; // per-category file read stats; `bytes` = what the Read calls put into the context: the `String.length` of the tool-result text (UTF-16 code units, not UTF-8 bytes; incl. the line-number prefixes), not the size of the file on disk; every Read with a `file_path` counts toward `files`, failed and repeated Reads included — by design (2026-10-24; `computeToolResultBytes` in `server/src/logs/claude-extractor.ts`); keys are category names from RepoConfig (e.g. "code", "docs"); resolved using the effective config for the caller's scope
   // Both TREE-scoped: the session AND every sub-agent session below it at any depth,
   // summed from the per-node session_stats rows by session-tree-metrics.sql.ts →
   // treeMetricsCte(), plus the root's raw-JSONB fallback when the root has no session_stats

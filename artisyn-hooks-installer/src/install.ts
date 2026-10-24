@@ -1,4 +1,4 @@
-import { execSync, execFileSync, spawn, ChildProcess } from 'child_process';
+import { execSync, execFileSync, spawn, spawnSync, ChildProcess } from 'child_process';
 import * as crypto from 'crypto';
 import * as fs from 'fs';
 import * as http from 'http';
@@ -657,7 +657,7 @@ async function applyHooksUpdate(
   claudeDir: string,
   cwd: string,
   overrides: Record<string, string>,
-): Promise<{ newVersion: string; marketplaceName: string }> {
+): Promise<{ newVersion: string; marketplaceName: string; problems: string[] }> {
   const archivePath = resolveArchivePath();
   let archiveBuffer: Buffer;
 
@@ -768,7 +768,12 @@ async function applyHooksUpdate(
   // The post-install smoke test — same required-but-non-fatal contract as the
   // activation above, and for the same reason: by now the port is written everywhere, so a
   // failure is a diagnosis rather than a retry trigger.
-  await verifyInstalledReceiver(otelPort, cwd);
+  // Then every hook entry script, started the way Claude Code starts it. Both results feed the
+  // summary: a hook that cannot start must never be reported as "ready to use".
+  const problems = verifyHookScriptsLoad(cwd);
+  if (!(await verifyInstalledReceiver(otelPort, cwd))) {
+    problems.push(`the OTEL receiver could not be verified on 127.0.0.1:${otelPort}`);
+  }
 
   // --- Step 3 (migration only): delete the now-superseded legacy directory and clean up any
   // recommendations it produced. Re-checked (not gated on `migrating`) so a delete failure from a
@@ -782,7 +787,14 @@ async function applyHooksUpdate(
   // Re-checked every run (see migrateLegacyWorkDir's own comment) — not gated on `migrating`.
   migrateLegacyWorkDir(cwd);
 
-  return { newVersion, marketplaceName };
+  return { newVersion, marketplaceName, problems };
+}
+
+/** The headline printed instead of a success line when the post-install checks found problems. */
+function printNotWorking(action: string, newVersion: string, problems: string[]): void {
+  console.warn(`⚠ Hooks ${action} (hooks v${newVersion}), but they are not working in this project yet:`);
+  for (const p of problems) console.warn(`  - ${p}`);
+  console.warn('  See the warnings above. Claude Code runs the hooks with your own `node` from PATH; any current Node.js LTS release works.');
 }
 
 export async function runInstall(flags?: CliFlags): Promise<void> {
@@ -875,7 +887,7 @@ export async function runInstall(flags?: CliFlags): Promise<void> {
     }
   }
 
-  const { marketplaceName } = await applyHooksUpdate(claudeDir, cwd, overrides);
+  const { marketplaceName, problems } = await applyHooksUpdate(claudeDir, cwd, overrides);
 
   // Security warning if API key was passed on the command line
   if (flags?.apiKey) {
@@ -885,7 +897,12 @@ export async function runInstall(flags?: CliFlags): Promise<void> {
   const hasServerUrl = !!flags?.serverUrl;
   const hasApiKey = !!flags?.apiKey;
 
-  console.log(`✓ Hooks ${currentVersion && currentVersion !== newVersion ? 'updated' : 'installed'} successfully! (hooks v${newVersion})`);
+  const action = currentVersion && currentVersion !== newVersion ? 'updated' : 'installed';
+  if (problems.length === 0) {
+    console.log(`✓ Hooks ${action} successfully! (hooks v${newVersion})`);
+  } else {
+    printNotWorking(action, newVersion, problems);
+  }
   console.log('');
   console.log('Plugin registered in .claude/settings.json:');
   console.log(`  enabledPlugins["${pluginKey(marketplaceName)}"] = true`);
@@ -899,7 +916,9 @@ export async function runInstall(flags?: CliFlags): Promise<void> {
   console.log(`Telemetry destination: ${installedServerUrl ?? '(not set)'}`);
   printDataCollectionNotice(installedServerUrl);
 
-  if (hasServerUrl && hasApiKey) {
+  if (hasServerUrl && hasApiKey && problems.length > 0) {
+    console.log('Hooks are configured, but not working yet — fix the problems listed above and run install again.');
+  } else if (hasServerUrl && hasApiKey) {
     console.log('Hooks are fully configured and ready to use.');
     // Only verify in TTY mode — claude may not be on PATH in non-interactive environments
     if (process.stdin.isTTY) {
@@ -1038,9 +1057,12 @@ export async function runUpgrade(): Promise<void> {
   // Re-adding an already-known marketplace and re-installing an already-installed plugin at the
   // same version are both documented no-ops (design decision 8) — this call is safe (and required)
   // on every upgrade run, migrating or not.
-  await applyHooksUpdate(claudeDir, cwd, {});
+  const { problems } = await applyHooksUpdate(claudeDir, cwd, {});
 
-  if (currentVersion === newVersion) {
+  if (problems.length > 0) {
+    printNotWorking(currentVersion === newVersion ? 're-applied' : 'upgraded', newVersion, problems);
+    console.log(`  Previous version: v${currentVersion}`);
+  } else if (currentVersion === newVersion) {
     console.log(`✓ Hooks already at latest version v${newVersion} (re-applied).`);
     console.log(`  Previous version: v${currentVersion}`);
     console.log(`  Current version:  v${newVersion}`);
@@ -1590,6 +1612,86 @@ function isArtisynOwnedOtelValue(key: string, env: Record<string, unknown>, owne
   return OTEL_ENDPOINT_KEYS.every(
     endpointKey => env[endpointKey] === undefined || isArtisynOwnedOtelValue(endpointKey, env, ownedPorts),
   );
+}
+
+/** Plugin-relative paths (`scripts/<x>.js`) of every script the installed `hooks/hooks.json` runs. */
+function installedHookScripts(cwd: string): string[] {
+  const scripts = new Set<string>();
+  try {
+    const parsed = JSON.parse(fs.readFileSync(relToPath(cwd, `${PLUGIN_ROOT_REL}/hooks/hooks.json`), 'utf8')) as {
+      hooks?: Record<string, Array<{ hooks?: Array<{ args?: unknown[] }> }>>;
+    };
+    for (const groups of Object.values(parsed.hooks ?? {})) {
+      for (const group of groups ?? []) {
+        for (const hook of group.hooks ?? []) {
+          const first = hook.args?.[0];
+          const m = typeof first === 'string' ? /^\$\{CLAUDE_PLUGIN_ROOT\}\/(.+)$/.exec(first) : null;
+          if (m) scripts.add(m[1]);
+        }
+      }
+    }
+  } catch {
+    // An unreadable hooks.json is reported by the caller as "no hook script found".
+  }
+  return [...scripts].sort();
+}
+
+/** The line of a failed run worth showing: the first error-looking stderr line, else the last one. */
+function failureLine(stderr: string): string {
+  const lines = stderr.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+  const line = lines.find((l) => /Error|Cannot find|not defined|ERR_/.test(l)) ?? lines[lines.length - 1] ?? '';
+  return line.slice(0, 300);
+}
+
+const HOOK_SELF_CHECK_TIMEOUT_MS = 20_000;
+
+// Post-install load check: runs every hook entry script of the installed hooks.json exactly the way
+// Claude Code will — `node` from PATH, cwd = the project — with `--self-check` (hook 2.24.2+), which
+// loads the script's whole module graph and exits 0 without reading stdin or writing anything. It
+// catches what kills every hook before it can log a line: the project's package.json
+// `"type": "module"` (the plugin's own scripts/package.json pins CommonJS), a `node` too old for the
+// hook, no `node` on PATH, a missing file. Same required-but-non-fatal contract as
+// `verifyInstalledReceiver`: the files are already in place, so a failure is a diagnosis that the
+// summary reports instead of "ready to use". Returns one problem line per failing script.
+export function verifyHookScriptsLoad(cwd: string): string[] {
+  const scripts = installedHookScripts(cwd);
+  if (scripts.length === 0) {
+    const problem = `no hook script found in ${PLUGIN_ROOT_REL}/hooks/hooks.json`;
+    console.warn(`Warning: the hook scripts could not be checked: ${problem}`);
+    return [problem];
+  }
+  const nodeVersion = spawnSync('node', ['--version'], { encoding: 'utf8', windowsHide: true, timeout: HOOK_SELF_CHECK_TIMEOUT_MS });
+  if (nodeVersion.error || nodeVersion.status !== 0) {
+    const problem = `\`node\` is not runnable from PATH (${nodeVersion.error?.message ?? `exit ${nodeVersion.status}`}); Claude Code runs every hook with it`;
+    console.warn(`Warning: ${problem}. Install any current Node.js LTS release.`);
+    return [problem];
+  }
+  const problems: string[] = [];
+  for (const rel of scripts) {
+    const res = spawnSync('node', [relToPath(cwd, `${PLUGIN_ROOT_REL}/${rel}`), '--self-check'], {
+      cwd,
+      encoding: 'utf8',
+      windowsHide: true,
+      timeout: HOOK_SELF_CHECK_TIMEOUT_MS,
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    if (!res.error && res.status === 0 && /"selfCheck":"ok"/.test(res.stdout ?? '')) continue;
+    const why = res.error ? res.error.message : `exit ${res.status}${res.signal ? ` (${res.signal})` : ''}`;
+    const detail = failureLine(res.stderr ?? '');
+    problems.push(`${rel}: ${why}${detail ? ` — ${detail}` : ''}`);
+  }
+  const node = nodeVersion.stdout.trim();
+  if (problems.length === 0) {
+    console.log(`✓ Hook scripts load with node ${node} (${scripts.length}/${scripts.length})`);
+  } else {
+    console.warn(
+      `Warning: ${problems.length} of ${scripts.length} hook script(s) do not start with node ${node} in this project, ` +
+      'so Claude Code sessions here will not be recorded:',
+    );
+    for (const p of problems) console.warn(`  ${p}`);
+    console.warn(`  To reproduce: node "${relToPath(cwd, `${PLUGIN_ROOT_REL}/${scripts[0]}`)}" --self-check`);
+  }
+  return problems;
 }
 
 // Post-install smoke test: spawn the *real* `otel-receiver.js` from the installed plugin tree with
