@@ -32,6 +32,9 @@ ARG UBUNTU_IMAGE=ubuntu:24.04
 # Dockerfile edit does not download them again. The stock docker-clean hook is removed so
 # downloaded .debs stay in the cache mount.
 FROM ${UBUNTU_IMAGE} AS fetch-base
+# pipefail: a failed download in `echo … | sha256sum` or `… | awk` fails the step. Inherited by
+# every fetch-* stage (repeated there for hadolint); the final stage sets it again.
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 ENV DEBIAN_FRONTEND=noninteractive
 RUN --mount=type=cache,id=apt-cache-fetch-base,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,id=apt-lists-fetch-base,target=/var/lib/apt/lists,sharing=locked \
@@ -41,6 +44,7 @@ RUN --mount=type=cache,id=apt-cache-fetch-base,target=/var/cache/apt,sharing=loc
 WORKDIR /dl
 
 FROM fetch-base AS fetch-node
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 ARG NODE_VERSION=24.22.1
 ARG NODE_SHA256=6c172a9ab6718f7b801fb5a7bd486af2ee5e32758086a04b84fcce2aa77095e6
 RUN set -eux; \
@@ -52,6 +56,7 @@ RUN set -eux; \
     rm -f /out/CHANGELOG.md /out/LICENSE /out/README.md
 
 FROM fetch-base AS fetch-claude
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 ARG CLAUDE_VERSION=2.1.304
 ARG CLAUDE_SHA256=ea0f135784631619a7a409d07322ecec964f9cc4fd377508ed1ba3f141f27912
 RUN set -eux; \
@@ -61,6 +66,7 @@ RUN set -eux; \
     chmod 0755 claude
 
 FROM fetch-base AS fetch-bun
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 ARG BUN_VERSION=1.3.14
 ARG BUN_SHA256=951ee2aee855f08595aeec6225226a298d3fea83a3dcd6465c09cbccdf7e848f
 RUN set -eux; \
@@ -72,6 +78,7 @@ RUN set -eux; \
     install -m 0755 bun-linux-x64/bun /out/bun
 
 FROM fetch-base AS fetch-mailpit
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # Keep equal to the Mailpit image tag in the compose files (DD-12).
 ARG MAILPIT_VERSION=1.31.6
 ARG MAILPIT_SHA256=10fa12ccc610f653d4ed4df848c1817f9935dcf4e9a6a458a19ab0fa02093f91
@@ -85,6 +92,7 @@ RUN set -eux; \
 
 # gitleaks: the repo's git hooks (.githooks/) refuse to commit or push without it.
 FROM fetch-base AS fetch-gitleaks
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 # Keep equal to GITLEAKS_VERSION in .github/workflows/gitleaks.yml.
 ARG GITLEAKS_VERSION=8.30.1
 ARG GITLEAKS_SHA256=551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
@@ -97,6 +105,7 @@ RUN set -eux; \
     chmod 0755 /out/gitleaks
 
 FROM fetch-base AS fetch-chrome
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 ARG CHROME_VERSION=156.0.8078.47-1
 ARG CHROME_SHA256=6c92cd22e90c6e3e255d782991543fa2091db8614e8536a971a7433a5c4d7ac8
 RUN set -eux; \
@@ -109,6 +118,7 @@ RUN set -eux; \
 # it runs in parallel with the apt stages and stays cached when later steps change. The browsers
 # dir is relocatable; the final stage copies it to dev's default ~/.cache/ms-playwright.
 FROM fetch-base AS fetch-playwright
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 ARG PLAYWRIGHT_VERSION=1.60.0
 COPY --from=fetch-node /out/ /usr/local/
 ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
@@ -122,13 +132,13 @@ RUN set -eux; \
 FROM ${UBUNTU_IMAGE} AS chrome-debs
 ENV DEBIAN_FRONTEND=noninteractive
 COPY --from=fetch-chrome /dl/chrome.deb /tmp/chrome.deb
+WORKDIR /tmp
 RUN --mount=type=cache,id=apt-cache-chrome-debs,target=/var/cache/apt,sharing=locked \
     --mount=type=cache,id=apt-lists-chrome-debs,target=/var/lib/apt/lists,sharing=locked \
     set -eux; \
     rm -f /etc/apt/apt.conf.d/docker-clean; \
     echo 'Acquire::Retries "5";' > /etc/apt/apt.conf.d/80-retries; \
     apt-get update; \
-    cd /tmp; \
     mkdir -p /debs /tmp/archives/partial; \
     apt-get install -y --no-install-recommends --download-only \
       -o Dir::Cache::archives=/tmp/archives ./chrome.deb libasound2t64; \
@@ -139,6 +149,7 @@ RUN --mount=type=cache,id=apt-cache-chrome-debs,target=/var/cache/apt,sharing=lo
 # Final image
 # ---------------------------------------------------------------------------------------------
 FROM ${UBUNTU_IMAGE}
+SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 ARG CLAUDE_VERSION=2.1.304
 ARG NPM_VERSION=11.16.0
 ARG TS_LS_VERSION=6.0.2
@@ -196,7 +207,7 @@ RUN --mount=type=cache,id=apt-cache-final,target=/var/cache/apt,sharing=locked \
     apt-get install -y --no-install-recommends /tmp/debs/*.deb; \
     rm -rf /tmp/debs; \
     rm -f /etc/apt/sources.list.d/google-chrome* /etc/cron.daily/google-chrome; \
-    ! ls /etc/apt/sources.list.d | grep -q google; \
+    test -z "$(find /etc/apt/sources.list.d -name '*google*')"; \
     google-chrome --version
 
 # Node + npm (host versions), bun, Mailpit, gitleaks, the TypeScript language server.
