@@ -145,11 +145,13 @@ air-gapped host), add `AI_TOOL_VERSION_CHECK_ENABLED: "false"` and
 2. `docker load -i <the new bundle's image tar>`
 3. Before upgrading, confirm the `db` container's data really is on the host bind mount, not an
    orphaned anonymous volume: `docker inspect artisyn-log-hub-db --format "{{json .Mounts}}"`
-   should show a single `"Type": "bind"` entry whose `Source` is `$LOG_HUB_DATA_DIR/pgdata` and
-   whose `Destination` matches the `db` service's volume mount in `docker-compose.yml`. If you
-   see a `"Type": "volume"` entry instead (or in addition), stop — that means real data is
-   sitting in an anonymous volume outside the bind mount, and recreating the container will
-   silently drop it.
+   should show a `"Type": "bind"` entry whose `Source` is `$LOG_HUB_DATA_DIR/pgdata` and
+   whose `Destination` (`/var/lib/postgresql/data`) matches the `db` service's volume mount in
+   `docker-compose.yml`, and that directory must hold a `pgdata/` subdirectory with `PG_VERSION`.
+   A `"Type": "volume"` entry with `Destination` `/var/lib/postgresql` is expected and empty: the
+   postgres 18 image declares that path as a volume. Stop only if the bind entry is missing or its
+   `pgdata/` is empty while the app shows data — then real data is sitting in an anonymous
+   volume, and recreating the container will silently drop it.
 4. `docker compose up -d` — recreates only the `app` container with the newly loaded tag; `db` is
    untouched, so Postgres has no downtime.
 5. Database migrations run automatically on app startup — no manual migration step needed.

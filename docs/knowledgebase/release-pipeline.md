@@ -95,9 +95,10 @@ table-tested in `algorithms/release-version.md`.
 4. Full mode only: create the tag `vX.Y.Z` through the REST API (`gh api …/git/refs`). An existing
    tag must already point at this commit. No checkout ever holds a write credential.
 5. Download `release-kit` and `vt-rows` (the latter may be missing).
-6. Render the notes and `CHANGES.md` with `scripts/ci/release-notes.js` (commit range
-   `<previous_tag>..<sha>`; `CHANGES.md` = the `docs/changelog/` entries added in that range),
-   then attest every kit file and `CHANGES.md`.
+6. Render the notes and `CHANGES.md` with `scripts/ci/release-notes.js`: the notes open with
+   "What's new" (the `docs/changelog/` entries added in `<previous_tag>..<sha>`), then the commit
+   list of that range folded into `<details>`, then "Security scan"; `CHANGES.md` holds the same
+   entries as a file. Then attest every kit file and `CHANGES.md`.
 7. Create the **draft** release (`gh release create --draft --verify-tag`), or upload the assets
    with `--clobber` and replace the notes on an existing draft.
 8. Tag the image `X.Y.Z`, `X.Y` and `latest` from the staging digest.
@@ -136,9 +137,10 @@ Assets of each GitHub Release (built by `scripts/release-kit.js` from `release-t
 | `SHA256SUMS` | `<sha256>  <name>` for the zip and every loose file, sorted by name |
 | `CHANGES.md` | "What's new": every `docs/changelog/` entry added since the previous release tag, newest first (all entries on the first release). Written by the `publish` job, attested, but not in `SHA256SUMS` |
 
-So every change that should show up in a release needs its `docs/changelog/` entry (the
-`changelog` skill) before it reaches `release`. An entry edited after a release is not repeated in
-the next `CHANGES.md`; only newly added files count.
+The same entries are the "What's new" section at the top of the release notes. So every change
+that should show up in a release needs its `docs/changelog/` entry (the `changelog` skill) before
+it reaches `release`. An entry edited after a release is not repeated in the next release; only
+newly added files count.
 
 `release-template/LOCAL-BUNDLE.md` belongs to the local test bundle and is never shipped.
 
@@ -205,7 +207,8 @@ Settings, not files — do these once:
 1. After the first PR run of `checks.yml`, add the status check `fast-checks` to the
    `protect-main-release` ruleset next to `scan`.
 2. After the first release push, make the GHCR package `artisyn-log-hub` public and link it to the
-   repository.
+   repository. Public is greyed out ("disabled by organization administrators") until an org owner
+   ticks **Public** under Organization settings → Packages → Package creation.
 3. Enable immutable releases in the repository settings.
 4. Set Actions → "Require approval for all outside collaborators" (first-time and outside
    contributors).
