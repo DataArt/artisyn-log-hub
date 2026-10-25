@@ -11,6 +11,9 @@
 //   1. GET /files/<sha256>; upload (POST /files) only when VirusTotal answers 404.
 //   2. After an upload, poll /analyses/<id> every 16 s (at most 40 times) until
 //      data.attributes.status === 'completed', then re-read GET /files/<sha256>.
+//      A report without last_analysis_date (the file is known but still queued, e.g.
+//      submitted by another run minutes earlier) is re-read every 16 s (at most 40 times)
+//      until it has one; a report that never gets one is neutral, never pass.
 //   3. Verdict from data.attributes.last_analysis_stats (malicious, suspicious);
 //      engine names are the keys of last_analysis_results whose category is
 //      malicious or suspicious.
@@ -109,11 +112,22 @@ function saveRaw(rawDir, name, json) {
   fs.writeFileSync(path.join(rawDir, name), `${JSON.stringify(json, null, 2)}\n`, 'utf8');
 }
 
+/**
+ * True once a GET /files/<sha> report carries a finished analysis. A file someone else
+ * submitted moments ago is already known (HTTP 200) but still queued: no last_analysis_date
+ * and an empty last_analysis_results.
+ */
+function isAnalysed(json) {
+  const attrs = json && json.data && json.data.attributes ? json.data.attributes : null;
+  return Boolean(attrs && attrs.last_analysis_date);
+}
+
 /** Pure verdict from a GET /files/<sha> response (Decision 12, VirusTotal). */
 function verdictFromReport(json) {
   const attrs = json && json.data && json.data.attributes ? json.data.attributes : null;
   const stats = attrs && attrs.last_analysis_stats;
   if (!stats) return { status: 'neutral', counts: {}, note: 'no analysis stats in report' };
+  if (!isAnalysed(json)) return { status: 'neutral', counts: {}, note: 'analysis not finished' };
   const malicious = Number.isInteger(stats.malicious) ? stats.malicious : 0;
   const suspicious = Number.isInteger(stats.suspicious) ? stats.suspicious : 0;
   const results = attrs.last_analysis_results && typeof attrs.last_analysis_results === 'object'
@@ -156,6 +170,15 @@ function scanFile(key, file, rawDir, label) {
     saveRaw(rawDir, `${label}-report.json`, res.json);
   }
   if (res.status !== 200) throw apiError('lookup', res);
+  // Known but not analysed yet (submitted by another run): wait for the report itself.
+  for (let i = 0; i < MAX_POLLS && !isAnalysed(res.json); i += 1) {
+    res = vtRequest(key, `${API}/files/${sha}`);
+    process.stdout.write(`virustotal-scan:   report poll ${i + 1} HTTP ${res.status}`
+      + ` ${isAnalysed(res.json) ? 'analysed' : 'pending'}\n`);
+    if (res.status !== 200) throw apiError('lookup', res);
+  }
+  saveRaw(rawDir, `${label}-report.json`, res.json);
+  if (!isAnalysed(res.json)) throw new Error(`VirusTotal analysis not completed after ${MAX_POLLS} polls`);
   return { sha, json: res.json };
 }
 

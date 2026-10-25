@@ -37,9 +37,10 @@ services:
       # false (default) | true | hop count (e.g. 1) | IP/CIDR list — when enabled it overrides
       # COOKIE_SECURE (cookie secure flag follows X-Forwarded-Proto) and fixes the client IP.
       TRUST_PROXY: ${TRUST_PROXY:-false}
-      # none | password | password-confirm | azure-oauth — see docs/knowledgebase/
-      # authorization-and-authentificaiton.md. Defaults to Mode 2 (password), matching every
-      # install that predates this setting; set explicitly in .env only to change modes.
+      # none | password | password-confirm | azure-oauth — the modes are described in
+      # https://github.com/DataArt/artisyn-log-hub/blob/main/docs/knowledgebase/authorization-and-authentificaiton.md
+      # The installer's .env sets `none`. `password` applies only when .env has no AUTH_MODE line
+      # (older hand-made installs), so they keep the mode they always had.
       AUTH_MODE: ${AUTH_MODE:-password}
       # Optional settings — empty means the app's built-in default (see .env.example).
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-}

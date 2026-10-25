@@ -150,6 +150,24 @@ as artifact `vt-rows`, and `scripts/ci/release-notes.js` renders them into the "
 section of the GitHub Release notes. The scan is report-only there too: a failed or timed-out
 `vt-scan` (40 min) never blocks `publish`; the notes show `no result` for a missing row.
 
+A file VirusTotal already knows can still be unanalysed: identical `install.sh` / `install.ps1`
+are usually submitted minutes earlier by the PR's `virustotal` run, so the release lookup answers
+200 with an empty `last_analysis_results` and no `last_analysis_date`. `virustotal-scan.js`
+re-reads `GET /files/<sha256>` (16 s apart, at most 40 times) until `last_analysis_date` is set,
+and a report without it is `neutral: analysis not finished`, never `pass`. (Release v1.0.0 was
+published before this fix and shows a misleading `0/0 engines` for both scripts.)
+
+#### Reviewed finding: Sigma rule on `install.ps1`
+
+The VirusTotal page of `install.ps1` shows one *medium* match in **Crowdsourced Sigma Rules**:
+"Usage Of Web Request Commands And Cmdlets - ScriptBlock". It is a hunting rule that matches any
+PowerShell script calling `Invoke-WebRequest` / `Invoke-RestMethod` / `WebClient` / `curl`; the
+installer must download `docker-compose.yml` and `env.example` from the release, so it matches by
+design and no rewrite avoids it (every download API is in the rule). Not a malware verdict, and
+the engine count stays clean; do not re-investigate. It is documented for users in
+`release-template/INSTALL.md` ("Security scanners and `install.ps1`") together with the
+script-free install from the verified zip for environments that forbid `irm | iex`.
+
 ## Release verification (FR-32 / FR-33 of `2026-10-23-ci-cd-scans`)
 
 The release-verification part of the `2026-10-23-ci-cd-scans` task — checksums, attestations and
