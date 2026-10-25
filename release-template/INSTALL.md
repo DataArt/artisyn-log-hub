@@ -177,9 +177,9 @@ Mode 1 accepts only local callers: localhost, plus the container's own default g
 the address your host's traffic to the published port arrives from (inside a container it never
 arrives from loopback, so without this Mode 1 could not be used at all). The container logs the
 gateway it trusts at startup — `docker compose logs app` shows a line reading
-`AUTH_MODE=none: container detected, also trusting default gateway ... as a local caller`. See
-`docs/knowledgebase/authorization-and-authentificaiton.md` in the repository before switching
-`AUTH_MODE` if you plan to expose the app beyond localhost.
+`AUTH_MODE=none: container detected, also trusting default gateway ... as a local caller`. Read
+[Authorization and Authentication](https://github.com/DataArt/artisyn-log-hub/blob/v{{VERSION}}/docs/knowledgebase/authorization-and-authentificaiton.md)
+before switching `AUTH_MODE` if you plan to expose the app beyond localhost.
 
 `app` only starts once `db` reports healthy, so Postgres finishing its first-time image pull
 and startup before `app` starts is already guaranteed — no separate prefetch step needed.

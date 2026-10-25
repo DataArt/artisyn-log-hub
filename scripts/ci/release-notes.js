@@ -5,9 +5,12 @@
 // .github/workflows/release.yml. Algorithm and examples:
 // docs/knowledgebase/algorithms/release-assets.md.
 //
-// The notes have two sections:
-//   ## Changes        `- <subject> (<sha>)` per commit, newest first, at most 500 lines,
-//                     then `…and <n> more` linking the compare view <prev>...<tag>
+// The notes have three sections:
+//   ## What's new     every docs/changelog/ entry added since the previous tag (see below),
+//                     newest first, one `### <title>` per entry: the human-readable summary
+//   ## Commits        `- <subject> (<sha>)` per commit, newest first, at most 500 lines,
+//                     then `…and <n> more` linking the compare view <prev>...<tag>; folded
+//                     into a <details> block
 //   ## Security scan  the image digest, a `File | SHA-256 | VirusTotal` table built from
 //                     SHA256SUMS, and the commands to verify checksums and attestations
 //
@@ -18,9 +21,9 @@
 //   file without a scope       -> `not scanned`
 //   scope without a row file   -> `no result`
 //
-// With --changes-out it also writes CHANGES.md, a release asset: every docs/changelog/ entry
-// (<YYYY-MM-DD-HHmm>-<slug>.md) added between the previous tag and <head>, newest first
-// (every entry at <head> on the first release).
+// Changelog entries are the docs/changelog/ files (<YYYY-MM-DD-HHmm>-<slug>.md) added between
+// the previous tag and <head> (every entry at <head> on the first release). With --changes-out
+// the same entries are also written as CHANGES.md, a release asset.
 //
 // Modes:
 //   node scripts/ci/release-notes.js --version X.Y.Z --tag vX.Y.Z [--previous-tag vA.B.C]
@@ -76,17 +79,36 @@ function vtCell(name, rowsByScope) {
 }
 
 /**
+ * Lines of the changelog entries, newest first by name (the name starts with the timestamp):
+ * per entry an empty line, `<heading> <title>` and, when there is a body, an empty line and
+ * the body. No entries: an empty line and `No changelog entries.`
+ */
+function entryLines(entries, heading) {
+  const sorted = (entries || []).slice().sort((a, b) => (a.name < b.name ? 1 : a.name > b.name ? -1 : 0));
+  if (sorted.length === 0) return ['', 'No changelog entries.'];
+  const lines = [];
+  for (const entry of sorted) {
+    const { title, body } = parseChangelogEntry(entry.name, entry.text);
+    lines.push('', `${heading} ${title}`);
+    if (body) lines.push('', body);
+  }
+  return lines;
+}
+
+/**
  * Markdown body of the release.
+ *   entries  [{name, text}] docs/changelog/ files added since the previous tag, any order
  *   commits  [{sha, subject}], newest first
  *   sums     [{name, sha256}] (parseSums)
  *   rows     VirusTotal scan rows ({tool, scope, status, note, link?})
  */
-function renderNotes({ version, tag, previousTag, repo, commits, digest, sums, rows }) {
-  const lines = ['## Changes', ''];
+function renderNotes({ version, tag, previousTag, repo, entries, commits, digest, sums, rows }) {
+  const lines = ['## What\'s new', ...entryLines(entries, '###'), '', '## Commits', ''];
   const list = commits || [];
   if (list.length === 0) {
     lines.push('No commits.');
   } else {
+    lines.push('<details>', `<summary>${list.length} commit${list.length === 1 ? '' : 's'}</summary>`, '');
     for (const c of list.slice(0, COMMIT_CAP)) lines.push(`- ${c.subject} (${c.sha})`);
     if (list.length > COMMIT_CAP) {
       const more = list.length - COMMIT_CAP;
@@ -95,6 +117,7 @@ function renderNotes({ version, tag, previousTag, repo, commits, digest, sums, r
         : `https://github.com/${repo}/commits/${tag}`;
       lines.push(`- […and ${more} more](${href})`);
     }
+    lines.push('', '</details>');
   }
 
   const rowsByScope = {};
@@ -113,10 +136,13 @@ function renderNotes({ version, tag, previousTag, repo, commits, digest, sums, r
     'Verify the downloaded files and the image:',
     '',
     '```sh',
-    'sha256sum -c SHA256SUMS',
+    'sha256sum -c SHA256SUMS --ignore-missing',
     `gh attestation verify <file> -R ${repo}`,
     `gh attestation verify oci://${IMAGE}:${version} -R ${repo}`,
     '```',
+    '',
+    'On Windows, and for what to do with a scanner warning, see "Verify the downloads" in the '
+      + 'release\'s `README.md`.',
     '',
   );
   return lines.join('\n');
@@ -144,14 +170,7 @@ function renderChanges({ tag, previousTag, repo, entries }) {
   lines.push(previousTag
     ? `Changes since [${previousTag}](https://github.com/${repo}/releases/tag/${previousTag}).`
     : 'First release.');
-  const sorted = (entries || []).slice().sort((a, b) => (a.name < b.name ? 1 : a.name > b.name ? -1 : 0));
-  if (sorted.length === 0) lines.push('', 'No changelog entries.');
-  for (const entry of sorted) {
-    const { title, body } = parseChangelogEntry(entry.name, entry.text);
-    lines.push('', `## ${title}`);
-    if (body) lines.push('', body);
-  }
-  lines.push('');
+  lines.push(...entryLines(entries, '##'), '');
   return lines.join('\n');
 }
 
@@ -218,11 +237,13 @@ function main() {
   try {
     const args = parseArgs(process.argv.slice(2));
     const previousTag = args['previous-tag'] || '';
+    const entries = readChangelog(previousTag, args.head);
     const notes = renderNotes({
       version: args.version,
       tag: args.tag,
       previousTag,
       repo: args.repo,
+      entries,
       commits: readCommits(previousTag, args.head),
       digest: args.digest,
       sums: parseSums(fs.readFileSync(args.sums, 'utf8')),
@@ -236,7 +257,7 @@ function main() {
         tag: args.tag,
         previousTag,
         repo: args.repo,
-        entries: readChangelog(previousTag, args.head),
+        entries,
       });
       fs.mkdirSync(path.dirname(path.resolve(args['changes-out'])), { recursive: true });
       fs.writeFileSync(args['changes-out'], changes, 'utf8');

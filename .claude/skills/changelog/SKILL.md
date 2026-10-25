@@ -5,7 +5,8 @@ description: "ALWAYS when a change is finished and ready to push, or the user ex
 
 `docs/changelog/` is a flat, human-readable log of what changed in the application — one short
 file per task/change. It is a summary for someone skimming history, not documentation.
-Each release ships the entries added since the previous release as its `CHANGES.md` asset
+Each release shows the entries added since the previous release as "What's new" at the top of its
+release notes, and ships them as its `CHANGES.md` asset
 (`scripts/ci/release-notes.js`, see `docs/knowledgebase/release-pipeline.md`), so the `# ` title
 and the text are what release readers see.
 
