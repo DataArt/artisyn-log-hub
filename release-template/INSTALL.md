@@ -119,6 +119,34 @@ On Windows, compare `(Get-FileHash install.ps1 -Algorithm SHA256).Hash` with its
 download it, verify it, then run the local file: `sh install.sh` or
 `powershell -ExecutionPolicy Bypass -File install.ps1`.
 
+### Security scanners and `install.ps1`
+
+Every release lists the VirusTotal result of `install.sh`, `install.ps1` and the zip in its notes.
+Antivirus engines report nothing, but on the VirusTotal page of `install.ps1` the **Crowdsourced
+Sigma Rules** block shows one *medium* match: **"Usage Of Web Request Commands And Cmdlets -
+ScriptBlock"**. That is a threat-hunting rule, not a malware verdict: it flags any PowerShell
+script that calls `Invoke-WebRequest` (or `Invoke-RestMethod`, `WebClient`, `curl`, ...). The
+installer has to download `docker-compose.yml` and `env.example` of the release from
+`github.com`, so it matches by design, and so does the `irm ... | iex` one-liner itself. An EDR
+on your machine may raise the same alert when you run it.
+
+If your policy does not allow running a downloaded PowerShell script, or `irm | iex` at all, do
+not run the installer: use the zip, which needs no script and no web request from PowerShell.
+
+1. Download `artisyn-log-hub-{{VERSION}}.zip` and `SHA256SUMS` from the release page in your
+   browser.
+2. Check the zip: `(Get-FileHash artisyn-log-hub-{{VERSION}}.zip -Algorithm SHA256).Hash` must
+   equal its line in `SHA256SUMS`. With the GitHub CLI you can also prove it was built by this
+   repository: `gh attestation verify artisyn-log-hub-{{VERSION}}.zip -R DataArt/artisyn-log-hub`.
+3. Unpack it. The zip holds one folder, `artisyn-log-hub/` (with `.env.example` already named
+   so): that folder is the install directory. Follow [Install manually](#install-manually) from
+   step 2 inside it. On Windows, a random hex secret for `.env` comes from
+   `$b = New-Object byte[] 32; [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($b); -join ($b | % { $_.ToString('x2') })`
+   (use 18 bytes for `POSTGRES_PASSWORD`), or from any password manager.
+4. To upgrade, check the new zip the same way and unpack it into the same parent directory, so its
+   files replace the ones in `artisyn-log-hub/` (on Windows: `Expand-Archive -Force`). The zip holds no `.env`, so yours is kept. Then
+   run `docker compose pull` and `docker compose up -d` in that folder.
+
 ## Upgrade from an old zip bundle
 
 Installs made from the old per-architecture zip bundles (which shipped the app image as
@@ -190,9 +218,13 @@ but every future recreation re-initializes an empty database. Keep the `PGDATA` 
 `db` volume mount's destination path in sync if you ever change either one.
 
 Before an upgrade you can confirm the `db` container's data really is on the host bind mount:
-`docker inspect artisyn-log-hub-db` must show, under `Mounts`, a single `"Type": "bind"` entry
-whose `Source` is `$LOG_HUB_DATA_DIR/pgdata`. A `"Type": "volume"` entry means real data is
-sitting in an anonymous volume outside the bind mount — stop and move it before recreating the
+`docker inspect artisyn-log-hub-db` must show, under `Mounts`, a `"Type": "bind"` entry whose
+`Destination` is `/var/lib/postgresql/data` and whose `Source` is `$LOG_HUB_DATA_DIR/pgdata`, and
+that directory must hold a `pgdata/` subdirectory with `PG_VERSION` in it. A second,
+`"Type": "volume"` entry with `Destination` `/var/lib/postgresql` is expected: the postgres 18
+image declares that path as a volume, so Docker always adds an anonymous one there; with the
+pinned `PGDATA` it stays empty. Data is in the wrong place only when the bind mount is missing or
+its `pgdata/` is empty while the app shows data — stop and move it before recreating the
 container. Back up `$LOG_HUB_DATA_DIR` before an upgrade: migrations only go forward, and the only
 way back to an older version is that version plus a backup made on it.
 
