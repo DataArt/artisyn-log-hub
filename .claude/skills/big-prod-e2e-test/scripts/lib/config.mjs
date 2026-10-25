@@ -1,6 +1,5 @@
 // Constants and per-run paths for the big pre-prod e2e test.
 // Every other module reads its fixed values from here so they are stated exactly once.
-import { createRequire } from 'node:module';
 import { execFileSync } from 'node:child_process';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -16,11 +15,12 @@ export const SCRIPTS_DIR = path.join(SKILL_DIR, 'scripts');
 export const FIXTURES_DIR = path.join(SKILL_DIR, 'fixtures');
 export const PROMPTS_DIR = path.join(SCRIPTS_DIR, 'prompts');
 
-// One stamp format shared with the release script.
-const require = createRequire(import.meta.url);
-const release = require(path.join(REPO_ROOT, 'scripts', 'release.js'));
-export const releaseStamp = release.releaseStamp;
-export const RELEASE_STAMP_RE = release.RELEASE_STAMP_RE;
+// Run identity: the UTC moment the run started, `YYYYMMDD-HHMMSS` — 15 characters,
+// lexicographically sortable, safe in file, image-tag and compose-project names.
+export const RUN_STAMP_RE = /^\d{8}-\d{6}$/;
+export function runStamp() {
+  return new Date().toISOString().replace(/[-:]/g, '').replace('T', '-').slice(0, 15);
+}
 
 export const APP_PORT = 3001;
 export const DB_PORT = 5433;
@@ -184,7 +184,7 @@ export function gitRoot(cwd = REPO_ROOT) {
 
 /** Every path of one run. `root` defaults to the git root. */
 export function resolveRun(stamp, root = gitRoot()) {
-  if (!RELEASE_STAMP_RE.test(stamp)) {
+  if (!RUN_STAMP_RE.test(stamp)) {
     throw new Error(`run stamp must match YYYYMMDD-HHMMSS, got "${stamp}"`);
   }
   const runDir = path.resolve(root, '..', `${RUN_DIR_PREFIX}${stamp}`);

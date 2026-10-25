@@ -21,7 +21,7 @@ import { resetWorldV1 } from '../fixtures/world-v1.sql';
  *  - the schema is `contract_<uuid>` (stale `contract_%` schemas of killed runs are dropped);
  *  - instead of the baseline user, the deterministic world-v1 fixture is loaded with raw SQL
  *    BEFORE the app boots, so no scheduler ever sees a half-filled schema;
- *  - every on-disk directory the app writes (upload queue, export/import, releases) is a throwaway
+ *  - every on-disk directory the app writes (upload queue, export/import) is a throwaway
  *    temp dir, so the suite never shares files with the always-on dev server (05 §5 risk 2).
  *
  * The app object stays in this process (`global.__CONTRACT_APP__`, for global-teardown.ts); spec
@@ -76,7 +76,6 @@ export default async function globalSetup(): Promise<void> {
   const tmpRoot = fs.mkdtempSync(join(os.tmpdir(), 'artisyn-contract-'));
   process.env.CONTRACT_TMP_DIR = tmpRoot;
   for (const [name, dir] of [
-    ['RELEASES_DIR', 'releases'],
     ['UPLOAD_QUEUE_DIR', 'upload-queue'],
     ['EXPORT_IMPORT_DIR', 'export-import'],
   ] as const) {

@@ -1,14 +1,30 @@
 #!/usr/bin/env node
-// Builds one self-contained release bundle per CPU architecture. Each bundle is a folder plus a
-// matching .zip holding the exported Docker image for that architecture, a standalone
-// docker-compose.yml (app + Postgres), a ready-to-run .env (fresh random secrets, no editing
-// required) plus .env.example for reference, and install instructions written for that
-// architecture — everything needed to run on a clean Docker host.
+// Builds a local test bundle — NOT a published release — one per CPU architecture, so the very
+// latest working tree (uncommitted changes included) can be handed to a colleague for manual
+// testing. Published releases come from .github/workflows/release.yml (GHCR image + the GitHub
+// Release install kit built by scripts/release-kit.js); this script never touches either.
+//
+//   npm run local-release-bundle                       both architectures
+//   BUNDLE_ARCHS=amd64 npm run local-release-bundle    only the named ones (comma list)
+//   BUNDLE_STAMP=YYYYMMDD-HHMMSS npm run ...           reuse a given stamp instead of "now"
+//
+// Each bundle is a folder plus a matching .zip under release/ holding the exported Docker image
+// for that architecture (tagged ghcr.io/dataart/artisyn-log-hub:local-<stamp>), the
+// docker-compose.yml from release-template/ filled with VERSION=local-<stamp>, a ready-to-run
+// .env (fresh random secrets, no editing required) plus .env.example for reference, and an
+// INSTALL.md rendered from release-template/LOCAL-BUNDLE.md for that architecture — everything
+// needed to run on a clean Docker host without pulling from a registry.
+//
+// The build context is the working tree (`.`), never a git checkout. GIT_COMMIT is the HEAD sha,
+// suffixed `-dirty` when `git status --porcelain` reports changes, so the app's Build tile tells
+// a tester whether the bundle carries uncommitted code.
 const fs = require('fs');
 const path = require('path');
-const crypto = require('crypto');
 const { execFileSync } = require('child_process');
 const { zipDir } = require('./zip-dir');
+const {
+  IMAGE, gitCommit, hostArch, applyPlaceholders, generateReleaseEnv,
+} = require('./release-kit');
 
 const repoRoot = path.resolve(__dirname, '..');
 const releaseDir = path.join(repoRoot, 'release');
@@ -36,46 +52,41 @@ const TARGETS = [
   },
 ];
 
-const DEFAULT_RELEASE_ARCHS = 'amd64,arm64';
+const DEFAULT_BUNDLE_ARCHS = 'amd64,arm64';
 
-// A release is identified by the UTC minute-and-second it was cut, not by a bumped package
-// version: the zips are published side by side on a server and the app reports the same string
-// back through /health/version, so the identity has to be generated (and shared) per run rather
-// than committed to a package.json.
-const RELEASE_STAMP_RE = /^\d{8}-\d{6}$/;
+// A local bundle is identified by the UTC moment it was built: there is no published version to
+// name it after, and two bundles cut from the same commit (with different uncommitted changes)
+// still have to be told apart. The app reports `local-<stamp>` as its build version.
+const BUNDLE_STAMP_RE = /^\d{8}-\d{6}$/;
 
-// Which TARGETS entry matches the machine running this script. That one is also loaded into the
-// local image store at the end, so `artisyn-log-hub:latest` stays runnable here.
-function hostArch() {
-  return process.arch === 'arm64' ? 'arm64' : 'amd64';
-}
-
-function gitCommit() {
+// `GIT_COMMIT` for the image: HEAD, plus `-dirty` when the working tree has uncommitted changes.
+function bundleCommit() {
+  const head = gitCommit();
   try {
-    return execFileSync('git', ['rev-parse', 'HEAD'], { cwd: repoRoot, encoding: 'utf8' }).trim();
+    const status = execFileSync('git', ['status', '--porcelain'], { cwd: repoRoot, encoding: 'utf8' });
+    return status.trim() === '' ? head : `${head}-dirty`;
   } catch (_) {
-    return 'unknown';
+    return head;
   }
 }
 
 // `YYYYMMDD-HHMMSS` in UTC — 15 characters, lexicographically sortable, no separator that would
 // be awkward in a file name.
-function releaseStamp() {
+function bundleStamp() {
   return new Date().toISOString().replace(/[-:]/g, '').replace('T', '-').slice(0, 15);
 }
 
-// CI generates the stamp itself (one `date -u` shared by the zips and the deployed image) and
-// passes it in; a local run generates its own. A malformed value is a hard error rather than a
-// silently-regenerated one, so a broken CI expression can never produce zips whose names
+// BUNDLE_STAMP lets a caller reuse a stamp; otherwise the run generates its own. A malformed
+// value is a hard error rather than a silently-regenerated one, so the zip names can never
 // disagree with the image's build-info.json.
-function resolveReleaseStamp(env = process.env) {
-  const fromEnv = env.RELEASE_STAMP;
+function resolveBundleStamp(env = process.env) {
+  const fromEnv = env.BUNDLE_STAMP;
   if (fromEnv === undefined || fromEnv === '') {
-    return releaseStamp();
+    return bundleStamp();
   }
-  if (!RELEASE_STAMP_RE.test(fromEnv)) {
+  if (!BUNDLE_STAMP_RE.test(fromEnv)) {
     throw new Error(
-      `RELEASE_STAMP must match YYYYMMDD-HHMMSS (UTC), got "${fromEnv}"`,
+      `BUNDLE_STAMP must match YYYYMMDD-HHMMSS (UTC), got "${fromEnv}"`,
     );
   }
   return fromEnv;
@@ -94,39 +105,30 @@ function zipFileName(stamp, arch) {
 }
 
 // Deliberately reads the unfiltered TARGETS: INSTALL.md points the reader at the other
-// architecture's download, which exists on the release server even when this particular run was
-// narrowed with RELEASE_ARCHS.
+// architecture's bundle by name, even when this particular run was narrowed with BUNDLE_ARCHS.
 function otherTarget(arch) {
   return TARGETS.find((t) => t.arch !== arch);
 }
 
-// RELEASE_ARCHS narrows what gets built (comma list, default both). It exists as a one-line
-// retreat for a runner whose daemon cannot emulate the non-native architecture — the inventory
-// happily lists a single architecture.
+// BUNDLE_ARCHS narrows what gets built (comma list, default both) — handy when the daemon cannot
+// emulate the non-native architecture, or when only the host's bundle is needed.
 function selectedTargets(env = process.env) {
-  const raw = env.RELEASE_ARCHS === undefined || env.RELEASE_ARCHS === ''
-    ? DEFAULT_RELEASE_ARCHS
-    : env.RELEASE_ARCHS;
+  const raw = env.BUNDLE_ARCHS === undefined || env.BUNDLE_ARCHS === ''
+    ? DEFAULT_BUNDLE_ARCHS
+    : env.BUNDLE_ARCHS;
   const wanted = raw.split(',').map((s) => s.trim()).filter(Boolean);
   const unknown = wanted.filter((arch) => !TARGETS.some((t) => t.arch === arch));
   if (unknown.length > 0) {
     throw new Error(
-      `RELEASE_ARCHS names unknown architecture(s) ${unknown.join(', ')} — `
+      `BUNDLE_ARCHS names unknown architecture(s) ${unknown.join(', ')} — `
       + `known: ${TARGETS.map((t) => t.arch).join(', ')}`,
     );
   }
   const selected = TARGETS.filter((t) => wanted.includes(t.arch));
   if (selected.length === 0) {
-    throw new Error('RELEASE_ARCHS selected no architecture to build');
+    throw new Error('BUNDLE_ARCHS selected no architecture to build');
   }
   return selected;
-}
-
-function applyPlaceholders(content, values) {
-  return Object.keys(values).reduce(
-    (acc, key) => acc.split(`{{${key}}}`).join(values[key]),
-    content,
-  );
 }
 
 function docker(args) {
@@ -152,40 +154,19 @@ function assertPlatformsBuildable(targets) {
   if (missing.length > 0) {
     throw new Error(
       `the active buildx builder cannot build ${missing.join(', ')}. Register QEMU emulation `
-      + '("docker run --privileged --rm tonistiigi/binfmt --install all") or run the release on '
-      + 'a builder that advertises those platforms.',
+      + '("docker run --privileged --rm tonistiigi/binfmt --install all"), or narrow the run '
+      + 'with BUNDLE_ARCHS to the platforms the builder advertises.',
     );
   }
 }
 
-// Turns the checked-in .env.example template into a drop-in, ready-to-run .env for this
-// release: real random secrets in place of the "change-me" placeholders, so `docker compose
-// up -d` works with no manual editing. Only for fresh installs — an upgrade must keep the
-// existing .env instead of overwriting it with a new one full of different random secrets.
-//
-// Generated once and shared by every bundle: the architectures are alternative downloads of the
-// same release, not separate installs, so a user who grabs the wrong one first and then the
-// right one should not find the secrets have changed underneath them.
-//
-// It also pins NODE_ENV=production (passed to the app by docker-compose.yml), so the server's
-// production-only behaviour applies even if the image's own ENV is ever overridden.
-function generateReleaseEnv(templateContent) {
-  const eol = templateContent.includes('\r\n') ? '\r\n' : '\n';
-  const body = templateContent
-    .replace('POSTGRES_PASSWORD=change-me', `POSTGRES_PASSWORD=${crypto.randomBytes(18).toString('hex')}`)
-    .replace(
-      'SESSION_SECRET=change-me-to-a-long-random-string',
-      `SESSION_SECRET=${crypto.randomBytes(32).toString('hex')}`,
-    );
-  const separator = body.endsWith('\n') ? '' : eol;
-  return `${body}${separator}${eol}NODE_ENV=production${eol}`;
-}
-
 // Fills the bundle folder for one architecture: image tar, compose file, env files, and an
 // INSTALL.md that names only this architecture's file and points at the other bundle by name.
+// The .env is generated once per run and shared by every bundle: the architectures are
+// alternative downloads of the same build, so the secrets must not differ between them.
 function assembleBundle(target, context) {
   const {
-    stamp, commit, imageTag, envExample, envContent,
+    stamp, version, commit, imageTag, envExample, envContent, composeContent,
   } = context;
   const name = bundleName(stamp, target.arch);
   const bundleDir = path.join(releaseDir, name);
@@ -200,29 +181,26 @@ function assembleBundle(target, context) {
     + `${emulated ? ' — emulated, expect this to take a while' : ''}...`,
   );
   // `--output type=docker,dest=<file>` writes the tar straight out of BuildKit, so building the
-  // non-native architecture never has to overwrite the local `latest` tag with an image this
-  // machine cannot run. The tar carries a classic `manifest.json`, so it also loads on daemons
-  // that predate the containerd image store.
+  // non-native architecture never puts an image this machine cannot run into the local store.
+  // The tar carries a classic `manifest.json`, so it also loads on daemons that predate the
+  // containerd image store.
   docker([
     'buildx', 'build',
     '--platform', target.platform,
+    '--build-arg', `VERSION=${version}`,
     '--build-arg', `GIT_COMMIT=${commit}`,
-    '--build-arg', `RELEASE_STAMP=${stamp}`,
     '-t', imageTag,
     '--output', `type=docker,dest=${path.join(bundleDir, imageFile)}`,
     '.',
   ]);
 
-  fs.copyFileSync(
-    path.join(templateDir, 'docker-compose.yml'),
-    path.join(bundleDir, 'docker-compose.yml'),
-  );
+  fs.writeFileSync(path.join(bundleDir, 'docker-compose.yml'), composeContent);
   fs.writeFileSync(path.join(bundleDir, '.env.example'), envExample);
   fs.writeFileSync(path.join(bundleDir, '.env'), envContent);
   fs.writeFileSync(
     path.join(bundleDir, 'INSTALL.md'),
-    applyPlaceholders(fs.readFileSync(path.join(templateDir, 'INSTALL.md'), 'utf8'), {
-      VERSION: stamp,
+    applyPlaceholders(fs.readFileSync(path.join(templateDir, 'LOCAL-BUNDLE.md'), 'utf8'), {
+      VERSION: version,
       GIT_COMMIT: commit,
       DATE: new Date().toISOString().slice(0, 10),
       IMAGE_FILE: imageFile,
@@ -247,9 +225,10 @@ if (require.main === module) {
     const targets = selectedTargets();
     assertPlatformsBuildable(targets);
 
-    const stamp = resolveReleaseStamp();
-    const commit = gitCommit();
-    const imageTag = 'artisyn-log-hub:latest';
+    const stamp = resolveBundleStamp();
+    const version = `local-${stamp}`;
+    const commit = bundleCommit();
+    const imageTag = `${IMAGE}:${version}`;
 
     fs.rmSync(releaseDir, { recursive: true, force: true });
     fs.mkdirSync(releaseDir, { recursive: true });
@@ -257,50 +236,53 @@ if (require.main === module) {
     const envExample = fs.readFileSync(path.join(templateDir, '.env.example'), 'utf8');
     const context = {
       stamp,
+      version,
       commit,
       imageTag,
       envExample,
       envContent: generateReleaseEnv(envExample),
+      composeContent: applyPlaceholders(
+        fs.readFileSync(path.join(templateDir, 'docker-compose.yml'), 'utf8'),
+        { VERSION: version, GIT_COMMIT: commit },
+      ),
     };
 
     const bundles = targets.map((target) => assembleBundle(target, context));
 
-    // Leaves the local store holding a runnable `artisyn-log-hub:latest`, the way the previous
-    // plain `docker build -t ... .` did. Everything is already in the build cache, so this is a
-    // near-instant re-export rather than another build.
+    // Leaves the host-arch image in the local store under the same tag the bundle's compose file
+    // names, so the bundle can also be tried right here. Everything is already in the build
+    // cache, so this is a near-instant re-export rather than another build.
     console.log(`Loading the linux/${hostArch()} image into the local store as ${imageTag}...`);
     docker([
       'buildx', 'build',
       '--platform', `linux/${hostArch()}`,
+      '--build-arg', `VERSION=${version}`,
       '--build-arg', `GIT_COMMIT=${commit}`,
-      '--build-arg', `RELEASE_STAMP=${stamp}`,
       '-t', imageTag,
       '--load',
       '.',
     ]);
 
-    console.log(`\nRelease ${stamp} assembled in ${releaseDir}:`);
+    console.log(`\nLocal test bundle ${version} (commit ${commit}) assembled in ${releaseDir}:`);
     for (const bundle of bundles) {
       console.log(`  ${bundle.bundleName}.zip  (${mib(bundle.zipBytes)})`);
     }
   } catch (err) {
-    console.error(`release failed: ${err.message}`);
+    console.error(`local-release-bundle failed: ${err.message}`);
     process.exit(1);
   }
 }
 
 module.exports = {
   TARGETS,
-  RELEASE_STAMP_RE,
-  DEFAULT_RELEASE_ARCHS,
-  releaseStamp,
-  resolveReleaseStamp,
+  BUNDLE_STAMP_RE,
+  DEFAULT_BUNDLE_ARCHS,
+  bundleStamp,
+  resolveBundleStamp,
+  bundleCommit,
   bundleName,
   imageFileName,
   zipFileName,
   otherTarget,
   selectedTargets,
-  hostArch,
-  gitCommit,
-  generateReleaseEnv,
 };

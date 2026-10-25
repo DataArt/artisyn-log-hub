@@ -59,7 +59,7 @@ Actual output on a code-split build: `22/27 files, raw 3685 KB → br 941 KB / g
 ~1.9 s` (the summary line the script writes to **stderr**).
 
 Both encodings ship. Chrome and Firefox only advertise `br` on secure origins, and plain-HTTP
-LAN installs are supported (`COOKIE_SECURE` defaults to `false` in `release/docker-compose.yml`),
+LAN installs are supported (`COOKIE_SECURE` defaults to `false` in the install kit's `docker-compose.yml`),
 so `.gz` is what keeps those installs compressed.
 
 The script exports its helpers (`isCompressible`, `worthKeeping`, `listCompressible`,
@@ -153,27 +153,7 @@ parsers, gzip sniffer, session and passport middleware are wrapped in `throwMidd
 see `hook-api-versioning.md` → "Per-route body limits". The handler is absent from apps built with
 `Test.createTestingModule()`, so the regular e2e suite cannot see it.
 
-## 6. What is deliberately *not* served: `dist/releases/`
-
-The downloadable release zips live at `/app/dist/releases` — a **sibling** of the served
-`dist/public/` tree, never inside it. Nothing about static serving changes because of them:
-
-- The `ServeStaticModule` `rootPath` is `join(__dirname, 'public')`, so a sibling directory is
-  simply outside its reach. **The `exclude` list in `server/src/app.module.ts` is unchanged** —
-  `releases/` needs no entry there, and adding one would be misleading.
-- The precompression walk (`client/scripts/precompress.cjs`) runs over `client/dist` only, and the
-  boot-time manifest walk (`buildPrecompressedManifest`) over the static root — neither ever sees
-  the releases directory. A `.zip` is not on the `COMPRESSIBLE` allowlist anyway.
-- The zips are reachable **only** through the signed, time-limited link redeemed at
-  `GET /api/v1/releases/download`, which the existing `'/api{/*path}'` exclude entry already keeps
-  out of static serving. A file-name guess against `/static/…` or `/…` returns the SPA fallback,
-  never a bundle.
-
-This placement is the security property, not an accident: inside `public/` these multi-hundred-MB
-bundles would be handed to any anonymous visitor who guessed the file name. The directory is
-resolved by `resolveReleasesDir()` (`server/src/releases/`).
-
-## 7. Rejected alternatives
+## 6. Rejected alternatives
 
 **In-container nginx** in front of the Node process (evaluated and rejected). It would have
 given compression and caching for free, but it adds a proxy hop that breaks five things:

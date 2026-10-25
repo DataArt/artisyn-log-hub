@@ -23,26 +23,38 @@ session transcripts, including file contents and command output.
 | `client/` | React web app. See [client/README.md](client/README.md). |
 | `hook/` | The Claude Code hook (source of truth). See [hook/README.md](hook/README.md) and [hook/INSTALL_HOOK.md](hook/INSTALL_HOOK.md). |
 | `artisyn-hooks-installer/` | The `npx` installer that puts the hook into a project. The server serves it. |
-| `release-template/` | Files of the self-contained release bundle (Docker image + compose). |
+| `release-template/` | Templates of the GitHub Release install kit (`docker-compose.yml`, `install.sh`, `install.ps1`, install guide). |
 | `tests/e2e/` | Playwright end-to-end tests. |
 | `docs/` | Knowledge base and task history. |
 
 ## Quick start
 
-The easiest install is a release bundle: a Docker image, a `docker-compose.yml` with Postgres, and a
-ready-to-use `.env`. You need a Docker Engine with the Compose v2 plugin. The bundle's `INSTALL.md`
-has the details; in short, unzip the bundle for your CPU architecture and run in its folder:
+Every release is published on the [releases page](https://github.com/DataArt/artisyn-log-hub/releases/latest)
+as a multi-arch Docker image (`ghcr.io/dataart/artisyn-log-hub`, `linux/amd64` and `linux/arm64`)
+plus a small install kit: a `docker-compose.yml` with Postgres, `install.sh`, `install.ps1` and an
+install guide. You need a Docker Engine with the Compose v2 plugin; nothing is built locally.
+
+Install or upgrade with one command:
 
 ```sh
-docker load -i artisyn-log-hub-<stamp>-<arch>.tar
-docker compose up -d
+# Linux, macOS, WSL
+curl -fsSL https://github.com/DataArt/artisyn-log-hub/releases/latest/download/install.sh | sh
 ```
 
-Open http://localhost:5003. The bundle starts in `AUTH_MODE=none` (Mode 1): no password, you
-identify yourself with an email address, and only the local machine can connect.
+```powershell
+# Windows (PowerShell)
+irm https://github.com/DataArt/artisyn-log-hub/releases/latest/download/install.ps1 | iex
+```
 
-To build a bundle yourself from this repository, run `npm run release` (needs Docker; writes
-`release/`).
+The script installs into `$HOME/artisyn-log-hub` (Windows: `%USERPROFILE%\artisyn-log-hub`),
+generates a `.env` with a random database password on the first install only, pulls the image and
+starts it with `docker compose up -d`. Run the same command again to upgrade: an existing `.env` is
+never changed, and installing a version lower than the installed one is refused. Set `VERSION=X.Y.Z`
+to pin a release and `INSTALL_DIR` to install elsewhere; the install guide (`README.md` of the
+release) lists every option, the manual install and how to verify the downloads with `SHA256SUMS`.
+
+Open http://localhost:5003. The install starts in `AUTH_MODE=none` (Mode 1): no password, you
+identify yourself with an email address, and only the local machine can connect.
 
 ### Check that you are the admin
 
@@ -53,8 +65,8 @@ that is a regular user. There is no setup token.
 2. Open **Admin Panel** in the left navigation, then the **Users** tab, and check that your account has
    the `admin` role.
 3. If there is no Admin Panel, or another account is the admin, someone signed in before you. Stop the
-   app, delete the database (for the release bundle: `docker compose down`, then delete
-   `$LOG_HUB_DATA_DIR/pgdata`), install again and sign in first.
+   app, delete the database (for a release install: `docker compose down` in the install
+   directory, then delete `$LOG_HUB_DATA_DIR/pgdata`), install again and sign in first.
 
 ### Install the hook into a project
 
@@ -95,15 +107,23 @@ the database. Migrations run automatically at startup.
 
 ### Docker image
 
+The published image runs against any Postgres you already have:
+
 ```sh
-docker build --build-arg GIT_COMMIT=$(git rev-parse HEAD) -t artisyn-log-hub .
-docker run -p 127.0.0.1:3000:3000 -e DATABASE_URL=<url> artisyn-log-hub
+docker run -p 127.0.0.1:3000:3000 -e DATABASE_URL=<url> ghcr.io/dataart/artisyn-log-hub:latest
 ```
 
-The image sets `NODE_ENV=production` and runs the server in cluster mode. Without
-`--build-arg GIT_COMMIT=...` the build info reports `gitCommit: "unknown"`. The `docker-compose.yml`
+Tags: `X.Y.Z` (one release), `X.Y` (the newest patch of a line) and `latest`. To build the image
+yourself from this repository:
+
+```sh
+docker build --build-arg VERSION=local --build-arg GIT_COMMIT=$(git rev-parse HEAD) -t ghcr.io/dataart/artisyn-log-hub:local .
+```
+
+The image sets `NODE_ENV=production` and runs the server in cluster mode. Without the build args
+the build info reports `version: "unknown"` and `gitCommit: "unknown"`. The `docker-compose.yml`
 at the repository root is the maintainers' deployment file (it expects an external network); for a
-self-contained setup use the release bundle.
+self-contained setup use the release install above.
 
 ## Authentication modes
 
@@ -127,7 +147,7 @@ The main settings are below. [server/README.md](server/README.md) lists every va
 |---|---|---|
 | `DATABASE_URL` | — | **Required.** PostgreSQL connection string. |
 | `PORT` | `3000` | HTTP listen port. |
-| `AUTH_MODE` | `password` | See above. The release bundle sets `none`. |
+| `AUTH_MODE` | `password` | See above. The release install sets `none`. |
 | `SESSION_SECRET` | generated | Optional. Generated and stored in the database when unset. |
 | `PUBLIC_BASE_URL` | — | Externally reachable URL, used for the links in emails. Required in production for Modes 2/3. |
 | `ALLOWED_EMAIL_DOMAINS` | any | Mode 3 sign-up allow-list, comma-separated domains. |
@@ -212,7 +232,7 @@ The in-app help article *Security hardening* lists the known limitations and acc
   also trusts the container's default gateway, because that is where host traffic to the published
   port comes from. With Docker's userland proxy every inbound connection arrives from that gateway, so
   a port published on all interfaces lets every client that can reach it sign in, without a
-  password, as any user, including the admin. The release bundle publishes `127.0.0.1:5003` only. Switch `AUTH_MODE` to another mode
+  password, as any user, including the admin. The release install publishes `127.0.0.1:5003` only. Switch `AUTH_MODE` to another mode
   before you change that.
 - **Outbound requests.** Once a day the server asks the public npm registry for the latest Claude Code
   version (`AI_TOOL_VERSION_CHECK_ENABLED`, on by default) and fetches the public Anthropic pricing

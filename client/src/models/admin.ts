@@ -187,7 +187,7 @@ export interface SystemInfo {
     logsTableBytes: number | null;
     databaseTotalBytes: number | null;
   };
-  build: { version: string; gitCommit: string; releaseStamp: string };
+  build: { version: string; gitCommit: string };
   node: { version: string; env: string };
   eventLoopLagMs: number;
   requests: { perSecond: number; active: number };
@@ -200,28 +200,4 @@ export interface SystemInfo {
     clustered: boolean;
     processes: SystemInfoWorkerProcess[];
   };
-}
-
-/** Architecture of a release bundle. */
-export type ReleaseArch = 'amd64' | 'arm64';
-
-/**
- * One release zip carried by this instance, as listed by
- * `GET /api/v1/admin/releases`. Only the newest release stamp is ever listed.
- */
-export interface ReleaseZip {
-  /** Full file name, e.g. `artisyn-log-hub-20260918-142233-amd64.zip`. */
-  fileName: string;
-  arch: ReleaseArch;
-  /** UTC release stamp, `YYYYMMDD-HHMMSS` — an identity, not a timestamp. */
-  stamp: string;
-  sizeBytes: number;
-}
-
-/** `POST /api/v1/admin/releases/download-link` — a temporary signed link. */
-export interface ReleaseDownloadLink {
-  /** Absolute, signed, unauthenticated download URL. */
-  url: string;
-  /** ISO-8601 UTC instant the link stops working. */
-  expiresAt: string;
 }

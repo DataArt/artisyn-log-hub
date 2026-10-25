@@ -39,7 +39,6 @@ format where the two differ).
 | [password-policy](password-policy.md) | `server/src/auth/utils/password-policy.ts` | jest |
 | [auth-startup-config](auth-startup-config.md) | `server/src/auth/config/auth-startup-validation.ts` | jest |
 | [local-request-detection](local-request-detection.md) | `server/src/auth/utils/localhost.util.ts`, `container-gateway.util.ts` | jest |
-| [release-link-token](release-link-token.md) | `server/src/releases/release-token.ts` | jest |
 | [harness-snapshot](harness-snapshot.md) | hook `skill-catalog.js`, `harness-snapshot.js` | `node --test` |
 | [workflow-agent-rows](workflow-agent-rows.md) | `client/.../session-log/workflow-agent-rows.ts` | vitest |
 | [tool-call-sections](tool-call-sections.md) | `client/.../session-log/tool-calls.ts` | vitest |
@@ -48,6 +47,8 @@ format where the two differ).
 | [sandbox-prune-classification](sandbox-prune-classification.md) | `scripts/claude-docker/prune.mjs` | `node --test` (`npm run test:scripts`) |
 | [executable-config-guard](executable-config-guard.md) | `scripts/ci/config-guard.js` | `node --test` (`npm run test:scripts`) |
 | [security-scan-summary](security-scan-summary.md) | `scripts/ci/security-summary.js` | `node --test` (`npm run test:scripts`) |
+| [release-version](release-version.md) | `scripts/ci/release-version.js` | `node --test` (`npm run test:scripts`) |
+| [release-assets](release-assets.md) | `scripts/release-kit.js`, `scripts/ci/release-notes.js`, `scripts/ci/virustotal-scan.js` (`scopeFor`) | `node --test` (`npm run test:scripts`) |
 
 ## File layout
 

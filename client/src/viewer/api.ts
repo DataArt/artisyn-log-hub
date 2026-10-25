@@ -57,8 +57,6 @@ import type {
   AdminUser,
   DataRetentionStats,
   ErrorLogEntry,
-  ReleaseDownloadLink,
-  ReleaseZip,
   SystemInfo,
   UploadQueueEntry,
   UploadQueueStats,
@@ -1948,34 +1946,6 @@ export async function fetchSystemInfo(): Promise<SystemInfo> {
   const res = await apiFetch('/api/v1/admin/system');
   if (!res.ok) throw new ApiError(res.status);
   return res.json() as Promise<SystemInfo>;
-}
-
-/**
- * Release zips this instance carries. The server lists only the newest release
- * stamp, and an instance with no releases directory returns an empty list —
- * that is a normal state, not an error.
- */
-export async function fetchReleaseZips(): Promise<ReleaseZip[]> {
-  const res = await apiFetch('/api/v1/admin/releases');
-  if (!res.ok) throw new ApiError(res.status);
-  const body = (await res.json()) as { entries: ReleaseZip[] };
-  return body.entries;
-}
-
-/**
- * Mints a temporary, signed download link for one release zip. The link works
- * without a session for 24 hours and cannot be revoked early.
- */
-export async function createReleaseDownloadLink(
-  file: string,
-): Promise<ReleaseDownloadLink> {
-  const res = await apiFetch('/api/v1/admin/releases/download-link', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ file }),
-  });
-  if (!res.ok) throw new ApiError(res.status);
-  return res.json() as Promise<ReleaseDownloadLink>;
 }
 
 export async function fetchDataRetention(): Promise<DataRetentionStats> {

@@ -2,8 +2,9 @@
 
 This guide describes the security-relevant configuration of an Artisyn Log Hub installation and
 the recommended settings for running it beyond a single local user. It applies to the Docker
-release bundle (`docker-compose.yml` + `.env`). For the component layout, see the **Component
-Reference**; for the installation procedure, see `INSTALL.md` in the release bundle.
+installation from the GitHub Release install kit (`docker-compose.yml` + `.env`). For the
+component layout, see the **Component Reference**; for the installation procedure, see the
+README.md of the GitHub Release install kit.
 
 ## 1. Security model in brief
 
@@ -37,7 +38,7 @@ Use this list before exposing an installation to anyone other than the local use
 | 10 | Set data retention to your policy | `SESSION_RETENTION_DAYS` |
 | 11 | Restrict filesystem access to `$LOG_HUB_DATA_DIR` | Host permissions; include in backups |
 | 12 | Review admin accounts — the first registered user becomes admin | Admin panel → Users |
-| 13 | Keep the image up to date | Load new release images; migrations run on startup |
+| 13 | Keep the image up to date | Re-run `install.sh` / `install.ps1` to pull the new release image; migrations run on startup |
 | 14 | Read the accepted risks | §11 Known limitations and accepted risks |
 
 ## 3. Authentication
@@ -56,7 +57,7 @@ Use this list before exposing an installation to anyone other than the local use
 - Routes belonging to a different mode return `404`.
 - `users.email` is the identity across all modes, so switching modes requires no data migration.
 
-> **Important.** The release bundle ships with `AUTH_MODE=none` and publishes the app on
+> **Important.** The install kit ships with `AUTH_MODE=none` and publishes the app on
 > `127.0.0.1:5003` only. That loopback-only port binding is the actual security boundary of
 > Mode 1: with Docker's port forwarding every connection appears to come from the container
 > gateway, which Mode 1 trusts. **Change `AUTH_MODE` in the same edit in which you widen the
@@ -132,14 +133,14 @@ registration) are built only from `PUBLIC_BASE_URL` — never from the request's
 which a caller controls. Set it to the canonical HTTPS address users open, for example
 `PUBLIC_BASE_URL=https://loghub.example.org`.
 
-- In production (`NODE_ENV=production`, which the Docker image and release bundle set), Modes 2
+- In production (`NODE_ENV=production`, which the Docker image and install kit set), Modes 2
   and 3 refuse to start without an absolute `http(s)` `PUBLIC_BASE_URL`.
 - Outside production it defaults to `http://localhost:5173` (the development client).
 - If it is missing anyway, the email is not sent and the server logs
   `mail: PUBLIC_BASE_URL not set — email link not sent` once per process.
 
-Links shown in the admin panel to a signed-in admin (an admin-generated reset link, a release
-download link) still use the address the admin is using.
+Links shown in the admin panel to a signed-in admin (an admin-generated reset link) still use
+the address the admin is using.
 
 ### 3.5 Sessions and cookies
 
@@ -156,8 +157,8 @@ download link) still use the address the admin is using.
   stored secret is as sensitive as the database itself — protect database backups accordingly
   (§9). If the secret cannot be read or stored, the server does not start.
 - Changing `SESSION_SECRET` (or deleting the `server_secrets` row when no env value is set)
-  invalidates all active sessions. Keep your existing `.env` on upgrade — each release bundle
-  ships a freshly generated `.env` intended for new installs only.
+  invalidates all active sessions. Keep your existing `.env` on upgrade — the install scripts
+  generate a `.env` only when it is missing and never overwrite an existing one.
 - Known insecure values (the old shipped default, `change-me`, the test secret) and well-known
   database passwords (`postgres`, `secret`, …) are reported at startup with
   `security: known insecure … in use — set a unique value`. The server still starts (§11).
@@ -174,15 +175,7 @@ download link) still use the address the admin is using.
   shared machines.
 - Recommendation: set an expiry on keys and rotate them periodically.
 
-### 3.7 Release download links
-
-Admins can mint time-limited (24 h) download links for release bundles. The links are signed with
-HMAC-SHA256 using `RELEASE_LINK_SECRET` when it is set; otherwise with a key derived from
-`SESSION_SECRET` (HKDF-SHA256), so the session secret itself never signs a URL. Changing either
-secret invalidates every outstanding link; links minted before the upgrade to this key scheme no
-longer work and must be re-issued.
-
-### 3.8 CSRF protection
+### 3.7 CSRF protection
 
 Cross-site request forgery protection relies on the session cookie's attributes only:
 
@@ -362,7 +355,6 @@ A value that is not a positive integer falls back to the default.
   `SESSION_SECRET` and, for Mode 4, `AZURE_CLIENT_SECRET`. Recommended: `chmod 600 .env`.
 - Restrict `$LOG_HUB_DATA_DIR` (database files, upload queue, logs) to the Docker/service
   account.
-- The `releases/` directory is mounted read-only; the app never writes to it.
 - Use a dedicated host or VM; keep Docker Engine and the host OS patched.
 - Before an upgrade, verify that the database lives on the host bind mount (see `INSTALL.md`,
   "Update to the latest version").
@@ -374,8 +366,8 @@ A value that is not a positive integer falls back to the default.
 - Security events are logged as structured `key=value` lines: login success/failure and applied
   delay, signup, email confirmation, password reset and change, account deletion. They contain
   email addresses and user IDs only — never passwords, hashes or tokens.
-- Admin panel → **Error Logs** shows recent errors; → **System** shows build, release stamp and
-  worker status; `GET /health` can be used by external monitoring.
+- Admin panel → **Error Logs** shows recent errors; → **System** shows build version, git commit
+  and worker status; `GET /health` can be used by external monitoring.
 - Admin panel → **Upload Queue** shows ingestion backlog and failures.
 
 ## 9. Backup and recovery
@@ -395,17 +387,16 @@ Protect backups with the same controls as the live data (§6.1) and apply the sa
 
 | Variable | Default | Security relevance |
 |---|---|---|
-| `AUTH_MODE` | `password` (bundle ships `none`) | Authentication mode (§3.1). |
-| `SESSION_SECRET` | generated per bundle; when unset, generated and stored in the database | Signs session cookies (§3.5). Optional. |
-| `RELEASE_LINK_SECRET` | unset → key derived from `SESSION_SECRET` | Signs release download links (§3.7). |
+| `AUTH_MODE` | `password` (install kit ships `none`) | Authentication mode (§3.1). |
+| `SESSION_SECRET` | generated per install; when unset, generated and stored in the database | Signs session cookies (§3.5). Optional. |
 | `PUBLIC_BASE_URL` | unset (`http://localhost:5173` outside production) | Base of emailed links. Required in production for Modes 2/3 (§3.4). |
 | `ALLOWED_EMAIL_DOMAINS` | unset (no restriction) | Mode 3 sign-up domain allow-list (§3.3). |
 | `AUTH_RATE_LIMIT_POINTS` | `5` (`0` disables) | Requests per window on sign-up, forgot, resend and reset (§3.3). |
 | `AUTH_RATE_LIMIT_WINDOW_SEC` | `900` | Rate-limit window (§3.3). |
-| `NODE_ENV` | `production` in the image and bundle | Enables the production startup checks. |
-| `POSTGRES_PASSWORD` | generated per bundle | Database password. Required. |
+| `NODE_ENV` | `production` in the image and install kit | Enables the production startup checks. |
+| `POSTGRES_PASSWORD` | generated per install | Database password. Required. |
 | `POSTGRES_USER`, `POSTGRES_DB` | `postgres`, `a-log` | Database identity. |
-| `COOKIE_SECURE` | `false` in the bundle | `Secure` cookie flag when `TRUST_PROXY` is off. |
+| `COOKIE_SECURE` | `false` in the install kit | `Secure` cookie flag when `TRUST_PROXY` is off. |
 | `TRUST_PROXY` | `false` | Reverse-proxy trust (§4.1). |
 | `PASSWORD_POLICY` | `long` | Password strength (§3.3). |
 | `AZURE_*` | — | Mode 4 settings (§3.2). |
@@ -430,7 +421,7 @@ what an administrator can do about it.
 |---|---|---|
 | **Azure accounts are matched by email.** A user is identified by the token's `email` / `preferred_username` within your tenant. An Entra admin who sets another user's `mail` attribute, a guest account with an unverified email, or a re-used UPN can sign in as an existing Log Hub user. | Mode 4 | Restrict who may sign in (user assignment on the enterprise application); do not re-use UPNs; review guest accounts; restrict who can edit user attributes in Entra ID. |
 | **The first registered user becomes admin.** | Modes 2 and 3 on a fresh database (and the first identify in Mode 1) | Register your own admin account before exposing the server; review **Admin panel → Users** afterwards. |
-| **CSRF protection is `SameSite=Lax` only** (§3.8). A sibling subdomain, or a browser without `SameSite` support, can make cross-site requests that carry the session cookie. | All modes with a browser session | Host Log Hub where every sibling subdomain is trusted (or on its own domain); require current browsers. |
+| **CSRF protection is `SameSite=Lax` only** (§3.7). A sibling subdomain, or a browser without `SameSite` support, can make cross-site requests that carry the session cookie. | All modes with a browser session | Host Log Hub where every sibling subdomain is trusted (or on its own domain); require current browsers. |
 | **No rate limits on log ingestion and the hook API-key routes**; the auth rate limits (§3.3) and login delay are counted per worker process, so the effective limit is about N × the setting with N workers. | All modes; multi-worker servers | Rate-limit at the reverse proxy; revoke abused API keys; lower `AUTH_RATE_LIMIT_POINTS` to compensate for the worker count. |
 | **Known insecure secrets only produce a warning.** The server starts with a well-known `SESSION_SECRET` or database password and logs `security: known insecure … in use`. | Modes 2, 3 and 4 | Check the startup log; set unique values (or leave `SESSION_SECRET` unset so one is generated). |
 | **Account enumeration.** The responses of sign-up, forgot-password and resend-confirmation can reveal whether an email has an account. | Modes 2 and 3 | Keep the auth rate limits on; monitor the security log for bursts; prefer Mode 4 for public-facing servers. |

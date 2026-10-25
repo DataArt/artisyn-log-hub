@@ -18,27 +18,15 @@ import {
 } from '@nestjs/common';
 import * as fs from 'fs';
 import type { Request, Response } from 'express';
-import { getRequestBaseUrl } from '../common/request-base-url';
 import { SessionAuthGuard } from '../auth/guards/session-auth.guard';
 import { AdminGuard } from '../common/guards/admin.guard';
 import { ErrorLogsService } from '../error-logs/error-logs.service';
 import { SystemInfoService } from '../system-info/system-info.service';
 import { AccountDeletionService } from '../users/account-deletion.service';
 import { UsersService } from '../users/users.service';
-import {
-  getReleaseLinkKey,
-  RELEASE_LINK_TTL_SECONDS,
-  signReleaseToken,
-} from '../releases/release-token';
-import { ReleasesService } from '../releases/releases.service';
 import { TransferOwnershipDto } from '../teams/dto/transfer-ownership.dto';
-import type {
-  ReleaseDownloadLinkResponse,
-  ReleaseInventoryResponse,
-} from '../releases/releases.types';
 import { AdminService } from './admin.service';
 import { DeleteUserDto } from './dto/delete-user.dto';
-import { ReleaseDownloadLinkDto } from './dto/release-download-link.dto';
 import { RenameUserEmailDto } from './dto/rename-user-email.dto';
 import { UpdateUserRoleDto } from './dto/update-user-role.dto';
 import { UploadQueueAdminService } from './upload-queue-admin.service';
@@ -59,7 +47,6 @@ export class AdminPanelController {
     private readonly uploadQueueAdminService: UploadQueueAdminService,
     private readonly uploadQueueStatsService: UploadQueueStatsService,
     private readonly accountDeletionService: AccountDeletionService,
-    private readonly releasesService: ReleasesService,
   ) {}
 
   @Get('repos')
@@ -142,49 +129,6 @@ export class AdminPanelController {
         this.logger.warn(`Logs archive download failed: ${err.message}`);
       }
     });
-  }
-
-  /**
-   * Release zips bundled with this deployment (newest stamp only — see
-   * ReleasesService.listReleases). Empty on an instance with no releases
-   * directory mounted, which is a normal local-dev state rather than an error.
-   */
-  @Get('releases')
-  getReleases(): ReleaseInventoryResponse {
-    return { entries: this.releasesService.listReleases() };
-  }
-
-  /**
-   * Mints a temporary, signed, unauthenticated download link for one release
-   * zip. This is the only point in the link lifecycle where the inventory is
-   * consulted: an admin cannot mint a link for a superseded or non-existent
-   * zip, but a link already minted keeps working for its whole window even
-   * after a newer stamp supersedes it.
-   */
-  @Post('releases/download-link')
-  @HttpCode(200)
-  createReleaseDownloadLink(
-    @Req() req: Request,
-    @Body() dto: ReleaseDownloadLinkDto,
-  ): ReleaseDownloadLinkResponse {
-    const listed = this.releasesService
-      .listReleases()
-      .some((entry) => entry.fileName === dto.file);
-
-    if (!listed) {
-      throw new BadRequestException(
-        'That release is not available for download on this server',
-      );
-    }
-
-    const exp = Math.floor(Date.now() / 1000) + RELEASE_LINK_TTL_SECONDS;
-    const sig = signReleaseToken(dto.file, exp, getReleaseLinkKey());
-    // base64url is URL-safe as produced, so only the file name needs encoding.
-    const url =
-      `${getRequestBaseUrl(req)}/api/v1/releases/download` +
-      `?file=${encodeURIComponent(dto.file)}&exp=${exp}&sig=${sig}`;
-
-    return { url, expiresAt: new Date(exp * 1000).toISOString() };
   }
 
   @Delete('repos/:id')
