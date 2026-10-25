@@ -2,10 +2,12 @@
 'use strict';
 
 // VirusTotal scan of the installer tarballs (FR-29 - FR-31) for the
-// virustotal CI workflow. Design Decision 21 of
-// docs/tasks/todo/2026-10-23-ci-cd-scans/impl-plan.md.
+// virustotal CI workflow (Design Decision 21 of
+// docs/tasks/todo/2026-10-23-ci-cd-scans/impl-plan.md), and of the release
+// install kit for the vt-scan job of release.yml (scopeFor rows in
+// docs/knowledgebase/algorithms/release-assets.md).
 //
-// For each tarball:
+// For each file:
 //   1. GET /files/<sha256>; upload (POST /files) only when VirusTotal answers 404.
 //   2. After an upload, poll /analyses/<id> every 16 s (at most 40 times) until
 //      data.attributes.status === 'completed', then re-read GET /files/<sha256>.
@@ -16,16 +18,20 @@
 // All HTTP goes through curl; the API key is sent as `--header @-` on stdin,
 // so it never appears in the process arguments or the logs.
 //
-// Row per tarball (tool `virustotal`), scope chosen by file name:
+// Row per file (tool `virustotal`), scope chosen by file name (scopeFor):
 //   artisyn-hooks-installer.tgz -> installer-tgz -> <out>/row-virustotal-installer-tgz.json
 //   hooks.tar.gz                -> hooks-tgz     -> <out>/row-virustotal-hooks-tgz.json
+//   artisyn-log-hub-X.Y.Z.zip   -> release-zip   -> <out>/row-virustotal-release-zip.json
+//   install.sh                  -> install-sh    -> <out>/row-virustotal-install-sh.json
+//   install.ps1                 -> install-ps1   -> <out>/row-virustotal-install-ps1.json
+//   any other name              -> usage error
 //   malicious + suspicious > 0  -> neutral (high = malicious, medium = suspicious, engines in note)
 //   API error, timeout, no key  -> neutral (reason in note)
 //   zero detections             -> pass
 //   link: https://www.virustotal.com/gui/file/<sha256>
 //
 // Modes:
-//   VIRUS_TOTAL_KEY=... node scripts/ci/virustotal-scan.js --out <dir> [--raw <dir>] <tarball>...
+//   VIRUS_TOTAL_KEY=... node scripts/ci/virustotal-scan.js --out <dir> [--raw <dir>] <file>...
 //     --raw <dir> also saves every VirusTotal JSON response there (raw-<job> artifact).
 //
 // Exit codes: 0 after writing the rows (report-only), 1 only on a usage error.
@@ -40,10 +46,20 @@ const API = 'https://www.virustotal.com/api/v3';
 const PERMALINK = 'https://www.virustotal.com/gui/file/';
 const REQUEST_GAP_MS = 16000;
 const MAX_POLLS = 40;
-const SCOPES = {
+const EXACT_SCOPES = {
   'artisyn-hooks-installer.tgz': 'installer-tgz',
   'hooks.tar.gz': 'hooks-tgz',
+  'install.sh': 'install-sh',
+  'install.ps1': 'install-ps1',
 };
+const RELEASE_ZIP_RE = /^artisyn-log-hub-\d+\.\d+\.\d+\.zip$/;
+
+/** Row scope of a scanned file from its base name; null when the name is not scannable. */
+function scopeFor(name) {
+  if (Object.prototype.hasOwnProperty.call(EXACT_SCOPES, name)) return EXACT_SCOPES[name];
+  if (RELEASE_ZIP_RE.test(name)) return 'release-zip';
+  return null;
+}
 
 let lastRequestAt = 0;
 
@@ -153,12 +169,12 @@ function parseArgs(argv) {
     } else if (a.startsWith('--')) {
       throw new Error(`unknown or incomplete argument: ${a}`);
     } else {
-      if (!SCOPES[path.basename(a)]) throw new Error(`unexpected tarball name: ${path.basename(a)}`);
+      if (!scopeFor(path.basename(a))) throw new Error(`unexpected file name: ${path.basename(a)}`);
       args.files.push(a);
     }
   }
   if (!args.out) throw new Error('--out <dir> is required');
-  if (args.files.length === 0) throw new Error('at least one tarball path is required');
+  if (args.files.length === 0) throw new Error('at least one file path is required');
   return args;
 }
 
@@ -169,13 +185,15 @@ function main() {
   } catch (err) {
     process.stderr.write(`virustotal-scan: ${err.message}\n`
       + 'Usage: VIRUS_TOTAL_KEY=... node scripts/ci/virustotal-scan.js --out <dir> [--raw <dir>] '
-      + '<artisyn-hooks-installer.tgz> <hooks.tar.gz>\n');
+      + '<file>...\n'
+      + '  <file> base name: artisyn-hooks-installer.tgz, hooks.tar.gz, '
+      + 'artisyn-log-hub-X.Y.Z.zip, install.sh or install.ps1\n');
     process.exit(1);
   }
   const key = String(process.env.VIRUS_TOTAL_KEY || '').trim();
 
   for (const file of args.files) {
-    const scope = SCOPES[path.basename(file)];
+    const scope = scopeFor(path.basename(file));
     const base = { tool: 'virustotal', scope };
     let row;
     try {
@@ -197,6 +215,6 @@ function main() {
   process.exit(0);
 }
 
-module.exports = { verdictFromReport };
+module.exports = { verdictFromReport, scopeFor };
 
 if (require.main === module) main();

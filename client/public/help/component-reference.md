@@ -72,7 +72,6 @@ A NestJS application on Node.js 22. It is the only process that talks to the dat
 | **Model pricing** | Per-model token prices used for cost calculation. Anthropic model prices are fetched from Anthropic's public pricing page once a day (`MODEL_PRICING_FETCH_ENABLED=false` turns it off). Non-Anthropic prices can be imported from OpenRouter with an admin button. Admins can set prices for models that have none and override fetched prices (Admin → Model Pricing). Models seen in telemetry without a price are added automatically and flagged as unpriced. |
 | **Session retention** | Background job that permanently purges sessions older than `SESSION_RETENTION_DAYS` (default 30). |
 | **Installer distribution** | Serves the hook installer package and plugin tarball under `/static/` so projects install directly from their own server. |
-| **Releases** | Lists release bundles from the read-only `releases/` directory and issues signed, time-limited download links (Admin → System). |
 | **System info / health** | `GET /health`, build information, cluster and worker status, AI tool version tracking. |
 | **Server logs** | Structured pino logs with daily rotation under `logs/`; error log viewer and archive download in the admin panel. |
 | **Mail** | Optional SMTP delivery for confirmation, password reset and password-changed notifications. |
@@ -84,7 +83,6 @@ A NestJS application on Node.js 22. It is the only process that talks to the dat
 | PostgreSQL | `$LOG_HUB_DATA_DIR/pgdata` | All application data. |
 | `/app/dist/upload-queue` | `$LOG_HUB_DATA_DIR/upload-queue` | Uploads awaiting ingestion. |
 | `/app/dist/logs` | `$LOG_HUB_DATA_DIR/logs` | Server application and SQL logs. |
-| `/app/dist/releases` (read-only) | `$LOG_HUB_DATA_DIR/releases` | Optional release zips offered for download. |
 
 ## 4. Web client
 
@@ -100,7 +98,7 @@ Main areas:
 - **My API Keys** — hook installation wizard and API key management.
 - **Hook State** — per-repository hook health: version, recommendations, upload errors.
 - **Admin panel** (admins only) — Users, Teams, Repos, Auth, Model Pricing, Data Retention,
-  Upload Queue, Error Logs, System (build, cluster, release downloads).
+  Upload Queue, Error Logs, System (build, cluster).
 - **Help** — this documentation.
 
 ## 5. PostgreSQL database

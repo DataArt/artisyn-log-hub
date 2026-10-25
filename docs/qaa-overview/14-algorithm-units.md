@@ -88,7 +88,7 @@ Legend for the "Tests now" column: "pure" is a pure function without mocks, "moc
 | A-36 | Startup config validator | Refuses to start with an incomplete environment for the mode (`AUTH_MODE`, secrets, mail, `PASSWORD_POLICY`); an empty `AUTH_MODE` defaults to `password` | `server/src/auth/config/auth-startup-validation.ts: validateAuthStartupConfig` | The server does not start, with a clear message (safe behaviour) | **NO single doc** (modes in `deployment-auth-mode.md`, no list of required variables) | `auth-startup-validation.spec` 21 (pure) | UNIT TEST | Scenario 01: restarting the server is not allowed, so it cannot be checked live. Doc: auth-startup-config |
 | A-37 | Request locality | Accepts the address `127.0.0.1`, `::1` and their `::ffff:` forms, plus the single container gateway; proxy headers are ignored | `server/src/auth/utils/localhost.util.ts: isLocalhostRequest` | Mode `none`: password-less login only locally (403 from outside) | `authorization-and-authentificaiton.md` lines 148-170: **exists** | `localhost.util.spec` 6, `auto-identify.guard.spec` 6 (pure) | UNIT TEST | The only protection of mode `none`; a "foreign address" cannot be reproduced from localhost. Doc: local-request-detection |
 | A-38 | Detecting the container and the trusted gateway | In layers: marker files, platform variables, cgroup v1/v2, mountinfo; the gateway is only a private IPv4 from `/proc/net/route` | `server/src/auth/utils/container-gateway.util.ts` | Same as A-37 (availability of mode `none` in the image) | `authorization-and-authentificaiton.md` lines 154-181: **exists** | `container-gateway.util.spec` 27 (pure, `FsProbe` injection) | UNIT TEST | cgroup/podman/k8s cannot be reproduced. Reduce 27 to a table of ≈10. Same doc as A-37 |
-| A-39 | Release link signature | HMAC-SHA256 over `file:exp`; checks in order: file name (pattern), `exp` format, signature, expiry (24 h); `../` is rejected before touching the disk | `server/src/releases/release-token.ts` | Downloading a release from a link in the admin panel (403/404 refusals) | `release-distribution.md`: **exists** (not checked line by line) | `release-token.spec` 11 (pure) | UNIT TEST | Scenario S-REL-02 checks forgery and expiry at the HTTP level; the unit test keeps only the order of checks and `../`. Priority P1. Doc: release-link-token |
+| ~~A-39~~ | **Dropped:** ~~Release link signature~~ | The release download feature and its signed links were removed by 2026-10-20-github-release-pipeline | — | — | — | — | DROPPED | Doc `release-link-token` deleted |
 | A-40 | Azure callback (SSO) | Checks state and nonce, token exchange, redirect to `oauthError` | `server/src/auth/azure/azure-callback.controller.ts` | SSO login | KB partial | `azure-callback.controller.spec` 10 (mocks) | NOT AN ALGORITHM | An OAuth flow on stubs, out of scope without an OIDC stand (question 10 of 13 and question 7 below) |
 | A-41 | Cluster worker restarts | A crash within 10 s of uptime is a fast failure: delay 1, 2, 4, 8, 16, 30, 30, 30, 30 s (151 s in total); the 10th in a row stops the slot; after 10 s of uptime the counter resets | `server/src/cluster/worker-slot-registry.ts: onExit` | System Info (restarts, `stopped`), the container is restarted by Docker | `system-info-and-cluster.md` lines 72-80: **exists, matches** (numbers checked against `cluster.constants.ts`) | `worker-slot-registry.spec` 25 (pure, with clock injection) | UNIT TEST | Scenario 04 itself keeps "squeeze to ~6". Doc: worker-restart-policy |
 | A-42 | Upload queue statistics and lease | Window arithmetic, load share, moving expired `processing` back to `pending` | `server/src/admin/upload-queue-stats.service.ts`, `upload-queue-scheduler.service.ts` | Admin → Upload queue | KB partial | `upload-queue-stats.service.spec` 11, `upload-queue-scheduler.service.spec` 19 (DB mocks) | NOT AN ALGORITHM | drizzle mocks and call counting (analysis 06 marked it X/DELETE). The live path is S-INGEST-06 |
@@ -394,11 +394,11 @@ author's mistakes). It is a separate run, not part of the implementation task.
 
 ### 5.1 How many in total
 
-- Candidates: **50**; **35** stay as unit tests; 11 are covered by a scenario; 4 are not an algorithm.
-- Algorithm docs: **30** (P0 13, P1 15, P2 2).
-- Doc status: already exists and matches the code **10** (cost-formula, cache-ratio-and-causes,
+- Candidates: **50** (A-39 dropped since, so 49 remain); **34** stay as unit tests; 11 are covered by a scenario; 4 are not an algorithm.
+- Algorithm docs: **29** (P0 12, P1 15, P2 2).
+- Doc status: already exists and matches the code **9** (cost-formula, cache-ratio-and-causes,
   change-surface-concentration, change-surface-paths-and-kinds, login-backoff, password-policy, local-request-detection,
-  worker-restart-policy, harness-usage-tree, release-link-token; the last two were not checked line by line); exists but
+  worker-restart-policy, harness-usage-tree; the last one was not checked line by line); exists but
   differs **2** (work-time, byte-token-estimates); partial **3** (otel-cost-selection, token-usage-dedupe,
   prompt-turn-qualification); missing entirely **15** (derived-productivity, summary-detectors, semver-compare,
   tool-outcome, tool-line-and-commit-counters, tool-duration-percentiles, file-category, workflow-notification,
@@ -412,10 +412,10 @@ Counting unit: one table row is one test (`it.each`). Estimated rows per doc (my
 
 | Priority | Docs | Rows (tests) | Files |
 |---|---|---|---|
-| P0 (money, security, data loss) | cost-formula 10, otel-cost-selection 6, login-backoff 6, password-policy 8, auth-startup-config 8, local-request-detection 10, guardrail-path-check 10, ndjson-tolerance 8, repo-url-normalization 12, change-surface-concentration 12 (15 rows in the sample with CS-10a..e), cache-ratio-and-causes 10, work-time 6, release-link-token 4 | ≈110 | 13 |
+| P0 (money, security, data loss) | cost-formula 10, otel-cost-selection 6, login-backoff 6, password-policy 8, auth-startup-config 8, local-request-detection 10, guardrail-path-check 10, ndjson-tolerance 8, repo-url-normalization 12, change-surface-concentration 12 (15 rows in the sample with CS-10a..e), cache-ratio-and-causes 10, work-time 6 | ≈106 | 12 |
 | P1 | change-surface-paths-and-kinds 14, summary-detectors 14, semver-compare 8, tool-outcome 7, tool-line-and-commit-counters 8, prompt-turn-qualification 10, token-usage-dedupe 6, derived-productivity 6, harness-usage-tree 6, worker-restart-policy 6, upload-chunk-planning 5, attribute-filter 8, file-category 6, byte-token-estimates 4, attribution-failure-cap 5 | ≈123 | 15 |
 | P2 | tool-duration-percentiles 5, workflow-notification 3 | ≈8 | 2 |
-| Total | 30 docs | **≈240 rows in 30 files** | |
+| Total | 29 docs | **≈236 rows in 29 files** | |
 
 Comparison with the owner's estimate (`13-new-test-suite.md`): there it is "about 100 for authorization and ~25 for the
 hook, that is ~125, packed into ~10 files". My estimate is wider because, on top of authorization and the hook, it adds
@@ -443,7 +443,6 @@ for the whole set, 7-12 for P0 (rough, not verified).
 5. change-surface-concentration (A-14): the sample is ready (section 3).
 6. cache-ratio-and-causes (A-05, A-06).
 7. work-time (A-07): first the owner's decision (question 1), otherwise the doc will pin the wrong behaviour.
-8. release-link-token (A-39).
 
 **P1:** change-surface-paths-and-kinds, summary-detectors, semver-compare, tool-outcome, tool-line-and-commit-counters,
 prompt-turn-qualification, token-usage-dedupe, derived-productivity, harness-usage-tree, worker-restart-policy,

@@ -1,9 +1,9 @@
 ---
 type: reference
 title: Git Hooks and Secret Scanning
-description: The versioned git hooks in .githooks/ (migration guard, gitleaks secret scan on pre-commit and pre-push), the .gitleaks.toml allowlist, the CI scan (gated on GITLEAKS_ENABLED) and the main/release branch ruleset that requires it
+description: The versioned git hooks in .githooks/ (migration guard, gitleaks secret scan on pre-commit and pre-push), the .gitleaks.toml allowlist, the CI scan (gated on GITLEAKS_ENABLED) and the main/release branch ruleset that requires it and the fast-checks job
 tags: [git, hooks, security, gitleaks, ci]
-timestamp: 2026-10-24
+timestamp: 2026-10-25
 ---
 
 # Git Hooks and Secret Scanning
@@ -81,6 +81,11 @@ The repository is public; the setup that goes with it:
 3. Make the `scan` check (the gitleaks job) required for `main` and `release` — done in the
    repository ruleset `protect-main-release` (Settings → Rules → Rulesets), which also requires a
    PR and blocks deletion and force-push on both branches.
+4. Add `fast-checks` next to `scan` as a required status check of `protect-main-release`. It is the
+   single job of `.github/workflows/checks.yml` (the FR-5 fast checks: typechecks, algorithm tests,
+   build-script tests, hook tests), which runs on every pull request to `main` and `release` and is
+   also called by the release workflow. GitHub offers a check name only after it has run once, so
+   add it after the first PR run of `checks.yml`. See [Release Pipeline](release-pipeline.md).
 
 The other, report-only security scans (Snyk, dependency review, config guard, lock-file and workflow
 lint, VirusTotal) are in [CI Security Scans](ci-security-scans.md).

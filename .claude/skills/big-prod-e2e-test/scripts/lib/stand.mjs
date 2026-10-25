@@ -47,8 +47,8 @@ export async function buildImage(stamp, { root = gitRoot(), logFile, timeoutMs =
   const args = [
     'buildx', 'build',
     '--platform', 'linux/amd64',
+    '--build-arg', `VERSION=big-prod-${stamp}`,
     '--build-arg', `GIT_COMMIT=${commit}`,
-    '--build-arg', `RELEASE_STAMP=${stamp}`,
     '-t', imageRef,
     '--load',
     '.',
@@ -129,7 +129,7 @@ export function renderCompose(imageTag) {
 `;
 }
 
-/** .env for the stand with fresh random secrets (pattern scripts/release.js generateReleaseEnv). */
+/** .env for the stand with fresh random secrets (pattern scripts/release-kit.js generateReleaseEnv). */
 export function renderEnv() {
   return [
     'LOG_HUB_DATA_DIR=./data',

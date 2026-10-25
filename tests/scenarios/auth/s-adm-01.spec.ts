@@ -63,7 +63,6 @@ test('@S-ADM-01 admin panel only for admins, tabs and deep links work @mode-a @m
       '/api/v1/admin/logs-archive',
       '/api/v1/admin/upload-queue',
       '/api/v1/admin/upload-queue/stats',
-      '/api/v1/admin/releases',
       '/api/v1/admin/auth',
     ];
     for (const path of gets) {

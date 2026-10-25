@@ -8,7 +8,6 @@ import { DateTime } from '../../../components/DateTime';
 import { formatBytes } from '../../../lib/format';
 import { cn } from '../../../lib/cn';
 import { Button } from '../../../ui/button';
-import { ReleaseDownloadsSection } from './ReleaseDownloadsSection';
 import {
   Table,
   TableHeader,
@@ -305,18 +304,13 @@ export function AdminSystemTab() {
         </Card>
       </div>
 
-      {/* Secondary metrics strip: 7 tiles + the logs-archive tile, wraps to 2
+      {/* Secondary metrics strip: 6 tiles + the logs-archive tile, wraps to 2
           columns on narrow viewports */}
       <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
         <SecondaryTile
           label="Build"
           value={build.version}
           caption={`git ${shortCommit}`}
-        />
-        <SecondaryTile
-          label="Release"
-          value={build.releaseStamp}
-          caption="build stamp (UTC)"
         />
         <SecondaryTile
           label="Node / Env"
@@ -425,9 +419,6 @@ export function AdminSystemTab() {
           </Table>
         </div>
       </div>
-
-      {/* Release zips carried by this instance + temporary download links */}
-      <ReleaseDownloadsSection />
     </div>
   );
 }

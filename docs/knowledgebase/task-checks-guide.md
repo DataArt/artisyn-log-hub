@@ -74,9 +74,6 @@ Manual-only. Audits for N+1 queries, missing pagination, sync operations that sh
 memory leaks, expensive render computations and large bundle additions. Returns issues categorized
 by severity.
 
-### release (`post-impl-check-release`)
-Builds the release bundle (`npm run release`) and verifies the contents of `release/`.
-
 ### security-no-auto (`post-impl-check-security-no-auto`)
 Manual-only. Audits for XSS, SQL injection, auth flaws, exposed secrets, CSRF, XXE, insecure
 deserialization and path traversal. Returns issues categorized as CRITICAL / HIGH / MEDIUM.
@@ -86,7 +83,7 @@ deserialization and path traversal. Returns issues categorized as CRITICAL / HIG
 `/adlc-lh:post-impl-check <task-folder>` scans `.claude/skills/` for folders named
 `post-impl-check-*`, drops every one whose id ends in `-no-auto`, adds the bundled checks and sorts
 by id. The automatic pass is therefore `client-component-size`, `docker-build`, `indexes`,
-`kb-actual`, `migrations` and `release`, in that order. Checks run one by one with no pause between
+`kb-actual` and `migrations`, in that order. Checks run one by one with no pause between
 them; only a hard blocker stops the run. The "locate changed files" scaffolding is injected once by
 the workflow prompt, so each check skill defines only its own audit.
 

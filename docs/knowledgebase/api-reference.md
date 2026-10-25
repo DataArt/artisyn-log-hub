@@ -746,15 +746,6 @@ interface AdminUser {
   lastActivity: string | null; // ISO 8601
 }
 
-type ReleaseArch = 'amd64' | 'arm64';
-
-interface ReleaseZipEntry {
-  fileName: string;   // e.g. "artisyn-log-hub-20260918-142233-amd64.zip"
-  arch: ReleaseArch;
-  stamp: string;      // UTC release stamp YYYYMMDD-HHMMSS — an identity, not a timestamp
-  sizeBytes: number;
-}
-
 interface ErrorLogEntry {
   timestamp: string;      // ISO 8601, parsed from the log line's local-time string
   source: string;         // NestJS logger context, e.g. "AdminPanelController"
@@ -871,31 +862,6 @@ response: { entries: ErrorLogEntry[] }
 // and deletes the temp file afterward.
 response: application/zip (Content-Disposition: attachment; filename="logs-<ISO timestamp>.zip")
 
-// GET /api/v1/admin/releases — 200
-// Requires: session cookie, role='admin'
-// Release zips this instance carries, read from the read-only releases/ bind mount.
-// ONLY the newest release stamp is listed (older zips still on disk are neither listed
-// nor deleted), sorted by arch ascending. A missing/unreadable/empty directory returns
-// { entries: [] } — never an error: an instance with no releases mounted is normal.
-response: { entries: ReleaseZipEntry[] }
-
-// POST /api/v1/admin/releases/download-link — 200
-// Requires: session cookie, role='admin'
-// Mints a temporary, signed, UNAUTHENTICATED download URL for one release zip.
-// Stateless: the token is an HMAC-SHA256 over `file:exp` keyed by SESSION_SECRET — no
-// table, no migration, and NO WAY TO REVOKE a minted link before it expires.
-body: { file: string }   // bare zip file name; must match
-                         // /^artisyn-log-hub-(\d{8}-\d{6})-(amd64|arm64)\.zip$/
-response: {
-  url: string;        // absolute: <base>/api/v1/releases/download?file=&exp=&sig=
-  expiresAt: string;  // ISO 8601 UTC, 24h (RELEASE_LINK_TTL_SECONDS = 86400) ahead
-}
-// Errors:
-//   400 — file fails the name pattern (global ValidationPipe), or is not in the CURRENT
-//         inventory (the only inventory check in the token's life — redeem never re-checks)
-//   401 — not authenticated
-//   403 — caller is not admin
-
 // GET /api/v1/admin/upload-queue — 200
 // Requires: session cookie, role='admin'
 // Flat list of all upload_queue rows (client groups by sessionId for display),
@@ -1000,34 +966,6 @@ response: { email_delivery: 'sent' | 'failed' }
 // DELETE /api/v1/admin/auth/pending-registrations/:id — 204
 // Requires: session cookie, role='admin'. Atomic — deletes the account only if still unconfirmed
 // (email_confirmation_tokens row cascades). Same 404-vs-409 guard as resend.
-```
-
----
-
-## Release Download (public)
-
-The one release endpoint with **no guards**. The signed token *is* the authorization — the
-recipient of a link is typically not a log-hub user at all. Minted by
-`POST /api/v1/admin/releases/download-link` above; see `server-endpoint-map.md` for the route entry.
-
-```ts
-// GET /api/v1/releases/download?file=<name>&exp=<epochSeconds>&sig=<base64url> — 200
-// No session cookie, no API key, no guard.
-// Success: the zip itself, streamed.
-//   Content-Type: application/zip
-//   Content-Disposition: attachment; filename="artisyn-log-hub-<stamp>-<arch>.zip"
-//
-// EVERY refusal is an HTML page, NOT JSON — the caller is a human in a browser, so the
-// handler never throws an HttpException (the global HttpExceptionFilter would render JSON).
-// No stack trace, no filesystem path, no partial file body.
-//   403 text/html "Invalid download link"     — file fails the name pattern (this is what
-//                                                ?file=../../etc/passwd gets), exp is not
-//                                                numeric, or the signature does not verify
-//   410 text/html "Link expired"              — signature genuine, exp in the past
-//   404 text/html "File no longer available"  — token valid, file no longer on disk
-//
-// Redeem does NOT consult the inventory: a link keeps working for its whole 24h window
-// after a newer stamp supersedes that zip in GET /api/v1/admin/releases.
 ```
 
 ---

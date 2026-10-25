@@ -129,7 +129,7 @@ The ids are made unique (impl-plan of the task `2026-10-14-qaa-test-suite-cleanu
 | S-ADM-05 | System Info, the log archive and the error log | UI+API | P1 |
 | S-ADM-06 | Data Retention: the retention period matches the consent text, a chart with an empty day | UI+API | P1 |
 | S-ADM-07 | Upload queue: a broken file, Reprocess, Clear, counters | UI+API | P1 |
-| S-ADM-08 | Releases: a signed link, a forgery, an expired one, and the public installer | UI+API | P1 |
+| ~~S-ADM-08~~ | **Dropped: the release download feature was removed by 2026-10-20-github-release-pipeline.** ~~Releases: a signed link, a forgery, an expired one, and the public installer~~ | UI+API | — |
 
 ### File 02: repos-sessions
 
@@ -226,7 +226,7 @@ The ids are made unique (impl-plan of the task `2026-10-14-qaa-test-suite-cleanu
 | S-INST-04 | Uninstall cuts out only its own parts and does not break anything else | installer | P0 |
 | S-INST-05 | OTEL port: allocation, pinning, `--otel-port`, stopping the old receiver, a foreign owner | installer | P1 |
 | S-REL-01 | Build artifacts: a clean dist, consistent versions, the installer downloads and remembers its version | installer | P1 |
-| S-REL-02 | A signed release link: from the admin panel to an anonymous download and every refusal | UI+API | P0 |
+| ~~S-REL-02~~ | **Dropped: the release download feature was removed by 2026-10-20-github-release-pipeline.** ~~A signed release link: from the admin panel to an anonymous download and every refusal~~ | UI+API | — |
 | S-PLAT-01 | Health, build version and security headers everywhere | API | P0 |
 | S-PLAT-02 | Static files of the built application: br/gzip/identity, Vary, cache, SPA fallback | API | P1 |
 | S-PLAT-03 | The server through an operator's eyes: cluster, System Info, worker restart, file logs, Error Logs, archive | UI+API | P1 |

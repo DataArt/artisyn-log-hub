@@ -2,11 +2,6 @@
 tmp
 /dist
 /release
-# Release zips served from Admin > System > Release Downloads: /releases is the local
-# docker-compose default for RELEASES_HOST_DIR (Docker creates it root-owned on first up),
-# /server/releases is the dev/jest fallback of resolveReleasesDir().
-/releases/
-/server/releases/
 /node_modules/
 /client/.ai_work_dir/
 /test-results/

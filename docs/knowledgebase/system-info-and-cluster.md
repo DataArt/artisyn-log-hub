@@ -5,7 +5,7 @@ description: "Native node:cluster launch (server/src/cluster/), the System Info 
 tags:
   - server
   - cluster
-timestamp: "2026-09-02T00:00:00+04:00"
+timestamp: "2026-10-25T00:00:00+04:00"
 ---
 
 # System Info & Cluster Parallel Launch
@@ -150,22 +150,28 @@ export function computeWorkerPoolMax(instances: number): number {
 
 ### Dockerfile changes (multi-stage build, repo-root `Dockerfile`)
 
-- **`GIT_COMMIT` build arg**: `ARG GIT_COMMIT=unknown` in the runtime stage, baked into `build-info.json`
-  (see below) so the running app can report which commit it was built from.
-- **`RELEASE_STAMP` build arg**: `ARG RELEASE_STAMP=unknown` in the runtime stage — the UTC
-  `YYYYMMDD-HHMMSS` release identity that `scripts/release.js` (or CI) generates; it is a
-  separate field rather than a bumped `version`.
+- **Build stages on the build platform**: `client-build`, `hooks-build` and `server-build` are
+  `FROM --platform=$BUILDPLATFORM …`, so a multi-arch build (amd64 + arm64) compiles the JS once per
+  runner natively and only the runtime stage is per-target. The argon2 musl prebuilds for both
+  architectures are already copied, so `npm ci` on the build platform is safe.
+- **`VERSION` and `GIT_COMMIT` build args**: `ARG VERSION=unknown` and `ARG GIT_COMMIT=unknown` in the
+  runtime stage. Whoever builds the image passes them:
+  - the release workflow (`.github/workflows/release.yml`): `VERSION=<X.Y.Z>` (the computed release
+    version) and `GIT_COMMIT=<github.sha>` — see [Release Pipeline](release-pipeline.md);
+  - `scripts/local-loghub.js`: `VERSION=local`;
+  - `scripts/local-release-bundle.js`: `VERSION=local-<stamp>`, `GIT_COMMIT=<HEAD>` or `<HEAD>-dirty`;
+  - the big-prod-e2e-test stand: `VERSION=big-prod-<stamp>`.
+  A plain `docker build` without args yields `unknown` / `unknown`.
 - **`build-info.json`**: written during the runtime stage —
-  `printf '{"version":"%s","gitCommit":"%s","releaseStamp":"%s"}' "$VERSION" "${GIT_COMMIT:-unknown}" "${RELEASE_STAMP:-unknown}" > dist/public/static/build-info.json`.
-  `VERSION` comes from `server/package.json` (captured at the end of the server-build stage into
-  `/app/dist/.app-version`) and is **no longer bumped** by a release run. Read by `readBuildInfo()`
-  (`server/src/common/build-info.ts`) through `SystemInfoService.getBuildInfo()` (cached after first
-  read); falls back to `{ version: 'dev', gitCommit: 'unknown', releaseStamp: 'dev' }` when the file
-  doesn't exist (local/dev, unbundled). A file written by an image built **before** the stamp existed
-  carries only two fields; the missing one is normalized to `'unknown'` on read, so the rest of the
-  app can treat `BuildInfo.releaseStamp` as always present. The same three fields widen the **public**
-  `GET /health/version` payload — `client/src/viewer/hooks/useBuildVersion.ts` declares its own
-  two-field interface and simply ignores the extra one.
+  `printf '{"version":"%s","gitCommit":"%s"}' "$VERSION" "$GIT_COMMIT" > dist/public/static/build-info.json`
+  (after `mkdir -p dist/public/static`). Read by `readBuildInfo()` (`server/src/common/build-info.ts`)
+  through `SystemInfoService.getBuildInfo()` (cached after first read). `readBuildInfo()` picks only
+  `version` and `gitCommit` from the parsed JSON, each a non-empty string or else `'unknown'`, so the
+  extra field of a file written by an older image (the former release stamp) never leaks into a response; a file
+  that is not a JSON object yields `{ version: 'unknown', gitCommit: 'unknown' }`. When the file is
+  absent (local/dev, unbundled) it falls back to `{ version: 'dev', gitCommit: 'unknown' }`. The same
+  two fields are the **public** `GET /health/version` payload, read by
+  `client/src/viewer/hooks/useBuildVersion.ts`.
 - **Cluster launch**: the runtime stage installs no process manager. It sets `ENV CLUSTER_MODE=primary`
   beside `ENV PORT=3000` and the container `CMD` is plain `["node", "index.js"]` — the bundle's own mode
   switch turns that one process into the primary, and the primary forks the workers.
@@ -333,8 +339,8 @@ interface SystemInfoResponse {
     logsTableBytes: number | null;                    // pg_total_relation_size('logs')
     databaseTotalBytes: number | null;                // pg_database_size(current_database())
   };
-  build: { version: string; gitCommit: string; releaseStamp: string };
-  // releaseStamp: UTC YYYYMMDD-HHMMSS; 'unknown' on a pre-stamp image, 'dev' with no build-info.json
+  build: { version: string; gitCommit: string };
+  // version: release X.Y.Z (or local / local-<stamp> / unknown); 'dev' with no build-info.json
   node: { version: string; env: string };
   eventLoopLagMs: number;                             // this-instance only
   requests: { perSecond: number; active: number };    // this-instance only
@@ -381,9 +387,9 @@ outside that group:
   `instances.actual` equals the configured worker count.
 - **Build info** (`getBuildInfo`, cached after first read, called synchronously) — delegates to
   `readBuildInfo()` (`server/src/common/build-info.ts`), which reads
-  `dist/public/static/build-info.json` (see Dockerfile section above), normalizes a missing
-  `releaseStamp` to `'unknown'`, and falls back to
-  `{ version: 'dev', gitCommit: 'unknown', releaseStamp: 'dev' }` when the file is absent (local dev).
+  `dist/public/static/build-info.json` (see Dockerfile section above), picks only `version` and
+  `gitCommit` (each a non-empty string, else `'unknown'`), and falls back to
+  `{ version: 'dev', gitCommit: 'unknown' }` when the file is absent (local dev).
 - **Event loop lag** (`getEventLoopLagMs`) — `perf_hooks.monitorEventLoopDelay()` histogram, enabled once at
   service construction (singleton scope); reports 0 until at least one sample exists.
 - **Disk usage** (`getDiskUsage`) — recursive size of `logs/` (resolved relative to CWD, same convention as
@@ -416,10 +422,9 @@ without provider plumbing. `workerStatsReporter` follows the same precedent.
 - Polls `GET /api/v1/admin/system` via react-query with `refetchInterval: 10_000` (10 s auto-refresh).
 - Core card grid: Node Instances (actual/expected + status dot), Visible CPUs, Database (connected + ping),
   Memory (process/system with a bar), Uptime (process + container), Load Average (vs. visible CPUs).
-- Secondary tiles strip: Build (version + short git commit), **Release** (`build.releaseStamp`, caption
-  "build stamp (UTC)"), Node/Env, Event Loop lag, DB Pool (active/max), Disk (logs dir / filesystem
-  total), Requests (per-second + active). Build and Release are deliberately separate tiles: `version`
-  is a frozen semver, the stamp is the release identity.
+- Secondary tiles strip: Build (`build.version` + short git commit), Node/Env, Event Loop lag, DB Pool
+  (active/max), Disk (logs dir / filesystem total), Requests (per-second + active), plus the Logs Archive
+  download tile. `build.version` is the release version (`X.Y.Z`) of a published image.
 - DB Space card: rendered only when `dbSpace.available` is true **and** `logsTableRowEstimate`,
   `logsTableBytes`, and `databaseTotalBytes` are all non-null.
 - Per-worker breakdown table, 5 columns: PID, Memory, Restarts, Last Restart, Status (with a colored
@@ -428,21 +433,3 @@ without provider plumbing. `workerStatsReporter` follows the same precedent.
   `lastRestartAt: null` uses. When `supervisor.clustered` is false the same 5 columns show a single
   fallback row for the current process instead (backend status string `'online (single process)'`; UI
   caption "Running without a supervisor — showing this process only").
-
-### Release Downloads section
-
-**Component:** `client/src/viewer/pages/admin/tabs/ReleaseDownloadsSection.tsx`, rendered by
-`AdminSystemTab.tsx` directly below the per-worker breakdown table. No new tab and no new route — it
-is part of the System Info tab.
-
-It lists the release zips this instance carries (`GET /api/v1/admin/releases`, newest release stamp
-only) and mints a 24-hour signed, unauthenticated download link per file
-(`POST /api/v1/admin/releases/download-link`). Its own `useQuery(["admin-releases"])` is separate from
-the tab's 10 s system-info poll and has no `refetchInterval` — the inventory only changes on a deploy.
-An empty inventory **and** a failed query both render the single "No release zips on this instance"
-row: an instance with no releases directory mounted is a normal local state, never an error.
-
-The zips themselves are **not** part of the image and are **never** statically served — they arrive
-through a read-only bind mount at `/app/dist/releases`, a sibling of the served `public/` tree. The
-endpoints and the HMAC token contract are in `server-endpoint-map.md`; see
-`client-component-map.md` for the component's own entry.

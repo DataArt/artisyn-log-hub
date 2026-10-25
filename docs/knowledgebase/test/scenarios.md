@@ -68,7 +68,7 @@ server, but because the stand build rewrites `artisyn-hooks-installer/` in place
 | `tmp/scenarios/stand/public/static/` | installer tarballs + `installer-version.json` (`build-hooks-installer.js --static-dir`) |
 | `tmp/scenarios/stand/drizzle/migrations/` | copy of `server/drizzle/migrations` |
 | `tmp/scenarios/stand/prebuilds/` | argon2 prebuilds (`scripts/copy-native.js <dir>`) |
-| `tmp/scenarios/run-<runId>/<mode>/` | working dir of the stand process: `stand.log`, `UPLOAD_QUEUE_DIR`, `EXPORT_IMPORT_DIR`, `RELEASES_DIR` |
+| `tmp/scenarios/run-<runId>/<mode>/` | working dir of the stand process: `stand.log`, `UPLOAD_QUEUE_DIR`, `EXPORT_IMPORT_DIR` |
 | `tmp/coverage/scenarios-<runId>/<mode>/` | with `SCENARIOS_COVERAGE=1` only: raw V8 profiles in `v8/`, `c8 report` output in `report/` |
 
 The input hash covers every file `git ls-files -co --exclude-standard` lists under `client/`,
@@ -136,7 +136,7 @@ Every spec imports `test`/`expect` from here.
 
 | Fixture | Scope | Value |
 |---|---|---|
-| `stand` | worker | `{ url, mode, authMode, schema, runDir }` from `STAND_URL` / `STAND_MODE` / `STAND_SCHEMA` / `STAND_RUN_DIR` (the stand's working dir; `RELEASES_DIR` is its `releases/` sub-dir, `STAND_RELEASES_SUBDIR` in `modes.ts`) |
+| `stand` | worker | `{ url, mode, authMode, schema, runDir }` from `STAND_URL` / `STAND_MODE` / `STAND_SCHEMA` / `STAND_RUN_DIR` (the stand's working dir) |
 | `db` | worker | `pg.Pool` on `DATABASE_URL` with `search_path` = the stand schema |
 | `api` | test | anonymous `APIRequestContext` on the stand |
 | `users` | test | `users.user(role, { label, email, acceptNotice })` → a fresh `<role>-<runId>@arrakis.test` user (`email` registers an exact address instead, e.g. one invited before its first login) with its own logged-in `api` context and `signIn(page)`. A: identify; B: signup + Mailpit confirmation + login; C: signup + login. The role is aligned with a direct `UPDATE` (the first user of a schema is admin); the data-collection notice is accepted by default. The fixture module also exports `loginPastBackoff(ctx, email, password)` |
@@ -162,7 +162,6 @@ Every spec imports `test`/`expect` from here.
 | `session-view.ts` | the session detail pane for the S-SESS scenarios: `uploadGoldenRepo(api, db, owner, fixtures)` (golden fixtures into one repository, with `rootId(fixture)` / `agentId(fixture, key)`), `openSession(page, user, repoId, sessionId, { tab, teamId })`, label-based readers `summaryTile`, `infoValue`, `infoTableValue`, `usageCounter`, `toolRow`, `logTurns` (top-level Logs turns), `turnMetric(turn, 'In' \| 'cache_ratio' \| 'Cost' …)`, `rootLineCounts(fixture)`, and display formats `usd4` / `pct1` / `hms` / `int` that print an `expected.json` literal the way the UI does |
 | `reports.ts` | REPO-GOLD and the Analytics / Reports screens for the S-COST, S-ANLT and S-REPT scenarios: `uploadRepoGold(api, db, owner, fixtures?)` (default all nine fixtures; returns `totals`, `expected` by root key, `sid(key)` / `keyOf(sessionId)`, `at(iso)` / `day(fixtureDay)` onto the loaded copy and the API `range` A..A+13d), `repoGet(user, repoId, route, params)` (asserts 200), `openReport(page, user, repoId, reportId, { startDate, endDate, branches, groupBy })` and `openAnalytics(page, user, repoId, { from, to, view, layout, groupBy })` deep links, `downloadPdfText(page)`, readers `kpiTile`, `kpiRowValues`, `reportSection`. Specs that use the screens pin the browser to UTC (`test.use({ timezoneId: 'UTC' })`) so the UI range equals the API range. Analytics remounts only when its view (`av`) changes, so a second `openAnalytics` with the same view keeps the old layout/grouping — switch those with the controls instead |
 | `ingest.ts` | raw uploads for the S-INGEST scenarios: `postLogs(api, key, params, body, headers)` sends exactly the given bytes to `POST /api/v2/logs` (plain, gzip with or without `Content-Encoding`, chunk params), `ndjson(rows)`, and DB readers `logRowCount`, `sessionRowCount`, `queueRowCount`, `storedBody(db, sessionId, type)` (the stored jsonb lines) and `processedSizes(db, sessionId)` (`upload_queue_measurements.size_bytes` of successful runs — the decompressed size the server counted) |
-| `releases.ts` | S-REL-02: `standReleasesDir(stand)`, `writeReleaseFiles(dir, files)`, `releaseLinkKey(db)` (HKDF-SHA256 «release-link» of the `server_secrets` session secret — modes A and C start without `SESSION_SECRET`), `signRelease(file, exp, key)`, `releaseDownloadPath(file, exp, sig)` |
 | `export-import.ts` | repository export/import jobs through the API: `exportRepo(api, repoId, body)` → `{ jobId, zip }` (start, poll, download), `startExport` / `stageImport` (raw responses for refusal checks), `importZip(api, repoId, zip)` (stage, confirm, poll to `done`), `stageBootstrap` / `confirmBootstrap` / `bootstrapImport` (the no-target-repo import), `waitForJob(api, statusPath)` |
 | `hook-process.ts` | the hook as child processes, for the S-HOOK scenarios (ported from `hook/.claude/telemetry_tool/__tests__/test-helpers.js`): `tempDirs()` (every sandbox under `os.tmpdir()`, never in this repo — a non-git cwd under the repo would resolve its git root), `copyToolDir`, `makeFakeGitRepo({ remote, branch, userName })`, `makeFakeHome`, `writeConfig` / `writeStandConfig` (the `ARTISYN` config: `serverUrl` in `log-hub.json`, the key only in `log-hub.local.json`, OTEL and prompt uploads off by default — `QUIET_HOOK_CONFIG`), `runScript` / `runHook` / `runPromptUpload` / `runNodeScript` (exit code, stdout, elapsed ms), `startFakeLogHub` (records method, path, query, headers, raw body; answers 201 `{warnings: []}`, a scripted status, `hang` or `drop`), readers `readHookLog`, `readManifest`, `readRecommendations`; the OTEL receiver: `freeLoopbackPort`, `spawnReceiver`, `startReceiver`, `waitForExit`, `stopReceiver`, `rawRequest` (one fresh connection per request); `writeFakeMcpServer`, `writeFakeClaude(behavior)` + `pathWith(dir)`; the built plugin: `installBuiltPlugin(standUrl, repo)` (the plugin archive from the stand's own installer tarball), `runPluginEvent` (every command `hooks/hooks.json` registers for an event); `[win]` process probes; `normalizePath` (DD SC6: `realpathSync.native` + forward slashes) |
 | `installer.ts` | the hooks installer CLI for the S-INST scenarios: `unpackInstaller(standUrl, dirs)` unpacks the stand's own `GET /static/artisyn-hooks-installer.tgz` (what `npx <server>/static/…tgz` runs), `runInstaller(cli, cwd, args, { home, fakeClaudeDir, stdin, env })` runs `node package/dist/index.js` with a fake HOME, a PATH stripped of every real `claude` (optionally a fake one first), `CLAUDECODE` blanked and stdin a pipe (never a TTY); `patchedPluginArchive(cli, dirs, { entry: content })` → a modified `hooks.tar.gz` for `ARTISYN_HOOKS_ARCHIVE_PATH`; `treeHashes(root)`, `filesContaining(root, needle)`, `fakeClaudeCalls(callsLog)`, `readJson`, `writeClaudeSettings`, `USER_SETTINGS` (the design's user `.claude/settings.json`) |
@@ -208,7 +207,7 @@ top 5, branch filter, previous period, PDF) and S-REPT-02 (Cache Read Ratio: rat
 both scopes, branch groups, causes and the personal threshold).
 
 The ingest and platform scenarios (`tests/scenarios/ingest/s-ingest-0[1-4].spec.ts`,
-`tests/scenarios/platform/s-plat-01.spec.ts`, `s-rel-02.spec.ts`; modes A and C) talk to the
+`tests/scenarios/platform/s-plat-01.spec.ts`; modes A and C) talk to the
 upload route byte by byte: S-INGEST-01 (key created, working, expired, revoked; one 401 body for
 every reason; `POST /api/v1/logs` → 404), S-INGEST-02 (first upload: ssh/https normalised into
 one repository, branch, user, contexts, re-uploads without duplicates; the session list only shows
@@ -217,9 +216,7 @@ queue row, NUL, the four gzip shapes, 413 for oversize and gzip bombs under `LOG
 S-INGEST-04 (6000-line Cyrillic/emoji transcript in three v2 chunks: retry, out of order, every
 parameter refusal, a foreign uploadId, byte-exact assembly, last writer wins, the Logs tab),
 S-PLAT-01 (`/health`, `/health/version`, the strict CSP / `X-Frame-Options` / `nosniff` on API,
-SPA, `/static` and `/assets` responses, error bodies without stacks or paths, no CORS) and S-REL-02
-(release zips in the stand's `RELEASES_DIR`: newest-stamp inventory in the admin UI, a minted link
-downloaded anonymously, 403/410/404 HTML refusals, rights, `/static` never serving a zip).
+SPA, `/static` and `/assets` responses, error bodies without stacks or paths, no CORS).
 
 The hook scenarios (`tests/scenarios/hook/s-hook-0[1247].spec.ts`, `s-hook-09.spec.ts`, helper
 `helpers/hook-process.ts`) run the real hook scripts as child processes in throwaway projects under

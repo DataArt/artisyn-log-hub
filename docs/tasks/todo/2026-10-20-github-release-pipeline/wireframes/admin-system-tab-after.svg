@@ -1,0 +1,186 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="960" viewBox="0 0 1440 960" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <title>Admin → System Info after FR-4 / FR-12: Build tile shows the semver version, no Release tile, no Release Downloads section</title>
+  <defs>
+    <style>
+      .bg { fill: #ffffff; }
+      .card { fill: #ffffff; stroke: #e4e4e7; stroke-width: 1; }
+      .lbl { font-size: 10px; font-weight: 700; letter-spacing: 0.8px; fill: #71717a; }
+      .slbl { font-size: 9px; font-weight: 700; letter-spacing: 0.8px; fill: #71717a; }
+      .big { font-size: 22px; font-weight: 700; fill: #18181b; }
+      .mid { font-size: 18px; font-weight: 700; fill: #18181b; }
+      .val { font-size: 14px; font-weight: 700; fill: #18181b; }
+      .cap { font-size: 10px; fill: #71717a; }
+      .small { font-size: 11px; fill: #71717a; }
+      .nav { font-size: 13px; fill: #3f3f46; }
+      .navsel { font-size: 13px; fill: #18181b; font-weight: 600; }
+      .side { font-size: 13px; fill: #3f3f46; }
+      .th { font-size: 13px; font-weight: 600; fill: #18181b; }
+      .td { font-size: 13px; fill: #18181b; }
+      .note { font-size: 12px; fill: #1d4ed8; }
+      .gone { font-size: 12px; fill: #b91c1c; }
+      .goneBox { fill: #fef2f2; stroke: #ef4444; stroke-width: 1.2; stroke-dasharray: 6 4; }
+      .newBox { fill: none; stroke: #2563eb; stroke-width: 1.5; stroke-dasharray: 5 3; }
+    </style>
+  </defs>
+
+  <rect class="bg" width="1440" height="960"/>
+
+  <!-- Top bar -->
+  <rect x="0" y="0" width="1440" height="48" fill="#ffffff" stroke="#e4e4e7"/>
+  <circle cx="24" cy="24" r="8" fill="#3b5bdb"/>
+  <text x="44" y="29" font-size="14" font-weight="600" fill="#18181b">Artisyn Log Hub</text>
+  <circle cx="1158" cy="24" r="7" fill="none" stroke="#3f3f46"/>
+  <text x="1226" y="29" font-size="13" fill="#52525b">dt@dataart.com</text>
+  <text x="1349" y="29" font-size="13" font-weight="600" fill="#18181b">Edit email</text>
+
+  <!-- Sidebar (abbreviated) -->
+  <rect x="0" y="48" width="320" height="912" fill="#fafafa" stroke="#e4e4e7"/>
+  <text x="12" y="108" class="lbl">TEAMS</text>
+  <text x="30" y="141" class="side">LogHubLocal</text>
+  <text x="30" y="173" class="side">LogHub Demo</text>
+  <text x="12" y="221" class="lbl">MY REPOS</text>
+  <text x="12" y="254" class="side">https://github.com/DataArt/artisyn-log-hub</text>
+  <text x="12" y="286" class="side">…</text>
+  <text x="30" y="330" class="side">My API Keys</text>
+  <text x="12" y="370" class="lbl">INSTALLED HOOKS</text>
+  <rect x="0" y="712" width="320" height="34" fill="#e4e4e7"/>
+  <text x="34" y="734" font-size="14" font-weight="600" fill="#18181b">Admin Panel</text>
+
+  <!-- Admin tabs -->
+  <text x="353" y="72" class="navsel">System Info</text>
+  <rect x="341" y="84" width="98" height="2" fill="#18181b"/>
+  <text x="450" y="72" class="nav">Repos</text>
+  <text x="510" y="72" class="nav">Teams</text>
+  <text x="572" y="72" class="nav">Users</text>
+  <text x="628" y="72" class="nav">Error Logs</text>
+  <text x="715" y="72" class="nav">Upload Queue</text>
+  <text x="829" y="72" class="nav">Data Retention</text>
+  <text x="946" y="72" class="nav">Auth</text>
+  <text x="999" y="72" class="nav">Model Pricing</text>
+  <line x1="320" y1="86" x2="1440" y2="86" stroke="#e4e4e7"/>
+
+  <!-- Header row -->
+  <circle cx="346" cy="118" r="5" fill="#059669"/>
+  <text x="359" y="122" class="small">Auto-refreshing every 10s · running as a single process (no cluster)</text>
+  <text x="1347" y="122" class="cap">Updated 4s ago</text>
+
+  <!-- Core cards (unchanged) -->
+  <g>
+    <rect class="card" x="341" y="143" width="350" height="112" rx="6"/>
+    <text x="358" y="171" class="lbl">NODE INSTANCES</text>
+    <text x="358" y="209" class="big">1 / 1</text>
+    <text x="358" y="235" class="cap">No supervisor detected · single process</text>
+
+    <rect class="card" x="707" y="143" width="350" height="112" rx="6"/>
+    <text x="724" y="171" class="lbl">VISIBLE CPUS</text>
+    <text x="724" y="209" class="big">4</text>
+    <text x="724" y="235" class="cap">availableParallelism() · raw cores: 4</text>
+
+    <rect class="card" x="1074" y="143" width="350" height="112" rx="6"/>
+    <text x="1091" y="171" class="lbl">DATABASE</text>
+    <text x="1091" y="205" font-size="20" font-weight="700" fill="#059669">Connected</text>
+    <text x="1091" y="231" class="cap">Ping latency: 1 ms</text>
+
+    <rect class="card" x="341" y="272" width="350" height="125" rx="6"/>
+    <text x="358" y="300" class="lbl">MEMORY</text>
+    <text x="358" y="334" class="mid">180 MB / 8 GB</text>
+    <rect x="358" y="348" width="316" height="6" rx="3" fill="#f4f4f5"/>
+    <rect x="358" y="348" width="8" height="6" rx="3" fill="#3b82f6"/>
+    <text x="358" y="374" class="cap">Process · System: 3.1 GB / 8 GB</text>
+
+    <rect class="card" x="707" y="272" width="350" height="125" rx="6"/>
+    <text x="724" y="300" class="lbl">UPTIME</text>
+    <text x="724" y="334" class="mid">2d 4h</text>
+    <text x="724" y="360" class="cap">Process uptime</text>
+    <text x="724" y="377" class="cap">Container: 2d 4h</text>
+
+    <rect class="card" x="1074" y="272" width="350" height="125" rx="6"/>
+    <text x="1091" y="300" class="lbl">LOAD AVERAGE</text>
+    <text x="1091" y="334" class="mid">0.12 / 0.08 / 0.05</text>
+    <text x="1091" y="360" class="cap">1m / 5m / 15m</text>
+    <text x="1091" y="377" class="cap">vs. 4 visible CPUs</text>
+  </g>
+
+  <!-- Secondary tiles: Release tile removed, 7 tiles now -->
+  <g>
+    <!-- Build tile (changed content) -->
+    <rect class="card" x="341" y="414" width="170" height="78" rx="6"/>
+    <rect class="newBox" x="337" y="410" width="178" height="86" rx="8"/>
+    <text x="354" y="437" class="slbl">BUILD</text>
+    <text x="354" y="459" class="val">0.1.3</text>
+    <text x="354" y="477" class="cap">git 3f9c2a1</text>
+
+    <rect class="card" x="524" y="414" width="170" height="78" rx="6"/>
+    <text x="537" y="437" class="slbl">NODE / ENV</text>
+    <text x="537" y="459" class="val">v24.22.1</text>
+    <text x="537" y="477" class="cap">production</text>
+
+    <rect class="card" x="706" y="414" width="170" height="78" rx="6"/>
+    <text x="719" y="437" class="slbl">EVENT LOOP</text>
+    <text x="719" y="459" class="val">2.4 ms</text>
+    <text x="719" y="477" class="cap">lag, this instance</text>
+
+    <rect class="card" x="889" y="414" width="170" height="78" rx="6"/>
+    <text x="902" y="437" class="slbl">DB POOL</text>
+    <text x="902" y="459" class="val">0 / 20</text>
+    <text x="902" y="477" class="cap">active, per instance</text>
+
+    <rect class="card" x="1071" y="414" width="170" height="78" rx="6"/>
+    <text x="1084" y="437" class="slbl">DISK</text>
+    <text x="1084" y="459" class="val">120 MB / 50 GB</text>
+    <text x="1084" y="477" class="cap">logs directory</text>
+
+    <rect class="card" x="1254" y="414" width="170" height="78" rx="6"/>
+    <text x="1267" y="437" class="slbl">LOGS ARCHIVE</text>
+    <rect x="1267" y="446" width="144" height="22" rx="4" fill="#ffffff" stroke="#18181b"/>
+    <text x="1339" y="461" font-size="12" fill="#18181b" text-anchor="middle">⤓ Download ZIP</text>
+
+    <rect class="card" x="341" y="505" width="170" height="78" rx="6"/>
+    <text x="354" y="528" class="slbl">REQUESTS</text>
+    <text x="354" y="550" class="val">1 / s</text>
+    <text x="354" y="568" class="cap">active req: 1</text>
+  </g>
+
+  <!-- Annotation: Build tile -->
+  <text x="528" y="530" class="note">Build tile: value = build-info.json "version" (FR-4: release tag without "v",</text>
+  <text x="528" y="546" class="note">e.g. 0.1.3; "local" for local-loghub builds), caption = git short commit.</text>
+  <line x1="526" y1="526" x2="470" y2="496" stroke="#2563eb" stroke-width="1"/>
+
+  <!-- Removed: Release tile -->
+  <rect class="goneBox" x="1254" y="505" width="170" height="78" rx="6"/>
+  <text x="1267" y="528" class="slbl" fill="#b91c1c">RELEASE</text>
+  <text x="1267" y="550" class="val" fill="#b91c1c" text-decoration="line-through">20261020-101500</text>
+  <text x="1267" y="568" class="cap" fill="#b91c1c">build stamp (UTC)</text>
+  <text x="1424" y="604" text-anchor="end" class="gone">Removed (FR-4/FR-12): the Release tile</text>
+  <text x="1424" y="620" text-anchor="end" class="gone">and BuildInfo.releaseStamp go away.</text>
+
+  <!-- DB Space (unchanged) -->
+  <rect class="card" x="341" y="600" width="350" height="100" rx="6"/>
+  <text x="358" y="628" class="lbl">DB SPACE</text>
+  <text x="358" y="654" class="val">Logs table: 7,931 rows · 1.4 GB</text>
+  <text x="358" y="678" class="val">Database total: 1.6 GB</text>
+
+  <!-- Per-instance breakdown (unchanged) -->
+  <text x="341" y="728" class="lbl">PER-INSTANCE BREAKDOWN</text>
+  <text x="498" y="728" class="cap">Running without a supervisor — showing this process only</text>
+  <rect class="card" x="341" y="741" width="1083" height="78" rx="6"/>
+  <text x="350" y="766" class="th">PID</text>
+  <text x="478" y="766" class="th">Memory</text>
+  <text x="654" y="766" class="th">Restarts</text>
+  <text x="813" y="766" class="th">Last Restart</text>
+  <text x="1027" y="766" class="th">Status</text>
+  <line x1="341" y1="781" x2="1424" y2="781" stroke="#18181b"/>
+  <text x="350" y="805" class="td">1</text>
+  <text x="478" y="805" class="td">180 MB</text>
+  <text x="654" y="805" class="td">0</text>
+  <text x="813" y="805" class="td">—</text>
+  <circle cx="1032" cy="800" r="4" fill="#9ca3af"/>
+  <text x="1043" y="805" class="td">online (single process)</text>
+
+  <!-- Removed: Release Downloads section -->
+  <rect class="goneBox" x="341" y="836" width="1083" height="100" rx="6"/>
+  <text x="358" y="860" class="lbl" fill="#b91c1c">RELEASE DOWNLOADS</text>
+  <text x="358" y="884" class="gone">Removed (FR-12): no Release Downloads section, no "Generate link" button, no signed download links.</text>
+  <text x="358" y="904" class="gone">The page ends after Per-Instance Breakdown. Releases are published on GitHub (FR-10) and installed</text>
+  <text x="358" y="920" class="gone">with install.sh / install.ps1 pulling ghcr.io/dataart/artisyn-log-hub:&lt;version&gt; (FR-11).</text>
+</svg>

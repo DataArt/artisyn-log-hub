@@ -43,12 +43,6 @@ export const SUITE_LIMITS_ENV: Readonly<Record<string, string>> = {
   AUTH_RATE_LIMIT_POINTS: '1000',
 };
 
-/**
- * Sub-directory of the stand's run dir that is its RELEASES_DIR. Scenarios that need release
- * zips (S-REL-02) write them there; the runner hands the run dir over as STAND_RUN_DIR.
- */
-export const STAND_RELEASES_SUBDIR = 'releases';
-
 /** Neutral identity domain for every scenario user and address (DD 2). */
 export const SCENARIO_EMAIL_DOMAIN = 'arrakis.test';
 export const DEFAULT_ADMIN_CONTACT_EMAIL = `admin@${SCENARIO_EMAIL_DOMAIN}`;
@@ -134,7 +128,6 @@ export function standEnv(input: StandEnvInput): Record<string, string> {
     COOKIE_SECURE: 'false',
     UPLOAD_QUEUE_DIR: input.joinPath(input.runDir, 'upload-queue'),
     EXPORT_IMPORT_DIR: input.joinPath(input.runDir, 'export-import'),
-    RELEASES_DIR: input.joinPath(input.runDir, STAND_RELEASES_SUBDIR),
   };
   if (input.mode === 'b') {
     if (!input.sessionSecret || !/^[0-9a-f]{96}$/.test(input.sessionSecret)) {

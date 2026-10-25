@@ -61,34 +61,3 @@ export function resolveStaticDir(
 
   return join(moduleDir, '..', 'public', 'static');
 }
-
-/**
- * Resolves the directory holding the downloadable release zips.
- *
- * The zips are a **sibling** of the served `public/` tree, never inside it:
- * `ServeStaticModule` would otherwise hand multi-hundred-MB bundles to any
- * anonymous visitor who guessed the file name, and the whole point of the
- * signed download link is that those files are not publicly reachable. They
- * are also never baked into the image — a bind mount drops them in.
- *
- *  - ncc production bundle (`moduleDir` is `dist/`, detected the same way as
- *    `resolveStaticDir` via `isBundledRuntime`): `dist/releases`, i.e.
- *    `/app/dist/releases`, which is exactly the container-side mount point
- *    both compose files use.
- *  - dev / jest (`moduleDir` is `server/src/releases`) and the plain-tsc build
- *    (`server/dist/releases`): two levels up, landing on `server/releases` in
- *    both cases. Two levels, not one: one level up is the `releases` *code*
- *    directory itself, which must never hold zips. `resolveStaticDir`'s middle
- *    `src/` candidate is deliberately not reproduced — nothing ever writes
- *    zips into the TypeScript source tree.
- *
- * `RELEASES_DIR` (absolute) overrides this entirely; that is what tests set.
- * The `exists` param is injectable for unit tests.
- */
-export function resolveReleasesDir(
-  moduleDir: string,
-  exists: (p: string) => boolean = fs.existsSync,
-): string {
-  if (isBundledRuntime(moduleDir, exists)) return join(moduleDir, 'releases');
-  return join(moduleDir, '..', '..', 'releases');
-}

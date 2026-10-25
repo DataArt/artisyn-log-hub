@@ -20,7 +20,6 @@ As of 2026-10-16: **12 spec files, 90 tests** in the full suite, 27 tagged `@cor
 |---|---|
 | `admin-model-pricing.spec.ts` | admin Model Pricing tab |
 | `admin-panel.spec.ts` | admin panel tabs, System Info |
-| `admin-releases.spec.ts` | admin Releases tab |
 | `api-keys.spec.ts` | API keys page, "Give Me String" install flow |
 | `change-surface-tab.spec.ts` | session Change surface tab |
 | `harness-usage-tab.spec.ts`, `harness-usage.spec.ts` | Harness usage tab and analytics |

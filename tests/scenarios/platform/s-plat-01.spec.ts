@@ -39,11 +39,13 @@ test('@S-PLAT-01 health, build version and security headers everywhere @mode-a @
     expect(await res.json()).toMatchObject({ status: 'ok', info: { database: { status: 'up' } } });
   });
 
-  await test.step('2. GET /health/version without a session → {version, gitCommit, releaseStamp}, none empty', async () => {
+  await test.step('2. GET /health/version without a session → exactly {version, gitCommit}, none empty', async () => {
     const res = await api.get('/health/version');
     expect(res.status()).toBe(200);
     const info = (await res.json()) as Record<string, unknown>;
-    for (const field of ['version', 'gitCommit', 'releaseStamp']) {
+    // Exactly these two keys: an old third field (the removed release stamp) fails here.
+    expect(Object.keys(info).sort()).toEqual(['gitCommit', 'version']);
+    for (const field of ['version', 'gitCommit']) {
       expect(typeof info[field], field).toBe('string');
       expect((info[field] as string).length, field).toBeGreaterThan(0);
     }
@@ -63,7 +65,6 @@ test('@S-PLAT-01 health, build version and security headers everywhere @mode-a @
       ['GET /', api.get('/'), 200],
       ['POST /api/v2/logs without key', api.post('/api/v2/logs?sessionId=s&type=artisyn', { data: '{}\n', headers: { 'Content-Type': 'application/x-ndjson' } }), 401],
       ['GET /static/artisyn-hooks-installer.tgz', api.get('/static/artisyn-hooks-installer.tgz'), 200],
-      ['GET /api/v1/releases/download', api.get('/api/v1/releases/download'), 403],
       [`GET ${asset}`, api.get(asset as string), 200],
     ];
     for (const [what, pending, status] of checks) {
@@ -76,7 +77,7 @@ test('@S-PLAT-01 health, build version and security headers everywhere @mode-a @
     expect(/script-src[^;]*'unsafe-inline'/.test(csp)).toBe(false);
   });
 
-  await test.step('4. /api errors are JSON {statusCode, message} with no stack or file-system path; the release page is HTML', async () => {
+  await test.step('4. /api errors are JSON {statusCode, message} with no stack or file-system path',async () => {
     const user = await users.user('user', { label: 'plat01' });
     const errors: Array<[string, Promise<APIResponse>, number]> = [
       ['404', api.get('/api/v1/nonexistent'), 404],
@@ -92,11 +93,6 @@ test('@S-PLAT-01 health, build version and security headers everywhere @mode-a @
       expect(JSON.parse(text) as unknown, what).toMatchObject({ statusCode: status, message: expect.any(String) });
       for (const leak of LEAKS) expect(text, `${what}: ${leak}`).not.toMatch(leak);
     }
-    const release = await api.get('/api/v1/releases/download');
-    expect(release.headers()['content-type']).toMatch(/^text\/html/);
-    const page = await release.text();
-    expect(page).toContain('Invalid download link');
-    for (const leak of LEAKS) expect(page, String(leak)).not.toMatch(leak);
   });
 
   await test.step('6. Neither Referer nor Origin is required; OPTIONS on the upload route opens no CORS', async () => {

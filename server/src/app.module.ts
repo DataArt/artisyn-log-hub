@@ -32,7 +32,6 @@ import { InstallerModule } from './installer/installer.module';
 import { inflateSniffedGzip } from './logs/gzip-sniff.middleware';
 import { LogsModule } from './logs/logs.module';
 import { PostTurnAnalysisModule } from './logs/post-turn-analysis/post-turn-analysis.module';
-import { ReleasesModule } from './releases/releases.module';
 import { RequestMetricsMiddleware } from './system-info/request-metrics.middleware';
 import { SessionsModule } from './sessions/sessions.module';
 import { SystemInfoModule } from './system-info/system-info.module';
@@ -111,7 +110,6 @@ function requireSessionSecret(): string {
     SystemInfoModule,
     InstallerModule,
     UserSettingsModule,
-    ReleasesModule,
     AiToolVersionsModule,
     ModelPricingModule,
   ],

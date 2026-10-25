@@ -4,9 +4,6 @@
 // routes also get one `member` row: the guard answers 403 and nothing is written.
 import type { ContractFamily } from '../types';
 
-/** A release zip the F01 spec drops into RELEASES_DIR before the rows run. */
-export const F01_RELEASE_ZIP = 'artisyn-log-hub-20260101-000000-amd64.zip';
-
 export const f01Infra: ContractFamily = {
   id: 'F01',
   name: 'infra',
@@ -58,13 +55,6 @@ export const f01Infra: ContractFamily = {
         "server's static dir. Covered by the installer scenarios (tests/scenarios/installer/*).",
     },
     {
-      id: 'F01-release-download-bad-signature',
-      route: 'GET /api/v1/releases/download',
-      actor: 'anon',
-      query: { file: F01_RELEASE_ZIP, exp: '4102444800', sig: 'forged' },
-      expect: { status: 403 },
-    },
-    {
       id: 'F01-log-echo',
       route: 'POST /api/v1/log-echo',
       actor: 'ownerKey',
@@ -106,40 +96,6 @@ export const f01Infra: ContractFamily = {
       route: 'GET /api/v1/admin/logs-archive',
       actor: 'member',
       expect: { status: 403 },
-    },
-    {
-      id: 'F01-admin-releases',
-      route: 'GET /api/v1/admin/releases',
-      actor: 'admin',
-      expect: {
-        status: 200,
-        bodyMatches: {
-          entries: [
-            {
-              fileName: F01_RELEASE_ZIP,
-              stamp: '20260101-000000',
-              arch: 'amd64',
-              sizeBytes: 13,
-            },
-          ],
-        },
-      },
-      noDb: true,
-    },
-    {
-      id: 'F01-admin-release-link',
-      route: 'POST /api/v1/admin/releases/download-link',
-      actor: 'admin',
-      body: { file: F01_RELEASE_ZIP },
-      expect: { status: 200 },
-      noDb: true,
-    },
-    {
-      id: 'F01-admin-release-link-unlisted',
-      route: 'POST /api/v1/admin/releases/download-link',
-      actor: 'admin',
-      body: { file: 'artisyn-log-hub-20250101-000000-arm64.zip' },
-      expect: { status: 400 },
     },
     {
       id: 'F01-admin-auth',

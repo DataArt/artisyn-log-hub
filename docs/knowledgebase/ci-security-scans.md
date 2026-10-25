@@ -1,9 +1,9 @@
 ---
 type: reference
 title: CI Security Scans
-description: The report-only security workflows (security-scans, virustotal, security-report), their triggers, the SNYK_TOKEN/VIRUS_TOTAL_KEY secrets, fork behaviour, the unified row format and label table, the PR-description block, the ci-reports branch and badge, the .snyk policy, the config-guard allowlist, the FR-27 repository settings and the owner rollout
+description: The report-only security workflows (security-scans, virustotal, security-report), their triggers, the SNYK_TOKEN/VIRUS_TOTAL_KEY secrets, fork behaviour, the unified row format and label table, the PR-description block, the ci-reports branch and badge, the .snyk policy, the config-guard allowlist, the FR-27 repository settings and the owner rollout; also lists checks.yml / release.yml and the release VirusTotal scopes
 tags: [ci, security, github-actions, snyk, virustotal, supply-chain]
-timestamp: 2026-10-24
+timestamp: 2026-10-25
 ---
 
 # CI Security Scans
@@ -24,6 +24,12 @@ Secret scanning is separate and unchanged: see [Git Hooks and Secret Scanning](g
 | `security-scans` | `.github/workflows/security-scans.yml` | `pull_request`; `push` to `main`, `release`; nightly `schedule` (`17 3 * * *` UTC); `workflow_dispatch` | always |
 | `virustotal` | `.github/workflows/virustotal.yml` | `pull_request` with paths `hook/**`, `artisyn-hooks-installer/**`, `release-template/**` | always (within the path filter) |
 | `security-report` | `.github/workflows/security-report.yml` | `workflow_run` (`completed`) of `security-scans` and `virustotal` | the triggering run came from a `pull_request` |
+| `checks` | `.github/workflows/checks.yml` | `pull_request` into `main`, `release` (no path filter); `workflow_call` from `release` | always — not a scan: the FR-5 fast checks (typechecks, algorithm tests, build-script and hook tests); its job `fast-checks` is a required check next to `scan` |
+| `release` | `.github/workflows/release.yml` | `push` to `release`; `workflow_dispatch` (refused on any other ref) | always — not a scan: builds and publishes the GHCR image and the GitHub Release; its `vt-scan` job scans the release assets (see below) |
+
+`checks` and `release` are not report-only scans and feed nothing into the PR block; they are
+listed here because they share the pinned actions, the `VIRUS_TOTAL_KEY` secret and
+`scripts/ci/virustotal-scan.js`. Both are documented in [Release Pipeline](release-pipeline.md).
 
 The workflow `name:` values are matched by `workflow_run` and by the README badge; do not rename
 them. There is no enable/disable repository variable: the scans are always on. `virustotal` is separate only because a path filter is allowed only on a
@@ -56,7 +62,7 @@ with `--ignore-scripts`.
 | Secret | Used by | Note |
 |---|---|---|
 | `SNYK_TOKEN` | `snyk-oss`, `container` | Snyk tests of a public repository do not use the free-plan quota. Projects carry `--remote-repo-url=https://github.com/DataArt/artisyn-log-hub`. |
-| `VIRUS_TOTAL_KEY` | `virustotal` `vt-scan` job | Public API key: 4 requests/min, 500/day, roughly 10 PRs/day. Passed to `curl` on stdin, never in arguments or logs. |
+| `VIRUS_TOTAL_KEY` | `virustotal` `vt-scan` job; `release` `vt-scan` job | Public API key: 4 requests/min, 500/day, roughly 10 PRs/day. Passed to `curl` on stdin, never in arguments or logs. Without it the release `vt-scan` writes `skipped` rows and the release is still published. |
 
 Only jobs that download the `installer-kit` artifact hold a secret; the build itself runs
 secret-free. `security-report` uses only `GITHUB_TOKEN`.
@@ -124,6 +130,37 @@ note is stripped to `[A-Za-z0-9 .,:;()/_@#+=%'-]`. Any other failure turns the r
 
 A new scanner needs a row here and in the label table inside `security-summary.js`; otherwise its
 rows are dropped.
+
+### Release VirusTotal scopes
+
+`scripts/ci/virustotal-scan.js` maps an input file name to its scope with the exported
+`scopeFor(name)` (rules in `algorithms/release-assets.md`); any other file name is a usage error:
+
+| File | Scope | Workflow |
+|---|---|---|
+| `artisyn-hooks-installer.tgz` | `installer-tgz` | `virustotal`, `security-scans` |
+| `hooks.tar.gz` | `hooks-tgz` | same |
+| `artisyn-log-hub-<X.Y.Z>.zip` | `release-zip` | `release` (`vt-scan`) |
+| `install.sh` | `install-sh` | same |
+| `install.ps1` | `install-ps1` | same |
+
+The three release rows (`virustotal/release-zip`, `/install-sh`, `/install-ps1`) are deliberately
+**not** in the label table and never reach the PR block or `ci-reports`: `release.yml` uploads them
+as artifact `vt-rows`, and `scripts/ci/release-notes.js` renders them into the "Security scan"
+section of the GitHub Release notes. The scan is report-only there too: a failed or timed-out
+`vt-scan` (40 min) never blocks `publish`; the notes show `no result` for a missing row.
+
+## Release verification (FR-32 / FR-33 of `2026-10-23-ci-cd-scans`)
+
+The release-verification part of the `2026-10-23-ci-cd-scans` task — checksums, attestations and
+VirusTotal on the release assets — is implemented by `release.yml`, not by the scan workflows:
+
+- `SHA256SUMS` covers the zip and every loose kit file (`scripts/release-kit.js`);
+- `actions/attest-build-provenance` attests the multi-arch image (pushed to the registry) and every
+  kit file; the image build also carries BuildKit provenance (`mode=max`) and an SBOM;
+- VirusTotal scans the zip and both install scripts (scopes above).
+
+The verification commands and the run order are in [Release Pipeline](release-pipeline.md).
 
 ## PR block
 
