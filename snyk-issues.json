@@ -169,5 +169,6 @@
       "project": "client/package.json"
     }
   ],
-  "snyk-oss/kit": []
+  "snyk-oss/kit": [],
+  "snyk-container/image": []
 }
