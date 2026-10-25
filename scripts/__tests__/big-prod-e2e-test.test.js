@@ -737,9 +737,9 @@ describe('config', () => {
   });
 
   test('resolveRun puts the run-dir beside the git root and validates the stamp', async () => {
-    const { resolveRun, releaseStamp, RELEASE_STAMP_RE } = await load('lib/config.mjs');
-    const stamp = releaseStamp();
-    assert.match(stamp, RELEASE_STAMP_RE);
+    const { resolveRun, runStamp, RUN_STAMP_RE } = await load('lib/config.mjs');
+    const stamp = runStamp();
+    assert.match(stamp, RUN_STAMP_RE);
     const root = path.resolve(os.tmpdir(), 'some-repo');
     const run = resolveRun(stamp, root);
     assert.equal(run.runDir, path.resolve(root, '..', `log_hub_big_test-${stamp}`));

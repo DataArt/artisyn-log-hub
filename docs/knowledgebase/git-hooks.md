@@ -1,9 +1,9 @@
 ---
 type: reference
 title: Git Hooks and Secret Scanning
-description: The versioned git hooks in .githooks/ (migration guard, gitleaks secret scan on pre-commit and pre-push), the .gitleaks.toml allowlist, the off-by-default CI scan and what to switch on when the repository goes public
+description: The versioned git hooks in .githooks/ (migration guard, gitleaks secret scan on pre-commit and pre-push), the .gitleaks.toml allowlist, the CI scan (gated on GITLEAKS_ENABLED) and the main/release branch ruleset that requires it and the fast-checks job
 tags: [git, hooks, security, gitleaks, ci]
-timestamp: 2026-10-24
+timestamp: 2026-10-25
 ---
 
 # Git Hooks and Secret Scanning
@@ -38,6 +38,15 @@ Both hooks are **strict**: a missing `gitleaks` binary blocks too, with install 
 image (`docker-dev/Dockerfile`, stage `fetch-gitleaks`) ships it. Findings are printed redacted.
 `git commit/push --no-verify` skips the hook as a last resort — it also skips the migration guard.
 
+### Custom rule — key files by name
+
+The default rules match provider prefixes or a keyword next to the value, so a file holding only
+a bare token (e.g. a 64-char API key with no `api_key=` around it) passes them. The `key-file`
+rule in `.gitleaks.toml` flags by path alone: any `*.key`, `*.pem`, `*.p12`, `*.pfx`, `*.jks`,
+`*.keystore`, `*.ppk` and `id_rsa`/`id_dsa`/`id_ecdsa`/`id_ed25519`, whatever the content. Local
+key files belong in `.gitignore` (e.g. `/vt.key`); the rule catches a `git add -f` or a key file
+elsewhere in the tree.
+
 ### False positives — `.gitleaks.toml`
 
 The config extends the default rule set (`[extend] useDefault = true`) and holds `[[allowlists]]`
@@ -54,19 +63,29 @@ too. Check the full history locally with
 
 If a real secret was committed: rotate it first — removing it from history does not un-leak it.
 
-## CI scan — off until the repository is public
+## CI scan and branch protection
 
 `.github/workflows/gitleaks.yml` downloads the pinned gitleaks release (sha256-verified, the
 official `gitleaks-action` needs a license key for organization repos) and scans the full history
-on push to `main` and on pull requests. The job is gated on the repository variable
-`GITLEAKS_ENABLED == 'true'`, so it is skipped (no runner minutes) until then; a manual
+on push to `main` or `release` and on pull requests. The job is gated on the repository variable
+`GITLEAKS_ENABLED == 'true'` (skipped, no runner minutes, while it is unset); a manual
 "Run workflow" (`workflow_dispatch`) always runs. Keep `GITLEAKS_VERSION`/`GITLEAKS_SHA256` equal
 in the workflow and `docker-dev/Dockerfile`.
 
-When the repository goes public:
+The repository is public; the setup that goes with it:
 
 1. Settings → Secrets and variables → Actions → Variables: add `GITLEAKS_ENABLED` = `true`.
 2. Settings → Code security: enable **Secret scanning** and **Push protection** (free for public
    repositories; paid GitHub Secret Protection for private ones). Push protection rejects a push
    with a known provider token at the remote.
-3. Optionally make the `gitleaks` check required in the `main` branch protection rule.
+3. Make the `scan` check (the gitleaks job) required for `main` and `release` — done in the
+   repository ruleset `protect-main-release` (Settings → Rules → Rulesets), which also requires a
+   PR and blocks deletion and force-push on both branches.
+4. Add `fast-checks` next to `scan` as a required status check of `protect-main-release`. It is the
+   single job of `.github/workflows/checks.yml` (the FR-5 fast checks: typechecks, algorithm tests,
+   build-script tests, hook tests), which runs on every pull request to `main` and `release` and is
+   also called by the release workflow. GitHub offers a check name only after it has run once, so
+   add it after the first PR run of `checks.yml`. See [Release Pipeline](release-pipeline.md).
+
+The other, report-only security scans (Snyk, dependency review, config guard, lock-file and workflow
+lint, VirusTotal) are in [CI Security Scans](ci-security-scans.md).

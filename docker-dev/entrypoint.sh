@@ -47,7 +47,6 @@ TS_LSP_PLUGIN=typescript-lsp@claude-plugins-official
 # plugins it could not run; Phase 2 deletes exactly these keys (and nothing else).
 POC_DISABLED_PLUGINS=("log-hub-hooks@artisyn-e798dd87" "$TS_LSP_PLUGIN")
 # node_modules volumes (FR-B2): dir relative to the worktree -> lockfile -> install command.
-# The root bun.lock is ignored: the root installs with npm.
 NM_DIRS=(. server hook artisyn-hooks-installer client)
 # Per-sandbox DB name: `-` -> `_` (DD-3).
 DB_NAME="log_hub_${SANDBOX_NAME//-/_}"

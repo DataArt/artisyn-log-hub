@@ -4,7 +4,6 @@ import { AdminGuard } from '../common/guards/admin.guard';
 import { ErrorLogsModule } from '../error-logs/error-logs.module';
 import { LogsModule } from '../logs/logs.module';
 import { MailModule } from '../mail/mail.module';
-import { ReleasesModule } from '../releases/releases.module';
 import { SessionsModule } from '../sessions/sessions.module';
 import { SystemInfoModule } from '../system-info/system-info.module';
 import { TeamsModule } from '../teams/teams.module';
@@ -23,7 +22,6 @@ import { UploadQueueStatsService } from './upload-queue-stats.service';
     LogsModule,
     MailModule,
     AuthModule,
-    ReleasesModule,
     SessionsModule,
     TeamsModule,
   ],

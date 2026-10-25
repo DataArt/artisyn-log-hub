@@ -39,10 +39,9 @@ export interface SystemInfoResponse {
     databaseTotalBytes: number | null;
   };
   /**
-   * Version, git commit and — since the release-zip work — `releaseStamp`,
-   * the UTC `YYYYMMDD-HHMMSS` identity of the release this image was built
-   * from (`dev` outside a Docker build, `unknown` for an image built before
-   * the field existed). The client renders it as its own Release tile.
+   * Version and git commit of this build. `version` is `X.Y.Z` in a released
+   * image, `local` from local-loghub, `dev` in an unbundled dev server and
+   * `unknown` in a Docker build without the `VERSION` build-arg.
    */
   build: BuildInfo;
   node: { version: string; env: string };

@@ -1,14 +1,16 @@
 #!/usr/bin/env node
-// Minimal, dependency-free ZIP writer used by scripts/release.js to pack each release folder
-// into a single archive.
+// Minimal, dependency-free ZIP writer. scripts/release-kit.js uses it to pack the install kit
+// (artisyn-log-hub-<version>.zip, a handful of small text files) for the GitHub Release;
+// scripts/local-release-bundle.js uses it to pack the offline per-architecture test bundles.
 //
 // Why hand-rolled rather than a library or a shell tool: the repo deliberately keeps its build
 // scripts on Node built-ins only, and the obvious shell alternatives are all host-specific
 // (PowerShell's Compress-Archive is Windows-only, `zip` is absent on Windows, and `tar -a`
 // speaks zip only via bsdtar). This runs the same everywhere.
 //
-// Entries are STORED, not deflated. A release folder is ~99% one `docker save` tar whose image
-// layers are already compressed — deflating it gains well under 1% for a lot of CPU on ~100 MB.
+// Entries are STORED, not deflated. The install kit is a few KiB of text, so compression would
+// save next to nothing, and a local bundle is ~99% one `docker save` tar whose image layers are
+// already compressed. STORED keeps the writer small and streaming.
 const fs = require('fs');
 const path = require('path');
 

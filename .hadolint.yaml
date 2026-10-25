@@ -1,0 +1,6 @@
+# hadolint config, read from the repo root by the security-scans `dockerfile-lint` job.
+ignored:
+  # Pinning apt package versions: Debian/Ubuntu drop old package versions from their mirrors, so a
+  # pinned `apt-get install pkg=<ver>` stops building within weeks. Base images are pinned instead
+  # (node:<x.y.z>, ubuntu:24.04) and every non-apt download is sha256-checked.
+  - DL3008

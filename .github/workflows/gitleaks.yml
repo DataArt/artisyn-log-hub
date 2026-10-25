@@ -2,14 +2,14 @@
 # .githooks/pre-commit and pre-push). Runs the MIT gitleaks binary directly: the official
 # gitleaks-action needs a license key for organization repos.
 #
-# OFF until the repository is public: the job runs on push/PR only when the repository variable
+# Gated: the job runs on push/PR only when the repository variable
 # GITLEAKS_ENABLED is `true` (Settings → Secrets and variables → Actions → Variables). A manual
 # "Run workflow" always runs. See docs/knowledgebase/git-hooks.md.
 name: gitleaks
 
 on:
   push:
-    branches: [main]
+    branches: [main, release]
   pull_request:
   workflow_dispatch:
 

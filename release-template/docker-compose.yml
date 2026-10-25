@@ -22,7 +22,7 @@ services:
       retries: 10
 
   app:
-    image: artisyn-log-hub:latest
+    image: ghcr.io/dataart/artisyn-log-hub:{{VERSION}}
     container_name: artisyn-log-hub
     restart: unless-stopped
     depends_on:
@@ -44,7 +44,6 @@ services:
       # Optional settings — empty means the app's built-in default (see .env.example).
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-}
       ALLOWED_EMAIL_DOMAINS: ${ALLOWED_EMAIL_DOMAINS:-}
-      RELEASE_LINK_SECRET: ${RELEASE_LINK_SECRET:-}
       AUTH_RATE_LIMIT_POINTS: ${AUTH_RATE_LIMIT_POINTS:-}
       AUTH_RATE_LIMIT_WINDOW_SEC: ${AUTH_RATE_LIMIT_WINDOW_SEC:-}
       IMPORT_MAX_UPLOAD_BYTES: ${IMPORT_MAX_UPLOAD_BYTES:-}
@@ -56,6 +55,3 @@ services:
     volumes:
       - ${LOG_HUB_DATA_DIR:?set LOG_HUB_DATA_DIR in .env}/upload-queue:/app/dist/upload-queue
       - ${LOG_HUB_DATA_DIR:?set LOG_HUB_DATA_DIR in .env}/logs:/app/dist/logs
-      # Optional: drop release zips here to offer them from Admin > System > Release Downloads.
-      # Read-only — the app only ever lists and streams them.
-      - ${LOG_HUB_DATA_DIR:?set LOG_HUB_DATA_DIR in .env}/releases:/app/dist/releases:ro

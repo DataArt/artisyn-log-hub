@@ -118,7 +118,6 @@ open-source release; see the changelog in the in-app help for the upgrade steps.
 | `COOKIE_SECURE` | `true` | Set `false` when the app is served over plain HTTP. |
 | `TRUST_PROXY` | `false` | Express `trust proxy` value (`true`, a hop count or an IP/CIDR list). When enabled it overrides `COOKIE_SECURE` and makes `req.ip` the real client address. |
 | `PUBLIC_BASE_URL` | `http://localhost:5173` outside production | **New.** Externally reachable URL, used for the links in confirmation and password-reset emails. Never taken from the request `Host` header. Required in production for Modes 2/3; without it no email with a link is sent. |
-| `RELEASE_LINK_SECRET` | derived from `SESSION_SECRET` | **New.** HMAC key for release download links. Changing it invalidates links already handed out. |
 | `DB_POOL_MAX` | `20` | Connection pool size per process (capped per worker in cluster mode). |
 | `ENV_NAME` | `local` | Environment label shown in the page header, e.g. `[local] Artisyn Log Hub`. |
 
@@ -153,7 +152,6 @@ open-source release; see the changelog in the in-app help for the upgrade steps.
 | `IMPORT_MAX_ENTRY_BYTES` | 400 MiB | **New.** Uncompressed size of one entry in an import zip. |
 | `EXPORT_IMPORT_DIR` | `export-import` | Temporary files of repository export and import jobs. |
 | `EXPORT_IMPORT_JOB_TTL_MS`, `EXPORT_IMPORT_CLEANUP_INTERVAL_MS` | 30 min, 5 min | Export and import jobs and their files are deleted after the TTL. |
-| `RELEASES_DIR` | `releases/` next to the bundle | Directory listed by Admin → System → Release Downloads (absolute path). |
 
 An import over a limit is rejected with HTTP 400 and a message naming the variable to raise.
 

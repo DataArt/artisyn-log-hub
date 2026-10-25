@@ -4,7 +4,7 @@ Date: 2026-10-13, branch `dev`. Design only; no tests were run or written. Sourc
 
 ## 0. Group scope
 
-The group covers: sign-up, login, logout, the session, the auth modes (`none` / `password` / `password-confirm` / `azure-oauth`), e-mail confirmation, password reset and change, account deletion, the password policy, the brute-force delay, API keys, teams (creation, members, invitations, access modes `restricted` / `transparent`, disclosure, roles), privacy of other people's sessions and raw logs, the admin panel (9 tabs: System Info, Repos, Teams, Users, Error Logs, Upload Queue, Data Retention, Auth, Model Pricing), the logs archive, releases, the data-collection consent screen, and "notifications".
+The group covers: sign-up, login, logout, the session, the auth modes (`none` / `password` / `password-confirm` / `azure-oauth`), e-mail confirmation, password reset and change, account deletion, the password policy, the brute-force delay, API keys, teams (creation, members, invitations, access modes `restricted` / `transparent`, disclosure, roles), privacy of other people's sessions and raw logs, the admin panel (9 tabs: System Info, Repos, Teams, Users, Error Logs, Upload Queue, Data Retention, Auth, Model Pricing), the logs archive, the data-collection consent screen, and "notifications".
 
 What I found about "notifications": there is no separate feature. The bell in the top bar (`NotificationBell`) shows only incoming team invitations (`GET /api/v1/invitations`). The server has no `/api/v1/notifications` route (the mention in a comment in `api-keys.spec.ts` is stale). The bell is covered by scenario S-TEAM-01. The Model Pricing tab belongs to the cost group; here only its presence is checked.
 
@@ -52,9 +52,8 @@ Shared personas: ADMIN (the first registered user, role `admin`), OWNER, M1, M2,
 | S-ADM-05 | System Info, logs archive and error log | UI+API | P1 | 45 |
 | S-ADM-06 | Data Retention: the retention period matches the consent text, a chart with an empty day | UI+API | P1 | 6 |
 | S-ADM-07 | Upload queue: broken file, Reprocess, Clear, counters | UI+API | P1 | 62 |
-| S-ADM-08 | Releases: signed link, forgery, expired, and the public installer | UI+API | P1 | 55 |
 
-Total 27 scenarios: P0 = 16, P1 = 11, P2 = 0. They replace ≈ 650-700 existing tests (counted by whole files; some unit tests are only partly replaced, which the "Replaces" lines note; `team-access-mode` and `repository-view` may be double-counted).
+Total 26 scenarios: P0 = 16, P1 = 10, P2 = 0 (S-ADM-08, releases, was dropped: the release download feature was removed by 2026-10-20-github-release-pipeline). They replace ≈ 650-700 existing tests (counted by whole files; some unit tests are only partly replaced, which the "Replaces" lines note; `team-access-mode` and `repository-view` may be double-counted).
 
 Convention for the text below: a "UI step" is what a person clicks by hand; an "API step" is the Playwright `request` fixture with the right user's cookie (or `X-API-Key`).
 
@@ -582,7 +581,7 @@ Convention for the text below: a "UI step" is what a person clicks by hand; an "
 - **Data/roles:** ADMIN, REGULAR, TEAMOWNER (a regular user who owns a team), an anonymous context.
 - **Steps:**
   1. UI (REGULAR): `/#/main`: the left menu has no "Admin Panel" link. Open `/#/admin`.
-  2. API (REGULAR): `GET /admin/repos`, `/admin/teams`, `/admin/users`, `/admin/system`, `/admin/error-logs`, `/admin/logs-archive`, `/admin/upload-queue`, `/admin/upload-queue/stats`, `/admin/releases`, `/admin/auth`, `PATCH /admin/users/<id>/role`, `POST /admin/users/<id>/delete`; the same anonymously.
+  2. API (REGULAR): `GET /admin/repos`, `/admin/teams`, `/admin/users`, `/admin/system`, `/admin/error-logs`, `/admin/logs-archive`, `/admin/upload-queue`, `/admin/upload-queue/stats`, `/admin/auth`, `PATCH /admin/users/<id>/role`, `POST /admin/users/<id>/delete`; the same anonymously.
   3. API (TEAMOWNER, not an admin): `GET /admin/retention`; REGULAR: the same call.
   4. UI (ADMIN): `/#/main`, press "Admin Panel".
   5. UI: go through all 9 tabs: System Info, Repos, Teams, Users, Error Logs, Upload Queue, Data Retention, Auth, Model Pricing.
@@ -750,31 +749,7 @@ Convention for the text below: a "UI step" is what a person clicks by hand; an "
 - **Replaces:** the `server/test/upload-queue.e2e-spec.ts` blocks "Admin upload-queue endpoints", "GET /admin/upload-queue", "file", "DELETE failed", "reprocess-failed", "stats" (≈ 17 of 36; the rest, about ingest and chunks, goes to the log-ingest group), `client/.../components/AdminUploadQueueTab.test.tsx` (24), `UploadQueueStatsPanel.test.tsx` (10), `server/src/admin/upload-queue-stats.service.spec.ts` (11, of which ≈ 5 about the p95/ETA/clamp-to-100% arithmetic are kept as pure maths). Closes F.3 #27 and #39.
 - **What we lose:** `Lease-timeout reclaim`, `Overlap guard`, `Partial-upload expiry`, a staging-directory write failure: these are scheduler internals (the ingest group). The exact ETA and p95 from the old units, if we do not keep the unit.
 
-### S-ADM-08. Releases: signed link, forgery, expired, and the public installer
-- **Layer:** UI+API (any mode)
-- **Priority:** P1
-- **Data/roles:** ADMIN, REGULAR, anonymous. The stand's release directory (`RELEASES_DIR`) with the files `artisyn-log-hub-20990101-000000-amd64.zip`, `...-arm64.zip` (the new stamp) and `artisyn-log-hub-20980101-000000-amd64.zip` (the old one), created by the test in a **temporary directory** (not in `server/releases`: the old `admin-releases.spec.ts` writes there and leaves garbage on failure), plus "almost release" files `...-riscv.zip` and one with a malformed stamp. The signing secret is known (the stand's `SESSION_SECRET`).
-- **Steps:**
-  1. UI (ADMIN): System Info, the Release Downloads section.
-  2. UI: "Generate link" for amd64; read the link and the expiry.
-  3. API (anonymous, **without a cookie**): download through the link.
-  4. API: change one character in `sig`; substitute `file=../../etc/passwd`; repeat `file` and `exp` as an array (`?file=a&file=b`).
-  5. API: the test issues a link with `exp` in the past using the same secret; then a link to a file that was deleted from disk.
-  6. UI: "Regenerate link".
-  7. API (ADMIN): `POST /admin/releases/download-link` for the old stamp, for a non-existent name, for `evil.zip`; REGULAR and anonymous.
-  8. API (anonymous and REGULAR): `GET /static/<release name>.zip`.
-  9. API (anonymous): `GET /static/artisyn-hooks-installer.tgz?v=1.5.0`, then `?v=1.0.0`, then `?v=<script>` and `latest-hook-version.json`.
-- **Checks:**
-  - Step 1: only the new stamp, one row per architecture (amd64, arm64), sorted by `arch`; the old stamp, riscv and the malformed stamp are **not shown**.
-  - Step 2: the link is absolute, from the stand origin, the expiry reads "Valid for 24 hours · expires <UTC> …", the button changes to "Regenerate link".
-  - Step 3: 200 without a login, `Content-Type: application/zip`, `Content-Disposition: attachment; filename="artisyn-log-hub-20990101-000000-amd64.zip"`, the body equals the file byte for byte.
-  - Step 4: a forged `sig` and the traversal give a **403** HTML page "Invalid download link" without the file body and without paths; an array in the parameter is also 403.
-  - Step 5: a valid signature with an expired term gives 410 "Link expired"; a link to a deleted file gives 404 "File no longer available"; no page contains a stack trace or file-system paths.
-  - Step 7: the old stamp and a missing name 400, `evil.zip` 400, REGULAR 403, anonymous 401; the link term `expiresAt` = now + 24 h (one minute tolerance).
-  - Step 8: the release zip is served through `/static` **neither anonymously nor to a regular user** (checked by the body, not by the status: the SPA fallback may answer 200).
-  - Step 9: the tgz is served without a login; the version is remembered as the maximum (after `1.0.0` it stays `1.5.0`), garbage `?v=` values are ignored and the tgz still downloads; `latest-hook-version.json` is public.
-- **Replaces:** `server/test/releases.e2e-spec.ts` (17), `tests/e2e/admin-releases.spec.ts` (6), `server/test/installer.e2e-spec.ts` (6 of 7), `client/.../components/ReleaseDownloadsSection.test.tsx` (4), `server/src/releases/release-token.spec.ts` (7 of 11) and `releases.service.spec.ts` (3 of 10) partly. Closes F.1 #12.
-- **What we lose:** a negative `exp`, and the signature being bound to the file name / secret / term separately (the `release-token.spec` unit checks this field by field; the scenario sees only the final 403). I suggest keeping `release-token.spec` for "a foreign secret / a foreign file / a negative `exp`" (≈ 4 tests) as a pure cryptographic function. Building the archives (`scripts/release.test.js`, the UTC stamp) and the installer content belong to the installer group.
+~~S-ADM-08. Releases: signed link, forgery, expired, and the public installer~~: **dropped**, the release download feature was removed by 2026-10-20-github-release-pipeline. The public installer download (its old step 9) is S-REL-01 step 7 in `04-ingest-hook-installer-platform.md`.
 
 ---
 
@@ -801,6 +776,5 @@ Convention for the text below: a "UI step" is what a person clicks by hand; an "
 1. ~~G-2~~ Decided: in `password-confirm` there must be no session before confirmation; the current `signup` issues one (a defect, see S-AUTH-01).
 2. G-3: whether the legacy `PATCH /api/v1/users/:userId/role` is used.
 3. Whether to make the separate run B (Mailpit, `NODE_ENV` not `test`, `PASSWORD_POLICY=long`) part of the regular cycle or only before a release.
-4. Whether we keep the units: `login-backoff` (14), `password-policy` (12), `auth-startup-validation` (21), `localhost/container-gateway` (≈ 20), `azure-callback` (≈ 8), part of `release-token` (≈ 4), `system-info.service`/`request-metrics` (≈ 12), the `upload-queue-stats` arithmetic (≈ 5). My estimate: keep all of them (about 100 tests, pure functions) and do not count them as "distrusted".
+4. Whether we keep the units: `login-backoff` (14), `password-policy` (12), `auth-startup-validation` (21), `localhost/container-gateway` (≈ 20), `azure-callback` (≈ 8), `system-info.service`/`request-metrics` (≈ 12), the `upload-queue-stats` arithmetic (≈ 5). My estimate: keep all of them (about 95 tests, pure functions) and do not count them as "distrusted".
 5. Whether a stand with a fake OIDC for SSO is needed (S-AUTH-10).
-6. S-ADM-08: a temporary release directory through `RELEASES_DIR` instead of writing to `server/releases`.

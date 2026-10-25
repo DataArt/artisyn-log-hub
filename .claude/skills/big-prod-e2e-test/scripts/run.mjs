@@ -11,7 +11,7 @@ import { fileURLToPath } from 'node:url';
 import {
   CLAUDE_MD_REPO, DB_PORT, FC_REPO, FC_SCENARIO, GENERATED_CLAUDE_MD, LEGACY_LOG_HUB_JSON, LEGACY_OWNER, LEGACY_REPO, MODELS,
   PREV_HOOK_VERSION, PREV_INSTALLER_VERSION, PREV_RELEASE_REF, REPOS, REPO_NAMES, REMOTE_URL, RESTAMP_WAIT_MS, STAND_HOST,
-  STAND_URL, STORED_URL, TEAMS, TIMEOUTS, USERS, USER_ORDER, FIXTURES_DIR, POSTGRES_IMAGE, gitRoot, releaseStamp, resolveRun,
+  STAND_URL, STORED_URL, TEAMS, TIMEOUTS, USERS, USER_ORDER, FIXTURES_DIR, POSTGRES_IMAGE, gitRoot, runStamp, resolveRun,
 } from './lib/config.mjs';
 import { run, runAsync } from './lib/proc.mjs';
 import { createApiClient } from './lib/api.mjs';
@@ -219,10 +219,10 @@ async function p0Preflight() {
   const root = gitRoot();
   prePullImages(step, root);
   ctx.gitStatusBefore = gitStatusPaths(root);
-  let runPaths = resolveRun(releaseStamp(), root);
+  let runPaths = resolveRun(runStamp(), root);
   while (fs.existsSync(runPaths.runDir)) {
     await sleep(RESTAMP_WAIT_MS);
-    runPaths = resolveRun(releaseStamp(), root);
+    runPaths = resolveRun(runStamp(), root);
   }
   fs.mkdirSync(runPaths.runDir, { recursive: true });
   for (const d of [runPaths.stateDir, runPaths.sessionsDir, runPaths.verifyDir, runPaths.reportDir]) {

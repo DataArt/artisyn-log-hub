@@ -32,7 +32,7 @@ export interface Stand {
   authMode: AuthMode;
   schema: string;
   /**
-   * Working dir of the stand process (STAND_RUN_DIR): its RELEASES_DIR, UPLOAD_QUEUE_DIR and
+   * Working dir of the stand process (STAND_RUN_DIR): its UPLOAD_QUEUE_DIR and
    * EXPORT_IMPORT_DIR live under it. Empty when the runner did not pass it.
    */
   runDir: string;

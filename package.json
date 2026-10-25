@@ -1,5 +1,6 @@
 {
   "name": "artisyn-log-hub",
+  "version": "1.0.0",
   "description": "Self-hosted server and web viewer for Claude Code session telemetry, plus the hook and installer that collect it",
   "author": "Denis Tsyplakov",
   "license": "MIT",
@@ -29,7 +30,7 @@
     "corpus:bootstrap": "node scripts/corpus/bootstrap.js",
     "test:e2e": "playwright test --project=core",
     "test:e2e:full": "playwright test --project=extended",
-    "release": "node scripts/release.js",
+    "local-release-bundle": "node scripts/local-release-bundle.js",
     "local-loghub:install": "node scripts/local-loghub.js install",
     "local-loghub:update": "node scripts/local-loghub.js update"
   },

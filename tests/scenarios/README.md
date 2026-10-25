@@ -53,7 +53,7 @@ is selected), the Chromium browser is not installed, or a stray `tmp/scenarios/.
 | `STAND_URL` | runner → Playwright | — | `baseURL` of the stand (`http://127.0.0.1:<port>`) |
 | `STAND_MODE` | runner → Playwright | — | `a`, `b` or `c` |
 | `STAND_SCHEMA` | runner → Playwright | — | the stand's schema, used by the `db` fixture |
-| `STAND_RUN_DIR` | runner → Playwright | — | the stand's working dir; its `releases/` sub-dir is the stand's `RELEASES_DIR` (S-REL-02) |
+| `STAND_RUN_DIR` | runner → Playwright | — | the stand's working dir; its `upload-queue/` and `export-import/` sub-dirs are the stand's `UPLOAD_QUEUE_DIR` and `EXPORT_IMPORT_DIR` |
 | `SCENARIOS_COVERAGE` | you | not set | `1` starts the stand with `NODE_V8_COVERAGE`; after each stand the runner writes a c8 report to `tmp/coverage/scenarios-<runId>/<mode>/report/` |
 | `PUBLIC_BASE_URL` | runner → stand | `STAND_URL` | base URL of links in emails; required in mode B |
 | `ADMIN_CONTACT_EMAIL` | runner → stand | `admin@arrakis.test` | required in mode B |

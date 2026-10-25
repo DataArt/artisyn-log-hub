@@ -28,8 +28,8 @@ export function checkTools() {
   }
 
   if (tools.docker) {
-    // Same check as scripts/release.js assertPlatformsBuildable: the active buildx builder must
-    // advertise the target platform, or the build dies mid-way with "exec format error".
+    // Same check as scripts/local-release-bundle.js assertPlatformsBuildable: the active buildx
+    // builder must advertise the target platform, or the build dies mid-way with "exec format error".
     try {
       const { stdout } = run('docker', ['buildx', 'inspect', '--bootstrap'], { timeoutMs: 120000 });
       if (!stdout.includes(BUILD_PLATFORM)) {

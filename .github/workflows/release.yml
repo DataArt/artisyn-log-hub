@@ -1,0 +1,472 @@
+# Release pipeline (FR-1 - FR-11): every push to the `release` branch publishes the next patch
+# version of the line in the root package.json as a multi-arch GHCR image plus a GitHub Release
+# with the pull-based install kit.
+#
+# Triggers: push to `release`, and manual "Run workflow" (workflow_dispatch, no inputs) — the
+# `plan` job refuses any ref other than refs/heads/release. Not a required check.
+# Jobs: plan -> checks (checks.yml) -> build (amd64 + arm64) -> manifest -> kit -> vt-scan -> publish.
+#   plan      scripts/ci/release-version.js: mode full (new version), resume (a strict tag already
+#             points at HEAD and its release is missing or still a draft) or fail.
+#   build     per-arch image pushed by digest only; manifest joins both as IMAGE:sha-<commit>
+#             (the staging image). Skipped in resume mode — the staging image already exists.
+#   kit       scripts/release-kit.js, secret-free; vt-scan scans the kit with VIRUS_TOTAL_KEY
+#             (report-only: no key -> `skipped` rows, a failure or timeout never blocks publish).
+#   publish   attests the image and the kit, creates the tag (REST API), the draft release, the
+#             X.Y.Z / X.Y / latest image tags and finally publishes the release.
+#
+# Image: IMAGE below, hardcoded lowercase (never derived from github.repository). Pushed with
+# GITHUB_TOKEN. Secret: VIRUS_TOTAL_KEY (vt-scan only, optional).
+# Runs are serialised (concurrency group `release`, never cancelled): a second push waits.
+# Rules: docs/tasks/todo/2026-10-20-github-release-pipeline/impl-plan.md (Design Decisions 3-8).
+name: release
+
+on:
+  push:
+    branches: [release]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/dataart/artisyn-log-hub
+  RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+  # One markdown table line per scan row, for $GITHUB_STEP_SUMMARY.
+  SUMMARY_ROW_JQ: '"| \(.tool) | \(.scope) | \(.status) | \(.counts.critical) | \(.counts.high) | \(.counts.medium) | \(.counts.low) | \(.note | gsub("\\|"; "/")) |"'
+  SUMMARY_HEADER: '| Tool | Scope | Status | Critical | High | Medium | Low | Note |'
+
+jobs:
+  # Version and run state (Design Decisions 5-6). contents: write only so that `gh release view`
+  # can see draft releases — a draft is invisible to a read-only token.
+  plan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    outputs:
+      mode: ${{ steps.version.outputs.mode }}
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+      line: ${{ steps.version.outputs.line }}
+      previous_tag: ${{ steps.version.outputs.previous_tag }}
+    steps:
+      - name: Require the release branch
+        run: |
+          set -eu
+          if [ "$GITHUB_REF" != "refs/heads/release" ]; then
+            echo "::error::release runs only on refs/heads/release, got $GITHUB_REF"
+            exit 1
+          fi
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      # Without GH_TOKEN `gh` fails and a published release would read as `none`.
+      - name: Plan the release
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/ci/release-version.js
+
+  # The FR-5 fast checks (checks.yml) on the release commit.
+  checks:
+    needs: plan
+    permissions:
+      contents: read
+    # `./` on purpose: actionlint 1.7.12 (security-scans.yml) rejects the newer `$/` syntax.
+    uses: ./.github/workflows/checks.yml # zizmor: ignore[self-repository]
+
+  # One image per architecture on a native runner, pushed by digest only (no tag yet).
+  build:
+    needs: [plan, checks]
+    if: needs.plan.outputs.mode == 'full'
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push by digest
+        id: push
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
+        with:
+          context: .
+          platforms: linux/${{ matrix.arch }}
+          build-args: |
+            VERSION=${{ needs.plan.outputs.version }}
+            GIT_COMMIT=${{ github.sha }}
+          provenance: mode=max
+          sbom: true
+          outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
+
+      - name: Write the digest
+        env:
+          DIGEST: ${{ steps.push.outputs.digest }}
+        run: |
+          set -eu
+          case "$DIGEST" in
+            sha256:*) ;;
+            *) echo "::error::build-push-action returned no digest"; exit 1 ;;
+          esac
+          mkdir -p "$RUNNER_TEMP/digests"
+          touch "$RUNNER_TEMP/digests/${DIGEST#sha256:}"
+
+      - name: Upload the digest
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: digest-${{ matrix.arch }}
+          path: ${{ runner.temp }}/digests/*
+          retention-days: 14
+          if-no-files-found: error
+
+  # Joins both per-arch images into the staging index IMAGE:sha-<commit>.
+  manifest:
+    needs: [plan, build]
+    if: needs.plan.outputs.mode == 'full'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Download the digests
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: digest-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/digests
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Create the staging index
+        env:
+          SHA: ${{ github.sha }}
+        run: |
+          set -eu
+          cd "$RUNNER_TEMP/digests"
+          count=$(find . -maxdepth 1 -type f | wc -l)
+          if [ "$count" -ne 2 ]; then
+            echo "::error::expected 2 per-arch digests, got $count"
+            exit 1
+          fi
+          set --
+          for d in *; do
+            set -- "$@" "$IMAGE@sha256:$d"
+          done
+          docker buildx imagetools create -t "$IMAGE:sha-$SHA" "$@"
+          docker buildx imagetools inspect "$IMAGE:sha-$SHA"
+
+  # Builds the install kit without any secret (Design Decision 11).
+  kit:
+    needs: [plan, checks]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      # Node built-ins only — no npm ci.
+      - name: Build the install kit
+        env:
+          VERSION: ${{ needs.plan.outputs.version }}
+          SHA: ${{ github.sha }}
+        run: node scripts/release-kit.js --version "$VERSION" --commit "$SHA" --out "$RUNNER_TEMP/kit"
+
+      - name: Upload release-kit
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-kit
+          path: ${{ runner.temp }}/kit/
+          retention-days: 14
+          if-no-files-found: error
+
+  # VirusTotal lookup / upload of the zip and both install scripts — report-only. Rows:
+  # virustotal/release-zip, virustotal/install-sh, virustotal/install-ps1 (artifact vt-rows, read
+  # by release-notes.js). publish never waits for a successful scan.
+  vt-scan:
+    needs: [plan, kit]
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+    steps:
+      # Only the repo's own scripts are checked out; the kit comes from the artifact.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      # Without VIRUS_TOTAL_KEY the job writes `skipped` rows and skips the scan.
+      - name: Check preconditions
+        id: gate
+        env:
+          VIRUS_TOTAL_KEY: ${{ secrets.VIRUS_TOTAL_KEY }}
+        run: |
+          set -eu
+          if [ -n "$VIRUS_TOTAL_KEY" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          echo "run=false" >> "$GITHUB_OUTPUT"
+          reason="VIRUS_TOTAL_KEY not set"
+          for scope in release-zip install-sh install-ps1; do
+            node scripts/ci/scan-rows.js skipped --tool virustotal --scope "$scope" \
+              --link "$RUN_URL" --out "$RUNNER_TEMP/rows" --note "$reason"
+          done
+          echo "::notice::virustotal skipped: $reason"
+          echo "virustotal skipped: $reason" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Download release-kit
+        if: steps.gate.outputs.run == 'true'
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-kit
+          path: ${{ runner.temp }}/kit
+
+      # A missing file (the download failed) becomes an `error` row.
+      - name: VirusTotal scan
+        if: steps.gate.outputs.run == 'true'
+        continue-on-error: true
+        env:
+          VIRUS_TOTAL_KEY: ${{ secrets.VIRUS_TOTAL_KEY }}
+          VERSION: ${{ needs.plan.outputs.version }}
+        run: |
+          set -eu
+          mkdir -p "$RUNNER_TEMP/raw"
+          node scripts/ci/virustotal-scan.js --out "$RUNNER_TEMP/rows" --raw "$RUNNER_TEMP/raw" \
+            "$RUNNER_TEMP/kit/artisyn-log-hub-$VERSION.zip" \
+            "$RUNNER_TEMP/kit/install.sh" "$RUNNER_TEMP/kit/install.ps1"
+
+      - name: Summary
+        if: always()
+        run: |
+          {
+            echo "### VirusTotal"
+            echo ""
+            echo "$SUMMARY_HEADER"
+            echo "|---|---|---|---|---|---|---|---|"
+            for scope in release-zip install-sh install-ps1; do
+              row="$RUNNER_TEMP/rows/row-virustotal-$scope.json"
+              if [ -f "$row" ]; then
+                jq -r "$SUMMARY_ROW_JQ" "$row"
+              else
+                echo "| virustotal | $scope | no row | | | | | |"
+              fi
+            done
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload vt-rows
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: vt-rows
+          path: ${{ runner.temp }}/rows/
+          retention-days: 14
+          if-no-files-found: warn
+
+      - name: Upload raw output
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: raw-virustotal
+          path: ${{ runner.temp }}/raw/
+          retention-days: 14
+          if-no-files-found: ignore
+
+  # Attest, tag, draft, retag, publish (Design Decision 8). Runs after a failed or timed-out
+  # vt-scan too; in resume mode manifest is skipped and the existing staging image is reused.
+  publish:
+    needs: [plan, checks, manifest, kit, vt-scan]
+    if: >-
+      always()
+      && needs.plan.result == 'success'
+      && needs.checks.result == 'success'
+      && needs.kit.result == 'success'
+      && (needs.plan.outputs.mode == 'resume' || needs.manifest.result == 'success')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
+      attestations: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      MODE: ${{ needs.plan.outputs.mode }}
+      VERSION: ${{ needs.plan.outputs.version }}
+      TAG: ${{ needs.plan.outputs.tag }}
+      LINE: ${{ needs.plan.outputs.line }}
+      PREVIOUS_TAG: ${{ needs.plan.outputs.previous_tag }}
+      SHA: ${{ github.sha }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - uses: docker/login-action@81c6f93d4bc991e510b342a00b419b3bb4efc5c6 # v4.7.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve the staging image digest
+        id: digest
+        run: |
+          set -eu
+          if ! manifest=$(docker buildx imagetools inspect "$IMAGE:sha-$SHA" --format '{{json .Manifest}}'); then
+            echo "::error::staging image :sha-$SHA not found"
+            exit 1
+          fi
+          digest=$(printf '%s' "$manifest" | jq -r .digest)
+          case "$digest" in
+            sha256:*) ;;
+            *) echo "::error::staging image :sha-$SHA not found"; exit 1 ;;
+          esac
+          echo "digest=$digest" >> "$GITHUB_OUTPUT"
+          echo "staging image $IMAGE:sha-$SHA = $digest"
+
+      - name: Attest the image
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-name: ${{ env.IMAGE }}
+          subject-digest: ${{ steps.digest.outputs.digest }}
+          push-to-registry: true
+
+      # Through the REST API, so no checkout ever holds a write credential. A tag that already
+      # exists (a re-run) must point at this commit.
+      - name: Create the tag
+        if: needs.plan.outputs.mode == 'full'
+        run: |
+          set -eu
+          if existing=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" --jq .object.sha 2>/dev/null); then
+            if [ "$existing" != "$SHA" ]; then
+              echo "::error::tag $TAG already exists on $existing, not on $SHA"
+              exit 1
+            fi
+            echo "tag $TAG already exists on $SHA"
+            exit 0
+          fi
+          gh api "repos/$GITHUB_REPOSITORY/git/refs" -f "ref=refs/tags/$TAG" -f "sha=$SHA"
+
+      - name: Download release-kit
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-kit
+          path: ${{ runner.temp }}/kit
+
+      # A timed-out or failed vt-scan uploads nothing; release-notes.js then reports "no result".
+      - name: Download vt-rows
+        continue-on-error: true
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: vt-rows
+          path: ${{ runner.temp }}/rows
+
+      # The commit range ends at the SHA: a tag created through the REST API is not in this clone.
+      # CHANGES.md lists the docs/changelog/ entries added since the previous tag; it is not in
+      # SHA256SUMS (the kit job has no previous tag) but is attested with the kit below.
+      - name: Write the release notes and CHANGES.md
+        env:
+          DIGEST: ${{ steps.digest.outputs.digest }}
+        run: |
+          set -eu
+          node scripts/ci/release-notes.js --version "$VERSION" --tag "$TAG" \
+            --previous-tag "$PREVIOUS_TAG" --head "$SHA" --digest "$DIGEST" \
+            --sums "$RUNNER_TEMP/kit/SHA256SUMS" --rows "$RUNNER_TEMP/rows" \
+            --repo "$GITHUB_REPOSITORY" --out "$RUNNER_TEMP/notes.md" \
+            --changes-out "$RUNNER_TEMP/docs/CHANGES.md"
+          cat "$RUNNER_TEMP/notes.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Attest the install kit
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: |
+            ${{ runner.temp }}/kit/artisyn-log-hub-${{ needs.plan.outputs.version }}.zip
+            ${{ runner.temp }}/kit/README.md
+            ${{ runner.temp }}/kit/docker-compose.yml
+            ${{ runner.temp }}/kit/env.example
+            ${{ runner.temp }}/kit/install.sh
+            ${{ runner.temp }}/kit/install.ps1
+            ${{ runner.temp }}/kit/SHA256SUMS
+            ${{ runner.temp }}/docs/CHANGES.md
+
+      - name: Create or complete the draft release
+        run: |
+          set -eu
+          if gh release view "$TAG" --json isDraft > /dev/null 2>&1; then
+            gh release upload "$TAG" "$RUNNER_TEMP"/kit/* "$RUNNER_TEMP/docs/CHANGES.md" --clobber
+            gh release edit "$TAG" --notes-file "$RUNNER_TEMP/notes.md"
+          else
+            gh release create "$TAG" --draft --verify-tag --title "$TAG" \
+              --notes-file "$RUNNER_TEMP/notes.md" "$RUNNER_TEMP"/kit/* "$RUNNER_TEMP/docs/CHANGES.md"
+          fi
+
+      - name: Tag the image X.Y.Z, X.Y and latest
+        env:
+          DIGEST: ${{ steps.digest.outputs.digest }}
+        run: |
+          set -eu
+          docker buildx imagetools create -t "$IMAGE:$VERSION" -t "$IMAGE:$LINE" -t "$IMAGE:latest" \
+            "$IMAGE@$DIGEST"
+
+      - name: Publish the release
+        run: gh release edit "$TAG" --draft=false --latest

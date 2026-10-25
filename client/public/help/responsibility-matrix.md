@@ -30,7 +30,7 @@ supply the software and documentation, and the operator runs it on its own infra
 |---|:-:|:-:|:-:|:-:|:-:|:-:|
 | Product development and defect fixing | **A/R** | I | I | C | – | C |
 | Security of the product code, dependency updates | **A/R** | I | I | – | – | – |
-| Building and publishing release bundles (image, compose, `INSTALL.md`) | **A/R** | I | – | I | – | – |
+| Publishing releases (GHCR image, GitHub Release install kit) | **A/R** | I | – | I | – | – |
 | Release notes ("What's New") | **A/R** | I | I | I | I | I |
 | Product documentation (this help, installation instructions) | **A/R** | C | C | I | I | I |
 | Third-party component and license inventory | **A/R** | I | C | – | – | – |
@@ -41,7 +41,7 @@ supply the software and documentation, and the operator runs it on its own infra
 | Activity | Maintainers | Op. IT | Op. Security | LH Admin | Team Owner | End User |
 |---|:-:|:-:|:-:|:-:|:-:|:-:|
 | Provisioning the host / VM and Docker Engine | – | **A/R** | C | I | – | – |
-| Initial installation from the release bundle | C | **A/R** | I | I | – | – |
+| Initial installation from the GitHub Release (`install.sh` / `install.ps1`) | C | **A/R** | I | I | – | – |
 | Choosing and configuring `AUTH_MODE` | C | R | **A** | C | – | – |
 | Azure Entra ID app registration (Mode 4) | C | R | **A** | I | – | – |
 | SMTP relay configuration (Modes 2/3) | – | **A/R** | C | I | – | – |

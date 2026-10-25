@@ -66,8 +66,7 @@ as an exception.
 | `GET /api/v1/admin/logs-archive` | `server/src/admin/admin-panel.controller.ts` (`downloadLogsArchive`) | Creates and then deletes its own temp archive; no persistent state changes. |
 
 Token-authorised flows (email confirmation, password reset) are SPA routes that `POST` a one-time
-token — they are not GET mutations. `GET /api/v1/releases/download` is authorised by an HMAC token in
-the URL and is read-only.
+token — they are not GET mutations.
 
 ## Report format
 

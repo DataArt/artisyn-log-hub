@@ -1,24 +1,22 @@
-# artisyn-log-hub release {{VERSION}} — {{ARCH_LABEL}}
+# Artisyn Log Hub {{VERSION}}
 
-Built {{DATE}} from commit {{GIT_COMMIT}}.
+Release `v{{VERSION}}`, built from commit `{{GIT_COMMIT}}`.
 
-`{{VERSION}}` is the **release stamp** — a UTC `YYYYMMDD-HHMMSS` build identity, not a semantic
-version number. It is what names this bundle's files and what the running app reports as
-`build.releaseStamp`; the app's own `build.version` is a separate, rarely-changing semver. A
-later stamp is always a later build — the strings sort chronologically as plain text.
+The app runs as two containers: the Log Hub image `ghcr.io/dataart/artisyn-log-hub:{{VERSION}}`
+(multi-arch: `linux/amd64` and `linux/arm64`, Docker picks the right one) and Postgres. Docker
+pulls both images from their registries; there is no image file to download and nothing to build.
 
-**This bundle runs on {{ARCH_LABEL}} hosts only** — {{ARCH_HOSTS}}. Check with `uname -m`, which
-must print `{{ARCH_UNAME}}`. If it prints something else, you want the
-`{{OTHER_ZIP}}` bundle instead ({{OTHER_ARCH_LABEL}}); the image inside this one will not run on
-your machine.
+## Release files
 
-## Contents
-
-- `{{IMAGE_FILE}}` — exported Docker image (`artisyn-log-hub:latest`), built for {{ARCH_LABEL}}
-- `docker-compose.yml` — app + Postgres, with bind-mounted host directories for logs and DB data
-- `.env` — ready to use as-is: fresh random `POSTGRES_PASSWORD`/`SESSION_SECRET`, `LOG_HUB_DATA_DIR`
-  set to `./loghub-db` (created next to this file), and `AUTH_MODE=none` (no login — see below)
-- `.env.example` — reference documenting every setting, in case you want to change one
+| File | What it is |
+|---|---|
+| `install.sh` | Installer and upgrader for Linux, macOS and WSL (POSIX `sh`) |
+| `install.ps1` | Installer and upgrader for Windows (Windows PowerShell 5.1 or PowerShell 7) |
+| `docker-compose.yml` | App + Postgres, pinned to image `{{VERSION}}`, with bind-mounted host directories for logs and DB data |
+| `env.example` | Every setting `docker-compose.yml` reads, documented. The installers save it as `.env.example` (GitHub does not allow release file names that start with a dot) |
+| `README.md` | This guide |
+| `artisyn-log-hub-{{VERSION}}.zip` | The same files in one archive, for manual installs |
+| `SHA256SUMS` | SHA-256 checksums of all the files above |
 
 ## Requirements
 
@@ -35,28 +33,125 @@ docker version
 docker compose version
 ```
 
-## Install on a clean machine (no source code needed)
+`install.sh` also needs `curl`; `install.ps1` needs nothing extra. Both need outbound HTTPS to
+`github.com` and `ghcr.io`.
+
+## Install or upgrade with one command
+
+Linux, macOS, WSL:
 
 ```sh
-docker load -i {{IMAGE_FILE}}
-docker compose up -d
+curl -fsSL https://github.com/DataArt/artisyn-log-hub/releases/latest/download/install.sh | sh
 ```
 
-If `docker compose up -d` warns that *"the requested image's platform does not match the detected
-host platform"*, you are on the other architecture — load the `{{OTHER_ZIP}}` bundle's image
-instead. Only the `app` image is architecture-specific; the `postgres` image is multi-arch and
-Docker pulls the matching variant on its own.
+Windows (PowerShell):
 
-No `.env` editing is required to get running. `AUTH_MODE=none` (Mode 1) auto-identifies you with
-no login step, which is safe by default because the app only listens on `127.0.0.1` — see the
-port note below. Mode 1 accepts only local callers: localhost, plus the container's own default
-gateway, which is the address your host's traffic to the published port arrives from (inside a
-container it never arrives from loopback, so without this Mode 1 could not be used at all). The
-container logs the gateway it trusts at startup — `docker compose logs app` shows a line reading
-`AUTH_MODE=none: container detected, also trusting default gateway ... as a local caller`. Edit
-`.env` first only if you want a different data directory, or see
-`docs/knowledgebase/authorization-and-authentificaiton.md` before switching `AUTH_MODE` if you
-plan to expose the app beyond localhost.
+```powershell
+irm https://github.com/DataArt/artisyn-log-hub/releases/latest/download/install.ps1 | iex
+```
+
+The same command installs a fresh copy and upgrades an existing one. It:
+
+1. checks that Docker and Compose are installed and that the Docker daemon is running;
+2. downloads `docker-compose.yml` and `env.example` of the requested release;
+3. refuses to install a version lower than the one already installed (database migrations only go
+   forward), unless `FORCE=1` is set;
+4. copies the files into the install directory, keeping the previous compose file as
+   `docker-compose.yml.prev`;
+5. on the first install only, generates `.env` from `.env.example` with a random
+   `POSTGRES_PASSWORD` and `SESSION_SECRET` and `NODE_ENV=production`. **An existing `.env` is never
+   changed** — your database password and settings survive every upgrade;
+6. runs `docker compose pull` (on failure it restores the previous compose file) and
+   `docker compose up -d`;
+7. prints the install directory and the URL — `PUBLIC_BASE_URL` from `.env` when set, otherwise
+   `http://localhost:5003`.
+
+Options, all optional, passed as environment variables:
+
+| Variable | Default | Meaning |
+|---|---|---|
+| `VERSION` | `latest` | Release to install: `latest`, `X.Y.Z` or `vX.Y.Z` |
+| `INSTALL_DIR` | `$HOME/artisyn-log-hub` (Windows: `%USERPROFILE%\artisyn-log-hub`) | Where `docker-compose.yml`, `.env` and the data directory live |
+| `FORCE` | unset | `1` allows installing a lower version than the installed one. Only for restoring together with a database backup made on that version |
+
+To install exactly this release:
+
+```sh
+curl -fsSL https://github.com/DataArt/artisyn-log-hub/releases/download/v{{VERSION}}/install.sh | VERSION={{VERSION}} sh
+```
+
+```powershell
+$env:VERSION = '{{VERSION}}'; irm https://github.com/DataArt/artisyn-log-hub/releases/download/v{{VERSION}}/install.ps1 | iex
+```
+
+Run the installer again with the same `INSTALL_DIR` for every upgrade. Database migrations run
+automatically when the new app container starts.
+
+## Install manually
+
+The same steps as the installer, by hand:
+
+1. Create the install directory and download `docker-compose.yml` and `env.example` of this
+   release into it (or unpack `artisyn-log-hub-{{VERSION}}.zip` there). Save `env.example` as
+   `.env.example`.
+2. First install only: copy `.env.example` to `.env` and replace the two `change-me` values with
+   random ones, e.g. `openssl rand -hex 18` for `POSTGRES_PASSWORD` and `openssl rand -hex 32` for
+   `SESSION_SECRET`. Add a line `NODE_ENV=production` at the end. Restrict the file to your user
+   (`chmod 600 .env`). On an upgrade keep your existing `.env`, and only carry over new settings
+   from the new `.env.example` if you need them.
+3. `docker compose pull`
+4. `docker compose up -d`
+5. Open `http://localhost:5003`.
+
+## Verify the downloads
+
+Every release file is listed in `SHA256SUMS` and has a GitHub build attestation that proves it was
+built by this repository's release workflow. To check the files before you run anything:
+
+```sh
+sha256sum -c SHA256SUMS --ignore-missing
+gh attestation verify install.sh -R DataArt/artisyn-log-hub
+gh attestation verify oci://ghcr.io/dataart/artisyn-log-hub:{{VERSION}} -R DataArt/artisyn-log-hub
+```
+
+On Windows, compare `(Get-FileHash install.ps1 -Algorithm SHA256).Hash` with its line in
+`SHA256SUMS` (case does not matter). If you want to verify the installer before running it,
+download it, verify it, then run the local file: `sh install.sh` or
+`powershell -ExecutionPolicy Bypass -File install.ps1`.
+
+## Upgrade from an old zip bundle
+
+Installs made from the old per-architecture zip bundles (which shipped the app image as
+a `.tar` file) use `image: artisyn-log-hub:latest`. To move such an install onto the published
+images, run the installer with `INSTALL_DIR` set to the bundle directory — the one holding its
+`docker-compose.yml` and `.env`:
+
+```sh
+curl -fsSL https://github.com/DataArt/artisyn-log-hub/releases/latest/download/install.sh | INSTALL_DIR=/path/to/old/bundle sh
+```
+
+```powershell
+$env:INSTALL_DIR = 'C:\path\to\old\bundle'; irm https://github.com/DataArt/artisyn-log-hub/releases/latest/download/install.ps1 | iex
+```
+
+It keeps your `.env` (so the database password and `LOG_HUB_DATA_DIR` stay the same), replaces the
+compose file and recreates the containers on the same data. Use the bundle directory, not a new
+one: the container names are fixed, so a second install directory would clash with the running
+containers. Afterwards you can delete the image `.tar` files, the old local image
+(`docker image rm artisyn-log-hub:latest`), the release download-link secret line in `.env` (if you set one) and the
+`releases/` subdirectory of `LOG_HUB_DATA_DIR` — none of them are used any more.
+
+## Access and authentication
+
+The generated `.env` sets `AUTH_MODE=none` (Mode 1): it auto-identifies you with no login step,
+which is safe by default because the app only listens on `127.0.0.1` — see the port note below.
+Mode 1 accepts only local callers: localhost, plus the container's own default gateway, which is
+the address your host's traffic to the published port arrives from (inside a container it never
+arrives from loopback, so without this Mode 1 could not be used at all). The container logs the
+gateway it trusts at startup — `docker compose logs app` shows a line reading
+`AUTH_MODE=none: container detected, also trusting default gateway ... as a local caller`. See
+`docs/knowledgebase/authorization-and-authentificaiton.md` in the repository before switching
+`AUTH_MODE` if you plan to expose the app beyond localhost.
 
 `app` only starts once `db` reports healthy, so Postgres finishing its first-time image pull
 and startup before `app` starts is already guaranteed — no separate prefetch step needed.
@@ -64,8 +159,10 @@ and startup before `app` starts is already guaranteed — no separate prefetch s
 By default the app is bound to `127.0.0.1:5003` only — reachable from the host machine itself
 (`http://localhost:5003`), not from other machines on the network. To expose it more broadly,
 change the `ports:` mapping in `docker-compose.yml` (e.g. `"5003:3000"` to listen on all
-interfaces, or `"<lan-ip>:5003:3000"` for a specific one) before running `docker compose up -d` —
-and **switch `AUTH_MODE` away from `none` first.**
+interfaces, or `"<lan-ip>:5003:3000"` for a specific one) and run `docker compose up -d` —
+and **switch `AUTH_MODE` away from `none` first.** Note that the installer replaces
+`docker-compose.yml` on every upgrade (the previous one stays as `docker-compose.yml.prev`), so
+re-apply a changed `ports:` mapping after each upgrade.
 
 That last point is not optional advice: this `127.0.0.1`-only publish is the actual security
 boundary for Mode 1, not the in-app local-caller check. With Docker's userland proxy every
@@ -74,21 +171,13 @@ trusts — so a non-loopback `ports:` mapping gives every client that can reach 
 password-less, auto-identified access. Change `AUTH_MODE` to `password` (or another mode) in the
 same edit.
 
-Postgres data, the upload queue, and logs are bind-mounted from `$LOG_HUB_DATA_DIR` on the
-host (see `.env.example`) into `pgdata/`, `upload-queue/`, and `logs/` subdirectories. Unlike
-named volumes, this data lives at a predictable host path outside of Docker's storage area, so
-it survives `docker compose down` *and* `docker compose down -v`, and it's easy to back up or
-inspect directly.
+## Data
 
-A fourth subdirectory, `$LOG_HUB_DATA_DIR/releases`, is mounted **read-only** at
-`/app/dist/releases`. It is optional and starts out empty: it is where release zips like this
-bundle can be placed so administrators can list them in the app's Admin panel → System →
-**Release Downloads** and hand out temporary download links. Drop
-`artisyn-log-hub-<stamp>-<arch>.zip` files straight into it (no restart needed — the directory is
-read on each request) and the newest stamp present will be listed. The mount is read-only because
-the app never writes there: it only lists and streams, and it never deletes an older release —
-removing superseded zips is yours to do. Leaving the directory empty is perfectly fine; the
-section then simply reports that this instance carries no release zips.
+Postgres data, the upload queue, and logs are bind-mounted from `$LOG_HUB_DATA_DIR` on the
+host (default `./loghub-db`, next to `docker-compose.yml`) into `pgdata/`, `upload-queue/`, and
+`logs/` subdirectories. Unlike named volumes, this data lives at a predictable host path outside
+of Docker's storage area, so it survives `docker compose down` *and* `docker compose down -v`, and
+it's easy to back up or inspect directly.
 
 `docker-compose.yml` also pins `PGDATA` to a fixed subdirectory (`/var/lib/postgresql/data/pgdata`)
 inside that bind mount, rather than relying on the postgres image's own default data path. The
@@ -99,6 +188,13 @@ that doesn't line up with it — makes Docker silently fall back to an anonymous
 real data while the host bind mount stays empty; the container still starts and looks healthy,
 but every future recreation re-initializes an empty database. Keep the `PGDATA` env var and the
 `db` volume mount's destination path in sync if you ever change either one.
+
+Before an upgrade you can confirm the `db` container's data really is on the host bind mount:
+`docker inspect artisyn-log-hub-db` must show, under `Mounts`, a single `"Type": "bind"` entry
+whose `Source` is `$LOG_HUB_DATA_DIR/pgdata`. A `"Type": "volume"` entry means real data is
+sitting in an anonymous volume outside the bind mount — stop and move it before recreating the
+container. Back up `$LOG_HUB_DATA_DIR` before an upgrade: migrations only go forward, and the only
+way back to an older version is that version plus a backup made on it.
 
 ## Right after install: check that you are the admin
 
@@ -116,46 +212,27 @@ Do the same check whenever you switch `AUTH_MODE` on a fresh database.
 
 ## Settings
 
-The bundle's `.env` sets `NODE_ENV=production`, which turns on the production checks below. Each
+The generated `.env` sets `NODE_ENV=production`, which turns on the production checks below. Each
 setting is documented in `.env.example`; uncomment it in `.env`, then run `docker compose up -d` to
 apply it.
 
 | Setting | When you need it |
 |---|---|
-| `SESSION_SECRET` | Optional. The bundle's `.env` carries a random one. If you leave it empty, the app generates a secret on first start and keeps it in the database. |
-| `PUBLIC_BASE_URL` | **Required for `AUTH_MODE=password` and `password-confirm`.** The externally reachable URL of the app, e.g. `https://log-hub.example.com`. Confirmation and password-reset links are built only from it. In production the app refuses to start in those modes without it. |
+| `SESSION_SECRET` | Optional. The generated `.env` carries a random one. If you leave it empty, the app generates a secret on first start and keeps it in the database. |
+| `PUBLIC_BASE_URL` | **Required for `AUTH_MODE=password` and `password-confirm`.** The externally reachable URL of the app, e.g. `https://log-hub.example.com`. Confirmation and password-reset links are built only from it. In production the app refuses to start in those modes without it. The installers also print it as the app URL. |
 | `ALLOWED_EMAIL_DOMAINS` | Recommended when `password-confirm` is reachable from the internet: comma-separated domains allowed to sign up, e.g. `example.com,example.org`. A malformed value stops the app at startup. |
 | `AUTH_RATE_LIMIT_POINTS`, `AUTH_RATE_LIMIT_WINDOW_SEC` | Rate limit on sign-up, forgot password, resend confirmation and reset password, per client IP and per email. Defaults: 5 requests per 900 seconds; `0` points turns it off. |
-| `RELEASE_LINK_SECRET` | Optional HMAC key for the release download links in Admin → System. When unset, a key is derived from `SESSION_SECRET`. Changing either invalidates links already handed out. |
 | `IMPORT_MAX_UPLOAD_BYTES`, `IMPORT_MAX_ENTRIES`, `IMPORT_MAX_UNCOMPRESSED_BYTES`, `IMPORT_MAX_ENTRY_BYTES` | Limits for repository zip imports. Defaults: 5 GiB upload, 20000 entries, 20 GiB uncompressed, 400 MiB per entry. An import over a limit is rejected with a message naming the setting to raise. |
 
 The app also makes two outbound requests a day: the public npm registry, for the latest Claude Code
 version, and the public Anthropic pricing page, for model prices. To turn them off (for example on an
 air-gapped host), add `AI_TOOL_VERSION_CHECK_ENABLED: "false"` and
 `MODEL_PRICING_FETCH_ENABLED: "false"` under the `app` service's `environment:` in
-`docker-compose.yml`.
+`docker-compose.yml` (and re-apply that edit after each upgrade, like a changed `ports:` mapping).
 
-## Update to the latest version
+## Check the running version
 
-1. Copy the new release's `{{IMAGE_FILE}}` onto the host — from the new version's
-   `{{ARCH}}` bundle, the same architecture you are running now (you only need the new
-   `docker-compose.yml`/`.env.example` too if this release's copies differ from what you're
-   running — diff them and carry over any new settings before step 3). **Keep your existing
-   `.env`** — do not overwrite it with the new release's `.env`, which ships its own freshly
-   generated `POSTGRES_PASSWORD`/`SESSION_SECRET` and would invalidate your running database
-   password and active sessions.
-2. `docker load -i {{IMAGE_FILE}}`
-3. Before upgrading, confirm the `db` container's data really is on the host bind mount, not an
-   orphaned anonymous volume: `docker inspect artisyn-log-hub-db --format "{{json .Mounts}}"`
-   should show a single `"Type": "bind"` entry whose `Source` is `$LOG_HUB_DATA_DIR/pgdata` and
-   whose `Destination` matches the `db` service's volume mount in `docker-compose.yml`. If you
-   see a `"Type": "volume"` entry instead (or in addition), stop — that means real data is
-   sitting in an anonymous volume outside the bind mount, and recreating the container will
-   silently drop it.
-4. `docker compose up -d` — recreates only the `app` container with the newly loaded `latest`
-   tag; `db` is untouched, so Postgres has no downtime.
-5. Database migrations run automatically on app startup — no manual migration step needed.
-6. Verify: `docker compose logs -f app` until it reports ready, then in the app's Admin panel
-   → System (or `GET /api/v1/admin/system` as an admin) check that the **Release** tile —
-   `build.releaseStamp` in the API response — reads `{{VERSION}}`. (`build.version` is the
-   separate semver and will *not* match the stamp.)
+`docker compose logs -f app` until it reports ready, then open the app's Admin panel → System (or
+`GET /api/v1/admin/system` as an admin): the **Build** tile — `build.version` in the API response —
+reads `{{VERSION}}`, and its caption shows the short form of commit `{{GIT_COMMIT}}`. `GET /health/version`
+returns the same two values without signing in.

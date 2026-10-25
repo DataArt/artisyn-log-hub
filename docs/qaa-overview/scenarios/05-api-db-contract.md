@@ -4,7 +4,7 @@ Date: 2026-10-13, branch `dev`. This is a design document; nothing was implement
 
 ## 0. The gist in three lines
 
-- EVERY HTTP endpoint (130 of them) has a row in the registry (a data file): "who calls -> on which golden fixture -> which independent SQL to run -> how a response field maps to a column".
+- EVERY HTTP endpoint (127 of them) has a row in the registry (a data file): "who calls -> on which golden fixture -> which independent SQL to run -> how a response field maps to a column".
 - The test calls the endpoint and, with a separate `pg` client (raw SQL, not drizzle, not application code), reads the same data from the same DB schema, then compares. For writes: a snapshot of the affected tables before/after, and the delta is compared with the expected one.
 - A meta-test fails if a route exists in the NestJS router but not in the registry (and the other way round). A new endpoint cannot be added without a contract row.
 
@@ -12,9 +12,9 @@ Date: 2026-10-13, branch `dev`. This is a design document; nothing was implement
 
 ## 1. Endpoint inventory
 
-In total there are **130** HTTP routes in 25 controllers (`grep @Get|@Post|@Put|@Patch|@Delete` over `server/src`, checked against `server-endpoint-map.md`; the sets match). Routes outside controllers (ServeStatic for the SPA, `express.static` for `public`) are not counted, see section 6.
+In total there are **127** HTTP routes in 24 controllers (`grep @Get|@Post|@Put|@Patch|@Delete` over `server/src`, checked against `server-endpoint-map.md`; the sets match). Routes outside controllers (ServeStatic for the SPA, `express.static` for `public`) are not counted, see section 6.
 
-Count per controller: repositories 23, admin-panel 21, teams 18, auth 13, reports 11, export-import 10, usage-analytics 5, api-keys 4, user-settings 4, admin 2, health 2, invitations 2, sessions 2, logs 2, and one each: ai-tool-versions, azure-callback, ping, installer, logs-v2, model-pricing, post-turn-analysis, session-attribution, turn-end-cost-advisor, release-download, session-retention.
+Count per controller: repositories 23, admin-panel 19, teams 18, auth 13, reports 11, export-import 10, usage-analytics 5, api-keys 4, user-settings 4, admin 2, health 2, invitations 2, sessions 2, logs 2, and one each: ai-tool-versions, azure-callback, ping, installer, logs-v2, model-pricing, post-turn-analysis, session-attribution, turn-end-cost-advisor, session-retention. (The three release-download routes, the public signed download and the two admin ones, were removed by 2026-10-20-github-release-pipeline.)
 
 Auth legend:
 - **S** = `SessionAuthGuard` (cookie session, any logged-in user);
@@ -28,9 +28,9 @@ Auth legend:
 
 DB tables are given as R (reads), W (writes). The "SQL check" column describes how we prove the response independently.
 
-### F01. Non-DB and infrastructure (14 endpoints, contract "nothing changes in the DB")
+### F01. Non-DB and infrastructure (11 endpoints, contract "nothing changes in the DB")
 
-Controllers: `HealthController`, `PingController`, `AuthController.config`, `InstallerController`, `ReleaseDownloadController`, `LogsController.logEcho`, `AdminPanelController` (system, error-logs, logs-archive, releases, release download-link, auth), `SessionsController.retention-days`.
+Controllers: `HealthController`, `PingController`, `AuthController.config`, `InstallerController`, `LogsController.logEcho`, `AdminPanelController` (system, error-logs, logs-archive, auth), `SessionsController.retention-days`.
 
 | Method+path | Auth | DB | Response fields -> source | SQL check / notes |
 |---|---|---|---|---|
@@ -39,13 +39,10 @@ Controllers: `HealthController`, `PingController`, `AuthController.config`, `Ins
 | GET /api/v1/ping | S | R: `users`, `auth_sessions` (session deserialization) | 204 | 401 without a cookie; no effect on the DB |
 | GET /api/v1/auth/config | P | none | `mode`, `adminContactEmail` from env | `mode='password-confirm'` in the harness; no secrets |
 | GET /static/artisyn-hooks-installer.tgz | P | none (writes `latest-hook-version.json` to disk on `?v=`) | tgz bytes | non-DB; we only check that nothing is written to the DB |
-| GET /api/v1/releases/download | P (signed token) | none | zip | non-DB (HMAC + file) |
 | POST /api/v1/log-echo | K | R: `api_keys` (authentication) | echo of the body | does not write to the DB; checked with a "nothing changed" snapshot |
 | GET /api/v1/admin/system | A | R: DB ping, `pool` counters | `db.connected`, workers, CPU | DB part: `connected=true`. The rest is non-deterministic and not compared |
 | GET /api/v1/admin/error-logs | A | none (reads `logs/app-*.log`) | log lines | non-DB |
 | GET /api/v1/admin/logs-archive | A | none (zip of the `logs/` directory) | zip | non-DB, large |
-| GET /api/v1/admin/releases | A | none (`RELEASES_DIR`) | `entries[]` | non-DB; the harness already points `RELEASES_DIR` at a temp directory |
-| POST /api/v1/admin/releases/download-link | A | none | signed URL | non-DB |
 | GET /api/v1/admin/auth | A | none (env) | `mode`, `smtp`, `azure` | non-DB |
 | GET /api/v1/sessions/retention-days | S | none (env `SESSION_RETENTION_DAYS`) | `retentionDays` | non-DB |
 
@@ -315,7 +312,7 @@ Controller: `RepositoryExportImportController`, plus `recompute-all-sessions`. A
 | POST /repositories/bootstrap-import/upload, /:uploadToken/confirm, GET /:jobId/status | as above without `:repoId` (creates a repository/team) | |
 | POST /repositories/:repoId/recompute-all-sessions | W `session_stats` and derived data | after the call: `session_stats` == the result of recomputing from `logs.body`; the metrics return to golden after the fixture deliberately corrupts columns (a good test of "the server really reads the logs") |
 
-**Total**: 14 + 10 + 3 + 4 + 4 + 6 + 3 + 3 + 5 + 9 + 3 + 4 + 4 + 9 + 2 + 3 + 8 + 2 + 4 + 7 + 10 + 2 + 11 = 130. **23 families.**
+**Total**: 11 + 10 + 3 + 4 + 4 + 6 + 3 + 3 + 5 + 9 + 3 + 4 + 4 + 9 + 2 + 3 + 8 + 2 + 4 + 7 + 10 + 2 + 11 = 127. **23 families.**
 
 ---
 
@@ -323,7 +320,7 @@ Controller: `RepositoryExportImportController`, plus `recompute-all-sessions`. A
 
 ### 2.1. What already exists and is reused
 
-- `server/test/setup/global-setup.ts`: boots the real `AppModule` (`Test.createTestingModule`), once per run, on an isolated schema `test_e2e_<uuid>`; `initializeDatabase()` applies the drizzle migrations to this schema; `E2E_DB_SCHEMA` sets the `search_path` both for the application (`DatabaseModule` through `resolveSearchPathOption()`) and for the test pool. Background jobs are sped up with env variables (queue 50 ms, retention 50 ms), `AI_TOOL_VERSION_CHECK_ENABLED=false`, `RELEASES_DIR` points to a temp directory, `AUTH_MODE=password-confirm`. We keep all of this.
+- `server/test/setup/global-setup.ts`: boots the real `AppModule` (`Test.createTestingModule`), once per run, on an isolated schema `test_e2e_<uuid>`; `initializeDatabase()` applies the drizzle migrations to this schema; `E2E_DB_SCHEMA` sets the `search_path` both for the application (`DatabaseModule` through `resolveSearchPathOption()`) and for the test pool. Background jobs are sped up with env variables (queue 50 ms, retention 50 ms), `AI_TOOL_VERSION_CHECK_ENABLED=false`, `AUTH_MODE=password-confirm`. We keep all of this.
 - `test/helpers/db-client.helper.ts`: `getTestDb()` gives a drizzle pool on the same schema. For the contract layer **do not use drizzle as the oracle**; a raw `pg.Pool` is needed (see 2.2).
 - `auth.helper.ts` (`TestAuthSession`): registration, confirmation with a token from the DB, login, API key. It does not fit the contract layer as the main way in (the test would create users on the fly through the same API it checks), see 2.3.
 - `db-cleanup.helper.ts`, `wait-for-queue-drain.helper.ts` (`waitForQueueDrained`), `create-app.helper.ts`, `e2e-app.helper.ts` (`getBaseUrl()`).
@@ -487,9 +484,9 @@ Exclusions are written as an explicit `route: 'GET /x', kind: 'excluded', reason
 
 | Indicator | Value |
 |---|---|
-| Endpoints | **130** (130 unique `METHOD path`) |
+| Endpoints | **127** (127 unique `METHOD path`) |
 | Families (one `it.each` per family) | **23** (F01-F23) |
-| Registry rows written by hand (happy path + differing roles + key negatives + extra fixtures for aggregates) | **~230-260** (130 baseline + ~55 role rows + ~35 negative/write rows + ~20 extra aggregate/filter variants) |
+| Registry rows written by hand (happy path + differing roles + key negatives + extra fixtures for aggregates) | **~230-260** (127 baseline + ~55 role rows + ~35 negative/write rows + ~20 extra aggregate/filter variants) |
 | Generated auth-matrix rows (401/403 by `auth` in the registry) | **~110** (no manual cost) |
 | Meta-tests | 3 |
 | "Tests" in jest terms (`it`) | 23 + 3 + 1 (matrix) = **~27**, but **~370 check rows** |
@@ -516,7 +513,7 @@ Replaced entirely or mostly (where the file is "call and check the response/DB")
 
 Partly replaced (the data contract moves into the registry; guard/validation/edge cases stay): `admin-panel` 30, `sessions` 44, `team-access-mode` 46, `team-cross-member-sessions` 16, `access-management` 48, `account-deletion` 11, `session-delete` 11, `auth*`/`password-reset` ~58, `logs`/`logs-otel`/`logs-gzip`/`logs-hook-status` ~64, `upload-queue` 36, `attribute-filter-threading` 13, `change-surface` 24, `session-workflow` 11, `session-tree-metrics` 15, `session-cost-consistency` 5. Estimate: ~35-40% of their tests (~140-170) become redundant.
 
-Unchanged (not about the DB contract): `installer` 7, `releases` 17, `system-info` 11, `security-headers` 4, `app.e2e-spec` 1, the `*.spec.ts` unit tests (`semver`, `claude-extractor`, `artisyn-extractor`, `claude-version-usage`, `db`, `repo-backfill`, `repository-export-import`, `ai-tool-versions*`).
+Unchanged (not about the DB contract): `installer` 7, `system-info` 11, `security-headers` 4, `app.e2e-spec` 1, the `*.spec.ts` unit tests (`semver`, `claude-extractor`, `artisyn-extractor`, `claude-version-usage`, `db`, `repo-backfill`, `repository-export-import`, `ai-tool-versions*`).
 
 **In total about 430-460 of the 882 server API tests become redundant** (**inference**, estimated from the file names, without a line-by-line analysis). An honest caveat: the contract layer proves "response == DB" and the write delta, but it does NOT replace the business-rule tests (config merge priority, access formulas by `access_mode`, the extractor parsers). Part of them stays as "Group 2".
 
@@ -525,7 +522,7 @@ Unchanged (not about the DB contract): `installer` 7, `releases` 17, `system-inf
 ## 5. Risks and open questions
 
 1. **External services**: Azure OAuth (`/auth/azure`, `/api/auth/callback`) needs a real Microsoft, so it is excluded (explicit `excluded`). SMTP (`MailService`) in F02/F07: mail is not checked (contract `email_delivery`), Mailpit is not required. The NPM registry is disabled with a flag.
-2. **File endpoints**: `upload-queue/:id/file`, `logs-archive`, `error-logs`, `releases/*`, `static installer`, export/download read the file system, not the DB; for them the DB oracle gives only "no side writes" and a metadata check. They depend on the `upload-queue/`, `export-import/`, `logs/` directories in `server/` (shared with the dev server, which runs in parallel! **inference**: the staging directories must be separated with env variables, like `RELEASES_DIR`).
+2. **File endpoints**: `upload-queue/:id/file`, `logs-archive`, `error-logs`, `static installer`, export/download read the file system, not the DB; for them the DB oracle gives only "no side writes" and a metadata check. They depend on the `upload-queue/`, `export-import/`, `logs/` directories in `server/` (shared with the dev server, which runs in parallel! **inference**: the staging directories must be separated with env variables).
 3. **Auth modes**: the contract runs in Mode 3; `identify` (Mode 1) and the Azure branches are checked only as 404. A positive Mode 1 needs a second boot with `AUTH_MODE=none` (a cheap second `describe` group of 3-4 rows, but it doubles the migrations, ~seconds). The owner's decision.
 4. **SSE/streams**: the code has no `@Sse`; `getSessionLogs` returns the response through `@Res` (possibly streamed/gzip) **(inference)**; supertest reads the whole buffer, but very large `body` values must not be used in the fixture.
 5. **PDF**: I found no endpoints with PDF (`grep` over the controllers). Reports return JSON; PDF/Excel is the client **(inference)**.

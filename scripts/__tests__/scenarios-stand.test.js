@@ -85,7 +85,6 @@ describe('mode env', () => {
       assert.equal(env.LOGS_MAX_BODY_MB, '2');
       assert.equal(env.UPLOAD_QUEUE_DIR, path.join('R', mode, 'upload-queue'));
       assert.equal(env.EXPORT_IMPORT_DIR, path.join('R', mode, 'export-import'));
-      assert.equal(env.RELEASES_DIR, path.join('R', mode, 'releases'));
       assert.equal(env.CLUSTER_MODE, undefined, 'stand must stay a single process');
     }
   });
