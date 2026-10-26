@@ -120,11 +120,13 @@ export class AdminService {
     const mode = this.configService.get<string>('AUTH_MODE');
     const response: AdminAuthConfig = { mode };
 
-    if (mode === 'password' || mode === 'password-confirm') {
+    // Only when SMTP applies to the mode and SMTP_HOST is set (Mode 3, or
+    // Mode 2 with SMTP). No code defaults: the card shows the real settings.
+    if (this.mailService.isConfigured()) {
       response.smtp = {
-        host: this.configService.get<string>('SMTP_HOST', ''),
-        port: Number(this.configService.get<string>('SMTP_PORT', '0')),
-        from: this.configService.get<string>('SMTP_FROM', ''),
+        host: this.configService.get<string>('SMTP_HOST') ?? '',
+        port: Number(this.configService.get<string>('SMTP_PORT')),
+        from: this.configService.get<string>('SMTP_FROM') ?? '',
       };
     }
     if (mode === 'azure-oauth') {

@@ -20,6 +20,11 @@ import {
   CardTitle,
 } from '../../ui/card';
 import { AzureSignInButton } from './AzureSignInButton';
+import {
+  forgotPasswordLinkState,
+  SMTP_NOT_CONFIGURED_HINT,
+  type ForgotPasswordLinkState,
+} from './forgot-password-link';
 
 function TemporaryIssueMessage({
   adminContactEmail,
@@ -114,9 +119,9 @@ function retryDelaySeconds(err: ApiError): number {
 }
 
 function PasswordLoginForm({
-  showForgotPassword,
+  forgotPassword,
 }: {
-  showForgotPassword: boolean;
+  forgotPassword: ForgotPasswordLinkState;
 }) {
   const { user, setUser } = useAuth();
   const navigate = useNavigate();
@@ -197,7 +202,7 @@ function PasswordLoginForm({
             required
             autoComplete="current-password"
           />
-          {showForgotPassword && (
+          {forgotPassword === 'active' && (
             <button
               type="button"
               className="self-end text-sm underline hover:text-foreground text-muted-foreground"
@@ -205,6 +210,24 @@ function PasswordLoginForm({
             >
               Forgot password?
             </button>
+          )}
+          {forgotPassword === 'disabled' && (
+            <div className="flex flex-col gap-1">
+              <button
+                type="button"
+                disabled
+                aria-describedby="forgot-password-hint"
+                className="self-end text-sm text-muted-foreground cursor-not-allowed opacity-60 no-underline"
+              >
+                Forgot password?
+              </button>
+              <p
+                id="forgot-password-hint"
+                className="self-end text-xs text-muted-foreground"
+              >
+                {SMTP_NOT_CONFIGURED_HINT}
+              </p>
+            </div>
           )}
           {error && <p className="text-sm text-destructive">{error}</p>}
           {delaySeconds > 0 && (
@@ -286,10 +309,10 @@ export function LoginPage() {
       {isError && <TemporaryIssueMessage />}
       {!isLoading && !isError && config?.mode === 'none' && <IdentifyForm />}
       {!isLoading && !isError && config?.mode === 'password' && (
-        <PasswordLoginForm showForgotPassword={false} />
+        <PasswordLoginForm forgotPassword={forgotPasswordLinkState(config)} />
       )}
       {!isLoading && !isError && config?.mode === 'password-confirm' && (
-        <PasswordLoginForm showForgotPassword={true} />
+        <PasswordLoginForm forgotPassword={forgotPasswordLinkState(config)} />
       )}
       {!isLoading && !isError && config?.mode === 'azure-oauth' && (
         <Card className="w-full max-w-sm">

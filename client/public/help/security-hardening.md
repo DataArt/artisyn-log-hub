@@ -99,7 +99,7 @@ Required settings: `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`,
   counter is in memory per worker process — it is a speed bump, not an account lockout. Behind a
   proxy, set `TRUST_PROXY` so the real client IP is used.
 - **Password change** signs out all of the user's other sessions and sends a notification email
-  when SMTP is configured.
+  when SMTP is configured — always in Mode 3, and in Mode 2 only when `SMTP_HOST` is set.
 - **Password reset** tokens are valid for 1 hour; email confirmation tokens for 24 hours; both are
   single-use with a 60-second re-issue cooldown.
 - **Rate limits on account endpoints**: sign-up, forgot-password, resend-confirmation and
@@ -120,11 +120,22 @@ Required settings: `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`,
 
 ### 3.4 Email (SMTP)
 
-Required for Mode 3; optional for Mode 2 (password reset and notifications are best-effort);
-unused in Modes 1 and 4.
+Settings: `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_SECURE`,
+`ADMIN_CONTACT_EMAIL`. The rule depends on the auth mode:
 
-`SMTP_HOST`, `SMTP_PORT`, `SMTP_SECURE`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM`,
-`ADMIN_CONTACT_EMAIL`.
+- **Modes 1 and 4** (`none`, `azure-oauth`) never use SMTP.
+- **Mode 2** (`password`): SMTP is optional.
+  - When `SMTP_HOST` is set, `SMTP_PORT` and `SMTP_FROM` are required (the server does not start
+    without them). A relay that cannot be reached at startup only logs a warning; sending is retried
+    on the first email.
+  - When `SMTP_HOST` is unset, password reset is unavailable: the login page shows
+    "Forgot password?" disabled with the hint "SMTP server is not configured", and no reset token is
+    issued. Password-changed notifications are not sent.
+  - `ADMIN_CONTACT_EMAIL` is optional.
+- **Mode 3** (`password-confirm`): `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM` and `ADMIN_CONTACT_EMAIL`
+  are required, and the relay must be reachable at startup — otherwise the server does not start.
+- `SMTP_USER`/`SMTP_PASSWORD` are optional (anonymous relay); `SMTP_SECURE` is optional
+  (unset = `false`).
 
 Use `SMTP_SECURE=true` (implicit TLS, usually port 465) or a relay that enforces STARTTLS.
 
@@ -262,7 +273,7 @@ The web client loads no external resources (fonts, CDNs, analytics).
 | Destination | When | How to control |
 |---|---|---|
 | Azure Entra ID | `AUTH_MODE=azure-oauth` | Mode setting |
-| SMTP relay | When `SMTP_HOST` is set | SMTP settings |
+| SMTP relay | Mode 3 always (checked at startup); Mode 2 only when `SMTP_HOST` is set | SMTP settings (§3.4) |
 | `registry.npmjs.org` (HTTPS) | Periodic AI tool version check | `AI_TOOL_VERSION_CHECK_ENABLED=false` disables it |
 | `platform.claude.com` (HTTPS) | Daily model pricing fetch: reads Anthropic's public pricing page, at most once per 24 h cluster-wide | `MODEL_PRICING_FETCH_ENABLED=false` disables it |
 | `openrouter.ai` (HTTPS) | Only when an admin clicks **Import from OpenRouter** on the Model Pricing tab | Not scheduled; don't click the button |
@@ -400,7 +411,7 @@ Protect backups with the same controls as the live data (§6.1) and apply the sa
 | `TRUST_PROXY` | `false` | Reverse-proxy trust (§4.1). |
 | `PASSWORD_POLICY` | `long` | Password strength (§3.3). |
 | `AZURE_*` | — | Mode 4 settings (§3.2). |
-| `SMTP_*`, `ADMIN_CONTACT_EMAIL` | — | Email settings (§3.4). |
+| `SMTP_*`, `ADMIN_CONTACT_EMAIL` | — | Email settings (§3.4): required in Mode 3, optional in Mode 2 (no password reset without `SMTP_HOST`), unused in Modes 1/4. |
 | `SESSION_RETENTION_DAYS` | `30` | Data retention (§6.2). |
 | `LOGS_MAX_BODY_MB` | `2500` | Maximum log upload request size (`POST /api/v2/logs`). |
 | `IMPORT_MAX_UPLOAD_BYTES`, `IMPORT_MAX_ENTRIES`, `IMPORT_MAX_UNCOMPRESSED_BYTES`, `IMPORT_MAX_ENTRY_BYTES` | 5 GiB, 20,000, 20 GiB, 400 MiB | Repository import limits (§6.4). |

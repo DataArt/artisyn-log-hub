@@ -169,6 +169,9 @@ response: {
   mode: 'none' | 'password' | 'password-confirm' | 'azure-oauth';
   azure?: { authority: string; clientId: string; redirectUri: string }; // only when mode === 'azure-oauth'
   adminContactEmail?: string; // only when mode is 'password' | 'password-confirm'
+  passwordResetAvailable?: boolean; // only when mode is 'password' | 'password-confirm':
+  // MailService.isConfigured() — true when SMTP_HOST is set (always in Mode 3), false in Mode 2
+  // without SMTP (the client then disables "Forgot password?"). Absent from older servers.
 }
 // Never includes a secret field. Used by the login page to pick which UI to render, before mounting any form.
 
@@ -236,6 +239,8 @@ response: { email_delivery: 'sent' | 'failed' }
 // Always 200 whether or not the email is registered (no enumeration); not gated on the account
 // having a password already (works for OAuth-only accounts too, for the Mode 4 → 2/3 switch-back
 // scenario). Same 60s cooldown mechanism as resend-confirmation.
+// Mode 2 without SMTP (SMTP_HOST unset): always { email_delivery: 'failed' }, answered before the
+// user lookup (still enumeration-safe) — no token is issued and no email is sent.
 body: { email: string }
 response: { email_delivery: 'sent' | 'failed' }
 // Errors: 429 (Retry-After header)
@@ -945,7 +950,8 @@ response: {
 // GET /api/v1/admin/auth — 200
 // Requires: session cookie, role='admin'
 // Non-secret config for the active AUTH_MODE — the field group present matches the mode
-// (Mode 1 has none).
+// (Mode 1 has none). `smtp` is present only when MailService.isConfigured(): always in Mode 3,
+// in Mode 2 only when SMTP_HOST is set. Values are the raw env (no code defaults).
 response: {
   mode: string;
   smtp?: { host: string; port: number; from: string };

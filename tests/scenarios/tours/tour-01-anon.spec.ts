@@ -87,4 +87,25 @@ test('@TOUR-01 anon: auth pages and guards @mode-a @mode-b @mode-c', async ({ st
   }
 
   walker.finish();
+
+  if (!modeA) {
+    // B runs with Mailpit as its relay (reset available); C runs without SMTP_HOST, so the link is
+    // disabled with the hint and /forgot-password refuses the form.
+    await test.step('forgot-password link state: enabled in B; disabled with the SMTP hint in C', async () => {
+      const hint = 'SMTP server is not configured';
+      await page.goto('/#/login');
+      const link = page.getByRole('button', { name: 'Forgot password?' });
+      await expect(link).toBeVisible();
+      if (stand.authMode === 'password-confirm') {
+        await expect(link).toBeEnabled();
+        await expect(page.getByText(hint)).toHaveCount(0);
+      } else {
+        await expect(link).toBeDisabled();
+        await expect(page.getByText(hint)).toBeVisible();
+        await page.goto('/#/forgot-password');
+        await expect(page.getByRole('note').filter({ hasText: hint })).toBeVisible();
+        await expect(page.getByRole('button', { name: 'Send reset link' })).toBeDisabled();
+      }
+    });
+  }
 });
