@@ -3,6 +3,7 @@
   "tmpDir": "tmp/",
   "credentialsNote": "Test login credentials (user/password for the local app) are in CLAUDE.local.md.",
   "kbIndexPath": "docs/knowledgebase/index.md",
+  "taskDetailsSkill": "github-issues",
   "simpleTrack": {
     "fileCountWarnThreshold": 20
   },
