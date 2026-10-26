@@ -23,6 +23,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/ui/tooltip';
+import { NoPricingBadge } from '../../../components/NoPricingBadge';
 import { formatCost, formatDuration, formatTokens } from '@/lib/format';
 import { formatCount, NO_VALUE } from '@/lib/usage-analytics-format';
 import { truncate } from '@/lib/format';
@@ -120,18 +121,12 @@ export function ActiveSessionsView({
                       {formatTokens(row.totalTokens)}
                     </TableCell>
                     <TableCell className="text-right font-mono">
-                      {row.totalCost === null ? (
-                        <Tooltip>
-                          <TooltipTrigger className="underline decoration-dotted">
-                            n/a
-                          </TooltipTrigger>
-                          <TooltipContent className="max-w-[320px]">
-                            No model in this session tree has a pricing row, so
-                            no cost can be computed. Not the same as $0.00.
-                          </TooltipContent>
-                        </Tooltip>
-                      ) : (
+                      {row.totalCost !== null ? (
                         formatCost(row.totalCost)
+                      ) : row.costUnavailableReason === 'unknown-model' ? (
+                        <NoPricingBadge modelIds={row.unpricedModels ?? []} />
+                      ) : (
+                        NO_VALUE
                       )}
                     </TableCell>
                     <TableCell className="text-right font-mono">

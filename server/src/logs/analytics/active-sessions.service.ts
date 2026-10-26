@@ -2,13 +2,9 @@ import { Inject, Injectable } from '@nestjs/common';
 import { sql } from 'drizzle-orm';
 import { DRIZZLE } from '../../database/database.constants';
 import type { DrizzleDb } from '../../database/database.module';
-import {
-  pricingAsOfSql,
-  sessionCostSql,
-  sessionPriceDateSql,
-} from '../cost.sql';
 import { maskFirstPrompt } from '../team-scope';
 import { descendantSessionsCte } from '../session-tree.sql';
+import { loadTreeCostRows, readTreeCost } from '../session-tree-cost.sql';
 import {
   loadScopedRootSessions,
   num,
@@ -33,8 +29,6 @@ import type {
 interface TreeRollupSqlRow {
   root_id: string | number;
   total_tokens: string | number | null;
-  total_cost: string | number | null;
-  any_priced: boolean | null;
   lines_added: string | number | null;
   lines_removed: string | number | null;
 }
@@ -68,9 +62,10 @@ export class ActiveSessionsService {
     const page = ordered.slice(0, limit);
     const rootIds = page.map((r) => r.sessionRowId);
 
-    const [treeRows, toolRows] = await Promise.all([
+    const [treeRows, toolRows, costRows] = await Promise.all([
       this.loadTreeRollup(rootIds),
       this.loadToolRollup(rootIds),
+      loadTreeCostRows(this.db, rootIds),
     ]);
 
     const treeByRoot = new Map(
@@ -83,6 +78,8 @@ export class ActiveSessionsService {
     const sessions: ActiveSessionRow[] = page.map((root) => {
       const tree = treeByRoot.get(root.sessionRowId);
       const tools = toolByRoot.get(root.sessionRowId);
+      // The same complete tree cost every other surface shows (session-tree-cost.sql.ts).
+      const cost = readTreeCost(costRows.get(root.sessionRowId));
       return {
         sessionId: root.sessionId,
         // A `manager` (`team-no-prompts`) sees every visible
@@ -101,9 +98,9 @@ export class ActiveSessionsService {
         workTimeMs: root.workTimeMs,
         turns: root.turnCount,
         totalTokens: num(tree?.total_tokens),
-        // null, not 0, when nothing in the tree had a model_pricing match — so the client can
-        // render "n/a" instead of a fake $0.00.
-        totalCost: tree?.any_priced === true ? num(tree.total_cost) : null,
+        totalCost: cost.total,
+        unpricedModels: cost.unpricedModels,
+        costUnavailableReason: cost.costUnavailableReason,
         toolCalls: num(tools?.tool_calls),
         linesAdded: num(tree?.lines_added),
         linesRemoved: num(tree?.lines_removed),
@@ -115,19 +112,8 @@ export class ActiveSessionsService {
   }
 
   /**
-   * Tokens, cost and diff-based line counts over the whole tree (`depth >= 0`).
-   *
-   * Cost is priced *per session* through the `model_pricing` lateral join rather than with the
-   * root's rate, because a sub-agent tree routinely mixes models and one rate cannot price it.
-   * The `REGEXP_REPLACE(..., '-[0-9]{8}$', '')` strips a dated model suffix so
-   * `claude-opus-4-5-20251101` matches the `claude-opus-4-5` pricing row — the same expression
-   * every other cost query in this repo uses.
-   *
-   * The cost arithmetic itself comes from `logs/cost.sql.ts`, so this panel can never
-   * drift from the sessions list on the TTL-split cache-write rates, the fast-mode surcharge or
-   * the per-request web-search price. Unpriced members contribute `0.0` to the `SUM` — the
-   * `BOOL_OR(p.model_id IS NOT NULL) AS any_priced` flag below is what tells the mapper the
-   * whole tree was unpriced, so it can report `null` instead of a fake `$0.00`.
+   * Tokens and diff-based line counts over the whole tree (`depth >= 0`). The cost comes from
+   * `loadTreeCostRows` instead, so this panel shows the sessions list's figure.
    */
   private async loadTreeRollup(rootIds: number[]): Promise<TreeRollupSqlRow[]> {
     const result = await this.db.execute(sql`
@@ -138,26 +124,16 @@ export class ActiveSessionsService {
           ss.input_tokens + ss.output_tokens
           + ss.cache_read_tokens + ss.cache_write_tokens
         ), 0) AS total_tokens,
-        COALESCE(SUM(
-          CASE WHEN p.model_id IS NOT NULL
-            THEN ${sessionCostSql({ stats: sql`ss`, pricing: sql`p` })}
-            ELSE 0.0 END
-        ), 0.0) AS total_cost,
-        BOOL_OR(p.model_id IS NOT NULL) AS any_priced,
         COALESCE(SUM(ss.lines_added), 0)   AS lines_added,
         COALESCE(SUM(ss.lines_removed), 0) AS lines_removed
       FROM descendant_sessions ds
       JOIN session_stats ss ON ss.session_id = ds.id
         -- Excludes an OTEL-only session_stats row (no transcript ever uploaded
-        -- for it) from the tree token/cost/lines rollup.
+        -- for it) from the tree token/lines rollup.
         AND EXISTS (
           SELECT 1 FROM logs tl
           WHERE tl.session_id = ds.id AND tl.log_type IN ('claude', 'claude-subagent')
         )
-      -- Every tree member is priced at its ROOT's price date.
-      LEFT JOIN LATERAL (
-        ${pricingAsOfSql(sql`ss.model`, sessionPriceDateSql(sql`ds.root_id`))}
-      ) p ON true
       GROUP BY ds.root_id
     `);
     return result.rows as unknown as TreeRollupSqlRow[];

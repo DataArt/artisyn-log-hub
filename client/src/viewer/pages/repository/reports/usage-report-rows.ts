@@ -6,6 +6,7 @@
  * the same arrangement `cache-read-ratio-rows.ts` uses.
  */
 import { formatCost, formatDuration, formatTokens } from '@/lib/format';
+import { UNKNOWN_COST_TEXT } from '@/lib/cost-hints';
 import {
   formatCoverage,
   formatDiffCoverageNote,
@@ -250,6 +251,10 @@ export function buildActiveSessionsKpiRows(
   const sessions = data.sessions;
   const totalCost = sessions.reduce((n, s) => n + (s.totalCost ?? 0), 0);
   const anyPriced = sessions.some((s) => s.totalCost !== null);
+  // A partial sum would read as the whole: one session with an unknown price makes it `$???`.
+  const anyUnknown = sessions.some(
+    (s) => s.totalCost === null && s.costUnavailableReason === 'unknown-model',
+  );
   return [
     {
       label: 'Sessions listed',
@@ -265,7 +270,14 @@ export function buildActiveSessionsKpiRows(
       label: 'Tokens',
       value: formatTokens(sessions.reduce((n, s) => n + s.totalTokens, 0)),
     },
-    { label: 'Cost', value: anyPriced ? formatCost(totalCost) : NO_VALUE },
+    {
+      label: 'Cost',
+      value: anyUnknown
+        ? UNKNOWN_COST_TEXT
+        : anyPriced
+          ? formatCost(totalCost)
+          : NO_VALUE,
+    },
     {
       label: 'Tool calls',
       value: count(sessions.reduce((n, s) => n + s.toolCalls, 0)),
@@ -304,7 +316,11 @@ export function buildActiveSessionRow(
     formatDuration(row.workTimeMs),
     count(row.turns),
     formatTokens(row.totalTokens),
-    row.totalCost === null ? 'n/a' : formatCost(row.totalCost),
+    row.totalCost !== null
+      ? formatCost(row.totalCost)
+      : row.costUnavailableReason === 'unknown-model'
+        ? UNKNOWN_COST_TEXT
+        : NO_VALUE,
     count(row.toolCalls),
     count(row.linesAdded),
     count(row.linesRemoved),
@@ -313,7 +329,7 @@ export function buildActiveSessionRow(
 }
 
 export const ACTIVE_SESSIONS_FOOTNOTE =
-  '"Active" means most recent activity inside the selected range — transcripts are uploaded after the fact, so there is no live-session concept. Every figure covers the session plus all of its descendant sub-agents, so a session whose work was done by agents does not read as empty. A cost of n/a means no model in that session tree has a pricing row; it is not $0.00.';
+  '"Active" means most recent activity inside the selected range — transcripts are uploaded after the fact, so there is no live-session concept. Every figure covers the session plus all of its descendant sub-agents, so a session whose work was done by agents does not read as empty. The cost is the same complete figure as the sessions list (session, sub-agents and utility calls at Log Hub prices). A cost of $??? means a model in that session tree has no price in Log Hub, so the cost cannot be computed; add a price for that model in Admin → Model Pricing. It is not $0.00, and it makes the Cost total $??? too.';
 
 // --- Claude Code version usage ------------------------------------------------------------
 

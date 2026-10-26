@@ -1,3 +1,8 @@
+import type { PricingTier } from '@loghub/pricing';
+
+/** One prompt-length price tier — defined in the shared package, used by the client too. */
+export type { PricingTier };
+
 /** Origin of one price version, as stored in `model_pricing.source`. */
 export type StoredPricingSource =
   | 'anthropic'
@@ -27,6 +32,8 @@ export interface ModelPricingRates {
   priceWebSearch: number;
   charsPerToken: number | null;
   contextLength: number | null;
+  /** Prompt-length tiers, ascending by `aboveTokens`; null when the model has none. */
+  tiers: PricingTier[] | null;
 }
 
 /** One row of `GET /api/v1/admin/model-pricing`. */
@@ -49,6 +56,12 @@ export interface PricingFetchStatus {
   lastResult: 'changed' | 'unchanged' | 'imported' | 'failed' | null;
   lastCounts: Record<string, number> | null;
   lastError: string | null;
+  /**
+   * When the scheduled check is next due (ISO): Anthropic only, null for OpenRouter (manual
+   * import) and when the fetch is disabled. The hourly scheduler tick picks it up within the
+   * hour after; a past value means "at the next tick".
+   */
+  nextCheckAt: string | null;
 }
 
 /** Response of `GET /api/v1/admin/model-pricing`. */
@@ -57,6 +70,12 @@ export interface AdminModelPricingResponse {
   openrouter: PricingFetchStatus;
   unpricedCount: number;
   models: AdminModelPricingRow[];
+}
+
+/** Response of `POST /api/v1/admin/model-pricing/fetch-anthropic`. */
+export interface AnthropicFetchNowResult {
+  /** `skipped`: another attempt started moments ago. */
+  result: 'changed' | 'unchanged' | 'failed' | 'skipped';
 }
 
 /** Response of `POST /api/v1/admin/model-pricing/import-openrouter`. */

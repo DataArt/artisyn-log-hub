@@ -6,6 +6,8 @@ import { ContextGrowthSubStepRow } from './ContextGrowthSubStepRow';
 import { StepDetailsModal, type StepSelection } from './StepDetailsModal';
 import { TurnBreakdownDialog } from './TurnBreakdownDialog';
 import { stepBars } from './step-bars';
+import { tierJumps } from './tier-jumps';
+import { TIER_MARKER_RESERVE_PX, TierJumpMarker } from './TierJumpMarker';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -191,6 +193,12 @@ export function ContextGrowthChart({ session, pricing }: Props) {
 
   const rows = buildGrowthRows(turns, session.compactBoundaries ?? []);
 
+  // Long-context price tiers: a red "+cost tier" marker right of the bar where a call's prompt
+  // passes a threshold. The bars are scaled to leave room for it when the session has one.
+  const modelPricing = pricing?.[session.summary.model ?? ''];
+  const jumps = tierJumps(turns, modelPricing?.tiers);
+  const scalePx = barMaxPx - (jumps.size > 0 ? TIER_MARKER_RESERVE_PX : 0);
+
   let turnIndex = 0;
 
   return (
@@ -276,11 +284,11 @@ export function ContextGrowthChart({ session, pricing }: Props) {
           const contextTokens = turn.contextTokens;
           const contextTokensStart = turn.contextTokensStart;
           const priorPx = Math.round(
-            ((contextTokensStart ?? 0) / maxContextTokens) * barMaxPx,
+            ((contextTokensStart ?? 0) / maxContextTokens) * scalePx,
           );
           const totalPx = Math.max(
             4,
-            Math.round(((contextTokens ?? 0) / maxContextTokens) * barMaxPx),
+            Math.round(((contextTokens ?? 0) / maxContextTokens) * scalePx),
           );
           const deltaPx = totalPx - priorPx;
 
@@ -309,6 +317,7 @@ export function ContextGrowthChart({ session, pricing }: Props) {
           const steps = turn.assistantSteps ?? [];
           const hasSubSteps = steps.length > 1;
           const isExpanded = expandedTurns.has(turn.index);
+          const jump = jumps.get(turn.index);
 
           return (
             <div key={`turn-${turn.index}`}>
@@ -381,6 +390,9 @@ export function ContextGrowthChart({ session, pricing }: Props) {
                       />
                     </div>
                   )}
+                  {jump && modelPricing && (
+                    <TierJumpMarker tiers={jump.turn} base={modelPricing} />
+                  )}
                 </div>
 
                 {/* Right label */}
@@ -412,6 +424,15 @@ export function ContextGrowthChart({ session, pricing }: Props) {
                       bar={bars[si]}
                       maxContextTokens={maxContextTokens}
                       barMaxPx={barMaxPx}
+                      scalePx={scalePx}
+                      marker={
+                        modelPricing && jump && jump.steps[si].length > 0 ? (
+                          <TierJumpMarker
+                            tiers={jump.steps[si]}
+                            base={modelPricing}
+                          />
+                        ) : null
+                      }
                       leftLabelW={LEFT_LABEL_W}
                       rightLabelW={RIGHT_LABEL_W}
                       onOpen={(i) => setSelectedStep({ turn, si: i })}

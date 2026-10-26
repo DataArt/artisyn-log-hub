@@ -12,13 +12,14 @@ import {
   attributeFilterSql,
   type ParsedAttributeFilter,
 } from '../attribute-filter.sql';
-import {
-  pricingAsOfSql,
-  sessionCostSql,
-  sessionPriceDateSql,
-} from '../cost.sql';
 import { descendantSessionsCte } from '../session-tree.sql';
-import { otelCostsCte, resolveSessionTotalCost } from '../otel-cost.sql';
+import {
+  readTreeCost,
+  TREE_COST_COLUMNS_SQL,
+  treeCostCtes,
+  type SessionTreeCost,
+  type TreeCostSqlRow,
+} from '../session-tree-cost.sql';
 import {
   SESSION_TREE_METRICS_CTE,
   mapTreeMetricsRow,
@@ -64,6 +65,11 @@ export interface ExecutiveSummaryTopSession {
    * aggregate disclosure over the same underlying signal.
    */
   costUnavailableReason: 'unknown-model' | null;
+  /**
+   * The model ids of this session's tree with no price in Log Hub (sorted; empty when
+   * everything is priced) — named by the `$???` hint. Added later; optional for consumers.
+   */
+  unpricedModels: string[];
 }
 
 export interface ExecutiveSummaryEngineerEntry {
@@ -147,11 +153,8 @@ export interface ExecutiveSummaryOptions {
   attributeFilters?: ParsedAttributeFilter[];
 }
 
-// Raw Phase A row shape, straight off the eligibility SELECT. `total_cost`
-// here is the session's OWN cost only (pre sub-agent rollup) — null when its
-// own model has no matching `model_pricing` row, which is exactly the
-// "was this session's own spend priced?" signal used for
-// excludedSessionCount/excludedModels, independent of the tree rollup below.
+// Raw Phase A row shape, straight off the eligibility SELECT. The cost comes from
+// Phase B (the complete computed tree cost).
 interface SessionRow {
   session_row_id: string;
   start_time: string;
@@ -160,10 +163,6 @@ interface SessionRow {
   branch: string | null;
   lines_changed: string | null;
   work_time_ms: string | null;
-  total_cost: string | null;
-  // `p.model_id IS NULL` — the same predicate that nulled `total_cost` above, carried out
-  // of SQL so the per-row `costUnavailableReason` cannot drift from it.
-  pricing_missing: boolean | null;
   input_tokens: string | null;
   output_tokens: string | null;
   cache_read_tokens: string | null;
@@ -178,11 +177,11 @@ interface SessionRow {
 // tree-scoped without a second round trip. Every tree column is nullable here because
 // `session_tree_metrics` is one arm of a FULL OUTER JOIN — `root_counted !== null`
 // is the test for "this root had a tree row at all".
-interface SubagentRollupRow extends Omit<TreeMetricsSqlRow, 'root_id'> {
+interface SubagentRollupRow
+  extends
+    Omit<TreeMetricsSqlRow, 'root_id'>,
+    Omit<TreeCostSqlRow, 'session_row_id'> {
   session_row_id: string;
-  subagent_cost: string | null;
-  subagent_count: string | null;
-  otel_cost: string | null;
 }
 
 // Raw row off the Advisor Spend join — `turn_end_advisor_runs`
@@ -202,10 +201,9 @@ interface AttributionSpendRow {
   cost_usd: string | number | null;
 }
 
-// Merged row consumed by every downstream builder. `total_cost` is the
-// redefinition `(ownCost ?? 0) + subagentCost`, computed
-// once here, so it is always numeric and every aggregate downstream reads
-// this single value.
+// Merged row consumed by every downstream builder. `total_cost` is the complete
+// computed tree cost, resolved once (0 for an unpriced session, which
+// `cost_unavailable_reason` marks), so every aggregate downstream reads this single value.
 interface SessionAggRow {
   start_time: string;
   user_email: string;
@@ -217,6 +215,7 @@ interface SessionAggRow {
   work_time_ms: string | null;
   total_cost: number;
   cost_unavailable_reason: 'unknown-model' | null;
+  unpriced_models: string[];
   input_tokens: string | null;
   output_tokens: string | null;
   cache_read_tokens: string | null;
@@ -315,7 +314,7 @@ function buildModelMix(
 // Top 5 sessions by cost — date/engineer/branch/duration/cost/model/tokens,
 // no prompt text, matching the "Top 5 Sessions by Cost" table in the
 // tmp/exec-report/img_1.png mockup. `total_cost` is always numeric here
-// (after the own + sub-agent cost merge), so no null-filtering is needed anymore.
+// (an unpriced session is 0 and carries `cost_unavailable_reason`).
 function buildTopSessions(rows: SessionAggRow[]): ExecutiveSummaryTopSession[] {
   return [...rows]
     .sort((a, b) => b.total_cost - a.total_cost)
@@ -334,6 +333,7 @@ function buildTopSessions(rows: SessionAggRow[]): ExecutiveSummaryTopSession[] {
       cacheWriteTokens:
         r.cache_write_tokens != null ? parseFloat(r.cache_write_tokens) : 0,
       costUnavailableReason: r.cost_unavailable_reason,
+      unpricedModels: r.unpriced_models,
     }));
 }
 
@@ -421,9 +421,7 @@ export class ExecutiveSummaryService {
     userFilter: SQL,
     attrFilter: SQL,
   ): Promise<PeriodAggregates> {
-    // Phase A: eligibility + each session's own cost (no sub-agent rollup
-    // yet). `total_cost` here stays NULL when the session's own model has no
-    // matching `model_pricing` row (the pre-merge own-pricing check).
+    // Phase A: eligibility and each root's own figures (the cost comes from Phase B).
     const result = await this.db.execute(sql`
       SELECT
         s.id               AS session_row_id,
@@ -436,22 +434,12 @@ export class ExecutiveSummaryService {
         ss.input_tokens    AS input_tokens,
         ss.output_tokens   AS output_tokens,
         ss.cache_read_tokens  AS cache_read_tokens,
-        ss.cache_write_tokens AS cache_write_tokens,
-        CASE WHEN p.model_id IS NOT NULL
-          THEN ${sessionCostSql({ stats: sql`ss`, pricing: sql`p` })}
-          ELSE NULL END AS total_cost,
-        -- Derived from the very predicate that produced total_cost above, so the
-        -- per-row costUnavailableReason can never contradict the pricing join.
-        p.model_id IS NULL AS pricing_missing
+        ss.cache_write_tokens AS cache_write_tokens
       FROM sessions s
       INNER JOIN logs l ON l.session_id = s.id
       INNER JOIN log_repositories lr ON lr.log_id = l.id
       INNER JOIN users u ON u.id = l.user_id
       LEFT JOIN session_stats ss ON ss.session_id = s.id
-      -- Priced at the session's own price date.
-      LEFT JOIN LATERAL (
-        ${pricingAsOfSql(sql`ss.model`, sessionPriceDateSql(sql`s.id`))}
-      ) p ON true
       WHERE lr.repo_id = ANY(${repoIdsLiteral}::int[])
         AND l.log_type = 'artisyn'
         AND l.first_prompt IS NOT NULL
@@ -470,51 +458,26 @@ export class ExecutiveSummaryService {
 
     const rows = result.rows as unknown as SessionRow[];
 
-    // Phase B: descendant (sub-agent) session cost SUM + COUNT, keyed off
-    // Phase A's session_row_ids, reusing the descendantSessionsCte/
-    // subagent_costs CTE pattern from repositories.controller.ts. Also resolves
-    // each root's OTEL cost alongside, for the merge step below.
-    const subagentRollup = new Map<number, { cost: number; count: number }>();
-    const otelCostByRow = new Map<number, number>();
-    // Per-root tree rollup of session_stats, from the same round trip.
+    // Phase B: the complete computed tree cost (own + sub-agents + utility calls,
+    // session-tree-cost.sql.ts) and the descendant COUNT, keyed off Phase A's
+    // session_row_ids, plus the per-root tree rollup of session_stats from the same round
+    // trip.
+    const treeCostByRow = new Map<number, SessionTreeCost>();
     const treeMetricsByRow = new Map<number, SessionTreeMetrics>();
     if (rows.length > 0) {
       const sessionRowIds = rows.map((r) => r.session_row_id);
       const idsLiteral = `{${sessionRowIds.join(',')}}`;
       const idsArray = sql`${idsLiteral}::bigint[]`;
+      const modelByRow = new Map(
+        rows.map((r) => [Number(r.session_row_id), r.model]),
+      );
       const rollupResult = await this.db.execute(sql`
         WITH RECURSIVE ${descendantSessionsCte(idsArray)},
         ${treeMetricsCte()},
-        ${otelCostsCte(idsArray)},
-        subagent_costs AS (
-          SELECT
-            ds.root_id AS session_row_id,
-            COALESCE(SUM(
-              CASE WHEN sub_p.model_id IS NOT NULL
-                THEN ${sessionCostSql({ stats: sql`ss`, pricing: sql`sub_p` })}
-                ELSE 0.0 END
-            ), 0.0) AS subagent_cost,
-            COUNT(*) AS subagent_count
-          FROM descendant_sessions ds
-          JOIN session_stats ss ON ss.session_id = ds.id
-            -- Excludes an OTEL-only session_stats row (no transcript ever
-            -- uploaded for it) from the sub-agent count/cost rollup.
-            AND EXISTS (
-              SELECT 1 FROM logs tl
-              WHERE tl.session_id = ds.id AND tl.log_type IN ('claude', 'claude-subagent')
-            )
-          -- Sub-agents are priced at their ROOT's price date.
-          LEFT JOIN LATERAL (
-            ${pricingAsOfSql(sql`ss.model`, sessionPriceDateSql(sql`ds.root_id`))}
-          ) sub_p ON true
-          WHERE ds.depth > 0
-          GROUP BY ds.root_id
-        )
+        ${treeCostCtes(idsArray)}
         SELECT
-          COALESCE(tm.root_id, sc.session_row_id, oc.session_row_id) AS session_row_id,
-          sc.subagent_cost,
-          sc.subagent_count,
-          oc.otel_cost,
+          tc.session_row_id,
+          ${TREE_COST_COLUMNS_SQL},
           tm.lines_changed,
           tm.files_edited_written,
           tm.lines_added,
@@ -525,26 +488,17 @@ export class ExecutiveSummaryService {
           tm.mcp_calls_total,
           tm.root_counted,
           tm.descendant_count
-        -- session_tree_metrics drives the join. It has no "depth > 0" filter, so
-        -- it holds a row for every root that counted anything at all, while
-        -- subagent_costs only has one for a root that actually delegated — driving from
-        -- subagent_costs would drop the tree figures of every non-delegating session.
-        FROM ${sql.raw(SESSION_TREE_METRICS_CTE)} tm
-        FULL OUTER JOIN subagent_costs sc ON sc.session_row_id = tm.root_id
-        FULL OUTER JOIN otel_costs oc
-          ON oc.session_row_id = COALESCE(tm.root_id, sc.session_row_id)
+        -- tree_costs has exactly one row per Phase A root; session_tree_metrics only one
+        -- for a root that counted anything at all.
+        FROM tree_costs tc
+        LEFT JOIN ${sql.raw(SESSION_TREE_METRICS_CTE)} tm ON tm.root_id = tc.session_row_id
       `);
       for (const row of rollupResult.rows as unknown as SubagentRollupRow[]) {
         const rowId = Number(row.session_row_id);
-        if (row.subagent_cost != null) {
-          subagentRollup.set(rowId, {
-            cost: parseFloat(row.subagent_cost),
-            count: parseInt(row.subagent_count ?? '0', 10),
-          });
-        }
-        if (row.otel_cost != null) {
-          otelCostByRow.set(rowId, parseFloat(row.otel_cost));
-        }
+        treeCostByRow.set(
+          rowId,
+          readTreeCost(row, modelByRow.get(rowId) ?? null),
+        );
         if (row.root_counted != null) {
           treeMetricsByRow.set(
             rowId,
@@ -554,30 +508,30 @@ export class ExecutiveSummaryService {
       }
     }
 
-    // excludedSessionCount/excludedModels come from the
-    // pre-merge own-pricing check only — whether the session's OWN model
-    // matched a model_pricing row — independent of the tree rollup below.
+    // excludedSessionCount/excludedModels: the sessions whose complete computed cost is
+    // null because some model of the tree (root, sub-agent or utility call) has no price,
+    // and those model ids. Such a session adds nothing to any sum below — it is disclosed
+    // as excluded, never counted as a $0 session.
     const excludedModelsSet = new Set<string>();
     let excludedSessionCount = 0;
     for (const r of rows) {
-      if (r.total_cost == null) {
+      const tree = treeCostByRow.get(Number(r.session_row_id));
+      if (tree?.total == null) {
         excludedSessionCount += 1;
-        excludedModelsSet.add(r.model ?? 'unknown');
+        const models = tree?.unpricedModels ?? [];
+        if (models.length === 0) excludedModelsSet.add(r.model ?? 'unknown');
+        for (const m of models) excludedModelsSet.add(m);
       }
     }
     const excludedModels = Array.from(excludedModelsSet);
 
-    // total_cost is redefined once, here, as
-    // (ownCost ?? 0) + subagentCost — UNLESS the root has an OTEL cost, which
-    // already covers the whole tree and replaces the computed rollup outright rather
-    // than being added on top of it (that would double-count). Every downstream
-    // aggregate (totalCost, weekly buckets, model-mix cost, top sessions, engineer
-    // totals) reads this single merged value.
+    // total_cost is the complete computed tree cost (session-tree-cost.sql.ts), defined
+    // once here; every downstream aggregate (totalCost, weekly buckets, model-mix cost,
+    // top sessions, engineer totals) reads this single value. An unpriced session is 0
+    // here so it adds nothing, and cost_unavailable_reason marks it.
     const aggRows: SessionAggRow[] = rows.map((r) => {
       const rowId = Number(r.session_row_id);
-      const otelCost = otelCostByRow.get(rowId);
-      const rollup = subagentRollup.get(rowId);
-      const ownCost = r.total_cost != null ? parseFloat(r.total_cost) : 0;
+      const tree = treeCostByRow.get(rowId);
       // The tree rollup already contains the root whenever it
       // had a counted session_stats row, so Phase A's own value is a *fallback*, added
       // only when the root is absent from the rollup — never on top of it.
@@ -592,26 +546,17 @@ export class ExecutiveSummaryService {
         branch: r.branch,
         lines_changed: treeLinesChanged,
         work_time_ms: r.work_time_ms,
-        // `resolveSessionTotalCost` keeps the OTEL-first rule but ignores an
-        // OTEL total too far below the computed tree to be complete (a truncated exporter).
-        total_cost:
-          resolveSessionTotalCost(
-            otelCost ?? null,
-            ownCost + (rollup?.cost ?? 0),
-          ) ?? 0,
-        // 'unknown-model' only when the session actually names a model
-        // that pricing could not match. A session with no `session_stats` row has no model
-        // to price, so its reason stays null — the missing figure there is "no stats yet",
-        // not "we do not know this model".
-        cost_unavailable_reason:
-          r.pricing_missing === true && r.model != null
-            ? 'unknown-model'
-            : null,
+        total_cost: tree?.total ?? 0,
+        // 'unknown-model' only when some model of the tree has no price. A session with
+        // no `session_stats` row and no model has nothing to price, so its reason stays
+        // null — the missing figure there is "no stats yet".
+        cost_unavailable_reason: tree?.costUnavailableReason ?? null,
+        unpriced_models: tree?.unpricedModels ?? [],
         input_tokens: r.input_tokens,
         output_tokens: r.output_tokens,
         cache_read_tokens: r.cache_read_tokens,
         cache_write_tokens: r.cache_write_tokens,
-        subagentCount: rollup?.count ?? 0,
+        subagentCount: tree?.subagentCount ?? 0,
       };
     });
 

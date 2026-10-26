@@ -592,6 +592,9 @@ Convention for the text below: a "UI step" is what a person clicks by hand; an "
   8. UI: press "Back" after switching tabs.
   9. UI: TEAMOWNER links a never-uploaded URL to their team; Admin → Repos, filter by the URL, "Remove".
   10. UI: TEAMOWNER invites REGULAR; Admin → Teams, "Set new owner" → REGULAR; API: set a non-member as owner.
+  11. UI: an unpriced model `scn-tier-ui-<run>` seeded into `model_pricing_meta`; Admin → Model Pricing, filter by it, "Set price" with Price In 3, Price Out 15 and one long-context tier above 150000 (AC5, task 2026-10-26-pricing-fetch-tiered).
+  12. UI: "Edit" on the same model, add a second tier with the same threshold 150000, "Save"; then "Cancel".
+  13. UI: a model `scn-tier-ov-<run>` inserted into `model_pricing` with source `anthropic` and no tiers; "Override" with one tier above 150000.
 - **Checks:**
   - Step 1: no link, the URL immediately becomes `#/main` (the `AdminGuard` redirect).
   - Step 2: **403** for REGULAR and **401** for the anonymous context on every listed route.
@@ -603,6 +606,9 @@ Convention for the text below: a "UI step" is what a person clicks by hand; an "
   - Step 8: "Back" returns to the previous tab (the tab state lives in the URL).
   - Step 9: the orphan link is one Repos row with the team name and no link into any content; "Remove" deletes it (`DELETE /admin/team-repos/:teamRepoId`), the team has no repository left.
   - Step 10: the dialog shows "Current owner: <TEAMOWNER>"; after "Set owner" the Teams row shows REGULAR as owner and `GET /teams/<T>`.`ownerId` is REGULAR; a non-member gives **400**.
+  - Step 11: the dialog closes, the model's row gets a muted second line "> 150k tokens" with the tier's rates under their columns (Price In `$6.00`), `GET /admin/model-pricing` gives source `manual` and `effective.tiers` = the entered tier.
+  - Step 12: the dialog stays open with the inline error "Two tiers share the threshold 150,000"; nothing is saved (`effective.tiers` is still the one tier). The dialog sorts the rows before sending, so a repeated threshold is the only non-increasing input it can be given.
+  - Step 13: the table shows the tier suffix; `GET /admin/model-pricing` gives `overrideActive` true, `effective.tiers` = the entered tier and `base.tiers` null (the fetched base keeps no tiers).
 - **Replaces:** `tests/e2e/admin-panel.spec.ts` (≈ 9 of 17: the link, the redirect, 4 tabs, deep-link ×3, no-tab, the Data Retention tab, nav click, no-console-errors, guard-regular ×2), the `server/test/admin-panel.e2e-spec.ts` 403/401 blocks (≈ 9), `client/.../use-admin-tab-state.test.ts` (2 of 8: the other 6 are about the hook internals).
 - **What we lose:** sorting by clicking a column and the filter (moved to S-ADM-04), the specific column headers.
 

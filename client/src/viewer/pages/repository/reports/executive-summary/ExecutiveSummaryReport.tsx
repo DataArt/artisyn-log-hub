@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { formatCost } from '@/lib/format';
 import { fetchExecutiveSummaryReport } from '../../../../api';
 import { NoPricingBadge } from '../../../../components/NoPricingBadge';
+import { unpricedModelIds } from '../../../../lib/cost-hints';
 import { PRODUCTIVITY_METRICS } from '../../analytics/metrics';
 import { toIsoDateBounds, type ReportParamsState } from '../report-url';
 import {
@@ -266,8 +267,8 @@ export function ExecutiveSummaryReport({
                   </thead>
                   <tbody>
                     {data.topSessions.map((s, i) => {
-                      // This row's model has no `model_pricing` row, so its `cost`
-                      // is not a real figure. Badge the row (and tint it) instead of
+                      // Some model of this session's tree has no `model_pricing` row, so
+                      // its `cost` is not a real figure. Show `$???` (and tint the row) instead of
                       // printing a number that silently omits the session's spend; the
                       // report-level limitations footnote below stays the aggregate
                       // disclosure and is unchanged.
@@ -295,7 +296,12 @@ export function ExecutiveSummaryReport({
                           <td className="px-3 py-2 text-right font-semibold">
                             {unpriced ? (
                               <span className="inline-flex justify-end">
-                                <NoPricingBadge modelId={s.model} />
+                                <NoPricingBadge
+                                  modelIds={unpricedModelIds(
+                                    s.unpricedModels,
+                                    s.model,
+                                  )}
+                                />
                               </span>
                             ) : (
                               formatCost(s.cost)

@@ -1,5 +1,6 @@
 import type { FileCategory, ServiceTierTokens } from '../database/schema/index';
 import type { RawChangedPath } from './change-surface/change-surface.types';
+import type { SessionCallTokens } from './cost.sql';
 import {
   stripRepoRootPreservingCase,
   usableRepoRoots,
@@ -272,6 +273,14 @@ export interface ClaudeStats {
    * tree to mark the matching OTEL call as a transcript (non-utility) call.
    */
   requestIds: string[];
+  /**
+   * Per-call token counts (`session_call_tokens.calls`), columnar: index `i` of every
+   * array is one deduplicated usage entry (`lastUsageByMessageId`, keyed by `message.id`
+   * with a `uuid` fallback), in first-seen order. Filled in the same loop as the totals
+   * above, so each array sums exactly to its aggregate. Used to price prompt-length tiers
+   * per call.
+   */
+  callTokens: Required<SessionCallTokens>;
 }
 
 /** A `tool_use` block awaiting its matching `tool_result`, collected during the walk. */
@@ -1090,6 +1099,16 @@ export function extractClaudeStats(
   }
 
   // Token totals, once per message from its last line (see lastUsageByMessageId).
+  // The per-call arrays are filled from the very same values, so they sum to the totals.
+  const callTokens: Required<SessionCallTokens> = {
+    inputTokens: [],
+    outputTokens: [],
+    cacheReadTokens: [],
+    cacheWrite5mTokens: [],
+    cacheWrite1hTokens: [],
+    inputTokensFast: [],
+    outputTokensFast: [],
+  };
   for (const usage of lastUsageByMessageId.values()) {
     inputTokens += asNumber(usage['input_tokens']);
     outputTokens += asNumber(usage['output_tokens']);
@@ -1098,6 +1117,19 @@ export function extractClaudeStats(
     const { write5m, write1h } = splitCacheCreationTokens(usage);
     cacheWrite5mTokens += write5m;
     cacheWrite1hTokens += write1h;
+
+    const isFast = asString(usage['speed']) === 'fast';
+    callTokens.inputTokens.push(asNumber(usage['input_tokens']));
+    callTokens.outputTokens.push(asNumber(usage['output_tokens']));
+    callTokens.cacheReadTokens.push(asNumber(usage['cache_read_input_tokens']));
+    callTokens.cacheWrite5mTokens.push(write5m);
+    callTokens.cacheWrite1hTokens.push(write1h);
+    callTokens.inputTokensFast.push(
+      isFast ? asNumber(usage['input_tokens']) : 0,
+    );
+    callTokens.outputTokensFast.push(
+      isFast ? asNumber(usage['output_tokens']) : 0,
+    );
 
     // Server-tool usage. Only web_search is billed (per request); web_fetch is not.
     const serverToolUse = asRecord(usage['server_tool_use']);
@@ -1278,6 +1310,7 @@ export function extractClaudeStats(
     ],
     claudeVersion: maxVersion(versions),
     requestIds: [...requestIds],
+    callTokens,
   };
 }
 

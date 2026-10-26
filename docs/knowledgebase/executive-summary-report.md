@@ -50,12 +50,14 @@ PDF. The Executive Summary is the report meant for leadership.
 
 ## Cost rollup and limitations
 
-**One cost value per root session.** The service first selects the eligible sessions with their own
-cost, then computes per root the sub-agent cost and count over the session tree
-(`descendantSessionsCte`, see [session-metrics-scope.md](session-metrics-scope.md)). Each row's
-`total_cost` is then rewritten **once** as own cost + descendant cost — or the session's OTEL cost
-when that covers the whole tree (`resolveSessionTotalCost`, see
-[llm-call-math.md](llm-call-math.md)). Every aggregate — headline, weekly buckets, model mix, top
+**One cost value per root session.** The service first selects the eligible sessions, then loads per
+root the complete computed tree cost — own + every sub-agent with a transcript + utility calls, at
+Log Hub's prices, never the OTEL figure — and the sub-agent count (`treeCostCtes` /
+`readTreeCost` in `session-tree-cost.sql.ts`, see [llm-call-math.md](llm-call-math.md) and
+[session-metrics-scope.md](session-metrics-scope.md)). Each row's `total_cost` is set **once**
+from it. A session whose cost is `null` (some model of its tree has no price) adds 0 and is
+disclosed: it counts in `excludedSessionCount`, its unpriced models in `excludedModels`, and its
+top-sessions row shows `$???`. Every aggregate — headline, weekly buckets, model mix, top
 sessions, engineer totals — reads this one value, so engineer and weekly totals add up to the
 headline. Lines changed are tree-scoped the same way.
 

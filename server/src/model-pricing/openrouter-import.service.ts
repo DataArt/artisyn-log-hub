@@ -23,6 +23,7 @@ import type {
   ModelPricingRates,
   OpenRouterImportResult,
 } from './model-pricing.types';
+import { notifySessionCostsStale } from './session-cost-invalidation';
 import {
   parseOpenRouterCatalog,
   type OpenRouterCatalog,
@@ -51,12 +52,16 @@ export class OpenRouterImportService {
     url: string = OPENROUTER_MODELS_URL,
   ): Promise<OpenRouterImportResult> {
     const catalog = await this.fetchCatalog(url);
+    let result: OpenRouterImportResult;
     try {
-      return await this.apply(catalog);
+      result = await this.apply(catalog);
     } catch (err) {
       await this.recordFailure(`failed to persist: ${errorMessage(err)}`, err);
       throw err;
     }
+    // The import transaction has committed: wake the sweeper for the costs it flagged stale.
+    await notifySessionCostsStale();
+    return result;
   }
 
   private async fetchCatalog(url: string): Promise<OpenRouterCatalog> {
@@ -109,7 +114,7 @@ export class OpenRouterImportService {
         if (candidates.length === 0) {
           newWrites.push({
             modelId: entry.strippedId,
-            rates: entry.rates,
+            rates: { ...entry.rates, tiers: null },
             source: IMPORT_SOURCE,
           });
           continue;
@@ -186,7 +191,8 @@ export class OpenRouterImportService {
 
 /**
  * The catalog has no chars-per-token and may lack a context length: keep the model's current
- * values for whatever the catalog does not provide.
+ * values for whatever the catalog does not provide. OpenRouter carries no prompt-length tiers,
+ * so every imported row is written with `tiers: null`.
  */
 function carryForward(
   rates: ModelPricingRates,
@@ -194,6 +200,7 @@ function carryForward(
 ): ModelPricingRates {
   return {
     ...rates,
+    tiers: null,
     charsPerToken: rates.charsPerToken ?? current?.charsPerToken ?? null,
     contextLength: rates.contextLength ?? current?.contextLength ?? null,
   };

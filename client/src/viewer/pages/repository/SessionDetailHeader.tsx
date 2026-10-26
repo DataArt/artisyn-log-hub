@@ -7,6 +7,11 @@ import { buildAttributionChips } from './session-list/session-list-helpers';
 import { formatDuration, formatInt } from './session-log/log-parser';
 import { CostBreakdownTooltip } from '../../components/CostBreakdownTooltip';
 import { NoPricingBadge } from '../../components/NoPricingBadge';
+import {
+  costDiscrepancyHint,
+  noPriceHint,
+  unpricedModelIds,
+} from '../../lib/cost-hints';
 import { cn } from '../../lib/cn';
 import { formatCost, formatLocalTimestamp } from '../../lib/format';
 import { computeSessionInfoDerived } from './session-log/session-info-derive';
@@ -128,14 +133,23 @@ export function SessionDetailHeader({
   // telemetry minus main.
   const subAgentCost = session.costBreakdown.subagentCost;
 
-  // The model this session ran on has no `model_pricing` row. Trust the server's
-  // explicit reason first (it decides against the same normalised id the pricing join
-  // uses); fall back to the loaded pricing map for a session the list row could not
-  // classify. `pricing == null` means "still loading", which must not badge anything.
+  // Some model of the session tree (main thread, sub-agent or utility call) has no
+  // `model_pricing` row, so the cost is `$???`. Trust the server's explicit reason first
+  // (it decides against the same normalised ids the pricing join uses); fall back to the
+  // loaded pricing map for the main model. `pricing == null` means "still loading", which
+  // must not badge anything.
   const headerModel = parsedLogs?.summary.model ?? null;
+  const mainModelUnpriced =
+    headerModel != null && pricing != null && pricing[headerModel] == null;
   const unpriced =
-    session.costUnavailableReason === 'unknown-model' ||
-    (headerModel != null && pricing != null && pricing[headerModel] == null);
+    session.costUnavailableReason === 'unknown-model' || mainModelUnpriced;
+  const unpricedIds = unpricedModelIds(
+    session.costBreakdown.unpricedModels,
+    headerModel,
+  );
+  const modelChipUnpriced =
+    mainModelUnpriced ||
+    (headerModel != null && unpriced && unpricedIds.includes(headerModel));
 
   // Attribution row derivation. `values`/`attributes` are already
   // orphan-stripped and resolved server-side, so the chip builder just
@@ -167,13 +181,13 @@ export function SessionDetailHeader({
             <HeaderStat label="Model">
               <span
                 className={
-                  unpriced
+                  modelChipUnpriced
                     ? 'inline-flex rounded border border-warning/50 bg-warning/15 px-1.5 py-0.5 font-mono text-warning-foreground dark:bg-warning/20 dark:text-warning'
                     : 'font-mono'
                 }
                 title={
-                  unpriced
-                    ? 'This model has no model_pricing row, so no cost can be computed for it.'
+                  modelChipUnpriced && headerModel
+                    ? noPriceHint([headerModel])
                     : undefined
                 }
               >
@@ -236,16 +250,10 @@ export function SessionDetailHeader({
                 >
                   <span className="cursor-help">{formatCost(sessionCost)}</span>
                 </CostBreakdownTooltip>
-              ) : unpriced ? (
-                // An unpriced session that still has a metered OTEL
-                // figure keeps showing it — hiding a real number would be a regression —
-                // with the badge appended to say the token×price estimate is unavailable.
-                <>
-                  {sessionCost !== null && (
-                    <span>{formatCost(sessionCost)}</span>
-                  )}
-                  <NoPricingBadge modelId={headerModel} />
-                </>
+              ) : unpriced && sessionCost === null ? (
+                // The cost cannot be computed: `$???` with the hint naming the models.
+                // The OTEL figure is never shown in its place.
+                <NoPricingBadge modelIds={unpricedIds} />
               ) : (
                 <span>
                   {sessionCost !== null ? formatCost(sessionCost) : '—'}
@@ -261,7 +269,11 @@ export function SessionDetailHeader({
               )}
               {session.hasCostDiscrepancy && (
                 <span
-                  title="Telemetry-reported cost and the computed token×price estimate differ by 33% or more for this session."
+                  data-testid="cost-discrepancy-icon"
+                  title={costDiscrepancyHint(
+                    session.costBreakdown.telemetryCost,
+                    session.costBreakdown.calculatedCost,
+                  )}
                   className="cursor-help"
                 >
                   <AlertTriangle className="size-3.5 shrink-0 text-amber-500" />

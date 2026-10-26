@@ -17,8 +17,13 @@ export const OPENROUTER_FETCH_TIMEOUT_MS = 20_000;
 /** The Anthropic parser rejects a page yielding fewer models than this (layout change guard). */
 export const MIN_PARSED_MODELS = 5;
 
-/** Largest rate `numeric(10,6)` can hold; anything above is rejected as a parse error. */
-export const MAX_RATE = 9999.999999;
+// Largest rate `numeric(10,6)` can hold, most tiers per model and largest tier threshold —
+// defined in the shared package, which the client's price dialog validates against too.
+export {
+  MAX_PRICING_TIERS,
+  MAX_RATE,
+  MAX_TIER_THRESHOLD,
+} from '@loghub/pricing';
 
 /** Rows per multi-row `INSERT … ON CONFLICT` in batched price writes. */
 export const IMPORT_BATCH_SIZE = 500;
@@ -40,6 +45,9 @@ export const STALE_AFTER_HOURS = 24;
 
 /** Minimum gap after the last attempt before another worker may retry (bound via `make_interval(hours => ...)`). */
 export const RETRY_AFTER_HOURS = 1;
+
+/** A manual "Fetch now" is refused when any fetch attempt started less than this many seconds ago. */
+export const MANUAL_FETCH_MIN_GAP_SECONDS = 30;
 
 /** Name of the interval registered in NestJS `SchedulerRegistry`. */
 export const SCHEDULER_NAME = 'model-pricing-fetch';

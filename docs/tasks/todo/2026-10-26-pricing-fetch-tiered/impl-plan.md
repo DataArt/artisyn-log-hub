@@ -362,6 +362,9 @@ The doc states the snippets are trimmed copies of the live page as of 2026-10-26
 | 11 | Tests — algorithm docs | 7 | needs 2, 4, 8, 10 |
 | 12 | Tests — API contract | 6 | needs 3–7 |
 | 13 | Tests — scenarios | 8 | needs all |
+| 14 | Shared `@loghub/pricing` package | 6 | added after chunks 1–13 at the user's request (2026-10-26); replaces the server/client formula and tier-validation twins |
+| 15 | Tier UI follow-ups and "Fetch now" | 4 | added on 2026-10-26 after the local-prod check, at the user's request |
+| 16 | Log Hub price is the source of truth; tiered utility calls | 6 | added on 2026-10-26 after the Haiku 5.5 cross-check, user decision |
 
 ### Chunk 1 — Schema and migration
 - [ ] In `model-pricing.types.ts`, add `PricingTier` (DD1). In `server/src/database/schema/index.ts`, add a nullable `tiers` jsonb column (`.$type<PricingTier[]>()`) to `modelPricing` and `overrideBaseTiers` (`override_base_tiers`) to `modelPricingMeta`. Add a comment pointing to the SQL-only CHECK constraints.
@@ -468,3 +471,106 @@ The doc states the snippets are trimmed copies of the live page as of 2026-10-26
 - [ ] In `s-adm-01.spec.ts`, add AC5 set-price steps: seed an unpriced `scn-tier-ui-<run>` in `model_pricing_meta`, set a price with one tier through the dialog, and assert the table's tier suffix and the admin GET `tiers`. Enter non-increasing thresholds and assert that the error shows and nothing is saved.
 - [ ] In `s-adm-01.spec.ts`, add AC5 override steps: `insertRow` a `model_pricing` row with source `anthropic` for `scn-tier-ov-<run>`, set an override with one tier through the dialog, and assert the admin GET `effective.tiers` and a null `base.tiers`.
 - [ ] Add the new steps to `docs/qaa-overview/scenarios/03-session-view-reports-golden.md` §S-COST-01 and `01-auth-access-admin.md` §S-ADM-01. Then run `npm run test:scenarios -- --mode a --only scenarios,contract --grep "@S-COST-01|@S-ADM-01"`.
+
+### Chunk 14 — Shared `@loghub/pricing` package
+Added on 2026-10-26 after chunks 1–13, at the user's request: the server and client copies of the
+cost formula and the tier validation become one repo-local package.
+- [x] Create `packages/pricing/` (`@loghub/pricing`, `"type": "module"`, TypeScript sources only,
+  no dependencies): `src/cost.ts` (`computeCostBreakdown`, `pickCallRates`, `promptTokens`,
+  `FAST_MODE_MULTIPLIER`, the cost types), `src/tiers.ts` (`PricingTier`, `validatePricingTiers`,
+  `normalizeTiers`, `tiersEqual`, `isValidRate`, `round6`, `MAX_RATE`, `MAX_PRICING_TIERS`,
+  `MAX_TIER_THRESHOLD`), a `README.md` and a strict `tsconfig.json`.
+- [x] Server: a `file:../packages/pricing` dependency. Add `rewriteRelativeImportExtensions` to
+  `server/tsconfig.json`, and a jest transform `server/jest-ts-cjs-transform.cjs` for the
+  package sources. `cost.sql.ts` becomes an adapter over `computeCostBreakdown`
+  (Postgres numerics, columnar `SessionCallTokens`). `model-pricing-rates.ts`,
+  `model-pricing.constants.ts` and `model-pricing.types.ts` re-export the tier helpers, limits
+  and `PricingTier`.
+- [x] Client: alias `@loghub/pricing` in `vite.config.ts` (plus `server.fs.allow`) and in
+  `tsconfig.json` (`paths`, `include`, `allowImportingTsExtensions`). It is not a bun
+  dependency, because bun fails to link `file:` deps on Windows. `format.ts` re-exports the
+  formula. `CallTokens` and `PricingTier` are re-exported from the package. `priceForm.ts`
+  `tiersFromRows` validates with the shared `validatePricingTiers`. The validator's texts are
+  user-facing, and the scenario text `Two tiers share the threshold …` is kept.
+- [x] Build: the ncc d.ts output now lands under `dist/server` and `dist/packages`, which the
+  postclean in `scripts/build-assets.js` and `build:postclean` now remove. The Dockerfile client
+  and server stages `COPY packages/`.
+- [x] Docs: `CLAUDE.md` § Shared packages, `.claude/rules/client.md`, new KB
+  `repo-local-packages.md` + index, and the formula/validator locations in `llm-call-math.md`,
+  `cost-formula.md`, `db-tables.md`, `model-pricing-research.md`, `algorithms/README.md` and
+  `client-component-map.md`.
+- [ ] Tests: no new test files. The existing `cost-formula.md` algorithm tests (server jest,
+  client vitest) now run through the package, and the hook test is unchanged. Re-run the fast set
+  and then the full set.
+
+### Chunk 15 — Tier UI follow-ups and "Fetch now"
+Added on 2026-10-26 after the local-prod check, at the user's request.
+- [x] Admin model-pricing table: each tier is a muted line inside the model's row, directly under
+  the base values with no divider. The Model ID cell reads "> 100k tokens", and each token-rate
+  cell shows the tier's rate. This replaces the "· >Nk tier" suffix. Steps 11 and 13 of
+  `S-ADM-01` now assert the new line.
+- [x] Context Growth chart: a bold red up arrow plus "+cost tier" sits right of the turn bar and
+  right of the step bar where a call's prompt passes a tier threshold. Its hint names the tier
+  and its rates. The jumps come from `tier-jumps.ts`, using `crossedTiers` from
+  `@loghub/pricing` (strictly above the threshold, as in `pickCallRates`), and the pricing
+  comes from the session's as-of-date map.
+- [x] "Fetch Anthropic prices now":
+  - a new `POST /api/v1/admin/model-pricing/fetch-anthropic` route calls
+    `runFetch(..., { force: true })`;
+  - `claimManual` skips the daily window, but refuses a fetch within 30 s of any other attempt;
+  - the contract row is `F22-fetch-anthropic-member`;
+  - `GET` adds `anthropic.nextCheckAt`, and the status line reads "next check in N h".
+- [x] Verified on the dev server with a temporary, already removed, backdated tier override:
+  the table lines, the turn and step markers, and the hint all showed, with no console errors.
+
+### Chunk 16 — Log Hub price is the source of truth; tiered utility calls
+Added on 2026-10-26 after the Haiku 5.5 cross-check, as a user decision. Why: Claude Code does not
+know `claude-haiku-5-5` (stderr `unrecognized_model`, `costBasis: unknown`), so it priced the
+session at Opus 5.5 rates ($2.85 instead of $0.19), and OTEL carries that number with no marker.
+Under the old "OTEL first" rule the session list and header showed it. The rule is now: **a
+session's cost is what Log Hub computes from its own price table. Nothing is substituted: OTEL
+never stands in for the computed cost, and no other model's price stands in for an unknown one.**
+
+- [x] **Selection rule (algorithm `otel-cost-selection`).** `resolveSessionTotalCost` returns
+  the computed cost, or null when it cannot be computed; OTEL is never used as the shown cost.
+  Remove `isOtelCostIncomplete` and `OTEL_INCOMPLETE_RATIO`. The discrepancy warning (rule 3)
+  and the mismatch flag (rule 4) are unchanged: OTEL stays a cross-check. Update the doc's rules
+  and examples rows and the algo spec.
+- [x] **Computed = complete or null.** The computed cost is null as soon as any part of the tree
+  is unpriced: the root (`session_costs.cost IS NULL`), any sub-agent with a transcript, or any
+  utility call whose model has no price. Add an additive `unpricedModels: string[]` (distinct
+  model ids, sorted) to `costBreakdown` where it is emitted, plus `costUnavailableReason
+  'unknown-model'` when the cost is null for that reason.
+- [x] **Every surface uses the same complete computed cost:** sessions list, session
+  stats/header, timeline, executive summary, attribution breakdown, turn-end advisor and the
+  delete audit row. Surfaces that summed only own + sub-agent cost now add the utility cost.
+  Report totals keep counting a null session as unpriced, never as 0.
+- [x] **UI — principle: when the price is unclear, say `$???`, why, and what to do.** Wherever
+  a session cost is shown, the user sees either a trusted number or `$???`, with a hint that
+  explains why and what to do:
+  - Cost null because a model has no price in Log Hub (root, sub-agent or utility call): `$???`
+    with "No price for model <id[, id…]> in Log Hub, so the cost cannot be computed. Update the
+    model prices so that <id> is there (Admin → Model Pricing → Fetch Anthropic prices now, or
+    set a price)." This replaces the current "no pricing" wording.
+  - Discrepancy icon (OTEL vs computed, rule 3): its hint names both numbers and the likely
+    causes, each with its action. "Claude Code reported $X, Log Hub computed $Y from its price
+    table. Usually Claude Code doesn't know this model and priced it as another one (update
+    Claude Code), or the Log Hub price is outdated (check Admin → Model Pricing)." The shown cost
+    stays the computed one.
+  - The same `$???` + hint is used in reports/tables where a per-session cost cell is shown.
+- [x] **Tiered utility calls.** `utilityCostsCte` prices each `otel_api_calls` row per call
+  with the tier rule of `pickCallRates`: prompt = input + cache read + cache write (5m + 1h),
+  the last tier with prompt strictly above `aboveTokens`, else base; web search at base. This
+  replaces DD11's "utility calls are not tiered".
+- [x] **Tests (three kinds only).**
+  - Algorithm rows: `otel-cost-selection.md` for the new rule, and the cost-formula/utility doc
+    rows if a SQL table test exists for it.
+  - API contract: the registry rows whose bodies carry `totalCost` / `costBreakdown`.
+  - Scenario steps: an unpriced model shows `$???` with the hint, and a tiered utility call
+    (extend an existing scenario that already uploads OTEL utility calls).
+- [x] **Active Sessions panel and report** (added after the first chunk 16 pass, at the user's
+  request): the tree cost comes from the shared `loadTreeCostRows` / `readTreeCost`, so it
+  matches the list and includes the utility calls. The row gains `unpricedModels` and
+  `costUnavailableReason`, which are additive. An unknown price shows `$???` with the
+  no-price hint instead of "n/a"; the report's Cost total is `$???` when any row is. Covered by
+  the `F20-active-sessions` contract row and by step 13 of `S-COST-01`.

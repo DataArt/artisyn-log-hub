@@ -18,6 +18,7 @@ export const DELETE_OUTSIDER: WriteSpec = {
     'log_repositories',
     'sessions',
     'session_stats',
+    'session_costs',
     'session_request_ids',
   ],
   delta: {
@@ -33,6 +34,7 @@ export const DELETE_OUTSIDER: WriteSpec = {
       },
       { table: 'sessions', where: 'id = @s08.id' },
       { table: 'session_stats', where: 'session_id = @s08.id' },
+      { table: 'session_costs', where: 'session_id = @s08.id' },
       {
         table: 'session_request_ids',
         where: 'session_id = @s08.id',

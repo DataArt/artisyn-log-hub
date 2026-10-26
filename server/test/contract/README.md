@@ -31,6 +31,7 @@ It shares Postgres with the server tests and the e2e suites, so it runs serially
 | Path | What it is |
 |---|---|
 | `../../jest.contract.config.js` | the jest project: `testRegex: test/contract/.*\.contract-spec\.ts$`, own global setup/teardown |
+| `setup/world-session-costs.ts` | derives the world's `session_costs` with the app's session-cost writer after every world load (setup, not an oracle; the registry checks costs with its own SQL) |
 | `setup/global-setup.ts` | fresh `contract_<uuid>` schema, migrations, world-v1, one app on a free port (`CONTRACT_BASE_URL`); temp dirs for upload queue / export-import |
 | `setup/global-teardown.ts` | closes the app, removes the temp dirs, drops the schema |
 | `fixtures/world-v1.sql.ts` | the deterministic world: raw SQL, explicit ids, fixed dates, sequences moved to 1000; `WORLD_V1` (ids) and `WORLD_V1_REFS` (`@ref` names) |

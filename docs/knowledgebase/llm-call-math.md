@@ -138,6 +138,29 @@ Two invariants make the shape non-obvious, and both are load-bearing:
   `price_cache_w` column has no readers left.
 - `inputFast` / `outputFast` are subsets, hence the surcharge form (§ 1).
 
+**Prompt-length tiers (per-call path).** A `model_pricing` row may carry `tiers` (§ 3): rate sets
+that apply to a call whose prompt exceeds a threshold (e.g. Haiku 5.5 above 200K prompt tokens).
+A tier is chosen **per call**, never per session, so a session cannot be priced from its
+aggregates alone once tiers exist:
+
+```
+for each call c (one deduplicated assistant usage, keyed by message.id, fallback uuid):
+  P = input + cacheRead + cacheWrite5m + cacheWrite1h          // prompt size of the call
+  r = rates of the LAST tier with P > aboveTokens (strict), else the base rates
+  cost_c = (in + inFast·F)/1e6·r.in + (out + outFast·F)/1e6·r.out
+         + cr/1e6·r.cr + w5/1e6·r.w5 + w1/1e6·r.w1
+session cost = Σ cost_c + webSearchRequests × base.priceWebSearch   // web search: base rate only
+```
+
+The per-call path runs only when per-call tokens exist **and** the row has non-empty `tiers`;
+otherwise the aggregate formula above runs at base rates. Both give the same number for a model
+without tiers. The breakdown terms (`input`, `output`, `cacheRead`, `cacheWrite5m`,
+`cacheWrite1h`, `webSearch`, `fastSurcharge`) are summed per call at the chosen rates and
+already add up to the total; `tierDelta` (total − the same tokens at base rates) is informational
+and is never added as a summand. This contract is implemented once in `@loghub/pricing`
+(`packages/pricing/src/cost.ts`, used by both server and client) plus the hook's plain-JS copy,
+all checked by the same table (`algorithms/cost-formula.md`).
+
 Worked checks: 1 000 000 Opus-5 **1h** cache-write tokens → `1e6/1e6 × 10.00 = $10.00`, not the
 `$6.25` a flat cache-write rate would produce. An all-fast Opus-5 turn of N input tokens →
 `(N+N)/1e6 × 5 = N/1e6 × 10`, i.e. the $10/$50 fast rate.
@@ -145,42 +168,68 @@ Worked checks: 1 000 000 Opus-5 **1h** cache-write tokens → `1e6/1e6 × 10.00 
 **Unpriced models yield `null`, never `0`.** Both implementations return `null` when no
 `model_pricing` row matches, and every caller keeps its own guard around the expression (a scalar
 `SELECT` wants `NULL`; a rollup `SUM` wants `0.0` for the unpriced member so its priced siblings
-still add up). A fake `$0.00` is indistinguishable from a genuinely free session — which is exactly
+still add up). For the stored cost (`session_costs`, below) "unpriced" is `sc.cost IS NULL`, and a
+missing `session_costs` row counts as unpriced too. A fake `$0.00` is indistinguishable from a genuinely free session — which is exactly
 why `costUnavailableReason: 'unknown-model'` exists on the API rows (§ `api-reference.md`) and why
-`NoPricingBadge` replaces the figure in the UI. Derive that flag from the same `model_id IS NULL`
-predicate that produced the cost, so the two can never contradict each other.
+`NoPricingBadge` replaces the figure in the UI. Derive that flag from the same value that produced the cost (`sc.cost IS NULL` for stored
+readers, `model_id IS NULL` for a live lookup), so the two can never contradict each other.
 
-### Server-side — `server/src/logs/cost.sql.ts` (the single implementation)
+### Server-side — `server/src/logs/cost.sql.ts` (adapter over `@loghub/pricing`)
 
-This arithmetic lives in one module because hand-copied expressions drift: when it was copied into **eleven** expressions across six files,
+The formula itself is defined once, in `packages/pricing/src/cost.ts` (`computeCostBreakdown`,
+`pickCallRates`, `promptTokens`, `FAST_MODE_MULTIPLIER`), shared by the server and the client — see
+[repo-local-packages.md](repo-local-packages.md). It lives in one place because hand-copied expressions drift: when it was copied into **eleven** expressions across six files,
 a flat cache-write rate survived the TTL token split, since fixing one copy left the others
-contradicting it on screen. All eleven now call this module.
+contradicting it on screen. All eleven now call this module, which in turn calls the package.
 
 | Export | Use |
 |---|---|
-| `sessionCostSql({ stats, pricing })` | The cost expression as a Drizzle `SQL` fragment, built from two aliases. Returns a bare arithmetic expression — no `CASE`, no outer `COALESCE`, no alias — so it drops into a `SELECT`, a `SUM(...)` or a `GROUP BY` unchanged. Every token column is `COALESCE(…, 0)`-guarded, because a `LEFT JOIN`ed row or an empty CTE yields `NULL` and one `NULL` term nulls the whole sum |
-| `pricingColumnsSql()` | The `DISTINCT ON (model_id)` select list for a `model_pricing` lookup — all six rates `::float`-cast, plus `model_id` for the `p.model_id IS NULL` → `pricing_missing` guard. The caller supplies only the `WHERE` / `ORDER BY` |
-| `computeSessionCost(tokens, pricing)` | The TypeScript twin, for the sites that roll up in TS rather than SQL. Accepts both raw shapes Postgres produces (`bigint`/`numeric` as strings, `::float` as numbers); `pricing == null` → `null` |
-| `FAST_MODE_MULTIPLIER` | `2`. Written in the general `M`-form everywhere, so a future change is one edit here plus one in the client twin |
+| `sessionCostSql({ stats, pricing })` | The aggregate formula at base rates (session costs themselves are read from `session_costs`). The cost expression as a Drizzle `SQL` fragment, built from two aliases. Returns a bare arithmetic expression — no `CASE`, no outer `COALESCE`, no alias — so it drops into a `SELECT`, a `SUM(...)` or a `GROUP BY` unchanged. Every token column is `COALESCE(…, 0)`-guarded, because a `LEFT JOIN`ed row or an empty CTE yields `NULL` and one `NULL` term nulls the whole sum |
+| `callTierRatesSql(call, pricing)` / `tieredCallCostSql({ call, pricing, tier })` | The SQL form of the per-call rule (`pickCallRates`) for ONE call row, used by `utilityCostsCte`: the lateral picks the tier with the largest `aboveTokens` strictly below the call's prompt (`input + cache read + cache write 5m + 1h`) from `pricing.tiers` (no row → base rates); the cost expression applies those rates (`COALESCE(tier.price_*, pricing.price_*)`), fast surcharge as in `sessionCostSql`, web search always at base. Without tiers it equals `sessionCostSql` |
+| `pricingColumnsSql()` | The `DISTINCT ON (model_id)` select list for a `model_pricing` lookup — all six rates `::float`-cast, `tiers`, `effective_from`, `source`, plus `model_id` for the `p.model_id IS NULL` → `pricing_missing` guard. The caller supplies only the `WHERE` / `ORDER BY` |
+| `computeSessionCostBreakdown(tokens, pricing)` | Thin adapter over the package's `computeCostBreakdown`: `{ cost, terms, tierDelta }`, or `null` when unpriced. Converts Postgres numerics to numbers and the columnar `SessionCallTokens` to `CallTokens[]` rows; the package takes the per-call path when calls are present and `pricing.tiers` is non-empty, the aggregate path otherwise (tier choice: the package's `pickCallRates`) |
+| `computeSessionCost(tokens, pricing)` | `computeSessionCostBreakdown(...)?.cost ?? null`. Accepts both raw shapes Postgres produces (`bigint`/`numeric` as strings, `::float` as numbers); `pricing == null` → `null` |
+| `FAST_MODE_MULTIPLIER` | `2`, re-exported from `@loghub/pricing` (used here by `sessionCostSql`). Written in the general `M`-form everywhere, so a future change is one edit in the package plus one in the hook's copy |
 
 The `stats` alias must expose `session_stats`' column names (`input_tokens`, `output_tokens`,
 `cache_read_tokens`, `cache_write_5m_tokens`, `cache_write_1h_tokens`, `web_search_requests`,
 `input_tokens_fast`, `output_tokens_fast`), so the raw-JSONB CTEs in `repositories.controller.ts`
 alias their aggregates to exactly those names.
 
-Typical call shape:
+### Stored session cost — `session_costs`
 
-```ts
-sql`CASE WHEN p.model_id IS NOT NULL
-      THEN ${sessionCostSql({ stats: sql`ss`, pricing: sql`p` })}
-      ELSE NULL END AS computed_cost`
-```
+A session's computed cost is **computed once and stored**, because the per-call tier path needs
+per-call tokens that SQL readers cannot cheaply price. Readers never re-price a session.
 
-Sites currently routed through it: `repositories.controller.ts` (sessions list, sub-agent rollup,
-branches, two timeline expressions), `reports/executive-summary.service.ts` (×2),
-`reports/cache-read-ratio.service.ts` (one SQL, one TS rollup), `analytics/active-sessions.service.ts`,
-`sessions/sessions.service.ts` (the delete-time audit row). **Adding a twelfth hand-written cost
-expression is a review-blocking defect.**
+- **Per-call tokens.** `extractClaudeStats` (`claude-extractor.ts`) fills `callTokens` — one entry
+  per deduplicated assistant usage, the same entries that sum to the `session_stats` totals.
+  `replaceSessionCallTokens()` (`session-stats-writer.ts`) stores them columnar in
+  `session_call_tokens.calls`.
+- **Writer.** `recomputeSessionCosts(db, ids)` (`logs/session-cost/session-cost-writer.ts`) is the
+  only runtime writer: it loads `session_stats`, `session_call_tokens`, the top ancestor's price
+  date and the `model_pricing` row in force, prices with `computeSessionCostBreakdown` and upserts
+  `cost` plus the eight term columns. Every `session_stats` upsert path (upload, import merge,
+  recompute-all) calls it in the same transaction.
+- **Invalidation.** A pricing write (`writeEffectivePrices`) marks the affected rows `stale` through
+  `markModelSessionsStale()` (`model-pricing/session-cost-invalidation.ts`, no `logs/` imports);
+  a new row or a changed `price_date` marks the session's descendants stale. The sweeper
+  `SessionCostRecomputeService` drains stale rows in batches of 500 (`FOR UPDATE SKIP LOCKED`)
+  every `SESSION_COST_RECOMPUTE_INTERVAL_MS` (default 10 s) and on `notifySessionCostsStale()`;
+  `SESSION_COST_RECOMPUTE_INLINE=true` makes that notify await the drain (contract stand).
+- **Backfill.** Migration `0074` wrote one row per existing `session_stats` row with a frozen copy
+  of the aggregate formula (no per-call rows for old sessions, tier delta 0).
+
+Reader rules: own cost is `sc.cost`, unpriced is `sc.cost IS NULL` (a missing row too); a
+sub-agent rollup is `COALESCE(SUM(sc.cost), 0.0)` over `descendant_sessions` with the existing
+`EXISTS(claude/claude-subagent log)` guard. Readers: `repositories.controller.ts` (sessions list,
+sub-agent rollup, session stats, branches/timeline), `reports/executive-summary.service.ts` (own +
+sub-agent), `reports/attribution-breakdown.service.ts` (own + sub-agent),
+`reports/cache-read-ratio.service.ts` (the `cost_cache_read` and `cost_cache_write_5m +
+cost_cache_write_1h` terms, own + descendants), `analytics/active-sessions.service.ts` (the
+shared `loadTreeCostRows` / `readTreeCost` of `session-tree-cost.sql.ts`, like the list),
+`turn-end-cost-advisor.service.ts` (tree members) and `sessions/sessions.service.ts` (the
+delete-time audit row, read before the purge). **Adding a hand-written session cost expression
+next to these is a review-blocking defect.**
 
 ### Two cost sources: computed vs. telemetry
 
@@ -202,12 +251,19 @@ the session-detail stats route, the executive summary and `active-sessions.servi
 cost — the `otel-summary` JSONB body written to `logs.body` at ingest is write-only redundant
 storage, kept only for the OTEL UI-invisibility guarantee (see `db-tables.md`'s `logs` section).
 
-`resolveSessionTotalCost(otelCost, computedCost)` (`otel-cost.sql.ts`) is the **only** place that
-picks between the two: it prefers the telemetry cost unless `isOtelCostIncomplete()` judges it too
-far below the computed cost to be trustworthy (a truncated exporter stream or out-of-process
-sub-agents), in which case the computed cost wins; `otelComputedDiscrepancy()` independently drives
-the session-header disagreement warning regardless of which side `resolveSessionTotalCost()` picked.
-Both guards read telemetry cost from a plain column (`session_stats.telemetry_cost`), not by parsing JSONB.
+**Log Hub's price is the source of truth.** The shown session cost is always the computed one,
+complete or not at all: `resolveSessionTotalCost(parts)` (`otel-cost.sql.ts`) returns
+`mainCost + subagentCost + utilityCost`, or `null` as soon as the root, a sub-agent with a
+transcript or a utility call has a model with no price in Log Hub. Nothing is substituted — the
+telemetry cost never stands in for it (Claude Code prices a model it does not know, e.g.
+`claude-haiku-5-5`, at another model's rates and reports that number with no marker), and no
+other model's price stands in for an unknown one. Telemetry stays a cross-check:
+`otelComputedDiscrepancy()` drives the session-header warning icon (whose hint names both
+numbers and the likely causes) and `costMismatch()` the tooltip mismatch line. Every cost surface
+(sessions list and header, timeline, executive summary, attribution breakdown, turn-end advisor,
+delete-time audit row) loads the parts through `session-tree-cost.sql.ts` (`treeCostCtes` /
+`loadTreeCostRows` + `readTreeCost`), so they cannot disagree. Algorithm and worked examples:
+[algorithms/otel-cost-selection.md](algorithms/otel-cost-selection.md).
 
 ### Utility calls (calls no transcript records)
 
@@ -222,7 +278,7 @@ the same transaction as the `logs_otel` row (so re-ingesting a chunk never dupli
 `call_key` is the call's `request_id`, or `<chunkKey>:<1-based line index>` when the record has
 none. Columns are named after `session_stats` (`cache_creation_tokens` → `cache_write_5m_tokens`,
 because telemetry has no TTL split; `speed='fast'` copies the totals into `input_tokens_fast` /
-`output_tokens_fast`), so `sessionCostSql` prices a call row unchanged. The transcript side is
+`output_tokens_fast`), so the SQL cost expressions price a call row unchanged. The transcript side is
 `session_request_ids`: the distinct `requestId` of every `assistant` line, rewritten
 (delete-then-insert) by `replaceSessionRequestIds()` in `session-stats-writer.ts` next to each
 `upsertSessionStatsRow` call. Both tables are in `db-tables.md`.
@@ -236,13 +292,17 @@ transcripts without `requestId`) does the CTE fall back to `query_source`: a cal
 unless its source is in `TRANSCRIPT_QUERY_SOURCES` (`repl_main_thread`, `sdk`) or starts with
 `TRANSCRIPT_QUERY_SOURCE_PREFIX` (`agent:`). Those values are always bound as SQL parameters.
 
-**Pricing.** Each utility call is priced with `sessionCostSql` at the call's own model, as of the
-**root's** price date (below). An unpriced model contributes 0 and sets `utility_pricing_missing`
-rather than nulling the session. The CTE yields one row per root that has calls; roots without
-telemetry have no row and callers `COALESCE` the utility cost to 0. It needs a
-`descendant_sessions` CTE over the same roots earlier in the `WITH`.
+**Pricing — per call, tiered.** Each utility call is priced at the call's own model, as of the
+**root's** price date (below), with the same prompt-length tier rule as `pickCallRates`: prompt =
+`input + cache read + cache write 5m + 1h` of the row, the tier with the largest `aboveTokens`
+strictly below it, else the base rates; web search at base (`callTierRatesSql` +
+`tieredCallCostSql` in `cost.sql.ts`). An unpriced model contributes 0, sets
+`utility_pricing_missing` and adds its id to `utility_unpriced_models` — the session's shown cost
+is then `null` (above). The CTE yields one row per root that has calls; roots without telemetry
+have no row and callers `COALESCE` the utility cost to 0. It needs a `descendant_sessions` CTE
+over the same roots earlier in the `WITH`.
 
-### `costBreakdown` vs the unchanged `totalCost`
+### `costBreakdown` and `totalCost`
 
 The sessions list (`GET /repositories/:repoId/sessions`, including `?branch=`) sends a
 non-optional `costBreakdown` per session (`CostBreakdown` in `otel-cost.sql.ts`, mirrored in
@@ -250,21 +310,23 @@ non-optional `costBreakdown` per session (`CostBreakdown` in `otel-cost.sql.ts`,
 
 | Field | Meaning |
 |---|---|
-| `mainCost` | Root session's own computed cost; `null` when the main model is unpriced |
-| `subagentCost` | Computed rollup of the descendant tree (0 without sub-agents) |
+| `mainCost` | Root session's own stored cost; `null` when the main model is unpriced |
+| `subagentCost` | Stored costs of the priced descendants with a transcript (0 without sub-agents) |
 | `utilityCost` | `utilityCostsCte` total (0 without telemetry) |
-| `calculatedCost` | `mainCost + subagentCost + utilityCost`, summed in TS; `null` when `mainCost` is |
+| `calculatedCost` | `resolveSessionTotalCost`: `mainCost + subagentCost + utilityCost`, or `null` when any part is unpriced |
 | `telemetryCost` | The root's `session_stats.telemetry_cost` in USD; `null` without telemetry |
 | `mismatch` | `costMismatch(telemetryCost, calculatedCost)` |
 | `utilityPricingMissing` | At least one utility call's model has no price |
+| `subagentPricingMissing` | At least one sub-agent's model has no price (added later; optional for consumers) |
+| `unpricedModels` | The model ids with no price in Log Hub, root + sub-agents + utility calls, sorted (added later; optional) |
 
-`computedCost` is now this utility-inclusive `calculatedCost`, and both
-`resolveSessionTotalCost()` and `otelComputedDiscrepancy()` receive it, so the 50% incompleteness
-guard and the 33% header flag compare like with like. **`totalCost` keeps its meaning**
-(telemetry preferred, computed as fallback): about thirty client analytics/report consumers and
-the server reports read it, and changing it would make them disagree. Only the surfaces that
-explain cost (Summary tile, list cell and its popover, Info tab) render `costBreakdown`, through
-the client `CostReconciliation` component. Per-turn and Call Tree costs stay client-calculated.
+`totalCost` = `computedCost` = `calculatedCost`. `costUnavailableReason` is `'unknown-model'`
+exactly when it is `null` because some model is unpriced; the client then shows `$???` with a
+hint naming `unpricedModels` and how to fix it (Admin → Model Pricing → Fetch Anthropic prices
+now, or set a price). The timeline rows and the executive summary's `topSessions` carry the same
+`unpricedModels` list. Only the surfaces that explain cost (Summary tile, list cell and its
+popover, Info tab) render `costBreakdown`, through the client `CostReconciliation` component.
+Per-turn and Call Tree costs stay client-calculated.
 
 **Mismatch tolerance.** `costMismatch()` is `true` only when both sides are non-null and
 `|calculated − telemetry|` reaches **both** `COST_MISMATCH_TOLERANCE_USD` (`0.05`) and
@@ -273,9 +335,9 @@ residual: OTEL reports only a total `cache_creation_tokens`, so utility calls ar
 5m write rate even when part of the write was 1h (cents per session). It is independent of the
 relative `OTEL_DISCREPANCY_THRESHOLD` flag and is exposed only as `costBreakdown.mismatch`.
 
-The branches route's per-branch `total_cost` deliberately does **not** add utility calls — it is
-an aggregate report surface like the other `totalCost` readers; it only moved to the session
-price date.
+The branches route's per-branch `total_cost` is the sum of the roots' own stored `session_costs.cost`
+(never the OTEL figure since 2026-10-26). It does **not** add sub-agents or utility calls (a
+known gap, pinned by the golden-load branch scenario's `test.fail`).
 
 ### Price date — `sessionPriceDateSql` / `pricingAsOfSql`
 
@@ -288,11 +350,11 @@ A session is priced at the rates in force **when it ran**, not today's, so a new
   over `model_pricing` with `effective_from <= dateExpr`, matched on the model id with the
   `-[0-9]{8}$` suffix stripped. The caller supplies the parentheses, alias and `ON true`.
 
-Sub-agents and utility calls use the **root's** date. Every session-cost site uses them: the
-sessions list, sub-agent rollup, branches and timeline expressions in `repositories.controller.ts`,
-`sessions.service.ts`, `active-sessions.service.ts`, `attribution-breakdown.service.ts`,
-`cache-read-ratio.service.ts`, `executive-summary.service.ts` and
-`turn-end-cost-advisor.service.ts`. `model-pricing-store.ts` and `unpriced-model-registry.ts`
+Sub-agents and utility calls use the **root's** date: `recomputeSessionCosts` prices every session
+at its **top ancestor's** price date (walking `parent_session_id`, depth ≤ 50, `topAncestorIdsSql`)
+and stores it as `session_costs.price_date`. The live lookups left are that writer,
+`utilityCostsCte` (`otel-cost.sql.ts`) and the turn-end cost advisor's rate lookup; every other
+session-cost reader reads the stored row. `model-pricing-store.ts` and `unpriced-model-registry.ts`
 keep `CURRENT_DATE` on purpose: they ask whether a model is priced **now**.
 
 The client matches it: `GET /api/v1/model-pricing?asOf=YYYY-MM-DD` filters
@@ -302,10 +364,11 @@ session's ISO-UTC `startTime` (the same UTC date `sessionPriceDateSql` computes)
 
 ### Client-side (`computeCost`)
 
-`client/src/viewer/lib/format.ts` — the client twin of `computeSessionCost`, prices individual turns
-from the transcript instead of sessions from `session_stats`, and exports its own
-`FAST_MODE_MULTIPLIER`. Same formula, same rates, same result for the same tokens; any change to one
-must be mirrored in the other.
+`client/src/viewer/lib/format.ts` prices individual turns from the transcript instead of sessions
+from `session_stats`. It has no formula of its own: it re-exports `computeCostBreakdown`,
+`FAST_MODE_MULTIPLIER`, `CostTerms` and `CostBreakdown` from `@loghub/pricing`, and `computeCost` is
+`computeCostBreakdown(...).total` — the same code the server runs, so the same tokens give the same
+result. Only the hook keeps a separate (plain-JS) copy.
 
 ```ts
 export function computeCost(breakdown: TokenBreakdown, pricing: ModelPricingEntry): number;
@@ -367,7 +430,8 @@ dimensionless multiple of a stored rate, not a price. See "Fast rates are derive
 | `price_web_search` | `numeric(10,6)` | USD **per web-search request** — not per million anything. `0.01` for first-party Claude rows, `0` for third-party rows, which offer no server tools |
 | `currency` | `varchar(3)` | Always `'USD'` |
 | `effective_from` | `date` PK part 2 | Session cost uses `effective_from <= <session price date> ORDER BY effective_from DESC` (`pricingAsOfSql`, § 2) to get the rate in force when the session ran; "is it priced now" checks use `CURRENT_DATE`. Selecting by `model_id` alone can pick a future-dated row and overcharge |
-| `source` | `varchar(16)` | Origin of the price version (migration `0066`): `anthropic` / `openrouter` / `manual` / `override`. **Cost math never reads it.** It exists for the admin tab and the runtime writers |
+| `source` | `varchar(16)` | Origin of the price version (migration `0066`): `anthropic` / `openrouter` / `manual` / `override`. **Cost math never reads it.** It exists for the admin tab and the runtime writers (and is copied into `session_costs.pricing_source`) |
+| `tiers` | `jsonb` nullable | Prompt-length tiers (migration `0074`): an array of `{ aboveTokens, priceIn, priceOut, priceCacheR, priceCacheW5m, priceCacheW1h }`, sorted ascending by `aboveTokens`, at most 10; `NULL` (never `[]`) when the model has none. A tier applies to a call whose prompt is **strictly greater** than `aboveTokens` (§ 2 per-call path). No tier carries a web-search price. Validated by `validatePricingTiers` (`packages/pricing/src/tiers.ts`; the admin dialog runs the same function); the array shape is a SQL-only CHECK |
 
 **Where rates come from.** Rows are seeded by migrations. Since migration `0066` they are also
 written at runtime by `server/src/model-pricing/`:
@@ -387,8 +451,9 @@ correct `DISTINCT ON` shape; use it rather than hand-writing the lookup.
 
 **Fast rates are derived, not stored.** There is deliberately no `price_in_fast` / `price_out_fast`
 column: fast mode bills at `FAST_MODE_MULTIPLIER = 2` × the standard rate, and two stored rates could
-drift apart while a multiplier cannot. It is exported from `server/src/logs/cost.sql.ts` and
-`client/src/viewer/lib/format.ts`, and both call sites write the general `M`-form.
+drift apart while a multiplier cannot. It is defined once in `packages/pricing/src/cost.ts`
+(re-exported by `server/src/logs/cost.sql.ts` and `client/src/viewer/lib/format.ts`; the hook keeps
+its own copy), and every call site writes the general `M`-form.
 
 ### Seeding / updating rates
 

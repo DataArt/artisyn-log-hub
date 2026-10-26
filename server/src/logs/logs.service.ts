@@ -55,12 +55,14 @@ import {
   writeSessionFileStats,
 } from './session-file-stats-writer';
 import {
+  replaceSessionCallTokens,
   replaceSessionRequestIds,
   upsertSessionClaudeVersionOtel,
   upsertSessionStatsRow,
   upsertSessionTelemetryCost,
 } from './session-stats-writer';
 import { upsertSessionToolStatsRows } from './session-tool-stats-writer';
+import { recomputeSessionCosts } from './session-cost/session-cost-writer';
 import {
   type CauseStatsScope,
   upsertSessionCauseStatsRow,
@@ -421,6 +423,8 @@ export class LogsService {
         );
         await upsertSessionStatsRow(tx, sessionRowId, stats);
         await replaceSessionRequestIds(tx, sessionRowId, stats.requestIds);
+        await replaceSessionCallTokens(tx, sessionRowId, stats.callTokens);
+        await recomputeSessionCosts(tx, [sessionRowId]);
 
         // Step 3a — changed paths. The repo root comes from the tree's artisyn log and
         // is routinely still unknown here (separate uploads, either order); the raw paths are
@@ -1028,6 +1032,8 @@ export class LogsService {
       const stats = extractClaudeStats(lines, '', false);
       await upsertSessionStatsRow(tx, sessionRowId, stats);
       await replaceSessionRequestIds(tx, sessionRowId, stats.requestIds);
+      await replaceSessionCallTokens(tx, sessionRowId, stats.callTokens);
+      await recomputeSessionCosts(tx, [sessionRowId]);
       await upsertSessionToolStatsRows(tx, sessionRowId, stats.toolStats);
       // Same writer, roots and tree-level scopes as upsert() Step 3b. Import adds the
       // claude log before the artisyn log and gets no heal, so an imported session lands on

@@ -1,9 +1,14 @@
 import { eq } from 'drizzle-orm';
 import { maxVersion } from '../common/semver';
 import type { DrizzleDb } from '../database/database.module';
-import { sessionRequestIds, sessionStats } from '../database/schema/index';
+import {
+  sessionCallTokens,
+  sessionRequestIds,
+  sessionStats,
+} from '../database/schema/index';
 import { registerUnpricedModels } from '../model-pricing/unpriced-model-registry';
 import type { ClaudeStats } from './claude-extractor';
+import type { SessionCallTokens } from './cost.sql';
 
 /**
  * Upserts a `session_stats` row for one session from a `ClaudeStats` result.
@@ -144,6 +149,39 @@ export async function replaceSessionRequestIds(
       )
       .onConflictDoNothing();
   }
+}
+
+/**
+ * Upserts one session's `session_call_tokens` row with its per-call token arrays
+ * (`ClaudeStats.callTokens`) — the sole writer of that table, called right after every
+ * `replaceSessionRequestIds()` and before `recomputeSessionCosts()`, which reads it.
+ *
+ * Throws when the present arrays differ in length: index `i` of every array must be the
+ * same call, and a ragged record would silently misprice tiered calls. A session with no
+ * calls stores the row with empty arrays.
+ */
+export async function replaceSessionCallTokens(
+  db: DrizzleDb,
+  sessionRowId: number,
+  calls: SessionCallTokens,
+): Promise<void> {
+  const lengths = new Set(
+    Object.values(calls)
+      .filter((arr): arr is number[] => Array.isArray(arr))
+      .map((arr) => arr.length),
+  );
+  if (lengths.size > 1) {
+    throw new Error(
+      `session_call_tokens for session ${sessionRowId}: per-call arrays differ in length (${[...lengths].join(', ')})`,
+    );
+  }
+  await db
+    .insert(sessionCallTokens)
+    .values({ sessionId: sessionRowId, calls, updatedAt: new Date() })
+    .onConflictDoUpdate({
+      target: sessionCallTokens.sessionId,
+      set: { calls, updatedAt: new Date() },
+    });
 }
 
 /**

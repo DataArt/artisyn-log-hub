@@ -163,7 +163,12 @@ GROUP BY ds.root_id
 Three details that are easy to get wrong:
 
 - **`depth >= 0` vs `depth > 0`.** The cost rollups use `WHERE ds.depth > 0` because the root's
-  own cost is computed separately and added in TS. A counter rollup that replaces the root value
+  own cost is read separately and added in TS. Both sides read the stored
+  `session_costs.cost` (`COALESCE(SUM(sc.cost), 0.0)` for the descendants; see
+  `llm-call-math.md` § 2 "Stored session cost") — no cost rollup re-prices a session. The one
+  shared cost rollup is `treeCostCtes()` in `server/src/logs/session-tree-cost.sql.ts` (own +
+  sub-agents + utility calls; an unpriced sub-agent nulls the whole tree cost, never adds 0) —
+  use it rather than a new `subagent_costs` CTE. A counter rollup that replaces the root value
   outright must include the root, i.e. **no `depth` filter at all** — which is what
   `treeMetricsCte()` does. Getting this backwards silently drops or doubles the root's
   contribution.

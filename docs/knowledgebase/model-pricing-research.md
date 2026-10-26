@@ -5,7 +5,7 @@ description: "Where to look up current Claude model pricing and context-window v
 tags:
   - pricing
   - database
-timestamp: "2026-10-14T00:00:00+04:00"
+timestamp: "2026-10-26T00:00:00+04:00"
 ---
 
 # Researching Model Pricing & Context Length
@@ -40,8 +40,20 @@ Claude Fable 5.1 / Mythos 5.1 ($0.25) and `0.05×` on Claude Opus 5.5 ($0.20), w
 stays at `0.1×`. Always read the cache-hit column off the pricing page per model instead of
 multiplying `price_in` (see `0064_model_pricing_2026_09_refresh.sql`).
 
-Fast-mode pricing has **no column**: it is `FAST_MODE_MULTIPLIER = 2 ×` the standard rate, derived in
-`server/src/logs/cost.sql.ts` and `client/src/viewer/lib/format.ts`. Do not add a `price_in_fast`.
+Prompt-length tiers live in the `tiers` jsonb column (`model_pricing.tiers`, mirrored by
+`model_pricing_meta.override_base_tiers` for an override base). It is an array of
+`{ aboveTokens, priceIn, priceOut, priceCacheR, priceCacheW5m, priceCacheW1h }` sorted ascending by
+`aboveTokens`, or `NULL` for a model without tiers (an empty array is stored as `NULL`). A call
+whose prompt size `input + cacheRead + cacheWrite5m + cacheWrite1h` is strictly greater than
+`aboveTokens` is priced at that tier's rates, the last matching tier winning; web search always
+uses the base rate. One shared validator, `validatePricingTiers()` in `@loghub/pricing`
+(`packages/pricing/src/tiers.ts`, re-exported by `model-pricing-rates.ts`; the admin dialog runs
+the same function, so dialog and API reject the same input with the same text), enforces at most `MAX_PRICING_TIERS = 10` tiers, integer thresholds in
+`[1, MAX_TIER_THRESHOLD = 100,000,000]` strictly increasing, and all five rates valid. The per-call
+formula is in [algorithms/cost-formula.md](algorithms/cost-formula.md).
+
+Fast-mode pricing has **no column**: it is `FAST_MODE_MULTIPLIER = 2 ×` the standard rate, defined once in
+`packages/pricing/src/cost.ts` (server and client; the hook keeps its own copy). Do not add a `price_in_fast`.
 
 ## Live price sync
 
@@ -102,15 +114,23 @@ writers:
   - Id mapping: major ≥ 4 gives `claude-<family>-<major>[-<minor>]` (`Claude Opus 4.1` →
     `claude-opus-4-1`). Major < 4 gives `claude-<major>[-<minor>]-<family>` (`Claude Haiku 3.5` →
     `claude-3-5-haiku`).
-  - Non-matching rows are skipped. For a duplicate id the first row wins, so a tiered model takes
-    its first tier.
-  - Price cells take the first `$N` amount. The web-search rate is the page's first "$N per 1,000
-    searches" divided by 1000.
+  - Prompt-length rows: a trailing `(for prompts up to N tokens)` / `(for prompts over N tokens)`
+    on the model cell (case-insensitive, commas in N allowed) is read as the row's bound before the
+    other trailing parenthetical is dropped.
+  - Rows are merged per id. A plain or `up to N` row sets the base rates (the first base row
+    wins; later ones are skipped). An `over N` row adds a tier `{ aboveTokens: N }` with its
+    five rates. `MIN_PARSED_MODELS` counts merged models.
+  - Non-matching rows are skipped.
+  - Price cells take the first `$N` amount. The web-search rate is the page's first
+    `$N [USD] per 1,000 searches` (regex `/$([d,]*.?d+)(?:s+USD)? per 1,000 searches/`)
+    divided by 1000.
 - **Fail-closed:** the parser returns `null` and nothing is written when any of these holds:
   - the heading, the table or any required column is missing
   - fewer than `MIN_PARSED_MODELS = 5` models parse
   - the web-search price is missing
   - any rate is not finite, is negative, or exceeds `MAX_RATE`
+  - an `over` row has no base row, an `over N` row is paired with an `up to M` row where M ≠ N,
+    an `over` threshold is duplicated, or a model's tiers fail `validatePricingTiers`
 - **Apply rules,** per parsed model:
   - **Override active:** only the override base in `model_pricing_meta` is updated. The override
     row stays.
@@ -118,12 +138,27 @@ writers:
     the today-row rule. A **manual price on a Claude model is therefore replaced** as soon as
     Anthropic publishes that model.
   - `chars_per_token` / `context_length` are not on the page. They are carried forward from the
-    current row, or from the override base.
+    current row, or from the override base. `tiers` always come from the page (a model whose page
+    rows carry no tiers is written with `tiers = NULL`), never from the current row.
+  - Under an active override the fetch refreshes the base's rates **and** tiers
+    (`override_base_tiers`) and never touches the override row's own tiers.
   - Models missing from the page are untouched.
 - **Schedule and claim:** see [system-info-and-cluster.md](system-info-and-cluster.md). It runs
   once at bootstrap and then every `MODEL_PRICING_FETCH_INTERVAL_MS` (default 1 h). A DB claim on
   `model_pricing_fetch_state['anthropic']` lets one worker fetch per 24 h, with a 1 h retry gap
   after a failure. `MODEL_PRICING_FETCH_ENABLED=false` turns it off.
+- **Manual fetch now:** the admin "Fetch Anthropic prices now" button calls
+  `POST /api/v1/admin/model-pricing/fetch-anthropic` → `runFetch(undefined, { force: true })`.
+  `claimManual()` ignores the 24 h / 1 h window and refuses (`skipped`) only when another attempt
+  started less than `MANUAL_FETCH_MIN_GAP_SECONDS` (30) ago — double clicks and a racing scheduled
+  tick. Otherwise it fetches and records the state exactly like a scheduled run; the response is
+  `{ result: 'changed' | 'unchanged' | 'failed' | 'skipped' }`. The enabled flag is checked only by
+  the scheduler, so the button works even with `MODEL_PRICING_FETCH_ENABLED=false`.
+- **Next check:** `GET /api/v1/admin/model-pricing` returns `anthropic.nextCheckAt`
+  (`nextAnthropicCheck()` in `model-pricing-admin.service.ts`): the later of
+  `lastSuccessAt + 24 h` and `lastAttemptAt + 1 h`, or now (the next hourly tick); `null` when the
+  fetch is disabled. OpenRouter's is always `null`. The status line renders it as
+  "next check in N h / N min / within the hour".
 
 ### OpenRouter import (admin button)
 
@@ -163,7 +198,14 @@ returns 409):
   inputs default to 0.
 - `PUT /override` returns 409 when the model has a future-dated row, which would silently end the
   override on its date.
-- Clearing an override writes the base back as a today row with its base source.
+- Clearing an override writes the base back as a today row with its base source and the base's
+  tiers.
+- `tiers` in `PUT /price` / `PUT /override`: omitted carries the current effective row's tiers
+  (like `charsPerToken`); `null` or `[]` clears them; the list is sorted, then checked by
+  `validatePricingTiers` — a failure is 400 with its text (user-facing, e.g.
+  `Tier 2: Above (tokens) must be strictly increasing`; the admin dialog shows the same text). An override row stores its own tiers.
+- After each admin write commits, `notifySessionCostsStale()` wakes the stored session-cost
+  recompute; the price write itself flags the affected `session_costs` rows stale.
 
 ### Rule for new pricing migrations
 

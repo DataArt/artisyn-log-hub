@@ -11,6 +11,7 @@ import {
 } from './model-pricing.constants';
 import {
   deriveModelState,
+  normalizeTiers,
   ratesEqual,
   round6,
   type ModelPricingMeta,
@@ -23,6 +24,7 @@ import type {
   PricingFetchStatus,
   StoredPricingSource,
 } from './model-pricing.types';
+import { markModelSessionsStale } from './session-cost-invalidation';
 
 /**
  * Shared DB helpers of the model-pricing module. Every function takes the
@@ -150,6 +152,7 @@ async function selectNewestVersions(
     priceWebSearch: Number(row.priceWebSearch),
     charsPerToken: nullableNumber(row.charsPerToken),
     contextLength: row.contextLength,
+    tiers: normalizeTiers(row.tiers),
   }));
 }
 
@@ -173,6 +176,7 @@ function toMeta(row: typeof modelPricingMeta.$inferSelect): ModelPricingMeta {
           priceWebSearch: Number(row.overrideBasePriceWebSearch ?? 0),
           charsPerToken: nullableNumber(row.overrideBaseCharsPerToken),
           contextLength: row.overrideBaseContextLength,
+          tiers: normalizeTiers(row.overrideBaseTiers),
         }
       : null,
   };
@@ -236,7 +240,10 @@ export async function writeEffectivePrice(
  * context length) and source are unchanged, and upserts the rest as today's row
  * (`effective_from = CURRENT_DATE`, overwriting a row already written today) in multi-row
  * `INSERT … ON CONFLICT DO UPDATE` batches of {@link IMPORT_BATCH_SIZE}. Rows dated before today
- * are never modified. For a duplicated id the last item wins. Returns the ids written.
+ * are never modified. For a duplicated id the last item wins. Every written model's stored
+ * session costs priced by the new row are flagged stale ({@link markModelSessionsStale}) in the
+ * same transaction; the caller calls `notifySessionCostsStale()` after commit. Returns the ids
+ * written.
  */
 export async function writeEffectivePrices(
   tx: DrizzleDb,
@@ -280,6 +287,7 @@ export async function writeEffectivePrices(
           effectiveFrom: sql`CURRENT_DATE`,
           charsPerToken: num3(rates.charsPerToken),
           contextLength: rates.contextLength,
+          tiers: normalizeTiers(rates.tiers),
           source,
         })),
       )
@@ -296,10 +304,15 @@ export async function writeEffectivePrices(
           currency: sql`excluded.currency`,
           charsPerToken: sql`excluded.chars_per_token`,
           contextLength: sql`excluded.context_length`,
+          tiers: sql`excluded.tiers`,
           source: sql`excluded.source`,
         },
       });
-    for (const item of batch) written.add(item.modelId);
+    for (const item of batch) {
+      written.add(item.modelId);
+      // Today's row now prices this model's stored session costs from today on (DD7).
+      await markModelSessionsStale(tx, item.modelId, sql`CURRENT_DATE`);
+    }
   }
   return written;
 }
@@ -324,6 +337,7 @@ export async function setOverrideBase(
     overrideBasePriceWebSearch: num6(rates.priceWebSearch),
     overrideBaseCharsPerToken: num3(rates.charsPerToken),
     overrideBaseContextLength: rates.contextLength,
+    overrideBaseTiers: normalizeTiers(rates.tiers),
   };
   await tx
     .insert(modelPricingMeta)
@@ -351,6 +365,7 @@ export async function clearOverrideBase(
       overrideBasePriceWebSearch: null,
       overrideBaseCharsPerToken: null,
       overrideBaseContextLength: null,
+      overrideBaseTiers: null,
       updatedAt: sql`now()`,
     })
     .where(sql`${modelPricingMeta.modelId} = ${modelId}`);

@@ -31,7 +31,11 @@ export const f22PricingToolVersions: ContractFamily = {
       actor: 'anon',
       expect: { status: 200, minRows: 4 },
       read: {
-        sql: `SELECT cp.model_id, ${RATES_JSON} AS rates FROM (${CURRENT_PRICES}) cp`,
+        // `tiers` only for a model that has them (DD12): untiered entries stay byte-identical.
+        sql: `SELECT cp.model_id,
+                     ${RATES_JSON} || CASE WHEN cp.tiers IS NULL THEN '{}'::jsonb
+                                           ELSE jsonb_build_object('tiers', cp.tiers) END AS rates
+                FROM (${CURRENT_PRICES}) cp`,
         shape: 'map',
         mapKey: 'model_id',
         mapValue: { col: 'rates', as: 'json' },
@@ -49,7 +53,8 @@ export const f22PricingToolVersions: ContractFamily = {
                      CASE WHEN cp.source = 'override' THEN m.override_base_source ELSE cp.source END
                        AS source,
                      cp.source = 'override' AS override_active,
-                     ${RATES_JSON} || jsonb_build_object('effectiveFrom', cp.effective_from::text)
+                     ${RATES_JSON} || jsonb_build_object('effectiveFrom', cp.effective_from::text,
+                                                         'tiers', cp.tiers)
                        AS effective,
                      CASE WHEN cp.source = 'override' THEN jsonb_build_object(
                        'priceIn', m.override_base_price_in::float8,
@@ -59,7 +64,8 @@ export const f22PricingToolVersions: ContractFamily = {
                        'priceCacheW1h', m.override_base_price_cache_w_1h::float8,
                        'priceWebSearch', m.override_base_price_web_search::float8,
                        'charsPerToken', m.override_base_chars_per_token::float8,
-                       'contextLength', m.override_base_context_length) END AS base,
+                       'contextLength', m.override_base_context_length,
+                       'tiers', m.override_base_tiers) END AS base,
                      m.first_seen_at
                 FROM (${CURRENT_PRICES}) cp
                 LEFT JOIN model_pricing_meta m ON m.model_id = cp.model_id`,
@@ -96,6 +102,7 @@ export const f22PricingToolVersions: ContractFamily = {
       },
       write: {
         watch: ['model_pricing', 'model_pricing_meta'],
+        derived: ['session_costs'],
         delta: {
           inserted: [
             {
@@ -129,6 +136,100 @@ export const f22PricingToolVersions: ContractFamily = {
       expect: { status: 403 },
     },
     {
+      // A manual price with one prompt-length tier: the tier is stored on the new version.
+      id: 'F22-set-price-tiers',
+      route: 'PUT /api/v1/admin/model-pricing/price',
+      actor: 'admin',
+      body: {
+        modelId: '@models.b',
+        priceIn: 4,
+        priceOut: 8,
+        tiers: [
+          {
+            aboveTokens: 200000,
+            priceIn: 8,
+            priceOut: 16,
+            priceCacheR: 0.8,
+            priceCacheW5m: 10,
+            priceCacheW1h: 16,
+          },
+        ],
+      },
+      expect: {
+        status: 200,
+        bodyMatches: { modelId: 'world-model-b', source: 'manual' },
+      },
+      write: {
+        watch: ['model_pricing', 'model_pricing_meta'],
+        derived: ['session_costs'],
+        delta: {
+          inserted: [
+            {
+              table: 'model_pricing',
+              where: `model_id = 'world-model-b' AND effective_from = current_date`,
+              check: [
+                'price_in = 4',
+                'price_out = 8',
+                `source = 'manual'`,
+                `tiers = '[{"aboveTokens": 200000, "priceIn": 8, "priceOut": 16, "priceCacheR": 0.8, "priceCacheW5m": 10, "priceCacheW1h": 16}]'::jsonb`,
+              ],
+            },
+          ],
+        },
+      },
+    },
+    {
+      // Thresholds must be strictly increasing in the order given; nothing is written.
+      id: 'F22-set-price-tiers-nonincreasing',
+      route: 'PUT /api/v1/admin/model-pricing/price',
+      actor: 'admin',
+      body: {
+        modelId: '@models.b',
+        priceIn: 4,
+        priceOut: 8,
+        tiers: [
+          {
+            aboveTokens: 200000,
+            priceIn: 8,
+            priceOut: 16,
+            priceCacheR: 0.8,
+            priceCacheW5m: 10,
+            priceCacheW1h: 16,
+          },
+          {
+            aboveTokens: 100000,
+            priceIn: 6,
+            priceOut: 12,
+            priceCacheR: 0.6,
+            priceCacheW5m: 7.5,
+            priceCacheW1h: 12,
+          },
+        ],
+      },
+      expect: { status: 400 },
+    },
+    {
+      id: 'F22-set-price-tiers-bad-rate',
+      route: 'PUT /api/v1/admin/model-pricing/price',
+      actor: 'admin',
+      body: {
+        modelId: '@models.b',
+        priceIn: 4,
+        priceOut: 8,
+        tiers: [
+          {
+            aboveTokens: 200000,
+            priceIn: -1,
+            priceOut: 16,
+            priceCacheR: 0.8,
+            priceCacheW5m: 10,
+            priceCacheW1h: 16,
+          },
+        ],
+      },
+      expect: { status: 400 },
+    },
+    {
       // Overriding a fetched price: the effective version becomes an `override` and the fetched
       // rates are kept aside as the override base.
       id: 'F22-override',
@@ -141,6 +242,7 @@ export const f22PricingToolVersions: ContractFamily = {
       },
       write: {
         watch: ['model_pricing', 'model_pricing_meta'],
+        derived: ['session_costs'],
         delta: {
           inserted: [
             {
@@ -176,6 +278,59 @@ export const f22PricingToolVersions: ContractFamily = {
       expect: { status: 403 },
     },
     {
+      // An override with tiers: the override version carries them, while the stored base keeps
+      // the fetched price's own (absent) tiers.
+      id: 'F22-override-tiers',
+      route: 'PUT /api/v1/admin/model-pricing/override',
+      actor: 'admin',
+      body: {
+        modelId: '@models.fetched',
+        priceIn: 1,
+        priceOut: 5,
+        tiers: [
+          {
+            aboveTokens: 200000,
+            priceIn: 8,
+            priceOut: 16,
+            priceCacheR: 0.8,
+            priceCacheW5m: 10,
+            priceCacheW1h: 16,
+          },
+        ],
+      },
+      expect: {
+        status: 200,
+        bodyMatches: { modelId: 'world-model-fetched', overrideActive: true },
+      },
+      write: {
+        watch: ['model_pricing', 'model_pricing_meta'],
+        derived: ['session_costs'],
+        delta: {
+          inserted: [
+            {
+              table: 'model_pricing',
+              where: `model_id = 'world-model-fetched' AND effective_from = current_date`,
+              check: [
+                'price_in = 1',
+                'price_out = 5',
+                `source = 'override'`,
+                `tiers = '[{"aboveTokens": 200000, "priceIn": 8, "priceOut": 16, "priceCacheR": 0.8, "priceCacheW5m": 10, "priceCacheW1h": 16}]'::jsonb`,
+              ],
+            },
+            {
+              table: 'model_pricing_meta',
+              where: `model_id = 'world-model-fetched'`,
+              check: [
+                `override_base_source = 'anthropic'`,
+                'override_base_price_in = 3',
+                'override_base_tiers IS NULL',
+              ],
+            },
+          ],
+        },
+      },
+    },
+    {
       // Clearing restores the base as a new effective version and drops the stored base.
       id: 'F22-clear-override',
       route: 'POST /api/v1/admin/model-pricing/override/clear',
@@ -190,6 +345,7 @@ export const f22PricingToolVersions: ContractFamily = {
       },
       write: {
         watch: ['model_pricing', 'model_pricing_meta'],
+        derived: ['session_costs'],
         delta: {
           inserted: [
             {
@@ -236,6 +392,14 @@ export const f22PricingToolVersions: ContractFamily = {
       // exercised here (05 §5 risk 1: external services).
       id: 'F22-import-openrouter-member',
       route: 'POST /api/v1/admin/model-pricing/import-openrouter',
+      actor: 'member',
+      expect: { status: 403 },
+    },
+    {
+      // "Fetch now" downloads the Anthropic pricing page; like the OpenRouter import, only the
+      // guard is exercised here (05 §5 risk 1: external services).
+      id: 'F22-fetch-anthropic-member',
+      route: 'POST /api/v1/admin/model-pricing/fetch-anthropic',
       actor: 'member',
       expect: { status: 403 },
     },

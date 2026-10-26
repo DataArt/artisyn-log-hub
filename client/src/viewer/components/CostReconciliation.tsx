@@ -1,6 +1,7 @@
 import type { CostBreakdown } from '../../models/repositories';
 import { cn } from '../lib/cn';
 import { formatCost } from '../lib/format';
+import { costDiscrepancyHint, unpricedModelIds } from '../lib/cost-hints';
 import { NoPricingBadge } from './NoPricingBadge';
 
 interface Props {
@@ -12,12 +13,13 @@ interface Props {
    */
   variant: 'table' | 'compact';
   /**
-   * True when the session's main model has no `model_pricing` row. A null
-   * `calculatedCost` then renders the "no pricing" badge instead of `—`, so an unknown price
-   * never reads as "free" or "missing data".
+   * True when some model of the session tree has no `model_pricing` row. A null
+   * `calculatedCost` then renders the `$???` marker instead of `—`, so an unknown price
+   * never reads as "free" or "missing data". Also implied by a non-empty
+   * `breakdown.unpricedModels`.
    */
   unpriced?: boolean;
-  /** The unpriced model id for the badge's tooltip, when the surface knows it. */
+  /** The surface's own unpriced main model, used when the server sent no `unpricedModels`. */
   unpricedModelId?: string | null;
   className?: string;
 }
@@ -37,7 +39,10 @@ function MismatchChip({ breakdown }: { breakdown: CostBreakdown }) {
     <span
       data-testid="cost-mismatch-chip"
       className="inline-flex items-center gap-1 rounded border border-amber-500/40 bg-amber-500/10 px-1.5 py-0.5 font-sans text-[10px] font-normal text-amber-700 dark:text-amber-400"
-      title="The calculated total (main thread + sub-agents + utility calls) and the telemetry-reported total differ by more than $0.05 and 1% of the telemetry total."
+      title={costDiscrepancyHint(
+        breakdown.telemetryCost,
+        breakdown.calculatedCost,
+      )}
     >
       <span aria-hidden="true">⚠</span> mismatch
       {delta != null && ` ${formatCost(delta)}`}
@@ -46,21 +51,19 @@ function MismatchChip({ breakdown }: { breakdown: CostBreakdown }) {
 }
 
 /**
- * Muted footnote explaining a flagged mismatch: OTEL meters the root process's real billed
- * calls in one pass, while the calculated total is reconstructed independently per session
- * (main thread, each sub-agent, utility calls) from its own extracted token counts and
- * `model_pricing` rates. The two pipelines normally land within ~5-25% of each other — wider
- * on sessions with several sub-agents, where more independently-extracted parts are summed.
- * See `otel-cost.sql.ts`'s `OTEL_INCOMPLETE_RATIO` comment for the measured band.
+ * Muted footnote under a flagged mismatch: why the two figures differ and what to do
+ * (`costDiscrepancyHint`). The calculated total is the shown session cost; the telemetry
+ * figure Claude Code reports is only a cross-check.
  */
 function MismatchNote({ breakdown }: { breakdown: CostBreakdown }) {
   if (!breakdown.mismatch) return null;
   return (
-    <p className="text-[10px] leading-snug text-muted-foreground/70">
-      *(OTEL and calculated price can mismatch by roughly 5-25% — wider on
-      sessions with several sub-agents — because OTEL meters the real billed
-      calls in one pass while the calculated total is reconstructed separately
-      per sub-agent from its own tokens and pricing)
+    <p
+      className="text-[10px] leading-snug text-muted-foreground/70"
+      data-testid="cost-mismatch-note"
+    >
+      *(The shown cost is Log Hub&apos;s.{' '}
+      {costDiscrepancyHint(breakdown.telemetryCost, breakdown.calculatedCost)})
     </p>
   );
 }
@@ -72,9 +75,10 @@ function CalculatedValue({
 }: Pick<Props, 'breakdown' | 'unpriced' | 'unpricedModelId'>) {
   if (breakdown.calculatedCost != null)
     return <>{formatCost(breakdown.calculatedCost)}</>;
-  return unpriced ? (
+  const ids = unpricedModelIds(breakdown.unpricedModels, unpricedModelId);
+  return unpriced || ids.length > 0 ? (
     <span className="inline-flex justify-end">
-      <NoPricingBadge modelId={unpricedModelId} />
+      <NoPricingBadge modelIds={ids} />
     </span>
   ) : (
     <>—</>
@@ -88,6 +92,8 @@ function CalculatedValue({
  *
  * Without telemetry (`telemetryCost == null`) the Utility and Telemetry rows are hidden —
  * utility calls are only ever discovered through telemetry, so they are 0 by construction.
+ * A part with an unpriced model carries the `$???` marker next to its priced share, and the
+ * calculated total is then `$???` too (never a partial sum).
  */
 export function CostReconciliation({
   breakdown,
@@ -138,7 +144,10 @@ export function CostReconciliation({
           <span className="font-mono tabular-nums text-muted-foreground">
             {parts.join(' · ')}
             {hasTelemetry && breakdown.utilityPricingMissing && (
-              <NoPricingBadge className="ml-1" />
+              <NoPricingBadge
+                className="ml-1"
+                modelIds={breakdown.unpricedModels ?? []}
+              />
             )}
           </span>
         )}
@@ -163,7 +172,14 @@ export function CostReconciliation({
         </tr>
         <tr className="hover:bg-muted/30">
           <td className={labelCell}>Sub-agents</td>
-          <td className={amountCell}>{formatCost(breakdown.subagentCost)}</td>
+          <td className={amountCell}>
+            <span className="inline-flex items-center justify-end gap-1">
+              {breakdown.subagentPricingMissing === true && (
+                <NoPricingBadge modelIds={breakdown.unpricedModels ?? []} />
+              )}
+              {formatCost(breakdown.subagentCost)}
+            </span>
+          </td>
         </tr>
         {hasTelemetry && (
           <tr
@@ -173,7 +189,9 @@ export function CostReconciliation({
             <td className={labelCell}>Utility calls</td>
             <td className={amountCell}>
               <span className="inline-flex items-center justify-end gap-1">
-                {breakdown.utilityPricingMissing && <NoPricingBadge />}
+                {breakdown.utilityPricingMissing && (
+                  <NoPricingBadge modelIds={breakdown.unpricedModels ?? []} />
+                )}
                 {formatCost(breakdown.utilityCost)}
               </span>
             </td>

@@ -12,10 +12,15 @@ import type { ModelPriceInputDto } from './dto/model-price-input.dto';
 import {
   CACHE_WRITE_1H_MULTIPLIER,
   CACHE_WRITE_5M_MULTIPLIER,
+  isFetchEnabled,
   MAX_RATE,
+  RETRY_AFTER_HOURS,
+  STALE_AFTER_HOURS,
 } from './model-pricing.constants';
 import {
+  normalizeTiers,
   round6,
+  validatePricingTiers,
   type ModelState,
   type PriceVersion,
 } from './model-pricing-rates';
@@ -34,6 +39,7 @@ import type {
   ModelPricingRates,
   PricingFetchStatus,
 } from './model-pricing.types';
+import { notifySessionCostsStale } from './session-cost-invalidation';
 
 const EMPTY_STATUS: PricingFetchStatus = {
   lastAttemptAt: null,
@@ -41,6 +47,7 @@ const EMPTY_STATUS: PricingFetchStatus = {
   lastResult: null,
   lastCounts: null,
   lastError: null,
+  nextCheckAt: null,
 };
 
 const FETCH_RESULTS: readonly Exclude<
@@ -50,7 +57,9 @@ const FETCH_RESULTS: readonly Exclude<
 
 /**
  * Admin view and manual edits of model prices. Every write runs in one
- * transaction under the advisory lock and returns the model's refreshed row.
+ * transaction under the advisory lock and returns the model's refreshed row. After the
+ * transaction commits, the stored session costs it flagged stale are recomputed via
+ * `notifySessionCostsStale()`.
  */
 @Injectable()
 export class ModelPricingAdminService {
@@ -71,14 +80,16 @@ export class ModelPricingAdminService {
         lastResult: FETCH_RESULTS.find((r) => r === row.lastResult) ?? null,
         lastCounts: row.lastCounts ?? null,
         lastError: row.lastError ?? null,
+        nextCheckAt: null,
       });
     }
 
     const models = [...states.values()].sort((a, b) =>
       a.modelId.localeCompare(b.modelId),
     );
+    const anthropic = statusOf(statusBySource, 'anthropic');
     return {
-      anthropic: statusOf(statusBySource, 'anthropic'),
+      anthropic: { ...anthropic, nextCheckAt: nextAnthropicCheck(anthropic) },
       openrouter: statusOf(statusBySource, 'openrouter'),
       unpricedCount: models.filter((m) => m.source === 'unpriced').length,
       models,
@@ -91,7 +102,7 @@ export class ModelPricingAdminService {
    * @throws NotFoundException for an unknown id; ConflictException for any other state.
    */
   async setPrice(dto: ModelPriceInputDto): Promise<AdminModelPricingRow> {
-    return this.db.transaction(async (tx) => {
+    const row = await this.db.transaction(async (tx) => {
       await lockPricingWrites(tx);
       const loaded = await loadModelStates(tx, [dto.modelId]);
       const state = requireKnown(loaded, dto.modelId);
@@ -107,6 +118,8 @@ export class ModelPricingAdminService {
       await writeEffectivePrice(tx, dto.modelId, rates, 'manual');
       return refreshedRow(tx, dto.modelId);
     });
+    await notifySessionCostsStale();
+    return row;
   }
 
   /**
@@ -117,7 +130,7 @@ export class ModelPricingAdminService {
    *   when the model has a future-dated price row (it would silently end the override).
    */
   async setOverride(dto: ModelPriceInputDto): Promise<AdminModelPricingRow> {
-    return this.db.transaction(async (tx) => {
+    const row = await this.db.transaction(async (tx) => {
       await lockPricingWrites(tx);
       const loaded = await loadModelStates(tx, [dto.modelId]);
       const state = requireKnown(loaded, dto.modelId);
@@ -139,16 +152,18 @@ export class ModelPricingAdminService {
       await writeEffectivePrice(tx, dto.modelId, rates, 'override');
       return refreshedRow(tx, dto.modelId);
     });
+    await notifySessionCostsStale();
+    return row;
   }
 
   /**
    * Ends an active override: restores the hidden base as the effective price with its own
-   * source, then clears the stored base.
+   * source and tiers, then clears the stored base.
    *
    * @throws NotFoundException for an unknown id; ConflictException when no override is active.
    */
   async clearOverride(modelId: string): Promise<AdminModelPricingRow> {
-    return this.db.transaction(async (tx) => {
+    const row = await this.db.transaction(async (tx) => {
       await lockPricingWrites(tx);
       const loaded = await loadModelStates(tx, [modelId]);
       const state = requireKnown(loaded, modelId);
@@ -159,7 +174,26 @@ export class ModelPricingAdminService {
       await clearOverrideBase(tx, modelId);
       return refreshedRow(tx, modelId);
     });
+    await notifySessionCostsStale();
+    return row;
   }
+}
+
+/**
+ * When the scheduled Anthropic check is next due: the later of "last success is stale"
+ * (`STALE_AFTER_HOURS`) and "retry window over" (`RETRY_AFTER_HOURS`) — the two conditions of
+ * the fetch claim. Null when the fetch is disabled; now when it never ran.
+ */
+function nextAnthropicCheck(status: PricingFetchStatus): string | null {
+  if (!isFetchEnabled()) return null;
+  const hours = (iso: string | null, h: number): number =>
+    iso ? new Date(iso).getTime() + h * 3_600_000 : 0;
+  const due = Math.max(
+    hours(status.lastSuccessAt, STALE_AFTER_HOURS),
+    hours(status.lastAttemptAt, RETRY_AFTER_HOURS),
+    Date.now(),
+  );
+  return new Date(due).toISOString();
 }
 
 function statusOf(
@@ -181,7 +215,10 @@ function isManualOrUnpriced(state: ModelState): boolean {
   return state.source === 'manual' || state.source === 'unpriced';
 }
 
-/** The input rates with the defaults applied for omitted fields. */
+/**
+ * The input rates with the defaults applied for omitted fields. Tiers (DD12): omitted carries
+ * the current effective row's tiers, `null` / `[]` clears them; invalid tiers are a 400.
+ */
 function withDefaults(
   dto: ModelPriceInputDto,
   current: PriceVersion | null,
@@ -197,6 +234,7 @@ function withDefaults(
     priceWebSearch: dto.priceWebSearch ?? 0,
     charsPerToken: dto.charsPerToken ?? current?.charsPerToken ?? null,
     contextLength: dto.contextLength ?? current?.contextLength ?? null,
+    tiers: resolveTiers(dto.tiers, current),
   };
   // A defaulted cache-write rate can exceed numeric(10,6) for a huge priceIn.
   if (rates.priceCacheW5m > MAX_RATE || rates.priceCacheW1h > MAX_RATE) {
@@ -205,6 +243,18 @@ function withDefaults(
     );
   }
   return rates;
+}
+
+function resolveTiers(
+  input: ModelPriceInputDto['tiers'],
+  current: PriceVersion | null,
+): ModelPricingRates['tiers'] {
+  if (input === undefined) return normalizeTiers(current?.tiers);
+  // Validated in the order given: non-increasing thresholds are a 400 (AC5),
+  // not silently re-sorted. Only a valid list is normalized for storage.
+  const error = validatePricingTiers(input);
+  if (error !== null) throw new BadRequestException(error);
+  return normalizeTiers(input);
 }
 
 async function refreshedRow(

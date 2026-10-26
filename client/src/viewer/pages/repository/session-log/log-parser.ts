@@ -7,6 +7,7 @@ import type {
   AgentActivation,
   AgentDefinition,
   AssistantEvent,
+  CallTokens,
   AssistantStep,
   ClaudeMdFile,
   CompactBoundary,
@@ -384,7 +385,40 @@ function breakdownFromUsage(u: TokenUsage): TokenBreakdown {
     webSearchRequests: webSearchRequestsOf(u),
     inputFast: fast.inputFast,
     outputFast: fast.outputFast,
+    calls: [callFromUsage(u)],
   };
+}
+
+/**
+ * One raw `usage` object as a single priced call (DD14) — the per-call record that lets
+ * `computeCost` apply prompt-length tiers per request. Its fields are the same per-usage
+ * figures the aggregate sums add, so the calls of a breakdown always sum to its totals.
+ */
+function callFromUsage(u: TokenUsage): CallTokens {
+  const { write5m, write1h } = splitCacheWrite(u);
+  const fast = splitFastTokens(u);
+  return {
+    input: u.input_tokens ?? 0,
+    output: u.output_tokens ?? 0,
+    cacheRead: u.cache_read_input_tokens ?? 0,
+    cacheWrite5m: write5m,
+    cacheWrite1h: write1h,
+    inputFast: fast.inputFast,
+    outputFast: fast.outputFast,
+  };
+}
+
+/**
+ * Concatenates the per-call lists of two breakdowns being merged. When either side has no
+ * call data (a `session_stats` fallback) the merged breakdown has none either, so it is
+ * priced on the aggregate path rather than per call over an incomplete list.
+ */
+export function concatCalls(
+  a: CallTokens[] | undefined,
+  b: CallTokens[] | undefined,
+): CallTokens[] | undefined {
+  if (a === undefined || b === undefined) return undefined;
+  return [...a, ...b];
 }
 
 /**
@@ -422,6 +456,7 @@ function sumTokenBreakdown(
   let webSearchRequests = 0;
   let inputFast = 0;
   let outputFast = 0;
+  const calls: CallTokens[] = [];
   // One API response can be split across multiple transcript lines — one per content
   // block (thinking/tool_use/text). Dedupe by message.id (falling back to the line's own
   // uuid when absent, which is unique per line and so never collides) so usage is counted
@@ -449,6 +484,7 @@ function sumTokenBreakdown(
       webSearchRequests += webSearchRequestsOf(u);
       inputFast += fast.inputFast;
       outputFast += fast.outputFast;
+      calls.push(callFromUsage(u));
       contributingCount++;
     } else if (e.type === 'user') {
       const ue = e as UserEvent;
@@ -473,6 +509,7 @@ function sumTokenBreakdown(
       webSearchRequests += webSearchRequestsOf(u);
       inputFast += fast.inputFast;
       outputFast += fast.outputFast;
+      calls.push(callFromUsage(u));
       contributingCount++;
     }
   }
@@ -488,6 +525,7 @@ function sumTokenBreakdown(
         webSearchRequests,
         inputFast,
         outputFast,
+        calls,
       }
     : null;
 }
@@ -515,6 +553,7 @@ function sumOwnAssistantTokenBreakdown(
   let webSearchRequests = 0;
   let inputFast = 0;
   let outputFast = 0;
+  const calls: CallTokens[] = [];
   // Same last-line-per-message.id dedupe as sumTokenBreakdown.
   const lastUsageUuid = lastUsageUuidByMessage(events, uuidSet);
 
@@ -536,6 +575,7 @@ function sumOwnAssistantTokenBreakdown(
     webSearchRequests += webSearchRequestsOf(u);
     inputFast += fast.inputFast;
     outputFast += fast.outputFast;
+    calls.push(callFromUsage(u));
     contributingCount++;
   }
 
@@ -550,6 +590,7 @@ function sumOwnAssistantTokenBreakdown(
         webSearchRequests,
         inputFast,
         outputFast,
+        calls,
       }
     : null;
 }
@@ -1062,6 +1103,7 @@ export function extractSubagentStats(logs: Record<string, unknown>[]): {
   let webSearchRequests = 0;
   let inputFast = 0;
   let outputFast = 0;
+  const calls: CallTokens[] = [];
 
   for (const rec of logs) {
     if (rec['type'] !== 'assistant') continue;
@@ -1084,6 +1126,8 @@ export function extractSubagentStats(logs: Record<string, unknown>[]): {
       webSearchRequests += webSearchRequestsOf(u);
       inputFast += fast.inputFast;
       outputFast += fast.outputFast;
+      // One call per usage-carrying record — the same records the sums above add.
+      calls.push(callFromUsage(u));
     }
   }
 
@@ -1099,6 +1143,7 @@ export function extractSubagentStats(logs: Record<string, unknown>[]): {
       webSearchRequests,
       inputFast,
       outputFast,
+      calls,
     },
   };
 }
@@ -1994,6 +2039,9 @@ export function parseSessionLogs(
             outputFast: 0,
           };
         }
+        // session_stats carries no per-call data, so the turn can no longer be priced per
+        // call over a complete list — drop it and fall back to the aggregate path.
+        delete tokenBreakdown.calls;
         tokenBreakdown.input += stats.inputTokens;
         tokenBreakdown.output += stats.outputTokens;
         tokenBreakdown.cacheRead += stats.cacheReadTokens;
@@ -2347,6 +2395,7 @@ export function parseSessionLogs(
   let sumWebSearchRequests = 0;
   let sumInputFast = 0;
   let sumOutputFast = 0;
+  const sumCalls: CallTokens[] = [];
   // Same message.id dedup as sumTokenBreakdown() above — one API response can be split
   // across multiple transcript lines (one per content block); its usage is counted from
   // the LAST line, as a first line written mid-stream can carry a partial output_tokens.
@@ -2377,6 +2426,7 @@ export function parseSessionLogs(
       sumWebSearchRequests += webSearchRequestsOf(u);
       sumInputFast += fast.inputFast;
       sumOutputFast += fast.outputFast;
+      sumCalls.push(callFromUsage(u));
     } else if (e.type === 'user') {
       const ue = e as UserEvent;
       if (!ue.toolUseResult?.agentId || !ue.toolUseResult.usage) continue;
@@ -2400,6 +2450,7 @@ export function parseSessionLogs(
       sumWebSearchRequests += webSearchRequestsOf(u);
       sumInputFast += fast.inputFast;
       sumOutputFast += fast.outputFast;
+      sumCalls.push(callFromUsage(u));
     }
   }
 
@@ -2413,6 +2464,7 @@ export function parseSessionLogs(
     webSearchRequests: sumWebSearchRequests,
     inputFast: sumInputFast,
     outputFast: sumOutputFast,
+    calls: sumCalls,
   };
   const totalTokens = sumInput + sumOutput + sumCacheRead + sumCacheWrite;
 

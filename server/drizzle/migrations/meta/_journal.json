@@ -519,6 +519,13 @@
       "when": 1790812800000,
       "tag": "0073_harness_snapshots",
       "breakpoints": true
+    },
+    {
+      "idx": 74,
+      "version": "7",
+      "when": 1790899200000,
+      "tag": "0074_pricing_tiers_session_costs",
+      "breakpoints": true
     }
   ]
 }

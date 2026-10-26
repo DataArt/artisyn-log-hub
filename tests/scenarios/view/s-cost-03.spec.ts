@@ -109,13 +109,16 @@ test('@S-COST-03 the first model, an unknown model, public prices @mode-a @mode-
     await expect(infoTableValue(page, 'Calculated total')).toHaveText(text);
   });
 
-  await test.step('5. UI GS-06b: «no pricing» in the list, header, Summary and Info — and $0.0000 nowhere', async () => {
+  await test.step('5. UI GS-06b: «$???» in the list, header, Summary and Info, the hint names the model — and $0.0000 nowhere', async () => {
     await openSession(page, owner, gold.repoId, gold.sid('gs06b'));
     const item = page.getByTestId('session-item').filter({ hasText: prompt('gs06b') });
     await expect(item).toHaveCount(1);
     await expect(item).not.toContainText('$0.0000');
     const header = page.locator('xpath=//p[normalize-space(text())="Cost"]/following-sibling::div').first();
-    await expect(header.getByTestId('no-pricing-badge')).toBeVisible();
+    await expect(header.getByTestId('no-pricing-badge')).toHaveText('$???');
+    await expect(item.getByTestId('no-pricing-badge')).toHaveText('$???');
+    await header.getByTestId('no-pricing-badge').hover();
+    await expect(page.getByRole('tooltip').first()).toContainText(`No price for model ${UNPRICED} in Log Hub`);
     await expect(header).not.toContainText('$0.0000');
     await expect(summaryTile(page, 'Cost').getByTestId('no-pricing-badge')).toBeVisible();
     await expect(summaryTile(page, 'Cost')).not.toContainText('$0.0000');

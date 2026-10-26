@@ -152,7 +152,8 @@ One row per `claude_code.api_request` OTEL record (migration `0071`) — the per
 `logs_otel`, used to price **utility calls** (API calls no transcript records). Written by
 `ingestOtelChunk()` (`logs.service.ts`) from `summarizeOtelChunk(lines, chunkKey).calls`
 (`otel-chunk.ts`), upserted in the same transaction as the `logs_otel` row. Read only by
-`utilityCostsCte()` (`otel-cost.sql.ts`). See `llm-call-math.md` § "Utility calls".
+`utilityCostsCte()` (`otel-cost.sql.ts`), which prices each row per call with the prompt-length
+tier rule (`callTierRatesSql` / `tieredCallCostSql`). See `llm-call-math.md` § "Utility calls".
 
 | Column                  | Type         | Nullable | Notes |
 |-------------------------|--------------|----------|-------|
@@ -190,6 +191,49 @@ The distinct Anthropic `requestId` of every `assistant` line in a session's tran
 - PK `session_request_ids_pk (session_id, request_id)`.
 - Index `idx_session_request_ids_request_id (request_id)`.
 - A tree with **no** rows here (old transcripts without `requestId`) makes `utilityCostsCte` fall back to `query_source` classification.
+
+### session_call_tokens
+
+Per-call token counts of a session's transcript (migration `0074`), the input of the per-call
+(prompt-length tier) cost path — see `llm-call-math.md` § 2. One call is one deduplicated
+assistant usage of `extractClaudeStats` (keyed by `message.id`, fallback `uuid`), so the per-call
+sums equal the `session_stats` token totals. Rewritten by `replaceSessionCallTokens(tx,
+sessionRowId, calls)` in `session-stats-writer.ts` next to each `upsertSessionStatsRow` call
+(upload, import merge, recompute-all). Sessions ingested before `0074` have no row until they are
+re-ingested or recomputed.
+
+| Column       | Type        | Nullable | Notes |
+|--------------|-------------|----------|-------|
+| `session_id` | integer     | NOT NULL | PK, FK → sessions.id, ON DELETE CASCADE |
+| `calls`      | jsonb       | NOT NULL | Columnar object: `inputTokens`, `outputTokens`, `cacheReadTokens`, `cacheWrite5mTokens`, `cacheWrite1hTokens`, `inputTokensFast`, `outputTokensFast`, each a `number[]` in first-seen call order. A missing key reads as all zeros; the writer throws when array lengths differ; a session with no calls stores empty arrays. SQL-only CHECK `jsonb_typeof(calls) = 'object'` |
+| `updated_at` | timestamptz | NOT NULL | DEFAULT now() |
+
+- Purged with the other child data on a soft delete (`SessionsService.purgeSessionChildData`).
+
+### session_costs
+
+Each session's stored computed cost and its breakdown terms (migration `0074`). Every session-cost
+reader reads it instead of re-pricing (`llm-call-math.md` § 2 "Stored session cost"). The only
+runtime writer is `recomputeSessionCosts` (`logs/session-cost/session-cost-writer.ts`), called on
+ingest and by the stale-row sweeper `SessionCostRecomputeService`; migration `0074` backfilled one
+row per existing `session_stats` row at base rates.
+
+| Column | Type | Nullable | Notes |
+|---|---|---|---|
+| `session_id` | integer | NOT NULL | PK, FK → sessions.id, ON DELETE CASCADE |
+| `model_id` | varchar | NULL | `session_stats.model` with any `-YYYYMMDD` suffix stripped |
+| `price_date` | date | NOT NULL | The **top ancestor's** price date (`sessionPriceDateSql` of the session reached via `parent_session_id`, depth ≤ 50) |
+| `pricing_effective_from`, `pricing_source` | date, varchar(16) | NULL | The resolved `model_pricing` row's `effective_from` / `source`; NULL when unpriced |
+| `cost` | double precision | NULL | Total computed cost in USD; **NULL means unpriced** |
+| `cost_input`, `cost_output`, `cost_cache_read`, `cost_cache_write_5m`, `cost_cache_write_1h`, `cost_web_search`, `cost_fast_surcharge` | double precision | NULL | Breakdown terms at the chosen (per-call) rates; they sum to `cost`. All NULL when unpriced |
+| `cost_tier_delta` | double precision | NULL | `cost` − the same tokens at base rates; informational only, never a summand |
+| `unavailable_reason` | varchar(32) | NULL | `'unknown-model'` or NULL |
+| `stale` | boolean | NOT NULL | DEFAULT false. Set by a pricing write (`markModelSessionsStale`) or a changed ancestor price date; cleared by the sweeper |
+| `computed_at` | timestamptz | NOT NULL | DEFAULT now() |
+
+- Partial index `idx_session_costs_stale ON (session_id) WHERE stale`; index `idx_session_costs_model_date (model_id, price_date)`.
+- A session with **no** row (e.g. an OTEL-only `session_stats` row created after `0074`) counts as unpriced.
+- Purged with the other child data on a soft delete (`SessionsService.purgeSessionChildData`); the delete-time audit row reads `cost` before the purge.
 
 ### users
 
@@ -437,6 +481,7 @@ Anthropic pricing fetch, the admin OpenRouter import and the admin set-price / o
 | `chars_per_token`| numeric(6, 3)  | NULL     | Estimation-only chars-per-token ratio for this model's tokenizer generation (not billing-accurate); NULL for third-party models whose tokenizer hasn't been researched |
 | `context_length` | integer        | NULL     | Max context window in tokens for this model; NULL if unresearched |
 | `source`         | varchar(16)    | NOT NULL | DEFAULT `'manual'`. Origin of this price version: `anthropic` (daily fetch), `openrouter` (admin import), `manual` (admin set price, or a migration/spec insert that did not set it) or `override` (admin override). CHECK `model_pricing_source_check` is SQL-only, not mirrored in Drizzle. Migration `0066` |
+| `tiers`          | jsonb          | NULL     | Prompt-length pricing tiers, migration `0074`: an array of `{ aboveTokens, priceIn, priceOut, priceCacheR, priceCacheW5m, priceCacheW1h }` (USD/MTok), ascending by `aboveTokens`, at most 10; NULL (never `[]`) when the model has none. A tier prices a call whose prompt is strictly greater than `aboveTokens`; web search always uses the base rate. CHECK `model_pricing_tiers_array_chk` (array or NULL) is SQL-only. Written by the Anthropic fetch (from "for prompts over N tokens" rows) and admin set price / override; OpenRouter writes NULL |
 
 **Primary key is `(model_id, effective_from)`** (widened from `model_id` alone in `0034`), so a model
 carries one row per price change. A future-dated row can therefore be landed ahead of a known price
@@ -471,8 +516,9 @@ rates — before it, every 1h cache write was under-charged by exactly 1.6×.
 
 **Fast-mode rates are derived, not stored.** There is deliberately no `price_in_fast` /
 `price_out_fast` column: fast mode bills at `FAST_MODE_MULTIPLIER = 2` × the standard rate, and two
-stored rates could drift apart. The multiplier lives in `server/src/logs/cost.sql.ts` and its client
-twin `client/src/viewer/lib/format.ts`. Cache reads, cache writes and web-search requests have no
+stored rates could drift apart. The multiplier lives in `@loghub/pricing`
+(`packages/pricing/src/cost.ts`, re-exported by `server/src/logs/cost.sql.ts` and
+`client/src/viewer/lib/format.ts`; the hook keeps its own copy). Cache reads, cache writes and web-search requests have no
 fast-mode surcharge at all. See `llm-call-math.md` § 2–§ 3.
 
 > **Every read must resolve to the row in effect today:**
@@ -507,8 +553,10 @@ Initially seeded with three rows: `claude-sonnet-4-6` ($3/$15), `claude-opus-4-8
 `effective_from <= CURRENT_DATE`). Runtime writers never touch rows dated before today:
 - A change inserts a row for `CURRENT_DATE` with `ON CONFLICT (model_id, effective_from) DO UPDATE`,
   so a second change on the same day overwrites today's row.
-- An unchanged price writes nothing. "Unchanged" compares all six rates, `chars_per_token`,
-  `context_length` and `source`, rounded to 6 decimals.
+- An unchanged price writes nothing. "Unchanged" compares all six rates, `tiers` (deeply),
+  `chars_per_token`, `context_length` and `source`, rounded to 6 decimals.
+- A write that inserts or updates a model's row marks that model's affected `session_costs` rows
+  `stale` (`markModelSessionsStale`, inside the same transaction).
 - Every price-writing transaction first takes `pg_advisory_xact_lock(MODEL_PRICING_LOCK_KEY)`
   (`7_211_066`, `model-pricing.constants.ts`).
 
@@ -530,6 +578,7 @@ per model, and only where needed. Written by `server/src/model-pricing/unpriced-
 | `override_base_price_in`, `override_base_price_out`, `override_base_price_cache_r`, `override_base_price_cache_w_5m`, `override_base_price_cache_w_1h`, `override_base_price_web_search` | numeric(10,6) | NULL | The fetched/imported base price while an override is active, NULL otherwise. The daily fetch and the import keep these current instead of replacing the override |
 | `override_base_chars_per_token` | numeric(6,3) | NULL | |
 | `override_base_context_length` | integer | NULL | |
+| `override_base_tiers` | jsonb | NULL | The base price's tiers while an override is active (migration `0074`, SQL-only CHECK `model_pricing_meta_override_base_tiers_array_chk`). Refreshed by the fetch under an override; `clearOverride` restores them |
 | `updated_at` | timestamptz | NOT NULL | DEFAULT now() |
 
 - **Unpriced** means a meta row and **no** effective `model_pricing` row.
@@ -591,7 +640,7 @@ Per-session pre-computed metrics. One row per session (1:1 with `sessions`, FK w
 | `diff_lines_covered_calls` | integer | NOT NULL | DEFAULT 0 — Edit/Write calls that carried a usable diff payload |
 | `diff_lines_total_calls`   | integer | NOT NULL | DEFAULT 0 — Edit/Write calls made, the denominator of "over N of M calls" |
 | `token_by_service_tier` | jsonb     | NOT NULL | DEFAULT {} — `{"<tier>":{input,output,cacheRead,cacheCreation,cacheWrite5m,cacheWrite1h}}`; messages with no `service_tier` key on `unknown` |
-| `telemetry_cost`     | bigint      | nullable | Denormalized OTEL cost, micro-USD — same unit as `logs_otel.cost_usd_micros` (migration `0054`). `NULL` = no telemetry signal (no `claude-otel` chunk ever ingested, or the recomputed `SUM(logs_otel.cost_usd_micros)` is exactly 0); any other value is the confirmed total. Readers test `IS NOT NULL` instead of a `<> 0` guard. Owned exclusively by `upsertSessionTelemetryCost()` (`session-stats-writer.ts`) — `upsertSessionStatsRow()` never writes it, so a `claude` transcript re-upload or `recompute-all-sessions` cannot reset it |
+| `telemetry_cost`     | bigint      | nullable | Denormalized OTEL cost, micro-USD — same unit as `logs_otel.cost_usd_micros` (migration `0054`). `NULL` = no telemetry signal (no `claude-otel` chunk ever ingested, or the recomputed `SUM(logs_otel.cost_usd_micros)` is exactly 0); any other value is the confirmed total. Readers test `IS NOT NULL` instead of a `<> 0` guard. A cross-check only: it feeds the discrepancy warning and the mismatch flag, never the shown cost. Owned exclusively by `upsertSessionTelemetryCost()` (`session-stats-writer.ts`) — `upsertSessionStatsRow()` never writes it, so a `claude` transcript re-upload or `recompute-all-sessions` cannot reset it |
 | `cs_changed_files` | integer   | nullable | Change surface (migration `0061`): distinct **own-scope** in-repo changed paths. `NULL` = never recomputed (the `telemetry_cost` precedent), never `0` |
 | `cs_folders_touched` | integer | nullable | Distinct own-scope in-repo folders touched. `NULL` = never recomputed |
 | `cs_outside_repo_files` | integer | nullable | Own-scope changed paths that could not be normalised into the repo. `NULL` = never recomputed |

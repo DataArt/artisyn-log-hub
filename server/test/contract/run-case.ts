@@ -9,7 +9,8 @@
 // (noDb and every negative row). All mismatches of a row are reported together, with its id,
 // route and a response-vs-SQL diff.
 //
-// No imports from src/**.
+// No imports from src/** — except, through setup/world-session-costs.ts, the session-cost writer
+// that derives the world's `session_costs` after a reload (setup, never an oracle).
 import { isDeepStrictEqual, inspect } from 'util';
 import * as argon2 from 'argon2';
 import request from 'supertest';
@@ -32,6 +33,7 @@ import {
   tableRows,
 } from './oracle';
 import { findCallCase } from './registry';
+import { recomputeWorldSessionCosts } from './setup/world-session-costs';
 import type {
   Actor,
   CallCase,
@@ -760,10 +762,16 @@ export function callable(cases: ContractCase[]): CallCase[] {
   return cases.filter((c): c is CallCase => c.kind !== 'excluded');
 }
 
-/** Reloads world-v1 into the contract schema in one transaction. */
+/**
+ * Reloads world-v1 into the contract schema in one transaction, together with the
+ * `session_costs` rows ingest would have derived from it (see world-session-costs.ts).
+ */
 export async function resetWorld(): Promise<void> {
   const schema = contractSchema();
-  await inOracleTransaction((client) => resetWorldV1(client, schema));
+  await inOracleTransaction(async (client) => {
+    await resetWorldV1(client, schema);
+    await recomputeWorldSessionCosts(client);
+  });
 }
 
 /**

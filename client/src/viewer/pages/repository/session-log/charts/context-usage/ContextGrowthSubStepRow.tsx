@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import type { AssistantStep } from '../../types';
 import {
   Tooltip,
@@ -17,6 +18,10 @@ interface Props {
   bar: StepBar;
   maxContextTokens: number;
   barMaxPx: number;
+  /** Pixels for `maxContextTokens` — `barMaxPx` minus the room kept for a tier marker. */
+  scalePx: number;
+  /** Drawn right of the bar, e.g. the long-context tier marker; null for none. */
+  marker: ReactNode;
   leftLabelW: number;
   rightLabelW: number;
   /** Opens the step modal for step `si` (DD-9). */
@@ -96,14 +101,16 @@ export function ContextGrowthSubStepRow({
   bar,
   maxContextTokens,
   barMaxPx,
+  scalePx,
+  marker,
   leftLabelW,
   rightLabelW,
   onOpen,
 }: Props) {
-  const priorPx = Math.round((bar.prior / maxContextTokens) * barMaxPx);
+  const priorPx = Math.round((bar.prior / maxContextTokens) * scalePx);
   const totalPx = Math.max(
     4,
-    Math.round((bar.total / maxContextTokens) * barMaxPx),
+    Math.round((bar.total / maxContextTokens) * scalePx),
   );
   // No blue segment on the last step; a zero-width one on a non-positive delta (DD-8).
   const deltaPx =
@@ -183,6 +190,7 @@ export function ContextGrowthSubStepRow({
             />
           )}
         </div>
+        {marker}
       </div>
       {/* Right label */}
       <div
