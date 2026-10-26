@@ -25,8 +25,13 @@ mode is not a smaller fix — it is a different product, and it does not actuall
   `users.password_hash` is `NULL` for every account auto-provisioned by an Azure login
   (`users.service.ts` → `create(email, null, role)`), so those users have no credentials to log in
   with. Recovery would require `forgot-password`, which needs SMTP; `docker-compose.prod.yml` sets no
-  SMTP variables (Mode 4 never sends email), so the reset mail would not be delivered. Mode 3
-  additionally refuses to start without `ADMIN_CONTACT_EMAIL`/`SMTP_HOST`/`SMTP_PORT`/`SMTP_FROM`.
+  SMTP variables (Mode 4 never sends email), so the reset mail would not be delivered. In Mode 2
+  SMTP is optional, and without `SMTP_HOST` password reset is simply unavailable ("Forgot password?"
+  is disabled, `forgot-password` answers `email_delivery: 'failed'` and issues no token). Mode 3
+  additionally refuses to start without `ADMIN_CONTACT_EMAIL`/`SMTP_HOST`/`SMTP_PORT`/`SMTP_FROM`,
+  and also when the relay cannot be reached at startup (`MailService.onModuleInit()` throws
+  `SMTP relay <host>:<port> is unreachable; ...`, the process exits and the cluster crash budget
+  stops the instance).
 - **Mode 1 (`none`) is unusable on any remote host.** `POST /api/v1/auth/identify` is gated to
   `127.0.0.1`/`::1` via `isLocalhostRequest()` (`server/src/auth/utils/localhost.util.ts`) and 403s
   every non-local caller — and if it *weren't* gated, it would mean anyone could sign in as anyone.

@@ -43,6 +43,12 @@ from `server/`) through the Vite client on `:5173` (`bun run dev` from `client/`
 talks to the same dev database. Do not use `npx playwright test`. Do not run it together with the
 server tests, the contract suite or `npm run build` (all in the `app` health-check group).
 
+A dev backend in `AUTH_MODE=password-confirm` (the `server/.env.example` default) outside
+`NODE_ENV=test` refuses to start unless its SMTP relay is reachable — locally, Mailpit on
+`localhost:1025` (`docker run -d --name mailpit -p 1025:1025 -p 8025:8025 axllent/mailpit`). Start
+Mailpit before `npm run start:dev`; an unreachable relay fails startup with
+`SMTP relay <host>:<port> is unreachable; AUTH_MODE=password-confirm requires a working relay`.
+
 Not to be confused with the server suite's `*.e2e-spec.ts` files: those are Jest + supertest API
 tests in `server/test/` ([server-tests.md](./server-tests.md)).
 

@@ -42,7 +42,10 @@ export const f01Infra: ContractFamily = {
       id: 'F01-auth-config',
       route: 'GET /api/v1/auth/config',
       actor: 'anon',
-      expect: { status: 200, bodyMatches: { mode: 'password-confirm' } },
+      expect: {
+        status: 200,
+        bodyMatches: { mode: 'password-confirm', passwordResetAvailable: true },
+      },
       noDb: true,
     },
     {

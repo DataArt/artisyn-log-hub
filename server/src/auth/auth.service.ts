@@ -21,7 +21,7 @@ import { parseAllowedEmailDomains } from './config/allowed-email-domains';
 import { getEmailLinkBaseUrl } from '../common/public-base-url';
 import { maskEmail } from '../common/mask-email';
 
-/** 'skipped' = no SMTP transport configured, so nothing was even attempted. */
+/** 'skipped' = SMTP not configured for this mode (MailService.isConfigured() is false). */
 export type NotificationDelivery = 'sent' | 'failed' | 'skipped';
 
 @Injectable()
@@ -176,6 +176,9 @@ export class AuthService {
   async forgotPassword(
     email: string,
   ): Promise<{ email_delivery: 'sent' | 'failed' }> {
+    // Mode 2 without SMTP: no reset is possible, so issue no token. Answered
+    // before the user lookup to stay enumeration-safe.
+    if (!this.mailService.isConfigured()) return { email_delivery: 'failed' };
     const user = await this.usersService.findByEmail(email);
     // Enumeration-safe; not gated on passwordHash being non-null (works for
     // OAuth-only accounts too — needed for the Mode 4 → Mode 2/3 switch-back).

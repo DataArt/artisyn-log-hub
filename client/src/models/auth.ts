@@ -25,4 +25,9 @@ export interface AuthConfig {
   mode: AuthMode;
   azure?: { authority: string; clientId: string; redirectUri: string };
   adminContactEmail?: string;
+  /**
+   * Present only in `password` / `password-confirm`: whether the server can
+   * send password-reset email (SMTP configured). Absent from older servers.
+   */
+  passwordResetAvailable?: boolean;
 }

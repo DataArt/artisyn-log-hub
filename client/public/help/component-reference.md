@@ -74,7 +74,7 @@ A NestJS application on Node.js 22. It is the only process that talks to the dat
 | **Installer distribution** | Serves the hook installer package and plugin tarball under `/static/` so projects install directly from their own server. |
 | **System info / health** | `GET /health`, build information, cluster and worker status, AI tool version tracking. |
 | **Server logs** | Structured pino logs with daily rotation under `logs/`; error log viewer and archive download in the admin panel. |
-| **Mail** | Optional SMTP delivery for confirmation, password reset and password-changed notifications. |
+| **Mail** | SMTP delivery for confirmation, password reset and password-changed notifications. Mode 3 (`password-confirm`) requires `SMTP_HOST`/`SMTP_PORT`/`SMTP_FROM` and a relay reachable at startup, or the server does not start. Mode 2 (`password`): optional — with `SMTP_HOST` set, `SMTP_PORT`/`SMTP_FROM` are required and an unreachable relay only logs a warning; without it, password reset is unavailable and "Forgot password?" is disabled. Modes 1/4 never use SMTP. |
 
 ### 3.3 Server-side persistent storage
 
