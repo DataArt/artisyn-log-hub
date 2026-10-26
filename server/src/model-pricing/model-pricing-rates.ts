@@ -1,3 +1,4 @@
+import { round6, tiersEqual } from '@loghub/pricing';
 import type {
   AdminModelPricingRow,
   ModelPricingRates,
@@ -10,17 +11,24 @@ import type {
  * unit tests can use them without pulling in the database layer.
  */
 
-/** Rounds to the 6 decimals `numeric(10,6)` stores. */
-export function round6(x: number): number {
-  return Number(x.toFixed(6));
-}
+// The tier helpers and rate limits live in the shared package, used by the client too.
+export {
+  isValidRate,
+  normalizeTiers,
+  round6,
+  tiersEqual,
+  validatePricingTiers,
+} from '@loghub/pricing';
 
 function nullableEqual(a: number | null, b: number | null): boolean {
   if (a === null || b === null) return a === b;
   return round6(a) === round6(b);
 }
 
-/** True when every rate (all six prices plus chars-per-token and context length) is equal at 6 decimals. */
+/**
+ * True when every rate (all six prices plus chars-per-token and context length) is equal at
+ * 6 decimals and the tier lists are deeply equal ({@link tiersEqual}).
+ */
 export function ratesEqual(
   a: ModelPricingRates,
   b: ModelPricingRates,
@@ -33,7 +41,8 @@ export function ratesEqual(
     round6(a.priceCacheW1h) === round6(b.priceCacheW1h) &&
     round6(a.priceWebSearch) === round6(b.priceWebSearch) &&
     nullableEqual(a.charsPerToken, b.charsPerToken) &&
-    nullableEqual(a.contextLength, b.contextLength)
+    nullableEqual(a.contextLength, b.contextLength) &&
+    tiersEqual(a.tiers, b.tiers)
   );
 }
 
@@ -66,6 +75,7 @@ function pickRates(row: ModelPricingRates): ModelPricingRates {
     priceWebSearch: row.priceWebSearch,
     charsPerToken: row.charsPerToken,
     contextLength: row.contextLength,
+    tiers: row.tiers,
   };
 }
 

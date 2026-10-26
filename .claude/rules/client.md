@@ -27,7 +27,9 @@ I do not have python, do not try to use or install.
 If you need some auxiliary scripts - use nodeJS.
 Use only TypeScript.
 
-This package is isolated from the monorepo `server/` package.
+This package is isolated from the monorepo `server/` package. The one sanctioned shared code is the
+repo-local `@loghub/pricing` package (`packages/pricing/`, aliased in `vite.config.ts` /
+`tsconfig.json`): pricing math and tier validation live there, never as a client copy.
 
 # Models
 

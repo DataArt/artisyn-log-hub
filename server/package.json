@@ -27,6 +27,7 @@
   },
   "dependencies": {
     "@azure/msal-node": "^7.1.0",
+    "@loghub/pricing": "file:../packages/pricing",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.4",
     "@nestjs/core": "^11.0.1",
@@ -110,6 +111,7 @@
     ],
     "testRegex": ".*\\.spec\\.ts$",
     "transform": {
+      "[\\\\/]packages[\\\\/][^\\\\/]+[\\\\/]src[\\\\/].+\\.ts$": "<rootDir>/jest-ts-cjs-transform.cjs",
       "^.+\\.(t|j)s$": "ts-jest"
     },
     "collectCoverageFrom": [

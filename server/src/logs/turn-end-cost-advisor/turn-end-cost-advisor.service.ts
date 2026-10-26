@@ -8,18 +8,10 @@ import {
   turnEndAdvisorRuns,
   type FileCategory,
 } from '../../database/schema/index';
-import {
-  pricingAsOfSql,
-  sessionCostSql,
-  sessionPriceDateSql,
-} from '../cost.sql';
-import { otelCostsCte, resolveSessionTotalCost } from '../otel-cost.sql';
+import { sessionPriceDateSql } from '../cost.sql';
+import { loadTreeCostRows, readTreeCost } from '../session-tree-cost.sql';
 import { descendantSessionsCte } from '../session-tree.sql';
-import {
-  num,
-  numOrNull,
-  sessionIdsArray,
-} from '../analytics/scoped-sessions.sql';
+import { num, sessionIdsArray } from '../analytics/scoped-sessions.sql';
 import { RepositoriesService } from '../repositories.service';
 import type { SessionOwnershipLookup } from '../session-attribution/session-attribution.service';
 
@@ -169,11 +161,6 @@ export interface TurnEndAdvisorLatestResult {
   harnessAdvice: string[];
 }
 
-interface TreeCostSqlRow {
-  computed_cost: string | number | null;
-  otel_cost: string | number | null;
-}
-
 interface RootInfoSqlRow {
   turn_count: string | number | null;
   work_time_ms: string | number | null;
@@ -280,47 +267,15 @@ export class TurnEndCostAdvisorService {
   }
 
   /**
-   * The tree-wide cost the $-threshold gate compares against, and the
-   * same figure `buildAggregate()` reports back as `sessionCostUsd`. Mirrors the
-   * `otelCostsCte` + per-session `model_pricing` LATERAL join pattern every other
-   * tree-cost site in this codebase uses (`active-sessions.service.ts`,
-   * `executive-summary.service.ts`) — computed cost is summed over EVERY session in the
-   * tree (root + descendants, each priced at its own model), then merged with the root's
-   * OTEL total via `resolveSessionTotalCost()` exactly as those sites do. A tree with no
-   * `session_stats` rows yet (not-yet-ingested) sums to `0`, which is naturally below any
-   * positive threshold.
+   * The tree-wide cost `buildAggregate()` reports back as `sessionCostUsd`: the complete
+   * computed tree cost every other surface shows (`loadTreeCostRows` + `readTreeCost`,
+   * own + sub-agents + utility calls). A tree with an unpriced model, or with no
+   * `session_stats` rows yet (not-yet-ingested), reports `0` — the aggregate's field is a
+   * plain number.
    */
   private async loadTreeCostUsd(sessionRowId: number): Promise<number> {
-    const idsArray = sessionIdsArray([sessionRowId]);
-
-    const result = await this.db.execute(sql`
-      WITH RECURSIVE ${descendantSessionsCte(idsArray)},
-      ${otelCostsCte(idsArray)}
-      SELECT
-        COALESCE(SUM(
-          CASE WHEN p.model_id IS NOT NULL
-            THEN ${sessionCostSql({ stats: sql`ss`, pricing: sql`p` })}
-            ELSE 0.0 END
-        ), 0.0) AS computed_cost,
-        (SELECT otel_cost FROM otel_costs LIMIT 1) AS otel_cost
-      FROM descendant_sessions ds
-      JOIN session_stats ss ON ss.session_id = ds.id
-        -- Excludes an OTEL-only session_stats row (no transcript ever uploaded for
-        -- it) from the tree cost rollup — same guard every sibling tree-cost query uses.
-        AND EXISTS (
-          SELECT 1 FROM logs tl
-          WHERE tl.session_id = ds.id AND tl.log_type IN ('claude', 'claude-subagent')
-        )
-      -- Every tree member is priced at its ROOT's price date.
-      LEFT JOIN LATERAL (
-        ${pricingAsOfSql(sql`ss.model`, sessionPriceDateSql(sql`ds.root_id`))}
-      ) p ON true
-    `);
-
-    const row = result.rows[0] as unknown as TreeCostSqlRow | undefined;
-    const computedCost = num(row?.computed_cost ?? null);
-    const otelCost = numOrNull(row?.otel_cost ?? null);
-    return resolveSessionTotalCost(otelCost, computedCost) ?? 0;
+    const rows = await loadTreeCostRows(this.db, [sessionRowId]);
+    return readTreeCost(rows.get(sessionRowId)).total ?? 0;
   }
 
   /** Root-only turn count / work time / model — same root-scope convention every other

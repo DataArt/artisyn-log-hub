@@ -1,4 +1,5 @@
 import { cn } from '@/lib/cn';
+import { noPriceHint, UNKNOWN_COST_TEXT } from '../lib/cost-hints';
 import { Badge } from '../ui/badge';
 import {
   Tooltip,
@@ -9,29 +10,33 @@ import {
 
 interface Props {
   /**
-   * The model id that has no `model_pricing` row. Already normalised (the `-YYYYMMDD`
-   * snapshot suffix is stripped upstream), so it is the exact id an admin would have to
-   * add a pricing row for. May be absent on surfaces whose payload does not carry the
-   * model (the sessions-list row); the tooltip then drops the id rather than printing a
-   * placeholder that looks like a real model name.
+   * The model ids with no `model_pricing` row (the server's `unpricedModels`, or the
+   * surface's own main model). Already normalised (the `-YYYYMMDD` snapshot suffix is
+   * stripped), so they are the exact ids an admin would have to add a price for. May be
+   * empty; the hint then says "this session's model" rather than printing a placeholder
+   * that looks like a real model name.
    */
+  modelIds?: readonly string[];
+  /** Single-id shorthand for {@link modelIds}. */
   modelId?: string | null;
   className?: string;
 }
 
 /**
- * The "no pricing" marker: shown wherever a cost would otherwise be rendered for a
- * session/turn whose model has no `model_pricing` row.
+ * The unknown-cost marker `$???`: shown wherever a cost would otherwise be rendered for a
+ * session/turn whose cost Log Hub cannot compute because a model has no price in its table
+ * (the main thread, a sub-agent or a utility call). Its hint names the models and says how
+ * to fix it (`noPriceHint`).
  *
- * It exists because `totalCost = null` alone is ambiguous — before this marker the client simply
- * omitted the figure (or printed `—` / `$0.0000`), making "we don't know this model's rates"
- * indistinguishable from "this session was free". A genuinely zero-cost session (all rates
- * `0`, e.g. a self-hosted model row) must keep showing `$0.0000` and must NOT render this
- * badge; the badge is only for the unknown-model case
- * (`costUnavailableReason === 'unknown-model'` server-side, or a missing `pricing[model]`
- * entry on surfaces that price from the transcript).
+ * It exists because `totalCost = null` alone is ambiguous — "we don't know this model's rates"
+ * must never read as "this session was free" (`$0.0000`) or "no data" (`—`). A genuinely
+ * zero-cost session (all rates `0`) keeps showing `$0.0000` and must NOT render this marker;
+ * it is only for the unknown-model case (`costUnavailableReason === 'unknown-model'`
+ * server-side, or a missing `pricing[model]` entry on surfaces that price from the
+ * transcript).
  */
-export function NoPricingBadge({ modelId, className }: Props) {
+export function NoPricingBadge({ modelIds, modelId, className }: Props) {
+  const ids = modelIds ?? (modelId ? [modelId] : []);
   return (
     <TooltipProvider>
       <Tooltip>
@@ -39,15 +44,13 @@ export function NoPricingBadge({ modelId, className }: Props) {
           <Badge
             variant="warning"
             data-testid="no-pricing-badge"
-            className={cn('cursor-help gap-1 font-normal', className)}
+            className={cn('cursor-help font-mono font-normal', className)}
           >
-            <span aria-hidden="true">⚠</span> no pricing
+            {UNKNOWN_COST_TEXT}
           </Badge>
         </TooltipTrigger>
-        <TooltipContent>
-          {modelId
-            ? `No pricing configured for model ${modelId} — cost cannot be computed`
-            : "No pricing configured for this session's model — cost cannot be computed"}
+        <TooltipContent className="max-w-sm" data-testid="no-pricing-hint">
+          {noPriceHint(ids)}
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>

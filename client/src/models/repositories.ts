@@ -96,10 +96,14 @@ export interface SessionAttributionValueBucket {
  * - `subagentCost` is the summed cost of every descendant sub-agent session (0 when none).
  * - `utilityCost` is the cost of telemetry API calls absent from every transcript in the tree
  *   (prompt suggestions, titles, …); 0 without telemetry.
- * - `calculatedCost` = main + sub-agents + utility; `null` when `mainCost` is null.
- * - `telemetryCost` is the OTEL-reported cost; `null` without telemetry.
- * - `mismatch` is true when both totals are present and differ by at least $0.01.
- * - `utilityPricingMissing` is true when some utility call's model has no price row.
+ * - `calculatedCost` = main + sub-agents + utility; `null` as soon as the main thread, a
+ *   sub-agent or a utility call is unpriced (it is the session's shown cost, `totalCost`).
+ * - `telemetryCost` is the OTEL-reported cost; `null` without telemetry. A cross-check only.
+ * - `mismatch` is true when both totals are present and differ by at least $0.05 and 1%.
+ * - `utilityPricingMissing` / `subagentPricingMissing` are true when some utility call's /
+ *   sub-agent's model has no price row.
+ * - `unpricedModels` lists the model ids with no price in Log Hub (sorted). The last two
+ *   fields are absent from older servers.
  */
 export interface CostBreakdown {
   mainCost: number | null;
@@ -109,6 +113,8 @@ export interface CostBreakdown {
   telemetryCost: number | null;
   mismatch: boolean;
   utilityPricingMissing: boolean;
+  subagentPricingMissing?: boolean;
+  unpricedModels?: string[];
 }
 
 export interface RepositorySession {
@@ -125,10 +131,8 @@ export interface RepositorySession {
   gitBranch?: string;
   userEmail?: string;
   totalCost?: number | null;
-  /** Token×price estimate, always present when priceable — independent of `totalCost`'s
-   * OTEL-preferred resolution. Equals `costBreakdown.calculatedCost`, so it includes
-   * utility calls (main thread + sub-agents + utility calls). Used to size the discrepancy
-   * check below. */
+  /** Token×price cost of the whole tree (main thread + sub-agents + utility calls), or null
+   * when any part is unpriced. Equals `costBreakdown.calculatedCost` and `totalCost`. */
   computedCost?: number | null;
   /**
    * The parts of this session's calculated cost, next to its telemetry cost (D2.2). Always
@@ -139,10 +143,10 @@ export interface RepositorySession {
    * by 33%+ relative — see `otelComputedDiscrepancy` (server/src/logs/otel-cost.sql.ts). */
   hasCostDiscrepancy?: boolean;
   /**
-   * `'unknown-model'` when the session names a model with no `model_pricing` row —
-   * which is *why* `totalCost` is null — and `null` whenever the cost is trustworthy,
-   * including a session with no stats extracted yet. Drives the "no pricing" badge, so a
-   * missing rate is never rendered as a plain `$0.00` or a dash.
+   * `'unknown-model'` when some model of the session tree (main thread, sub-agent or
+   * utility call) has no `model_pricing` row — which is *why* `totalCost` is null — and
+   * `null` whenever the cost is trustworthy, including a session with no stats extracted
+   * yet. Drives the `$???` marker, so a missing rate is never rendered as `$0.00` or a dash.
    */
   costUnavailableReason?: 'unknown-model' | null;
   isFavorite?: boolean;
@@ -241,10 +245,12 @@ export interface TimelineSession {
   /** Fast-mode **subset** of the root session's output tokens, not extra tokens. */
   outputTokensFast: number;
   /**
-   * `'unknown-model'` when the session names a model with no `model_pricing` row,
+   * `'unknown-model'` when some model of the session tree has no `model_pricing` row,
    * explaining a null `totalCost`; `null` when the cost is trustworthy.
    */
   costUnavailableReason?: 'unknown-model' | null;
+  /** The model ids with no price in Log Hub (sorted); absent from older servers. */
+  unpricedModels?: string[];
   isFavorite?: boolean;
 }
 
@@ -312,6 +318,8 @@ export interface ExecutiveSummaryTopSession {
    * the aggregate disclosure over the same signal.
    */
   costUnavailableReason?: 'unknown-model' | null;
+  /** The model ids of this session's tree with no price in Log Hub; absent from older servers. */
+  unpricedModels?: string[];
 }
 
 export interface ExecutiveSummaryEngineerEntry {
@@ -623,8 +631,15 @@ export interface ActiveSessionRow {
   workTimeMs: number;
   turns: number;
   totalTokens: number;
-  /** `null` when nothing in the tree had a `model_pricing` match. */
+  /**
+   * The tree's complete computed cost (root + sub-agents + utility calls), the sessions list's
+   * figure; `null` when it cannot be computed — see `costUnavailableReason`.
+   */
   totalCost: number | null;
+  /** Model ids of the tree with no price in Log Hub. Absent from older servers. */
+  unpricedModels?: string[];
+  /** `'unknown-model'` when `totalCost` is null because a model has no price. */
+  costUnavailableReason?: 'unknown-model' | null;
   toolCalls: number;
   linesAdded: number;
   linesRemoved: number;

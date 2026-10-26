@@ -12,6 +12,7 @@ const SESSION_TABLES = [
   'log_contexts',
   'contexts',
   'session_stats',
+  'session_costs',
   'session_request_ids',
   'session_tool_stats',
   'session_changed_paths',
@@ -74,6 +75,7 @@ function deleteSession(
           count: 'all',
         },
         { table: 'session_stats', where: `session_id = ${pk}`, count: 'all' },
+        { table: 'session_costs', where: `session_id = ${pk}`, count: 'all' },
         {
           table: 'session_file_stats',
           where: `session_id = ${pk}`,

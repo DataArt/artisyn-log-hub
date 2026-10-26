@@ -191,6 +191,16 @@ cycle: the iterate loop via `adlc-lh:check-health` (driven entirely by
 visual checks, the Definition of Done checklist, and pre-completion cleanup. It defers to the
 `server-e2e-tests` and `use-playwright` skills for their respective conventions.
 
+## Shared packages (`packages/`)
+
+Code the server and the client must compute identically lives in repo-local packages under
+`packages/`, never as hand-kept twins. Today there is one, `@loghub/pricing` (cost formula,
+prompt-length tiers, tier validation). The server links it as a `file:` dependency; the client
+uses a Vite/tsconfig alias, because bun cannot link a `file:` dependency on Windows. Its own
+checks are the existing client/server typechecks and algorithm tests. The hook keeps its own
+plain-JS copy. How it is wired and its rules (pure TypeScript, erasable syntax only, `.ts`
+relative imports): `packages/pricing/README.md` and `docs/knowledgebase/repo-local-packages.md`.
+
 ## Build distribution
 
 dist/ folder is the final build location

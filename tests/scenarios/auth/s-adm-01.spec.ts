@@ -5,6 +5,9 @@
 //   - step 8: `useAdminTabState.setTab` writes `?tab=` with `replace: true`, so switching tabs adds
 //     no history entries and «Back» leaves the admin panel for the page before it. The step pins
 //     that behaviour (the tab still lives in the URL — step 7 covers that).
+//   - steps 11–13 (AC5 of task 2026-10-26-pricing-fetch-tiered): the price dialog sorts the tier rows
+//     before sending, so the only non-increasing input it can be given is a repeated threshold; that
+//     is caught in the dialog («Two tiers share the threshold …») and no request is sent.
 //   - step 1: a brand-new user is sent from /#/main to /#/api-keys once per browser session
 //     (`useNewUserNudge`); the scenario marks the nudge as done so the redirect under test is the
 //     AdminGuard one.
@@ -16,8 +19,9 @@
 //   - client/src/viewer/__tests__/unit/use-admin-tab-state.test.ts (2 of 8)
 import type { Page } from '@playwright/test';
 import { randomBytes } from 'crypto';
-import { test, expect } from '../fixtures';
+import { test, expect, type ScenarioUser } from '../fixtures';
 import { addTeamRepo, inviteAndAccept, skipNewUserNudge } from '../helpers/teams';
+import { insertRow } from '../helpers/db-seed';
 import { ADMIN_TABS } from '../../../client/src/viewer/tab-ids';
 
 const TAB_LABELS: Record<(typeof ADMIN_TABS)[number], string> = {
@@ -34,8 +38,56 @@ const TAB_LABELS: Record<(typeof ADMIN_TABS)[number], string> = {
 
 const tab = (page: Page, id: string) => page.getByTestId(`tab-admin-${id}`);
 
-test('@S-ADM-01 admin panel only for admins, tabs and deep links work @mode-a @mode-c', async ({ api, users, page }) => {
-  test.setTimeout(120_000);
+/** One long-context tier as the admin enters it (USD/MTok above 150000 prompt tokens). */
+const UI_TIER = { aboveTokens: 150_000, priceIn: 6, priceOut: 22.5, priceCacheR: 0.6, priceCacheW5m: 7.5, priceCacheW1h: 12 };
+const TIER_LABELS: Record<keyof typeof UI_TIER, string> = {
+  aboveTokens: 'Above (tokens)',
+  priceIn: 'Input',
+  priceOut: 'Output',
+  priceCacheR: 'Cache read',
+  priceCacheW5m: '5m write',
+  priceCacheW1h: '1h write',
+};
+
+interface AdminPricingRow {
+  modelId: string;
+  source: string;
+  overrideActive: boolean;
+  effective: { priceIn: number; tiers: unknown[] | null } | null;
+  base: { tiers: unknown[] | null } | null;
+}
+
+/** The model's row of `GET /api/v1/admin/model-pricing`. */
+async function adminPricingRow(admin: ScenarioUser, modelId: string): Promise<AdminPricingRow> {
+  const res = await admin.api.get('/api/v1/admin/model-pricing');
+  expect(res.status()).toBe(200);
+  const { models } = (await res.json()) as { models: AdminPricingRow[] };
+  const row = models.find((m) => m.modelId === modelId);
+  if (!row) throw new Error(`${modelId} is not in the admin model-pricing list`);
+  return row;
+}
+
+/** Opens Admin → Model Pricing filtered down to `modelId` and returns its table row. */
+async function pricingTableRow(page: Page, modelId: string) {
+  await page.goto('/#/admin?tab=model-pricing');
+  await page.reload();
+  await page.getByPlaceholder('Filter by model ID…').fill(modelId);
+  const row = page.locator('tbody tr', { hasText: modelId });
+  await expect(row).toHaveCount(1);
+  return row;
+}
+
+/** Clicks «Add tier» in the open price dialog and types `tier` into the new row `n` (1-based). */
+async function addTier(page: Page, n: number, tier: typeof UI_TIER): Promise<void> {
+  const dialog = page.getByTestId('model-price-dialog');
+  await dialog.getByTestId('pricing-tier-add').click();
+  for (const [key, label] of Object.entries(TIER_LABELS) as Array<[keyof typeof UI_TIER, string]>) {
+    await dialog.getByLabel(`Tier ${n} ${label}`, { exact: true }).fill(String(tier[key]));
+  }
+}
+
+test('@S-ADM-01 admin panel only for admins, tabs and deep links work @mode-a @mode-c', async ({ api, db, users, page }) => {
+  test.setTimeout(180_000);
   const runId = randomBytes(4).toString('hex');
   const admin = await users.user('admin', { label: 'adm1' });
   const regular = await users.user('user', { label: 'adm1-regular' });
@@ -176,6 +228,70 @@ test('@S-ADM-01 admin panel only for admins, tabs and deep links work @mode-a @m
     expect(team.ownerId).toBe(regular.id);
     const refused = await admin.api.post(`/api/v1/admin/teams/${teamId}/owner`, { data: { userId: admin.id } });
     expect(refused.status()).toBe(400);
+    expect(pageErrors).toEqual([]);
+  });
+
+  const uiModel = `scn-tier-ui-${runId}`;
+  const ovModel = `scn-tier-ov-${runId}`;
+
+  await test.step(`11. UI: «Set price» on the unpriced ${uiModel} with one tier above 150000 → the table shows a «> 150k tokens» line with the tier rates under the model row, the admin GET has the tier`, async () => {
+    await insertRow(db, 'model_pricing_meta', { model_id: uiModel, first_seen_at: new Date() });
+    const row = await pricingTableRow(page, uiModel);
+    await row.getByTestId('model-pricing-action-set').click();
+    const dialog = page.getByTestId('model-price-dialog');
+    await dialog.locator('input[name="priceIn"]').fill('3');
+    await dialog.locator('input[name="priceOut"]').fill('15');
+    await addTier(page, 1, UI_TIER);
+    await dialog.getByRole('button', { name: 'Save' }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(row.getByTestId('pricing-tier-label')).toHaveText('> 150k tokens');
+    await expect(row.getByTestId('pricing-tier-priceIn')).toHaveText('$6.00');
+    const saved = await adminPricingRow(admin, uiModel);
+    expect(saved.source).toBe('manual');
+    expect(saved.effective?.tiers).toEqual([UI_TIER]);
+  });
+
+  await test.step('12. UI: «Edit» with a second tier at the same threshold → the dialog shows the tier error and nothing is saved', async () => {
+    const row = await pricingTableRow(page, uiModel);
+    await row.getByTestId('model-pricing-action-edit').click();
+    const dialog = page.getByTestId('model-price-dialog');
+    await expect(dialog.getByTestId('pricing-tier-row')).toHaveCount(1);
+    await addTier(page, 2, { ...UI_TIER, priceIn: 9 });
+    await dialog.getByRole('button', { name: 'Save' }).click();
+    await expect(dialog.getByTestId('pricing-tiers-error')).toHaveText('Two tiers share the threshold 150,000');
+    await expect(dialog).toBeVisible();
+    await dialog.getByRole('button', { name: 'Cancel' }).click();
+    await expect(dialog).toHaveCount(0);
+    expect((await adminPricingRow(admin, uiModel)).effective?.tiers).toEqual([UI_TIER]);
+  });
+
+  await test.step(`13. UI: «Override» on the anthropic-sourced ${ovModel} with one tier → effective.tiers holds it, base.tiers stays null`, async () => {
+    await insertRow(db, 'model_pricing', {
+      model_id: ovModel,
+      price_in: 1,
+      price_out: 5,
+      price_cache_r: 0.1,
+      price_cache_w: 1.25,
+      price_cache_w_5m: 1.25,
+      price_cache_w_1h: 2,
+      price_web_search: 0.01,
+      effective_from: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10),
+      source: 'anthropic',
+    });
+    const row = await pricingTableRow(page, ovModel);
+    await row.getByTestId('model-pricing-action-override').click();
+    const dialog = page.getByTestId('model-price-dialog');
+    await expect(dialog.getByTestId('pricing-tiers-empty')).toBeVisible();
+    await addTier(page, 1, UI_TIER);
+    await dialog.getByRole('button', { name: 'Save' }).click();
+    await expect(dialog).toHaveCount(0);
+    await expect(row.getByTestId('pricing-tier-label')).toHaveText('> 150k tokens');
+    await expect(row.getByTestId('pricing-tier-priceIn')).toHaveText('$6.00');
+    const saved = await adminPricingRow(admin, ovModel);
+    expect(saved.overrideActive).toBe(true);
+    expect(saved.effective?.tiers).toEqual([UI_TIER]);
+    expect(saved.base).not.toBeNull();
+    expect(saved.base?.tiers).toBeNull();
     expect(pageErrors).toEqual([]);
   });
 });

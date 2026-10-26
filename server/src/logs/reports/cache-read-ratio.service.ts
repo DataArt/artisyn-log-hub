@@ -11,7 +11,6 @@ import {
 } from '../attribute-filter.sql';
 import { scopedUserFilterSql } from '../analytics/scoped-sessions.sql';
 import { cacheReadRatio } from '../cache-ratio.sql';
-import { pricingAsOfSql, sessionPriceDateSql } from '../cost.sql';
 import type { CacheThresholdSource } from '../repositories.service';
 import type { CauseStatsScope } from '../session-cause-stats-writer';
 import { descendantSessionsCte } from '../session-tree.sql';
@@ -123,10 +122,11 @@ export interface CacheRatioCauseRow {
  * scoped cause row already merged. This is the single input shape of every pure helper
  * below, which is what makes them testable without a database.
  *
- * Costs are carried as a *rate* for the root session (so the multiplication happens in
- * `aggregateScope`, once, alongside the token sums) but as already-summed *amounts* for the
- * descendants: a sub-agent tree can span several models, so a single rate cannot price it.
- * `null` in either position means "this scope contributed nothing priceable".
+ * Costs are carried as already-computed *amounts*, both for the root session and for the
+ * descendants. They come from the stored `session_costs` terms (`cost_cache_read`,
+ * `cost_cache_write_5m + cost_cache_write_1h`), which are priced per call at write time —
+ * so a prompt-length pricing tier is reflected here exactly as in the sessions list.
+ * `null` in any position means "this scope contributed nothing priceable".
  */
 export interface CacheRatioSessionRow {
   startTime: string;
@@ -136,16 +136,17 @@ export interface CacheRatioSessionRow {
   cacheWriteTokens: number;
   cacheWrite5mTokens: number;
   cacheWrite1hTokens: number;
-  /** `$/Mtok` for this session's own model; `null` when it has no pricing row. */
-  priceCacheRead: number | null;
   /**
-   * The two cache-write rates, `$/Mtok`, split by TTL: a 1h cache write costs
-   * 1.6x a 5m one, so the two token buckets must be priced separately — pricing both at
-   * one rate under-charged every 1h write and made this report contradict the sessions
-   * list. Both are `null` together, from the same missing pricing row.
+   * This session's own cache-read cost in USD (stored `session_costs.cost_cache_read`);
+   * `null` when the session is unpriced or has no `session_costs` row.
    */
-  priceCacheWrite5m: number | null;
-  priceCacheWrite1h: number | null;
+  cacheReadCost: number | null;
+  /**
+   * This session's own cache-write cost in USD, both TTL buckets each at its own rate
+   * (stored `cost_cache_write_5m + cost_cache_write_1h`). `null` together with
+   * {@link cacheReadCost}, from the same unpriced session.
+   */
+  cacheWriteCost: number | null;
   descendantSessionCount: number;
   descendantCacheReadTokens: number;
   descendantCacheWriteTokens: number;
@@ -176,9 +177,8 @@ interface PhaseARow {
   cache_write_tokens: string | number | null;
   cache_write_5m_tokens: string | number | null;
   cache_write_1h_tokens: string | number | null;
-  price_cache_r: string | number | null;
-  price_cache_w_5m: string | number | null;
-  price_cache_w_1h: string | number | null;
+  cache_read_cost: string | number | null;
+  cache_write_cost: string | number | null;
   cause_threshold: string | number | null;
   compaction_tokens: string | number | null;
   file_reread_tokens: string | number | null;
@@ -300,7 +300,7 @@ export function aggregateTokens(
 /**
  * {@link aggregateTokens} plus the two cost figures and the undefined-ratio session count.
  *
- * Costs are `Σ tokens / 1_000_000 × that session's rate`; an unpriced session contributes
+ * Costs are `Σ` of each session's stored cache cost amounts; an unpriced session contributes
  * nothing, and both cost fields are `null` when *no* session in the scope was priced (so the
  * client can render `n/a` rather than a fake `$0.00`).
  *
@@ -324,17 +324,13 @@ export function aggregateScope(
       undefinedRatioSessionCount += 1;
     }
 
-    if (row.priceCacheRead !== null) {
-      cacheReadCost += (row.cacheReadTokens / 1_000_000) * row.priceCacheRead;
+    if (row.cacheReadCost !== null) {
+      cacheReadCost += row.cacheReadCost;
       anyPriced = true;
     }
-    // Each TTL bucket at its own rate. `cacheWrite5mTokens + cacheWrite1hTokens`
-    // equals `cacheWriteTokens` by invariant, so this is the same token base as before —
-    // only the price per token differs now, which is the whole point.
-    if (row.priceCacheWrite5m !== null || row.priceCacheWrite1h !== null) {
-      cacheWriteCost +=
-        (row.cacheWrite5mTokens / 1_000_000) * (row.priceCacheWrite5m ?? 0) +
-        (row.cacheWrite1hTokens / 1_000_000) * (row.priceCacheWrite1h ?? 0);
+    // Already each TTL bucket at its own rate (stored 5m + 1h terms).
+    if (row.cacheWriteCost !== null) {
+      cacheWriteCost += row.cacheWriteCost;
       anyPriced = true;
     }
 
@@ -568,8 +564,8 @@ export class CacheReadRatioService {
     const attrCondition = attributeFilterSql(opts.attributeFilters, sql`s.id`);
     const attrFilter = attrCondition ? sql`AND ${attrCondition}` : sql``;
 
-    // Phase A — eligible root sessions with their own cache/TTL columns and their model's
-    // cache rates, plus (A2) the scoped cause row. The LEFT JOIN on session_cause_stats is
+    // Phase A — eligible root sessions with their own cache/TTL columns and their stored
+    // cache cost terms (`session_costs`), plus (A2) the scoped cause row. The LEFT JOIN on session_cause_stats is
     // what makes a session with no row for this config scope countable as
     // `sessionsWithoutCauseData` instead of silently dropping out of the report. The LEFT
     // JOIN on `session_attribution` is separate from the `attrFilter` predicate
@@ -586,9 +582,8 @@ export class CacheReadRatioService {
         COALESCE(ss.cache_write_tokens, 0)      AS cache_write_tokens,
         COALESCE(ss.cache_write_5m_tokens, 0)   AS cache_write_5m_tokens,
         COALESCE(ss.cache_write_1h_tokens, 0)   AS cache_write_1h_tokens,
-        p.price_cache_r                         AS price_cache_r,
-        p.price_cache_w_5m                      AS price_cache_w_5m,
-        p.price_cache_w_1h                      AS price_cache_w_1h,
+        sc.cost_cache_read                      AS cache_read_cost,
+        sc.cost_cache_write_5m + sc.cost_cache_write_1h AS cache_write_cost,
         scs.threshold                           AS cause_threshold,
         scs.compaction_tokens                   AS compaction_tokens,
         scs.file_reread_tokens                  AS file_reread_tokens,
@@ -605,10 +600,8 @@ export class CacheReadRatioService {
       LEFT JOIN session_cause_stats scs
         ON scs.session_id = s.id AND ${causeScopeFilter}
       LEFT JOIN session_attribution attr_sa ON attr_sa.session_id = s.id
-      -- The session's cache rates at its own price date.
-      LEFT JOIN LATERAL (
-        ${pricingAsOfSql(sql`ss.model`, sessionPriceDateSql(sql`s.id`))}
-      ) p ON true
+      -- Stored per-session cost terms (NULL when unpriced or no row).
+      LEFT JOIN session_costs sc ON sc.session_id = s.id
       WHERE lr.repo_id = ANY(${repoIdsLiteral}::int[])
         AND l.log_type = 'artisyn'
         AND l.first_prompt IS NOT NULL
@@ -629,8 +622,8 @@ export class CacheReadRatioService {
     if (phaseARows.length === 0) return [];
 
     // Phase B — recursive descendants (depth > 0) of Phase A's sessions: cache/TTL token
-    // rollup plus their own cost, priced per descendant model (a sub-agent tree routinely
-    // mixes models, so the root's rate cannot be reused for it).
+    // rollup plus their own stored cache cost terms (`session_costs`, priced per
+    // descendant model at write time — a sub-agent tree routinely mixes models).
     const idsLiteral = `{${phaseARows.map((r) => Number(r.session_row_id)).join(',')}}`;
     const idsArray = sql`${idsLiteral}::bigint[]`;
     const rollupResult = await this.db.execute(sql`
@@ -643,18 +636,10 @@ export class CacheReadRatioService {
           COALESCE(SUM(ss.cache_write_tokens), 0) AS cache_write_tokens,
           COALESCE(SUM(ss.cache_write_5m_tokens), 0) AS cache_write_5m_tokens,
           COALESCE(SUM(ss.cache_write_1h_tokens), 0) AS cache_write_1h_tokens,
-          COALESCE(SUM(
-            CASE WHEN sub_p.model_id IS NOT NULL
-              THEN COALESCE(ss.cache_read_tokens, 0)::float / 1000000.0 * sub_p.price_cache_r
-              ELSE 0.0 END
-          ), 0.0) AS cache_read_cost,
-          COALESCE(SUM(
-            CASE WHEN sub_p.model_id IS NOT NULL
-              THEN (COALESCE(ss.cache_write_5m_tokens, 0)::float / 1000000.0 * sub_p.price_cache_w_5m)
-                 + (COALESCE(ss.cache_write_1h_tokens, 0)::float / 1000000.0 * sub_p.price_cache_w_1h)
-              ELSE 0.0 END
-          ), 0.0) AS cache_write_cost,
-          BOOL_OR(sub_p.model_id IS NOT NULL) AS any_priced
+          COALESCE(SUM(sub_sc.cost_cache_read), 0.0) AS cache_read_cost,
+          COALESCE(SUM(sub_sc.cost_cache_write_5m + sub_sc.cost_cache_write_1h), 0.0)
+            AS cache_write_cost,
+          COALESCE(BOOL_OR(sub_sc.cost IS NOT NULL), false) AS any_priced
         FROM descendant_sessions ds
         JOIN session_stats ss ON ss.session_id = ds.id
           -- Excludes an OTEL-only session_stats row (no transcript ever
@@ -663,10 +648,8 @@ export class CacheReadRatioService {
             SELECT 1 FROM logs tl
             WHERE tl.session_id = ds.id AND tl.log_type IN ('claude', 'claude-subagent')
           )
-        -- Sub-agents are priced at their ROOT's price date.
-        LEFT JOIN LATERAL (
-          ${pricingAsOfSql(sql`ss.model`, sessionPriceDateSql(sql`ds.root_id`))}
-        ) sub_p ON true
+        -- Stored sub-agent cost terms (priced at the ROOT's price date at write time).
+        LEFT JOIN session_costs sub_sc ON sub_sc.session_id = ds.id
         WHERE ds.depth > 0
         GROUP BY ds.root_id
       )
@@ -694,9 +677,8 @@ export class CacheReadRatioService {
         cacheWriteTokens: num(r.cache_write_tokens),
         cacheWrite5mTokens: num(r.cache_write_5m_tokens),
         cacheWrite1hTokens: num(r.cache_write_1h_tokens),
-        priceCacheRead: numOrNull(r.price_cache_r),
-        priceCacheWrite5m: numOrNull(r.price_cache_w_5m),
-        priceCacheWrite1h: numOrNull(r.price_cache_w_1h),
+        cacheReadCost: numOrNull(r.cache_read_cost),
+        cacheWriteCost: numOrNull(r.cache_write_cost),
         descendantSessionCount: num(rollup?.descendant_session_count),
         descendantCacheReadTokens: num(rollup?.cache_read_tokens),
         descendantCacheWriteTokens: num(rollup?.cache_write_tokens),

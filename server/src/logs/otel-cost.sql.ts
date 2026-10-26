@@ -1,33 +1,31 @@
 import { sql, type SQL } from 'drizzle-orm';
 import {
+  callTierRatesSql,
   pricingAsOfSql,
-  sessionCostSql,
   sessionPriceDateSql,
+  tieredCallCostSql,
 } from './cost.sql';
 
 /**
- * OTEL-reported cost resolution.
+ * OTEL-reported cost, used only as a cross-check.
  *
- * Two cost sources exist per session: the computed cost (token counts × `model_pricing`)
- * and the OTEL cost — `session_stats.telemetry_cost`, denormalized at OTEL ingest
- * time from `SUM(logs_otel.cost_usd_micros)` in the same transaction as the chunk write.
+ * Two cost figures exist per session: the computed cost (token counts × Log Hub's
+ * `model_pricing`) and the OTEL cost — `session_stats.telemetry_cost`, denormalized at OTEL
+ * ingest time from `SUM(logs_otel.cost_usd_micros)` in the same transaction as the chunk
+ * write. The shown cost is always the computed one ({@link resolveSessionTotalCost}); the OTEL
+ * total only feeds the discrepancy warning and the mismatch flag.
  *
  * OTEL cost is only ever recorded under the ROOT session's own `session_stats` row —
  * in-process sub-agents (`Agent`/`Workflow`-launched agents) share the root process's
  * OTEL exporter and are never tagged with their own `session_id` there. So this CTE must
- * be joined on the ROOT session id, never a descendant's, and once present its value
- * already covers the whole descendant tree — callers must use it INSTEAD OF a
- * separately-computed sub-agent rollup for that root, never in addition to one (that
- * would double-count).
+ * be joined on the ROOT session id, never a descendant's, and its value covers the whole
+ * descendant tree — compare it with the whole computed tree cost, never with one part.
  *
  * Excludes `telemetry_cost IS NULL`: the column is written `NULL` whenever the recomputed
  * `SUM(logs_otel.cost_usd_micros)` is exactly 0 — a `claude-otel` chunk exists for every
  * upload the receiver ever gets, including ones that carry no `claude_code.api_request`
  * record at all (plain telemetry with nothing billable), which sum to `0n` by design
- * ("cost-free, not broken"). An exact-zero total is therefore indistinguishable from "OTEL
- * saw no billing data yet", not a genuine free session. Treating it as "no OTEL signal" and
- * falling back to the computed cost keeps a non-billing OTEL chunk invisible to `totalCost`,
- * matching the UI-invisibility guarantee for `claude-otel` rows.
+ * ("cost-free, not broken"). An exact-zero total is therefore treated as "no OTEL signal".
  */
 export function otelCostsCte(rootIdsArray: SQL): SQL {
   return sql`otel_costs AS (
@@ -41,67 +39,62 @@ export function otelCostsCte(rootIdsArray: SQL): SQL {
 }
 
 /**
- * Fraction of the computed cost below which an OTEL total is treated as INCOMPLETE and no
- * longer preferred.
- *
- * A complete OTEL total is never far below the computed cost for the same scope — the OTEL
- * exporter meters what the API actually billed, including the root process's in-process
- * sub-agents. Measured across every session on the live DB with an OTEL cost and a computed
- * tree cost above $0.50:
- *
- * | otel / computed-tree | sessions | verdict |
- * |---|---|---|
- * | 10.9%                | 1        | broken — exporter stopped after 41 s of a 7 h 37 m session |
- * | 84.0%                | 1        | healthy — 14 OUT-of-process sub-agents the root's exporter never saw |
- * | 104.9% – 124.3%      | 23       | healthy — the normal band (OTEL slightly above, as expected) |
- *
- * 50% sits with a wide margin on both sides of that gap. It is deliberately generous: the
- * only cost of being too lax is keeping the status quo for a session, while being too strict
- * would discard good OTEL data.
- *
- * The rule is asymmetric on purpose — OTEL *above* computed is normal and is left alone. Only
- * a materially LOWER OTEL total is suspicious, and in both of its possible causes (a truncated
- * telemetry stream, or sub-agents that ran out of process) the computed figure is the better
- * estimate of what the whole session cost.
+ * The parts a session's computed cost is made of: the root's own stored cost
+ * (`session_costs.cost`, `null` when the root is unpriced or has no row), the sum of its
+ * sub-agents' stored costs, and its utility calls (`utilityCostsCte`). The two flags say
+ * whether some sub-agent with a transcript, or some utility call, has a model with no price
+ * in Log Hub — its share is then missing from the sum.
  */
-export const OTEL_INCOMPLETE_RATIO = 0.5;
-
-/**
- * Whether an OTEL total looks truncated/partial rather than authoritative.
- *
- * `false` when either side is missing or the computed baseline is non-positive — there is then
- * nothing to compare against, so the existing preference stands.
- */
-export function isOtelCostIncomplete(
-  otelCost: number | null,
-  computedCost: number | null,
-): boolean {
-  if (otelCost == null || computedCost == null || computedCost <= 0) {
-    return false;
-  }
-  return otelCost < computedCost * OTEL_INCOMPLETE_RATIO;
+export interface SessionCostParts {
+  mainCost: number | null;
+  subagentCost: number;
+  subagentPricingMissing: boolean;
+  utilityCost: number;
+  utilityPricingMissing: boolean;
 }
 
 /**
- * The single definition of a session's headline cost.
+ * The single definition of a session's headline cost: what Log Hub computes from its own
+ * price table, complete or not at all.
  *
- * Prefers the root's OTEL total — it meters real billing and already covers the in-process
- * sub-agent tree — EXCEPT when that total is so far below the computed cost that it cannot be
- * complete, in which case the computed cost wins. Falls back to whichever side exists.
+ * `mainCost + subagentCost + utilityCost`, or `null` as soon as any part of the tree is
+ * unpriced (the root, a sub-agent or a utility call) — a partial sum would silently
+ * under-report the session. Nothing is substituted: the OTEL total is never used as the
+ * shown cost (Claude Code prices a model it does not know at another model's rates and
+ * reports that number with no marker), and no other model's price stands in for an unknown
+ * one. OTEL stays a cross-check: {@link otelComputedDiscrepancy} and {@link costMismatch}.
  *
- * Every surface that shows a session cost must go through this, so the session list, the
- * analytics timeline, the executive summary and the delete-time audit row can never disagree
- * about which source won. `otelComputedDiscrepancy()` stays independent of this choice, so the
- * header keeps warning whenever the two sources disagree — including when this guard fires.
+ * Every surface that shows a session cost goes through this (via `readTreeCost` in
+ * `session-tree-cost.sql.ts`), so the session list, the analytics timeline, the reports,
+ * the turn-end advisor and the delete-time audit row can never disagree.
  */
 export function resolveSessionTotalCost(
-  otelCost: number | null,
-  computedCost: number | null,
+  parts: SessionCostParts,
 ): number | null {
-  if (otelCost != null && !isOtelCostIncomplete(otelCost, computedCost)) {
-    return otelCost;
+  if (
+    parts.mainCost == null ||
+    parts.subagentPricingMissing ||
+    parts.utilityPricingMissing
+  ) {
+    return null;
   }
-  return computedCost ?? otelCost ?? null;
+  return parts.mainCost + parts.subagentCost + parts.utilityCost;
+}
+
+/**
+ * The model ids named in a "no price" hint: the distinct non-empty ids of every given list
+ * (root, sub-agents, utility calls), sorted by code unit so the text is stable.
+ */
+export function unpricedModelList(
+  ...lists: ReadonlyArray<ReadonlyArray<string | null>>
+): string[] {
+  const ids = new Set<string>();
+  for (const list of lists) {
+    for (const id of list) {
+      if (id != null && id !== '') ids.add(id);
+    }
+  }
+  return [...ids].sort();
 }
 
 /** Relative-delta threshold above which the session header shows a discrepancy warning. */
@@ -177,9 +170,13 @@ export const TRANSCRIPT_QUERY_SOURCE_PREFIX = 'agent:';
 /**
  * Per-session cost parts sent with every listed session (`costBreakdown`).
  *
- * `calculatedCost = mainCost + subagentCost + utilityCost`; `null` when the main model is
- * unpriced. `telemetryCost` is the root's OTEL total (`null` without telemetry), and
- * `mismatch` is {@link costMismatch} of the two.
+ * `calculatedCost` is {@link resolveSessionTotalCost}: `mainCost + subagentCost + utilityCost`,
+ * or `null` as soon as the root, a sub-agent or a utility call is unpriced.
+ * `telemetryCost` is the root's OTEL total (`null` without telemetry), and `mismatch` is
+ * {@link costMismatch} of the two. `subagentPricingMissing` / `utilityPricingMissing` say
+ * which part is unpriced, and `unpricedModels` lists the model ids with no price in Log
+ * Hub ({@link unpricedModelList}; empty when everything is priced). The last two fields
+ * were added later, so a consumer must treat them as optional.
  */
 export interface CostBreakdown {
   mainCost: number | null;
@@ -189,13 +186,16 @@ export interface CostBreakdown {
   telemetryCost: number | null;
   mismatch: boolean;
   utilityPricingMissing: boolean;
+  subagentPricingMissing: boolean;
+  unpricedModels: string[];
 }
 
 /**
  * Prices the **utility calls** of each root session: API calls
  * the OTEL exporter metered but no transcript in the session tree records (title generation,
  * summarisation, haiku side calls, ...). Produces
- * `utility_costs(session_row_id, utility_cost, utility_pricing_missing)`, one row per root
+ * `utility_costs(session_row_id, utility_cost, utility_pricing_missing,
+ * utility_unpriced_models)`, one row per root
  * that has `otel_api_calls`; roots without telemetry have no row (callers `COALESCE` to 0).
  *
  * Classification — a root R's `otel_api_calls` row is utility when:
@@ -204,9 +204,13 @@ export interface CostBreakdown {
  * - otherwise (old transcripts without `requestId`): its `query_source` is neither one of
  *   {@link TRANSCRIPT_QUERY_SOURCES} nor starts with {@link TRANSCRIPT_QUERY_SOURCE_PREFIX}.
  *
- * Pricing — {@link sessionCostSql} over the call row (its columns are named like
- * `session_stats`), at the call's model as of the ROOT's {@link sessionPriceDateSql}. An
- * unpriced model contributes 0 and sets `utility_pricing_missing`.
+ * Pricing — per call, with the prompt-length tier rule of `pickCallRates`
+ * (`@loghub/pricing`): {@link tieredCallCostSql} over the call row at the rates
+ * {@link callTierRatesSql} picks, for the call's model as of the ROOT's
+ * {@link sessionPriceDateSql}. An unpriced model contributes 0, sets
+ * `utility_pricing_missing` and adds its id (snapshot suffix stripped) to
+ * `utility_unpriced_models` (`text[]`, distinct, empty when all are priced) — the shown cost
+ * is then null ({@link resolveSessionTotalCost}).
  *
  * Requires a `descendant_sessions` CTE (`descendantSessionsCte`) over the same roots to be in
  * scope earlier in the same `WITH`.
@@ -222,10 +226,15 @@ export function utilityCostsCte(rootIdsArray: SQL): SQL {
       rs.id AS session_row_id,
       COALESCE(SUM(
         CASE WHEN p.model_id IS NOT NULL
-          THEN ${sessionCostSql({ stats: sql`oc`, pricing: sql`p` })}
+          THEN ${tieredCallCostSql({ call: sql`oc`, pricing: sql`p`, tier: sql`ct` })}
           ELSE 0.0 END
       ), 0.0)::float AS utility_cost,
-      COALESCE(BOOL_OR(p.model_id IS NULL), false) AS utility_pricing_missing
+      COALESCE(BOOL_OR(p.model_id IS NULL), false) AS utility_pricing_missing,
+      COALESCE(
+        ARRAY_AGG(DISTINCT REGEXP_REPLACE(oc.model, '-[0-9]{8}$', '')::text)
+          FILTER (WHERE p.model_id IS NULL AND COALESCE(oc.model, '') <> ''),
+        '{}'::text[]
+      ) AS utility_unpriced_models
     FROM sessions rs
     CROSS JOIN LATERAL (
       SELECT ${sessionPriceDateSql(sql`rs.id`)} AS price_date
@@ -242,6 +251,9 @@ export function utilityCostsCte(rootIdsArray: SQL): SQL {
     LEFT JOIN LATERAL (
       ${pricingAsOfSql(sql`oc.model`, sql`pd.price_date`)}
     ) p ON true
+    LEFT JOIN LATERAL (
+      ${callTierRatesSql(sql`oc`, sql`p`)}
+    ) ct ON true
     WHERE rs.id = ANY(${rootIdsArray})
       AND CASE
         WHEN tr.has_request_ids THEN

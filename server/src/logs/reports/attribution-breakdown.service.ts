@@ -7,7 +7,6 @@ import type {
   SessionAttributionAttributeType,
 } from '../../database/schema/index';
 import {
-  num,
   scopedUserFilterSql,
   textList,
 } from '../analytics/scoped-sessions.sql';
@@ -16,23 +15,17 @@ import {
   isOrphanedValue,
   type ParsedAttributeFilter,
 } from '../attribute-filter.sql';
-import {
-  pricingAsOfSql,
-  sessionCostSql,
-  sessionPriceDateSql,
-} from '../cost.sql';
-import { otelCostsCte, resolveSessionTotalCost } from '../otel-cost.sql';
-import { descendantSessionsCte } from '../session-tree.sql';
+import { loadTreeCostRows, readTreeCost } from '../session-tree-cost.sql';
 import type { TeamScope } from '../team-scope';
 
 /**
  * Attribution Breakdown report.
  *
  * Copies `cache-read-ratio.service.ts`'s two-phase shape rather than inventing a new report
- * architecture: Phase A is a cheap scan of every eligible session's own cost (pre sub-agent
- * rollup) plus its whole `session_attribution.values` object; Phase B is a cost rollup —
- * recursive descendants via `descendantSessionsCte`, OTEL-preferred — keyed on Phase A's
- * `session_row_id`s, the same pattern `executive-summary.service.ts`'s Phase B uses. Every
+ * architecture: Phase A is a cheap scan of every eligible session plus its whole
+ * `session_attribution.values` object; Phase B is the complete computed tree cost
+ * (`loadTreeCostRows`, own + sub-agents + utility calls; null when any part is unpriced)
+ * keyed on Phase A's `session_row_id`s, the same cost every other surface shows. Every
  * per-attribute section is then built in TS from the merged per-session rows, using the
  * fixed per-type layout.
  */
@@ -104,14 +97,7 @@ interface AttributionSessionRow {
 
 interface PhaseARow {
   session_row_id: string | number;
-  own_cost: string | number | null;
   attribution_values: AttributionValues | null;
-}
-
-interface PhaseBRow {
-  session_row_id: string | number;
-  subagent_cost: string | number | null;
-  otel_cost: string | number | null;
 }
 
 // --- Pure helpers (exported for unit tests) ----------------------------------------------
@@ -399,28 +385,19 @@ export class AttributionBreakdownService {
     const attrCondition = attributeFilterSql(opts.attributeFilters, sql`s.id`);
     const attrFilter = attrCondition ? sql`AND ${attrCondition}` : sql``;
 
-    // Phase A — eligible sessions with their own cost (pre sub-agent rollup, NULL when the
-    // session's own model has no `model_pricing` match) and their whole
+    // Phase A — eligible sessions with their whole
     // `session_attribution.values` object — a session with no
     // attribution row still gets its own Phase A row, with `attribution_values: null`
     // (the "Unattributed" bucket).
     const result = await this.db.execute(sql`
       SELECT
         s.id                                AS session_row_id,
-        CASE WHEN p.model_id IS NOT NULL
-          THEN ${sessionCostSql({ stats: sql`ss`, pricing: sql`p` })}
-          ELSE NULL END                      AS own_cost,
         sa.values                           AS attribution_values
       FROM sessions s
       INNER JOIN logs l ON l.session_id = s.id
       INNER JOIN log_repositories lr ON lr.log_id = l.id
       INNER JOIN users u ON u.id = l.user_id
-      LEFT JOIN session_stats ss ON ss.session_id = s.id
       LEFT JOIN session_attribution sa ON sa.session_id = s.id
-      -- Priced at the session's own price date.
-      LEFT JOIN LATERAL (
-        ${pricingAsOfSql(sql`ss.model`, sessionPriceDateSql(sql`s.id`))}
-      ) p ON true
       WHERE lr.repo_id = ANY(${repoIdsLiteral}::int[])
         AND l.log_type = 'artisyn'
         AND l.first_prompt IS NOT NULL
@@ -440,60 +417,17 @@ export class AttributionBreakdownService {
     const phaseARows = result.rows as unknown as PhaseARow[];
     if (phaseARows.length === 0) return [];
 
-    // Phase B — recursive descendant cost rollup + OTEL resolution, keyed on Phase A's
-    // session_row_ids, same pattern as `executive-summary.service.ts`'s Phase B.
-    const idsLiteral = `{${phaseARows.map((r) => Number(r.session_row_id)).join(',')}}`;
-    const idsArray = sql`${idsLiteral}::bigint[]`;
-    const rollupResult = await this.db.execute(sql`
-      WITH RECURSIVE ${descendantSessionsCte(idsArray)},
-      ${otelCostsCte(idsArray)},
-      subagent_costs AS (
-        SELECT
-          ds.root_id AS session_row_id,
-          COALESCE(SUM(
-            CASE WHEN sub_p.model_id IS NOT NULL
-              THEN ${sessionCostSql({ stats: sql`ss`, pricing: sql`sub_p` })}
-              ELSE 0.0 END
-          ), 0.0) AS subagent_cost
-        FROM descendant_sessions ds
-        JOIN session_stats ss ON ss.session_id = ds.id
-          -- Excludes an OTEL-only session_stats row (no transcript ever uploaded
-          -- for it) from the sub-agent cost rollup.
-          AND EXISTS (
-            SELECT 1 FROM logs tl
-            WHERE tl.session_id = ds.id AND tl.log_type IN ('claude', 'claude-subagent')
-          )
-        -- Sub-agents are priced at their ROOT's price date.
-        LEFT JOIN LATERAL (
-          ${pricingAsOfSql(sql`ss.model`, sessionPriceDateSql(sql`ds.root_id`))}
-        ) sub_p ON true
-        WHERE ds.depth > 0
-        GROUP BY ds.root_id
-      )
-      SELECT
-        COALESCE(sc.session_row_id, oc.session_row_id) AS session_row_id,
-        sc.subagent_cost,
-        oc.otel_cost
-      FROM subagent_costs sc
-      FULL OUTER JOIN otel_costs oc ON oc.session_row_id = sc.session_row_id
-    `);
+    // Phase B — the complete computed tree cost (own + sub-agents + utility calls,
+    // session-tree-cost.sql.ts), keyed on Phase A's session_row_ids. An unpriced session
+    // (null cost) adds nothing to any bucket.
+    const treeCosts = await loadTreeCostRows(
+      this.db,
+      phaseARows.map((r) => Number(r.session_row_id)),
+    );
 
-    const rollupByRowId = new Map<number, PhaseBRow>();
-    for (const row of rollupResult.rows as unknown as PhaseBRow[]) {
-      rollupByRowId.set(Number(row.session_row_id), row);
-    }
-
-    return phaseARows.map((r) => {
-      const rollup = rollupByRowId.get(Number(r.session_row_id));
-      const ownCost = r.own_cost != null ? num(r.own_cost) : 0;
-      const subagentCost =
-        rollup?.subagent_cost != null ? num(rollup.subagent_cost) : 0;
-      const otelCost = rollup?.otel_cost != null ? num(rollup.otel_cost) : null;
-
-      return {
-        costUsd: resolveSessionTotalCost(otelCost, ownCost + subagentCost) ?? 0,
-        attributionValues: r.attribution_values ?? null,
-      };
-    });
+    return phaseARows.map((r) => ({
+      costUsd: readTreeCost(treeCosts.get(Number(r.session_row_id))).total ?? 0,
+      attributionValues: r.attribution_values ?? null,
+    }));
   }
 }

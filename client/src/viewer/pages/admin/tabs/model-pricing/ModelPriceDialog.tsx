@@ -18,13 +18,17 @@ import {
 } from '../../../../ui/dialog';
 import { formatUsdPerMillion } from './format';
 import { PricingSourceBadge } from './PricingSourceBadge';
+import { PricingTiersEditor } from './PricingTiersEditor';
 import {
   FIELDS,
   emptyForm,
   formFromRates,
+  tierRowsFromTiers,
+  tiersFromRows,
   validatePriceForm,
   type FieldKey,
   type PriceForm,
+  type TierRow,
 } from './priceForm';
 
 export type ModelPriceDialogMode = 'set' | 'edit' | 'override';
@@ -96,22 +100,29 @@ function SourceStrip({ row }: { row: AdminModelPricingRow }) {
 export function ModelPriceDialog({ row, mode, open, onOpenChange }: Props) {
   const { setPrice, setOverride } = useModelPricingMutations();
   const mutation = mode === 'override' ? setOverride : setPrice;
+  const prefill = mode === 'set' ? null : row.effective;
   const [form, setForm] = useState<PriceForm>(() =>
-    mode === 'set' || row.effective === null
-      ? emptyForm()
-      : formFromRates(row.effective),
+    prefill === null ? emptyForm() : formFromRates(prefill),
+  );
+  const [tierRows, setTierRows] = useState<TierRow[]>(() =>
+    tierRowsFromTiers(prefill?.tiers),
   );
   const [error, setError] = useState('');
+  const [tierError, setTierError] = useState('');
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const result = validatePriceForm(form);
-    if (!result.ok) {
-      setError(result.error);
-      return;
-    }
-    setError('');
-    const input: ModelPriceInput = { modelId: row.modelId, ...result.values };
+    const tierResult = tiersFromRows(tierRows);
+    setError(result.ok ? '' : result.error);
+    setTierError(tierResult.ok ? '' : tierResult.error);
+    if (!result.ok || !tierResult.ok) return;
+    // `tiers` is always sent: the dialog shows the full tier list, so an empty table clears it.
+    const input: ModelPriceInput = {
+      modelId: row.modelId,
+      ...result.values,
+      tiers: tierResult.tiers,
+    };
     mutation.mutate(input, {
       onSuccess: () => onOpenChange(false),
       onError: (err: unknown) => {
@@ -128,7 +139,7 @@ export function ModelPriceDialog({ row, mode, open, onOpenChange }: Props) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent data-testid="model-price-dialog">
+      <DialogContent className="sm:max-w-2xl" data-testid="model-price-dialog">
         <DialogHeader>
           <DialogTitle>
             {TITLES[mode]} — {row.modelId}
@@ -165,6 +176,11 @@ export function ModelPriceDialog({ row, mode, open, onOpenChange }: Props) {
               </label>
             ))}
           </div>
+          <PricingTiersEditor
+            rows={tierRows}
+            onChange={setTierRows}
+            error={tierError}
+          />
           {showFr5Note && (
             <p
               className="text-xs text-muted-foreground"

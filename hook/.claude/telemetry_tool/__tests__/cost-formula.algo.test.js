@@ -22,10 +22,21 @@ const TOKEN_KEYS = [
   'outputTokensFast',
 ];
 
+/** Per-call keys of `deriveTokenTotals().calls` — the aggregates without web search. */
+const CALL_KEYS = TOKEN_KEYS.filter((key) => key !== 'webSearchRequests');
+
 for (const row of loadExamples('cost-formula')) {
   test(row.id, { skip: row.only === 'server' && 'server-only row' }, () => {
     const tokens = {};
     for (const key of TOKEN_KEYS) tokens[key] = row.input.tokens[key] ?? 0;
+    if (Array.isArray(row.input.calls)) {
+      tokens.calls = row.input.calls.map((c) => {
+        const call = {};
+        for (const key of CALL_KEYS) call[key] = c[key] ?? 0;
+        return call;
+      });
+    }
+    // `row.input.pricing` carries `tiers` as-is (array, null or absent), like the API response.
     const cost = computeLocalSessionCost(tokens, row.input.pricing);
     assert.ok(Math.abs(cost - row.expected.cost) < 1e-9, `got ${cost}, doc says ${row.expected.cost}`);
   });

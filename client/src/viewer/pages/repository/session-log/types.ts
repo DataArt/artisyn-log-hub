@@ -1,3 +1,4 @@
+import type { CallTokens } from '@loghub/pricing';
 import type { WorkflowRun } from '../../../../models/workflows';
 export type { WorkflowRun };
 
@@ -31,6 +32,14 @@ export interface TokenUsage {
   speed?: string;
 }
 
+/**
+ * Tokens of one LLM call — one deduplicated assistant usage (keyed by `message.id`, falling
+ * back to `uuid`), or one sub-agent `toolUseResult.usage` priced as a single call. Needed
+ * because prompt-length tiers price each call by its own prompt size, which the aggregates
+ * cannot reproduce. Defined in the shared `@loghub/pricing` package.
+ */
+export type { CallTokens };
+
 export interface TokenBreakdown {
   input: number;
   output: number;
@@ -60,6 +69,13 @@ export interface TokenBreakdown {
    */
   inputFast: number;
   outputFast: number;
+  /**
+   * Per-call tokens summing to the aggregates above, in first-seen order (DD14). Optional:
+   * a breakdown built without call data (e.g. a `session_stats` fallback) is priced on the
+   * aggregate path. Every merge of two breakdowns concatenates both lists, or drops them
+   * when either side has none (`concatCalls` in `log-parser.ts`).
+   */
+  calls?: CallTokens[];
 }
 
 export interface BaseEvent {

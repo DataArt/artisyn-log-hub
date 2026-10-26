@@ -8,6 +8,8 @@ import {
 import { sql } from 'drizzle-orm';
 import { DRIZZLE } from '../database/database.constants';
 import type { DrizzleDb } from '../database/database.module';
+import { normalizeTiers } from '../model-pricing/model-pricing-rates';
+import type { PricingTier } from '../model-pricing/model-pricing.types';
 
 /** `asOf` query format: a calendar date, `YYYY-MM-DD`. */
 const AS_OF_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
@@ -37,6 +39,20 @@ interface PricingRow {
   price_web_search: string;
   chars_per_token: string | null;
   context_length: number | null;
+  tiers: PricingTier[] | null;
+}
+
+/** One entry of `GET /api/v1/model-pricing`. `tiers` is present only when the model has tiers. */
+export interface PublicModelPricingEntry {
+  priceIn: number;
+  priceOut: number;
+  priceCacheR: number;
+  priceCacheW5m: number;
+  priceCacheW1h: number;
+  priceWebSearch: number;
+  charsPerToken: number | null;
+  contextLength: number | null;
+  tiers?: PricingTier[];
 }
 
 /**
@@ -44,6 +60,8 @@ interface PricingRow {
  * before any session has been ingested, i.e. before it
  * could ever hold a valid session-scoped API key/cookie. Response shape is unchanged and
  * carries no per-user or per-session data — only the repo-wide `model_pricing` table.
+ * `tiers` (prompt-length tiers) is emitted only for a model that has them, so entries of
+ * untiered models stay byte-identical for old consumers.
  *
  * An optional `asOf=YYYY-MM-DD` returns the rates in force on that date (the client
  * passes a session's UTC start date so its per-turn costs match the server's session price
@@ -54,21 +72,9 @@ export class ModelPricingController {
   constructor(@Inject(DRIZZLE) private readonly db: DrizzleDb) {}
 
   @Get()
-  async getModelPricing(@Query('asOf') asOf?: string): Promise<
-    Record<
-      string,
-      {
-        priceIn: number;
-        priceOut: number;
-        priceCacheR: number;
-        priceCacheW5m: number;
-        priceCacheW1h: number;
-        priceWebSearch: number;
-        charsPerToken: number | null;
-        contextLength: number | null;
-      }
-    >
-  > {
+  async getModelPricing(
+    @Query('asOf') asOf?: string,
+  ): Promise<Record<string, PublicModelPricingEntry>> {
     if (asOf !== undefined && !isValidAsOf(asOf)) {
       throw new BadRequestException('asOf must be a date in YYYY-MM-DD format');
     }
@@ -78,7 +84,7 @@ export class ModelPricingController {
       SELECT DISTINCT ON (model_id) model_id,
              price_in, price_out, price_cache_r,
              price_cache_w_5m, price_cache_w_1h, price_web_search,
-             chars_per_token, context_length
+             chars_per_token, context_length, tiers
       FROM model_pricing
       WHERE effective_from <= ${priceDate}
       ORDER BY model_id, effective_from DESC
@@ -91,9 +97,8 @@ export class ModelPricingController {
     }
 
     return Object.fromEntries(
-      rows.map((row) => [
-        row.model_id,
-        {
+      rows.map((row): [string, PublicModelPricingEntry] => {
+        const entry: PublicModelPricingEntry = {
           priceIn: parseFloat(row.price_in),
           priceOut: parseFloat(row.price_out),
           priceCacheR: parseFloat(row.price_cache_r),
@@ -105,8 +110,11 @@ export class ModelPricingController {
               ? parseFloat(row.chars_per_token)
               : null,
           contextLength: row.context_length,
-        },
-      ]),
+        };
+        const tiers = normalizeTiers(row.tiers);
+        if (tiers !== null) entry.tiers = tiers;
+        return [row.model_id, entry];
+      }),
     );
   }
 }

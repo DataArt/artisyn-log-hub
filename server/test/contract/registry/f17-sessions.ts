@@ -124,7 +124,8 @@ export const f17Sessions: ContractFamily = {
         sql: `SELECT ${ownCostSql('own')} AS main_cost,
                      ${treeCostSql('own.session_id')} - ${ownCostSql('own')} AS subagent_cost,
                      ${treeCostSql('own.session_id')} AS total_cost,
-                     0 AS utility_cost, NULL::numeric AS telemetry_cost, false AS flag
+                     0 AS utility_cost, NULL::numeric AS telemetry_cost, false AS flag,
+                     '[]'::jsonb AS unpriced_models
                 FROM session_stats own WHERE own.session_id = $1`,
         args: ['@s02.id'],
         shape: 'object',
@@ -137,6 +138,40 @@ export const f17Sessions: ContractFamily = {
           telemetryCost: 'telemetry_cost',
           mismatch: 'flag',
           utilityPricingMissing: 'flag',
+          subagentPricingMissing: 'flag',
+          unpricedModels: { col: 'unpriced_models', as: 'json' },
+        },
+        strict: true,
+      },
+    },
+    {
+      // The member's own w1-s06 (first in the T1 list) runs world-model-unpriced: no
+      // calculated cost at all (never a partial sum), and the model is named for the
+      // `$???` hint.
+      id: 'F17-list-cost-breakdown-unpriced',
+      route: 'GET /api/v1/repositories/:repoId/sessions',
+      actor: 'member',
+      params: { repoId: '@R1.id' },
+      query: { teamId: '@T1.id' },
+      expect: { status: 200 },
+      read: {
+        sql: `SELECT NULL::numeric AS main_cost, 0 AS zero, NULL::numeric AS total_cost,
+                     NULL::numeric AS telemetry_cost, false AS flag,
+                     jsonb_build_array(ss.model) AS unpriced_models
+                FROM session_stats ss WHERE ss.session_id = $1`,
+        args: ['@s06.id'],
+        shape: 'object',
+        path: '0.costBreakdown',
+        fields: {
+          mainCost: { col: 'main_cost', as: 'numeric' },
+          subagentCost: { col: 'zero', as: 'numeric' },
+          utilityCost: { col: 'zero', as: 'numeric' },
+          calculatedCost: { col: 'total_cost', as: 'numeric' },
+          telemetryCost: 'telemetry_cost',
+          mismatch: 'flag',
+          utilityPricingMissing: 'flag',
+          subagentPricingMissing: 'flag',
+          unpricedModels: { col: 'unpriced_models', as: 'json' },
         },
         strict: true,
       },

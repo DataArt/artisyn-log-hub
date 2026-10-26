@@ -57,9 +57,11 @@ function copyMigrations() {
   fs.cpSync(from, path.join(ROOT, 'dist', 'drizzle', 'migrations'), { recursive: true, filter: skipDotfiles });
 }
 
-// Strips ncc's leftover source/test output from dist/.
+// Strips ncc's leftover source/test output from dist/. ncc emits the .d.ts files under the
+// common root of every compiled .ts: server/ alone gives src/ + test/; with the repo-local
+// packages/ (@loghub/pricing) in the graph it is the repo root, so server/ + packages/.
 function postclean() {
-  for (const leftover of ['src', 'test', 'drizzle.config.d.ts']) {
+  for (const leftover of ['src', 'test', 'server', 'packages', 'drizzle.config.d.ts']) {
     try {
       fs.rmSync(path.join(ROOT, 'dist', leftover), { recursive: true, force: true });
     } catch (_) {

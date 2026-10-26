@@ -115,7 +115,7 @@ export interface SessionInfoDerived {
    * shows above it: main-session cost, plus Sub-agents when present, plus Workflow agents when
    * shown. Not just `derived.totalCost` (main-session tokens only) — that undercounts by the
    * full sub-agent/workflow spend whenever any ran, which previously made this row look wildly
-   * lower than "Telemetry reported price" even though the two were never meant to match.
+   * lower than the session cost shown next to it even though the two were never meant to match.
    */
   totalCostWithSubagents: number | null;
   productivityLines: string | null;

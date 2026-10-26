@@ -3,6 +3,7 @@ import {
   bigint,
   boolean,
   date,
+  doublePrecision,
   index,
   integer,
   jsonb,
@@ -18,6 +19,7 @@ import {
   varchar,
 } from 'drizzle-orm/pg-core';
 import type { UploadQueueMeasurementOutcome } from '../../logs/upload-queue-stats.constants';
+import type { PricingTier } from '../../model-pricing/model-pricing.types';
 
 export const userRoleEnum = pgEnum('user_role', ['admin', 'user']);
 
@@ -401,6 +403,75 @@ export const sessionRequestIds = pgTable(
   ],
 );
 
+// Per-call token arrays of a session (migration 0074), one row per session, in the
+// columnar shape of SessionCallTokensColumns. Rewritten with every session_stats upsert;
+// read by the session-cost recompute for the per-call (tiered) cost path. CHECK
+// (jsonb_typeof(calls) = 'object') lives in migration 0074 only.
+export const sessionCallTokens = pgTable('session_call_tokens', {
+  sessionId: integer('session_id')
+    .primaryKey()
+    .references(() => sessions.id, { onDelete: 'cascade' }),
+  calls: jsonb('calls').$type<SessionCallTokensColumns>().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+/**
+ * Columnar per-call token arrays (`session_call_tokens.calls`). Every present key holds
+ * one number per call in first-seen order; a missing key reads as all zeros.
+ */
+export interface SessionCallTokensColumns {
+  inputTokens?: number[];
+  outputTokens?: number[];
+  cacheReadTokens?: number[];
+  cacheWrite5mTokens?: number[];
+  cacheWrite1hTokens?: number[];
+  inputTokensFast?: number[];
+  outputTokensFast?: number[];
+}
+
+// A session's stored cost and its breakdown (migration 0074), one row per session.
+// Every session-cost reader reads `cost` from here; NULL cost = unpriced. `stale` rows
+// are recomputed by the session-cost sweeper.
+export const sessionCosts = pgTable(
+  'session_costs',
+  {
+    sessionId: integer('session_id')
+      .primaryKey()
+      .references(() => sessions.id, { onDelete: 'cascade' }),
+    // session_stats.model with any -YYYYMMDD suffix stripped.
+    modelId: varchar('model_id'),
+    // The top ancestor's price date (sessionPriceDateSql).
+    priceDate: date('price_date').notNull(),
+    pricingEffectiveFrom: date('pricing_effective_from'),
+    pricingSource: varchar('pricing_source', { length: 16 }),
+    cost: doublePrecision('cost'),
+    costInput: doublePrecision('cost_input'),
+    costOutput: doublePrecision('cost_output'),
+    costCacheRead: doublePrecision('cost_cache_read'),
+    costCacheWrite5m: doublePrecision('cost_cache_write_5m'),
+    costCacheWrite1h: doublePrecision('cost_cache_write_1h'),
+    costWebSearch: doublePrecision('cost_web_search'),
+    costFastSurcharge: doublePrecision('cost_fast_surcharge'),
+    // Informational: total minus the same tokens at base rates; never a summand.
+    costTierDelta: doublePrecision('cost_tier_delta'),
+    // 'unknown-model' or NULL.
+    unavailableReason: varchar('unavailable_reason', { length: 32 }),
+    stale: boolean('stale').notNull().default(false),
+    computedAt: timestamp('computed_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    // Partial: `WHERE stale` — defined in migration 0074 (Drizzle mirror below).
+    index('idx_session_costs_stale')
+      .on(table.sessionId)
+      .where(sql`stale`),
+    index('idx_session_costs_model_date').on(table.modelId, table.priceDate),
+  ],
+);
+
 export const logRepositories = pgTable(
   'log_repositories',
   {
@@ -558,12 +629,16 @@ export const modelPricing = pgTable(
     // Origin of this price version: 'anthropic' | 'openrouter' | 'manual' | 'override'.
     // The newest effective row's source is the model's current source.
     source: varchar('source', { length: 16 }).notNull().default('manual'),
+    // Prompt-length price tiers, sorted ascending by aboveTokens; NULL = no tiers
+    // (an empty array is stored as NULL). Validated by validatePricingTiers.
+    tiers: jsonb('tiers').$type<PricingTier[]>(),
   },
   (table) => [primaryKey({ columns: [table.modelId, table.effectiveFrom] })],
 );
 // Note: CHECK constraint model_pricing_source_check (source IN ('anthropic',
 // 'openrouter','manual','override')) is defined in the raw SQL migration 0066 only —
-// it is not mirrored in Drizzle.
+// it is not mirrored in Drizzle. Likewise CHECK model_pricing_tiers_array_chk
+// (tiers IS NULL OR jsonb_typeof(tiers) = 'array') lives in migration 0074 only.
 
 // Per-model facts that do not belong to a price version: when an unpriced model was
 // first seen, and the base price hidden under an active override. An unpriced model
@@ -601,13 +676,17 @@ export const modelPricingMeta = pgTable('model_pricing_meta', {
     scale: 3,
   }),
   overrideBaseContextLength: integer('override_base_context_length'),
+  // Tiers of the base price hidden under an override; NULL = no tiers.
+  overrideBaseTiers: jsonb('override_base_tiers').$type<PricingTier[]>(),
   updatedAt: timestamp('updated_at', { withTimezone: true })
     .notNull()
     .defaultNow(),
 });
 // Note: CHECK constraint model_pricing_meta_override_base_source_check
 // (override_base_source IN ('anthropic','openrouter')) is defined in the raw SQL
-// migration 0066 only — it is not mirrored in Drizzle.
+// migration 0066 only — it is not mirrored in Drizzle. Likewise CHECK
+// model_pricing_meta_override_base_tiers_array_chk (override_base_tiers IS NULL OR
+// jsonb_typeof(override_base_tiers) = 'array') lives in migration 0074 only.
 
 // One row per price source ('anthropic', 'openrouter'): last attempt/success and
 // outcome. The 'anthropic' row is also the cluster claim for the daily fetch.

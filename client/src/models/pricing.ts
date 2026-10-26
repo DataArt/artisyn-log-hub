@@ -1,3 +1,5 @@
+import type { PricingTier } from '@loghub/pricing';
+
 /**
  * One `model_pricing` row as served by `GET /api/v1/model-pricing`.
  *
@@ -9,6 +11,14 @@
  * used 1h caching. There is deliberately no fast-mode rate here — fast tokens are priced
  * at `FAST_MODE_MULTIPLIER` x the standard `priceIn`/`priceOut` (see `viewer/lib/format.ts`).
  */
+/**
+ * One prompt-length tier: a call whose prompt (`input + cacheRead + cacheWrite5m +
+ * cacheWrite1h`) is strictly greater than `aboveTokens` is priced at these rates instead of
+ * the base rates. All rates are USD per million tokens; a tier has no web-search price.
+ * Defined in the shared `@loghub/pricing` package (also used by the server).
+ */
+export type { PricingTier };
+
 export interface ModelPricingEntry {
   priceIn: number;
   priceOut: number;
@@ -21,6 +31,11 @@ export interface ModelPricingEntry {
   priceWebSearch: number;
   charsPerToken: number | null;
   contextLength: number | null;
+  /**
+   * Prompt-length tiers, ascending by `aboveTokens`. Absent for an untiered model (the
+   * server emits the field only when non-null).
+   */
+  tiers?: PricingTier[];
 }
 
 export type ModelPricingMap = Record<string, ModelPricingEntry>;
@@ -52,6 +67,8 @@ export interface ModelPricingRates {
   priceWebSearch: number;
   charsPerToken: number | null;
   contextLength: number | null;
+  /** Prompt-length tiers, ascending by `aboveTokens`; null when the model has none. */
+  tiers: PricingTier[] | null;
 }
 
 /** One row of `GET /api/v1/admin/model-pricing`. */
@@ -74,6 +91,8 @@ export interface PricingFetchStatus {
   lastResult: 'changed' | 'unchanged' | 'imported' | 'failed' | null;
   lastCounts: Record<string, number> | null;
   lastError: string | null;
+  /** When the daily Anthropic check is next due (ISO); null for OpenRouter or when disabled. */
+  nextCheckAt: string | null;
 }
 
 /** Response of `GET /api/v1/admin/model-pricing`. */
@@ -82,6 +101,12 @@ export interface AdminModelPricingResponse {
   openrouter: PricingFetchStatus;
   unpricedCount: number;
   models: AdminModelPricingRow[];
+}
+
+/** Response of `POST /api/v1/admin/model-pricing/fetch-anthropic`. */
+export interface AnthropicFetchNowResult {
+  /** `skipped`: another check started moments ago. */
+  result: 'changed' | 'unchanged' | 'failed' | 'skipped';
 }
 
 /** Response of `POST /api/v1/admin/model-pricing/import-openrouter`. */
@@ -108,4 +133,6 @@ export interface ModelPriceInput {
   priceWebSearch?: number;
   charsPerToken?: number;
   contextLength?: number;
+  /** Omitted keeps the current tiers; `null` or `[]` clears them. */
+  tiers?: PricingTier[] | null;
 }

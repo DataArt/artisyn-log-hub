@@ -750,6 +750,16 @@
         "068015354fbf2e426a5c205fef704e81acf0d825a8fa4380778b819e96351194",
         "2527cdafeea490cacb283501d18a1750ad198dd6ad9869870f1319154358fc36"
       ]
+    },
+    {
+      "idx": 74,
+      "tag": "0074_pricing_tiers_session_costs",
+      "when": 1790899200000,
+      "sha256": "cf4a11afd0db277f06476334495acc97d1bc4be2c518a22a840e5bcfa031c4ae",
+      "acceptedHashes": [
+        "7b92ca244e3efc966831b42a6738114b7ec90ce8b72063bc01757f7384a70614",
+        "cf4a11afd0db277f06476334495acc97d1bc4be2c518a22a840e5bcfa031c4ae"
+      ]
     }
   ]
 }

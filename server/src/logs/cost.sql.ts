@@ -1,3 +1,10 @@
+import {
+  type CallTokens,
+  computeCostBreakdown,
+  type CostTerms,
+  FAST_MODE_MULTIPLIER,
+  type PricingTier,
+} from '@loghub/pricing';
 import { sql, type SQL } from 'drizzle-orm';
 
 /**
@@ -5,71 +12,44 @@ import { sql, type SQL } from 'drizzle-orm';
  *
  * Before the TTL pricing split the same arithmetic was hand-copied into eleven expressions across six
  * files, which is exactly how the flat cache-write rate survived the TTL token split:
- * fixing one copy left the others contradicting it on screen. Every server cost site —
- * SQL or TypeScript — must now go through {@link sessionCostSql} or
- * {@link computeSessionCost}, so the sessions list, the analytics timeline, the
- * executive summary, the cache-read-ratio report, the active-sessions panel and the
- * delete-time audit row can never disagree about what a session cost.
+ * fixing one copy left the others contradicting it on screen. Every server session-cost
+ * site must now go through {@link computeSessionCostBreakdown} (or its scalar wrapper
+ * {@link computeSessionCost}); its result is stored per session in `session_costs` and
+ * every reader (sessions list, analytics timeline, executive summary, cache-read-ratio
+ * report, active-sessions panel, delete-time audit row) reads that stored value, so they
+ * can never disagree about what a session cost.
  *
- * The canonical formula (all six rates come from `model_pricing`; none is ever a
- * literal in source — see `docs/knowledgebase/llm-call-math.md`):
+ * {@link sessionCostSql} is the SQL form of the aggregate formula at base rates. The OTEL
+ * utility-call rollup (`utilityCostsCte` in `otel-cost.sql.ts`) prices each
+ * `otel_api_calls` row per call with prompt-length tiers instead: {@link callTierRatesSql}
+ * picks the call's rates and {@link tieredCallCostSql} applies them — together the SQL form
+ * of the per-call rule (`pickCallRates` in `@loghub/pricing`).
  *
- * ```
- * F = FAST_MODE_MULTIPLIER - 1                       // 1 today
- *
- * cost = (input  + inputFast  * F) / 1e6 * priceIn
- *      + (output + outputFast * F) / 1e6 * priceOut
- *      +  cacheRead               / 1e6 * priceCacheR
- *      +  cacheWrite5m            / 1e6 * priceCacheW5m
- *      +  cacheWrite1h            / 1e6 * priceCacheW1h
- *      +  webSearchRequests             * priceWebSearch   // per REQUEST, not per 1e6
- * ```
- *
- * Two invariants worth restating because both are load-bearing:
- * - `cacheWrite5m + cacheWrite1h = cacheWrite`, so this formula must never also add a
- *   `cacheWrite * priceCacheW` term — the deprecated `price_cache_w` column has no
- *   readers left.
- * - `inputFast` / `outputFast` are **subsets** of `input` / `output`, not extra tokens.
- *   That is why fast mode appears as a *surcharge* on the grand total
- *   (`(total - fast)*r + fast*M*r = (total + fast*(M-1))*r`) rather than as separate
- *   standard/fast terms. Adding `fast * M * r` on top of a full-total term would
- *   double-bill every fast token.
- *
- * Client-side twin: `client/src/viewer/lib/format.ts`'s `computeCost` (plus its own
- * `FAST_MODE_MULTIPLIER`). Any change here must be mirrored there, and vice versa —
- * the client prices individual turns from the transcript, the server prices sessions
- * from `session_stats`, but both must land on the same number for the same tokens.
+ * The formula itself — the aggregate form and the per-call rule for prompt-length tiers —
+ * is defined once in the shared package `@loghub/pricing` (`packages/pricing/src/cost.ts`),
+ * which the client uses as well; {@link computeSessionCostBreakdown} only adapts
+ * `session_stats` / `session_call_tokens` rows (Postgres numerics, columnar per-call
+ * arrays) to it. {@link sessionCostSql} must stay equal to its aggregate path.
  */
 
-/**
- * Multiplier applied to the standard per-token rate for tokens billed in fast mode
- * (`usage.speed = 'fast'`).
- *
- * Fast rates are **derived, not stored**: `model_pricing` holds only the standard
- * `price_in` / `price_out`, and the fast price is this multiple of them.
- * There is deliberately no `price_in_fast` column — the two rates
- * would then be able to drift apart, and no evidence exists of a fast-mode rate that is
- * anything other than 2x standard. Cache reads/writes and web-search requests have no
- * fast-mode surcharge at all.
- *
- * The code below writes the general `M`-form rather than hardcoding "double", so a
- * future multiplier change is a single edit here and in the client twin.
- */
-export const FAST_MODE_MULTIPLIER = 2;
+/** Fast-mode multiplier of the standard rate — defined in `@loghub/pricing`. */
+export { FAST_MODE_MULTIPLIER };
 
 /**
  * The fast-mode *surcharge* factor `F = M - 1`, as a raw SQL literal.
  *
  * `sql.raw` rather than a bind parameter on purpose: an untyped `$n` inside
  * `bigint + $n` arithmetic makes Postgres guess at the parameter's type. The value is
- * derived from a numeric constant in this file, never from input.
+ * derived from a numeric constant of `@loghub/pricing`, never from input.
  */
 const fastSurchargeSql = sql.raw(String(FAST_MODE_MULTIPLIER - 1));
 
 /**
  * The `SELECT` list for a `model_pricing` lookup — every rate {@link sessionCostSql}
  * needs, plus `model_id`, which call sites use for the "is this model priced at all?"
- * guard (`p.model_id IS NULL` -> `costUnavailableReason: 'unknown-model'`).
+ * guard (`p.model_id IS NULL` -> `costUnavailableReason: 'unknown-model'`), plus
+ * `tiers` (jsonb prompt-length tiers or NULL), `effective_from` and `source` of the
+ * resolved row, which the stored session-cost writer records alongside the cost.
  *
  * Emitted in the `DISTINCT ON (model_id)` shape every existing lookup already uses, so
  * the caller supplies only the `WHERE` / `ORDER BY` around it. Both forms below are in
@@ -103,7 +83,10 @@ export function pricingColumnsSql(): SQL {
          price_cache_r::float    AS price_cache_r,
          price_cache_w_5m::float AS price_cache_w_5m,
          price_cache_w_1h::float AS price_cache_w_1h,
-         price_web_search::float AS price_web_search`;
+         price_web_search::float AS price_web_search,
+         tiers,
+         effective_from,
+         source`;
 }
 
 /**
@@ -209,11 +192,90 @@ export function sessionCostSql({ stats, pricing }: SessionCostSqlAliases): SQL {
 }
 
 /**
+ * The prompt size of one call, as SQL — `input + cache read + cache write (5m + 1h)` of a
+ * row whose columns are named like `session_stats` (an `otel_api_calls` row). The same sum
+ * as `promptTokens` in `@loghub/pricing`.
+ */
+function callPromptTokensSql(call: SQL): SQL {
+  return sql`(COALESCE(${call}.input_tokens, 0) + COALESCE(${call}.cache_read_tokens, 0)
+    + COALESCE(${call}.cache_write_5m_tokens, 0) + COALESCE(${call}.cache_write_1h_tokens, 0))`;
+}
+
+/**
+ * The body of a `LEFT JOIN LATERAL` that picks the prompt-length tier one call is priced at:
+ * among the `tiers` jsonb of the pricing row (ascending by `aboveTokens`), the tier with the
+ * largest `aboveTokens` strictly below the call's prompt size ({@link callPromptTokensSql}).
+ * No row comes back when no tier matches (or the model has no tiers, or no pricing row), and
+ * {@link tieredCallCostSql} then falls back to the base rates.
+ *
+ * This is the SQL form of `pickCallRates` (`@loghub/pricing`): "the last tier with
+ * prompt > aboveTokens" over an ascending list is exactly the tier with the largest threshold
+ * below the prompt. Selects `price_in`, `price_out`, `price_cache_r`, `price_cache_w_5m` and
+ * `price_cache_w_1h` (tiers carry no web-search price).
+ *
+ * @param call SQL alias of the call row (`otel_api_calls`).
+ * @param pricing SQL alias of a pricing row built with {@link pricingColumnsSql}.
+ */
+export function callTierRatesSql(call: SQL, pricing: SQL): SQL {
+  return sql`SELECT (t->>'priceIn')::float       AS price_in,
+           (t->>'priceOut')::float      AS price_out,
+           (t->>'priceCacheR')::float   AS price_cache_r,
+           (t->>'priceCacheW5m')::float AS price_cache_w_5m,
+           (t->>'priceCacheW1h')::float AS price_cache_w_1h
+      FROM jsonb_array_elements(COALESCE(${pricing}.tiers, '[]'::jsonb)) AS t
+     WHERE (t->>'aboveTokens')::bigint < ${callPromptTokensSql(call)}
+     ORDER BY (t->>'aboveTokens')::bigint DESC
+     LIMIT 1`;
+}
+
+/**
+ * The cost of ONE call at its chosen rates — {@link sessionCostSql}'s arithmetic with each
+ * token rate taken from the picked tier (`tier`, a {@link callTierRatesSql} lateral) when one
+ * matched, else from the base row. Fast-mode surcharge as in {@link sessionCostSql}; web
+ * search always at the base rate. Like {@link sessionCostSql} it carries no missing-pricing
+ * guard: wrap it in `CASE WHEN p.model_id IS NOT NULL …`.
+ */
+export function tieredCallCostSql({
+  call,
+  pricing,
+  tier,
+}: {
+  call: SQL;
+  pricing: SQL;
+  tier: SQL;
+}): SQL {
+  return sql`(
+    ((COALESCE(${call}.input_tokens, 0) + COALESCE(${call}.input_tokens_fast, 0) * ${fastSurchargeSql})::float / 1000000.0 * COALESCE(${tier}.price_in, ${pricing}.price_in)) +
+    ((COALESCE(${call}.output_tokens, 0) + COALESCE(${call}.output_tokens_fast, 0) * ${fastSurchargeSql})::float / 1000000.0 * COALESCE(${tier}.price_out, ${pricing}.price_out)) +
+    (COALESCE(${call}.cache_read_tokens, 0)::float / 1000000.0 * COALESCE(${tier}.price_cache_r, ${pricing}.price_cache_r)) +
+    (COALESCE(${call}.cache_write_5m_tokens, 0)::float / 1000000.0 * COALESCE(${tier}.price_cache_w_5m, ${pricing}.price_cache_w_5m)) +
+    (COALESCE(${call}.cache_write_1h_tokens, 0)::float / 1000000.0 * COALESCE(${tier}.price_cache_w_1h, ${pricing}.price_cache_w_1h)) +
+    (COALESCE(${call}.web_search_requests, 0)::float * ${pricing}.price_web_search)
+  )`;
+}
+
+/**
  * A numeric value as it can arrive from Postgres: `bigint` and `numeric` columns come
  * back as strings through `node-postgres`, `::float` casts as numbers, and a
  * `LEFT JOIN`ed row as `null`.
  */
 type NumericLike = number | string | null | undefined;
+
+/**
+ * Per-call token counts of one session (`session_call_tokens.calls`), columnar: index `i`
+ * of every array is call `i`. A missing key reads as all zeros; the call count is the
+ * longest present array. `inputTokensFast` / `outputTokensFast` are subsets of
+ * `inputTokens` / `outputTokens`, as in the aggregates.
+ */
+export interface SessionCallTokens {
+  inputTokens?: number[];
+  outputTokens?: number[];
+  cacheReadTokens?: number[];
+  cacheWrite5mTokens?: number[];
+  cacheWrite1hTokens?: number[];
+  inputTokensFast?: number[];
+  outputTokensFast?: number[];
+}
 
 /** Token counts for {@link computeSessionCost} — a `session_stats` row's shape. */
 export interface SessionCostTokens {
@@ -227,6 +289,11 @@ export interface SessionCostTokens {
   inputTokensFast: NumericLike;
   /** Subset of `outputTokens` billed in fast mode — not additional tokens. */
   outputTokensFast: NumericLike;
+  /**
+   * Per-call tokens; used (instead of the aggregates above) only when the pricing has a
+   * non-empty `tiers` list. Their sums equal the aggregates.
+   */
+  calls?: SessionCallTokens | null;
 }
 
 /** Rates for {@link computeSessionCost} — a `model_pricing` row's shape. */
@@ -238,6 +305,22 @@ export interface SessionCostPricing {
   priceCacheW1h: NumericLike;
   /** USD per web-search request — a per-request price, NOT per million tokens. */
   priceWebSearch: NumericLike;
+  /** Prompt-length tiers, ascending by `aboveTokens`; null/absent/empty means none. */
+  tiers?: readonly PricingTier[] | null;
+}
+
+/** Cost terms of one session, in USD; they sum to the total cost. */
+export type SessionCostTerms = CostTerms;
+
+/** Result of {@link computeSessionCostBreakdown}. */
+export interface SessionCostBreakdown {
+  cost: number;
+  terms: SessionCostTerms;
+  /**
+   * Total minus the same tokens priced at base rates. Informational only — `terms`
+   * already sum to `cost`, so it is never added as a summand. 0 on the aggregate path.
+   */
+  tierDelta: number;
 }
 
 /** Missing/unparseable -> 0, so one absent column cannot `NaN` the whole cost. */
@@ -249,10 +332,76 @@ function num(value: NumericLike): number {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+/** Columnar per-call record -> one row per call; the call count is the longest array. */
+function callRows(calls: SessionCallTokens): CallTokens[] {
+  const n = Math.max(
+    0,
+    calls.inputTokens?.length ?? 0,
+    calls.outputTokens?.length ?? 0,
+    calls.cacheReadTokens?.length ?? 0,
+    calls.cacheWrite5mTokens?.length ?? 0,
+    calls.cacheWrite1hTokens?.length ?? 0,
+    calls.inputTokensFast?.length ?? 0,
+    calls.outputTokensFast?.length ?? 0,
+  );
+  const at = (arr: number[] | undefined, i: number): number => num(arr?.[i]);
+  const rows: CallTokens[] = [];
+  for (let i = 0; i < n; i++) {
+    rows.push({
+      input: at(calls.inputTokens, i),
+      output: at(calls.outputTokens, i),
+      cacheRead: at(calls.cacheReadTokens, i),
+      cacheWrite5m: at(calls.cacheWrite5mTokens, i),
+      cacheWrite1h: at(calls.cacheWrite1hTokens, i),
+      inputFast: at(calls.inputTokensFast, i),
+      outputFast: at(calls.outputTokensFast, i),
+    });
+  }
+  return rows;
+}
+
 /**
- * TypeScript twin of {@link sessionCostSql}, for the cost sites that roll up in TS
- * rather than in SQL (the delete-time audit row in `sessions.service.ts`, the
- * cache-read-ratio report's group rollup). Same formula, same rates, same result.
+ * The session's cost with its per-term breakdown, by the shared formula of
+ * `@loghub/pricing` (`computeCostBreakdown`): per call when `tokens.calls` is present
+ * and the pricing has a non-empty `tiers` list, otherwise over the aggregates at base rates.
+ * Returns `null` — never a zero cost — when there is no pricing row.
+ */
+export function computeSessionCostBreakdown(
+  tokens: SessionCostTokens,
+  pricing: SessionCostPricing | null | undefined,
+): SessionCostBreakdown | null {
+  if (pricing == null) {
+    return null;
+  }
+  const { total, terms, tierDelta } = computeCostBreakdown(
+    {
+      input: num(tokens.inputTokens),
+      output: num(tokens.outputTokens),
+      cacheRead: num(tokens.cacheReadTokens),
+      cacheWrite5m: num(tokens.cacheWrite5mTokens),
+      cacheWrite1h: num(tokens.cacheWrite1hTokens),
+      inputFast: num(tokens.inputTokensFast),
+      outputFast: num(tokens.outputTokensFast),
+      webSearchRequests: num(tokens.webSearchRequests),
+      calls: tokens.calls == null ? null : callRows(tokens.calls),
+    },
+    {
+      priceIn: num(pricing.priceIn),
+      priceOut: num(pricing.priceOut),
+      priceCacheR: num(pricing.priceCacheR),
+      priceCacheW5m: num(pricing.priceCacheW5m),
+      priceCacheW1h: num(pricing.priceCacheW1h),
+      priceWebSearch: num(pricing.priceWebSearch),
+      tiers: pricing.tiers,
+    },
+  );
+  return { cost: total, terms, tierDelta };
+}
+
+/**
+ * Scalar form of {@link computeSessionCostBreakdown}: the session's cost, or `null`
+ * without a pricing row. On the aggregate path it is the TypeScript twin of
+ * {@link sessionCostSql}.
  *
  * Accepts the raw shapes both sources produce — Drizzle rows (`bigint` as `number`,
  * `numeric` as `string`) and raw `db.execute` rows (everything a string) — so call
@@ -274,20 +423,5 @@ export function computeSessionCost(
   tokens: SessionCostTokens,
   pricing: SessionCostPricing | null | undefined,
 ): number | null {
-  if (pricing == null) {
-    return null;
-  }
-  const fastSurcharge = FAST_MODE_MULTIPLIER - 1;
-  const input =
-    num(tokens.inputTokens) + num(tokens.inputTokensFast) * fastSurcharge;
-  const output =
-    num(tokens.outputTokens) + num(tokens.outputTokensFast) * fastSurcharge;
-  return (
-    (input / 1_000_000) * num(pricing.priceIn) +
-    (output / 1_000_000) * num(pricing.priceOut) +
-    (num(tokens.cacheReadTokens) / 1_000_000) * num(pricing.priceCacheR) +
-    (num(tokens.cacheWrite5mTokens) / 1_000_000) * num(pricing.priceCacheW5m) +
-    (num(tokens.cacheWrite1hTokens) / 1_000_000) * num(pricing.priceCacheW1h) +
-    num(tokens.webSearchRequests) * num(pricing.priceWebSearch)
-  );
+  return computeSessionCostBreakdown(tokens, pricing)?.cost ?? null;
 }

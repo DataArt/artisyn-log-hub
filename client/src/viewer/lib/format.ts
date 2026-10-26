@@ -1,3 +1,4 @@
+import { computeCostBreakdown } from '@loghub/pricing';
 import { trunc } from './tools/strings';
 import type { ModelPricingEntry } from '../../models/pricing';
 import type { TokenBreakdown } from '../pages/repository/session-log/types';
@@ -15,60 +16,27 @@ export function formatDuration(ms: number | undefined | null): string {
   return `${m}m ${s}s`;
 }
 
-/**
- * Multiplier applied to the standard per-token rate for tokens billed in fast mode
- * (`usage.speed === 'fast'`).
- *
- * Client-side twin of `FAST_MODE_MULTIPLIER` in `server/src/logs/cost.sql.ts` — the two
- * must always carry the same value, or the same tokens price differently depending on
- * whether the figure came from the transcript (client) or from `session_stats` (server).
- * Fast rates are derived, never stored: `model_pricing` holds only the standard
- * `priceIn` / `priceOut`. Cache reads/writes and web-search requests have no fast-mode
- * surcharge.
- */
-export const FAST_MODE_MULTIPLIER = 2;
+// The cost formula (aggregate and per-call with prompt-length tiers) is defined once in the
+// shared `@loghub/pricing` package, which the server uses for stored session costs as well.
+export {
+  computeCostBreakdown,
+  FAST_MODE_MULTIPLIER,
+  type CostBreakdown,
+  type CostTerms,
+} from '@loghub/pricing';
 
 /**
- * The single client-side definition of a token breakdown's cost.
- *
- * ```
- * F = FAST_MODE_MULTIPLIER - 1                      // 1 today
- *
- * cost = (input  + inputFast  * F) / 1e6 * priceIn
- *      + (output + outputFast * F) / 1e6 * priceOut
- *      +  cacheRead               / 1e6 * priceCacheR
- *      +  cacheWrite5m            / 1e6 * priceCacheW5m
- *      +  cacheWrite1h            / 1e6 * priceCacheW1h
- *      +  webSearchRequests             * priceWebSearch   // per REQUEST, not per 1e6
- * ```
- *
- * Two invariants make the shape of this expression load-bearing:
- * - `cacheWrite5m + cacheWrite1h === cacheWrite`, so the two TTL terms replace the old
- *   flat `cacheWrite * priceCacheW` term — never add both.
- * - `inputFast` / `outputFast` are **subsets** of `input` / `output`, so fast mode is a
- *   *surcharge* on the grand total (`(total - fast)*r + fast*M*r = (total + fast*(M-1))*r`),
- *   not a separate priced term. Adding `fast * M * r` on top of a full-total term would
- *   double-bill every fast token.
- *
- * Server-side twin: `computeSessionCost` / `sessionCostSql` in `server/src/logs/cost.sql.ts`.
- * The client prices individual turns from the transcript and the server prices whole
- * sessions from `session_stats`, but both must land on the same number for the same tokens.
+ * A token breakdown's cost — the total of {@link computeCostBreakdown} (`@loghub/pricing`).
+ * Per call when the breakdown carries `calls` and the model has tiers, otherwise over the
+ * aggregates at base rates. The hook's `computeLocalSessionCost` (`hook/`) is a plain-JS
+ * copy of the same formula, checked against the same table
+ * (`docs/knowledgebase/algorithms/cost-formula.md`).
  */
 export function computeCost(
   breakdown: TokenBreakdown,
   pricing: ModelPricingEntry,
 ): number {
-  const fastSurcharge = FAST_MODE_MULTIPLIER - 1;
-  const input = breakdown.input + breakdown.inputFast * fastSurcharge;
-  const output = breakdown.output + breakdown.outputFast * fastSurcharge;
-  return (
-    (input / 1_000_000) * pricing.priceIn +
-    (output / 1_000_000) * pricing.priceOut +
-    (breakdown.cacheRead / 1_000_000) * pricing.priceCacheR +
-    (breakdown.cacheWrite5m / 1_000_000) * pricing.priceCacheW5m +
-    (breakdown.cacheWrite1h / 1_000_000) * pricing.priceCacheW1h +
-    breakdown.webSearchRequests * pricing.priceWebSearch
-  );
+  return computeCostBreakdown(breakdown, pricing).total;
 }
 
 /**

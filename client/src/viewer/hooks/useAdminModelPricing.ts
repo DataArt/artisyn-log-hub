@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   clearAdminModelOverride,
   fetchAdminModelPricing,
+  fetchAnthropicPricingNow,
   importOpenRouterPricing,
   setAdminModelOverride,
   setAdminModelPrice,
@@ -53,6 +54,16 @@ export function useModelPricingMutations() {
     mutationFn: importOpenRouterPricing,
     onSuccess: invalidate,
   });
+  const fetchAnthropic = useMutation({
+    mutationFn: fetchAnthropicPricingNow,
+    onSuccess: invalidate,
+  });
 
-  return { setPrice, setOverride, clearOverride, importOpenRouter };
+  return {
+    setPrice,
+    setOverride,
+    clearOverride,
+    importOpenRouter,
+    fetchAnthropic,
+  };
 }
