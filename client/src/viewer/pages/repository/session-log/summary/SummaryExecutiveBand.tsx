@@ -15,6 +15,10 @@ import type { SessionLogsData } from '../../../../api';
 import { Card, CardContent } from '@/ui/card';
 import { CostBreakdownTooltip } from '../../../../components/CostBreakdownTooltip';
 import { NoPricingBadge } from '../../../../components/NoPricingBadge';
+import {
+  costDiscrepancyHint,
+  unpricedModelIds,
+} from '../../../../lib/cost-hints';
 import { CostReconciliation } from '../../../../components/CostReconciliation';
 import { cn } from '../../../../lib/cn';
 import { formatCost } from '../../../../lib/format';
@@ -166,11 +170,12 @@ export function SummaryExecutiveBand({
     >
       <span className="cursor-help">{formatCost(sessionCost)}</span>
     </CostBreakdownTooltip>
-  ) : unpriced ? (
-    <>
-      {sessionCost !== null && <span>{formatCost(sessionCost)}</span>}
-      <NoPricingBadge modelId={model} />
-    </>
+  ) : unpriced && sessionCost === null ? (
+    // The cost cannot be computed: `$???` with the hint naming the models (never the
+    // OTEL figure in its place).
+    <NoPricingBadge
+      modelIds={unpricedModelIds(session.costBreakdown.unpricedModels, model)}
+    />
   ) : (
     <span>{sessionCost !== null ? formatCost(sessionCost) : 'n/a'}</span>
   );
@@ -178,8 +183,8 @@ export function SummaryExecutiveBand({
   const hasSubAgentMarker = (info.subAgentCost ?? 0) > 0;
   // D2.2 — the compact server-priced reconciliation (calculated vs telemetry, and the
   // main / sub-agents / utility parts) sits under the existing markers. No `unpriced` here:
-  // the tile's value already carries the "no pricing" badge, so a null calculated total just
-  // reads `—` rather than badging the tile twice.
+  // the tile's value already carries the `$???` marker, so a null calculated total just
+  // reads `—` rather than marking the tile twice.
   const costSecondary: ReactNode = (
     <span className="flex flex-col gap-1">
       {(hasSubAgentMarker || session.hasCostDiscrepancy) && (
@@ -191,7 +196,11 @@ export function SummaryExecutiveBand({
           )}
           {session.hasCostDiscrepancy && (
             <span
-              title="Telemetry-reported cost and the computed token×price estimate differ by 33% or more for this session."
+              data-testid="cost-discrepancy-icon"
+              title={costDiscrepancyHint(
+                session.costBreakdown.telemetryCost,
+                session.costBreakdown.calculatedCost,
+              )}
               className="cursor-help"
             >
               <AlertTriangle className="size-3.5 shrink-0 text-amber-500" />

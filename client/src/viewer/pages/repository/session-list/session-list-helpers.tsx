@@ -12,8 +12,8 @@ import { HoverPopover } from '../../../components/ViewportPopover';
 import { PROMPT_HIDDEN_LABEL } from '../../../lib/access-mode-copy';
 
 /**
- * True when this row's cost is missing *because* the model has no `model_pricing` row
- * — the only case that earns the amber "no pricing" marker. `totalCost == null`
+ * True when this row's cost is missing *because* some model of the session tree has no
+ * `model_pricing` row — the only case that earns the amber `$???` marker. `totalCost == null`
  * with no reason attached still means "no stats extracted yet" and keeps rendering
  * nothing, and a genuinely free session has a real `0` cost and prints `$0.0000`.
  */
@@ -318,9 +318,12 @@ export function SessionItem({
         {unpriced && (
           <span className="ml-1 flex items-baseline gap-1">
             <span className="text-muted-foreground/50">|</span>
-            {/* The sessions-list payload carries the reason but not the model id, so
-                the tooltip falls back to its id-less wording here. */}
-            <NoPricingBadge />
+            {/* `unpricedModels` names every unpriced model of the tree (main thread,
+                sub-agents, utility calls); an older server sends none and the hint falls
+                back to its id-less wording. */}
+            <NoPricingBadge
+              modelIds={session.costBreakdown.unpricedModels ?? []}
+            />
           </span>
         )}
       </p>

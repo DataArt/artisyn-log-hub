@@ -25,18 +25,32 @@ table), unchanged across all four modes — `SessionAuthGuard`/`SessionSerialize
 Validated fail-fast at startup (`server/src/auth/config/auth-startup-validation.ts`, called from
 `app.module.ts`) — the server refuses to start with an unrecognized `AUTH_MODE`, or with the active mode's own required
 config missing (e.g. `AZURE_CLIENT_SECRET` for Mode 4,
-`ADMIN_CONTACT_EMAIL`/`SMTP_HOST`/`SMTP_PORT`/`SMTP_FROM` for Mode 3 only). Further startup rules:
+`ADMIN_CONTACT_EMAIL`/`SMTP_HOST`/`SMTP_PORT`/`SMTP_FROM` for Mode 3). Further startup rules:
 
 - **Modes 2 and 3 in production** (`isProduction()` = `NODE_ENV === 'production'`, `server/src/common/runtime-env.ts`;
   set by the Dockerfile runtime stage and the release bundle `.env`, never by dev/e2e) require `PUBLIC_BASE_URL` to be
   an absolute `http(s)` URL (`validateMode2` / `validateMode3`). Outside production it is optional.
 - **Mode 3** also validates `ALLOWED_EMAIL_DOMAINS` (see the allow-list section below).
 - **Mode 4** requires `AZURE_TENANT_ID` to be a tenant GUID (see the Azure tenant section below). **Mode 1 requires no config at all** — no
-fixed/env-configured identity exists in this mode. **Mode 2 also requires no email config** — its only email-dependent
-feature ("forgot password") is best-effort at runtime (`MailService.send()` catches failures and returns `'failed'`), so
-an install with no real SMTP relay can run Mode 2 with `SMTP_*`/`ADMIN_CONTACT_EMAIL` left entirely unset;
-password-reset-via-email simply never succeeds. Only Mode 3 requires working config at startup, since the account is
-unusable until the confirmation email is actually delivered.
+fixed/env-configured identity exists in this mode; Modes 1 and 4 never use SMTP (no transporter, no connection).
+
+**SMTP per mode.** The `SMTP_*` block (`SMTP_HOST`/`SMTP_PORT`/`SMTP_FROM`, port an integer 1–65535) is checked by one
+shared `validateSmtpBlock()` in `auth-startup-validation.ts`:
+
+- **Mode 2 (`password`) — SMTP is optional.** `validateMode2()` calls `validateSmtpBlock()` only when `SMTP_HOST`
+  (trimmed) is non-empty; when it is unset (or whitespace) every other `SMTP_*` value is ignored. With SMTP set, a relay
+  that cannot be reached at startup only logs the warning
+  `SMTP connection warm-up failed (will retry lazily on first send): <err>`. Without SMTP, password reset is
+  unavailable: `GET /api/v1/auth/config` returns `passwordResetAvailable: false`, the login page shows "Forgot
+  password?" disabled with the hint "SMTP server is not configured", and `POST /api/v1/auth/forgot-password` answers
+  `{ email_delivery: 'failed' }` without issuing a token. `ADMIN_CONTACT_EMAIL` stays optional.
+- **Mode 3 (`password-confirm`) — SMTP is required and must be reachable.** `validateMode3()` always calls
+  `validateSmtpBlock()`, and `MailService.onModuleInit()` verifies the relay: a failed `verify()` throws
+  `SMTP relay <host>:<port> is unreachable; AUTH_MODE=password-confirm requires a working relay: <err>`, so the app
+  does not start (`main.ts` → `logFatalError` → exit 1; the cluster crash budget then stops the instance). The
+  account is unusable until the confirmation email is delivered, so the mode cannot run without a relay. Under
+  `NODE_ENV=test` (the contract suite runs Mode 3 with no relay) the failure stays a warning, like Mode 2.
+- `SMTP_USER`/`SMTP_PASSWORD` are optional in both modes; `SMTP_SECURE` is optional (unset = `false`).
 
 **`AUTH_MODE` unset or empty defaults to Mode 2 (`password`)**, rather than failing fast — legacy compatibility for
 every install that predates `AUTH_MODE`, which all ran what is now called Mode 2 with no such env var existing at
@@ -141,8 +155,10 @@ verifies the current password, applies `applyPasswordPolicy`, then:
   time they run the password change has already committed, so a pruning failure must not turn a successful request into
   a 500.
 - **Sends a best-effort notification** (`MailService.sendPasswordChangedEmail`), reported as
-  `email_delivery: 'sent' | 'failed' | 'skipped'`. `'skipped'` means `MailService.isConfigured()` was false (empty
-  `SMTP_HOST`), so nothing was even attempted. None of the three outcomes fails the change.
+  `email_delivery: 'sent' | 'failed' | 'skipped'`. `'skipped'` means `MailService.isConfigured()` was false, so
+  nothing was even attempted. `isConfigured()` is per mode: true iff `AUTH_MODE` is `password` or
+  `password-confirm` **and** `SMTP_HOST` (trimmed) is non-empty — so in practice Mode 2 without SMTP (Mode 3 always
+  has a host outside `NODE_ENV=test`). None of the three outcomes fails the change.
 
 A wrong current password returns **403**, not 401: the client's `apiFetch()` force-navigates to the login page on any
 401, which would eject the user from the dialog mid-change.
@@ -281,7 +297,10 @@ Two caveats to know before relying on this:
   `consumed_at` vs. the older `used_at`) and a shared 60s resend/reissue cooldown, so two concurrent requests for the
   same account can't both succeed.
 - `MailService` (`server/src/mail/mail.service.ts`) sends both email types via `nodemailer`, driven entirely by
-  `SMTP_HOST`/`SMTP_PORT`/`SMTP_SECURE`/`SMTP_USER`/`SMTP_PASSWORD`/`SMTP_FROM` — no code-level defaults. Send failures
+  `SMTP_HOST`/`SMTP_PORT`/`SMTP_SECURE`/`SMTP_USER`/`SMTP_PASSWORD`/`SMTP_FROM` — no code-level defaults. The
+  transporter (`nodemailer.Transporter | null`) is built only when `isConfigured()` is true; otherwise it stays
+  `null`, so nodemailer's `localhost:587` fallback is never reached, the startup warm-up returns silently and
+  `send()` returns `'failed'` without logging (a defensive path — every caller gates on `isConfigured()`). Send failures
   are caught and reported as `email_delivery: 'failed'` in the response body (never thrown) — the account/token action
   itself still succeeds.
 - Emailed confirmation/reset links (signup confirm, resend, forgot-password, and the admin pending-registration

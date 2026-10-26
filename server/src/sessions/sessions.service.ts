@@ -5,27 +5,17 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import {
-  and,
-  desc,
-  eq,
-  inArray,
-  isNull,
-  lt,
-  lte,
-  notInArray,
-  sql,
-} from 'drizzle-orm';
+import { and, eq, inArray, isNull, lt, notInArray, sql } from 'drizzle-orm';
 import { DRIZZLE } from '../database/database.constants';
 import type { DrizzleDb } from '../database/database.module';
-import { computeSessionCost, sessionPriceDateSql } from '../logs/cost.sql';
-import { resolveSessionTotalCost } from '../logs/otel-cost.sql';
+import { loadTreeCostRows, readTreeCost } from '../logs/session-tree-cost.sql';
 import {
   contexts,
   deletedSessionLog,
   logContexts,
   logs,
-  modelPricing,
+  sessionCallTokens,
+  sessionCosts,
   sessionFileStats,
   sessionStats,
   sessions,
@@ -170,8 +160,10 @@ export class SessionsService {
   }
 
   /**
-   * Deletes all child data (session_stats, user_favorite_sessions,
-   * session_file_stats, logs, and orphaned contexts) for the given session ids.
+   * Deletes all child data (session_stats, session_call_tokens, session_costs,
+   * user_favorite_sessions, session_file_stats, logs, and orphaned contexts) for
+   * the given session ids. The two cost tables would cascade on a hard delete of
+   * the `sessions` row, but a soft delete keeps that row, so they are purged here.
    * Does NOT touch the `sessions` rows themselves or write audit log rows —
    * callers decide the final disposition (soft-delete vs. hard-delete) and
    * whether/how to record an audit trail.
@@ -182,6 +174,12 @@ export class SessionsService {
   ): Promise<void> {
     // a. Delete session_stats
     await tx.delete(sessionStats).where(inArray(sessionStats.sessionId, ids));
+
+    // a2. Delete the per-call token rows and the stored session costs
+    await tx
+      .delete(sessionCallTokens)
+      .where(inArray(sessionCallTokens.sessionId, ids));
+    await tx.delete(sessionCosts).where(inArray(sessionCosts.sessionId, ids));
 
     // b. Delete user_favorite_sessions
     await tx
@@ -249,6 +247,10 @@ export class SessionsService {
    * table when it has no `artisyn` log row to source it from.
    */
   private async captureAuditRows(ids: number[]): Promise<AuditRow[]> {
+    // The cost each session shows on every live surface — the complete computed cost of
+    // its tree (own + sub-agents + utility calls; null when any part is unpriced), captured
+    // here before the purge deletes the rows it is computed from.
+    const treeCosts = await loadTreeCostRows(this.db, ids);
     return Promise.all(
       ids.map(async (sid) => {
         const [logRow] = await this.db
@@ -273,69 +275,12 @@ export class SessionsService {
         }
 
         const [statsRow] = await this.db
-          .select({
-            workTimeMs: sessionStats.workTimeMs,
-            inputTokens: sessionStats.inputTokens,
-            outputTokens: sessionStats.outputTokens,
-            cacheReadTokens: sessionStats.cacheReadTokens,
-            cacheWrite5mTokens: sessionStats.cacheWrite5mTokens,
-            cacheWrite1hTokens: sessionStats.cacheWrite1hTokens,
-            webSearchRequests: sessionStats.webSearchRequests,
-            inputTokensFast: sessionStats.inputTokensFast,
-            outputTokensFast: sessionStats.outputTokensFast,
-            model: sessionStats.model,
-            telemetryCost: sessionStats.telemetryCost,
-          })
+          .select({ workTimeMs: sessionStats.workTimeMs })
           .from(sessionStats)
           .where(eq(sessionStats.sessionId, sid))
           .limit(1);
 
-        // OTEL cost (root-only; already covers any in-process sub-agents)
-        // wins over the computed estimate below when this session has a confirmed
-        // `telemetry_cost` — read straight from session_stats, no `logs.body` parse.
-        const otelCost =
-          statsRow?.telemetryCost != null
-            ? Number(statsRow.telemetryCost) / 1_000_000
-            : null;
-
-        // The computed estimate is now derived whenever pricing allows, not
-        // only when OTEL is absent, because `resolveSessionTotalCost` needs both sides to
-        // detect a truncated OTEL total. The archived figure then matches what every live
-        // surface shows for the same session.
-        let computedCost: number | null = null;
-        if (statsRow?.model) {
-          // Match on the NORMALISED model id, stripping a dated suffix so
-          // `claude-opus-4-5-20251101` finds the `claude-opus-4-5` price row. This used to
-          // be the one cost site joining on the raw id, which silently produced a NULL
-          // cost — i.e. an empty audit `total_cost` — for every dated model. Same
-          // normalisation as the SQL sites' `REGEXP_REPLACE(model, '-[0-9]{8}$', '')`.
-          const normalisedModelId = statsRow.model.replace(/-\d{8}$/, '');
-          // Newest price row that had taken effect on the session's price date —
-          // a model can carry several dated rows, so an unordered lookup by model_id
-          // alone could pick a future-dated one and overcharge, and pricing at today's
-          // date would disagree with every live surface for an older session.
-          const [pricing] = await this.db
-            .select()
-            .from(modelPricing)
-            .where(
-              and(
-                eq(modelPricing.modelId, normalisedModelId),
-                lte(
-                  modelPricing.effectiveFrom,
-                  sessionPriceDateSql(sql`${sid}`),
-                ),
-              ),
-            )
-            .orderBy(desc(modelPricing.effectiveFrom))
-            .limit(1);
-          // `computeSessionCost` is the single definition of the cost formula
-          // (`logs/cost.sql.ts`) — TTL-split cache writes, the fast-mode surcharge and the
-          // per-request web-search price included. It returns null, never 0, without a
-          // pricing row, so an unpriced model keeps the audit `total_cost` empty.
-          computedCost = computeSessionCost(statsRow, pricing);
-        }
-
-        const resolvedCost = resolveSessionTotalCost(otelCost, computedCost);
+        const resolvedCost = readTreeCost(treeCosts.get(sid)).total;
         const totalCost: string | null =
           resolvedCost != null ? resolvedCost.toFixed(8) : null;
 

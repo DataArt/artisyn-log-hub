@@ -13,6 +13,7 @@ import type { WorkflowRun } from '../../../../../models/workflows';
 import { computeCost } from '../../../../lib/format';
 import {
   buildChildrenByParentMap,
+  concatCalls,
   parseSessionLogs,
   stripAgentPrefix,
 } from '../log-parser';
@@ -126,6 +127,7 @@ function emptyBreakdown(): TokenBreakdown {
     webSearchRequests: 0,
     inputFast: 0,
     outputFast: 0,
+    calls: [],
   };
 }
 
@@ -285,8 +287,9 @@ function logTimeSpan(turns: PromptTurn[]): {
   return { startMs, endMs };
 }
 
-/** Sum two token breakdowns. */
+/** Sum two token breakdowns; per-call lists concatenate (none if either side lacks them). */
 function addBreakdown(a: TokenBreakdown, b: TokenBreakdown): TokenBreakdown {
+  const calls = concatCalls(a.calls, b.calls);
   return {
     input: a.input + b.input,
     output: a.output + b.output,
@@ -297,6 +300,7 @@ function addBreakdown(a: TokenBreakdown, b: TokenBreakdown): TokenBreakdown {
     webSearchRequests: a.webSearchRequests + b.webSearchRequests,
     inputFast: a.inputFast + b.inputFast,
     outputFast: a.outputFast + b.outputFast,
+    ...(calls !== undefined && { calls }),
   };
 }
 

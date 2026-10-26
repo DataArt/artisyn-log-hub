@@ -1,6 +1,7 @@
 import type { TimelineSession } from '../../../../models/repositories';
 import { ViewportPopover } from '../../../components/ViewportPopover';
 import { PROMPT_HIDDEN_LABEL } from '../../../lib/access-mode-copy';
+import { UNKNOWN_COST_TEXT } from '../../../lib/cost-hints';
 
 interface Props {
   session: TimelineSession;
@@ -51,6 +52,16 @@ export function SessionTooltip({ session, x, y }: Props) {
   });
   if (session.totalCost != null) {
     rows.push({ label: 'Cost', value: formatCost(session.totalCost) });
+  } else if (session.costUnavailableReason === 'unknown-model') {
+    // The cost cannot be computed: say so and name the models, never show a number.
+    const ids = session.unpricedModels ?? [];
+    rows.push({
+      label: 'Cost',
+      value:
+        ids.length > 0
+          ? `${UNKNOWN_COST_TEXT} (no price in Log Hub for ${ids.join(', ')})`
+          : `${UNKNOWN_COST_TEXT} (no price in Log Hub for this session's model)`,
+    });
   }
   if (session.userEmail) {
     rows.push({ label: 'User', value: session.userEmail });

@@ -13,6 +13,7 @@ import { AppModule } from '../../../src/app.module';
 import { initializeDatabase } from '../../../src/database/database-init';
 import { createTestApp } from '../../helpers/create-app.helper';
 import { resetWorldV1 } from '../fixtures/world-v1.sql';
+import { recomputeWorldSessionCosts } from './world-session-costs';
 
 /**
  * Global setup of the API <-> DB contract suite (docs/qaa-overview/scenarios/05 §2.1,
@@ -65,6 +66,11 @@ export default async function globalSetup(): Promise<void> {
   process.env.AI_TOOL_VERSION_CHECK_ENABLED = 'false';
   process.env.MODEL_PRICING_FETCH_ENABLED = 'false';
   process.env.LOGS_MAX_BODY_MB = '2';
+  // Session costs: a pricing write awaits its own re-pricing (`notifySessionCostsStale`), so a
+  // write row's "after" snapshot already holds the re-priced `session_costs` rows, and the
+  // periodic sweeper is parked like the other background jobs.
+  process.env.SESSION_COST_RECOMPUTE_INLINE = 'true';
+  process.env.SESSION_COST_RECOMPUTE_INTERVAL_MS = '3600000';
   // Deliberately NOT lowered: the retention tick and the abandoned-partial-upload sweep. The
   // world's dates are fixed in January 2026, so a fast retention tick with the default 30-day
   // window would purge the whole world mid-run. The window is also pushed out to 100 years, so
@@ -125,6 +131,7 @@ export default async function globalSetup(): Promise<void> {
   try {
     await client.query('BEGIN');
     await resetWorldV1(client, schemaName);
+    await recomputeWorldSessionCosts(client);
     await client.query('COMMIT');
   } catch (err) {
     await client.query('ROLLBACK').catch(() => undefined);

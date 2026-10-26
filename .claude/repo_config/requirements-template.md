@@ -6,6 +6,7 @@
 **Module(s):** client | server | shared | <other>
 **Owner:** <git username>
 **Created:** <YYYY-MM-DD>
+**Tracker:** <KEY> <url>  ← (remove this line for tasks that have no tracker entry)
 
 ## Description
 

@@ -947,12 +947,15 @@ function deriveFileUsage(entries, fileCategories) {
  * across several transcript lines, each repeating the same `message.usage`). Returns the raw
  * sums the cost lookup needs plus a per-service-tier
  * breakdown (parity hand-port of `readServiceTier()`, unused by the cost formula itself, which
- * only splits on `usage.speed`).
+ * only splits on `usage.speed`). `calls` holds one row per counted usage (the same dedup key as
+ * the server's per-call capture), so each column of `calls` sums to the matching total — the
+ * per-call input of {@link computeLocalSessionCost}'s tiered path.
  * @param {Array<Record<string, *>>} entries
  * @returns {{
  *   inputTokens: number, outputTokens: number, cacheReadTokens: number,
  *   cacheWrite5mTokens: number, cacheWrite1hTokens: number, cacheWriteTokens: number,
  *   webSearchRequests: number, inputTokensFast: number, outputTokensFast: number,
+ *   calls: Array<{ inputTokens: number, outputTokens: number, cacheReadTokens: number, cacheWrite5mTokens: number, cacheWrite1hTokens: number, inputTokensFast: number, outputTokensFast: number }>,
  *   tokenByServiceTier: Record<string, { input: number, output: number, cacheRead: number, cacheCreation: number, cacheWrite5m: number, cacheWrite1h: number }>
  * }}
  */
@@ -966,6 +969,7 @@ function deriveTokenTotals(entries) {
   let inputTokensFast = 0;
   let outputTokensFast = 0;
   const tokenByServiceTier = {};
+  const calls = [];
   const usageCountedForMessageId = new Set();
 
   for (const e of entries) {
@@ -998,10 +1002,20 @@ function deriveTokenTotals(entries) {
         typeof serverToolUse.web_search_requests === 'number' ? serverToolUse.web_search_requests : 0;
     }
 
-    if (usage.speed === 'fast') {
+    const isFast = usage.speed === 'fast';
+    if (isFast) {
       inputTokensFast += fields.inputTokens;
       outputTokensFast += fields.outputTokens;
     }
+    calls.push({
+      inputTokens: fields.inputTokens,
+      outputTokens: fields.outputTokens,
+      cacheReadTokens: fields.cacheReadTokens,
+      cacheWrite5mTokens: write5m,
+      cacheWrite1hTokens: write1h,
+      inputTokensFast: isFast ? fields.inputTokens : 0,
+      outputTokensFast: isFast ? fields.outputTokens : 0,
+    });
 
     const tier = readServiceTier(usage);
     const bucket = tokenByServiceTier[tier] ?? {
@@ -1031,6 +1045,7 @@ function deriveTokenTotals(entries) {
     webSearchRequests,
     inputTokensFast,
     outputTokensFast,
+    calls,
     tokenByServiceTier,
   };
 }
@@ -1091,7 +1106,10 @@ function deriveLocalAggregate(entries, ctx) {
  * @param {string} serverUrl
  * @param {string} apiKey
  * @param {number} timeoutMs
- * @returns {Promise<Record<string, { priceIn:number, priceOut:number, priceCacheR:number, priceCacheW5m:number, priceCacheW1h:number, priceWebSearch:number, charsPerToken:number|null, contextLength:number|null }>|null>}
+ * Newer servers add an optional `tiers` array (long-context rate tiers, ascending by
+ * `aboveTokens`) to a model's entry only when the model has tiers; older servers never send it,
+ * and {@link computeLocalSessionCost} then uses the aggregate base-rate formula.
+ * @returns {Promise<Record<string, { priceIn:number, priceOut:number, priceCacheR:number, priceCacheW5m:number, priceCacheW1h:number, priceWebSearch:number, charsPerToken:number|null, contextLength:number|null, tiers?: Array<{ aboveTokens:number, priceIn:number, priceOut:number, priceCacheR:number, priceCacheW5m:number, priceCacheW1h:number }> }>|null>}
  */
 async function fetchModelPricing(serverUrl, apiKey, timeoutMs) {
   const resp = await httpRequestJson(
@@ -1106,17 +1124,52 @@ async function fetchModelPricing(serverUrl, apiKey, timeoutMs) {
 }
 
 /**
- * Hand-port of `cost.sql.ts`'s `computeSessionCost()` — same formula, same
- * `FAST_MODE_MULTIPLIER` fast-token surcharge, restricted to the fields
+ * Hand-port of `cost.sql.ts`'s `pickCallRates()`: the rates of the last tier whose
+ * `aboveTokens` the call's prompt size strictly exceeds, or the base rates when no tier
+ * matches (or the model has none).
+ * @param {number} promptTokens input + cache read + cache write 5m + cache write 1h of one call
+ * @param {{ priceIn:number, priceOut:number, priceCacheR:number, priceCacheW5m:number, priceCacheW1h:number, tiers?: Array<{ aboveTokens:number, priceIn:number, priceOut:number, priceCacheR:number, priceCacheW5m:number, priceCacheW1h:number }>|null }} rates
+ * @returns {{ priceIn:number, priceOut:number, priceCacheR:number, priceCacheW5m:number, priceCacheW1h:number }}
+ */
+function pickCallRates(promptTokens, rates) {
+  let chosen = rates;
+  for (const tier of Array.isArray(rates.tiers) ? rates.tiers : []) {
+    if (promptTokens > tier.aboveTokens) chosen = tier;
+  }
+  return chosen;
+}
+
+/**
+ * Hand-port of `cost.sql.ts`'s `computeSessionCostBreakdown()` (its `cost`) — same formula,
+ * same `FAST_MODE_MULTIPLIER` fast-token surcharge, restricted to the fields
  * {@link deriveTokenTotals}/the `GET /api/v1/model-pricing` response actually provide (both
  * already plain numbers here, unlike the server's `NumericLike` DB-row inputs, so no `num()`
  * coercion helper is needed).
+ *
+ * - **Per-call path**: `tokens.calls` present **and** `rates.tiers` non-empty — each call is
+ *   priced at {@link pickCallRates} for its prompt size; web search at the base rate.
+ * - **Aggregate path**: otherwise (including every response from a server too old to send
+ *   `tiers`) — the aggregate totals at base rates. Both paths agree for an untiered model.
  * @param {ReturnType<typeof deriveTokenTotals>} tokens
- * @param {{ priceIn:number, priceOut:number, priceCacheR:number, priceCacheW5m:number, priceCacheW1h:number, priceWebSearch:number }} rates
+ * @param {{ priceIn:number, priceOut:number, priceCacheR:number, priceCacheW5m:number, priceCacheW1h:number, priceWebSearch:number, tiers?: Array<{ aboveTokens:number, priceIn:number, priceOut:number, priceCacheR:number, priceCacheW5m:number, priceCacheW1h:number }>|null }} rates
  * @returns {number}
  */
 function computeLocalSessionCost(tokens, rates) {
   const fastSurcharge = FAST_MODE_MULTIPLIER - 1;
+  if (Array.isArray(tokens.calls) && Array.isArray(rates.tiers) && rates.tiers.length > 0) {
+    let total = tokens.webSearchRequests * rates.priceWebSearch;
+    for (const c of tokens.calls) {
+      const prompt = c.inputTokens + c.cacheReadTokens + c.cacheWrite5mTokens + c.cacheWrite1hTokens;
+      const r = pickCallRates(prompt, rates);
+      total +=
+        ((c.inputTokens + c.inputTokensFast * fastSurcharge) / 1_000_000) * r.priceIn +
+        ((c.outputTokens + c.outputTokensFast * fastSurcharge) / 1_000_000) * r.priceOut +
+        (c.cacheReadTokens / 1_000_000) * r.priceCacheR +
+        (c.cacheWrite5mTokens / 1_000_000) * r.priceCacheW5m +
+        (c.cacheWrite1hTokens / 1_000_000) * r.priceCacheW1h;
+    }
+    return total;
+  }
   const input = tokens.inputTokens + tokens.inputTokensFast * fastSurcharge;
   const output = tokens.outputTokens + tokens.outputTokensFast * fastSurcharge;
   return (
@@ -1821,6 +1874,7 @@ module.exports = {
   // Cost lookup
   fetchModelPricing,
   computeLocalSessionCost,
+  pickCallRates,
   priceLocalAggregate,
   FAST_MODE_MULTIPLIER,
 };

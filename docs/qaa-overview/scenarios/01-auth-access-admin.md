@@ -230,11 +230,13 @@ Convention for the text below: a "UI step" is what a person clicks by hand; an "
   2. For the mode from step 1: list every mode-specific route and call each one without and with a login: `identify`, `signup`, `login`, `confirm-email`, `resend-confirmation`, `forgot-password`, `reset-password`, `change-password`, `GET azure`, `GET /api/auth/callback`.
   3. ADMIN: `GET /api/v1/admin/auth`.
   4. Compare the response bodies of steps 1 and 3 against substrings of the secret values.
+  4a. Mode `password` only (run C, no `SMTP_HOST`): without a cookie, `POST /api/v1/auth/forgot-password` with an existing user's e-mail.
   5. Without a cookie: `GET /health`, `GET /health/version`, `GET /api/v1/model-pricing`, `GET /static/artisyn-hooks-installer.tgz`; with a regular user's cookie: `GET /api/v1/ping`.
 - **Checks:**
-  - Step 1: a 200 response without a login, contains `mode`; `azure` only in azure-oauth mode (only `authority`, `clientId`, `redirectUri`); `adminContactEmail` only in password*; **no field holds a secret value**.
+  - Step 1: a 200 response without a login, contains `mode`; `azure` only in azure-oauth mode (only `authority`, `clientId`, `redirectUri`); `adminContactEmail` only in password*; `passwordResetAvailable` absent in `none`, `true` in run B (`password-confirm` with Mailpit as the relay), `false` in run C (`password` without `SMTP_HOST`); **no field holds a secret value**.
   - Step 2: in `password` and `password-confirm`, `identify` and `GET azure` give **404** (not 403); in `none`, `signup`, `login`, `forgot-password`, `reset-password`, `change-password`, `confirm-email` give 404, while `identify` from localhost gives 200; in `password` (without confirmation) `confirm-email` and `resend-confirmation` give 404; in `azure-oauth` everything local and password-based is 404, while `GET azure` answers 302 to `login.microsoftonline.com` with `state` and `nonce`. Routes without `@AllowedAuthModes` (`logout`, `me`, `config`) are alive in every mode.
-  - Step 3: `admin/auth` returns `mode` and only non-secret fields (`smtp.host`, `smtp.port`, `smtp.from` or `azure.tenantId/clientId/redirectUri/authority`), and **no secret value from the environment appears in the body** (compared against the real values, not the key names).
+  - Step 3: `admin/auth` returns `mode` and only non-secret fields (`smtp.host`, `smtp.port`, `smtp.from` or `azure.tenantId/clientId/redirectUri/authority`), and **no secret value from the environment appears in the body** (compared against the real values, not the key names). `smtp` is present only when a relay is configured: in run B it has exactly `from`, `host`, `port`; in runs A and C it is absent.
+  - Step 4a: 200 with `{ email_delivery: 'failed' }` (the same answer for any e-mail, so enumeration-safe), and no `password_reset_tokens` row exists for that user.
   - Step 5: public resources are available without a login; `ping` without a cookie is 401.
 - **Replaces:** `server/src/auth/guards/auth-mode.guard.spec.ts` (3), `auth.controller.spec.ts` (5, `GET config` without secrets), `auth.service.spec.ts` (4, partly), the `server/test/admin-auth.e2e-spec.ts` block "returns the config without secrets" (2), and closes the gaps F.1 #2 (identify/azure = 404) and #10 (comparison against the real secrets).
 - **What we lose:** the row-by-row "route x mode" matrix written by hand in `auth-mode.guard.spec` (it knows every route and catches a forgotten `@AllowedAuthModes`); the scenario checks it only for the routes in step 2 and only for the run's mode. I suggest keeping a compact unit with the matrix (≈3 tests) as a "cheap guard", or accepting that three runs give the full coverage.
@@ -590,6 +592,9 @@ Convention for the text below: a "UI step" is what a person clicks by hand; an "
   8. UI: press "Back" after switching tabs.
   9. UI: TEAMOWNER links a never-uploaded URL to their team; Admin → Repos, filter by the URL, "Remove".
   10. UI: TEAMOWNER invites REGULAR; Admin → Teams, "Set new owner" → REGULAR; API: set a non-member as owner.
+  11. UI: an unpriced model `scn-tier-ui-<run>` seeded into `model_pricing_meta`; Admin → Model Pricing, filter by it, "Set price" with Price In 3, Price Out 15 and one long-context tier above 150000 (AC5, task 2026-10-26-pricing-fetch-tiered).
+  12. UI: "Edit" on the same model, add a second tier with the same threshold 150000, "Save"; then "Cancel".
+  13. UI: a model `scn-tier-ov-<run>` inserted into `model_pricing` with source `anthropic` and no tiers; "Override" with one tier above 150000.
 - **Checks:**
   - Step 1: no link, the URL immediately becomes `#/main` (the `AdminGuard` redirect).
   - Step 2: **403** for REGULAR and **401** for the anonymous context on every listed route.
@@ -601,6 +606,9 @@ Convention for the text below: a "UI step" is what a person clicks by hand; an "
   - Step 8: "Back" returns to the previous tab (the tab state lives in the URL).
   - Step 9: the orphan link is one Repos row with the team name and no link into any content; "Remove" deletes it (`DELETE /admin/team-repos/:teamRepoId`), the team has no repository left.
   - Step 10: the dialog shows "Current owner: <TEAMOWNER>"; after "Set owner" the Teams row shows REGULAR as owner and `GET /teams/<T>`.`ownerId` is REGULAR; a non-member gives **400**.
+  - Step 11: the dialog closes, the model's row gets a muted second line "> 150k tokens" with the tier's rates under their columns (Price In `$6.00`), `GET /admin/model-pricing` gives source `manual` and `effective.tiers` = the entered tier.
+  - Step 12: the dialog stays open with the inline error "Two tiers share the threshold 150,000"; nothing is saved (`effective.tiers` is still the one tier). The dialog sorts the rows before sending, so a repeated threshold is the only non-increasing input it can be given.
+  - Step 13: the table shows the tier suffix; `GET /admin/model-pricing` gives `overrideActive` true, `effective.tiers` = the entered tier and `base.tiers` null (the fetched base keeps no tiers).
 - **Replaces:** `tests/e2e/admin-panel.spec.ts` (≈ 9 of 17: the link, the redirect, 4 tabs, deep-link ×3, no-tab, the Data Retention tab, nav click, no-console-errors, guard-regular ×2), the `server/test/admin-panel.e2e-spec.ts` 403/401 blocks (≈ 9), `client/.../use-admin-tab-state.test.ts` (2 of 8: the other 6 are about the hook internals).
 - **What we lose:** sorting by clicking a column and the filter (moved to S-ADM-04), the specific column headers.
 

@@ -14,10 +14,12 @@
     "jsx": "react-jsx",
     "noEmit": true,
     "resolveJsonModule": true,
+    "allowImportingTsExtensions": true,
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/viewer/*"]
+      "@/*": ["./src/viewer/*"],
+      "@loghub/pricing": ["../packages/pricing/src/index.ts"]
     }
   },
-  "include": ["src", "vite.config.ts"]
+  "include": ["src", "vite.config.ts", "../packages/pricing/src"]
 }

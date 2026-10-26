@@ -95,17 +95,33 @@ interface RepositorySession {
   endTime: string;      // ISO 8601
   gitBranch?: string;   // pre-computed on ingest; stored on logs table
   userEmail?: string;   // email of the user who submitted the log
-  totalCost?: number | null; // OTEL-reported cost when present for this root session, else the token×price estimate; null/absent if neither is available
-  computedCost?: number | null; // always the token×price estimate, independent of totalCost's OTEL preference; only present to size hasCostDiscrepancy
-  hasCostDiscrepancy?: boolean; // true when both an OTEL cost and a computed cost exist and differ by 33%+ relative — drives the session header's warning icon
-  costUnavailableReason: 'unknown-model' | null; // 'unknown-model' iff the session reports a
-                        // model with no model_pricing row match on REGEXP_REPLACE(model, '-[0-9]{8}$', ''),
+  totalCost?: number | null; // (2026-10-26) the cost Log Hub computes from its own price table for the
+                        // whole tree: root + sub-agents + utility calls (session-tree-cost.sql.ts,
+                        // resolveSessionTotalCost). null as soon as any part is unpriced, or "no stats
+                        // yet". The OTEL figure is NEVER used here any more (algorithm otel-cost-selection).
+  computedCost?: number | null; // equals totalCost (kept for compatibility)
+  costBreakdown: {              // always present for a listed session
+    mainCost: number | null;    // root's own stored cost; null when unpriced
+    subagentCost: number;       // priced sub-agents' stored costs (0 when none)
+    utilityCost: number;        // utility calls (otel_api_calls no transcript records), priced per call
+                                // with prompt-length tiers; 0 without telemetry
+    calculatedCost: number | null; // = totalCost
+    telemetryCost: number | null;  // the root's OTEL total (USD); a cross-check only
+    mismatch: boolean;          // costMismatch(telemetryCost, calculatedCost): ≥ $0.05 and ≥ 1%
+    utilityPricingMissing: boolean; // some utility call's model has no price
+    subagentPricingMissing: boolean; // (2026-10-26, additive) some sub-agent's model has no price
+    unpricedModels: string[];   // (2026-10-26, additive) model ids with no price in Log Hub, sorted;
+                                // [] when everything is priced. Named by the client's `$???` hint
+  };
+  hasCostDiscrepancy?: boolean; // true when both an OTEL cost and the computed cost exist and differ by 33%+ relative — drives the session header's warning icon (its hint names both numbers)
+  costUnavailableReason: 'unknown-model' | null; // 'unknown-model' iff totalCost is null because some
+                        // model of the tree (root, sub-agent with a transcript, utility call) has no
+                        // model_pricing row match on REGEXP_REPLACE(model, '-[0-9]{8}$', ''),
                         // i.e. a -YYYYMMDD-suffixed id still prices normally. null otherwise, including
-                        // "no stats yet" (where totalCost is already null). Derived from the same
-                        // p.model_id IS NULL predicate that produced the cost, so the two can never
-                        // contradict. Drives NoPricingBadge in the session list, the session detail
-                        // header and the session log view — all three read THIS row, so there is no
-                        // separate session-detail cost endpoint.
+                        // "no stats yet" (where totalCost is already null). Drives the `$???` marker
+                        // (NoPricingBadge) in the session list, the session detail header and the
+                        // session log view — all three read THIS row, so there is no separate
+                        // session-detail cost endpoint.
   isFavorite?: boolean; // true when the authenticated user has favorited this session
   userId: number | null; // numeric id of the user who owns the session (the artisyn log uploader); null if unknown
   isHookService: boolean; // true when the artisyn log body contains a hook_service event
@@ -169,6 +185,9 @@ response: {
   mode: 'none' | 'password' | 'password-confirm' | 'azure-oauth';
   azure?: { authority: string; clientId: string; redirectUri: string }; // only when mode === 'azure-oauth'
   adminContactEmail?: string; // only when mode is 'password' | 'password-confirm'
+  passwordResetAvailable?: boolean; // only when mode is 'password' | 'password-confirm':
+  // MailService.isConfigured() — true when SMTP_HOST is set (always in Mode 3), false in Mode 2
+  // without SMTP (the client then disables "Forgot password?"). Absent from older servers.
 }
 // Never includes a secret field. Used by the login page to pick which UI to render, before mounting any form.
 
@@ -236,6 +255,8 @@ response: { email_delivery: 'sent' | 'failed' }
 // Always 200 whether or not the email is registered (no enumeration); not gated on the account
 // having a password already (works for OAuth-only accounts too, for the Mode 4 → 2/3 switch-back
 // scenario). Same 60s cooldown mechanism as resend-confirmation.
+// Mode 2 without SMTP (SMTP_HOST unset): always { email_delivery: 'failed' }, answered before the
+// user lookup (still enumeration-safe) — no token is issued and no email is sent.
 body: { email: string }
 response: { email_delivery: 'sent' | 'failed' }
 // Errors: 429 (Retry-After header)
@@ -439,7 +460,7 @@ interface TurnEndAdvisorAggregate {
   promptCount: number;          // tree-wide SUM(turn_count)
   turnCount: number;            // invoking (root) session's own turn_count
   workTimeMs: number;
-  sessionCostUsd: number;       // tree-wide, OTEL-preferred/computed-fallback
+  sessionCostUsd: number;       // the complete computed tree cost (own + sub-agents + utility calls); 0 when unpriced
   model: string | null;
   contextWindow: number | null;
 }
@@ -945,7 +966,8 @@ response: {
 // GET /api/v1/admin/auth — 200
 // Requires: session cookie, role='admin'
 // Non-secret config for the active AUTH_MODE — the field group present matches the mode
-// (Mode 1 has none).
+// (Mode 1 has none). `smtp` is present only when MailService.isConfigured(): always in Mode 3,
+// in Mode 2 only when SMTP_HOST is set. Values are the raw env (no code defaults).
 response: {
   mode: string;
   smtp?: { host: string; port: number; from: string };
@@ -1378,7 +1400,7 @@ export interface BranchSummary {
   // The root-only figure, kept additively: the branch's root sessions only. Never add
   // it to totalLinesChanged — it is already included there (double count).
   totalLinesChangedOwn: number;
-  totalCost: number | null;    // sum of per-session cost, OTEL-preferred when a session's root has one, else session_stats + model_pricing; null when no pricing data
+  totalCost: number | null;    // sum of the root sessions' own stored cost (session_costs.cost, Log Hub prices; never the OTEL figure since 2026-10-26); root-only — sub-agents and utility calls are not rolled up here; null when no session is priced
 }
 interface GetRepositorySessionBranchesQuery {
   teamId?: number;    // optional; activates team-based access check
@@ -1593,7 +1615,8 @@ interface TimelineSession {
   userEmail: string | null;
   group: string | null;    // null when groupBy is absent; branch/email when groupBy is set
   workTimeMs: number;      // session_stats.work_time_ms: per-prompt active time from the claude transcript (0 if no claude log)
-  totalCost: number | null; // USD cost computed from token usage × model_pricing; null if model unknown
+  totalCost: number | null; // the same complete computed tree cost as the sessions list (root + sub-agents +
+                            // utility calls, Log Hub prices); null when any model of the tree is unpriced
   fileStatsByCategory: Record<string, { files: number; bytes: number }>; // per-category file read stats; `bytes` = what the Read calls put into the context: the `String.length` of the tool-result text (UTF-16 code units, not UTF-8 bytes; incl. the line-number prefixes), not the size of the file on disk; every Read with a `file_path` counts toward `files`, failed and repeated Reads included — by design (2026-10-24; `computeToolResultBytes` in `server/src/logs/claude-extractor.ts`); keys are category names from RepoConfig (e.g. "code", "docs"); resolved using the effective config for the caller's scope
   // Both TREE-scoped: the session AND every sub-agent session below it at any depth,
   // summed from the per-node session_stats rows by session-tree-metrics.sql.ts →
@@ -1630,6 +1653,7 @@ interface TimelineSession {
   inputTokensFast: number;    // SUBSET of inputTokens billed at usage.speed = 'fast' — not extra tokens
   outputTokensFast: number;   // SUBSET of outputTokens billed at usage.speed = 'fast' — not extra tokens
   costUnavailableReason: 'unknown-model' | null; // same semantics as on RepositorySession above
+  unpricedModels: string[];   // (2026-10-26, additive) same as costBreakdown.unpricedModels on RepositorySession
 }
 response: TimelineSession[]
 // Errors:
@@ -1736,24 +1760,14 @@ response: WorkTimeBucket[]
 // GET /api/v1/repositories/:repoId/reports/executive-summary — 200
 // Backs the Reports tab's "Executive Summary" document (ReportsController,
 // server/src/logs/reports/reports.controller.ts + executive-summary.service.ts).
-// Cost is a two-phase rollup: each session's own session_stats tokens (Phase A)
-// PLUS the summed cost of every descendant sub-agent session under it (Phase B,
-// via the descendantSessionsCte/subagent_costs pattern) — total_cost is redefined
-// once as (ownCost ?? 0) + subagentCost before any aggregate is built, so
-// totalCost/weeklyBuckets/modelMix/topSessions/engineerBreakdown all read the
-// same rolled-up value (sum(engineerBreakdown[].totalCost) === totalCost, same
-// for weeklyBuckets). excludedSessionCount/excludedModels are computed from the
-// pre-rollup own-pricing check only (unrelated to whether the rolled-up total
-// ends up non-zero).
-// when a session's root has an OTEL cost (logs.log_type='claude-otel'), that
-// value REPLACES (ownCost ?? 0) + subagentCost outright for that session — it already
-// covers the whole descendant tree, so it is never added on top of the computed
-// rollup. excludedSessionCount/excludedModels still reflect the pre-rollup own-pricing
-// check regardless of OTEL availability (see the excludedSessionCount comment in
-// executive-summary.service.ts) — a session can be OTEL-priced (contributing real
-// cost to totalCost) while still counting toward excludedSessionCount if its own model
-// has no model_pricing match, since that count is a model-coverage-gap signal, not a
-// "did this session get priced at all" signal.
+// Cost (2026-10-26): Phase A selects the eligible root sessions, Phase B the complete computed
+// tree cost of each (session-tree-cost.sql.ts: own + every sub-agent with a transcript + utility
+// calls, Log Hub prices only — the OTEL figure is never used). total_cost is resolved once before
+// any aggregate is built, so totalCost/weeklyBuckets/modelMix/topSessions/engineerBreakdown all
+// read the same value (sum(engineerBreakdown[].totalCost) === totalCost, same for weeklyBuckets).
+// A session whose cost is null (some model of its tree has no price) adds 0 to every sum and is
+// disclosed instead: excludedSessionCount counts it, excludedModels lists the union of the
+// unpriced model ids, its topSessions row carries costUnavailableReason + unpricedModels.
 //
 // Access control identical to /analytics/timeline (team visibility gate applies).
 interface GetExecutiveSummaryQuery {
@@ -1782,18 +1796,19 @@ interface ExecutiveSummaryTopSession {
   userEmail: string;
   branch: string | null;
   workTimeMs: number;
-  cost: number;          // rolled-up total_cost (own cost + descendant sub-agent cost)
+  cost: number;          // the complete computed tree cost (own + sub-agents + utility calls); 0 when
+                         // unpriced (then costUnavailableReason is set and the session is excluded)
   model: string | null;
   inputTokens: number;
   outputTokens: number;
   cacheReadTokens: number;
   cacheWriteTokens: number;
   costUnavailableReason: 'unknown-model' | null; // same semantics as on RepositorySession —
-                        // 'unknown-model' when this session's own model has no model_pricing match, so
-                        // the report row and its PDF twin show the no-pricing badge instead of a figure
-                        // that silently omits this session's spend. Independent of the report-level
-                        // excludedSessionCount / excludedModels, which stay the aggregate disclosure
-                        // over the same underlying signal.
+                        // 'unknown-model' when some model of this session's tree has no model_pricing
+                        // match, so the report row and its PDF twin show `$???` instead of a figure
+                        // that silently omits this session's spend. excludedSessionCount / excludedModels
+                        // are the aggregate disclosure over the same signal (the union of unpricedModels).
+  unpricedModels: string[]; // (2026-10-26, additive) the model ids of this tree with no price, sorted
 }
 interface ExecutiveSummaryEngineerEntry {
   userEmail: string;
@@ -1839,7 +1854,7 @@ interface ExecutiveSummaryReport {
   avgCostPerLine: number;    // totalCost / totalLinesChanged; 0 when totalLinesChanged is 0
   avgLinesPerHour: number;   // totalLinesChanged / (totalWorkTimeMs/3600000); 0 when no work time
   avgSessionLengthMs: number; // totalWorkTimeMs / totalSessions; 0 when totalSessions is 0
-  excludedSessionCount: number; // count of eligible sessions whose OWN model had no model_pricing match (pre-rollup check)
+  excludedSessionCount: number; // count of eligible sessions whose complete computed cost is null (some model of the tree has no price)
   excludedModels: string[];     // distinct unpriced model identifiers behind excludedSessionCount; [] when 0
   previousPeriod: ExecutiveSummaryPreviousPeriod | null; // immediately preceding window of equal length; null when that window has 0 sessions
   weeklyBuckets: ExecutiveSummaryWeekBucket[];
@@ -2084,8 +2099,8 @@ response: HarnessUsageReportData
 // Copies cache-read-ratio.service.ts's two-phase shape: Phase A is a
 // cheap scan of each in-scope session's own cost plus its whole session_attribution.values
 // object; Phase B is a cost rollup (recursive descendants via descendantSessionsCte,
-// OTEL-preferred via resolveSessionTotalCost()) keyed on Phase A's session_row_ids, the same
-// pattern executive-summary.service.ts's Phase B uses.
+// the complete computed tree cost via loadTreeCostRows()/readTreeCost(), own + sub-agents +
+// utility calls; an unpriced session adds 0) keyed on Phase A's session_row_ids.
 //
 // One section per this repo's resolved attribute definition, fixed by declared type:
 //   - boolean:            exactly 4 rows — 'true', 'false', 'Not determined', 'Unattributed';
@@ -2293,7 +2308,10 @@ interface ActiveSessionRow {
   sessionId: string; firstPrompt: string | null; userEmail: string; gitBranch: string | null;
   lastActivity: string;     // ISO 8601 — end_time when present, else start_time
   workTimeMs: number; turns: number; totalTokens: number;
-  totalCost: number | null; // null (NOT 0) when no model in the tree has a pricing row
+  totalCost: number | null; // the tree's complete computed cost (root + sub-agents + utility calls,
+                            // the sessions list's figure); null (NOT 0) when it cannot be computed
+  unpricedModels: string[]; // model ids of the tree with no price in Log Hub, sorted
+  costUnavailableReason: 'unknown-model' | null; // why totalCost is null
   toolCalls: number; linesAdded: number; linesRemoved: number; topTool: string | null;
 }
 interface ActiveSessionsResponse {
@@ -2889,6 +2907,15 @@ Application logs are written to `server/logs/` (gitignored, not served via API).
 // Returns the most-recent pricing row (effective_from <= today) for every model_id
 // in the model_pricing table.  An empty table returns {}.
 // NUMERIC columns are returned as JavaScript numbers.
+// Optional query asOf=YYYY-MM-DD returns the rates in force on that date (400 if malformed).
+interface PricingTier {      // USD per million tokens; applies to a call whose prompt size
+  aboveTokens: number;       // (input + cacheRead + cacheWrite5m + cacheWrite1h) is > aboveTokens;
+  priceIn: number;           // the last matching tier wins; web search always uses the base rate
+  priceOut: number;
+  priceCacheR: number;
+  priceCacheW5m: number;
+  priceCacheW1h: number;
+}
 response: Record<
   string,  // model_id
   {
@@ -2905,6 +2932,9 @@ response: Record<
                             // third-party models, which offer no server tools
     charsPerToken: number | null; // estimation-only chars-per-token ratio; null for unresearched (third-party) tokenizers
     contextLength: number | null; // max context window in tokens for this model; null if unresearched
+    tiers?: PricingTier[];        // prompt-length tiers, ascending by aboveTokens; the key is
+                                  // PRESENT ONLY when the model has tiers, so entries of untiered
+                                  // models are byte-identical for older consumers (hook, client)
   }
 >
 // Errors:
@@ -2918,7 +2948,8 @@ response: Record<
 Controller: `server/src/model-pricing/model-pricing-admin.controller.ts`. Every route requires a
 session cookie **and** the admin role (`SessionAuthGuard` + `AdminGuard`). Without a session
 the call returns 401; a non-admin gets 403. Types live in
-`server/src/model-pricing/model-pricing.types.ts`, with the client twin in `client/src/models/pricing.ts`.
+`server/src/model-pricing/model-pricing.types.ts`, with the client twin in `client/src/models/pricing.ts`;
+`PricingTier` itself is defined once in `@loghub/pricing` (`packages/pricing/src/tiers.ts`) and re-exported by both.
 Semantics are described in [model-pricing-research.md](model-pricing-research.md).
 
 ```ts
@@ -2929,6 +2960,7 @@ interface ModelPricingRates {
   priceCacheW5m: number; priceCacheW1h: number;            // USD per million tokens
   priceWebSearch: number;                                  // USD per web-search REQUEST
   charsPerToken: number | null; contextLength: number | null;
+  tiers: PricingTier[] | null;  // always present here (null = no tiers); PricingTier as above
 }
 interface AdminModelPricingRow {
   modelId: string;
@@ -2943,11 +2975,18 @@ interface PricingFetchStatus {
   lastResult: 'changed' | 'unchanged' | 'imported' | 'failed' | null;
   lastCounts: Record<string, number> | null; // anthropic: { changed }; openrouter: import counts
   lastError: string | null;
+  nextCheckAt: string | null; // ISO. Anthropic only: the later of lastSuccessAt + 24 h
+                              //   (STALE_AFTER_HOURS) and lastAttemptAt + 1 h (RETRY_AFTER_HOURS),
+                              //   or now (= next hourly tick). null when MODEL_PRICING_FETCH_ENABLED
+                              //   is 'false', and always null for openrouter
 }
 interface AdminModelPricingResponse {
   anthropic: PricingFetchStatus; openrouter: PricingFetchStatus;
   unpricedCount: number;          // known ids with no effective row
   models: AdminModelPricingRow[]; // one per id in model_pricing ∪ model_pricing_meta
+}
+interface AnthropicFetchNowResult {
+  result: 'changed' | 'unchanged' | 'failed' | 'skipped'; // skipped: another attempt started < 30 s ago
 }
 interface OpenRouterImportResult {
   updated: number; added: number; unchanged: number;
@@ -2965,6 +3004,10 @@ interface ModelPriceInputDto {
   priceWebSearch?: number;  // default 0
   charsPerToken?: number;   // 0 < x ≤ 999.999; default: current effective row's value, else null
   contextLength?: number;   // positive integer ≤ 100,000,000; default as charsPerToken
+  tiers?: PricingTier[] | null; // ≤ 10 entries; aboveTokens integer 1–100,000,000, rates as priceIn.
+                            // Omitted: carry the current effective row's tiers. null or []: clear.
+                            // Checked by validatePricingTiers in the order given — non-increasing
+                            // thresholds or an invalid rate are 400 with its message; stored sorted.
 }
 
 // GET /api/v1/admin/model-pricing — 200
@@ -2974,23 +3017,37 @@ response: AdminModelPricingResponse
 // PUT /api/v1/admin/model-pricing/price — 200
 // Sets a manual price (writes a today row with source 'manual').
 body: ModelPriceInputDto
-response: AdminModelPricingRow   // refreshed row
+response: AdminModelPricingRow   // refreshed row, including effective.tiers
+// After commit, the stored session costs the write flagged stale are recomputed
+//   (notifySessionCostsStale; also on /override and /override/clear).
 // Errors: 400 validation; 404 unknown id (no model_pricing and no model_pricing_meta row);
 //   409 resolved source is not 'unpriced' / 'manual'
 
 // PUT /api/v1/admin/model-pricing/override — 200
 // Overrides a fetched/imported price. On the first override, the current effective rates are
 //   saved as the base in model_pricing_meta; then a today row with source 'override' is written.
+//   The override row stores its own tiers (same tiers rules as /price); the base keeps its tiers.
 body: ModelPriceInputDto
 response: AdminModelPricingRow
 // Errors: 400; 404; 409 resolved source is not 'anthropic' / 'openrouter', or the model has a
 //   future-dated row ("model has a scheduled price change")
 
 // POST /api/v1/admin/model-pricing/override/clear — 200
-// Writes the base back as a today row with its base source, then clears the meta base.
+// Writes the base back as a today row with its base source and the base's tiers, then clears
+//   the meta base.
 body: { modelId: string }        // ModelIdDto, 1–255 chars
 response: AdminModelPricingRow
 // Errors: 400; 404; 409 no active override
+
+// POST /api/v1/admin/model-pricing/fetch-anthropic — 200
+// Admin "Fetch Anthropic prices now": AnthropicPricingFetchService.runFetch(undefined, { force: true })
+//   runs synchronously, ignoring the daily stale/retry window. It is refused ('skipped', nothing
+//   fetched) only when another attempt started less than MANUAL_FETCH_MIN_GAP_SECONDS (30) ago
+//   (claimManual). A fetch/parse/persist failure is not an HTTP error: result 'failed', recorded in
+//   model_pricing_fetch_state['anthropic'] like a scheduled failure.
+body: none
+response: AnthropicFetchNowResult
+// Errors: 401, 403
 
 // POST /api/v1/admin/model-pricing/import-openrouter — 200
 // Synchronous fetch of https://openrouter.ai/api/v1/models; updates non-Anthropic models only.

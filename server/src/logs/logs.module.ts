@@ -40,6 +40,7 @@ import { ExecutiveSummaryService } from './reports/executive-summary.service';
 import { HarnessUsageService } from './reports/harness-usage.service';
 import { ReportsController } from './reports/reports.controller';
 import { SessionAttributionModule } from './session-attribution/session-attribution.module';
+import { SessionCostRecomputeService } from './session-cost/session-cost-recompute.service';
 import { UploadQueueSchedulerService } from './upload-queue-scheduler.service';
 import { UploadQueueService } from './upload-queue.service';
 
@@ -96,6 +97,9 @@ import { UploadQueueService } from './upload-queue.service';
     ChangeSurfaceService,
     ChangeSurfaceAggregateService,
     ChangeSurfaceReportService,
+    // Stored session costs: sweeps stale session_costs rows (pricing changes, moved
+    // top-ancestor price dates) and serves the pricing writers' drain signal.
+    SessionCostRecomputeService,
   ],
   exports: [RepositoriesService, HookStateService, UploadQueueService],
 })

@@ -44,7 +44,26 @@ export interface PromptSession {
    * Without `reads` the logs are unchanged.
    */
   reads?: string[];
+  /** Model of every assistant line. Default `claude-sonnet-4-6`. */
+  model?: string;
+  /**
+   * Per-turn `usage` of turn n's main (answer) assistant line, by index n − 1; a turn without
+   * an entry keeps the default `{ input_tokens: 10, output_tokens: 5 }`. Each answer line is
+   * one call, so a scenario can pin the per-call prompt sizes a tiered price is chosen by.
+   */
+  usages?: AssistantUsage[];
 }
+
+/** An assistant line's `message.usage`, as Claude Code writes it. */
+export interface AssistantUsage {
+  input_tokens: number;
+  output_tokens: number;
+  cache_read_input_tokens?: number;
+  cache_creation_input_tokens?: number;
+}
+
+const DEFAULT_MODEL = 'claude-sonnet-4-6';
+const DEFAULT_USAGE: AssistantUsage = { input_tokens: 10, output_tokens: 5 };
 
 /** Working directory a session with `reads` reports as its git root. */
 const READS_ROOT = '/work/scn-repo';
@@ -53,6 +72,7 @@ const READS_ROOT = '/work/scn-repo';
 export function promptSessionBodies(s: PromptSession): { artisyn: string; claude: string } {
   const first = s.at ?? new Date(Date.now() - DAY_MS);
   const reads = s.reads ?? [];
+  const model = s.model ?? DEFAULT_MODEL;
   const git = {
     repo: s.repoUrl,
     branch: s.branch ?? 'main',
@@ -96,8 +116,8 @@ export function promptSessionBodies(s: PromptSession): { artisyn: string; claude
           timestamp: readAt,
           message: {
             role: 'assistant',
-            model: 'claude-sonnet-4-6',
-            usage: { input_tokens: 10, output_tokens: 5 },
+            model,
+            usage: DEFAULT_USAGE,
             content: reads.map((path, i) => ({
               type: 'tool_use',
               id: toolIds[i],
@@ -133,8 +153,8 @@ export function promptSessionBodies(s: PromptSession): { artisyn: string; claude
         timestamp: stop.toISOString(),
         message: {
           role: 'assistant',
-          model: 'claude-sonnet-4-6',
-          usage: { input_tokens: 10, output_tokens: 5 },
+          model,
+          usage: s.usages?.[n - 1] ?? DEFAULT_USAGE,
           content: [{ type: 'text', text: 'Done.' }],
         },
       },

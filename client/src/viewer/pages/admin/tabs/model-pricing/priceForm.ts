@@ -1,18 +1,25 @@
+import {
+  MAX_PRICING_TIERS,
+  MAX_RATE,
+  validatePricingTiers,
+} from '@loghub/pricing';
 import type {
   ModelPriceInput,
   ModelPricingRates,
+  PricingTier,
 } from '../../../../../models/pricing';
 
-/** Editable fields of the price dialog, in grid order. */
-export type FieldKey = keyof ModelPricingRates;
+/** Editable scalar fields of the price dialog, in grid order (tiers are edited separately). */
+export type FieldKey = Exclude<keyof ModelPricingRates, 'tiers'>;
 
 /** Raw text of every field, as typed. */
 export type PriceForm = Record<FieldKey, string>;
 
-/** Same upper bound as the server's `ModelPriceInputDto`. */
-const MAX_RATE = 9999.999999;
+/** Same upper bounds as the server's `ModelPriceInputDto` (`MAX_RATE` is shared). */
 const MAX_CHARS_PER_TOKEN = 999.999;
 const MAX_CONTEXT_LENGTH = 100_000_000;
+
+export { MAX_PRICING_TIERS };
 
 export const FIELDS: { key: FieldKey; label: string; required: boolean }[] = [
   { key: 'priceIn', label: 'Price In', required: true },
@@ -122,4 +129,80 @@ export function validatePriceForm(form: PriceForm): PriceFormResult {
     return { ok: false, error: 'Price In and Price Out are required' };
   }
   return { ok: true, values: { ...values, priceIn, priceOut } };
+}
+
+/** One editable tier row: every field as typed. */
+export type TierRow = Record<keyof PricingTier, string>;
+
+/** Tier columns of the editor, in table order. */
+export const TIER_FIELDS: { key: keyof PricingTier; label: string }[] = [
+  { key: 'aboveTokens', label: 'Above (tokens)' },
+  { key: 'priceIn', label: 'Input' },
+  { key: 'priceOut', label: 'Output' },
+  { key: 'priceCacheR', label: 'Cache read' },
+  { key: 'priceCacheW5m', label: '5m write' },
+  { key: 'priceCacheW1h', label: '1h write' },
+];
+
+export function emptyTierRow(): TierRow {
+  return {
+    aboveTokens: '',
+    priceIn: '',
+    priceOut: '',
+    priceCacheR: '',
+    priceCacheW5m: '',
+    priceCacheW1h: '',
+  };
+}
+
+/** Prefills the tier rows from a model's current tiers (none → no rows). */
+export function tierRowsFromTiers(
+  tiers: readonly PricingTier[] | null | undefined,
+): TierRow[] {
+  return (tiers ?? []).map((t) => ({
+    aboveTokens: String(t.aboveTokens),
+    priceIn: String(t.priceIn),
+    priceOut: String(t.priceOut),
+    priceCacheR: String(t.priceCacheR),
+    priceCacheW5m: String(t.priceCacheW5m),
+    priceCacheW1h: String(t.priceCacheW1h),
+  }));
+}
+
+export type TierRowsResult =
+  | { ok: true; tiers: PricingTier[] | null }
+  | { ok: false; error: string };
+
+/**
+ * Converts the typed tier rows to the request's `tiers` (`null` when there are none), sorted
+ * ascending by threshold, and checks them with the server's own `validatePricingTiers`
+ * (`@loghub/pricing`), so the dialog rejects exactly what the API would.
+ */
+export function tiersFromRows(rows: readonly TierRow[]): TierRowsResult {
+  if (rows.length === 0) return { ok: true, tiers: null };
+  const tiers: PricingTier[] = [];
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const badField = TIER_FIELDS.find((field) => {
+      const raw = row[field.key].trim();
+      return raw === '' || !Number.isFinite(Number(raw));
+    });
+    if (badField) {
+      return {
+        ok: false,
+        error: `Tier ${i + 1}: ${badField.label} must be a number`,
+      };
+    }
+    tiers.push({
+      aboveTokens: Number(row.aboveTokens.trim()),
+      priceIn: Number(row.priceIn.trim()),
+      priceOut: Number(row.priceOut.trim()),
+      priceCacheR: Number(row.priceCacheR.trim()),
+      priceCacheW5m: Number(row.priceCacheW5m.trim()),
+      priceCacheW1h: Number(row.priceCacheW1h.trim()),
+    });
+  }
+  tiers.sort((a, b) => a.aboveTokens - b.aboveTokens);
+  const error = validatePricingTiers(tiers);
+  return error === null ? { ok: true, tiers } : { ok: false, error };
 }

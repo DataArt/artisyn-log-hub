@@ -15,7 +15,7 @@
     "build:copy:client": "copyfiles -u 2 \"client/dist/**/*\" dist/public",
     "build:copy:static": "copyfiles -u 2 \"server/src/public/**/*\" dist/public",
     "build:copy:env": "node -e \"require('fs').copyFileSync('.env.defaults', 'dist/.env')\"",
-    "build:postclean": "node -e \"['src','test','drizzle.config.d.ts'].forEach(p=>{try{require('fs').rmSync('dist/'+p,{recursive:true,force:true})}catch(_){}})\"",
+    "build:postclean": "node -e \"['src','test','server','packages','drizzle.config.d.ts'].forEach(p=>{try{require('fs').rmSync('dist/'+p,{recursive:true,force:true})}catch(_){}})\"",
     "build:copy:native": "node scripts/copy-native.js",
     "build:copy:migrations": "copyfiles -u 3 \"server/drizzle/migrations/**/*\" dist/drizzle/migrations",
     "build:assets": "node scripts/build-assets.js",

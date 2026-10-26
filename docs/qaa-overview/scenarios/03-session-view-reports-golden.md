@@ -657,7 +657,7 @@ Common setup for every scenario unless stated otherwise: user U1 is logged in (s
 ### S-COST-01. One session, one cost everywhere
 - **Layer:** UI+API
 - **Priority:** P0
-- **Data/roles:** GS-01 (0.0825), GS-03 (1.0490), GS-04 (1.4000), GS-02 (0.1173), U1
+- **Data/roles:** GS-01 (0.0825), GS-03 (1.0490), GS-04 (1.4000), GS-02 (0.1173), U1; for steps 7–11 an ADMIN, a model `scn-tiered-<run>` inserted into `model_pricing` (source `anthropic`, effective 30 days ago, Haiku 5.5 base rates 0.10/0.50/0.01/0.125/0.20 and one tier above 100000 prompt tokens at 0.5/2.5/0.05/0.625/1), and two two-turn prompt sessions of that model (3 days ago and today), each with a 60000 in + 50000 cache read call and a 90000 in call.
 - **Steps:**
   1. Upload the four sessions into one repository.
   2. `GET .../sessions`: the `totalCost` of each row.
@@ -665,7 +665,19 @@ Common setup for every scenario unless stated otherwise: user U1 is logged in (s
   4. `GET .../analytics/active-sessions`: `totalCost`.
   5. `GET .../reports/executive-summary`: `totalCost` and `topSessions[].cost`.
   6. In the UI, for each session read: the Cost column in the list, the header, the Summary Cost, the Info "Calculated approx. total", the Call Tree "Session Total".
+  7. Insert the tiered model's `model_pricing` row; upload the 3-day-old and the today session (AC4a, task 2026-10-26-pricing-fetch-tiered).
+  8. For each of the two sessions: `GET .../sessions` `totalCost`; in the UI the list cell, the header, the Summary Cost, the Info "Calculated total", and the Logs per-turn Cost.
+  9. ADMIN `PUT /api/v1/admin/model-pricing/override` for the tiered model: the same base and tier rates, the tier threshold moved to 120000 (AC4d); poll `GET .../sessions` for the today session.
+  10. UI: the today session's list cell and header.
+  11. The 3-day-old session: `GET .../sessions` and the UI list cell and header.
+  12. Insert two `otel_api_calls` rows (utility calls: no request id, `query_source = 'prompt_suggestion'`) of the tiered model on the 3-day-old session — 60000 in + 50000 cache read, and 90000 in (Chunk 16 of task 2026-10-26-pricing-fetch-tiered); `GET .../sessions`; the UI list cell and header.
+  13. Insert one utility call of a model with no price (`scn-unpriced-<run>`, 1000 in) on the today session; `GET .../sessions` and `GET .../analytics/active-sessions` (`totalCost` null, `costUnavailableReason: 'unknown-model'`, `unpricedModels` = that model); the UI list cell and header, hover the header marker.
 - **Checks:** for each session **the same number everywhere**, from `expected.json`: GS-01 `0.0825`, GS-02 `0.1173`, GS-03 `1.0490`, GS-04 `1.4000`; the UI shows exactly these numbers with 4 digits. The client formula (Info/Call Tree, computed from the transcript) and the server SQL (list, timeline, report) do not diverge. The sum of the four = `2.6488`, and it is also the totalCost of Executive Summary on a repository of 4 sessions.
+  - Step 8: the tier is chosen per call: both sessions cost **0.0415** in the list, header, Summary and Info; per turn **0.0325** (the 110000-token prompt, tier rates) / **0.0090** (the 90000-token prompt, base rates). An aggregate-only formula would give 0.0155 or price everything at the tier.
+  - Step 9–10: the sweeper re-prices the today session to **0.0155** (call 1 is now under the threshold: 0.0065 + 0.0090), in the API and the UI.
+  - Step 11: the 3-day-old session stays **0.0415** — the override starts today and the session's price date is before it.
+  - Step 12: utility calls are tiered per call like transcript calls: `costBreakdown.utilityCost` **0.0415** (0.0325 tiered + 0.0090 base), the session **0.0830** in the API, the list and the header. Pricing utility calls at base rates would give 0.0065 + 0.0090.
+  - Step 13: one unpriced utility call makes the whole session unknown: `totalCost = null` (not 0.0155, never the OTEL figure), `costUnavailableReason = 'unknown-model'`, `costBreakdown.calculatedCost = null`, `costBreakdown.unpricedModels = ['scn-unpriced-<run>']`; the list cell and the header show `$???`, and the hint says "No price for model scn-unpriced-<run> in Log Hub …" with "Fetch Anthropic prices now".
 - **Replaces:** `E2E/session-cost-consistency.spec.ts` (5), `API/session-cost-consistency.e2e-spec.ts` (3 synthetic, 5 in total), `SRV/logs/cost.sql.spec.ts` (14), `CU/format.test.ts` `computeCost` (13), the `CC/CallTreeView.test.tsx` T-87 block (4+3), `CC/cost-breakdown-tooltip.test.tsx` (8), `CC/session-info-tab.test.tsx` (the cost part), `E2E/helpers/pricing.ts` (the duplicate formula is no longer needed). Closes F.3 #35 (the client formula versus the server aggregates). ≈ 55.
 - **What we lose:** the direct "SQL versus the TS twin" comparison on arbitrary values (property-style) and the enumeration of fast×TTL×websearch combinations at the function level. It stays as one server unit `cost.sql.spec` (I recommend keeping 3 tests: 1h, fast, null).
 
@@ -705,8 +717,8 @@ Common setup for every scenario unless stated otherwise: user U1 is logged in (s
 - **Checks:**
   - Prices are public (no authentication); sonnet-4-6 3/15/0.30, 5m 3.75, 1h 6.00; opus-5 5/25/0.50, 6.25, 10.00; haiku-4-5 1/5/0.10, 1.25, 2.00; web search 0.01 (the only place where the test reads rates: if a pricing migration changes them, only this item and the section 2 table break).
   - GS-06a: `totalCost = 0.1260` (by the first model sonnet-4-6; not `0.2100`), Info → Model `claude-sonnet-4-6`, the tokens are summed across both models (in 6 000, out 3 000, cacheRead 10 000, cacheWrite 16 000).
-  - GS-06b: `totalCost = null`, `costUnavailableReason = 'unknown-model'`; "no pricing" everywhere (list, header, Info, Summary), `$0.0000` nowhere.
-  - Executive Summary for W2: totalCost **0.2121**, `excludedSessionCount = 1`, `excludedModels = ['claude-unreleased-9']`, the text "1 sessions excluded from cost" on screen and in the PDF text; the GS-06b top-sessions row with the "no pricing" badge.
+  - GS-06b: `totalCost = null`, `costUnavailableReason = 'unknown-model'`; the `$???` marker everywhere (list, header, Info, Summary), its hint "No price for model claude-unreleased-9 in Log Hub …", `$0.0000` nowhere.
+  - Executive Summary for W2: totalCost **0.2121**, `excludedSessionCount = 1`, `excludedModels = ['claude-unreleased-9']`, the text "1 sessions excluded from cost" on screen and in the PDF text; the GS-06b top-sessions row with the `$???` marker.
 - **Replaces:** `API/model-pricing.e2e-spec.ts` (9, part), `API/session-cost-consistency.e2e-spec.ts` (model-switch), `CC/no-pricing-badge.test.tsx` (19), `SRV/logs/cost.sql.spec.ts` (null versus 0, ≈ 4). ≈ 30.
 - **What we lose:** each of the 19 surfaces of the "no pricing" badge separately (5 are checked), third-party models priced at 0 (Bedrock/Vertex), dated ids (`-20251001`), a future pricing row. Important: the `-YYYYMMDD` normalisation stays as one server test.
 

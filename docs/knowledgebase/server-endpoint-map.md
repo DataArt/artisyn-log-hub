@@ -72,7 +72,7 @@ After any endpoint change, update this file to stay in sync.
 | GET | `/api/v1/auth/me` | `me()` | `AutoIdentifyGuard` + SessionAuthGuard |
 
 **Notes (configurable auth modes):**
-- `GET config` — the only always-public route on this controller; returns `{ mode, azure?: { authority, clientId, redirectUri }, adminContactEmail? }`. `azure` only when `mode === 'azure-oauth'`; `adminContactEmail` only when `mode` is `password`/`password-confirm`. Never includes a secret field.
+- `GET config` — the only always-public route on this controller; returns `{ mode, azure?: { authority, clientId, redirectUri }, adminContactEmail?, passwordResetAvailable? }`. `azure` only when `mode === 'azure-oauth'`; `adminContactEmail` and `passwordResetAvailable` only when `mode` is `password`/`password-confirm` (`passwordResetAvailable` = `MailService.isConfigured()`: `false` in Mode 2 without `SMTP_HOST`). Never includes a secret field.
 - `POST identify` — Mode 1 (`none`). No password, ever. Rejects with `403` unless the request originates from `127.0.0.1`/`::1` (`req.socket.remoteAddress`, never `X-Forwarded-For`) — or, when the server runs containerized, from the container's own private default gateway (see `authorization-and-authentificaiton.md`). Looks up/auto-provisions the user by (lowercased) email and `req.logIn()`s — same success shape as `login`/`confirm-email`.
 - `GET me` — `AutoIdentifyGuard` runs before `SessionAuthGuard` and is a no-op except in Mode 1 (`none`): for an unauthenticated local request with no session (`isLocalhostRequest()` — `127.0.0.1`/`::1`, plus the container's own private default gateway when containerized), it silently `req.logIn()`s a user picked by `AuthService.autoIdentifyMode1()` (exactly one user in `users` → that user; more than one, e.g. leftover e2e accounts → `id=1`; zero users → falls through unchanged, so the client still shows the manual identify form) instead of 401ing. This means Mode 1 never really needs the session cookie to "remember" anyone across restarts/expiry — every `GET me` re-derives the identity from the `users` table. Every other mode is unaffected (`req.isAuthenticated()`/mode/localhost checks all short-circuit to the original 401 behavior).
 - `POST confirm-email` — `{ token }` → `200 <public profile>` / `400` invalid / `410` expired / `409` already-confirmed. Atomic consume (`EmailConfirmationTokensService.consume`).
@@ -371,9 +371,9 @@ data is `/api/v1/admin/model-pricing` below.
   report does via `ReportsController.resolveAttributeFilters()`). Copies
   `cache-read-ratio.service.ts`'s two-phase shape: Phase A is a cheap scan
   of each in-scope session's own cost plus its whole `session_attribution.values` object; Phase B
-  is a cost rollup (recursive descendants via `descendantSessionsCte`, OTEL-preferred via
-  `resolveSessionTotalCost()`) keyed on Phase A's `session_row_id`s, the same pattern
-  `executive-summary.service.ts`'s Phase B uses. One section per this repo's resolved attribute
+  is the complete computed tree cost (`loadTreeCostRows()` + `readTreeCost()` in
+  `session-tree-cost.sql.ts`: own + sub-agents + utility calls; an unpriced session adds 0)
+  keyed on Phase A's `session_row_id`s, the same cost every other surface shows. One section per this repo's resolved attribute
   definition (`SessionAttributionService.resolveDefinitions()`), each fixed by declared type:
   `boolean` -> exactly 4 rows (`true`, `false`, `"Not determined"`,
   `"Unattributed"`), no ranking; `string`/`number` -> a ranked table, top 15 by session count
@@ -420,25 +420,7 @@ data is `/api/v1/admin/model-pricing` below.
   deduplicated per session. Explicit `null` ("not determined") and any orphaned value
   (`isOrphanedValue()`) are excluded; an attribute with zero attributed sessions in scope simply
   has no key in the response.
-- **OTEL-preferred cost.** `totalCost` in `getRepositorySessions()`, `getRepositorySessionBranches()`, `getAnalyticsTimeline()`, and `ReportsController.getExecutiveSummary()` now resolves as: use the root session's OTEL cost (`logs.log_type = 'claude-otel'`, via the shared `otelCostsCte()`/inline-join helper in `server/src/logs/otel-cost.sql.ts`) when present, else fall back to the existing computed token×price rollup — never both added together, since a root's OTEL total already covers its whole in-process sub-agent tree. `getRepositorySessions()` additionally returns `computedCost` (always the token×price estimate) and `hasCostDiscrepancy` (true when both values exist and differ by 33%+ relative, via `otelComputedDiscrepancy()`) so the client can show a warning icon next to the session header price. `sessions.service.ts`'s `captureAuditRows()` (archived cost at soft/hard-delete time) applies the same OTEL-first check, still without a sub-agent rollup (root-only scope).
-  - **Amended: OTEL is no longer preferred when its total cannot be complete.**
-    All four call sites now go through one helper, `resolveSessionTotalCost(otelCost, computedCost)`
-    in `otel-cost.sql.ts`, which keeps the OTEL-first rule EXCEPT when the OTEL total is below
-    `OTEL_INCOMPLETE_RATIO` (0.5) of the computed cost — then the computed cost wins.
-    Why: a real session showed **$0.4583** in the header against a true **$79.49**, because the
-    OTEL receiver self-exited 41 s into a 7 h 36 m session and nothing re-armed it (the only
-    re-arm trigger is `UserPromptSubmit`, and a long autonomous turn has none). The rule is
-    deliberately asymmetric — OTEL *above* computed is normal and untouched; only a materially
-    lower OTEL total is suspicious, and in both of its causes (a truncated exporter, or sub-agents
-    that ran out of process) the computed figure is the better total. Threshold picked from
-    measured live data: healthy sessions span **84%–124%** of the computed tree cost, the broken
-    one sat at **10.9%**. `otelComputedDiscrepancy()` is unchanged and still raises the header
-    warning whenever the two sources disagree, including when this guard overrides the source —
-    so a truncated-OTEL session shows the right number AND still flags that something is wrong.
-    The analytics-timeline query no longer merges the two costs in SQL (`COALESCE`) — it returns
-    `otel_cost` and `computed_cost` as separate columns and merges in TS, because the guard cannot
-    be expressed in `COALESCE` without duplicating the whole computed expression. Unit-tested in
-    `otel-cost.sql.algo.spec.ts` (rows in `algorithms/otel-cost-selection.md`).
+- **Session cost = Log Hub's computed cost (2026-10-26; replaces the earlier "OTEL-preferred" rule and its 50% amendment).** `totalCost` in `getRepositorySessions()`, `getAnalyticsTimeline()`, `ReportsController.getExecutiveSummary()` (and the attribution breakdown, the turn-end advisor's `sessionCostUsd` and `captureAuditRows()`'s archived cost) is the complete computed tree cost — root + every sub-agent with a transcript + utility calls (`otel_api_calls` no transcript records, priced per call with prompt-length tiers), all at Log Hub's own prices — loaded through `session-tree-cost.sql.ts` (`treeCostCtes()` / `loadTreeCostRows()` + `readTreeCost()`) and resolved by `resolveSessionTotalCost(parts)` in `otel-cost.sql.ts`: `null` as soon as any part is unpriced (`costUnavailableReason: 'unknown-model'`, model ids in `costBreakdown.unpricedModels` / the timeline's and top sessions' `unpricedModels`). The OTEL total is never used as the shown cost: Claude Code priced `claude-haiku-5-5` (a model it does not know) at Opus 5.5 rates, $2.85 instead of $0.19, and OTEL carries such a number with no marker. It stays a cross-check: `hasCostDiscrepancy` (`otelComputedDiscrepancy()`, 33%+) and `costBreakdown.mismatch` (`costMismatch()`). `getRepositorySessions()` returns `computedCost` = `totalCost`. Unit-tested in `otel-cost.sql.algo.spec.ts` (rows in `algorithms/otel-cost-selection.md`).
 - `GET .../sessions/:sessionId/logs` response now includes `workflows: WorkflowRun[]` — workflow runs extracted server-side from the claude log events using `extractWorkflows()` from `server/src/logs/workflow-extractor.ts`. Each entry also carries `wfId: string | null` (extracted from the completion notification's `<diagnostics>` tag) and `agentSessionIds: string[]` (full multi-level agent linkage — the workflow's direct agents, matched via `sessions.workflow_run_id === wfId`, plus their own regular Task-tool sub-agents at any depth) — resolved in `getSessionLogs()` via a `wfId → directAgentIds[]` map and a BFS over the same owner-scoped `descendantIds` already computed for `subagents`, so no new access-control path is introduced. Empty array when `wfId` is null (running workflow) or unresolvable (legacy/pre-migration session).
 - `GET .../sessions/:sessionId/logs` — Owner-only, with a team-owner exception: non-owner callers receive 403 Forbidden (the app admin role grants no exception), **unless** the request includes `?teamId` and the caller is the owner of that team (`RepositoriesService.isTeamOwner(userId, teamId)`) — that caller may fetch any team member's session logs. The owner is determined by the `userId` on the session's artisyn log row.
 - `GET .../sessions/:sessionId/logs` — response gains `turnEndAdvisor: { generatedAt, summaryGeneral, costFactors, harnessAdvice } | null`, the latest `outcome='submitted'` row from `turn_end_advisor_runs` for this session (`null` when never successfully evaluated). This is deliberately the only session-detail surface for the advisor result; there is no separate route. `turnEndAdvisor` additionally gains `model: string | null`, `costUsd: number | null` (`Number()`-converted from the numeric-string column), and `inputTokens`/`outputTokens`/`cacheReadTokens`/`cacheWriteTokens: number` (default `0`, matching the column defaults) — sourced straight from the same `turn_end_advisor_runs` row.
@@ -886,11 +868,13 @@ registered in `app.module.ts` after `AiToolVersionsModule`)
 | PUT | `/api/v1/admin/model-pricing/price` | `setPrice()` | SessionAuthGuard + AdminGuard |
 | PUT | `/api/v1/admin/model-pricing/override` | `setOverride()` | SessionAuthGuard + AdminGuard |
 | POST | `/api/v1/admin/model-pricing/override/clear` | `clearOverride()` | SessionAuthGuard + AdminGuard |
+| POST | `/api/v1/admin/model-pricing/fetch-anthropic` | `fetchAnthropic()` | SessionAuthGuard + AdminGuard |
 | POST | `/api/v1/admin/model-pricing/import-openrouter` | `importOpenRouter()` | SessionAuthGuard + AdminGuard |
 
 **Notes:**
 - `list`, `setPrice`, `setOverride` and `clearOverride` delegate to `ModelPricingAdminService`.
-  `importOpenRouter` delegates to `OpenRouterImportService.runImport()`. Both POST routes use
+  `importOpenRouter` delegates to `OpenRouterImportService.runImport()`, `fetchAnthropic` to
+  `AnthropicPricingFetchService.runFetch(undefined, { force: true })`. All POST routes use
   `@HttpCode(200)`.
 - The model id travels **in the body** (`ModelPriceInputDto.modelId` / `ModelIdDto.modelId`),
   never the path, because ids can contain `/`.
@@ -900,6 +884,10 @@ registered in `app.module.ts` after `AiToolVersionsModule`)
   returns 404.
 - `POST import-openrouter` is synchronous: one outbound call to `openrouter.ai`. It returns 502
   `{ message }` on a fetch or parse failure, and writes no price in that case.
+- `POST fetch-anthropic` is synchronous too: it skips the daily stale/retry window and returns
+  `{ result: 'changed' | 'unchanged' | 'failed' | 'skipped' }` (never an HTTP error for a failed
+  fetch); `skipped` when another attempt started < `MANUAL_FETCH_MIN_GAP_SECONDS` (30) ago.
+  `GET` adds `anthropic.nextCheckAt` (`nextAnthropicCheck()` in `model-pricing-admin.service.ts`).
 - Contract and types: [api-reference.md](api-reference.md) § Model Pricing. Semantics:
   [model-pricing-research.md](model-pricing-research.md).
 

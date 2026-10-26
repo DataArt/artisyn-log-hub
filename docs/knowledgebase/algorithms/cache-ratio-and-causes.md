@@ -79,8 +79,13 @@ or right before it; both come from the turn walk:
 8. `totalCreationTokens` = the three token sums; each `share` = bucket / total, and all shares
    are 0 when the total is 0.
 
-All token counts are non-negative. The cost fields `aggregateScope` also returns belong to the
-cost rules ([cost-formula.md](cost-formula.md)) and are not pinned here. Outside these rules, and not covered by these rows (the report's SQL and its mapping are
+All token counts are non-negative. The cost fields `aggregateScope` also returns are plain sums
+of stored cost terms: each session's `cacheReadCost` is its `session_costs.cost_cache_read` and
+its `cacheWriteCost` is `cost_cache_write_5m + cost_cache_write_1h` (both `null` when the session
+is unpriced or has no `session_costs` row), and the descendant amounts are the same terms summed
+over the sub-agents. The terms themselves are computed at write time by the cost rules
+([cost-formula.md](cost-formula.md)), per call when the model has prompt-length tiers, and are not
+pinned here. Outside these rules, and not covered by these rows (the report's SQL and its mapping are
 exercised end to end by scenario S-REPT-02): the walk
 that produces the turns (`walkTurns`) reports orphan tokens as
 `max(0, session total - tokens tied to turns)`; the report's SQL mapper turns database values

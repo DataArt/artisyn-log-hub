@@ -81,6 +81,7 @@ function knownSecrets(): string[] {
 test('@S-AUTH-07 mode matrix: what exists in this mode and what answers 404 @mode-a @mode-b @mode-c', async ({
   stand,
   api,
+  db,
   users,
 }) => {
   const admin = await users.user('admin');
@@ -103,6 +104,13 @@ test('@S-AUTH-07 mode matrix: what exists in this mode and what answers 404 @mod
       expect(body).not.toHaveProperty('adminContactEmail');
     } else if (stand.authMode === 'password-confirm') {
       expect(body.adminContactEmail).toBe(DEFAULT_ADMIN_CONTACT_EMAIL);
+    }
+    // passwordResetAvailable belongs to the password modes only: B runs with Mailpit as its
+    // relay (true), C runs without SMTP_HOST (false, reset unavailable).
+    if (stand.authMode === 'none') {
+      expect(body).not.toHaveProperty('passwordResetAvailable');
+    } else {
+      expect(body.passwordResetAvailable).toBe(stand.authMode === 'password-confirm');
     }
     expectNoSecrets(text, 'GET /api/v1/auth/config');
   });
@@ -156,13 +164,32 @@ test('@S-AUTH-07 mode matrix: what exists in this mode and what answers 404 @mod
     const body = JSON.parse(text) as { mode?: string; smtp?: Record<string, unknown>; azure?: unknown };
     expect(body.mode).toBe(stand.authMode);
     expect(body.azure).toBeUndefined();
-    if (stand.authMode === 'none') {
+    // No SMTP card without a relay: mode A never uses SMTP, mode C runs without SMTP_HOST.
+    if (stand.authMode !== 'password-confirm') {
       expect(body.smtp).toBeUndefined();
     } else {
       expect(Object.keys(body.smtp ?? {}).sort()).toEqual(['from', 'host', 'port']);
     }
     expectNoSecrets(text, 'GET /api/v1/admin/auth');
   });
+
+  if (stand.authMode === 'password') {
+    await test.step('4a. mode password without SMTP: forgot-password → email_delivery «failed», no reset token', async () => {
+      const anonymous = await pwRequest.newContext({ baseURL: stand.url });
+      try {
+        const res = await anonymous.post('/api/v1/auth/forgot-password', { data: { email: member.email } });
+        expect(res.status()).toBe(200);
+        expect(await res.json()).toEqual({ email_delivery: 'failed' });
+      } finally {
+        await anonymous.dispose();
+      }
+      const { rows } = await db.query<{ n: string }>(
+        'SELECT count(*)::text AS n FROM password_reset_tokens WHERE user_id = $1',
+        [member.id],
+      );
+      expect(rows[0].n).toBe('0');
+    });
+  }
 
   await test.step('5. public resources answer without a session; /ping needs one', async () => {
     for (const path of ['/health', '/health/version', '/api/v1/model-pricing', '/static/artisyn-hooks-installer.tgz']) {

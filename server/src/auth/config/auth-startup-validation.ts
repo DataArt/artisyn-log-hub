@@ -117,15 +117,35 @@ function validateMode4(): void {
   }
 }
 
-// Mode 2 ("password") does not require SMTP/ADMIN_CONTACT_EMAIL: its only email-dependent
-// feature is the "forgot password" flow, which is already best-effort at runtime
-// (MailService.send() catches failures and returns 'failed' — see mail.service.ts). Forcing
-// these vars to be set for every Mode 2 install would mean everyone without a real mail relay
-// has to fill in placeholder values that are never used. Only Mode 3 ("password-confirm")
-// truly needs working email delivery, since the account is unusable until the confirmation
-// link is clicked, so only Mode 3 validates it at startup.
+/**
+ * SMTP block shared by Modes 2/3: SMTP_HOST, SMTP_FROM and SMTP_PORT (an
+ * integer 1–65535) must be set. SMTP_USER/SMTP_PASSWORD/SMTP_SECURE stay
+ * optional (SMTP_SECURE unset or empty = false).
+ */
+function validateSmtpBlock(): void {
+  requireNonEmpty('SMTP_HOST', process.env.SMTP_HOST);
+  requireNonEmpty('SMTP_FROM', process.env.SMTP_FROM);
+
+  const smtpPort = requireNonEmpty('SMTP_PORT', process.env.SMTP_PORT);
+  const port = Number(smtpPort);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new Error(
+      `SMTP_PORT environment variable must be an integer between 1 and 65535, got: ${smtpPort}`,
+    );
+  }
+}
+
+// Per-mode SMTP rule: Modes 1/4 never use SMTP. In Mode 2 ("password") SMTP is optional:
+// when SMTP_HOST is set, SMTP_PORT/SMTP_FROM are required (and a relay that cannot be
+// reached at startup only logs a warning); when SMTP_HOST is unset (or blank), every other
+// SMTP_* value is ignored, password reset is unavailable and "Forgot password?" is disabled.
+// In Mode 3 ("password-confirm") SMTP_HOST/SMTP_PORT/SMTP_FROM are required and the relay
+// must be reachable at startup (MailService.onModuleInit), or the app does not start.
 function validateMode2(): void {
   validatePublicBaseUrl();
+  if ((process.env.SMTP_HOST ?? '').trim() !== '') {
+    validateSmtpBlock();
+  }
 }
 
 function validateMode3(): void {
@@ -145,16 +165,7 @@ function validateMode3(): void {
     );
   }
 
-  requireNonEmpty('SMTP_HOST', process.env.SMTP_HOST);
-  requireNonEmpty('SMTP_FROM', process.env.SMTP_FROM);
-
-  const smtpPort = requireNonEmpty('SMTP_PORT', process.env.SMTP_PORT);
-  const port = Number(smtpPort);
-  if (!Number.isInteger(port) || port < 1 || port > 65535) {
-    throw new Error(
-      `SMTP_PORT environment variable must be an integer between 1 and 65535, got: ${smtpPort}`,
-    );
-  }
+  validateSmtpBlock();
 }
 
 function validatePasswordPolicy(): void {

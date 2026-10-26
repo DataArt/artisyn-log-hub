@@ -132,8 +132,8 @@ self-contained setup use the release install above.
 | Value | Mode | Use it for |
 |---|---|---|
 | `none` | Mode 1, no password | One user on their own machine. Only local callers are accepted. |
-| `password` | Mode 2, email and password | A small team on a trusted network. |
-| `password-confirm` | Mode 3, email, password and emailed confirmation | Anything reachable from the internet. Needs SMTP. |
+| `password` | Mode 2, email and password | A small team on a trusted network. SMTP is optional; without it password reset is unavailable. |
+| `password-confirm` | Mode 3, email, password and emailed confirmation | Anything reachable from the internet. Needs SMTP: the app refuses to start without a reachable relay. |
 | `azure-oauth` | Mode 4, Azure Entra ID sign-in | Organisations on Microsoft Entra ID, single tenant. |
 
 In every mode the first user to sign in becomes the admin.

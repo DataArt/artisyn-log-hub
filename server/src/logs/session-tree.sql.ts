@@ -46,6 +46,43 @@ export function descendantSessionsCte(rootIdsArray: SQL): SQL {
   )`;
 }
 
+/**
+ * Returns a raw SQL fragment defining two CTEs (without the `WITH RECURSIVE` keyword or a
+ * trailing comma) — the upward twin of {@link descendantSessionsCte}:
+ *
+ * - `ancestor_walk(start_id, cur_id, parent_session_id, depth)` walks each session in
+ *   `idsArray` up its `parent_session_id` chain (same join as the descendant CTE, reversed);
+ * - `top_ancestors(id, top_id)` gives, per input `sessions.id`, its TOP ancestor — the
+ *   deepest row of the walk. A top-level session (or one whose parent row is missing) is its
+ *   own top.
+ *
+ * The walk caps at depth 50 (a cyclic chain therefore stops at an arbitrary member of the
+ * cycle), and when a duplicate `sessions.session_id` makes the walk branch, `DISTINCT ON
+ * (start_id) … ORDER BY depth DESC, cur_id` picks one top deterministically. Mirrors the
+ * frozen copy in migration 0074's backfill.
+ *
+ * Callers must prefix their own `WITH` with `WITH RECURSIVE` and read `top_ancestors`.
+ *
+ * `idsArray` must be a `sql` fragment producing a Postgres array of `sessions.id` values.
+ */
+export function topAncestorIdsSql(idsArray: SQL): SQL {
+  return sql`ancestor_walk AS (
+    SELECT s.id AS start_id, s.id AS cur_id, s.parent_session_id, 0 AS depth
+    FROM sessions s
+    WHERE s.id = ANY(${idsArray})
+    UNION ALL
+    SELECT a.start_id, p.id, p.parent_session_id, a.depth + 1
+    FROM ancestor_walk a
+    JOIN sessions p ON p.session_id = a.parent_session_id
+    WHERE a.depth < 50
+  ),
+  top_ancestors AS (
+    SELECT DISTINCT ON (start_id) start_id AS id, cur_id AS top_id
+    FROM ancestor_walk
+    ORDER BY start_id, depth DESC, cur_id
+  )`;
+}
+
 interface DescendantRow {
   id: string | number;
   root_id: string | number;

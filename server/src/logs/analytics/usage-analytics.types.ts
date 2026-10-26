@@ -110,8 +110,15 @@ export interface ActiveSessionRow {
   workTimeMs: number;
   turns: number;
   totalTokens: number;
-  /** `null` when no session in the tree had a `model_pricing` match. */
+  /**
+   * The tree's complete computed cost (root + sub-agents + utility calls, the same figure as
+   * the sessions list); `null` when it cannot be computed — see `costUnavailableReason`.
+   */
   totalCost: number | null;
+  /** Model ids of the tree with no price in Log Hub (root, sub-agents, utility calls), sorted. */
+  unpricedModels: string[];
+  /** `'unknown-model'` when `totalCost` is null because a model has no price; else null. */
+  costUnavailableReason: 'unknown-model' | null;
   toolCalls: number;
   linesAdded: number;
   linesRemoved: number;

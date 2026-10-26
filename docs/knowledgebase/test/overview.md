@@ -31,6 +31,11 @@ For contributors, [tests/README.md](../../../tests/README.md) and
 [tests/scenarios/README.md](../../../tests/scenarios/README.md) are the public, self-contained guides:
 environment (Postgres, Mailpit, `bun`, ports), the `AUTH_MODE` matrix, and how to run each suite.
 
+A host dev server in `AUTH_MODE=password-confirm` (Mode 3, the `server/.env.example` default) outside
+`NODE_ENV=test` refuses to start unless Mailpit (`localhost:1025`) is running — Mode 3 fails fast on an
+unreachable SMTP relay. The contract suite (`NODE_ENV=test`) and the scenario stand are unaffected (the
+stand's mode B brings its own Mailpit).
+
 # Canonical commands
 
 These are the ONLY approved commands. The source of truth is

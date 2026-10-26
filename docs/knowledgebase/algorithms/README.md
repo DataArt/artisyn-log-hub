@@ -27,7 +27,8 @@ format where the two differ).
 
 | Doc | Code | Test runner |
 |---|---|---|
-| [cost-formula](cost-formula.md) | `server/src/logs/cost.sql.ts`; twins `client/.../lib/format.ts`, hook `post-turn-analysis-worker.js` | jest, vitest, `node --test` |
+| [cost-formula](cost-formula.md) | `packages/pricing/src/cost.ts` (server via `server/src/logs/cost.sql.ts`, client via `client/.../lib/format.ts`); twin hook `post-turn-analysis-worker.js` | jest, vitest, `node --test` |
+| [anthropic-pricing-parse](anthropic-pricing-parse.md) | `server/src/model-pricing/anthropic-pricing-parser.ts` | jest |
 | [otel-cost-selection](otel-cost-selection.md) | `server/src/logs/otel-cost.sql.ts` | jest |
 | [cache-ratio-and-causes](cache-ratio-and-causes.md) | `server/src/logs/cache-ratio.sql.ts`, `reports/cache-read-ratio.service.ts`, `turn-walk.ts`; twin `client/.../lib/format.ts` | jest, vitest |
 | [work-time](work-time.md) | `server/src/logs/claude-extractor.ts`; twin hook `post-turn-analysis-worker.js` | jest, `node --test` |

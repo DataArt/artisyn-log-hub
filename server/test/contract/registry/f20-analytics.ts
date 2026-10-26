@@ -38,6 +38,7 @@ export const f20Analytics: ContractFamily = {
                      (SELECT email FROM users WHERE id = r.user_id) AS user_email,
                      NULL::text AS grp,
                      ss.work_time_ms, ${treeCostSql('r.id')} AS total_cost,
+                     '[]'::jsonb AS unpriced_models,
                      ss.files_edited_written, ss.cache_read_tokens, ss.cache_write_tokens,
                      (SELECT sum(k.lines_changed) FROM tree t JOIN session_stats k ON k.session_id = t.id
                        WHERE t.root_id = r.id) AS lines_changed,
@@ -64,6 +65,7 @@ export const f20Analytics: ContractFamily = {
           group: 'grp',
           workTimeMs: { col: 'work_time_ms', as: 'number' },
           totalCost: { col: 'total_cost', as: 'numeric' },
+          unpricedModels: { col: 'unpriced_models', as: 'json' },
           filesEditedWritten: 'files_edited_written',
           linesChanged: { col: 'lines_changed', as: 'number' },
           logLineCount: 'log_lines',
@@ -306,6 +308,10 @@ export const f20Analytics: ContractFamily = {
               SELECT r.session_id, r.first_prompt, r.git_branch, r.end_time,
                      (SELECT email FROM users WHERE id = r.user_id) AS user_email,
                      ss.work_time_ms, ss.turn_count, ${treeCostSql('r.id')} AS total_cost,
+                     CASE WHEN ${treeCostSql('r.id')} IS NULL THEN 'unknown-model' END
+                       AS cost_unavailable_reason,
+                     CASE WHEN ${treeCostSql('r.id')} IS NULL THEN jsonb_build_array(ss.model)
+                          ELSE '[]'::jsonb END AS unpriced_models,
                      (SELECT sum(k.input_tokens + k.output_tokens + k.cache_read_tokens
                                  + k.cache_write_tokens)
                         FROM tree t JOIN session_stats k ON k.session_id = t.id
@@ -335,6 +341,8 @@ export const f20Analytics: ContractFamily = {
           turns: 'turn_count',
           totalTokens: { col: 'tokens', as: 'number' },
           totalCost: { col: 'total_cost', as: 'numeric' },
+          unpricedModels: { col: 'unpriced_models', as: 'json' },
+          costUnavailableReason: 'cost_unavailable_reason',
           toolCalls: { col: 'tool_calls', as: 'number' },
           linesAdded: { col: 'added', as: 'number' },
           linesRemoved: { col: 'removed', as: 'number' },

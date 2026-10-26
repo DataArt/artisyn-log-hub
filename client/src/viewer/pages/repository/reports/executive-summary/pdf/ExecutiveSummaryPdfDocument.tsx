@@ -1,5 +1,6 @@
 import { Document, Page, Text, View } from '@react-pdf/renderer';
 import { formatCost } from '@/lib/format';
+import { UNKNOWN_COST_TEXT } from '@/lib/cost-hints';
 import type { ExecutiveSummaryReportData } from '../../../../../../models/repositories';
 import { PRODUCTIVITY_METRICS } from '../../../analytics/metrics';
 import {
@@ -255,10 +256,10 @@ export function ExecutiveSummaryPdfDocument({
                 s.branch ?? 'no branch',
                 formatReportDuration(s.workTimeMs),
                 // An unpriced row must not print a cost that omits this session's
-                // spend. The PDF's built-in Helvetica has no U+26A0 glyph, so the amber
-                // pill degrades here to the tinted row (below) plus this literal.
+                // spend: the same `$???` as on screen, on the tinted row (below); the
+                // limitations block names the models.
                 s.costUnavailableReason === 'unknown-model'
-                  ? 'no pricing'
+                  ? UNKNOWN_COST_TEXT
                   : formatCost(s.cost),
                 s.model ?? 'unknown',
                 `${formatReportTokens(s.inputTokens)} / ${formatReportTokens(s.outputTokens)}`,

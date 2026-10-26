@@ -259,6 +259,8 @@ export const f23ExportImport: ContractFamily = {
         watch: [],
         derived: [
           'session_stats',
+          'session_call_tokens',
+          'session_costs',
           'session_tool_stats',
           'session_changed_paths',
           'session_file_stats',

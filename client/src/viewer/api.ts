@@ -44,6 +44,7 @@ import type {
 import type {
   AdminModelPricingResponse,
   AdminModelPricingRow,
+  AnthropicFetchNowResult,
   ModelPriceInput,
   ModelPricingMap,
   OpenRouterImportResult,
@@ -2115,6 +2116,15 @@ export async function clearAdminModelOverride(
   });
   if (!res.ok) return throwAdminModelPricingError(res);
   return res.json() as Promise<AdminModelPricingRow>;
+}
+
+/** Runs the Anthropic pricing fetch now, outside its daily schedule. */
+export async function fetchAnthropicPricingNow(): Promise<AnthropicFetchNowResult> {
+  const res = await apiFetch('/api/v1/admin/model-pricing/fetch-anthropic', {
+    method: 'POST',
+  });
+  if (!res.ok) return throwAdminModelPricingError(res);
+  return res.json() as Promise<AnthropicFetchNowResult>;
 }
 
 /** Imports non-Anthropic prices from OpenRouter (502 with a message when the fetch fails). */

@@ -6,9 +6,12 @@
  */
 import { createRequire } from 'node:module';
 import { describe, expect, it } from 'vitest';
-import type { ModelPricingEntry } from '../../models/pricing';
-import type { TokenBreakdown } from '../pages/repository/session-log/types';
-import { cacheReadRatio, computeCost } from './format';
+import type { ModelPricingEntry, PricingTier } from '../../models/pricing';
+import type {
+  CallTokens,
+  TokenBreakdown,
+} from '../pages/repository/session-log/types';
+import { cacheReadRatio, computeCost, computeCostBreakdown } from './format';
 
 // Vite would transform the .cjs loader as ESM; node's own require loads it as-is.
 const loader: typeof import('../../../../scripts/algo-docs/load-examples.cjs') =
@@ -24,7 +27,10 @@ type PriceRow = Pick<
   | 'priceCacheW5m'
   | 'priceCacheW1h'
   | 'priceWebSearch'
->;
+> & { tiers?: PricingTier[] | null };
+
+/** One call of the doc's row-wise `input.calls` (no web search); an omitted count is 0. */
+type DocCall = Omit<ServerTokens, 'webSearchRequests'>;
 
 interface ServerTokens {
   inputTokens?: number;
@@ -37,8 +43,21 @@ interface ServerTokens {
   outputTokensFast?: number;
 }
 
+/** One doc call (`session_stats` column names) -> the client's `CallTokens`. */
+function callTokens(c: DocCall): CallTokens {
+  return {
+    input: c.inputTokens ?? 0,
+    output: c.outputTokens ?? 0,
+    cacheRead: c.cacheReadTokens ?? 0,
+    cacheWrite5m: c.cacheWrite5mTokens ?? 0,
+    cacheWrite1h: c.cacheWrite1hTokens ?? 0,
+    inputFast: c.inputTokensFast ?? 0,
+    outputFast: c.outputTokensFast ?? 0,
+  };
+}
+
 /** The doc speaks in `session_stats` column names; the client's breakdown names differ. */
-function breakdown(t: ServerTokens): TokenBreakdown {
+function breakdown(t: ServerTokens, calls?: DocCall[]): TokenBreakdown {
   const cacheWrite5m = t.cacheWrite5mTokens ?? 0;
   const cacheWrite1h = t.cacheWrite1hTokens ?? 0;
   return {
@@ -51,25 +70,35 @@ function breakdown(t: ServerTokens): TokenBreakdown {
     webSearchRequests: t.webSearchRequests ?? 0,
     inputFast: t.inputTokensFast ?? 0,
     outputFast: t.outputTokensFast ?? 0,
+    ...(calls ? { calls: calls.map(callTokens) } : {}),
   };
 }
 
 describe('cost-formula (client twin computeCost)', () => {
   const rows = loader
     .loadExamples<
-      { tokens: ServerTokens; pricing: PriceRow },
-      { cost: number }
+      { tokens: ServerTokens; calls?: DocCall[]; pricing: PriceRow },
+      { cost: number; tierDelta?: number }
     >('cost-formula')
     .filter((row) => row.only !== 'server');
 
   it.each(rows)('$id', (row) => {
+    const { tiers, ...rates } = row.input.pricing;
+    // The API omits `tiers` for an untiered model; the doc's `null` means the same.
     const pricing: ModelPricingEntry = {
-      ...row.input.pricing,
+      ...rates,
       charsPerToken: null,
       contextLength: null,
+      ...(tiers ? { tiers } : {}),
     };
-    const cost = computeCost(breakdown(row.input.tokens), pricing);
+    const tokens = breakdown(row.input.tokens, row.input.calls);
+    const cost = computeCost(tokens, pricing);
     expect(Math.abs(cost - row.expected.cost)).toBeLessThan(1e-9);
+
+    if (row.expected.tierDelta !== undefined) {
+      const { tierDelta } = computeCostBreakdown(tokens, pricing);
+      expect(Math.abs(tierDelta - row.expected.tierDelta)).toBeLessThan(1e-9);
+    }
   });
 });
 

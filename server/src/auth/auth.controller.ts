@@ -13,6 +13,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import type { Request, Response } from 'express';
+import { MailService } from '../mail/mail.service';
 import { AccountDeletionService } from '../users/account-deletion.service';
 import {
   AUTH_RATE_LIMIT_ROUTES,
@@ -53,6 +54,7 @@ export class AuthController {
     private readonly azureAuthService: AzureAuthService,
     private readonly accountDeletionService: AccountDeletionService,
     private readonly authRateLimit: AuthRateLimitService,
+    private readonly mailService: MailService,
   ) {}
 
   @Get('config')
@@ -62,6 +64,7 @@ export class AuthController {
       mode: string | undefined;
       azure?: { authority: string; clientId: string; redirectUri: string };
       adminContactEmail?: string;
+      passwordResetAvailable?: boolean;
     } = { mode };
 
     if (mode === 'azure-oauth') {
@@ -75,6 +78,8 @@ export class AuthController {
       response.adminContactEmail = this.configService.get<string>(
         'ADMIN_CONTACT_EMAIL',
       );
+      // false in Mode 2 without SMTP_HOST: the client disables "Forgot password?".
+      response.passwordResetAvailable = this.mailService.isConfigured();
     }
     return response;
   }

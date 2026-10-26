@@ -63,10 +63,12 @@ import {
 import { writeSessionFileStats } from './session-file-stats-writer';
 import { getDescendantSessionIds } from './session-tree.sql';
 import {
+  replaceSessionCallTokens,
   replaceSessionRequestIds,
   upsertSessionStatsRow,
 } from './session-stats-writer';
 import { upsertSessionToolStatsRows } from './session-tool-stats-writer';
+import { recomputeSessionCosts } from './session-cost/session-cost-writer';
 import { upsertSessionHarnessUsageRows } from './session-harness-usage-writer';
 import type { TeamScope } from './team-scope';
 import {
@@ -1431,6 +1433,8 @@ export class RepositoriesService {
       await this.db.transaction(async (tx) => {
         await upsertSessionStatsRow(tx, row.sessionId, stats);
         await replaceSessionRequestIds(tx, row.sessionId, stats.requestIds);
+        await replaceSessionCallTokens(tx, row.sessionId, stats.callTokens);
+        await recomputeSessionCosts(tx, [row.sessionId]);
       });
       // The changed paths and the `cs_*` counters are rebuilt on the same pass, so
       // this endpoint is also the change-surface backfill for every session that predates the feature.

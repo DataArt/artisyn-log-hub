@@ -38,7 +38,11 @@ given below (`<v>` is the offending value as it was read, untrimmed, except for
    password-confirm, azure-oauth`.
 2. Per mode:
    - `none`: nothing to check.
-   - `password`: the `PUBLIC_BASE_URL` rule (below).
+   - `password`, in order:
+     1. the `PUBLIC_BASE_URL` rule (below);
+     2. only when `SMTP_HOST` is not empty: the SMTP block, i.e. `password-confirm` steps 4 and 5
+        (same messages, same order). When `SMTP_HOST` is empty, every other `SMTP_*` value is
+        ignored (SMTP is optional in this mode; password reset is then unavailable).
    - `password-confirm`, in order:
      1. the `PUBLIC_BASE_URL` rule;
      2. `ALLOWED_EMAIL_DOMAINS`, if not empty, is split on `,`; each entry, trimmed and
@@ -91,6 +95,9 @@ given below (`<v>` is the offending value as it was read, untrimmed, except for
   AS-55; not needed by `none` and `azure-oauth` even in production: AS-41, AS-40.
 - `SMTP_PORT` boundaries 0/1/65535/65536, negative, a fraction, text, padded, missing: AS-12..AS-16,
   AS-46, AS-48, AS-47, AS-45. Other SMTP values missing: AS-17, AS-44.
+- Mode `password` SMTP block: checked when `SMTP_HOST` is set (missing `SMTP_FROM`, missing
+  `SMTP_PORT`, port 0, full block): AS-102..AS-105; ignored when `SMTP_HOST` is unset or
+  spaces only: AS-106, AS-107.
 - Admin e-mail missing, spaces, no `@`, no top-level domain, leading space: AS-10, AS-50,
   AS-11, AS-49, AS-58.
 - Spaces-only values: `AUTH_MODE` (AS-02), policy (AS-20), `SMTP_HOST` (AS-59), domain list
@@ -164,7 +171,7 @@ needs hex letters (AS-32, AS-33, AS-57, AS-62, AS-66, AS-67).
     "id": "AS-07",
     "input": {"env": {"AUTH_MODE": "password", "NODE_ENV": "production", "PUBLIC_BASE_URL": "https://hub.arrakis.test"}},
     "expected": {"ok": true, "AUTH_MODE": "password", "PASSWORD_POLICY": "long"},
-    "note": "PUBLIC_BASE_URL rule: set to an absolute https URL passes in production; password mode needs no SMTP."
+    "note": "PUBLIC_BASE_URL rule: set to an absolute https URL passes in production; in password mode SMTP unset is allowed."
   },
   {
     "id": "AS-08",
@@ -729,6 +736,42 @@ needs hex letters (AS-32, AS-33, AS-57, AS-62, AS-66, AS-67).
     "input": {"env":{"AUTH_MODE":"password-confirm","ADMIN_CONTACT_EMAIL":"a@b@arrakis.test","SMTP_HOST":"smtp.arrakis.test","SMTP_PORT":"587","SMTP_FROM":"hub@arrakis.test"}},
     "expected": {"ok":false,"error":"ADMIN_CONTACT_EMAIL environment variable must be a valid email address"},
     "note": "Step 3: two @ are not allowed."
+  },
+  {
+    "id": "AS-102",
+    "input": {"env":{"AUTH_MODE":"password","SMTP_HOST":"smtp.arrakis.test"}},
+    "expected": {"ok":false,"error":"SMTP_FROM environment variable is required"},
+    "note": "Mode password, step 2: SMTP_HOST is set, so the SMTP block is checked and SMTP_FROM is missing."
+  },
+  {
+    "id": "AS-103",
+    "input": {"env":{"AUTH_MODE":"password","SMTP_HOST":"smtp.arrakis.test","SMTP_FROM":"hub@arrakis.test"}},
+    "expected": {"ok":false,"error":"SMTP_PORT environment variable is required"},
+    "note": "Mode password, step 2: with host and from set, the missing SMTP_PORT is reported."
+  },
+  {
+    "id": "AS-104",
+    "input": {"env":{"AUTH_MODE":"password","SMTP_HOST":"smtp.arrakis.test","SMTP_PORT":"0","SMTP_FROM":"hub@arrakis.test"}},
+    "expected": {"ok":false,"error":"SMTP_PORT environment variable must be an integer between 1 and 65535"},
+    "note": "Mode password, step 2: the port range check applies too; 0 < 1."
+  },
+  {
+    "id": "AS-105",
+    "input": {"env":{"AUTH_MODE":"password","SMTP_HOST":"smtp.arrakis.test","SMTP_PORT":"587","SMTP_FROM":"hub@arrakis.test"}},
+    "expected": {"ok":true,"AUTH_MODE":"password","PASSWORD_POLICY":"long"},
+    "note": "Mode password, step 2: a full SMTP block passes."
+  },
+  {
+    "id": "AS-106",
+    "input": {"env":{"AUTH_MODE":"password","SMTP_PORT":"abc"}},
+    "expected": {"ok":true,"AUTH_MODE":"password","PASSWORD_POLICY":"long"},
+    "note": "Mode password, step 2: SMTP_HOST unset, so the SMTP block is not checked and the bad SMTP_PORT is ignored."
+  },
+  {
+    "id": "AS-107",
+    "input": {"env":{"AUTH_MODE":"password","SMTP_HOST":"   ","SMTP_PORT":"abc"}},
+    "expected": {"ok":true,"AUTH_MODE":"password","PASSWORD_POLICY":"long"},
+    "note": "Mode password, step 2: a spaces-only SMTP_HOST counts as unset, so the bad SMTP_PORT is ignored."
   }
 ]
 ```
@@ -780,6 +823,9 @@ needs hex letters (AS-32, AS-33, AS-57, AS-62, AS-66, AS-67).
   dot -> AS-77, AS-78, AS-79. `PUBLIC_BASE_URL` limited to https -> AS-80.
 - Domain labels required to start with a letter or digit -> AS-69.
 - Production detected case-insensitively -> AS-70.
+- Mode `password` SMTP block checked when `SMTP_HOST` is unset -> AS-106, AS-107 (a spaces-only
+  host taken as set -> AS-107).
+- Mode `password` SMTP block not checked when `SMTP_HOST` is set -> AS-102..AS-104.
 
 ## Where the result is visible
 

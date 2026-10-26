@@ -5,6 +5,8 @@
 FROM --platform=$BUILDPLATFORM node:24.22.1-slim AS client-build
 RUN npm install -g bun@1.3.14
 WORKDIR /app/client
+# client/vite.config.ts aliases @loghub/pricing to the repo-local package sources.
+COPY packages/ /app/packages/
 COPY client/ ./
 RUN bun install --frozen-lockfile && bun run build
 
@@ -23,6 +25,8 @@ RUN mkdir -p server/src/public/static \
 FROM --platform=$BUILDPLATFORM node:24.22.1-slim AS server-build
 RUN npm install -g @vercel/ncc@0.38.4
 WORKDIR /app/server
+# server/package.json depends on the repo-local @loghub/pricing (file:../packages/pricing).
+COPY packages/ /app/packages/
 COPY server/ ./
 # ncc type-checks every file in server/tsconfig.json, including the *.algo.spec.ts tests that
 # import this loader (only its .d.cts is needed; nothing from it reaches the bundle).

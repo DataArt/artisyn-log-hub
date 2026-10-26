@@ -114,7 +114,8 @@ export const f21Reports: ContractFamily = {
                      (SELECT email FROM users WHERE id = r.user_id) AS email, r.git_branch,
                      ss.work_time_ms, ${treeCostSql('r.id')} AS cost, ss.model,
                      ss.input_tokens, ss.output_tokens, ss.cache_read_tokens,
-                     ss.cache_write_tokens, NULL::text AS reason
+                     ss.cache_write_tokens, NULL::text AS reason,
+                     '[]'::jsonb AS unpriced_models
                 FROM roots r JOIN session_stats ss ON ss.session_id = r.id
                ORDER BY cost DESC`,
         args: ['@R1.id'],
@@ -132,6 +133,7 @@ export const f21Reports: ContractFamily = {
           cacheReadTokens: { col: 'cache_read_tokens', as: 'number' },
           cacheWriteTokens: { col: 'cache_write_tokens', as: 'number' },
           costUnavailableReason: 'reason',
+          unpricedModels: { col: 'unpriced_models', as: 'json' },
         },
         strict: true,
       },

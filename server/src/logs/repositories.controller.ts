@@ -65,15 +65,14 @@ import {
   costMismatch,
   otelCostsCte,
   otelComputedDiscrepancy,
-  resolveSessionTotalCost,
-  utilityCostsCte,
   type CostBreakdown,
 } from './otel-cost.sql';
 import {
-  pricingAsOfSql,
-  sessionCostSql,
-  sessionPriceDateSql,
-} from './cost.sql';
+  readTreeCost,
+  TREE_COST_COLUMNS_SQL,
+  treeCostCtes,
+  type TreeCostSqlRow,
+} from './session-tree-cost.sql';
 import {
   assertKnownGroupByAttrKey,
   assertNoGroupByAttrFilterConflict,
@@ -119,6 +118,8 @@ const EMPTY_COST_BREAKDOWN: Readonly<CostBreakdown> = Object.freeze({
   telemetryCost: null,
   mismatch: false,
   utilityPricingMissing: false,
+  subagentPricingMissing: false,
+  unpricedModels: [],
 });
 
 /**
@@ -150,14 +151,10 @@ function teamScopeUserFilterSql(
 }
 
 /**
- * The five per-event usage figures `sessionCostSql()` needs beyond the three
- * this file's raw-JSONB CTEs already summed, aliased to the exact `session_stats`
- * column names that helper expects.
- *
- * Both CTEs below (the sessions-list `session_events` and the timeline
- * `session_events`) read the same `message.usage` paths, so the extraction lives here
- * once — the earlier copy-paste of cost arithmetic is precisely how the flat
- * cache-write rate survived the TTL token split.
+ * The five per-event usage figures the timeline's raw-JSONB `session_events` CTE
+ * surfaces beyond the three it already sums, aliased to the exact `session_stats`
+ * column names. They are only a fallback for the response's token columns when no
+ * `session_stats` row exists yet; cost itself comes from the stored `session_costs`.
  *
  * The 5m/1h split mirrors `splitCacheCreationTokens()`
  * (`claude-extractor.ts`) per event, not per session: `usage.cache_creation`'s two
@@ -306,10 +303,13 @@ interface TimelineSession {
   inputTokensFast: number;
   outputTokensFast: number;
   /**
-   * 'unknown-model' when the session names a model with no `model_pricing` row, which is
-   * why `totalCost` is null; null otherwise (including "no stats extracted yet").
+   * 'unknown-model' when some model of the session tree (root, sub-agent or utility call)
+   * has no `model_pricing` row, which is why `totalCost` is null; null otherwise
+   * (including "no stats extracted yet").
    */
   costUnavailableReason: 'unknown-model' | null;
+  /** The model ids with no price in Log Hub (sorted; empty when everything is priced). */
+  unpricedModels: string[];
   isFavorite: boolean;
 }
 
@@ -612,16 +612,8 @@ export class RepositoriesController {
       // causing massive planning overhead and "malformed array literal" errors.
       const idsLiteral = `{${sessionRowIds.join(',')}}`;
       const idsArray = sql`${idsLiteral}::bigint[]`;
-      type CostRow = {
-        session_row_id: string;
+      type CostRow = TreeCostSqlRow & {
         model: string | null;
-        main_cost: string | number | null;
-        subagent_cost: string | number | null;
-        utility_cost: string | number | null;
-        utility_pricing_missing: boolean | null;
-        // `p.model_id IS NULL` — the same predicate that nulled `main_cost`, carried
-        // out of SQL so `costUnavailableReason` cannot drift from it.
-        pricing_missing: boolean | null;
         otel_cost: string | null;
       };
       const costResult = await this.db.execute(sql`
@@ -658,132 +650,51 @@ export class RepositoriesController {
             -- massively over/under-price the session.
             (ARRAY_AGG(evt->'message'->>'model' ORDER BY ord) FILTER (
               WHERE (evt->'message'->>'model') IS NOT NULL
-            ))[1] AS model,
-            SUM(COALESCE((evt->'message'->'usage'->>'input_tokens')::bigint, 0)) AS input_tokens,
-            SUM(COALESCE((evt->'message'->'usage'->>'output_tokens')::bigint, 0)) AS output_tokens,
-            SUM(COALESCE((evt->'message'->'usage'->>'cache_read_input_tokens')::bigint, 0)) AS cache_read_tokens,
-            SUM(COALESCE((evt->'message'->'usage'->>'cache_creation_input_tokens')::bigint, 0)) AS cache_write_tokens,
-            -- The TTL-split cache writes, web-search requests and fast-mode token
-            -- subsets this CTE must expose for sessionCostSql() to price it. Every line
-            -- here is already an assistant line (assistant_lines above), so no per-value
-            -- type guard is needed.
-            ${jsonbUsageCostColumnsSql((value) => value)}
+            ))[1] AS model
           FROM assistant_lines
           GROUP BY session_row_id
         ),
-        -- Root-session token totals now come from session_stats (already
-        -- denormalized at ingest) instead of re-parsing logs.body on every query,
-        -- falling back to the raw-JSONB aggregate above when no session_stats row
-        -- exists yet (e.g. a claude log processed before any recompute) so that case
-        -- keeps getting a computed cost exactly as before. model is taken ONLY from
-        -- the JSONB aggregate, never ss.model -- ss.model additionally falls back to
-        -- extractClaudeStats()'s model-or-sidechainModel rule, which would silently
-        -- start pricing a pure Task-orchestrator root (today NULL model, no computed
-        -- cost) and change computedCost/costUnavailableReason for that case.
-        session_events AS (
-          SELECT
-            sej.session_row_id,
-            sej.model,
-            COALESCE(ss.input_tokens, sej.input_tokens) AS input_tokens,
-            COALESCE(ss.output_tokens, sej.output_tokens) AS output_tokens,
-            COALESCE(ss.cache_read_tokens, sej.cache_read_tokens) AS cache_read_tokens,
-            COALESCE(ss.cache_write_tokens, sej.cache_write_tokens) AS cache_write_tokens,
-            COALESCE(ss.cache_write_5m_tokens, sej.cache_write_5m_tokens) AS cache_write_5m_tokens,
-            COALESCE(ss.cache_write_1h_tokens, sej.cache_write_1h_tokens) AS cache_write_1h_tokens,
-            COALESCE(ss.web_search_requests, sej.web_search_requests) AS web_search_requests,
-            COALESCE(ss.input_tokens_fast, sej.input_tokens_fast) AS input_tokens_fast,
-            COALESCE(ss.output_tokens_fast, sej.output_tokens_fast) AS output_tokens_fast
-          FROM session_events_jsonb sej
-          LEFT JOIN session_stats ss ON ss.session_id = sej.session_row_id
-        ),
-        subagent_costs AS (
-          SELECT
-            ds.root_id AS session_row_id,
-            COALESCE(SUM(
-              CASE WHEN sub_p.model_id IS NOT NULL
-                THEN ${sessionCostSql({ stats: sql`ss`, pricing: sql`sub_p` })}
-                ELSE 0.0 END
-            ), 0.0) AS total_cost
-          FROM descendant_sessions ds
-          JOIN session_stats ss ON ss.session_id = ds.id
-            -- An OTEL-only session_stats row (no transcript ever uploaded for
-            -- it) must not be mistaken for a real sub-agent — it would silently add a
-            -- $0 line to the sum but, worse, would satisfy this JOIN for a descendant
-            -- that never had a claude/claude-subagent log, which some future column
-            -- addition here could turn into a phantom contributor.
-            AND EXISTS (
-              SELECT 1 FROM logs tl
-              WHERE tl.session_id = ds.id AND tl.log_type IN ('claude', 'claude-subagent')
-            )
-          -- Sub-agents are priced at their ROOT's price date.
-          LEFT JOIN LATERAL (
-            ${pricingAsOfSql(sql`ss.model`, sessionPriceDateSql(sql`ds.root_id`))}
-          ) sub_p ON true
-          WHERE ds.depth > 0
-          GROUP BY ds.root_id
-        ),
-        -- OTEL-metered calls no transcript in the tree records (utility calls).
-        ${utilityCostsCte(idsArray)}
+        -- Cost comes from the stored session_costs rows (DD10) plus the utility calls,
+        -- all in tree_costs (session-tree-cost.sql.ts). The model shown is still taken
+        -- ONLY from the JSONB aggregate above, never ss.model (which falls back to the
+        -- sidechain model).
+        ${treeCostCtes(idsArray)}
         SELECT
           se.session_row_id,
           se.model AS model,
-          -- The cost parts are selected separately so the response can carry the
-          -- whole breakdown; calculatedCost = main + sub-agents + utility is summed in TS.
-          CASE WHEN p.model_id IS NOT NULL THEN
-            ${sessionCostSql({ stats: sql`se`, pricing: sql`p` })}
-          ELSE NULL END AS main_cost,
-          COALESCE(sac.total_cost, 0.0)::float AS subagent_cost,
-          COALESCE(uc.utility_cost, 0.0)::float AS utility_cost,
-          COALESCE(uc.utility_pricing_missing, false) AS utility_pricing_missing,
-          -- Derived from the very predicate that produced main_cost above, so the
-          -- per-row costUnavailableReason can never contradict the pricing join.
-          p.model_id IS NULL AS pricing_missing,
+          ${TREE_COST_COLUMNS_SQL},
           oc.otel_cost AS otel_cost
-        FROM session_events se
-        LEFT JOIN subagent_costs sac ON sac.session_row_id = se.session_row_id
-        -- The main thread is priced at the session's own price date.
-        LEFT JOIN LATERAL (
-          ${pricingAsOfSql(sql`se.model`, sessionPriceDateSql(sql`se.session_row_id`))}
-        ) p ON true
-        LEFT JOIN utility_costs uc ON uc.session_row_id = se.session_row_id
+        FROM session_events_jsonb se
+        JOIN tree_costs tc ON tc.session_row_id = se.session_row_id
         LEFT JOIN otel_costs oc ON oc.session_row_id = se.session_row_id
       `);
-      // Resolution rule: at this aggregate level (session-list totals, session
-      // header top-of-page price), use the root's OTEL cost when present — it already
-      // covers the whole descendant tree — else fall back to the computed rollup above.
-      // computedCost is kept alongside for the header's 33%+ discrepancy warning.
-      // computedCost is the utility-inclusive calculatedCost, so the 33% flag
-      // and the 50% incompleteness guard compare like with like.
+      // The shown cost is the complete computed tree cost (readTreeCost →
+      // resolveSessionTotalCost): null as soon as the root, a sub-agent or a utility call is
+      // unpriced. The OTEL total is only a cross-check (hasCostDiscrepancy, mismatch).
       const toNum = (v: string | number | null): number | null =>
         v == null ? null : typeof v === 'number' ? v : parseFloat(v);
       for (const row of costResult.rows as unknown as CostRow[]) {
-        const mainCost = toNum(row.main_cost);
-        const subagentCost = toNum(row.subagent_cost) ?? 0;
-        const utilityCost = toNum(row.utility_cost) ?? 0;
-        const calculatedCost =
-          mainCost != null ? mainCost + subagentCost + utilityCost : null;
+        const tree = readTreeCost(row, row.model);
         const otelCost = toNum(row.otel_cost);
         costMap.set(Number(row.session_row_id), {
-          totalCost: resolveSessionTotalCost(otelCost, calculatedCost),
-          computedCost: calculatedCost,
+          totalCost: tree.total,
+          computedCost: tree.total,
           otelCost,
           costBreakdown: {
-            mainCost,
-            subagentCost,
-            utilityCost,
-            calculatedCost,
+            mainCost: tree.mainCost,
+            subagentCost: tree.subagentCost,
+            utilityCost: tree.utilityCost,
+            calculatedCost: tree.total,
             telemetryCost: otelCost,
-            mismatch: costMismatch(otelCost, calculatedCost),
-            utilityPricingMissing: row.utility_pricing_missing === true,
+            mismatch: costMismatch(otelCost, tree.total),
+            utilityPricingMissing: tree.utilityPricingMissing,
+            subagentPricingMissing: tree.subagentPricingMissing,
+            unpricedModels: tree.unpricedModels,
           },
-          // 'unknown-model' only when the session actually names a
-          // model that pricing could not match. A session whose transcript carries no
-          // model at all has nothing to price, so its reason stays null — the missing
-          // figure there is "no stats yet", not "we do not know this model".
-          costUnavailableReason:
-            row.pricing_missing === true && row.model != null
-              ? 'unknown-model'
-              : null,
+          // 'unknown-model' only when some model of the tree has no price. A session
+          // whose transcript carries no model at all has nothing to price, so its reason
+          // stays null — the missing figure there is "no stats yet".
+          costUnavailableReason: tree.costUnavailableReason,
         });
       }
     }
@@ -1235,27 +1146,16 @@ export class RepositoriesController {
         SUM(COALESCE(ss.lines_changed, 0))::text        AS total_lines_changed_own,
         ARRAY_AGG(s.id)                                 AS session_row_ids,
         ARRAY_AGG(COALESCE(ss.lines_changed, 0))        AS session_lines_changed_own,
-        SUM(
-          -- OTEL cost (root-only, already covers any in-process
-          -- sub-agents) wins over the computed token×price estimate when present for
-          -- that root session. No exact-zero guard here — the guard already lives in
-          -- the column (NULL = no signal), reading it plain reproduces today's
-          -- behavior exactly.
-          COALESCE(
-            ss.telemetry_cost::float / 1000000.0,
-            CASE WHEN p.model_id IS NOT NULL
-              THEN ${sessionCostSql({ stats: sql`ss`, pricing: sql`p` })}
-              ELSE NULL END
-          )
-        )::text                                         AS total_cost
+        -- Stored computed cost of each root (NULL = unpriced / no row). The OTEL total
+        -- never stands in for it (Log Hub's price is the source of truth, see
+        -- otel-cost.sql.ts). Still root-only: sub-agents and utility calls are not rolled
+        -- up here (a known gap, pinned by the golden-load branch scenario).
+        SUM(sc.cost)::text                              AS total_cost
       FROM logs l
       INNER JOIN sessions s ON s.id = l.session_id AND s.deleted = false
       INNER JOIN log_repositories lr ON lr.log_id = l.id
       LEFT JOIN session_stats ss ON ss.session_id = l.session_id
-      -- Priced at the session's own price date, not today's rates.
-      LEFT JOIN LATERAL (
-        ${pricingAsOfSql(sql`ss.model`, sessionPriceDateSql(sql`l.session_id`))}
-      ) p ON true
+      LEFT JOIN session_costs sc ON sc.session_id = l.session_id
       WHERE ${repoBranchFilter}
         AND l.log_type = 'artisyn'
         AND l.first_prompt IS NOT NULL
@@ -2604,6 +2504,7 @@ export class RepositoriesController {
         descendantCacheReadTokens: number;
         descendantCacheWriteTokens: number;
         costUnavailableReason: 'unknown-model' | null;
+        unpricedModels: string[];
       }
     >();
 
@@ -2613,11 +2514,9 @@ export class RepositoriesController {
       const idsLiteral = `{${sessionRowIds.join(',')}}`;
       const idsArray = sql`${idsLiteral}::bigint[]`;
 
-      type StatsRow = {
+      type StatsRow = TreeCostSqlRow & {
         session_row_id: string;
         work_time_ms: string | null;
-        otel_cost: string | null;
-        computed_cost: string | null;
         // Tree-scoped (root + all descendants); the `*_own` pair is root-only.
         files_edited_written: string;
         lines_changed: string;
@@ -2636,9 +2535,6 @@ export class RepositoriesController {
         descendant_cache_read_tokens: string | null;
         descendant_cache_write_tokens: string | null;
         model: string | null;
-        // `p.model_id IS NULL` — the same predicate that nulled `computed_cost`, carried
-        // out of SQL so `costUnavailableReason` cannot drift from it.
-        pricing_missing: boolean | null;
       };
 
       type FileStatsRow = {
@@ -2654,7 +2550,6 @@ export class RepositoriesController {
         -- descendant. Joined below on root_id; see session-tree-metrics.sql.ts for the
         -- double-count trap (the rollup already contains the root).
         ${treeMetricsCte()},
-        ${otelCostsCte(idsArray)},
         artisyn_events AS (
           SELECT
             al.session_id,
@@ -2698,7 +2593,7 @@ export class RepositoriesController {
             SUM(CASE WHEN (evt->>'type') = 'assistant'
                      THEN COALESCE((evt->'message'->'usage'->>'cache_creation_input_tokens')::bigint, 0) ELSE 0 END) AS cache_write_tokens,
             -- The TTL-split cache writes, web-search requests and fast-mode token
-            -- subsets sessionCostSql() prices, under the same type = 'assistant' guard the
+            -- subsets surfaced in the response, under the same type = 'assistant' guard the
             -- sums above use (this CTE aggregates every line type in one pass).
             ${jsonbUsageCostColumnsSql(
               (value) =>
@@ -2710,23 +2605,9 @@ export class RepositoriesController {
             AND cl.session_id = ANY(${idsArray})
           GROUP BY cl.session_id
         ),
-        subagent_costs AS (
-          SELECT
-            ds.root_id AS session_row_id,
-            COALESCE(SUM(
-              CASE WHEN sub_p.model_id IS NOT NULL
-                THEN ${sessionCostSql({ stats: sql`ss`, pricing: sql`sub_p` })}
-                ELSE 0.0 END
-            ), 0.0) AS total_cost
-          FROM descendant_sessions ds
-          JOIN session_stats ss ON ss.session_id = ds.id
-          -- Sub-agents are priced at their ROOT's price date.
-          LEFT JOIN LATERAL (
-            ${pricingAsOfSql(sql`ss.model`, sessionPriceDateSql(sql`ds.root_id`))}
-          ) sub_p ON true
-          WHERE ds.depth > 0
-          GROUP BY ds.root_id
-        ),
+        -- Stored sub-agent costs (session_costs, priced at the root's price date).
+        -- The complete computed tree cost (own + sub-agents + utility calls).
+        ${treeCostCtes(idsArray)},
         -- Cache tokens of all recursive descendants (depth > 0) per root.
         subagent_cache AS (
           SELECT
@@ -2818,20 +2699,11 @@ export class RepositoriesController {
         SELECT
           se.session_row_id,
           COALESCE(ss.work_time_ms, wt.work_time_ms, 0) AS work_time_ms,
-          -- Both cost sources are returned separately and merged in TS
-          -- by resolveSessionTotalCost(), so this route, the session list, the executive
-          -- summary and the delete-time audit row all apply one definition. Merging here with
-          -- COALESCE could not express the "OTEL is too low to be complete" guard without
-          -- duplicating the whole computed expression.
+          -- The tree cost parts, resolved in TS by readTreeCost(), so this route, the
+          -- session list, the reports and the delete-time audit row all apply one
+          -- definition: complete computed cost, or null when any part is unpriced.
           -- (No backticks in this comment: it lives inside a sql template literal.)
-          oc.otel_cost AS otel_cost,
-          CASE WHEN p.model_id IS NOT NULL THEN
-            ${sessionCostSql({ stats: sql`tk`, pricing: sql`p` })} +
-            COALESCE(sac.total_cost, 0.0)
-          ELSE NULL END AS computed_cost,
-          -- Derived from the very predicate that produced computed_cost above, so the
-          -- per-row costUnavailableReason can never contradict the pricing join.
-          p.model_id IS NULL AS pricing_missing,
+          ${TREE_COST_COLUMNS_SQL},
           COALESCE(ss.model, se.model) AS model,
           -- Tree-scoped. The rollup already includes the root, so the root's
           -- own value is added back ONLY when the rollup did not count it (no session_stats
@@ -2854,7 +2726,7 @@ export class RepositoriesController {
           COALESCE(ll.log_line_count, 0) AS log_line_count,
           COALESCE(ss.cache_read_tokens, se.cache_read_tokens, 0) AS cache_read_tokens,
           COALESCE(ss.cache_write_tokens, se.cache_write_tokens, 0) AS cache_write_tokens,
-          -- The same three figures the cost expression above prices, surfaced for the
+          -- The same three figures the stored cost prices, surfaced for the
           -- client so the timeline's own cost math can reproduce the server's number.
           COALESCE(tk.web_search_requests, 0) AS web_search_requests,
           COALESCE(tk.input_tokens_fast, 0) AS input_tokens_fast,
@@ -2863,9 +2735,9 @@ export class RepositoriesController {
           COALESCE(sca.descendant_cache_write_tokens, 0) AS descendant_cache_write_tokens
         FROM session_events se
         LEFT JOIN session_stats ss ON ss.session_id = se.session_row_id
-        -- One alias carrying the session's token counts under the exact column names
-        -- sessionCostSql() expects. Preserves the original per-column preference: the
-        -- extracted session_stats value wins, and the raw-JSONB session_events aggregate is
+        LEFT JOIN session_costs sc ON sc.session_id = se.session_row_id
+        -- One alias carrying the session's token counts for the response. Preserves the
+        -- original per-column preference: the extracted session_stats value wins, and the raw-JSONB session_events aggregate is
         -- the fallback for a session whose stats row has not been written yet.
         LEFT JOIN LATERAL (
           SELECT
@@ -2879,27 +2751,21 @@ export class RepositoriesController {
             COALESCE(ss.output_tokens_fast, se.output_tokens_fast)       AS output_tokens_fast
         ) tk ON true
         LEFT JOIN ${sql.raw(SESSION_TREE_METRICS_CTE)} tm ON tm.root_id = se.session_row_id
-        LEFT JOIN subagent_costs sac ON sac.session_row_id = se.session_row_id
+        LEFT JOIN tree_costs tc ON tc.session_row_id = se.session_row_id
         LEFT JOIN subagent_cache sca ON sca.session_row_id = se.session_row_id
-        LEFT JOIN otel_costs oc ON oc.session_row_id = se.session_row_id
         LEFT JOIN work_time_cte wt ON wt.session_id = se.session_row_id
-        -- The session's model at the session's own price date.
-        LEFT JOIN LATERAL (
-          ${pricingAsOfSql(sql`COALESCE(ss.model, se.model)`, sessionPriceDateSql(sql`se.session_row_id`))}
-        ) p ON true
         LEFT JOIN file_stats_cte fs ON fs.session_row_id = se.session_row_id
         LEFT JOIN vision_stats_cte vs ON vs.session_row_id = se.session_row_id
         LEFT JOIN log_lines_cte ll ON ll.session_id = se.session_row_id
       `);
 
       for (const row of statsResult.rows as unknown as StatsRow[]) {
+        const tree = readTreeCost(row, row.model);
         statsMap.set(Number(row.session_row_id), {
           workTimeMs:
             row.work_time_ms != null ? parseFloat(row.work_time_ms) : 0,
-          totalCost: resolveSessionTotalCost(
-            row.otel_cost != null ? parseFloat(row.otel_cost) : null,
-            row.computed_cost != null ? parseFloat(row.computed_cost) : null,
-          ),
+          totalCost: tree.total,
+          unpricedModels: tree.unpricedModels,
           filesEditedWritten:
             row.files_edited_written != null
               ? parseInt(row.files_edited_written, 10)
@@ -2954,13 +2820,10 @@ export class RepositoriesController {
             row.descendant_cache_write_tokens != null
               ? parseInt(row.descendant_cache_write_tokens, 10)
               : 0,
-          // 'unknown-model' only when the session actually names a
-          // model that pricing could not match — a session with neither a stats row nor a
-          // model in its transcript has nothing to price, so its reason stays null.
-          costUnavailableReason:
-            row.pricing_missing === true && row.model != null
-              ? 'unknown-model'
-              : null,
+          // 'unknown-model' only when some model of the tree has no price — a
+          // session with neither a stats row nor a model in its transcript has nothing to
+          // price, so its reason stays null.
+          costUnavailableReason: tree.costUnavailableReason,
         });
       }
 
@@ -3048,6 +2911,7 @@ export class RepositoriesController {
         descendantCacheReadTokens: stats?.descendantCacheReadTokens ?? 0,
         descendantCacheWriteTokens: stats?.descendantCacheWriteTokens ?? 0,
         costUnavailableReason: stats?.costUnavailableReason ?? null,
+        unpricedModels: stats?.unpricedModels ?? [],
         isFavorite: timelineFavoriteIds.has(r.sessionRowId),
       }));
     });

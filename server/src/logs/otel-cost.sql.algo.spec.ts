@@ -1,17 +1,21 @@
 /**
  * Table test for docs/knowledgebase/algorithms/otel-cost-selection.md: every row of the doc's
- * examples block runs against the real selection, warning and mismatch functions.
+ * examples block runs against the real total, unpriced-model list, warning and mismatch
+ * functions.
  */
 import { loadExamples } from '../../../scripts/algo-docs/load-examples.cjs';
 import {
   costMismatch,
-  isOtelCostIncomplete,
   otelComputedDiscrepancy,
   resolveSessionTotalCost,
+  unpricedModelList,
+  type SessionCostParts,
 } from './otel-cost.sql';
 
 type OtelInput =
-  | { kind: 'select'; otel: number | null; computed: number | null }
+  | ({ kind: 'total' } & SessionCostParts)
+  | { kind: 'unpriced'; lists: Array<Array<string | null>> }
+  | { kind: 'discrepancy'; otel: number | null; computed: number | null }
   | {
       kind: 'mismatch';
       telemetry: number | null;
@@ -23,15 +27,21 @@ const rows = loadExamples<OtelInput, Record<string, unknown>>(
 );
 
 it.each(rows)('$id', ({ input, expected }) => {
-  if (input.kind === 'select') {
-    expect({
-      total: resolveSessionTotalCost(input.otel, input.computed),
-      incomplete: isOtelCostIncomplete(input.otel, input.computed),
-      discrepancy: otelComputedDiscrepancy(input.otel, input.computed),
-    }).toEqual(expected);
-    return;
+  switch (input.kind) {
+    case 'total':
+      expect({ total: resolveSessionTotalCost(input) }).toEqual(expected);
+      return;
+    case 'unpriced':
+      expect({ models: unpricedModelList(...input.lists) }).toEqual(expected);
+      return;
+    case 'discrepancy':
+      expect({
+        discrepancy: otelComputedDiscrepancy(input.otel, input.computed),
+      }).toEqual(expected);
+      return;
+    case 'mismatch':
+      expect({
+        mismatch: costMismatch(input.telemetry, input.calculated),
+      }).toEqual(expected);
   }
-  expect({
-    mismatch: costMismatch(input.telemetry, input.calculated),
-  }).toEqual(expected);
 });

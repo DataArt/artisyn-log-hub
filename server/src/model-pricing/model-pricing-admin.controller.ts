@@ -11,9 +11,11 @@ import { SessionAuthGuard } from '../auth/guards/session-auth.guard';
 import { AdminGuard } from '../common/guards/admin.guard';
 import { ModelIdDto } from './dto/model-id.dto';
 import { ModelPriceInputDto } from './dto/model-price-input.dto';
+import { AnthropicPricingFetchService } from './anthropic-pricing-fetch.service';
 import { ModelPricingAdminService } from './model-pricing-admin.service';
 import type {
   AdminModelPricingResponse,
+  AnthropicFetchNowResult,
   AdminModelPricingRow,
   OpenRouterImportResult,
 } from './model-pricing.types';
@@ -30,6 +32,7 @@ export class ModelPricingAdminController {
   constructor(
     private readonly adminService: ModelPricingAdminService,
     private readonly openRouterImport: OpenRouterImportService,
+    private readonly anthropicFetch: AnthropicPricingFetchService,
   ) {}
 
   @Get()
@@ -51,6 +54,16 @@ export class ModelPricingAdminController {
   @HttpCode(200)
   clearOverride(@Body() dto: ModelIdDto): Promise<AdminModelPricingRow> {
     return this.adminService.clearOverride(dto.modelId);
+  }
+
+  /** Runs the Anthropic pricing fetch now, outside its daily schedule. */
+  @Post('fetch-anthropic')
+  @HttpCode(200)
+  async fetchAnthropic(): Promise<AnthropicFetchNowResult> {
+    const result = await this.anthropicFetch.runFetch(undefined, {
+      force: true,
+    });
+    return { result };
   }
 
   @Post('import-openrouter')

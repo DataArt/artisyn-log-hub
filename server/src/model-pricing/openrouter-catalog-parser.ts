@@ -108,6 +108,7 @@ function toRates(item: Record<string, unknown>): ModelPricingRates | null {
     priceWebSearch: round6(webSearch),
     charsPerToken: null,
     contextLength: readContextLength(item.context_length),
+    tiers: null,
   };
   const values = [
     rates.priceIn,

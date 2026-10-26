@@ -6,6 +6,7 @@ import { parseAnthropicPricing } from './anthropic-pricing-parser';
 import {
   ANTHROPIC_FETCH_TIMEOUT_MS,
   ANTHROPIC_PRICING_URL,
+  MANUAL_FETCH_MIN_GAP_SECONDS,
   RETRY_AFTER_HOURS,
   STALE_AFTER_HOURS,
 } from './model-pricing.constants';
@@ -19,6 +20,7 @@ import {
   type EffectivePriceWrite,
 } from './model-pricing-store';
 import type { ModelPricingRates } from './model-pricing.types';
+import { notifySessionCostsStale } from './session-cost-invalidation';
 
 export type RunFetchResult = 'changed' | 'unchanged' | 'failed' | 'skipped';
 
@@ -30,6 +32,8 @@ const FETCH_SOURCE = 'anthropic';
  * `runFetch` is safe to call from every cluster worker at once: a conditional UPDATE on
  * `model_pricing_fetch_state.last_attempt_at` lets exactly one worker per stale/retry window
  * fetch the page; every other worker returns `'skipped'` without touching anything else.
+ * An admin's manual "Fetch now" (`force`) ignores that window and is only refused while
+ * another attempt started less than {@link MANUAL_FETCH_MIN_GAP_SECONDS} ago.
  */
 @Injectable()
 export class AnthropicPricingFetchService {
@@ -41,13 +45,17 @@ export class AnthropicPricingFetchService {
    * Seeds and claims the `'anthropic'` fetch-state row, then — only when the claim succeeds —
    * fetches and parses the page and persists the prices with the fetch state in one
    * transaction. Any fetch, parse or persist failure records a `failed` state (no price is
-   * written) and returns `'failed'`.
+   * written) and returns `'failed'`. With `force` (the admin's "Fetch now") the claim
+   * skips the stale/retry window.
    */
-  async runFetch(url: string = ANTHROPIC_PRICING_URL): Promise<RunFetchResult> {
+  async runFetch(
+    url: string = ANTHROPIC_PRICING_URL,
+    { force = false }: { force?: boolean } = {},
+  ): Promise<RunFetchResult> {
     await this.db.execute(
       sql`INSERT INTO model_pricing_fetch_state (source) VALUES (${FETCH_SOURCE}) ON CONFLICT (source) DO NOTHING`,
     );
-    if (!(await this.claim())) return 'skipped';
+    if (!(await (force ? this.claimManual() : this.claim()))) return 'skipped';
 
     let fetched: Map<string, ModelPricingRates>;
     try {
@@ -70,6 +78,8 @@ export class AnthropicPricingFetchService {
 
     try {
       const changed = await this.persist(fetched);
+      // persist has committed: wake the sweeper for the session costs it flagged stale.
+      await notifySessionCostsStale();
       return changed > 0 ? 'changed' : 'unchanged';
     } catch (err) {
       return await this.fail(`failed to persist: ${errorMessage(err)}`, err);
@@ -86,6 +96,20 @@ export class AnthropicPricingFetchService {
        WHERE source = ${FETCH_SOURCE}
          AND (last_success_at IS NULL OR last_success_at < now() - make_interval(hours => ${STALE_AFTER_HOURS}))
          AND (last_attempt_at IS NULL OR last_attempt_at < now() - make_interval(hours => ${RETRY_AFTER_HOURS}))
+      RETURNING source
+    `);
+    return (result.rows[0] ?? null) !== null;
+  }
+
+  /**
+   * Manual claim: stamps `last_attempt_at = now()` unless an attempt started within the last
+   * {@link MANUAL_FETCH_MIN_GAP_SECONDS} — guards double clicks and a racing scheduled tick.
+   */
+  private async claimManual(): Promise<boolean> {
+    const result = await this.db.execute<{ source: string }>(sql`
+      UPDATE model_pricing_fetch_state SET last_attempt_at = now()
+       WHERE source = ${FETCH_SOURCE}
+         AND (last_attempt_at IS NULL OR last_attempt_at < now() - make_interval(secs => ${MANUAL_FETCH_MIN_GAP_SECONDS}))
       RETURNING source
     `);
     return (result.rows[0] ?? null) !== null;
@@ -164,7 +188,8 @@ export class AnthropicPricingFetchService {
 
 /**
  * The pricing page carries no chars-per-token or context length: keep the model's current
- * values (its effective row, or the override base), else null.
+ * values (its effective row, or the override base), else null. Tiers always come from the
+ * page (a model whose tier rows disappeared loses its tiers), never from the current row.
  */
 function carryForward(
   rates: ModelPricingRates,
@@ -172,6 +197,7 @@ function carryForward(
 ): ModelPricingRates {
   return {
     ...rates,
+    tiers: rates.tiers,
     charsPerToken: current?.charsPerToken ?? null,
     contextLength: current?.contextLength ?? null,
   };

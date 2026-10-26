@@ -65,7 +65,8 @@ export function AdminModelPricingTab() {
   const [actionError, setActionError] = useState('');
 
   const query = useAdminModelPricing();
-  const { clearOverride, importOpenRouter } = useModelPricingMutations();
+  const { clearOverride, importOpenRouter, fetchAnthropic } =
+    useModelPricingMutations();
   // `mutate` is referentially stable; the column factory needs only it, not the mutation state.
   const clearOverrideMutate = clearOverride.mutate;
 
@@ -109,6 +110,23 @@ export function AdminModelPricingTab() {
   }
 
   const data = query.data;
+
+  function runFetchNow() {
+    setActionError('');
+    fetchAnthropic.mutate(undefined, {
+      onSuccess: ({ result }) => {
+        if (result === 'skipped') {
+          setActionError(
+            'Another Anthropic pricing check started moments ago — try again in a minute.',
+          );
+        }
+      },
+      onError: (err) =>
+        setActionError(
+          `Could not fetch Anthropic prices: ${errorMessage(err, 'request failed')}`,
+        ),
+    });
+  }
 
   function runImport() {
     setConfirmImport(false);
@@ -155,6 +173,17 @@ export function AdminModelPricingTab() {
         </label>
         <Button
           className="ml-auto"
+          variant="outline"
+          size="sm"
+          disabled={fetchAnthropic.isPending}
+          onClick={runFetchNow}
+          data-testid="model-pricing-fetch-anthropic"
+        >
+          {fetchAnthropic.isPending
+            ? 'Fetching…'
+            : 'Fetch Anthropic prices now'}
+        </Button>
+        <Button
           variant="outline"
           size="sm"
           disabled={importOpenRouter.isPending}

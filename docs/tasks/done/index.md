@@ -14,3 +14,4 @@ Folders are named `<YYYY-MM-DD>-<slug>` (the day the task was created).
 - [2026-10-24-post-e2e-test-bugs] Post-E2E-Test Bugs (Umbrella) — archived 2026-10-24
 - [2026-10-23-ci-cd-scans] CI/CD Scans (Security, Supply Chain, Malware) and Where Their Results Live — archived 2026-10-24
 - [2026-10-20-github-release-pipeline] GitHub Release Pipeline (release branch, Actions, GHCR) — archived 2026-10-25
+- [2026-10-26-smtp-warmup-unconfigured] SMTP Per Auth Mode — No Warm-Up Without It, Fail Fast in Mode 3 — archived 2026-10-26
