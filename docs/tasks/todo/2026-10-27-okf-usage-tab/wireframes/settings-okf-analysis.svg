@@ -72,7 +72,7 @@
   <rect x="369" y="482" width="640" height="78" rx="4" fill="#fffbeb" stroke="#fcd34d"/>
   <text x="381" y="502" class="s b" fill="#92400e">⚠ Can be relatively expensive</text>
   <text x="381" y="520" class="xs" fill="#78350f">A separate LLM call (sonnet) after every prompt of a session above the threshold, on your own Claude account —</text>
-  <text x="381" y="536" class="xs" fill="#78350f">typically $0.15–0.70 and 1–3 min per run; it reads the KB indexes, your prompts and some KB files itself.</text>
+  <text x="381" y="536" class="xs" fill="#78350f">typically $0.45–0.65 and 3–5 min per run; it reads the KB indexes, your prompts and some KB files itself.</text>
   <text x="381" y="552" class="xs b" fill="#78350f">Last 7 days (personal scope): 23 runs · $3.42</text>
 
   <!-- Cost threshold (FR-19, FR-21) — replaces the former sub-option checkboxes -->

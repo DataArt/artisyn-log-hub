@@ -60,6 +60,38 @@ function factsSection(f) {
   ].join('\n\n');
 }
 
+// v4c (PER_AGENT=1): a sub-agent is an independent task with its own prompt and an empty context —
+// its reads are listed under its own prompt, to be judged against that prompt, never summed over
+// the tree.
+const short = (id) => id.replace(/^agent-/, '').slice(0, 8);
+function factsSectionPerAgent(f, kbRoot) {
+  const size = (p) => {
+    try {
+      const s = fs.statSync(path.join(kbRoot, p));
+      return s.isFile() ? ` of a ${Math.round(s.size / 1024)} KB file` : ' (folder)';
+    } catch { return ' (not in the KB at session start)'; }
+  };
+  const row = (r) => `- ${r.path}: ${r.bytes} bytes${size(r.path)}, ${r.calls} calls`
+    + `${r.ownEditBytes ? `, ${r.ownEditBytes} bytes after this agent's own edit` : ''}`
+    + `${r.ranges.length ? `, ranges ${r.ranges.join(' ')}` : ''}`;
+  const main = [
+    `### Agent main — its task is the user prompts above`,
+    `KB reads:\n${f.mainKbReads.map(row).join('\n') || '(none)'}`,
+    `Order of first KB accesses: ${f.mainKbSeq.join(' → ') || '(none)'}`,
+  ].join('\n');
+  const subs = f.agents.map((a) => [
+    `### Agent ${short(a.id)} — sub-agent`,
+    `Its prompt (its whole task):\n\`\`\`\n${a.prompt}\n\`\`\``,
+    `KB reads:\n${a.kbReads.map(row).join('\n') || '(none)'}`,
+    `Order of first KB accesses: ${a.kbSeq.join(' → ') || '(none)'}`,
+    `Other files read (top): ${a.otherReadsTop.join(', ') || '(none)'}`,
+    `Files changed: ${a.changes.join(', ') || '(none)'}`,
+  ].join('\n'));
+  const tree = factsSection(f).split('\n\n').filter((s) => /^### (Other files changed|Other files read|Commands run)/.test(s));
+  return [`Session started at ${f.startedAt}; ${f.prompts.length} user prompts; ${f.agents.length} sub-agents.`,
+    main, ...subs, '### Whole session tree', ...tree].join('\n\n');
+}
+
 function callClaude(prompt, cwd) {
   return new Promise((resolve) => {
     const t0 = Date.now();
@@ -102,6 +134,18 @@ function check(f, r, kbRoot) {
   const kbReadPaths = f.reads.filter((x) => x.kb).map((x) => x.path);
   const judged = new Set((r?.reads || []).map((x) => x.path));
   const missed = r?.missed || [];
+  if (process.env.PER_AGENT === '1') {
+    const pairs = [...f.mainKbReads.map((x) => `main|${x.path}`), ...f.agents.flatMap((a) => a.kbReads.map((x) => `${short(a.id)}|${x.path}`))];
+    const got = new Set((r?.reads || []).map((x) => `${String(x.agent).replace(/^agent-/, '').slice(0, x.agent === 'main' ? 4 : 8)}|${x.path}`));
+    judged.clear();
+    judged.add('__pairs__');
+    return {
+      kbReadsJudged: `${pairs.filter((p) => got.has(p)).length}/${pairs.length} agent+file`,
+      missedExist: `${missed.filter((x) => fs.existsSync(path.join(kbRoot, x.path))).length}/${missed.length}`,
+      missedNotKb: missed.filter((x) => !kb(x.path)).map((x) => x.path),
+      notNeeded: (r?.reads || []).filter((x) => x.verdict === 'not_needed').length,
+    };
+  }
   return {
     kbReadsJudged: `${kbReadPaths.filter((p) => judged.has(p)).length}/${kbReadPaths.length}`,
     missedExist: `${missed.filter((x) => fs.existsSync(path.join(kbRoot, x.path))).length}/${missed.length}`,
@@ -119,7 +163,7 @@ for (const prefix of SAMPLE) {
   const kbRoot = kbRootFor(f.startedAt);
   const prompt = template
     .replace('{{PROMPTS}}', f.prompts.map((p, i) => `### Prompt ${i + 1}\n${p}`).join('\n\n') || '(none)')
-    .replace('{{FACTS}}', factsSection(f))
+    .replace('{{FACTS}}', process.env.PER_AGENT === '1' ? factsSectionPerAgent(f, kbRoot) : factsSection(f))
     .replace('{{KB_INDEXES}}', kbIndexes(kbRoot));
   fs.writeFileSync(path.join(outDir, `${prefix}.prompt.md`), prompt);
   console.log(`[${prefix}] prompt ${Math.round(Buffer.byteLength(prompt) / 1024)} KB, running…`);
@@ -134,6 +178,9 @@ for (const prefix of SAMPLE) {
     toolCalls: tools.length, json: Boolean(result), taskKind: result?.taskKind ?? null,
     missed: result?.missed?.length ?? null, gaps: result?.gaps?.length ?? null, ...check(f, result, kbRoot),
     excessive: (result?.reads || []).filter((x) => x.cost === 'excessive').length,
+    tooCoarse: (result?.reads || []).filter((x) => x.granularity === 'too_coarse').length,
+    viaSearch: (result?.reads || []).filter((x) => x.findability === 'search').length,
+    kbFixes: result?.kbFixes?.length ?? null,
   };
   rows.push(row);
   console.log(JSON.stringify(row));

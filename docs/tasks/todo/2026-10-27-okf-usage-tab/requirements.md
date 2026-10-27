@@ -98,11 +98,12 @@ the hook), its own tables, its own tab and its own analysis toggle.
 
 - **FR-11** Tree "bundle → folder → file → section" with two heat scales: read (bytes put into
   context by default, toggle to call count) and write.
-- **FR-12** Markers: "re-read of own edit" (`after_own_edit` reads, FR-3), "read by N agents" (the
-  same file read by ≥ 3 agents of the tree — in the local-prod 1.1 MB outlier, 12 sub-agents each
-  read one 100 KB article in full before editing, which the own-edit marker does not catch),
-  grep/listing over a whole folder, whether the session started from `index.md` (the chronologically first OKF access in the
-  whole session tree, any op, targets the bundle's `index.md`).
+- **FR-12** Markers: grep/listing over a whole folder; whether the session started from `index.md`
+  (the chronologically first OKF access in the whole session tree, any op, targets the bundle's
+  `index.md`); and, as plain information only, "re-read of own edit" (`after_own_edit` reads, FR-3)
+  and "read by N agents". The last two describe cost, not KB quality: each sub-agent is an
+  independent task with an empty context and may need the same article (owner decision), so they
+  never feed the verdict.
 - **FR-13** Summary: share of each bundle that reached the context — files = distinct files with at
   least one read/grep range ÷ bundle files; sections = sections whose lines overlap any read/grep
   range ÷ all sections (any overlap counts, one `grep -n` hit line included); content = deduplicated
@@ -124,19 +125,19 @@ the hook), its own tables, its own tab and its own analysis toggle.
     analysis is off and links to the settings (FR-19), and the badge carries "access data only".
 
   Every line links to its node in the tree below (expands and scrolls to it); the tree, bundle
-  cards and analysis panel stay as the drill-down. Rules, all summed over the session tree; the
-  verdict is the worst severity triggered:
-  - content in context (FR-13) of any bundle with ≥ 10 files > 50 % → **Mess**; > 25 % →
-    **Something to fix** (smaller bundles are skipped; for this rule the share leaves out
-    `after_own_edit` ranges and files the session wrote, which still show in the heat);
-  - `after_own_edit` read bytes ≥ 50 % of all KB read bytes and ≥ 100 KB → **Something to fix**;
-  - one file read by ≥ 3 agents of the tree with ≥ 100 KB read bytes in total → **Something to
-    fix** ("N agents each pulled X into context");
-  - analysis `missed` + false reads (FR-24) ≥ 5 → **Mess**; ≥ 1 → **Something to fix**.
+  cards and analysis panel stay as the drill-down. The rules judge **KB quality — granularity and
+  findability — not cost**; the verdict is the worst severity triggered:
+  - per agent of the tree (each agent is its own task, judged on its own reads): content in
+    context (FR-13) of any bundle with ≥ 10 files > 50 % → **Mess**; > 25 % → **Something to fix**
+    (smaller bundles are skipped; the share leaves out `after_own_edit` ranges and files the agent
+    wrote, which still show in the heat);
+  - analysis `missed` + false reads (FR-24) ≥ 5 → **Mess**; ≥ 1 → **Something to fix**;
+  - analysis reads with `granularity: too_coarse` (FR-24) ≥ 1 → **Something to fix** ("agent X
+    needed one section of a 156 KB article").
 
   **KB read bytes** = summed `bytes` of `read` and `grep` rows, `after_own_edit` rows included
-  (`list` and `write` excluded); one definition for the Read top 5, both sides of the own-edit
-  ratio and the repo hot sections (FR-16). Analysis input = the latest successful run (FR-25) after
+  (`list` and `write` excluded); one definition for the Read top 5 and the repo hot sections
+  (FR-16). Analysis input = the latest successful run (FR-25) after
   dropping paths outside the bound snapshot; the "Show analysis" toggle hides the overlay only and
   never changes the verdict; when that run's watermark is behind the current counts the badge adds
   "analysis may be stale". Boundary cases: no bundle in the snapshot and no access → no verdict
@@ -183,8 +184,9 @@ the hook), its own tables, its own tab and its own analysis toggle.
     (FR-28) → Something to fix (one line per file, top 5 by count).
 
   Verdict = the worst severity triggered; three or more distinct rule kinds triggered → **Mess**.
-  The five rule kinds are `always_read`, `kb_flood`, `index_bypassed`, `repeatedly_missed`,
-  `repeatedly_false_read`; the count is of kinds, not lines (several always-read files are one
+  The six rule kinds are `always_read`, `kb_flood`, `index_bypassed`, `repeatedly_missed`,
+  `repeatedly_false_read`, `repeatedly_too_coarse` (a file marked `too_coarse` by ≥ 3 analysed
+  sessions → Something to fix: "split it or point the index line at its sections"); the count is of kinds, not lines (several always-read files are one
   kind). There is deliberately no rule for unread files (FR-16). A session here = a root session
   tree (FR-4). Not enough data, Always read and Index bypassed count every KB-touching tree in the
   filter, snapshot-less ones included; KB flood counts only trees with a bound snapshot; when
@@ -255,24 +257,26 @@ the hook), its own tables, its own tab and its own analysis toggle.
      system reminders; a slash command is kept as `/name args`, CLI utilities like `/clear` are
      dropped. The filter is an algorithm with its own doc and table test
      (`algorithms/okf-task-context.md`).
-  2. **Session facts** from the session analyser that already exists (FR-23): per file read —
-     bytes into context, calls, number of agents, line ranges, own-edit bytes, via which tool; KB
-     files written; other files changed; other files read (the code the session had to explore);
-     commands run — all summed over the session tree.
+  2. **Session facts** from the session analyser that already exists (FR-23), **grouped per
+     agent**: the main agent (its task = the user prompts) and each sub-agent with its own spawn
+     prompt verbatim (its task — a sub-agent is an independent task with an empty context). Per
+     agent: KB reads (bytes, the article's size, calls, line ranges, own-edit bytes), the order of
+     its first KB accesses (how it reached each article), other files read (top by bytes), files
+     changed. Tree-wide: other files changed and read, commands run.
   3. Each bundle's `index.md` text **only** — no other KB file and no outline, since a KB can weigh
      megabytes.
 
   Documents the prompts point at (a requirements file, a task folder name, an issue) are **not**
-  pasted: the model reads them itself (FR-22a). The prompt (PoC `prompt-v4b.md`) also says: the
-  facts are measured — trust them over assumptions ("N agents" = agents that read the file; only
-  "bytes after the same agent's own edit" proves an own-edit re-read); judge every KB read on two
-  axes, content (`verdict`) and `cost`; an unread article is not a problem by itself; KB files
-  the session itself wrote did not exist in that form when it started, so they are never evidence
-  of a miss or a gap; check the KB before naming a gap. The prompt says the task is not always a
-  requirements document and asks, per kind of task, what KB would have helped. The prompt is a
-  few KB to a few tens of KB (PoC), within the worker's `DEFAULT_MAX_PROMPT_SIZE_KB` = 60 cap; if the
-  facts ever exceed it, the "other files read" list is cut to its top entries by bytes — prompts
-  and KB facts never are.
+  pasted: the model reads them itself (FR-22a). The prompt (PoC `prompt-v4d.md`) says: the goal is
+  **KB quality — granularity and findability — not cost**, so an article read by several agents or
+  several times is not a KB problem; each agent's reads are judged against that agent's own task;
+  the facts are measured — trust them over assumptions; an unread article is not a problem by
+  itself; KB files the session itself wrote did not exist in that form when it started, so they
+  are never evidence of a miss or a gap; check the KB before naming a gap; the task is not always a
+  requirements document. Nothing of the prompts or the facts is cut: the prompt was 38–94 KB in
+  the PoC (sub-agent prompts add up to ~40 KB in a 23-agent session), so this branch's cap is
+  200 KB instead of the worker's default `DEFAULT_MAX_PROMPT_SIZE_KB` = 60; above it, only the
+  "other files read" lists are cut to their top entries by bytes.
 - **FR-22a** The model may read files itself, with **moderate curiosity**: a KB article when it
   needs the content to judge, documents and issues the prompts point at, and a little code when
   it helps (owner decision; seen in the PoC). The restriction is only an instruction in the prompt,
@@ -292,17 +296,23 @@ the hook), its own tables, its own tab and its own analysis toggle.
   unchanged, like attribution's not-yet-ingested path. Only the user prompts (1) are read from the
   local transcript.
 - **FR-24** Output JSON schema (validated in the PoC, `docs/pocs/2026-10-27-1950-okf-analysis-cost/`):
-  `reads[] {path, verdict: useful | partly | not_needed, cost: ok | excessive, reason}` — one entry
-  per KB file the session read; a **false read** is `verdict: not_needed`, an **excessive read** is
-  `cost: excessive` (a useful file can be both useful and excessive);
-  `missed[] {path, section?, why}` — KB articles that would have helped and were not read (a file
-  that was read appears here only with the section that was not); `gaps[] {topic, evidence,
-  suggestion}` — knowledge the session dug out of code that no article covers; `indexHints[] {path,
-  suggestion}`; `summary`; `taskKind: question | change | other`; and `missingContext[]` — only
-  when the prompts point at
-  something whose text the model could not obtain ("the prompt says 'see the issue' but the issue
-  text is neither in the prompts nor readable"). A self-contained one-line question has an empty `missingContext`; missing
-  documents are never inferred just because there are none.
+  - `reads[] {agent: 'main' | <sub-agent id>, path, verdict: useful | partly | not_needed,
+    granularity: ok | too_coarse | too_fine, findability: index | search | given | linked, reason}` —
+    one entry per agent + KB file it read. A **false read** is `verdict: not_needed`; a **coarse
+    read** is `granularity: too_coarse` (the agent needed one part, the article gave it no way to
+    get just that part); `findability` says how the agent reached the article (`search` where the
+    index should have led is a findability problem, named in `reason`);
+  - `missed[] {agent, path, section?, why}` — articles that would have helped that agent's task and
+    were not read (a read article appears only with the section not read);
+  - `gaps[] {agent, topic, evidence, suggestion}` — knowledge an agent dug out of code that no
+    article covers;
+  - `kbFixes[] {path, change, helps}` — the concrete KB changes, most valuable first: split or
+    restructure an article, point an index line at sections, add or reword an index line, add an
+    article for a gap; `helps` names the agents and tasks it would have served;
+  - `summary`, `taskKind: question | change | other`, and `missingContext[]` — only when a prompt
+    points at something whose text the model could not obtain. A self-contained one-line question
+    has an empty `missingContext`; missing documents are never inferred just because there are
+    none.
 - **FR-25** Posted to `POST /api/v2/okf-usage-analysis` with body `{sessionId, repoUrl,
   okfSnapshotId, model, promptWatermark, okfAccessWatermark, outcome: 'submitted'|'failed',
   failureReason?, result?, costUsd, fallbackUsed}` (response and not-yet-ingested handling as in
@@ -317,16 +327,16 @@ the hook), its own tables, its own tab and its own analysis toggle.
   evaluationRequired}`, where `evaluationRequired` = `promptWatermark` or `okfAccessWatermark`
   above the stored values; the hook checks the cost threshold itself (FR-19). An unresolvable half answers all-off (`enabled:false`, watermarks null) and the other
   halves still work. Hooks that predate the feature never read this half.
-- **FR-27** Overlay in the session tab: "false read" and "excessive read" markers with the reason,
-  the analysis' `gaps` as a "KB lacks" list, "could have helped,
-  not read" markers on unread nodes, the summary and index hints, a show-analysis toggle, model and
-  run-time badge. Without an analysis the tab works as before. A non-empty `missingContext` is
-  listed and puts a caveat on the "could have helped" markers; `taskKind` is shown next to the
-  summary.
-- **FR-28** Overlay in the repo tab: per node, how many analysed sessions marked it a false read and
-  how many marked it missed; coverage "analysed X of Y sessions in the filter"; index hints
-  repeated across sessions are grouped. In the team view, markers and hints on ignored paths are
-  cut on the server.
+- **FR-27** Overlay in the session tab: "false read" and "too coarse" markers with the reason and
+  the agent, the findability of each read (index / search / given / linked), "could have helped,
+  not read" markers on unread nodes, the analysis' `gaps` as a "KB lacks" list, `kbFixes` as a
+  "Fix the KB" list, the summary, a show-analysis toggle, model and run-time badge. Without an
+  analysis the tab works as before. A non-empty `missingContext` is listed and puts a caveat on
+  the "could have helped" markers; `taskKind` is shown next to the summary.
+- **FR-28** Overlay in the repo tab: per node, how many analysed sessions marked it a false read,
+  too coarse, or missed; coverage "analysed X of Y sessions in the filter"; `kbFixes` repeated
+  across sessions are grouped by path and change, ranked by the number of sessions. In the team
+  view, markers and fixes on ignored paths are cut on the server.
 
 ### Phase 6 — later
 
@@ -371,9 +381,10 @@ the hook), its own tables, its own tab and its own analysis toggle.
       `grep -rn` over `docs/knowledgebase/` shows the folder-scan marker on that folder.
 - [ ] FR-14: a session uploaded by a hook without snapshot support shows only accessed paths and the
       "update the hook" hint.
-- [ ] FR-14a: the session tab opens with the verdict card above the tree; a session whose own-edit
-      re-reads dominate shows "Something to fix" with that reason; a session that read > 50 % of a
-      bundle shows "Mess"; a session without KB access shows "KB not used"; the verdict cases match
+- [ ] FR-14a: the session tab opens with the verdict card above the tree; a session where one
+      agent read > 50 % of a bundle shows "Mess"; a session where 12 agents each read the same
+      article (and nothing else is wrong) shows "OK"; an analysis with a `too_coarse` read shows
+      "Something to fix" with that reason; a session without KB access shows "KB not used"; the verdict cases match
       the `okf-verdict.md` examples; a session without an analysis shows "access data only" with a
       settings link; a session without a snapshot shows "partial data" and skips the share rule.
 - [ ] FR-17a: the repo tab opens with the verdict card and anomaly list; a file read in ≥ 80 % of
@@ -411,17 +422,19 @@ the hook), its own tables, its own tab and its own analysis toggle.
       documents yourself" instruction; a run in which the model read a file is marked `fallback_used`.
 - [ ] FR-24/25: a posted analysis result with a path outside the snapshot is stored without that
       path.
-- [ ] FR-27: after a result is posted, the session tab shows false-read and missed markers with
-      their reasons, the summary and the index hints.
-- [ ] FR-28: the repo tab shows per-node false-read / missed counts and "analysed X of Y"; the team
-      view hides markers on ignored paths.
+- [ ] FR-27: after a result is posted, the session tab shows false-read, too-coarse and missed
+      markers with their reasons and agents, each read's findability, the "KB lacks" and "Fix the
+      KB" lists and the summary.
+- [ ] FR-28: the repo tab shows per-node false-read / too-coarse / missed counts, "analysed X of Y"
+      and the KB fixes grouped across sessions; the team view hides markers and fixes on ignored
+      paths.
 - [ ] Backward compatibility: an old hook (no snapshot, no `okfAnalysis` handling) uploads to the new
       server without errors; a new hook against an old server uploads without errors.
 
 ## Common sense considerations
 
 - Verdict thresholds (FR-14a, FR-17a) are first-version defaults chosen from the local-prod week in
-  `notes.md` (max 18 % read share, one 1.1 MB own-edit outlier); they live as named constants in
+  `notes.md` (max 18 % read share); they live as named constants in
   `algorithms/okf-verdict.md` and are tuned there, not per repo.
 
 - `okfAnalysis` config half, its all-off fallback and the watermarks follow the attribution half (FR-21, FR-26).
@@ -435,7 +448,10 @@ the hook), its own tables, its own tab and its own analysis toggle.
 - Mess-by-count counts five named rule kinds, not lines (FR-17a).
 - Unread articles are never a problem by themselves: no dead-weight rule; only an analysis `missed` flags one (FR-16, owner decision).
 - Per-session share = line union over the bundles visible in the current view (FR-17a).
-- Session share rule skips bundles under 10 files and own-edit/written ranges (FR-14a).
+- Session share rule is per agent and skips bundles under 10 files and own-edit/written ranges (FR-14a).
+- The analysis and the verdict judge KB quality (granularity, findability), not cost; own-edit re-reads and "read by N agents" are information only (FR-12, FR-14a, owner decision).
+- Each sub-agent is judged against its own spawn prompt, never against the tree's user prompts (FR-22, owner decision).
+- The OKF analysis prompt cap is 200 KB, so prompts and facts are never cut (FR-22).
 - Boundary badges: no bundle → no card; no access → KB not used; 1–4 repo sessions → Not enough data (FR-14a, FR-17a).
 - Path normalisation returns null instead of an absolute fallback (FR-2).
 - OKF snapshot rides on the root upload only; orphan sweep and export/import mirror harness snapshots (FR-10).

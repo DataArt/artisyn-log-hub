@@ -108,12 +108,12 @@
     <rect x="586" y="366" width="28" height="12" rx="6" fill="#fef3c7" stroke="#f59e0b"/><text x="592" y="375" style="font-size:9px" fill="#92400e">fix</text>
     <rect x="618" y="366" width="34" height="12" rx="6" fill="#fee2e2"/><text x="623" y="375" style="font-size:9px" fill="#b91c1c">mess</text>
     <text x="374" y="400" class="cap">WHY</text>
-    <text x="374" y="418" class="xs">• 68 % of KB reads = re-reads of own edits</text>
-    <text x="374" y="434" class="xs">• analysis: 2 false reads, 1 missed article</text>
+    <text x="374" y="418" class="xs">• agent 3f2a needed one section of a 96 KB article (too coarse)</text>
+    <text x="374" y="434" class="xs">• analysis: 1 false read, 1 missed article</text>
     <line x1="720" y1="328" x2="720" y2="440" class="line"/>
     <text x="736" y="338" class="cap">READ · TOP 5 BY BYTES</text>
     <text x="736" y="358" class="xs mono">bash-command-view.md</text><text x="896" y="358" class="xs mono">96 KB</text>
-    <text x="944" y="358" class="xs" fill="#9a3412">↻</text><text x="958" y="358" class="xs b" fill="#b91c1c">✗</text>
+    <text x="944" y="358" class="xs" fill="#9a3412">↻</text><text x="958" y="358" class="xs b" fill="#92400e">▤</text>
     <text x="736" y="376" class="xs mono">harness-snapshot.md</text><text x="896" y="376" class="xs mono">14 KB</text><text x="958" y="376" class="xs b" fill="#b91c1c">✗</text>
     <text x="736" y="394" class="xs mono">index.md</text><text x="896" y="394" class="xs mono">9 KB</text>
     <text x="736" y="412" class="xs mono">db-tables.md</text><text x="896" y="412" class="xs mono">8 KB</text>
@@ -193,8 +193,8 @@
   <text x="796" y="551" class="xs mono">96 KB</text>
   <rect x="836" y="541" width="60" height="12" rx="2" fill="#f1f5f9"/><rect x="836" y="541" width="26" height="12" rx="2" fill="#f97316"/>
   <text x="900" y="551" class="xs mono">8 KB</text>
-  <rect x="940" y="540" width="100" height="16" rx="8" fill="#fff7ed" stroke="#fdba74"/><text x="946" y="552" class="xs" fill="#9a3412">↻ own edit ×14</text>
-  <rect x="1044" y="540" width="46" height="16" rx="8" fill="#fee2e2" stroke="#fca5a5"/><text x="1050" y="552" class="xs b" fill="#b91c1c">✗ false</text>
+  <rect x="940" y="540" width="88" height="16" rx="8" fill="#fff7ed" stroke="#fdba74"/><text x="946" y="552" class="xs" fill="#9a3412">↻ own edit ×14</text>
+  <rect x="1034" y="540" width="56" height="16" rx="8" fill="#fef3c7" stroke="#fcd34d"/><text x="1040" y="552" class="xs b" fill="#92400e">▤ coarse</text>
   <line x1="357" y1="563" x2="1095" y2="563" class="line"/>
 
   <!-- sections -->
@@ -264,14 +264,14 @@
   <text x="478" y="886" class="xs m">Write</text>
   <rect x="514" y="877" width="16" height="10" fill="#fed7aa"/><rect x="530" y="877" width="16" height="10" fill="#f97316"/><rect x="546" y="877" width="16" height="10" fill="#c2410c"/>
   <text x="576" y="886" class="xs m">bar = share of the bundle max; Calls toggle swaps bytes for call counts</text>
-  <rect x="370" y="898" width="112" height="16" rx="8" fill="#fff7ed" stroke="#fdba74"/><text x="377" y="910" class="xs" fill="#9a3412">↻ re-read own edit</text>
+  <rect x="370" y="898" width="112" height="16" rx="8" fill="#fff7ed" stroke="#fdba74"/><text x="377" y="910" class="xs" fill="#9a3412">↻ own edit (info)</text>
   <rect x="490" y="898" width="64" height="16" rx="8" fill="#eff6ff"/><text x="497" y="910" class="xs" fill="#1d4ed8">entry point</text>
   <rect x="562" y="898" width="110" height="16" rx="8" fill="#f3f4f6"/><text x="569" y="910" class="xs m">grep / ls over folder</text>
   <rect x="680" y="898" width="76" height="16" rx="8" fill="#fee2e2" stroke="#fca5a5"/><text x="686" y="910" class="xs b" fill="#b91c1c">✗ false read</text>
   <rect x="764" y="898" width="118" height="16" rx="8" fill="#dcfce7" stroke="#86efac"/><text x="770" y="910" class="xs b" fill="#15803d">＋ could have helped</text>
   <text x="890" y="910" class="xs m">(hidden when analysis is off)</text>
-  <rect x="370" y="918" width="112" height="16" rx="8" fill="#fef3c7" stroke="#fcd34d"/><text x="377" y="930" class="xs b" fill="#92400e">$ excessive read</text>
-  <text x="490" y="930" class="xs m">useful file, wasteful reading (e.g. read in full by N agents) — analysis `cost: excessive`</text>
+  <rect x="370" y="918" width="112" height="16" rx="8" fill="#fef3c7" stroke="#fcd34d"/><text x="377" y="930" class="xs b" fill="#92400e">▤ too coarse</text>
+  <text x="490" y="930" class="xs m">the agent needed one part, the article gave no way to get just it — split it or point the index at sections</text>
   <text x="370" y="948" class="xs m">* caveat: the analysis reported missing context, so "could have helped" may be incomplete.</text>
   <text x="370" y="962" class="xs m">Hover / click a marker → popover with the model's reason.</text>
 
@@ -283,14 +283,14 @@
 
   <text x="1122" y="452" class="cap">SUMMARY</text>
   <text x="1122" y="470" class="xs">The plan task needed the snapshot delivery</text>
-  <text x="1122" y="485" class="xs">flow; the agent re-read bash-command-view.md</text>
-  <text x="1122" y="500" class="xs">while editing it and never opened</text>
+  <text x="1122" y="485" class="xs">flow; one agent pulled all 82 KB of Examples</text>
+  <text x="1122" y="500" class="xs">for one rule, and none opened</text>
   <text x="1122" y="515" class="xs">session-metrics-scope.md.</text>
   <line x1="1120" y1="528" x2="1414" y2="528" class="line"/>
 
-  <text x="1122" y="548" class="cap" fill="#b91c1c">FALSE READS · 2</text>
+  <text x="1122" y="548" class="cap" fill="#b91c1c">FALSE / COARSE READS · 2</text>
   <text x="1122" y="566" class="xs mono">bash-command-view.md › Examples</text>
-  <text x="1122" y="581" class="xs m">full re-reads of own edits, 82 KB</text>
+  <text x="1122" y="581" class="xs m">▤ agent 3f2a needed one rule, got 82 KB of Examples</text>
   <text x="1122" y="600" class="xs mono">harness-snapshot.md</text>
   <text x="1122" y="615" class="xs m">unrelated to the planned change</text>
   <line x1="1120" y1="628" x2="1414" y2="628" class="line"/>
@@ -305,12 +305,12 @@
   <text x="1130" y="740" class="xs" fill="#92400e">Prompt says "see GH-41" — no issue text in</text>
   <text x="1130" y="755" class="xs" fill="#92400e">the session. "Could have helped" may be partial.</text>
 
-  <text x="1122" y="790" class="cap">INDEX HINTS · 2</text>
-  <text x="1122" y="808" class="xs mono">index.md</text>
-  <text x="1122" y="823" class="xs m">Add "read when changing session sums"</text>
-  <text x="1122" y="838" class="xs m">to the session-metrics-scope.md line.</text>
+  <text x="1122" y="790" class="cap">FIX THE KB · 2 (kbFixes)</text>
+  <text x="1122" y="808" class="xs mono">bash-command-view.md</text>
+  <text x="1122" y="823" class="xs m">Split Examples (L39–260) into its own file;</text>
+  <text x="1122" y="838" class="xs m">helps agents 3f2a, 9c1d.</text>
   <text x="1122" y="858" class="xs mono">index.md</text>
-  <text x="1122" y="873" class="xs m">Split algorithms/ entries by area.</text>
+  <text x="1122" y="873" class="xs m">Point the session-metrics-scope.md line at FR-4 sums.</text>
   <line x1="1120" y1="886" x2="1414" y2="886" class="line"/>
   <text x="1122" y="904" class="cap" fill="#92400e">KB LACKS · 1 (gaps)</text>
   <text x="1122" y="922" class="xs">Snapshot delivery retry rules — dug out of</text>

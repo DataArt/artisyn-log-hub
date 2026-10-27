@@ -16,7 +16,8 @@
 - The 1.1 MB outlier (one `implement-deep` session, `algorithms/bash-command-view.md`, 61 edits):
   first read as repeated re-reads of one's own edit; the 2026-10-27 PoC (below) shows it was
   **12 sub-agents each reading the same ~100 KB doc in full before editing** — a doc created in that
-  very session. Hence the "read by N agents" marker (FR-12) next to the own-edit one.
+  very session. Most of those agents were reviewers whose own prompt was to read that doc, so this
+  is a cost, not a KB-quality problem: "read by N agents" is information only (FR-12).
 - KB work happens largely inside sub-agents (38 Agent prompts in 16 sessions reference the KB), so
   every figure must be session-tree scoped.
 - 41 articles were edited during the week.
@@ -50,10 +51,13 @@ Found: `docs/knowledgebase` (tracked, 82 files), `docs/kb-local` (ignored, 2 fil
 ## 2026-10-27 — PoC: the post-turn analysis on real sessions
 
 [`docs/pocs/2026-10-27-1950-okf-analysis-cost/`](../../../pocs/2026-10-27-1950-okf-analysis-cost/README.md)
-ran the analysis like the worker (`claude -p`, sonnet) on 8 real sessions of $5–114, in five
-iterations. Adopted design (v4b): user prompts + the session analyser's facts + KB indexes, no
-transcript text; KB judged as of session start; facts over guesses; per-read `verdict` + `cost`;
-`gaps`. Result: $0.16–0.67 and 1–3.5 min per run regardless of session size, prompt 26–39 KB, every
-usefulness criterion met (README). Dropped on the way: outlines in the prompt (break the 60 KB cap),
-transcript text (cut or a context file), regex extraction (double-counted multi-file Bash bytes,
-took `<task-notification>` for prompts).
+ran the analysis like the worker (`claude -p`, sonnet) on 8 real sessions of $5–114. Adopted
+design (v4d): user prompts + the session analyser's facts **per agent** (each sub-agent judged
+against its own spawn prompt) + KB indexes, no transcript text; KB judged as of session start;
+facts over guesses; the goal is **KB quality, not cost** — each read gets `verdict`, `granularity`
+and `findability`, plus `gaps` and `kbFixes`. Result on four multi-agent sessions: $0.45–0.61 and
+3–4.7 min per run, prompt 38–94 KB (hence the 200 KB cap); the findings are KB changes — split
+100–170 KB monoliths, add section pointers and missing index rows (README). Dropped on the way:
+outlines in the prompt (break the 60 KB cap), transcript text (cut or a context file), regex
+extraction (double-counted multi-file Bash bytes, took `<task-notification>` for prompts), a
+`cost` axis and tree-wide judging (owner: sub-agents are atomic tasks; cost is not KB quality).

@@ -79,8 +79,8 @@
     <text x="448" y="274" class="xs"><tspan class="mono">db-tables.md</tspan> is read in 44 of 49 KB sessions (90 %) — its key facts probably belong in index.md / CLAUDE.md, or split it</text>
     <rect x="346" y="286" width="92" height="16" rx="8" fill="#fef3c7"/><text x="352" y="298" class="xs b" fill="#92400e">missed ×7</text>
     <text x="448" y="298" class="xs"><tspan class="mono">session-metrics-scope.md</tspan> should have been read but wasn&#8217;t in 7 of 18 analysed sessions — index line too vague?</text>
-    <rect x="346" y="310" width="92" height="16" rx="8" fill="#fef3c7"/><text x="352" y="322" class="xs b" fill="#92400e">false read ×9</text>
-    <text x="448" y="322" class="xs"><tspan class="mono">bash-command-view.md</tspan> was pulled into context for nothing in 9 analysed sessions</text>
+    <rect x="346" y="310" width="92" height="16" rx="8" fill="#fef3c7"/><text x="352" y="322" class="xs b" fill="#92400e">too coarse ×6</text>
+    <text x="448" y="322" class="xs"><tspan class="mono">bash-command-view.md</tspan> — in 6 analysed sessions an agent needed one rule but had to read the whole Examples section: split it</text>
   </g>
   <text x="60" y="386" style="font-size:11px;fill:#b45309;font-style:italic">Fewer than 5 KB sessions in the filter → grey "Not enough data" badge, anomalies still listed. Team view: no line names an ignored path (filtered on the server). Tiles and tree below = drill-down.</text>
 
@@ -140,7 +140,7 @@
 
   <rect x="61" y="458" width="898" height="32" fill="#fef2f2"/>
   <text x="102" y="478" class="s m">▾</text><text x="116" y="478" class="s mono">bash-command-view.md</text>
-  <rect x="290" y="467" width="118" height="16" rx="8" fill="#fef3c7" stroke="#fcd34d"/><text x="297" y="479" class="xs" fill="#92400e">read by 12 agents</text>
+  <rect x="290" y="467" width="118" height="16" rx="8" fill="#fef3c7" stroke="#fcd34d"/><text x="297" y="479" class="xs" fill="#92400e">▤ too coarse ×6</text>
   <rect x="430" y="468" width="130" height="12" rx="2" fill="#f1f5f9"/><rect x="430" y="468" width="70" height="12" rx="2" fill="#1d4ed8"/><text x="566" y="478" class="xs mono">1.8 MB</text>
   <text x="626" y="478" class="xs mono">6</text>
   <rect x="694" y="468" width="60" height="12" rx="2" fill="#f1f5f9"/><rect x="694" y="468" width="52" height="12" rx="2" fill="#c2410c"/><text x="758" y="478" class="xs mono">4</text>
@@ -238,11 +238,11 @@
 
   <rect x="976" y="826" width="448" height="140" rx="6" fill="#fff" stroke="#e5e7eb"/>
   <rect x="977" y="827" width="446" height="26" fill="#f5f3ff"/>
-  <text x="992" y="845" class="cap" fill="#5b21b6">INDEX HINTS · GROUPED ACROSS 18 ANALYSED SESSIONS</text>
-  <text x="992" y="872" class="xs mono">index.md</text><rect x="1360" y="861" width="48" height="16" rx="8" fill="#ede9fe"/><text x="1370" y="873" class="xs b" fill="#5b21b6">×7</text>
-  <text x="992" y="888" class="xs m">Add "read when changing session sums" to session-metrics-scope.md</text>
+  <text x="992" y="845" class="cap" fill="#5b21b6">FIX THE KB · GROUPED ACROSS 18 ANALYSED SESSIONS</text>
+  <text x="992" y="872" class="xs mono">client-component-map.md</text><rect x="1360" y="861" width="48" height="16" rx="8" fill="#ede9fe"/><text x="1370" y="873" class="xs b" fill="#5b21b6">×7</text>
+  <text x="992" y="888" class="xs m">Split the 156 KB map by feature area, or point index lines at sections</text>
   <text x="992" y="912" class="xs mono">index.md</text><rect x="1360" y="901" width="48" height="16" rx="8" fill="#ede9fe"/><text x="1370" y="913" class="xs b" fill="#5b21b6">×4</text>
-  <text x="992" y="928" class="xs m">Split algorithms/ entries by area (UI / ingest / hook)</text>
+  <text x="992" y="928" class="xs m">Add a "Testing" group: test/index.md, algorithms/README.md</text>
   <text x="992" y="952" class="xs" fill="#3b4fd8">Show all 9 →</text>
   </g>
 </svg>

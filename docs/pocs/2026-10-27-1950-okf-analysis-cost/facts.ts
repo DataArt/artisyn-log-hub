@@ -64,6 +64,10 @@ const parser = await loadBashParser({
 });
 
 const reads = new Map<string, FileFact>();
+// v4c: per-agent view — a sub-agent is an independent task; its reads are judged against its own prompt.
+type AgentFacts = { prompt: string; reads: Map<string, FileFact>; changes: Map<string, number>; kbSeq: string[] };
+const perAgent = new Map<string, AgentFacts>();
+const agentOf = (a: string) => { let x = perAgent.get(a); if (!x) { x = { prompt: '', reads: new Map(), changes: new Map(), kbSeq: [] }; perAgent.set(a, x); } return x; };
 const changes = new Map<string, number>();
 const runs = new Map<string, number>();
 const prompts: string[] = [];
@@ -77,7 +81,15 @@ const bump = (p: string, bytes: number, via: string, range: string | null, own: 
   if (own) f.ownEditBytes += bytes;
   if (range && f.ranges.length < 6) f.ranges.push(range);
   reads.set(p, f);
+  const af = agentOf(agent).reads;
+  const g = af.get(p) ?? { calls: 0, bytes: 0, ranges: [], ownEditBytes: 0, via: new Set(), agents: new Set() };
+  g.calls += 1; g.bytes += bytes; g.via.add(via); if (own) g.ownEditBytes += bytes; if (range && g.ranges.length < 6) g.ranges.push(range);
+  af.set(p, g);
+  // How the agent reached KB articles (findability): the order of its first KB accesses.
+  const seq = agentOf(agent).kbSeq;
+  if ((p.startsWith('docs/knowledgebase') || p.startsWith('docs/kb-local')) && seq.length < 15) seq.push(`${via.split(':')[0]} ${p}`);
 };
+const change = (p: string) => { changes.set(p, (changes.get(p) ?? 0) + 1); const c = agentOf(agent).changes; c.set(p, (c.get(p) ?? 0) + 1); };
 
 for (const file of files) {
   const isMain = path.basename(file, '.jsonl') === id;
@@ -93,6 +105,10 @@ for (const file of files) {
     if (l.cwd) cwd = l.cwd;
     const msg = l.message;
     if (!msg) continue;
+    if (!isMain && l.type === 'user' && !l.isMeta && !agentOf(agent).prompt) {
+      const c0 = msg.content;
+      agentOf(agent).prompt = typeof c0 === 'string' ? c0 : Array.isArray(c0) ? c0.filter((b: any) => b.type === 'text').map((b: any) => b.text).join('\n') : '';
+    }
     if (isMain && l.type === 'user' && !l.isMeta) {
       const t = typeof msg.content === 'string' ? msg.content
         : Array.isArray(msg.content) ? msg.content.filter((b: any) => b.type === 'text').map((b: any) => b.text).join('\n') : '';
@@ -112,7 +128,7 @@ for (const file of files) {
         if (p) bump(p, bytes, 'Read', inp.offset || inp.limit ? `${inp.offset ?? 1}+${inp.limit ?? ''}` : null, edited.has(p));
       } else if (u.name === 'Edit' || u.name === 'MultiEdit' || u.name === 'Write' || u.name === 'NotebookEdit') {
         const p = toRepoPath(inp.file_path ?? inp.notebook_path, cwd);
-        if (p) { changes.set(p, (changes.get(p) ?? 0) + 1); edited.add(p); }
+        if (p) { change(p); edited.add(p); }
       } else if (u.name === 'Grep' || u.name === 'Glob') {
         const p = toRepoPath(inp.path ?? '.', cwd);
         if (p !== null) bump(p || '.', bytes, `${u.name}:${String(inp.pattern ?? '').slice(0, 40)}`, null, false);
@@ -123,7 +139,7 @@ for (const file of files) {
         const rs = view.files.reads.map((r) => toRepoPath(r, base)).filter((x): x is string => Boolean(x));
         // One result for several files: split its bytes instead of charging each file in full.
         for (const p of rs) bump(p, Math.round(bytes / rs.length), 'Bash', null, edited.has(p));
-        for (const c of view.files.changes) { const p = toRepoPath(c, base); if (p) { changes.set(p, (changes.get(p) ?? 0) + 1); edited.add(p); } }
+        for (const c of view.files.changes) { const p = toRepoPath(c, base); if (p) { change(p); edited.add(p); } }
         for (const r of view.files.runs) runs.set(r, (runs.get(r) ?? 0) + 1);
       }
     }
@@ -141,4 +157,12 @@ console.log(JSON.stringify({
   changes: [...changes].map(([p, n]) => ({ path: p, kb: kb(p), edits: n })),
   runs: [...runs].map(([r, n]) => ({ run: r, times: n })).slice(0, 40),
   unparsedBash,
+  agents: [...perAgent].filter(([a]) => a !== 'main').map(([a, x]) => ({
+    id: a, prompt: x.prompt, kbSeq: x.kbSeq,
+    kbReads: [...x.reads].filter(([p]) => kb(p)).map(([p, g]) => ({ path: p, calls: g.calls, bytes: g.bytes, ownEditBytes: g.ownEditBytes, ranges: g.ranges })),
+    otherReadsTop: [...x.reads].filter(([p]) => !kb(p)).sort((a, b) => b[1].bytes - a[1].bytes).slice(0, 8).map(([p, g]) => `${p} (${g.bytes} B)`),
+    changes: [...x.changes].map(([p, n]) => `${p} (${n})`).slice(0, 15),
+  })),
+  mainKbSeq: perAgent.get('main')?.kbSeq ?? [],
+  mainKbReads: [...(perAgent.get('main')?.reads ?? new Map())].filter(([p]) => kb(p)).map(([p, g]) => ({ path: p, calls: g.calls, bytes: g.bytes, ownEditBytes: g.ownEditBytes, ranges: g.ranges })),
 }));
