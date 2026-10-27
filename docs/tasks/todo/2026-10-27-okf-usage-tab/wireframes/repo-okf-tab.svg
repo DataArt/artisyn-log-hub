@@ -34,7 +34,7 @@
   <rect x="290" y="128" width="44" height="2" fill="#111827"/>
   <text x="350" y="117" class="t m">Settings</text>
   <rect x="420" y="102" width="162" height="22" rx="4" fill="#eef2ff" stroke="#c7d2fe" stroke-dasharray="3 2"/>
-  <text x="430" y="117" class="xs" fill="#3730a3">NEW TAB (FR-15..17a, FR-28)</text>
+  <text x="430" y="117" class="xs" fill="#3730a3">NEW TAB (FR-15..17a)</text>
   <line x1="40" y1="131" x2="1440" y2="131" class="line"/>
 
   <!-- Filter bar (FR-15, FR-17) -->
@@ -77,10 +77,10 @@
     <text x="346" y="252" class="cap">ANOMALIES · 3 · CLICK A LINE → ITS NODE IN THE TREE</text>
     <rect x="346" y="262" width="92" height="16" rx="8" fill="#fef3c7"/><text x="352" y="274" class="xs b" fill="#92400e">always read</text>
     <text x="448" y="274" class="xs"><tspan class="mono">db-tables.md</tspan> is read in 44 of 49 KB sessions (90 %) — its key facts probably belong in index.md / CLAUDE.md, or split it</text>
-    <rect x="346" y="286" width="92" height="16" rx="8" fill="#fef3c7"/><text x="352" y="298" class="xs b" fill="#92400e">missed ×7</text>
-    <text x="448" y="298" class="xs"><tspan class="mono">session-metrics-scope.md</tspan> should have been read but wasn&#8217;t in 7 of 18 analysed sessions — index line too vague?</text>
-    <rect x="346" y="310" width="92" height="16" rx="8" fill="#fef3c7"/><text x="352" y="322" class="xs b" fill="#92400e">too coarse ×6</text>
-    <text x="448" y="322" class="xs"><tspan class="mono">bash-command-view.md</tspan> — in 6 analysed sessions an agent needed one rule but had to read the whole Examples section: split it</text>
+    <rect x="346" y="286" width="92" height="16" rx="8" fill="#fef3c7"/><text x="352" y="298" class="xs b" fill="#92400e">index bypassed</text>
+    <text x="448" y="298" class="xs">only 21 of 49 KB sessions started from <tspan class="mono">index.md</tspan> (43 %) — agents reach articles by grep instead</text>
+    <rect x="346" y="310" width="92" height="16" rx="8" fill="#fef3c7"/><text x="352" y="322" class="xs b" fill="#92400e">KB flood</text>
+    <text x="448" y="322" class="xs">in 4 sessions an agent put more than 25 % of <tspan class="mono">docs/knowledgebase</tspan> into its context</text>
   </g>
   <text x="60" y="386" style="font-size:11px;fill:#b45309;font-style:italic">Fewer than 5 KB sessions in the filter → grey "Not enough data" badge, anomalies still listed. Team view: no line names an ignored path (filtered on the server). Tiles and tree below = drill-down.</text>
 
@@ -96,7 +96,7 @@
     <rect x="608" y="232" width="262" height="78" rx="6" fill="#fff" stroke="#e5e7eb"/><rect x="608" y="232" width="4" height="78" fill="#7c3aed"/>
     <text x="626" y="256" class="cap">SESSIONS IN FILTER · TOUCHED KB</text><text x="626" y="290" class="t b" style="font-size:22px">49 / 70</text>
     <rect x="882" y="232" width="262" height="78" rx="6" fill="#fff" stroke="#e5e7eb"/><rect x="882" y="232" width="4" height="78" fill="#ea580c"/>
-    <text x="900" y="256" class="cap">LLM ANALYSIS COVERAGE</text><text x="900" y="290" class="t b" style="font-size:22px">analysed 18 of 49</text><text x="900" y="304" class="xs m">31 not: under $1 or analysis off</text>
+    <text x="900" y="256" class="cap">SESSIONS STARTED FROM INDEX</text><text x="900" y="290" class="t b" style="font-size:22px">21 / 49</text><text x="980" y="290" class="xs m">43 %</text>
     <rect x="1156" y="232" width="268" height="78" rx="6" fill="#fff" stroke="#e5e7eb"/><rect x="1156" y="232" width="4" height="78" fill="#16a34a"/>
     <text x="1174" y="256" class="cap">MEDIAN READ SHARE / SESSION</text><text x="1174" y="290" class="t b" style="font-size:22px">6 %</text>
     <text x="1220" y="290" class="xs m">max 18 % (15 files)</text>
@@ -109,8 +109,7 @@
   <text x="430" y="346" class="cap">READ (BYTES, ALL SESSIONS)</text>
   <text x="626" y="346" class="cap">SESSIONS</text>
   <text x="694" y="346" class="cap">WRITE</text>
-  <text x="790" y="346" class="cap" fill="#b91c1c">✗ FALSE</text>
-  <text x="860" y="346" class="cap" fill="#15803d">＋ MISSED</text>
+  <text x="790" y="346" class="cap">AGENTS</text>
   <line x1="61" y1="357" x2="959" y2="357" class="line"/>
 
   <!-- rows -->
@@ -119,7 +118,7 @@
   <rect x="430" y="370" width="130" height="12" rx="2" fill="#1e3a8a"/><text x="566" y="380" class="xs mono">6.1 MB</text>
   <text x="626" y="380" class="xs mono">49</text>
   <rect x="694" y="370" width="60" height="12" rx="2" fill="#f1f5f9"/><rect x="694" y="370" width="44" height="12" rx="2" fill="#ea580c"/><text x="758" y="380" class="xs mono">41</text>
-  <text x="790" y="380" class="xs mono b" fill="#b91c1c">23</text><text x="860" y="380" class="xs mono b" fill="#15803d">17</text>
+  <text x="790" y="380" class="xs mono m">23</text>
   <line x1="61" y1="391" x2="959" y2="391" class="line"/>
 
   <text x="102" y="413" class="s mono">index.md</text>
@@ -127,7 +126,7 @@
   <rect x="430" y="403" width="130" height="12" rx="2" fill="#f1f5f9"/><rect x="430" y="403" width="40" height="12" rx="2" fill="#60a5fa"/><text x="566" y="413" class="xs mono">410 KB</text>
   <text x="626" y="413" class="xs mono">34</text>
   <rect x="694" y="403" width="60" height="12" rx="2" fill="#f1f5f9"/><rect x="694" y="403" width="8" height="12" rx="2" fill="#fed7aa"/><text x="758" y="413" class="xs mono">3</text>
-  <text x="790" y="413" class="xs mono m">0</text><text x="860" y="413" class="xs mono m">0</text>
+  <text x="790" y="413" class="xs mono m">0</text>
   <rect x="61" y="424" width="898" height="0" />
   <line x1="61" y1="424" x2="959" y2="424" class="line"/>
 
@@ -135,16 +134,15 @@
   <rect x="430" y="436" width="130" height="12" rx="2" fill="#f1f5f9"/><rect x="430" y="436" width="100" height="12" rx="2" fill="#1d4ed8"/><text x="566" y="446" class="xs mono">3.4 MB</text>
   <text x="626" y="446" class="xs mono">31</text>
   <rect x="694" y="436" width="60" height="12" rx="2" fill="#f1f5f9"/><rect x="694" y="436" width="36" height="12" rx="2" fill="#f97316"/><text x="758" y="446" class="xs mono">18</text>
-  <text x="790" y="446" class="xs mono b" fill="#b91c1c">14</text><text x="860" y="446" class="xs mono b" fill="#15803d">5</text>
+  <text x="790" y="446" class="xs mono m">14</text>
   <line x1="61" y1="457" x2="959" y2="457" class="line"/>
 
-  <rect x="61" y="458" width="898" height="32" fill="#fef2f2"/>
+  <rect x="61" y="458" width="898" height="32" fill="#f8fafc"/>
   <text x="102" y="478" class="s m">▾</text><text x="116" y="478" class="s mono">bash-command-view.md</text>
-  <rect x="290" y="467" width="118" height="16" rx="8" fill="#fef3c7" stroke="#fcd34d"/><text x="297" y="479" class="xs" fill="#92400e">▤ too coarse ×6</text>
   <rect x="430" y="468" width="130" height="12" rx="2" fill="#f1f5f9"/><rect x="430" y="468" width="70" height="12" rx="2" fill="#1d4ed8"/><text x="566" y="478" class="xs mono">1.8 MB</text>
   <text x="626" y="478" class="xs mono">6</text>
   <rect x="694" y="468" width="60" height="12" rx="2" fill="#f1f5f9"/><rect x="694" y="468" width="52" height="12" rx="2" fill="#c2410c"/><text x="758" y="478" class="xs mono">4</text>
-  <text x="790" y="478" class="xs mono b" fill="#b91c1c">9</text><text x="860" y="478" class="xs mono m">0</text>
+  <text x="790" y="478" class="xs mono m">9</text>
   <line x1="61" y1="490" x2="959" y2="490" class="line"/>
 
   <text x="130" y="510" class="xs m">§</text><text x="142" y="510" class="xs">Examples</text><text x="250" y="510" class="xs m mono">L39–260</text>
@@ -152,22 +150,22 @@
   <rect x="430" y="501" width="130" height="10" rx="2" fill="#f1f5f9"/><rect x="430" y="501" width="64" height="10" rx="2" fill="#1e3a8a"/><text x="566" y="510" class="xs mono">1.5 MB</text>
   <text x="626" y="510" class="xs mono">6</text>
   <rect x="694" y="501" width="60" height="10" rx="2" fill="#f1f5f9"/><rect x="694" y="501" width="48" height="10" rx="2" fill="#c2410c"/><text x="758" y="510" class="xs mono">4</text>
-  <text x="790" y="510" class="xs mono b" fill="#b91c1c">8</text><text x="860" y="510" class="xs mono m">0</text>
+  <text x="790" y="510" class="xs mono m">8</text>
   <line x1="61" y1="520" x2="959" y2="520" class="line"/>
 
   <text x="102" y="542" class="s m">▸</text><text x="116" y="542" class="s mono">harness-snapshot.md</text>
   <rect x="430" y="532" width="130" height="12" rx="2" fill="#f1f5f9"/><rect x="430" y="532" width="26" height="12" rx="2" fill="#60a5fa"/><text x="566" y="542" class="xs mono">380 KB</text>
   <text x="626" y="542" class="xs mono">11</text>
   <rect x="694" y="532" width="60" height="12" rx="2" fill="#f1f5f9"/><text x="758" y="542" class="xs mono m">0</text>
-  <text x="790" y="542" class="xs mono b" fill="#b91c1c">3</text><text x="860" y="542" class="xs mono m">0</text>
+  <text x="790" y="542" class="xs mono m">3</text>
   <line x1="61" y1="553" x2="959" y2="553" class="line"/>
 
-  <rect x="61" y="554" width="898" height="32" fill="#f0fdf4"/>
+  <rect x="61" y="554" width="898" height="32" fill="#ffffff"/>
   <text x="102" y="574" class="s mono">session-metrics-scope.md</text>
   <rect x="430" y="564" width="130" height="12" rx="2" fill="#f1f5f9"/><rect x="430" y="564" width="8" height="12" rx="2" fill="#bfdbfe"/><text x="566" y="574" class="xs mono">22 KB</text>
   <text x="626" y="574" class="xs mono">2</text>
   <rect x="694" y="564" width="60" height="12" rx="2" fill="#f1f5f9"/><text x="758" y="574" class="xs mono m">0</text>
-  <text x="790" y="574" class="xs mono m">0</text><text x="860" y="574" class="xs mono b" fill="#15803d">7</text>
+  <text x="790" y="574" class="xs mono m">0</text>
   <line x1="61" y1="586" x2="959" y2="586" class="line"/>
 
   <text x="102" y="607" class="s mono" fill="#9ca3af">turn-end-cost-advisor.md</text>
@@ -175,7 +173,7 @@
   <rect x="430" y="597" width="130" height="12" rx="2" fill="#f1f5f9"/><text x="566" y="607" class="xs mono m">0</text>
   <text x="626" y="607" class="xs mono m">0</text>
   <rect x="694" y="597" width="60" height="12" rx="2" fill="#f1f5f9"/><text x="758" y="607" class="xs mono m">0</text>
-  <text x="790" y="607" class="xs mono m">0</text><text x="860" y="607" class="xs mono b" fill="#15803d">2</text>
+  <text x="790" y="607" class="xs mono m">0</text>
   <line x1="61" y1="618" x2="959" y2="618" class="line"/>
 
   <text x="88" y="640" class="s m">▸</text><text x="102" y="640" class="s mono" fill="#9ca3af">log-schema/</text><text x="190" y="640" class="xs m">(6 files)</text>
@@ -183,7 +181,7 @@
   <rect x="430" y="630" width="130" height="12" rx="2" fill="#f1f5f9"/><text x="566" y="640" class="xs mono m">0</text>
   <text x="626" y="640" class="xs mono m">0</text>
   <rect x="694" y="630" width="60" height="12" rx="2" fill="#f1f5f9"/><text x="758" y="640" class="xs mono m">0</text>
-  <text x="790" y="640" class="xs mono m">0</text><text x="860" y="640" class="xs mono m">0</text>
+  <text x="790" y="640" class="xs mono m">0</text>
   <line x1="61" y1="651" x2="959" y2="651" class="line"/>
 
   <text x="88" y="672" class="xs m">… 74 more files</text>
@@ -201,16 +199,16 @@
   <rect x="430" y="728" width="130" height="12" rx="2" fill="#f1f5f9"/><rect x="430" y="728" width="6" height="12" rx="2" fill="#bfdbfe"/><text x="566" y="738" class="xs mono">8 KB</text>
   <text x="626" y="738" class="xs mono">2</text>
   <rect x="694" y="728" width="60" height="12" rx="2" fill="#f1f5f9"/><text x="758" y="738" class="xs mono m">0</text>
-  <text x="790" y="738" class="xs mono m">0</text><text x="860" y="738" class="xs mono m">0</text>
+  <text x="790" y="738" class="xs mono m">0</text>
   <line x1="61" y1="749" x2="959" y2="749" class="line"/>
 
   <text x="74" y="776" class="cap">NOTES</text>
   <text x="74" y="796" class="xs m">Bundle tree = latest snapshot in the filtered range (per branch when a branch is selected).</text>
-  <text x="74" y="814" class="xs m">✗ FALSE / ＋ MISSED = number of analysed sessions that marked the node; shown only for analysed sessions (coverage tile above).</text>
-  <text x="74" y="832" class="xs m">Click a node → side drawer with the per-session list (session, read bytes, ranges, analysis reasons).</text>
+  <text x="74" y="814" class="xs m">AGENTS = agents that read the node across the filtered sessions — information only, not a finding.</text>
+  <text x="74" y="832" class="xs m">Click a node → side drawer with the per-session list (session, agents, read bytes, ranges).</text>
   <text x="74" y="850" class="xs m">Sorted by read heat; not-read nodes last and dimmed (neutral).</text>
 
-  <!-- Highlights column (FR-16, FR-28) -->
+  <!-- Highlights column (FR-16) -->
   <rect x="976" y="326" width="448" height="186" rx="6" fill="#fff" stroke="#e5e7eb"/>
   <text x="992" y="350" class="cap">READ SHARE PER SESSION · 49 SESSIONS</text>
   <line x1="992" y1="480" x2="1408" y2="480" stroke="#9ca3af"/>
@@ -232,17 +230,14 @@
   <text x="992" y="710" class="cap">NOT READ IN PERIOD · 29 FILES · INFO ONLY</text>
   <text x="992" y="732" class="xs mono">log-schema/ (6 files)</text>
   <text x="992" y="750" class="xs mono">upload-queue.md</text>
-  <text x="992" y="768" class="xs mono">turn-end-cost-advisor.md</text><text x="1260" y="768" class="xs" fill="#15803d">＋ missed ×2</text>
-  <text x="992" y="788" class="xs m">Not a problem by itself — flagged only where the analysis says "missed".</text>
+  <text x="992" y="768" class="xs mono">turn-end-cost-advisor.md</text>
+  <text x="992" y="788" class="xs m">Not a problem by itself — an article about an untouched module should not be read.</text>
   <text x="992" y="806" class="xs" fill="#3b4fd8">Show all 29 →</text>
 
-  <rect x="976" y="826" width="448" height="140" rx="6" fill="#fff" stroke="#e5e7eb"/>
-  <rect x="977" y="827" width="446" height="26" fill="#f5f3ff"/>
-  <text x="992" y="845" class="cap" fill="#5b21b6">FIX THE KB · GROUPED ACROSS 18 ANALYSED SESSIONS</text>
-  <text x="992" y="872" class="xs mono">client-component-map.md</text><rect x="1360" y="861" width="48" height="16" rx="8" fill="#ede9fe"/><text x="1370" y="873" class="xs b" fill="#5b21b6">×7</text>
-  <text x="992" y="888" class="xs m">Split the 156 KB map by feature area, or point index lines at sections</text>
-  <text x="992" y="912" class="xs mono">index.md</text><rect x="1360" y="901" width="48" height="16" rx="8" fill="#ede9fe"/><text x="1370" y="913" class="xs b" fill="#5b21b6">×4</text>
-  <text x="992" y="928" class="xs m">Add a "Testing" group: test/index.md, algorithms/README.md</text>
-  <text x="992" y="952" class="xs" fill="#3b4fd8">Show all 9 →</text>
+  <rect x="976" y="826" width="448" height="96" rx="6" fill="#f9fafb" stroke="#e5e7eb"/>
+  <text x="992" y="850" class="cap">DEEPER ANALYSIS</text>
+  <text x="992" y="870" class="xs m">What should have been read, coarse articles, KB gaps and fixes:</text>
+  <text x="992" y="886" class="xs m">the local KB-analysis skill (Opus, on demand, picks the sessions itself).</text>
+  <text x="992" y="902" class="xs m">Its results stay on the developer's machine and are not shown here.</text>
   </g>
 </svg>

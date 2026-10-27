@@ -1,9 +1,9 @@
-# 2026-10-27: KB Completeness Deep Analysis Skill
+# 2026-10-27: KB Analysis Skill — On-Demand Opus Analysis of Past Sessions
 
 **Status:** todo
 **Priority:**
 **Type:** feature
-**Module(s):** skill (`.claude/skills/`)
+**Module(s):** hook (skill shipped with the hooks plugin) | server (read-only data it pulls)
 **Owner:** denis.tsyplakov
 **Created:** 2026-10-27
 **Tracker:** GH-45 https://github.com/DataArt/artisyn-log-hub/issues/45
@@ -17,47 +17,108 @@ Raw idea (owner, verbatim):
 > пофайлово в саб агентах
 > т.е. такой исчерпывающий дорогой анализ полноты КБ
 
-A separate skill, run **only on the user's explicit request**, that takes a user-chosen number of
-past sessions and runs an exhaustive, deliberately expensive analysis of how complete the knowledge
-base is for them. Unlike the post-turn OKF analysis of `2026-10-27-okf-usage-tab` (only the KB
-index in the prompt, the model reads a few files with moderate curiosity), this skill reads the
-**whole KB, file by file, in sub-agents**.
+Later the same day, after the PoC (owner, verbatim):
 
-Related: `2026-10-27-okf-usage-tab` (transcript task-context assembly FR-22, KB access extraction
-FR-1/FR-23, OKF bundle detection FR-7); PoC `docs/pocs/2026-10-27-1950-okf-analysis-cost/`; the
-existing `session-kb-suggest` skill (suggests one KB article from a single past session).
+> доллар за анализ уже чета дофига
+> давай наверное это сделаем скилов который ставится вмиесте с хуками и делает дорогой но более
+> толковый анализ сессий опусом уже
+> сначала он решает какие сесси взять в ангализ потом анализирует, мжет подтягивать данные с log hub
+> но результат туда не заливает а чинистя все локально разработчиком
+
+An on-demand skill, installed together with the Log Hub hooks, that analyses how well the project's
+knowledge base (KB) served past sessions — with Opus, deliberately thorough and expensive, and only
+when the developer asks. It first chooses which sessions are worth analysing, then analyses them,
+and leaves a local report of concrete KB and harness fixes that the developer applies by hand.
+Nothing is sent back to Log Hub. This replaces the per-turn LLM analysis that was dropped from
+`2026-10-27-okf-usage-tab` (FR-19 there) because one run cost $0.45–0.90 per session.
+
+The analysis design comes from the PoC `docs/pocs/2026-10-27-1950-okf-analysis-cost/` (iterations
+v1–v4f on real sessions of this repo; README there).
 
 ## Functional Requirements
 
-- **FR-1** Manual-only skill: its description says it never triggers on its own; it runs only when
-  the user invokes it.
-- **FR-2** Input: how many past sessions to analyse (the latest N of the current repo) or an
-  explicit list of session ids; the skill states the session count and asks for confirmation
-  before spending anything, since the run is expensive.
-- **FR-3** For each session, build the task context and the KB accesses from the session's own
-  transcript (sub-agents included), the same way as `2026-10-27-okf-usage-tab` FR-22 / FR-1.
-- **FR-4** The KB = every OKF bundle of the repo (`index.md` with `okf_version`, nested indexes
-  belong to the parent bundle). Sub-agents read **every** KB article in full, split across
-  sub-agents by file batches so that no agent's context is overloaded.
-- **FR-5** Per session, the sub-agents judge each article against the session's task: relevant
-  and read; relevant but not read (a miss); read but not needed (a false read); and what the KB
-  lacks — facts the session had to dig out of code or ask about, with no article covering them.
-- **FR-6** Output: one report per session plus an aggregated KB-completeness report across all
-  analysed sessions, with concrete fix suggestions (new article, extend article X, fix index
-  entry Y, split or merge), ranked by how many sessions each would have helped.
-- **FR-7** Reports are written to a gitignored location (under `tmp/`), never into the KB itself;
-  the skill only suggests changes.
+### Shipping and trigger
+
+- **FR-1** The skill ships in the hooks plugin (`hook/` is the source of truth; installer, version
+  bump and the dogfooded copy per `.claude/rules/hook.md`), so every project with the hooks has it.
+  It is manual-only: its description says it never triggers on its own.
+
+### Step 1 — choose the sessions
+
+- **FR-2** The developer can name the sessions (ids, "the last N", a period, a branch). Without
+  that, the skill proposes candidates itself from the Log Hub data of the current repo: sessions
+  whose deterministic OKF verdict (`2026-10-27-okf-usage-tab` FR-14a) is not OK, sessions where
+  agents reached KB articles without the index, KB flood, and long code exploration with few KB
+  reads — ranked, with the reason for each.
+- **FR-3** Before spending anything it shows the chosen sessions, the reason for each and an
+  estimated cost, and waits for confirmation.
+
+### Step 2 — analyse
+
+- **FR-4** Input per session — no transcript text: the filtered user prompts and the per-agent
+  facts (each sub-agent with its own spawn prompt; KB reads, the order of first KB accesses, other
+  files read and changed), pulled from Log Hub (`GET /api/v2/okf-usage/facts`,
+  `2026-10-27-okf-usage-tab` FR-20) with the hook's API key; when the server lacks the route, the
+  skill builds the same facts from the local transcripts with the same session analyser.
+- **FR-5** The KB and the harness are judged **as they were when the session started**: `docs/`,
+  `CLAUDE.md`, `.claude/rules`, `.claude/skills` and the plugin skills of the last commit before
+  the session, unpacked with read-only `git archive` into a temporary folder outside the repo
+  (harness files under a `harness/` subfolder so they are not loaded as the model's own
+  instructions).
+- **FR-6** Goal: KB quality — granularity and findability — not session cost. Each sub-agent is an
+  independent task judged only against its own prompt; an article read by several agents is not a
+  finding; an unread article is not a problem unless it would clearly have helped that agent.
+- **FR-7** The analysis runs as **specialised passes in parallel** sub-agents (Opus), each owning
+  one class of findings so that no class is traded away for another (the PoC's single combined
+  prompt lost the entry-point class and some index-line findings between runs):
+  1. **Entry** — for every agent that did not start from the KB index: what its instructions said
+     (the current `CLAUDE.md`, the skill's sub-agent prompt template, its own prompt — quoted) and
+     why they did not route it to the index; proposes `entryFixes` at the point the instruction
+     failed to reach the agent, never a duplicate of an existing rule, or states explicitly that
+     the instructions are sufficient.
+  2. **Findability** — index lines versus the words of each agent's task: quotes the current line
+     and the missing words; proposes `index_line`, `section_pointers` or `index_grouping` fixes.
+  3. **Granularity and gaps** — big articles read for a small part (`split`, `section_pointers`),
+     knowledge dug out of code with no article (`new_article`); checks the KB before naming a gap.
+  4. **Completeness (deep mode, opt-in)** — sub-agents read every KB article in full, in batches,
+     and judge each against the sessions' tasks (the original idea of this task).
+- **FR-8** Each finding carries a `cause`: `entry_point`, `index_line`, `granularity` or
+  `agent_choice` (KB fine, agent ignored it — reported, no fix). The passes' results are merged
+  deterministically (dedup by path + kind) and filtered: no `split` for articles under 20 KB, no
+  index-line fix whose keywords the current line already has.
+
+### Output
+
+- **FR-9** A local report under `.artisyn/ai_work_dir/kb-analysis/<timestamp>/` (gitignored): one
+  section per session (agents, their reads with verdict, granularity, findability and cause) and an
+  aggregated, ranked list of `kbFixes` and `entryFixes` with how many sessions each would have
+  helped and the evidence. Nothing is uploaded to Log Hub; the skill never edits the KB or the
+  harness — the developer applies the fixes.
+
+## Non-Functional Requirements
+
+- Cost is stated before the run (FR-3) and in the report (real spend per session).
+- Backward compatibility: a skill from a newer hook against an older server falls back to local
+  transcripts (FR-4); the skill adds no hook API field.
 
 ## Acceptance Criteria
 
-- [ ] FR-1: the skill does not run unless the user invokes it by name.
-- [ ] FR-2: invoked with `5`, it lists the 5 latest sessions and asks for confirmation before any
-      sub-agent starts; invoked with explicit ids, it uses exactly those.
-- [ ] FR-3: a session whose task is a one-line question gets that prompt as its whole task context.
-- [ ] FR-4: the run log shows every KB article read in full by some sub-agent, exactly once per
-      session.
-- [ ] FR-5/6: each per-session report lists misses, false reads and KB gaps with reasons; the
-      aggregated report ranks fix suggestions by the number of sessions they would have helped.
-- [ ] FR-7: no file under the KB folders is changed by a run; reports land under `tmp/`.
+- [ ] FR-1: after installing the hooks the skill is available and never runs unless invoked.
+- [ ] FR-2/3: invoked without arguments, it proposes ranked sessions with reasons and an estimated
+      cost, and starts nothing before confirmation; invoked with ids, it uses exactly those.
+- [ ] FR-4: the analysis input carries no tool result text; against a server without the facts
+      route the same facts come from local transcripts.
+- [ ] FR-5: an article created after a session never appears as a miss or a gap for it.
+- [ ] FR-7/8: on the PoC sessions, the report keeps the entry-point class (agents that skipped the
+      index, with the instruction that failed to reach them), the `server-conventions.md` case as
+      `agent_choice` with no KB fix, the 100–170 KB monoliths as `granularity`, and the
+      `hook-system-overview.md` PostToolUse index-line miss.
+- [ ] FR-9: a run changes no file in the KB or the harness and uploads nothing; the report ranks
+      fixes by the number of sessions helped.
 
 ## Notes
+
+- PoC: `docs/pocs/2026-10-27-1950-okf-analysis-cost/` — the design and evidence for FR-4–FR-8; a
+  single combined prompt measured $0.45–0.90 and 4–7 min per session with Sonnet.
+- Related: `2026-10-27-okf-usage-tab` (facts route FR-20, deterministic verdict FR-14a/FR-17a);
+  the existing repo skill `session-kb-suggest` (one KB article from one past session).

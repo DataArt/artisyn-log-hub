@@ -80,7 +80,7 @@
   <rect x="952" y="268" width="50" height="2" fill="#3b4fd8"/>
   <text x="1018" y="256" class="t m">Raw Logs</text>
   <rect x="1110" y="238" width="152" height="26" rx="4" fill="#eef2ff" stroke="#c7d2fe" stroke-dasharray="3 2"/>
-  <text x="1120" y="255" class="xs" fill="#3730a3">NEW TAB (FR-11..14a, FR-27)</text>
+  <text x="1120" y="255" class="xs" fill="#3730a3">NEW TAB (FR-11..14a)</text>
   <line x1="342" y1="272" x2="1440" y2="272" class="line"/>
 
   <!-- Toolbar -->
@@ -89,12 +89,6 @@
   <rect x="818" y="284" width="112" height="22" rx="11" fill="#f3f4f6" stroke="#e5e7eb"/>
   <rect x="819" y="285" width="56" height="20" rx="10" fill="#3b4fd8"/>
   <text x="831" y="299" class="xs b" fill="#fff">Bytes</text><text x="887" y="299" class="xs m">Calls</text>
-  <rect x="948" y="287" width="28" height="16" rx="8" fill="#3b4fd8"/><circle cx="968" cy="295" r="6" fill="#fff"/>
-  <text x="982" y="299" class="xs">Show analysis</text>
-  <rect x="1072" y="284" width="196" height="22" rx="11" fill="#f5f3ff" stroke="#ddd6fe"/>
-  <text x="1082" y="299" class="xs" fill="#5b21b6">sonnet · run 2026-10-21 22:55 · $0.41</text>
-  <rect x="1276" y="284" width="150" height="22" rx="11" fill="#ecfdf5" stroke="#a7f3d0"/>
-  <text x="1286" y="299" class="xs" fill="#047857">model read files: yes</text>
 
   <!-- Verdict summary (FR-14a) -->
   <g>
@@ -108,27 +102,27 @@
     <rect x="586" y="366" width="28" height="12" rx="6" fill="#fef3c7" stroke="#f59e0b"/><text x="592" y="375" style="font-size:9px" fill="#92400e">fix</text>
     <rect x="618" y="366" width="34" height="12" rx="6" fill="#fee2e2"/><text x="623" y="375" style="font-size:9px" fill="#b91c1c">mess</text>
     <text x="374" y="400" class="cap">WHY</text>
-    <text x="374" y="418" class="xs">• agent 3f2a needed one section of a 96 KB article (too coarse)</text>
-    <text x="374" y="434" class="xs">• analysis: 1 false read, 1 missed article</text>
+    <text x="374" y="418" class="xs">• agent 3f2a went to 2 KB articles without reading the index</text>
+    <text x="374" y="434" class="xs m">(per agent — the same article read by several agents is not a finding)</text>
     <line x1="720" y1="328" x2="720" y2="440" class="line"/>
     <text x="736" y="338" class="cap">READ · TOP 5 BY BYTES</text>
     <text x="736" y="358" class="xs mono">bash-command-view.md</text><text x="896" y="358" class="xs mono">96 KB</text>
-    <text x="944" y="358" class="xs" fill="#9a3412">↻</text><text x="958" y="358" class="xs b" fill="#92400e">▤</text>
-    <text x="736" y="376" class="xs mono">harness-snapshot.md</text><text x="896" y="376" class="xs mono">14 KB</text><text x="958" y="376" class="xs b" fill="#b91c1c">✗</text>
+    <text x="944" y="358" class="xs" fill="#9a3412">↻</text>
+    <text x="736" y="376" class="xs mono">harness-snapshot.md</text><text x="896" y="376" class="xs mono">14 KB</text>
     <text x="736" y="394" class="xs mono">index.md</text><text x="896" y="394" class="xs mono">9 KB</text>
     <text x="736" y="412" class="xs mono">db-tables.md</text><text x="896" y="412" class="xs mono">8 KB</text>
     <text x="736" y="430" class="xs mono">change-surface.md</text><text x="896" y="430" class="xs mono">5 KB</text>
     <text x="736" y="446" class="xs m">+ 7 more files</text>
     <line x1="990" y1="328" x2="990" y2="440" class="line"/>
-    <text x="1006" y="338" class="cap" fill="#15803d">SHOULD HAVE BEEN READ, BUT WASN&#8217;T · 1</text>
-    <text x="1006" y="358" class="xs mono">session-metrics-scope.md</text>
-    <text x="1006" y="374" class="xs m">tree-scoped sums are the core of FR-4</text>
-    <text x="1006" y="396" class="xs" fill="#92400e">⚠ may be incomplete: prompt says "see GH-41",</text>
-    <text x="1006" y="410" class="xs" fill="#92400e">no issue text in the session</text>
+    <text x="1006" y="338" class="cap">HOW AGENTS REACHED THE KB · 4 AGENTS</text>
+    <text x="1006" y="358" class="xs">main: index.md → 3 articles</text><text x="1290" y="358" class="xs" fill="#15803d">✓ index</text>
+    <text x="1006" y="376" class="xs">3f2a: grep → 2 articles</text><text x="1290" y="376" class="xs" fill="#b45309">✗ no index</text>
+    <text x="1006" y="394" class="xs">9c1d: path given in its prompt</text><text x="1290" y="394" class="xs m">given</text>
+    <text x="1006" y="412" class="xs">7e40: index.md → 1 article</text><text x="1290" y="412" class="xs" fill="#15803d">✓ index</text>
     <text x="1006" y="434" class="xs m">Click any line → opens that node in the tree.</text>
   </g>
-  <text x="356" y="467" class="note">No analysis run → right column reads "Analysis is off — turn it on in Settings →", or "Not analysed: session cost $0.40 is below the $1.00 threshold" (FR-19);</text>
-  <text x="356" y="482" class="note">either way the badge adds "access data only". Run older than the latest prompt/KB access → badge adds "analysis may be stale". The tree below is the drill-down.</text>
+  <text x="356" y="467" class="note">No LLM analysis here (FR-19): what should have been read and how to fix the KB comes from the local KB-analysis skill</text>
+  <text x="356" y="482" class="note">(task 2026-10-27-kb-completeness-deep) — its results stay on the developer's machine. The tree below is the drill-down.</text>
 
   <g transform="translate(0,175)">
   <!-- Bundle summary cards (FR-13) -->
@@ -152,7 +146,7 @@
     <text x="1214" y="362" class="cap">CONTENT IN CONTEXT</text><text x="1214" y="380" class="s mono b">0 B / 6 KB · 0 %</text>
   </g>
 
-  <!-- Tree table (FR-11, FR-12, FR-27) -->
+  <!-- Tree table (FR-11, FR-12) -->
   <rect x="356" y="404" width="740" height="560" rx="6" fill="#fff" stroke="#e5e7eb"/>
   <rect x="357" y="405" width="738" height="28" fill="#fafafa"/>
   <text x="370" y="423" class="cap">BUNDLE → FOLDER → FILE → SECTION</text>
@@ -187,14 +181,13 @@
   <line x1="357" y1="530" x2="1095" y2="530" class="line"/>
 
   <!-- bash-command-view.md -->
-  <rect x="357" y="531" width="738" height="32" fill="#fef2f2"/>
+  <rect x="357" y="531" width="738" height="32" fill="#f8fafc"/>
   <text x="398" y="551" class="s m">▾</text><text x="412" y="551" class="s mono">bash-command-view.md</text>
   <rect x="680" y="541" width="110" height="12" rx="2" fill="#f1f5f9"/><rect x="680" y="541" width="66" height="12" rx="2" fill="#1d4ed8"/>
   <text x="796" y="551" class="xs mono">96 KB</text>
   <rect x="836" y="541" width="60" height="12" rx="2" fill="#f1f5f9"/><rect x="836" y="541" width="26" height="12" rx="2" fill="#f97316"/>
   <text x="900" y="551" class="xs mono">8 KB</text>
   <rect x="940" y="540" width="88" height="16" rx="8" fill="#fff7ed" stroke="#fdba74"/><text x="946" y="552" class="xs" fill="#9a3412">↻ own edit ×14</text>
-  <rect x="1034" y="540" width="56" height="16" rx="8" fill="#fef3c7" stroke="#fcd34d"/><text x="1040" y="552" class="xs b" fill="#92400e">▤ coarse</text>
   <line x1="357" y1="563" x2="1095" y2="563" class="line"/>
 
   <!-- sections -->
@@ -223,13 +216,11 @@
   <rect x="940" y="658" width="70" height="16" rx="8" fill="#f3f4f6"/><text x="947" y="670" class="xs m">grep -n ×4</text>
   <line x1="357" y1="680" x2="1095" y2="680" class="line"/>
 
-  <!-- session-metrics-scope.md : missed -->
-  <rect x="357" y="681" width="738" height="32" fill="#f0fdf4"/>
+  <!-- session-metrics-scope.md : not read -->
   <text x="398" y="701" class="s mono" fill="#9ca3af">session-metrics-scope.md</text>
   <rect x="680" y="691" width="110" height="12" rx="2" fill="#f1f5f9"/>
   <text x="686" y="701" class="xs m">not read</text>
   <rect x="836" y="691" width="60" height="12" rx="2" fill="#f1f5f9"/>
-  <rect x="940" y="690" width="132" height="16" rx="8" fill="#dcfce7" stroke="#86efac"/><text x="947" y="702" class="xs b" fill="#15803d">＋ could have helped *</text>
   <line x1="357" y1="713" x2="1095" y2="713" class="line"/>
 
   <!-- turn-end-cost-advisor.md never read -->
@@ -267,55 +258,42 @@
   <rect x="370" y="898" width="112" height="16" rx="8" fill="#fff7ed" stroke="#fdba74"/><text x="377" y="910" class="xs" fill="#9a3412">↻ own edit (info)</text>
   <rect x="490" y="898" width="64" height="16" rx="8" fill="#eff6ff"/><text x="497" y="910" class="xs" fill="#1d4ed8">entry point</text>
   <rect x="562" y="898" width="110" height="16" rx="8" fill="#f3f4f6"/><text x="569" y="910" class="xs m">grep / ls over folder</text>
-  <rect x="680" y="898" width="76" height="16" rx="8" fill="#fee2e2" stroke="#fca5a5"/><text x="686" y="910" class="xs b" fill="#b91c1c">✗ false read</text>
-  <rect x="764" y="898" width="118" height="16" rx="8" fill="#dcfce7" stroke="#86efac"/><text x="770" y="910" class="xs b" fill="#15803d">＋ could have helped</text>
-  <text x="890" y="910" class="xs m">(hidden when analysis is off)</text>
-  <rect x="370" y="918" width="112" height="16" rx="8" fill="#fef3c7" stroke="#fcd34d"/><text x="377" y="930" class="xs b" fill="#92400e">▤ too coarse</text>
-  <text x="490" y="930" class="xs m">the agent needed one part, the article gave no way to get just it — split it or point the index at sections</text>
-  <text x="370" y="948" class="xs m">* caveat: the analysis reported missing context, so "could have helped" may be incomplete.</text>
-  <text x="370" y="962" class="xs m">Hover / click a marker → popover with the model's reason.</text>
+  <rect x="680" y="898" width="112" height="16" rx="8" fill="#f3f4f6"/><text x="687" y="910" class="xs m">read by N agents</text>
+  <text x="800" y="910" class="xs m">both: info only (cost, not KB quality)</text>
+  <text x="370" y="934" class="xs m">"not read" is neutral: an article about a module this task never touched should not be read.</text>
 
-  <!-- Analysis side panel (FR-27) -->
+  <!-- Agents panel (FR-14a, per-agent facts) -->
   <rect x="1108" y="404" width="318" height="560" rx="6" fill="#fff" stroke="#e5e7eb"/>
-  <rect x="1109" y="405" width="316" height="28" fill="#f5f3ff"/>
-  <text x="1122" y="423" class="cap" fill="#5b21b6">KB USAGE ANALYSIS</text>
-  <rect x="1330" y="412" width="84" height="16" rx="8" fill="#ede9fe"/><text x="1338" y="424" class="xs" fill="#5b21b6">task: change</text>
+  <rect x="1109" y="405" width="316" height="28" fill="#fafafa"/>
+  <text x="1122" y="423" class="cap">AGENTS · 4 · EACH ON ITS OWN TASK</text>
 
-  <text x="1122" y="452" class="cap">SUMMARY</text>
-  <text x="1122" y="470" class="xs">The plan task needed the snapshot delivery</text>
-  <text x="1122" y="485" class="xs">flow; one agent pulled all 82 KB of Examples</text>
-  <text x="1122" y="500" class="xs">for one rule, and none opened</text>
-  <text x="1122" y="515" class="xs">session-metrics-scope.md.</text>
-  <line x1="1120" y1="528" x2="1414" y2="528" class="line"/>
+  <text x="1122" y="452" class="xs b mono">main</text><text x="1180" y="452" class="xs" fill="#15803d">✓ started from index</text>
+  <text x="1122" y="468" class="xs m">/adlc-lh:plan-deep 2026-10-15-claude-dev…</text>
+  <text x="1122" y="484" class="xs">3 KB articles · 21 KB into context</text>
+  <line x1="1120" y1="496" x2="1414" y2="496" class="line"/>
 
-  <text x="1122" y="548" class="cap" fill="#b91c1c">FALSE / COARSE READS · 2</text>
-  <text x="1122" y="566" class="xs mono">bash-command-view.md › Examples</text>
-  <text x="1122" y="581" class="xs m">▤ agent 3f2a needed one rule, got 82 KB of Examples</text>
-  <text x="1122" y="600" class="xs mono">harness-snapshot.md</text>
-  <text x="1122" y="615" class="xs m">unrelated to the planned change</text>
-  <line x1="1120" y1="628" x2="1414" y2="628" class="line"/>
+  <text x="1122" y="516" class="xs b mono">3f2a</text><text x="1180" y="516" class="xs" fill="#b45309">✗ no index — grep first</text>
+  <text x="1122" y="532" class="xs m">"Gather context for the snapshot delivery…"</text>
+  <text x="1122" y="548" class="xs">2 KB articles · 110 KB into context</text>
+  <line x1="1120" y1="560" x2="1414" y2="560" class="line"/>
 
-  <text x="1122" y="648" class="cap" fill="#15803d">COULD HAVE HELPED · 1</text>
-  <text x="1122" y="666" class="xs mono">session-metrics-scope.md</text>
-  <text x="1122" y="681" class="xs m">tree-scoped sums are the core of FR-4</text>
-  <line x1="1120" y1="694" x2="1414" y2="694" class="line"/>
+  <text x="1122" y="580" class="xs b mono">9c1d</text><text x="1180" y="580" class="xs m">path given in its prompt</text>
+  <text x="1122" y="596" class="xs m">"Review bash-command-view.md rules 5.x…"</text>
+  <text x="1122" y="612" class="xs">1 KB article · 96 KB into context</text>
+  <line x1="1120" y1="624" x2="1414" y2="624" class="line"/>
 
-  <rect x="1120" y="704" width="294" height="62" rx="4" fill="#fffbeb" stroke="#fde68a"/>
-  <text x="1130" y="722" class="cap" fill="#92400e">MISSING CONTEXT · 1</text>
-  <text x="1130" y="740" class="xs" fill="#92400e">Prompt says "see GH-41" — no issue text in</text>
-  <text x="1130" y="755" class="xs" fill="#92400e">the session. "Could have helped" may be partial.</text>
+  <text x="1122" y="644" class="xs b mono">7e40</text><text x="1180" y="644" class="xs" fill="#15803d">✓ started from index</text>
+  <text x="1122" y="660" class="xs m">"Check the plan against hook compatibility…"</text>
+  <text x="1122" y="676" class="xs">1 KB article · 9 KB into context</text>
+  <line x1="1120" y1="688" x2="1414" y2="688" class="line"/>
 
-  <text x="1122" y="790" class="cap">FIX THE KB · 2 (kbFixes)</text>
-  <text x="1122" y="808" class="xs mono">bash-command-view.md</text>
-  <text x="1122" y="823" class="xs m">Split Examples (L39–260) into its own file;</text>
-  <text x="1122" y="838" class="xs m">helps agents 3f2a, 9c1d.</text>
-  <text x="1122" y="858" class="xs mono">index.md</text>
-  <text x="1122" y="873" class="xs m">Point the session-metrics-scope.md line at FR-4 sums.</text>
-  <line x1="1120" y1="886" x2="1414" y2="886" class="line"/>
-  <text x="1122" y="904" class="cap" fill="#92400e">KB LACKS · 1 (gaps)</text>
-  <text x="1122" y="922" class="xs">Snapshot delivery retry rules — dug out of</text>
-  <text x="1122" y="937" class="xs">upload-queue.ts (4 reads, 38 KB); no article.</text>
-  <text x="1122" y="954" class="xs m">→ add a section to harness-snapshot.md</text>
+  <text x="1122" y="712" class="xs m">Click an agent → the tree shows only its reads.</text>
+  <rect x="1120" y="860" width="294" height="92" rx="4" fill="#f9fafb" stroke="#e5e7eb"/>
+  <text x="1130" y="880" class="cap">DEEPER ANALYSIS</text>
+  <text x="1130" y="898" class="xs m">What should have been read, coarse articles,</text>
+  <text x="1130" y="913" class="xs m">KB gaps and fixes: the local KB-analysis skill</text>
+  <text x="1130" y="928" class="xs m">(Opus, on demand). Its results stay on your</text>
+  <text x="1130" y="943" class="xs m">machine and are not shown here.</text>
 
   <!-- FR-14 variant -->
   <rect x="356" y="978" width="1070" height="68" rx="6" fill="#fffbeb" stroke="#fcd34d" stroke-dasharray="5 3"/>

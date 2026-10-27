@@ -33,6 +33,15 @@ function kbRootFor(startedAt) {
     const tarball = execFileSync('git', ['archive', '--format=tar', commit, 'docs'], { cwd: repoRoot, maxBuffer: 512 * 1024 * 1024 });
     execFileSync('tar', ['-x', '-C', dir.replace(/\\/g, '/')], { input: tarball, shell: process.platform === 'win32' });
     fs.cpSync(path.join(repoRoot, 'docs/kb-local'), path.join(dir, 'docs/kb-local'), { recursive: true });
+    // v4f: the harness files that steer agents to the KB, as of session start, under harness/ —
+    // NOT at the root, where Claude Code would load CLAUDE.md as the analysis model's own memory.
+    const harness = path.join(dir, 'harness');
+    fs.mkdirSync(harness, { recursive: true });
+    for (const p of ['CLAUDE.md', '.claude/rules', '.claude/skills', '.artisyn/marketplace/plugins/adlc-lh/skills']) {
+      let tar;
+      try { tar = execFileSync('git', ['archive', '--format=tar', commit, p], { cwd: repoRoot, maxBuffer: 512 * 1024 * 1024, stdio: ['ignore', 'pipe', 'ignore'] }); } catch { continue; }
+      execFileSync('tar', ['-x', '-C', harness.replace(/\\/g, '/')], { input: tar, shell: process.platform === 'win32' });
+    }
   }
   return dir;
 }
@@ -129,6 +138,32 @@ function parseStream(out) {
   return { env, tools, result, text };
 }
 
+// v4e: deterministic filter the server applies to `kbFixes` (no LLM) — drops fixes the facts refute:
+// "split" of an article under 20 KB, and an index-line fix whose keywords the line already has.
+const SPLIT_MIN_BYTES = 20 * 1024;
+function filterFixes(r, kbRoot) {
+  if (!r?.kbFixes) return [];
+  const indexText = BUNDLES.map((b) => { try { return fs.readFileSync(path.join(kbRoot, b, 'index.md'), 'utf8'); } catch { return ''; } }).join('\n');
+  const lineFor = (p) => indexText.split('\n').find((l) => l.includes(`(${path.posix.basename(p)})`) || l.includes(p.replace(/^docs\/(knowledgebase|kb-local)\//, ''))) || '';
+  const dropped = [];
+  r.kbFixes = r.kbFixes.filter((x) => {
+    if (x.kind === 'split') {
+      let size = Infinity;
+      try { size = fs.statSync(path.join(kbRoot, x.path)).size; } catch { /* unknown → keep */ }
+      if (size < SPLIT_MIN_BYTES) { dropped.push(`split of a ${Math.round(size / 1024)} KB article: ${x.path}`); return false; }
+    }
+    if (x.kind === 'index_line' && Array.isArray(x.keywords) && x.keywords.filter(Boolean).length) {
+      const line = lineFor(x.path).toLowerCase();
+      if (line && x.keywords.filter(Boolean).every((k) => line.includes(String(k).toLowerCase()))) {
+        dropped.push(`index line of ${x.path} already has: ${x.keywords.join(', ')}`);
+        return false;
+      }
+    }
+    return true;
+  });
+  return dropped;
+}
+
 // Automatic part of the README criteria (2, 3); 4 and 5 are judged by reading the result.
 function check(f, r, kbRoot) {
   const kbReadPaths = f.reads.filter((x) => x.kb).map((x) => x.path);
@@ -170,6 +205,7 @@ for (const prefix of SAMPLE) {
   const r = await callClaude(prompt, kbRoot);
   fs.writeFileSync(path.join(outDir, `${prefix}.out.jsonl`), r.out || r.err);
   const { env, tools, result, text } = parseStream(r.out);
+  const droppedFixes = filterFixes(result, kbRoot);
   fs.writeFileSync(path.join(outDir, `${prefix}.result.json`), result ? JSON.stringify(result, null, 2) : text);
   fs.writeFileSync(path.join(outDir, `${prefix}.tools.txt`), tools.join('\n'));
   const row = {
@@ -181,6 +217,10 @@ for (const prefix of SAMPLE) {
     tooCoarse: (result?.reads || []).filter((x) => x.granularity === 'too_coarse').length,
     viaSearch: (result?.reads || []).filter((x) => x.findability === 'search').length,
     kbFixes: result?.kbFixes?.length ?? null,
+    entryFixes: result?.entryFixes?.length ?? null,
+    causes: [...(result?.missed || []), ...(result?.reads || []).filter((x) => x.cause && x.cause !== 'none')]
+      .reduce((m, x) => ({ ...m, [x.cause]: (m[x.cause] || 0) + 1 }), {}),
+    droppedFixes,
   };
   rows.push(row);
   console.log(JSON.stringify(row));

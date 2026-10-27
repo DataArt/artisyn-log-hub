@@ -51,8 +51,11 @@ Found: `docs/knowledgebase` (tracked, 82 files), `docs/kb-local` (ignored, 2 fil
 ## 2026-10-27 — PoC: the post-turn analysis on real sessions
 
 [`docs/pocs/2026-10-27-1950-okf-analysis-cost/`](../../../pocs/2026-10-27-1950-okf-analysis-cost/README.md)
-ran the analysis like the worker (`claude -p`, sonnet) on 8 real sessions of $5–114. Adopted
-design (v4d): user prompts + the session analyser's facts **per agent** (each sub-agent judged
+ran the analysis like the worker (`claude -p`, sonnet) on 8 real sessions of $5–114. Outcome
+(2026-10-28, owner decision): $0.45–0.90 per session run is too much for a per-turn analysis, so
+the LLM analysis left this task (FR-19) for the on-demand local Opus skill of
+`2026-10-27-kb-completeness-deep`, with specialised parallel passes (a single combined prompt lost
+a whole class of findings between v4e and v4f). The design it carries over (v4d): user prompts + the session analyser's facts **per agent** (each sub-agent judged
 against its own spawn prompt) + KB indexes, no transcript text; KB judged as of session start;
 facts over guesses; the goal is **KB quality, not cost** — each read gets `verdict`, `granularity`
 and `findability`, plus `gaps` and `kbFixes`. Result on four multi-agent sessions: $0.45–0.61 and

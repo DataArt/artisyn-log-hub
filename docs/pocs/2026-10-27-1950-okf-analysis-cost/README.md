@@ -1,7 +1,8 @@
 # PoC — OKF usage analysis on real sessions: cost, speed, usefulness
 
 Task: [2026-10-27-okf-usage-tab](../../tasks/todo/2026-10-27-okf-usage-tab/requirements.md)
-(FR-19 … FR-24).
+(FR-19, FR-20) and [2026-10-27-kb-completeness-deep](../../tasks/todo/2026-10-27-kb-completeness-deep/requirements.md),
+which took the analysis over.
 
 ## Question
 
@@ -49,37 +50,56 @@ which files the model read; cost and timing fields are the same.
 | v4b | KB as of session start (`git archive` of the last commit before it, outside the repo — also no repo `CLAUDE.md`/rules/hooks in the model's context); facts over guesses; separate `cost: ok\|excessive` per read; a read file can be `missed` only by section; gaps must be checked against the KB (`prompt-v4b.md`, `KB_AT_SESSION=1`) | `out-runs/v4b/`, `out-runs/v4b-final/` |
 
 | v4c | per agent: each sub-agent's own spawn prompt is its task, its reads are judged against it (stopped before finishing — the cost axis was the wrong goal) | — |
-| v4d | **adopted**: goal = KB quality, not cost; per-agent facts incl. the order of first KB accesses and article sizes; each read judged on `verdict`, `granularity` (`too_coarse`/`too_fine`) and `findability` (`index`/`search`/`given`/`linked`); `kbFixes` list (`prompt-v4d.md`, `PER_AGENT=1`) | `out-runs/v4d/` |
+| v4d | goal = KB quality, not cost; per-agent facts incl. the order of first KB accesses and article sizes; each read judged on `verdict`, `granularity` (`too_coarse`/`too_fine`) and `findability` (`index`/`search`/`given`/`linked`); `kbFixes` list (`prompt-v4d.md`, `PER_AGENT=1`) | `out-runs/v4d/` |
 
-Run v4d: `PROMPT=prompt-v4d.md KB_AT_SESSION=1 PER_AGENT=1 node run4.mjs <tag> <id-prefix> [...]`
+| v4e | every finding gets a `cause` (`entry_point` / `index_line` / `granularity` / `agent_choice`) with the index line quoted; `kbFixes` with `kind` + `keywords`, separate `entryFixes`; deterministic filter (no split under 20 KB, no index fix whose keywords the line already has) (`prompt-v4e.md`) | `out-runs/v4e/` |
+| v4f | the harness as of session start (`CLAUDE.md`, rules, skills) under `harness/` in the snapshot; read the file before proposing an entry fix; an `entry_point` still gets its index line checked (`prompt-v4f.md`) | `out-runs/v4f/` |
+
+Run the latest: `PROMPT=prompt-v4f.md KB_AT_SESSION=1 PER_AGENT=1 node run4.mjs <tag> <id-prefix> [...]`
 (needs `bun`).
 
 ## Result
 
-**v4d is the design to adopt.** v4b already met criteria 1–6, but it judged cost (the owner's
-correction: twelve atomic sub-agents reading one article is a cost, not a KB quality problem, and
-each sub-agent must be judged against its own prompt). v4d on the four multi-agent sessions:
+**Outcome: the LLM analysis does not belong in the per-turn hook path; it becomes an on-demand,
+local Opus skill** (task `2026-10-27-kb-completeness-deep`), and the OKF tab keeps only the
+deterministic facts and verdict (task `2026-10-27-okf-usage-tab`, FR-19). Reasons, from the runs:
 
-| Session | Agents | Cost | Time | Prompt | Agent+file reads judged | Key finding |
-|---|---|---|---|---|---|---|
-| e88adad0 | 23 | $0.61 | 234 s | 94 KB | 38/38 | 28 reads are `given` (reviewers got the path) — fine; new algorithm docs missing from the `algorithms/README.md` table; no own line for the modal in `client-component-map.md` |
-| 0edba12b | 4 | $0.52 | 212 s | 38 KB | 15/15 | `server-conventions.md` mixes four unrelated topics; three perf agents never found its perf section → split |
-| 89206502 | 9 | $0.45 | 186 s | 60 KB | 17/23 | no article on why the tool-call SKIP list drops Read/Edit/… — two agents re-derived it from code |
-| 92f0ad24 | 3 | $0.50 | 283 s | 58 KB | 42/42 | 13 `too_coarse` reads of 100–170 KB monoliths (`db-tables.md`, `client-component-map.md`, `api-reference.md`, `server-endpoint-map.md`) where agents needed 0.5–5 KB → split or point index lines at sections |
+- **Cost**: one run per session cost $0.45–0.90 and 4–7 min (v4d–v4f, Sonnet) — too much to run
+  after every turn of every session.
+- **Stability**: with one combined prompt, a fix to one class of findings removed another. v4e's
+  cause split stopped the wrong "split this 8 KB article" fix (`server-conventions.md` became
+  `agent_choice` — its index line already names the perf section); v4f's harness access stopped
+  "add a rule to CLAUDE.md" fixes for a rule that already exists — but then the entry-point class
+  disappeared entirely, and the `hook-system-overview.md` index-line miss found in v4b was lost in
+  v4e and v4f. Hence the skill's design: specialised passes in parallel, one per class of findings,
+  merged deterministically.
 
-- **Cost and time**: $0.45–0.61 and 3–4.7 min per run. The prompt grows with the sub-agent prompts
-  (up to 94 KB for 23 agents), so the analysis branch needs a cap of ~200 KB; ~35 KB more input
-  costs about $0.03.
-- **Usefulness**: the findings are KB changes an owner can make — split monolithic articles, add
-  section pointers to index lines, add missing index rows and articles. The same monoliths come up
-  across unrelated sessions, which is what the repo-level "repeatedly too coarse" rule aggregates.
-- **Earlier results still hold**: KB as of session start (no anachronisms), facts over guesses,
-  running outside the repo (~8k tokens less per turn), no transcript text.
-- **What did not work**: v1 (outlines of every file) broke the 60 KB cap; v2/v3 (transcript text)
-  cut long sessions or needed a context file, and their regex extraction double-counted multi-file
-  Bash bytes and mistook `<task-notification>` messages for prompts; v4a was anachronistic; v4b
-  judged cost and the session tree as one task.
-- **Residual**: a folder or glob "read" is sometimes left unjudged (17/23 in `89206502`);
-  harmless. Instruction-only "little code" reads happen and are acceptable.
+| Run | e88adad0 | 0edba12b | 89206502 | 92f0ad24 |
+|---|---|---|---|---|
+| v4d | $0.61 · 234 s | $0.52 · 212 s | $0.45 · 186 s | $0.50 · 283 s |
+| v4e | $0.59 · 266 s | $0.70 · 260 s | $0.62 · 293 s | $0.59 · 340 s |
+| v4f | $0.45 · 255 s | $0.79 · 388 s | $0.61 · 256 s | $0.90 · 426 s |
 
-v4b numbers for reference (single-task view, 8 sessions): $0.16–0.67, 1–3.5 min — `out-runs/v4b*/summary.json`.
+**Findings checked against the repo** (what the skill must keep finding):
+- 100–170 KB monoliths read for 0.5–5 KB at a time: `api-reference.md` 171 KB,
+  `client-component-map.md` 161 KB, `db-tables.md` 141 KB, `server-endpoint-map.md` 110 KB.
+- `otel-cost-selection.md` has no line in `index.md` (found independently by three sessions).
+- `hook-system-overview.md` already documented PostToolUse's `tool_use_id` while a session built a
+  PoC to find it out; its index line names no payload fields.
+- `hook-installation.md`'s index line lacks the installer-build words the article covers.
+- Many agents — main and sub-agents — go to KB articles by grep without the index, although
+  `CLAUDE.md` says to start from it.
+- Fixed later by other work (confirms the analysis saw real holes): the new algorithm docs missing
+  from `algorithms/README.md`; the undocumented tool-call SKIP list.
+- Wrong recommendation (fixed by the cause split): split `server-conventions.md` (8 KB; its index
+  line already names the section).
+
+**What carried over into the skill's design**: no transcript text — user prompts plus the session
+analyser's per-agent facts (`facts.ts` → `buildBashView`); each sub-agent judged against its own
+prompt; KB and harness as of session start, outside the repo; facts over guesses; goal = KB quality,
+not cost; causes; deterministic merge and filter.
+
+**Dropped on the way**: outlines of every file in the prompt (v1, broke the 60 KB cap); transcript
+text (v2/v3; cut long sessions); regex extraction (double-counted multi-file Bash bytes, took
+`<task-notification>` for prompts); a `cost` axis and tree-wide judging (v4b; sub-agents are
+atomic tasks, cost is not KB quality).
