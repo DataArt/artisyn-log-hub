@@ -59,6 +59,14 @@ services:
       IMPORT_MAX_ENTRIES: ${IMPORT_MAX_ENTRIES:-}
       IMPORT_MAX_UNCOMPRESSED_BYTES: ${IMPORT_MAX_UNCOMPRESSED_BYTES:-}
       IMPORT_MAX_ENTRY_BYTES: ${IMPORT_MAX_ENTRY_BYTES:-}
+      # Azure Entra ID sign-in — required for azure-oauth, ignored by the other modes (see .env.example).
+      AZURE_TENANT_ID: ${AZURE_TENANT_ID:-}
+      AZURE_CLIENT_ID: ${AZURE_CLIENT_ID:-}
+      AZURE_CLIENT_SECRET: ${AZURE_CLIENT_SECRET:-}
+      AZURE_REDIRECT_URI: ${AZURE_REDIRECT_URI:-}
+      # An empty AZURE_SCOPES stops the app, so unset falls back to the app's own default here.
+      AZURE_SCOPES: ${AZURE_SCOPES:-openid profile email}
+      AZURE_AUTHORITY: ${AZURE_AUTHORITY:-}
     ports:
       - "127.0.0.1:5003:3000"
     volumes:

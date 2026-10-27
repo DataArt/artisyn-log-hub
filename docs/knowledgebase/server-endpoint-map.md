@@ -98,7 +98,7 @@ After any endpoint change, update this file to stay in sync.
 
 **Notes:**
 - Deliberately outside the `api/v1/auth` prefix: `/api/auth/callback` is the exact redirect URI already registered on the Azure App Registration of the deployment (see [Local SSO reference folder](deployment-auth-mode.md#local-sso-reference-folder)) — a versioned-prefix path would need a new Azure Portal registration.
-- Validates `state`/`nonce` against `req.session` (set by `GET /api/v1/auth/azure`), exchanges the code via `@azure/msal-node`, extracts the `email` claim (falling back to `preferred_username`), auto-provisions/matches the local user (case-insensitive, same helper Mode 1 uses), `req.logIn()`s, redirects to `/`. Any failure (provider error, state/nonce mismatch, missing email) logs server-side only and redirects to `/#/login?oauthError=1` — no provider detail leaked to the client.
+- Validates `state`/`nonce` against `req.session` (set by `GET /api/v1/auth/azure`), exchanges the code via `@azure/msal-node` (passing the session's `nonce` — msal-node 7 fails the exchange with `nonce_mismatch` without it), extracts the `email` claim (falling back to `preferred_username`), auto-provisions/matches the local user (case-insensitive, same helper Mode 1 uses), `req.logIn()`s, redirects to `/`. Any failure (provider error, state/nonce mismatch, missing email) logs server-side only and redirects to `/#/login?oauthError=1` — no provider detail leaked to the client.
 - Verified live 2026-08-06 against the real dev Azure App Registration: full interactive Microsoft sign-in correctly matched and logged into a pre-existing local account by email (no duplicate created).
 
 ---

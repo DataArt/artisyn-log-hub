@@ -60,15 +60,22 @@ export class AzureAuthService {
     });
   }
 
+  /**
+   * `nonce` is the value sent with getAuthCodeUrl. msal-node 7 rejects an ID
+   * token that carries a nonce (`nonce_mismatch`) unless the expected one is
+   * passed here, so the exchange cannot succeed without it.
+   */
   acquireTokenByCode(
     code: string,
     state: string,
+    nonce: string,
   ): Promise<AuthenticationResult | null> {
     return this.getClient().acquireTokenByCode({
       scopes: this.getScopes(),
       redirectUri: this.getRedirectUri(),
       code,
       state,
+      nonce,
     });
   }
 }

@@ -58,13 +58,23 @@ export class AzureCallbackController {
     if (error) {
       return fail(`provider error: ${error} ${errorDescription ?? ''}`);
     }
-    if (!code || !state || !expectedState || state !== expectedState) {
+    if (
+      !code ||
+      !state ||
+      !expectedState ||
+      state !== expectedState ||
+      !expectedNonce
+    ) {
       return fail('missing code or state/nonce validation failure');
     }
 
     let result: AuthenticationResult | null;
     try {
-      result = await this.azureAuthService.acquireTokenByCode(code, state);
+      result = await this.azureAuthService.acquireTokenByCode(
+        code,
+        state,
+        expectedNonce,
+      );
     } catch (err) {
       this.logger.error('Azure token exchange failed', err as Error);
       return fail('token exchange error');
