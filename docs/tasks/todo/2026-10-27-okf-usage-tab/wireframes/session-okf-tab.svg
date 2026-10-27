@@ -1,0 +1,327 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1235" viewBox="0 0 1440 1235" font-family="Segoe UI, Inter, Arial, sans-serif">
+  <style>
+    .t { font-size: 13px; fill: #111827; }
+    .s { font-size: 12px; fill: #111827; }
+    .xs { font-size: 11px; fill: #111827; }
+    .m { fill: #6b7280; }
+    .cap { font-size: 10.5px; fill: #6b7280; letter-spacing: .4px; }
+    .mono { font-family: Consolas, 'JetBrains Mono', monospace; }
+    .b { font-weight: 600; }
+    .line { stroke: #e5e7eb; stroke-width: 1; }
+    .note { font-size: 11px; fill: #b45309; font-style: italic; }
+  </style>
+  <rect width="1440" height="1235" fill="#ffffff"/>
+
+  <!-- Top bar -->
+  <rect width="1440" height="48" fill="#fafafa"/>
+  <line x1="0" y1="48" x2="1440" y2="48" class="line"/>
+  <circle cx="24" cy="24" r="7" fill="#3b4fd8"/>
+  <text x="44" y="29" class="t b">[local] Artisyn Log Hub</text><text x="198" y="29" class="xs m">dev</text>
+  <text x="1226" y="29" class="t m">dt@dataart.com</text><text x="1350" y="29" class="t b">Edit email</text>
+
+  <!-- Collapsed sidebar -->
+  <rect x="0" y="49" width="40" height="1186" fill="#fafafa"/>
+  <line x1="40" y1="49" x2="40" y2="1235" class="line"/>
+  <text x="14" y="72" class="s m">›</text>
+
+  <!-- Repo header + repo tabs -->
+  <text x="56" y="76" class="t mono">https://github.com/DataArt/artisyn-log-hub</text>
+  <text x="1290" y="76" class="s m">Sessions: 44  Users: 1</text>
+  <line x1="40" y1="94" x2="1440" y2="94" class="line"/>
+  <text x="70" y="117" class="t b">Sessions</text>
+  <rect x="64" y="128" width="66" height="2" fill="#111827"/>
+  <text x="146" y="117" class="t m">Analytics</text>
+  <text x="226" y="117" class="t m">Reports</text>
+  <text x="298" y="117" class="t m">OKF</text>
+  <text x="342" y="117" class="t m">Settings</text>
+  <line x1="40" y1="131" x2="1440" y2="131" class="line"/>
+
+  <!-- Session list (simplified) -->
+  <rect x="48" y="140" width="282" height="910" fill="#ffffff"/>
+  <rect x="48" y="140" width="282" height="28" rx="4" fill="#fff" stroke="#e5e7eb"/>
+  <text x="58" y="158" class="xs">By branch</text>
+  <text x="60" y="190" class="s b mono">main</text><text x="300" y="190" class="xs m">34</text>
+  <g>
+    <rect x="48" y="204" width="282" height="80" fill="#fff"/>
+    <text x="58" y="226" class="s b mono">2026-10-22 01:12:16</text><text x="202" y="226" class="s b mono" fill="#ea580c">| $28.7908</text>
+    <text x="58" y="246" class="xs m">/adlc-lh:implement-deep 2026-10-15-clau…</text>
+    <line x1="48" y1="284" x2="330" y2="284" class="line"/>
+    <rect x="48" y="285" width="282" height="80" fill="#f3f4f6"/>
+    <rect x="48" y="285" width="3" height="80" fill="#3b4fd8"/>
+    <text x="58" y="307" class="s b mono">2026-10-21 22:53:14</text><text x="202" y="307" class="s b mono" fill="#2563eb">| $12.1719</text>
+    <text x="58" y="327" class="xs m">/adlc-lh:plan-deep 2026-10-15-claude-dev…</text>
+    <line x1="48" y1="365" x2="330" y2="365" class="line"/>
+    <text x="58" y="388" class="s b mono">2026-10-21 21:57:11</text><text x="202" y="388" class="s b mono" fill="#16a34a">| $0.8139</text>
+    <text x="58" y="408" class="xs m">"why is the branch cost total wrong?"</text>
+    <line x1="48" y1="446" x2="330" y2="446" class="line"/>
+  </g>
+  <line x1="338" y1="131" x2="338" y2="1235" stroke="#e5e7eb" stroke-width="6"/>
+
+  <!-- Session header metrics -->
+  <rect x="342" y="132" width="1098" height="96" fill="#fafafa"/>
+  <text x="356" y="152" class="cap">START</text><text x="356" y="170" class="s mono">2026-10-21 19:40:14</text>
+  <text x="510" y="152" class="cap">END</text><text x="510" y="170" class="s mono">2026-10-21 22:53:14</text>
+  <text x="664" y="152" class="cap">USER</text><text x="664" y="170" class="s mono">dt@dataart.com</text>
+  <text x="820" y="152" class="cap">MODEL</text><text x="820" y="170" class="s mono">claude-opus-5-5</text>
+  <text x="356" y="196" class="cap">COST</text><text x="356" y="214" class="s mono">$12.1719</text>
+  <text x="510" y="196" class="cap">PROMPTS</text><text x="510" y="214" class="s mono">7</text>
+  <line x1="342" y1="228" x2="1440" y2="228" class="line"/>
+
+  <!-- Session tabs -->
+  <text x="360" y="256" class="t m">Summary</text>
+  <text x="434" y="256" class="t m">Info</text>
+  <text x="478" y="256" class="t m">Logs</text>
+  <text x="522" y="256" class="t m">Bash</text><text x="558" y="256" class="xs m mono">11</text>
+  <text x="590" y="256" class="t m">Charts</text>
+  <text x="650" y="256" class="t m">Statistics</text>
+  <text x="732" y="256" class="t m">Change surface</text>
+  <text x="846" y="256" class="t m">Harness usage</text>
+  <text x="962" y="256" class="t b">OKF</text>
+  <rect x="952" y="268" width="50" height="2" fill="#3b4fd8"/>
+  <text x="1018" y="256" class="t m">Raw Logs</text>
+  <rect x="1110" y="238" width="152" height="26" rx="4" fill="#eef2ff" stroke="#c7d2fe" stroke-dasharray="3 2"/>
+  <text x="1120" y="255" class="xs" fill="#3730a3">NEW TAB (FR-11..14a, FR-27)</text>
+  <line x1="342" y1="272" x2="1440" y2="272" class="line"/>
+
+  <!-- Toolbar -->
+  <text x="356" y="298" class="cap">OKF · WHOLE SESSION TREE (MAIN + 3 SUB-AGENTS) · 2 BUNDLES</text>
+  <text x="760" y="298" class="xs m">Read heat</text>
+  <rect x="818" y="284" width="112" height="22" rx="11" fill="#f3f4f6" stroke="#e5e7eb"/>
+  <rect x="819" y="285" width="56" height="20" rx="10" fill="#3b4fd8"/>
+  <text x="831" y="299" class="xs b" fill="#fff">Bytes</text><text x="887" y="299" class="xs m">Calls</text>
+  <rect x="948" y="287" width="28" height="16" rx="8" fill="#3b4fd8"/><circle cx="968" cy="295" r="6" fill="#fff"/>
+  <text x="982" y="299" class="xs">Show analysis</text>
+  <rect x="1072" y="284" width="196" height="22" rx="11" fill="#f5f3ff" stroke="#ddd6fe"/>
+  <text x="1082" y="299" class="xs" fill="#5b21b6">sonnet · run 2026-10-21 22:55 · $0.41</text>
+  <rect x="1276" y="284" width="150" height="22" rx="11" fill="#ecfdf5" stroke="#a7f3d0"/>
+  <text x="1286" y="299" class="xs" fill="#047857">model read files: yes</text>
+
+  <!-- Verdict summary (FR-14a) -->
+  <g>
+    <rect x="356" y="316" width="1070" height="136" rx="6" fill="#fff" stroke="#fcd34d"/>
+    <rect x="356" y="316" width="5" height="136" fill="#d97706"/>
+    <text x="374" y="338" class="cap">VERDICT · FR-14a</text>
+    <rect x="374" y="348" width="170" height="30" rx="15" fill="#fef3c7" stroke="#f59e0b"/>
+    <text x="392" y="368" class="t b" fill="#92400e">● Something to fix</text>
+    <text x="554" y="361" class="xs m">scale:</text>
+    <rect x="554" y="366" width="28" height="12" rx="6" fill="#dcfce7"/><text x="559" y="375" style="font-size:9px" fill="#15803d">OK</text>
+    <rect x="586" y="366" width="28" height="12" rx="6" fill="#fef3c7" stroke="#f59e0b"/><text x="592" y="375" style="font-size:9px" fill="#92400e">fix</text>
+    <rect x="618" y="366" width="34" height="12" rx="6" fill="#fee2e2"/><text x="623" y="375" style="font-size:9px" fill="#b91c1c">mess</text>
+    <text x="374" y="400" class="cap">WHY</text>
+    <text x="374" y="418" class="xs">• 68 % of KB reads = re-reads of own edits</text>
+    <text x="374" y="434" class="xs">• analysis: 2 false reads, 1 missed article</text>
+    <line x1="720" y1="328" x2="720" y2="440" class="line"/>
+    <text x="736" y="338" class="cap">READ · TOP 5 BY BYTES</text>
+    <text x="736" y="358" class="xs mono">bash-command-view.md</text><text x="896" y="358" class="xs mono">96 KB</text>
+    <text x="944" y="358" class="xs" fill="#9a3412">↻</text><text x="958" y="358" class="xs b" fill="#b91c1c">✗</text>
+    <text x="736" y="376" class="xs mono">harness-snapshot.md</text><text x="896" y="376" class="xs mono">14 KB</text><text x="958" y="376" class="xs b" fill="#b91c1c">✗</text>
+    <text x="736" y="394" class="xs mono">index.md</text><text x="896" y="394" class="xs mono">9 KB</text>
+    <text x="736" y="412" class="xs mono">db-tables.md</text><text x="896" y="412" class="xs mono">8 KB</text>
+    <text x="736" y="430" class="xs mono">change-surface.md</text><text x="896" y="430" class="xs mono">5 KB</text>
+    <text x="736" y="446" class="xs m">+ 7 more files</text>
+    <line x1="990" y1="328" x2="990" y2="440" class="line"/>
+    <text x="1006" y="338" class="cap" fill="#15803d">SHOULD HAVE BEEN READ, BUT WASN&#8217;T · 1</text>
+    <text x="1006" y="358" class="xs mono">session-metrics-scope.md</text>
+    <text x="1006" y="374" class="xs m">tree-scoped sums are the core of FR-4</text>
+    <text x="1006" y="396" class="xs" fill="#92400e">⚠ may be incomplete: prompt says "see GH-41",</text>
+    <text x="1006" y="410" class="xs" fill="#92400e">no issue text in the session</text>
+    <text x="1006" y="434" class="xs m">Click any line → opens that node in the tree.</text>
+  </g>
+  <text x="356" y="467" class="note">No analysis run → right column reads "Analysis is off — turn it on in Settings →", or "Not analysed: session cost $0.40 is below the $1.00 threshold" (FR-19);</text>
+  <text x="356" y="482" class="note">either way the badge adds "access data only". Run older than the latest prompt/KB access → badge adds "analysis may be stale". The tree below is the drill-down.</text>
+
+  <g transform="translate(0,175)">
+  <!-- Bundle summary cards (FR-13) -->
+  <g>
+    <rect x="356" y="316" width="530" height="74" rx="6" fill="#fff" stroke="#e5e7eb"/>
+    <rect x="356" y="316" width="4" height="74" fill="#3b4fd8"/>
+    <text x="372" y="338" class="s b mono">docs/knowledgebase</text>
+    <rect x="512" y="327" width="54" height="16" rx="8" fill="#ecfdf5"/><text x="519" y="339" class="xs" fill="#047857">tracked</text>
+    <rect x="572" y="327" width="150" height="16" rx="8" fill="#eff6ff"/><text x="580" y="339" class="xs" fill="#1d4ed8">✓ started from index.md</text>
+    <text x="372" y="362" class="cap">FILES READ</text><text x="372" y="380" class="s mono b">12 / 82 · 15 %</text>
+    <text x="512" y="362" class="cap">SECTIONS REACHED</text><text x="512" y="380" class="s mono b">31 / 640 · 5 %</text>
+    <text x="672" y="362" class="cap">CONTENT IN CONTEXT</text><text x="672" y="380" class="s mono b">184 KB / 2.19 MB · 8 %</text>
+
+    <rect x="898" y="316" width="528" height="74" rx="6" fill="#fff" stroke="#e5e7eb"/>
+    <rect x="898" y="316" width="4" height="74" fill="#9ca3af"/>
+    <text x="914" y="338" class="s b mono">docs/kb-local</text>
+    <rect x="1010" y="327" width="72" height="16" rx="8" fill="#fef3c7"/><text x="1017" y="339" class="xs" fill="#92400e">gitignored</text>
+    <text x="1090" y="339" class="xs m">personal view only</text>
+    <text x="914" y="362" class="cap">FILES READ</text><text x="914" y="380" class="s mono b">0 / 2 · 0 %</text>
+    <text x="1054" y="362" class="cap">SECTIONS REACHED</text><text x="1054" y="380" class="s mono b">0 / 9 · 0 %</text>
+    <text x="1214" y="362" class="cap">CONTENT IN CONTEXT</text><text x="1214" y="380" class="s mono b">0 B / 6 KB · 0 %</text>
+  </g>
+
+  <!-- Tree table (FR-11, FR-12, FR-27) -->
+  <rect x="356" y="404" width="740" height="560" rx="6" fill="#fff" stroke="#e5e7eb"/>
+  <rect x="357" y="405" width="738" height="28" fill="#fafafa"/>
+  <text x="370" y="423" class="cap">BUNDLE → FOLDER → FILE → SECTION</text>
+  <text x="680" y="423" class="cap">READ (BYTES)</text>
+  <text x="836" y="423" class="cap">WRITE</text>
+  <text x="940" y="423" class="cap">MARKERS</text>
+  <line x1="357" y1="433" x2="1095" y2="433" class="line"/>
+
+  <!-- row helper: y baseline -->
+  <!-- bundle -->
+  <text x="370" y="455" class="s m">▾</text><text x="384" y="455" class="s b mono">docs/knowledgebase</text>
+  <rect x="680" y="445" width="110" height="12" rx="2" fill="#f1f5f9"/><rect x="680" y="445" width="110" height="12" rx="2" fill="#1e40af"/>
+  <text x="796" y="455" class="xs mono">184 KB</text>
+  <rect x="836" y="445" width="60" height="12" rx="2" fill="#f1f5f9"/><rect x="836" y="445" width="38" height="12" rx="2" fill="#ea580c"/>
+  <text x="900" y="455" class="xs mono">12 KB</text>
+  <line x1="357" y1="466" x2="1095" y2="466" class="line"/>
+
+  <!-- index.md -->
+  <text x="398" y="487" class="s mono">index.md</text>
+  <rect x="680" y="477" width="110" height="12" rx="2" fill="#f1f5f9"/><rect x="680" y="477" width="22" height="12" rx="2" fill="#60a5fa"/>
+  <text x="796" y="487" class="xs mono">9 KB</text>
+  <rect x="836" y="477" width="60" height="12" rx="2" fill="#f1f5f9"/>
+  <rect x="940" y="476" width="64" height="16" rx="8" fill="#eff6ff"/><text x="947" y="488" class="xs" fill="#1d4ed8">entry point</text>
+  <line x1="357" y1="498" x2="1095" y2="498" class="line"/>
+
+  <!-- algorithms folder -->
+  <text x="384" y="519" class="s m">▾</text><text x="398" y="519" class="s mono">algorithms/</text>
+  <rect x="680" y="509" width="110" height="12" rx="2" fill="#f1f5f9"/><rect x="680" y="509" width="80" height="12" rx="2" fill="#1d4ed8"/>
+  <text x="796" y="519" class="xs mono">118 KB</text>
+  <rect x="836" y="509" width="60" height="12" rx="2" fill="#f1f5f9"/><rect x="836" y="509" width="30" height="12" rx="2" fill="#f97316"/>
+  <rect x="940" y="508" width="118" height="16" rx="8" fill="#f3f4f6"/><text x="947" y="520" class="xs m">grep -rn over folder ×3</text>
+  <line x1="357" y1="530" x2="1095" y2="530" class="line"/>
+
+  <!-- bash-command-view.md -->
+  <rect x="357" y="531" width="738" height="32" fill="#fef2f2"/>
+  <text x="398" y="551" class="s m">▾</text><text x="412" y="551" class="s mono">bash-command-view.md</text>
+  <rect x="680" y="541" width="110" height="12" rx="2" fill="#f1f5f9"/><rect x="680" y="541" width="66" height="12" rx="2" fill="#1d4ed8"/>
+  <text x="796" y="551" class="xs mono">96 KB</text>
+  <rect x="836" y="541" width="60" height="12" rx="2" fill="#f1f5f9"/><rect x="836" y="541" width="26" height="12" rx="2" fill="#f97316"/>
+  <text x="900" y="551" class="xs mono">8 KB</text>
+  <rect x="940" y="540" width="100" height="16" rx="8" fill="#fff7ed" stroke="#fdba74"/><text x="946" y="552" class="xs" fill="#9a3412">↻ own edit ×14</text>
+  <rect x="1044" y="540" width="46" height="16" rx="8" fill="#fee2e2" stroke="#fca5a5"/><text x="1050" y="552" class="xs b" fill="#b91c1c">✗ false</text>
+  <line x1="357" y1="563" x2="1095" y2="563" class="line"/>
+
+  <!-- sections -->
+  <text x="426" y="583" class="xs m">§</text><text x="438" y="583" class="xs">Overview</text><text x="590" y="583" class="xs m mono">L1–38</text>
+  <rect x="680" y="574" width="110" height="10" rx="2" fill="#f1f5f9"/><rect x="680" y="574" width="20" height="10" rx="2" fill="#93c5fd"/>
+  <text x="796" y="583" class="xs mono">6 KB</text>
+  <rect x="836" y="574" width="60" height="10" rx="2" fill="#f1f5f9"/>
+  <line x1="357" y1="592" x2="1095" y2="592" class="line"/>
+  <text x="426" y="611" class="xs m">§</text><text x="438" y="611" class="xs">Examples</text><text x="590" y="611" class="xs m mono">L39–260</text>
+  <rect x="680" y="602" width="110" height="10" rx="2" fill="#f1f5f9"/><rect x="680" y="602" width="100" height="10" rx="2" fill="#1e3a8a"/>
+  <text x="796" y="611" class="xs mono">82 KB</text>
+  <rect x="836" y="602" width="60" height="10" rx="2" fill="#f1f5f9"/><rect x="836" y="602" width="52" height="10" rx="2" fill="#c2410c"/>
+  <text x="900" y="611" class="xs mono">7 KB</text>
+  <line x1="357" y1="620" x2="1095" y2="620" class="line"/>
+  <text x="426" y="639" class="xs m">§</text><text x="438" y="639" class="xs">Edge cases</text><text x="590" y="639" class="xs m mono">L261–300</text>
+  <rect x="680" y="630" width="110" height="10" rx="2" fill="#f1f5f9"/><rect x="680" y="630" width="10" height="10" rx="2" fill="#bfdbfe"/>
+  <text x="796" y="639" class="xs mono">3 KB</text>
+  <rect x="836" y="630" width="60" height="10" rx="2" fill="#f1f5f9"/>
+  <line x1="357" y1="648" x2="1095" y2="648" class="line"/>
+
+  <!-- harness-snapshot.md -->
+  <text x="398" y="669" class="s m">▸</text><text x="412" y="669" class="s mono">harness-snapshot.md</text>
+  <rect x="680" y="659" width="110" height="12" rx="2" fill="#f1f5f9"/><rect x="680" y="659" width="14" height="12" rx="2" fill="#93c5fd"/>
+  <text x="796" y="669" class="xs mono">14 KB</text>
+  <rect x="836" y="659" width="60" height="12" rx="2" fill="#f1f5f9"/>
+  <rect x="940" y="658" width="70" height="16" rx="8" fill="#f3f4f6"/><text x="947" y="670" class="xs m">grep -n ×4</text>
+  <line x1="357" y1="680" x2="1095" y2="680" class="line"/>
+
+  <!-- session-metrics-scope.md : missed -->
+  <rect x="357" y="681" width="738" height="32" fill="#f0fdf4"/>
+  <text x="398" y="701" class="s mono" fill="#9ca3af">session-metrics-scope.md</text>
+  <rect x="680" y="691" width="110" height="12" rx="2" fill="#f1f5f9"/>
+  <text x="686" y="701" class="xs m">not read</text>
+  <rect x="836" y="691" width="60" height="12" rx="2" fill="#f1f5f9"/>
+  <rect x="940" y="690" width="132" height="16" rx="8" fill="#dcfce7" stroke="#86efac"/><text x="947" y="702" class="xs b" fill="#15803d">＋ could have helped *</text>
+  <line x1="357" y1="713" x2="1095" y2="713" class="line"/>
+
+  <!-- turn-end-cost-advisor.md never read -->
+  <text x="398" y="734" class="s mono" fill="#9ca3af">turn-end-cost-advisor.md</text>
+  <rect x="680" y="724" width="110" height="12" rx="2" fill="#f1f5f9"/>
+  <text x="686" y="734" class="xs m">not read</text>
+  <rect x="836" y="724" width="60" height="12" rx="2" fill="#f1f5f9"/>
+  <line x1="357" y1="745" x2="1095" y2="745" class="line"/>
+
+  <!-- log-schema folder never read -->
+  <text x="384" y="766" class="s m">▸</text><text x="398" y="766" class="s mono" fill="#9ca3af">log-schema/</text><text x="490" y="766" class="xs m">(6 files)</text>
+  <rect x="680" y="756" width="110" height="12" rx="2" fill="#f1f5f9"/>
+  <text x="686" y="766" class="xs m">not read</text>
+  <rect x="836" y="756" width="60" height="12" rx="2" fill="#f1f5f9"/>
+  <line x1="357" y1="777" x2="1095" y2="777" class="line"/>
+
+  <text x="384" y="798" class="xs m">… 64 more files (sorted by read heat, not-read last)</text>
+  <line x1="357" y1="809" x2="1095" y2="809" class="line"/>
+
+  <!-- kb-local bundle -->
+  <text x="370" y="830" class="s m">▸</text><text x="384" y="830" class="s b mono">docs/kb-local</text>
+  <rect x="490" y="819" width="72" height="16" rx="8" fill="#fef3c7"/><text x="497" y="831" class="xs" fill="#92400e">gitignored</text>
+  <rect x="680" y="820" width="110" height="12" rx="2" fill="#f1f5f9"/>
+  <text x="686" y="830" class="xs m">not read</text>
+  <rect x="836" y="820" width="60" height="12" rx="2" fill="#f1f5f9"/>
+  <line x1="357" y1="841" x2="1095" y2="841" class="line"/>
+
+  <!-- Legend -->
+  <text x="370" y="866" class="cap">LEGEND</text>
+  <text x="370" y="886" class="xs m">Read</text>
+  <rect x="404" y="877" width="16" height="10" fill="#bfdbfe"/><rect x="420" y="877" width="16" height="10" fill="#60a5fa"/><rect x="436" y="877" width="16" height="10" fill="#1d4ed8"/><rect x="452" y="877" width="16" height="10" fill="#1e3a8a"/>
+  <text x="478" y="886" class="xs m">Write</text>
+  <rect x="514" y="877" width="16" height="10" fill="#fed7aa"/><rect x="530" y="877" width="16" height="10" fill="#f97316"/><rect x="546" y="877" width="16" height="10" fill="#c2410c"/>
+  <text x="576" y="886" class="xs m">bar = share of the bundle max; Calls toggle swaps bytes for call counts</text>
+  <rect x="370" y="898" width="112" height="16" rx="8" fill="#fff7ed" stroke="#fdba74"/><text x="377" y="910" class="xs" fill="#9a3412">↻ re-read own edit</text>
+  <rect x="490" y="898" width="64" height="16" rx="8" fill="#eff6ff"/><text x="497" y="910" class="xs" fill="#1d4ed8">entry point</text>
+  <rect x="562" y="898" width="110" height="16" rx="8" fill="#f3f4f6"/><text x="569" y="910" class="xs m">grep / ls over folder</text>
+  <rect x="680" y="898" width="76" height="16" rx="8" fill="#fee2e2" stroke="#fca5a5"/><text x="686" y="910" class="xs b" fill="#b91c1c">✗ false read</text>
+  <rect x="764" y="898" width="118" height="16" rx="8" fill="#dcfce7" stroke="#86efac"/><text x="770" y="910" class="xs b" fill="#15803d">＋ could have helped</text>
+  <text x="890" y="910" class="xs m">(hidden when analysis is off)</text>
+  <rect x="370" y="918" width="112" height="16" rx="8" fill="#fef3c7" stroke="#fcd34d"/><text x="377" y="930" class="xs b" fill="#92400e">$ excessive read</text>
+  <text x="490" y="930" class="xs m">useful file, wasteful reading (e.g. read in full by N agents) — analysis `cost: excessive`</text>
+  <text x="370" y="948" class="xs m">* caveat: the analysis reported missing context, so "could have helped" may be incomplete.</text>
+  <text x="370" y="962" class="xs m">Hover / click a marker → popover with the model's reason.</text>
+
+  <!-- Analysis side panel (FR-27) -->
+  <rect x="1108" y="404" width="318" height="560" rx="6" fill="#fff" stroke="#e5e7eb"/>
+  <rect x="1109" y="405" width="316" height="28" fill="#f5f3ff"/>
+  <text x="1122" y="423" class="cap" fill="#5b21b6">KB USAGE ANALYSIS</text>
+  <rect x="1330" y="412" width="84" height="16" rx="8" fill="#ede9fe"/><text x="1338" y="424" class="xs" fill="#5b21b6">task: change</text>
+
+  <text x="1122" y="452" class="cap">SUMMARY</text>
+  <text x="1122" y="470" class="xs">The plan task needed the snapshot delivery</text>
+  <text x="1122" y="485" class="xs">flow; the agent re-read bash-command-view.md</text>
+  <text x="1122" y="500" class="xs">while editing it and never opened</text>
+  <text x="1122" y="515" class="xs">session-metrics-scope.md.</text>
+  <line x1="1120" y1="528" x2="1414" y2="528" class="line"/>
+
+  <text x="1122" y="548" class="cap" fill="#b91c1c">FALSE READS · 2</text>
+  <text x="1122" y="566" class="xs mono">bash-command-view.md › Examples</text>
+  <text x="1122" y="581" class="xs m">full re-reads of own edits, 82 KB</text>
+  <text x="1122" y="600" class="xs mono">harness-snapshot.md</text>
+  <text x="1122" y="615" class="xs m">unrelated to the planned change</text>
+  <line x1="1120" y1="628" x2="1414" y2="628" class="line"/>
+
+  <text x="1122" y="648" class="cap" fill="#15803d">COULD HAVE HELPED · 1</text>
+  <text x="1122" y="666" class="xs mono">session-metrics-scope.md</text>
+  <text x="1122" y="681" class="xs m">tree-scoped sums are the core of FR-4</text>
+  <line x1="1120" y1="694" x2="1414" y2="694" class="line"/>
+
+  <rect x="1120" y="704" width="294" height="62" rx="4" fill="#fffbeb" stroke="#fde68a"/>
+  <text x="1130" y="722" class="cap" fill="#92400e">MISSING CONTEXT · 1</text>
+  <text x="1130" y="740" class="xs" fill="#92400e">Prompt says "see GH-41" — no issue text in</text>
+  <text x="1130" y="755" class="xs" fill="#92400e">the session. "Could have helped" may be partial.</text>
+
+  <text x="1122" y="790" class="cap">INDEX HINTS · 2</text>
+  <text x="1122" y="808" class="xs mono">index.md</text>
+  <text x="1122" y="823" class="xs m">Add "read when changing session sums"</text>
+  <text x="1122" y="838" class="xs m">to the session-metrics-scope.md line.</text>
+  <text x="1122" y="858" class="xs mono">index.md</text>
+  <text x="1122" y="873" class="xs m">Split algorithms/ entries by area.</text>
+  <line x1="1120" y1="886" x2="1414" y2="886" class="line"/>
+  <text x="1122" y="904" class="cap" fill="#92400e">KB LACKS · 1 (gaps)</text>
+  <text x="1122" y="922" class="xs">Snapshot delivery retry rules — dug out of</text>
+  <text x="1122" y="937" class="xs">upload-queue.ts (4 reads, 38 KB); no article.</text>
+  <text x="1122" y="954" class="xs m">→ add a section to harness-snapshot.md</text>
+
+  <!-- FR-14 variant -->
+  <rect x="356" y="978" width="1070" height="68" rx="6" fill="#fffbeb" stroke="#fcd34d" stroke-dasharray="5 3"/>
+  <text x="372" y="998" class="cap" fill="#92400e">VARIANT · SESSION UPLOADED BY A HOOK WITHOUT OKF SNAPSHOT (FR-14)</text>
+  <text x="372" y="1018" class="s" fill="#78350f">⚠ No KB snapshot for this session — the tree shows only the paths that were accessed (no sections, no "not read" list).</text>
+  <text x="372" y="1036" class="s" fill="#78350f">Update the Log Hub hook in this repository to see the full bundle tree.</text>
+  <rect x="1300" y="1006" width="112" height="26" rx="4" fill="#fff" stroke="#d97706"/><text x="1316" y="1023" class="xs b" fill="#92400e">How to update</text>
+  </g>
+</svg>

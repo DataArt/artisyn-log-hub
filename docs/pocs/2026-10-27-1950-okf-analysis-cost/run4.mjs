@@ -1,0 +1,141 @@
+// v4: the analysis input is the preprocessed session facts (facts.ts — the session view's own
+// read/write/Bash analyser), the user prompts and the KB indexes; no transcript text otherwise.
+// Runs `claude -p` like the hook worker, then checks the result against the README criteria.
+//   node run4.mjs <tag> <id-prefix> [...]   → out-runs/<tag>/
+import fs from 'node:fs';
+import path from 'node:path';
+import os from 'node:os';
+import { spawn, execFileSync } from 'node:child_process';
+
+const [tag, ...SAMPLE] = process.argv.slice(2);
+if (!tag || !SAMPLE.length) throw new Error('usage: node run4.mjs <tag> <id-prefix> [...]');
+const MODEL = 'sonnet';
+const TIMEOUT_MS = 10 * 60 * 1000;
+const here = import.meta.dirname;
+const repoRoot = path.resolve(here, '../../..');
+const outDir = path.join(here, 'out-runs', tag);
+fs.mkdirSync(outDir, { recursive: true });
+const BUNDLES = ['docs/knowledgebase', 'docs/kb-local'];
+const PROMPT_FILE = path.join(here, process.env.PROMPT || 'prompt-v4.md');
+// v4b: KB_AT_SESSION=1 → judge against the KB as it was when the session started. `docs/` of the
+// last commit before the session is unpacked (read-only `git archive`) into the OS temp dir —
+// outside the repo, so Claude Code finds no CLAUDE.md, rules or hook settings walking up — and
+// `claude -p` runs there.
+// docs/kb-local is gitignored, so it is copied from the working tree.
+const KB_AT_SESSION = process.env.KB_AT_SESSION === '1';
+
+function kbRootFor(startedAt) {
+  if (!KB_AT_SESSION) return repoRoot;
+  const commit = execFileSync('git', ['rev-list', '-1', `--before=${startedAt}`, 'main'], { cwd: repoRoot, encoding: 'utf8' }).trim();
+  const dir = path.join(os.tmpdir(), 'okf-poc-kb-snapshots', commit.slice(0, 10));
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+    const tarball = execFileSync('git', ['archive', '--format=tar', commit, 'docs'], { cwd: repoRoot, maxBuffer: 512 * 1024 * 1024 });
+    execFileSync('tar', ['-x', '-C', dir.replace(/\\/g, '/')], { input: tarball, shell: process.platform === 'win32' });
+    fs.cpSync(path.join(repoRoot, 'docs/kb-local'), path.join(dir, 'docs/kb-local'), { recursive: true });
+  }
+  return dir;
+}
+
+const kbIndexes = (root) => BUNDLES.map((b) => {
+  const p = path.join(root, b, 'index.md');
+  return fs.existsSync(p) ? `### ${b}/index.md\n${fs.readFileSync(p, 'utf8')}` : '';
+}).filter(Boolean).join('\n\n');
+
+const kb = (p) => BUNDLES.some((b) => p === b || p.startsWith(b + '/'));
+
+function factsSection(f) {
+  const kbReads = f.reads.filter((r) => r.kb);
+  const other = f.reads.filter((r) => !r.kb).slice(0, 40);
+  const row = (r) => `- ${r.path}: ${r.bytes} bytes into context, ${r.calls} calls by ${r.agents} agent(s)`
+    + `${r.ownEditBytes ? `, ${r.ownEditBytes} bytes after the same agent's own edit` : ''}`
+    + `${r.ranges.length ? `, ranges ${r.ranges.join(' ')}` : ''}, via ${r.via.join(', ')}`;
+  return [
+    `Session started at ${f.startedAt}; it has ${f.prompts.length} user prompts.`,
+    `### KB reads (whole session tree, sub-agents included)\n${kbReads.length ? kbReads.map(row).join('\n') : '(none — the session read no KB file)'}`,
+    `### KB files written\n${f.changes.filter((c) => c.kb).map((c) => `- ${c.path}: ${c.edits} edits`).join('\n') || '(none)'}`,
+    `### Other files changed (${f.changes.filter((c) => !c.kb).length})\n${f.changes.filter((c) => !c.kb).slice(0, 80).map((c) => `- ${c.path} (${c.edits})`).join('\n') || '(none)'}`,
+    `### Other files read, top ${other.length} by bytes (code the session had to explore)\n${other.map((r) => `- ${r.path}: ${r.bytes} bytes, ${r.calls} calls`).join('\n') || '(none)'}`,
+    `### Commands run\n${f.runs.slice(0, 15).map((r) => `- ${r.run} ×${r.times}`).join('\n') || '(none)'}`,
+  ].join('\n\n');
+}
+
+function callClaude(prompt, cwd) {
+  return new Promise((resolve) => {
+    const t0 = Date.now();
+    const child = spawn('claude', ['--model', MODEL, '--print', '--no-session-persistence', '--output-format', 'stream-json', '--verbose'], {
+      shell: process.platform === 'win32', windowsHide: true, cwd,
+      env: { ...process.env, ARTISYN_HOOK_SERVICE: 'okf-analysis-poc' },
+    });
+    let out = '';
+    let err = '';
+    const timer = setTimeout(() => child.kill(), TIMEOUT_MS);
+    child.stdout.on('data', (c) => { out += c; });
+    child.stderr.on('data', (c) => { err += c; });
+    child.on('close', (code) => { clearTimeout(timer); resolve({ code, out, err: err.slice(-2000), ms: Date.now() - t0 }); });
+    child.stdin.end(prompt);
+  });
+}
+
+function parseStream(out) {
+  let env = {};
+  const tools = [];
+  for (const line of out.split('\n')) {
+    let ev;
+    try { ev = JSON.parse(line); } catch { continue; }
+    if (ev.type === 'result') env = ev;
+    if (ev.type === 'assistant') {
+      for (const b of ev.message?.content || []) {
+        if (b.type === 'tool_use') tools.push(`${b.name} ${String(b.input?.file_path || b.input?.command || b.input?.pattern || '').replace(/\\/g, '/').replace(/^.*\/_repo\//, '')}`);
+      }
+    }
+  }
+  let result = null;
+  const text = String(env.result || '');
+  const m = text.match(/\{[\s\S]*\}/);
+  try { result = m ? JSON.parse(m[0]) : null; } catch { /* not json */ }
+  return { env, tools, result, text };
+}
+
+// Automatic part of the README criteria (2, 3); 4 and 5 are judged by reading the result.
+function check(f, r, kbRoot) {
+  const kbReadPaths = f.reads.filter((x) => x.kb).map((x) => x.path);
+  const judged = new Set((r?.reads || []).map((x) => x.path));
+  const missed = r?.missed || [];
+  return {
+    kbReadsJudged: `${kbReadPaths.filter((p) => judged.has(p)).length}/${kbReadPaths.length}`,
+    missedExist: `${missed.filter((x) => fs.existsSync(path.join(kbRoot, x.path))).length}/${missed.length}`,
+    missedButRead: missed.filter((x) => kbReadPaths.includes(x.path)).map((x) => x.path),
+    missedNotKb: missed.filter((x) => !kb(x.path)).map((x) => x.path),
+    notNeeded: (r?.reads || []).filter((x) => x.verdict === 'not_needed').length,
+  };
+}
+
+const template = fs.readFileSync(PROMPT_FILE, 'utf8');
+const rows = [];
+for (const prefix of SAMPLE) {
+  const f = JSON.parse(execFileSync('bun', ['facts.ts', prefix], { cwd: here, encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, shell: process.platform === 'win32' }));
+  fs.writeFileSync(path.join(outDir, `${prefix}.facts.json`), JSON.stringify(f, null, 2));
+  const kbRoot = kbRootFor(f.startedAt);
+  const prompt = template
+    .replace('{{PROMPTS}}', f.prompts.map((p, i) => `### Prompt ${i + 1}\n${p}`).join('\n\n') || '(none)')
+    .replace('{{FACTS}}', factsSection(f))
+    .replace('{{KB_INDEXES}}', kbIndexes(kbRoot));
+  fs.writeFileSync(path.join(outDir, `${prefix}.prompt.md`), prompt);
+  console.log(`[${prefix}] prompt ${Math.round(Buffer.byteLength(prompt) / 1024)} KB, running…`);
+  const r = await callClaude(prompt, kbRoot);
+  fs.writeFileSync(path.join(outDir, `${prefix}.out.jsonl`), r.out || r.err);
+  const { env, tools, result, text } = parseStream(r.out);
+  fs.writeFileSync(path.join(outDir, `${prefix}.result.json`), result ? JSON.stringify(result, null, 2) : text);
+  fs.writeFileSync(path.join(outDir, `${prefix}.tools.txt`), tools.join('\n'));
+  const row = {
+    id: prefix, promptKB: Math.round(Buffer.byteLength(prompt) / 1024), kbReads: f.reads.filter((x) => x.kb).length,
+    exit: r.code, sec: Math.round(r.ms / 1000), turns: env.num_turns ?? null, costUsd: env.total_cost_usd ?? null,
+    toolCalls: tools.length, json: Boolean(result), taskKind: result?.taskKind ?? null,
+    missed: result?.missed?.length ?? null, gaps: result?.gaps?.length ?? null, ...check(f, result, kbRoot),
+    excessive: (result?.reads || []).filter((x) => x.cost === 'excessive').length,
+  };
+  rows.push(row);
+  console.log(JSON.stringify(row));
+}
+fs.writeFileSync(path.join(outDir, 'summary.json'), JSON.stringify(rows, null, 2));
