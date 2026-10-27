@@ -44,11 +44,9 @@ facts that skill uses (FR-20).
 ### Phase 1 — Server: OKF access facts from transcripts (no hook change)
 
 - **FR-1** At ingest of `claude` / `claude-subagent` logs, extract every access to a `.md` file
-  with the existing session analyser (FR-20): Read (whole file, or the range from
-  `offset`/`limit`); Bash — the files `analyzeBash` reports as reads / changes, with a line range
-  added for `sed -n`, `head`, `tail` and the matched lines of `grep -n`; Grep; Glob / `ls` on a
-  folder (listing); Edit / MultiEdit (write — range from the position of `old_string` when it can
-  be located, else the whole file); Write (write, whole file). Store the bytes of each call's
+  **at file level only — no sections or line ranges** (owner decision), with the existing session
+  analyser (FR-20): Read; Bash — the files `analyzeBash` reports as reads / changes; Grep; Glob /
+  `ls` on a folder (listing); Edit / MultiEdit / Write (write). Store the bytes of each call's
   `tool_result`; when one Bash command touches several files, its bytes are split evenly between
   them, never charged to each in full.
 - **FR-2** Normalise paths against the repo and worktree roots with a helper that returns
@@ -56,14 +54,14 @@ facts that skill uses (FR-20).
   `normaliseReadPath()`, which falls back to the absolute path). A path that does not resolve under
   a repo root, or a session with no known roots, stores nothing (no absolute local paths in the DB).
 - **FR-3** Store the facts in a new table `session_okf_access(session_id int FK sessions.id cascade,
-  path_key varchar, op 'read'|'grep'|'list'|'write', after_own_edit bool, line_ranges jsonb
-  [[start,end],…] (null = whole file), bytes bigint, calls int)`, unique on
+  path_key varchar, op 'read'|'grep'|'list'|'write', after_own_edit bool, bytes bigint, calls int)`,
+  unique on
   `(session_id, path_key, op, after_own_edit)`, one set of rows per session-tree node (the tree sum
   comes from `getDescendantSessionIds` at read time). `after_own_edit` = the access comes after an
   Edit/Write of the same path by the same agent earlier in its transcript. The writer runs
   everywhere `writeSessionFileStats` runs (ingest, import, the claude-before-artisyn heal,
-  recompute) with per-node delete-then-insert. Bundle and section are resolved at read time from
-  the snapshot (FR-8), so old sessions never need rewriting when a snapshot appears.
+  recompute) with per-node delete-then-insert. The bundle is resolved at read time from the
+  snapshot (FR-8), so old sessions never need rewriting when a snapshot appears.
 - **FR-4** All figures are summed over the whole session tree (sub-agents included), per
   `session-metrics-scope.md`.
 - **FR-5** History is filled by the existing `recompute-all-sessions`; the migration only creates
@@ -80,8 +78,7 @@ facts that skill uses (FR-20).
   bundle folder are **not** followed or included. Global OKF bases outside the project (e.g.
   `~/.claude`) are **not** searched.
 - **FR-8** Snapshot content per file: path, `ignored` flag (via `git check-ignore --stdin` on the
-  found files only), size, line count, outline (headings with line ranges), content hash. File
-  content is never sent.
+  found files only), size, content hash. No outline and no file content is sent.
 - **FR-9** Exclusions: `okf.exclude` (glob patterns) in `log-hub.json` / `log-hub.local.json`;
   `tmp/` excluded by default (it holds junk KB copies such as `tmp/kb-baseline`).
 - **FR-10** Delivery mirrors `harness-snapshot`: a content-addressed `okfSnapshotId`; the full
@@ -93,16 +90,16 @@ facts that skill uses (FR-20).
   created_at)` unique on `(user_id, snapshot_id)`. The snapshot lines and params ride only on the
   root session's `artisyn` upload, like the harness snapshot; the root session is bound to the
   snapshot of its first upload that carries one and is never rebound, like `harness_snapshot_id`.
-  Sub-agent rows keep `okf_snapshot_id` null, and every node of a tree resolves sections through
-  the root's snapshot. If the KB changes during the session, sections still resolve against that
-  bound snapshot; accessed ranges beyond its line count show as "outside known outline". Lifecycle:
+  Sub-agent rows keep `okf_snapshot_id` null, and every node of a tree resolves bundles through
+  the root's snapshot; a file the session created is shown as "not in the KB at session start".
+  Lifecycle:
   a `deleteOrphanOkfSnapshots(tx)` sweep runs wherever `deleteOrphanHarnessSnapshots` runs;
   repository export writes the `okf-snapshot` / `okf-snapshot-ref` lines from `okf_snapshots` and
   import rebinds `sessions.okf_snapshot_id`, as for harness snapshots.
 
 ### Phase 3 — UI: OKF tab in the session view
 
-- **FR-11** Tree "bundle → folder → file → section" with two heat scales: read (bytes put into
+- **FR-11** Tree "bundle → folder → file" (no sections) with two heat scales: read (bytes put into
   context by default, toggle to call count) and write.
 - **FR-12** Markers: grep/listing over a whole folder; whether the session started from `index.md`
   (the chronologically first OKF access in the whole session tree, any op, targets the bundle's
@@ -110,14 +107,12 @@ facts that skill uses (FR-20).
   and "read by N agents". The last two describe cost, not KB quality: each sub-agent is an
   independent task with an empty context and may need the same article (owner decision), so they
   never feed the verdict.
-- **FR-13** Summary: share of each bundle that reached the context — files = distinct files with at
-  least one read/grep range ÷ bundle files; sections = sections whose lines overlap any read/grep
-  range ÷ all sections (any overlap counts, one `grep -n` hit line included); content = deduplicated
-  union of read/grep line ranges ÷ total bundle lines. Listing ops and greps without line numbers
-  count toward no share, only heat and markers. The heat scale uses raw summed `tool_result` bytes
-  (can exceed file size); the UI labels it "bytes into context".
-- **FR-14** Without a snapshot (old hook): the tree is built only from accessed paths (no sections,
-  no "not read" list), with an "update the hook" hint.
+- **FR-13** Summary per bundle: files read = distinct files with at least one `read` or `grep` row
+  ÷ bundle files (the **file share**), and the bytes into context. Listings count toward no share,
+  only heat and markers. The heat scale uses raw summed `tool_result` bytes (can exceed file size);
+  the UI labels it "bytes into context".
+- **FR-14** Without a snapshot (old hook): the tree is built only from accessed paths (no "not
+  read" list), with an "update the hook" hint.
 - **FR-14a** **Verdict summary at the top of the tab** — the first thing on the tab, above the
   bundle cards, so the owner gets a quick answer without opening the tree. One card with:
   - a verdict badge on a three-step scale: **OK** (green) / **Something to fix** (amber) / **Mess**
@@ -135,14 +130,14 @@ facts that skill uses (FR-20).
   cards stay as the drill-down. The rules are deterministic and judge **KB use — granularity and
   findability — not cost**, per agent of the tree (each agent is its own task, judged on its own
   reads); the verdict is the worst severity triggered:
-  - content in context (FR-13) of any bundle with ≥ 10 files > 50 % → **Mess**; > 25 % →
-    **Something to fix** (smaller bundles are skipped; the share leaves out `after_own_edit`
-    ranges and files the agent wrote, which still show in the heat);
+  - file share (FR-13) of any bundle with ≥ 10 files > 50 % → **Mess**; > 25 % → **Something to
+    fix** (smaller bundles are skipped; files the agent wrote are left out, they still show in the
+    heat);
   - an agent that read KB articles of a bundle without reading that bundle's `index.md` first →
     **Something to fix** ("agent X went to 4 KB articles without the index").
 
   **KB read bytes** = summed `bytes` of `read` and `grep` rows, `after_own_edit` rows included
-  (`list` and `write` excluded); one definition for the Read top 5 and the repo hot sections
+  (`list` and `write` excluded); one definition for the Read top 5 and the repo hot files
   (FR-16). Boundary cases: no bundle in the snapshot and no access → no verdict card; no access →
   **KB not used**.
 
@@ -158,11 +153,10 @@ facts that skill uses (FR-20).
   report inside Reports). Aggregate over sessions with filters: period, branch, user (team view),
   `attr=`; filters apply at once — no Generate button. The
   bundle set is the latest snapshot in the filtered range (per branch when filtered by branch).
-  Each session's accesses resolve to sections through its own bound snapshot, then fold into the
-  latest tree by path + heading text (not line numbers); paths or headings missing from the latest
-  snapshot go to a "no longer in KB" group; sessions without a snapshot add file-level heat only.
-- **FR-16** Highlights: not read in the period, hot sections (top 10 by read bytes in the filter),
-  distribution of the content read share per session (bins 0–10 %, 10–25 %, 25–50 %, > 50 %).
+  Each session's accesses fold into the latest tree by path; paths missing from the latest
+  snapshot go to a "no longer in KB" group.
+- **FR-16** Highlights: not read in the period, hot files (top 10 by read bytes in the filter),
+  distribution of the file share per session (bins 0–10 %, 10–25 %, 25–50 %, > 50 %).
   "Not read" is **informational only** and neutral in the UI: an article may describe a module no
   session touched, and not reading it is then correct. Whether an unread article should have been
   read is judged only by the on-demand skill (task `2026-10-27-kb-completeness-deep`).
@@ -179,7 +173,7 @@ facts that skill uses (FR-20).
   filtered sessions that touched the KB:
   - **Always read**: a file other than a bundle `index.md` read (read/grep op) in ≥ 80 % of them →
     Something to fix (one line per file);
-  - **KB flood**: sessions with content read share > 25 % (FR-16 bins) — any → Something to fix;
+  - **KB flood**: sessions with file share > 25 % (FR-16 bins) — any → Something to fix;
     ≥ 20 % of the sessions → Mess;
   - **Index bypassed**: sessions that started from `index.md` (FR-12) < 50 % → Something to fix;
 
@@ -189,9 +183,9 @@ facts that skill uses (FR-20).
   tree (FR-4). Not enough data, Always read and Index bypassed count every KB-touching tree in the
   filter, snapshot-less ones included; KB flood counts only trees with a bound snapshot; when
   snapshot-less trees are present the badge adds "partial data — N of M
-  sessions without a snapshot". Per-session content share (FR-16 bins, KB flood, median tile) =
-  union of read/grep lines across the bundles visible in the current view ÷ their total lines (team
-  view: `ignored: false` bundles only). Boundary cases: 0 KB sessions in the filter → **KB not
+  sessions without a snapshot". Per-session file share (FR-16 bins, KB flood, median tile) =
+  distinct files read across the bundles visible in the current view ÷ their files (team view:
+  `ignored: false` bundles only). Boundary cases: 0 KB sessions in the filter → **KB not
   used**; 1–4 → **Not enough data** replaces the severity and the anomaly lines are shown without
   one. Computed on the server from the same filtered data as the tree, so in the team view no line
   ever names an ignored path (FR-17); thresholds are pinned by `algorithms/okf-verdict.md`.
@@ -200,11 +194,10 @@ facts that skill uses (FR-20).
   `GET /api/v1/repositories/:repoId/reports/okf-usage?startDate&endDate&branches&users&teamId&attr`
   (`resolveUsageScope`). Both responses start with
   `verdict: { level: 'ok'|'fix'|'mess'|'kb_not_used'|'not_enough_data', qualifiers:
-  'partial_data'[], findings: [{ rule, severity: 'fix'|'mess', params, node: { bundle, path?,
-  sectionHeading? } }] }`, then `bundles`, `tree` and (session route only) `agents: [{ id,
+  'partial_data'[], findings: [{ rule, severity: 'fix'|'mess', params, node: { bundle, path? } }] }`, then `bundles`, `tree` and (session route only) `agents: [{ id,
   taskHead, entry: 'index' | 'search' | 'given', kbReads }]`. The
   server sends rule ids and numeric/path `params`, never finished text; the client renders the
-  plain-language line. `node` uses the tree's own key (path + heading text, FR-15).
+  plain-language line. `node` uses the tree's own key (bundle + path, FR-15).
 
 ![Repository OKF tab wireframe](wireframes/repo-okf-tab.svg)
 
@@ -225,15 +218,15 @@ facts that skill uses (FR-20).
   `facts.ts`): the session start; the user prompts, filtered (no `<task-notification>`, command
   output or system reminders; a slash command kept as `/name args`, CLI utilities like `/clear`
   dropped — algorithm doc `algorithms/okf-task-context.md`); and **per agent** (main, and each
-  sub-agent with its own spawn prompt): KB reads (bytes, calls, line ranges, own-edit bytes), the
+  sub-agent with its own spawn prompt): KB reads (bytes, calls, own-edit bytes, the file's size), the
   order of its first KB accesses, other files read (top by bytes), files changed; tree-wide: files
   changed and read, commands run. No tool result text.
 
 ### Phase 6 — later
 
-- **FR-29** Section ↔ changed-code co-occurrence across sessions (no LLM): sections about a changed
+- **FR-29** Article ↔ changed-code co-occurrence across sessions (no LLM): articles about a changed
   area that are never read.
-- **FR-30** Staleness: sections read often, not edited for long, while their code changed.
+- **FR-30** Staleness: articles read often, not edited for long, while their code changed.
 - **FR-31** Before/after comparison of an index reorganisation (multi-index) on the same metrics.
 
 ## Non-Functional Requirements
@@ -244,13 +237,13 @@ facts that skill uses (FR-20).
   the matrix in `hook-api-versioning.md`.
 - Detection must not slow down the interactive session: it runs at upload, not `SessionStart`.
   Re-measure on a large repo (thousands of `.md`); if slow, cache the snapshot by the mtime tree.
-- Gitignored file content never leaves the machine; only metadata (path, size, outline, hash).
+- Gitignored file content never leaves the machine; only metadata (path, size, hash).
 
 ## Acceptance Criteria
 
 - [ ] FR-1/2: for a session that reads a KB article via `sed -n 10,40p`, `grep -n`, `cat` and Read
-      with `offset`/`limit`, `session_okf_access` holds the expected path keys, ops, line ranges and
-      bytes (algorithm doc `okf-access-extraction.md` examples).
+      with `offset`/`limit`, `session_okf_access` holds the expected path keys, ops, bytes and
+      calls (no line ranges) (algorithm doc `okf-access-extraction.md` examples).
 - [ ] FR-3/5: after `recompute-all-sessions`, sessions ingested before the feature have OKF access
       rows.
 - [ ] FR-4: a read done only inside a sub-agent shows in the root session's OKF tab.
@@ -258,11 +251,11 @@ facts that skill uses (FR-20).
       once.
 - [ ] FR-7/9: on this repo the hook detects `docs/knowledgebase` (with `log-schema/` and `test/`
       inside it) and `docs/kb-local`, and not `tmp/kb-baseline`; `private_kb` is not followed.
-- [ ] FR-8: the snapshot carries path, ignored flag, size, line count, outline and hash per file and
-      no file content.
+- [ ] FR-8: the snapshot carries path, ignored flag, size and hash per file — no outline, no file
+      content.
 - [ ] FR-10: a second upload with an unchanged KB sends only the `okfSnapshotId` reference.
-- [ ] FR-11/13: the session tab shows the bundle tree with read and write heat per section and a
-      bundle read-share summary; the scale toggles between bytes and calls.
+- [ ] FR-11/13: the session tab shows the bundle → folder → file tree (no sections) with read and
+      write heat per file and a bundle file-share summary; the scale toggles between bytes and calls.
 - [ ] FR-9: an `okf.exclude: ["docs/kb-local/**"]` entry in `log-hub.local.json` removes that
       bundle from the snapshot.
 - [ ] FR-10: a session that edits the KB across two uploads stays bound to its first snapshot.
@@ -283,9 +276,9 @@ facts that skill uses (FR-20).
       and the "three or more kinds → Mess" rule match the `okf-verdict.md` examples.
 - [ ] FR-14a/17a: clicking a Why or anomaly line expands and scrolls to its node in the tree.
 - [ ] FR-10: deleting the last session bound to a snapshot removes the `okf_snapshots` row; a
-      repository export/import keeps the OKF tab's sections (step in the export/import scenario).
+      repository export/import keeps the OKF tab's bundles (step in the export/import scenario).
 - [ ] FR-15/16: the repo tab aggregates the filtered sessions, lists not-read nodes as neutral info (no warning colour), the
-      top-10 hot sections and the read-share distribution.
+      top-10 hot files and the file-share distribution.
 - [ ] FR-17: the team-view response for a repo with an ignored bundle contains no ignored path; the
       personal view of the same user shows it; a snapshot-less session that read `docs/kb-local`
       adds nothing to the team view.
@@ -307,23 +300,23 @@ facts that skill uses (FR-20).
 
 - Routes: session `…/sessions/:sessionId/okf-usage`, repo `…/reports/okf-usage`; verdict sent as rule ids + params, text rendered by the client (FR-18).
 - KB read bytes = `read` + `grep` bytes, own-edit rows included; one definition everywhere (FR-14a).
-- Repo rule unit = root session tree; snapshot-less trees count only where no section data is needed (FR-17a).
+- Repo rule unit = root session tree; snapshot-less trees count only where no bundle file list is needed (FR-17a).
 - Mess-by-count counts the three named rule kinds, not lines (FR-17a).
 - Unread articles are never a problem by themselves: no dead-weight rule (FR-16, owner decision).
 - Per-session share = line union over the bundles visible in the current view (FR-17a).
-- Session share rule is per agent and skips bundles under 10 files and own-edit/written ranges (FR-14a).
+- Session share rule is per agent and skips bundles under 10 files and files the agent wrote (FR-14a).
 - The verdict judges KB use (granularity, findability), not cost; own-edit re-reads and "read by N agents" are information only (FR-12, FR-14a, owner decision).
 - No LLM analysis in this feature; it is the on-demand local skill of `2026-10-27-kb-completeness-deep` (FR-19, owner decision).
 - Boundary badges: no bundle → no card; no access → KB not used; 1–4 repo sessions → Not enough data (FR-14a, FR-17a).
 - Path normalisation returns null instead of an absolute fallback (FR-2).
 - OKF snapshot rides on the root upload only; orphan sweep and export/import mirror harness snapshots (FR-10).
-- Read-share formulas: files / overlapping sections / deduplicated lines; listings count only toward heat (FR-13).
-- Hot sections = top 10 by read bytes; distribution bins 0–10 / 10–25 / 25–50 / > 50 % (FR-16).
+- Tracking is per file only — no sections, outlines or line ranges anywhere; the share is distinct files read ÷ bundle files; listings count only toward heat (FR-1, FR-8, FR-13, owner decision).
+- Hot files = top 10 by read bytes; distribution bins 0–10 / 10–25 / 25–50 / > 50 % (FR-16).
 - Team view fails closed on unknown or conflicting `ignored` status (FR-17).
 - Snapshot wire format mirrors harness-snapshot; first-upload binding replaces "nearest to its start" (FR-10).
 - `session_okf_access` is per tree node, written wherever `writeSessionFileStats` runs; unresolved paths are not stored (FR-2, FR-3).
 - "Re-read of own edit" is an `after_own_edit` split of read rows, not a per-path boolean (FR-3, FR-12).
-- Repo aggregate folds accesses by path + heading via each session's own snapshot (FR-15).
+- Repo aggregate folds accesses by path into the latest snapshot's tree (FR-15).
 - Facts come from the existing session analyser (`analyzeBash`), moved to `packages/`, and are served to the skill by `GET /api/v2/okf-usage/facts` (FR-20).
 
 ## Notes

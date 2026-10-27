@@ -133,8 +133,8 @@
     <rect x="512" y="327" width="54" height="16" rx="8" fill="#ecfdf5"/><text x="519" y="339" class="xs" fill="#047857">tracked</text>
     <rect x="572" y="327" width="150" height="16" rx="8" fill="#eff6ff"/><text x="580" y="339" class="xs" fill="#1d4ed8">✓ started from index.md</text>
     <text x="372" y="362" class="cap">FILES READ</text><text x="372" y="380" class="s mono b">12 / 82 · 15 %</text>
-    <text x="512" y="362" class="cap">SECTIONS REACHED</text><text x="512" y="380" class="s mono b">31 / 640 · 5 %</text>
-    <text x="672" y="362" class="cap">CONTENT IN CONTEXT</text><text x="672" y="380" class="s mono b">184 KB / 2.19 MB · 8 %</text>
+    
+    <text x="560" y="362" class="cap">BYTES INTO CONTEXT</text><text x="560" y="380" class="s mono b">184 KB</text>
 
     <rect x="898" y="316" width="528" height="74" rx="6" fill="#fff" stroke="#e5e7eb"/>
     <rect x="898" y="316" width="4" height="74" fill="#9ca3af"/>
@@ -142,14 +142,14 @@
     <rect x="1010" y="327" width="72" height="16" rx="8" fill="#fef3c7"/><text x="1017" y="339" class="xs" fill="#92400e">gitignored</text>
     <text x="1090" y="339" class="xs m">personal view only</text>
     <text x="914" y="362" class="cap">FILES READ</text><text x="914" y="380" class="s mono b">0 / 2 · 0 %</text>
-    <text x="1054" y="362" class="cap">SECTIONS REACHED</text><text x="1054" y="380" class="s mono b">0 / 9 · 0 %</text>
-    <text x="1214" y="362" class="cap">CONTENT IN CONTEXT</text><text x="1214" y="380" class="s mono b">0 B / 6 KB · 0 %</text>
+    
+    <text x="1100" y="362" class="cap">BYTES INTO CONTEXT</text><text x="1100" y="380" class="s mono b">0 B</text>
   </g>
 
   <!-- Tree table (FR-11, FR-12) -->
   <rect x="356" y="404" width="740" height="560" rx="6" fill="#fff" stroke="#e5e7eb"/>
   <rect x="357" y="405" width="738" height="28" fill="#fafafa"/>
-  <text x="370" y="423" class="cap">BUNDLE → FOLDER → FILE → SECTION</text>
+  <text x="370" y="423" class="cap">BUNDLE → FOLDER → FILE</text>
   <text x="680" y="423" class="cap">READ (BYTES)</text>
   <text x="836" y="423" class="cap">WRITE</text>
   <text x="940" y="423" class="cap">MARKERS</text>
@@ -182,7 +182,7 @@
 
   <!-- bash-command-view.md -->
   <rect x="357" y="531" width="738" height="32" fill="#f8fafc"/>
-  <text x="398" y="551" class="s m">▾</text><text x="412" y="551" class="s mono">bash-command-view.md</text>
+  <text x="412" y="551" class="s mono">bash-command-view.md</text>
   <rect x="680" y="541" width="110" height="12" rx="2" fill="#f1f5f9"/><rect x="680" y="541" width="66" height="12" rx="2" fill="#1d4ed8"/>
   <text x="796" y="551" class="xs mono">96 KB</text>
   <rect x="836" y="541" width="60" height="12" rx="2" fill="#f1f5f9"/><rect x="836" y="541" width="26" height="12" rx="2" fill="#f97316"/>
@@ -190,26 +190,25 @@
   <rect x="940" y="540" width="88" height="16" rx="8" fill="#fff7ed" stroke="#fdba74"/><text x="946" y="552" class="xs" fill="#9a3412">↻ own edit ×14</text>
   <line x1="357" y1="563" x2="1095" y2="563" class="line"/>
 
-  <!-- sections -->
-  <text x="426" y="583" class="xs m">§</text><text x="438" y="583" class="xs">Overview</text><text x="590" y="583" class="xs m mono">L1–38</text>
-  <rect x="680" y="574" width="110" height="10" rx="2" fill="#f1f5f9"/><rect x="680" y="574" width="20" height="10" rx="2" fill="#93c5fd"/>
-  <text x="796" y="583" class="xs mono">6 KB</text>
-  <rect x="836" y="574" width="60" height="10" rx="2" fill="#f1f5f9"/>
+  <!-- more files (file level only, no sections) -->
+  <text x="412" y="583" class="s mono">tool-call-sections.md</text>
+  <rect x="680" y="573" width="110" height="12" rx="2" fill="#f1f5f9"/><rect x="680" y="573" width="16" height="12" rx="2" fill="#93c5fd"/>
+  <text x="796" y="583" class="xs mono">12 KB</text>
+  <rect x="836" y="573" width="60" height="12" rx="2" fill="#f1f5f9"/>
   <line x1="357" y1="592" x2="1095" y2="592" class="line"/>
-  <text x="426" y="611" class="xs m">§</text><text x="438" y="611" class="xs">Examples</text><text x="590" y="611" class="xs m mono">L39–260</text>
-  <rect x="680" y="602" width="110" height="10" rx="2" fill="#f1f5f9"/><rect x="680" y="602" width="100" height="10" rx="2" fill="#1e3a8a"/>
-  <text x="796" y="611" class="xs mono">82 KB</text>
-  <rect x="836" y="602" width="60" height="10" rx="2" fill="#f1f5f9"/><rect x="836" y="602" width="52" height="10" rx="2" fill="#c2410c"/>
-  <text x="900" y="611" class="xs mono">7 KB</text>
+  <text x="412" y="611" class="s mono">tool-call-outcome.md</text>
+  <rect x="680" y="601" width="110" height="12" rx="2" fill="#f1f5f9"/><rect x="680" y="601" width="12" height="12" rx="2" fill="#93c5fd"/>
+  <text x="796" y="611" class="xs mono">9 KB</text>
+  <rect x="836" y="601" width="60" height="12" rx="2" fill="#f1f5f9"/>
   <line x1="357" y1="620" x2="1095" y2="620" class="line"/>
-  <text x="426" y="639" class="xs m">§</text><text x="438" y="639" class="xs">Edge cases</text><text x="590" y="639" class="xs m mono">L261–300</text>
-  <rect x="680" y="630" width="110" height="10" rx="2" fill="#f1f5f9"/><rect x="680" y="630" width="10" height="10" rx="2" fill="#bfdbfe"/>
-  <text x="796" y="639" class="xs mono">3 KB</text>
-  <rect x="836" y="630" width="60" height="10" rx="2" fill="#f1f5f9"/>
+  <text x="412" y="639" class="s mono">README.md</text>
+  <rect x="680" y="629" width="110" height="12" rx="2" fill="#f1f5f9"/><rect x="680" y="629" width="8" height="12" rx="2" fill="#93c5fd"/>
+  <text x="796" y="639" class="xs mono">6 KB</text>
+  <rect x="836" y="629" width="60" height="12" rx="2" fill="#f1f5f9"/>
   <line x1="357" y1="648" x2="1095" y2="648" class="line"/>
 
   <!-- harness-snapshot.md -->
-  <text x="398" y="669" class="s m">▸</text><text x="412" y="669" class="s mono">harness-snapshot.md</text>
+  <text x="412" y="669" class="s mono">harness-snapshot.md</text>
   <rect x="680" y="659" width="110" height="12" rx="2" fill="#f1f5f9"/><rect x="680" y="659" width="14" height="12" rx="2" fill="#93c5fd"/>
   <text x="796" y="669" class="xs mono">14 KB</text>
   <rect x="836" y="659" width="60" height="12" rx="2" fill="#f1f5f9"/>
@@ -298,7 +297,7 @@
   <!-- FR-14 variant -->
   <rect x="356" y="978" width="1070" height="68" rx="6" fill="#fffbeb" stroke="#fcd34d" stroke-dasharray="5 3"/>
   <text x="372" y="998" class="cap" fill="#92400e">VARIANT · SESSION UPLOADED BY A HOOK WITHOUT OKF SNAPSHOT (FR-14)</text>
-  <text x="372" y="1018" class="s" fill="#78350f">⚠ No KB snapshot for this session — the tree shows only the paths that were accessed (no sections, no "not read" list).</text>
+  <text x="372" y="1018" class="s" fill="#78350f">⚠ No KB snapshot for this session — the tree shows only the paths that were accessed (no "not read" list).</text>
   <text x="372" y="1036" class="s" fill="#78350f">Update the Log Hub hook in this repository to see the full bundle tree.</text>
   <rect x="1300" y="1006" width="112" height="26" rx="4" fill="#fff" stroke="#d97706"/><text x="1316" y="1023" class="xs b" fill="#92400e">How to update</text>
   </g>

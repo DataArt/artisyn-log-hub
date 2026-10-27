@@ -92,20 +92,20 @@
     <text x="130" y="290" class="xs m">snapshot 2026-10-26 (main)</text>
     <rect x="334" y="232" width="262" height="78" rx="6" fill="#fff" stroke="#e5e7eb"/><rect x="334" y="232" width="4" height="78" fill="#9ca3af"/>
     <text x="352" y="256" class="cap">NOT READ (PERIOD) · INFO ONLY</text><text x="352" y="290" class="t b" style="font-size:22px">29</text>
-    <text x="392" y="290" class="xs m">files · 412 sections</text>
+    <text x="392" y="290" class="xs m">files</text>
     <rect x="608" y="232" width="262" height="78" rx="6" fill="#fff" stroke="#e5e7eb"/><rect x="608" y="232" width="4" height="78" fill="#7c3aed"/>
     <text x="626" y="256" class="cap">SESSIONS IN FILTER · TOUCHED KB</text><text x="626" y="290" class="t b" style="font-size:22px">49 / 70</text>
     <rect x="882" y="232" width="262" height="78" rx="6" fill="#fff" stroke="#e5e7eb"/><rect x="882" y="232" width="4" height="78" fill="#ea580c"/>
     <text x="900" y="256" class="cap">SESSIONS STARTED FROM INDEX</text><text x="900" y="290" class="t b" style="font-size:22px">21 / 49</text><text x="980" y="290" class="xs m">43 %</text>
     <rect x="1156" y="232" width="268" height="78" rx="6" fill="#fff" stroke="#e5e7eb"/><rect x="1156" y="232" width="4" height="78" fill="#16a34a"/>
-    <text x="1174" y="256" class="cap">MEDIAN READ SHARE / SESSION</text><text x="1174" y="290" class="t b" style="font-size:22px">6 %</text>
+    <text x="1174" y="256" class="cap">MEDIAN FILE SHARE / SESSION</text><text x="1174" y="290" class="t b" style="font-size:22px">6 %</text>
     <text x="1220" y="290" class="xs m">max 18 % (15 files)</text>
   </g>
 
   <!-- Aggregated tree -->
   <rect x="60" y="326" width="900" height="640" rx="6" fill="#fff" stroke="#e5e7eb"/>
   <rect x="61" y="327" width="898" height="30" fill="#fafafa"/>
-  <text x="74" y="346" class="cap">BUNDLE → FOLDER → FILE → SECTION</text>
+  <text x="74" y="346" class="cap">BUNDLE → FOLDER → FILE</text>
   <text x="430" y="346" class="cap">READ (BYTES, ALL SESSIONS)</text>
   <text x="626" y="346" class="cap">SESSIONS</text>
   <text x="694" y="346" class="cap">WRITE</text>
@@ -138,22 +138,21 @@
   <line x1="61" y1="457" x2="959" y2="457" class="line"/>
 
   <rect x="61" y="458" width="898" height="32" fill="#f8fafc"/>
-  <text x="102" y="478" class="s m">▾</text><text x="116" y="478" class="s mono">bash-command-view.md</text>
+  <text x="116" y="478" class="s mono">bash-command-view.md</text><rect x="320" y="467" width="60" height="16" rx="8" fill="#fee2e2"/><text x="328" y="479" class="xs b" fill="#b91c1c">🔥 hot #1</text>
   <rect x="430" y="468" width="130" height="12" rx="2" fill="#f1f5f9"/><rect x="430" y="468" width="70" height="12" rx="2" fill="#1d4ed8"/><text x="566" y="478" class="xs mono">1.8 MB</text>
   <text x="626" y="478" class="xs mono">6</text>
   <rect x="694" y="468" width="60" height="12" rx="2" fill="#f1f5f9"/><rect x="694" y="468" width="52" height="12" rx="2" fill="#c2410c"/><text x="758" y="478" class="xs mono">4</text>
   <text x="790" y="478" class="xs mono m">9</text>
   <line x1="61" y1="490" x2="959" y2="490" class="line"/>
 
-  <text x="130" y="510" class="xs m">§</text><text x="142" y="510" class="xs">Examples</text><text x="250" y="510" class="xs m mono">L39–260</text>
-  <rect x="320" y="499" width="60" height="16" rx="8" fill="#fee2e2"/><text x="328" y="511" class="xs b" fill="#b91c1c">🔥 hot #1</text>
-  <rect x="430" y="501" width="130" height="10" rx="2" fill="#f1f5f9"/><rect x="430" y="501" width="64" height="10" rx="2" fill="#1e3a8a"/><text x="566" y="510" class="xs mono">1.5 MB</text>
-  <text x="626" y="510" class="xs mono">6</text>
-  <rect x="694" y="501" width="60" height="10" rx="2" fill="#f1f5f9"/><rect x="694" y="501" width="48" height="10" rx="2" fill="#c2410c"/><text x="758" y="510" class="xs mono">4</text>
-  <text x="790" y="510" class="xs mono m">8</text>
+  <text x="116" y="510" class="s mono">tool-call-sections.md</text>
+  <rect x="430" y="501" width="130" height="10" rx="2" fill="#f1f5f9"/><rect x="430" y="501" width="30" height="10" rx="2" fill="#60a5fa"/><text x="566" y="510" class="xs mono">420 KB</text>
+  <text x="626" y="510" class="xs mono">5</text>
+  <rect x="694" y="501" width="60" height="10" rx="2" fill="#f1f5f9"/><text x="758" y="510" class="xs mono m">0</text>
+  <text x="790" y="510" class="xs mono m">7</text>
   <line x1="61" y1="520" x2="959" y2="520" class="line"/>
 
-  <text x="102" y="542" class="s m">▸</text><text x="116" y="542" class="s mono">harness-snapshot.md</text>
+  <text x="116" y="542" class="s mono">harness-snapshot.md</text>
   <rect x="430" y="532" width="130" height="12" rx="2" fill="#f1f5f9"/><rect x="430" y="532" width="26" height="12" rx="2" fill="#60a5fa"/><text x="566" y="542" class="xs mono">380 KB</text>
   <text x="626" y="542" class="xs mono">11</text>
   <rect x="694" y="532" width="60" height="12" rx="2" fill="#f1f5f9"/><text x="758" y="542" class="xs mono m">0</text>
@@ -205,12 +204,12 @@
   <text x="74" y="776" class="cap">NOTES</text>
   <text x="74" y="796" class="xs m">Bundle tree = latest snapshot in the filtered range (per branch when a branch is selected).</text>
   <text x="74" y="814" class="xs m">AGENTS = agents that read the node across the filtered sessions — information only, not a finding.</text>
-  <text x="74" y="832" class="xs m">Click a node → side drawer with the per-session list (session, agents, read bytes, ranges).</text>
+  <text x="74" y="832" class="xs m">Click a node → side drawer with the per-session list (session, agents, read bytes, calls).</text>
   <text x="74" y="850" class="xs m">Sorted by read heat; not-read nodes last and dimmed (neutral).</text>
 
   <!-- Highlights column (FR-16) -->
   <rect x="976" y="326" width="448" height="186" rx="6" fill="#fff" stroke="#e5e7eb"/>
-  <text x="992" y="350" class="cap">READ SHARE PER SESSION · 49 SESSIONS</text>
+  <text x="992" y="350" class="cap">FILE SHARE PER SESSION · 49 SESSIONS</text>
   <line x1="992" y1="480" x2="1408" y2="480" stroke="#9ca3af"/>
   <rect x="1004" y="380" width="70" height="100" fill="#60a5fa"/><text x="1030" y="374" class="xs mono">31</text>
   <rect x="1104" y="420" width="70" height="60" fill="#60a5fa"/><text x="1130" y="414" class="xs mono">14</text>
@@ -219,11 +218,11 @@
   <text x="1018" y="498" class="xs m">0–10 %</text><text x="1112" y="498" class="xs m">10–25 %</text><text x="1212" y="498" class="xs m">25–50 %</text><text x="1322" y="498" class="xs m">&gt;50 %</text>
 
   <rect x="976" y="524" width="448" height="150" rx="6" fill="#fff" stroke="#e5e7eb"/>
-  <text x="992" y="548" class="cap">HOT SECTIONS · TOP BY READ BYTES</text>
-  <text x="992" y="570" class="xs mono">1  bash-command-view.md › Examples</text><text x="1360" y="570" class="xs mono">1.5 MB</text>
-  <text x="992" y="590" class="xs mono">2  db-tables.md › sessions</text><text x="1360" y="590" class="xs mono">320 KB</text>
-  <text x="992" y="610" class="xs mono">3  harness-snapshot.md › Delivery</text><text x="1360" y="610" class="xs mono">210 KB</text>
-  <text x="992" y="630" class="xs mono">4  hook-api-versioning.md › Matrix</text><text x="1360" y="630" class="xs mono">180 KB</text>
+  <text x="992" y="548" class="cap">HOT FILES · TOP BY READ BYTES</text>
+  <text x="992" y="570" class="xs mono">1  algorithms/bash-command-view.md</text><text x="1360" y="570" class="xs mono">1.8 MB</text>
+  <text x="992" y="590" class="xs mono">2  db-tables.md</text><text x="1360" y="590" class="xs mono">410 KB</text>
+  <text x="992" y="610" class="xs mono">3  algorithms/harness-snapshot.md</text><text x="1360" y="610" class="xs mono">380 KB</text>
+  <text x="992" y="630" class="xs mono">4  hook-api-versioning.md</text><text x="1360" y="630" class="xs mono">180 KB</text>
   <text x="992" y="656" class="xs" fill="#3b4fd8">Show all →</text>
 
   <rect x="976" y="686" width="448" height="128" rx="6" fill="#fff" stroke="#e5e7eb"/>
