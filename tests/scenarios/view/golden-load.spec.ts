@@ -392,12 +392,7 @@ test('GOLDEN-LOAD work time per day merges overlapping sessions @mode-a', async 
   }
 });
 
-// Code bug, recorded in the task Notes ("Golden numbers vs the app", branch cost): the computed
-// cost of GET .../sessions/branches (Cost by Branch, Branch Summary) is root-only, while the
-// session list, timeline and Executive Summary roll up sub-agents. expected.json keeps the tree
-// value; remove `test.fail` once the branch route rolls up its sub-agents.
 test('GOLDEN-LOAD cost by branch includes sub-agents @mode-a', async ({ golden }) => {
-  test.fail(true, 'branch cost is root-only — see requirements.md Notes, "Golden numbers vs the app"');
   const rows = await getJson<{ branch: string; totalCost: number | null }[]>(golden, '/sessions/branches', golden.range);
   for (const [branch, cost] of Object.entries(golden.totals.costByBranch)) {
     const row = rows.find((r) => r.branch === branch);
