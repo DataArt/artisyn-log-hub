@@ -1,6 +1,6 @@
 # Security scan report
 
-_Commit [`66f9184`](https://github.com/DataArt/artisyn-log-hub/commit/66f9184e92a1c9eeb77c5915b23595228a26b038) on `main` · updated 2026-10-27 12:24 UTC · [workflow run](https://github.com/DataArt/artisyn-log-hub/actions/runs/40503331354)_
+_Commit [`ec04be7`](https://github.com/DataArt/artisyn-log-hub/commit/ec04be7787189da501075bb6d09f8dd36294d0c2) on `main` · updated 2026-10-27 13:42 UTC · [workflow run](https://github.com/DataArt/artisyn-log-hub/actions/runs/40514214858)_
 
 The README badge counts every row below except Snyk Open Source (dev) — devDependencies do not
 ship — and skipped rows. How the scans work: [ci-security-scans.md](https://github.com/DataArt/artisyn-log-hub/blob/main/docs/knowledgebase/ci-security-scans.md).
@@ -9,19 +9,19 @@ ship — and skipped rows. How the scans work: [ci-security-scans.md](https://gi
 
 | Tool | Status | Critical | High | Medium | Low | Details |
 |---|---|---|---|---|---|---|
-| Snyk Open Source (prod) | ✅ pass | 0 | 0 | 0 | 0 | [link](https://github.com/DataArt/artisyn-log-hub/actions/runs/40503331354) no issues |
-| Snyk Open Source (dev) | ❌ findings | 1 | 13 | 14 | 1 | [link](https://github.com/DataArt/artisyn-log-hub/actions/runs/40503331354) 11 fixable high/critical |
-| Snyk — installer tarballs | ✅ pass | 0 | 0 | 0 | 0 | [link](https://github.com/DataArt/artisyn-log-hub/actions/runs/40503331354) no issues |
-| Executable-config guard | ✅ pass | 0 | 0 | 0 | 0 | [link](https://github.com/DataArt/artisyn-log-hub/actions/runs/40503331354) |
-| Lock-file registry | ✅ pass | 0 | 0 | 0 | 0 | [link](https://github.com/DataArt/artisyn-log-hub/actions/runs/40503331354) ok |
-| npm registry signatures | ✅ pass | 0 | 0 | 0 | 0 | [link](https://github.com/DataArt/artisyn-log-hub/actions/runs/40503331354) ok |
-| actionlint | ✅ pass | 0 | 0 | 0 | 0 | [link](https://github.com/DataArt/artisyn-log-hub/actions/runs/40503331354) ok |
-| zizmor | ✅ pass | 0 | 0 | 0 | 0 | [link](https://github.com/DataArt/artisyn-log-hub/actions/runs/40503331354) no issues |
-| hadolint | ✅ pass | 0 | 0 | 0 | 0 | [link](https://github.com/DataArt/artisyn-log-hub/actions/runs/40503331354) no issues |
-| docker compose config | ✅ pass | 0 | 0 | 0 | 0 | [link](https://github.com/DataArt/artisyn-log-hub/actions/runs/40503331354) ok |
+| Snyk Open Source (prod) | ✅ pass | 0 | 0 | 0 | 0 | [link](https://github.com/DataArt/artisyn-log-hub/actions/runs/40514214858) no issues |
+| Snyk Open Source (dev) | ❌ findings | 1 | 13 | 14 | 1 | [link](https://github.com/DataArt/artisyn-log-hub/actions/runs/40514214858) 11 fixable high/critical |
+| Snyk — installer tarballs | ✅ pass | 0 | 0 | 0 | 0 | [link](https://github.com/DataArt/artisyn-log-hub/actions/runs/40514214858) no issues |
+| Executable-config guard | ✅ pass | 0 | 0 | 0 | 0 | [link](https://github.com/DataArt/artisyn-log-hub/actions/runs/40514214858) |
+| Lock-file registry | ✅ pass | 0 | 0 | 0 | 0 | [link](https://github.com/DataArt/artisyn-log-hub/actions/runs/40514214858) ok |
+| npm registry signatures | ✅ pass | 0 | 0 | 0 | 0 | [link](https://github.com/DataArt/artisyn-log-hub/actions/runs/40514214858) ok |
+| actionlint | ✅ pass | 0 | 0 | 0 | 0 | [link](https://github.com/DataArt/artisyn-log-hub/actions/runs/40514214858) ok |
+| zizmor | ✅ pass | 0 | 0 | 0 | 0 | [link](https://github.com/DataArt/artisyn-log-hub/actions/runs/40514214858) no issues |
+| hadolint | ✅ pass | 0 | 0 | 0 | 0 | [link](https://github.com/DataArt/artisyn-log-hub/actions/runs/40514214858) no issues |
+| docker compose config | ✅ pass | 0 | 0 | 0 | 0 | [link](https://github.com/DataArt/artisyn-log-hub/actions/runs/40514214858) ok |
 | Snyk Container | ✅ pass | 0 | 0 | 0 | 0 | [link](https://github.com/DataArt/artisyn-log-hub/actions/runs/40476901952) as of 2026-10-27 08:56 UTC: no issues |
-| Node runtime (Dockerfile) | ✅ pass | 0 | 0 | 0 | 0 | [link](https://github.com/DataArt/artisyn-log-hub/actions/runs/40503331354) 24.22.1 is the latest patch |
-| Node runtime (docker-dev) | ✅ pass | 0 | 0 | 0 | 0 | [link](https://github.com/DataArt/artisyn-log-hub/actions/runs/40503331354) 24.22.1 is the latest patch |
+| Node runtime (Dockerfile) | ✅ pass | 0 | 0 | 0 | 0 | [link](https://github.com/DataArt/artisyn-log-hub/actions/runs/40514214858) 24.22.1 is the latest patch |
+| Node runtime (docker-dev) | ✅ pass | 0 | 0 | 0 | 0 | [link](https://github.com/DataArt/artisyn-log-hub/actions/runs/40514214858) 24.22.1 is the latest patch |
 | VirusTotal — artisyn-hooks-installer.tgz | ✅ pass | 0 | 0 | 0 | 0 | [link](https://www.virustotal.com/gui/file/089e7d2598946bb78427a426f91f4bbbf61cf9323be976a5bf4f10dcaa3ea3f9) as of 2026-10-27 08:56 UTC: 0/75 engines |
 | VirusTotal — hooks.tar.gz | ✅ pass | 0 | 0 | 0 | 0 | [link](https://www.virustotal.com/gui/file/e56503a752c8f0713c84d8c07043b17e1d30a108ee90d8b2695f94c2998e549e) as of 2026-10-27 08:56 UTC: 0/75 engines |
 
