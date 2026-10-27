@@ -46,6 +46,11 @@ which makes switching look cheap. It isn't; see above.
   `AZURE_SCOPES` are passed through by the per-environment overlay (`docker-compose.dev.yml`,
   `docker-compose.prod.yml`). Supply them from the deploy pipeline's secret store, never from the
   repo. `AZURE_REDIRECT_URI` is `https://<public host>/api/auth/callback`.
+- The release install kit (`release-template/docker-compose.yml`) passes the same five `AZURE_*`
+  variables plus `AZURE_AUTHORITY` from the install's `.env`; they are documented, commented out,
+  in `release-template/.env.example`. There an unset `AZURE_SCOPES` is substituted with the app's
+  own default `openid profile email` in the compose file, because compose turns an unset `${VAR:-}`
+  into an empty string, which would fail startup.
 - Compose `environment:` entries **override** `env_file: .env`, and an unset `${VAR}` resolves to an
   empty string rather than falling back — so a variable missing from the pipeline blanks out whatever
   the deploy host's own `.env` held. An empty `AZURE_SCOPES` is a hard startup failure by design
