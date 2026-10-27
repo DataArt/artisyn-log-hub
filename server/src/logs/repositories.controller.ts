@@ -68,6 +68,7 @@ import {
   type CostBreakdown,
 } from './otel-cost.sql';
 import {
+  loadTreeCostRows,
   readTreeCost,
   TREE_COST_COLUMNS_SQL,
   treeCostCtes,
@@ -1132,7 +1133,6 @@ export class RepositoriesController {
        */
       session_row_ids: (string | number)[];
       session_lines_changed_own: (string | number)[];
-      total_cost: string | null;
     };
 
     const result = await this.db.execute(sql`
@@ -1145,17 +1145,11 @@ export class RepositoriesController {
         SUM(COALESCE(ss.work_time_ms, 0))::text         AS total_work_time_ms,
         SUM(COALESCE(ss.lines_changed, 0))::text        AS total_lines_changed_own,
         ARRAY_AGG(s.id)                                 AS session_row_ids,
-        ARRAY_AGG(COALESCE(ss.lines_changed, 0))        AS session_lines_changed_own,
-        -- Stored computed cost of each root (NULL = unpriced / no row). The OTEL total
-        -- never stands in for it (Log Hub's price is the source of truth, see
-        -- otel-cost.sql.ts). Still root-only: sub-agents and utility calls are not rolled
-        -- up here (a known gap, pinned by the golden-load branch scenario).
-        SUM(sc.cost)::text                              AS total_cost
+        ARRAY_AGG(COALESCE(ss.lines_changed, 0))        AS session_lines_changed_own
       FROM logs l
       INNER JOIN sessions s ON s.id = l.session_id AND s.deleted = false
       INNER JOIN log_repositories lr ON lr.log_id = l.id
       LEFT JOIN session_stats ss ON ss.session_id = l.session_id
-      LEFT JOIN session_costs sc ON sc.session_id = l.session_id
       WHERE ${repoBranchFilter}
         AND l.log_type = 'artisyn'
         AND l.first_prompt IS NOT NULL
@@ -1174,7 +1168,9 @@ export class RepositoriesController {
 
     // One extra batched query for the tree rollup of every
     // root on every branch, never a per-branch or per-session round trip. The `git_branch`
-    // grouping above stays untouched; the tree total is folded here.
+    // grouping above stays untouched; the tree total is folded here. The tree cost (root +
+    // sub-agents + utility calls, the session list's per-row value) is loaded in the same
+    // batch.
     const branchRootIds = [
       ...new Set(
         branchRows.flatMap((row) =>
@@ -1182,16 +1178,21 @@ export class RepositoriesController {
         ),
       ),
     ];
-    const branchTreeMetrics = await loadTreeMetricsByRoot(
-      this.db,
-      branchRootIds,
-    );
+    const [branchTreeMetrics, branchTreeCosts] = await Promise.all([
+      loadTreeMetricsByRoot(this.db, branchRootIds),
+      loadTreeCostRows(this.db, branchRootIds),
+    ]);
 
     return branchRows.map((row) => {
       const rootIds = row.session_row_ids ?? [];
       const ownLines = row.session_lines_changed_own ?? [];
       let totalLinesChanged = 0;
+      // Null only when every root's tree is unpriced (`$???`), as SQL SUM was; an
+      // unpriced root adds nothing. Log Hub's price only — the OTEL total never stands in.
+      let totalCost: number | null = null;
       rootIds.forEach((rawId, i) => {
+        const treeCost = readTreeCost(branchTreeCosts.get(Number(rawId))).total;
+        if (treeCost != null) totalCost = (totalCost ?? 0) + treeCost;
         // withOwnFallback is the only sanctioned tree+own combination: the rollup already
         // contains the root, so the own value is added back only for a root the rollup
         // never counted (no session_stats row, or excluded by the OTEL-only-row guard).
@@ -1207,7 +1208,7 @@ export class RepositoriesController {
         totalWorkTimeMs: Number(row.total_work_time_ms),
         totalLinesChanged,
         totalLinesChangedOwn: Number(row.total_lines_changed_own),
-        totalCost: row.total_cost != null ? parseFloat(row.total_cost) : null,
+        totalCost,
       };
     });
   }

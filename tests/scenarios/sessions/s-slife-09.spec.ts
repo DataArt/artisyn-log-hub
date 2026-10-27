@@ -16,8 +16,7 @@
 //   - the timeline's tree `filesEditedWritten` is the sum of the per-node counters
 //     (`SUM(session_stats.files_edited_written)`, session-tree-metrics.sql.ts): A 1 + B 2 + D 1 = 4,
 //     although B and A both touch invoice.ts (3 distinct files — that union is the change surface).
-//   - the branch route's cost is root-only (golden-load, task Notes «Golden numbers vs the app»),
-//     so this scenario does not compare branch cost.
+//   - the branch route's cost is the tree cost (R tree + P), the same as the session rows.
 //
 // Replaces:
 //   - server/test/session-tree-metrics.e2e-spec.ts (15)
@@ -33,6 +32,7 @@ import {
   uploadGolden,
   type GoldenRootExpected,
 } from '../helpers/golden';
+import { usd4 } from '../helpers/session-view';
 import { skipNewUserNudge } from '../helpers/teams';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -52,6 +52,7 @@ interface BranchRow {
   totalLinesChanged: number;
   totalLinesChangedOwn: number;
   totalWorkTimeMs: number;
+  totalCost: number | null;
 }
 interface NodeStats {
   linesChanged: number;
@@ -141,7 +142,7 @@ test('@S-SLIFE-09 session metrics count the whole agent tree, not just the root 
     checkTimeline(first.timeline, R, P);
   });
 
-  await test.step(`2. branches: main lines ${branchLines}, own ${branchOwn}; work time is the union of the roots, not the sum of agents`, async () => {
+  await test.step(`2. branches: main lines ${branchLines}, own ${branchOwn}, cost R tree + P; work time is the union of the roots, not the sum of agents`, async () => {
     expect(first.branches).toHaveLength(1);
     const main = first.branches[0];
     expect(main).toMatchObject({
@@ -151,6 +152,7 @@ test('@S-SLIFE-09 session metrics count the whole agent tree, not just the root 
       totalLinesChangedOwn: branchOwn,
       totalWorkTimeMs: R.workTimeMs + P.workTimeMs,
     });
+    expect(main.totalCost).toBeCloseTo(totalCost, 6);
   });
 
   await test.step('3. R’s logs: A, B, D carry their own lines; they add up to the tree; B is nested under A', async () => {
@@ -191,6 +193,20 @@ test('@S-SLIFE-09 session metrics count the whole agent tree, not just the root 
     await expect(page.getByLabel(`Connection from main to ${a}`, { exact: true })).toHaveCount(1);
     await expect(page.getByLabel(`Connection from main to ${d}`, { exact: true })).toHaveCount(1);
     await expect(page.getByLabel(`Connection from main to ${b}`, { exact: true })).toHaveCount(0);
+  });
+
+  await test.step('5b. UI: «main» header cost = sum of its session rows', async () => {
+    await page.goto(`/#/repos/${loaded.repoId}`);
+    // Session rows carry the branch name too — only the group header is not a session-item.
+    const header = page.locator('button:not([data-testid="session-item"])', { has: page.locator('span.font-mono', { hasText: /^main$/ }) });
+    await expect(header).toContainText(usd4(totalCost));
+    // `main` is the only (first) branch, so it is open by default — no click needed.
+    const costs = page.getByTestId('session-item-cost');
+    await expect(costs).toHaveCount(2);
+    const sum = (await costs.allTextContents())
+      .map((t) => parseFloat(/\$([0-9.]+)/.exec(t)?.[1] ?? 'NaN'))
+      .reduce((a, b) => a + b, 0);
+    expect(sum).toBeCloseTo(totalCost, 3);
   });
 
   await test.step('6. all four endpoints again: the same numbers, nothing recounted or doubled', async () => {

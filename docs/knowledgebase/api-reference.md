@@ -1400,7 +1400,7 @@ export interface BranchSummary {
   // The root-only figure, kept additively: the branch's root sessions only. Never add
   // it to totalLinesChanged — it is already included there (double count).
   totalLinesChangedOwn: number;
-  totalCost: number | null;    // sum of the root sessions' own stored cost (session_costs.cost, Log Hub prices; never the OTEL figure since 2026-10-26); root-only — sub-agents and utility calls are not rolled up here; null when no session is priced
+  totalCost: number | null;    // sum of the roots' tree costs (own + sub-agents + utility calls, loadTreeCostRows/readTreeCost; Log Hub prices, never the OTEL figure), the same per-session value as GET .../sessions; an unpriced tree adds nothing; null when none is priced
 }
 interface GetRepositorySessionBranchesQuery {
   teamId?: number;    // optional; activates team-based access check

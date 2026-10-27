@@ -16,3 +16,5 @@ Folders are named `<YYYY-MM-DD>-<slug>` (the day the task was created).
 - [2026-10-20-github-release-pipeline] GitHub Release Pipeline (release branch, Actions, GHCR) — archived 2026-10-25
 - [2026-10-26-smtp-warmup-unconfigured] SMTP Per Auth Mode — No Warm-Up Without It, Fail Fast in Mode 3 — archived 2026-10-26
 - [2026-10-26-pricing-fetch-tiered] Fix Anthropic Pricing Fetch and Add Prompt-Length Tiered Pricing — archived 2026-10-26
+- [2026-10-27-release-compose-azure-sso] Release Compose Supports Azure SSO — archived 2026-10-27
+- [2026-10-27-branch-group-cost-total] Branch Group Cost Total Is Lower Than Its Sessions — archived 2026-10-27
