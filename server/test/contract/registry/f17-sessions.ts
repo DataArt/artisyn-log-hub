@@ -249,10 +249,8 @@ export const f17Sessions: ContractFamily = {
       },
     },
     {
-      // KNOWN DISCREPANCY, pinned as the code behaves today: a branch's totalCost prices only
-      // the root sessions' own tokens — sub-agent (child) costs are not rolled up, while the
-      // session list and the executive summary include them (main: 3.125 here vs 3.525 there).
-      // Reported with chunk 23. latestEndTime is Postgres' text form of the timestamp, not ISO.
+      // totalCost is the sum of the roots' tree costs (sub-agents included), as the session
+      // list shows them. latestEndTime is Postgres' text form of the timestamp, not ISO.
       id: 'F17-branches',
       route: 'GET /api/v1/repositories/:repoId/sessions/branches',
       actor: 'owner',
@@ -262,13 +260,13 @@ export const f17Sessions: ContractFamily = {
       read: {
         sql: `SELECT b.git_branch, count(*) AS session_count, max(b.end_time)::text AS latest_end,
                      sum(b.work_time) AS work_time, sum(b.lines_own) AS lines_own,
-                     sum(b.lines_own + b.lines_kids) AS lines_all, sum(b.root_cost) AS root_cost
+                     sum(b.lines_own + b.lines_kids) AS lines_all, sum(b.tree_cost) AS tree_cost
                 FROM (SELECT r.git_branch, r.end_time, ss.work_time_ms AS work_time,
                              ss.lines_changed AS lines_own,
                              coalesce((SELECT sum(k.lines_changed) FROM sessions c
                                          JOIN session_stats k ON k.session_id = c.id
                                         WHERE c.parent_session_id = r.session_id), 0) AS lines_kids,
-                             ${ownCostSql('ss')} AS root_cost
+                             ${treeCostSql('r.id')} AS tree_cost
                         FROM ${listedRootsSql('$1')} r
                         JOIN session_stats ss ON ss.session_id = r.id) b
                GROUP BY b.git_branch`,
@@ -282,7 +280,7 @@ export const f17Sessions: ContractFamily = {
           totalWorkTimeMs: { col: 'work_time', as: 'number' },
           totalLinesChanged: { col: 'lines_all', as: 'number' },
           totalLinesChangedOwn: { col: 'lines_own', as: 'number' },
-          totalCost: { col: 'root_cost', as: 'numeric' },
+          totalCost: { col: 'tree_cost', as: 'numeric' },
         },
         strict: true,
       },
