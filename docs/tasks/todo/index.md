@@ -24,7 +24,6 @@ Folders are named `<YYYY-MM-DD>-<slug>` (the day the task was created).
 - [2026-06-16-prompt-classifier-session-tags] Prompt Classifier — Auto-tag Sessions via `claude -p` — UserPromptSubmit hook
   classifies each prompt with `claude -p` and assigns a user-configured tag to the session; server stores tags on
   sessions; client supports filter and group-by-tag in session list.
-- [2026-06-19-mcp-invocation-log-tab] Tools/MCP tab — Repository-level tab monitoring MCP servers (from transcripts, automatic) and any command-line tool added in the UI (wrapped by the hook in Bash/PowerShell on Windows/Linux/macOS): per-tool stats, every call's input, full output, exit code and usefulness signals.
 - [2026-06-19-exclude-tiny-sessions] Exclude Tiny Sessions from Analytics — Add a toggle in the Productivity analytics tab to exclude very short sessions from metrics and charts, with a visible threshold and excluded-count indicator.
 - [2026-06-20-codex-hooks] Codex Hook Parity — Add Codex equivalents for the Claude telemetry, guardrail, and upload hooks using `.codex/hooks.json` and provider-aware telemetry.
 - [2026-06-21-session-parse-indicator] Session Log Parsing Indicator — Show a parsing indicator in the client once session logs are loaded from the server and client-side parsing begins.
