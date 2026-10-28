@@ -23,12 +23,14 @@
 //   zizmor            --sarif <file>                          findings when any result
 //   hadolint          --json <file> (hadolint --format json)  findings on error, warning on warning
 //   skipped           --note <text>                           skipped
+//   warning           --note <text>                           warning (the scan could not run, e.g. a
+//                                                             transient tool/API failure)
 //
 //   A missing or unreadable input file gives an `error` row with the note `no output`.
 //
 //   require('scripts/ci/scan-rows.js') exports the row mappers (snykOssRow,
 //   snykContainerRow, dependencyReviewRow, outcomeRow, zizmorRow, hadolintRow,
-//   skippedRow) and the helpers makeRow / writeRow / rowFileName used by the
+//   skippedRow, warningRow) and the helpers makeRow / writeRow / rowFileName used by the
 //   other scripts in scripts/ci/.
 //
 // Exit codes: 0 after writing the row (report-only, findings never fail the
@@ -288,6 +290,12 @@ function skippedRow(base, note) {
   return makeRow({ ...base, status: 'skipped', note: note || 'skipped' });
 }
 
+// -------------------------------------------------------------- warning ----
+
+function warningRow(base, note) {
+  return makeRow({ ...base, status: 'warning', note: note || 'warning' });
+}
+
 // ------------------------------------------------------------------ CLI ----
 
 const SUBCOMMANDS = {
@@ -298,6 +306,7 @@ const SUBCOMMANDS = {
   zizmor: ['sarif'],
   hadolint: ['json'],
   skipped: ['note'],
+  warning: ['note'],
 };
 const COMMON = ['tool', 'scope', 'out', 'version', 'link'];
 
@@ -335,6 +344,7 @@ function buildRowFor(args, env) {
     case 'zizmor': return zizmorRow(base, readJson(args.sarif));
     case 'hadolint': return hadolintRow(base, readJson(args.json));
     case 'skipped': return skippedRow(base, args.note);
+    case 'warning': return warningRow(base, args.note);
     default: throw new Error(`unknown subcommand: ${args.sub}`);
   }
 }
@@ -345,7 +355,7 @@ function main() {
     args = parseArgs(process.argv.slice(2));
   } catch (err) {
     process.stderr.write(`scan-rows: ${err.message}\n`
-      + 'Usage: node scripts/ci/scan-rows.js <snyk-oss|snyk-container|dependency-review|outcome|zizmor|hadolint|skipped>'
+      + 'Usage: node scripts/ci/scan-rows.js <snyk-oss|snyk-container|dependency-review|outcome|zizmor|hadolint|skipped|warning>'
       + ' --tool <t> --scope <s> --out <dir> [--version <v>] [--link <url>] ...\n');
     process.exit(1);
   }
@@ -373,6 +383,7 @@ module.exports = {
   zizmorRow,
   hadolintRow,
   skippedRow,
+  warningRow,
 };
 
 if (require.main === module) main();
