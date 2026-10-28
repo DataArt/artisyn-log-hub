@@ -5,10 +5,62 @@
 //
 // World: w1-s01 changed src/app.ts (+10 -2, modified) and docs/readme.md (+5, added);
 // w1-s02 changed nothing itself, its child w1-s03 added src/health.ts (+20).
+//
+// OKF usage (session route, 2026-10-27 OKF usage tab): the s02 -> s03 tree is bound to the world's
+// OKF snapshot (bundle `docs/kb`: index.md, a gitignored private.md, scheduler.md). s02 read
+// index.md and private.md, s03 read scheduler.md twice. The verdict and the tree are an algorithm
+// (okf-verdict.md); here the bundle summary and the per-agent read totals are proven against
+// `session_okf_access` and the stored snapshot body, in the personal view and in a team view,
+// where the DD-30 filter drops the gitignored file.
 import type { ContractFamily } from '../types';
 import { listedRootsSql } from './oracle-sql';
 
 const MONTH = { startDate: '2026-01-01', endDate: '2026-01-31' };
+
+/** Session pks of the tree rooted at session pk `$1` (root and sub-agents). */
+const TREE_NODES = `
+  WITH RECURSIVE tree AS (
+    SELECT id, session_id FROM sessions WHERE id = $1
+    UNION ALL
+    SELECT c.id, c.session_id FROM sessions c JOIN tree t ON c.parent_session_id = t.session_id
+  )`;
+
+/**
+ * One row per bundle of the snapshot the tree root `$1` is bound to: file count, distinct
+ * listed files read (read/grep), read bytes under the bundle root. `team`: the files the
+ * snapshot marks `ignored` count nowhere (DD-30).
+ */
+function okfBundlesSql(team: boolean): string {
+  const visible = team ? `NOT (f->>'ignored')::boolean` : 'true';
+  return `${TREE_NODES},
+    acc AS (SELECT a.* FROM tree t JOIN session_okf_access a ON a.session_id = t.id
+             WHERE a.op IN ('read', 'grep'))
+    SELECT b->>'root' AS root, b->>'index' AS idx, (b->>'ignored')::boolean AS ignored,
+           (SELECT count(*) FROM jsonb_array_elements(b->'files') f WHERE ${visible}) AS files,
+           (SELECT count(DISTINCT acc.path_key) FROM acc
+             WHERE acc.path_key IN (SELECT f->>'path' FROM jsonb_array_elements(b->'files') f
+                                     WHERE ${visible})) AS files_read,
+           (SELECT coalesce(sum(acc.bytes), 0) FROM acc
+             WHERE acc.path_key LIKE (b->>'root') || '/%'
+               AND acc.path_key NOT IN (SELECT f->>'path' FROM jsonb_array_elements(b->'files') f
+                                         WHERE NOT (${visible}))) AS read_bytes
+      FROM okf_snapshots o, jsonb_array_elements(o.body->'bundles') b
+     WHERE o.snapshot_id = (SELECT okf_snapshot_id FROM sessions WHERE id = $1)
+       AND o.user_id = (SELECT min(user_id) FROM logs WHERE session_id = $1)
+     ORDER BY root`;
+}
+
+const OKF_BUNDLE_FIELDS = {
+  root: 'root',
+  index: 'idx',
+  ignored: 'ignored',
+  files: { col: 'files', as: 'number' },
+  filesRead: { col: 'files_read', as: 'number' },
+  readBytes: { col: 'read_bytes', as: 'number' },
+} as const;
+
+const OKF_ROUTE =
+  'GET /api/v1/repositories/:repoId/sessions/:sessionId/okf-usage' as const;
 
 /** `session_changed_paths` rows of the tree rooted at session pk `$1`. */
 const TREE_PATHS = `
@@ -135,6 +187,116 @@ export const f19ChangeSurface: ContractFamily = {
         'GET /api/v1/repositories/:repoId/sessions/:sessionId/change-surface/files',
       actor: 'outsider',
       params: { repoId: '@R1.id', sessionId: '@s01.sessionId' },
+      expect: { status: 403 },
+    },
+    {
+      // Personal view: the bound snapshot's one bundle, all three files counted (private.md too).
+      // A 3-file bundle is below SHARE_MIN_BUNDLE_FILES, so the verdict is a plain `ok`.
+      id: 'F19-okf-session',
+      route: OKF_ROUTE,
+      actor: 'owner',
+      params: { repoId: '@R1.id', sessionId: '@s02.sessionId' },
+      expect: {
+        status: 200,
+        minRows: 1,
+        bodyMatches: {
+          hasSnapshot: true,
+          verdict: { level: 'ok', qualifiers: [], findings: [] },
+        },
+      },
+      read: {
+        sql: okfBundlesSql(false),
+        args: ['@s02.id'],
+        shape: 'array',
+        path: 'bundles',
+        fields: OKF_BUNDLE_FIELDS,
+      },
+    },
+    {
+      // Per agent (tree node, `sessions.session_id`): read/grep calls and bytes on KB files —
+      // the sub-agent s03's reads are its own (FR-4).
+      id: 'F19-okf-session-agents',
+      route: OKF_ROUTE,
+      actor: 'owner',
+      params: { repoId: '@R1.id', sessionId: '@s02.sessionId' },
+      expect: { status: 200, minRows: 2 },
+      read: {
+        sql: `${TREE_NODES}
+              SELECT t.session_id AS id,
+                     (SELECT coalesce(sum(a.calls), 0) FROM session_okf_access a
+                       WHERE a.session_id = t.id AND a.op IN ('read', 'grep')
+                         AND a.path_key NOT LIKE '%/') AS kb_reads,
+                     (SELECT coalesce(sum(a.bytes), 0) FROM session_okf_access a
+                       WHERE a.session_id = t.id AND a.op IN ('read', 'grep')
+                         AND a.path_key NOT LIKE '%/') AS kb_read_bytes
+                FROM tree t`,
+        args: ['@s02.id'],
+        shape: 'array',
+        path: 'agents',
+        sortBy: 'id',
+        fields: {
+          id: 'id',
+          kbReads: { col: 'kb_reads', as: 'number' },
+          kbReadBytes: { col: 'kb_read_bytes', as: 'number' },
+        },
+      },
+    },
+    {
+      // Team view (T1): the gitignored private.md is gone from the file count, the files read
+      // and the read bytes (DD-30 fail closed).
+      id: 'F19-okf-session-team',
+      route: OKF_ROUTE,
+      actor: 'owner',
+      params: { repoId: '@R1.id', sessionId: '@s02.sessionId' },
+      query: { teamId: '@T1.id' },
+      expect: { status: 200, minRows: 1, bodyMatches: { hasSnapshot: true } },
+      read: {
+        sql: okfBundlesSql(true),
+        args: ['@s02.id'],
+        shape: 'array',
+        path: 'bundles',
+        fields: OKF_BUNDLE_FIELDS,
+      },
+    },
+    {
+      // A session with neither OKF rows nor a snapshot: no KB at all, `verdict: null`. The
+      // opened node is always listed as an agent, with nothing read.
+      id: 'F19-okf-session-none',
+      route: OKF_ROUTE,
+      actor: 'owner',
+      params: { repoId: '@R1.id', sessionId: '@s01.sessionId' },
+      expect: {
+        status: 200,
+        bodyMatches: {
+          verdict: null,
+          hasSnapshot: false,
+          bundles: [],
+          tree: [],
+          agents: [
+            {
+              id: '@s01.sessionId',
+              taskHead: 'Add a spice-yield endpoint',
+              entry: null,
+              kbReads: 0,
+              kbReadBytes: 0,
+              files: [],
+            },
+          ],
+        },
+      },
+      read: {
+        sql: `SELECT path_key FROM session_okf_access WHERE session_id = $1 ORDER BY path_key`,
+        args: ['@s01.id'],
+        shape: 'array',
+        path: 'readTop',
+        fields: { path: 'path_key' },
+      },
+    },
+    {
+      id: 'F19-okf-session-outsider',
+      route: OKF_ROUTE,
+      actor: 'outsider',
+      params: { repoId: '@R1.id', sessionId: '@s02.sessionId' },
       expect: { status: 403 },
     },
     {

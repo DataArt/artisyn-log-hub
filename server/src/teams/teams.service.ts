@@ -25,6 +25,7 @@ import type { DrizzleDb } from '../database/database.module';
 import * as schema from '../database/schema';
 import type { RepoConfigJson } from '../database/schema';
 import { deleteOrphanHarnessSnapshots } from '../logs/harness-snapshot';
+import { deleteOrphanOkfSnapshots } from '../logs/okf/okf-snapshot';
 import { PLACEHOLDER_IMPORT_USER_PASSWORD_HASH } from '../logs/logs.service';
 import {
   isRawLocalPath,
@@ -636,9 +637,10 @@ export class TeamsService {
               await tx
                 .delete(schema.sessions)
                 .where(inArray(schema.sessions.id, orphanIds));
-              // DD-11: sweep harness_snapshots rows no session references any more, now
-              // that these orphaned sessions are gone.
+              // DD-11: sweep harness_snapshots and okf_snapshots rows no session references
+              // any more, now that these orphaned sessions are gone.
               await deleteOrphanHarnessSnapshots(tx);
+              await deleteOrphanOkfSnapshots(tx);
             }
           }
         }

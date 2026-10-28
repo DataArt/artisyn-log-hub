@@ -35,6 +35,7 @@ import {
   loadHarnessSnapshot,
   storeHarnessSnapshot,
 } from './harness-snapshot';
+import { storeAndBindOkfSnapshot } from './okf/okf-snapshot';
 import {
   loadSessionTreeEditRecords,
   resolveSessionRepoRoots,
@@ -54,6 +55,7 @@ import {
   rewriteSessionTreeFileStats,
   writeSessionFileStats,
 } from './session-file-stats-writer';
+import { rebuildSessionOkfAccess } from './okf/okf-access-writer';
 import {
   replaceSessionCallTokens,
   replaceSessionRequestIds,
@@ -460,6 +462,15 @@ export class LogsService {
             userId,
           ),
         );
+        // Step 3b' — OKF access rows of this node (FR-3), same roots as the file stats. With
+        // no root yet nothing is stored; the heal below rebuilds them once the artisyn log lands.
+        await rebuildSessionOkfAccess(
+          tx,
+          sessionRowId,
+          lines,
+          repoRoots,
+          logType === 'claude-subagent',
+        );
 
         // Step 3c — populate session_cause_stats (one row per applicable config scope)
         const sessionRepoUrls = await this.getSessionRepoUrls(tx, sessionRowId);
@@ -691,6 +702,13 @@ export class LogsService {
           }
         }
       }
+
+      // Step 5d2 — OKF snapshot store-then-bind (DD-21, impl-plan of
+      // docs/tasks/todo/2026-10-27-okf-usage-tab). A full `okf-snapshot` line is stored
+      // verbatim for the uploading owner; the tree's ROOT session is then bound to the ref id
+      // (or the full line's own id) only while its `okf_snapshot_id` is still NULL — never
+      // rebound. Uploads without either line (old hooks) skip this entirely.
+      await storeAndBindOkfSnapshot(tx, userId, sessionRowId, lines);
 
       // Step 5e — change surface. Two independent pieces, both artisyn-only:
       //
@@ -1038,17 +1056,20 @@ export class LogsService {
       // Same writer, roots and tree-level scopes as upsert() Step 3b. Import adds the
       // claude log before the artisyn log and gets no heal, so an imported session lands on
       // the no-root fallback until a settings save recomputes it (known limitation).
+      const repoRoots = await resolveSessionRepoRoots(tx, sessionRowId);
       await writeSessionFileStats(
         tx,
         sessionRowId,
         lines,
-        await resolveSessionRepoRoots(tx, sessionRowId),
+        repoRoots,
         await resolveFileStatsScopes(
           tx,
           await resolveSessionTreeRepoUrls(tx, sessionRowId),
           effectiveUserId,
         ),
       );
+      // OKF access rows (FR-3), same writer and roots as upsert() Step 3b'.
+      await rebuildSessionOkfAccess(tx, sessionRowId, lines, repoRoots, false);
       const sessionRepoUrls = await this.getSessionRepoUrls(tx, sessionRowId);
       await this.upsertSessionCauseStats(
         tx,
@@ -1079,6 +1100,9 @@ export class LogsService {
     if (ref !== null) {
       await bindSessionSnapshot(tx, sessionRowId, ref);
     }
+    // OKF snapshot: same store-then-bind as upsert() Step 5d2, scoped to the archive's
+    // resolved author. An old zip without OKF lines leaves the session unbound.
+    await storeAndBindOkfSnapshot(tx, log.resolvedUserId, sessionRowId, lines);
 
     await tx
       .insert(repositories)

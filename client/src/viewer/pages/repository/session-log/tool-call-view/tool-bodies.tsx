@@ -1,5 +1,5 @@
 import { useMemo, type ReactNode } from 'react';
-import { toRepoRelative } from '../../../../lib/bash-view/display-paths';
+import { toRepoRelative } from '@loghub/bash-view';
 import { formatBytes, formatCompact } from '../log-parser';
 import type { FileAccess, SubAgentNode, ToolCallDetail } from '../types';
 import { ToolOutputBlock } from './ToolOutputBlock';

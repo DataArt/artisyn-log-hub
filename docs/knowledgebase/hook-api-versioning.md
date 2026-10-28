@@ -66,6 +66,8 @@ mechanism feeds).
 |---|---|---|---|
 | `< 1.7.0` (any un-upgraded hook) | `POST /api/v1/logs` | none — the route was removed and answers `404` | Every upload fails: the hook logs a `fail` line per file and counts it in `failedCount`. Nothing is stored until the hook is upgraded |
 | `>= 1.7.0` | `POST /api/v2/logs` | `201`, `{ warnings: string[] }` | No synchronous `400`. The bad file is staged, queued, and later marked `status='failed'` by the background scheduler; the *next* upload's response `warnings` array carries a message for it, which the hook turns into a `broken-upload-file` recommendation (`upsertRecommendation(cwd, { rule: 'broken-upload-file', ... })`) — surfaced via the existing `hook-status` → `HookStatePage.tsx` flow, the same mechanism `timeout-on-upload` already uses. Also visible directly in the Admin Panel's Upload Queue tab, and in the Error Logs tab via the scheduler's `Logger.error()` call on failure |
+| `>= 2.22.0` | `POST /api/v2/logs` + `snapshotId` / `snapshotFull` on the root `artisyn` upload | `201`, `{ warnings, unknownSnapshotId? }` | As `>= 1.7.0`; an invalid id is ignored, never a `400` — see the harness snapshot section below |
+| `>= 2.26.0` | `POST /api/v2/logs` + `okfSnapshotId` / `okfSnapshotFull` on the root `artisyn` upload | `201`, `{ warnings, unknownSnapshotId?, unknownOkfSnapshotId? }` | As `>= 1.7.0`; an invalid id is ignored, never a `400`; a server without OKF support ignores the params — see the OKF snapshot section below |
 
 The route requires `ApiKeyAuthGuard` (the `X-API-Key` header) and accepts this body encoding
 (`express.text()`, `Content-Type: application/x-ndjson`/`application/json`/`text/plain`, 2500MB
@@ -281,7 +283,7 @@ read the same in storage (the column is left unchanged either way) but have diff
 ## `snapshotId` / `snapshotFull` / `unknownSnapshotId` — harness snapshot query params (hook `2.22.0`+)
 
 The harness-snapshot flow (DD-1–DD-9 in
-`docs/tasks/todo/2026-10-16-sysctx-skill-source/impl-plan.md`; see `hook-system-overview.md`'s
+`docs/tasks/done/2026-10-16-sysctx-skill-source/impl-plan.md`; see `hook-system-overview.md`'s
 "Context injection" for the full shape and per-run flow) adds a fourth query param pair to
 `POST /api/v2/logs`, on top of the existing `type`/`sessionId`/`parentSessionId`/`workflowRunId`
 and the hook-`1.8.0`+ chunk params — see `docs/knowledgebase/api-reference.md` for the full
@@ -480,6 +482,48 @@ An additive-field release; no route, no wire-format change, and the server needs
 Both server readers of artisyn `tool_use_id` (`extractEditResultRecords` in `artisyn-extractor.ts`
 and `change-surface/changed-paths.sql.ts`) filter to `PostToolUse`, so the new ids on other events
 are never mistaken for edit records.
+
+## `okfSnapshotId` / `okfSnapshotFull` / `unknownOkfSnapshotId` — OKF snapshot (hook `2.26.0`+)
+
+The OKF usage tabs ([okf-usage.md](okf-usage.md); plan `docs/tasks/todo/2026-10-27-okf-usage-tab/`,
+DD-13–DD-22) add a second, independent snapshot loop beside the harness one, with the same shape:
+
+- **Body.** On the current root session's own `artisyn` upload (the `getHarnessPrefix` gate;
+  `send-logs-hook.js` `getOkfPrefix()`), the hook prepends an `okf-snapshot-ref` line always and a
+  full `okf-snapshot` line when the id is not in `okf-state.json`. Never on
+  `prompt-upload-hook.js`, never on sub-agent or `claude` uploads. Detection runs only here, at
+  upload time. Shape and id: [algorithms/okf-snapshot.md](algorithms/okf-snapshot.md). Neither line
+  carries a `timestamp`; `artisyn-extractor.ts` lists both as non-activity lines.
+- **Query.** `okfSnapshotId=<64 hex>` with the ref, plus `okfSnapshotFull=1` when the full line is
+  in the body (`upload-logs.js` appends both independently of `snapshotId` / `snapshotFull`).
+
+| Query param | Server behaviour |
+|---|---|
+| `okfSnapshotId` | Validated against `^[0-9a-f]{64}$` (`OKF_SNAPSHOT_ID_RE`); invalid → **silently ignored, never a `400`** |
+| `okfSnapshotFull=1` | With a valid id, sets `upload_queue.okf_snapshot_id` (an in-flight full body counts as known) and suppresses `unknownOkfSnapshotId` |
+
+**`unknownOkfSnapshotId`** (response, additive, single-upload and chunk-complete responses only) =
+the id when it is valid, the upload was ref-only, and `isOkfSnapshotKnown()`
+(`server/src/logs/okf/okf-snapshot.ts`) finds neither an `okf_snapshots` row for (user, id) nor a
+`pending` / `processing` / `partially_uploaded` queue row with it. The hook then removes the id
+from `okf-state.json` (`forgetOkfSnapshot`) so the next upload resends the full body; after a
+successful full upload it remembers the id (`rememberOkfSnapshot`, cap 20). The accepted purge race
+of the harness loop (DD-21 above) applies unchanged: a swept row self-heals on the next upload.
+
+**Binding.** Ingest stores a full body per owner (`ON CONFLICT DO NOTHING`; a body over 10 MB is
+ignored) and binds the root `sessions.okf_snapshot_id` only while it is `NULL` — the first upload of
+a session decides, never rebound.
+
+**Config.** Hook `2.26.0` adds the top-level `okf` key (`{ "exclude": [globs] }`, see
+[hook-installation.md](hook-installation.md)). An older hook ignores the key; a newer
+`log-hub.json` with it is harmless to it.
+
+| Combination | Behaviour |
+|---|---|
+| Hook `< 2.26.0` → any server | No OKF lines or params: `okf_snapshot_id` stays `NULL`. The server still extracts `session_okf_access` from the transcripts; the session OKF tab shows the "No KB snapshot" banner and `partial_data` |
+| Hook `2.26.0` → server without OKF support | Unknown query params are ignored and the two line types are skipped like any unknown artisyn event; the upload returns `201` without `unknownOkfSnapshotId`, so the hook simply remembers the id after its full upload and sends refs from then on (no effect on such a server) |
+| Hook `2.26.0` → server with OKF support | Full loop as above |
+| OKF detection fails or exceeds `OKF_SNAPSHOT_MAX_FILES` on the hook | The upload goes out without OKF lines; an OKF failure never fails an upload |
 
 
 ## v1 retirement (done, open-source readiness)

@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { useCopyToClipboard } from '../../../../hooks/useCopyToClipboard';
-import { toRepoRelative } from '../../../../lib/bash-view/display-paths';
+import { toRepoRelative } from '@loghub/bash-view';
 import { formatBytes, formatCompact } from '../log-parser';
 import { useToolView } from './ToolViewContext';
 

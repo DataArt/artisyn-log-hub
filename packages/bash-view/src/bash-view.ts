@@ -6,15 +6,15 @@
  * Display strings are made repo-relative (`toRepoRelative`); "Copy original" must use the call's
  * own `input.command`, never anything from here.
  */
-import { analyzeBash } from './bash-analyze';
+import { analyzeBash } from './bash-analyze.ts';
 import {
   type FoldedHeredoc,
   foldHeredocs,
   formatBash,
   liftCd,
-} from './bash-format';
-import type { BashParser } from './bash-parser';
-import { toRepoRelative } from './display-paths';
+} from './bash-format.ts';
+import type { BashParser } from './syntax.ts';
+import { toRepoRelative } from './display-paths.ts';
 
 export interface BashFiles {
   changes: string[];

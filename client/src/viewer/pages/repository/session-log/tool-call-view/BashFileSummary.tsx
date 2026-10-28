@@ -1,8 +1,8 @@
 import {
+  type BashFiles,
   type DirGroup,
   displayGroups,
-} from '../../../../lib/bash-view/bash-analyze';
-import type { BashFiles } from '../../../../lib/bash-view/bash-view';
+} from '@loghub/bash-view';
 
 const GROUPS: {
   key: 'changes' | 'reads' | 'runs' | 'inline';

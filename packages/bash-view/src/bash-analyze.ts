@@ -13,8 +13,11 @@
  *   arguments count as unresolved;
  * - inline interpreter scripts (`node -e`, heredoc into `python`, …) are only noted, never analysed.
  */
-import type { Node } from 'web-tree-sitter';
-import { type BashParser, withTree } from './bash-parser';
+import {
+  type BashParser,
+  type BashSyntaxNode as Node,
+  withTree,
+} from './syntax.ts';
 
 /** A file list longer than this is shown grouped by directory (`groupByDir`). */
 export const GROUP_BY_DIR_ABOVE = 3;
@@ -71,6 +74,25 @@ const SUBCOMMAND_TOOLS =
 const RUN_SCRIPT_TOOLS = /^(npm|pnpm|yarn|bun)$/;
 /** At most this many literal `for` values are walked through the loop body. */
 const FOR_VALUES_MAX = 30;
+/** Command base names whose read paths are searched (`readAccess` kind `grep`). */
+const GREP_CMDS = /^(grep|rg|ag|egrep|fgrep)$/;
+/** Command base names whose read paths are listed (`readAccess` kind `list`). */
+const LIST_CMDS = /^(ls|find|tree|dir)$/;
+
+/** How a command reached a read path: its content, a search through it, or a directory listing. */
+export type BashReadKind = 'read' | 'grep' | 'list';
+
+export interface BashReadAccess {
+  path: string;
+  kind: BashReadKind;
+}
+
+/** `readAccess` kind of a read path by the base name of the command that reads it. */
+export function readKindOf(base: string): BashReadKind {
+  if (GREP_CMDS.test(base)) return 'grep';
+  if (LIST_CMDS.test(base)) return 'list';
+  return 'read';
+}
 
 export interface BashAnalysis {
   /** The first `cd` target (absolute or as written); paths below are relative to it. */
@@ -78,6 +100,11 @@ export interface BashAnalysis {
   changes: string[];
   /** Read paths that are not also in `changes`. */
   reads: string[];
+  /**
+   * One entry per path of `reads`, in the same order: the kind of the first command that read it
+   * (`<` redirects, `sed` and `cp` sources are `read`). The Bash view ignores it.
+   */
+  readAccess: BashReadAccess[];
   /** Labels such as `npm run build`, `git status`, `jq`. */
   runs: string[];
   /** `inline <cmd> script, N lines — not analysed` notes. */
@@ -165,13 +192,20 @@ function analyzeTree(rootNode: Node): BashAnalysis {
   const found: { workDir: string | null } = { workDir: null };
   const written: string[] = [];
   const read: string[] = [];
+  /** `readAccess` kind per read path; the first read wins, like the order of `read`. */
+  const readKind = new Map<string, BashReadKind>();
   const runs: string[] = [];
   const scripts: InlineScript[] = [];
   /** Start offsets of the script commands already noted (rule 5.3). */
   const noted = new Set<number>();
   let unresolved = 0;
 
-  const add = (list: string[], st: WalkState, p: string | null): void => {
+  const add = (
+    list: string[],
+    st: WalkState,
+    p: string | null,
+    kind: BashReadKind = 'read',
+  ): void => {
     if (p === null) {
       unresolved++;
       return;
@@ -181,6 +215,7 @@ function analyzeTree(rootNode: Node): BashAnalysis {
     // A device is ignored however it is reached (`/dev/null`, `../dev/null` from `/tmp`).
     if (full.startsWith('/dev/')) return;
     if (!list.includes(full)) list.push(full);
+    if (list === read && !readKind.has(full)) readKind.set(full, kind);
   };
   const run = (label: string): void => {
     if (!runs.includes(label)) runs.push(label);
@@ -230,9 +265,10 @@ function analyzeTree(rootNode: Node): BashAnalysis {
       return;
     }
     if (W_CMDS.has(base)) pos.forEach((p) => add(written, st, p));
-    else if (R_CMDS.has(base)) pos.forEach((p) => add(read, st, p));
+    else if (R_CMDS.has(base))
+      pos.forEach((p) => add(read, st, p, readKindOf(base)));
     else if (base === 'grep' || base === 'rg')
-      pos.slice(1).forEach((p) => add(read, st, p));
+      pos.slice(1).forEach((p) => add(read, st, p, readKindOf(base)));
     else if (base === 'sed') {
       const inPlace = flags.some(
         (f) => /^-i/.test(f) || /^--in-place(=|$)/.test(f),
@@ -447,10 +483,15 @@ function analyzeTree(rootNode: Node): BashAnalysis {
       : p;
   };
 
+  const reads = read.filter((p) => !written.includes(p));
   return {
     workDir: root,
     changes: written.map(rel),
-    reads: read.filter((p) => !written.includes(p)).map(rel),
+    reads: reads.map(rel),
+    readAccess: reads.map((p) => ({
+      path: rel(p),
+      kind: readKind.get(p) ?? 'read',
+    })),
     runs,
     inline: scripts.map(
       (s) => `inline ${s.command} script, ${s.lines} lines — not analysed`,

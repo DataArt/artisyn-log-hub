@@ -266,7 +266,8 @@ row per existing `session_stats` row at base rates.
 | `parent_session_id` | varchar(255) | nullable | The `session_id` string of the TRUE immediate parent session/agent. No FK constraint, no cycle check (weak ref). |
 | `workflow_run_id`  | varchar(255) | nullable | The wf-id folder name (e.g. `wf_b4978a0b-2af`) of the `Workflow` tool run that spawned this sub-agent session, mirroring `parent_session_id` (no FK, no cycle check). Set only on workflow-subdir agent uploads (hook v1.6.0+, `workflowRunId` query param on `POST /api/v1/logs`). Used server-side to resolve `WorkflowRun.agentSessionIds`. Migration: `0025_workflow_run_id.sql`. |
 | `deleted`           | boolean      | NOT NULL | DEFAULT false — soft-delete flag; deleted sessions are hidden from all queries |
-| `harness_snapshot_id` | varchar(64) | nullable | The DD-2 id of the [`harness_snapshots`](#harness_snapshots) row this session is bound to. No FK — the row is looked up in application code by `(owning user_id, this id)`, and an orphan sweep (`deleteOrphanHarnessSnapshots`) can delete that row out from under this column by design (see [data-retention.md](data-retention.md) § "Orphan harness-snapshot cleanup"). `NULL` until the first `artisyn` upload that carries a `harness-snapshot` or `harness-snapshot-ref` line binds it — COALESCE-bound (`WHERE harness_snapshot_id IS NULL`), so once set it is never overwritten by a later upload. Indexed (`sessions_harness_snapshot_id_idx`): the session-logs read path looks a session's snapshot up by this column on every request. Migration: `0073_harness_snapshots.sql`. |
+| `harness_snapshot_id` | varchar(64) | nullable | The DD-2 id of the [`harness_snapshots`](#harness_snapshots) row this session is bound to. No FK — the row is looked up in application code by `(owning user_id, this id)`, and an orphan sweep (`deleteOrphanHarnessSnapshots`) can delete that row out from under this column by design (see [data-retention.md](data-retention.md) § "Orphan harness-snapshot and OKF-snapshot cleanup"). `NULL` until the first `artisyn` upload that carries a `harness-snapshot` or `harness-snapshot-ref` line binds it — COALESCE-bound (`WHERE harness_snapshot_id IS NULL`), so once set it is never overwritten by a later upload. Indexed (`sessions_harness_snapshot_id_idx`): the session-logs read path looks a session's snapshot up by this column on every request. Migration: `0073_harness_snapshots.sql`. |
+| `okf_snapshot_id` | varchar(64) | nullable | The DD-14 id of the [`okf_snapshots`](#okf_snapshots) row this **root** session is bound to (sub-agents resolve their root). No FK, same rationale as `harness_snapshot_id` (the orphan sweep `deleteOrphanOkfSnapshots` may delete the row under it). `NULL` until the first root `artisyn` upload carrying an `okf-snapshot` or `okf-snapshot-ref` line binds it (`WHERE okf_snapshot_id IS NULL`, never overwritten); stays `NULL` for uploads from hooks older than 2.26.0. Indexed (`sessions_okf_snapshot_id_idx`) for the OKF read path and the orphan sweep. See [okf-usage.md](okf-usage.md). Migration: `0075_okf_usage.sql`. |
 
 Lightweight deduplication table. Arriving session strings are looked up or created here; the integer FK is stored on `logs` to keep that table lean.
 
@@ -316,6 +317,28 @@ still references their `snapshot_id` — called from session purge (soft/hard de
 delete, retention — see [data-retention.md](data-retention.md) § "Orphan harness-snapshot
 cleanup") and from the team-repo deletion path. There is no other deletion path, and account
 deletion is covered by the `ON DELETE CASCADE` on `user_id` above.
+
+### okf_snapshots
+
+One row per `(owner user_id, snapshot_id)`: the hook's OKF knowledge-base snapshot (bundles and
+their `.md` files with size, sha256 and gitignored flag), stored verbatim in `body`. Migration:
+`0075_okf_usage.sql`. Id and detection rules: [algorithms/okf-snapshot.md](algorithms/okf-snapshot.md);
+feature: [okf-usage.md](okf-usage.md).
+
+| Column        | Type        | Nullable | Notes |
+|---------------|-------------|----------|-------|
+| `id`          | serial      | NOT NULL | PK |
+| `user_id`     | integer     | NOT NULL | FK → users.id, ON DELETE CASCADE — the uploading user (owner) |
+| `snapshot_id` | varchar(64) | NOT NULL | The hook-computed `okfSnapshotId` (64 lowercase hex); format-validated, never recomputed |
+| `body`        | jsonb       | NOT NULL | The `okf-snapshot` line minus its `type`: `{okfSnapshotId, schemaVersion, bundles[]}`; a body over `OKF_SNAPSHOT_MAX_BYTES` (10 MB) is never stored |
+| `created_at`  | timestamptz | NOT NULL | DEFAULT now(); the repo OKF route's `snapshot.takenAt` |
+
+Unique constraint `okf_snapshots_user_id_snapshot_id_key` on `(user_id, snapshot_id)` is the
+`ON CONFLICT DO NOTHING` ingest target and serves the per-owner lookups. Referenced (no FK) from
+`sessions.okf_snapshot_id` and `upload_queue.okf_snapshot_id`. Rows are deleted only by
+`deleteOrphanOkfSnapshots(tx)` (no session references the `snapshot_id` any more, any owner),
+called beside `deleteOrphanHarnessSnapshots` from session purge and the team-repo deletion path
+(see [data-retention.md](data-retention.md)), and by the `user_id` cascade.
 
 ### repositories
 
@@ -987,6 +1010,31 @@ claude-before-artisyn heal and the settings-save recompute share one writer.
 
 Query-time resolution: the analytics timeline endpoint joins `session_file_stats` filtered by the caller's effective scope (team or user) to build `fileStatsByCategory` on each `TimelineSession`.
 
+### session_okf_access
+
+Per tree node (`sessions` row = the root agent or one sub-agent), which repo paths the node's
+transcript read, searched, listed or wrote — the data of the OKF tabs. Derived data: rebuilt
+delete-then-insert per node by `server/src/logs/okf/okf-access-writer.ts` on ingest, import,
+the file-stats heal and `recompute-all-sessions` (the only backfill for older sessions).
+Extraction rules: [algorithms/okf-access-extraction.md](algorithms/okf-access-extraction.md);
+feature: [okf-usage.md](okf-usage.md). Migration: `0075_okf_usage.sql`.
+
+| Column           | Type          | Nullable | Notes |
+|------------------|---------------|----------|-------|
+| `id`             | serial        | NOT NULL | PK |
+| `session_id`     | integer       | NOT NULL | FK → sessions.id, ON DELETE CASCADE (the node) |
+| `path_key`       | varchar(1024) | NOT NULL | Repo-relative `.md` file path (original case), or a folder path ending `/` (repo root = `/`) |
+| `op`             | varchar(8)    | NOT NULL | CHECK `read` | `grep` | `list` | `write` |
+| `after_own_edit` | boolean       | NOT NULL | DEFAULT false — a `read` / `grep` of a path this node had already written |
+| `bytes`          | bigint        | NOT NULL | DEFAULT 0 — UTF-8 bytes of the tool results (a multi-path Bash call split evenly); 0 for `write` |
+| `calls`          | integer       | NOT NULL | DEFAULT 0 — tool calls |
+| `seq`            | integer       | NOT NULL | 1-based rank of the path's first access within the node (all rows of a path share it) |
+
+Unique constraint `session_okf_access_session_path_op_edit_key` on
+`(session_id, path_key, op, after_own_edit)`; its leading `session_id` serves the per-node delete
+and the tree read, so there is no separate index. Session purge deletes the rows explicitly (step
+c2 — a soft delete keeps the `sessions` row, so the cascade would not run).
+
 ### session_changed_paths
 
 Change surface (migration `0061`) — per-session changed-path facts, one row per **logical**
@@ -1125,6 +1173,7 @@ threshold (`CHUNK_SIZE_BYTES` in `upload-logs.js` — 900KB as of hook `2.6.1`, 
 | `total_chunks`    | integer      | nullable | total expected chunks; NULL unless chunked                     |
 | `warning_delivered` | boolean    | NOT NULL | DEFAULT false (migration `0068`). Set true when a `rejected_foreign_session` row's warning is returned to the hook (`getPendingWarnings` uses `UPDATE … SET warning_delivered=true … RETURNING`), so each rejection is reported once |
 | `harness_snapshot_id` | varchar(64) | nullable | Set only when the upload's `snapshotFull='1'` query param held and `snapshotId` passed format validation — i.e. this upload's body carries the full `harness-snapshot` line, not just a ref. `NULL` for a ref-only upload. Set on insert (single upload, and chunk 0 of a chunked upload). Backs the DD-8 "known" check: while a row with this status (`pending`/`processing`/`partially_uploaded`) and this id exists, `POST /api/v2/logs` treats that id as already known and does not ask the hook to resend it (see [upload-queue.md](upload-queue.md) § "Harness snapshot known-check"). Migration: `0073_harness_snapshots.sql`. No FK, same rationale as `sessions.harness_snapshot_id`. |
+| `okf_snapshot_id` | varchar(64) | nullable | OKF counterpart of `harness_snapshot_id`: set only when the upload's `okfSnapshotFull='1'` held and `okfSnapshotId` passed format validation (the body carries the full `okf-snapshot` line). Backs `isOkfSnapshotKnown`: a `pending`/`processing`/`partially_uploaded` row with this id makes `POST /api/v2/logs` treat the id as known (no `unknownOkfSnapshotId`). No index, no FK. Migration: `0075_okf_usage.sql`. |
 
 Indexes: `idx_upload_queue_status_received_at` (status, received_at), `idx_upload_queue_user_id`, `idx_upload_queue_user_id_status`, `idx_upload_queue_session_id_received_at`, and a partial unique index `idx_upload_queue_upload_id` on `upload_id` `WHERE upload_id IS NOT NULL` (migration `0032`).
 
@@ -1417,3 +1466,4 @@ re-reads, so every cluster worker and every restart share one value.
 | `0071_otel_api_calls_request_ids.sql` | Create `otel_api_calls` (unique `(session_id, call_key)`, index `(session_id, request_id)`) and `session_request_ids` (PK `(session_id, request_id)`, index `(request_id)`) — utility-call pricing. Backfills both in the same file: `otel_api_calls` from `logs_otel.body` `claude_code.api_request` records (`jsonb_array_elements … WITH ORDINALITY`, 1-based, matching ingest's `call_key`), and `session_request_ids` from the distinct `requestId` of `assistant` events in `claude` / `claude-subagent` logs. Additive and re-runnable (`IF NOT EXISTS`, `ON CONFLICT DO NOTHING`). No `CONCURRENTLY` index |
 | `0072_team_repo_config.sql` | Create `team_repo_config` (PK = FK → `team_repositories.id`, ON DELETE CASCADE). Moves every team-scoped `repo_config` row to its link (matched by `(team_id, repo_url)`; newest `updated_at` wins, ties → lowest `repo_id`; rows with no link are dropped and counted in a `RAISE NOTICE`), then drops `repo_config_scope_check` and `repo_config.team_id` (with its partial unique index) and sets `repo_config.user_id` NOT NULL. Guarded by `information_schema.columns` in `current_schema()`; irreversible |
 | `0073_harness_snapshots.sql` | Create `harness_snapshots` (serial PK, `user_id` FK → `users.id` ON DELETE CASCADE, `snapshot_id` varchar(64), `body` jsonb, `created_at`; unique `(user_id, snapshot_id)`; index on `snapshot_id` alone) — the hook's DD-1 harness snapshot (skills/agents/MCP/system-context), replacing the old `skill-definitions`/`agent-definitions`/`mcp-config`/`system-context` event parsing. Add nullable `sessions.harness_snapshot_id` varchar(64) with its own index, and nullable `upload_queue.harness_snapshot_id` varchar(64) (no index — looked up only alongside `user_id`/`status` via the existing queue indexes). All three `ADD COLUMN`s are nullable with no DEFAULT, so catalog-only. Purely additive, no backfill, no `CONCURRENTLY` index (new table created empty in the same transaction) |
+| `0075_okf_usage.sql` | Create `okf_snapshots` (serial PK, `user_id` FK → `users.id` ON DELETE CASCADE, `snapshot_id` varchar(64), `body` jsonb, `created_at`; unique `(user_id, snapshot_id)`) and `session_okf_access` (serial PK, `session_id` FK → `sessions.id` ON DELETE CASCADE, `path_key` varchar(1024), `op` varchar(8) CHECK `read`/`grep`/`list`/`write`, `after_own_edit`, `bytes`, `calls`, `seq`; unique `(session_id, path_key, op, after_own_edit)`) — OKF usage tabs. Add nullable `sessions.okf_snapshot_id` varchar(64) with index `sessions_okf_snapshot_id_idx` and nullable `upload_queue.okf_snapshot_id` varchar(64). Additive and re-runnable (`IF NOT EXISTS` throughout), catalog-only `ADD COLUMN`s, no backfill (history via `POST recompute-all-sessions`), no `CONCURRENTLY` index |

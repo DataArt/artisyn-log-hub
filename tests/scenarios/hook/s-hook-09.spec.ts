@@ -50,6 +50,7 @@ import {
   makeFakeHome,
   pathWith,
   pluginHookCommands,
+  readHookLog,
   readRecommendations,
   runPluginEvent,
   runToken,
@@ -141,7 +142,17 @@ test('@S-HOOK-09 the installed hook reaches the real server and the session show
 
     const plugin = await test.step('setup (with design step 2): the built plugin from the stand’s installer, config on the stand, harness, transcript and sub-agent', async () => {
       const root = await installBuiltPlugin(stand.url, repo);
-      writeStandConfig(repo, stand.url, key.key);
+      // OKF (FR-9): `notes/**` is excluded, so of the two bundles below only docs/kb is sent.
+      writeStandConfig(repo, stand.url, key.key, { okf: { exclude: ['notes/**'] } });
+      for (const [rel, text] of [
+        ['docs/kb/index.md', '---\nokf_version: 1\n---\n# Chain KB\n'],
+        ['docs/kb/login-flow.md', '# Login flow\n'],
+        ['notes/kb/index.md', '---\nokf_version: 1\n---\n# Private notes\n'],
+        ['notes/kb/draft.md', '# Draft\n'],
+      ] as const) {
+        fs.mkdirSync(path.dirname(path.join(repo, rel)), { recursive: true });
+        fs.writeFileSync(path.join(repo, rel), text);
+      }
       fs.writeFileSync(path.join(repo, 'CLAUDE.md'), '# chain project rules\n');
       fs.mkdirSync(path.join(repo, '.claude', 'skills', 'hello'), { recursive: true });
       fs.writeFileSync(path.join(repo, '.claude', 'skills', 'hello', 'SKILL.md'), '---\nname: hello\ndescription: Greets.\n---\nSay hello.\n');
@@ -272,6 +283,24 @@ test('@S-HOOK-09 the installed hook reaches the real server and the session show
       await expect(page.getByTestId('harness-element-row').filter({ hasText: 'Edit' })).toHaveCount(1);
     });
 
+    const okfSnapshotId = await test.step('4b. OKF: the first upload stored the full okf-snapshot — docs/kb only, notes/** excluded — and bound the session to it', async () => {
+      const snap = await db.query<{ snapshot_id: string; body: { bundles: Array<{ root: string; index: string; files: Array<{ path: string }> }> } }>(
+        'SELECT snapshot_id, body FROM okf_snapshots WHERE user_id = $1',
+        [owner.id],
+      );
+      expect(snap.rows, 'one okf_snapshots row for the owner').toHaveLength(1);
+      const { snapshot_id: id, body } = snap.rows[0];
+      expect(id).toMatch(/^[0-9a-f]{64}$/);
+      expect(body.bundles.map((b) => b.root), 'okf.exclude drops the notes bundle (FR-9)').toEqual(['docs/kb']);
+      expect(body.bundles[0].index).toBe('docs/kb/index.md');
+      expect(body.bundles[0].files.map((f) => f.path).sort()).toEqual(['docs/kb/index.md', 'docs/kb/login-flow.md']);
+      const bound = await db.query<{ okf_snapshot_id: string | null }>('SELECT okf_snapshot_id FROM sessions WHERE session_id = $1', [sid]);
+      expect(bound.rows[0]?.okf_snapshot_id, 'the root session is bound to that snapshot').toBe(id);
+      const log = readHookLog(repo, 'send-logs-hook.js');
+      expect(log.filter((l) => l.includes(`okf: snapshot ${id.slice(0, 12)} sent`)), 'the full snapshot went out once').toHaveLength(1);
+      return id;
+    });
+
     await test.step('5. a second Stop without changes: no harness duplicates, no new claude upload', async () => {
       const claudeBefore = await claudeQueueRows(db, sid);
       const elements = await db.query<{ n: string }>('SELECT count(*) AS n FROM harness_elements WHERE repo_id = $1', [repoId]);
@@ -290,6 +319,15 @@ test('@S-HOOK-09 the installed hook reaches the real server and the session show
         harnessSnapshot?: unknown;
       };
       expect(logs.harnessSnapshot, 'GET logs still returns the harness snapshot').toBeTruthy();
+      // FR-10: the OKF id is known now, so this Stop sent only okf-snapshot-ref — no new full
+      // snapshot, no second okf_snapshots row, the binding unchanged.
+      const okfLog = readHookLog(repo, 'send-logs-hook.js');
+      expect(okfLog.filter((l) => l.includes(`okf: snapshot ${okfSnapshotId.slice(0, 12)} sent`)), 'still one full send').toHaveLength(1);
+      expect(okfLog.some((l) => l.includes(`okf: snapshot ${okfSnapshotId.slice(0, 12)} known`)), 'the second Stop sent the ref only').toBe(true);
+      const okfCount = await db.query<{ n: string }>('SELECT count(*) AS n FROM okf_snapshots WHERE user_id = $1', [owner.id]);
+      expect(Number(okfCount.rows[0].n)).toBe(1);
+      const okfBound = await db.query<{ okf_snapshot_id: string | null }>('SELECT okf_snapshot_id FROM sessions WHERE session_id = $1', [sid]);
+      expect(okfBound.rows[0]?.okf_snapshot_id).toBe(okfSnapshotId);
     });
 
     await test.step('6. Installed Hooks page: version = plugin version.json, up to date, no issue badge', async () => {

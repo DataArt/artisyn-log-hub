@@ -386,5 +386,65 @@ export const f16PostTurn: ContractFamily = {
       },
       expect: { status: 404 },
     },
+    {
+      // OKF facts (FR-20, DD-34): the caller's own session tree, rebuilt from the stored claude
+      // bodies — the root (main agent) first, then its sub-agent. The world's bodies carry no
+      // tool calls, so every read/change list is empty; the prompts are the root's own.
+      id: 'F16-okf-facts',
+      route: 'GET /api/v2/okf-usage/facts',
+      actor: 'ownerKey',
+      query: { sessionId: '@s02.sessionId' },
+      expect: {
+        status: 200,
+        minRows: 2,
+        bodyMatches: {
+          sessionId: '@s02.sessionId',
+          startedAt: '2026-01-11T09:00:00.000Z',
+          prompts: ['Refactor the harvester scheduler'],
+          tree: { changes: [], reads: [], runs: [] },
+        },
+      },
+      read: {
+        sql: `WITH RECURSIVE tree AS (
+                SELECT id, session_id, parent_session_id FROM sessions WHERE id = $1
+                UNION ALL
+                SELECT c.id, c.session_id, c.parent_session_id
+                  FROM sessions c JOIN tree t ON c.parent_session_id = t.session_id)
+              SELECT session_id, parent_session_id FROM tree
+               ORDER BY (parent_session_id IS NOT NULL), id`,
+        args: ['@s02.id'],
+        shape: 'array',
+        path: 'agents',
+        fields: { id: 'session_id', parentId: 'parent_session_id' },
+      },
+    },
+    {
+      // DD-33: a session of another user is the same 404 as a missing one.
+      id: 'F16-okf-facts-foreign-session',
+      route: 'GET /api/v2/okf-usage/facts',
+      actor: 'memberKey',
+      query: { sessionId: '@s02.sessionId' },
+      expect: { status: 404 },
+    },
+    {
+      id: 'F16-okf-facts-unknown-session',
+      route: 'GET /api/v2/okf-usage/facts',
+      actor: 'ownerKey',
+      query: { sessionId: 'w1-no-such-session' },
+      expect: { status: 404 },
+    },
+    {
+      id: 'F16-okf-facts-no-session-id',
+      route: 'GET /api/v2/okf-usage/facts',
+      actor: 'ownerKey',
+      expect: { status: 400 },
+    },
+    {
+      id: 'F16-okf-facts-no-key',
+      route: 'GET /api/v2/okf-usage/facts',
+      actor: 'anon',
+      query: { sessionId: '@s02.sessionId' },
+      expect: { status: 401 },
+    },
   ],
 };

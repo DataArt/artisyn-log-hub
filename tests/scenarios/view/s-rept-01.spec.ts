@@ -17,13 +17,23 @@
 //   - Weekly buckets and the model mix are charts; their numbers are asserted on the API, the page
 //     is checked for the four model names in the model-mix legend.
 //
+// Steps 8–10 — the repo OKF tab's verdict card (2026-10-27-okf-usage-tab, DD-38): five OKF
+// session trees (helpers/okf.ts, DD-36) in a repository of their own read `core.md` and 4 KB of
+// the 100 KB `big.md` → «Something to fix» with two «always read» lines and one «coarse
+// article» line; a branch filter down to three KB sessions shows «Not enough data» with the
+// findings still listed.
+//
 // Replaces:
 //   - tests/e2e/executive-summary-report.spec.ts (42)
 //   - server/test/executive-summary-report-filters.e2e-spec.ts (4)
 //   - server/test/executive-summary-spend-sections.e2e-spec.ts (branch filter part)
 //   - server/test/session-cost-consistency.e2e-spec.ts (Executive Summary part)
 //   - server/src/logs/reports/*.spec.ts (Executive Summary parts)
+import { randomBytes } from 'crypto';
 import { test, expect } from '../fixtures';
+import { createApiKey } from '../helpers/api-key';
+import { uploadOkfSessionTree } from '../helpers/okf';
+import { ownRepoId, rangeAround } from '../helpers/prompt-session';
 import { usd4 } from '../helpers/session-view';
 import { downloadPdfText, kpiRowValues, kpiTile, openReport, repoGet, reportSection, uploadRepoGold } from '../helpers/reports';
 
@@ -44,6 +54,11 @@ interface ExecutiveSummary {
   weeklyBuckets: Array<{ weekStart: string; sessionCount: number; totalCost: number }>;
   modelMix: Array<{ model: string; sessionCount: number; cost: number }>;
   topSessions: Array<{ startTime: string; cost: number; branch: string | null; model: string | null } & Record<string, unknown>>;
+}
+
+interface OkfRepoUsage {
+  verdict: { level: string; findings: Array<{ rule: string; node: { bundle: string | null; path?: string } }> };
+  tiles: { kbSessions: number };
 }
 
 const BILLING = 'feature/billing';
@@ -190,5 +205,71 @@ test('@S-REPT-01 executive summary: totals, filters, period, PDF @mode-a @mode-c
     await expect(kpiTile(page, 'Total Sessions')).toContainText('0');
     await expect(reportSection(page, 'Top 5 Most Expensive Sessions').getByText('No sessions in the selected period.')).toBeVisible();
     await expect(page.locator('body')).not.toContainText('NaN');
+  });
+
+  // ── Repo OKF tab verdict (2026-10-27-okf-usage-tab, FR-14a, FR-17a, DD-38) ────────────────
+  const run = randomBytes(4).toString('hex');
+  const okfRepoUrl = `https://git.arrakis.test/scn/rept01-okf-${run}`;
+  const KB = 'docs/kb';
+  const BIG_SIZE = 100_000;
+  const FEAT = 'feat/okf';
+  const okfRepoId = await test.step('8. upload 5 OKF session trees into their own repository: 2 on main, 3 on feat/okf, each reads index.md, core.md and 4 KB of the 100 KB big.md', async () => {
+    const key = await createApiKey(owner.api);
+    const branches = ['main', 'main', FEAT, FEAT, FEAT];
+    for (const [i, branch] of branches.entries()) {
+      await uploadOkfSessionTree(
+        api,
+        key.key,
+        {
+          sessionId: `rept01-okf-${run}-${i}`,
+          repoUrl: okfRepoUrl,
+          branch,
+          prompt: `okf session ${i} ${run}`,
+          at: new Date(Date.now() - 24 * 60 * 60 * 1000 - i * 60 * 60 * 1000),
+          snapshot: {
+            bundles: [
+              {
+                root: KB,
+                files: [`${KB}/core.md`, { path: `${KB}/big.md`, size: BIG_SIZE }, `${KB}/other1.md`, `${KB}/other2.md`, `${KB}/other3.md`],
+              },
+            ],
+          },
+          actions: [{ read: `${KB}/index.md`, bytes: 500 }, { read: `${KB}/core.md` }, { read: `${KB}/big.md`, bytes: 4000 }],
+        },
+        { db, userId: owner.id },
+      );
+    }
+    return ownRepoId(owner.api, okfRepoUrl);
+  });
+  const okfUsage = (query: Record<string, string> = {}) =>
+    repoGet<OkfRepoUsage>(owner, okfRepoId, '/reports/okf-usage', { ...Object.fromEntries(new URLSearchParams(rangeAround())), ...query });
+
+  await test.step('9. 5 KB sessions: «Something to fix» — core.md and big.md always read, big.md a coarse article; the anomaly lines say so', async () => {
+    const r = await okfUsage();
+    expect(r.tiles.kbSessions).toBe(5);
+    expect(r.verdict.level).toBe('fix');
+    const rules = r.verdict.findings.map((f) => `${f.rule}:${f.node.path ?? ''}`).sort();
+    expect(rules).toEqual([`always_read:${KB}/big.md`, `always_read:${KB}/core.md`, `coarse_article:${KB}/big.md`].sort());
+
+    await page.goto(`/#/repos/${okfRepoId}?mtab=okf`);
+    await expect(page.getByTestId('tab-repo-okf')).toHaveAttribute('data-state', 'active');
+    await expect(page.getByTestId('okf-verdict-level')).toHaveText('Something to fix');
+    const lines = page.getByTestId('okf-why-line');
+    await expect(lines).toHaveCount(3);
+    await expect(lines.filter({ hasText: `${KB}/core.md is read in 5 of 5 KB sessions (100%)` })).toHaveCount(1);
+    await expect(lines.filter({ hasText: `${KB}/big.md (` }).filter({ hasText: 'is read in 5 sessions, ~' })).toContainText('(4%)');
+    await expect(page.getByTestId('okf-tile-sessions').locator('p').first()).toHaveText('5 / 5');
+  });
+
+  await test.step(`10. branch filter ${FEAT}: 3 KB sessions → «Not enough data», the findings still listed`, async () => {
+    const r = await okfUsage({ branches: FEAT });
+    expect(r.tiles.kbSessions).toBe(3);
+    expect(r.verdict.level).toBe('not_enough_data');
+    expect(r.verdict.findings.map((f) => f.rule)).toContain('always_read');
+
+    await page.goto(`/#/repos/${okfRepoId}?mtab=okf&okfBranches=${encodeURIComponent(encodeURIComponent(FEAT))}`);
+    await expect(page.getByTestId('okf-verdict-level')).toHaveText('Not enough data');
+    await expect(page.getByTestId('okf-why-line').filter({ hasText: `${KB}/core.md is read in 3 of 3 KB sessions` })).toHaveCount(1);
+    await expect(page.getByTestId('okf-tile-sessions').locator('p').first()).toHaveText('3 / 3');
   });
 });

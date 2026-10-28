@@ -33,11 +33,8 @@ This feature is **separate from file categories**: it neither reads nor changes
 `repo_config.fileCategories` or `session_file_stats`. It has its own detection (OKF bundles found by
 the hook), its own tables and its own tab.
 
-The LLM analysis from the raw idea is **not** part of this feature and nothing of it is shown in the
-UI: a per-session LLM run measured $0.45–0.90 in the PoC, so it moved to an on-demand, local Opus
-skill — task `2026-10-27-kb-completeness-deep` — whose results stay on the developer's machine
-(owner decision). This feature shows deterministically what was read and written, and serves the
-facts that skill uses (FR-20).
+This feature shows deterministically what was read and written; the LLM analysis from the raw idea
+is not part of it (FR-19), and the feature only serves the facts that analysis uses (FR-20).
 
 ## Functional Requirements
 
@@ -136,9 +133,8 @@ facts that skill uses (FR-20).
     fix** (smaller bundles are skipped; files the agent wrote are left out, they still show in the
     heat).
 
-  How an agent reached an article (index, grep, given path) is shown but never judged here: a grep
-  that finds the article is fine. A search that did **not** find an existing article is visible only
-  to the on-demand skill, which reads the searches (task `2026-10-27-kb-completeness-deep`).
+  How an agent reached an article is shown but never judged (FR-12); a search that did **not** find
+  an existing article is left to the on-demand skill (FR-19).
 
   **KB read bytes** = summed `bytes` of `read` and `grep` rows, `after_own_edit` rows included
   (`list` and `write` excluded); one definition for the Read top 5 and the repo hot files
@@ -163,8 +159,8 @@ facts that skill uses (FR-20).
 - **FR-16** Highlights: not read in the period, hot files (top 10 by read bytes in the filter),
   distribution of the file share per session (bins 0–10 %, 10–25 %, 25–50 %, > 50 %).
   "Not read" is **informational only** and neutral in the UI: an article may describe a module no
-  session touched, and not reading it is then correct. Whether an unread article should have been
-  read is judged only by the on-demand skill (task `2026-10-27-kb-completeness-deep`).
+  session touched, and not reading it is then correct; whether it should have been read is left to
+  the on-demand skill (FR-19).
 - **FR-17** Visibility: the personal view shows all bundles including gitignored ones; the team view
   shows only `ignored: false`. The filter is applied **on the server** — ignored paths never reach
   a team response. Fail closed: a path appears in a team response only if the accessing session's
@@ -180,14 +176,20 @@ facts that skill uses (FR-20).
     Something to fix (one line per file);
   - **KB flood**: per bundle with ≥ 10 files, sessions whose file share of that bundle > 25 % — any
     → Something to fix; ≥ 20 % of the sessions that touched the bundle → Mess.
+  - **Coarse article**: a file other than a bundle `index.md` of ≥ 50 KB (size from the latest
+    snapshot in the filter) read in ≥ 5 of them whose average `read`-op call brings < 10 % of its
+    size (summed `read` bytes ÷ `read` calls; `grep` rows not counted) → Something to fix (one line
+    per file: "`client-component-map.md` (161 KB) is read in 14 sessions, ~4 KB per read (3 %) —
+    split it or add section pointers"); the tree marks the file "coarse".
 
   Every rule is evaluated per bundle and its line names the bundle ("`docs/knowledgebase`: in 4
   sessions an agent read more than 25 % of its files").
 
-  Verdict = the worst severity triggered. The two rule kinds are `always_read` and `kb_flood`.
+  Verdict = the worst severity triggered. The three rule kinds are `always_read`, `kb_flood` and
+  `coarse_article`.
   There is deliberately no rule for unread files (FR-16) and none for reaching articles without the
   index (FR-12). A session here = a root session
-  tree (FR-4). Not enough data and Always read count every KB-touching tree in the
+  tree (FR-4). Not enough data, Always read and Coarse article count every KB-touching tree in the
   filter, snapshot-less ones included; KB flood counts only trees with a bound snapshot; when
   snapshot-less trees are present the badge adds "partial data — N of M
   sessions without a snapshot". The file share of a session is per bundle (distinct files of the
@@ -214,8 +216,9 @@ facts that skill uses (FR-20).
 
 - **FR-19** No LLM analysis in this feature: no settings checkbox, no post-turn worker branch, no
   analysis tables or routes, and no analysis markers, lists or tiles in the UI. The analysis is the
-  on-demand local skill of task `2026-10-27-kb-completeness-deep` (installed with the hooks); its
-  findings never return to Log Hub.
+  on-demand local Opus skill of task `2026-10-27-kb-completeness-deep` (installed with the hooks),
+  because a per-session LLM run measured $0.45–0.90 in the PoC; its findings stay on the
+  developer's machine and never return to Log Hub (owner decision).
 - **FR-20** For that skill the server serves the preprocessed facts of a session tree on a new hook
   route `GET /api/v2/okf-usage/facts?sessionId=…` (API-key auth like the other `/api/v2` hook
   routes; only the session owner's key; contract row). The facts come from the **existing session
@@ -287,7 +290,8 @@ facts that skill uses (FR-20).
       "KB not used"; a session without a snapshot shows "partial data" and skips the share rule;
       the verdict cases match the `okf-verdict.md` examples.
 - [ ] FR-17a: the repo tab opens with the verdict card and anomaly list; a file read in ≥ 80 % of
-      the KB sessions in the filter is listed as "always read"; with fewer than 5 KB sessions the
+      the KB sessions in the filter is listed as "always read"; a 161 KB file read in 14 sessions
+      at ~4 KB per read call is listed as "coarse article"; with fewer than 5 KB sessions the
       badge is "Not enough data"; the team-view anomaly list names no ignored path; every rule kind
       match the `okf-verdict.md` examples.
 - [ ] FR-14a/17a: clicking a Why or anomaly line expands and scrolls to its node in the tree.
@@ -328,6 +332,7 @@ facts that skill uses (FR-20).
 - OKF snapshot rides on the root upload only; orphan sweep and export/import mirror harness snapshots (FR-10).
 - Tracking is per file only — no sections, outlines or line ranges anywhere; the share is distinct files read ÷ bundle files; listings count only toward heat (FR-1, FR-8, FR-13, owner decision).
 - Hot files = top 10 by read bytes; distribution bins 0–10 / 10–25 / 25–50 / > 50 % (FR-16).
+- Coarse article is the deterministic granularity signal (file-level bytes per read call vs snapshot size, no sections); thresholds 50 KB / 5 sessions / 10 % are first-version defaults in `okf-verdict.md` (FR-17a, owner decision 2026-10-28).
 - Team view fails closed on unknown or conflicting `ignored` status (FR-17).
 - Snapshot wire format mirrors harness-snapshot; first-upload binding replaces "nearest to its start" (FR-10).
 - `session_okf_access` is per tree node, written wherever `writeSessionFileStats` runs; unresolved paths are not stored (FR-2, FR-3).

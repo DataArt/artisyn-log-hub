@@ -44,7 +44,11 @@ format where the two differ).
 | [workflow-agent-rows](workflow-agent-rows.md) | `client/.../session-log/workflow-agent-rows.ts` | vitest |
 | [tool-call-sections](tool-call-sections.md) | `client/.../session-log/tool-calls.ts` | vitest |
 | [tool-call-outcome](tool-call-outcome.md) | `client/.../session-log/tool-outcome.ts`; twin `server/src/logs/tool-stats.ts` | vitest, jest |
-| [bash-command-view](bash-command-view.md) | `client/src/viewer/lib/bash-view/*` | vitest |
+| [bash-command-view](bash-command-view.md) | `packages/bash-view/src/*` (`@loghub/bash-view`; client loader `client/src/viewer/lib/bash-view/`) | vitest |
+| [okf-access-extraction](okf-access-extraction.md) | `server/src/logs/okf/okf-access-extractor.ts` | jest |
+| [okf-task-context](okf-task-context.md) | `server/src/logs/okf/okf-task-context.ts` | jest |
+| [okf-verdict](okf-verdict.md) | `server/src/logs/okf/okf-verdict.ts` (+ team filter `okf-usage-tree.ts`) | jest |
+| [okf-snapshot](okf-snapshot.md) | hook `okf-snapshot.js` | `node --test` |
 | [sandbox-prune-classification](sandbox-prune-classification.md) | `scripts/claude-docker/prune.mjs` | `node --test` (`npm run test:scripts`) |
 | [executable-config-guard](executable-config-guard.md) | `scripts/ci/config-guard.js` | `node --test` (`npm run test:scripts`) |
 | [security-scan-summary](security-scan-summary.md) | `scripts/ci/security-summary.js` | `node --test` (`npm run test:scripts`) |

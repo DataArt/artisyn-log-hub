@@ -42,6 +42,14 @@ const READ_RETRY_DELAY_MS = 50;
 // | sessionAttributionMaxPromptSizeKb| 60        | number   |
 // | sessionAttributionLlmModel       | 'haiku'   | string   |
 // | sessionAttributionLlmTimeoutMs   | 600000    | number   |
+// | okf                              | {exclude:[]} | object |
+//
+// `okf` (hook 2.26.0+) configures the OKF knowledge-base snapshot (`okf-snapshot.js`):
+// `okf.exclude` is a list of repo-relative globs (`**`, `*`, `?`) whose files/folders are never
+// scanned for bundles. Like every top-level key, `log-hub.local.json`'s `okf` replaces
+// `log-hub.json`'s whole object (shallow merge) — the two `exclude` lists are not concatenated.
+// A non-array `exclude` is dropped (treated as `[]`) with one warn line. The built-in
+// `tmp/**` exclusion lives in `okf-snapshot.js` and is always applied on top of this list.
 //
 // The 6 keys above configure `post-turn-analysis-worker.js`'s advisor/attribution
 // branches — see that file's own header comment for what each gates. Their timeout defaults are
@@ -81,6 +89,7 @@ const CONFIG_DEFAULTS = {
   sessionAttributionMaxPromptSizeKb: 60,
   sessionAttributionLlmModel: 'haiku',
   sessionAttributionLlmTimeoutMs: 600000,
+  okf: { exclude: [] },
 };
 
 const CONFIG_TYPES = {
@@ -103,6 +112,7 @@ const CONFIG_TYPES = {
   sessionAttributionMaxPromptSizeKb: 'number',
   sessionAttributionLlmModel: 'string',
   sessionAttributionLlmTimeoutMs: 'number',
+  okf: 'object',
 };
 
 function matchesType(value, type) {
@@ -113,6 +123,9 @@ function matchesType(value, type) {
       return typeof value === 'boolean';
     case 'array':
       return Array.isArray(value);
+    case 'object':
+      // A plain JSON object: not null, not an array.
+      return value !== null && typeof value === 'object' && !Array.isArray(value);
     case 'number':
       // Reject NaN/Infinity and negative numbers (a negative timeout/size is
       // never meaningful for any of today's numeric keys).
@@ -136,10 +149,12 @@ function matchesType(value, type) {
  */
 function coerceConfigValue(key, value, fileLabel, cwd) {
   if (!Object.prototype.hasOwnProperty.call(CONFIG_DEFAULTS, key)) return value;
-  if (value === null || value === undefined) return CONFIG_DEFAULTS[key];
+  if (value === null || value === undefined) return cloneDefault(key);
 
   const type = CONFIG_TYPES[key];
-  if (matchesType(value, type)) return value;
+  if (matchesType(value, type)) {
+    return key === 'okf' ? normalizeOkfConfig(value, fileLabel, cwd) : value;
+  }
 
   let shown;
   try {
@@ -154,7 +169,46 @@ function coerceConfigValue(key, value, fileLabel, cwd) {
     `${fileLabel}: invalid value for "${key}" (${shown}) — falling back to default ${JSON.stringify(CONFIG_DEFAULTS[key])}`,
     cwd,
   );
-  return CONFIG_DEFAULTS[key];
+  return cloneDefault(key);
+}
+
+/**
+ * The default for `key`; object/array defaults are cloned so a caller mutating its config can
+ * never change `CONFIG_DEFAULTS` for the rest of the process.
+ * @param {string} key
+ * @returns {*}
+ */
+function cloneDefault(key) {
+  const value = CONFIG_DEFAULTS[key];
+  if (value !== null && typeof value === 'object') return JSON.parse(JSON.stringify(value));
+  return value;
+}
+
+/**
+ * Normalise an `okf` object (already known to be a plain object): `exclude` absent -> `[]`;
+ * present but not an array -> `[]` plus one warn line; non-string or blank entries are dropped.
+ * Other sub-keys are kept as they are (an older hook ignores them, a newer one may read them).
+ * @param {Record<string, *>} value
+ * @param {string} fileLabel
+ * @param {string|null} cwd
+ * @returns {Record<string, *> & {exclude: string[]}}
+ */
+function normalizeOkfConfig(value, fileLabel, cwd) {
+  const raw = value.exclude;
+  let exclude = [];
+  if (Array.isArray(raw)) {
+    exclude = raw.filter((p) => typeof p === 'string' && p.trim() !== '');
+  } else if (raw !== undefined && raw !== null) {
+    let shown;
+    try {
+      shown = JSON.stringify(raw);
+    } catch {
+      shown = String(raw);
+    }
+    hookLog(HOOK_FILE, null, 'warn',
+      `${fileLabel}: invalid value for "okf.exclude" (${shown}) — expected an array of globs, ignoring it`, cwd);
+  }
+  return {...value, exclude};
 }
 
 // ---------------------------------------------------------------------------

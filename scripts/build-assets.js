@@ -13,6 +13,7 @@
 const fs = require('fs');
 const path = require('path');
 const { copyNative } = require('./copy-native');
+const { copyWasm } = require('./copy-wasm');
 
 const ROOT = path.join(__dirname, '..');
 
@@ -75,6 +76,7 @@ try {
   copyStatic();
   copyEnv();
   copyNative();
+  copyWasm();
   copyMigrations();
   postclean();
   process.exit(0);

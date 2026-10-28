@@ -3,7 +3,7 @@
  * grammar's own `queries/highlights.scm` (plus `(file_redirect) @redirect`) through the `Query`
  * API, never regexes. Algorithm doc: `docs/knowledgebase/algorithms/bash-command-view.md`.
  */
-import type { BashParser } from './bash-parser';
+import type { BashParser } from './syntax.ts';
 
 export type HighlightKind =
   | 'keyword'

@@ -38,6 +38,8 @@ import type {
   WorkTimeBucket,
   ActiveSessionsResponse,
   ProductivityAnalyticsResponse,
+  RepoOkfUsageResponse,
+  SessionOkfUsageResponse,
   TokenAnalyticsResponse,
   ToolAnalyticsResponse,
 } from '../models/repositories';
@@ -790,6 +792,62 @@ export async function fetchChangeSurfaceReport(
   );
   if (!res.ok) throw new ApiError(res.status);
   return res.json() as Promise<ChangeSurfaceReportData>;
+}
+
+// --- OKF usage -------------------------------------------------------------------
+
+/**
+ * How one session tree read the repo's OKF knowledge bases (session OKF tab). With `teamId`
+ * the server applies the team view filter (gitignored KB paths are never returned).
+ */
+export async function fetchSessionOkfUsage(
+  repoId: number,
+  sessionId: string,
+  teamId?: number,
+): Promise<SessionOkfUsageResponse> {
+  const base = `/api/v1/repositories/${repoId}/sessions/${encodeURIComponent(sessionId)}/okf-usage`;
+  const res = await apiFetch(teamId ? `${base}?teamId=${teamId}` : base);
+  if (!res.ok) throw new ApiError(res.status);
+  return res.json() as Promise<SessionOkfUsageResponse>;
+}
+
+export interface RepoOkfUsageQueryParams {
+  teamId?: number;
+  startDate: string;
+  endDate: string;
+  branches?: string[];
+  users?: string[];
+  /** Raw `<key>:<op>[:<value>]` attribute filters, one `attr=` param each. */
+  attr?: string[];
+  /** Bundle root to narrow to; absent or unknown means all bundles. */
+  bundle?: string;
+}
+
+/** How the repo's OKF knowledge bases were read over a period (repo OKF tab). */
+export async function fetchRepoOkfUsage(
+  repoId: number,
+  params: RepoOkfUsageQueryParams,
+): Promise<RepoOkfUsageResponse> {
+  const url = new URLSearchParams();
+  if (params.teamId != null) url.set('teamId', String(params.teamId));
+  url.set('startDate', params.startDate);
+  url.set('endDate', params.endDate);
+  if (params.branches && params.branches.length > 0) {
+    url.set(
+      'branches',
+      params.branches.map((b) => encodeURIComponent(b)).join(','),
+    );
+  }
+  if (params.users && params.users.length > 0) {
+    url.set('users', params.users.map((u) => encodeURIComponent(u)).join(','));
+  }
+  for (const a of params.attr ?? []) url.append('attr', a);
+  if (params.bundle) url.set('bundle', params.bundle);
+  const res = await apiFetch(
+    `/api/v1/repositories/${repoId}/reports/okf-usage?${url.toString()}`,
+  );
+  if (!res.ok) throw new ApiError(res.status);
+  return res.json() as Promise<RepoOkfUsageResponse>;
 }
 
 export interface AttributionBreakdownQueryParams {

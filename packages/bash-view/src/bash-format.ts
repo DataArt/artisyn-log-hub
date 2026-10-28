@@ -8,9 +8,12 @@
  * `do…done`, `then…fi`, `{ … }` and `( … )`. Every other node is copied verbatim, and multi-line
  * verbatim text (heredocs, strings) is never re-indented.
  */
-import type { Node } from 'web-tree-sitter';
-import { literal } from './bash-analyze';
-import { type BashParser, withTree } from './bash-parser';
+import { literal } from './bash-analyze.ts';
+import {
+  type BashParser,
+  type BashSyntaxNode as Node,
+  withTree,
+} from './syntax.ts';
 
 const WIDTH = 80;
 const IND = '  ';

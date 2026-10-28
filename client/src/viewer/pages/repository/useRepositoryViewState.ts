@@ -102,12 +102,24 @@ export function useRepositoryViewState({
 
   function setMainTab(tab: MainTab) {
     const next = new URLSearchParams(searchParams);
-    if (tab === 'analytics' || tab === 'reports' || tab === 'settings') {
+    if (
+      tab === 'analytics' ||
+      tab === 'reports' ||
+      tab === 'okf' ||
+      tab === 'settings'
+    ) {
       next.set('mtab', tab);
       next.delete('session');
       next.delete('tab');
     } else {
       next.delete('mtab');
+    }
+    // The repo OKF tab owns its `okf*` filter params (DD-44); leaving the tab drops them so
+    // they never leak into another tab's URL.
+    if (tab !== 'okf') {
+      for (const key of [...next.keys()]) {
+        if (key.startsWith('okf')) next.delete(key);
+      }
     }
     setSearchParams(next, { replace: true });
   }

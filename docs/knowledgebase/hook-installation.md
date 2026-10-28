@@ -294,6 +294,28 @@ Two fixed limits on the upload side are not config keys:
   (`harness: plugin <id> enabled but not installed for this project — skipped`), never a scan
   failure. Project skills still win over user and plugin skills of the same name.
 
+### OKF Knowledge-Base Snapshot (hook `2.26.0`+)
+
+| Key | Default | Description |
+|---|---|---|
+| `okf` | `{"exclude": []}` | Object. `okf.exclude` is an array of repo-relative globs (`**` any depth, `*` and `?` inside one path segment) whose files and folders are never scanned for OKF bundles (folders whose `index.md` front matter has an `okf_version:` key). `tmp/**` is always excluded on top of the list, so a user list can never remove it. A non-array `exclude` is ignored with one `[warn]` line; blank or non-string entries are dropped; other sub-keys are kept as they are. |
+
+- **Merge.** Like every top-level key, `log-hub.local.json`'s `okf` replaces `log-hub.json`'s whole
+  object (shallow merge) — the two `exclude` lists are **not** concatenated. Example:
+  `{"okf": {"exclude": ["vendor/**", "docs/archive/**"]}}`.
+- **What it drives.** On every root-session `artisyn` upload `send-logs-hook.js` detects the
+  bundles, flags gitignored files with one `git check-ignore` call, and sends the
+  `okf-snapshot-ref` line (plus the full `okf-snapshot` line once per distinct KB state, tracked in
+  `.artisyn/ai_work_dir/okf-state.json`). Rules: `docs/knowledgebase/algorithms/okf-snapshot.md`;
+  wire contract: `hook-api-versioning.md`; what the server shows: `okf-usage.md`.
+- **Excluding vs ignoring.** An excluded folder is not in the snapshot at all; a gitignored one is
+  in it, flagged `ignored`, and hidden from every team view (but visible to its owner).
+- **`hook.log` lines.** `okf: snapshot <id12> sent` / `known` / `unknown on server — will resend`;
+  `okf-snapshot: detection took N ms …` when over 300 ms; `okf-snapshot: N KB files exceed the
+  20000 cap — no snapshot sent`; `okf: snapshot skipped (…)` on any failure (the upload still goes
+  out).
+- An older hook ignores the key; this hook ignores unknown sub-keys.
+
 ### OTEL Settings
 
 Hook `2.3.0`+. These five keys live in `.artisyn/config/log-hub.json` like every other non-secret setting —

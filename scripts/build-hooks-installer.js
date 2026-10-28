@@ -126,6 +126,10 @@ const HOOK_JS_FILES = [
   // its known-snapshot-ids / per-session-id state.
   'harness-snapshot.js',
   'harness-state.js',
+  // OKF snapshot builder (KB bundle detection, ignored flags, content-hash id) and its
+  // known-snapshot-ids / content-hash-cache state — `require`d at startup by send-logs-hook.
+  'okf-snapshot.js',
+  'okf-state.js',
   // Pre-upload drop of malformed NDJSON lines, shared by both upload hooks.
   'ndjson-sanitize.js',
   // Change surface: the throttled tracked-codebase measurement `send-logs-hook.js` ships as

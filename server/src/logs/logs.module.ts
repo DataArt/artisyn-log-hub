@@ -27,6 +27,9 @@ import { LogsController } from './logs.controller';
 import { LogsV2Controller } from './logs-v2.controller';
 import { LogsService } from './logs.service';
 import { ModelPricingController } from './model-pricing.controller';
+import { OkfFactsController } from './okf/okf-facts.controller';
+import { OkfFactsService } from './okf/okf-facts.service';
+import { OkfUsageService } from './okf/okf-usage.service';
 import { RepoBackfillService } from './repo-backfill.service';
 import { RepositoriesController } from './repositories.controller';
 import { RepositoriesService } from './repositories.service';
@@ -62,6 +65,7 @@ import { UploadQueueService } from './upload-queue.service';
     LogsController,
     LogsV2Controller,
     ModelPricingController,
+    OkfFactsController,
     RepositoriesController,
     RepositoryExportImportController,
     ReportsController,
@@ -100,6 +104,10 @@ import { UploadQueueService } from './upload-queue.service';
     // Stored session costs: sweeps stale session_costs rows (pricing changes, moved
     // top-ancestor price dates) and serves the pricing writers' drain signal.
     SessionCostRecomputeService,
+    // OKF (knowledge base) usage — the session tab and repo report (OkfUsageService) and
+    // the API-key facts route (OkfFactsService).
+    OkfUsageService,
+    OkfFactsService,
   ],
   exports: [RepositoriesService, HookStateService, UploadQueueService],
 })

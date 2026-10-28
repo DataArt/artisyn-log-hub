@@ -30,6 +30,12 @@
 // reassigned to the importer — steps 5 and 7 assert that, steps 9-14 run in mode C only. An
 // archive that repeats a session id is refused with 422 in every mode (step 15).
 //
+// OKF usage tab (2026-10-27-okf-usage-tab, DD-21, DD-42), steps 17–19: an archive from before the
+// OKF tab (no `okfSnapshotId`, no OKF lines) still imports and leaves the session unbound; a later
+// archive of the same session with OKF lines stores the snapshot for the importer and binds the
+// session (recompute-all then fills its OKF rows from the now-known roots); a third archive with a
+// different snapshot never rebinds it.
+//
 // Replaces:
 //   - server/test/repository-export-import.spec.ts (7 of 8: «overwrites when longer», «leaves
 //     untouched when shorter or equal», «bootstrap import», «retries numbered suffix», «404 other
@@ -50,6 +56,7 @@ import {
   type UploadSummary,
 } from '../helpers/export-import';
 import { ndjson } from '../helpers/ingest';
+import { okfSessionTree, type OkfSessionTreeSpec } from '../helpers/okf';
 import { ownRepoId, promptSessionBodies, uploadPromptSession, type PromptSession } from '../helpers/prompt-session';
 import { buildExportZip, buildZip } from '../helpers/zip';
 
@@ -433,5 +440,94 @@ test('@S-REPO-11 import conflicts: the longer log wins; bootstrap import creates
       [snapSid],
     );
     expect(bound.rows[0]?.harness_snapshot_id, 'the imported session is bound to it').toBe(snapshotId);
+  });
+
+  // ── OKF snapshot binding on import ────────────────────────────────────────────────────────
+  const okfSid = `r11-${run}-okf`;
+  const okfKb = `docs/kb-${run}`;
+  const okfSpec = (bundleRoot: string): OkfSessionTreeSpec => ({
+    sessionId: okfSid,
+    repoUrl,
+    prompt: `okf ${run}`,
+    snapshot: { bundles: [{ root: bundleRoot, files: [`${bundleRoot}/a.md`, `${bundleRoot}/b.md`] }] },
+    actions: [{ read: `${bundleRoot}/index.md` }, { read: `${bundleRoot}/a.md`, bytes: 1500 }],
+  });
+  /** A current-format archive of the OKF session: `okfSnapshotId` in session.json, OKF lines in artisyn.jsonl. */
+  const okfZip = (spec: OkfSessionTreeSpec) => {
+    const tree = okfSessionTree(spec);
+    const [artisyn, claude] = tree.uploads.map((u) => u.body);
+    const at = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    return {
+      okfSnapshotId: tree.okfSnapshotId!,
+      zip: buildZip([
+        {
+          name: 'meta.json',
+          data: JSON.stringify({
+            formatVersion: 1,
+            createdAt: new Date().toISOString(),
+            sourceHost: 'scenario-suite',
+            sourceRepoUrl: repoUrl,
+            sourceRepoContext: { type: 'personal' },
+            sessionCount: 1,
+            approxUncompressedBytes: artisyn.length + claude.length,
+          }),
+        },
+        {
+          name: `sessions/${okfSid}/session.json`,
+          data: JSON.stringify({
+            sessionId: okfSid,
+            parentSessionId: null,
+            workflowRunId: null,
+            firstPrompt: spec.prompt,
+            startTime: at.toISOString(),
+            endTime: new Date(at.getTime() + 120_000).toISOString(),
+            gitBranch: 'main',
+            okfSnapshotId: tree.okfSnapshotId,
+            stats: null,
+            logs: { claude: { userEmail: owner.email }, artisyn: { userEmail: owner.email } },
+          }),
+        },
+        { name: `sessions/${okfSid}/claude.jsonl`, data: claude },
+        { name: `sessions/${okfSid}/artisyn.jsonl`, data: artisyn },
+      ]),
+    };
+  };
+  const okfBinding = async () =>
+    (await db.query<{ okf_snapshot_id: string | null }>('SELECT okf_snapshot_id FROM sessions WHERE session_id = $1', [okfSid])).rows[0]
+      ?.okf_snapshot_id;
+  const okfStored = async (id: string) =>
+    (await db.query('SELECT 1 FROM okf_snapshots WHERE user_id = $1 AND snapshot_id = $2', [owner.id, id])).rows.length;
+
+  await test.step('17. DD-42: an archive from before the OKF tab (no okfSnapshotId, no OKF lines) imports; the session stays unbound', async () => {
+    const status = await importZip(
+      owner.api,
+      repoA,
+      buildExportZip({ sourceRepoUrl: repoUrl, sessions: [{ sessionId: okfSid, prompt: `okf ${run}`, repoUrl, userEmail: owner.email }] }),
+    );
+    expect(status).toMatchObject({ status: 'done', processed: 1, total: 1 });
+    expect(await sessionIdsOf(owner, repoA)).toContain(okfSid);
+    expect(await okfBinding()).toBeNull();
+  });
+
+  const first = okfZip(okfSpec(okfKb));
+
+  await test.step('18. DD-21: an archive of the same session with OKF lines stores the snapshot for the importer and binds it; recompute fills its OKF rows', async () => {
+    const status = await importZip(owner.api, repoA, first.zip);
+    expect(status).toMatchObject({ status: 'done', processed: 1, total: 1 });
+    expect(await okfStored(first.okfSnapshotId), 'the importer owns an okf_snapshots row for this id').toBe(1);
+    expect(await okfBinding()).toBe(first.okfSnapshotId);
+    expect((await owner.api.post(`/api/v1/repositories/${repoA}/recompute-all-sessions`)).status()).toBe(201);
+    const rows = await db.query<{ path_key: string }>(
+      `SELECT a.path_key FROM session_okf_access a JOIN sessions s ON s.id = a.session_id WHERE s.session_id = $1 ORDER BY a.path_key`,
+      [okfSid],
+    );
+    expect(rows.rows.map((r) => r.path_key)).toEqual([`${okfKb}/a.md`, `${okfKb}/index.md`]);
+  });
+
+  await test.step('19. DD-21: a third archive with a different snapshot never rebinds the session', async () => {
+    const other = okfZip(okfSpec(`${okfKb}-other`));
+    expect(other.okfSnapshotId).not.toBe(first.okfSnapshotId);
+    await importZip(owner.api, repoA, other.zip);
+    expect(await okfBinding()).toBe(first.okfSnapshotId);
   });
 });
