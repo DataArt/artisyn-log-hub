@@ -1,13 +1,18 @@
 ---
-name: review-poc
-description: "ALWAYS when, while reviewing a task (adlc-lh:review, adlc-lh:review-deep, or an ad-hoc review of requirements/plan), you need to build a prototype / proof of concept / spike to check an assumption. Defines where the PoC lives (docs/pocs/<datetime>-<slug>/) and that every non-source file in it (dependencies, build output, logs) is listed in that folder's own .gitignore."
+name: poc
+description: "ALWAYS when you build a prototype / proof of concept / PoC / spike / experiment to check an assumption — during research, task review (adlc-lh:review, adlc-lh:review-deep, ad-hoc), planning, or on a direct request (\"сделай poc\", \"прототип\", \"проверь гипотезу\", \"spike\", \"research\"). Defines where the PoC lives (docs/pocs/<datetime>-<slug>/ — never tmp/ or docs/tasks/), its README (task, question, how to run, result) and that every non-source file in it (dependencies, build output, logs) is listed in that folder's own .gitignore."
 ---
 
-# Prototypes during task review
+# Prototypes and proofs of concept
 
-A review sometimes cannot answer a question from code and docs alone — "does library X support Y",
-"will this query be fast enough", "can the hook read Z on Windows". Then build a small prototype.
-This skill fixes where it goes and what of it gets committed.
+Research, a review or a plan sometimes cannot answer a question from code and docs alone — "does
+library X support Y", "will this query be fast enough", "can the hook read Z on Windows". Then build
+a small prototype. This skill fixes where it goes and what of it gets committed — whether the PoC
+was asked for directly or started on your own initiative.
+
+**Decide the location before writing the first file.** A PoC is not a throwaway temp file: even if
+it starts as a quick experiment, it goes to `docs/pocs/` from the start, not to `tmp/` "for now".
+`tmp/` is only for run artefacts you will delete.
 
 ## Location
 
@@ -67,6 +72,9 @@ docs/pocs/<datetime>-<slug>/
   never imported by the real packages; if the approach is adopted, the implementation is written
   again in the right package during `implement`.
 - No secrets in the PoC; credentials go to the ignored `.env`.
+- A sample project inside the PoC must not carry a live `.claude/` folder (it would activate its
+  hooks/settings for anyone who opens the folder in Claude Code) — name it e.g. `claude-config/`
+  and pass it with `claude --settings`. Never commit a nested `.git/` of such a sample.
 - Background processes started for the PoC (servers, watchers) are stopped when done — see
   `## Background processes cleanup` in `CLAUDE.md`.
 
@@ -77,6 +85,7 @@ docs/pocs/<datetime>-<slug>/
    contain only source files, `README.md` and `.gitignore`. If something else shows up, add it to
    the PoC's `.gitignore` and re-check.
 2. Fill in **Result** in the PoC `README.md`.
-3. Reference the PoC from the review output: in the task's requirements / review findings (and in
+3. Reference the PoC from the work it serves: in the task's requirements / research note / review
+   findings (and in
    `open_questions_ru.md` if a question is answered or raised by it) — link
    `docs/pocs/<datetime>-<slug>/` and state the conclusion in one or two sentences.
