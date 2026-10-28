@@ -202,6 +202,7 @@ export const f08AdminReposTeams: ContractFamily = {
           'session_stats',
           'session_costs',
           'session_request_ids',
+          'session_tool_usage',
         ],
         delta: {
           deleted: [
@@ -221,6 +222,11 @@ export const f08AdminReposTeams: ContractFamily = {
             { table: 'session_costs', where: 'session_id = @s08.id' },
             {
               table: 'session_request_ids',
+              where: 'session_id = @s08.id',
+              count: 'all',
+            },
+            {
+              table: 'session_tool_usage',
               where: 'session_id = @s08.id',
               count: 'all',
             },

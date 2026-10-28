@@ -35,6 +35,11 @@ const ReportsPanel = lazy(() =>
     default: m.ReportsPanel,
   })),
 );
+const RepoToolsTab = lazy(() =>
+  import('./tools/RepoToolsTab').then((m) => ({
+    default: m.RepoToolsTab,
+  })),
+);
 const RepoOkfTab = lazy(() =>
   import('./okf/RepoOkfTab').then((m) => ({
     default: m.RepoOkfTab,
@@ -53,6 +58,7 @@ const MAIN_TAB_LABELS: Record<MainTab, string> = {
   sessions: 'Sessions',
   analytics: 'Analytics',
   reports: 'Reports',
+  tools: 'Tools/MCP',
   okf: 'OKF',
   settings: 'Settings',
 };
@@ -172,6 +178,8 @@ export function RepositoryView() {
     closeSession,
     handleAnalyticsSessionClick,
     handleAnalyticsStateChange,
+    targetToolUseId,
+    clearTargetToolUse,
   } = useRepositoryViewState({
     repoId,
     teamId,
@@ -417,6 +425,8 @@ export function RepositoryView() {
             isBranchOpen={isBranchOpen}
             onToggleBranch={toggleBranch}
             isReloadingUpdatedSession={isReloadingUpdatedSession}
+            targetToolUseId={targetToolUseId}
+            onTargetToolUseConsumed={clearTargetToolUse}
           />
         </PageTabsContent>
 
@@ -450,6 +460,12 @@ export function RepositoryView() {
             <PageTabsContent value="reports" className="flex-1 min-h-0">
               <Suspense fallback={<LazyFallback />}>
                 <ReportsPanel repoId={repoId} teamId={teamId} />
+              </Suspense>
+            </PageTabsContent>
+
+            <PageTabsContent value="tools" className="flex-1 min-h-0">
+              <Suspense fallback={<LazyFallback />}>
+                <RepoToolsTab repoId={repoId} teamId={teamId} />
               </Suspense>
             </PageTabsContent>
 

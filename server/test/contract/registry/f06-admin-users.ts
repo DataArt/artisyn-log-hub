@@ -20,6 +20,7 @@ export const DELETE_OUTSIDER: WriteSpec = {
     'session_stats',
     'session_costs',
     'session_request_ids',
+    'session_tool_usage',
   ],
   delta: {
     deleted: [
@@ -37,6 +38,11 @@ export const DELETE_OUTSIDER: WriteSpec = {
       { table: 'session_costs', where: 'session_id = @s08.id' },
       {
         table: 'session_request_ids',
+        where: 'session_id = @s08.id',
+        count: 'all',
+      },
+      {
+        table: 'session_tool_usage',
         where: 'session_id = @s08.id',
         count: 'all',
       },

@@ -124,6 +124,9 @@ export function standEnv(input: StandEnvInput): Record<string, string> {
     E2E_DB_SCHEMA: input.schema,
     PUBLIC_BASE_URL: input.publicBaseUrl || url,
     LOGS_MAX_BODY_MB: '2',
+    // The Tools/MCP rebuild drain (DD-7) runs every second, so a scenario sees the derived
+    // `session_tool_usage` rows shortly after its upload instead of after the 15 s default.
+    TOOL_USAGE_REBUILD_INTERVAL_MS: '1000',
     // The stand is plain http on 127.0.0.1; the server defaults to Secure cookies, which the
     // browser and request contexts would then never send back. .env.defaults is not copied.
     COOKIE_SECURE: 'false',

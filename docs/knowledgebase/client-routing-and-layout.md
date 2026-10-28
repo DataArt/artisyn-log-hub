@@ -5,7 +5,7 @@ description: "React SPA routing, layout, provider hierarchy, major page componen
 tags:
   - client
   - routing
-timestamp: "2026-10-22T00:00:00+04:00"
+timestamp: "2026-10-28T00:00:00+04:00"
 ---
 
 # Client Component Hierarchy
@@ -162,7 +162,7 @@ Main content for a repository. Reads `repoId` and optional `teamId` from react-r
 **Tab layout** via `PageTabs`:
 - **Sessions tab** — left column: scrollable session list (date, first prompt, branch); right panel:
   - **Top summary strip** (always visible when session selected): start time, end time, user email, session context key:value pairs.
-  - **Inner tab bar** (`SessionTabBar.tsx`, ids in `tab-ids.ts` `SESSION_TABS`): Summary | Info | Logs | Bash | Charts | [Advisor] | Statistics | Change surface | Harness usage | [Raw Logs]. The entries below describe the older core tabs; Call Tree is now a Charts sub-tab (`tab=call-tree` redirects to Charts).
+  - **Inner tab bar** (`SessionTabBar.tsx`, ids in `tab-ids.ts` `SESSION_TABS`): Summary | Info | Logs | Bash | Charts | [Advisor] | Statistics | Change surface | Harness usage | OKF | Tools/MCP | [Raw Logs]. The entries below describe the older core tabs; Call Tree is now a Charts sub-tab (`tab=call-tree` redirects to Charts).
     - **Logs tab** (`SessionLogView`): structured prompt-turn list with context side panel.
     - **Bash tab** (`SessionBashTab`, tab id `bash`): every Bash command of the session tree (main + sub-agents) in a keyboard-navigable list, with the readable command view of the selected one. The selected call lives in the `bashCall` search param (`useBashCallParam`, `setSearchParams(next, { replace: true })`); a missing or unknown id selects the first row without rewriting the URL.
     - **Call Tree tab** (`CallTreeView`): hierarchical token-cost breakdown tree (System Context → Prompt turns → per-turn children). Token counts and cost-share percentages with progress bars. Expandable rows for prompt turns, groups (Skills, Rules, Code, Docs), and sub-agent rows.

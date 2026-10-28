@@ -61,6 +61,11 @@ export default async function globalSetup(): Promise<void> {
   process.env.EXPORT_IMPORT_CLEANUP_INTERVAL_MS = '3600000';
   process.env.EXPORT_IMPORT_JOB_TTL_MS = String(100 * 365 * 24 * 3600 * 1000);
   process.env.TURN_END_ADVISOR_ORPHAN_CLEANUP_INTERVAL_MS = '3600000';
+  // The tool-usage rebuild drain (T-26 DD-7) is parked too: every world session is pending
+  // (`tool_usage_version` NULL), so a 15 s tick would rewrite `session_tool_usage`, `sessions`
+  // and `repositories.tool_wrap_status` mid-run. The F24 rows read the world's hand-written
+  // `session_tool_usage` rows; what a rebuild produces is the algorithm tests' and scenarios' job.
+  process.env.TOOL_USAGE_REBUILD_INTERVAL_MS = '3600000';
   process.env.UPLOAD_QUEUE_LEASE_TIMEOUT_MS = '150';
   process.env.UPLOAD_QUEUE_TICK_BUDGET_MS = '500';
   process.env.AI_TOOL_VERSION_CHECK_ENABLED = 'false';

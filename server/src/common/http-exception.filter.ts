@@ -22,6 +22,8 @@ export class HttpExceptionFilter implements ExceptionFilter {
     let error: string | undefined;
     let retryAfterSeconds: number | undefined;
     let conflicts: unknown[] | undefined;
+    let field: string | undefined;
+    let code: string | undefined;
 
     if (exception instanceof HttpException) {
       status = exception.getStatus();
@@ -50,6 +52,14 @@ export class HttpExceptionFilter implements ExceptionFilter {
         // Zip import 409: the per-session conflict list travels in the body.
         if (Array.isArray(resp['conflicts'])) {
           conflicts = resp['conflicts'];
+        }
+        // Field-level validation errors (tool-monitoring config PUT): the offending field
+        // (`tools[2].name`) and a machine-readable code travel in the body.
+        if (typeof resp['field'] === 'string') {
+          field = resp['field'];
+        }
+        if (typeof resp['code'] === 'string') {
+          code = resp['code'];
         }
       } else {
         message = exception.message;
@@ -98,6 +108,8 @@ export class HttpExceptionFilter implements ExceptionFilter {
       message,
       ...(error ? { error } : {}),
       ...(conflicts ? { conflicts } : {}),
+      ...(field !== undefined ? { field } : {}),
+      ...(code !== undefined ? { code } : {}),
     });
   }
 }

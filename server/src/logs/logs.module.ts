@@ -44,6 +44,10 @@ import { HarnessUsageService } from './reports/harness-usage.service';
 import { ReportsController } from './reports/reports.controller';
 import { SessionAttributionModule } from './session-attribution/session-attribution.module';
 import { SessionCostRecomputeService } from './session-cost/session-cost-recompute.service';
+import { ToolMonitorConfigService } from './tool-monitoring/tool-monitor-config.service';
+import { ToolMonitoringHookController } from './tool-monitoring/tool-monitoring-hook.controller';
+import { ToolMonitoringController } from './tool-monitoring/tool-monitoring.controller';
+import { ToolUsageRebuildService } from './tool-monitoring/tool-usage-rebuild.service';
 import { UploadQueueSchedulerService } from './upload-queue-scheduler.service';
 import { UploadQueueService } from './upload-queue.service';
 
@@ -70,6 +74,9 @@ import { UploadQueueService } from './upload-queue.service';
     RepositoryExportImportController,
     ReportsController,
     UsageAnalyticsController,
+    // Tools/MCP monitoring (DD-24): the tab's UI routes and the hook's config route.
+    ToolMonitoringController,
+    ToolMonitoringHookController,
   ],
   providers: [
     LogsService,
@@ -108,6 +115,12 @@ import { UploadQueueService } from './upload-queue.service';
     // the API-key facts route (OkfFactsService).
     OkfUsageService,
     OkfFactsService,
+    // Tools/MCP monitoring (DD-24): registered here rather than in a module of its own, which
+    // would cycle with this module's RepositoriesService.
+    ToolMonitorConfigService,
+    // Background drain that rebuilds stale session_tool_usage trees (DD-7); LogsService nudges
+    // it after each ingest commit.
+    ToolUsageRebuildService,
   ],
   exports: [RepositoriesService, HookStateService, UploadQueueService],
 })

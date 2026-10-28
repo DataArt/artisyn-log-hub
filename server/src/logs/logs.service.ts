@@ -56,6 +56,8 @@ import {
   writeSessionFileStats,
 } from './session-file-stats-writer';
 import { rebuildSessionOkfAccess } from './okf/okf-access-writer';
+import { ToolUsageRebuildService } from './tool-monitoring/tool-usage-rebuild.service';
+import { markTreeStale } from './tool-monitoring/tool-usage-writer';
 import {
   replaceSessionCallTokens,
   replaceSessionRequestIds,
@@ -247,7 +249,10 @@ export type ImportSessionInput = {
 export class LogsService {
   private readonly logger = new Logger(LogsService.name);
 
-  constructor(@Inject(DRIZZLE) private readonly db: DrizzleDb) {}
+  constructor(
+    @Inject(DRIZZLE) private readonly db: DrizzleDb,
+    private readonly toolUsageRebuild: ToolUsageRebuildService,
+  ) {}
 
   /** Lock-free `findSessionOwnerId` for callers outside this service (zip import). */
   getSessionOwnerId(sessionId: string): Promise<number | null> {
@@ -484,6 +489,16 @@ export class LogsService {
         );
       }
 
+      // Step 3d — Tools/MCP tab (DD-7): a transcript or wrapper-records upload only marks the
+      // tree stale; the background drain rebuilds its session_tool_usage rows after commit.
+      if (
+        logType === 'claude' ||
+        logType === 'claude-subagent' ||
+        logType === 'tool-calls'
+      ) {
+        await markTreeStale(tx, sessionRowId);
+      }
+
       // Step 4 — Early exit for non-artisyn
       if (logType !== 'artisyn') return;
 
@@ -550,6 +565,10 @@ export class LogsService {
           .onConflictDoNothing()
           .returning({ repoId: logRepositories.repoId });
         linksInserted = insertedLinks.length;
+      }
+      // A newly linked repository makes the tree's owner and monitored tools known (DD-7).
+      if (linksInserted > 0) {
+        await markTreeStale(tx, sessionRowId);
       }
 
       // Step 5b — Update max_upload_bytes on all repos linked to this artisyn log.
@@ -786,6 +805,8 @@ export class LogsService {
           .onConflictDoNothing();
       }
     });
+    // Post-commit nudge: rebuild whatever this upload marked stale (no-op when nothing is).
+    if (!foreignSession) this.toolUsageRebuild.notify();
     return foreignSession ? { status: 'foreign-session' } : { status: 'ok' };
   }
 
@@ -870,102 +891,107 @@ export class LogsService {
    */
   async importSession(input: ImportSessionInput): Promise<ImportSessionResult> {
     const { sessionId, parentSessionId, workflowRunId, targetUserId } = input;
-    return this.db.transaction(async (tx): Promise<ImportSessionResult> => {
-      // Step 1 — same per-session advisory lock key as upsert().
-      await tx.execute(
-        sql`SELECT pg_advisory_xact_lock(hashtextextended(${'session-owner:' + sessionId}, 0))`,
-      );
-
-      // Step 2 — reject imports targeting a soft-deleted session silently.
-      const deletedRow = await tx
-        .select({ id: sessions.id })
-        .from(sessions)
-        .where(
-          and(eq(sessions.sessionId, sessionId), eq(sessions.deleted, true)),
-        )
-        .limit(1);
-      if (deletedRow.length > 0) {
-        this.logger.warn(
-          `Session ${sessionId} is deleted; import rejected silently`,
+    const result = await this.db.transaction(
+      async (tx): Promise<ImportSessionResult> => {
+        // Step 1 — same per-session advisory lock key as upsert().
+        await tx.execute(
+          sql`SELECT pg_advisory_xact_lock(hashtextextended(${'session-owner:' + sessionId}, 0))`,
         );
-        return { status: 'deleted' };
-      }
 
-      // Step 3 — owner guard (not in single-user mode).
-      let ownerId: number | null = null;
-      if (!input.reassignToImporter) {
-        ownerId = await findSessionOwnerId(tx, sessionId);
-        if (ownerId !== null && ownerId !== targetUserId) {
+        // Step 2 — reject imports targeting a soft-deleted session silently.
+        const deletedRow = await tx
+          .select({ id: sessions.id })
+          .from(sessions)
+          .where(
+            and(eq(sessions.sessionId, sessionId), eq(sessions.deleted, true)),
+          )
+          .limit(1);
+        if (deletedRow.length > 0) {
           this.logger.warn(
-            `import blocked: foreign session sessionId=${sessionId} targetUserId=${targetUserId} ownerId=${ownerId}`,
+            `Session ${sessionId} is deleted; import rejected silently`,
           );
-          return { status: 'foreign-session' };
+          return { status: 'deleted' };
         }
-      }
 
-      // Step 4 — session upsert, once per session.
-      const [sessionRow] = await tx
-        .insert(sessions)
-        .values({
-          sessionId,
-          parentSessionId: parentSessionId ?? undefined,
-          workflowRunId: workflowRunId ?? undefined,
-        })
-        .onConflictDoUpdate({
-          target: sessions.sessionId,
-          set: {
-            sessionId: sql`excluded.session_id`,
-            ...(parentSessionId
-              ? { parentSessionId: sql`excluded.parent_session_id` }
-              : {}),
-            ...(workflowRunId
-              ? { workflowRunId: sql`excluded.workflow_run_id` }
-              : {}),
-          },
-        })
-        .returning({ id: sessions.id });
-      const sessionRowId = sessionRow.id;
+        // Step 3 — owner guard (not in single-user mode).
+        let ownerId: number | null = null;
+        if (!input.reassignToImporter) {
+          ownerId = await findSessionOwnerId(tx, sessionId);
+          if (ownerId !== null && ownerId !== targetUserId) {
+            this.logger.warn(
+              `import blocked: foreign session sessionId=${sessionId} targetUserId=${targetUserId} ownerId=${ownerId}`,
+            );
+            return { status: 'foreign-session' };
+          }
+        }
 
-      // Step 5 — every log, in order, under its effective owner.
-      const ownSession = ownerId !== null && ownerId === targetUserId;
-      for (const log of input.logs) {
-        const effectiveUserId =
-          input.reassignToImporter || ownSession
-            ? targetUserId
-            : log.resolvedUserId;
-        await this.writeImportedLog(
-          tx,
-          sessionRowId,
-          log,
-          input,
-          effectiveUserId,
-        );
-      }
+        // Step 4 — session upsert, once per session.
+        const [sessionRow] = await tx
+          .insert(sessions)
+          .values({
+            sessionId,
+            parentSessionId: parentSessionId ?? undefined,
+            workflowRunId: workflowRunId ?? undefined,
+          })
+          .onConflictDoUpdate({
+            target: sessions.sessionId,
+            set: {
+              sessionId: sql`excluded.session_id`,
+              ...(parentSessionId
+                ? { parentSessionId: sql`excluded.parent_session_id` }
+                : {}),
+              ...(workflowRunId
+                ? { workflowRunId: sql`excluded.workflow_run_id` }
+                : {}),
+            },
+          })
+          .returning({ id: sessions.id });
+        const sessionRowId = sessionRow.id;
 
-      // Step 6 — single-user mode: the importer owns every log of the session.
-      if (input.reassignToImporter) {
-        await tx
-          .update(logs)
-          .set({ userId: targetUserId })
-          .where(
-            and(
-              eq(logs.sessionId, sessionRowId),
-              ne(logs.userId, targetUserId),
-            ),
+        // Step 5 — every log, in order, under its effective owner.
+        const ownSession = ownerId !== null && ownerId === targetUserId;
+        for (const log of input.logs) {
+          const effectiveUserId =
+            input.reassignToImporter || ownSession
+              ? targetUserId
+              : log.resolvedUserId;
+          await this.writeImportedLog(
+            tx,
+            sessionRowId,
+            log,
+            input,
+            effectiveUserId,
           );
-        await tx
-          .update(logsOtel)
-          .set({ userId: targetUserId })
-          .where(
-            and(
-              eq(logsOtel.sessionId, sessionRowId),
-              ne(logsOtel.userId, targetUserId),
-            ),
-          );
-      }
+        }
 
-      return { status: 'ok' };
-    });
+        // Step 6 — single-user mode: the importer owns every log of the session.
+        if (input.reassignToImporter) {
+          await tx
+            .update(logs)
+            .set({ userId: targetUserId })
+            .where(
+              and(
+                eq(logs.sessionId, sessionRowId),
+                ne(logs.userId, targetUserId),
+              ),
+            );
+          await tx
+            .update(logsOtel)
+            .set({ userId: targetUserId })
+            .where(
+              and(
+                eq(logsOtel.sessionId, sessionRowId),
+                ne(logsOtel.userId, targetUserId),
+              ),
+            );
+        }
+
+        return { status: 'ok' };
+      },
+    );
+    // Post-commit nudge for the trees writeImportedLog marked stale (DD-7).
+    if (result.status === 'ok') this.toolUsageRebuild.notify();
+    return result;
   }
 
   /**
@@ -1040,6 +1066,12 @@ export class LogsService {
       // and discard the incoming data for this log entirely.
       logId = existing.id;
       wrote = false;
+    }
+
+    // Tools/MCP tab (DD-7, DD-23): a written transcript or wrapper-records body, or an artisyn
+    // log (whose repo link below makes the owner known), marks the tree for the background drain.
+    if (wrote || logType === 'artisyn') {
+      await markTreeStale(tx, sessionRowId);
     }
 
     // session_stats/session_file_stats for claude logs, reusing the exact

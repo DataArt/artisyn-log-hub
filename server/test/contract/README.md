@@ -39,7 +39,7 @@ It shares Postgres with the server tests and the e2e suites, so it runs serially
 | `types.ts` | the registry row format (`ContractCase`, `ReadSpec`, `WriteSpec`, `FieldMap`) |
 | `run-case.ts` | `runCase(row, ctx)`, `ContractContext` (one real login per actor), `callable()`, `resetWorld()` |
 | `registry/index.ts` | collects the families: `FAMILIES`, `casesOf()`, `registryRoutes()` |
-| `registry/f<NN>-<family>.ts` | one family's rows (F01-F23) |
+| `registry/f<NN>-<family>.ts` | one family's rows (F01-F24) |
 | `registry/oracle-sql.ts` | shared hand-written SQL: session cost (own / with sub-agents), the listed root sessions of a repository, ISO timestamps for jsonb |
 | `f<NN>.contract-spec.ts` | one `it.each` per family |
 | `routes.contract-spec.ts` | the meta-test: router (Nest metadata and the Express 5 stack) vs registry |

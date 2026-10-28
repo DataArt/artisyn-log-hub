@@ -5,12 +5,14 @@ description: "Hook system architecture: event triggers, telemetry recording, the
 tags:
   - hooks
   - otel
-timestamp: "2026-10-24T00:00:00+04:00"
+timestamp: "2026-10-28T00:00:00+04:00"
 ---
 
 # Hook System Overview
 
 The artisyn hook system is a set of Node.js scripts wired into Claude Code's hook event system. It collects telemetry from Claude sessions and uploads collected logs to the artisyn-log-hub server. It is monitoring/logging only and never blocks a tool call — the `PreToolUse` guardrail (`guardrail-hook.js`, static file-access and LLM Bash checks, `guardrail*` config keys) was removed in hook `2.19.0`; an upgrade deletes the stale script from the installed plugin, and leftover `guardrail*` keys in `log-hub.json` are ignored but deliberately left in place (an older hook reading a config without them would fall back to its guardrail-on defaults).
+
+Hook `2.27.0` re-introduces a `PreToolUse` entry, but it is **not** a guardrail: `tool-wrap-powershell.js` (matcher `PowerShell`) only prefixes a PowerShell command that mentions a monitored CLI tool with a logging wrapper (`updatedInput`). It never returns a permission decision, never denies a call and exits 0 with no output whenever anything fails. Together with the Bash shims that SessionStart puts on the PATH it is the **CLI tool wrapper** of the Tools/MCP tab — see [tool-monitoring.md](tool-monitoring.md).
 
 All hooks use only Node.js 18+ built-ins (`fs`, `path`, `child_process`, `http`, `https`, `os`, `zlib`) — no `npm install` is needed in the project being monitored.
 
@@ -24,7 +26,7 @@ The hook ships as a Claude Code plugin (`log-hub-hooks`), extracted by the insta
 | File | Role |
 |---|---|
 | `.claude-plugin/plugin.json` | Plugin manifest — `name`, `displayName`, `version`, `description`, `author` |
-| `hooks/hooks.json` | All hook wiring — 14 events (no `PreToolUse`), exec form (`{"type":"command","command":"node","args":["${CLAUDE_PLUGIN_ROOT}/scripts/<script>.js"]}`) |
+| `hooks/hooks.json` | All hook wiring — 15 events (14 until hook `2.26.x`; `2.27.0` adds `PreToolUse` with matcher `PowerShell` → `tool-wrap-powershell.js`, status message "Preparing tool monitoring..."), exec form (`{"type":"command","command":"node","args":["${CLAUDE_PLUGIN_ROOT}/scripts/<script>.js"]}`) |
 | `scripts/telemetry-hook.js` | Fired on `UserPromptSubmit` — writes `prompt_start` event; also throttle-checks and, if enabled, spawns a detached `prompt-upload-hook.js` child process |
 | `scripts/lifecycle-hook.js` | Fired on 12 lifecycle events — writes `type: 'artisyn'` events for tool calls, permissions, subagents, compaction, session start/end, stop failure |
 | `scripts/send-logs-hook.js` | Fired on `Stop` / `Interrupt` (full run) and on `SessionEnd` (scoped flush, hook `2.8.0`+) — uploads collected logs to server |
@@ -44,6 +46,12 @@ The hook ships as a Claude Code plugin (`log-hub-hooks`), extracted by the insta
 | `scripts/env-context.js` | Shared utility: `loadConfig(cwd)` reads `.artisyn/config/log-hub.json` + `log-hub.local.json` (anchored at the git repo root, not `${CLAUDE_PLUGIN_ROOT}`, since that path changes on every plugin update), resolves telemetry dir, extracts the `context` array. Also owns the OTEL resolvers (`2.3.0`+): `resolveOtelDir(cwd, config)` → `<telemetryDir>/otel`, `resolveOtelPort(config, env, cwd)` and `OTEL_FALLBACK_PORT`. |
 | `scripts/hook-log.js` | Shared utility: writes diagnostic lines to `.artisyn/ai_work_dir/hook.log`; also exports `getHookVersion()` (cached read of `version.json`) and `readLogTail(cwd, n)` (last `n` non-empty `hook.log` lines), and `exitIfSelfCheck(hookFile)` (hook `2.24.2`+): each hook entry script calls it right after its top-level requires, so `node <script> --self-check` loads the whole module graph, prints `{"selfCheck":"ok",…}` and exits 0 without reading stdin or writing a file — the installer's post-install load check ([hook-installation.md](hook-installation.md), step 9) |
 | `scripts/recommendations.js` | Shared utility: `readRecommendations(cwd)` / `upsertRecommendation(cwd, entry)` — reads/writes `.artisyn/ai_work_dir/hook-recommendations.json` |
+| `scripts/tool-wrap-names.js` | Shared utility (hook `2.27.0`+): plain-JS twin of `@loghub/tool-monitor` — the tool-name denylist, `validateToolName()`, the capture limits — plus the hook-only tool-wrap constants (`UPLOAD_CAP_BYTES`, `SESSION_DIR_MAX_AGE_MS`, `BREAKER_GLOBAL_FAULTS`, `CONFIG_REFRESH_THROTTLE_MS`, `SELF_TEST_OUTPUT`) and `toolMentionRegex()`. Change it together with the package; both are tested from [algorithms/tool-monitor-name-validation.md](algorithms/tool-monitor-name-validation.md) |
+| `scripts/tool-wrap-config.js` | Shared utility (hook `2.27.0`+): the kill switches (`LOGHUB_TOOL_WRAP=0`, config `toolWrap: false`), `GET /api/v2/tool-monitoring/config` fetch, the atomic `<workDir>/tool-wrap/config-cache.json` and the per-session `off/` / `mode/` markers. See [tool-monitoring.md](tool-monitoring.md) |
+| `scripts/tool-wrap-shims.js` | Shared utility (hook `2.27.0`+), called by `lifecycle-hook.js` at `SessionStart`: generates one Bash shim per monitored tool into `<workDir>/tool-wrap/<sessionId>/shims/`, runs the pre-flight self-test, appends the PATH export to `$CLAUDE_ENV_FILE`, owns the breaker and prunes session dirs older than 7 days |
+| `scripts/tool-wrap-tee.js` | **Not a Claude Code hook entry point** (hook `2.27.0`+) — the stdout tee a Bash shim pipes the real tool through: forwards bytes unchanged, captures up to 100 KB, handles EPIPE (`consumerClosed`), writes the `stream_end` record; `--self-test` for the pre-flight |
+| `scripts/tool-wrap-powershell.js` | Fired on `PreToolUse` (matcher `PowerShell`, hook `2.27.0`+) — the PowerShell side of the CLI tool wrapper (PowerShell does not read `$CLAUDE_ENV_FILE`): returns `updatedInput` with a `__lhWrap` prefix when the command mentions a monitored tool, otherwise no output. Never a permission decision |
+| `scripts/tool-wrap-records.js` | Shared utility (hook `2.27.0`+), used by `send-logs-hook.js` and `session-files.js`: assembles the per-call files of one session into `<workDir>/tool-wrap/upload/<sessionId>.jsonl`, uploaded as log kind `tool-calls` |
 | `scripts/version.json` | Hook content version (must agree with `plugin.json`'s `version`) |
 | `scripts/package.json` | `{"type": "commonjs"}` (hook `2.24.1`+, written by `scripts/build-hooks-installer.js`). The plugin runs from inside the user's repo and Node takes a `.js` file's module type from the nearest `package.json`; without this file a repo whose root `package.json` says `"type": "module"` made every hook die with `require is not defined in ES module scope` and nothing was recorded |
 | `config-template/log-hub.json` | Blanked config template the installer reconciles into the project's own `.artisyn/config/log-hub.json` |
@@ -173,7 +181,7 @@ lines at all" is therefore no longer an ambiguous state — it now means the scr
 
 ### `Stop` → `send-logs-hook.js`
 
-Fires at the end of each assistant turn. Uploads four namespaces of log files to `POST /api/v2/logs` (hook `1.7.0`+; earlier hook versions post to `POST /api/v1/logs` — see `docs/knowledgebase/hook-api-versioning.md` for the version/route compatibility matrix):
+Fires at the end of each assistant turn. Uploads five namespaces of log files to `POST /api/v2/logs` (hook `1.7.0`+; earlier hook versions post to `POST /api/v1/logs` — see `docs/knowledgebase/hook-api-versioning.md` for the version/route compatibility matrix):
 
 | Namespace | Source path | Notes |
 |---|---|---|
@@ -182,6 +190,7 @@ Fires at the end of each assistant turn. Uploads four namespaces of log files to
 | `claude-subagent` | `~/.claude/projects/<slug>/<session>/subagents/*.jsonl` | Regular sub-agent session logs |
 | `claude-subagent` | `~/.claude/projects/<slug>/<session>/subagents/workflows/<wf-id>/agent-*.jsonl` | Workflow agent logs (v1.2.0+) |
 | `claude-otel` | `<telemetryDir>/otel/<session_id>/<epoch-ms>-<seq>.jsonl` | OTLP logs/metrics written by `otel-receiver.js`, one chunk file per inbound request (hook `2.4.0`+). Gated on `otelEnabled`; every file in that directory belongs to this project, so there is no filtering. See [otel-receiver.md](otel-receiver.md). |
+| `tool-calls` | `<workDir>/tool-wrap/upload/<session_id>.jsonl`, assembled from `<workDir>/tool-wrap/<session_id>/calls/*` | CLI tool wrapper records, NDJSON (`tool_call` lines + one `tool_wrap_status` line), hook `2.27.0`+. Assembled by `tool-wrap-records.js` just before the upload; only for sessions that have wrapper calls. The server keeps one `tool-calls` log per session, so every upload re-sends the whole cumulative set (capped at 50 MB). Also part of the `SessionEnd` scoped flush (`session-files.js`). An old server stores it as an inert generic `logs` row. See [tool-monitoring.md](tool-monitoring.md). |
 
 `~/.claude` here (and for user-level skills, plugins and `settings.json`/`mcp.json`) means Claude Code's user config dir: `$CLAUDE_CONFIG_DIR` when that env var is set, else `~/.claude` — resolved by `claudeConfigDir()` in `hook/.claude/telemetry_tool/claude-config-dir.js` (hook `2.18.1`+). Earlier hooks always read `~/.claude`, so a user running Claude Code with `CLAUDE_CONFIG_DIR` got no `claude`/`claude-subagent` uploads at all.
 

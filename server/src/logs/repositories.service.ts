@@ -83,6 +83,7 @@ import {
   upsertTeamRepoConfig,
 } from './team-repo-config';
 import { classifyTurnCauses, walkTurns } from './turn-walk';
+import { markTreesStale } from './tool-monitoring/tool-usage-writer';
 
 export interface RepoSettingsResponse {
   effectiveConfig: RepoConfigJson;
@@ -1463,6 +1464,10 @@ export class RepositoriesService {
     // FR-5: the same endpoint backfills the OKF access rows of every node of the gathered trees
     // (scope-independent, so once per tree here — not in the per-scope `writeFileStatsForTree`).
     await this.recomputeOkfAccess(sessionIdValues, rootByNodeId);
+
+    // Tools/MCP tab (DD-7): the same endpoint re-extracts the tool usage of every gathered tree,
+    // through the background drain (which picks the marked trees up on its next tick).
+    await markTreesStale(this.db, sessionIdValues);
 
     return { recomputed: sessionRows.length };
   }

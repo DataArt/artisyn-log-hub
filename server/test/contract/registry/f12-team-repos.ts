@@ -149,12 +149,18 @@ export const f12TeamRepos: ContractFamily = {
           'logs',
           'log_repositories',
           'team_repo_config',
+          'team_repo_tool_monitor_config',
         ],
         delta: {
           deleted: [
             { table: 'team_repositories', where: 'id = 1' },
             // T1's config of R1 goes with its link by FK cascade.
             { table: 'team_repo_config', where: 'team_repository_id = 1' },
+            // ...and so does T1's monitored-tools list of R1 (T-26).
+            {
+              table: 'team_repo_tool_monitor_config',
+              where: 'team_repository_id = 1',
+            },
           ],
         },
       },

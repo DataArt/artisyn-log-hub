@@ -63,6 +63,13 @@ const SessionOkfTab = lazy(() =>
   })),
 );
 
+// Lazy: the repo Tools/MCP tab narrowed to this session; pulls its own queries and three panes.
+const SessionToolsTab = lazy(() =>
+  import('./tools/RepoToolsTab').then((m) => ({
+    default: m.RepoToolsTab,
+  })),
+);
+
 // Lazy: the tab pulls the Bash view (and, through it, the tree-sitter parser on first use) and is
 // opened deliberately. Its row count for the tab bar comes from the WASM-free collector below.
 const SessionBashTab = lazy(() =>
@@ -96,6 +103,10 @@ export interface SessionDetailPaneProps {
   repoUrl: string | undefined;
   sessionCost: number | null;
   isReloadingUpdatedSession: boolean;
+  /** `tool_use` id of a Tools/MCP "Open in session" link (`tu` param, DD-19). */
+  targetToolUseId?: string | null;
+  /** Clears the `tu` param once the Logs tab has acted on it. */
+  onTargetToolUseConsumed?: () => void;
 }
 
 export function SessionDetailPane({
@@ -123,6 +134,8 @@ export function SessionDetailPane({
   repoUrl,
   sessionCost,
   isReloadingUpdatedSession,
+  targetToolUseId,
+  onTargetToolUseConsumed,
 }: SessionDetailPaneProps) {
   const { user } = useAuth();
   const queryClient = useQueryClient();
@@ -333,6 +346,9 @@ export function SessionDetailPane({
               sessionSubagentCost={selectedSession.costBreakdown.subagentCost}
               targetTurnIndex={targetTurnIndex}
               onTargetTurnConsumed={() => setTargetTurnIndex(null)}
+              targetToolUseId={targetToolUseId}
+              onTargetTurnResolved={setTargetTurnIndex}
+              onTargetToolUseConsumed={onTargetToolUseConsumed}
             />
           ) : sessionTab === 'bash' ? (
             <Suspense fallback={<LazyFallback />}>
@@ -397,6 +413,14 @@ export function SessionDetailPane({
                 repoId={repoId}
                 sessionId={selectedSession.sessionId}
                 teamId={teamId}
+              />
+            </Suspense>
+          ) : sessionTab === 'tools' ? (
+            <Suspense fallback={<LazyFallback />}>
+              <SessionToolsTab
+                repoId={repoId}
+                teamId={teamId}
+                sessionId={selectedSession.sessionId}
               />
             </Suspense>
           ) : sessionTab === 'raw-logs' ? (

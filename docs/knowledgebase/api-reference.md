@@ -6,7 +6,7 @@ tags:
   - api
   - rest
   - auth
-timestamp: "2026-07-20T22:24:25+04:00"
+timestamp: "2026-10-28T00:00:00+04:00"
 ---
 
 # API Specification
@@ -2160,6 +2160,42 @@ response: {
 //   401 — not authenticated
 //   403 — repo exists but caller lacks access
 //   404 — repoId not found
+
+// ── Tools/MCP (ToolMonitoringController, server/src/logs/tool-monitoring/) ──────────────────
+// Backs the repository "Tools/MCP" main tab and the session detail "Tools/MCP" tab. Types:
+// server/src/logs/tool-monitoring/tool-monitoring.types.ts, mirrored in
+// client/src/models/tool-monitoring.ts. Every route takes teamId? (positive int, else 400) and
+// follows the Sessions-tab visibility rules (DD-17): without teamId the caller's own sessions and
+// the personal config level, with teamId the team access-mode row filter and the team level.
+// See tool-monitoring.md for the shapes in full.
+//
+// GET /api/v1/repositories/:repoId/tool-monitoring/config — 200
+response: { level: 'personal' | 'team'; canEdit: boolean; paused: boolean;
+            tools: { name; enabled; capture: 'full' | 'meta'; levels: ('personal' | 'team')[];
+                     lastWrapperAt: string | null;
+                     hint: 'hook_too_old' | 'no_data_yet' | 'preflight_failed' | 'breaker' | null }[];
+            wrapStatus: { hookVersion; os; preflight: { ok; reason }; breaker: { global; tools }; reportedAt } | null;
+            denylist: string[] }
+// PUT  same path — body { paused: boolean; tools: { name; enabled; capture }[] } (≤ 100, names
+//   unique case-insensitively, validateToolName). Response as GET. 400 { message, field:
+//   'tools[i].name', code } on a bad name; 403 in a team view unless the caller owns the team.
+//   Newly added / enabled tools mark the level's scope sessions for a rebuild.
+// GET  …/tool-monitoring/summary — query from?, to? (ISO; default the last 30 days),
+//   sessionId? (a root session id: only that session tree; with sessionId and no from/to the
+//   range is the whole session). response { range, pendingSessions, totals: Agg,
+//   groups: { mcp, cli }, tools: [{ channel, tool, lastUsedAt, ...Agg, operations[] }], neverCalled }
+// GET  …/tool-monitoring/calls — query from?, to?, sessionId? (as summary), channel?, tool?,
+//   operation?, status? (ok|error|killed|no_result), q? (≤ 200 chars), page?, pageSize? (≤ 200).
+//   response { total, page, pageSize, items: call records without args/cwd, with usageId,
+//   sessionId, sessionOwner { id, email (masked per team scope) } }, newest first
+// GET  …/tool-monitoring/calls/:usageId/:callId — response { call, output: { input?, stdin?,
+//   stdout?, stderr?, agentSaw?, encoding }, link: { sessionId, toolUseId | null } }; 404 when the
+//   row/call is missing, out of scope or its session is not visible
+// Errors (all): 400 bad teamId / dates / enum / length; 401 not authenticated; 403 no repo access
+//
+// GET /api/v2/tool-monitoring/config?repoUrl=… — 200 (X-API-Key; ToolMonitoringHookController)
+// The hook's merged monitored set: { schemaVersion: 1, paused, tools: [{ name, capture }] };
+// unknown repo → { schemaVersion: 1, paused: false, tools: [] }; 400 without repoUrl; 401 without key.
 
 // GET /api/v1/repositories/:repoId/reports/harness-usage — 200
 // Backs the Reports tab's "Harness Usage" document (ReportsController +

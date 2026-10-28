@@ -29,6 +29,13 @@ const {hookLog} = require('./hook-log');
 const {spawnDetachedHidden} = require('./spawn-hidden');
 const {maybeReArmOtelSession} = require('./otel-register');
 const {claimThrottleSlot} = require('./throttle-state');
+const toolWrapConfig = require('./tool-wrap-config');
+const {
+  CONFIG_REFRESH_THROTTLE_FILE,
+  CONFIG_REFRESH_THROTTLE_MS,
+  CONFIG_FETCH_TIMEOUT_MS_DEFAULT,
+  PROMPT_CONFIG_REFRESH_TIMEOUT_MS,
+} = require('./tool-wrap-names');
 
 const HOOK_FILE = 'telemetry-hook.js';
 
@@ -41,6 +48,46 @@ require('./hook-log').exitIfSelfCheck(HOOK_FILE);
 // other two re-arm call sites, so it neither competes with nor is masked by this one.
 const PROMPT_UPLOAD_THROTTLE_MS = 60000;
 const THROTTLE_STATE_FILE = 'prompt-upload-throttle.json';
+
+/**
+ * Throttled refresh of the CLI tool-wrap config (at most once a minute per project): fetch the
+ * monitored-tools list, rewrite the local cache and this session's off/ and mode/ markers, so a
+ * UI pause, a disabled tool or a capture change reaches the running session's shims without a
+ * restart. A tool added mid-session has no shim and is wrapped only from the next session.
+ *
+ * Fail-open: skipped under the kill switches or without a server/API key, a failed fetch leaves
+ * the cache and markers untouched, and nothing here can throw out of the hook.
+ * @param {string|null} cwd
+ * @param {string|null} sessionId
+ * @param {Record<string, *>} config
+ * @returns {Promise<void>}
+ */
+async function refreshToolWrapConfig(cwd, sessionId, config) {
+  try {
+    if (toolWrapConfig.isToolWrapDisabled(config)) return;
+    if (!String(config.serverUrl || '').trim() || !String(config.apiKey || '').trim()) return;
+    if (!claimThrottleSlot(cwd, CONFIG_REFRESH_THROTTLE_FILE, CONFIG_REFRESH_THROTTLE_MS)) return;
+    // Capped below the configured timeout: the prompt hook must never hold Claude up on a slow
+    // or hanging server (a miss just keeps the cache until the next refresh).
+    const configured = config.toolWrapConfigTimeoutMs;
+    const base = typeof configured === 'number' && configured > 0 ? configured : CONFIG_FETCH_TIMEOUT_MS_DEFAULT;
+    const cfg = await toolWrapConfig.fetchToolWrapConfig(cwd, config, Math.min(base, PROMPT_CONFIG_REFRESH_TIMEOUT_MS));
+    if (!cfg) {
+      hookLog(HOOK_FILE, sessionId, 'result', 'tool-wrap config refresh: no config (kept cache)', cwd);
+      return;
+    }
+    toolWrapConfig.writeCache(cwd, cfg);
+    const sessionDir = toolWrapConfig.sessionDirPath(cwd, sessionId);
+    const generated = sessionDir ? toolWrapConfig.listGeneratedTools(sessionDir) : [];
+    if (sessionDir && generated.length > 0) {
+      toolWrapConfig.writeSessionMarkers(sessionDir, cfg, generated);
+    }
+    hookLog(HOOK_FILE, sessionId, 'result',
+      `tool-wrap config refreshed (${cfg.paused ? 'paused' : `${cfg.tools.length} tool(s)`})`, cwd);
+  } catch (err) {
+    hookLog(HOOK_FILE, sessionId, 'error', `tool-wrap config refresh failed: ${err && err.message}`, cwd);
+  }
+}
 
 // Wrapped in an async IIFE (rather than a bare top-level body) so the re-arm call below can be
 // `await`-ed before the trailing `process.exit(0)`, instead of racing it fire-and-forget. The
@@ -135,7 +182,13 @@ const THROTTLE_STATE_FILE = 'prompt-upload-throttle.json';
     // Awaited (not fire-and-forget) so a stale-version restart (otel-register.js) has a chance to
     // run to completion before this process exits — bounded ~2s on the fast path, several seconds
     // longer only when a restart actually fires.
-    await maybeReArmOtelSession(config, sessionId, cwd, git, HOOK_FILE);
+    //
+    // The tool-wrap config refresh runs alongside it, so its bounded fetch
+    // (at most `PROMPT_CONFIG_REFRESH_TIMEOUT_MS`, once a minute) adds no latency on top.
+    await Promise.all([
+      maybeReArmOtelSession(config, sessionId, cwd, git, HOOK_FILE),
+      refreshToolWrapConfig(cwd, sessionId, config),
+    ]);
 
     // Deferred one tick so a spawn failure — surfaced asynchronously via the child's 'error' event —
     // still reaches the onError handlers above and lands in hook.log, instead of being lost to an
