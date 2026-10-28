@@ -6,6 +6,7 @@
 **Module(s):** client | server | hook | root
 **Owner:** denis.tsyplakov
 **Created:** 2026-10-24
+**Tracker:** GH-51 https://github.com/DataArt/artisyn-log-hub/issues/51
 
 ## Description
 
