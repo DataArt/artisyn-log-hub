@@ -36,6 +36,16 @@ Do not put garbage/temporary files, screenshots, etc into the root project folde
 Make a tmp dir under the project root and put this dir into .gitignore
 (matches `project-env.json → tmpDir`; keep in sync with it).
 
+# never delete directories outside the repository
+
+Never delete, empty or overwrite-by-recreate any directory outside this repository — not sibling
+folders (e.g. `../loghub-tool-wrap-check`), not the parent folder, not anything under the home
+directory, and never a drive root. This applies to your own shell commands (`rm -rf`, `rmdir`,
+`Remove-Item -Recurse`, `fs.rmSync`, …) and to every script or test you write: code that creates
+an external folder only writes its own listed files, refuses to run against a drive root, the home
+dir, the repo, an ancestor of the repo or a non-empty folder it did not create, and leaves cleanup
+to me. If something outside the repo really needs deleting, tell me the exact path and let me do it.
+
 
 ## Test policy — three kinds of tests, nothing else
 
