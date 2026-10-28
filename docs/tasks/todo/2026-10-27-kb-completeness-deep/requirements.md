@@ -73,7 +73,9 @@ v1–v4f on real sessions of this repo; README there).
 - **FR-7** The analysis runs as **specialised passes in parallel** sub-agents (Opus), each owning
   one class of findings so that no class is traded away for another (the PoC's single combined
   prompt lost the entry-point class and some index-line findings between runs):
-  1. **Entry** — for every agent that reached a bundle without that bundle's index: what its instructions said
+  1. **Entry** — for every agent whose search did **not** find an existing relevant article (it
+     grepped or listed the KB, missed, and dug into code instead; reaching an article without the
+     index is fine when the grep found it): what its instructions said
      (the current `CLAUDE.md`, the skill's sub-agent prompt template, its own prompt — quoted) and
      why they did not route it to the index; proposes `entryFixes` at the point the instruction
      failed to reach the agent, never a duplicate of an existing rule, or states explicitly that
@@ -121,6 +123,13 @@ v1–v4f on real sessions of this repo; README there).
 
 ## Notes
 
+- Open idea (2026-10-28, owner asked for a proposal, not decided yet): make KB search work for
+  agents that grep — (1) **synonym tags** in each article's front matter in the words people and
+  agents use for the task (today 56 of 82 articles have tags, but coarse ones: `client` ×13,
+  `server` ×12); (2) a **generated `tags.md` per bundle** (tag → articles) that one grep hits, with
+  a `CLAUDE.md` rule to grep `tags.md` and `index.md` first; (3) later, if needed, a local
+  ranked `kb-search` tool. This skill would gain a fix kind `tags` ("add tag X to article Y")
+  fed by its failed-search findings. Recommended start: (1) + (2), as a separate task.
 - PoC: `docs/pocs/2026-10-27-1950-okf-analysis-cost/` — the design and evidence for FR-4–FR-8; a
   single combined prompt measured $0.45–0.90 and 4–7 min per session with Sonnet.
 - Related: `2026-10-27-okf-usage-tab` (facts route FR-20, deterministic verdict FR-14a/FR-17a);

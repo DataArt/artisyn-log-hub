@@ -102,7 +102,7 @@
     <rect x="586" y="366" width="28" height="12" rx="6" fill="#fef3c7" stroke="#f59e0b"/><text x="592" y="375" style="font-size:9px" fill="#92400e">fix</text>
     <rect x="618" y="366" width="34" height="12" rx="6" fill="#fee2e2"/><text x="623" y="375" style="font-size:9px" fill="#b91c1c">mess</text>
     <text x="374" y="400" class="cap">WHY</text>
-    <text x="374" y="418" class="xs">• agent 3f2a went to 2 KB articles without reading the index</text>
+    <text x="374" y="418" class="xs">• agent 9c1d read 27 % of docs/knowledgebase files (22 of 82)</text>
     <text x="374" y="434" class="xs m">(per agent — the same article read by several agents is not a finding)</text>
     <line x1="720" y1="328" x2="720" y2="440" class="line"/>
     <text x="736" y="338" class="cap">READ · TOP 5 BY BYTES</text>
@@ -116,7 +116,7 @@
     <line x1="990" y1="328" x2="990" y2="440" class="line"/>
     <text x="1006" y="338" class="cap">HOW AGENTS REACHED THE KB · 4 AGENTS</text>
     <text x="1006" y="358" class="xs">main: index.md → 3 articles</text><text x="1290" y="358" class="xs" fill="#15803d">✓ index</text>
-    <text x="1006" y="376" class="xs">3f2a: grep → 2 articles</text><text x="1290" y="376" class="xs" fill="#b45309">✗ no index</text>
+    <text x="1006" y="376" class="xs">3f2a: grep → 2 articles</text><text x="1290" y="376" class="xs m">grep</text>
     <text x="1006" y="394" class="xs">9c1d: path given in its prompt</text><text x="1290" y="394" class="xs m">given</text>
     <text x="1006" y="412" class="xs">7e40: index.md → 1 article</text><text x="1290" y="412" class="xs" fill="#15803d">✓ index</text>
     <text x="1006" y="434" class="xs m">Click any line → opens that node in the tree.</text>
@@ -271,7 +271,7 @@
   <text x="1122" y="484" class="xs">3 KB articles · 21 KB into context</text>
   <line x1="1120" y1="496" x2="1414" y2="496" class="line"/>
 
-  <text x="1122" y="516" class="xs b mono">3f2a</text><text x="1180" y="516" class="xs" fill="#b45309">✗ no index — grep first</text>
+  <text x="1122" y="516" class="xs b mono">3f2a</text><text x="1180" y="516" class="xs m">found by grep</text>
   <text x="1122" y="532" class="xs m">"Gather context for the snapshot delivery…"</text>
   <text x="1122" y="548" class="xs">2 KB articles · 110 KB into context</text>
   <line x1="1120" y1="560" x2="1414" y2="560" class="line"/>

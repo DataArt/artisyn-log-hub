@@ -103,13 +103,12 @@ facts that skill uses (FR-20).
 
 - **FR-11** Tree "bundle → folder → file" (no sections) with two heat scales: read (bytes put into
   context by default, toggle to call count) and write.
-- **FR-12** Markers: grep/listing over a whole folder; per bundle, whether the session started
-  from its `index.md` (the chronologically first access to that bundle in the whole session tree,
-  any op, targets that bundle's `index.md` — so a session can start one bundle from its index and
-  another without); and, as plain information only, "re-read of own edit" (`after_own_edit` reads, FR-3)
-  and "read by N agents". The last two describe cost, not KB quality: each sub-agent is an
-  independent task with an empty context and may need the same article (owner decision), so they
-  never feed the verdict.
+- **FR-12** Markers, all **plain information that never feeds the verdict**: grep/listing over a
+  whole folder; per bundle, whether the session started from its `index.md` (the chronologically
+  first access to that bundle in the whole session tree, any op, targets that bundle's
+  `index.md`); "re-read of own edit" (`after_own_edit` reads, FR-3); "read by N agents". Reaching
+  an article without the index is fine when a grep found it (owner decision); re-reads and several
+  agents describe cost, not KB quality — each sub-agent is an independent task.
 - **FR-13** Summary per bundle: files read = distinct files with at least one `read` or `grep` row
   ÷ bundle files (the **file share**), and the bytes into context. Listings count toward no share,
   only heat and markers. The heat scale uses raw summed `tool_result` bytes (can exceed file size);
@@ -135,9 +134,11 @@ facts that skill uses (FR-20).
   reads); the verdict is the worst severity triggered:
   - file share (FR-13) of any bundle with ≥ 10 files > 50 % → **Mess**; > 25 % → **Something to
     fix** (smaller bundles are skipped; files the agent wrote are left out, they still show in the
-    heat);
-  - an agent that read KB articles of a bundle without reading that bundle's `index.md` first →
-    **Something to fix** ("agent X went to 4 KB articles without the index").
+    heat).
+
+  How an agent reached an article (index, grep, given path) is shown but never judged here: a grep
+  that finds the article is fine. A search that did **not** find an existing article is visible only
+  to the on-demand skill, which reads the searches (task `2026-10-27-kb-completeness-deep`).
 
   **KB read bytes** = summed `bytes` of `read` and `grep` rows, `after_own_edit` rows included
   (`list` and `write` excluded); one definition for the Read top 5 and the repo hot files
@@ -178,17 +179,15 @@ facts that skill uses (FR-20).
   - **Always read**: a file other than a bundle `index.md` read (read/grep op) in ≥ 80 % of them →
     Something to fix (one line per file);
   - **KB flood**: per bundle with ≥ 10 files, sessions whose file share of that bundle > 25 % — any
-    → Something to fix; ≥ 20 % of the sessions that touched the bundle → Mess;
-  - **Index bypassed**: per bundle, the sessions that touched it and started it from its
-    `index.md` (FR-12) < 50 % → Something to fix;
+    → Something to fix; ≥ 20 % of the sessions that touched the bundle → Mess.
 
-  Every rule is evaluated per bundle and its line names the bundle ("in `docs/knowledgebase`, only
-  21 of 49 sessions started from its index").
+  Every rule is evaluated per bundle and its line names the bundle ("`docs/knowledgebase`: in 4
+  sessions an agent read more than 25 % of its files").
 
-  Verdict = the worst severity triggered; three or more distinct rule kinds triggered → **Mess**.
-  The three rule kinds are `always_read`, `kb_flood`, `index_bypassed`; the count is of kinds,
-  not lines (several always-read files are one kind). There is deliberately no rule for unread files (FR-16). A session here = a root session
-  tree (FR-4). Not enough data, Always read and Index bypassed count every KB-touching tree in the
+  Verdict = the worst severity triggered. The two rule kinds are `always_read` and `kb_flood`.
+  There is deliberately no rule for unread files (FR-16) and none for reaching articles without the
+  index (FR-12). A session here = a root session
+  tree (FR-4). Not enough data and Always read count every KB-touching tree in the
   filter, snapshot-less ones included; KB flood counts only trees with a bound snapshot; when
   snapshot-less trees are present the badge adds "partial data — N of M
   sessions without a snapshot". The file share of a session is per bundle (distinct files of the
@@ -265,7 +264,8 @@ facts that skill uses (FR-20).
       its files.
 - [ ] FR-12/17a: a session that starts `docs/kb-local` from its index and reads
       `docs/knowledgebase` articles without that index is "started from index" for the first bundle
-      only; the repo anomaly lines name their bundle; the bundle filter switches the tree, the
+      only, and neither the session nor the repo verdict changes because of it; the repo anomaly
+      lines name their bundle; the bundle filter switches the tree, the
       tiles and the share histogram.
 - [ ] FR-8: the snapshot carries path, ignored flag, size and hash per file — no outline, no file
       content.
@@ -282,14 +282,14 @@ facts that skill uses (FR-20).
       "update the hook" hint.
 - [ ] FR-14a: the session tab opens with the verdict card above the tree; a session where one
       agent read > 50 % of a bundle shows "Mess"; a session where 12 agents each read the same
-      article (and nothing else is wrong) shows "OK"; an agent that read KB articles without the
-      bundle index shows "Something to fix" with that reason; a session without KB access shows
+      article (and nothing else is wrong) shows "OK"; an agent that reached KB articles by grep
+      without the bundle index (and nothing else is wrong) shows "OK"; a session without KB access shows
       "KB not used"; a session without a snapshot shows "partial data" and skips the share rule;
       the verdict cases match the `okf-verdict.md` examples.
 - [ ] FR-17a: the repo tab opens with the verdict card and anomaly list; a file read in ≥ 80 % of
       the KB sessions in the filter is listed as "always read"; with fewer than 5 KB sessions the
       badge is "Not enough data"; the team-view anomaly list names no ignored path; every rule kind
-      and the "three or more kinds → Mess" rule match the `okf-verdict.md` examples.
+      match the `okf-verdict.md` examples.
 - [ ] FR-14a/17a: clicking a Why or anomaly line expands and scrolls to its node in the tree.
 - [ ] FR-10: deleting the last session bound to a snapshot removes the `okf_snapshots` row; a
       repository export/import keeps the OKF tab's bundles (step in the export/import scenario).
@@ -317,7 +317,7 @@ facts that skill uses (FR-20).
 - Routes: session `…/sessions/:sessionId/okf-usage`, repo `…/reports/okf-usage`; verdict sent as rule ids + params, text rendered by the client (FR-18).
 - KB read bytes = `read` + `grep` bytes, own-edit rows included; one definition everywhere (FR-14a).
 - Repo rule unit = root session tree; snapshot-less trees count only where no bundle file list is needed (FR-17a).
-- Mess-by-count counts the three named rule kinds, not lines (FR-17a).
+- No verdict rule for reaching an article without the index — a grep that finds it is fine; failed searches are the skill's job (FR-12, FR-14a, FR-17a, owner decision).
 - Unread articles are never a problem by themselves: no dead-weight rule (FR-16, owner decision).
 - A repo can have several OKF bundles: shares, the started-from-index check and the repo rules are per bundle, never pooled; a file belongs to the deepest bundle (FR-7, FR-12, FR-17a, owner remark).
 - Session share rule is per agent and skips bundles under 10 files and files the agent wrote (FR-14a).
