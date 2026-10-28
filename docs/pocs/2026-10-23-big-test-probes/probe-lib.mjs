@@ -57,7 +57,7 @@ export function createRepo(ws, repo, name = repo) {
 
 export async function installHook(ws, dir, tgz, env) {
   const { POC_SERVER_URL, POC_API_KEY } = readDotEnv();
-  // A bare Windows path ("D:/…/x.tgz") makes npx hang with no output; a file: URL works everywhere.
+  // A bare Windows path ("<drive>:/…/x.tgz") makes npx hang with no output; a file: URL works everywhere.
   const cmd = `npx --yes "${pathToFileURL(tgz).href}" install --server-url ${POC_SERVER_URL} --api-key ${POC_API_KEY}`;
   const started = Date.now();
   const res = await runAsync(cmd, [], { cwd: dir, env, shell: true, timeoutMs: 300000 });

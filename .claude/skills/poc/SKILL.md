@@ -85,7 +85,25 @@ docs/pocs/<datetime>-<slug>/
    contain only source files, `README.md` and `.gitignore`. If something else shows up, add it to
    the PoC's `.gitignore` and re-check.
 2. Fill in **Result** in the PoC `README.md`.
-3. Reference the PoC from the work it serves: in the task's requirements / research note / review
+3. **Private machine data check — in a subagent.** Launch a subagent (fresh context, so it reads
+   the files as an outsider would) over everything the PoC adds or changes: the PoC folder and every
+   doc, wireframe or note that quotes its results. It reports, with `file:line`, anything that
+   describes the machine the PoC ran on:
+   - absolute paths that show how that computer is laid out — drive and folder structure, the
+     home directory, workspace / checkout locations, install locations of tools
+     (`D:\work\…`, `C:\Users\<name>\…`, `/home/<name>/…`, `~/.dotnet/tools/…`);
+   - host / machine names, local network addresses, local ports of the developer's own services,
+     process ids, pipe / socket names, session or device ids taken from that machine;
+   - environment variable values, tokens, keys, account ids; local DB names / users;
+   - anything else that tells a reader what is installed where on that computer.
+
+   The **name of the person who ran it is fine** (author, `Owner:`, a git user name). Generic paths
+   that are the same on every machine are fine too (`C:\WINDOWS\system32\find.exe`,
+   `/usr/bin/find`, paths relative to the repo). Clean every finding: make the path relative,
+   or replace the machine-specific part with a placeholder (`<repo>`, `<home>`, `<tool-dir>`) —
+   in code prefer deriving the path at runtime over hard-coding it. Re-run the check until it
+   reports nothing.
+4. Reference the PoC from the work it serves: in the task's requirements / research note / review
    findings (and in
    `open_questions_ru.md` if a question is answered or raised by it) — link
    `docs/pocs/<datetime>-<slug>/` and state the conclusion in one or two sentences.

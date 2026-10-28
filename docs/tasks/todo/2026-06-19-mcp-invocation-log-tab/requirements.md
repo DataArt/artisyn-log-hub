@@ -30,7 +30,7 @@ authors will never cooperate with Log Hub — the wrapper knows nothing about th
 name. It must work on Windows (Git Bash and PowerShell), Linux and macOS.
 
 The research and the POC behind this design (what was verified on which OS, rejected approaches,
-the local-prod MCP snapshot) are in [research-cli-tool-capture.md](research-cli-tool-capture.md).
+an MCP snapshot from a local install) are in [research-cli-tool-capture.md](research-cli-tool-capture.md).
 
 **Relation to existing views.** The session **Harness usage** tab counts element use per session
 (`mcp` / `tool` kinds) — it answers "was it used". This tab answers "what did it return and was
@@ -336,7 +336,7 @@ transcript-only fallback). These are heuristics and are labelled as such in the 
 **2026-10-28:** Requirements rewritten from "per-prompt MCP section" to a repository-level
 Tools/MCP tab covering two channels (MCP from transcripts, CLI tools via a UI-configured wrapper).
 Research and POC: [research-cli-tool-capture.md](research-cli-tool-capture.md); POC code in
-[`docs/pocs/2026-10-28-1140-cli-tool-capture/`](../../../pocs/2026-10-28-1140-cli-tool-capture/README.md). Local prod snapshot: 559 MCP calls, `playwright:browser_navigate`
+[`docs/pocs/2026-10-28-1140-cli-tool-capture/`](../../../pocs/2026-10-28-1140-cli-tool-capture/README.md). Snapshot of a local install: 559 MCP calls, `playwright:browser_navigate`
 fails in 41 % of calls (mostly 30 s timeouts).
 
 **2026-10-28:** Config is two-level (personal / team); a session records the union of its owner's

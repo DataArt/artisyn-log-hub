@@ -9,7 +9,7 @@
 2. Can the hook wrap **any** command-line tool, known only by name, so that every call is logged
    with full output, stdin and exit code — in the Bash tool (Git Bash, Linux, macOS) and in the
    PowerShell tool — without changing the tool's behaviour for the agent?
-3. How do MCP calls look in the existing data (local prod)?
+3. How do MCP calls look in the existing data (a local Log Hub install)?
 
 ## Layout
 
@@ -22,7 +22,7 @@
 | `sample/` | Small Java project to index with CodeExplorer |
 | `sample/claude-config/` | Claude Code hooks for a live test: `session-start.mjs` (PATH via `CLAUDE_ENV_FILE`), `pre-tool-use.mjs` (PowerShell `updatedInput`). Deliberately not `.claude/`, so opening the folder in Claude Code activates nothing |
 | `wintest/`, `linuxtest/` | `zz` — an arbitrary "unknown" tool printing 20 000 lines (`zz fail` exits 3); `wintest/make-pstest.mjs` builds a PowerShell native-vs-wrapped comparison script |
-| `extract.mjs` | Unified invocation log + usefulness signals from transcripts, or from local prod (`--prod`) |
+| `extract.mjs` | Unified invocation log + usefulness signals from transcripts, or from a local Log Hub install (`--prod`) |
 | `wireframe/` | Generator of the task's `wireframes/tools-mcp-tab.svg` and a Playwright screenshot helper |
 
 Logs default to `out/` here (override with `TOOL_SHIM_DIR`); `out/` and other run artefacts are
@@ -62,7 +62,7 @@ claude -p "Using ce via Bash and via PowerShell, find who calls findById" --sett
 node ../extract.mjs ~/.claude/projects/<encoded-sample-path>/<session>.jsonl --shim ../out/tool-calls.jsonl
 ```
 
-MCP calls on local prod: `node extract.mjs --prod` (reads the `artisyn-log-hub-db` container).
+MCP calls on a local Log Hub install: `node extract.mjs --prod` (reads the default `artisyn-log-hub-db` container of a docker-compose install).
 
 ## Result
 
@@ -84,5 +84,5 @@ MCP calls on local prod: `node extract.mjs --prod` (reads the `artisyn-log-hub-d
      `C:/Program Files/Git/nonexistent` for the MSYS `find`, `.cmd` handling differed, a Node
      `DEP0190` warning leaked into stderr, and PowerShell `Select-Object -First` killed the wrapper
      before it logged.
-3. 559 MCP calls in local prod, 100 % with a joined result; `playwright:browser_navigate` fails in
+3. 559 MCP calls in a local Log Hub install, 100 % with a joined result; `playwright:browser_navigate` fails in
    45 of 110 calls (31 × 30 s timeout, 11 × `file:` protocol blocked).

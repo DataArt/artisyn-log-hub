@@ -1,6 +1,6 @@
 // POC: unified "tool invocation log" from Claude Code transcripts.
 //   node extract.mjs <transcript.jsonl>... [--shim out/tool-calls.jsonl] [--json out/report.json]
-//   node extract.mjs --prod [--json ...]   (reads claude/claude-subagent logs from local prod DB)
+//   node extract.mjs --prod [--json ...]   (reads claude/claude-subagent logs from a local docker-compose Log Hub DB)
 // Covers MCP calls (mcp__<server>__<tool>) and CLI tools run through Bash/PowerShell that
 // match the REGISTRY below. Joins wrapper (shim) records when given, and derives usefulness signals.
 import { readFileSync, writeFileSync, existsSync } from 'node:fs';

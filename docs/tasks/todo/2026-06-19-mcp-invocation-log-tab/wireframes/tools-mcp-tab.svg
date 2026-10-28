@@ -165,7 +165,7 @@
 <rect x="781.2" y="175" width="202" height="15" fill="#fef3c7" rx="7"/>
 <text x="786.2" y="186" font-size="10" fill="#92400e" font-weight="bold" xml:space="preserve">cut by agent: saw 2 of 8 lines</text>
 <text x="1244" y="186" font-size="12" fill="#4f46e5" text-anchor="end" xml:space="preserve">Open in session → turn 3  ↗</text>
-<text x="568" y="208" font-size="11" fill="#6b7280" xml:space="preserve">2026-10-28 07:41:08 · 623 ms · dt@dataart.com · root agent · bash · C:\Users\Den\.dotnet\tools\ce.exe</text>
+<text x="568" y="208" font-size="11" fill="#6b7280" xml:space="preserve">2026-10-28 07:41:08 · 623 ms · dt@dataart.com · root agent · bash · ~/.dotnet/tools/ce</text>
 <text x="568" y="234" font-size="10" fill="#9ca3af" font-weight="bold" xml:space="preserve">PARAMETERS</text>
 <rect x="568" y="242" width="676" height="74" fill="#f9fafb" stroke="#e5e7eb" rx="3"/>
 <text x="580" y="262" font-size="11" fill="#6b7280" xml:space="preserve">command</text>
@@ -173,7 +173,7 @@
 <text x="580" y="282" font-size="11" fill="#6b7280" xml:space="preserve">args</text>
 <text x="652" y="282" font-size="12" fill="#111827" font-family="Consolas, Menlo, monospace" xml:space="preserve">[0] callers   [1] setStatus</text>
 <text x="580" y="302" font-size="11" fill="#6b7280" xml:space="preserve">cwd</text>
-<text x="652" y="302" font-size="12" fill="#111827" font-family="Consolas, Menlo, monospace" xml:space="preserve">D:\work\orders</text>
+<text x="652" y="302" font-size="12" fill="#111827" font-family="Consolas, Menlo, monospace" xml:space="preserve">~/src/orders</text>
 <text x="1232" y="262" font-size="10" fill="#9ca3af" text-anchor="end" xml:space="preserve">MCP: input JSON, pretty-printed</text>
 <text x="568" y="332" font-size="10" fill="#9ca3af" font-weight="bold" xml:space="preserve">INPUT (stdin)</text>
 <text x="662" y="332" font-size="11" fill="#9ca3af" xml:space="preserve">— shown only when something was piped / redirected into the tool; here: none</text>

@@ -12,8 +12,8 @@ repository the user says "monitor `ce`", the hook wraps it automatically, result
 macOS must all work.
 
 POC code: [`docs/pocs/2026-10-28-1140-cli-tool-capture/`](../../../pocs/2026-10-28-1140-cli-tool-capture/README.md): `shim/posix-shim.template.sh` + `shim/tee-log.mjs`
-(Bash), `shim/ps-prefix.template.ps1` (PowerShell), `extract.mjs`, `envtest/.claude/session-start.mjs`,
-`envtest/.claude/pre-tool-use.mjs`, `wintest/make-pstest.mjs`. `shim/tool-shim.mjs` is the first,
+(Bash), `shim/ps-prefix.template.ps1` (PowerShell), `extract.mjs`, `sample/claude-config/session-start.mjs`,
+`sample/claude-config/pre-tool-use.mjs`, `wintest/make-pstest.mjs`. `shim/tool-shim.mjs` is the first,
 superseded attempt (see "Rejected" below).
 
 ## Finding 1 — the transcript already has what the agent saw
@@ -34,7 +34,7 @@ wrapper only observes.** The wrapper knows nothing about the tool but its name.
 
 | Agent shell | How the wrapper gets in front | Wrapper |
 |---|---|---|
-| Bash tool (Windows Git Bash, Linux, macOS) | `SessionStart` hook appends `export PATH="<shim-dir>:$PATH"` to `$CLAUDE_ENV_FILE`; Claude Code sources it before every Bash command (on Windows the dir in Git-Bash form, `/d/...`) | bash script per tool (`posix-shim.template.sh`): resolves the real tool with `command -v` on PATH minus the shim dir, runs it itself; stdout piped through `tee-log.mjs`, stderr through `tee`; exit code from `PIPESTATUS` |
+| Bash tool (Windows Git Bash, Linux, macOS) | `SessionStart` hook appends `export PATH="<shim-dir>:$PATH"` to `$CLAUDE_ENV_FILE`; Claude Code sources it before every Bash command (on Windows the dir in Git-Bash form, `/c/...`) | bash script per tool (`posix-shim.template.sh`): resolves the real tool with `command -v` on PATH minus the shim dir, runs it itself; stdout piped through `tee-log.mjs`, stderr through `tee`; exit code from `PIPESTATUS` |
 | PowerShell tool | does **not** read `CLAUDE_ENV_FILE` (verified). `PreToolUse` hook (matcher `PowerShell`) returns `updatedInput` with wrapper functions prepended — only when the command mentions a monitored tool | PowerShell function per tool calling a shared `__lhWrap`: `Get-Command -CommandType Application` (skips the function itself), `& $real @args 2>&1`, buffers everything, writes the log, then emits stdout to the pipeline and stderr to the error stream, restores `$LASTEXITCODE`. No Node involved |
 
 Log format (both shells): `tool-calls.jsonl` with a `start` record (callId, tool, args exactly as typed,
@@ -144,7 +144,7 @@ Per invocation, from the next 3 tool calls: `emptyResult`, `retriedSameTool`, `f
 `openedFileFromOutput`; plus error rate, median duration, output size per `tool:subcommand`. A
 stronger, on-demand version is an LLM judge over (input, output, next steps).
 
-## Local prod snapshot (2026-10-28) — MCP part
+## Local install snapshot (2026-10-28) — MCP part
 
 559 MCP calls, 100 % have a joined result. `playwright:browser_navigate` 45 / 110 errors (31 ×
 30 s timeout, 11 × `file:` protocol blocked); `browser_run_code_unsafe` 30 / 92 errors, 61 % retried;

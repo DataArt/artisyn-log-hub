@@ -10,8 +10,11 @@ mkdirSync(logDir, { recursive: true });
 const fn = readFileSync(path.join(root, 'shim', 'ps-prefix.template.ps1'), 'utf8').trim().replace('__LOGDIR__', logDir.replace(/'/g, "''"));
 const prefix = `${fn}; function zz { __lhWrap 'zz' $args }; function find { __lhWrap 'find' $args }; function ce { __lhWrap 'ce' $args }; `;
 const bin = path.join(root, 'wintest', 'bin');
+// A clean Windows PATH built from this machine's own locations (no hard-coded install paths).
+const sysRoot = process.env.SystemRoot || 'C:\\Windows';
+const nodeDir = path.dirname(process.execPath);
 const ps = [
-  `$env:PATH = '${bin};C:\\WINDOWS\\system32;C:\\WINDOWS;' + [Environment]::GetEnvironmentVariable('PATH','User') + ';C:\\Program Files\\nodejs'`,
+  `$env:PATH = '${bin};${sysRoot}\\system32;${sysRoot};' + [Environment]::GetEnvironmentVariable('PATH','User') + ';${nodeDir}'`,
   `Set-Location '${path.join(root, 'sample')}'`,
   `'--- native:'; zz big | Select-Object -First 1; "zz|first exit=$LASTEXITCODE"; find /c "class" src\\main\\java\\com\\acme\\orders\\Order.java; "find exit=$LASTEXITCODE"`,
   prefix,

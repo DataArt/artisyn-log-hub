@@ -74,7 +74,7 @@ deterministic facts and verdict (task `2026-10-27-okf-usage-tab`, FR-19). Reason
   v4e and v4f. Hence the skill's design: specialised passes in parallel, one per class of findings,
   merged deterministically.
 
-| Run | e88adad0 | 0edba12b | 89206502 | 92f0ad24 |
+| Run | session S1 | session S2 | session S3 | session S4 |
 |---|---|---|---|---|
 | v4d | $0.61 · 234 s | $0.52 · 212 s | $0.45 · 186 s | $0.50 · 283 s |
 | v4e | $0.59 · 266 s | $0.70 · 260 s | $0.62 · 293 s | $0.59 · 340 s |

@@ -118,7 +118,7 @@ Everything runs from this folder. The probes reuse the big-prod-e2e-test skill l
   `build-hooks-installer.js --static-dir` 1.3 s. All exited 0.
 - **Versions.** `installer-version.json` is `{"version":"2.21.1"}`, and
   `git show 25146c8:artisyn-hooks-installer/package.json` gives `1.0.69`.
-- **`npx` with a bare Windows path hangs.** `npx --yes "D:/…/artisyn-hooks-installer.tgz" install …`
+- **`npx` with a bare Windows path hangs.** `npx --yes "<drive>:/…/artisyn-hooks-installer.tgz" install …`
   hangs with no output until it is killed, and so does `--help`. A relative path is resolved
   against the npm workspace root. The **`file:` URL** (`pathToFileURL(tgz).href`) works.
 - **The old installer.** It installs against the current server: exit 0, "Hooks installed", and
@@ -126,6 +126,6 @@ Everything runs from this folder. The probes reuse the big-prod-e2e-test skill l
   `otelReceiverPort` into the tracked **`log-hub.json`**, and only `apiKey` into
   `log-hub.local.json`. The OTEL env goes into `.claude/settings.json` (there is no
   `settings.local.json`).
-- **The session.** Plugin `log-hub-hooks@artisyn-3b54378a` version 2.21.1 **matches**
+- **The session.** Plugin `log-hub-hooks@artisyn-<8 hex>` version 2.21.1 **matches**
   `ALLOWED_PLUGIN_SOURCE_RE`. The hooks fire, and the transcript, OTEL and artisyn files upload to
   the current server.

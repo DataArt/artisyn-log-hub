@@ -7,15 +7,15 @@ import os from 'node:os';
 import { spawn } from 'node:child_process';
 import { extractSession, taskContext, KB_BUNDLES } from './extract.mjs';
 
-const SAMPLE = process.argv.slice(2).length ? process.argv.slice(2) : [
-  'c77d1077', '5b0a1634', '4b15c275', 'e88adad0', '92f0ad24',
-];
+const SAMPLE = process.argv.slice(2);
+if (!SAMPLE.length) throw new Error('usage: node run.mjs <session-id-prefix> [...]');
 const MODEL = 'sonnet';
 const TIMEOUT_MS = 10 * 60 * 1000;
 const MAX_PROMPT = 60 * 1024;
 
-const projectDir = path.join(os.homedir(), '.claude/projects/D---work-Artisyn-LogHub--repo');
 const repoRoot = path.resolve(import.meta.dirname, '../../..');
+// Claude Code's project folder = the checkout path with every non-alphanumeric char turned into '-'.
+const projectDir = path.join(os.homedir(), '.claude/projects', repoRoot.replace(/[^A-Za-z0-9]/g, '-'));
 const outDir = path.join(import.meta.dirname, 'out-runs');
 fs.mkdirSync(outDir, { recursive: true });
 
@@ -134,7 +134,7 @@ for (const prefix of SAMPLE) {
     if (ev.type === 'result') env = ev;
     if (ev.type === 'assistant') {
       for (const b of ev.message?.content || []) {
-        if (b.type === 'tool_use') modelReads.push(`${b.name} ${String(b.input?.file_path || b.input?.command || b.input?.pattern || '').replace(/\\/g, '/').replace(/^.*\/_repo\//, '')}`);
+        if (b.type === 'tool_use') modelReads.push(`${b.name} ${String(b.input?.file_path || b.input?.command || b.input?.pattern || '').replace(/\\/g, '/').replace(new RegExp(`^.*/${path.basename(repoRoot)}/`), '')}`);
       }
     }
   }

@@ -127,7 +127,7 @@ function parseStream(out) {
     if (ev.type === 'result') env = ev;
     if (ev.type === 'assistant') {
       for (const b of ev.message?.content || []) {
-        if (b.type === 'tool_use') tools.push(`${b.name} ${String(b.input?.file_path || b.input?.command || b.input?.pattern || '').replace(/\\/g, '/').replace(/^.*\/_repo\//, '')}`);
+        if (b.type === 'tool_use') tools.push(`${b.name} ${String(b.input?.file_path || b.input?.command || b.input?.pattern || '').replace(/\\/g, '/').replace(new RegExp(`^.*/${path.basename(repoRoot)}/`), '')}`);
       }
     }
   }

@@ -4,8 +4,9 @@ import path from 'node:path';
 import os from 'node:os';
 import { extractSession } from './extract.mjs';
 
-const projectDir = path.join(os.homedir(), '.claude/projects/D---work-Artisyn-LogHub--repo');
 const repoRoot = path.resolve(import.meta.dirname, '../../..');
+// Claude Code's project folder = the checkout path with every non-alphanumeric char turned into '-'.
+const projectDir = path.join(os.homedir(), '.claude/projects', repoRoot.replace(/[^A-Za-z0-9]/g, '-'));
 const rows = [];
 for (const f of fs.readdirSync(projectDir)) {
   if (!f.endsWith('.jsonl')) continue;

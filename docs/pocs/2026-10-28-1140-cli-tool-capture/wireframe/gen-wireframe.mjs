@@ -91,14 +91,14 @@ badge(R.x + 130 + bx, y, '✓ exit 0', '#d1fae5', '#047857');
 badge(R.x + 200 + bx, y, 'cut by agent: saw 2 of 8 lines', '#fef3c7', '#92400e');
 t(R.x + R.w - 16, y, 'Open in session → turn 3  ↗', { size: 12, fill: '#4f46e5', anchor: 'end' });
 y += 22;
-t(R.x + 16, y, '2026-10-28 07:41:08 · 623 ms · dt@dataart.com · root agent · bash · C:\\Users\\Den\\.dotnet\\tools\\ce.exe', { size: 11, fill: '#6b7280' });
+t(R.x + 16, y, '2026-10-28 07:41:08 · 623 ms · dt@dataart.com · root agent · bash · ~/.dotnet/tools/ce', { size: 11, fill: '#6b7280' });
 
 // Parameters
 y += 26; t(R.x + 16, y, 'PARAMETERS', { size: 10, fill: '#9ca3af', bold: true });
 y += 8; r(R.x + 16, y, R.w - 32, 74, { fill: '#f9fafb', stroke: '#e5e7eb' });
 t(R.x + 28, y + 20, 'command', { size: 11, fill: '#6b7280' }); t(R.x + 100, y + 20, 'ce callers "setStatus" | head -2', { size: 12, mono: true });
 t(R.x + 28, y + 40, 'args', { size: 11, fill: '#6b7280' }); t(R.x + 100, y + 40, '[0] callers   [1] setStatus', { size: 12, mono: true });
-t(R.x + 28, y + 60, 'cwd', { size: 11, fill: '#6b7280' }); t(R.x + 100, y + 60, 'D:\\work\\orders', { size: 12, mono: true });
+t(R.x + 28, y + 60, 'cwd', { size: 11, fill: '#6b7280' }); t(R.x + 100, y + 60, '~/src/orders', { size: 12, mono: true });
 t(R.x + R.w - 28, y + 20, 'MCP: input JSON, pretty-printed', { size: 10, fill: '#9ca3af', anchor: 'end' });
 
 // Stdin

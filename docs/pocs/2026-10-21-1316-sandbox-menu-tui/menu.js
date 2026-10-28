@@ -26,7 +26,8 @@ const c = {
 const STALE_DAYS = 7;
 const DAY = 24 * 60 * 60 * 1000;
 const now = Date.now();
-const WORKTREES = 'D:\\_work\\Artisyn-LogHub\\_repo-worktrees';
+// Sibling of the checkout, derived at runtime (no machine-specific path in the source).
+const WORKTREES = `${require('path').resolve(__dirname, '../../..')}-worktrees`;
 
 // Mock sandboxes covering every state the real launcher distinguishes.
 const sandboxes = [

@@ -12,7 +12,10 @@ import { loadBashParser } from '../../../client/src/viewer/lib/bash-view/bash-pa
 import { buildBashView } from '../../../client/src/viewer/lib/bash-view/bash-view.ts';
 
 const repoRoot = path.resolve(import.meta.dir, '../../..');
-const projectDir = path.join(os.homedir(), '.claude/projects/D---work-Artisyn-LogHub--repo');
+// Claude Code's project folder = the checkout path with every non-alphanumeric char turned into '-'.
+const projectDir = path.join(os.homedir(), '.claude/projects', repoRoot.replace(/[^A-Za-z0-9]/g, '-'));
+// Folder name of the checkout, to cut absolute paths down to repo paths (also in linked worktrees).
+const repoDirRe = new RegExp(`/${path.basename(repoRoot).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(?:/\\.claude/worktrees/[^/]+)?/(.*)$`, 'i');
 const clientRequire = createRequire(path.join(repoRoot, 'client/package.json'));
 
 type FileFact = { calls: number; bytes: number; ranges: string[]; ownEditBytes: number; via: Set<string>; agents: Set<string> };
@@ -26,7 +29,7 @@ function toRepoPath(p: string | undefined, base: string | null): string | null {
   const b = base?.replace(/\\/g, '/') ?? null;
   if (!isAbs(s) && b) s = `${b}/${s}`;
   if (!isAbs(s)) return path.posix.normalize(s).replace(/\/+$/, '');
-  const m = s.match(/\/_repo(?:\/\.claude\/worktrees\/[^/]+)?\/(.*)$/i);
+  const m = s.match(repoDirRe);
   if (!m) return null;
   return path.posix.normalize(m[1]).replace(/\/+$/, '');
 }
