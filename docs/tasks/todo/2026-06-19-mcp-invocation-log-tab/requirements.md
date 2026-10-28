@@ -46,16 +46,37 @@ see Open Questions.
 
 - A new main tab **Tools/MCP** on the repository page, next to Sessions / Analytics / Reports /
   Settings, URL-backed like the other main tabs and with a `tab-repo-<id>` test id.
-- **Top bar**: date range (default last 30 days), Tool, Channel (`MCP` / `CLI`), Status filters, a
-  free-text search over arguments / input and output, and the **Monitored tools** button (FR-2).
-  The same user scope rules as the Sessions tab apply (personal view → own sessions; team view →
-  team rules). Sub-agent and workflow-agent calls are included (the whole session tree, see
+- **Top bar**: date range (default last 30 days), Status filter, a free-text search over
+  arguments / input and output, the current tree selection as a removable scope chip
+  (`Scope: ce › callers ✕`), and the **Monitored tools** button (FR-2). The same user scope rules
+  as the Sessions tab apply (personal view → own sessions; team view → team rules). Sub-agent and
+  workflow-agent calls are included (the whole session tree, see
   `docs/knowledgebase/session-metrics-scope.md`).
-- **Tools strip** under the top bar: one chip per tool (channel badge, name, calls, error %,
-  retried %); clicking a chip sets the Tool filter. Per-operation figures (MCP tool / CLI
-  subcommand — the first non-option argument, or `(none)`) are shown when one tool is filtered.
-- **Left pane — calls table** (explorer list), newest first, both channels mixed, paginated,
-  keyboard ↑/↓ moves the selection. Columns:
+- **Three panes, explorer style: tools tree → calls table → call details.** Must stay usable with
+  40+ tools.
+  - **Splitters** between the panes: each pane boundary is draggable with the mouse; minimum
+    widths keep every pane usable; the chosen widths are remembered per user (browser storage,
+    a per-viewer convenience).
+  - **The tools pane is collapsible**: a `«` button collapses it to a narrow rail that still
+    shows the current selection (e.g. `TOOLS · ce › callers`); `»` (or a click on the rail)
+    restores it at its previous width. The collapsed state is remembered like the widths. The
+    freed width goes to the calls and details panes.
+- **Tools pane — tree** (replaces any chip strip; chips do not scale to dozens of tools):
+  - `All tools` on top, then two groups, `MCP · N servers` and `CLI · N monitored`, each
+    collapsible; under them one node per tool (channel badge + name), and under a tool its
+    **operations** (MCP: the tool segment of `mcp__<server>__<tool>`; CLI: the subcommand — the
+    first non-option argument, or `(none)`);
+  - every node shows: calls (number + a small bar proportional to the largest tool) and error %
+    coloured by a fixed scale (grey < 5 %, amber < 15 %, red ≥ 15 %);
+  - a **filter box** (by tool / operation name) and **sort** by calls (default), error %,
+    retried %, last used — so the worst tools can be brought to the top;
+  - clicking a node scopes the calls table to it; clicking `All tools` or the chip's ✕ clears it;
+  - monitored CLI tools with no calls in the range stay in the tree, greyed, marked
+    `never called` (the wrapper is missing, or nobody uses the tool);
+  - the pane scrolls; group / tool expansion state is kept while the tab stays open.
+- **Calls pane — calls table** (explorer list) for the tree selection, newest first, both
+  channels mixed when `All tools` / a group is selected, paginated, keyboard ↑/↓ moves the
+  selection. Columns:
   - **Time**;
   - **Tool · operation** with a channel badge (`MCP` / `CLI`), e.g. `ce callers`,
     `postgres:query`;
@@ -64,7 +85,7 @@ see Open Questions.
   - **Status** — `ok` / `error` (MCP `is_error`, CLI exit code ≠ 0) / `killed` (no exit record) /
     `no result`, with a small hint underneath when relevant: `cut` (the agent saw less), `empty`,
     `truncated` (100 KB limit hit), `no wrapper` (transcript-only data).
-- **Right pane — details of the selected call**:
+- **Details pane — details of the selected call**:
   - header: channel, tool + operation, exit code / error badge, `cut by agent` /
     `truncated` / `persisted` badges, timestamp, duration, user, agent (root / sub-agent / workflow
     agent), shell (`bash` / `powershell`), resolved binary path, and **Open in session** → the
@@ -85,7 +106,10 @@ see Open Questions.
     - when the whole output is **valid JSON**, the Terminal view is replaced by a **pretty-printed,
       collapsible JSON tree** (MCP outputs are often JSON; MCP content blocks with JSON text are
       detected the same way);
-    - stderr, when present, follows in its own red-tinted block; copy-to-clipboard per block;
+    - stderr, when present, follows in its own red-tinted block;
+    - a visible **⧉ Copy** button in the Output header copies the active view as plain text
+      (Terminal / As the agent saw it: the text; Raw: the exact captured text; JSON: the
+      pretty-printed JSON); the stderr block and the Parameters / Input blocks have their own Copy;
   - **Signals** (FR-5) as chips.
 - Long inputs/outputs are collapsed beyond a reasonable height with an expand toggle.
 
@@ -246,6 +270,77 @@ transcript-only fallback). These are heuristics and are labelled as such in the 
 - MCP rows are produced for every session regardless of any configuration (FR-3), including a
   one-off backfill of existing sessions.
 
+### FR-8 Wrapper safety — the wrapper must never break a tool or the agent's shell
+
+The wrapper sits in front of tools on developers' machines. A wrapper bug that breaks `ce` — or,
+worse, the agent's shell — breaks people's work. Safety outranks completeness of the data: when in
+doubt, the wrapper steps aside and the call is simply not recorded.
+
+**1. Tools that may never be wrapped (hard denylist).** Enforced in three places: the UI refuses to
+save them, the server never returns them in the hook config, and the hook drops them even if they
+arrive (an older or misconfigured server). The list is fixed in the hook, not configurable:
+
+- shells and interpreters the agent's own tool calls run in: `bash`, `sh`, `zsh`, `dash`, `fish`,
+  `ksh`, `powershell`, `pwsh`, `cmd`, `wsl`;
+- everything the wrapper itself uses — wrapping these would recurse: `node`, `tee`, `env`,
+  `cygpath`, `cat`, `printf`, `mkdir`, `date`, `command`;
+- the agent and its infrastructure: `claude`, `git` (the hook and Claude Code call it constantly),
+  `npx`, `npm`;
+- process-control and privilege tools: `sudo`, `su`, `doas`, `runas`, `exec`, `nohup`, `timeout`,
+  `xargs`, `time`;
+- shell builtins and keywords (wrapping them is impossible or changes semantics): `cd`, `echo`,
+  `export`, `source`, `.`, `set`, `alias`, `exit`, `eval`, `trap`, `read`, `test`, `[`, `true`,
+  `false`, `type`, `which`, `where`.
+
+Name validation on top: a single command word, `[A-Za-z0-9._-]`, no path separators, no shell
+metacharacters, max 64 chars. The UI explains a refusal ("`powershell` is the agent's shell and
+cannot be monitored").
+
+**2. Fail open, always.** Any problem inside the wrapper — log directory missing or not writable,
+`node` not found, disk full, an exception, a malformed cached config — makes the wrapper run the
+real tool directly, unchanged, without logging. The wrapper never prints its own messages to the
+tool's stdout/stderr (diagnostics go only to `hook.log`) and never changes the exit code.
+
+**3. Pre-flight before anything is injected.** At `SessionStart` the hook injects the PATH entry /
+enables the PowerShell prefix only if: the shim directory was generated completely, its scripts are
+executable, `bash` / `node` / `tee` resolve for the Bash wrapper, and a dry self-test of the
+wrapper against a harmless built-in probe (the wrapper's own `--self-test` mode, not a user tool)
+returns the expected output and exit code. Any failure → nothing is injected for this session, one
+`[warn]` in `hook.log`, and the UI shows "wrapper disabled on <machine/os>: <reason>".
+
+**4. Circuit breaker.** The wrapper switches itself off for the rest of the session (pass-through
+only) for a tool after a wrapper-side fault — the real binary could not be resolved although it
+exists, the logging pipeline failed mid-call, or the wrapper's exit code differs from the tool's.
+The breaker state is a file in the session's work dir; it is reported to the server with the next
+upload and shown in the Monitored tools panel. A global breaker trips the same way after 3 faults
+in one session.
+
+**5. Kill switches.**
+
+- UI: per tool (`enabled`) and a per-repository **"Pause all wrapping"** switch; effective from the
+  next prompt (config refresh on `UserPromptSubmit`).
+- Local, without the server: environment variable `LOGHUB_TOOL_WRAP=0`, or `"toolWrap": false` in
+  `.artisyn/config/log-hub.local.json` — the hook then injects nothing.
+- Hook version too old / server too old → nothing is wrapped (FR-6).
+
+**6. No recursion, no double wrapping.** The wrapper sets `LOGHUB_SHIM_ACTIVE=1` for the child; a
+nested call of a monitored tool from inside a wrapped tool sees the marker and passes straight
+through. PATH lookup for the real tool always skips the shim directory; a resolved "real" path
+inside the shim directory is treated as a fault (breaker).
+
+**7. Fidelity rules (what the wrapper must preserve).** Bytes, not strings: stdout / stderr /
+stdin are forwarded byte-for-byte (no decoding, no newline or encoding conversion); the shell runs
+the real tool (FR-4); exit codes including `126` / `127` / `128+n` for signals; signals
+(Ctrl+C / SIGINT, SIGTERM) are forwarded to the tool; argument quoting, spaces, quotes and Unicode
+are untouched; Git Bash path conversion behaves as without the wrapper; `.cmd` / `.bat` / `.ps1`
+tools resolve exactly as the shell would. Only interactive use is out of scope — the wrapper is
+injected only into Claude Code's own shell tools (`CLAUDE_CODE_SESSION_ID` present); without it the
+wrapper passes through.
+
+**8. Wrapper overhead budget.** The wrapper must not add more than 150 ms per call (one Node start
+in Bash, nothing in PowerShell) and never block on logging; if logging falls behind, it is dropped,
+not waited for.
+
 ## Non-Functional Requirements
 
 - **Cross-platform**: Windows (Git Bash, Windows PowerShell 5.1, PowerShell 7), Linux, macOS.
@@ -281,7 +376,8 @@ transcript-only fallback). These are heuristics and are labelled as such in the 
       `no wrapper data`; with an old server, a new hook runs normally and wraps nothing.
 - [ ] Call detail shows input, output seen by the agent, full output (when available), exit code,
       status, usefulness signals, and opens the session's Logs tab at the right prompt turn.
-- [ ] Summary row per tool expands into operations; figures add up across both channels.
+- [ ] The tools tree expands a tool into its operations; group and `All tools` figures add up
+      across both channels.
 - [ ] Personal `tool1` + team `tool1`, `tool2` → a session of that developer records both tools; a
       teammate without a personal setting records `tool2` and `tool1` through the team setting; a
       developer of the same repository outside the team records neither.
@@ -290,13 +386,30 @@ transcript-only fallback). These are heuristics and are labelled as such in the 
 - [ ] A session with 300 tool calls produces one stored row per (session, tool), not one per call;
       a re-upload overwrites those rows rather than adding new ones.
 - [ ] Adding a CLI tool back-fills transcript-only data for existing sessions of that level's scope.
-- [ ] The tab has the explorer layout of the wireframe: calls table on the left (Time, Tool ·
-      operation, In, Out, Status), details of the selected call on the right.
+- [ ] The tab has the three-pane explorer layout of the wireframe: tools tree → calls table
+      (Time, Tool · operation, In, Out, Status) → details of the selected call.
+- [ ] With 40 tools the tree stays usable: filter box, sort by calls / error % / retried % / last
+      used, collapsible groups; a configured CLI tool with no calls shows as `never called`.
+- [ ] Pane widths change by dragging the splitters and survive a page reload; the tools pane
+      collapses to a rail (`«`) showing the current selection and restores (`»`) to its width.
 - [ ] Output in the Terminal view keeps whitespace and ANSI colours; a Markdown pipe table (e.g.
       `ce callers` output) and a fixed-width table are shown as aligned tables; a valid-JSON output is
       shown as a pretty-printed collapsible tree; Raw shows the exact bytes.
 - [ ] Data piped into a monitored tool appears in the Input (stdin) block; the section is hidden
       when nothing was piped.
+- [ ] `powershell`, `bash`, `node`, `git`, `tee`, `cd` and the rest of the FR-8 denylist cannot be
+      added in the UI (clear refusal message), are never returned by the server, and are dropped by
+      the hook even if a config contains them.
+- [ ] With the log directory read-only, `node` missing, or a corrupted config cache, monitored
+      tools still work exactly as without the wrapper (pass-through, nothing logged, one `[warn]`).
+- [ ] A failed SessionStart pre-flight injects nothing; `LOGHUB_TOOL_WRAP=0` or "Pause all
+      wrapping" disables wrapping; a tripped circuit breaker is visible in Monitored tools.
+- [ ] Fidelity matrix wrapped vs unwrapped is byte-identical (stdout, stderr, exit code) for:
+      binary output, 20 000-line output, stdin pipe, args with spaces / quotes / Unicode, missing
+      tool (127), Ctrl+C, `find /nonexistent` in Git Bash, a `.cmd` tool in PowerShell — on Windows
+      (Git Bash, PowerShell 5.1 and 7), Linux and macOS.
+- [ ] A nested call of a monitored tool from inside another wrapped call is not wrapped twice.
+- [ ] Copy buttons copy the Output (active view), stderr, Parameters and Input blocks.
 - [ ] An output over 100 KB is stored cut at 100 KB with the `truncated` badge; the agent still
       receives the tool's full output.
 
@@ -306,7 +419,12 @@ transcript-only fallback). These are heuristics and are labelled as such in the 
   CLI command recognition (tool name + subcommand from a Bash / PowerShell command line);
   wrapper-record ↔ transcript-call matching; usefulness signals (FR-5); MCP name parsing and
   status/duration derivation (FR-3); output format detection for the Output block (JSON / Markdown
-  pipe table / fixed-width or TSV table / plain text) and table re-alignment (FR-1).
+  pipe table / fixed-width or TSV table / plain text) and table re-alignment (FR-1); monitored-tool
+  name validation + the FR-8 denylist (one shared table for UI, server and hook); **wrapper
+  fidelity** (FR-8.7) — a doc whose examples table lists each case of the fidelity matrix
+  (command, stdin, expected: byte-identical stdout / stderr / exit code wrapped vs unwrapped), run
+  by a hook `*.algo.test.js` that executes every row both ways on the OS it runs on, plus the
+  fail-open cases (read-only log dir, missing `node`, corrupted cache → pass-through).
 - **API contract**: rows in `server/test/contract/registry/` for the hook-facing config route, the
   monitored-tools settings routes, and the Tools/MCP summary / calls / call-detail routes.
 - **Scenario**: a new scenario (no existing one covers the feature) — configure a monitored tool in
@@ -346,3 +464,11 @@ Storage: one jsonb row per session + tool, overwritten as a whole (FR-7) — not
 **2026-10-28:** Wireframe replaced by `wireframes/tools-mcp-tab.svg` (explorer layout: calls table
 left, call details right; terminal-style output with table alignment, JSON pretty-print). Capture
 limit fixed at 100 KB per call (no per-tool setting); stdin is captured when piped.
+
+**2026-10-28:** Tools chip strip replaced by a tools tree (MCP / CLI → tool → operation) as the
+first explorer pane — chips do not scale to 40+ tools. Panes are resizable with splitters; the tools
+pane collapses to a rail. Wireframe regenerated.
+
+**2026-10-28:** Added FR-8 (wrapper safety: hard denylist incl. shells / `node` / `git`, fail-open,
+pre-flight self-test, circuit breaker, kill switches, no recursion, byte-level fidelity, overhead
+budget) and visible Copy buttons for Output / stderr / Parameters / Input.
