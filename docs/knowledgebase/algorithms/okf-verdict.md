@@ -48,15 +48,21 @@ reader can recompute every verdict by hand.
 10, `SHARE_BINS` = `[0, 0.10, 0.25, 0.50]` (bins `0-10`, `10-25`, `25-50`, `50+`, lower bound
 inclusive), `TASK_HEAD_MAX_CHARS` = 200.
 
+**Articles** (`bundleArticles`): a bundle's snapshot-listed files without its `index.md`. The index
+is the entry point and read by design, so **no analysis counts it**: the share rules (4, 8), the
+per-file rules (7, 9), the repo tab's share histogram, the bundle cards' "files read" and the hot
+files all work on articles only. It still counts as KB access (rules 1, 6), names the `index`
+entry and shows up in plain read lists ("Read · top 5", the tree).
+
 **Session verdict** (`computeSessionVerdict`, DD-24), over the tree's nodes (agents):
 
 1. *KB access* = a read row in a visible bundle, or — when the tree has no snapshot — any read row.
 2. No KB access: `null` when there is no bundle (no snapshot, or a snapshot with no bundle);
    otherwise `kb_not_used`.
 3. KB access but no snapshot: level `ok`, qualifier `partial_data`, the share rule is skipped.
-4. **`session_share`**: for each node and each bundle with ≥ `SHARE_MIN_BUNDLE_FILES` files:
-   W = bundle files the node wrote (`write` rows); total = files − |W|; read = distinct bundle
-   files not in W with a read row of the node; share = read ÷ total (skipped when total is 0).
+4. **`session_share`**: for each node and each bundle with ≥ `SHARE_MIN_BUNDLE_FILES` articles:
+   W = bundle articles the node wrote (`write` rows); total = articles − |W|; read = distinct
+   articles not in W with a read row of the node; share = read ÷ total (skipped when total is 0).
    share > `SESSION_SHARE_MESS` → `mess`; else share > `SESSION_SHARE_FIX` → `fix`; params
    `{agentId, bundle, read, total, share}`.
 5. Level = `mess` if any finding is `mess`, else `fix` if any finding, else `ok`. Findings of the
@@ -71,17 +77,17 @@ first by `seq` names the bundle. `index` if that row is the bundle's `index.md`;
 rows from all its nodes):
 
 6. *KB sessions* = trees with a read row in a visible bundle (any read row when no snapshot exists
-   anywhere). B sessions = KB sessions with a read row in bundle B. Index files are excluded from
-   the per-file rules.
-7. **`always_read`** (`fix`): a non-index file f of B with (KB sessions with a read row on f) ÷
+   anywhere). B sessions = KB sessions with a read row in bundle B. Rules 7–9 see articles only.
+7. **`always_read`** (`fix`): an article f of B with (KB sessions with a read row on f) ÷
    (KB sessions) ≥ `ALWAYS_READ_SHARE`; params `{bundle, path, sessions, kbSessions, share}`.
    Snapshot-less trees count.
-8. **`kb_flood`**: only for B with ≥ `SHARE_MIN_BUNDLE_FILES` files, only over **snapshot-bound**
-   B sessions. A tree is *flooded* when (distinct B files with a read row) ÷ (B files) >
+8. **`kb_flood`**: only for B with ≥ `SHARE_MIN_BUNDLE_FILES` articles, only over
+   **snapshot-bound** B sessions. A tree is *flooded* when (distinct B articles with a read row) ÷
+   (B articles) >
    `FLOOD_SHARE`. Any flooded tree → one finding for B, `mess` when flooded ÷ snapshot-bound B
    sessions ≥ `FLOOD_MESS_SESSION_SHARE`, else `fix`; params `{bundle, sessions: flooded,
    bundleSessions, share}`.
-9. **`coarse_article`** (`fix`): a non-index file f of B with size ≥ `COARSE_MIN_SIZE_BYTES`,
+9. **`coarse_article`** (`fix`): an article f of B with size ≥ `COARSE_MIN_SIZE_BYTES`,
    with a `read`-op row in ≥ `COARSE_MIN_SESSIONS` KB sessions, and avgReadBytes = Σ `read` bytes
    ÷ Σ `read` calls over those sessions, ratio = avgReadBytes ÷ size < `COARSE_MAX_READ_RATIO`.
    `grep` rows are ignored; snapshot-less trees count. params `{bundle, path, size, sessions,
@@ -99,7 +105,7 @@ nothing; ignored bundles are dropped and ignored files leave the bundle file lis
 
 - Session share boundaries: 0.6 → mess OV-01, 0.3 → fix OV-02, 0.2 → ok OV-03, exactly 0.25 → ok
   OV-04, exactly 0.5 → fix OV-05.
-- A bundle under 10 files is never judged by share: OV-06.
+- A bundle under 10 articles is never judged by share: OV-06; the index is not an article: OV-16.
 - Own writes leave numerator and denominator: OV-07.
 - Many agents each reading one article of a big bundle: OV-08.
 - Entry `search` / `index` / `given` / `null`: OV-09, OV-10; a `list` row only, a `write` and a
@@ -120,8 +126,9 @@ nothing; ignored bundles are dropped and ignored files leave the bundle file lis
 `kind` is `session` or `repo`.
 
 - **Bundles** (`input.bundles`, `null` = no snapshot): `{root, files}` with `index` =
-  `<root>/index.md`. `files` is either a number N — then the files are `<root>/index.md` followed by
-  `<root>/a1.md` … `<root>/a<N−1>.md`, each of size 1000 — or a list of `{path, size, ignored?}`.
+  `<root>/index.md`. `files` is either a number N of articles — then the files are
+  `<root>/index.md` plus `<root>/a1.md` … `<root>/a<N>.md`, each of size 1000 — or a list of
+  `{path, size, ignored?}`.
   Every file is `ignored: false` unless listed so; bundles are never ignored here.
 - **Rows** are `{pathKey, op}` plus optional `bytes` (default 0), `calls` (default 1),
   `afterOwnEdit` (default false) and `seq` (default: the row's 1-based position in its list).
@@ -147,7 +154,7 @@ nothing; ignored bundles are dropped and ignored files leave the bundle file lis
       {"pathKey": "docs/kb/a4.md", "op": "read"}, {"pathKey": "docs/kb/a5.md", "op": "grep"}, {"pathKey": "docs/kb/a6.md", "op": "read"}]}]},
     "expected": {"verdict": {"level": "mess", "qualifiers": [], "findings": [
       {"rule": "session_share", "severity": "mess", "params": {"agentId": "a1b2c3", "bundle": "docs/kb", "read": 6, "total": 10, "share": 0.6}}]}, "entries": ["given"]},
-    "note": "Rule 4: 10 files, no writes; 6 distinct files with read rows (grep counts) -> 6/10 = 0.6 > 0.5 -> mess. Entry: first row a1.md is a non-index read and no grep/list comes before it -> given."
+    "note": "Rule 4: 10 articles, no writes; 6 distinct articles with read rows (grep counts) -> 6/10 = 0.6 > 0.5 -> mess. Entry: first row a1.md is a non-index read and no grep/list comes before it -> given."
   },
   {
     "id": "OV-02",
@@ -193,7 +200,15 @@ nothing; ignored bundles are dropped and ignored files leave the bundle file lis
       {"pathKey": "docs/kb/a3.md", "op": "read"}, {"pathKey": "docs/kb/a4.md", "op": "read"}, {"pathKey": "docs/kb/a5.md", "op": "read"},
       {"pathKey": "docs/kb/a6.md", "op": "read"}, {"pathKey": "docs/kb/a7.md", "op": "read"}, {"pathKey": "docs/kb/a8.md", "op": "read"}]}]},
     "expected": {"verdict": {"level": "ok", "qualifiers": [], "findings": []}, "entries": ["index"]},
-    "note": "Rule 4: 9 files < SHARE_MIN_BUNDLE_FILES 10 -> the bundle is skipped even at 9/9 -> ok. Entry: the first row is the index -> index."
+    "note": "Rule 4: 9 articles < SHARE_MIN_BUNDLE_FILES 10 -> the bundle is skipped even at 9/9 -> ok. Entry: the first row is the index -> index."
+  },
+  {
+    "id": "OV-16",
+    "kind": "session",
+    "input": {"bundles": [{"root": "docs/kb", "files": 10}], "nodes": [{"agentId": "a1b2c3", "rows": [
+      {"pathKey": "docs/kb/index.md", "op": "read"}, {"pathKey": "docs/kb/a1.md", "op": "read"}, {"pathKey": "docs/kb/a2.md", "op": "read"}]}]},
+    "expected": {"verdict": {"level": "ok", "qualifiers": [], "findings": []}, "entries": ["index"]},
+    "note": "Articles: the index is not counted -> 2/10 = 0.2 -> ok (counting it would give 3/11 = 0.27 -> fix). Entry: index."
   },
   {
     "id": "OV-07",

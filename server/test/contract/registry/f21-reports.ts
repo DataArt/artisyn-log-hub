@@ -379,7 +379,8 @@ export const f21Reports: ContractFamily = {
       },
     },
     {
-      // Hot files: read + grep bytes per KB file over the KB sessions, most bytes first.
+      // Hot files: read + grep bytes per KB file over the KB sessions, most bytes first. The
+      // bundle's index.md is the entry point, read by design, so it is never a hot file.
       id: 'F21-okf-usage-hot-files',
       route: 'GET /api/v1/repositories/:repoId/reports/okf-usage',
       actor: 'owner',
@@ -387,7 +388,7 @@ export const f21Reports: ContractFamily = {
       query: MONTH,
       expect: {
         status: 200,
-        minRows: 3,
+        minRows: 2,
         // Golden (DD-38): with one KB session every non-index file it read is "always read";
         // below REPO_MIN_KB_SESSIONS the level is `not_enough_data`, the findings still listed.
         bodyMatches: {
@@ -418,6 +419,7 @@ export const f21Reports: ContractFamily = {
                 FROM tree t JOIN session_okf_access a ON a.session_id = t.id
                WHERE a.op IN ('read', 'grep') AND a.path_key LIKE 'docs/kb/%'
                  AND a.path_key NOT LIKE '%/'
+                 AND a.path_key <> 'docs/kb/index.md'
                GROUP BY a.path_key
                ORDER BY read_bytes DESC, a.path_key
                LIMIT 10`,

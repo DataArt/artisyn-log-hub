@@ -67,7 +67,7 @@ function toSnapshotBundles(specs: BundleSpec[]): OkfSnapshotBundle[] {
     const index = `${spec.root}/index.md`;
     const files =
       typeof spec.files === 'number'
-        ? Array.from({ length: spec.files }, (_, i) => ({
+        ? Array.from({ length: spec.files + 1 }, (_, i) => ({
             path: i === 0 ? index : `${spec.root}/a${i}.md`,
             size: 1000,
             ignored: false,

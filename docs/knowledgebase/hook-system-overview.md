@@ -104,7 +104,9 @@ failure surfaced asynchronously on the child's `'error'` event still reaches `ho
 This is also the one detached script that shells out: `loadConfig()`/`getGitRoot()` fork `git.exe` (unless the
 `ARTISYN_PROJECT_ROOT` override applies, which needs no git call). Because a
 detached process has no console to inherit, that call **must** pass `windowsHide: true` or Windows allocates a fresh
-visible console window for it (a visible console flash). Pinned by `__tests__/no-visible-window.test.js`.
+visible console window for it (a visible console flash). The former `no-visible-window` unit test was
+replaced by the "no visible window" step of `tests/scenarios/hook/s-hook-09.spec.ts`, which checks
+`spawn-hidden.js` only — the `git-context.js` calls are not pinned by a test.
 
 ### `prompt-upload-hook.js` (detached child, not a hook event)
 
@@ -332,7 +334,7 @@ are identical for both callers.
 **Context injection (hook `2.22.0`+ — harness snapshot):** before uploading an `artisyn` namespace
 file of the *current* session, the hook prepends a `harness-snapshot-ref` line (just `{ type:
 'harness-snapshot-ref', snapshotId }`) to every upload, and prepends the full `harness-snapshot`
-line (DD-1 in `docs/tasks/todo/2026-10-16-sysctx-skill-source/impl-plan.md` — the design the rest
+line (DD-1 in `docs/tasks/done/2026-10-16-sysctx-skill-source/impl-plan.md` — the design the rest
 of this section follows) only when that id is not yet known to have reached the server. `claude`
 and `claude-subagent` namespaces are uploaded as-is without modification. A backlog session (not
 the current run's own session) carries neither line — same restriction the four events this
@@ -455,8 +457,8 @@ stdio MCP server and waits for an `initialize` + `tools/list` handshake, sequent
 (the old, pre-snapshot design) put upload lines in `hook.log` exactly 4.7–4.9 s apart and turned
 2,399 artisyn files into a ~188-minute run that never once reached its own `done:` line. DD-7's
 per-*run* (not per-file) flow and the once-per-run memoisation described above exist specifically
-to keep this cost paid at most once. Pinned by the `per-run context prepends` tests in
-`__tests__/send-logs-hook.test.js`.
+to keep this cost paid at most once. Covered by step 5 (a second Stop: no harness duplicates) of
+`tests/scenarios/hook/s-hook-09.spec.ts`.
 
 **The live `tools/list` probe itself (hook `2.7.0`+, now part of the harness snapshot's
 `mcpServers` since `2.22.0`):** for each server declared in `.mcp.json` / `~/.claude/mcp.json` /

@@ -41,7 +41,15 @@ v1–v4f on real sessions of this repo; README there).
 
 - **FR-1** The skill ships in the hooks plugin (`hook/` is the source of truth; installer, version
   bump and the dogfooded copy per `.claude/rules/hook.md`), so every project with the hooks has it.
-  It is manual-only: its description says it never triggers on its own.
+  It is manual-only: its description says it never triggers on its own. Its name is `kb-analysis`,
+  so it runs as `/log-hub-hooks:kb-analysis [session ids]` — the session OKF tab of
+  `2026-10-27-okf-usage-tab` already shows that command as a hint (`KB_ANALYSIS_COMMAND` in
+  `SessionOkfTab.tsx`); rename both together.
+
+- **FR-1a** A bundle's `index.md` is the entry point and read by design: the skill never reports
+  it as over-read, a flood, a hot or coarse article, and leaves it out of every share, like the
+  deterministic OKF analysis (`docs/knowledgebase/algorithms/okf-verdict.md`, "Articles"). Not
+  reaching the KB through the index is still a finding.
 
 ### Step 1 — choose the sessions
 

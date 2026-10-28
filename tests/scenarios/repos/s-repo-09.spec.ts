@@ -234,7 +234,8 @@ test('@S-REPO-09 owner exports a repository to zip and imports it into another o
     expect(res.status()).toBe(200);
     const usage = (await res.json()) as { hasSnapshot: boolean; bundles: Array<{ root: string; filesRead: number }> };
     expect(usage.hasSnapshot).toBe(true);
-    expect(usage.bundles).toEqual([expect.objectContaining({ root: okfKb, filesRead: 2 })]);
+    // db.md only: the bundle's index.md is the entry point and never counts as an article read.
+    expect(usage.bundles).toEqual([expect.objectContaining({ root: okfKb, filesRead: 1 })]);
   });
 
   await test.step('6. The session with a sub-agent costs the same in B as in A (the tree is the same row)', async () => {

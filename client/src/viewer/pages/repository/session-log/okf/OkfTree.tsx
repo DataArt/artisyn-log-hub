@@ -18,6 +18,7 @@ import type { OkfTreeNode } from '../../../../../models/repositories';
 import {
   filterOkfTreeByFiles,
   findOkfNodePath,
+  folderScanCounts,
   flattenOkfTree,
   isExpanded,
   sortOkfTree,
@@ -66,6 +67,7 @@ export function OkfTree({
   const containerRef = useRef<HTMLDivElement | null>(null);
 
   const sorted = useMemo(() => sortOkfTree(tree, metric), [tree, metric]);
+  const folderScans = useMemo(() => folderScanCounts(tree), [tree]);
   const shown = useMemo(
     () => (fileFilter ? filterOkfTreeByFiles(sorted, fileFilter) : sorted),
     [sorted, fileFilter],
@@ -141,6 +143,7 @@ export function OkfTree({
                 entry.top.bundle !== null &&
                 (ignoredBundles?.has(entry.top.bundle) ?? false)
               }
+              folderScans={folderScans.get(entry.key) ?? 0}
               highlighted={highlight === entry.key}
               onToggle={toggle}
             />

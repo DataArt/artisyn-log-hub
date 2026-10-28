@@ -25,9 +25,11 @@
 // Steps 7–10 — the session OKF tab (2026-10-27 OKF usage tab, FR-4, FR-11..FR-13): a session
 // tree built by helpers/okf.ts (DD-36) in a repository whose snapshot has one 12-file bundle
 // `docs/kb`. The main agent edits a01.md and reads it back (own edit), reads index.md, greps the
-// bundle folder (folder scan), reads a02.md three times and a03.md once; its sub-agent reads
-// a04.md (8 KB). Main agent: 3 of the 11 files it did not write (27 % > 25 %) → «Something to fix»
-// with one Why line; the sub-agent's 1 of 12 is fine.
+// bundle folder (folder scan), reads a02.md three times, a03.md and a05.md once and greps a03.md
+// (a file grep, not counted in the folder-scan marker); its sub-agent
+// reads a04.md (8 KB). Shares count articles only (index.md is the entry point): main agent 3 of
+// the 10 articles it did not write (30 % > 25 %) → «Something to fix» with one Why line; the
+// sub-agent's 1 of 11 is fine.
 //
 // Replaces:
 //   - server/test/change-surface.e2e-spec.ts (24, part ≈ 10)
@@ -244,6 +246,8 @@ test('@S-SESS-09 Windows change surface: scattered change, a file outside the re
           { read: 'docs/kb/a02.md', bytes: 100 },
           { read: 'docs/kb/a02.md', bytes: 100 },
           { read: 'docs/kb/a03.md', bytes: 1000 },
+          { grep: 'docs/kb/a03.md', bytes: 50 },
+          { read: 'docs/kb/a05.md', bytes: 100 },
         ],
         subAgents: [{ agentId: subAgentId, task: 'summarise the payment article', actions: [{ read: 'docs/kb/a04.md', bytes: 8000 }] }],
       },
@@ -264,14 +268,14 @@ test('@S-SESS-09 Windows change surface: scattered change, a file outside the re
     return id;
   });
 
-  await test.step('8. verdict card: «Something to fix», one Why line for the main agent (3 of 11, 27 %), read top 5 with the own-edit icon, two agents', async () => {
+  await test.step('8. verdict card: «Something to fix», one Why line for the main agent (3 of 10, 30 %), read top 5 with the own-edit icon, two agents', async () => {
     await openSession(page, owner, okfRepoId, okfSid, { tab: 'okf' });
     await expect(page.getByTestId('session-okf-tab')).toBeVisible();
     await expect(page.getByTestId('okf-no-snapshot')).toHaveCount(0);
     await expect(page.getByTestId('okf-verdict-level')).toHaveText('Something to fix');
     const why = page.getByTestId('okf-why-line');
     await expect(why).toHaveCount(1);
-    await expect(why).toContainText(`agent ${okfSid.slice(0, 4)} read 27% of docs/kb files (3 of 11)`);
+    await expect(why).toContainText(`agent ${okfSid.slice(0, 4)} read 30% of docs/kb files (3 of 10)`);
     const readTop = page.getByTestId('okf-read-top');
     await expect(readTop).toHaveCount(5);
     await expect(readTop.first()).toContainText('docs/kb/a04.md');
@@ -285,7 +289,8 @@ test('@S-SESS-09 Windows change surface: scattered change, a file outside the re
     await expect(rows.first()).toContainText('docs/kb');
     await expect(rows.nth(1)).toContainText('a04.md');
     await expect(rows.filter({ hasText: 'a01.md' })).toContainText('own edit');
-    await expect(page.getByTestId('okf-tree')).toContainText('grep / ls over folder');
+    // The bundle's grepCalls (2) include the file grep on a03.md; the marker counts the folder's own grep only.
+    await expect(rows.first()).toContainText('grep / ls over folder ×1');
     await expect(rows.filter({ hasText: 'a11.md' })).toContainText('not read');
     await page.getByTestId('okf-metric-toggle').getByText('Calls', { exact: true }).click();
     await expect(rows.nth(1)).toContainText('a02.md');

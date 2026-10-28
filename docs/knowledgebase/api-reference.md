@@ -2150,7 +2150,7 @@ response: {
     maxShare: number | null;
   };
   shareBins: { bin: '0-10' | '10-25' | '25-50' | '50+'; sessions: number }[];
-  hotFiles: { bundle: string | null; path: string; readBytes: number; sessions: number }[]; // top 10
+  hotFiles: { bundle: string | null; path: string; readBytes: number; sessions: number }[]; // top 10; never a bundle's index.md (the entry point)
   notRead: { bundle: string; path: string; size: number }[];  // full list
   bundles: OkfBundleSummary[];
   tree: OkfTreeNode[];

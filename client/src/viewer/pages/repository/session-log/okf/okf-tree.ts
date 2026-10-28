@@ -2,9 +2,10 @@
  * Pure helpers behind the OKF tree (session and repo OKF tabs).
  *
  * The server sends the tree already aggregated (bundle → folder → file, every folder the sum of
- * its children); nothing here recomputes a metric. These helpers only shape it for display:
- * sort by the selected heat metric with "not read" rows last, narrow it to one agent's files,
- * flatten it to the visible rows, and find the ancestors of a node for "scroll to node".
+ * its children plus its own folder rows); nothing here recomputes a metric except a folder's own
+ * grep / ls count for its marker. These helpers only shape it for display: sort by the selected
+ * heat metric with "not read" rows last, narrow it to one agent's files, flatten it to the visible
+ * rows, and find the ancestors of a node for "scroll to node".
  */
 import type { OkfTreeNode } from '../../../../../models/repositories';
 
@@ -31,6 +32,28 @@ export function isNotRead(node: OkfTreeNode): boolean {
 /** The READ heat value of a node under the selected metric. */
 export function heatValue(node: OkfTreeNode, metric: OkfHeatMetric): number {
   return metric === 'bytes' ? node.readBytes : node.readCalls;
+}
+
+/**
+ * Grep / ls calls on each folder and bundle node itself, by `okfNodeKey`. The server rolls the
+ * children into a folder's `grepCalls` / `listCalls`, so the folder's own calls are its value minus
+ * its children's. Build it from the unfiltered tree: the agent filter drops children.
+ */
+export function folderScanCounts(
+  nodes: readonly OkfTreeNode[],
+): Map<string, number> {
+  const out = new Map<string, number>();
+  const walk = (node: OkfTreeNode): void => {
+    if (node.kind === 'file') return;
+    let own = node.grepCalls + node.listCalls;
+    for (const c of node.children ?? []) {
+      own -= c.grepCalls + c.listCalls;
+      walk(c);
+    }
+    out.set(okfNodeKey(node), own);
+  };
+  nodes.forEach(walk);
+  return out;
 }
 
 /** Files at or below a node. */

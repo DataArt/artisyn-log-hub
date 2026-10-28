@@ -26,20 +26,22 @@ const TREE_NODES = `
   )`;
 
 /**
- * One row per bundle of the snapshot the tree root `$1` is bound to: file count, distinct
- * listed files read (read/grep), read bytes under the bundle root. `team`: the files the
- * snapshot marks `ignored` count nowhere (DD-30).
+ * One row per bundle of the snapshot the tree root `$1` is bound to: article count (listed files
+ * without the bundle's index.md, which no analysis counts), distinct articles read (read/grep),
+ * read bytes under the bundle root. `team`: the files the snapshot marks `ignored` count nowhere
+ * (DD-30).
  */
 function okfBundlesSql(team: boolean): string {
   const visible = team ? `NOT (f->>'ignored')::boolean` : 'true';
+  const article = `${visible} AND f->>'path' <> b->>'index'`;
   return `${TREE_NODES},
     acc AS (SELECT a.* FROM tree t JOIN session_okf_access a ON a.session_id = t.id
              WHERE a.op IN ('read', 'grep'))
     SELECT b->>'root' AS root, b->>'index' AS idx, (b->>'ignored')::boolean AS ignored,
-           (SELECT count(*) FROM jsonb_array_elements(b->'files') f WHERE ${visible}) AS files,
+           (SELECT count(*) FROM jsonb_array_elements(b->'files') f WHERE ${article}) AS files,
            (SELECT count(DISTINCT acc.path_key) FROM acc
              WHERE acc.path_key IN (SELECT f->>'path' FROM jsonb_array_elements(b->'files') f
-                                     WHERE ${visible})) AS files_read,
+                                     WHERE ${article})) AS files_read,
            (SELECT coalesce(sum(acc.bytes), 0) FROM acc
              WHERE acc.path_key LIKE (b->>'root') || '/%'
                AND acc.path_key NOT IN (SELECT f->>'path' FROM jsonb_array_elements(b->'files') f

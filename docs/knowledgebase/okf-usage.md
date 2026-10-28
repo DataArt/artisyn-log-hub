@@ -100,13 +100,21 @@ Response types: `server/src/logs/okf/okf-usage.types.ts`, mirrored in
 `client/src/viewer/pages/repository/session-log/okf/` — `SessionOkfTab.tsx` (tab id `okf`,
 between "Harness usage" and "Raw Logs"):
 
-- verdict card (`OkfVerdictCard.tsx`): badge, "partial data" chip, clickable Why lines that scroll
-  the tree to the node, Read top 5 with the own-edit icon, "How agents reached the KB" chips
-  (`✓ index` / `grep` / `given`);
+- a one-line "Deeper analysis" hint under the toggle bar (`data-testid="okf-deeper-analysis"`)
+  naming the local on-demand command `/log-hub-hooks:kb-analysis <sessionId>` (constant
+  `KB_ANALYSIS_COMMAND`; the skill itself is the not-yet-shipped task `2026-10-27-kb-completeness-deep`);
+- verdict card (`OkfVerdictCard.tsx`, width-capped at `max-w-4xl`): badge, "partial data" chip,
+  clickable Why lines that scroll the tree to the node, Read top 5 with the own-edit icon (a
+  tooltip, `data-testid="okf-own-edit-icon"`, explains "read after the agent edited this file
+  itself"), "How agents reached the KB" chips (`✓ index` / `grep` / `given`);
 - bundle cards (`OkfBundleCards.tsx`): tracked / gitignored, "started from index.md", FILES READ,
   BYTES INTO CONTEXT;
 - tree (`OkfTree.tsx`, `okf-tree.ts`, `okf-tree-rows.tsx`): bundle → folder → file, READ heat
-  (Bytes / Calls toggle), WRITE bar, markers `folder_scan`, `entry_point`, `own_edit`; files not
+  (Bytes / Calls toggle), WRITE bar, markers `folder_scan`, `entry_point`, `own_edit`. A folder or
+  bundle node's numbers are its own folder rows plus its children's, so its READ can exceed the
+  sum of the visible children; the `folder_scan` text («grep / ls over folder ×N») counts only the
+  folder's own rows (`folderScanCounts` in `okf-tree.ts`: node minus children, taken before the
+  agent filter drops children). Files not
   read are grey ("not read") and sorted last; accessed files absent from the snapshot carry the
   "not in KB at start" chip, paths outside every bundle form a "Not in the KB snapshot" group;
 - Agents panel (`OkfAgentsPanel.tsx`): one row per tree node with its task head (200 characters),
@@ -130,6 +138,9 @@ Settings, shown where `canSeeTeamWideTabs` allows):
   (`OkfShareHistogram.tsx`, four CSS bars), hot files top 10 (`OkfHotFiles.tsx`), not-read list
   (`OkfNotReadList.tsx`, neutral, inline "Show all"), and the tree with markers `hot` / `coarse`
   and the "No longer in KB" group (paths absent from the latest snapshot).
+- A bundle's `index.md` is never analysed as an article: it is no hot file, and every share
+  (histogram, bundle cards, verdict rules) counts articles only — see "Articles" in
+  [algorithms/okf-verdict.md](algorithms/okf-verdict.md).
 - The latest snapshot = the bound snapshot of the newest root session in the filtered set
   (DD-29); its bundles define the tree, the KB files and the not-read list.
 

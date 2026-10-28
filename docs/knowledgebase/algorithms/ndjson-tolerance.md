@@ -77,7 +77,7 @@ rule 7, which no realistic parser message reaches): the hook reports
 for each dropped line its byte length before trimming and without its `\n` (so `\r` and spaces
 count), the parser
 error and a snippet of the first 120 UTF-16 units of the trimmed text passed through
-`JSON.stringify` (the snippet cap is tested in `__tests__/ndjson-sanitize.test.js`); bytes that
+`JSON.stringify` (the snippet cap is checked by step 3 of `tests/scenarios/hook/s-hook-02.spec.ts`); bytes that
 are not valid UTF-8 are decoded only for parsing, the kept line keeps its original bytes (NT-46).
 When
 the server accepts a body with drops, the server writes a warning to its own log with the first 5 drops

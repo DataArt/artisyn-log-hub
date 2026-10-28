@@ -58,11 +58,13 @@ import {
   READ_TOP_N,
   TASK_HEAD_MAX_CHARS,
   agentEntry,
+  bundleArticles,
   bundleOfPath,
   computeRepoVerdict,
   computeSessionVerdict,
   fileShare,
   median,
+  readFilesOfBundle,
   shareBin,
   startedFromIndex,
   type OkfVerdictRow,
@@ -215,17 +217,17 @@ const NULL_GROUP_SPEC: OkfTreeGroupSpec = {
   files: [],
 };
 
-/** Distinct snapshot-listed files of the bundle with a read/grep row in `rows`. */
+/** Distinct articles of the bundle (index excluded, `bundleArticles`) read/grepped in `rows`. */
 function listedFilesRead(
   rows: readonly OkfVerdictRow[],
   bundle: OkfSnapshotBundle,
 ): Set<string> {
-  const listed = new Set(bundle.files.map((f) => f.path));
-  const out = new Set<string>();
-  for (const r of rows) {
-    if (isReadLike(r.op) && listed.has(r.pathKey)) out.add(r.pathKey);
-  }
-  return out;
+  return readFilesOfBundle(rows, bundle);
+}
+
+/** Share denominator: the bundle's articles, its `index.md` not counted. */
+function articleCount(bundle: OkfSnapshotBundle): number {
+  return bundleArticles(bundle).length;
 }
 
 function readBytesOf(rows: readonly OkfVerdictRow[]): number {
@@ -392,9 +394,9 @@ export class OkfUsageService {
         root: b.root,
         index: b.index,
         ignored: b.ignored,
-        files: b.files.length,
+        files: articleCount(b),
         filesRead,
-        share: fileShare(filesRead, b.files.length),
+        share: fileShare(filesRead, articleCount(b)),
         readBytes: readBytesOf(allRows),
         startedFromIndex: fromIndex,
         sessionsStartedFromIndex: null,
@@ -614,7 +616,7 @@ export class OkfUsageService {
       if (c.tree.snapshot === null || bundles === null) continue;
       let best: number | null = null;
       for (const b of bundles) {
-        const s = fileShare(listedFilesRead(c.kbRows, b).size, b.files.length);
+        const s = fileShare(listedFilesRead(c.kbRows, b).size, articleCount(b));
         if (s !== null && (best === null || s > best)) best = s;
       }
       if (best !== null) shares.push(best);
@@ -627,7 +629,14 @@ export class OkfUsageService {
       binCounts.set(bin, (binCounts.get(bin) ?? 0) + 1);
     }
 
-    // Hot files: read + grep bytes per file over KB sessions (gone files included).
+    // Hot files: read + grep bytes per file over KB sessions (gone files included). A bundle's
+    // `index.md` is read by design (it is the entry point), so it is never a hot file; without
+    // a snapshot any `index.md` counts as one.
+    const indexPaths = new Set((allBundles ?? []).map((b) => b.index));
+    const isIndexPath = (path: string): boolean =>
+      indexPaths.has(path) ||
+      (allBundles === null &&
+        (path === 'index.md' || path.endsWith('/index.md')));
     const hot = new Map<
       string,
       { bundle: string | null; readBytes: number; sessions: Set<number> }
@@ -635,7 +644,13 @@ export class OkfUsageService {
     for (const c of kb) {
       for (const contrib of c.contributions) {
         const row = contrib.row;
-        if (!isReadLike(row.op) || isFolderKey(row.pathKey)) continue;
+        if (
+          !isReadLike(row.op) ||
+          isFolderKey(row.pathKey) ||
+          isIndexPath(row.pathKey)
+        ) {
+          continue;
+        }
         const entry = hot.get(row.pathKey) ?? {
           bundle: contrib.groupKey === NULL_GROUP_KEY ? null : contrib.groupKey,
           readBytes: 0,
@@ -696,9 +711,9 @@ export class OkfUsageService {
         root: b.root,
         index: b.index,
         ignored: b.ignored,
-        files: b.files.length,
+        files: articleCount(b),
         filesRead,
-        share: fileShare(filesRead, b.files.length),
+        share: fileShare(filesRead, articleCount(b)),
         readBytes: readBytesOf(rowsInB),
         startedFromIndex: null,
         sessionsStartedFromIndex: fromIndex,

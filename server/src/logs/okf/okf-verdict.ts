@@ -260,13 +260,25 @@ function worstLevel(findings: readonly OkfFinding[]): 'ok' | 'fix' | 'mess' {
   return 'ok';
 }
 
-/** Distinct snapshot-listed files of the bundle with a read/grep row, minus `exclude`. */
-function readFilesOfBundle(
+/**
+ * The bundle's articles: its snapshot-listed files without its `index.md`. The index is the entry
+ * point and read by design, so no analysis counts it — not in shares, floods, hot files or the
+ * per-file rules.
+ */
+export function bundleArticles<F extends { path: string }>(bundle: {
+  index: string;
+  files: readonly F[];
+}): F[] {
+  return bundle.files.filter((f) => f.path !== bundle.index);
+}
+
+/** Distinct articles of the bundle (`bundleArticles`) with a read/grep row, minus `exclude`. */
+export function readFilesOfBundle(
   rows: readonly OkfVerdictRow[],
   bundle: OkfVerdictBundle,
   exclude: ReadonlySet<string> = new Set(),
 ): Set<string> {
-  const listed = new Set(bundle.files.map((f) => f.path));
+  const listed = new Set(bundleArticles(bundle).map((f) => f.path));
   const out = new Set<string>();
   for (const r of rows) {
     if (isReadLike(r.op) && listed.has(r.pathKey) && !exclude.has(r.pathKey)) {
@@ -302,8 +314,9 @@ export function computeSessionVerdict(
   const findings: { finding: OkfFinding; share: number }[] = [];
   for (const node of nodes) {
     for (const bundle of bundles) {
-      if (bundle.files.length < SHARE_MIN_BUNDLE_FILES) continue;
-      const listed = new Set(bundle.files.map((f) => f.path));
+      const articles = bundleArticles(bundle);
+      if (articles.length < SHARE_MIN_BUNDLE_FILES) continue;
+      const listed = new Set(articles.map((f) => f.path));
       const written = new Set(
         node.rows
           .filter((r) => r.op === 'write' && listed.has(r.pathKey))
@@ -372,7 +385,7 @@ export function computeRepoVerdict(input: RepoVerdictInput): OkfVerdict {
 
   const findings: OkfFinding[] = [];
   for (const bundle of bundles ?? []) {
-    const nonIndex = bundle.files.filter((f) => f.path !== bundle.index);
+    const nonIndex = bundleArticles(bundle);
 
     // always_read
     for (const file of nonIndex) {
@@ -397,7 +410,7 @@ export function computeRepoVerdict(input: RepoVerdictInput): OkfVerdict {
     }
 
     // kb_flood
-    if (bundle.files.length >= SHARE_MIN_BUNDLE_FILES) {
+    if (nonIndex.length >= SHARE_MIN_BUNDLE_FILES) {
       const bundleSessions = kbSessions.filter(
         (s) =>
           s.hasSnapshot &&
@@ -409,7 +422,7 @@ export function computeRepoVerdict(input: RepoVerdictInput): OkfVerdict {
       const flooded = bundleSessions.filter((s) => {
         const share = fileShare(
           readFilesOfBundle(s.rows, bundle).size,
-          bundle.files.length,
+          nonIndex.length,
         );
         return share !== null && share > FLOOD_SHARE;
       }).length;

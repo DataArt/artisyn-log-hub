@@ -7,6 +7,12 @@
 import { RefreshCw } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Badge } from '@/ui/badge';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/ui/tooltip';
 import { formatBytes } from '@/lib/format';
 import {
   entryLabel,
@@ -88,117 +94,133 @@ export function OkfVerdictCard({
   const entryAgents = agents.filter((a) => a.entry !== null);
 
   return (
-    <div
-      data-testid="okf-verdict-card"
-      className="space-y-3 rounded-md border border-border bg-card p-3"
-    >
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-          Verdict
-        </span>
-        <Badge
-          variant={LEVEL_VARIANT[verdict.level] ?? 'secondary'}
-          data-testid="okf-verdict-level"
-        >
-          {levelLabel(verdict.level)}
-        </Badge>
-        {verdict.qualifiers.map((q) => (
-          <Badge key={q} variant="outline" className="text-muted-foreground">
-            {qualifierLabel(q, verdict)}
-          </Badge>
-        ))}
-        {variant === 'repo' && kbSessions !== undefined ? (
-          <span className="text-xs text-muted-foreground">
-            {kbSessions.toLocaleString()} KB sessions
-            {totalSessions !== undefined
-              ? ` of ${totalSessions.toLocaleString()}`
-              : ''}
+    <TooltipProvider>
+      <div
+        data-testid="okf-verdict-card"
+        className="space-y-3 rounded-md border border-border bg-card p-3"
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+            Verdict
           </span>
-        ) : null}
-      </div>
-
-      {verdict.findings.length > 0 ? (
-        <div>
-          <SectionTitle>
-            {variant === 'repo' ? 'Anomalies' : 'Why'}
-          </SectionTitle>
-          {verdict.findings.map((f, i) => (
-            <LineButton
-              key={`${f.rule}:${i}`}
-              testId="okf-why-line"
-              onClick={() => onNodeClick(f.node.bundle, f.node.path)}
-            >
-              <span
-                className={`size-1.5 shrink-0 rounded-full ${
-                  f.severity === 'mess' ? 'bg-red-500' : 'bg-amber-500'
-                }`}
-              />
-              <span className="min-w-0 flex-1">{formatOkfFinding(f)}</span>
-            </LineButton>
+          <Badge
+            variant={LEVEL_VARIANT[verdict.level] ?? 'secondary'}
+            data-testid="okf-verdict-level"
+          >
+            {levelLabel(verdict.level)}
+          </Badge>
+          {verdict.qualifiers.map((q) => (
+            <Badge key={q} variant="outline" className="text-muted-foreground">
+              {qualifierLabel(q, verdict)}
+            </Badge>
           ))}
-          {variant === 'session' ? (
-            <div className="px-1 text-[11px] text-muted-foreground">
-              Per agent — the same article read by several agents is not a
-              finding.
-            </div>
+          {variant === 'repo' && kbSessions !== undefined ? (
+            <span className="text-xs text-muted-foreground">
+              {kbSessions.toLocaleString()} KB sessions
+              {totalSessions !== undefined
+                ? ` of ${totalSessions.toLocaleString()}`
+                : ''}
+            </span>
           ) : null}
         </div>
-      ) : null}
 
-      {variant === 'session' && top5.length > 0 ? (
-        <div>
-          <SectionTitle>Read · top 5 by bytes</SectionTitle>
-          {top5.map((r) => (
-            <LineButton
-              key={`${r.bundle ?? ''}:${r.path}`}
-              testId="okf-read-top"
-              onClick={() => onNodeClick(r.bundle, r.path)}
-            >
-              <span className="min-w-0 flex-1 truncate font-mono">
-                {r.path}
-              </span>
-              {r.ownEdit ? (
-                <RefreshCw
-                  className="size-3 shrink-0 text-muted-foreground"
-                  aria-label="read after own edit"
-                />
-              ) : null}
-              <span className="w-16 shrink-0 text-right font-mono tabular-nums">
-                {formatBytes(r.readBytes)}
-              </span>
-            </LineButton>
-          ))}
-        </div>
-      ) : null}
-
-      {variant === 'session' && entryAgents.length > 0 ? (
-        <div>
-          <SectionTitle>
-            How agents reached the KB · {entryAgents.length} agents
-          </SectionTitle>
-          <div className="flex flex-wrap gap-1.5">
-            {entryAgents.map((a) => (
-              <span
-                key={a.id}
-                data-testid="okf-entry-chip"
-                className="inline-flex items-center gap-1 rounded border border-border px-1.5 py-0.5 text-[11px]"
-                title={a.taskHead}
+        {verdict.findings.length > 0 ? (
+          <div>
+            <SectionTitle>
+              {variant === 'repo' ? 'Anomalies' : 'Why'}
+            </SectionTitle>
+            {verdict.findings.map((f, i) => (
+              <LineButton
+                key={`${f.rule}:${i}`}
+                testId="okf-why-line"
+                onClick={() => onNodeClick(f.node.bundle, f.node.path)}
               >
-                <span className="font-mono">
-                  {okfAgentLabel(a.id, rootSessionId)}
+                <span
+                  className={`size-1.5 shrink-0 rounded-full ${
+                    f.severity === 'mess' ? 'bg-red-500' : 'bg-amber-500'
+                  }`}
+                />
+                <span className="min-w-0 flex-1">{formatOkfFinding(f)}</span>
+              </LineButton>
+            ))}
+            {variant === 'session' ? (
+              <div className="px-1 text-[11px] text-muted-foreground">
+                Per agent — the same article read by several agents is not a
+                finding.
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+
+        {variant === 'session' && top5.length > 0 ? (
+          <div>
+            <SectionTitle>Read · top 5 by bytes</SectionTitle>
+            {top5.map((r) => (
+              <LineButton
+                key={`${r.bundle ?? ''}:${r.path}`}
+                testId="okf-read-top"
+                onClick={() => onNodeClick(r.bundle, r.path)}
+              >
+                <span className="min-w-0 flex-1 truncate font-mono">
+                  {r.path}
                 </span>
-                <span className="text-muted-foreground">
-                  → {a.files.length}{' '}
-                  {a.files.length === 1 ? 'article' : 'articles'}
+                {r.ownEdit ? (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <span
+                        className="shrink-0"
+                        data-testid="okf-own-edit-icon"
+                      >
+                        <RefreshCw
+                          className="size-3 text-muted-foreground"
+                          aria-label="read after own edit"
+                        />
+                      </span>
+                    </TooltipTrigger>
+                    <TooltipContent side="top" className="max-w-xs text-xs">
+                      Read after the agent edited this file itself: it
+                      re-checked its own change rather than looking something up
+                      in the KB.
+                    </TooltipContent>
+                  </Tooltip>
+                ) : null}
+                <span className="w-16 shrink-0 text-right font-mono tabular-nums">
+                  {formatBytes(r.readBytes)}
                 </span>
-                <span className="font-medium">
-                  {a.entry ? entryLabel(a.entry) : ''}
-                </span>
-              </span>
+              </LineButton>
             ))}
           </div>
-        </div>
-      ) : null}
-    </div>
+        ) : null}
+
+        {variant === 'session' && entryAgents.length > 0 ? (
+          <div>
+            <SectionTitle>
+              How agents reached the KB · {entryAgents.length} agents
+            </SectionTitle>
+            <div className="flex flex-wrap gap-1.5">
+              {entryAgents.map((a) => (
+                <span
+                  key={a.id}
+                  data-testid="okf-entry-chip"
+                  className="inline-flex items-center gap-1 rounded border border-border px-1.5 py-0.5 text-[11px]"
+                  title={a.taskHead}
+                >
+                  <span className="font-mono">
+                    {okfAgentLabel(a.id, rootSessionId)}
+                  </span>
+                  <span className="text-muted-foreground">
+                    → {a.files.length}{' '}
+                    {a.files.length === 1 ? 'article' : 'articles'}
+                  </span>
+                  <span className="font-medium">
+                    {a.entry ? entryLabel(a.entry) : ''}
+                  </span>
+                </span>
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </div>
+    </TooltipProvider>
   );
 }

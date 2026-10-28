@@ -82,19 +82,21 @@ function NoSnapshotBanner() {
   );
 }
 
-function DeeperAnalysisBox() {
+/** Name of the on-demand KB-analysis skill shipped with the hooks plugin (task kb-completeness-deep). */
+const KB_ANALYSIS_COMMAND = '/log-hub-hooks:kb-analysis';
+
+function DeeperAnalysisHint({ sessionId }: { sessionId: string }) {
   return (
-    <div
+    <p
       data-testid="okf-deeper-analysis"
-      className="rounded-md border border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground"
+      className="text-xs text-muted-foreground"
     >
-      <div className="mb-0.5 text-[10px] font-medium uppercase tracking-wide">
-        Deeper analysis
-      </div>
-      What should have been read, failed searches, KB gaps and fixes: run the
-      local KB-completeness skill on your machine. Its results stay there and
-      are not shown here.
-    </div>
+      Deeper analysis (what should have been read, failed searches, KB gaps and
+      fixes) runs locally in Claude Code, on demand:{' '}
+      <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px] text-foreground">
+        {KB_ANALYSIS_COMMAND} {sessionId}
+      </code>
+    </p>
   );
 }
 
@@ -184,23 +186,19 @@ export function SessionOkfTab({
           </ToggleGroupItem>
         </ToggleGroup>
       </div>
+      <DeeperAnalysisHint sessionId={sessionId} />
 
       {!data.hasSnapshot ? <NoSnapshotBanner /> : null}
 
-      <div className="flex flex-col gap-3 xl:flex-row xl:items-start">
-        <div className="min-w-0 flex-1">
-          <OkfVerdictCard
-            verdict={data.verdict}
-            variant="session"
-            readTop={data.readTop}
-            agents={data.agents}
-            rootSessionId={sessionId}
-            onNodeClick={scrollToNode}
-          />
-        </div>
-        <div className="xl:w-[320px]">
-          <DeeperAnalysisBox />
-        </div>
+      <div className="max-w-4xl">
+        <OkfVerdictCard
+          verdict={data.verdict}
+          variant="session"
+          readTop={data.readTop}
+          agents={data.agents}
+          rootSessionId={sessionId}
+          onNodeClick={scrollToNode}
+        />
       </div>
 
       <OkfBundleCards

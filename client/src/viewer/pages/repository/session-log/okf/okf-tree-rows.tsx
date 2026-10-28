@@ -45,12 +45,13 @@ function markerLabels(
   node: OkfTreeNode,
   variant: OkfTreeVariant,
   collapsed: boolean,
+  folderScans: number,
 ): string[] {
   const out: string[] = [];
   for (const m of node.markers) {
     if (m === 'entry_point') out.push('entry point');
     else if (m === 'folder_scan') {
-      out.push(`grep / ls over folder ×${node.grepCalls + node.listCalls}`);
+      out.push(`grep / ls over folder ×${folderScans}`);
     } else if (m === 'own_edit') {
       out.push(`↻ own edit ${formatBytes(node.ownEditReadBytes)}`);
     } else if (m === 'coarse') out.push('coarse');
@@ -73,6 +74,7 @@ export function OkfTreeRow({
   variant,
   bundleLabel,
   bundleIgnored,
+  folderScans,
   highlighted,
   onToggle,
 }: {
@@ -82,6 +84,8 @@ export function OkfTreeRow({
   /** Display label of a top-level node (bundle root or the synthetic group). */
   bundleLabel: string;
   bundleIgnored: boolean;
+  /** Grep / ls calls on this folder itself (`folderScanCounts`), children excluded. */
+  folderScans: number;
   highlighted: boolean;
   onToggle: (key: string) => void;
 }) {
@@ -93,6 +97,7 @@ export function OkfTreeRow({
     node,
     variant,
     entry.hasChildren && !entry.expanded,
+    folderScans,
   );
   const label = isTop ? bundleLabel : entry.label;
 
