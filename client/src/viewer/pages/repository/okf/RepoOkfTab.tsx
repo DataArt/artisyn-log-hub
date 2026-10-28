@@ -8,10 +8,11 @@
  * Nothing is recomputed here — the server sends the verdict, tiles, bins, lists and tree.
  */
 import { useQuery } from '@tanstack/react-query';
-import { useMemo, useRef, useState } from 'react';
+import { useMemo, useRef, useState, type CSSProperties } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Skeleton } from '@/ui/skeleton';
 import { ApiError, fetchRepoOkfUsage } from '../../../api';
+import { useDraggableWidth } from '../../../hooks/useDraggableWidth';
 import { toIsoDateBounds } from '../reports/report-url';
 import { OkfTree, type OkfTreeHandle } from '../session-log/okf/OkfTree';
 import { OkfVerdictCard } from '../session-log/okf/OkfVerdictCard';
@@ -25,6 +26,9 @@ import {
   writeOkfFilters,
   type RepoOkfFilters,
 } from './okf-url-state';
+
+/** Narrowest the KB tree may get when the side column is dragged wider, in px. */
+const TREE_MIN_WIDTH = 480;
 
 export interface RepoOkfTabProps {
   repoId: number;
@@ -57,6 +61,19 @@ export function RepoOkfTab({ repoId, teamId }: RepoOkfTabProps) {
     [searchParams],
   );
   const treeRef = useRef<OkfTreeHandle | null>(null);
+  // Side column (histogram, hot files, not-read) beside the tree from `xl` up; its handle widens
+  // the tree when dragged right. The tree keeps at least TREE_MIN_WIDTH.
+  const splitRef = useRef<HTMLDivElement | null>(null);
+  const { width: sideWidth, onMouseDown: onSplitMouseDown } = useDraggableWidth(
+    {
+      storageKey: 'artisyn:okfRepoSideWidth',
+      defaultWidth: 340,
+      minWidth: 240,
+      rightPanel: true,
+      getMaxWidth: () =>
+        (splitRef.current?.clientWidth ?? window.innerWidth) - TREE_MIN_WIDTH,
+    },
+  );
   // The response lists only the selected bundle when one is chosen, so the bundle select keeps
   // the last full list it saw.
   const [knownBundles, setKnownBundles] = useState<string[]>([]);
@@ -165,8 +182,12 @@ export function RepoOkfTab({ repoId, teamId }: RepoOkfTabProps) {
           snapshot={data.snapshot}
           bundleCount={data.bundles.length}
         />
-        <div className="flex flex-col gap-3 xl:flex-row xl:items-start">
-          <div className="min-w-0 flex-1">
+        <div
+          ref={splitRef}
+          className="flex flex-col gap-3 xl:flex-row xl:items-stretch xl:gap-0"
+          style={{ '--okf-side-w': `${sideWidth}px` } as CSSProperties}
+        >
+          <div className="min-w-0 flex-1 xl:self-start">
             <OkfTree
               ref={treeRef}
               tree={data.tree}
@@ -180,7 +201,15 @@ export function RepoOkfTab({ repoId, teamId }: RepoOkfTabProps) {
               }
             />
           </div>
-          <div className="flex flex-col gap-3 xl:w-[340px]">
+          <div
+            role="separator"
+            aria-orientation="vertical"
+            aria-label="Resize the KB tree"
+            data-testid="okf-split-handle"
+            onMouseDown={onSplitMouseDown}
+            className="mx-1 hidden w-1 shrink-0 cursor-col-resize rounded hover:bg-accent xl:block"
+          />
+          <div className="flex flex-col gap-3 xl:w-(--okf-side-w) xl:shrink-0 xl:self-start">
             <OkfShareHistogram bins={data.shareBins} />
             <OkfHotFiles files={data.hotFiles} onNodeClick={scrollToNode} />
             <OkfNotReadList files={data.notRead} onNodeClick={scrollToNode} />

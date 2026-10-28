@@ -5,6 +5,8 @@ interface UseDraggableWidthOptions {
   defaultWidth: number;
   minWidth: number;
   getMaxWidth?: () => number;
+  /** The panel sits right of its handle: dragging left widens it. */
+  rightPanel?: boolean;
 }
 
 export function useDraggableWidth({
@@ -12,6 +14,7 @@ export function useDraggableWidth({
   defaultWidth,
   minWidth,
   getMaxWidth,
+  rightPanel = false,
 }: UseDraggableWidthOptions): {
   width: number;
   onMouseDown: React.MouseEventHandler;
@@ -34,9 +37,10 @@ export function useDraggableWidth({
 
       function onMouseMove(ev: MouseEvent) {
         const maxWidth = getMaxWidth?.() ?? Infinity;
+        const delta = ev.clientX - startX;
         const newWidth = Math.max(
           minWidth,
-          Math.min(maxWidth, startWidth + ev.clientX - startX),
+          Math.min(maxWidth, startWidth + (rightPanel ? -delta : delta)),
         );
         setWidth(newWidth);
         localStorage.setItem(storageKey, String(newWidth));
@@ -52,7 +56,7 @@ export function useDraggableWidth({
       document.addEventListener('mousemove', onMouseMove);
       document.addEventListener('mouseup', onMouseUp);
     },
-    [width, minWidth, getMaxWidth, storageKey],
+    [width, minWidth, getMaxWidth, storageKey, rightPanel],
   );
 
   useEffect(() => {

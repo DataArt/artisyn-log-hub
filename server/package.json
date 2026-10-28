@@ -96,7 +96,11 @@
     "typescript-eslint": "^8.20.0"
   },
   "overrides": {
-    "multer": "$multer"
+    "multer": "$multer",
+    "drizzle-kit": {
+      "esbuild": "^0.28.1"
+    },
+    "qs": "~6.16.2"
   },
   "jest": {
     "moduleFileExtensions": [

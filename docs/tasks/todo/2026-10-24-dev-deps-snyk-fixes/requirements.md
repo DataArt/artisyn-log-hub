@@ -56,3 +56,21 @@ README security badge does not count them, but they run on developer machines an
 ## Notes
 
 <!-- Append timestamped notes here as work progresses -->
+
+- 2026-10-28 18:15 — Implemented on branch `fix/2026-10-24-dev-deps-snyk-fixes`, together with the
+  one Snyk (prod) finding: `qs@6.16.1` under `express` / `body-parser` (medium, fixed in 6.16.2).
+  - `server/`: `overrides.qs = "~6.16.2"` for every `qs` in the tree (express, body-parser,
+    superagent, typed-rest-client). Pinned to the 6.16 patch line on purpose: 6.16.2 was published
+    after 6.17.0 as the fix backport, and Snyk lists only 6.16.2 as fixed. Impact: in the app `qs`
+    only parses `application/x-www-form-urlencoded` bodies (`express.urlencoded({ extended: true })`
+    in `app.module.ts` / `logs.module.ts`); query strings go through Express 5's default `simple`
+    parser (`node:querystring`), and no route expects a form body.
+  - `server/`: `overrides["drizzle-kit"].esbuild = "^0.28.1"` (esbuild 0.18.20 / 0.25.12 → 0.28.2,
+    the critical). drizzle-kit is a manual tool only (`drizzle.config.ts`, no npm script);
+    `drizzle-kit export` still bundles the schema (48 tables). `fast-uri` 3.1.8 → 3.1.9 by update.
+  - root: `brace-expansion` 1.1.15 → 1.1.21; `hook/`: `brace-expansion` → 1.1.21, `js-yaml`
+    4.1.1 → 4.3.2 (lock-only updates within existing ranges).
+  - `client/`: `vitest` / `@vitest/coverage-v8` ^4.1.12 (pulls `@vitest/mocker` 4.1.12);
+    `overrides["postcss-selector-parser"] = "^6.1.5"` (`@tailwindcss/typography` pins 6.0.10).
+    The built CSS is byte-identical before and after.
+  - Left as is (no fixed version): picomatch, uri-js, inflight, deepmerge.
