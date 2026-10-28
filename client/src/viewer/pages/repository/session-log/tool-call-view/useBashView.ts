@@ -1,13 +1,11 @@
 import { useEffect, useMemo, useState } from 'react';
-import type { BashParser } from '../../../../lib/bash-view/bash-parser';
 import {
-  type HighlightSegment,
-  highlightBash,
-} from '../../../../lib/bash-view/bash-highlight';
-import {
+  type BashParser,
   type BashView,
   buildBashView,
-} from '../../../../lib/bash-view/bash-view';
+  type HighlightSegment,
+  highlightBash,
+} from '@loghub/bash-view';
 import { useToolView } from './ToolViewContext';
 
 /** The lazily loaded browser parser plus the highlight query that goes with it. */

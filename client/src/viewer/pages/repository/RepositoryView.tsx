@@ -35,6 +35,11 @@ const ReportsPanel = lazy(() =>
     default: m.ReportsPanel,
   })),
 );
+const RepoOkfTab = lazy(() =>
+  import('./okf/RepoOkfTab').then((m) => ({
+    default: m.RepoOkfTab,
+  })),
+);
 
 function getHttpStatusCode(error: unknown): number | null {
   if (error && typeof error === 'object' && 'statusCode' in error) {
@@ -48,6 +53,7 @@ const MAIN_TAB_LABELS: Record<MainTab, string> = {
   sessions: 'Sessions',
   analytics: 'Analytics',
   reports: 'Reports',
+  okf: 'OKF',
   settings: 'Settings',
 };
 
@@ -444,6 +450,12 @@ export function RepositoryView() {
             <PageTabsContent value="reports" className="flex-1 min-h-0">
               <Suspense fallback={<LazyFallback />}>
                 <ReportsPanel repoId={repoId} teamId={teamId} />
+              </Suspense>
+            </PageTabsContent>
+
+            <PageTabsContent value="okf" className="flex-1 min-h-0">
+              <Suspense fallback={<LazyFallback />}>
+                <RepoOkfTab repoId={repoId} teamId={teamId} />
               </Suspense>
             </PageTabsContent>
 

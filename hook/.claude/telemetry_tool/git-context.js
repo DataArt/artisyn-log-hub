@@ -43,6 +43,39 @@ function git(args, cwd, timeoutMs = GIT_DEFAULT_TIMEOUT_MS) {
   }
 }
 
+/**
+ * Run one `git` command that reads `input` on stdin, and return its exit status and raw stdout.
+ * Unlike {@link git} it never collapses a non-zero exit into `null`: some commands report a
+ * meaningful answer through the exit code (`git check-ignore` exits 1 for "nothing ignored").
+ * Never throws.
+ *
+ * @param {string[]} args
+ * @param {string} cwd
+ * @param {string} input - written to git's stdin
+ * @param {number} [timeoutMs] budget for this call; defaults to `GIT_DEFAULT_TIMEOUT_MS`
+ * @returns {{ status: number|null, stdout: string }} `status` is the exit code, or `null` when git
+ *   could not be started, timed out or was killed by a signal; `stdout` is untrimmed (may be '')
+ */
+function gitWithInput(args, cwd, input, timeoutMs = GIT_DEFAULT_TIMEOUT_MS) {
+  try {
+    const stdout = execFileSync('git', args, {
+      cwd,
+      input,
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'ignore'],
+      timeout: timeoutMs,
+      maxBuffer: 64 * 1024 * 1024,
+      // See git() above: required so a detached hook process never flashes a console window.
+      windowsHide: true,
+    });
+    return { status: 0, stdout: typeof stdout === 'string' ? stdout : '' };
+  } catch (err) {
+    const status = err && typeof err.status === 'number' ? err.status : null;
+    const stdout = err && typeof err.stdout === 'string' ? err.stdout : '';
+    return { status, stdout };
+  }
+}
+
 // Resolves the project root for the given directory. An `ARTISYN_PROJECT_ROOT` override that
 // contains `cwd` wins (see project-root-override.js) — then a linked worktree is its own project
 // root, which is what a sandbox that sees only that worktree needs. Otherwise it is the main repo
@@ -148,6 +181,7 @@ function ensureWorkDir(cwd) {
 module.exports = {
   GIT_DEFAULT_TIMEOUT_MS,
   git,
+  gitWithInput,
   getGitRoot,
   getGitContext,
   stripRemoteUserinfo,

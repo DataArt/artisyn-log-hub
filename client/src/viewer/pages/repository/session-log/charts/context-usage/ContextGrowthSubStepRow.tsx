@@ -9,7 +9,7 @@ import {
 import { formatStepDelta, type StepBar } from './step-bars';
 import { fullToolDetail, stepLabel } from './step-label';
 import { useToolView } from '../../tool-call-view/ToolViewContext';
-import { toRepoRelative } from '../../../../../lib/bash-view/display-paths';
+import { toRepoRelative } from '@loghub/bash-view';
 
 interface Props {
   step: AssistantStep;

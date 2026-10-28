@@ -12,9 +12,10 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(dirname, 'src/viewer'),
-      // Repo-local package shared with the server (see packages/pricing/README.md). Consumed from
-      // source through this alias: bun cannot link a `file:` dependency on Windows.
+      // Repo-local packages shared with the server (see packages/pricing/README.md). Consumed from
+      // source through these aliases: bun cannot link a `file:` dependency on Windows.
       '@loghub/pricing': path.resolve(dirname, '../packages/pricing/src/index.ts'),
+      '@loghub/bash-view': path.resolve(dirname, '../packages/bash-view/src/index.ts'),
     },
   },
   // web-tree-sitter loads its own .wasm via import.meta.url; pre-bundling breaks that path.

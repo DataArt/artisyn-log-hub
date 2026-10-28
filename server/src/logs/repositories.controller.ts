@@ -106,6 +106,8 @@ import {
   type ChangeSurfaceTimelineBucket,
 } from './change-surface/change-surface.types';
 import { maskFirstPrompt, type TeamScope } from './team-scope';
+import { OkfUsageService } from './okf/okf-usage.service';
+import type { SessionOkfUsageResponse } from './okf/okf-usage.types';
 
 /**
  * `costBreakdown` of a listed session that has no cost row (no assistant lines yet): nothing
@@ -353,6 +355,7 @@ export class RepositoriesController {
     private readonly sessionAttributionService: SessionAttributionService,
     private readonly changeSurfaceService: ChangeSurfaceService,
     private readonly changeSurfaceAggregateService: ChangeSurfaceAggregateService,
+    private readonly okfUsageService: OkfUsageService,
   ) {}
 
   @Get()
@@ -1499,6 +1502,46 @@ export class RepositoriesController {
   }
 
   /**
+   * One session tree's OKF (knowledge base) usage — the session OKF tab.
+   *
+   * Same scope and 403 rules as the change-surface session routes. A session the scope
+   * resolves but that has no visible row (never ingested into these repos) answers with the
+   * empty response rather than a 404, like `change-surface`'s `computed: false`. With
+   * `teamId` the DD-30 fail-closed team filter applies and another member's task heads are
+   * masked for a `team-no-prompts` caller.
+   */
+  @Get(':repoId/sessions/:sessionId/okf-usage')
+  async getSessionOkfUsage(
+    @Req() req: Request,
+    @Param('repoId', ParseIntPipe) repoId: number,
+    @Param('sessionId') sessionId: string,
+    @Query('teamId', new ParseIntPipe({ optional: true })) teamId?: number,
+  ): Promise<SessionOkfUsageResponse> {
+    const { repoIds, scope, teamScope } =
+      await this.resolveChangeSurfaceSessionScope(
+        req,
+        repoId,
+        teamId,
+        sessionId,
+      );
+    const sessionDbId = await this.okfUsageService.findSessionDbId(
+      repoIds,
+      sessionId,
+      scope.visibleUserIds,
+    );
+    if (sessionDbId === null) return this.okfUsageService.emptySessionUsage();
+
+    const user = req.user as AuthUser;
+    return this.okfUsageService.getSessionOkfUsage(sessionDbId, {
+      teamFilter: teamId !== undefined,
+      promptMask:
+        teamId === undefined
+          ? undefined
+          : { scope: teamScope, requesterUserId: user.id },
+    });
+  }
+
+  /**
    * The repo scope and owner narrowing both session change-surface routes resolve —
    * identical to `getSessionContexts()`'s: `assertRepoAccess` 403s a repository the caller
    * cannot reach, `resolveRepoIds` widens to the same repository as seen through the other
@@ -1513,7 +1556,11 @@ export class RepositoriesController {
     repoId: number,
     teamId: number | undefined,
     sessionId: string,
-  ): Promise<{ repoIds: number[]; scope: ChangeSurfaceSessionScope }> {
+  ): Promise<{
+    repoIds: number[];
+    scope: ChangeSurfaceSessionScope;
+    teamScope: TeamScope;
+  }> {
     if (teamId !== undefined && teamId <= 0) {
       throw new BadRequestException('teamId must be a positive integer');
     }
@@ -1545,6 +1592,7 @@ export class RepositoriesController {
       scope: {
         visibleUserIds: teamId === undefined ? null : teamScope.visibleUserIds,
       },
+      teamScope,
     };
   }
 

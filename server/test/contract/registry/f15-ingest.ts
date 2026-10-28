@@ -170,6 +170,139 @@ export const f15Ingest: ContractFamily = {
       },
     },
     {
+      // OKF DD-22: a valid but never-stored OKF snapshot id, ref-only — the hook is told to
+      // resend the full snapshot (`unknownOkfSnapshotId`). The queue row records an id only for
+      // an `okfSnapshotFull=1` upload.
+      id: 'F15-upload-unknown-okf-snapshot',
+      route: 'POST /api/v2/logs',
+      actor: 'authorKey',
+      query: {
+        sessionId: 'w1-new-upload-unknown-okf',
+        type: 'artisyn',
+        okfSnapshotId: UNKNOWN_SNAPSHOT_ID,
+      },
+      headers: { 'Content-Type': 'application/x-ndjson' },
+      body: NDJSON,
+      expect: {
+        status: 201,
+        bodyMatches: {
+          warnings: [],
+          unknownOkfSnapshotId: UNKNOWN_SNAPSHOT_ID,
+          unknownSnapshotId: undefined,
+        },
+      },
+      write: {
+        watch: ['upload_queue'],
+        delta: {
+          inserted: [
+            {
+              table: 'upload_queue',
+              where: `session_id = 'w1-new-upload-unknown-okf'`,
+              check: [
+                `status = 'pending'`,
+                'okf_snapshot_id IS NULL',
+                'harness_snapshot_id IS NULL',
+              ],
+            },
+          ],
+        },
+      },
+    },
+    {
+      // The world's OKF snapshot (stored for the owner) is known: no unknownOkfSnapshotId.
+      id: 'F15-upload-known-okf-snapshot',
+      route: 'POST /api/v2/logs',
+      actor: 'ownerKey',
+      query: {
+        sessionId: 'w1-new-upload-known-okf',
+        type: 'artisyn',
+        okfSnapshotId: '@okfSnapshotId',
+      },
+      headers: { 'Content-Type': 'application/x-ndjson' },
+      body: NDJSON,
+      expect: {
+        status: 201,
+        bodyMatches: { unknownOkfSnapshotId: undefined },
+      },
+      write: {
+        watch: ['upload_queue'],
+        delta: {
+          inserted: [
+            {
+              table: 'upload_queue',
+              where: `session_id = 'w1-new-upload-known-okf'`,
+              check: [`status = 'pending'`, 'okf_snapshot_id IS NULL'],
+            },
+          ],
+        },
+      },
+    },
+    {
+      // okfSnapshotFull=1: the queue row records the id (the in-flight "known" check), and
+      // unknownOkfSnapshotId never comes back for a full upload.
+      id: 'F15-upload-okf-snapshot-full',
+      route: 'POST /api/v2/logs',
+      actor: 'authorKey',
+      query: {
+        sessionId: 'w1-new-upload-okf-full',
+        type: 'artisyn',
+        okfSnapshotId: UNKNOWN_SNAPSHOT_ID,
+        okfSnapshotFull: '1',
+      },
+      headers: { 'Content-Type': 'application/x-ndjson' },
+      body: NDJSON,
+      expect: {
+        status: 201,
+        bodyMatches: { warnings: [], unknownOkfSnapshotId: undefined },
+      },
+      write: {
+        watch: ['upload_queue'],
+        delta: {
+          inserted: [
+            {
+              table: 'upload_queue',
+              where: `session_id = 'w1-new-upload-okf-full'`,
+              check: [
+                `status = 'pending'`,
+                `okf_snapshot_id = '${UNKNOWN_SNAPSHOT_ID}'`,
+              ],
+            },
+          ],
+        },
+      },
+    },
+    {
+      // DD-18: an id that is not 64 lowercase hex is silently ignored — never a 400, never an
+      // unknownOkfSnapshotId, nothing recorded, even with okfSnapshotFull=1.
+      id: 'F15-upload-invalid-okf-snapshot',
+      route: 'POST /api/v2/logs',
+      actor: 'authorKey',
+      query: {
+        sessionId: 'w1-new-upload-invalid-okf',
+        type: 'artisyn',
+        okfSnapshotId: 'NOT-A-SNAPSHOT-ID',
+        okfSnapshotFull: '1',
+      },
+      headers: { 'Content-Type': 'application/x-ndjson' },
+      body: NDJSON,
+      expect: {
+        status: 201,
+        bodyMatches: { warnings: [], unknownOkfSnapshotId: undefined },
+      },
+      write: {
+        watch: ['upload_queue'],
+        delta: {
+          inserted: [
+            {
+              table: 'upload_queue',
+              where: `session_id = 'w1-new-upload-invalid-okf'`,
+              check: [`status = 'pending'`, 'okf_snapshot_id IS NULL'],
+            },
+          ],
+        },
+      },
+    },
+    {
       // First chunk of a two-part upload: the row waits as `partially_uploaded`.
       id: 'F15-upload-first-chunk',
       route: 'POST /api/v2/logs',

@@ -760,6 +760,16 @@
         "7b92ca244e3efc966831b42a6738114b7ec90ce8b72063bc01757f7384a70614",
         "cf4a11afd0db277f06476334495acc97d1bc4be2c518a22a840e5bcfa031c4ae"
       ]
+    },
+    {
+      "idx": 75,
+      "tag": "0075_okf_usage",
+      "when": 1790985600000,
+      "sha256": "542a1bf4a3675c08836b128b3348148309d4a22760e1a3bdcd1d3b2307a14654",
+      "acceptedHashes": [
+        "542a1bf4a3675c08836b128b3348148309d4a22760e1a3bdcd1d3b2307a14654",
+        "bdc076222953fb0d27b479f9d54f2992c1521217fc024e8ea969e934c6e6c3e6"
+      ]
     }
   ]
 }

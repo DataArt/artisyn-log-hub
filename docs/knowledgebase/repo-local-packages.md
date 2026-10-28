@@ -1,7 +1,7 @@
 ---
 type: "Reference"
 title: "Repo-Local Packages (packages/)"
-description: "The packages/ folder convention for TypeScript code shared by server and client (today only @loghub/pricing): how the server consumes it (file: link, Node 24 type stripping, jest transform, ncc), how the client consumes it (Vite/tsconfig alias), Docker, the rules a package must follow, and how to add one."
+description: "The packages/ folder convention for TypeScript code shared by server and client (@loghub/pricing, @loghub/bash-view): how the server consumes it (file: link, Node 24 type stripping, jest transform, ncc), how the client consumes it (Vite/tsconfig alias), Docker, the rules a package must follow (including structural types for parser-backed packages), and how to add one."
 tags:
   - server
   - client
@@ -19,6 +19,7 @@ their `.ts` sources directly.
 | Package | Contents | Details |
 |---|---|---|
 | `@loghub/pricing` (`packages/pricing/`) | The LLM cost formula (`src/cost.ts`: `computeCostBreakdown`, `pickCallRates`, `FAST_MODE_MULTIPLIER`, …) and pricing-tier validation (`src/tiers.ts`: `validatePricingTiers`, `normalizeTiers`, `MAX_*`, `PricingTier`, …) | [packages/pricing/README.md](../../packages/pricing/README.md), [algorithms/cost-formula.md](algorithms/cost-formula.md) |
+| `@loghub/bash-view` (`packages/bash-view/`) | Bash command analysis and display shared by the client Bash view and the server OKF access extraction: `analyzeBash` (changes / reads / runs, `readAccess` kinds), `buildBashView`, `formatBash`, `highlightBash`, `toRepoRelative`, and the structural parser types of `src/syntax.ts` (`BashParser`, `BashSyntaxNode`, `BashSyntaxTree`, `withTree`). Each side brings its own `tree-sitter-bash` loader: client `client/src/viewer/lib/bash-view/bash-parser.ts` + `browser-parser.ts`, server `server/src/logs/okf/server-bash-parser.ts` | [packages/bash-view/README.md](../../packages/bash-view/README.md), [algorithms/bash-command-view.md](algorithms/bash-command-view.md), [algorithms/okf-access-extraction.md](algorithms/okf-access-extraction.md) |
 
 The hook (`hook/`) does **not** use packages: it is plain CommonJS installed into user repos, so it
 keeps its own copies (e.g. `computeLocalSessionCost`), held to the same algorithm doc tables.
@@ -67,6 +68,17 @@ The `client-build` and `server-build` stages of the root `Dockerfile` both `COPY
   in the server.
 - Erasable syntax only (no `enum`, `namespace`, parameter properties): Node's type stripping
   rejects anything else at runtime.
+- **Parser-backed packages use structural types.** A package whose logic walks the output of a
+  native/WASM runtime (`@loghub/bash-view` and `web-tree-sitter`) must not import that runtime —
+  it would become a dependency, pull the WASM into whichever side imports the package and tie
+  both sides to one loading mechanism. Instead the package declares the minimal structural
+  interfaces it needs (`src/syntax.ts`: the node fields and methods it actually calls, a
+  `BashParser` interface with `parse` / `highlight`) and takes the parser as a parameter. Each
+  side loads the runtime its own way (client: dynamic `import()` and Vite `?url` WASM assets;
+  server: the CJS export plus WASM files from `dist/wasm/` or `node_modules`) and passes an
+  object that satisfies the interface; the runtime's real classes match it structurally, so no
+  adapter is needed. When the package starts using a new node member, add it to the structural
+  type — both typechecks then verify each loader still satisfies it.
 - Relative imports end in `.ts`.
 - Type errors surface through `bun run typecheck` (client) and `npm run typecheck` (server); there
   is no separate package check. Behaviour is tested through the server/client algorithm tests of
@@ -81,5 +93,8 @@ The `client-build` and `server-build` stages of the root `Dockerfile` both `COPY
    matches every `packages/*/src`.
 3. Client: add the alias to `client/vite.config.ts` and `client/tsconfig.json` (`paths` and
    `include`). `server.fs.allow` already covers all of `packages/`.
-4. Docker: nothing to change — the whole `packages/` folder is copied.
+4. Docker: nothing to change — the whole `packages/` folder is copied. (A runtime the package
+   needs at run time — e.g. the `tree-sitter-bash` WASM files for `@loghub/bash-view` on the
+   server — is a dependency of the consuming side, shipped by that side: `scripts/copy-wasm.js`
+   copies them to `dist/wasm/`, and the Dockerfile and the scenario stand do the same.)
 5. Add a row to the table above.

@@ -127,6 +127,11 @@ export const WORLD_V1 = {
   harnessSnapshotId: 'b'.repeat(64),
   /** DD-2 id of the harness_snapshots row bound only to the orphan session s09 (05 §F12 chunk 13). */
   harnessSnapshotIdOrphan: 'c'.repeat(64),
+  /**
+   * OKF snapshot id s02 (the root of the s02 -> s03 tree) is bound to (2026-10-27 OKF usage
+   * tab, F15/F16/F19/F21): one bundle `docs/kb` of three files, one of them gitignored.
+   */
+  okfSnapshotId: 'e'.repeat(64),
   /** Export/import jobs of R1 (05 §F23); none has a file on disk. */
   jobs: {
     exportDone: { id: 'w1-job-export-done' },
@@ -174,6 +179,7 @@ export const WORLD_V1_REFS: Readonly<Record<string, string | number>> = (() => {
   refs['authorResetToken'] = WORLD_V1.authorResetToken;
   refs['harnessSnapshotId'] = WORLD_V1.harnessSnapshotId;
   refs['harnessSnapshotIdOrphan'] = WORLD_V1.harnessSnapshotIdOrphan;
+  refs['okfSnapshotId'] = WORLD_V1.okfSnapshotId;
   // Every world user's password hash, so a row can prove a password-changing call replaced it.
   refs['worldPasswordHash'] = PASSWORD_HASH;
   return refs;
@@ -377,6 +383,44 @@ const HARNESS_SNAPSHOT_BODY = {
 };
 
 /** Minimal DD-1 body bound only to the orphan session s09 (05 §F12 chunk 13). */
+/**
+ * The OKF snapshot (impl-plan DD-13) s02 is bound to: one bundle `docs/kb` with its index, a
+ * scheduler article and a gitignored private article. A team view drops the ignored file
+ * (DD-30); the personal view keeps it.
+ */
+const OKF_SNAPSHOT_BODY = {
+  type: 'okf-snapshot',
+  okfSnapshotId: WORLD_V1.okfSnapshotId,
+  schemaVersion: 1,
+  bundles: [
+    {
+      root: 'docs/kb',
+      index: 'docs/kb/index.md',
+      ignored: false,
+      files: [
+        {
+          path: 'docs/kb/index.md',
+          ignored: false,
+          size: 400,
+          hash: '1'.repeat(64),
+        },
+        {
+          path: 'docs/kb/private.md',
+          ignored: true,
+          size: 800,
+          hash: '2'.repeat(64),
+        },
+        {
+          path: 'docs/kb/scheduler.md',
+          ignored: false,
+          size: 2000,
+          hash: '3'.repeat(64),
+        },
+      ],
+    },
+  ],
+};
+
 const HARNESS_SNAPSHOT_BODY_ORPHAN = {
   snapshotId: WORLD_V1.harnessSnapshotIdOrphan,
   schemaVersion: 1,
@@ -1003,11 +1047,20 @@ function buildStatements(): WorldStatement[] {
         'workflow_run_id',
         'deleted',
         'harness_snapshot_id',
+        'okf_snapshot_id',
       ],
       [
-        [S.s01.id, S.s01.sessionId, null, null, false, null],
-        [S.s02.id, S.s02.sessionId, null, null, false, null],
-        [S.s03.id, S.s03.sessionId, S.s02.sessionId, null, false, null],
+        [S.s01.id, S.s01.sessionId, null, null, false, null, null],
+        [
+          S.s02.id,
+          S.s02.sessionId,
+          null,
+          null,
+          false,
+          null,
+          WORLD_V1.okfSnapshotId,
+        ],
+        [S.s03.id, S.s03.sessionId, S.s02.sessionId, null, false, null, null],
         [
           S.s04.id,
           S.s04.sessionId,
@@ -1015,11 +1068,12 @@ function buildStatements(): WorldStatement[] {
           null,
           false,
           WORLD_V1.harnessSnapshotId,
+          null,
         ],
-        [S.s05.id, S.s05.sessionId, null, null, true, null],
-        [S.s06.id, S.s06.sessionId, null, null, false, null],
-        [S.s07.id, S.s07.sessionId, null, null, false, null],
-        [S.s08.id, S.s08.sessionId, null, null, false, null],
+        [S.s05.id, S.s05.sessionId, null, null, true, null, null],
+        [S.s06.id, S.s06.sessionId, null, null, false, null, null],
+        [S.s07.id, S.s07.sessionId, null, null, false, null, null],
+        [S.s08.id, S.s08.sessionId, null, null, false, null, null],
         [
           S.s09.id,
           S.s09.sessionId,
@@ -1027,8 +1081,9 @@ function buildStatements(): WorldStatement[] {
           null,
           false,
           WORLD_V1.harnessSnapshotIdOrphan,
+          null,
         ],
-        [S.s10.id, S.s10.sessionId, null, null, false, null],
+        [S.s10.id, S.s10.sessionId, null, null, false, null, null],
       ],
     ),
   );
@@ -1482,6 +1537,45 @@ function buildStatements(): WorldStatement[] {
           json(HARNESS_SNAPSHOT_BODY_ORPHAN),
           '2026-01-15T10:00:00.000Z',
         ],
+      ],
+    ),
+  );
+
+  // OKF usage (2026-10-27): s02 is bound to OKF_SNAPSHOT_BODY; the s02 -> s03 tree read the
+  // bundle. s02 (main agent) read index.md first, then the gitignored private.md; its sub-agent
+  // s03 read scheduler.md twice. No other session has OKF rows.
+  out.push(
+    insert(
+      'okf_snapshots',
+      ['id', 'user_id', 'snapshot_id', 'body', 'created_at'],
+      [
+        [
+          1,
+          U.owner.id,
+          WORLD_V1.okfSnapshotId,
+          json(OKF_SNAPSHOT_BODY),
+          '2026-01-11T09:00:00.000Z',
+        ],
+      ],
+    ),
+  );
+  out.push(
+    insert(
+      'session_okf_access',
+      [
+        'id',
+        'session_id',
+        'path_key',
+        'op',
+        'after_own_edit',
+        'bytes',
+        'calls',
+        'seq',
+      ],
+      [
+        [1, S.s02.id, 'docs/kb/index.md', 'read', false, 400, 1, 1],
+        [2, S.s02.id, 'docs/kb/private.md', 'read', false, 800, 1, 2],
+        [3, S.s03.id, 'docs/kb/scheduler.md', 'read', false, 1500, 2, 1],
       ],
     ),
   );

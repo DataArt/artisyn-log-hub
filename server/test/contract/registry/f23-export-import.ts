@@ -268,6 +268,8 @@ export const f23ExportImport: ContractFamily = {
           'session_cause_stats',
           'session_request_ids',
           'harness_elements',
+          // OKF DD-9: recompute rebuilds every tree node's rows from the claude bodies.
+          'session_okf_access',
         ],
         delta: {},
         after: [

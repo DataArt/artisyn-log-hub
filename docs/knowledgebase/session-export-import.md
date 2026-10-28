@@ -58,7 +58,9 @@ sessions/<sessionId>/artisyn.jsonl
 - `session.json` — session id, parent session id, workflow run id, first prompt, start/end time,
   git branch, a frozen `stats` snapshot (display only), and per log type the author's
   `userEmail`. An email is stored instead of a user id because a raw id means nothing in another
-  database.
+  database. Since the OKF usage tab it also carries `okfSnapshotId` (the root's bound OKF snapshot
+  id or `null`) — optional, so older zips without it stay valid; import binds from the
+  `artisyn.jsonl` lines below, never from this field.
 
 Scope is `all`, a date range or a list of session ids. `GET …/export-import/scope` previews the
 session count and approximate size before a job starts. Sessions are processed in batches of
@@ -80,7 +82,7 @@ necessarily the exporting user — a team export covers every member's sessions)
 This makes the archive self-sufficient even though the session's live body usually holds only the
 ref: the full snapshot was sent to the server just once, on whichever upload first saw an unknown
 id. Nothing is added when the session has no bound snapshot id, or the row no longer exists (the
-accepted purge race — see [data-retention.md](data-retention.md) § "Orphan harness-snapshot
+accepted purge race — see [data-retention.md](data-retention.md) § "Orphan harness-snapshot and OKF-snapshot
 cleanup").
 
 ### Import binding
@@ -100,6 +102,25 @@ scoped to the archive's resolved author (`log.resolvedUserId`):
 The inventory upsert (ingest step 3 of DD-9) is **not** re-run on import: an imported session's
 `repo_code_inventory` rows are populated lazily the next time the session's logs are read, the same
 read path every other session uses.
+
+### OKF snapshot and OKF access rows
+
+The OKF snapshot ([okf-usage.md](okf-usage.md)) travels the same way as the harness snapshot:
+
+- **Export** — `buildExportOkfSnapshotLines()` (`repository-export-import.service.ts`) prepends to
+  the root's `artisyn.jsonl` a full `okf-snapshot` line built from the artisyn log owner's
+  `okf_snapshots` row and an `okf-snapshot-ref` line, each only when the live body does not already
+  carry that line with the same id (so a re-export never grows the body). Nothing is added
+  without a bound `okf_snapshot_id` or when the row is gone.
+- **Import** — `LogsService.importSession()` runs the ingest store-then-bind
+  (`storeAndBindOkfSnapshot`, `server/src/logs/okf/okf-snapshot.ts`) for the archive's resolved
+  author: the full line is stored per `(user_id, snapshot_id)`, the root is bound only while its
+  `okf_snapshot_id` is `NULL`. For every `claude` / `claude-subagent` log it also rebuilds the
+  node's `session_okf_access` rows with the archive's repo roots (same writer as ingest).
+- **Backward compatibility (DD-42)** — a zip from an older Log Hub (no `okfSnapshotId`, no OKF
+  lines) imports with no snapshot (`okf_snapshot_id` stays `NULL`; the OKF tab shows the
+  "no snapshot" state, access rows are still extracted). An older Log Hub importing a newer zip
+  ignores the unknown field and skips the unknown NDJSON line types.
 
 ### Jobs
 

@@ -478,7 +478,7 @@ const OWNER_REPO_ROWS: ScreenRow[] = (
 ).map((r): ScreenRow => ({ ...r, story: 'tour-03', role: 'owner', modes: A }));
 
 // ---------------------------------------------------------------------------------------------
-// Story 4 — analytics (13 views) and reports (17) on REPO-GOLD (06 §2.3 #4, §1.7, §1.8).
+// Story 4 — analytics (13 views), reports (17) and the repo OKF tab on REPO-GOLD (06 §2.3 #4, §1.7, §1.8).
 // ---------------------------------------------------------------------------------------------
 const ANALYTICS_QUERY = '?mtab=analytics&ar=custom&af={from}&at={to}&av=';
 /** A bar of the vertical charts (each bar group is clickable). */
@@ -579,6 +579,23 @@ const REPORT_ROWS: ScreenRow[] = REPORTS.map(([report, title, extra]): ScreenRow
   ...extra,
 }));
 
+/**
+ * The repo OKF tab over the golden two weeks. No golden session has an OKF snapshot, so the tab
+ * shows its snapshot-less state (or «KB not used in this period»); S-REPO-16 and S-REPT-01 walk
+ * the filled tab.
+ */
+const OKF_REPO_ROW: ScreenRow = {
+  id: 'repo.okf',
+  story: 'tour-04',
+  route: '/repos/:repoId',
+  query: '?mtab=okf&okfFrom={startDate}&okfTo={endDate}',
+  tab: { group: 'repo', id: 'okf' },
+  role: 'owner',
+  modes: A,
+  title: 'Repository: OKF (knowledge base usage)',
+  expectTestId: 'repo-okf-tab',
+};
+
 // ---------------------------------------------------------------------------------------------
 // Story 5 — session detail: 9 tabs + 7 Charts sub-tabs + redirects (06 §2.3 #5, §1.3, §1.4).
 // ---------------------------------------------------------------------------------------------
@@ -659,6 +676,17 @@ const SESSION_TAB_ROWS: Array<Omit<ScreenRow, 'story' | 'role' | 'modes' | 'rout
     tab: { group: 'session', id: 'harness-usage' },
     title: 'Session: Harness usage',
     expectTestId: 'harness-tree-row',
+  },
+  {
+    // The golden tour session has no OKF bundle and reads no KB article: the tab's empty state
+    // is the meaningful screen there; S-SESS-09 walks the filled tab.
+    id: 'session.okf',
+    query: `${SESSION_QUERY}&tab=okf`,
+    tab: { group: 'session', id: 'okf' },
+    title: 'Session: OKF (knowledge base usage)',
+    expectTestId: 'session-okf-tab',
+    dataOptional: true,
+    emptyText: 'No OKF knowledge base',
   },
   {
     id: 'session.raw-logs',
@@ -983,6 +1011,7 @@ export const SCREEN_REGISTRY: readonly ScreenRow[] = [
   ...OWNER_REPO_ROWS,
   ...ANALYTICS_ROWS,
   ...REPORT_ROWS,
+  OKF_REPO_ROW,
   ...SESSION_ROWS,
   ...TEAM_OWNER_ROWS,
   ...MEMBER_ROWS,

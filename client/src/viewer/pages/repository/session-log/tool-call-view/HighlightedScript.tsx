@@ -4,7 +4,7 @@ import {
   HIGHLIGHT_CLASS,
   type HighlightKind,
   type HighlightSegment,
-} from '../../../../lib/bash-view/bash-highlight';
+} from '@loghub/bash-view';
 
 const LEGEND: { kind: HighlightKind; label: string }[] = [
   { kind: 'keyword', label: 'keyword / operator' },

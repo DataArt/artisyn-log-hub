@@ -317,7 +317,7 @@ stand is built from the working tree, so it always ships the current hook.
   scenario is `not exercised`; check `permissionArgs` in `scripts/scenarios.mjs`.
 - **A Bash row shows an absolute path in S1 / S10 / S11 on Windows**: the filled `{{REPO_ROOT}}`
   is `D:/…` (forward slashes), and Claude may echo it as `D:/…`, `D:\…` or the msys form
-  `/d/…`. `toRepoRelative` (`client/src/viewer/lib/bash-view/display-paths.ts`) matches all of
+  `/d/…`. `toRepoRelative` (`packages/bash-view/src/display-paths.ts`) matches all of
   them case-insensitively, so a leftover absolute path points at the root the view received (the
   session's repo root), not at the prompt.
 - **A UI step times out in `onboarding` / `teams`**: the infra error names the step and the

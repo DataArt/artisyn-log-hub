@@ -17,6 +17,7 @@ import type { DrizzleDb } from '../database/database.module';
 import { UploadQueueService } from './upload-queue.service';
 import { FOREIGN_SESSION_WARNING } from './upload-warnings';
 import { SNAPSHOT_ID_RE, isHarnessSnapshotKnown } from './harness-snapshot';
+import { OKF_SNAPSHOT_ID_RE, isOkfSnapshotKnown } from './okf/okf-snapshot';
 
 /**
  * `POST /api/v2/logs` — the log upload route: async stage-then-queue.
@@ -52,11 +53,22 @@ export class LogsV2Controller {
     @Query('totalSize') totalSizeRaw: string | undefined,
     @Query('snapshotId') snapshotIdRaw: string | undefined,
     @Query('snapshotFull') snapshotFullRaw: string | undefined,
+    @Query('okfSnapshotId') okfSnapshotIdRaw: string | undefined,
+    @Query('okfSnapshotFull') okfSnapshotFullRaw: string | undefined,
     @Body() rawBody: unknown,
     @Req() req: Request & { userId: number },
   ): Promise<
-    | { warnings: string[]; unknownSnapshotId?: string }
-    | { complete: boolean; warnings?: string[]; unknownSnapshotId?: string }
+    | {
+        warnings: string[];
+        unknownSnapshotId?: string;
+        unknownOkfSnapshotId?: string;
+      }
+    | {
+        complete: boolean;
+        warnings?: string[];
+        unknownSnapshotId?: string;
+        unknownOkfSnapshotId?: string;
+      }
   > {
     if (!sessionId) {
       this.logger.warn(`userId=${req.userId} missing sessionId`);
@@ -92,6 +104,15 @@ export class LogsV2Controller {
     const harnessSnapshotId =
       snapshotFull && snapshotId ? snapshotId : undefined;
 
+    // OKF DD-18/DD-22: same silent validation and full-flag rule for the OKF snapshot id.
+    const okfSnapshotId =
+      okfSnapshotIdRaw && OKF_SNAPSHOT_ID_RE.test(okfSnapshotIdRaw)
+        ? okfSnapshotIdRaw
+        : undefined;
+    const okfSnapshotFull = okfSnapshotFullRaw === '1';
+    const queuedOkfSnapshotId =
+      okfSnapshotFull && okfSnapshotId ? okfSnapshotId : undefined;
+
     // Open-source readiness: a session owned by another user is
     // rejected before anything is staged. Lock-free — `LogsService.upsert()` repeats the
     // check under the per-session lock, so a race still ends in `rejected_foreign_session`.
@@ -119,6 +140,7 @@ export class LogsV2Controller {
         parentSessionId,
         workflowRunId,
         harnessSnapshotId,
+        okfSnapshotId: queuedOkfSnapshotId,
       });
 
       const warnings = await this.uploadQueueService.getPendingWarnings(
@@ -131,7 +153,17 @@ export class LogsV2Controller {
         req.userId,
       );
 
-      return { warnings, ...(unknownSnapshotId ? { unknownSnapshotId } : {}) };
+      const unknownOkfSnapshotId = await this.resolveUnknownOkfSnapshotId(
+        okfSnapshotId,
+        okfSnapshotFull,
+        req.userId,
+      );
+
+      return {
+        warnings,
+        ...(unknownSnapshotId ? { unknownSnapshotId } : {}),
+        ...(unknownOkfSnapshotId ? { unknownOkfSnapshotId } : {}),
+      };
     }
 
     if (
@@ -226,6 +258,7 @@ export class LogsV2Controller {
       totalChunks,
       totalSize,
       harnessSnapshotId,
+      okfSnapshotId: queuedOkfSnapshotId,
     });
 
     if (!complete) {
@@ -242,10 +275,17 @@ export class LogsV2Controller {
       req.userId,
     );
 
+    const unknownOkfSnapshotId = await this.resolveUnknownOkfSnapshotId(
+      okfSnapshotId,
+      okfSnapshotFull,
+      req.userId,
+    );
+
     return {
       complete,
       warnings,
       ...(unknownSnapshotId ? { unknownSnapshotId } : {}),
+      ...(unknownOkfSnapshotId ? { unknownOkfSnapshotId } : {}),
     };
   }
 
@@ -277,5 +317,22 @@ export class LogsV2Controller {
     }
     const known = await isHarnessSnapshotKnown(this.db, userId, snapshotId);
     return known ? undefined : snapshotId;
+  }
+
+  /**
+   * OKF DD-22: `unknownOkfSnapshotId` mirrors {@link resolveUnknownSnapshotId} — returned only
+   * when the id is valid, this upload was ref-only (`okfSnapshotFull !== '1'`), and the id is
+   * neither stored nor in flight (`isOkfSnapshotKnown`).
+   */
+  private async resolveUnknownOkfSnapshotId(
+    okfSnapshotId: string | undefined,
+    okfSnapshotFull: boolean,
+    userId: number,
+  ): Promise<string | undefined> {
+    if (!okfSnapshotId || okfSnapshotFull) {
+      return undefined;
+    }
+    const known = await isOkfSnapshotKnown(this.db, userId, okfSnapshotId);
+    return known ? undefined : okfSnapshotId;
   }
 }

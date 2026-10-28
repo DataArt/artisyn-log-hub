@@ -6,6 +6,7 @@
 //   tmp/scenarios/stand/public/static/         installer tarballs + installer-version.json
 //   tmp/scenarios/stand/drizzle/migrations/    copy of server/drizzle/migrations
 //   tmp/scenarios/stand/prebuilds/             argon2 prebuilds (scripts/copy-native.js)
+//   tmp/scenarios/stand/wasm/                  tree-sitter WASM for the server Bash analysis (scripts/copy-wasm.js)
 //   tmp/scenarios/stand/table.sql              connect-pg-simple session table DDL (as in Dockerfile)
 //
 // Never writes into dist/ or server/src/public/static. The rebuild is skipped when the sha256
@@ -33,13 +34,14 @@ export const STAND_DIR = path.join(SCENARIOS_TMP, 'stand');
 export const HASH_FILE_NAME = '.inputs-hash';
 
 /** Input trees whose content decides whether the stand must be rebuilt (DD C1). */
-export const INPUT_DIRS = ['client', 'server/src', 'server/drizzle', 'hook', 'artisyn-hooks-installer'];
+export const INPUT_DIRS = ['client', 'server/src', 'server/drizzle', 'hook', 'artisyn-hooks-installer', 'packages'];
 
 /** The build scripts themselves: editing the builder must also invalidate the stand. */
 export const BUILDER_FILES = [
   'scripts/scenarios/build-stand.mjs',
   'scripts/build-hooks-installer.js',
   'scripts/copy-native.js',
+  'scripts/copy-wasm.js',
 ];
 
 /** Repo-relative input files (forward slashes), sorted, de-duplicated. Read-only git call. */
@@ -169,6 +171,10 @@ export function buildStandFresh(standDir = STAND_DIR) {
   // 5. argon2 native prebuilds next to the bundle.
   process.stderr.write('[build-stand] copy native prebuilds\n');
   require(path.join(ROOT, 'scripts', 'copy-native.js')).copyNative(standDir);
+
+  // 5b. tree-sitter WASM (server Bash analysis, server-bash-parser.ts) into <stand>/wasm.
+  process.stderr.write('[build-stand] copy tree-sitter wasm\n');
+  require(path.join(ROOT, 'scripts', 'copy-wasm.js')).copyWasm(standDir);
 
   // 6. connect-pg-simple reads table.sql from the bundle's directory (createTableIfMissing);
   //    ncc does not bundle it — the Docker image copies it the same way (Dockerfile).

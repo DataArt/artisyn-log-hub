@@ -338,6 +338,13 @@ interface PostLogsQuery {
   snapshotFull?: '1';       // optional; present only when the body's harness-snapshot line is
                             //   the FULL snapshot (not just a harness-snapshot-ref). Ignored
                             //   unless snapshotId is also present and valid.
+  okfSnapshotId?: string;   // optional; sent by hook 2.26.0+ on the root session's own artisyn
+                            //   upload (OKF knowledge-base snapshot, see okf-usage.md and
+                            //   algorithms/okf-snapshot.md). 64-char lowercase hex; an invalid
+                            //   value is silently ignored (never a 400), same as absent.
+  okfSnapshotFull?: '1';    // optional; present only when the body carries the FULL okf-snapshot
+                            //   line (not just okf-snapshot-ref). With a valid okfSnapshotId it
+                            //   sets upload_queue.okf_snapshot_id; ignored otherwise.
 }
 // Request body: raw NDJSON stream, Content-Type: application/x-ndjson (required)
 //   AppModule registers express.text() for this content-type only; a body sent as
@@ -391,7 +398,7 @@ interface PostLogsChunkQuery {
                          //   ALWAYS uncompressed bytes, whatever encoding the chunks use,
                          //   so reassembly and upload_queue.size_bytes stay truthful.
 }
-response: { warnings: string[]; unknownSnapshotId?: string } | { complete: boolean; warnings?: string[]; unknownSnapshotId?: string }
+response: { warnings: string[]; unknownSnapshotId?: string; unknownOkfSnapshotId?: string } | { complete: boolean; warnings?: string[]; unknownSnapshotId?: string; unknownOkfSnapshotId?: string }
 // Non-chunked path (no chunk params sent) — otherwise UNCHANGED: { warnings: string[] }.
 //   warnings — one message per outstanding status='failed' upload_queue row for
 //   the calling API key's userId (from a PREVIOUS upload's parse/upsert
@@ -409,6 +416,12 @@ response: { warnings: string[]; unknownSnapshotId?: string } | { complete: boole
 //   full harness-snapshot line on its next upload (see hook-api-versioning.md). Never
 //   present when snapshotId was absent/invalid, or when this request itself carried
 //   snapshotFull=1 — the server does not ask back for what the same request just sent.
+//   unknownOkfSnapshotId — additive, the OKF twin of unknownSnapshotId (hook 2.26.0+): present
+//     only when okfSnapshotId is present and valid, okfSnapshotFull was NOT '1', and
+//     isOkfSnapshotKnown() finds neither an okf_snapshots row for (userId, id) nor a
+//     pending/processing/partially_uploaded upload_queue row with okf_snapshot_id = id. The hook
+//     then resends the full okf-snapshot line on its next upload. A server without OKF support
+//     simply never sends it (the hook keeps working).
 // Chunked path, intermediate chunk: { complete: false } — unchanged, never carries unknownSnapshotId.
 // Chunked path, final chunk (the one completing the set): { complete: true, warnings: string[], unknownSnapshotId?: string }
 //   — same warnings/unknownSnapshotId semantics as the non-chunked path, evaluated once
@@ -606,6 +619,37 @@ priced cost (`costUsd` is `Number()`-converted from the numeric-string column); 
 fields default to `0`, matching the column defaults. This is deliberately the only
 session-detail surface for the advisor result — there is no separate
 session-detail cost/advisor endpoint.
+
+---
+
+## OKF Usage Facts
+
+```ts
+// GET /api/v2/okf-usage/facts?sessionId=<session id string> — 200
+// Auth: X-API-Key header (ApiKeyAuthGuard); the key's user must own the session.
+// The plain facts of one session tree for an on-demand local KB-completeness skill
+// (OkfFactsController/OkfFactsService, server/src/logs/okf/). Built by reparsing the stored
+// claude / claude-subagent bodies; never any tool-result text. See okf-usage.md.
+response: {
+  sessionId: string;
+  startedAt: string | null;           // root logs.start_time, ISO
+  prompts: string[];                  // main agent's user prompts (task-context filter), each <= 4000 chars
+  agents: {
+    id: string;                       // sessions.session_id
+    parentId: string | null;
+    prompt: string;                   // main: joined prompts; sub-agent: its first user message
+    kbReads: { path: string; bytes: number; calls: number; ownEditBytes: number; size: number | null }[];
+    kbSeq: string[];                  // KB paths in first-access order
+    otherReadsTop: { path: string; bytes: number }[]; // top 20 non-KB reads
+    changes: string[];                // repo-relative written paths, sorted, unique
+  }[];
+  tree: { changes: string[]; reads: string[]; runs: string[] };
+}
+// Errors:
+//   400 — sessionId query param missing or empty
+//   401 — X-API-Key missing or invalid
+//   404 — session not found, or none of its logs belong to the key's user (same response)
+```
 
 ---
 
@@ -1561,6 +1605,71 @@ response: {
 }
 // Errors: same as the aggregate route above
 
+// GET /api/v1/repositories/:repoId/sessions/:sessionId/okf-usage — 200
+// One session TREE's OKF (knowledge-base) usage — the session "OKF" tab (OkfUsageService,
+// server/src/logs/okf/). Types: server/src/logs/okf/okf-usage.types.ts, mirrored in
+// client/src/models/repositories.ts. See okf-usage.md and algorithms/okf-verdict.md.
+// Query: teamId? (positive int). Same scope and 403 rules as the change-surface session routes.
+// A session the scope does not show answers the empty response (verdict null, empty lists),
+// never a 404. With teamId the fail-closed team filter drops gitignored KB paths first, and
+// another member's taskHead is masked for a team-no-prompts caller.
+type OkfOp = 'read' | 'grep' | 'list' | 'write';
+type OkfVerdictLevel = 'ok' | 'fix' | 'mess' | 'kb_not_used' | 'not_enough_data';
+interface OkfFinding {
+  rule: 'session_share' | 'always_read' | 'kb_flood' | 'coarse_article'; // clients render an unknown id as id + params
+  severity: 'fix' | 'mess';
+  params: Record<string, string | number>;  // shares/ratios are fractions 0-1
+  node: { bundle: string | null; path?: string }; // bundle null = "No longer in KB" group
+}
+interface OkfVerdict {
+  level: OkfVerdictLevel;
+  qualifiers: 'partial_data'[];
+  partialData?: { withoutSnapshot: number; total: number }; // repo route only
+  findings: OkfFinding[];                                    // worst first
+}
+interface OkfBundleSummary {
+  root: string; index: string; ignored: boolean;
+  files: number | null;               // null without a snapshot
+  filesRead: number;
+  share: number | null;               // filesRead / files, fraction 0-1
+  readBytes: number;                  // read + grep bytes, own-edit rows included
+  startedFromIndex: boolean | null;   // session route; repo route null
+  sessionsStartedFromIndex: number | null; // repo route; session route null
+}
+interface OkfTreeNode {
+  bundle: string | null;              // null = no-longer-in-KB / no-snapshot group
+  path: string;                       // file path, or folder path ending '/' (bundle: its root folder; group: '')
+  kind: 'bundle' | 'folder' | 'file';
+  inSnapshot: boolean;
+  size: number | null;
+  readBytes: number; readCalls: number; ownEditReadBytes: number;
+  grepCalls: number; listCalls: number; writeCalls: number;
+  agents: number;                     // distinct tree nodes (session) / root sessions (repo)
+  markers: ('folder_scan' | 'entry_point' | 'own_edit' | 'coarse' | 'hot')[];
+  hotRank?: number;                   // repo route, with the 'hot' marker (1-based)
+  children?: OkfTreeNode[];
+}
+response: {
+  verdict: OkfVerdict | null;         // null = no bundle and no KB access
+  hasSnapshot: boolean;               // false = hook < 2.26.0 (or no binding yet)
+  readTop: { bundle: string | null; path: string; readBytes: number; ownEdit: boolean }[]; // top 5
+  bundles: OkfBundleSummary[];
+  tree: OkfTreeNode[];
+  agents: {
+    id: string;                       // sessions.session_id string
+    taskHead: string;                 // first user prompt, task-context filtered, <= 200 chars
+    entry: 'index' | 'search' | 'given' | null;
+    kbReads: number;                  // read + grep calls on bundle files
+    kbReadBytes: number;
+    files: string[];                  // bundle files, by read bytes desc then path
+  }[];
+}
+// Errors:
+//   400 — teamId not a positive integer
+//   401 — not authenticated
+//   403 — repo exists but caller lacks access
+//   404 — repoId not found
+
 
 // POST /api/v1/repositories/:repoId/sessions/:sessionId/favorite — 200
 // Sets or clears the favorite flag for a session on behalf of the authenticated user.
@@ -2017,6 +2126,37 @@ response: ChangeSurfaceReportData
 // Errors:
 //   400 — teamId not a positive integer; startDate/endDate missing or not ISO 8601;
 //          groupBy not one of none/branch/user/attr:<known key>
+//   401 — not authenticated
+//   403 — repo exists but caller lacks access
+//   404 — repoId not found
+
+// GET /api/v1/repositories/:repoId/reports/okf-usage — 200
+// Backs the repository "OKF" main tab (ReportsController.getOkfUsageReport ->
+// OkfUsageService.getRepoOkfUsage). Types as in the session okf-usage route above.
+// Query: startDate, endDate (required, ISO 8601), teamId?, branches?, users?, attr? (repeatable) — the same params,
+// scope (resolveUsageScope) and 403 rules as /reports/harness-usage, no groupBy — plus
+// bundle? (a bundle root of the latest snapshot; unknown or empty = all bundles).
+// Unit = root session tree. "Latest snapshot" = the bound snapshot of the newest root session in
+// the filtered set; its bundles define bundles/tree/kbFiles/notRead. With teamId the
+// fail-closed team filter applies before the verdict.
+response: {
+  verdict: OkfVerdict;
+  snapshot: { okfSnapshotId: string; takenAt: string; branch: string | null } | null; // takenAt = okf_snapshots.created_at
+  tiles: {
+    kbFiles: number; notRead: number;
+    kbSessions: number; totalSessions: number;
+    startedFromIndex: number;          // count of KB sessions
+    medianShare: number | null;        // fractions 0-1 over snapshot-bound KB sessions
+    maxShare: number | null;
+  };
+  shareBins: { bin: '0-10' | '10-25' | '25-50' | '50+'; sessions: number }[];
+  hotFiles: { bundle: string | null; path: string; readBytes: number; sessions: number }[]; // top 10; never a bundle's index.md (the entry point)
+  notRead: { bundle: string; path: string; size: number }[];  // full list
+  bundles: OkfBundleSummary[];
+  tree: OkfTreeNode[];
+}
+// Errors:
+//   400 — teamId not a positive integer; startDate/endDate missing or not ISO 8601 (parseAnalyticsQuery)
 //   401 — not authenticated
 //   403 — repo exists but caller lacks access
 //   404 — repoId not found

@@ -40,6 +40,7 @@ import {
   extractFileStatsByCategory,
 } from './claude-extractor';
 import type { CauseStatsScope } from './session-cause-stats-writer';
+import { rebuildOkfAccessForNodes } from './okf/okf-access-writer';
 import { getDescendantSessionIds } from './session-tree.sql';
 import { listTeamScopesForUrls } from './team-repo-config';
 
@@ -204,9 +205,9 @@ export async function resolveFileStatsScopes(
 
 /**
  * The claude-before-artisyn heal: once the tree root's `artisyn` log
- * lands (or links a repo, or learns a root), rebuild the file stats of every node of the
- * tree from its stored `claude` / `claude-subagent` body. Roots and scopes are resolved once
- * on the tree root — equivalent for every node.
+ * lands (or links a repo, or learns a root), rebuild the file stats and the OKF access rows
+ * of every node of the tree from its stored `claude` / `claude-subagent` body. Roots and
+ * scopes are resolved once on the tree root — equivalent for every node.
  */
 export async function rewriteSessionTreeFileStats(
   db: DrizzleDb,
@@ -224,7 +225,11 @@ export async function rewriteSessionTreeFileStats(
   ];
 
   const bodyRows = await db
-    .select({ sessionId: logs.sessionId, body: logs.body })
+    .select({
+      sessionId: logs.sessionId,
+      logType: logs.logType,
+      body: logs.body,
+    })
     .from(logs)
     .where(
       and(
@@ -259,4 +264,8 @@ export async function rewriteSessionTreeFileStats(
   for (const [sessionRowId, lines] of linesBySession) {
     await writeSessionFileStats(db, sessionRowId, lines, repoRoots, scopes);
   }
+
+  // The OKF access rows (FR-3) depend on the same roots, so the heal rebuilds them from the
+  // same reparsed bodies: a node ingested before its tree's artisyn log stored none (no root).
+  await rebuildOkfAccessForNodes(db, bodyRows, () => repoRoots);
 }

@@ -56,6 +56,13 @@ const SessionHarnessUsageTab = lazy(() =>
   })),
 );
 
+// Lazy: the tab pulls its own OKF usage query and tree, and is opened deliberately.
+const SessionOkfTab = lazy(() =>
+  import('./session-log/okf/SessionOkfTab').then((m) => ({
+    default: m.SessionOkfTab,
+  })),
+);
+
 // Lazy: the tab pulls the Bash view (and, through it, the tree-sitter parser on first use) and is
 // opened deliberately. Its row count for the tab bar comes from the WASM-free collector below.
 const SessionBashTab = lazy(() =>
@@ -382,6 +389,14 @@ export function SessionDetailPane({
                 workflows={logsQuery.data?.workflows}
                 isLoading={logsQuery.isLoading}
                 error={logsQuery.error}
+              />
+            </Suspense>
+          ) : sessionTab === 'okf' ? (
+            <Suspense fallback={<LazyFallback />}>
+              <SessionOkfTab
+                repoId={repoId}
+                sessionId={selectedSession.sessionId}
+                teamId={teamId}
               />
             </Suspense>
           ) : sessionTab === 'raw-logs' ? (

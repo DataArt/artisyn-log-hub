@@ -271,7 +271,9 @@ server means editing this file in the same PR.
 - `.github/dependabot.yml`: weekly `docker` updates for `/`, patch and minor only for `node` (a
   major bump — the next LTS — is done by hand). `docker-dev/Dockerfile` pins Node via
   `ARG NODE_VERSION` + `NODE_SHA256`, which Dependabot cannot bump; fix its `node-runtime` warning
-  by hand.
+  by hand. A Node major bump also changes `node-version` in every workflow's `setup-node`
+  step (major only, currently `24`): see "Node.js version in CI" in
+  [Release Pipeline](release-pipeline.md).
 - `SECURITY.md`: GitHub private vulnerability reporting as a second reporting channel.
 - `pr-merge-checks.md`: the manual review list; CI covers some of its items but does not replace it.
 

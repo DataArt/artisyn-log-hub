@@ -72,6 +72,8 @@ import {
   type HarnessUsageGroupBy,
   type HarnessUsageReportData,
 } from './harness-usage.service';
+import { OkfUsageService } from '../okf/okf-usage.service';
+import type { RepoOkfUsageResponse } from '../okf/okf-usage.types';
 
 // Whitelist for the cache-read-ratio report's fixed (non-`attr:`) `groupBy` values.
 // `groupBy=attr:<key>` is validated separately,
@@ -117,6 +119,7 @@ export class ReportsController {
     private readonly productivityAnalyticsService: ProductivityAnalyticsService,
     private readonly activeSessionsService: ActiveSessionsService,
     private readonly claudeVersionUsageService: ClaudeVersionUsageService,
+    private readonly okfUsageService: OkfUsageService,
   ) {}
 
   @Get(':repoId/reports/executive-summary')
@@ -336,6 +339,37 @@ export class ReportsController {
       groupBy,
       resolvedAttributeDefinitions: resolvedDefinitions,
     });
+  }
+
+  /**
+   * The repo OKF usage tab: how the repo's knowledge bases were read over the root sessions
+   * of the scope (DD-29, DD-38, DD-39). Same scope and 403 rules as `harness-usage`; with
+   * `teamId` the service applies the DD-30 fail-closed team filter. `bundle` narrows to one
+   * bundle root of the latest snapshot — an unknown or empty value means all bundles.
+   */
+  @Get(':repoId/reports/okf-usage')
+  async getOkfUsageReport(
+    @Req() req: Request,
+    @Param('repoId', ParseIntPipe) repoId: number,
+    @Query('teamId', new ParseIntPipe({ optional: true })) teamId?: number,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Query('branches') branches?: string,
+    @Query('users') users?: string,
+    @Query('attr') attr?: string | string[],
+    @Query('bundle') bundle?: string,
+  ): Promise<RepoOkfUsageResponse> {
+    const { repoIds, scope } = await this.resolveUsageScope(req, repoId, {
+      teamId,
+      startDate,
+      endDate,
+      branches,
+      users,
+      attr,
+    });
+    const bundleRoot =
+      typeof bundle === 'string' && bundle.length > 0 ? bundle : undefined;
+    return this.okfUsageService.getRepoOkfUsage(repoIds, scope, bundleRoot);
   }
 
   /**

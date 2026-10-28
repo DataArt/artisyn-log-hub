@@ -1,0 +1,14 @@
+# dependencies
+node_modules/
+# build output
+dist/
+build/
+out/
+*.tsbuildinfo
+# runtime garbage
+*.log
+.cache/
+coverage/
+.env
+# generated prompts and raw LLM outputs (contain session text)
+out-runs/

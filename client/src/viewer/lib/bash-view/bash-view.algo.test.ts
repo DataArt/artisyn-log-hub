@@ -4,7 +4,7 @@
  * - View rows run `buildBashView(parser, command, root)` and compare only the keys the row lists
  *   (`changes` / `reads` / `runs` / `inline` / `unresolved` from `view.files`; `changeGroups` /
  *   `readGroups` / `runGroups` / `inlineGroups` from `displayGroups`, the same helper the FILES
- *   block uses); every `ok` row also
+ *   block uses; `readAccess` from `analyzeBash`); every `ok` row also
  *   checks the token invariant (rule 2.7) on `formatBash(parser, command).script`.
  * - Highlight rows run `highlightBash` with `bashHighlightQuery(<grammar highlights.scm>)` — the
  *   same query builder as the browser's `HIGHLIGHT_QUERY` — and compare `[kind, text]` pairs.
@@ -14,13 +14,19 @@
  */
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import type { Node } from 'web-tree-sitter';
+import {
+  type BashParser,
+  type BashSyntaxNode,
+  analyzeBash,
+  bashHighlightQuery,
+  buildBashView,
+  displayGroups,
+  formatBash,
+  highlightBash,
+  withTree,
+} from '@loghub/bash-view';
 import { beforeAll, describe, expect, it } from 'vitest';
-import { displayGroups } from './bash-analyze';
-import { formatBash } from './bash-format';
-import { bashHighlightQuery, highlightBash } from './bash-highlight';
-import { type BashParser, loadBashParser, withTree } from './bash-parser';
-import { buildBashView } from './bash-view';
+import { loadBashParser } from './bash-parser';
 
 const require = createRequire(import.meta.url);
 
@@ -51,6 +57,7 @@ interface BashViewExpected {
   readGroups?: unknown[] | null;
   runGroups?: unknown[] | null;
   inlineGroups?: unknown[] | null;
+  readAccess?: { path: string; kind: string }[];
   highlights?: [string, string][];
 }
 
@@ -81,9 +88,9 @@ beforeAll(async () => {
 function tokens(src: string): string[] {
   return withTree(parser, src, (root) => {
     const out: string[] = [];
-    const walk = (n: Node): void => {
+    const walk = (n: BashSyntaxNode): void => {
       if (
-        n.childCount === 0 ||
+        n.children.length === 0 ||
         n.type === 'heredoc_body' ||
         n.type === 'string_content' ||
         n.type === 'raw_string'
@@ -120,6 +127,10 @@ describe('bash-command-view: view rows', () => {
       readGroups: displayGroups('reads', view.files.reads),
       runGroups: displayGroups('runs', view.files.runs),
       inlineGroups: displayGroups('inline', view.files.inline),
+      // Not part of the view: `analyzeBash` straight, paths as written (not repo-relative).
+      ...('readAccess' in expected
+        ? { readAccess: analyzeBash(parser, input.command).readAccess }
+        : {}),
     };
     const picked = Object.fromEntries(
       Object.keys(expected).map((k) => [k, actual[k]]),

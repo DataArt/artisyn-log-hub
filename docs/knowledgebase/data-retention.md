@@ -66,33 +66,41 @@ For each eligible root, `SessionsService.hardPurgeExpiredSessions()` (`server/sr
 3. In one transaction per root (so one bad root can't roll back roots already purged earlier in
    the same tick): writes a `deleted_session_log` audit row per active session (`deletedByUserId:
    null` marks it as an automated purge, not a user action — see `docs/knowledgebase/db-tables.md`
-   § `deleted_session_log`), deletes child data (`session_stats`, `user_favorite_sessions`,
-   `session_file_stats`, `logs`, orphaned `contexts`, queued `upload_queue` rows), then hard-deletes
+   § `deleted_session_log`), deletes child data (`session_stats`, `session_call_tokens`,
+   `session_costs`, `user_favorite_sessions`, `session_file_stats`, `session_okf_access` (step c2),
+   `logs`, orphaned `contexts`, queued `upload_queue` rows), then hard-deletes
    the `sessions` rows themselves — root and every descendant (including any already-soft-deleted
    one, whose bare row is still hard-deleted even though its data was already purged).
 4. Per-root failures are logged and skipped; the loop continues with the remaining roots in the
    batch.
 
-### Orphan harness-snapshot cleanup
+### Orphan harness-snapshot and OKF-snapshot cleanup
 
 `purgeSessionChildData()` (`sessions.service.ts`, shared by soft delete, hard delete, admin family
 delete and this retention job) ends with two more steps, after the child-data deletes above and
 before the `sessions` rows themselves are removed:
 
-- **g.** Clears `sessions.harness_snapshot_id` to `NULL` for every session id in the batch. This
-  must run before step h, since h's orphan test is "no session references this snapshot id any
-  more".
+- **g.** Clears `sessions.harness_snapshot_id` and `sessions.okf_snapshot_id` to `NULL` for every
+  session id in the batch. This must run before step h, since h's orphan test is "no session
+  references this snapshot id any more".
 - **h.** `deleteOrphanHarnessSnapshots(tx)` (`server/src/logs/harness-snapshot.ts`): deletes every
   `harness_snapshots` row that no `sessions.harness_snapshot_id` references any more, across **all**
   owners (`DELETE FROM harness_snapshots hs WHERE NOT EXISTS (SELECT 1 FROM sessions s WHERE
   s.harness_snapshot_id = hs.snapshot_id)`). A row is conservative to delete: it survives as long
-  as any session anywhere still references its `snapshot_id`, so no owner join is needed.
+  as any session anywhere still references its `snapshot_id`, so no owner join is needed. Then
+  `deleteOrphanOkfSnapshots(tx)` (`server/src/logs/okf/okf-snapshot.ts`) does the same for
+  `okf_snapshots` against `sessions.okf_snapshot_id`.
 
-The same `deleteOrphanHarnessSnapshots(tx)` call is also made from the team-repo deletion path
+Step **c2** (earlier in the same function) deletes the session ids' `session_okf_access` rows
+explicitly: the table cascades on a hard delete of `sessions`, but a soft delete keeps the row,
+so without c2 the OKF tabs' access rows of a soft-deleted session would stay behind.
+
+The same `deleteOrphanHarnessSnapshots(tx)` and `deleteOrphanOkfSnapshots(tx)` calls are also made
+from the team-repo deletion path
 (`server/src/teams/teams.service.ts`, step 4d), right after that path hard-deletes the `sessions`
 rows that become orphaned once a repo is detached from a team (no other repo or log still
-references them). Account deletion needs no explicit sweep: `harness_snapshots.user_id` has
-`ON DELETE CASCADE` on `users`.
+references them). Account deletion needs no explicit sweep: `harness_snapshots.user_id` and
+`okf_snapshots.user_id` have `ON DELETE CASCADE` on `users`.
 
 This is a genuine hard delete, distinct from user-triggered `deleteSession()`, which only
 soft-deletes (`deleted = true`) and leaves the row and its data in place.

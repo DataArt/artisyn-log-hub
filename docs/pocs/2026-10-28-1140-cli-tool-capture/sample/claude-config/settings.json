@@ -1,0 +1,4 @@
+{ "hooks": {
+  "SessionStart": [ { "hooks": [ { "type": "command", "command": "node claude-config/session-start.mjs" } ] } ],
+  "PreToolUse": [ { "matcher": "PowerShell", "hooks": [ { "type": "command", "command": "node claude-config/pre-tool-use.mjs" } ] } ]
+} }

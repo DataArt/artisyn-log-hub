@@ -96,6 +96,11 @@ const NON_ACTIVITY_LINE_TYPES = new Set([
   // is session activity.
   'harness-snapshot',
   'harness-snapshot-ref',
+  // The OKF snapshot — `okf-snapshot` (full body) and `okf-snapshot-ref` — is the hook's
+  // inventory of the repo's knowledge-base bundles (DD-13 in
+  // docs/tasks/todo/2026-10-27-okf-usage-tab/impl-plan.md). Neither is session activity.
+  'okf-snapshot',
+  'okf-snapshot-ref',
   // The code-inventory snapshot is a throttled repo-size report the hook prefixes
   // onto an upload, not session activity. Its `capturedAt`/`timestamp` can predate the
   // session by up to the 6h throttle window, so counting it would stretch the session's

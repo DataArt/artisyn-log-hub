@@ -1,0 +1,18 @@
+# dependencies
+node_modules/
+# build output
+dist/
+build/
+*.tsbuildinfo
+# runtime garbage
+*.log
+.cache/
+coverage/
+.env
+# PoC run artefacts — logs and captured outputs
+out/
+wintest/pslog/
+wintest/pstest.ps1
+linuxtest/log/
+**/.codeexplorer/
+**/.artisyn/

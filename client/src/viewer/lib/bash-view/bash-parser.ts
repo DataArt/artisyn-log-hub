@@ -1,15 +1,17 @@
 /**
  * Lazy `tree-sitter-bash` parser for the Bash command view.
  *
- * This and `browser-parser.ts` are the only modules that import `web-tree-sitter` as a value —
- * and only through `import()`, so the runtime (~210 KB) and the bash grammar (~1.36 MB WASM) never
- * land in the main bundle. Every other `bash-view` module takes a `BashParser` argument and uses
- * `import type` only, which keeps them pure and lets the node algorithm test pass WASM paths
- * resolved with `createRequire` instead of Vite `?url` assets.
+ * This and `browser-parser.ts` are the only client modules that import `web-tree-sitter` as a
+ * value — and only through `import()`, so the runtime (~210 KB) and the bash grammar (~1.36 MB
+ * WASM) never land in the main bundle. The analysis itself lives in the shared `@loghub/bash-view`
+ * package, which takes a `BashParser` argument and never imports `web-tree-sitter`; that keeps it
+ * pure and lets the node algorithm test pass WASM paths resolved with `createRequire` instead of
+ * Vite `?url` assets.
  *
  * Nothing is ever executed: commands are only parsed.
  */
-import type { Node, Query, Tree } from 'web-tree-sitter';
+import type { BashParser } from '@loghub/bash-view';
+import type { Query, Tree } from 'web-tree-sitter';
 
 /** Locations of the two WASM files: Vite `?url` assets in the browser, file paths in node. */
 export interface BashParserAssets {
@@ -17,24 +19,6 @@ export interface BashParserAssets {
   runtimeWasm: string;
   /** `tree-sitter-bash/tree-sitter-bash.wasm` — the bash grammar. */
   languageWasm: string;
-}
-
-/**
- * One capture of a highlight query, flattened to plain offsets (UTF-16 code units into the parsed
- * text), so it stays valid after the syntax tree that produced it has been freed.
- */
-export interface BashCapture {
-  /** The capture name without `@`, e.g. `keyword`, `string`, `redirect`. */
-  name: string;
-  start: number;
-  end: number;
-}
-
-export interface BashParser {
-  /** Parses `src`. The caller owns the tree and must `delete()` it — or use `withTree`. */
-  parse(src: string): Tree;
-  /** Runs a highlight query (compiled once per distinct source) over `text`. */
-  highlight(text: string, querySource: string): BashCapture[];
 }
 
 let cached: Promise<BashParser> | null = null;
@@ -94,21 +78,4 @@ export function loadBashParser(assets: BashParserAssets): Promise<BashParser> {
     });
   }
   return cached;
-}
-
-/**
- * Parses `src`, hands the root node to `fn` and frees the tree afterwards (trees live in WASM
- * memory). `fn` must not keep nodes beyond its own return.
- */
-export function withTree<T>(
-  parser: BashParser,
-  src: string,
-  fn: (root: Node) => T,
-): T {
-  const tree = parser.parse(src);
-  try {
-    return fn(tree.rootNode);
-  } finally {
-    tree.delete();
-  }
 }

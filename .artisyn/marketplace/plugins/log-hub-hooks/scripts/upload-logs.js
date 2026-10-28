@@ -410,16 +410,19 @@ function planIdentitySlices(body, sliceSize) {
  *   request declares `Content-Encoding: gzip`. This function never compresses anything itself;
  *   `Content-Length` is always `Buffer.byteLength(body)` of the buffer it was handed, so an
  *   already-compressed body is described correctly with no other change.
- * @param {{snapshotId: string, snapshotFull: boolean}|null} [snapshotQuery] - DD-7/DD-8 of the
+ * @param {{snapshotId?: string, snapshotFull?: boolean, okfSnapshotId?: string, okfSnapshotFull?: boolean}|null} [snapshotQuery] - DD-7/DD-8 of the
  *   `2026-10-16-sysctx-skill-source` plan: appends `&snapshotId=…`, and `&snapshotFull=1` when
  *   `snapshotFull` is true. Omitted (or `snapshotId` falsy) sends neither param, exactly like an
- *   old hook.
+ *   old hook. OKF (plan `2026-10-27-okf-usage-tab`, DD-20): the optional `okfSnapshotId` /
+ *   `okfSnapshotFull` fields append `&okfSnapshotId=…` (+ `&okfSnapshotFull=1`) independently of
+ *   the harness pair; an old server ignores both params.
  * @returns {Promise<{ success: boolean, reason: string|null, warnings?: string[], complete?: boolean,
- *   unknownSnapshotId?: string, statusCode?: number|null, snippet?: string, sentEncoding?: 'gzip'|null }>}
+ *   unknownSnapshotId?: string, unknownOkfSnapshotId?: string, statusCode?: number|null, snippet?: string,
+ *   sentEncoding?: 'gzip'|null }>}
  *   on failure, `statusCode` / `snippet` / `sentEncoding` describe the rejection precisely enough
  *   for `isEncodingRejection()` to classify it; `reason` keeps its historical text verbatim.
  *   `unknownSnapshotId`, when the server's 201 JSON carries one, is DD-8's answer to the
- *   `snapshotQuery` this request sent.
+ *   `snapshotQuery` this request sent; `unknownOkfSnapshotId` is the same answer for its OKF id.
  */
 function uploadFile(serverUrl, apiKey, namespace, sessionId, body, timeoutMs, hookSessionId, cwd, parentSessionId, workflowRunId, chunkMeta, bodyEncoding, snapshotQuery) {
   const sentEncoding = bodyEncoding === 'gzip' ? 'gzip' : null;
@@ -449,6 +452,12 @@ function uploadFile(serverUrl, apiKey, namespace, sessionId, body, timeoutMs, ho
       urlStr += `&snapshotId=${encodeURIComponent(snapshotQuery.snapshotId)}`;
       if (snapshotQuery.snapshotFull) {
         urlStr += '&snapshotFull=1';
+      }
+    }
+    if (snapshotQuery && snapshotQuery.okfSnapshotId) {
+      urlStr += `&okfSnapshotId=${encodeURIComponent(snapshotQuery.okfSnapshotId)}`;
+      if (snapshotQuery.okfSnapshotFull) {
+        urlStr += '&okfSnapshotFull=1';
       }
     }
     let urlObj;
@@ -502,6 +511,7 @@ function uploadFile(serverUrl, apiKey, namespace, sessionId, body, timeoutMs, ho
           let warnings = [];
           let complete;
           let unknownSnapshotId;
+          let unknownOkfSnapshotId;
           try {
             const parsed = JSON.parse(Buffer.concat(okChunks).toString('utf8'));
             warnings = parsed && Array.isArray(parsed.warnings) ? parsed.warnings : [];
@@ -511,6 +521,9 @@ function uploadFile(serverUrl, apiKey, namespace, sessionId, body, timeoutMs, ho
             if (parsed && typeof parsed.unknownSnapshotId === 'string') {
               unknownSnapshotId = parsed.unknownSnapshotId;
             }
+            if (parsed && typeof parsed.unknownOkfSnapshotId === 'string') {
+              unknownOkfSnapshotId = parsed.unknownOkfSnapshotId;
+            }
           } catch {
             // fail-open: no/invalid JSON body — treat as no warnings
             warnings = [];
@@ -518,6 +531,7 @@ function uploadFile(serverUrl, apiKey, namespace, sessionId, body, timeoutMs, ho
           const result = { success: true, reason: null, warnings };
           if (complete !== undefined) result.complete = complete;
           if (unknownSnapshotId !== undefined) result.unknownSnapshotId = unknownSnapshotId;
+          if (unknownOkfSnapshotId !== undefined) result.unknownOkfSnapshotId = unknownOkfSnapshotId;
           resolve(result);
         });
         return;
@@ -747,10 +761,11 @@ function writePendingUploads(telemetryDir, pendingPath, map, sessionId, cwd) {
  * @param {string|null} workflowRunId
  * @param {string} telemetryDir
  * @param {string} manifestKey
- * @param {{snapshotId: string, snapshotFull: boolean}|null} [snapshotQuery] - DD-7: every chunk of
+ * @param {{snapshotId?: string, snapshotFull?: boolean, okfSnapshotId?: string, okfSnapshotFull?: boolean}|null} [snapshotQuery] - DD-7: every chunk of
  *   this upload carries the same query params, forwarded to each `uploadFile()` call below.
  * @returns {Promise<{ success: boolean, reason: string|null, warnings?: string[], wireBytes: number,
- *   plainBytes: number, requests: number, fallback: boolean, unknownSnapshotId?: string }>}
+ *   plainBytes: number, requests: number, fallback: boolean, unknownSnapshotId?: string,
+ *   unknownOkfSnapshotId?: string }>}
  *   `wireBytes` sums every request body actually put on the wire (so a restart's re-sent chunks
  *   are counted, which is the honest transfer cost); `plainBytes` is the file's uncompressed size;
  *   `requests` counts the requests this call made; `fallback` is true when the peer rejected a
@@ -874,6 +889,7 @@ async function uploadFileChunked(serverUrl, apiKey, namespace, sessionId, body, 
         fallback,
       };
       if (result.unknownSnapshotId !== undefined) final.unknownSnapshotId = result.unknownSnapshotId;
+      if (result.unknownOkfSnapshotId !== undefined) final.unknownOkfSnapshotId = result.unknownOkfSnapshotId;
       return final;
     }
 
@@ -920,10 +936,11 @@ async function uploadFileChunked(serverUrl, apiKey, namespace, sessionId, body, 
  * @param {string|null} cwd
  * @param {string|null} [parentSessionId]
  * @param {string|null} [workflowRunId]
- * @param {{snapshotId: string, snapshotFull: boolean}|null} [snapshotQuery] - DD-7: forwarded to
+ * @param {{snapshotId?: string, snapshotFull?: boolean, okfSnapshotId?: string, okfSnapshotFull?: boolean}|null} [snapshotQuery] - DD-7: forwarded to
  *   every `uploadFile()` call this function makes — the one attempt, or the plain retry.
  * @returns {Promise<{ success: boolean, reason: string|null, warnings?: string[], wireBytes: number,
- *   plainBytes: number, requests: number, fallback: boolean, unknownSnapshotId?: string }>} the
+ *   plainBytes: number, requests: number, fallback: boolean, unknownSnapshotId?: string,
+ *   unknownOkfSnapshotId?: string }>} the
  *   underlying `uploadFile()` result plus the same reporting fields as `uploadFileChunked()`;
  *   `requests` is 2 when the compressed attempt was rejected and the plain retry was made.
  */

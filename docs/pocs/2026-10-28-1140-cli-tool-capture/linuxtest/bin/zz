@@ -1,0 +1,4 @@
+#!/bin/sh
+i=0; while [ $i -lt 20000 ]; do echo "zz line $i args=$*"; i=$((i+1)); done
+[ "$1" = fail ] && { echo boom >&2; exit 3; }
+exit 0

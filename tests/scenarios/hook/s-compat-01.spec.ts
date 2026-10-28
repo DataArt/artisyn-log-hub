@@ -28,6 +28,12 @@
 //     201 + JSON `{warnings: []}` for a single request, `{complete: false}` then
 //     `{complete: true, warnings: [...]}` for chunks.
 //
+// Steps 10–11 (2026-10-27 OKF usage tab, FR-2, FR-14): 2.6.1 predates the OKF snapshot AND the
+// `git.root` field, so its session is never bound (`okf_snapshot_id` null) and the KB article its
+// agent read cannot be made repo-relative — the OKF tab is the empty state. A hook between the
+// two (root sent, no snapshot; no frozen copy exists) is uploaded inline with helpers/okf.ts: its
+// read counts with «partial data», and the OKF tab shows the «update the hook» banner.
+//
 // Replaces:
 //   - server/test/upload-queue.e2e-spec.ts — «v1 unmodified» (1)
 //   - server/test/logs.e2e-spec.ts — empty-response checks (2)
@@ -52,8 +58,10 @@ import {
   type TempDirs,
 } from '../helpers/hook-process';
 import { ndjson, queueRowCount, sessionRowCount, storedBody } from '../helpers/ingest';
+import { uploadOkfSessionTree } from '../helpers/okf';
 import { ownRepoId } from '../helpers/prompt-session';
 import { waitForQueueIdle } from '../helpers/queue';
+import { openSession } from '../helpers/session-view';
 
 const LEGACY_DIR = path.join(REPO_ROOT, 'tests', 'fixtures', 'legacy-hooks');
 const PROMPT = 'compat: fix the old bug';
@@ -171,7 +179,7 @@ function expectRunOk(run: HookRun, what: string): void {
   expect(run.code, `${what}: ${run.stderr}`).toBe(0);
 }
 
-test('@S-COMPAT-01 frozen 1.6.2 and 2.6.1 hooks against the current server @mode-a @mode-c', async ({ api, db, users, stand }) => {
+test('@S-COMPAT-01 frozen 1.6.2 and 2.6.1 hooks against the current server @mode-a @mode-c', async ({ api, db, users, stand, page }) => {
   test.setTimeout(240_000);
   const run = runToken();
   const dirs = tempDirs();
@@ -227,7 +235,20 @@ test('@S-COMPAT-01 frozen 1.6.2 and 2.6.1 hooks against the current server @mode
       const home = makeFakeHome(dirs);
       writeStandConfig(repo, proxy.url, key.key);
       const sid = `c26-${run}`;
-      fs.writeFileSync(path.join(claudeProjectDir(home, repo), `${sid}.jsonl`), ndjson(transcriptLines(sid, 'feature/compat', repo, 2)));
+      // The main agent also reads a KB article (step 10): 2.6.1 sends no repo root, so the server
+      // cannot place the read in the repository and stores no OKF row for it.
+      const kbRead = [
+        {
+          type: 'assistant', uuid: 'kb-a', parentUuid: 'a1', sessionId: sid, timestamp: new Date(Date.now() - 25 * 60_000).toISOString(), cwd: repo,
+          message: { id: `msg-${sid}-kb`, role: 'assistant', model: 'claude-sonnet-4-6', usage: { input_tokens: 50, output_tokens: 5 },
+            content: [{ type: 'tool_use', id: 'toolu_kb_1', name: 'Read', input: { file_path: path.join(repo, 'docs', 'kb', 'guide.md') } }] },
+        },
+        {
+          type: 'user', uuid: 'kb-r', parentUuid: 'kb-a', sessionId: sid, timestamp: new Date(Date.now() - 25 * 60_000 + 1000).toISOString(), cwd: repo,
+          message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_kb_1', content: '# Guide\n'.repeat(50) }] },
+        },
+      ];
+      fs.writeFileSync(path.join(claudeProjectDir(home, repo), `${sid}.jsonl`), ndjson([...transcriptLines(sid, 'feature/compat', repo, 2), ...kbRead]));
       const agents = subagentsDir(home, repo, sid);
       const sub = (agentId: string) => ndjson([
         { type: 'user', uuid: `${agentId}-u`, sessionId: sid, isSidechain: true, timestamp: new Date(Date.now() - 20 * 60_000).toISOString(), message: { role: 'user', content: 'sub task' } },
@@ -311,6 +332,52 @@ test('@S-COMPAT-01 frozen 1.6.2 and 2.6.1 hooks against the current server @mode
       expect(state.outdated).toBe(true);
       const hooks = (await (await owner.api.get('/api/v1/repositories/hooks')).json()) as Array<{ id: number; outdated: boolean }>;
       expect(hooks.find((r) => r.id === repoId)?.outdated).toBe(true);
+    });
+
+    await test.step('10. 2.6.1 sends no OKF snapshot and no repo root: okf_snapshot_id stays null, its KB read is not counted (FR-2), the OKF tab is the empty state', async () => {
+      const bound = await db.query<{ okf_snapshot_id: string | null }>(
+        'SELECT okf_snapshot_id FROM sessions WHERE session_id = $1',
+        [v26.sid],
+      );
+      expect(bound.rows[0]?.okf_snapshot_id).toBeNull();
+      const repoId = await ownRepoId(owner.api, `https://git.arrakis.test/compat/${run}/v26`);
+      const res = await owner.api.get(`/api/v1/repositories/${repoId}/sessions/${encodeURIComponent(v26.sid)}/okf-usage`);
+      expect(res.status()).toBe(200);
+      const usage = (await res.json()) as { hasSnapshot: boolean; verdict: unknown; readTop: unknown[] };
+      expect(usage).toMatchObject({ hasSnapshot: false, verdict: null, readTop: [] });
+      await openSession(page, owner, repoId, v26.sid, { tab: 'okf' });
+      await expect(page.getByTestId('okf-empty')).toContainText('No OKF knowledge base');
+    });
+
+    await test.step('11. a pre-OKF hook that does send the repo root (2.8 … 2.25): unbound session, the KB read counts, «partial data» and the «update the hook» banner (FR-14)', async () => {
+      // No frozen hook of that range exists; its upload shape is the current one minus the OKF
+      // lines and query params, which is exactly helpers/okf.ts with `snapshot: null`.
+      const sid = `c25-${run}`;
+      const repoUrl = `https://git.arrakis.test/compat/${run}/pre-okf`;
+      await uploadOkfSessionTree(
+        api,
+        key.key,
+        { sessionId: sid, repoUrl, snapshot: null, actions: [{ read: 'docs/kb/guide.md', bytes: 400 }] },
+        { db, userId: owner.id },
+      );
+      const bound = await db.query<{ okf_snapshot_id: string | null }>('SELECT okf_snapshot_id FROM sessions WHERE session_id = $1', [sid]);
+      expect(bound.rows[0]?.okf_snapshot_id).toBeNull();
+      const repoId = await ownRepoId(owner.api, repoUrl);
+      const res = await owner.api.get(`/api/v1/repositories/${repoId}/sessions/${encodeURIComponent(sid)}/okf-usage`);
+      expect(res.status()).toBe(200);
+      const usage = (await res.json()) as { hasSnapshot: boolean; verdict: { level: string; qualifiers: string[] } | null; readTop: Array<{ path: string }> };
+      expect(usage.hasSnapshot).toBe(false);
+      expect(usage.verdict).toMatchObject({ level: 'ok', qualifiers: ['partial_data'] });
+      expect(usage.readTop.map((r) => r.path)).toEqual(['docs/kb/guide.md']);
+
+      await openSession(page, owner, repoId, sid, { tab: 'okf' });
+      const banner = page.getByTestId('okf-no-snapshot');
+      await expect(banner).toBeVisible();
+      await expect(banner).toContainText('Update the Log Hub hook');
+      await expect(page.getByTestId('okf-verdict-card')).toContainText('partial data — no KB snapshot');
+      await expect(page.getByTestId('okf-tree-row').filter({ hasText: 'guide.md' })).toHaveCount(1);
+      await banner.getByRole('button', { name: 'How to update' }).click();
+      await expect(page).toHaveURL(/#\/api-keys/);
     });
 
     await test.step('4–5. a 1.5 MB transcript in 900 KB chunks: chunk 1 fails, the next Stop resumes from .claude-logs.pending and the server assembles it byte for byte', async () => {

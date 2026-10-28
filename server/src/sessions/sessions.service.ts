@@ -17,11 +17,13 @@ import {
   sessionCallTokens,
   sessionCosts,
   sessionFileStats,
+  sessionOkfAccess,
   sessionStats,
   sessions,
   userFavoriteSessions,
 } from '../database/schema/index';
 import { deleteOrphanHarnessSnapshots } from '../logs/harness-snapshot';
+import { deleteOrphanOkfSnapshots } from '../logs/okf/okf-snapshot';
 import { getDescendantSessionIds } from '../logs/session-tree.sql';
 import { UploadQueueService } from '../logs/upload-queue.service';
 
@@ -161,7 +163,7 @@ export class SessionsService {
 
   /**
    * Deletes all child data (session_stats, session_call_tokens, session_costs,
-   * user_favorite_sessions, session_file_stats, logs, and orphaned contexts) for
+   * user_favorite_sessions, session_file_stats, session_okf_access, logs, and orphaned contexts) for
    * the given session ids. The two cost tables would cascade on a hard delete of
    * the `sessions` row, but a soft delete keeps that row, so they are purged here.
    * Does NOT touch the `sessions` rows themselves or write audit log rows —
@@ -191,6 +193,12 @@ export class SessionsService {
       .delete(sessionFileStats)
       .where(inArray(sessionFileStats.sessionId, ids));
 
+    // c2. Delete session_okf_access — it would cascade on a hard delete, but a soft delete
+    // keeps the `sessions` row.
+    await tx
+      .delete(sessionOkfAccess)
+      .where(inArray(sessionOkfAccess.sessionId, ids));
+
     // d. Delete logs (cascades log_repositories and log_contexts automatically)
     await tx.delete(logs).where(inArray(logs.sessionId, ids));
 
@@ -217,16 +225,17 @@ export class SessionsService {
       sessionIdRows.map((row) => row.sessionId),
     );
 
-    // g. Clear the harness snapshot reference on these sessions (DD-11) — must run before
-    // h, since h's orphan test is "no session references this snapshot id any more".
+    // g. Clear the harness (DD-11) and OKF snapshot references on these sessions — must run
+    // before h, since h's orphan test is "no session references this snapshot id any more".
     await tx
       .update(sessions)
-      .set({ harnessSnapshotId: null })
+      .set({ harnessSnapshotId: null, okfSnapshotId: null })
       .where(inArray(sessions.id, ids));
 
     // h. Delete every harness_snapshots row no session references any more (DD-11), across
     // all owners — shared with the team-repo orphan sweep (`teams.service.ts`).
     await deleteOrphanHarnessSnapshots(tx);
+    await deleteOrphanOkfSnapshots(tx);
   }
 
   /**

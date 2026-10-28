@@ -40,6 +40,7 @@ import {
 import { ExportImportJobsService } from './export-import-jobs.service';
 import { getImportLimits, ImportLimitError } from './import-limits';
 import { loadHarnessSnapshot } from './harness-snapshot';
+import { loadOkfSnapshot } from './okf/okf-snapshot';
 import {
   findForeignAuthorEmails,
   findForeignSessionIds,
@@ -75,6 +76,8 @@ interface MatchingSessionRow {
   workflowRunId: string | null;
   /** DD-14: non-null when a harness snapshot (DD-9) is bound to this session. */
   harnessSnapshotId: string | null;
+  /** Non-null when an OKF snapshot is bound to this (root) session (DD-21). */
+  okfSnapshotId: string | null;
 }
 
 /**
@@ -914,6 +917,7 @@ export class RepositoryExportImportService {
           new Date(0)
         ).toISOString(),
         gitBranch: artisynLog?.gitBranch ?? null,
+        okfSnapshotId: session.okfSnapshotId,
         stats,
         logs: {
           ...(claudeLog ? { claude: { userEmail: claudeLog.userEmail } } : {}),
@@ -939,8 +943,17 @@ export class RepositoryExportImportService {
           artisynLog.userId,
           artisynBodyLines,
         );
+        const okfSnapshotLines = await this.buildExportOkfSnapshotLines(
+          session.okfSnapshotId,
+          artisynLog.userId,
+          artisynBodyLines,
+        );
         archive.append(
-          serializeArrayToJsonl([...snapshotLines, ...artisynBodyLines]),
+          serializeArrayToJsonl([
+            ...snapshotLines,
+            ...okfSnapshotLines,
+            ...artisynBodyLines,
+          ]),
           { name: `${baseDir}/artisyn.jsonl` },
         );
       }
@@ -981,6 +994,42 @@ export class RepositoryExportImportService {
         type: 'harness-snapshot-ref',
         snapshotId: harnessSnapshotId,
       });
+    }
+    return lines;
+  }
+
+  /**
+   * OKF counterpart of {@link buildExportHarnessSnapshotLines} (DD-21, DD-42 of
+   * docs/tasks/todo/2026-10-27-okf-usage-tab/impl-plan.md): prepends the bound OKF snapshot to
+   * the exported `artisyn.jsonl` as a full `okf-snapshot` line from the `okf_snapshots` row of
+   * the artisyn log's owner, plus an `okf-snapshot-ref` line, so import rebinds the session to
+   * the same id. Import binds the FIRST valid ref (or full line) it sees, so each line is
+   * skipped only when the body's first line of that type already names the bound id — a
+   * re-exported, re-imported body never grows. Returns `[]` when the session has no bound OKF
+   * snapshot or the row no longer exists. Older Log Hub versions skip both unknown line types.
+   */
+  private async buildExportOkfSnapshotLines(
+    okfSnapshotId: string | null,
+    ownerUserId: number,
+    bodyLines: unknown[],
+  ): Promise<object[]> {
+    if (okfSnapshotId === null) return [];
+    const body = await loadOkfSnapshot(this.db, ownerUserId, okfSnapshotId);
+    if (body === null) return [];
+
+    const firstIdOfType = (type: string): unknown => {
+      const line = bodyLines.find(
+        (l) => (l as { type?: unknown } | null)?.type === type,
+      ) as { okfSnapshotId?: unknown } | undefined;
+      return line?.okfSnapshotId;
+    };
+
+    const lines: object[] = [];
+    if (firstIdOfType('okf-snapshot') !== okfSnapshotId) {
+      lines.push({ type: 'okf-snapshot', ...body });
+    }
+    if (firstIdOfType('okf-snapshot-ref') !== okfSnapshotId) {
+      lines.push({ type: 'okf-snapshot-ref', okfSnapshotId });
     }
     return lines;
   }
@@ -1043,6 +1092,7 @@ export class RepositoryExportImportService {
         parentSessionId: sessions.parentSessionId,
         workflowRunId: sessions.workflowRunId,
         harnessSnapshotId: sessions.harnessSnapshotId,
+        okfSnapshotId: sessions.okfSnapshotId,
       })
       .from(sessions)
       .innerJoin(logs, eq(logs.sessionId, sessions.id))

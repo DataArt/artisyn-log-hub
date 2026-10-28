@@ -1,8 +1,7 @@
 import { useEffect, useRef, type KeyboardEvent } from 'react';
 import { cn } from '../../../../lib/cn';
 import { formatDuration, formatTime } from '../../../../lib/format';
-import type { BashView } from '../../../../lib/bash-view/bash-view';
-import { toRepoRelative } from '../../../../lib/bash-view/display-paths';
+import { type BashView, toRepoRelative } from '@loghub/bash-view';
 import { StatusMark } from '../tool-call-view/StatusBadge';
 import { commandOf } from '../tool-call-view/useBashView';
 import { useToolView } from '../tool-call-view/ToolViewContext';

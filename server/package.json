@@ -27,6 +27,7 @@
   },
   "dependencies": {
     "@azure/msal-node": "^7.1.0",
+    "@loghub/bash-view": "file:../packages/bash-view",
     "@loghub/pricing": "file:../packages/pricing",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.4",
@@ -55,6 +56,8 @@
     "rate-limiter-flexible": "^11.2.0",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
+    "tree-sitter-bash": "0.25.1",
+    "web-tree-sitter": "0.27.1",
     "yauzl": "^3.4.0"
   },
   "devDependencies": {
@@ -93,7 +96,11 @@
     "typescript-eslint": "^8.20.0"
   },
   "overrides": {
-    "multer": "$multer"
+    "multer": "$multer",
+    "drizzle-kit": {
+      "esbuild": "^0.28.1"
+    },
+    "qs": "~6.16.2"
   },
   "jest": {
     "moduleFileExtensions": [

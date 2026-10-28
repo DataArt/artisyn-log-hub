@@ -4,7 +4,7 @@ import type { AssistantStep, PromptTurn, ToolCallDetail } from '../../types';
 import { toolSection } from '../../tool-calls';
 import { ToolCallView } from '../../tool-call-view/ToolCallView';
 import { useToolView } from '../../tool-call-view/ToolViewContext';
-import { toRepoRelative } from '../../../../../lib/bash-view/display-paths';
+import { toRepoRelative } from '@loghub/bash-view';
 import {
   Dialog,
   DialogContent,

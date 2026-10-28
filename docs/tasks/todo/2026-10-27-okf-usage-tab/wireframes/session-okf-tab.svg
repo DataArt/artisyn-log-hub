@@ -1,0 +1,305 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1235" viewBox="0 0 1440 1235" font-family="Segoe UI, Inter, Arial, sans-serif">
+  <style>
+    .t { font-size: 13px; fill: #111827; }
+    .s { font-size: 12px; fill: #111827; }
+    .xs { font-size: 11px; fill: #111827; }
+    .m { fill: #6b7280; }
+    .cap { font-size: 10.5px; fill: #6b7280; letter-spacing: .4px; }
+    .mono { font-family: Consolas, 'JetBrains Mono', monospace; }
+    .b { font-weight: 600; }
+    .line { stroke: #e5e7eb; stroke-width: 1; }
+    .note { font-size: 11px; fill: #b45309; font-style: italic; }
+  </style>
+  <rect width="1440" height="1235" fill="#ffffff"/>
+
+  <!-- Top bar -->
+  <rect width="1440" height="48" fill="#fafafa"/>
+  <line x1="0" y1="48" x2="1440" y2="48" class="line"/>
+  <circle cx="24" cy="24" r="7" fill="#3b4fd8"/>
+  <text x="44" y="29" class="t b">[local] Artisyn Log Hub</text><text x="198" y="29" class="xs m">dev</text>
+  <text x="1226" y="29" class="t m">dt@dataart.com</text><text x="1350" y="29" class="t b">Edit email</text>
+
+  <!-- Collapsed sidebar -->
+  <rect x="0" y="49" width="40" height="1186" fill="#fafafa"/>
+  <line x1="40" y1="49" x2="40" y2="1235" class="line"/>
+  <text x="14" y="72" class="s m">›</text>
+
+  <!-- Repo header + repo tabs -->
+  <text x="56" y="76" class="t mono">https://github.com/DataArt/artisyn-log-hub</text>
+  <text x="1290" y="76" class="s m">Sessions: 212  Users: 1</text>
+  <line x1="40" y1="94" x2="1440" y2="94" class="line"/>
+  <text x="70" y="117" class="t b">Sessions</text>
+  <rect x="64" y="128" width="66" height="2" fill="#111827"/>
+  <text x="146" y="117" class="t m">Analytics</text>
+  <text x="226" y="117" class="t m">Reports</text>
+  <text x="298" y="117" class="t m">OKF</text>
+  <text x="342" y="117" class="t m">Settings</text>
+  <line x1="40" y1="131" x2="1440" y2="131" class="line"/>
+
+  <!-- Session list (simplified) -->
+  <rect x="48" y="140" width="282" height="910" fill="#ffffff"/>
+  <rect x="48" y="140" width="282" height="28" rx="4" fill="#fff" stroke="#e5e7eb"/>
+  <text x="58" y="158" class="xs">By branch</text>
+  <text x="60" y="190" class="s b mono">main</text><text x="300" y="190" class="xs m">34</text>
+  <g>
+    <rect x="48" y="204" width="282" height="80" fill="#fff"/>
+    <text x="58" y="226" class="s b mono">2026-10-22 01:12:16</text><text x="202" y="226" class="s b mono" fill="#ea580c">| $28.7908</text>
+    <text x="58" y="246" class="xs m">/adlc-lh:implement-deep 2026-10-15-clau…</text>
+    <line x1="48" y1="284" x2="330" y2="284" class="line"/>
+    <rect x="48" y="285" width="282" height="80" fill="#f3f4f6"/>
+    <rect x="48" y="285" width="3" height="80" fill="#3b4fd8"/>
+    <text x="58" y="307" class="s b mono">2026-10-21 22:53:14</text><text x="202" y="307" class="s b mono" fill="#2563eb">| $12.1719</text>
+    <text x="58" y="327" class="xs m">/adlc-lh:plan-deep 2026-10-15-claude-dev…</text>
+    <line x1="48" y1="365" x2="330" y2="365" class="line"/>
+    <text x="58" y="388" class="s b mono">2026-10-21 21:57:11</text><text x="202" y="388" class="s b mono" fill="#16a34a">| $0.8139</text>
+    <text x="58" y="408" class="xs m">"why is the branch cost total wrong?"</text>
+    <line x1="48" y1="446" x2="330" y2="446" class="line"/>
+  </g>
+  <line x1="338" y1="131" x2="338" y2="1235" stroke="#e5e7eb" stroke-width="6"/>
+
+  <!-- Session header metrics -->
+  <rect x="342" y="132" width="1098" height="96" fill="#fafafa"/>
+  <text x="356" y="152" class="cap">START</text><text x="356" y="170" class="s mono">2026-10-21 19:40:14</text>
+  <text x="510" y="152" class="cap">END</text><text x="510" y="170" class="s mono">2026-10-21 22:53:14</text>
+  <text x="664" y="152" class="cap">USER</text><text x="664" y="170" class="s mono">dt@dataart.com</text>
+  <text x="820" y="152" class="cap">MODEL</text><text x="820" y="170" class="s mono">claude-opus-5-5</text>
+  <text x="356" y="196" class="cap">COST</text><text x="356" y="214" class="s mono">$12.1719</text>
+  <text x="510" y="196" class="cap">PROMPTS</text><text x="510" y="214" class="s mono">7</text>
+  <line x1="342" y1="228" x2="1440" y2="228" class="line"/>
+
+  <!-- Session tabs -->
+  <text x="360" y="256" class="t m">Summary</text>
+  <text x="434" y="256" class="t m">Info</text>
+  <text x="478" y="256" class="t m">Logs</text>
+  <text x="522" y="256" class="t m">Bash</text><text x="558" y="256" class="xs m mono">11</text>
+  <text x="590" y="256" class="t m">Charts</text>
+  <text x="650" y="256" class="t m">Statistics</text>
+  <text x="732" y="256" class="t m">Change surface</text>
+  <text x="846" y="256" class="t m">Harness usage</text>
+  <text x="962" y="256" class="t b">OKF</text>
+  <rect x="952" y="268" width="50" height="2" fill="#3b4fd8"/>
+  <text x="1018" y="256" class="t m">Raw Logs</text>
+  <rect x="1110" y="238" width="152" height="26" rx="4" fill="#eef2ff" stroke="#c7d2fe" stroke-dasharray="3 2"/>
+  <text x="1120" y="255" class="xs" fill="#3730a3">NEW TAB (FR-11..14a)</text>
+  <line x1="342" y1="272" x2="1440" y2="272" class="line"/>
+
+  <!-- Toolbar -->
+  <text x="356" y="298" class="cap">OKF · WHOLE SESSION TREE (MAIN + 3 SUB-AGENTS) · 2 BUNDLES</text>
+  <text x="760" y="298" class="xs m">Read heat</text>
+  <rect x="818" y="284" width="112" height="22" rx="11" fill="#f3f4f6" stroke="#e5e7eb"/>
+  <rect x="819" y="285" width="56" height="20" rx="10" fill="#3b4fd8"/>
+  <text x="831" y="299" class="xs b" fill="#fff">Bytes</text><text x="887" y="299" class="xs m">Calls</text>
+
+  <!-- Verdict summary (FR-14a) -->
+  <g>
+    <rect x="356" y="316" width="1070" height="136" rx="6" fill="#fff" stroke="#fcd34d"/>
+    <rect x="356" y="316" width="5" height="136" fill="#d97706"/>
+    <text x="374" y="338" class="cap">VERDICT · FR-14a</text>
+    <rect x="374" y="348" width="170" height="30" rx="15" fill="#fef3c7" stroke="#f59e0b"/>
+    <text x="392" y="368" class="t b" fill="#92400e">● Something to fix</text>
+    <text x="554" y="361" class="xs m">scale:</text>
+    <rect x="554" y="366" width="28" height="12" rx="6" fill="#dcfce7"/><text x="559" y="375" style="font-size:9px" fill="#15803d">OK</text>
+    <rect x="586" y="366" width="28" height="12" rx="6" fill="#fef3c7" stroke="#f59e0b"/><text x="592" y="375" style="font-size:9px" fill="#92400e">fix</text>
+    <rect x="618" y="366" width="34" height="12" rx="6" fill="#fee2e2"/><text x="623" y="375" style="font-size:9px" fill="#b91c1c">mess</text>
+    <text x="374" y="400" class="cap">WHY</text>
+    <text x="374" y="418" class="xs">• agent 9c1d read 27 % of docs/knowledgebase files (22 of 82)</text>
+    <text x="374" y="434" class="xs m">(per agent — the same article read by several agents is not a finding)</text>
+    <line x1="720" y1="328" x2="720" y2="440" class="line"/>
+    <text x="736" y="338" class="cap">READ · TOP 5 BY BYTES</text>
+    <text x="736" y="358" class="xs mono">bash-command-view.md</text><text x="896" y="358" class="xs mono">96 KB</text>
+    <text x="944" y="358" class="xs" fill="#9a3412">↻</text>
+    <text x="736" y="376" class="xs mono">index.md</text><text x="896" y="376" class="xs mono">18 KB</text>
+    <text x="736" y="394" class="xs mono">harness-snapshot.md</text><text x="896" y="394" class="xs mono">14 KB</text>
+    <text x="736" y="412" class="xs mono">tool-call-sections.md</text><text x="896" y="412" class="xs mono">12 KB</text>
+    <text x="736" y="430" class="xs mono">tool-call-outcome.md</text><text x="896" y="430" class="xs mono">9 KB</text>
+    <text x="736" y="446" class="xs m">+ 23 more files</text>
+    <line x1="990" y1="328" x2="990" y2="440" class="line"/>
+    <text x="1006" y="338" class="cap">HOW AGENTS REACHED THE KB · 4 AGENTS</text>
+    <text x="1006" y="358" class="xs">main: index.md → 2 articles</text><text x="1290" y="358" class="xs" fill="#15803d">✓ index</text>
+    <text x="1006" y="376" class="xs">3f2a: grep → 2 articles</text><text x="1290" y="376" class="xs m">grep</text>
+    <text x="1006" y="394" class="xs">9c1d: path given, then 21 more</text><text x="1290" y="394" class="xs m">given</text>
+    <text x="1006" y="412" class="xs">7e40: index.md → 1 article</text><text x="1290" y="412" class="xs" fill="#15803d">✓ index</text>
+    <text x="1006" y="434" class="xs m">Click any line → opens that node in the tree.</text>
+  </g>
+  <text x="356" y="467" class="note">No LLM analysis here (FR-19): what should have been read and how to fix the KB comes from the local KB-analysis skill</text>
+  <text x="356" y="482" class="note">(task 2026-10-27-kb-completeness-deep) — its results stay on the developer's machine. The tree below is the drill-down.</text>
+
+  <g transform="translate(0,175)">
+  <!-- Bundle summary cards (FR-13) -->
+  <g>
+    <rect x="356" y="316" width="530" height="74" rx="6" fill="#fff" stroke="#e5e7eb"/>
+    <rect x="356" y="316" width="4" height="74" fill="#3b4fd8"/>
+    <text x="372" y="338" class="s b mono">docs/knowledgebase</text>
+    <rect x="512" y="327" width="54" height="16" rx="8" fill="#ecfdf5"/><text x="519" y="339" class="xs" fill="#047857">tracked</text>
+    <rect x="572" y="327" width="150" height="16" rx="8" fill="#eff6ff"/><text x="580" y="339" class="xs" fill="#1d4ed8">✓ started from index.md</text>
+    <text x="372" y="362" class="cap">FILES READ</text><text x="372" y="380" class="s mono b">28 / 82 · 34 %</text>
+    
+    <text x="560" y="362" class="cap">BYTES INTO CONTEXT</text><text x="560" y="380" class="s mono b">213 KB</text>
+
+    <rect x="898" y="316" width="528" height="74" rx="6" fill="#fff" stroke="#e5e7eb"/>
+    <rect x="898" y="316" width="4" height="74" fill="#9ca3af"/>
+    <text x="914" y="338" class="s b mono">docs/kb-local</text>
+    <rect x="1010" y="327" width="72" height="16" rx="8" fill="#fef3c7"/><text x="1017" y="339" class="xs" fill="#92400e">gitignored</text>
+    <text x="1090" y="339" class="xs m">personal view only</text>
+    <text x="914" y="362" class="cap">FILES READ</text><text x="914" y="380" class="s mono b">0 / 2 · 0 %</text>
+    
+    <text x="1100" y="362" class="cap">BYTES INTO CONTEXT</text><text x="1100" y="380" class="s mono b">0 B</text>
+  </g>
+
+  <!-- Tree table (FR-11, FR-12) -->
+  <rect x="356" y="404" width="740" height="560" rx="6" fill="#fff" stroke="#e5e7eb"/>
+  <rect x="357" y="405" width="738" height="28" fill="#fafafa"/>
+  <text x="370" y="423" class="cap">BUNDLE → FOLDER → FILE</text>
+  <text x="680" y="423" class="cap">READ (BYTES)</text>
+  <text x="836" y="423" class="cap">WRITE</text>
+  <text x="940" y="423" class="cap">MARKERS</text>
+  <line x1="357" y1="433" x2="1095" y2="433" class="line"/>
+
+  <!-- row helper: y baseline -->
+  <!-- bundle -->
+  <text x="370" y="455" class="s m">▾</text><text x="384" y="455" class="s b mono">docs/knowledgebase</text>
+  <rect x="680" y="445" width="110" height="12" rx="2" fill="#f1f5f9"/><rect x="680" y="445" width="110" height="12" rx="2" fill="#1e40af"/>
+  <text x="796" y="455" class="xs mono">213 KB</text>
+  <rect x="836" y="445" width="60" height="12" rx="2" fill="#f1f5f9"/><rect x="836" y="445" width="38" height="12" rx="2" fill="#ea580c"/>
+  <text x="900" y="455" class="xs mono">12 KB</text>
+  <line x1="357" y1="466" x2="1095" y2="466" class="line"/>
+
+  <!-- index.md -->
+  <text x="398" y="487" class="s mono">index.md</text>
+  <rect x="680" y="477" width="110" height="12" rx="2" fill="#f1f5f9"/><rect x="680" y="477" width="22" height="12" rx="2" fill="#60a5fa"/>
+  <text x="796" y="487" class="xs mono">18 KB</text>
+  <rect x="836" y="477" width="60" height="12" rx="2" fill="#f1f5f9"/>
+  <rect x="940" y="476" width="64" height="16" rx="8" fill="#eff6ff"/><text x="947" y="488" class="xs" fill="#1d4ed8">entry point</text>
+  <rect x="1010" y="476" width="76" height="16" rx="8" fill="#f3f4f6"/><text x="1016" y="488" class="xs m">read by 2</text>
+  <line x1="357" y1="498" x2="1095" y2="498" class="line"/>
+
+  <!-- algorithms folder -->
+  <text x="384" y="519" class="s m">▾</text><text x="398" y="519" class="s mono">algorithms/</text>
+  <rect x="680" y="509" width="110" height="12" rx="2" fill="#f1f5f9"/><rect x="680" y="509" width="80" height="12" rx="2" fill="#1d4ed8"/>
+  <text x="796" y="519" class="xs mono">151 KB</text>
+  <rect x="836" y="509" width="60" height="12" rx="2" fill="#f1f5f9"/><rect x="836" y="509" width="30" height="12" rx="2" fill="#f97316"/>
+  <rect x="940" y="508" width="118" height="16" rx="8" fill="#f3f4f6"/><text x="947" y="520" class="xs m">grep -rn over folder ×3</text>
+  <line x1="357" y1="530" x2="1095" y2="530" class="line"/>
+
+  <!-- bash-command-view.md -->
+  <rect x="357" y="531" width="738" height="32" fill="#f8fafc"/>
+  <text x="412" y="551" class="s mono">bash-command-view.md</text>
+  <rect x="680" y="541" width="110" height="12" rx="2" fill="#f1f5f9"/><rect x="680" y="541" width="66" height="12" rx="2" fill="#1d4ed8"/>
+  <text x="796" y="551" class="xs mono">96 KB</text>
+  <rect x="836" y="541" width="60" height="12" rx="2" fill="#f1f5f9"/><rect x="836" y="541" width="26" height="12" rx="2" fill="#f97316"/>
+  <text x="900" y="551" class="xs mono">8 KB</text>
+  <rect x="940" y="540" width="88" height="16" rx="8" fill="#fff7ed" stroke="#fdba74"/><text x="946" y="552" class="xs" fill="#9a3412">↻ own edit ×14</text>
+  <line x1="357" y1="563" x2="1095" y2="563" class="line"/>
+
+  <!-- more files (file level only, no sections) -->
+  <text x="412" y="583" class="s mono">tool-call-sections.md</text>
+  <rect x="680" y="573" width="110" height="12" rx="2" fill="#f1f5f9"/><rect x="680" y="573" width="16" height="12" rx="2" fill="#93c5fd"/>
+  <text x="796" y="583" class="xs mono">12 KB</text>
+  <rect x="836" y="573" width="60" height="12" rx="2" fill="#f1f5f9"/>
+  <line x1="357" y1="592" x2="1095" y2="592" class="line"/>
+  <text x="412" y="611" class="s mono">tool-call-outcome.md</text>
+  <rect x="680" y="601" width="110" height="12" rx="2" fill="#f1f5f9"/><rect x="680" y="601" width="12" height="12" rx="2" fill="#93c5fd"/>
+  <text x="796" y="611" class="xs mono">9 KB</text>
+  <rect x="836" y="601" width="60" height="12" rx="2" fill="#f1f5f9"/>
+  <line x1="357" y1="620" x2="1095" y2="620" class="line"/>
+  <text x="412" y="639" class="s mono">README.md</text>
+  <rect x="680" y="629" width="110" height="12" rx="2" fill="#f1f5f9"/><rect x="680" y="629" width="8" height="12" rx="2" fill="#93c5fd"/>
+  <text x="796" y="639" class="xs mono">6 KB</text>
+  <rect x="836" y="629" width="60" height="12" rx="2" fill="#f1f5f9"/>
+  <line x1="357" y1="648" x2="1095" y2="648" class="line"/>
+
+  <!-- harness-snapshot.md -->
+  <text x="412" y="669" class="s mono">harness-snapshot.md</text>
+  <rect x="680" y="659" width="110" height="12" rx="2" fill="#f1f5f9"/><rect x="680" y="659" width="14" height="12" rx="2" fill="#93c5fd"/>
+  <text x="796" y="669" class="xs mono">14 KB</text>
+  <rect x="836" y="659" width="60" height="12" rx="2" fill="#f1f5f9"/>
+  <rect x="940" y="658" width="70" height="16" rx="8" fill="#f3f4f6"/><text x="947" y="670" class="xs m">grep -n ×4</text>
+  <line x1="357" y1="680" x2="1095" y2="680" class="line"/>
+
+  <!-- session-metrics-scope.md : not read -->
+  <text x="398" y="701" class="s mono" fill="#9ca3af">session-metrics-scope.md</text>
+  <rect x="680" y="691" width="110" height="12" rx="2" fill="#f1f5f9"/>
+  <text x="686" y="701" class="xs m">not read</text>
+  <rect x="836" y="691" width="60" height="12" rx="2" fill="#f1f5f9"/>
+  <line x1="357" y1="713" x2="1095" y2="713" class="line"/>
+
+  <!-- turn-end-cost-advisor.md never read -->
+  <text x="398" y="734" class="s mono" fill="#9ca3af">turn-end-cost-advisor.md</text>
+  <rect x="680" y="724" width="110" height="12" rx="2" fill="#f1f5f9"/>
+  <text x="686" y="734" class="xs m">not read</text>
+  <rect x="836" y="724" width="60" height="12" rx="2" fill="#f1f5f9"/>
+  <line x1="357" y1="745" x2="1095" y2="745" class="line"/>
+
+  <!-- log-schema folder never read -->
+  <text x="384" y="766" class="s m">▸</text><text x="398" y="766" class="s mono" fill="#9ca3af">log-schema/</text><text x="490" y="766" class="xs m">(6 files)</text>
+  <rect x="680" y="756" width="110" height="12" rx="2" fill="#f1f5f9"/>
+  <text x="686" y="766" class="xs m">not read</text>
+  <rect x="836" y="756" width="60" height="12" rx="2" fill="#f1f5f9"/>
+  <line x1="357" y1="777" x2="1095" y2="777" class="line"/>
+
+  <text x="384" y="798" class="xs m">… 68 more files (sorted by read heat, not-read last)</text>
+  <line x1="357" y1="809" x2="1095" y2="809" class="line"/>
+
+  <!-- kb-local bundle -->
+  <text x="370" y="830" class="s m">▸</text><text x="384" y="830" class="s b mono">docs/kb-local</text>
+  <rect x="490" y="819" width="72" height="16" rx="8" fill="#fef3c7"/><text x="497" y="831" class="xs" fill="#92400e">gitignored</text>
+  <rect x="680" y="820" width="110" height="12" rx="2" fill="#f1f5f9"/>
+  <text x="686" y="830" class="xs m">not read</text>
+  <rect x="836" y="820" width="60" height="12" rx="2" fill="#f1f5f9"/>
+  <line x1="357" y1="841" x2="1095" y2="841" class="line"/>
+
+  <!-- Legend -->
+  <text x="370" y="866" class="cap">LEGEND</text>
+  <text x="370" y="886" class="xs m">Read</text>
+  <rect x="404" y="877" width="16" height="10" fill="#bfdbfe"/><rect x="420" y="877" width="16" height="10" fill="#60a5fa"/><rect x="436" y="877" width="16" height="10" fill="#1d4ed8"/><rect x="452" y="877" width="16" height="10" fill="#1e3a8a"/>
+  <text x="478" y="886" class="xs m">Write</text>
+  <rect x="514" y="877" width="16" height="10" fill="#fed7aa"/><rect x="530" y="877" width="16" height="10" fill="#f97316"/><rect x="546" y="877" width="16" height="10" fill="#c2410c"/>
+  <text x="576" y="886" class="xs m">bar = share of the bundle max; Calls toggle swaps bytes for call counts</text>
+  <rect x="370" y="898" width="112" height="16" rx="8" fill="#fff7ed" stroke="#fdba74"/><text x="377" y="910" class="xs" fill="#9a3412">↻ own edit (info)</text>
+  <rect x="490" y="898" width="64" height="16" rx="8" fill="#eff6ff"/><text x="497" y="910" class="xs" fill="#1d4ed8">entry point</text>
+  <rect x="562" y="898" width="110" height="16" rx="8" fill="#f3f4f6"/><text x="569" y="910" class="xs m">grep / ls over folder</text>
+  <rect x="680" y="898" width="112" height="16" rx="8" fill="#f3f4f6"/><text x="687" y="910" class="xs m">read by N agents</text>
+  <text x="800" y="910" class="xs m">both: info only (cost, not KB quality)</text>
+  <text x="370" y="934" class="xs m">"not read" is neutral: an article about a module this task never touched should not be read.</text>
+
+  <!-- Agents panel (FR-14a, per-agent facts) -->
+  <rect x="1108" y="404" width="318" height="560" rx="6" fill="#fff" stroke="#e5e7eb"/>
+  <rect x="1109" y="405" width="316" height="28" fill="#fafafa"/>
+  <text x="1122" y="423" class="cap">AGENTS · 4 · EACH ON ITS OWN TASK</text>
+
+  <text x="1122" y="452" class="xs b mono">main</text><text x="1180" y="452" class="xs" fill="#15803d">✓ started from index</text>
+  <text x="1122" y="468" class="xs m">/adlc-lh:plan-deep 2026-10-15-claude-dev…</text>
+  <text x="1122" y="484" class="xs">3 KB files · 22 KB into context</text>
+  <line x1="1120" y1="496" x2="1414" y2="496" class="line"/>
+
+  <text x="1122" y="516" class="xs b mono">3f2a</text><text x="1180" y="516" class="xs m">found by grep</text>
+  <text x="1122" y="532" class="xs m">"Gather context for the snapshot delivery…"</text>
+  <text x="1122" y="548" class="xs">2 KB files · 26 KB into context</text>
+  <line x1="1120" y1="560" x2="1414" y2="560" class="line"/>
+
+  <text x="1122" y="580" class="xs b mono">9c1d</text><text x="1180" y="580" class="xs m">path given in its prompt</text>
+  <text x="1122" y="596" class="xs m">"Review bash-command-view.md, check the KB for stale rules…"</text>
+  <text x="1122" y="612" class="xs">22 KB files · 150 KB into context</text>
+  <line x1="1120" y1="624" x2="1414" y2="624" class="line"/>
+
+  <text x="1122" y="644" class="xs b mono">7e40</text><text x="1180" y="644" class="xs" fill="#15803d">✓ started from index</text>
+  <text x="1122" y="660" class="xs m">"Check the plan against hook compatibility…"</text>
+  <text x="1122" y="676" class="xs">2 KB files · 15 KB into context</text>
+  <line x1="1120" y1="688" x2="1414" y2="688" class="line"/>
+
+  <text x="1122" y="712" class="xs m">Click an agent → the tree shows only its reads.</text>
+  <rect x="1120" y="860" width="294" height="92" rx="4" fill="#f9fafb" stroke="#e5e7eb"/>
+  <text x="1130" y="880" class="cap">DEEPER ANALYSIS</text>
+  <text x="1130" y="898" class="xs m">What should have been read, failed searches,</text>
+  <text x="1130" y="913" class="xs m">KB gaps and fixes: the local KB-analysis skill</text>
+  <text x="1130" y="928" class="xs m">(Opus, on demand). Its results stay on your</text>
+  <text x="1130" y="943" class="xs m">machine and are not shown here.</text>
+
+  <!-- FR-14 variant -->
+  <rect x="356" y="978" width="1070" height="68" rx="6" fill="#fffbeb" stroke="#fcd34d" stroke-dasharray="5 3"/>
+  <text x="372" y="998" class="cap" fill="#92400e">VARIANT · SESSION UPLOADED BY A HOOK WITHOUT OKF SNAPSHOT (FR-14)</text>
+  <text x="372" y="1018" class="s" fill="#78350f">⚠ No KB snapshot for this session — the tree shows only the paths that were accessed (no "not read" list).</text>
+  <text x="372" y="1036" class="s" fill="#78350f">Update the Log Hub hook in this repository to see the full bundle tree.</text>
+  <rect x="1300" y="1006" width="112" height="26" rx="4" fill="#fff" stroke="#d97706"/><text x="1316" y="1023" class="xs b" fill="#92400e">How to update</text>
+  </g>
+</svg>
