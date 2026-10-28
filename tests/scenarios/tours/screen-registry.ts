@@ -596,6 +596,24 @@ const OKF_REPO_ROW: ScreenRow = {
   expectTestId: 'repo-okf-tab',
 };
 
+/**
+ * The repo Tools/MCP tab (2026-06-19-mcp-invocation-log-tab) over the golden two weeks. The
+ * tab's frame (top bar, Monitored tools button) is the anchor; whether the golden transcripts
+ * hold MCP calls or not, the body is the tree or «No tool calls in this range». S-REPO-17 walks
+ * the filled tab.
+ */
+const TOOLS_REPO_ROW: ScreenRow = {
+  id: 'repo.tools',
+  story: 'tour-04',
+  route: '/repos/:repoId',
+  query: '?mtab=tools&tfrom={startDate}&tto={endDate}',
+  tab: { group: 'repo', id: 'tools' },
+  role: 'owner',
+  modes: A,
+  title: 'Repository: Tools/MCP (tool and MCP calls)',
+  expectTestId: 'repo-tools-tab',
+};
+
 // ---------------------------------------------------------------------------------------------
 // Story 5 — session detail: 9 tabs + 7 Charts sub-tabs + redirects (06 §2.3 #5, §1.3, §1.4).
 // ---------------------------------------------------------------------------------------------
@@ -687,6 +705,16 @@ const SESSION_TAB_ROWS: Array<Omit<ScreenRow, 'story' | 'role' | 'modes' | 'rout
     expectTestId: 'session-okf-tab',
     dataOptional: true,
     emptyText: 'No OKF knowledge base',
+  },
+  {
+    // The repo Tools/MCP tab narrowed to this session. Its frame is the anchor; whether the
+    // golden session holds MCP calls or not, the body is the tree or the empty state.
+    // S-REPO-17 walks the filled tab.
+    id: 'session.tools',
+    query: `${SESSION_QUERY}&tab=tools`,
+    tab: { group: 'session', id: 'tools' },
+    title: 'Session: Tools/MCP (this session’s tool and MCP calls)',
+    expectTestId: 'session-tools-tab',
   },
   {
     id: 'session.raw-logs',
@@ -1011,6 +1039,7 @@ export const SCREEN_REGISTRY: readonly ScreenRow[] = [
   ...OWNER_REPO_ROWS,
   ...ANALYTICS_ROWS,
   ...REPORT_ROWS,
+  TOOLS_REPO_ROW,
   OKF_REPO_ROW,
   ...SESSION_ROWS,
   ...TEAM_OWNER_ROWS,

@@ -40,6 +40,34 @@ const HANDLED_EVENTS = new Set([
   'StopFailure',
 ]);
 
+/**
+ * SessionStart: set up the CLI tool wrapper for this session (tool-wrap-shims.js, DD-15) — fetch the
+ * monitored-tools config, generate the Bash shims, run the pre-flight, append the PATH export to
+ * `$CLAUDE_ENV_FILE` and write `preflight.json`. Its own try/catch, required lazily so even a broken
+ * tool-wrap module can never affect the rest of this hook; it writes nothing to stdout.
+ * @param {string|null} cwd
+ * @param {string|null} sessionId
+ * @param {Record<string, *>} config
+ * @returns {Promise<void>}
+ */
+async function setupToolWrap(cwd, sessionId, config) {
+  try {
+    const {setupSessionToolWrap} = require('./tool-wrap-shims');
+    const r = await setupSessionToolWrap({cwd, sessionId, config});
+    if (r.status === 'failed') {
+      hookLog(HOOK_FILE, sessionId, 'warn',
+        `tool-wrap pre-flight failed: ${r.reason}; Bash tool calls are not wrapped this session`, cwd);
+    } else if (r.status === 'ok') {
+      const missing = r.missing && r.missing.length ? `; not on PATH: ${r.missing.join(', ')}` : '';
+      hookLog(HOOK_FILE, sessionId, 'result', `tool-wrap: wrapping ${r.generated.join(', ')}${missing}`, cwd);
+    } else {
+      hookLog(HOOK_FILE, sessionId, 'result', `tool-wrap skipped: ${r.reason}`, cwd);
+    }
+  } catch (err) {
+    hookLog(HOOK_FILE, sessionId, 'error', `tool-wrap setup failed: ${err && err.message}`, cwd);
+  }
+}
+
 // Wrapped in an async IIFE (rather than a bare top-level body) so the SessionStart/re-arm call
 // below can be `await`-ed before the trailing `process.exit(0)`, instead of racing it
 // fire-and-forget. The `try/catch` below is unchanged in shape and still provides the
@@ -177,6 +205,10 @@ const HANDLED_EVENTS = new Set([
 
     hookLog(HOOK_FILE, sessionId, 'result', `${eventName} recorded to ${telemetryDir}`, cwd);
 
+    // CLI tool wrapper (SessionStart only): started here so its bounded config fetch
+    // (`toolWrapConfigTimeoutMs`) overlaps the otel announce below, awaited before the exit.
+    const toolWrapSetup = eventName === 'SessionStart' ? setupToolWrap(cwd, sessionId, config) : null;
+
     // SessionStart is the primary spawn call site: `session.count`, `mcp_server_connection` and
     // `plugin_loaded` all fire before the first prompt, so a receiver armed only on the first
     // UserPromptSubmit would miss them. Unconditional per session (the receiver itself deduplicates
@@ -208,6 +240,8 @@ const HANDLED_EVENTS = new Set([
     } else if (eventName !== 'SessionStart') {
       await maybeReArmOtelSession(config, sessionId, cwd, git, HOOK_FILE);
     }
+
+    if (toolWrapSetup) await toolWrapSetup;
 
     // Deferred one tick so a spawn failure — surfaced asynchronously via the child's 'error' event —
     // still reaches announceOtelSession's onError handler and lands in hook.log, instead of being

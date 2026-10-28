@@ -5,6 +5,7 @@ import type { RepositorySession } from '../../../models/repositories';
 import { type ViewMode } from './session-list/SessionListPanel';
 import { type AnalyticsState } from './analytics/RepositoryAnalytics';
 import { applyAnalyticsToParams } from './analytics/analytics-url';
+import { TOOLS_PARAM_KEYS } from './tools/tools-url-state';
 import {
   REPO_MAIN_TABS,
   SESSION_TABS,
@@ -79,6 +80,25 @@ export function useRepositoryViewState({
    */
   const showAllUsers = searchParams.get('users') === 'all';
 
+  /**
+   * `tool_use` id of a Tools/MCP "Open in session" deep link (DD-19). Transient: the Logs tab
+   * resolves it to a turn once and then clears it through `clearTargetToolUse`.
+   */
+  const targetToolUseId = searchParams.get('tu') || null;
+
+  /** Drops the `tu` param without a history entry. Reads the latest params, not this render's. */
+  const clearTargetToolUse = useCallback(() => {
+    setSearchParams(
+      (prev) => {
+        if (!prev.has('tu')) return prev;
+        const next = new URLSearchParams(prev);
+        next.delete('tu');
+        return next;
+      },
+      { replace: true },
+    );
+  }, [setSearchParams]);
+
   // Invalidate stale queries when navigating to a different repo.
   useEffect(() => {
     void queryClient.invalidateQueries({
@@ -105,12 +125,14 @@ export function useRepositoryViewState({
     if (
       tab === 'analytics' ||
       tab === 'reports' ||
+      tab === 'tools' ||
       tab === 'okf' ||
       tab === 'settings'
     ) {
       next.set('mtab', tab);
       next.delete('session');
       next.delete('tab');
+      next.delete('tu');
     } else {
       next.delete('mtab');
     }
@@ -121,6 +143,10 @@ export function useRepositoryViewState({
         if (key.startsWith('okf')) next.delete(key);
       }
     }
+    // The Tools/MCP tab owns its filter / selection params (DD-21); drop them likewise.
+    if (tab !== 'tools') {
+      for (const key of TOOLS_PARAM_KEYS) next.delete(key);
+    }
     setSearchParams(next, { replace: true });
   }
 
@@ -128,6 +154,10 @@ export function useRepositoryViewState({
     const next = new URLSearchParams(searchParams);
     if (tab !== 'summary') next.set('tab', tab);
     else next.delete('tab');
+    // The session Tools/MCP tab shares the repo tab's `t*` params; leaving it drops them.
+    if (tab !== 'tools') {
+      for (const key of TOOLS_PARAM_KEYS) next.delete(key);
+    }
     setSearchParams(next, { replace: true });
   }
 
@@ -157,6 +187,9 @@ export function useRepositoryViewState({
     const next = new URLSearchParams(searchParams);
     next.set('session', session.sessionId);
     next.delete('mtab');
+    next.delete('tu');
+    // A selected call or scope of the previous session's Tools/MCP tab means nothing here.
+    for (const key of TOOLS_PARAM_KEYS) next.delete(key);
     // Only a direct click on the Advisor lightbulb badge jumps straight to the
     // Advisor tab. A normal row click just selects the session and leaves the
     // tab alone, same as any other session without advice.
@@ -169,6 +202,8 @@ export function useRepositoryViewState({
     const next = new URLSearchParams(searchParams);
     next.delete('session');
     next.delete('tab');
+    next.delete('tu');
+    for (const key of TOOLS_PARAM_KEYS) next.delete(key);
     setSearchParams(next, { replace: true });
   }
 
@@ -208,5 +243,7 @@ export function useRepositoryViewState({
     closeSession,
     handleAnalyticsSessionClick,
     handleAnalyticsStateChange,
+    targetToolUseId,
+    clearTargetToolUse,
   };
 }

@@ -9,9 +9,12 @@
  *                                its own files; the full multi-session scan stays on
  *                                `Stop`)
  *
- * Scope is deliberately two files:
- *   artisyn — <telemetryDir>/<sessionId>.jsonl
- *   claude  — ~/.claude/projects/<slug>/<sessionId>.jsonl
+ * Scope is deliberately the session's own files:
+ *   artisyn    — <telemetryDir>/<sessionId>.jsonl
+ *   claude     — ~/.claude/projects/<slug>/<sessionId>.jsonl
+ *   tool-calls — <workDir>/tool-wrap/upload/<sessionId>.jsonl, assembled on the spot from the CLI
+ *                tool wrapper's per-call files (tool-wrap-records.js); only when the session has
+ *                wrapper data
  *
  * `claude-subagent` and `claude-otel` are out of scope here: sub-agent files are discovered by a
  * directory scan that only the full `Stop` run performs, and otel chunk files are collected
@@ -23,7 +26,7 @@ const fs = require('fs');
 const path = require('path');
 const { claudeConfigDir } = require('./claude-config-dir');
 
-const { getGitRoot } = require('./git-context');
+const { getGitRoot, getWorkDirPath } = require('./git-context');
 
 // Upper bound on how much of a transcript `readTranscriptCwd` reads. The `cwd` field appears on
 // the first user/assistant line, but a transcript can open with large non-message lines (file
@@ -195,11 +198,12 @@ function transcriptBelongsToRepo(filePath, gitRoot) {
 /**
  * Resolve exactly the current session's own candidate files — the artisyn telemetry file and
  * the current session's claude transcript file — mirroring send-logs-hook.js's §2.2 project-slug
- * resolution, without the subagent/workflow scan.
+ * resolution, without the subagent/workflow scan — plus the session's `tool-calls` upload when the
+ * CLI tool wrapper recorded anything for it.
  * @param {string|null} cwd
  * @param {string} sessionId
  * @param {string} telemetryDir
- * @returns {{ namespace: 'artisyn'|'claude', filePath: string, size: number }[]}
+ * @returns {{ namespace: 'artisyn'|'claude'|'tool-calls', filePath: string, size: number }[]}
  */
 function collectScopedFiles(cwd, sessionId, telemetryDir) {
   const files = [];
@@ -238,6 +242,21 @@ function collectScopedFiles(cwd, sessionId, telemetryDir) {
     }
   } catch {
     // ~/.claude/projects absent — nothing to do for the claude namespace
+  }
+
+  // The CLI tool wrapper's records of this session (lazy require, fail-open: a broken tool-wrap
+  // module must never stop the artisyn / claude flush).
+  try {
+    const { assembleToolCallsUpload } = require('./tool-wrap-records');
+    const toolCallsPath = assembleToolCallsUpload(getWorkDirPath(cwd), sessionId);
+    if (toolCallsPath) {
+      const stat = fs.statSync(toolCallsPath);
+      if (stat.isFile() && stat.size > 0) {
+        files.push({ namespace: 'tool-calls', filePath: toolCallsPath, size: stat.size });
+      }
+    }
+  } catch {
+    // no wrapper data for this session, or it could not be assembled — nothing to upload
   }
 
   return files;

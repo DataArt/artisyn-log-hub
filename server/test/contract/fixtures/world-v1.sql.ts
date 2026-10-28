@@ -132,6 +132,18 @@ export const WORLD_V1 = {
    * tab, F15/F16/F19/F21): one bundle `docs/kb` of three files, one of them gitignored.
    */
   okfSnapshotId: 'e'.repeat(64),
+  /**
+   * `session_tool_usage` rows (T-26 Tools/MCP tab, F24): s01 holds one MCP and one CLI row, s03
+   * (s02's sub-agent) one MCP row, the member's s06 one CLI row, the outsider's s08 one MCP row.
+   * `callIds` are the `calls[].callId` values the registry addresses.
+   */
+  toolUsage: {
+    tuS01Mcp: { id: 1, callA: 'w1-q1', callB: 'w1-q2' },
+    tuS01Cli: { id: 2, callA: 'w1-c1' },
+    tuS03Mcp: { id: 3, callA: 'w1-q3' },
+    tuS06Cli: { id: 4, callA: 'w1-c2' },
+    tuS08Mcp: { id: 5, callA: 'w1-g1' },
+  },
   /** Export/import jobs of R1 (05 §F23); none has a file on disk. */
   jobs: {
     exportDone: { id: 'w1-job-export-done' },
@@ -162,6 +174,7 @@ export const WORLD_V1_REFS: Readonly<Record<string, string | number>> = (() => {
     WORLD_V1.repos,
     WORLD_V1.sessions,
     WORLD_V1.jobs,
+    WORLD_V1.toolUsage,
   ] as const;
   for (const group of groups) {
     for (const [name, entry] of Object.entries(group)) {
@@ -1576,6 +1589,382 @@ function buildStatements(): WorldStatement[] {
         [1, S.s02.id, 'docs/kb/index.md', 'read', false, 400, 1, 1],
         [2, S.s02.id, 'docs/kb/private.md', 'read', false, 800, 1, 2],
         [3, S.s03.id, 'docs/kb/scheduler.md', 'read', false, 1500, 2, 1],
+      ],
+    ),
+  );
+
+  // Tools/MCP tab (T-26, F24). The owner's personal list of R1 monitors `ce` and `kubectl`
+  // (plus a disabled `old`); T1's list of R1's URL (link 1) monitors `find`; T2 has none. R1's
+  // repository row carries the hook's last wrapper status (wrapper data for `ce` only). Every
+  // session keeps `tool_usage_version` NULL (rebuild pending) and the contract run parks the
+  // rebuild drain, so these hand-written rows are what the read routes serve.
+  out.push(
+    insert(
+      'repo_tool_monitor_config',
+      ['repo_id', 'config', 'updated_at'],
+      [
+        [
+          R.R1.id,
+          json({
+            paused: false,
+            tools: [
+              { name: 'ce', enabled: true, capture: 'full' },
+              { name: 'kubectl', enabled: true, capture: 'meta' },
+              { name: 'old', enabled: false, capture: 'full' },
+            ],
+          }),
+          '2026-01-03T12:00:00.000Z',
+        ],
+      ],
+    ),
+  );
+  out.push(
+    insert(
+      'team_repo_tool_monitor_config',
+      ['team_repository_id', 'config', 'updated_at'],
+      [
+        [
+          1,
+          json({
+            paused: false,
+            tools: [{ name: 'find', enabled: true, capture: 'full' }],
+          }),
+          '2026-01-03T12:30:00.000Z',
+        ],
+      ],
+    ),
+  );
+  out.push({
+    sql: `UPDATE repositories SET tool_wrap_status = $1 WHERE id = $2`,
+    params: [
+      JSON.stringify({
+        hookVersion: '2.21.0',
+        os: 'win32',
+        preflight: {
+          ok: true,
+          reason: null,
+          shells: { bash: true, powershell: true },
+        },
+        breaker: { global: false, tools: [] },
+        reportedAt: '2026-01-10T10:31:00.000Z',
+        tools: { ce: { lastWrapperAt: '2026-01-10T10:03:00.000Z' } },
+      }),
+      R.R1.id,
+    ],
+  });
+
+  const TU = WORLD_V1.toolUsage;
+  /** A DD-10 call record: an MCP call of the main agent unless `over` says otherwise. */
+  const toolCall = (over: Record<string, unknown>) => ({
+    callId: '',
+    channel: 'mcp',
+    tool: '',
+    operation: '',
+    ts: '',
+    durationMs: null,
+    status: 'ok',
+    hints: [],
+    source: 'transcript',
+    shell: null,
+    exitCode: null,
+    inBytes: 0,
+    outBytes: 0,
+    agentSawBytes: null,
+    toolUseId: null,
+    agentId: null,
+    agentKind: 'root',
+    inputPreview: '',
+    real: null,
+    cwd: null,
+    args: null,
+    signals: [],
+    ...over,
+  });
+  /** A DD-11 per-operation aggregate. */
+  const opAgg = (over: Record<string, unknown>) => ({
+    calls: 1,
+    errors: 0,
+    killed: 0,
+    noResult: 0,
+    empty: 0,
+    retried: 0,
+    fellBack: 0,
+    openedFile: 0,
+    durationMsSum: 0,
+    durationCount: 0,
+    inBytesSum: 0,
+    outBytesSum: 0,
+    lastTs: null,
+    ...over,
+  });
+  out.push(
+    insert(
+      'session_tool_usage',
+      [
+        'id',
+        'session_id',
+        'channel',
+        'tool',
+        'call_count',
+        'first_call_at',
+        'last_call_at',
+        'has_wrapper_data',
+        'aggregates',
+        'calls',
+        'outputs',
+      ],
+      [
+        [
+          TU.tuS01Mcp.id,
+          S.s01.id,
+          'mcp',
+          'postgres',
+          2,
+          '2026-01-10T10:01:00.000Z',
+          '2026-01-10T10:02:00.000Z',
+          false,
+          json({
+            operations: {
+              query: opAgg({
+                calls: 2,
+                errors: 1,
+                retried: 1,
+                durationMsSum: 300,
+                durationCount: 2,
+                inBytesSum: 80,
+                outBytesSum: 560,
+                lastTs: '2026-01-10T10:02:00.000Z',
+              }),
+            },
+          }),
+          json([
+            toolCall({
+              callId: TU.tuS01Mcp.callA,
+              tool: 'postgres',
+              operation: 'query',
+              ts: '2026-01-10T10:01:00.000Z',
+              durationMs: 100,
+              inBytes: 40,
+              outBytes: 500,
+              agentSawBytes: 500,
+              toolUseId: 'toolu_w1_q1',
+              inputPreview: '{"sql":"select count(*) from harvests"}',
+            }),
+            toolCall({
+              callId: TU.tuS01Mcp.callB,
+              tool: 'postgres',
+              operation: 'query',
+              ts: '2026-01-10T10:02:00.000Z',
+              durationMs: 200,
+              status: 'error',
+              inBytes: 40,
+              outBytes: 60,
+              agentSawBytes: 60,
+              toolUseId: 'toolu_w1_q2',
+              inputPreview: '{"sql":"select * from spice"}',
+              signals: ['retried'],
+            }),
+          ]),
+          json({
+            [TU.tuS01Mcp.callA]: {
+              input: '{"sql":"select count(*) from harvests"}',
+              agentSaw: '42',
+              encoding: 'utf8',
+            },
+            [TU.tuS01Mcp.callB]: {
+              input: '{"sql":"select * from spice"}',
+              agentSaw: 'relation "spice" does not exist',
+              encoding: 'utf8',
+            },
+          }),
+        ],
+        [
+          TU.tuS01Cli.id,
+          S.s01.id,
+          'cli',
+          'ce',
+          1,
+          '2026-01-10T10:03:00.000Z',
+          '2026-01-10T10:03:00.000Z',
+          true,
+          json({
+            operations: {
+              build: opAgg({
+                durationMsSum: 1500,
+                durationCount: 1,
+                outBytesSum: 2048,
+                lastTs: '2026-01-10T10:03:00.000Z',
+              }),
+            },
+          }),
+          json([
+            toolCall({
+              callId: TU.tuS01Cli.callA,
+              channel: 'cli',
+              tool: 'ce',
+              operation: 'build',
+              ts: '2026-01-10T10:03:00.000Z',
+              durationMs: 1500,
+              hints: ['cut'],
+              source: 'both',
+              shell: 'bash',
+              exitCode: 0,
+              outBytes: 2048,
+              agentSawBytes: 1024,
+              toolUseId: 'toolu_w1_c1',
+              inputPreview: 'ce build --all | head -20',
+              real: '/usr/local/bin/ce',
+              cwd: ROOT,
+              args: ['build', '--all'],
+            }),
+          ]),
+          json({
+            [TU.tuS01Cli.callA]: {
+              input: 'ce build --all | head -20',
+              stdout: 'built 12 targets',
+              stderr: '',
+              agentSaw: 'built 12',
+              encoding: 'utf8',
+            },
+          }),
+        ],
+        [
+          TU.tuS03Mcp.id,
+          S.s03.id,
+          'mcp',
+          'postgres',
+          1,
+          '2026-01-11T09:12:00.000Z',
+          '2026-01-11T09:12:00.000Z',
+          false,
+          json({
+            operations: {
+              schema: opAgg({
+                empty: 1,
+                durationMsSum: 50,
+                durationCount: 1,
+                inBytesSum: 20,
+                outBytesSum: 300,
+                lastTs: '2026-01-11T09:12:00.000Z',
+              }),
+            },
+          }),
+          json([
+            toolCall({
+              callId: TU.tuS03Mcp.callA,
+              tool: 'postgres',
+              operation: 'schema',
+              ts: '2026-01-11T09:12:00.000Z',
+              durationMs: 50,
+              inBytes: 20,
+              outBytes: 300,
+              agentSawBytes: 300,
+              toolUseId: 'toolu_w1_q3',
+              agentId: 'agent-w1-scheduler',
+              agentKind: 'subagent',
+              inputPreview: '{"table":"schedules"}',
+              signals: ['empty'],
+            }),
+          ]),
+          json({
+            [TU.tuS03Mcp.callA]: {
+              input: '{"table":"schedules"}',
+              agentSaw: '',
+              encoding: 'utf8',
+            },
+          }),
+        ],
+        [
+          TU.tuS06Cli.id,
+          S.s06.id,
+          'cli',
+          'ce',
+          1,
+          '2026-01-13T08:05:00.000Z',
+          '2026-01-13T08:05:00.000Z',
+          true,
+          json({
+            operations: {
+              test: opAgg({
+                errors: 1,
+                durationMsSum: 3000,
+                durationCount: 1,
+                outBytesSum: 400,
+                lastTs: '2026-01-13T08:05:00.000Z',
+              }),
+            },
+          }),
+          json([
+            toolCall({
+              callId: TU.tuS06Cli.callA,
+              channel: 'cli',
+              tool: 'ce',
+              operation: 'test',
+              ts: '2026-01-13T08:05:00.000Z',
+              durationMs: 3000,
+              status: 'error',
+              source: 'both',
+              shell: 'powershell',
+              exitCode: 2,
+              outBytes: 400,
+              agentSawBytes: 400,
+              toolUseId: 'toolu_w1_c2',
+              inputPreview: 'ce test',
+              real: 'C:/tools/ce.exe',
+              cwd: ROOT,
+              args: ['test'],
+            }),
+          ]),
+          json({
+            [TU.tuS06Cli.callA]: {
+              input: 'ce test',
+              stdout: '',
+              stderr: '2 tests failed',
+              agentSaw: '2 tests failed',
+              encoding: 'utf8',
+            },
+          }),
+        ],
+        [
+          TU.tuS08Mcp.id,
+          S.s08.id,
+          'mcp',
+          'github',
+          1,
+          '2026-01-14T16:01:00.000Z',
+          '2026-01-14T16:01:00.000Z',
+          false,
+          json({
+            operations: {
+              search_issues: opAgg({
+                durationMsSum: 700,
+                durationCount: 1,
+                outBytesSum: 900,
+                lastTs: '2026-01-14T16:01:00.000Z',
+              }),
+            },
+          }),
+          json([
+            toolCall({
+              callId: TU.tuS08Mcp.callA,
+              tool: 'github',
+              operation: 'search_issues',
+              ts: '2026-01-14T16:01:00.000Z',
+              durationMs: 700,
+              outBytes: 900,
+              agentSawBytes: 900,
+              toolUseId: 'toolu_w1_g1',
+              inputPreview: '{"q":"harvester"}',
+            }),
+          ]),
+          json({
+            [TU.tuS08Mcp.callA]: {
+              input: '{"q":"harvester"}',
+              agentSaw: '[]',
+              encoding: 'utf8',
+            },
+          }),
+        ],
       ],
     ),
   );

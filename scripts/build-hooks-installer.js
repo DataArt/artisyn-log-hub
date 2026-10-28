@@ -145,6 +145,17 @@ const HOOK_JS_FILES = [
   // `ARTISYN_PROJECT_ROOT` override of the project root — `require`d by git-context.js, so every
   // hook dies with MODULE_NOT_FOUND without it.
   'project-root-override.js',
+  // CLI tool wrapper: name rules, config fetch/cache/markers (`require`d by telemetry-hook), the
+  // SessionStart shim generation + pre-flight (`require`d by lifecycle-hook), the stdout tee the
+  // generated Bash shims run, the PowerShell PreToolUse entry (wired into `HOOKS_JSON`'s
+  // `PreToolUse:` below) and the `tool-calls` upload assembly (`require`d by send-logs-hook and
+  // session-files).
+  'tool-wrap-names.js',
+  'tool-wrap-config.js',
+  'tool-wrap-shims.js',
+  'tool-wrap-tee.js',
+  'tool-wrap-powershell.js',
+  'tool-wrap-records.js',
 ];
 
 /**
@@ -299,13 +310,16 @@ function singleHook(scriptFile, statusMessage) {
   return [{ hooks: [{ ...mkPluginCmd(scriptFile), statusMessage }] }];
 }
 
-// 14 events, all monitoring/logging (lifecycle-hook.js, except UserPromptSubmit/Stop and the
-// second SessionEnd script) — matching hook/INSTALL_HOOK.md's documented event set exactly (see
-// the drift check below) and preserving every statusMessage documented there. There is no
-// PreToolUse entry: the guardrail hook was removed in 2.19.0.
+// 15 events (lifecycle-hook.js, except UserPromptSubmit/Stop, the second SessionEnd script and
+// PreToolUse) — matching hook/INSTALL_HOOK.md's documented event set exactly (see the drift check
+// below) and preserving every statusMessage documented there.
 const HOOKS_JSON = {
   hooks: {
     UserPromptSubmit: singleHook('telemetry-hook.js', 'Recording prompt...'),
+    // CLI tool wrapper for the PowerShell tool (DD-14 of the Tools/MCP tab plan): only PowerShell
+    // calls, and it rewrites the command (`updatedInput`) only when it mentions a monitored tool;
+    // otherwise it exits 0 silently. It never returns a permission decision.
+    PreToolUse: [{ matcher: 'PowerShell', hooks: [{ ...mkPluginCmd('tool-wrap-powershell.js'), statusMessage: 'Preparing tool monitoring...' }] }],
     PostToolUse: singleHook('lifecycle-hook.js', 'Recording tool call...'),
     PostToolUseFailure: singleHook('lifecycle-hook.js', 'Recording tool failure...'),
     SessionStart: singleHook('lifecycle-hook.js', 'Recording session start...'),

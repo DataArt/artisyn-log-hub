@@ -19,8 +19,9 @@
     "paths": {
       "@/*": ["./src/viewer/*"],
       "@loghub/pricing": ["../packages/pricing/src/index.ts"],
-      "@loghub/bash-view": ["../packages/bash-view/src/index.ts"]
+      "@loghub/bash-view": ["../packages/bash-view/src/index.ts"],
+      "@loghub/tool-monitor": ["../packages/tool-monitor/src/index.ts"]
     }
   },
-  "include": ["src", "vite.config.ts", "../packages/pricing/src", "../packages/bash-view/src"]
+  "include": ["src", "vite.config.ts", "../packages/pricing/src", "../packages/bash-view/src", "../packages/tool-monitor/src"]
 }

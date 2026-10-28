@@ -1,0 +1,13 @@
+{
+  "hooks": {
+    "SessionStart": [
+      { "hooks": [{ "type": "command", "command": "node /hook/lifecycle-hook.js" }] }
+    ],
+    "UserPromptSubmit": [
+      { "hooks": [{ "type": "command", "command": "node /hook/telemetry-hook.js" }] }
+    ],
+    "PreToolUse": [
+      { "matcher": "PowerShell", "hooks": [{ "type": "command", "command": "node /hook/tool-wrap-powershell.js" }] }
+    ]
+  }
+}

@@ -19,6 +19,7 @@ import {
   sessionFileStats,
   sessionOkfAccess,
   sessionStats,
+  sessionToolUsage,
   sessions,
   userFavoriteSessions,
 } from '../database/schema/index';
@@ -163,7 +164,8 @@ export class SessionsService {
 
   /**
    * Deletes all child data (session_stats, session_call_tokens, session_costs,
-   * user_favorite_sessions, session_file_stats, session_okf_access, logs, and orphaned contexts) for
+   * user_favorite_sessions, session_file_stats, session_okf_access, session_tool_usage, logs, and
+   * orphaned contexts) for
    * the given session ids. The two cost tables would cascade on a hard delete of
    * the `sessions` row, but a soft delete keeps that row, so they are purged here.
    * Does NOT touch the `sessions` rows themselves or write audit log rows —
@@ -198,6 +200,11 @@ export class SessionsService {
     await tx
       .delete(sessionOkfAccess)
       .where(inArray(sessionOkfAccess.sessionId, ids));
+
+    // c3. Delete session_tool_usage (derived MCP / CLI tool usage) — same reason as c2.
+    await tx
+      .delete(sessionToolUsage)
+      .where(inArray(sessionToolUsage.sessionId, ids));
 
     // d. Delete logs (cascades log_repositories and log_contexts automatically)
     await tx.delete(logs).where(inArray(logs.sessionId, ids));

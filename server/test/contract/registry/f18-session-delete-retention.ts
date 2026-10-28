@@ -26,6 +26,8 @@ const SESSION_TABLES = [
   // DD-11 steps g/h: every purge unconditionally nulls the deleted session's
   // harness_snapshot_id and sweeps harness_snapshots rows no session references any more.
   'harness_snapshots',
+  // T-26: the purge deletes the session's Tools/MCP rows.
+  'session_tool_usage',
 ];
 
 function deleteSession(
@@ -83,6 +85,11 @@ function deleteSession(
         },
         {
           table: 'user_favorite_sessions',
+          where: `session_id = ${pk}`,
+          count: 'all',
+        },
+        {
+          table: 'session_tool_usage',
           where: `session_id = ${pk}`,
           count: 'all',
         },

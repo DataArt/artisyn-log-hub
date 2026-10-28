@@ -258,6 +258,12 @@ The installer extracts this tree, generated at build time from `hook/.claude/tel
         │   ├── edit-result-counts.js
         │   ├── claude-config-dir.js
         │   ├── project-root-override.js
+        │   ├── tool-wrap-names.js
+        │   ├── tool-wrap-config.js
+        │   ├── tool-wrap-shims.js
+        │   ├── tool-wrap-tee.js
+        │   ├── tool-wrap-powershell.js
+        │   ├── tool-wrap-records.js
         │   └── version.json
         └── config-template/
             └── log-hub.json
@@ -301,15 +307,19 @@ As shipped in the tarball; the installer replaces `"name"` with this repo's `art
 
 ### `hooks/hooks.json`
 
-All 14 events wired — the hook is monitoring/logging only and never blocks a tool call (the `PreToolUse`
-guardrail was removed in `2.19.0`): `telemetry-hook.js` on `UserPromptSubmit`, `lifecycle-hook.js` on the 12
-remaining lifecycle events, and `send-logs-hook.js` + `post-turn-analysis-hook.js` on `Stop`:
+All 15 events wired — the hook is monitoring/logging only and never blocks or denies a tool call (the `PreToolUse`
+guardrail was removed in `2.19.0`): `telemetry-hook.js` on `UserPromptSubmit`, `tool-wrap-powershell.js` on
+`PreToolUse` (matcher `PowerShell`, hook `2.27.0`+), `lifecycle-hook.js` on the 12 remaining lifecycle events, and
+`send-logs-hook.js` + `post-turn-analysis-hook.js` on `Stop`:
 
 ```json
 {
   "hooks": {
     "UserPromptSubmit": [
       { "hooks": [{ "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/telemetry-hook.js"], "statusMessage": "Recording prompt..." }] }
+    ],
+    "PreToolUse": [
+      { "matcher": "PowerShell", "hooks": [{ "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/tool-wrap-powershell.js"], "statusMessage": "Preparing tool monitoring..." }] }
     ],
     "PostToolUse": [
       { "hooks": [{ "type": "command", "command": "node", "args": ["${CLAUDE_PLUGIN_ROOT}/scripts/lifecycle-hook.js"], "statusMessage": "Recording tool call..." }] }
@@ -363,7 +373,8 @@ remaining lifecycle events, and `send-logs-hook.js` + `post-turn-analysis-hook.j
 `prompt-upload-hook.js`, `otel-receiver.js`, `otel-register.js`, `otel-endpoint-check.js`, `otel-restart.js`, `session-files.js`,
 `throttle-state.js`, `claude-invoke-async.js`, `skill-catalog.js`, `harness-snapshot.js`, `post-turn-analysis-worker.js`,
 `session-attribution-state.js`, `process-marker.js`, `harness-state.js`, `okf-snapshot.js`, `okf-state.js`, `ndjson-sanitize.js`, `code-inventory.js`,
-`edit-result-counts.js`, `claude-config-dir.js` and `project-root-override.js` are **not** wired to any event — they are detached child processes / shared modules
+`edit-result-counts.js`, `claude-config-dir.js`, `project-root-override.js`, `tool-wrap-names.js`, `tool-wrap-config.js`,
+`tool-wrap-shims.js`, `tool-wrap-tee.js` and `tool-wrap-records.js` are **not** wired to any event — they are detached child processes / shared modules
 launched by the hooks above, so they never appear in `hooks.json`.
 
 `send-logs-hook.js` is wired to two events and behaves differently on each:
@@ -371,7 +382,19 @@ launched by the hooks above, so they never appear in `hooks.json`.
 | Event | Behaviour |
 |---|---|
 | `Stop` | The full run — scans every namespace across all sessions, honours `.claude-logs.sent`, injects context events, reports `hook-status`, prunes otel. Waits up to 2s for the shared upload lock, since it blocks the interactive turn. |
-| `SessionEnd` | A short, scoped flush of just the ending session's own `artisyn` + `claude` files. Waits up to 20s for the lock — it is the session's last trigger, so giving up strands those files until some other session happens to run a full scan. Writes no `.claude-logs.sent` entry. |
+| `SessionEnd` | A short, scoped flush of just the ending session's own `artisyn` + `claude` files (plus its `tool-calls` upload when the CLI tool wrapper recorded anything). Waits up to 20s for the lock — it is the session's last trigger, so giving up strands those files until some other session happens to run a full scan. Writes no `.claude-logs.sent` entry. |
+
+`tool-wrap-powershell.js` (hook `2.27.0`+) is the only `PreToolUse` entry, and only for the `PowerShell` tool. It is
+the PowerShell side of the CLI tool wrapper (Tools/MCP tab): the PowerShell tool does not read `$CLAUDE_ENV_FILE`, so
+the Bash shims `lifecycle-hook.js` puts on `PATH` at `SessionStart` do not reach it. When the command mentions a
+monitored tool as a command word, the hook answers with `hookSpecificOutput.updatedInput` — the same input with a
+one-line prefix that defines a PowerShell function per mentioned tool; the function runs the real tool, records the
+call under `.artisyn/ai_work_dir/tool-wrap/<session-id>/calls/` and re-emits its output and exit code unchanged
+(text-level). In every other case — no monitored tool mentioned, `LOGHUB_TOOL_WRAP=0`, `toolWrap: false`, monitoring
+paused in the UI, no cached config, a tripped breaker, or any error — it exits 0 with no output and the call runs
+untouched. It never returns a permission decision, so the normal permission flow applies to every call. The recorded
+calls are uploaded by `send-logs-hook.js` as log kind `tool-calls` (assembled by `tool-wrap-records.js`); a server
+older than this feature stores that upload as an inert log.
 
 `post-turn-analysis-hook.js` (hook `2.9.0`+) is the second script on `Stop`, alongside `send-logs-hook.js` —
 both run on every `Stop` event, independently of each other. It does no network I/O itself: it resolves
@@ -456,6 +479,8 @@ It is read from the hook process's environment (inherited from Claude Code), not
 | `sessionAttributionLlmModel` | `"haiku"` | string | Claude model used for the AI Session Attribution branch's `claude -p` call. |
 | `sessionAttributionLlmTimeoutMs` | `600000` | number | Timeout for the attribution branch's LLM call (10 min — same rationale as the advisor branch's timeout above); on timeout the run is recorded as `failed` and counts toward the 3-consecutive-failure cap. |
 | `okf` | `{"exclude": []}` | object | OKF knowledge-base snapshot settings (hook `2.26.0`+). `okf.exclude` is an array of repo-relative globs (`**`, `*`, `?`) whose files and folders are never scanned for OKF bundles (folders whose `index.md` front matter has an `okf_version:` key); `tmp/**` is always excluded on top of it. Like every top-level key, `log-hub.local.json`'s `okf` replaces `log-hub.json`'s whole object — the two `exclude` lists are not merged. A non-array `exclude` is ignored with one `[warn]` line. An older hook ignores the key. Example: `{"okf": {"exclude": ["vendor/**", "docs/archive/**"]}}`. |
+| `toolWrap` | `true` | boolean | CLI tool wrapper local kill switch (hook `2.27.0`+). `false` (or the environment variable `LOGHUB_TOOL_WRAP=0`) turns the wrapper off for this checkout: no shims are put on `PATH` at `SessionStart`, the `PreToolUse` PowerShell entry never rewrites a command and no `tool-calls` log is uploaded. The list of monitored tools itself is configured on the server, not here. An older hook ignores the key. |
+| `toolWrapConfigTimeoutMs` | `2000` | number | HTTP timeout for fetching the monitored-tools config from the server (hook `2.27.0`+); the once-a-minute refresh on each prompt caps it at 1000 ms. On timeout or any error the hook keeps its cached config (fail open — it never blocks a session). |
 
 **Removed guardrail keys:** `guardrailEnabled`, `guardrailBlockOutsideProject`, `guardrailProhibitedFiles`,
 `guardrailLlm*`, `guardrailBlockNetwork` and `guardrailMaxScriptSizeKb` belonged to the `PreToolUse` guardrail

@@ -1,13 +1,13 @@
 ---
 type: "Reference"
 title: "Repo-Local Packages (packages/)"
-description: "The packages/ folder convention for TypeScript code shared by server and client (@loghub/pricing, @loghub/bash-view): how the server consumes it (file: link, Node 24 type stripping, jest transform, ncc), how the client consumes it (Vite/tsconfig alias), Docker, the rules a package must follow (including structural types for parser-backed packages), and how to add one."
+description: "The packages/ folder convention for TypeScript code shared by server and client (@loghub/pricing, @loghub/bash-view, @loghub/tool-monitor): how the server consumes it (file: link, Node 24 type stripping, jest transform, ncc), how the client consumes it (Vite/tsconfig alias), Docker, the rules a package must follow (including structural types for parser-backed packages), and how to add one."
 tags:
   - server
   - client
   - build
   - pricing
-timestamp: "2026-10-26T12:00:00+04:00"
+timestamp: "2026-10-28T00:00:00+04:00"
 ---
 
 # Repo-Local Packages (`packages/`)
@@ -20,6 +20,7 @@ their `.ts` sources directly.
 |---|---|---|
 | `@loghub/pricing` (`packages/pricing/`) | The LLM cost formula (`src/cost.ts`: `computeCostBreakdown`, `pickCallRates`, `FAST_MODE_MULTIPLIER`, …) and pricing-tier validation (`src/tiers.ts`: `validatePricingTiers`, `normalizeTiers`, `MAX_*`, `PricingTier`, …) | [packages/pricing/README.md](../../packages/pricing/README.md), [algorithms/cost-formula.md](algorithms/cost-formula.md) |
 | `@loghub/bash-view` (`packages/bash-view/`) | Bash command analysis and display shared by the client Bash view and the server OKF access extraction: `analyzeBash` (changes / reads / runs, `readAccess` kinds), `buildBashView`, `formatBash`, `highlightBash`, `toRepoRelative`, and the structural parser types of `src/syntax.ts` (`BashParser`, `BashSyntaxNode`, `BashSyntaxTree`, `withTree`). Each side brings its own `tree-sitter-bash` loader: client `client/src/viewer/lib/bash-view/bash-parser.ts` + `browser-parser.ts`, server `server/src/logs/okf/server-bash-parser.ts` | [packages/bash-view/README.md](../../packages/bash-view/README.md), [algorithms/bash-command-view.md](algorithms/bash-command-view.md), [algorithms/okf-access-extraction.md](algorithms/okf-access-extraction.md) |
+| `@loghub/tool-monitor` (`packages/tool-monitor/`) | CLI tool monitoring rules: `TOOL_DENYLIST` (name + role), `validateToolName`, `normalizeToolName`, `denylistRole` and the constants `TOOL_NAME_MAX`, `CAPTURE_LIMIT_BYTES`, `STDIN_CAPTURE_LIMIT_BYTES`, `MAX_MONITORED_TOOLS`. The hook's plain-JS copy is `hook/.claude/telemetry_tool/tool-wrap-names.js` | [packages/tool-monitor/README.md](../../packages/tool-monitor/README.md), [algorithms/tool-monitor-name-validation.md](algorithms/tool-monitor-name-validation.md) |
 
 The hook (`hook/`) does **not** use packages: it is plain CommonJS installed into user repos, so it
 keeps its own copies (e.g. `computeLocalSessionCost`), held to the same algorithm doc tables.

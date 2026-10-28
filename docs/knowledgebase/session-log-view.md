@@ -5,7 +5,7 @@ description: "Session log view (Logs tab): component architecture, log parser, t
 tags:
   - client
   - logs
-timestamp: "2026-10-22T00:00:00+04:00"
+timestamp: "2026-10-28T00:00:00+04:00"
 ---
 
 # Session Log View
@@ -49,6 +49,28 @@ Key files live in `client/src/viewer/pages/repository/session-log/`:
 | `SessionInfoMcpSection.tsx` | Info tab — MCP Usage section |
 | `SessionInfoVisionSection.tsx` | Info tab — Vision/image usage section |
 | `call-tree/` | Supporting types and hooks for the call tree |
+| `turn-anchor.ts` | `resolveTurnAnchor(visibleTurns, targetIndex)` — the DOM-free scroll target of the cross-tab scroll-to-turn effect |
+| `tool-use-turn.ts` | `findTurnIndexForToolUse(turns, toolUseId, subagentLogs, agentParentMap)` — the root turn holding a `tool_use` id; see [Deep links into the Logs tab](#deep-links-into-the-logs-tab) |
+
+### Deep links into the Logs tab
+
+The Logs tab can be opened scrolled to one turn. Two sources feed the same transient target-turn
+state, which `SessionDetailPane.tsx` owns (`targetTurnIndex`, `onGoToTurn`) and `SessionLogView`
+consumes once (scroll via `resolveTurnAnchor`, then `onTargetTurnConsumed`, so a later manual visit
+does not re-scroll):
+
+- **Summary tab** findings and per-prompt cost rows call `onGoToTurn(turnIndex)` and switch to Logs.
+- **Tools/MCP "Open in session"** (DD-19, [tool-monitoring.md](tool-monitoring.md)) links to
+  `#/repos/:repoId?session=<rootSessionId>&tab=logs&tu=<toolUseId>` (the team route
+  `#/teams/:teamId/repos/:repoId?…` in a team view).
+  `useRepositoryViewState.ts` reads the `tu` param (`targetToolUseId`) and passes it through
+  `RepositorySessionsPanel` → `SessionDetailPane` → `SessionLogView`. Once the session is parsed,
+  `findTurnIndexForToolUse` resolves the turn: the root turn's own calls, then its sub-agent tree
+  (any depth), then the sub-agent logs the turn model did not attach, walked up `agentParentMap` to an
+  agent some turn activated. A found turn goes to the target-turn state; either way the param is
+  dropped right after (`clearTargetToolUse`, `replace: true`), so a reload or a later tab switch does
+  not re-scroll. An unknown id just opens the Logs tab at the top. An `indirect` wrapper call without
+  a `toolUseId` links to the session without `tu`.
 
 ---
 
@@ -257,8 +279,11 @@ Research (2026-10-21, Claude Code on Windows), kept for the case the decision is
   the parent session id of a separately launched CLI process.
 - Non-`CLAUDE_*` environment variables **are** inherited. A parent `SessionStart` hook that appends
   `export SOME_VAR=<session_id>` to `$CLAUDE_ENV_FILE` makes the variable visible to the parent's Bash
-  tool, and the nested `claude -p`'s hooks read it (verified end to end). Untested: whether the PowerShell
-  tool applies `CLAUDE_ENV_FILE` (a `.sh` file), and the link would point at the root session, not the
+  tool, and the nested `claude -p`'s hooks read it (verified end to end). The PowerShell tool does
+  **not** read `CLAUDE_ENV_FILE` (a `.sh` file; confirmed while building the CLI tool wrapper, which
+  for that reason wraps PowerShell through a `PreToolUse` `updatedInput` hook instead of the PATH
+  export — see [tool-monitoring.md](tool-monitoring.md)), so a variable set this way never reaches a
+  `claude -p` launched from PowerShell. Also, the link would point at the root session, not the
   workflow agent that ran the command.
 - Alternatives considered: walking the OS process tree to the parent `claude` process (per-OS code,
   PID reuse), and a time-window heuristic in the UI (wrong when several sessions run in parallel in

@@ -362,7 +362,12 @@ interface ToolResultRecord {
  */
 const MAX_RESULT_TEXT_SCAN = 200;
 
-function flattenToolResultText(content: unknown): string {
+/**
+ * The first `MAX_RESULT_TEXT_SCAN` characters of a `tool_result`'s text (string content, or the
+ * concatenated `text` blocks), for rejection detection. Also used by the tool-monitoring MCP
+ * extractor for the same purpose.
+ */
+export function flattenToolResultText(content: unknown): string {
   if (typeof content === 'string')
     return content.slice(0, MAX_RESULT_TEXT_SCAN);
   const blocks = asArray(content);
@@ -1388,7 +1393,11 @@ export function extractFileStatsByCategory(
   return result;
 }
 
-function computeToolResultBytes(content: unknown): number {
+/**
+ * Length (UTF-16 code units) of a `tool_result`'s text: string content, or the summed `text`
+ * blocks; other blocks count 0. Also used by the tool-monitoring MCP extractor.
+ */
+export function computeToolResultBytes(content: unknown): number {
   if (typeof content === 'string') return content.length;
   const blocks = asArray(content);
   if (blocks === null) return 0;

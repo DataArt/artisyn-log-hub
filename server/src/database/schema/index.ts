@@ -12,6 +12,7 @@ import {
   pgTable,
   primaryKey,
   serial,
+  smallint,
   text,
   timestamp,
   unique,
@@ -153,6 +154,10 @@ export const sessions = pgTable(
     // snapshot ref binds it (bound only while NULL: never overwritten afterwards, DD-21).
     // Sub-agent nodes stay NULL and resolve their root's value.
     okfSnapshotId: varchar('okf_snapshot_id', { length: 64 }),
+    // Migration 0076: tool-usage rebuild marker (DD-7). NULL = the node's `session_tool_usage`
+    // rows are pending a rebuild by the background drain; otherwise the
+    // `TOOL_USAGE_EXTRACTOR_VERSION` they were built with.
+    toolUsageVersion: smallint('tool_usage_version'),
   },
   (table) => [
     index('sessions_parent_session_id_idx').on(table.parentSessionId),
@@ -165,6 +170,14 @@ export const sessions = pgTable(
     // OKF read path (session/repo OKF tabs) and the okf_snapshots orphan sweep look up
     // sessions by this column.
     index('sessions_okf_snapshot_id_idx').on(table.okfSnapshotId),
+    // The drain's claim query: pending, non-deleted sessions (migration 0076).
+    index('idx_sessions_tool_usage_pending')
+      .on(table.id)
+      .where(sql`${table.toolUsageVersion} IS NULL AND NOT ${table.deleted}`),
+    // The startup re-queue `WHERE tool_usage_version < $1` in initializeDatabase() (migration 0077).
+    index('idx_sessions_tool_usage_version')
+      .on(table.toolUsageVersion)
+      .where(sql`${table.toolUsageVersion} IS NOT NULL`),
   ],
 );
 
@@ -261,6 +274,9 @@ export const repositories = pgTable(
     // per-tool `tools/list` probe capability. NULL = never reported
     // by a capable hook; true/false = last capable hook's report.
     harnessMcpPerToolSupported: boolean('harness_mcp_per_tool_supported'),
+    // Migration 0076: the last tool-wrapper status the hook reported for this repository row,
+    // written by the tool-usage rebuild (DD-20, last `reportedAt` wins). NULL = never reported.
+    toolWrapStatus: jsonb('tool_wrap_status').$type<ToolWrapStatusJson>(),
   },
   (table) => [
     unique('repositories_user_id_repo_url_unique').on(
@@ -1212,6 +1228,120 @@ export interface SessionAttributionAttributeDef {
   prompt: string;
 }
 
+// ── Tools/MCP monitoring jsonb types (migration 0076) ──────────────────────────────────────
+
+/** How much a monitored CLI tool's wrapper captures: text + records, or records only (DD-13). */
+export type ToolMonitorCapture = 'full' | 'meta';
+
+/**
+ * The monitored CLI tool list of one level (DD-1), stored in `repo_tool_monitor_config.config`
+ * (personal) and `team_repo_tool_monitor_config.config` (team). Kept out of `RepoConfigJson` so
+ * the settings PUTs, which replace that whole blob, never drop it.
+ */
+export interface ToolMonitorConfigJson {
+  paused: boolean;
+  tools: { name: string; enabled: boolean; capture: ToolMonitorCapture }[];
+}
+
+export type ToolUsageChannel = 'mcp' | 'cli';
+
+/** Per-operation totals of one `session_tool_usage` row (DD-11). */
+export interface ToolUsageOperationAggregate {
+  calls: number;
+  errors: number;
+  killed: number;
+  noResult: number;
+  empty: number;
+  retried: number;
+  fellBack: number;
+  openedFile: number;
+  durationMsSum: number;
+  durationCount: number;
+  inBytesSum: number;
+  outBytesSum: number;
+  /** ISO timestamp of the operation's latest call, or null when none has a timestamp. */
+  lastTs: string | null;
+}
+
+/** `session_tool_usage.aggregates` (DD-11). */
+export interface ToolUsageAggregates {
+  operations: Record<string, ToolUsageOperationAggregate>;
+}
+
+export type ToolCallStatus = 'ok' | 'error' | 'killed' | 'no_result';
+export type ToolCallHint =
+  | 'cut'
+  | 'empty'
+  | 'truncated'
+  | 'no_wrapper'
+  | 'indirect'
+  | 'persisted';
+export type ToolCallSource = 'transcript' | 'wrapper' | 'both';
+export type ToolCallAgentKind = 'root' | 'subagent' | 'workflow';
+export type ToolCallSignal = 'empty' | 'retried' | 'fell_back' | 'opened_file';
+export type ToolCallShell = 'bash' | 'powershell';
+
+/**
+ * One call's metadata in `session_tool_usage.calls` (DD-10) — no output text, at most an
+ * `INPUT_PREVIEW_CHARS` preview. `toolUseId` is null only for an `indirect` CLI call.
+ */
+export interface ToolCallRecord {
+  callId: string;
+  channel: ToolUsageChannel;
+  tool: string;
+  operation: string;
+  /** ISO timestamp of the call start. */
+  ts: string;
+  durationMs: number | null;
+  status: ToolCallStatus;
+  hints: ToolCallHint[];
+  source: ToolCallSource;
+  shell: ToolCallShell | null;
+  exitCode: number | null;
+  inBytes: number;
+  outBytes: number;
+  agentSawBytes: number | null;
+  toolUseId: string | null;
+  agentId: string | null;
+  agentKind: ToolCallAgentKind;
+  inputPreview: string;
+  real: string | null;
+  cwd: string | null;
+  args: string[] | null;
+  signals: ToolCallSignal[];
+}
+
+/** One call's captured text in `session_tool_usage.outputs` (DD-9). */
+export interface ToolCallOutput {
+  input?: string;
+  stdin?: string;
+  stdout?: string;
+  stderr?: string;
+  agentSaw?: string;
+  encoding: 'utf8' | 'base64';
+}
+
+/** `session_tool_usage.outputs`: captured text keyed by `callId` (DD-9). */
+export type ToolCallOutputs = Record<string, ToolCallOutput>;
+
+/**
+ * `repositories.tool_wrap_status` (DD-20): the hook's last reported wrapper status for that
+ * repository row (last `reportedAt` wins) plus the latest wrapper record time per tool.
+ */
+export interface ToolWrapStatusJson {
+  hookVersion: string | null;
+  os: string | null;
+  preflight: {
+    ok: boolean;
+    reason: string | null;
+    shells?: { bash: boolean; powershell: boolean };
+  };
+  breaker: { global: boolean; tools: string[] };
+  /** ISO timestamp of the reported `tool_wrap_status` line (`at`). */
+  reportedAt: string;
+  tools: Record<string, { lastWrapperAt: string | null }>;
+}
+
 // Personal repo config only — one row per (repo_id, user_id). The team config lives in
 // `teamRepoConfig`, keyed by the team-repository link (migration 0072 dropped `team_id`).
 // The partial unique index on (repo_id, user_id) is defined in SQL migration only — Drizzle
@@ -1246,6 +1376,67 @@ export const teamRepoConfig = pgTable('team_repo_config', {
     .notNull()
     .defaultNow(),
 });
+
+// Personal monitored-tools config of a repository row (DD-1, migration 0076). A `repositories`
+// row is already per user, so `repo_id` alone is the key.
+export const repoToolMonitorConfig = pgTable('repo_tool_monitor_config', {
+  repoId: integer('repo_id')
+    .primaryKey()
+    .references(() => repositories.id, { onDelete: 'cascade' }),
+  config: jsonb('config').$type<ToolMonitorConfigJson>().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
+// Team monitored-tools config of a (team, repoUrl) link (DD-1, migration 0076); the FK cascade
+// removes it with the `team_repositories` link, like `teamRepoConfig`.
+export const teamRepoToolMonitorConfig = pgTable(
+  'team_repo_tool_monitor_config',
+  {
+    teamRepositoryId: integer('team_repository_id')
+      .primaryKey()
+      .references(() => teamRepositories.id, { onDelete: 'cascade' }),
+    config: jsonb('config').$type<ToolMonitorConfigJson>().notNull(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+);
+
+// Derived MCP / CLI tool usage per tree node (sessions row), one row per (channel, tool)
+// (migration 0076). Rebuilt delete-then-insert per session tree by the background drain (DD-7,
+// DD-8). `aggregates`, `calls` and `outputs` are separate jsonb columns so the summary, which
+// names only `aggregates`, never detoasts the other two (DD-9). The CHECK on `channel`
+// ('mcp' | 'cli') is defined in the SQL migration only. The UNIQUE index's leading session_id
+// serves the per-node delete and the tree read, so there is no separate session_id index.
+export const sessionToolUsage = pgTable(
+  'session_tool_usage',
+  {
+    id: serial('id').primaryKey(),
+    sessionId: integer('session_id')
+      .notNull()
+      .references(() => sessions.id, { onDelete: 'cascade' }),
+    channel: varchar('channel', { length: 8 })
+      .$type<ToolUsageChannel>()
+      .notNull(),
+    tool: text('tool').notNull(),
+    callCount: integer('call_count').notNull().default(0),
+    firstCallAt: timestamp('first_call_at', { withTimezone: true }),
+    lastCallAt: timestamp('last_call_at', { withTimezone: true }),
+    hasWrapperData: boolean('has_wrapper_data').notNull().default(false),
+    aggregates: jsonb('aggregates').$type<ToolUsageAggregates>().notNull(),
+    calls: jsonb('calls').$type<ToolCallRecord[]>().notNull(),
+    outputs: jsonb('outputs').$type<ToolCallOutputs>(),
+  },
+  (table) => [
+    unique('session_tool_usage_session_channel_tool_key').on(
+      table.sessionId,
+      table.channel,
+      table.tool,
+    ),
+  ],
+);
 
 export const userFavoriteSessions = pgTable(
   'user_favorite_sessions',

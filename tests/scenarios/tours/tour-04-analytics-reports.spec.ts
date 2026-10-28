@@ -1,7 +1,7 @@
 // Tour 4 — repository owner: every Analytics view and every report on REPO-GOLD (impl-plan DD G5;
 // docs/qaa-overview/scenarios/06-ui-tab-walk.md §2.3 story 4, §1.7, §1.8; checks per screen §2.2).
 //
-// The longest story (31 screens: 13 views, 17 reports and the repo OKF tab), kept apart from
+// The longest story (32 screens: 13 views, 17 reports, the repo Tools/MCP tab and the repo OKF tab), kept apart from
 // tour 3 so a broken report does not mix with the settings walk. Analytics views are switched through the view Select, reports through the report
 // tree, both as a person does; the range is the golden two weeks (A..A+13d) of the loaded copy.
 // The horizontal layout is checked once, on the Cost view (06 §1.7).
@@ -96,6 +96,15 @@ test('@TOUR-04 owner: analytics & reports tour @mode-a', async ({ stand, api, db
       },
     });
   }
+
+  // The repo Tools/MCP tab (2026-06-19-mcp-invocation-log-tab), by deep link with the golden range.
+  await walker.screen(page, 'repo.tools', {
+    check: async () => {
+      await expect(page).toHaveURL(/mtab=tools(&|$)/);
+      await expect(page.getByTestId('tools-top-bar')).toBeVisible();
+      await expect(page.getByTestId('tools-panes').or(page.getByTestId('tools-empty'))).toBeVisible({ timeout: 20_000 });
+    },
+  });
 
   // The repo OKF tab (2026-10-27-okf-usage-tab), by deep link with the golden range.
   await walker.screen(page, 'repo.okf', {

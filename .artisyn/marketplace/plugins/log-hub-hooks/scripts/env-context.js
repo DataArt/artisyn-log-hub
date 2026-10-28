@@ -43,6 +43,12 @@ const READ_RETRY_DELAY_MS = 50;
 // | sessionAttributionLlmModel       | 'haiku'   | string   |
 // | sessionAttributionLlmTimeoutMs   | 600000    | number   |
 // | okf                              | {exclude:[]} | object |
+// | toolWrap                         | true      | boolean  |
+// | toolWrapConfigTimeoutMs          | 2000      | number   |
+//
+// `toolWrap` / `toolWrapConfigTimeoutMs` (hook 2.27.0+) gate the CLI tool wrapper
+// (`tool-wrap-config.js`): `toolWrap: false` is a local kill switch (as is env
+// `LOGHUB_TOOL_WRAP=0`), and the timeout bounds the monitored-tools config fetch.
 //
 // `okf` (hook 2.26.0+) configures the OKF knowledge-base snapshot (`okf-snapshot.js`):
 // `okf.exclude` is a list of repo-relative globs (`**`, `*`, `?`) whose files/folders are never
@@ -90,6 +96,8 @@ const CONFIG_DEFAULTS = {
   sessionAttributionLlmModel: 'haiku',
   sessionAttributionLlmTimeoutMs: 600000,
   okf: { exclude: [] },
+  toolWrap: true,
+  toolWrapConfigTimeoutMs: 2000,
 };
 
 const CONFIG_TYPES = {
@@ -113,6 +121,8 @@ const CONFIG_TYPES = {
   sessionAttributionLlmModel: 'string',
   sessionAttributionLlmTimeoutMs: 'number',
   okf: 'object',
+  toolWrap: 'boolean',
+  toolWrapConfigTimeoutMs: 'number',
 };
 
 function matchesType(value, type) {

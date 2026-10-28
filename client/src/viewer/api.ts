@@ -52,6 +52,16 @@ import type {
   OpenRouterImportResult,
 } from '../models/pricing';
 import type { AiToolVersionsResponse } from '../models/ai-tool-versions';
+import type {
+  ToolCallDetailResponse,
+  ToolCallsPageResponse,
+  ToolCallStatus,
+  ToolMonitorConfigBody,
+  ToolMonitorConfigError,
+  ToolMonitorConfigView,
+  ToolUsageChannel,
+  ToolUsageSummaryResponse,
+} from '../models/tool-monitoring';
 import type { HarnessUsageReportData } from '../models/harness-usage';
 import type {
   AdminRepo,
@@ -848,6 +858,151 @@ export async function fetchRepoOkfUsage(
   );
   if (!res.ok) throw new ApiError(res.status);
   return res.json() as Promise<RepoOkfUsageResponse>;
+}
+
+// --- Tools/MCP monitoring --------------------------------------------------------
+
+function toolMonitoringUrl(
+  repoId: number,
+  path: string,
+  query: URLSearchParams,
+): string {
+  const qs = query.toString();
+  const base = `/api/v1/repositories/${repoId}/tool-monitoring/${path}`;
+  return qs ? `${base}?${qs}` : base;
+}
+
+function teamQuery(teamId?: number): URLSearchParams {
+  const q = new URLSearchParams();
+  if (teamId != null) q.set('teamId', String(teamId));
+  return q;
+}
+
+/**
+ * A rejected config save. `field` (e.g. `tools[2].name`) and `code` (a `validateToolName` code,
+ * or `invalid` / `too_many` / `duplicate`) come from the server's 400 body; both are undefined
+ * for other statuses.
+ */
+export class ToolMonitorConfigSaveError extends ApiError {
+  field?: string;
+  constructor(statusCode: number, body: Partial<ToolMonitorConfigError>) {
+    super(statusCode, body.message ?? '', body.code);
+    this.field = body.field;
+  }
+}
+
+/** The Monitored tools config of the caller's level: personal, or the team's with `teamId`. */
+export async function fetchToolMonitoringConfig(
+  repoId: number,
+  teamId?: number,
+): Promise<ToolMonitorConfigView> {
+  const res = await apiFetch(
+    toolMonitoringUrl(repoId, 'config', teamQuery(teamId)),
+  );
+  if (!res.ok) throw new ApiError(res.status);
+  return res.json() as Promise<ToolMonitorConfigView>;
+}
+
+/** Replaces the level's whole tool list; throws {@link ToolMonitorConfigSaveError}. */
+export async function saveToolMonitoringConfig(
+  repoId: number,
+  body: ToolMonitorConfigBody,
+  teamId?: number,
+): Promise<ToolMonitorConfigView> {
+  const res = await apiFetch(
+    toolMonitoringUrl(repoId, 'config', teamQuery(teamId)),
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    },
+  );
+  if (!res.ok) {
+    const err = (await res
+      .json()
+      .catch(() => ({}))) as Partial<ToolMonitorConfigError>;
+    throw new ToolMonitorConfigSaveError(res.status, err);
+  }
+  return res.json() as Promise<ToolMonitorConfigView>;
+}
+
+export interface ToolRangeQueryParams {
+  teamId?: number;
+  /**
+   * ISO date or date-time; absent means the server default (last 30 days, or the whole session
+   * when `sessionId` is set).
+   */
+  from?: string;
+  to?: string;
+  /** A root session id: only that session tree's calls (the session's Tools/MCP tab). */
+  sessionId?: string;
+}
+
+function setToolRangeParams(q: URLSearchParams, params: ToolRangeQueryParams) {
+  if (params.from) q.set('from', params.from);
+  if (params.to) q.set('to', params.to);
+  if (params.sessionId) q.set('sessionId', params.sessionId);
+}
+
+/** The tools tree figures for a date range and scope (status / search do not apply). */
+export async function fetchToolSummary(
+  repoId: number,
+  params: ToolRangeQueryParams,
+): Promise<ToolUsageSummaryResponse> {
+  const q = teamQuery(params.teamId);
+  setToolRangeParams(q, params);
+  const res = await apiFetch(toolMonitoringUrl(repoId, 'summary', q));
+  if (!res.ok) throw new ApiError(res.status);
+  return res.json() as Promise<ToolUsageSummaryResponse>;
+}
+
+export interface ToolCallsQueryParams extends ToolRangeQueryParams {
+  channel?: ToolUsageChannel;
+  tool?: string;
+  operation?: string;
+  status?: ToolCallStatus;
+  /** Server-side search, at most 200 chars. */
+  q?: string;
+  /** 1-based. */
+  page?: number;
+  pageSize?: number;
+}
+
+/** One page of the calls table, newest first. */
+export async function fetchToolCalls(
+  repoId: number,
+  params: ToolCallsQueryParams,
+): Promise<ToolCallsPageResponse> {
+  const q = teamQuery(params.teamId);
+  setToolRangeParams(q, params);
+  if (params.channel) q.set('channel', params.channel);
+  if (params.tool) q.set('tool', params.tool);
+  if (params.operation) q.set('operation', params.operation);
+  if (params.status) q.set('status', params.status);
+  if (params.q) q.set('q', params.q);
+  if (params.page != null) q.set('page', String(params.page));
+  if (params.pageSize != null) q.set('pageSize', String(params.pageSize));
+  const res = await apiFetch(toolMonitoringUrl(repoId, 'calls', q));
+  if (!res.ok) throw new ApiError(res.status);
+  return res.json() as Promise<ToolCallsPageResponse>;
+}
+
+/** One call with its captured text and the deep link into its session. */
+export async function fetchToolCallDetail(
+  repoId: number,
+  usageId: number,
+  callId: string,
+  teamId?: number,
+): Promise<ToolCallDetailResponse> {
+  const res = await apiFetch(
+    toolMonitoringUrl(
+      repoId,
+      `calls/${usageId}/${encodeURIComponent(callId)}`,
+      teamQuery(teamId),
+    ),
+  );
+  if (!res.ok) throw new ApiError(res.status);
+  return res.json() as Promise<ToolCallDetailResponse>;
 }
 
 export interface AttributionBreakdownQueryParams {

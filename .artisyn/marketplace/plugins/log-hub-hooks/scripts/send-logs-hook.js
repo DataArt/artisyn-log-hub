@@ -828,7 +828,8 @@ function formatUploadResultLine(manifestKey, result) {
 }
 
 /**
- * The `SessionEnd` flush — upload just this session's own `artisyn` and `claude` files.
+ * The `SessionEnd` flush — upload just this session's own `artisyn` and `claude` files, plus its
+ * `tool-calls` upload when the CLI tool wrapper recorded anything (`collectScopedFiles`).
  *
  * Deliberately *not* the full `runUpload()` scan: this fires as the session is tearing down, so it
  * must stay short and bounded. The full multi-session scan, manifest bookkeeping, context-injection
@@ -1088,6 +1089,45 @@ async function runUpload(cwd, hookSessionId, serverUrl, apiKey, timeoutMs, telem
         isCurrentSession: hookSessionId !== null && sessionId === hookSessionId,
       });
     }
+  }
+
+  // -------------------------------------------------------------------------
+  // §2.4 CLI tool-wrap call records (`tool-calls`)
+  // -------------------------------------------------------------------------
+  // <workDir>/tool-wrap/<sessionId>/ holds the per-call files the CLI tool wrapper wrote
+  // (tool-wrap-records.js). Each session is assembled into one NDJSON file and uploaded as log kind
+  // `tool-calls`; the server keeps one such log per session, so every upload re-sends the whole set.
+  // The manifest "size" of `tool-calls/<sessionId>` is a fingerprint of the source files, so an
+  // unchanged session is skipped without being assembled again. An old server stores the upload as
+  // an inert generic log. Fail-open: a failure here never affects the other namespaces.
+  try {
+    const toolWrapRecords = require('./tool-wrap-records');
+    const twWorkDir = getWorkDirPath(cwd);
+    const twSessions = toolWrapRecords.listToolWrapSessionsChecked(twWorkDir);
+    if (twSessions !== null) {
+      prunableNamespaces.add('tool-calls');
+      for (const sessionId of twSessions) {
+        const size = toolWrapRecords.toolCallsSourceSize(twWorkDir, sessionId);
+        if (size === 0) continue;
+        const manifestKey = `tool-calls/${sessionId}`;
+        const filePath = manifest.get(manifestKey) === size
+          ? toolWrapRecords.uploadFilePath(twWorkDir, sessionId)
+          : toolWrapRecords.assembleToolCallsUpload(twWorkDir, sessionId);
+        if (!filePath) continue;
+        filesToProcess.push({
+          namespace: 'tool-calls',
+          sessionId,
+          filePath,
+          size,
+          manifestKey,
+          isCurrentSession: hookSessionId !== null && sessionId === hookSessionId,
+        });
+      }
+      toolWrapRecords.pruneUploadFiles(twWorkDir);
+    }
+  } catch (err) {
+    hookLog(HOOK_FILE, hookSessionId, 'warn',
+      `tool-calls: collection skipped (${err && err.message ? err.message : String(err)})`, cwd);
   }
 
   // -------------------------------------------------------------------------

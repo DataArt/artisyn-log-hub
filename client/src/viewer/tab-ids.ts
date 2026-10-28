@@ -30,6 +30,8 @@ export const SESSION_TABS = [
   'harness-usage',
   // How the session tree read the repo's OKF knowledge bases.
   'okf',
+  // This session tree's MCP and monitored CLI tool calls: the repo Tools/MCP tab, one session.
+  'tools',
 ] as const;
 
 /** Repository view main tabs, mirrored into the `mtab` URL param (group `repo`). */
@@ -37,6 +39,8 @@ export const REPO_MAIN_TABS = [
   'sessions',
   'analytics',
   'reports',
+  // Monitored CLI tools and MCP servers: calls, outputs and usefulness signals.
+  'tools',
   // How the repo's OKF knowledge bases were read over a period.
   'okf',
   'settings',

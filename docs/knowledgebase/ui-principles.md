@@ -5,7 +5,7 @@ description: "Access control messaging, error handling, color scheme (light-only
 tags:
   - client
   - ui
-timestamp: "2026-07-20T22:24:25+04:00"
+timestamp: "2026-10-28T00:00:00+04:00"
 ---
 
 if user tryies to access to something that he does not have acceess to - show "No access"
@@ -18,6 +18,15 @@ all english only
 Always use the **light** color scheme. All UI components, modals, panels, and wireframes must use a light background palette. Do not implement or reference dark-mode variants unless explicitly requested.
 
 **Exception — hook log tail (dark surface):** `HookStatePage`'s "Hook log" card (`client/src/viewer/pages/hook-state/HookStatePage.tsx`) renders the raw `hook.log` tail in a fixed dark `<pre>` block (`bg-slate-900`/`#0f172a`, monospace, light text) regardless of the app's light-only color scheme. This matches the existing pattern of rendering raw/terminal-style content and is an intentional, deliberate exception — not a general invitation to add dark-mode variants elsewhere.
+
+**Terminal output stays on the light surface (not an exception).** Captured CLI output with ANSI
+colours — the Tools/MCP details pane (`client/src/viewer/pages/repository/tools/ToolOutputView.tsx`,
+`ansi-render.tsx`) — renders in a white monospace `<pre>`, not a dark terminal. Only SGR foreground
+colours (30–37 / 90–97), bold and the resets are kept, mapped to `-700` / `-600` Tailwind text shades
+(ANSI white → `gray-500` / `gray-400`, so it stays readable on white); backgrounds, cursor moves and
+every other escape sequence are stripped. Reuse `ansi-render.tsx` for any future terminal-output view
+instead of adding a dark block. Lines the agent actually received are marked with an amber left bar
+(`border-l-amber-400 bg-amber-50/60`), not with a different background colour for the rest.
 
 if API call fails due to access error - got to login page
 
@@ -59,6 +68,10 @@ Two rules that follow from the same reasoning:
 - **An undefined value is not zero.** A zero denominator renders as a short dashed `n/a` stub at the baseline (or, in Recharts, a `null` value so no bar is drawn) — never a 0 % bar, which reads as "very bad" rather than "no data".
 
 Current instance: the Cache Read Ratio views (`analytics/CacheRatioBarChart.tsx`, `analytics/HorizontalCacheRatioRows.tsx`, `reports/CacheReadRatioChart.tsx`). Apply the same treatment to any future bounded-ratio metric rather than reaching for `zoneColor()`.
+
+A bounded rate shown as a small chip uses **fixed thresholds**, not zones, for the same reason: the
+Tools/MCP tree's error % chip is grey below 5 %, amber below 15 %, red from 15 % (`ERROR_PCT_AMBER` /
+`ERROR_PCT_RED` in `tools/tools-constants.ts`, `errorPctClass` in `tools/tools-tree-model.ts`).
 
 ---
 
