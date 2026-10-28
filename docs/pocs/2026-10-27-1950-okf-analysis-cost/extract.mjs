@@ -46,9 +46,7 @@ export function toRepoPath(p, repoRoot) {
   const root = repoRoot.replace(/\\/g, '/').replace(/\/$/, '');
   if (s.toLowerCase().startsWith(root.toLowerCase() + '/')) s = s.slice(root.length + 1);
   else if (/^[a-zA-Z]:\//.test(s) || s.startsWith('/')) {
-    // Another checkout of the same repo (e.g. a linked worktree): cut at the checkout folder name.
-    const dir = path.posix.basename(root).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const m = s.match(new RegExp(`/${dir}(?:/\\.claude/worktrees/[^/]+)?/(.*)$`));
+    const m = s.match(/\/_repo(?:\/\.claude\/worktrees\/[^/]+)?\/(.*)$/);
     if (!m) return null;
     s = m[1];
   }
