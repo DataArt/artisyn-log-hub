@@ -570,183 +570,183 @@ No wireframe changes. The wireframe shows Tools/MCP between Reports and Settings
 | 18 | Scenario and tour updates | 7 | last |
 
 ### Chunk 1 — Shared package `@loghub/tool-monitor`
-- [ ] Create `packages/tool-monitor/` (`package.json` name `@loghub/tool-monitor`, `tsconfig.json`, `src/index.ts`), copying the `packages/pricing` setup; erasable TS syntax only.
-- [ ] In `src/index.ts`, export `TOOL_DENYLIST` (with role per entry for messages), `validateToolName()`, `normalizeToolName()` and the constants, all per DD-4.
-- [ ] Server wiring: add `"@loghub/tool-monitor": "file:../packages/tool-monitor"` to `server/package.json` and run `npm install` in `server/` (updates `package-lock.json`).
-- [ ] Client wiring: add the alias to `client/vite.config.ts` and to `client/tsconfig.json` (`paths` and `include`), as `@loghub/pricing` is wired.
-- [ ] Write `packages/tool-monitor/README.md` (purpose, the hook's plain-JS copy `tool-wrap-names.js` must stay in sync, tested by `tool-monitor-name-validation.md`). Add a row to the package table in `docs/knowledgebase/repo-local-packages.md`.
+- [x] Create `packages/tool-monitor/` (`package.json` name `@loghub/tool-monitor`, `tsconfig.json`, `src/index.ts`), copying the `packages/pricing` setup; erasable TS syntax only.
+- [x] In `src/index.ts`, export `TOOL_DENYLIST` (with role per entry for messages), `validateToolName()`, `normalizeToolName()` and the constants, all per DD-4.
+- [x] Server wiring: add `"@loghub/tool-monitor": "file:../packages/tool-monitor"` to `server/package.json` and run `npm install` in `server/` (updates `package-lock.json`).
+- [x] Client wiring: add the alias to `client/vite.config.ts` and to `client/tsconfig.json` (`paths` and `include`), as `@loghub/pricing` is wired.
+- [x] Write `packages/tool-monitor/README.md` (purpose, the hook's plain-JS copy `tool-wrap-names.js` must stay in sync, tested by `tool-monitor-name-validation.md`). Add a row to the package table in `docs/knowledgebase/repo-local-packages.md`.
 
 ### Chunk 2 — Schema and migration
-- [ ] Write `server/drizzle/migrations/0076_tool_monitoring.sql` exactly per Database changes, with a header comment (additive, lock profile, implicit backfill) styled like `0075_okf_usage.sql`.
-- [ ] Add the journal entry in `meta/_journal.json`, then run `npm run migrations:lock` from `server/`.
-- [ ] In `server/src/database/schema/index.ts`, add Drizzle mirrors `repoToolMonitorConfig`, `teamRepoToolMonitorConfig`, `sessionToolUsage`, plus the columns `sessions.toolUsageVersion` and `repositories.toolWrapStatus` (partial index mirrored with `.where`).
-- [ ] Add the jsonb types `ToolMonitorConfigJson` (DD-1), `ToolUsageAggregates` (DD-11), `ToolCallRecord` (DD-10), `ToolCallOutputs` (DD-9) and `ToolWrapStatusJson` (DD-20) next to `RepoConfigJson` in the schema file.
-- [ ] In `server/src/sessions/sessions.service.ts` `purgeSessionChildData`, add a step deleting `session_tool_usage` rows of the purged sessions next to step c2 (:196-200).
-- [ ] Create `server/src/logs/tool-monitoring/tool-usage.constants.ts` with the server constants of DD-22, including env-read interval and batch.
-- [ ] In `server/src/database/database-init.ts` `initializeDatabase()`, add a step that sets `sessions.tool_usage_version = NULL` where it is below `TOOL_USAGE_EXTRACTOR_VERSION`, per DD-7.
+- [x] Write `server/drizzle/migrations/0076_tool_monitoring.sql` exactly per Database changes, with a header comment (additive, lock profile, implicit backfill) styled like `0075_okf_usage.sql`.
+- [x] Add the journal entry in `meta/_journal.json`, then run `npm run migrations:lock` from `server/`.
+- [x] In `server/src/database/schema/index.ts`, add Drizzle mirrors `repoToolMonitorConfig`, `teamRepoToolMonitorConfig`, `sessionToolUsage`, plus the columns `sessions.toolUsageVersion` and `repositories.toolWrapStatus` (partial index mirrored with `.where`).
+- [x] Add the jsonb types `ToolMonitorConfigJson` (DD-1), `ToolUsageAggregates` (DD-11), `ToolCallRecord` (DD-10), `ToolCallOutputs` (DD-9) and `ToolWrapStatusJson` (DD-20) next to `RepoConfigJson` in the schema file.
+- [x] In `server/src/sessions/sessions.service.ts` `purgeSessionChildData`, add a step deleting `session_tool_usage` rows of the purged sessions next to step c2 (:196-200).
+- [x] Create `server/src/logs/tool-monitoring/tool-usage.constants.ts` with the server constants of DD-22, including env-read interval and batch.
+- [x] In `server/src/database/database-init.ts` `initializeDatabase()`, add a step that sets `sessions.tool_usage_version = NULL` where it is below `TOOL_USAGE_EXTRACTOR_VERSION`, per DD-7.
 
 ### Chunk 3 — Server config service
-- [ ] Create `server/src/logs/tool-monitoring/tool-monitor-config.service.ts` with `getLevelConfig(repoId, teamId?)` and `saveLevelConfig(user, repoId, teamId?, body)`, reading and upserting the two tables per DD-1.
-- [ ] Validate in `saveLevelConfig`: body shape, `MAX_MONITORED_TOOLS`, case-insensitive unique names and `validateToolName`; throw `BadRequestException({message, field, code})` per API changes. Team level requires `canEditTeamConfig` (else 403).
-- [ ] Implement `resolveMonitoredTools(userId, repoUrl)` per DD-2: owner's personal row, plus team rows joined through `team_repositories` and team membership on the normalized `repoUrl`.
-- [ ] Implement `markScopeStale(repoId, teamId?, toolNames)`, called from `saveLevelConfig` for newly added or enabled tools. It sets `tool_usage_version = NULL` on the scope sessions (personal: the owner's; team: the team members') of the repository URL, reusing the root selection in `server/src/logs/analytics/scoped-sessions.sql.ts`.
-- [ ] Create `tool-monitoring/tool-monitoring.types.ts` with all response DTOs exactly per API changes.
-- [ ] Implement `buildConfigView(user, repoId, teamId?)` returning the config GET DTO (levels per tool, `lastWrapperAt`, `hint` precedence, `wrapStatus`, `denylist`) per DD-20.
-- [ ] Register `ToolMonitorConfigService` as a provider in `server/src/logs/logs.module.ts` (DD-24).
+- [x] Create `server/src/logs/tool-monitoring/tool-monitor-config.service.ts` with `getLevelConfig(repoId, teamId?)` and `saveLevelConfig(user, repoId, teamId?, body)`, reading and upserting the two tables per DD-1.
+- [x] Validate in `saveLevelConfig`: body shape, `MAX_MONITORED_TOOLS`, case-insensitive unique names and `validateToolName`; throw `BadRequestException({message, field, code})` per API changes. Team level requires `canEditTeamConfig` (else 403).
+- [x] Implement `resolveMonitoredTools(userId, repoUrl)` per DD-2: owner's personal row, plus team rows joined through `team_repositories` and team membership on the normalized `repoUrl`.
+- [x] Implement `markScopeStale(repoId, teamId?, toolNames)`, called from `saveLevelConfig` for newly added or enabled tools. It sets `tool_usage_version = NULL` on the scope sessions (personal: the owner's; team: the team members') of the repository URL, reusing the root selection in `server/src/logs/analytics/scoped-sessions.sql.ts`.
+- [x] Create `tool-monitoring/tool-monitoring.types.ts` with all response DTOs exactly per API changes.
+- [x] Implement `buildConfigView(user, repoId, teamId?)` returning the config GET DTO (levels per tool, `lastWrapperAt`, `hint` precedence, `wrapStatus`, `denylist`) per DD-20.
+- [x] Register `ToolMonitorConfigService` as a provider in `server/src/logs/logs.module.ts` (DD-24).
 
 ### Chunk 4 — Server extractors
-- [ ] In `server/src/logs/claude-extractor.ts`, export the private `flattenToolResultText` (:365) and `computeToolResultBytes` (:1391) without changing their behaviour.
-- [ ] Create `tool-monitoring/mcp-call-extractor.ts`: `extractMcpCalls(entries, nodeMeta)` → DD-10 records plus outputs, per DD-12 MCP rules, reusing `classifyToolOutcome`, `resolveToolDuration`, `flattenToolResultText` and `computeToolResultBytes`.
-- [ ] Create `tool-monitoring/cli-command-recognition.ts`: `recognizeCliCalls(parser, command, shell, toolNames)` → `[{tool, operation, args}]`, per DD-12 (tree-sitter `command` node walk for Bash, tokenizer for PowerShell).
-- [ ] Create `tool-monitoring/tool-calls-log.ts`: `parseToolCallsLog(lines)` → `{ calls, status }` per DD-6, tolerant of unknown fields and malformed lines; decodes `base64` text; clamps text to `CAPTURE_LIMIT_BYTES`.
-- [ ] Create `tool-monitoring/wrapper-record-matching.ts`: `matchWrapperRecords(records, transcriptCliCalls)` → matched pairs, `indirect` records and transcript-only calls, with `cut` computed, per DD-12 matching rules.
-- [ ] Create `tool-monitoring/tool-call-signals.ts`: `computeSignals(orderedToolUsesPerAgent, index)` → DD-10 `signals` per DD-12 signal rules. Like the other files of this chunk, it imports no DB or Nest code.
+- [x] In `server/src/logs/claude-extractor.ts`, export the private `flattenToolResultText` (:365) and `computeToolResultBytes` (:1391) without changing their behaviour.
+- [x] Create `tool-monitoring/mcp-call-extractor.ts`: `extractMcpCalls(entries, nodeMeta)` → DD-10 records plus outputs, per DD-12 MCP rules, reusing `classifyToolOutcome`, `resolveToolDuration`, `flattenToolResultText` and `computeToolResultBytes`.
+- [x] Create `tool-monitoring/cli-command-recognition.ts`: `recognizeCliCalls(parser, command, shell, toolNames)` → `[{tool, operation, args}]`, per DD-12 (tree-sitter `command` node walk for Bash, tokenizer for PowerShell).
+- [x] Create `tool-monitoring/tool-calls-log.ts`: `parseToolCallsLog(lines)` → `{ calls, status }` per DD-6, tolerant of unknown fields and malformed lines; decodes `base64` text; clamps text to `CAPTURE_LIMIT_BYTES`.
+- [x] Create `tool-monitoring/wrapper-record-matching.ts`: `matchWrapperRecords(records, transcriptCliCalls)` → matched pairs, `indirect` records and transcript-only calls, with `cut` computed, per DD-12 matching rules.
+- [x] Create `tool-monitoring/tool-call-signals.ts`: `computeSignals(orderedToolUsesPerAgent, index)` → DD-10 `signals` per DD-12 signal rules. Like the other files of this chunk, it imports no DB or Nest code.
 
 ### Chunk 5 — Server builder, writer and rebuild drain
-- [ ] Create `tool-monitoring/tool-usage-builder.ts`: `buildTreeToolUsage(nodes, toolCallsLog, monitored)` → rows per DD-8, with `aggregates` (DD-11), `calls` (DD-10, sorted by `ts`), `outputs` (DD-9) and the scalar columns.
-- [ ] Create `tool-monitoring/tool-wrap-status.ts`: `writeToolWrapStatus(tx, repoRowId, parsedStatus, calls)`, last report wins by `reportedAt`, merging per-tool `lastWrapperAt` (max) per DD-20.
-- [ ] Create `tool-monitoring/tool-usage-writer.ts`:
+- [x] Create `tool-monitoring/tool-usage-builder.ts`: `buildTreeToolUsage(nodes, toolCallsLog, monitored)` → rows per DD-8, with `aggregates` (DD-11), `calls` (DD-10, sorted by `ts`), `outputs` (DD-9) and the scalar columns.
+- [x] Create `tool-monitoring/tool-wrap-status.ts`: `writeToolWrapStatus(tx, repoRowId, parsedStatus, calls)`, last report wins by `reportedAt`, merging per-tool `lastWrapperAt` (max) per DD-20.
+- [x] Create `tool-monitoring/tool-usage-writer.ts`:
   - `markTreeStale(tx, sessionRowId)` (node + top ancestor via `topAncestorIdsSql`);
   - `rewriteTreeToolUsage(tx, rootId)` (load inputs and repository link per DD-8, delete-then-insert for every tree node, then `writeToolWrapStatus`).
-- [ ] Create `tool-monitoring/tool-usage-rebuild.service.ts` per DD-7, using the DD-22 interval and batch: `SchedulerRegistry` interval, `FOR UPDATE SKIP LOCKED` claim, version set before read, per-tree transaction with error logging, and a `notify()` nudge.
-- [ ] Register `ToolUsageRebuildService` in `server/src/logs/logs.module.ts` (DD-24). Document `TOOL_USAGE_REBUILD_INTERVAL_MS` and `TOOL_USAGE_REBUILD_BATCH` in `server/.env.example` next to `SESSION_COST_RECOMPUTE_INTERVAL_MS` (:66-71).
-- [ ] In `logs.service.ts` `upsert()`:
+- [x] Create `tool-monitoring/tool-usage-rebuild.service.ts` per DD-7, using the DD-22 interval and batch: `SchedulerRegistry` interval, `FOR UPDATE SKIP LOCKED` claim, version set before read, per-tree transaction with error logging, and a `notify()` nudge.
+- [x] Register `ToolUsageRebuildService` in `server/src/logs/logs.module.ts` (DD-24). Document `TOOL_USAGE_REBUILD_INTERVAL_MS` and `TOOL_USAGE_REBUILD_BATCH` in `server/.env.example` next to `SESSION_COST_RECOMPUTE_INTERVAL_MS` (:66-71).
+- [x] In `logs.service.ts` `upsert()`:
   - before the non-artisyn early return (:488), call `markTreeStale` for `claude`, `claude-subagent` and `tool-calls`;
   - after the Step 5 link insert, call it when `linksInserted > 0`;
   - after commit, call `rebuildService.notify()`.
-- [ ] In `logs.service.ts` `writeImportedLog` (:976) and `repositories.service.ts` `recomputeAllSessionStats` (:1282), call `markTreeStale` for each written or recomputed session.
+- [x] In `logs.service.ts` `writeImportedLog` (:976) and `repositories.service.ts` `recomputeAllSessionStats` (:1282), call `markTreeStale` for each written or recomputed session.
 
 ### Chunk 6 — Server read and hook routes
-- [ ] Create `tool-monitoring/tool-usage-read.sql.ts`:
+- [x] Create `tool-monitoring/tool-usage-read.sql.ts`:
   - `loadSummary(scope, range)`: aggregates plus `pendingSessions` only, never selecting `calls`/`outputs`;
   - `loadCalls(scope, filters, page)`: `jsonb_array_elements(calls)`, DD-18 filters and sort;
   - `loadCallDetail(usageId, callId)`.
-- [ ] Add the summary tree assembly to `tool-usage-read.sql.ts`: group and tool totals summed from operations, and `neverCalled` = enabled configured CLI tools with no calls in range.
-- [ ] Create `tool-monitoring/tool-monitoring.controller.ts` (`@Controller('api/v1/repositories')`) with routes `:repoId/tool-monitoring/config` GET/PUT, `summary`, `calls` and `calls/:usageId/:callId`, validating `teamId`/dates/paging and scoping per DD-17.
-- [ ] In the detail route, call `assertSessionVisible` (`repositories.service.ts:474`) on the row's session; mask the owner email with `maskFirstPrompt`-style rules (`logs/team-scope.ts`) where the team scope requires it.
-- [ ] Create `tool-monitoring/tool-monitoring-hook.controller.ts` (`@Controller('api/v2/tool-monitoring')`, `@Get('config')`, `ApiKeyAuthGuard`), returning DD-3 via `resolveMonitoredTools`, modelled on `post-turn-analysis.controller.ts:57-82`.
-- [ ] Register both controllers in `server/src/logs/logs.module.ts` (DD-24), then run the server lint and typecheck.
+- [x] Add the summary tree assembly to `tool-usage-read.sql.ts`: group and tool totals summed from operations, and `neverCalled` = enabled configured CLI tools with no calls in range.
+- [x] Create `tool-monitoring/tool-monitoring.controller.ts` (`@Controller('api/v1/repositories')`) with routes `:repoId/tool-monitoring/config` GET/PUT, `summary`, `calls` and `calls/:usageId/:callId`, validating `teamId`/dates/paging and scoping per DD-17.
+- [x] In the detail route, call `assertSessionVisible` (`repositories.service.ts:474`) on the row's session; mask the owner email with `maskFirstPrompt`-style rules (`logs/team-scope.ts`) where the team scope requires it.
+- [x] Create `tool-monitoring/tool-monitoring-hook.controller.ts` (`@Controller('api/v2/tool-monitoring')`, `@Get('config')`, `ApiKeyAuthGuard`), returning DD-3 via `resolveMonitoredTools`, modelled on `post-turn-analysis.controller.ts:57-82`.
+- [x] Register both controllers in `server/src/logs/logs.module.ts` (DD-24), then run the server lint and typecheck.
 
 ### Chunk 7 — Hook config, names, refresh
-- [ ] Create `hook/.claude/telemetry_tool/tool-wrap-names.js`: plain-JS copy of DD-4 (`TOOL_DENYLIST`, `validateToolName`, constants) plus the hook constants of DD-22, with a header comment naming `packages/tool-monitor` as the twin.
-- [ ] In `env-context.js`, add `toolWrap` (boolean, default `true`) and `toolWrapConfigTimeoutMs` (number, default 2000) to `CONFIG_DEFAULTS` (:72-93) and `CONFIG_TYPES` (:95-116).
-- [ ] Create `tool-wrap-config.js`:
+- [x] Create `hook/.claude/telemetry_tool/tool-wrap-names.js`: plain-JS copy of DD-4 (`TOOL_DENYLIST`, `validateToolName`, constants) plus the hook constants of DD-22, with a header comment naming `packages/tool-monitor` as the twin.
+- [x] In `env-context.js`, add `toolWrap` (boolean, default `true`) and `toolWrapConfigTimeoutMs` (number, default 2000) to `CONFIG_DEFAULTS` (:72-93) and `CONFIG_TYPES` (:95-116).
+- [x] Create `tool-wrap-config.js`:
   - `isToolWrapDisabled(config)` (`LOGHUB_TOOL_WRAP=0` / `toolWrap:false`);
   - `fetchToolWrapConfig(cwd, config, timeoutMs)` per DD-16 / DD-3 (non-200, timeout or a bad `schemaVersion` → `null`);
   - `readCache` / `writeCache` (atomic);
   - `effectiveTools(cfg)`, which drops denylisted or invalid names and returns `[]` when `paused`.
-- [ ] Add `writeSessionMarkers(sessionDir, cfg, generatedTools)` to `tool-wrap-config.js`: it rewrites `off/<tool>`, `off/__all` (paused) and `mode/<tool>.meta` per DD-13 / DD-16.
-- [ ] In `telemetry-hook.js` (UserPromptSubmit, near :101-129), add a throttled refresh via `claimThrottleSlot(cwd, 'tool-wrap-config.json', 60000)`: fetch, write cache, write markers. Wrap it in try/catch and fail open.
+- [x] Add `writeSessionMarkers(sessionDir, cfg, generatedTools)` to `tool-wrap-config.js`: it rewrites `off/<tool>`, `off/__all` (paused) and `mode/<tool>.meta` per DD-13 / DD-16.
+- [x] In `telemetry-hook.js` (UserPromptSubmit, near :101-129), add a throttled refresh via `claimThrottleSlot(cwd, 'tool-wrap-config.json', 60000)`: fetch, write cache, write markers. Wrap it in try/catch and fail open.
 
 ### Chunk 8 — Hook Bash wrapper and SessionStart
-- [ ] Create `tool-wrap-tee.js` per DD-13:
+- [x] Create `tool-wrap-tee.js` per DD-13:
   - byte forwarding, capture limit, keep draining after EPIPE until the limit;
   - `stream_end` record, swallowing every logging error;
   - `--self-test` prints `loghub-selftest-ok`;
   - calls `exitIfSelfCheck` (`hook-log.js:125`).
-- [ ] Create `tool-wrap-shims.js` with `renderPosixShim(tool, opts)`, the Bash template per DD-13: pass-through conditions, PATH stripping, `LOGHUB_SHIM_ACTIVE`, stdin tee, `PIPESTATUS` exit, start/exit records, breaker files, and an `exec` to the real tool on any internal failure.
-- [ ] Add `generateShimDir(sessionDir, tools)` to `tool-wrap-shims.js`: temp dir, then rename; one shim per tool resolvable on PATH; `__selftest` shim; `chmod 0755`.
-- [ ] Add `runPreflight(shimDir)` to `tool-wrap-shims.js`: `bash`, `node` and `tee` resolve and the self-test passes. Also add `toGitBashPath(p)` and `appendEnvFileExport(envFile, shimDir)`, both per DD-15.
-- [ ] Add `pruneOldSessionDirs(workDir)` (older than 7 days, DD-27 guards) and `recordBreakerFault(sessionDir, tool)` (global after 3) to `tool-wrap-shims.js`, per DD-15.
-- [ ] In `lifecycle-hook.js` SessionStart (:157-169), call the DD-15 sequence inside its own try/catch, writing `preflight.json`; keep the existing `systemMessage` stdout (:200-207) unchanged, and write nothing extra to stdout.
+- [x] Create `tool-wrap-shims.js` with `renderPosixShim(tool, opts)`, the Bash template per DD-13: pass-through conditions, PATH stripping, `LOGHUB_SHIM_ACTIVE`, stdin tee, `PIPESTATUS` exit, start/exit records, breaker files, and an `exec` to the real tool on any internal failure.
+- [x] Add `generateShimDir(sessionDir, tools)` to `tool-wrap-shims.js`: temp dir, then rename; one shim per tool resolvable on PATH; `__selftest` shim; `chmod 0755`.
+- [x] Add `runPreflight(shimDir)` to `tool-wrap-shims.js`: `bash`, `node` and `tee` resolve and the self-test passes. Also add `toGitBashPath(p)` and `appendEnvFileExport(envFile, shimDir)`, both per DD-15.
+- [x] Add `pruneOldSessionDirs(workDir)` (older than 7 days, DD-27 guards) and `recordBreakerFault(sessionDir, tool)` (global after 3) to `tool-wrap-shims.js`, per DD-15.
+- [x] In `lifecycle-hook.js` SessionStart (:157-169), call the DD-15 sequence inside its own try/catch, writing `preflight.json`; keep the existing `systemMessage` stdout (:200-207) unchanged, and write nothing extra to stdout.
 
 ### Chunk 9 — Hook PowerShell, upload, registration
-- [ ] Create `tool-wrap-powershell.js` (PreToolUse entry) per DD-14:
+- [x] Create `tool-wrap-powershell.js` (PreToolUse entry) per DD-14:
   - read stdin JSON, cache and `preflight.json`;
   - mention regex;
   - build the `__lhWrap` prefix and emit `updatedInput`, else exit 0 silently;
   - fail open on any error;
   - call `exitIfSelfCheck`.
-- [ ] Create `tool-wrap-records.js` with `assembleToolCallsUpload(workDir, sessionId)` per DD-5 / DD-6: read the call files, decode UTF-8 or base64, truncate `.in` to 100 KB, apply the 50 MB cap, add the `tool_wrap_status` line. It returns the file path, or null when there are no calls.
-- [ ] In `send-logs-hook.js` `runUpload` (:899), add namespace `tool-calls`: assemble per session dir, then push to `filesToProcess` like `claude-otel` (:1078-1091), with a manifest key `tool-calls/<sessionId>` and size-based dedupe.
-- [ ] In `session-files.js` (:204-244), include `tool-calls` in the SessionEnd / prompt flush set.
-- [ ] In `scripts/build-hooks-installer.js`, add the six new files to `HOOK_JS_FILES` (:97). Add a `PreToolUse` entry (matcher `PowerShell`, command `tool-wrap-powershell.js`) to `HOOKS_JSON` (:306-346) and drop the "no PreToolUse" comment (:305).
-- [ ] In `hook/INSTALL_HOOK.md` (:302-395), document the PreToolUse event and update the event count (:304).
+- [x] Create `tool-wrap-records.js` with `assembleToolCallsUpload(workDir, sessionId)` per DD-5 / DD-6: read the call files, decode UTF-8 or base64, truncate `.in` to 100 KB, apply the 50 MB cap, add the `tool_wrap_status` line. It returns the file path, or null when there are no calls.
+- [x] In `send-logs-hook.js` `runUpload` (:899), add namespace `tool-calls`: assemble per session dir, then push to `filesToProcess` like `claude-otel` (:1078-1091), with a manifest key `tool-calls/<sessionId>` and size-based dedupe.
+- [x] In `session-files.js` (:204-244), include `tool-calls` in the SessionEnd / prompt flush set.
+- [x] In `scripts/build-hooks-installer.js`, add the six new files to `HOOK_JS_FILES` (:97). Add a `PreToolUse` entry (matcher `PowerShell`, command `tool-wrap-powershell.js`) to `HOOKS_JSON` (:306-346) and drop the "no PreToolUse" comment (:305).
+- [x] In `hook/INSTALL_HOOK.md` (:302-395), document the PreToolUse event and update the event count (:304).
 
 ### Chunk 10 — Hook release steps
-- [ ] Run `npm run lint:fix` then `npm run lint` in `hook/`; fix the findings.
-- [ ] Run the `update-install-instructions` skill for the new config keys and the PreToolUse event.
-- [ ] Bump `hook/.claude/telemetry_tool/version.json` to `2.27.0` (MINOR).
-- [ ] Run `npm run build:hooks-installer`, then refresh `.artisyn/marketplace/plugins/log-hub-hooks/` (scripts, `version.json`, `.claude-plugin/plugin.json`, `hooks/hooks.json` with the PreToolUse entry) per `.claude/rules/hook.md`.
+- [x] Run `npm run lint:fix` then `npm run lint` in `hook/`; fix the findings.
+- [x] Run the `update-install-instructions` skill for the new config keys and the PreToolUse event.
+- [x] Bump `hook/.claude/telemetry_tool/version.json` to `2.27.0` (MINOR).
+- [x] Run `npm run build:hooks-installer`, then refresh `.artisyn/marketplace/plugins/log-hub-hooks/` (scripts, `version.json`, `.claude-plugin/plugin.json`, `hooks/hooks.json` with the PreToolUse entry) per `.claude/rules/hook.md`.
 
 ### Chunk 11 — Client foundation
-- [ ] Create `client/src/models/tool-monitoring.ts` mirroring the API changes response shapes and the DD-10 record.
-- [ ] Create `client/src/viewer/pages/repository/tools/tools-constants.ts` with the client constants of DD-22 and the DD-21 localStorage keys.
-- [ ] In `client/src/viewer/api.ts`, add `fetchToolMonitoringConfig`, `saveToolMonitoringConfig`, `fetchToolSummary`, `fetchToolCalls` and `fetchToolCallDetail`, all with an optional `teamId`, next to `fetchRepoOkfUsage` (:827).
-- [ ] Add `tools` to `REPO_MAIN_TABS` (`tab-ids.ts:36-43`). Add a lazy tab and the label "Tools/MCP" in `RepositoryView.tsx` (:28-58, mount near :456). In `useRepositoryViewState.ts` `setMainTab` (:103-125), drop the DD-21 params.
-- [ ] Create `pages/repository/tools/tools-url-state.ts` (read and write the DD-21 params; default range via `defaultDateRange`, `reports/report-url.ts:23`), modelled on `okf/okf-url-state.ts:19-57`.
-- [ ] Create `pages/repository/tools/output-format.ts`:
+- [x] Create `client/src/models/tool-monitoring.ts` mirroring the API changes response shapes and the DD-10 record.
+- [x] Create `client/src/viewer/pages/repository/tools/tools-constants.ts` with the client constants of DD-22 and the DD-21 localStorage keys.
+- [x] In `client/src/viewer/api.ts`, add `fetchToolMonitoringConfig`, `saveToolMonitoringConfig`, `fetchToolSummary`, `fetchToolCalls` and `fetchToolCallDetail`, all with an optional `teamId`, next to `fetchRepoOkfUsage` (:827).
+- [x] Add `tools` to `REPO_MAIN_TABS` (`tab-ids.ts:36-43`). Add a lazy tab and the label "Tools/MCP" in `RepositoryView.tsx` (:28-58, mount near :456). In `useRepositoryViewState.ts` `setMainTab` (:103-125), drop the DD-21 params.
+- [x] Create `pages/repository/tools/tools-url-state.ts` (read and write the DD-21 params; default range via `defaultDateRange`, `reports/report-url.ts:23`), modelled on `okf/okf-url-state.ts:19-57`.
+- [x] Create `pages/repository/tools/output-format.ts`:
   - `detectOutputFormat(text)` → `'json'|'pipe-table'|'fixed-width-table'|'tsv'|'plain'`;
   - `realignTable(text, format)` → `{ headers, rows }`;
   - `markAgentSeenLines(full, agentSaw)` → line indexes.
-- [ ] Create `pages/repository/tools/ansi-render.tsx`: parse SGR codes 30–37 / 90–97 / 1 / 0 into spans with a light palette (no dark backgrounds), leaving other escape codes stripped.
+- [x] Create `pages/repository/tools/ansi-render.tsx`: parse SGR codes 30–37 / 90–97 / 1 / 0 into spans with a light palette (no dark backgrounds), leaving other escape codes stripped.
 
 ### Chunk 12 — Client tab layout, tree, table
-- [ ] Create `tools/RepoToolsTab.tsx`: react-query loads summary and calls (keys include `teamId` and the filters); three panes with two `useDraggableWidth` splitters and the tree-rail collapse, using the DD-21 storage keys and widths from Visual/UX notes.
-- [ ] Create `tools/ToolsTopBar.tsx`: `DateRangePicker`, Status select, debounced (300 ms) search input, removable scope chip, and a "Monitored tools (N)" button. Layout like `okf/OkfFilterStrip.tsx`.
-- [ ] Create `tools/ToolsTree.tsx`: All tools → MCP / CLI groups → tools → operations, with counts, bars, coloured error %, filter box, sort control, `never called` rows, and expansion state in component state, per Visual/UX notes and DD-25 sorting.
-- [ ] Create `tools/ToolCallsTable.tsx`: listbox with Time, Tool · operation + channel badge, In, Out, Status + hints; ↑/↓ selection writing `tcall`; pager footer; pattern `pages/repository/session-log/bash-tab/BashCallList.tsx:50-100`.
-- [ ] Add empty, loading and 403 states, plus the "processing" note, to `RepoToolsTab.tsx`, per Visual/UX notes.
+- [x] Create `tools/RepoToolsTab.tsx`: react-query loads summary and calls (keys include `teamId` and the filters); three panes with two `useDraggableWidth` splitters and the tree-rail collapse, using the DD-21 storage keys and widths from Visual/UX notes.
+- [x] Create `tools/ToolsTopBar.tsx`: `DateRangePicker`, Status select, debounced (300 ms) search input, removable scope chip, and a "Monitored tools (N)" button. Layout like `okf/OkfFilterStrip.tsx`.
+- [x] Create `tools/ToolsTree.tsx`: All tools → MCP / CLI groups → tools → operations, with counts, bars, coloured error %, filter box, sort control, `never called` rows, and expansion state in component state, per Visual/UX notes and DD-25 sorting.
+- [x] Create `tools/ToolCallsTable.tsx`: listbox with Time, Tool · operation + channel badge, In, Out, Status + hints; ↑/↓ selection writing `tcall`; pager footer; pattern `pages/repository/session-log/bash-tab/BashCallList.tsx:50-100`.
+- [x] Add empty, loading and 403 states, plus the "processing" note, to `RepoToolsTab.tsx`, per Visual/UX notes.
 
 ### Chunk 13 — Client details, dialog, deep link
-- [ ] Create `tools/ToolCallDetails.tsx`: header (badges, DD-25 meta line, "Open in session" link per DD-19), then Parameters (DD-25), Input (stdin, hidden when absent), Output, stderr and Signals sections with collapse beyond 400 px and a `CopyButton` per block.
-- [ ] Create `tools/ToolOutputView.tsx`:
+- [x] Create `tools/ToolCallDetails.tsx`: header (badges, DD-25 meta line, "Open in session" link per DD-19), then Parameters (DD-25), Input (stdin, hidden when absent), Output, stderr and Signals sections with collapse beyond 400 px and a `CopyButton` per block.
+- [x] Create `tools/ToolOutputView.tsx`:
   - tabs Terminal | As the agent saw it | Raw;
   - Terminal uses `ansi-render` + `realignTable` + the agent-seen bar;
   - JSON output switches to `JsonTree`;
   - Copy copies the active view's text.
-- [ ] Create `tools/JsonTree.tsx`: a collapsible JSON tree (objects and arrays expandable, first two levels open by default, monospace, light surface).
-- [ ] Create `tools/MonitoredToolsDialog.tsx`: row editor per Visual/UX notes, inline `validateToolName` errors from `@loghub/tool-monitor`, the "Pause all wrapping" switch, save via `saveToolMonitoringConfig`, server 400 shown on the row, read-only when `!canEdit`.
-- [ ] In `useRepositoryViewState.ts`, read and clear the `tu` param, and pass it through `SessionDetailPane.tsx` (:138-148).
-- [ ] In `SessionLogView.tsx` (:88-106), resolve the turn containing tool_use id `tu` and set the existing target-turn state.
-- [ ] Run the client lint and typecheck; visually check the tab with Playwright per the `use-playwright` skill.
+- [x] Create `tools/JsonTree.tsx`: a collapsible JSON tree (objects and arrays expandable, first two levels open by default, monospace, light surface).
+- [x] Create `tools/MonitoredToolsDialog.tsx`: row editor per Visual/UX notes, inline `validateToolName` errors from `@loghub/tool-monitor`, the "Pause all wrapping" switch, save via `saveToolMonitoringConfig`, server 400 shown on the row, read-only when `!canEdit`.
+- [x] In `useRepositoryViewState.ts`, read and clear the `tu` param, and pass it through `SessionDetailPane.tsx` (:138-148).
+- [x] In `SessionLogView.tsx` (:88-106), resolve the turn containing tool_use id `tu` and set the existing target-turn state.
+- [x] Run the client lint and typecheck; visually check the tab with Playwright per the `use-playwright` skill.
 
 ### Chunk 14 — KB documentation
-- [ ] Create `docs/knowledgebase/tool-monitoring.md`: channels, config levels and merge, transport, rebuild drain, tables, routes, wrapper safety, a backward-compatibility table like `okf-usage.md`. Add it to `docs/knowledgebase/index.md`.
-- [ ] Update `hook-system-overview.md` (files table :24-49, ":27 no PreToolUse", namespace table :178-184) and `hook-installation.md` (config keys `toolWrap` / `toolWrapConfigTimeoutMs`, guardrail note :255-266).
-- [ ] In `hook-api-versioning.md`, add a compatibility section for `GET /api/v2/tool-monitoring/config` and the `tool-calls` log kind, modelled on :486-527.
-- [ ] Update `db-tables.md`: the three new tables, the two new columns, and migration history (:1400).
-- [ ] Update `client-component-map.md` (new `tools/*` components) and `ui-principles.md` if a new pattern emerged, per the `ui-components` skill. Update `session-log-view.md` (the `tu` deep link; PowerShell does not read `CLAUDE_ENV_FILE`, :259-262).
-- [ ] Fix `test/client-unit-tests.md:16` so it lists all client algorithm tests, including the new ones.
+- [x] Create `docs/knowledgebase/tool-monitoring.md`: channels, config levels and merge, transport, rebuild drain, tables, routes, wrapper safety, a backward-compatibility table like `okf-usage.md`. Add it to `docs/knowledgebase/index.md`.
+- [x] Update `hook-system-overview.md` (files table :24-49, ":27 no PreToolUse", namespace table :178-184) and `hook-installation.md` (config keys `toolWrap` / `toolWrapConfigTimeoutMs`, guardrail note :255-266).
+- [x] In `hook-api-versioning.md`, add a compatibility section for `GET /api/v2/tool-monitoring/config` and the `tool-calls` log kind, modelled on :486-527.
+- [x] Update `db-tables.md`: the three new tables, the two new columns, and migration history (:1400).
+- [x] Update `client-component-map.md` (new `tools/*` components) and `ui-principles.md` if a new pattern emerged, per the `ui-components` skill. Update `session-log-view.md` (the `tu` deep link; PowerShell does not read `CLAUDE_ENV_FILE`, :259-262).
+- [x] Fix `test/client-unit-tests.md:16` so it lists all client algorithm tests, including the new ones.
 
 ### Chunk 15 — Server algorithm docs and tests
-- [ ] Write `docs/knowledgebase/algorithms/tool-monitor-name-validation.md` (DD-4; examples cover every denylist category, `.exe` suffix, case, length 64/65, path separators, metacharacters) and `server/src/logs/tool-monitoring/tool-monitor-name-validation.algo.spec.ts`.
-- [ ] Write `algorithms/mcp-call-extraction.md` (DD-12 MCP rules; examples: ok, `is_error`, no result, image block, extra `__`, sidechain) and `mcp-call-extractor.algo.spec.ts`, using the `toEntries()` pattern of `okf/okf-access-extractor.algo.spec.ts:1-60`.
-- [ ] Write `algorithms/cli-command-recognition.md` (Bash pipelines, `&&`, subshell, quoted args, `.exe`, PowerShell `;` / `|`, absolute path not matched, `(none)` op) and `cli-command-recognition.algo.spec.ts`.
-- [ ] Write `algorithms/tool-wrapper-matching.md` (matched, two calls in one command, indirect inside a window, indirect without a window, transcript-only, `cut`) and `wrapper-record-matching.algo.spec.ts`.
-- [ ] Write `algorithms/tool-usefulness-signals.md` (each signal, window of 3, other agent ignored) and `tool-call-signals.algo.spec.ts`.
-- [ ] Register all new docs in `algorithms/README.md`. Fill the `reviewed` / `reviewer` front matter per its rules. Run the server `npm run test`.
+- [x] Write `docs/knowledgebase/algorithms/tool-monitor-name-validation.md` (DD-4; examples cover every denylist category, `.exe` suffix, case, length 64/65, path separators, metacharacters) and `server/src/logs/tool-monitoring/tool-monitor-name-validation.algo.spec.ts`.
+- [x] Write `algorithms/mcp-call-extraction.md` (DD-12 MCP rules; examples: ok, `is_error`, no result, image block, extra `__`, sidechain) and `mcp-call-extractor.algo.spec.ts`, using the `toEntries()` pattern of `okf/okf-access-extractor.algo.spec.ts:1-60`.
+- [x] Write `algorithms/cli-command-recognition.md` (Bash pipelines, `&&`, subshell, quoted args, `.exe`, PowerShell `;` / `|`, absolute path not matched, `(none)` op) and `cli-command-recognition.algo.spec.ts`.
+- [x] Write `algorithms/tool-wrapper-matching.md` (matched, two calls in one command, indirect inside a window, indirect without a window, transcript-only, `cut`) and `wrapper-record-matching.algo.spec.ts`.
+- [x] Write `algorithms/tool-usefulness-signals.md` (each signal, window of 3, other agent ignored) and `tool-call-signals.algo.spec.ts`.
+- [x] Register all new docs in `algorithms/README.md`. Fill the `reviewed` / `reviewer` front matter per its rules. Run the server `npm run test`.
 
 ### Chunk 16 — Client and hook algorithm docs and tests
-- [ ] Add `hook/.claude/telemetry_tool/__tests__/tool-wrap-names.algo.test.js`, reading the `tool-monitor-name-validation.md` examples via `scripts/algo-docs/load-examples.cjs` (pattern `okf-snapshot.algo.test.js:19-20`).
-- [ ] Write `algorithms/tool-output-format.md` (JSON, pipe table, fixed-width, TSV, plain, ANSI-coloured table, agent-seen lines) and `tools/output-format.algo.test.ts` (pattern `workflow-agent-rows.algo.test.ts:6-46`).
-- [ ] Write `algorithms/tool-wrapper-fidelity.md` with the Test coverage plan fidelity and fail-open rows (`os` / `shell` fields per row) and register both new docs in `algorithms/README.md`.
-- [ ] Write `hook/.claude/telemetry_tool/__tests__/tool-wrap-fidelity.algo.test.js`: generate a shim dir in a temp dir and run each row wrapped and unwrapped, comparing stdout / stderr bytes and exit code, and skipping rows for unavailable shells. Skip the whole file unless `LOGHUB_FIDELITY_TEST=1` (DD-26).
-- [ ] Create `scripts/tool-wrap-check/create-check-project.mjs` generating `<repo>/../loghub-tool-wrap-check/` (fixture tools, `run-check.mjs`, `package.json`, `check.config.json`, `README.md`, marker) per DD-26, with the DD-27 refusal guards and no delete calls.
-- [ ] Add the Linux container run to the generator output per DD-26: `linux/Dockerfile`, the `check:linux` script, `--linux` / `--image` handling in `run-check.mjs` (read-only `/hook` mount, `/work` mount, `--rm`, exit 2 without Docker).
-- [ ] Add `check:linux-live` per DD-26:
+- [x] Add `hook/.claude/telemetry_tool/__tests__/tool-wrap-names.algo.test.js`, reading the `tool-monitor-name-validation.md` examples via `scripts/algo-docs/load-examples.cjs` (pattern `okf-snapshot.algo.test.js:19-20`).
+- [x] Write `algorithms/tool-output-format.md` (JSON, pipe table, fixed-width, TSV, plain, ANSI-coloured table, agent-seen lines) and `tools/output-format.algo.test.ts` (pattern `workflow-agent-rows.algo.test.ts:6-46`).
+- [x] Write `algorithms/tool-wrapper-fidelity.md` with the Test coverage plan fidelity and fail-open rows (`os` / `shell` fields per row) and register both new docs in `algorithms/README.md`.
+- [x] Write `hook/.claude/telemetry_tool/__tests__/tool-wrap-fidelity.algo.test.js`: generate a shim dir in a temp dir and run each row wrapped and unwrapped, comparing stdout / stderr bytes and exit code, and skipping rows for unavailable shells. Skip the whole file unless `LOGHUB_FIDELITY_TEST=1` (DD-26).
+- [x] Create `scripts/tool-wrap-check/create-check-project.mjs` generating `<repo>/../loghub-tool-wrap-check/` (fixture tools, `run-check.mjs`, `package.json`, `check.config.json`, `README.md`, marker) per DD-26, with the DD-27 refusal guards and no delete calls.
+- [x] Add the Linux container run to the generator output per DD-26: `linux/Dockerfile`, the `check:linux` script, `--linux` / `--image` handling in `run-check.mjs` (read-only `/hook` mount, `/work` mount, `--rm`, exit 2 without Docker).
+- [x] Add `check:linux-live` per DD-26:
   - `log-hub-dev:latest` image;
   - `docker-dev/claude-home` mounted read-write as `CLAUDE_CONFIG_DIR`;
   - generated `.claude/settings.json` hook commands;
   - seeded config cache;
   - result written to `runs/<timestamp>/live.json`.
-- [ ] Run `npm test` in `hook/` and the client `bun run test`. Generate the verification project, run `npm run check` (Windows), both `check:linux` variants and `check:linux-live`, and record the results in `notes.md`.
+- [x] Run `npm test` in `hook/` and the client `bun run test`. Generate the verification project, run `npm run check` (Windows), both `check:linux` variants and `check:linux-live`, and record the results in `notes.md`.
 
 ### Chunk 17 — Contract tests
-- [ ] Create `server/test/contract/registry/f24-tool-monitoring.ts` with rows for the six routes per Test coverage plan, using the `f16-post-turn.ts:38-80,390-450` (hook key) and `f21-reports.ts:333-440` (repo GET) patterns.
-- [ ] Create `server/test/contract/f24.contract-spec.ts` and register family F24 in `registry/index.ts`.
-- [ ] Add `session_tool_usage`, `repo_tool_monitor_config` and `team_repo_tool_monitor_config` to the delete-order lists in `fixtures/world-v1.sql.ts` (:1330, :1564).
-- [ ] Run `npm run test:contract` from `server/` (final-run check, `app` group, not concurrent with build or e2e).
+- [x] Create `server/test/contract/registry/f24-tool-monitoring.ts` with rows for the six routes per Test coverage plan, using the `f16-post-turn.ts:38-80,390-450` (hook key) and `f21-reports.ts:333-440` (repo GET) patterns.
+- [x] Create `server/test/contract/f24.contract-spec.ts` and register family F24 in `registry/index.ts`.
+- [x] Add `session_tool_usage`, `repo_tool_monitor_config` and `team_repo_tool_monitor_config` to the delete-order lists in `fixtures/world-v1.sql.ts` (:1330, :1564). — DONE DIFFERENTLY: no hand-kept delete-order lists exist any more; `deleteOrder()` derives the order from the FK graph, so the three tables are covered automatically; F24 fixture rows were added instead
+- [x] Run `npm run test:contract` from `server/` (final-run check, `app` group, not concurrent with build or e2e).
 
 ### Chunk 18 — Scenario and tour updates
-- [ ] Create `tests/scenarios/helpers/tool-monitoring.ts`:
+- [x] Create `tests/scenarios/helpers/tool-monitoring.ts`:
   - `buildToolCallsLog(calls)` (DD-6 lines);
   - `uploadToolCallsLog(...)`;
   - a transcript builder with MCP and Bash `tool_use`/`tool_result` pairs, reusing `helpers/okf.ts:166-294`;
   - `waitForToolUsage(...)`, which polls the summary API.
-- [ ] Create `tests/scenarios/repos/s-repo-17.spec.ts` (`@S-REPO-17 @mode-a`) with the Test coverage plan steps, following the `s-repo-16.spec.ts:229-290` structure (`browserAs(…'?mtab=tools')`, `tab-repo-tools`).
-- [ ] In `tests/scenarios/modes.ts`, add `TOOL_USAGE_REBUILD_INTERVAL_MS: '1000'` to the stand env next to `LOGS_MAX_BODY_MB` (:126).
-- [ ] Update `tests/scenarios/hook/s-hook-09.spec.ts` (:13-14, :214, :218) to expect exactly one `PreToolUse` entry (matcher `PowerShell`).
-- [ ] Add the Tools/MCP screen row to `tests/scenarios/tours/screen-registry.ts` (:587-597), and the tab to `tour-03-owner-repo.spec.ts:70`.
-- [ ] Add S-REPO-17 to `docs/qaa-overview/scenarios/02-repos-sessions.md`, and the hook PreToolUse note to `04-ingest-hook-installer-platform.md`.
-- [ ] Run `npm run test:scenarios -- --mode a --only scenarios,contract --grep "@S-REPO-17"` and fix failures.
+- [x] Create `tests/scenarios/repos/s-repo-17.spec.ts` (`@S-REPO-17 @mode-a`) with the Test coverage plan steps, following the `s-repo-16.spec.ts:229-290` structure (`browserAs(…'?mtab=tools')`, `tab-repo-tools`).
+- [x] In `tests/scenarios/modes.ts`, add `TOOL_USAGE_REBUILD_INTERVAL_MS: '1000'` to the stand env next to `LOGS_MAX_BODY_MB` (:126).
+- [x] Update `tests/scenarios/hook/s-hook-09.spec.ts` (:13-14, :214, :218) to expect exactly one `PreToolUse` entry (matcher `PowerShell`).
+- [x] Add the Tools/MCP screen row to `tests/scenarios/tours/screen-registry.ts` (:587-597), and the tab to `tour-03-owner-repo.spec.ts:70`.
+- [x] Add S-REPO-17 to `docs/qaa-overview/scenarios/02-repos-sessions.md`, and the hook PreToolUse note to `04-ingest-hook-installer-platform.md`.
+- [x] Run `npm run test:scenarios -- --mode a --only scenarios,contract --grep "@S-REPO-17"` and fix failures.

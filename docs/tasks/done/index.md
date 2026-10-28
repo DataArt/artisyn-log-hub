@@ -20,3 +20,4 @@ Folders are named `<YYYY-MM-DD>-<slug>` (the day the task was created).
 - [2026-10-27-branch-group-cost-total] Branch Group Cost Total Is Lower Than Its Sessions — archived 2026-10-27
 - [2026-10-27-okf-usage-tab] OKF Usage Tab — Knowledge-Base Read/Write Heatmap — archived 2026-10-28
 - [2026-10-24-dev-deps-snyk-fixes] Update Vulnerable Dev Dependencies (Snyk) — archived 2026-10-28
+- [2026-06-19-mcp-invocation-log-tab] Tools/MCP tab — monitoring of MCP servers and command-line tools — archived 2026-10-29
