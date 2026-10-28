@@ -336,7 +336,7 @@ transcript-only fallback). These are heuristics and are labelled as such in the 
 **2026-10-28:** Requirements rewritten from "per-prompt MCP section" to a repository-level
 Tools/MCP tab covering two channels (MCP from transcripts, CLI tools via a UI-configured wrapper).
 Research and POC: [research-cli-tool-capture.md](research-cli-tool-capture.md); POC code in
-`tmp/tool-usage-poc/` (gitignored). Local prod snapshot: 559 MCP calls, `playwright:browser_navigate`
+[`poc/`](poc/README.md). Local prod snapshot: 559 MCP calls, `playwright:browser_navigate`
 fails in 41 % of calls (mostly 30 s timeouts).
 
 **2026-10-28:** Config is two-level (personal / team); a session records the union of its owner's
