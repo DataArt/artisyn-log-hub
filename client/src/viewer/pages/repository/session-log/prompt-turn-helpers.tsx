@@ -11,7 +11,7 @@ import {
 import { DetailTooltip } from '../../../components/DetailTooltip';
 import { StatusBadge, StatusMark } from './tool-call-view/StatusBadge';
 import { useToolView } from './tool-call-view/ToolViewContext';
-import { toRepoRelative } from '../../../lib/bash-view/display-paths';
+import { toRepoRelative } from '@loghub/bash-view';
 import type { DetailRow } from '../../../components/DetailTooltip';
 import type { ModelPricingMap } from '../../../../models/pricing';
 import { formatCost } from '../../../lib/format';

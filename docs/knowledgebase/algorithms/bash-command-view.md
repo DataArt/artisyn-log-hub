@@ -15,17 +15,25 @@ original text stays one click away ("Raw", "Copy original").
 
 ## Code
 
-- Implementation, all under `client/src/viewer/lib/bash-view/`:
+- Implementation: the repo-local package `@loghub/bash-view`, all under `packages/bash-view/src/`
+  (shared by the client and the server; see `packages/bash-view/README.md` and
+  [../repo-local-packages.md](../repo-local-packages.md)):
   - `bash-view.ts` (`buildBashView`) — the composition the rows run;
   - `bash-format.ts` (`formatBash`, `liftCd`, `foldHeredocs`, `WIDTH`, `IND`,
     `HEREDOC_INLINE_MAX`);
-  - `bash-analyze.ts` (`analyzeBash`, `literal`, `groupByDir`, `displayGroups`,
+  - `bash-analyze.ts` (`analyzeBash`, `readKindOf`, `literal`, `groupByDir`, `displayGroups`,
     `GROUP_BY_DIR_ABOVE`, the command tables `W_CMDS`, `R_CMDS`, `SCRIPT_CMDS`, `NOT_RUNS`,
-    `SUBCOMMAND_TOOLS`, `RUN_SCRIPT_TOOLS`, `FOR_VALUES_MAX`);
+    `SUBCOMMAND_TOOLS`, `RUN_SCRIPT_TOOLS`, `GREP_CMDS`, `LIST_CMDS`, `FOR_VALUES_MAX`);
   - `display-paths.ts` (`toRepoRelative`);
   - `bash-highlight.ts` (`highlightBash`, `bashHighlightQuery`, `HIGHLIGHT_CLASS`);
-  - `bash-parser.ts` (`loadBashParser`, `withTree`) and `browser-parser.ts` (`HIGHLIGHT_QUERY` =
-    `bashHighlightQuery(<grammar highlights.scm>)`, browser WASM assets) — loading only, no rules.
+  - `syntax.ts` — structural types of the syntax tree (`BashSyntaxNode`, `BashSyntaxTree`,
+    `BashCapture`), the `BashParser` interface each side implements, and `withTree`. The package
+    never imports `web-tree-sitter`.
+- Parser loaders (loading only, no rules): client
+  `client/src/viewer/lib/bash-view/bash-parser.ts` (`loadBashParser`) and `browser-parser.ts`
+  (`HIGHLIGHT_QUERY` = `bashHighlightQuery(<grammar highlights.scm>)`, browser WASM assets);
+  server `server/src/logs/okf/server-bash-parser.ts` (`getServerBashParser`, WASM from
+  `dist/wasm/` or `node_modules`), used by the OKF access extraction.
   - UI: `client/src/viewer/pages/repository/session-log/tool-call-view/BashFileSummary.tsx`
     shows the FILES lists through `displayGroups` (rule 5.7).
 - Parser: `web-tree-sitter` 0.27.1 with the `tree-sitter-bash` 0.25.1 grammar. Nothing is
@@ -37,9 +45,11 @@ original text stays one click away ("Raw", "Copy original").
   `toRepoRelative` (a regular expression over the display text, rule 6).
 - Origin: the PoC `docs/pocs/2026-10-22-2035-bash-pretty-format/bash-view.mjs` (checked on 880
   real commands).
-- Twins: none.
-- Test: `client/src/viewer/lib/bash-view/bash-view.algo.test.ts` (vitest; WASM paths and the
-  grammar's `highlights.scm` resolved with `createRequire`).
+- Twins: none (client and server run the same package).
+- Test: `client/src/viewer/lib/bash-view/bash-view.algo.test.ts` (vitest; imports the package
+  through the `@loghub/bash-view` alias; WASM paths and the grammar's `highlights.scm` resolved
+  with `createRequire`). The server side of `readAccess` is also exercised by the Bash rows of
+  [okf-access-extraction](okf-access-extraction.md), which run with the real server parser.
 
 ## Input and output
 
@@ -310,6 +320,14 @@ gives the target as the number `N`); it can only come from a command argument su
    (`./` for bare names), groups and names in first-seen order (`groupByDir`). Runs and inline
    notes are never grouped; a list of 3 or fewer is flat.
 8. `unresolved` is shown under FILES as "+ N not resolved (non-literal paths)".
+9. **`readAccess`** (`analyzeBash` only; the Bash view ignores it): one `{path, kind}` per entry
+   of `reads`, same order and same relativisation. `kind` comes from the base name of the
+   **first** command that read the path (`readKindOf`): `grep rg ag egrep fgrep` → `grep`;
+   `ls find tree dir` → `list`; anything else — the other read commands, `sed`, `cp` sources, a
+   `<` redirect — → `read`. Only commands that produce reads under rule 5.2 reach it, so of those
+   names only `grep`, `rg` (`grep`) and `ls` (`list`) occur today; `find`, `tree`, `egrep`, … are
+   runs, not reads. The server's OKF extraction maps the kinds to its ops
+   ([okf-access-extraction](okf-access-extraction.md)).
 
 ### 6. Repo-relative display (`toRepoRelative`)
 
@@ -442,6 +460,10 @@ gives the target as the number `N`); it can only come from a command argument su
   `?`) BV-47, `yarn` BV-68, `bun` BV-47.
 - R from a `cd` inside a subshell BV-05 and a background statement BV-74; `cd` with two
   positionals uses the first BV-62; a backslash-newline inside `"…"` disappears BV-60.
+- `readAccess` (rule 5.9): one kind each (`sed -n` read, `grep -n` grep, `ls` list) BV-92;
+  folders searched by `grep -rn` BV-93; a `<` redirect is `read`, the first command decides the
+  kind BV-94; paths relative to the analysis root, `ls .`, a read that is also a change left out
+  BV-95; `find` / `tree` / `egrep` are runs, no reads BV-96.
 
 ## Examples
 
@@ -453,7 +475,8 @@ Two kinds of rows.
   `firstStatement` from the view;
   `changes`, `reads`, `runs`, `inline` and `unresolved` from `view.files`; `changeGroups` /
   `readGroups` / `runGroups` / `inlineGroups` are `displayGroups('changes' | 'reads' | 'runs' |
-  'inline', list)` (rule 5.7: the groups, or `null` when flat). Keys that are not listed are not checked. On every row with `ok: true` the test also
+  'inline', list)` (rule 5.7: the groups, or `null` when flat); `readAccess` is
+  `analyzeBash(parser, command).readAccess` (rule 5.9). Keys that are not listed are not checked. On every row with `ok: true` the test also
   checks the token invariant (rule 2.7) on `formatBash(parser, command).script`.
 - **Highlight rows** have `input.highlight: true`. The test runs `highlightBash(parser, command,
   bashHighlightQuery(<grammar highlights.scm>))` (rule 7.1) and maps each segment to
@@ -1270,6 +1293,48 @@ Commands are anonymised (`/work/acme-app`, `C:\work\acme-app`).
     "note": "Rule 5.3, the whole script table (16 commands), each with -c or -e and the 1-line literal argument x -> one note each, 1 line, in order. Rule 5.2: none is in another table; bun's first argument is '-e', not 'run', and bun is not a subcommand tool -> bare names. An entry missing from the script table drops its note."
   },
   {
+    "id": "BV-92",
+    "input": {"command": "sed -n 10,40p docs/kb/a.md; grep -n okf docs/kb/b.md; ls docs/kb"},
+    "expected": {
+      "ok": true, "changes": [], "reads": ["docs/kb/a.md", "docs/kb/b.md", "docs/kb"], "runs": [],
+      "readAccess": [{"path": "docs/kb/a.md", "kind": "read"}, {"path": "docs/kb/b.md", "kind": "grep"}, {"path": "docs/kb", "kind": "list"}]
+    },
+    "note": "Rule 5.2: sed's first positional 10,40p is the script, a.md a read; grep skips the pattern okf; ls reads its positional. Rule 5.9: kinds by base name -> sed read, grep grep, ls list, in reads order."
+  },
+  {
+    "id": "BV-93",
+    "input": {"command": "grep -rn TODO docs/kb src && cat docs/kb/a.md"},
+    "expected": {
+      "ok": true, "reads": ["docs/kb", "src", "docs/kb/a.md"],
+      "readAccess": [{"path": "docs/kb", "kind": "grep"}, {"path": "src", "kind": "grep"}, {"path": "docs/kb/a.md", "kind": "read"}]
+    },
+    "note": "Rule 5.2: grep -rn: flags skipped, TODO is the pattern, both folders are reads. Rule 5.9: grep -> grep for both, cat -> read. The folder/file decision is the server's (okf-access-extraction rule 4), not this rule's."
+  },
+  {
+    "id": "BV-94",
+    "input": {"command": "grep -c x < list.txt; cat a.md; grep x a.md"},
+    "expected": {
+      "ok": true, "reads": ["list.txt", "a.md"],
+      "readAccess": [{"path": "list.txt", "kind": "read"}, {"path": "a.md", "kind": "read"}]
+    },
+    "note": "Rule 5.1: '< list.txt' is a read through a redirect -> kind read, although the command is grep (grep itself has no path after its pattern). Rule 5.6/5.9: a.md is listed once; its first reader is cat -> read; the later grep does not change it."
+  },
+  {
+    "id": "BV-95",
+    "input": {"command": "cd /work/acme-app/docs/kb && cat index.md && ls . && cat a.md > a.md"},
+    "expected": {
+      "ok": true, "workDir": null, "changes": ["a.md"], "reads": ["index.md", "."],
+      "readAccess": [{"path": "index.md", "kind": "read"}, {"path": ".", "kind": "list"}]
+    },
+    "note": "Rule 3.2: cd ... && is not lifted (view workDir null), but rule 5.5 makes /work/acme-app/docs/kb the analysis root R. ls . reads R itself -> '.', kind list. Rule 5.1: '> a.md' is a change, so the cat read of a.md is listed only under changes (rule 5.6) and has no readAccess entry."
+  },
+  {
+    "id": "BV-96",
+    "input": {"command": "find docs -name '*.md'; tree docs; egrep x docs/a.md"},
+    "expected": {"ok": true, "changes": [], "reads": [], "runs": ["find", "tree", "egrep"], "readAccess": []},
+    "note": "Rule 5.2: find, tree and egrep are in no read table, so they are runs and read nothing; rule 5.9's list/grep names for them never apply -> readAccess empty."
+  },
+  {
     "id": "BH-01",
     "input": {"command": "for f in *.ts; do echo \"$f\"; done", "highlight": true},
     "expected": {"highlights": [["keyword", "for"], ["variable", "f"], ["keyword", "in"], ["keyword", "do"], ["command", "echo"], ["string", "\""], ["keyword", "$"], ["variable", "f"], ["string", "\""], ["keyword", "done"]]},
@@ -1396,6 +1461,10 @@ Commands are anonymised (`/work/acme-app`, `C:\work\acme-app`).
   from the source -> BV-88.
 - A non-literal `run` argument printed instead of `?` -> BV-47 (`pnpm run null`); a
   backslash-newline in `"…"` kept -> BV-60.
+- `readAccess` kind taken from the last reader instead of the first -> BV-94 (`a.md` grep); a `<`
+  redirect given the command's kind -> BV-94 (`list.txt` grep); `readAccess` not filtered by
+  changes -> BV-95; not relativised like `reads` -> BV-95; `grep` / `ls` not mapped -> BV-92,
+  BV-93.
 - Inline notes deduplicated by text -> BV-48; a note per loop walk -> BV-87; the heredoc passed
   into a compound statement's commands (`{ … }`, `while`, `if`, or a `for` body, or a subshell)
   -> BV-87.

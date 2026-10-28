@@ -53,6 +53,8 @@ const { buildProcessMarkerEnv, killProcessTree } = require('./process-marker');
 const { readKnownSnapshots, rememberSnapshot, forgetSnapshot, recordSessionSnapshot } = require('./harness-state');
 const { buildHarnessSnapshot, HARNESS_SNAPSHOT_SCHEMA_VERSION } = require('./harness-snapshot');
 const { buildCodeInventory } = require('./code-inventory');
+const { buildOkfSnapshot, buildOkfSnapshotRef } = require('./okf-snapshot');
+const { readKnownOkfSnapshots, rememberOkfSnapshot, forgetOkfSnapshot } = require('./okf-state');
 const { claudeConfigDir } = require('./claude-config-dir');
 
 const HOOK_FILE = 'send-logs-hook.js';
@@ -1183,10 +1185,21 @@ async function runUpload(cwd, hookSessionId, serverUrl, apiKey, timeoutMs, telem
   let resolvedSnapshotId = null;
   /** True once `getHarnessPrefix()` decided the id was unknown and shipped the full body. */
   let sentFullSnapshot = false;
-  /** @type {{ snapshotId: string, snapshotFull: boolean }|null} */
+  /**
+   * Query params for the current-session artisyn upload: the harness pair (set by
+   * `getHarnessPrefix()`) plus the OKF pair (set by `getOkfPrefix()`).
+   * @type {{ snapshotId?: string, snapshotFull?: boolean, okfSnapshotId?: string, okfSnapshotFull?: boolean }|null}
+   */
   let snapshotQuery = null;
   /** @type {Buffer|null} */
   let harnessPrefix = null;
+
+  /** The OKF snapshot id `getOkfPrefix()` computed this run, or null (not run, or no snapshot). */
+  let resolvedOkfSnapshotId = null;
+  /** True once `getOkfPrefix()` decided the OKF id was unknown and shipped the full body. */
+  let sentFullOkfSnapshot = false;
+  /** @type {Buffer|null} */
+  let okfPrefix = null;
 
   // The code-inventory prepend — its own throttle, its own state file, its own commit point.
   /** @type {Buffer|null} */
@@ -1297,6 +1310,70 @@ async function runUpload(cwd, hookSessionId, serverUrl, apiKey, timeoutMs, telem
   }
 
   /**
+   * The OKF snapshot prepend for the current session's artisyn body (plan
+   * `2026-10-27-okf-usage-tab`, DD-20): always the `okf-snapshot-ref` line, plus the full
+   * `okf-snapshot` line when `okf-state.json` does not list the id yet. Detection runs only here,
+   * at upload, never at SessionStart. Memoised per run.
+   *
+   * Fail-open: any failure (detection, git, state) is logged and yields an empty buffer, so the
+   * upload goes out without OKF lines — OKF can never fail an upload.
+   * @returns {Buffer}
+   */
+  function getOkfPrefix() {
+    if (okfPrefix) return okfPrefix;
+    okfPrefix = Buffer.alloc(0);
+    if (hookSessionId === null) return okfPrefix;
+    const log = (line) => hookLog(HOOK_FILE, hookSessionId, 'result', line, cwd);
+    try {
+      const projectRoot = getGitRoot(cwd || process.cwd());
+      const snapshot = buildOkfSnapshot({ projectRoot, config, log, workDir });
+      if (!snapshot) return okfPrefix;
+
+      const id = snapshot.okfSnapshotId;
+      const parts = [Buffer.from(JSON.stringify(buildOkfSnapshotRef(id)) + '\n', 'utf8')];
+      const known = readKnownOkfSnapshots(workDir).includes(id);
+      if (!known) parts.push(Buffer.from(JSON.stringify(snapshot) + '\n', 'utf8'));
+
+      resolvedOkfSnapshotId = id;
+      sentFullOkfSnapshot = !known;
+      snapshotQuery = { ...(snapshotQuery || {}), okfSnapshotId: id, okfSnapshotFull: !known };
+      okfPrefix = Buffer.concat(parts);
+    } catch (err) {
+      hookLog(HOOK_FILE, hookSessionId, 'warn',
+        `okf: snapshot skipped (${err && err.message ? err.message : String(err)})`, cwd);
+      resolvedOkfSnapshotId = null;
+      sentFullOkfSnapshot = false;
+      okfPrefix = Buffer.alloc(0);
+    }
+    return okfPrefix;
+  }
+
+  /**
+   * Record the OKF outcome after the upload that carried `getOkfPrefix()` succeeded (DD-20):
+   * forget the id when the server echoed it as `unknownOkfSnapshotId` (next upload resends the full
+   * body), remember it when the full body was sent. Never throws.
+   * @param {string|undefined} unknownOkfSnapshotId
+   */
+  function commitOkfReport(unknownOkfSnapshotId) {
+    if (resolvedOkfSnapshotId === null) return;
+    try {
+      const id12 = resolvedOkfSnapshotId.slice(0, 12);
+      if (unknownOkfSnapshotId === resolvedOkfSnapshotId) {
+        forgetOkfSnapshot(workDir, resolvedOkfSnapshotId);
+        hookLog(HOOK_FILE, hookSessionId, 'result', `okf: snapshot ${id12} unknown on server — will resend`, cwd);
+      } else if (sentFullOkfSnapshot) {
+        rememberOkfSnapshot(workDir, resolvedOkfSnapshotId);
+        hookLog(HOOK_FILE, hookSessionId, 'result', `okf: snapshot ${id12} sent`, cwd);
+      } else {
+        hookLog(HOOK_FILE, hookSessionId, 'result', `okf: snapshot ${id12} known`, cwd);
+      }
+    } catch (err) {
+      hookLog(HOOK_FILE, hookSessionId, 'warn',
+        `okf: state not updated (${err && err.message ? err.message : String(err)})`, cwd);
+    }
+  }
+
+  /**
    * The `code-inventory` prepend — how big the repo's tracked codebase is, measured
    * at most once per `CODE_INVENTORY_THROTTLE_MS` per repo root.
    *
@@ -1369,8 +1446,9 @@ async function runUpload(cwd, hookSessionId, serverUrl, apiKey, timeoutMs, telem
    * (the latter carries the hook-status event as an extra prepend).
    * @param {object} entry - one of filesToProcess
    * @param {object[]} extraEvents - extra JSON objects to prepend to an artisyn body
-   * @returns {Promise<{ success: boolean, reason: string|null, warnings?: string[], unknownSnapshotId?: string }>}
-   *   `unknownSnapshotId` is only ever set on the current-session artisyn upload — every other
+   * @returns {Promise<{ success: boolean, reason: string|null, warnings?: string[], unknownSnapshotId?: string,
+   *   unknownOkfSnapshotId?: string }>}
+   *   `unknownSnapshotId` / `unknownOkfSnapshotId` are only ever set on the current-session artisyn upload — every other
    *   call passes no `snapshotQuery`, so the server never returns the field for them.
    */
   async function processFile(entry, extraEvents) {
@@ -1463,6 +1541,9 @@ async function runUpload(cwd, hookSessionId, serverUrl, apiKey, timeoutMs, telem
         // the inventory is a six-hourly measurement of the repo.
         // Pushed after it so the pre-existing events keep their exact byte order.
         parts.push(getCodeInventoryPrefix());
+        // OKF snapshot lines (DD-20): same gate as the harness prefix; pushed last so every
+        // pre-existing event keeps its byte order. Empty when OKF detection failed.
+        parts.push(getOkfPrefix());
       }
       parts.push(body);
       body = Buffer.concat(parts);
@@ -1481,7 +1562,7 @@ async function runUpload(cwd, hookSessionId, serverUrl, apiKey, timeoutMs, telem
     const result = bodyBytes > CHUNK_SIZE_BYTES
       ? await uploadFileChunked(serverUrl, apiKey, namespace, sessionId, body, timeoutMs, hookSessionId, cwd, parentSessionId || null, workflowRunId || null, telemetryDir, manifestKey, snapshotQuery)
       : await uploadFileMaybeCompressed(serverUrl, apiKey, namespace, sessionId, body, timeoutMs, hookSessionId, cwd, parentSessionId || null, workflowRunId || null, snapshotQuery);
-    const { success, reason, warnings, unknownSnapshotId } = result;
+    const { success, reason, warnings, unknownSnapshotId, unknownOkfSnapshotId } = result;
 
     if (success) {
       // `claude-otel` chunks are DELETED once uploaded, not fingerprinted. Unlike a session
@@ -1529,7 +1610,7 @@ async function runUpload(cwd, hookSessionId, serverUrl, apiKey, timeoutMs, telem
       failedCount++;
     }
 
-    return { success, reason, warnings, unknownSnapshotId };
+    return { success, reason, warnings, unknownSnapshotId, unknownOkfSnapshotId };
   }
 
   // The current session's own artisyn file is processed last, once every other
@@ -1612,7 +1693,7 @@ async function runUpload(cwd, hookSessionId, serverUrl, apiKey, timeoutMs, telem
   };
 
   for (const entry of currentArtisynEntries) {
-    const { success, warnings, unknownSnapshotId } = await processFile(entry, [hookStatusEvent]);
+    const { success, warnings, unknownSnapshotId, unknownOkfSnapshotId } = await processFile(entry, [hookStatusEvent]);
     if (warnings && warnings.length > 0) {
       allWarnings.push(...warnings);
     }
@@ -1622,6 +1703,7 @@ async function runUpload(cwd, hookSessionId, serverUrl, apiKey, timeoutMs, telem
     if (success) {
       commitHarnessReport(unknownSnapshotId);
       commitCodeInventoryReport();
+      commitOkfReport(unknownOkfSnapshotId);
     }
   }
 

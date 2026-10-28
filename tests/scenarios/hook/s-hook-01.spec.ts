@@ -16,6 +16,10 @@
 //     `uploaded N KB … in K request(s)` form is the per-file line;
 //   - a sub-agent's manifest key is `claude-subagent/<root session>/<agent file>`.
 //
+// Step 4b (2026-10-27 OKF usage tab): the fake hub is an old Log Hub for OKF — it never answers
+// `unknownOkfSnapshotId` — and the new hook's upload with the OKF snapshot still succeeds; step 5
+// then sees the OKF ref only (FR-10).
+//
 // Replaces:
 //   - hook/.claude/telemetry_tool/__tests__/send-logs-hook.test.js — parentSessionId ×4,
 //     workflowRunId ×2, journal, v2 route, current-first order, current/backlog, manifest ×4,
@@ -69,6 +73,7 @@ test('@S-HOOK-01 a Stop run uploads the right files in the right order and never
   const dirs = tempDirs();
   let hub: FakeLogHub | undefined;
   let snapshotId = '';
+  let okfSnapshotId = '';
   try {
     hub = await startFakeLogHub();
     const toolDir = copyToolDir(dirs);
@@ -97,6 +102,10 @@ test('@S-HOOK-01 a Stop run uploads the right files in the right order and never
       fs.writeFileSync(path.join(wfDir, 'agent-w1.jsonl'), line({ type: 'user', agent: 'w1' }));
       fs.writeFileSync(path.join(wfDir, 'journal.jsonl'), line({ type: 'result' }));
       fs.writeFileSync(path.join(repo, 'CLAUDE.md'), '# rules\n');
+      // An OKF bundle (2026-10-27 OKF usage tab): the hook sends its snapshot with the cur artisyn.
+      fs.mkdirSync(path.join(repo, 'docs', 'kb'), { recursive: true });
+      fs.writeFileSync(path.join(repo, 'docs', 'kb', 'index.md'), '---\nokf_version: 1\n---\n# KB\n');
+      fs.writeFileSync(path.join(repo, 'docs', 'kb', 'setup.md'), '# Setup\n');
       fs.mkdirSync(path.join(repo, '.claude', 'skills', 'hello'), { recursive: true });
       fs.writeFileSync(path.join(repo, '.claude', 'skills', 'hello', 'SKILL.md'), '---\nname: hello\ndescription: Says hi.\n---\nbody\n');
       fs.mkdirSync(path.join(repo, '.claude', 'agents', 'rev'), { recursive: true });
@@ -177,6 +186,27 @@ test('@S-HOOK-01 a Stop run uploads the right files in the right order and never
       expect(cur.query.get('snapshotFull')).toBe('1');
     });
 
+    await test.step('4b. new hook → old server: the OKF snapshot rides on cur artisyn, the hub ignores okfSnapshotId (no unknownOkfSnapshotId), the upload still succeeds', async () => {
+      // The fake hub answers every upload with a bare `{warnings: []}` — exactly an old Log Hub,
+      // which knows neither the OKF query params nor the OKF lines.
+      const cur = hub!.requests.find((r) => r.type === 'artisyn' && r.sessionId === 'cur')!;
+      const lines = ndjsonLines(cur.body.toString('utf8'));
+      const full = lines.find((e) => e.type === 'okf-snapshot');
+      expect(full, 'full okf-snapshot line on the first run').toBeDefined();
+      okfSnapshotId = String(full!.okfSnapshotId);
+      expect(okfSnapshotId).toMatch(/^[0-9a-f]{64}$/);
+      expect(lines.find((e) => e.type === 'okf-snapshot-ref')?.okfSnapshotId).toBe(okfSnapshotId);
+      expect(Array.isArray(full!.bundles) && (full!.bundles as Array<{ root: string }>).map((b) => b.root)).toEqual(['docs/kb']);
+      expect(cur.query.get('okfSnapshotId')).toBe(okfSnapshotId);
+      expect(cur.query.get('okfSnapshotFull')).toBe('1');
+      const old = hub!.requests.find((r) => r.type === 'artisyn' && r.sessionId === 'old')!;
+      expect(bodyTypes(old)).not.toContain('okf-snapshot-ref');
+      expect(old.query.get('okfSnapshotId')).toBeNull();
+      const log = readHookLog(repo, 'send-logs-hook.js');
+      expect(log.some((l) => l.includes(`okf: snapshot ${okfSnapshotId.slice(0, 12)} sent`)), log.join('\n')).toBe(true);
+      expect(log.filter((l) => /\[result\] done: uploaded=\d+ skipped=\d+ failed=0 /.test(l))).toHaveLength(1);
+    });
+
     await test.step('5. second Stop, cur transcript grew: only cur artisyn and the grown transcript go out', async () => {
       // Claude Code appends `turn_duration` after the Stop hook fires — the usual reason it grows.
       fs.appendFileSync(path.join(project, 'cur.jsonl'), line({ type: 'system', subtype: 'turn_duration' }));
@@ -192,6 +222,11 @@ test('@S-HOOK-01 a Stop run uploads the right files in the right order and never
       expect(curTypes).not.toContain('harness-snapshot');
       expect(cur.query.get('snapshotId')).toBe(snapshotId);
       expect(cur.query.get('snapshotFull')).toBeNull();
+      // FR-10: the same for OKF — ref line only, no okfSnapshotFull.
+      expect(curTypes).toContain('okf-snapshot-ref');
+      expect(curTypes).not.toContain('okf-snapshot');
+      expect(cur.query.get('okfSnapshotId')).toBe(okfSnapshotId);
+      expect(cur.query.get('okfSnapshotFull')).toBeNull();
     });
 
     await test.step('5b. the hub reports the snapshot unknown → the next Stop resends the full harness-snapshot (DD-21)', async () => {

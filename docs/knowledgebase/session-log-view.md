@@ -335,7 +335,7 @@ permission event belongs to. Nothing else in the client hard-codes tool names fo
 - **`ParsedSession.repoRoot`** (display only): the effective repo root of path normalisation when
   non-empty, else the first main event's `cwd`; forward slashes, no trailing slash, `''` when
   unknown. `ToolViewProvider` passes it to the tool views, which show paths repo-relative with
-  `toRepoRelative` (`lib/bash-view/display-paths.ts`). Copy actions use the original text.
+  `toRepoRelative` (`packages/bash-view/src/display-paths.ts`, `@loghub/bash-view`). Copy actions use the original text.
 
 ### Shared tool view (`tool-call-view/`)
 

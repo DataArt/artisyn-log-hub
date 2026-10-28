@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# POC: generated wrapper for one monitored tool (the hook would write one copy per tool name,
+# replacing zz). The SHELL runs the real tool, exactly as without the wrapper — same PATH
+# lookup, same argument handling (incl. Git Bash path conversion on Windows). Node only tees stdout.
+__tool='zz'
+__dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+__path=":$PATH:"; __path="${__path//:$__dir:/:}"; __path="${__path#:}"; __path="${__path%:}"
+__real="$(PATH="$__path" command -v "$__tool")" || { echo "$__tool: command not found" >&2; exit 127; }
+__log="${TOOL_SHIM_DIR:-$__dir/../out}"
+__id="$(date +%s)-$$-$RANDOM$RANDOM"
+mkdir -p "$__log/out" 2>/dev/null
+# Node is a native Windows program under Git Bash: give it a Windows path to its script.
+__js="$__dir/tee-log.mjs"; command -v cygpath >/dev/null 2>&1 && __js="$(cygpath -w "$__js")"
+
+# stderr: plain tee (always available) into its own file, back to the real stderr.
+# stdout: through tee-log.mjs. MSYS_NO_PATHCONV keeps the logged args exactly as the agent typed them.
+PATH="$__path" "$__real" "$@" 2> >(tee -a "$__log/out/$__id.err" >&2) \
+  | MSYS_NO_PATHCONV=1 MSYS2_ARG_CONV_EXCL='*' node "$__js" "$__id" "$__tool" "$__real" "$@"
+__code=${PIPESTATUS[0]}
+printf '{"phase":"exit","callId":"%s","exit_code":%d}\n' "$__id" "$__code" >> "$__log/tool-calls.jsonl" 2>/dev/null
+exit "$__code"

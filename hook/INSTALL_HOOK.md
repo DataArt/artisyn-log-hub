@@ -251,6 +251,8 @@ The installer extracts this tree, generated at build time from `hook/.claude/tel
         │   ├── session-attribution-state.js
         │   ├── process-marker.js
         │   ├── harness-state.js
+        │   ├── okf-snapshot.js
+        │   ├── okf-state.js
         │   ├── ndjson-sanitize.js
         │   ├── code-inventory.js
         │   ├── edit-result-counts.js
@@ -360,7 +362,7 @@ remaining lifecycle events, and `send-logs-hook.js` + `post-turn-analysis-hook.j
 
 `prompt-upload-hook.js`, `otel-receiver.js`, `otel-register.js`, `otel-endpoint-check.js`, `otel-restart.js`, `session-files.js`,
 `throttle-state.js`, `claude-invoke-async.js`, `skill-catalog.js`, `harness-snapshot.js`, `post-turn-analysis-worker.js`,
-`session-attribution-state.js`, `process-marker.js`, `harness-state.js`, `ndjson-sanitize.js`, `code-inventory.js`,
+`session-attribution-state.js`, `process-marker.js`, `harness-state.js`, `okf-snapshot.js`, `okf-state.js`, `ndjson-sanitize.js`, `code-inventory.js`,
 `edit-result-counts.js`, `claude-config-dir.js` and `project-root-override.js` are **not** wired to any event — they are detached child processes / shared modules
 launched by the hooks above, so they never appear in `hooks.json`.
 
@@ -453,6 +455,7 @@ It is read from the hook process's environment (inherited from Claude Code), not
 | `sessionAttributionMaxPromptSizeKb` | `60` | number | Cap on the AI Session Attribution prompt's free-text "user prompts" sample; attribute definitions and the changed-file list are never truncated. |
 | `sessionAttributionLlmModel` | `"haiku"` | string | Claude model used for the AI Session Attribution branch's `claude -p` call. |
 | `sessionAttributionLlmTimeoutMs` | `600000` | number | Timeout for the attribution branch's LLM call (10 min — same rationale as the advisor branch's timeout above); on timeout the run is recorded as `failed` and counts toward the 3-consecutive-failure cap. |
+| `okf` | `{"exclude": []}` | object | OKF knowledge-base snapshot settings (hook `2.26.0`+). `okf.exclude` is an array of repo-relative globs (`**`, `*`, `?`) whose files and folders are never scanned for OKF bundles (folders whose `index.md` front matter has an `okf_version:` key); `tmp/**` is always excluded on top of it. Like every top-level key, `log-hub.local.json`'s `okf` replaces `log-hub.json`'s whole object — the two `exclude` lists are not merged. A non-array `exclude` is ignored with one `[warn]` line. An older hook ignores the key. Example: `{"okf": {"exclude": ["vendor/**", "docs/archive/**"]}}`. |
 
 **Removed guardrail keys:** `guardrailEnabled`, `guardrailBlockOutsideProject`, `guardrailProhibitedFiles`,
 `guardrailLlm*`, `guardrailBlockNetwork` and `guardrailMaxScriptSizeKb` belonged to the `PreToolUse` guardrail

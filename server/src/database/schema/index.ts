@@ -146,6 +146,13 @@ export const sessions = pgTable(
     // column by design (DD-11, DD-21). NULL until the first artisyn upload that carries a
     // snapshot or snapshot ref binds it (COALESCE-bound: never overwritten afterwards).
     harnessSnapshotId: varchar('harness_snapshot_id', { length: 64 }),
+    // Migration 0075: the DD-14 id of the okf_snapshots row this root session is bound to.
+    // No FK — the row is looked up by (owning user_id, this id) in application code, and an
+    // orphan sweep can delete that row out from under this column by design (same as
+    // harnessSnapshotId). NULL until the first artisyn upload that carries an OKF snapshot or
+    // snapshot ref binds it (bound only while NULL: never overwritten afterwards, DD-21).
+    // Sub-agent nodes stay NULL and resolve their root's value.
+    okfSnapshotId: varchar('okf_snapshot_id', { length: 64 }),
   },
   (table) => [
     index('sessions_parent_session_id_idx').on(table.parentSessionId),
@@ -155,6 +162,9 @@ export const sessions = pgTable(
     // Read path (getSessionLogs) looks up a session's snapshot by this column on every
     // session-logs request.
     index('sessions_harness_snapshot_id_idx').on(table.harnessSnapshotId),
+    // OKF read path (session/repo OKF tabs) and the okf_snapshots orphan sweep look up
+    // sessions by this column.
+    index('sessions_okf_snapshot_id_idx').on(table.okfSnapshotId),
   ],
 );
 
@@ -183,6 +193,32 @@ export const harnessSnapshots = pgTable(
       table.snapshotId,
     ),
     index('idx_harness_snapshots_snapshot_id').on(table.snapshotId),
+  ],
+);
+
+// One row per (owner user_id, snapshot_id): the whole DD-13 OKF snapshot body (the repo's
+// knowledge-base bundles and their files: path, ignored flag, size, hash) the hook built and
+// uploaded, stored verbatim in `body`. `snapshotId` is computed by the hook (DD-14) and only
+// format-validated here, never recomputed. UNIQUE (user_id, snapshot_id) makes the ingest-time
+// insert an upsert (`ON CONFLICT DO NOTHING`) (migration 0075).
+export const okfSnapshots = pgTable(
+  'okf_snapshots',
+  {
+    id: serial('id').primaryKey(),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    snapshotId: varchar('snapshot_id', { length: 64 }).notNull(),
+    body: jsonb('body').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    unique('okf_snapshots_user_id_snapshot_id_key').on(
+      table.userId,
+      table.snapshotId,
+    ),
   ],
 );
 
@@ -1245,6 +1281,41 @@ export const sessionFileStats = pgTable(
   (table) => [index('idx_session_file_stats_session_id').on(table.sessionId)],
 );
 
+// OKF (knowledge-base) access facts per tree node (sessions row), extracted from the transcript
+// (migration 0075): one row per (path_key, op, after_own_edit). `pathKey` is repo-relative —
+// a file path, or a folder with a trailing `/` (repo root = `/`, DD-4). `bytes` is the
+// UTF-8 size of the tool results attributed to this path (DD-1/DD-2; 0 for `write`), `calls`
+// the tool calls touching it, `seq` the 1-based rank of the path's first access within the node
+// (DD-27; shared by all rows of the same path). Derived data: rebuilt delete-then-insert per node
+// (DD-9). The CHECK on `op` ('read' | 'grep' | 'list' | 'write') is defined in the SQL
+// migration only. The UNIQUE index's leading session_id serves the per-node delete and the tree
+// read, so there is no separate session_id index.
+export const sessionOkfAccess = pgTable(
+  'session_okf_access',
+  {
+    id: serial('id').primaryKey(),
+    sessionId: integer('session_id')
+      .notNull()
+      .references(() => sessions.id, { onDelete: 'cascade' }),
+    pathKey: varchar('path_key', { length: 1024 }).notNull(),
+    op: varchar('op', { length: 8 })
+      .$type<'read' | 'grep' | 'list' | 'write'>()
+      .notNull(),
+    afterOwnEdit: boolean('after_own_edit').notNull().default(false),
+    bytes: bigint('bytes', { mode: 'number' }).notNull().default(0),
+    calls: integer('calls').notNull().default(0),
+    seq: integer('seq').notNull(),
+  },
+  (table) => [
+    unique('session_okf_access_session_path_op_edit_key').on(
+      table.sessionId,
+      table.pathKey,
+      table.op,
+      table.afterOwnEdit,
+    ),
+  ],
+);
+
 // Cache-creation cause decomposition per session, scoped like `sessionFileStats`
 // (nullable team_id / user_id) because the high-cache-creation threshold it is computed
 // with is a scoped `repo_config` field: a team-wide value and a personal override must be
@@ -1319,6 +1390,12 @@ export const uploadQueue = pgTable(
     // index: only matched together with user_id and status in that check, on a bounded-size
     // queue table.
     harnessSnapshotId: varchar('harness_snapshot_id', { length: 64 }),
+    // Migration 0075: set only when the upload's `okfSnapshotFull=1` query param carried a full
+    // OKF-snapshot body (DD-20), so the OKF "known" check (DD-22) can treat an id as "already in
+    // flight" while its upload_queue row is pending/processing/partially_uploaded, before the
+    // ingest transaction has stored the okf_snapshots row. No FK and no index, like
+    // harnessSnapshotId.
+    okfSnapshotId: varchar('okf_snapshot_id', { length: 64 }),
   },
   (table) => [
     index('idx_upload_queue_status_received_at').on(

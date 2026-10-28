@@ -134,6 +134,7 @@ After any endpoint change, update this file to stay in sync.
 - A staging-directory write failure (disk full, permissions, etc.) propagates as a `500` and creates no queue row.
 - **Chunked upload path (hook `1.8.0`+)**: four new optional query params, present only when the hook splits a body over `CHUNK_SIZE_BYTES` (10MB originally, 900KB since hook `2.6.1`, and the *on-the-wire* budget since `2.8.0`) into chunks — `uploadId` (hook-generated UUID, distinct from `sessionId`), `chunkIndex` (0-based integer), `totalChunks` (integer ≥1), `totalSize` (decimal string, total un-chunked byte length, required and read only on the `chunkIndex===0` request). All three of `uploadId`/`chunkIndex`/`totalChunks` must be present together or none at all — an incomplete subset, an out-of-range/non-integer `chunkIndex`/`totalChunks`, a `chunkIndex>0` referencing an unknown `uploadId`, or a `totalChunks` mismatch against the `uploadId`'s previously recorded value all `400`. Each chunk is staged as its own file (`${uploadId}.chunk${chunkIndex}`) and reassembled into one `${uploadId}.raw` file on the chunk that completes the set; the row is `partially_uploaded` until then. Response body on this path replaces the plain `{warnings}` shape: `201 { complete: false }` for every non-final chunk, `201 { complete: true, warnings: string[] }` for the final chunk. Files at or under `CHUNK_SIZE_BYTES` uncompressed, or any caller that omits all four new params, keep using the original single-request path and response shape unchanged — this is what preserves old-hook (pre-`1.8.0`) compatibility.
 - See `docs/knowledgebase/hook-api-versioning.md` for the v1/v2 history, the v1 removal and the compatibility matrix.
+- **OKF snapshot params (hook `2.26.0`+):** optional `okfSnapshotId` (validated `^[0-9a-f]{64}$`, invalid → silently ignored, never `400`) and `okfSnapshotFull=1` (full `okf-snapshot` line in the body; with a valid id sets `upload_queue.okf_snapshot_id`). The single and chunk-complete responses gain an optional `unknownOkfSnapshotId` when the upload was ref-only and the id is neither stored for the user nor queued (`isOkfSnapshotKnown`). Mirrors the harness `snapshotId` / `snapshotFull` / `unknownSnapshotId` trio; see `hook-api-versioning.md` and [`okf-usage.md`](okf-usage.md).
 
 ---
 
@@ -242,6 +243,28 @@ After any endpoint change, update this file to stay in sync.
 
 ---
 
+## `/api/v2/okf-usage`
+
+**File:** `server/src/logs/okf/okf-facts.controller.ts`
+
+| Method | Path | Handler | Auth |
+|---|---|---|---|
+| GET | `/api/v2/okf-usage/facts` | `getFacts()` | ApiKeyAuthGuard |
+
+**Notes:**
+- The plain facts of one of the caller's own session trees for an on-demand local KB-completeness
+  skill (FR-20): `{ sessionId, startedAt, prompts, agents[], tree }` — per agent its prompt, KB
+  reads with bytes / calls / own-edit bytes / snapshot size, first-access order (`kbSeq`), top 20
+  other reads and changed paths; never any tool-result text. Built by `OkfFactsService` from the
+  stored `claude` / `claude-subagent` bodies (reparsed, not `session_okf_access`).
+- `sessionId` (the session id string) is required → `400` without it. A missing session and a
+  session none of whose `logs` rows belong to the API key's user both answer the same `404`
+  (DD-33).
+- Registered in `LogsModule` (`OkfFactsController`, `OkfFactsService`). See
+  [`okf-usage.md`](okf-usage.md).
+
+---
+
 ## `/api/v1/model-pricing`
 
 **File:** `server/src/logs/model-pricing.controller.ts`
@@ -277,6 +300,7 @@ data is `/api/v1/admin/model-pricing` below.
 | GET | `/api/v1/repositories/:repoId/sessions/:sessionId/contexts` | `getSessionContexts()` | SessionAuthGuard |
 | GET | `/api/v1/repositories/:repoId/sessions/:sessionId/change-surface` | `getSessionChangeSurface()` | SessionAuthGuard — One session **tree**'s change-surface aggregate (fetched on every session open, for the Summary tile and the three CS detectors). Optional `teamId`. Access resolution is identical to `sessions/:sessionId/contexts` (`assertRepoAccess` + `resolveRepoIds` + the team-visibility owner condition). An inaccessible or never-recomputed session returns a `computed: false` aggregate, never a 404 and never a zeroed one. Uncapped by design |
 | GET | `/api/v1/repositories/:repoId/sessions/:sessionId/change-surface/files` | `getSessionChangeSurfaceFiles()` | SessionAuthGuard — The per-path rows behind the Change surface tab's file tree, fetched only when that tab is opened. Optional `teamId`. Capped at `CHANGE_SURFACE_MAX_FILE_ROWS` (5,000) with `total` / `truncated` reported alongside, so the tab says "showing the first N of M paths" instead of silently cutting the tree |
+| GET | `/api/v1/repositories/:repoId/sessions/:sessionId/okf-usage` | `getSessionOkfUsage()` | SessionAuthGuard — One session **tree**'s OKF (knowledge-base) usage for the session OKF tab: `{ verdict, hasSnapshot, readTop, bundles, tree, agents }`. Optional `teamId`. Same scope and 403 rules as the change-surface session routes (`resolveChangeSurfaceSessionScope`); a session not visible in the scope answers the empty response (`emptySessionUsage()`), never a 404. With `teamId` the fail-closed team filter (`applyOkfTeamFilter`) drops gitignored KB paths before the verdict, and another member's task heads are masked for a `team-no-prompts` caller. See [`okf-usage.md`](okf-usage.md) |
 | POST | `/api/v1/repositories/:repoId/sessions/:sessionId/favorite` | `setSessionFavorite()` | SessionAuthGuard |
 | GET | `/api/v1/repositories/:repoId/summary` | `getRepositorySummary()` | SessionAuthGuard — with `?teamId` counts every team member's row of the URL (`resolveRepoIds`), not access-mode scoped |
 | GET | `/api/v1/repositories/:repoId/sessions/:sessionId/logs` | `getSessionLogs()` | SessionAuthGuard — each `subagentStats` entry gains `webSearchRequests` / `inputTokensFast` / `outputTokensFast`; response gains `turnEndAdvisor: { generatedAt, summaryGeneral, costFactors, harnessAdvice } \| null`; `turnEndAdvisor` gains `model`, `costUsd`, `inputTokens`, `outputTokens`, `cacheReadTokens`, `cacheWriteTokens`; response gains `sessionAttribution` (see Notes below); each `subagentStats` entry gains `linesChanged` / `filesEditedWritten` / `linesAdded` / `linesRemoved` / `diffLinesCoveredCalls` / `diffLinesTotalCalls` (per-node, that child's own transcript only), and the `subagentStats` select carries the OTEL-only `EXISTS` guard so it cannot disagree with the server-side tree rollup |
@@ -289,6 +313,7 @@ data is `/api/v1/admin/model-pricing` below.
 | GET | `/api/v1/repositories/:repoId/reports/cache-read-ratio` | `ReportsController.getCacheReadRatio()` | SessionAuthGuard — `cacheWriteCost` is now the sum of the two TTL terms (5m and 1h priced separately), so 1h-heavy ranges report a higher figure than before. accepts `attr=` + `groupBy=attr:<key>` (see Notes below) |
 | GET | `/api/v1/repositories/:repoId/reports/harness-usage` | `ReportsController.getHarnessUsageReport()` | SessionAuthGuard — accepts `attr=` + `groupBy=attr:<key>` (see Notes below) |
 | GET | `/api/v1/repositories/:repoId/reports/change-surface` | `ReportsController.getChangeSurfaceReport()` | SessionAuthGuard — Backs the Reports tab's "Change Surface" document. Same `teamId`/`startDate`/`endDate`/`branches`/`users`/`attr` params and the same fixed-vs-`attr:` `groupBy` split as `harness-usage` (`CHANGE_SURFACE_GROUP_BY_VALUES`). Computes nothing itself: it calls `ChangeSurfaceAggregateService.build()` pinned to `bucket: 'week'`, which is what makes the report and the analytics chart structurally incapable of disagreeing |
+| GET | `/api/v1/repositories/:repoId/reports/okf-usage` | `ReportsController.getOkfUsageReport()` | SessionAuthGuard — Backs the repo **OKF** tab: `{ verdict, snapshot, tiles, shareBins, hotFiles, notRead, bundles, tree }` over the scoped root sessions. Same `teamId`/`startDate`/`endDate`/`branches`/`users`/`attr` params, scope (`resolveUsageScope`) and 403 rules as `harness-usage`, no `groupBy`; plus optional `bundle` (a bundle root of the latest snapshot; unknown or empty = all bundles). With `teamId` the fail-closed team filter applies. Delegates to `OkfUsageService.getRepoOkfUsage()`. See [`okf-usage.md`](okf-usage.md) |
 | GET | `/api/v1/repositories/:repoId/reports/attribution-breakdown` | `ReportsController.getAttributionBreakdownReport()` | SessionAuthGuard — `supportsAttributeFilter: true`, no `groupBy` (see Notes below) |
 | GET | `/api/v1/repositories/:repoId/reports/attribution-usage` | `ReportsController.getAttributionUsageReport()` | SessionAuthGuard — `supportsAttributeFilter: false`; repeatable `outcome=` (see Notes below) |
 | GET | `/api/v1/repositories/:repoId/analytics/tools` | `UsageAnalyticsController.getToolAnalytics()` | SessionAuthGuard — accepts `attr=` (see Notes below) |

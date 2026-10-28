@@ -17,6 +17,13 @@
 //   - step 8: a plain member of a `restricted` team sees only the Sessions tab, so Team-X is
 //     `transparent` for the member to reach Settings → Import/Export at all.
 //
+// OKF usage tab (2026-10-27-okf-usage-tab, DD-21, DD-42): the «refactor» session is an OKF
+// session tree (helpers/okf.ts) bound to a KB snapshot whose bundle root carries the run id, so
+// no other session of the stand shares the snapshot. The export carries `okfSnapshotId` in
+// session.json and the `okf-snapshot` line in artisyn.jsonl (step 2); after the import the
+// session keeps its binding and its OKF rows (step 5a); deleting it removes its
+// `session_okf_access` rows and sweeps the now-orphan `okf_snapshots` row (step 9).
+//
 // Replaces:
 //   - tests/e2e/repo-export-import.spec.ts (4: round trip and three «visibility» tests)
 //   - client/src/viewer/__tests__/components/ImportExportSection.test.tsx (3)
@@ -28,6 +35,7 @@ import type { Page } from '@playwright/test';
 import { test, expect } from '../fixtures';
 import { createApiKey } from '../helpers/api-key';
 import { ndjson, postLogs } from '../helpers/ingest';
+import { okfSnapshotBody, uploadOkfSessionTree } from '../helpers/okf';
 import { ownRepoId, promptSessionBodies, uploadPromptSession, uploadSubagent } from '../helpers/prompt-session';
 import { waitForQueueIdle } from '../helpers/queue';
 import { addTeamRepo, browserAs, createTeam, inviteAndAccept, skipNewUserNudge } from '../helpers/teams';
@@ -58,6 +66,26 @@ test('@S-REPO-09 owner exports a repository to zip and imports it into another o
   const prompts = { fix: `Fix login ${run}`, add: `Add export ${run}`, refactor: `Refactor db ${run}`, other: `Other ${run}` };
   const agentId = sid('fix-agent');
   const snapshotId = randomBytes(32).toString('hex');
+  const okfKb = `docs/kb-${run}`;
+  const okfSnapshot = { bundles: [{ root: okfKb, files: [`${okfKb}/db.md`, `${okfKb}/api.md`] }] };
+  const okfSnapshotId = okfSnapshotBody(okfSnapshot).okfSnapshotId;
+  /** `session_okf_access` rows of a session (its root node). */
+  const okfRows = async (sessionId: string) =>
+    Number(
+      (
+        await db.query<{ n: string }>(
+          'SELECT count(*) AS n FROM session_okf_access a JOIN sessions s ON s.id = a.session_id WHERE s.session_id = $1',
+          [sessionId],
+        )
+      ).rows[0].n,
+    );
+  const boundOkfSnapshot = async (sessionId: string) =>
+    (await db.query<{ okf_snapshot_id: string | null }>('SELECT okf_snapshot_id FROM sessions WHERE session_id = $1', [sessionId]))
+      .rows[0]?.okf_snapshot_id ?? null;
+  const okfSnapshotRows = async () =>
+    Number(
+      (await db.query<{ n: string }>('SELECT count(*) AS n FROM okf_snapshots WHERE snapshot_id = $1', [okfSnapshotId])).rows[0].n,
+    );
 
   const { repoA, repoB, teamId } = await test.step('setup: A with 3 sessions (main, feat/x, one with a sub-agent), B with 1, transparent Team-X with A', async () => {
     const key = await createApiKey(owner.api);
@@ -92,7 +120,22 @@ test('@S-REPO-09 owner exports a repository to zip and imports it into another o
     expect(res.status()).toBe(201);
     await waitForQueueIdle(db, owner.id);
     await uploadPromptSession(api, key.key, { sessionId: sid('add'), prompt: prompts.add, repoUrl: urlA, branch: 'feat/x' }, queue);
-    await uploadPromptSession(api, key.key, { sessionId: sid('refactor'), prompt: prompts.refactor, repoUrl: urlA, branch: 'main' }, queue);
+    // The «refactor» session reads a KB bound to an OKF snapshot (exported with it, step 2).
+    const okfTree = await uploadOkfSessionTree(
+      api,
+      key.key,
+      {
+        sessionId: sid('refactor'),
+        prompt: prompts.refactor,
+        repoUrl: urlA,
+        branch: 'main',
+        snapshot: okfSnapshot,
+        actions: [{ read: `${okfKb}/index.md` }, { read: `${okfKb}/db.md`, bytes: 2000 }],
+      },
+      queue,
+    );
+    expect(okfTree.okfSnapshotId).toBe(okfSnapshotId);
+    expect(await okfRows(sid('refactor')), 'index.md and db.md reads').toBe(2);
     await uploadPromptSession(api, key.key, { sessionId: sid('other'), prompt: prompts.other, repoUrl: urlB }, queue);
     const teamId = await createTeam(owner, `Export-${run}`);
     expect((await owner.api.patch(`/api/v1/teams/${teamId}`, { data: { accessMode: 'transparent' } })).status()).toBe(200);
@@ -141,6 +184,20 @@ test('@S-REPO-09 owner exports a repository to zip and imports it into another o
     // DD-14: the exported artisyn.jsonl of the snapshot session carries a harness-snapshot line.
     const fixArtisyn = entries.get(`sessions/${sid('fix')}/artisyn.jsonl`)!.toString('utf8');
     expect(fixArtisyn.split('\n').some((l) => l.trim() !== '' && (JSON.parse(l) as { type?: string }).type === 'harness-snapshot')).toBe(true);
+    // OKF (DD-21, DD-42): session.json names the bound snapshot, artisyn.jsonl carries its full
+    // line once (the original upload's line is not duplicated); a session without one has null.
+    const sessionJson = (name: string) =>
+      JSON.parse(entries.get(`sessions/${name}/session.json`)!.toString('utf8')) as { okfSnapshotId?: string | null };
+    expect(sessionJson(sid('refactor')).okfSnapshotId).toBe(okfSnapshotId);
+    expect(sessionJson(sid('add')).okfSnapshotId).toBeNull();
+    const okfLines = entries
+      .get(`sessions/${sid('refactor')}/artisyn.jsonl`)!
+      .toString('utf8')
+      .split('\n')
+      .filter((l) => l.trim() !== '')
+      .map((l) => JSON.parse(l) as { type?: string; okfSnapshotId?: string })
+      .filter((l) => l.type === 'okf-snapshot');
+    expect(okfLines.map((l) => l.okfSnapshotId)).toEqual([okfSnapshotId]);
   });
 
   await test.step('3. B → Import session → choose the zip: preview «3 sessions», from A (personal)', async () => {
@@ -168,6 +225,17 @@ test('@S-REPO-09 owner exports a repository to zip and imports it into another o
     await expect(page.locator('span', { hasText: /^Sessions:/ })).toHaveText('Sessions: 4');
     await page.getByRole('combobox').selectOption({ label: 'Plain list' });
     for (const prompt of Object.values(prompts)) await expect(page.getByText(prompt, { exact: true })).toBeVisible();
+  });
+
+  await test.step('5a. OKF: the imported «refactor» session keeps its snapshot binding and its OKF rows; B’s OKF tab reads its KB', async () => {
+    expect(await boundOkfSnapshot(sid('refactor'))).toBe(okfSnapshotId);
+    expect(await okfRows(sid('refactor'))).toBe(2);
+    const res = await owner.api.get(`/api/v1/repositories/${repoB}/sessions/${sid('refactor')}/okf-usage`);
+    expect(res.status()).toBe(200);
+    const usage = (await res.json()) as { hasSnapshot: boolean; bundles: Array<{ root: string; filesRead: number }> };
+    expect(usage.hasSnapshot).toBe(true);
+    // db.md only: the bundle's index.md is the entry point and never counts as an article read.
+    expect(usage.bundles).toEqual([expect.objectContaining({ root: okfKb, filesRead: 1 })]);
   });
 
   await test.step('6. The session with a sub-agent costs the same in B as in A (the tree is the same row)', async () => {
@@ -202,5 +270,13 @@ test('@S-REPO-09 owner exports a repository to zip and imports it into another o
     } finally {
       await context.close();
     }
+  });
+
+  await test.step('9. OKF: deleting the «refactor» session removes its session_okf_access rows and sweeps the orphan okf_snapshots row', async () => {
+    expect(await okfSnapshotRows(), 'the owner’s stored snapshot').toBe(1);
+    expect((await owner.api.delete(`/api/v1/sessions/${sid('refactor')}`)).status()).toBe(204);
+    expect(await okfRows(sid('refactor'))).toBe(0);
+    expect(await boundOkfSnapshot(sid('refactor'))).toBeNull();
+    expect(await okfSnapshotRows(), 'no session references the snapshot any more').toBe(0);
   });
 });

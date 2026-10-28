@@ -28,6 +28,8 @@ export const SESSION_TABS = [
   'change-surface',
   // The session tree plus each session's harness elements.
   'harness-usage',
+  // How the session tree read the repo's OKF knowledge bases.
+  'okf',
 ] as const;
 
 /** Repository view main tabs, mirrored into the `mtab` URL param (group `repo`). */
@@ -35,6 +37,8 @@ export const REPO_MAIN_TABS = [
   'sessions',
   'analytics',
   'reports',
+  // How the repo's OKF knowledge bases were read over a period.
+  'okf',
   'settings',
 ] as const;
 

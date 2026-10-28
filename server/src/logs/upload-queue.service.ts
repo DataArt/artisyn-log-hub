@@ -16,6 +16,11 @@ export interface SaveRawUploadMeta {
   workflowRunId?: string;
   /** DD-8: set only when the upload's `snapshotFull=1` and `snapshotId` is valid. */
   harnessSnapshotId?: string;
+  /**
+   * OKF DD-22: set only when the upload's `okfSnapshotFull=1` and `okfSnapshotId` is valid
+   * (mirrors `harnessSnapshotId`).
+   */
+  okfSnapshotId?: string;
 }
 
 export interface SaveChunkMeta {
@@ -30,6 +35,11 @@ export interface SaveChunkMeta {
   totalSize?: number;
   /** DD-8: set only when the upload's `snapshotFull=1` and `snapshotId` is valid. */
   harnessSnapshotId?: string;
+  /**
+   * OKF DD-22: set only when the upload's `okfSnapshotFull=1` and `okfSnapshotId` is valid
+   * (mirrors `harnessSnapshotId`).
+   */
+  okfSnapshotId?: string;
 }
 
 /**
@@ -111,6 +121,7 @@ export class UploadQueueService {
       workflowRunId: meta.workflowRunId,
       status: 'pending',
       harnessSnapshotId: meta.harnessSnapshotId,
+      okfSnapshotId: meta.okfSnapshotId,
     });
   }
 
@@ -181,6 +192,7 @@ export class UploadQueueService {
           chunksReceived,
           totalChunks: meta.totalChunks,
           harnessSnapshotId: meta.harnessSnapshotId,
+          okfSnapshotId: meta.okfSnapshotId,
         });
       }
     } else {

@@ -66,6 +66,7 @@ export function SessionTabBar({
     { id: 'usage', label: 'Statistics' },
     { id: 'change-surface', label: 'Change surface' },
     { id: 'harness-usage', label: 'Harness usage' },
+    { id: 'okf', label: 'OKF' },
     {
       id: 'raw-logs',
       label: (

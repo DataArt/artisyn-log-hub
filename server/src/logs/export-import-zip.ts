@@ -82,6 +82,12 @@ export interface SessionJson {
   startTime: string;
   endTime: string;
   gitBranch: string | null;
+  /**
+   * The OKF snapshot id the session (a tree root) was bound to at export time, or `null`.
+   * Optional because zips exported before the OKF usage tab lack it — import treats a missing
+   * value as "no snapshot" (DD-42 of docs/tasks/todo/2026-10-27-okf-usage-tab/impl-plan.md).
+   */
+  okfSnapshotId?: string | null;
   stats: Record<string, unknown> | null;
   logs: {
     claude?: SessionJsonLogEntry;

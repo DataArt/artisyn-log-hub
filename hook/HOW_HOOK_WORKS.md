@@ -340,6 +340,57 @@ body.
 
 ---
 
+## OKF snapshot — knowledge-base lines injected at upload time
+
+Since hook `2.26.0`, the same current-session `artisyn` upload (same gate as the harness lines
+above: the session's own artisyn file, current run only, never a backlog re-upload, never the
+prompt-triggered background upload) also carries one or two OKF lines built by `okf-snapshot.js`,
+appended after the harness and `code-inventory` lines. Like those, they are **never written to the
+local JSONL file**. Detection runs only here, at upload — never at `SessionStart`.
+
+**What is detected.** Starting from the git root, every `index.md` whose front matter (first 512
+bytes, between `---` lines) has an `okf_version:` key roots an OKF *bundle*; every `.md` under
+a bundle root belongs to the deepest bundle containing it (index links are never followed).
+`.git`, `node_modules`, symlinked directories, `tmp/**` and every `okf.exclude` glob from the
+config are skipped. Ignored flags come from one `git check-ignore --stdin -z` call (any git
+failure marks every file `ignored: true`). Over 20 000 KB files → no OKF lines (logged).
+
+**`okf-snapshot-ref`** is sent on every such upload:
+
+```json
+{ "type": "okf-snapshot-ref", "okfSnapshotId": "<64 lowercase hex>" }
+```
+
+**`okf-snapshot`** (the full body) is sent in addition only when the id is not in
+`okf-state.json`'s `knownSnapshotIds`:
+
+```json
+{ "type": "okf-snapshot", "okfSnapshotId": "<64 hex>", "schemaVersion": 1,
+  "bundles": [ { "root": "docs/knowledgebase", "index": "docs/knowledgebase/index.md",
+                 "ignored": false,
+                 "files": [ { "path": "docs/knowledgebase/db-tables.md", "ignored": false,
+                              "size": 12345, "hash": "<sha256 hex of content>" } ] } ] }
+```
+
+A repo without any bundle still sends a snapshot with `bundles: []`. Paths are repo-relative with
+`/`; `size` is bytes on disk. `okfSnapshotId` is the sha256 of the sorted
+`{root, index, ignored, files:[{path, ignored, size, hash}]}` projection — never mtime — so an
+unchanged KB keeps its id.
+
+**Query params and state.** The upload adds `&okfSnapshotId=<id>` (+ `&okfSnapshotFull=1` when the
+full line rides along). After a successful upload the hook remembers the id in
+`.artisyn/ai_work_dir/okf-state.json` (`knownSnapshotIds`, most-recent-first, capped at 20) when it
+sent the full body; when the server's response echoes `unknownOkfSnapshotId` with that id, the id
+is forgotten so the next upload resends the full body. `okf-state.json` also holds `hashCache`
+(path → `[mtimeMs, size, sha256]`), so an unchanged KB is not re-read and re-hashed on every
+upload; losing the file only costs one full resend and one re-hash.
+
+**Fail-open.** Any OKF failure — detection, git, state read/write — is logged to `hook.log` and
+the upload goes out without OKF lines; OKF never fails an upload. An older server ignores both the
+lines and the params.
+
+---
+
 ## Upload mechanics
 
 `send-logs-hook.js` runs in two modes. On `Stop` (end of each assistant turn) it does the **full run**

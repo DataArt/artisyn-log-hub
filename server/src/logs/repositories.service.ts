@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import {
   and,
+  asc,
   desc,
   eq,
   exists,
@@ -70,6 +71,7 @@ import {
 import { upsertSessionToolStatsRows } from './session-tool-stats-writer';
 import { recomputeSessionCosts } from './session-cost/session-cost-writer';
 import { upsertSessionHarnessUsageRows } from './session-harness-usage-writer';
+import { rebuildOkfAccessForNodes } from './okf/okf-access-writer';
 import type { TeamScope } from './team-scope';
 import {
   DEFAULT_TEAM_VIEW_CONFIG,
@@ -1458,7 +1460,60 @@ export class RepositoriesService {
       );
     }
 
+    // FR-5: the same endpoint backfills the OKF access rows of every node of the gathered trees
+    // (scope-independent, so once per tree here — not in the per-scope `writeFileStatsForTree`).
+    await this.recomputeOkfAccess(sessionIdValues, rootByNodeId);
+
     return { recomputed: sessionRows.length };
+  }
+
+  /**
+   * Rebuilds `session_okf_access` for every node of the given trees from its stored
+   * `claude` / `claude-subagent` body (impl-plan DD-9). Roots follow the one root rule: the
+   * node's own artisyn roots, else its tree root's — the same lookup as `writeFileStatsForTree`.
+   * Runs after the artisyn bodies above have refreshed the `logs` root columns.
+   */
+  private async recomputeOkfAccess(
+    treeSessionIds: number[],
+    rootByNodeId: Map<number, number>,
+  ): Promise<void> {
+    if (treeSessionIds.length === 0) return;
+    const rootsBySessionId = await loadArtisynRootsBySessionIds(
+      this.db,
+      treeSessionIds,
+    );
+    // One tree at a time, so only that tree's bodies are held in memory.
+    const nodesByTreeRoot = new Map<number, number[]>();
+    for (const nodeId of treeSessionIds) {
+      const treeRootId = rootByNodeId.get(nodeId) ?? nodeId;
+      const nodes = nodesByTreeRoot.get(treeRootId) ?? [];
+      nodes.push(nodeId);
+      nodesByTreeRoot.set(treeRootId, nodes);
+    }
+    for (const [treeRootId, nodeIds] of nodesByTreeRoot) {
+      const bodyRows = await this.db
+        .select({
+          sessionId: logs.sessionId,
+          logType: logs.logType,
+          body: logs.body,
+        })
+        .from(logs)
+        .where(
+          and(
+            inArray(logs.sessionId, nodeIds),
+            inArray(logs.logType, ['claude', 'claude-subagent']),
+          ),
+        )
+        .orderBy(asc(logs.id));
+      await rebuildOkfAccessForNodes(
+        this.db,
+        bodyRows,
+        (nodeId) =>
+          rootsBySessionId.get(nodeId) ??
+          rootsBySessionId.get(treeRootId) ??
+          [],
+      );
+    }
   }
 
   async setSessionFavorite(

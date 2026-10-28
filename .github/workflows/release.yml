@@ -69,7 +69,7 @@ jobs:
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 22
+          node-version: 24
           package-manager-cache: false
 
       # Without GH_TOKEN `gh` fails and a published release would read as `none`.
@@ -207,7 +207,7 @@ jobs:
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 22
+          node-version: 24
           package-manager-cache: false
 
       # Node built-ins only — no npm ci.
@@ -242,7 +242,7 @@ jobs:
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 22
+          node-version: 24
           package-manager-cache: false
 
       # Without VIRUS_TOTAL_KEY the job writes `skipped` rows and skips the scan.
@@ -357,7 +357,7 @@ jobs:
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
-          node-version: 22
+          node-version: 24
           package-manager-cache: false
 
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1

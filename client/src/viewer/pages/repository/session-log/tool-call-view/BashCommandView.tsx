@@ -1,9 +1,11 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { cn } from '../../../../lib/cn';
 import { useCopyToClipboard } from '../../../../hooks/useCopyToClipboard';
-import type { FoldedHeredoc } from '../../../../lib/bash-view/bash-format';
-import type { HighlightSegment } from '../../../../lib/bash-view/bash-highlight';
-import { toRepoRelative } from '../../../../lib/bash-view/display-paths';
+import {
+  type FoldedHeredoc,
+  type HighlightSegment,
+  toRepoRelative,
+} from '@loghub/bash-view';
 import type { ToolCallDetail } from '../types';
 import { BashFileSummary } from './BashFileSummary';
 import { HighlightedScript } from './HighlightedScript';

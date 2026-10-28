@@ -33,9 +33,11 @@ COPY server/ ./
 COPY scripts/algo-docs/ /app/scripts/algo-docs/
 RUN npm ci && ncc build src/main.ts -o /app/dist
 WORKDIR /app
-RUN mkdir -p /app/dist/drizzle /app/dist/prebuilds \
+# dist/wasm: the tree-sitter WASM the server's Bash analysis loads (scripts/copy-wasm.js).
+RUN mkdir -p /app/dist/drizzle /app/dist/prebuilds /app/dist/wasm \
  && cp -r server/drizzle/migrations /app/dist/drizzle/migrations \
  && cp -r server/node_modules/argon2/prebuilds/* /app/dist/prebuilds/ \
+ && cp server/node_modules/web-tree-sitter/web-tree-sitter.wasm server/node_modules/tree-sitter-bash/tree-sitter-bash.wasm /app/dist/wasm/ \
  && cp server/node_modules/connect-pg-simple/table.sql /app/dist/table.sql
 
 # Stage 4 — runtime

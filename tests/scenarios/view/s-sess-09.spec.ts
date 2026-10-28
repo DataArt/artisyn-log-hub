@@ -22,6 +22,15 @@
 //   - the tree shows a file's lines and change kind, not its call count; the two calls on Cart.tsx
 //     are checked in the API (`editCalls` 2) and as one tree node.
 //
+// Steps 7–10 — the session OKF tab (2026-10-27 OKF usage tab, FR-4, FR-11..FR-13): a session
+// tree built by helpers/okf.ts (DD-36) in a repository whose snapshot has one 12-file bundle
+// `docs/kb`. The main agent edits a01.md and reads it back (own edit), reads index.md, greps the
+// bundle folder (folder scan), reads a02.md three times, a03.md and a05.md once and greps a03.md
+// (a file grep, not counted in the folder-scan marker); its sub-agent
+// reads a04.md (8 KB). Shares count articles only (index.md is the entry point): main agent 3 of
+// the 10 articles it did not write (30 % > 25 %) → «Something to fix» with one Why line; the
+// sub-agent's 1 of 11 is fine.
+//
 // Replaces:
 //   - server/test/change-surface.e2e-spec.ts (24, part ≈ 10)
 //   - server/src/logs/change-surface/path-normalise.spec.ts (15)
@@ -32,8 +41,12 @@
 //   - client/src/viewer/__tests__/unit/log-parser.test.ts (normaliseClientPath, auto path
 //     normalization: ≈ 10)
 //   - client/src/viewer/__tests__/components/change-surface-tab.test.tsx (18, part)
+import { randomBytes } from 'crypto';
 import { test, expect } from '../fixtures';
+import { createApiKey } from '../helpers/api-key';
 import { loadExpected } from '../helpers/golden';
+import { uploadOkfSessionTree } from '../helpers/okf';
+import { ownRepoId } from '../helpers/prompt-session';
 import { openSession, summaryTile, uploadGoldenRepo } from '../helpers/session-view';
 
 interface ChangeSurface {
@@ -205,5 +218,95 @@ test('@S-SESS-09 Windows change surface: scattered change, a file outside the re
     await expect(tree.getByText('Cart.tsx', { exact: true })).toHaveCount(1);
     await expect(tree).toContainText(`Outside repo / unnormalised (${X.outsideRepoFiles})`);
     await expect(tree).toContainText(`+${X.linesAdded}`);
+  });
+
+  // ── OKF tab ───────────────────────────────────────────────────────────────────────────────
+  const run = randomBytes(4).toString('hex');
+  const okfSid = `ss09okf-${run}`;
+  const subAgentId = `agent-${run}kb`;
+  const okfRepoUrl = `https://git.arrakis.test/scn/ss09-okf-${run}`;
+  const articles = Array.from({ length: 11 }, (_, i) => `docs/kb/a${String(i + 1).padStart(2, '0')}.md`);
+
+  const okfRepoId = await test.step('7. upload an OKF session tree: 12-file bundle docs/kb, main agent + one sub-agent', async () => {
+    const key = await createApiKey(owner.api);
+    await uploadOkfSessionTree(
+      api,
+      key.key,
+      {
+        sessionId: okfSid,
+        repoUrl: okfRepoUrl,
+        prompt: 'document the KB-driven checkout',
+        snapshot: { bundles: [{ root: 'docs/kb', files: [{ path: 'docs/kb/index.md', size: 600 }, ...articles] }] },
+        actions: [
+          { edit: 'docs/kb/a01.md' },
+          { read: 'docs/kb/a01.md', bytes: 3000 },
+          { read: 'docs/kb/index.md', bytes: 600 },
+          { grep: 'docs/kb', bytes: 200 },
+          { read: 'docs/kb/a02.md', bytes: 100 },
+          { read: 'docs/kb/a02.md', bytes: 100 },
+          { read: 'docs/kb/a02.md', bytes: 100 },
+          { read: 'docs/kb/a03.md', bytes: 1000 },
+          { grep: 'docs/kb/a03.md', bytes: 50 },
+          { read: 'docs/kb/a05.md', bytes: 100 },
+        ],
+        subAgents: [{ agentId: subAgentId, task: 'summarise the payment article', actions: [{ read: 'docs/kb/a04.md', bytes: 8000 }] }],
+      },
+      { db, userId: owner.id },
+    );
+    const id = await ownRepoId(owner.api, okfRepoUrl);
+    const bound = await db.query<{ okf_snapshot_id: string | null }>(
+      'SELECT okf_snapshot_id FROM sessions WHERE session_id = $1',
+      [okfSid],
+    );
+    expect(bound.rows[0]?.okf_snapshot_id, 'the root session is bound to the uploaded snapshot').toMatch(/^[0-9a-f]{64}$/);
+    const sub = await db.query<{ n: string }>(
+      `SELECT count(*) AS n FROM session_okf_access a JOIN sessions s ON s.id = a.session_id
+        WHERE s.session_id = $1 AND a.path_key = 'docs/kb/a04.md' AND a.op = 'read'`,
+      [subAgentId],
+    );
+    expect(Number(sub.rows[0].n), 'the sub-agent read is stored on the sub-agent node (FR-4)').toBe(1);
+    return id;
+  });
+
+  await test.step('8. verdict card: «Something to fix», one Why line for the main agent (3 of 10, 30 %), read top 5 with the own-edit icon, two agents', async () => {
+    await openSession(page, owner, okfRepoId, okfSid, { tab: 'okf' });
+    await expect(page.getByTestId('session-okf-tab')).toBeVisible();
+    await expect(page.getByTestId('okf-no-snapshot')).toHaveCount(0);
+    await expect(page.getByTestId('okf-verdict-level')).toHaveText('Something to fix');
+    const why = page.getByTestId('okf-why-line');
+    await expect(why).toHaveCount(1);
+    await expect(why).toContainText(`agent ${okfSid.slice(0, 4)} read 30% of docs/kb files (3 of 10)`);
+    const readTop = page.getByTestId('okf-read-top');
+    await expect(readTop).toHaveCount(5);
+    await expect(readTop.first()).toContainText('docs/kb/a04.md');
+    await expect(readTop.filter({ hasText: 'docs/kb/a01.md' }).getByLabel('read after own edit')).toBeVisible();
+    await expect(page.getByTestId('okf-agent-row')).toHaveCount(2);
+    await expect(page.getByTestId('okf-bundle-card')).toContainText('docs/kb');
+  });
+
+  await test.step('9. tree: heat by bytes puts the sub-agent’s a04.md first, by calls a02.md; own-edit and folder-scan markers', async () => {
+    const rows = page.getByTestId('okf-tree-row');
+    await expect(rows.first()).toContainText('docs/kb');
+    await expect(rows.nth(1)).toContainText('a04.md');
+    await expect(rows.filter({ hasText: 'a01.md' })).toContainText('own edit');
+    // The bundle's grepCalls (2) include the file grep on a03.md; the marker counts the folder's own grep only.
+    await expect(rows.first()).toContainText('grep / ls over folder ×1');
+    await expect(rows.filter({ hasText: 'a11.md' })).toContainText('not read');
+    await page.getByTestId('okf-metric-toggle').getByText('Calls', { exact: true }).click();
+    await expect(rows.nth(1)).toContainText('a02.md');
+    await page.getByTestId('okf-metric-toggle').getByText('Bytes', { exact: true }).click();
+    await expect(rows.nth(1)).toContainText('a04.md');
+  });
+
+  await test.step('10. the sub-agent row narrows the tree to its read (FR-4); a Why line scrolls to and highlights the bundle', async () => {
+    const rows = page.getByTestId('okf-tree-row');
+    await page.getByTestId('okf-agent-row').filter({ hasText: subAgentId.slice(0, 4) }).click();
+    await expect(page.getByTestId('okf-tree')).toContainText('only agent');
+    await expect(rows.filter({ hasText: 'a04.md' })).toHaveCount(1);
+    await expect(rows.filter({ hasText: 'a02.md' })).toHaveCount(0);
+    await page.getByTestId('okf-why-line').click();
+    await expect(rows.filter({ hasText: 'a02.md' }), 'the Why click clears the agent filter').toHaveCount(1);
+    await expect(rows.first()).toHaveClass(/\bbg-accent\b/);
+    await expect(rows.first()).toBeInViewport();
   });
 });

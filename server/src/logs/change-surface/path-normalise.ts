@@ -210,3 +210,60 @@ export function normaliseChangedPath(
     outsideRepo: false,
   };
 }
+
+/** `/d/x/…` (Git Bash / MSYS spelling of a Windows drive path) → `D:/x/…`; anything else as is. */
+function msysToWindows(posixPath: string): string | null {
+  const m = /^\/([a-zA-Z])(\/.*)?$/.exec(posixPath);
+  return m ? `${m[1].toUpperCase()}:${m[2] ?? '/'}` : null;
+}
+
+/** Resolve `.` / `..` segments of a slash-normalised absolute path (no filesystem access). */
+function collapseDots(posixPath: string): string {
+  const leadingSlash = posixPath.startsWith('/');
+  const out: string[] = [];
+  for (const seg of posixPath.split('/')) {
+    if (seg === '' || seg === '.') continue;
+    if (seg === '..') {
+      // Never climb above a drive letter (`D:`) or the filesystem root.
+      if (out.length > 0 && !/^[a-zA-Z]:$/.test(out[out.length - 1])) out.pop();
+      continue;
+    }
+    out.push(seg);
+  }
+  return (leadingSlash ? '/' : '') + out.join('/');
+}
+
+/**
+ * Repo-relative path of an **absolute** path, in its original case, or `null` (OKF usage, FR-2).
+ *
+ * Backslashes become `/`, `.` / `..` segments are resolved, then the longest matching candidate
+ * root is stripped with the {@link stripRepoRootPreservingCase} rules (case-insensitive, `/`
+ * boundary). A Git Bash spelling `/d/repo/…` is retried as `D:/repo/…` when it matches no root.
+ *
+ * Returns `''` for the repo root itself (so a caller can key the root folder), the relative path
+ * without leading or trailing slash otherwise, and `null` when the session has no usable root or
+ * the path is outside every root — nothing is stored then.
+ */
+export function resolveRepoPath(
+  absPath: string,
+  candidateRoots: readonly (string | null | undefined)[] | null | undefined,
+): string | null {
+  const roots = usableRepoRoots(candidateRoots);
+  if (roots.length === 0 || typeof absPath !== 'string') return null;
+
+  const tryOne = (posixPath: string): string | null => {
+    const trimmed =
+      posixPath.length > 1 && posixPath.endsWith('/')
+        ? posixPath.slice(0, -1)
+        : posixPath;
+    const lower = trimmed.toLowerCase();
+    if (roots.some((root) => root.toLowerCase() === lower)) return '';
+    return stripRepoRootPreservingCase(trimmed, roots);
+  };
+
+  const collapsed = collapseDots(toPosix(absPath.trim()));
+  const direct = tryOne(collapsed);
+  if (direct !== null) return direct;
+  const windows = msysToWindows(collapsed);
+  return windows === null ? null : tryOne(windows);
+}

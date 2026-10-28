@@ -3,7 +3,7 @@ type: reference
 title: Release Pipeline
 description: How a release is published - push to the release branch runs .github/workflows/release.yml, which computes the version from the root package.json line and the git tags, builds the multi-arch GHCR image, builds and scans the install kit, attests everything and publishes the GitHub Release; plus the install scripts, verification commands, the local test bundle and the owner rollout checklist
 tags: [ci, release, github-actions, docker, ghcr, install]
-timestamp: 2026-10-25
+timestamp: 2026-10-28
 ---
 
 # Release Pipeline
@@ -23,6 +23,24 @@ that pins the image tag, and Docker pulls it.
 | VirusTotal scopes | `scripts/ci/virustotal-scan.js` (`scopeFor`) — same doc; see [CI Security Scans](ci-security-scans.md) |
 | Kit templates | `release-template/` (`INSTALL.md` → `README.md`, `docker-compose.yml`, `.env.example`, `install.sh`, `install.ps1`) |
 | Image build | repo-root `Dockerfile` (`ARG VERSION`, `ARG GIT_COMMIT` → `build-info.json`, see [System Info & Cluster](system-info-and-cluster.md)) |
+
+## Node.js version in CI
+
+Every `actions/setup-node` step in `.github/workflows/` (`checks.yml`, `release.yml`,
+`security-scans.yml`, `security-report.yml`, `virustotal.yml`) uses `node-version: 24`, the same
+major line as the `Dockerfile` (`node:24.22.1-slim` build stages, `node:24.22.1-alpine` runtime) and
+`docker-dev/Dockerfile` (`ARG NODE_VERSION=24.22.1`). Checks and builds therefore run on the major
+line the product runs on.
+
+- CI pins only the major line, not the patch: `setup-node` resolves it to the latest 24.x on each
+  run, so CI gets Node security patches without a manual bump. The exact patch is pinned in the
+  two Dockerfiles, where the `node-runtime` scan checks it (see [CI Security Scans](ci-security-scans.md)).
+- Dependabot does not bump `node-version`. On a move to the next LTS major, change all of these
+  in one PR: every `node-version` in `.github/workflows/`, both Dockerfiles, `@types/node` and the
+  Node.js row in `client/public/help/third-party-components.md`.
+- This is the Node that **builds and checks** Log Hub. The hook runs with the user's own `node`
+  from PATH (`engines: >=18.19`, every current LTS line, see
+  [Hook System Overview](hook-system-overview.md)), and the CI version does not cover that.
 
 ## Trigger
 

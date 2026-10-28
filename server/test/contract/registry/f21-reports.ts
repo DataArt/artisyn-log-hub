@@ -331,6 +331,119 @@ export const f21Reports: ContractFamily = {
       expect: { status: 403 },
     },
     {
+      // OKF usage (2026-10-27): the listed roots of January; a KB session is a root whose tree
+      // has a read/grep row under the bundle root `docs/kb` (only s02, through itself and its
+      // sub-agent s03). The latest snapshot is s02's (the only bound root): three files. The
+      // verdict's thresholds are okf-verdict.md's — one KB session is `not_enough_data`.
+      id: 'F21-okf-usage',
+      route: 'GET /api/v1/repositories/:repoId/reports/okf-usage',
+      actor: 'owner',
+      params: { repoId: '@R1.id' },
+      query: MONTH,
+      expect: {
+        status: 200,
+        bodyMatches: {
+          snapshot: {
+            okfSnapshotId: '@okfSnapshotId',
+            takenAt: '2026-01-11T09:00:00.000Z',
+            branch: 'main',
+          },
+        },
+      },
+      read: {
+        sql: `${ROOTS_AND_TREES},
+              acc AS (SELECT t.root_id, a.path_key FROM tree t
+                        JOIN session_okf_access a ON a.session_id = t.id
+                       WHERE a.op IN ('read', 'grep') AND a.path_key LIKE 'docs/kb/%'),
+              latest AS (SELECT o.body FROM roots r
+                           JOIN sessions s ON s.id = r.id
+                           JOIN okf_snapshots o ON o.snapshot_id = s.okf_snapshot_id
+                                               AND o.user_id = r.user_id
+                          ORDER BY r.start_time DESC LIMIT 1)
+              SELECT (SELECT count(*) FROM roots) AS total_sessions,
+                     (SELECT count(DISTINCT root_id) FROM acc) AS kb_sessions,
+                     (SELECT count(*) FROM latest, jsonb_array_elements(latest.body->'bundles') b,
+                                      jsonb_array_elements(b->'files') f) AS kb_files,
+                     (SELECT count(*) FROM latest, jsonb_array_elements(latest.body->'bundles') b,
+                                      jsonb_array_elements(b->'files') f
+                       WHERE f->>'path' NOT IN (SELECT path_key FROM acc)) AS not_read`,
+        args: ['@R1.id'],
+        shape: 'object',
+        path: 'tiles',
+        fields: {
+          totalSessions: { col: 'total_sessions', as: 'number' },
+          kbSessions: { col: 'kb_sessions', as: 'number' },
+          kbFiles: { col: 'kb_files', as: 'number' },
+          notRead: { col: 'not_read', as: 'number' },
+        },
+      },
+    },
+    {
+      // Hot files: read + grep bytes per KB file over the KB sessions, most bytes first. The
+      // bundle's index.md is the entry point, read by design, so it is never a hot file.
+      id: 'F21-okf-usage-hot-files',
+      route: 'GET /api/v1/repositories/:repoId/reports/okf-usage',
+      actor: 'owner',
+      params: { repoId: '@R1.id' },
+      query: MONTH,
+      expect: {
+        status: 200,
+        minRows: 2,
+        // Golden (DD-38): with one KB session every non-index file it read is "always read";
+        // below REPO_MIN_KB_SESSIONS the level is `not_enough_data`, the findings still listed.
+        bodyMatches: {
+          verdict: {
+            level: 'not_enough_data',
+            qualifiers: [],
+            findings: ['docs/kb/private.md', 'docs/kb/scheduler.md'].map(
+              (path) => ({
+                rule: 'always_read',
+                severity: 'fix',
+                params: {
+                  bundle: 'docs/kb',
+                  path,
+                  sessions: 1,
+                  kbSessions: 1,
+                  share: 1,
+                },
+                node: { bundle: 'docs/kb', path },
+              }),
+            ),
+          },
+        },
+      },
+      read: {
+        sql: `${ROOTS_AND_TREES}
+              SELECT 'docs/kb' AS bundle, a.path_key, sum(a.bytes) AS read_bytes,
+                     count(DISTINCT t.root_id) AS sessions
+                FROM tree t JOIN session_okf_access a ON a.session_id = t.id
+               WHERE a.op IN ('read', 'grep') AND a.path_key LIKE 'docs/kb/%'
+                 AND a.path_key NOT LIKE '%/'
+                 AND a.path_key <> 'docs/kb/index.md'
+               GROUP BY a.path_key
+               ORDER BY read_bytes DESC, a.path_key
+               LIMIT 10`,
+        args: ['@R1.id'],
+        shape: 'array',
+        path: 'hotFiles',
+        fields: {
+          bundle: 'bundle',
+          path: 'path_key',
+          readBytes: { col: 'read_bytes', as: 'number' },
+          sessions: { col: 'sessions', as: 'number' },
+        },
+        strict: true,
+      },
+    },
+    {
+      id: 'F21-okf-usage-outsider',
+      route: 'GET /api/v1/repositories/:repoId/reports/okf-usage',
+      actor: 'outsider',
+      params: { repoId: '@R1.id' },
+      query: MONTH,
+      expect: { status: 403 },
+    },
+    {
       // One section per attribute; a row per stored value, plus "Not determined" (evaluated, no
       // value) and "Unattributed" (never evaluated). Golden.
       id: 'F21-attribution-breakdown',
