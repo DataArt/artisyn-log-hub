@@ -11,7 +11,7 @@ repository the user says "monitor `ce`", the hook wraps it automatically, result
 **Tool Monitoring** tab; the user tunes or switches it off and the hook follows. Windows, Linux and
 macOS must all work.
 
-POC code: [`poc/`](poc/README.md): `shim/posix-shim.template.sh` + `shim/tee-log.mjs`
+POC code: [`docs/pocs/2026-10-28-1140-cli-tool-capture/`](../../../pocs/2026-10-28-1140-cli-tool-capture/README.md): `shim/posix-shim.template.sh` + `shim/tee-log.mjs`
 (Bash), `shim/ps-prefix.template.ps1` (PowerShell), `extract.mjs`, `envtest/.claude/session-start.mjs`,
 `envtest/.claude/pre-tool-use.mjs`, `wintest/make-pstest.mjs`. `shim/tool-shim.mjs` is the first,
 superseded attempt (see "Rejected" below).

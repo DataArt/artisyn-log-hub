@@ -1,7 +1,0 @@
-# POC run artefacts — logs and captured outputs, never committed
-out/
-wintest/pslog/
-wintest/pstest.ps1
-linuxtest/log/
-**/.codeexplorer/
-**/.artisyn/
