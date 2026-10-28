@@ -49,6 +49,13 @@ format where the two differ).
 | [okf-task-context](okf-task-context.md) | `server/src/logs/okf/okf-task-context.ts` | jest |
 | [okf-verdict](okf-verdict.md) | `server/src/logs/okf/okf-verdict.ts` (+ team filter `okf-usage-tree.ts`) | jest |
 | [okf-snapshot](okf-snapshot.md) | hook `okf-snapshot.js` | `node --test` |
+| [tool-monitor-name-validation](tool-monitor-name-validation.md) | `packages/tool-monitor/src/index.ts` (`@loghub/tool-monitor`; server and client); twin hook `tool-wrap-names.js` | jest, `node --test` |
+| [mcp-call-extraction](mcp-call-extraction.md) | `server/src/logs/tool-monitoring/mcp-call-extractor.ts` | jest |
+| [cli-command-recognition](cli-command-recognition.md) | `server/src/logs/tool-monitoring/cli-command-recognition.ts` | jest |
+| [tool-wrapper-matching](tool-wrapper-matching.md) | `server/src/logs/tool-monitoring/wrapper-record-matching.ts` | jest |
+| [tool-usefulness-signals](tool-usefulness-signals.md) | `server/src/logs/tool-monitoring/tool-call-signals.ts` | jest |
+| [tool-output-format](tool-output-format.md) | `client/.../repository/tools/output-format.ts` | vitest |
+| [tool-wrapper-fidelity](tool-wrapper-fidelity.md) | hook `tool-wrap-shims.js`, `tool-wrap-tee.js`, `tool-wrap-powershell.js` (real shells; skipped unless `LOGHUB_FIDELITY_TEST=1`, run from `scripts/tool-wrap-check/`'s verification project) | `node --test` |
 | [sandbox-prune-classification](sandbox-prune-classification.md) | `scripts/claude-docker/prune.mjs` | `node --test` (`npm run test:scripts`) |
 | [executable-config-guard](executable-config-guard.md) | `scripts/ci/config-guard.js` | `node --test` (`npm run test:scripts`) |
 | [security-scan-summary](security-scan-summary.md) | `scripts/ci/security-summary.js` | `node --test` (`npm run test:scripts`) |

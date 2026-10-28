@@ -16,6 +16,7 @@ export default defineConfig({
       // source through these aliases: bun cannot link a `file:` dependency on Windows.
       '@loghub/pricing': path.resolve(dirname, '../packages/pricing/src/index.ts'),
       '@loghub/bash-view': path.resolve(dirname, '../packages/bash-view/src/index.ts'),
+      '@loghub/tool-monitor': path.resolve(dirname, '../packages/tool-monitor/src/index.ts'),
     },
   },
   // web-tree-sitter loads its own .wasm via import.meta.url; pre-bundling breaks that path.

@@ -282,7 +282,9 @@ test('@S-HOOK-04 the hook never blocks Claude: server down, hanging, 500 or 401 
       );
       expect(res.code).toBe(0);
       await new Promise((resolve) => setTimeout(resolve, 2000));
-      expect(quiet.requests).toHaveLength(0);
+      // Prompt upload off sends nothing; the only request allowed is the separate, throttled
+      // tool-wrap config refresh (`toolWrap` is on by default), which is not an upload.
+      expect(quiet.requests.filter((r) => r.path !== '/api/v2/tool-monitoring/config')).toHaveLength(0);
       expect(readHookLog(off.repo, 'prompt-upload-hook.js')).toHaveLength(0);
     });
 

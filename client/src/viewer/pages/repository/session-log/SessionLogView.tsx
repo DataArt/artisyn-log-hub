@@ -13,6 +13,7 @@ import { SessionContextPanel } from './SessionContextPanel';
 import { NoPricingBadge } from '../../../components/NoPricingBadge';
 import { getSessionLogsErrorMessage } from './session-logs-error';
 import { resolveTurnAnchor } from './turn-anchor';
+import { findTurnIndexForToolUse } from './tool-use-turn';
 
 interface Props {
   logsData: SessionLogsData | undefined;
@@ -26,6 +27,16 @@ interface Props {
   targetTurnIndex?: number | null;
   /** Called once the scroll effect has acted on `targetTurnIndex`, so a later manual visit does not re-scroll. */
   onTargetTurnConsumed?: () => void;
+  /**
+   * A `tool_use` id to jump to — the Tools/MCP tab's "Open in session" link (`tu` param,
+   * DD-19). Once the logs parse, the turn holding it goes through `onTargetTurnResolved` and
+   * the id is consumed, found or not.
+   */
+  targetToolUseId?: string | null;
+  /** Receives the turn index resolved from `targetToolUseId` (sets the target-turn state). */
+  onTargetTurnResolved?: (turnIndex: number) => void;
+  /** Called once `targetToolUseId` has been acted on. */
+  onTargetToolUseConsumed?: () => void;
 }
 
 export function SessionLogView({
@@ -37,6 +48,9 @@ export function SessionLogView({
   sessionSubagentCost,
   targetTurnIndex,
   onTargetTurnConsumed,
+  targetToolUseId,
+  onTargetTurnResolved,
+  onTargetToolUseConsumed,
 }: Props) {
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const subagentLogsMap = useMemo(() => {
@@ -83,6 +97,27 @@ export function SessionLogView({
     () => (parsed ? parsed.turns.filter((t) => !isSystemOnlyTurn(t)) : []),
     [parsed],
   );
+
+  // Deep link to one tool call (DD-19): resolve the turn holding the `tool_use` id and hand it
+  // to the target-turn state, which the scroll effect below then acts on.
+  useEffect(() => {
+    if (!targetToolUseId || parsed === null) return;
+    const turnIndex = findTurnIndexForToolUse(
+      parsed.turns,
+      targetToolUseId,
+      subagentLogsMap,
+      agentParentMap,
+    );
+    if (turnIndex !== null) onTargetTurnResolved?.(turnIndex);
+    onTargetToolUseConsumed?.();
+  }, [
+    targetToolUseId,
+    parsed,
+    subagentLogsMap,
+    agentParentMap,
+    onTargetTurnResolved,
+    onTargetToolUseConsumed,
+  ]);
 
   // Cross-tab scroll-to-turn. Returns immediately when there is no
   // target or the session hasn't parsed yet — otherwise this would fire on every Logs mount and

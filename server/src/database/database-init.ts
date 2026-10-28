@@ -6,6 +6,7 @@ import { join } from 'path';
 import { Pool } from 'pg';
 import { AppLogger } from '../common/app-logger';
 import { isProduction } from '../common/runtime-env';
+import { TOOL_USAGE_EXTRACTOR_VERSION } from '../logs/tool-monitoring/tool-usage.constants';
 import {
   loadAppliedMigrations,
   verifyAppliedMigrations,
@@ -140,6 +141,22 @@ export async function initializeDatabase(
         migrationsSchema: process.env.E2E_DB_SCHEMA,
       });
       logger.log(`Migrations done in ${Date.now() - started}ms`, CONTEXT);
+
+      // 3b. Re-queue tool-usage rows built by an older extractor (DD-7): NULL marks the
+      //     session as pending, and the background drain rebuilds it. A no-op until
+      //     TOOL_USAGE_EXTRACTOR_VERSION is bumped. Still under the lock, so concurrently
+      //     starting workers run it once each at most, harmlessly. The partial index
+      //     idx_sessions_tool_usage_version (migration 0077) keeps it from scanning sessions.
+      const requeued = await client.query(
+        'UPDATE sessions SET tool_usage_version = NULL WHERE tool_usage_version < $1',
+        [TOOL_USAGE_EXTRACTOR_VERSION],
+      );
+      if (requeued.rowCount) {
+        logger.log(
+          `Tool usage: ${requeued.rowCount} session(s) queued for rebuild (extractor v${TOOL_USAGE_EXTRACTOR_VERSION})`,
+          CONTEXT,
+        );
+      }
 
       // 4. Resolve SESSION_SECRET (env -> stored row -> generated), still under
       //    the lock so concurrently starting workers agree on one value. Runs on

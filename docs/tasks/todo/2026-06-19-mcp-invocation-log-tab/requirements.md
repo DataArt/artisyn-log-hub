@@ -34,9 +34,8 @@ an MCP snapshot from a local install) are in [research-cli-tool-capture.md](rese
 
 **Relation to existing views.** The session **Harness usage** tab counts element use per session
 (`mcp` / `tool` kinds) — it answers "was it used". This tab answers "what did it return and was
-that good", across sessions. Neither replaces the other. The original per-prompt "MCP" section
-from the first version of this task is out of scope here —
-see Open Questions.
+that good", across sessions. Neither replaces the other. A per-prompt "MCP" section is out of
+scope — see Open Questions.
 
 ## Functional Requirements
 
@@ -51,7 +50,8 @@ see Open Questions.
   (`Scope: ce › callers ✕`), and the **Monitored tools** button (FR-2). The same user scope rules
   as the Sessions tab apply (personal view → own sessions; team view → team rules). Sub-agent and
   workflow-agent calls are included (the whole session tree, see
-  `docs/knowledgebase/session-metrics-scope.md`).
+  `docs/knowledgebase/session-metrics-scope.md`). The Status filter and the search apply to the calls
+  table only; the tools tree always shows the totals for the date range and scope.
 - **Three panes, explorer style: tools tree → calls table → call details.** Must stay usable with
   40+ tools.
   - **Splitters** between the panes: each pane boundary is draggable with the mouse; minimum
@@ -117,8 +117,8 @@ see Open Questions.
 
 - On the Tools/MCP tab, a **Monitored tools** panel lists the repository's CLI tools under
   observation. Per tool:
-  - `name` — the command name as typed in a shell (`ce`, `find`, …); validated as a single command
-    name (no spaces, no path separators, no shell metacharacters);
+  - `name` — the command name as typed in a shell (`ce`, `find`, …); validated per FR-8.1 (name
+    rules + denylist);
   - `enabled` — on / off;
   - `capture` — `full` (stdout + stderr) or `meta` (arguments, exit code, sizes, duration — no
     output text);
@@ -199,7 +199,9 @@ see Open Questions.
 - **Stdin**: when the agent pipes or redirects data into the tool (`cat x | ce …`, `… < file`,
   a heredoc, PowerShell pipeline input), the wrapper captures it (up to 100 KB) while passing it to
   the tool unchanged. Known difference: the tool then reads stdin from a pipe, not from the
-  redirected file directly. With no piped input, stdin is passed through untouched.
+  redirected file directly. With no piped input, stdin is passed through untouched. In Bash the
+  stdin copy is written to disk in full and cut to 100 KB at upload time (a very large piped input
+  temporarily occupies disk space; accepted to stay within the FR-8.8 budget).
 - **Crash-safe**: a `start` record is written before the tool runs; output is written as it
   arrives (Bash) or right after the tool exits (PowerShell); an `exit` record closes the call. A
   call without `exit` is shown as `terminated`.
@@ -258,7 +260,8 @@ transcript-only fallback). These are heuristics and are labelled as such in the 
   of rows per session and make the tab slow.
 - The row is **recomputed and overwritten as a whole** every time the session's data changes
   (each upload, including prompt-triggered partial uploads, and re-uploads) — no incremental
-  patching of the jsonb.
+  patching of the jsonb. The recompute runs asynchronously in the background after the upload, so
+  new data appears on the tab a few seconds after the upload, not instantly.
 - The Tools/MCP summary reads the pre-computed aggregates only; the calls list and call detail
   read the calls array. Full outputs must not have to be read to render the summary (e.g. kept in
   the same jsonb but outside the aggregate part, or in a sibling column — plan decides; see Open
@@ -333,7 +336,9 @@ stdin are forwarded byte-for-byte (no decoding, no newline or encoding conversio
 the real tool (FR-4); exit codes including `126` / `127` / `128+n` for signals; signals
 (Ctrl+C / SIGINT, SIGTERM) are forwarded to the tool; argument quoting, spaces, quotes and Unicode
 are untouched; Git Bash path conversion behaves as without the wrapper; `.cmd` / `.bat` / `.ps1`
-tools resolve exactly as the shell would. Only interactive use is out of scope — the wrapper is
+tools resolve exactly as the shell would. In PowerShell, which itself decodes native output into
+strings with or without the wrapper, fidelity is text-level: what the agent's PowerShell sees must be
+identical wrapped and unwrapped; byte-level fidelity applies to Bash. Only interactive use is out of scope — the wrapper is
 injected only into Claude Code's own shell tools (`CLAUDE_CODE_SESSION_ID` present); without it the
 wrapper passes through.
 
@@ -346,8 +351,8 @@ not waited for.
 - **Cross-platform**: Windows (Git Bash, Windows PowerShell 5.1, PowerShell 7), Linux, macOS.
   No path or behaviour tuned to the developer's machine.
 - **Overhead**: an unmonitored command pays nothing (Bash: no wrapper on PATH for it; PowerShell:
-  `PreToolUse` exits without output). A monitored call pays one extra Node start in Bash and no
-  extra process in PowerShell; to be measured on a high-frequency tool (`find`) and reported.
+  `PreToolUse` exits without output). A monitored call stays within the FR-8.8 budget, measured on
+  a high-frequency tool (`find`) and reported.
 - **Storage**: capture size per call limited to 100 KB (FR-4); MCP outputs stored as the transcript
   already holds them (no duplication of the transcript bytes beyond what the tab needs to query).
 - **Tab performance**: the summary for a repository with thousands of sessions must not re-parse
@@ -407,7 +412,8 @@ not waited for.
 - [ ] Fidelity matrix wrapped vs unwrapped is byte-identical (stdout, stderr, exit code) for:
       binary output, 20 000-line output, stdin pipe, args with spaces / quotes / Unicode, missing
       tool (127), Ctrl+C, `find /nonexistent` in Git Bash, a `.cmd` tool in PowerShell — on Windows
-      (Git Bash, PowerShell 5.1 and 7), Linux and macOS.
+      (Git Bash, PowerShell 5.1 and 7), Linux and macOS; for PowerShell "identical" means the text
+      the agent's PowerShell sees (FR-8.7).
 - [ ] A nested call of a monitored tool from inside another wrapped call is not wrapped twice.
 - [ ] Copy buttons copy the Output (active view), stderr, Parameters and Input blocks.
 - [ ] An output over 100 KB is stored cut at 100 KB with the `truncated` badge; the agent still
@@ -451,24 +457,4 @@ not waited for.
 ## Notes
 
 <!-- Append timestamped notes here as work progresses -->
-**2026-10-28:** Requirements rewritten from "per-prompt MCP section" to a repository-level
-Tools/MCP tab covering two channels (MCP from transcripts, CLI tools via a UI-configured wrapper).
-Research and POC: [research-cli-tool-capture.md](research-cli-tool-capture.md); POC code in
-[`docs/pocs/2026-10-28-1140-cli-tool-capture/`](../../../pocs/2026-10-28-1140-cli-tool-capture/README.md). Snapshot of a local install: 559 MCP calls, `playwright:browser_navigate`
-fails in 41 % of calls (mostly 30 s timeouts).
-
-**2026-10-28:** Config is two-level (personal / team); a session records the union of its owner's
-personal list and the repository's team lists; display follows the existing visibility rules.
-Storage: one jsonb row per session + tool, overwritten as a whole (FR-7) — not one row per call.
-
-**2026-10-28:** Wireframe replaced by `wireframes/tools-mcp-tab.svg` (explorer layout: calls table
-left, call details right; terminal-style output with table alignment, JSON pretty-print). Capture
-limit fixed at 100 KB per call (no per-tool setting); stdin is captured when piped.
-
-**2026-10-28:** Tools chip strip replaced by a tools tree (MCP / CLI → tool → operation) as the
-first explorer pane — chips do not scale to 40+ tools. Panes are resizable with splitters; the tools
-pane collapses to a rail. Wireframe regenerated.
-
-**2026-10-28:** Added FR-8 (wrapper safety: hard denylist incl. shells / `node` / `git`, fail-open,
-pre-flight self-test, circuit breaker, kill switches, no recursion, byte-level fidelity, overhead
-budget) and visible Copy buttons for Output / stderr / Parameters / Input.
+Revision history, POC pointer and the local-install MCP snapshot: [notes.md](notes.md).

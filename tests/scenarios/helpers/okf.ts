@@ -152,40 +152,67 @@ export function okfSnapshotBody(spec: OkfSnapshotSpec): OkfSnapshotBody {
 
 const abs = (rel: string): string => `${OKF_REPO_ROOT}/${rel.replace(/\/+$/, '')}`;
 
-/** The user / assistant / tool-result lines of one agent's transcript. */
-function agentLines(
-  sessionId: string,
-  idPrefix: string,
-  prompt: string,
-  actions: readonly OkfAction[],
-  start: Date,
-  sidechain: boolean,
-): object[] {
-  const common = { sessionId, cwd: OKF_REPO_ROOT, ...(sidechain ? { isSidechain: true } : {}) };
+/**
+ * One tool call of an agent transcript: the `tool_use` block (its `id` is filled in) and the
+ * `tool_result` content it got. `isError` adds `is_error: true` to the result.
+ */
+export interface AgentToolStep {
+  name: string;
+  input: Record<string, unknown>;
+  result: string;
+  isError?: boolean;
+}
+
+/** Where an agent transcript runs and when (shared by the OKF and the Tools/MCP builders). */
+export interface AgentTranscriptOptions {
+  /** The `sessionId` every line carries (the root session id, also for a sub-agent). */
+  sessionId: string;
+  /** Prefix of every uuid, message id and `tool_use` id (`toolu_<idPrefix>_<i>`). */
+  idPrefix: string;
+  /** The first user message. */
+  prompt: string;
+  /** Time of the first user message; step i's `tool_use` is at +10 + 10·i s, its result 1 s later. */
+  start: Date;
+  /** Every line is a sidechain line (a sub-agent transcript). */
+  sidechain: boolean;
+  /** The `cwd` every line carries. */
+  cwd: string;
+}
+
+/** The `tool_use` id of step `index` in a transcript built with `idPrefix`. */
+export function agentToolUseId(idPrefix: string, index: number): string {
+  return `toolu_${idPrefix}_${index}`;
+}
+
+/** When step `index`'s `tool_use` and (1 s later) its `tool_result` are written, given `start`. */
+export function agentStepAt(start: Date, index: number): { toolUse: Date; result: Date } {
+  return {
+    toolUse: new Date(start.getTime() + (10 + index * 10) * 1000),
+    result: new Date(start.getTime() + (11 + index * 10) * 1000),
+  };
+}
+
+/**
+ * The user / assistant / tool-result lines of one agent's transcript: the prompt, one
+ * assistant `tool_use` + user `tool_result` pair per step, and a closing «Done.» answer.
+ */
+export function agentTranscriptLines(o: AgentTranscriptOptions, steps: readonly AgentToolStep[]): object[] {
+  const { sessionId, idPrefix, prompt, start, sidechain } = o;
+  const common = { sessionId, cwd: o.cwd, ...(sidechain ? { isSidechain: true } : {}) };
   const at = (s: number) => new Date(start.getTime() + s * 1000).toISOString();
   const lines: object[] = [
     { type: 'user', uuid: `${idPrefix}-u0`, timestamp: at(0), ...common, message: { role: 'user', content: prompt } },
   ];
   let parent = `${idPrefix}-u0`;
-  actions.forEach((action, i) => {
-    const toolId = `toolu_${idPrefix}_${i}`;
-    let toolUse: object;
-    let result: string;
-    if ('read' in action) {
-      toolUse = { type: 'tool_use', id: toolId, name: 'Read', input: { file_path: abs(action.read) } };
-      result = 'r'.repeat(action.bytes ?? 1000);
-    } else if ('grep' in action) {
-      toolUse = { type: 'tool_use', id: toolId, name: 'Grep', input: { pattern: 'TODO', path: abs(action.grep) } };
-      result = 'g'.repeat(action.bytes ?? 100);
-    } else {
-      toolUse = {
-        type: 'tool_use',
-        id: toolId,
-        name: 'Edit',
-        input: { file_path: abs(action.edit), old_string: 'old', new_string: 'new' },
-      };
-      result = 'The file has been updated.';
-    }
+  steps.forEach((step, i) => {
+    const toolId = agentToolUseId(idPrefix, i);
+    const toolUse = { type: 'tool_use', id: toolId, name: step.name, input: step.input };
+    const toolResult = {
+      type: 'tool_result',
+      tool_use_id: toolId,
+      content: step.result,
+      ...(step.isError ? { is_error: true } : {}),
+    };
     const a = `${idPrefix}-a${i}`;
     const r = `${idPrefix}-r${i}`;
     lines.push(
@@ -203,7 +230,7 @@ function agentLines(
         parentUuid: a,
         timestamp: at(11 + i * 10),
         ...common,
-        message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: toolId, content: result }] },
+        message: { role: 'user', content: [toolResult] },
       },
     );
     parent = r;
@@ -212,7 +239,7 @@ function agentLines(
     type: 'assistant',
     uuid: `${idPrefix}-done`,
     parentUuid: parent,
-    timestamp: at(20 + actions.length * 10),
+    timestamp: at(20 + steps.length * 10),
     ...common,
     message: {
       id: `msg_${idPrefix}_done`,
@@ -223,6 +250,33 @@ function agentLines(
     },
   });
   return lines;
+}
+
+/** The tool step of one OKF action (Read / Grep / Edit under `OKF_REPO_ROOT`). */
+function okfStep(action: OkfAction): AgentToolStep {
+  if ('read' in action) {
+    return { name: 'Read', input: { file_path: abs(action.read) }, result: 'r'.repeat(action.bytes ?? 1000) };
+  }
+  if ('grep' in action) {
+    return { name: 'Grep', input: { pattern: 'TODO', path: abs(action.grep) }, result: 'g'.repeat(action.bytes ?? 100) };
+  }
+  return {
+    name: 'Edit',
+    input: { file_path: abs(action.edit), old_string: 'old', new_string: 'new' },
+    result: 'The file has been updated.',
+  };
+}
+
+/** The user / assistant / tool-result lines of one OKF agent's transcript. */
+function agentLines(
+  sessionId: string,
+  idPrefix: string,
+  prompt: string,
+  actions: readonly OkfAction[],
+  start: Date,
+  sidechain: boolean,
+): object[] {
+  return agentTranscriptLines({ sessionId, idPrefix, prompt, start, sidechain, cwd: OKF_REPO_ROOT }, actions.map(okfStep));
 }
 
 /** The uploads of one OKF session tree (DD-36). */
@@ -281,7 +335,22 @@ export async function uploadOkfSessionTree(
   queue: { db: Pool; userId: number },
 ): Promise<OkfSessionTree> {
   const tree = okfSessionTree(spec);
-  for (const u of tree.uploads) {
+  await postUploadsInOrder(api, apiKey, tree.uploads, queue);
+  return tree;
+}
+
+/**
+ * Posts `uploads` with `apiKey` one by one through `POST /api/v2/logs`, throws on any non-201,
+ * and waits after each until the key owner's queue is idle — hook order, so the artisyn log
+ * (repository, roots, snapshot binding) is processed before the transcripts that follow it.
+ */
+export async function postUploadsInOrder(
+  api: APIRequestContext,
+  apiKey: string,
+  uploads: readonly OkfUpload[],
+  queue: { db: Pool; userId: number },
+): Promise<void> {
+  for (const u of uploads) {
     const res = await api.post('/api/v2/logs', {
       params: u.params,
       headers: { 'Content-Type': 'application/x-ndjson', 'X-API-Key': apiKey },
@@ -290,8 +359,6 @@ export async function uploadOkfSessionTree(
     if (res.status() !== 201) {
       throw new Error(`Uploading ${u.params.type} of ${u.params.sessionId} failed (${res.status()}): ${await res.text()}`);
     }
-    // Hook order: the artisyn log (repo, roots, snapshot binding) is processed first.
     await waitForQueueIdle(queue.db, queue.userId);
   }
-  return tree;
 }

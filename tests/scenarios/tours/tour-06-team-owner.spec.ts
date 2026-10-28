@@ -76,7 +76,7 @@ test('@TOUR-06 team owner: teams tour @mode-a', async ({ stand, api, db, users, 
   await walker.screen(page, 'team-repo.sessions');
   await walker.screen(page, 'team-repo.owner-sees-team-wide-tabs', {
     check: async () => {
-      await expectTabsOnScreen(page, 'repo', ['sessions', 'analytics', 'reports', 'okf', 'settings']);
+      await expectTabsOnScreen(page, 'repo', ['sessions', 'analytics', 'reports', 'tools', 'okf', 'settings']);
       await expect(page.getByTestId('restricted-sessions-notice')).toHaveCount(0);
     },
   });

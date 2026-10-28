@@ -4,7 +4,7 @@ title: "Database Structure"
 description: "Database schema, table relationships, extracted field patterns, indices, and migration history."
 tags:
   - database
-timestamp: "2026-07-20T22:24:25+04:00"
+timestamp: "2026-10-29T00:00:00+04:00"
 ---
 
 # Database Structure
@@ -268,6 +268,7 @@ row per existing `session_stats` row at base rates.
 | `deleted`           | boolean      | NOT NULL | DEFAULT false — soft-delete flag; deleted sessions are hidden from all queries |
 | `harness_snapshot_id` | varchar(64) | nullable | The DD-2 id of the [`harness_snapshots`](#harness_snapshots) row this session is bound to. No FK — the row is looked up in application code by `(owning user_id, this id)`, and an orphan sweep (`deleteOrphanHarnessSnapshots`) can delete that row out from under this column by design (see [data-retention.md](data-retention.md) § "Orphan harness-snapshot and OKF-snapshot cleanup"). `NULL` until the first `artisyn` upload that carries a `harness-snapshot` or `harness-snapshot-ref` line binds it — COALESCE-bound (`WHERE harness_snapshot_id IS NULL`), so once set it is never overwritten by a later upload. Indexed (`sessions_harness_snapshot_id_idx`): the session-logs read path looks a session's snapshot up by this column on every request. Migration: `0073_harness_snapshots.sql`. |
 | `okf_snapshot_id` | varchar(64) | nullable | The DD-14 id of the [`okf_snapshots`](#okf_snapshots) row this **root** session is bound to (sub-agents resolve their root). No FK, same rationale as `harness_snapshot_id` (the orphan sweep `deleteOrphanOkfSnapshots` may delete the row under it). `NULL` until the first root `artisyn` upload carrying an `okf-snapshot` or `okf-snapshot-ref` line binds it (`WHERE okf_snapshot_id IS NULL`, never overwritten); stays `NULL` for uploads from hooks older than 2.26.0. Indexed (`sessions_okf_snapshot_id_idx`) for the OKF read path and the orphan sweep. See [okf-usage.md](okf-usage.md). Migration: `0075_okf_usage.sql`. |
+| `tool_usage_version` | smallint | nullable | Tools/MCP rebuild marker (DD-7). `NULL` = the node's [`session_tool_usage`](#session_tool_usage) rows are pending a rebuild by the background drain (`ToolUsageRebuildService`); otherwise the `TOOL_USAGE_EXTRACTOR_VERSION` they were built with. Set back to `NULL` on the uploaded node and its top ancestor (`markTreeStale` / `markTreesStale`) by a `claude` / `claude-subagent` / `tool-calls` ingest, an `artisyn` ingest that inserted a new `log_repositories` link, import, `recompute-all-sessions` and a newly monitored CLI tool; `initializeDatabase()` NULLs every value below the current extractor version on start. No default: every session that existed before `0076` starts `NULL`, which is the one-off backfill. Partial index `idx_sessions_tool_usage_pending` on `(id) WHERE tool_usage_version IS NULL AND NOT deleted` (the drain's claim) and, since `0077`, `idx_sessions_tool_usage_version` on `(tool_usage_version) WHERE tool_usage_version IS NOT NULL` (the startup re-queue). See [tool-monitoring.md](tool-monitoring.md). Migrations: `0076_tool_monitoring.sql`, `0077_tool_usage_indexes.sql`. |
 
 Lightweight deduplication table. Arriving session strings are looked up or created here; the integer FK is stored on `logs` to keep that table lean.
 
@@ -355,6 +356,7 @@ called beside `deleteOrphanHarnessSnapshots` from session purge and the team-rep
 | `hook_recommendations` | jsonb | nullable | Array of `{rule, message, detectedAt}` — current recommendation set; one entry per `rule`, upserted in place hook-side (see `recommendations.js` in `docs/knowledgebase/hook-system-overview.md`). Migration: `0024_repositories_hook_state`. |
 | `harness_inventory_reported_at` | timestamptz | nullable | Timestamp of the most recent artisyn upload that carried an inventory self-report (skill-definitions/mcp-config/system-context). `NULL` until the repo's hook has ever reported harness inventory — drives the Harness Usage report's `inventoryReported` empty state. "Last self-report wins" semantics, same as `hook_version`. Migration: `0052_harness_elements`. |
 | `harness_mcp_per_tool_supported` | boolean | nullable | The most recent artisyn upload's `mcp-config.perToolDetailSupported` flag. `NULL` = never reported by a capable hook (old hook, or no report yet) — distinguishes that case from "capable hook, this server had 0 tools" (`false`/`true` are both real reports). Migration: `0052_harness_elements`. |
+| `tool_wrap_status` | jsonb | nullable | `ToolWrapStatusJson` — the CLI tool wrapper's last reported status for this repository row (DD-20): `{ hookVersion, os, preflight: { ok, reason, shells? }, breaker: { global, tools[] }, reportedAt, tools: { [name]: { lastWrapperAt } } }`. Written only by the Tools/MCP tree rebuild (`tool-wrap-status.ts` `writeToolWrapStatus`, row locked for the read-merge-write) for the rows linked to the root's `artisyn` log, when the tree has a `tool-calls` log: the newest `reportedAt` wins, `lastWrapperAt` is the max over every rebuild. `NULL` = never reported (hook older than 2.27.0, or no wrapper data yet) — drives the panel hint `hook_too_old`. Migration: `0076_tool_monitoring.sql`. |
 
 **`repo_url` is stored in canonical form.** Every repository URL is normalised at ingest by `normalizeRepoUrl()` (`server/src/logs/repo-url-normalizer.ts`), so the SSH and HTTPS spellings of one remote map to one row:
 
@@ -922,6 +924,36 @@ neither seeds nor recomputes. Writes: `saveTeamConfig` (team owner only; with `t
 that team, without it the caller's lowest-id owned team linking the URL); `null` deletes the
 row.
 
+### repo_tool_monitor_config
+
+The **personal** monitored-CLI-tools list of one repository row (Tools/MCP tab, DD-1; migration
+`0076`). A `repositories` row is already per user, so `repo_id` alone is the key. Kept apart from
+`repo_config` on purpose: the settings PUTs replace the whole `RepoConfigJson` blob and run the
+file-stats recompute, which must never drop the tool list or be triggered by it. No row = the
+empty config. Reads and writes: `ToolMonitorConfigService`
+(`server/src/logs/tool-monitoring/tool-monitor-config.service.ts`).
+
+| Column       | Type        | Nullable | Notes |
+|--------------|-------------|----------|-------|
+| `repo_id`    | integer     | NOT NULL | PK; FK → repositories.id, ON DELETE CASCADE |
+| `config`     | jsonb       | NOT NULL | `ToolMonitorConfigJson` = `{ paused: boolean, tools: [{ name, enabled, capture: 'full' / 'meta' }] }`; at most 100 tools, names unique case-insensitively and valid per `validateToolName` (`@loghub/tool-monitor`). Read tolerantly: malformed entries are dropped |
+| `updated_at` | timestamptz | NOT NULL | DEFAULT now() |
+
+### team_repo_tool_monitor_config
+
+The **team** monitored-CLI-tools list of a (team, repoUrl) link (migration `0076`), the
+counterpart of `team_repo_config`: owned by the `team_repositories` link and removed by its FK
+cascade. Edited by the team owner only. The hook and the rebuild use the merge of the owner's
+personal row and every team row whose team links the URL and has the owner as a member
+(`resolveMonitoredTools`, DD-2: union of the enabled tools, `full` capture wins, any `paused`
+pauses).
+
+| Column               | Type        | Nullable | Notes |
+|----------------------|-------------|----------|-------|
+| `team_repository_id` | integer     | NOT NULL | PK; FK → team_repositories.id, ON DELETE CASCADE |
+| `config`             | jsonb       | NOT NULL | `ToolMonitorConfigJson` (as above) |
+| `updated_at`         | timestamptz | NOT NULL | DEFAULT now() |
+
 ### session_cause_stats
 
 Per-session decomposition of cache-creation tokens by **cause**, written during `claude` log ingestion (migration `0049`). Shape mirrors `session_file_stats`: nullable `team_id` / `user_id`, one row per (session, config scope).
@@ -1034,6 +1066,37 @@ Unique constraint `session_okf_access_session_path_op_edit_key` on
 `(session_id, path_key, op, after_own_edit)`; its leading `session_id` serves the per-node delete
 and the tree read, so there is no separate index. Session purge deletes the rows explicitly (step
 c2 — a soft delete keeps the `sessions` row, so the cascade would not run).
+
+### session_tool_usage
+
+Per tree node (`sessions` row = the root agent or one sub-agent), the MCP and CLI tool calls of
+the Tools/MCP tab — one row per `(session_id, channel, tool)`. Derived data: rebuilt
+delete-then-insert per **session tree** by the background drain `ToolUsageRebuildService`
+(`tool-usage-writer.ts` `rewriteTreeToolUsage`) whenever `sessions.tool_usage_version` is `NULL`;
+ingest never writes it inline. A call belongs to the node whose transcript holds it; an unmatched
+(`indirect`) wrapper record belongs to the root. Feature: [tool-monitoring.md](tool-monitoring.md).
+Migration: `0076_tool_monitoring.sql`.
+
+| Column             | Type        | Nullable | Notes |
+|--------------------|-------------|----------|-------|
+| `id`               | serial      | NOT NULL | PK; the `usageId` of the call-detail route |
+| `session_id`       | integer     | NOT NULL | FK → sessions.id, ON DELETE CASCADE (the node) |
+| `channel`          | varchar(8)  | NOT NULL | CHECK `mcp` / `cli` (SQL only) |
+| `tool`             | text        | NOT NULL | MCP server name (segment 1 of `mcp__<server>__…`) or the CLI tool name |
+| `call_count`       | integer     | NOT NULL | DEFAULT 0 |
+| `first_call_at`    | timestamptz | nullable | Earliest call start in the row |
+| `last_call_at`     | timestamptz | nullable | Latest call start; the date-range reads filter on it after reaching the scoped tree's rows by `session_id`, so it is not indexed (`idx_session_tool_usage_last_call_at` from `0076` was dropped by `0077`) |
+| `has_wrapper_data` | boolean     | NOT NULL | DEFAULT false — at least one call of the row came from a wrapper record |
+| `aggregates`       | jsonb       | NOT NULL | `ToolUsageAggregates` = `{ operations: { [op]: { calls, errors, killed, noResult, empty, retried, fellBack, openedFile, durationMsSum, durationCount, inBytesSum, outBytesSum, lastTs } } }` (DD-11). The summary route reads only this column |
+| `calls`            | jsonb       | NOT NULL | `ToolCallRecord[]` — per-call metadata, no output text, at most a 300-character `inputPreview` (DD-10) |
+| `outputs`          | jsonb       | nullable | `{ [callId]: { input?, stdin?, stdout?, stderr?, agentSaw?, encoding } }` — captured text, each part capped at 100 KB (DD-9). Read only by the call-detail route and the search |
+
+The three jsonb columns are TOASTed separately, so a query that names only `aggregates` never
+detoasts the call lists or the outputs. Unique constraint
+`session_tool_usage_session_channel_tool_key` on `(session_id, channel, tool)`; its leading
+`session_id` serves the per-node delete and the tree read, so there is no separate index. Session
+purge deletes the rows explicitly (`sessions.service.ts` step c3 — a soft delete keeps the
+`sessions` row, so the cascade would not run).
 
 ### session_changed_paths
 
@@ -1467,3 +1530,5 @@ re-reads, so every cluster worker and every restart share one value.
 | `0072_team_repo_config.sql` | Create `team_repo_config` (PK = FK → `team_repositories.id`, ON DELETE CASCADE). Moves every team-scoped `repo_config` row to its link (matched by `(team_id, repo_url)`; newest `updated_at` wins, ties → lowest `repo_id`; rows with no link are dropped and counted in a `RAISE NOTICE`), then drops `repo_config_scope_check` and `repo_config.team_id` (with its partial unique index) and sets `repo_config.user_id` NOT NULL. Guarded by `information_schema.columns` in `current_schema()`; irreversible |
 | `0073_harness_snapshots.sql` | Create `harness_snapshots` (serial PK, `user_id` FK → `users.id` ON DELETE CASCADE, `snapshot_id` varchar(64), `body` jsonb, `created_at`; unique `(user_id, snapshot_id)`; index on `snapshot_id` alone) — the hook's DD-1 harness snapshot (skills/agents/MCP/system-context), replacing the old `skill-definitions`/`agent-definitions`/`mcp-config`/`system-context` event parsing. Add nullable `sessions.harness_snapshot_id` varchar(64) with its own index, and nullable `upload_queue.harness_snapshot_id` varchar(64) (no index — looked up only alongside `user_id`/`status` via the existing queue indexes). All three `ADD COLUMN`s are nullable with no DEFAULT, so catalog-only. Purely additive, no backfill, no `CONCURRENTLY` index (new table created empty in the same transaction) |
 | `0075_okf_usage.sql` | Create `okf_snapshots` (serial PK, `user_id` FK → `users.id` ON DELETE CASCADE, `snapshot_id` varchar(64), `body` jsonb, `created_at`; unique `(user_id, snapshot_id)`) and `session_okf_access` (serial PK, `session_id` FK → `sessions.id` ON DELETE CASCADE, `path_key` varchar(1024), `op` varchar(8) CHECK `read`/`grep`/`list`/`write`, `after_own_edit`, `bytes`, `calls`, `seq`; unique `(session_id, path_key, op, after_own_edit)`) — OKF usage tabs. Add nullable `sessions.okf_snapshot_id` varchar(64) with index `sessions_okf_snapshot_id_idx` and nullable `upload_queue.okf_snapshot_id` varchar(64). Additive and re-runnable (`IF NOT EXISTS` throughout), catalog-only `ADD COLUMN`s, no backfill (history via `POST recompute-all-sessions`), no `CONCURRENTLY` index |
+| `0076_tool_monitoring.sql` | Create `repo_tool_monitor_config` (PK = FK → `repositories.id`) and `team_repo_tool_monitor_config` (PK = FK → `team_repositories.id`), both ON DELETE CASCADE with `config` jsonb + `updated_at`, and `session_tool_usage` (serial PK, `session_id` FK → `sessions.id` ON DELETE CASCADE, `channel` varchar(8) CHECK `mcp`/`cli`, `tool` text, `call_count`, `first_call_at`, `last_call_at`, `has_wrapper_data`, jsonb `aggregates` / `calls` / `outputs`; unique `(session_id, channel, tool)`, index `idx_session_tool_usage_last_call_at`) — Tools/MCP tab. Add nullable `sessions.tool_usage_version` smallint with the partial index `idx_sessions_tool_usage_pending` (`WHERE tool_usage_version IS NULL AND NOT deleted`) and nullable `repositories.tool_wrap_status` jsonb. Additive and re-runnable (`IF NOT EXISTS` throughout), catalog-only `ADD COLUMN`s (no default), no `CONCURRENTLY` index. **Implicit backfill**: every existing session starts with `tool_usage_version` `NULL`, so after deploy the background drain rebuilds every non-deleted tree in batches (`TOOL_USAGE_REBUILD_BATCH` per `TOOL_USAGE_REBUILD_INTERVAL_MS`, `SKIP LOCKED`); the file itself rewrites no data |
+| `0077_tool_usage_indexes.sql` | Drop `idx_session_tool_usage_last_call_at` (never read: the Tools/MCP reads reach `session_tool_usage` by `session_id` and filter `last_call_at` as a residual) and create the partial `idx_sessions_tool_usage_version` on `sessions (tool_usage_version) WHERE tool_usage_version IS NOT NULL` for the startup re-queue `UPDATE … WHERE tool_usage_version < $1`. Index-only, re-runnable (`IF EXISTS` / `IF NOT EXISTS`), no data rewritten; older builds need neither index, so a rollback is safe |

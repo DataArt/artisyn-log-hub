@@ -533,6 +533,20 @@
       "when": 1790985600000,
       "tag": "0075_okf_usage",
       "breakpoints": true
+    },
+    {
+      "idx": 76,
+      "version": "7",
+      "when": 1791072000000,
+      "tag": "0076_tool_monitoring",
+      "breakpoints": true
+    },
+    {
+      "idx": 77,
+      "version": "7",
+      "when": 1791158400000,
+      "tag": "0077_tool_usage_indexes",
+      "breakpoints": true
     }
   ]
 }

@@ -39,6 +39,7 @@ Cross-cutting assumptions (checked by reading the code):
 | S-REPO-14 | The team config is one record per (team, URL) and lives together with the link | API | P0 | 0 |
 | S-REPO-15 | Two teams on one URL: `teamId` picks the team, without it the lowest id wins | API | P0 | 0 |
 | S-REPO-16 | Team analytics is computed with the team config for the sessions of all members | UI+API | P0 | 0 |
+| S-REPO-17 | Tools/MCP tab: monitored tools per level, MCP and wrapped CLI calls, call detail, visibility | UI+API | P0 | 0 |
 | S-SLIFE-01 | Session list: order, fields, hidden sessions, grouping, auto-refresh | UI+API | P1 | 35 |
 | S-SLIFE-02 | Branches: the counters match the list, an empty branch, the filter | UI+API | P1 | 16 |
 | S-SLIFE-03 | Other people's sessions in a personal repo and hook sessions: filters and the "hidden" banner | UI | P1 | 24 |
@@ -340,6 +341,24 @@ Count by priority: P0 = REPO-01, 03, 05, 07, 09, 11, 12, SESS-06, 07, 08, 09, 10
 - **Check:** the categories of the team timeline by the team config for other people's sessions, the threshold and the cause scope, the untouched personal view, the UI calls with `teamId`, the recompute.
 - **Replaces:** nothing (new functionality).
 - **What we lose:** nothing.
+
+### S-REPO-17. The Tools/MCP tab: monitored tools per level, MCP and wrapped CLI calls, the call detail and who sees them
+- **Layer:** UI+API
+- **Priority:** P0
+- **Modes:** A.
+- **Spec:** `tests/scenarios/repos/s-repo-17.spec.ts` (`@S-REPO-17`); uploads through `tests/scenarios/helpers/tool-monitoring.ts`. The stand runs the rebuild drain every second (`TOOL_USAGE_REBUILD_INTERVAL_MS=1000`, `tests/scenarios/modes.ts`).
+- **Data/roles:** `owner` with a repository (one seed session); a transparent team (`owner` + `member`) that links the URL; `outsider`, a plain user in no team. Each has an API key.
+- **Steps:**
+  1. FR-8.1, UI: `owner` opens `#/repos/<R>?mtab=tools` (empty state), opens «Monitored tools», types `bash` → the inline refusal "`bash` is the agent's shell and cannot be monitored"; types `ce` and saves → the tree lists `ce` as «never called». In the team view `#/teams/<T>/repos/<R>?mtab=tools` the owner adds the team tool `find`. `PUT …/tool-monitoring/config` with `pwsh` → 400 `{ field: 'tools[0].name', code: 'denylisted' }`. The personal config GET has `ce` with hint `hook_too_old`; the team GET has `find`.
+  2. DD-2 / DD-3: `GET /api/v2/tool-monitoring/config?repoUrl=` with the owner's key → `schemaVersion 1`, `ce` and `find` (personal ∪ team); with the member's key → `find` only; with the outsider's key → empty.
+  3. Upload a session tree (artisyn + claude) with three MCP calls (`jira`: `get_issue` twice, `search` with `is_error`) and two Bash calls (`ce list --all | head -1`, `find /nonexistent`), then its `tool-calls` log: a `ce` record (exit 141, `consumerClosed`, three lines of stdout), a `find` record (exit 1, stderr) and a `tool_wrap_status` line.
+  4. Wait until the summary has no pending session (the background rebuild, DD-7).
+  5. The summary adds up (5 calls, 2 errors; MCP 1 tool / 3 calls, CLI 2 tools / 2 calls; operations sum to their tool; `get_issue` retried once); `calls` has 5 rows; status / scope / search narrow the table only. The `ce` call is `ok`, `source: both`, hint `cut`; its detail has the full stdout and `agentSaw = row-1` and links to its `tool_use`. The config now carries the wrapper status (hook 2.27.0, linux) and `ce`'s `lastWrapperAt`, no hint. UI: the tree titles (All tools 5, jira 3, find 1), clicking `ce` scopes the table to one row marked «cut», the details show «row-3» in Terminal and only «row-1» in «As the agent saw it»; «Open in session» carries `tu=<toolUseId>` and opens the session's Logs tab.
+  6. A second session runs `ce status` without wrapper records → a transcript-only `ce` call with hint `no_wrapper`; the table scoped to `ce` shows two rows, one «no wrapper».
+  7. DD-17 visibility: `member` sees 6 calls in the team view, the team config read-only («Managed by team owner.», no Save), a team PUT → 403, the owner's row without `teamId` → 403. `outsider` gets 403 from summary / calls / config with and without `teamId`; their own row for the same URL shows 0 calls, and the owner's call through it → 404.
+- **Check:** the merge of the two levels and the hook's view of it, the denylist in the UI and the API, the asynchronous rebuild, figures that add up, full output versus what the agent saw, the deep link, `no_wrapper`, and the Sessions-tab visibility rules.
+- **Replaces:** nothing (new functionality).
+- **What we lose:** nothing. The wrapper's own fidelity (shells, binary output, SIGPIPE) is the hook algorithm test `tool-wrap-fidelity.algo.test.js`, run in the verification project.
 
 ---
 

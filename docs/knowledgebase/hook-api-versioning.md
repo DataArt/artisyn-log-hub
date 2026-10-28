@@ -6,7 +6,7 @@ tags:
   - hooks
   - api
   - otel
-timestamp: "2026-10-14T00:00:00+04:00"
+timestamp: "2026-10-28T00:00:00+04:00"
 ---
 
 # Hook API Versioning (v2 logs upload, v1 removed)
@@ -68,6 +68,7 @@ mechanism feeds).
 | `>= 1.7.0` | `POST /api/v2/logs` | `201`, `{ warnings: string[] }` | No synchronous `400`. The bad file is staged, queued, and later marked `status='failed'` by the background scheduler; the *next* upload's response `warnings` array carries a message for it, which the hook turns into a `broken-upload-file` recommendation (`upsertRecommendation(cwd, { rule: 'broken-upload-file', ... })`) — surfaced via the existing `hook-status` → `HookStatePage.tsx` flow, the same mechanism `timeout-on-upload` already uses. Also visible directly in the Admin Panel's Upload Queue tab, and in the Error Logs tab via the scheduler's `Logger.error()` call on failure |
 | `>= 2.22.0` | `POST /api/v2/logs` + `snapshotId` / `snapshotFull` on the root `artisyn` upload | `201`, `{ warnings, unknownSnapshotId? }` | As `>= 1.7.0`; an invalid id is ignored, never a `400` — see the harness snapshot section below |
 | `>= 2.26.0` | `POST /api/v2/logs` + `okfSnapshotId` / `okfSnapshotFull` on the root `artisyn` upload | `201`, `{ warnings, unknownSnapshotId?, unknownOkfSnapshotId? }` | As `>= 1.7.0`; an invalid id is ignored, never a `400`; a server without OKF support ignores the params — see the OKF snapshot section below |
+| `>= 2.27.0` | `POST /api/v2/logs` also with `type=tool-calls`; plus `GET /api/v2/tool-monitoring/config` | unchanged | As `>= 1.7.0`; a server without Tools/MCP support stores `tool-calls` as an inert generic log and answers the config route `404` (read as "no config") — see the CLI tool wrapper section below |
 
 The route requires `ApiKeyAuthGuard` (the `X-API-Key` header) and accepts this body encoding
 (`express.text()`, `Content-Type: application/x-ndjson`/`application/json`/`text/plain`, 2500MB
@@ -524,6 +525,63 @@ a session decides, never rebound.
 | Hook `2.26.0` → server without OKF support | Unknown query params are ignored and the two line types are skipped like any unknown artisyn event; the upload returns `201` without `unknownOkfSnapshotId`, so the hook simply remembers the id after its full upload and sends refs from then on (no effect on such a server) |
 | Hook `2.26.0` → server with OKF support | Full loop as above |
 | OKF detection fails or exceeds `OKF_SNAPSHOT_MAX_FILES` on the hook | The upload goes out without OKF lines; an OKF failure never fails an upload |
+
+## `GET /api/v2/tool-monitoring/config` and the `tool-calls` log kind — CLI tool wrapper (hook `2.27.0`+)
+
+The Tools/MCP tab ([tool-monitoring.md](tool-monitoring.md); plan
+`docs/tasks/todo/2026-06-19-mcp-invocation-log-tab/`, DD-3, DD-5, DD-6, DD-16) adds one hook-facing
+route and one upload log kind. Both are purely additive: no existing route, query param or line type
+changes.
+
+**Config route.** `GET /api/v2/tool-monitoring/config?repoUrl=<remote>` (`ApiKeyAuthGuard`,
+`tool-monitoring-hook.controller.ts`). `repoUrl` is normalised with `normalizeRepoUrl` like every other
+`repoUrl`-taking hook route; a missing one is a `400`, a missing or bad key a `401`. The answer is the
+key's user's merged personal ∪ team list (DD-2):
+
+```json
+{ "schemaVersion": 1, "paused": false, "tools": [{ "name": "find", "capture": "full" }] }
+```
+
+An unknown repository answers `{ "schemaVersion": 1, "paused": false, "tools": [] }`, never a 404.
+
+- **Versioning rule (FR-6).** The hook acts only on the `schemaVersion: 1` fields and ignores unknown
+  fields, so a later server adds fields **without** bumping the version. The version is bumped only
+  for a breaking change; a hook that sees an unknown version reads the answer as "no config".
+- **Hook side** (`tool-wrap-config.js` `fetchToolWrapConfig`): fetched synchronously at
+  `SessionStart` with `toolWrapConfigTimeoutMs` (default 2000) and refreshed on `UserPromptSubmit`
+  at most once a minute with that timeout capped at 1000 ms (`PROMPT_CONFIG_REFRESH_TIMEOUT_MS`) (`claimThrottleSlot(cwd, 'tool-wrap-config.json', 60000)`). A non-200 answer,
+  a timeout or a bad body reads as "no config": the hook keeps `<workDir>/tool-wrap/config-cache.json`
+  and, without a cache, wraps nothing.
+
+**`tool-calls` log kind.** `POST /api/v2/logs?type=tool-calls&sessionId=<root session id>` with an
+NDJSON body assembled by `tool-wrap-records.js` (upload, chunking, gzip and the `.claude-logs.sent`
+manifest are the ordinary ones; the manifest key is `tool-calls/<sessionId>`). The server keeps one
+log per `(session_id, log_type)`, so every upload re-sends the session's whole cumulative set
+(capped at 50 MB: past the cap the oldest calls lose their text, `textDropped: true`, and keep their
+meta). Line types (DD-6; the server parses tolerantly in `tool-calls-log.ts` and ignores unknown
+fields and unknown line types):
+
+| Line | Fields |
+|---|---|
+| `tool_call` | `type`, `schema: 1`, `callId`, `sessionId`, `tool`, `args[]`, `real`, `cwd`, `shell` (`bash`/`powershell`), `startedAt`, `endedAt`/`exitCode`/`durationMs` (null = killed), `bytes {stdin, stdout, stderr}`, `consumerClosed`, `truncated`, `capture` (`full`/`meta`), `stdin?`/`stdout?`/`stderr?`, `encoding` (`utf8`/`base64`), `textDropped?` |
+| `tool_wrap_status` | `type`, `schema: 1`, `hookVersion`, `os`, `preflight {ok, reason, shells {bash, powershell}}`, `breaker {global, tools[]}`, `at` |
+
+On ingest a `tool-calls` upload (like `claude` / `claude-subagent`) only marks the session tree stale
+(`sessions.tool_usage_version = NULL`, `logs.service.ts` Step 3d); the background drain rebuilds the
+tree's `session_tool_usage` rows and merges the status line into `repositories.tool_wrap_status`.
+
+**PreToolUse.** Hook `2.27.0` also registers `PreToolUse` (matcher `PowerShell`,
+`tool-wrap-powershell.js`). It answers only with `hookSpecificOutput.updatedInput` (or nothing) and
+never with a permission decision — no server contract is involved.
+
+| Combination | Behaviour |
+|---|---|
+| Hook `< 2.27.0` → any server | Never calls the config route and uploads no `tool-calls` log. The tab still shows every MCP call and transcript-only CLI calls (hint `no_wrapper`); a configured tool shows the hint `hook_too_old` while the owners' `repositories.tool_wrap_status` is `NULL` |
+| Hook `2.27.0` → server without the route (`404`) | "No config": the cached list is used when one exists (e.g. a downgraded server), else nothing is wrapped and no `tool-calls` log is produced |
+| Hook `2.27.0` with a cache → server unreachable / timeout | The cached list is used (fail open); the session is never delayed beyond `toolWrapConfigTimeoutMs` |
+| `tool-calls` upload → server without Tools/MCP support | `type=tool-calls` is an unknown kind: stored as an inert generic `logs` row (`logs-v2.controller.ts`), nothing reads it. When that server is upgraded, migration `0076` leaves every session's `tool_usage_version` `NULL`, so the drain rebuilds every tree and picks the stored rows up |
+| Hook `2.27.0` → server with Tools/MCP support | Full loop as above |
+| Config answer with `schemaVersion` ≠ 1 | Read as "no config", like a non-200: the cached schema-1 list is used when one exists, else nothing is wrapped |
 
 
 ## v1 retirement (done, open-source readiness)

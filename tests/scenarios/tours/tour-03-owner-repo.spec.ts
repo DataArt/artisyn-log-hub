@@ -66,8 +66,9 @@ test('@TOUR-03 owner: repo tour @mode-a', async ({ stand, api, db, users, page }
       await page.locator('select').filter({ has: page.locator('option[value="plain"]') }).selectOption('date');
     },
     check: async () => {
-      // The repo OKF tab's row belongs to tour 4 (analytics & reports), its trigger shows here too.
-      await expectTabsOnScreen(page, 'repo', [...registryTabIds(walker, 'repo'), 'okf']);
+      // The repo Tools/MCP and OKF tabs' rows belong to tour 4 (analytics & reports), their
+      // triggers show here too.
+      await expectTabsOnScreen(page, 'repo', [...registryTabIds(walker, 'repo'), 'tools', 'okf']);
       const select = page.locator('select').filter({ has: page.locator('option[value="plain"]') });
       for (const mode of VIEW_MODES) {
         await select.selectOption(mode);

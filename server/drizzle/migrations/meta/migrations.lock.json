@@ -770,6 +770,26 @@
         "542a1bf4a3675c08836b128b3348148309d4a22760e1a3bdcd1d3b2307a14654",
         "bdc076222953fb0d27b479f9d54f2992c1521217fc024e8ea969e934c6e6c3e6"
       ]
+    },
+    {
+      "idx": 76,
+      "tag": "0076_tool_monitoring",
+      "when": 1791072000000,
+      "sha256": "6f69888758c4279620f4c53d6cba7ad25ba8de50cf9484a312d9da56d8b92a4c",
+      "acceptedHashes": [
+        "6f69888758c4279620f4c53d6cba7ad25ba8de50cf9484a312d9da56d8b92a4c",
+        "7347ae673d6676946001ebe5c37abe7233859394e12ea98bb95b16d979eea685"
+      ]
+    },
+    {
+      "idx": 77,
+      "tag": "0077_tool_usage_indexes",
+      "when": 1791158400000,
+      "sha256": "06d9dee021933db1435c8137b07e53f2fc513e5625045ec23c3a7aa3ccb90276",
+      "acceptedHashes": [
+        "06d9dee021933db1435c8137b07e53f2fc513e5625045ec23c3a7aa3ccb90276",
+        "6870592fbceda3e43b80a8ccd238514a8437237f462111cc631ac5b26379b0aa"
+      ]
     }
   ]
 }

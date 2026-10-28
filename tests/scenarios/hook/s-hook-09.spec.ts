@@ -10,8 +10,10 @@
 // Code facts that differ from the design text:
 //   - the installer's own steps (config conversion, settings merge, `claude plugin` activation)
 //     are S-INST-01's; here the project config is written directly (`writeStandConfig`);
-//   - the plugin registers no PreToolUse hook since the guardrail was removed in 2.19.0, so the
-//     design's «PreToolUse Read» step asserts exactly that;
+//   - the guardrail PreToolUse hook was removed in 2.19.0; since 2.27.0 the plugin registers
+//     exactly one PreToolUse entry again — matcher `PowerShell`, `tool-wrap-powershell.js` (the
+//     Tools/MCP PowerShell wrapper, 2026-06-19-mcp-invocation-log-tab DD-14) — so the design's
+//     «PreToolUse Read» step asserts that no Read (or any other non-PowerShell) PreToolUse exists;
 //   - a project agent is `.claude/agents/<name>/AGENT.md`. The server keeps skills, MCP servers and
 //     MCP tools in `harness_elements` (the Harness Usage report), but no agents: the agent is
 //     checked in the stored artisyn log's `agent-definitions` event;
@@ -211,11 +213,22 @@ test('@S-HOOK-09 the installed hook reaches the real server and the session show
       return runs;
     };
 
-    await test.step('1. hooks of the installed plugin in session order: SessionStart → UserPromptSubmit → (no PreToolUse hook) → PostToolUse Edit → Stop', async () => {
+    await test.step('1. hooks of the installed plugin in session order: SessionStart → UserPromptSubmit → (PreToolUse only for PowerShell) → PostToolUse Edit → Stop', async () => {
       expect(readVersion(path.join(STAND_STATIC_DIR, 'installer-version.json')), 'bundled plugin = installer version').toBe(pluginVersion);
       await fire({ hook_event_name: 'SessionStart', source: 'startup' });
       await fire({ hook_event_name: 'UserPromptSubmit', prompt: PROMPT });
-      expect(pluginHookCommands(plugin, 'PreToolUse'), 'guardrail removed in 2.19.0').toEqual([]);
+      // The guardrail was removed in 2.19.0; the only PreToolUse entry is the PowerShell tool
+      // wrapper (2.27.0), so an Edit / Read call runs no PreToolUse hook at all.
+      const hooksJson = JSON.parse(fs.readFileSync(path.join(plugin, 'hooks', 'hooks.json'), 'utf8')) as {
+        hooks: Record<string, Array<{ matcher?: string }>>;
+      };
+      expect(
+        (hooksJson.hooks.PreToolUse ?? []).map((g) => g.matcher),
+        'exactly one PreToolUse entry, matcher PowerShell',
+      ).toEqual(['PowerShell']);
+      const preToolUse = pluginHookCommands(plugin, 'PreToolUse');
+      expect(preToolUse, 'one command in it').toHaveLength(1);
+      expect(preToolUse[0].args.join(' ')).toMatch(/tool-wrap-powershell\.js$/);
       await fire({
         hook_event_name: 'PostToolUse',
         tool_name: 'Edit',

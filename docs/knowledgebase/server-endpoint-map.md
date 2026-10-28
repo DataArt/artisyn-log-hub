@@ -5,7 +5,7 @@ description: "Maps every HTTP route to its controller and auth guard, with a gua
 tags:
   - server
   - api
-timestamp: "2026-07-20T22:24:25+04:00"
+timestamp: "2026-10-28T00:00:00+04:00"
 ---
 
 # Server API Endpoint → Controller Map
@@ -265,6 +265,22 @@ After any endpoint change, update this file to stay in sync.
 
 ---
 
+## `/api/v2/tool-monitoring`
+
+**File:** `server/src/logs/tool-monitoring/tool-monitoring-hook.controller.ts`
+
+| Method | Path | Handler | Auth |
+|---|---|---|---|
+| GET | `/api/v2/tool-monitoring/config` | `getConfig()` | ApiKeyAuthGuard |
+
+**Notes:**
+- The hook's monitored CLI tools for `repoUrl` (required → `400` without it): the key owner's
+  personal list ∪ every team list of that URL they belong to (`resolveMonitoredTools`),
+  `{ schemaVersion: 1, paused, tools: [{ name, capture }] }`. Unknown repo → an empty list.
+- Registered in `LogsModule`. See [`tool-monitoring.md`](tool-monitoring.md).
+
+---
+
 ## `/api/v1/model-pricing`
 
 **File:** `server/src/logs/model-pricing.controller.ts`
@@ -314,6 +330,10 @@ data is `/api/v1/admin/model-pricing` below.
 | GET | `/api/v1/repositories/:repoId/reports/harness-usage` | `ReportsController.getHarnessUsageReport()` | SessionAuthGuard — accepts `attr=` + `groupBy=attr:<key>` (see Notes below) |
 | GET | `/api/v1/repositories/:repoId/reports/change-surface` | `ReportsController.getChangeSurfaceReport()` | SessionAuthGuard — Backs the Reports tab's "Change Surface" document. Same `teamId`/`startDate`/`endDate`/`branches`/`users`/`attr` params and the same fixed-vs-`attr:` `groupBy` split as `harness-usage` (`CHANGE_SURFACE_GROUP_BY_VALUES`). Computes nothing itself: it calls `ChangeSurfaceAggregateService.build()` pinned to `bucket: 'week'`, which is what makes the report and the analytics chart structurally incapable of disagreeing |
 | GET | `/api/v1/repositories/:repoId/reports/okf-usage` | `ReportsController.getOkfUsageReport()` | SessionAuthGuard — Backs the repo **OKF** tab: `{ verdict, snapshot, tiles, shareBins, hotFiles, notRead, bundles, tree }` over the scoped root sessions. Same `teamId`/`startDate`/`endDate`/`branches`/`users`/`attr` params, scope (`resolveUsageScope`) and 403 rules as `harness-usage`, no `groupBy`; plus optional `bundle` (a bundle root of the latest snapshot; unknown or empty = all bundles). With `teamId` the fail-closed team filter applies. Delegates to `OkfUsageService.getRepoOkfUsage()`. See [`okf-usage.md`](okf-usage.md) |
+| GET / PUT | `/api/v1/repositories/:repoId/tool-monitoring/config` | `ToolMonitoringController.getConfig()` / `putConfig()` | SessionAuthGuard — The Tools/MCP monitored-tools config of the personal level (no `teamId`) or the team level (`teamId`; PUT needs the team owner, else 403). PUT validates names (`@loghub/tool-monitor`, 400 `{ message, field, code }`) and marks the level's scope sessions for a rebuild. File `server/src/logs/tool-monitoring/tool-monitoring.controller.ts`. See [`tool-monitoring.md`](tool-monitoring.md) |
+| GET | `/api/v1/repositories/:repoId/tool-monitoring/summary` | `ToolMonitoringController.getSummary()` | SessionAuthGuard — The tools tree: per-operation aggregates summed over `session_tool_usage` rows in scope (Sessions-tab rules) and range (`from`/`to`, default 30 days), `neverCalled`, `pendingSessions`. Optional `sessionId` (a root session id) narrows to that one session tree — the session detail tab; with no `from`/`to` it then covers the whole session |
+| GET | `/api/v1/repositories/:repoId/tool-monitoring/calls` | `ToolMonitoringController.getCalls()` | SessionAuthGuard — One page of calls, newest first; filters `channel`/`tool`/`operation`/`status`/`q`, `page`/`pageSize` (≤ 200), the same range, scope and `sessionId` as `summary`. Items never carry `args`/`cwd`; owner e-mail masked per team scope |
+| GET | `/api/v1/repositories/:repoId/tool-monitoring/calls/:usageId/:callId` | `ToolMonitoringController.getCallDetail()` | SessionAuthGuard — One call with its captured text and the session deep link; 404 when missing, out of scope or the session is not visible (`assertSessionVisible`) |
 | GET | `/api/v1/repositories/:repoId/reports/attribution-breakdown` | `ReportsController.getAttributionBreakdownReport()` | SessionAuthGuard — `supportsAttributeFilter: true`, no `groupBy` (see Notes below) |
 | GET | `/api/v1/repositories/:repoId/reports/attribution-usage` | `ReportsController.getAttributionUsageReport()` | SessionAuthGuard — `supportsAttributeFilter: false`; repeatable `outcome=` (see Notes below) |
 | GET | `/api/v1/repositories/:repoId/analytics/tools` | `UsageAnalyticsController.getToolAnalytics()` | SessionAuthGuard — accepts `attr=` (see Notes below) |

@@ -58,6 +58,9 @@ export interface RepositorySessionsPanelProps {
   isBranchOpen: (key: string, index: number) => boolean;
   onToggleBranch: (key: string, index: number) => void;
   isReloadingUpdatedSession: boolean;
+  /** `tool_use` id of a Tools/MCP "Open in session" link (`tu` param, DD-19). */
+  targetToolUseId?: string | null;
+  onTargetToolUseConsumed?: () => void;
 }
 
 export function RepositorySessionsPanel({
@@ -98,6 +101,8 @@ export function RepositorySessionsPanel({
   isBranchOpen,
   onToggleBranch,
   isReloadingUpdatedSession,
+  targetToolUseId,
+  onTargetToolUseConsumed,
 }: RepositorySessionsPanelProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const { width: sessionListWidth, onMouseDown: handleSessionListDragStart } =
@@ -178,6 +183,8 @@ export function RepositorySessionsPanel({
             repoUrl={repoUrl}
             sessionCost={sessionCost}
             isReloadingUpdatedSession={isReloadingUpdatedSession}
+            targetToolUseId={targetToolUseId}
+            onTargetToolUseConsumed={onTargetToolUseConsumed}
           />
         )}
       </div>
