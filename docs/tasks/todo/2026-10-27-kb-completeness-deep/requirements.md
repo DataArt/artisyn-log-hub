@@ -60,8 +60,10 @@ v1–v4f on real sessions of this repo; README there).
   files read and changed), pulled from Log Hub (`GET /api/v2/okf-usage/facts`,
   `2026-10-27-okf-usage-tab` FR-20) with the hook's API key; when the server lacks the route, the
   skill builds the same facts from the local transcripts with the same session analyser.
-- **FR-5** The KB and the harness are judged **as they were when the session started**: `docs/`,
-  `CLAUDE.md`, `.claude/rules`, `.claude/skills` and the plugin skills of the last commit before
+- **FR-5** The KB and the harness are judged **as they were when the session started**: every OKF
+  bundle of the repo (a repo can have several, wherever they live — detected as in
+  `2026-10-27-okf-usage-tab` FR-7; a gitignored bundle is copied from the working tree, since git
+  has no history for it), the folders the prompts point at (e.g. `docs/tasks/`), `CLAUDE.md`, `.claude/rules`, `.claude/skills` and the plugin skills of the last commit before
   the session, unpacked with read-only `git archive` into a temporary folder outside the repo
   (harness files under a `harness/` subfolder so they are not loaded as the model's own
   instructions).
@@ -71,12 +73,13 @@ v1–v4f on real sessions of this repo; README there).
 - **FR-7** The analysis runs as **specialised passes in parallel** sub-agents (Opus), each owning
   one class of findings so that no class is traded away for another (the PoC's single combined
   prompt lost the entry-point class and some index-line findings between runs):
-  1. **Entry** — for every agent that did not start from the KB index: what its instructions said
+  1. **Entry** — for every agent that reached a bundle without that bundle's index: what its instructions said
      (the current `CLAUDE.md`, the skill's sub-agent prompt template, its own prompt — quoted) and
      why they did not route it to the index; proposes `entryFixes` at the point the instruction
      failed to reach the agent, never a duplicate of an existing rule, or states explicitly that
      the instructions are sufficient.
-  2. **Findability** — index lines versus the words of each agent's task: quotes the current line
+  2. **Findability** — the lines of every bundle's index versus the words of each agent's task
+     (including the case where the article sits in another bundle than the one the agent searched): quotes the current line
      and the missing words; proposes `index_line`, `section_pointers` or `index_grouping` fixes.
   3. **Granularity and gaps** — big articles read for a small part (`split`, `section_pointers`),
      knowledge dug out of code with no article (`new_article`); checks the KB before naming a gap.

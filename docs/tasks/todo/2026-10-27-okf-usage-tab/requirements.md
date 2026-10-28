@@ -72,8 +72,10 @@ facts that skill uses (FR-20).
 
 ### Phase 2 — Hook: OKF snapshot
 
-- **FR-7** The hook detects OKF bundles: an `index.md` whose front matter has `okf_version`; a nested
-  `index.md` without it belongs to the parent bundle. The bundle is the index's folder. Links from
+- **FR-7** The hook detects **every** OKF bundle of the repo — a repo can have two or more: an
+  `index.md` whose front matter has `okf_version`; a nested `index.md` without it belongs to the
+  parent bundle. The bundle is the index's folder. A nested `index.md` with its own `okf_version`
+  starts a separate bundle, and a file belongs to the deepest bundle that contains it. Links from
   an index to paths outside the repo (e.g. `../../../private_kb`) and files referenced outside the
   bundle folder are **not** followed or included. Global OKF bases outside the project (e.g.
   `~/.claude`) are **not** searched.
@@ -101,9 +103,10 @@ facts that skill uses (FR-20).
 
 - **FR-11** Tree "bundle → folder → file" (no sections) with two heat scales: read (bytes put into
   context by default, toggle to call count) and write.
-- **FR-12** Markers: grep/listing over a whole folder; whether the session started from `index.md`
-  (the chronologically first OKF access in the whole session tree, any op, targets the bundle's
-  `index.md`); and, as plain information only, "re-read of own edit" (`after_own_edit` reads, FR-3)
+- **FR-12** Markers: grep/listing over a whole folder; per bundle, whether the session started
+  from its `index.md` (the chronologically first access to that bundle in the whole session tree,
+  any op, targets that bundle's `index.md` — so a session can start one bundle from its index and
+  another without); and, as plain information only, "re-read of own edit" (`after_own_edit` reads, FR-3)
   and "read by N agents". The last two describe cost, not KB quality: each sub-agent is an
   independent task with an empty context and may need the same article (owner decision), so they
   never feed the verdict.
@@ -151,7 +154,8 @@ facts that skill uses (FR-20).
 
 - **FR-15** A separate **OKF** tab of the repository view, next to Analytics and Reports (not a
   report inside Reports). Aggregate over sessions with filters: period, branch, user (team view),
-  `attr=`; filters apply at once — no Generate button. The
+  `attr=`, and **bundle** (all, or one bundle of the latest snapshot); filters apply at once — no
+  Generate button. The
   bundle set is the latest snapshot in the filtered range (per branch when filtered by branch).
   Each session's accesses fold into the latest tree by path; paths missing from the latest
   snapshot go to a "no longer in KB" group.
@@ -173,9 +177,13 @@ facts that skill uses (FR-20).
   filtered sessions that touched the KB:
   - **Always read**: a file other than a bundle `index.md` read (read/grep op) in ≥ 80 % of them →
     Something to fix (one line per file);
-  - **KB flood**: sessions with file share > 25 % (FR-16 bins) — any → Something to fix;
-    ≥ 20 % of the sessions → Mess;
-  - **Index bypassed**: sessions that started from `index.md` (FR-12) < 50 % → Something to fix;
+  - **KB flood**: per bundle with ≥ 10 files, sessions whose file share of that bundle > 25 % — any
+    → Something to fix; ≥ 20 % of the sessions that touched the bundle → Mess;
+  - **Index bypassed**: per bundle, the sessions that touched it and started it from its
+    `index.md` (FR-12) < 50 % → Something to fix;
+
+  Every rule is evaluated per bundle and its line names the bundle ("in `docs/knowledgebase`, only
+  21 of 49 sessions started from its index").
 
   Verdict = the worst severity triggered; three or more distinct rule kinds triggered → **Mess**.
   The three rule kinds are `always_read`, `kb_flood`, `index_bypassed`; the count is of kinds,
@@ -183,8 +191,10 @@ facts that skill uses (FR-20).
   tree (FR-4). Not enough data, Always read and Index bypassed count every KB-touching tree in the
   filter, snapshot-less ones included; KB flood counts only trees with a bound snapshot; when
   snapshot-less trees are present the badge adds "partial data — N of M
-  sessions without a snapshot". Per-session file share (FR-16 bins, KB flood, median tile) =
-  distinct files read across the bundles visible in the current view ÷ their files (team view:
+  sessions without a snapshot". The file share of a session is per bundle (distinct files of the
+  bundle read ÷ its files) — never pooled across bundles, so a small KB is not hidden by a big one.
+  The FR-16 bins and the median tile show the bundle chosen in the filter; with "all bundles" they
+  use each session's highest share among the bundles visible in the current view (team view:
   `ignored: false` bundles only). Boundary cases: 0 KB sessions in the filter → **KB not
   used**; 1–4 → **Not enough data** replaces the severity and the anomaly lines are shown without
   one. Computed on the server from the same filtered data as the tree, so in the team view no line
@@ -249,8 +259,14 @@ facts that skill uses (FR-20).
 - [ ] FR-4: a read done only inside a sub-agent shows in the root session's OKF tab.
 - [ ] FR-6: the duplicate sub-agent Read pairs are explained and, if they are duplicates, counted
       once.
-- [ ] FR-7/9: on this repo the hook detects `docs/knowledgebase` (with `log-schema/` and `test/`
-      inside it) and `docs/kb-local`, and not `tmp/kb-baseline`; `private_kb` is not followed.
+- [ ] FR-7/9: on this repo the hook detects both bundles, `docs/knowledgebase` (with `log-schema/`
+      and `test/` inside it) and `docs/kb-local`, and not `tmp/kb-baseline`; `private_kb` is not
+      followed; a nested `index.md` with its own `okf_version` becomes a separate bundle that owns
+      its files.
+- [ ] FR-12/17a: a session that starts `docs/kb-local` from its index and reads
+      `docs/knowledgebase` articles without that index is "started from index" for the first bundle
+      only; the repo anomaly lines name their bundle; the bundle filter switches the tree, the
+      tiles and the share histogram.
 - [ ] FR-8: the snapshot carries path, ignored flag, size and hash per file — no outline, no file
       content.
 - [ ] FR-10: a second upload with an unchanged KB sends only the `okfSnapshotId` reference.
@@ -303,7 +319,7 @@ facts that skill uses (FR-20).
 - Repo rule unit = root session tree; snapshot-less trees count only where no bundle file list is needed (FR-17a).
 - Mess-by-count counts the three named rule kinds, not lines (FR-17a).
 - Unread articles are never a problem by themselves: no dead-weight rule (FR-16, owner decision).
-- Per-session share = line union over the bundles visible in the current view (FR-17a).
+- A repo can have several OKF bundles: shares, the started-from-index check and the repo rules are per bundle, never pooled; a file belongs to the deepest bundle (FR-7, FR-12, FR-17a, owner remark).
 - Session share rule is per agent and skips bundles under 10 files and files the agent wrote (FR-14a).
 - The verdict judges KB use (granularity, findability), not cost; own-edit re-reads and "read by N agents" are information only (FR-12, FR-14a, owner decision).
 - No LLM analysis in this feature; it is the on-demand local skill of `2026-10-27-kb-completeness-deep` (FR-19, owner decision).
