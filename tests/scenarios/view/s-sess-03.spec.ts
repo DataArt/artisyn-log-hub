@@ -4,12 +4,15 @@
 //
 // Data: GS-07 (main: three prompts with failures, a denial, an unresolved call, plus distractors —
 // a sidechain pair of 50 000 / 10 000 tokens, an isMeta line, a late <task-notification> and an
-// answer split over two lines with one `message.id`), GS-01 (files) and GS-05 (System Context, and
-// the ResearchWorkflow run with its two workflow agents W1/W2 for the Agents table). Uploaded through
-// POST /api/v2/logs (DD SC3); the numbers come from their expected.json (DD D3). Step 6a uploads
-// its own small session (a background agent, a <task-notification> and the main thread finishing
-// after it): the turn's work time runs from the prompt to the last answer. Step 8c uploads one with
-// a Workflow call rejected before launch and one launched by scriptPath (workflow status and name).
+// answer split over two lines with one `message.id`), GS-01 (files; no harness snapshot, so the old-hook
+// state of the System context anatomy tab) and GS-05 (the System context anatomy tab — numbers from
+// its expected.json `anatomy` block —, and the ResearchWorkflow run with its two workflow agents W1/W2
+// for the Agents table). Uploaded through POST /api/v2/logs (DD SC3); the numbers come from their
+// expected.json (DD D3). Step 6a uploads its own small session (a background agent, a
+// <task-notification> and the main thread finishing after it): the turn's work time runs from the
+// prompt to the last answer. Step 8c uploads one with a Workflow call rejected before launch and one
+// launched by scriptPath (workflow status and name). Step 8d uploads one whose startup estimate
+// exceeds its measured total (the over-total edge state).
 //
 // Code facts that differ from the design text:
 //   - the prompt text of a turn is shown in its header, not collapsed behind a click; the scenario
@@ -49,6 +52,15 @@ const HIDDEN_TEXTS = [
 ];
 const PROMPTS = ['Run the test suite', 'Clean the build folder and check the sources', 'Print ok'];
 
+/** GS-05 `expected.json` → `roots[0].anatomy` (checked by tests/golden/check-arithmetic.mjs). */
+interface GoldenAnatomy {
+  charsPerToken: number;
+  total: number;
+  attributed: number;
+  harnessInternals: number;
+  partitions: Record<string, { bytes: number; tokens: number }>;
+}
+
 interface LogEntry {
   type?: string;
   isSidechain?: boolean;
@@ -62,7 +74,7 @@ test('@S-SESS-03 Logs: what counts as a prompt, what is hidden, how a turn reads
   users,
   page,
 }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(180_000);
   const G7 = loadExpected('gs-07').roots[0];
   const G1 = loadExpected('gs-01').roots[0];
   const owner = await users.user('user', { label: 'ss03-owner' });
@@ -223,57 +235,85 @@ test('@S-SESS-03 Logs: what counts as a prompt, what is hidden, how a turn reads
     await expect(group('Docs').locator('tr', { hasText: 'docs/api.md' })).toHaveCount(1);
   });
 
-  await test.step('8. GS-05 System Context: Skills is snapshot ∩ skill_listing (unused-skill hidden); plugin badge and tokens shown; modal has a Plugin row and no Modified row', async () => {
-    await openSession(page, owner, repo.repoId, repo.rootId('gs-05'), { tab: 'logs' });
-    const panel = page.getByTestId('sysctx-panel');
-    await expect(panel).toBeVisible();
-    await panel.getByRole('button', { name: /show details/i }).click();
-    await panel.getByTestId('sysctx-tab-skills').click();
-    const rows = panel.getByTestId('sysctx-skill-row');
-    await expect(rows, 'only the registered skills, unused-skill hidden').toHaveCount(2);
-    await expect(rows.filter({ hasText: 'unused-skill' })).toHaveCount(0);
-    const reviewDeepRow = panel.locator('[data-skill-name="adlc:review-deep"]');
-    await expect(reviewDeepRow).toBeVisible();
-    await expect(reviewDeepRow, 'plugin badge').toContainText('plugin');
-    await expect(reviewDeepRow, 'token estimate').toContainText('tok');
-    await reviewDeepRow.click();
-    const dialog = page.getByRole('dialog');
-    await expect(dialog).toBeVisible();
-    await expect(dialog.getByTestId('skill-detail-plugin')).toBeVisible();
-    await expect(dialog).toContainText('adlc@artisyn');
-    await expect(dialog, 'no Modified row').not.toContainText('Modified');
-    await page.keyboard.press('Escape');
-    await expect(dialog).toHaveCount(0);
+  await test.step('8. GS-05 System context anatomy: total 8,800, partitions and harness internals 5,971 from expected.json, the internals hint, a bar segment selects its row, skills drill-down = the listing (unused-skill not shown, adlc:review-deep from a plugin)', async () => {
+    const A5 = loadExpected('gs-05').roots[0].anatomy as GoldenAnatomy;
+    await openSession(page, owner, repo.repoId, repo.rootId('gs-05'), { tab: 'sysctx' });
+    const tab = page.getByTestId('sysctx-anatomy-tab');
+    await expect(tab.getByTestId('anatomy-total')).toHaveText(`Total ${int(A5.total)} tokens · exact (input + cache write + cache read)`);
+    await expect(tab.getByTestId('anatomy-banner'), 'hook 2.28.0 snapshot with git status: no edge banner').toHaveCount(0);
+    const row = (kind: string) => tab.locator(`[data-testid="anatomy-partition-row"][data-kind="${kind}"]`);
+    // Columns: PARTITION · KIND · SOURCE · BYTES · ≈ TOKENS · SHARE.
+    for (const [kind, p] of Object.entries(A5.partitions)) {
+      await expect(row(kind).locator('td').nth(3), `${kind} bytes`).toHaveText(int(p.bytes));
+      await expect(row(kind).locator('td').nth(4), `${kind} tokens`).toHaveText(int(p.tokens));
+    }
+    const internals = row('harness-internals');
+    await expect(internals.locator('td').nth(4)).toHaveText(int(A5.harnessInternals));
+    await expect(internals.locator('td').nth(5)).toHaveText(`${((A5.harnessInternals / A5.total) * 100).toFixed(1)} %`);
+
+    await internals.getByTestId('anatomy-internals-hint').hover();
+    const hint = page.getByTestId('anatomy-internals-hint-text').first();
+    await expect(hint).toContainText(`Harness internals — ≈ ${int(A5.harnessInternals)} tokens (67.9 % of the startup context)`);
+    await expect(hint).toContainText(`Measured total ${int(A5.total)} minus everything attributed above (${int(A5.attributed)})`);
+    await expect(hint).toContainText('Tool definitions');
+    await expect(hint).not.toContainText('Unallocated');
+    await page.mouse.move(0, 0);
+    await expect(tab, 'the internals are never called unallocated or free').not.toContainText(/Unallocated|\bfree\b/);
+
+    await tab.locator('[data-testid="anatomy-segment"][data-kind="instruction-file"]').click();
+    await expect(row('instruction-file')).toHaveAttribute('aria-selected', 'true');
+    await expect(row('skills')).toHaveAttribute('aria-selected', 'false');
+
+    await row('skills').click();
+    await expect(row('skills')).toHaveAttribute('aria-selected', 'true');
+    await expect(row('instruction-file')).toHaveAttribute('aria-selected', 'false');
+    const skills = tab.getByTestId('anatomy-skill-row');
+    await expect(skills, 'one row per listed skill; unused-skill and gold-sync are not listed').toHaveCount(2);
+    await expect(tab.locator('[data-testid="anatomy-skill-row"][data-skill-name="unused-skill"]')).toHaveCount(0);
+    await expect(tab.locator('[data-testid="anatomy-skill-row"][data-skill-name="gold-sync"]')).toHaveCount(0);
+    await expect(tab.locator('[data-testid="anatomy-skill-row"][data-skill-name="adlc:review-deep"]')).toHaveAttribute('data-source', 'plugin');
+    await expect(tab.locator('[data-testid="anatomy-skill-row"][data-skill-name="adlc:review"]')).toHaveAttribute('data-source', 'plugin');
   });
 
-  await test.step('8a. GS-05 System Context Files/Rules: instructions attachment merged with the snapshot (user / project / local, no duplicate CLAUDE.md), rules with sizes, no file text and no absolute path', async () => {
-    const panel = page.getByTestId('sysctx-panel');
-    await panel.getByTestId('sysctx-tab-files').click();
-    const files = panel.getByTestId('sysctx-file-row');
-    await expect(files, 'snapshot CLAUDE.md and the log one are one row').toHaveCount(3);
-    const fileRow = (type: string) => files.and(panel.locator(`[data-file-type="${type}"]`));
-    await expect(fileRow('user')).toContainText('~/.claude/CLAUDE.md');
-    await expect(fileRow('user')).toContainText('1.0 KB');
-    await expect(fileRow('project')).toContainText('CLAUDE.md');
-    await expect(fileRow('project')).toContainText('3.4 KB');
-    await expect(fileRow('local')).toContainText('CLAUDE.local.md');
-    await expect(fileRow('local')).toContainText('700 B');
-    await expect(files.filter({ hasText: /\/home\/|\/work\// }), 'no absolute path').toHaveCount(0);
+  await test.step('8a. GS-05 files drill-down: git tracked / ignored / outside repo, rules on demand, no file text and no absolute path; the Logs startup-context line links to the tab', async () => {
+    const tab = page.getByTestId('sysctx-anatomy-tab');
+    const files = tab.getByTestId('anatomy-file-row');
+    // The instruction-file row was expanded by the segment click in step 8.
+    const paths = await files.evaluateAll((trs) => trs.map((tr) => tr.getAttribute('data-path')));
+    expect(paths, 'loaded files first (snapshot CLAUDE.md merged with the log one), then the on-demand rules').toEqual([
+      '~/.claude/CLAUDE.md',
+      'CLAUDE.md',
+      'CLAUDE.local.md',
+      '.claude/rules/db.md',
+      '.claude/rules/ui.md',
+    ]);
+    const file = (p: string) => tab.locator(`[data-testid="anatomy-file-row"][data-path="${p}"]`);
+    await expect(file('CLAUDE.md')).toHaveAttribute('data-git', 'tracked');
+    await expect(file('CLAUDE.local.md')).toHaveAttribute('data-git', 'ignored');
+    await expect(file('~/.claude/CLAUDE.md')).toHaveAttribute('data-git', 'outside-repo');
+    await expect(file('.claude/rules/db.md')).toHaveAttribute('data-git', 'tracked');
+    await expect(file('.claude/rules/ui.md')).toHaveAttribute('data-git', 'untracked');
+    await expect(tab.getByText('On demand — 0 at start')).toBeVisible();
+    // Columns: PATH · KIND · GIT · FILE SIZE · LOADED B · ≈ TOKENS · SHARE.
+    for (const rule of ['.claude/rules/db.md', '.claude/rules/ui.md'])
+      await expect(file(rule).locator('td').nth(4), `${rule} loads 0 at start`).toHaveText('0');
+    await expect(file('CLAUDE.md').locator('td').nth(4)).toHaveText('3,500');
 
-    await panel.getByTestId('sysctx-tab-rules').click();
-    const rules = panel.getByTestId('sysctx-rule-row');
-    await expect(rules).toHaveCount(2);
-    await expect(rules.filter({ hasText: 'db' })).toContainText('700 B');
-    await expect(rules.filter({ hasText: 'ui' })).toContainText('1.4 KB');
-    await rules.filter({ hasText: 'db' }).click();
-    const dialog = page.getByRole('dialog');
-    await expect(dialog).toBeVisible();
-    await expect(dialog.getByRole('tab', { name: 'Body' }), 'no rule text tab').toHaveCount(0);
-    await expect(dialog).not.toContainText('Use parameterised queries only');
-    await page.keyboard.press('Escape');
-    await expect(dialog).toHaveCount(0);
-    for (const text of ['GS05-LOCAL-MARKER', 'GS05-USER-MARKER', 'Use parameterised queries only'])
-      await expect(panel, `no file text: ${text}`).not.toContainText(text);
+    const markers = ['GS05-LOCAL-MARKER', 'GS05-USER-MARKER', 'GS05-PROJECT-MARKER', 'Use parameterised queries only', 'You are a coding assistant', 'Use the postgres server', 'dev@arrakis.test'];
+    for (const text of markers) await expect(tab, `no file, prompt or reminder text: ${text}`).not.toContainText(text);
+    await expect(tab, 'no absolute path').not.toContainText(/\/home\/|\/work\//);
+
+    await openSession(page, owner, repo.repoId, repo.rootId('gs-05'), { tab: 'logs' });
+    const line = page.getByTestId('startup-context-line');
+    await expect(line).toContainText('Startup context');
+    await expect(line).toContainText('8,800 tokens');
+    await expect(page.getByTestId('sysctx-panel'), 'the old System Context panel is gone').toHaveCount(0);
+    await line.getByRole('button', { name: /View anatomy/ }).click();
+    await expect(page.getByTestId('sysctx-anatomy-tab')).toBeVisible();
+    await expect(page).toHaveURL(/[?&]tab=sysctx\b/);
+    // Back to Logs for the workflow Agents table (8b).
+    await openSession(page, owner, repo.repoId, repo.rootId('gs-05'), { tab: 'logs' });
+    await expect(page.getByTestId('startup-context-line')).toBeVisible();
   });
 
   await test.step('8b. GS-05 workflow Agents table: shown as soon as the workflow opens; one row per agent with label, duration, tokens and cost; numbers 1/2 and 12-char ids; a row opens a modal with the agent Logs and Raw logs tabs; no extra request', async () => {
@@ -387,11 +427,57 @@ test('@S-SESS-03 Logs: what counts as a prompt, what is hidden, how a turn reads
     await expect(page.getByRole('button', { name: /⚡ ScriptWorkflow/ })).toContainText('completed');
   });
 
-  await test.step('9. GS-01 (no harness snapshot): no Skills, Agents or MCP tab, and no page error', async () => {
-    await openSession(page, owner, repo.repoId, repo.rootId('gs-01'), { tab: 'logs' });
-    await expect(page.getByTestId('sysctx-tab-skills')).toHaveCount(0);
-    await expect(page.getByTestId('sysctx-tab-agents')).toHaveCount(0);
-    await expect(page.getByTestId('sysctx-tab-mcp')).toHaveCount(0);
+  await test.step('8d. attributed > measured total (a 10,000-byte instruction file, first usage 100 tokens): the over-total warning, no harness internals row', async () => {
+    const runId = randomBytes(4).toString('hex');
+    const s: PromptSession = {
+      sessionId: `ss03-over-${runId}`,
+      prompt: `ss03 over total ${runId}`,
+      repoUrl: `https://git.arrakis.test/scn/${runId}/ss03-over`,
+    };
+    const at = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const t = (sec: number) => new Date(at.getTime() + sec * 1000).toISOString();
+    const id = (n: string) => `${s.sessionId}-${n}`;
+    const claude = [
+      { type: 'attachment', uuid: id('i1'), parentUuid: null, sessionId: s.sessionId, timestamp: t(0), isSidechain: false,
+        attachment: { type: 'instructions', files: [{ path: `/work/ss03-over-${runId}/CLAUDE.md`, type: 'Project', content: 'x'.repeat(10_000) }] } },
+      { type: 'user', uuid: id('u1'), parentUuid: id('i1'), sessionId: s.sessionId, timestamp: t(0), isSidechain: false,
+        message: { role: 'user', content: s.prompt } },
+      { type: 'assistant', uuid: id('a1'), parentUuid: id('u1'), sessionId: s.sessionId, timestamp: t(5), isSidechain: false,
+        message: { id: id('m1'), role: 'assistant', model: 'claude-sonnet-4-6', usage: { input_tokens: 100, output_tokens: 5 }, content: [{ type: 'text', text: 'Done.' }] } },
+    ];
+    const key = await createApiKey(owner.api);
+    const bodies = { artisyn: promptSessionBodies({ ...s, at }).artisyn, claude: claude.map((r) => JSON.stringify(r)).join('\n') + '\n' };
+    for (const type of ['artisyn', 'claude'] as const) {
+      const res = await api.post('/api/v2/logs', {
+        params: { sessionId: s.sessionId, type },
+        headers: { 'Content-Type': 'application/x-ndjson', 'X-API-Key': key.key },
+        data: bodies[type],
+      });
+      expect(res.status(), `upload ${type}`).toBe(201);
+    }
+    await waitForQueueIdle(db, owner.id);
+    const repoId = await ownRepoId(owner.api, s.repoUrl);
+
+    await openSession(page, owner, repoId, s.sessionId, { tab: 'sysctx' });
+    const tab = page.getByTestId('sysctx-anatomy-tab');
+    await expect(tab.getByTestId('anatomy-total')).toContainText('Total 100 tokens');
+    const over = tab.locator('[data-testid="anatomy-banner"][data-variant="over-total"]');
+    await expect(over).toBeVisible();
+    await expect(over).toContainText(/Attributed estimate exceeds measured total by [\d,]+ tokens/);
+    await expect(tab.locator('[data-testid="anatomy-partition-row"][data-kind="instruction-file"]')).toBeVisible();
+    await expect(tab.locator('[data-testid="anatomy-partition-row"][data-kind="harness-internals"]')).toHaveCount(0);
+    await expect(tab.locator('[data-testid="anatomy-segment"][data-kind="harness-internals"]')).toHaveCount(0);
+  });
+
+  await test.step('9. GS-01 (no harness snapshot): the anatomy tab shows the old-hook banner, git status only unknown or outside repo, and no page error', async () => {
+    await openSession(page, owner, repo.repoId, repo.rootId('gs-01'), { tab: 'sysctx' });
+    const tab = page.getByTestId('sysctx-anatomy-tab');
+    await expect(tab.locator('[data-testid="anatomy-banner"][data-variant="old-hook"]')).toBeVisible();
+    await expect(tab.locator('[data-testid="anatomy-banner"][data-variant="no-git"]')).toHaveCount(0);
+    await expect(tab.getByTestId('anatomy-total')).toBeVisible();
+    await tab.locator('[data-testid="anatomy-partition-row"][data-kind="instruction-file"]').click();
+    const gits = await tab.getByTestId('anatomy-file-row').evaluateAll((trs) => trs.map((tr) => tr.getAttribute('data-git')));
+    for (const git of gits) expect(['unknown', 'outside-repo'], 'no snapshot: no tracked/ignored/untracked status').toContain(git);
     expect(pageErrors, pageErrors.join('\n')).toEqual([]);
   });
 });

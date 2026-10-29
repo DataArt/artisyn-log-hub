@@ -5,7 +5,7 @@ description: "Session log view (Logs tab): component architecture, log parser, t
 tags:
   - client
   - logs
-timestamp: "2026-10-28T00:00:00+04:00"
+timestamp: "2026-10-29T00:00:00+04:00"
 ---
 
 # Session Log View
@@ -22,9 +22,10 @@ Key files live in `client/src/viewer/pages/repository/session-log/`:
 |---|---|
 | `types.ts` | All TypeScript types for log events, turns, and summary |
 | `log-parser.ts` | `parseSessionLogs()` — parses raw event array into `ParsedSession` |
-| `SessionLogView.tsx` | Root container; renders loading/error states, calls parser, renders `SessionContextPanel` + `PromptTurnList` |
-| `SessionContextPanel.tsx` | Collapsible context panel at the top — CLAUDE.md files, rules, MCP tools, skills, agents registered in the session; the Files/Rules tables live in `SystemContextFilesTab.tsx` |
-| `instruction-files.ts` | Pure helpers for the Files/Rules tabs: `extractInstructionFiles` (`instructions` attachment), `rulesToInstructionFiles` (on-demand `nested_memory`), `mergeInstructionFiles`, `toUserDisplayPath`, `classifyInstructionRole` |
+| `SessionLogView.tsx` | Root container; renders loading/error states, calls parser, renders `StartupContextLine` + `PromptTurnList`; optional prop `onOpenAnatomy` |
+| `StartupContextLine.tsx` | One-line band at the top of Logs (`data-testid="startup-context-line"`): "Startup context · N tokens" (or "total unknown") from `computeStartupTotal(main)` and a "View anatomy →" link that opens the `sysctx` tab; renders nothing for an empty transcript. Replaced the old System Context panel — see [System Context Anatomy Tab](sysctx-anatomy-tab.md) |
+| `sysctx-anatomy/` | The System context anatomy tab (`SessionSysctxAnatomyTab`, bar, table, drill-downs, and the pure builder `buildSysctxAnatomy`) — see [System Context Anatomy Tab](sysctx-anatomy-tab.md) |
+| `instruction-files.ts` | Pure helpers behind `summary.claudeMd` (and `toUserDisplayPath` for the anatomy tab): `extractInstructionFiles` (`instructions` attachment), `rulesToInstructionFiles` (on-demand `nested_memory`), `mergeInstructionFiles`, `toUserDisplayPath`, `classifyInstructionRole` |
 | `PromptTurnList.tsx` | Scrollable list of prompt turns |
 | `PromptTurnItem.tsx` | Single turn row (header + metrics + skills + rules + tools + files + images + agent activations + sub-agents + workflows); clicking a tool, file, skill or orphan Agent-call row opens `ToolCallDetailModal` |
 | `tool-calls.ts` | Tool-call core: `TOOL_SECTION` / `toolSection`, `FILE_TOOL_NAMES`, `buildToolResultIndex`, `extractRawToolCalls`, `buildAllToolCalls`, `extractPermissionEvents`, `attributePermissionEvents`, `deepEqual` / `deepSubset` — see [Tool calls](#tool-calls-tool-callsts-tool-outcomets) and `algorithms/tool-call-sections.md` |
@@ -399,30 +400,29 @@ Key types:
 - `WorkflowRun` — re-exported from `client/src/models/workflows.ts`; attached to `PromptTurn.workflows` by log parser during post-turn pass
 - `SessionSummary` — session-wide aggregates: `promptCount`, `totalTokens`, `tokenBreakdown`, `totalWorkTimeMs`, `maxContextTokens`, `skillsUsed`, `fileStats`, `linesChanged`, `model?`, `claudeMd?`, `deferredTools: string[]` (tool names announced via `deferred_tools_delta` events)
 - `FileAccess` — `path`, `tool`, `accessCount` (1-based), `category: string` (free-form, from `resolveFileCategory`/`RepoConfig`; default config yields `'knowledgebase'`, `'docs'`, or fallback `'code'` — not a fixed `'code'|'doc'` union), `globMatchCount?`, `bytes?`, `estTokens?` (both absent unless the Read succeeded), `toolUseId?`, `status?`, `error?` (first result line, ≤ 200 chars, only when status ≠ success)
-- `SkillDefinition` — `name`, `description`, `argumentHint?`, `body`, `path`, `bytes`, `source: 'project'|'builtin'|'plugin'`
-- `AgentDefinition` — `name`, `description`, `body`, `path`, `bytes`
-- `McpServerConfig` — `name`, `command`, `args` (pre-joined string, credentials scrubbed by hook)
+- `SkillDefinition` — `name`, `description`, `argumentHint?`, `body`, `path`, `bytes`, `source: 'project'|'user'|'plugin'|'org-synced'`, `plugin?`
 - `SkillInvocation` — `name`, `isDuplicate`, `path?`, `bytes?`, `estTokens?`, `definition?: SkillDefinition` (resolved post-parse), `toolUseId?`, `status?` (of the `Skill` call)
 - `SubAgentNode` — `agentId`, `prompt`, `model?`, `tokens?`, `durationMs?`, `toolUseID?`, `parentToolUseID?`, `allToolCalls?` (deduped by id; the source of its `toolCalls` / `files` / `skills`), `children: SubAgentNode[]`
 - `AgentActivation` — `toolUseId?` (the `Agent` call), `agentId`, `description?`, `prompt`, `resultText?`, `tokens?`, `totalTokens?`, `durationMs?`
 - `RuleInjection` — `name`, `path?`, `bytes?`, `estTokens?`
 - `ClaudeMdFile` — `path`, `bytes`, `role?: 'claude-md'|'local-md'|'rule'` (classified by parser; absent = `'claude-md'` for old sessions)
 - `ClaudeMdContext` — `totalBytes`, `estTokens`, `files: ClaudeMdFile[]`
-- `SessionSummary` — additionally carries `skillDefinitions?: Map<string, SkillDefinition>`, `agentDefinitions?: Map<string, AgentDefinition>`, `mcpConfig?: McpServerConfig[]` (all optional; absent for sessions uploaded by hooks that do not emit the definition events)
+- `SessionSummary` — additionally carries `skillDefinitions?: Map<string, SkillDefinition>` (optional; absent without a harness snapshot). The former `visibleSkills` / `visibleAgents` / `agentDefinitions` / `mcpConfig` fields were removed together with the System Context panel, their only reader
 - `ParsedSession` includes `mcpCalls: Record<string, number>` — map of `mcp__<server>__<tool>` names → invocation count, accumulated from `tool_use` blocks across all assistant events; `repoRoot: string` (display-only repo root, see [Tool calls](#tool-calls-tool-callsts-tool-outcomets)); `unattributedPermissionEvents: number` (diagnostics)
 
 ---
 
 ## MCP Burden Display
 
-### SessionContextPanel — MCP Servers block
+### MCP servers in the startup context
 
-A collapsible "MCP Servers" section is rendered when `summary.deferredTools` is non-empty. It shows:
-- Each unique server name extracted from `mcp__<server>__<tool>` strings in `deferredTools`.
-- Per-server: tool count and estimated token weight (`toolCount × 150` tokens, shown as `~N tokens`).
-- Total estimated token weight for all MCP servers combined.
+The old System Context panel's "MCP Servers" block (a `toolCount × 150` token guess) is gone. The
+per-server startup cost — deferred tool-name bytes plus `mcp_instructions_delta` instruction bytes,
+status, tool count and names loaded on demand — is the `mcp-server` partition of the System context
+anatomy tab ([System Context Anatomy Tab](sysctx-anatomy-tab.md)).
 
-`deferredTools` is populated by the log parser collecting all `deferred_tools_delta` event payloads.
+`summary.deferredTools` is still populated by the log parser from all `deferred_tools_delta` event
+payloads; the Context Usage chart reads it (`charts/context-usage/context-data.ts`).
 
 ### ToolCallRow — MCP tool label
 
@@ -461,11 +461,14 @@ A collapsible "MCP Usage" section is rendered when `parsedSession.mcpCalls` has 
 
 Session-level summary metrics are displayed in `SessionInfoTab.tsx` (the Info tab), not as a standalone panel in the log view. Metrics include prompts, total tokens (with breakdown), work time, cost, max context, skills used, and file stats.
 
-`SessionContextPanel.tsx` (rendered at the top of the Logs tab in `SessionLogView.tsx`) shows the session context burden — CLAUDE.md files, rules, registered skills, registered agents, and MCP server configuration. It is collapsible and is distinct from the summary stats panel.
+The top of the Logs tab holds only `StartupContextLine` — one line with the exact startup token
+total and a "View anatomy →" link. The former collapsible System Context panel (Files / MCP / Tools /
+Skills / Agents / Rules tabs and five detail modals) was removed; its breakdown lives in the
+**System context anatomy** tab — see [System Context Anatomy Tab](sysctx-anatomy-tab.md).
 
-### System Context Files / Rules — sources and merge
+### `summary.claudeMd` — sources and merge
 
-`summary.claudeMd` (Files + Rules tabs, the `N files` chip, Session Info, Call Tree, Context Usage)
+`summary.claudeMd` (Session Info, Call Tree, Context Usage)
 is the union of three sources, built in `log-parser.ts` with the helpers in `instruction-files.ts`:
 
 1. the harness snapshot's `systemContext` (hook ≥ 2.22.0; the only source for Claude Code versions
@@ -473,12 +476,12 @@ is the union of three sources, built in `log-parser.ts` with the helpers in `ins
 2. every `attachment.type === "instructions"` line of the Claude log — `files[]` with `path`, `type`
    (`User` / `Project` / `Local`) and `content` — the initial context;
 3. the per-turn `nested_memory` injections (`turn.rulesInjected`) — loaded during the session; they
-   carry an internal `onDemand: true` that the UI does **not** show (the tabs and modals do not track
-   whether a file was loaded — only name/path, type, size and tokens).
+   carry an internal `onDemand: true` that the UI does **not** show (only name/path, type, size and
+   tokens are kept).
 
 Only path, type (`typeLabel` = attachment `type` lowercased; snapshot-only files fall back to the
 role: `local-md` → `local`, `user-md` → `user`, else `project`) and UTF-8 size are kept — **file text is never stored or shown**, from any source (the rule `content` the snapshot
-carries is dropped; `RuleDetailModal` has no Body tab). User-type paths are rewritten to
+carries is dropped). User-type paths are rewritten to
 `~/.claude/<rest>` at extraction time and are skipped by the repo-root auto-detection and path
 normalisation. The merge runs after normalisation, keyed by the path with `\` → `/` lowercased, in
 the order snapshot → `instructions` → on-demand (later wins, first-seen order kept); `totalBytes` is
@@ -621,7 +624,6 @@ turn-level Sub-agents section keeps the tree). Omitted entirely when the forest 
     renders, over the agent's own turns — header, tokens/cost, Skills, Rules, Tools, Files.
   - **Raw logs** (`data-testid="workflow-agent-raw-logs"`): the very same `RawLogsTab` the Raw Logs
     tab renders, with `parsedSession` = that parse, so the records group under `TurnHeader` rows.
-- Not to be confused with `AgentDetailModal.tsx`, the System Context panel's agent-definition modal.
 
 ### SessionInfoTab cost table
 
@@ -698,11 +700,11 @@ Session tab `bash` (after Logs, always shown; label `Bash` plus a muted count). 
 ## Special log event fields
 
 - `isMeta=true` on `user` events: injected context (e.g., skill output delivered to model) — excluded from qualifying user event check.
-- `attachment` events with `attachment.type=nested_memory`: CLAUDE.md / rule files injected into context — collected as `RuleInjection[]` per turn (with `content.type` as `RuleInjection.type`; a `User` file's path becomes `~/.claude/…`), and also fed into the System Context Files/Rules tabs.
-- `attachment` events with `attachment.type=instructions`: the initial instruction files (`files[]` with `path`, `type`, `content`) — feed the System Context Files/Rules tabs (see "System Context Files / Rules — sources and merge").
+- `attachment` events with `attachment.type=nested_memory`: CLAUDE.md / rule files injected into context — collected as `RuleInjection[]` per turn (with `content.type` as `RuleInjection.type`; a `User` file's path becomes `~/.claude/…`), and also merged into `summary.claudeMd`.
+- `attachment` events with `attachment.type=instructions`: the initial instruction files (`files[]` with `path`, `type`, `content`) — merged into `summary.claudeMd` (see "`summary.claudeMd` — sources and merge"); the anatomy tab reads the startup ones straight from the raw transcript.
 - The Claude Code 2.1.280 types `atis-latch`, `cost-state` (top-level) and the attachments `prompt_snapshot`, `total_tokens_reminder`, `silent_turn_reminder`, `deferred_tools_record`, `remote_session_change` are not read by the log parser (every loop is gated on its own type) and feed no metric — in particular `cost-state.totalCostUSD` is never a cost source and the tool catalogues in `prompt_snapshot` / `deferred_tools_record` never count as tool usage. In Raw Logs they are collapsed rows with no special renderer (`docs/knowledgebase/raw-logs-renderers.md` § "Types with no special renderer").
-- System Context data for the Skills, Agents and MCP tabs is **not** parsed from log lines any more (the Files and Rules tabs additionally read the `instructions` / `nested_memory` attachments — see above). It comes from the `harnessSnapshot` field of the `GET .../logs` response (a `HarnessSnapshot | null`, built server-side from the `harness_snapshots` table — see `docs/knowledgebase/db-tables.md` and the `harness-snapshot` algorithm doc, `docs/knowledgebase/algorithms/harness-snapshot.md`). `parseSessionLogs(raw, { harnessSnapshot })` builds, from that one object: `skillDefinitions` (every snapshot skill except `anthropic-skills:*`), `visibleSkills`/`visibleAgents` (filtered against `registeredSkills`/`registeredAgents`, or all when that set is empty), `agentDefinitions`, `mcpConfig` (`snapshot.mcpServers`) and `claudeMd` (`snapshot.systemContext`). With no snapshot, all of these are empty/`undefined` and the corresponding tabs do not render.
-- The old `skill_listing` attachment fallback (reading "Project"/"Built-in" section headers out of the listing `content` to backfill `skillDefinitions`) has been **removed**, along with the parsing of the four synthetic hook events that used to carry this data: `system-context`, `skill-definitions`, `agent-definitions`, `mcp-config`. Sessions uploaded by a hook older than 2.22.0 carry only those old events and no `harnessSnapshot` — they lose their Skills, Agents, MCP, Files and Rules tabs with no fallback and no backfill (an explicit, owner-accepted exception to the usual hook backward-compatibility rule, for this change only). Their raw event lines are unaffected and still render in Raw Logs through the existing renderers (`docs/knowledgebase/raw-logs-renderers.md`).
+- Skill definitions and the snapshot part of `claudeMd` are **not** parsed from log lines. They come from the `harnessSnapshot` field of the `GET .../logs` response (a `HarnessSnapshot | null`, built server-side from the `harness_snapshots` table — see `docs/knowledgebase/db-tables.md` and the `harness-snapshot` algorithm doc, `docs/knowledgebase/algorithms/harness-snapshot.md`). `parseSessionLogs(raw, { harnessSnapshot })` builds, from that one object: `skillDefinitions` (every snapshot skill except `anthropic-skills:*`; read by the per-turn skill detail, which labels an `org-synced` source `ORG-SYNCED`) and the snapshot part of `claudeMd` (`snapshot.systemContext`). With no snapshot, both are absent. The System context anatomy tab reads the same `harnessSnapshot` directly, not through the parser.
+- The old `skill_listing` attachment fallback (reading "Project"/"Built-in" section headers out of the listing `content` to backfill `skillDefinitions`) has been **removed**, along with the parsing of the four synthetic hook events that used to carry this data: `system-context`, `skill-definitions`, `agent-definitions`, `mcp-config`. Sessions uploaded by a hook older than 2.22.0 carry only those old events and no `harnessSnapshot` — they lost the snapshot-backed skill definitions (and, at the time, the System Context panel's Skills, Agents, MCP, Files and Rules tabs) with no fallback and no backfill; today the anatomy tab shows its old-hook banner for them (an explicit, owner-accepted exception to the usual hook backward-compatibility rule, for this change only). Their raw event lines are unaffected and still render in Raw Logs through the existing renderers (`docs/knowledgebase/raw-logs-renderers.md`).
 
 ---
 

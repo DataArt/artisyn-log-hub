@@ -125,6 +125,8 @@ const HOOK_JS_FILES = [
   // Harness snapshot builder (catalog + agents + system context + static MCP config, DD-2 id) and
   // its known-snapshot-ids / per-session-id state.
   'harness-snapshot.js',
+  // Per-entry `gitStatus` of the harness snapshot — `require`d by harness-snapshot.js.
+  'harness-git-status.js',
   'harness-state.js',
   // OKF snapshot builder (KB bundle detection, ignored flags, content-hash id) and its
   // known-snapshot-ids / content-hash-cache state — `require`d at startup by send-logs-hook.

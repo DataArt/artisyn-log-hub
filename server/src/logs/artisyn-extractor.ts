@@ -437,7 +437,9 @@ export interface HarnessSkillInventoryEntry {
 /**
  * Skill inventory: from the loaded snapshot's `skills[]` (DD-10). Workflow entries
  * (`kind === 'workflow'`) are left out — harness-usage tracks those as workflow runs, not
- * skill-context injections.
+ * skill-context injections. Org-synced entries (`source === 'org-synced'`, hook 2.28.0+) are
+ * left out too: the snapshot stores their bare name while usage is counted under the listing's
+ * `<prefix>:<name>`, so including them would produce false "never used" rows.
  */
 export function extractHarnessSkillInventory(
   body: HarnessSnapshotBody,
@@ -448,6 +450,7 @@ export function extractHarnessSkillInventory(
 
   for (const skill of body.skills) {
     if (skill?.kind === 'workflow') continue;
+    if (skill?.source === 'org-synced') continue;
     const name = skill?.name;
     if (typeof name !== 'string' || name === '' || seen.has(name)) continue;
     seen.add(name);

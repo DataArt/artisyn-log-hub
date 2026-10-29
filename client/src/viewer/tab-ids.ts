@@ -32,6 +32,8 @@ export const SESSION_TABS = [
   'okf',
   // This session tree's MCP and monitored CLI tool calls: the repo Tools/MCP tab, one session.
   'tools',
+  // Byte/token anatomy of the startup system context; always shown, rightmost.
+  'sysctx',
 ] as const;
 
 /** Repository view main tabs, mirrored into the `mtab` URL param (group `repo`). */

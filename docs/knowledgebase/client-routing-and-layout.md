@@ -162,14 +162,15 @@ Main content for a repository. Reads `repoId` and optional `teamId` from react-r
 **Tab layout** via `PageTabs`:
 - **Sessions tab** — left column: scrollable session list (date, first prompt, branch); right panel:
   - **Top summary strip** (always visible when session selected): start time, end time, user email, session context key:value pairs.
-  - **Inner tab bar** (`SessionTabBar.tsx`, ids in `tab-ids.ts` `SESSION_TABS`): Summary | Info | Logs | Bash | Charts | [Advisor] | Statistics | Change surface | Harness usage | OKF | Tools/MCP | [Raw Logs]. The entries below describe the older core tabs; Call Tree is now a Charts sub-tab (`tab=call-tree` redirects to Charts).
-    - **Logs tab** (`SessionLogView`): structured prompt-turn list with context side panel.
+  - **Inner tab bar** (`SessionTabBar.tsx`, ids in `tab-ids.ts` `SESSION_TABS`): Summary | Info | Logs | Bash | Charts | [Advisor] | Statistics | Change surface | Harness usage | OKF | Tools/MCP | [Raw Logs] | System context anatomy. The entries below describe the older core tabs; Call Tree is now a Charts sub-tab (`tab=call-tree` redirects to Charts).
+    - **Logs tab** (`SessionLogView`): structured prompt-turn list, headed by the one-line `StartupContextLine` (startup token total + "View anatomy →" link to the `sysctx` tab).
     - **Bash tab** (`SessionBashTab`, tab id `bash`): every Bash command of the session tree (main + sub-agents) in a keyboard-navigable list, with the readable command view of the selected one. The selected call lives in the `bashCall` search param (`useBashCallParam`, `setSearchParams(next, { replace: true })`); a missing or unknown id selects the first row without rewriting the URL.
     - **Call Tree tab** (`CallTreeView`): hierarchical token-cost breakdown tree (System Context → Prompt turns → per-turn children). Token counts and cost-share percentages with progress bars. Expandable rows for prompt turns, groups (Skills, Rules, Code, Docs), and sub-agent rows.
     - **Charts tab** (`SessionChartsTab`): five sub-tabs (Timeline, Agent Tree, Tool Heatmap, Context Usage, Context Growth).
     - **Info tab** (`SessionInfoTab`): session metadata panel with sections — Identity, Timeline, Activity, Tokens & Cost, Files & Tools, MCP Usage, Vision, Productivity, CLAUDE.md Context.
     - **Usage tab** (`SessionUsageTab`): transcript-derived analytics for this session only — productivity counters, per-tool table, cache-TTL/service-tier breakdown, iterations drill-down. Computed client-side from the already-fetched `/logs` payload; carries only figures not already shown by Charts → Tool Heatmap or Info → Tokens & Cost.
     - **Raw Logs tab** (`RawLogsTab`): Kibana-style table of all raw log entries.
+    - **System context anatomy tab** (`SessionSysctxAnatomyTab`, tab id `sysctx`, always last): the first request's startup context split into estimated partitions with drill-downs, git status and Harness internals; lazy, computed client-side from the `/logs` `main` + `harnessSnapshot` — see `sysctx-anatomy-tab.md`.
   - Tab value is persisted in URL search params so it is bookmarkable (`call-tree` maps to value `'call-tree'`).
 - **Analytics tab** — `RepositoryAnalytics` component with date range picker, group-by, bar/horizontal chart layouts, and view selector (work-time/cost/files/vision/mcp/productivity/log-lines/cache-read-ratio/tools/tokens/productivity-counters/active-sessions — the last four are usage-analytics table views, not charts).
 - **Settings tab** — `RepositorySettings` modal for team/user file-category config.

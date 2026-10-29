@@ -102,6 +102,11 @@ server can analyze how your harness affects cost and behavior:
 
 - Sizes of your CLAUDE.md files and the content of rule files
 - The list of available skills and agents (names and descriptions)
+- Skills your organization syncs to you (under `~/.claude/skills/synced/`): only their names,
+  descriptions, sizes and paths, with the organization folder name masked — never the skill text
+  (hook 2.28.0 and later)
+- The git status of each project file in that list — `tracked`, `untracked`, `ignored` or
+  `outside-repo` — just the status, no git output (hook 2.28.0 and later)
 - Configured MCP servers and their available tools — any credentials found in server
   configuration are removed before upload
 - The hook's own status: version, recent activity, any files that failed to upload, and

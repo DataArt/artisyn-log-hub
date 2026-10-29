@@ -72,6 +72,13 @@ const SessionToolsTab = lazy(() =>
 
 // Lazy: the tab pulls the Bash view (and, through it, the tree-sitter parser on first use) and is
 // opened deliberately. Its row count for the tab bar comes from the WASM-free collector below.
+// Lazy: the startup system-context anatomy, computed client-side from the loaded transcript.
+const SessionSysctxAnatomyTab = lazy(() =>
+  import('./session-log/sysctx-anatomy/SessionSysctxAnatomyTab').then((m) => ({
+    default: m.SessionSysctxAnatomyTab,
+  })),
+);
+
 const SessionBashTab = lazy(() =>
   import('./session-log/bash-tab/SessionBashTab').then((m) => ({
     default: m.SessionBashTab,
@@ -349,6 +356,7 @@ export function SessionDetailPane({
               targetToolUseId={targetToolUseId}
               onTargetTurnResolved={setTargetTurnIndex}
               onTargetToolUseConsumed={onTargetToolUseConsumed}
+              onOpenAnatomy={() => onSessionTabChange('sysctx')}
             />
           ) : sessionTab === 'bash' ? (
             <Suspense fallback={<LazyFallback />}>
@@ -421,6 +429,18 @@ export function SessionDetailPane({
                 repoId={repoId}
                 teamId={teamId}
                 sessionId={selectedSession.sessionId}
+              />
+            </Suspense>
+          ) : sessionTab === 'sysctx' ? (
+            <Suspense fallback={<LazyFallback />}>
+              <SessionSysctxAnatomyTab
+                mainLogs={mainLogs}
+                harnessSnapshot={logsQuery.data?.harnessSnapshot}
+                repoRoot={parsedLogs?.repoRoot ?? ''}
+                pricing={pricing}
+                sessionModel={parsedLogs?.summary.model}
+                isLoading={logsQuery.isLoading}
+                error={logsQuery.error}
               />
             </Suspense>
           ) : sessionTab === 'raw-logs' ? (

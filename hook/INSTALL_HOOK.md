@@ -246,6 +246,7 @@ The installer extracts this tree, generated at build time from `hook/.claude/tel
         │   ├── claude-invoke-async.js
         │   ├── skill-catalog.js
         │   ├── harness-snapshot.js
+        │   ├── harness-git-status.js
         │   ├── post-turn-analysis-hook.js
         │   ├── post-turn-analysis-worker.js
         │   ├── session-attribution-state.js
@@ -371,7 +372,7 @@ guardrail was removed in `2.19.0`): `telemetry-hook.js` on `UserPromptSubmit`, `
 ```
 
 `prompt-upload-hook.js`, `otel-receiver.js`, `otel-register.js`, `otel-endpoint-check.js`, `otel-restart.js`, `session-files.js`,
-`throttle-state.js`, `claude-invoke-async.js`, `skill-catalog.js`, `harness-snapshot.js`, `post-turn-analysis-worker.js`,
+`throttle-state.js`, `claude-invoke-async.js`, `skill-catalog.js`, `harness-snapshot.js`, `harness-git-status.js`, `post-turn-analysis-worker.js`,
 `session-attribution-state.js`, `process-marker.js`, `harness-state.js`, `okf-snapshot.js`, `okf-state.js`, `ndjson-sanitize.js`, `code-inventory.js`,
 `edit-result-counts.js`, `claude-config-dir.js`, `project-root-override.js`, `tool-wrap-names.js`, `tool-wrap-config.js`,
 `tool-wrap-shims.js`, `tool-wrap-tee.js` and `tool-wrap-records.js` are **not** wired to any event — they are detached child processes / shared modules

@@ -19,6 +19,10 @@
  *     any extra directories `plugin.json` lists under `skills`/`commands` (string or array,
  *     scanned the same way as the default folder for that kind). The name is
  *     `<pluginName>:<name>`.
+ *   - **org-synced** (`<claudeConfigDir>/skills/synced/<org>/<skill>/SKILL.md`, skills only):
+ *     metadata only — the entry's `body` is always `''`, its `path` masks the org folder as
+ *     the literal `~/.claude/skills/synced/<org>/<skill>/SKILL.md` and its `name` is the bare
+ *     frontmatter/folder name. Skipped on a name collision with a project or user skill.
  * Which plugins are "enabled" and where each one is actually installed for this project is DD-4:
  * `enabledPlugins` is merged from the user, project and project-local settings files (`false`
  * disables), then each enabled `<id>@<marketplace>` is resolved against `installed_plugins.json`
@@ -269,7 +273,7 @@ function scanPluginExtraPaths(installPath, manifest) {
  * @param {'skill'|'workflow'|'command'} kind
  * @param {object} read - the `{name, description, argumentHint, body, bytes, contentHash}` a
  *   reader function above produced.
- * @param {'project'|'user'|'plugin'} source
+ * @param {'project'|'user'|'plugin'|'org-synced'} source
  * @param {string} entryPath - the DD-3 path for this entry.
  * @param {{ id: string, name: string, marketplace: string, version: string, gitCommitSha?: string }} [pluginMeta]
  * @returns {object}
@@ -433,9 +437,30 @@ function readPluginManifest(installPath, idPart) {
   return { name: idPart, manifest: null };
 }
 
+/** DD-19 `org-synced` path: the org folder name is masked as the literal `<org>`. */
+function orgSyncedEntryPath(absFile) {
+  const skillDir = path.basename(path.dirname(absFile));
+  return `~/.claude/skills/synced/<org>/${skillDir}/SKILL.md`;
+}
+
+/**
+ * @param {string} syncedDir - `<claudeConfigDir>/skills/synced`.
+ * @returns {string[]} the absolute path of every `<org>` subdirectory (empty when missing).
+ */
+function listOrgDirs(syncedDir) {
+  try {
+    return fs
+      .readdirSync(syncedDir, { withFileTypes: true })
+      .filter((e) => e.isDirectory())
+      .map((e) => path.join(syncedDir, e.name));
+  } catch {
+    return [];
+  }
+}
+
 /**
  * Build the DD-1 `skills[]` array: every project, user and enabled-plugin skill/workflow/command,
- * per DD-3–DD-5. Fail-open throughout — a missing source contributes nothing, never throws.
+ * per DD-3–DD-5, plus every org-synced skill (metadata only). Fail-open throughout — a missing source contributes nothing, never throws.
  * @param {{ projectRoot: string, cwd?: string, env?: Record<string, string|undefined>, log?: (line: string) => void }} options
  * @returns {Array<object>} the DD-1 `skills[]` entries (never `null`; empty array when nothing is found).
  */
@@ -454,8 +479,10 @@ function buildSkillCatalog({ projectRoot, cwd, env = process.env, log } = {}) {
   }
 
   // User — `<claudeConfigDir>/` — skipped on a name collision with a project entry.
+  const userKeys = new Set();
   for (const { kind, file, read } of scanRoot(configDir)) {
     if (projectKeys.has(`${kind}:${read.name}`)) continue;
+    userKeys.add(`${kind}:${read.name}`);
     entries.push(makeEntry(kind, read, 'user', userEntryPath(configDir, file)));
   }
 
@@ -481,6 +508,18 @@ function buildSkillCatalog({ projectRoot, cwd, env = process.env, log } = {}) {
       entries.push(
         makeEntry(kind, read, 'plugin', pluginEntryPath(pluginName, resolved.version, resolved.installPath, file), pluginMeta),
       );
+    }
+  }
+
+  // Org-synced — `<claudeConfigDir>/skills/synced/<org>/<skill>/SKILL.md` (DD-19): metadata only
+  // (empty body), masked org path, skipped on a project/user name collision.
+  for (const orgDir of listOrgDirs(path.join(configDir, 'skills', 'synced'))) {
+    for (const { file, fallbackName } of scanSkillsDir(orgDir)) {
+      const read = readMarkdownEntry(file, fallbackName);
+      if (!read) continue;
+      const key = `skill:${read.name}`;
+      if (projectKeys.has(key) || userKeys.has(key)) continue;
+      entries.push(makeEntry('skill', { ...read, body: '' }, 'org-synced', orgSyncedEntryPath(file)));
     }
   }
 

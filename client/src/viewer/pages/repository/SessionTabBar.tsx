@@ -96,6 +96,7 @@ export function SessionTabBar({
         </TooltipProvider>
       ),
     },
+    { id: 'sysctx', label: 'System context anatomy' },
   ];
 
   return (

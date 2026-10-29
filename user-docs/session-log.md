@@ -92,6 +92,48 @@ Session metadata including:
 
 The unprocessed JSONL log lines captured by the hook. Useful for debugging hook issues or writing custom analysis.
 
+### System context anatomy
+
+The last tab. It shows what Claude Code sent to the model **before you typed anything** — the
+startup context of the session's first request — and how big each part of it was. The top of the
+Logs tab shows the same total in one line, "Startup context · N tokens", with a **View anatomy →**
+link to this tab.
+
+- **Total** — the exact size of the first request in tokens (input + cache write + cache read, as
+  the model reported it).
+- **The bar** — the total split into coloured parts: the system prompt, the memory index
+  (MEMORY.md), environment details, built-in tool names, MCP servers, subagent types, the skills
+  listing, instruction files (CLAUDE.md and friends), system reminders and your first prompt.
+  Hover a part for its size and share; click it (or its table row) to select it.
+- **The table** — the same parts with bytes, ≈ tokens and share. Expand a part to see what it is
+  made of: one row per skill, per file, per MCP server (with its status, tool count and the tools
+  it loaded later on demand) or per prompt line. Only names, paths and sizes are shown — never
+  the text of a file or prompt.
+
+Every part except the total is an **estimate**: its size in bytes divided by a bytes-per-token
+ratio for the model (shown under the total). Only the total is exact.
+
+**Harness internals** (the hatched part) is what is left: tokens Claude Code sent in the first
+request but did not write to the session log, so they cannot be split further. It is mostly the
+definitions of the built-in and MCP tools, message wrapping, and the combined error of the
+estimates above. If the estimates add up to more than the measured total, a warning shows the
+difference and there is no Harness internals part.
+
+The skills and files tables show where each item lives and its **git status**:
+
+| Git status | Meaning |
+|---|---|
+| tracked | The file is committed to the repository. |
+| untracked | The file is inside the repository but not added to git. |
+| ignored | The file is inside the repository and ignored by `.gitignore`. |
+| outside repo | The file lives outside the repository — your home folder (`~/.claude/…`), a plugin or an organisation-synced skill. |
+| unknown | Log Hub has no git status for this file. |
+
+Git status and file sizes on disk come from the hook. Git status needs **hook 2.28.0 or newer**;
+with an older hook the tab says so and shows `unknown` (or `outside repo` for files clearly outside
+the repository). Sessions recorded with a hook older than 2.22.0 have no file sizes on disk either.
+A skill synced to you by your organisation is shown with the source **org-synced**.
+
 ## Navigation
 
 Use the **back arrow** in the session header to return to the repository session list without losing your scroll position.
