@@ -2,54 +2,55 @@
  * and slide-content-template.svg). Loaded after reveal.js reset.css/reveal.css and the shared
  * ../assets/theme.css; no reveal theme. Slides are 1280 x 720 logical pixels (480 x 900 on a narrow
  * screen, see index.html), scaled by reveal.js. Light: white slide on a light-grey stage; dark:
- * #111827 slide on #0b1220 (prefers-color-scheme). ?print-pdf always prints the light palette. */
+ * phosphor-green on near-black (prefers-color-scheme). ?print-pdf always prints the light palette. */
 
 :root {
-  --deck-stage: #f3f4f6;
-  --deck-slide: #ffffff;
-  --deck-slide-border: #d1d5db;
-  --deck-accent-soft: #eef2f7;
-  --deck-pill: #e5e7eb;
-  --deck-pill-text: #6b7280;
-  --deck-ok: #16a34a;
-  --deck-bar-1: #1e3a5f;
-  --deck-bar-2: #3b6ea5;
-  --deck-bar-3: #7aa2cf;
-  --deck-bar-4: #b6cbe3;
-  --deck-bar-5: #d7e2ef;
+  --deck-stage: #e8e5db;
+  --deck-slide: #faf9f4;
+  --deck-slide-border: #b8b5a8;
+  --deck-accent-soft: #eceee4;
+  --deck-pill: #e3e0d4;
+  --deck-pill-text: #5e6a62;
+  --deck-ok: #2f7a4f;
+  --deck-bar-1: #1f5c45;
+  --deck-bar-2: #4a8068;
+  --deck-bar-3: #9a6614;
+  --deck-bar-4: #c4a46a;
+  --deck-bar-5: #8d968f;
 }
 
 @media (prefers-color-scheme: dark) {
   :root:not(.print-pdf) {
-    --deck-stage: #0b1220;
-    --deck-slide: #111827;
-    --deck-slide-border: #374151;
-    --deck-accent-soft: #1e293b;
-    --deck-pill: #1f2937;
-    --deck-pill-text: #9ca3af;
-    --deck-ok: #4ade80;
-    --deck-bar-1: #93c5fd;
-    --deck-bar-2: #60a5fa;
-    --deck-bar-3: #3b82f6;
-    --deck-bar-4: #1d4ed8;
-    --deck-bar-5: #1e3a8a;
+    --deck-stage: #0a0d0b;
+    --deck-slide: #131915;
+    --deck-slide-border: #2f3b33;
+    --deck-accent-soft: #18211c;
+    --deck-pill: #1c2520;
+    --deck-pill-text: #8a978e;
+    --deck-ok: #8fc3a3;
+    --deck-bar-1: #8fc3a3;
+    --deck-bar-2: #5c9479;
+    --deck-bar-3: #d3a65c;
+    --deck-bar-4: #8a6c3a;
+    --deck-bar-5: #56605a;
   }
 }
 
 /* Print / PDF export: light palette regardless of the viewer's scheme. */
 html.print-pdf {
-  --text: #111827;
-  --text-2: #374151;
-  --text-3: #6b7280;
-  --accent: #1e3a5f;
-  --link: #0969da;
-  --page: #ffffff;
-  --stage: #f3f4f6;
-  --surface: #f9fafb;
-  --border: #d1d5db;
-  --border-soft: #e5e7eb;
-  --label-bg: #fef3c7;
-  --label-text: #78350f;
+  --text: #17201b;
+  --text-2: #36433c;
+  --text-3: #66726a;
+  --accent: #1f5c45;
+  --accent-2: #9a6614;
+  --link: #1f5c45;
+  --page: #f3f1ea;
+  --stage: #e8e5db;
+  --surface: #faf9f4;
+  --border: #b8b5a8;
+  --border-soft: #d9d6ca;
+  --label-bg: transparent;
+  --label-text: #9a6614;
 }
 
 body.reveal-viewport {
@@ -136,7 +137,7 @@ body.reveal-viewport {
   color: var(--text-2);
   background: var(--deck-slide);
   border: 1px solid var(--deck-slide-border);
-  border-radius: 6px;
+  border-radius: var(--radius);
   padding: 4px 10px;
   text-decoration: none;
 }
@@ -228,7 +229,7 @@ html.print-pdf .deck-exit {
   align-items: center;
   margin-top: 28px;
   padding: 16px 20px;
-  border-radius: 8px;
+  border-radius: var(--radius);
   background: var(--deck-accent-soft);
 }
 
@@ -276,7 +277,7 @@ html.print-pdf .deck-exit {
 .cost-bar {
   display: flex;
   height: 44px;
-  border-radius: 6px;
+  border-radius: var(--radius);
   overflow: hidden;
 }
 
@@ -405,7 +406,7 @@ html.print-pdf .deck-exit {
 .closing-links a {
   display: inline-block;
   border: 2px solid var(--accent);
-  border-radius: 8px;
+  border-radius: var(--radius);
   padding: 10px 22px;
   font-size: 24px;
   font-weight: 600;
@@ -428,7 +429,7 @@ html.print-pdf .deck-exit {
 
 .thesis-col {
   position: relative;
-  border-radius: 8px;
+  border-radius: var(--radius);
   min-height: 400px;
   padding: 24px 26px;
   border: 2px solid var(--text-2);
@@ -620,4 +621,324 @@ html.deck-narrow .closing-links a {
 /* reveal.js print layout sizes sections to their content; keep the full 1280 x 720 paper. */
 html.print-pdf .slide-frame {
   height: 720px;
+}
+
+/* Real product screenshots (site/assets/shots/, demo repository, English UI only). */
+.slide-cols:has(.deck-shot) {
+  grid-template-columns: minmax(0, 1fr) 600px;
+  gap: 36px;
+}
+
+.reveal .shot.deck-shot {
+  margin: 0;
+  width: 600px;
+  padding: 6px;
+}
+
+.reveal .shot.deck-shot img {
+  max-height: 400px;
+  object-fit: cover;
+  object-position: top left;
+}
+
+.reveal .shot-pair img.shot-crop-top {
+  aspect-ratio: 810 / 190;
+  max-height: none;
+}
+
+.reveal .shot-gap {
+  margin: 4px 0;
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 14px;
+  color: var(--accent-2);
+}
+
+.reveal .shot figcaption {
+  font-size: 13px;
+}
+
+html.deck-narrow .slide-cols:has(.deck-shot) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+html.deck-narrow .reveal .shot.deck-shot {
+  width: 100%;
+}
+
+/* Slide 9: anomalies board (dataset `anomalies`, styled like the Home readout). */
+.slide-cols:has(.anomaly-board) {
+  grid-template-columns: minmax(0, 1fr) 600px;
+  gap: 36px;
+}
+
+.visual-slot.deck-visual.anomaly-board {
+  width: 600px;
+  height: auto;
+  gap: 8px;
+  padding: 14px 18px;
+  background-color: var(--deck-slide);
+  background-image: repeating-linear-gradient(0deg, var(--scan) 0 1px, transparent 1px 3px);
+  font-family: var(--mono);
+}
+
+.anomaly-board .board-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  color: var(--text-3);
+}
+
+.anomaly-board .board-head .illustrative {
+  margin-top: 0;
+}
+
+.anomaly-board .board-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+
+.anomaly-board ul.anomalies {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.anomaly-board .anomalies li {
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+  padding: 7px 0;
+  border-top: 1px dashed var(--border);
+  font-size: 16px;
+  line-height: 1.3;
+}
+
+.anomaly-board .anomalies small {
+  display: block;
+  font-size: 13px;
+  color: var(--text-3);
+  font-weight: 400;
+}
+
+.anomaly-board .anomalies b {
+  text-align: right;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.anomaly-board .lvl {
+  justify-self: start;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border: 1px solid currentColor;
+  padding: 0 6px;
+}
+
+.anomaly-board .lvl-critical .lvl { color: #a3362a; }
+.anomaly-board .lvl-warning .lvl { color: var(--accent-2); }
+.anomaly-board .lvl-info .lvl { color: var(--text-3); }
+
+@media (prefers-color-scheme: dark) {
+  :root:not(.print-pdf) .anomaly-board .lvl-critical .lvl { color: #e07a6c; }
+}
+
+html.deck-narrow .slide-cols:has(.anomaly-board) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+html.deck-narrow .visual-slot.deck-visual.anomaly-board {
+  width: 100%;
+}
+
+/* Slide 12: "sealed by default" board (same look as the anomalies board, no dataset figures). */
+.slide-cols:has(.seal-board) {
+  grid-template-columns: minmax(0, 1fr) 600px;
+  gap: 36px;
+}
+
+.visual-slot.deck-visual.seal-board {
+  width: 600px;
+  height: auto;
+  gap: 8px;
+  padding: 14px 18px;
+  background-color: var(--deck-slide);
+  background-image: repeating-linear-gradient(0deg, var(--scan) 0 1px, transparent 1px 3px);
+  border: 1px solid var(--accent);
+  border-left-width: 4px;
+  font-family: var(--mono);
+}
+
+.seal-board .board-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.seal-board ul.seal {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.seal-board .seal li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  padding: 8px 0;
+  border-top: 1px dashed var(--border);
+  font-size: 17px;
+  line-height: 1.3;
+  color: var(--text-2);
+}
+
+.seal-board .seal b {
+  text-align: right;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.seal-board .seal small {
+  display: block;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--text-3);
+}
+
+html.deck-narrow .slide-cols:has(.seal-board) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+html.deck-narrow .visual-slot.deck-visual.seal-board {
+  width: 100%;
+}
+
+.seal-board .footnote {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--text-3);
+}
+
+.reveal sup {
+  font-size: 0.6em;
+  vertical-align: super;
+}
+
+/* Mosaic slides (4b, 8b): questions on the left, real charts as a 2 × 2 grid on the right. */
+.mosaic-slide .slide-cols {
+  grid-template-columns: minmax(0, 1fr) 700px;
+  gap: 32px;
+  margin-top: 24px;
+}
+
+.mosaic-slide ol.questions {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mosaic-slide ol.questions li {
+  display: flex;
+  gap: 14px;
+  margin: 0 0 22px;
+  font-size: 24px;
+  line-height: 1.35;
+}
+
+.mosaic-slide .q-no {
+  flex: none;
+  display: inline-block;
+  min-width: 1.6em;
+  height: 1.6em;
+  line-height: 1.6em;
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 0.8em;
+  font-weight: 700;
+  color: var(--deck-slide);
+  background: var(--accent);
+  border-radius: var(--radius);
+}
+
+.mosaic {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.mosaic .tile {
+  margin: 0;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  padding: 4px;
+}
+
+.mosaic .tile img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  object-position: top left;
+  border: 1px solid var(--border-soft);
+}
+
+.mosaic .tile-tree img {
+  object-position: left center;
+}
+
+.mosaic .tile figcaption {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 2px 1px;
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+.mosaic .tile .q-no {
+  font-size: 12px;
+}
+
+html.deck-narrow .mosaic-slide .slide-cols {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+html.deck-narrow .mosaic-slide ol.questions li {
+  font-size: 18px;
+}
+
+/* Title and closing: "open source by DataArt" line. */
+.title-slide .byline,
+.closing-slide .closing-sub {
+  margin: 18px 0 0;
+  font-family: var(--mono);
+  font-size: 18px;
+  letter-spacing: 0.02em;
+  color: var(--accent-2);
+}
+
+.closing-slide .closing-sub {
+  margin: 0 0 24px;
+}
+
+.seal-board .footnote code {
+  font-size: 1em;
+  padding: 0 0.2em;
+}
+
+.seal-board .seal li {
+  padding: 5px 0;
+  font-size: 15px;
 }

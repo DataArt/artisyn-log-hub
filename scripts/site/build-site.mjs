@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 // Pre-renders the Log Hub static site (GitHub Pages) into tmp/site/ (impl-plan DD-18, DD-19):
 //
-//   index.html, features.html     site/pages/{home,features}.html wrapped by layout.mjs
+//   index.html, features.html,    site/pages/{home,features,questions}.html wrapped by layout.mjs
+//   questions.html
 //   docs/<slug>.html              every user-docs/nav.json page (markdown → HTML, heading ids, TOC)
 //   deck/                         copy of site/deck/ with placeholders filled in every .html
 //   assets/                       copy of site/assets/
@@ -130,6 +131,47 @@ function remarkSiteLinks({ fromFile, nav, errors }) {
   };
 }
 
+/**
+ * remark plugin: a fenced block whose info string carries `diagram=<name>` (e.g. ```text diagram=architecture)
+ * becomes a Mermaid figure from site/diagrams/<name>.mmd, with the original block kept as its
+ * "Text version". The in-app help and GitHub ignore the meta and show the text block as before.
+ */
+function remarkSiteDiagrams({ fromFile, errors }) {
+  return (tree, file) => {
+    walk(tree, (node) => {
+      if (node.type !== 'code' || typeof node.meta !== 'string') return;
+      const m = /(?:^|\s)diagram=([a-z0-9-]+)(?:\s|$)/.exec(node.meta);
+      if (!m) return;
+      const src = path.join(SITE_DIR, 'diagrams', `${m[1]}.mmd`);
+      if (!fs.existsSync(src)) {
+        errors.push(`${rel(fromFile)}: diagram ${m[1]} has no ${rel(src)}`);
+        return;
+      }
+      const mmd = fs.readFileSync(src, 'utf8');
+      const text = node.value;
+      file.data.hasDiagram = true;
+      node.type = 'siteDiagram';
+      delete node.value;
+      node.data = {
+        hName: 'figure',
+        hProperties: { className: ['diagram'] },
+        hChildren: [
+          { type: 'element', tagName: 'pre', properties: { className: ['mermaid'] }, children: [{ type: 'text', value: mmd }] },
+          {
+            type: 'element',
+            tagName: 'details',
+            properties: { open: true },
+            children: [
+              { type: 'element', tagName: 'summary', properties: {}, children: [{ type: 'text', value: 'Text version' }] },
+              { type: 'element', tagName: 'pre', properties: {}, children: [{ type: 'element', tagName: 'code', properties: {}, children: [{ type: 'text', value: text }] }] },
+            ],
+          },
+        ],
+      };
+    });
+  };
+}
+
 /** rehype plugin (after rehype-slug): collects h2/h3 into file.data.toc. */
 function rehypeToc() {
   return (tree, file) => {
@@ -148,12 +190,13 @@ function renderMarkdown(md, fromFile, nav, errors) {
     .use(remarkParse)
     .use(remarkGfm)
     .use(remarkSiteLinks, { fromFile, nav, errors })
+    .use(remarkSiteDiagrams, { fromFile, errors })
     .use(remarkRehype)
     .use(rehypeSlug)
     .use(rehypeToc)
     .use(rehypeStringify)
     .processSync(md);
-  return { html: String(file), toc: file.data.toc || [] };
+  return { html: String(file), toc: file.data.toc || [], diagrams: file.data.hasDiagram === true };
 }
 
 function readUtf8(p, errors) {
@@ -213,7 +256,7 @@ function main() {
     nav.pages.forEach((p, i) => {
       const md = sources.get(p.slug);
       if (md === undefined) return;
-      const { html, toc } = renderMarkdown(substituteRetention(md), p.file, nav, linkErrors);
+      const { html, toc, diagrams } = renderMarkdown(substituteRetention(md), p.file, nav, linkErrors);
       const prev = i > 0 ? nav.pages[i - 1] : undefined;
       const next = i < nav.pages.length - 1 ? nav.pages[i + 1] : undefined;
       files.set(path.join('docs', `${p.slug}.html`), page({
@@ -225,18 +268,19 @@ function main() {
         body: html,
         toc,
         prevNext: { prev, next },
+        diagrams,
       }));
     });
     for (const e of linkErrors) if (!errors.includes(e)) errors.push(e);
 
     // Home and Features.
-    for (const [name, title, activeSection] of [['home', SITE_NAME, 'home'], ['features', 'Features', 'features']]) {
+    for (const [name, title, activeSection] of [['home', SITE_NAME, 'home'], ['features', 'Features', 'features'], ['questions', 'Questions', 'questions']]) {
       const src = path.join(SITE_DIR, 'pages', `${name}.html`);
       const text = readUtf8(src, errors);
       if (text === null) continue;
       try {
         const body = fillAll(text, ds);
-        files.set(name === 'home' ? 'index.html' : 'features.html', page({ title, depth: 0, nav, activeSection, body }));
+        files.set(name === 'home' ? 'index.html' : `${name}.html`, page({ title, depth: 0, nav, activeSection, body }));
       } catch (err) {
         errors.push(`${rel(src)}: ${err.message}`);
       }

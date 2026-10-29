@@ -84,7 +84,7 @@
         → OKF and Tools/MCP tabs. See <a href="docs/session-log.html">Session Log</a>.</dd>
     </dl>
   </div>
-  <div class="visual-slot">Visual slot — system context and harness usage</div>
+  <figure class="shot"><img src="assets/shots/context-usage.png" alt="Context Usage: system context split into system files, MCP definitions, skills and built-in tools, next to tool results and conversation history" loading="lazy"><figcaption>Session → Charts → Context Usage · real screen, demo repository</figcaption></figure>
 </section>
 
 <section class="feature" id="c" aria-labelledby="c-title">
@@ -107,7 +107,7 @@
         Settings → Session Attributes.</dd>
     </dl>
   </div>
-  <div class="visual-slot">Visual slot — change surface and productivity</div>
+  <figure class="shot"><img src="assets/shots/change-surface.png" alt="Change Surface tab: 14 files in 9 folders, concentration 20 of 100, lines added and removed" loading="lazy"><figcaption>Session → Change surface · real screen, demo repository</figcaption></figure>
 </section>
 
 <section class="feature" id="d" aria-labelledby="d-title">
@@ -133,7 +133,7 @@
         <a href="docs/analytics-reports.html">Analytics &amp; Reports</a>.</dd>
     </dl>
   </div>
-  <div class="visual-slot">Visual slot — team analytics and reports</div>
+  <figure class="shot"><img src="assets/shots/analytics.png" alt="Repository analytics: work time per hour, stacked by session, coloured by share of the period" loading="lazy"><figcaption>Repository → Analytics · real screen, demo repository</figcaption></figure>
 </section>
 
 <section class="feature" id="e" aria-labelledby="e-title">
@@ -145,6 +145,10 @@
         <ul>
           <li>For tool authors: how the agent really uses your MCP server or CLI — arguments, errors,
             empty answers, truncated output — with no integration on the tool side.</li>
+          <li>Example: you connected a popular documentation MCP server, {{ds:tools.0.name}}. Do you
+            know what it actually advised? Without monitoring you can only hope it brought some
+            benefit. Log Hub keeps every call — the library and question the agent asked and the docs
+            that came back — so you can read what it really told the agent.</li>
           <li>For admins and team leads: is the tool called at all, by whom, how often, with what
             error %; does the agent trust its output (<code>opened file</code>) or abandon it
             (<code>retried</code>) — the basis to keep, tune or remove it.</li>
@@ -175,7 +179,8 @@
         <tr><td>{{ds:tools.3.name}} ({{ds:tools.3.kind}})</td><td class="num">{{ds:tools.3.calls}}</td><td class="num">—</td><td class="num">—</td><td class="num">—</td></tr>
       </tbody>
     </table>
-    <p>{{ds:tools.3.name}} is monitored but never called — a candidate to remove.</p>
+    <p>Each of the {{ds:tools.0.calls}} {{ds:tools.0.name}} calls opens with the question and the
+      answer. {{ds:tools.3.name}} is monitored but never called — a candidate to remove.</p>
   </figure>
 </section>
 
@@ -199,5 +204,9 @@
         <a href="docs/getting-started.html">Your first session</a></dd>
     </dl>
   </div>
-  <div class="visual-slot">Visual slot — install in three steps</div>
+  <ol class="install-steps">
+    <li><span>01</span>Install the server — Docker + Postgres, one command</li>
+    <li><span>02</span>Install the hook in a repository — <code>npx</code></li>
+    <li><span>03</span>Work as usual, then open your first session</li>
+  </ol>
 </section>

@@ -52,6 +52,7 @@ function topNav(prefix, nav, activeSection) {
     if (!sec || sec.articles.length === 0) continue;
     items.push(navLink(docHref(prefix, sec.articles[0].slug), label, activeSection === section));
   }
+  items.push(navLink(`${prefix}questions.html`, 'Questions', activeSection === 'questions'));
   items.push(navLink(`${prefix}deck/index.html`, 'Deck', activeSection === 'deck'));
   items.push(navLink(REPO_URL, 'GitHub ↗', false, ' rel="noopener noreferrer"'));
   return `<header class="site-header">
@@ -102,19 +103,29 @@ function footer(prefix) {
 </footer>`;
 }
 
+/** Mermaid (pinned, SRI) for pages with a ```text diagram=<name> block; site-only, the app never loads it. */
+export const MERMAID_URL = 'https://cdn.jsdelivr.net/npm/mermaid@12.2.0/dist/mermaid.min.js';
+const MERMAID_SRI = 'sha384-8xUhuLNMjW/cI2Dacg3DR4WliYznvIg0LVG1stctThKD/YVrJFI9TNCFxft5NYgp';
+
+function diagramScripts(prefix) {
+  return `<script src="${MERMAID_URL}" integrity="${MERMAID_SRI}" crossorigin="anonymous" defer></script>
+<script src="${prefix}assets/diagrams.js" defer></script>
+`;
+}
+
 /**
  * Full HTML document.
  * @param {object} o
  * @param {string} o.title        page title (without the site name)
  * @param {number} o.depth        directory depth of the output file below the site root
  * @param {{sections: {section: string, articles: {slug: string, title: string}[]}[]}} o.nav
- * @param {string} o.activeSection 'home' | 'features' | 'deck' | a nav.json section name
+ * @param {string} o.activeSection 'home' | 'features' | 'questions' | 'deck' | a nav.json section name
  * @param {string} o.body          trusted HTML of the main content
  * @param {string} [o.activeSlug]  docs page slug; when set the three-column docs layout is used
  * @param {{depth: number, id: string, text: string}[]} [o.toc]  h2/h3 entries (shown when ≥ 3)
  * @param {{prev?: {slug: string, title: string}, next?: {slug: string, title: string}}} [o.prevNext]
  */
-export function page({ title, depth, nav, activeSection, body, activeSlug, toc, prevNext }) {
+export function page({ title, depth, nav, activeSection, body, activeSlug, toc, prevNext, diagrams }) {
   const prefix = prefixFor(depth);
   const fullTitle = title && title !== SITE_NAME ? `${title} — ${SITE_NAME}` : SITE_NAME;
   const main = activeSlug
@@ -133,7 +144,7 @@ ${tocBlock(toc)}
 <link rel="icon" href="data:,">
 <link rel="stylesheet" href="${prefix}assets/theme.css">
 <script src="${prefix}assets/site.js" defer></script>
-</head>
+${diagrams ? diagramScripts(prefix) : ''}</head>
 <body class="${activeSlug ? 'page-docs' : `page-${escapeHtml(activeSection)}`}">
 <a class="skip-link" href="#main">Skip to content</a>
 ${topNav(prefix, nav, activeSection)}

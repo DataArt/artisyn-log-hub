@@ -126,21 +126,35 @@ validate links (exit 1 on `unresolved`), rewrite page links to `<slug>.html#anch
 retention period configured on your server (default 30 days)", fill dataset and site placeholders
 in Home/Features/deck, wrap with `scripts/site/layout.mjs`, copy assets.
 
+**Diagrams.** A fenced block whose info string carries `diagram=<name>` (e.g.
+```` ```text diagram=architecture ```` in `component-reference.md`) becomes a Mermaid figure from
+`site/diagrams/<name>.mmd` on the site, with the original ASCII block kept under a "Text version"
+`<details>` (open until the diagram renders). The in-app help and GitHub ignore the meta and show
+the ASCII block. A missing `.mmd` fails the build. Only pages with a diagram load Mermaid 12.2.0
+from jsDelivr (pinned, SRI) and `assets/diagrams.js`, which themes it from the CSS tokens.
+
 | Input | Output |
 |---|---|
-| `site/pages/home.html`, `site/pages/features.html` (body fragments) | `index.html`, `features.html` |
+| `site/pages/home.html`, `features.html`, `questions.html` (body fragments) | `index.html`, `features.html`, `questions.html` (security-lead FAQ, each answer links its source doc) |
 | every `nav.json` page | `docs/<slug>.html` (sidebar, content, TOC, prev/next) |
 | `site/deck/` | `deck/` (standalone, no site nav) |
-| `site/assets/` (`theme.css` shared by site and deck, `site.js` menu toggle) | `assets/` |
+| `site/assets/` (`theme.css` shared by site and deck, `site.js` menu toggle, `diagrams.js`, `shots/*.png`) | `assets/` |
 
 - Every link in the output is relative (`../`-aware per depth); nothing depends on the
-  `/artisyn-log-hub/` base path. No external fonts or scripts on the site pages.
+  `/artisyn-log-hub/` base path. No external fonts; the only external scripts are Mermaid on
+  diagram pages and reveal.js in the deck, both pinned with SRI.
 - `layout.mjs` exports `SITE_URL` (`https://dataart.github.io/artisyn-log-hub/`), `REPO_URL`,
   `RELEASES_URL`, filled into `{{site:url}}`, `{{site:repo}}`, `{{site:releases}}`. Top nav: Home,
-  Features, Get started, Configuration, Using Log Hub, Data & security, Deck, GitHub ↗; a section
+  Features, Get started, Configuration, Using Log Hub, Data & security, Questions, Deck, GitHub ↗; a section
   link opens that section's first page. Changelog is in the sidebar and footer only.
-- Light/dark palette from `prefers-color-scheme`; sidebar collapses under "Menu" below 768 px,
+- Style: "old digital" — warm paper / near-black palette, muted phosphor green and amber, monospace
+  headings, nav, labels and numbers, a faint grid background, square corners; no neon or glow.
+  Light/dark palette from `prefers-color-scheme`; sidebar collapses under "Menu" below 768 px,
   TOC hidden below 1024 px.
+- Screenshots: `site/assets/shots/*.png` are real screens of the demo repository in local prod,
+  cropped to the content pane. Rule: English UI text only, no e-mail, user name or local path on
+  them. Features and deck show them as `<figure class="shot">` with a "where in the app" caption;
+  they are not dataset figures and carry no illustrative label.
 
 ## Example dataset placeholders
 
@@ -153,8 +167,10 @@ dataset figures carries `<span class="illustrative">Illustrative example</span>`
   `|usd0` (`$8`), `|pct` (`78%`).
 - `scripts/site/dataset.mjs`: `checkDataset(ds)` returns errors when the session parts do not sum to
   the total (±0.005), `daily.total ≠ daily.sessions × session.total`,
-  `monthly.total ≠ team.workingDays × daily.total` or `contextRereadPct` does not match the token
-  counts; `fillPlaceholders(text, ds)` throws on an unknown key or format. Any error fails the
+  `monthly.total ≠ team.workingDays × daily.total`, `contextRereadPct` does not match the token
+  counts, or — when the optional `insight` block (Home "what to do about it" readout) is present —
+  its unused-context share, sub-agent share or trim saving per session / per month do not follow
+  from the other figures; `fillPlaceholders(text, ds)` throws on an unknown key or format. Any error fails the
   build. Algorithm doc: `docs/knowledgebase/algorithms/site-example-dataset.md`.
 
 ## Deck

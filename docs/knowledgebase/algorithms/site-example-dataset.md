@@ -7,7 +7,7 @@ reviewer: none
 
 ## Purpose
 
-The site (Home, Features) and the deck show one fictional example — a $8 session, $144 a day,
+The site (Home, Features) and the deck show one fictional example — an average $8 session, $144 a day,
 $2,880 a month for a team of six. Every figure comes from `site/data/example-dataset.json`, so the
 pages never disagree with each other, and the arithmetic between the figures is checked at build
 time so a reader who multiplies them gets the same numbers.
@@ -23,8 +23,10 @@ time so a reader who multiplies them gets the same numbers.
 
 The dataset (money in USD numbers):
 `team { developers, workingDays, period }`, `session { total, parts { … }, tokens { … },
-contextRereadPct }`, `daily { sessions, total }`, `monthly { total }`, plus `tools` rows that no
-rule checks. A placeholder is `{{ds:<dot.path>}}` or `{{ds:<dot.path>|<format>}}`.
+contextRereadPct }`, `daily { sessions, total }`, `monthly { total }`, an optional `insight`
+block (the Home "what to do about it" figure: `turns`, `systemContextTokens`,
+`unusedContextTokens`, `unusedContextPct`, `subAgentsPct`, `trimPerSession`, `trimMonthly`, plus
+comparison figures no rule checks), plus `tools` rows that no rule checks. A placeholder is `{{ds:<dot.path>}}` or `{{ds:<dot.path>|<format>}}`.
 
 ## Rules
 
@@ -39,6 +41,21 @@ rule checks. A placeholder is `{{ds:<dot.path>}}` or `{{ds:<dot.path>|<format>}}
    `monthly.total <fmt2(monthly.total)> != team.workingDays × daily.total <fmt2(product)>`.
 4. `session.contextRereadPct ≠ round(100 × tokens.cacheRead / Σ session.tokens)` →
    `session.contextRereadPct <pct> != round(100 × cacheRead / Σ tokens) <expected>`.
+
+Rules 5–8 run only when `insight` is present. If any of its seven checked fields is missing or not a
+number → one error `insight must have numbers turns, systemContextTokens, unusedContextTokens,
+unusedContextPct, subAgentsPct, trimPerSession, trimMonthly`, and rules 5–8 are skipped.
+
+5. `insight.unusedContextPct ≠ round(100 × unusedContextTokens / systemContextTokens)` →
+   `insight.unusedContextPct <pct> != round(100 × unusedContextTokens / systemContextTokens) <expected>`.
+6. `insight.subAgentsPct ≠ round(100 × session.parts.subAgents / session.total)` →
+   `insight.subAgentsPct <pct> != round(100 × parts.subAgents / session.total) <expected>`.
+7. `|insight.trimPerSession − unusedContextTokens × turns × parts.cacheRead / tokens.cacheRead| > EPS`
+   (the unused system context re-read every turn, priced at this session's cache-read price) →
+   `insight.trimPerSession <fmt2(stored)> != unusedContextTokens × turns × cache-read price <fmt2(computed)>`.
+8. `insight.trimMonthly ≠ round(trimPerSession × daily.sessions × team.workingDays)` (stored
+   `trimPerSession`) →
+   `insight.trimMonthly <stored> != round(trimPerSession × daily.sessions × team.workingDays) <expected>`.
 
 Errors are listed in that order; every rule is checked, so one wrong figure can raise more than
 one error (rule 3 uses the stored `daily.total`, not the product). A missing or non-numeric field
@@ -57,19 +74,21 @@ The value is looked up by the dot path (`session.tokens.cacheRead`).
 
 ## Edge cases
 
-- The shipped dataset is consistent: SED-01.
+- A consistent dataset (an earlier version of the shipped one): SED-01.
 - Parts off by 0.01 fails, off by 0.004 is within `EPS`: SED-02, SED-03.
 - Daily mismatch (`daily.sessions` changed, monthly still right): SED-04.
 - Monthly mismatch: SED-05. Reread percentage mismatch: SED-06.
 - Raw integer with grouping, raw string, raw non-integer: SED-07, SED-08, SED-09.
 - `usd`, `usd0`, `pct`: SED-10, SED-11, SED-12. Several placeholders in one text: SED-13.
 - Unknown path, object path, unknown format: SED-14, SED-15, SED-16.
+- Insight block consistent: SED-17. Unused-context share, sub-agent share wrong: SED-18, SED-19.
+  Wrong trim per session also breaks the monthly figure: SED-20. Incomplete block: SED-21.
 
 ## Examples
 
 `input.fn` is the exported function to call and `input.args` its argument list; `expected.result`
 is its exact return value, or `expected.error` the message of the error it throws. `D` below is
-the shipped dataset without `tools`:
+a consistent dataset (an earlier version of the shipped one, without `tools`):
 `{"team":{"developers":6,"workingDays":20,"period":"one month"},"session":{"total":8,"parts":{"input":0.62,"output":1.94,"cacheRead":2.16,"cacheWrite":1.48,"subAgents":1.8},"tokens":{"input":42000,"output":18000,"cacheRead":1560000,"cacheWrite":380000},"contextRereadPct":78},"daily":{"sessions":18,"total":144},"monthly":{"total":2880}}`;
 the `checkDataset` rows spell it out with one field changed.
 
@@ -90,7 +109,12 @@ the `checkDataset` rows spell it out with one field changed.
   {"id":"SED-13","input":{"fn":"fillPlaceholders","args":["{{ds:daily.sessions}} sessions × {{ds:session.total|usd0}} = {{ds:daily.total|usd}}",{"session":{"total":8},"daily":{"sessions":18,"total":144}}]},"expected":{"result":"18 sessions × $8 = $144.00"},"note":"Three placeholders, each by its own rule: 18 raw, $8 usd0, $144.00 usd."},
   {"id":"SED-14","input":{"fn":"fillPlaceholders","args":["{{ds:session.nope|usd}}",{"session":{"total":8}}]},"expected":{"error":"unknown dataset key: session.nope"},"note":"Rule 1: session has no key nope."},
   {"id":"SED-15","input":{"fn":"fillPlaceholders","args":["{{ds:session.parts}}",{"session":{"parts":{"input":0.62}}}]},"expected":{"error":"unknown dataset key: session.parts"},"note":"Rule 2: the path names an object, not a figure."},
-  {"id":"SED-16","input":{"fn":"fillPlaceholders","args":["{{ds:session.total|eur}}",{"session":{"total":8}}]},"expected":{"error":"unknown format: eur"},"note":"Rule 6: eur is not usd, usd0 or pct."}
+  {"id":"SED-16","input":{"fn":"fillPlaceholders","args":["{{ds:session.total|eur}}",{"session":{"total":8}}]},"expected":{"error":"unknown format: eur"},"note":"Rule 6: eur is not usd, usd0 or pct."},
+  {"id":"SED-17","input":{"fn":"checkDataset","args":[{"team":{"developers":6,"workingDays":20,"period":"one month"},"session":{"total":8,"parts":{"input":0.62,"output":1.94,"cacheRead":2.16,"cacheWrite":1.48,"subAgents":1.8},"tokens":{"input":42000,"output":18000,"cacheRead":1560000,"cacheWrite":380000},"contextRereadPct":78},"daily":{"sessions":18,"total":144},"monthly":{"total":2880},"insight":{"turns":65,"systemContextTokens":14400,"unusedContextTokens":9600,"unusedContextPct":67,"subAgentsPct":23,"trimPerSession":0.86,"trimMonthly":310}}]},"expected":{"result":[]},"note":"Insight block present and consistent: 100 × 9600 / 14400 = 66.7 → 67; 100 × 1.80 / 8 = 22.5 → 23; 9600 × 65 × 2.16 / 1560000 = 0.864, |0.86 − 0.864| <= 0.005; round(0.86 × 18 × 20) = round(309.6) = 310. No error."},
+  {"id":"SED-18","input":{"fn":"checkDataset","args":[{"team":{"developers":6,"workingDays":20,"period":"one month"},"session":{"total":8,"parts":{"input":0.62,"output":1.94,"cacheRead":2.16,"cacheWrite":1.48,"subAgents":1.8},"tokens":{"input":42000,"output":18000,"cacheRead":1560000,"cacheWrite":380000},"contextRereadPct":78},"daily":{"sessions":18,"total":144},"monthly":{"total":2880},"insight":{"turns":65,"systemContextTokens":14400,"unusedContextTokens":9600,"unusedContextPct":60,"subAgentsPct":23,"trimPerSession":0.86,"trimMonthly":310}}]},"expected":{"result":["insight.unusedContextPct 60 != round(100 × unusedContextTokens / systemContextTokens) 67"]},"note":"Rule 5: 100 × 9600 / 14400 rounds to 67, not 60."},
+  {"id":"SED-19","input":{"fn":"checkDataset","args":[{"team":{"developers":6,"workingDays":20,"period":"one month"},"session":{"total":8,"parts":{"input":0.62,"output":1.94,"cacheRead":2.16,"cacheWrite":1.48,"subAgents":1.8},"tokens":{"input":42000,"output":18000,"cacheRead":1560000,"cacheWrite":380000},"contextRereadPct":78},"daily":{"sessions":18,"total":144},"monthly":{"total":2880},"insight":{"turns":65,"systemContextTokens":14400,"unusedContextTokens":9600,"unusedContextPct":67,"subAgentsPct":22,"trimPerSession":0.86,"trimMonthly":310}}]},"expected":{"result":["insight.subAgentsPct 22 != round(100 × parts.subAgents / session.total) 23"]},"note":"Rule 6: 100 × 1.80 / 8 = 22.5 rounds to 23, not 22."},
+  {"id":"SED-20","input":{"fn":"checkDataset","args":[{"team":{"developers":6,"workingDays":20,"period":"one month"},"session":{"total":8,"parts":{"input":0.62,"output":1.94,"cacheRead":2.16,"cacheWrite":1.48,"subAgents":1.8},"tokens":{"input":42000,"output":18000,"cacheRead":1560000,"cacheWrite":380000},"contextRereadPct":78},"daily":{"sessions":18,"total":144},"monthly":{"total":2880},"insight":{"turns":65,"systemContextTokens":14400,"unusedContextTokens":9600,"unusedContextPct":67,"subAgentsPct":23,"trimPerSession":0.9,"trimMonthly":310}}]},"expected":{"result":["insight.trimPerSession 0.90 != unusedContextTokens × turns × cache-read price 0.86","insight.trimMonthly 310 != round(trimPerSession × daily.sessions × team.workingDays) 324"]},"note":"Rule 7: 0.90 is 0.036 off 0.864; rule 8 then uses the stored 0.90: round(0.90 × 360) = 324 != 310 — two errors."},
+  {"id":"SED-21","input":{"fn":"checkDataset","args":[{"team":{"developers":6,"workingDays":20,"period":"one month"},"session":{"total":8,"parts":{"input":0.62,"output":1.94,"cacheRead":2.16,"cacheWrite":1.48,"subAgents":1.8},"tokens":{"input":42000,"output":18000,"cacheRead":1560000,"cacheWrite":380000},"contextRereadPct":78},"daily":{"sessions":18,"total":144},"monthly":{"total":2880},"insight":{"turns":65,"systemContextTokens":14400,"unusedContextTokens":9600,"unusedContextPct":67,"subAgentsPct":23,"trimPerSession":0.86}}]},"expected":{"result":["insight must have numbers turns, systemContextTokens, unusedContextTokens, unusedContextPct, subAgentsPct, trimPerSession, trimMonthly"]},"note":"Insight block without trimMonthly: one \"must have numbers\" error, rules 5-8 skipped."}
 ]
 ```
 

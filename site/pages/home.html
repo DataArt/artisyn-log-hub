@@ -15,21 +15,64 @@
       <a class="button" href="{{site:repo}}" rel="noopener noreferrer">GitHub ↗</a>
     </p>
   </div>
-  <figure class="figure-block" aria-labelledby="home-figure-title">
-    <span class="illustrative">Illustrative example</span>
-    <figcaption id="home-figure-title">One session, {{ds:session.total|usd}} — where the money went</figcaption>
-    <div class="key-figure">{{ds:session.contextRereadPct|pct}}</div>
-    <p>of the session's tokens were the context read again from cache on every turn.</p>
-    <table>
-      <thead><tr><th scope="col">Part</th><th scope="col" class="num">Cost</th></tr></thead>
-      <tbody>
-        <tr><td>Input</td><td class="num">{{ds:session.parts.input|usd}}</td></tr>
-        <tr><td>Output</td><td class="num">{{ds:session.parts.output|usd}}</td></tr>
-        <tr><td>Cache read</td><td class="num">{{ds:session.parts.cacheRead|usd}}</td></tr>
-        <tr><td>Cache write</td><td class="num">{{ds:session.parts.cacheWrite|usd}}</td></tr>
-        <tr><td>Sub-agents</td><td class="num">{{ds:session.parts.subAgents|usd}}</td></tr>
-      </tbody>
-    </table>
+  <figure class="figure-block insight" aria-labelledby="home-figure-title">
+    <div class="insight-head">
+      <span class="illustrative">Illustrative example</span>
+      <span>{{ds:insight.turns}} turns</span>
+    </div>
+    <figcaption id="home-figure-title">One session, {{ds:session.total|usd}} — and what to do about it</figcaption>
+
+    <div class="insight-step">
+      <h3><span class="step-no">01</span>Where the money went</h3>
+      <div class="cost-bar" aria-hidden="true">
+        <span style="flex-grow: {{ds:session.parts.input}}"></span>
+        <span style="flex-grow: {{ds:session.parts.output}}"></span>
+        <span style="flex-grow: {{ds:session.parts.cacheRead}}"></span>
+        <span style="flex-grow: {{ds:session.parts.cacheWrite}}"></span>
+        <span style="flex-grow: {{ds:session.parts.subAgents}}"></span>
+      </div>
+      <ul class="cost-legend">
+        <li>input {{ds:session.parts.input|usd}}</li>
+        <li>output {{ds:session.parts.output|usd}}</li>
+        <li>cache read {{ds:session.parts.cacheRead|usd}}</li>
+        <li>cache write {{ds:session.parts.cacheWrite|usd}}</li>
+        <li>sub-agents {{ds:session.parts.subAgents|usd}}</li>
+      </ul>
+      <p class="insight-note">Cache reads are {{ds:session.contextRereadPct|pct}} of the tokens — cheap per
+        token, expensive by volume. The breakdown says where the money went — not why, and not what to
+        change.</p>
+    </div>
+
+    <div class="insight-step">
+      <h3><span class="step-no">02</span>How the harness worked</h3>
+      <ul class="readout">
+        <li><span>system context per turn</span><b>{{ds:insight.systemContextTokens}} tokens</b></li>
+        <li><span>of it, never invoked here</span><b class="flag">{{ds:insight.unusedContextPct|pct}}</b></li>
+        <li><span>MCP servers used / loaded</span><b>{{ds:insight.mcpUsed}} / {{ds:insight.mcpLoaded}}</b></li>
+        <li><span>skills used / loaded</span><b>{{ds:insight.skillsUsed}} / {{ds:insight.skillsLoaded}}</b></li>
+      </ul>
+    </div>
+
+    <div class="insight-step">
+      <h3><span class="step-no">03</span>Against the repo and the team</h3>
+      <ul class="readout">
+        <li><span>cost vs repo median</span><b class="flag">{{ds:session.total|usd}} vs {{ds:insight.repoMedianSession|usd}}</b></li>
+        <li><span>turns vs repo median</span><b class="flag">{{ds:insight.turns}} vs {{ds:insight.repoMedianTurns}}</b></li>
+        <li><span>sub-agent share vs team</span><b class="flag">{{ds:insight.subAgentsPct|pct}} vs {{ds:insight.teamSubAgentsPct|pct}}</b></li>
+      </ul>
+    </div>
+
+    <div class="insight-do">
+      <h3>→ What to do</h3>
+      <ol>
+        <li>Unload the MCP servers and skills this session never touched: <span class="nowrap">−{{ds:insight.trimPerSession|usd}}</span>
+          here; if they idle like this in every session, about {{ds:insight.trimMonthly|usd0}} a month
+          for the team.</li>
+        <li>Start a fresh session at the task boundary — {{ds:insight.turns}} turns where the repo median
+          is {{ds:insight.repoMedianTurns}}, and every turn re-reads the whole context.</li>
+        <li>Check the workflow that spawns sub-agents: their share is well above the team's.</li>
+      </ol>
+    </div>
   </figure>
 </section>
 

@@ -4,44 +4,61 @@
 
 :root {
   color-scheme: light dark;
-  --text: #111827;
-  --text-2: #374151;
-  --text-3: #6b7280;
-  --accent: #1e3a5f;
-  --link: #0969da;
-  --page: #ffffff;
-  --stage: #f3f4f6;
-  --surface: #f9fafb;
-  --border: #d1d5db;
-  --border-soft: #e5e7eb;
-  --code-bg: #f3f4f6;
-  --label-bg: #fef3c7;
-  --label-text: #78350f;
-  --focus: #2563eb;
+  /* "Old digital": warm terminal paper, ink, muted phosphor green and amber. No neon, no glow. */
+  --text: #17201b;
+  --text-2: #36433c;
+  --text-3: #66726a;
+  --accent: #1f5c45;
+  --accent-2: #9a6614;
+  --link: #1f5c45;
+  --page: #f3f1ea;
+  --stage: #e8e5db;
+  --surface: #faf9f4;
+  --border: #b8b5a8;
+  --border-soft: #d9d6ca;
+  --code-bg: #e9e6dc;
+  --label-bg: transparent;
+  --label-text: #9a6614;
+  --focus: #9a6614;
+  --grid: rgba(23, 32, 27, 0.06);
+  --scan: rgba(23, 32, 27, 0.025);
+  --bar-1: #1f5c45;
+  --bar-2: #4a8068;
+  --bar-3: #9a6614;
+  --bar-4: #c4a46a;
+  --bar-5: #8d968f;
 
   --font: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
-  --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+  --mono: ui-monospace, "Cascadia Mono", "Cascadia Code", SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
   --content-max: 760px;
   --wide-max: 1200px;
-  --radius: 8px;
+  --radius: 2px;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --text: #e5e7eb;
-    --text-2: #cbd5e1;
-    --text-3: #9ca3af;
-    --accent: #93c5fd;
-    --link: #60a5fa;
-    --page: #0b1220;
-    --stage: #111827;
-    --surface: #111827;
-    --border: #374151;
-    --border-soft: #1f2937;
-    --code-bg: #1f2937;
-    --label-bg: #422006;
-    --label-text: #fde68a;
-    --focus: #93c5fd;
+    --text: #d3dcd5;
+    --text-2: #a9b6ad;
+    --text-3: #7c8980;
+    --accent: #8fc3a3;
+    --accent-2: #d3a65c;
+    --link: #8fc3a3;
+    --page: #0e1210;
+    --stage: #0a0d0b;
+    --surface: #131915;
+    --border: #2f3b33;
+    --border-soft: #1f2922;
+    --code-bg: #18201b;
+    --label-bg: transparent;
+    --label-text: #d3a65c;
+    --focus: #d3a65c;
+    --grid: rgba(211, 220, 213, 0.05);
+    --scan: rgba(211, 220, 213, 0.025);
+    --bar-1: #8fc3a3;
+    --bar-2: #5c9479;
+    --bar-3: #d3a65c;
+    --bar-4: #8a6c3a;
+    --bar-5: #56605a;
   }
 }
 
@@ -58,7 +75,11 @@ html {
 
 body {
   margin: 0;
-  background: var(--page);
+  background-color: var(--page);
+  background-image:
+    linear-gradient(var(--grid) 1px, transparent 1px),
+    linear-gradient(90deg, var(--grid) 1px, transparent 1px);
+  background-size: 24px 24px;
   color: var(--text);
   font-family: var(--font);
   font-size: 16px;
@@ -81,6 +102,9 @@ h2,
 h3,
 h4 {
   color: var(--accent);
+  font-family: var(--mono);
+  font-weight: 600;
+  letter-spacing: -0.01em;
   line-height: 1.25;
   margin: 1.6em 0 0.6em;
 }
@@ -108,7 +132,7 @@ code {
   font-size: 0.9em;
   background: var(--code-bg);
   padding: 0.1em 0.35em;
-  border-radius: 4px;
+  border-radius: var(--radius);
 }
 
 pre {
@@ -144,6 +168,9 @@ td {
 
 th {
   background: var(--surface);
+  font-family: var(--mono);
+  font-size: 0.85em;
+  font-weight: 600;
 }
 
 blockquote {
@@ -186,6 +213,7 @@ hr {
 }
 
 .site-brand {
+  font-family: var(--mono);
   font-weight: 700;
   font-size: 1.1rem;
   color: var(--accent);
@@ -204,7 +232,8 @@ hr {
 .site-nav a {
   color: var(--text-2);
   text-decoration: none;
-  font-size: 0.95rem;
+  font-family: var(--mono);
+  font-size: 0.9rem;
 }
 
 .site-nav a:hover {
@@ -225,7 +254,8 @@ hr {
   color: var(--text);
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius);
+  font-family: var(--mono);
   padding: 6px 12px;
   cursor: pointer;
 }
@@ -244,18 +274,23 @@ hr {
 
 .eyebrow {
   margin: 0;
+  font-family: var(--mono);
   font-size: 0.8rem;
   font-weight: 600;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--text-3);
+  color: var(--accent-2);
+}
+
+.eyebrow::before {
+  content: "// ";
 }
 
 .hero {
   display: grid;
   grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
   gap: 32px;
-  align-items: center;
+  align-items: start;
   padding: 24px 0 32px;
 }
 
@@ -280,10 +315,14 @@ hr {
 .button {
   display: inline-block;
   padding: 10px 18px;
-  border-radius: 6px;
+  border-radius: var(--radius);
   border: 1px solid var(--accent);
   color: var(--accent);
-  background: transparent;
+  background: var(--surface);
+  font-family: var(--mono);
+  font-size: 0.9rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
   font-weight: 600;
   text-decoration: none;
 }
@@ -308,6 +347,7 @@ hr {
   display: flex;
   flex-direction: column;
   border: 1px solid var(--border);
+  border-top: 3px solid var(--accent);
   border-radius: var(--radius);
   background: var(--surface);
   padding: 20px;
@@ -341,11 +381,20 @@ hr {
   margin: 0;
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  background: var(--surface);
+  background-color: var(--surface);
+  background-image: repeating-linear-gradient(0deg, var(--scan) 0 1px, transparent 1px 3px);
   padding: 16px 20px;
 }
 
+.figure-block figcaption {
+  font-family: var(--mono);
+  font-size: 0.95rem;
+  color: var(--text-2);
+  margin: 8px 0 0;
+}
+
 .figure-block .key-figure {
+  font-family: var(--mono);
   font-size: 2.5rem;
   font-weight: 700;
   color: var(--accent);
@@ -368,14 +417,195 @@ hr {
 
 .illustrative {
   display: inline-block;
+  font-family: var(--mono);
   font-size: 0.75rem;
   font-weight: 600;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.06em;
   text-transform: uppercase;
   background: var(--label-bg);
   color: var(--label-text);
-  border-radius: 4px;
-  padding: 2px 8px;
+  border: 1px dashed currentColor;
+  border-radius: var(--radius);
+  padding: 1px 8px;
+}
+
+/* Home "one session — and what to do about it" readout. */
+.insight .insight-head {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 12px;
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  color: var(--text-3);
+}
+
+.insight-step {
+  border-top: 1px dashed var(--border);
+  margin-top: 12px;
+  padding-top: 10px;
+}
+
+.insight-step h3,
+.insight-do h3 {
+  margin: 0 0 6px;
+  font-size: 0.85rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+
+.insight-step h3 .step-no {
+  color: var(--accent-2);
+  margin-right: 6px;
+}
+
+.cost-bar {
+  display: flex;
+  height: 14px;
+  border: 1px solid var(--border);
+  margin: 4px 0 6px;
+}
+
+.cost-bar span:nth-child(1) { background: var(--bar-1); }
+.cost-bar span:nth-child(2) { background: var(--bar-2); }
+.cost-bar span:nth-child(3) { background: var(--bar-3); }
+.cost-bar span:nth-child(4) { background: var(--bar-4); }
+.cost-bar span:nth-child(5) { background: var(--bar-5); }
+
+.cost-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 14px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  color: var(--text-2);
+}
+
+.cost-legend li::before {
+  content: "■ ";
+}
+
+.cost-legend li:nth-child(1)::before { color: var(--bar-1); }
+.cost-legend li:nth-child(2)::before { color: var(--bar-2); }
+.cost-legend li:nth-child(3)::before { color: var(--bar-3); }
+.cost-legend li:nth-child(4)::before { color: var(--bar-4); }
+.cost-legend li:nth-child(5)::before { color: var(--bar-5); }
+
+.readout {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-family: var(--mono);
+  font-size: 0.85rem;
+}
+
+.readout li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 1px 0;
+}
+
+.readout li span {
+  color: var(--text-2);
+}
+
+.readout li b {
+  font-weight: 600;
+  text-align: right;
+  white-space: nowrap;
+}
+
+.readout .flag {
+  color: var(--accent-2);
+}
+
+.insight-note {
+  margin: 6px 0 0;
+  font-size: 0.9rem;
+  color: var(--text-2);
+}
+
+.insight-do {
+  margin-top: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--accent);
+  border-left-width: 4px;
+  background: var(--page);
+}
+
+.insight-do h3 {
+  color: var(--accent);
+}
+
+.insight-do ol {
+  margin: 0;
+  padding-left: 1.4em;
+  font-size: 0.92rem;
+}
+
+.insight-do li {
+  margin: 4px 0;
+}
+
+/* Docs diagrams: Mermaid render of site/diagrams/<name>.mmd, ASCII original as "Text version". */
+.diagram {
+  margin: 1em 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 12px;
+  overflow-x: auto;
+}
+
+.diagram pre.mermaid {
+  margin: 0;
+  border: 0;
+  padding: 0;
+  background: none;
+  text-align: center;
+}
+
+.diagram pre.mermaid:not([data-processed]) {
+  display: none;
+}
+
+.diagram details {
+  margin-top: 8px;
+  font-family: var(--mono);
+  font-size: 0.85rem;
+  color: var(--text-3);
+}
+
+.diagram details pre {
+  margin: 8px 0 0;
+}
+
+/* Product screenshot in a visual slot (site/assets/shots/, English UI only). */
+.shot {
+  margin: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: 6px;
+}
+
+.shot img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--border-soft);
+}
+
+.shot figcaption {
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  color: var(--text-3);
+  padding: 6px 2px 0;
 }
 
 /* Placeholder for a future product screenshot (no screenshots yet). */
@@ -429,7 +659,8 @@ hr {
   font-weight: 700;
   color: var(--page);
   background: var(--accent);
-  border-radius: 999px;
+  border-radius: var(--radius);
+  font-family: var(--mono);
   padding: 0 8px;
   margin-right: 8px;
 }
@@ -471,6 +702,7 @@ hr {
 }
 
 .docs-group-title {
+  font-family: var(--mono);
   font-size: 0.75rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -527,6 +759,7 @@ hr {
 }
 
 .docs-toc-title {
+  font-family: var(--mono);
   font-size: 0.75rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
@@ -555,6 +788,7 @@ hr {
 /* ---------- Footer ---------- */
 
 .site-footer {
+  font-family: var(--mono);
   border-top: 1px solid var(--border-soft);
   margin-top: 40px;
   padding: 16px 24px;
@@ -591,6 +825,15 @@ hr {
 }
 
 @media (max-width: 767px) {
+  .figure-block table {
+    display: block;
+    overflow-x: auto;
+  }
+
+  .readout li b {
+    white-space: normal;
+  }
+
   .site-header {
     padding: 10px 16px;
   }
@@ -660,4 +903,64 @@ hr {
   .docs-prevnext {
     display: none;
   }
+}
+
+/* Features F: three install steps. */
+.install-steps {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  align-self: start;
+  border: 1px solid var(--accent);
+  border-left-width: 4px;
+  background: var(--surface);
+  font-family: var(--mono);
+  font-size: 0.95rem;
+}
+
+.install-steps li {
+  display: flex;
+  gap: 12px;
+  padding: 12px 16px;
+  border-top: 1px dashed var(--border);
+}
+
+.install-steps li:first-child {
+  border-top: 0;
+}
+
+.install-steps li span {
+  color: var(--accent-2);
+  font-weight: 600;
+}
+
+.nowrap {
+  white-space: nowrap;
+}
+
+/* Questions page. */
+.qa {
+  margin: 0 0 8px;
+}
+
+.qa dt {
+  margin: 1.2em 0 0.3em;
+  font-family: var(--mono);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.qa dt::before {
+  content: "> ";
+  color: var(--accent-2);
+}
+
+.qa dd {
+  margin: 0;
+  padding-left: 1.2em;
+  color: var(--text-2);
+}
+
+.qa dd a {
+  white-space: nowrap;
 }

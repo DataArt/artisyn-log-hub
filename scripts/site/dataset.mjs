@@ -91,7 +91,50 @@ export function checkDataset(ds) {
       errors.push(`session.contextRereadPct ${pct} != round(100 × cacheRead / Σ tokens) ${expected}`);
     }
   }
+
+  const insight = get(ds, 'insight');
+  if (insight !== undefined) checkInsight(ds, insight, errors);
   return errors;
+}
+
+// Optional `insight` block (Home "what to do about it" figure): rules 5-8 of the algorithm doc.
+function checkInsight(ds, insight, errors) {
+  const fields = ['turns', 'systemContextTokens', 'unusedContextTokens', 'unusedContextPct',
+    'subAgentsPct', 'trimPerSession', 'trimMonthly'];
+  if (insight === null || typeof insight !== 'object' || !fields.every((f) => isNum(insight[f]))) {
+    errors.push(`insight must have numbers ${fields.join(', ')}`);
+    return;
+  }
+  const total = get(ds, 'session.total');
+  const subAgents = get(ds, 'session.parts.subAgents');
+  const cacheReadCost = get(ds, 'session.parts.cacheRead');
+  const cacheReadTokens = get(ds, 'session.tokens.cacheRead');
+  const dailySessions = get(ds, 'daily.sessions');
+  const workingDays = get(ds, 'team.workingDays');
+
+  const unusedPct = insight.systemContextTokens === 0 ? 0
+    : Math.round((100 * insight.unusedContextTokens) / insight.systemContextTokens);
+  if (insight.unusedContextPct !== unusedPct) {
+    errors.push(`insight.unusedContextPct ${insight.unusedContextPct} != round(100 × unusedContextTokens / systemContextTokens) ${unusedPct}`);
+  }
+  if (isNum(total) && total !== 0 && isNum(subAgents)) {
+    const share = Math.round((100 * subAgents) / total);
+    if (insight.subAgentsPct !== share) {
+      errors.push(`insight.subAgentsPct ${insight.subAgentsPct} != round(100 × parts.subAgents / session.total) ${share}`);
+    }
+  }
+  if (isNum(cacheReadCost) && isNum(cacheReadTokens) && cacheReadTokens !== 0) {
+    const trim = (insight.unusedContextTokens * insight.turns * cacheReadCost) / cacheReadTokens;
+    if (Math.abs(insight.trimPerSession - trim) > EPS) {
+      errors.push(`insight.trimPerSession ${fmt2(insight.trimPerSession)} != unusedContextTokens × turns × cache-read price ${fmt2(trim)}`);
+    }
+  }
+  if (isNum(dailySessions) && isNum(workingDays)) {
+    const monthly = Math.round(insight.trimPerSession * dailySessions * workingDays);
+    if (insight.trimMonthly !== monthly) {
+      errors.push(`insight.trimMonthly ${insight.trimMonthly} != round(trimPerSession × daily.sessions × team.workingDays) ${monthly}`);
+    }
+  }
 }
 
 function formatValue(value, format, dotPath) {

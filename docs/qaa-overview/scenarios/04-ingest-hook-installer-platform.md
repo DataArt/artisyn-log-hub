@@ -626,14 +626,14 @@ Total: P0: 15, P1: 12, P2: 1. Replaces about 820 tests. (S-REL-02, the signed re
 - **Steps:**
   0. Build the site: exit code 0, `index.html` exists.
   1. Crawl every `href`/`src` from `index.html`: every local target answers 200 and every `#fragment` exists on its target page; Home, Features, the deck and `docs/<slug>.html` for every `user-docs/nav.json` page are reached; external links are `https://` (or the reader's own `http://localhost` server in the install guide).
-  2. At 1280×720 every non-deck page has the top nav Home, Features, Get started, Configuration, Using Log Hub, Data & security, Deck, GitHub ↗ in that order; each local target answers 200; clicking each from Home opens it with that item marked current.
+  2. At 1280×720 every non-deck page has the top nav Home, Features, Get started, Configuration, Using Log Hub, Data & security, Questions, Deck, GitHub ↗ in that order; each local target answers 200; clicking each from Home opens it with that item marked current.
   3. Home: the thesis headline ("… Is that good?"), the lead that keeps cost control "right and useful" and "Log Hub answers the next questions", three question cards, links to the deck, Features and Get started.
   4. Features: six sections `#a`–`#f`, each heading with its block marker A–F and a question.
   5. Docs pages: the sidebar lists every nav page with the nav.json groups; every TOC ("On this page", shown for ≥ 3 headings) link points at an existing heading id (install-server has one); every page links the repository and its releases.
   6. Dark mode: `emulateMedia({ colorScheme: 'dark' })` changes the body background of Home, a docs page and the deck.
   7. At 375 px: no horizontal page scroll on any non-deck page, body font ≥ 16 px; the top nav is hidden until the "Menu" button opens it.
   8. At 1280×720: no horizontal page scroll on any non-deck page.
-  9. Deck: 10–15 slides; no slide's content overflows its 1280×720 frame; ArrowRight/ArrowLeft move between slides and update the `#/n` hash.
+  9. Deck: 10–20 slides; no slide's content overflows its 1280×720 frame; ArrowRight/ArrowLeft move between slides and update the `#/n` hash.
   10. Every content slide has one headline, 1–3 bullets and at most 40 words of body text (the "Illustrative example" label not counted).
   11. Every block with dataset figures (`.deck-figure` in the deck, `.figure-block` on Home and Features) carries the "Illustrative example" label.
   12. `deck/index.html?print-pdf` renders one PDF page per slide and hides the exit link.

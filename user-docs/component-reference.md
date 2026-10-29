@@ -20,7 +20,7 @@ The product has four deliverable parts:
 
 ## 2. Architecture
 
-```
+```text diagram=architecture
  Developer machine                                   Server host (Docker)
  ┌────────────────────────────────────┐              ┌──────────────────────────────────┐
  │ Claude Code                        │              │  app container                   │

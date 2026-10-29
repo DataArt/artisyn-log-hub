@@ -27,7 +27,7 @@ const REPO_URL = 'https://github.com/DataArt/artisyn-log-hub';
 const RELEASES_URL = `${REPO_URL}/releases`;
 
 /** Top-nav labels in order (DD-20). */
-const TOP_NAV = ['Home', 'Features', 'Get started', 'Configuration', 'Using Log Hub', 'Data & security', 'Deck', 'GitHub ↗'];
+const TOP_NAV = ['Home', 'Features', 'Get started', 'Configuration', 'Using Log Hub', 'Data & security', 'Questions', 'Deck', 'GitHub ↗'];
 
 /** An external request may only go to jsDelivr with an exact `name@x.y.z` version. */
 const VERSIONED_CDN = /^https:\/\/cdn\.jsdelivr\.net\/npm\/(?:@[^/]+\/)?[^/@]+@\d+\.\d+\.\d+\//;
@@ -199,6 +199,7 @@ test('@S-SITE-01 static site and deck: built, served under a base path, navigabl
       const expected = [
         'index.html',
         'features.html',
+        'questions.html',
         'deck/index.html',
         ...helpPages.map((p) => `docs/${p.slug}.html`),
       ].map((p) => `${server.base}${p}`);
@@ -319,12 +320,12 @@ test('@S-SITE-01 static site and deck: built, served under a base path, navigabl
       }
     });
 
-    const slideCount = await test.step('9. deck: 10–15 slides, every slide fits 1280×720, arrows move between slides', async () => {
+    const slideCount = await test.step('9. deck: 10–20 slides, every slide fits 1280×720, arrows move between slides', async () => {
       await page.goto(`${server.base}deck/index.html`);
       await page.waitForFunction(() => document.querySelector('.reveal.ready') !== null);
       const count = await page.locator('.reveal .slides > section').count();
       expect(count).toBeGreaterThanOrEqual(10);
-      expect(count).toBeLessThanOrEqual(15);
+      expect(count).toBeLessThanOrEqual(20);
       for (let i = 0; i < count; i++) {
         const overflow = await page.evaluate((idx) => {
           const frame = document.querySelectorAll('.reveal .slides > section')[idx].querySelector('.slide-frame');
