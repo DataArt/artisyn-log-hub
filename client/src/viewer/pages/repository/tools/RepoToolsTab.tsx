@@ -119,9 +119,16 @@ export function RepoToolsTab({ repoId, teamId, sessionId }: RepoToolsTabProps) {
         ),
       { replace: true },
     );
-  // Any filter or scope change starts again on page 1.
-  const onFilterChange = (patch: ToolsTopBarPatch) =>
-    update({ ...patch, page: 1 });
+  // Any filter or scope change starts again on page 1. A new scope (another tool or operation)
+  // also drops the selected call: it belonged to the previous tool's list.
+  const onFilterChange = (patch: ToolsTopBarPatch) => {
+    const scopeChanged =
+      patch.scope !== undefined &&
+      (patch.scope.channel !== state.scope.channel ||
+        patch.scope.tool !== state.scope.tool ||
+        patch.scope.operation !== state.scope.operation);
+    update({ ...patch, page: 1, ...(scopeChanged ? { call: null } : {}) });
+  };
 
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const setTreeCollapsed = (value: boolean) => {

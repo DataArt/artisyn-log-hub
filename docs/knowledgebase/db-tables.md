@@ -1087,7 +1087,7 @@ Migration: `0076_tool_monitoring.sql`.
 | `first_call_at`    | timestamptz | nullable | Earliest call start in the row |
 | `last_call_at`     | timestamptz | nullable | Latest call start; the date-range reads filter on it after reaching the scoped tree's rows by `session_id`, so it is not indexed (`idx_session_tool_usage_last_call_at` from `0076` was dropped by `0077`) |
 | `has_wrapper_data` | boolean     | NOT NULL | DEFAULT false — at least one call of the row came from a wrapper record |
-| `aggregates`       | jsonb       | NOT NULL | `ToolUsageAggregates` = `{ operations: { [op]: { calls, errors, killed, noResult, empty, retried, fellBack, openedFile, durationMsSum, durationCount, inBytesSum, outBytesSum, lastTs } } }` (DD-11). The summary route reads only this column |
+| `aggregates`       | jsonb       | NOT NULL | `ToolUsageAggregates` = `{ operations: { [op]: { calls, errors, killed, noResult, empty, retried, openedFile, durationMsSum, durationCount, inBytesSum, outBytesSum, lastTs } } }` (DD-11). The summary route reads only this column |
 | `calls`            | jsonb       | NOT NULL | `ToolCallRecord[]` — per-call metadata, no output text, at most a 300-character `inputPreview` (DD-10) |
 | `outputs`          | jsonb       | nullable | `{ [callId]: { input?, stdin?, stdout?, stderr?, agentSaw?, encoding } }` — captured text, each part capped at 100 KB (DD-9). Read only by the call-detail route and the search |
 

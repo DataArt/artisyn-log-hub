@@ -8,9 +8,9 @@ reviewer: none
 ## Purpose
 
 Call counts and error rates say how often a tool is used, not whether it helped. The Tools/MCP
-tab marks each call with up to four heuristic signals read from what the same agent did right
-after it: the output was empty, the agent repeated the same call, it fell back to plain text
-search, or it opened a file the output pointed to. Summed per tool and operation they show
+tab marks each call with up to three heuristic signals read from what the same agent did right
+after it: the output was empty, the agent repeated the same call, or it opened a file the output
+pointed to. Summed per tool and operation they show
 which tools agents keep retrying or abandoning. The UI labels them as heuristics.
 
 ## Code
@@ -28,10 +28,14 @@ which tools agents keep retrying or abandoning. The UI labels them as heuristics
 `computeSignals(orderedToolUsesPerAgent, index, subject?)` takes one agent's `tool_use`s in
 transcript order — each with its transcript tool `name`, the monitored `calls` it carries
 (`{tool, operation}`: one for MCP, the recognised ones for Bash / PowerShell, none otherwise),
-its `commandWords` (Bash / PowerShell), its `filePath` (Read / Edit) and the `output` the agent
-saw (`null` without a result) — and the index of the call's `tool_use`. `subject` picks the call
+its `filePath` (Read / Edit) and the `output` the agent saw (`null` without a result) — and the index of the call's `tool_use`. `subject` picks the call
 when the `tool_use` carries several (default: its first call and its output). Returns the
-subset of `['empty', 'retried', 'fell_back', 'opened_file']`, in that order.
+subset of `['empty', 'retried', 'opened_file']`, in that order.
+
+A fourth signal, `fell_back` (a `Grep` / `Glob` / `grep` / `rg` / `findstr` / `Select-String` in
+the window), was removed: any later search, related or not, fired it, so it said little. Its rows
+SG-09 – SG-11 are retired; rows built before the removal are rebuilt without it
+(`TOOL_USAGE_EXTRACTOR_VERSION` 2).
 
 ## Rules
 
@@ -45,10 +49,7 @@ subset of `['empty', 'retried', 'fell_back', 'opened_file']`, in that order.
    used.
 4. **`retried`.** A `tool_use` in the window carries a call with the same tool (case-insensitive,
    without `.exe`) and the same operation.
-5. **`fell_back`.** A `tool_use` in the window is `Grep` or `Glob`, or is `Bash` / `PowerShell`
-   with a command word (case-insensitive, without `.exe`) `grep`, `rg`, `findstr` or
-   `Select-String` — except when that word is the call's own tool.
-6. **`opened_file`.** The output is not `null` or `''`, and a `Read` or `Edit` in the window has a
+5. **`opened_file`.** The output is not `null` or `''`, and a `Read` or `Edit` in the window has a
    `file_path` whose basename (after the last `/` or `\`) appears in the output as a substring.
 
 ## Edge cases
@@ -56,8 +57,7 @@ subset of `['empty', 'retried', 'fell_back', 'opened_file']`, in that order.
 - `empty`: empty string SG-01, a "No results" line further down SG-02, a non-matching line
   SG-03, no result at all SG-04.
 - `retried`: SG-05; last place of the window SG-06; just outside SG-07; other operation SG-08.
-- `fell_back`: Grep tool SG-09, Bash `rg` SG-10, PowerShell `Select-String` SG-11, the call's own
-  tool is no fallback SG-12.
+- `retried` with the same tool, other operation (a shell tool): SG-12.
 - `opened_file`: Windows path basename SG-13; `Write` does not count SG-14.
 - Other agent ignored: SG-15; the window is counted in the agent's own calls SG-16.
 - Several signals at once and their order: SG-17. A chosen call of a multi-call Bash
@@ -66,7 +66,7 @@ subset of `['empty', 'retried', 'fell_back', 'opened_file']`, in that order.
 ## Examples
 
 `input.uses` is the transcript's `tool_use`s in order, across agents: `agent` (default `root`),
-`name`, `calls` (default `[]`), `commandWords` (default `[]`), `filePath` (default `null`) and
+`name`, `calls` (default `[]`), `filePath` (default `null`) and
 `output` (`null` = no result). `input.index` is the call's position in `input.uses`; the test
 keeps only the `uses` of that call's agent (rule 1, as the builder does per node) and passes the
 call's position in that list. `input.subject`, when given, is passed as `subject`.
@@ -106,7 +106,7 @@ call's position in that list. `input.subject`, when given, is passed as `subject
       {"name": "mcp__github__get_issue", "calls": [{"tool": "github", "operation": "get_issue"}], "output": "z"}
     ]},
     "expected": {"signals": ["retried"]},
-    "note": "Rule 4: the 2nd next tool_use is github / get_issue again -> retried. Rule 6: 'a.ts' is not in 'x' -> no opened_file."
+    "note": "Rule 4: the 2nd next tool_use is github / get_issue again -> retried. Rule 5: 'a.ts' is not in 'x' -> no opened_file."
   },
   {
     "id": "SG-06",
@@ -141,40 +141,13 @@ call's position in that list. `input.subject`, when given, is passed as `subject
     "note": "Rule 4: same tool but operation list_prs != get_issue -> not retried."
   },
   {
-    "id": "SG-09",
-    "input": {"index": 0, "uses": [
-      {"name": "mcp__search__query", "calls": [{"tool": "search", "operation": "query"}], "output": "nothing useful"},
-      {"name": "Grep", "output": "src/a.ts:1: zz"}
-    ]},
-    "expected": {"signals": ["fell_back"]},
-    "note": "Rule 5: a Grep tool_use in the window -> fell_back. Rule 3: 'nothing useful' does not start with 'nothing found' -> not empty."
-  },
-  {
-    "id": "SG-10",
-    "input": {"index": 0, "uses": [
-      {"name": "mcp__search__query", "calls": [{"tool": "search", "operation": "query"}], "output": "x"},
-      {"name": "Bash", "commandWords": ["cd", "rg"], "output": "y"}
-    ]},
-    "expected": {"signals": ["fell_back"]},
-    "note": "Rule 5: a Bash tool_use whose command words include rg -> fell_back."
-  },
-  {
-    "id": "SG-11",
-    "input": {"index": 0, "uses": [
-      {"name": "mcp__search__query", "calls": [{"tool": "search", "operation": "query"}], "output": "x"},
-      {"name": "PowerShell", "commandWords": ["Get-Content", "Select-String"], "output": "y"}
-    ]},
-    "expected": {"signals": ["fell_back"]},
-    "note": "Rule 5: PowerShell with Select-String (case-insensitive) -> fell_back."
-  },
-  {
     "id": "SG-12",
     "input": {"index": 0, "uses": [
-      {"name": "Bash", "calls": [{"tool": "rg", "operation": "TODO"}], "commandWords": ["rg"], "output": "x"},
-      {"name": "Bash", "calls": [{"tool": "rg", "operation": "FIXME"}], "commandWords": ["rg"], "output": "y"}
+      {"name": "Bash", "calls": [{"tool": "rg", "operation": "TODO"}], "output": "x"},
+      {"name": "Bash", "calls": [{"tool": "rg", "operation": "FIXME"}], "output": "y"}
     ]},
     "expected": {"signals": []},
-    "note": "Rule 5: rg is the call's own tool -> not a fallback. Rule 4: operation FIXME != TODO -> not retried."
+    "note": "Rule 4: same tool rg, but operation FIXME != TODO -> not retried."
   },
   {
     "id": "SG-13",
@@ -183,7 +156,7 @@ call's position in that list. `input.subject`, when given, is passed as `subject
       {"name": "Read", "filePath": "D:\\repo\\src\\app\\main.ts", "output": "..."}
     ]},
     "expected": {"signals": ["opened_file"]},
-    "note": "Rule 6: the basename after the last \\ is main.ts, which appears in the output -> opened_file."
+    "note": "Rule 5: the basename after the last \\ is main.ts, which appears in the output -> opened_file."
   },
   {
     "id": "SG-14",
@@ -192,7 +165,7 @@ call's position in that list. `input.subject`, when given, is passed as `subject
       {"name": "Write", "filePath": "/repo/src/app/main.ts", "output": "ok"}
     ]},
     "expected": {"signals": []},
-    "note": "Rule 6: only Read / Edit count; a Write of main.ts does not -> nothing."
+    "note": "Rule 5: only Read / Edit count; a Write of main.ts does not -> nothing."
   },
   {
     "id": "SG-15",
@@ -203,15 +176,15 @@ call's position in that list. `input.subject`, when given, is passed as `subject
       {"name": "Read", "filePath": "/repo/x.md", "output": "w"}
     ]},
     "expected": {"signals": []},
-    "note": "Rule 1: the root's own list is [get_issue, Read]; the sub-agent a1's Grep and repeated get_issue are invisible -> no fell_back, no retried; 'x.md' is not in 'x' -> no opened_file."
+    "note": "Rule 1: the root's own list is [get_issue, Read]; the sub-agent a1's repeated get_issue is invisible -> no retried; 'x.md' is not in 'x' -> no opened_file."
   },
   {
     "id": "SG-16",
     "input": {"index": 0, "uses": [
       {"name": "mcp__github__get_issue", "calls": [{"tool": "github", "operation": "get_issue"}], "output": "x"},
-      {"agent": "a1", "name": "Bash", "commandWords": ["ls"], "output": "y"},
-      {"agent": "a1", "name": "Bash", "commandWords": ["ls"], "output": "y"},
-      {"agent": "a1", "name": "Bash", "commandWords": ["ls"], "output": "y"},
+      {"agent": "a1", "name": "Bash", "output": "y"},
+      {"agent": "a1", "name": "Bash", "output": "y"},
+      {"agent": "a1", "name": "Bash", "output": "y"},
       {"name": "mcp__github__get_issue", "calls": [{"tool": "github", "operation": "get_issue"}], "output": "z"}
     ]},
     "expected": {"signals": ["retried"]},
@@ -224,14 +197,14 @@ call's position in that list. `input.subject`, when given, is passed as `subject
       {"name": "mcp__search__query", "calls": [{"tool": "search", "operation": "query"}], "output": "No matches"},
       {"name": "Glob", "output": "a.ts"}
     ]},
-    "expected": {"signals": ["empty", "retried", "fell_back"]},
-    "note": "Rule 3: 'No matches' -> empty. Rule 4: the next call repeats search / query -> retried. Rule 5: Glob in the window -> fell_back. Listed in the fixed order."
+    "expected": {"signals": ["empty", "retried"]},
+    "note": "Rule 3: 'No matches' -> empty. Rule 4: the next call repeats search / query -> retried. A Glob in the window adds nothing (no fell_back any more). Listed in the fixed order."
   },
   {
     "id": "SG-18",
     "input": {"index": 0, "subject": {"tool": "find", "operation": ".", "output": "find: not found"}, "uses": [
-      {"name": "Bash", "calls": [{"tool": "zz", "operation": "build"}, {"tool": "find", "operation": "."}], "commandWords": ["zz", "find"], "output": "build ok"},
-      {"name": "Bash", "calls": [{"tool": "find", "operation": "."}], "commandWords": ["find"], "output": "x"}
+      {"name": "Bash", "calls": [{"tool": "zz", "operation": "build"}, {"tool": "find", "operation": "."}], "output": "build ok"},
+      {"name": "Bash", "calls": [{"tool": "find", "operation": "."}], "output": "x"}
     ]},
     "expected": {"signals": ["retried"]},
     "note": "The subject is the find call with its own output. Rule 3: 'find: not found' does not start with 'not found' -> not empty. Rule 4: the next tool_use carries find / '.' -> retried."
@@ -242,13 +215,12 @@ call's position in that list. `input.subject`, when given, is passed as `subject
 ## Mutations
 
 - Window of 4, or unbounded -> SG-07; window of 2 -> SG-06.
-- Calls of other agents counted -> SG-15 (fell_back, retried); window counted over all agents
+- Calls of other agents counted -> SG-15 (retried); window counted over all agents
   -> SG-16.
 - `empty` pattern anchored to the whole output instead of any line -> SG-02; unanchored -> SG-03,
   SG-18.
 - No result treated as empty -> SG-04.
 - Operation ignored for `retried` -> SG-08, SG-12.
-- The call's own tool counted as a fallback -> SG-12.
 - Full path compared instead of the basename, or `/`-only split -> SG-13; `Write` counted -> SG-14.
 - First call of the `tool_use` used instead of `subject` -> SG-18 (zz / build has no repeat).
 
@@ -256,5 +228,5 @@ call's position in that list. `input.subject`, when given, is passed as `subject
 
 - Repository → **Tools/MCP** tab: the "retried %" column of the tree, the signal chips in the
   calls table and call details (labelled as heuristics).
-- Storage: `session_tool_usage.calls[].signals` and the `empty` / `retried` / `fellBack` /
-  `openedFile` counters of `session_tool_usage.aggregates` (DD-11).
+- Storage: `session_tool_usage.calls[].signals` and the `empty` / `retried` / `openedFile`
+  counters of `session_tool_usage.aggregates` (DD-11).

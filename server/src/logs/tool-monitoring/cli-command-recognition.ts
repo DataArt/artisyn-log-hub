@@ -174,17 +174,6 @@ function commandWordKey(word: string): string | null {
   return normalizeToolName(word);
 }
 
-/** Every command word of a command line (normalised, path-less words only). */
-export function commandWordsOf(
-  parser: BashParser | null,
-  command: string,
-  shell: ToolCallShell,
-): string[] {
-  return simpleCommands(parser, command, shell)
-    .map((c) => commandWordKey(c.word))
-    .filter((w): w is string => w !== null && w !== '');
-}
-
 /**
  * The monitored tool invocations of one shell command, in source order. `toolNames` are the
  * recognised tool names (enabled monitored names ∪ names present in wrapper records).

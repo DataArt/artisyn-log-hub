@@ -18,7 +18,7 @@ invocations in one shell command, with their operation and arguments.
 ## Code
 
 - Implementation: `server/src/logs/tool-monitoring/cli-command-recognition.ts`
-  (`recognizeCliCalls`, `tokenizeSimpleCommands`, `operationOfArgs`, `commandWordsOf`).
+  (`recognizeCliCalls`, `tokenizeSimpleCommands`, `operationOfArgs`).
 - Helpers it relies on: `@loghub/bash-view` (`withTree`, `literal`) over the server's
   tree-sitter-bash parser `server/src/logs/okf/server-bash-parser.ts` (`getServerBashParser`);
   `@loghub/tool-monitor` (`normalizeToolName`, see

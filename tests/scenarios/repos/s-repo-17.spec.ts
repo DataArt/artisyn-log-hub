@@ -308,6 +308,15 @@ test('@S-REPO-17 Tools/MCP tab: configured tools, MCP and wrapped CLI calls, cal
       await expect(output).toContainText('row-1');
       await expect(output).not.toContainText('row-3');
 
+      // Another tool drops the selected call: the details pane waits for a call of the new list.
+      await treeTool(page, 'find').click();
+      await expect(page).toHaveURL(/ttool=find/);
+      await expect(page).not.toHaveURL(/tcall=/);
+      await expect(details).toHaveCount(0);
+      await treeTool(page, 'ce').click();
+      await rows.first().click();
+      await expect(details).toBeVisible();
+
       const open = page.getByTestId('tools-open-in-session');
       await expect(open).toHaveAttribute('href', new RegExp(`tu=${tree.steps[3].toolUseId}`));
       await open.click();

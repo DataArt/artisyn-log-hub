@@ -8,8 +8,6 @@
  *   A call without output (no result) gets no `empty`.
  * - `retried`: a following `tool_use` carries the same tool (case-insensitive, no `.exe`) and
  *   operation.
- * - `fell_back`: a following `Grep` / `Glob`, or a `Bash` / `PowerShell` whose command words
- *   include `grep`, `rg`, `findstr` or `Select-String` — unless that word is the call's own tool.
  * - `opened_file`: a following `Read` / `Edit` whose `file_path` basename appears in the call's
  *   output.
  *
@@ -25,8 +23,6 @@ export interface SignalToolUse {
   name: string;
   /** The monitored calls it carries: one for MCP, the recognised ones for Bash / PowerShell. */
   calls: { tool: string; operation: string }[];
-  /** Bash / PowerShell: the command words of its command (any case, `.exe` allowed). */
-  commandWords: string[];
   /** Read / Edit: its `file_path`; else null. */
   filePath: string | null;
   /** The output the agent saw; null when the call got no result. */
@@ -44,9 +40,6 @@ export interface SignalSubject {
 const EMPTY_OUTPUT_PATTERN =
   /^(no (results|matches)|not found|nothing found|0 results)/im;
 
-const FALLBACK_TOOLS = new Set(['Grep', 'Glob']);
-const SHELL_TOOLS = new Set(['Bash', 'PowerShell']);
-const FALLBACK_COMMANDS = new Set(['grep', 'rg', 'findstr', 'select-string']);
 const OPEN_FILE_TOOLS = new Set(['Read', 'Edit']);
 
 /** True when an output reads as "nothing found" (DD-12 `empty`). */
@@ -95,19 +88,6 @@ export function computeSignals(
     )
   ) {
     signals.push('retried');
-  }
-
-  if (
-    next.some((n) => {
-      if (FALLBACK_TOOLS.has(n.name)) return true;
-      if (!SHELL_TOOLS.has(n.name)) return false;
-      return n.commandWords.some((w) => {
-        const key = normalizeToolName(w);
-        return FALLBACK_COMMANDS.has(key) && key !== ownTool;
-      });
-    })
-  ) {
-    signals.push('fell_back');
   }
 
   const output = own.output;

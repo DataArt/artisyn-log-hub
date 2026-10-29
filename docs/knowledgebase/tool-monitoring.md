@@ -215,7 +215,7 @@ Column details and migration `0076_tool_monitoring.sql`: [db-tables.md](db-table
 (`ok` / `error` / `killed` / `no_result`), `hints` (`cut`, `empty`, `truncated`, `no_wrapper`,
 `indirect`, `persisted`), `source` (`transcript` / `wrapper` / `both`), `shell, exitCode, inBytes,
 outBytes, agentSawBytes, toolUseId, agentId, agentKind` (`root` / `subagent` / `workflow`),
-`inputPreview, real, cwd, args, signals` (`empty`, `retried`, `fell_back`, `opened_file`).
+`inputPreview, real, cwd, args, signals` (`empty`, `retried`, `opened_file`).
 `cut` = the consumer closed the pipe, or the agent saw fewer bytes than the wrapper captured.
 
 ### Routes
