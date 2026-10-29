@@ -6,6 +6,7 @@
 **Module(s):** server
 **Owner:** denis.tsyplakov
 **Created:** 2026-10-20
+**Tracker:** GH-61 https://github.com/DataArt/artisyn-log-hub/issues/61
 
 ## Description
 
@@ -57,3 +58,25 @@ sends JSON only and the Azure callback is a GET. Estimate: about half a day.
       only if a route changes.
 
 ## Notes
+
+### Why this is not critical right now
+
+Defence-in-depth, not an open hole. Related pentest finding: L6 ("The application does not
+utilize any countermeasures against CSRF attacks", Low) of the DataArt Security Lab report of
+07/06/2026.
+
+- **Cross-site requests already carry no session.** The session cookie is `SameSite=Lax`,
+  `HttpOnly` (`server/src/app.module.ts` ~213-217). A page on another site cannot make the browser
+  send it with a POST/PUT/PATCH/DELETE, and no GET mutates data (invariant 1 of the
+  `security-check` skill), so the top-level-navigation exception of `Lax` gives nothing.
+- **No CORS is enabled** (no `enableCors` in `server/src`). A cross-origin `fetch` with a JSON body
+  needs a preflight, which the server never approves, so a foreign page cannot call the JSON API
+  with credentials.
+- **The remaining gaps need an attacker who already controls a sibling subdomain** of the Log Hub
+  host (same-site for `Lax`), or a plain HTML form post to a route that accepts urlencoded bodies
+  from such a page. Both require a compromised or malicious page on the same registrable domain —
+  an internal deployment on a corporate domain makes this a narrow, insider-level scenario.
+- **The hook API is not affected at all**: it authenticates by `X-API-Key`, not by a cookie, so
+  there is nothing for a browser to replay.
+
+It stays on the backlog as hardening (closes L6 formally); it is not a release blocker.

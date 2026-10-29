@@ -44,3 +44,4 @@ Folders are named `<YYYY-MM-DD>-<slug>` (the day the task was created).
 - [2026-10-28-kb-tag-search] KB Tag Search — Synonym Tags and a Generated Tag Index — synonym tags in article front matter plus a generated tags.md per OKF bundle so a grep finds the article; tag fixes proposed by the KB-analysis skill
 - [2026-10-28-why-loghub-slides] "Why Log Hub" Presentation on GitHub Pages — slide deck on cost drivers, harness fit, value and team anomalies, deployed via GitHub Pages
 - [2026-10-28-branch-summary-view] Branch Summary View — click a branch in the branch-grouped session list to see aggregated Summary/Info/OKF etc. over its sessions (client-only)
+- [2026-10-29-sysctx-anatomy-tab] Session Tab — System Context Anatomy (Disk-Partition View) — partition bar + table of the startup system context: per-section size and origin down to file name, size and git status; metadata only
