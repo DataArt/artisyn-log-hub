@@ -1,0 +1,45 @@
+[
+  {
+    "section": "Get started",
+    "articles": [
+      { "slug": "install-server", "title": "Install the server" },
+      { "slug": "install-hook", "title": "Install the hook", "downloadable": true, "source": "../hook/INSTALL_HOOK.md" },
+      { "slug": "getting-started", "title": "Your first session" },
+      { "slug": "connect-repository", "title": "Connecting a Repository", "downloadable": true }
+    ]
+  },
+  {
+    "section": "Configuration",
+    "articles": [
+      { "slug": "authentication-modes", "title": "Authentication modes" },
+      { "slug": "server-configuration", "title": "Server settings" },
+      { "slug": "tuning-your-setup", "title": "Tuning Your Setup" },
+      { "slug": "security-hardening", "title": "Security Hardening & Configuration", "downloadable": true }
+    ]
+  },
+  {
+    "section": "Using Log Hub",
+    "articles": [
+      { "slug": "session-list", "title": "Working with the Session List" },
+      { "slug": "session-log", "title": "Session Log" },
+      { "slug": "cost-and-context", "title": "Understanding Cost & Context" },
+      { "slug": "analytics-reports", "title": "Analytics & Reports" }
+    ]
+  },
+  {
+    "section": "Data and security",
+    "articles": [
+      { "slug": "data-collection-notice", "title": "Data Collection Notice" },
+      { "slug": "data-collection", "title": "Data Collection & Upload" },
+      { "slug": "trust-model", "title": "Trust model" },
+      { "slug": "component-reference", "title": "Component Reference", "downloadable": true },
+      { "slug": "responsibility-matrix", "title": "Responsibility Matrix (RACI)", "downloadable": true },
+      { "slug": "third-party-components", "title": "Third-Party Components", "downloadable": true },
+      { "slug": "how-hook-works", "title": "How the hook works", "downloadable": true, "source": "../hook/HOW_HOOK_WORKS.md" }
+    ]
+  },
+  {
+    "section": "Changelog",
+    "articles": [{ "slug": "changelog", "title": "Changelog" }]
+  }
+]

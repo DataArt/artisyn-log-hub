@@ -1,10 +1,10 @@
 # Scenarios: log ingest, hook, installer, platform
 
-Group: INGEST (log ingest v1/v2), HOOK (the Claude Code hook and the OTEL receiver), COMPAT (hook backward compatibility), INST (installer), REL (build and releases), PLAT (health, headers, static files, cluster, server logs).
+Group: INGEST (log ingest v1/v2), HOOK (the Claude Code hook and the OTEL receiver), COMPAT (hook backward compatibility), INST (installer), REL (build and releases), PLAT (health, headers, static files, cluster, server logs), SITE (the static GitHub Pages site and the deck).
 
 ## 0. Scope and assumptions
 
-**What we cover.** 27 scenarios instead of about 860 existing tests of this group (an approximate count, by `grep` of `it(`/`test(` lines; an `it.each` counted as one). Each scenario is a long story of 5-15 steps that a person can repeat by hand (`curl`, a terminal, clicks). The written description of a scenario is the source of truth; the test code must follow it, not the other way round.
+**What we cover.** 28 scenarios instead of about 860 existing tests of this group (an approximate count, by `grep` of `it(`/`test(` lines; an `it.each` counted as one). Each scenario is a long story of 5-15 steps that a person can repeat by hand (`curl`, a terminal, clicks). The written description of a scenario is the source of truth; the test code must follow it, not the other way round.
 
 **What we do NOT cover here** (it belongs to other groups; the "Replaces" column does not list these files): `claude-extractor.spec.ts` (106) and `tool-stats.spec.ts` (88) are token/cost/tool formulas, the Cost/Analytics group; `post-turn-analysis-*`, `session-attribution-state` are the Advisor/Attribution group; `session-retention` (server retention) is the Sessions group; `user-settings`, `model-pricing` are the User/Cost groups. The hook side of OTEL retention (`otelRetentionDays`) is covered here (S-HOOK-08).
 
@@ -67,8 +67,9 @@ CLAUDE.md forbids stopping/restarting the dev server; ENV-B/ENV-C are separate p
 | S-PLAT-01 | Health, build version and security headers everywhere | API | P0 | 9 |
 | S-PLAT-02 | Static files of the built application: br/gzip/identity, Vary, cache, SPA fallback | API | P1 | 36 |
 | S-PLAT-03 | The server through an operator's eyes: cluster, System Info, a worker restart, file logs, Error Logs, archive | UI+API | P1 | 110 |
+| S-SITE-01 | The static site and the "Why Log Hub" deck: built, served under a base path, navigable, responsive, no leaks | UI | P1 | 0 |
 
-Total: P0: 15, P1: 11, P2: 1. Replaces about 820 tests. (S-REL-02, the signed release link, was dropped: the release download feature was removed by 2026-10-20-github-release-pipeline.)
+Total: P0: 15, P1: 12, P2: 1. Replaces about 820 tests. (S-REL-02, the signed release link, was dropped: the release download feature was removed by 2026-10-20-github-release-pipeline.)
 
 ---
 
@@ -617,6 +618,30 @@ Total: P0: 15, P1: 11, P2: 1. Replaces about 820 tests. (S-REL-02, the signed re
 - **Replaces:** `cluster-messages.spec.ts` (12), `worker-slot-registry.spec.ts` (25; the behaviour "the slot is kept, a restart with a delay" is steps 5-6, the pure backoff logic remains debatable, see below), `worker-stats-reporter.spec.ts` (13), `system-info.service.spec.ts` (12), `request-metrics.middleware.spec.ts` (12), `system-info.e2e-spec.ts` (11), `instance-count.spec.ts` (3), `trust-proxy.spec.ts` (5), `app-logger.spec.ts` (8), `sql-logger.spec.ts` (10), `logback-formatter.spec.ts` (4), `AdminSystemTab.test.tsx`/`AdminErrorLogsTab.test.tsx` (~6, the client components group), the Error Logs and Logs Archive parts of `admin-panel.e2e-spec.ts` (~4). It closes F.3 "the cluster has no e2e".
 - **What we lose:** the exact backoff schedule `1/2/4/8/16/30 s` and the stop threshold after 10 fast crashes (the pure arithmetic of `WorkerSlotRegistry`): **we recommend keeping one small unit file with ~6 cases** (the owner's decision, section 4); an unreachable DB in System Info (`connected=false`, `memoryBytes null`) and the active request counter not going negative are low-value edge cases, and the loss is acceptable; log rotation at the day change (`DailyRotateStream` switches the file at midnight) is not checked, only the name format.
 - **OS:** on Windows `cluster.schedulingPolicy` differs (no round-robin), so spreading the requests across the workers is not guaranteed; step 4 on Windows is relaxed to "at least one `-iN` file"; processes are killed with `taskkill`; `SIGTERM` is not equivalent.
+
+### S-SITE-01. The static site and the "Why Log Hub" deck: built, served under a base path, navigable, responsive, no leaks
+- **Layer:** UI
+- **Priority:** P1
+- **Data/environment:** no stand and no DB: `node scripts/site/build-site.mjs --out tmp/scenarios/site` (the same renderer GitHub Pages runs), served by a Node `http` static server under the base path `/artisyn-log-hub/` (the GitHub Pages path, impl-plan DD-19a; anything outside it is 404). The deck needs internet access: it loads reveal.js 5.2.1 from `cdn.jsdelivr.net`. Runs in the mode-A pass only (`@mode-a`). Test: `tests/scenarios/platform/s-site-01.spec.ts`.
+- **Steps:**
+  0. Build the site: exit code 0, `index.html` exists.
+  1. Crawl every `href`/`src` from `index.html`: every local target answers 200 and every `#fragment` exists on its target page; Home, Features, the deck and `docs/<slug>.html` for every `user-docs/nav.json` page are reached; external links are `https://` (or the reader's own `http://localhost` server in the install guide).
+  2. At 1280×720 every non-deck page has the top nav Home, Features, Get started, Configuration, Using Log Hub, Data & security, Questions, Deck, GitHub ↗ in that order; each local target answers 200; clicking each from Home opens it with that item marked current.
+  3. Home: the thesis headline ("… Is that good?"), the lead that keeps cost control "right and useful" and "Log Hub answers the next questions", three question cards, links to the deck, Features and Get started.
+  4. Features: six sections `#a`–`#f`, each heading with its block marker A–F and a question.
+  5. Docs pages: the sidebar lists every nav page with the nav.json groups; every TOC ("On this page", shown for ≥ 3 headings) link points at an existing heading id (install-server has one); every page links the repository and its releases.
+  6. Dark mode: `emulateMedia({ colorScheme: 'dark' })` changes the body background of Home, a docs page and the deck.
+  7. At 375 px: no horizontal page scroll on any non-deck page, body font ≥ 16 px; the top nav is hidden until the "Menu" button opens it.
+  8. At 1280×720: no horizontal page scroll on any non-deck page.
+  9. Deck: 10–20 slides; no slide's content overflows its 1280×720 frame; ArrowRight/ArrowLeft move between slides and update the `#/n` hash.
+  10. Every content slide has one headline, 1–3 bullets and at most 40 words of body text (the "Illustrative example" label not counted).
+  11. Every block with dataset figures (`.deck-figure` in the deck, `.figure-block` on Home and Features) carries the "Illustrative example" label.
+  12. `deck/index.html?print-pdf` renders one PDF page per slide and hides the exit link.
+  13. All browser requests went to the local server or to `cdn.jsdelivr.net/npm/<name>@<x.y.z>/…` (a versioned URL).
+  14. Artifact grep over the built files: no e-mail address (the `git@github.com` SSH remote example is not one) and no absolute local path (`X:\…`, `/Users/<name>`, `/home/<name>` except the fictional `/home/me` and `/home/jane` examples of the docs, the repository path and the home folder of the build machine).
+- **Check:** the site works below a base path with relative links only, nothing links to a missing page or heading, the layout holds on a phone and a laptop, the deck keeps its content limits and labels every fictional figure, nothing personal leaks into the published files.
+- **Replaces:** nothing (a new feature, 2026-10-28-why-loghub-slides).
+- **What we lose:** the real GitHub Pages deploy (`.github/workflows/pages.yml`) is not run; the PDF file itself is not produced (only the `?print-pdf` layout is checked); the dataset arithmetic and link resolution are covered by the algorithm tables `site-example-dataset.md` and `user-docs-links.md`.
 
 ---
 

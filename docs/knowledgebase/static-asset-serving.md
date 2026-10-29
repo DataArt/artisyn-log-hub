@@ -130,7 +130,9 @@ representation is legal but pointless here — nothing in the app range-requests
 
 Scoped by path segment, not by "the filename looks hashed", because only vite's `assets/` output is
 content-hashed. `index.html`, `/favicon.svg` and `/help/*.md` have stable names and must keep
-revalidating — and the same rule keeps the `ServeStaticModule` SPA fallback
+revalidating (`/help/*.md` comes from `client/public/help/`, which is generated from `user-docs/`
+at build time — see [user-docs-and-site.md](user-docs-and-site.md); a docs edit ships under the
+same names, so a cached copy must not outlive it) — and the same rule keeps the `ServeStaticModule` SPA fallback
 (`res.sendFile(indexFilePath)`, which also runs this hook) out of the immutable bucket. An
 `immutable` `index.html` would pin users to a stale build.
 

@@ -125,7 +125,7 @@ the unauthenticated routes that send email or accept a token. It is a plain `Rat
 - **signup**: over either the IP or the email limit → 429. **forgot / resend**: over the IP limit → 429; over the email
   limit → the normal success response with no email sent (no enumeration signal). **reset**: IP limit only.
 - Per process, in memory: with N cluster workers the effective limit is about N × the setting (documented as an accepted
-  risk in `client/public/help/security-hardening.md` §11).
+  risk in `user-docs/security-hardening.md` §11).
 - Unlike the login backoff it is **not** disabled under `NODE_ENV=test`; the contract suite's global setup
   (`server/test/contract/setup/global-setup.ts`) and the scenario stand set `AUTH_RATE_LIMIT_POINTS=1000`, and the dev server used by e2e runs
   with `AUTH_RATE_LIMIT_POINTS=0`.

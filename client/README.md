@@ -46,12 +46,12 @@ result into `dist/public/`.
 | `src/viewer/ui/` | The app's own UI primitives, built on Radix UI. |
 | `src/viewer/lib/` | Viewer logic: formatting, cost math, chart helpers, feature flags. |
 | `src/viewer/hooks/`, `src/viewer/context/` | React hooks and context providers. |
-| `src/viewer/help/` | The in-app help: article index and modal. Article bodies are Markdown files in `public/help/`. |
+| `src/viewer/help/` | The in-app help: modal, link handler and the article index, which reads `../user-docs/nav.json` (alias `@loghub/user-docs`). Article bodies are the Markdown pages in the repo-root `user-docs/`; edit them there. |
 | `src/viewer/api.ts` | All HTTP calls to the server. |
 | `src/models/` | TypeScript types of the API responses the client uses. |
 | `src/lib/` | Small shared helpers. |
 | `src/viewer/__tests__/`, `src/test/` | Vitest unit and component tests and their setup. |
-| `public/` | Static files copied as-is, including the help articles. |
+| `public/` | Static files copied as-is. `public/help/*.md` is generated from `user-docs/` by `scripts/user-docs/generate-help.js` (the `predev`/`prebuild` scripts) and gitignored — never edit it. |
 
 The `@/*` import alias points at `src/viewer/*`.
 

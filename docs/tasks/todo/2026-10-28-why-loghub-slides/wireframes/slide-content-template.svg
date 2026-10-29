@@ -100,6 +100,6 @@
     <text y="76">3. Visual slot has a fixed box; a later screenshot drops in with no redesign (FR-7). No screenshots in this task.</text>
     <text y="100">4. Phone: same order, single column, body text at least 16 px (NFR), no horizontal scroll; the visual slot scales to the width.</text>
     <text y="124">5. Detail that does not fit (detector ids, report names, Tools/MCP signals) goes to speaker notes (S key), not onto the slide.</text>
-    <text y="148">6. Light theme only; one navy accent; neutral greys. Numbers labelled "Illustrative example".</text>
+    <text y="148">6. Light theme; dark via prefers-color-scheme (FR-3); one navy accent; neutral greys. Numbers labelled "Illustrative example".</text>
   </g>
 </svg>

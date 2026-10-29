@@ -7,7 +7,9 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "predev": "node ../scripts/user-docs/generate-help.js",
     "dev": "vite",
+    "prebuild": "node ../scripts/user-docs/generate-help.js",
     "build": "vite build && node scripts/precompress.cjs",
     "preview": "vite preview",
     "test": "vitest run",
@@ -32,6 +34,7 @@
     "react-markdown": "^10.1.0",
     "react-router-dom": "^7.18.4",
     "recharts": "^3.8.1",
+    "rehype-slug": "^6.0.0",
     "remark-gfm": "^4.0.1",
     "tailwind-merge": "^3.5.0",
     "tailwindcss": "^4.2.2",

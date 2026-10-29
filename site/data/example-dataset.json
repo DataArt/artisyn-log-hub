@@ -1,0 +1,128 @@
+{
+  "team": {
+    "developers": 6,
+    "workingDays": 20,
+    "period": "one month"
+  },
+  "session": {
+    "total": 8,
+    "parts": {
+      "input": 0.7,
+      "output": 1.4,
+      "cacheRead": 2.6,
+      "cacheWrite": 1.5,
+      "subAgents": 1.8
+    },
+    "tokens": {
+      "input": 140000,
+      "output": 56000,
+      "cacheRead": 5200000,
+      "cacheWrite": 240000
+    },
+    "contextRereadPct": 92
+  },
+  "daily": {
+    "sessions": 18,
+    "total": 144
+  },
+  "monthly": {
+    "total": 2880
+  },
+  "insight": {
+    "turns": 65,
+    "systemContextTokens": 48000,
+    "unusedContextTokens": 32000,
+    "unusedContextPct": 67,
+    "mcpLoaded": 5,
+    "mcpUsed": 2,
+    "skillsLoaded": 14,
+    "skillsUsed": 3,
+    "repoMedianSession": 3.4,
+    "repoMedianTurns": 22,
+    "subAgentsPct": 23,
+    "teamSubAgentsPct": 9,
+    "trimPerSession": 1.04,
+    "trimMonthly": 374
+  },
+  "anomalies": [
+    {
+      "level": "info",
+      "signal": "lagging Claude Code version",
+      "subject": "2 developers",
+      "value": "2.1.280",
+      "baseline": "stable 2.1.308"
+    },
+    {
+      "level": "critical",
+      "signal": "cost per changed line",
+      "subject": "branch feature/export",
+      "value": "$0.042",
+      "baseline": "repo $0.007"
+    },
+    {
+      "level": "warning",
+      "signal": "low cache-read ratio",
+      "subject": "3 sessions",
+      "value": "41%",
+      "baseline": "team 72%"
+    },
+    {
+      "level": "warning",
+      "signal": "MCP error spike",
+      "subject": "issue-tracker",
+      "value": "12% errors",
+      "baseline": "3% last month"
+    },
+    {
+      "level": "info",
+      "signal": "knowledge-base flood",
+      "subject": "docs/kb",
+      "value": "23 read",
+      "baseline": "4 used"
+    },
+    {
+      "level": "info",
+      "signal": "monitored, never called",
+      "subject": "db-cli",
+      "value": "0 calls",
+      "baseline": "one month"
+    }
+  ],
+  "tools": [
+    {
+      "name": "docs-mcp",
+      "kind": "mcp",
+      "calls": 412,
+      "errorPct": 3,
+      "retriedPct": 9,
+      "openedFilePct": 61
+    },
+    {
+      "name": "issue-tracker",
+      "kind": "mcp",
+      "calls": 138,
+      "errorPct": 12,
+      "retriedPct": 21,
+      "openedFilePct": 18
+    },
+    {
+      "name": "build-cli",
+      "kind": "cli",
+      "calls": 905,
+      "errorPct": 7,
+      "retriedPct": 4,
+      "openedFilePct": 0
+    },
+    {
+      "name": "db-cli",
+      "kind": "cli",
+      "calls": 0,
+      "errorPct": 0,
+      "retriedPct": 0,
+      "openedFilePct": 0
+    }
+  ],
+  "productivity": {
+    "costPerLine": 0.007
+  }
+}

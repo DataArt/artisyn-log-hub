@@ -73,8 +73,10 @@ lib/consent-queries.ts             The three queries the consent gate reads (use
 
 ### `viewer/help/`
 ```
-HelpModal.tsx                   Dialog-based help modal: left nav + article pane; fetches /help/<slug>.md at runtime. Articles flagged `downloadable` get a "Download .md" button (plain same-origin <a download> to /help/<slug>.md, file name from helpDownloadFileName())
-articles/index.ts               helpNav manifest (sections, article slugs, optional `downloadable` flag) + helpDownloadFileName(slug) → artisyn-log-hub-<slug>.md
+HelpModal.tsx                   Dialog-based help modal: left nav + article pane; fetches /help/<slug>.md at runtime and renders it with remark-gfm + rehype-slug (heading ids). Opens on DEFAULT_HELP_SLUG = 'getting-started'; keeps `pendingAnchor` and, after the article renders, scrolls to that id or to the top. Articles flagged `downloadable` get a "Download .md" button (plain same-origin <a download> to /help/<slug>.md, file name from helpDownloadFileName())
+HelpMarkdownLink.tsx            The `a` renderer passed to ReactMarkdown: #anchor → scroll inside the pane; <slug>.md[#anchor] → onNavigate(slug, anchor); unknown slug → console.warn, no navigation; http(s)/mailto → new tab + trailing ↗
+help-links.ts                   Pure parseHelpHref(href, knownSlugs) → external | anchor | page | unknown (the link rules of scripts/user-docs/links.js minus `source` basenames, which the generator already rewrote)
+articles/index.ts               helpNav = the repo-root user-docs/nav.json (imported via the @loghub/user-docs alias; sections, article slugs, optional `downloadable` and `source`) + helpDownloadFileName(slug) → artisyn-log-hub-<slug>.md
 ```
 
 ### `viewer/components/`
@@ -83,10 +85,12 @@ LazyFallback.tsx                Shared Suspense fallback for lazy-loaded routes/
 DataCollectionConsentScreen.tsx The first-run data-collection notice. Rendered by main.tsx's AppLayout *instead of* `<AppShell><Outlet/></AppShell>` while useDataCollectionConsent() says 'required' — not a Dialog and not an overlay, so no nav, no page content and no shell query exists behind it, and a deep link cannot get past it. Renders /help/data-collection-notice.md via ReactMarkdown+remarkGfm with `{{RETENTION_DAYS}}` substituted from the ['retention-days'] cache; the "If the assistant handles secrets" section is split out of the markdown flow into an amber AlertTriangle block. Exactly one control: "I understand and accept" → saveUserSetting(DATA_COLLECTION_NOTICE_SETTING, encodeConsent(hash)) then invalidates ['user-settings']. No ×, no Escape, no decline; on failure the error shows under the button and the screen stays
 ```
 
-### `public/help/`  ← static assets served at `/help/<slug>.md`
+### `public/help/`  ← GENERATED static assets served at `/help/<slug>.md`
+
+Generated and gitignored: `scripts/user-docs/generate-help.js` writes one `<slug>.md` per `user-docs/nav.json` page (the client `predev`/`prebuild`, `npm run build:help`, the Dockerfile and the scenario stand all run it). Edit the sources in the repo-root `user-docs/` (and `hook/INSTALL_HOOK.md` / `hook/HOW_HOOK_WORKS.md` for `install-hook` / `how-hook-works`), never these copies — see [user-docs-and-site.md](user-docs-and-site.md). The list below describes some of the pages (all 20 are in `nav.json`).
 ```
 getting-started.md              Article content: Getting Started guide
-data-collection-notice.md       The consent notice text — shown both as a Help article and, verbatim, by DataCollectionConsentScreen.tsx. Its content hash (client/src/viewer/lib/notice-hash.ts) versions the consent, so editing this file re-asks every user exactly once. Carries a literal `{{RETENTION_DAYS}}` placeholder the consent screen substitutes; the '## If the assistant handles secrets' heading is the split point for the amber block
+data-collection-notice.md       The consent notice text — shown both as a Help article and, verbatim, by DataCollectionConsentScreen.tsx. Copied byte-for-byte from user-docs/data-collection-notice.md (it has no page links to rewrite). Its content hash (client/src/viewer/lib/notice-hash.ts) versions the consent, so editing the source re-asks every user exactly once. Carries a literal `{{RETENTION_DAYS}}` placeholder the consent screen substitutes; the '## If the assistant handles secrets' heading is the split point for the amber block
 session-log.md                  Article content: Session Log reference
 component-reference.md          Article content: "Technical Info" — formal Component Reference (architecture, server modules, client, DB, hook, installer, interfaces). Downloadable
 security-hardening.md           Article content: "Technical Info" — Security Hardening & Configuration Guide (auth modes, TLS/proxy, headers, retention, backup, env reference). Downloadable

@@ -17,6 +17,8 @@ export default defineConfig({
       '@loghub/pricing': path.resolve(dirname, '../packages/pricing/src/index.ts'),
       '@loghub/bash-view': path.resolve(dirname, '../packages/bash-view/src/index.ts'),
       '@loghub/tool-monitor': path.resolve(dirname, '../packages/tool-monitor/src/index.ts'),
+      // User-doc sources (nav.json drives the in-app help menu); see user-docs/.
+      '@loghub/user-docs': path.resolve(dirname, '../user-docs'),
     },
   },
   // web-tree-sitter loads its own .wasm via import.meta.url; pre-bundling breaks that path.
@@ -31,7 +33,7 @@ export default defineConfig({
     port: 5173,
     // The alias above reaches outside client/; let the dev server serve those files.
     fs: {
-      allow: [searchForWorkspaceRoot(process.cwd()), path.resolve(dirname, '../packages')],
+      allow: [searchForWorkspaceRoot(process.cwd()), path.resolve(dirname, '../packages'), path.resolve(dirname, '../user-docs')],
     },
     // Set (e.g. to 0.0.0.0) inside the dev container so the published port reaches Vite;
     // unset on the host, where Vite keeps its default.

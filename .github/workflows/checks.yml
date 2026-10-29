@@ -55,6 +55,14 @@ jobs:
           (cd server && npm ci --ignore-scripts)
           (cd client && bun install --frozen-lockfile --ignore-scripts)
 
+      # A broken user-docs link, dataset figure or site placeholder fails the PR here, not only the
+      # post-merge Pages deploy (pages.yml). Generator in --check mode writes nothing.
+      - name: User docs and site
+        run: |
+          set -eu
+          node scripts/user-docs/generate-help.js --check
+          npm run build:site -- --out tmp/site-check
+
       - name: Client typecheck
         working-directory: client
         run: bun run typecheck

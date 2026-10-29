@@ -11,22 +11,7 @@ confirm data is flowing. You do this once per repository.
 
 ## Step 1 — Install the hook
 
-Open **My API Keys** in the left sidebar. The **Install** tab opens first and walks you through
-three steps:
-
-1. **Run the installer** — copy the pre-filled command and run it in your project's root
-   directory. It installs the telemetry hook as a Claude Code plugin.
-2. **Configure the hook** — put your API key into `.artisyn/config/log-hub.local.json`. The
-   **Generate Key NOW** button creates a key and fills it into the snippet for you. Keys are
-   shown only once — copy them when the "Save this key — it won't be shown again" banner appears.
-3. **Set the server URL** — put the server address into `.artisyn/config/log-hub.json`.
-
-Prefer a single command? The **Full Auto Install** card generates a one-liner that installs and
-configures everything at once. Note the warning: the API key is visible in your shell history, so
-avoid this on shared machines.
-
-You can manage keys on the **API Keys** tab: create named keys with an optional expiry, edit the
-expiry, or revoke a key.
+Install the hook into your project as described in [Install the hook](../hook/INSTALL_HOOK.md).
 
 ## Step 2 — Run a first session
 

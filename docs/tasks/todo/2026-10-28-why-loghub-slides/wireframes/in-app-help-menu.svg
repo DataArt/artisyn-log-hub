@@ -1,0 +1,143 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1090" viewBox="0 0 1440 1090" font-family="Inter, Segoe UI, Arial, sans-serif">
+  <title>In-app help after FR-2: page-map menu, "Your first session" default, internal links and Download .md</title>
+  <rect width="1440" height="1090" fill="#f3f4f6"/>
+  <text x="40" y="44" font-size="20" font-weight="600" fill="#111827">In-app Help modal - menu generated from the shared navigation definition (FR-2 page map)</text>
+  <text x="40" y="70" font-size="13" fill="#6b7280">Wireframe. Same modal as today (header, left menu, article pane); only the menu content, the default page title and link handling change. Text is placeholder copy.</text>
+
+  <!-- App backdrop (dimmed) -->
+  <g transform="translate(40,96)">
+    <rect width="940" height="860" fill="#ffffff" stroke="#d1d5db"/>
+    <rect width="940" height="48" fill="#ffffff" stroke="#e5e7eb"/>
+    <circle cx="24" cy="24" r="8" fill="#1e3a8a"/>
+    <text x="42" y="30" font-size="14" font-weight="700" fill="#111827">Artisyn Log Hub</text>
+    <circle cx="790" cy="24" r="9" fill="none" stroke="#111827" stroke-width="1.5"/>
+    <text x="790" y="28" font-size="11" font-weight="700" fill="#111827" text-anchor="middle">?</text>
+    <text x="916" y="30" font-size="13" font-weight="600" fill="#111827" text-anchor="end">Edit email</text>
+    <rect y="48" width="940" height="812" fill="#6b7280" opacity="0.45"/>
+
+    <!-- Modal -->
+    <g transform="translate(40,70)">
+      <rect width="860" height="770" rx="6" fill="#ffffff" stroke="#9ca3af"/>
+      <text x="18" y="30" font-size="18" font-weight="500" fill="#111827">Help</text>
+      <text x="836" y="31" font-size="16" fill="#374151" text-anchor="middle">×</text>
+      <line x1="0" y1="46" x2="860" y2="46" stroke="#111827"/>
+
+      <!-- Left menu -->
+      <rect x="0" y="46" width="230" height="724" fill="#f9fafb"/>
+      <line x1="230" y1="46" x2="230" y2="770" stroke="#e5e7eb"/>
+      <g font-size="10" font-weight="600" fill="#6b7280" letter-spacing="0.8">
+        <text x="16" y="72">GET STARTED</text>
+        <text x="16" y="212">CONFIGURATION</text>
+        <text x="16" y="358">USING LOG HUB</text>
+        <text x="16" y="488">DATA AND SECURITY</text>
+        <text x="16" y="692">CHANGELOG</text>
+      </g>
+      <g font-size="13" fill="#6b7280">
+        <text x="18" y="96">Install the server</text>
+        <text x="18" y="122">Install the hook</text>
+        <rect x="0" y="132" width="230" height="28" fill="#eff6ff"/>
+        <rect x="0" y="132" width="3" height="28" fill="#2563eb"/>
+        <text x="18" y="151" fill="#2563eb" font-weight="500">Your first session</text>
+        <text x="18" y="182">Connecting a Repository</text>
+
+        <text x="18" y="236">Authentication modes</text>
+        <text x="18" y="262">Server settings</text>
+        <text x="18" y="288">Tuning Your Setup</text>
+        <text x="18" y="314">Security Hardening &amp;</text>
+        <text x="18" y="331">Configuration</text>
+
+        <text x="18" y="382">Working with the Session List</text>
+        <text x="18" y="408">Session Log</text>
+        <text x="18" y="434">Understanding Cost &amp; Context</text>
+        <text x="18" y="460">Analytics &amp; Reports</text>
+
+        <text x="18" y="512">Data Collection Notice</text>
+        <text x="18" y="538">Data Collection &amp; Upload</text>
+        <text x="18" y="564">Trust model</text>
+        <text x="18" y="590">Component Reference</text>
+        <text x="18" y="616">Responsibility Matrix (RACI)</text>
+        <text x="18" y="642">Third-Party Components</text>
+        <text x="18" y="668">How the hook works</text>
+
+        <text x="18" y="716">Changelog</text>
+      </g>
+      <!-- NEW markers -->
+      <g font-size="9" font-weight="700" fill="#1e3a5f">
+        <rect x="186" y="86" width="34" height="14" rx="3" fill="#e0e7ff"/><text x="203" y="96" text-anchor="middle">NEW</text>
+        <rect x="186" y="112" width="34" height="14" rx="3" fill="#e0e7ff"/><text x="203" y="122" text-anchor="middle">NEW</text>
+        <rect x="186" y="226" width="34" height="14" rx="3" fill="#e0e7ff"/><text x="203" y="236" text-anchor="middle">NEW</text>
+        <rect x="186" y="252" width="34" height="14" rx="3" fill="#e0e7ff"/><text x="203" y="262" text-anchor="middle">NEW</text>
+        <rect x="186" y="554" width="34" height="14" rx="3" fill="#e0e7ff"/><text x="203" y="564" text-anchor="middle">NEW</text>
+        <rect x="186" y="658" width="34" height="14" rx="3" fill="#e0e7ff"/><text x="203" y="668" text-anchor="middle">NEW</text>
+      </g>
+
+      <!-- Article pane -->
+      <g transform="translate(262,46)">
+        <text x="0" y="62" font-size="28" font-weight="700" fill="#111827">Your first session</text>
+        <text x="0" y="84" font-size="11" fill="#6b7280">slug stays getting-started - the modal still opens here by default</text>
+        <text x="0" y="128" font-size="19" font-weight="700" fill="#111827">Before you start</text>
+        <text x="0" y="158" font-size="13" fill="#374151">You need a running Log Hub server and the hook in your project.</text>
+        <text x="0" y="182" font-size="13" fill="#374151">If the hook is not installed yet, follow <tspan fill="#2563eb" text-decoration="underline">Install the hook</tspan>.</text>
+        <text x="0" y="232" font-size="19" font-weight="700" fill="#111827">Run a session</text>
+        <rect x="0" y="250" width="500" height="8" fill="#e5e7eb"/>
+        <rect x="0" y="268" width="540" height="8" fill="#e5e7eb"/>
+        <rect x="0" y="286" width="420" height="8" fill="#e5e7eb"/>
+        <text x="0" y="330" font-size="13" fill="#374151">Not sure what is uploaded? Read <tspan fill="#2563eb" text-decoration="underline">What is collected</tspan>.</text>
+        <text x="0" y="380" font-size="19" font-weight="700" fill="#111827">Find it in Log Hub</text>
+        <rect x="0" y="398" width="520" height="8" fill="#e5e7eb"/>
+        <rect x="0" y="416" width="460" height="8" fill="#e5e7eb"/>
+        <text x="0" y="460" font-size="13" fill="#374151">Hook internals: <tspan fill="#2563eb" text-decoration="underline">How the hook works</tspan></text>
+      </g>
+    </g>
+  </g>
+
+  <!-- Callouts -->
+  <g font-size="12" fill="#1e3a5f">
+    <path d="M648 388 C 760 330, 880 160, 1004 112" stroke="#1e3a5f" stroke-width="1.5" fill="none" stroke-dasharray="4 3"/>
+    <path d="M636 537 C 760 520, 880 450, 1004 436" stroke="#1e3a5f" stroke-width="1.5" fill="none" stroke-dasharray="4 3"/>
+  </g>
+
+  <!-- Right: what happens on click -->
+  <g transform="translate(1010,96)">
+    <text x="0" y="16" font-size="14" font-weight="700" fill="#111827">Internal link (install-hook.md)</text>
+    <text x="0" y="36" font-size="12" fill="#374151">switches the article inside the modal;</text>
+    <text x="0" y="52" font-size="12" fill="#374151">the menu highlight moves with it.</text>
+
+    <rect x="0" y="70" width="390" height="220" rx="6" fill="#ffffff" stroke="#9ca3af"/>
+    <rect x="0" y="70" width="110" height="220" fill="#f9fafb"/>
+    <line x1="110" y1="70" x2="110" y2="290" stroke="#e5e7eb"/>
+    <text x="10" y="92" font-size="9" font-weight="600" fill="#6b7280">GET STARTED</text>
+    <text x="10" y="112" font-size="10" fill="#6b7280">Install the server</text>
+    <rect x="0" y="120" width="110" height="20" fill="#eff6ff"/><rect x="0" y="120" width="3" height="20" fill="#2563eb"/>
+    <text x="10" y="134" font-size="10" fill="#2563eb">Install the hook</text>
+    <text x="10" y="156" font-size="10" fill="#6b7280">Your first session</text>
+    <text x="128" y="104" font-size="17" font-weight="700" fill="#111827">Install the hook</text>
+    <rect x="270" y="88" width="106" height="24" rx="4" fill="#ffffff" stroke="#d1d5db"/>
+    <text x="323" y="104" font-size="11" fill="#374151" text-anchor="middle">⤓ Download .md</text>
+    <rect x="128" y="130" width="240" height="7" fill="#e5e7eb"/>
+    <rect x="128" y="146" width="200" height="7" fill="#e5e7eb"/>
+    <rect x="128" y="166" width="248" height="40" rx="4" fill="#f3f4f6"/>
+    <text x="138" y="190" font-size="10" font-family="Consolas, monospace" fill="#374151">npx … install</text>
+    <rect x="128" y="220" width="220" height="7" fill="#e5e7eb"/>
+    <text x="128" y="270" font-size="10" fill="#6b7280">file: artisyn-log-hub-install-hook.md</text>
+
+    <text x="0" y="340" font-size="14" font-weight="700" fill="#111827">slug.md#anchor link</text>
+    <text x="0" y="360" font-size="12" fill="#374151">(data-collection.md#what-is-collected)</text>
+    <text x="0" y="380" font-size="12" fill="#374151">opens that article in the modal.</text>
+
+    <text x="0" y="430" font-size="14" font-weight="700" fill="#111827">External link  ↗ (optional extra)</text>
+    <text x="0" y="450" font-size="12" fill="#374151">opens in a new browser tab; never the only</text>
+    <text x="0" y="466" font-size="12" fill="#374151">source of a fact - every doc is a help page.</text>
+
+    <text x="0" y="516" font-size="14" font-weight="700" fill="#111827">Download .md</text>
+    <text x="0" y="536" font-size="12" fill="#374151">only on pages flagged downloadable in</text>
+    <text x="0" y="552" font-size="12" fill="#374151">the page map; same file name as today.</text>
+  </g>
+
+  <g transform="translate(40,990)" font-size="13" fill="#374151">
+    <text font-size="15" font-weight="600" fill="#111827">Notes</text>
+    <text y="24">1. Menu = four sections + Changelog in the FR-2 page-map order, imported at compile time from the shared definition; the site docs sidebar shows the same pages. NEW = page moved in from README.</text>
+    <text y="46">2. "Getting Started" is renamed "Your first session" (slug unchanged) and stays the default page; old slugs and /help/&lt;slug&gt;.md URLs keep working. Layout, colours and sizes are today's HelpModal.</text>
+    <text y="68">3. Offline first: menu, pages and Download .md are bundled with the app and load nothing from the internet; How the hook works (hook/HOW_HOOK_WORKS.md) is a help page, not a GitHub link.</text>
+  </g>
+</svg>

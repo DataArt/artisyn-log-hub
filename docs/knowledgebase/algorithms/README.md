@@ -61,6 +61,8 @@ format where the two differ).
 | [security-scan-summary](security-scan-summary.md) | `scripts/ci/security-summary.js` | `node --test` (`npm run test:scripts`) |
 | [release-version](release-version.md) | `scripts/ci/release-version.js` | `node --test` (`npm run test:scripts`) |
 | [release-assets](release-assets.md) | `scripts/release-kit.js`, `scripts/ci/release-notes.js`, `scripts/ci/virustotal-scan.js` (`scopeFor`) | `node --test` (`npm run test:scripts`) |
+| [user-docs-links](user-docs-links.md) | `scripts/user-docs/links.js` (`resolveLink`, `rewritePageLinks`) | `node --test` (`npm run test:scripts`) |
+| [site-example-dataset](site-example-dataset.md) | `scripts/site/dataset.mjs` (`checkDataset`, `fillPlaceholders`) | `node --test` (`npm run test:scripts`) |
 
 ## File layout
 

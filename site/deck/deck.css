@@ -1,0 +1,944 @@
+/* "Why Log Hub" deck (impl-plan DD-23, DD-24, Visual/UX notes; wireframes slide-opening-thesis.svg
+ * and slide-content-template.svg). Loaded after reveal.js reset.css/reveal.css and the shared
+ * ../assets/theme.css; no reveal theme. Slides are 1280 x 720 logical pixels (480 x 900 on a narrow
+ * screen, see index.html), scaled by reveal.js. Light: white slide on a light-grey stage; dark:
+ * phosphor-green on near-black (prefers-color-scheme). ?print-pdf always prints the light palette. */
+
+:root {
+  --deck-stage: #e8e5db;
+  --deck-slide: #faf9f4;
+  --deck-slide-border: #b8b5a8;
+  --deck-accent-soft: #eceee4;
+  --deck-pill: #e3e0d4;
+  --deck-pill-text: #5e6a62;
+  --deck-ok: #2f7a4f;
+  --deck-bar-1: #1f5c45;
+  --deck-bar-2: #4a8068;
+  --deck-bar-3: #9a6614;
+  --deck-bar-4: #c4a46a;
+  --deck-bar-5: #8d968f;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not(.print-pdf) {
+    --deck-stage: #0a0d0b;
+    --deck-slide: #131915;
+    --deck-slide-border: #2f3b33;
+    --deck-accent-soft: #18211c;
+    --deck-pill: #1c2520;
+    --deck-pill-text: #8a978e;
+    --deck-ok: #8fc3a3;
+    --deck-bar-1: #8fc3a3;
+    --deck-bar-2: #5c9479;
+    --deck-bar-3: #d3a65c;
+    --deck-bar-4: #8a6c3a;
+    --deck-bar-5: #56605a;
+  }
+}
+
+/* Print / PDF export: light palette regardless of the viewer's scheme. */
+html.print-pdf {
+  --text: #17201b;
+  --text-2: #36433c;
+  --text-3: #66726a;
+  --accent: #1f5c45;
+  --accent-2: #9a6614;
+  --link: #1f5c45;
+  --page: #f3f1ea;
+  --stage: #e8e5db;
+  --surface: #faf9f4;
+  --border: #b8b5a8;
+  --border-soft: #d9d6ca;
+  --label-bg: transparent;
+  --label-text: #9a6614;
+}
+
+body.reveal-viewport {
+  background: var(--deck-stage);
+  color: var(--text);
+  font-family: var(--font);
+  font-size: 16px;
+  line-height: 1.4;
+}
+
+.reveal {
+  font-family: var(--font);
+  color: var(--text);
+}
+
+.reveal .slides {
+  text-align: left;
+}
+
+.reveal .slides > section {
+  height: 100%;
+}
+
+/* The white "paper" of each slide; reveal.js zeroes section padding in print, so the frame pads. */
+.slide-frame {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  padding: 44px 56px 64px;
+  background: var(--deck-slide);
+  border: 1px solid var(--deck-slide-border);
+}
+
+.reveal h1,
+.reveal h2,
+.reveal h3,
+.reveal p,
+.reveal ul,
+.reveal ol {
+  margin: 0;
+}
+
+.reveal a {
+  color: var(--link);
+}
+
+/* Footer: site URL on every slide; the counter is reveal.js slideNumber 'c/t'. */
+.slide-footer {
+  position: absolute;
+  left: 56px;
+  right: 56px;
+  bottom: 20px;
+  border-top: 1px solid var(--border-soft);
+  padding-top: 10px;
+  font-size: 16px;
+  color: var(--text-3);
+}
+
+.reveal .slide-number {
+  right: 120px;
+  bottom: 22px;
+  background: transparent;
+  color: var(--text-3);
+  font-family: var(--font);
+  font-size: 16px;
+}
+
+.reveal .controls {
+  color: var(--accent);
+}
+
+.reveal .progress {
+  color: var(--accent);
+}
+
+/* Exit to the site — not part of the PDF. */
+.deck-exit {
+  position: fixed;
+  top: 12px;
+  left: 16px;
+  z-index: 40;
+  font-size: 15px;
+  color: var(--text-2);
+  background: var(--deck-slide);
+  border: 1px solid var(--deck-slide-border);
+  border-radius: var(--radius);
+  padding: 4px 10px;
+  text-decoration: none;
+}
+
+.deck-exit:hover {
+  color: var(--accent);
+}
+
+html.print-pdf .deck-exit {
+  display: none;
+}
+
+/* Slide head: block marker (left) and P / A-F progress pills (right). */
+.slide-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 28px;
+}
+
+.block-marker {
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.pills {
+  display: flex;
+  gap: 6px;
+  list-style: none;
+  padding: 0;
+}
+
+.pills li {
+  min-width: 40px;
+  border-radius: 999px;
+  background: var(--deck-pill);
+  color: var(--deck-pill-text);
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 24px;
+  text-align: center;
+}
+
+.pills li.active {
+  background: var(--accent);
+  color: var(--deck-slide);
+}
+
+.headline {
+  margin-top: 28px;
+  font-size: 40px;
+  font-weight: 700;
+  line-height: 1.2;
+  color: var(--text);
+}
+
+/* Content slide: body column (bullets + key figure) and a 464 x 300 visual slot. */
+.slide-cols {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 464px;
+  gap: 48px;
+  margin-top: 36px;
+  align-items: start;
+}
+
+.slide-body ul {
+  padding-left: 1.1em;
+  font-size: 26px;
+  line-height: 1.35;
+  color: var(--text-2);
+}
+
+.slide-body li + li {
+  margin-top: 14px;
+}
+
+.deck-figure {
+  display: block;
+}
+
+.key-box {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 4px 20px;
+  align-items: center;
+  margin-top: 28px;
+  padding: 16px 20px;
+  border-radius: var(--radius);
+  background: var(--deck-accent-soft);
+}
+
+.key-figure {
+  grid-row: span 2;
+  font-size: 72px;
+  font-weight: 700;
+  line-height: 1;
+  color: var(--accent);
+  font-variant-numeric: tabular-nums;
+}
+
+.key-caption {
+  font-size: 20px;
+  line-height: 1.3;
+  color: var(--text-2);
+}
+
+.reveal .illustrative {
+  justify-self: start;
+  font-size: 13px;
+}
+
+.visual-slot.deck-visual {
+  width: 464px;
+  height: 300px;
+  aspect-ratio: auto;
+  padding: 16px;
+  font-size: 16px;
+}
+
+.deck-visual.has-figure {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  justify-content: flex-start;
+  gap: 12px;
+  border-style: solid;
+  background: var(--deck-slide);
+  color: var(--text-2);
+  text-align: left;
+}
+
+/* Visual: stacked bar of one session's cost parts. */
+.cost-bar {
+  display: flex;
+  height: 44px;
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.cost-bar span:nth-child(1) { background: var(--deck-bar-1); }
+.cost-bar span:nth-child(2) { background: var(--deck-bar-2); }
+.cost-bar span:nth-child(3) { background: var(--deck-bar-3); }
+.cost-bar span:nth-child(4) { background: var(--deck-bar-4); }
+.cost-bar span:nth-child(5) { background: var(--deck-bar-5); }
+
+.cost-legend {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+  gap: 6px 10px;
+  align-items: center;
+  font-size: 17px;
+  list-style: none;
+  padding: 0;
+}
+
+.cost-legend .swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+}
+
+.cost-legend .num,
+.tool-table .num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.swatch.s1 { background: var(--deck-bar-1); }
+.swatch.s2 { background: var(--deck-bar-2); }
+.swatch.s3 { background: var(--deck-bar-3); }
+.swatch.s4 { background: var(--deck-bar-4); }
+.swatch.s5 { background: var(--deck-bar-5); }
+
+/* Visual: context growth sketch (no figures — shape only). */
+.growth {
+  display: flex;
+  align-items: flex-end;
+  gap: 14px;
+  height: 200px;
+  padding: 0 8px;
+  border-left: 2px solid var(--border);
+  border-bottom: 2px solid var(--border);
+}
+
+.growth span {
+  flex: 1;
+  background: var(--deck-bar-4);
+  border-radius: 3px 3px 0 0;
+}
+
+.growth span.jump {
+  background: var(--deck-bar-1);
+}
+
+.growth-caption {
+  font-size: 16px;
+  color: var(--text-3);
+}
+
+/* Visual: tools table. */
+.reveal .tool-table {
+  display: table;
+  width: 100%;
+  margin: 0;
+  font-size: 17px;
+}
+
+.reveal .tool-table th,
+.reveal .tool-table td {
+  padding: 5px 8px;
+}
+
+/* Visual: install steps. */
+.steps {
+  margin: 0;
+  padding-left: 1.4em;
+  font-size: 22px;
+  line-height: 1.5;
+  color: var(--text-2);
+}
+
+/* Title and closing slides. */
+.title-slide .slide-frame,
+.closing-slide .slide-frame {
+  justify-content: center;
+  border-left: 12px solid var(--accent);
+}
+
+.title-slide h1 {
+  font-size: 64px;
+  color: var(--text);
+}
+
+.title-slide .subtitle {
+  margin-top: 20px;
+  font-size: 32px;
+  line-height: 1.3;
+  color: var(--text-2);
+}
+
+.title-rule {
+  width: 160px;
+  height: 3px;
+  margin: 32px 0 20px;
+  background: var(--accent);
+}
+
+.title-slide .tagline {
+  font-size: 22px;
+  color: var(--text-3);
+}
+
+.closing-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin-top: 40px;
+  list-style: none;
+  padding: 0;
+}
+
+.closing-links a {
+  display: inline-block;
+  border: 2px solid var(--accent);
+  border-radius: var(--radius);
+  padding: 10px 22px;
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.closing-links li:first-child a {
+  background: var(--accent);
+  color: var(--deck-slide);
+}
+
+/* Thesis slide (2): you already control → the number does not say → Log Hub answers. */
+.thesis-cols {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 40px;
+  margin-top: 48px;
+}
+
+.thesis-col {
+  position: relative;
+  border-radius: var(--radius);
+  min-height: 400px;
+  padding: 24px 26px;
+  border: 2px solid var(--text-2);
+}
+
+.thesis-col + .thesis-col::before {
+  content: "→";
+  position: absolute;
+  left: -32px;
+  top: 45%;
+  font-size: 26px;
+  color: var(--text-3);
+}
+
+.thesis-col.questions {
+  border: 2px dashed var(--border);
+  background: var(--surface);
+}
+
+.thesis-col.answers {
+  border-color: var(--accent);
+  background: var(--deck-accent-soft);
+}
+
+.thesis-col h3 {
+  font-size: 28px;
+  color: var(--text);
+}
+
+.thesis-col.answers h3 {
+  color: var(--accent);
+}
+
+.thesis-col .sub {
+  font-size: 19px;
+  color: var(--text-3);
+}
+
+.thesis-col ul {
+  margin-top: 20px;
+  padding-left: 1.1em;
+  font-size: 25px;
+  line-height: 1.45;
+  color: var(--text-2);
+}
+
+.thesis-col.questions ul {
+  list-style: none;
+  padding-left: 0;
+}
+
+.thesis-figures {
+  margin-top: 14px;
+  list-style: none;
+  padding: 0;
+  font-size: 26px;
+  line-height: 1.6;
+  font-variant-numeric: tabular-nums;
+}
+
+.thesis-figures .big {
+  font-size: 48px;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.thesis-ok {
+  margin-top: 10px;
+  font-size: 17px;
+  color: var(--deck-ok);
+}
+
+.thesis-label {
+  margin-top: 22px;
+}
+
+/* Narrow screens (< 600 px; index.html switches to a 480 x 900 slide): columns stack. */
+html.deck-narrow .slide-frame {
+  padding: 28px 24px 56px;
+}
+
+html.deck-narrow .slide-footer {
+  left: 24px;
+  right: 24px;
+  font-size: 14px;
+}
+
+html.deck-narrow .reveal .slide-number {
+  right: 90px;
+  font-size: 14px;
+}
+
+html.deck-narrow .slide-head {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+html.deck-narrow .block-marker {
+  font-size: 15px;
+}
+
+html.deck-narrow .pills li {
+  min-width: 30px;
+  font-size: 13px;
+  line-height: 20px;
+}
+
+html.deck-narrow .headline {
+  margin-top: 16px;
+  font-size: 28px;
+}
+
+html.deck-narrow .slide-cols,
+html.deck-narrow .thesis-cols {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  margin-top: 16px;
+}
+
+html.deck-narrow .thesis-col + .thesis-col::before {
+  content: none;
+}
+
+html.deck-narrow .thesis-col {
+  min-height: 0;
+  padding: 10px 14px;
+}
+
+html.deck-narrow .thesis-col ul,
+html.deck-narrow .thesis-figures {
+  margin-top: 6px;
+  font-size: 16px;
+}
+
+html.deck-narrow .thesis-figures .big {
+  font-size: 22px;
+}
+
+html.deck-narrow .slide-body ul {
+  font-size: 19px;
+}
+
+html.deck-narrow .slide-body li + li {
+  margin-top: 8px;
+}
+
+html.deck-narrow .key-box {
+  margin-top: 14px;
+  padding: 10px 14px;
+}
+
+html.deck-narrow .key-figure {
+  font-size: 44px;
+}
+
+html.deck-narrow .key-caption {
+  font-size: 16px;
+}
+
+html.deck-narrow .visual-slot.deck-visual {
+  width: 100%;
+  height: auto;
+  min-height: 160px;
+}
+
+html.deck-narrow .title-slide h1 {
+  font-size: 40px;
+}
+
+html.deck-narrow .title-slide .subtitle {
+  font-size: 22px;
+}
+
+html.deck-narrow .closing-links a {
+  font-size: 18px;
+  padding: 8px 14px;
+}
+
+.reveal .slide-number a {
+  text-decoration: none;
+}
+
+.deck-visual .illustrative {
+  align-self: flex-start;
+  margin-top: auto;
+}
+
+/* reveal.js print layout sizes sections to their content; keep the full 1280 x 720 paper. */
+html.print-pdf .slide-frame {
+  height: 720px;
+}
+
+/* Real product screenshots (site/assets/shots/, demo repository, English UI only). */
+.slide-cols:has(.deck-shot) {
+  grid-template-columns: minmax(0, 1fr) 600px;
+  gap: 36px;
+}
+
+.reveal .shot.deck-shot {
+  margin: 0;
+  width: 600px;
+  padding: 6px;
+}
+
+.reveal .shot.deck-shot img {
+  max-height: 400px;
+  object-fit: cover;
+  object-position: top left;
+}
+
+.reveal .shot-pair img.shot-crop-top {
+  aspect-ratio: 810 / 190;
+  max-height: none;
+}
+
+.reveal .shot-gap {
+  margin: 4px 0;
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 14px;
+  color: var(--accent-2);
+}
+
+.reveal .shot figcaption {
+  font-size: 13px;
+}
+
+html.deck-narrow .slide-cols:has(.deck-shot) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+html.deck-narrow .reveal .shot.deck-shot {
+  width: 100%;
+}
+
+/* Slide 9: anomalies board (dataset `anomalies`, styled like the Home readout). */
+.slide-cols:has(.anomaly-board) {
+  grid-template-columns: minmax(0, 1fr) 600px;
+  gap: 36px;
+}
+
+.visual-slot.deck-visual.anomaly-board {
+  width: 600px;
+  height: auto;
+  gap: 8px;
+  padding: 14px 18px;
+  background-color: var(--deck-slide);
+  background-image: repeating-linear-gradient(0deg, var(--scan) 0 1px, transparent 1px 3px);
+  font-family: var(--mono);
+}
+
+.anomaly-board .board-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  color: var(--text-3);
+}
+
+.anomaly-board .board-head .illustrative {
+  margin-top: 0;
+}
+
+.anomaly-board .board-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-2);
+}
+
+.anomaly-board ul.anomalies {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.anomaly-board .anomalies li {
+  display: grid;
+  grid-template-columns: 84px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+  padding: 7px 0;
+  border-top: 1px dashed var(--border);
+  font-size: 16px;
+  line-height: 1.3;
+}
+
+.anomaly-board .anomalies small {
+  display: block;
+  font-size: 13px;
+  color: var(--text-3);
+  font-weight: 400;
+}
+
+.anomaly-board .anomalies b {
+  text-align: right;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.anomaly-board .lvl {
+  justify-self: start;
+  font-size: 12px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  border: 1px solid currentColor;
+  padding: 0 6px;
+}
+
+.anomaly-board .lvl-critical .lvl { color: #a3362a; }
+.anomaly-board .lvl-warning .lvl { color: var(--accent-2); }
+.anomaly-board .lvl-info .lvl { color: var(--text-3); }
+
+@media (prefers-color-scheme: dark) {
+  :root:not(.print-pdf) .anomaly-board .lvl-critical .lvl { color: #e07a6c; }
+}
+
+html.deck-narrow .slide-cols:has(.anomaly-board) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+html.deck-narrow .visual-slot.deck-visual.anomaly-board {
+  width: 100%;
+}
+
+/* Slide 12: "sealed by default" board (same look as the anomalies board, no dataset figures). */
+.slide-cols:has(.seal-board) {
+  grid-template-columns: minmax(0, 1fr) 600px;
+  gap: 36px;
+}
+
+.visual-slot.deck-visual.seal-board {
+  width: 600px;
+  height: auto;
+  gap: 8px;
+  padding: 14px 18px;
+  background-color: var(--deck-slide);
+  background-image: repeating-linear-gradient(0deg, var(--scan) 0 1px, transparent 1px 3px);
+  border: 1px solid var(--accent);
+  border-left-width: 4px;
+  font-family: var(--mono);
+}
+
+.seal-board .board-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--accent);
+}
+
+.seal-board ul.seal {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.seal-board .seal li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  padding: 8px 0;
+  border-top: 1px dashed var(--border);
+  font-size: 17px;
+  line-height: 1.3;
+  color: var(--text-2);
+}
+
+.seal-board .seal b {
+  text-align: right;
+  font-weight: 600;
+  color: var(--accent);
+}
+
+.seal-board .seal small {
+  display: block;
+  font-size: 13px;
+  font-weight: 400;
+  color: var(--text-3);
+}
+
+html.deck-narrow .slide-cols:has(.seal-board) {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+html.deck-narrow .visual-slot.deck-visual.seal-board {
+  width: 100%;
+}
+
+.seal-board .footnote {
+  margin: 4px 0 0;
+  font-size: 12px;
+  line-height: 1.35;
+  color: var(--text-3);
+}
+
+.reveal sup {
+  font-size: 0.6em;
+  vertical-align: super;
+}
+
+/* Mosaic slides (4b, 8b): questions on the left, real charts as a 2 × 2 grid on the right. */
+.mosaic-slide .slide-cols {
+  grid-template-columns: minmax(0, 1fr) 700px;
+  gap: 32px;
+  margin-top: 24px;
+}
+
+.mosaic-slide ol.questions {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.mosaic-slide ol.questions li {
+  display: flex;
+  gap: 14px;
+  margin: 0 0 22px;
+  font-size: 24px;
+  line-height: 1.35;
+}
+
+.mosaic-slide .q-no {
+  flex: none;
+  display: inline-block;
+  min-width: 1.6em;
+  height: 1.6em;
+  line-height: 1.6em;
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 0.8em;
+  font-weight: 700;
+  color: var(--deck-slide);
+  background: var(--accent);
+  border-radius: var(--radius);
+}
+
+.mosaic {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+
+.mosaic .tile {
+  margin: 0;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  padding: 4px;
+}
+
+.mosaic .tile img {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  object-position: top left;
+  border: 1px solid var(--border-soft);
+}
+
+.mosaic .tile-tree img {
+  object-position: left center;
+}
+
+.mosaic .tile figcaption {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 2px 1px;
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--text-2);
+}
+
+.mosaic .tile .q-no {
+  font-size: 12px;
+}
+
+html.deck-narrow .mosaic-slide .slide-cols {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+html.deck-narrow .mosaic-slide ol.questions li {
+  font-size: 18px;
+}
+
+/* Title and closing: "open source by DataArt" line. */
+.title-slide .byline,
+.closing-slide .closing-sub {
+  margin: 18px 0 0;
+  font-family: var(--mono);
+  font-size: 18px;
+  letter-spacing: 0.02em;
+  color: var(--accent-2);
+}
+
+.closing-slide .closing-sub {
+  margin: 0 0 24px;
+}
+
+.seal-board .footnote code {
+  font-size: 1em;
+  padding: 0 0.2em;
+}
+
+.seal-board .seal li {
+  padding: 5px 0;
+  font-size: 15px;
+}

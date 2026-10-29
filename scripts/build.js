@@ -6,6 +6,7 @@
 // build:client (vite → client/dist), build:server (ncc → dist) and the hooks-installer branch
 // (→ server/src/public/static) write to three disjoint trees, so they are run concurrently here.
 // Everything that consumes their output runs afterwards, in one process (scripts/build-assets.js).
+// Before the parallel block, build:help generates client/public/help/*.md from user-docs/.
 //
 // NOTE ON CONVENTIONS: .claude/skills/nodejs-script mandates synchronous child processes
 // (execFileSync/spawnSync). That rule is incompatible with the entire point of this script —
@@ -47,6 +48,10 @@ function runSeq(scripts) {
 async function main() {
   // dist/ must be gone before ncc writes into it.
   await run('build:clean');
+
+  // client/public/help/*.md is generated from user-docs/ and must exist before vite copies
+  // client/public; the client's own prebuild re-runs it harmlessly.
+  await run('build:help');
 
   await Promise.all([
     runSeq(['install:hooks-installer', 'build:hooks-installer']),

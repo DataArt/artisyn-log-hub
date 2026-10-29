@@ -1,0 +1,88 @@
+<section class="prose questions-page" aria-labelledby="q-title">
+  <p class="eyebrow">For engineering and security leads</p>
+  <h1 id="q-title">Questions you will ask</h1>
+  <p class="lead">Straight answers about where the data goes, who can read it and what Log Hub does
+    not do. Each answer links to the document that has the details.</p>
+
+  <h2 id="data">Data and where it goes</h2>
+  <dl class="qa">
+    <dt>Where does the data go? Does DataArt see any of it?</dt>
+    <dd>To a server you run — on one machine, on your LAN or behind your VPN. DataArt runs no hosted
+      service and receives nothing. Sessions are stored in your Postgres.
+      <a href="docs/install-server.html">Install the server</a></dd>
+
+    <dt>What exactly does the hook collect?</dt>
+    <dd>The full Claude Code transcript, unredacted by design: prompts, tool results, file contents
+      Claude read and command output. Plus CLAUDE.md, rules, skills, MCP configuration and the git
+      remote (credentials stripped), branch and git user. The installer shows this notice before it
+      installs. <a href="docs/data-collection.html">Data Collection &amp; Upload</a></dd>
+
+    <dt>Can we keep secrets or sensitive files out?</dt>
+    <dd>Yes, at the source: Claude Code <code>permissions.deny</code> rules keep files out of what
+      Claude can read, so they never reach a transcript. The hook itself does not redact.
+      <a href="docs/security-hardening.html">Security Hardening</a></dd>
+
+    <dt>Does anything you add call out to the internet or to the model provider?</dt>
+    <dd>The server makes two public GETs at most once a day — the model price list and the Claude
+      Code version list — and sends no data; both can be turned off. The optional post-turn analysis
+      (cost advisor, session attribution) runs <code>claude -p</code> on the developer's machine
+      through the same Claude connection the session already uses, and is switched per repository.
+      <a href="docs/server-configuration.html">Server settings</a></dd>
+
+    <dt>Does it work in an air-gapped network?</dt>
+    <dd>Yes. The app, its in-app help and every user document ship with the product; with the two
+      fetches turned off nothing leaves the host.</dd>
+  </dl>
+
+  <h2 id="access">Access</h2>
+  <dl class="qa">
+    <dt>Who can read my engineers' prompts?</dt>
+    <dd>In a restricted team (the default) members see only their own sessions, the team owner and
+      ADLC trainers see prompts, managers see analytics without prompt text. A transparent team is
+      opt-in. The admin role grants no access to session data. A member becomes visible to the team
+      only after accepting a disclosure notice. <a href="docs/trust-model.html">Trust model</a></dd>
+
+    <dt>Which sign-in methods are there? SSO?</dt>
+    <dd>Identify by email, email and password (optionally with email confirmation), or Azure
+      Entra ID, single tenant. Other identity providers are not supported today.
+      <a href="docs/authentication-modes.html">Authentication modes</a></dd>
+
+    <dt>Is there an audit trail?</dt>
+    <dd>Security events — sign-ins and their failures, sign-up, email confirmation, password reset
+      and change, account deletion — are logged as structured lines with email and user ID only.
+      There is no log of who opened which session.
+      <a href="docs/security-hardening.html">Security Hardening</a></dd>
+  </dl>
+
+  <h2 id="storage">Storage and retention</h2>
+  <dl class="qa">
+    <dt>How long is data kept?</dt>
+    <dd>The server deletes sessions older than <code>SESSION_RETENTION_DAYS</code> (default 30) — set
+      it to your policy. Deleting an account is a hard delete of the user and all of their data.</dd>
+
+    <dt>We have record-keeping obligations. Does Log Hub cover them?</dt>
+    <dd>No. Log Hub has no immutable (WORM) storage; long-term retention belongs to your backup layer.</dd>
+
+    <dt>Encryption at rest and in transit?</dt>
+    <dd>At rest: the app does not encrypt the database itself — use host or volume encryption. In
+      transit: terminate TLS at your proxy and give developers an <code>https://</code> server URL.</dd>
+  </dl>
+
+  <h2 id="scope">Scope</h2>
+  <dl class="qa">
+    <dt>Does it stop anything?</dt>
+    <dd>No. The hook only observes; it never blocks a tool call. Prevention stays in Claude Code
+      permissions.</dd>
+
+    <dt>Which assistants are supported?</dt>
+    <dd>Claude Code.</dd>
+
+    <dt>What runs on developer machines?</dt>
+    <dd>The hook: plain, readable Node.js scripts with no third-party dependencies, installed with
+      <code>npx</code> from your own server. New servers keep accepting uploads from older hooks.
+      <a href="docs/how-hook-works.html">How the hook works</a></dd>
+
+    <dt>Is it open source?</dt>
+    <dd>Yes — open source by DataArt, MIT licence. <a href="{{site:repo}}" rel="noopener noreferrer">GitHub ↗</a></dd>
+  </dl>
+</section>

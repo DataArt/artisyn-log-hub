@@ -9,6 +9,62 @@ retried later.
 
 ---
 
+## What is collected
+
+The hook sends a lot of data to the server it is configured for. Read this before you install
+it. The full description, per hook event, is in the "What is collected" section of the hook's own
+README (`README.md` in the hook package).
+
+**Full transcripts.**
+
+- The complete Claude Code transcripts of the project, **including earlier sessions** of the same
+  repository that are still on disk when the hook is installed.
+- That means every prompt, every tool input and tool result, the contents of every file Claude
+  read, and the output of every command Claude ran. Secrets that appeared in a session are
+  uploaded with it.
+- The hook does not redact transcripts.
+
+**Local context.**
+
+- `CLAUDE.md` files, rules, skills, agents and MCP server configuration of the project, plus the
+  user-level skills, plugins and MCP configs that apply to it.
+- The git remote URL (with any `user:password@` part removed) and git `user.name`.
+- Absolute paths, including the project root and transcript paths, which usually contain your OS
+  user name.
+- `logTail`: the last 50 lines of the hook's own `hook.log`, sent with each upload for
+  diagnostics.
+
+**Other channels.**
+
+- **Post-turn analysis.** When the server asks, the hook runs a local `claude -p` (cost advisor
+  and session attribution) with your Claude Code account and sends the result — see
+  [Post-turn analysis](#post-turn-analysis).
+- **OTEL export.** The installer turns on Claude Code's OpenTelemetry export to a loopback
+  receiver, with `OTEL_LOG_TOOL_DETAILS=1` (tool names and parameters). The hook uploads what it
+  receives.
+- **Code inventory.** The number of git-tracked files and lines (`trackedFiles`, `trackedLines`).
+- **Session attribution.** A short classification of what the session was about.
+- **MCP probe.** On each `Stop`, the hook starts each configured stdio MCP server briefly to list
+  its tools, waiting at most `mcpProbeTimeoutMs` (default 3000 ms) per server.
+
+**How to stop sending.** Remove `apiKey` from `.artisyn/config/log-hub.local.json` or `serverUrl`
+from `.artisyn/config/log-hub.json`; the hook then records locally but uploads nothing. Or
+uninstall the hook (`npx <server-origin>/static/artisyn-hooks-installer.tgz uninstall`).
+
+**Who operates the server, retention and rights.**
+
+- The data goes to whichever server `serverUrl` points at. Whoever runs that server (usually your
+  employer or team) controls the data and is responsible for it. This project runs no hosted
+  service and receives none of it.
+- The server deletes sessions older than `SESSION_RETENTION_DAYS` (default 30). Users can delete
+  their own account, which removes their data.
+- Requests to access, correct or delete personal data go to the server operator.
+- **Employers:** tell employees before you install the hook in their projects. Explain what is
+  collected, who can see it and how long it is kept, and check that this fits your employment and
+  data-protection rules.
+
+See also the [Trust model](trust-model.md).
+
 ## What the hook uploads
 
 The hook collects and uploads four kinds of data:
@@ -37,11 +93,7 @@ The hook installer (`artisyn-hooks` 1.0.66 and later) prints a **data collection
 every successful install and upgrade. It names the server the hook will upload to and summarizes
 what is sent — full transcripts, git metadata without credentials, project context and the
 Claude Code OpenTelemetry records — before the next Claude Code session starts uploading. The
-full list is in the "What is collected" section of the hook README.
-
-To stop sending data, remove `serverUrl` / `apiKey` from the hook configuration
-(`.artisyn/config/log-hub.json` and `log-hub.local.json`) or uninstall the hook with
-`npx artisyn-hooks uninstall`.
+full list, and how to stop sending, is in [What is collected](#what-is-collected).
 
 ### Environment snapshot
 

@@ -95,7 +95,7 @@ Route `PATCH users/:id/email` on the `api/v1/admin` controller
 ## Onboarding and data-collection consent
 
 - Before the app renders, every signed-in user must accept a **non-closable data-collection
-  notice** (`client/public/help/data-collection-notice.md`). How the gate replaces the app shell is
+  notice** (`user-docs/data-collection-notice.md`, served from the generated `/help/data-collection-notice.md`). How the gate replaces the app shell is
   described in [client-routing-and-layout.md](client-routing-and-layout.md) § "The data-collection
   consent gate".
 - Acceptance is one row in the generic per-user `user_settings` key/value store

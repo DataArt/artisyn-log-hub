@@ -21,8 +21,8 @@ installed `package.json` under `node_modules` (not from a registry lookup or fro
 every missing or non-obvious value was resolved by reading the package's actual `LICENSE` file.
 The PostgreSQL version was read from a live `select version()`.
 
-The user-facing version of this inventory is the **Technical Info → Third-Party Components** help
-article (`client/public/help/third-party-components.md`); keep the two in sync.
+The user-facing version of this inventory is the **Data and security → Third-Party Components** help
+article (`user-docs/third-party-components.md`, also published on the site); keep the two in sync.
 
 ---
 
@@ -104,6 +104,8 @@ Bundled into the SPA served from `dist/public`, subject to tree-shaking.
 | `react-resizable-panels` | 4.11.2 | MIT | Drag-resizable split panes in the session view |
 | `react-markdown` | 10.1.0 | MIT | Markdown rendering — prompts, replies, help articles |
 | `remark-gfm` | 4.0.1 | MIT | GFM tables/task-lists for the markdown renderer |
+| `rehype-slug` | 6.0.0 | MIT | Heading ids in help articles (anchor links) |
+| `github-slugger` | 2.0.0 | ISC | Heading text → id slugs (dependency of `rehype-slug`) |
 | `jszip` | 3.10.1 | (MIT OR GPL-3.0-or-later) — MIT elected, see §5 | Client-side zip building for session/statistics export |
 | `@react-pdf/renderer` | 4.5.1 | MIT | PDF report generation |
 
@@ -129,6 +131,29 @@ Both are delivered to users and installed into their own projects.
 |---|---|---|
 | `hook/` (bundled hook version 2.17.2) | **None** | Captures Claude Code session events in a user's project and uploads them. Deliberately dependency-free: every `require` in `hook/.claude/telemetry_tool/*.js` resolves to a Node built-in (`child_process`, `crypto`, `fs`, `http`, `https`, `net`, `os`, `path`, `zlib`) — that is what makes the hook installable into any project without an `npm install`. |
 | `artisyn-hooks-installer/` (1.0.57) | **None** | The `npx` installer that places the hook into a project. Ships as `dist/index.js` only. |
+
+### 4a. Documentation site renderer (build tooling, not shipped)
+
+Root `devDependencies` used only by `scripts/site/build-site.mjs` (`npm run build:site`) to
+pre-render `user-docs/` into the static GitHub Pages site. They never reach `dist/`, the image or
+a user's project; they are listed here because the site they build is published.
+
+| Package | Version | License | Role |
+|---|---|---|---|
+| `unified` | 11.0.5 | MIT | Processor pipeline for the markdown → HTML render |
+| `remark-parse` | 11.0.0 | MIT | Markdown parser (mdast) |
+| `remark-gfm` | 4.0.1 | MIT | GFM tables/task-lists in the site pages |
+| `remark-rehype` | 11.1.2 | MIT | mdast → hast conversion |
+| `rehype-slug` | 6.0.0 | MIT | Heading ids (github-slugger), same anchors as the in-app help |
+| `rehype-stringify` | 10.0.1 | MIT | hast → HTML serialisation |
+
+The site's "Why Log Hub" deck (`site/deck/index.html`) loads one more component in the visitor's
+browser — not an npm dependency, not in `dist/`, the image or the in-app help:
+
+| Component | Version | License | Role |
+|---|---|---|---|
+| reveal.js (from jsDelivr, pinned version + SRI `sha384`) | 5.2.1 | MIT | Slide engine of the site deck only (`reset.css`, `reveal.css`, `reveal.js`, notes plugin) |
+| mermaid (from jsDelivr, pinned version + SRI `sha384`) | 12.2.0 | MIT | Renders the architecture diagram on the site docs pages only (`site/diagrams/*.mmd`); the app never loads it |
 
 ---
 
@@ -166,7 +191,8 @@ The inventory is derived, not hand-maintained. To refresh it after a dependency 
 5. **Infrastructure** — re-read the `FROM` lines and any global `npm install -g` calls in
    `Dockerfile`.
 6. **Sync the help article** — mirror any change into
-   `client/public/help/third-party-components.md` (the user-facing Technical Info page).
+   `user-docs/third-party-components.md` (the user-facing Data and security page; the in-app copy in
+   `client/public/help/` is generated from it).
 
 Write throwaway scripts under `tmp/` (gitignored), per `CLAUDE.md`. Node.js or PowerShell only.
 

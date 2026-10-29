@@ -1,29 +1,18 @@
-# Getting Started
+# Your first session
 
 ## Prerequisites
 
 Before using Artisyn Log Hub, make sure you have:
 
 - **Node.js 18+** installed on your machine
-- A running instance of Artisyn Log Hub (server + client)
+- A running instance of Artisyn Log Hub — see [Install the server](install-server.md)
 - Claude Code CLI installed and configured
 
 ## Installing the Hook
 
-The Artisyn Log Hub hook captures Claude Code session data automatically.
+Install the hook into your project as described in [Install the hook](../hook/INSTALL_HOOK.md).
 
-1. Open **My API Keys** in the left sidebar — the **Install** tab opens first.
-2. Copy the hook installation command shown on the page.
-3. Run the command in your project's root directory — it installs the hook into your Claude Code
-   configuration.
-4. Add your API key and the server URL as shown in the Install tab's steps 2 and 3.
-
-For verification steps and troubleshooting, see **Connecting a Repository** in the Reference
-section.
-
-After installation, the hook fires automatically whenever a Claude Code session starts or ends.
-
-## Your First Session
+## Record a session
 
 Once the hook is installed:
 

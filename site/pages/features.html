@@ -1,0 +1,212 @@
+<div class="prose">
+  <p class="eyebrow">Features</p>
+  <h1>Six questions Log Hub answers</h1>
+  <p class="lead">Knowing what AI coding costs is right and useful. Each block below starts from the
+    next question — the one the number alone cannot answer — and shows what Log Hub gives you for it
+    and where to find it in the app.</p>
+  <ul class="toc-inline" aria-label="Blocks on this page">
+    <li><a href="#a">A · Why does it cost this much?</a></li>
+    <li><a href="#b">B · Does my harness work as designed?</a></li>
+    <li><a href="#c">C · What does it really bring?</a></li>
+    <li><a href="#d">D · What happens across the team?</a></li>
+    <li><a href="#e">E · Does this tool work?</a></li>
+    <li><a href="#f">F · How do I run it?</a></li>
+  </ul>
+</div>
+
+<section class="feature" id="a" aria-labelledby="a-title">
+  <div>
+    <h2 id="a-title"><span class="block-marker">A</span>Why does it cost this much?</h2>
+    <dl>
+      <dt>What it shows</dt>
+      <dd>
+        <ul>
+          <li>A per-turn token breakdown — input, output, cache read, cache write (5 min and 1 h),
+            vision — priced from Log Hub's own model price table.</li>
+          <li>The Context Growth chart with a drill-down into every step: what the agent read, called
+            and wrote as the context grew.</li>
+          <li>Summary findings that name the cost drivers: <code>context-compression</code>,
+            <code>context-ceiling-pressure</code>, <code>low-cache-read-ratio</code>,
+            <code>change-surface-spread</code>, <code>change-surface-modules</code>,
+            <code>change-surface-single-file-folders</code>, <code>claude-version</code>.</li>
+          <li>The cost of the whole session tree — the root session, its sub-agents and workflow
+            agents — not only the main conversation.</li>
+          <li>The Turn-End Cost Advisor: an LLM review of the cost after each turn.</li>
+          <li>Statistics, Bash and tool-call views: success, error and denial rates, heavy Bash
+            commands, files read, changed and run.</li>
+        </ul>
+      </dd>
+      <dt>Where in the app</dt>
+      <dd>Session view → Summary, Charts (Context Growth, Context usage, Agent tree), Statistics,
+        Bash, Advisor tabs. See <a href="docs/cost-and-context.html">Understanding Cost &amp;
+        Context</a>.</dd>
+    </dl>
+  </div>
+  <figure class="figure-block" aria-labelledby="a-figure-title">
+    <span class="illustrative">Illustrative example</span>
+    <figcaption id="a-figure-title">A team of {{ds:team.developers}} developers, {{ds:team.period}}</figcaption>
+    <table>
+      <tbody>
+        <tr><td>Per month ({{ds:team.workingDays}} working days)</td><td class="num">{{ds:monthly.total|usd}}</td></tr>
+        <tr><td>Per day ({{ds:daily.sessions}} sessions)</td><td class="num">{{ds:daily.total|usd}}</td></tr>
+        <tr><td>Per session</td><td class="num">{{ds:session.total|usd}}</td></tr>
+      </tbody>
+    </table>
+    <div class="key-figure">{{ds:session.contextRereadPct|pct}}</div>
+    <p>of that session's tokens ({{ds:session.tokens.cacheRead}}) were cache reads: the context
+      read again on every turn. Sub-agents alone cost {{ds:session.parts.subAgents|usd}}.</p>
+  </figure>
+</section>
+
+<section class="feature" id="b" aria-labelledby="b-title">
+  <div>
+    <h2 id="b-title"><span class="block-marker">B</span>Does my harness work as designed?</h2>
+    <dl>
+      <dt>What it shows</dt>
+      <dd>
+        <ul>
+          <li>The system context — CLAUDE.md, rules, skills, agents, MCP servers — and its size in
+            tokens: the "tax" every turn pays before any work starts.</li>
+          <li>Harness usage: which skills, rules, workflows, MCP servers and tools the session tree
+            actually used, and how often. A harness snapshot is kept per session, so you can compare
+            sessions before and after a harness change.</li>
+          <li>Knowledge-base usage (OKF): index or search entry, never-read articles, and the
+            signals <code>always_read</code>, <code>kb_flood</code> and <code>coarse_article</code>
+            with verdicts.</li>
+          <li>Permission attribution: where the agent stumbles on permissions — tool calls that asked for permission or were denied.</li>
+          <li>The Tools/MCP tab: every MCP call and every monitored CLI tool call as an operation
+            tree with calls and error %, call details, and the usefulness signals
+            <code>empty</code>, <code>retried</code> and <code>opened file</code>.</li>
+        </ul>
+      </dd>
+      <dt>Where in the app</dt>
+      <dd>Session view → Charts (Context usage), Harness usage, OKF and Tools/MCP tabs; repository
+        → OKF and Tools/MCP tabs. See <a href="docs/session-log.html">Session Log</a>.</dd>
+    </dl>
+  </div>
+  <figure class="shot"><img src="assets/shots/context-usage.png" alt="Context Usage: system context split into system files, MCP definitions, skills and built-in tools, next to tool results and conversation history" loading="lazy"><figcaption>Session → Charts → Context Usage · real screen, demo repository</figcaption></figure>
+</section>
+
+<section class="feature" id="c" aria-labelledby="c-title">
+  <div>
+    <h2 id="c-title"><span class="block-marker">C</span>What does it really bring?</h2>
+    <dl>
+      <dt>What it shows</dt>
+      <dd>
+        <ul>
+          <li>Change Surface: which files, folders and modules a session tree touched, and how
+            concentrated the change was.</li>
+          <li>Productivity counters: diff lines, commits, pull requests, cost per line, lines per
+            hour.</li>
+          <li>Session Attributes: labels an LLM extracts from each session (task type, outcome, …),
+            usable as a group-by for every chart and report.</li>
+        </ul>
+      </dd>
+      <dt>Where in the app</dt>
+      <dd>Session view → Change surface tab; repository → Analytics and Reports; repository
+        Settings → Session Attributes.</dd>
+    </dl>
+  </div>
+  <figure class="shot"><img src="assets/shots/change-surface.png" alt="Change Surface tab: 14 files in 9 folders, concentration 20 of 100, lines added and removed" loading="lazy"><figcaption>Session → Change surface · real screen, demo repository</figcaption></figure>
+</section>
+
+<section class="feature" id="d" aria-labelledby="d-title">
+  <div>
+    <h2 id="d-title"><span class="block-marker">D</span>What happens across the team?</h2>
+    <dl>
+      <dt>What it shows</dt>
+      <dd>
+        <ul>
+          <li>Repository Analytics: work time, cost, files, vision, MCP and cache ratio by hour and
+            by day, grouped by user, branch or session attribute; Top-N rankings.</li>
+          <li>17 reports, every one exportable to PDF — Executive Summary, Cost by Branch, Cost by
+            User, Token Usage, Tool Analytics, Harness Usage, Claude Code Version Usage, Cache Read
+            Ratio, Change Surface, Attribute Breakdown and more.</li>
+          <li>Anomalies: ranking outliers, a low cache-read ratio, <code>kb_flood</code>, lagging
+            Claude Code versions, unusual cost per line, per-tool error spikes, monitored tools that
+            are never called, a high <code>retried</code> rate.</li>
+          <li>Teams with transparent or restricted access, and manager and ADLC trainer roles.</li>
+        </ul>
+      </dd>
+      <dt>Where in the app</dt>
+      <dd>Repository → Analytics, Reports and Tools/MCP tabs; Admin → Teams. See
+        <a href="docs/analytics-reports.html">Analytics &amp; Reports</a>.</dd>
+    </dl>
+  </div>
+  <figure class="shot"><img src="assets/shots/analytics.png" alt="Repository analytics: work time per hour, stacked by session, coloured by share of the period" loading="lazy"><figcaption>Repository → Analytics · real screen, demo repository</figcaption></figure>
+</section>
+
+<section class="feature" id="e" aria-labelledby="e-title">
+  <div>
+    <h2 id="e-title"><span class="block-marker">E</span>Does this tool work — for its author and for the admin who rolled it out?</h2>
+    <dl>
+      <dt>What it shows</dt>
+      <dd>
+        <ul>
+          <li>For tool authors: how the agent really uses your MCP server or CLI — arguments, errors,
+            empty answers, truncated output — with no integration on the tool side.</li>
+          <li>Example: you connected a popular documentation MCP server, {{ds:tools.0.name}}. Do you
+            know what it actually advised? Without monitoring you can only hope it brought some
+            benefit. Log Hub keeps every call — the library and question the agent asked and the docs
+            that came back — so you can read what it really told the agent.</li>
+          <li>For admins and team leads: is the tool called at all, by whom, how often, with what
+            error %; does the agent trust its output (<code>opened file</code>) or abandon it
+            (<code>retried</code>) — the basis to keep, tune or remove it.</li>
+        </ul>
+      </dd>
+      <dt>Where in the app</dt>
+      <dd>Repository → Tools/MCP tab; the CLI tools to monitor are set in repository Settings →
+        Monitored Tools.</dd>
+    </dl>
+  </div>
+  <figure class="figure-block" aria-labelledby="e-figure-title">
+    <span class="illustrative">Illustrative example</span>
+    <figcaption id="e-figure-title">Tools of the example team, {{ds:team.period}}</figcaption>
+    <table>
+      <thead>
+        <tr>
+          <th scope="col">Tool</th>
+          <th scope="col" class="num">Calls</th>
+          <th scope="col" class="num">Errors</th>
+          <th scope="col" class="num">Retried</th>
+          <th scope="col" class="num">Opened file</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr><td>{{ds:tools.0.name}} ({{ds:tools.0.kind}})</td><td class="num">{{ds:tools.0.calls}}</td><td class="num">{{ds:tools.0.errorPct|pct}}</td><td class="num">{{ds:tools.0.retriedPct|pct}}</td><td class="num">{{ds:tools.0.openedFilePct|pct}}</td></tr>
+        <tr><td>{{ds:tools.1.name}} ({{ds:tools.1.kind}})</td><td class="num">{{ds:tools.1.calls}}</td><td class="num">{{ds:tools.1.errorPct|pct}}</td><td class="num">{{ds:tools.1.retriedPct|pct}}</td><td class="num">{{ds:tools.1.openedFilePct|pct}}</td></tr>
+        <tr><td>{{ds:tools.2.name}} ({{ds:tools.2.kind}})</td><td class="num">{{ds:tools.2.calls}}</td><td class="num">{{ds:tools.2.errorPct|pct}}</td><td class="num">{{ds:tools.2.retriedPct|pct}}</td><td class="num">{{ds:tools.2.openedFilePct|pct}}</td></tr>
+        <tr><td>{{ds:tools.3.name}} ({{ds:tools.3.kind}})</td><td class="num">{{ds:tools.3.calls}}</td><td class="num">—</td><td class="num">—</td><td class="num">—</td></tr>
+      </tbody>
+    </table>
+    <p>Each of the {{ds:tools.0.calls}} {{ds:tools.0.name}} calls opens with the question and the
+      answer. {{ds:tools.3.name}} is monitored but never called — a candidate to remove.</p>
+  </figure>
+</section>
+
+<section class="feature" id="f" aria-labelledby="f-title">
+  <div>
+    <h2 id="f-title"><span class="block-marker">F</span>How do I run it?</h2>
+    <dl>
+      <dt>What it shows</dt>
+      <dd>
+        <ul>
+          <li>Self-hosted: Docker and Postgres, a one-command install; your data stays in-house.</li>
+          <li>The hook installs into a repository via <code>npx</code> and captures the full session
+            transcript by design.</li>
+          <li>Backward compatible: a new server keeps accepting uploads from older hooks.</li>
+          <li>Session export and import between Log Hub installations.</li>
+        </ul>
+      </dd>
+      <dt>Where to start</dt>
+      <dd><a href="docs/install-server.html">Install the server</a> ·
+        <a href="docs/install-hook.html">Install the hook</a> ·
+        <a href="docs/getting-started.html">Your first session</a></dd>
+    </dl>
+  </div>
+  <ol class="install-steps">
+    <li><span>01</span>Install the server — Docker + Postgres, one command</li>
+    <li><span>02</span>Install the hook in a repository — <code>npx</code></li>
+    <li><span>03</span>Work as usual, then open your first session</li>
+  </ol>
+</section>

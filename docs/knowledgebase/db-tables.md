@@ -1209,7 +1209,7 @@ Known setting names (all client-owned):
 
 | `setting_name` | Written by | Value shape |
 |---|---|---|
-| `dataCollectionNotice` | `client/src/viewer/components/DataCollectionConsentScreen.tsx` | `{"noticeHash":"<8 hex>","acceptedAt":"<ISO 8601>"}` — the hash of the notice text the user accepted, so editing `client/public/help/data-collection-notice.md` re-asks everyone once |
+| `dataCollectionNotice` | `client/src/viewer/components/DataCollectionConsentScreen.tsx` | `{"noticeHash":"<8 hex>","acceptedAt":"<ISO 8601>"}` — the hash of the notice text the user accepted, so editing `user-docs/data-collection-notice.md` re-asks everyone once |
 
 ### upload_queue
 

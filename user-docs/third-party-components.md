@@ -79,6 +79,8 @@ The browser application: session browser, log viewer, analytics and reports.
 | `react-day-picker` | 10.0.1 | MIT | Calendar control for date-range pickers. |
 | `react-markdown` | 10.1.0 | MIT | Renders markdown — prompts, assistant replies and these help articles. |
 | `remark-gfm` | 4.0.1 | MIT | GitHub-flavored markdown support (tables, task lists) for the renderer above. |
+| `rehype-slug` | 6.0.0 | MIT | Adds ids to help-article headings so links can jump to a section. |
+| `github-slugger` | 2.0.0 | ISC | Turns heading text into those ids (used by `rehype-slug`). |
 | `jszip` | 3.10.2 | MIT (dual-licensed MIT OR GPL-3.0-or-later; used under MIT) | Builds the zip files for in-browser session and statistics export. |
 | `@react-pdf/renderer` | 4.5.1 | MIT | Generates PDF reports. |
 

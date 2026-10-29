@@ -116,7 +116,7 @@ export interface ScreenRow {
   screenshot?: boolean;
 }
 
-const HELP = 'client/public/help';
+const HELP = 'user-docs';
 const ALL_MODES: RegistryMode[] = ['a', 'b', 'c'];
 const PASSWORD_MODES: RegistryMode[] = ['b', 'c'];
 const A: RegistryMode[] = ['a'];
@@ -147,9 +147,10 @@ const ANON_ROWS: ScreenRow[] = [
     modes: A,
     title: 'Login (auth mode none: e-mail only)',
     expectText: 'Enter your email to continue',
+    // authentication-modes.md has no H2: the whole page is the mode table.
     docRef: {
-      file: `${HELP}/security-hardening.md`,
-      heading: '3.1 Authentication modes (`AUTH_MODE`)',
+      file: `${HELP}/authentication-modes.md`,
+      heading: 'Authentication modes',
     },
     screenshot: true,
   },
@@ -310,8 +311,8 @@ const ADMIN_ROWS: ScreenRow[] = (
       title: 'Admin: Auth',
       expectText: 'Other modes',
       docRef: {
-        file: `${HELP}/security-hardening.md`,
-        heading: '3.1 Authentication modes (`AUTH_MODE`)',
+        file: `${HELP}/authentication-modes.md`,
+        heading: 'Authentication modes',
       },
     },
     {
@@ -459,8 +460,8 @@ const OWNER_REPO_ROWS: ScreenRow[] = (
       title: 'API keys: Install',
       expectText: 'Full Auto Install',
       docRef: {
-        file: `${HELP}/connect-repository.md`,
-        heading: 'Step 1 — Install the hook',
+        file: 'hook/INSTALL_HOOK.md',
+        heading: '1. Install',
       },
       screenshot: true,
     },
@@ -972,7 +973,13 @@ const NON_MEMBER_ROWS: ScreenRow[] = (
 // `expectText` of a help row is the article's first `#` heading (the meta-test checks it).
 // ---------------------------------------------------------------------------------------------
 const HELP_ARTICLES: Array<[string, string]> = [
-  ['getting-started', 'Getting Started'],
+  ['install-server', 'Install the server'],
+  ['install-hook', 'Install Telemetry Hook'],
+  ['getting-started', 'Your first session'],
+  ['authentication-modes', 'Authentication modes'],
+  ['server-configuration', 'Server settings'],
+  ['trust-model', 'Trust model'],
+  ['how-hook-works', 'How the Telemetry Hook Works'],
   ['data-collection-notice', 'Data Collection Notice'],
   ['connect-repository', 'Connecting a Repository'],
   ['session-list', 'Working with the Session List'],
@@ -988,6 +995,12 @@ const HELP_ARTICLES: Array<[string, string]> = [
   ['changelog', 'Changelog'],
 ];
 
+/** Pages whose source is not `user-docs/<slug>.md` (nav.json `source`, DD-2). */
+const HELP_SOURCE: Record<string, string> = {
+  'install-hook': 'hook/INSTALL_HOOK.md',
+  'how-hook-works': 'hook/HOW_HOOK_WORKS.md',
+};
+
 const HELP_ROWS: ScreenRow[] = HELP_ARTICLES.map(([slug, h1]): ScreenRow => ({
   id: `help.${slug}`,
   story: 'tour-09',
@@ -998,7 +1011,7 @@ const HELP_ROWS: ScreenRow[] = HELP_ARTICLES.map(([slug, h1]): ScreenRow => ({
   title: `Help article: ${h1}`,
   expectText: h1,
   forbidText: ['Article not found.', '<!doctype'],
-  docRef: { file: `${HELP}/${slug}.md` },
+  docRef: { file: HELP_SOURCE[slug] ?? `${HELP}/${slug}.md` },
 }));
 
 const GATE_ROWS: ScreenRow[] = [

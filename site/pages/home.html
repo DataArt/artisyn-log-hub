@@ -1,0 +1,101 @@
+<section class="hero" aria-labelledby="hero-title">
+  <div>
+    <p class="eyebrow">Self-hosted analytics for Claude Code</p>
+    <h1 id="hero-title">This session cost {{ds:session.total|usd0}}. Is that good?</h1>
+    <p class="lead">You already know what AI coding costs — per month, per day, per session — and
+      controlling that is right and useful. But a number alone is not an answer: is
+      {{ds:session.total|usd0}} a lot or a little, good or bad? How do you make it cheaper — or when
+      is it worth spending more for better quality?</p>
+    <p class="lead">Log Hub answers the next questions: why it costs that much, which factors drive
+      it, whether your harness works the way you designed it, and what your tools really bring — for
+      one session and across the team.</p>
+    <p class="actions">
+      <a class="button button-primary" href="docs/install-server.html">Get started</a>
+      <a class="button" href="deck/index.html">Why Log Hub (deck)</a>
+      <a class="button" href="{{site:repo}}" rel="noopener noreferrer">GitHub ↗</a>
+    </p>
+  </div>
+  <figure class="figure-block insight" aria-labelledby="home-figure-title">
+    <div class="insight-head">
+      <span class="illustrative">Illustrative example</span>
+      <span>{{ds:insight.turns}} turns</span>
+    </div>
+    <figcaption id="home-figure-title">One session, {{ds:session.total|usd}} — and what to do about it</figcaption>
+
+    <div class="insight-step">
+      <h3><span class="step-no">01</span>Where the money went</h3>
+      <div class="cost-bar" aria-hidden="true">
+        <span style="flex-grow: {{ds:session.parts.input}}"></span>
+        <span style="flex-grow: {{ds:session.parts.output}}"></span>
+        <span style="flex-grow: {{ds:session.parts.cacheRead}}"></span>
+        <span style="flex-grow: {{ds:session.parts.cacheWrite}}"></span>
+        <span style="flex-grow: {{ds:session.parts.subAgents}}"></span>
+      </div>
+      <ul class="cost-legend">
+        <li>input {{ds:session.parts.input|usd}}</li>
+        <li>output {{ds:session.parts.output|usd}}</li>
+        <li>cache read {{ds:session.parts.cacheRead|usd}}</li>
+        <li>cache write {{ds:session.parts.cacheWrite|usd}}</li>
+        <li>sub-agents {{ds:session.parts.subAgents|usd}}</li>
+      </ul>
+      <p class="insight-note">Cache reads are {{ds:session.contextRereadPct|pct}} of the tokens — cheap per
+        token, expensive by volume. The breakdown says where the money went — not why, and not what to
+        change.</p>
+    </div>
+
+    <div class="insight-step">
+      <h3><span class="step-no">02</span>How the harness worked</h3>
+      <ul class="readout">
+        <li><span>system context per turn</span><b>{{ds:insight.systemContextTokens}} tokens</b></li>
+        <li><span>of it, never invoked here</span><b class="flag">{{ds:insight.unusedContextPct|pct}}</b></li>
+        <li><span>MCP servers used / loaded</span><b>{{ds:insight.mcpUsed}} / {{ds:insight.mcpLoaded}}</b></li>
+        <li><span>skills used / loaded</span><b>{{ds:insight.skillsUsed}} / {{ds:insight.skillsLoaded}}</b></li>
+      </ul>
+    </div>
+
+    <div class="insight-step">
+      <h3><span class="step-no">03</span>Against the repo and the team</h3>
+      <ul class="readout">
+        <li><span>cost vs repo median</span><b class="flag">{{ds:session.total|usd}} vs {{ds:insight.repoMedianSession|usd}}</b></li>
+        <li><span>turns vs repo median</span><b class="flag">{{ds:insight.turns}} vs {{ds:insight.repoMedianTurns}}</b></li>
+        <li><span>sub-agent share vs team</span><b class="flag">{{ds:insight.subAgentsPct|pct}} vs {{ds:insight.teamSubAgentsPct|pct}}</b></li>
+      </ul>
+    </div>
+
+    <div class="insight-do">
+      <h3>→ What to do</h3>
+      <ol>
+        <li>Unload the MCP servers and skills this session never touched: <span class="nowrap">−{{ds:insight.trimPerSession|usd}}</span>
+          here; if they idle like this in every session, about {{ds:insight.trimMonthly|usd0}} a month
+          for the team.</li>
+        <li>Start a fresh session at the task boundary — {{ds:insight.turns}} turns where the repo median
+          is {{ds:insight.repoMedianTurns}}, and every turn re-reads the whole context.</li>
+        <li>Check the workflow that spawns sub-agents: their share is well above the team's.</li>
+      </ol>
+    </div>
+  </figure>
+</section>
+
+<section class="cards" aria-label="Three questions Log Hub answers">
+  <article class="card">
+    <h2>Why it costs this much</h2>
+    <p>Context growth, cache reads, sub-agents — the factors that drive the cost of each session,
+      turn by turn.</p>
+    <a class="card-link" href="features.html#a">Features → A</a>
+  </article>
+  <article class="card">
+    <h2>Does the harness work?</h2>
+    <p>What CLAUDE.md, rules, skills and MCP servers add to every turn — and what the agent actually
+      uses.</p>
+    <a class="card-link" href="features.html#b">Features → B</a>
+  </article>
+  <article class="card">
+    <h2>What it really brings</h2>
+    <p>Changes, productivity and the value of your tools — per session and across the team, with
+      anomalies.</p>
+    <a class="card-link" href="features.html#c">Features → C, D, E</a>
+  </article>
+</section>
+
+<p class="strip">Self-hosted · Docker + Postgres · one-command install · hook via npx · your data
+  stays in-house. <a href="features.html#f">How to run it →</a></p>
