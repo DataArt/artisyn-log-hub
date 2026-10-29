@@ -69,3 +69,5 @@ server/src/public/static/installer-version.json
 # Personal KB about the developer's own local setup (described in CLAUDE.local.md)
 /docs/kb-local/
 /vt.key
+# In-app help pages: generated from user-docs/ by scripts/user-docs/generate-help.js.
+/client/public/help/

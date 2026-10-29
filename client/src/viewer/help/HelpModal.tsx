@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react';
-import ReactMarkdown from 'react-markdown';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import rehypeSlug from 'rehype-slug';
 import { Download } from 'lucide-react';
 import { Button } from '@/ui/button';
 import {
@@ -11,9 +12,17 @@ import {
   DialogTitle,
 } from '@/ui/dialog';
 import { helpDownloadFileName, helpNav } from './articles/index';
+import { HelpMarkdownLink } from './HelpMarkdownLink';
+
+/** The page the modal opens on (DD-13) — not simply the first menu entry. */
+const DEFAULT_HELP_SLUG = 'getting-started';
 
 const allArticles = helpNav.flatMap((section) => section.articles);
-const defaultSlug = allArticles[0]?.slug ?? '';
+const knownSlugs: ReadonlySet<string> = new Set(
+  allArticles.map((article) => article.slug),
+);
+const remarkPlugins = [remarkGfm];
+const rehypePlugins = [rehypeSlug];
 
 interface HelpModalProps {
   open: boolean;
@@ -21,14 +30,18 @@ interface HelpModalProps {
 }
 
 export function HelpModal({ open, onOpenChange }: HelpModalProps) {
-  const [activeSlug, setActiveSlug] = useState(defaultSlug);
+  const [activeSlug, setActiveSlug] = useState(DEFAULT_HELP_SLUG);
   const [content, setContent] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  /** Heading id to scroll to once the next article has rendered (DD-15). */
+  const [pendingAnchor, setPendingAnchor] = useState<string | null>(null);
+  const contentPaneRef = useRef<HTMLDivElement>(null);
   const activeArticle = allArticles.find((a) => a.slug === activeSlug);
 
   useEffect(() => {
     if (open) {
-      setActiveSlug(defaultSlug);
+      setPendingAnchor(null);
+      setActiveSlug(DEFAULT_HELP_SLUG);
     }
   }, [open]);
 
@@ -44,6 +57,38 @@ export function HelpModal({ open, onOpenChange }: HelpModalProps) {
       .catch(() => setContent(null))
       .finally(() => setLoading(false));
   }, [activeSlug]);
+
+  // After an article renders: jump to the requested heading, or to the top
+  // when there is none (or the heading does not exist).
+  useEffect(() => {
+    if (content === null) return;
+    const target = pendingAnchor
+      ? document.getElementById(pendingAnchor)
+      : null;
+    if (target) {
+      target.scrollIntoView({ block: 'start' });
+    } else if (contentPaneRef.current) {
+      contentPaneRef.current.scrollTop = 0;
+    }
+  }, [content, pendingAnchor]);
+
+  const openArticle = useCallback((slug: string, anchor?: string) => {
+    setPendingAnchor(anchor ?? null);
+    setActiveSlug(slug);
+  }, []);
+
+  const markdownComponents = useMemo<Components>(
+    () => ({
+      a: (props) => (
+        <HelpMarkdownLink
+          {...props}
+          knownSlugs={knownSlugs}
+          onNavigate={openArticle}
+        />
+      ),
+    }),
+    [openArticle],
+  );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -75,7 +120,7 @@ export function HelpModal({ open, onOpenChange }: HelpModalProps) {
                               ? 'w-full text-left px-4 py-1.5 text-sm bg-blue-50 border-l-[3px] border-blue-500 text-blue-700 font-semibold'
                               : 'w-full text-left px-4 py-1.5 text-sm text-muted-foreground hover:bg-accent cursor-pointer border-l-[3px] border-transparent'
                           }
-                          onClick={() => setActiveSlug(article.slug)}
+                          onClick={() => openArticle(article.slug)}
                         >
                           {article.title}
                         </button>
@@ -88,7 +133,7 @@ export function HelpModal({ open, onOpenChange }: HelpModalProps) {
           </nav>
 
           {/* Right content pane */}
-          <div className="flex-1 overflow-y-auto p-6">
+          <div ref={contentPaneRef} className="flex-1 overflow-y-auto p-6">
             {loading ? (
               <p className="text-muted-foreground">Loading…</p>
             ) : content !== null ? (
@@ -106,7 +151,11 @@ export function HelpModal({ open, onOpenChange }: HelpModalProps) {
                     </Button>
                   </div>
                 )}
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                <ReactMarkdown
+                  remarkPlugins={remarkPlugins}
+                  rehypePlugins={rehypePlugins}
+                  components={markdownComponents}
+                >
                   {content}
                 </ReactMarkdown>
               </div>

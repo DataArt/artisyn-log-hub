@@ -10,9 +10,10 @@
     <text x="20" y="32" font-size="15" font-weight="700" fill="#1e3a5f">Shared page set (source)</text>
     <g font-size="12" fill="#374151">
       <text x="20" y="58">getting-started.md, session-log.md, …</text>
-      <text x="20" y="78">+ install-server.md, authentication-modes.md, … (from README)</text>
-      <text x="20" y="98">+ one navigation definition</text>
-      <text x="20" y="128" fill="#6b7280">lives in user-docs/</text>
+      <text x="20" y="78">+ install-server.md, authentication-modes.md, …</text>
+      <text x="20" y="96" fill="#6b7280">  (moved in from README)</text>
+      <text x="20" y="116">+ one navigation definition</text>
+      <text x="20" y="138" fill="#6b7280">lives in user-docs/</text>
     </g>
     <path d="M300 75 L380 75" stroke="#1e3a5f" stroke-width="2"/>
     <path d="M380 69 L390 75 L380 81 Z" fill="#1e3a5f"/>
@@ -56,12 +57,20 @@
       <rect x="12" y="104" width="216" height="30" rx="4" fill="#eef2f7"/>
       <text x="24" y="124" font-weight="600" fill="#1e3a5f">Authentication modes</text>
       <text x="24" y="158">Server settings</text>
-      <text x="24" y="188">Hook settings</text>
-      <text x="24" y="218">Teams and roles</text>
-      <text x="24" y="248">Tuning your setup</text>
+      <text x="24" y="188">Tuning Your Setup</text>
+      <text x="24" y="218">Security Hardening &amp;</text>
+      <text x="24" y="236">Configuration</text>
     </g>
-    <text x="24" y="296" font-size="11" fill="#6b7280">Same order as the in-app</text>
-    <text x="24" y="312" font-size="11" fill="#6b7280">help menu (one definition)</text>
+    <line x1="24" y1="262" x2="216" y2="262" stroke="#e5e7eb"/>
+    <g font-size="12" fill="#6b7280">
+      <text x="24" y="286">Get started</text>
+      <text x="24" y="310">Using Log Hub</text>
+      <text x="24" y="334">Data and security</text>
+      <text x="24" y="358">Changelog</text>
+    </g>
+    <text x="24" y="400" font-size="11" fill="#6b7280">Pages and order = FR-2 page map;</text>
+    <text x="24" y="416" font-size="11" fill="#6b7280">same as the in-app help menu</text>
+    <text x="24" y="432" font-size="11" fill="#6b7280">(one navigation definition)</text>
 
     <!-- center: content -->
     <g transform="translate(280,56)">
@@ -84,7 +93,8 @@
       <rect x="0" y="352" width="620" height="8" fill="#e5e7eb"/><rect x="0" y="370" width="700" height="8" fill="#e5e7eb"/><rect x="0" y="388" width="540" height="8" fill="#e5e7eb"/>
       <text x="0" y="440" font-size="14" fill="#0969da">See also: Server settings →</text>
       <text x="0" y="500" font-size="11" fill="#6b7280">Values and defaults checked against server/.env.example at implementation (FR-7).</text>
-      <text x="0" y="530" font-size="12" fill="#6b7280">← Teams and roles                                                                                            Hook settings →</text>
+      <text x="0" y="530" font-size="12" fill="#6b7280">← Connecting a Repository</text>
+      <text x="760" y="530" font-size="12" fill="#6b7280" text-anchor="end">Server settings →</text>
     </g>
 
     <!-- right: on this page -->

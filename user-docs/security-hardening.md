@@ -3,8 +3,9 @@
 This guide describes the security-relevant configuration of an Artisyn Log Hub installation and
 the recommended settings for running it beyond a single local user. It applies to the Docker
 installation from the GitHub Release install kit (`docker-compose.yml` + `.env`). For the
-component layout, see the **Component Reference**; for the installation procedure, see the
-README.md of the GitHub Release install kit.
+component layout, see the [Component Reference](component-reference.md); for the installation
+procedure, see [Install the server](install-server.md) and the README.md of the GitHub Release
+install kit.
 
 ## 1. Security model in brief
 
@@ -45,23 +46,10 @@ Use this list before exposing an installation to anyone other than the local use
 
 ### 3.1 Authentication modes (`AUTH_MODE`)
 
-| Value | Mode | Use for |
-|---|---|---|
-| `none` | No authentication. A caller types an email and is logged in as that user, without verification. Accepted **only from local callers** (localhost and, in a container, the container's default gateway). | A single user on their own machine. **Never** for a shared or network-reachable installation. |
-| `password` | Email + password. | Small teams without SSO. |
-| `password-confirm` | Email + password, account usable only after an emailed confirmation link. Requires SMTP (§3.4). | Teams without SSO that need verified email ownership. |
-| `azure-oauth` | Azure Entra ID (OAuth 2.0 / OIDC). No local passwords. | **Recommended** for organisations using Microsoft Entra ID. |
-
-- Unset `AUTH_MODE` defaults to `password`. An unrecognised value, or a mode whose required
-  settings are missing, stops the server at startup.
-- Routes belonging to a different mode return `404`.
-- `users.email` is the identity across all modes, so switching modes requires no data migration.
-
-> **Important.** The install kit ships with `AUTH_MODE=none` and publishes the app on
-> `127.0.0.1:5003` only. That loopback-only port binding is the actual security boundary of
-> Mode 1: with Docker's port forwarding every connection appears to come from the container
-> gateway, which Mode 1 trusts. **Change `AUTH_MODE` in the same edit in which you widen the
-> `ports:` mapping.**
+The four modes (`none`, `password`, `password-confirm`, `azure-oauth`), what each is for, the
+default when `AUTH_MODE` is unset and why Mode 1 must stay on a loopback-only port are described
+in [Authentication modes](authentication-modes.md). The settings each mode needs are in §3.2–§3.4
+below.
 
 ### 3.2 Azure Entra ID (Mode 4)
 
@@ -112,7 +100,9 @@ Required settings: `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`,
   - `AUTH_RATE_LIMIT_POINTS=0` disables the limits (development only).
   - The counters are in memory per worker process, so with N workers the effective limit is about
     N × the configured value (§11).
-- **Sign-up domain allow-list (Mode 3)**: `ALLOWED_EMAIL_DOMAINS` is a comma-separated list of
+- **Sign-up domain allow-list (Mode 3)**: on an internet-facing Mode 3 server anyone who can
+  reach the sign-up page can create an account, so limit sign-up to your domains.
+  `ALLOWED_EMAIL_DOMAINS` is a comma-separated list of
   domains (for example `example.org,example.net`). When set, sign-up is accepted only for emails
   whose domain matches an entry exactly — subdomains are not included. Unset or empty means no
   restriction. A malformed value (an entry with `@`, spaces or no dot) stops the server at
@@ -171,7 +161,7 @@ the address the admin is using.
   invalidates all active sessions. Keep your existing `.env` on upgrade — the install scripts
   generate a `.env` only when it is missing and never overwrite an existing one.
 - Known insecure values (the old shipped default, `change-me`, the test secret) and well-known
-  database passwords (`postgres`, `secret`, …) are reported at startup with
+  database passwords (`postgres`, `secret`, …) are reported at startup in Modes 2–4 with
   `security: known insecure … in use — set a unique value`. The server still starts (§11).
 
 ### 3.6 API keys (hook authentication)
@@ -254,6 +244,13 @@ The shipped mapping `127.0.0.1:5003:3000` makes the app reachable from the host 
 proxy runs on the same host, keep it that way. Otherwise bind to the specific interface the proxy
 reaches (`"<ip>:5003:3000"`) and restrict that port with the host firewall.
 
+**Mode 1 (`AUTH_MODE=none`): publish the port on `127.0.0.1` only.** Inside a container, Mode 1
+also trusts the container's default gateway, because that is where host traffic to the published
+port comes from. With Docker's userland proxy every inbound connection arrives from that gateway,
+so a port published on all interfaces lets every client that can reach it sign in, without a
+password, as any user, including the admin. Switch `AUTH_MODE` to another mode before you widen
+the mapping.
+
 The `db` service is not published at all; keep it that way.
 
 ### 4.3 HTTP security headers
@@ -278,7 +275,9 @@ The web client loads no external resources (fonts, CDNs, analytics).
 | `platform.claude.com` (HTTPS) | Daily model pricing fetch: reads Anthropic's public pricing page, at most once per 24 h cluster-wide | `MODEL_PRICING_FETCH_ENABLED=false` disables it |
 | `openrouter.ai` (HTTPS) | Only when an admin clicks **Import from OpenRouter** on the Model Pricing tab | Not scheduled; don't click the button |
 
-No telemetry is sent to the project maintainers or any other third party.
+On air-gapped installs set `AI_TOOL_VERSION_CHECK_ENABLED=false` and
+`MODEL_PRICING_FETCH_ENABLED=false`. No telemetry is sent to the project maintainers or any other
+third party.
 
 ## 5. Authorization and data visibility
 

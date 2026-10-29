@@ -23,7 +23,7 @@
     <text x="88" y="300">•  whether your <tspan font-weight="600">harness</tspan> (CLAUDE.md, rules, skills, MCP) works as designed;</text>
     <text x="88" y="324">•  what each <tspan font-weight="600">tool</tspan> really brings.</text>
   </g>
-  <text x="72" y="360" font-size="16" fill="#1f2328">→ <tspan fill="#0969da" text-decoration="underline">Site: features, install, configuration</tspan>  ·  <tspan fill="#0969da" text-decoration="underline">Deck: Why Log Hub</tspan> <tspan fill="#59636e">(dataart.github.io/artisyn-log-hub)</tspan></text>
+  <text x="72" y="360" font-size="16" fill="#1f2328">→ <tspan fill="#0969da" text-decoration="underline">Docs: install, configuration (user-docs/)</tspan>  ·  <tspan fill="#0969da" text-decoration="underline">Site</tspan>  ·  <tspan fill="#0969da" text-decoration="underline">Deck: Why Log Hub</tspan></text>
 
   <!-- badges -->
   <rect x="72" y="394" width="150" height="20" rx="3" fill="#555"/><rect x="152" y="394" width="70" height="20" fill="#2da44e"/>
@@ -58,9 +58,9 @@
 
   <g transform="translate(40,730)" font-size="13" fill="#374151">
     <text font-size="15" font-weight="600" fill="#111827">Notes</text>
-    <text y="26">1. Pitch block is the very first content, directly under the title and above the badges; at most 8 rendered lines. Dashed frame marks new content only.</text>
+    <text y="26">1. Pitch block is the very first content, directly under the title and above the badges; at most 8 non-empty source lines (≤ 100 chars, ≤ 70 words). Dashed frame marks new content only.</text>
     <text y="50">2. Thesis (FR-10): cost control is acknowledged as right; the $8 session shows a number alone is not an answer. Links to site and deck - same story as Home and slide 2 (FR-11).</text>
-    <text y="74">3. Minimal README: description, disclaimer, one-line "What is collected" warning (links to the site), minimal quick start, links to the site. Install/config sections move to user-docs/.</text>
+    <text y="74">3. Minimal README: description, disclaimer, "What is collected" warning, minimal quick start. Doc links are relative user-docs/*.md (work in an offline clone); site/deck links are extras.</text>
     <text y="98">4. Rendered by GitHub - the wireframe mimics GitHub's light theme; no custom styling is possible in README.</text>
   </g>
 </svg>

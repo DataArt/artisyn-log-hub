@@ -1,9 +1,8 @@
 # 2026-10-28: Log Hub Site on GitHub Pages (what, why, features, usage, configuration + "Why Log Hub" deck)
 
 **Status:** todo **Priority:** medium
-**Type:** feature **Module (s):** site (new static folder) | user-docs (new shared page set) | client/public/help | client/src/viewer/help (HelpModal,
-articles/index.ts) | scripts (site build) | .github/workflows | README.md **Owner:** denis.tsyplakov **Created:**
-2026-10-28 **Tracker:** GH-47 https://github.com/DataArt/artisyn-log-hub/issues/47
+**Type:** feature **Module (s):** site (new static folder) | user-docs (new shared page set) | client/public/help | client/src/viewer/help (HelpModal, articles/index.ts) | scripts (site build) | .github/workflows | README.md **Owner:** denis.tsyplakov **Created:** 2026-10-28
+**Tracker:** GH-47 https://github.com/DataArt/artisyn-log-hub/issues/47
 
 ## Description
 
@@ -120,13 +119,9 @@ transcript capture by design, backward compatibility with old hooks, session exp
        the deck, Features and Get started.
     2. **Features** — one entry per feature group A–F of the inventory: what it shows, which question
        it answers, where it is in the app.
-    3. **Get started** — install the server (release install, Docker image, source build) and the
-       hook into a project; first session.
-    4. **Configuration** — authentication modes, server environment variables, hook settings, teams
-       and roles, tuning the setup.
-    5. **Using Log Hub** — session list, session log, cost and context, analytics and reports,
-       connecting a repository.
-    6. **Data and security** — what is collected, trust model, security hardening.
+    3. **Get started**, 4. **Configuration**, 5. **Using Log Hub**, 6. **Data and security** — the
+       pages of the matching FR-2 page-map section; the FR-2 page map is the only authority for
+       which page sits in which section.
     7. **Why Log Hub (deck)** — FR-5.
 - **FR-2 One page set for in-app help and site.** The in-app help and the site's documentation are
   generated from **one source set of pages** (owner's decision). The release build generates both
@@ -134,14 +129,34 @@ transcript capture by design, backward compatibility with old hooks, session exp
   reads today) and the site's documentation pages. No hand-kept copy exists anywhere.
     - **Location:** the page set lives in a new top-level folder `user-docs/` (owner's decision): the
       pages and the one navigation definition. `client/public/help/*.md` stops being a source: those
-      files are generated from `user-docs/` by `npm run build` and by the client dev start, and are
-      gitignored (no second copy in the repo).
+      files are generated from `user-docs/` (plus `hook/INSTALL_HOOK.md`) and are gitignored (no
+      second copy in the repo).
+    - **Generation points:** one Node generator script runs from the client's own `prebuild` /
+      `predev` (so plain `bun run build` / `bun run dev` produce the files) and as an ordered step
+      before `build:client` in `scripts/build.js`. The Dockerfile client-build stage copies
+      `user-docs/`, `hook/INSTALL_HOOK.md` and the script. Every build path — `npm run build`, client
+      build/dev, `docker build`, the scenario stand, CI `checks.yml` — produces the files on a clean
+      checkout with no manual step.
+    - **Consumers that read the help files from the working tree** read the `user-docs/` sources:
+      `tests/e2e/helpers/notice-hash.ts`, `tests/scenarios/helpers/notice-hash.ts`, `HELP` in
+      `tests/scenarios/tours/screen-registry.ts`; the `tour-10-registry` help check compares the
+      shared navigation definition against the `user-docs/` page files (plus `hook/INSTALL_HOOK.md`
+      for `install-hook`).
+    - **Tracked references** that tell people to edit `client/public/help/<page>.md` (KB articles
+      incl. `release-pipeline.md`, `docs/third-party-components.md`, `client/README.md`,
+      `.claude/skills/security-check/SKILL.md`, the comment in `client/src/viewer/lib/notice-hash.ts`)
+      are repointed to `user-docs/<page>.md`; a KB article on the shared page set and its generator is
+      added and listed in `docs/knowledgebase/index.md`.
+    - **Navigation definition:** `user-docs/nav.json` — sections of `{ slug, title, downloadable?,
+      source? }` (`source` lets `install-hook` point to `../hook/INSTALL_HOOK.md`). It drives both the
+      in-app help menu (today `client/src/viewer/help/articles/index.ts`) and the site's Get started /
+      Configuration / Using / Data and security sections. The client imports it directly at compile
+      time through a Vite/tsconfig alias (same pattern as `@loghub/pricing`; no generated navigation
+      file) and keeps today's `HelpArticle` / `HelpSection` shape, the `downloadable` flag and the
+      download file name; the Node site script reads it with `JSON.parse`.
     - The set starts from today's help pages (moved from `client/public/help/*.md` to `user-docs/`)
       and gains the install and configuration pages that now live only in `README.md` and
       `hook/INSTALL_HOOK.md`, so they appear in the in-app help as well.
-    - One navigation definition in the set drives both the in-app help menu (today
-      `client/src/viewer/help/articles/index.ts`) and the site's Get started / Configuration / Using /
-      Data and security sections.
     - **Page map.** Both the in-app menu and the site use the same four sections plus Changelog, in
       this order. Every page is published in both places — none is app-only (the technical pages
       are what security reviewers ask for before installing). Existing slugs and `downloadable`
@@ -162,23 +177,29 @@ transcript capture by design, backward compatibility with old hooks, session exp
       | Data and security | `data-collection` (Data Collection & Upload) | existing + README What is collected merged in | no |
       | Data and security | `trust-model` (Trust model) — new | README Trust model | no |
       | Data and security | `component-reference`, `responsibility-matrix`, `third-party-components` | existing | yes |
+      | Data and security | `how-hook-works` (How the hook works) — new | `hook/HOW_HOOK_WORKS.md`, read in place (linked from `install-hook`) | yes |
       | Changelog | `changelog` (Changelog) | existing | no |
 
-      The in-app "Getting Started" page (the first session after sign-in) and the site's "Get
-      started" section no longer clash: "Get started" is the section, the page is titled "Your first
-      session". The in-app help still opens on `getting-started` by default (not on the first page
-      of the menu), because a user of the app has already installed the server. On the site,
+      "Get started" is the section; the `getting-started` page (the first session after sign-in) is
+      titled "Your first session". The in-app help opens on `getting-started` by default — a client
+      constant, not the first page of the menu — because a user of the app has already installed the server. On the site,
       Changelog is reached from the docs sidebar and the footer, not from the top navigation.
     - Pages are written to read well in both places.
     - Backward compatible: existing help slugs and `/help/<slug>.md` URLs (incl. "Download .md")
       keep working.
     - Only Home, Features and the deck are site-only.
-    - The client imports the shared navigation definition directly at compile time (no generated
-      navigation file); it keeps today's `HelpArticle` / `HelpSection` shape, the `downloadable`
-      flag and the download file name.
     - Links between pages are written once, as `slug.md` (optionally `#anchor`). HelpModal gets a
       ReactMarkdown link handler: an internal link switches the article, an external link opens in a
       new tab. The site build rewrites the same links to the site page paths.
+    - **Offline first:** every relative link in a page must resolve to a page of the set, so the in-app
+      help is complete with no internet. A user-facing file linked today from outside the set (e.g.
+      `hook/HOW_HOOK_WORKS.md` from `hook/INSTALL_HOOK.md`) joins the set as a page read in place, like
+      `install-hook`; a contributor-only link in moved README text (e.g. `server/README.md`) is dropped
+      or reworded. The build fails on any relative link that does not resolve to a page. External
+      `http(s)` links are allowed only as optional extras, never as the only place a fact is documented.
+    - Anchors: `#anchor` and `slug.md#anchor` scroll to the heading in the app and on the site. Heading
+      ids use the GitHub slug algorithm (`github-slugger` / `rehype-slug`) in both. An unknown slug
+      does not navigate and logs a console warning; a missing anchor opens the page at the top.
     - `hook/INSTALL_HOOK.md` stays where it is as the single source of hook install text; the page
       set reads it as a page. Its consumers (`scripts/build-hooks-installer.js` event-name check, its
       test, the `s-inst-01` scenario, the `update-install-instructions` skill) are unchanged.
@@ -186,9 +207,11 @@ transcript capture by design, backward compatibility with old hooks, session exp
       is unchanged and no user is asked to consent again.
       On the site, `{{RETENTION_DAYS}}` reads "the retention period configured on your server (default 30 days)".
     - Site documentation pages are pre-rendered to static HTML by a Node script under `scripts/`
-      (tested by `npm run test:scripts`) with the remark / remark-gfm stack the client already uses;
-      the table of contents comes from h2/h3. `pages.yml` runs it after `actions/setup-node`, pinned
-      to the same SHA as `checks.yml`, and uploads only its output folder.
+      (tested by `npm run test:scripts`) using `unified`, `remark-parse`, `remark-gfm` (same major as
+      the client), `remark-rehype`, `rehype-slug`, `rehype-stringify`, declared as root
+      `devDependencies`; raw HTML in pages is not rendered (no `rehype-raw`), as in the app. The table
+      of contents comes from h2/h3. `pages.yml` runs `npm ci` and then the script after
+      `actions/setup-node`, pinned to the same SHA as `checks.yml`, and uploads only its output folder.
 - **FR-3 Navigation and look.** Own neutral theme shared by site and deck (not the DataArt corporate
   kit); top navigation, a per-page table of contents for long pages, working relative links between
   pages, a link to the GitHub repo and releases on every page. Light theme; dark via
@@ -213,7 +236,7 @@ transcript capture by design, backward compatibility with old hooks, session exp
   a team → F how to install (links to Get started). **Size: 10–15 slides in total** (owner's
   decision), title and closing included — so problem and each of A–F get 1–2 slides. The feature
   inventory is a **pool**, not a checklist: each block picks its strongest items, and leftover
-  detail goes into speaker notes. Each block uses the feature inventory above. *(spec.)* items appear
+  detail goes into speaker notes. *(spec.)* items appear
   only phrased as a use of existing data (e.g. "compare snapshots
   before/after a harness change"), never as a dedicated feature or screen.
 
@@ -237,7 +260,7 @@ transcript capture by design, backward compatibility with old hooks, session exp
   and `.github/workflows/pages.yml`, plus `workflow_dispatch`. All actions are pinned by commit SHA
   like the other workflows. Shape: one `deploy` job on `ubuntu-latest` with
   `environment: { name: github-pages, url: ${{ steps.deployment.outputs.page_url }} }`; steps
-  `actions/checkout` (`persist-credentials: false`) → assemble the site (if FR-2 needs it) →
+  `actions/checkout` (`persist-credentials: false`) → `actions/setup-node` → `npm ci` → assemble the site →
   `actions/configure-pages` → `actions/upload-pages-artifact` → `actions/deploy-pages`
   (`id: deployment`); `concurrency: { group: pages, cancel-in-progress: false }`; minimal
   permissions — top-level `contents: read`, with `pages: write` and `id-token: write` on the job
@@ -246,19 +269,23 @@ transcript capture by design, backward compatibility with old hooks, session exp
 - **FR-10 README pitch and a minimal README.** A reader who opens the README reads its top two
   inches and is then lost (owner) — so the pitch is the **very first content of `README.md`**,
   directly under the `# Artisyn Log Hub` title, above the badges and everything else, and short
-  (at most 8 rendered lines: thesis, what Log Hub answers, links). It states the "why" plainly: you already know what AI work
+  (at most 8 non-empty markdown source lines of at most 100 characters each, at most 70 words: thesis,
+  what Log Hub answers, links). It states the "why" plainly: you already know what AI work
   costs per month, per day and per session, and controlling that is right and useful; **but a
   number alone is not an answer** — a session cost $8: a lot or a little, good or bad, how to make
   it cheaper, or when to spend more for better quality? Log Hub answers why it costs that much,
   which factors drive it, whether the harness works as designed, and what the tools really bring —
   per session and across the team. The tone acknowledges cost control, never dismisses it.
-  The same block links to the site and to the deck. The existing factual description of what Log
+  The same block links to the docs, the site and the deck. Doc links in the README are relative links to
+  `user-docs/<page>.md` (they work on GitHub and in an offline clone); site and deck links are extras.
+  The existing factual description of what Log
   Hub is stays, below or merged into this pitch.
   The rest of the README becomes **minimal** (owner's decision): the badges, the short description,
   the trademark disclaimer, a one-line "read What is collected before you install the hook" warning
-  linking to the site page, a minimal quick start (the few commands of the release install plus
-  installing the hook) and links to the site's Get started / Configuration / Data and security
-  sections. The sections Quick start (details), Other ways to run, Authentication modes,
+  linking to `user-docs/data-collection.md`, a minimal quick start (the few shell commands of the release install plus
+  installing the hook, no prose, each followed by a link to `install-server` / `install-hook` — the only
+  allowed duplicate of install text) and links to the Get started / Configuration / Data and security
+  pages in `user-docs/`, with the site as an extra. The sections Quick start (details), Other ways to run, Authentication modes,
   Configuration, What is collected, Trust model and Security notes move to `user-docs/` (FR-2 page
   map) and are no longer in the README. Repository layout, For developers and Licence stay — they
   are for contributors and are not part of the page set.
@@ -270,6 +297,8 @@ transcript capture by design, backward compatibility with old hooks, session exp
 
 ![Documentation page and the shared page set feeding site and in-app help](wireframes/site-docs-page.svg)
 
+![In-app help modal with the FR-2 page-map menu and link handling](wireframes/in-app-help-menu.svg)
+
 ![Deck opening: title slide and thesis slide](wireframes/slide-opening-thesis.svg)
 
 ![Content slide template with visual slot, desktop and phone](wireframes/slide-content-template.svg)
@@ -280,6 +309,9 @@ transcript capture by design, backward compatibility with old hooks, session exp
 
 ## Non-Functional Requirements
 
+- **Offline app (owner's principle):** the app, its in-app help and every doc a user needs work in a
+  network-isolated installation; the help menu, pages, images and "Download .md" never load anything from
+  the internet. The site and the deck are an online extra and are never the only home of user documentation.
 - External scripts only from a pinned CDN version (or vendored into the folder); no tracking.
 - Readable on a laptop projector and on a phone.
 - No private machine data in the site or its assets (same rule as the `poc` skill).
@@ -292,14 +324,22 @@ transcript capture by design, backward compatibility with old hooks, session exp
   the thesis and the three questions and links to the deck, Features and Get started; Features
   has six entries A–F, each with what it shows, which question it answers and where it is in
   the app.
-- [ ] FR-2: no help or install/configuration text exists twice in the repo; changing one source
+- [ ] FR-2: no help or install/configuration text exists twice in the repo (exempt: the README
+  quick-start commands, `hook/README.md`, `release-template/INSTALL.md`,
+  `docs/third-party-components.md`); changing one source
   page changes both the in-app help and the site page after the next build; the in-app help menu
   and the site's doc navigation come from one definition; every existing help slug and
   `/help/<slug>.md` URL still opens; internal links work in both the app and the site;
   "Download .md" behaves as today; the notice hash of `data-collection-notice.md` equals
   today's; `npm run build:hooks-installer` and its event-name check pass. The page set lives in `user-docs/`;
   `client/public/help/*.md` is generated and gitignored; the in-app menu and the site show the sections and pages of
-  the FR-2 page map; the in-app help opens on `getting-started` by default.
+  the FR-2 page map; the in-app help opens on `getting-started` by default. On a clean checkout
+  `npm run build`, client `bun run build` / `bun run dev`, `docker build` (the image serves
+  `/help/data-collection-notice.md` and `/help/install-hook.md`) and the notice-hash test helpers
+  work with no manual generation step. An anchor link opens the right heading in the app and on
+  the site; every relative link resolves to a page of the set (the build fails otherwise); with the
+  network blocked, the in-app help opens every page of the menu and follows every internal link. A grep for `client/public/help/`
+  in tracked docs, skills and comments finds it only as generated output.
 - [ ] FR-3: site and deck share one theme; long pages have a table of contents; every page except
   the deck links to the GitHub repo and releases (the deck's title and closing slides do); with
   `prefers-color-scheme: dark` site and deck switch to the dark palette.
@@ -323,11 +363,11 @@ transcript capture by design, backward compatibility with old hooks, session exp
   version (or files are vendored); the site references no analytics host and makes no network
   requests other than the pinned CDN.
 - [ ] FR-10: the first content after the `# Artisyn Log Hub` title in `README.md` is the pitch block (before the
-  badges), at most 8 rendered lines, containing the thesis (cost control is right and useful, but a number like "$8 per
+  badges), at most 8 non-empty source lines of ≤ 100 characters and ≤ 70 words, containing the thesis (cost control is right and useful, but a number like "$8 per
   session" alone does not say whether it is good or how to change it), what Log Hub answers next, and links to the site
   and the deck; no sentence calls cost tracking useless. The README no longer contains the sections Other ways to run,
   Authentication modes, Configuration, What is collected, Trust model or Security notes; it keeps a minimal quick start
-  and links to the site sections.
+  and relative links to the `user-docs/` pages; every doc link in the README works in an offline clone.
 - [ ] FR-11: Home and the deck's first content slide carry the same thesis as the README block.
 
 ## Common sense considerations
@@ -360,21 +400,43 @@ transcript capture by design, backward compatibility with old hooks, session exp
 - Go-live timing (when to merge, when to enable Pages, relative to the T-26 release) is handled manually by the owner;
   the implementation adds no hold-back mechanism and runs only the git/release commands the owner asks for.
 - The shared page set lives in top-level `user-docs/`; `client/public/help/*.md` becomes generated, gitignored output.
-- README is minimal: pitch first (above badges, ≤ 8 lines), minimal quick start, links to the site; install,
+- README is minimal: pitch first (above badges, ≤ 8 lines), minimal quick start, relative links to `user-docs/` (site as extra); install,
   configuration and data/security sections move to `user-docs/`.
 - Deck size is 10–15 slides; the feature inventory is a pool, leftovers go to speaker notes.
 - One page map (FR-2) for in-app help and site: four sections + Changelog, every page in both places, existing slugs
   kept, `getting-started` retitled "Your first session" and still the in-app default.
+- Help files are generated from the client's own prebuild/predev and before `build:client`; the Dockerfile copies the
+  sources, so every build path works on a clean checkout.
+- Test helpers and the tour-10 help check read the `user-docs/` sources, not generated output.
+- Tracked references to `client/public/help/<page>.md` as an edit target move to `user-docs/`; a KB article covers the
+  page set and its generator.
+- Offline first: every relative link resolves to a page of the set (user-facing linked files such as
+  `HOW_HOOK_WORKS.md` join the set); no in-app doc depends on the internet; the build fails on unresolved links.
+- Anchors use GitHub-style heading ids in app and site; unknown slug → no navigation + console warning; missing
+  anchor → page top.
+- Navigation definition is `user-docs/nav.json`, imported via an alias like `@loghub/pricing`; `getting-started`
+  stays a client constant.
+- Pre-render uses unified/remark/rehype packages in root `devDependencies`; the Pages job runs `npm ci`; raw HTML is
+  not rendered.
+- The FR-2 page map is the only authority for site sections; teams and roles stay covered by existing pages
+  (`tuning-your-setup`, `session-list`), no new page.
+- The README quick start keeps only shell commands, each linked to `install-server` / `install-hook`; it is the one
+  allowed duplicate of install text.
+- The README pitch limit is measured in source lines (≤ 8 non-empty lines, ≤ 100 chars each, ≤ 70 words).
+- `hook/README.md` and `release-template/INSTALL.md` keep their own text and are exempt from the no-duplicate rule
+  (owner's decision: shipped READMEs must work offline).
+- `docs/third-party-components.md` stays as the internal license-audit inventory (exempt); its "keep in sync"
+  pointers name `user-docs/third-party-components.md`.
 
 ## Open Questions
 
+
 ## Notes
 
-- 2026-10-28: Release dependency — the Pages deploy (FR-8/FR-9) and the README link (FR-10) go live
-  only after T-26 Tools/MCP (`2026-06-19-mcp-invocation-log-tab`) is released. 2026-10-29: the owner times
-  the merge and Pages enablement by hand; nothing in the implementation enforces it.
-
-- 2026-10-28: Pinned SHAs resolved in the session (latest releases at that date):
+- Release dependency — the Pages deploy (FR-8/FR-9) and the README link (FR-10) go live only after
+  T-26 Tools/MCP (`2026-06-19-mcp-invocation-log-tab`) is released; the owner times the merge and
+  Pages enablement by hand.
+- Pinned SHAs (latest releases at 2026-10-28):
   `actions/configure-pages` v6.0.0 `45bfe0192ca1faeb007ade9deae92b16b8254a0d`,
   `actions/upload-pages-artifact` v5.0.0 `fc324d3547104276b827a68afc52ff2a11cc49c9`,
   `actions/deploy-pages` v5.0.1 `368f82528645a54fb793d4d04e342629a3f51346`.

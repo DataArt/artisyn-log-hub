@@ -36,7 +36,7 @@ invariants — reports and task notes refer to them by number.
 no DB `insert`/`update`/`delete`/upsert, no `req.logIn`/session writes, no deletion or rewriting of
 files or job rows the user cares about.
 
-**Why.** CSRF protection is `SameSite=Lax` only (see `client/public/help/security-hardening.md`).
+**Why.** CSRF protection is `SameSite=Lax` only (see `user-docs/security-hardening.md`).
 `Lax` still sends the session cookie on cross-site top-level `GET` navigations, so a mutating GET
 can be triggered by any external page the logged-in user visits. A mutating GET found here is
 converted to `POST`; if an old hook or installer version calls it, the old GET is kept and listed

@@ -1,5 +1,14 @@
 # Artisyn Log Hub
 
+You already track AI coding cost per month, day and session — and you should.
+But a number is not an answer: this session cost $8. Is that a lot?
+How do you make it cheaper, or when is spending more worth it?
+Log Hub answers the next questions: why it costs that much, what drives it,
+whether your harness works as designed, what your tools bring — per session and team-wide.
+[Docs](user-docs/install-server.md) ·
+[Site](https://dataart.github.io/artisyn-log-hub/) ·
+[Deck](https://dataart.github.io/artisyn-log-hub/deck/)
+
 [![Security scan](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/DataArt/artisyn-log-hub/ci-reports/badges/security.json)](https://github.com/DataArt/artisyn-log-hub/blob/ci-reports/REPORT.md)
 [![security-scans](https://github.com/DataArt/artisyn-log-hub/actions/workflows/security-scans.yml/badge.svg)](https://github.com/DataArt/artisyn-log-hub/actions/workflows/security-scans.yml)
 
@@ -12,29 +21,11 @@ produce reports.
 > **Disclaimer.** This project is not affiliated with or endorsed by Anthropic, Cursor or GitHub.
 > "Claude" and "Claude Code" are trademarks of Anthropic.
 
-**Read [What is collected](#what-is-collected) before you install the hook.** It uploads complete
-session transcripts, including file contents and command output.
-
-## Repository layout
-
-| Path | Contents |
-|---|---|
-| `server/` | NestJS server: API, authentication, log ingestion, migrations, scheduled jobs. See [server/README.md](server/README.md). |
-| `client/` | React web app. See [client/README.md](client/README.md). |
-| `hook/` | The Claude Code hook (source of truth). See [hook/README.md](hook/README.md) and [hook/INSTALL_HOOK.md](hook/INSTALL_HOOK.md). |
-| `artisyn-hooks-installer/` | The `npx` installer that puts the hook into a project. The server serves it. |
-| `release-template/` | Templates of the GitHub Release install kit (`docker-compose.yml`, `install.sh`, `install.ps1`, install guide). |
-| `tests/e2e/` | Playwright end-to-end tests. |
-| `docs/` | Knowledge base and task history. |
+**The hook uploads complete session transcripts, including file contents and command output — read [What is collected](user-docs/data-collection.md#what-is-collected) before you install it.**
 
 ## Quick start
 
-Every release is published on the [releases page](https://github.com/DataArt/artisyn-log-hub/releases/latest)
-as a multi-arch Docker image (`ghcr.io/dataart/artisyn-log-hub`, `linux/amd64` and `linux/arm64`)
-plus a small install kit: a `docker-compose.yml` with Postgres, `install.sh`, `install.ps1` and an
-install guide. You need a Docker Engine with the Compose v2 plugin; nothing is built locally.
-
-Install or upgrade with one command:
+Install or upgrade the server (Docker Engine with Compose v2):
 
 ```sh
 # Linux, macOS, WSL
@@ -46,209 +37,46 @@ curl -fsSL https://github.com/DataArt/artisyn-log-hub/releases/latest/download/i
 irm https://github.com/DataArt/artisyn-log-hub/releases/latest/download/install.ps1 | iex
 ```
 
-The script installs into `$HOME/artisyn-log-hub` (Windows: `%USERPROFILE%\artisyn-log-hub`),
-generates a `.env` with a random database password on the first install only, pulls the image and
-starts it with `docker compose up -d`. Run the same command again to upgrade: an existing `.env` is
-never changed, and installing a version lower than the installed one is refused. Set `VERSION=X.Y.Z`
-to pin a release and `INSTALL_DIR` to install elsewhere; the install guide (`README.md` of the
-release) lists every option, the manual install and how to verify the downloads with `SHA256SUMS`.
+Options, upgrades and other ways to run: [Install the server](user-docs/install-server.md).
 
-Open http://localhost:5003. The install starts in `AUTH_MODE=none` (Mode 1): no password, you
-identify yourself with an email address, and only the local machine can connect.
+Open http://localhost:5003, sign in first and check that you are the admin:
+[Check that you are the admin](user-docs/install-server.md#check-that-you-are-the-admin).
 
-### Check that you are the admin
-
-**Do this right after the install.** The first user who signs in becomes the admin; everyone after
-that is a regular user. There is no setup token.
-
-1. Sign in (or sign up) right away.
-2. Open **Admin Panel** in the left navigation, then the **Users** tab, and check that your account has
-   the `admin` role.
-3. If there is no Admin Panel, or another account is the admin, someone signed in before you. Stop the
-   app, delete the database (for a release install: `docker compose down` in the install
-   directory, then delete `$LOG_HUB_DATA_DIR/pgdata`), install again and sign in first.
-
-### Install the hook into a project
-
-In the web app, open **API Keys**, create a key and copy the install command from the **Install** tab.
-It looks like this and is run from the root of the project you want to record:
+Install the hook from the root of the project you want to record (the web app's **API Keys** →
+**Install** tab gives you the exact command):
 
 ```sh
 npx "<server-origin>/static/artisyn-hooks-installer.tgz" install --server-url "<server-origin>" --api-key "<your-api-key>"
 ```
 
-The installer prints what will be collected. Sessions show up in the web app after the next Claude
-Code turn ends. See [hook/INSTALL_HOOK.md](hook/INSTALL_HOOK.md) for all options and for uninstalling.
+All options and uninstalling: [Install the hook](hook/INSTALL_HOOK.md).
 
-## Other ways to run
+## Documentation
 
-### From a source build
+The user documentation lives in [`user-docs/`](user-docs/). The same pages are the in-app help
+(the **?** button in the web app) and the docs of the [site](https://dataart.github.io/artisyn-log-hub/).
 
-```sh
-npm install
-npm run build          # server, client and hook installer -> dist/
-```
+| Section | Pages |
+|---|---|
+| Get started | [Install the server](user-docs/install-server.md) · [Install the hook](hook/INSTALL_HOOK.md) · [Your first session](user-docs/getting-started.md) · [Connecting a Repository](user-docs/connect-repository.md) |
+| Configuration | [Authentication modes](user-docs/authentication-modes.md) · [Server settings](user-docs/server-configuration.md) · [Tuning Your Setup](user-docs/tuning-your-setup.md) · [Security Hardening & Configuration](user-docs/security-hardening.md) |
+| Using Log Hub | [Working with the Session List](user-docs/session-list.md) · [Session Log](user-docs/session-log.md) · [Understanding Cost & Context](user-docs/cost-and-context.md) · [Analytics & Reports](user-docs/analytics-reports.md) |
+| Data and security | [Data Collection Notice](user-docs/data-collection-notice.md) · [Data Collection & Upload](user-docs/data-collection.md) · [Trust model](user-docs/trust-model.md) · [Component Reference](user-docs/component-reference.md) · [Responsibility Matrix](user-docs/responsibility-matrix.md) · [Third-Party Components](user-docs/third-party-components.md) · [How the hook works](hook/HOW_HOOK_WORKS.md) |
+| Changelog | [Changelog](user-docs/changelog.md) |
 
-`dist/` gets a `.env` copied from `.env.defaults` (`PORT`, `COOKIE_SECURE`, a local `DATABASE_URL`).
-Set `DATABASE_URL` to your Postgres and run from the repository root:
+## Repository layout
 
-```sh
-# Linux / macOS
-PORT=3000 DATABASE_URL=<url> node dist/index.js
-```
-
-```powershell
-# Windows (PowerShell)
-$env:PORT="3000"; $env:DATABASE_URL="<url>"; node dist/index.js
-```
-
-`SESSION_SECRET` is optional. When it is unset, the server generates one on first start and keeps it in
-the database. Migrations run automatically at startup.
-
-### Docker image
-
-The published image runs against any Postgres you already have:
-
-```sh
-docker run -p 127.0.0.1:3000:3000 -e DATABASE_URL=<url> ghcr.io/dataart/artisyn-log-hub:latest
-```
-
-Tags: `X.Y.Z` (one release), `X.Y` (the newest patch of a line) and `latest`. To build the image
-yourself from this repository:
-
-```sh
-docker build --build-arg VERSION=local --build-arg GIT_COMMIT=$(git rev-parse HEAD) -t ghcr.io/dataart/artisyn-log-hub:local .
-```
-
-The image sets `NODE_ENV=production` and runs the server in cluster mode. Without the build args
-the build info reports `version: "unknown"` and `gitCommit: "unknown"`. The `docker-compose.yml`
-at the repository root is the maintainers' deployment file (it expects an external network); for a
-self-contained setup use the release install above.
-
-## Authentication modes
-
-`AUTH_MODE` selects one of four modes:
-
-| Value | Mode | Use it for |
-|---|---|---|
-| `none` | Mode 1, no password | One user on their own machine. Only local callers are accepted. |
-| `password` | Mode 2, email and password | A small team on a trusted network. SMTP is optional; without it password reset is unavailable. |
-| `password-confirm` | Mode 3, email, password and emailed confirmation | Anything reachable from the internet. Needs SMTP: the app refuses to start without a reachable relay. |
-| `azure-oauth` | Mode 4, Azure Entra ID sign-in | Organisations on Microsoft Entra ID, single tenant. |
-
-In every mode the first user to sign in becomes the admin.
-
-## Configuration
-
-The main settings are below. [server/README.md](server/README.md) lists every variable and
-`server/.env.example` documents each one.
-
-| Variable | Default | Notes |
-|---|---|---|
-| `DATABASE_URL` | — | **Required.** PostgreSQL connection string. |
-| `PORT` | `3000` | HTTP listen port. |
-| `AUTH_MODE` | `password` | See above. The release install sets `none`. |
-| `SESSION_SECRET` | generated | Optional. Generated and stored in the database when unset. |
-| `PUBLIC_BASE_URL` | — | Externally reachable URL, used for the links in emails. Required in production for Modes 2/3. |
-| `ALLOWED_EMAIL_DOMAINS` | any | Mode 3 sign-up allow-list, comma-separated domains. |
-| `COOKIE_SECURE` | `true` | Set `false` when served over plain HTTP. |
-| `TRUST_PROXY` | `false` | Set when running behind a reverse proxy. When enabled it overrides `COOKIE_SECURE`. |
-| `SESSION_RETENTION_DAYS` | `30` | Sessions older than this are deleted. |
-| `AI_TOOL_VERSION_CHECK_ENABLED` | on | `false` turns off the outbound npm version check. |
-| `MODEL_PRICING_FETCH_ENABLED` | on | `false` turns off the outbound pricing-page fetch. |
-
-## What is collected
-
-The hook sends a lot of data to the server it is configured for. The full description, per hook
-event, is in [hook/README.md](hook/README.md#what-is-collected).
-
-**Full transcripts.**
-
-- The complete Claude Code transcripts of the project, **including earlier sessions** of the same
-  repository that are still on disk when the hook is installed.
-- That means every prompt, every tool input and tool result, the contents of every file Claude read,
-  and the output of every command Claude ran. Secrets that appeared in a session are uploaded with it.
-- The hook does not redact transcripts.
-
-**Local context.**
-
-- `CLAUDE.md` files, rules, skills, agents and MCP server configuration of the project, plus the
-  user-level skills, plugins and MCP configs that apply to it.
-- The git remote URL (with any `user:password@` part removed) and git `user.name`.
-- Absolute paths, including the project root and transcript paths, which usually contain your OS user
-  name.
-- `logTail`: the last 50 lines of the hook's own `hook.log`, sent with each upload for diagnostics.
-
-**Other channels.**
-
-- **Post-turn analysis.** When the server asks, the hook runs a local `claude -p` (cost advisor and
-  session attribution) with your Claude Code account and sends the result.
-- **OTEL export.** The installer turns on Claude Code's OpenTelemetry export to a loopback receiver,
-  with `OTEL_LOG_TOOL_DETAILS=1` (tool names and parameters). The hook uploads what it receives.
-- **Code inventory.** The number of git-tracked files and lines (`trackedFiles`, `trackedLines`).
-- **Session attribution.** A short classification of what the session was about.
-- **MCP probe.** On each `Stop`, the hook starts each configured stdio MCP server briefly to list its
-  tools, waiting at most `mcpProbeTimeoutMs` (default 3000 ms) per server.
-
-**How to stop sending.** Remove `apiKey` from `.artisyn/config/log-hub.local.json` or `serverUrl`
-from `.artisyn/config/log-hub.json`; the hook then records locally but uploads nothing. Or uninstall the
-hook (`npx <server-origin>/static/artisyn-hooks-installer.tgz uninstall`).
-
-**Who operates the server, retention and rights.**
-
-- The data goes to whichever server `serverUrl` points at. Whoever runs that server (usually your
-  employer or team) controls the data and is responsible for it. This project runs no hosted service
-  and receives none of it.
-- The server deletes sessions older than `SESSION_RETENTION_DAYS` (default 30). Users can delete their
-  own account, which removes their data.
-- Requests to access, correct or delete personal data go to the server operator.
-- **Employers:** tell employees before you install the hook in their projects. Explain what is
-  collected, who can see it and how long it is kept, and check that this fits your employment and
-  data-protection rules.
-
-## Trust model
-
-- **The server sees everything listed above.** Point the hook only at a server you trust, and use
-  `https://` for anything that is not on your own machine. Plain `http://` is accepted.
-- **The API key identifies you.** Uploads are attributed to the key's owner. Keep the key in the
-  gitignored `log-hub.local.json`, never in the tracked `log-hub.json`.
-- **The server can make the hook run `claude -p`**, with your Claude Code account and usage.
-- **The hook runs with your user rights**, like any Claude Code plugin.
-- **The installer is fetched with `npx` from the server** with no checksum or signature, so it is only
-  as trustworthy as that server and the connection to it.
-- **Inside the server,** you see your own sessions. Teams can share sessions between members: a
-  member becomes visible to the team only after accepting a disclosure notice, and the team's access
-  mode and roles decide who sees prompts and reports. The admin role grants no access to session
-  data in the app; admins see sessions only through their own repositories or a team role (server
-  operators can still reach the database and logs directly).
-- **The OTEL receiver listens on `127.0.0.1` only** and has no token, so another local process
-  running as you could post to it.
-
-The in-app help article *Security hardening* lists the known limitations and accepted risks.
-
-## Security notes
-
-- **Mode 1 (`AUTH_MODE=none`): publish the port on `127.0.0.1` only.** Inside a container, Mode 1
-  also trusts the container's default gateway, because that is where host traffic to the published
-  port comes from. With Docker's userland proxy every inbound connection arrives from that gateway, so
-  a port published on all interfaces lets every client that can reach it sign in, without a
-  password, as any user, including the admin. The release install publishes `127.0.0.1:5003` only. Switch `AUTH_MODE` to another mode
-  before you change that.
-- **Outbound requests.** Once a day the server asks the public npm registry for the latest Claude Code
-  version (`AI_TOOL_VERSION_CHECK_ENABLED`, on by default) and fetches the public Anthropic pricing
-  page (`MODEL_PRICING_FETCH_ENABLED`). Set either to `false` to turn it off, for example on air-gapped
-  installs.
-- **`PUBLIC_BASE_URL`.** Confirmation and password-reset links are built only from this value, never
-  from the request's `Host` header. Set it on every Mode 2/3 deployment; in production the server
-  refuses to start in those modes without it.
-- **Internet-facing Mode 3.** Anyone who can reach the sign-up page can create an account. Set
-  `ALLOWED_EMAIL_DOMAINS` to limit sign-up to your domains. Sign-up, password reset and resend are
-  rate-limited (`AUTH_RATE_LIMIT_POINTS`, `AUTH_RATE_LIMIT_WINDOW_SEC`).
-- **Azure (Mode 4) is single-tenant only.** `AZURE_TENANT_ID` must be your tenant GUID; `common`,
-  `organizations`, `consumers` and domain names are rejected at startup, and sign-ins from other
-  tenants are refused.
-- **Secrets.** In Modes 2–4 the server warns at startup when it sees a known example `SESSION_SECRET` or database
-  password. Replace them.
+| Path | Contents |
+|---|---|
+| `server/` | NestJS server: API, authentication, log ingestion, migrations, scheduled jobs. See [server/README.md](server/README.md). |
+| `client/` | React web app. See [client/README.md](client/README.md). |
+| `hook/` | The Claude Code hook (source of truth). See [hook/README.md](hook/README.md) and [hook/INSTALL_HOOK.md](hook/INSTALL_HOOK.md). |
+| `artisyn-hooks-installer/` | The `npx` installer that puts the hook into a project. The server serves it. |
+| `user-docs/` | User documentation (source of the in-app help and the site docs) and its `nav.json`. |
+| `site/` | Site pages, example dataset and slide deck, published to GitHub Pages. |
+| `release-template/` | Templates of the GitHub Release install kit (`docker-compose.yml`, `install.sh`, `install.ps1`, install guide). |
+| `tests/` | Scenario suites (`tests/scenarios/`) and legacy Playwright end-to-end tests (`tests/e2e/`). |
+| `docs/` | Knowledge base and task history. |
 
 ## For developers
 
@@ -298,6 +126,10 @@ Hub (dogfooding).
 
 5. **Change the hook in `hook/`**, not in the `.artisyn/` copy. `npm run build:hooks-installer`
    rebuilds the installer, and `.claude/rules/hook.md` describes how to refresh the dogfood copy.
+
+6. **Change user documentation in `user-docs/`**, never in `client/public/help/` — that folder is
+   generated (`npm run build:help`). `npm run build:site` builds the site into `tmp/site/`. See
+   [`docs/knowledgebase/user-docs-and-site.md`](docs/knowledgebase/user-docs-and-site.md).
 
 The canonical build, lint and test commands are listed in `CLAUDE.md`.
 

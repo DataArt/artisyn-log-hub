@@ -1,0 +1,17 @@
+{
+  "team": { "developers": 6, "workingDays": 20, "period": "one month" },
+  "session": {
+    "total": 8.00,
+    "parts": { "input": 0.62, "output": 1.94, "cacheRead": 2.16, "cacheWrite": 1.48, "subAgents": 1.80 },
+    "tokens": { "input": 42000, "output": 18000, "cacheRead": 1560000, "cacheWrite": 380000 },
+    "contextRereadPct": 78
+  },
+  "daily": { "sessions": 18, "total": 144.00 },
+  "monthly": { "total": 2880.00 },
+  "tools": [
+    { "name": "docs-search", "kind": "mcp", "calls": 412, "errorPct": 3, "retriedPct": 9, "openedFilePct": 61 },
+    { "name": "issue-tracker", "kind": "mcp", "calls": 138, "errorPct": 12, "retriedPct": 21, "openedFilePct": 18 },
+    { "name": "build-cli", "kind": "cli", "calls": 905, "errorPct": 7, "retriedPct": 4, "openedFilePct": 0 },
+    { "name": "db-cli", "kind": "cli", "calls": 0, "errorPct": 0, "retriedPct": 0, "openedFilePct": 0 }
+  ]
+}
