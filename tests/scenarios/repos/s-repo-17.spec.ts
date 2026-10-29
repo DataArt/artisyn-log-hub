@@ -131,31 +131,34 @@ test('@S-REPO-17 Tools/MCP tab: configured tools, MCP and wrapped CLI calls, cal
     try {
       await expect(page.getByTestId('tab-repo-tools')).toHaveAttribute('data-state', 'active');
       await expect(page.getByTestId('tools-empty')).toBeVisible();
+      // The button opens the settings' Monitored Tools tab, without the Tools/MCP tab's `t*` params.
       await page.getByTestId('tools-monitored-button').click();
-      const dialog = page.getByTestId('tools-monitored-dialog');
-      await expect(dialog).toBeVisible();
-      await dialog.getByTestId('tools-config-add').click();
-      const name = dialog.getByTestId('tools-config-name').last();
+      await expect(page).toHaveURL(/mtab=settings&stab=monitored-tools/);
+      await expect(page.getByTestId('tab-settings-monitored-tools')).toHaveAttribute('data-state', 'active');
+      const panel = page.getByTestId('tools-monitored-settings');
+      await expect(panel).toBeVisible();
+      await expect(panel.getByTestId('tools-config-capture'), 'a monitored tool is always captured in full').toHaveCount(0);
+      await panel.getByTestId('tools-config-add').click();
+      const name = panel.getByTestId('tools-config-name').last();
       await name.fill('bash');
       await name.blur();
-      await expect(dialog.getByTestId('tools-config-error')).toHaveText("`bash` is the agent's shell and cannot be monitored");
+      await expect(panel.getByTestId('tools-config-error')).toHaveText("`bash` is the agent's shell and cannot be monitored");
       await name.fill('ce');
-      await expect(dialog.getByTestId('tools-config-error')).toHaveCount(0);
-      await dialog.getByTestId('tools-config-save').click();
-      await expect(dialog).toBeHidden();
+      await expect(panel.getByTestId('tools-config-error')).toHaveCount(0);
+      await panel.getByTestId('tools-config-save').click();
+      await expect(panel.getByTestId('tools-config-save'), 'saved: nothing left to save').toBeDisabled();
+      await page.getByTestId('tab-repo-tools').click();
       // Monitored but not called yet: the tree lists it as «never called».
       await expect(page.getByTestId('tools-tree-never-called')).toHaveAttribute('title', /^ce: /);
       await expect(page.getByTestId('tools-monitored-button')).toContainText('Monitored tools (1)');
 
-      await page.goto(`/#/teams/${teamId}/repos/${repoId}?mtab=tools`);
+      await page.goto(`/#/teams/${teamId}/repos/${repoId}?mtab=settings&stab=monitored-tools`);
       await page.reload();
-      await expect(page.getByTestId('tab-repo-tools')).toHaveAttribute('data-state', 'active');
-      await page.getByTestId('tools-monitored-button').click();
-      await expect(dialog).toContainText('for every member of this team');
-      await dialog.getByTestId('tools-config-add').click();
-      await dialog.getByTestId('tools-config-name').last().fill('find');
-      await dialog.getByTestId('tools-config-save').click();
-      await expect(dialog).toBeHidden();
+      await expect(panel).toContainText('for every member of this team');
+      await panel.getByTestId('tools-config-add').click();
+      await panel.getByTestId('tools-config-name').last().fill('find');
+      await panel.getByTestId('tools-config-save').click();
+      await expect(panel.getByTestId('tools-config-save')).toBeDisabled();
     } finally {
       await context.close();
     }

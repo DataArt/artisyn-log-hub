@@ -64,6 +64,8 @@ export const SETTINGS_TABS = [
   'display',
   'file-categories',
   'analysis',
+  // The CLI tools the hook wraps (the Tools/MCP tab's "Monitored tools" button opens it).
+  'monitored-tools',
   'session-attribution',
   'maintenance',
   'import-export',

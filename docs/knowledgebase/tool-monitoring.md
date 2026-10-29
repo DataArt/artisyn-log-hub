@@ -37,8 +37,9 @@ command matches (the tool was called from a script) is `indirect`. Rules:
 
 ## Configuration: monitored CLI tools
 
-Only CLI tools need configuring (MCP is always recorded). The **Monitored tools** dialog edits one
-level, stored in its own table (DD-1) — not inside `RepoConfigJson`, because the settings PUTs
+Only CLI tools need configuring (MCP is always recorded). The repository settings'
+**Monitored Tools** tab (`stab=monitored-tools`, `tools/MonitoredToolsSettings.tsx`; the Tools/MCP
+tab's "Monitored tools (N)" button opens it) edits one level, stored in its own table (DD-1) — not inside `RepoConfigJson`, because the settings PUTs
 replace that whole blob and run the synchronous file-stats recompute:
 
 | Level | Table | Edited by |
@@ -47,7 +48,9 @@ replace that whole blob and run the synchronous file-stats recompute:
 | team | `team_repo_tool_monitor_config` (PK `team_repository_id`) | the team owner (`canEditTeamConfig`), in the team view; others see it read-only ("Managed by team owner") |
 
 Both hold `{ paused, tools: [{ name, enabled, capture: 'full' | 'meta' }] }`, at most 100 tools,
-names unique case-insensitively.
+names unique case-insensitively. The UI no longer offers `meta`: it saves every row with
+`capture: 'full'`. The field stays in the API and the hook config for backward compatibility
+(older hooks and older saved rows with `meta`).
 
 **Merge (DD-2, `ToolMonitorConfigService.resolveMonitoredTools(userId, repoUrl)`).** What the hook
 wraps for a user and what the rebuild recognises for a session owner: the owner's personal row
@@ -251,7 +254,8 @@ Types: `server/src/logs/tool-monitoring/tool-monitoring.types.ts`, mirrored in
 after Reports and before OKF, where `canSeeTeamWideTabs` allows). File-by-file:
 [client-component-map.md](client-component-map.md).
 
-- Top bar (date range, status, search, scope chip, "Monitored tools (N)") over three resizable
+- Top bar (date range, status, search, scope chip, "Monitored tools (N)" — opens the settings'
+  Monitored Tools tab, dropping the `t*` params) over three resizable
   panes: the tools tree (All tools → MCP / CLI → tool → operation, sortable by calls / error % /
   retried % / last used, collapsible to a rail), the calls table (keyboard listbox, pager) and the
   call details (Parameters, Input, Output, stderr, Signals — each collapsible with a copy button).
@@ -270,7 +274,7 @@ after Reports and before OKF, where `canSeeTeamWideTabs` allows). File-by-file:
 The session detail pane has a "Tools/MCP" tab too (`tab=tools`, test id `tab-session-tools`, after
 OKF): the same `RepoToolsTab` with `sessionId`, so the tree, the calls table and the details show
 only that session tree's calls (root + sub-agents), for the whole session. It has no date range and
-no Monitored tools button (the config is edited on the repository tab); its root carries
+no Monitored tools button (the config is edited in the repository settings); its root carries
 `data-testid="session-tools-tab"`. It shares the `t*` params (without `tfrom` / `tto`), which
 `setSessionTab` and a session switch drop.
 

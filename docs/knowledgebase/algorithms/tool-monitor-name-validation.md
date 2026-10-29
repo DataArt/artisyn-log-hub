@@ -19,7 +19,7 @@ why.
 - Implementation: `packages/tool-monitor/src/index.ts` (`@loghub/tool-monitor`:
   `validateToolName`, `denylistRole`, `normalizeToolName`, `TOOL_DENYLIST`, `TOOL_NAME_MAX`),
   used by the server (`server/src/logs/tool-monitoring/tool-monitor-config.service.ts`, the
-  config PUT) and the client (the "Monitored tools" dialog).
+  config PUT) and the client (the repository settings' "Monitored Tools" tab).
 - Twins: the hook's plain-JS copy `hook/.claude/telemetry_tool/tool-wrap-names.js` (same
   functions, same messages); the hook drops any name that fails, whatever the server sent.
 - Test: `server/src/logs/tool-monitoring/tool-monitor-name-validation.algo.spec.ts` (jest, the
@@ -273,7 +273,7 @@ not on the list (computed independently of the other checks). The test compares
 
 ## Where the result is visible
 
-- Repository → **Tools/MCP** tab → "Monitored tools" dialog: the inline error under the name
+- Repository → **Settings** → "Monitored Tools" tab: the inline error under the name
   field (message text) and the disabled Add button.
 - API: `PUT /api/v1/repositories/:repoId/tool-monitoring/config` answers 400 with the message for a
   rejected name; `GET /api/v2/tool-monitoring/config` (hook) never returns one (DD-2).
