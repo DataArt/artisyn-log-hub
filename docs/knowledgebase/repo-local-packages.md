@@ -57,6 +57,15 @@ keeps its own copies (e.g. `computeLocalSessionCost`), held to the same algorith
   lists `../packages/<name>/src`).
 - `server.fs.allow` in `client/vite.config.ts` adds `../packages` so the Vite dev server may serve
   files outside `client/`.
+- **`@loghub/user-docs` is an alias, not a package.** It points at the repo-root `user-docs/`
+  folder (the shared user documentation, see [user-docs-and-site.md](user-docs-and-site.md)) so
+  the client can `import nav from '@loghub/user-docs/nav.json'` for the help menu. Wired the same
+  way: `resolve.alias` `'@loghub/user-docs'` → `../user-docs` and `server.fs.allow` `../user-docs`
+  in `client/vite.config.ts`; `paths` `"@loghub/user-docs/*": ["../user-docs/*"]` and `include`
+  `"../user-docs/nav.json"` in `client/tsconfig.json` (`resolveJsonModule` is on). It has no
+  `package.json`, no server side and no Docker `COPY packages/` entry — the client-build stage
+  copies `user-docs/` itself. `tests/tsconfig.json` has no `paths`, so tests never import
+  `help/articles/index.ts`; they read the nav through `tests/scenarios/helpers/help-nav.ts`.
 
 ## Docker
 

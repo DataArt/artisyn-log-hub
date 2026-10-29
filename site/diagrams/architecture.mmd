@@ -1,0 +1,24 @@
+flowchart TB
+  subgraph dev["Developer machine"]
+    direction LR
+    cc["Claude Code"]
+    hook["Telemetry hook<br/>(plugin)"]
+    wd[".artisyn/ai_work_dir/…<br/>local files"]
+    otel["OTEL receiver<br/>127.0.0.1:&lt;port&gt;<br/>loopback only"]
+    cc -->|hook events| hook
+    hook --> wd
+    cc -.->|OTLP export| otel
+  end
+  browser["Browser"]
+  subgraph host["Server host (Docker)"]
+    direction LR
+    subgraph app["app container"]
+      srv["Log Hub server (Node.js)<br/>REST API · upload queue<br/>workers · scheduled jobs<br/>static web client"]
+    end
+    subgraph db["db container"]
+      pg[("PostgreSQL")]
+    end
+    srv -->|SQL| pg
+  end
+  hook ==>|"HTTPS/HTTP · x-api-key"| srv
+  browser -->|session cookie| srv

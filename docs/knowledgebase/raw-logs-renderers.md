@@ -5,7 +5,7 @@ description: "Architectural guide to the raw-logs/ subsystem: layers, dependency
 tags:
   - client
   - logs
-timestamp: "2026-07-20T17:04:19+04:00"
+timestamp: "2026-10-29T00:00:00+04:00"
 ---
 
 ---
@@ -110,7 +110,7 @@ Expanded view for `type=system`, `type=system-context`, `type=harness-snapshot` 
 |---|---|
 | `SystemExpanded` | Renders subtype, isMeta, level, durationMs, hasOutput, hookCount, hookErrors, hookInfos, hookAdditionalContext, messageCount, preventedContinuation, stopReason, toolUseID, logicalParentUuid, pendingBackgroundAgentCount, content `<pre>`, compactMetadata |
 | `SystemContextExpanded` | Renders `claudeMd` object: totalBytes + files list |
-| `HarnessSnapshotExpanded` | Compact view of a DD-1 `harness-snapshot` line (the full catalog, uploaded at most once per snapshot id — see `docs/knowledgebase/algorithms/harness-snapshot.md`): the id's first 12 characters, `schemaVersion` and `perToolDetailSupported` when present, then just the **counts** of `skills`/`agents`/`mcpServers`/`systemContext.files` — no file bodies or skill text, those render in the System Context tabs instead |
+| `HarnessSnapshotExpanded` | Compact view of a DD-1 `harness-snapshot` line (the full catalog, uploaded at most once per snapshot id — see `docs/knowledgebase/algorithms/harness-snapshot.md`): the id's first 12 characters, `schemaVersion` and `perToolDetailSupported` when present, then just the **counts** of `skills`/`agents`/`mcpServers`/`systemContext.files` — no file bodies or skill text; sizes, sources and git status of those entries show in the System context anatomy tab instead (`sysctx-anatomy-tab.md`) |
 | `HarnessSnapshotRefExpanded` | Compact view of a `harness-snapshot-ref` line — just the id's first 12 characters. Every artisyn upload of the current session carries one of these, pointing at whichever upload carried the full snapshot |
 
 ### `simple-renderers.tsx`

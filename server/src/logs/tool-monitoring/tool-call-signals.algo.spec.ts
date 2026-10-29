@@ -15,7 +15,6 @@ interface UseInput {
   agent?: string;
   name: string;
   calls?: { tool: string; operation: string }[];
-  commandWords?: string[];
   filePath?: string | null;
   output: string | null;
 }
@@ -36,7 +35,6 @@ function toSignalUse(use: UseInput): SignalToolUse {
   return {
     name: use.name,
     calls: use.calls ?? [],
-    commandWords: use.commandWords ?? [],
     filePath: use.filePath ?? null,
     output: use.output,
   };

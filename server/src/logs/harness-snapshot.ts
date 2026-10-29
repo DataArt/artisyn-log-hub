@@ -40,7 +40,21 @@ export const PENDING_QUEUE_STATUSES = [
   'partially_uploaded',
 ] as const;
 
-export type HarnessSnapshotSkillSource = 'project' | 'user' | 'plugin';
+/**
+ * `'org-synced'` (hook 2.28.0+): a skill synced from the organisation's skill store into
+ * `~/.claude/skills/<org>/`; its `name` is the bare skill name.
+ */
+export type HarnessSnapshotSkillSource =
+  | 'project'
+  | 'user'
+  | 'plugin'
+  | 'org-synced';
+/** Hook 2.28.0+ (DD-17): a harness file's git status relative to the repository root. */
+export type HarnessGitStatus =
+  | 'tracked'
+  | 'untracked'
+  | 'ignored'
+  | 'outside-repo';
 export type HarnessSnapshotSkillKind = 'skill' | 'workflow' | 'command';
 
 /** DD-1: present only on a `plugin`-source skill. */
@@ -66,6 +80,11 @@ export interface HarnessSnapshotSkillEntry {
   bytes: number;
   contentHash: string;
   plugin?: HarnessSnapshotPlugin;
+  /**
+   * Hook 2.28.0+: the file's git status relative to the session's repository root (DD-17).
+   * Absent on older hooks.
+   */
+  gitStatus?: HarnessGitStatus;
 }
 
 export interface HarnessSnapshotAgentEntry {
@@ -76,6 +95,11 @@ export interface HarnessSnapshotAgentEntry {
   bytes: number;
   contentHash: string;
   source: 'project';
+  /**
+   * Hook 2.28.0+: the file's git status relative to the session's repository root (DD-17).
+   * Absent on older hooks.
+   */
+  gitStatus?: HarnessGitStatus;
 }
 
 export interface HarnessSnapshotMcpToolEntry {
@@ -100,6 +124,11 @@ export interface HarnessSnapshotContextFile {
   contentHash: string;
   /** Rule file contents only (DD-13's `claudeMd`); other files carry no `content`. */
   content?: string;
+  /**
+   * Hook 2.28.0+: the file's git status relative to the session's repository root (DD-17).
+   * Absent on older hooks.
+   */
+  gitStatus?: HarnessGitStatus;
 }
 
 export interface HarnessSnapshotSystemContext {

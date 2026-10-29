@@ -1,12 +1,12 @@
 ---
 type: "Log Schema Reference"
 title: "Attachment Types in Claude Logs"
-description: "Reference for all 25 attachment.type sub-types (20 auto-generated, 5 hand-maintained): field schemas, sample values, and UI display strategies."
+description: "Reference for all 27 attachment.type sub-types (20 auto-generated, 7 hand-maintained): field schemas, sample values, UI display strategies, and how the System context anatomy tab sizes the startup ones."
 tags:
   - logs
   - schema
   - claude
-timestamp: "2026-06-15T14:10:06+04:00"
+timestamp: "2026-10-29T00:00:00+04:00"
 ---
 
 # Attachment Types in Claude Logs
@@ -20,6 +20,27 @@ timestamp: "2026-06-15T14:10:06+04:00"
 > read-only queries on the dev DB (2026-10-21); their counts are not part of the snapshot statistics above. None of
 > them feeds a metric (tokens, cost, turns, work time), and the raw-logs viewer shows each as a collapsed row through
 > the generic JSON fallback, with no special renderer.
+>
+> `mcp_instructions_delta` and `session_context` were added by hand for the System context anatomy tab
+> (2026-10-29). Only their field names and value sizes are documented — never their text.
+
+## Sizing in the System context anatomy tab
+
+The System context anatomy tab ([System Context Anatomy Tab](../sysctx-anatomy-tab.md), rules in `../algorithms/sysctx-anatomy.md`) reads the
+attachments of the **startup block** (the lines before the first main-chain assistant reply) and
+sizes each one by UTF-8 bytes:
+
+| Attachment type | Partition | Measured |
+|---|---|---|
+| `prompt_snapshot` | `system-prompt` / `memory` | each `systemPrompt[]` block |
+| `deferred_tools_delta` | `deferred-tools` / `mcp-server` | `addedLines[i]` + 1 per name, split by `mcp__<slug>__` |
+| `mcp_instructions_delta` | `mcp-server` (instructions part) | `addedBlocks[i]` per `addedNames[i]` |
+| `agent_listing_delta` | `agent-types` | `addedLines[i]` + 1 per `addedTypes[i]` |
+| `skill_listing` | `skills` | `content`, split per skill name |
+| `instructions` | `instruction-file` / `memory` | `files[].content` |
+| `session_context` | `system-reminder` | each `context` value |
+| `date`, `environment`, `command_permissions` and any other type | `environment` (**environment-sized**, estimated) | `JSON.stringify(attachment)`, one row per type |
+| `deferred_tools_record`, `nested_memory` | — | not sized (`deferred_tools_record` only feeds an MCP server's "loaded on demand" names) |
 
 ## Overview
 
@@ -30,7 +51,7 @@ All top-level keys seen across all attachment types:
 
 `addedLines`, `addedNames`, `addedTypes`, `allowedTools`, `command`, `commandMode`, `content`, `displayPath`, `durationMs`, `exitCode`, `filename`, `files`, `hookEvent`, `hookName`, `ideName`, `isInitial`, `isNew`, `isSubAgent`, `itemCount`, `lineEnd`, `lineStart`, `names`, `newDate`, `path`, `pendingMcpServers`, `planExists`, `planFilePath`, `prompt`, `readdedNames`, `reminderType`, `removedNames`, `removedTypes`, `showConcurrencyNote`, `skillCount`, `skillDir`, `skillNames`, `skills`, `snippet`, `stderr`, `stdout`, `toolUseID`, `type`
 
-Added by the hand-maintained types: `cliPrefix`, `commit`, `contextRendering`, `echoWireToolInputs`, `entries`,
+Added by the hand-maintained types: `addedBlocks`, `cliPrefix`, `commit`, `context`, `contextRendering`, `echoWireToolInputs`, `entries`,
 `inlineTools`, `keptReminders`, `managedCommit`, `managedPr`, `nameOnlyAnnouncements`, `pr`, `reminderFold`,
 `sendUserFileHint`, `systemPrompt`, `systemTurns`, `text`, `toolChangeHeader`, `toolInputCopies`, `tools`, `url`
 
@@ -49,6 +70,7 @@ Added by the hand-maintained types: `cliPrefix`, `commit`, `contextRendering`, `
 - [`file`](#attachment-type-file) — 29 entries
 - [`hook_success`](#attachment-type-hook_success) — 19 entries
 - [`invoked_skills`](#attachment-type-invoked_skills) — 9 entries
+- [`mcp_instructions_delta`](#attachment-type-mcp_instructions_delta) — hand-maintained (2026-10-29)
 - [`nested_memory`](#attachment-type-nested_memory) — 160 entries
 - [`opened_file_in_ide`](#attachment-type-opened_file_in_ide) — 125 entries
 - [`plan_mode`](#attachment-type-plan_mode) — 1 entries
@@ -57,6 +79,7 @@ Added by the hand-maintained types: `cliPrefix`, `commit`, `contextRendering`, `
 - [`queued_command`](#attachment-type-queued_command) — 5 entries
 - [`remote_session_change`](#attachment-type-remote_session_change) — hand-maintained (Claude Code 2.1.280+)
 - [`selected_lines_in_ide`](#attachment-type-selected_lines_in_ide) — 15 entries
+- [`session_context`](#attachment-type-session_context) — hand-maintained (2026-10-29)
 - [`silent_turn_reminder`](#attachment-type-silent_turn_reminder) — hand-maintained (Claude Code 2.1.280+)
 - [`skill_listing`](#attachment-type-skill_listing) — 200 entries
 - [`task_reminder`](#attachment-type-task_reminder) — 1015 entries
@@ -103,6 +126,9 @@ Added by the hand-maintained types: `cliPrefix`, `commit`, `contextRendering`, `
 |-------|------|---------------|
 | `allowedTools` | array | [], ["Read"], ["Read","Grep","Glob","WebFetch"] |
 | `type` | string | "command_permissions" |
+
+In the System context anatomy tab a startup `command_permissions` is **environment-sized**: it counts toward
+the `environment` partition by its `JSON.stringify` length (see [Sizing](#sizing-in-the-system-context-anatomy-tab)).
 
 ---
 
@@ -282,6 +308,26 @@ be text-matched for tool usage: a tool listed here was offered, not called.
 
 ---
 
+## Attachment type: `mcp_instructions_delta`
+
+**Hand-maintained** (2026-10-29), from the GS-05 golden fixture and real Claude Code sessions.
+
+The instruction text each MCP server sends at connection, announced to the model at startup (and again when a
+server connects or disconnects later). The System context anatomy tab adds `addedBlocks[i]` bytes to the
+`mcp-server` row of `addedNames[i]` (the INSTR. B column), joined by `mcpKey(name)` — every character outside
+`[A-Za-z0-9_-]` becomes `_`, so "claude.ai Claude Docs" joins `mcp__claude_ai_Claude_Docs__…` tool names.
+
+### Mandatory Fields
+
+| Field | Type | Sample Values |
+|-------|------|---------------|
+| `addedNames` | array | ["postgres"], ["claude.ai Claude Docs"] — server display names |
+| `addedBlocks` | array | instruction text, one string per `addedNames` entry (same index) |
+| `removedNames` | array | [], names of servers whose instructions were withdrawn |
+| `type` | string | "mcp_instructions_delta" |
+
+---
+
 ## Attachment type: `nested_memory`
 
 **Entries analyzed:** 160
@@ -453,6 +499,30 @@ Remote-session (commit / PR handoff) settings for the session. Informational onl
 | `lineEnd` | number | 2, 1, 27, 12, 71 |
 | `lineStart` | number | 0, 1, 27, 12, 71 |
 | `type` | string | "selected_lines_in_ide" |
+
+---
+
+## Attachment type: `session_context`
+
+**Hand-maintained** (2026-10-29), from the GS-05 golden fixture and real Claude Code sessions.
+
+Session facts Claude Code injects as a system reminder at startup. The System context anatomy tab sizes each
+`context` key as one `system-reminder` row (its string value's UTF-8 bytes; a non-string value by
+`JSON.stringify`) and shows only the key name and size.
+
+### Mandatory Fields
+
+| Field | Type | Sample Values |
+|-------|------|---------------|
+| `context` | object | {"userEmail": "…", "gitStatus": "…"} |
+| `type` | string | "session_context" |
+
+#### `context` keys seen
+
+| Key | Type | Content |
+|-----|------|---------|
+| `userEmail` | string | the signed-in user's email |
+| `gitStatus` | string | the git status snapshot of the working tree at session start (branch, recent commits, changed files) |
 
 ---
 

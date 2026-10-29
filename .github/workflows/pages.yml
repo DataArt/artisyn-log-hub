@@ -1,0 +1,71 @@
+# Log Hub site on GitHub Pages: pre-renders site/ + user-docs/ with scripts/site/build-site.mjs
+# (npm run build:site → tmp/site/) and deploys it. Home, Features, docs pages and the deck.
+#
+# Triggers: a push to main that touches a site input, or a manual run. README.md and client/** are
+# not site inputs, so they are deliberately not in `paths`.
+# Least privilege: the workflow reads only; the deploy job alone gets pages: write and
+# id-token: write (OIDC for actions/deploy-pages). No secrets. Actions are pinned by SHA.
+# One-time owner step: repository Settings → Pages → Source: GitHub Actions.
+# Rules: docs/tasks/todo/2026-10-28-why-loghub-slides/impl-plan.md (DD-26), KB
+# docs/knowledgebase/user-docs-and-site.md.
+name: pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - site/**
+      - user-docs/**
+      - hook/INSTALL_HOOK.md
+      - hook/HOW_HOOK_WORKS.md
+      - scripts/user-docs/**
+      - scripts/site/**
+      - package.json
+      - package-lock.json
+      - .github/workflows/pages.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# One deployment at a time; a queued run waits instead of cancelling one in progress.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: deploy
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          package-manager-cache: false
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Build the site
+        run: npm run build:site
+
+      - uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d # v6.0.0
+
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        with:
+          path: tmp/site
+
+      - id: deployment
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

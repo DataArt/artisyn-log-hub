@@ -11,6 +11,7 @@ import {
   type CategoryRow,
 } from './FileCategoriesEditor';
 import { MaintenanceSection } from './MaintenanceSection';
+import { MonitoredToolsSettings } from './tools/MonitoredToolsSettings';
 import { ImportExportSection } from './export-import/ImportExportSection';
 import {
   SessionAttributionSettings,
@@ -33,6 +34,7 @@ const SETTINGS_TAB_LABELS: Record<SettingsTab, string> = {
   display: 'Display',
   'file-categories': 'File Categories',
   analysis: 'Analysis',
+  'monitored-tools': 'Monitored Tools',
   'session-attribution': 'Session Attributes',
   maintenance: 'Maintenance',
   'import-export': 'Import/Export',
@@ -347,6 +349,15 @@ export function RepositorySettings({
                 </div>
               </div>
             )}
+          </div>
+        </PageTabsContent>
+
+        <PageTabsContent
+          value="monitored-tools"
+          className="flex-1 min-h-0 overflow-auto p-6"
+        >
+          <div className="max-w-3xl">
+            <MonitoredToolsSettings repoId={repoId} teamId={teamId} />
           </div>
         </PageTabsContent>
 

@@ -1,10 +1,10 @@
 # Scenarios: log ingest, hook, installer, platform
 
-Group: INGEST (log ingest v1/v2), HOOK (the Claude Code hook and the OTEL receiver), COMPAT (hook backward compatibility), INST (installer), REL (build and releases), PLAT (health, headers, static files, cluster, server logs).
+Group: INGEST (log ingest v1/v2), HOOK (the Claude Code hook and the OTEL receiver), COMPAT (hook backward compatibility), INST (installer), REL (build and releases), PLAT (health, headers, static files, cluster, server logs), SITE (the static GitHub Pages site and the deck).
 
 ## 0. Scope and assumptions
 
-**What we cover.** 27 scenarios instead of about 860 existing tests of this group (an approximate count, by `grep` of `it(`/`test(` lines; an `it.each` counted as one). Each scenario is a long story of 5-15 steps that a person can repeat by hand (`curl`, a terminal, clicks). The written description of a scenario is the source of truth; the test code must follow it, not the other way round.
+**What we cover.** 28 scenarios instead of about 860 existing tests of this group (an approximate count, by `grep` of `it(`/`test(` lines; an `it.each` counted as one). Each scenario is a long story of 5-15 steps that a person can repeat by hand (`curl`, a terminal, clicks). The written description of a scenario is the source of truth; the test code must follow it, not the other way round.
 
 **What we do NOT cover here** (it belongs to other groups; the "Replaces" column does not list these files): `claude-extractor.spec.ts` (106) and `tool-stats.spec.ts` (88) are token/cost/tool formulas, the Cost/Analytics group; `post-turn-analysis-*`, `session-attribution-state` are the Advisor/Attribution group; `session-retention` (server retention) is the Sessions group; `user-settings`, `model-pricing` are the User/Cost groups. The hook side of OTEL retention (`otelRetentionDays`) is covered here (S-HOOK-08).
 
@@ -67,8 +67,9 @@ CLAUDE.md forbids stopping/restarting the dev server; ENV-B/ENV-C are separate p
 | S-PLAT-01 | Health, build version and security headers everywhere | API | P0 | 9 |
 | S-PLAT-02 | Static files of the built application: br/gzip/identity, Vary, cache, SPA fallback | API | P1 | 36 |
 | S-PLAT-03 | The server through an operator's eyes: cluster, System Info, a worker restart, file logs, Error Logs, archive | UI+API | P1 | 110 |
+| S-SITE-01 | The static site and the "Why Log Hub" deck: built, served under a base path, navigable, responsive, no leaks | UI | P1 | 0 |
 
-Total: P0: 15, P1: 11, P2: 1. Replaces about 820 tests. (S-REL-02, the signed release link, was dropped: the release download feature was removed by 2026-10-20-github-release-pipeline.)
+Total: P0: 15, P1: 12, P2: 1. Replaces about 820 tests. (S-REL-02, the signed release link, was dropped: the release download feature was removed by 2026-10-20-github-release-pipeline.)
 
 ---
 
@@ -371,13 +372,14 @@ Total: P0: 15, P1: 11, P2: 1. Replaces about 820 tests. (S-REL-02, the signed re
 ### S-HOOK-09. The main end-to-end scenario: an installed hook, a real server, the session is visible in the UI
 - **Layer:** UI+API
 - **Priority:** P0 (the only scenario that checks the whole chain from the developer to the browser)
-- **Data/environment:** ENV-A. Through S-INST-01 the **built** plugin is installed into temp-project (git remote `git@git.example.com:e2e/<run>/chain.git`, branch `feature/chain`, git user "Jane Dev"); `serverUrl` is the real server, the key is created through the API; a fake `claude` for activation; the project has a `CLAUDE.md`, a skill `.claude/skills/hello/SKILL.md`, an agent `.claude/agents/rev.md`, and a `.mcp.json` with a stdio server `fake-mcp.js` (it answers `initialize`/`tools/list`).
+- **Data/environment:** ENV-A. Through S-INST-01 the **built** plugin is installed into temp-project (git remote `git@git.example.com:e2e/<run>/chain.git`, branch `feature/chain`, git user "Jane Dev"); `serverUrl` is the real server, the key is created through the API; a fake `claude` for activation; the project has a `CLAUDE.md` (added with `git add`), a `CLAUDE.local.md` ignored by `.gitignore`, a skill `.claude/skills/hello/SKILL.md` (untracked), an agent `.claude/agents/rev.md`, and a `.mcp.json` with a stdio server `fake-mcp.js` (it answers `initialize`/`tools/list`); the fake home holds an org-synced skill `skills/synced/org-1/greet/SKILL.md`.
 - **Steps:**
   1. Run the hooks of the installed plugin (`${CLAUDE_PLUGIN_ROOT}/scripts/*.js` from `.artisyn/marketplace/plugins/log-hub-hooks/hooks/hooks.json`, exactly as written there: `command:"node"`, `args`) in the sequence of a real session: `SessionStart` -> `UserPromptSubmit` ("fix the login bug") -> `PreToolUse` Read inside the project (allowed) -> `PostToolUse` Edit -> `Stop`.
      PreToolUse note (code): the Read guardrail was removed in 2.19.0, so no PreToolUse hook runs for Read / Edit. Since 2.27.0 (`2026-06-19-mcp-invocation-log-tab`, DD-14) `hooks.json` registers exactly **one** `PreToolUse` entry again: matcher `PowerShell`, `tool-wrap-powershell.js` (the Tools/MCP PowerShell wrapper). The step asserts exactly that entry and no other.
   2. The transcript `~/.claude/projects/<slug>/<sid>.jsonl` (seeded from a prepared real session: 2 user messages, 2 assistant replies with `usage`, one tool_use/Edit) and a sub-agent `agent-a1.jsonl` with `parentAgentId`.
   3. After `Stop` (we wait ≤10 s) `GET /api/v1/repositories` holds the `chain` repository; `GET .../sessions` the session with the key owner's `userEmail` and branch `feature/chain`.
   4. Browser: `#/repos/:id` -> the session is in the list; open it -> the Summary tab shows the tokens and the cost (checked against `GET .../sessions/:sid/logs`), Logs shows the prompt "fix the login bug", the tree has the sub-agent as a descendant; the Harness usage tab shows the skill `hello`, the agent `rev`, the MCP server `fake-mcp` and its tool exactly once.
+  4c. (hook 2.28.0+) The stored `harness_snapshots.body` carries `gitStatus`: `CLAUDE.md` `tracked`, `CLAUDE.local.md` `ignored`, skill `hello` `untracked`; the org-synced skill `greet` is stored with `source: "org-synced"`, the masked path `~/.claude/skills/synced/<org>/greet/SKILL.md` and an empty `body` (no skill text); there is no `harness_elements` row named `greet` (the server leaves org-synced skills out of the Harness usage inventory).
   5. A second `Stop` without changes: no duplicates in Harness (harness events are sent once per session), the server's upload counter for the `claude` transcript did not grow.
   6. The "Installed Hooks" page (`#/repos/:id/hook-state`, the left menu): the hook version = the version from the plugin's `version.json`, no issues badge (the version is not below the baseline).
   7. Downgrade the hook: rewrite `scripts/version.json` to `0.0.1` and `Stop` -> the page shows "Hook outdated", version `0.0.1`, issue count 1 (+1 for a recommendation, if there is one), the recommendations and the log tail (`logTail`), the `[error]/[fail]/[warn]` lines are highlighted; the "Copy upgrade cmd" button gives a command like `npx <origin>/static/artisyn-hooks-installer.tgz upgrade` with `?v=<latest>`.
@@ -386,7 +388,7 @@ Total: P0: 15, P1: 11, P2: 1. Replaces about 820 tests. (S-REL-02, the signed re
   10. User B (an outsider) does not see the repository or its `hook-state` (403/empty).
   11. The `broken-upload-file` recommendation: mix a broken file into the upload (v2) and run two `Stop`s: in the second run `hook-recommendations.json` has `broken-upload-file`, and it appears in the UI; after the queue is cleaned (S-INGEST-05) and one more `Stop`, it disappears (closes "no e2e for clearing recommendations").
   12. `GET /api/v1/model-pricing` without a session -> 200 and a non-empty table (the hook needs it before the first upload).
-- **Check:** the end-to-end values: repository, user, branch, tokens, the sub-agent tree, harness without duplicates, the hook status; version consistency; the baseline by maximum; the built (not the source) plugin works; pricing is public.
+- **Check:** the end-to-end values: repository, user, branch, tokens, the sub-agent tree, harness without duplicates, the snapshot's git status and org-synced skill (metadata only), the hook status; version consistency; the baseline by maximum; the built (not the source) plugin works; pricing is public.
 - **Replaces:** `hook-state.e2e-spec.ts` (11), `E2E/hook-state.spec.ts` (2), `logs-hook-status.e2e-spec.ts` (5), `hook-state.service.spec.ts` (2), `send-logs-hook.test.js` harness/MCP-probe/context-prepends (~15), `skill-catalog.test.js` (12, through the result in the UI), `no-visible-window.test.js` and `spawn-hidden.test.js` (7, as a static check of the sources for `windowsHide:true` and the absence of `.vbs`/`wscript`; 1 grep step stays), the `?v=` part of `installer.e2e-spec.ts` (4), `model-pricing.e2e-spec.ts` (1, public access), part of `HookStatePage.test.tsx`. It closes "sanitize reaches the server" (S-HOOK-02 step 5) and "recommendations disappear in the UI".
 - **What we lose:** the skills priority project > user > plugin and the exclusion of disabled plugins (`skill-catalog` 12): we keep only the fact "the project skill is visible"; the detailed MCP probe with a `.cmd` shim on Windows and several servers (4 tests) is a `[win]` step outside this scenario (a manual run or a separate Windows job).
 
@@ -617,6 +619,30 @@ Total: P0: 15, P1: 11, P2: 1. Replaces about 820 tests. (S-REL-02, the signed re
 - **Replaces:** `cluster-messages.spec.ts` (12), `worker-slot-registry.spec.ts` (25; the behaviour "the slot is kept, a restart with a delay" is steps 5-6, the pure backoff logic remains debatable, see below), `worker-stats-reporter.spec.ts` (13), `system-info.service.spec.ts` (12), `request-metrics.middleware.spec.ts` (12), `system-info.e2e-spec.ts` (11), `instance-count.spec.ts` (3), `trust-proxy.spec.ts` (5), `app-logger.spec.ts` (8), `sql-logger.spec.ts` (10), `logback-formatter.spec.ts` (4), `AdminSystemTab.test.tsx`/`AdminErrorLogsTab.test.tsx` (~6, the client components group), the Error Logs and Logs Archive parts of `admin-panel.e2e-spec.ts` (~4). It closes F.3 "the cluster has no e2e".
 - **What we lose:** the exact backoff schedule `1/2/4/8/16/30 s` and the stop threshold after 10 fast crashes (the pure arithmetic of `WorkerSlotRegistry`): **we recommend keeping one small unit file with ~6 cases** (the owner's decision, section 4); an unreachable DB in System Info (`connected=false`, `memoryBytes null`) and the active request counter not going negative are low-value edge cases, and the loss is acceptable; log rotation at the day change (`DailyRotateStream` switches the file at midnight) is not checked, only the name format.
 - **OS:** on Windows `cluster.schedulingPolicy` differs (no round-robin), so spreading the requests across the workers is not guaranteed; step 4 on Windows is relaxed to "at least one `-iN` file"; processes are killed with `taskkill`; `SIGTERM` is not equivalent.
+
+### S-SITE-01. The static site and the "Why Log Hub" deck: built, served under a base path, navigable, responsive, no leaks
+- **Layer:** UI
+- **Priority:** P1
+- **Data/environment:** no stand and no DB: `node scripts/site/build-site.mjs --out tmp/scenarios/site` (the same renderer GitHub Pages runs), served by a Node `http` static server under the base path `/artisyn-log-hub/` (the GitHub Pages path, impl-plan DD-19a; anything outside it is 404). The deck needs internet access: it loads reveal.js 5.2.1 from `cdn.jsdelivr.net`. Runs in the mode-A pass only (`@mode-a`). Test: `tests/scenarios/platform/s-site-01.spec.ts`.
+- **Steps:**
+  0. Build the site: exit code 0, `index.html` exists.
+  1. Crawl every `href`/`src` from `index.html`: every local target answers 200 and every `#fragment` exists on its target page; Home, Features, the deck and `docs/<slug>.html` for every `user-docs/nav.json` page are reached; external links are `https://` (or the reader's own `http://localhost` server in the install guide).
+  2. At 1280×720 every non-deck page has the top nav Home, Features, Get started, Configuration, Using Log Hub, Data & security, Questions, Deck, GitHub ↗ in that order; each local target answers 200; clicking each from Home opens it with that item marked current.
+  3. Home: the thesis headline ("… Is that good?"), the lead that keeps cost control "right and useful" and "Log Hub answers the next questions", three question cards, links to the deck, Features and Get started.
+  4. Features: eight sections `#a`–`#h`, each heading with its block marker A–H and a question.
+  5. Docs pages: the sidebar lists every nav page with the nav.json groups; every TOC ("On this page", shown for ≥ 3 headings) link points at an existing heading id (install-server has one); every page links the repository and its releases.
+  6. Dark mode: `emulateMedia({ colorScheme: 'dark' })` changes the body background of Home, a docs page and the deck.
+  7. At 375 px: no horizontal page scroll on any non-deck page, body font ≥ 16 px; the top nav is hidden until the "Menu" button opens it.
+  8. At 1280×720: no horizontal page scroll on any non-deck page.
+  9. Deck: 10–20 slides; no slide's content overflows its 1280×720 frame; ArrowRight/ArrowLeft move between slides and update the `#/n` hash.
+  10. Every content slide has one headline, 1–3 bullets and at most 40 words of body text (the "Illustrative example" label not counted).
+  11. Every block with dataset figures (`.deck-figure` in the deck, `.figure-block` on Home and Features) carries the "Illustrative example" label.
+  12. `deck/index.html?print-pdf` renders one PDF page per slide and hides the exit link.
+  13. All browser requests went to the local server or to `cdn.jsdelivr.net/npm/<name>@<x.y.z>/…` (a versioned URL).
+  14. Artifact grep over the built files: no e-mail address (the `git@github.com` SSH remote example is not one) and no absolute local path (`X:\…`, `/Users/<name>`, `/home/<name>` except the fictional `/home/me` and `/home/jane` examples of the docs, the repository path and the home folder of the build machine).
+- **Check:** the site works below a base path with relative links only, nothing links to a missing page or heading, the layout holds on a phone and a laptop, the deck keeps its content limits and labels every fictional figure, nothing personal leaks into the published files.
+- **Replaces:** nothing (a new feature, 2026-10-28-why-loghub-slides).
+- **What we lose:** the real GitHub Pages deploy (`.github/workflows/pages.yml`) is not run; the PDF file itself is not produced (only the `?print-pdf` layout is checked); the dataset arithmetic and link resolution are covered by the algorithm tables `site-example-dataset.md` and `user-docs-links.md`.
 
 ---
 

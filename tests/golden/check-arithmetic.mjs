@@ -14,6 +14,8 @@
 //     GS-04 and GS-06a must be told apart from, GS-03's context table;
 //   - change-surface concentration from the folder distribution (GS-09: from the transcript's paths),
 //     with the formula of docs/knowledgebase/change-surface.md §2;
+//   - the System context anatomy (GS-05 `anatomy`): partition bytes from the startup block, tokens
+//     at `charsPerToken`, attributed = Σ tokens, harness internals = total − attributed;
 //   - every REPO-GOLD total in `repo-gold.expected.json`, including the merged work time per day.
 //
 // Usage: node tests/golden/check-arithmetic.mjs   (exit 0 all consistent, 1 on any mismatch)
@@ -222,6 +224,77 @@ function editedFolders(lines, repoRoot) {
   return folders;
 }
 
+/** Partition kinds of the System context anatomy, harness internals excluded. */
+export const ANATOMY_KINDS = [
+  'system-prompt', 'memory', 'environment', 'deferred-tools', 'mcp-server',
+  'agent-types', 'skills', 'instruction-file', 'system-reminder', 'first-prompt',
+];
+const ANATOMY_OWN_TYPES = new Set([
+  'prompt_snapshot', 'deferred_tools_delta', 'mcp_instructions_delta', 'agent_listing_delta',
+  'skill_listing', 'instructions', 'session_context',
+]);
+const ANATOMY_IGNORED_TYPES = new Set(['deferred_tools_record', 'nested_memory']);
+
+/**
+ * Startup-context anatomy of a root transcript, re-derived independently of the client builder
+ * (docs/knowledgebase/algorithms/sysctx-anatomy.md): partition bytes from the lines before the
+ * first non-sidechain assistant line with usage, the exact total from that line's usage.
+ */
+export function startupAnatomy(lines) {
+  const utf8 = (s) => Buffer.byteLength(String(s), 'utf8');
+  let anchor = lines.findIndex((l) => l.type === 'assistant' && l.isSidechain !== true && l.message?.usage);
+  let total = null;
+  if (anchor >= 0) {
+    const u = lines[anchor].message.usage;
+    total = (u.input_tokens ?? 0) + (u.cache_creation_input_tokens ?? 0) + (u.cache_read_input_tokens ?? 0);
+  } else {
+    anchor = lines.findIndex((l) => l.type === 'assistant');
+    if (anchor < 0) anchor = lines.length;
+  }
+  const block = lines.slice(0, anchor).filter((l) => l.isSidechain !== true);
+  const atts = block.filter((l) => l.type === 'attachment' && typeof l.attachment?.type === 'string').map((l) => l.attachment);
+  const bytes = Object.fromEntries(ANATOMY_KINDS.map((k) => [k, 0]));
+  const listing = atts.filter((a) => a.type === 'skill_listing');
+  const initial = listing.find((a) => a.isInitial === true) ?? listing[0];
+  if (initial) bytes.skills = utf8(initial.content ?? '');
+  const promptSnapshot = atts.find((a) => a.type === 'prompt_snapshot');
+  for (const b of promptSnapshot?.systemPrompt ?? []) {
+    const text = typeof b === 'string' ? b : typeof b?.text === 'string' ? b.text : JSON.stringify(b ?? '');
+    const first = text.split('\n').find((l) => l.trim() !== '');
+    bytes[first?.trim() === '# Memory' ? 'memory' : 'system-prompt'] += utf8(text);
+  }
+  for (const a of atts) {
+    if (a.type === 'instructions') {
+      for (const f of a.files ?? []) {
+        const isMemory = /\/MEMORY\.md$/.test(String(f.path ?? '').replace(/\\/g, '/'));
+        bytes[isMemory ? 'memory' : 'instruction-file'] += utf8(f.content ?? '');
+      }
+    } else if (a.type === 'deferred_tools_delta') {
+      (a.addedNames ?? []).forEach((name, i) => {
+        bytes[/^mcp__.+?__/.test(name) ? 'mcp-server' : 'deferred-tools'] += utf8(a.addedLines?.[i] ?? name) + 1;
+      });
+    } else if (a.type === 'mcp_instructions_delta') {
+      for (const block of a.addedBlocks ?? []) bytes['mcp-server'] += utf8(block);
+    } else if (a.type === 'agent_listing_delta') {
+      (a.addedTypes ?? []).forEach((_t, i) => (bytes['agent-types'] += utf8(a.addedLines?.[i] ?? '') + 1));
+    } else if (a.type === 'session_context') {
+      for (const v of Object.values(a.context ?? {})) bytes['system-reminder'] += utf8(typeof v === 'string' ? v : JSON.stringify(v ?? ''));
+    } else if (!ANATOMY_OWN_TYPES.has(a.type) && !ANATOMY_IGNORED_TYPES.has(a.type)) {
+      bytes.environment += utf8(JSON.stringify(a));
+    }
+  }
+  for (const l of block.filter((x) => x.type === 'user')) {
+    const c = l.message?.content;
+    if (typeof c === 'string') bytes['first-prompt'] += utf8(c);
+    else if (Array.isArray(c)) {
+      for (const p of c) {
+        if (p?.type === 'text' && typeof p.text === 'string' && !p.text.startsWith('<system-reminder>')) bytes['first-prompt'] += utf8(p.text);
+      }
+    }
+  }
+  return { total, bytes };
+}
+
 export function listFixtures(dir = GOLDEN_DIR) {
   return fs
     .readdirSync(dir, { withFileTypes: true })
@@ -366,6 +439,23 @@ export function check({ dir = GOLDEN_DIR } = {}) {
         for (const [k, v] of Object.entries(causes)) {
           eq(`${at}.cacheCreationCauses.${k} sum`, v.compaction + v.fileReread + v.unattributed, own.cacheWrite5m + own.cacheWrite1h);
         }
+      }
+
+      // System context anatomy (GS-05): partitions re-derived from the startup block.
+      if (exp.anatomy) {
+        const an = exp.anatomy;
+        const derived = startupAnatomy(rootLines);
+        eq(`${at}.anatomy.total(first usage)`, derived.total, an.total);
+        eq(`${at}.anatomy.partitions keys`, Object.keys(an.partitions), ANATOMY_KINDS);
+        let attributed = 0;
+        for (const kind of ANATOMY_KINDS) {
+          const p = an.partitions[kind];
+          eq(`${at}.anatomy.partitions.${kind}.bytes`, derived.bytes[kind], p?.bytes);
+          eq(`${at}.anatomy.partitions.${kind}.tokens`, Math.round((p?.bytes ?? 0) / an.charsPerToken), p?.tokens);
+          attributed += p?.tokens ?? 0;
+        }
+        eq(`${at}.anatomy.attributed`, attributed, an.attributed);
+        eq(`${at}.anatomy.harnessInternals = total - attributed`, an.total - an.attributed, an.harnessInternals);
       }
 
       // Lines, tools, change surface.

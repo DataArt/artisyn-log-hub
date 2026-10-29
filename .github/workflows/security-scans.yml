@@ -748,9 +748,32 @@ jobs:
       # SARIF mode exits 0 on findings and uploads them to code scanning (category `zizmor`).
       # On fork PRs (no security-events token) it runs in annotation mode instead, and the row
       # comes from the step outcome.
+      # A failed step is therefore zizmor itself failing — in practice an online audit
+      # (known-vulnerable-actions etc.) losing a GitHub API request, which aborts the whole run
+      # with "no audit was performed" and no SARIF. So a failure is retried once after 30 s, and
+      # a second failure gives a `warning` row (GitHub API unavailable), not an `error`;
+      # findings never trigger a retry. Fork PRs are not retried: in annotation mode a failed
+      # step can mean findings. The two steps are identical apart from their ids.
       - name: zizmor
         id: zizmor
         if: steps.gate.outputs.run == 'true'
+        continue-on-error: true
+        uses: zizmorcore/zizmor-action@53290badfa369cb0bf7ad16342cb62c2fa47ac7b # v0.8.0
+        with:
+          version: ${{ env.ZIZMOR_VERSION }}
+          inputs: .
+          collect: workflows
+          color: false
+          advanced-security: ${{ !github.event.pull_request.head.repo.fork }}
+          annotations: ${{ github.event.pull_request.head.repo.fork == true }}
+
+      - name: zizmor retry pause
+        if: steps.gate.outputs.run == 'true' && steps.zizmor.outcome == 'failure' && !github.event.pull_request.head.repo.fork
+        run: sleep 30
+
+      - name: zizmor (retry 1)
+        id: zizmor_retry1
+        if: steps.gate.outputs.run == 'true' && steps.zizmor.outcome == 'failure' && !github.event.pull_request.head.repo.fork
         continue-on-error: true
         uses: zizmorcore/zizmor-action@53290badfa369cb0bf7ad16342cb62c2fa47ac7b # v0.8.0
         with:
@@ -768,8 +791,10 @@ jobs:
           AL_OUTCOME: ${{ steps.actionlint.outcome }}
           AL_RC: ${{ steps.actionlint.outputs.rc }}
           AL_FAILED: ${{ steps.actionlint.outputs.failed }}
-          ZIZMOR_OUTCOME: ${{ steps.zizmor.outcome }}
-          ZIZMOR_SARIF: ${{ steps.zizmor.outputs.output-file }}
+          ZIZMOR_OUTCOME_1: ${{ steps.zizmor.outcome }}
+          ZIZMOR_SARIF_1: ${{ steps.zizmor.outputs.output-file }}
+          ZIZMOR_OUTCOME_2: ${{ steps.zizmor_retry1.outcome }}
+          ZIZMOR_SARIF_2: ${{ steps.zizmor_retry1.outputs.output-file }}
           IS_FORK: ${{ github.event.pull_request.head.repo.fork == true }}
         run: |
           set -eu
@@ -786,7 +811,19 @@ jobs:
           node scripts/ci/scan-rows.js outcome --tool actionlint --scope workflows \
             --version "$ACTIONLINT_VERSION" --link "$RUN_URL" --out "$RUNNER_TEMP/rows" \
             --outcome "$al_outcome" --failed "${AL_FAILED:-0}" --note "$al_note"
-          if [ "$IS_FORK" = "true" ]; then
+          # The retry decides the row when it ran (skipped = the first attempt was enough).
+          ZIZMOR_OUTCOME="$ZIZMOR_OUTCOME_1"
+          ZIZMOR_SARIF="$ZIZMOR_SARIF_1"
+          if [ -n "$ZIZMOR_OUTCOME_2" ] && [ "$ZIZMOR_OUTCOME_2" != "skipped" ]; then
+            ZIZMOR_OUTCOME="$ZIZMOR_OUTCOME_2"
+            ZIZMOR_SARIF="$ZIZMOR_SARIF_2"
+          fi
+          if [ "$IS_FORK" != "true" ] && [ "$ZIZMOR_OUTCOME" != "success" ]; then
+            # Both attempts failed: zizmor could not run (no SARIF), not findings.
+            node scripts/ci/scan-rows.js warning --tool zizmor --scope workflows \
+              --version "$ZIZMOR_VERSION" --link "$RUN_URL" --out "$RUNNER_TEMP/rows" \
+              --note "not run: GitHub API unavailable (failed twice, 30 s apart); see the job log"
+          elif [ "$IS_FORK" = "true" ]; then
             node scripts/ci/scan-rows.js outcome --tool zizmor --scope workflows \
               --version "$ZIZMOR_VERSION" --link "$RUN_URL" --out "$RUNNER_TEMP/rows" \
               --outcome "$ZIZMOR_OUTCOME" --note "fork PR: annotations only, no SARIF"

@@ -19,7 +19,7 @@ test.describe('Help Modal', () => {
 
     // The active nav button should have the blue styling classes
     const gettingStartedButton = page.getByRole('dialog').getByRole('button', {
-      name: 'Getting Started',
+      name: 'Your first session',
     });
 
     // Check that the active button has the blue border class

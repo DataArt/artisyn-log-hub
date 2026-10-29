@@ -34,7 +34,7 @@ export const STAND_DIR = path.join(SCENARIOS_TMP, 'stand');
 export const HASH_FILE_NAME = '.inputs-hash';
 
 /** Input trees whose content decides whether the stand must be rebuilt (DD C1). */
-export const INPUT_DIRS = ['client', 'server/src', 'server/drizzle', 'hook', 'artisyn-hooks-installer', 'packages'];
+export const INPUT_DIRS = ['client', 'server/src', 'server/drizzle', 'hook', 'artisyn-hooks-installer', 'packages', 'user-docs'];
 
 /** The build scripts themselves: editing the builder must also invalidate the stand. */
 export const BUILDER_FILES = [
@@ -42,6 +42,8 @@ export const BUILDER_FILES = [
   'scripts/build-hooks-installer.js',
   'scripts/copy-native.js',
   'scripts/copy-wasm.js',
+  'scripts/user-docs/generate-help.js',
+  'scripts/user-docs/links.js',
 ];
 
 /** Repo-relative input files (forward slashes), sorted, de-duplicated. Read-only git call. */
@@ -153,6 +155,8 @@ export function buildStandFresh(standDir = STAND_DIR) {
   const publicDir = path.join(standDir, 'public');
   const clientDir = path.join(ROOT, 'client');
   const viteCli = path.join(clientDir, 'node_modules', 'vite', 'bin', 'vite.js');
+  // vite build is called directly (no bun prebuild), so generate client/public/help/*.md first.
+  step('generate help', node, [path.join(ROOT, 'scripts', 'user-docs', 'generate-help.js')], ROOT);
   step('vite build', node, [viteCli, 'build', '--outDir', publicDir, '--emptyOutDir'], clientDir);
   step('precompress', node, [path.join(clientDir, 'scripts', 'precompress.cjs'), publicDir], ROOT);
 

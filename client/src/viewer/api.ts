@@ -1392,11 +1392,19 @@ export interface HarnessSnapshotPlugin {
   gitCommitSha?: string;
 }
 
+/** Hook 2.28.0+ (DD-17): a harness file's git status relative to the repository root. */
+export type HarnessGitStatus =
+  | 'tracked'
+  | 'untracked'
+  | 'ignored'
+  | 'outside-repo';
+
 export interface HarnessSnapshotSkill {
   /** Plugin entries are `<pluginName>:<name>` (DD-1). */
   name: string;
   kind: 'skill' | 'workflow' | 'command';
-  source: 'project' | 'user' | 'plugin';
+  /** `'org-synced'` (hook 2.28.0+): synced into `~/.claude/skills/<org>/`; bare `name`. */
+  source: 'project' | 'user' | 'plugin' | 'org-synced';
   description: string;
   argumentHint?: string;
   /** File text after frontmatter; a workflow's `body` is the whole `.js` text. */
@@ -1406,6 +1414,8 @@ export interface HarnessSnapshotSkill {
   bytes: number;
   contentHash: string;
   plugin?: HarnessSnapshotPlugin;
+  /** Hook 2.28.0+ (DD-17); absent on older hooks. */
+  gitStatus?: HarnessGitStatus;
 }
 
 export interface HarnessSnapshotAgent {
@@ -1416,6 +1426,8 @@ export interface HarnessSnapshotAgent {
   bytes: number;
   contentHash: string;
   source: 'project';
+  /** Hook 2.28.0+ (DD-17); absent on older hooks. */
+  gitStatus?: HarnessGitStatus;
 }
 
 export interface HarnessSnapshotMcpTool {
@@ -1440,6 +1452,8 @@ export interface HarnessSnapshotFile {
   contentHash: string;
   /** Rule file contents only (DD-13's `claudeMd`); other files carry no `content`. */
   content?: string;
+  /** Hook 2.28.0+ (DD-17); absent on older hooks. */
+  gitStatus?: HarnessGitStatus;
 }
 
 export interface HarnessSnapshot {

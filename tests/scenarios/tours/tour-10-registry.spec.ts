@@ -9,7 +9,9 @@
 //                 TEAM_TABS, API_KEYS_TABS, CHART_TABS (client/src/viewer/tab-ids.ts) ↔ rows' `tab`
 //   - analytics:  VIEW_OPTIONS (analytics-state.ts)                           ↔ `analytics:<view>`
 //   - reports:    ALL_REPORTS (report-catalog.ts)                             ↔ `report:<id>`
-//   - help:       helpNav (help/articles/index.ts) and client/public/help/*.md ↔ `help:<slug>`
+//   - help:       user-docs/nav.json (read via helpers/help-nav)                ↔ `help:<slug>`;
+//                 its slugs ↔ user-docs/*.md plus the `source` files, and every relative link of
+//                 every page resolves (scripts/user-docs/links.js, the help generator's own rules)
 // A new route / tab / view / report / article without a row fails («add a row to
 // screen-registry.ts»), and so does a row for something the app no longer has.
 //
@@ -34,11 +36,11 @@ import {
 } from '../../../client/src/viewer/tab-ids';
 import { VIEW_OPTIONS } from '../../../client/src/viewer/pages/repository/analytics/analytics-state';
 import { ALL_REPORTS } from '../../../client/src/viewer/pages/repository/reports/report-catalog';
-import { helpNav } from '../../../client/src/viewer/help/articles/index';
+import { findLinks, helpNav, helpPageFile, helpPages, resolveLink } from '../helpers/help-nav';
 import { SCREEN_REGISTRY, STORY_PARAMS, coverageKeys, rowParams, type TourId } from './screen-registry';
 
 const ROOT = path.resolve(__dirname, '..', '..', '..');
-const HELP_DIR = path.join(ROOT, 'client', 'public', 'help');
+const USER_DOCS = path.join(ROOT, 'user-docs');
 
 const TAB_SOURCES: Record<string, readonly string[]> = {
   session: SESSION_TABS,
@@ -88,14 +90,28 @@ test.describe('@TOUR-10 registry completeness (meta) @mode-a', () => {
     expect(stale, 'the registry covers these, the app no longer has them — remove or fix the row').toEqual([]);
   });
 
-  test('help: helpNav and client/public/help/*.md list the same articles', () => {
+  test('help: nav.json lists exactly user-docs/*.md plus its source files', () => {
     const files = fs
-      .readdirSync(HELP_DIR)
+      .readdirSync(USER_DOCS)
       .filter((f) => f.endsWith('.md'))
-      .map((f) => f.slice(0, -'.md'.length))
-      .sort();
-    const nav = helpNav.flatMap((s) => s.articles.map((a) => a.slug)).sort();
-    expect(nav, 'helpNav entries vs client/public/help/*.md files').toEqual(files);
+      .map((f) => f.slice(0, -'.md'.length));
+    const sourced = helpNav.flatMap((s) => s.articles.filter((a) => a.source).map((a) => a.slug));
+    const nav = helpNav.flatMap((s) => s.articles.filter((a) => !a.source).map((a) => a.slug)).sort();
+    expect(nav, 'nav.json entries without `source` vs user-docs/*.md files').toEqual(files.sort());
+    const missing = sourced.filter((slug) => !fs.existsSync(path.join(ROOT, helpPageFile(slug))));
+    expect(missing, 'nav.json `source` files that do not exist').toEqual([]);
+  });
+
+  test('help: every relative link of every page resolves to a page of the set', () => {
+    const problems: string[] = [];
+    for (const page of helpPages) {
+      for (const href of findLinks(fs.readFileSync(page.file, 'utf8'))) {
+        if (resolveLink(href, page.file, { pages: helpPages }).kind === 'unresolved') {
+          problems.push(`${helpPageFile(page.slug)}: ${href}`);
+        }
+      }
+    }
+    expect(problems, 'unresolved links (fix the link or add the page to user-docs/nav.json)').toEqual([]);
   });
 
   test('rows: unique ids, an anchor each, valid modes, only the params of their story, a spec per story', () => {
@@ -143,7 +159,7 @@ test.describe('@TOUR-10 registry completeness (meta) @mode-a', () => {
     const problems: string[] = [];
     for (const row of SCREEN_REGISTRY.filter((r) => r.id.startsWith('help.'))) {
       const slug = row.id.slice('help.'.length);
-      const md = fs.readFileSync(path.join(HELP_DIR, `${slug}.md`), 'utf8');
+      const md = fs.readFileSync(path.join(ROOT, helpPageFile(slug)), 'utf8');
       const h1 = /^#\s+(.+?)\s*$/m.exec(md)?.[1];
       if (row.expectText !== h1) problems.push(`${row.id}: expectText «${row.expectText}» vs # heading «${h1}»`);
     }

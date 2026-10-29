@@ -2,7 +2,8 @@
  * The "Tools/MCP" tab: which MCP servers and monitored CLI tools the agents called, how often
  * they failed, and every call's input and output. Used twice: as the repository view's main tab
  * (every in-scope session over a date range) and, with `sessionId`, as a session detail tab
- * (that one session tree, whole session, no date range and no Monitored tools dialog).
+ * (that one session tree, whole session, no date range and no Monitored tools button). The
+ * Monitored tools button opens the repository settings' "Monitored Tools" tab.
  *
  * Top bar over three panes: the tools tree (collapsible to a rail), the calls table and the
  * call details, split by two draggable handles whose widths persist in localStorage (DD-21).
@@ -24,7 +25,6 @@ import {
 } from '../../../api';
 import { useDraggableWidth } from '../../../hooks/useDraggableWidth';
 import { toIsoDateBounds } from '../reports/report-url';
-import { MonitoredToolsDialog } from './MonitoredToolsDialog';
 import { ToolCallDetails } from './ToolCallDetails';
 import { ToolCallsTable } from './ToolCallsTable';
 import { ToolsTopBar, type ToolsTopBarPatch } from './ToolsTopBar';
@@ -42,6 +42,7 @@ import {
   TREE_WIDTH_MIN,
 } from './tools-constants';
 import {
+  TOOLS_PARAM_KEYS,
   toolsStateFromParams,
   writeToolsState,
   type ToolsTabUrlState,
@@ -118,9 +119,16 @@ export function RepoToolsTab({ repoId, teamId, sessionId }: RepoToolsTabProps) {
         ),
       { replace: true },
     );
-  // Any filter or scope change starts again on page 1.
-  const onFilterChange = (patch: ToolsTopBarPatch) =>
-    update({ ...patch, page: 1 });
+  // Any filter or scope change starts again on page 1. A new scope (another tool or operation)
+  // also drops the selected call: it belonged to the previous tool's list.
+  const onFilterChange = (patch: ToolsTopBarPatch) => {
+    const scopeChanged =
+      patch.scope !== undefined &&
+      (patch.scope.channel !== state.scope.channel ||
+        patch.scope.tool !== state.scope.tool ||
+        patch.scope.operation !== state.scope.operation);
+    update({ ...patch, page: 1, ...(scopeChanged ? { call: null } : {}) });
+  };
 
   const [collapsed, setCollapsed] = useState(readCollapsed);
   const setTreeCollapsed = (value: boolean) => {
@@ -204,7 +212,18 @@ export function RepoToolsTab({ repoId, teamId, sessionId }: RepoToolsTabProps) {
     queryFn: () => fetchToolMonitoringConfig(repoId, teamId),
     enabled: !sessionMode,
   });
-  const [dialogOpen, setDialogOpen] = useState(false);
+  // The list is edited in the repository settings; the tab's own `t*` params mean nothing there.
+  const openMonitoredTools = () =>
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev);
+        for (const key of TOOLS_PARAM_KEYS) next.delete(key);
+        next.set('mtab', 'settings');
+        next.set('stab', 'monitored-tools');
+        return next;
+      },
+      { replace: true },
+    );
   const monitoredCount = configQuery.data
     ? configQuery.data.tools.filter((t) => t.enabled).length
     : null;
@@ -348,20 +367,9 @@ export function RepoToolsTab({ repoId, teamId, sessionId }: RepoToolsTabProps) {
         filters={state}
         onChange={onFilterChange}
         monitoredCount={monitoredCount}
-        onOpenMonitoredTools={
-          configQuery.data ? () => setDialogOpen(true) : undefined
-        }
+        onOpenMonitoredTools={openMonitoredTools}
         sessionMode={sessionMode}
       />
-      {configQuery.data && !sessionMode ? (
-        <MonitoredToolsDialog
-          open={dialogOpen}
-          onOpenChange={setDialogOpen}
-          repoId={repoId}
-          teamId={teamId}
-          config={configQuery.data}
-        />
-      ) : null}
       {pending > 0 && !forbidden ? (
         <div
           className="shrink-0 border-b border-border bg-muted/40 px-4 py-1.5 text-xs text-muted-foreground"

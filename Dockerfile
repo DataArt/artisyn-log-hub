@@ -7,6 +7,10 @@ RUN npm install -g bun@1.3.14
 WORKDIR /app/client
 # client/vite.config.ts aliases @loghub/pricing to the repo-local package sources.
 COPY packages/ /app/packages/
+# The client prebuild generates public/help/*.md from user-docs/ (scripts/user-docs/generate-help.js).
+COPY user-docs/ /app/user-docs/
+COPY hook/INSTALL_HOOK.md hook/HOW_HOOK_WORKS.md /app/hook/
+COPY scripts/user-docs/ /app/scripts/user-docs/
 COPY client/ ./
 RUN bun install --frozen-lockfile && bun run build
 

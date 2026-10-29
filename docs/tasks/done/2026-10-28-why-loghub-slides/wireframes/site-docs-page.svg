@@ -1,0 +1,113 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1020" viewBox="0 0 1440 1020" font-family="Inter, Segoe UI, Arial, sans-serif">
+  <title>Log Hub site - documentation page and the shared page set feeding site and in-app help (FR-2, FR-3)</title>
+  <rect width="1440" height="1020" fill="#f3f4f6"/>
+  <text x="40" y="44" font-size="20" font-weight="600" fill="#111827">Documentation page (Configuration → Authentication modes) and where its text comes from</text>
+  <text x="40" y="70" font-size="13" fill="#6b7280">Wireframe. One page set is the only source; the release build generates the in-app help and the site from it. Text is placeholder copy.</text>
+
+  <!-- Pipeline -->
+  <g transform="translate(40,96)">
+    <rect width="300" height="150" rx="8" fill="#ffffff" stroke="#1e3a5f" stroke-width="2"/>
+    <text x="20" y="32" font-size="15" font-weight="700" fill="#1e3a5f">Shared page set (source)</text>
+    <g font-size="12" fill="#374151">
+      <text x="20" y="58">getting-started.md, session-log.md, …</text>
+      <text x="20" y="78">+ install-server.md, authentication-modes.md, …</text>
+      <text x="20" y="96" fill="#6b7280">  (moved in from README)</text>
+      <text x="20" y="116">+ one navigation definition</text>
+      <text x="20" y="138" fill="#6b7280">lives in user-docs/</text>
+    </g>
+    <path d="M300 75 L380 75" stroke="#1e3a5f" stroke-width="2"/>
+    <path d="M380 69 L390 75 L380 81 Z" fill="#1e3a5f"/>
+    <rect x="394" y="40" width="200" height="70" rx="8" fill="#eef2f7" stroke="#1e3a5f"/>
+    <text x="494" y="70" font-size="14" font-weight="700" fill="#1e3a5f" text-anchor="middle">Release build</text>
+    <text x="494" y="92" font-size="12" fill="#374151" text-anchor="middle">generator</text>
+    <path d="M594 60 L680 20" stroke="#1e3a5f" stroke-width="2"/>
+    <path d="M594 90 L680 130" stroke="#1e3a5f" stroke-width="2"/>
+    <rect x="684" y="0" width="330" height="56" rx="8" fill="#ffffff" stroke="#d1d5db"/>
+    <text x="700" y="24" font-size="14" font-weight="700" fill="#111827">In-app help</text>
+    <text x="700" y="44" font-size="12" fill="#374151">/help/&lt;slug&gt;.md + help menu (slugs unchanged)</text>
+    <rect x="684" y="104" width="330" height="56" rx="8" fill="#ffffff" stroke="#d1d5db"/>
+    <text x="700" y="128" font-size="14" font-weight="700" fill="#111827">Site documentation</text>
+    <text x="700" y="148" font-size="12" fill="#374151">Get started / Configuration / Using / Data</text>
+    <text x="1040" y="32" font-size="12" fill="#6b7280">links rewritten per target</text>
+    <text x="1040" y="136" font-size="12" fill="#6b7280">same text, same order</text>
+  </g>
+
+  <!-- Docs page desktop -->
+  <g transform="translate(40,290)">
+    <rect width="1360" height="620" fill="#ffffff" stroke="#d1d5db"/>
+    <rect width="1360" height="56" fill="#ffffff" stroke="#e5e7eb"/>
+    <rect x="24" y="18" width="20" height="20" rx="4" fill="#1e3a5f"/>
+    <text x="54" y="34" font-size="15" font-weight="700" fill="#111827">Artisyn Log Hub</text>
+    <g font-size="13" fill="#374151">
+      <text x="300" y="34">Home</text>
+      <text x="364" y="34">Features</text>
+      <text x="444" y="34">Get started</text>
+      <text x="538" y="34" font-weight="700" fill="#1e3a5f">Configuration</text>
+      <line x1="538" y1="44" x2="636" y2="44" stroke="#1e3a5f" stroke-width="2"/>
+      <text x="660" y="34">Using Log Hub</text>
+      <text x="770" y="34">Data &amp; security</text>
+      <text x="890" y="34">Deck</text>
+      <text x="1336" y="34" fill="#0969da" text-anchor="end">GitHub ↗</text>
+    </g>
+
+    <!-- left: section nav -->
+    <rect x="0" y="56" width="240" height="564" fill="#f9fafb" stroke="#e5e7eb"/>
+    <text x="24" y="92" font-size="11" font-weight="600" fill="#6b7280" letter-spacing="1.2">CONFIGURATION</text>
+    <g font-size="13" fill="#374151">
+      <rect x="12" y="104" width="216" height="30" rx="4" fill="#eef2f7"/>
+      <text x="24" y="124" font-weight="600" fill="#1e3a5f">Authentication modes</text>
+      <text x="24" y="158">Server settings</text>
+      <text x="24" y="188">Tuning Your Setup</text>
+      <text x="24" y="218">Security Hardening &amp;</text>
+      <text x="24" y="236">Configuration</text>
+    </g>
+    <line x1="24" y1="262" x2="216" y2="262" stroke="#e5e7eb"/>
+    <g font-size="12" fill="#6b7280">
+      <text x="24" y="286">Get started</text>
+      <text x="24" y="310">Using Log Hub</text>
+      <text x="24" y="334">Data and security</text>
+      <text x="24" y="358">Changelog</text>
+    </g>
+    <text x="24" y="400" font-size="11" fill="#6b7280">Pages and order = FR-2 page map;</text>
+    <text x="24" y="416" font-size="11" fill="#6b7280">same as the in-app help menu</text>
+    <text x="24" y="432" font-size="11" fill="#6b7280">(one navigation definition)</text>
+
+    <!-- center: content -->
+    <g transform="translate(280,56)">
+      <text x="0" y="56" font-size="28" font-weight="700" fill="#111827">Authentication modes</text>
+      <text x="0" y="90" font-size="15" fill="#374151"><tspan font-family="Consolas, monospace" fill="#111827">AUTH_MODE</tspan> selects one of four modes. In every mode the first user to sign in becomes the admin.</text>
+      <!-- table -->
+      <rect x="0" y="112" width="760" height="36" fill="#f3f4f6" stroke="#e5e7eb"/>
+      <g font-size="13" font-weight="600" fill="#111827"><text x="14" y="135">Value</text><text x="170" y="135">Mode</text><text x="430" y="135">Use it for</text></g>
+      <g font-size="13" fill="#374151">
+        <rect x="0" y="148" width="760" height="36" fill="#ffffff" stroke="#e5e7eb"/>
+        <text x="14" y="171" font-family="Consolas, monospace">none</text><text x="170" y="171">No password</text><text x="430" y="171">One user on their own machine</text>
+        <rect x="0" y="184" width="760" height="36" fill="#ffffff" stroke="#e5e7eb"/>
+        <text x="14" y="207" font-family="Consolas, monospace">password</text><text x="170" y="207">Email and password</text><text x="430" y="207">A small team, trusted network</text>
+        <rect x="0" y="220" width="760" height="36" fill="#ffffff" stroke="#e5e7eb"/>
+        <text x="14" y="243" font-family="Consolas, monospace">password-confirm</text><text x="170" y="243">+ emailed confirmation</text><text x="430" y="243">Reachable from the internet</text>
+        <rect x="0" y="256" width="760" height="36" fill="#ffffff" stroke="#e5e7eb"/>
+        <text x="14" y="279" font-family="Consolas, monospace">azure-oauth</text><text x="170" y="279">Azure Entra ID</text><text x="430" y="279">Organisations on Entra ID</text>
+      </g>
+      <text x="0" y="336" font-size="20" font-weight="700" fill="#111827">Choosing a mode</text>
+      <rect x="0" y="352" width="620" height="8" fill="#e5e7eb"/><rect x="0" y="370" width="700" height="8" fill="#e5e7eb"/><rect x="0" y="388" width="540" height="8" fill="#e5e7eb"/>
+      <text x="0" y="440" font-size="14" fill="#0969da">See also: Server settings →</text>
+      <text x="0" y="500" font-size="11" fill="#6b7280">Values and defaults checked against server/.env.example at implementation (FR-7).</text>
+      <text x="0" y="530" font-size="12" fill="#6b7280">← Connecting a Repository</text>
+      <text x="760" y="530" font-size="12" fill="#6b7280" text-anchor="end">Server settings →</text>
+    </g>
+
+    <!-- right: on this page -->
+    <g transform="translate(1100,56)">
+      <text x="0" y="56" font-size="11" font-weight="600" fill="#6b7280" letter-spacing="1.2">ON THIS PAGE</text>
+      <rect x="-12" y="70" width="3" height="22" fill="#1e3a5f"/>
+      <g font-size="13" fill="#374151"><text x="0" y="86" fill="#1e3a5f">Modes</text><text x="0" y="114">Choosing a mode</text><text x="0" y="142">SMTP for modes 2 and 3</text><text x="0" y="170">Switching modes</text></g>
+    </g>
+  </g>
+
+  <g transform="translate(40,940)" font-size="13" fill="#374151">
+    <text font-size="15" font-weight="600" fill="#111827">Notes</text>
+    <text y="26">1. Three columns: section nav (generated from the shared navigation definition), page text, "On this page" table of contents for long pages (FR-3). Phone: one column, nav in a menu.</text>
+    <text y="50">2. The same page opens in the in-app help at /help/&lt;slug&gt;.md with the same text; existing slugs and "Download .md" keep working (FR-2). No hand-kept copy anywhere.</text>
+  </g>
+</svg>

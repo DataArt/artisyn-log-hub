@@ -37,6 +37,7 @@
 //   - server/test/installer.e2e-spec.ts — `?v=` baseline (4)
 //   - server/test/model-pricing.e2e-spec.ts — public access (1)
 //   - client/src/viewer/__tests__/components/HookStatePage.test.tsx — status card, log tail (part)
+import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -72,6 +73,16 @@ import { logTurns, openSession, summaryTile, usd4 } from '../helpers/session-vie
 import { skipNewUserNudge } from '../helpers/teams';
 
 const PROMPT = 'fix the login bug';
+/** Body text of the org-synced `greet` skill — never sent (metadata only). */
+const GREET_BODY = 'H09-GREET-BODY-MARKER: say hello to the whole team.';
+
+interface SnapshotGitEntry {
+  name?: string;
+  path: string;
+  source?: string;
+  body?: string;
+  gitStatus?: string;
+}
 
 interface SessionRow {
   sessionId: string;
@@ -156,6 +167,15 @@ test('@S-HOOK-09 the installed hook reaches the real server and the session show
         fs.writeFileSync(path.join(repo, rel), text);
       }
       fs.writeFileSync(path.join(repo, 'CLAUDE.md'), '# chain project rules\n');
+      // Git status per harness file (hook 2.28.0, step 4c): CLAUDE.md is tracked, CLAUDE.local.md
+      // ignored, the hello skill and the rev agent stay untracked.
+      execFileSync('git', ['add', 'CLAUDE.md'], { cwd: repo, stdio: 'ignore' });
+      fs.writeFileSync(path.join(repo, 'CLAUDE.local.md'), '# chain local notes\n');
+      fs.writeFileSync(path.join(repo, '.gitignore'), 'CLAUDE.local.md\n');
+      // An org-synced skill in the fake home: only its name and size reach the snapshot.
+      const synced = path.join(home, '.claude', 'skills', 'synced', 'org-1', 'greet');
+      fs.mkdirSync(synced, { recursive: true });
+      fs.writeFileSync(path.join(synced, 'SKILL.md'), `---\nname: greet\ndescription: Greets the team.\n---\n${GREET_BODY}\n`);
       fs.mkdirSync(path.join(repo, '.claude', 'skills', 'hello'), { recursive: true });
       fs.writeFileSync(path.join(repo, '.claude', 'skills', 'hello', 'SKILL.md'), '---\nname: hello\ndescription: Greets.\n---\nSay hello.\n');
       fs.mkdirSync(path.join(repo, '.claude', 'agents', 'rev'), { recursive: true });
@@ -312,6 +332,36 @@ test('@S-HOOK-09 the installed hook reaches the real server and the session show
       const log = readHookLog(repo, 'send-logs-hook.js');
       expect(log.filter((l) => l.includes(`okf: snapshot ${id.slice(0, 12)} sent`)), 'the full snapshot went out once').toHaveLength(1);
       return id;
+    });
+
+    await test.step('4c. harness snapshot carries git status and org-synced skills', async () => {
+      const snap = await db.query<{
+        body: { skills: SnapshotGitEntry[]; agents: SnapshotGitEntry[]; systemContext: { files: SnapshotGitEntry[] } | null };
+      }>('SELECT body FROM harness_snapshots WHERE user_id = $1', [owner.id]);
+      expect(snap.rows).toHaveLength(1);
+      const { skills, agents, systemContext } = snap.rows[0].body;
+      const fileStatus = (p: string) => systemContext?.files.find((f) => f.path === p)?.gitStatus;
+      expect(fileStatus('CLAUDE.md'), 'git add CLAUDE.md').toBe('tracked');
+      expect(fileStatus('CLAUDE.local.md'), '.gitignore lists CLAUDE.local.md').toBe('ignored');
+      const hello = skills.find((s) => s.name === 'hello');
+      expect(hello?.source).toBe('project');
+      expect(hello?.gitStatus, 'the project skill is not added to git').toBe('untracked');
+      expect(agents.find((a) => a.name === 'rev')?.gitStatus).toBe('untracked');
+
+      const greet = skills.filter((s) => s.name === 'greet');
+      expect(greet, 'the org-synced skill, once, under its bare name').toHaveLength(1);
+      expect(greet[0].source).toBe('org-synced');
+      expect(greet[0].path, 'the org folder name is masked').toBe('~/.claude/skills/synced/<org>/greet/SKILL.md');
+      expect(greet[0].body, 'metadata only: no skill text').toBe('');
+      expect(greet[0].gitStatus).toBe('outside-repo');
+      expect(JSON.stringify(snap.rows[0].body), 'the org folder name and the skill text never leave the machine').not.toMatch(/org-1|H09-GREET-BODY-MARKER/);
+
+      // The server leaves org-synced entries out of the skill inventory (no false "never used" row).
+      const elements = await db.query<{ n: string }>(
+        "SELECT count(*) AS n FROM harness_elements WHERE repo_id = $1 AND name = 'greet'",
+        [repoId],
+      );
+      expect(Number(elements.rows[0].n), 'no harness_elements row for greet').toBe(0);
     });
 
     await test.step('5. a second Stop without changes: no harness duplicates, no new claude upload', async () => {

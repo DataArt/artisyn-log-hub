@@ -231,7 +231,6 @@ export interface ToolUsageAgg {
   noResult: number;
   empty: number;
   retried: number;
-  fellBack: number;
   openedFile: number;
   avgDurationMs: number | null;
   inBytes: number;

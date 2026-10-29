@@ -331,30 +331,12 @@ export interface SkillDefinition {
   body: string;
   path: string;
   bytes: number;
-  source: 'project' | 'user' | 'plugin';
+  source: 'project' | 'user' | 'plugin' | 'org-synced';
   /** Absent only for a pre-snapshot definition that predates DD-1's kind field. */
   kind?: 'skill' | 'workflow' | 'command';
   /** `plugin`-source entries only (DD-1/DD-3). */
   plugin?: SkillDefinitionPlugin;
   contentHash?: string;
-}
-
-export interface AgentDefinition {
-  name: string;
-  description: string;
-  body: string;
-  path: string;
-  bytes: number;
-  source?: 'project' | 'user' | 'plugin';
-  contentHash?: string;
-}
-
-export interface McpServerConfig {
-  name: string;
-  command: string;
-  args: string;
-  url?: string;
-  configSource?: 'project' | 'user';
 }
 
 /**
@@ -431,19 +413,11 @@ export interface SessionSummary {
   linesChanged: number;
   imageStats: ImageStats;
   deferredTools: string[];
-  registeredAgents: string[];
-  registeredSkills: string[];
   /** Primary model used in the session (from first assistant event with a model field) */
   model?: string;
   /** CLAUDE.md system-context injected by the hook on upload */
   claudeMd?: ClaudeMdContext;
   skillDefinitions?: Map<string, SkillDefinition>;
-  agentDefinitions?: Map<string, AgentDefinition>;
-  mcpConfig?: McpServerConfig[];
-  /** DD-13: snapshot skills visible to this session (`registeredSkills`-filtered), sorted by name. */
-  visibleSkills?: SkillDefinition[];
-  /** DD-13: snapshot agents visible to this session (`registeredAgents`-filtered), sorted by name. */
-  visibleAgents?: AgentDefinition[];
 }
 
 export interface ClaudeMdFile {

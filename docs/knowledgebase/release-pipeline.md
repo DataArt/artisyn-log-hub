@@ -37,7 +37,7 @@ line the product runs on.
   two Dockerfiles, where the `node-runtime` scan checks it (see [CI Security Scans](ci-security-scans.md)).
 - Dependabot does not bump `node-version`. On a move to the next LTS major, change all of these
   in one PR: every `node-version` in `.github/workflows/`, both Dockerfiles, `@types/node` and the
-  Node.js row in `client/public/help/third-party-components.md`.
+  Node.js row in `user-docs/third-party-components.md`.
 - This is the Node that **builds and checks** Log Hub. The hook runs with the user's own `node`
   from PATH (`engines: >=18.19`, every current LTS line, see
   [Hook System Overview](hook-system-overview.md)), and the CI version does not cover that.

@@ -42,6 +42,7 @@ format where the two differ).
 | [local-request-detection](local-request-detection.md) | `server/src/auth/utils/localhost.util.ts`, `container-gateway.util.ts` | jest |
 | [harness-snapshot](harness-snapshot.md) | hook `skill-catalog.js`, `harness-snapshot.js` | `node --test` |
 | [workflow-agent-rows](workflow-agent-rows.md) | `client/.../session-log/workflow-agent-rows.ts` | vitest |
+| [sysctx-anatomy](sysctx-anatomy.md) | `client/.../session-log/sysctx-anatomy/sysctx-anatomy.ts` | vitest |
 | [tool-call-sections](tool-call-sections.md) | `client/.../session-log/tool-calls.ts` | vitest |
 | [tool-call-outcome](tool-call-outcome.md) | `client/.../session-log/tool-outcome.ts`; twin `server/src/logs/tool-stats.ts` | vitest, jest |
 | [bash-command-view](bash-command-view.md) | `packages/bash-view/src/*` (`@loghub/bash-view`; client loader `client/src/viewer/lib/bash-view/`) | vitest |
@@ -61,6 +62,8 @@ format where the two differ).
 | [security-scan-summary](security-scan-summary.md) | `scripts/ci/security-summary.js` | `node --test` (`npm run test:scripts`) |
 | [release-version](release-version.md) | `scripts/ci/release-version.js` | `node --test` (`npm run test:scripts`) |
 | [release-assets](release-assets.md) | `scripts/release-kit.js`, `scripts/ci/release-notes.js`, `scripts/ci/virustotal-scan.js` (`scopeFor`) | `node --test` (`npm run test:scripts`) |
+| [user-docs-links](user-docs-links.md) | `scripts/user-docs/links.js` (`resolveLink`, `rewritePageLinks`) | `node --test` (`npm run test:scripts`) |
+| [site-example-dataset](site-example-dataset.md) | `scripts/site/dataset.mjs` (`checkDataset`, `fillPlaceholders`) | `node --test` (`npm run test:scripts`) |
 
 ## File layout
 

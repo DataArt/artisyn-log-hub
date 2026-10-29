@@ -1,0 +1,180 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="900" viewBox="0 0 1280 900" font-family="Inter, 'Segoe UI', Arial, sans-serif">
+  <defs>
+    <pattern id="hatch" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <rect width="8" height="8" fill="#f3f4f6"/>
+      <line x1="0" y1="0" x2="0" y2="8" stroke="#d1d5db" stroke-width="3"/>
+    </pattern>
+    <style>
+      .mono { font-family: 'JetBrains Mono', Consolas, monospace; }
+      .th { font-size: 11px; fill: #6b7280; letter-spacing: 0.4px; }
+      .td { font-size: 13px; fill: #111827; }
+      .tds { font-size: 12px; fill: #374151; }
+      .muted { font-size: 12px; fill: #6b7280; }
+      .note { font-size: 11px; fill: #b45309; font-style: italic; }
+      .ptitle { font-size: 13px; font-weight: 600; fill: #111827; }
+      .tab { font-size: 14px; fill: #4b5563; }
+    </style>
+  </defs>
+  <rect width="1280" height="900" fill="#ffffff"/>
+
+  <!-- ================= A: old hook (FR-9) ================= -->
+  <rect x="10" y="10" width="625" height="420" rx="6" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="26" y="34" class="ptitle">A · Session from an old hook (no git metadata) — FR-9</text>
+
+  <rect x="26" y="48" width="593" height="42" rx="4" fill="#eff6ff" stroke="#bfdbfe"/>
+  <text x="40" y="66" font-size="12" fill="#1e3a8a">ⓘ Uploaded by a hook without file git status. Git status shows as</text>
+  <text x="40" y="82" font-size="12" fill="#1e3a8a">  "unknown"; file sizes are taken from the transcript where available.</text>
+
+  <text x="26" y="118" font-size="15" font-weight="600" fill="#111827">Startup system context</text>
+  <text x="26" y="138" font-size="12" fill="#374151">Total <tspan class="mono" font-weight="600">41,880 tokens</tspan> <tspan fill="#6b7280">· exact, first API call</tspan></text>
+  <rect x="26" y="150" width="593" height="30" rx="5" fill="#fff" stroke="#9ca3af"/>
+  <rect x="27" y="151" width="22" height="28" fill="#6366f1"/>
+  <rect x="49" y="151" width="12" height="28" fill="#14b8a6"/>
+  <rect x="61" y="151" width="70" height="28" fill="#8b5cf6"/>
+  <rect x="131" y="151" width="58" height="28" fill="#22c55e"/>
+  <rect x="189" y="151" width="429" height="28" fill="url(#hatch)"/>
+  <text x="404" y="170" font-size="11" fill="#4b5563" text-anchor="middle">Harness internals 72.4 %</text>
+
+  <text x="40" y="206" class="th">PATH</text>
+  <text x="250" y="206" class="th">GIT</text>
+  <text x="440" y="206" class="th" text-anchor="end">FILE SIZE</text>
+  <text x="530" y="206" class="th" text-anchor="end">LOADED B</text>
+  <text x="605" y="206" class="th" text-anchor="end">≈ TOK</text>
+  <line x1="26" y1="214" x2="619" y2="214" stroke="#e5e7eb"/>
+  <g>
+    <text x="40" y="234" class="tds mono">CLAUDE.md</text>
+    <rect x="248" y="222" width="60" height="17" rx="8" fill="#ffffff" stroke="#9ca3af" stroke-dasharray="3 2"/><text x="278" y="234" font-size="10" fill="#6b7280" text-anchor="middle">unknown</text>
+    <text x="440" y="234" class="muted mono" text-anchor="end">—</text>
+    <text x="530" y="234" class="tds mono" text-anchor="end">12,040</text>
+    <text x="605" y="234" class="tds mono" text-anchor="end">3,254</text>
+    <line x1="26" y1="242" x2="619" y2="242" stroke="#f3f4f6"/>
+    <text x="40" y="262" class="tds mono">CLAUDE.local.md</text>
+    <rect x="248" y="250" width="60" height="17" rx="8" fill="#ffffff" stroke="#9ca3af" stroke-dasharray="3 2"/><text x="278" y="262" font-size="10" fill="#6b7280" text-anchor="middle">unknown</text>
+    <text x="440" y="262" class="muted mono" text-anchor="end">—</text>
+    <text x="530" y="262" class="tds mono" text-anchor="end">731</text>
+    <text x="605" y="262" class="tds mono" text-anchor="end">198</text>
+    <line x1="26" y1="270" x2="619" y2="270" stroke="#f3f4f6"/>
+    <text x="40" y="290" class="tds mono">.claude/skills/ce/SKILL.md</text>
+    <rect x="248" y="278" width="60" height="17" rx="8" fill="#ffffff" stroke="#9ca3af" stroke-dasharray="3 2"/><text x="278" y="290" font-size="10" fill="#6b7280" text-anchor="middle">unknown</text>
+    <text x="440" y="290" class="tds mono" text-anchor="end">3,160</text>
+    <text x="530" y="290" class="tds mono" text-anchor="end">322</text>
+    <text x="605" y="290" class="tds mono" text-anchor="end">87</text>
+    <line x1="26" y1="298" x2="619" y2="298" stroke="#f3f4f6"/>
+  </g>
+  <text x="40" y="326" class="note">"unknown" = the snapshot carries no git status field (old hook) or no snapshot</text>
+  <text x="40" y="341" class="note">is bound to the session. FILE SIZE falls back to "—" when the snapshot is</text>
+  <text x="40" y="356" class="note">missing; LOADED B still comes from the transcript attachments.</text>
+  <text x="40" y="380" class="note">Tab renders without errors for any older session (AC FR-1, FR-9).</text>
+
+  <!-- ================= B: total unknown (FR-6) ================= -->
+  <rect x="645" y="10" width="625" height="420" rx="6" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="661" y="34" class="ptitle">B · Measured total unknown — FR-6</text>
+
+  <text x="661" y="64" font-size="15" font-weight="600" fill="#111827">Startup system context</text>
+  <text x="661" y="84" font-size="12" fill="#374151">Total <tspan font-weight="600" fill="#6b7280">unknown</tspan>
+    <tspan fill="#6b7280"> · no main-agent API usage in the transcript</tspan></text>
+  <text x="661" y="102" font-size="12" fill="#374151">Attributed <tspan class="mono" font-weight="600">≈ 17,259 tokens</tspan>
+    <tspan fill="#6b7280"> · bar shows attributed partitions only</tspan></text>
+
+  <rect x="661" y="116" width="593" height="36" rx="5" fill="#fff" stroke="#9ca3af" stroke-dasharray="5 3"/>
+  <rect x="662" y="117" width="60" height="34" fill="#6366f1"/>
+  <rect x="722" y="117" width="22" height="34" fill="#94a3b8"/>
+  <rect x="744" y="117" width="50" height="34" fill="#14b8a6"/>
+  <rect x="794" y="117" width="24" height="34" fill="#f59e0b"/>
+  <rect x="818" y="117" width="248" height="34" fill="#8b5cf6"/>
+  <rect x="1066" y="117" width="187" height="34" fill="#22c55e"/>
+  <text x="942" y="139" font-size="12" fill="#fff" text-anchor="middle" font-weight="600">Skills 41.8 %</text>
+  <text x="1160" y="139" font-size="12" fill="#fff" text-anchor="middle" font-weight="600">Instr. files 31.3 %</text>
+  <text x="661" y="170" class="muted">Shares are of the attributed sum (100 % = 17,259). No Harness internals partition.</text>
+
+  <text x="675" y="204" class="th">PARTITION</text>
+  <text x="1150" y="204" class="th" text-anchor="end">≈ TOKENS</text>
+  <text x="1240" y="204" class="th" text-anchor="end">SHARE</text>
+  <line x1="661" y1="212" x2="1254" y2="212" stroke="#e5e7eb"/>
+  <rect x="675" y="222" width="10" height="10" rx="2" fill="#8b5cf6"/><text x="693" y="231" class="tds">Skills (78)</text>
+  <text x="1150" y="231" class="tds mono" text-anchor="end">7,209</text><text x="1240" y="231" class="tds mono" text-anchor="end">41.8 %</text>
+  <line x1="661" y1="240" x2="1254" y2="240" stroke="#f3f4f6"/>
+  <rect x="675" y="250" width="10" height="10" rx="2" fill="#22c55e"/><text x="693" y="259" class="tds">Instruction files (4)</text>
+  <text x="1150" y="259" class="tds mono" text-anchor="end">5,406</text><text x="1240" y="259" class="tds mono" text-anchor="end">31.3 %</text>
+  <line x1="661" y1="268" x2="1254" y2="268" stroke="#f3f4f6"/>
+  <text x="693" y="287" class="muted">… other attributed partitions …</text>
+  <line x1="661" y1="296" x2="1254" y2="296" stroke="#d1d5db"/>
+  <text x="693" y="316" class="td" font-weight="600">Attributed (total unknown)</text>
+  <text x="1150" y="316" class="td mono" font-weight="600" text-anchor="end">17,259</text><text x="1240" y="316" class="td mono" font-weight="600" text-anchor="end">100 %</text>
+  <text x="675" y="350" class="note">Dashed bar outline signals "not the real total". Applies to sessions</text>
+  <text x="675" y="365" class="note">with no main-agent assistant message (e.g. aborted at start).</text>
+
+  <!-- ================= C: attributed exceeds total (FR-6) ================= -->
+  <rect x="10" y="440" width="625" height="450" rx="6" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="26" y="464" class="ptitle">C · Attributed estimate exceeds measured total — FR-6</text>
+
+  <rect x="26" y="478" width="593" height="42" rx="4" fill="#fffbeb" stroke="#fcd34d"/>
+  <text x="40" y="496" font-size="12" fill="#92400e">⚠ Attributed estimate exceeds measured total by 1,204 tokens.</text>
+  <text x="40" y="512" font-size="12" fill="#92400e">  Byte → token estimate is approximate; bar is scaled to the attributed sum.</text>
+
+  <text x="26" y="548" font-size="15" font-weight="600" fill="#111827">Startup system context</text>
+  <text x="26" y="568" font-size="12" fill="#374151">Total <tspan class="mono" font-weight="600">16,055 tokens</tspan> <tspan fill="#6b7280">(exact) · attributed ≈ 17,259</tspan></text>
+  <rect x="26" y="580" width="593" height="32" rx="5" fill="#fff" stroke="#f59e0b" stroke-width="1.5"/>
+  <rect x="27" y="581" width="60" height="30" fill="#6366f1"/>
+  <rect x="87" y="581" width="22" height="30" fill="#94a3b8"/>
+  <rect x="109" y="581" width="50" height="30" fill="#14b8a6"/>
+  <rect x="159" y="581" width="24" height="30" fill="#f59e0b"/>
+  <rect x="183" y="581" width="248" height="30" fill="#8b5cf6"/>
+  <rect x="431" y="581" width="187" height="30" fill="#22c55e"/>
+  <!-- marker where measured total ends -->
+  <line x1="577" y1="574" x2="577" y2="618" stroke="#b91c1c" stroke-width="2" stroke-dasharray="4 2"/>
+  <text x="577" y="632" font-size="11" fill="#b91c1c" text-anchor="middle">measured total</text>
+  <text x="26" y="654" class="muted">No Harness internals partition (it would be negative). Shares are of the attributed sum.</text>
+
+  <text x="40" y="684" class="th">PARTITION</text>
+  <text x="520" y="684" class="th" text-anchor="end">≈ TOKENS</text>
+  <text x="605" y="684" class="th" text-anchor="end">SHARE</text>
+  <line x1="26" y1="692" x2="619" y2="692" stroke="#e5e7eb"/>
+  <text x="58" y="711" class="muted">… attributed partitions …</text>
+  <line x1="26" y1="720" x2="619" y2="720" stroke="#f3f4f6"/>
+  <rect x="40" y="730" width="10" height="10" rx="2" fill="#fef3c7" stroke="#f59e0b"/>
+  <text x="58" y="739" class="tds" fill="#92400e">Harness internals — discrepancy</text>
+  <text x="520" y="739" class="tds mono" text-anchor="end" fill="#92400e">−1,204</text>
+  <text x="605" y="739" class="tds mono" text-anchor="end" fill="#92400e">flag</text>
+  <line x1="26" y1="748" x2="619" y2="748" stroke="#d1d5db"/>
+  <text x="58" y="768" class="td" font-weight="600">Total (measured)</text>
+  <text x="520" y="768" class="td mono" font-weight="600" text-anchor="end">16,055</text>
+  <text x="40" y="806" class="note">Exact presentation (scale to attributed sum vs. measured total, wording)</text>
+  <text x="40" y="821" class="note">is an open question in requirements.md — this is one candidate.</text>
+
+  <!-- ================= D: Logs tab after the change (FR-0) ================= -->
+  <rect x="645" y="440" width="625" height="450" rx="6" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="661" y="464" class="ptitle">D · Logs tab after the change — System Context panel removed (FR-0)</text>
+
+  <text x="661" y="496" class="tab">Summary</text>
+  <text x="732" y="496" class="tab">Info</text>
+  <text x="776" y="496" class="tab" fill="#111827" font-weight="600">Logs</text>
+  <rect x="771" y="504" width="40" height="2.5" fill="#2563eb"/>
+  <text x="826" y="496" class="tab">Bash</text>
+  <text x="876" y="496" class="tab">Charts</text>
+  <text x="936" y="496" class="tab">…</text>
+  <text x="661" y="528" class="tab">Tools/MCP</text>
+  <text x="744" y="528" class="tab">Raw Logs</text>
+  <text x="824" y="528" class="tab">System context anatomy</text>
+  <line x1="645" y1="540" x2="1270" y2="540" stroke="#e5e7eb"/>
+
+  <!-- removed panel ghost -->
+  <rect x="661" y="550" width="593" height="44" rx="4" fill="#ffffff" stroke="#fca5a5" stroke-dasharray="5 3"/>
+  <text x="675" y="568" font-size="12" fill="#9ca3af" text-decoration="line-through">System Context  7 files · 3 MCP · 23 tools · 45 skills</text>
+  <text x="675" y="585" font-size="11" fill="#9ca3af" text-decoration="line-through">› Show details</text>
+  <text x="1240" y="577" font-size="11" fill="#dc2626" text-anchor="end">removed → moved to the new tab</text>
+
+  <!-- log rows start directly -->
+  <text x="661" y="626" font-size="13" fill="#0ea5e9">✦</text>
+  <text x="681" y="626" font-size="13" fill="#6b7280">2026-10-21 22:53:15  ⏱ 1:04:00  <tspan fill="#9333ea">⚡ 1 workflow</tspan></text>
+  <text x="667" y="654" font-size="14" fill="#4b5563">›</text>
+  <text x="681" y="654" font-size="15" fill="#111827">/adlc-lh:implement-deep 2026-10-15-claude-dev-container</text>
+  <text x="681" y="682" font-size="13" class="mono"><tspan fill="#2563eb">In</tspan> <tspan fill="#111827">34</tspan>  <tspan fill="#dc2626">Out</tspan> <tspan fill="#111827">13,696</tspan>  <tspan fill="#2563eb">cache_r</tspan> <tspan fill="#111827">1,217,655</tspan>  <tspan fill="#2563eb">cache_w</tspan> <tspan fill="#111827">75,433</tspan></text>
+  <text x="681" y="706" font-size="13" class="mono" fill="#d97706">Context: <tspan fill="#111827">62.5K → 109.0K</tspan></text>
+  <rect x="681" y="718" width="2" height="60" fill="#facc15"/>
+  <text x="695" y="736" font-size="13" class="mono" fill="#111827">› Tools 9 calls · ~3.1K tok</text>
+  <text x="695" y="762" font-size="13" class="mono" fill="#111827">› Code 1 file · 355 B · ~131 tok</text>
+  <line x1="645" y1="790" x2="1270" y2="790" stroke="#e5e7eb"/>
+  <text x="661" y="822" class="note">The Logs tab starts directly with the first prompt. Whether summary.claudeMd</text>
+  <text x="661" y="837" class="note">and the detail modals survive is an open question in requirements.md.</text>
+</svg>

@@ -4,7 +4,8 @@
  * Consent is stored server-side as one opaque `user_settings` value — the server
  * never looks inside it. What lives in there is a JSON string carrying the hash
  * of the notice text the user actually accepted, so that editing
- * `public/help/data-collection-notice.md` re-asks everyone exactly once.
+ * `user-docs/data-collection-notice.md` (served as `/help/data-collection-notice.md`
+ * by the help generator, byte-for-byte) re-asks everyone exactly once.
  *
  * `tests/e2e/helpers/notice-hash.ts` is a twin of this module — keep the
  * normalisation, the hash and the JSON shape in sync with it.

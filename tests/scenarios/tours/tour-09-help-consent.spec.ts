@@ -1,10 +1,15 @@
 // Tour 9 — help articles, notifications and the two gates (impl-plan DD G5;
 // docs/qaa-overview/scenarios/06-ui-tab-walk.md §2.3 story 9, §1.9, §1.10; checks per screen §2.2).
 //
-//   - Help: the «Help» button opens the modal; each of the 14 articles is opened from its sidebar
-//     entry and must render its own `# heading` (a SPA fallback that serves index.html instead of
-//     a missing .md would show «<!doctype» or «Article not found.»); downloadable ones offer
-//     «Download .md».
+//   - Help: the «Help» button opens the modal; each of the 20 pages of user-docs/nav.json is opened
+//     from its sidebar entry and must render its own `# heading` (a SPA fallback that serves
+//     index.html instead of a missing .md would show «<!doctype» or «Article not found.»);
+//     downloadable ones offer «Download .md». This pass runs with every request that does not go
+//     to the stand aborted — the help works offline.
+//   - Help navigation: the modal opens on «Your first session», the menu sections follow nav.json,
+//     a link to another page switches the article and the highlight, a `page.md#anchor` link
+//     scrolls to that heading, external links open in a new tab; an unknown page link only warns
+//     and a missing anchor opens the page at its top.
 //   - The bell lists a pending team invitation with Accept / Decline (nothing is clicked).
 //   - Disclosure gate: a user force-added to a team before registering sees the disclosure modal
 //     at first login.
@@ -20,9 +25,9 @@ import { test, expect } from '../fixtures';
 import type { ScenarioUser } from '../fixtures';
 import { SCENARIO_EMAIL_DOMAIN } from '../modes';
 import { createTeam, invite, skipNewUserNudge } from '../helpers/teams';
-import { helpNav } from '../../../client/src/viewer/help/articles/index';
+import { helpNav } from '../helpers/help-nav';
 import { TourWalker } from './tour-kit';
-import type { Browser } from '@playwright/test';
+import type { Browser, Route } from '@playwright/test';
 
 const DOWNLOADABLE = new Set(helpNav.flatMap((s) => s.articles.filter((a) => a.downloadable).map((a) => a.slug)));
 const NAV_TITLE = new Map(helpNav.flatMap((s) => s.articles.map((a) => [a.slug, a.title] as const)));
@@ -62,7 +67,16 @@ test('@TOUR-09 help, notifications, consent @mode-a', async ({ stand, users, pag
   await skipNewUserNudge(page);
   await regular.signIn(page);
 
+  // Offline pass: anything that does not go to the stand is aborted while the help is walked.
+  const standOrigin = new URL(stand.url).origin;
+  const offline = (route: Route) =>
+    new URL(route.request().url()).origin === standOrigin ? route.fallback() : route.abort('internetdisconnected');
+  await page.context().route('**/*', offline);
+
   const dialog = page.getByRole('dialog');
+  const menu = dialog.getByRole('navigation');
+  const menuButton = (slug: string) => menu.getByRole('button', { name: NAV_TITLE.get(slug), exact: true });
+  const h1 = (name: string) => dialog.getByRole('heading', { level: 1, name, exact: true });
   const helpRows = walker.rows().filter((r) => r.id.startsWith('help.'));
   for (const [i, row] of helpRows.entries()) {
     const slug = row.id.slice('help.'.length);
@@ -73,7 +87,7 @@ test('@TOUR-09 help, notifications, consent @mode-a', async ({ stand, users, pag
           await page.getByRole('button', { name: 'Help' }).click();
           await expect(dialog.getByRole('heading', { name: 'Help', exact: true })).toBeVisible();
         }
-        await dialog.getByRole('navigation').getByRole('button', { name: NAV_TITLE.get(slug), exact: true }).click();
+        await menuButton(slug).click();
       },
       check: async () => {
         await expect(dialog.getByRole('heading', { level: 1, name: row.expectText, exact: true })).toBeVisible();
@@ -83,6 +97,69 @@ test('@TOUR-09 help, notifications, consent @mode-a', async ({ stand, users, pag
   }
   await page.keyboard.press('Escape');
   await expect(dialog).toHaveCount(0);
+
+  await test.step('help: opens on «Your first session», menu sections in nav.json order', async () => {
+    await page.getByRole('button', { name: 'Help' }).click();
+    await expect(h1('Your first session')).toBeVisible();
+    await expect(menuButton('getting-started')).toHaveClass(/border-blue-500/);
+    await expect(menu.locator('p')).toHaveText(helpNav.map((s) => s.section));
+  });
+
+  await test.step('help: a link to another page switches the article and the highlight', async () => {
+    await dialog.getByRole('link', { name: 'Install the hook', exact: true }).click();
+    await expect(h1('Install Telemetry Hook')).toBeVisible();
+    await expect(menuButton('install-hook')).toHaveClass(/border-blue-500/);
+    await expect(menuButton('getting-started')).not.toHaveClass(/border-blue-500/);
+  });
+
+  await test.step('help: a page.md#anchor link opens that page at the heading', async () => {
+    await menuButton('trust-model').click();
+    await dialog.getByRole('link', { name: 'What is collected', exact: true }).first().click();
+    await expect(h1('Data Collection & Upload')).toBeVisible();
+    await expect(dialog.getByRole('heading', { level: 2, name: 'What is collected', exact: true })).toBeInViewport();
+  });
+
+  await test.step('help: an external link opens in a new tab', async () => {
+    await menuButton('install-server').click();
+    const external = dialog.locator('a[href^="https://"]').first();
+    await expect(external).toHaveAttribute('target', '_blank');
+    await expect(external).toHaveAttribute('rel', /noopener/);
+    await expect(external).toContainText('↗');
+  });
+
+  await test.step('help: an unknown page link only warns, a missing anchor opens the page at its top', async () => {
+    await page.route('**/help/getting-started.md', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'text/markdown; charset=utf-8',
+        body: [
+          '# Your first session',
+          '',
+          '[Broken page](no-such-page.md)',
+          '',
+          '[Missing anchor](session-log.md#no-such-anchor)',
+          '',
+        ].join('\n'),
+      }),
+    );
+    await menuButton('getting-started').click();
+    await expect(h1('Your first session')).toBeVisible();
+    const [warning] = await Promise.all([
+      page.waitForEvent('console', (msg) => msg.type() === 'warning' && msg.text().includes('[help] unknown help page')),
+      dialog.getByRole('link', { name: 'Broken page' }).click(),
+    ]);
+    expect(warning.text()).toContain('no-such-page.md');
+    await expect(h1('Your first session')).toBeVisible();
+    await expect(menuButton('getting-started')).toHaveClass(/border-blue-500/);
+
+    await dialog.getByRole('link', { name: 'Missing anchor' }).click();
+    await expect(h1('Session Log')).toBeInViewport();
+    await expect(menuButton('session-log')).toHaveClass(/border-blue-500/);
+    await page.unroute('**/help/getting-started.md');
+  });
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+  await page.context().unroute('**/*', offline);
 
   await walker.screen(page, 'notifications.bell', {
     go: async (hash) => {

@@ -12,7 +12,9 @@ hook uploads, never from older per-tab events; the Files and Rules tabs addition
 Claude log's own `instructions` / `nested_memory` attachments (log wins per path — see
 `docs/knowledgebase/session-log-view.md` § "System Context Files / Rules — sources and merge"). Two things decide what shows up and
 whether a resend is needed: **which** project/user/plugin skills, workflows and commands the
-catalog scanner finds (and under what name and path), and the **content-only** id that lets the
+catalog scanner finds (and under what name and path), each entry's optional `gitStatus`
+(`tracked` | `untracked` | `ignored` | `outside-repo`, on `skills[]`, `agents[]` and
+`systemContext.files[]`, absent when git gave no answer), and the **content-only** id that lets the
 hook send the full snapshot just once per distinct harness and a cheap ref on every other upload.
 A wrong catalog hides or mis-labels a skill; a wrong id either resends the full snapshot every
 turn (every file read becomes an upload) or never resends it after a real change (stale System
@@ -23,9 +25,12 @@ Context).
 - Implementation:
   - `hook/.claude/telemetry_tool/skill-catalog.js`, `buildSkillCatalog({projectRoot, cwd, env,
     log})` — the catalog scanner (which plugins are enabled, where each resolves to, what gets
-    scanned, naming and the project/user collision rule).
+    scanned, naming, the org-synced scan and the project/user collision rule).
   - `hook/.claude/telemetry_tool/harness-snapshot.js`, `computeSnapshotId(sections)` — the id
     algorithm over the catalog plus agents, MCP servers and system-context files.
+  - `hook/.claude/telemetry_tool/harness-git-status.js`, `annotateGitStatus({projectRoot, skills,
+    agents, systemContext})` — the per-entry `gitStatus`, set in place by `buildHarnessSnapshot`
+    before the id is computed.
 - Twins: none. The server never recomputes `snapshotId` — it only validates the `^[0-9a-f]{64}$`
   shape and trusts the hook's value (design decision, `2026-10-16-sysctx-skill-source` plan, DD-2)
   — so there is nothing on the server side to test against this doc.
@@ -64,22 +69,50 @@ Context).
    copy of the same plugin elsewhere on disk contributes nothing.
 5. **Project/user collision.** When a project and a user entry share the same `kind` and `name`,
    only the project one is kept.
+5a. **Org-synced scan.** After the plugins, every subdirectory `<org>` of
+   `<claudeConfigDir>/skills/synced/` is scanned like a `skills/` folder (`<org>/<skill>/
+   SKILL.md`, kind `skill`, name from frontmatter `name` else the directory name, never
+   namespaced). The entry has `source: "org-synced"` and an **empty `body`** (metadata only —
+   `description`, `bytes` and `contentHash` are still read). An org-synced skill whose name
+   matches a project or user skill is skipped. The user scan of `<claudeConfigDir>/skills/` never
+   picks up `synced` itself, because `synced/SKILL.md` does not exist.
 6. **Path and hash.** Every entry's `path` is: `project` → relative to `projectRoot` with forward
    slashes; `user` → the literal string `~/.claude/<rel>`, `<rel>` relative to `claudeConfigDir`
    (never the real OS home directory, even when `CLAUDE_CONFIG_DIR` points elsewhere); `plugin` →
-   `<pluginName>@<version>/<rel inside installPath>`. `contentHash` is the sha256 hex digest of the
+   `<pluginName>@<version>/<rel inside installPath>`; `org-synced` →
+   `~/.claude/skills/synced/<org>/<skill>/SKILL.md`, with the literal text `<org>` in place of the
+   real org folder name. `contentHash` is the sha256 hex digest of the
    exact UTF-8 text the scanner read for that file — never a function of its mtime or size.
 
 **Snapshot id** (`computeSnapshotId`):
 
-7. `snapshotId = sha256Hex(JSON.stringify(canon))`, where `canon` projects only: `skills` sorted by
-   `(source, name)` as `[name, source, plugin ? "<id>@<version>" : "", contentHash]`; `agents`
-   sorted by `path` as `[name, path, contentHash]`; `mcp` sorted by `name` as `[name, command,
-   args, url ?? "", configSource]`; `context` (the `systemContext` files) sorted by `path` as
-   `[path, contentHash]`.
+7. `snapshotId = sha256Hex(JSON.stringify(canon))`, where `canon` is `{v: 1, skills, agents, mcp,
+   context}` and projects only: `skills` sorted by `(source, name)` as `[name, source, plugin ?
+   "<id>@<version>" : "", contentHash, gitStatus?]`; `agents` sorted by `path` as `[name, path,
+   contentHash, gitStatus?]`; `mcp` sorted by `name` as `[name, command, args, url ?? "",
+   configSource]`; `context` (the `systemContext` files) sorted by `path` as `[path, contentHash,
+   gitStatus?]`. `gitStatus?` is appended **only** when the entry's `gitStatus` is a non-empty
+   string, so a snapshot without the field (an older hook, or git gave no answer) keeps exactly the
+   id it had before the field existed; a changed status changes the id.
 8. Everything not in that projection is invisible to the id: an MCP server's probe results
    (`connected`, `tools`) and the body-level `perToolDetailSupported` flag never affect it, and
    neither does any file's mtime — only `contentHash`, which is itself a pure function of text.
+
+**Git status** (`annotateGitStatus`, run inside `buildHarnessSnapshot` before the id):
+
+9. **Candidates.** A skill of source `project`, every agent and every `systemContext` file is an
+   in-root candidate, unless its `path` leaves the project root (`../…`, or absolute). Every other
+   entry — `user`/`plugin`/`org-synced` skills and `../…` context files — is
+   `outside-repo` without asking git.
+10. **At most two git processes**, cwd = `projectRoot`. Process 1 is `git ls-files -z --
+    :(literal)<path>…` over the candidates (or `git rev-parse --git-dir` as a pure repo probe when
+    there are none); an output path equal to a candidate is `tracked`. Process 2, only when some
+    candidate is not tracked, is `git check-ignore --stdin -z` over those: exit 0 or 1 → each
+    returned path is `ignored`, every other one `untracked`; any other exit leaves those paths
+    without a status.
+11. **Fail-open.** Process 1 failing (git missing, timeout, not a repository) or a joined pathspec
+    longer than 24 000 characters leaves **every** entry without `gitStatus` — including the
+    `outside-repo` ones — and never throws.
 
 ## Edge cases
 
@@ -96,6 +129,15 @@ Context).
   config change does change it: HS-10.
 - A user-level skill with no project equivalent, and its literal `~/.claude/...` path: HS-11.
 - A project/user name collision resolving to exactly the project entry: HS-12.
+- An org-synced skill: masked `<org>` path, `source: org-synced`, empty body, and an org-synced
+  skill that collides with a project skill skipped: HS-17.
+- All four git statuses in one repository (tracked skill/agent/file, ignored file, untracked skill,
+  user skill and `../` context file outside the repo): HS-13.
+- Not a git repository: no entry gets a `gitStatus`, and the id is the literal pre-`gitStatus`
+  canon id: HS-14.
+- The same file tracked in one snapshot and untracked in the other gives different ids: HS-15.
+- A repository with no in-root candidate (only a user skill): the repo probe still marks it
+  `outside-repo`: HS-16.
 
 ## Examples
 
@@ -118,19 +160,28 @@ temp directory before the call:
 - `mtimeOverride` (`before`/`after` rows only) re-stamps a tree file's mtime to a fixed value after
   it is written, so content and mtime can be varied independently.
 
-Three `kind`s:
+Four `kind`s:
 
 - **`catalog`**: one `{tree, settings?, installedPlugins?}`. `expected.present` lists partial
   entries (`name`, `kind`, `source`, `path`) that must be found in `buildSkillCatalog(...)`;
   `expected.absentNames` lists names that must not appear; `expected.exactlyOne` lists names that
   must appear exactly once; `expected.logContains` is a substring the `log` callback must have
-  received.
+  received. Every key of a `present` entry is compared, so `"body": ""` checks an empty body.
 - **`compare`**: `{before, after}`, each a `{tree, mtimeOverride?}` written to its own temp
   directory and passed to `buildHarnessSnapshot`. `expected.sameId` says whether the two resulting
   `snapshotId`s are equal.
 - **`probe`**: one `{tree, probeServerName, probeFields}`. `buildHarnessSnapshot` runs once; a
   second id is computed from the same sections after merging `probeFields` onto the named MCP
   server's entry. `expected.sameId` says whether the two ids are equal.
+- **`git`**: one `{tree, git?, gitAdd?, gitignore?}`, or `{before, after}` of two of them. The tree
+  is written as above (a `../<rel>` key lands in the temp directory that holds the project, i.e.
+  outside the repository); then, unless `git: false`, `git init` runs in the project root, the
+  `gitignore` lines are written to its `.gitignore` and the `gitAdd` paths are `git add`ed. Git
+  runs with `GIT_CEILING_DIRECTORIES` at the temp directory and no global/system config, so the
+  machine's own repositories and excludes never leak in. `expected.statuses` maps every entry
+  `path` (skills, agents, context files) to its `gitStatus`, or `null` when absent;
+  `expected.snapshotId`, when given, is the literal id. For `{before, after}`, `expected.sameId`
+  says whether the two ids are equal.
 
 ```examples
 [
@@ -267,6 +318,87 @@ Three `kind`s:
       "exactlyOne": ["dup"]
     },
     "note": "Rule 5: project and user both define a skill named dup; only the project one survives, so dup appears exactly once and it is the project entry at its project-relative path."
+  },
+  {
+    "id": "HS-13",
+    "kind": "git",
+    "input": {
+      "tree": {
+        "CLAUDE.md": "# Project\n",
+        "CLAUDE.local.md": "# Local\n",
+        ".claude/skills/hello/SKILL.md": "---\nname: hello\n---\nHello",
+        ".claude/skills/shipped/SKILL.md": "---\nname: shipped\n---\nShipped",
+        ".claude/agents/rev/AGENT.md": "---\nname: rev\n---\nReview",
+        "user:skills/bar/SKILL.md": "---\nname: bar\n---\nUser",
+        "../CLAUDE.md": "# Parent\n"
+      },
+      "gitAdd": ["CLAUDE.md", ".claude/skills/shipped/SKILL.md", ".claude/agents/rev/AGENT.md"],
+      "gitignore": ["CLAUDE.local.md"]
+    },
+    "expected": {
+      "statuses": {
+        "CLAUDE.md": "tracked",
+        "CLAUDE.local.md": "ignored",
+        ".claude/skills/hello/SKILL.md": "untracked",
+        ".claude/skills/shipped/SKILL.md": "tracked",
+        ".claude/agents/rev/AGENT.md": "tracked",
+        "~/.claude/skills/bar/SKILL.md": "outside-repo",
+        "../CLAUDE.md": "outside-repo"
+      }
+    },
+    "note": "Rule 9: the user skill and the ../ context file are outside-repo without asking git. Rule 10: ls-files returns the three git-added paths (tracked); check-ignore over the other two returns CLAUDE.local.md (ignored) and leaves the hello skill untracked."
+  },
+  {
+    "id": "HS-14",
+    "kind": "git",
+    "input": {
+      "git": false,
+      "tree": {
+        "CLAUDE.md": "# Hi\n",
+        ".claude/skills/hello/SKILL.md": "---\nname: hello\n---\nHello"
+      }
+    },
+    "expected": {
+      "statuses": { "CLAUDE.md": null, ".claude/skills/hello/SKILL.md": null },
+      "snapshotId": "57a1bdff8f18063521ee9a0936ac389fcc877ac41a87aee893e0aa838bebf223"
+    },
+    "note": "Rule 11: ls-files fails outside a repository, so no entry gets a gitStatus. Rule 7: with no gitStatus the tuples are the old ones, and the id equals sha256 of {v:1, skills:[[hello, project, '', <hash>]], agents:[], mcp:[], context:[[CLAUDE.md, <hash>]]} — the id an older hook computed for the same files."
+  },
+  {
+    "id": "HS-15",
+    "kind": "git",
+    "input": {
+      "before": { "tree": { "CLAUDE.md": "# Hi\n" }, "gitAdd": ["CLAUDE.md"] },
+      "after": { "tree": { "CLAUDE.md": "# Hi\n" } }
+    },
+    "expected": { "sameId": false },
+    "note": "Rule 7: same content and path, but the context tuple ends in tracked in one snapshot and untracked in the other, so the ids differ."
+  },
+  {
+    "id": "HS-16",
+    "kind": "git",
+    "input": { "tree": { "user:skills/bar/SKILL.md": "---\nname: bar\n---\nUser" } },
+    "expected": { "statuses": { "~/.claude/skills/bar/SKILL.md": "outside-repo" } },
+    "note": "Rule 10: there is no in-root candidate, so process 1 is the rev-parse repo probe; it succeeds in the git-init project, and the user skill is marked outside-repo."
+  },
+  {
+    "id": "HS-17",
+    "kind": "catalog",
+    "input": {
+      "tree": {
+        "user:skills/synced/acme-org/greet/SKILL.md": "---\nname: greet\ndescription: Say hello\n---\nSecret org body",
+        "user:skills/synced/acme-org/dup/SKILL.md": "---\nname: dup\n---\nOrg dup body",
+        ".claude/skills/dup/SKILL.md": "---\nname: dup\n---\nProject dup body"
+      }
+    },
+    "expected": {
+      "present": [
+        { "name": "greet", "kind": "skill", "source": "org-synced", "path": "~/.claude/skills/synced/<org>/greet/SKILL.md", "body": "", "description": "Say hello" },
+        { "name": "dup", "kind": "skill", "source": "project", "path": ".claude/skills/dup/SKILL.md" }
+      ],
+      "exactlyOne": ["greet", "dup"]
+    },
+    "note": "Rule 5a: greet under synced/acme-org becomes an org-synced entry with the bare name, an empty body (description is still read) and, per rule 6, the org folder masked as the literal <org>. The org-synced dup collides with the project dup and is skipped, so dup appears once, as the project entry. The user scan finds no synced/SKILL.md and adds nothing."
   }
 ]
 ```
@@ -287,6 +419,14 @@ Three `kind`s:
   (would still pass in a developer's own home but fail under the test's `CLAUDE_CONFIG_DIR`
   redirection) -> HS-11.
 - User entries kept alongside a same-named project entry instead of dropped -> HS-12.
+- `check-ignore` output ignored (every non-tracked candidate `untracked`), or user/`../` entries
+  sent to git instead of marked `outside-repo` -> HS-13.
+- `gitStatus` appended to a tuple even when absent (e.g. as `""`), or `outside-repo` set before the
+  repo check succeeded -> HS-14 (the literal id, or the null statuses, would differ).
+- `gitStatus` left out of the id tuples -> HS-15 (would match).
+- No repo probe when there are no candidates (user skills left without a status) -> HS-16.
+- The org-synced body kept, the real org folder name in the path, the name namespaced, or a
+  project/user collision not skipped -> HS-17.
 
 ## Where the result is visible
 

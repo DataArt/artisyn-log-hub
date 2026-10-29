@@ -323,10 +323,10 @@ Two fixed limits on the upload side are not config keys:
 
 | Key | Default | Description |
 |---|---|---|
-| `toolWrap` | `true` | Local kill switch of the CLI tool wrapper (Tools/MCP tab). `false` — like the environment variable `LOGHUB_TOOL_WRAP=0` — turns it off for this checkout: `SessionStart` puts no shims on `PATH`, the `PreToolUse` PowerShell entry never rewrites a command, and no new wrapper records (so no new `tool-calls` log) are produced. The list of monitored tools is configured in the UI (Repository → Tools/MCP → Monitored tools), never here. An older hook ignores the key. |
+| `toolWrap` | `true` | Local kill switch of the CLI tool wrapper (Tools/MCP tab). `false` — like the environment variable `LOGHUB_TOOL_WRAP=0` — turns it off for this checkout: `SessionStart` puts no shims on `PATH`, the `PreToolUse` PowerShell entry never rewrites a command, and no new wrapper records (so no new `tool-calls` log) are produced. The list of monitored tools is configured in the UI (Repository → Settings → Monitored Tools), never here. An older hook ignores the key. |
 | `toolWrapConfigTimeoutMs` | `2000` | HTTP timeout (ms) of the monitored-tools fetch `GET /api/v2/tool-monitoring/config` — synchronous at `SessionStart`, at most once a minute on `UserPromptSubmit` (there capped at 1000 ms). On a timeout, a non-200 answer (an old server answers 404) or any error the hook keeps its cached `<workDir>/tool-wrap/config-cache.json`; without a cache nothing is wrapped. Fail open: it never blocks a session. |
 
-- **Third kill switch.** "Pause all wrapping" in the UI's Monitored tools dialog reaches the hook as `paused: true`
+- **Third kill switch.** "Pause all wrapping" in the UI's Monitored Tools settings tab reaches the hook as `paused: true`
   in the config: a new session wraps nothing, a running one gets the `off/__all` marker on the next refresh.
 - **`hook.log` lines.** `lifecycle-hook.js`: `tool-wrap: wrapping <tools>` / `tool-wrap skipped: <reason>` /
   `[warn] tool-wrap pre-flight failed: <reason>; Bash tool calls are not wrapped this session`;

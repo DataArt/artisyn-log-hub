@@ -18,10 +18,10 @@ import * as path from 'path';
 /** Twin of `DATA_COLLECTION_NOTICE_SETTING`. */
 export const DATA_COLLECTION_NOTICE_SETTING = 'dataCollectionNotice';
 
-/** The markdown the client fetches from `/help/data-collection-notice.md`. */
+/** The source of the markdown the client fetches from `/help/data-collection-notice.md` (the generator copies it byte-for-byte). */
 const NOTICE_PATH = path.resolve(
   __dirname,
-  '../../../client/public/help/data-collection-notice.md',
+  '../../../user-docs/data-collection-notice.md',
 );
 
 /** Twin of `noticeHash` — FNV-1a 32-bit, 8 lowercase hex chars. */

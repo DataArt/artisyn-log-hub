@@ -3,7 +3,7 @@ type: reference
 title: CI Security Scans
 description: The report-only security workflows (security-scans, virustotal, security-report), their triggers, the SNYK_TOKEN/VIRUS_TOTAL_KEY secrets, fork behaviour, the unified row format and label table, the PR-description block, the ci-reports branch and badge, the .snyk policy, the config-guard allowlist, the FR-27 repository settings and the owner rollout; also lists checks.yml / release.yml and the release VirusTotal scopes
 tags: [ci, security, github-actions, snyk, virustotal, supply-chain]
-timestamp: 2026-10-25
+timestamp: 2026-10-29
 ---
 
 # CI Security Scans
@@ -75,6 +75,17 @@ a job-summary line, and skips its remaining steps. For forks, dependency review 
 check. SARIF upload is switched off on fork PRs, and zizmor runs in annotation mode
 (`fork PR: annotations only, no SARIF`). The PR block still appears: `security-report` runs in the
 base repository context through `workflow_run`.
+
+## zizmor and the GitHub API
+
+zizmor's online audits (`known-vulnerable-actions` and others) query the GitHub API for every
+action; a single lost request aborts the whole run (`fatal: no audit was performed`, no SARIF).
+In SARIF mode findings never fail the step, so a failed `zizmor` step means zizmor itself could
+not run: `workflow-lint` waits 30 s and runs it once more (step `zizmor (retry 1)`). If the retry
+fails too, the `zizmor/workflows` row is a `warning` with the note `not run: GitHub API
+unavailable …` (written by `scan-rows.js warning`), not an `error`. Fork PRs are not retried —
+in annotation mode a failed step can mean findings. Online audits stay on: nothing else watches
+the pinned actions for advisories (Dependabot covers only the `docker` ecosystem).
 
 ## Row format
 
