@@ -35,7 +35,6 @@ import type {
   ToolUsageOperationAggregate,
 } from '../../database/schema/index';
 import {
-  commandWordsOf,
   operationOfArgs,
   recognizeCliCalls,
   type RecognizedCliCall,
@@ -203,7 +202,6 @@ function scanNode(
           tool: r.tool,
           operation: r.operation,
         })),
-        commandWords: commandWordsOf(parser, command, shell),
         filePath: null,
         output,
       };
@@ -213,7 +211,6 @@ function scanNode(
       name: use.name,
       calls:
         mcp === null ? [] : [{ tool: mcp.server, operation: mcp.operation }],
-      commandWords: [],
       filePath: asString(use.input['file_path']),
       output,
     };
@@ -229,7 +226,6 @@ function emptyOperationAggregate(): ToolUsageOperationAggregate {
     noResult: 0,
     empty: 0,
     retried: 0,
-    fellBack: 0,
     openedFile: 0,
     durationMsSum: 0,
     durationCount: 0,
@@ -252,7 +248,6 @@ export function aggregateCalls(
     if (call.status === 'no_result') agg.noResult++;
     if (call.signals.includes('empty')) agg.empty++;
     if (call.signals.includes('retried')) agg.retried++;
-    if (call.signals.includes('fell_back')) agg.fellBack++;
     if (call.signals.includes('opened_file')) agg.openedFile++;
     if (call.durationMs !== null) {
       agg.durationMsSum += call.durationMs;

@@ -1,6 +1,7 @@
 /**
  * Filter strip of the Tools/MCP tab: date range, call status, a debounced search over the calls,
- * the removable scope chip set by the tree, and the "Monitored tools (N)" button. Every change is
+ * the removable scope chip set by the tree, and the "Monitored tools (N)" button (opens the
+ * repository settings' "Monitored Tools" tab). Every change is
  * applied at once; the tab mirrors it to the `t*` URL params (DD-21). Status and search filter
  * the calls table only, the tree keeps its totals (DD-18).
  */
@@ -47,7 +48,7 @@ export interface ToolsTopBarProps {
   onChange: (patch: ToolsTopBarPatch) => void;
   /** Enabled monitored tools of the caller's level; null while the config loads. */
   monitoredCount: number | null;
-  /** Opens the Monitored tools dialog; the button is disabled without it. */
+  /** Opens the settings' Monitored Tools tab; the button is disabled without it. */
   onOpenMonitoredTools?: () => void;
   /**
    * The session detail's tab: one session's calls, so no date range and no Monitored tools

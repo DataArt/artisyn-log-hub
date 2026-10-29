@@ -98,7 +98,7 @@
     <text y="28">1. Block marker (top-left) and P/A-F progress pills (top-right) tell a C-level reader where they are in the storyline (FR-6).</text>
     <text y="52">2. Headline = the one message of the slide. Body: at most 3 short bullets and one key figure; at most 40 words of body text (FR-5).</text>
     <text y="76">3. Visual slot has a fixed box; a later screenshot drops in with no redesign (FR-7). No screenshots in this task.</text>
-    <text y="100">4. Phone: same order, single column, body text at least 15-16 px, no horizontal scroll; the visual slot scales to the width.</text>
+    <text y="100">4. Phone: same order, single column, body text at least 16 px (NFR), no horizontal scroll; the visual slot scales to the width.</text>
     <text y="124">5. Detail that does not fit (detector ids, report names, Tools/MCP signals) goes to speaker notes (S key), not onto the slide.</text>
     <text y="148">6. Light theme only; one navy accent; neutral greys. Numbers labelled "Illustrative example".</text>
   </g>

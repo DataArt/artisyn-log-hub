@@ -127,7 +127,6 @@ export const EMPTY_AGG: ToolUsageAgg = {
   noResult: 0,
   empty: 0,
   retried: 0,
-  fellBack: 0,
   openedFile: 0,
   avgDurationMs: null,
   inBytes: 0,

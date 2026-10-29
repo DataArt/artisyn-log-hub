@@ -32,7 +32,7 @@ export type ToolCallHint =
 export type ToolCallSource = 'transcript' | 'wrapper' | 'both';
 export type ToolCallAgentKind = 'root' | 'subagent' | 'workflow';
 /** Usefulness heuristics (FR-5); the UI labels them as heuristics. */
-export type ToolCallSignal = 'empty' | 'retried' | 'fell_back' | 'opened_file';
+export type ToolCallSignal = 'empty' | 'retried' | 'opened_file';
 export type ToolCallShell = 'bash' | 'powershell';
 
 /**
@@ -135,7 +135,6 @@ export interface ToolUsageAgg {
   noResult: number;
   empty: number;
   retried: number;
-  fellBack: number;
   openedFile: number;
   avgDurationMs: number | null;
   inBytes: number;

@@ -367,6 +367,7 @@ const SETTINGS_ANCHORS: Array<[string, string, string, string]> = [
   ['display', 'Display', 'Hide hook-service sessions', 'Display'],
   ['file-categories', 'File Categories', 'Pattern', 'File Categories'],
   ['analysis', 'Analysis', 'Turn-End Cost Advisor', 'Analysis'],
+  ['monitored-tools', 'Monitored Tools', 'Pause all wrapping', 'Monitored Tools'],
   // A personal repository has no team to configure session attributes for: that notice is the screen.
   ['session-attribution', 'Session Attribution', 'Session attributes are a team-level setting', 'Session Attribution'],
   ['maintenance', 'Maintenance', 'Recompute all sessions', 'Maintenance and Import/Export'],

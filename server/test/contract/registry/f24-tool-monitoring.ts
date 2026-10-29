@@ -620,7 +620,6 @@ const summaryRows: ContractCase[] = [
           noResult: 0,
           empty: 1,
           retried: 1,
-          fellBack: 0,
           openedFile: 0,
           // (100 + 200 + 50 + 1500) / 4 = 462.5, rounded.
           avgDurationMs: 463,
@@ -716,7 +715,6 @@ const summaryRows: ContractCase[] = [
           noResult: 0,
           empty: 1,
           retried: 0,
-          fellBack: 0,
           openedFile: 0,
           avgDurationMs: 50,
           inBytes: 20,
@@ -750,7 +748,6 @@ const summaryRows: ContractCase[] = [
           noResult: 0,
           empty: 0,
           retried: 0,
-          fellBack: 0,
           openedFile: 0,
           avgDurationMs: null,
           inBytes: 0,

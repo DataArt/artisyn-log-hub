@@ -1,15 +1,16 @@
 /**
- * "Monitored tools" dialog of the Tools/MCP tab: the CLI tools whose calls the hook wraps, for
+ * "Monitored Tools" tab of the repository settings: the CLI tools whose calls the hook wraps, for
  * the caller's level (personal, or the team's in a team view). One row per tool — name, enabled
- * switch, capture (full / meta), level badges, the last wrapper record or a hint, remove — plus
- * "Add tool" and the "Pause all wrapping" switch. Names are checked as typed with
- * `validateToolName` from `@loghub/tool-monitor` (the same rules the server applies); a 400
- * from the save lands on the row it names. Read-only, with "Managed by team owner", when the
- * caller cannot edit the level.
+ * switch, level badges, the last wrapper record or a hint, remove — plus "Add tool" and the
+ * "Pause all wrapping" switch. A monitored tool is always captured in full: every row is saved
+ * with `capture: 'full'` (the API keeps the field — older hooks still read it). Names are
+ * checked as typed with `validateToolName` from `@loghub/tool-monitor` (the same rules the
+ * server applies); a 400 from the save lands on the row it names. Read-only, with "Managed by
+ * team owner", when the caller cannot edit the level.
  */
 import { useMemo, useState } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Plus, Trash2 } from 'lucide-react';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { Loader2, Plus, Trash2 } from 'lucide-react';
 import {
   MAX_MONITORED_TOOLS,
   normalizeToolName,
@@ -17,42 +18,30 @@ import {
 } from '@loghub/tool-monitor';
 import { cn } from '@/lib/cn';
 import { Button } from '@/ui/button';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/ui/dialog';
 import { Input } from '@/ui/input';
 import { Switch } from '@/ui/switch';
 import {
+  fetchToolMonitoringConfig,
   saveToolMonitoringConfig,
   ToolMonitorConfigSaveError,
 } from '../../../api';
 import { formatLocalTimestamp } from '../../../lib/format';
 import type {
-  ToolMonitorCapture,
   ToolMonitorConfigToolView,
   ToolMonitorConfigView,
   ToolMonitorLevel,
 } from '../../../../models/tool-monitoring';
 
-export interface MonitoredToolsDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
+export interface MonitoredToolsSettingsProps {
   repoId: number;
   teamId?: number;
-  config: ToolMonitorConfigView;
 }
 
 interface DraftRow {
   key: number;
   name: string;
   enabled: boolean;
-  capture: ToolMonitorCapture;
-  /** Server view of the row when it was loaded; null for a row added in this dialog. */
+  /** Server view of the row when it was loaded; null for a row added in this form. */
   saved: ToolMonitorConfigToolView | null;
 }
 
@@ -92,30 +81,29 @@ function rowError(rows: DraftRow[], index: number): string | null {
   return null;
 }
 
+function toDraftRows(config: ToolMonitorConfigView): DraftRow[] {
+  return config.tools.map((t, i) => ({
+    key: i,
+    name: t.name,
+    enabled: t.enabled,
+    saved: t,
+  }));
+}
+
 function MonitoredToolsForm({
   repoId,
   teamId,
   config,
-  onDone,
 }: {
   repoId: number;
   teamId?: number;
   config: ToolMonitorConfigView;
-  onDone: () => void;
 }) {
   const queryClient = useQueryClient();
   const readOnly = !config.canEdit;
   const [nextKey, setNextKey] = useState(config.tools.length);
   const [paused, setPaused] = useState(config.paused);
-  const [rows, setRows] = useState<DraftRow[]>(() =>
-    config.tools.map((t, i) => ({
-      key: i,
-      name: t.name,
-      enabled: t.enabled,
-      capture: t.capture,
-      saved: t,
-    })),
-  );
+  const [rows, setRows] = useState<DraftRow[]>(() => toDraftRows(config));
   // Name errors are shown once the user has touched the row or tried to save.
   const [touched, setTouched] = useState<Set<number>>(new Set());
   const [submitted, setSubmitted] = useState(false);
@@ -126,6 +114,14 @@ function MonitoredToolsForm({
 
   const errors = useMemo(() => rows.map((_, i) => rowError(rows, i)), [rows]);
   const hasErrors = errors.some((e) => e !== null);
+  const hasChanges =
+    paused !== config.paused ||
+    rows.length !== config.tools.length ||
+    rows.some(
+      (r, i) =>
+        r.name !== config.tools[i].name ||
+        r.enabled !== config.tools[i].enabled,
+    );
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -136,12 +132,13 @@ function MonitoredToolsForm({
           tools: rows.map((r) => ({
             name: r.name,
             enabled: r.enabled,
-            capture: r.capture,
+            capture: 'full',
           })),
         },
         teamId,
       ),
     onSuccess: (view) => {
+      // A changed list remounts this form (keyed by the saved list) with the saved rows.
       queryClient.setQueryData(
         ['tool-monitoring-config', repoId, teamId ?? null],
         view,
@@ -150,7 +147,6 @@ function MonitoredToolsForm({
         queryKey: ['tool-summary', repoId],
       });
       void queryClient.invalidateQueries({ queryKey: ['tool-calls', repoId] });
-      onDone();
     },
     onError: (err) => {
       if (err instanceof ToolMonitorConfigSaveError) {
@@ -182,9 +178,18 @@ function MonitoredToolsForm({
   const addRow = () => {
     setRows((prev) => [
       ...prev,
-      { key: nextKey, name: '', enabled: true, capture: 'full', saved: null },
+      { key: nextKey, name: '', enabled: true, saved: null },
     ]);
     setNextKey((k) => k + 1);
+  };
+
+  const discard = () => {
+    setPaused(config.paused);
+    setRows(toDraftRows(config));
+    setNextKey(config.tools.length);
+    setTouched(new Set());
+    setSubmitted(false);
+    setServerError(null);
   };
 
   const save = () => {
@@ -195,7 +200,16 @@ function MonitoredToolsForm({
   };
 
   return (
-    <>
+    <div className="flex flex-col gap-3">
+      {readOnly ? (
+        <p
+          className="text-xs font-medium text-muted-foreground"
+          data-testid="tools-config-readonly"
+        >
+          Managed by team owner.
+        </p>
+      ) : null}
+
       <div className="flex items-center gap-2 rounded-md border border-border bg-muted/30 px-3 py-2">
         <Switch
           id="tools-pause-all"
@@ -212,19 +226,7 @@ function MonitoredToolsForm({
         </span>
       </div>
 
-      {readOnly ? (
-        <div
-          className="text-xs text-muted-foreground"
-          data-testid="tools-config-readonly"
-        >
-          Managed by team owner.
-        </div>
-      ) : null}
-
-      <div
-        className="flex max-h-[50vh] flex-col gap-1 overflow-y-auto"
-        data-testid="tools-config-rows"
-      >
+      <div className="flex flex-col gap-1" data-testid="tools-config-rows">
         {rows.length === 0 ? (
           <div className="py-4 text-center text-xs text-muted-foreground">
             No monitored tools. MCP servers are recorded without any setup; add
@@ -264,21 +266,6 @@ function MonitoredToolsForm({
                   aria-label="Enabled"
                   data-testid="tools-config-enabled"
                 />
-                <select
-                  value={row.capture}
-                  onChange={(e) =>
-                    update(row.key, {
-                      capture: e.target.value === 'meta' ? 'meta' : 'full',
-                    })
-                  }
-                  disabled={readOnly}
-                  aria-label="Capture"
-                  className="h-8 rounded-md border border-input bg-background px-2 text-xs"
-                  data-testid="tools-config-capture"
-                >
-                  <option value="full">full</option>
-                  <option value="meta">meta only</option>
-                </select>
                 <span className="flex gap-1">
                   {(row.saved?.levels ?? []).map((l) => (
                     <span
@@ -341,10 +328,8 @@ function MonitoredToolsForm({
         </div>
       ) : null}
 
-      <DialogFooter className="items-center sm:justify-between">
-        {readOnly ? (
-          <span />
-        ) : (
+      {readOnly ? null : (
+        <div className="flex items-center gap-2">
           <Button
             type="button"
             variant="outline"
@@ -356,57 +341,85 @@ function MonitoredToolsForm({
             <Plus />
             Add tool
           </Button>
-        )}
-        <div className="flex gap-2">
-          <Button type="button" variant="ghost" size="sm" onClick={onDone}>
-            {readOnly ? 'Close' : 'Cancel'}
+          <Button
+            type="button"
+            size="sm"
+            onClick={save}
+            disabled={
+              !hasChanges || mutation.isPending || (submitted && hasErrors)
+            }
+            data-testid="tools-config-save"
+          >
+            {mutation.isPending && (
+              <Loader2 className="size-3.5 animate-spin" />
+            )}
+            Save
           </Button>
-          {readOnly ? null : (
+          {hasChanges ? (
             <Button
               type="button"
+              variant="ghost"
               size="sm"
-              onClick={save}
-              disabled={mutation.isPending || (submitted && hasErrors)}
-              data-testid="tools-config-save"
+              onClick={discard}
+              disabled={mutation.isPending}
+              data-testid="tools-config-discard"
             >
-              {mutation.isPending ? 'Saving…' : 'Save'}
+              Discard changes
             </Button>
-          )}
+          ) : null}
         </div>
-      </DialogFooter>
-    </>
+      )}
+    </div>
   );
 }
 
-export function MonitoredToolsDialog({
-  open,
-  onOpenChange,
+export function MonitoredToolsSettings({
   repoId,
   teamId,
-  config,
-}: MonitoredToolsDialogProps) {
+}: MonitoredToolsSettingsProps) {
+  const configQuery = useQuery({
+    queryKey: ['tool-monitoring-config', repoId, teamId ?? null],
+    queryFn: () => fetchToolMonitoringConfig(repoId, teamId),
+  });
+  const config = configQuery.data;
+
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl" data-testid="tools-monitored-dialog">
-        <DialogHeader>
-          <DialogTitle>Monitored tools</DialogTitle>
-          <DialogDescription>
-            {config.level === 'team'
-              ? 'CLI tools the hook wraps for every member of this team in this repository.'
-              : 'CLI tools the hook wraps in your sessions of this repository.'}{' '}
-            Shells, the agent&apos;s own tools and shell builtins cannot be
-            monitored.
-          </DialogDescription>
-        </DialogHeader>
-        {open ? (
-          <MonitoredToolsForm
-            repoId={repoId}
-            teamId={teamId}
-            config={config}
-            onDone={() => onOpenChange(false)}
-          />
-        ) : null}
-      </DialogContent>
-    </Dialog>
+    <div className="flex flex-col gap-3" data-testid="tools-monitored-settings">
+      <div className="flex flex-col gap-1">
+        <h3 className="text-sm font-medium">Monitored tools</h3>
+        <p className="text-xs text-muted-foreground">
+          {config?.level === 'team'
+            ? 'CLI tools the hook wraps for every member of this team in this repository.'
+            : 'CLI tools the hook wraps in your sessions of this repository.'}{' '}
+          Their calls — input and full output — appear on the Tools/MCP tab.
+          Shells, the agent&apos;s own tools and shell builtins cannot be
+          monitored.
+        </p>
+      </div>
+
+      {configQuery.isLoading && (
+        <div className="flex items-center gap-2 py-8">
+          <Loader2 className="size-5 animate-spin text-muted-foreground" />
+        </div>
+      )}
+
+      {configQuery.error && (
+        <p className="text-sm text-destructive">
+          Failed to load settings. Please try again.
+        </p>
+      )}
+
+      {config ? (
+        <MonitoredToolsForm
+          key={JSON.stringify([
+            config.paused,
+            config.tools.map((t) => [t.name, t.enabled]),
+          ])}
+          repoId={repoId}
+          teamId={teamId}
+          config={config}
+        />
+      ) : null}
+    </div>
   );
 }

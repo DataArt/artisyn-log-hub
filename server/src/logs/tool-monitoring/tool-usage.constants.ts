@@ -10,7 +10,7 @@
  * `sessions.tool_usage_version` (DD-7). Bump it when the extraction changes: on the next start
  * `initializeDatabase()` sets every older version back to NULL, so the drain rebuilds them.
  */
-export const TOOL_USAGE_EXTRACTOR_VERSION = 1;
+export const TOOL_USAGE_EXTRACTOR_VERSION = 2;
 
 /** Drain period when `TOOL_USAGE_REBUILD_INTERVAL_MS` is unset or invalid. */
 export const DEFAULT_TOOL_USAGE_REBUILD_INTERVAL_MS = 15_000;

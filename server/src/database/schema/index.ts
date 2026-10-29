@@ -1253,7 +1253,6 @@ export interface ToolUsageOperationAggregate {
   noResult: number;
   empty: number;
   retried: number;
-  fellBack: number;
   openedFile: number;
   durationMsSum: number;
   durationCount: number;
@@ -1278,7 +1277,7 @@ export type ToolCallHint =
   | 'persisted';
 export type ToolCallSource = 'transcript' | 'wrapper' | 'both';
 export type ToolCallAgentKind = 'root' | 'subagent' | 'workflow';
-export type ToolCallSignal = 'empty' | 'retried' | 'fell_back' | 'opened_file';
+export type ToolCallSignal = 'empty' | 'retried' | 'opened_file';
 export type ToolCallShell = 'bash' | 'powershell';
 
 /**

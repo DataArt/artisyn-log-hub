@@ -1,0 +1,10 @@
+{
+  "exclude": [
+    ".claude/**",
+    ".artisyn/**",
+    "artisyn-hooks-installer/**",
+    "dist/**",
+    "tmp/**",
+    "docs/**"
+  ]
+}

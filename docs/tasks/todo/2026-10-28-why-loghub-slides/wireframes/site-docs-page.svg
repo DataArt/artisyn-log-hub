@@ -10,9 +10,9 @@
     <text x="20" y="32" font-size="15" font-weight="700" fill="#1e3a5f">Shared page set (source)</text>
     <g font-size="12" fill="#374151">
       <text x="20" y="58">getting-started.md, session-log.md, …</text>
-      <text x="20" y="78">+ install.md, configuration.md (from README)</text>
+      <text x="20" y="78">+ install-server.md, authentication-modes.md, … (from README)</text>
       <text x="20" y="98">+ one navigation definition</text>
-      <text x="20" y="128" fill="#6b7280">location - open question</text>
+      <text x="20" y="128" fill="#6b7280">lives in user-docs/</text>
     </g>
     <path d="M300 75 L380 75" stroke="#1e3a5f" stroke-width="2"/>
     <path d="M380 69 L390 75 L380 81 Z" fill="#1e3a5f"/>

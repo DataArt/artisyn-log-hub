@@ -83,7 +83,6 @@ export interface ToolUsageOperationTotals {
   noResult: number;
   empty: number;
   retried: number;
-  fellBack: number;
   openedFile: number;
   durationMsSum: number;
   durationCount: number;
@@ -199,7 +198,6 @@ interface OperationSqlRow {
   no_result: unknown;
   empty: unknown;
   retried: unknown;
-  fell_back: unknown;
   opened_file: unknown;
   duration_ms_sum: unknown;
   duration_count: unknown;
@@ -239,7 +237,6 @@ export async function loadSummary(
       ${opSum('noResult')} AS no_result,
       ${opSum('empty')} AS empty,
       ${opSum('retried')} AS retried,
-      ${opSum('fellBack')} AS fell_back,
       ${opSum('openedFile')} AS opened_file,
       ${opSum('durationMsSum')} AS duration_ms_sum,
       ${opSum('durationCount')} AS duration_count,
@@ -281,7 +278,6 @@ export async function loadSummary(
       noResult: num(r.no_result),
       empty: num(r.empty),
       retried: num(r.retried),
-      fellBack: num(r.fell_back),
       openedFile: num(r.opened_file),
       durationMsSum: num(r.duration_ms_sum),
       durationCount: num(r.duration_count),
@@ -304,7 +300,6 @@ interface AggSums {
   noResult: number;
   empty: number;
   retried: number;
-  fellBack: number;
   openedFile: number;
   durationMsSum: number;
   durationCount: number;
@@ -321,7 +316,6 @@ function emptySums(): AggSums {
     noResult: 0,
     empty: 0,
     retried: 0,
-    fellBack: 0,
     openedFile: 0,
     durationMsSum: 0,
     durationCount: 0,
@@ -338,7 +332,6 @@ function addOperation(sums: AggSums, op: ToolUsageOperationTotals): void {
   sums.noResult += op.noResult;
   sums.empty += op.empty;
   sums.retried += op.retried;
-  sums.fellBack += op.fellBack;
   sums.openedFile += op.openedFile;
   sums.durationMsSum += op.durationMsSum;
   sums.durationCount += op.durationCount;
@@ -356,7 +349,6 @@ function addSums(target: AggSums, source: AggSums): void {
   target.noResult += source.noResult;
   target.empty += source.empty;
   target.retried += source.retried;
-  target.fellBack += source.fellBack;
   target.openedFile += source.openedFile;
   target.durationMsSum += source.durationMsSum;
   target.durationCount += source.durationCount;
@@ -378,7 +370,6 @@ function toAgg(sums: AggSums): ToolUsageAgg {
     noResult: sums.noResult,
     empty: sums.empty,
     retried: sums.retried,
-    fellBack: sums.fellBack,
     openedFile: sums.openedFile,
     avgDurationMs:
       sums.durationCount > 0

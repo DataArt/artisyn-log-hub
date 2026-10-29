@@ -1688,7 +1688,6 @@ function buildStatements(): WorldStatement[] {
     noResult: 0,
     empty: 0,
     retried: 0,
-    fellBack: 0,
     openedFile: 0,
     durationMsSum: 0,
     durationCount: 0,

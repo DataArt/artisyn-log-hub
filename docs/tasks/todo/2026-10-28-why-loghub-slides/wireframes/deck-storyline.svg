@@ -2,7 +2,7 @@
   <title>Why Log Hub deck - storyline overview (FR-6)</title>
   <rect width="1440" height="820" fill="#f3f4f6"/>
   <text x="40" y="44" font-size="20" font-weight="600" fill="#111827">Deck storyline - overview (reveal-style grid, Esc key)</text>
-  <text x="40" y="70" font-size="13" fill="#6b7280">Order fixed by FR-6: Problem -&gt; A -&gt; B -&gt; C -&gt; D -&gt; E -&gt; F. Each block 1-3 slides (count is an open question). Thumbnails show the one message per slide.</text>
+  <text x="40" y="70" font-size="13" fill="#6b7280">Order fixed by FR-6: Problem -&gt; A -&gt; B -&gt; C -&gt; D -&gt; E -&gt; F. 10-15 slides in total, 1-2 per block. Thumbnails are candidates - the strongest are kept.</text>
 
   <defs>
     <g id="thumb">
@@ -92,7 +92,7 @@
 
   <g transform="translate(40,730)" font-size="13" fill="#374151">
     <text font-size="15" font-weight="600" fill="#111827">Notes</text>
-    <text y="26">Thumbnail titles are placeholder headlines that map to the feature inventory (A-F). The inventory is a pool; leftover detail goes to speaker notes (open question).</text>
+    <text y="26">Thumbnail titles are placeholder headlines that map to the feature inventory (A-F). The inventory is a pool; leftover detail goes to speaker notes.</text>
     <text y="50">Tools/MCP (T-26) slides in B and E are presented as shipped, with no "coming soon" mark. Dashed box in each thumbnail = visual slot.</text>
   </g>
 </svg>

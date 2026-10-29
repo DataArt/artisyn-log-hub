@@ -40,6 +40,15 @@ see at a glance whether a session burned its budget reading documentation or act
 - **Turn-End Cost Advisor** — the checkbox that turns automatic per-turn cost advice on, plus a
   **Minimum session cost (USD)** field (default $0.10).
 
+### Monitored Tools
+
+The CLI tools (e.g. `psql`, `gh`) whose calls the hook wraps, so their input and full output
+show up on the **Tools/MCP** tab — MCP servers are recorded without any setup. Each row has the
+tool name and an on/off switch; **Pause all wrapping** stops the hook wrapping anything while
+keeping the list. A monitored tool is always recorded in full. The personal view edits your own
+list, the team view the team's list (team owner only). The **Monitored tools** button on the
+Tools/MCP tab opens this tab. Shells, the agent's own tools and shell builtins cannot be monitored.
+
 ### Session Attribution
 
 Team-only. Define up to 12 attributes the AI fills in for every session — the defaults are
