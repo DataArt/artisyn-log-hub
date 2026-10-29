@@ -21,3 +21,5 @@ Folders are named `<YYYY-MM-DD>-<slug>` (the day the task was created).
 - [2026-10-27-okf-usage-tab] OKF Usage Tab — Knowledge-Base Read/Write Heatmap — archived 2026-10-28
 - [2026-10-24-dev-deps-snyk-fixes] Update Vulnerable Dev Dependencies (Snyk) — archived 2026-10-28
 - [2026-06-19-mcp-invocation-log-tab] Tools/MCP tab — monitoring of MCP servers and command-line tools — archived 2026-10-29
+- [2026-10-28-why-loghub-slides] Log Hub Site on GitHub Pages (what, why, features, usage, configuration + "Why Log Hub" deck) — archived 2026-10-29
+- [2026-10-29-sysctx-anatomy-tab] Session Tab — System Context Anatomy (Disk-Partition View) — archived 2026-10-29
