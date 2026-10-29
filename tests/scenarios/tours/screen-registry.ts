@@ -727,6 +727,16 @@ const SESSION_TAB_ROWS: Array<Omit<ScreenRow, 'story' | 'role' | 'modes' | 'rout
     docRef: { file: SESSION_DOC, heading: 'Raw Logs' },
   },
   {
+    // Built from the loaded /logs payload (startup block + harness snapshot); S-SESS-03 steps
+    // 8–9 walk the totals, partitions, drill-downs and edge banners.
+    id: 'session.sysctx',
+    query: `${SESSION_QUERY}&tab=sysctx`,
+    tab: { group: 'session', id: 'sysctx' },
+    title: 'Session: System context anatomy',
+    expectTestId: 'sysctx-anatomy-tab',
+    docRef: { file: SESSION_DOC, heading: 'System context anatomy' },
+  },
+  {
     id: 'session.call-tree.redirect',
     query: `${SESSION_QUERY}&tab=call-tree`,
     tab: { group: 'session', id: 'call-tree' },

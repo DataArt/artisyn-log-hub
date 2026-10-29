@@ -5,7 +5,6 @@ import type { HarnessSnapshot } from '../../../api';
 import { computeCost, formatLocalTimestamp } from '../../../lib/format';
 import type {
   AgentActivation,
-  AgentDefinition,
   AssistantEvent,
   CallTokens,
   AssistantStep,
@@ -16,7 +15,6 @@ import type {
   FileStats,
   ImageAccess,
   ImageStats,
-  McpServerConfig,
   ToolCallDetail,
   ParsedSession,
   ProgressAgentEvent,
@@ -55,8 +53,8 @@ export const BYTES_PER_TOKEN = 3.5;
 
 /**
  * DD-16: `anthropic-skills:*` plugin entries are filtered out of every snapshot-derived
- * `skillDefinitions` map (and so out of `visibleSkills` and the turn-chip resolution) — they are
- * Claude's own bundled skills, not something a System Context viewer needs to inspect.
+ * `skillDefinitions` map (and so out of the turn-chip resolution) — they are Claude's own bundled
+ * skills, not something a session viewer needs to inspect.
  */
 export const HIDDEN_SKILL_PREFIX = 'anthropic-skills:';
 
@@ -1706,8 +1704,6 @@ export function parseSessionLogs(
   const harnessSnapshot = options?.harnessSnapshot ?? null;
 
   let skillDefinitionsMap: Map<string, SkillDefinition> | undefined;
-  let agentDefinitionsMap: Map<string, AgentDefinition> | undefined;
-  let mcpConfigList: McpServerConfig[] | undefined;
 
   // 1. Filter and cast events
   const events = raw
@@ -2312,11 +2308,10 @@ export function parseSessionLogs(
   }
 
   // 6. Compute summary
-  // System Context (DD-13): skillDefinitions, agentDefinitions and mcpConfig are built from the
-  // hook-reported harness snapshot (DD-1), loaded server-side and passed in as
-  // `options.harnessSnapshot`. With no snapshot (old hook, or a session that never bound one —
-  // DD-17), they stay undefined and the corresponding System Context tabs do not render.
-  // `claudeMd` (Files/Rules tabs) merges three sources — the snapshot's `systemContext`, the Claude
+  // skillDefinitions (per-turn skill `definition`) is built from the hook-reported harness
+  // snapshot (DD-1), loaded server-side and passed in as `options.harnessSnapshot`. With no
+  // snapshot (old hook, or a session that never bound one — DD-17), it stays undefined.
+  // `claudeMd` merges three sources — the snapshot's `systemContext`, the Claude
   // log `instructions` attachment and the per-turn `nested_memory` injections (on demand); the merge
   // runs after path normalisation below, so its key is the repo-relative path. No text is kept.
   const snapshotInstructionFiles: ClaudeMdFile[] =
@@ -2354,35 +2349,6 @@ export function parseSessionLogs(
         });
       }
     }
-  }
-
-  if (harnessSnapshot?.agents && harnessSnapshot.agents.length > 0) {
-    agentDefinitionsMap = new Map();
-    for (const a of harnessSnapshot.agents) {
-      agentDefinitionsMap.set(a.name, {
-        name: a.name,
-        description: a.description ?? '',
-        body: a.body ?? '',
-        path: a.path,
-        bytes: a.bytes ?? 0,
-        source: a.source,
-        ...(a.contentHash ? { contentHash: a.contentHash } : {}),
-      });
-    }
-  }
-
-  if (harnessSnapshot?.mcpServers && harnessSnapshot.mcpServers.length > 0) {
-    mcpConfigList = harnessSnapshot.mcpServers
-      .filter((s) => s && typeof s.name === 'string')
-      .map((s) => ({
-        name: s.name,
-        command: s.command ?? '',
-        args: s.args ?? '',
-        ...(s.url !== undefined ? { url: s.url } : {}),
-        ...(s.configSource !== undefined
-          ? { configSource: s.configSource }
-          : {}),
-      }));
   }
 
   // Token breakdown across all events (not scoped to turns)
@@ -2565,70 +2531,6 @@ export function parseSessionLogs(
   }
   const deferredTools = Array.from(deferredToolsSet);
 
-  // registeredAgents: net set from agent_listing_delta events
-  const registeredAgentsSet = new Set<string>();
-  for (const e of events) {
-    if (e.type !== 'attachment') continue;
-    const ae = e as {
-      attachment?: {
-        type?: string;
-        addedTypes?: string[];
-        removedTypes?: string[];
-        isInitial?: boolean;
-      };
-    };
-    if (ae.attachment?.type !== 'agent_listing_delta') continue;
-    if (ae.attachment.isInitial === true) registeredAgentsSet.clear();
-    for (const t of ae.attachment.addedTypes ?? []) registeredAgentsSet.add(t);
-    for (const t of ae.attachment.removedTypes ?? [])
-      registeredAgentsSet.delete(t);
-  }
-  const registeredAgents = Array.from(registeredAgentsSet);
-
-  // registeredSkills: prefer isInitial=true entry; fallback to last skill_listing
-  let registeredSkills: string[] = [];
-  let lastSkillNames: string[] = [];
-  for (const e of events) {
-    if (e.type !== 'attachment') continue;
-    const ae = e as {
-      attachment?: {
-        type?: string;
-        names?: string[];
-        isInitial?: boolean;
-      };
-    };
-    if (ae.attachment?.type !== 'skill_listing') continue;
-    const names = ae.attachment.names ?? [];
-    if (ae.attachment.isInitial === true) {
-      registeredSkills = names;
-      break;
-    }
-    lastSkillNames = names;
-  }
-  if (registeredSkills.length === 0) registeredSkills = lastSkillNames;
-
-  // visibleSkills / visibleAgents (DD-13): snapshot-derived definitions filtered down to what
-  // this session actually registered. When the session reported no listing at all (empty
-  // registeredSkills/registeredAgents — e.g. a log predating the attachment events), every
-  // snapshot definition is shown instead of none, so a merely-older session still gets its
-  // Skills/Agents tabs.
-  const visibleSkills: SkillDefinition[] | undefined = skillDefinitionsMap
-    ? Array.from(skillDefinitionsMap.values())
-        .filter(
-          (s) =>
-            registeredSkills.length === 0 || registeredSkills.includes(s.name),
-        )
-        .sort((a, b) => a.name.localeCompare(b.name))
-    : undefined;
-  const visibleAgents: AgentDefinition[] | undefined = agentDefinitionsMap
-    ? Array.from(agentDefinitionsMap.values())
-        .filter(
-          (a) =>
-            registeredAgents.length === 0 || registeredAgents.includes(a.name),
-        )
-        .sort((a, b) => a.name.localeCompare(b.name))
-    : undefined;
-
   // mcpCalls: count tool_use blocks in assistant messages whose name matches /^mcp__/
   const mcpCalls: Record<string, number> = {};
   for (const e of events) {
@@ -2663,18 +2565,10 @@ export function parseSessionLogs(
     linesChanged,
     imageStats,
     deferredTools,
-    registeredAgents,
-    registeredSkills,
     ...(sessionModel !== undefined && { model: sessionModel }),
     ...(skillDefinitionsMap !== undefined && {
       skillDefinitions: skillDefinitionsMap,
     }),
-    ...(agentDefinitionsMap !== undefined && {
-      agentDefinitions: agentDefinitionsMap,
-    }),
-    ...(mcpConfigList !== undefined && { mcpConfig: mcpConfigList }),
-    ...(visibleSkills !== undefined && { visibleSkills }),
-    ...(visibleAgents !== undefined && { visibleAgents }),
   };
 
   // ---------------------------------------------------------------------------

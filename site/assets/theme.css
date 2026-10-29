@@ -905,62 +905,14 @@ hr {
   }
 }
 
-/* Features F: three install steps. */
-.install-steps {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  align-self: start;
-  border: 1px solid var(--accent);
-  border-left-width: 4px;
-  background: var(--surface);
+.toc-aside {
+  margin: -12px 0 24px;
   font-family: var(--mono);
-  font-size: 0.95rem;
+  font-size: 0.9rem;
+  color: var(--text-3);
 }
 
-.install-steps li {
-  display: flex;
-  gap: 12px;
-  padding: 12px 16px;
-  border-top: 1px dashed var(--border);
-}
-
-.install-steps li:first-child {
-  border-top: 0;
-}
-
-.install-steps li span {
-  color: var(--accent-2);
-  font-weight: 600;
-}
-
-.nowrap {
-  white-space: nowrap;
-}
-
-/* Questions page. */
-.qa {
-  margin: 0 0 8px;
-}
-
-.qa dt {
-  margin: 1.2em 0 0.3em;
-  font-family: var(--mono);
-  font-weight: 600;
-  color: var(--text);
-}
-
-.qa dt::before {
-  content: "> ";
-  color: var(--accent-2);
-}
-
-.qa dd {
-  margin: 0;
-  padding-left: 1.2em;
-  color: var(--text-2);
-}
-
-.qa dd a {
-  white-space: nowrap;
+.figure-block td small {
+  color: var(--text-3);
+  font-size: 0.85em;
 }

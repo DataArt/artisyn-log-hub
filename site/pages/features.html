@@ -1,6 +1,6 @@
 <div class="prose">
   <p class="eyebrow">Features</p>
-  <h1>Six questions Log Hub answers</h1>
+  <h1>Eight questions Log Hub answers</h1>
   <p class="lead">Knowing what AI coding costs is right and useful. Each block below starts from the
     next question — the one the number alone cannot answer — and shows what Log Hub gives you for it
     and where to find it in the app.</p>
@@ -10,8 +10,11 @@
     <li><a href="#c">C · What does it really bring?</a></li>
     <li><a href="#d">D · What happens across the team?</a></li>
     <li><a href="#e">E · Does this tool work?</a></li>
-    <li><a href="#f">F · How do I run it?</a></li>
+    <li><a href="#f">F · Who or what is off the usual?</a></li>
+    <li><a href="#g">G · Does the agent use our knowledge base?</a></li>
+    <li><a href="#h">H · Where did the agent struggle?</a></li>
   </ul>
+  <p class="toc-aside">Want to try it? <a href="docs/install-server.html">Get started</a></p>
 </div>
 
 <section class="feature" id="a" aria-labelledby="a-title">
@@ -122,9 +125,6 @@
           <li>17 reports, every one exportable to PDF — Executive Summary, Cost by Branch, Cost by
             User, Token Usage, Tool Analytics, Harness Usage, Claude Code Version Usage, Cache Read
             Ratio, Change Surface, Attribute Breakdown and more.</li>
-          <li>Anomalies: ranking outliers, a low cache-read ratio, <code>kb_flood</code>, lagging
-            Claude Code versions, unusual cost per line, per-tool error spikes, monitored tools that
-            are never called, a high <code>retried</code> rate.</li>
           <li>Teams with transparent or restricted access, and manager and ADLC trainer roles.</li>
         </ul>
       </dd>
@@ -186,27 +186,82 @@
 
 <section class="feature" id="f" aria-labelledby="f-title">
   <div>
-    <h2 id="f-title"><span class="block-marker">F</span>How do I run it?</h2>
+    <h2 id="f-title"><span class="block-marker">F</span>Who or what is off the usual?</h2>
     <dl>
       <dt>What it shows</dt>
       <dd>
         <ul>
-          <li>Self-hosted: Docker and Postgres, a one-command install; your data stays in-house.</li>
-          <li>The hook installs into a repository via <code>npx</code> and captures the full session
-            transcript by design.</li>
-          <li>Backward compatible: a new server keeps accepting uploads from older hooks.</li>
-          <li>Session export and import between Log Hub installations.</li>
+          <li>Top-N rankings and outliers: the most expensive sessions, users and branches, and
+            an unusual cost per changed line.</li>
+          <li>Lagging Claude Code versions per developer, a low cache-read ratio, an agent that
+            floods the context with the knowledge base.</li>
+          <li>Per-tool error spikes, monitored tools nobody calls, a high <code>retried</code> rate.</li>
+          <li>These are reports and rankings you look at — Log Hub does not page anyone.</li>
         </ul>
       </dd>
-      <dt>Where to start</dt>
-      <dd><a href="docs/install-server.html">Install the server</a> ·
-        <a href="docs/install-hook.html">Install the hook</a> ·
-        <a href="docs/getting-started.html">Your first session</a></dd>
+      <dt>Where in the app</dt>
+      <dd>Repository → Analytics (rankings), Reports (Claude Code Version Usage, Cache Read Ratio,
+        Productivity), Tools/MCP and OKF tabs.</dd>
     </dl>
   </div>
-  <ol class="install-steps">
-    <li><span>01</span>Install the server — Docker + Postgres, one command</li>
-    <li><span>02</span>Install the hook in a repository — <code>npx</code></li>
-    <li><span>03</span>Work as usual, then open your first session</li>
-  </ol>
+  <figure class="figure-block" aria-labelledby="f-figure-title">
+    <span class="illustrative">Illustrative example</span>
+    <figcaption id="f-figure-title">What the reports surface for a team, {{ds:team.period}}</figcaption>
+    <table>
+      <thead><tr><th scope="col">Signal</th><th scope="col" class="num">Value</th><th scope="col" class="num">Baseline</th></tr></thead>
+      <tbody>
+        <tr><td>{{ds:anomalies.1.signal}}<br><small>{{ds:anomalies.1.subject}}</small></td><td class="num">{{ds:anomalies.1.value}}</td><td class="num">{{ds:anomalies.1.baseline}}</td></tr>
+        <tr><td>{{ds:anomalies.2.signal}}<br><small>{{ds:anomalies.2.subject}}</small></td><td class="num">{{ds:anomalies.2.value}}</td><td class="num">{{ds:anomalies.2.baseline}}</td></tr>
+        <tr><td>{{ds:anomalies.3.signal}}<br><small>{{ds:anomalies.3.subject}}</small></td><td class="num">{{ds:anomalies.3.value}}</td><td class="num">{{ds:anomalies.3.baseline}}</td></tr>
+        <tr><td>{{ds:anomalies.4.signal}}<br><small>{{ds:anomalies.4.subject}}</small></td><td class="num">{{ds:anomalies.4.value}}</td><td class="num">{{ds:anomalies.4.baseline}}</td></tr>
+        <tr><td>{{ds:anomalies.0.signal}}<br><small>{{ds:anomalies.0.subject}}</small></td><td class="num">{{ds:anomalies.0.value}}</td><td class="num">{{ds:anomalies.0.baseline}}</td></tr>
+        <tr><td>{{ds:anomalies.5.signal}}<br><small>{{ds:anomalies.5.subject}}</small></td><td class="num">{{ds:anomalies.5.value}}</td><td class="num">{{ds:anomalies.5.baseline}}</td></tr>
+      </tbody>
+    </table>
+  </figure>
+</section>
+
+<section class="feature" id="g" aria-labelledby="g-title">
+  <div>
+    <h2 id="g-title"><span class="block-marker">G</span>Does the agent actually use our knowledge base?</h2>
+    <dl>
+      <dt>What it shows</dt>
+      <dd>
+        <ul>
+          <li>Which knowledge-base articles the agents read, searched or listed, and how many bytes
+            each put into the context.</li>
+          <li>Whether a session started from the index or went straight to search; the files nobody
+            read in the period; the hottest files.</li>
+          <li>A verdict on the layout, with concrete hints — "this article is read in five sessions,
+            split it or add section pointers". No LLM involved.</li>
+        </ul>
+      </dd>
+      <dt>Where in the app</dt>
+      <dd>Session view → OKF tab; Repository → OKF tab for a period, per bundle and branch.</dd>
+    </dl>
+  </div>
+  <figure class="shot"><img src="assets/shots/okf-usage.png" alt="Repository OKF tab: verdict Something to fix with two hints, KB files, files not read in the period, sessions that touched the KB, read heat per file and the hottest files" loading="lazy"><figcaption>Repository → OKF · real screen, Log Hub repository</figcaption></figure>
+</section>
+
+<section class="feature" id="h" aria-labelledby="h-title">
+  <div>
+    <h2 id="h-title"><span class="block-marker">H</span>Where did the agent struggle?</h2>
+    <dl>
+      <dt>What it shows</dt>
+      <dd>
+        <ul>
+          <li>Per tool: calls, success rate, failures, calls left unresolved, median and maximum
+            duration — for the main agent and the sub-agents.</li>
+          <li>Every Bash command in order, with status, duration, the files it changed, read or ran,
+            and its output size; permission requests and denials on the calls.</li>
+          <li>The Turn-End Cost Advisor: a short review after each turn of what drove the cost, with
+            practical advice — optional, per repository.</li>
+        </ul>
+      </dd>
+      <dt>Where in the app</dt>
+      <dd>Session view → Statistics, Bash, Logs and Advisor tabs. See
+        <a href="docs/session-log.html">Session Log</a>.</dd>
+    </dl>
+  </div>
+  <figure class="shot"><img src="assets/shots/tool-analytics.png" alt="Tool analytics: Bash 43 calls 97.7% success, Edit and Write 100%, PowerShell 85.7% with one failure" loading="lazy"><figcaption>Session → Statistics → Tool analytics · real screen, demo repository</figcaption></figure>
 </section>

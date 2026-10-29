@@ -59,6 +59,25 @@
         "skills": { "adlc:review-deep": { "bytes": 1750, "tokens": 500 } },
         "deferredTools": { "servers": 2, "tools": ["mcp__postgres__query", "mcp__postgres__list_tables", "mcp__playwright__browser_click"], "tokens": 450 }
       },
+      "anatomy": {
+        "$comment": "System context anatomy of the startup block (algorithm doc sysctx-anatomy.md, row SA-GS05). Tokens = round(bytes / charsPerToken); harnessInternals = total - attributed.",
+        "charsPerToken": 3.5,
+        "total": 8800,
+        "attributed": 2829,
+        "harnessInternals": 5971,
+        "partitions": {
+          "system-prompt": { "bytes": 2800, "tokens": 800 },
+          "memory": { "bytes": 700, "tokens": 200 },
+          "environment": { "bytes": 35, "tokens": 10 },
+          "deferred-tools": { "bytes": 0, "tokens": 0 },
+          "mcp-server": { "bytes": 429, "tokens": 123 },
+          "agent-types": { "bytes": 0, "tokens": 0 },
+          "skills": { "bytes": 83, "tokens": 24 },
+          "instruction-file": { "bytes": 5250, "tokens": 1500 },
+          "system-reminder": { "bytes": 350, "tokens": 100 },
+          "first-prompt": { "bytes": 252, "tokens": 72 }
+        }
+      },
       "inventory": { "skills": ["adlc:review-deep", "adlc:review", "unused-skill"], "mcpServers": ["postgres", "playwright"] },
       "harnessUsage": {
         "rootOnly": [

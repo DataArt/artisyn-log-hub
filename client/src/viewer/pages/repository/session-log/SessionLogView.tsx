@@ -9,7 +9,7 @@ import {
   parseSessionLogs,
 } from './log-parser';
 import { PromptTurnList, isSystemOnlyTurn } from './PromptTurnList';
-import { SessionContextPanel } from './SessionContextPanel';
+import { StartupContextLine } from './StartupContextLine';
 import { NoPricingBadge } from '../../../components/NoPricingBadge';
 import { getSessionLogsErrorMessage } from './session-logs-error';
 import { resolveTurnAnchor } from './turn-anchor';
@@ -37,6 +37,8 @@ interface Props {
   onTargetTurnResolved?: (turnIndex: number) => void;
   /** Called once `targetToolUseId` has been acted on. */
   onTargetToolUseConsumed?: () => void;
+  /** Opens the System context anatomy tab (the startup line's "View anatomy" link). */
+  onOpenAnatomy?: () => void;
 }
 
 export function SessionLogView({
@@ -51,6 +53,7 @@ export function SessionLogView({
   targetToolUseId,
   onTargetTurnResolved,
   onTargetToolUseConsumed,
+  onOpenAnatomy,
 }: Props) {
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const subagentLogsMap = useMemo(() => {
@@ -197,10 +200,9 @@ export function SessionLogView({
             </span>
           </div>
         )}
-        <SessionContextPanel
-          summary={parsed.summary}
-          mcpCalls={parsed.mcpCalls}
-          pricing={pricing}
+        <StartupContextLine
+          main={logsData?.main}
+          onOpenAnatomy={onOpenAnatomy}
         />
         <PromptTurnList
           turns={parsed.turns}

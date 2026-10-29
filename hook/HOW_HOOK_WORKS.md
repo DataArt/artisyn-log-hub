@@ -224,7 +224,8 @@ catalog, project agents, MCP servers and CLAUDE.md/rules context — not anythin
       "body": "...",
       "path": ".claude/skills/task-implement/SKILL.md",
       "bytes": 1234,
-      "contentHash": "a94a8f..."
+      "contentHash": "a94a8f...",
+      "gitStatus": "tracked"
     },
     {
       "name": "adlc-lh:tracker",
@@ -235,7 +236,19 @@ catalog, project agents, MCP servers and CLAUDE.md/rules context — not anythin
       "path": "adlc-lh@1.3.1/skills/tracker/SKILL.md",
       "bytes": 2048,
       "contentHash": "b7e23e...",
-      "plugin": { "id": "adlc-lh@artisyn", "name": "adlc-lh", "marketplace": "artisyn", "version": "1.3.1" }
+      "plugin": { "id": "adlc-lh@artisyn", "name": "adlc-lh", "marketplace": "artisyn", "version": "1.3.1" },
+      "gitStatus": "outside-repo"
+    },
+    {
+      "name": "greet",
+      "kind": "skill",
+      "source": "org-synced",
+      "description": "...",
+      "body": "",
+      "path": "~/.claude/skills/synced/<org>/greet/SKILL.md",
+      "bytes": 300,
+      "contentHash": "f1d2d2...",
+      "gitStatus": "outside-repo"
     }
   ],
   "agents": [
@@ -246,7 +259,8 @@ catalog, project agents, MCP servers and CLAUDE.md/rules context — not anythin
       "path": ".claude/agents/task-implement-orchestrator/AGENT.md",
       "bytes": 2100,
       "contentHash": "c4ca42...",
-      "source": "project"
+      "source": "project",
+      "gitStatus": "untracked"
     }
   ],
   "mcpServers": [
@@ -256,8 +270,9 @@ catalog, project agents, MCP servers and CLAUDE.md/rules context — not anythin
   "systemContext": {
     "totalBytes": 12800,
     "files": [
-      { "path": "CLAUDE.md", "bytes": 9800, "contentHash": "d41d8c..." },
-      { "path": ".claude/rules/installer.md", "bytes": 455, "contentHash": "e2fc71...", "content": "# Rule content..." }
+      { "path": "CLAUDE.md", "bytes": 9800, "contentHash": "d41d8c...", "gitStatus": "tracked" },
+      { "path": "CLAUDE.local.md", "bytes": 700, "contentHash": "9b74c9...", "gitStatus": "ignored" },
+      { "path": ".claude/rules/installer.md", "bytes": 455, "contentHash": "e2fc71...", "content": "# Rule content...", "gitStatus": "tracked" }
     ]
   }
 }
@@ -288,6 +303,13 @@ Collects skills/workflows/commands from three kinds of source:
   plugin's own `plugin.json` lists under `skills`/`commands`. Entries are named
   `<pluginName>:<name>` and tagged `source: "plugin"`, with a `plugin` object
   (`{id, name, marketplace, version, gitCommitSha?}`).
+- **Org-synced** (hook `2.28.0`+, skills only) — every `<claudeConfigDir>/skills/synced/<org>/<skill>/SKILL.md`
+  (skills your organisation syncs to you). **Metadata only**: the name (bare, from the front matter
+  or the folder), description, size and hash are kept, and `body` is always the empty string — the
+  skill text is never uploaded. The path is masked to `~/.claude/skills/synced/<org>/<skill>/SKILL.md`
+  (the literal `<org>`, never the real org folder name). Tagged `source: "org-synced"`. Skipped
+  when a project or user entry has the same name. The server stores these entries but leaves them
+  out of the Harness usage inventory.
 
 A project/user name collision resolves **project wins**. This replaces the old recursive scan of
 `~/.claude/plugins/` and the directory-marketplace working-copy scan from earlier hook versions —
@@ -300,6 +322,27 @@ only a project's own *resolved, enabled* plugin install is read now.
 | `project` | Relative to the project root, forward slashes. |
 | `user` | `~/.claude/<rel>`. |
 | `plugin` | `<pluginName>@<version>/<rel inside installPath>`. |
+| `org-synced` | `~/.claude/skills/synced/<org>/<skill>/SKILL.md` (org folder masked). |
+
+### Git status (`harness-git-status.js`, hook `2.28.0`+)
+
+Every `skills[]`, `agents[]` and `systemContext.files[]` entry may carry an optional `gitStatus` —
+only the status value, no git output and no file content:
+
+| Value | Meaning |
+|---|---|
+| `tracked` | a project file listed by `git ls-files` |
+| `untracked` | a project file inside the repository that git does not track and does not ignore |
+| `ignored` | a project file matched by `.gitignore` (`git check-ignore`) |
+| `outside-repo` | a `user`, `plugin` or `org-synced` entry, or a context file whose path leaves the project root (`../…`) — never asked about |
+
+`annotateGitStatus` runs at most **two** git processes per snapshot build (`git ls-files -z` over the
+project paths — or `git rev-parse --git-dir` as a repo probe when there are none — then
+`git check-ignore --stdin -z` over the ones not tracked), each with the default 2 s git timeout. It
+is fail-open: when git is missing, fails or times out, or the project is not a git repository, no
+entry gets a `gitStatus` at all. It runs on every snapshot build, before the `snapshotId` is
+computed. The System context anatomy session tab shows these values; with an older hook it shows
+`unknown`.
 
 ### MCP servers and the live `tools/list` probe
 
@@ -327,7 +370,8 @@ attempted the probe" apart from "old hook, never tried" — see
 
 `snapshotId = sha256Hex(JSON.stringify(canon))`, where `canon` is a fixed, sorted projection of
 `skills`/`agents`/`mcpServers`/`systemContext.files` built from each entry's `contentHash` (never
-the raw body text) — deliberately excluding the MCP probe's `connected`/`tools` and
+the raw body text) and, from hook `2.28.0`, its `gitStatus` when set (appended to the entry's tuple
+only then, so a snapshot without it keeps its old id; the first `2.28.0` run changes the id once) — deliberately excluding the MCP probe's `connected`/`tools` and
 `perToolDetailSupported`, so probing or getting a different probe result never changes the id. The
 server **never recomputes** this id; it only format-validates it. `harness-state.json` (v2) tracks
 `knownSnapshotIds` (most-recent-first, capped at 20) and `sessionSnapshots` (per-session last-sent

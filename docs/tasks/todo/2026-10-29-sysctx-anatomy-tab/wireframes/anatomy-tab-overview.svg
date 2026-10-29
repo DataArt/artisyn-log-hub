@@ -1,0 +1,340 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="1110" viewBox="0 0 1280 1110" font-family="Inter, 'Segoe UI', Arial, sans-serif">
+  <defs>
+    <pattern id="hatch" width="8" height="8" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <rect width="8" height="8" fill="#f3f4f6"/>
+      <line x1="0" y1="0" x2="0" y2="8" stroke="#d1d5db" stroke-width="3"/>
+    </pattern>
+    <pattern id="hatchSmall" width="4" height="4" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <rect width="4" height="4" fill="#fde68a"/>
+      <line x1="0" y1="0" x2="0" y2="4" stroke="#f59e0b" stroke-width="1.5"/>
+    </pattern>
+    <filter id="shadow" x="-10%" y="-10%" width="130%" height="140%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000" flood-opacity="0.15"/>
+    </filter>
+    <style>
+      .mono { font-family: 'JetBrains Mono', Consolas, monospace; }
+      .lbl { font-size: 10px; fill: #6b7280; letter-spacing: 0.4px; }
+      .val { font-size: 12px; fill: #111827; }
+      .tab { font-size: 14px; fill: #4b5563; }
+      .th { font-size: 11px; fill: #6b7280; letter-spacing: 0.4px; }
+      .td { font-size: 13px; fill: #111827; }
+      .tds { font-size: 12px; fill: #374151; }
+      .muted { font-size: 12px; fill: #6b7280; }
+      .note { font-size: 11px; fill: #b45309; font-style: italic; }
+    </style>
+  </defs>
+
+  <rect width="1280" height="1110" fill="#ffffff"/>
+
+  <!-- Session header strip (existing UI, abbreviated) -->
+  <rect x="0" y="0" width="1280" height="78" fill="#f9fafb"/>
+  <line x1="0" y1="78" x2="1280" y2="78" stroke="#e5e7eb"/>
+  <text x="20" y="20" class="lbl">START</text><text x="20" y="38" class="val mono">2026-10-21 22:53:15</text>
+  <text x="175" y="20" class="lbl">END</text><text x="175" y="38" class="val mono">2026-10-22 01:12:16</text>
+  <text x="330" y="20" class="lbl">USER</text><text x="330" y="38" class="val mono">dt@dataart.com</text>
+  <text x="470" y="20" class="lbl">MODEL</text><text x="470" y="38" class="val mono">claude-opus-5-5</text>
+  <text x="600" y="20" class="lbl">PROMPTS</text><text x="600" y="38" class="val mono">7</text>
+  <text x="20" y="58" class="lbl">TOKENS IN/OUT/CACHE (main thread)</text><text x="20" y="72" class="val mono" font-size="11">88 / 24,570 / 3,853,946 / 89,815</text>
+  <text x="330" y="58" class="lbl">COST</text><text x="330" y="72" class="val mono" font-size="11">$28.7908</text>
+
+  <!-- Session tabs (two wrapped rows, as in the current UI) -->
+  <rect x="18" y="92" width="22" height="22" rx="4" fill="#fff" stroke="#d1d5db"/>
+  <text x="29" y="108" font-size="12" text-anchor="middle" fill="#6b7280">☆</text>
+  <rect x="48" y="92" width="22" height="22" rx="4" fill="#fff" stroke="#d1d5db"/>
+  <text x="59" y="108" font-size="12" text-anchor="middle" fill="#6b7280">↻</text>
+  <text x="88" y="108" class="tab">Summary</text>
+  <text x="170" y="108" class="tab">Info</text>
+  <text x="222" y="108" class="tab">Logs</text>
+  <text x="276" y="108" class="tab">Bash <tspan font-size="12" fill="#6b7280">196</tspan></text>
+  <text x="358" y="108" class="tab">Charts</text>
+  <text x="422" y="108" class="tab">Statistics</text>
+  <text x="508" y="108" class="tab">Change surface</text>
+  <text x="628" y="108" class="tab">Harness usage</text>
+  <text x="742" y="108" class="tab">OKF</text>
+  <text x="30" y="146" class="tab">Tools/MCP</text>
+  <text x="118" y="146" class="tab" fill="#d97706">🔒</text>
+  <text x="136" y="146" class="tab">Raw Logs</text>
+  <text x="224" y="146" class="tab" fill="#111827" font-weight="600">System context anatomy</text>
+  <rect x="218" y="160" width="190" height="2.5" fill="#2563eb"/>
+  <rect x="1160" y="130" width="100" height="26" rx="4" fill="#fff" stroke="#fca5a5"/>
+  <text x="1210" y="148" font-size="13" text-anchor="middle" fill="#dc2626">🗑 Remove</text>
+  <line x1="0" y1="168" x2="1280" y2="168" stroke="#e5e7eb"/>
+  <text x="420" y="150" class="note">← new tab, rightmost (FR-1); replaces the System Context panel in Logs (FR-0)</text>
+
+  <!-- Title + total -->
+  <text x="30" y="204" font-size="18" font-weight="600" fill="#111827">Startup system context</text>
+  <text x="30" y="228" font-size="13" fill="#374151">Total <tspan class="mono" font-weight="600" fill="#111827">55,513 tokens</tspan>
+    <tspan fill="#6b7280"> · exact, first main-agent API call = input 2 + cache write 23,450 + cache read 32,061, minus first user prompt</tspan></text>
+  <text x="1250" y="204" font-size="12" text-anchor="end" fill="#6b7280">ⓘ Partition sizes ≈ bytes / 3.7 — only the total is exact</text>
+
+  <!-- Partition bar -->
+  <rect x="30" y="248" width="1220" height="48" rx="6" fill="#ffffff" stroke="#9ca3af"/>
+  <rect x="31" y="249" width="38" height="46" fill="#6366f1"/>
+  <rect x="69" y="249" width="15" height="46" fill="#94a3b8"/>
+  <rect x="84" y="249" width="6" height="46" fill="#0ea5e9"/>
+  <rect x="90" y="249" width="32" height="46" fill="#14b8a6"/>
+  <rect x="122" y="249" width="15" height="46" fill="#f59e0b"/>
+  <rect x="137" y="249" width="159" height="46" fill="#8b5cf6"/>
+  <rect x="296" y="249" width="118" height="46" fill="#22c55e"/>
+  <rect x="414" y="249" width="10" height="46" fill="url(#hatchSmall)"/>
+  <rect x="424" y="249" width="825" height="46" fill="url(#hatch)"/>
+  <!-- separators -->
+  <g stroke="#ffffff" stroke-width="1.5">
+    <line x1="69" y1="249" x2="69" y2="295"/><line x1="84" y1="249" x2="84" y2="295"/>
+    <line x1="90" y1="249" x2="90" y2="295"/><line x1="122" y1="249" x2="122" y2="295"/>
+    <line x1="137" y1="249" x2="137" y2="295"/><line x1="296" y1="249" x2="296" y2="295"/>
+    <line x1="414" y1="249" x2="414" y2="295"/><line x1="424" y1="249" x2="424" y2="295"/>
+  </g>
+  <text x="50" y="276" font-size="11" fill="#fff" text-anchor="middle" font-weight="600">SP</text>
+  <text x="106" y="276" font-size="11" fill="#fff" text-anchor="middle" font-weight="600">MCP</text>
+  <text x="216" y="270" font-size="12" fill="#fff" text-anchor="middle" font-weight="600">Skills</text>
+  <text x="216" y="285" font-size="11" fill="#ede9fe" text-anchor="middle">13.0 %</text>
+  <text x="355" y="270" font-size="12" fill="#fff" text-anchor="middle" font-weight="600">Instr. files</text>
+  <text x="355" y="285" font-size="11" fill="#dcfce7" text-anchor="middle">9.7 %</text>
+  <text x="836" y="270" font-size="13" fill="#4b5563" text-anchor="middle" font-weight="600">Harness internals</text>
+  <text x="836" y="286" font-size="11" fill="#6b7280" text-anchor="middle">38,254 tok · 68.9 % · tool JSON schemas, wrappers</text>
+  <!-- selection (Skills) -->
+  <rect x="137" y="246" width="159" height="52" fill="none" stroke="#111827" stroke-width="2.5" rx="2"/>
+  <path d="M210 240 L216 246 L222 240 Z" fill="#111827"/>
+
+  <!-- Tooltip on hover (Instruction files) -->
+  <g filter="url(#shadow)">
+    <path d="M345 304 L355 296 L365 304 Z" fill="#ffffff" stroke="#d1d5db"/>
+    <rect x="300" y="304" width="270" height="96" rx="6" fill="#ffffff" stroke="#d1d5db"/>
+  </g>
+  <rect x="346" y="303" width="18" height="3" fill="#ffffff"/>
+  <rect x="314" y="318" width="10" height="10" rx="2" fill="#22c55e"/>
+  <text x="332" y="327" font-size="13" font-weight="600" fill="#111827">Instruction files (4)</text>
+  <text x="314" y="348" font-size="12" fill="#374151" class="mono">≈ 5,406 tokens · 20,001 bytes</text>
+  <text x="314" y="367" font-size="12" fill="#374151">9.7 % of total</text>
+  <text x="314" y="386" font-size="11" fill="#6b7280">Source: project / user · click to select</text>
+
+  <text x="590" y="330" class="note">Hover: tokens, bytes, share (FR-2). Click selects the</text>
+  <text x="590" y="345" class="note">partition here and the row below, and vice versa (FR-3).</text>
+  <text x="590" y="366" class="note">Partitions &lt; 0.5 % get a 6 px minimum width; zero-size ones are</text>
+  <text x="590" y="381" class="note">grouped into one striped "small partitions" segment (still clickable).</text>
+
+  <!-- Partition table -->
+  <text x="50" y="434" class="th">PARTITION</text>
+  <text x="430" y="434" class="th">KIND</text>
+  <text x="560" y="434" class="th">SOURCE</text>
+  <text x="860" y="434" class="th" text-anchor="end">BYTES</text>
+  <text x="960" y="434" class="th" text-anchor="end">≈ TOKENS</text>
+  <text x="1040" y="434" class="th" text-anchor="end">SHARE</text>
+  <line x1="30" y1="444" x2="1250" y2="444" stroke="#e5e7eb"/>
+
+  <!-- row helper: y = row top; text baseline y+21 -->
+  <!-- r1 -->
+  <g>
+    <text x="34" y="465" font-size="11" fill="#9ca3af">▸</text>
+    <rect x="48" y="456" width="10" height="10" rx="2" fill="#6366f1"/>
+    <text x="66" y="465" class="td">System prompt (harness core) · 11 blocks</text>
+    <text x="430" y="465" class="tds mono">system-prompt</text>
+    <text x="560" y="465" class="tds">Claude Code harness</text>
+    <text x="860" y="465" class="tds mono" text-anchor="end">6,500</text>
+    <text x="960" y="465" class="tds mono" text-anchor="end">1,757</text>
+    <text x="1040" y="465" class="tds mono" text-anchor="end">3.2 %</text>
+    <rect x="1060" y="457" width="180" height="8" rx="2" fill="#f3f4f6"/><rect x="1060" y="457" width="6" height="8" rx="2" fill="#6366f1"/>
+    <line x1="30" y1="476" x2="1250" y2="476" stroke="#f3f4f6"/>
+  </g>
+  <!-- r2 -->
+  <g>
+    <text x="34" y="497" font-size="11" fill="#9ca3af">▸</text>
+    <rect x="48" y="488" width="10" height="10" rx="2" fill="#94a3b8"/>
+    <text x="66" y="497" class="td">Environment &amp; system reminders</text>
+    <rect x="290" y="485" width="44" height="16" rx="8" fill="#fff7ed" stroke="#fdba74"/>
+    <text x="312" y="497" font-size="10" fill="#c2410c" text-anchor="middle">≈ est.</text>
+    <text x="430" y="497" class="tds mono">system-reminder</text>
+    <text x="560" y="497" class="tds">harness · git status snapshot · user email</text>
+    <text x="860" y="497" class="tds mono" text-anchor="end">2,364</text>
+    <text x="960" y="497" class="tds mono" text-anchor="end">639</text>
+    <text x="1040" y="497" class="tds mono" text-anchor="end">1.2 %</text>
+    <rect x="1060" y="489" width="180" height="8" rx="2" fill="#f3f4f6"/><rect x="1060" y="489" width="3" height="8" fill="#94a3b8"/>
+    <line x1="30" y1="508" x2="1250" y2="508" stroke="#f3f4f6"/>
+  </g>
+  <!-- r3 -->
+  <g>
+    <text x="34" y="529" font-size="11" fill="#9ca3af">▸</text>
+    <rect x="48" y="520" width="10" height="10" rx="2" fill="#0ea5e9"/>
+    <text x="66" y="529" class="td">Deferred tool names — built-in (23)</text>
+    <text x="430" y="529" class="tds mono">deferred-tools</text>
+    <text x="560" y="529" class="tds">Claude Code harness</text>
+    <text x="860" y="529" class="tds mono" text-anchor="end">302</text>
+    <text x="960" y="529" class="tds mono" text-anchor="end">82</text>
+    <text x="1040" y="529" class="tds mono" text-anchor="end">0.1 %</text>
+    <rect x="1060" y="521" width="180" height="8" rx="2" fill="#f3f4f6"/><rect x="1060" y="521" width="1" height="8" fill="#0ea5e9"/>
+    <line x1="30" y1="540" x2="1250" y2="540" stroke="#f3f4f6"/>
+  </g>
+  <!-- r4 -->
+  <g>
+    <text x="34" y="561" font-size="11" fill="#9ca3af">▸</text>
+    <rect x="48" y="552" width="10" height="10" rx="2" fill="#14b8a6"/>
+    <text x="66" y="561" class="td">MCP servers (14 · <tspan fill="#dc2626">1 failed</tspan>)</text>
+    <text x="430" y="561" class="tds mono">mcp-server</text>
+    <text x="560" y="561" class="tds">MCP server · deferred names + instructions</text>
+    <text x="860" y="561" class="tds mono" text-anchor="end">5,305</text>
+    <text x="960" y="561" class="tds mono" text-anchor="end">1,461</text>
+    <text x="1040" y="561" class="tds mono" text-anchor="end">2.6 %</text>
+    <rect x="1060" y="553" width="180" height="8" rx="2" fill="#f3f4f6"/><rect x="1060" y="553" width="5" height="8" fill="#14b8a6"/>
+    <line x1="30" y1="572" x2="1250" y2="572" stroke="#f3f4f6"/>
+  </g>
+  <!-- r5 -->
+  <g>
+    <text x="34" y="593" font-size="11" fill="#9ca3af">▸</text>
+    <rect x="48" y="584" width="10" height="10" rx="2" fill="#f59e0b"/>
+    <text x="66" y="593" class="td">Subagent types (6)</text>
+    <text x="430" y="593" class="tds mono">agent-types</text>
+    <text x="560" y="593" class="tds">built-in / project</text>
+    <text x="860" y="593" class="tds mono" text-anchor="end">2,527</text>
+    <text x="960" y="593" class="tds mono" text-anchor="end">683</text>
+    <text x="1040" y="593" class="tds mono" text-anchor="end">1.2 %</text>
+    <rect x="1060" y="585" width="180" height="8" rx="2" fill="#f3f4f6"/><rect x="1060" y="585" width="3" height="8" fill="#f59e0b"/>
+    <line x1="30" y1="604" x2="1250" y2="604" stroke="#f3f4f6"/>
+  </g>
+
+  <!-- r6 Skills: selected + expanded -->
+  <rect x="30" y="605" width="1220" height="262" fill="#f5f3ff"/>
+  <rect x="30" y="605" width="3" height="262" fill="#8b5cf6"/>
+  <text x="38" y="625" font-size="11" fill="#4b5563">▾</text>
+  <rect x="48" y="616" width="10" height="10" rx="2" fill="#8b5cf6"/>
+  <text x="66" y="625" class="td" font-weight="600">Skills (78)</text>
+  <text x="430" y="625" class="tds mono">skills</text>
+  <text x="560" y="625" class="tds">project 41 · plugin 22 · org 9 · built-in 6</text>
+  <text x="860" y="625" class="tds mono" text-anchor="end">26,675</text>
+  <text x="960" y="625" class="tds mono" text-anchor="end" font-weight="600">7,209</text>
+  <text x="1040" y="625" class="tds mono" text-anchor="end">13.0 %</text>
+  <rect x="1060" y="617" width="180" height="8" rx="2" fill="#ede9fe"/><rect x="1060" y="617" width="23" height="8" rx="2" fill="#8b5cf6"/>
+
+  <!-- skills sub-table -->
+  <rect x="60" y="638" width="1180" height="220" rx="4" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="72" y="656" class="th">SKILL</text>
+  <text x="244" y="656" class="th">SOURCE</text>
+  <text x="334" y="656" class="th">FILE (SKILL.md)</text>
+  <text x="696" y="656" class="th" text-anchor="end">FILE SIZE</text>
+  <text x="712" y="656" class="th">GIT</text>
+  <text x="860" y="656" class="th" text-anchor="end">LISTING B</text>
+  <text x="960" y="656" class="th" text-anchor="end">≈ TOKENS</text>
+  <text x="1040" y="656" class="th" text-anchor="end">SHARE</text>
+  <line x1="60" y1="664" x2="1240" y2="664" stroke="#e5e7eb"/>
+
+  <!-- skill row 1 -->
+  <text x="72" y="683" class="tds mono">big-prod-e2e-test</text>
+  <rect x="242" y="671" width="54" height="17" rx="8" fill="#eef2ff"/><text x="269" y="683" font-size="10" fill="#4338ca" text-anchor="middle">project</text>
+  <text x="334" y="683" class="tds mono" font-size="11">.claude/skills/big-prod-e2e-test/SKILL.md</text>
+  <text x="696" y="683" class="tds mono" text-anchor="end">8,366</text>
+  <rect x="710" y="671" width="56" height="17" rx="8" fill="#dcfce7"/><text x="738" y="683" font-size="10" fill="#166534" text-anchor="middle">tracked</text>
+  <text x="860" y="683" class="tds mono" text-anchor="end">706</text>
+  <text x="960" y="683" class="tds mono" text-anchor="end">191</text>
+  <text x="1040" y="683" class="tds mono" text-anchor="end">0.3 %</text>
+  <line x1="60" y1="690" x2="1240" y2="690" stroke="#f3f4f6"/>
+  <!-- skill row 2 -->
+  <text x="72" y="709" class="tds mono">update-config</text>
+  <rect x="242" y="697" width="58" height="17" rx="8" fill="#f3f4f6"/><text x="271" y="709" font-size="10" fill="#374151" text-anchor="middle">built-in</text>
+  <text x="334" y="709" class="muted">Claude Code harness — no file</text>
+  <text x="696" y="709" class="muted mono" text-anchor="end">—</text>
+  <text x="712" y="709" class="muted">—</text>
+  <text x="860" y="709" class="tds mono" text-anchor="end">690</text>
+  <text x="960" y="709" class="tds mono" text-anchor="end">186</text>
+  <text x="1040" y="709" class="tds mono" text-anchor="end">0.3 %</text>
+  <line x1="60" y1="716" x2="1240" y2="716" stroke="#f3f4f6"/>
+  <!-- skill row 3 -->
+  <text x="72" y="735" class="tds mono">adlc-lh:review-deep</text>
+  <rect x="242" y="723" width="50" height="17" rx="8" fill="#fae8ff"/><text x="267" y="735" font-size="10" fill="#86198f" text-anchor="middle">plugin</text>
+  <text x="334" y="735" class="tds mono" font-size="11">adlc-lh@2.3.0/skills/review-deep/SKILL.md</text>
+  <text x="696" y="735" class="tds mono" text-anchor="end">6,912</text>
+  <rect x="710" y="723" width="76" height="17" rx="8" fill="#dbeafe"/><text x="748" y="735" font-size="10" fill="#1e40af" text-anchor="middle">outside repo</text>
+  <text x="860" y="735" class="tds mono" text-anchor="end">281</text>
+  <text x="960" y="735" class="tds mono" text-anchor="end">76</text>
+  <text x="1040" y="735" class="tds mono" text-anchor="end">0.1 %</text>
+  <line x1="60" y1="742" x2="1240" y2="742" stroke="#f3f4f6"/>
+  <!-- skill row 4 -->
+  <text x="72" y="761" class="tds mono">anthropic-skills:pdf</text>
+  <rect x="242" y="749" width="70" height="17" rx="8" fill="#ecfeff"/><text x="277" y="761" font-size="10" fill="#0e7490" text-anchor="middle">org-synced</text>
+  <text x="334" y="761" class="tds mono" font-size="11">~/.claude/skills/synced/…/pdf/SKILL.md</text>
+  <text x="696" y="761" class="tds mono" text-anchor="end">11,204</text>
+  <rect x="710" y="749" width="76" height="17" rx="8" fill="#dbeafe"/><text x="748" y="761" font-size="10" fill="#1e40af" text-anchor="middle">outside repo</text>
+  <text x="860" y="761" class="tds mono" text-anchor="end">412</text>
+  <text x="960" y="761" class="tds mono" text-anchor="end">111</text>
+  <text x="1040" y="761" class="tds mono" text-anchor="end">0.2 %</text>
+  <line x1="60" y1="768" x2="1240" y2="768" stroke="#f3f4f6"/>
+  <!-- skill row 5 -->
+  <text x="72" y="787" class="tds mono">my-draft-skill</text>
+  <rect x="242" y="775" width="54" height="17" rx="8" fill="#eef2ff"/><text x="269" y="787" font-size="10" fill="#4338ca" text-anchor="middle">project</text>
+  <text x="334" y="787" class="tds mono" font-size="11">.claude/skills/my-draft-skill/SKILL.md</text>
+  <text x="696" y="787" class="tds mono" text-anchor="end">1,204</text>
+  <rect x="710" y="775" width="66" height="17" rx="8" fill="#fef3c7"/><text x="743" y="787" font-size="10" fill="#92400e" text-anchor="middle">untracked</text>
+  <text x="860" y="787" class="tds mono" text-anchor="end">156</text>
+  <text x="960" y="787" class="tds mono" text-anchor="end">42</text>
+  <text x="1040" y="787" class="tds mono" text-anchor="end">0.1 %</text>
+  <line x1="60" y1="794" x2="1240" y2="794" stroke="#f3f4f6"/>
+  <!-- skill row 6 -->
+  <text x="72" y="813" class="tds mono">adlc-scripting</text>
+  <rect x="242" y="801" width="54" height="17" rx="8" fill="#eef2ff"/><text x="269" y="813" font-size="10" fill="#4338ca" text-anchor="middle">project</text>
+  <text x="334" y="813" class="tds mono" font-size="11">.claude/skills/adlc-scripting/SKILL.md</text>
+  <text x="696" y="813" class="tds mono" text-anchor="end">390</text>
+  <rect x="710" y="801" width="56" height="17" rx="8" fill="#dcfce7"/><text x="738" y="813" font-size="10" fill="#166534" text-anchor="middle">tracked</text>
+  <text x="860" y="813" class="tds mono" text-anchor="end">80</text>
+  <text x="960" y="813" class="tds mono" text-anchor="end">22</text>
+  <text x="1040" y="813" class="tds mono" text-anchor="end">0.04 %</text>
+  <line x1="60" y1="820" x2="1240" y2="820" stroke="#f3f4f6"/>
+  <text x="72" y="843" font-size="12" fill="#2563eb">Show all 78 skills ▾</text>
+  <text x="210" y="843" class="muted">sorted by ≈ tokens · sizes are the listing line, not the file (file size shown for reference)</text>
+
+  <!-- r7 -->
+  <g>
+    <text x="34" y="889" font-size="11" fill="#9ca3af">▸</text>
+    <rect x="48" y="880" width="10" height="10" rx="2" fill="#22c55e"/>
+    <text x="66" y="889" class="td">Instruction files (4)</text>
+    <text x="430" y="889" class="tds mono">instruction-file</text>
+    <text x="560" y="889" class="tds">project / user</text>
+    <text x="860" y="889" class="tds mono" text-anchor="end">20,001</text>
+    <text x="960" y="889" class="tds mono" text-anchor="end">5,406</text>
+    <text x="1040" y="889" class="tds mono" text-anchor="end">9.7 %</text>
+    <rect x="1060" y="881" width="180" height="8" rx="2" fill="#f3f4f6"/><rect x="1060" y="881" width="17" height="8" rx="2" fill="#22c55e"/>
+    <line x1="30" y1="900" x2="1250" y2="900" stroke="#f3f4f6"/>
+  </g>
+  <!-- r8 -->
+  <g>
+    <text x="34" y="921" font-size="11" fill="#9ca3af">▸</text>
+    <rect x="48" y="912" width="10" height="10" rx="2" fill="#ec4899"/>
+    <text x="66" y="921" class="td">Memory index (MEMORY.md)</text>
+    <text x="430" y="921" class="tds mono">memory</text>
+    <text x="560" y="921" class="tds">user</text>
+    <text x="860" y="921" class="tds mono" text-anchor="end">0</text>
+    <text x="960" y="921" class="tds mono" text-anchor="end">0</text>
+    <text x="1040" y="921" class="tds mono" text-anchor="end">0.0 %</text>
+    <line x1="30" y1="932" x2="1250" y2="932" stroke="#f3f4f6"/>
+  </g>
+  <!-- r9 -->
+  <g>
+    <text x="34" y="953" font-size="11" fill="#9ca3af">▸</text>
+    <rect x="48" y="944" width="10" height="10" rx="2" fill="#f97316"/>
+    <text x="66" y="953" class="td">First user prompt</text>
+    <text x="430" y="953" class="tds mono">user-prompt</text>
+    <text x="560" y="953" class="tds">user · subtracted from total, shown for reference</text>
+    <text x="860" y="953" class="tds mono" text-anchor="end">82</text>
+    <text x="960" y="953" class="tds mono" text-anchor="end">22</text>
+    <text x="1040" y="953" class="tds mono" text-anchor="end">—</text>
+    <line x1="30" y1="964" x2="1250" y2="964" stroke="#f3f4f6"/>
+  </g>
+  <!-- r10 Harness internals -->
+  <g>
+    <rect x="48" y="976" width="10" height="10" rx="2" fill="url(#hatch)" stroke="#9ca3af" stroke-width="0.5"/>
+    <text x="66" y="985" class="td">Harness internals</text>
+    <text x="430" y="985" class="tds mono">harness-internals</text>
+    <text x="560" y="985" class="tds">tool JSON schemas (built-in + MCP), wrappers, tags</text>
+    <text x="860" y="985" class="tds mono" text-anchor="end">—</text>
+    <text x="960" y="985" class="tds mono" text-anchor="end">38,254</text>
+    <text x="1040" y="985" class="tds mono" text-anchor="end">68.9 %</text>
+    <rect x="1060" y="977" width="180" height="8" rx="2" fill="#f3f4f6"/><rect x="1060" y="977" width="124" height="8" rx="2" fill="url(#hatch)" stroke="#9ca3af" stroke-width="0.5"/>
+  </g>
+  <line x1="30" y1="998" x2="1250" y2="998" stroke="#d1d5db"/>
+  <text x="66" y="1019" class="td" font-weight="600">Total</text>
+  <text x="560" y="1019" class="tds">API usage (exact)</text>
+  <text x="960" y="1019" class="td mono" font-weight="600" text-anchor="end">55,513</text>
+  <text x="1040" y="1019" class="td mono" font-weight="600" text-anchor="end">100 %</text>
+
+  <text x="30" y="1058" class="note">Wireframe notes: data loads once per session (no per-row requests). Only names, paths, sizes and statuses are shown — never section or file text (FR-10).</text>
+  <text x="30" y="1076" class="note">Paths are repo-relative, ~/.claude/… or &lt;plugin&gt;@&lt;version&gt;/… — never absolute (FR-4). Git status chips: tracked / untracked / ignored / outside repo / unknown.</text>
+  <text x="30" y="1094" class="note">Partition kind / source lists and the "first user prompt" handling are open questions in requirements.md; values here are illustrative (PoC sample session).</text>
+</svg>

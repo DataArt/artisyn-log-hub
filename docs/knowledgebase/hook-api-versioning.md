@@ -69,6 +69,7 @@ mechanism feeds).
 | `>= 2.22.0` | `POST /api/v2/logs` + `snapshotId` / `snapshotFull` on the root `artisyn` upload | `201`, `{ warnings, unknownSnapshotId? }` | As `>= 1.7.0`; an invalid id is ignored, never a `400` — see the harness snapshot section below |
 | `>= 2.26.0` | `POST /api/v2/logs` + `okfSnapshotId` / `okfSnapshotFull` on the root `artisyn` upload | `201`, `{ warnings, unknownSnapshotId?, unknownOkfSnapshotId? }` | As `>= 1.7.0`; an invalid id is ignored, never a `400`; a server without OKF support ignores the params — see the OKF snapshot section below |
 | `>= 2.27.0` | `POST /api/v2/logs` also with `type=tool-calls`; plus `GET /api/v2/tool-monitoring/config` | unchanged | As `>= 1.7.0`; a server without Tools/MCP support stores `tool-calls` as an inert generic log and answers the config route `404` (read as "no config") — see the CLI tool wrapper section below |
+| `>= 2.28.0` | unchanged — the root `artisyn` upload's `harness-snapshot` line gains optional `gitStatus` on `skills[]` / `agents[]` / `systemContext.files[]` and skill entries of source `org-synced` | unchanged | As `>= 1.7.0`; any server stores the snapshot body verbatim, so the new fields need no server change. A server older than this change lists org-synced skills in Harness usage as never-used rows — see the harness snapshot `gitStatus` / `org-synced` section below |
 
 The route requires `ApiKeyAuthGuard` (the `X-API-Key` header) and accepts this body encoding
 (`express.text()`, `Content-Type: application/x-ndjson`/`application/json`/`text/plain`, 2500MB
@@ -583,6 +584,30 @@ never with a permission decision — no server contract is involved.
 | Hook `2.27.0` → server with Tools/MCP support | Full loop as above |
 | Config answer with `schemaVersion` ≠ 1 | Read as "no config", like a non-200: the cached schema-1 list is used when one exists, else nothing is wrapped |
 
+
+## Harness snapshot `gitStatus` and `org-synced` skills (hook `2.28.0`+)
+
+Hook `2.28.0` (task `2026-10-29-sysctx-anatomy-tab`, DD 17–20) adds two things to the existing
+`harness-snapshot` line. Neither is a route, query-param or response change, and `schemaVersion`
+stays `1`:
+
+- **`gitStatus`** — an optional `'tracked' | 'untracked' | 'ignored' | 'outside-repo'` on each
+  `skills[]`, `agents[]` and `systemContext.files[]` entry (`harness-git-status.js`, at most two
+  git processes per hook run). It is absent when git gave no answer (not a repository, git missing,
+  timeout). `computeSnapshotId` appends it to an entry's tuple only when it is set, so a snapshot
+  without it keeps the id an older hook computed; the first `2.28.0` run in a repository changes the
+  id once, which costs one full-snapshot resend per user.
+- **`org-synced` skills** — `skill-catalog.js` also scans
+  `~/.claude/skills/synced/<org>/<skill>/SKILL.md` and emits a `skills[]` entry with
+  `source: 'org-synced'`, the bare name, an **empty `body`** (metadata only) and the path
+  `~/.claude/skills/synced/<org>/<skill>/SKILL.md` with the org folder masked as the literal
+  `<org>`. A name that collides with a project or user skill is skipped.
+
+| Combination | Behaviour |
+|---|---|
+| Hook `< 2.28.0` → any server | No `gitStatus` and no org-synced entries; the System context anatomy tab shows git as `unknown` / `outside repo` and the "Git status needs hook 2.28.0 or newer" banner |
+| Hook `2.28.0` → server older than this change | The snapshot body is stored verbatim, so the fields are kept and later shown once the client is upgraded. **Accepted caveat:** such a server's `extractHarnessSkillInventory` does not skip `org-synced` entries, so each org-synced skill becomes a `source: null` harness element and shows as a never-used row in Harness usage until the server is upgraded |
+| Hook `2.28.0` → server with this change | `extractHarnessSkillInventory` skips `org-synced` entries (usage is counted under the listing's `<prefix>:<name>`, which never matches the bare snapshot name), so Harness usage is as before; the anatomy tab shows git status and org-synced sources |
 
 ## v1 retirement (done, open-source readiness)
 

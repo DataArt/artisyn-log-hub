@@ -152,7 +152,8 @@ Events: `/clear` (the `<command-name>` line comes first, it does **not** qualify
 |---|---|
 | Root tokens | 4000 / 1500 / 30000 / 8000 / 0 → 0.0735; W1 3000/1000 → 0.0080; W2 2000/500 → 0.0045; **tree 0.0860** |
 | Work time | P1 60 s + P2 90 s = **150 s** |
-| Context | instruction files from the `instructions` attachment (merged with the snapshot's `systemContext`, one row per path): `~/.claude/CLAUDE.md` (user) 1050 B → ~300 tok, `CLAUDE.md` (project) 3500 bytes → ~1000 tok, `CLAUDE.local.md` (local) 700 B → ~200 tok — System Files 5250 B → ~1500 tok; rules `.claude/rules/db.md` 700 B → ~200 tok, `.claude/rules/ui.md` 1400 B → ~400 tok (both loaded by `nested_memory`); skill `adlc:review-deep` 1750 B → ~500 tok; deferred tools: `mcp__postgres__query`, `mcp__postgres__list_tables`, `mcp__playwright__browser_click` → 2 servers, ~450 tok (3 × 150) |
+| Context | instruction files from the `instructions` attachment (merged with the snapshot's `systemContext`, one row per path): `~/.claude/CLAUDE.md` (user) 1050 B → ~300 tok, `CLAUDE.md` (project) 3500 bytes → ~1000 tok, `CLAUDE.local.md` (local) 700 B → ~200 tok — System Files 5250 B → ~1500 tok; rules `.claude/rules/db.md` 700 B → ~200 tok, `.claude/rules/ui.md` 1400 B → ~400 tok (both loaded by `nested_memory`); skill `adlc:review-deep` 1750 B → ~500 tok; deferred tools: `mcp__postgres__query`, `mcp__postgres__list_tables`, `mcp__playwright__browser_click` → 2 servers |
+| System context anatomy | total **8 800** tok; partitions system prompt 2800 B / 800, memory 700 B / 200, environment 35 B / 10, MCP servers 429 B / 123, skills 83 B / 24, instruction files 5250 B / 1500, system reminders 350 B / 100, first prompt 252 B / 72 → attributed 2829, **Harness internals 5971** (67.9 %); deferred tools and subagent types 0; git: `CLAUDE.md` tracked, `CLAUDE.local.md` ignored, `.claude/rules/ui.md` untracked, `~/.claude/CLAUDE.md` outside repo (`expected.json` `anatomy`) |
 | Inventory (the hook's self-report) | skills: `adlc:review-deep`, `adlc:review`, `unused-skill`; MCP: postgres, playwright |
 | Harness usage, root without sub-sessions | skill `adlc:review` 1 (slash), skill `adlc:review-deep` 1, rule `db.md` 1, rule `ui.md` 1, workflow `ResearchWorkflow` 1, mcp `postgres:query` 2, mcp `playwright:browser_click` 1, tool `Read` 1; `/clear` is absent |
 | The same with "Include sub-sessions" | `adlc:review-deep` 2, `Read` 2, `Edit` 1; the rest unchanged |
@@ -354,7 +355,7 @@ Common setup for every scenario unless stated otherwise: user U1 is logged in (s
 ### S-SESS-03. Logs: what counts as a prompt, what is hidden, how a turn reads
 - **Layer:** UI+API
 - **Priority:** P0
-- **Data/roles:** GS-07 (main), GS-01 (comparison), GS-05 (System Context and the `ResearchWorkflow` run with its two workflow agents W1/W2), U1
+- **Data/roles:** GS-07 (main), GS-01 (comparison), GS-05 (the System context anatomy tab and the `ResearchWorkflow` run with its two workflow agents W1/W2), U1
 - **Steps:**
   1. Upload GS-07, GS-01 and GS-05.
   2. `GET .../sessions/:sid/logs` for GS-07: find the raw events; make sure the response contains the sidechain pair, `isMeta`, the `<task-notification>` and the duplicate `message.id` (the API has the data in full).
@@ -364,6 +365,10 @@ Common setup for every scenario unless stated otherwise: user U1 is logged in (s
   5. Expand the Tools of turn P2, click the `Bash` row: a modal opens with INPUT and RESULT and a copy button.
   6. Close the modal; in GS-01 expand the Files section: `src/app.ts` with an indicator of 2 accesses, `docs/api.md` in the docs group.
   7. (8b in the spec) In GS-05 Logs, with a counter of `/api/` requests running: expand `⚡ ResearchWorkflow` (the `Agents (2)` table is shown right away, not collapsible); read the agents table; click the W1 row (a modal opens on its `Logs` tab); switch to `Raw logs`; expand the last record; press Escape.
+  8. Open GS-05 on the **System context anatomy** tab (`tab=sysctx`): read the total, the bar and the partition table; hover the Harness internals info icon; click a bar segment; expand Skills.
+  8a. Expand Instruction files; then open GS-05 Logs and click "View anatomy →" in the one-line `startup-context-line`.
+  8d. Upload a small session of its own with a 10 000-byte `instructions` file and a first assistant usage total of 100 tokens; open its anatomy tab.
+  9. Open GS-01 (uploaded without a harness snapshot) on the anatomy tab.
 - **Checks:**
   - GS-07 Logs has exactly **3** turns; not visible: the sidechain pair, `isMeta`, `<task-notification>`.
   - The sum of the turn tokens equals 3000 / 1200 / 12000 / 4000 (the duplicate `message.id` is counted once, the sidechain with in 50 000 is not included).
@@ -372,6 +377,10 @@ Common setup for every scenario unless stated otherwise: user U1 is logged in (s
   - The cost tooltip: a breakdown by the four token types, the turn total = the sum of the breakdown.
   - The modal: INPUT contains the command, RESULT contains the result text (for the rejection, the text about "user doesn't want to proceed").
   - GS-01: Files, `src/app.ts` accessCount 2, `docs/api.md` in docs.
+  - 8 (GS-05 anatomy): `anatomy-total` reads 8,800 tokens; the partitions are those of the golden `anatomy` block (system prompt 800, memory 200, environment 10, MCP servers 123, skills 24, instruction files 1500, system reminders 100, first prompt 72 tokens) and Harness internals is 5,971; the internals hint never says "Unallocated"; clicking a segment selects the row of the same kind (`aria-selected="true"`); the Skills drill-down has 2 rows (no `unused-skill`, which is not in the listing), `adlc:review-deep` with `data-source="plugin"`.
+  - 8a: the Files drill-down shows `data-git` `tracked` for `CLAUDE.md`, `ignored` for `CLAUDE.local.md` and `outside-repo` for `~/.claude/CLAUDE.md`; the rules are listed under "On demand — 0 at start"; no fixture marker text and no absolute path appear in the tab; the Logs top shows only the one-line `startup-context-line` and its link opens the anatomy tab.
+  - 8d: `anatomy-banner[data-variant=over-total]` is shown, and there is no `harness-internals` partition row.
+  - 9 (GS-01, no snapshot): `anatomy-banner[data-variant=old-hook]`; file rows show only `data-git` `unknown` or `outside-repo`; no page error.
   - GS-05 workflow Agents table: exactly 2 `workflow-agent-row` rows — W1 `Add a billing section to src/report.ts`, `0:00:18`, `4.0K`, `$0.0080`; W2 `Review the billing flow in depth`, `0:00:23`, `2.5K`, `$0.0045` (tokens and costs from `expected.json`); the `#` cells are `{1, 2}` as a set (both agents start at the same second, so their order is pinned by the algorithm row AO-02, not here); each row shows the first 12 characters of its id followed by `…`.
   - The W1 modal shows the label; its `Logs` tab renders W1's turn with that prompt; its `Raw logs` tab shows a `Turn #1` header, W1's 4 records and `Billing section added.`; Escape closes it.
   - No `/api/` request is sent while the table and the dialog are used (both reuse the loaded Logs payload).
@@ -429,12 +438,12 @@ Common setup for every scenario unless stated otherwise: user U1 is logged in (s
 - **Data/roles:** GS-05, U1
 - **Steps:**
   1. Upload GS-05 and the two workflow agents.
-  2. Open Logs, expand the top of the context panel (SessionContextPanel).
+  2. Open Logs: the top shows the one-line startup context (`startup-context-line`); the startup breakdown itself is checked on the System context anatomy tab by S-SESS-03 steps 8/8a.
   3. Find turn P2: expand its Skills, Rules, Tools, Workflows.
   4. Expand the `ResearchWorkflow` workflow: statistics, the "Agents (2)" section, and the Skills section inside W2.
   5. Info: the Workflows and MCP Usage sections.
 - **Checks:**
-  - The context panel: Files — three rows `~/.claude/CLAUDE.md` (user, ~300 tok), `CLAUDE.md` (project, ~1000 tok), `CLAUDE.local.md` (local, ~200 tok), no file text anywhere; Rules: `db.md ~200 tok`, `ui.md ~400 tok` (name, size, tokens only); Skills 3 registered, MCP Servers 2, deferred tools 3 (~450 tokens).
+  - The Logs top is one line "Startup context · 8,800 tokens" with a "View anatomy →" link — no System Context panel, no detail modals (removed with task 2026-10-29-sysctx-anatomy-tab; the files, skills and MCP servers are now checked in S-SESS-03 steps 8/8a).
   - The P1 turn header contains `adlc:review` as the invoked command; `/clear` is not shown as a turn.
   - Turn P2: Skills "1 skill" (`adlc:review-deep`, ~500 tok), Tools: Read, mcp `postgres:query` ×2, `playwright:browser_click` ×1 (labels with `:`, a purple badge).
   - Workflow: the badge `⚡ ResearchWorkflow`, status completed, duration 45 s, "2 agents · 6.5K tokens · 2 tool uses", "Agents (2)".

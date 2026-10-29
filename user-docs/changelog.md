@@ -1,5 +1,7 @@
 # Changelog
 
-## Open-source release (2026-10-14)
+What changed in each version of Log Hub is in its release notes:
+[github.com/DataArt/artisyn-log-hub/releases](https://github.com/DataArt/artisyn-log-hub/releases).
 
-Log Hub is now released as open source. This entry is the changelog baseline: it marks the first public release, and the changes in every later release are listed above it.
+Each release also carries the same notes as a `CHANGES.md` file next to its downloads, so you can
+keep them with an offline installation.

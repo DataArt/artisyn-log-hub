@@ -7,8 +7,9 @@
  * NDJSON line describing the harness itself (skill/workflow/command catalog, agents, MCP servers,
  * CLAUDE.md + `.claude/rules/` context) rather than the session. `send-logs-hook.js` is the only
  * caller that assembles a *full* body (it adds `schemaVersion`, `perToolDetailSupported` and the
- * MCP probe results, per DD-7) — everything in this file is the static part: nothing here spawns a
- * process or makes a network call, so it costs nothing beyond file reads and hashing.
+ * MCP probe results, per DD-7) — everything in this file is the static part: no network call and no
+ * MCP probe. The only processes it spawns are at most 2 short `git` calls (`harness-git-status.js`)
+ * that set each entry's optional `gitStatus` before the id is computed.
  *
  * @typedef {Object} HarnessSnapshotPlugin
  * @property {string} id
@@ -20,7 +21,7 @@
  * @typedef {Object} HarnessSnapshotSkillEntry
  * @property {string} name - plugin entries are `<pluginName>:<name>` (DD-1)
  * @property {'skill'|'workflow'|'command'} kind
- * @property {'project'|'user'|'plugin'} source
+ * @property {'project'|'user'|'plugin'|'org-synced'} source
  * @property {string} description
  * @property {string} [argumentHint]
  * @property {string} body - file text after frontmatter; a workflow's body is the whole `.js` text
@@ -28,6 +29,7 @@
  * @property {number} bytes
  * @property {string} contentHash - sha256 hex of the raw UTF-8 file text
  * @property {HarnessSnapshotPlugin} [plugin] - present only on a `plugin`-source entry
+ * @property {'tracked'|'untracked'|'ignored'|'outside-repo'} [gitStatus] - absent when git gave no answer
  *
  * @typedef {Object} HarnessSnapshotAgentEntry
  * @property {string} name
@@ -37,6 +39,7 @@
  * @property {number} bytes
  * @property {string} contentHash
  * @property {'project'} source
+ * @property {'tracked'|'untracked'|'ignored'|'outside-repo'} [gitStatus] - absent when git gave no answer
  *
  * @typedef {Object} HarnessSnapshotMcpToolEntry
  * @property {string} name
@@ -56,6 +59,7 @@
  * @property {number} bytes
  * @property {string} contentHash
  * @property {string} [content] - kept only for `.claude/rules/` files
+ * @property {'tracked'|'untracked'|'ignored'|'outside-repo'} [gitStatus] - absent when git gave no answer
  *
  * @typedef {Object} HarnessSnapshotSystemContext
  * @property {number} totalBytes
@@ -76,6 +80,7 @@ const path = require('path');
 const crypto = require('crypto');
 const { claudeConfigDir } = require('./claude-config-dir');
 const { buildSkillCatalog, parseFrontmatter } = require('./skill-catalog');
+const { annotateGitStatus } = require('./harness-git-status');
 
 /** DD-16: bumped only on an incompatible change to the DD-1 body shape. */
 const HARNESS_SNAPSHOT_SCHEMA_VERSION = 1;
@@ -323,6 +328,17 @@ function readMcpServersStatic(projectRoot, env) {
 // DD-2 snapshot id
 // ---------------------------------------------------------------------------
 
+/**
+ * Appends `gitStatus` to an id tuple only when it is a non-empty string, so a snapshot without the
+ * field (an older hook, or git gave no answer) keeps its id byte-for-byte.
+ * @param {Array<string>} tuple
+ * @param {{ gitStatus?: unknown }} entry
+ * @returns {Array<string>}
+ */
+function withGitStatus(tuple, entry) {
+  return typeof entry.gitStatus === 'string' && entry.gitStatus ? [...tuple, entry.gitStatus] : tuple;
+}
+
 /** @param {string|undefined|null} a @param {string|undefined|null} b */
 function cmpStr(a, b) {
   const x = a || '';
@@ -357,21 +373,21 @@ function computeSnapshotId(sections) {
     v: HARNESS_SNAPSHOT_SCHEMA_VERSION,
     skills: [...skills]
       .sort((a, b) => cmpStr(a.source, b.source) || cmpStr(a.name, b.name))
-      .map((s) => [
+      .map((s) => withGitStatus([
         s.name,
         s.source,
         s.plugin ? `${s.plugin.id}@${s.plugin.version}` : '',
         s.contentHash,
-      ]),
+      ], s)),
     agents: [...agents]
       .sort((a, b) => cmpStr(a.path, b.path))
-      .map((a) => [a.name, a.path, a.contentHash]),
+      .map((a) => withGitStatus([a.name, a.path, a.contentHash], a)),
     mcp: [...mcpServers]
       .sort((a, b) => cmpStr(a.name, b.name))
       .map((m) => [m.name, m.command, m.args, m.url || '', m.configSource]),
     context: [...contextFiles]
       .sort((a, b) => cmpStr(a.path, b.path))
-      .map((f) => [f.path, f.contentHash]),
+      .map((f) => withGitStatus([f.path, f.contentHash], f)),
   };
 
   return sha256Hex(JSON.stringify(canon));
@@ -404,6 +420,9 @@ function buildHarnessSnapshot({ projectRoot, cwd, env = process.env, log } = {})
   const agents = buildAgentDefinitions(resolvedCwd, resolvedProjectRoot);
   const systemContext = buildSystemContext(resolvedCwd, resolvedProjectRoot, env);
   const { servers: mcpServers, rawConfigByName } = readMcpServersStatic(resolvedProjectRoot, env);
+
+  // Before the id: `gitStatus` is part of the skill/agent/context tuples.
+  annotateGitStatus({ projectRoot: resolvedProjectRoot, skills, agents, systemContext });
 
   const snapshotId = computeSnapshotId({ skills, agents, mcpServers, systemContext });
 

@@ -326,7 +326,9 @@ export function buildSkillDefinitionRows(
       ? 'PROJECT'
       : def.source === 'plugin'
         ? 'PLUGIN'
-        : 'USER';
+        : def.source === 'org-synced'
+          ? 'ORG-SYNCED'
+          : 'USER';
   const rows: DetailRow[] = [{ label: 'Source', value: sourceLabel }];
   if (def.source === 'plugin' && def.plugin)
     rows.push({

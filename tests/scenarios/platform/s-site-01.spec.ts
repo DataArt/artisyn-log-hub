@@ -249,9 +249,9 @@ test('@S-SITE-01 static site and deck: built, served under a base path, navigabl
       await expect(page.locator('main a[href="docs/install-server.html"]')).not.toHaveCount(0);
     });
 
-    await test.step('4. Features: six blocks A–F, each with its question', async () => {
+    await test.step('4. Features: eight blocks A–H, each with its question', async () => {
       await page.goto(`${server.base}features.html`);
-      for (const block of ['a', 'b', 'c', 'd', 'e', 'f']) {
+      for (const block of ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']) {
         const marker = page.locator(`section#${block} h2 .block-marker`);
         await expect(marker, block).toHaveText(block.toUpperCase());
         await expect(page.locator(`section#${block} h2`), block).toContainText('?');
