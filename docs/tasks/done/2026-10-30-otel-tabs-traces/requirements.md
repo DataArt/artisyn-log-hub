@@ -1,6 +1,6 @@
 # 2026-10-30: OTEL Tabs for Repository and Session — Cost Charts and Jaeger-Style Traces, Near-Realtime
 
-**Status:** todo
+**Status:** done
 **Priority:**
 **Type:** feature
 **Module(s):** client | server | hook

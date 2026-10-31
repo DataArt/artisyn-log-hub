@@ -24,3 +24,4 @@ Folders are named `<YYYY-MM-DD>-<slug>` (the day the task was created).
 - [2026-10-28-why-loghub-slides] Log Hub Site on GitHub Pages (what, why, features, usage, configuration + "Why Log Hub" deck) — archived 2026-10-29
 - [2026-10-29-sysctx-anatomy-tab] Session Tab — System Context Anatomy (Disk-Partition View) — archived 2026-10-29
 - [2026-10-30-otel-shared-receiver] Shared Per-User OTEL Receiver (Claude Code Ignores Project-Level Telemetry Env) — archived 2026-10-31
+- [2026-10-30-otel-tabs-traces] OTEL Tabs for Repository and Session — Cost Charts and Jaeger-Style Traces, Near-Realtime — archived 2026-10-31
