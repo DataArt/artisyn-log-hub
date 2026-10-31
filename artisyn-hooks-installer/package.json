@@ -1,6 +1,6 @@
 {
   "name": "artisyn-hooks-installer",
-  "version": "1.0.82",
+  "version": "1.0.91",
   "description": "Installs the Artisyn Log Hub telemetry hook into a Claude Code project",
   "author": "Denis Tsyplakov",
   "license": "MIT",
@@ -18,5 +18,5 @@
     "@types/node": "^18.19.0",
     "tsx": "^4"
   },
-  "bundledHookVersion": "2.28.0"
+  "bundledHookVersion": "2.30.3"
 }

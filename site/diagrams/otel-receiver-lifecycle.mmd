@@ -1,0 +1,12 @@
+flowchart TB
+  start(["A Claude Code session starts in any repo"]) --> hello{"hello on the per-user port<br/>answers with a valid proof?"}
+  hello -->|yes| reg["register the session<br/>(repo, signals, uploader)"]
+  hello -->|no answer| spawn["start a receiver from this repo's<br/>own hook copy (detached)"]
+  spawn --> hello2{"hello within 2 s?"}
+  hello2 -->|yes| reg
+  hello2 -->|"no / port taken by a stranger"| down["status: receiver-down<br/>(port-conflict)"]
+  reg --> serve["receiver serves every repo of this user"]
+  serve --> idle{"no OTLP traffic<br/>for 10 min?"}
+  idle -->|no| serve
+  idle -->|yes| exit(["idle-exit: registry flushed to<br/>~/.artisyn/otel/registry.json"])
+  exit -. "next session, any repo" .-> start

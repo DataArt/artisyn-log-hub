@@ -61,3 +61,15 @@ export function unpricedModelIds(
   if (serverIds != null && serverIds.length > 0) return [...serverIds];
   return fallback ? [fallback] : [];
 }
+
+/**
+ * The utility-call marker next to a session cost whose root has no OTEL API calls and an OTEL
+ * state other than `ok` (2026-10-30 otel-shared-receiver, DD-30, `costExcludesUtilityCalls`):
+ * the cost is still the Log Hub-computed one, but Claude Code's utility calls are missing from it.
+ */
+export const UTILITY_CALLS_MARKER_TEXT = 'excl. utility calls (no OTEL)';
+
+/** The marker's ⓘ tooltip (wireframe `session-otel-tab-no-data.svg`). */
+export const UTILITY_CALLS_MARKER_HINT =
+  'Log Hub-computed cost. Claude Code utility calls are not in the transcript and are only ' +
+  'visible via OTEL. Why no OTEL? Click for help.';

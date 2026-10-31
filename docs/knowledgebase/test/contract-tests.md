@@ -1,7 +1,7 @@
 ---
 type: Test Suite
 title: API vs DB contract suite (jest, world-v1)
-description: npm run test:contract (server/) — a separate jest project that boots its own app in a fresh contract_<uuid> schema loaded with the deterministic world-v1 fixture, checks every route's answer against independent raw SQL via a data registry of 24 families (F01-F24) and one shared runCase, and a meta-test that fails when a router route has no registry row.
+description: npm run test:contract (server/) — a separate jest project that boots its own app in a fresh contract_<uuid> schema loaded with the deterministic world-v1 fixture, checks every route's answer against independent raw SQL via a data registry of 25 families (F01-F25) and one shared runCase, and a meta-test that fails when a router route has no registry row.
 resource: server/test/contract/README.md
 tags: [testing, server, jest, contract, database, registry]
 timestamp: 2026-10-28T00:00:00Z
@@ -41,7 +41,7 @@ The main `npm run test` never picks the suite up (`*.contract-spec.ts` is outsid
 | `server/test/contract/oracle.ts` | `pg.Pool` with `search_path` = contract schema only; `q()`, whole-schema checksum, table snapshots |
 | `server/test/contract/types.ts` | `ContractCase` (call row or `excluded` row), `ReadSpec`, `WriteSpec`, `FieldMap` |
 | `server/test/contract/run-case.ts` | `runCase(row, ctx)`: world reset for write rows and for any row after one, real login per actor, call, status, read/write/noDb oracle, unchanged-schema guard for negative rows |
-| `server/test/contract/registry/index.ts` | `FAMILIES` (F01-F24 files `registry/f<NN>-<family>.ts`), `casesOf`, `registryRoutes` |
+| `server/test/contract/registry/index.ts` | `FAMILIES` (F01-F25 files `registry/f<NN>-<family>.ts`), `casesOf`, `registryRoutes` |
 | `server/test/contract/registry/oracle-sql.ts` | shared hand-written SQL: own / tree session cost, the listed root sessions of a repository, ISO timestamps in jsonb |
 | `server/test/contract/f<NN>.contract-spec.ts` | one `it.each` per family (F09 also drops a staged queue file into the temp `UPLOAD_QUEUE_DIR`) |
 | `server/test/contract/routes.contract-spec.ts` | meta-test: routes from Nest metadata and from the Express 5 router stack must agree; router ⊆ registry; registry ⊆ router; rows well-formed |
@@ -62,6 +62,7 @@ No file in `oracle.ts`, `fixtures/` or `registry/` imports from `server/src/**` 
 | F17-F18 | `f17`, `f18` | session lists/subsets (cost: golden + SQL formula), delete + retention |
 | F19-F23 | `f19`-`f23` | change surface, analytics, reports (5 twins via `sameExpectedAs`), pricing + admin pricing + tool versions, export/import + recompute |
 | F24 | `f24-tool-monitoring.ts` | Tools/MCP tab: hook monitored-tools config (API key), tab config GET/PUT (personal and team level), summary, calls, call detail |
+| F25 | `f25-otel.ts` | OTEL tabs: realtime ingest (API key; accepted, replay, deleted session, 400/401/409/413), repository facts (KPIs, kpisPrev, buckets, cost flow incl. a branch-less session, sessions table with team masking, FR-34 403s), session OTEL (snapshot, deltas, unknown cursors, masking, out-of-scope), team facts (DD-29 distinct roots, repositories, people filter, 403s). World: OTEL rows for s01/s04/s06/s11, T2's second repository Rdesert and the `trainer` actor; the projection drain is parked (`OTEL_PROJECTION_INTERVAL_MS`) |
 
 The positive routes that need the outside world (Azure callback, OpenRouter import, the
 multi-GB logs archive, the build-artifact installer tgz) have guard rows or an explicit

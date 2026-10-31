@@ -53,6 +53,12 @@ export type StopReceiverOpts = {
   gracePollIntervalMs?: number;
   portFreeRetries?: number;
   portFreeRetryIntervalMs?: number;
+  /**
+   * Replaces the legacy unauthenticated `postShutdown` call — the shared receiver (DD-9) needs an
+   * authenticated one, which `otel-handshake.ts` `shutdown` sends (`--restart-otel-receiver`,
+   * uninstall). Resolves the answer's status, or `null` on a transport failure.
+   */
+  sendShutdown?: () => Promise<{ status: number; ok: boolean } | null>;
 };
 
 /**
@@ -285,16 +291,19 @@ export async function stopReceiverAndWait(
   sessionId?: string | null,
   opts?: StopReceiverOpts,
 ): Promise<StopReceiverResult> {
+  const { sendShutdown, ...timing } = opts || {};
   const o = {
     shutdownTimeoutMs: SHUTDOWN_TIMEOUT_MS,
     graceMs: SHUTDOWN_GRACE_MS,
     gracePollIntervalMs: GRACE_POLL_INTERVAL_MS,
     portFreeRetries: PORT_FREE_RETRIES,
     portFreeRetryIntervalMs: PORT_FREE_RETRY_INTERVAL_MS,
-    ...(opts || {}),
+    ...timing,
   };
 
-  const response = await postShutdown(port, gitRoot, sessionId, o.shutdownTimeoutMs);
+  const response = sendShutdown
+    ? await sendShutdown().catch(() => null)
+    : await postShutdown(port, gitRoot, sessionId, o.shutdownTimeoutMs);
   if (!response) return { stopped: false, reason: 'transport-error' };
   if (response.status === 409) return { stopped: false, reason: 'owner-mismatch' };
   // Any non-200/409 status (404 from a pre-shutdown-route receiver, 400, 5xx, …) is treated

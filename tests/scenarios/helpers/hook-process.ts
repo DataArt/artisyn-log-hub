@@ -16,6 +16,11 @@
  *    `readHookLog`, `readManifest`, `readRecommendations`;
  *  - the OTEL receiver: `freeLoopbackPort`, `waitForPort`, `spawnReceiver`, `startReceiver`,
  *    `stopReceiver`, `waitForExit`, `rawRequest`;
+ *  - the shared per-user receiver (hook 2.30.0+): `writeSharedState` (port.json + token under a
+ *    fake home), `spawnSharedReceiver` / `startSharedReceiver` (the DD-7 `--shared` argv, optional
+ *    `clockShift` preload), `sharedHello` (DD-9 hello and proof check), `authedRequest` (the
+ *    `x-artisyn-auth` header over the exact body bytes), `startFakeCollector` (a foreign OTLP
+ *    collector recording raw bytes and headers, with a down mode), `repoKeyOf` / `ownerHashOf`;
  *  - the built plugin: `installBuiltPlugin` unpacks the plugin tree from the stand's own installer
  *    tarball, `pluginHookCommands` reads its `hooks/hooks.json`;
  *  - `normalizePath` (impl-plan DD SC6): every path a hook or installer scenario compares goes
@@ -23,7 +28,7 @@
  *    which resolves its own git root, reports in long form.
  */
 import { spawn, spawnSync, type ChildProcess } from 'child_process';
-import { randomBytes } from 'crypto';
+import { createHash, createHmac, randomBytes } from 'crypto';
 import * as fs from 'fs';
 import * as http from 'http';
 import * as net from 'net';
@@ -111,7 +116,14 @@ function copyDirExcluding(src: string, dest: string, exclude: ReadonlySet<string
  * sandbox dir, so a scenario runs the source hook without ever touching the source files.
  */
 export function copyToolDir(dirs: TempDirs): string {
-  const dest = dirs.make('hook-tool');
+  return copyToolDirTo(dirs.make('hook-tool'));
+}
+
+/**
+ * The same copy into a given directory (created), e.g. a plugin dir under a fake home or inside a
+ * fake repo, where a shared receiver accepts its `send-logs-hook.js` as a registered uploader.
+ */
+export function copyToolDirTo(dest: string): string {
   copyDirExcluding(HOOK_SOURCE_DIR, dest, new Set(['__tests__', '.env', '.env.local', 'node_modules']));
   return dest;
 }
@@ -180,6 +192,7 @@ export function fakeHomeEnv(fakeHome: string): Record<string, string> {
     OTEL_EXPORTER_OTLP_ENDPOINT: '',
     OTEL_EXPORTER_OTLP_LOGS_ENDPOINT: '',
     OTEL_EXPORTER_OTLP_METRICS_ENDPOINT: '',
+    OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: '',
     ARTISYN_HOOK_SERVICE: '',
     ARTISYN_PROJECT_ROOT: '',
   };
@@ -740,6 +753,275 @@ export function rawRequest(
     if (method === 'GET' || method === 'OPTIONS' || method === 'HEAD') req.end();
     else req.end(payload);
   });
+}
+
+// ---------------------------------------------------------------------------
+// the shared per-user OTEL receiver (hook 2.30.0+, task 2026-10-30-otel-shared-receiver)
+// ---------------------------------------------------------------------------
+
+interface UserStateModule {
+  repoKey(gitRoot: string): string;
+  ownerHash(home: string): string;
+}
+
+/** The hook's own `user-state.js` (plain CommonJS), so the hashes never drift from the hook's. */
+function userStateModule(): UserStateModule {
+  return require(path.join(HOOK_SOURCE_DIR, 'user-state.js'));
+}
+
+/** DD-5 `repoKey` of a git root, as the hook and the receiver compute it. */
+export function repoKeyOf(gitRoot: string): string {
+  return userStateModule().repoKey(gitRoot);
+}
+
+/** DD-9 `ownerHash` of a home dir, as the hook and the receiver compute it. */
+export function ownerHashOf(home: string): string {
+  return userStateModule().ownerHash(home);
+}
+
+export interface SharedState {
+  home: string;
+  /** `<home>/.artisyn/otel` */
+  stateDir: string;
+  token: string;
+  port: number;
+}
+
+/**
+ * Writes what the installer writes for the shared receiver under a fake home (DD-4): `port.json`
+ * and `token` in `<home>/.artisyn/otel/`. The port is a free loopback port unless given.
+ */
+export async function writeSharedState(home: string, port?: number): Promise<SharedState> {
+  const stateDir = path.join(home, '.artisyn', 'otel');
+  fs.mkdirSync(stateDir, { recursive: true });
+  const token = randomBytes(32).toString('hex');
+  const chosen = port ?? (await freeLoopbackPort());
+  fs.writeFileSync(path.join(stateDir, 'token'), token, 'utf8');
+  fs.writeFileSync(
+    path.join(stateDir, 'port.json'),
+    JSON.stringify({ version: 1, port: chosen, allocatedAt: new Date().toISOString() }),
+    'utf8',
+  );
+  return { home, stateDir, token, port: chosen };
+}
+
+/**
+ * A movable clock for a receiver child: a `--require` preload that adds the number of
+ * milliseconds in `file` to `Date.now()` (re-read every 50 ms). It lets a scenario age the pending
+ * spool (5 min TTL) or a registry entry without waiting; timers (`setTimeout`) are not affected.
+ */
+export interface ClockShift {
+  file: string;
+  preload: string;
+  /** Sets the offset and waits until the child has surely re-read it. */
+  set(offsetMs: number): Promise<void>;
+}
+
+export function clockShift(dirs: TempDirs): ClockShift {
+  const dir = dirs.make('clock');
+  const file = path.join(dir, 'offset-ms');
+  const preload = path.join(dir, 'clock-shift.js');
+  fs.writeFileSync(file, '0', 'utf8');
+  fs.writeFileSync(
+    preload,
+    [
+      "'use strict';",
+      "const fs = require('fs');",
+      `const file = ${JSON.stringify(file)};`,
+      'const realNow = Date.now.bind(Date);',
+      'let offset = 0;',
+      'const read = () => { try { offset = Number(fs.readFileSync(file, "utf8").trim()) || 0; } catch { /* keep */ } };',
+      'read();',
+      'setInterval(read, 50).unref();',
+      'Date.now = () => realNow() + offset;',
+      '',
+    ].join('\n'),
+    'utf8',
+  );
+  return {
+    file,
+    preload,
+    async set(offsetMs: number) {
+      fs.writeFileSync(file, String(offsetMs), 'utf8');
+      await new Promise((resolve) => setTimeout(resolve, 250));
+    },
+  };
+}
+
+export interface SharedReceiverParams {
+  home: string;
+  stateDir: string;
+  port: number;
+  /** Default 60 s, so a receiver outlives the scenario's steps; idle steps pass a short one. */
+  idleTimeoutMs?: number;
+  maxBodyBytes?: number;
+  clock?: ClockShift;
+}
+
+/**
+ * Spawns `otel-receiver.js` of `toolDir` in shared mode with the DD-7 argv
+ * (`--shared --owner-home --state-dir --port --idle-timeout-ms --max-body-bytes`). The legacy
+ * `ARTISYN_OTEL_*` env twins are removed, so nothing inherited turns it into a `--dir` conflict.
+ */
+export function spawnSharedReceiver(toolDir: string, params: SharedReceiverParams): ReceiverProcess {
+  const env: Record<string, string | undefined> = { ...process.env };
+  for (const name of Object.keys(env)) if (name.startsWith('ARTISYN_OTEL_')) delete env[name];
+  const argv = [
+    ...(params.clock ? ['--require', params.clock.preload] : []),
+    path.join(toolDir, 'otel-receiver.js'),
+    '--shared',
+    '--owner-home', params.home,
+    '--state-dir', params.stateDir,
+    '--port', String(params.port),
+    '--idle-timeout-ms', String(params.idleTimeoutMs ?? 60_000),
+    '--max-body-bytes', String(params.maxBodyBytes ?? 8_388_608),
+  ];
+  const child = spawn(process.execPath, argv, { stdio: ['ignore', 'pipe', 'pipe'], env, windowsHide: true });
+  let stderr = '';
+  let code: number | null | undefined;
+  child.stderr?.on('data', (c: Buffer) => (stderr += c.toString('utf8')));
+  child.stdout?.resume();
+  const exited = new Promise<number | null>((resolve) => {
+    child.on('exit', (c) => {
+      code = c;
+      resolve(c);
+    });
+  });
+  return { child, exited, exitCode: () => code, stderr: () => stderr };
+}
+
+/** {@link spawnSharedReceiver} and wait until it listens. */
+export async function startSharedReceiver(toolDir: string, params: SharedReceiverParams): Promise<ReceiverProcess> {
+  const receiver = spawnSharedReceiver(toolDir, params);
+  await waitForPort(params.port);
+  return receiver;
+}
+
+/** `HMAC(token, "srv\n"+clientNonce+"\n"+serverNonce)` hex — the hello proof (DD-9). */
+export function helloProof(token: string, clientNonce: string, serverNonce: string): string {
+  return createHmac('sha256', token).update(`srv\n${clientNonce}\n${serverNonce}`).digest('hex');
+}
+
+/** The DD-9 `x-artisyn-auth` header value of one request over its exact wire bytes. */
+export function authHeaderFor(token: string, serverNonce: string, urlPath: string, rawBody: Buffer): string {
+  const bodyHash = createHash('sha256').update(rawBody).digest('hex');
+  const mac = createHmac('sha256', token).update(`cli\n${serverNonce}\n${urlPath}\n${bodyHash}`).digest('hex');
+  return `v1 ${serverNonce} ${mac}`;
+}
+
+export interface SharedHello {
+  res: RawResponse;
+  clientNonce: string;
+  /** `null` unless the answer is a 200 with a nonce. */
+  serverNonce: string | null;
+  /** Whether `proof` is the HMAC of this client nonce and the server nonce under `token`. */
+  proofValid: boolean;
+}
+
+/**
+ * `POST /artisyn/hello {clientNonce, ownerHash}` (DD-9). `ownerHash` defaults to the hash of
+ * `home`; pass another to provoke the 409.
+ */
+export async function sharedHello(
+  port: number,
+  { token, home, ownerHash }: { token: string; home: string; ownerHash?: string },
+): Promise<SharedHello> {
+  const clientNonce = randomBytes(16).toString('hex');
+  const res = await rawRequest(port, '/artisyn/hello', { clientNonce, ownerHash: ownerHash ?? ownerHashOf(home) });
+  const serverNonce = res.status === 200 && typeof res.json?.serverNonce === 'string' ? res.json.serverNonce : null;
+  const proofValid = serverNonce !== null && res.json?.proof === helloProof(token, clientNonce, serverNonce);
+  return { res, clientNonce, serverNonce, proofValid };
+}
+
+export interface AuthedRequestOptions {
+  token: string;
+  home: string;
+  /** Reuse this server nonce instead of a fresh hello (a spent nonce → 401). */
+  nonce?: string;
+  /** Sign with this token instead of `token` (a bad MAC → 401). */
+  signWith?: string;
+}
+
+/**
+ * One authenticated shared-receiver request (`register`, `session-status`, `shutdown`): a fresh
+ * hello for the nonce (unless given), then the body with its `x-artisyn-auth` header. Returns the
+ * answer and the nonce it spent.
+ */
+export async function authedRequest(
+  port: number,
+  routePath: string,
+  body: unknown,
+  opts: AuthedRequestOptions,
+): Promise<RawResponse & { nonce: string }> {
+  let nonce = opts.nonce;
+  if (nonce === undefined) {
+    const hello = await sharedHello(port, { token: opts.token, home: opts.home });
+    if (!hello.serverNonce || !hello.proofValid) throw new Error(`hello failed: ${hello.res.status} ${hello.res.body}`);
+    nonce = hello.serverNonce;
+  }
+  const raw = Buffer.from(JSON.stringify(body ?? {}), 'utf8');
+  const res = await rawRequest(port, routePath, raw, {
+    headers: { 'x-artisyn-auth': authHeaderFor(opts.signWith ?? opts.token, nonce, routePath, raw) },
+  });
+  return { ...res, nonce };
+}
+
+export interface CollectedRequest {
+  path: string;
+  headers: http.IncomingHttpHeaders;
+  body: Buffer;
+}
+
+export interface FakeCollector {
+  url: string;
+  port: number;
+  requests: CollectedRequest[];
+  /** `true`: every connection is destroyed on arrival (an unreachable upstream); `false`: 200. */
+  setDown(down: boolean): void;
+  close(): Promise<void>;
+}
+
+/**
+ * A foreign OTLP/HTTP collector for the forwarding steps (DD-20): records the raw bytes, path and
+ * headers of every request it answers 200; in down mode it drops each connection without a byte.
+ */
+export async function startFakeCollector(): Promise<FakeCollector> {
+  let down = false;
+  const requests: CollectedRequest[] = [];
+  const sockets = new Set<net.Socket>();
+  const server = http.createServer((req, res) => {
+    const chunks: Buffer[] = [];
+    req.on('data', (c: Buffer) => chunks.push(c));
+    req.on('end', () => {
+      requests.push({ path: req.url ?? '/', headers: req.headers, body: Buffer.concat(chunks) });
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end('{}');
+    });
+  });
+  server.on('connection', (s: net.Socket) => {
+    if (down) {
+      s.destroy();
+      return;
+    }
+    sockets.add(s);
+    s.on('close', () => sockets.delete(s));
+  });
+  const port = await listenLoopback(server);
+  return {
+    url: `http://127.0.0.1:${port}`,
+    port,
+    requests,
+    setDown(next) {
+      down = next;
+      // A kept-alive socket of an earlier request would otherwise still reach the server.
+      if (down) for (const s of sockets) s.destroy();
+    },
+    close: () =>
+      new Promise<void>((resolve) => {
+        for (const s of sockets) s.destroy();
+        server.close(() => resolve());
+      }),
+  };
 }
 
 // ---------------------------------------------------------------------------

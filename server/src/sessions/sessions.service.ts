@@ -14,6 +14,11 @@ import {
   deletedSessionLog,
   logContexts,
   logs,
+  otelCalls,
+  otelCostBuckets,
+  otelReclassQueue,
+  otelSessionState,
+  otelSpans,
   sessionCallTokens,
   sessionCosts,
   sessionFileStats,
@@ -48,6 +53,11 @@ export interface RetentionStats {
   youngestSessionAt: string | null;
   totalSessionCount: number;
   dailySeries: RetentionDailyBucket[];
+  /**
+   * Non-deleted root sessions with OTEL data but no `logs` rows (realtime-only, DD-25); they
+   * are purge-eligible by `otel_session_state.created_at` and not part of the counts above.
+   */
+  otelOnlySessions: number;
 }
 
 type RetentionStatsRawRow = {
@@ -176,6 +186,22 @@ export class SessionsService {
     tx: DrizzleDb,
     ids: number[],
   ): Promise<void> {
+    // 0. OTEL facts (DD-25). The state row goes first: every OTEL writer locks it FOR UPDATE
+    // before its deleted check (DD-2), so this waits for a running writer, and a later writer
+    // finds no row (or `deleted = true`) and writes nothing. All five tables would cascade on a
+    // hard delete, but a soft delete keeps the `sessions` row.
+    await tx
+      .delete(otelSessionState)
+      .where(inArray(otelSessionState.sessionId, ids));
+    await tx.delete(otelCalls).where(inArray(otelCalls.sessionId, ids));
+    await tx.delete(otelSpans).where(inArray(otelSpans.sessionId, ids));
+    await tx
+      .delete(otelCostBuckets)
+      .where(inArray(otelCostBuckets.sessionId, ids));
+    await tx
+      .delete(otelReclassQueue)
+      .where(inArray(otelReclassQueue.sessionId, ids));
+
     // a. Delete session_stats
     await tx.delete(sessionStats).where(inArray(sessionStats.sessionId, ids));
 
@@ -365,9 +391,32 @@ export class SessionsService {
       .orderBy(earliestLog.earliest)
       .limit(batchSize);
 
+    // Realtime-only roots (DD-25): OTEL data but no `logs` rows, so the query above never sees
+    // them. Aged by the OTEL state row's creation and filling the rest of the batch.
+    const otelOnlyRoots =
+      eligibleRoots.length >= batchSize
+        ? []
+        : await this.db
+            .select({ id: sessions.id })
+            .from(sessions)
+            .innerJoin(
+              otelSessionState,
+              eq(otelSessionState.sessionId, sessions.id),
+            )
+            .where(
+              and(
+                isNull(sessions.parentSessionId),
+                eq(sessions.deleted, false),
+                lt(otelSessionState.createdAt, cutoff),
+                sql`NOT EXISTS (SELECT 1 FROM ${logs} WHERE ${logs.sessionId} = ${sessions.id})`,
+              ),
+            )
+            .orderBy(otelSessionState.createdAt)
+            .limit(batchSize - eligibleRoots.length);
+
     let purgedCount = 0;
 
-    for (const { id: rootId } of eligibleRoots) {
+    for (const { id: rootId } of [...eligibleRoots, ...otelOnlyRoots]) {
       try {
         const descendantsMap = await getDescendantSessionIds(this.db, [rootId]);
         const allDescendantIds = descendantsMap.get(rootId) ?? [];
@@ -529,12 +578,27 @@ export class SessionsService {
 
     const rows = result.rows as unknown as RetentionStatsRawRow[];
 
+    // Realtime-only roots (DD-25): OTEL data, no `logs` rows — additive to the series above.
+    const otelOnlyResult = await this.db.execute(sql`
+      SELECT COUNT(*) AS "count"
+        FROM otel_session_state st
+        JOIN sessions s ON s.id = st.session_id
+       WHERE s.deleted = false
+         AND s.parent_session_id IS NULL
+         AND NOT EXISTS (SELECT 1 FROM logs l WHERE l.session_id = s.id)
+    `);
+    const otelOnlySessions = Number(
+      (otelOnlyResult.rows as unknown as { count: string | number }[])[0]
+        ?.count ?? 0,
+    );
+
     if (rows.length === 0) {
       return {
         oldestSessionAt: null,
         youngestSessionAt: null,
         totalSessionCount: 0,
         dailySeries: [],
+        otelOnlySessions,
       };
     }
 
@@ -552,6 +616,7 @@ export class SessionsService {
         sessionCount: Number(row.sessionCount),
         totalSizeBytes: Number(row.totalSizeBytes),
       })),
+      otelOnlySessions,
     };
   }
 }

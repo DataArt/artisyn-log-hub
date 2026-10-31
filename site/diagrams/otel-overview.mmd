@@ -1,0 +1,29 @@
+flowchart TB
+  subgraph machine["Developer machine (one OS user)"]
+    direction TB
+    subgraph sessions["Claude Code sessions"]
+      direction LR
+      s1["shop-api"]
+      s2["web-ui"]
+      s3["billing-svc"]
+    end
+    rcv["Shared OTEL receiver<br/>127.0.0.1:&lt;per-user port&gt; · loopback only"]
+    subgraph dirs["Per-repo data"]
+      direction LR
+      d1["shop-api/.artisyn/…/otel"]
+      d2["web-ui/.artisyn/…/otel"]
+      d3["billing-svc/.artisyn/…/otel"]
+    end
+    s1 -.->|OTLP| rcv
+    s2 -.->|OTLP| rcv
+    s3 -.->|OTLP| rcv
+    rcv --> d1
+    rcv --> d2
+    rcv --> d3
+  end
+  coll["Your own collector<br/>(optional, proxy mode)"]
+  hub["Log Hub server"]
+  rcv -.->|"forward unchanged"| coll
+  d1 ==>|"upload · realtime<br/>repo's own API key"| hub
+  d2 ==> hub
+  d3 ==> hub

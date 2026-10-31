@@ -24,6 +24,12 @@
 // The design's step 6 (two concurrent purges) cannot be driven through the stand; what is
 // observable is that later ticks add no second audit row (`session_pk` is the claim).
 //
+// OTEL steps (2026-10-30 OTEL tabs, DD-25): OLD also carries an OTEL chunk (projected into the
+// OTEL fact tables), which goes with its root; two OTEL-only roots — sessions that only ever got
+// realtime batches, so they have no `logs` row and age by `otel_session_state.created_at` — one
+// 31 days old (purged) and one 29 days old (kept); and a realtime batch for the soft-deleted SOFT
+// is answered `ignored: 'deleted'` and writes nothing.
+//
 // Code facts that differ from the design text:
 //   - `GET /api/v1/sessions/retention-days` answers `{ retentionDays: 30 }`, not `{ days: 30 }`.
 //
@@ -38,6 +44,10 @@ import { insertRow } from '../helpers/db-seed';
 import { ownRepoId, uploadPromptSession, uploadSubagent, type PromptSession } from '../helpers/prompt-session';
 import { skipNewUserNudge } from '../helpers/teams';
 import { shiftSessionTree } from '../helpers/time-shift';
+import { apiRequestLine, callLines, otelTurn, spanLines } from '../fixtures/otel/otel-lines';
+import { otelRowCounts, sendRealtime, uploadOtelChunk, waitForOtelProjected } from '../helpers/otel';
+
+const OTEL_TABLES = ['otel_session_state', 'otel_calls', 'otel_spans', 'otel_cost_buckets', 'otel_reclass_queue', 'logs_otel'];
 
 const TICKS_MS = 600;
 
@@ -77,6 +87,17 @@ test('@S-SLIFE-08 retention removes an old session tree and leaves young, empty 
         [sid],
       )
     ).rows;
+  const OTEL_OLD = `sl08-${run}-otel-old`;
+  const OTEL_YOUNG = `sl08-${run}-otel-young`;
+  /** Rows of every OTEL table for a `sessions.id` (the row itself may be gone already). */
+  const otelRowsById = async (id: number) => {
+    let n = 0;
+    for (const table of OTEL_TABLES) {
+      n += Number((await db.query<{ n: string }>(`SELECT count(*) AS n FROM ${table} WHERE session_id = $1`, [id])).rows[0].n);
+    }
+    return n;
+  };
+  let oldOtel = { id: 0, otelOldId: 0 };
   const queueRows = async (sid: string) =>
     (await db.query<{ status: string }>('SELECT status FROM upload_queue WHERE session_id = $1', [sid])).rows.map((r) => r.status);
 
@@ -100,7 +121,35 @@ test('@S-SLIFE-08 retention removes an old session tree and leaves young, empty 
     expect(await queueRows(OLD2.sessionId)).toContain('partially_uploaded');
 
     await insertRow(db, 'sessions', { session_id: EMPTY });
+
+    // OTEL: OLD's chunk (logs and spans) projected into the fact tables; two OTEL-only roots.
+    const turn = otelTurn(`o${run}`, new Date(Date.now() - 2 * 60 * 60 * 1000));
+    await uploadOtelChunk(api, key.key, OLD.sessionId, [...callLines(OLD.sessionId, turn), ...spanLines(OLD.sessionId, turn)], queue);
+    await waitForOtelProjected(db, OLD.sessionId);
+    for (const sid of [OTEL_OLD, OTEL_YOUNG]) {
+      const res = await sendRealtime(api, key.key, {
+        sessionId: sid,
+        receiverId: `rcv-${run}`,
+        batchSeq: 1,
+        lines: [apiRequestLine(sid, { requestId: `${sid}-req`, querySource: 'repl_main_thread', model: 'claude-scn-model-a', at: new Date(), costUsd: 0.01, input: 10, output: 1 })],
+      });
+      expect(res.accepted).toEqual({ calls: 1, spans: 0 });
+    }
+    expect(await otelRowCounts(db, OLD.sessionId)).toMatchObject({ otel_session_state: 1, otel_calls: 5, otel_spans: 6, logs_otel: 1 });
+    oldOtel = { id: (await sessionRow(OLD.sessionId)).id, otelOldId: (await sessionRow(OTEL_OLD)).id };
     return { repoId: await ownRepoId(owner.api, repoUrl), uploadId };
+  });
+
+  await test.step('1b. realtime to the soft-deleted SOFT: 200 ignored «deleted», no OTEL row written', async () => {
+    const key = await createApiKey(owner.api);
+    const res = await sendRealtime(api, key.key, {
+      sessionId: SOFT.sessionId,
+      receiverId: `rcv-soft-${run}`,
+      batchSeq: 1,
+      lines: [apiRequestLine(SOFT.sessionId, { requestId: `soft-${run}-req`, querySource: 'repl_main_thread', model: 'claude-scn-model-a', at: new Date(), costUsd: 0.01, input: 10, output: 1 })],
+    });
+    expect(res).toMatchObject({ ignored: 'deleted', accepted: { calls: 0, spans: 0 } });
+    expect(await otelRowsById((await sessionRow(SOFT.sessionId)).id)).toBe(0);
   });
 
   const base = `/api/v1/repositories/${repoId}`;
@@ -127,6 +176,12 @@ test('@S-SLIFE-08 retention removes an old session tree and leaves young, empty 
     await shiftSessionTree(db, OLD2.sessionId, 31, { excludeTables: ['upload_queue'] });
     const shifted = await shiftSessionTree(db, OLD.sessionId, 31);
     expect(shifted.sessionIds.sort()).toEqual([OLD.sessionId, child, grandchild, softChild].sort());
+    expect(shifted.tables.find((t) => t.table === 'logs_otel')).toMatchObject({ rows: 1 });
+    expect(shifted.tables.find((t) => t.table === 'logs_otel')?.columns).toContain('created_at');
+    const otelOnly = await shiftSessionTree(db, OTEL_OLD, 31);
+    expect(otelOnly.tables.find((t) => t.table === 'otel_session_state')).toMatchObject({ rows: 1 });
+    expect(otelOnly.tables.find((t) => t.table === 'otel_session_state')?.columns).toContain('created_at');
+    await shiftSessionTree(db, OTEL_YOUNG, 29);
   });
 
   await test.step('4. the scheduler purges OLD with its whole tree and OLD2 with its queue row; YOUNG, EMPTY and SOFT stay', async () => {
@@ -147,6 +202,15 @@ test('@S-SLIFE-08 retention removes an old session tree and leaves young, empty 
     expect(await logsStatus(YOUNG.sessionId)).toBe(200);
     expect(await sessionRow(EMPTY)).toMatchObject({ deleted: false });
     expect(await sessionRow(SOFT.sessionId)).toMatchObject({ deleted: true });
+  });
+
+  await test.step('4b. OTEL: OLD’s OTEL rows went with it; the 31-day-old OTEL-only root is purged with its rows; the 29-day-old one stays', async () => {
+    expect(await otelRowsById(oldOtel.id)).toBe(0);
+    await expect.poll(async () => (await sessionRow(OTEL_OLD)) ?? null, { timeout: 15_000 }).toBeNull();
+    expect(await otelRowsById(oldOtel.otelOldId)).toBe(0);
+    await new Promise((resolve) => setTimeout(resolve, TICKS_MS));
+    expect(await sessionRow(OTEL_YOUNG)).toMatchObject({ deleted: false });
+    expect(await otelRowCounts(db, OTEL_YOUNG)).toMatchObject({ otel_session_state: 1, otel_calls: 1 });
   });
 
   await test.step('5. audit: one automatic row (deleted_by null) per active session of OLD’s tree; none added for the owner-deleted child or SOFT', async () => {

@@ -9,6 +9,43 @@ import type { ContractFamily } from '../types';
 const NDJSON =
   '{"type":"user","sessionId":"w1-new-upload","message":{"role":"user","content":"hello"}}\n';
 
+/** One hook `otel-status` line (2026-10-30 otel-shared-receiver, DD-16). */
+function otelStatusLine(
+  timestamp: string,
+  state: string,
+  reason: string | null,
+) {
+  return {
+    type: 'otel-status',
+    timestamp,
+    sessionId: 'w1-new-otel-status',
+    state,
+    reason,
+    detail: null,
+    received: { logs: 0, metrics: 0, spans: 0, firstAt: null },
+    claudeVersion: '2.1.300',
+    forward: 'off',
+    hookVersion: '2.30.0',
+    receiverVersion: '2.30.0',
+  };
+}
+
+/** An artisyn body: one prompt, then a newer, an older and an unknown-reason `otel-status`. */
+const OTEL_STATUS_NDJSON =
+  [
+    {
+      event: 'prompt_start',
+      timestamp: '2026-01-20T10:00:00.000Z',
+      session_id: 'w1-new-otel-status',
+      prompt: 'Map the spice fields',
+    },
+    otelStatusLine('2026-01-20T10:10:00.000Z', 'partial', 'managed-endpoint'),
+    otelStatusLine('2026-01-20T10:05:00.000Z', 'none', 'not-configured'),
+    otelStatusLine('2026-01-20T10:20:00.000Z', 'none', 'galaxy-brain'),
+  ]
+    .map((line) => JSON.stringify(line))
+    .join('\n') + '\n';
+
 /** A syntactically valid but never-stored snapshot id (DD-2/DD-8). */
 const UNKNOWN_SNAPSHOT_ID = 'd'.repeat(64);
 
@@ -38,6 +75,38 @@ export const f15Ingest: ContractFamily = {
                 `size_bytes = ${Buffer.byteLength(NDJSON)}`,
                 'upload_id IS NULL',
                 'error_message IS NULL',
+              ],
+            },
+          ],
+        },
+      },
+    },
+    {
+      // 2026-10-30 otel-shared-receiver (DD-16, DD-28): an artisyn body carrying `otel-status`
+      // lines — a later one, an older one and one with an unknown reason — is enqueued like any
+      // other artisyn body: one `pending` row of exactly its size, no session_stats write and no
+      // 4xx for the unknown values. What the worker then stores (the latest by timestamp, an
+      // unknown reason as `unknown`, end_time untouched) is checked by @S-INGEST-02 step 11,
+      // because the contract run parks the worker.
+      id: 'F15-upload-otel-status',
+      route: 'POST /api/v2/logs',
+      actor: 'authorKey',
+      query: { sessionId: 'w1-new-otel-status', type: 'artisyn' },
+      headers: { 'Content-Type': 'application/x-ndjson' },
+      body: OTEL_STATUS_NDJSON,
+      expect: { status: 201, bodyMatches: { warnings: [] } },
+      write: {
+        watch: ['upload_queue', 'session_stats'],
+        delta: {
+          inserted: [
+            {
+              table: 'upload_queue',
+              where: `session_id = 'w1-new-otel-status'`,
+              check: [
+                `status = 'pending'`,
+                `log_type = 'artisyn'`,
+                'user_id = @author.id',
+                `size_bytes = ${Buffer.byteLength(OTEL_STATUS_NDJSON)}`,
               ],
             },
           ],

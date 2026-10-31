@@ -790,6 +790,26 @@
         "06d9dee021933db1435c8137b07e53f2fc513e5625045ec23c3a7aa3ccb90276",
         "6870592fbceda3e43b80a8ccd238514a8437237f462111cc631ac5b26379b0aa"
       ]
+    },
+    {
+      "idx": 78,
+      "tag": "0078_otel_tabs_traces",
+      "when": 1791244800000,
+      "sha256": "8924142e3645a6ff4a42df17592ef198c24d7f8d89475f579018491663c8f0e8",
+      "acceptedHashes": [
+        "163d275feed0101ba35103921f55ddf142378ec2368c933795e5521cf7bdd262",
+        "8924142e3645a6ff4a42df17592ef198c24d7f8d89475f579018491663c8f0e8"
+      ]
+    },
+    {
+      "idx": 79,
+      "tag": "0079_otel_status",
+      "when": 1791331200000,
+      "sha256": "6f123439fc780fd738ce5616c3f359cf8fa7910760e82fdf8af626a1b67e0008",
+      "acceptedHashes": [
+        "0743f0c1f204ce50ee12e696b8474da496dbd0af0075b1c1fb1e495c9a8b317c",
+        "6f123439fc780fd738ce5616c3f359cf8fa7910760e82fdf8af626a1b67e0008"
+      ]
     }
   ]
 }

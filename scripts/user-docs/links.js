@@ -16,6 +16,9 @@ const FENCE_RE = /^ {0,3}(`{3,}|~{3,})/;
 const INLINE_RE = /\]\(\s*(?:<([^>\n]*)>|([^\s)<]+))(?:\s+(?:"[^"\n]*"|'[^'\n]*'|\([^)\n]*\)))?\s*\)/dg;
 // Reference definition: `[label]: href` (footnotes `[^1]:` are not links).
 const REF_DEF_RE = /^ {0,3}\[(?!\^)[^\]\n]+\]:[ \t]*(?:<([^>\n]*)>|(\S+))/d;
+// An image shipped with the docs: a file directly in `user-docs/images/`, lowercase name, svg or png.
+// The generators copy it next to the pages, so it works offline in the app and on the site.
+const ASSET_RE = /\/user-docs\/images\/([a-z0-9][a-z0-9-]*\.(?:svg|png))$/;
 
 function toPosix(p) {
   return p.split(path.sep).join('/').split('\\').join('/');
@@ -60,6 +63,8 @@ function resolveLink(href, fromFile, nav) {
       return { kind: 'page', slug: page.slug, anchor };
     }
   }
+  const asset = anchor === null ? ASSET_RE.exec(target) : null;
+  if (asset) return { kind: 'asset', path: `images/${asset[1]}` };
   return { kind: 'unresolved' };
 }
 

@@ -5,7 +5,7 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { and, count, eq, inArray, ne, or } from 'drizzle-orm';
+import { and, count, eq, inArray, ne, or, sql } from 'drizzle-orm';
 import { AuthSessionsService } from '../auth/auth-sessions.service';
 import { invalidateApiKeyCache } from '../cluster/api-key-cache-ipc';
 import { DRIZZLE } from '../database/database.constants';
@@ -13,6 +13,7 @@ import type { DrizzleDb } from '../database/database.module';
 import {
   invitations,
   logs,
+  otelSessionState,
   repositories,
   sessions,
   teamRepositories,
@@ -133,7 +134,24 @@ export class AccountDeletionService {
         .selectDistinct({ sessionId: logs.sessionId })
         .from(logs)
         .where(eq(logs.userId, userId));
-      const sessionIds = sessionIdRows.map((r) => r.sessionId);
+      // Plus the user's realtime-only roots (DD-25): OTEL data but no `logs` rows, so the query
+      // above never sees them. Read before the users delete, which nulls
+      // `otel_session_state.user_id`.
+      const otelOnlyRows = await tx
+        .select({ sessionId: otelSessionState.sessionId })
+        .from(otelSessionState)
+        .where(
+          and(
+            eq(otelSessionState.userId, userId),
+            sql`NOT EXISTS (SELECT 1 FROM ${logs} WHERE ${logs.sessionId} = ${otelSessionState.sessionId})`,
+          ),
+        );
+      const sessionIds = [
+        ...new Set([
+          ...sessionIdRows.map((r) => r.sessionId),
+          ...otelOnlyRows.map((r) => r.sessionId),
+        ]),
+      ];
 
       // (1) invitations — no cascade on either FK.
       await tx

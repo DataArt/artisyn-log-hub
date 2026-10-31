@@ -1,0 +1,6 @@
+# generated report (contains real session data)
+out/
+# runtime garbage
+*.log
+.cache/
+.env

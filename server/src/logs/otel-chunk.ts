@@ -26,7 +26,7 @@ export function computeChunkKey(lines: unknown[]): string {
 }
 
 /** Read an OTLP attribute list into a plain map, unwrapping the typed value envelope. */
-function attributesOf(record: unknown): Map<string, unknown> {
+export function attributesOf(record: unknown): Map<string, unknown> {
   const out = new Map<string, unknown>();
   const attrs = (record as { attributes?: unknown })?.attributes;
   if (!Array.isArray(attrs)) return out;
@@ -53,7 +53,7 @@ function attributesOf(record: unknown): Map<string, unknown> {
  * as BigInt and dividing once at the end keeps a report over thousands of chunks exact, where
  * accumulating floats would drift. `cost_usd` is only a fallback for a producer that omits micros.
  */
-function costMicrosOf(attrs: Map<string, unknown>): bigint | null {
+export function costMicrosOf(attrs: Map<string, unknown>): bigint | null {
   const micros = attrs.get('cost_usd_micros');
   if (micros !== undefined && micros !== null) {
     const parsed = Number(micros);
@@ -72,7 +72,7 @@ function costMicrosOf(attrs: Map<string, unknown>): bigint | null {
  * arrive as `intValue` (often a string in OTLP/JSON), `doubleValue` or `stringValue`; anything
  * missing or non-numeric counts as 0, matching the SQL backfill's `COALESCE(..., 0)`.
  */
-function tokenCountOf(attrs: Map<string, unknown>, key: string): number {
+export function tokenCountOf(attrs: Map<string, unknown>, key: string): number {
   const raw = attrs.get(key);
   if (raw === undefined || raw === null || raw === '') return 0;
   const parsed = Number(raw);
@@ -86,7 +86,10 @@ const CALL_TEXT_MAX = 255;
  * A non-empty string attribute cut to the varchar(255) column width, or null — the same rule as
  * the backfill's `LEFT(NULLIF(..., ''), 255)`, so an oversized value never fails the upload.
  */
-function stringAttrOf(attrs: Map<string, unknown>, key: string): string | null {
+export function stringAttrOf(
+  attrs: Map<string, unknown>,
+  key: string,
+): string | null {
   const raw = attrs.get(key);
   if (typeof raw !== 'string' || raw === '') return null;
   return raw.slice(0, CALL_TEXT_MAX);

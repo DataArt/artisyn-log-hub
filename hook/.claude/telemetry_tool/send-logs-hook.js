@@ -41,11 +41,16 @@ const fs = require('fs');
 const path = require('path');
 const { spawn } = require('child_process');
 
-const { loadConfig, resolveTelemetryDir, resolveOtelDir, resolveOtelNumber } = require('./env-context');
+const { loadConfig, resolveTelemetryDir, resolveOtelDir, resolveOtelNumber, resolveOtelPort, isCompactJson } = require('./env-context');
 const { getGitRoot, getWorkDirPath } = require('./git-context');
 const { hookLog, getHookVersion, readLogTail } = require('./hook-log');
 const { readRecommendations, upsertRecommendation, removeRecommendation } = require('./recommendations');
-const { maybeReArmOtelSession } = require('./otel-register');
+const { maybeReArmOtelSession, queryOtelSessionStatus } = require('./otel-register');
+const { buildOtelStatusEvent, deriveState, shouldWriteStatus, resolveEffectiveOtel, resolveClaudeVersion, isArtisynEndpoint } = require('./otel-status');
+const { readManagedOtel, SIGNAL_ENDPOINT_KEYS, GENERIC_ENDPOINT_KEY } = require('./managed-settings');
+const { loadOtelScopes } = require('./otel-endpoint-check');
+const { readOtelStatusMark, writeOtelStatusMark } = require('./throttle-state');
+const { writeTelemetry } = require('./write-telemetry');
 const { uploadFile, uploadFileChunked, uploadFileMaybeCompressed, CHUNK_SIZE_BYTES, acquireUploadLockWithWait, releaseUploadLock, formatServerOrigin } = require('./upload-logs');
 const { collectScopedFiles, findProjectSlugDirs, transcriptBelongsToRepo } = require('./session-files');
 const { sanitizeNdjson, formatDroppedLines } = require('./ndjson-sanitize');
@@ -706,6 +711,113 @@ async function runOtelSweep(cwd) {
   process.exit(0);
 }
 
+// The endpoint keys whose value tells whether a settings scope points Claude Code's exporter at an
+// Artisyn receiver (any loopback port).
+const OTEL_STATUS_ENDPOINT_KEYS = [
+  SIGNAL_ENDPOINT_KEYS.logs, SIGNAL_ENDPOINT_KEYS.metrics, SIGNAL_ENDPOINT_KEYS.spans, GENERIC_ENDPOINT_KEY,
+];
+
+/**
+ * Whether a scope's `env` sets any OTLP endpoint to an Artisyn (loopback) receiver.
+ * @param {Record<string, string>|null} env
+ * @returns {boolean}
+ */
+function scopeHasArtisynEndpoint(env) {
+  if (!env || typeof env !== 'object') return false;
+  return OTEL_STATUS_ENDPOINT_KEYS.some((key) => isArtisynEndpoint(env[key], null));
+}
+
+/**
+ * The DD-15 "why" inputs of `deriveReason`: managed settings, the effective config (DD-14) and the
+ * Claude Code version (DD-13). Read only when an `otel-status` is actually about to be written —
+ * the managed read shells out on win32/darwin. Never throws.
+ * @param {string|null} cwd
+ * @param {string|null} transcriptPath
+ * @returns {{ managed: { pinnedSignals?: string[], disabledSignals?: string[] }|null,
+ *   userHasArtisynEndpoint: boolean, projectHasArtisynEndpoint: boolean,
+ *   effectiveHasArtisynEndpoint: boolean, claudeVersion: string|null }}
+ */
+function readOtelStatusContext(cwd, transcriptPath) {
+  const out = {
+    managed: null,
+    userHasArtisynEndpoint: false,
+    projectHasArtisynEndpoint: false,
+    effectiveHasArtisynEndpoint: false,
+    claudeVersion: null,
+  };
+  try {
+    out.claudeVersion = resolveClaudeVersion({ transcriptPath }).version;
+  } catch {
+    // unknown version
+  }
+  try {
+    const managed = readManagedOtel();
+    out.managed = managed;
+    const { scopes } = loadOtelScopes(cwd, { managed });
+    const effective = resolveEffectiveOtel(scopes, out.claudeVersion);
+    out.userHasArtisynEndpoint = scopeHasArtisynEndpoint(scopes.user);
+    out.projectHasArtisynEndpoint = scopeHasArtisynEndpoint(scopes.local) || scopeHasArtisynEndpoint(scopes.project);
+    out.effectiveHasArtisynEndpoint = Object.values(effective.effective)
+      .some((hit) => isArtisynEndpoint(hit.value, null))
+      || isArtisynEndpoint(process.env[SIGNAL_ENDPOINT_KEYS.logs], null);
+  } catch {
+    // reason falls back to `unknown`/`not-configured` on whatever was read
+  }
+  return out;
+}
+
+/**
+ * Stop / SessionEnd (DD-15, DD-16): ask the shared receiver what it got for this session, and append
+ * one `otel-status` event to the session's artisyn log when the write rule says so — once, and
+ * again only when the state improves. Each written event also gets one `hook.log` line.
+ *
+ * Legacy mode (DD-6 fallback, no `~/.artisyn/otel/port.json`): the per-project receiver has no
+ * session-status route, so a `detail: 'legacy-receiver'` event with zero counts is written at
+ * SessionEnd only.
+ *
+ * Gated on `otelEnabled` and a session id. Never throws.
+ * @param {'stop'|'session-end'} phase
+ * @param {Record<string, *>} config
+ * @param {string|null} sessionId
+ * @param {string|null} cwd
+ * @param {string|null} transcriptPath
+ */
+async function maybeWriteOtelStatus(phase, config, sessionId, cwd, transcriptPath) {
+  if (!config || !config.otelEnabled || !sessionId) return;
+  try {
+    const prev = readOtelStatusMark(sessionId, cwd);
+    // `ok` is the best state there is — nothing could improve it, so skip the receiver round trip.
+    if (prev && prev.state === 'ok') return;
+
+    const { mode, port } = resolveOtelPort(config, process.env, cwd, { warn: false, sessionId });
+    if (mode === 'legacy' && phase !== 'session-end') return;
+
+    const status = mode === 'legacy' ? { legacy: true } : await queryOtelSessionStatus(port, sessionId);
+    const signals = { logs: true, metrics: true, spans: config.otelTraces === true };
+    const answered = !status.legacy && !status.unreachable && !status.unsupported;
+    const received = answered ? status.received : { logs: 0, metrics: 0, spans: 0 };
+    if (!shouldWriteStatus(phase, prev, { state: deriveState(received, signals), received })) return;
+
+    const event = buildOtelStatusEvent({
+      sessionId,
+      status,
+      signals,
+      ...readOtelStatusContext(cwd, transcriptPath),
+      hookVersion: getHookVersion(),
+    });
+    // `session_id` too: `writeTelemetry` names the file after it, like every other artisyn line.
+    const written = writeTelemetry({ ...event, session_id: sessionId },
+      resolveTelemetryDir(cwd, config), { compact: isCompactJson(config) });
+    if (!written) return;
+    writeOtelStatusMark(sessionId, event.state, cwd);
+    hookLog(HOOK_FILE, sessionId, 'result',
+      `otel-status state=${event.state} reason=${event.reason ?? 'null'} detail=${event.detail ?? 'null'}`
+      + ` received=${event.received.logs}/${event.received.metrics}/${event.received.spans} phase=${phase}`, cwd);
+  } catch (err) {
+    hookLog(HOOK_FILE, sessionId, 'error', `otel-status failed: ${err.message}`, cwd);
+  }
+}
+
 async function main() {
   // `--otel-sweep` is a receiver-spawned background run with no hook payload on stdin — branch
   // before the stdin read so it never blocks on, or misparses, an absent payload.
@@ -762,6 +874,11 @@ async function main() {
   // itself from cwd, and the receiver's owner check compares only that root, so this avoids the
   // four git subprocesses a full getGitContext() would cost on every Stop.
   await maybeReArmOtelSession(config, hookSessionId, cwd, null, HOOK_FILE);
+
+  // DD-15/DD-16: the per-session `otel-status` line, appended to this session's artisyn log before
+  // this Stop's / SessionEnd's upload below picks the file up. Never fails the hook.
+  await maybeWriteOtelStatus(hookEvent === 'SessionEnd' ? 'session-end' : 'stop',
+    config, hookSessionId, cwd, input.transcript_path || null);
 
   const serverUrl = (config.serverUrl || '').trim().replace(/\/$/, '');
   const apiKey = (config.apiKey || '').trim();

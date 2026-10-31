@@ -6,7 +6,7 @@ tags:
   - api
   - rest
   - auth
-timestamp: "2026-10-28T00:00:00+04:00"
+timestamp: "2026-10-31T00:00:00+04:00"
 ---
 
 # API Specification
@@ -112,6 +112,11 @@ interface RepositorySession {
     subagentPricingMissing: boolean; // (2026-10-26, additive) some sub-agent's model has no price
     unpricedModels: string[];   // (2026-10-26, additive) model ids with no price in Log Hub, sorted;
                                 // [] when everything is priced. Named by the client's `$???` hint
+    costExcludesUtilityCalls: boolean; // (2026-10-30 otel-shared-receiver, additive) true when the root
+                                // has no OTEL call rows (otel_api_calls / otel_calls) AND
+                                // session_stats.otel_state IS DISTINCT FROM 'ok' — utility calls are
+                                // priced only from OTEL, so the cost may miss them (UtilityCallsMarker).
+                                // costExcludesUtilityCallsSql in otel-cost.sql.ts
   };
   hasCostDiscrepancy?: boolean; // true when both an OTEL cost and the computed cost exist and differ by 33%+ relative — drives the session header's warning icon (its hint names both numbers)
   costUnavailableReason: 'unknown-model' | null; // 'unknown-model' iff totalCost is null because some
@@ -653,6 +658,146 @@ response: {
 
 ---
 
+## OTEL Tabs (realtime ingest + facts)
+
+Added 2026-10-30 (otel-tabs-traces). Every type below is defined in
+`server/src/logs/otel/otel-facts.types.ts` (client mirror: `client/src/models/repositories.ts`
+and `client/src/models/teams.ts`). Micro-USD amounts travel as **decimal strings** (no float
+loss). Design: [`otel-tabs.md`](otel-tabs.md). No existing route, upload kind or chunk line type
+changed (FR-18).
+
+Additive since 2026-10-30 (otel-shared-receiver): `coverage` on both facts routes,
+`status.otelStatus` / `status.costExcludesUtilityCalls` on the session route, and the artisyn line
+type `otel-status` (hook 2.30.0+) accepted through the existing `POST /api/v2/logs` upload — it
+sets `session_stats.otel_state` / `otel_reason` / `otel_status` (latest `timestamp` wins, unknown
+state or reason stored as `unknown`) and is not an activity line (never moves session times).
+
+```ts
+type OtelReasonKey =
+  | 'managed-endpoint' | 'managed-disabled' | 'not-configured'
+  | 'project-only' | 'receiver-down' | 'unknown' | 'no-status';
+interface OtelCoverage {            // DD-29, over the same root scope and filters as the facts
+  otelSessions: number;             // roots with OTEL data (hasOtel) or otel_state ok/partial
+  totalSessions: number;            // all roots in scope
+  otelUsers: number;                // distinct users among otelSessions
+  reasons: { reason: OtelReasonKey; count: number }[]; // the other roots by
+                                    // COALESCE(otel_reason,'no-status'), count descending
+}
+interface OtelStatusDto {           // from session_stats.otel_*; null when never reported
+  state: 'ok' | 'partial' | 'none' | 'unknown';
+  reason: Exclude<OtelReasonKey, 'no-status'> | null;
+  detail: string | null;            // e.g. 'port-conflict', 'no-session-status', 'legacy-receiver'
+  received: { logs: number; metrics: number; spans: number; firstAt: string | null };
+  claudeVersion: string | null;
+  hookVersion: string | null;
+  receiverVersion: string | null;
+  forward: 'ok' | 'degraded' | 'off' | null;
+}
+```
+
+```ts
+// POST /api/v2/otel-realtime — 200   (hook 2.29.0+, OtelRealtimeController)
+// Auth: X-API-Key (ApiKeyAuthGuard). Body limit: the shared HOOK_API_BODY_LIMIT (1 MiB, in
+// HOOK_API_ROUTES); gzip accepted like the other hook routes. Synchronous, no upload queue.
+body: {
+  sessionId: string; hookVersion: string;
+  receiverId: string;          // random per receiver start
+  batchSeq: number;            // per session + receiver; a value <= the last one is a replay (no gap)
+  droppedLines: number;        // > 0 marks a gap
+  lines: object[];             // the exact chunk-line objects {signal, receivedAt, resource, scope, record, hookVersion}
+}
+response: { accepted: { calls: number; spans: number }; cursor: string /* v1.<seq> */;
+            minIntervalMs: number /* env OTEL_REALTIME_MIN_INTERVAL_MS, floor 5000 */;
+            ignored?: 'deleted' /* soft-deleted session: nothing written */ }
+// Errors: 400 malformed body or lines > OTEL_REALTIME_MAX_LINES (5000); 401 bad key;
+//         409 the session belongs to another user; 413 over the body limit.
+// An older server answers 404; the hook then turns realtime off for an hour (DD-13).
+
+// GET /api/v1/repositories/:repoId/otel/facts — 200   (OtelFactsController, SessionAuthGuard)
+// Query: from, to (ISO, required, to > from, span <= OTEL_MAX_PERIOD_DAYS = 93 days),
+//        model[] / ccVersion[] (string lists), calls=all|hidden|transcript,
+//        interval=auto|5m|1h|1d, stackBy=structure|querySource|model|ccVersion,
+//        tz (IANA name, default UTC), teamId (optional team context).
+// Scope: assertRepoAccess + resolveRepoIds + resolveTeamScope (a private copy of the tools
+// controller's resolveReadScope), roots via scopedTreeCtes; deleted sessions excluded.
+response: RepoOtelFactsResponse {
+  interval: '5m'|'1h'|'1d'; tz: string; generatedAt: string;
+  hasOtel: boolean; hasOtelInPeriod: boolean;       // false → empty state A; true/false → C
+  slowUpdates: boolean; hookVersion: string | null; // max repositories.hook_version < 2.29.0 → slow
+  realtime: { unconfirmedCalls; realtimeSessions; chunkDelayedSessions; gapSessions };
+  buckets: { start; key; calls; costUsdMicros; tokens; changeKind }[];  // server-rolled
+  kpis: OtelRepoKpis;          // totals, per day / session / user, median, hidden cost/calls/share,
+                               // sessions, users, token sums by type
+  kpisPrev: OtelRepoKpis | null;  // same KPIs over [from − (to − from), from)
+  flows: { model; userEmail; branch; repository /* team route only */; other; costUsdMicros;
+           calls; sessions }[];   // ≤ 500 rows by cost + one folded `other` row
+  querySources: { querySource; description; known; hidden; calls; sessions; costUsdMicros; share;
+                  hiddenShare; contextToOutput; models }[];
+  filterOptions: { models: string[]; ccVersions: string[] };
+  sessions: { sessionId; startedAt; firstPrompt /* masked for team-no-prompts */; userEmail; ccVersion;
+              calls; costUsdMicros; hiddenCostUsdMicros; hasTraces; live; unconfirmedCalls }[]; // ≤ 200, newest first
+  coverage: OtelCoverage;      // (2026-10-30, additive) OTEL coverage of the roots active in the period
+}
+// Errors: 400 invalid parameter (bad ISO date, to <= from, period > 93 days, unknown enum,
+//         invalid tz, teamId not a positive integer); 403 no access to the repository, or
+//         teamId given and teamScope.analyticsAllowed is false (restricted team, caller neither
+//         owner nor manager — the usage-analytics gate).
+
+// GET /api/v1/repositories/:repoId/sessions/:sessionId/otel — 200   (same controller)
+// :sessionId = Claude session UUID string, resolved to its root (sub-agents share the root's rows).
+// Query: interval=auto|5m|1h, stackBy=structure|querySource|model, tz, since (previous cursor),
+//        teamId (optional). No analytics gate: follows the session's usual visibility.
+response: SessionOtelResponse {
+  cursor: string;              // v1.<seq>; pass back as since= for a delta
+  full: boolean;               // true = snapshot (no since, unknown cursor version, or since > stored seq)
+  interval: '5m'|'1h';
+  status: { hasOtel; hasSpans; live; slowUpdates; slowReason: 'old-hook'|'realtime-off'|null;
+            otelHookVersion; attributesMasked;
+            realtime: { active; unconfirmedCalls; unconfirmedSpans; lastRealtimeAt; lastChunkAt;
+                        chunkDelayed; gap };
+            otelStatus: OtelStatusDto | null;      // (2026-10-30, additive) the hook's latest otel-status
+            costExcludesUtilityCalls: boolean };   // (2026-10-30, additive) same rule as costBreakdown
+  buckets: OtelBucket[];       // in a delta: full values of only the rolled buckets that changed
+  calls: { callKey; requestId; querySource; model; eventTime; structure: 'main'|'subagent'|'hidden';
+           provisional; confirmed; costUsdMicros; inputTokens; outputTokens; cacheReadTokens;
+           cacheWriteTokens; agentId; promptId; changeKind }[];
+  spans: { traceId; spanId; parentSpanId; name; startTime; endTime; requestId; agentId; querySource;
+           context; costUsdMicros; rollupCostUsdMicros; hidden; confirmed;
+           attributes /* null when masked */; changeKind }[];
+  kpis: { totalCostUsdMicros; hiddenCostUsdMicros; hiddenCalls; apiCalls; subagentCostUsdMicros;
+          subagentShare } | null;            // null in an empty delta
+  querySources: OtelQuerySourceRow[] | null;
+}
+// changeKind: 'new'|'update'|'confirm'|'fill'|'reclass' (DD-3).
+// Empty-delta fast path: since == stored seq → one primary-key read, empty arrays, kpis null.
+// A session outside the scope answers an empty response with status.hasOtel=false, never 404.
+// Errors: 400 invalid parameter / sessionId; 403 no access to the repository.
+
+// GET /api/v1/teams/:teamId/otel/facts — 200   (OtelTeamFactsController, SessionAuthGuard)
+// Query: the repository facts' (from, to, model[], ccVersion[], calls, interval, tz) plus
+//        repoId[] / userId[] (positive integers) and
+//        stackBy=person|repository|structure|model|querySource.
+// Scope: the team's repositories, each through scopedTreeCtes with the caller's team scope,
+// then DISTINCT roots — a session linked to two team repositories counts once in totals,
+// KPIs, buckets, people and flows, and once per repository in `repositories`.
+response: TeamOtelFactsResponse = Omit<RepoOtelFactsResponse, 'sessions'|'filterOptions'|'kpis'|'kpisPrev'> & {
+  kpis: OtelRepoKpis & { perActivePersonCostUsdMicros; repositories; repositoriesLive };
+  kpisPrev: (same) | null;
+  // buckets.key = user id (stackBy=person) / repository id (stackBy=repository)
+  // flows rows carry `repository` (repo URL)
+  filterOptions: { models; ccVersions; people: { userId; email }[]; repositories: { repoId; repoUrl }[] };
+                 // built without the person / repository filters
+  people: { userId; email; sessions; costUsdMicros; hiddenCostUsdMicros; inputTokens; cacheReadTokens;
+            cacheWriteTokens; models; repositories; live; trend: number[] }[];
+  repositories: { repoId; repoUrl; people; sessions; costUsdMicros; hiddenCostUsdMicros; liveSessions }[];
+  coverage: OtelCoverage;      // (2026-10-30, additive) over the DISTINCT team roots
+}
+// Errors: 400 invalid parameter (incl. an unknown stackBy); 403 not a team member, or
+//         teamScope.analyticsAllowed is false (restricted team: only owner and managers).
+```
+
+---
+
 ## User Settings
 
 Generic per-user key/value store (`SessionAuthGuard`). The server never
@@ -1056,6 +1201,9 @@ interface RetentionResponse {
   youngestSessionAt: string | null;   // ISO 8601
   totalSessionCount: number;
   dailySeries: RetentionDailyBucket[]; // UTC-day-bucketed, gap-filled (zero-session days included)
+  otelOnlySessions: number;           // (2026-10-30, additive) non-deleted roots with OTEL data
+                                      // (otel_session_state) but no logs rows — realtime-only;
+                                      // not part of totalSessionCount / dailySeries
 }
 
 // GET /api/v1/admin/retention — 200
@@ -1371,10 +1519,18 @@ response: RepoSettingsResponse
 //   ?attr=<key>:<op>:<value>  — op in eq|is|any|gte|lte|isnull|unattributed
 //   Same-key repeats OR; different keys AND. Unknown key or an operator/type mismatch against
 //   this repo's resolved attribute definitions -> 400.
+//
+// OTEL reason filtering (optional, 2026-10-30 otel-shared-receiver):
+//   ?otelReason=<key>  — key in OTEL_REASON_FILTER_KEYS: managed-endpoint | managed-disabled |
+//                        not-configured | project-only | receiver-down | unknown | no-status.
+//   Keeps only root sessions WITHOUT OTEL data (not hasOtel, otel_state not ok/partial) whose
+//   COALESCE(session_stats.otel_reason, 'no-status') equals the key — the split the OTEL
+//   coverage chips use. Absent or empty -> no filter; repeated or unknown value -> 400.
 interface GetRepositorySessionsQuery {
   teamId?: number;        // optional; activates team-based access check
   branch?: string;        // optional; filter by branch name; empty string matches sessions with no branch
   attr?: string | string[]; // optional, repeatable; see Attribute filtering above
+  otelReason?: string;    // optional, once; see OTEL reason filtering above
 }
 response: RepositorySession[]
 // (2026-09-23) each row carries claudeVersion: string | null — see RepositorySession above.
@@ -1390,7 +1546,8 @@ response: RepositorySession[]
 // (unknown key, or a stored value whose type no longer matches the declared type) stripped
 // server-side before this response is built.
 // Errors:
-//   400 — teamId present but not a positive integer; malformed/unknown attr= filter
+//   400 — teamId present but not a positive integer; malformed/unknown attr= filter;
+//         unknown or repeated otelReason=
 //   401 — not authenticated
 //   403 — repo exists but caller lacks access
 //   404 — repoId not found

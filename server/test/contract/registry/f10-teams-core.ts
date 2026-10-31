@@ -1,6 +1,7 @@
 // F10 — teams: core (docs/qaa-overview/scenarios/05 §F10). World: T1 (transparent; owner +
-// member, member is an ADLC trainer) and T2 (restricted; owner + member + manager; the member has
-// not acknowledged T2's disclosure yet). Both teams are owned by `owner`.
+// member, member is an ADLC trainer) and T2 (restricted; owner + member + manager + trainer,
+// an ADLC trainer only; the member has not acknowledged T2's disclosure yet). Both teams are
+// owned by `owner`.
 //
 // Guards: TeamAccessGuard (member of the team — no admin bypass) answers 403 to an outsider and
 // 404 for an unknown team; TeamOwnerGuard admits the owner only — no admin bypass either.
@@ -232,7 +233,7 @@ export const f10TeamsCore: ContractFamily = {
       expect: { status: 403 },
     },
     {
-      // T2's memberships, its repository link and its (declined) invitation go with it.
+      // T2's memberships, its two repository links and its (declined) invitation go with it.
       id: 'F10-delete',
       route: 'DELETE /api/v1/teams/:teamId',
       actor: 'owner',
@@ -243,8 +244,8 @@ export const f10TeamsCore: ContractFamily = {
         delta: {
           deleted: [
             { table: 'teams', where: 'id = @T2.id' },
-            { table: 'team_members', where: 'team_id = @T2.id', count: 3 },
-            { table: 'team_repositories', where: 'team_id = @T2.id', count: 1 },
+            { table: 'team_members', where: 'team_id = @T2.id', count: 4 },
+            { table: 'team_repositories', where: 'team_id = @T2.id', count: 2 },
             { table: 'invitations', where: 'team_id = @T2.id', count: 1 },
           ],
         },

@@ -1,5 +1,6 @@
 {
   "serverUrl": "",
   "telemetryDir": "",
-  "context": []
+  "context": [],
+  "otelTraces": true
 }

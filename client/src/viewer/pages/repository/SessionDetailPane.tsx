@@ -79,6 +79,13 @@ const SessionSysctxAnatomyTab = lazy(() =>
   })),
 );
 
+// Lazy: the OTEL chart and trace waterfall poll their own route and are opened deliberately.
+const SessionOtelTab = lazy(() =>
+  import('./session-log/otel/SessionOtelTab').then((m) => ({
+    default: m.SessionOtelTab,
+  })),
+);
+
 const SessionBashTab = lazy(() =>
   import('./session-log/bash-tab/SessionBashTab').then((m) => ({
     default: m.SessionBashTab,
@@ -441,6 +448,14 @@ export function SessionDetailPane({
                 sessionModel={parsedLogs?.summary.model}
                 isLoading={logsQuery.isLoading}
                 error={logsQuery.error}
+              />
+            </Suspense>
+          ) : sessionTab === 'otel' ? (
+            <Suspense fallback={<LazyFallback />}>
+              <SessionOtelTab
+                repoId={repoId}
+                sessionId={selectedSession.sessionId}
+                teamId={teamId}
               />
             </Suspense>
           ) : sessionTab === 'raw-logs' ? (

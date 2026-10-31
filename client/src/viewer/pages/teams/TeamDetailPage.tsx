@@ -9,6 +9,7 @@ import { PageTabs, PageTabsContent } from '../../ui/page-tabs';
 import { TeamInvitationsTab } from './tabs/TeamInvitationsTab';
 import { TeamMembersTab } from './tabs/TeamMembersTab';
 import { TeamRepositoriesTab } from './tabs/TeamRepositoriesTab';
+import { TeamOtelTab } from './otel/TeamOtelTab';
 
 type Tab = TeamTab;
 
@@ -16,6 +17,7 @@ const TAB_LABELS: Record<Tab, string> = {
   members: 'Members',
   repositories: 'Repositories',
   invitations: 'Invitations',
+  otel: 'OTEL',
 };
 
 export function TeamDetailPage() {
@@ -38,6 +40,15 @@ export function TeamDetailPage() {
 
   const isOwner = team?.ownerId === user?.id;
   const isMember = members.some((m: TeamMember) => m.userId === user?.id);
+  /**
+   * The OTEL tab follows the analytics rule (FR-34, the repository view's
+   * `canSeeTeamWideTabs`): everyone in a `transparent` team, only the owner and
+   * managers in a `restricted` one. The server enforces it (403 → "No access").
+   */
+  const canSeeOtel =
+    team !== undefined &&
+    (team.accessMode !== 'restricted' || isOwner || team.myIsManager);
+  const role = isOwner ? 'owner' : team?.myIsManager ? 'manager' : 'member';
 
   if (!team) {
     return (
@@ -52,7 +63,10 @@ export function TeamDetailPage() {
       </div>
 
       <PageTabs
-        tabs={TEAM_TABS.map((t) => ({ value: t, label: TAB_LABELS[t] }))}
+        tabs={TEAM_TABS.filter((t) => t !== 'otel' || canSeeOtel).map((t) => ({
+          value: t,
+          label: TAB_LABELS[t],
+        }))}
         value={tab}
         onValueChange={(v) => setTab(v as Tab)}
         testIdGroup="team"
@@ -74,6 +88,24 @@ export function TeamDetailPage() {
 
         <PageTabsContent value="invitations">
           <TeamInvitationsTab teamId={teamId} isOwner={isOwner} />
+        </PageTabsContent>
+
+        <PageTabsContent value="otel">
+          {tab === 'otel' &&
+            (canSeeOtel ? (
+              <TeamOtelTab
+                teamId={teamId}
+                accessMode={team.accessMode}
+                role={role}
+              />
+            ) : (
+              <div
+                className="p-6 text-sm text-muted-foreground"
+                data-testid="team-otel-tab"
+              >
+                No access
+              </div>
+            ))}
         </PageTabsContent>
       </PageTabs>
     </div>

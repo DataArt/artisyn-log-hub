@@ -1,7 +1,7 @@
 // Tour 9 — help articles, notifications and the two gates (impl-plan DD G5;
 // docs/qaa-overview/scenarios/06-ui-tab-walk.md §2.3 story 9, §1.9, §1.10; checks per screen §2.2).
 //
-//   - Help: the «Help» button opens the modal; each of the 20 pages of user-docs/nav.json is opened
+//   - Help: the «Help» button opens the modal; each page of user-docs/nav.json is opened
 //     from its sidebar entry and must render its own `# heading` (a SPA fallback that serves
 //     index.html instead of a missing .md would show «<!doctype» or «Article not found.»);
 //     downloadable ones offer «Download .md». This pass runs with every request that does not go

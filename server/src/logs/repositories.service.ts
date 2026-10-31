@@ -63,6 +63,7 @@ import {
 } from './session-cause-stats-writer';
 import { writeSessionFileStats } from './session-file-stats-writer';
 import { getDescendantSessionIds } from './session-tree.sql';
+import { enqueueOtelReclass } from './otel/otel-facts-writer';
 import {
   replaceSessionCallTokens,
   replaceSessionRequestIds,
@@ -1436,6 +1437,7 @@ export class RepositoriesService {
       await this.db.transaction(async (tx) => {
         await upsertSessionStatsRow(tx, row.sessionId, stats);
         await replaceSessionRequestIds(tx, row.sessionId, stats.requestIds);
+        await enqueueOtelReclass(tx, row.sessionId);
         await replaceSessionCallTokens(tx, row.sessionId, stats.callTokens);
         await recomputeSessionCosts(tx, [row.sessionId]);
       });

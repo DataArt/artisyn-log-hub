@@ -281,6 +281,29 @@ After any endpoint change, update this file to stay in sync.
 
 ---
 
+## `/api/v2/otel-realtime`
+
+**File:** `server/src/logs/otel/otel-realtime.controller.ts`
+
+| Method | Path | Handler | Auth |
+|---|---|---|---|
+| POST | `/api/v2/otel-realtime` | `ingest()` | ApiKeyAuthGuard |
+
+**Notes:**
+- The hook `2.29.0`+ OTEL receiver's realtime batch (DD-17):
+  `{ sessionId, hookVersion, receiverId, batchSeq, droppedLines, lines }` → `200 { accepted:
+  { calls, spans }, cursor, minIntervalMs, ignored? }`. One synchronous transaction in
+  `OtelRealtimeService.ingest`: the `session-owner:` advisory lock + `findSessionOwnerId`, the
+  `sessions` row insert-if-missing, the root's `otel_session_state` lock, the gap / replay rule,
+  then `applyOtelLines(…, 'realtime')`.
+- `400` malformed body or more than `OTEL_REALTIME_MAX_LINES` (5000) lines; `409` foreign
+  session; `413` over `HOOK_API_BODY_LIMIT` (in `HOOK_API_ROUTES`); a soft-deleted session
+  answers `200` with `ignored: 'deleted'`. An older server answers `404`, which the hook reads as
+  "realtime unavailable" for an hour.
+- Registered in `LogsModule`. See [`hook-api-versioning.md`](hook-api-versioning.md).
+
+---
+
 ## `/api/v1/model-pricing`
 
 **File:** `server/src/logs/model-pricing.controller.ts`
@@ -317,6 +340,8 @@ data is `/api/v1/admin/model-pricing` below.
 | GET | `/api/v1/repositories/:repoId/sessions/:sessionId/change-surface` | `getSessionChangeSurface()` | SessionAuthGuard — One session **tree**'s change-surface aggregate (fetched on every session open, for the Summary tile and the three CS detectors). Optional `teamId`. Access resolution is identical to `sessions/:sessionId/contexts` (`assertRepoAccess` + `resolveRepoIds` + the team-visibility owner condition). An inaccessible or never-recomputed session returns a `computed: false` aggregate, never a 404 and never a zeroed one. Uncapped by design |
 | GET | `/api/v1/repositories/:repoId/sessions/:sessionId/change-surface/files` | `getSessionChangeSurfaceFiles()` | SessionAuthGuard — The per-path rows behind the Change surface tab's file tree, fetched only when that tab is opened. Optional `teamId`. Capped at `CHANGE_SURFACE_MAX_FILE_ROWS` (5,000) with `total` / `truncated` reported alongside, so the tab says "showing the first N of M paths" instead of silently cutting the tree |
 | GET | `/api/v1/repositories/:repoId/sessions/:sessionId/okf-usage` | `getSessionOkfUsage()` | SessionAuthGuard — One session **tree**'s OKF (knowledge-base) usage for the session OKF tab: `{ verdict, hasSnapshot, readTop, bundles, tree, agents }`. Optional `teamId`. Same scope and 403 rules as the change-surface session routes (`resolveChangeSurfaceSessionScope`); a session not visible in the scope answers the empty response (`emptySessionUsage()`), never a 404. With `teamId` the fail-closed team filter (`applyOkfTeamFilter`) drops gitignored KB paths before the verdict, and another member's task heads are masked for a `team-no-prompts` caller. See [`okf-usage.md`](okf-usage.md) |
+| GET | `/api/v1/repositories/:repoId/sessions/:sessionId/otel` | `OtelFactsController.getSessionOtel()` | SessionAuthGuard — 2026-10-30 otel-tabs-traces. The session OTEL tab: one root session's rolled `buckets`, `calls`, `spans`, `kpis`, `querySources` and `status` (realtime / slow / masking). Optional `interval=auto\|5m\|1h`, `stackBy=structure\|querySource\|model`, `tz`, `teamId`, and `since=<cursor>` for a delta (`full: false`, only rows with `seq > since`); an unknown cursor or one above the stored seq gets a snapshot. One `REPEATABLE READ READ ONLY` transaction (DD-2). A session outside the scope answers the empty response with `hasOtel: false`, never 404. No analytics gate. File `server/src/logs/otel/otel-facts.controller.ts`, reader `otel-facts.reader.ts`. See [`otel-tabs.md`](otel-tabs.md) |
+| GET | `/api/v1/repositories/:repoId/otel/facts` | `OtelFactsController.getRepoOtelFacts()` | SessionAuthGuard — 2026-10-30 otel-tabs-traces. The repository OTEL tab: required `from`/`to` (≤ 93 days), `model[]`, `ccVersion[]`, `calls`, `interval`, `stackBy`, `tz`, optional `teamId`. Returns `RepoOtelFactsResponse` (buckets, KPIs + `kpisPrev`, `flows`, `querySources`, `sessions` ≤ 200, realtime counts, slow flag). Scope = a private copy of the tools controller's `resolveReadScope` + `scopedTreeCtes`. With `teamId`, 403 when `teamScope.analyticsAllowed` is false (same gate as usage analytics). See [`otel-tabs.md`](otel-tabs.md) |
 | POST | `/api/v1/repositories/:repoId/sessions/:sessionId/favorite` | `setSessionFavorite()` | SessionAuthGuard |
 | GET | `/api/v1/repositories/:repoId/summary` | `getRepositorySummary()` | SessionAuthGuard — with `?teamId` counts every team member's row of the URL (`resolveRepoIds`), not access-mode scoped |
 | GET | `/api/v1/repositories/:repoId/sessions/:sessionId/logs` | `getSessionLogs()` | SessionAuthGuard — each `subagentStats` entry gains `webSearchRequests` / `inputTokensFast` / `outputTokensFast`; response gains `turnEndAdvisor: { generatedAt, summaryGeneral, costFactors, harnessAdvice } \| null`; `turnEndAdvisor` gains `model`, `costUsd`, `inputTokens`, `outputTokens`, `cacheReadTokens`, `cacheWriteTokens`; response gains `sessionAttribution` (see Notes below); each `subagentStats` entry gains `linesChanged` / `filesEditedWritten` / `linesAdded` / `linesRemoved` / `diffLinesCoveredCalls` / `diffLinesTotalCalls` (per-node, that child's own transcript only), and the `subagentStats` select carries the OTEL-only `EXISTS` guard so it cannot disagree with the server-side tree rollup |
@@ -800,7 +825,7 @@ New sibling controller to `RepositoriesController` — not more methods on it.
 
 **Notes:**
 - Reachable by site admins *and* any user who owns at least one team (not just admins), unlike the `/api/v1/admin` block below.
-- Response: `{ retentionDays, oldestSessionAt, youngestSessionAt, totalSessionCount, dailySeries: { day, sessionCount, totalSizeBytes }[] }` — UTC-day-bucketed, gap-filled session age/size stats across all non-deleted sessions (not scoped to the caller's own sessions/team).
+- Response: `{ retentionDays, oldestSessionAt, youngestSessionAt, totalSessionCount, dailySeries: { day, sessionCount, totalSizeBytes }[], otelOnlySessions }` (`otelOnlySessions` added 2026-10-30: realtime-only OTEL roots with no `logs` rows, see `data-retention.md`) — UTC-day-bucketed, gap-filled session age/size stats across all non-deleted sessions (not scoped to the caller's own sessions/team).
 
 ---
 
@@ -874,6 +899,24 @@ Generic per-user key/value CRUD. The owning user always comes from the session �
 - `GET /api/v1/teams/pending-disclosures` — teams the caller belongs to with `disclosure_acknowledged_at IS NULL`, i.e. the two membership paths that have no Accept step (the `force: true` invite branch below, and `addMemberIfRealUser()` during a repository import). Returns `{ teamId, teamName, accessMode, hasTrainer }[]`. **Must stay declared before `@Get(':teamId')`** in `teams.controller.ts` — Nest matches in declaration order, so a later literal would be swallowed by the parametric route and rejected by its `ParseIntPipe` with a 400.
 - `POST /api/v1/teams/:teamId/acknowledge-disclosure` — body `{ acknowledgedAccessMode }`, validated against the team's live `access_mode` (400 on mismatch) so a stale modal cannot consent to a contract that no longer applies. Stamps `disclosure_acknowledged_at = now()` on the caller's own membership row and returns `{ acknowledged: true }`. 404 when the caller has no membership row (only possible if the membership vanished after `TeamAccessGuard`, which admits members only).
 - `POST /api/v1/teams/:teamId/invitations` — body now also accepts an optional `force?: boolean` (default `false`). When the invitee email has no registered user, the request 404s with `{ error: 'user_not_registered' }` unless `force: true` is sent, in which case an auto-provisioned user is created for that email and the invitation proceeds. On the `force: true` path, `team_members` is inserted immediately but the invitation itself is created with `status: 'pending'` — it flips to `'accepted'` automatically on the invitee's first login (`UsersService.acceptGrantedInvitations()`, called from `AuthService.identify()`/`autoIdentifyMode1()` and `AzureCallbackController`), not via the normal `PATCH /api/v1/invitations/:invId` accept step.
+
+### Team OTEL facts (`OtelTeamFactsController`)
+
+**File:** `server/src/logs/otel/otel-team-facts.controller.ts` (`@Controller('api/v1/teams')`,
+registered in `LogsModule`, not `TeamsModule`)
+
+| Method | Path | Handler | Auth |
+|---|---|---|---|
+| GET | `/api/v1/teams/:teamId/otel/facts` | `getTeamOtelFacts()` | SessionAuthGuard (membership checked in the handler) |
+
+**Notes:**
+- 2026-10-30 otel-tabs-traces (DD-29). Parameters = the repository OTEL facts' plus `repoId[]`,
+  `userId[]` and `stackBy=person|repository|structure|model|querySource`. Returns
+  `TeamOtelFactsResponse` (no `sessions`; `people`, `repositories`, team KPIs, `filterOptions`
+  with `people` / `repositories` built without the person / repository filters).
+- `403` for a non-member and when `teamScope.analyticsAllowed` is false (restricted team: only
+  the owner and managers). Distinct roots across the team's repositories, so a session linked to
+  two of them counts once (except in the `repositories` rows). See [`otel-tabs.md`](otel-tabs.md).
 
 ---
 

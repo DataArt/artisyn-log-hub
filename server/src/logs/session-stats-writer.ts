@@ -1,4 +1,4 @@
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { maxVersion } from '../common/semver';
 import type { DrizzleDb } from '../database/database.module';
 import {
@@ -7,6 +7,7 @@ import {
   sessionStats,
 } from '../database/schema/index';
 import { registerUnpricedModels } from '../model-pricing/unpriced-model-registry';
+import type { OtelStatusEvent } from './artisyn-extractor';
 import type { ClaudeStats } from './claude-extractor';
 import type { SessionCallTokens } from './cost.sql';
 
@@ -29,6 +30,10 @@ import type { SessionCallTokens } from './cost.sql';
  * the counters from ever describing a different set of rows than the table holds — a second
  * writer here would need the repo root, which is not part of `ClaudeStats` and is routinely
  * not yet known when the transcript is extracted.
+ *
+ * The three OTEL status columns (`otel_state`, `otel_reason`, `otel_status`) are the third
+ * exception: they are owned exclusively by {@link upsertSessionOtelStatus} (DD-28), so a
+ * transcript re-upload or a recompute never clears the hook's last reported status.
  */
 export async function upsertSessionStatsRow(
   db: DrizzleDb,
@@ -310,5 +315,55 @@ export async function upsertSessionChangeSurfaceCounters(
         csComputedAt: counters.computedAt,
         updatedAt: new Date(),
       },
+    });
+}
+
+/**
+ * Upserts ONLY `otel_state`, `otel_reason` and `otel_status` (+ `updated_at`) for one session
+ * from its latest `otel-status` event (2026-10-30 otel-shared-receiver, DD-28) — the sole writer
+ * of those columns, modelled on {@link upsertSessionClaudeVersionOtel}. Called from the artisyn
+ * ingest beside step 5c when the upload carries the event.
+ *
+ * The latest event wins: the conflict update is skipped when the stored
+ * `otel_status->>'timestamp'` is newer than the event's (both are `toISOString()` strings, so
+ * text order is time order). `event` is already normalised by `extractOtelStatus` — an unknown
+ * `state` or `reason` arrives as `unknown`. Creates the `session_stats` row when there is none
+ * yet, leaving every other counter at its schema default. Never touches a column
+ * `upsertSessionStatsRow()` owns, and vice versa.
+ */
+export async function upsertSessionOtelStatus(
+  db: DrizzleDb,
+  sessionRowId: number,
+  event: OtelStatusEvent,
+): Promise<void> {
+  const status = {
+    timestamp: event.timestamp,
+    detail: event.detail,
+    received: event.received,
+    claudeVersion: event.claudeVersion,
+    forward: event.forward,
+    hookVersion: event.hookVersion,
+    receiverVersion: event.receiverVersion,
+  };
+  await db
+    .insert(sessionStats)
+    .values({
+      sessionId: sessionRowId,
+      otelState: event.state,
+      otelReason: event.reason,
+      otelStatus: status,
+      updatedAt: new Date(),
+    })
+    .onConflictDoUpdate({
+      target: sessionStats.sessionId,
+      set: {
+        // Every column in `values()` above must also be here.
+        otelState: event.state,
+        otelReason: event.reason,
+        otelStatus: status,
+        updatedAt: new Date(),
+      },
+      setWhere: sql`${sessionStats.otelStatus} IS NULL
+        OR COALESCE(${sessionStats.otelStatus}->>'timestamp', '') <= ${event.timestamp}`,
     });
 }

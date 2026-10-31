@@ -4,7 +4,7 @@ title: "Database Structure"
 description: "Database schema, table relationships, extracted field patterns, indices, and migration history."
 tags:
   - database
-timestamp: "2026-10-29T00:00:00+04:00"
+timestamp: "2026-10-31T00:00:00+04:00"
 ---
 
 # Database Structure
@@ -139,6 +139,7 @@ Raw OTEL chunk storage (migration `0041`). The hook's receiver writes one file p
 | `record_count`    | integer     | nullable | Records in the chunk                                                  |
 | `processed_at`    | timestamptz | nullable | When cost was computed                                                |
 | `created_at`      | timestamptz | NOT NULL | Row creation time                                                     |
+| `otel_projection_version` | smallint | nullable | Projection marker (migration `0078`): NULL = pending for the OTEL projection drain, `-1` = projection failed (re-marked NULL at startup), N = projected by version N. Reset to NULL by the `ingestOtelChunk` upsert when a chunk is re-uploaded. Partial index `idx_logs_otel_projection_pending (id) WHERE otel_projection_version IS NULL` |
 
 **Why integer micros:** costs are summed as `bigint` micros and divided by 1e6 once at the end, so a report over thousands of chunks carries no floating-point drift.
 
@@ -173,6 +174,95 @@ tier rule (`callTierRatesSql` / `tieredCallCostSql`). See `llm-call-math.md` § 
 - Unique `otel_api_calls_session_call_unique (session_id, call_key)` — re-ingesting a chunk upserts, never duplicates.
 - Index `idx_otel_api_calls_session_request_id (session_id, request_id)` — the utility classification join.
 - Token attributes are read from `intValue` / `doubleValue` / `stringValue` (the `attributesOf` envelope order); a missing value is 0.
+
+### OTEL tab tables (migration `0078`)
+
+Five tables hold the **projected OTEL facts** behind the repository / session / team OTEL tabs
+(2026-10-30 otel-tabs-traces). Every row belongs to the **root** session (the OTEL `session.id` is
+always the root; sub-agent calls and spans are told apart by `agent_id`). Written by the free
+functions in `server/src/logs/otel/otel-facts-writer.ts` from two channels: the realtime route
+`POST /api/v2/otel-realtime` and the projection drain over `logs_otel` (`OtelProjectionService`).
+Read by `otel-facts-read.sql.ts` / `OtelFactsReader`. All five cascade on a hard delete of
+`sessions`; `purgeSessionChildData` deletes them explicitly (state row first) so a soft delete
+clears them too. Design, lock order and the `seq` cursor: [`otel-tabs.md`](otel-tabs.md).
+
+Shared columns: `seq` = the root's `otel_session_state.seq` value of the write that last changed
+the row (the `since=` delta cursor); `change_kind` = `new` \| `update` \| `confirm` \| `fill` \|
+`reclass` (why it last changed); `source_mask` bit 1 = realtime, bit 2 = chunk (a row without
+bit 2 is "unconfirmed"); `first_seq` = `seq` at insert, never changed.
+
+**`otel_calls`** — one row per `claude_code.api_request` call. PK `(session_id, call_key)`;
+indexes `(session_id, seq)` and `(session_id, request_id) WHERE request_id IS NOT NULL`.
+
+| Column | Type | Notes |
+|---|---|---|
+| `session_id` | int NOT NULL | FK → sessions.id ON DELETE CASCADE (root) |
+| `call_key` | varchar(300) NOT NULL | `request_id`, else `rec:` + sha1 of `{timeUnixNano, attributes}` (`otelCallKey`) — the same on both channels, independent of `otel_api_calls.call_key` |
+| `request_id`, `query_source`, `model`, `prompt_id`, `agent_id` | varchar(255) | from the record attributes |
+| `claude_code_version` | varchar(64) | resource `service.version` |
+| `event_time` | timestamptz NOT NULL | `event.timestamp` → `timeUnixNano` → line `receivedAt` |
+| `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_tokens` | bigint NOT NULL DEFAULT 0 | |
+| `cost_usd_micros` | bigint | Claude Code's `cost_usd` (the `costMicrosOf` rule) |
+| `structure` | varchar(16) NOT NULL | CHECK `main` \| `subagent` \| `hidden` (`classifyOtelCall`) |
+| `provisional` | boolean NOT NULL | classified before the transcript arrived (`first_seq > transcript_seq`) |
+| `source_mask`, `first_seq`, `seq`, `change_kind` | | see above |
+
+**`otel_spans`** — one row per trace span (hook `2.29.0`+ with traces on). PK
+`(session_id, trace_id, span_id)`; indexes `(session_id, seq)` and
+`(session_id, request_id) WHERE request_id IS NOT NULL`.
+
+| Column | Type | Notes |
+|---|---|---|
+| `session_id` | int NOT NULL | FK → sessions.id ON DELETE CASCADE (root) |
+| `trace_id` | varchar(64) NOT NULL | over-long ids skip the span |
+| `span_id` / `parent_span_id` | varchar(32) | parent NULL for a root or an empty parent |
+| `name` | varchar(255) NOT NULL | `claude_code.interaction`, `.llm_request`, `.tool`, `.tool.blocked_on_user`, `.tool.execution`, or anything else |
+| `start_time` / `end_time` | timestamptz | `end_time` nullable |
+| `request_id`, `agent_id`, `query_source` | varchar(255) | `query_source_safe`, else `query_source` |
+| `context` | varchar(32) | `llm_request.context` |
+| `attributes` | jsonb NOT NULL DEFAULT '{}' | raw, flattened; over 64 KiB → `{ "_truncated": true, "_bytes": n }` |
+| `cost_usd_micros` | bigint | an `llm_request` span's cost, from `otel_calls` by `request_id` |
+| `rollup_cost_usd_micros` | bigint | own + Σ child rollups (recursive CTE over touched traces) |
+| `source_mask`, `first_seq`, `seq`, `change_kind` | | see above |
+
+**`otel_cost_buckets`** — 5-minute UTC rollups of `otel_calls`, the source of every chart / KPI.
+PK `(session_id, bucket_start, structure, query_source, model, cc_version)`; indexes
+`(session_id, seq)` and `(user_id)`. No repository column: `log_repositories` is many-to-many and
+OTEL can arrive before the link, so reads scope roots with `scopedTreeCtes`.
+
+| Column | Type | Notes |
+|---|---|---|
+| `session_id` | int NOT NULL | FK → sessions.id ON DELETE CASCADE (root) |
+| `user_id` | int | FK → users.id ON DELETE SET NULL |
+| `bucket_start` | timestamptz NOT NULL | 5-minute UTC floor of `event_time` |
+| `structure` | varchar(16) NOT NULL | |
+| `query_source`, `model` | varchar(255) NOT NULL DEFAULT '' | NULL dimensions stored as `''` |
+| `cc_version` | varchar(64) NOT NULL DEFAULT '' | |
+| `calls` | int NOT NULL DEFAULT 0 | |
+| `cost_usd_micros`, `input_tokens`, `output_tokens`, `cache_read_tokens`, `cache_write_tokens` | bigint NOT NULL DEFAULT 0 | |
+| `seq`, `change_kind` | | a key that disappears on reclassification is set to zero, never deleted; reads ignore zero rows |
+
+**`otel_session_state`** — one row per root with OTEL data; also the **lock row** every OTEL writer
+takes `FOR UPDATE` first. Indexes `(user_id)` and `(created_at)` (retention of OTEL-only roots).
+
+| Column | Type | Notes |
+|---|---|---|
+| `session_id` | int PK | FK → sessions.id ON DELETE CASCADE |
+| `user_id` | int | FK → users.id ON DELETE SET NULL. Owner fallback of `findSessionOwnerId` for realtime-only sessions; account deletion collects OTEL-only roots by it |
+| `seq` | bigint NOT NULL DEFAULT 0 | per-root write counter (cursor `v1.<seq>`) |
+| `transcript_seq` | bigint | `seq` at the last reclassification after a transcript |
+| `otel_hook_version` | varchar(32) | highest `hookVersion` seen (slow-updates banner) |
+| `has_spans`, `has_provisional` | boolean NOT NULL DEFAULT false | |
+| `rt_last_at` | timestamptz | `now()` of the last realtime batch |
+| `chunk_last_at` | timestamptz | `logs_otel.created_at` of the newest projected chunk |
+| `rt_gap_at` | timestamptz | set by a skipped `batchSeq` or `droppedLines > 0`; cleared once chunks caught up |
+| `rt_receiver_id` / `rt_batch_seq` | varchar(64) / bigint | replay / gap detection |
+| `created_at` | timestamptz NOT NULL DEFAULT now() | retention age of an OTEL-only root |
+
+**`otel_reclass_queue`** — `session_id` int PK (FK → sessions.id ON DELETE CASCADE), `queued_at`
+timestamptz NOT NULL DEFAULT now(). Inserted (`ON CONFLICT DO NOTHING`) right after every
+`replaceSessionRequestIds`; claimed by the projection drain with `DELETE … FOR UPDATE SKIP LOCKED
+… RETURNING`.
 
 ### session_request_ids
 
@@ -672,6 +762,9 @@ Per-session pre-computed metrics. One row per session (1:1 with `sessions`, FK w
 | `cs_computed_at`   | timestamptz | nullable | "The extractor ran for this session" marker. Written **even when it found zero changed paths** (the three counters are then `0`, not `NULL`), which is what separates a genuine zero-change session from a never-recomputed one. Stays `NULL` only when no repo root was ever learned |
 | `claude_version`   | varchar(64) | nullable | Claude Code version check (migration `0065`): the highest valid SemVer among the `version` fields of **this** log's transcript lines (every line type, sidechain lines included; a sub-agent log gets its own value). Written by `upsertSessionStatsRow()`. `NULL` = unknown (no line carried a parseable version, or the session was not recomputed since `0065`) |
 | `claude_version_otel` | varchar(64) | nullable | OTEL fallback (migration `0065`): the highest `resource['service.version']` seen on the session's `claude-otel` chunks (lines whose `service.name` is absent or `claude-code`). Owned exclusively by `upsertSessionClaudeVersionOtel()` (`session-stats-writer.ts`), called from `ingestOtelChunk()` under the session row lock; only ever raised, never lowered. Readers use `COALESCE(claude_version, claude_version_otel)` — the transcript value wins |
+| `otel_state` | varchar(16) | nullable | Per-session OTEL status (migration `0079`, hook `2.30.0`+): `ok` / `partial` / `none` / `unknown` from the hook's latest `otel-status` event (an unrecognised value is stored as `unknown`). `NULL` = no hook ever reported a status (older hook, or the session predates `0079`). Owned exclusively by `upsertSessionOtelStatus()` (`session-stats-writer.ts`), called from the artisyn ingest; `upsertSessionStatsRow()` never touches the three `otel_*` status columns |
+| `otel_reason` | varchar(32) | nullable | Why OTEL is missing or partial (migration `0079`): `managed-endpoint` / `managed-disabled` / `project-only` / `not-configured` / `receiver-down` / `unknown`, or `NULL` when the state is `ok` or nothing was reported. Readers map `NULL` without OTEL data to `no-status` (`COALESCE(otel_reason, 'no-status')`) for the coverage chips and the sessions `otelReason=` filter. Same writer as `otel_state` |
+| `otel_status` | jsonb | nullable | The rest of the `otel-status` event (migration `0079`): `{timestamp, detail, received:{logs,metrics,spans,firstAt}, claudeVersion, forward, hookVersion, receiverVersion}`. The latest event `timestamp` wins: an event older than the stored `otel_status->>'timestamp'` updates nothing. Same writer as `otel_state`. Read by the session OTEL route as `status.otelStatus`; see [otel-tabs.md](otel-tabs.md) § "OTEL coverage and status" |
 | `updated_at`          | timestamptz | NOT NULL | DEFAULT now()                                           |
 
 The `mcp_calls_by_server` JSONB object uses the server name extracted from `mcp__<server>__<tool>` tool names.
@@ -1532,3 +1625,5 @@ re-reads, so every cluster worker and every restart share one value.
 | `0075_okf_usage.sql` | Create `okf_snapshots` (serial PK, `user_id` FK → `users.id` ON DELETE CASCADE, `snapshot_id` varchar(64), `body` jsonb, `created_at`; unique `(user_id, snapshot_id)`) and `session_okf_access` (serial PK, `session_id` FK → `sessions.id` ON DELETE CASCADE, `path_key` varchar(1024), `op` varchar(8) CHECK `read`/`grep`/`list`/`write`, `after_own_edit`, `bytes`, `calls`, `seq`; unique `(session_id, path_key, op, after_own_edit)`) — OKF usage tabs. Add nullable `sessions.okf_snapshot_id` varchar(64) with index `sessions_okf_snapshot_id_idx` and nullable `upload_queue.okf_snapshot_id` varchar(64). Additive and re-runnable (`IF NOT EXISTS` throughout), catalog-only `ADD COLUMN`s, no backfill (history via `POST recompute-all-sessions`), no `CONCURRENTLY` index |
 | `0076_tool_monitoring.sql` | Create `repo_tool_monitor_config` (PK = FK → `repositories.id`) and `team_repo_tool_monitor_config` (PK = FK → `team_repositories.id`), both ON DELETE CASCADE with `config` jsonb + `updated_at`, and `session_tool_usage` (serial PK, `session_id` FK → `sessions.id` ON DELETE CASCADE, `channel` varchar(8) CHECK `mcp`/`cli`, `tool` text, `call_count`, `first_call_at`, `last_call_at`, `has_wrapper_data`, jsonb `aggregates` / `calls` / `outputs`; unique `(session_id, channel, tool)`, index `idx_session_tool_usage_last_call_at`) — Tools/MCP tab. Add nullable `sessions.tool_usage_version` smallint with the partial index `idx_sessions_tool_usage_pending` (`WHERE tool_usage_version IS NULL AND NOT deleted`) and nullable `repositories.tool_wrap_status` jsonb. Additive and re-runnable (`IF NOT EXISTS` throughout), catalog-only `ADD COLUMN`s (no default), no `CONCURRENTLY` index. **Implicit backfill**: every existing session starts with `tool_usage_version` `NULL`, so after deploy the background drain rebuilds every non-deleted tree in batches (`TOOL_USAGE_REBUILD_BATCH` per `TOOL_USAGE_REBUILD_INTERVAL_MS`, `SKIP LOCKED`); the file itself rewrites no data |
 | `0077_tool_usage_indexes.sql` | Drop `idx_session_tool_usage_last_call_at` (never read: the Tools/MCP reads reach `session_tool_usage` by `session_id` and filter `last_call_at` as a residual) and create the partial `idx_sessions_tool_usage_version` on `sessions (tool_usage_version) WHERE tool_usage_version IS NOT NULL` for the startup re-queue `UPDATE … WHERE tool_usage_version < $1`. Index-only, re-runnable (`IF EXISTS` / `IF NOT EXISTS`), no data rewritten; older builds need neither index, so a rollback is safe |
+| `0078_otel_tabs_traces.sql` | Add nullable `logs_otel.otel_projection_version` smallint (no default, catalog-only) with the partial index `idx_logs_otel_projection_pending`, and create `otel_calls`, `otel_spans`, `otel_cost_buckets`, `otel_session_state` and `otel_reclass_queue` (all FK → `sessions.id` ON DELETE CASCADE, `user_id` FKs ON DELETE SET NULL) — OTEL tabs, traces and realtime (see § "OTEL tab tables" and `otel-tabs.md`). Additive and re-runnable (`IF NOT EXISTS` throughout), no `CONCURRENTLY` index. **Implicit backfill**: every existing `logs_otel` row starts NULL, so after deploy the projection drain projects all OTEL history in batches (`OTEL_PROJECTION_BATCH` per `OTEL_PROJECTION_INTERVAL_MS`, `SKIP LOCKED`); the file itself rewrites no data |
+| `0079_otel_status.sql` | Add nullable `session_stats.otel_state` varchar(16), `otel_reason` varchar(32) and `otel_status` jsonb — the per-session OTEL status reported by hook `2.30.0`+ (`otel-status` event; task `2026-10-30-otel-shared-receiver`, see `otel-tabs.md`). Guarded `ADD COLUMN IF NOT EXISTS`, no default, catalog-only (no rewrite), no index (coverage reads filter by the already indexed session scope). **No backfill**: `NULL` = no status reported, shown as `no-status`. Rollback: drop the three columns, nothing else depends on them |

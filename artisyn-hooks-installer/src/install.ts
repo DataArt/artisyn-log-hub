@@ -9,10 +9,72 @@ import * as path from 'path';
 import * as readline from 'readline';
 import * as zlib from 'zlib';
 import { extractTarGz, readTarEntry } from './tar';
-import { stopExistingReceiverIfRunning } from './otel-restart';
-import { OTEL_ENV_KEYS, OTEL_ENDPOINT_KEYS } from './otel-env';
+import {
+  OTEL_ENV_KEYS,
+  OTEL_ENDPOINT_KEYS,
+  OTEL_TRACE_ENV_KEYS,
+  OTEL_TRACE_ENDPOINT_KEY,
+  OTEL_RESOURCE_ATTRIBUTES_KEY,
+  buildResourceAttributes,
+} from './otel-env';
+import {
+  ALL_OTEL_EXPECTED_VALUES,
+  OTEL_PORT_MAX,
+  OTEL_PORT_MIN,
+  assertUserSettingsShape,
+  getUserSettingsLabel,
+  getUserSettingsPath,
+  isArtisynOwnedOtelValue,
+  isOtelEndpointKey,
+  mergeOwnedOtelKey,
+  mergeUserOtelEnv,
+  readUserSettingsForMutation,
+  userSettingsBackupPath,
+  withUserEnsureHook,
+  writeUserSettings,
+} from './user-settings';
+import {
+  atomicWriteFile,
+  otelStateDir,
+  readOrCreateToken,
+  readForward,
+  readPortFile,
+  readRepos,
+  removeRepoEntry,
+  repoKey,
+  stateFilePath,
+  upsertRepoEntry,
+  writePortFile,
+} from './user-state';
+import { buildSharedArgv, buildSharedEnv, hello, sessionStatus, shutdown } from './otel-handshake';
+import { readManagedOtel, type ManagedOtel } from './managed-settings';
+import {
+  EXISTING_CHOICES,
+  buildArtisynOtelNote,
+  detectForeignOtel,
+  detectedForwardSignals,
+  forwardSignalsFromUrl,
+  incompatibleSignals,
+  prepareTakeover,
+  renderForeignSummary,
+  restoreUserOtel,
+  streamChangesLine,
+  toForwardFile,
+  writeForwardFile,
+  type ExistingChoice,
+  type ForeignOtel,
+  type ForwardFile,
+  type ForwardSignals,
+} from './foreign-otel';
+import { stopReceiverAndWait } from './otel-restart';
 
-export type CliFlags = { serverUrl?: string; apiKey?: string; otelPort?: number };
+export type CliFlags = {
+  serverUrl?: string;
+  apiKey?: string;
+  otelPort?: number;
+  otelTraces?: boolean;
+  otelExisting?: ExistingChoice;
+};
 
 function checkServerConnection(serverUrl: string, apiKey: string): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -221,6 +283,49 @@ function installedHookVersion(claudeDir: string): string | null {
   } catch {
     return null;
   }
+}
+
+// Numeric `MAJOR.MINOR.PATCH` compare: negative when `a` is older than `b`, 0 when equal, `null`
+// when either side is not a plain dotted version (e.g. `unknown`).
+export function compareHookVersions(a: string, b: string): number | null {
+  const parse = (v: string): number[] | null => (/^\d+(\.\d+)*$/.test(v) ? v.split('.').map(Number) : null);
+  const pa = parse(a);
+  const pb = parse(b);
+  if (!pa || !pb) return null;
+  for (let i = 0; i < Math.max(pa.length, pb.length); i++) {
+    const diff = (pa[i] ?? 0) - (pb[i] ?? 0);
+    if (diff !== 0) return diff;
+  }
+  return 0;
+}
+
+// Appends one line to `.artisyn/ai_work_dir/hook.log` in the hook's own line format, so an install
+// or upgrade (and the version it moved from/to) shows up next to the hook activity it changes.
+// Best-effort: never fails the install.
+function logInstallerEvent(cwd: string, event: 'result' | 'warn', message: string): void {
+  try {
+    const dir = path.join(cwd, '.artisyn', 'ai_work_dir');
+    fs.mkdirSync(dir, { recursive: true });
+    fs.appendFileSync(path.join(dir, 'hook.log'), `${new Date().toISOString()} [installer] [-] [${event}] ${message}\n`);
+  } catch {
+    // diagnostics only
+  }
+}
+
+// Logs the version transition of an install/upgrade run and warns, on the console and in hook.log,
+// when the bundled hook is older than the installed one — e.g. an installer fetched from a server
+// that still serves an older release silently replaces a newer hook.
+function reportVersionTransition(cwd: string, action: 'install' | 'upgrade', currentVersion: string | null, newVersion: string, serverUrl: string | null): void {
+  const source = serverUrl ? ` (server ${serverUrl})` : '';
+  const cmp = currentVersion ? compareHookVersions(newVersion, currentVersion) : null;
+  if (currentVersion && cmp !== null && cmp < 0) {
+    const text = `${action}: DOWNGRADE hooks v${currentVersion} → v${newVersion}${source} — this installer is older than the installed hook; ` +
+      'use the installer of the newer release to get v' + currentVersion + ' back';
+    console.warn(`Warning: ${text}`);
+    logInstallerEvent(cwd, 'warn', text);
+    return;
+  }
+  logInstallerEvent(cwd, 'result', `${action}: hooks v${currentVersion ?? 'none'} → v${newVersion}${source}`);
 }
 
 // Reads the installed plugin's version from `.artisyn/marketplace/plugins/log-hub-hooks/
@@ -454,7 +559,8 @@ function printDataCollectionNotice(serverUrl: string | undefined): void {
   console.log('    command output), including earlier sessions still on disk; transcripts are not redacted');
   console.log('  - git metadata (remote URL without credentials, user.name, branch) and project context');
   console.log('  - Claude Code OpenTelemetry records: OTEL export is enabled through the "env" block in');
-  console.log('    .claude/settings.json and sent to a local receiver, which the hook uploads');
+  console.log('    ~/.claude/settings.json (mirrored in .claude/settings.local.json) and sent to a local');
+  console.log('    receiver shared by your repos, which the hook uploads per repo');
   console.log('  See "What is collected" in the hook README (hook/README.md) for the full list.');
   console.log('');
 }
@@ -657,6 +763,8 @@ async function applyHooksUpdate(
   claudeDir: string,
   cwd: string,
   overrides: Record<string, string>,
+  otelTraces: boolean,
+  otelPlan: OtelUserPlan,
 ): Promise<{ newVersion: string; marketplaceName: string; problems: string[] }> {
   const archivePath = resolveArchivePath();
   let archiveBuffer: Buffer;
@@ -682,30 +790,26 @@ async function applyHooksUpdate(
     ? convertLegacyEnvToConfigParts(claudeDir)
     : { base: {} as Record<string, unknown>, local: {} as Record<string, unknown> };
 
-  // Resolved once per run and used twice below: it is written into
-  // `log-hub.local.json` and into the `.claude/settings.local.json` env block, which is what keeps the two
-  // in agreement. This sits on the shared install/upgrade path deliberately: upgrade is the only
-  // route by which an existing user starts receiving OTEL, so it must allocate and write exactly
-  // as a fresh install does.
-  //
-  // Resolved before extraction so the stop-before-install step immediately
-  // below has a port to target — a stale receiver from a previous install must be stopped before
-  // its own files are overwritten on disk.
-  //
-  // The recorded ports are read first: `resolveInstallOtelPort` overwrites the store, and a
-  // previously allocated port must still count as ours when the settings merge below judges which
-  // OTEL endpoints are stale Artisyn values.
-  const ownedPorts = readRecordedOtelPorts(cwd);
-  const otelPort = await resolveInstallOtelPort(
-    overrides['OTEL_PORT'] ? { otelPort: Number(overrides['OTEL_PORT']) } : undefined,
-    cwd,
-  );
-  ownedPorts.add(otelPort);
+  // Pre-flight of the user-scope Claude Code settings (DD-23), before anything is written: an
+  // unparsable or wrong-typed `~/.claude/settings.json` aborts here with every file untouched.
+  assertUserSettingsShape(readUserSettingsForMutation().existing, 'existing');
 
-  // Required-but-non-fatal: stop any receiver already running on the resolved
-  // port before its files are overwritten, so an older-version process isn't left holding the port
-  // (or holding stale code) across the update. Never blocks/fails the install.
-  await stopExistingReceiverIfRunning(otelPort, cwd);
+  // The per-user shared receiver port (DD-4, DD-25), resolved once per run and written everywhere
+  // below: `log-hub.local.json` `otelReceiverPort`, the user-scope endpoints and the
+  // `.claude/settings.local.json` mirror. The recorded ports are read first, so an endpoint still
+  // pointing at a previous port (the per-project receiver of an older install, or a re-pinned
+  // shared port) counts as ours when the settings merges below judge which values are stale.
+  //
+  // No receiver is stopped any more (DD-25): an old per-project receiver keeps its own port until
+  // its idle-exit, and a running shared receiver serves every repo of this user.
+  const ownedPorts = readRecordedOtelPorts(cwd);
+  const pinnedPort = overrides['OTEL_PORT'] ? Number(overrides['OTEL_PORT']) : undefined;
+  const { port: otelPort, previousPort } = await resolveSharedOtelPort(pinnedPort);
+  if (previousPort !== null) ownedPorts.add(previousPort);
+  ownedPorts.add(otelPort);
+  if (readOrCreateToken() === null) {
+    console.warn(`Warning: could not create the shared OTEL receiver token in ${otelStateDir()} — OTEL data will not be captured until it exists.`);
+  }
 
   // Tar entries are repo-root-relative (e.g. `.artisyn/marketplace/...`) — extract over the repo
   // root, not `.claude/`. This writes the plugin tree, including the config-template file read below.
@@ -732,15 +836,17 @@ async function applyHooksUpdate(
   const overridesLocal: Record<string, unknown> = {};
   if (overrides['SERVER_URL']) overridesLocal['serverUrl'] = overrides['SERVER_URL'];
   if (overrides['API_KEY']) overridesLocal['apiKey'] = overrides['API_KEY'];
-  // Always an override, never a merge input: `otel-port.json` is authoritative, so the project's
-  // own `otelReceiverPort` is overwritten from it every run and the two files cannot drift. It
+  // Always an override, never a merge input: the shared `~/.artisyn/otel/port.json` is
+  // authoritative, so the project's own `otelReceiverPort` is overwritten from it every run and the
+  // two cannot drift (hooks before 2.30.0 still read it when `port.json` is unknown to them). It
   // must go in as a `Number` — `CONFIG_TYPES.otelReceiverPort` is `'number'` hook-side, and a
   // string would be silently discarded by `matchesType` at runtime.
   overridesLocal['otelReceiverPort'] = Number(otelPort);
 
   const existingBase = readJsonConfig(logHubJsonPath);
   const templateForMerge = migrating ? { ...templateObj, ...legacyParts.base } : templateObj;
-  const mergedBase = mergeConfig(templateForMerge, existingBase);
+  // The trace opt-in answer (DD-23) lives in the tracked file, so `upgrade` can reuse it without asking.
+  const mergedBase = mergeConfig(templateForMerge, existingBase, { otelTraces });
   // Older installers wrote this checkout's port into the tracked file — drop it on every run so an
   // upgrade cleans the project up (the port now lives in `log-hub.local.json`).
   delete mergedBase['otelReceiverPort'];
@@ -748,6 +854,11 @@ async function applyHooksUpdate(
 
   const existingLocal = readJsonConfig(logHubLocalJsonPath);
   const localForMerge = migrating ? { ...legacyParts.local, ...existingLocal } : existingLocal;
+  // A hand-set `otelTraces` in the local file would shadow the tracked answer hook-side (local wins
+  // per key), so it is kept in agreement with the answer just given.
+  if (Object.prototype.hasOwnProperty.call(localForMerge, 'otelTraces')) {
+    overridesLocal['otelTraces'] = otelTraces;
+  }
   const mergedLocal = mergeConfigLocal(localForMerge, overridesLocal);
   writeJsonConfig(logHubLocalJsonPath, mergedLocal);
   ensureConfigIgnored(cwd, logHubLocalJsonPath);
@@ -757,9 +868,47 @@ async function applyHooksUpdate(
     verifyWrittenJson(logHubLocalJsonPath);
   }
 
-  // --- Step 2: read-modify-write of `.claude/settings.local.json` (OTEL env), then `.claude/settings.json`. ---
+  // The legacy per-project port store is superseded by `port.json` (DD-25).
+  removeStoredOtelPort(cwd);
+
+  // --- Per-user state (DD-4): this repo's `repos.json` entry and the `bin/` receiver copy. ---
+  const thisRepoKey = repoKey(cwd);
+  const thisOtelDir = resolveInstalledOtelDir(cwd, { ...mergedBase, ...mergedLocal });
+  try {
+    // The shared receiver never creates a repo's folder while writing (a deleted project must stay
+    // deleted), so a repo reached by its `artisyn.repo` tag before any session registered needs it.
+    fs.mkdirSync(thisOtelDir, { recursive: true });
+  } catch (err) {
+    console.warn(`Warning: could not create ${thisOtelDir}: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  try {
+    upsertRepoEntry({
+      repoKey: thisRepoKey,
+      gitRoot: path.resolve(cwd),
+      otelDir: thisOtelDir,
+      uploader: relToPath(cwd, `${PLUGIN_ROOT_REL}/scripts/send-logs-hook.js`),
+      traces: otelTraces,
+      hookVersion: newVersion,
+    });
+  } catch (err) {
+    console.warn(`Warning: could not update ${stateFilePath('repos')}: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  copyReceiverBin(cwd);
+
+  // --- Step 2: the user-scope OTEL keys (DD-23), then `.claude/settings.local.json` (the mirror,
+  // with the `artisyn.repo` resource attribute), then `.claude/settings.json`. ---
+  const userOtelEnv = applyUserOtelSettings(otelPort, ownedPorts, otelPlan);
   const listedPlugins = marketplacePluginNames(cwd);
-  mergeSettings(claudeDir, otelPort, ownedPorts, marketplaceName, listedPlugins);
+  mergeSettings(claudeDir, otelPort, ownedPorts, marketplaceName, listedPlugins, otelTraces, {
+    repoKey: thisRepoKey,
+    userResourceAttributes: userOtelEnv[OTEL_RESOURCE_ATTRIBUTES_KEY],
+  });
+
+  // `--otel-port <n>` re-pins the one shared port, so every other installed repo of this user must
+  // follow (DD-25): its local mirror endpoints and its `otelReceiverPort`.
+  if (pinnedPort !== undefined) {
+    repinOtherRepos(cwd, otelPort, ownedPorts);
+  }
 
   // Design decision 8 — required, non-fatal, immediately after the settings write, for both a
   // fresh install and a migration.
@@ -771,7 +920,7 @@ async function applyHooksUpdate(
   // Then every hook entry script, started the way Claude Code starts it. Both results feed the
   // summary: a hook that cannot start must never be reported as "ready to use".
   const problems = verifyHookScriptsLoad(cwd);
-  if (!(await verifyInstalledReceiver(otelPort, cwd))) {
+  if (!(await verifyInstalledReceiver(otelPort))) {
     problems.push(`the OTEL receiver could not be verified on 127.0.0.1:${otelPort}`);
   }
 
@@ -851,6 +1000,7 @@ export async function runInstall(flags?: CliFlags): Promise<void> {
     } else {
       console.log(`Updating hooks v${currentVersion} → v${newVersion}...`);
     }
+    reportVersionTransition(cwd, 'install', currentVersion, newVersion, flags?.serverUrl ?? null);
   } else {
     console.log(`Installing hooks v${newVersion}...`);
   }
@@ -887,7 +1037,9 @@ export async function runInstall(flags?: CliFlags): Promise<void> {
     }
   }
 
-  const { marketplaceName, problems } = await applyHooksUpdate(claudeDir, cwd, overrides);
+  const otelTraces = await resolveOtelTracesAnswer('install', cwd, flags?.otelTraces);
+  const otelPlan = await resolveOtelUserPlan(cwd, flags?.otelExisting, otelTraces);
+  const { marketplaceName, problems } = await applyHooksUpdate(claudeDir, cwd, overrides, otelTraces, otelPlan);
 
   // Security warning if API key was passed on the command line
   if (flags?.apiKey) {
@@ -914,6 +1066,15 @@ export async function runInstall(flags?: CliFlags): Promise<void> {
   // than passed on this command line.
   const installedServerUrl = readInstalledServerUrl(cwd, claudeDir);
   console.log(`Telemetry destination: ${installedServerUrl ?? '(not set)'}`);
+  console.log(`OTEL trace export: ${otelTraces ? 'on' : 'off'} (otelTraces in .artisyn/config/log-hub.json; change with --otel-traces=yes|no)`);
+  const sharedPort = readPortFile()?.port;
+  if (sharedPort !== undefined) {
+    console.log(`OTEL receiver: one per OS user on 127.0.0.1:${sharedPort} (~/.artisyn/otel/port.json; change with --otel-port <n>)`);
+  }
+  if (flags?.otelPort !== undefined) {
+    console.log('');
+    console.log(`OTEL port pinned to ${flags.otelPort} for ${getUserSettingsLabel()} and every installed repo — restart Claude Code (every open session) to pick it up.`);
+  }
   printDataCollectionNotice(installedServerUrl);
 
   if (hasServerUrl && hasApiKey && problems.length > 0) {
@@ -1009,7 +1170,7 @@ function verifyHookInstallation(cwd: string): void {
   }
 }
 
-export async function runUpgrade(): Promise<void> {
+export async function runUpgrade(flags?: Pick<CliFlags, 'otelExisting'>): Promise<void> {
   const cwd = process.cwd();
 
   if (!fs.existsSync(path.join(cwd, '.git'))) {
@@ -1053,11 +1214,14 @@ export async function runUpgrade(): Promise<void> {
   } else {
     console.log(`Upgrading hooks v${currentVersion} → v${newVersion}...`);
   }
+  reportVersionTransition(cwd, 'upgrade', currentVersion, newVersion, serverUrl);
 
   // Re-adding an already-known marketplace and re-installing an already-installed plugin at the
   // same version are both documented no-ops (design decision 8) — this call is safe (and required)
   // on every upgrade run, migrating or not.
-  const { problems } = await applyHooksUpdate(claudeDir, cwd, {});
+  const otelTraces = await resolveOtelTracesAnswer('upgrade', cwd);
+  const otelPlan = await resolveOtelUserPlan(cwd, flags?.otelExisting, otelTraces);
+  const { problems } = await applyHooksUpdate(claudeDir, cwd, {}, otelTraces, otelPlan);
 
   if (problems.length > 0) {
     printNotWorking(currentVersion === newVersion ? 're-applied' : 'upgraded', newVersion, problems);
@@ -1082,7 +1246,11 @@ export async function runUpgrade(): Promise<void> {
 // While marketplace.json still lists another plugin, only `plugins/log-hub-hooks/` and its entry
 // are removed, and `extraKnownMarketplaces.<name>` stays so that plugin keeps loading. Keys under
 // the legacy shared `artisyn` name are removed too.
-export function runUninstall(): void {
+//
+// Per-user OTEL state (DD-27): this repo's `repos.json` entry is removed; when it was the last one,
+// `removeUserOtelState` restores the user's original OTEL keys and removes the Artisyn ones, the
+// user-level hook and the `~/.artisyn/otel/` files. Any other entry only removes itself.
+export async function runUninstall(): Promise<void> {
   const cwd = process.cwd();
 
   if (!fs.existsSync(path.join(cwd, '.git'))) {
@@ -1099,6 +1267,13 @@ export function runUninstall(): void {
   const marketplaceName = installedMarketplaceName(cwd) ?? LEGACY_MARKETPLACE_NAME;
   // Read before anything below removes the port store / config directory.
   const ownedPorts = readRecordedOtelPorts(cwd);
+  const thisRepoKey = repoKey(cwd);
+  // No `~/.artisyn/otel/` = an install from before the shared receiver: no user state to remove.
+  const lastRepo = fs.existsSync(otelStateDir()) && readRepos().repos.every(r => r.repoKey === thisRepoKey);
+  if (lastRepo) {
+    // Pre-flight before anything is removed: an unparsable or wrong-typed user file aborts here.
+    assertUserSettingsShape(readUserSettingsForMutation().existing, 'existing');
+  }
   removePluginSettingsKeys(claudeDir, marketplaceName, ownedPorts, { keepMarketplace });
   // Unconditional — `settings.local.json` holds the OTEL keys whether or not `settings.json` exists.
   removeOtelEnvKeys(claudeDir, 'settings.local.json', ownedPorts);
@@ -1122,6 +1297,19 @@ export function runUninstall(): void {
     console.log(`  Removed enabledPlugins["${pluginKey(marketplaceName)}"] / extraKnownMarketplaces.${marketplaceName} from .claude/settings.json`);
     console.log('  Removed .artisyn/marketplace/ and .artisyn/config/');
   }
+
+  let remaining: number;
+  try {
+    remaining = removeRepoEntry(thisRepoKey).length;
+  } catch (err) {
+    console.warn(`Warning: could not update ${stateFilePath('repos')}: ${err instanceof Error ? err.message : String(err)}`);
+    return;
+  }
+  if (remaining > 0) {
+    console.log(`  Kept the per-user OTEL receiver and the OTEL keys in ${getUserSettingsLabel()} — ${remaining} other repo(s) still use them.`);
+  } else if (lastRepo) {
+    await removeUserOtelState(ownedPorts);
+  }
 }
 
 function gunzip(buffer: Buffer): Promise<Buffer> {
@@ -1136,6 +1324,37 @@ function gunzip(buffer: Buffer): Promise<Buffer> {
 function prompt(question: string): Promise<string> {
   const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
   return new Promise(resolve => rl.question(question, answer => { rl.close(); resolve(answer.trim()); }));
+}
+
+// The `otelTraces` answer already stored for this project (the gitignored local file wins over the
+// tracked one, matching the hook's per-key merge), or `undefined` when none is a boolean.
+function readStoredOtelTraces(cwd: string): boolean | undefined {
+  const configDir = path.join(cwd, '.artisyn', 'config');
+  for (const file of ['log-hub.local.json', 'log-hub.json']) {
+    const value = readJsonConfig(path.join(configDir, file))['otelTraces'];
+    if (typeof value === 'boolean') return value;
+  }
+  return undefined;
+}
+
+// The trace opt-in answer (DD-23):
+//  - install: the `--otel-traces=yes|no` flag if given; else a TTY `[Y/n]` prompt; else yes.
+//  - upgrade: the stored `otelTraces` if present, without asking; else a TTY prompt; else yes.
+// Asked before any file is touched, like the other install prompts.
+async function resolveOtelTracesAnswer(
+  command: 'install' | 'upgrade',
+  cwd: string,
+  flag?: boolean,
+): Promise<boolean> {
+  if (command === 'install' && flag !== undefined) return flag;
+  if (command === 'upgrade') {
+    const stored = readStoredOtelTraces(cwd);
+    if (stored !== undefined) return stored;
+  }
+  if (!process.stdin.isTTY) return true;
+  const answer = await prompt('Also export Claude Code traces (enhanced telemetry beta) to Log Hub? [Y/n] ');
+  const normalized = answer.toLowerCase();
+  return normalized !== 'n' && normalized !== 'no';
 }
 
 // ---------------------------------------------------------------------------
@@ -1162,6 +1381,11 @@ export type LogHubConfig = {
   otelReceiverIdleTimeoutMs: number;
   otelReceiverMaxBodyKb: number;
   otelRetentionDays: number;
+  // Trace opt-in answer (`--otel-traces`, the install prompt); absent on installs that predate it.
+  otelTraces?: boolean;
+  // Realtime forwarding of receiver chunks to the server; defaults live hook-side in env-context.js.
+  otelRealtime?: boolean;
+  otelRealtimeIntervalMs?: number;
   apiKey?: string;
 };
 
@@ -1318,7 +1542,7 @@ function ensureConfigIgnored(cwd: string, localConfigPath: string, opts: { secre
 }
 
 // ---------------------------------------------------------------------------
-// OTEL receiver port — per-project allocation, store and post-install smoke test
+// OTEL receiver port — per-user allocation (~/.artisyn/otel/port.json) and post-install smoke test
 //
 // ---------------------------------------------------------------------------
 
@@ -1330,8 +1554,7 @@ export const OTEL_FALLBACK_PORT_INSTALLER = 25317;
 // The allocation range. A fixed default port is wrong twice over: 4318 collides with a user's own
 // collector, and any fixed choice is a guess. Staying above 25000 keeps well clear of the
 // registered-service range and of the ports development tooling habitually grabs.
-export const OTEL_PORT_MIN = 25000;
-export const OTEL_PORT_MAX = 65535;
+export { OTEL_PORT_MIN, OTEL_PORT_MAX };
 
 // 65535 − 25000 + 1 = 40536 slots, treated as a hash table walked by open addressing.
 export const OTEL_PORT_RANGE = OTEL_PORT_MAX - OTEL_PORT_MIN + 1;
@@ -1365,26 +1588,11 @@ function isUsablePortNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isInteger(value) && value >= 1 && value <= OTEL_PORT_MAX;
 }
 
-// `.artisyn/config/otel-port.json` — the authoritative record of this project's allocated port.
-// It sits beside `log-hub.json` but is gitignored: `log-hub.json` is committed, and a committed
-// port would be inherited by every teammate's checkout and by every second checkout on one
-// machine, manufacturing exactly the collisions the randomisation avoids.
-function otelPortFilePath(cwd: string): string {
+// `.artisyn/config/otel-port.json` — the per-project port store of installers before hook 2.30.0.
+// The port is now per OS user (`~/.artisyn/otel/port.json`, DD-4); install/upgrade/uninstall only
+// ever delete this legacy file (DD-25) and never read it.
+function legacyOtelPortFilePath(cwd: string): string {
   return path.join(cwd, '.artisyn', 'config', 'otel-port.json');
-}
-
-// The stored port, or null when the file is missing/malformed or holds an unusable value — in
-// every one of those cases the caller allocates a fresh one.
-function readStoredOtelPort(cwd: string): number | null {
-  const stored = readJsonConfig(otelPortFilePath(cwd));
-  const port = stored['port'];
-  return isUsablePortNumber(port) ? port : null;
-}
-
-function writeStoredOtelPort(cwd: string, port: number): void {
-  const filePath = otelPortFilePath(cwd);
-  fs.mkdirSync(path.dirname(filePath), { recursive: true });
-  atomicWrite(filePath, JSON.stringify({ port, allocatedAt: new Date().toISOString() }, null, 2) + '\n');
 }
 
 // Closes a probe server, resolving either way — `close()` on a server that never managed to listen
@@ -1515,60 +1723,363 @@ export async function allocateOtelPort(): Promise<number> {
   return OTEL_FALLBACK_PORT_INSTALLER;
 }
 
-// OTEL port resolution order, first match wins:
-//   1. `--otel-port <n>` — explicit operator override, persisted like any other value.
-//   2. the `port` in `.artisyn/config/otel-port.json` — stable across reinstalls and upgrades.
-//   3. a fresh allocation.
-// The result is always persisted (so an override or a first allocation is stable from then on) and
-// the store is always confirmed gitignored. The project's own `otelReceiverPort` in
-// `log-hub.local.json` is deliberately **not** an input — it is an output, always rewritten from this value, so the two
-// files cannot drift.
-export async function resolveInstallOtelPort(flags: CliFlags | undefined, cwd: string): Promise<number> {
-  let port: number;
-
-  if (flags && isUsablePortNumber(flags.otelPort)) {
-    port = flags.otelPort;
-  } else {
-    port = readStoredOtelPort(cwd) ?? await allocateOtelPort();
+// The per-user shared receiver port (DD-4, DD-25), first match wins:
+//   1. `--otel-port <n>` — an explicit pin: `port.json` is rewritten with it;
+//   2. the `port` in `~/.artisyn/otel/port.json` — one port for every repo of this OS user;
+//   3. a fresh allocation, written to `port.json`.
+// `previousPort` is the port `port.json` held before this run (null on a first install), so the
+// caller can recognise endpoints that still point at it as ours. The project's `otelReceiverPort`
+// and the endpoint keys are outputs, always rewritten from this value.
+export async function resolveSharedOtelPort(pin?: number): Promise<{ port: number; previousPort: number | null }> {
+  const previousPort = readPortFile()?.port ?? null;
+  if (pin !== undefined && isUsablePortNumber(pin)) {
+    if (pin !== previousPort) writePortFile(pin);
+    return { port: pin, previousPort };
   }
-
-  writeStoredOtelPort(cwd, port);
-  ensureConfigIgnored(cwd, otelPortFilePath(cwd), { secret: false });
-  return port;
+  if (previousPort !== null) return { port: previousPort, previousPort };
+  const port = await allocateOtelPort();
+  writePortFile(port);
+  return { port, previousPort };
 }
 
-// Deletes `.artisyn/config/otel-port.json` — project-scoped state with no consumer once the
-// plugin is gone. Called explicitly by `uninstall` (which also removes the whole config
-// directory) so the port record is dropped even if that directory delete has to be retried.
+// Deletes the legacy `.artisyn/config/otel-port.json` (DD-25) — the shared port replaced it. Called
+// on every install/upgrade and by `uninstall`. The per-project receiver that used it is left to its
+// own idle-exit.
 function removeStoredOtelPort(cwd: string): void {
   try {
-    fs.rmSync(otelPortFilePath(cwd), { force: true });
+    fs.rmSync(legacyOtelPortFilePath(cwd), { force: true });
   } catch {
-    // Best-effort — the `.artisyn/config/` delete that follows covers it, and a leftover port
-    // file is inert once the plugin is uninstalled.
+    // Best-effort — a leftover legacy port file has no reader any more.
+  }
+}
+
+// This repo's OTEL chunk directory, exactly as the hook resolves it (`resolveOtelDir` in
+// env-context.js): `<telemetryDir>/otel`, a relative `telemetryDir` taken from the repo root,
+// default `.artisyn/ai_work_dir/telemetry`.
+function resolveInstalledOtelDir(cwd: string, config: Record<string, unknown>): string {
+  const configured = typeof config['telemetryDir'] === 'string' ? config['telemetryDir'].trim() : '';
+  const telemetryDir = configured
+    ? (path.isAbsolute(configured) ? configured : path.resolve(cwd, configured))
+    : path.resolve(cwd, '.artisyn', 'ai_work_dir', 'telemetry');
+  return path.join(telemetryDir, 'otel');
+}
+
+// The files the installer keeps in `~/.artisyn/otel/bin/` (DD-4, DD-21): the receiver copy that
+// `otel-ensure-receiver.js` and the post-install check spawn, its `version.json`, and the
+// user-level SessionStart hook itself.
+const RECEIVER_BIN_FILES = ['otel-receiver.js', 'version.json', 'otel-ensure-receiver.js'] as const;
+
+// Copies `RECEIVER_BIN_FILES` from the freshly extracted plugin into `bin/` on every install and
+// upgrade, overwriting only those files (atomically) and nothing else in the folder. A running
+// receiver already holds its code in memory, so overwriting its script is safe. Non-fatal.
+function copyReceiverBin(cwd: string): void {
+  const binDir = stateFilePath('binDir');
+  for (const name of RECEIVER_BIN_FILES) {
+    const source = relToPath(cwd, `${PLUGIN_ROOT_REL}/scripts/${name}`);
+    try {
+      atomicWriteFile(path.join(binDir, name), fs.readFileSync(source));
+    } catch (err) {
+      console.warn(`Warning: could not copy ${name} to ${binDir}: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// The user-scope OTEL plan: managed, no foreign collector, or proxy / keep / replace (DD-24, DD-26)
+// ---------------------------------------------------------------------------
+
+// What `applyUserOtelSettings` does with the user scope, decided before any file is touched.
+export type OtelUserPlan =
+  | { kind: 'managed'; managed: ManagedOtel }
+  | { kind: 'none'; stored: ForwardFile | null }
+  | { kind: 'keep'; foreign: ForeignOtel; stored: ForwardFile | null }
+  | { kind: 'proxy' | 'replace'; foreign: ForeignOtel; stored: ForwardFile | null; signals: ForwardSignals };
+
+const MANAGED_OTEL_MESSAGE =
+  'OTEL is managed by your organization — OTEL tabs are unavailable, everything else works.';
+
+// The FR-D6 alternatives for a grpc / http-protobuf collector: an OTLP/HTTP URL of the same
+// collector (then `proxy` to it), `keep` or `replace`. Up to three attempts at a valid URL, then keep.
+async function askProtocolAlternative(foreign: ForeignOtel): Promise<{ choice: ExistingChoice; signals: ForwardSignals }> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const answer = (await prompt(
+      'Enter the OTLP/HTTP URL of the same collector (typically http://<host>:4318), or "keep" / "replace" [keep]: ',
+    )).trim();
+    const lower = answer.toLowerCase();
+    if (lower === '' || lower === 'keep' || lower === 'k') return { choice: 'keep', signals: {} };
+    if (lower === 'replace' || lower === 'r') return { choice: 'replace', signals: {} };
+    const signals = forwardSignalsFromUrl(foreign, answer);
+    if (signals) return { choice: 'proxy', signals };
+    console.log('  That is not an absolute http(s) URL.');
+  }
+  return { choice: 'keep', signals: {} };
+}
+
+// Resolves the user-scope OTEL plan (DD-24, DD-26), asking in a terminal when it has to. Called
+// before any file is written. Order for a foreign collector: `--otel-existing=` → the stored choice
+// when `forward.json.fingerprint` matches → a TTY prompt → `keep`.
+export async function resolveOtelUserPlan(cwd: string, flag: ExistingChoice | undefined, otelTraces: boolean): Promise<OtelUserPlan> {
+  const managed = readManagedOtel();
+  if (managed.pinnedSignals.length > 0 || managed.disabledSignals.length > 0) {
+    return { kind: 'managed', managed };
+  }
+
+  const read = readUserSettingsForMutation();
+  assertUserSettingsShape(read.existing, 'existing');
+  const ownedPorts = readRecordedOtelPorts(cwd);
+  const stored = toForwardFile(readForward());
+  const foreign = detectForeignOtel({
+    userSettings: read.existing,
+    processEnv: process.env,
+    ownedPorts,
+    stored,
+  });
+  if (!foreign.present) return { kind: 'none', stored };
+
+  const anyTraces = otelTraces || readRepos().repos.some(r => r.traces);
+  const printSummary = (): void => {
+    console.log('');
+    console.log('An existing OTEL collector is configured for Claude Code (header values are not shown):');
+    for (const line of renderForeignSummary(foreign)) console.log(line);
+  };
+
+  let choice: ExistingChoice;
+  let signals: ForwardSignals | null = null;
+  const storedMatches = !!stored && stored.fingerprint === foreign.fingerprint
+    && (EXISTING_CHOICES as readonly string[]).includes(stored.mode);
+  if (flag !== undefined) {
+    choice = flag;
+  } else if (storedMatches && stored) {
+    choice = stored.mode as ExistingChoice;
+    if (choice === 'proxy') signals = stored.signals;
+    console.log(`Existing OTEL collector: unchanged since the last install — keeping the choice "${choice}" (--otel-existing=proxy|keep|replace to change it).`);
+  } else if (process.stdin.isTTY) {
+    printSummary();
+    console.log(`  ${streamChangesLine(anyTraces)}`);
+    console.log('How should Log Hub coexist with it?');
+    console.log('  [P]roxy   (recommended) Log Hub receives the data and forwards everything to your collector as before');
+    console.log('  [k]eep    leave your collector untouched — the Log Hub OTEL tabs will not work');
+    console.log('  [r]eplace data goes only to Log Hub — your collector stops receiving it');
+    const answer = (await prompt('Choice [P/k/r]: ')).toLowerCase();
+    choice = answer === 'k' || answer === 'keep' ? 'keep' : answer === 'r' || answer === 'replace' ? 'replace' : 'proxy';
+  } else {
+    printSummary();
+    console.log('Existing OTEL collector: keeping it untouched (non-interactive run) — the Log Hub OTEL tabs will not work.');
+    console.log('  Re-run with --otel-existing=proxy (forward to it) or --otel-existing=replace to change that.');
+    return { kind: 'keep', foreign, stored };
+  }
+
+  if (choice === 'proxy' && signals === null) {
+    signals = detectedForwardSignals(foreign);
+    const incompatible = incompatibleSignals(foreign);
+    if (incompatible.length > 0) {
+      const protocols = [...new Set(incompatible.map(s => s.protocol))].join(', ');
+      console.log(
+        `Your collector is configured with ${protocols}; the Log Hub receiver can forward only to an OTLP/HTTP (JSON) endpoint.`,
+      );
+      if (process.stdin.isTTY) {
+        const alt = await askProtocolAlternative(foreign);
+        choice = alt.choice;
+        signals = alt.signals;
+      } else {
+        console.log('Existing OTEL collector: keeping it untouched (non-interactive run). Re-run in a terminal to give its OTLP/HTTP URL, or use --otel-existing=replace.');
+        choice = 'keep';
+      }
+    }
+  }
+
+  if (choice === 'keep') return { kind: 'keep', foreign, stored };
+  return { kind: choice, foreign, stored, signals: choice === 'proxy' ? signals ?? {} : {} };
+}
+
+const sameJson = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
+
+// Writes `forward.json` for the plan unless the stored one already says the same (DD-4, DD-24).
+function writeForwardForPlan(plan: OtelUserPlan): void {
+  if (plan.kind === 'managed') return;
+  const stored = plan.stored;
+  let next: { mode: ForwardFile['mode']; fingerprint: string | null; signals: ForwardSignals; original: ForwardFile['original'] };
+  if (plan.kind === 'none') {
+    if (!stored || stored.mode === 'none') return;
+    // An applied proxy/replace holds the only copy of the user's original keys (the user file was
+    // rewritten): never trade it for `none` — the last uninstall still needs it to restore them.
+    if (stored.mode === 'proxy' || stored.mode === 'replace') return;
+    next = { mode: 'none', fingerprint: null, signals: {}, original: { env: {} } };
+  } else if (plan.kind === 'keep') {
+    next = { mode: 'keep', fingerprint: plan.foreign.fingerprint, signals: {}, original: { env: {} } };
+  } else {
+    next = { mode: plan.kind, fingerprint: plan.foreign.fingerprint, signals: plan.signals, original: plan.foreign.original };
+  }
+  if (stored && stored.mode === next.mode && stored.fingerprint === next.fingerprint
+    && sameJson(stored.signals, next.signals) && sameJson(stored.original, next.original)) {
+    return;
+  }
+  writeForwardFile(next);
+}
+
+// Writes the Artisyn OTEL keys into the user-scope Claude Code settings (DD-23) — Claude Code
+// 2.1.282+ reads telemetry keys only from there (or managed settings). Every key is merged by the
+// owned-key rule (`mergeUserOtelEnv`): absent or still-Artisyn values are (re)written to the shared
+// port, the user's own values are kept and reported. The trace keys go in while any installed repo
+// of this user wants traces (the shared receiver drops spans per repo, DD-18) and are removed, while
+// still ours, once none does. Returns the user `env` as written, for the local mirror.
+//
+// The plan (`resolveOtelUserPlan`) decides first:
+//  - managed (DD-26): no user key is written, the managed message is printed;
+//  - keep: the user's collector is left alone — no Artisyn OTEL key goes in; a former proxy/replace
+//    rewrite is undone from the `forward.json` backup;
+//  - proxy / replace (DD-24): `forward.json` is saved first, the endpoint and protocol keys move to
+//    the receiver (proxy keeps the header keys and `otelHeadersHelper`), `_artisynOtel` is written;
+//  - the DD-21 user-level SessionStart hook is present only for proxy.
+function applyUserOtelSettings(otelPort: number, ownedPorts: Set<number>, plan: OtelUserPlan): Record<string, unknown> {
+  const read = readUserSettingsForMutation();
+  const label = getUserSettingsLabel();
+  const ensureScript = path.join(stateFilePath('binDir'), 'otel-ensure-receiver.js');
+  const envOf = (settings: Record<string, unknown>): Record<string, unknown> =>
+    isPlainObject(settings['env']) ? (settings['env'] as Record<string, unknown>) : {};
+
+  if (plan.kind === 'managed') {
+    console.log(MANAGED_OTEL_MESSAGE);
+    console.log(`  (managed OTEL settings found in: ${plan.managed.sources.map(s => s.label).join(', ')}; nothing was written to ${label})`);
+    return envOf(read.existing);
+  }
+
+  writeForwardForPlan(plan);
+
+  if (plan.kind === 'keep') {
+    let next: Record<string, unknown> = read.existing;
+    if (plan.foreign.reconstructed) {
+      // A former proxy/replace is switched to keep: put the user's collector back.
+      next = restoreUserOtel(next, plan.stored, ownedPorts).settings;
+      console.log(`Restored your OTEL collector settings in ${label} from the Log Hub backup.`);
+    } else if (next['_artisynOtel'] !== undefined) {
+      next = { ...next };
+      delete next['_artisynOtel'];
+    }
+    next = withUserEnsureHook(next, false, ensureScript);
+    if (writeUserSettings(read, next)) {
+      console.log(`Updated ${label}; previous content saved to ${userSettingsBackupPath(read.settingsPath)}`);
+    }
+    return envOf(next);
+  }
+
+  const anyTraces = readRepos().repos.some(r => r.traces);
+  let base: Record<string, unknown> = read.existing;
+  let extraDesired: Record<string, string> = {};
+  let keepKeys = new Set<string>();
+  if (plan.kind === 'proxy' || plan.kind === 'replace') {
+    const prepared = prepareTakeover(read.existing, plan.kind, plan.foreign, otelPort);
+    base = prepared.settings;
+    extraDesired = prepared.extraDesired;
+    keepKeys = prepared.keepKeys;
+  }
+  const env = envOf(base);
+  const desired: Record<string, string> = {
+    ...(anyTraces ? { ...OTEL_ENV_KEYS(otelPort), ...OTEL_TRACE_ENV_KEYS(otelPort) } : OTEL_ENV_KEYS(otelPort)),
+    ...extraDesired,
+  };
+  const stripKeys = (anyTraces ? [] : Object.keys(OTEL_TRACE_ENV_KEYS(otelPort))).filter(k => !keepKeys.has(k) && !(k in desired));
+  const merged = mergeUserOtelEnv(env, desired, ownedPorts, stripKeys);
+
+  let next: Record<string, unknown> = { ...base, env: merged.env };
+  // Same guard as `writeForwardForPlan`: a `none` plan never undoes an applied proxy/replace.
+  const appliedStoredMode = plan.kind === 'none' && plan.stored
+    && (plan.stored.mode === 'proxy' || plan.stored.mode === 'replace') ? plan.stored.mode : null;
+  if (plan.kind === 'proxy' || plan.kind === 'replace') {
+    next['_artisynOtel'] = buildArtisynOtelNote(plan.kind, plan.foreign.original, stateFilePath('forward'), anyTraces);
+  } else if (appliedStoredMode === null) {
+    delete next['_artisynOtel'];
+  }
+  next = withUserEnsureHook(next, plan.kind === 'proxy' || appliedStoredMode === 'proxy', ensureScript);
+
+  const written = writeUserSettings(read, next);
+  if (written) {
+    console.log(`OTEL export configured in ${label} (receiver 127.0.0.1:${otelPort}); previous content saved to ${userSettingsBackupPath(read.settingsPath)}`);
+  }
+  if (plan.kind === 'proxy') {
+    const forwarded = Object.keys(plan.signals);
+    console.log(
+      `Existing OTEL collector: proxy — the Log Hub receiver forwards ${forwarded.length > 0 ? forwarded.join(', ') : 'no signal (none was exported)'} to it unchanged. ` +
+      `Backup of your original keys: ${stateFilePath('forward')}; a user-level SessionStart hook keeps the receiver running for every project.`,
+    );
+  } else if (plan.kind === 'replace') {
+    console.log(`Existing OTEL collector: replace — telemetry now goes only to Log Hub. Backup of your original keys: ${stateFilePath('forward')}.`);
+  }
+  if (merged.rewritten.length > 0) {
+    console.log(`Note: rewrote stale Artisyn OTEL endpoints in ${label} (${merged.rewritten.join(', ')}).`);
+  }
+  if (merged.stripped.length > 0) {
+    console.log(`Note: no installed repo exports traces — removed the Artisyn trace env keys from ${label} (${merged.stripped.join(', ')}).`);
+  }
+  if (merged.kept.length > 0) {
+    console.log(
+      `Note: kept your existing ${label} env values for ${merged.kept.join(', ')} — ` +
+      'remove them and re-run the installer if you want the Artisyn OTEL defaults instead.',
+    );
+  }
+  return merged.env;
+}
+
+// After `--otel-port` re-pinned the shared port (DD-25): every OTHER repo in `repos.json` gets its
+// Artisyn-owned endpoint keys in `.claude/settings.local.json` and its `otelReceiverPort` in
+// `.artisyn/config/log-hub.local.json` rewritten to the new port. Only files that exist and parse
+// are touched; a user's own values are left alone. Non-fatal, one warning per failure.
+function repinOtherRepos(cwd: string, otelPort: number, ownedPorts: Set<number>): void {
+  const self = path.resolve(cwd);
+  const norm = (p: string): string => (process.platform === 'win32' ? path.resolve(p).toLowerCase() : path.resolve(p));
+  for (const repo of readRepos().repos) {
+    if (norm(repo.gitRoot) === norm(self)) continue;
+    try {
+      const repoOwned = new Set(ownedPorts);
+      const localConfigPath = path.join(repo.gitRoot, '.artisyn', 'config', 'log-hub.local.json');
+      const localConfig = readJsonConfig(localConfigPath);
+      if (isUsablePortNumber(localConfig['otelReceiverPort'])) repoOwned.add(localConfig['otelReceiverPort']);
+      if (fs.existsSync(localConfigPath) && localConfig['otelReceiverPort'] !== otelPort) {
+        writeJsonConfig(localConfigPath, { ...localConfig, otelReceiverPort: otelPort });
+      }
+
+      const mirrorPath = path.join(repo.gitRoot, '.claude', 'settings.local.json');
+      const mirror = readSettingsFileSafe(mirrorPath);
+      if (mirror && isPlainObject(mirror['env'])) {
+        const env = mirror['env'] as Record<string, unknown>;
+        const desired: Record<string, string> = { ...OTEL_ENV_KEYS(otelPort), ...OTEL_TRACE_ENV_KEYS(otelPort) };
+        const next: Record<string, unknown> = { ...env };
+        let changed = false;
+        for (const key of Object.keys(env)) {
+          if (!isOtelEndpointKey(key) || !isArtisynOwnedOtelValue(key, env, repoOwned)) continue;
+          if (env[key] !== desired[key]) {
+            next[key] = desired[key];
+            changed = true;
+          }
+        }
+        if (changed) {
+          atomicWrite(`${mirrorPath}.bak`, fs.readFileSync(mirrorPath, 'utf8'));
+          atomicWrite(mirrorPath, JSON.stringify({ ...mirror, env: next }, null, 2) + '\n');
+        }
+      }
+      console.log(`Note: moved ${repo.gitRoot} to the shared OTEL receiver port ${otelPort}.`);
+    } catch (err) {
+      console.warn(`Warning: could not move ${repo.gitRoot} to OTEL port ${otelPort}: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 }
 
 // `OTEL_ENV_KEYS(port)` (the `env` block written into `.claude/settings.local.json`) and
 // `OTEL_ENDPOINT_KEYS` live in `./otel-env` — a pure module the dev-container provisioning script
 // also imports — and are re-exported from here for existing importers.
-export { OTEL_ENV_KEYS, OTEL_ENDPOINT_KEYS };
+export { OTEL_ENV_KEYS, OTEL_ENDPOINT_KEYS, OTEL_TRACE_ENV_KEYS, OTEL_TRACE_ENDPOINT_KEY };
 
-// A loopback OTLP logs/metrics endpoint — the shape the installer writes. Capture group 1 is the
-// port. Matching it is necessary but not sufficient for ownership: see `isArtisynOwnedOtelValue`.
-const OTEL_LOOPBACK_ENDPOINT_RE = /^https?:\/\/(?:127\.0\.0\.1|localhost):(\d{1,5})\/v1\/(?:logs|metrics)$/;
-
-// Every port this project has on record as its own OTEL receiver port: the gitignored
-// `.artisyn/config/otel-port.json` store, the `otelReceiverPort` in `.artisyn/config/log-hub.local.json`
-// and the legacy one in `.artisyn/config/log-hub.json` (written there by older installers).
-// All are kept when they disagree (a store rewritten by a newer allocation, a hand-edited config),
-// and only values that are a usable port number count. Must be read before `resolveInstallOtelPort`
-// overwrites the store, so a previously allocated port is still recognised as ours.
+// Every port this project has on record as its own OTEL receiver port: the per-user shared port in
+// `~/.artisyn/otel/port.json`, the `otelReceiverPort` in `.artisyn/config/log-hub.local.json` (the
+// legacy per-project port until this run rewrites it) and the one in `.artisyn/config/log-hub.json`
+// (written there by older installers). All are kept when they disagree, and only values that are a
+// usable port number count. Must be read before the config is rewritten, so a previously allocated
+// port is still recognised as ours.
 function readRecordedOtelPorts(cwd: string): Set<number> {
   const ports = new Set<number>();
-  const stored = readStoredOtelPort(cwd);
-  if (stored !== null) {
-    ports.add(stored);
+  const shared = readPortFile();
+  if (shared !== null) {
+    ports.add(shared.port);
   }
   const configDir = path.join(cwd, '.artisyn', 'config');
   for (const file of ['log-hub.local.json', 'log-hub.json']) {
@@ -1578,40 +2089,6 @@ function readRecordedOtelPorts(cwd: string): Set<number> {
     }
   }
   return ports;
-}
-
-function isOtelEndpointKey(key: string): boolean {
-  return (OTEL_ENDPOINT_KEYS as readonly string[]).includes(key);
-}
-
-// Whether `env[key]` (one file's `env` object) holds a value this installer wrote, judged per key
-// and per file:
-//  - an endpoint key is ours while it is a loopback endpoint whose port is in the allocation range
-//    or is one of the project's recorded ports (`ownedPorts`);
-//  - any other OTEL key is ours while it carries exactly the value the installer writes AND every
-//    endpoint key present in the same `env` is ours — a file whose endpoint points at the user's
-//    own collector keeps its exporter/protocol keys, because they are the user's too.
-function isArtisynOwnedOtelValue(key: string, env: Record<string, unknown>, ownedPorts: Set<number>): boolean {
-  if (isOtelEndpointKey(key)) {
-    const value = env[key];
-    if (typeof value !== 'string') {
-      return false;
-    }
-    const match = OTEL_LOOPBACK_ENDPOINT_RE.exec(value);
-    if (!match) {
-      return false;
-    }
-    const port = Number(match[1]);
-    return (port >= OTEL_PORT_MIN && port <= OTEL_PORT_MAX) || ownedPorts.has(port);
-  }
-
-  const expected = OTEL_ENV_KEYS(0)[key];
-  if (expected === undefined || env[key] !== expected) {
-    return false;
-  }
-  return OTEL_ENDPOINT_KEYS.every(
-    endpointKey => env[endpointKey] === undefined || isArtisynOwnedOtelValue(endpointKey, env, ownedPorts),
-  );
 }
 
 /** Plugin-relative paths (`scripts/<x>.js`) of every script the installed `hooks/hooks.json` runs. */
@@ -1694,85 +2171,96 @@ export function verifyHookScriptsLoad(cwd: string): string[] {
   return problems;
 }
 
-// Post-install smoke test: spawn the *real* `otel-receiver.js` from the installed plugin tree with
-// a short idle timeout, POST a synthetic `/artisyn/register`, and confirm `200`. This verifies the
-// shipped artifact end to end, not just the port.
+// Post-install smoke test of the shared receiver (DD-25): a hello with the HMAC proof check, then an
+// authenticated `session-status` for a synthetic session. When nothing answers on the shared port,
+// the `bin/` receiver copy is spawned with the DD-7 shared argv and a short idle timeout, and the
+// handshake is retried until it answers or the deadline passes. This verifies the shipped artifact
+// end to end — token, ownership hash, routes — not just the port.
 //
 // Required but non-fatal, with a remediation line — the same contract as
 // `runClaudePluginActivation`: by the time this runs the port is already written everywhere, so a
 // failure is a diagnosis, not a retry trigger. It never re-allocates.
 //
-// The receiver writes into a throwaway temp directory, never the project's real otel directory, so
-// the check leaves no files behind. If a receiver for this project is already listening (a
-// re-install during a live session), the spawned one exits on EADDRINUSE and the probe verifies
-// the running one instead — an equally valid answer to "is this port serving this project".
-export async function verifyInstalledReceiver(port: number, cwd: string): Promise<boolean> {
-  const receiverPath = relToPath(cwd, `${PLUGIN_ROOT_REL}/scripts/otel-receiver.js`);
-  const ownerArg = JSON.stringify({ gitRoot: cwd, repo: path.basename(cwd) });
+// A receiver already running on the port (another repo's session, or a re-install during a live
+// session) is verified as it is: it serves every repo of this OS user. A spawned verify receiver
+// is killed afterwards (it would idle-exit anyway); it registers nothing and writes no repo files.
+export async function verifyInstalledReceiver(port: number): Promise<boolean> {
+  const home = os.homedir();
+  const stateDir = otelStateDir(home);
+  const receiverPath = path.join(stateFilePath('binDir'), 'otel-receiver.js');
+  const launch = { home, stateDir, port, idleTimeoutMs: OTEL_VERIFY_IDLE_TIMEOUT_MS };
 
   const warnUnverified = (reason: string): void => {
     console.warn(
-      `Warning: the OTEL receiver could not be verified on 127.0.0.1:${port} (${reason}). ` +
+      `Warning: the shared OTEL receiver could not be verified on 127.0.0.1:${port} (${reason}). ` +
       'Claude Code telemetry may not be captured. To diagnose, run it in the foreground:\n' +
-      `  node "${receiverPath}" --port ${port} --dir "${path.join(os.tmpdir(), 'artisyn-otel-check')}" ` +
-      `--owner "${ownerArg.replace(/"/g, '\\"')}"\n` +
-      '  (then re-install with `--otel-port <n>` to move it to a different port)',
+      `  node "${receiverPath}" ${buildSharedArgv(launch).map(a => (a.startsWith('--') ? a : `"${a}"`)).join(' ')}\n` +
+      `  and read ${stateFilePath('receiverLog')}\n` +
+      '  (then re-install with `--otel-port <n>` to move every repo to a different port)',
     );
   };
 
-  if (!fs.existsSync(receiverPath)) {
-    warnUnverified(`receiver script not found at ${receiverPath}`);
-    return false;
-  }
-
-  let tmpDir: string;
-  try {
-    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'artisyn-otel-verify-'));
-  } catch (err) {
-    warnUnverified(`could not create a temporary directory: ${err instanceof Error ? err.message : String(err)}`);
-    return false;
-  }
+  const describeHandshake = (h: { status: string; detail?: string }): string => {
+    if (h.status === 'port-conflict') {
+      return `the listener on that port is not this user's Log Hub receiver (${h.detail ?? 'unknown'}) — another program or another OS user holds it`;
+    }
+    if (h.status === 'no-token') return `the token in ${stateDir} is missing or unreadable`;
+    return 'no reply from the receiver';
+  };
 
   let child: ChildProcess | null = null;
   try {
-    child = spawn(process.execPath, [
-      receiverPath,
-      '--port', String(port),
-      '--dir', tmpDir,
-      '--owner', ownerArg,
-      '--idleTimeoutMs', String(OTEL_VERIFY_IDLE_TIMEOUT_MS),
-    ], { cwd, stdio: 'ignore', windowsHide: true });
-    // Without a listener, a spawn failure (e.g. a missing node) is an uncaught 'error' event.
-    child.on('error', () => { /* reported by the polling loop below as "no reply" */ });
+    let first = await hello(port, { timeoutMs: OTEL_VERIFY_REQUEST_TIMEOUT_MS, homeDir: home });
+    if (first.status === 'none') {
+      if (!fs.existsSync(receiverPath)) {
+        warnUnverified(`receiver script not found at ${receiverPath}`);
+        return false;
+      }
+      child = spawn(process.execPath, [receiverPath, ...buildSharedArgv(launch)], {
+        cwd: os.tmpdir(),
+        stdio: 'ignore',
+        windowsHide: true,
+        env: { ...process.env, ...buildSharedEnv(launch) },
+      });
+      // Without a listener, a spawn failure (e.g. a missing node) is an uncaught 'error' event.
+      child.on('error', () => { /* reported by the polling loop below as "no reply" */ });
 
-    const payload = JSON.stringify({
-      sessionId: `installer-verify-${process.pid}`,
-      gitRoot: cwd,
-      repo: path.basename(cwd),
-      hookVersion: installerVersion(),
+      // Poll until something answers: no answer means the receiver has not finished binding yet
+      // (or never will); any answer is final.
+      const deadline = Date.now() + OTEL_VERIFY_DEADLINE_MS;
+      for (;;) {
+        first = await hello(port, { timeoutMs: OTEL_VERIFY_REQUEST_TIMEOUT_MS, homeDir: home });
+        if (first.status !== 'none' || Date.now() >= deadline) break;
+        await delay(150);
+      }
+    }
+    if (first.status !== 'ok') {
+      warnUnverified(describeHandshake(first));
+      return false;
+    }
+
+    const status = await sessionStatus(port, `installer-verify-${process.pid}`, {
+      timeoutMs: OTEL_VERIFY_REQUEST_TIMEOUT_MS,
+      homeDir: home,
     });
-
-    // Poll until something answers: a transport failure means the receiver has not finished
-    // binding yet (or never will), while *any* HTTP reply is a final answer — a non-200 from a
-    // listener that is already up will not become a 200 by asking again.
-    const deadline = Date.now() + OTEL_VERIFY_DEADLINE_MS;
-    let last: { status: number; body: string } | null = null;
-    for (;;) {
-      last = await postLoopbackJson(port, '/artisyn/register', payload, OTEL_VERIFY_REQUEST_TIMEOUT_MS);
-      if (last || Date.now() >= deadline) break;
-      await delay(150);
-    }
-
-    if (!last) {
-      warnUnverified('no reply from the receiver');
+    if (status.kind === 'handshake') {
+      warnUnverified(describeHandshake(status.handshake));
       return false;
     }
-    if (last.status !== 200) {
-      warnUnverified(`the listener on that port answered ${last.status} — it may belong to another project or another program`);
+    if (status.kind === 'none') {
+      warnUnverified('no reply to the authenticated session-status request');
       return false;
     }
-
-    console.log(`✓ OTEL receiver verified on 127.0.0.1:${port}`);
+    if (status.kind === 'unsupported') {
+      // An older shared receiver without `session-status` still proved it holds our token; it is
+      // replaced by the new code after its idle-exit.
+      console.log(
+        `✓ OTEL receiver verified on 127.0.0.1:${port} (receiver ${status.receiverVersion ?? 'unknown'}, ` +
+        `${status.detail}; restarts with the new version after its idle-exit)`,
+      );
+      return true;
+    }
+    console.log(`✓ OTEL receiver verified on 127.0.0.1:${port} (shared, receiver ${status.status.receiverVersion ?? 'unknown'})`);
     return true;
   } catch (err) {
     warnUnverified(err instanceof Error ? err.message : String(err));
@@ -1782,13 +2270,8 @@ export async function verifyInstalledReceiver(port: number, cwd: string): Promis
       try {
         child.kill();
       } catch {
-        // Already gone (the usual case: it exited on EADDRINUSE).
+        // Already gone (it exited on EADDRINUSE or its idle timeout).
       }
-    }
-    try {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
-    } catch {
-      // Best-effort — a temp directory the OS will clean up anyway must not fail the install.
     }
   }
 }
@@ -1886,21 +2369,6 @@ function warnDuplicateHooks(claudeDir: string): void {
       console.warn(`Warning: telemetry hooks also found in ${label} - remove them or events will be recorded twice.`);
     }
   }
-}
-
-// Claude Code's user-level config dir: `$CLAUDE_CONFIG_DIR` when set, else `~/.claude` — the same
-// directory the `claude plugin` commands this installer runs read and write.
-function getCustomClaudeConfigDir(): string | null {
-  const custom = (process.env.CLAUDE_CONFIG_DIR ?? '').trim();
-  return custom ? path.resolve(custom) : null;
-}
-
-function getUserSettingsPath(): string {
-  return path.join(getCustomClaudeConfigDir() ?? path.join(os.homedir(), '.claude'), 'settings.json');
-}
-
-function getUserSettingsLabel(): string {
-  return getCustomClaudeConfigDir() ? '$CLAUDE_CONFIG_DIR/settings.json' : '~/.claude/settings.json';
 }
 
 // Detects a marketplace name collision at the user level: `claude plugin marketplace add` records
@@ -2008,11 +2476,9 @@ function readSettingsForMutation(
 
 type SettingsFileName = 'settings.json' | 'settings.local.json';
 
-// Port of a loopback OTEL endpoint value, for the rewrite Note; the raw value when it has none.
-function otelEndpointPortLabel(value: unknown): string {
-  const match = typeof value === 'string' ? OTEL_LOOPBACK_ENDPOINT_RE.exec(value) : null;
-  return match ? match[1] : String(value);
-}
+// What the `.claude/settings.local.json` mirror needs beyond the port (DD-23): this repo's
+// `repoKey` and the user-scope `OTEL_RESOURCE_ATTRIBUTES` value to carry over.
+type LocalMirrorOpts = { repoKey: string; userResourceAttributes: unknown };
 
 // The OTEL `env` merge for install/upgrade (Design Decisions 4, 5 and 7 of the OTEL-port task).
 // `sharedEnv` is the committed `.claude/settings.json` `env`; the Artisyn keys belong in the
@@ -2027,12 +2493,18 @@ function otelEndpointPortLabel(value: unknown): string {
 // Writes `settings.local.json` (creating it when there is something to write, deleting an emptied
 // `env`), makes sure it and its `.bak` are git-ignored, and returns the cleaned `settings.json` env
 // for the caller to write — the local file is always written first.
+//
+// `otelTraces` (the trace opt-in answer) adds `OTEL_TRACE_ENV_KEYS` to the merged set; when it is
+// false, the trace keys that are still Artisyn-owned are removed from both files instead and a
+// user's own trace keys are left alone.
 function mergeOtelEnv(
   cwd: string,
   claudeDir: string,
   otelPort: number,
   ownedPorts: Set<number>,
   sharedEnv: Record<string, unknown>,
+  otelTraces: boolean,
+  mirror: LocalMirrorOpts,
 ): Record<string, unknown> {
   const { settingsPath: localPath, existing: localExisting, raw: localRaw } =
     readSettingsForMutation(claudeDir, 'settings.local.json');
@@ -2050,7 +2522,30 @@ function mergeOtelEnv(
   const keptLocal: string[] = [];
   const rewritten: string[] = [];
 
-  for (const [key, desired] of Object.entries(OTEL_ENV_KEYS(otelPort))) {
+  const desiredKeys: Record<string, string> = otelTraces
+    ? { ...OTEL_ENV_KEYS(otelPort), ...OTEL_TRACE_ENV_KEYS(otelPort) }
+    : OTEL_ENV_KEYS(otelPort);
+
+  // Traces declined: drop the owned trace keys (judged on each env as read) from both files.
+  const strippedTraceKeys: string[] = [];
+  if (!otelTraces) {
+    const traceKeys = Object.keys(OTEL_TRACE_ENV_KEYS(otelPort));
+    const pairs: Array<[Record<string, unknown>, Record<string, unknown>, SettingsFileName]> = [
+      [sharedEnv, nextShared, 'settings.json'],
+      [localEnv, nextLocal, 'settings.local.json'],
+    ];
+    for (const [env, nextEnv, fileName] of pairs) {
+      const { env: kept } = stripOwnedOtelEnvKeys(env, fileName, ownedPorts, traceKeys);
+      for (const key of traceKeys) {
+        if (has(env, key) && !(kept && has(kept, key))) {
+          delete nextEnv[key];
+          if (!strippedTraceKeys.includes(key)) strippedTraceKeys.push(key);
+        }
+      }
+    }
+  }
+
+  for (const [key, desired] of Object.entries(desiredKeys)) {
     const sharedOwned = has(sharedEnv, key) && isArtisynOwnedOtelValue(key, sharedEnv, ownedPorts);
     const localOwned = has(localEnv, key) && isArtisynOwnedOtelValue(key, localEnv, ownedPorts);
 
@@ -2066,23 +2561,26 @@ function mergeOtelEnv(
       migrated.push(key);
     }
 
-    if (isOtelEndpointKey(key)) {
-      // (c)
-      if (!has(localEnv, key) || localOwned) {
-        if (localOwned && localEnv[key] !== desired) {
-          rewritten.push(`${key}: ${otelEndpointPortLabel(localEnv[key])} → ${otelPort}`);
-        }
-        nextLocal[key] = desired;
-      } else {
-        keptLocal.push(key);
-      }
-    } else if (!has(localEnv, key)) {
-      // (d)
+    // (c) and (d) — the same per-key rule as the user-scope file (`mergeOwnedOtelKey`).
+    const decision = mergeOwnedOtelKey(localEnv, key, desired, ownedPorts);
+    if (decision.action === 'set') {
       nextLocal[key] = desired;
-    } else if (localEnv[key] !== desired) {
+      if (decision.rewrite) rewritten.push(decision.rewrite);
+    } else if (decision.action === 'keep') {
       keptLocal.push(key);
     }
   }
+
+  // The repo tag (DD-23): this file's `OTEL_RESOURCE_ATTRIBUTES` replaces the user-scope (and the
+  // committed project) value in Claude Code versions that still read project telemetry keys, so
+  // theirs are carried over, then `artisyn.repo=<repoKey>` is added.
+  nextLocal[OTEL_RESOURCE_ATTRIBUTES_KEY] = buildResourceAttributes(
+    [mirror.userResourceAttributes, sharedEnv[OTEL_RESOURCE_ATTRIBUTES_KEY]]
+      .filter((v): v is string => typeof v === 'string' && v.trim() !== '')
+      .join(','),
+    localEnv[OTEL_RESOURCE_ATTRIBUTES_KEY],
+    mirror.repoKey,
+  );
 
   const nextLocalFile: Record<string, unknown> = { ...localExisting };
   if (Object.keys(nextLocal).length > 0) {
@@ -2104,6 +2602,9 @@ function mergeOtelEnv(
 
   if (migrated.length > 0) {
     console.log('Note: moved the Artisyn OTEL env keys from .claude/settings.json to .claude/settings.local.json.');
+  }
+  if (strippedTraceKeys.length > 0) {
+    console.log(`Note: OTEL trace export is off — removed the Artisyn trace env keys (${strippedTraceKeys.join(', ')}).`);
   }
   if (rewritten.length > 0) {
     console.log(`Note: rewrote stale Artisyn OTEL endpoints in .claude/settings.local.json (${rewritten.join(', ')}).`);
@@ -2127,15 +2628,18 @@ function mergeOtelEnv(
 // Strips every Artisyn-owned OTEL key from one settings file's `env` (ownership judged on that env
 // as read, before any deletion), printing a Note for each endpoint key that is set to something
 // that is not ours. Returns the remaining env (`undefined` when it is left empty) and how many keys
-// were removed. Pure apart from the Notes — the caller writes the file.
+// were removed. Pure apart from the Notes — the caller writes the file. Covers the base keys and
+// the opt-in trace keys (`OTEL_TRACE_ENV_KEYS`) by default, so uninstall removes both; `keys`
+// narrows it (the trace keys alone when traces are declined).
 function stripOwnedOtelEnvKeys(
   env: Record<string, unknown>,
   fileName: SettingsFileName,
   ownedPorts: Set<number>,
+  keys: readonly string[] = Object.keys(ALL_OTEL_EXPECTED_VALUES),
 ): { env: Record<string, unknown> | undefined; removed: number } {
   const next: Record<string, unknown> = { ...env };
   let removed = 0;
-  for (const key of Object.keys(OTEL_ENV_KEYS(OTEL_FALLBACK_PORT_INSTALLER))) {
+  for (const key of keys) {
     if (!Object.prototype.hasOwnProperty.call(env, key)) continue;
     if (isArtisynOwnedOtelValue(key, env, ownedPorts)) {
       delete next[key];
@@ -2201,6 +2705,8 @@ function mergeSettings(
   ownedPorts: Set<number>,
   marketplaceName: string,
   listedPlugins: Set<string>,
+  otelTraces: boolean,
+  mirror: LocalMirrorOpts,
 ): void {
   const { settingsPath, existing } = readSettingsForMutation(claudeDir, 'settings.json');
 
@@ -2279,7 +2785,7 @@ function mergeSettings(
     const sharedEnv = isPlainObject(existing['env'])
       ? (existing['env'] as Record<string, unknown>)
       : {};
-    const cleanedEnv = mergeOtelEnv(path.dirname(claudeDir), claudeDir, otelPort, ownedPorts, sharedEnv);
+    const cleanedEnv = mergeOtelEnv(path.dirname(claudeDir), claudeDir, otelPort, ownedPorts, sharedEnv, otelTraces, mirror);
     if (Object.keys(cleanedEnv).length > 0) {
       merged['env'] = cleanedEnv;
     } else {
@@ -2353,4 +2859,103 @@ function removePluginSettingsKeys(
   }
 
   atomicWrite(settingsPath, JSON.stringify(merged, null, 2) + '\n');
+}
+
+// ---------------------------------------------------------------------------
+// Uninstall of the per-user OTEL state (DD-27) and --restart-otel-receiver (DD-25)
+// ---------------------------------------------------------------------------
+
+// The state files the installer created or the receiver/hook wrote, unlinked one by one at the
+// last uninstall — never a recursive delete: anything else in the folder (a user's own file) keeps
+// it, and with it `bin/`/`otel/`.
+const STATE_FILES_TO_REMOVE = ['port', 'token', 'repos', 'registry', 'forward', 'receiverLog', 'claudeVersion'] as const;
+
+// Asks the shared receiver to exit (authenticated shutdown) and waits for its port to be free.
+// Never throws. `null` = nothing answered on the port.
+async function stopSharedReceiver(port: number): Promise<{ stopped: boolean; reason?: string } | null> {
+  const answer = await shutdown(port);
+  if (answer.kind === 'none' || (answer.kind === 'handshake' && answer.handshake.status === 'none')) return null;
+  if (answer.kind === 'handshake') {
+    return { stopped: false, reason: answer.handshake.status === 'port-conflict'
+      ? `the listener on that port is not this user's Log Hub receiver (${answer.handshake.detail ?? 'unknown'})`
+      : answer.handshake.status };
+  }
+  if (answer.kind === 'rejected') return { stopped: false, reason: `shutdown refused with HTTP ${answer.status}` };
+  // Accepted: wait for the exit (grace poll, force-kill, confirm) the way every restart does.
+  return stopReceiverAndWait(port, os.tmpdir(), null, { sendShutdown: async () => ({ status: 200, ok: true }) });
+}
+
+// The last-repo removal of the per-user OTEL state (DD-27): the user file gets the original
+// collector keys back exactly (`forward.json.original`), loses the Artisyn keys, `_artisynOtel`
+// and the DD-21 hook entry; the receiver is stopped; the listed state files are unlinked and
+// `bin/`, `otel/` removed while empty. `<settings>.artisyn-bak` is kept (the user's safety copy).
+// Non-fatal apart from the user-file validation, which aborts with nothing written.
+async function removeUserOtelState(ownedPorts: Set<number>): Promise<void> {
+  const label = getUserSettingsLabel();
+  const stored = toForwardFile(readForward());
+  const read = readUserSettingsForMutation();
+  const restored = restoreUserOtel(read.existing, stored, ownedPorts);
+  const next = withUserEnsureHook(restored.settings, false, path.join(stateFilePath('binDir'), 'otel-ensure-receiver.js'));
+  if (writeUserSettings(read, next)) {
+    const parts: string[] = [];
+    if (restored.removed.length > 0) parts.push(`removed the Artisyn OTEL keys (${restored.removed.join(', ')})`);
+    if (restored.restored.length > 0) parts.push(`restored your original OTEL keys (${restored.restored.join(', ')})`);
+    console.log(`  ${label}: ${parts.length > 0 ? parts.join('; ') : 'removed the Log Hub entries'}.`);
+    console.log(`  The previous content of ${label} is kept in ${userSettingsBackupPath(read.settingsPath)}.`);
+  }
+
+  const port = readPortFile()?.port;
+  if (port !== undefined) {
+    const result = await stopSharedReceiver(port);
+    if (result && !result.stopped) {
+      console.warn(`Warning: could not stop the shared OTEL receiver on 127.0.0.1:${port} (${result.reason ?? 'unknown'}) — it exits on its own when idle.`);
+    }
+  }
+
+  const binDir = stateFilePath('binDir');
+  const unlink = (file: string): void => {
+    try {
+      fs.unlinkSync(file);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException)?.code !== 'ENOENT') {
+        console.warn(`Warning: could not remove ${file}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+  };
+  for (const name of RECEIVER_BIN_FILES) unlink(path.join(binDir, name));
+  for (const name of STATE_FILES_TO_REMOVE) unlink(stateFilePath(name));
+  for (const dir of [binDir, otelStateDir()]) {
+    try {
+      fs.rmdirSync(dir); // non-recursive: only an empty folder goes
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException)?.code;
+      if (code === 'ENOTEMPTY' || code === 'EEXIST' || code === 'EPERM') {
+        console.log(`  Kept ${dir} — it still holds files Log Hub did not create.`);
+      } else if (code !== 'ENOENT') {
+        console.warn(`Warning: could not remove ${dir}: ${err instanceof Error ? err.message : String(err)}`);
+      }
+    }
+  }
+  console.log(`  Removed the per-user OTEL receiver state (${otelStateDir()}).`);
+}
+
+// `--restart-otel-receiver` (DD-25): an authenticated `POST /artisyn/shutdown` to the shared
+// receiver, then a wait until its port is free. The next Claude Code session (or the DD-21 user
+// hook) starts it again — from the current code.
+export async function runRestartOtelReceiver(): Promise<void> {
+  const port = readPortFile()?.port;
+  if (port === undefined) {
+    console.error(`Error: no shared OTEL receiver is configured (${stateFilePath('port')} is missing) — install the hooks first.`);
+    process.exit(1);
+  }
+  const result = await stopSharedReceiver(port);
+  if (result === null) {
+    console.log(`No OTEL receiver is running on 127.0.0.1:${port} — nothing to restart; the next Claude Code session starts it.`);
+    return;
+  }
+  if (!result.stopped) {
+    console.error(`Error: could not stop the OTEL receiver on 127.0.0.1:${port} (${result.reason ?? 'unknown'}).`);
+    process.exit(1);
+  }
+  console.log(`✓ Stopped the shared OTEL receiver on 127.0.0.1:${port}. The next Claude Code session starts it again with the installed version.`);
 }
