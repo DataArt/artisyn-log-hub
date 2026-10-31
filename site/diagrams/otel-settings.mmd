@@ -1,0 +1,8 @@
+flowchart TB
+  m["Managed settings<br/>(file · OS policy · admin console)"] -->|wins over everything| eff(["Effective OTEL config"])
+  u["~/.claude/settings.json<br/>(written by the installer)"] --> eff
+  l[".claude/settings.local.json mirror<br/>(read only by Claude Code &lt; 2.1.282)"] -.-> eff
+  eff --> q{"endpoint = Log Hub receiver?"}
+  q -->|yes| ok["OTEL tabs filled"]
+  q -->|"no: admin pinned it"| mg["reason: managed-endpoint /<br/>managed-disabled"]
+  q -->|"no: your own collector kept"| nc["reason: not-configured<br/>(re-run installer with proxy)"]

@@ -12,6 +12,51 @@ const BODY_SMALL = makeClaudeNdjson(5);
 const BODY_MEDIUM = makeArtisynNdjson(100);
 const BODY_LARGE = makeArtisynNdjson(500);
 
+/**
+ * One realtime OTEL batch body (`POST /api/v2/otel-realtime`): `count` synthetic
+ * `claude_code.api_request` log lines in the receiver's chunk-line shape. Synthetic data only.
+ */
+function makeOtelRealtimeBody(
+  sessionId: string,
+  count: number,
+  batchSeq: number,
+): string {
+  const base = Date.now() - count * 1000;
+  const lines = Array.from({ length: count }, (_, i) => {
+    const nanos = String(BigInt(base + i * 1000) * 1_000_000n);
+    return {
+      signal: 'logs',
+      receivedAt: new Date(base + i * 1000).toISOString(),
+      hookVersion: '2.29.0',
+      resource: { 'service.name': 'claude-code', 'service.version': '2.1.0' },
+      scope: { name: 'com.anthropic.claude_code.events' },
+      record: {
+        timeUnixNano: nanos,
+        body: { stringValue: 'claude_code.api_request' },
+        attributes: [
+          { key: 'session.id', value: { stringValue: sessionId } },
+          { key: 'request_id', value: { stringValue: `req_perf_${sessionId}_${batchSeq}_${i}` } },
+          { key: 'model', value: { stringValue: i % 3 === 0 ? 'claude-haiku-4-5' : 'claude-sonnet-4-6' } },
+          { key: 'query_source', value: { stringValue: i % 5 === 0 ? 'compact' : 'repl_main_thread' } },
+          { key: 'input_tokens', value: { intValue: String(100 + i) } },
+          { key: 'output_tokens', value: { intValue: String(50 + i) } },
+          { key: 'cache_read_tokens', value: { intValue: '2000' } },
+          { key: 'cache_creation_tokens', value: { intValue: '300' } },
+          { key: 'cost_usd', value: { doubleValue: 0.0012 + i * 0.0001 } },
+        ],
+      },
+    };
+  });
+  return JSON.stringify({
+    sessionId,
+    hookVersion: '2.29.0',
+    receiverId: 'perf-receiver',
+    batchSeq,
+    droppedLines: 0,
+    lines,
+  });
+}
+
 /** Scenarios whose endpoint only exists under a password-based auth mode. */
 const PASSWORD_ONLY_SCENARIOS = new Set(['auth:login']);
 
@@ -181,6 +226,25 @@ export function buildScenarios(
       })(),
     },
     {
+      name: 'otel:realtime-50',
+      description:
+        'POST /api/v2/otel-realtime — one realtime batch of 50 api_request lines (synchronous ingest)',
+      fn: async (auth) => {
+        const authClient = auth as AuthClient;
+        const sid = randomUUID();
+        const res = await fetch(`${BASE}/api/v2/otel-realtime`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...authClient.apiKeyHeader,
+          },
+          body: makeOtelRealtimeBody(sid, 50, 1),
+        });
+        if (res.ok) idCollector.sessionUuids.add(sid);
+        return { ok: res.ok };
+      },
+    },
+    {
       name: 'repos:list',
       description: 'GET /api/v1/repositories',
       fn: async (auth) => {
@@ -280,6 +344,20 @@ export function buildScenarios(
             },
           },
           {
+            name: 'otel:repo-facts-week',
+            description:
+              'GET /api/v1/repositories/:repoId/otel/facts — 1-week OTEL snapshot',
+            fn: async (auth: unknown) => {
+              const authClient = auth as AuthClient;
+              const to = new Date();
+              const from = new Date(to.getTime() - 7 * 24 * 60 * 60 * 1000);
+              const res = await authClient.fetch(
+                `/api/v1/repositories/${repoId}/otel/facts?from=${encodeURIComponent(from.toISOString())}&to=${encodeURIComponent(to.toISOString())}`,
+              );
+              return { ok: res.ok };
+            },
+          },
+          {
             name: 'repos:hook-state',
             description: 'GET /api/v1/repositories/:repoId/hook-state',
             fn: async (auth: unknown) => {
@@ -322,6 +400,53 @@ export function buildScenarios(
               );
               return { ok: res.ok };
             },
+          },
+          {
+            name: 'otel:session-snapshot',
+            description:
+              'GET /api/v1/repositories/:repoId/sessions/:sid/otel — session OTEL snapshot (seeded once with 50 realtime calls)',
+            fn: (() => {
+              let seeded = false;
+              return async (auth: unknown) => {
+                const authClient = auth as AuthClient;
+                if (!seeded) {
+                  seeded = true;
+                  await fetch(`${BASE}/api/v2/otel-realtime`, {
+                    method: 'POST',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      ...authClient.apiKeyHeader,
+                    },
+                    body: makeOtelRealtimeBody(String(sessionId), 50, 1),
+                  });
+                }
+                const res = await authClient.fetch(
+                  `/api/v1/repositories/${repoId}/sessions/${sessionId}/otel`,
+                );
+                return { ok: res.ok };
+              };
+            })(),
+          },
+          {
+            name: 'otel:session-empty-delta',
+            description:
+              'GET /api/v1/repositories/:repoId/sessions/:sid/otel?since=<cursor> — empty-delta fast path',
+            fn: (() => {
+              let cursor: string | null = null;
+              return async (auth: unknown) => {
+                const authClient = auth as AuthClient;
+                const path = `/api/v1/repositories/${repoId}/sessions/${sessionId}/otel`;
+                if (cursor === null) {
+                  const first = await authClient.fetch(path);
+                  if (!first.ok) return { ok: false };
+                  cursor = ((await first.json()) as { cursor: string }).cursor;
+                }
+                const res = await authClient.fetch(
+                  `${path}?since=${encodeURIComponent(cursor)}`,
+                );
+                return { ok: res.ok };
+              };
+            })(),
           },
           {
             name: 'repos:session-contexts',

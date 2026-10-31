@@ -6,6 +6,8 @@ import type { HookEditRecord } from './claude-extractor';
 // already-validated `HarnessSnapshotBody` (DD-9/DD-10); they never read artisyn lines
 // themselves for this purpose any more.
 import type { HarnessSnapshotBody } from './harness-snapshot';
+import { OTEL_REASON_KEYS, OTEL_STATES } from './otel/otel-facts.constants';
+import type { OtelStatusDto } from './otel/otel-facts.types';
 
 type AnyRecord = Record<string, unknown>;
 
@@ -106,6 +108,9 @@ const NON_ACTIVITY_LINE_TYPES = new Set([
   // session by up to the 6h throttle window, so counting it would stretch the session's
   // start/end range.
   'code-inventory',
+  // The hook's OTEL status report (2026-10-30 otel-shared-receiver, DD-16), appended at Stop
+  // and SessionEnd. It describes the telemetry pipeline, not session activity.
+  'otel-status',
 ]);
 
 /**
@@ -355,6 +360,88 @@ export function extractHookStatus(lines: object[]): HookStatusEvent | null {
     };
   }
   return null;
+}
+
+/**
+ * The latest `otel-status` event of an artisyn upload (2026-10-30 otel-shared-receiver,
+ * DD-16, DD-28), normalised to the stored shape: `timestamp` is the event's own ISO time.
+ */
+export interface OtelStatusEvent extends OtelStatusDto {
+  timestamp: string;
+}
+
+function nonNegativeInt(v: unknown): number {
+  return typeof v === 'number' && Number.isFinite(v) && v > 0
+    ? Math.floor(v)
+    : 0;
+}
+
+function stringOrNull(v: unknown, maxChars: number): string | null {
+  return typeof v === 'string' && v !== '' ? v.slice(0, maxChars) : null;
+}
+
+/** Longest `detail` / version string kept from an `otel-status` event. */
+const OTEL_STATUS_TEXT_MAX = 255;
+
+/**
+ * The latest (by `timestamp`) well-formed `otel-status` line among `lines`, or null when there is
+ * none — the pattern of {@link extractHookStatus}. A line needs a parseable `timestamp`; every
+ * other field is normalised: an unknown `state` or a non-null unknown `reason` becomes
+ * `unknown` (DD-28), counts below 0 or not numbers become 0, `forward` outside
+ * `ok` / `degraded` / `off` becomes null. An artisyn log can carry one line per Stop plus one
+ * at SessionEnd, so the newest one wins.
+ */
+export function extractOtelStatus(lines: object[]): OtelStatusEvent | null {
+  let best: OtelStatusEvent | null = null;
+  let bestMs = -Infinity;
+  for (const line of lines) {
+    const rec = line as AnyRecord;
+    if (rec['type'] !== 'otel-status') continue;
+    const timestamp = rec['timestamp'];
+    if (typeof timestamp !== 'string') continue;
+    const ms = Date.parse(timestamp);
+    if (isNaN(ms) || ms < bestMs) continue;
+
+    const rawState = rec['state'];
+    const state = (OTEL_STATES as readonly unknown[]).includes(rawState)
+      ? (rawState as OtelStatusDto['state'])
+      : 'unknown';
+    const rawReason = rec['reason'];
+    const reason =
+      rawReason === null || rawReason === undefined
+        ? null
+        : (OTEL_REASON_KEYS as readonly unknown[]).includes(rawReason)
+          ? (rawReason as NonNullable<OtelStatusDto['reason']>)
+          : 'unknown';
+    const received = asRecord(rec['received']) ?? {};
+    const rawForward = rec['forward'];
+    const forward =
+      rawForward === 'ok' || rawForward === 'degraded' || rawForward === 'off'
+        ? rawForward
+        : null;
+
+    best = {
+      timestamp: new Date(ms).toISOString(),
+      state,
+      reason,
+      detail: stringOrNull(rec['detail'], OTEL_STATUS_TEXT_MAX),
+      received: {
+        logs: nonNegativeInt(received['logs']),
+        metrics: nonNegativeInt(received['metrics']),
+        spans: nonNegativeInt(received['spans']),
+        firstAt: stringOrNull(received['firstAt'], OTEL_STATUS_TEXT_MAX),
+      },
+      claudeVersion: stringOrNull(rec['claudeVersion'], OTEL_STATUS_TEXT_MAX),
+      hookVersion: stringOrNull(rec['hookVersion'], OTEL_STATUS_TEXT_MAX),
+      receiverVersion: stringOrNull(
+        rec['receiverVersion'],
+        OTEL_STATUS_TEXT_MAX,
+      ),
+      forward,
+    };
+    bestMs = ms;
+  }
+  return best;
 }
 
 // ---------------------------------------------------------------------------

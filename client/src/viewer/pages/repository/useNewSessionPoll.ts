@@ -39,6 +39,11 @@ interface UseNewSessionPollParams {
   filterByUserEmail?: string;
   hideHookSessions: boolean;
   isBranchOpen: (key: string, index: number) => boolean;
+  /**
+   * The displayed list is a filtered subset (the `otelReason` filter, 2026-10-30
+   * otel-shared-receiver), so diffing it against every session id would always report "new".
+   */
+  paused?: boolean;
 }
 
 /**
@@ -56,6 +61,7 @@ export function useNewSessionPoll({
   filterByUserEmail,
   hideHookSessions,
   isBranchOpen,
+  paused = false,
 }: UseNewSessionPollParams): { hasNewSessions: boolean } {
   const flatPollQuery = useQuery({
     queryKey: [
@@ -70,12 +76,12 @@ export function useNewSessionPoll({
         filterByUserEmail,
         hideHookSessions,
       }),
-    enabled: !isInvalidId && viewMode !== 'branch',
+    enabled: !isInvalidId && !paused && viewMode !== 'branch',
     refetchInterval: SESSION_POLL_INTERVAL_MS,
   });
 
   const flatHasNew = useMemo(() => {
-    if (viewMode === 'branch') return false;
+    if (viewMode === 'branch' || paused) return false;
     const displayedIds = new Set(
       filterVisibleSessions(sessions, {
         filterByUserEmail,
@@ -85,6 +91,7 @@ export function useNewSessionPoll({
     return diffNewSessionIds(flatPollQuery.data ?? [], displayedIds).length > 0;
   }, [
     viewMode,
+    paused,
     sessions,
     filterByUserEmail,
     hideHookSessions,

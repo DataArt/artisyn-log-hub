@@ -547,6 +547,20 @@
       "when": 1791158400000,
       "tag": "0077_tool_usage_indexes",
       "breakpoints": true
+    },
+    {
+      "idx": 78,
+      "version": "7",
+      "when": 1791244800000,
+      "tag": "0078_otel_tabs_traces",
+      "breakpoints": true
+    },
+    {
+      "idx": 79,
+      "version": "7",
+      "when": 1791331200000,
+      "tag": "0079_otel_status",
+      "breakpoints": true
     }
   ]
 }

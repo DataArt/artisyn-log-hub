@@ -144,7 +144,10 @@ function rootSessionSql(scope: ToolUsageReadScope): SQL {
  * `scoped_roots(id, user_id)` are the in-scope tree roots started no later than `to`; a row
  * whose last call is in range cannot belong to a tree that started after the range ends.
  */
-function scopedTreeCtes(scope: ToolUsageReadScope, range: ToolUsageRange): SQL {
+export function scopedTreeCtes(
+  scope: ToolUsageReadScope,
+  range: ToolUsageRange,
+): SQL {
   return sql`scoped_roots AS (
     SELECT DISTINCT s.id, l.user_id
     FROM sessions s

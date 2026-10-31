@@ -450,16 +450,23 @@ checkout (`git rev-parse --git-common-dir`), which is not mounted. `ARTISYN_PROJ
 `git.root` = the worktree. Unset, or a cwd outside it, means the old behaviour; see
 [hook-system-overview.md](hook-system-overview.md).
 
-**Provisioning** (`docker-dev/provision.mjs`) writes only git-ignored worktree files, in the
-installer's formats, keeping every other key:
+**Provisioning** (`docker-dev/provision.mjs`) writes git-ignored worktree files and, for the
+shared OTEL receiver, the container-local `~/.artisyn/otel/` and the shared profile's
+`settings.json` — in the installer's formats, keeping every other key:
 
-- `--static` (entrypoint): picks the port — the existing `otel-port.json` `port`, else a legacy
-  tracked `log-hub.json` `otelReceiverPort` (branches made before installer `1.0.75`), else the
-  fixed `25317` (the hook's `OTEL_FALLBACK_PORT`; each container has its own loopback, so no
-  allocation) — and writes it into `.artisyn/config/otel-port.json`; writes `serverUrl`
-  `http://localhost:5173` and `otelReceiverPort` into `.artisyn/config/log-hub.local.json`; and the
-  OTEL `env` keys into `.claude/settings.local.json`, imported at runtime from the worktree's
-  `artisyn-hooks-installer/src/otel-env.ts`. Takes effect once the sandbox image is rebuilt;
+- `--static` (entrypoint): uses the fixed OTEL port `25317` (`SANDBOX_OTEL_PORT`, the hook's
+  `OTEL_FALLBACK_PORT`; each container has its own loopback, so no allocation, and every sandbox
+  shares one Claude profile, so the user-scope endpoints must agree); deletes a leftover
+  `.artisyn/config/otel-port.json`; writes `serverUrl` `http://localhost:5173` and
+  `otelReceiverPort` into `.artisyn/config/log-hub.local.json`. When the worktree's installer has
+  `src/user-state.ts` (hook 2.30.0+, shared receiver) it also writes the container's own
+  `~/.artisyn/otel/port.json` and `token`, and merges the OTEL `env` keys into
+  `$CLAUDE_CONFIG_DIR/settings.json` (the user scope Claude Code 2.1.282+ reads; skipped with a log
+  line when that file does not parse or names a non-loopback collector). Finally it merges the
+  OTEL `env` keys — plus `OTEL_RESOURCE_ATTRIBUTES` with `artisyn.repo=<repoKey>` in shared mode —
+  into `.claude/settings.local.json`. The keys and formats are imported at runtime from the
+  worktree's `artisyn-hooks-installer/src/otel-env.ts` and `user-state.ts`. Takes effect once the
+  sandbox image is rebuilt;
 
 - `--loop` (`devctl` service, every 10 s): skip while `GET /api/v1/auth/config` is not 200; if
   `log-hub.local.json` has an `apiKey` that `POST /api/v1/log-echo` accepts, touch

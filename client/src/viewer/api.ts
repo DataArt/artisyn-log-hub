@@ -12,6 +12,8 @@ import type {
   TeamRepository,
   Invitation,
   PendingDisclosure,
+  TeamOtelFactsParams,
+  TeamOtelFactsResponse,
 } from '../models/teams';
 import type {
   AttributionBreakdownReportData,
@@ -24,6 +26,7 @@ import type {
   ChangeSurfaceTimeline,
   ChangeSurfaceTimelineBucket,
   ExecutiveSummaryReportData,
+  OtelReasonKey,
   RepoConfig,
   RepositoryContext,
   RepositoryDetail,
@@ -39,7 +42,11 @@ import type {
   ActiveSessionsResponse,
   ProductivityAnalyticsResponse,
   RepoOkfUsageResponse,
+  RepoOtelFactsParams,
+  RepoOtelFactsResponse,
   SessionOkfUsageResponse,
+  SessionOtelParams,
+  SessionOtelResponse,
   TokenAnalyticsResponse,
   ToolAnalyticsResponse,
 } from '../models/repositories';
@@ -398,14 +405,20 @@ export async function fetchMyRepositories(): Promise<UserRepository[]> {
   return res.json() as Promise<UserRepository[]>;
 }
 
+/**
+ * The sessions list. `otelReason` keeps only root sessions without OTEL data whose reason (or
+ * `no-status`) equals it (2026-10-30 otel-shared-receiver, API changes); null / absent = all.
+ */
 export async function fetchRepositorySessions(
   repoId: number,
   teamId?: number,
   branch?: string | null,
+  otelReason?: OtelReasonKey | null,
 ): Promise<RepositorySession[]> {
   const params = new URLSearchParams();
   if (teamId != null) params.set('teamId', String(teamId));
   if (branch !== undefined) params.set('branch', branch ?? '');
+  if (otelReason != null) params.set('otelReason', otelReason);
   const qs = params.toString();
   const url = qs
     ? `/api/v1/repositories/${repoId}/sessions?${qs}`
@@ -858,6 +871,79 @@ export async function fetchRepoOkfUsage(
   );
   if (!res.ok) throw new ApiError(res.status);
   return res.json() as Promise<RepoOkfUsageResponse>;
+}
+
+// --- OTEL tabs (2026-10-30 otel-tabs-traces) ------------------------------------
+
+/** OTEL facts of a repository over a period (repository OTEL tab, DD-19 / DD-28). */
+export async function fetchRepoOtelFacts(
+  params: RepoOtelFactsParams,
+  signal?: AbortSignal,
+): Promise<RepoOtelFactsResponse> {
+  const q = new URLSearchParams();
+  if (params.teamId != null) q.set('teamId', String(params.teamId));
+  q.set('from', params.from);
+  q.set('to', params.to);
+  for (const m of params.models ?? []) q.append('model', m);
+  for (const v of params.ccVersions ?? []) q.append('ccVersion', v);
+  if (params.calls) q.set('calls', params.calls);
+  if (params.interval) q.set('interval', params.interval);
+  if (params.stackBy) q.set('stackBy', params.stackBy);
+  if (params.tz) q.set('tz', params.tz);
+  const res = await apiFetch(
+    `/api/v1/repositories/${params.repoId}/otel/facts?${q.toString()}`,
+    { signal },
+  );
+  if (!res.ok) throw await readApiError(res);
+  return res.json() as Promise<RepoOtelFactsResponse>;
+}
+
+/**
+ * OTEL facts of every repository of a team over a period (team OTEL tab, DD-29). 403 for a
+ * non-member and for a caller without the analytics rule.
+ */
+export async function fetchTeamOtelFacts(
+  params: TeamOtelFactsParams,
+  signal?: AbortSignal,
+): Promise<TeamOtelFactsResponse> {
+  const q = new URLSearchParams();
+  q.set('from', params.from);
+  q.set('to', params.to);
+  for (const id of params.repoIds ?? []) q.append('repoId', String(id));
+  for (const id of params.userIds ?? []) q.append('userId', String(id));
+  for (const m of params.models ?? []) q.append('model', m);
+  for (const v of params.ccVersions ?? []) q.append('ccVersion', v);
+  if (params.calls) q.set('calls', params.calls);
+  if (params.interval) q.set('interval', params.interval);
+  if (params.stackBy) q.set('stackBy', params.stackBy);
+  if (params.tz) q.set('tz', params.tz);
+  const res = await apiFetch(
+    `/api/v1/teams/${params.teamId}/otel/facts?${q.toString()}`,
+    { signal },
+  );
+  if (!res.ok) throw await readApiError(res);
+  return res.json() as Promise<TeamOtelFactsResponse>;
+}
+
+/**
+ * OTEL facts and traces of one session (session OTEL tab): a snapshot, or with `since` (the
+ * previous response's cursor) only what changed after it (DD-2).
+ */
+export async function fetchSessionOtel(
+  params: SessionOtelParams,
+  signal?: AbortSignal,
+): Promise<SessionOtelResponse> {
+  const q = new URLSearchParams();
+  if (params.teamId != null) q.set('teamId', String(params.teamId));
+  if (params.interval) q.set('interval', params.interval);
+  if (params.stackBy) q.set('stackBy', params.stackBy);
+  if (params.tz) q.set('tz', params.tz);
+  if (params.since) q.set('since', params.since);
+  const qs = q.toString();
+  const base = `/api/v1/repositories/${params.repoId}/sessions/${encodeURIComponent(params.sessionId)}/otel`;
+  const res = await apiFetch(qs ? `${base}?${qs}` : base, { signal });
+  if (!res.ok) throw await readApiError(res);
+  return res.json() as Promise<SessionOtelResponse>;
 }
 
 // --- Tools/MCP monitoring --------------------------------------------------------

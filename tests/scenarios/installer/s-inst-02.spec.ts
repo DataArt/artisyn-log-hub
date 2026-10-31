@@ -12,8 +12,9 @@
 //   - the destination warning reads `Warning: this changes the telemetry destination:
 //     http://a:3000 -> http://b:3000`;
 //   - the tracked-file abort happens after the installer has already re-extracted the plugin and
-//     rewritten the config files (same content) and `otel-port.json` (a new `allocatedAt`), so
-//     «files not changed» holds for every file except `.artisyn/config/otel-port.json`.
+//     rewritten the config files (same content); since hook 2.30.0 the receiver port lives in the
+//     per-user `~/.artisyn/otel/port.json` (task 2026-10-30-otel-shared-receiver) and the project
+//     has no `otel-port.json` any more, so no file of the project changes.
 //
 // Replaces:
 //   - artisyn-hooks-installer/src/__tests__/install.test.ts — secrets and `config gitignore
@@ -92,7 +93,8 @@ test('@S-INST-02 the API key lives only in log-hub.local.json, a tracked secret 
       fs.writeFileSync(path.join(other, '.gitignore'), 'log-hub.local.json\n');
       const res = await runInstaller(cli, other, ['install', '--api-key', 'K-OTHER'], { home, fakeClaudeDir: fakeClaude.dir });
       expect(res.code, res.output).toBe(0);
-      expect(lines(path.join(other, '.artisyn', 'config', '.gitignore'))).not.toContain('log-hub.local.json');
+      const otherIgnore = path.join(other, '.artisyn', 'config', '.gitignore');
+      expect(fs.existsSync(otherIgnore) ? lines(otherIgnore) : []).not.toContain('log-hub.local.json');
 
       const third = makeFakeGitRepo(dirs);
       fs.mkdirSync(path.join(third, '.claude'));
@@ -105,7 +107,7 @@ test('@S-INST-02 the API key lives only in log-hub.local.json, a tracked secret 
       const ignore = lines(path.join(third, '.artisyn', 'config', '.gitignore'));
       expect(ignore[0]).toBe('my-own-file');
       expect(ignore.filter((l) => l === 'log-hub.local.json')).toHaveLength(1);
-      expect(ignore.filter((l) => l === 'otel-port.json')).toHaveLength(1);
+      expect(ignore, 'no per-project port store since hook 2.30.0').not.toContain('otel-port.json');
     });
 
     await test.step('7. reinstall with --server-url http://b:3000 only: the destination warning, the key kept, serverUrl = b in log-hub.local.json, log-hub.json untouched; the same URL with a slash → no warning', async () => {
@@ -128,7 +130,7 @@ test('@S-INST-02 the API key lives only in log-hub.local.json, a tracked secret 
       expect(readJson(local)).toEqual({
         apiKey: 'SECRET-KEY-2',
         serverUrl: 'http://b:3000',
-        otelReceiverPort: readJson(path.join(configDir, 'otel-port.json')).port,
+        otelReceiverPort: readJson<{ port: number }>(path.join(home, '.artisyn', 'otel', 'port.json')).port,
         myKey: 1,
       });
       expect(readJson(base).myKey).toBe(1);
@@ -148,7 +150,7 @@ test('@S-INST-02 the API key lives only in log-hub.local.json, a tracked secret 
       expect(res.output).not.toContain('SECRET-KEY-2');
     });
 
-    await test.step('6. log-hub.local.json committed with git add -f → install aborts with the git rm --cached hint; only otel-port.json was rewritten', async () => {
+    await test.step('6. log-hub.local.json committed with git add -f → install aborts with the git rm --cached hint; no project file changed', async () => {
       git(repo, ['add', '-f', '.artisyn/config/log-hub.local.json']);
       git(repo, ['commit', '-q', '-m', 'oops, the secret']);
       const before = treeHashes(repo);
@@ -157,7 +159,7 @@ test('@S-INST-02 the API key lives only in log-hub.local.json, a tracked secret 
       expect(res.output).toContain('git rm --cached .artisyn/config/log-hub.local.json');
       const after = treeHashes(repo);
       const changed = [...new Set([...before.keys(), ...after.keys()])].filter((k) => before.get(k) !== after.get(k));
-      expect(changed).toEqual(['.artisyn/config/otel-port.json']);
+      expect(changed).toEqual([]);
     });
   } finally {
     dirs.cleanup();

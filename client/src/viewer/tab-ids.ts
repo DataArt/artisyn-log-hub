@@ -32,8 +32,10 @@ export const SESSION_TABS = [
   'okf',
   // This session tree's MCP and monitored CLI tool calls: the repo Tools/MCP tab, one session.
   'tools',
-  // Byte/token anatomy of the startup system context; always shown, rightmost.
+  // Byte/token anatomy of the startup system context; always shown.
   'sysctx',
+  // OTEL cost-over-time chart and trace waterfall of the session tree; always shown, rightmost.
+  'otel',
 ] as const;
 
 /** Repository view main tabs, mirrored into the `mtab` URL param (group `repo`). */
@@ -45,6 +47,8 @@ export const REPO_MAIN_TABS = [
   'tools',
   // How the repo's OKF knowledge bases were read over a period.
   'okf',
+  // OTEL cost over time, cost structure and hidden calls over a period.
+  'otel',
   'settings',
 ] as const;
 
@@ -74,7 +78,13 @@ export const SETTINGS_TABS = [
 ] as const;
 
 /** Team detail page tabs (group `team`). */
-export const TEAM_TABS = ['members', 'repositories', 'invitations'] as const;
+export const TEAM_TABS = [
+  'members',
+  'repositories',
+  'invitations',
+  // OTEL cost of every team repository; shown only to callers passing the analytics rule.
+  'otel',
+] as const;
 
 /** API keys page tabs (group `apikeys`). */
 export const API_KEYS_TABS = ['install', 'keys'] as const;

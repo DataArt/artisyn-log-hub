@@ -75,6 +75,19 @@ export function AdminDataRetentionTab() {
             Non-deleted sessions currently stored
           </div>
         </Card>
+
+        <Card label="OTEL-only Sessions">
+          <div
+            className="mt-2 text-2xl font-bold text-foreground"
+            data-testid="retention-otel-only-sessions"
+          >
+            {data.otelOnlySessions.toLocaleString()}
+          </div>
+          <div className="mt-2 text-[11px] text-muted-foreground">
+            Sessions with OTEL data but no uploaded logs yet; purged by the same
+            window
+          </div>
+        </Card>
       </div>
 
       <div className="grid grid-cols-2 md:grid-cols-2 gap-3">

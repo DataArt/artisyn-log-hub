@@ -13,7 +13,13 @@
  *      tree's rows.
  *
  * The table list is read from `information_schema.columns`, never hard-coded, so a new
- * session-scoped table is shifted without touching this file. `session_id` is matched by its
+ * session-scoped table is shifted without touching this file. That includes the OTEL tables
+ * (task 2026-10-30-otel-tabs-traces): `logs_otel.created_at` (retention's age of a chunk-only
+ * root) and `otel_session_state.created_at` (the age of an OTEL-only root — a session that only
+ * ever received realtime batches and has no `logs` row), next to `otel_calls.event_time`,
+ * `otel_spans` start/end and `otel_cost_buckets.bucket_start`. {@link shiftSessionTree} checks
+ * that both `created_at` columns were found, so a renamed column fails loudly instead of leaving
+ * an "old" OTEL session young. `session_id` is matched by its
  * type: an integer column holds `sessions.id`, a text column holds the string `sessions.session_id`.
  * Everything runs in one transaction on the `db` fixture's pool (its search_path is the stand's
  * schema, read here through `current_schema()`).
@@ -88,6 +94,12 @@ async function sessionScopedTables(client: PoolClient): Promise<Map<string, { se
   return tables;
 }
 
+/** The OTEL columns retention ages a session by (DD-25 of 2026-10-30-otel-tabs-traces). */
+const OTEL_AGE_COLUMNS: ReadonlyArray<[string, string]> = [
+  ['otel_session_state', 'created_at'],
+  ['logs_otel', 'created_at'],
+];
+
 export interface ShiftOptions {
   /**
    * Tables to leave alone. For in-flight transport state whose age drives its own sweep — e.g.
@@ -135,6 +147,13 @@ export async function shiftSessionTree(
       const sets = timestamps.map((c) => `${quoteIdent(c)} = ${quoteIdent(c)} - $1::float8 * interval '1 day'`).join(', ');
       const res = await client.query(`UPDATE ${quoteIdent(table)} SET ${sets} WHERE ${where}`, [deltaDays, param]);
       shifted.push({ table, columns: timestamps, rows: res.rowCount ?? 0 });
+    }
+
+    for (const [table, column] of OTEL_AGE_COLUMNS) {
+      const entry = tables.get(table);
+      if (entry && !entry.timestamps.includes(column)) {
+        throw new Error(`shiftSessionTree: ${table}.${column} is not a timestamp column any more — retention reads it`);
+      }
     }
 
     await client.query('COMMIT');

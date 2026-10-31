@@ -39,7 +39,7 @@ It shares Postgres with the server tests and the e2e suites, so it runs serially
 | `types.ts` | the registry row format (`ContractCase`, `ReadSpec`, `WriteSpec`, `FieldMap`) |
 | `run-case.ts` | `runCase(row, ctx)`, `ContractContext` (one real login per actor), `callable()`, `resetWorld()` |
 | `registry/index.ts` | collects the families: `FAMILIES`, `casesOf()`, `registryRoutes()` |
-| `registry/f<NN>-<family>.ts` | one family's rows (F01-F24) |
+| `registry/f<NN>-<family>.ts` | one family's rows (F01-F25) |
 | `registry/oracle-sql.ts` | shared hand-written SQL: session cost (own / with sub-agents), the listed root sessions of a repository, ISO timestamps for jsonb |
 | `f<NN>.contract-spec.ts` | one `it.each` per family |
 | `routes.contract-spec.ts` | the meta-test: router (Nest metadata and the Express 5 stack) vs registry |
@@ -77,7 +77,7 @@ It shares Postgres with the server tests and the e2e suites, so it runs serially
    {
      id: 'F04-list',                          // unique; the test title
      route: 'GET /api/v1/api-keys',           // METHOD + path exactly as the router declares it
-     actor: 'owner',                          // admin | owner | member | outsider | author | manager
+     actor: 'owner',                          // admin | owner | member | outsider | author | manager | trainer
                                               // | ownerKey | memberKey | authorKey | anon
      expect: { status: 200, minRows: 2 },     // minRows: the fixture really exercises the route
      read: {

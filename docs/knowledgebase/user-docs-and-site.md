@@ -133,6 +133,15 @@ in Home/Features/deck, wrap with `scripts/site/layout.mjs`, copy assets.
 the ASCII block. A missing `.mmd` fails the build. Only pages with a diagram load Mermaid 12.2.0
 from jsDelivr (pinned, SRI) and `assets/diagrams.js`, which themes it from the CSS tokens.
 
+**Images.** A page may show an image kept in `user-docs/images/` (lowercase name, `.svg` or `.png`,
+no subfolder), linked as `![alt](images/<name>)`. `resolveLink` returns `{kind:'asset'}` for it
+(rule 6 of `algorithms/user-docs-links.md`); any other image path is `unresolved` and fails both
+builds, as does a missing file. `generate-help.js` copies the linked images to
+`client/public/help/images/` (stale ones there are removed) and `HelpModal` renders only
+`images/<name>` sources, from `/help/images/` — never a remote `src`, so the help stays offline.
+`build-site.mjs` copies them to `docs/images/`. First used by `otel-architecture.md` (two OTEL tab
+wireframes).
+
 | Input | Output |
 |---|---|
 | `site/pages/home.html`, `features.html`, `questions.html` (body fragments) | `index.html`, `features.html`, `questions.html` (security-lead FAQ, each answer links its source doc) |

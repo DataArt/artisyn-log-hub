@@ -47,6 +47,17 @@ An orange dot with "N issues" in the sidebar means something on this page needs 
 - **Upgrade:** use the **Upgrade Hooks** card on the Install tab (or the **Copy upgrade cmd**
   button on the Hook State page). Upgrading keeps your existing configuration and is safe to
   re-run.
+- **Traces question:** installing hook **2.29.0** or newer asks
+  `Also export Claude Code traces (enhanced telemetry beta) to Log Hub? [Y/n]`. Traces feed the
+  trace waterfall of the session [OTEL tab](otel-tab.md). Answer it in a non-interactive run with
+  `--otel-traces=yes` or `--otel-traces=no` on the `install` command (a run without a terminal and
+  without the flag means yes). The answer is stored as `otelTraces` in
+  `.artisyn/config/log-hub.json`; an upgrade keeps it without asking again. To change it, run
+  `install` again with the other `--otel-traces` value.
+- **Live OTEL updates:** hook 2.29.0 also sends OTEL data to Log Hub every few seconds while a
+  session runs, so the OTEL tabs update almost live. To turn that off, set
+  `"otelRealtime": false` in `.artisyn/config/log-hub.json`; the OTEL data then arrives with the
+  regular upload at the end of each turn.
 - **Uninstall:** run the same installer command with `uninstall` — it removes the hook and its
   configuration from the project.
 

@@ -62,11 +62,17 @@ import {
 import { EDIT_WRITE_TOOL_NAMES } from './edit-tools';
 import { textList } from './analytics/scoped-sessions.sql';
 import {
+  costExcludesUtilityCallsSql,
   costMismatch,
   otelCostsCte,
   otelComputedDiscrepancy,
   type CostBreakdown,
 } from './otel-cost.sql';
+import { OTEL_REASON_FILTER_KEYS } from './otel/otel-facts.constants';
+import {
+  otelRootCoveredSql,
+  otelRootReasonSql,
+} from './otel/otel-facts-read.sql';
 import {
   loadTreeCostRows,
   readTreeCost,
@@ -123,7 +129,29 @@ const EMPTY_COST_BREAKDOWN: Readonly<CostBreakdown> = Object.freeze({
   utilityPricingMissing: false,
   subagentPricingMissing: false,
   unpricedModels: [],
+  costExcludesUtilityCalls: false,
 });
+
+/**
+ * The sessions list `otelReason=` filter (2026-10-30 otel-shared-receiver, API changes): absent
+ * or empty → no filter; one of {@link OTEL_REASON_FILTER_KEYS} → that key; a repeated or unknown
+ * value → 400, like the other enum filters.
+ */
+function parseOtelReasonFilter(
+  raw: string | string[] | undefined,
+): (typeof OTEL_REASON_FILTER_KEYS)[number] | undefined {
+  if (raw === undefined || raw === '') return undefined;
+  if (typeof raw !== 'string') {
+    throw new BadRequestException('otelReason must be given once');
+  }
+  const key = OTEL_REASON_FILTER_KEYS.find((k) => k === raw);
+  if (key === undefined) {
+    throw new BadRequestException(
+      `otelReason must be one of ${OTEL_REASON_FILTER_KEYS.join(', ')}`,
+    );
+  }
+  return key;
+}
 
 /**
  * The team access-mode row filter, as a raw-SQL fragment for the routes on this
@@ -511,10 +539,19 @@ export class RepositoriesController {
     @Query('teamId', new ParseIntPipe({ optional: true })) teamId?: number,
     @Query('branch') branchParam?: string,
     @Query('attr') attrParam?: string | string[],
+    @Query('otelReason') otelReasonParam?: string | string[],
   ) {
     if (teamId !== undefined && teamId <= 0) {
       throw new BadRequestException('teamId must be a positive integer');
     }
+    const otelReason = parseOtelReasonFilter(otelReasonParam);
+    // Only root sessions without OTEL data whose reason (`no-status` when the hook never
+    // reported one) equals the filter (DD-29's split, API changes).
+    const otelReasonCondition =
+      otelReason === undefined
+        ? undefined
+        : sql`(NOT ${otelRootCoveredSql(sql`${schema.sessions.id}`)}
+            AND ${otelRootReasonSql(sql`${schema.sessions.id}`)} = ${otelReason})`;
 
     const user = req.user as AuthUser;
     const { repoCondition, branchCondition, ownerCondition, repoUrl, scope } =
@@ -591,6 +628,7 @@ export class RepositoriesController {
           branchCondition,
           ownerCondition,
           attrCondition,
+          otelReasonCondition,
         ),
       )
       .orderBy(
@@ -619,6 +657,7 @@ export class RepositoriesController {
       type CostRow = TreeCostSqlRow & {
         model: string | null;
         otel_cost: string | null;
+        cost_excludes_utility_calls: boolean | null;
       };
       const costResult = await this.db.execute(sql`
         WITH RECURSIVE ${descendantSessionsCte(idsArray)},
@@ -667,7 +706,8 @@ export class RepositoriesController {
           se.session_row_id,
           se.model AS model,
           ${TREE_COST_COLUMNS_SQL},
-          oc.otel_cost AS otel_cost
+          oc.otel_cost AS otel_cost,
+          ${costExcludesUtilityCallsSql(sql`se.session_row_id`)} AS cost_excludes_utility_calls
         FROM session_events_jsonb se
         JOIN tree_costs tc ON tc.session_row_id = se.session_row_id
         LEFT JOIN otel_costs oc ON oc.session_row_id = se.session_row_id
@@ -694,6 +734,7 @@ export class RepositoriesController {
             utilityPricingMissing: tree.utilityPricingMissing,
             subagentPricingMissing: tree.subagentPricingMissing,
             unpricedModels: tree.unpricedModels,
+            costExcludesUtilityCalls: row.cost_excludes_utility_calls === true,
           },
           // 'unknown-model' only when some model of the tree has no price. A session
           // whose transcript carries no model at all has nothing to price, so its reason

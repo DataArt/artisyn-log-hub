@@ -34,6 +34,22 @@
 // two (root sent, no snapshot; no frozen copy exists) is uploaded inline with helpers/okf.ts: its
 // read counts with «partial data», and the OKF tab shows the «update the hook» banner.
 //
+// Steps 12–13 (2026-10-30 OTEL tabs, AC-10 / AC-11):
+//   - 2.28.0 — the last hook without OTEL traces and the realtime channel. Its real Stop uploads
+//     the transcript, and its `--otel-sweep` run (what the 2.28.0 receiver launches on a quiet
+//     minute) ships the OTEL chunk the receiver wrote: `signal:"logs"` lines only, no
+//     `hookVersion` field. The OTEL tabs show the full chart and the hidden breakdown, the
+//     waterfall's place says «No traces — upgrade the hook», and the slow banner names the hook;
+//   - 1.6.2 never reaches the server (steps 1–3) and 2.6.1 predates OTEL in the project config
+//     (its OTEL is off): the 2.6.1 session and its repository show the OTEL empty state, every
+//     other session view is unchanged.
+//
+// Steps 14–15 (2026-10-30 shared receiver, AC-A3, DD-22): 2.28.0 is also the last per-project-
+// receiver hook. Next to a running shared receiver (current hook, fake home with port.json and
+// token) it keeps re-arming and registering on its own `otelReceiverPort`; pointed at the shared
+// port by a stale config, its unauthenticated register and shutdown get 401, the shared receiver
+// stays up, and its own receiver launched there exits 0 on EADDRINUSE.
+//
 // Replaces:
 //   - server/test/upload-queue.e2e-spec.ts — «v1 unmodified» (1)
 //   - server/test/logs.e2e-spec.ts — empty-response checks (2)
@@ -44,21 +60,38 @@ import * as path from 'path';
 import { test, expect } from '../fixtures';
 import { createApiKey } from '../helpers/api-key';
 import {
+  authedRequest,
   claudeProjectDir,
+  copyToolDir,
+  freeLoopbackPort,
   isRecord,
   makeFakeGitRepo,
   makeFakeHome,
+  rawRequest,
+  readHookLog,
   REPO_ROOT,
+  runNodeScript,
   runScript,
   runToken,
+  sharedHello,
+  spawnReceiver,
+  startSharedReceiver,
+  stopReceiver,
   subagentsDir,
   tempDirs,
+  waitForExit,
+  waitForPort,
+  writeConfig,
+  writeSharedState,
   writeStandConfig,
   type HookRun,
+  type ReceiverProcess,
   type TempDirs,
 } from '../helpers/hook-process';
 import { ndjson, queueRowCount, sessionRowCount, storedBody } from '../helpers/ingest';
 import { uploadOkfSessionTree } from '../helpers/okf';
+import { callLines, chunkBody, floor5m, otelTurn, transcriptBodies } from '../fixtures/otel/otel-lines';
+import { repoFacts, sessionOtel, waitForOtelProjected } from '../helpers/otel';
 import { ownRepoId } from '../helpers/prompt-session';
 import { waitForQueueIdle } from '../helpers/queue';
 import { openSession } from '../helpers/session-view';
@@ -179,11 +212,13 @@ function expectRunOk(run: HookRun, what: string): void {
   expect(run.code, `${what}: ${run.stderr}`).toBe(0);
 }
 
-test('@S-COMPAT-01 frozen 1.6.2 and 2.6.1 hooks against the current server @mode-a @mode-c', async ({ api, db, users, stand, page }) => {
+test('@S-COMPAT-01 frozen 1.6.2, 2.6.1 and 2.28.0 hooks against the current server @mode-a @mode-c', async ({ api, db, users, stand, page }) => {
   test.setTimeout(240_000);
   const run = runToken();
   const dirs = tempDirs();
   let proxy: StandProxy | undefined;
+  let shared: ReceiverProcess | undefined;
+  let legacyReceiver: ReceiverProcess | undefined;
   try {
     const owner = await users.user('user', { label: 'compat-owner' });
     const key = await createApiKey(owner.api);
@@ -380,6 +415,71 @@ test('@S-COMPAT-01 frozen 1.6.2 and 2.6.1 hooks against the current server @mode
       await expect(page).toHaveURL(/#\/api-keys/);
     });
 
+    await test.step('12. AC-10: frozen 2.28.0 — Stop uploads the transcript, its --otel-sweep ships the OTEL logs chunk; the OTEL tabs show chart and hidden breakdown, «No traces — upgrade the hook» instead of the waterfall, no error', async () => {
+      const { toolDir, frozen } = copyFrozenHook(dirs, '2.28.0');
+      expect(frozen.version).toBe('2.28.0');
+      const repoUrl = `https://git.arrakis.test/compat/${run}/v228`;
+      const repo = makeFakeGitRepo(dirs, { remote: `git@git.arrakis.test:compat/${run}/v228.git` });
+      const home = makeFakeHome(dirs);
+      writeStandConfig(repo, stand.url, key.key);
+      const sid = `c228-${run}`;
+      const tag = `k${run}`;
+      const turn = otelTurn(tag, floor5m(new Date(Date.now() - 30 * 60_000)));
+      const { claude } = transcriptBodies({ sessionId: sid, prompt: PROMPT, repoUrls: [repoUrl], branch: 'main', at: new Date(Date.now() - 31 * 60_000), requestIds: turn.transcriptRequestIds });
+      fs.writeFileSync(path.join(claudeProjectDir(home, repo), `${sid}.jsonl`), claude);
+      const prompt = await runScript(toolDir, 'telemetry-hook.js', { hook_event_name: 'UserPromptSubmit', session_id: sid, cwd: repo, prompt: PROMPT }, { home });
+      expectRunOk(prompt, '2.28.0 UserPromptSubmit');
+      expectRunOk(await runScript(toolDir, 'send-logs-hook.js', { hook_event_name: 'Stop', session_id: sid, cwd: repo }, { home, timeoutMs: 30_000 }), '2.28.0 Stop');
+
+      // What the 2.28.0 receiver writes: one chunk per OTLP request, logs only, no hookVersion.
+      const otelDir = path.join(repo, '.artisyn', 'ai_work_dir', 'telemetry', 'otel', sid);
+      fs.mkdirSync(otelDir, { recursive: true });
+      fs.writeFileSync(path.join(otelDir, `${Date.now()}-0.jsonl`), chunkBody(callLines(sid, turn, { hookVersion: null })));
+      const sweep = await runNodeScript(path.join(toolDir, 'send-logs-hook.js'), repo, null, { home, argv: ['--otel-sweep', '--cwd', repo], timeoutMs: 30_000 });
+      expectRunOk(sweep, '2.28.0 --otel-sweep');
+      expect(fs.readdirSync(otelDir), 'the uploaded chunk is deleted').toEqual([]);
+      await waitForQueueIdle(db, owner.id);
+      await waitForOtelProjected(db, sid);
+
+      const repoId = await ownRepoId(owner.api, repoUrl);
+      const snap = await sessionOtel(owner, repoId, sid);
+      expect(snap.status).toMatchObject({ hasOtel: true, hasSpans: false, slowUpdates: true, slowReason: 'old-hook', otelHookVersion: null });
+      expect(Number(snap.kpis?.totalCostUsdMicros)).toBe(turn.totalMicros);
+      expect(Number(snap.kpis?.hiddenCostUsdMicros)).toBe(turn.hiddenMicros);
+      expect(snap.spans).toEqual([]);
+      const facts = await repoFacts(owner, repoId);
+      expect(facts).toMatchObject({ hasOtel: true, slowUpdates: true, hookVersion: '2.28.0' });
+
+      await openSession(page, owner, repoId, sid, { tab: 'otel' });
+      const tab = page.getByTestId('session-otel-tab');
+      await expect(tab.getByTestId('otel-cost-chart')).toBeVisible();
+      await expect(tab.getByTestId('otel-hidden-bars')).toContainText('prompt_suggestion');
+      await expect(tab.getByTestId('otel-empty-B')).toContainText('No traces — upgrade the hook');
+      await expect(tab.getByTestId('otel-slow-banner')).toHaveAttribute('data-reason', 'old-hook');
+      await expect(tab.getByText('Could not load OTEL data.')).toHaveCount(0);
+    });
+
+    await test.step('13. AC-11: 1.6.2 reached nothing (steps 1–3); the 2.6.1 session, recorded with OTEL off, shows the OTEL empty state in its session and repository tabs, and its other views are unchanged', async () => {
+      const repoId = await ownRepoId(owner.api, `https://git.arrakis.test/compat/${run}/v26`);
+      const snap = await sessionOtel(owner, repoId, v26.sid);
+      expect(snap.status.hasOtel).toBe(false);
+      expect(snap.calls).toEqual([]);
+      expect((await repoFacts(owner, repoId)).hasOtel).toBe(false);
+      await openSession(page, owner, repoId, v26.sid, { tab: 'otel' });
+      // 2.6.1 reports no otel-status: the generic `no-status` reason panel (shared-receiver task, DD-31).
+      await expect(page.getByTestId('otel-reason-panel')).toContainText('No OTEL data for this session');
+      await expect(page.getByTestId('otel-reason-status-line')).toHaveCount(0);
+      await page.getByTestId('tab-session-summary').click();
+      await expect(page.getByTestId('summary-executive-band')).toBeVisible();
+      await page.getByTestId('tab-session-logs').click();
+      await expect(page.locator('[data-turn-index]').first()).toBeVisible();
+      await page.goto(`/#/repos/${repoId}?mtab=otel`);
+      // 0 of M sessions with OTEL: the `reason` variant, dominated by the old hook's `no-status`.
+      const repoEmpty = page.getByTestId('otel-empty-reason');
+      await expect(repoEmpty).toHaveAttribute('data-reason', 'no-status');
+      await expect(repoEmpty).toContainText(/No OTEL data in this period \(0 of \d+ sessions?\)/);
+    });
+
     await test.step('4–5. a 1.5 MB transcript in 900 KB chunks: chunk 1 fails, the next Stop resumes from .claude-logs.pending and the server assembles it byte for byte', async () => {
       const bigSid = `c26big-${run}`;
       const rows = transcriptLines(bigSid, 'feature/compat', v26.repo, 30, 50_000);
@@ -420,7 +520,69 @@ test('@S-COMPAT-01 frozen 1.6.2 and 2.6.1 hooks against the current server @mode
       expect(stored[0]).toEqual(rows[0]);
       expect(stored[stored.length - 1]).toEqual(rows[rows.length - 1]);
     });
+
+    // Steps 14–15 (2026-10-30 shared receiver, AC-A3, DD-22): a user who upgraded one repo keeps
+    // frozen 2.28.0 in another. Nothing here talks to the stand.
+    const current = copyToolDir(dirs);
+    const legacyHook = copyFrozenHook(dirs, '2.28.0').toolDir;
+    const shHome = makeFakeHome(dirs);
+    const shState = await writeSharedState(shHome);
+    const shAuth = { token: shState.token, home: shHome };
+    const sharedLog = () => fs.readFileSync(path.join(shState.stateDir, 'receiver.log'), 'utf8');
+    const legacyConfig = (port: number) => ({ base: { otelEnabled: true, sendLogsOnPromptEnabled: false, otelReceiverPort: port, otelReceiverIdleTimeoutMs: 5000 } });
+
+    await test.step('14. AC-A3: frozen 2.28.0 keeps its own per-project port next to a running shared receiver — its Stop re-arms and registers there, never on the shared port, and changes neither port', async () => {
+      shared = await startSharedReceiver(current, { home: shHome, stateDir: shState.stateDir, port: shState.port });
+      const repo = makeFakeGitRepo(dirs, { remote: `git@git.arrakis.test:compat/${run}/v228-port.git` });
+      const otelDir = path.join(repo, '.artisyn', 'ai_work_dir', 'telemetry', 'otel');
+      fs.mkdirSync(otelDir, { recursive: true });
+      const legacyPort = await freeLoopbackPort();
+      legacyReceiver = spawnReceiver(legacyHook, { port: legacyPort, dir: otelDir, owner: { gitRoot: repo, repo: `git@git.arrakis.test:compat/${run}/v228-port.git` }, idleTimeoutMs: 30_000 });
+      await waitForPort(legacyPort);
+      writeConfig(repo, legacyConfig(legacyPort));
+      const configBefore = fs.readFileSync(path.join(repo, '.artisyn', 'config', 'log-hub.json'), 'utf8');
+      const portFileBefore = fs.readFileSync(path.join(shState.stateDir, 'port.json'), 'utf8');
+
+      // The home has the shared port.json — 2.28.0 never reads it (FR-A11).
+      expectRunOk(await runScript(legacyHook, 'send-logs-hook.js', { hook_event_name: 'Stop', session_id: `c228p-${run}`, cwd: repo }, { home: shHome, timeoutMs: 30_000 }), '2.28.0 Stop');
+      const log = readHookLog(repo);
+      expect(log.some((l) => l.includes(`otel receiver re-armed on 127.0.0.1:${legacyPort}`)), log.join('\n')).toBe(true);
+      expect(log.some((l) => l.includes(`:${shState.port}`)), 'the shared port is never used').toBe(false);
+      expect(sharedLog()).not.toMatch(/auth-reject|register /);
+      expect(fs.readFileSync(path.join(repo, '.artisyn', 'config', 'log-hub.json'), 'utf8')).toBe(configBefore);
+      expect(fs.readFileSync(path.join(shState.stateDir, 'port.json'), 'utf8')).toBe(portFileBefore);
+      // Its own receiver still serves it.
+      const owner = { gitRoot: repo, repo: `git@git.arrakis.test:compat/${run}/v228-port.git` };
+      expect((await rawRequest(legacyPort, '/artisyn/register', { sessionId: 'p1', ...owner })).status).toBe(200);
+      expect(legacyReceiver.exitCode()).toBeUndefined();
+    });
+
+    await test.step('15. DD-22: a legacy register and shutdown on the shared port (a stale otelReceiverPort) → 401, the shared receiver stays up; the frozen receiver launched on that port exits 0 (EADDRINUSE)', async () => {
+      const repo = makeFakeGitRepo(dirs, { remote: `git@git.arrakis.test:compat/${run}/v228-stale.git` });
+      writeConfig(repo, legacyConfig(shState.port));
+      expectRunOk(await runScript(legacyHook, 'send-logs-hook.js', { hook_event_name: 'Stop', session_id: `c228s-${run}`, cwd: repo }, { home: shHome, timeoutMs: 30_000 }), '2.28.0 Stop on the shared port');
+      await expect.poll(() => sharedLog().includes('auth-reject route=/artisyn/register reason=missing-header'), { timeout: 5000 }).toBe(true);
+
+      const owner = { gitRoot: repo, repo: `git@git.arrakis.test:compat/${run}/v228-stale.git` };
+      const register = await rawRequest(shState.port, '/artisyn/register', { sessionId: 'stale-1', ...owner });
+      expect(register.status).toBe(401);
+      expect(register.json).toEqual({ error: 'unauthorized' });
+      const shutdown = await rawRequest(shState.port, '/artisyn/shutdown', { gitRoot: repo, sessionId: 'stale-1' });
+      expect(shutdown.status).toBe(401);
+      expect(sharedLog()).toContain('auth-reject route=/artisyn/shutdown reason=missing-header');
+
+      const loser = spawnReceiver(legacyHook, { port: shState.port, dir: path.join(repo, '.artisyn', 'ai_work_dir', 'telemetry', 'otel'), owner, idleTimeoutMs: 5000 });
+      expect(await waitForExit(loser), 'EADDRINUSE is the normal second-receiver path').toBe(0);
+
+      expect(shared!.exitCode(), 'the shared receiver is still running').toBeUndefined();
+      const hello = await sharedHello(shState.port, shAuth);
+      expect(hello.res.status).toBe(200);
+      expect(hello.proofValid).toBe(true);
+      expect((await authedRequest(shState.port, '/artisyn/session-status', { sessionId: 'stale-1' }, shAuth)).json).toMatchObject({ registered: false });
+    });
   } finally {
+    await stopReceiver(shared);
+    await stopReceiver(legacyReceiver);
     await proxy?.close();
     dirs.cleanup();
   }

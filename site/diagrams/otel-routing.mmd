@@ -1,0 +1,11 @@
+flowchart TB
+  rec["OTLP record arrives"] --> sid["read session.id<br/>(record, then resource)"]
+  sid --> known{"session registered?"}
+  known -->|yes| sig{"signal enabled<br/>for that repo?"}
+  sig -->|yes| write["write to that repo's OTEL folder"]
+  sig -->|no| drop["drop (counted)"]
+  known -->|no| tag{"resource tag artisyn.repo<br/>matches an installed repo?"}
+  tag -->|yes| write
+  tag -->|no| pend["pending spool<br/>5 min, 5000 records max"]
+  pend -->|"session registers in time"| write
+  pend -->|expired| drop

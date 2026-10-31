@@ -1,3 +1,11 @@
+import type {
+  OtelCallsFilter,
+  OtelCoverage,
+  OtelInterval,
+  OtelRepoKpis,
+  RepoOtelFactsResponse,
+} from './repositories';
+
 /**
  * How much of each other's work the members of a team can see.
  *
@@ -81,4 +89,90 @@ export interface PendingDisclosure {
   teamName: string;
   accessMode: TeamAccessMode;
   hasTrainer: boolean;
+}
+
+// --- Team OTEL tab (2026-10-30 otel-tabs-traces, DD-29) ---------------------------
+
+/** `stackBy` of the team facts route: person = user id keys, repository = repository id keys. */
+export type TeamOtelStackBy =
+  | 'person'
+  | 'repository'
+  | 'structure'
+  | 'model'
+  | 'querySource';
+
+export interface OtelTeamKpis extends OtelRepoKpis {
+  /** Total / active people; null without people. */
+  perActivePersonCostUsdMicros: string | null;
+  repositories: number;
+  repositoriesLive: number;
+}
+
+export interface OtelTeamPersonRow {
+  userId: number;
+  email: string;
+  sessions: number;
+  costUsdMicros: string;
+  hiddenCostUsdMicros: string;
+  inputTokens: string;
+  cacheReadTokens: string;
+  cacheWriteTokens: string;
+  models: string[];
+  /** How many of the team's repositories the person has sessions in. */
+  repositories: number;
+  live: boolean;
+  /** Cost per bucket start, in USD, oldest first. */
+  trend: number[];
+}
+
+export interface OtelTeamRepositoryRow {
+  /** The team repository id (`routes.teamRepo`). */
+  repoId: number;
+  repoUrl: string;
+  people: number;
+  /** A session linked to two team repositories counts in each. */
+  sessions: number;
+  costUsdMicros: string;
+  hiddenCostUsdMicros: string;
+  liveSessions: number;
+}
+
+/** `GET /api/v1/teams/:teamId/otel/facts` (DD-29). */
+export interface TeamOtelFactsResponse extends Omit<
+  RepoOtelFactsResponse,
+  'sessions' | 'filterOptions' | 'kpis' | 'kpisPrev'
+> {
+  kpis: OtelTeamKpis;
+  kpisPrev: OtelTeamKpis | null;
+  /** The caller's whole visible scope, without the person / repository filters. */
+  filterOptions: {
+    models: string[];
+    ccVersions: string[];
+    people: { userId: number; email: string }[];
+    repositories: { repoId: number; repoUrl: string }[];
+  };
+  people: OtelTeamPersonRow[];
+  repositories: OtelTeamRepositoryRow[];
+  /**
+   * OTEL coverage of the team's roots active in the period, summed across the team's repositories
+   * (2026-10-30 otel-shared-receiver, DD-29).
+   */
+  coverage: OtelCoverage;
+}
+
+/** Query of the team facts route. */
+export interface TeamOtelFactsParams {
+  teamId: number;
+  /** ISO bounds, `to > from`. */
+  from: string;
+  to: string;
+  repoIds?: number[];
+  userIds?: number[];
+  models?: string[];
+  ccVersions?: string[];
+  calls?: OtelCallsFilter;
+  interval?: 'auto' | OtelInterval;
+  stackBy?: TeamOtelStackBy;
+  /** IANA name; the server defaults to `UTC`. */
+  tz?: string;
 }

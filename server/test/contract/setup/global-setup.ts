@@ -66,6 +66,11 @@ export default async function globalSetup(): Promise<void> {
   // and `repositories.tool_wrap_status` mid-run. The F24 rows read the world's hand-written
   // `session_tool_usage` rows; what a rebuild produces is the algorithm tests' and scenarios' job.
   process.env.TOOL_USAGE_REBUILD_INTERVAL_MS = '3600000';
+  // The OTEL projection drain (2026-10-30 otel-tabs-traces, DD-16) is parked for the same
+  // reason: its tick drains `otel_reclass_queue` (filled by any transcript re-read) and
+  // finalises idle roots, both writes no row made. The F25 rows read world-v1's hand-written
+  // otel_* rows; what the drain produces is the scenarios' job.
+  process.env.OTEL_PROJECTION_INTERVAL_MS = '3600000';
   process.env.UPLOAD_QUEUE_LEASE_TIMEOUT_MS = '150';
   process.env.UPLOAD_QUEUE_TICK_BUDGET_MS = '500';
   process.env.AI_TOOL_VERSION_CHECK_ENABLED = 'false';

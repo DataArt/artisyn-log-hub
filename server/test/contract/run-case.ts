@@ -69,6 +69,7 @@ const COOKIE_ACTORS: Partial<Record<Actor, string>> = {
   outsider: WORLD_V1.users.outsider.email,
   author: WORLD_V1.users.author.email,
   manager: WORLD_V1.users.manager.email,
+  trainer: WORLD_V1.users.trainer.email,
 };
 
 const KEY_ACTORS: Partial<Record<Actor, string>> = {

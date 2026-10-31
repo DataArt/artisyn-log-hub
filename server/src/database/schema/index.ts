@@ -360,6 +360,9 @@ export const logsOtel = pgTable(
     costUsdMicros: bigint('cost_usd_micros', { mode: 'bigint' }),
     recordCount: integer('record_count'),
     processedAt: timestamp('processed_at', { withTimezone: true }),
+    // OTEL facts projection marker (migration 0078): NULL = pending, -1 = projection failed
+    // (re-marked NULL at startup), N = projected with OTEL_PROJECTION_VERSION N.
+    otelProjectionVersion: smallint('otel_projection_version'),
   },
   (table) => [
     unique('logs_otel_session_chunk_unique').on(
@@ -372,6 +375,9 @@ export const logsOtel = pgTable(
       table.sessionId,
       table.receivedAt,
     ),
+    index('idx_logs_otel_projection_pending')
+      .on(table.id)
+      .where(sql`${table.otelProjectionVersion} IS NULL`),
   ],
 );
 
@@ -454,6 +460,200 @@ export const sessionRequestIds = pgTable(
     index('idx_session_request_ids_request_id').on(table.requestId),
   ],
 );
+
+// ---------------------------------------------------------------------------
+// OTEL facts (migration 0078, 2026-10-30 otel-tabs-traces). Projected from logs_otel chunks and
+// from the hook's realtime channel; every row belongs to the ROOT session (the OTEL session.id is
+// always the root id) and sub-agent rows are told apart by agent_id. `seq` is the value of
+// otel_session_state.seq stamped by the write that last changed the row (the `since=` cursor);
+// `change_kind` is 'new' | 'update' | 'confirm' | 'fill' | 'reclass'; `source_mask` bit 1 =
+// realtime, bit 2 = chunk. All tables cascade away with their sessions row.
+// ---------------------------------------------------------------------------
+
+// One row per OTEL api_request call. call_key = request_id, else 'rec:' + sha1 of the record.
+// CHECK (structure IN ('main','subagent','hidden')) lives in migration 0078 only.
+export const otelCalls = pgTable(
+  'otel_calls',
+  {
+    sessionId: integer('session_id')
+      .notNull()
+      .references(() => sessions.id, { onDelete: 'cascade' }),
+    callKey: varchar('call_key', { length: 300 }).notNull(),
+    requestId: varchar('request_id', { length: 255 }),
+    querySource: varchar('query_source', { length: 255 }),
+    model: varchar('model', { length: 255 }),
+    claudeCodeVersion: varchar('claude_code_version', { length: 64 }),
+    promptId: varchar('prompt_id', { length: 255 }),
+    agentId: varchar('agent_id', { length: 255 }),
+    eventTime: timestamp('event_time', { withTimezone: true }).notNull(),
+    inputTokens: bigint('input_tokens', { mode: 'number' })
+      .notNull()
+      .default(0),
+    outputTokens: bigint('output_tokens', { mode: 'number' })
+      .notNull()
+      .default(0),
+    cacheReadTokens: bigint('cache_read_tokens', { mode: 'number' })
+      .notNull()
+      .default(0),
+    cacheWriteTokens: bigint('cache_write_tokens', { mode: 'number' })
+      .notNull()
+      .default(0),
+    costUsdMicros: bigint('cost_usd_micros', { mode: 'bigint' }),
+    structure: varchar('structure', { length: 16 }).notNull(),
+    provisional: boolean('provisional').notNull(),
+    sourceMask: smallint('source_mask').notNull(),
+    firstSeq: bigint('first_seq', { mode: 'number' }).notNull(),
+    seq: bigint('seq', { mode: 'number' }).notNull(),
+    changeKind: varchar('change_kind', { length: 8 }).notNull(),
+  },
+  (table) => [
+    primaryKey({
+      name: 'otel_calls_pk',
+      columns: [table.sessionId, table.callKey],
+    }),
+    index('idx_otel_calls_session_seq').on(table.sessionId, table.seq),
+    index('idx_otel_calls_session_request_id')
+      .on(table.sessionId, table.requestId)
+      .where(sql`${table.requestId} IS NOT NULL`),
+  ],
+);
+
+// One row per OTEL trace span. `attributes` holds the raw flattened span attributes (or
+// { _truncated: true, _bytes } over OTEL_SPAN_ATTRIBUTES_MAX_BYTES); `rollup_cost_usd_micros` =
+// own cost + the children's rollups.
+export const otelSpans = pgTable(
+  'otel_spans',
+  {
+    sessionId: integer('session_id')
+      .notNull()
+      .references(() => sessions.id, { onDelete: 'cascade' }),
+    traceId: varchar('trace_id', { length: 64 }).notNull(),
+    spanId: varchar('span_id', { length: 32 }).notNull(),
+    parentSpanId: varchar('parent_span_id', { length: 32 }),
+    name: varchar('name', { length: 255 }).notNull(),
+    startTime: timestamp('start_time', { withTimezone: true }).notNull(),
+    endTime: timestamp('end_time', { withTimezone: true }),
+    requestId: varchar('request_id', { length: 255 }),
+    agentId: varchar('agent_id', { length: 255 }),
+    querySource: varchar('query_source', { length: 255 }),
+    context: varchar('context', { length: 32 }),
+    attributes: jsonb('attributes')
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    costUsdMicros: bigint('cost_usd_micros', { mode: 'bigint' }),
+    rollupCostUsdMicros: bigint('rollup_cost_usd_micros', { mode: 'bigint' }),
+    sourceMask: smallint('source_mask').notNull(),
+    firstSeq: bigint('first_seq', { mode: 'number' }).notNull(),
+    seq: bigint('seq', { mode: 'number' }).notNull(),
+    changeKind: varchar('change_kind', { length: 8 }).notNull(),
+  },
+  (table) => [
+    primaryKey({
+      name: 'otel_spans_pk',
+      columns: [table.sessionId, table.traceId, table.spanId],
+    }),
+    index('idx_otel_spans_session_seq').on(table.sessionId, table.seq),
+    index('idx_otel_spans_session_request_id')
+      .on(table.sessionId, table.requestId)
+      .where(sql`${table.requestId} IS NOT NULL`),
+  ],
+);
+
+// 5-minute UTC cost rollups of otel_calls per (root session, bucket, structure, query_source,
+// model, cc_version). NULL dimensions are stored as ''. A key that no longer exists after a
+// rebuild is zeroed, never deleted; reads ignore zero rows.
+export const otelCostBuckets = pgTable(
+  'otel_cost_buckets',
+  {
+    sessionId: integer('session_id')
+      .notNull()
+      .references(() => sessions.id, { onDelete: 'cascade' }),
+    userId: integer('user_id').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    bucketStart: timestamp('bucket_start', { withTimezone: true }).notNull(),
+    structure: varchar('structure', { length: 16 }).notNull(),
+    querySource: varchar('query_source', { length: 255 }).notNull().default(''),
+    model: varchar('model', { length: 255 }).notNull().default(''),
+    ccVersion: varchar('cc_version', { length: 64 }).notNull().default(''),
+    calls: integer('calls').notNull().default(0),
+    costUsdMicros: bigint('cost_usd_micros', { mode: 'bigint' })
+      .notNull()
+      .default(sql`0`),
+    inputTokens: bigint('input_tokens', { mode: 'number' })
+      .notNull()
+      .default(0),
+    outputTokens: bigint('output_tokens', { mode: 'number' })
+      .notNull()
+      .default(0),
+    cacheReadTokens: bigint('cache_read_tokens', { mode: 'number' })
+      .notNull()
+      .default(0),
+    cacheWriteTokens: bigint('cache_write_tokens', { mode: 'number' })
+      .notNull()
+      .default(0),
+    seq: bigint('seq', { mode: 'number' }).notNull(),
+    changeKind: varchar('change_kind', { length: 8 }).notNull(),
+  },
+  (table) => [
+    primaryKey({
+      name: 'otel_cost_buckets_pk',
+      columns: [
+        table.sessionId,
+        table.bucketStart,
+        table.structure,
+        table.querySource,
+        table.model,
+        table.ccVersion,
+      ],
+    }),
+    index('idx_otel_cost_buckets_session_seq').on(table.sessionId, table.seq),
+    index('idx_otel_cost_buckets_user_id').on(table.userId),
+  ],
+);
+
+// Per-root-session OTEL state: the ingest cursor `seq` and the row every OTEL writer locks
+// FOR UPDATE (DD-2 lock order). No row = the root has no OTEL data (hasOtel=false).
+export const otelSessionState = pgTable(
+  'otel_session_state',
+  {
+    sessionId: integer('session_id')
+      .primaryKey()
+      .references(() => sessions.id, { onDelete: 'cascade' }),
+    userId: integer('user_id').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    seq: bigint('seq', { mode: 'number' }).notNull().default(0),
+    transcriptSeq: bigint('transcript_seq', { mode: 'number' }),
+    otelHookVersion: varchar('otel_hook_version', { length: 32 }),
+    hasSpans: boolean('has_spans').notNull().default(false),
+    hasProvisional: boolean('has_provisional').notNull().default(false),
+    rtLastAt: timestamp('rt_last_at', { withTimezone: true }),
+    chunkLastAt: timestamp('chunk_last_at', { withTimezone: true }),
+    rtGapAt: timestamp('rt_gap_at', { withTimezone: true }),
+    rtReceiverId: varchar('rt_receiver_id', { length: 64 }),
+    rtBatchSeq: bigint('rt_batch_seq', { mode: 'number' }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index('idx_otel_session_state_user_id').on(table.userId),
+    index('idx_otel_session_state_created_at').on(table.createdAt),
+  ],
+);
+
+// Sessions (any node of a tree) whose transcript request ids changed; the projection drain
+// claims one row per transaction and reclassifies the root's otel_calls.
+export const otelReclassQueue = pgTable('otel_reclass_queue', {
+  sessionId: integer('session_id')
+    .primaryKey()
+    .references(() => sessions.id, { onDelete: 'cascade' }),
+  queuedAt: timestamp('queued_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
 
 // Per-call token arrays of a session (migration 0074), one row per session, in the
 // columnar shape of SessionCallTokensColumns. Rewritten with every session_stats upsert;
@@ -880,6 +1080,12 @@ export const sessionStats = pgTable('session_stats', {
   // COALESCE(claude_version, claude_version_otel), so the transcript value wins.
   claudeVersion: varchar('claude_version', { length: 64 }),
   claudeVersionOtel: varchar('claude_version_otel', { length: 64 }),
+  // Latest hook-reported OTEL status of the session (migration 0079). All NULLABLE WITH NO
+  // DEFAULT (NULL = no status reported). Written only by the otel-status ingest; the latest
+  // event timestamp (otelStatus.timestamp) wins.
+  otelState: varchar('otel_state', { length: 16 }),
+  otelReason: varchar('otel_reason', { length: 32 }),
+  otelStatus: jsonb('otel_status'),
   updatedAt: timestamp('updated_at', { withTimezone: true })
     .notNull()
     .defaultNow(),

@@ -7,6 +7,7 @@ import { Pool } from 'pg';
 import { AppLogger } from '../common/app-logger';
 import { isProduction } from '../common/runtime-env';
 import { TOOL_USAGE_EXTRACTOR_VERSION } from '../logs/tool-monitoring/tool-usage.constants';
+import { OTEL_PROJECTION_VERSION } from '../logs/otel/otel-facts.constants';
 import {
   loadAppliedMigrations,
   verifyAppliedMigrations,
@@ -154,6 +155,21 @@ export async function initializeDatabase(
       if (requeued.rowCount) {
         logger.log(
           `Tool usage: ${requeued.rowCount} session(s) queued for rebuild (extractor v${TOOL_USAGE_EXTRACTOR_VERSION})`,
+          CONTEXT,
+        );
+      }
+
+      // 3c. Re-queue OTEL chunks projected by an older projection version, or whose
+      //     projection failed (-1) (DD-16): NULL marks the logs_otel row as pending, and the
+      //     projection drain projects it again. Every row is projected at most once per
+      //     version, so after the drain this touches no rows. Still under the lock.
+      const otelRequeued = await client.query(
+        'UPDATE logs_otel SET otel_projection_version = NULL WHERE otel_projection_version < $1',
+        [OTEL_PROJECTION_VERSION],
+      );
+      if (otelRequeued.rowCount) {
+        logger.log(
+          `OTEL facts: ${otelRequeued.rowCount} chunk(s) queued for projection (projection v${OTEL_PROJECTION_VERSION})`,
           CONTEXT,
         );
       }

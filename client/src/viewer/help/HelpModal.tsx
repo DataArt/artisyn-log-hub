@@ -23,13 +23,24 @@ const knownSlugs: ReadonlySet<string> = new Set(
 );
 const remarkPlugins = [remarkGfm];
 const rehypePlugins = [rehypeSlug];
+/** Images shipped with the docs (`user-docs/images/`, copied to `/help/images/` by generate-help.js). */
+const HELP_IMAGE_RE = /^images\/[a-z0-9][a-z0-9-]*\.(?:svg|png)$/;
 
 interface HelpModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  /** The article to open on; default `getting-started`. */
+  initialSlug?: string;
+  /** Heading id inside `initialSlug` to scroll to. */
+  initialAnchor?: string;
 }
 
-export function HelpModal({ open, onOpenChange }: HelpModalProps) {
+export function HelpModal({
+  open,
+  onOpenChange,
+  initialSlug,
+  initialAnchor,
+}: HelpModalProps) {
   const [activeSlug, setActiveSlug] = useState(DEFAULT_HELP_SLUG);
   const [content, setContent] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -40,10 +51,14 @@ export function HelpModal({ open, onOpenChange }: HelpModalProps) {
 
   useEffect(() => {
     if (open) {
-      setPendingAnchor(null);
-      setActiveSlug(DEFAULT_HELP_SLUG);
+      const slug =
+        initialSlug !== undefined && knownSlugs.has(initialSlug)
+          ? initialSlug
+          : DEFAULT_HELP_SLUG;
+      setPendingAnchor(slug === initialSlug ? (initialAnchor ?? null) : null);
+      setActiveSlug(slug);
     }
-  }, [open]);
+  }, [open, initialSlug, initialAnchor]);
 
   useEffect(() => {
     if (!activeSlug) return;
@@ -86,6 +101,15 @@ export function HelpModal({ open, onOpenChange }: HelpModalProps) {
           onNavigate={openArticle}
         />
       ),
+      // Only docs images, served from the app itself — the help works offline, never a remote src.
+      img: ({ src, alt }) =>
+        typeof src === 'string' && HELP_IMAGE_RE.test(src) ? (
+          <img
+            src={`/help/${src}`}
+            alt={alt ?? ''}
+            className="my-3 max-w-full h-auto rounded border border-border"
+          />
+        ) : null,
     }),
     [openArticle],
   );

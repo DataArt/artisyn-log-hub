@@ -19,6 +19,10 @@
 // price in Log Hub makes the whole session cost `$???` (never a partial sum, never the OTEL
 // figure), with a hint naming that model.
 //
+// Step 14 (task 2026-10-30-otel-shared-receiver, AC-C1 UI part, DD-30): a session cost that leaves
+// out Claude Code's utility calls — no OTEL calls and an OTEL state other than `ok` — carries the
+// muted «excl. utility calls (no OTEL)» marker in the header and on the Summary Cost tile.
+//
 // Code facts that differ from the design text:
 //   - The list groups sessions by branch and folds the groups; the scenario switches it to «Plain list».
 //   - Info's total row is «Calculated total» («Calculated approx. total» is the turn cost tooltip).
@@ -103,7 +107,7 @@ interface SessionRow {
   firstPrompt: string | null;
   totalCost: number | null;
   costUnavailableReason?: string | null;
-  costBreakdown?: { utilityCost: number; calculatedCost: number | null; unpricedModels?: string[] };
+  costBreakdown?: { utilityCost: number; calculatedCost: number | null; unpricedModels?: string[]; costExcludesUtilityCalls?: boolean };
 }
 interface TimelineRow {
   sessionId: string;
@@ -338,5 +342,30 @@ test('@S-COST-01 one session, one cost in every place @mode-a @mode-c', async ({
     const hint = page.getByRole('tooltip').first();
     await expect(hint).toContainText(`No price for model ${unpricedModel} in Log Hub`);
     await expect(hint).toContainText('Fetch Anthropic prices now');
+  });
+
+  await test.step('14, AC-C1 (UI). the utility-call marker: a session with no OTEL calls and no OTEL status (GS-01) says «excl. utility calls (no OTEL)» next to the header cost and on the Summary Cost tile; a session whose hook reported OTEL ok (GS-03) and one with utility calls (the 3-day-old tiered session) do not', async () => {
+    await db.query(`UPDATE session_stats SET otel_state = 'ok' WHERE session_id = $1`, [await sessionRowId(db, gold.sid('gs03'))]);
+    const list = await repoGet<SessionRow[]>(owner, gold.repoId, '/sessions');
+    const flag = (key: string) => list.find((r) => r.sessionId === gold.sid(key))?.costBreakdown?.costExcludesUtilityCalls;
+    expect(flag('gs01'), 'no OTEL calls, no status').toBe(true);
+    expect(flag('gs03'), 'OTEL state ok').toBe(false);
+    expect((await listRow(tiered.old.sessionId)).costBreakdown?.costExcludesUtilityCalls, 'has utility calls').toBe(false);
+
+    const header = () => page.locator('xpath=//p[normalize-space(text())="Cost"]/following-sibling::div').first();
+    await openFresh(page, owner, gold.repoId, gold.sid('gs01'));
+    const marker = header().getByTestId('utility-calls-marker');
+    await expect(marker).toHaveText('excl. utility calls (no OTEL)');
+    await expect(marker.locator('span[title]')).toHaveAttribute('title', /only visible via OTEL/);
+    await expect(summaryTile(page, 'Cost').getByTestId('utility-calls-marker')).toHaveText('excl. utility calls (no OTEL)');
+
+    await openFresh(page, owner, gold.repoId, gold.sid('gs03'));
+    await expect(summaryTile(page, 'Cost')).toContainText(usd4(cost('gs03')));
+    await expect(header().getByTestId('utility-calls-marker')).toHaveCount(0);
+    await expect(summaryTile(page, 'Cost').getByTestId('utility-calls-marker')).toHaveCount(0);
+
+    await openFresh(page, owner, tieredRepoId, tiered.old.sessionId);
+    await expect(header()).toContainText(usd4(TIERED_COST + UTILITY_COST));
+    await expect(header().getByTestId('utility-calls-marker')).toHaveCount(0);
   });
 });

@@ -270,6 +270,9 @@ export const f23ExportImport: ContractFamily = {
           'harness_elements',
           // OKF DD-9: recompute rebuilds every tree node's rows from the claude bodies.
           'session_okf_access',
+          // 2026-10-30 OTEL tabs (DD-5): every re-read of a transcript queues its session for
+          // OTEL reclassification (the drain is parked during the run).
+          'otel_reclass_queue',
         ],
         delta: {},
         after: [

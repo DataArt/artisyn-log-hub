@@ -616,6 +616,23 @@ const TOOLS_REPO_ROW: ScreenRow = {
   expectTestId: 'repo-tools-tab',
 };
 
+/**
+ * The repo OTEL tab (2026-10-30-otel-tabs-traces). The golden sessions carry no OTEL records, so
+ * the tab shows empty state A; S-OTEL-01 walks the filled tab.
+ */
+const OTEL_REPO_ROW: ScreenRow = {
+  id: 'repo.otel',
+  story: 'tour-04',
+  route: '/repos/:repoId',
+  query: '?mtab=otel',
+  tab: { group: 'repo', id: 'otel' },
+  role: 'owner',
+  modes: A,
+  title: 'Repository: OTEL (Claude Code cost over time, hidden calls)',
+  expectTestId: 'repo-otel-tab',
+  docRef: { file: `${HELP}/otel-tab.md`, heading: 'Repository OTEL tab' },
+};
+
 // ---------------------------------------------------------------------------------------------
 // Story 5 — session detail: 9 tabs + 7 Charts sub-tabs + redirects (06 §2.3 #5, §1.3, §1.4).
 // ---------------------------------------------------------------------------------------------
@@ -737,6 +754,16 @@ const SESSION_TAB_ROWS: Array<Omit<ScreenRow, 'story' | 'role' | 'modes' | 'rout
     docRef: { file: SESSION_DOC, heading: 'System context anatomy' },
   },
   {
+    // The golden tour session has no OTEL records: empty state A is the meaningful screen here;
+    // S-OTEL-01 walks the filled tab (chart, KPIs, waterfall).
+    id: 'session.otel',
+    query: `${SESSION_QUERY}&tab=otel`,
+    tab: { group: 'session', id: 'otel' },
+    title: 'Session: OTEL (cost over time and trace waterfall)',
+    expectTestId: 'session-otel-tab',
+    docRef: { file: `${HELP}/otel-tab.md`, heading: 'Session OTEL tab' },
+  },
+  {
     id: 'session.call-tree.redirect',
     query: `${SESSION_QUERY}&tab=call-tree`,
     tab: { group: 'session', id: 'call-tree' },
@@ -830,6 +857,16 @@ const TEAM_OWNER_ROWS: ScreenRow[] = (
       tab: { group: 'team', id: 'invitations' },
       title: 'Team: Invitations',
       expectText: '{pendingEmail}',
+    },
+    {
+      // The team owner passes the analytics rule (FR-34). The tour's session has no OTEL
+      // records, so the tab shows empty state A; S-OTEL-01 walks the filled tab.
+      id: 'team.otel',
+      route: '/teams/:teamId',
+      tab: { group: 'team', id: 'otel' },
+      title: 'Team: OTEL (cost of every team repository and person)',
+      expectTestId: 'team-otel-tab',
+      docRef: { file: `${HELP}/otel-tab.md`, heading: 'Team OTEL tab' },
     },
     {
       id: 'team-repo.sessions',
@@ -995,8 +1032,11 @@ const HELP_ARTICLES: Array<[string, string]> = [
   ['session-list', 'Working with the Session List'],
   ['session-log', 'Session Log'],
   ['analytics-reports', 'Analytics & Reports'],
+  ['otel-tab', 'OTEL tab'],
+  ['otel-architecture', 'OTEL collection architecture'],
   ['cost-and-context', 'Understanding Cost & Context'],
   ['tuning-your-setup', 'Tuning Your Setup'],
+  ['otel-admin-guide', 'OTEL for organization admins'],
   ['data-collection', 'Data Collection & Upload'],
   ['component-reference', 'Artisyn Log Hub — Component Reference'],
   ['security-hardening', 'Artisyn Log Hub — Security Hardening & Configuration Guide'],
@@ -1065,6 +1105,7 @@ export const SCREEN_REGISTRY: readonly ScreenRow[] = [
   ...REPORT_ROWS,
   TOOLS_REPO_ROW,
   OKF_REPO_ROW,
+  OTEL_REPO_ROW,
   ...SESSION_ROWS,
   ...TEAM_OWNER_ROWS,
   ...MEMBER_ROWS,

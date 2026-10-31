@@ -1,12 +1,12 @@
 ---
 type: "Architecture Guide"
 title: "Hook API Versioning (v2 logs upload, v1 removed)"
-description: "Why log upload moved from POST /api/v1/logs to POST /api/v2/logs, the removal of v1 (old hooks get 404 and must upgrade), the hook-version compatibility matrix, and the hook-to-OTEL-receiver cross-version contract."
+description: "Why log upload moved from POST /api/v1/logs to POST /api/v2/logs, the removal of v1 (old hooks get 404 and must upgrade), the hook-version compatibility matrix, and the hook-to-OTEL-receiver cross-version contract (legacy per-project and shared per-user modes, hello/auth, register contract 1, capabilities, session-status, the otel-status event)."
 tags:
   - hooks
   - api
   - otel
-timestamp: "2026-10-28T00:00:00+04:00"
+timestamp: "2026-10-31T00:00:00+04:00"
 ---
 
 # Hook API Versioning (v2 logs upload, v1 removed)
@@ -70,6 +70,8 @@ mechanism feeds).
 | `>= 2.26.0` | `POST /api/v2/logs` + `okfSnapshotId` / `okfSnapshotFull` on the root `artisyn` upload | `201`, `{ warnings, unknownSnapshotId?, unknownOkfSnapshotId? }` | As `>= 1.7.0`; an invalid id is ignored, never a `400`; a server without OKF support ignores the params — see the OKF snapshot section below |
 | `>= 2.27.0` | `POST /api/v2/logs` also with `type=tool-calls`; plus `GET /api/v2/tool-monitoring/config` | unchanged | As `>= 1.7.0`; a server without Tools/MCP support stores `tool-calls` as an inert generic log and answers the config route `404` (read as "no config") — see the CLI tool wrapper section below |
 | `>= 2.28.0` | unchanged — the root `artisyn` upload's `harness-snapshot` line gains optional `gitStatus` on `skills[]` / `agents[]` / `systemContext.files[]` and skill entries of source `org-synced` | unchanged | As `>= 1.7.0`; any server stores the snapshot body verbatim, so the new fields need no server change. A server older than this change lists org-synced skills in Harness usage as never-used rows — see the harness snapshot `gitStatus` / `org-synced` section below |
+| `>= 2.29.0` | unchanged uploads (chunk lines gain `hookVersion`, `spans` lines from `/v1/traces` when traces are on); plus `POST /api/v2/otel-realtime` | `200`, `{ accepted, cursor, minIntervalMs, ignored? }` | Realtime is best-effort: a `404` (older server), `401` or `403` disables it for 1 h, a `409` (foreign session) stops it for that session, a `413` halves the batch once; chunks still upload as before — see the OTEL realtime section below |
+| `>= 2.30.0` | unchanged — the root `artisyn` upload gains `otel-status` lines at `Stop` / `SessionEnd`; chunk lines gain `receiverVersion` | unchanged | As `>= 1.7.0`; an older server stores `otel-status` as an inert artisyn line (it is not an activity type, so session times are not moved on a new server) — see "Hook ↔ OTEL receiver" below |
 
 The route requires `ApiKeyAuthGuard` (the `X-API-Key` header) and accepts this body encoding
 (`express.text()`, `Content-Type: application/x-ndjson`/`application/json`/`text/plain`, 2500MB
@@ -104,7 +106,7 @@ from body-parser):
 | Routes | Limit | Registered in |
 |---|---|---|
 | Log ingest — `LOG_INGEST_ROUTES` (`POST api/v2/logs` only; v1 was removed) | `getLogsBodyLimit()` (`LOGS_MAX_BODY_MB`, default 2500 MB) | `LogsModule.configure()` — json, `text({type:['application/x-ndjson','text/plain']})` and urlencoded |
-| Hook JSON APIs — `HOOK_API_ROUTES` (`POST api/v2/turn-end-cost-advisor`, `POST api/v2/session-attribution`, `POST api/v1/log-echo`) | `HOOK_API_BODY_LIMIT` = 1,048,576 bytes | `AppModule.configure()` |
+| Hook JSON APIs — `HOOK_API_ROUTES` (`POST api/v2/turn-end-cost-advisor`, `POST api/v2/session-attribution`, `POST api/v1/log-echo`, `POST api/v2/otel-realtime`) | `HOOK_API_BODY_LIMIT` = 1,048,576 bytes | `AppModule.configure()` |
 | Everything else | `GLOBAL_BODY_LIMIT` = 512,000 bytes | `AppModule.configure()` — the global json/urlencoded/text parsers `.exclude()` both lists above |
 
 `PostTurnAnalysisController` exposes only `GET config`, so it has no entry. A hook that sends a
@@ -189,40 +191,109 @@ advance — it fails one request and retries smaller, exactly as suggested here.
 
 ---
 
-## Hook ↔ OTEL receiver (hook `2.3.0`+)
+## Hook ↔ OTEL receiver (hook `2.3.0`+; shared receiver `2.30.0`+)
 
 The same compatibility rule applies to a second, purely local interface: the hook talks to
-`otel-receiver.js` over `POST http://127.0.0.1:<port>/artisyn/register`. Both sides ship in the same
+`otel-receiver.js` over `POST http://127.0.0.1:<port>/artisyn/*`. Both sides ship in the same
 plugin tarball, but they are **separate long-lived processes**: a receiver spawned at
-`SessionStart` outlives the hook run that started it and keeps serving every later session of the
-project until its idle timeout. So a session running hook `N` can perfectly well meet a receiver
-still running version `N-1` (or, right after an upgrade, `N+1`), and neither side may assume
-otherwise.
+`SessionStart` outlives the hook run that started it and keeps serving later sessions until its
+idle timeout. Since hook `2.30.0` one receiver serves **every repo of the OS user**, so a session
+running hook `N` can meet a receiver spawned by another repo's hook at `N-1` or `N+1`, and neither
+side may assume otherwise. Design: [otel-receiver.md](otel-receiver.md).
 
-The contract is therefore deliberately one-directional and lossy-tolerant:
+There are two modes, chosen by the hook alone (`resolveOtelPort`): **shared** when
+`~/.artisyn/otel/port.json` exists, **legacy** (per project, `otelReceiverPort`) otherwise.
+
+### Shared mode (hook `2.30.0`+)
+
+| Route | Auth | Request | Response |
+|---|---|---|---|
+| `POST /artisyn/hello` | none | `{clientNonce, ownerHash}` | `200 {serverNonce, proof, receiverVersion, contract:1, capabilities[]}` · `409 {error:'owner-mismatch'}` |
+| `POST /artisyn/register` | `x-artisyn-auth` | contract 1 (below) | `200 {ok, receiverVersion, contract, capabilities, rebound}` · `400 {error:'bad-request', reason}` · `401 {error:'unauthorized'}` |
+| `POST /artisyn/session-status` | `x-artisyn-auth` | `{sessionId}` | `200 {receiverVersion, registered, received:{logs,metrics,spans}, firstRecordAt, pending, forward}` · `401` |
+| `POST /artisyn/shutdown` | `x-artisyn-auth` | `{}` | `200 {ok}` then exit · `401` |
+| OTLP `POST /v1/logs\|metrics\|traces` | none (unchanged) | OTLP JSON | `200` after the local write |
+
+- **Hello / auth.** HMAC-SHA256 keyed by `~/.artisyn/otel/token`:
+  `proof = HMAC(token, "srv\n"+clientNonce+"\n"+serverNonce)` is verified by the hook before it
+  sends anything secret; each authenticated request carries
+  `x-artisyn-auth: v1 <serverNonce> <HMAC(token, "cli\n"+serverNonce+"\n"+urlPath+"\n"+sha256hex(rawBody))>`
+  with a single-use nonce (30 s TTL). A bad proof, a non-JSON or non-200 hello or a `409` is a
+  `port-conflict` for the hook: one `warn`, no register.
+- **Register contract 1.** `{sessionId, gitRoot, otelDir, hookVersion, contract:1, repoKey,
+  signals:{logs,metrics,spans}, uploader, realtime|null}`. Required: `sessionId`, `gitRoot`,
+  `otelDir` (absolute), `hookVersion`; unknown fields are ignored; `uploader` must be a real
+  `send-logs-hook.js` under `gitRoot` or `~/.claude/plugins/` (else
+  `400 reason:'uploader-not-allowed'`). A future contract adds fields and bumps `contract` only for
+  a change an old receiver would misread.
+- **Capabilities** = `['shared','auth-v1','spans','realtime','forward','session-status']`. A hook
+  compares them with what the session needs (`session-status` always, `spans` with traces,
+  `realtime` when on). Anything missing → **one `warn` per session and nothing else**: the older
+  receiver keeps running and serving, and the newer code takes over after its idle-exit. A shared
+  receiver is never stopped, killed or restarted by a hook. New behaviour is therefore always
+  announced as a new capability string, never by changing an existing one.
+- **Session status.** Asked at `Stop` and `SessionEnd`. A receiver without the `session-status`
+  capability, or a `404`, makes the hook report `reason:'unknown'`, `detail:'no-session-status'`.
+  An unknown session → `registered:false` with zero counts.
+
+### Legacy mode (hooks `≤ 2.29.0`, or no `port.json`)
 
 **Caller side (`otel-register.js`) — every outcome is non-fatal, and nothing is ever retried.**
 
 | Receiver response | Hook behaviour |
 |---|---|
-| `200 {"ok":true,"receiverVersion":"<v>","port":<n>}` | Success. If `receiverVersion` parses and is **older** than the caller's own `version.json`, one `hook.log` `warn` line naming both versions — and nothing else. No takeover, no re-spawn, no kill. An unparseable or absent version produces no warning (an unrecognisable version must not manufacture a spurious one). |
-| `409 owner-mismatch` | One `warn` line naming the port and the owning repo — see `docs/knowledgebase/otel-receiver.md` § "The `409 owner-mismatch` guard". |
+| `200 {"ok":true,"receiverVersion":"<v>","port":<n>}` | Success. If `receiverVersion` parses and is **older** than the caller's own `version.json`, one `hook.log` `warn` line naming both versions, then the throttled **stale-receiver restart** (authenticated by owner: `POST /artisyn/shutdown`, port wait, spawn of the hook's own copy — [otel-receiver.md](otel-receiver.md) § "Stale receiver restart"). An unparseable or absent version produces no warning and no restart (an unrecognisable version must not manufacture one). |
+| `409 owner-mismatch` | One `warn` line naming the port and the owning repo — see [otel-receiver.md](otel-receiver.md) § "The `409 owner-mismatch` guard". |
 | `404` | **Silent.** This is exactly what a pre-`2.3.0` receiver returns: it has no `/artisyn/register` route. Treating it as an error would make every upgrade-in-flight session log noise. |
 | `ECONNREFUSED` / any socket error / any other status | Silent. "No receiver is running" is the normal case, and the spawn that follows the register call is what fixes it. |
 
-The register POST is fire-and-forget on an `unref()`'d socket, so it can never delay or fail a hook
-run regardless of what is (or isn't) listening.
+The register POST is bounded by `REGISTER_TIMEOUT_MS` (2 s), so it can never hang a hook run
+regardless of what is (or isn't) listening.
 
 **Receiver side — tolerant of unknown and missing fields.** Unknown body fields are ignored, so a
 newer hook may add fields freely. Every field except `gitRoot` may be absent; only a missing
 `gitRoot` (or a `sessionId` failing the `^[A-Za-z0-9._-]{1,128}$` allow-list) is a `400`. `gitRoot`
 cannot be optional — it *is* the owner check.
 
-Practical consequence for future changes: a new field in the register payload is always safe, and a
-new *response* field is safe as long as `ok` / `receiverVersion` / `error` keep their meaning.
-Removing or repurposing any of those three, or making a previously optional request field required,
-is a breaking change and needs the same treatment `v1`/`v2` got above — a new route, not an
-in-place edit.
+### Why old hooks keep working (FR-A11)
+
+- **Old hooks never read the shared port.** A `≤ 2.29.0` hook reads only its repo's
+  `otelReceiverPort` and runs its own per-project receiver there, side by side with the shared one.
+  Each Claude Code session exports to the endpoint its effective settings name, so a repo with an
+  old hook keeps working exactly as before on Claude Code `< 2.1.282`.
+- **An old hook that reaches the shared port anyway** (a stale `otelReceiverPort`): its
+  unauthenticated register or shutdown gets `401`, the shared receiver keeps running, and the old
+  hook's restart path spawns a copy that hits `EADDRINUSE` and exits 0. No data is misfiled: a
+  shared receiver routes only by registration or `artisyn.repo` tag.
+- **A new hook on a machine where the installer never ran** (plugin auto-update): no `port.json` →
+  legacy mode with one `warn` "run the installer to enable the shared receiver".
+- **A shared receiver of an older `2.30.x`** meets a newer hook: capability `warn` only (above).
+- Pinned by `s-compat-01` with the frozen `2.28.0` fixture (the last released per-project hook).
+
+### The `otel-status` event (hook `2.30.0`+, hook → server)
+
+At `Stop` and `SessionEnd` the hook appends one line to the session's artisyn log before that
+upload (write rule: algorithm [otel-status-reason](algorithms/otel-status-reason.md)):
+
+```json
+{"type": "otel-status", "timestamp": "<ISO>", "sessionId": "<id>",
+ "state": "ok|partial|none", "reason": "<reason>|null", "detail": "<string>|null",
+ "received": {"logs": 0, "metrics": 0, "spans": 0, "firstAt": "<ISO>|null"},
+ "claudeVersion": "<v>|null", "forward": "ok|degraded|off",
+ "hookVersion": "<v>", "receiverVersion": "<v>|null"}
+```
+
+| Combination | Behaviour |
+|---|---|
+| Hook `< 2.30.0` → any server | No event; `session_stats.otel_*` stay `NULL`, shown as `no-status` (generic "no OTEL" message) |
+| Hook `2.30.0` → server older than this change | The line is stored with the artisyn log and otherwise ignored; no route or status changes |
+| Hook `2.30.0` → server with this change | `extractOtelStatus` → `upsertSessionOtelStatus`: the latest `timestamp` wins, an unknown `state` / `reason` is stored as `unknown`; `otel-status` is in `NON_ACTIVITY_LINE_TYPES`, so it never moves the session's end time ([otel-tabs.md](otel-tabs.md) § "OTEL coverage and status") |
+
+Practical consequence for future changes: a new field in a register payload, a new response field
+or a new capability is always safe, as long as `ok` / `receiverVersion` / `error` / `capabilities`
+keep their meaning. Removing or repurposing any of those, or making a previously optional request
+field required, is a breaking change and needs the same treatment `v1`/`v2` got above — a new
+route (or a new `contract`), not an in-place edit.
 
 ---
 
@@ -608,6 +679,29 @@ stays `1`:
 | Hook `< 2.28.0` → any server | No `gitStatus` and no org-synced entries; the System context anatomy tab shows git as `unknown` / `outside repo` and the "Git status needs hook 2.28.0 or newer" banner |
 | Hook `2.28.0` → server older than this change | The snapshot body is stored verbatim, so the fields are kept and later shown once the client is upgraded. **Accepted caveat:** such a server's `extractHarnessSkillInventory` does not skip `org-synced` entries, so each org-synced skill becomes a `source: null` harness element and shows as a never-used row in Harness usage until the server is upgraded |
 | Hook `2.28.0` → server with this change | `extractHarnessSkillInventory` skips `org-synced` entries (usage is counted under the listing's `<prefix>:<name>`, which never matches the bare snapshot name), so Harness usage is as before; the anatomy tab shows git status and org-synced sources |
+
+## `POST /api/v2/otel-realtime` — realtime OTEL channel (hook `2.29.0`+)
+
+Task `2026-10-30-otel-tabs-traces` (DD-13, DD-14, DD-17). Besides writing its chunk files exactly as
+before, the hook `2.29.0` OTEL receiver sends the same `logs` and `spans` lines (never
+`metrics`) about every 5 s per running session:
+
+- Body `{ sessionId, hookVersion, receiverId, batchSeq, droppedLines, lines }`, gzipped when over
+  8 KiB, `ApiKeyAuthGuard`, the shared `HOOK_API_BODY_LIMIT` (it is in `HOOK_API_ROUTES`).
+- `200 { accepted: { calls, spans }, cursor, minIntervalMs }`; the hook never sends more often than
+  `minIntervalMs` (env `OTEL_REALTIME_MIN_INTERVAL_MS`, default and floor 5000).
+- `200 { …, ignored: 'deleted' }` for a soft-deleted session (nothing written); `400` for a
+  malformed body or more than 5000 lines; `409` when the session belongs to another user.
+- `batchSeq` ≤ the last one stored for the same `receiverId` is a replay (idempotent upserts, no
+  gap); a skipped `batchSeq` or `droppedLines > 0` marks a gap that the regular chunk upload fills.
+- Realtime-only sessions get an owner too: `findSessionOwnerId` falls back to
+  `otel_session_state.user_id`, so the upload path also rejects a second user writing into them.
+
+| Combination | Behaviour |
+|---|---|
+| Hook `< 2.29.0` → any server | Never calls the route; OTEL arrives by chunk only and the OTEL tabs show the "update the hook" slow-updates banner |
+| Hook `2.29.0` → server without the route | `404`: realtime is disabled for 1 h with one `receiver.log` line, no retries; chunk uploads are unchanged (the server ignores the `spans` lines and the `hookVersion` field) |
+| Hook `2.29.0` → server with the route | Full loop: realtime rows are confirmed (or gaps filled) when the chunk is projected |
 
 ## v1 retirement (done, open-source readiness)
 

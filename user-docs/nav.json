@@ -14,6 +14,7 @@
       { "slug": "authentication-modes", "title": "Authentication modes" },
       { "slug": "server-configuration", "title": "Server settings" },
       { "slug": "tuning-your-setup", "title": "Tuning Your Setup" },
+      { "slug": "otel-admin-guide", "title": "OTEL for organization admins" },
       { "slug": "security-hardening", "title": "Security Hardening & Configuration", "downloadable": true }
     ]
   },
@@ -23,7 +24,9 @@
       { "slug": "session-list", "title": "Working with the Session List" },
       { "slug": "session-log", "title": "Session Log" },
       { "slug": "cost-and-context", "title": "Understanding Cost & Context" },
-      { "slug": "analytics-reports", "title": "Analytics & Reports" }
+      { "slug": "analytics-reports", "title": "Analytics & Reports" },
+      { "slug": "otel-tab", "title": "OTEL tab" },
+      { "slug": "otel-architecture", "title": "OTEL collection architecture" }
     ]
   },
   {

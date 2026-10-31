@@ -24,6 +24,7 @@ import {
   extractHarnessRuleInventory,
   extractHarnessSkillInventory,
   extractHookStatus,
+  extractOtelStatus,
   extractRepoUrls,
   extractTimestampRange,
   selectEditResultRecordsForSession,
@@ -57,11 +58,13 @@ import {
 } from './session-file-stats-writer';
 import { rebuildSessionOkfAccess } from './okf/okf-access-writer';
 import { ToolUsageRebuildService } from './tool-monitoring/tool-usage-rebuild.service';
+import { enqueueOtelReclass } from './otel/otel-facts-writer';
 import { markTreeStale } from './tool-monitoring/tool-usage-writer';
 import {
   replaceSessionCallTokens,
   replaceSessionRequestIds,
   upsertSessionClaudeVersionOtel,
+  upsertSessionOtelStatus,
   upsertSessionStatsRow,
   upsertSessionTelemetryCost,
 } from './session-stats-writer';
@@ -109,7 +112,8 @@ export type UpsertResult = { status: 'ok' | 'deleted' | 'foreign-session' };
 
 /**
  * The owner of a session: the `user_id` of any `logs` or
- * `logs_otel` row of that session. `null` when no such row exists yet — a session
+ * `logs_otel` row of that session, else (a realtime-only session) the
+ * `otel_session_state.user_id` of that session. `null` when no such row exists yet — a session
  * with no stored data has no owner, so the first uploader claims it.
  *
  * Takes the db handle explicitly so it can run both inside the `upsert()`
@@ -120,19 +124,30 @@ export async function findSessionOwnerId(
   db: DrizzleDb,
   sessionId: string,
 ): Promise<number | null> {
+  // The third branch (2026-10-30 otel-tabs-traces, DD-17) is a fallback for realtime-only
+  // sessions: `otel_session_state.user_id` is consulted only when no `logs` / `logs_otel` row
+  // names an owner, so a second user cannot write into a session first seen on the realtime
+  // channel.
   const result = await db.execute<{ user_id: number }>(sql`
     SELECT owner.user_id
     FROM (
-      SELECT l.user_id
+      SELECT l.user_id, 0 AS prio
       FROM ${logs} l
       JOIN ${sessions} s ON s.id = l.session_id
       WHERE s.session_id = ${sessionId}
       UNION ALL
-      SELECT o.user_id
+      SELECT o.user_id, 0 AS prio
       FROM ${logsOtel} o
       JOIN ${sessions} s ON s.id = o.session_id
       WHERE s.session_id = ${sessionId}
+      UNION ALL
+      SELECT st.user_id, 1 AS prio
+      FROM otel_session_state st
+      JOIN ${sessions} s ON s.id = st.session_id
+      WHERE s.session_id = ${sessionId}
+        AND st.user_id IS NOT NULL
     ) owner
+    ORDER BY owner.prio
     LIMIT 1
   `);
   const row = result.rows[0];
@@ -430,6 +445,7 @@ export class LogsService {
         );
         await upsertSessionStatsRow(tx, sessionRowId, stats);
         await replaceSessionRequestIds(tx, sessionRowId, stats.requestIds);
+        await enqueueOtelReclass(tx, sessionRowId);
         await replaceSessionCallTokens(tx, sessionRowId, stats.callTokens);
         await recomputeSessionCosts(tx, [sessionRowId]);
 
@@ -604,6 +620,15 @@ export class LogsService {
               WHERE log_repositories.log_id = ${logResult.id}
                 AND log_repositories.repo_id = repositories.id`,
         );
+      }
+
+      // Step 5c' — The session's OTEL status (2026-10-30 otel-shared-receiver, DD-28), only
+      // when this upload carries an `otel-status` event: an older hook (no event) or an
+      // earlier artisyn body must not clear the stored status. The writer keeps the latest
+      // event by its timestamp, so a re-upload of an older body never moves it back.
+      const otelStatus = extractOtelStatus(lines);
+      if (otelStatus !== null) {
+        await upsertSessionOtelStatus(tx, sessionRowId, otelStatus);
       }
 
       // Step 5d — Harness snapshot store/bind + element inventory upsert (DD-9). Fires for
@@ -1082,6 +1107,7 @@ export class LogsService {
       const stats = extractClaudeStats(lines, '', false);
       await upsertSessionStatsRow(tx, sessionRowId, stats);
       await replaceSessionRequestIds(tx, sessionRowId, stats.requestIds);
+      await enqueueOtelReclass(tx, sessionRowId);
       await replaceSessionCallTokens(tx, sessionRowId, stats.callTokens);
       await recomputeSessionCosts(tx, [sessionRowId]);
       await upsertSessionToolStatsRows(tx, sessionRowId, stats.toolStats);
@@ -1215,6 +1241,8 @@ export class LogsService {
           costUsdMicros: sql`excluded.cost_usd_micros`,
           recordCount: sql`excluded.record_count`,
           processedAt: sql`excluded.processed_at`,
+          // A changed chunk is projected into the OTEL facts again (DD-16).
+          otelProjectionVersion: null,
         },
       });
 
