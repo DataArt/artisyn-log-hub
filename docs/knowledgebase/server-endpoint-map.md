@@ -886,7 +886,7 @@ Generic per-user key/value CRUD. The owning user always comes from the session �
 | POST | `/api/v1/teams/:teamId/leave` | `leaveTeam()` | SessionAuthGuard |
 | POST | `/api/v1/teams/:teamId/transfer` | `transferOwnership()` | SessionAuthGuard + TeamOwnerGuard |
 | GET | `/api/v1/teams/:teamId/repositories` | `getTeamRepositories()` | SessionAuthGuard + TeamAccessGuard |
-| POST | `/api/v1/teams/:teamId/repositories` | `addTeamRepository()` | SessionAuthGuard + TeamOwnerGuard — a new link seeds its `team_repo_config` (owner's personal config for the URL, else `TEAM_CREATION_DEFAULT_CONFIG`) and runs `recomputeTeamScope`; re-adding a linked URL does neither |
+| POST | `/api/v1/teams/:teamId/repositories` | `addTeamRepository()` | SessionAuthGuard + TeamOwnerGuard — a new link seeds its `team_repo_config` (owner's personal config for the URL, else `TEAM_CREATION_DEFAULT_CONFIG`) and queues `recomputeTeamScope` in `team_repo_recompute_queue` (drained in the background by `TeamRepoRecomputeService`; awaited when `TEAM_REPO_RECOMPUTE_INLINE=true`); re-adding a linked URL does neither. The GET reports `recomputePending` per link |
 | DELETE | `/api/v1/teams/:teamId/repositories/:repoId/link` | `unlinkTeamRepository()` | SessionAuthGuard + TeamOwnerGuard — the link's `team_repo_config` goes by FK cascade (also on remove, team delete, admin repo removal, account deletion) |
 | DELETE | `/api/v1/teams/:teamId/repositories/:repoId` | `removeTeamRepository()` | SessionAuthGuard + TeamOwnerGuard |
 | POST | `/api/v1/teams/:teamId/invitations` | `sendInvitation()` | SessionAuthGuard + TeamAccessGuard |

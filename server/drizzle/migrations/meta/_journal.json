@@ -561,6 +561,27 @@
       "when": 1791331200000,
       "tag": "0079_otel_status",
       "breakpoints": true
+    },
+    {
+      "idx": 80,
+      "version": "7",
+      "when": 1791417600000,
+      "tag": "0080_session_list_flags",
+      "breakpoints": true
+    },
+    {
+      "idx": 81,
+      "version": "7",
+      "when": 1791504000000,
+      "tag": "0081_session_stats_claude_line_count",
+      "breakpoints": true
+    },
+    {
+      "idx": 82,
+      "version": "7",
+      "when": 1791590400000,
+      "tag": "0082_team_repo_recompute_queue",
+      "breakpoints": true
     }
   ]
 }

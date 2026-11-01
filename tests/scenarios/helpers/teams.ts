@@ -59,11 +59,26 @@ export async function setMemberRoles(owner: ScenarioUser, teamId: number, userId
   expect(res.status(), `roles of ${userId} in team ${teamId}`).toBe(200);
 }
 
-/** `POST /api/v1/teams/:teamId/repositories` as the owner; returns the link (`team_repositories`) id. */
+/**
+ * `POST /api/v1/teams/:teamId/repositories` as the owner; returns the link (`team_repositories`)
+ * id once the team's background recompute of that URL is done — the list reports
+ * `recomputePending: false` for the link (team_repo_recompute_queue drained).
+ */
 export async function addTeamRepo(owner: ScenarioUser, teamId: number, repoUrl: string): Promise<number> {
   const res = await owner.api.post(`/api/v1/teams/${teamId}/repositories`, { data: { repoUrl } });
   expect(res.status(), `add ${repoUrl} to team ${teamId}`).toBe(201);
-  return ((await res.json()) as { id: number }).id;
+  const linkId = ((await res.json()) as { id: number }).id;
+  await expect
+    .poll(
+      async () => {
+        const list = await owner.api.get(`/api/v1/teams/${teamId}/repositories`);
+        const rows = (await list.json()) as Array<{ id: number; recomputePending: boolean }>;
+        return rows.find((r) => r.id === linkId)?.recomputePending;
+      },
+      { message: `team ${teamId}: background recompute of ${repoUrl}`, timeout: 60_000 },
+    )
+    .toBe(false);
+  return linkId;
 }
 
 /** `DELETE /api/v1/teams/:teamId/repositories/:linkId/link` — drops the link only, sessions stay. */

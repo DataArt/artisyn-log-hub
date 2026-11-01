@@ -13,6 +13,7 @@ import {
   verifyAppliedMigrations,
   verifyMigrationFilesAgainstLock,
 } from './migration-lock-check';
+import { backfillSessionListFlags } from './backfill-session-list-flags';
 import { validateMigrationFiles } from './migration-validator';
 import { resolveSessionSecret } from './server-secrets';
 import { resolveSearchPathOption } from './test-schema';
@@ -173,6 +174,12 @@ export async function initializeDatabase(
           CONTEXT,
         );
       }
+
+      // 3d. Backfill the session-list flag columns of session_stats (migration 0080)
+      //     for rows written before ingest started filling them. One commit per
+      //     repository; a no-op probe on the partial index once nothing is pending.
+      //     Still under the lock. See backfill-session-list-flags.ts.
+      await backfillSessionListFlags(client, logger);
 
       // 4. Resolve SESSION_SECRET (env -> stored row -> generated), still under
       //    the lock so concurrently starting workers agree on one value. Runs on

@@ -89,16 +89,21 @@ test('@S-TEAM-01 owner creates a team, invites, a colleague accepts through the 
       expect((await owner.api.post('/api/v1/teams', { data: { name: teamName } })).status()).toBe(409);
     });
 
-    await test.step('4. UI: Repositories → pick the repository from «My repositories» → listed with 1 session', async () => {
+    await test.step('4. UI: Repositories → pick the repository from «My repositories» → listed with 1 session; the background team recompute finishes («Adding…» goes away, recomputePending false)', async () => {
       await page.getByTestId('tab-team-repositories').click();
       await page.getByRole('listitem').filter({ hasText: repoUrl }).getByText('+ Add').click();
-      await expect(page.getByRole('row').filter({ hasText: repoUrl }).getByRole('cell', { name: '1', exact: true })).toBeVisible();
+      const row = page.getByRole('row').filter({ hasText: repoUrl });
+      await expect(row.getByRole('cell', { name: '1', exact: true })).toBeVisible();
+      // The row is listed right away; its team stats are recomputed in the background
+      // (team_repo_recompute_queue) and the row says «Adding…» until that is done.
+      await expect(row.getByTestId('team-repo-recompute-pending')).toHaveCount(0, { timeout: 60_000 });
       const repos = (await (await owner.api.get(`/api/v1/teams/${teamId}/repositories`)).json()) as Array<{
         repoUrl: string;
         sessionCount: number;
         repositoryId: number;
+        recomputePending: boolean;
       }>;
-      expect(repos).toEqual([expect.objectContaining({ repoUrl, sessionCount: 1, repositoryId: ownerRepoId })]);
+      expect(repos).toEqual([expect.objectContaining({ repoUrl, sessionCount: 1, repositoryId: ownerRepoId, recomputePending: false })]);
     });
 
     await test.step('5–6. UI: invite M1 (pending), again → «Pending invitation already exists»; invite M2', async () => {

@@ -1314,6 +1314,9 @@ response: Team
 // GET /api/v1/teams/:teamId/repositories — 200
 // Requires: team member
 response: TeamRepository[]
+// TeamRepository.recomputePending: boolean — the team-scope recompute queued when the URL was
+// added has not finished (team_repo_recompute_queue row pending/processing); the team page shows
+// «Adding…» and polls until it is false. Absent before migration 0082 — clients treat it as false.
 // Errors: 403, 404
 
 // POST /api/v1/teams/:teamId/repositories — 201
@@ -1321,6 +1324,8 @@ response: TeamRepository[]
 body: { repoUrl: string }
 response: TeamRepository
 // Idempotent: returns existing row if URL already in team
+// A new link seeds its team config and QUEUES the team-scope recompute (background,
+// TeamRepoRecomputeService) instead of running it in the request.
 
 // DELETE /api/v1/teams/:teamId/repositories/:repoId — 204
 // Requires: team owner (TeamOwnerGuard)

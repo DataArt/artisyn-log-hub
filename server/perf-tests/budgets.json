@@ -1,0 +1,20 @@
+{
+  "repos:sessions-heavy": { "p95Ms": 500 },
+  "repos:sessions": { "p95Ms": 500 },
+  "repos:sessions-ids-heavy": { "p95Ms": 500 },
+  "repos:summary-heavy": { "p95Ms": 500 },
+  "repos:get-heavy": { "p95Ms": 500 },
+  "repos:branches-heavy": { "p95Ms": 500 },
+  "repos:contexts-heavy": { "p95Ms": 500 },
+  "repos:attribution-values-heavy": { "p95Ms": 500 },
+  "repos:export-scope-heavy": { "p95Ms": 500 },
+  "repos:analytics-timeline-heavy": { "p95Ms": 500 },
+  "repos:analytics-work-time-heavy": { "p95Ms": 500 },
+  "repos:analytics-change-surface-heavy": { "p95Ms": 500 },
+  "otel:repo-facts-week-heavy": { "p95Ms": 500 },
+  "repos:session-logs-heavy": { "p95Ms": 500 },
+  "repos:session-contexts-heavy": { "p95Ms": 500 },
+  "repos:session-change-surface-heavy": { "p95Ms": 500 },
+  "repos:session-change-surface-files-heavy": { "p95Ms": 500 },
+  "repos:session-okf-usage-heavy": { "p95Ms": 500 }
+}

@@ -4,7 +4,7 @@ title: "Database Structure"
 description: "Database schema, table relationships, extracted field patterns, indices, and migration history."
 tags:
   - database
-timestamp: "2026-10-31T00:00:00+04:00"
+timestamp: "2026-11-01T00:00:00+04:00"
 ---
 
 # Database Structure
@@ -765,9 +765,33 @@ Per-session pre-computed metrics. One row per session (1:1 with `sessions`, FK w
 | `otel_state` | varchar(16) | nullable | Per-session OTEL status (migration `0079`, hook `2.30.0`+): `ok` / `partial` / `none` / `unknown` from the hook's latest `otel-status` event (an unrecognised value is stored as `unknown`). `NULL` = no hook ever reported a status (older hook, or the session predates `0079`). Owned exclusively by `upsertSessionOtelStatus()` (`session-stats-writer.ts`), called from the artisyn ingest; `upsertSessionStatsRow()` never touches the three `otel_*` status columns |
 | `otel_reason` | varchar(32) | nullable | Why OTEL is missing or partial (migration `0079`): `managed-endpoint` / `managed-disabled` / `project-only` / `not-configured` / `receiver-down` / `unknown`, or `NULL` when the state is `ok` or nothing was reported. Readers map `NULL` without OTEL data to `no-status` (`COALESCE(otel_reason, 'no-status')`) for the coverage chips and the sessions `otelReason=` filter. Same writer as `otel_state` |
 | `otel_status` | jsonb | nullable | The rest of the `otel-status` event (migration `0079`): `{timestamp, detail, received:{logs,metrics,spans,firstAt}, claudeVersion, forward, hookVersion, receiverVersion}`. The latest event `timestamp` wins: an event older than the stored `otel_status->>'timestamp'` updates nothing. Same writer as `otel_state`. Read by the session OTEL route as `status.otelStatus`; see [otel-tabs.md](otel-tabs.md) § "OTEL coverage and status" |
+| `main_model` | varchar | nullable | Session-list flag (migration `0080`): the first non-null `message.model` of the deduped **main** (non-sidechain) assistant lines of the session's own `claude` transcript — the model the session list prices the session's own tokens with (`root_model`). `NULL` = no main assistant line carried a model. Rules: [algorithms/session-list-flags.md](algorithms/session-list-flags.md) |
+| `has_workflow` | boolean | NOT NULL | DEFAULT false — session-list flag (migration `0080`): some assistant event (sidechain included) holds a `Workflow` `tool_use` block with a non-empty string `id` (the `extractWorkflows` step 1 predicate). Read by the session list as `hasWorkflow` |
+| `has_main_assistant` | boolean | NOT NULL | DEFAULT false — session-list flag (migration `0080`): the transcript has at least one main assistant line. Only such sessions get a cost row in the session list (otherwise `totalCost: null`, empty breakdown) |
+| `claude_line_count` | integer | nullable | Session-list flag (migration `0081`, flags version 2): number of lines in the session's own `claude` log (`jsonb_array_length(logs.body)`), read by `GET …/analytics/timeline` as `logLineCount` so it never detoasts the transcript. `NULL` = no claude log (sub-agent and OTEL-only rows) or not computed yet — the timeline then counts from the body |
+| `list_flags_version` | smallint | nullable | Version of the rules the flags were computed with (`SESSION_LIST_FLAGS_VERSION`, currently `2`; `0081` reset version-1 rows to `NULL`). `NULL` = pending for the startup backfill. Partial index `idx_session_stats_list_flags_pending (session_id) WHERE list_flags_version IS NULL` |
 | `updated_at`          | timestamptz | NOT NULL | DEFAULT now()                                           |
 
 The `mcp_calls_by_server` JSONB object uses the server name extracted from `mcp__<server>__<tool>` tool names.
+
+**Session-list flags** (`main_model`, `has_workflow`, `has_main_assistant`, `list_flags_version`, migration
+`0080`; `claude_line_count`, `0081`) let `GET /api/v1/repositories/:repoId/sessions` read the model and
+workflow marker, and `GET …/analytics/timeline` the log line count, from columns instead of scanning
+`logs.body` jsonb per request. The timeline still has raw-transcript fallbacks (model, tokens, files, images,
+work time, line count), but scans the body only for a session with no `session_stats` row, a `NULL` model or a
+`NULL` line count (`raw_sessions` CTE). Owners:
+
+- **Ingest / recompute:** `computeSessionListFlags()` (`server/src/logs/session-list-flags.ts`) runs in
+  `extractClaudeStats`; `upsertSessionStatsRow()` writes the five columns **only for root transcripts**
+  (`stats.listFlags !== null`). A `claude-subagent` upload or recompute leaves them untouched (a sub-agent row
+  keeps the defaults or what the backfill wrote); `upsertSessionTelemetryCost()` and the other column owners never
+  write them.
+- **Startup backfill:** `backfillSessionListFlags()` (`server/src/database/backfill-session-list-flags.ts`),
+  step 3d of `initializeDatabase()`, under the migration advisory lock. It fills every row with
+  `list_flags_version IS NULL` using the same rules in set-based SQL: one autocommitted `UPDATE` per repository
+  (from `log_repositories`), so an interrupted start resumes where it stopped, then one catch-all `UPDATE` for the
+  rest (sub-agent rows and sessions linked to no repository, which get `NULL` / `false` / `false`). A probe on the
+  partial index skips the step on every later start. A rule change bumps `SESSION_LIST_FLAGS_VERSION`.
 
 **Work time (`work_time_ms`)** is computed from the claude transcript, not from hook events
 (`computeWorkTime()`, `server/src/logs/claude-extractor.ts`). For each user prompt it takes the last assistant
@@ -1031,6 +1055,27 @@ empty config. Reads and writes: `ToolMonitorConfigService`
 | `repo_id`    | integer     | NOT NULL | PK; FK → repositories.id, ON DELETE CASCADE |
 | `config`     | jsonb       | NOT NULL | `ToolMonitorConfigJson` = `{ paused: boolean, tools: [{ name, enabled, capture: 'full' / 'meta' }] }`; at most 100 tools, names unique case-insensitively and valid per `validateToolName` (`@loghub/tool-monitor`). Read tolerantly: malformed entries are dropped |
 | `updated_at` | timestamptz | NOT NULL | DEFAULT now() |
+
+### team_repo_recompute_queue
+
+Background queue of the team-scope recompute (`RepositoriesService.recomputeTeamScope`:
+`session_cause_stats` / `session_file_stats` of the team over every session of the URL) that
+adding a repository to a team needs (migration `0082`). `POST /teams/:teamId/repositories` upserts
+the link's row as `pending`; `TeamRepoRecomputeService` (`server/src/teams/team-repo-recompute.service.ts`)
+claims rows with `FOR UPDATE SKIP LOCKED`, runs the recompute and deletes the row; on failure the row
+goes back to `pending` until 3 attempts, then stays `failed` with `last_error`. A `processing` row
+untouched for 10 minutes is reclaimed (worker restart). `GET /teams/:teamId/repositories` reports
+`recomputePending` while a `pending` / `processing` row exists. The other team recomputes (team config
+save) still run in their request.
+
+| Column               | Type        | Nullable | Notes |
+|----------------------|-------------|----------|-------|
+| `team_repository_id` | integer     | NOT NULL | PK; FK → team_repositories.id, ON DELETE CASCADE (unlink, remove, team delete drop the row) |
+| `status`             | varchar(16) | NOT NULL | DEFAULT 'pending' — `pending` / `processing` / `failed` |
+| `attempts`           | integer     | NOT NULL | DEFAULT 0; incremented by each claim |
+| `last_error`         | text        | nullable | Message of the last failed attempt |
+| `enqueued_at`        | timestamptz | NOT NULL | DEFAULT now(); claim order; reset by a re-add |
+| `updated_at`         | timestamptz | NOT NULL | DEFAULT now(); stale-`processing` detection |
 
 ### team_repo_tool_monitor_config
 
@@ -1627,3 +1672,6 @@ re-reads, so every cluster worker and every restart share one value.
 | `0077_tool_usage_indexes.sql` | Drop `idx_session_tool_usage_last_call_at` (never read: the Tools/MCP reads reach `session_tool_usage` by `session_id` and filter `last_call_at` as a residual) and create the partial `idx_sessions_tool_usage_version` on `sessions (tool_usage_version) WHERE tool_usage_version IS NOT NULL` for the startup re-queue `UPDATE … WHERE tool_usage_version < $1`. Index-only, re-runnable (`IF EXISTS` / `IF NOT EXISTS`), no data rewritten; older builds need neither index, so a rollback is safe |
 | `0078_otel_tabs_traces.sql` | Add nullable `logs_otel.otel_projection_version` smallint (no default, catalog-only) with the partial index `idx_logs_otel_projection_pending`, and create `otel_calls`, `otel_spans`, `otel_cost_buckets`, `otel_session_state` and `otel_reclass_queue` (all FK → `sessions.id` ON DELETE CASCADE, `user_id` FKs ON DELETE SET NULL) — OTEL tabs, traces and realtime (see § "OTEL tab tables" and `otel-tabs.md`). Additive and re-runnable (`IF NOT EXISTS` throughout), no `CONCURRENTLY` index. **Implicit backfill**: every existing `logs_otel` row starts NULL, so after deploy the projection drain projects all OTEL history in batches (`OTEL_PROJECTION_BATCH` per `OTEL_PROJECTION_INTERVAL_MS`, `SKIP LOCKED`); the file itself rewrites no data |
 | `0079_otel_status.sql` | Add nullable `session_stats.otel_state` varchar(16), `otel_reason` varchar(32) and `otel_status` jsonb — the per-session OTEL status reported by hook `2.30.0`+ (`otel-status` event; task `2026-10-30-otel-shared-receiver`, see `otel-tabs.md`). Guarded `ADD COLUMN IF NOT EXISTS`, no default, catalog-only (no rewrite), no index (coverage reads filter by the already indexed session scope). **No backfill**: `NULL` = no status reported, shown as `no-status`. Rollback: drop the three columns, nothing else depends on them |
+| `0080_session_list_flags.sql` | Add `session_stats.main_model` varchar (nullable, no default), `has_workflow` / `has_main_assistant` boolean NOT NULL DEFAULT false (constant default, catalog-only) and `list_flags_version` smallint (nullable) plus the partial index `idx_session_stats_list_flags_pending (session_id) WHERE list_flags_version IS NULL` — session list without request-time jsonb scans (task `2026-10-31-session-list-slow-jsonb`). Additive and re-runnable (`IF NOT EXISTS` throughout), no table rewrite. **Backfill at startup**, not in the file: `backfillSessionListFlags()` in `initializeDatabase()` fills every pending row, one repository per transaction. Rollback: drop the index and the four columns after reverting their readers |
+| `0081_session_stats_claude_line_count.sql` | Add `session_stats.claude_line_count` integer (nullable, no default, catalog-only) and reset `list_flags_version` of version-1 rows to `NULL`, so the startup backfill recomputes them as version 2 with the line count — analytics timeline without request-time `jsonb_array_length` (task `2026-10-31-session-list-slow-jsonb`). The `UPDATE` touches only databases that already ran `0080`'s backfill. Rollback: drop the column after reverting its readers |
+| `0082_team_repo_recompute_queue.sql` | New table `team_repo_recompute_queue` (PK/FK `team_repository_id` → `team_repositories.id` ON DELETE CASCADE, `status`, `attempts`, `last_error`, `enqueued_at`, `updated_at`) — the team-scope recompute after adding a repository to a team runs in the background instead of inside the request. Additive, `IF NOT EXISTS`. Rollback: drop the table after reverting its readers/writers |

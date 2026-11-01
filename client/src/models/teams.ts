@@ -52,6 +52,11 @@ export interface TeamRepository {
   repoUrl: string;
   addedAt: string;
   sessionCount: number;
+  /**
+   * The team's background recompute of this URL (queued when it was added) has not finished
+   * yet. Absent from servers older than migration 0082 — treat as false.
+   */
+  recomputePending?: boolean;
 }
 
 export interface Invitation {

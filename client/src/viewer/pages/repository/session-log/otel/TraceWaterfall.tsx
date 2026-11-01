@@ -65,6 +65,20 @@ function ancestorsOf(turn: OtelTurn, keys: ReadonlySet<string>): Set<string> {
   return out;
 }
 
+/** Viewport y of the bottom edge of the area that shows `el`: its nearest scrolling ancestor. */
+function visibleBottom(el: HTMLElement): number {
+  for (let p = el.parentElement; p; p = p.parentElement) {
+    const { overflowY } = getComputedStyle(p);
+    if (
+      (overflowY === 'auto' || overflowY === 'scroll') &&
+      p.scrollHeight > p.clientHeight
+    ) {
+      return p.getBoundingClientRect().bottom;
+    }
+  }
+  return window.innerHeight;
+}
+
 function tickLabel(ms: number): string {
   const s = ms / 1000;
   return s < 10 ? `${s.toFixed(1)} s` : `${Math.round(s)} s`;
@@ -92,33 +106,42 @@ export function TraceWaterfall({
     [turn, newSpanKeys],
   );
 
-  const scrollRef = useRef<HTMLDivElement>(null);
+  // The rows have no scroll box of their own (no scroll inside the tab's scroll): "below" means
+  // below the visible bottom of whatever scrolls them — the nearest scrolling ancestor, else the
+  // viewport.
+  const rowsRef = useRef<HTMLDivElement>(null);
   const [below, setBelow] = useState(0);
 
-  const countBelow = useCallback(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const bottom = el.scrollTop + el.clientHeight;
-    let n = 0;
-    el.querySelectorAll<HTMLElement>('[data-new="true"]').forEach((row) => {
-      if (row.offsetTop >= bottom - 4) n += 1;
-    });
-    setBelow(n);
+  const newRowsBelow = useCallback((): HTMLElement[] => {
+    const el = rowsRef.current;
+    if (!el) return [];
+    const bottom = visibleBottom(el);
+    return [...el.querySelectorAll<HTMLElement>('[data-new="true"]')].filter(
+      (row) => row.getBoundingClientRect().top >= bottom - 4,
+    );
   }, []);
+
+  const countBelow = useCallback(() => {
+    setBelow(newRowsBelow().length);
+  }, [newRowsBelow]);
 
   // `rows` / `newSpanKeys` are the triggers: the DOM they render is what gets counted.
   useEffect(() => {
     countBelow();
   }, [countBelow, rows, newSpanKeys]);
 
+  // Scroll events do not bubble; a capturing window listener sees the scrolling ancestor's.
+  useEffect(() => {
+    window.addEventListener('scroll', countBelow, true);
+    window.addEventListener('resize', countBelow);
+    return () => {
+      window.removeEventListener('scroll', countBelow, true);
+      window.removeEventListener('resize', countBelow);
+    };
+  }, [countBelow]);
+
   const scrollToNew = () => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const bottom = el.scrollTop + el.clientHeight;
-    const target = [
-      ...el.querySelectorAll<HTMLElement>('[data-new="true"]'),
-    ].find((row) => row.offsetTop >= bottom - 4);
-    target?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    newRowsBelow()[0]?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   };
 
   const ticks = Array.from({ length: TICKS }, (_, i) => {
@@ -141,11 +164,7 @@ export function TraceWaterfall({
         <span className="text-right">Duration</span>
       </div>
       <div className="relative">
-        <div
-          ref={scrollRef}
-          className="relative max-h-[560px] overflow-auto"
-          onScroll={countBelow}
-        >
+        <div ref={rowsRef}>
           {rows.map(({ node }) => (
             <TraceWaterfallRow
               key={node.key}
@@ -169,15 +188,19 @@ export function TraceWaterfall({
           ))}
         </div>
         {below > 0 && (
-          <button
-            type="button"
-            className="absolute bottom-2 left-1/2 inline-flex -translate-x-1/2 items-center gap-1 rounded-full bg-amber-500 px-3 py-1 text-xs font-semibold text-white shadow"
-            onClick={scrollToNew}
-            data-testid="otel-new-spans-pill"
-          >
-            <ArrowDown className="size-3" />
-            {below} new span{below === 1 ? '' : 's'} below
-          </button>
+          // Zero-height sticky anchor: pins the pill to the bottom of the visible area while
+          // the waterfall runs past it.
+          <div className="pointer-events-none sticky bottom-2 h-0">
+            <button
+              type="button"
+              className="pointer-events-auto absolute bottom-0 left-1/2 inline-flex -translate-x-1/2 items-center gap-1 rounded-full bg-amber-500 px-3 py-1 text-xs font-semibold text-white shadow"
+              onClick={scrollToNew}
+              data-testid="otel-new-spans-pill"
+            >
+              <ArrowDown className="size-3" />
+              {below} new span{below === 1 ? '' : 's'} below
+            </button>
+          </div>
         )}
       </div>
       <p className="border-t px-2 py-1 text-[11px] text-muted-foreground">

@@ -8,7 +8,11 @@
 // state of the System context anatomy tab) and GS-05 (the System context anatomy tab — numbers from
 // its expected.json `anatomy` block —, and the ResearchWorkflow run with its two workflow agents W1/W2
 // for the Agents table). Uploaded through POST /api/v2/logs (DD SC3); the numbers come from their
-// expected.json (DD D3). Step 6a uploads its own small session (a background agent, a
+// expected.json (DD D3). Step 1a checks the session list's stored flags (session_stats
+// `has_workflow`, algorithm doc session-list-flags.md): it re-uploads GS-07's claude body with one
+// extra Workflow call, checks the flag, the analytics timeline's log line count (stored as
+// `claude_line_count`) and that recompute-all-sessions leaves the list unchanged, then
+// restores the original body for the later steps. Step 6a uploads its own small session (a background agent, a
 // <task-notification> and the main thread finishing after it): the turn's work time runs from the
 // prompt to the last answer. Step 8c uploads one with a Workflow call rejected before launch and one
 // launched by scriptPath (workflow status and name). Step 8d uploads one whose startup estimate
@@ -39,7 +43,7 @@
 import { randomBytes } from 'node:crypto';
 import { test, expect } from '../fixtures';
 import { createApiKey } from '../helpers/api-key';
-import { loadExpected } from '../helpers/golden';
+import { loadExpected, materializeGolden } from '../helpers/golden';
 import { ownRepoId, promptSessionBodies, type PromptSession } from '../helpers/prompt-session';
 import { waitForQueueIdle } from '../helpers/queue';
 import { hms, infoValue, int, logTurns, num, openSession, turnMetric, uploadGoldenRepo, usd4 } from '../helpers/session-view';
@@ -59,6 +63,17 @@ interface GoldenAnatomy {
   attributed: number;
   harnessInternals: number;
   partitions: Record<string, { bytes: number; tokens: number }>;
+}
+
+/** The session-list fields step 1a compares (cost fields + the stored workflow flag). */
+interface ListRow {
+  sessionId: string;
+  totalCost: unknown;
+  costBreakdown: unknown;
+  computedCost: unknown;
+  hasCostDiscrepancy: unknown;
+  costUnavailableReason: unknown;
+  hasWorkflow: boolean;
 }
 
 interface LogEntry {
@@ -84,6 +99,62 @@ test('@S-SESS-03 Logs: what counts as a prompt, what is hidden, how a turn reads
   const repo = await test.step('1. upload GS-07, GS-01 and GS-05', async () =>
     uploadGoldenRepo(api, db, owner, ['gs-07', 'gs-01', 'gs-05']));
   const sid7 = repo.rootId('gs-07');
+
+  await test.step('1a. session list: GS-05 hasWorkflow, GS-07 not; a re-upload of GS-07 with a Workflow call sets it; recompute-all-sessions changes no cost field and no flag', async () => {
+    const listRows = async (): Promise<ListRow[]> => {
+      const res = await owner.api.get(`/api/v1/repositories/${repo.repoId}/sessions`);
+      expect(res.status(), 'GET .../sessions').toBe(200);
+      return ((await res.json()) as ListRow[])
+        .map(({ sessionId, totalCost, costBreakdown, computedCost, hasCostDiscrepancy, costUnavailableReason, hasWorkflow }) =>
+          ({ sessionId, totalCost, costBreakdown, computedCost, hasCostDiscrepancy, costUnavailableReason, hasWorkflow }))
+        .sort((a, b) => a.sessionId.localeCompare(b.sessionId));
+    };
+    const flagOf = (rows: ListRow[], sid: string) => rows.find((r) => r.sessionId === sid)?.hasWorkflow;
+    // The analytics timeline's log line count is stored with the same flags (claude_line_count).
+    const timelineLineCount = async (sid: string): Promise<number | undefined> => {
+      const res = await owner.api.get(`/api/v1/repositories/${repo.repoId}/analytics/timeline`, {
+        params: { startDate: '2000-01-01T00:00:00.000Z', endDate: '2100-01-01T00:00:00.000Z' },
+      });
+      expect(res.status(), 'GET .../analytics/timeline').toBe(200);
+      return ((await res.json()) as Array<{ sessionId: string; logLineCount: number }>).find((r) => r.sessionId === sid)?.logLineCount;
+    };
+    const before = await listRows();
+    expect(flagOf(before, repo.rootId('gs-05')), 'GS-05 has a Workflow call').toBe(true);
+    expect(flagOf(before, sid7), 'GS-07 has none').toBe(false);
+
+    const original = materializeGolden('gs-07', { runId: repo.runId }).uploads.find((u) => u.sessionId === sid7 && u.type === 'claude');
+    if (!original) throw new Error('GS-07 has no claude upload');
+    const lines = original.body.split('\n').filter((l) => l.trim() !== '');
+    const last = JSON.parse(lines[lines.length - 1]) as { sessionId?: string; timestamp?: string };
+    const workflowLine = {
+      type: 'assistant', uuid: `${sid7}-wf`, sessionId: last.sessionId ?? sid7, timestamp: last.timestamp, isSidechain: false,
+      message: { id: `${sid7}-wf-msg`, role: 'assistant', content: [{ type: 'tool_use', id: 'toolu_ss03_wf', name: 'Workflow', input: {} }] },
+    };
+    expect(await timelineLineCount(sid7), 'timeline log line count = the transcript lines').toBe(lines.length);
+    const key = await createApiKey(owner.api);
+    const uploadClaude = async (body: string) => {
+      const res = await api.post('/api/v2/logs', {
+        params: { sessionId: sid7, type: 'claude' },
+        headers: { 'Content-Type': 'text/plain', 'X-API-Key': key.key },
+        data: body,
+      });
+      expect(res.status(), 'upload GS-07 claude').toBe(201);
+      await waitForQueueIdle(db, owner.id, { timeoutMs: 30_000 });
+    };
+
+    await uploadClaude([...lines, JSON.stringify(workflowLine)].join('\n') + '\n');
+    const withWorkflow = await listRows();
+    expect(flagOf(withWorkflow, sid7), 'the re-upload with a Workflow call sets the flag, no restart').toBe(true);
+    expect(await timelineLineCount(sid7), 'the re-upload updates the stored line count').toBe(lines.length + 1);
+
+    expect((await owner.api.post(`/api/v1/repositories/${repo.repoId}/recompute-all-sessions`)).status()).toBe(201);
+    expect(await listRows(), 'recompute leaves every cost field and flag as ingest stored them').toEqual(withWorkflow);
+
+    // Back to the fixture as shipped, so the later steps read GS-07 unchanged.
+    await uploadClaude(original.body);
+    expect(flagOf(await listRows(), sid7), 'the original body clears the flag again').toBe(false);
+    expect(await timelineLineCount(sid7), 'and restores the line count').toBe(lines.length);
+  });
 
   await test.step('2. GET .../logs of GS-07 keeps the raw data whole: sidechain pair, isMeta, task-notification, duplicate message.id', async () => {
     const res = await owner.api.get(`/api/v1/repositories/${repo.repoId}/sessions/${encodeURIComponent(sid7)}/logs`);
