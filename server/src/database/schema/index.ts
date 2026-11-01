@@ -805,6 +805,27 @@ export const teamRepositories = pgTable(
   (table) => [unique().on(table.teamId, table.repoUrl)],
 );
 
+/**
+ * Migration 0082: background queue of the team-scope recompute that follows adding a
+ * repository to a team (`TeamRepoRecomputeService`). One row per team link while its
+ * recompute is pending (`pending` / `processing`) or gave up (`failed`); deleted on success,
+ * cascaded with the link. `GET /teams/:teamId/repositories` reports `recomputePending` from it.
+ */
+export const teamRepoRecomputeQueue = pgTable('team_repo_recompute_queue', {
+  teamRepositoryId: integer('team_repository_id')
+    .primaryKey()
+    .references(() => teamRepositories.id, { onDelete: 'cascade' }),
+  status: varchar('status', { length: 16 }).notNull().default('pending'),
+  attempts: integer('attempts').notNull().default(0),
+  lastError: text('last_error'),
+  enqueuedAt: timestamp('enqueued_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+  updatedAt: timestamp('updated_at', { withTimezone: true })
+    .notNull()
+    .defaultNow(),
+});
+
 export const invitations = pgTable(
   'invitations',
   {
@@ -1086,6 +1107,24 @@ export const sessionStats = pgTable('session_stats', {
   otelState: varchar('otel_state', { length: 16 }),
   otelReason: varchar('otel_reason', { length: 32 }),
   otelStatus: jsonb('otel_status'),
+  // Session-list flags (migration 0080), derived from the session's own claude transcript by
+  // computeSessionListFlags() (logs/session-list-flags.ts) so the session list never scans
+  // logs.body. Written by upsertSessionStatsRow() for non-subagent transcripts only (a
+  // sub-agent upload/recompute leaves them untouched); rows from before 0080 are filled by
+  // the startup backfill. `listFlagsVersion` NULL = not computed yet (or stale rules: it
+  // holds SESSION_LIST_FLAGS_VERSION once written).
+  // Partial index (raw SQL in 0080, not expressible here):
+  //   idx_session_stats_list_flags_pending ON session_stats (session_id)
+  //   WHERE list_flags_version IS NULL — lets the backfill find pending rows cheaply.
+  mainModel: varchar('main_model'),
+  hasWorkflow: boolean('has_workflow').notNull().default(false),
+  hasMainAssistant: boolean('has_main_assistant').notNull().default(false),
+  listFlagsVersion: smallint('list_flags_version'),
+  // Migration 0081 (list flags v2): number of lines in the session's own `claude` log
+  // (jsonb_array_length(logs.body)), so the analytics timeline never detoasts the body to
+  // count them. Same owner and backfill as the flags above; NULL = no claude log, or not
+  // computed yet. 0081 resets list_flags_version of v1 rows so the backfill fills it.
+  claudeLineCount: integer('claude_line_count'),
   updatedAt: timestamp('updated_at', { withTimezone: true })
     .notNull()
     .defaultNow(),

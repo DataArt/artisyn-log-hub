@@ -12,10 +12,20 @@ export class AuthClient {
   private _authMode: string | null = null;
   private idCollector: IdCollector | null = null;
 
-  async setup(collector?: IdCollector): Promise<void> {
+  /**
+   * Logs in (or identifies) as `config.testUser`. In read-only mode it never signs up and never
+   * creates an API key — the only request that reaches the server besides reads is the
+   * login/identify itself — so `teardown()` has nothing to delete.
+   */
+  async setup(
+    collector?: IdCollector,
+    opts: { readOnly?: boolean } = {},
+  ): Promise<void> {
     this.idCollector = collector ?? null;
-    await this._ensureUser();
-    await this._ensureApiKey();
+    await this._ensureUser(opts.readOnly === true);
+    if (!opts.readOnly) {
+      await this._ensureApiKey();
+    }
   }
 
   async teardown(): Promise<void> {
@@ -48,11 +58,19 @@ export class AuthClient {
     return data.mode ?? null;
   }
 
-  private async _ensureUser(): Promise<void> {
+  private async _ensureUser(readOnly: boolean): Promise<void> {
     const mode = await this._fetchAuthMode();
     this._authMode = mode;
     if (mode === 'none') {
-      await this._identify();
+      await this._identify(readOnly);
+      return;
+    }
+    if (readOnly) {
+      if (!(await this._tryLogin())) {
+        throw new Error(
+          `Read-only mode: login/identify as PERF_EMAIL failed (${config.testUser.email}) — the user must already exist; check PERF_EMAIL / PERF_PASSWORD`,
+        );
+      }
       return;
     }
     await this._ensureUserWithPassword();
@@ -68,14 +86,18 @@ export class AuthClient {
    * reused one from a previous run. Leaving one reusable user behind is a much
    * better failure mode than `DELETE FROM users` on a row we did not create.
    */
-  private async _identify(): Promise<void> {
+  private async _identify(readOnly: boolean): Promise<void> {
     const res = await fetch(`${BASE}/api/v1/auth/identify`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: config.testUser.email }),
     });
     if (!res.ok) {
-      throw new Error(`Identify failed: ${res.status} ${await res.text()}`);
+      throw new Error(
+        readOnly
+          ? `Read-only mode: login/identify as PERF_EMAIL failed (${config.testUser.email}): ${res.status} ${await res.text()}`
+          : `Identify failed: ${res.status} ${await res.text()}`,
+      );
     }
     this._captureSessionCookie(res);
     const data = (await res.json()) as Record<string, string>;
@@ -166,9 +188,14 @@ export class AuthClient {
     return this._authMode;
   }
 
+  /**
+   * Every request carries a timeout signal (`config.requestTimeoutMs`) unless the caller passed
+   * its own — so a stalled endpoint fails the request instead of hanging the whole run.
+   */
   fetch(path: string, init?: RequestInit): Promise<Response> {
     return fetch(`${BASE}${path}`, {
       ...init,
+      signal: init?.signal ?? AbortSignal.timeout(config.requestTimeoutMs),
       headers: { Cookie: this.sessionCookie || '', ...(init?.headers || {}) },
     });
   }
@@ -176,6 +203,7 @@ export class AuthClient {
   fetchJson(path: string, method: string, body?: unknown): Promise<Response> {
     return fetch(`${BASE}${path}`, {
       method,
+      signal: AbortSignal.timeout(config.requestTimeoutMs),
       headers: {
         'Content-Type': 'application/json',
         Cookie: this.sessionCookie || '',

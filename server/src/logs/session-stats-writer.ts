@@ -10,6 +10,7 @@ import { registerUnpricedModels } from '../model-pricing/unpriced-model-registry
 import type { OtelStatusEvent } from './artisyn-extractor';
 import type { ClaudeStats } from './claude-extractor';
 import type { SessionCallTokens } from './cost.sql';
+import { SESSION_LIST_FLAGS_VERSION } from './session-list-flags';
 
 /**
  * Upserts a `session_stats` row for one session from a `ClaudeStats` result.
@@ -34,12 +35,28 @@ import type { SessionCallTokens } from './cost.sql';
  * The three OTEL status columns (`otel_state`, `otel_reason`, `otel_status`) are the third
  * exception: they are owned exclusively by {@link upsertSessionOtelStatus} (DD-28), so a
  * transcript re-upload or a recompute never clears the hook's last reported status.
+ *
+ * The session-list flag columns (`main_model`, `has_workflow`, `has_main_assistant`,
+ * `list_flags_version`, migration 0080; `claude_line_count`, 0081) are owned conditionally: they are written here only
+ * when `stats.listFlags` is non-null, i.e. for a root (non-sub-agent) transcript. A
+ * `claude-subagent` upload or recompute passes `listFlags: null` and leaves them untouched,
+ * so a sub-agent never overwrites its root session's flags. Rows written before 0080 keep
+ * `list_flags_version` NULL until the startup backfill fills them.
  */
 export async function upsertSessionStatsRow(
   db: DrizzleDb,
   sessionRowId: number,
   stats: ClaudeStats,
 ): Promise<void> {
+  const listFlagCols = stats.listFlags
+    ? {
+        mainModel: stats.listFlags.mainModel,
+        hasWorkflow: stats.listFlags.hasWorkflow,
+        hasMainAssistant: stats.listFlags.hasMainAssistant,
+        claudeLineCount: stats.listFlags.lineCount,
+        listFlagsVersion: SESSION_LIST_FLAGS_VERSION,
+      }
+    : {};
   await db
     .insert(sessionStats)
     .values({
@@ -70,6 +87,7 @@ export async function upsertSessionStatsRow(
       diffLinesTotalCalls: stats.diffLinesTotalCalls,
       tokenByServiceTier: stats.tokenByServiceTier,
       claudeVersion: stats.claudeVersion,
+      ...listFlagCols,
       updatedAt: new Date(),
     })
     .onConflictDoUpdate({
@@ -104,6 +122,7 @@ export async function upsertSessionStatsRow(
         diffLinesTotalCalls: stats.diffLinesTotalCalls,
         tokenByServiceTier: stats.tokenByServiceTier,
         claudeVersion: stats.claudeVersion,
+        ...listFlagCols,
         updatedAt: new Date(),
       },
     });

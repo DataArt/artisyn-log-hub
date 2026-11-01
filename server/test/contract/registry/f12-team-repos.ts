@@ -27,7 +27,11 @@ export const f12TeamRepos: ContractFamily = {
                                              WHERE r.repo_url = tr.repo_url
                                                AND r.user_id IN (SELECT user_id FROM team_members
                                                                   WHERE team_id = tr.team_id)))
-                       AS log_count
+                       AS log_count,
+                     EXISTS (SELECT 1 FROM team_repo_recompute_queue q
+                              WHERE q.team_repository_id = tr.id
+                                AND q.status IN ('pending', 'processing'))
+                       AS recompute_pending
                 FROM team_repositories tr
                WHERE tr.team_id = $1
                ORDER BY tr.repo_url`,
@@ -40,6 +44,7 @@ export const f12TeamRepos: ContractFamily = {
           addedAt: { col: 'added_at', as: 'iso' },
           repositoryId: 'repository_id',
           sessionCount: { col: 'log_count', as: 'number' },
+          recomputePending: 'recompute_pending',
         },
         strict: true,
       },

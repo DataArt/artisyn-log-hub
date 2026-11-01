@@ -130,7 +130,9 @@ interface RepositorySession {
   isFavorite?: boolean; // true when the authenticated user has favorited this session
   userId: number | null; // numeric id of the user who owns the session (the artisyn log uploader); null if unknown
   isHookService: boolean; // true when the artisyn log body contains a hook_service event
-  hasWorkflow: boolean;   // true when the claude log body contains a Workflow tool_use (fast LIKE scan)
+  hasWorkflow: boolean;   // session_stats.has_workflow: an assistant event holds a Workflow tool_use
+                        // with a non-empty string id (computed at ingest / startup backfill,
+                        // algorithms/session-list-flags.md) — no request-time body scan
   claudeVersion: string | null; // (2026-09-23) COALESCE(session_stats.claude_version, claude_version_otel):
                         // highest Claude Code CLI version on the transcript lines, else the highest
                         // OTEL resource service.version; null when neither is known (no backfill for
@@ -1314,6 +1316,9 @@ response: Team
 // GET /api/v1/teams/:teamId/repositories — 200
 // Requires: team member
 response: TeamRepository[]
+// TeamRepository.recomputePending: boolean — the team-scope recompute queued when the URL was
+// added has not finished (team_repo_recompute_queue row pending/processing); the team page shows
+// «Adding…» and polls until it is false. Absent before migration 0082 — clients treat it as false.
 // Errors: 403, 404
 
 // POST /api/v1/teams/:teamId/repositories — 201
@@ -1321,6 +1326,8 @@ response: TeamRepository[]
 body: { repoUrl: string }
 response: TeamRepository
 // Idempotent: returns existing row if URL already in team
+// A new link seeds its team config and QUEUES the team-scope recompute (background,
+// TeamRepoRecomputeService) instead of running it in the request.
 
 // DELETE /api/v1/teams/:teamId/repositories/:repoId — 204
 // Requires: team owner (TeamOwnerGuard)
@@ -1901,7 +1908,9 @@ interface TimelineSession {
   imageTotalBytes: number; // decoded bytes of those images (base64.length * 3/4)
   mcpCallsTotal: number;          // total mcp__* tool_use calls in the session
   mcpCallsByServer: Record<string, number>; // per-server call counts (server name → count)
-  logLineCount: number;    // total raw log event count for the session (proxy for prompt activity)
+  logLineCount: number;    // line count of the session's claude log (proxy for prompt activity):
+                           // session_stats.claude_line_count, else jsonb_array_length(body) for
+                           // sessions not backfilled yet (raw_sessions CTE)
   isFavorite?: boolean;    // true when the authenticated user has favorited this session
   // Cache traffic, always present, default 0 — backs the "Cache Read Ratio" analytics
   // view. The root/descendant pair is reported side by side, never blended: descendant* sums

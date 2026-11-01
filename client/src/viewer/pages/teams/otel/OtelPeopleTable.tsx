@@ -73,16 +73,16 @@ export function OtelPeopleTable({
                     data-testid="otel-person-row"
                   >
                     <td className="py-1.5 pr-3">{p.email}</td>
-                    <td className="py-1.5 pr-3 text-right font-mono">
+                    <td className="whitespace-nowrap py-1.5 pr-3 text-right font-mono">
                       {formatCount(p.sessions)}
                     </td>
-                    <td className="py-1.5 pr-3 text-right font-mono">
+                    <td className="whitespace-nowrap py-1.5 pr-3 text-right font-mono">
                       {formatMicrosUsd(p.costUsdMicros)}
                     </td>
-                    <td className="py-1.5 pr-3 text-right font-mono">
+                    <td className="whitespace-nowrap py-1.5 pr-3 text-right font-mono">
                       {formatMicrosUsd(p.hiddenCostUsdMicros)}
                     </td>
-                    <td className="py-1.5 pr-3 text-right font-mono">
+                    <td className="whitespace-nowrap py-1.5 pr-3 text-right font-mono">
                       {ratio === null ? 'n/a' : formatShare(ratio)}
                     </td>
                     <td
@@ -91,7 +91,7 @@ export function OtelPeopleTable({
                     >
                       {p.models.join(', ') || '—'}
                     </td>
-                    <td className="py-1.5 pr-3 text-right font-mono">
+                    <td className="whitespace-nowrap py-1.5 pr-3 text-right font-mono">
                       {formatCount(p.repositories)}
                     </td>
                     <td className="w-24 py-1.5 pr-3">

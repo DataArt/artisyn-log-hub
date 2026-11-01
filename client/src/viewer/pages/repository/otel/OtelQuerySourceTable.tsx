@@ -38,14 +38,24 @@ export function OtelQuerySourceTable({
             <tr className="border-b">
               <th className="py-1.5 pr-3 font-medium">query_source</th>
               <th className="py-1.5 pr-3 font-medium">description</th>
-              <th className="py-1.5 pr-3 text-right font-medium">calls</th>
+              <th className="whitespace-nowrap py-1.5 pr-3 text-right font-medium">
+                calls
+              </th>
               {showSessions && (
-                <th className="py-1.5 pr-3 text-right font-medium">sessions</th>
+                <th className="whitespace-nowrap py-1.5 pr-3 text-right font-medium">
+                  sessions
+                </th>
               )}
-              <th className="py-1.5 pr-3 text-right font-medium">cost</th>
-              <th className="py-1.5 pr-3 text-right font-medium">share</th>
-              <th className="py-1.5 pr-3 text-right font-medium">hidden</th>
-              <th className="py-1.5 pr-3 text-right font-medium">
+              <th className="whitespace-nowrap py-1.5 pr-3 text-right font-medium">
+                cost
+              </th>
+              <th className="whitespace-nowrap py-1.5 pr-3 text-right font-medium">
+                share
+              </th>
+              <th className="whitespace-nowrap py-1.5 pr-3 text-right font-medium">
+                hidden
+              </th>
+              <th className="whitespace-nowrap py-1.5 pr-3 text-right font-medium">
                 ctx : output
               </th>
               <th className="py-1.5 font-medium">models</th>
@@ -80,24 +90,24 @@ export function OtelQuerySourceTable({
                 <td className="py-1.5 pr-3 text-muted-foreground">
                   {r.description ?? '— (not in dictionary)'}
                 </td>
-                <td className="py-1.5 pr-3 text-right font-mono">
+                <td className="whitespace-nowrap py-1.5 pr-3 text-right font-mono">
                   {formatCount(r.calls)}
                 </td>
                 {showSessions && (
-                  <td className="py-1.5 pr-3 text-right font-mono">
+                  <td className="whitespace-nowrap py-1.5 pr-3 text-right font-mono">
                     {formatCount(r.sessions)}
                   </td>
                 )}
-                <td className="py-1.5 pr-3 text-right font-mono">
+                <td className="whitespace-nowrap py-1.5 pr-3 text-right font-mono">
                   {formatMicrosUsd(r.costUsdMicros)}
                 </td>
-                <td className="py-1.5 pr-3 text-right">
+                <td className="whitespace-nowrap py-1.5 pr-3 text-right">
                   {formatShare(r.share)}
                 </td>
-                <td className="py-1.5 pr-3 text-right">
+                <td className="whitespace-nowrap py-1.5 pr-3 text-right">
                   {r.hiddenShare > 0 ? formatShare(r.hiddenShare) : '—'}
                 </td>
-                <td className="py-1.5 pr-3 text-right font-mono">
+                <td className="whitespace-nowrap py-1.5 pr-3 text-right font-mono">
                   {formatContextToOutput(r.contextToOutput)}
                 </td>
                 <td className="py-1.5">{r.models.join(', ') || '—'}</td>

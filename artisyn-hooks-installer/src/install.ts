@@ -1000,7 +1000,6 @@ export async function runInstall(flags?: CliFlags): Promise<void> {
     } else {
       console.log(`Updating hooks v${currentVersion} → v${newVersion}...`);
     }
-    reportVersionTransition(cwd, 'install', currentVersion, newVersion, flags?.serverUrl ?? null);
   } else {
     console.log(`Installing hooks v${newVersion}...`);
   }
@@ -1040,6 +1039,11 @@ export async function runInstall(flags?: CliFlags): Promise<void> {
   const otelTraces = await resolveOtelTracesAnswer('install', cwd, flags?.otelTraces);
   const otelPlan = await resolveOtelUserPlan(cwd, flags?.otelExisting, otelTraces);
   const { marketplaceName, problems } = await applyHooksUpdate(claudeDir, cwd, overrides, otelTraces, otelPlan);
+  // Logged only once the update actually ran: an install that aborts earlier (e.g. a tracked
+  // secret file) must leave no trace in the project, hook.log included.
+  if (currentVersion) {
+    reportVersionTransition(cwd, 'install', currentVersion, newVersion, flags?.serverUrl ?? null);
+  }
 
   // Security warning if API key was passed on the command line
   if (flags?.apiKey) {

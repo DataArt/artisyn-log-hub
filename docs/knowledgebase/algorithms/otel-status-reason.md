@@ -59,7 +59,10 @@ as "at or past the cutoff".
 3. The first remaining scope wins (`effective[key]` = that scope); every later scope that has the
    key → `{key, scope, why:'shadowed'}` in `ignored`.
 4. No winner, project scopes not honored, and a project scope has the key → the key goes to
-   `projectOnlyKeys`.
+   `projectOnlyKeys` — except `OTEL_RESOURCE_ATTRIBUTES`: the installer writes it only to
+   `.claude/settings.local.json` by design (its `artisyn.repo` value differs per repository, the
+   user scope is shared) and the receiver routes by the session register, so it is never
+   `project-only`.
 
 **Warnings** (`deriveConfigWarnings`), in this order, at most one each:
 
@@ -97,7 +100,8 @@ in it).
 
 - Version boundary on both sides and unknown: SS-01, SS-02, SS-03, SS-08.
 - Shadowing within honored and not-honored scopes: SS-04, SS-05, SS-06, SS-09; blank value: SS-07.
-- Each warning class and its negative: SW-01 … SW-06.
+- Each warning class and its negative: SW-01 … SW-06; the per-repo resource attributes are not
+  project-only: SS-10, SW-07.
 - State: all / some / none, no enabled signal, a disabled signal ignored, a numeric string: ST-01 …
   ST-06.
 - Reason order: receiver-down beats ok (RN-01) and is triggered by the detail alone (RN-02);
@@ -120,6 +124,8 @@ in it).
   {"id": "SS-06", "input": {"kind": "effective", "claudeVersion": "2.1.300", "scopes": {"user": {"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://127.0.0.1:31000/v1/logs"}, "project": {"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://127.0.0.1:30000/v1/logs"}}}, "expected": {"projectScopeHonored": false, "effective": {"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "user"}, "ignored": [{"key": "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT", "scope": "project", "why": "project-scope-ignored"}], "projectOnlyKeys": []}, "note": "user wins; project not honored -> project-scope-ignored; a winner exists -> not project-only"},
   {"id": "SS-07", "input": {"kind": "effective", "claudeVersion": "2.1.300", "scopes": {"user": {"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "   "}}}, "expected": {"projectScopeHonored": false, "effective": {}, "ignored": [], "projectOnlyKeys": []}, "note": "rule 1: a blank value does not count as having the key"},
   {"id": "SS-08", "input": {"kind": "effective", "claudeVersion": "v2", "scopes": {"project": {"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://127.0.0.1:30000/v1/logs"}}}, "expected": {"projectScopeHonored": false, "effective": {}, "projectOnlyKeys": ["OTEL_EXPORTER_OTLP_LOGS_ENDPOINT"]}, "note": "'v2' does not parse as x.y.z -> unknown -> not honored -> project-only"},
+  {"id": "SS-10", "input": {"kind": "effective", "claudeVersion": "2.1.300", "scopes": {"user": {"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://127.0.0.1:31000/v1/logs"}, "local": {"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://127.0.0.1:31000/v1/logs", "OTEL_RESOURCE_ATTRIBUTES": "artisyn.repo=205f7427c85f094e"}}}, "expected": {"projectScopeHonored": false, "effective": {"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "user"}, "ignored": [{"key": "OTEL_EXPORTER_OTLP_LOGS_ENDPOINT", "scope": "local", "why": "project-scope-ignored"}, {"key": "OTEL_RESOURCE_ATTRIBUTES", "scope": "local", "why": "project-scope-ignored"}], "projectOnlyKeys": []}, "note": "the installer's normal layout on 2.1.282+: resource attributes only in local are ignored but never project-only (rule 4 exception)"},
+  {"id": "SW-07", "input": {"kind": "warnings", "claudeVersion": "2.1.300", "sharedPort": 31000, "scopes": {"user": {"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://127.0.0.1:31000/v1/logs"}, "local": {"OTEL_RESOURCE_ATTRIBUTES": "artisyn.repo=205f7427c85f094e"}}}, "expected": {"warnings": []}, "note": "per-repo resource attributes only in local -> no project-only warning"},
   {"id": "SW-01", "input": {"kind": "warnings", "claudeVersion": "2.1.300", "scopes": {"project": {"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "http://127.0.0.1:30000/v1/logs"}}}, "expected": {"warnings": ["project-only"]}, "note": "warning 1: projectOnlyKeys = [L]; no user endpoint -> nothing else"},
   {"id": "SW-02", "input": {"kind": "warnings", "claudeVersion": "2.1.300", "forwardMode": "proxy", "scopes": {"user": {"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "https://collector.example.com/v1/logs"}}}, "expected": {"warnings": ["endpoint-drift"]}, "note": "warning 2: proxy and a non-loopback user endpoint"},
   {"id": "SW-03", "input": {"kind": "warnings", "claudeVersion": "2.1.300", "forwardMode": "keep", "scopes": {"user": {"OTEL_EXPORTER_OTLP_LOGS_ENDPOINT": "https://collector.example.com/v1/logs"}}}, "expected": {"warnings": []}, "note": "warning 2 needs proxy or replace; keep -> no drift"},

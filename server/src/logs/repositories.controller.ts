@@ -655,62 +655,30 @@ export class RepositoriesController {
       const idsLiteral = `{${sessionRowIds.join(',')}}`;
       const idsArray = sql`${idsLiteral}::bigint[]`;
       type CostRow = TreeCostSqlRow & {
-        model: string | null;
+        root_model: string | null;
         otel_cost: string | null;
         cost_excludes_utility_calls: boolean | null;
       };
       const costResult = await this.db.execute(sql`
         WITH RECURSIVE ${descendantSessionsCte(idsArray)},
         ${otelCostsCte(idsArray)},
-        assistant_lines AS (
-          -- One API response can be split across multiple transcript lines — one per
-          -- content block (thinking/tool_use/text) — each repeating the SAME
-          -- message.usage. DISTINCT ON (session, message.id) keeps exactly one line per
-          -- real API response so usage isn't summed once per content block — the LAST
-          -- one (ord DESC), since a first block line written mid-stream can carry a
-          -- partial output_tokens (same rule as extractClaudeStats). A line
-          -- missing message.id falls back to its own uuid, which is unique per line, so
-          -- it can never collide with another line and is always kept.
-          SELECT DISTINCT ON (cl.session_id, COALESCE(evt->'message'->>'id', evt->>'uuid'))
-            cl.session_id AS session_row_id,
-            ord,
-            evt
-          FROM logs cl
-          CROSS JOIN LATERAL jsonb_array_elements(cl.body) WITH ORDINALITY AS t(evt, ord)
-          WHERE cl.log_type = 'claude'
-            AND cl.session_id = ANY(${idsArray})
-            AND (evt->>'type') = 'assistant'
-            AND (evt->>'isSidechain') IS DISTINCT FROM 'true'
-          ORDER BY cl.session_id, COALESCE(evt->'message'->>'id', evt->>'uuid'), ord DESC
-        ),
-        session_events_jsonb AS (
-          SELECT
-            session_row_id,
-            -- First non-null model, in log order — matches extractClaudeStats()'s
-            -- "first non-null model wins" logic (claude-extractor.ts). MIN() would pick
-            -- the alphabetically-smallest model string instead, which is wrong whenever
-            -- a session used more than one model (e.g. manual /model switches) and can
-            -- massively over/under-price the session.
-            (ARRAY_AGG(evt->'message'->>'model' ORDER BY ord) FILTER (
-              WHERE (evt->'message'->>'model') IS NOT NULL
-            ))[1] AS model
-          FROM assistant_lines
-          GROUP BY session_row_id
-        ),
         -- Cost comes from the stored session_costs rows (DD10) plus the utility calls,
-        -- all in tree_costs (session-tree-cost.sql.ts). The model shown is still taken
-        -- ONLY from the JSONB aggregate above, never ss.model (which falls back to the
-        -- sidechain model).
+        -- all in tree_costs (session-tree-cost.sql.ts). The root model is
+        -- session_stats.main_model — the first non-null model of the de-duplicated
+        -- main-thread (non-sidechain) assistant lines, written at ingest and by the
+        -- startup backfill (session-list-flags.ts) — never ss.model, which falls back to
+        -- the sidechain model. Only sessions with at least one main-thread assistant
+        -- line (has_main_assistant) get a cost row, as before.
         ${treeCostCtes(idsArray)}
         SELECT
-          se.session_row_id,
-          se.model AS model,
+          tc.session_row_id,
+          ss.main_model AS root_model,
           ${TREE_COST_COLUMNS_SQL},
           oc.otel_cost AS otel_cost,
-          ${costExcludesUtilityCallsSql(sql`se.session_row_id`)} AS cost_excludes_utility_calls
-        FROM session_events_jsonb se
-        JOIN tree_costs tc ON tc.session_row_id = se.session_row_id
-        LEFT JOIN otel_costs oc ON oc.session_row_id = se.session_row_id
+          ${costExcludesUtilityCallsSql(sql`tc.session_row_id`)} AS cost_excludes_utility_calls
+        FROM tree_costs tc
+        JOIN session_stats ss ON ss.session_id = tc.session_row_id AND ss.has_main_assistant
+        LEFT JOIN otel_costs oc ON oc.session_row_id = tc.session_row_id
       `);
       // The shown cost is the complete computed tree cost (readTreeCost →
       // resolveSessionTotalCost): null as soon as the root, a sub-agent or a utility call is
@@ -718,7 +686,7 @@ export class RepositoriesController {
       const toNum = (v: string | number | null): number | null =>
         v == null ? null : typeof v === 'number' ? v : parseFloat(v);
       for (const row of costResult.rows as unknown as CostRow[]) {
-        const tree = readTreeCost(row, row.model);
+        const tree = readTreeCost(row, row.root_model);
         const otelCost = toNum(row.otel_cost);
         costMap.set(Number(row.session_row_id), {
           totalCost: tree.total,
@@ -768,43 +736,23 @@ export class RepositoriesController {
       }
     }
 
-    // Build hasWorkflowSet: session row ids whose claude log body contains a Workflow
-    // tool_use. The predicate mirrors `extractWorkflows` (workflow-extractor.ts): an
-    // assistant event whose `message.content` holds a `tool_use` block named `Workflow`
-    // with a non-empty string `id`. The `@>` containment is a cheap jsonb pre-filter;
-    // the `EXISTS` is the exact check (the old `body::text LIKE` matched any text that
-    // merely mentioned the tool name, and depended on jsonb's text rendering).
-    // The `CASE jsonb_typeof(...)` guards keep `jsonb_array_elements` from raising on a
-    // non-array value, since Postgres does not guarantee AND evaluation order.
+    // Build hasWorkflowSet from session_stats.has_workflow — the `extractWorkflows`
+    // step-1 predicate (an assistant event with a `tool_use` block named `Workflow` and a
+    // non-empty string `id`), computed at ingest and by the startup backfill
+    // (session-list-flags.ts), so the list never scans the claude log body here.
     const hasWorkflowSet = new Set<number>();
     if (sessionDbIds.length > 0) {
       const idsLiteralWorkflow = `{${sessionDbIds.join(',')}}`;
       const idsArrayWorkflow = sql`${idsLiteralWorkflow}::bigint[]`;
-      type WorkflowRow = { session_row_id: string };
+      type WorkflowRow = { session_id: string };
       const workflowResult = await this.db.execute(sql`
-        SELECT DISTINCT s.id AS session_row_id
-        FROM sessions s
-        INNER JOIN logs cl ON cl.session_id = s.id AND cl.log_type = 'claude'
-        WHERE s.id = ANY(${idsArrayWorkflow})
-          AND cl.body @> '[{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Workflow"}]}}]'::jsonb
-          AND EXISTS (
-            SELECT 1
-            FROM jsonb_array_elements(
-                   CASE WHEN jsonb_typeof(cl.body) = 'array' THEN cl.body ELSE '[]'::jsonb END
-                 ) AS ev(e),
-                 jsonb_array_elements(
-                   CASE WHEN jsonb_typeof(ev.e -> 'message' -> 'content') = 'array'
-                        THEN ev.e -> 'message' -> 'content' ELSE '[]'::jsonb END
-                 ) AS blk(tu)
-            WHERE ev.e ->> 'type' = 'assistant'
-              AND blk.tu ->> 'type' = 'tool_use'
-              AND blk.tu ->> 'name' = 'Workflow'
-              AND jsonb_typeof(blk.tu -> 'id') = 'string'
-              AND blk.tu ->> 'id' <> ''
-          )
+        SELECT session_id
+        FROM session_stats
+        WHERE session_id = ANY(${idsArrayWorkflow})
+          AND has_workflow
       `);
       for (const row of workflowResult.rows as unknown as WorkflowRow[]) {
-        hasWorkflowSet.add(Number(row.session_row_id));
+        hasWorkflowSet.add(Number(row.session_id));
       }
     }
 
@@ -2640,6 +2588,25 @@ export class RepositoriesController {
         -- descendant. Joined below on root_id; see session-tree-metrics.sql.ts for the
         -- double-count trap (the rollup already contains the root).
         ${treeMetricsCte()},
+        -- The sessions this route reports on: those with a claude log. Reading logs without
+        -- body never detoasts the transcript.
+        claude_sessions AS (
+          SELECT cl.session_id AS session_row_id
+          FROM logs cl
+          WHERE cl.log_type = 'claude'
+            AND cl.session_id = ANY(${idsArray})
+        ),
+        -- The sessions whose numbers still come from the raw transcript: no session_stats row
+        -- (every per-column value falls back), a row without a model (the model fallback) or
+        -- one without the stored line count (not backfilled yet). Every other session is
+        -- served from session_stats alone, so the raw-JSONB CTEs below scan only these.
+        -- (No backticks in this comment: it lives inside a sql template literal.)
+        raw_sessions AS (
+          SELECT cs.session_row_id
+          FROM claude_sessions cs
+          LEFT JOIN session_stats ss ON ss.session_id = cs.session_row_id
+          WHERE ss.session_id IS NULL OR ss.model IS NULL OR ss.claude_line_count IS NULL
+        ),
         artisyn_events AS (
           SELECT
             al.session_id,
@@ -2650,7 +2617,7 @@ export class RepositoriesController {
           FROM logs al
           CROSS JOIN LATERAL jsonb_array_elements(al.body) AS evt
           WHERE al.log_type = 'artisyn'
-            AND al.session_id = ANY(${idsArray})
+            AND al.session_id IN (SELECT session_row_id FROM raw_sessions)
             AND (evt->>'event') IN ('prompt_start', 'prompt_stop')
             AND (evt->>'timestamp') IS NOT NULL
         ),
@@ -2692,7 +2659,7 @@ export class RepositoriesController {
           FROM logs cl
           CROSS JOIN LATERAL jsonb_array_elements(cl.body) WITH ORDINALITY AS t(evt, ord)
           WHERE cl.log_type = 'claude'
-            AND cl.session_id = ANY(${idsArray})
+            AND cl.session_id IN (SELECT session_row_id FROM raw_sessions)
           GROUP BY cl.session_id
         ),
         -- Stored sub-agent costs (session_costs, priced at the root's price date).
@@ -2732,7 +2699,7 @@ export class RepositoriesController {
                  ELSE '[]'::jsonb END
           ) AS tu
           WHERE cl.log_type = 'claude'
-            AND cl.session_id = ANY(${idsArray})
+            AND cl.session_id IN (SELECT session_row_id FROM raw_sessions)
             AND evt->>'type' = 'assistant'
             AND tu->>'type' = 'tool_use'
             AND tu->>'name' IN (${textList([...EDIT_WRITE_TOOL_NAMES])})
@@ -2773,7 +2740,7 @@ export class RepositoriesController {
                  ELSE '[]'::jsonb END
           ) AS img
           WHERE cl.log_type = 'claude'
-            AND cl.session_id = ANY(${idsArray})
+            AND cl.session_id IN (SELECT session_row_id FROM raw_sessions)
             AND (evt->>'type') = 'user'
             AND (tr->>'type') = 'tool_result'
             AND (img->>'type') = 'image'
@@ -2784,10 +2751,10 @@ export class RepositoriesController {
           SELECT session_id, jsonb_array_length(body) AS log_line_count
           FROM logs
           WHERE log_type = 'claude'
-            AND session_id = ANY(${idsArray})
+            AND session_id IN (SELECT session_row_id FROM raw_sessions)
         )
         SELECT
-          se.session_row_id,
+          cs.session_row_id,
           COALESCE(ss.work_time_ms, wt.work_time_ms, 0) AS work_time_ms,
           -- The tree cost parts, resolved in TS by readTreeCost(), so this route, the
           -- session list, the reports and the delete-time audit row all apply one
@@ -2813,7 +2780,7 @@ export class RepositoriesController {
           COALESCE(ss.image_total_bytes, vs.image_total_bytes, 0) AS image_total_bytes,
           COALESCE(ss.mcp_calls_total, 0) AS mcp_calls_total,
           COALESCE(ss.mcp_calls_by_server, '{}'::jsonb) AS mcp_calls_by_server,
-          COALESCE(ll.log_line_count, 0) AS log_line_count,
+          COALESCE(ss.claude_line_count, ll.log_line_count, 0) AS log_line_count,
           COALESCE(ss.cache_read_tokens, se.cache_read_tokens, 0) AS cache_read_tokens,
           COALESCE(ss.cache_write_tokens, se.cache_write_tokens, 0) AS cache_write_tokens,
           -- The same three figures the stored cost prices, surfaced for the
@@ -2823,9 +2790,10 @@ export class RepositoriesController {
           COALESCE(tk.output_tokens_fast, 0) AS output_tokens_fast,
           COALESCE(sca.descendant_cache_read_tokens, 0) AS descendant_cache_read_tokens,
           COALESCE(sca.descendant_cache_write_tokens, 0) AS descendant_cache_write_tokens
-        FROM session_events se
-        LEFT JOIN session_stats ss ON ss.session_id = se.session_row_id
-        LEFT JOIN session_costs sc ON sc.session_id = se.session_row_id
+        FROM claude_sessions cs
+        LEFT JOIN session_events se ON se.session_row_id = cs.session_row_id
+        LEFT JOIN session_stats ss ON ss.session_id = cs.session_row_id
+        LEFT JOIN session_costs sc ON sc.session_id = cs.session_row_id
         -- One alias carrying the session's token counts for the response. Preserves the
         -- original per-column preference: the extracted session_stats value wins, and the raw-JSONB session_events aggregate is
         -- the fallback for a session whose stats row has not been written yet.
@@ -2840,13 +2808,15 @@ export class RepositoriesController {
             COALESCE(ss.input_tokens_fast, se.input_tokens_fast)         AS input_tokens_fast,
             COALESCE(ss.output_tokens_fast, se.output_tokens_fast)       AS output_tokens_fast
         ) tk ON true
-        LEFT JOIN ${sql.raw(SESSION_TREE_METRICS_CTE)} tm ON tm.root_id = se.session_row_id
-        LEFT JOIN tree_costs tc ON tc.session_row_id = se.session_row_id
-        LEFT JOIN subagent_cache sca ON sca.session_row_id = se.session_row_id
-        LEFT JOIN work_time_cte wt ON wt.session_id = se.session_row_id
-        LEFT JOIN file_stats_cte fs ON fs.session_row_id = se.session_row_id
-        LEFT JOIN vision_stats_cte vs ON vs.session_row_id = se.session_row_id
-        LEFT JOIN log_lines_cte ll ON ll.session_id = se.session_row_id
+        LEFT JOIN ${sql.raw(SESSION_TREE_METRICS_CTE)} tm ON tm.root_id = cs.session_row_id
+        LEFT JOIN tree_costs tc ON tc.session_row_id = cs.session_row_id
+        LEFT JOIN subagent_cache sca ON sca.session_row_id = cs.session_row_id
+        LEFT JOIN work_time_cte wt ON wt.session_id = cs.session_row_id
+        LEFT JOIN file_stats_cte fs ON fs.session_row_id = cs.session_row_id
+        LEFT JOIN vision_stats_cte vs ON vs.session_row_id = cs.session_row_id
+        LEFT JOIN log_lines_cte ll ON ll.session_id = cs.session_row_id
+        -- A claude log with no lines produced no session_events row, so it was never reported.
+        WHERE COALESCE(ss.claude_line_count, ll.log_line_count, 0) > 0
       `);
 
       for (const row of statsResult.rows as unknown as StatsRow[]) {

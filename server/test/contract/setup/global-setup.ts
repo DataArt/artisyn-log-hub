@@ -81,6 +81,10 @@ export default async function globalSetup(): Promise<void> {
   // periodic sweeper is parked like the other background jobs.
   process.env.SESSION_COST_RECOMPUTE_INLINE = 'true';
   process.env.SESSION_COST_RECOMPUTE_INTERVAL_MS = '3600000';
+  // Adding a team repository: the request awaits its own team-scope recompute, so the write
+  // row's "after" snapshot holds the recomputed stats and the queue row is gone again.
+  process.env.TEAM_REPO_RECOMPUTE_INLINE = 'true';
+  process.env.TEAM_REPO_RECOMPUTE_INTERVAL_MS = '3600000';
   // Deliberately NOT lowered: the retention tick and the abandoned-partial-upload sweep. The
   // world's dates are fixed in January 2026, so a fast retention tick with the default 30-day
   // window would purge the whole world mid-run. The window is also pushed out to 100 years, so

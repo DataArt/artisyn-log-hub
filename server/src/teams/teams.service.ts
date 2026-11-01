@@ -32,12 +32,12 @@ import {
   toLocalRepoIdentity,
 } from '../logs/local-repo-identity';
 import { normalizeRepoUrl } from '../logs/repo-url-normalizer';
-import { RepositoriesService } from '../logs/repositories.service';
 import {
   findPersonalRepoConfig,
   seedTeamRepoConfig,
 } from '../logs/team-repo-config';
 import { UsersService } from '../users/users.service';
+import { TeamRepoRecomputeService } from './team-repo-recompute.service';
 
 const TEAM_CREATION_DEFAULT_CONFIG: RepoConfigJson = {
   fileCategories: [{ name: 'docs', patterns: ['\\.md$'] }],
@@ -50,7 +50,7 @@ export class TeamsService {
   constructor(
     @Inject(DRIZZLE) private readonly db: DrizzleDb,
     private readonly usersService: UsersService,
-    private readonly repositoriesService: RepositoriesService,
+    private readonly teamRepoRecompute: TeamRepoRecomputeService,
   ) {}
 
   async createTeam(ownerId: number, name: string) {
@@ -366,6 +366,12 @@ export class TeamsService {
         addedAt: schema.teamRepositories.addedAt,
         repositoryId: min(schema.repositories.id),
         sessionCount: countDistinct(schema.logRepositories.logId),
+        // The background team-scope recompute queued by addTeamRepository has not finished
+        // (a `failed` row does not count: it is not going to finish).
+        recomputePending: sql<boolean>`EXISTS (
+          SELECT 1 FROM team_repo_recompute_queue q
+           WHERE q.team_repository_id = ${schema.teamRepositories.id}
+             AND q.status IN ('pending', 'processing'))`,
       })
       .from(schema.teamRepositories)
       .leftJoin(
@@ -442,13 +448,15 @@ export class TeamsService {
 
     // A new link gets the team's single config for the URL: the owner's personal config
     // when they have one, else the creation default — even when nobody has uploaded the URL
-    // yet. The team's derived stats are then written over every same-URL session.
+    // yet. The team's derived stats over every same-URL session are queued for the background
+    // recompute (it reads every transcript of the URL — tens of seconds for a large repo);
+    // the list reports `recomputePending` until it is done.
     const team = await this.getTeam(teamId);
     const initialConfig =
       (await findPersonalRepoConfig(this.db, team.ownerId, repoUrl)) ??
       TEAM_CREATION_DEFAULT_CONFIG;
     await seedTeamRepoConfig(this.db, teamRepo.id, initialConfig);
-    await this.repositoriesService.recomputeTeamScope(teamId, repoUrl);
+    await this.teamRepoRecompute.enqueue(teamRepo.id);
 
     return teamRepo;
   }
