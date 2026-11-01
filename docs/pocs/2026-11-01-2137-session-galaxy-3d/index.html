@@ -1,0 +1,485 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="data:,">
+<title>Session Galaxy — Artisyn Log Hub</title>
+<style>
+  :root {
+    --bg: #02030a;
+    --panel: rgba(10, 14, 30, 0.62);
+    --line: rgba(120, 140, 255, 0.18);
+    --text: #e6e9ff;
+    --muted: #8a93c0;
+    --gold: #ffd166;
+    --cyan: #38bdf8;
+    --red: #ff4d6d;
+  }
+  html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text); overflow: hidden;
+    font: 13px/1.4 "Inter", "Segoe UI", system-ui, sans-serif; }
+  #graph { position: fixed; inset: 0; }
+  .panel { position: fixed; background: var(--panel); border: 1px solid var(--line); border-radius: 14px;
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); box-shadow: 0 0 40px rgba(60, 80, 255, 0.08); }
+  .mono { font-family: "JetBrains Mono", "Cascadia Code", Consolas, monospace; }
+
+  #brand { top: 18px; left: 18px; padding: 14px 18px; max-width: 460px; }
+  #brand .kicker { font-size: 11px; letter-spacing: .18em; text-transform: uppercase; color: var(--muted); }
+  #brand h1 { margin: 4px 0 6px; font-size: 22px; font-weight: 700; letter-spacing: -.01em;
+    background: linear-gradient(90deg, #fff 0%, #9db4ff 45%, #ffd166 100%); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  #brand .prompt { color: #c9cff5; font-size: 12px; }
+
+  #stats { top: 18px; right: 18px; padding: 14px 18px; display: grid; grid-template-columns: repeat(4, auto); gap: 4px 26px; }
+  #stats .v { font-size: 26px; font-weight: 700; letter-spacing: -.02em; }
+  #stats .k { font-size: 10px; letter-spacing: .14em; text-transform: uppercase; color: var(--muted); }
+  #cost { color: var(--gold); text-shadow: 0 0 18px rgba(255, 209, 102, .55); }
+
+  #ticker { left: 18px; bottom: 96px; width: 430px; padding: 10px 12px; }
+  #ticker .row { display: flex; gap: 8px; align-items: center; white-space: nowrap; overflow: hidden; padding: 2px 0;
+    animation: slide .35s ease-out; }
+  #ticker .row .dot { width: 7px; height: 7px; border-radius: 50%; flex: none; box-shadow: 0 0 8px currentColor; }
+  #ticker .row .clock { color: var(--muted); font-size: 11px; flex: none; }
+  #ticker .row .who { color: #aab3e6; flex: none; max-width: 150px; overflow: hidden; text-overflow: ellipsis; }
+  #ticker .row .what { overflow: hidden; text-overflow: ellipsis; }
+  #ticker .row.err .what { color: var(--red); }
+  @keyframes slide { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+  #legend { right: 18px; bottom: 96px; padding: 10px 14px; font-size: 12px; }
+  #legend div { display: flex; align-items: center; gap: 8px; padding: 2px 0; }
+  #legend i { width: 9px; height: 9px; border-radius: 50%; display: inline-block; box-shadow: 0 0 8px currentColor; }
+
+  #bar { left: 18px; right: 18px; bottom: 18px; padding: 12px 16px; display: flex; align-items: center; gap: 14px; }
+  #bar button { background: rgba(255, 255, 255, .06); color: var(--text); border: 1px solid var(--line); border-radius: 9px;
+    padding: 7px 12px; font: inherit; cursor: pointer; }
+  #bar button:hover { background: rgba(255, 255, 255, .12); }
+  #bar button.on { border-color: var(--gold); color: var(--gold); }
+  #live { display: flex; align-items: center; gap: 6px; color: var(--red); font-weight: 700; letter-spacing: .08em; font-size: 12px; }
+  #live::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--red); box-shadow: 0 0 10px var(--red);
+    animation: blink 1.2s infinite; }
+  #live.off { color: var(--muted); } #live.off::before { background: var(--muted); box-shadow: none; animation: none; }
+  @keyframes blink { 50% { opacity: .25; } }
+  #clock { min-width: 120px; color: #c9cff5; }
+  #track { flex: 1; position: relative; height: 26px; cursor: pointer; }
+  #track canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
+  #head { position: absolute; top: -3px; bottom: -3px; width: 2px; background: var(--gold); box-shadow: 0 0 12px var(--gold); }
+
+  #card { top: 50%; left: 50%; transform: translate(-50%, -50%) scale(.96); padding: 26px 30px; min-width: 420px; opacity: 0;
+    pointer-events: none; transition: opacity .8s, transform .8s; text-align: center; }
+  #card.show { opacity: 1; transform: translate(-50%, -50%) scale(1); pointer-events: auto; }
+  #card .big { font-size: 46px; font-weight: 800; color: var(--gold); text-shadow: 0 0 30px rgba(255, 209, 102, .6); }
+  #card .sub { color: var(--muted); margin-bottom: 14px; }
+  #card table { margin: 0 auto 14px; border-collapse: collapse; text-align: left; }
+  #card td { padding: 3px 10px; } #card td.c { color: var(--gold); text-align: right; }
+  #card .why { font-size: 15px; } #card .why b { color: #9db4ff; }
+
+  #info { top: 120px; right: 18px; padding: 12px 14px; width: 300px; display: none; }
+  #info .t { font-weight: 700; margin-bottom: 6px; } #info .r { display: flex; justify-content: space-between; color: #c9cff5; }
+  #info .r span:first-child { color: var(--muted); }
+  #loading { position: fixed; inset: 0; display: grid; place-items: center; color: var(--muted); letter-spacing: .2em; font-size: 12px; }
+</style>
+</head>
+<body>
+<div id="loading">LOADING SESSION GALAXY…</div>
+<div id="graph"></div>
+
+<div id="brand" class="panel">
+  <div class="kicker">Artisyn Log Hub · Session Galaxy</div>
+  <h1>One Claude Code session, every agent, every call</h1>
+  <div class="prompt mono" id="prompt"></div>
+</div>
+
+<div id="stats" class="panel">
+  <div><div class="v mono" id="cost">$0.00</div><div class="k">Cost</div></div>
+  <div><div class="v mono" id="nAgents">0</div><div class="k">Agents</div></div>
+  <div><div class="v mono" id="nCalls">0</div><div class="k">Tool calls</div></div>
+  <div><div class="v mono" id="nErr">0</div><div class="k">Errors</div></div>
+</div>
+
+<div id="info" class="panel"></div>
+<div id="ticker" class="panel mono"></div>
+
+<div id="legend" class="panel">
+  <div><i style="color:#ffd166;background:#ffd166"></i>Session root</div>
+  <div><i style="color:#b388ff;background:#b388ff"></i>Workflow run</div>
+  <div><i style="color:#ff8a3d;background:#ff8a3d"></i>Agent (size and heat = cost)</div>
+  <div><i style="color:#38bdf8;background:#38bdf8"></i>Read · Grep · Glob</div>
+  <div><i style="color:#34d399;background:#34d399"></i>Edit · Write</div>
+  <div><i style="color:#fbbf24;background:#fbbf24"></i>Bash · PowerShell</div>
+  <div><i style="color:#a78bfa;background:#a78bfa"></i>MCP</div>
+  <div><i style="color:#f472b6;background:#f472b6"></i>Skill · Agent · Workflow</div>
+  <div><i style="color:#ff4d6d;background:#ff4d6d"></i>Failed call</div>
+</div>
+
+<div id="bar" class="panel mono">
+  <button id="play">❚❚ Pause</button>
+  <button id="restart">↺ Replay</button>
+  <button id="all">Show all</button>
+  <button id="orbit" class="on">Orbit</button>
+  <span id="live">LIVE REPLAY</span>
+  <span id="clock">--:--</span>
+  <div id="track"><canvas id="spark"></canvas><div id="head"></div></div>
+  <button data-d="30">30s</button><button data-d="60" class="on">60s</button><button data-d="120">2m</button>
+</div>
+
+<div id="card" class="panel">
+  <div class="sub mono" id="cardSub"></div>
+  <div class="big mono" id="cardCost"></div>
+  <div class="sub">where the money went</div>
+  <table class="mono" id="cardTop"></table>
+  <div class="sub" style="margin:0 0 10px;font-size:11px">click to close</div>
+  <div class="why">Not just <b>how much</b> — <b>why</b>. That is what Log Hub shows.</div>
+</div>
+
+<script src="data.js"></script>
+<script type="module">
+import * as THREE from 'https://esm.sh/three@0.186.0';
+import ForceGraph3D from 'https://esm.sh/3d-force-graph@1.80.1?deps=three@0.186.0';
+import SpriteText from 'https://esm.sh/three-spritetext@1.10.0?deps=three@0.186.0';
+import { UnrealBloomPass } from 'https://esm.sh/three@0.186.0/examples/jsm/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'https://esm.sh/three@0.186.0/examples/jsm/postprocessing/OutputPass.js';
+
+const DATA = window.SESSION_GALAXY;
+const $ = (id) => document.getElementById(id);
+
+// ---------- palette ----------
+const TOOL_COLORS = [
+  [/^(Read|Grep|Glob)$/, '#38bdf8'],
+  [/^(Edit|Write|MultiEdit|NotebookEdit)$/, '#34d399'],
+  [/^(Bash|PowerShell|Monitor)$/, '#fbbf24'],
+  [/^mcp:/, '#a78bfa'],
+  [/^(Skill|Agent|Task|Workflow|ToolSearch)$/, '#f472b6'],
+];
+const toolColor = (n) => (TOOL_COLORS.find(([re]) => re.test(n)) || [null, '#7c86b8'])[1];
+const maxAgentCost = Math.max(...DATA.nodes.filter((n) => n.kind === 'agent').map((n) => n.cost || 0), 0.01);
+function heat(cost) {
+  const k = Math.min(1, Math.sqrt((cost || 0) / maxAgentCost));
+  return new THREE.Color('#5b8cff').lerp(new THREE.Color('#ff8a3d'), Math.min(1, k * 1.6)).lerp(new THREE.Color('#ff3d6e'), Math.max(0, k - 0.6) * 2.5);
+}
+
+// ---------- model: nodes + chronological events ----------
+const byId = new Map(DATA.nodes.map((n) => [n.id, n]));
+const root = DATA.nodes.find((n) => n.kind === 'root');
+const events = [];
+for (const n of DATA.nodes) {
+  const evs = n.ev || [];
+  const sumW = evs.reduce((a, e) => a + (e.w || 0), 0);
+  evs.forEach((e, i) => {
+    const c = (n.cost || 0) * (sumW > 0 ? (e.w || 0) / sumW : 1 / evs.length);
+    events.push({ ...e, node: n.id, c, i });
+  });
+}
+for (const n of DATA.nodes) if (n.kind === 'wf' && n.t0) events.push({ t: n.t0, k: 'spawn', node: n.id, c: 0 });
+events.sort((a, b) => a.t - b.t);
+
+// Compress idle gaps so a 5-hour session plays as one continuous flow.
+const GAP_CAP = 45000;
+let acc = 0;
+events.forEach((e, i) => {
+  if (i > 0) acc += Math.min(e.t - events[i - 1].t, GAP_CAP);
+  e.ct = acc;
+});
+const T_TOTAL = acc || 1;
+const totalCost = DATA.nodes.reduce((a, n) => a + (n.cost || 0), 0);
+const totalCalls = events.filter((e) => e.k === 'tool').length;
+
+$('prompt').textContent = '› ' + root.label;
+
+// ---------- graph ----------
+const gNodes = [];
+const gLinks = [];
+const shown = new Map();
+const linkTo = new Map();
+
+function addNode(id) {
+  if (shown.has(id)) return shown.get(id);
+  const n = byId.get(id);
+  if (!n) return null;
+  let parent = null;
+  if (n.parent) parent = addNode(n.parent);
+  const g = { id: n.id, kind: n.kind, label: n.label, cost: n.cost || 0, model: n.model, ctx: n.ctx, calls: 0, spent: 0 };
+  if (parent) {
+    const r = n.kind === 'wf' ? 60 : 30;
+    g.x = (parent.x || 0) + (Math.random() - 0.5) * r; g.y = (parent.y || 0) + (Math.random() - 0.5) * r; g.z = (parent.z || 0) + (Math.random() - 0.5) * r;
+  }
+  shown.set(id, g);
+  gNodes.push(g);
+  if (parent) {
+    const l = { source: parent, target: g, kind: n.kind === 'wf' ? 'wf' : 'agent' };
+    gLinks.push(l);
+    linkTo.set(id, l);
+  }
+  g.born = performance.now();
+  return g;
+}
+
+let toolSeq = 0;
+function addTool(e) {
+  const owner = addNode(e.node);
+  const id = 'tool-' + (toolSeq++);
+  const g = { id, kind: 'tool', tool: e.n, label: e.x, err: !!e.err, owner: e.node,
+    x: owner.x + (Math.random() - 0.5) * 8, y: owner.y + (Math.random() - 0.5) * 8, z: owner.z + (Math.random() - 0.5) * 8, born: performance.now() };
+  gNodes.push(g);
+  const l = { source: owner, target: g, kind: 'tool', color: e.err ? '#ff4d6d' : toolColor(e.n) };
+  gLinks.push(l);
+  owner.calls++;
+  return l;
+}
+
+const Graph = new ForceGraph3D($('graph'), { controlType: 'orbit' })
+  .backgroundColor('#000000')
+  .showNavInfo(false)
+  .nodeRelSize(4)
+  .nodeResolution(14)
+  .nodeOpacity(0.95)
+  .nodeVal((n) => n.kind === 'tool' ? (n.err ? 2.2 : 0.55) : n.kind === 'agent' ? 4 + n.cost * 16 : 1)
+  .nodeColor((n) => n.kind === 'tool' ? (n.err ? '#ff4d6d' : toolColor(n.tool)) : n.kind === 'agent' ? '#' + heat(n.cost).getHexString() : '#ffffff')
+  .nodeLabel((n) => tooltip(n))
+  .nodeThreeObjectExtend((n) => n.kind === 'agent' || n.kind === 'tool')
+  .nodeThreeObject((n) => nodeObject(n))
+  .linkColor((l) => l.kind === 'tool' ? l.color : l.kind === 'wf' ? '#b388ff' : '#ffb36b')
+  .linkOpacity(0.28)
+  .linkWidth((l) => l.kind === 'tool' ? 0 : l.kind === 'wf' ? 1.2 : 0.6 + Math.min(2.5, (l.target.cost || 0) * 1.2))
+  .linkDirectionalParticles((l) => l.kind === 'tool' ? 0 : l.kind === 'wf' ? 3 : Math.min(6, 1 + Math.round((l.target.cost || 0) * 3)))
+  .linkDirectionalParticleSpeed(0.006)
+  .linkDirectionalParticleWidth((l) => l.kind === 'tool' ? 2.2 : 1.6)
+  .linkDirectionalParticleColor((l) => l.kind === 'tool' ? l.color : l.kind === 'wf' ? '#d7c2ff' : '#ffd166')
+  .onNodeClick((n) => focusNode(n))
+  .onBackgroundClick(() => { $('info').style.display = 'none'; })
+  .graphData({ nodes: gNodes, links: gLinks });
+
+Graph.d3Force('charge').strength((n) => n.kind === 'tool' ? -6 : n.kind === 'agent' ? -120 : -260);
+Graph.d3Force('link').distance((l) => l.kind === 'tool' ? 10 + Math.random() * 14 : l.kind === 'wf' ? 150 : 75).strength((l) => l.kind === 'tool' ? 0.9 : 0.35);
+
+// glow
+const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 1.25, 0.5, 0.12);
+Graph.postProcessingComposer().addPass(bloom);
+Graph.postProcessingComposer().addPass(new OutputPass());
+
+// starfield + nebula dust
+(function stars() {
+  const g = new THREE.BufferGeometry();
+  const N = 2600; const pos = new Float32Array(N * 3); const col = new Float32Array(N * 3);
+  for (let i = 0; i < N; i++) {
+    const r = 1400 + Math.random() * 2600; const th = Math.random() * Math.PI * 2; const ph = Math.acos(2 * Math.random() - 1);
+    pos.set([r * Math.sin(ph) * Math.cos(th), r * Math.sin(ph) * Math.sin(th), r * Math.cos(ph)], i * 3);
+    const c = new THREE.Color().setHSL(0.6 + Math.random() * 0.15, 0.5, 0.18 + Math.random() * 0.3);
+    col.set([c.r, c.g, c.b], i * 3);
+  }
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.setAttribute('color', new THREE.BufferAttribute(col, 3));
+  Graph.scene().add(new THREE.Points(g, new THREE.PointsMaterial({ size: 1.5, vertexColors: true, transparent: true, opacity: 0.85, sizeAttenuation: true })));
+})();
+
+function label(text, color, h) {
+  const s = new SpriteText(text, h, color);
+  s.fontFace = 'Segoe UI, system-ui, sans-serif';
+  s.fontWeight = '600';
+  s.backgroundColor = 'rgba(5,8,22,0.55)';
+  s.padding = [3, 2];
+  s.borderRadius = 3;
+  s.material.depthWrite = false;
+  return s;
+}
+
+function nodeObject(n) {
+  if (n.kind === 'root') {
+    const grp = new THREE.Group();
+    const core = new THREE.Mesh(new THREE.IcosahedronGeometry(16, 1), new THREE.MeshBasicMaterial({ color: '#ffd166', wireframe: true }));
+    const inner = new THREE.Mesh(new THREE.SphereGeometry(9, 24, 24), new THREE.MeshBasicMaterial({ color: '#fff3c4' }));
+    grp.add(core, inner);
+    const t = label('$' + (n.cost || 0).toFixed(2) + ' · main session', '#ffd166', 9);
+    t.position.y = 26; grp.add(t);
+    grp.userData.spin = core;
+    return grp;
+  }
+  if (n.kind === 'wf') {
+    const grp = new THREE.Group();
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(10, 1.1, 12, 64), new THREE.MeshBasicMaterial({ color: '#b388ff' }));
+    const ring2 = new THREE.Mesh(new THREE.TorusGeometry(14, 0.4, 8, 64), new THREE.MeshBasicMaterial({ color: '#7c4dff' }));
+    ring2.rotation.x = Math.PI / 2;
+    grp.add(ring, ring2);
+    const t = label(n.label, '#d7c2ff', 7); t.position.y = 20; grp.add(t);
+    grp.userData.spin = ring; grp.userData.spin2 = ring2;
+    return grp;
+  }
+  if (n.kind === 'agent') {
+    const r = Math.cbrt(4 + n.cost * 16) * 4;
+    const t = label(n.label + ' · $' + n.cost.toFixed(2), '#' + heat(n.cost).getHexString(), n.cost > 1 ? 7 : 5);
+    t.position.y = r + 5;
+    return t;
+  }
+  return null;
+}
+
+function tooltip(n) {
+  if (n.kind === 'tool') return `<div class="mono" style="padding:4px 6px"><b style="color:${n.err ? '#ff4d6d' : toolColor(n.tool)}">${esc(n.tool)}</b> ${esc(n.label || '')}${n.err ? ' — failed' : ''}</div>`;
+  return `<div class="mono" style="padding:4px 6px"><b>${esc(n.label)}</b>${n.cost ? ' · $' + n.cost.toFixed(2) : ''}</div>`;
+}
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+
+function focusNode(n) {
+  const d = n.kind === 'tool' ? 60 : 140;
+  const r = 1 + d / Math.hypot(n.x, n.y, n.z || 1);
+  orbitPausedUntil = performance.now() + 15000;
+  Graph.cameraPosition({ x: n.x * r, y: n.y * r, z: n.z * r }, n, 1600);
+  const rows = n.kind === 'tool'
+    ? [['Tool', n.tool], ['Target', n.label || '—'], ['Agent', byId.get(n.owner)?.label || ''], ['Outcome', n.err ? 'failed' : 'ok']]
+    : [['Kind', n.kind], ['Cost', n.cost ? '$' + n.cost.toFixed(2) : '—'], ['Model', n.model || '—'], ['Tool calls', String(n.calls || 0)], ['Peak context', n.ctx ? Math.round(n.ctx / 1000) + 'k tokens' : '—']];
+  $('info').innerHTML = `<div class="t">${esc(n.label || n.tool)}</div>` + rows.map(([k, v]) => `<div class="r mono"><span>${k}</span><span>${esc(v)}</span></div>`).join('');
+  $('info').style.display = 'block';
+}
+
+// ---------- replay ----------
+let duration = 60000;
+let playing = true;
+let cursor = 0;
+let simT = 0;
+let lastFrame = performance.now();
+let spentShown = 0; let spent = 0; let calls = 0; let errs = 0;
+let dirty = false;
+let anchorWall = null; let anchorSim = 0;
+let ended = false;
+let orbit = true; let orbitPausedUntil = 0; let angle = 0;
+
+function fmtClock(t) {
+  const d = new Date(t);
+  return d.toISOString().slice(11, 19) + ' UTC';
+}
+
+function apply(e, animate) {
+  if (e.k === 'spawn') { addNode(e.node); dirty = true; return; }
+  const owner = addNode(e.node);
+  spent += e.c; owner.spent += e.c;
+  if (e.k === 'tool') {
+    calls++; if (e.err) errs++;
+    const l = addTool(e);
+    dirty = true;
+    if (animate) {
+      owner.pulse = performance.now();
+      pendingParticles.push(l);
+      const up = linkTo.get(e.node);
+      if (up) pendingParticles.push(up);
+      ticker(e, owner);
+    }
+  }
+}
+const pendingParticles = [];
+
+function ticker(e, owner) {
+  const el = document.createElement('div');
+  el.className = 'row' + (e.err ? ' err' : '');
+  const col = e.err ? '#ff4d6d' : toolColor(e.n);
+  el.innerHTML = `<span class="dot" style="color:${col};background:${col}"></span><span class="clock">${fmtClock(e.t).slice(0, 8)}</span><span class="who">${esc(owner.kind === 'root' ? 'main session' : owner.label)}</span><span class="what"><b style="color:${col}">${esc(e.n)}</b> ${esc(e.x || '')}</span>`;
+  const box = $('ticker');
+  box.prepend(el);
+  while (box.children.length > 8) box.lastChild.remove();
+}
+
+function resetTo(ct) {
+  gNodes.length = 0; gLinks.length = 0; shown.clear(); linkTo.clear(); toolSeq = 0;
+  spent = 0; calls = 0; errs = 0; cursor = 0; ended = false;
+  $('ticker').innerHTML = ''; $('card').classList.remove('show');
+  addNode(root.id);
+  while (cursor < events.length && events[cursor].ct <= ct) apply(events[cursor++], false);
+  simT = ct; spentShown = spent; anchorWall = null;
+  Graph.graphData({ nodes: gNodes, links: gLinks });
+}
+
+function endCard() {
+  const top = DATA.nodes.filter((n) => n.kind !== 'wf').sort((a, b) => (b.cost || 0) - (a.cost || 0)).slice(0, 4);
+  const first = events[0].t; const last = events[events.length - 1].t;
+  const hrs = ((last - first) / 3600000).toFixed(1);
+  $('cardSub').textContent = `${DATA.nodes.filter((n) => n.kind === 'agent').length} agents · ${totalCalls} tool calls · ${hrs} h of work`;
+  $('cardCost').textContent = '$' + totalCost.toFixed(2);
+  $('cardTop').innerHTML = top.map((n) => `<tr><td>${esc(n.kind === 'root' ? 'Main session' : n.label)}</td><td class="c">$${(n.cost || 0).toFixed(2)}</td><td style="color:#8a93c0">${Math.round(((n.cost || 0) / totalCost) * 100)}%</td></tr>`).join('');
+  $('card').classList.add('show');
+}
+
+function frame(now) {
+  const dt = Math.min(1000, now - lastFrame); lastFrame = now;
+  if (playing && !ended) {
+    if (anchorWall === null) { anchorWall = now; anchorSim = simT; }
+    simT = anchorSim + (now - anchorWall) * (T_TOTAL / duration);
+    while (cursor < events.length && events[cursor].ct <= simT) apply(events[cursor++], true);
+    if (cursor >= events.length) { ended = true; playing = false; setPlayLabel(); setTimeout(endCard, 1800); }
+  }
+  if (dirty) { Graph.graphData({ nodes: gNodes, links: gLinks }); dirty = false; }
+  while (pendingParticles.length) { const l = pendingParticles.shift(); try { Graph.emitParticle(l); } catch { /* link not yet in scene */ } }
+
+  // HUD
+  spentShown += (spent - spentShown) * 0.12;
+  $('cost').textContent = '$' + spentShown.toFixed(2);
+  $('nAgents').textContent = gNodes.filter((n) => n.kind === 'agent').length;
+  $('nCalls').textContent = calls;
+  $('nErr').textContent = errs;
+  const ev = events[Math.max(0, cursor - 1)];
+  $('clock').textContent = ev ? fmtClock(ev.t) : '--:--';
+  $('head').style.left = (Math.min(1, simT / T_TOTAL) * 100) + '%';
+
+  // node animation: spin hubs, pulse agents on activity, fade-in births
+  for (const n of gNodes) {
+    const o = n.__threeObj; if (!o) continue;
+    if (o.userData.spin) { o.userData.spin.rotation.y += 0.01; o.userData.spin.rotation.x += 0.004; }
+    if (o.userData.spin2) o.userData.spin2.rotation.z += 0.006;
+    const age = (now - (n.born || 0)) / 600;
+    let s = age < 1 ? 0.2 + 0.8 * (1 - Math.pow(1 - age, 3)) : 1;
+    if (n.pulse) { const p = (now - n.pulse) / 450; if (p < 1) s *= 1 + 0.55 * (1 - p); }
+    o.scale.setScalar(s);
+  }
+
+  // slow cinematic orbit
+  if (orbit && now > orbitPausedUntil) {
+    angle += dt * 0.00006;
+    const dist = 520 + Math.min(700, gNodes.length * 1.1);
+    Graph.cameraPosition({ x: dist * Math.sin(angle), y: dist * 0.28, z: dist * Math.cos(angle) }, { x: 0, y: 0, z: 0 });
+  }
+  requestAnimationFrame(frame);
+}
+
+// ---------- timeline sparkline (activity density) ----------
+function drawSpark() {
+  const c = $('spark'); const w = c.clientWidth; const h = c.clientHeight; c.width = w * devicePixelRatio; c.height = h * devicePixelRatio;
+  const ctx = c.getContext('2d'); ctx.scale(devicePixelRatio, devicePixelRatio);
+  const bins = new Array(Math.max(10, Math.floor(w / 3))).fill(0); const errBins = bins.slice();
+  for (const e of events) { if (e.k !== 'tool') continue; const b = Math.min(bins.length - 1, Math.floor((e.ct / T_TOTAL) * bins.length)); bins[b]++; if (e.err) errBins[b]++; }
+  const mx = Math.max(...bins, 1); const bw = w / bins.length;
+  bins.forEach((v, i) => {
+    const bh = (v / mx) * (h - 2);
+    const g = ctx.createLinearGradient(0, h, 0, h - bh); g.addColorStop(0, 'rgba(91,140,255,.25)'); g.addColorStop(1, 'rgba(157,180,255,.95)');
+    ctx.fillStyle = g; ctx.fillRect(i * bw, h - bh, bw - 1, bh);
+    if (errBins[i]) { ctx.fillStyle = '#ff4d6d'; ctx.fillRect(i * bw, 0, bw - 1, 3); }
+  });
+}
+
+// ---------- controls ----------
+function setPlayLabel() { $('play').textContent = playing ? '❚❚ Pause' : '▶ Play'; $('live').classList.toggle('off', !playing); }
+$('play').onclick = () => { if (ended) { resetTo(0); } playing = !playing || ended; ended = false; anchorWall = null; setPlayLabel(); };
+$('restart').onclick = () => { resetTo(0); playing = true; setPlayLabel(); };
+$('all').onclick = () => { resetTo(T_TOTAL); playing = false; ended = true; setPlayLabel(); endCard(); };
+$('orbit').onclick = (ev) => { orbit = !orbit; ev.target.classList.toggle('on', orbit); };
+document.querySelectorAll('[data-d]').forEach((b) => b.onclick = () => {
+  duration = Number(b.dataset.d) * 1000; anchorWall = null;
+  document.querySelectorAll('[data-d]').forEach((x) => x.classList.toggle('on', x === b));
+});
+$('track').onclick = (ev) => {
+  const r = $('track').getBoundingClientRect();
+  resetTo(((ev.clientX - r.left) / r.width) * T_TOTAL);
+};
+$('card').onclick = () => $('card').classList.remove('show');
+$('graph').addEventListener('pointerdown', () => { orbitPausedUntil = performance.now() + 8000; });
+addEventListener('resize', () => { drawSpark(); bloom.setSize(innerWidth, innerHeight); });
+
+// ---------- go ----------
+const params = new URLSearchParams(location.search);
+if (params.get('d')) { duration = Number(params.get('d')) * 1000; document.querySelectorAll('[data-d]').forEach((x) => x.classList.toggle('on', Number(x.dataset.d) * 1000 === duration)); }
+resetTo(0);
+drawSpark();
+$('loading').remove();
+Graph.cameraPosition({ x: 0, y: 900, z: 2400 });
+setTimeout(() => Graph.cameraPosition({ x: 0, y: 160, z: 560 }, { x: 0, y: 0, z: 0 }, 3500), 200);
+orbitPausedUntil = performance.now() + 3800;
+if (params.get('at')) { resetTo(Number(params.get('at')) * T_TOTAL); if (params.get('at') === '1') { playing = false; ended = true; setPlayLabel(); } }
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>

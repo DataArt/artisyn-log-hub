@@ -1,0 +1,14 @@
+# dependencies
+node_modules/
+# build output
+dist/
+build/
+out/
+*.tsbuildinfo
+# runtime garbage
+*.log
+.cache/
+coverage/
+.env
+# screenshots taken while checking the PoC (not part of the result)
+shots/

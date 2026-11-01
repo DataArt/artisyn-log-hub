@@ -261,9 +261,14 @@ are often CRLF, so `\n`-based anchors silently miss. Pick the tool that needs no
 
 - **Exact text replacement in a file → use the Edit tool** (Read the lines first). It takes the
   text literally — Windows paths like `D:\\x\\src` and CRLF files just work.
-- **Bulk/mechanical replacement across many files → write a `.mjs` script to the scratchpad**
-  with a quoted heredoc (`cat > file.mjs <<'EOF'` — the quotes stop bash from expanding
-  anything), then `node file.mjs`. Never inline it with `node -e`.
+- **Bulk/mechanical replacement across many files → write a `.mjs` script with the Write tool**
+  into the scratchpad, then `node "<abs path>"`. Never inline it with `node -e`.
+- **Never create a script or any multi-line file with a heredoc** (`cat > f <<'EOF'`), not even
+  a quoted one — use the Write tool. The Bash tool halves every `\\` in the command before bash
+  sees it (even inside `'…'` and `<<'EOF'`), so Windows paths and regexes come out silently
+  broken; and heredocs of a few KB fail with `bash: -c: line N: unexpected EOF while looking for
+  matching '` although the text is valid bash. A heredoc is fine only for a few lines with no
+  backslashes.
 - In such a script, make anchors line-ending-agnostic (`s.includes('\r\n')` → convert `\n` in
   the anchor) and throw when an anchor is missing, instead of silently writing nothing.
 
