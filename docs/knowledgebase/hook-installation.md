@@ -1,11 +1,11 @@
 ---
 type: "Installation Guide"
 title: "Hook Installation Guide"
-description: "Install, upgrade, or uninstall the hook as a Claude Code plugin via npx, the JSON config reference, OTEL port allocation and settings env block, migration from the pre-plugin install, and verification steps."
+description: "Install, upgrade, or uninstall the hook as a Claude Code plugin via npx, the JSON config reference, the per-user OTEL port and state (~/.artisyn/otel), the user-scope OTEL keys in ~/.claude/settings.json with validation and backup, the .claude/settings.local.json mirror and resource attributes, the foreign-collector proxy/keep/replace flow, managed settings, migration from the pre-plugin install, and verification steps."
 tags:
   - hooks
   - otel
-timestamp: "2026-10-28T00:00:00+04:00"
+timestamp: "2026-10-31T00:00:00+04:00"
 ---
 
 # Hook Installation Guide
@@ -42,7 +42,10 @@ Keys page (Install tab) shows the exact command pre-filled with the correct orig
 |---|---|
 | `--server-url <url>` | Writes `serverUrl` into the gitignored `.artisyn/config/log-hub.local.json` (installer `1.0.75`+; never changes `serverUrl` in the tracked `log-hub.json`). Trailing slash stripped automatically. |
 | `--api-key <key>` | Writes `apiKey` into `.artisyn/config/log-hub.local.json` (never into the tracked `log-hub.json`). Prints a warning that the key will be visible in shell history. |
-| `--otel-port <n>` | Pins the loopback port of this project's OTEL receiver (integer `1`-`65535`; anything else is a hard `exit 1`). Wins over the previously allocated port and is persisted like any other value. Use it to move a project off a colliding port — see "OTEL settings" below. `install` only; `upgrade` and `uninstall` reject it alongside `--server-url`/`--api-key`. |
+| `--otel-port <n>` | Pins the loopback port of the **per-user** OTEL receiver (integer `1`-`65535`; anything else is a hard `exit 1`). Installer for hook `2.30.0`+: one receiver serves every repo of the OS user, so it rewrites `~/.artisyn/otel/port.json`, the endpoints in `~/.claude/settings.json`, the `.claude/settings.local.json` mirror and `otelReceiverPort` of **every** repo in `repos.json`, then prints "restart Claude Code". Use it to move off a colliding port — see "OTEL settings" below. `install` only; `upgrade` and `uninstall` reject it alongside `--server-url`/`--api-key`. (Before `2.30.0` it pinned this project's own port.) |
+| `--otel-existing=proxy\|keep\|replace` | Installer for hook `2.30.0`+. Answers the foreign-collector question when Claude Code already exports OTEL elsewhere (user settings or process env): `proxy` — the Log Hub receiver forwards everything unchanged to your collector (OTLP/HTTP JSON only); `keep` — your collector stays, the OTEL tabs stay empty; `replace` — data goes only to Log Hub. Without the flag: the stored choice when your collector settings are unchanged, else a TTY prompt, else `keep`. `install` and `upgrade`; `uninstall` rejects it. See "Foreign collector" below. |
+| `--restart-otel-receiver` | Installer for hook `2.30.0`+. An action of its own (no subcommand, no other option): an authenticated `POST /artisyn/shutdown` to the per-user receiver, then a wait until its port is free. The next Claude Code session starts it again from the installed code. Exit 1 when `port.json` is missing or the receiver could not be stopped. |
+| `--otel-traces=yes\|no` | Answers the trace question (installer for hook `2.29.0`+): `yes` adds the three trace keys to the `env` block, `no` writes none of them (and strips owned ones). Stored as `otelTraces` in `log-hub.json`. Without the flag a TTY run asks `Also export Claude Code traces (enhanced telemetry beta) to Log Hub? [Y/n]` and a non-TTY run means yes. Any other value is a hard `exit 1`. `install` only; `upgrade` and `uninstall` reject it. See "Trace keys" below. |
 | `--help` | Prints usage and exits. |
 
 **Reinstall behavior**: an omitted flag preserves the previously configured value; a provided flag always wins.
@@ -60,26 +63,34 @@ npx "<server-origin>/static/artisyn-hooks-installer.tgz" install --server-url "<
 2. Validates `.claude/` exists — prompts `Create it now? [Y/n]` if missing.
 3. Extracts the `.artisyn/marketplace/` plugin tree bundled in the installer tarball (no network call here) and
    renames the marketplace to this repo's own name (see "Per-repo marketplace name" below).
-4. Resolves this project's OTEL receiver port (`--otel-port` → `.artisyn/config/otel-port.json` → allocate),
-   persists it to `otel-port.json` and git-ignores that file. See "OTEL settings" below.
+4. Resolves the **per-user** OTEL receiver port (`--otel-port` → `~/.artisyn/otel/port.json` → allocate),
+   persists it to `port.json`, creates `~/.artisyn/otel/token` when missing and deletes the legacy
+   `.artisyn/config/otel-port.json` (installer for hook `2.30.0`+; older installers kept a per-project port
+   there). Before any file is touched it also resolves the OTEL plan: managed settings, then the
+   foreign-collector choice. See "OTEL settings" below.
 5. Writes/merges `.artisyn/config/log-hub.json` (shared, non-per-developer settings; a legacy `otelReceiverPort`
    in it is removed) and `.artisyn/config/log-hub.local.json` — always written (installer `1.0.75`+): it gets
    `otelReceiverPort` (always overwritten from the resolved port) plus `serverUrl`/`apiKey` when the flags are given.
 6. Ensures `log-hub.local.json` is git-ignored (`.artisyn/config/.gitignore`) on every install; hard-aborts with a
    remediation message if it's already tracked by git.
-7. Merges the nine-key OTEL `env` block into the gitignored `.claude/settings.local.json` (created when absent,
-   `.claude/settings.local.json.bak` written first; installer `1.0.72`+ — see "The `.claude/settings.local.json`
-   `env` block" below), then merges `enabledPlugins["log-hub-hooks@artisyn-<hash>"] = true` and
+7. Upserts this repo's entry in `~/.artisyn/otel/repos.json`, copies the receiver to `~/.artisyn/otel/bin/`,
+   writes the OTEL keys into the user-scope `~/.claude/settings.json` (validated first, `.artisyn-bak` copy —
+   see "User-scope OTEL keys" below; skipped when OTEL is managed), then merges the nine-key OTEL `env` block
+   (twelve keys when the trace answer is yes) plus `OTEL_RESOURCE_ATTRIBUTES` into the gitignored
+   `.claude/settings.local.json` mirror (created when absent, `.claude/settings.local.json.bak` written first;
+   installer `1.0.72`+ — see "The `.claude/settings.local.json` `env` block" below), then merges `enabledPlugins["log-hub-hooks@artisyn-<hash>"] = true` and
    `extraKnownMarketplaces["artisyn-<hash>"].source.path = "./.artisyn/marketplace"` into `.claude/settings.json` —
    every other key (including hooks you wired yourself) is preserved; `.claude/settings.json.bak` is written first.
 8. Runs `claude plugin marketplace add ./.artisyn/marketplace` then
    `claude plugin install log-hub-hooks@artisyn-<hash> --scope project`. **This step is required** — declaring the two
    settings keys alone does not register or cache the plugin, so no hook fires without it. A failure here (e.g.
    `claude` not on `PATH`) is non-fatal: a warning prints both exact commands to run manually, in order.
-9. Runs the OTEL receiver smoke test — spawns the *real* `otel-receiver.js` from the installed plugin tree into a
-   throwaway temp directory and POSTs a synthetic `/artisyn/register`, expecting `200`. Required but non-fatal,
-   like step 8: on failure it prints the exact foreground command to reproduce the problem, and never
-   re-allocates the port.
+9. Runs the OTEL receiver smoke test — since hook `2.30.0` the shared handshake (`verifyInstalledReceiver`):
+   a hello with proof check against the receiver on the shared port, spawning `~/.artisyn/otel/bin/otel-receiver.js`
+   with the shared argv when none answers, then an authenticated `session-status`. A listener that fails the
+   proof is reported as "not this user's Log Hub receiver". Required but non-fatal, like step 8: on failure it
+   prints the exact foreground command to reproduce the problem, and never re-allocates the port. (Older
+   installers spawned a per-project receiver into a temp directory and POSTed a synthetic `/artisyn/register`.)
    Before it (installer `1.0.78`+ / hook `2.24.2`+), the **hook load check**: every script the installed
    `hooks/hooks.json` runs is started exactly the way Claude Code starts it — `node` from `PATH`, cwd = the
    project — with `--self-check` (`exitIfSelfCheck` in `hook-log.js`, called by each entry script right after
@@ -132,10 +143,20 @@ package's own version, and the archive is applied through the same `applyHooksUp
 pre-plugin install is detected, `upgrade` performs the same migration `install` does and does not require
 `.claude/telemetry_tool/version.json` to exist. Running `upgrade` a second time with nothing to do is a no-op.
 
-`upgrade` also resolves/allocates the OTEL port and writes the `env` block exactly as `install` does — this is the
-only route by which an already-installed project starts receiving OTEL, and the route that moves the keys out of
-`.claude/settings.json` and rewrites a stale Artisyn endpoint, so it deliberately shares that code path.
-An existing `.artisyn/config/otel-port.json` is reused, so upgrading never moves a project's port. After the
+`upgrade` also resolves/allocates the OTEL port and writes the user-scope keys and the `env` block exactly as
+`install` does — this is the only route by which an already-installed project starts receiving OTEL, and the
+route that moves the keys out of `.claude/settings.json` and rewrites a stale Artisyn endpoint, so it deliberately
+shares that code path. It takes `--otel-existing=` like `install`.
+
+**Upgrade from the per-project receiver** (hook `2.30.0`, DD-25, AC-A9). An existing `~/.artisyn/otel/port.json`
+is reused, so upgrading never moves the shared port; the first upgraded repo of a user allocates it. The upgrade
+writes the shared port into `otelReceiverPort` (`log-hub.local.json`), the user file and the local mirror,
+**deletes** `.artisyn/config/otel-port.json`, and does **not** stop the old per-project receiver
+(`stopExistingReceiverIfRunning` is no longer called): it keeps its old port, receives nothing new and idle-exits.
+The old per-project port stays "owned" for this run (`readRecordedOtelPorts`), so the endpoints that still point at
+it are rewritten as stale. The trace
+answer (hook `2.29.0`+) comes from the stored `otelTraces` in `log-hub.json` without asking; an install that
+predates the question gets the TTY `[Y/n]` prompt once (non-TTY: yes), and the answer is stored. After the
 success lines `upgrade` always prints
 `Note: Claude Code sessions that are already running keep their old OTEL endpoint until restarted.` — a running
 session's exporter does not pick up a rewritten endpoint.
@@ -148,7 +169,7 @@ session's exporter does not pick up a rewritten endpoint.
 npx <server-origin>/static/artisyn-hooks-installer.tgz uninstall
 ```
 
-Removes `.artisyn/marketplace/` and `.artisyn/config/` (both JSON files plus `otel-port.json`), and surgically
+Removes `.artisyn/marketplace/` and `.artisyn/config/` (both JSON files plus a legacy `otel-port.json`), and surgically
 removes `enabledPlugins["log-hub-hooks@artisyn-<hash>"]` / `extraKnownMarketplaces["artisyn-<hash>"]` (and the same
 keys under the legacy `artisyn` name) from `.claude/settings.json`, leaving every other setting untouched.
 
@@ -162,7 +183,7 @@ since extraction only writes `plugins/log-hub-hooks/`. While another entry is li
 still overwrites `marketplace.json` (dropping the foreign entries) and `uninstall` deletes the whole
 `.artisyn/marketplace/`.
 
-The nine OTEL `env` keys are removed too, **per key and per file**, from both `.claude/settings.json` (legacy
+The nine OTEL `env` keys (and the three trace keys) are removed too, **per key and per file**, from both `.claude/settings.json` (legacy
 location) and `.claude/settings.local.json` (`removeOtelEnvKeys` in `artisyn-hooks-installer/src/install.ts`,
 installer `1.0.72`+). The recorded ports are read before `.artisyn/config/` is deleted, and each key is removed only
 while it is Artisyn-owned by the ownership rule in "The `.claude/settings.local.json` `env` block" below, judged on
@@ -172,6 +193,22 @@ loopback port outside the Artisyn range) stays, together with the exporter/proto
 line names it. A file is rewritten (after its `.bak`) only when at least one key was removed and is never deleted;
 an `env` block left empty by the removal is dropped entirely. `settings.local.json` is cleaned whether or not
 `settings.json` exists.
+
+**Per-user OTEL state** (installer for hook `2.30.0`+, DD-27, AC-B2). `uninstall` removes this repo's entry from
+`~/.artisyn/otel/repos.json`. While other repos remain, nothing else changes there and it prints
+`Kept the per-user OTEL receiver and the OTEL keys in ~/.claude/settings.json — <n> other repo(s) still use them.`
+Removing the **last** entry (`removeUserOtelState`):
+
+- restores the `forward.json.original` keys (and `otelHeadersHelper`) in the user file exactly, in the order
+  `original.envOrder` recorded (so a proxy-then-uninstall leaves the file byte-identical), removes the
+  Artisyn-owned OTEL keys, `_artisynOtel` and the user-level SessionStart hook entry (`restoreUserOtel`,
+  `withUserEnsureHook`); the write is validated and backed up like every other user-file write;
+- stops the shared receiver (authenticated shutdown, then the port wait);
+- unlinks the listed state files one by one (`port.json`, `token`, `repos.json`, `registry.json`,
+  `forward.json`, `receiver.log`, `claude-version.json` and the three `bin/` files), then `rmdir`s `bin/` and
+  `otel/` **non-recursively** — a folder holding anything Log Hub did not create is kept and named.
+
+`~/.claude/settings.json.artisyn-bak` is kept: it is the user's safety copy, and the message names it.
 
 If a leftover file can't be deleted (locked by an editor or a running hook), the
 settings-key removal still succeeds and is reported; a warning names the leftover path and the next
@@ -339,7 +376,7 @@ How the wrapper works and what the server does with its records: [tool-monitorin
 
 ### OTEL Settings
 
-Hook `2.3.0`+. These five keys live in `.artisyn/config/log-hub.json` like every other non-secret setting —
+Hook `2.3.0`+ (the last three rows: `2.29.0`+). These eight keys live in `.artisyn/config/log-hub.json` like every other non-secret setting —
 except `otelReceiverPort`, which is per checkout and goes to the gitignored `log-hub.local.json` (installer
 `1.0.75`+).
 See `docs/knowledgebase/otel-receiver.md` for what they gate.
@@ -347,28 +384,36 @@ See `docs/knowledgebase/otel-receiver.md` for what they gate.
 | Key | Default | Description |
 |---|---|---|
 | `otelEnabled` | `true` | Runtime switch. Gates the receiver spawn, the register handshake, and the `claude-otel` upload + prune pass. See the caveat below — this does **not** stop Claude Code from exporting. |
-| `otelReceiverPort` | `0` | Loopback port this project's receiver binds. `0` means "not yet allocated" — the installer always overwrites it with the resolved port, so hand-editing it is pointless (edit `.artisyn/config/otel-port.json`, or re-install with `--otel-port`, instead). If it somehow never got a value, `OTEL_FALLBACK_PORT` (`25317`) applies. |
-| `otelReceiverIdleTimeoutMs` | `600000` | No request of any kind for this long ⇒ the receiver exits (10 min). `0` means "use the default". |
+| `otelReceiverPort` | `0` | The receiver port, written by the installer from `~/.artisyn/otel/port.json` on every run (hook `2.30.0`+: the shared per-user port; before: this project's own port). A `2.30.0` hook reads it only in the legacy fallback when `port.json` is missing; hooks `≤ 2.29.0` always read it. `0` means "not yet allocated"; hand-editing is pointless (re-install with `--otel-port` instead). If it somehow never got a value, `OTEL_FALLBACK_PORT` (`25317`) applies. |
+| `otelReceiverIdleTimeoutMs` | `600000` | No request of any kind for this long ⇒ the receiver exits (10 min). `0` means "use the default". Legacy per-project receiver only: the shared receiver always uses the fixed `SHARED_IDLE_TIMEOUT_MS` (600000), because no single repo owns it. |
 | `otelReceiverMaxBodyKb` | `8192` | Request bodies above this are rejected (`413`) without writing. **KiB**, converted to bytes by the spawning hook (`8192` → `8388608`). Applies to wire bytes, before decompression. `0` means "use the default". |
 | `otelRetentionDays` | `7` | `<telemetryDir>/otel/*.jsonl` older than this (by mtime) are deleted on a later `Stop` run. `0` means "use the default". See `docs/knowledgebase/data-retention.md`. |
+| `otelRealtime` | `true` | Hook `2.29.0`+. The receiver's realtime channel: it forwards the session's OTEL logs and spans to `POST /api/v2/otel-realtime` while the session runs, so the OTEL tabs update live. `false` turns it off; chunks still upload at each turn end, so the tabs update after each turn. Read by the receiver itself (`readRealtimeTarget`), re-read on a config mtime change. See [otel-receiver.md](otel-receiver.md) § "Realtime sender". |
+| `otelRealtimeIntervalMs` | `5000` | Hook `2.29.0`+. Smallest gap between two realtime POSTs of one session; clamped to at least `5000`. The server's `minIntervalMs` answer can only raise it. |
+| `otelTraces` | absent | Hook `2.29.0`+. The installer's stored answer to the trace question (`true` / `false`); absent on installs that predate it. `otel-endpoint-check.js` checks `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` only when it is `true`. Change it by re-running `install --otel-traces=yes\|no` (editing it by hand does not add or remove the `env` keys). |
 
 **`otelEnabled: false` is runtime-only.** It stops the hook from spawning the receiver, registering, uploading and
 pruning — but it does **not** retract the `env` block from `.claude/settings.local.json`, so Claude Code keeps
 exporting to a port nothing listens on. That is harmless by design: the port is a random high one (below), so there
 is no realistic chance of it later colliding with a collector of your own on `4317`/`4318`. To disable OTEL fully,
-set `otelEnabled: false` **and** remove the nine `env` keys, or just run `uninstall`.
+set `otelEnabled: false` **and** remove the nine (twelve with traces) `env` keys, or just run `uninstall`. Since
+hook `2.30.0` the user-scope keys in `~/.claude/settings.json` serve every repo of the user and stay until the last
+repo is uninstalled.
 
 #### Port allocation
 
 A fixed default port would be wrong twice over — `4318` collides with the user's own collector, and any fixed
-choice is a guess. So the installer allocates a **random port per project** out of `[25000, 65535]`.
+choice is a guess. So the installer allocates a **random port** out of `[25000, 65535]` — since hook `2.30.0`
+**one per OS user** (`resolveSharedOtelPort` in `install.ts`), because Claude Code `2.1.282`+ reads the OTEL
+endpoint only from user (or managed) settings, which are per user. Before `2.30.0` it was one per project.
 
 Resolution order at install time, first match wins:
 
-1. `--otel-port <n>` — explicit operator override, persisted like any other value.
-2. `port` from `.artisyn/config/otel-port.json`, if a positive integer — this is what makes the port stable across
-   reinstalls and upgrades.
-3. Allocate, then persist.
+1. `--otel-port <n>` — explicit operator override; rewrites `port.json` and moves every installed repo (see the
+   flag above).
+2. `port` from `~/.artisyn/otel/port.json` (`{version:1, port, allocatedAt}`), if a usable port — this is what
+   makes the port stable across reinstalls, upgrades and repos.
+3. Allocate, then persist to `port.json`.
 
 Allocation walks the 40536-slot range with a prime-step (`7919`) open-addressing probe from a random origin, so it
 visits every port exactly once before repeating and consecutive probes land far apart. Each candidate must pass
@@ -376,22 +421,32 @@ visits every port exactly once before repeating and consecutive probes land far 
 local proxy or security product intercepting loopback, or an IPv4/IPv6 binding mismatch that a bind probe alone
 would miss).
 
-**`.artisyn/config/otel-port.json`** (`{"port": 31447, "allocatedAt": "<ISO>"}`) is the authoritative record, and
-it is **gitignored** through the same `.artisyn/config/.gitignore` mechanism that covers `log-hub.local.json`.
-That is the whole point: a committed port would be inherited by every teammate's checkout and by every second
-checkout on one machine, manufacturing exactly the collisions randomisation avoids. `log-hub.local.json`'s
-`otelReceiverPort` is an **output** of this file, never an input, so the two cannot drift (installer `1.0.75`+;
-older installers wrote it into the tracked `log-hub.json`, and the next install removes it from there).
+**`~/.artisyn/otel/port.json`** is the authoritative record and lives outside every repo, so it is never committed
+and never inherited by a teammate. `log-hub.local.json`'s `otelReceiverPort` is an **output** of it, never an input
+(installer `1.0.75`+ for the local file; older installers wrote it into the tracked `log-hub.json`, and the next
+install removes it from there). The legacy per-project record `.artisyn/config/otel-port.json` is deleted on every
+install and upgrade.
 
-Two projects can still collide by chance. That case is detected — not repaired — by the receiver's
-`409 owner-mismatch` guard, which writes one `hook.log` warning telling you to re-install with `--otel-port <n>`.
-See `docs/knowledgebase/otel-receiver.md` § "The `409 owner-mismatch` guard".
+The rest of the per-user state dir (`token`, `repos.json`, `registry.json`, `forward.json`, `receiver.log`,
+`claude-version.json`, `bin/`) is described in [otel-receiver.md](otel-receiver.md) § "User-level state".
+`repos.json` gets one entry per installed repo: `{repoKey, gitRoot, otelDir, uploader, traces, installedAt,
+hookVersion}` (`upsertRepoEntry` in `user-state.ts`); the receiver uses it to route records that carry an
+`artisyn.repo` tag before their session registered.
+
+A port held by another program or another OS user is detected, not repaired: the hook's hello fails the HMAC proof
+and it writes one `otel port-conflict port=<n>` warning (the session's OTEL status then says `receiver-down`), and
+the installer's receiver check names it. Re-install with `--otel-port <n>`. For legacy per-project receivers the
+`409 owner-mismatch` guard still applies — see [otel-receiver.md](otel-receiver.md).
 
 #### The `.claude/settings.local.json` `env` block
 
 Claude Code exposes a settings `env` block to the session as real environment variables, which is how its OTLP
-exporter is pointed at the local receiver (and how the hook learns the endpoint the exporter actually uses). The
-installer (`1.0.72`+) writes these nine keys into the **gitignored `.claude/settings.local.json`**, with `<port>`
+exporter is pointed at the local receiver (and how the hook learns the endpoint the exporter actually uses). Since
+hook `2.30.0` the authoritative copy is the user-scope file (see "User-scope OTEL keys" below); the project-local
+block described here is the **mirror** for Claude Code versions before `2.1.282`, which still read project scope
+and where a local value would otherwise shadow the user one. It points at the same shared port. The
+installer (`1.0.72`+) writes these nine keys — twelve with the trace keys (hook `2.29.0`+, "Trace keys" below) —
+into the **gitignored `.claude/settings.local.json`**, with `<port>`
 substituted from the resolution above. Older installers wrote them into the committed `.claude/settings.json`; the
 next `install`/`upgrade` moves them (see "Migration from `.claude/settings.json`" below).
 
@@ -412,6 +467,23 @@ a shorter interval changes no total — it only shrinks the unexported tail lost
 since the Stop upload can land seconds after the last export. 10 s bounds that loss while staying 6x cheaper in
 record volume than the 5 s logs stream (`OTEL_LOGS_EXPORT_INTERVAL`, left at its default). Per-request cost comes
 from the `api_request` log events and is unaffected by this setting.
+
+**Trace keys** (hook `2.29.0`+, `OTEL_TRACE_ENV_KEYS(port)` in `artisyn-hooks-installer/src/otel-env.ts`). Written
+only when the trace answer is yes (`--otel-traces=yes`, the `[Y/n]` prompt, or the stored `otelTraces: true`):
+
+| Key | Value | Artisyn-owned when |
+|---|---|---|
+| `CLAUDE_CODE_ENHANCED_TELEMETRY_BETA` | `"1"` | the value is `1` (and every endpoint key in the same `env` is owned) |
+| `OTEL_TRACES_EXPORTER` | `"otlp"` | the value is `otlp` (same endpoint rule) |
+| `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` | `"http://127.0.0.1:<port>/v1/traces"` | a loopback receiver URL (`OTEL_LOOPBACK_ENDPOINT_RE` now also matches `/v1/traces`) on an allocated or recorded port |
+
+`OTEL_ENV_KEYS` itself is unchanged (the dev-container provisioning imports it). The traces endpoint counts as an
+endpoint key (`isOtelEndpointKey`), and `isArtisynOwnedOtelValue` looks the expected value up in
+`{ ...OTEL_ENV_KEYS(0), ...OTEL_TRACE_ENV_KEYS(0) }`, so the merge, the stale-endpoint rewrite and the migration below
+treat the three keys exactly like the nine. When the answer is no, and on `uninstall`, only the **owned** trace keys
+are stripped (`stripOwnedOtelEnvKeys`); a value you set yourself stays. The hook (`env-context.js`) has a traces
+regex for the port-mismatch check, and `otel-endpoint-check.js` checks the traces endpoint only when
+`otelTraces === true`.
 
 `OTEL_EXPORTER_OTLP_COMPRESSION` is written explicitly so the payload encoding never depends on an exporter default
 — the receiver still accepts `gzip`/`deflate`, so overriding it is not silently dropped.
@@ -478,6 +550,83 @@ Fix: re-run the log-hub installer "upgrade" (it writes OTEL_EXPORTER_OTLP_LOGS_E
 Detection logic is unchanged in `2.22.1`; only the text (and the comments naming `.claude/settings.local.json` as
 where the installer writes the endpoints) changed.
 
+**`OTEL_RESOURCE_ATTRIBUTES` in the mirror** (hook `2.30.0`+, `buildResourceAttributes` in `otel-env.ts`). The local
+mirror also gets `OTEL_RESOURCE_ATTRIBUTES` = the user-scope value (if any) + the existing local value +
+`artisyn.repo=<repoKey>`, comma-joined and deduped by attribute key (local wins over user on a clash; an older
+`artisyn.repo` entry is replaced). A local value replaces the user value in Claude Code, so the user's own
+attributes are carried over. The `repoKey` tag lets the shared receiver route records to this repo before the
+session registers; it is a hash, so no local path reaches a foreign collector.
+
+#### User-scope OTEL keys: `~/.claude/settings.json` (hook `2.30.0`+)
+
+Claude Code `2.1.282`+ ignores telemetry keys in `.claude/settings.json` and `.claude/settings.local.json`, so
+the installer writes the same nine (twelve) keys, pointing at the shared port, into the **user** file
+(`$CLAUDE_CONFIG_DIR/settings.json` when that env var is set, else `~/.claude/settings.json`;
+`artisyn-hooks-installer/src/user-settings.ts`, called from `applyUserOtelSettings` in `install.ts`). This file is
+global — a wrong-typed known key makes Claude Code skip **the whole file** — so every write is guarded:
+
+- **Read** (`readUserSettingsForMutation`): a missing file reads as `{}`; invalid JSON or a non-object root aborts
+  the installer (exit 1) with no write.
+- **Validate** (`validateUserSettingsShape`), once on the file as read and again on the merged result right before
+  the write: `env` an object of string values, `hooks` an object of arrays, `otelHeadersHelper` a string,
+  `_artisynOtel` an object. A violation → exit 1 with one line per problem, file untouched.
+- **Backup:** the content about to be replaced goes to `<settings>.artisyn-bak` first; the write itself is atomic.
+  An unchanged result writes nothing.
+- **Merge** (`mergeUserOtelEnv`): per key, by the same ownership rule as the mirror (`isArtisynOwnedOtelValue`,
+  extended so that endpoints on the per-user port count as owned). Absent or still-Artisyn values are (re)written to
+  the shared port, the user's own values are kept and listed in a Note. The trace keys are written while **any**
+  installed repo of the user wants traces (the receiver drops spans per repo) and stripped, while still owned, once
+  none does.
+
+**Managed settings** (DD-26). When `readManagedOtel` (`managed-settings.ts`) finds OTEL keys in a managed source —
+`managed-settings.json` (`%ProgramFiles%\ClaudeCode\` on Windows, `/Library/Application Support/ClaudeCode/` on
+macOS, `/etc/claude-code/` on Linux), the OS policy (Windows registry `HKLM`/`HKCU\SOFTWARE\Policies\ClaudeCode`,
+macOS `com.anthropic.claudecode` plist) or the server-managed cache `<claudeConfigDir>/remote-settings.json` — the
+installer writes **no** user OTEL keys, still writes the local mirror and the `repos.json` entry, and prints
+`OTEL is managed by your organization — OTEL tabs are unavailable, everything else works.` The env
+`ARTISYN_MANAGED_SETTINGS_DIR` replaces the managed file location and disables the OS-policy reads (test-only).
+
+#### Foreign collector: proxy / keep / replace (hook `2.30.0`+)
+
+**Foreign** = a user-scope or process-env OTLP endpoint key, or `otelHeadersHelper`, that is not Artisyn-owned
+(`detectForeignOtel` in `foreign-otel.ts`). Its **fingerprint** is the `sha256` of a canonical JSON of the foreign
+keys, with header values replaced by their own `sha256`.
+
+Choice resolution (`resolveOtelUserPlan`): `--otel-existing=` → the stored `forward.json` mode when its
+`fingerprint` matches → a TTY prompt (`[P]roxy` recommended / `[k]eep` / `[r]eplace`) → `keep` on a non-TTY run,
+with a message naming both flags. The prompt lists per signal the endpoint, protocol, `headers: set` (never values)
+and exporter, and names the stream changes Log Hub adds (`OTEL_LOG_TOOL_DETAILS=1`, export intervals, traces if on).
+
+| Choice | User file | `forward.json` | Receiver |
+|---|---|---|---|
+| `proxy` | endpoint and protocol keys move to the shared port; header keys and `otelHeadersHelper` stay (Claude Code sends them to the receiver, which passes them upstream); `_artisynOtel` note; the user-level SessionStart hook entry is added | `mode:'proxy'`, per-signal upstream `{endpoint, protocol}`, `original` = the replaced keys | forwards every request of a listed signal upstream (see [otel-receiver.md](otel-receiver.md) § "Forwarding") |
+| `replace` | endpoint, protocol and header keys (and `otelHeadersHelper`) removed, Artisyn keys written; `_artisynOtel` note | `mode:'replace'`, `original` | no forwarding |
+| `keep` | no Artisyn OTEL key goes in; a former proxy/replace rewrite is undone from the backup | `mode:'keep'` | the OTEL tabs stay empty for this user |
+
+- **`grpc` / `http/protobuf` collectors:** the receiver forwards only OTLP/HTTP JSON. The installer says so and, on
+  a TTY, offers to enter an OTLP/HTTP URL of the same collector, `keep` or `replace`; non-interactive → `keep`
+  plus a message.
+- **`_artisynOtel`** = `{note, mode, previous:{KEY: masked}, backup:'<path to forward.json>'}`, with header keys
+  masked as `set` (`buildArtisynOtelNote`). No header value is ever printed or logged.
+- `forward.json` is written **before** the user file, and only when it changed.
+- **Second repo after a takeover (installer `1.0.90`+):** once `proxy`/`replace` is applied, the user file
+  carries the Artisyn per-signal endpoints; `detectForeignOtel` no longer lets those owned keys hide the
+  backed-up generic `OTEL_EXPORTER_OTLP_ENDPOINT`, so the next repo's install still sees the collector and
+  reuses the stored choice. As a second guard, a `none` plan never overwrites an applied `proxy`/`replace`
+  `forward.json` and keeps `_artisynOtel` and the user-level hook — the file holds the only copy of the
+  user's original keys. (Before 1.0.90 a generic-endpoint collector lost its backup and its forwarding at
+  the second repo.)
+- **Drift:** when the user later points the user-scope endpoint elsewhere while `forward.json` says `proxy` or
+  `replace`, the hook writes one `endpoint-drift` `warn` per SessionStart (`otel-endpoint-check.js`); the next
+  install sees a new fingerprint and asks again.
+
+**Hook-side effective-config check** (hook `2.30.0`+, `otel-status.js` `resolveEffectiveOtel` /
+`deriveConfigWarnings`). At `SessionStart` `otel-endpoint-check.js` resolves, per Artisyn key, the effective scope
+(managed > user > local > project before Claude Code `2.1.282`; managed > user from `2.1.282` on or when the version
+is unknown) and writes one `warn` per class: `project-only` (keys only in project scope on `≥ 2.1.282`),
+`endpoint-drift`, `port-mismatch`; `lifecycle-hook.js` also logs `claude-version=<v|unknown> source=<transcript|cache|cli|none>` at SessionStart.
+It never writes a file. Rules: algorithm [otel-status-reason](algorithms/otel-status-reason.md).
+
 ### Post-Turn Analysis Settings
 
 Hook `2.9.0`+. These 6 keys configure `post-turn-analysis-worker.js`'s two independently-gated branches —
@@ -525,7 +674,11 @@ ls  .artisyn/ai_work_dir/telemetry/otel/
 
 (substitute your `telemetryDir` if you have set one). A `start` line followed by `ingest` lines, plus one
 `<session-id>.jsonl` per session, means the exporter is reaching the receiver. An `addr-in-use` line is normal for
-the second and later sessions of a project — one receiver serves them all. An `owner-mismatch` line means another
+the second and later sessions of a project — one receiver serves them all (back-to-back repeats are written once). A
+`no-data` line at idle-exit means the receiver lived a whole idle period without a single OTLP request — Claude Code
+is not exporting to it (OTEL env not in `~/.claude/settings.json`, or Claude Code not restarted). Every install /
+upgrade (installer 1.0.91+) writes an `[installer]` line to `hook.log` (`upgrade: hooks v<old> → v<new> (server …)`),
+as a `warn` with `DOWNGRADE` when the bundled hook is older than the installed one. An `owner-mismatch` line means another
 project allocated the same port; re-install with `--otel-port <n>`.
 
 ---

@@ -158,6 +158,13 @@ const HOOK_JS_FILES = [
   'tool-wrap-tee.js',
   'tool-wrap-powershell.js',
   'tool-wrap-records.js',
+  // Per-user shared OTEL receiver (hook 2.30.0+): the `~/.artisyn/otel/` state dir, the managed
+  // settings reader, the effective-config / reason / write-rule logic, and the user-level
+  // SessionStart hook the installer copies to `~/.artisyn/otel/bin/` in proxy mode.
+  'user-state.js',
+  'managed-settings.js',
+  'otel-status.js',
+  'otel-ensure-receiver.js',
 ];
 
 /**

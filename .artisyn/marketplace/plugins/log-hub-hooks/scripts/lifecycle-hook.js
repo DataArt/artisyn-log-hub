@@ -19,6 +19,7 @@ const {hookLog} = require('./hook-log');
 const {announceOtelSession, maybeReArmOtelSession} = require('./otel-register');
 const {deriveEditResultCounts} = require('./edit-result-counts');
 const {checkOtelEndpoints} = require('./otel-endpoint-check');
+const {resolveClaudeVersion} = require('./otel-status');
 
 const HOOK_FILE = 'lifecycle-hook.js';
 
@@ -230,12 +231,30 @@ async function setupToolWrap(cwd, sessionId, config) {
     // (announceOtelSession/maybeReArmOtelSession never throw themselves, but the await keeps this
     // hook's own failure handling identical either way).
     if (eventName === 'SessionStart' && config.otelEnabled) {
-      await announceOtelSession(config, sessionId, cwd, git, HOOK_FILE, 'announced');
+      // DD-13 / FR-E1: which Claude Code runs this session decides whether project-scope telemetry
+      // keys count (2.1.282 cutoff). Transcript tail first, then the user-level cache, then at most
+      // once per 24 h `claude --version`. Never fails the hook.
+      let claudeVersion = null;
+      try {
+        const resolved = resolveClaudeVersion({transcriptPath: input.transcript_path || null});
+        claudeVersion = resolved.version;
+        hookLog(HOOK_FILE, sessionId, 'result',
+          `claude-version=${resolved.version || 'unknown'} source=${resolved.source}`, cwd);
+      } catch (err) {
+        hookLog(HOOK_FILE, sessionId, 'result', 'claude-version=unknown source=none', cwd);
+        hookLog(HOOK_FILE, sessionId, 'error', `claude version lookup failed: ${err && err.message}`, cwd);
+      }
+
+      const announced = await announceOtelSession(config, sessionId, cwd, git, HOOK_FILE, 'announced');
 
       // Once per session: warn when Claude Code's exporter does not point at the port the receiver
       // just got armed on — otherwise every OTEL record of the session is dropped silently. Shown to
       // the user via SessionStart's `systemMessage`; see otel-endpoint-check.js.
-      const warning = checkOtelEndpoints(resolveOtelPort(config, process.env, cwd), cwd, sessionId);
+      // The traces endpoint is part of the check only when the project opted in (`otelTraces`).
+      // The port and mode the announce resolved; re-resolved silently if the announce itself failed.
+      const receiver = announced || resolveOtelPort(config, process.env, cwd, {sessionId, warn: false});
+      const warning = checkOtelEndpoints(receiver.port, cwd, sessionId,
+        {otelTraces: config.otelTraces, claudeVersion, mode: receiver.mode});
       if (warning) fs.writeSync(1, JSON.stringify({systemMessage: warning}));
     } else if (eventName !== 'SessionStart') {
       await maybeReArmOtelSession(config, sessionId, cwd, git, HOOK_FILE);

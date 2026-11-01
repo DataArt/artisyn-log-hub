@@ -11,6 +11,31 @@ import { isoSql, listedRootsSql, ownCostSql, treeCostSql } from './oracle-sql';
 
 const MONTH = { startDate: '2026-01-01', endDate: '2026-01-31' };
 
+/**
+ * `costBreakdown.costExcludesUtilityCalls` (2026-10-30 otel-shared-receiver, DD-30) of the root
+ * whose `session_stats` row is aliased `stats`: no OTEL API call in either OTEL table and a
+ * reported `otel_state` other than ok (none reported counts as not ok). World: s02 reported none
+ * and has no OTEL call -> true; s06 has an OTEL call -> false.
+ */
+function excludesUtilitySql(stats: string): string {
+  return `(NOT EXISTS (SELECT 1 FROM otel_api_calls a WHERE a.session_id = ${stats}.session_id)
+           AND NOT EXISTS (SELECT 1 FROM otel_calls c WHERE c.session_id = ${stats}.session_id)
+           AND coalesce(${stats}.otel_state, '') <> 'ok')`;
+}
+
+/**
+ * The listed roots of repository `$1` the `otelReason=$2` filter keeps: no OTEL data (no
+ * `otel_session_state` row, reported state neither ok nor partial) and a reported reason —
+ * `no-status` without a report — equal to `$2`, in the list's order.
+ */
+const OTEL_REASON_ROOTS_SQL = `SELECT r.session_id
+    FROM ${listedRootsSql('$1')} r
+    LEFT JOIN session_stats ss ON ss.session_id = r.id
+   WHERE NOT EXISTS (SELECT 1 FROM otel_session_state o WHERE o.session_id = r.id)
+     AND coalesce(ss.otel_state, '') NOT IN ('ok', 'partial')
+     AND coalesce(ss.otel_reason, 'no-status') = $2
+   ORDER BY r.end_time DESC`;
+
 export const f17Sessions: ContractFamily = {
   id: 'F17',
   name: 'sessions',
@@ -125,7 +150,8 @@ export const f17Sessions: ContractFamily = {
                      ${treeCostSql('own.session_id')} - ${ownCostSql('own')} AS subagent_cost,
                      ${treeCostSql('own.session_id')} AS total_cost,
                      0 AS utility_cost, NULL::numeric AS telemetry_cost, false AS flag,
-                     '[]'::jsonb AS unpriced_models
+                     '[]'::jsonb AS unpriced_models,
+                     ${excludesUtilitySql('own')} AS excludes_utility
                 FROM session_stats own WHERE own.session_id = $1`,
         args: ['@s02.id'],
         shape: 'object',
@@ -140,6 +166,7 @@ export const f17Sessions: ContractFamily = {
           utilityPricingMissing: 'flag',
           subagentPricingMissing: 'flag',
           unpricedModels: { col: 'unpriced_models', as: 'json' },
+          costExcludesUtilityCalls: 'excludes_utility',
         },
         strict: true,
       },
@@ -157,7 +184,8 @@ export const f17Sessions: ContractFamily = {
       read: {
         sql: `SELECT NULL::numeric AS main_cost, 0 AS zero, NULL::numeric AS total_cost,
                      NULL::numeric AS telemetry_cost, false AS flag,
-                     jsonb_build_array(ss.model) AS unpriced_models
+                     jsonb_build_array(ss.model) AS unpriced_models,
+                     ${excludesUtilitySql('ss')} AS excludes_utility
                 FROM session_stats ss WHERE ss.session_id = $1`,
         args: ['@s06.id'],
         shape: 'object',
@@ -172,6 +200,7 @@ export const f17Sessions: ContractFamily = {
           utilityPricingMissing: 'flag',
           subagentPricingMissing: 'flag',
           unpricedModels: { col: 'unpriced_models', as: 'json' },
+          costExcludesUtilityCalls: 'excludes_utility',
         },
         strict: true,
       },
@@ -232,6 +261,47 @@ export const f17Sessions: ContractFamily = {
       params: { repoId: '@R1.id' },
       query: { teamId: '@T1.id' },
       expect: { status: 403 },
+    },
+    {
+      // otelReason= (2026-10-30 otel-shared-receiver): in R1 only s02 (no OTEL data, reported
+      // none / project-only) is kept; s01 and s04 have OTEL rows.
+      id: 'F17-list-otel-reason',
+      route: 'GET /api/v1/repositories/:repoId/sessions',
+      actor: 'owner',
+      params: { repoId: '@R1.id' },
+      query: { otelReason: 'project-only' },
+      expect: { status: 200, minRows: 1 },
+      read: {
+        sql: OTEL_REASON_ROOTS_SQL,
+        args: ['@R1.id', 'project-only'],
+        shape: 'array',
+        fields: { sessionId: 'session_id' },
+      },
+    },
+    {
+      // no-status: R1 has no root without OTEL data and without a report (s02 reported one),
+      // so the list is empty although R1 lists three roots.
+      id: 'F17-list-otel-reason-no-status',
+      route: 'GET /api/v1/repositories/:repoId/sessions',
+      actor: 'owner',
+      params: { repoId: '@R1.id' },
+      query: { otelReason: 'no-status' },
+      expect: { status: 200 },
+      read: {
+        sql: OTEL_REASON_ROOTS_SQL,
+        args: ['@R1.id', 'no-status'],
+        shape: 'array',
+        fields: { sessionId: 'session_id' },
+      },
+    },
+    {
+      // An unknown reason is refused like the other enum filters.
+      id: 'F17-list-otel-reason-unknown',
+      route: 'GET /api/v1/repositories/:repoId/sessions',
+      actor: 'owner',
+      params: { repoId: '@R1.id' },
+      query: { otelReason: 'galaxy' },
+      expect: { status: 400 },
     },
     {
       id: 'F17-ids',

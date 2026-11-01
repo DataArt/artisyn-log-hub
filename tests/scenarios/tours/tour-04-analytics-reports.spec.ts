@@ -115,5 +115,14 @@ test('@TOUR-04 owner: analytics & reports tour @mode-a', async ({ stand, api, db
     },
   });
 
+  // The repo OTEL tab (2026-10-30-otel-tabs-traces): the golden sessions carry no OTEL records.
+  await walker.screen(page, 'repo.otel', {
+    check: async () => {
+      await expect(page).toHaveURL(/mtab=otel(&|$)/);
+      await expect(page.getByTestId('otel-realtime-badge')).toBeVisible();
+      await expect(page.getByTestId('otel-empty-A').or(page.getByTestId('otel-cost-chart'))).toBeVisible({ timeout: 20_000 });
+    },
+  });
+
   walker.finish();
 });

@@ -177,6 +177,8 @@ export const TRANSCRIPT_QUERY_SOURCE_PREFIX = 'agent:';
  * which part is unpriced, and `unpricedModels` lists the model ids with no price in Log
  * Hub ({@link unpricedModelList}; empty when everything is priced). The last two fields
  * were added later, so a consumer must treat them as optional.
+ * `costExcludesUtilityCalls` is {@link costExcludesUtilityCallsSql} (DD-30 of 2026-10-30
+ * otel-shared-receiver; added later still, so it is optional for a consumer too).
  */
 export interface CostBreakdown {
   mainCost: number | null;
@@ -188,6 +190,26 @@ export interface CostBreakdown {
   utilityPricingMissing: boolean;
   subagentPricingMissing: boolean;
   unpricedModels: string[];
+  costExcludesUtilityCalls: boolean;
+}
+
+/**
+ * Whether a root's computed cost leaves out Claude Code's utility calls because Log Hub never
+ * saw them (2026-10-30 otel-shared-receiver, DD-30): the root has no OTEL API-call rows — neither
+ * in `otel_api_calls`, which {@link utilityCostsCte} prices, nor in the projected `otel_calls` —
+ * **and** its `session_stats.otel_state` is not `ok`. Deliberately not keyed on
+ * `telemetry_cost`, which is also NULL for a zero OTEL sum (FR-C7).
+ *
+ * A boolean SQL expression over `rootId` (a `sessions.id` of a tree root). Used by the
+ * sessions list `costBreakdown` and the session OTEL route's status.
+ */
+export function costExcludesUtilityCallsSql(rootId: SQL): SQL {
+  return sql`(
+    NOT EXISTS (SELECT 1 FROM otel_api_calls xa WHERE xa.session_id = ${rootId})
+    AND NOT EXISTS (SELECT 1 FROM otel_calls xc WHERE xc.session_id = ${rootId})
+    AND (SELECT xs.otel_state FROM session_stats xs WHERE xs.session_id = ${rootId})
+      IS DISTINCT FROM 'ok'
+  )`;
 }
 
 /**

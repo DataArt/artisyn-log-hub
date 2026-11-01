@@ -9,6 +9,8 @@
 // (scripts/user-docs/links.js) — otherwise prints `<file>: <href>` to stderr and exits 1. Then
 // writes <out>/<slug>.md with page links rewritten to `<slug>.md[#anchor]`; a page without such
 // links is copied byte-for-byte. Stale *.md files in <out> that are not in the nav are deleted.
+// Images a page links to (`kind: 'asset'`, user-docs/images/<name>) must exist; they are copied to
+// <out>/images/, and stale *.svg/*.png there are deleted.
 // --check validates only and writes nothing. Idempotent. Exit 0 = ok, 1 = error.
 
 const fs = require('fs');
@@ -56,6 +58,7 @@ function main() {
 
   const problems = [];
   const outputs = [];
+  const assets = new Set();
   for (const page of nav.pages) {
     const rel = path.relative(REPO_ROOT, page.file).split(path.sep).join('/');
     if (!fs.existsSync(page.file)) {
@@ -65,7 +68,11 @@ function main() {
     const bytes = fs.readFileSync(page.file);
     const text = bytes.toString('utf8');
     for (const href of findLinks(text)) {
-      if (resolveLink(href, page.file, nav).kind === 'unresolved') problems.push(`${rel}: ${href}`);
+      const res = resolveLink(href, page.file, nav);
+      if (res.kind === 'unresolved') problems.push(`${rel}: ${href}`);
+      if (res.kind !== 'asset') continue;
+      if (fs.existsSync(path.join(REPO_ROOT, 'user-docs', res.path))) assets.add(res.path);
+      else problems.push(`${rel}: ${href} (missing user-docs/${res.path})`);
     }
     const rewritten = rewritePageLinks(text, page.file, nav);
     outputs.push({ slug: page.slug, data: rewritten === text ? bytes : Buffer.from(rewritten, 'utf8') });
@@ -91,7 +98,20 @@ function main() {
     if (fs.existsSync(target) && fs.readFileSync(target).equals(o.data)) continue;
     fs.writeFileSync(target, o.data);
   }
-  process.stderr.write(`generate-help: wrote ${outputs.length} pages to ${path.relative(REPO_ROOT, opts.out) || '.'}\n`);
+  const imagesOut = path.join(opts.out, 'images');
+  if (assets.size > 0) fs.mkdirSync(imagesOut, { recursive: true });
+  if (fs.existsSync(imagesOut)) {
+    for (const name of fs.readdirSync(imagesOut)) {
+      if (/\.(?:svg|png)$/.test(name) && !assets.has(`images/${name}`)) fs.unlinkSync(path.join(imagesOut, name));
+    }
+  }
+  for (const asset of assets) {
+    const data = fs.readFileSync(path.join(REPO_ROOT, 'user-docs', asset));
+    const target = path.join(opts.out, asset);
+    if (fs.existsSync(target) && fs.readFileSync(target).equals(data)) continue;
+    fs.writeFileSync(target, data);
+  }
+  process.stderr.write(`generate-help: wrote ${outputs.length} pages and ${assets.size} images to ${path.relative(REPO_ROOT, opts.out) || '.'}\n`);
   return 0;
 }
 

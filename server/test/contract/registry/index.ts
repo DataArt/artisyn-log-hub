@@ -35,8 +35,9 @@ import { f21Reports } from './f21-reports';
 import { f22PricingToolVersions } from './f22-pricing-tool-versions';
 import { f23ExportImport } from './f23-export-import';
 import { f24ToolMonitoring } from './f24-tool-monitoring';
+import { f25Otel } from './f25-otel';
 
-/** Every family, in F01..F24 order. */
+/** Every family, in F01..F25 order. */
 export const FAMILIES: readonly ContractFamily[] = [
   f01Infra,
   f02Account,
@@ -62,6 +63,7 @@ export const FAMILIES: readonly ContractFamily[] = [
   f22PricingToolVersions,
   f23ExportImport,
   f24ToolMonitoring,
+  f25Otel,
 ];
 
 /** All rows of all families. */

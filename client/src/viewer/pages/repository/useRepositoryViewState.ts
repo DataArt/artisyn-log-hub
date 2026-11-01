@@ -1,11 +1,16 @@
 import { useCallback, useEffect } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { useQueryClient } from '@tanstack/react-query';
-import type { RepositorySession } from '../../../models/repositories';
+import type {
+  OtelReasonKey,
+  RepositorySession,
+} from '../../../models/repositories';
 import { type ViewMode } from './session-list/SessionListPanel';
 import { type AnalyticsState } from './analytics/RepositoryAnalytics';
 import { applyAnalyticsToParams } from './analytics/analytics-url';
 import { TOOLS_PARAM_KEYS } from './tools/tools-url-state';
+import { OTEL_PARAM_KEYS } from './otel/otel-url-state';
+import { parseOtelReasonKey } from './otel/otel.constants';
 import {
   REPO_MAIN_TABS,
   SESSION_TABS,
@@ -86,6 +91,16 @@ export function useRepositoryViewState({
    */
   const targetToolUseId = searchParams.get('tu') || null;
 
+  /**
+   * The sessions list `otelReason` filter (2026-10-30 otel-shared-receiver, DD-33): set by a
+   * coverage chip of the OTEL tab, cleared by the list's `OTEL: <reason> ×` chip. URL param
+   * `otelReason` — deliberately not in `OTEL_PARAM_KEYS`, so it survives leaving the OTEL tab.
+   * An unknown value is ignored.
+   */
+  const otelReasonFilter: OtelReasonKey | null = parseOtelReasonKey(
+    searchParams.get('otelReason'),
+  );
+
   /** Drops the `tu` param without a history entry. Reads the latest params, not this render's. */
   const clearTargetToolUse = useCallback(() => {
     setSearchParams(
@@ -127,6 +142,7 @@ export function useRepositoryViewState({
       tab === 'reports' ||
       tab === 'tools' ||
       tab === 'okf' ||
+      tab === 'otel' ||
       tab === 'settings'
     ) {
       next.set('mtab', tab);
@@ -147,6 +163,10 @@ export function useRepositoryViewState({
     if (tab !== 'tools') {
       for (const key of TOOLS_PARAM_KEYS) next.delete(key);
     }
+    // The OTEL tab owns its `otel*` filter / chart params; drop them likewise.
+    if (tab !== 'otel') {
+      for (const key of OTEL_PARAM_KEYS) next.delete(key);
+    }
     setSearchParams(next, { replace: true });
   }
 
@@ -165,6 +185,22 @@ export function useRepositoryViewState({
     const next = new URLSearchParams(searchParams);
     if (n != null) next.set('top', String(n));
     else next.delete('top');
+    setSearchParams(next, { replace: true });
+  }
+
+  /**
+   * Sets (a reason) or clears (null) the sessions list `otelReason` filter. Setting it also
+   * switches to the Sessions tab, where the filtered list is shown.
+   */
+  function setOtelReasonFilter(reason: OtelReasonKey | null) {
+    const next = new URLSearchParams(searchParams);
+    if (reason !== null) {
+      next.set('otelReason', reason);
+      next.delete('mtab');
+      for (const key of OTEL_PARAM_KEYS) next.delete(key);
+    } else {
+      next.delete('otelReason');
+    }
     setSearchParams(next, { replace: true });
   }
 
@@ -235,6 +271,8 @@ export function useRepositoryViewState({
     sessionTab,
     topN,
     showAllUsers,
+    otelReasonFilter,
+    setOtelReasonFilter,
     setMainTab,
     setSessionTab,
     setTopN,

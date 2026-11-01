@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
+import { Loader2 } from 'lucide-react';
 import type { TeamRepository } from '../../../../models/teams';
 import {
   addTeamRepository,
@@ -33,6 +34,10 @@ export function TeamRepositoriesTab({
   const { data: repos = [] } = useQuery({
     queryKey: ['team-repos', teamId],
     queryFn: () => fetchTeamRepositories(teamId),
+    // A newly added repo's team stats are recomputed in the background; poll until every
+    // row is done so «Adding…» clears by itself (also after a page reload).
+    refetchInterval: (query) =>
+      query.state.data?.some((r) => r.recomputePending) ? 3000 : false,
   });
 
   const { data: myRepos = [] } = useQuery({
@@ -155,8 +160,20 @@ export function TeamRepositoriesTab({
                         : ''
                     }
                   >
-                    <td className="py-2 pl-2 pr-4 truncate max-w-xs">
-                      {r.repoUrl}
+                    <td className="py-2 pl-2 pr-4">
+                      <div className="flex items-center gap-2">
+                        <span className="truncate max-w-xs">{r.repoUrl}</span>
+                        {r.recomputePending && (
+                          <span
+                            className="inline-flex shrink-0 items-center gap-1 text-xs text-muted-foreground"
+                            title="Recalculating team statistics for this repository's sessions"
+                            data-testid="team-repo-recompute-pending"
+                          >
+                            <Loader2 className="size-3 animate-spin" />
+                            Adding…
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="py-2 text-right w-20 tabular-nums">
                       {r.sessionCount}
@@ -217,9 +234,20 @@ export function TeamRepositoriesTab({
               onChange={(e) => setRepoUrl(e.target.value)}
             />
             <Button type="submit" size="sm" disabled={addRepoMut.isPending}>
-              Add
+              {addRepoMut.isPending ? 'Adding…' : 'Add'}
             </Button>
           </form>
+          {addRepoMut.isPending && (
+            // The link request itself; the team-stats recompute that follows runs in the
+            // background and shows as «Adding…» on the repository's row.
+            <p
+              className="flex items-center gap-2 text-xs text-muted-foreground"
+              data-testid="team-repo-adding"
+            >
+              <Loader2 className="size-3 animate-spin" />
+              Adding {addRepoMut.variables}…
+            </p>
+          )}
           {repoError && <p className="text-xs text-destructive">{repoError}</p>}
 
           {/* My repos not yet in this team */}
@@ -235,18 +263,34 @@ export function TeamRepositoriesTab({
                   My repositories
                 </p>
                 <ul className="flex flex-col gap-1">
-                  {available.map((r) => (
-                    <li
-                      key={r.id}
-                      className="flex items-center justify-between gap-2 px-3 py-2 border border-border rounded-md bg-card/50 hover:bg-accent/30 cursor-pointer"
-                      onClick={() => addRepoMut.mutate(r.repoUrl)}
-                    >
-                      <span className="text-sm truncate">{r.repoUrl}</span>
-                      <span className="text-xs text-muted-foreground shrink-0">
-                        + Add
-                      </span>
-                    </li>
-                  ))}
+                  {available.map((r) => {
+                    const adding =
+                      addRepoMut.isPending &&
+                      addRepoMut.variables === r.repoUrl;
+                    return (
+                      <li
+                        key={r.id}
+                        className={`flex items-center justify-between gap-2 px-3 py-2 border border-border rounded-md bg-card/50 ${
+                          addRepoMut.isPending
+                            ? 'cursor-default opacity-60'
+                            : 'hover:bg-accent/30 cursor-pointer'
+                        }`}
+                        aria-disabled={addRepoMut.isPending}
+                        onClick={() => {
+                          if (!addRepoMut.isPending)
+                            addRepoMut.mutate(r.repoUrl);
+                        }}
+                      >
+                        <span className="text-sm truncate">{r.repoUrl}</span>
+                        <span className="flex items-center gap-1 text-xs text-muted-foreground shrink-0">
+                          {adding && (
+                            <Loader2 className="size-3 animate-spin" />
+                          )}
+                          {adding ? 'Adding…' : '+ Add'}
+                        </span>
+                      </li>
+                    );
+                  })}
                 </ul>
               </div>
             );

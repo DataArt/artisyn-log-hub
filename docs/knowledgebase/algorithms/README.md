@@ -30,9 +30,16 @@ format where the two differ).
 | [cost-formula](cost-formula.md) | `packages/pricing/src/cost.ts` (server via `server/src/logs/cost.sql.ts`, client via `client/.../lib/format.ts`); twin hook `post-turn-analysis-worker.js` | jest, vitest, `node --test` |
 | [anthropic-pricing-parse](anthropic-pricing-parse.md) | `server/src/model-pricing/anthropic-pricing-parser.ts` | jest |
 | [otel-cost-selection](otel-cost-selection.md) | `server/src/logs/otel-cost.sql.ts` | jest |
+| [otel-facts](otel-facts.md) | `server/src/logs/otel/otel-classify.ts`, `otel-records.ts`, `otel-query-source-dictionary.ts` | jest |
+| [otel-trace-assembly](otel-trace-assembly.md) | `client/.../session-log/otel/otel-trace-assembly.ts` | vitest |
+| [otel-delta-merge](otel-delta-merge.md) | `client/.../repository/otel/otel-merge.ts` | vitest |
+| [otel-realtime-backoff](otel-realtime-backoff.md) | hook `otel-receiver.js` (`nextRealtimeDelay`) | `node --test` |
+| [otel-shared-routing](otel-shared-routing.md) | hook `otel-receiver.js` (`routeRecord`, pending spool, `validateRegisterPayload`, `forwardHeaders`, `forwardHealth`, `forwardBackoffMs`) | `node --test` |
+| [otel-status-reason](otel-status-reason.md) | hook `otel-status.js` (`resolveEffectiveOtel`, `deriveConfigWarnings`, `deriveState`, `deriveReason`, `shouldWriteStatus`) | `node --test` |
 | [cache-ratio-and-causes](cache-ratio-and-causes.md) | `server/src/logs/cache-ratio.sql.ts`, `reports/cache-read-ratio.service.ts`, `turn-walk.ts`; twin `client/.../lib/format.ts` | jest, vitest |
 | [work-time](work-time.md) | `server/src/logs/claude-extractor.ts`; twin hook `post-turn-analysis-worker.js` | jest, `node --test` |
 | [session-time-span](session-time-span.md) | `server/src/logs/artisyn-extractor.ts` | jest |
+| [session-list-flags](session-list-flags.md) | `server/src/logs/session-list-flags.ts` (`computeSessionListFlags`); twin backfill SQL `server/src/database/backfill-session-list-flags.ts` | jest |
 | [change-surface-concentration](change-surface-concentration.md) | `server/src/logs/change-surface/change-surface-metrics.ts` | jest |
 | [repo-url-normalization](repo-url-normalization.md) | `server/src/logs/repo-url-normalizer.ts` | jest |
 | [ndjson-tolerance](ndjson-tolerance.md) | hook `ndjson-sanitize.js`, `server/src/logs/ndjson-parser.ts` | `node --test`, jest |

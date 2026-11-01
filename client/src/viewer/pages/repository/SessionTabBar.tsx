@@ -97,6 +97,7 @@ export function SessionTabBar({
       ),
     },
     { id: 'sysctx', label: 'System context anatomy' },
+    { id: 'otel', label: 'OTEL' },
   ];
 
   return (

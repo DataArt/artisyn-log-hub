@@ -25,6 +25,8 @@ export const HOOK_API_BODY_LIMIT = 1_048_576;
  * - `TurnEndCostAdvisorController` — `api/v2/turn-end-cost-advisor`
  * - `SessionAttributionController` — `api/v2/session-attribution`
  * - `LogsController.logEcho` — `api/v1/log-echo`
+ * - `OtelRealtimeController` — `api/v2/otel-realtime` (hook ≥ 2.29.0 realtime OTEL batches;
+ *   the hook caps one batch at 768 KiB uncompressed, under this limit)
  *
  * `PostTurnAnalysisController` exposes only `GET config`, so it has no entry here.
  */
@@ -35,6 +37,7 @@ export const HOOK_API_ROUTES: ReadonlyArray<{
   { path: 'api/v2/turn-end-cost-advisor', method: RequestMethod.POST },
   { path: 'api/v2/session-attribution', method: RequestMethod.POST },
   { path: 'api/v1/log-echo', method: RequestMethod.POST },
+  { path: 'api/v2/otel-realtime', method: RequestMethod.POST },
 ];
 
 /**

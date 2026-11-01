@@ -43,8 +43,8 @@
       "module": "Scenarios, auth mode none",
       "command": "npm run test:scenarios -- --mode a --only scenarios,corpus",
       "group": "app",
-      "timeoutSeconds": 600,
-      "instructions": "Isolated stand in auth mode none: run.mjs builds tmp/scenarios/stand/, starts its own server on a free port in a fresh scn_* schema and drops it afterwards — it does not use or touch the dev server, the dev DB's public schema or server/src/public/static (the run fails if either changed). Exit 2 = preflight (Postgres/Mailpit/Chromium/stray tmp/scenarios/.env.local) — fix the environment, not the tests. The stand build rewrites the installer in place like npm run build, hence the `app` group. If a mode outgrows 600 s, split it by --grep into areas.",
+      "timeoutSeconds": 900,
+      "instructions": "Isolated stand in auth mode none: run.mjs builds tmp/scenarios/stand/, starts its own server on a free port in a fresh scn_* schema and drops it afterwards — it does not use or touch the dev server, the dev DB's public schema or server/src/public/static (the run fails if either changed). Exit 2 = preflight (Postgres/Mailpit/Chromium/stray tmp/scenarios/.env.local) — fix the environment, not the tests. The stand build rewrites the installer in place like npm run build, hence the `app` group. Mode A is the big integrated run (~13 min in Oct 2026) and is kept as ONE check on purpose — raise the budget rather than splitting it by --grep, which could silently drop a scenario whose tag no split covers.",
       "finalOnly": true
     },
     {
@@ -54,7 +54,7 @@
       "command": "npm run test:scenarios -- --mode b --only scenarios",
       "group": "app",
       "timeoutSeconds": 600,
-      "instructions": "Isolated stand in auth mode password-confirm: run.mjs builds tmp/scenarios/stand/, starts its own server on a free port in a fresh scn_* schema and drops it afterwards — it does not use or touch the dev server, the dev DB's public schema or server/src/public/static (the run fails if either changed). Exit 2 = preflight (Postgres/Mailpit/Chromium/stray tmp/scenarios/.env.local) — fix the environment, not the tests. The stand build rewrites the installer in place like npm run build, hence the `app` group. If a mode outgrows 600 s, split it by --grep into areas.",
+      "instructions": "Isolated stand in auth mode password-confirm: run.mjs builds tmp/scenarios/stand/, starts its own server on a free port in a fresh scn_* schema and drops it afterwards — it does not use or touch the dev server, the dev DB's public schema or server/src/public/static (the run fails if either changed). Exit 2 = preflight (Postgres/Mailpit/Chromium/stray tmp/scenarios/.env.local) — fix the environment, not the tests. The stand build rewrites the installer in place like npm run build, hence the `app` group. Each mode is ONE integrated run on purpose: if it outgrows its budget, raise timeoutSeconds rather than splitting it by --grep, which could silently drop a scenario whose tag no split covers.",
       "finalOnly": true
     },
     {
@@ -64,7 +64,7 @@
       "command": "npm run test:scenarios -- --mode c --only scenarios",
       "group": "app",
       "timeoutSeconds": 600,
-      "instructions": "Isolated stand in auth mode password: run.mjs builds tmp/scenarios/stand/, starts its own server on a free port in a fresh scn_* schema and drops it afterwards — it does not use or touch the dev server, the dev DB's public schema or server/src/public/static (the run fails if either changed). Exit 2 = preflight (Postgres/Mailpit/Chromium/stray tmp/scenarios/.env.local) — fix the environment, not the tests. The stand build rewrites the installer in place like npm run build, hence the `app` group. If a mode outgrows 600 s, split it by --grep into areas.",
+      "instructions": "Isolated stand in auth mode password: run.mjs builds tmp/scenarios/stand/, starts its own server on a free port in a fresh scn_* schema and drops it afterwards — it does not use or touch the dev server, the dev DB's public schema or server/src/public/static (the run fails if either changed). Exit 2 = preflight (Postgres/Mailpit/Chromium/stray tmp/scenarios/.env.local) — fix the environment, not the tests. The stand build rewrites the installer in place like npm run build, hence the `app` group. Each mode is ONE integrated run on purpose: if it outgrows its budget, raise timeoutSeconds rather than splitting it by --grep, which could silently drop a scenario whose tag no split covers.",
       "finalOnly": true
     },
     {

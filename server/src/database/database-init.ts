@@ -7,11 +7,13 @@ import { Pool } from 'pg';
 import { AppLogger } from '../common/app-logger';
 import { isProduction } from '../common/runtime-env';
 import { TOOL_USAGE_EXTRACTOR_VERSION } from '../logs/tool-monitoring/tool-usage.constants';
+import { OTEL_PROJECTION_VERSION } from '../logs/otel/otel-facts.constants';
 import {
   loadAppliedMigrations,
   verifyAppliedMigrations,
   verifyMigrationFilesAgainstLock,
 } from './migration-lock-check';
+import { backfillSessionListFlags } from './backfill-session-list-flags';
 import { validateMigrationFiles } from './migration-validator';
 import { resolveSessionSecret } from './server-secrets';
 import { resolveSearchPathOption } from './test-schema';
@@ -157,6 +159,27 @@ export async function initializeDatabase(
           CONTEXT,
         );
       }
+
+      // 3c. Re-queue OTEL chunks projected by an older projection version, or whose
+      //     projection failed (-1) (DD-16): NULL marks the logs_otel row as pending, and the
+      //     projection drain projects it again. Every row is projected at most once per
+      //     version, so after the drain this touches no rows. Still under the lock.
+      const otelRequeued = await client.query(
+        'UPDATE logs_otel SET otel_projection_version = NULL WHERE otel_projection_version < $1',
+        [OTEL_PROJECTION_VERSION],
+      );
+      if (otelRequeued.rowCount) {
+        logger.log(
+          `OTEL facts: ${otelRequeued.rowCount} chunk(s) queued for projection (projection v${OTEL_PROJECTION_VERSION})`,
+          CONTEXT,
+        );
+      }
+
+      // 3d. Backfill the session-list flag columns of session_stats (migration 0080)
+      //     for rows written before ingest started filling them. One commit per
+      //     repository; a no-op probe on the partial index once nothing is pending.
+      //     Still under the lock. See backfill-session-list-flags.ts.
+      await backfillSessionListFlags(client, logger);
 
       // 4. Resolve SESSION_SECRET (env -> stored row -> generated), still under
       //    the lock so concurrently starting workers agree on one value. Runs on

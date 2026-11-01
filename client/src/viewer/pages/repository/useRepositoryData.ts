@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query';
-import type { RepositorySession } from '../../../models/repositories';
+import type {
+  OtelReasonKey,
+  RepositorySession,
+} from '../../../models/repositories';
 import {
   ApiError,
   fetchRepositoryContexts,
@@ -29,6 +32,8 @@ interface UseRepositoryDataParams {
   viewMode: ViewMode;
   sessionId?: string;
   branchSelectedSession: BranchSelectedSession | null;
+  /** The sessions list `otelReason` filter (2026-10-30 otel-shared-receiver, DD-33). */
+  otelReason?: OtelReasonKey | null;
 }
 
 export function useRepositoryData({
@@ -38,12 +43,19 @@ export function useRepositoryData({
   viewMode,
   sessionId,
   branchSelectedSession,
+  otelReason = null,
 }: UseRepositoryDataParams) {
   const queryClient = useQueryClient();
 
+  // The unfiltered list keeps its historic key, so the exact-key cache writes below (favorite)
+  // still reach it; a filtered list is its own entry under the same prefix (invalidations match).
   const sessionsQuery = useQuery({
-    queryKey: ['repo-sessions', repoId, teamId],
-    queryFn: () => fetchRepositorySessions(repoId, teamId),
+    queryKey:
+      otelReason === null
+        ? ['repo-sessions', repoId, teamId]
+        : ['repo-sessions', repoId, teamId, { otelReason }],
+    queryFn: () =>
+      fetchRepositorySessions(repoId, teamId, undefined, otelReason),
     enabled:
       !isInvalidId &&
       (viewMode === 'plain' ||

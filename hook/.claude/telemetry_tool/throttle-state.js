@@ -104,9 +104,146 @@ function claimThrottleSlot(cwd, fileName, thresholdMs) {
   return true;
 }
 
+/**
+ * The per-session "otel-status already written" marks (DD-15): which state the last `otel-status`
+ * event of a session carried, so Stop/SessionEnd write it once and again only when it improves.
+ * One map in one work-dir file, `{ otelStatusWritten: { [sessionId]: { state, at } } }`; entries
+ * older than `OTEL_STATUS_MARK_TTL_MS` are pruned on every write.
+ */
+const OTEL_STATUS_STATE_FILE = 'otel-status-written.json';
+const OTEL_STATUS_MARK_TTL_MS = 86400000;
+
+/**
+ * @param {string|null} cwd
+ * @returns {Record<string, { state: string, at: string }>}
+ */
+function readOtelStatusMarks(cwd) {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(throttleStatePath(cwd, OTEL_STATUS_STATE_FILE), 'utf8'));
+    const map = parsed && parsed.otelStatusWritten;
+    return map && typeof map === 'object' && !Array.isArray(map) ? map : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * The mark of the last `otel-status` written for `sessionId`, or `null`. Fail-open.
+ * @param {string} sessionId
+ * @param {string|null} [cwd]
+ * @returns {{ state: string, at: string }|null}
+ */
+function readOtelStatusMark(sessionId, cwd = null) {
+  if (typeof sessionId !== 'string' || !sessionId) return null;
+  const mark = readOtelStatusMarks(cwd)[sessionId];
+  return mark && typeof mark === 'object' && typeof mark.state === 'string' ? mark : null;
+}
+
+/**
+ * Record that an `otel-status` with `state` was written for `sessionId`, pruning marks older than
+ * 24 h. Best-effort — a write failure must never fail the hook.
+ * @param {string} sessionId
+ * @param {string} state
+ * @param {string|null} [cwd]
+ */
+function writeOtelStatusMark(sessionId, state, cwd = null) {
+  if (typeof sessionId !== 'string' || !sessionId) return;
+  try {
+    const now = Date.now();
+    const marks = readOtelStatusMarks(cwd);
+    const kept = {};
+    for (const [id, mark] of Object.entries(marks)) {
+      const at = mark && typeof mark.at === 'string' ? Date.parse(mark.at) : NaN;
+      if (!Number.isNaN(at) && now - at < OTEL_STATUS_MARK_TTL_MS) kept[id] = mark;
+    }
+    kept[sessionId] = { state, at: new Date(now).toISOString() };
+    ensureWorkDir(cwd);
+    fs.writeFileSync(throttleStatePath(cwd, OTEL_STATUS_STATE_FILE), JSON.stringify({ otelStatusWritten: kept }), 'utf8');
+  } catch {
+    // best-effort
+  }
+}
+
+/**
+ * Per-session "this warning was already written" marks (hook 2.30.0+): the shared-receiver client
+ * writes some `warn` lines at most once per session (port conflict, missing receiver capabilities,
+ * legacy per-project receiver, port mismatch), while the code that may write them runs on every
+ * throttled re-arm. One map in one work-dir file, `{ [sessionId]: { [key]: at } }`; sessions whose
+ * newest mark is older than `OTEL_SESSION_WARNING_TTL_MS` are pruned on every write.
+ */
+const OTEL_SESSION_WARNINGS_FILE = 'otel-session-warnings.json';
+const OTEL_SESSION_WARNING_TTL_MS = 86400000;
+
+/**
+ * @param {string|null} cwd
+ * @returns {Record<string, Record<string, string>>}
+ */
+function readSessionWarnings(cwd) {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(throttleStatePath(cwd, OTEL_SESSION_WARNINGS_FILE), 'utf8'));
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Whether the warning `key` was already written for `sessionId`. Read-only, fail-open (`false`).
+ * @param {string|null} sessionId
+ * @param {string} key
+ * @param {string|null} [cwd]
+ * @returns {boolean}
+ */
+function hasSessionWarning(sessionId, key, cwd = null) {
+  if (typeof sessionId !== 'string' || !sessionId) return false;
+  const marks = readSessionWarnings(cwd)[sessionId];
+  return !!marks && typeof marks === 'object' && typeof marks[key] === 'string';
+}
+
+/**
+ * Claim the one write of warning `key` for `sessionId`: `true` when the caller should write it
+ * (and the claim is recorded), `false` when it was already written. Without a session id nothing
+ * can be deduplicated, so the caller always writes. Best-effort: a failed record still returns
+ * `true`, so a warning is never lost to a read-only work dir.
+ * @param {string|null} sessionId
+ * @param {string} key
+ * @param {string|null} [cwd]
+ * @returns {boolean}
+ */
+function claimSessionWarning(sessionId, key, cwd = null) {
+  if (typeof sessionId !== 'string' || !sessionId) return true;
+  const all = readSessionWarnings(cwd);
+  const current = all[sessionId] && typeof all[sessionId] === 'object' ? all[sessionId] : {};
+  if (typeof current[key] === 'string') return false;
+  try {
+    const now = Date.now();
+    const kept = {};
+    for (const [id, marks] of Object.entries(all)) {
+      if (!marks || typeof marks !== 'object') continue;
+      const newest = Math.max(...Object.values(marks).map((at) => (typeof at === 'string' ? Date.parse(at) : NaN))
+        .filter((at) => !Number.isNaN(at)), -Infinity);
+      if (now - newest < OTEL_SESSION_WARNING_TTL_MS) kept[id] = marks;
+    }
+    kept[sessionId] = { ...current, [key]: new Date(now).toISOString() };
+    ensureWorkDir(cwd);
+    fs.writeFileSync(throttleStatePath(cwd, OTEL_SESSION_WARNINGS_FILE), JSON.stringify(kept), 'utf8');
+  } catch {
+    // best-effort
+  }
+  return true;
+}
+
 module.exports = {
   OTEL_RESPAWN_THROTTLE_MS,
   OTEL_SPAWN_STATE_FILE,
+  OTEL_STATUS_STATE_FILE,
+  OTEL_STATUS_MARK_TTL_MS,
+  OTEL_SESSION_WARNINGS_FILE,
+  OTEL_SESSION_WARNING_TTL_MS,
+  claimSessionWarning,
+  hasSessionWarning,
+  readOtelStatusMark,
+  writeOtelStatusMark,
   claimThrottleSlot,
   readThrottleState,
   throttleStatePath,

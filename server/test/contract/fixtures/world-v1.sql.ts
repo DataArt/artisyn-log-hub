@@ -32,6 +32,11 @@ export const WORLD_V1 = {
     author: { id: 5, email: 'author@arrakis.test', role: 'user' },
     pending: { id: 6, email: 'pending@arrakis.test', role: 'user' },
     manager: { id: 7, email: 'manager@arrakis.test', role: 'user' },
+    /**
+     * T2's ADLC trainer without the manager flag (2026-10-30 OTEL tabs, F25, DD-29): sees the
+     * team's sessions but no team analytics. Owns no repository and no log.
+     */
+    trainer: { id: 8, email: 'trainer@arrakis.test', role: 'user' },
   },
   apiKeys: {
     ownerKey: {
@@ -97,6 +102,16 @@ export const WORLD_V1 = {
       userId: 2,
       url: 'https://github.com/arrakis/orphan-outpost',
     },
+    /**
+     * T2's second repository (2026-10-30 OTEL tabs, F25, DD-29): the owner's, linked to T2 only
+     * (team_repositories id 5). s04's artisyn log is linked to both R1 and Rdesert (one session
+     * in two team repositories); s11 lives here only and has no git branch.
+     */
+    Rdesert: {
+      id: 7,
+      userId: 2,
+      url: 'https://github.com/arrakis/deep-desert',
+    },
   },
   sessions: {
     s01: { id: 1, sessionId: 'w1-s01-plain' },
@@ -110,6 +125,8 @@ export const WORLD_V1 = {
     /** Rorphan's only session (05 §F12 chunk 13); see Rorphan's comment above. */
     s09: { id: 9, sessionId: 'w1-s09-orphan' },
     s10: { id: 10, sessionId: 'w1-s10-member-claude-only' },
+    /** Owner's Rdesert-only session: one artisyn log without a git branch, OTEL data (F25). */
+    s11: { id: 11, sessionId: 'w1-s11-desert-nobranch' },
   },
   models: {
     a: 'world-model-a',
@@ -711,6 +728,14 @@ function buildStatements(): WorldStatement[] {
           '2026-01-01T09:50:00.000Z',
           '2026-01-01T09:51:00.000Z',
         ],
+        [
+          U.trainer.id,
+          U.trainer.email,
+          PASSWORD_HASH,
+          'user',
+          '2026-01-01T09:55:00.000Z',
+          '2026-01-01T09:56:00.000Z',
+        ],
       ],
     ),
   );
@@ -890,6 +915,16 @@ function buildStatements(): WorldStatement[] {
           '2026-01-04T10:00:00.000Z',
           '2026-01-04T09:00:00.000Z',
         ],
+        // ADLC trainer only (no manager flag): sees T2's sessions, never its analytics (F25).
+        [
+          T.T2.id,
+          U.trainer.id,
+          false,
+          false,
+          true,
+          '2026-01-04T11:00:00.000Z',
+          '2026-01-04T10:30:00.000Z',
+        ],
       ],
     ),
   );
@@ -1027,6 +1062,19 @@ function buildStatements(): WorldStatement[] {
           null,
           null,
         ],
+        [
+          R.Rdesert.id,
+          R.Rdesert.url,
+          R.Rdesert.userId,
+          null,
+          '2.29.0',
+          '2026-01-15T09:05:00.000Z',
+          null,
+          null,
+          null,
+          null,
+          null,
+        ],
       ],
     ),
   );
@@ -1041,6 +1089,8 @@ function buildStatements(): WorldStatement[] {
         // T1's only link to Rorphan (05 §F12 chunk 13): removing it has no other team
         // reference left, so the repo, its one log and the now-orphaned session s09 go too.
         [4, T.T1.id, R.Rorphan.url, '2026-01-02T12:15:00.000Z'],
+        // T2's second repository (F25, DD-29).
+        [5, T.T2.id, R.Rdesert.url, '2026-01-02T12:30:00.000Z'],
       ],
     ),
   );
@@ -1097,6 +1147,7 @@ function buildStatements(): WorldStatement[] {
           null,
         ],
         [S.s10.id, S.s10.sessionId, null, null, false, null, null],
+        [S.s11.id, S.s11.sessionId, null, null, false, null, null],
       ],
     ),
   );
@@ -1209,6 +1260,41 @@ function buildStatements(): WorldStatement[] {
     ROOT,
   ]);
   logRepoRows.push([orphanLogId, R.Rorphan.id]);
+  // OTEL tabs (F25, DD-29): s04's logs are also linked to Rdesert, so one session sits in two
+  // T2 repositories; s11's single artisyn log (no git branch -> "(unknown)" in the cost flow)
+  // is linked to Rdesert only. Neither changes any R1 view.
+  const s04ArtisynLogId = logIdBySession.s04.artisyn;
+  if (s04ArtisynLogId === undefined) {
+    throw new Error('world-v1: s04 has no artisyn log');
+  }
+  logRepoRows.push([s04ArtisynLogId, R.Rdesert.id]);
+  // ...and its claude log too, as the hook uploads both logs of a session to its repositories.
+  logRepoRows.push([logIdBySession.s04.claude, R.Rdesert.id]);
+  logId += 1;
+  const s11LogId = logId;
+  logRows.push([
+    s11LogId,
+    '2026-01-15T09:05:00.000Z',
+    '2026-01-15T09:05:00.000Z',
+    S.s11.id,
+    'artisyn',
+    json([
+      {
+        type: 'artisyn',
+        hook_event_name: 'SessionStart',
+        timestamp: '2026-01-15T08:55:00.000Z',
+        session_id: S.s11.sessionId,
+      },
+    ]),
+    U.owner.id,
+    'Survey the deep desert',
+    '2026-01-15T08:55:00.000Z',
+    '2026-01-15T09:05:00.000Z',
+    null,
+    null,
+    null,
+  ]);
+  logRepoRows.push([s11LogId, R.Rdesert.id]);
   out.push(
     insert(
       'logs',
@@ -1258,10 +1344,84 @@ function buildStatements(): WorldStatement[] {
     s01: [2, 2, 0],
     s03: [1, 1, 0],
   };
+  // OTEL status reported by the hook's `otel-status` event (2026-10-30 otel-shared-receiver,
+  // DD-28): [otel_state, otel_reason, otel_status jsonb]. Every other session has none (NULL).
+  // - s02 (owner, R1, no OTEL data): none / project-only -> R1's coverage is mixed (s01, s04
+  //   covered by their OTEL rows, s02 not), and the sessions `otelReason=project-only` filter
+  //   keeps it; no OTEL call and state not ok -> costExcludesUtilityCalls.
+  // - s04 (owner, R1 + Rdesert, OTEL data): ok, no reason.
+  // - s07 (author, R1author, no OTEL data): partial / managed-endpoint -> covered by the
+  //   reported state alone.
+  // - s08 (outsider, R3, no OTEL data): none / receiver-down (port conflict) -> R3 has zero
+  //   OTEL coverage.
+  const otelStatusOf = (
+    timestamp: string,
+    detail: string | null,
+    received: [number, number, number],
+    firstAt: string | null,
+    forward: 'ok' | 'degraded' | 'off',
+  ) => ({
+    timestamp,
+    detail,
+    received: {
+      logs: received[0],
+      metrics: received[1],
+      spans: received[2],
+      firstAt,
+    },
+    claudeVersion: '2.1.300',
+    forward,
+    hookVersion: '2.30.0',
+    receiverVersion: '2.30.0',
+  });
+  const otelBySession: Record<
+    string,
+    [string, string | null, Record<string, unknown>]
+  > = {
+    s02: [
+      'none',
+      'project-only',
+      otelStatusOf('2026-01-11T09:45:00.000Z', null, [0, 0, 0], null, 'off'),
+    ],
+    s04: [
+      'ok',
+      null,
+      otelStatusOf(
+        '2026-01-12T14:20:00.000Z',
+        null,
+        [5, 2, 0],
+        '2026-01-12T14:01:00.000Z',
+        'ok',
+      ),
+    ],
+    s07: [
+      'partial',
+      'managed-endpoint',
+      otelStatusOf(
+        '2026-01-13T11:10:00.000Z',
+        null,
+        [3, 0, 0],
+        '2026-01-13T11:01:00.000Z',
+        'off',
+      ),
+    ],
+    s08: [
+      'none',
+      'receiver-down',
+      otelStatusOf(
+        '2026-01-14T16:05:00.000Z',
+        'port-conflict',
+        [0, 0, 0],
+        null,
+        'off',
+      ),
+    ],
+  };
   const statsRows = SESSIONS.map((s) => {
     const t = totals(s);
     const durationMs = Date.parse(s.end) - Date.parse(s.start);
     const cs = csBySession[s.key];
+    const otel = otelBySession[s.key];
     return [
       S[s.key].id,
       s.turns[0].model,
@@ -1294,6 +1454,9 @@ function buildStatements(): WorldStatement[] {
       cs ? cs[2] : null,
       cs ? s.end : null,
       '2.1.99',
+      otel ? otel[0] : null,
+      otel ? otel[1] : null,
+      otel ? json(otel[2]) : null,
       s.end,
     ];
   });
@@ -1323,6 +1486,9 @@ function buildStatements(): WorldStatement[] {
         'cs_outside_repo_files',
         'cs_computed_at',
         'claude_version',
+        'otel_state',
+        'otel_reason',
+        'otel_status',
         'updated_at',
       ],
       statsRows,
@@ -2519,6 +2685,446 @@ function buildStatements(): WorldStatement[] {
     ),
   );
 
+  out.push(...otelStatements());
+
+  return out;
+}
+
+/**
+ * Projected OTEL facts (2026-10-30 otel-tabs-traces, F25). Written as the projection would have
+ * left them, at rest: no call is provisional and the reclassification queue is empty, so the
+ * (parked) drain would have nothing to do anyway.
+ *
+ * - s01 (owner, R1): seq 3. Call `req_s01_1` (main, 0.70 USD, realtime + chunk, seq 2,
+ *   `confirm`) and a `prompt_suggestion` call without a request id (hidden, 0.02 USD, chunk only,
+ *   seq 3, `new`); trace `w1trace01` = interaction `w1span01` > llm_request `w1span02`, plus the
+ *   standalone llm_request trace `w1trace02` (seq 3). Realtime receiver `w1-recv-01` at batch 4.
+ * - s04 (owner, R1 + Rdesert): one main call 0.50 USD, chunk only, hook 2.28.0 (no spans).
+ * - s06 (member, R1member): one main call 0.30 USD, chunk only, no hook version.
+ * - s11 (owner, Rdesert only, no git branch): one hidden `compact` call 0.10 USD.
+ *
+ * Every bucket equals the sum of its calls (one call per bucket key here).
+ */
+function otelStatements(): WorldStatement[] {
+  const S = WORLD_V1.sessions;
+  const out: WorldStatement[] = [];
+  out.push(
+    insert(
+      'otel_session_state',
+      [
+        'session_id',
+        'user_id',
+        'seq',
+        'transcript_seq',
+        'otel_hook_version',
+        'has_spans',
+        'has_provisional',
+        'rt_last_at',
+        'chunk_last_at',
+        'rt_gap_at',
+        'rt_receiver_id',
+        'rt_batch_seq',
+        'created_at',
+      ],
+      [
+        [
+          S.s01.id,
+          U.owner.id,
+          3,
+          3,
+          '2.29.0',
+          true,
+          false,
+          '2026-01-10T10:06:05.000Z',
+          '2026-01-10T10:10:00.000Z',
+          null,
+          'w1-recv-01',
+          4,
+          '2026-01-10T10:00:05.000Z',
+        ],
+        [
+          S.s04.id,
+          U.owner.id,
+          1,
+          1,
+          '2.28.0',
+          false,
+          false,
+          null,
+          '2026-01-12T14:25:00.000Z',
+          null,
+          null,
+          null,
+          '2026-01-12T14:25:00.000Z',
+        ],
+        [
+          S.s06.id,
+          U.member.id,
+          1,
+          1,
+          null,
+          false,
+          false,
+          null,
+          '2026-01-13T08:20:00.000Z',
+          null,
+          null,
+          null,
+          '2026-01-13T08:20:00.000Z',
+        ],
+        [
+          S.s11.id,
+          U.owner.id,
+          1,
+          1,
+          '2.29.0',
+          false,
+          false,
+          null,
+          '2026-01-15T09:05:00.000Z',
+          null,
+          null,
+          null,
+          '2026-01-15T09:05:00.000Z',
+        ],
+      ],
+    ),
+  );
+
+  const callColumns = [
+    'session_id',
+    'call_key',
+    'request_id',
+    'query_source',
+    'model',
+    'claude_code_version',
+    'prompt_id',
+    'agent_id',
+    'event_time',
+    'input_tokens',
+    'output_tokens',
+    'cache_read_tokens',
+    'cache_write_tokens',
+    'cost_usd_micros',
+    'structure',
+    'provisional',
+    'source_mask',
+    'first_seq',
+    'seq',
+    'change_kind',
+  ];
+  out.push(
+    insert('otel_calls', callColumns, [
+      [
+        S.s01.id,
+        'req_s01_1',
+        'req_s01_1',
+        'repl_main_thread',
+        M.a,
+        '2.1.99',
+        's01-p1',
+        null,
+        '2026-01-10T10:05:00.000Z',
+        400_000,
+        100_000,
+        0,
+        100_000,
+        700_000,
+        'main',
+        false,
+        3,
+        1,
+        2,
+        'confirm',
+      ],
+      [
+        S.s01.id,
+        'rec:w1-s01-suggestion',
+        null,
+        'prompt_suggestion',
+        M.b,
+        '2.1.99',
+        's01-p1',
+        null,
+        '2026-01-10T10:06:00.000Z',
+        1_000,
+        50,
+        9_000,
+        0,
+        20_000,
+        'hidden',
+        false,
+        2,
+        3,
+        3,
+        'new',
+      ],
+      [
+        S.s04.id,
+        'req_s04_1',
+        'req_s04_1',
+        'repl_main_thread',
+        M.a,
+        '2.1.98',
+        's04-p1',
+        null,
+        '2026-01-12T14:20:00.000Z',
+        100_000,
+        50_000,
+        400_000,
+        0,
+        500_000,
+        'main',
+        false,
+        2,
+        1,
+        1,
+        'new',
+      ],
+      [
+        S.s06.id,
+        'req_s06_1',
+        'req_s06_1',
+        'sdk',
+        M.unpriced,
+        '2.1.99',
+        's06-p1',
+        null,
+        '2026-01-13T08:15:00.000Z',
+        300_000,
+        30_000,
+        0,
+        0,
+        300_000,
+        'main',
+        false,
+        2,
+        1,
+        1,
+        'new',
+      ],
+      [
+        S.s11.id,
+        'rec:w1-s11-compact',
+        null,
+        'compact',
+        M.b,
+        '2.1.99',
+        null,
+        null,
+        '2026-01-15T09:00:00.000Z',
+        50_000,
+        1_000,
+        0,
+        0,
+        100_000,
+        'hidden',
+        false,
+        2,
+        1,
+        1,
+        'new',
+      ],
+    ]),
+  );
+
+  out.push(
+    insert(
+      'otel_spans',
+      [
+        'session_id',
+        'trace_id',
+        'span_id',
+        'parent_span_id',
+        'name',
+        'start_time',
+        'end_time',
+        'request_id',
+        'agent_id',
+        'query_source',
+        'context',
+        'attributes',
+        'cost_usd_micros',
+        'rollup_cost_usd_micros',
+        'source_mask',
+        'first_seq',
+        'seq',
+        'change_kind',
+      ],
+      [
+        [
+          S.s01.id,
+          'w1trace01',
+          'w1span01',
+          null,
+          'claude_code.interaction',
+          '2026-01-10T10:00:00.000Z',
+          '2026-01-10T10:05:00.000Z',
+          null,
+          null,
+          null,
+          null,
+          json({ user_prompt_length: 26 }),
+          null,
+          700_000,
+          3,
+          1,
+          2,
+          'confirm',
+        ],
+        [
+          S.s01.id,
+          'w1trace01',
+          'w1span02',
+          'w1span01',
+          'claude_code.llm_request',
+          '2026-01-10T10:00:30.000Z',
+          '2026-01-10T10:05:00.000Z',
+          'req_s01_1',
+          null,
+          'repl_main_thread',
+          'interaction',
+          json({ model: M.a, request_id: 'req_s01_1' }),
+          700_000,
+          700_000,
+          3,
+          1,
+          2,
+          'confirm',
+        ],
+        [
+          S.s01.id,
+          'w1trace02',
+          'w1span03',
+          null,
+          'claude_code.llm_request',
+          '2026-01-10T10:05:30.000Z',
+          '2026-01-10T10:06:00.000Z',
+          null,
+          null,
+          'prompt_suggestion',
+          'standalone',
+          json({ model: M.b }),
+          null,
+          null,
+          2,
+          3,
+          3,
+          'new',
+        ],
+      ],
+    ),
+  );
+
+  out.push(
+    insert(
+      'otel_cost_buckets',
+      [
+        'session_id',
+        'user_id',
+        'bucket_start',
+        'structure',
+        'query_source',
+        'model',
+        'cc_version',
+        'calls',
+        'cost_usd_micros',
+        'input_tokens',
+        'output_tokens',
+        'cache_read_tokens',
+        'cache_write_tokens',
+        'seq',
+        'change_kind',
+      ],
+      [
+        [
+          S.s01.id,
+          U.owner.id,
+          '2026-01-10T10:05:00.000Z',
+          'main',
+          'repl_main_thread',
+          M.a,
+          '2.1.99',
+          1,
+          700_000,
+          400_000,
+          100_000,
+          0,
+          100_000,
+          2,
+          'confirm',
+        ],
+        [
+          S.s01.id,
+          U.owner.id,
+          '2026-01-10T10:05:00.000Z',
+          'hidden',
+          'prompt_suggestion',
+          M.b,
+          '2.1.99',
+          1,
+          20_000,
+          1_000,
+          50,
+          9_000,
+          0,
+          3,
+          'new',
+        ],
+        [
+          S.s04.id,
+          U.owner.id,
+          '2026-01-12T14:20:00.000Z',
+          'main',
+          'repl_main_thread',
+          M.a,
+          '2.1.98',
+          1,
+          500_000,
+          100_000,
+          50_000,
+          400_000,
+          0,
+          1,
+          'new',
+        ],
+        [
+          S.s06.id,
+          U.member.id,
+          '2026-01-13T08:15:00.000Z',
+          'main',
+          'sdk',
+          M.unpriced,
+          '2.1.99',
+          1,
+          300_000,
+          300_000,
+          30_000,
+          0,
+          0,
+          1,
+          'new',
+        ],
+        [
+          S.s11.id,
+          U.owner.id,
+          '2026-01-15T09:00:00.000Z',
+          'hidden',
+          'compact',
+          M.b,
+          '2.1.99',
+          1,
+          100_000,
+          50_000,
+          1_000,
+          0,
+          0,
+          1,
+          'new',
+        ],
+      ],
+    ),
+  );
   return out;
 }
 

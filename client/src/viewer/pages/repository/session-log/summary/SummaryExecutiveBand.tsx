@@ -20,6 +20,7 @@ import {
   unpricedModelIds,
 } from '../../../../lib/cost-hints';
 import { CostReconciliation } from '../../../../components/CostReconciliation';
+import { UtilityCallsMarker } from '../../../../components/UtilityCallsMarker';
 import { cn } from '../../../../lib/cn';
 import { formatCost } from '../../../../lib/format';
 import { formatDiffCoverageNote } from '../../../../lib/usage-analytics-format';
@@ -207,6 +208,9 @@ export function SummaryExecutiveBand({
             </span>
           )}
         </span>
+      )}
+      {session.costBreakdown.costExcludesUtilityCalls === true && (
+        <UtilityCallsMarker />
       )}
       <CostReconciliation variant="compact" breakdown={session.costBreakdown} />
     </span>

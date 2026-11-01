@@ -4,6 +4,15 @@
 // row and the session's logs, removes contexts only that session used, and writes one audit row.
 import type { ContractFamily, WriteSpec } from '../types';
 
+/** The projected OTEL tables `purgeSessionChildData` empties for the deleted root. */
+const OTEL_TABLES = [
+  'otel_session_state',
+  'otel_calls',
+  'otel_spans',
+  'otel_cost_buckets',
+  'otel_reclass_queue',
+];
+
 /** Every table a session deletion may touch. */
 const SESSION_TABLES = [
   'sessions',
@@ -28,6 +37,8 @@ const SESSION_TABLES = [
   'harness_snapshots',
   // T-26: the purge deletes the session's Tools/MCP rows.
   'session_tool_usage',
+  // 2026-10-30 OTEL tabs (DD-25): the purge deletes the root's projected OTEL rows.
+  ...OTEL_TABLES,
 ];
 
 function deleteSession(
@@ -93,6 +104,11 @@ function deleteSession(
           where: `session_id = ${pk}`,
           count: 'all',
         },
+        ...OTEL_TABLES.map((table) => ({
+          table,
+          where: `session_id = ${pk}`,
+          count: 'all' as const,
+        })),
         // KNOWN DISCREPANCY, pinned as the code behaves today (05 §F18 expects these emptied
         // too): the soft-deleted `sessions` row keeps its session_request_ids,
         // session_tool_stats, session_changed_paths (raw file paths), session_harness_usage,
@@ -170,7 +186,12 @@ export const f18SessionDeleteRetention: ContractFamily = {
                              FROM logs l JOIN sessions s ON s.id = l.session_id AND NOT s.deleted
                             GROUP BY l.session_id)
               SELECT 36500 AS retention_days, min(last_end) AS oldest, max(last_end) AS youngest,
-                     count(*) AS total
+                     count(*) AS total,
+                     -- 2026-10-30 OTEL tabs (DD-25): realtime-only roots (OTEL data, no logs).
+                     (SELECT count(*) FROM sessions s
+                       WHERE NOT s.deleted AND s.parent_session_id IS NULL
+                         AND EXISTS (SELECT 1 FROM otel_session_state st WHERE st.session_id = s.id)
+                         AND NOT EXISTS (SELECT 1 FROM logs l WHERE l.session_id = s.id)) AS otel_only
                 FROM per`,
         shape: 'object',
         fields: {
@@ -178,6 +199,7 @@ export const f18SessionDeleteRetention: ContractFamily = {
           oldestSessionAt: { col: 'oldest', as: 'iso?' },
           youngestSessionAt: { col: 'youngest', as: 'iso?' },
           totalSessionCount: { col: 'total', as: 'number' },
+          otelOnlySessions: { col: 'otel_only', as: 'number' },
         },
         ignore: ['dailySeries'],
         strict: true,

@@ -93,6 +93,11 @@ export function runInstaller(cli: InstallerCli, cwd: string, args: string[], opt
   // The installer reads the archive from ARTISYN_HOOKS_ARCHIVE_PATH when it is set at all (even
   // empty), so one inherited from the launching shell is removed rather than blanked.
   delete childEnv.ARTISYN_HOOKS_ARCHIVE_PATH;
+  // The admin-managed Claude Code settings of the machine running the suite (a managed-settings
+  // file, an OS policy, DD-12) would turn every install into a "managed" one: by default the
+  // installer reads a managed-settings dir that does not exist (no file, no OS-policy read). A
+  // scenario that tests managed OTEL passes its own dir through `env`.
+  childEnv.ARTISYN_MANAGED_SETTINGS_DIR = path.join(home, '.no-managed-settings');
   Object.assign(childEnv, env);
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [cli.entry, ...args], {

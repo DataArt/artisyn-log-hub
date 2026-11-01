@@ -208,7 +208,9 @@ Create the file at `REQUIREMENTS` from it:
   one; in idea mode, remove the line entirely.
 - Insert the source material into the Description section: the raw idea verbatim in idea mode, the
   fetched description (plus any extra text the user typed) in tracker mode.
-- Metadata fields (Priority, Module, Type, scope): fill in only what the tracker returned, what is
+- Priority: use what the tracker returned or what the idea directly states; otherwise set it to
+  `medium` (the default — never leave it blank or keep the `high | medium | low` placeholder).
+- Other metadata fields (Module, Type, scope): fill in only what the tracker returned, what is
   directly stated in the idea, or what is trivially implied by it; leave everything else blank. Do
   not guess these — a speculative value just becomes a manufactured Open Question in review.
 - Functional Requirements and Acceptance Criteria: actively draft these by restating/reformulating

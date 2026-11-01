@@ -45,6 +45,11 @@ const RepoOkfTab = lazy(() =>
     default: m.RepoOkfTab,
   })),
 );
+const RepoOtelTab = lazy(() =>
+  import('./otel/RepoOtelTab').then((m) => ({
+    default: m.RepoOtelTab,
+  })),
+);
 
 function getHttpStatusCode(error: unknown): number | null {
   if (error && typeof error === 'object' && 'statusCode' in error) {
@@ -60,6 +65,7 @@ const MAIN_TAB_LABELS: Record<MainTab, string> = {
   reports: 'Reports',
   tools: 'Tools/MCP',
   okf: 'OKF',
+  otel: 'OTEL',
   settings: 'Settings',
 };
 
@@ -170,6 +176,8 @@ export function RepositoryView() {
     sessionTab,
     topN,
     showAllUsers,
+    otelReasonFilter,
+    setOtelReasonFilter,
     setMainTab,
     setSessionTab,
     setTopN,
@@ -214,6 +222,13 @@ export function RepositoryView() {
       ? (user?.email ?? undefined)
       : undefined;
 
+  /**
+   * The sessions list `otelReason` filter (2026-10-30 otel-shared-receiver, DD-33) is applied by
+   * the server to the repo-wide list only, so while it is active the list renders as a plain list
+   * (the per-branch lists are not filtered).
+   */
+  const listViewMode: ViewMode = otelReasonFilter !== null ? 'plain' : viewMode;
+
   const {
     sessionsQuery,
     sessions,
@@ -234,9 +249,10 @@ export function RepositoryView() {
     repoId,
     teamId,
     isInvalidId,
-    viewMode,
+    viewMode: listViewMode,
     sessionId,
     branchSelectedSession,
+    otelReason: otelReasonFilter,
   });
 
   // D4.8 — the repo URL comes from the repo-detail query (team-aware), not another view's cache.
@@ -255,10 +271,11 @@ export function RepositoryView() {
     teamId,
     isInvalidId,
     sessions,
-    viewMode,
+    viewMode: listViewMode,
     filterByUserEmail,
     hideHookSessions,
     isBranchOpen,
+    paused: otelReasonFilter !== null,
   });
 
   const deleteSessionMutation = useMutation({
@@ -397,8 +414,10 @@ export function RepositoryView() {
             onSessionSelect={handleSessionSelect}
             repoId={repoId}
             teamId={teamId}
-            viewMode={viewMode}
+            viewMode={listViewMode}
             onViewModeChange={handleViewModeChange}
+            otelReasonFilter={otelReasonFilter}
+            onOtelReasonFilterClear={() => setOtelReasonFilter(null)}
             filterByUserEmail={filterByUserEmail}
             onShowAllUsers={() => setShowAllUsers(true)}
             hideHookSessions={hideHookSessions}
@@ -472,6 +491,16 @@ export function RepositoryView() {
             <PageTabsContent value="okf" className="flex-1 min-h-0">
               <Suspense fallback={<LazyFallback />}>
                 <RepoOkfTab repoId={repoId} teamId={teamId} />
+              </Suspense>
+            </PageTabsContent>
+
+            <PageTabsContent value="otel" className="flex-1 min-h-0">
+              <Suspense fallback={<LazyFallback />}>
+                <RepoOtelTab
+                  repoId={repoId}
+                  teamId={teamId}
+                  onReasonFilter={setOtelReasonFilter}
+                />
               </Suspense>
             </PageTabsContent>
 

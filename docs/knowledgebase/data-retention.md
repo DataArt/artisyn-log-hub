@@ -7,7 +7,7 @@ tags:
   - sessions
   - scheduler
   - hooks
-timestamp: "2026-08-07T00:00:00+04:00"
+timestamp: "2026-10-30T00:00:00+04:00"
 ---
 
 # Session Data Retention
@@ -56,6 +56,28 @@ A root session (`parent_session_id IS NULL`, `deleted = false`) is purged when i
   regardless of how old its data is.
 - Eligible roots are processed oldest-first, up to `SESSION_RETENTION_PURGE_BATCH_SIZE` per tick.
 
+### OTEL-only roots (2026-10-30 otel-tabs-traces, DD-25)
+
+The hook `2.29.0`+ realtime channel (`POST /api/v2/otel-realtime`, see
+[`otel-tabs.md`](otel-tabs.md)) can create a root session that has OTEL rows but no `logs` row
+at all — e.g. a session whose transcript upload never arrived. The `logs`-based query above can
+never see such a root, so `hardPurgeExpiredSessions()` runs a **second, additive query** only when
+the first one returned fewer than `batchSize` roots:
+
+- `parent_session_id IS NULL`, `deleted = false`;
+- `NOT EXISTS` any `logs` row of the session;
+- `otel_session_state.created_at < cutoff` (the time the first OTEL data of the root arrived);
+- oldest first by `otel_session_state.created_at`, filling the rest of the batch.
+
+Those roots go through the same per-root purge loop below. The existing `logs`-based query is
+unchanged. An OTEL-only root that later receives a `logs` row simply moves to the first query.
+
+**Admin stats.** `getRetentionStats()` (`GET /api/v1/admin/retention`) returns an additive
+`otelOnlySessions` count: non-deleted roots with an `otel_session_state` row and no `logs`
+row. They are not part of `totalSessionCount` / `dailySeries` (both are `logs`-based). The
+admin Data Retention tab shows the count as the **OTEL-only Sessions** card
+(`data-testid="retention-otel-only-sessions"`).
+
 ## Purge mechanics
 
 For each eligible root, `SessionsService.hardPurgeExpiredSessions()` (`server/src/sessions/sessions.service.ts`):
@@ -68,11 +90,37 @@ For each eligible root, `SessionsService.hardPurgeExpiredSessions()` (`server/sr
    null` marks it as an automated purge, not a user action — see `docs/knowledgebase/db-tables.md`
    § `deleted_session_log`), deletes child data (`session_stats`, `session_call_tokens`,
    `session_costs`, `user_favorite_sessions`, `session_file_stats`, `session_okf_access` (step c2),
-   `logs`, orphaned `contexts`, queued `upload_queue` rows), then hard-deletes
+   `logs`, orphaned `contexts`, queued `upload_queue` rows, and — step 0 — the OTEL facts tables, see
+   below), then hard-deletes
    the `sessions` rows themselves — root and every descendant (including any already-soft-deleted
    one, whose bare row is still hard-deleted even though its data was already purged).
 4. Per-root failures are logged and skipped; the loop continues with the remaining roots in the
    batch.
+
+### OTEL facts tables (step 0)
+
+`purgeSessionChildData()` starts by deleting the OTEL-tab rows of the session ids
+(2026-10-30 otel-tabs-traces, DD-25), in this order:
+
+1. `otel_session_state` **first** — every OTEL writer (realtime ingest, projection drain,
+   reclassification, cleanup) takes that row `FOR UPDATE` before its `sessions.deleted` check
+   (DD-2 lock order in [`otel-tabs.md`](otel-tabs.md)), so the delete waits for a running writer,
+   and a later writer finds no row (or `deleted = true`) and writes nothing;
+2. `otel_calls`, `otel_spans`, `otel_cost_buckets`, `otel_reclass_queue`.
+
+All five tables also cascade on a hard delete of `sessions`, but a soft delete keeps the
+`sessions` row, so the explicit deletes are what clears them on soft delete. `logs_otel` (the raw
+chunks) is not touched here; it cascades on the hard delete as before.
+
+**Deleted-session cleanup.** A session soft-deleted while an older server build (one that does not
+know these tables) was running keeps its OTEL rows. The projection drain
+(`OtelProjectionService`, step 5) deletes the OTEL rows of up to `OTEL_CLEANUP_BATCH` = 50 such
+roots per tick, found through `otel_session_state` joined to `sessions.deleted = true`. A realtime
+batch for a soft-deleted session is answered `200 { ignored: 'deleted' }` and stores nothing.
+
+**Account deletion.** `AccountDeletionService` collects the user's sessions from `logs` and,
+additively, the roots whose `otel_session_state.user_id` is the user and that have no `logs` rows,
+so realtime-only sessions go with the account.
 
 ### Orphan harness-snapshot and OKF-snapshot cleanup
 
@@ -133,7 +181,7 @@ developer's disk, and never touches the database. It exists because `otel-receiv
 
 Note the asymmetry with the server side above: pruning a local `.jsonl` file does **not** remove the
 records from the hub. They were already uploaded, and on the server they are ordinary `logs` rows
-with `log_type = 'otel'`, subject only to the global `SESSION_RETENTION_DAYS` purge, which is
+(`logs_otel` chunks, plus the OTEL-tab tables projected from them), subject only to the global `SESSION_RETENTION_DAYS` purge, which is
 log-type-agnostic. Lowering `otelRetentionDays` only shortens how long the raw files linger on disk.
 
 See `docs/knowledgebase/otel-receiver.md` for the directory layout and

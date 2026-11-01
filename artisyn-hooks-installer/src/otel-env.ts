@@ -36,3 +36,54 @@ export function OTEL_ENV_KEYS(port: number): Record<string, string> {
 // The two OTEL env keys that carry a receiver endpoint (and therefore a port). Every other key of
 // `OTEL_ENV_KEYS` has a port-independent value.
 export const OTEL_ENDPOINT_KEYS = ['OTEL_EXPORTER_OTLP_LOGS_ENDPOINT', 'OTEL_EXPORTER_OTLP_METRICS_ENDPOINT'] as const;
+
+// Opt-in trace export (the `--otel-traces` install answer, stored as `otelTraces` in
+// `log-hub.json`). Kept out of `OTEL_ENV_KEYS` on purpose: the dev-container provisioning imports
+// that function and must stay unaffected. Merged into the same `env` block only when the answer is
+// yes; stripped (only while still Artisyn-owned) when it is no and on uninstall.
+export function OTEL_TRACE_ENV_KEYS(port: number): Record<string, string> {
+  return {
+    CLAUDE_CODE_ENHANCED_TELEMETRY_BETA: '1',
+    OTEL_TRACES_EXPORTER: 'otlp',
+    OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: `http://127.0.0.1:${port}/v1/traces`,
+  };
+}
+
+// The trace env key that carries a receiver endpoint (and therefore a port).
+export const OTEL_TRACE_ENDPOINT_KEY = 'OTEL_EXPORTER_OTLP_TRACES_ENDPOINT';
+
+// The OTLP resource attribute that carries a repo's `repoKey` (DD-5). Twins: `REPO_ATTR_KEY` in
+// hook/.claude/telemetry_tool/otel-receiver.js and user-state.js.
+export const REPO_ATTR_KEY = 'artisyn.repo';
+
+// The env key whose value the repo tag rides in.
+export const OTEL_RESOURCE_ATTRIBUTES_KEY = 'OTEL_RESOURCE_ATTRIBUTES';
+
+// Parse an `OTEL_RESOURCE_ATTRIBUTES` value (`k=v,k2=v2`) into `[key, entry]` pairs, dropping empty
+// and key-less items. The entry is kept verbatim (trimmed) so values are never re-encoded.
+function parseResourceAttributes(value: unknown): Array<[string, string]> {
+  if (typeof value !== 'string') return [];
+  const out: Array<[string, string]> = [];
+  for (const raw of value.split(',')) {
+    const entry = raw.trim();
+    const eq = entry.indexOf('=');
+    if (eq <= 0) continue;
+    out.push([entry.slice(0, eq).trim(), entry]);
+  }
+  return out;
+}
+
+// The `.claude/settings.local.json` `OTEL_RESOURCE_ATTRIBUTES` value (DD-23): the user-scope value
+// (if any), then the existing local value, then `artisyn.repo=<repoKey>`, comma-joined and deduped
+// by attribute key. A local value replaces the user value in Claude Code, so the user's attributes
+// are carried over; on a key clash the local entry wins over the user one, and any earlier
+// `artisyn.repo` entry (a moved repo) is replaced by this repo's tag.
+export function buildResourceAttributes(userValue: unknown, localValue: unknown, repoKey: string): string {
+  const merged = new Map<string, string>();
+  for (const [key, entry] of [...parseResourceAttributes(userValue), ...parseResourceAttributes(localValue)]) {
+    if (key === REPO_ATTR_KEY) continue;
+    merged.set(key, entry);
+  }
+  merged.set(REPO_ATTR_KEY, `${REPO_ATTR_KEY}=${repoKey}`);
+  return [...merged.values()].join(',');
+}

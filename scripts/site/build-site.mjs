@@ -4,6 +4,7 @@
 //   index.html, features.html,    site/pages/{home,features,questions}.html wrapped by layout.mjs
 //   questions.html
 //   docs/<slug>.html              every user-docs/nav.json page (markdown → HTML, heading ids, TOC)
+//   docs/images/                  the user-docs/images/ files those pages link to
 //   deck/                         copy of site/deck/ with placeholders filled in every .html
 //   assets/                       copy of site/assets/
 //
@@ -120,9 +121,11 @@ function hastText(node) {
 function remarkSiteLinks({ fromFile, nav, errors }) {
   return (tree) => {
     walk(tree, (node) => {
-      if ((node.type !== 'link' && node.type !== 'definition') || typeof node.url !== 'string') return;
+      if ((node.type !== 'link' && node.type !== 'definition' && node.type !== 'image') || typeof node.url !== 'string') return;
       const res = resolveLink(node.url, fromFile, nav);
-      if (res.kind === 'page') {
+      if (res.kind === 'asset') {
+        node.url = res.path; // copied to docs/images/, next to the page
+      } else if (res.kind === 'page') {
         node.url = res.anchor === null ? `${res.slug}.html` : `${res.slug}.html#${res.anchor}`;
       } else if (res.kind === 'unresolved') {
         errors.push(`${rel(fromFile)}: ${node.url}`);
@@ -233,7 +236,12 @@ function main() {
     if (md === null) continue;
     sources.set(p.slug, md);
     for (const href of findLinks(md)) {
-      if (resolveLink(href, p.file, nav).kind === 'unresolved') errors.push(`${rel(p.file)}: ${href}`);
+      const res = resolveLink(href, p.file, nav);
+      if (res.kind === 'unresolved') errors.push(`${rel(p.file)}: ${href}`);
+      if (res.kind !== 'asset') continue;
+      const src = path.join(ROOT, 'user-docs', res.path);
+      if (fs.existsSync(src)) files.set(path.join('docs', res.path), fs.readFileSync(src));
+      else errors.push(`${rel(p.file)}: ${href} (missing user-docs/${res.path})`);
     }
   }
 

@@ -23,3 +23,8 @@ regexes = ['''^GIT_PPA_KEY_FPR=[0-9A-F]{40}$''']
 [[allowlists]]
 description = "Prose read as a generic API key (docs/qaa-overview/scenarios/03-session-view-reports-golden.md)"
 regexes = ['''^glob/categories$''']
+
+[[allowlists]]
+description = "Fake OTEL collector header value used by the installer scenario to prove it never leaks (tests/scenarios/installer/s-inst-04.spec.ts)"
+paths = ['''^tests/scenarios/installer/s-inst-04\.spec\.ts$''']
+regexes = ['''^scn-collector-secret-7f3a91$''']

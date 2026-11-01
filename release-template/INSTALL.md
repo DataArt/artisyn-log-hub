@@ -267,6 +267,38 @@ air-gapped host), add `AI_TOOL_VERSION_CHECK_ENABLED: "false"` and
 `MODEL_PRICING_FETCH_ENABLED: "false"` under the `app` service's `environment:` in
 `docker-compose.yml` (and re-apply that edit after each upgrade, like a changed `ports:` mapping).
 
+## OTEL telemetry from the hook
+
+The OTEL tabs show Claude Code's own OpenTelemetry data (model calls, cost, optional traces). Users
+install the hook from the app (Install tab); this is what it sets up on their machines, from hook
+`2.30.0` on:
+
+- **One shared local receiver per OS user.** Claude Code sends its telemetry to a receiver on
+  `127.0.0.1`, on a port picked once at install and kept in `~/.artisyn/otel/port.json`. The
+  receiver serves every repository of that user, writes the data per repository, and the hook
+  uploads it with the session. No prompt or response content is collected through OTEL. Older
+  hooks keep their own per-repository receiver side by side with it.
+- **User settings.** Claude Code `2.1.282` and newer ignore telemetry keys in the project files
+  `.claude/settings.json` and `.claude/settings.local.json`; they work only in user or managed
+  settings. The installer therefore writes them into `~/.claude/settings.json` (backup in
+  `~/.claude/settings.json.artisyn-bak`) and mirrors them into the project's
+  `.claude/settings.local.json` for older Claude Code versions. Users restart Claude Code after an
+  install or upgrade.
+- **An existing collector.** When a user already sends OTEL to another collector, the installer
+  asks what to do, or takes `--otel-existing=proxy|keep|replace`: `proxy` forwards everything
+  unchanged to that collector (OTLP/HTTP JSON only), `keep` leaves it alone (no OTEL in Log Hub for
+  that user), `replace` sends the data only to Log Hub. A non-interactive run without the flag
+  means `keep`.
+- **Managed OTEL.** Organization-managed Claude Code settings (a `managed-settings.json` file, an
+  OS policy / MDM profile, or server-managed settings from the Claude admin console) that set the
+  OTEL endpoint or turn telemetry off win by design; users then see "OTEL is managed by your
+  organization" and only an admin can change it. Everything except the OTEL tabs keeps working.
+  The in-app help page "OTEL for organization admins" lists the managed settings that send the
+  data to Log Hub.
+
+Each session tells why its OTEL data is missing; the in-app help page "OTEL tab" has the
+troubleshooting list.
+
 ## Check the running version
 
 `docker compose logs -f app` until it reports ready, then open the app's Admin panel → System (or

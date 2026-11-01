@@ -96,7 +96,7 @@ test('@TOUR-05 session: detail tour @mode-a', async ({ stand, api, db, users, pa
   await walker.screen(page, 'session.summary', {
     check: () => expectTabsOnScreen(page, 'session', registryTabIds(walker, 'session')),
   });
-  for (const id of ['info', 'logs', 'bash', 'advisor', 'usage', 'change-surface', 'harness-usage', 'okf', 'tools', 'raw-logs', 'sysctx']) {
+  for (const id of ['info', 'logs', 'bash', 'advisor', 'usage', 'change-surface', 'harness-usage', 'okf', 'tools', 'raw-logs', 'sysctx', 'otel']) {
     await walker.screen(page, `session.${id}`, { go: clickTab('session', id) });
   }
 

@@ -1,0 +1,14 @@
+sequenceDiagram
+  participant H as Hook (repo session)
+  participant R as Shared receiver
+  Note over H,R: both read the per-user secret ~/.artisyn/otel/token
+  H->>R: POST /artisyn/hello {clientNonce, ownerHash}
+  alt another OS user's receiver
+    R-->>H: 409 owner-mismatch
+  else this user's receiver
+    R-->>H: 200 {serverNonce, proof = HMAC(token, clientNonce, serverNonce), capabilities}
+  end
+  H->>H: verify proof before sending anything
+  H->>R: POST /artisyn/register + x-artisyn-auth (HMAC over nonce, path, body)
+  R-->>H: 200 {ok, receiverVersion, capabilities}
+  Note over H,R: a missing or wrong signature gets 401 and is logged as auth-reject

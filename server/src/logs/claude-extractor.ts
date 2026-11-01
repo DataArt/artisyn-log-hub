@@ -8,6 +8,10 @@ import {
 import { maxVersion } from '../common/semver';
 import { isEditWriteTool } from './edit-tools';
 import {
+  computeSessionListFlags,
+  type SessionListFlags,
+} from './session-list-flags';
+import {
   accumulateToolCall,
   classifyToolOutcome,
   countCommits,
@@ -281,6 +285,13 @@ export interface ClaudeStats {
    * per call.
    */
   callTokens: Required<SessionCallTokens>;
+  /**
+   * Session-list flags (`session_stats.main_model` / `has_workflow` / `has_main_assistant`,
+   * migration 0080) — see `session-list-flags.ts`. `null` for sub-agent logs
+   * (`isSubagentLog`), so a sub-agent upload or recompute never overwrites the root
+   * session's flags.
+   */
+  listFlags: SessionListFlags | null;
 }
 
 /** A `tool_use` block awaiting its matching `tool_result`, collected during the walk. */
@@ -1316,6 +1327,7 @@ export function extractClaudeStats(
     claudeVersion: maxVersion(versions),
     requestIds: [...requestIds],
     callTokens,
+    listFlags: isSubagentLog ? null : computeSessionListFlags(lines),
   };
 }
 

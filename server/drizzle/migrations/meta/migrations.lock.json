@@ -790,6 +790,56 @@
         "06d9dee021933db1435c8137b07e53f2fc513e5625045ec23c3a7aa3ccb90276",
         "6870592fbceda3e43b80a8ccd238514a8437237f462111cc631ac5b26379b0aa"
       ]
+    },
+    {
+      "idx": 78,
+      "tag": "0078_otel_tabs_traces",
+      "when": 1791244800000,
+      "sha256": "8924142e3645a6ff4a42df17592ef198c24d7f8d89475f579018491663c8f0e8",
+      "acceptedHashes": [
+        "163d275feed0101ba35103921f55ddf142378ec2368c933795e5521cf7bdd262",
+        "8924142e3645a6ff4a42df17592ef198c24d7f8d89475f579018491663c8f0e8"
+      ]
+    },
+    {
+      "idx": 79,
+      "tag": "0079_otel_status",
+      "when": 1791331200000,
+      "sha256": "6f123439fc780fd738ce5616c3f359cf8fa7910760e82fdf8af626a1b67e0008",
+      "acceptedHashes": [
+        "0743f0c1f204ce50ee12e696b8474da496dbd0af0075b1c1fb1e495c9a8b317c",
+        "6f123439fc780fd738ce5616c3f359cf8fa7910760e82fdf8af626a1b67e0008"
+      ]
+    },
+    {
+      "idx": 80,
+      "tag": "0080_session_list_flags",
+      "when": 1791417600000,
+      "sha256": "5f3064dccff9153c94d13251295117e160b71c6f4cdd81e8d280244893da34cc",
+      "acceptedHashes": [
+        "461f316a3befe68c2ab8c83a7cb1642d62a8a1c0be7d3fd93dd5f6e668ef7698",
+        "5f3064dccff9153c94d13251295117e160b71c6f4cdd81e8d280244893da34cc"
+      ]
+    },
+    {
+      "idx": 81,
+      "tag": "0081_session_stats_claude_line_count",
+      "when": 1791504000000,
+      "sha256": "87ad6eda25e1c074263ce4b9adecd74aea28324f618652b90071f1fbf0bc5110",
+      "acceptedHashes": [
+        "6cc77609a15dcd74c01df188c9570ecd3d959e8778239b4a9c5f703930fabc07",
+        "87ad6eda25e1c074263ce4b9adecd74aea28324f618652b90071f1fbf0bc5110"
+      ]
+    },
+    {
+      "idx": 82,
+      "tag": "0082_team_repo_recompute_queue",
+      "when": 1791590400000,
+      "sha256": "e2363bf90d8bed721338d1461e0b753d1a969baea1f023654fac7d01dbdcafd8",
+      "acceptedHashes": [
+        "e2363bf90d8bed721338d1461e0b753d1a969baea1f023654fac7d01dbdcafd8",
+        "fa86ce81674a83c1c8c659c024da5fa0ae2458aa1ca68417a9f778b6eb355779"
+      ]
     }
   ]
 }

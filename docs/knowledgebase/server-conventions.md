@@ -4,7 +4,7 @@ title: "Server Conventions"
 description: "Backend implementation patterns: DB query optimization, Argon2id password hashing, performance testing, and pino logging."
 tags:
   - server
-timestamp: "2026-07-20T16:28:47+04:00"
+timestamp: "2026-11-01T00:00:00+04:00"
 ---
 
 - avoid n+1 pattern when quering DB
@@ -62,13 +62,14 @@ This is equivalent to `tsc --project perf-tests/tsconfig.json && node perf-tests
 
 | File | Purpose |
 |---|---|
-| `run.ts` | Entry point — auth setup, data seeding, orchestration, report saving |
-| `runner.ts` | Executes scenarios with sliding-window parallelism; computes p50/p95/p99 stats |
+| `run.ts` | Entry point — auth setup, data seeding (normal + heavy), read-only target flow, orchestration, report saving, budget exit code |
+| `runner.ts` | Executes scenarios with sliding-window parallelism and per-scenario overrides; per-request timeout; computes p50/p95/p99 stats |
 | `scenarios.ts` | Defines all test scenarios (auth, logs, repos, teams, invitations, health) |
 | `auth-client.ts` | Manages test user lifecycle and attaches auth headers to requests |
-| `data.ts` | Generates synthetic artisyn/claude NDJSON payloads |
+| `data.ts` | Generates synthetic artisyn/claude NDJSON payloads, incl. `makeHeavyClaudeNdjson()` (~5 MB transcripts) |
 | `reporter.ts` | Saves JSON results and renders an HTML comparison report |
-| `config.ts` | Loads config from `constants.json` with env-var overrides |
+| `config.ts` | Loads config from `constants.json` with env-var overrides (incl. the `PERF_*` read-only target vars) |
+| `budgets.json` / `budgets.ts` | Absolute p95 budgets per scenario; `loadBudgets()`, `evaluateBudgets()`, `printBudgetReport()` |
 | `types.ts` | Shared TypeScript interfaces |
 
 **Execution model:**
@@ -76,6 +77,32 @@ This is equivalent to `tsc --project perf-tests/tsconfig.json && node perf-tests
 - Scenarios run **sequentially** one after another.
 - Within each scenario, a **sliding-window concurrency** approach is used: up to `parallelRunsPerScenario` requests are in-flight simultaneously. Once the window is full, the runner waits for one to complete before dispatching the next.
 - Each scenario runs `warmupIterations` sequential warm-up requests first (not timed), then `iterations` timed requests.
+- **Per-scenario overrides:** a `Scenario` may set its own `iterations`, `warmupIterations` and `parallel`, which win over
+  the global config (e.g. every `*-heavy` scenario runs 20 timed / 2 warm-up requests, one at a time).
+- **Per-request timeout:** every timed request is capped at `requestTimeoutMs` (30 000 ms): a request that takes
+  longer counts as an error instead of hanging the run, and `AuthClient.fetch` adds an
+  `AbortSignal.timeout(requestTimeoutMs)` when the caller passed no signal.
+
+**Heavy seed:** besides the normal seed, a run seeds one extra repository (`perf-heavy-repo-<uuid>`) with 12 sessions,
+each an artisyn log plus a ~5 MB claude transcript (`makeHeavyClaudeNdjson`: turns with `message.id` / `model` /
+`usage`, Write tool_use blocks with ~4 KB of content, tool_result blocks, some sidechain lines; the padding is random
+text so the jsonb does not compress — each body is above Postgres' default 4 MB `work_mem`, the shape that made the
+old per-line list query slow; 30 x 1 MB of compressible text let it pass); every 5th carries a `Workflow` tool_use and one
+`claude-subagent` child. Every read endpoint of a repository and of one session runs against that repository too, as
+a `-heavy` twin of the regular scenario (`repos:sessions-heavy`, `repos:analytics-timeline-heavy`,
+`repos:session-logs-heavy`, … — `repoReadScenarios()` / `sessionReadScenarios()` in `scenarios.ts` build both
+variants from one list, the session ones on the first heavy session, which has the Workflow call and the sub-agent).
+A new read endpoint goes into those lists, so a query that scans stored transcripts fails its budget here, not on a
+real instance. A failed heavy upload aborts the run
+(non-zero exit), so a budget can never pass because its scenario silently did not run. Its ids go to the
+`IdCollector` and are cleaned up like the rest.
+
+**Budgets:** `server/perf-tests/budgets.json` maps a scenario name to an absolute `p95Ms` budget
+(`repos:sessions` and every `*-heavy` scenario: 500 ms — `repos:hook-state` has no heavy twin, the heavy repo has no
+hook state). After the baseline comparison the run prints a budget report:
+each budget is **pass**, **fail** (p95 above the budget, or any error) or **skipped** (scenario not run). Any fail sets
+`process.exitCode = 1` (after cleanup), so `npm run perf` exits non-zero. Budgets are independent of the
+baseline-relative 20 % rule below.
 
 **Cleanup:** a run deletes everything it created, in the `finally` block of `main()` in `run.ts`, so it also
 runs after a failed scenario. Created ids are recorded during the run in an `IdCollector` (`types.ts`): session
@@ -96,7 +123,21 @@ not cleaned, because its rows can be shared with real data.
 
 All defaults can be overridden via environment variables: `PERF_BASE_URL`, `PERF_ITERATIONS`, `PERF_WARMUP`, `PERF_PARALLEL`, `PERF_OUTPUT_DIR`.
 
-**Output:** JSON and HTML reports are written to `tmp/perftests/` (relative to repo root, gitignored). Each run saves a timestamped result file and optionally compares against a stored baseline; the HTML report renders a side-by-side table.
+**Read-only target mode** (measure an existing instance without changing it):
+
+| Variable | Meaning |
+|---|---|
+| `PERF_EMAIL` / `PERF_PASSWORD` | Sign in (login, or identify in auth mode `none`) as this existing user instead of the test user; never signs up |
+| `PERF_REPO_ID` | Repository to measure; implies read-only mode. The run first GETs its session list and aborts (non-zero exit, naming the repo id and `PERF_EMAIL`) when it fails or is empty; the newest session becomes the seed session |
+| `PERF_READONLY=1` | Read-only mode without a fixed repository |
+
+In read-only mode the run needs no `DATABASE_URL`, creates no API key, seeds nothing (no normal or heavy seed, so
+`repos:sessions-heavy` is reported as skipped), runs no scenario marked `writes: true` (every POST/PUT/PATCH/DELETE
+scenario except `auth:login`, announced in one "Skipping … — read-only mode" line) and skips `cleanupDb`. The
+banner prints `Mode: read-only (target repo N)`. Example:
+`PERF_BASE_URL=http://localhost:5003 PERF_EMAIL=<owner> PERF_REPO_ID=1 npm run perf`.
+
+**Output:** JSON and HTML reports are written to `tmp/perftests/` (relative to repo root, gitignored). Each run saves a timestamped result file and optionally compares against a stored baseline; the HTML report renders a side-by-side table. A run in read-only mode or with `PERF_BASE_URL` set writes to its own per-target sub-folder `tmp/perftests/targets/<host>_<port>-repo<id|seed>/`, so a remote target's baseline never mixes with the local one.
 
 **Performance regression gate:** After any server code change, run `npm run perf` and confirm that no metric degrades by more than 20% relative to the previous baseline. Stop and ask the user if degradation exceeds this threshold.
 

@@ -375,4 +375,93 @@ test('@S-INGEST-02 first v2 upload: repository, branch, user, context; re-upload
       'COALESCE: an already-bound session never moves to a later ref',
     ).toBe(SNAP_SHARED);
   });
+
+  await test.step('11. otel-status (hook 2.30.0): the latest event by timestamp is stored, an older upload never moves it back, an unknown state/reason is stored as «unknown», and the artisyn end_time ignores the event', async () => {
+    const sidOtel = `sess-otel-status-${run}`;
+    const statusLine = (hms: string, state: string, reason: string | null, logs: number) => ({
+      type: 'otel-status',
+      timestamp: at(hms),
+      sessionId: sidOtel,
+      state,
+      reason,
+      detail: null,
+      received: { logs, metrics: 0, spans: 0, firstAt: logs > 0 ? at('15:01:00') : null },
+      claudeVersion: '2.1.300',
+      forward: 'off',
+      hookVersion: '2.30.0',
+      receiverVersion: '2.30.0',
+    });
+    const stored = async () =>
+      (
+        await db.query<{
+          otel_state: string | null;
+          otel_reason: string | null;
+          ts: string | null;
+          logs: string | null;
+          end_time: Date | null;
+        }>(
+          `SELECT ss.otel_state, ss.otel_reason, ss.otel_status ->> 'timestamp' AS ts,
+                  ss.otel_status -> 'received' ->> 'logs' AS logs, l.end_time
+             FROM sessions s
+             LEFT JOIN session_stats ss ON ss.session_id = s.id
+             LEFT JOIN logs l ON l.session_id = s.id AND l.log_type = 'artisyn'
+            WHERE s.session_id = $1`,
+          [sidOtel],
+        )
+      ).rows[0];
+    const endTime = new Date(at('15:04:00')).toISOString();
+
+    // The hook appends the event to the session's artisyn log and uploads the whole log, so
+    // every body below carries the activity lines (15:00 → 15:04) too.
+    const activity = [
+      {
+        event: 'prompt_start',
+        timestamp: at('15:00:00'),
+        session_id: sidOtel,
+        prompt: `OTEL status ${run}`,
+        git: { repo: httpsUrl, branch: 'main' },
+      },
+      { event: 'prompt_stop', timestamp: at('15:04:00'), session_id: sidOtel },
+    ];
+    const first = [statusLine('15:06:00', 'none', 'not-configured', 0), statusLine('15:10:00', 'partial', 'managed-endpoint', 3)];
+
+    // Two events in one body: the later one (15:10) wins.
+    await send(key.key, sidOtel, 'artisyn', ndjson([...activity, ...first]));
+    await queueA();
+    let row = await stored();
+    expect(row, 'the latest event of the body').toMatchObject({
+      otel_state: 'partial',
+      otel_reason: 'managed-endpoint',
+      ts: new Date(at('15:10:00')).toISOString(),
+      logs: '3',
+    });
+    expect(row.end_time?.toISOString(), 'end_time stays at the last activity line').toBe(endTime);
+
+    // A late retry of an older body, whose latest event is 15:08, does not overwrite the stored
+    // 15:10 one.
+    await send(key.key, sidOtel, 'artisyn', ndjson([...activity, statusLine('15:08:00', 'ok', null, 9)]));
+    await queueA();
+    row = await stored();
+    expect(row, 'an older event never moves the status back').toMatchObject({
+      otel_state: 'partial',
+      otel_reason: 'managed-endpoint',
+      ts: new Date(at('15:10:00')).toISOString(),
+    });
+
+    // A newer event with values this server does not know is stored as «unknown».
+    await send(
+      key.key,
+      sidOtel,
+      'artisyn',
+      ndjson([...activity, ...first, statusLine('15:20:00', 'weird', 'galaxy-brain', 0)]),
+    );
+    await queueA();
+    row = await stored();
+    expect(row, 'unknown state and reason → unknown').toMatchObject({
+      otel_state: 'unknown',
+      otel_reason: 'unknown',
+      ts: new Date(at('15:20:00')).toISOString(),
+    });
+    expect(row.end_time?.toISOString(), 'end_time never follows an otel-status timestamp').toBe(endTime);
+  });
 });

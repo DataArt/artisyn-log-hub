@@ -1,0 +1,8 @@
+flowchart LR
+  hook["Hook at Stop / SessionEnd"] -->|"session-status (authenticated)"| rcv["Receiver: records received<br/>logs · metrics · traces"]
+  hook --> why["Why: managed settings,<br/>effective config, Claude Code version"]
+  rcv --> ev["otel-status event<br/>state ok · partial · none + reason"]
+  why --> ev
+  ev -->|"normal upload"| srv["Log Hub server<br/>session_stats"]
+  srv --> ui1["Session tab: reason panel<br/>or partial banner"]
+  srv --> ui2["Repo / team tab: coverage banner,<br/>reason chips, Sessions with OTEL tile"]

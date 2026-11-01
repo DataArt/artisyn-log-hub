@@ -30,6 +30,12 @@ import { ModelPricingController } from './model-pricing.controller';
 import { OkfFactsController } from './okf/okf-facts.controller';
 import { OkfFactsService } from './okf/okf-facts.service';
 import { OkfUsageService } from './okf/okf-usage.service';
+import { OtelFactsController } from './otel/otel-facts.controller';
+import { OtelFactsReader } from './otel/otel-facts.reader';
+import { OtelTeamFactsController } from './otel/otel-team-facts.controller';
+import { OtelRealtimeController } from './otel/otel-realtime.controller';
+import { OtelRealtimeService } from './otel/otel-realtime.service';
+import { OtelProjectionService } from './otel/otel-projection.service';
 import { RepoBackfillService } from './repo-backfill.service';
 import { RepositoriesController } from './repositories.controller';
 import { RepositoriesService } from './repositories.service';
@@ -77,6 +83,11 @@ import { UploadQueueService } from './upload-queue.service';
     // Tools/MCP monitoring (DD-24): the tab's UI routes and the hook's config route.
     ToolMonitoringController,
     ToolMonitoringHookController,
+    // OTEL tabs (2026-10-30 otel-tabs-traces): the hook's realtime ingest route (DD-17).
+    OtelRealtimeController,
+    // OTEL tabs: the repository / session tab read routes (DD-6, DD-19).
+    OtelFactsController,
+    OtelTeamFactsController,
   ],
   providers: [
     LogsService,
@@ -121,6 +132,13 @@ import { UploadQueueService } from './upload-queue.service';
     // Background drain that rebuilds stale session_tool_usage trees (DD-7); LogsService nudges
     // it after each ingest commit.
     ToolUsageRebuildService,
+    // OTEL tabs: synchronous realtime ingest behind OtelRealtimeController (DD-17).
+    OtelRealtimeService,
+    // OTEL tabs: background drain projecting logs_otel chunks into the OTEL facts, draining the
+    // reclassification queue and cleaning up deleted roots (DD-16).
+    OtelProjectionService,
+    // OTEL tabs: the read model behind OtelFactsController (DD-2 reader rule, DD-22 masking).
+    OtelFactsReader,
   ],
   exports: [RepositoriesService, HookStateService, UploadQueueService],
 })

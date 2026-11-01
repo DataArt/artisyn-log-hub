@@ -1,6 +1,10 @@
 import { useRef } from 'react';
+import { X } from 'lucide-react';
 import type { UseQueryResult } from '@tanstack/react-query';
-import type { RepositorySession } from '../../../models/repositories';
+import type {
+  OtelReasonKey,
+  RepositorySession,
+} from '../../../models/repositories';
 import type { ModelPricingMap } from '../../../models/pricing';
 import type { SessionLogsData } from '../../api';
 import { useDraggableWidth } from '../../hooks/useDraggableWidth';
@@ -14,6 +18,7 @@ import type { ParsedSession } from './session-log/types';
 import type { RepoConfig } from '../../../models/repositories';
 
 import type { SessionTab } from './useRepositoryViewState';
+import { otelReasonShortLabel, otelReasonTooltip } from './otel/otel.constants';
 
 export interface RepositorySessionsPanelProps {
   sessions: RepositorySession[];
@@ -32,6 +37,12 @@ export interface RepositorySessionsPanelProps {
   teamId?: number;
   viewMode: ViewMode;
   onViewModeChange: (mode: ViewMode) => void;
+  /**
+   * The active sessions list `otelReason` filter, set by an OTEL tab coverage chip
+   * (2026-10-30 otel-shared-receiver, DD-33); shown as a removable `OTEL: <reason> ×` chip.
+   */
+  otelReasonFilter?: OtelReasonKey | null;
+  onOtelReasonFilterClear?: () => void;
   filterByUserEmail?: string;
   onShowAllUsers: () => void;
   sessionTab: SessionTab;
@@ -75,6 +86,8 @@ export function RepositorySessionsPanel({
   teamId,
   viewMode,
   onViewModeChange,
+  otelReasonFilter = null,
+  onOtelReasonFilterClear,
   filterByUserEmail,
   onShowAllUsers,
   sessionTab,
@@ -121,6 +134,23 @@ export function RepositorySessionsPanel({
         style={{ width: sessionListWidth }}
         className="shrink-0 flex flex-col overflow-hidden"
       >
+        {otelReasonFilter !== null && (
+          <div className="shrink-0 border-b border-border px-2 py-1.5">
+            <button
+              type="button"
+              onClick={onOtelReasonFilterClear}
+              title={`Sessions without OTEL data for this reason: ${otelReasonTooltip(otelReasonFilter)} Click to clear the filter.`}
+              className="inline-flex max-w-full items-center gap-1 rounded bg-primary px-1.5 py-0.5 text-xs text-primary-foreground hover:bg-primary/90"
+              data-testid="session-list-otel-reason-chip"
+              data-reason={otelReasonFilter}
+            >
+              <span className="truncate">
+                OTEL: {otelReasonShortLabel(otelReasonFilter)}
+              </span>
+              <X className="size-3 shrink-0" aria-label="Clear OTEL filter" />
+            </button>
+          </div>
+        )}
         <SessionListPanel
           sessions={sessions}
           isLoading={sessionsLoading}

@@ -7,6 +7,7 @@ import { buildAttributionChips } from './session-list/session-list-helpers';
 import { formatDuration, formatInt } from './session-log/log-parser';
 import { CostBreakdownTooltip } from '../../components/CostBreakdownTooltip';
 import { NoPricingBadge } from '../../components/NoPricingBadge';
+import { UtilityCallsMarker } from '../../components/UtilityCallsMarker';
 import {
   costDiscrepancyHint,
   noPriceHint,
@@ -278,6 +279,9 @@ export function SessionDetailHeader({
                 >
                   <AlertTriangle className="size-3.5 shrink-0 text-amber-500" />
                 </span>
+              )}
+              {session.costBreakdown.costExcludesUtilityCalls === true && (
+                <UtilityCallsMarker />
               )}
             </span>
           </HeaderStat>

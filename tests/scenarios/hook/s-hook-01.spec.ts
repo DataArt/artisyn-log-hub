@@ -26,16 +26,34 @@
 //     SessionEnd ×4, upload lock ×4, hook-status, one-line-per-run logging ×4 (≈ 35)
 //   - hook/.claude/telemetry_tool/__tests__/manifest-bounded.test.js (5)
 //
+// Step 16 (2026-10-30 OTEL tabs, AC-13, old-server half): the 2.29.0 OTEL receiver against a Log
+// Hub that predates `POST /api/v2/otel-realtime` (the fake hub answers it 404). One realtime
+// batch is tried, the 404 switches the channel off (`rt-disable` in receiver.log) and nothing more
+// is sent; the chunk files — spans included — still upload through the regular
+// `claude-otel` route, exactly as to any server.
+//
+// Steps 17–19 (2026-10-30 shared receiver, DD-15/DD-16, AC-C2): the `otel-status` artisyn line
+// against a running shared receiver. It is written at the first Stop that has records (here
+// `partial`: logs only), again when the state improves (`ok` once metrics arrive) and never after
+// `ok`; a session with no record gets one `none` line at SessionEnd. The fake hub stands for an
+// old Log Hub: it stores the line untouched and the upload succeeds.
+//
 // Steps 12–15 cover the ARTISYN_PROJECT_ROOT override (git-context.js / project-root-override.js):
 // in a linked worktree it makes the worktree the project root, and it is ignored when unset or
 // when it does not contain the cwd.
 import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as zlib from 'zlib';
 import { test, expect } from '../fixtures';
 import {
   claudeProjectDir,
   copyToolDir,
+  copyToolDirTo,
+  pathWith,
+  startSharedReceiver,
+  writeFakeClaude,
+  writeSharedState,
   makeFakeGitRepo,
   makeFakeHome,
   isRecord,
@@ -52,16 +70,27 @@ import {
   workDir,
   writeConfig,
   writeFakeMcpServer,
+  rawRequest,
+  runNodeScript,
+  startReceiver,
+  stopReceiver,
   QUIET_HOOK_CONFIG,
+  type ReceiverProcess,
   type FakeLogHub,
   type FakeRequest,
 } from '../helpers/hook-process';
+import { callLines, otelTurn, spanLines } from '../fixtures/otel/otel-lines';
 
 const API_KEY = 'k-test-123456';
 const HARNESS_TYPES = ['harness-snapshot-ref', 'harness-snapshot'];
 
 function line(obj: object): string {
   return `${JSON.stringify(obj)}\n`;
+}
+
+/** A request body as text, gunzipped when the hook compressed it. */
+function bodyText(req: FakeRequest): string {
+  return (req.headers['content-encoding'] === 'gzip' ? zlib.gunzipSync(req.body) : req.body).toString('utf8');
 }
 
 function bodyTypes(req: FakeRequest): string[] {
@@ -72,6 +101,9 @@ test('@S-HOOK-01 a Stop run uploads the right files in the right order and never
   test.setTimeout(120_000);
   const dirs = tempDirs();
   let hub: FakeLogHub | undefined;
+  let oldHub: FakeLogHub | undefined;
+  let receiver: ReceiverProcess | undefined;
+  let sharedReceiver: ReceiverProcess | undefined;
   let snapshotId = '';
   let okfSnapshotId = '';
   try {
@@ -397,7 +429,129 @@ test('@S-HOOK-01 a Stop run uploads the right files in the right order and never
       expect(normalizePath(String(gitInfo.root))).toBe(normalizePath(mainRepo));
       expect(fs.existsSync(workDir(elsewhere)), 'nothing written into the unrelated dir').toBe(false);
     });
+
+    await test.step('16. AC-13 (old server): the receiver tries one realtime batch, gets 404 and goes silent; the chunks (logs and spans) still upload as claude-otel', async () => {
+      oldHub = await startFakeLogHub((req) => (req.path === '/api/v2/otel-realtime' ? { status: 404, body: '{"message":"Cannot POST"}' } : { status: 201, body: JSON.stringify({ warnings: [] }) }));
+      const repo = makeFakeGitRepo(dirs, { remote: 'git@git.arrakis.test:scn/hook01/old-server.git' });
+      writeConfig(repo, { base: { ...QUIET_HOOK_CONFIG, serverUrl: oldHub.url, sendLogsTimeoutMs: 5000 }, local: { apiKey: API_KEY } });
+      const otelDir = path.join(telemetryDir(repo), 'otel');
+      fs.mkdirSync(otelDir, { recursive: true });
+      const started = await startReceiver(toolDir, { dir: otelDir, owner: { gitRoot: repo, repo: 'git@git.arrakis.test:scn/hook01/old-server.git' } });
+      receiver = started.receiver;
+      const sid = 'rt-old-1';
+      const turn = otelTurn('hk01', new Date(Date.now() - 6 * 60_000));
+      const resource = { attributes: [{ key: 'service.name', value: { stringValue: 'claude-code' } }] };
+      const post = async (route: string, body: object) => {
+        const res = await rawRequest(started.port, route, body);
+        expect(res.status, `${route}: ${res.body}`).toBe(200);
+      };
+      const realtime = () => oldHub!.requests.filter((r) => r.path === '/api/v2/otel-realtime');
+      await post('/v1/logs', { resourceLogs: [{ resource, scopeLogs: [{ scope: { name: 'com.anthropic.claude_code.events' }, logRecords: callLines(sid, turn).map((l) => l.record) }] }] });
+      await post('/v1/traces', { resourceSpans: [{ resource, scopeSpans: [{ scope: { name: 'com.anthropic.claude_code.tracing' }, spans: spanLines(sid, turn).map((l) => l.record) }] }] });
+      await expect.poll(() => realtime().length, { timeout: 15_000 }).toBe(1);
+      const batch: unknown = JSON.parse(bodyText(realtime()[0]));
+      expect(isRecord(batch) && batch.sessionId === sid && batch.batchSeq === 1, 'one batch of this session').toBe(true);
+      expect(realtime()[0].headers['x-api-key']).toBe(API_KEY);
+
+      // More data after the 404: it lands in chunk files only.
+      await post('/v1/logs', { resourceLogs: [{ resource, scopeLogs: [{ scope: { name: 'com.anthropic.claude_code.events' }, logRecords: callLines('rt-old-2', otelTurn('hk02', new Date())).map((l) => l.record) }] }] });
+      await new Promise((resolve) => setTimeout(resolve, 12_000));
+      expect(realtime(), 'silence after the 404: no retry, no second session').toHaveLength(1);
+      expect(fs.readFileSync(path.join(otelDir, 'receiver.log'), 'utf8')).toMatch(/rt-disable/);
+      await stopReceiver(receiver);
+
+      const sweep = await runNodeScript(path.join(toolDir, 'send-logs-hook.js'), repo, null, { home, argv: ['--otel-sweep', '--cwd', repo] });
+      expect(sweep.code, sweep.stderr).toBe(0);
+      const uploads = oldHub.requests.filter((r) => r.path === '/api/v2/logs');
+      expect(new Set(uploads.map((r) => r.type))).toEqual(new Set(['claude-otel']));
+      expect(new Set(uploads.map((r) => r.sessionId))).toEqual(new Set([sid, 'rt-old-2']));
+      const lines = uploads.filter((r) => r.sessionId === sid).flatMap((r) => ndjsonLines(bodyText(r)));
+      expect(lines.filter((l) => l.signal === 'spans')).toHaveLength(Object.keys(turn.spans).length);
+      expect(lines.filter((l) => l.signal === 'logs')).toHaveLength(Object.keys(turn.calls).length);
+      expect(realtime(), 'the sweep sends no realtime batch either').toHaveLength(1);
+    });
+
+    // Steps 17–19 (2026-10-30 shared receiver, DD-15/DD-16): the `otel-status` line. A fake home
+    // with the installer's shared state, the hook as a plugin under `~/.claude/plugins/` (so the
+    // receiver accepts its send-logs-hook.js as the registered uploader), a shared receiver already
+    // running, and the fake hub — an old Log Hub that knows nothing about `otel-status`.
+    const shHome = makeFakeHome(dirs);
+    const shState = await writeSharedState(shHome);
+    const shTool = copyToolDirTo(path.join(shHome, '.claude', 'plugins', 'log-hub-hooks', 'scripts'));
+    const shVersion: string = JSON.parse(fs.readFileSync(path.join(shTool, 'version.json'), 'utf8')).version;
+    const shRepo = makeFakeGitRepo(dirs, { remote: 'git@git.arrakis.test:scn/hook01/shared.git' });
+    fs.mkdirSync(path.join(telemetryDir(shRepo), 'otel'), { recursive: true });
+    const shEnv = { ARTISYN_MANAGED_SETTINGS_DIR: dirs.make('no-managed'), ...pathWith(writeFakeClaude(dirs, 'fail').dir) };
+    const shRun = (event: 'Stop' | 'SessionEnd', sid: string) =>
+      runHook(shTool, { hook_event_name: event, session_id: sid, cwd: shRepo }, { home: shHome, env: shEnv });
+    const statusLog = (sid: string) => readHookLog(shRepo, 'send-logs-hook.js').filter((l) => l.includes(`[${sid}]`) && l.includes('otel-status state='));
+    /** The `otel-status` lines of the latest artisyn upload of `sid`. */
+    const uploadedStatus = (sid: string) => {
+      const uploads = hub!.requests.filter((r) => r.type === 'artisyn' && r.sessionId === sid);
+      expect(uploads.length, `artisyn/${sid} uploaded`).toBeGreaterThan(0);
+      return ndjsonLines(bodyText(uploads[uploads.length - 1])).filter((e) => e.type === 'otel-status');
+    };
+    const resource = { attributes: [{ key: 'service.name', value: { stringValue: 'claude-code' } }] };
+    const sessionAttr = (sid: string) => [{ key: 'session.id', value: { stringValue: sid } }];
+
+    await test.step('17. otel-status at the first Stop with records: records arrived before the register, the Stop re-arm registers the session, the line says partial (logs only) and rides on the artisyn upload an old hub accepts', async () => {
+      writeConfig(shRepo, {
+        base: { ...QUIET_HOOK_CONFIG, otelEnabled: true, otelRealtime: false, serverUrl: hub!.url, sendLogsTimeoutMs: 5000 },
+        local: { apiKey: API_KEY },
+      });
+      sharedReceiver = await startSharedReceiver(shTool, { home: shHome, stateDir: shState.stateDir, port: shState.port });
+      const logs = await rawRequest(shState.port, '/v1/logs', {
+        resourceLogs: [{ resource, scopeLogs: [{ scope: { name: 'com.anthropic.claude_code.events' }, logRecords: [{ timeUnixNano: '1735689600000000001', body: { stringValue: 'claude_code.user_prompt' }, attributes: sessionAttr('os-1') }] }] }],
+      });
+      expect(logs.status).toBe(200);
+      hub!.requests.length = 0;
+      const stop = await shRun('Stop', 'os-1');
+      expect(stop.code, stop.stderr).toBe(0);
+      expect(statusLog('os-1'), readHookLog(shRepo).join('\n')).toHaveLength(1);
+      expect(statusLog('os-1')[0]).toMatch(/otel-status state=partial reason=not-configured detail=null received=1\/0\/0 phase=stop/);
+      const [line] = uploadedStatus('os-1');
+      expect(line).toMatchObject({
+        sessionId: 'os-1', state: 'partial', reason: 'not-configured', detail: null,
+        received: { logs: 1, metrics: 0, spans: 0 }, forward: 'off', hookVersion: shVersion, receiverVersion: shVersion,
+      });
+      expect(String((line.received as Record<string, unknown>).firstAt)).toMatch(/^\d{4}-\d{2}-\d{2}T/);
+      // An old hub stores the artisyn file as is: the upload simply succeeds.
+      expect(readHookLog(shRepo, 'send-logs-hook.js').filter((l) => /\[result\] done: uploaded=\d+ skipped=\d+ failed=0 /.test(l))).toHaveLength(1);
+
+      expect((await shRun('Stop', 'os-1')).code).toBe(0);
+      expect(statusLog('os-1'), 'the same state is not written twice').toHaveLength(1);
+    });
+
+    await test.step('18. a late correction: metrics arrive, the next Stop writes a second line with state ok; after ok nothing more is written, not even at SessionEnd', async () => {
+      const metrics = await rawRequest(shState.port, '/v1/metrics', {
+        resourceMetrics: [{ resource, scopeMetrics: [{ scope: { name: 'com.anthropic.claude_code' }, metrics: [{ name: 'claude_code.token.usage', unit: 'tokens', sum: { dataPoints: [{ attributes: sessionAttr('os-1'), asInt: '7', timeUnixNano: '1735689600000000500' }] } }] }] }],
+      });
+      expect(metrics.status).toBe(200);
+      hub!.requests.length = 0;
+      expect((await shRun('Stop', 'os-1')).code).toBe(0);
+      expect(statusLog('os-1')).toHaveLength(2);
+      expect(statusLog('os-1')[1]).toMatch(/otel-status state=ok reason=null detail=null received=1\/1\/0 phase=stop/);
+      expect(uploadedStatus('os-1').map((l) => [l.state, l.reason])).toEqual([['partial', 'not-configured'], ['ok', null]]);
+      expect((await shRun('SessionEnd', 'os-1')).code).toBe(0);
+      expect(statusLog('os-1')).toHaveLength(2);
+    });
+
+    await test.step('19. a session that never gets a record: nothing at Stop, one state=none line at SessionEnd, uploaded with zero counts', async () => {
+      hub!.requests.length = 0;
+      expect((await shRun('Stop', 'os-2')).code).toBe(0);
+      expect(statusLog('os-2')).toHaveLength(0);
+      expect((await shRun('SessionEnd', 'os-2')).code).toBe(0);
+      expect(statusLog('os-2')).toHaveLength(1);
+      expect(statusLog('os-2')[0]).toMatch(/otel-status state=none reason=not-configured detail=null received=0\/0\/0 phase=session-end/);
+      expect(uploadedStatus('os-2')).toEqual([
+        expect.objectContaining({ state: 'none', reason: 'not-configured', received: { logs: 0, metrics: 0, spans: 0, firstAt: null } }),
+      ]);
+      expect(readHookLog(shRepo, 'send-logs-hook.js').some((l) => /session-end flush done: uploaded=\d+ failed=0/.test(l))).toBe(true);
+    });
   } finally {
+    await stopReceiver(sharedReceiver);
+    await stopReceiver(receiver);
+    await oldHub?.close();
     await hub?.close();
     dirs.cleanup();
   }

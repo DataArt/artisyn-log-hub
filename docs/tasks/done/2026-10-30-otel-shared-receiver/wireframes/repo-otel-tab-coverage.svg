@@ -1,0 +1,112 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="900" viewBox="0 0 1200 900" font-family="Segoe UI, Arial, sans-serif" font-size="13">
+  <!-- Wireframe: repository OTEL tab (same layout on the team OTEL tab) with OTEL coverage (FR-C7, AC-C3, AC-G2) -->
+  <rect width="1200" height="900" fill="#ffffff"/>
+
+  <!-- top bar -->
+  <rect x="0" y="0" width="1200" height="44" fill="#fafafa" stroke="#e4e4e7"/>
+  <circle cx="22" cy="22" r="7" fill="#4f46e5"/>
+  <text x="40" y="27" font-size="14" font-weight="600" fill="#18181b">Artisyn Log Hub</text>
+  <text x="1150" y="27" font-weight="600" fill="#18181b">Edit email</text>
+
+  <!-- repo header + tabs -->
+  <text x="20" y="72" font-family="Consolas, monospace" font-size="14" fill="#18181b">https://github.com/acme/repo-b</text>
+  <text x="1060" y="72" fill="#52525b">Sessions: 42  Users: 3</text>
+  <line x1="0" y1="86" x2="1200" y2="86" stroke="#e4e4e7"/>
+  <text x="20" y="110" fill="#52525b">Sessions</text>
+  <text x="100" y="110" fill="#52525b">Analytics</text>
+  <text x="180" y="110" fill="#52525b">Reports</text>
+  <text x="250" y="110" fill="#52525b">Tools/MCP</text>
+  <text x="335" y="110" fill="#52525b">OKF</text>
+  <text x="380" y="110" font-weight="600" fill="#18181b">OTEL</text>
+  <rect x="376" y="118" width="40" height="2" fill="#18181b"/>
+  <text x="430" y="110" fill="#52525b">Settings</text>
+  <line x1="0" y1="124" x2="1200" y2="124" stroke="#e4e4e7"/>
+
+  <!-- title -->
+  <text x="20" y="160" font-size="16" font-weight="600" fill="#18181b">Cost over time</text>
+  <rect x="138" y="146" width="104" height="22" rx="11" fill="#eff6ff" stroke="#60a5fa"/>
+  <text x="150" y="161" font-size="12" fill="#1d4ed8">ⓘ Realtime data</text>
+  <text x="254" y="161" font-size="12" fill="#71717a">Claude Code per-call estimate (cost_usd) · bucketed by event time</text>
+
+  <!-- NEW: coverage banner -->
+  <rect x="20" y="182" width="1160" height="58" rx="4" fill="#eff6ff" stroke="#93c5fd"/>
+  <text x="36" y="205" font-weight="600" fill="#1e3a8a">OTEL for 30 of 42 sessions</text>
+  <text x="222" y="205" fill="#1e40af">— totals and averages below cover these 30 sessions only; the other 12 are not counted as zero.</text>
+  <text x="36" y="228" font-size="12" fill="#1e40af">Without OTEL:</text>
+  <rect x="120" y="215" width="118" height="18" rx="9" fill="#ffffff" stroke="#93c5fd"/>
+  <text x="130" y="228" font-size="11" fill="#1d4ed8">project-only · 7</text>
+  <rect x="246" y="215" width="122" height="18" rx="9" fill="#ffffff" stroke="#93c5fd"/>
+  <text x="256" y="228" font-size="11" fill="#1d4ed8">not-configured · 3</text>
+  <rect x="376" y="215" width="160" height="18" rx="9" fill="#ffffff" stroke="#93c5fd"/>
+  <text x="386" y="228" font-size="11" fill="#1d4ed8">no status (older hook) · 2</text>
+  <text x="1080" y="228" font-size="12" fill="#1d4ed8" text-decoration="underline">Why no OTEL?</text>
+
+  <!-- filters (unchanged) -->
+  <text x="20" y="272" fill="#52525b">Period</text>
+  <rect x="66" y="258" width="210" height="24" rx="3" fill="#ffffff" stroke="#d4d4d8"/>
+  <text x="76" y="275" fill="#18181b">24 h    7 d    </text>
+  <rect x="140" y="259" width="36" height="22" fill="#eff6ff"/>
+  <text x="146" y="275" fill="#1d4ed8">30 d</text>
+  <text x="186" y="275" fill="#18181b">90 d   Custom</text>
+  <text x="300" y="272" fill="#52525b">Model  [All models ▾]   Claude Code  [All versions ▾]   Calls  [All | Hidden only | In transcript]</text>
+
+  <!-- chart placeholder -->
+  <rect x="20" y="300" width="1160" height="260" fill="#ffffff" stroke="#e4e4e7"/>
+  <line x1="70" y1="530" x2="1160" y2="530" stroke="#a1a1aa"/>
+  <rect x="150" y="430" width="240" height="100" fill="#3b82f6"/>
+  <rect x="150" y="380" width="240" height="50" fill="#8b5cf6"/>
+  <rect x="150" y="374" width="240" height="6" fill="#ef4444"/>
+  <rect x="480" y="410" width="240" height="120" fill="#3b82f6"/>
+  <rect x="480" y="330" width="240" height="80" fill="#8b5cf6"/>
+  <rect x="480" y="322" width="240" height="8" fill="#ef4444"/>
+  <rect x="810" y="500" width="240" height="30" fill="#3b82f6"/>
+  <rect x="810" y="488" width="240" height="12" fill="#8b5cf6"/>
+  <text x="270" y="548" text-anchor="middle" font-size="11" fill="#71717a">10/28</text>
+  <text x="600" y="548" text-anchor="middle" font-size="11" fill="#71717a">10/29</text>
+  <text x="930" y="548" text-anchor="middle" font-size="11" fill="#71717a">10/30</text>
+
+  <!-- KPI tiles -->
+  <rect x="20" y="580" width="280" height="100" fill="#ffffff" stroke="#18181b"/>
+  <text x="36" y="604" font-size="12" fill="#52525b" text-decoration="underline">Total OTEL cost</text>
+  <text x="36" y="634" font-family="Consolas, monospace" font-size="20" font-weight="700" fill="#18181b">$278.95</text>
+  <text x="36" y="658" font-size="12" fill="#71717a">Claude Code estimate · 30 of 42 sessions</text>
+
+  <rect x="314" y="580" width="280" height="100" fill="#ffffff" stroke="#18181b"/>
+  <text x="330" y="604" font-size="12" fill="#52525b" text-decoration="underline">Per session</text>
+  <text x="330" y="634" font-family="Consolas, monospace" font-size="20" font-weight="700" fill="#18181b">$9.30</text>
+  <text x="330" y="658" font-size="12" fill="#71717a">median $2.98 · over OTEL sessions</text>
+
+  <rect x="608" y="580" width="280" height="100" fill="#ffffff" stroke="#18181b"/>
+  <text x="624" y="604" font-size="12" fill="#52525b" text-decoration="underline">API calls</text>
+  <text x="624" y="634" font-family="Consolas, monospace" font-size="20" font-weight="700" fill="#18181b">4,749</text>
+  <text x="624" y="658" font-size="12" fill="#71717a">3 models</text>
+
+  <!-- NEW: Sessions tile shows coverage -->
+  <rect x="902" y="580" width="278" height="100" fill="#ffffff" stroke="#2563eb" stroke-width="2"/>
+  <text x="918" y="604" font-size="12" fill="#52525b" text-decoration="underline">Sessions with OTEL</text>
+  <text x="918" y="634" font-family="Consolas, monospace" font-size="20" font-weight="700" fill="#18181b">30 / 42</text>
+  <rect x="918" y="646" width="244" height="6" rx="3" fill="#e4e4e7"/>
+  <rect x="918" y="646" width="174" height="6" rx="3" fill="#2563eb"/>
+  <text x="918" y="670" font-size="12" fill="#71717a">71 % coverage · 3 users</text>
+
+  <!-- empty-state variant -->
+  <text x="20" y="716" font-size="13" font-weight="600" fill="#18181b">Variant — 0 of M sessions have OTEL in the period (replaces chart + tiles)</text>
+  <rect x="300" y="730" width="600" height="150" rx="6" fill="#ffffff" stroke="#3f3f46" stroke-dasharray="4 3"/>
+  <text x="600" y="762" text-anchor="middle" font-size="15" font-weight="700" fill="#18181b">No OTEL data in this period (0 of 12 sessions)</text>
+  <text x="600" y="786" text-anchor="middle" fill="#52525b">Most sessions report: telemetry keys only in project settings —</text>
+  <text x="600" y="804" text-anchor="middle" fill="#52525b">ignored by Claude Code 2.1.282+. Re-run the installer and restart Claude Code.</text>
+  <rect x="390" y="822" width="130" height="34" rx="4" fill="#eff6ff" stroke="#93c5fd"/>
+  <text x="455" y="844" text-anchor="middle" fill="#1d4ed8">Show 1 month</text>
+  <rect x="532" y="822" width="170" height="34" rx="4" fill="#ffffff" stroke="#d4d4d8"/>
+  <text x="617" y="844" text-anchor="middle" fill="#18181b">Why no OTEL? (help)</text>
+  <rect x="714" y="822" width="100" height="34" rx="4" fill="#ffffff" stroke="#d4d4d8"/>
+  <text x="764" y="844" text-anchor="middle" fill="#18181b">Breakdown</text>
+
+  <text x="920" y="760" font-size="12" fill="#92400e">Notes</text>
+  <text x="920" y="780" font-size="12" fill="#92400e">• Banner hidden when all</text>
+  <text x="920" y="796" font-size="12" fill="#92400e">  sessions have OTEL.</text>
+  <text x="920" y="816" font-size="12" fill="#92400e">• Reason chips filter the</text>
+  <text x="920" y="832" font-size="12" fill="#92400e">  Sessions list.</text>
+  <text x="920" y="852" font-size="12" fill="#92400e">• Team OTEL tab: same banner,</text>
+  <text x="920" y="868" font-size="12" fill="#92400e">  counts across team repos.</text>
+</svg>

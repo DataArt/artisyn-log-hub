@@ -29,6 +29,7 @@ export type Actor =
   | 'outsider'
   | 'author'
   | 'manager'
+  | 'trainer'
   | 'ownerKey'
   | 'memberKey'
   | 'authorKey'

@@ -27,19 +27,51 @@ function round(v: number): number {
   return Math.round(v * 100) / 100;
 }
 
+interface RunOptions {
+  iterations: number;
+  warmupIterations: number;
+  requestTimeoutMs: number;
+}
+
+/**
+ * Runs one scenario call, resolving `{ ok: false }` once `timeoutMs` passes — a stalled request
+ * counts as an error at the timeout instead of hanging the whole run.
+ */
+async function callWithTimeout(
+  scenario: Scenario,
+  auth: AuthClient,
+  timeoutMs: number,
+): Promise<{ ok: boolean }> {
+  let timer: NodeJS.Timeout | undefined;
+  const timeout = new Promise<{ ok: boolean }>((resolve) => {
+    timer = setTimeout(() => resolve({ ok: false }), timeoutMs);
+  });
+  try {
+    return await Promise.race([scenario.fn(auth), timeout]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function runScenario(
   scenario: Scenario,
   auth: AuthClient,
-  config: { iterations: number; warmupIterations: number },
-  parallelLimit: number,
+  defaults: RunOptions,
+  defaultParallelLimit: number,
 ): Promise<ScenarioResult> {
+  // Per-scenario overrides (e.g. a heavy endpoint measured with fewer, serial calls).
+  const config = {
+    iterations: scenario.iterations ?? defaults.iterations,
+    warmupIterations: scenario.warmupIterations ?? defaults.warmupIterations,
+  };
+  const parallelLimit = Math.max(1, scenario.parallel ?? defaultParallelLimit);
   const label = scenario.name.padEnd(26);
   process.stdout.write(`  ${label} `);
 
   // Warmup runs (sequential, as before)
   for (let i = 0; i < config.warmupIterations; i++) {
     try {
-      await scenario.fn(auth);
+      await callWithTimeout(scenario, auth, defaults.requestTimeoutMs);
     } catch {
       // Warmup errors are ignored
     }
@@ -57,7 +89,11 @@ async function runScenario(
       const t0 = performance.now();
       let ok = false;
       try {
-        const result = await scenario.fn(auth);
+        const result = await callWithTimeout(
+          scenario,
+          auth,
+          defaults.requestTimeoutMs,
+        );
         ok = result.ok;
       } catch {
         ok = false;
@@ -110,6 +146,7 @@ export async function runAllScenarios(
     iterations: number;
     warmupIterations: number;
     parallelRunsPerScenario: number;
+    requestTimeoutMs: number;
   },
 ): Promise<ScenarioResult[]> {
   const results: ScenarioResult[] = [];
@@ -120,6 +157,7 @@ export async function runAllScenarios(
       {
         iterations: options.iterations,
         warmupIterations: options.warmupIterations,
+        requestTimeoutMs: options.requestTimeoutMs,
       },
       options.parallelRunsPerScenario,
     );

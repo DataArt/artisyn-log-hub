@@ -302,6 +302,17 @@ is then `null` (above). The CTE yields one row per root that has calls; roots wi
 have no row and callers `COALESCE` the utility cost to 0. It needs a `descendant_sessions` CTE
 over the same roots earlier in the `WITH`.
 
+**The OTEL tabs use the same rule, in TypeScript (2026-10-30).** The OTEL tabs' "hidden" calls are
+the utility calls above, decided per call by `classifyOtelCall` (`server/src/logs/otel/otel-classify.ts`)
+into `main` / `subagent` / `hidden` and stored in `otel_calls.structure`: `request_id` in the
+tree's `session_request_ids` → visible (`subagent` for a sub-agent transcript or an `agent:`
+source); otherwise the same `TRANSCRIPT_QUERY_SOURCES` / `agent:` fallback applies while the tree
+has no request ids **or** the call is still provisional (its transcript has not arrived yet);
+otherwise `hidden`. Once no call is provisional, the hidden set equals what `utilityCostsCte`
+classifies as utility. The OTEL tabs show Claude Code's own `cost_usd`, never the Log Hub price
+computed here. Details, the reclassification queue and the algorithm doc:
+[`otel-tabs.md`](otel-tabs.md) § "Call structure" and `algorithms/otel-facts.md`.
+
 ### `costBreakdown` and `totalCost`
 
 The sessions list (`GET /repositories/:repoId/sessions`, including `?branch=`) sends a

@@ -7,20 +7,32 @@
 //
 // Both modes write only git-ignored files of the worktree, in the installer's formats, and keep
 // every key they do not own:
-//   - `.artisyn/config/otel-port.json`       {port, allocatedAt}
-//   - `.claude/settings.local.json`          the OTEL `env` keys
+//   - `.claude/settings.local.json`          the OTEL `env` keys (+ `OTEL_RESOURCE_ATTRIBUTES`)
 //   - `.artisyn/config/log-hub.local.json`   serverUrl, otelReceiverPort (--static), apiKey (--loop)
+// `--static` also writes the per-OS-user OTEL state the shared receiver needs (hook 2.30.0+),
+// inside the container only:
+//   - `~/.artisyn/otel/port.json`            {version:1, port, allocatedAt} — `SANDBOX_OTEL_PORT`
+//   - `~/.artisyn/otel/token`                the receiver's shared secret, created when missing
+//   - `$CLAUDE_CONFIG_DIR/settings.json`     the user-scope OTEL `env` keys (Claude Code 2.1.282+
+//                                            reads telemetry keys only there)
+// and deletes a leftover pre-2.30.0 `.artisyn/config/otel-port.json`.
 // Tracked files (`.claude/settings.json`, `.artisyn/config/log-hub.json`) are only read.
 //
-// Env: SANDBOX_WORKTREE (container worktree path), SANDBOX_NAME, SANDBOX_HOST_EMAIL.
+// Env: SANDBOX_WORKTREE (container worktree path), SANDBOX_NAME, SANDBOX_HOST_EMAIL,
+// CLAUDE_CONFIG_DIR (the shared Claude profile).
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const SERVER = 'http://127.0.0.1:3000';
 // The hook's own config: the sandbox client URL and the hook's `OTEL_FALLBACK_PORT`.
 const SANDBOX_SERVER_URL = 'http://localhost:5173';
+// Fixed on purpose: each container has its own loopback, and every sandbox shares one Claude
+// profile (`CLAUDE_CONFIG_DIR`), so the user-scope endpoints must name the same port everywhere.
 const SANDBOX_OTEL_PORT = 25317;
+// A loopback OTLP endpoint — the only kind provisioning treats as its own (an Artisyn receiver).
+const LOOPBACK_OTLP_ENDPOINT_RE = /^https?:\/\/(?:127\.0\.0\.1|localhost):\d{1,5}\/v1\/(?:logs|metrics|traces)$/;
 const LOOP_INTERVAL_MS = 10_000;
 const REQUEST_TIMEOUT_MS = 5_000;
 const PROVISIONED_MARKER = '/run/dev/provisioned';
@@ -31,7 +43,6 @@ if (!worktree) {
   process.exit(2);
 }
 const configDir = path.join(worktree, '.artisyn', 'config');
-const logHubJsonPath = path.join(configDir, 'log-hub.json');
 const logHubLocalPath = path.join(configDir, 'log-hub.local.json');
 const otelPortPath = path.join(configDir, 'otel-port.json');
 const settingsLocalPath = path.join(worktree, '.claude', 'settings.local.json');
@@ -66,39 +77,114 @@ function writeJson(file, obj) {
 
 // --- --static ---------------------------------------------------------------------------------
 
-function isUsablePort(v) {
-  return Number.isInteger(v) && v > 0 && v <= 65535;
+function isPlainObject(v) {
+  return !!v && typeof v === 'object' && !Array.isArray(v);
+}
+
+// Imports one of the worktree's own installer modules through Node's type stripping (they use
+// erasable syntax only), so the formats always match the installer of this branch. `null` when the
+// branch predates the module (a worktree made before hook 2.30.0).
+async function importInstallerModule(name) {
+  const file = path.join(worktree, 'artisyn-hooks-installer', 'src', name);
+  if (!fs.existsSync(file)) return null;
+  return import(pathToFileURL(file).href);
+}
+
+// Claude Code's user-level settings file: `$CLAUDE_CONFIG_DIR/settings.json` when set (always, in
+// a sandbox: the shared profile), else `~/.claude/settings.json`.
+function userSettingsPath() {
+  const custom = (process.env.CLAUDE_CONFIG_DIR || '').trim();
+  return path.join(custom || path.join(os.homedir(), '.claude'), 'settings.json');
+}
+
+// The per-OS-user shared-receiver state (DD-4 of
+// docs/tasks/todo/2026-10-30-otel-shared-receiver/impl-plan.md): `port.json` and `token` in the
+// container's own `~/.artisyn/otel/` (the container home is not mounted from the host). Returns
+// false when this branch has no shared receiver (no `user-state.ts`).
+async function writeSharedReceiverState(port, userState) {
+  if (!userState) {
+    log('this worktree\'s installer has no shared OTEL receiver (pre-2.30.0 branch); skipped ~/.artisyn/otel');
+    return false;
+  }
+  const existing = userState.readPortFile();
+  if (existing?.port !== port) {
+    userState.writePortFile(port);
+    log(`wrote ${userState.stateFilePath('port')} (port ${port})`);
+  } else {
+    log(`${userState.stateFilePath('port')} already has port ${port}`);
+  }
+  if (userState.readOrCreateToken() === null) {
+    log(`could not create or read ${userState.stateFilePath('token')} — the shared receiver will not start`);
+  }
+  return true;
+}
+
+// Merges the user-scope OTEL keys into the shared profile's settings.json. Every sandbox writes the
+// same values (fixed port), so this is idempotent across sandboxes. A collector the developer set
+// there themselves (a non-loopback endpoint) is left alone, and so is a file that does not parse
+// or whose `env` is not an object — logged, never fatal. Returns the user `env` as it now stands.
+function writeUserOtelEnv(desired) {
+  const file = userSettingsPath();
+  let settings;
+  try {
+    settings = readJsonObject(file);
+  } catch (e) {
+    log(`${file} is not valid JSON (${e.message}); left untouched, OTEL keys not written to the user scope`);
+    return {};
+  }
+  if (settings.env !== undefined && !isPlainObject(settings.env)) {
+    log(`${file} has a non-object "env"; left untouched, OTEL keys not written to the user scope`);
+    return {};
+  }
+  const env = settings.env ?? {};
+  const foreign = Object.keys(desired).filter(
+    (k) => k.endsWith('_ENDPOINT') && typeof env[k] === 'string' && env[k] && !LOOPBACK_OTLP_ENDPOINT_RE.test(env[k]),
+  );
+  if (foreign.length > 0) {
+    log(`${file} points ${foreign.join(', ')} at a collector of your own; left untouched`);
+    return env;
+  }
+  const next = { ...env, ...desired };
+  if (Object.keys(desired).every((k) => env[k] === desired[k])) {
+    log(`${file} already has the OTEL env keys`);
+    return env;
+  }
+  writeJson(file, { ...settings, env: next });
+  log(`merged the OTEL env keys into ${file}`);
+  return next;
 }
 
 async function runStatic() {
-  // Each container has its own loopback, so a fixed port is fine — no allocation. The tracked
-  // `otelReceiverPort` is only read for worktrees of branches made before the installer moved it
-  // to `log-hub.local.json`.
-  const existingPort = readJsonObject(otelPortPath);
-  const trackedPort = readJsonObject(logHubJsonPath).otelReceiverPort;
-  const port = isUsablePort(existingPort.port)
-    ? existingPort.port
-    : isUsablePort(trackedPort)
-      ? trackedPort
-      : SANDBOX_OTEL_PORT;
-  if (existingPort.port !== port || typeof existingPort.allocatedAt !== 'string') {
-    writeJson(otelPortPath, { ...existingPort, port, allocatedAt: new Date().toISOString() });
-    log(`wrote ${otelPortPath} (port ${port})`);
-  } else {
-    log(`${otelPortPath} already has port ${port}`);
+  // Each container has its own loopback, so a fixed port is fine — no allocation.
+  const port = SANDBOX_OTEL_PORT;
+
+  // The pre-2.30.0 per-project port store; the installer deletes it too.
+  if (fs.existsSync(otelPortPath)) {
+    fs.unlinkSync(otelPortPath);
+    log(`deleted the legacy ${otelPortPath}`);
   }
 
   // `serverUrl` resolves to the sandbox client inside the container (its Vite proxy forwards /api).
+  // `otelReceiverPort` stays: hooks before 2.30.0 (and the 2.30.0 fallback without `port.json`) read it.
   writeJson(logHubLocalPath, { ...readJsonObject(logHubLocalPath), serverUrl: SANDBOX_SERVER_URL, otelReceiverPort: port });
   log(`wrote serverUrl ${SANDBOX_SERVER_URL} and otelReceiverPort ${port} into ${logHubLocalPath}`);
 
-  // The worktree's own installer source, through Node's type stripping (otel-env.ts uses erasable
-  // syntax only), so the env keys always match the installer of this branch.
-  const otelEnvUrl = pathToFileURL(path.join(worktree, 'artisyn-hooks-installer', 'src', 'otel-env.ts')).href;
-  const { OTEL_ENV_KEYS } = await import(otelEnvUrl);
+  const otelEnv = await importInstallerModule('otel-env.ts');
+  if (!otelEnv) throw new Error('the worktree has no artisyn-hooks-installer/src/otel-env.ts');
+  const userState = await importInstallerModule('user-state.ts');
+  const shared = await writeSharedReceiverState(port, userState);
+  const userEnv = shared ? writeUserOtelEnv(otelEnv.OTEL_ENV_KEYS(port)) : {};
+
+  // The local mirror, read by Claude Code before 2.1.282. With the shared receiver it also carries
+  // the `artisyn.repo` resource attribute (the user value carried over, as the installer does).
   const settings = readJsonObject(settingsLocalPath);
-  const env = settings.env && typeof settings.env === 'object' && !Array.isArray(settings.env) ? settings.env : {};
-  writeJson(settingsLocalPath, { ...settings, env: { ...env, ...OTEL_ENV_KEYS(port) } });
+  const env = isPlainObject(settings.env) ? settings.env : {};
+  const mirror = { ...env, ...otelEnv.OTEL_ENV_KEYS(port) };
+  if (shared && typeof otelEnv.buildResourceAttributes === 'function') {
+    const key = otelEnv.OTEL_RESOURCE_ATTRIBUTES_KEY;
+    mirror[key] = otelEnv.buildResourceAttributes(userEnv[key], env[key], userState.repoKey(worktree));
+  }
+  writeJson(settingsLocalPath, { ...settings, env: mirror });
   log(`merged the OTEL env keys into ${settingsLocalPath}`);
 }
 

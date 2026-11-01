@@ -3,6 +3,9 @@ const fs = require('fs');
 const path = require('path');
 const {getGitRoot} = require('./git-context');
 const {hookLog} = require('./hook-log');
+const {readPortFile} = require('./user-state');
+const {claimSessionWarning} = require('./throttle-state');
+const {claudeConfigDir} = require('./claude-config-dir');
 
 const HOOK_FILE = 'env-context.js';
 
@@ -45,6 +48,17 @@ const READ_RETRY_DELAY_MS = 50;
 // | okf                              | {exclude:[]} | object |
 // | toolWrap                         | true      | boolean  |
 // | toolWrapConfigTimeoutMs          | 2000      | number   |
+// | otelRealtime                     | true      | boolean  |
+// | otelRealtimeIntervalMs           | 5000      | number   |
+// | otelTraces                       | undefined | boolean  |
+//
+// `otelRealtime` / `otelRealtimeIntervalMs` (hook 2.29.0+) gate the OTEL receiver's realtime
+// channel (`otel-receiver.js`, which reads them itself with `fs` — it cannot require this module):
+// `otelRealtime: false` turns it off; the interval is clamped there to at least 5000 ms and the
+// server can raise it further. The regular chunk upload is unaffected by both.
+// `otelTraces` (hook 2.29.0+) records the installer's answer to the trace-keys question. It has
+// no default on purpose: absent means "never asked" (an older install), and only `true` makes the
+// SessionStart endpoint self-check also check `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`.
 //
 // `toolWrap` / `toolWrapConfigTimeoutMs` (hook 2.27.0+) gate the CLI tool wrapper
 // (`tool-wrap-config.js`): `toolWrap: false` is a local kill switch (as is env
@@ -98,6 +112,9 @@ const CONFIG_DEFAULTS = {
   okf: { exclude: [] },
   toolWrap: true,
   toolWrapConfigTimeoutMs: 2000,
+  otelRealtime: true,
+  otelRealtimeIntervalMs: 5000,
+  otelTraces: undefined,
 };
 
 const CONFIG_TYPES = {
@@ -123,6 +140,9 @@ const CONFIG_TYPES = {
   okf: 'object',
   toolWrap: 'boolean',
   toolWrapConfigTimeoutMs: 'number',
+  otelRealtime: 'boolean',
+  otelRealtimeIntervalMs: 'number',
+  otelTraces: 'boolean',
 };
 
 function matchesType(value, type) {
@@ -380,6 +400,7 @@ const OTEL_FALLBACK_PORT = 25317;
 // somewhere we must not bind.
 const OTEL_LOGS_ENDPOINT_RE = /^https?:\/\/(?:127\.0\.0\.1|localhost):(\d{1,5})\/v1\/logs$/;
 const OTEL_METRICS_ENDPOINT_RE = /^https?:\/\/(?:127\.0\.0\.1|localhost):(\d{1,5})\/v1\/metrics$/;
+const OTEL_TRACES_ENDPOINT_RE = /^https?:\/\/(?:127\.0\.0\.1|localhost):(\d{1,5})\/v1\/traces$/;
 
 /**
  * The OTEL directory for this project: always `<telemetryDir>/otel`.
@@ -424,42 +445,114 @@ function normalizeConfiguredPort(value) {
 }
 
 /**
- * Resolve the loopback port this project's receiver must bind, in precedence order:
+ * The legacy (per-project receiver) port, in precedence order:
  *  1. the port in `env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT` — the authority, because
  *     binding anything else means receiving nothing;
  *  2. `config.otelReceiverPort`, when it is a positive integer;
  *  3. `OTEL_FALLBACK_PORT`.
  *
  * Emits at most one `warn` line per case when (1) and (2) disagree, and when the
- * metrics endpoint names a different port than (1) — only one port is bound, and
- * logs win because they carry the events.
+ * metrics or traces endpoint names a different port than (1) — only one port is bound,
+ * and logs win because they carry the events.
  * @param {Record<string, *>|null} config
- * @param {Record<string, *>} [env] - defaults to `process.env`
- * @param {string|null} [cwd] - present solely so the warnings reach `hookLog`
+ * @param {Record<string, *>} source - the env
+ * @param {string|null} cwd
+ * @param {boolean} warn
  * @returns {number}
  */
-function resolveOtelPort(config, env = process.env, cwd = null) {
-  const source = env || {};
+function resolveLegacyOtelPort(config, source, cwd, warn) {
   const endpointPort = parseEndpointPort(source.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT, OTEL_LOGS_ENDPOINT_RE);
   const configPort = normalizeConfiguredPort(config ? config.otelReceiverPort : undefined);
 
   if (endpointPort !== null) {
-    if (configPort !== null && configPort !== endpointPort) {
+    if (warn && configPort !== null && configPort !== endpointPort) {
       hookLog(HOOK_FILE, null, 'warn',
         `OTEL_EXPORTER_OTLP_LOGS_ENDPOINT points at port ${endpointPort} but config "otelReceiverPort" is ` +
         `${configPort} — using ${endpointPort}, the port Claude Code actually exports to`, cwd);
     }
     const metricsPort = parseEndpointPort(source.OTEL_EXPORTER_OTLP_METRICS_ENDPOINT, OTEL_METRICS_ENDPOINT_RE);
-    if (metricsPort !== null && metricsPort !== endpointPort) {
+    if (warn && metricsPort !== null && metricsPort !== endpointPort) {
       hookLog(HOOK_FILE, null, 'warn',
         `OTEL_EXPORTER_OTLP_METRICS_ENDPOINT points at port ${metricsPort} but the logs endpoint uses ` +
         `${endpointPort} — only one port is bound, so metrics will not be captured`, cwd);
+    }
+    const tracesPort = parseEndpointPort(source.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, OTEL_TRACES_ENDPOINT_RE);
+    if (warn && tracesPort !== null && tracesPort !== endpointPort) {
+      hookLog(HOOK_FILE, null, 'warn',
+        `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT points at port ${tracesPort} but the logs endpoint uses ` +
+        `${endpointPort} — only one port is bound, so traces will not be captured`, cwd);
     }
     return endpointPort;
   }
 
   if (configPort !== null) return configPort;
   return OTEL_FALLBACK_PORT;
+}
+
+/**
+ * The user-scope (`<claudeConfigDir>/settings.json`) logs endpoint's loopback port, else the one in
+ * `env` (a shell export or a Claude Code version that forwards it); `null` when neither names a
+ * loopback port. Never throws.
+ * @param {Record<string, *>} source - the env
+ * @returns {number|null}
+ */
+function userScopeLogsEndpointPort(source) {
+  let fromUser = null;
+  try {
+    const parsed = JSON.parse(fs.readFileSync(path.join(claudeConfigDir(source), 'settings.json'), 'utf8'));
+    const env = parsed && typeof parsed === 'object' && parsed.env && typeof parsed.env === 'object' ? parsed.env : null;
+    if (env) fromUser = parseEndpointPort(env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT, OTEL_LOGS_ENDPOINT_RE);
+  } catch {
+    // no or unreadable user settings — fall through to the env
+  }
+  if (fromUser !== null) return fromUser;
+  return parseEndpointPort(source.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT, OTEL_LOGS_ENDPOINT_RE);
+}
+
+/**
+ * Resolve the loopback receiver this session talks to (DD-6, hook 2.30.0+):
+ *
+ *  - `~/.artisyn/otel/port.json` present → `{mode: 'shared', port}`: the per-OS-user receiver.
+ *    A different loopback port in the user-scope logs endpoint is a cross-check only and writes one
+ *    `warn` per session (key `port-mismatch`, shared with otel-endpoint-check.js's DD-14 warning).
+ *  - `port.json` missing (the plugin auto-updated the scripts but the installer never ran) →
+ *    `{mode: 'legacy', port}`: the pre-2.30.0 per-project receiver, port resolved exactly as
+ *    before (see `resolveLegacyOtelPort`), plus one `warn` per session asking to run the
+ *    installer. A missing-install fallback, not a toggle.
+ *
+ * `opts.warn: false` resolves silently (a caller that only needs the port again).
+ * @param {Record<string, *>|null} config
+ * @param {Record<string, *>} [env] - defaults to `process.env`
+ * @param {string|null} [cwd] - present solely so the warnings reach `hookLog`
+ * @param {{ sessionId?: string|null, warn?: boolean, homeDir?: string }} [opts]
+ * @returns {{ mode: 'shared'|'legacy', port: number }}
+ */
+function resolveOtelPort(config, env = process.env, cwd = null, opts = {}) {
+  const source = env || {};
+  const warn = opts.warn !== false;
+  const sessionId = typeof opts.sessionId === 'string' && opts.sessionId ? opts.sessionId : null;
+  const portFile = readPortFile(opts.homeDir ? { homeDir: opts.homeDir } : {});
+
+  if (portFile) {
+    const port = portFile.port;
+    if (warn) {
+      const userPort = userScopeLogsEndpointPort(source);
+      if (userPort !== null && userPort !== port && claimSessionWarning(sessionId, 'port-mismatch', cwd)) {
+        hookLog(HOOK_FILE, sessionId, 'warn',
+          `otel port-mismatch: the user-scope OTEL_EXPORTER_OTLP_LOGS_ENDPOINT points at port ${userPort} but the ` +
+          `shared receiver port (~/.artisyn/otel/port.json) is ${port} — re-run the log-hub installer "upgrade", ` +
+          'then restart Claude Code', cwd);
+      }
+    }
+    return { mode: 'shared', port };
+  }
+
+  if (warn && claimSessionWarning(sessionId, 'legacy-receiver', cwd)) {
+    hookLog(HOOK_FILE, sessionId, 'warn',
+      'otel: ~/.artisyn/otel/port.json is missing — using the per-project OTEL receiver; run the log-hub ' +
+      'installer to enable the shared receiver', cwd);
+  }
+  return { mode: 'legacy', port: resolveLegacyOtelPort(config, source, cwd, warn) };
 }
 
 // The numeric otel keys for which `0` means "use the default". `otelReceiverPort` is

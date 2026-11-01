@@ -1,11 +1,11 @@
 ---
 type: "Architecture Guide"
 title: "Hook System Overview"
-description: "Hook system architecture: event triggers, telemetry recording, the per-project OTEL receiver, log upload with deduplication, and design principles."
+description: "Hook system architecture: event triggers, telemetry recording, the OTEL receiver (per OS user since 2.30.0) and the otel-status event, log upload with deduplication, and design principles."
 tags:
   - hooks
   - otel
-timestamp: "2026-10-28T00:00:00+04:00"
+timestamp: "2026-10-31T00:00:00+04:00"
 ---
 
 # Hook System Overview
@@ -32,8 +32,12 @@ The hook ships as a Claude Code plugin (`log-hub-hooks`), extracted by the insta
 | `scripts/send-logs-hook.js` | Fired on `Stop` / `Interrupt` (full run) and on `SessionEnd` (scoped flush, hook `2.8.0`+) — uploads collected logs to server |
 | `scripts/session-files.js` | Shared utility (hook `2.8.0`+): `collectScopedFiles(cwd, sessionId, telemetryDir)` resolves just the current session's own `artisyn` + `claude` files. Extracted from `prompt-upload-hook.js` so the `UserPromptSubmit` background upload and the `SessionEnd` flush share one implementation of the project-slug resolution. |
 | `scripts/prompt-upload-hook.js` | **Not a Claude Code hook entry point** — a detached child process spawned by `telemetry-hook.js` on `UserPromptSubmit`. Uploads just the current session's `artisyn` and `claude` files in the background so large sessions stay closer to up-to-date on the server without adding latency to the prompt turn. See "UserPromptSubmit background upload" below. |
-| `scripts/otel-receiver.js` | **Not a Claude Code hook entry point** (hook `2.3.0`+) — a detached, long-lived loopback OTLP/JSON receiver spawned by `lifecycle-hook.js` (`SessionStart`) and re-armed by `telemetry-hook.js` (`UserPromptSubmit`). Binds `127.0.0.1:<otelReceiverPort>`, accepts `POST /v1/logs`, `POST /v1/metrics`, `POST /artisyn/register` and `POST /artisyn/shutdown`, demultiplexes records by `session.id` and writes one chunk per request and session to `<telemetryDir>/otel/<session-id>/<epochMs>-<seq>.jsonl`. Uses **only** `http`/`fs`/`path`/`zlib` and deliberately `require`s no other hook module (it cannot resolve a git root or read a project config — every parameter is passed in). See [otel-receiver.md](otel-receiver.md). |
-| `scripts/otel-register.js` | Shared utility: `buildOwnerPayload()` / `buildRegistrationPayload()` / `buildReceiverLaunch()` (the argv+env pair the spawn needs) plus `fireRegister()`, the non-blocking `POST /artisyn/register` client used by both receiver spawn call sites. Fire-and-forget (socket `unref()`'d, no retry, every failure swallowed); its only observable output is a `hook.log` `warn` line on `409 owner-mismatch` or an older `receiverVersion`. |
+| `scripts/otel-receiver.js` | **Not a Claude Code hook entry point** (hook `2.3.0`+) — a detached, long-lived loopback OTLP/JSON receiver spawned by `lifecycle-hook.js` (`SessionStart`) and re-armed by `telemetry-hook.js` (`UserPromptSubmit`) and the other throttled re-arm sites. Accepts `POST /v1/logs`, `/v1/metrics`, `/v1/traces` (`2.29.0`+), `/artisyn/register` and `/artisyn/shutdown`, demultiplexes records by `session.id` and writes one chunk per request and session to `<otelDir>/<session-id>/<epochMs>-<seq>.jsonl`. **Since `2.30.0` one receiver per OS user** (`--shared`): port from `~/.artisyn/otel/port.json`, HMAC `POST /artisyn/hello` + `x-artisyn-auth` on `register` / `session-status` / `shutdown`, a persisted session registry, per-record routing to each repo's `otelDir` (registration, else the `artisyn.repo` tag, else a pending spool), per-repo uploads and realtime, and forwarding to a foreign collector in `proxy` mode. The legacy per-project mode (`--owner`/`--dir`, `otelReceiverPort`) stays for older hooks and a missing `port.json`. Node built-ins only and deliberately `require`s no other hook module — every parameter is passed in. See [otel-receiver.md](otel-receiver.md). |
+| `scripts/otel-register.js` | Shared utility: `buildOwnerPayload()` / `buildRegistrationPayload()` / `buildReceiverLaunch()` (the argv+env pair of the shared or legacy launch) plus `announceOtelSession()` / `maybeReArmOtelSession()`. Shared mode (`2.30.0`+): hello with proof check (`sharedHandshake`), spawn of its own plugin copy when nothing answers, the authenticated register (contract 1) and the one-per-session capability `warn`, never a restart; a failed hello is a `port-conflict` `warn`. `queryOtelSessionStatus()` asks `session-status` for the `otel-status` event. Legacy mode: `fireRegister()`, the `409 owner-mismatch` `warn` and the throttled stale-receiver restart. Every failure is non-fatal. |
+| `scripts/user-state.js` | Shared utility (hook `2.30.0`+): the per-user OTEL state dir `~/.artisyn/otel/` (resolved per call from `os.homedir()`) — `port.json`, `token` (created with `wx` when missing), `repos.json`, `forward.json`, `claude-version.json` paths, atomic JSON I/O, `repoKey(gitRoot)` (16 hex of `sha256` of the normalized git root) and `ownerHash(home)`. TS twin `artisyn-hooks-installer/src/user-state.ts`. |
+| `scripts/managed-settings.js` | Shared utility (hook `2.30.0`+): reads Claude Code managed settings (the per-OS `managed-settings.json`, the Windows registry / macOS plist OS policy with a 1.5 s timeout, `<claudeConfigDir>/remote-settings.json`) and returns the OTEL `pinnedSignals` / `disabledSignals` per signal. `ARTISYN_MANAGED_SETTINGS_DIR` replaces the file location and disables the OS-policy reads (test-only). TS twin `managed-settings.ts`. |
+| `scripts/otel-status.js` | Shared utility (hook `2.30.0`+): pure `resolveEffectiveOtel` (effective scope per Artisyn OTEL key, managed > user > local > project before Claude Code `2.1.282`, managed > user from it on), `deriveConfigWarnings`, `deriveState`, `deriveReason`, `shouldWriteStatus`, `buildOtelStatusEvent`; plus `resolveClaudeVersion` (transcript tail → `claude-version.json` cache → `claude --version` at most once per 24 h). Rules: [algorithms/otel-status-reason.md](algorithms/otel-status-reason.md). |
+| `scripts/otel-ensure-receiver.js` | **Not a plugin hook** (hook `2.30.0`+) — the user-level `SessionStart` hook the installer copies to `~/.artisyn/otel/bin/` and wires into `~/.claude/settings.json` only in `proxy` mode: hello with a 500 ms timeout, spawn `bin/otel-receiver.js` with the shared argv when nothing answers, always exit 0 silently. Standalone, Node built-ins only. |
 | `scripts/upload-logs.js` | Shared utility: the network-upload primitives — `CHUNK_SIZE_BYTES` (900KB as of `2.6.1`; the **on-the-wire** budget per request as of `2.8.0`), `uploadFile()`, `uploadFileMaybeCompressed()` (single-request upload that decides its own encoding and retries plain once if the peer rejects gzip), `uploadFileChunked()` (chunk-splitting + resumability for files over that threshold), the gzip layer added in `2.8.0` (`isLoopbackServerUrl()`, `alignSliceBoundary()`, `planCompressedSlices()`/`planIdentitySlices()`, `readGzipRatio()`/`writeGzipRatio()`, `isEncodingRejection()`/`resetGzipSupport()`), `readPendingUploads()`/`writePendingUploads()` (the v2 JSON `.claude-logs.pending` record) and `acquireUploadLock()`/`releaseUploadLock()` (mutual exclusion between `send-logs-hook.js` and `prompt-upload-hook.js`). Required by both upload-triggering scripts so there is exactly one chunking/compression/locking implementation. |
 | `scripts/spawn-hidden.js` | Shared utility: `spawnDetachedHidden()` launches a detached background Node process with no visible window — one `spawn(…, {detached: true, stdio: 'ignore', windowsHide: true})` on every platform, where `detached` (→ `DETACHED_PROCESS`) is what guarantees the child gets no console on Windows. Used by `telemetry-hook.js` to launch `prompt-upload-hook.js` and, since `2.3.0`, by both receiver spawn call sites to launch `otel-receiver.js`. **Before `2.6.0`** it routed the Windows launch through a self-deleting VBScript run via `wscript.exe //B //Nologo` from `%LOCALAPPDATA%\Temp`; that is not used (EDR flagged it as malware — four commodity-loader indicators at once) after establishing the console flash it was added for actually comes from *grandchild* processes that omit `windowsHide`, not from the launch itself. Every receiver parameter is still passed as **both** argv and an `ARTISYN_OTEL_*` env var, now purely for cross-version compatibility with hooks &le; `2.5.1`, whose VBScript command line carried env only. |
 | `scripts/process-marker.js` | Shared utility (hook `2.11.0`+): `buildProcessMarkerEnv(role, meta)` returns the `ARTISYN_PROC_*` provenance env vars (`ROLE`, `STARTED_AT`, `STARTED_EPOCH_MS`, `PARENT_PID`, `PARENT_SCRIPT`, `SESSION_ID`, `HOOK_VERSION`) stamped into every child the hooks spawn — inert metadata, never branched on, unlike the `ARTISYN_HOOK_SERVICE` re-entrancy guard. `killProcessTree(child)` is the mandatory replacement for `child.kill()` on any `shell: true` child: on Windows that child is a `cmd.exe` wrapper and the real program is its **grandchild**, so a plain kill orphaned live MCP servers and timed-out `claude -p` calls (six orphans up to five days old were found on the dev machine). Wired into the MCP probe and `claude-invoke-async.js`, and centrally inside `spawnDetachedHidden()` so no `spawn-hidden.js` call site can forget. Note: Windows does not expose another process's environment via `Win32_Process` — these are readable from inside the child, or externally only with a PEB reader (Process Explorer); on Linux/macOS `/proc/<pid>/environ` and `ps eww` show them directly. |
@@ -534,11 +538,34 @@ Exits 0 even on upload failure — never blocks Claude Code.
 
 ## OTEL receiver
 
-Since hook `2.3.0`, `otel-receiver.js` is a detached loopback OTLP/JSON listener — one per project, on
-its own port — that files Claude Code's OTEL logs and metrics as per-session chunk files under
+Since hook `2.3.0`, `otel-receiver.js` is a detached loopback OTLP/JSON listener that files Claude
+Code's OTEL logs, metrics and (`2.29.0`+) spans as per-session chunk files under
 `<telemetryDir>/otel/`. The `Stop` upload ships them as the `claude-otel` namespace and deletes each
-chunk once uploaded. The spawn/register handshake, the `409 owner-mismatch` guard, the stale-receiver
+chunk once uploaded. Up to `2.29.0` there was one receiver per project on its own port; since
+`2.30.0` one receiver per OS user serves every repo (Claude Code `2.1.282`+ reads OTEL keys only from
+user or managed settings). The shared design (state dir, auth, register contract, routing,
+forwarding), the legacy per-project mode with its `409 owner-mismatch` guard and stale-receiver
 restart, the chunk layout and the prune are described in [otel-receiver.md](otel-receiver.md).
+
+### `otel-status` event (hook `2.30.0`+)
+
+At `Stop` / `Interrupt` and at `SessionEnd`, `send-logs-hook.js` (`maybeWriteOtelStatus`, gated on
+`otelEnabled`) asks the receiver `POST /artisyn/session-status` for this session's routed record
+counts, derives `state` (`ok` / `partial` / `none`) and the first matching `reason`, and — when the
+write rule allows — appends one `{"type":"otel-status", …}` line to the session's artisyn log **before**
+that run's upload, plus one `hook.log` line `otel-status state=… reason=… detail=…`. Write rule: at
+`Stop` once ≥ 1 record arrived, or when the state improved; at `SessionEnd` when nothing was written
+yet, or when the state improved. The per-session mark is `otelStatusWritten` in the throttle-state
+file (`readOtelStatusMark` / `writeOtelStatusMark` in `throttle-state.js`, entries pruned after
+24 h). A receiver without `session-status` (or a `404`) gives `reason:'unknown'`,
+`detail:'no-session-status'`; the legacy per-project receiver gives `detail:'legacy-receiver'`.
+Line shape and server handling: [hook-api-versioning.md](hook-api-versioning.md) § "The
+`otel-status` event"; rules: [algorithms/otel-status-reason.md](algorithms/otel-status-reason.md);
+UI: [otel-tabs.md](otel-tabs.md) § "OTEL coverage and status".
+
+At `SessionStart`, `lifecycle-hook.js` logs `claude-version=<v|unknown> source=…`, and
+`otel-endpoint-check.js` writes the effective-config warnings (`project-only`, `endpoint-drift`,
+`port-mismatch`), see [hook-installation.md](hook-installation.md) § "OTEL Settings".
 
 ---
 

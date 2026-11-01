@@ -164,6 +164,12 @@ export interface DataRetentionStats {
   youngestSessionAt: string | null;
   totalSessionCount: number;
   dailySeries: DataRetentionDailyBucket[];
+  /**
+   * Non-deleted root sessions with OTEL data but no `logs` rows (realtime-only, 2026-10-30
+   * otel-tabs-traces DD-25). Purged by the same retention window, by their first OTEL data.
+   * Not part of `totalSessionCount` or `dailySeries`.
+   */
+  otelOnlySessions: number;
 }
 
 export interface SystemInfo {
