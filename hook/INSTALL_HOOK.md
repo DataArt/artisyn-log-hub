@@ -690,7 +690,8 @@ fallback). A non-loopback endpoint (your own collector) is never reported. Three
 `SessionStart`:
 
 - `otel project-only: …` — the Artisyn keys exist only in `.claude/settings*.json`, which this Claude Code ignores;
-  also shown as a `systemMessage`.
+  also shown as a `systemMessage`. `OTEL_RESOURCE_ATTRIBUTES` never triggers it: the installer writes it only to
+  `.claude/settings.local.json` by design, and the receiver routes by the session register, not by that tag.
 - `otel endpoint-drift: …` — the user-scope endpoint no longer points at the receiver although the installer set it
   up (`~/.artisyn/otel/forward.json`).
 - `otel port-mismatch: …` — a user-scope loopback endpoint names another port than `port.json`.

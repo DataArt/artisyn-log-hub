@@ -62,6 +62,11 @@ const ARTISYN_OTEL_KEYS = [
   'OTEL_RESOURCE_ATTRIBUTES',
 ];
 
+// Keys the installer writes only to the per-checkout `.claude/settings.local.json` by design (the
+// value differs per repository, the user scope is shared), so they never count as `project-only`.
+// The receiver routes by the session register, not by the `artisyn.repo` tag.
+const PER_REPO_KEYS = ['OTEL_RESOURCE_ATTRIBUTES'];
+
 const ENDPOINT_KEYS = [SIGNAL_ENDPOINT_KEYS.logs, SIGNAL_ENDPOINT_KEYS.metrics, SIGNAL_ENDPOINT_KEYS.spans];
 
 // Scope order, highest precedence first — Claude Code's settings precedence (managed > local >
@@ -160,7 +165,10 @@ function resolveEffectiveOtel(scopes, claudeVersion) {
       winner = scope;
       effective[key] = { value: s[scope][key].trim(), scope };
     }
-    if (!winner && !honored && PROJECT_SCOPES.some((scope) => hasKey(s[scope], key))) projectOnlyKeys.push(key);
+    if (!winner && !honored && !PER_REPO_KEYS.includes(key)
+      && PROJECT_SCOPES.some((scope) => hasKey(s[scope], key))) {
+      projectOnlyKeys.push(key);
+    }
   }
   return { projectScopeHonored: honored, effective, ignored, projectOnlyKeys };
 }
