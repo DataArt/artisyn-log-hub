@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="478" viewBox="0 0 1100 478" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <filter id="sh" x="-10%" y="-20%" width="120%" height="160%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000" flood-opacity="0.14"/>
+    </filter>
+    <marker id="ah" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#2563eb"/></marker>
+  </defs>
+  <rect x="0" y="0" width="1100" height="478" fill="#ffffff"/>
+  <text x="24" y="34" font-size="18" font-weight="700" fill="#111827">A3 · Repository, settings and admin tabs get the same description tooltip</text>
+  <text x="24" y="56" font-size="12" fill="#6b7280">Team, API keys and Charts sub-tabs too. URL params mtab / stab / tab and tab-&lt;group&gt;-&lt;id&gt; test ids unchanged.</text>
+<rect x="24" y="84" width="1052" height="116" rx="8" fill="#fff" stroke="#e5e7eb"/>
+<text x="40" y="106" font-size="10" font-weight="700" fill="#6b7280" letter-spacing="0.6">REPOSITORY  ·  mtab</text>
+<text x="47" y="136" font-size="13.5" font-weight="600" fill="#111827">Sessions</text><line x1="36" y1="145" x2="114.09898000000001" y2="145" stroke="#111827" stroke-width="2"/><text x="125.09898000000001" y="136" font-size="13.5" fill="#6b7280">Analytics</text><rect x="190.83608" y="118" width="67.43965" height="26" rx="4" fill="#f3f4f6"/><text x="201.83608" y="136" font-size="13.5" fill="#111827">Reports</text><text x="269.27573" y="136" font-size="13.5" fill="#6b7280">Tools/MCP</text><text x="355.83408" y="136" font-size="13.5" fill="#6b7280">OKF</text><text x="402.58362999999997" y="136" font-size="13.5" fill="#6b7280">OTEL</text><text x="457.58302999999995" y="136" font-size="13.5" fill="#6b7280">Settings</text>
+<line x1="24" y1="146" x2="1076" y2="146" stroke="#e5e7eb"/>
+<rect x="184.83608" y="152" width="386.49370000000005" height="31" rx="6" fill="#fff" stroke="#e5e7eb" filter="url(#sh)"/><text x="197.83608" y="173" font-size="12" font-weight="700" fill="#111827">Saved cost and usage reports of this repository over a period.</text>
+<path transform="translate(246.27573,134)" d="M0 0 L0 16 L4.2 12.2 L7 18.4 L9.6 17.3 L6.9 11.2 L12 11.2 Z" fill="#111827" stroke="#ffffff" stroke-width="1.2" stroke-linejoin="round"/>
+<rect x="24" y="214" width="1052" height="116" rx="8" fill="#fff" stroke="#e5e7eb"/>
+<text x="40" y="236" font-size="10" font-weight="700" fill="#6b7280" letter-spacing="0.6">REPOSITORY SETTINGS  ·  stab</text>
+<text x="47" y="266" font-size="13.5" font-weight="600" fill="#111827">Display</text><line x1="36" y1="275" x2="103.23667750000001" y2="275" stroke="#111827" stroke-width="2"/><text x="114.23667750000001" y="266" font-size="13.5" fill="#6b7280">File Categories</text><text x="226.06837750000003" y="266" font-size="13.5" fill="#6b7280">Analysis</text><rect x="287.09127750000005" y="248" width="117.72445000000002" height="26" rx="4" fill="#f3f4f6"/><text x="298.09127750000005" y="266" font-size="13.5" fill="#111827">Monitored Tools</text><text x="415.8157275000001" y="266" font-size="13.5" fill="#6b7280">Session Attributes</text><text x="547.4208775000002" y="266" font-size="13.5" fill="#6b7280">Maintenance</text><text x="643.9314275000002" y="266" font-size="13.5" fill="#6b7280">Import/Export</text>
+<line x1="24" y1="276" x2="1076" y2="276" stroke="#e5e7eb"/>
+<rect x="281.09127750000005" y="282" width="394.92688000000004" height="31" rx="6" fill="#fff" stroke="#e5e7eb" filter="url(#sh)"/><text x="294.09127750000005" y="303" font-size="12" font-weight="700" fill="#111827">Which CLI tools the hook wraps and records for this repository.</text>
+<path transform="translate(392.8157275000001,264)" d="M0 0 L0 16 L4.2 12.2 L7 18.4 L9.6 17.3 L6.9 11.2 L12 11.2 Z" fill="#111827" stroke="#ffffff" stroke-width="1.2" stroke-linejoin="round"/>
+<rect x="24" y="344" width="1052" height="116" rx="8" fill="#fff" stroke="#e5e7eb"/>
+<text x="40" y="366" font-size="10" font-weight="700" fill="#6b7280" letter-spacing="0.6">ADMIN PANEL  ·  tab</text>
+<text x="47" y="396" font-size="13.5" font-weight="600" fill="#111827">System Info</text><line x1="36" y1="405" x2="132.9361375" y2="405" stroke="#111827" stroke-width="2"/><text x="143.9361375" y="396" font-size="13.5" fill="#6b7280">Repos</text><text x="201.9473875" y="396" font-size="13.5" fill="#6b7280">Teams</text><text x="263.7561875" y="396" font-size="13.5" fill="#6b7280">Users</text><rect x="308.54128749999995" y="378" width="85.1179" height="26" rx="4" fill="#f3f4f6"/><text x="319.54128749999995" y="396" font-size="13.5" fill="#111827">Error Logs</text><text x="404.6591875" y="396" font-size="13.5" fill="#6b7280">Upload Queue</text><text x="506.9315375" y="396" font-size="13.5" fill="#6b7280">Data Retention</text><text x="616.4061375" y="396" font-size="13.5" fill="#6b7280">Auth</text><text x="665.2508875" y="396" font-size="13.5" fill="#6b7280">Model Pricing</text>
+<line x1="24" y1="406" x2="1076" y2="406" stroke="#e5e7eb"/>
+<rect x="302.54128749999995" y="412" width="327.217" height="31" rx="6" fill="#fff" stroke="#e5e7eb" filter="url(#sh)"/><text x="315.54128749999995" y="433" font-size="12" font-weight="700" fill="#111827">Server errors and failed hook uploads, newest first.</text>
+<path transform="translate(381.6591875,394)" d="M0 0 L0 16 L4.2 12.2 L7 18.4 L9.6 17.3 L6.9 11.2 L12 11.2 Z" fill="#111827" stroke="#ffffff" stroke-width="1.2" stroke-linejoin="round"/>
+<circle cx="740" cy="176" r="10" fill="#2563eb"/><text x="740" y="180.5" font-size="12" font-weight="700" fill="#fff" text-anchor="middle">1</text><text x="758" y="180.5" font-size="12" fill="#2563eb">PageTabs: optional description per tab</text>
+<circle cx="740" cy="306" r="10" fill="#2563eb"/><text x="740" y="310.5" font-size="12" font-weight="700" fill="#fff" text-anchor="middle">2</text><text x="758" y="310.5" font-size="12" fill="#2563eb">same shared tooltip as the session bar</text>
+<circle cx="740" cy="436" r="10" fill="#2563eb"/><text x="740" y="440.5" font-size="12" font-weight="700" fill="#fff" text-anchor="middle">3</text><text x="758" y="440.5" font-size="12" fill="#2563eb">no description → no tooltip, as today</text>
+</svg>

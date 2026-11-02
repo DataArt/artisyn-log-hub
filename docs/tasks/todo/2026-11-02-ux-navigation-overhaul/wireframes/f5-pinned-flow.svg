@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1060" height="380" viewBox="0 0 1060 380" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#2563eb"/></marker>
+  </defs>
+  <rect width="1060" height="380" fill="#ffffff"/>
+
+  <text x="24" y="34" font-size="18" font-weight="700" fill="#111827">F5 · Pinned: pin a repo or a report, find it on Home, unpin from there</text>
+  <text x="24" y="56" font-size="12" fill="#6b7280">Favorite sessions (★) are listed too. Pins are stored in user settings, so they follow the user to another browser.</text>
+
+  <!-- 1 repo header -->
+  <text x="24" y="88" font-size="12.5" font-weight="700" fill="#111827">① Repository header</text>
+  <rect x="24" y="96" width="470" height="62" rx="8" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="40" y="124" font-size="15" font-weight="700" fill="#111827" font-family="Consolas, monospace">at-scanner</text>
+  <text x="40" y="146" font-size="11.5" fill="#6b7280">Sessions · Analytics · Reports · Tools/MCP · …</text>
+  <rect x="390" y="108" width="88" height="26" rx="6" fill="#eff6ff" stroke="#2563eb" stroke-width="2"/>
+  <text x="402" y="126" font-size="12" font-weight="600" fill="#1e3a8a">📌 Pinned</text>
+
+  <!-- 2 report header -->
+  <text x="24" y="190" font-size="12.5" font-weight="700" fill="#111827">② Analytics / Report view header</text>
+  <rect x="24" y="198" width="470" height="62" rx="8" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="40" y="224" font-size="13.5" font-weight="700" fill="#111827">Reports › Executive Summary</text>
+  <text x="40" y="246" font-size="11.5" fill="#6b7280">artisyn-log-hub · Last 30 days</text>
+  <rect x="390" y="210" width="88" height="26" rx="6" fill="#eff6ff" stroke="#2563eb" stroke-width="2"/>
+  <text x="402" y="228" font-size="12" font-weight="600" fill="#1e3a8a">📌 Pinned</text>
+
+  <!-- 3 session favorite -->
+  <text x="24" y="292" font-size="12.5" font-weight="700" fill="#111827">③ Session favorite (existing star)</text>
+  <rect x="24" y="300" width="470" height="62" rx="8" fill="#ffffff" stroke="#e5e7eb"/>
+  <rect x="40" y="318" width="26" height="26" rx="5" fill="#eff6ff" stroke="#2563eb" stroke-width="2"/>
+  <text x="46" y="337" font-size="15" fill="#f59e0b">★</text>
+  <text x="78" y="330" font-size="13" font-weight="600" fill="#111827">3f2a91 · Fix flaky upload test</text>
+  <text x="78" y="348" font-size="11.5" fill="#6b7280">artisyn-log-hub · $28.79</text>
+
+  <!-- arrows -->
+  <path d="M 478 121 C 540 121, 540 150, 600 150" fill="none" stroke="#2563eb" stroke-width="2" marker-end="url(#ah)"/>
+  <path d="M 478 223 C 540 223, 540 186, 600 186" fill="none" stroke="#2563eb" stroke-width="2" marker-end="url(#ah)"/>
+  <path d="M 494 331 C 550 331, 550 222, 600 222" fill="none" stroke="#2563eb" stroke-width="2" stroke-dasharray="6 4" marker-end="url(#ah)"/>
+
+  <!-- home pinned widget -->
+  <text x="610" y="88" font-size="12.5" font-weight="700" fill="#111827">Home › Pinned</text>
+  <rect x="610" y="96" width="426" height="170" rx="8" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="626" y="120" font-size="13.5" font-weight="600" fill="#111827">Pinned</text>
+
+  <rect x="616" y="136" width="414" height="28" rx="5" fill="#f9fafb"/>
+  <text x="628" y="155" font-size="12" fill="#111827">📌 at-scanner</text>
+  <text x="900" y="155" font-size="10.5" fill="#9ca3af">repository</text>
+  <text x="1012" y="155" font-size="13" fill="#9ca3af">✕</text>
+
+  <rect x="616" y="172" width="414" height="28" rx="5" fill="#f9fafb"/>
+  <text x="628" y="191" font-size="12" fill="#111827">📌 artisyn-log-hub › Executive Summary</text>
+  <text x="900" y="191" font-size="10.5" fill="#9ca3af">report</text>
+  <text x="1012" y="191" font-size="13" fill="#9ca3af">✕</text>
+
+  <rect x="616" y="208" width="414" height="28" rx="5" fill="#eff6ff" stroke="#bfdbfe"/>
+  <text x="628" y="227" font-size="12" fill="#111827"><tspan fill="#f59e0b">★</tspan> 3f2a91 · Fix flaky upload test</text>
+  <text x="900" y="227" font-size="10.5" fill="#9ca3af">session</text>
+  <rect x="1002" y="211" width="24" height="22" rx="4" fill="#ffffff" stroke="#2563eb" stroke-width="2"/>
+  <text x="1008" y="227" font-size="13" fill="#2563eb">✕</text>
+
+  <text x="1030" y="256" text-anchor="end" font-size="12" fill="#1e3a8a">④ Unpin on any line (for a session: removes the favorite)</text>
+</svg>

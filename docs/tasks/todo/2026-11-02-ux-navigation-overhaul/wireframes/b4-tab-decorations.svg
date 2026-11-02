@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="424" viewBox="0 0 1000 424" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <filter id="sh" x="-10%" y="-20%" width="120%" height="160%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000" flood-opacity="0.14"/>
+    </filter>
+    <marker id="ah" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#2563eb"/></marker>
+  </defs>
+  <rect x="0" y="0" width="1000" height="424" fill="#ffffff"/>
+  <text x="24" y="34" font-size="18" font-weight="700" fill="#111827">B4 · Count, failure dot and lock on the tabs</text>
+  <text x="24" y="56" font-size="12" fill="#6b7280">Only from data the pane already loaded: no extra request, no early load of lazy tabs.</text>
+<rect x="24" y="84" width="620" height="126" rx="8" fill="#fff" stroke="#e5e7eb"/>
+<text x="51" y="116" font-size="14" fill="#6b7280">Overview</text><text x="134.036" y="116" font-size="14" font-weight="600" fill="#111827">Transcript</text><line x1="125.036" y1="128" x2="209.05517" y2="128" stroke="#111827" stroke-width="2"/><text x="226.05517" y="116" font-size="14" fill="#6b7280">Cost &amp; context</text><text x="344.94237000000004" y="116" font-size="14" fill="#6b7280">Effects</text>
+<line x1="24" y1="129" x2="644" y2="129" stroke="#e5e7eb"/>
+<rect x="40" y="142" width="234.29546" height="30" rx="6" fill="#f3f4f6"/><text x="56" y="162" font-size="13" fill="#6b7280">Logs</text><rect x="96.9942" y="146" width="75.79966" height="22" rx="5" fill="#fff" stroke="#d1d5db"/><text x="107.9942" y="162" font-size="13" font-weight="600" fill="#111827">Bash</text><text x="143.38811" y="162" font-size="11.5" fill="#6b7280" font-family="Consolas, monospace">196</text><g transform="translate(185.79386,151) scale(1)"><path d="M2.5 5 V3.5 a3 3 0 0 1 6 0 V5" fill="none" stroke="#f59e0b" stroke-width="1.8"/><rect x="0.5" y="5" width="10" height="7" rx="1.5" fill="#f59e0b"/></g><text x="200.79386" y="162" font-size="13" fill="#6b7280">Raw Logs</text>
+<rect x="24" y="228" width="620" height="126" rx="8" fill="#fff" stroke="#e5e7eb"/>
+<text x="51" y="260" font-size="14" fill="#6b7280">Overview</text><text x="134.036" y="260" font-size="14" fill="#6b7280">Transcript</text><text x="222.91140000000001" y="260" font-size="14" fill="#6b7280">Cost &amp; context</text><text x="341.7986" y="260" font-size="14" font-weight="600" fill="#111827">Effects</text><line x1="332.7986" y1="272" x2="397.8533" y2="272" stroke="#111827" stroke-width="2"/>
+<line x1="24" y1="273" x2="644" y2="273" stroke="#e5e7eb"/>
+<rect x="40" y="286" width="268.81610500000005" height="30" rx="6" fill="#f3f4f6"/><rect x="45" y="290" width="114.81590500000003" height="22" rx="5" fill="#fff" stroke="#d1d5db"/><text x="56" y="306" font-size="13" font-weight="600" fill="#111827">Change surface</text><text x="172.81590500000004" y="306" font-size="13" fill="#6b7280">Tools/MCP</text><circle cx="241.98320500000005" cy="297" r="3.5" fill="#dc2626"/><text x="268.98320500000005" y="306" font-size="13" fill="#6b7280">OKF</text>
+<path d="M152.59098500000002 186 L152.59098500000002 176" stroke="#2563eb" stroke-width="1.5" fill="none" marker-end="url(#ah)"/><circle cx="152.59098500000002" cy="196" r="10" fill="#2563eb"/><text x="152.59098500000002" y="200.5" font-size="12" font-weight="700" fill="#fff" text-anchor="middle">1</text>
+<path d="M191.29386 186 L191.29386 176" stroke="#2563eb" stroke-width="1.5" fill="none" marker-end="url(#ah)"/><circle cx="191.29386" cy="196" r="10" fill="#2563eb"/><text x="191.29386" y="200.5" font-size="12" font-weight="700" fill="#fff" text-anchor="middle">2</text>
+<path d="M241.98320500000005 330 L241.98320500000005 320" stroke="#2563eb" stroke-width="1.5" fill="none" marker-end="url(#ah)"/><circle cx="241.98320500000005" cy="340" r="10" fill="#2563eb"/><text x="241.98320500000005" y="344.5" font-size="12" font-weight="700" fill="#fff" text-anchor="middle">3</text>
+<circle cx="680" cy="150" r="10" fill="#2563eb"/><text x="680" y="154.5" font-size="12" font-weight="700" fill="#fff" text-anchor="middle">1</text><text x="698" y="154.5" font-size="12" fill="#2563eb">Bash: command count, as today</text>
+<circle cx="680" cy="182" r="10" fill="#2563eb"/><text x="680" y="186.5" font-size="12" font-weight="700" fill="#fff" text-anchor="middle">2</text><text x="698" y="186.5" font-size="12" fill="#2563eb">Raw Logs: amber lock, as today</text>
+<circle cx="680" cy="296" r="10" fill="#2563eb"/><text x="680" y="300.5" font-size="12" font-weight="700" fill="#fff" text-anchor="middle">3</text><text x="698" y="300.5" font-size="12" fill="#2563eb">Tools/MCP: red dot when an MCP</text><text x="698" y="316.5" font-size="12" fill="#2563eb">server failed — a dot, not a number</text>
+<text x="24" y="394" font-size="12" fill="#6b7280">No MCP failures → no dot:</text>
+<rect x="190" y="378" width="258.81610500000005" height="30" rx="6" fill="#f3f4f6"/><rect x="195" y="382" width="114.81590500000003" height="22" rx="5" fill="#fff" stroke="#d1d5db"/><text x="206" y="398" font-size="13" font-weight="600" fill="#111827">Change surface</text><text x="322.81590500000004" y="398" font-size="13" fill="#6b7280">Tools/MCP</text><text x="408.98320500000005" y="398" font-size="13" fill="#6b7280">OKF</text>
+</svg>

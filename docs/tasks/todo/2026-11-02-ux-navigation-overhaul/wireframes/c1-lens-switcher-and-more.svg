@@ -1,0 +1,59 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="494" viewBox="0 0 1000 494" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <filter id="sh" x="-10%" y="-10%" width="120%" height="140%"><feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000" flood-opacity="0.12"/></filter>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#2563eb"/></marker>
+  </defs>
+  <rect x="0" y="0" width="1000" height="494" fill="#ffffff"/>
+  <text x="24" y="32" font-size="17" fill="#111827" font-weight="700">C1 · Lens switcher and a lens tab row (Cost lens, "More ▾" open)</text>
+  <text x="24" y="52" font-size="12" fill="#6b7280">A lens = its promoted tabs in one row; every other tab sits in "More ▾", listed by group.</text>
+  <rect x="24" y="70" width="952" height="404" rx="8" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="44" y="105" font-size="11" fill="#6b7280">Lens</text>
+  <rect x="76" y="88" width="445" height="26" rx="13" fill="#f3f4f6"/>
+  <text x="129" y="105" font-size="12" fill="#6b7280" text-anchor="middle">What happened</text>
+  <rect x="181" y="90" width="49" height="22" rx="11" fill="#ffffff" stroke="#2563eb" stroke-width="1.5"/>
+  <text x="205.5" y="105" font-size="12" fill="#1d4ed8" font-weight="700" text-anchor="middle">Cost</text>
+  <text x="294" y="105" font-size="12" fill="#6b7280" text-anchor="middle">Harness &amp; context</text>
+  <text x="417" y="105" font-size="12" fill="#6b7280" text-anchor="middle">Failed tool call</text>
+  <text x="498" y="105" font-size="12" fill="#6b7280" text-anchor="middle">All</text>
+  <rect x="177" y="84" width="57" height="34" rx="8" fill="none" stroke="#2563eb" stroke-width="2"/>
+  <circle cx="205.5" cy="72" r="10" fill="#2563eb"/><text x="205.5" y="76" font-size="11" fill="#ffffff" font-weight="700" text-anchor="middle">1</text>
+  <line x1="24" y1="130" x2="976" y2="130" stroke="#e5e7eb"/>
+  <rect x="44" y="142" width="433" height="32" rx="6" fill="#f9fafb"/>
+  <rect x="50" y="146" width="73" height="24" rx="5" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="61" y="163" font-size="13" fill="#111827" font-weight="600">Summary</text>
+  <text x="136" y="163" font-size="13" fill="#6b7280">Statistics</text>
+  <text x="225" y="163" font-size="13" fill="#6b7280">Charts</text>
+  <text x="288" y="163" font-size="13" fill="#6b7280">Advisor</text>
+  <text x="358" y="163" font-size="13" fill="#6b7280">OTEL</text>
+  <rect x="401" y="146" width="68" height="24" rx="5" fill="#e5e7eb" stroke="#9ca3af"/>
+  <text x="411" y="163" font-size="13" fill="#111827">More ▾</text>
+  <rect x="40" y="138" width="361" height="40" rx="8" fill="none" stroke="#2563eb" stroke-width="2"/>
+  <circle cx="40" cy="138" r="10" fill="#2563eb"/><text x="40" y="142" font-size="11" fill="#ffffff" font-weight="700" text-anchor="middle">2</text>
+  <rect x="281" y="182" width="250" height="301" rx="6" fill="#ffffff" stroke="#e5e7eb" filter="url(#sh)"/>
+  <text x="293" y="203" font-size="9.5" fill="#9ca3af" font-weight="700" letter-spacing="0.06em">OVERVIEW</text>
+  <text x="301" y="226" font-size="13" fill="#111827">Info</text>
+  <text x="293" y="246" font-size="9.5" fill="#9ca3af" font-weight="700" letter-spacing="0.06em">TRANSCRIPT</text>
+  <rect x="287" y="253" width="238" height="22" rx="4" fill="#f3f4f6"/>
+  <text x="301" y="269" font-size="13" fill="#111827">Logs</text>
+  <text x="301" y="292" font-size="13" fill="#111827">Bash</text>
+  <text x="333" y="292" font-size="11.5" fill="#6b7280" font-family="Consolas, monospace">196</text>
+  <text x="301" y="315" font-size="13" fill="#111827">Raw Logs</text>
+  <text x="293" y="335" font-size="9.5" fill="#9ca3af" font-weight="700" letter-spacing="0.06em">COST &amp; CONTEXT</text>
+  <text x="301" y="358" font-size="13" fill="#111827">System context anatomy</text>
+  <text x="301" y="381" font-size="13" fill="#111827">Harness usage</text>
+  <text x="293" y="401" font-size="9.5" fill="#9ca3af" font-weight="700" letter-spacing="0.06em">EFFECTS</text>
+  <text x="301" y="424" font-size="13" fill="#111827">Change surface</text>
+  <text x="301" y="447" font-size="13" fill="#111827">Tools/MCP</text>
+  <circle cx="371.5" cy="442" r="4" fill="#dc2626"/>
+  <text x="301" y="470" font-size="13" fill="#111827">OKF</text>
+  <rect x="277" y="178" width="258" height="309" rx="8" fill="none" stroke="#2563eb" stroke-width="2"/>
+  <circle cx="535" cy="178" r="10" fill="#2563eb"/><text x="535" y="182" font-size="11" fill="#ffffff" font-weight="700" text-anchor="middle">3</text>
+  <rect x="44" y="190" width="217" height="264" rx="6" fill="#f9fafb" stroke="#e5e7eb" stroke-dasharray="4 3"/><text x="58" y="326" font-size="12" fill="#9ca3af">Summary content</text>
+  <circle cx="561" cy="214" r="10" fill="#2563eb"/><text x="561" y="218" font-size="11" fill="#ffffff" font-weight="700" text-anchor="middle">1</text>
+  <text x="577" y="218" font-size="11.5" fill="#1e3a8a">Active lens, always marked</text>
+  <circle cx="561" cy="244" r="10" fill="#2563eb"/><text x="561" y="248" font-size="11" fill="#ffffff" font-weight="700" text-anchor="middle">2</text>
+  <text x="577" y="248" font-size="11.5" fill="#1e3a8a">Promoted tabs, in lens order</text>
+  <circle cx="561" cy="274" r="10" fill="#2563eb"/><text x="561" y="278" font-size="11" fill="#ffffff" font-weight="700" text-anchor="middle">3</text>
+  <text x="577" y="278" font-size="11.5" fill="#1e3a8a">Every other tab, by group</text>
+  <text x="551" y="312" font-size="11.5" fill="#6b7280">Nothing is hidden for good.</text>
+</svg>
