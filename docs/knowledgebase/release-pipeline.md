@@ -98,7 +98,7 @@ table-tested in `algorithms/release-version.md`.
 |---|---|
 | `plan` | Run state and version (above). |
 | `checks` | Calls `checks.yml`: client/server/tests typechecks, client/server/hook algorithm tests, build-script tests. A release is never built from a commit that fails them. |
-| `build` | Full mode only. One native runner per arch (`ubuntu-latest`, `ubuntu-24.04-arm`), `docker/build-push-action` with `VERSION=<version>`, `GIT_COMMIT=<sha>`, `provenance: mode=max`, `sbom: true`, pushed **by digest only** (no tag). |
+| `build` | Full mode only. One native runner per arch (`ubuntu-24.04`, `ubuntu-24.04-arm`; pinned, not `ubuntu-latest`), `docker/build-push-action` with `VERSION=<version>`, `GIT_COMMIT=<sha>`, `provenance: mode=max`, `sbom: true`, pushed **by digest only** (no tag). |
 | `manifest` | Full mode only. Joins both digests into the staging index `IMAGE:sha-<commit>`. |
 | `kit` | Secret-free: `node scripts/release-kit.js --version <version> --commit <sha> --out …`, uploaded as artifact `release-kit`. |
 | `vt-scan` | VirusTotal on the zip, `install.sh`, `install.ps1` (scopes `release-zip`, `install-sh`, `install-ps1`). Report-only: no `VIRUS_TOTAL_KEY` → `skipped` rows; a failure or the 40 min timeout never blocks `publish`. |

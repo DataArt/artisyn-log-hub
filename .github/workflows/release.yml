@@ -43,7 +43,7 @@ jobs:
   # Version and run state (Design Decisions 5-6). contents: write only so that `gh release view`
   # can see draft releases — a draft is invisible to a read-only token.
   plan:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     permissions:
       contents: write
@@ -96,7 +96,7 @@ jobs:
       matrix:
         include:
           - arch: amd64
-            runner: ubuntu-latest
+            runner: ubuntu-24.04
           - arch: arm64
             runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.runner }}
@@ -154,7 +154,7 @@ jobs:
   manifest:
     needs: [plan, build]
     if: needs.plan.outputs.mode == 'full'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: read
@@ -196,7 +196,7 @@ jobs:
   # Builds the install kit without any secret (Design Decision 11).
   kit:
     needs: [plan, checks]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: read
@@ -230,7 +230,7 @@ jobs:
   # by release-notes.js). publish never waits for a successful scan.
   vt-scan:
     needs: [plan, kit]
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 40
     permissions:
       contents: read
@@ -333,7 +333,7 @@ jobs:
       && needs.checks.result == 'success'
       && needs.kit.result == 'success'
       && (needs.plan.outputs.mode == 'resume' || needs.manifest.result == 'success')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
       contents: write

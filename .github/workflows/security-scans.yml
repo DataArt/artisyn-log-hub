@@ -41,7 +41,7 @@ jobs:
   # (Dockerfile or docker-dev/Dockerfile). Both are `false` outside pull_request.
   # On PRs it also uploads `pr-meta` ({"pr": <n>, "sha": "<head sha>"}) for security-report.yml.
   changes:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
       docs_only: ${{ steps.diff.outputs.docs_only }}
@@ -100,7 +100,7 @@ jobs:
   # Builds the installer tarballs without any secret (Design Decision 6). Jobs holding a secret
   # only download the `installer-kit` artifact.
   build-kit:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -137,7 +137,7 @@ jobs:
     # Runs even when build-kit failed: the kit row then becomes an `error` row ("no output").
     if: >-
       always() && needs.changes.result == 'success'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
       contents: read
@@ -369,7 +369,7 @@ jobs:
     needs: changes
     if: >-
       github.event_name == 'pull_request'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -458,7 +458,7 @@ jobs:
   # .mcp.json and the untracked log-hub.local.json. Findings become `::warning` annotations.
   config-guard:
     needs: changes
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -524,7 +524,7 @@ jobs:
   # four npm lock files. Rows: lockfile-lint/npm, npm-signatures/npm.
   supply-chain:
     needs: changes
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     env:
       LOCKFILE_LINT_VERSION: 5.1.0
@@ -683,7 +683,7 @@ jobs:
   # scanning, category `zizmor`, outside fork PRs). Rows: actionlint/workflows, zizmor/workflows.
   workflow-lint:
     needs: changes
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: read
@@ -890,7 +890,7 @@ jobs:
   # Rows: hadolint/dockerfiles, compose/config.
   dockerfile-lint:
     needs: changes
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     env:
       HADOLINT_VERSION: 2.15.1
@@ -1048,7 +1048,7 @@ jobs:
   # Rows: node-runtime/dockerfile, node-runtime/docker-dev.
   node-runtime:
     needs: changes
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     env:
       IMNV_VERSION: 1.6.1
@@ -1146,7 +1146,7 @@ jobs:
     if: >-
       (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         || (github.event_name == 'pull_request' && needs.changes.outputs.docker_changed == 'true'))
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     permissions:
       contents: read
@@ -1286,7 +1286,7 @@ jobs:
     if: >-
       always()
       && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch')
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -1398,7 +1398,7 @@ jobs:
       && (github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
         || github.event_name == 'push')
       && github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     permissions:
       contents: write
