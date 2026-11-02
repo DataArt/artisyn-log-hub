@@ -128,3 +128,39 @@ export async function getDescendantSessionIds(
 
   return map;
 }
+
+/**
+ * Takes the per-tree ingest lock: a transaction-scoped advisory lock keyed by the `session_id`
+ * of the tree's top ancestor, released at commit/rollback.
+ *
+ * Without it, two cluster workers ingesting uploads of the same tree at once deadlock: the
+ * artisyn upload re-normalises the changed paths of every node (delete + insert per node, then
+ * the node's `session_stats` counters), while a sub-agent upload writes the same node's rows in
+ * the opposite order. Holding one lock per tree serialises them. Call it at the very start of
+ * the ingest transaction, right after the session-owner lock, so every transaction takes the
+ * two locks in the same order.
+ *
+ * The walk starts at `parentSessionId` for a sub-agent upload (its own row may not exist yet)
+ * and at `sessionId` otherwise, and climbs `parent_session_id` with the same `depth < 50` guard
+ * as the lookups above. A parent not uploaded yet ends the walk there; that only makes the
+ * lock finer, and the upload queue retries the rare deadlock that can still slip through.
+ */
+export async function lockSessionTreeForIngest(
+  tx: DrizzleDb,
+  sessionId: string,
+  parentSessionId: string | undefined,
+): Promise<void> {
+  const start = parentSessionId ?? sessionId;
+  await tx.execute(sql`
+    WITH RECURSIVE walk AS (
+      SELECT ${start}::varchar AS cur, 0 AS depth
+      UNION ALL
+      SELECT s.parent_session_id, w.depth + 1
+      FROM walk w
+      JOIN sessions s ON s.session_id = w.cur
+      WHERE s.parent_session_id IS NOT NULL AND w.depth < 50
+    )
+    SELECT pg_advisory_xact_lock(hashtextextended('session-tree:' || cur, 0))
+    FROM (SELECT cur FROM walk ORDER BY depth DESC LIMIT 1) top
+  `);
+}

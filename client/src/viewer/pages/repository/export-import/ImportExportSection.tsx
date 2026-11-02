@@ -9,7 +9,7 @@ import { SessionExportSection } from '../SessionExportSection';
 // Renders inline (no Dialog) within RepositorySettings.tsx's
 // `import-export` PageTabsContent. Its own Export session/Import
 // session/Export Session statistics mode toggle uses ui/tabs.tsx's `line`
-// variant (same primitive SessionChartsTab.tsx uses for its sub-tabs) and is
+// variant and is
 // itself URL-backed (`iemode` search param, distinct from the `stab` param
 // the parent subtab bar owns) per the client navigation rule — never local
 // useState. The `stats` mode hosts the SessionExportSection, moved here

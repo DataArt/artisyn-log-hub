@@ -1,13 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Loader2, RefreshCw, Star, Trash2 } from 'lucide-react';
-import {
-  lazy,
-  Suspense,
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-} from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import type { RepositorySession } from '../../../models/repositories';
 import type { ModelPricingMap } from '../../../models/pricing';
 import type { UseQueryResult } from '@tanstack/react-query';
@@ -30,72 +23,33 @@ import { fetchSessionChangeSurface, type SessionLogsData } from '../../api';
 import type { RepoConfig } from '../../../models/repositories';
 import { ToolViewProvider } from './session-log/tool-call-view/ToolViewContext';
 import { SessionTabBar } from './SessionTabBar';
+import { isChartTab, type TabVisibilityContext } from '../../tab-ids';
 import { collectBashCalls } from './session-log/bash-tab/collect-bash-calls';
+import { readChartTab, rememberChartTab } from './session-log/charts/chart-tab';
+import type { LensId } from './session-lenses';
+import { useSessionLens } from './useSessionLens';
 
 import type { SessionTab } from './useRepositoryViewState';
 
-const SessionChartsTab = lazy(() =>
-  import('./session-log/SessionChartsTab').then((m) => ({
-    default: m.SessionChartsTab,
-  })),
-);
-
-// Lazy for the same reason Charts is: the tab pulls its own two queries and a whole
-// tree renderer, and it is opened deliberately, not on every session view.
-const SessionChangeSurfaceTab = lazy(() =>
-  import('./session-log/change-surface/SessionChangeSurfaceTab').then((m) => ({
-    default: m.SessionChangeSurfaceTab,
-  })),
-);
-
-// Lazy for the same reason: the tab pulls its own transcript walker and tree renderer,
-// and it is opened deliberately rather than on every session view.
-const SessionHarnessUsageTab = lazy(() =>
-  import('./session-log/harness-usage/SessionHarnessUsageTab').then((m) => ({
-    default: m.SessionHarnessUsageTab,
-  })),
-);
-
-// Lazy: the tab pulls its own OKF usage query and tree, and is opened deliberately.
-const SessionOkfTab = lazy(() =>
-  import('./session-log/okf/SessionOkfTab').then((m) => ({
-    default: m.SessionOkfTab,
-  })),
-);
-
-// Lazy: the repo Tools/MCP tab narrowed to this session; pulls its own queries and three panes.
-const SessionToolsTab = lazy(() =>
-  import('./tools/RepoToolsTab').then((m) => ({
-    default: m.RepoToolsTab,
-  })),
-);
-
-// Lazy: the tab pulls the Bash view (and, through it, the tree-sitter parser on first use) and is
-// opened deliberately. Its row count for the tab bar comes from the WASM-free collector below.
-// Lazy: the startup system-context anatomy, computed client-side from the loaded transcript.
-const SessionSysctxAnatomyTab = lazy(() =>
-  import('./session-log/sysctx-anatomy/SessionSysctxAnatomyTab').then((m) => ({
-    default: m.SessionSysctxAnatomyTab,
-  })),
-);
-
-// Lazy: the OTEL chart and trace waterfall poll their own route and are opened deliberately.
-const SessionOtelTab = lazy(() =>
-  import('./session-log/otel/SessionOtelTab').then((m) => ({
-    default: m.SessionOtelTab,
-  })),
-);
-
-const SessionBashTab = lazy(() =>
-  import('./session-log/bash-tab/SessionBashTab').then((m) => ({
-    default: m.SessionBashTab,
-  })),
-);
+import {
+  SessionBashTab,
+  SessionChangeSurfaceTab,
+  SessionChartsTab,
+  SessionHarnessUsageTab,
+  SessionOkfTab,
+  SessionOtelTab,
+  SessionSysctxAnatomyTab,
+  SessionToolsTab,
+} from './session-lazy-tabs';
 
 export interface SessionDetailPaneProps {
   selectedSession: RepositorySession;
   sessionTab: SessionTab;
   onSessionTabChange: (tab: SessionTab) => void;
+  /** The `lens` URL param (DD-7); `null` → the remembered `session-lens`, then `DEFAULT_LENS`. */
+  lensParam: LensId | null;
+  /** Writes `lens` and its default tab in one URL update (`switchLens`). */
+  onLensSwitch: (lens: LensId, defaultTab: SessionTab) => void;
   isFavorite: boolean;
   favoriteMutationPending: boolean;
   onFavoriteToggle: (newValue: boolean) => void;
@@ -127,6 +81,8 @@ export function SessionDetailPane({
   selectedSession,
   sessionTab,
   onSessionTabChange,
+  lensParam,
+  onLensSwitch,
   isFavorite,
   favoriteMutationPending,
   onFavoriteToggle,
@@ -199,6 +155,19 @@ export function SessionDetailPane({
     [usage, subagentStats, rootStats],
   );
 
+  // Tools/MCP failure dot (DD-9): any transcript-derived MCP failure, from the memo above — no
+  // extra request and no early load of the lazy Tools tab (FR-B3).
+  const toolsFailure = useMemo(
+    () => usage.mcpServers.some((s) => s.failures > 0),
+    [usage],
+  );
+
+  // The chart last opened is what a legacy `tab=charts` link reopens (see below).
+  const userId = user?.id;
+  useEffect(() => {
+    if (isChartTab(sessionTab)) rememberChartTab(sessionTab);
+  }, [sessionTab]);
+
   // Bash command count for the tab bar (DD-20) — the same collector the Bash tab lists, no WASM.
   const bashCount = useMemo(
     () => collectBashCalls(mainLogs, subagentLogsMap).length,
@@ -223,11 +192,12 @@ export function SessionDetailPane({
       fetchSessionChangeSurface(repoId, selectedSession.sessionId, teamId),
   });
 
-  // A stale/bookmarked `tab=call-tree` deep link — Call Tree moved from a top-level tab into a
-  // Charts sub-tab — redirects to Charts.
+  // A stale/bookmarked `tab=charts` deep link — the charts used to be sub-tabs of one Charts tab
+  // and are plain session tabs now — opens the chart this browser last showed (Dashboard by
+  // default), as the old Charts tab did.
   useEffect(() => {
-    if (sessionTab === 'call-tree') {
-      onSessionTabChange('charts');
+    if (sessionTab === 'charts') {
+      onSessionTabChange(readChartTab());
     }
   }, [sessionTab, onSessionTabChange]);
 
@@ -244,6 +214,21 @@ export function SessionDetailPane({
       onSessionTabChange('summary');
     }
   }, [sessionTab, logsQuery.isLoading, turnEndAdvisor, onSessionTabChange]);
+
+  // What the tab registry's session predicates look at (Advisor, Raw Logs).
+  const tabVisibility: TabVisibilityContext = useMemo(
+    () => ({ hasAdvisorResult: turnEndAdvisor != null, canSeeRawLogs }),
+    [turnEndAdvisor, canSeeRawLogs],
+  );
+
+  // The effective lens (DD-7): URL → remembered `session-lens` → `DEFAULT_LENS`; never written
+  // on load, so no `tab=` opens Summary and an explicit `tab=` wins.
+  const { lens, switchLens: handleLensChange } = useSessionLens(
+    userId,
+    lensParam,
+    tabVisibility,
+    onLensSwitch,
+  );
 
   return (
     <>
@@ -291,17 +276,22 @@ export function SessionDetailPane({
         <SessionTabBar
           sessionTab={sessionTab}
           onSessionTabChange={onSessionTabChange}
-          showAdvisor={!!turnEndAdvisor}
-          canSeeRawLogs={canSeeRawLogs}
+          lens={lens}
+          onLensChange={handleLensChange}
+          ctx={tabVisibility}
           bashCount={logsQuery.data ? bashCount : undefined}
+          toolsFailure={toolsFailure}
         />
         {user?.id === selectedSession.userId && (
+          // Icon-only, so the one row of session tabs keeps its width; the label is the
+          // accessible name and the tooltip.
           <button
             onClick={onDeleteRequest}
-            className="ml-auto flex items-center gap-1.5 rounded px-2 py-1 text-xs font-medium text-destructive hover:bg-destructive/10 border border-destructive/30"
+            aria-label="Remove"
+            title="Remove session"
+            className="ml-auto flex items-center rounded border border-destructive/30 p-1 text-destructive hover:bg-destructive/10"
           >
             <Trash2 className="size-3.5" />
-            Remove
           </button>
         )}
       </div>
@@ -349,6 +339,8 @@ export function SessionDetailPane({
               changeSurface={changeSurfaceQuery.data ?? null}
               changeSurfaceLoading={changeSurfaceQuery.isLoading}
               claudeReleaseHistory={claudeReleaseHistory}
+              bashCount={logsQuery.data ? bashCount : undefined}
+              onLensSwitch={handleLensChange}
             />
           ) : sessionTab === 'logs' ? (
             <SessionLogView
@@ -374,9 +366,11 @@ export function SessionDetailPane({
                 sessionModel={parsedLogs?.summary.model}
               />
             </Suspense>
-          ) : sessionTab === 'charts' ? (
+          ) : isChartTab(sessionTab) ? (
             <Suspense fallback={<LazyFallback />}>
               <SessionChartsTab
+                chart={sessionTab}
+                onOpenChart={onSessionTabChange}
                 parsedLogs={parsedLogs}
                 subagentLogsMap={subagentLogsMap}
                 agentParentMap={agentParentMap}

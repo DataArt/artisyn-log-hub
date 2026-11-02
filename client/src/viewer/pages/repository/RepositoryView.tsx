@@ -6,6 +6,7 @@ import { deleteSession, fetchTeams } from '../../api';
 import { RESTRICTED_SESSIONS_NOTICE } from '../../lib/access-mode-copy';
 import { routes } from '../../hooks/useHashRoute';
 import { useAuth } from '../../context/AuthContext';
+import { useRecentVisits } from '../../lib/useRecentVisits';
 import { PageTabs, PageTabsContent } from '../../ui/page-tabs';
 import { useModelPricing } from '../../hooks/useModelPricing';
 import { LazyFallback } from '../../components/LazyFallback';
@@ -14,7 +15,11 @@ import { type AnalyticsState } from './analytics/RepositoryAnalytics';
 import { RepositorySettings } from './RepositorySettings';
 import { analyticsFromParams } from './analytics/analytics-url';
 import { useRepositoryData } from './useRepositoryData';
-import { REPO_MAIN_TABS, type RepoMainTab as MainTab } from '../../tab-ids';
+import {
+  teamWideAccess,
+  visibleTabs,
+  type RepoMainTab as MainTab,
+} from '../../tab-ids';
 import { RepositoryHeader } from './RepositoryHeader';
 import { RepositorySessionsPanel } from './RepositorySessionsPanel';
 import { useRepositoryViewState } from './useRepositoryViewState';
@@ -25,10 +30,11 @@ import { NotificationDot } from '../../ui/notification-dot';
 
 export type { AnalyticsState };
 
+// The light repository tabs load through one barrel, so they share one chunk (lazy-chunk budget).
+// Reports keeps its own chunk: it carries the PDF and zip export libraries.
+const loadRepoTabs = () => import('./repository-tabs-lazy-group');
 const RepositoryAnalytics = lazy(() =>
-  import('./analytics/RepositoryAnalytics').then((m) => ({
-    default: m.RepositoryAnalytics,
-  })),
+  loadRepoTabs().then((m) => ({ default: m.RepositoryAnalytics })),
 );
 const ReportsPanel = lazy(() =>
   import('./reports/ReportsPanel').then((m) => ({
@@ -36,19 +42,13 @@ const ReportsPanel = lazy(() =>
   })),
 );
 const RepoToolsTab = lazy(() =>
-  import('./tools/RepoToolsTab').then((m) => ({
-    default: m.RepoToolsTab,
-  })),
+  loadRepoTabs().then((m) => ({ default: m.RepoToolsTab })),
 );
 const RepoOkfTab = lazy(() =>
-  import('./okf/RepoOkfTab').then((m) => ({
-    default: m.RepoOkfTab,
-  })),
+  loadRepoTabs().then((m) => ({ default: m.RepoOkfTab })),
 );
 const RepoOtelTab = lazy(() =>
-  import('./otel/RepoOtelTab').then((m) => ({
-    default: m.RepoOtelTab,
-  })),
+  loadRepoTabs().then((m) => ({ default: m.RepoOtelTab })),
 );
 
 function getHttpStatusCode(error: unknown): number | null {
@@ -58,16 +58,6 @@ function getHttpStatusCode(error: unknown): number | null {
   }
   return null;
 }
-
-const MAIN_TAB_LABELS: Record<MainTab, string> = {
-  sessions: 'Sessions',
-  analytics: 'Analytics',
-  reports: 'Reports',
-  tools: 'Tools/MCP',
-  okf: 'OKF',
-  otel: 'OTEL',
-  settings: 'Settings',
-};
 
 export function RepositoryView() {
   const { repoId: repoIdStr, teamId: teamIdStr } = useParams<{
@@ -114,7 +104,7 @@ export function RepositoryView() {
    * grants nothing here — an admin is scoped by their team role like anyone else.
    */
   const canSeeTeamWideTabs =
-    !isRestrictedTeam || isTeamOwner || (currentTeam?.myIsManager ?? false);
+    currentTeam === undefined || teamWideAccess(currentTeam, user?.id);
 
   /**
    * Only a caller whose scope really is `own-only` gets the notice — a `manager`
@@ -174,12 +164,14 @@ export function RepositoryView() {
     sessionId,
     mainTab,
     sessionTab,
+    lensParam,
     topN,
     showAllUsers,
     otelReasonFilter,
     setOtelReasonFilter,
     setMainTab,
     setSessionTab,
+    switchLens,
     setTopN,
     setShowAllUsers,
     handleSessionSelect,
@@ -254,6 +246,39 @@ export function RepositoryView() {
     branchSelectedSession,
     otelReason: otelReasonFilter,
   });
+
+  // Recent visits (DD-15): a repository open, every session / session-tab visit, and the removal
+  // of a session whose open failed (the `SessionNotFoundState` pane).
+  const { recordRepo, recordSession, dropSession } = useRecentVisits();
+  const repoOpened = !isInvalidId && summaryQuery.isSuccess;
+  useEffect(() => {
+    if (repoOpened) recordRepo(repoId, teamId);
+  }, [repoOpened, repoId, teamId, recordRepo]);
+  const visitedSessionId =
+    selectedSession !== null && selectedSession.sessionId === sessionId
+      ? selectedSession.sessionId
+      : null;
+  const visitedSessionLabel = selectedSession?.firstPrompt ?? null;
+  useEffect(() => {
+    if (visitedSessionId === null) return;
+    recordSession({
+      repoId,
+      teamId,
+      sessionId: visitedSessionId,
+      tab: sessionTab,
+      label: visitedSessionLabel,
+    });
+  }, [
+    visitedSessionId,
+    visitedSessionLabel,
+    sessionTab,
+    repoId,
+    teamId,
+    recordSession,
+  ]);
+  useEffect(() => {
+    if (isSessionNotFound && sessionId) dropSession(sessionId);
+  }, [isSessionNotFound, sessionId, dropSession]);
 
   // D4.8 — the repo URL comes from the repo-detail query (team-aware), not another view's cache.
   const repoUrl = repoDetailQuery.data?.repoUrl;
@@ -366,6 +391,8 @@ export function RepositoryView() {
         sessionCountDisplay={sessionCountDisplay}
         userCountDisplay={userCountDisplay}
         repoContexts={repoContexts}
+        repoId={repoId}
+        teamId={teamId}
       />
 
       {showRestrictedNotice && (
@@ -379,9 +406,11 @@ export function RepositoryView() {
       )}
 
       <PageTabs
-        tabs={REPO_MAIN_TABS.filter(
-          (t) => t === 'sessions' || canSeeTeamWideTabs,
-        ).map((t) => ({ value: t, label: MAIN_TAB_LABELS[t] }))}
+        tabs={visibleTabs('repo', { canSeeTeamWideTabs }).map((r) => ({
+          value: r.id,
+          label: r.label,
+          description: r.description,
+        }))}
         value={visibleMainTab}
         onValueChange={(v) => setMainTab(v as MainTab)}
         className="flex flex-col flex-1 min-h-0"
@@ -423,6 +452,8 @@ export function RepositoryView() {
             hideHookSessions={hideHookSessions}
             sessionTab={sessionTab}
             onSessionTabChange={setSessionTab}
+            lensParam={lensParam}
+            onLensSwitch={switchLens}
             isFavorite={isFavorite}
             favoriteMutationPending={favoriteMutation.isPending}
             onFavoriteToggle={(newValue) => favoriteMutation.mutate(newValue)}

@@ -2,6 +2,49 @@
 
 The Session Log view displays a complete record of a single Claude Code session. Open it by clicking any row in the repository's session list.
 
+## Views and tabs
+
+A session has one row of tabs. It starts with the **View** select, which picks the few tabs that
+answer one question and shows them in the row:
+
+| View | Tabs in the row | Opens on |
+|---|---|---|
+| What happened | Summary, Logs, Bash, Timeline, Agent Tree, Change surface | Summary |
+| Cost | Summary, Statistics, Call Tree, Context Growth, Dashboard, Advisor, OTEL | Statistics |
+| Harness & context | System context anatomy, Context Usage, Harness usage, OKF, Info | System context anatomy |
+| Failed tool call | Tools/MCP, Logs, Bash, Tool Heatmap, OTEL | Tools/MCP |
+| All tabs | every tab | Summary |
+
+- **Cost** is the view you start with. Log Hub remembers the last view you picked, per user, in
+  this browser.
+- Switching the view opens the tab in the **Opens on** column. A session link without a tab
+  always opens **Summary**, whatever the view.
+- Tabs a view does not show are under **More ▾** at the end of the row, under the headings
+  Overview, Transcript, Cost & context and Effects. The same menu takes the tabs that do not fit
+  on a narrow screen.
+- When you open a tab that is not in the view (from More, a Summary card or a link), it shows at
+  the end of the row after a divider, so you always see which tab is open.
+- Tabs that have nothing to show for this session are left out, for example Advisor without an
+  advisor result. Raw Logs is shown only to the session's owner.
+- The view is part of the page address (`&lens=harness`), so a copied link opens the same view.
+  Choosing a tab never changes the view.
+
+The headings in **More ▾** group the tabs like this:
+
+| Heading | Tabs |
+|---|---|
+| Overview | Summary, Info, Statistics, Advisor |
+| Transcript | Logs, Bash, Raw Logs |
+| Cost & context | Dashboard, Context Growth, Context Usage, Agent Tree, Timeline, Tool Heatmap, Call Tree, System context anatomy, Harness usage, OTEL |
+| Effects | Change surface, Tools/MCP, OKF |
+
+A red dot on **Tools/MCP** means an MCP server call of this session failed. Hover any tab for a
+one-line description of what it shows.
+
+The **Summary** tab ends with **Where to look next**: one card per tab worth a look, with its key
+figure and **Open →**, and a row of questions (**Why so expensive?**, **What happened?**, **What
+gets loaded?**, **Which tool failed?**) that switch to the matching view.
+
 ## Tabs
 
 ### Timeline
@@ -64,7 +107,10 @@ PowerShell commands) are shown as plain text.
 
 ### Charts
 
-Visual breakdown of the session:
+Each chart is a tab of its own: **Dashboard** (the key charts on one screen — click a card to open
+the full chart tab), **Context Growth**, **Context Usage**, **Agent Tree**, **Timeline**, **Tool
+Heatmap** and **Call Tree**. An older link that ends in `tab=charts` opens the chart you looked at
+last (the dashboard the first time). The charts show:
 
 - **Cost** — cumulative spend over time
 - **Token usage** — input vs output tokens per turn
@@ -94,7 +140,7 @@ The unprocessed JSONL log lines captured by the hook. Useful for debugging hook 
 
 ### System context anatomy
 
-The last tab. It shows what Claude Code sent to the model **before you typed anything** — the
+In the **Cost & context** group. It shows what Claude Code sent to the model **before you typed anything** — the
 startup context of the session's first request — and how big each part of it was. The top of the
 Logs tab shows the same total in one line, "Startup context · N tokens", with a **View anatomy →**
 link to this tab.

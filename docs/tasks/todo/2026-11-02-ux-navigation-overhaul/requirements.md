@@ -66,6 +66,24 @@ uses B's "More ▾"; D's Explore chips and F's question cards open C's lenses.
 
 ### B — Grouped session tab bar
 
+> **Revised 2026-11-02 after the first implementation (owner's decision).** The shipped bar had
+> four levels (lens row → group row → tab row → Charts sub-tabs); the owner's rule is **at most
+> two**. Replacement, implemented in place of FR-B1–B4 below and the segmented switcher of FR-C5:
+> - The session bar has **one level of tabs**. The lens is a compact **"View" select** at the start
+>   of the tab row (`data-testid="session-lens"`, value = lens id), not a row of its own.
+> - There is **no group row**: session groups are only the section headings of "More ▾" (and of
+>   the All views map). The "All" lens ("All tabs") puts every visible tab in the row; what does
+>   not fit the width goes to More. Nothing remembers a per-group tab any more.
+> - The **seven charts are plain session tabs** (`dashboard` labelled "Dashboard", `context-growth`,
+>   `context-usage`, `agent-tree`, `timeline`, `tool-heatmap`, `call-tree`); the Charts sub-tab bar
+>   and the `chart` registry scope are gone. Backward compatibility: an old `tab=charts` link
+>   opens the chart this browser last showed (`charts-sub-tab`, else the dashboard); `tab=call-tree`
+>   is a real tab now.
+> - The lenses promote chart tabs directly (Cost: Summary, Statistics, Call Tree, Context Growth,
+>   Dashboard, Advisor, OTEL; see `docs/knowledgebase/algorithms/session-lens-row.md`).
+>
+> The original text below is kept for history.
+
 - FR-B1: The session tab bar is a **two-level bar** (option B of `wave-1/02-grouped-session-tab-bar.md`;
   the one-row-with-dividers option A and its UX wireframe W2 are not used). The top row shows the
   groups: Overview (Summary, Info, Statistics, Advisor), Transcript (Logs, Bash, Raw Logs), Cost &
@@ -105,8 +123,7 @@ uses B's "More ▾"; D's Explore chips and F's question cards open C's lenses.
 - FR-C3: The active lens is kept in an optional `lens=` URL parameter and remembered per viewer in
   browser storage (reads and writes wrapped in try/catch; page works without storage).
 - FR-C3a: Default lens, used when the URL has no `lens=` and nothing is remembered (first visit, or
-  storage unavailable): **Cost**, for every user (no per-role default). Once the viewer picks a lens,
-  that choice is remembered and used instead of Cost.
+  storage unavailable): **Cost**, for every user (no per-role default).
 - FR-C4: An explicit `tab=` in the URL always wins over the lens default tab. An unknown `lens=` value
   is treated as missing (FR-C3a applies). A session URL without `tab=` opens Summary, as today, under any lens; a lens's default tab
   is opened only when the user switches lens (and is then written as `tab=`).

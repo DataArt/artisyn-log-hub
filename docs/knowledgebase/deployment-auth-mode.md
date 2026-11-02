@@ -51,6 +51,11 @@ which makes switching look cheap. It isn't; see above.
   in `release-template/.env.example`. There an unset `AZURE_SCOPES` is substituted with the app's
   own default `openid profile email` in the compose file, because compose turns an unset `${VAR:-}`
   into an empty string, which would fail startup.
+- The release kit's `app` service also has `env_file: .env`, so **every** variable of the install's
+  `.env` reaches the container, including ones not listed under `environment:` (e.g.
+  `SESSION_RETENTION_DAYS`, `PASSWORD_POLICY`, `AI_TOOL_VERSION_CHECK_ENABLED`). A new server env
+  var therefore needs no compose edit — only a commented line in `release-template/.env.example`.
+  A variable absent from `.env` stays unset, so the app's own default applies.
 - Compose `environment:` entries **override** `env_file: .env`, and an unset `${VAR}` resolves to an
   empty string rather than falling back — so a variable missing from the pipeline blanks out whatever
   the deploy host's own `.env` held. An empty `AZURE_SCOPES` is a hard startup failure by design

@@ -35,6 +35,10 @@ export type ReportCategoryId =
 export interface ReportDefinition {
   id: ReportId;
   title: string;
+  /** One-line explanation, shown in tooltips and on the All views map. */
+  description: string;
+  /** Extra words the All views filter matches. */
+  synonyms: string[];
   supportsGroupBy: boolean;
   supportsBranchFilter: boolean;
   supportsUserFilter: boolean;
@@ -74,6 +78,8 @@ export const REPORT_CATEGORIES: ReportCategory[] = [
       {
         id: 'executive-summary',
         title: 'Executive Summary',
+        description: 'Cost, sessions, users and trends of the period.',
+        synonyms: ['cost', 'summary', 'spend', 'week'],
         supportsGroupBy: false,
         supportsBranchFilter: true,
         supportsUserFilter: true,
@@ -89,6 +95,8 @@ export const REPORT_CATEGORIES: ReportCategory[] = [
       {
         id: 'session-timeline',
         title: 'Session Timeline',
+        description: 'When sessions ran.',
+        synonyms: ['time', 'calendar'],
         supportsGroupBy: true,
         supportsBranchFilter: true,
         supportsUserFilter: false,
@@ -98,6 +106,8 @@ export const REPORT_CATEGORIES: ReportCategory[] = [
       {
         id: 'work-time',
         title: 'Work Time Distribution',
+        description: 'Agent work time by hour.',
+        synonyms: ['time', 'hours'],
         supportsGroupBy: true,
         supportsBranchFilter: true,
         supportsUserFilter: false,
@@ -107,6 +117,8 @@ export const REPORT_CATEGORIES: ReportCategory[] = [
       {
         id: 'tool-analytics',
         title: 'Tool Analytics',
+        description: 'Tool calls and their success rate.',
+        synonyms: ['tools', 'fail', 'errors'],
         // These four aggregate over the whole filtered set and have no per-group
         // breakdown, so the groupBy control is hidden for them.
         supportsGroupBy: false,
@@ -118,6 +130,8 @@ export const REPORT_CATEGORIES: ReportCategory[] = [
       {
         id: 'active-sessions',
         title: 'Active Sessions',
+        description: 'Sessions active in the period.',
+        synonyms: ['running', 'active'],
         supportsGroupBy: false,
         supportsBranchFilter: true,
         supportsUserFilter: true,
@@ -133,6 +147,8 @@ export const REPORT_CATEGORIES: ReportCategory[] = [
       {
         id: 'branch-summary',
         title: 'Branch Summary',
+        description: 'Work per branch.',
+        synonyms: ['branch', 'git'],
         supportsGroupBy: false,
         supportsBranchFilter: true,
         supportsUserFilter: false,
@@ -146,6 +162,8 @@ export const REPORT_CATEGORIES: ReportCategory[] = [
         // repo-level row (the report states that inline). No SCOPE toggle.
         id: 'change-surface',
         title: 'Change Surface',
+        description: 'Files touched in the period.',
+        synonyms: ['files', 'diff'],
         supportsGroupBy: true,
         supportsBranchFilter: true,
         supportsUserFilter: true,
@@ -161,6 +179,8 @@ export const REPORT_CATEGORIES: ReportCategory[] = [
       {
         id: 'cost-by-branch',
         title: 'Cost by Branch',
+        description: 'Cost per branch.',
+        synonyms: ['cost', 'spend', 'expensive'],
         supportsGroupBy: false,
         supportsBranchFilter: true,
         supportsUserFilter: false,
@@ -170,6 +190,8 @@ export const REPORT_CATEGORIES: ReportCategory[] = [
       {
         id: 'cost-by-user',
         title: 'Cost by User',
+        description: 'Cost per user.',
+        synonyms: ['cost', 'spend', 'who', 'people', 'expensive'],
         supportsGroupBy: true,
         supportsBranchFilter: false,
         supportsUserFilter: false,
@@ -179,6 +201,8 @@ export const REPORT_CATEGORIES: ReportCategory[] = [
       {
         id: 'cache-read-ratio',
         title: 'Cache Read Ratio',
+        description: 'How much input came from cache.',
+        synonyms: ['cache', 'tokens', 'cost'],
         supportsGroupBy: true,
         supportsBranchFilter: true,
         supportsUserFilter: true,
@@ -188,6 +212,8 @@ export const REPORT_CATEGORIES: ReportCategory[] = [
       {
         id: 'token-usage',
         title: 'Token Usage',
+        description: 'Tokens by kind and model.',
+        synonyms: ['tokens', 'cost'],
         supportsGroupBy: false,
         supportsBranchFilter: true,
         supportsUserFilter: true,
@@ -203,6 +229,8 @@ export const REPORT_CATEGORIES: ReportCategory[] = [
       {
         id: 'productivity',
         title: 'Productivity',
+        description: 'Output per hour and per dollar.',
+        synonyms: ['productivity', 'lines'],
         supportsGroupBy: false,
         supportsBranchFilter: true,
         supportsUserFilter: false,
@@ -212,6 +240,8 @@ export const REPORT_CATEGORIES: ReportCategory[] = [
       {
         id: 'productivity-counters',
         title: 'Productivity Counters',
+        description: 'Counts of produced work.',
+        synonyms: ['counters', 'lines'],
         supportsGroupBy: false,
         supportsBranchFilter: true,
         supportsUserFilter: true,
@@ -227,6 +257,8 @@ export const REPORT_CATEGORIES: ReportCategory[] = [
       {
         id: 'harness-usage',
         title: 'Harness Usage',
+        description: 'Which skills, agents and CLAUDE.md files sessions used.',
+        synonyms: ['claude.md', 'skills', 'harness', 'used'],
         supportsGroupBy: true,
         supportsBranchFilter: true,
         supportsUserFilter: true,
@@ -237,6 +269,8 @@ export const REPORT_CATEGORIES: ReportCategory[] = [
         // Per-user table only — each row already is a user, so no groupBy control.
         id: 'claude-version-usage',
         title: 'Claude Code Version Usage',
+        description: 'Claude Code versions in use.',
+        synonyms: ['version', 'upgrade'],
         supportsGroupBy: false,
         supportsBranchFilter: true,
         supportsUserFilter: true,
@@ -252,6 +286,8 @@ export const REPORT_CATEGORIES: ReportCategory[] = [
       {
         id: 'attribution-breakdown',
         title: 'Attribute Breakdown',
+        description: 'Cost and sessions per attribute.',
+        synonyms: ['jira', 'ticket', 'attribution'],
         // Already breaks every attribute down into its own section — a groupBy would be
         // redundant (see reports.controller.ts's getAttributionBreakdownReport comment).
         supportsGroupBy: false,
@@ -263,6 +299,8 @@ export const REPORT_CATEGORIES: ReportCategory[] = [
       {
         id: 'attribution-usage',
         title: 'Attribute Extraction Usage',
+        description: 'How attribute extraction is used.',
+        synonyms: ['jira', 'attribution'],
         supportsGroupBy: false,
         supportsBranchFilter: true,
         supportsUserFilter: true,

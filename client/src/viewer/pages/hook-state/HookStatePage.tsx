@@ -5,6 +5,7 @@ import { ApiError, fetchHookState } from '../../api';
 import { PageState } from '../../components/PageState';
 import { formatRelativeDate } from '../../../lib/format';
 import { HookStatusCard } from './HookStatusCard';
+import { RecommendationMessage } from './RecommendationMessage';
 
 function errorMessage(error: unknown): string {
   if (error instanceof ApiError) {
@@ -87,7 +88,7 @@ export function HookStatePage() {
                   <div className="flex min-w-0 items-start gap-2">
                     <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-orange-500" />
                     <div className="flex min-w-0 flex-col gap-0.5">
-                      <span className="text-sm font-medium">{rec.message}</span>
+                      <RecommendationMessage message={rec.message} />
                       <span className="text-xs text-muted-foreground">
                         rule: {rec.rule}
                       </span>

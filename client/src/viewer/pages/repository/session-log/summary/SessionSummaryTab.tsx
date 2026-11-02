@@ -38,6 +38,10 @@ import { runDetectors } from './detectors/registry';
 import { SummaryExecutiveBand } from './SummaryExecutiveBand';
 import { SummaryDetectedIssues } from './SummaryDetectedIssues';
 import { SummaryExtendedDetails } from './SummaryExtendedDetails';
+import { buildSummaryCards } from './summary-cards';
+import { SummaryNextCards } from './SummaryNextCards';
+import { SummaryExploreChips } from './SummaryExploreChips';
+import type { LensId } from '../../session-lenses';
 
 export interface SessionSummaryTabProps {
   selectedSession: RepositorySession;
@@ -77,6 +81,10 @@ export interface SessionSummaryTabProps {
    * (component tests) need no QueryClient; absent means "no reference versions".
    */
   claudeReleaseHistory?: AiToolVersionHistoryEntry[];
+  /** Bash calls of the session tree, counted once by `SessionDetailPane` (Bash card, DD-20). */
+  bashCount?: number;
+  /** The pane's lens switch (`useSessionLens`); absent hides the Explore chips. */
+  onLensSwitch?: (lens: LensId) => void;
 }
 
 /** The loading render — `Skeleton` blocks, per `SessionUsageTab.tsx:83-99`. */
@@ -106,6 +114,8 @@ export function SessionSummaryTab({
   changeSurface,
   changeSurfaceLoading = false,
   claudeReleaseHistory,
+  bashCount,
+  onLensSwitch,
 }: SessionSummaryTabProps) {
   // A handful of memos, each on its own dependency set, so an unrelated
   // re-render recomputes nothing. These run unconditionally, before the state machine below
@@ -195,6 +205,31 @@ export function SessionSummaryTab({
     selectedSession.claudeVersion,
   ]);
 
+  // "Where to look next" cards (DD-20): only values already loaded — no request, no lazy chunk.
+  const turnEndAdvisor = logsQuery.data?.turnEndAdvisor ?? null;
+  const tokenBreakdown = parsedLogs?.summary.tokenBreakdown ?? null;
+  const cards = useMemo(
+    () =>
+      buildSummaryCards({
+        sessionCost,
+        tokenBreakdown,
+        derived,
+        bashCount,
+        changeSurface: changeSurface ?? null,
+        changeSurfaceLoading,
+        advisor: turnEndAdvisor,
+      }),
+    [
+      sessionCost,
+      tokenBreakdown,
+      derived,
+      bashCount,
+      changeSurface,
+      changeSurfaceLoading,
+      turnEndAdvisor,
+    ],
+  );
+
   // State machine, in this exact order.
   let content: ReactNode;
   if (logsQuery.isLoading) {
@@ -243,6 +278,11 @@ export function SessionSummaryTab({
           incomplete={false}
           changeSurfaceLoading={changeSurfaceLoading}
         />
+        <SummaryNextCards
+          cards={cards}
+          onSessionTabChange={onSessionTabChange}
+        />
+        {onLensSwitch && <SummaryExploreChips onLensSwitch={onLensSwitch} />}
         <SummaryDetectedIssues
           findings={findings}
           onGoToTurn={onGoToTurn}

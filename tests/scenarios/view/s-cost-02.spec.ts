@@ -27,7 +27,7 @@
 //   - tests/e2e/usage-analytics.spec.ts (TTL part)
 import { test, expect } from '../fixtures';
 import { type GoldenTokens } from '../helpers/golden';
-import { infoTableValue, int, logTurns, openSession, pct1, turnMetric, usd4 } from '../helpers/session-view';
+import { infoTableValue, int, logTurns, openSession, pct1, turnMetric, usd4, selectSessionTab } from '../helpers/session-view';
 import { repoGet, uploadRepoGold } from '../helpers/reports';
 
 /** DD D3 rates of claude-opus-5, $ per Mtok; web search $ per request. */
@@ -138,7 +138,7 @@ test('@S-COST-02 cache 5m and 1h, fast mode, web search: the price by the formul
   });
 
   await test.step('5. Info Tokens & Cost: 5m TTL and 1h TTL rows at their own rates, web search, the fast rows, total 1.4000', async () => {
-    await page.getByTestId('tab-session-info').click();
+    await selectSessionTab(page, 'info');
     const cells = (label: string) => page.locator('tr').filter({ has: page.locator('td:first-child', { hasText: new RegExp(`^\\s*${label}\\s*$`) }) }).first().locator('td');
     await expect(cells('↳ 5m TTL').nth(1)).toHaveText(int(tok.cacheWrite5m));
     await expect(cells('↳ 5m TTL').nth(3)).toHaveText(usd4((tok.cacheWrite5m * OPUS5.write5m) / M));
@@ -152,15 +152,14 @@ test('@S-COST-02 cache 5m and 1h, fast mode, web search: the price by the formul
   });
 
   await test.step('6. Statistics: 5-minute TTL 40.0K and 1-hour TTL 80.0K', async () => {
-    await page.getByTestId('tab-session-usage').click();
+    await selectSessionTab(page, 'usage');
     const tab = page.getByTestId('session-usage-tab');
     await expect(tab.locator('tr', { hasText: '5-minute TTL' })).toContainText(`${(tok.cacheWrite5m / 1000).toFixed(1)}K`);
     await expect(tab.locator('tr', { hasText: '1-hour TTL' })).toContainText(`${(tok.cacheWrite1h / 1000).toFixed(1)}K`);
   });
 
-  await test.step('7. Charts → Call Tree: P1 has separate «Cache: write (5m)» and «Cache: write (1h)» rows; «Session Total» 1.4000', async () => {
-    await page.getByTestId('tab-session-charts').click();
-    await page.getByTestId('tab-chart-call-tree').click();
+  await test.step('7. Call Tree: P1 has separate «Cache: write (5m)» and «Cache: write (1h)» rows; «Session Total» 1.4000', async () => {
+    await selectSessionTab(page, 'call-tree');
     const t = P[0].tokens;
     const cells = (label: string) =>
       page.locator('tr').filter({ has: page.locator('td:first-child', { hasText: new RegExp(`^\\s*${label}\\s*$`) }) }).first().locator('td');

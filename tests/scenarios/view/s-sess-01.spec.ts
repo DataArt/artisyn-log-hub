@@ -43,6 +43,8 @@ import {
   uploadGoldenRepo,
   usageCounter,
   usd4,
+  selectSessionTab,
+  lensSelect,
 } from '../helpers/session-view';
 
 const FIRST_PROMPT = 'Add a /health endpoint to the app and document it';
@@ -109,7 +111,7 @@ test('@S-SESS-01 plain session: Summary, Info and Statistics show the same numbe
   });
 
   await test.step('5. Info: prompts (isMeta not counted), work time, duration, lines, productivity, cache ratio, total', async () => {
-    await page.getByTestId('tab-session-info').click();
+    await selectSessionTab(page, 'info');
     await expect(page).toHaveURL(/tab=info/);
     await expect(infoValue(page, 'Prompts')).toHaveText(String(E.prompts));
     await expect(infoValue(page, 'Autonomous work time')).toHaveText(hms(E.workTimeMs));
@@ -127,7 +129,7 @@ test('@S-SESS-01 plain session: Summary, Info and Statistics show the same numbe
   });
 
   await test.step('6. Statistics: tokens by TTL and tier, tool table (calls, no failures)', async () => {
-    await page.getByTestId('tab-session-usage').click();
+    await selectSessionTab(page, 'usage');
     const tab = page.getByTestId('session-usage-tab');
     await expect(tab).toBeVisible();
     const tools = Object.entries(E.tools);
@@ -158,7 +160,7 @@ test('@S-SESS-01 plain session: Summary, Info and Statistics show the same numbe
   });
 
   await test.step('7. Logs: three turns with the per-prompt cost and cache_ratio of expected.json', async () => {
-    await page.getByTestId('tab-session-logs').click();
+    await selectSessionTab(page, 'logs');
     const turns = logTurns(page);
     const perPrompt = E.perPrompt as Array<{ workTimeMs: number; costUsd: number; cacheRatio: number; tokens: { input: number } }>;
     await expect(turns).toHaveCount(perPrompt.length);
@@ -184,5 +186,74 @@ test('@S-SESS-01 plain session: Summary, Info and Statistics show the same numbe
     expect(meta, 'the isMeta line is stored, just not counted as a prompt').toHaveLength(
       (E.nonQualifyingUserLines as { isMeta: number }).isMeta,
     );
+  });
+
+  await test.step('9. default Cost lens: Info is not in the row; it opens through "More ▾" without writing lens=', async () => {
+    await openSession(page, owner, repo.repoId, sid);
+    await expect(lensSelect(page)).toHaveValue('cost');
+    // The first Cost tabs; how many of the later ones (Call Tree, Context Growth, Dashboard, OTEL) fit
+    // depends on the pane width — the rest overflow into "More ▾".
+    for (const t of ['summary', 'usage']) {
+      await expect(page.getByTestId(`tab-session-${t}`), `${t} is promoted by the Cost lens`).toBeVisible();
+    }
+    await expect(page.getByTestId('tab-session-info')).toHaveCount(0);
+    await page.getByTestId('session-tabs-more').click();
+    await page.getByTestId('tab-session-info').click();
+    await expect(page).toHaveURL(/tab=info/);
+    await expect(page).not.toHaveURL(/lens=/);
+    await expect(infoValue(page, 'Prompts')).toHaveText(String(E.prompts));
+    // Info is out of the lens: it stays visible as the active tab after the divider.
+    await expect(page.getByTestId('session-lens-extra').getByTestId('tab-session-info')).toHaveAttribute(
+      'aria-selected',
+      'true',
+    );
+  });
+
+  await test.step('10. ?tab=logs&lens=cost: Logs is active after the divider, the Cost row stays', async () => {
+    await openSession(page, owner, repo.repoId, sid, { tab: 'logs', lens: 'cost' });
+    await expect(lensSelect(page)).toHaveValue('cost');
+    const extra = page.getByTestId('session-lens-extra');
+    await expect(extra.getByTestId('tab-session-logs')).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByTestId('tab-session-usage')).toHaveAttribute('aria-selected', 'false');
+    await expect(logTurns(page)).toHaveCount((E.perPrompt as unknown[]).length);
+  });
+
+  await test.step('11. Summary cards: no request when Summary opens; Statistics = the band Cost; OKF has no figure', async () => {
+    const requests: string[] = [];
+    const onRequest = (req: { url(): string }) => {
+      if (/\/api\//.test(req.url())) requests.push(req.url());
+    };
+    page.on('request', onRequest);
+    await selectSessionTab(page, 'summary');
+    const cards = page.getByTestId('summary-next-cards');
+    await expect(cards).toBeVisible();
+    await expect(page.getByTestId('summary-card-usage-headline')).toHaveText(usd4(E.costUsd!));
+    await expect(summaryTile(page, 'Cost')).toContainText(usd4(E.costUsd!));
+    await expect(page.getByTestId('summary-card-change-surface-headline')).toHaveText(
+      `${E.changeSurface.changedFiles} changed files`,
+    );
+    await expect(page.getByTestId('summary-card-change-surface')).not.toHaveAttribute('data-dimmed', 'true');
+    await expect(page.getByTestId('summary-card-okf')).toBeVisible();
+    await expect(page.getByTestId('summary-card-okf-headline')).toHaveCount(0);
+    await expect(page.getByTestId('summary-card-okf')).not.toHaveAttribute('data-dimmed', 'true');
+    page.off('request', onRequest);
+    expect(requests, 'opening Summary sends no API request').toEqual([]);
+  });
+
+  await test.step('12. "Open →" on the Info card switches to Info', async () => {
+    await page.getByTestId('summary-card-info-open').click();
+    await expect(page).toHaveURL(/tab=info/);
+    await expect(page.getByTestId('tab-session-info')).toHaveAttribute('aria-selected', 'true');
+    await expect(infoValue(page, 'Prompts')).toHaveText(String(E.prompts));
+  });
+
+  await test.step('13. a session with no changed paths (GS-04): the Change surface card is dimmed', async () => {
+    const noChange = await uploadGoldenRepo(api, db, owner, ['gs-04']);
+    expect(loadExpected('gs-04').roots[0].changeSurface.changedFiles).toBe(0);
+    await openSession(page, owner, noChange.repoId, noChange.rootId('gs-04'));
+    const card = page.getByTestId('summary-card-change-surface');
+    await expect(card).toHaveAttribute('data-dimmed', 'true');
+    await expect(card).toContainText('No data in this session');
+    await expect(page.getByTestId('summary-card-change-surface-headline')).toHaveCount(0);
   });
 });

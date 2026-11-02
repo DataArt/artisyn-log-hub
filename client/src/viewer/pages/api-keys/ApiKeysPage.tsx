@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { Copy, Pencil, Trash2 } from 'lucide-react';
 import { useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import {
   type ApiKey,
   type CreatedApiKey,
@@ -11,20 +12,34 @@ import {
 } from '../../api';
 import { Button } from '../../ui/button';
 import { DatePickerPopover } from '../../ui/date-picker-popover';
-import { API_KEYS_TABS, type ApiKeysTab } from '../../tab-ids';
+import { API_KEYS_TABS, tabsOf, type ApiKeysTab } from '../../tab-ids';
 import { PageTabs, PageTabsContent } from '../../ui/page-tabs';
 import { InstallTab } from './InstallTab';
 
-const TAB_LABELS: Record<ApiKeysTab, string> = {
-  install: 'Install',
-  keys: 'API Keys',
-};
+const TABS = tabsOf('apikeys').map((r) => ({
+  value: r.id,
+  label: r.label,
+  description: r.description,
+}));
 
-const TABS = API_KEYS_TABS.map((t) => ({ value: t, label: TAB_LABELS[t] }));
+/**
+ * The tab a link asked for through `navigate(path, { state: { apiKeysTab } })` (the All views
+ * map), or `install`. API-keys tabs have no URL param, so the state is read once.
+ */
+function initialApiKeysTab(state: unknown): ApiKeysTab {
+  const wanted: unknown =
+    typeof state === 'object' && state !== null && 'apiKeysTab' in state
+      ? state.apiKeysTab
+      : undefined;
+  return API_KEYS_TABS.find((t) => t === wanted) ?? 'install';
+}
 
 export function ApiKeysPage() {
   const queryClient = useQueryClient();
-  const [activeTab, setActiveTab] = useState<ApiKeysTab>('install');
+  const location = useLocation();
+  const [activeTab, setActiveTab] = useState<ApiKeysTab>(() =>
+    initialApiKeysTab(location.state),
+  );
   const [newKeyName, setNewKeyName] = useState('');
   const [newKeyExpiry, setNewKeyExpiry] = useState('');
   const [error, setError] = useState('');

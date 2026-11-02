@@ -36,6 +36,10 @@ import {
   toolRow,
   uploadGoldenRepo,
   usd4,
+  selectLens,
+  selectSessionTab,
+  lensSelect,
+  revealSessionTab,
 } from '../helpers/session-view';
 
 interface PerPrompt {
@@ -117,7 +121,7 @@ test('@S-SESS-04 delegator three levels deep: nesting and the cost of the tree @
   });
 
   await test.step('6. Info: Sub-agents spawned 3, Lines changed 36 (not 0), Cost / line, Lines / autonomous hr, work time not stretched', async () => {
-    await page.getByTestId('tab-session-info').click();
+    await selectSessionTab(page, 'info');
     await expect(infoValue(page, 'Sub-agents spawned')).toHaveText(String(E.subAgentsSpawned));
     await expect(infoValue(page, 'Lines changed')).toContainText(String(E.lines.written));
     await expect(infoValue(page, 'Lines changed')).toContainText(`${E.lines.writtenOwn} own · ${E.lines.written} in 3 sub-agents`);
@@ -129,7 +133,7 @@ test('@S-SESS-04 delegator three levels deep: nesting and the cost of the tree @
   });
 
   await test.step('7. Summary: Delegation 3 agents and its cost share, Code impact 36 lines, Cost with sub-agents', async () => {
-    await page.getByTestId('tab-session-summary').click();
+    await selectSessionTab(page, 'summary');
     const delegation = summaryTile(page, 'Delegation');
     await expect(delegation).toContainText('3 agents');
     await expect(delegation).toContainText(`${Math.round((E.delegationShare as number) * 100)}% of cost`);
@@ -140,7 +144,7 @@ test('@S-SESS-04 delegator three levels deep: nesting and the cost of the tree @
   });
 
   await test.step('8. Statistics: tool calls summed over the tree', async () => {
-    await page.getByTestId('tab-session-usage').click();
+    await selectSessionTab(page, 'usage');
     for (const [tool, t] of Object.entries(E.tools)) {
       await expect(toolRow(page, tool).locator('td').nth(1), tool).toHaveText(String(t.calls));
     }
@@ -150,5 +154,43 @@ test('@S-SESS-04 delegator three levels deep: nesting and the cost of the tree @
 
   await test.step('9. the session list has one row for the tree — none for A, B or D', async () => {
     await expect(page.getByTestId('session-item')).toHaveCount(1);
+  });
+
+  await test.step('10. a lens switch writes lens= and the lens default tab: Harness → System context', async () => {
+    await selectLens(page, 'harness');
+    await expect(page).toHaveURL(/lens=harness/);
+    await expect(page).toHaveURL(/tab=sysctx/);
+    await expect(page.getByTestId('tab-session-sysctx')).toHaveAttribute('aria-selected', 'true');
+    // The other Harness tabs are in the row or, when the pane is narrow, under "More ▾".
+    for (const t of ['context-usage', 'harness-usage', 'okf', 'info']) {
+      await revealSessionTab(page, t);
+      await page.keyboard.press('Escape');
+    }
+  });
+
+  await test.step('11. the lens survives a reload, and a link without lens= reopens the remembered lens', async () => {
+    await page.reload();
+    await expect(lensSelect(page)).toHaveValue('harness');
+    await expect(page.getByTestId('tab-session-sysctx')).toHaveAttribute('aria-selected', 'true');
+    await openSession(page, owner, repo.repoId, sid);
+    await expect(lensSelect(page)).toHaveValue('harness');
+    await expect(page).not.toHaveURL(/lens=/);
+    // Without tab= the session still opens on Summary under every lens.
+    await expect(page.getByTestId('summary-executive-band')).toBeVisible();
+  });
+
+  await test.step('12. All tabs: one level of tabs, a chart is a tab, an old tab=charts link reopens the last chart', async () => {
+    await selectLens(page, 'all');
+    await expect(page).toHaveURL(/lens=all/);
+    await expect(page).not.toHaveURL(/tab=/);
+    // One level: no group row and no Charts sub-tab bar.
+    await expect(page.locator('[data-testid^="tab-session-group-"]')).toHaveCount(0);
+    await expect(page.locator('[data-testid^="tab-chart-"]')).toHaveCount(0);
+    await selectSessionTab(page, 'timeline');
+    await expect(page).toHaveURL(/tab=timeline/);
+    await expect(page.getByTestId('session-chart-timeline')).toBeVisible();
+    await openSession(page, owner, repo.repoId, sid, { tab: 'charts' });
+    await expect(page).toHaveURL(/tab=timeline/);
+    await expect(page.getByTestId('tab-session-timeline')).toHaveAttribute('aria-selected', 'true');
   });
 });

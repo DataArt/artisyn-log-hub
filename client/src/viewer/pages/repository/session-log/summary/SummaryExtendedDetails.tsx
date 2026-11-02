@@ -306,8 +306,8 @@ export function SummaryExtendedDetails({
               <ContextGrowthChart session={parsedLogs} pricing={pricing} />
             </div>
             <DeepLink
-              tab="charts"
-              label="View full chart on the Charts tab →"
+              tab="context-growth"
+              label="View full chart on the Context Growth tab →"
               onSessionTabChange={onSessionTabChange}
             />
           </div>

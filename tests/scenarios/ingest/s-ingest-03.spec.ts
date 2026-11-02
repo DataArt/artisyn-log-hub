@@ -92,11 +92,14 @@ test('@S-INGEST-03 hostile and huge bodies: empty, malformed, NUL, four gzip sha
     await ok('bad', '{"a":1}\nNOT-JSON\n');
     const counts = await waitForQueueIdle(db, owner.id, { allowFailed: true });
     expect(counts).toEqual({ failed: 1 });
-    const { rows } = await db.query<{ error_message: string }>(
-      'SELECT error_message FROM upload_queue WHERE session_id = $1',
+    const { rows } = await db.query<{ error_message: string; error_kind: string | null; attempts: number }>(
+      'SELECT error_message, error_kind, attempts FROM upload_queue WHERE session_id = $1',
       [sid('bad')],
     );
     expect(rows[0].error_message).toMatch(/^Malformed NDJSON: invalid JSON line 2 of 3/);
+    // A broken body is the file's fault and is not retried.
+    expect(rows[0].error_kind).toBe('file');
+    expect(rows[0].attempts).toBe(1);
     expect(await sessionRowCount(db, sid('bad'))).toBe(0);
     expect(await logRowCount(db, sid('bad'))).toBe(0);
     // The next upload's response carries the failure as a warning (until an admin clears it).
@@ -107,6 +110,35 @@ test('@S-INGEST-03 hostile and huge bodies: empty, malformed, NUL, four gzip sha
     expect(warnings[0]).toMatch(/^Hook uploaded broken file: \S+\.raw — Malformed NDJSON/);
     valid.push('after-bad');
     await waitForQueueIdle(db, owner.id, { allowFailed: true });
+
+    // A server-side failure (here: the retries of a deadlock ran out) does not blame the hook,
+    // and a row failed before migration 0083 (raw Drizzle text, local paths in its params) is
+    // shown as one short line without SQL or paths.
+    const warningAfter = async (label: string): Promise<string> => {
+      const res = await post(label, T);
+      expect(res.status()).toBe(201);
+      valid.push(label);
+      const body = (await res.json()) as { warnings: string[] };
+      await waitForQueueIdle(db, owner.id, { allowFailed: true });
+      expect(body.warnings).toHaveLength(1);
+      return body.warnings[0];
+    };
+    await db.query(
+      `UPDATE upload_queue SET error_kind = 'server', error_message = 'database error 40P01: deadlock detected (after 5 attempts)'
+       WHERE session_id = $1`,
+      [sid('bad')],
+    );
+    expect(await warningAfter('after-server')).toMatch(
+      /^Log Hub could not process upload \S+\.raw \(server-side error, not a hook problem; .*\) — database error 40P01: deadlock detected \(after 5 attempts\)$/,
+    );
+    await db.query(
+      `UPDATE upload_queue SET error_kind = NULL, error_message = $2 WHERE session_id = $1`,
+      [sid('bad'), 'Failed query: insert into "session_changed_paths" ("session_id") values ($1)\nparams: 1,D:\\work\\repo\\x.ts'],
+    );
+    const legacy = await warningAfter('after-legacy');
+    expect(legacy).toMatch(/^Log Hub could not process upload \S+\.raw .* — database query failed$/);
+    expect(legacy).not.toContain('params');
+    expect(legacy).not.toContain('D:\\');
     const cleared = await owner.api.delete('/api/v1/admin/upload-queue/failed');
     expect(cleared.status()).toBe(200);
     expect(await waitForQueueIdle(db, owner.id)).toEqual({});

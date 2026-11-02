@@ -184,9 +184,8 @@ test('@S-SESS-14 Tool calls in detail: Context Growth step modal, Bash view, cal
   const modal = page.getByTestId('step-details-modal');
   const stepRows = page.getByTestId('growth-step-row');
 
-  await test.step('chart: Charts → Context Growth, the turn expands into five step rows +20k / +1k / +1k / +1k / — with a pointer cursor, and no WASM is fetched yet (AC-1, AC-2a)', async () => {
-    await openSession(page, owner, repoId, main.sessionId, { tab: 'charts' });
-    await page.getByTestId('tab-chart-context-growth').click();
+  await test.step('chart: the Context Growth tab, the turn expands into five step rows +20k / +1k / +1k / +1k / — with a pointer cursor, and no WASM is fetched yet (AC-1, AC-2a)', async () => {
+    await openSession(page, owner, repoId, main.sessionId, { tab: 'context-growth' });
     const turnRow = page.getByTestId('growth-row');
     await expect(turnRow).toHaveCount(1);
     await turnRow.getByTitle('Expand steps').click();

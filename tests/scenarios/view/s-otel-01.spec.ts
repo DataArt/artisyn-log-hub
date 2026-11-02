@@ -71,7 +71,7 @@ import {
   type OtelSpanRow,
 } from '../helpers/otel';
 import { ownRepoId } from '../helpers/prompt-session';
-import { openSession } from '../helpers/session-view';
+import { openSession, selectSessionTab } from '../helpers/session-view';
 import { addTeamRepo, createTeam, inviteAndAccept, setMemberRoles, skipNewUserNudge } from '../helpers/teams';
 import { shiftSessionTree } from '../helpers/time-shift';
 
@@ -486,7 +486,7 @@ test('@S-OTEL-01 repository and session OTEL tabs from uploaded chunks @mode-a',
     await panel.getByRole('button', { name: 'Help: OTEL tab is empty' }).click();
     await expect(page.getByRole('dialog').locator('[id="otel-tab-is-empty"]')).toBeInViewport();
     await page.keyboard.press('Escape');
-    await page.getByTestId('tab-session-summary').click();
+    await selectSessionTab(page, 'summary');
     await expect(page.getByTestId('summary-executive-band')).toBeVisible();
   });
 

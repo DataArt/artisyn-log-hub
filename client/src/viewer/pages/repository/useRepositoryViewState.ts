@@ -17,6 +17,7 @@ import {
   type RepoMainTab,
   type SessionTab,
 } from '../../tab-ids';
+import { parseLens, type LensId } from './session-lenses';
 
 type MainTab = RepoMainTab;
 /**
@@ -72,6 +73,13 @@ export function useRepositoryViewState({
   const sessionId = searchParams.get('session') ?? undefined;
 
   const sessionTab: SessionTab = parseSessionTab(searchParams.get('tab'));
+
+  /**
+   * The session lens named by the `lens` URL param (DD-7), or `null` when absent or unknown — the
+   * pane then falls back to the remembered `session-lens`, then to `DEFAULT_LENS`. It survives
+   * session switches; leaving the sessions view or closing the session drops it with `tab`.
+   */
+  const lensParam: LensId | null = parseLens(searchParams.get('lens'));
 
   const topN: number | null = searchParams.get('top')
     ? parseInt(searchParams.get('top')!, 10)
@@ -148,6 +156,7 @@ export function useRepositoryViewState({
       next.set('mtab', tab);
       next.delete('session');
       next.delete('tab');
+      next.delete('lens');
       next.delete('tu');
     } else {
       next.delete('mtab');
@@ -176,6 +185,22 @@ export function useRepositoryViewState({
     else next.delete('tab');
     // The session Tools/MCP tab shares the repo tab's `t*` params; leaving it drops them.
     if (tab !== 'tools') {
+      for (const key of TOOLS_PARAM_KEYS) next.delete(key);
+    }
+    setSearchParams(next, { replace: true });
+  }
+
+  /**
+   * A lens switch (switcher or Summary Explore chip, DD-7): writes `lens` and the lens's default
+   * tab in one replace, so the URL never shows the new lens with the old tab. `tab` is dropped for
+   * `summary`, as `setSessionTab` does. Any other tab change leaves `lens` alone.
+   */
+  function switchLens(lens: LensId, defaultTab: SessionTab) {
+    const next = new URLSearchParams(searchParams);
+    next.set('lens', lens);
+    if (defaultTab !== 'summary') next.set('tab', defaultTab);
+    else next.delete('tab');
+    if (defaultTab !== 'tools') {
       for (const key of TOOLS_PARAM_KEYS) next.delete(key);
     }
     setSearchParams(next, { replace: true });
@@ -238,6 +263,7 @@ export function useRepositoryViewState({
     const next = new URLSearchParams(searchParams);
     next.delete('session');
     next.delete('tab');
+    next.delete('lens');
     next.delete('tu');
     for (const key of TOOLS_PARAM_KEYS) next.delete(key);
     setSearchParams(next, { replace: true });
@@ -269,12 +295,14 @@ export function useRepositoryViewState({
     sessionId,
     mainTab,
     sessionTab,
+    lensParam,
     topN,
     showAllUsers,
     otelReasonFilter,
     setOtelReasonFilter,
     setMainTab,
     setSessionTab,
+    switchLens,
     setTopN,
     setShowAllUsers,
     handleSessionSelect,

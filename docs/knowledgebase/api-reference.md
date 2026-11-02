@@ -409,7 +409,11 @@ response: { warnings: string[]; unknownSnapshotId?: string; unknownOkfSnapshotId
 // Non-chunked path (no chunk params sent) — otherwise UNCHANGED: { warnings: string[] }.
 //   warnings — one message per outstanding status='failed' upload_queue row for
 //   the calling API key's userId (from a PREVIOUS upload's parse/upsert
-//   failure), formatted "Hook uploaded broken file: <fileName> — <errorMessage>".
+//   failure), formatted "Hook uploaded broken file: <fileName> — <errorMessage>"
+//   when the body itself is broken, or "Log Hub could not process upload
+//   <fileName> (server-side error, not a hook problem; an admin can reprocess
+//   it in Admin › Upload Queue) — <errorMessage>" for a server-side failure;
+//   <errorMessage> is one short line (algorithms/upload-error-classify.md).
 //   Empty array when there are no outstanding failures. A malformed NDJSON
 //   body no longer 400s synchronously on this route — it becomes a failed
 //   queue row surfaced via this array on a later call instead.
