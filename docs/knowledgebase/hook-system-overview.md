@@ -647,7 +647,7 @@ Two `send-logs-hook.js` line formats changed in hook `2.8.0`:
   installed. The hooks run with the **user's own `node` from `PATH`** (`hooks.json` `"command":
   "node"`), never a runtime bundled with Claude Code, so the Node version is whatever the user's
   machine resolves first. Check the current LTS lines on <https://nodejs.org/en/about/previous-releases>
-  (as of 2026-10: 22.x maintenance and 24.x active; 26.x enters LTS at the end of October 2026); the
+  (as of 2026-11: 22.x and 24.x maintenance, 26.x active); the
   `engines` floor in `hook/package.json` (`>=18.19`) is older still and is not raised without a
   decision. Consequences: no API or syntax newer than the oldest supported line; no reliance on
   version-specific module-loader behaviour (e.g. Node 22+ module-syntax detection) — the scripts are

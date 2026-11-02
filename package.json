@@ -38,7 +38,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.60.0",
-    "@types/node": "^25.9.1",
+    "@types/node": "^26.6.6",
     "@types/pg": "^8.20.3",
     "@vercel/ncc": "^0.38.3",
     "c8": "^12.0.0",

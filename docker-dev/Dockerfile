@@ -45,8 +45,8 @@ WORKDIR /dl
 
 FROM fetch-base AS fetch-node
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
-ARG NODE_VERSION=24.22.1
-ARG NODE_SHA256=6c172a9ab6718f7b801fb5a7bd486af2ee5e32758086a04b84fcce2aa77095e6
+ARG NODE_VERSION=26.13.0
+ARG NODE_SHA256=d28a96af6c38596f6d9d97c0ee531c13d238d757742387d1928de822d959e997
 RUN set -eux; \
     aria2c -x16 -s16 --console-log-level=warn -o node.tar.xz \
       "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz"; \

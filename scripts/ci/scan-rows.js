@@ -127,8 +127,10 @@ function snykIssues(json) {
       if (!v || typeof v !== 'object') continue;
       const key = `${v.id}|${v.packageName}`;
       const prev = seen.get(key);
+      // Snyk reports one entry per dependency path. An issue is fixable only when every path is:
+      // an upgrade that drops one path (eslint@10 dropping @eslint/eslintrc > ajv) leaves it open.
       const fixable = Boolean(v.isUpgradable || v.isPatchable);
-      seen.set(key, { severity: snykSeverity(v.severity), fixable: fixable || Boolean(prev && prev.fixable) });
+      seen.set(key, { severity: snykSeverity(v.severity), fixable: fixable && (!prev || prev.fixable) });
     }
   }
   const counts = zeroCounts();

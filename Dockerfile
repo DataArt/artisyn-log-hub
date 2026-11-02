@@ -2,7 +2,7 @@
 # workflows and docker-dev, typescript and @vercel/ncc = the root package-lock.json.
 
 # Stage 1 — client-build
-FROM --platform=$BUILDPLATFORM node:24.22.1-slim AS client-build
+FROM --platform=$BUILDPLATFORM node:26.13.0-slim AS client-build
 RUN npm install -g bun@1.3.14
 WORKDIR /app/client
 # client/vite.config.ts aliases @loghub/pricing to the repo-local package sources.
@@ -15,7 +15,7 @@ COPY client/ ./
 RUN bun install --frozen-lockfile && bun run build
 
 # Stage 2 — hooks-installer build (generates artisyn-hooks-installer.tgz + hooks.tar.gz)
-FROM --platform=$BUILDPLATFORM node:24.22.1-slim AS hooks-build
+FROM --platform=$BUILDPLATFORM node:26.13.0-slim AS hooks-build
 WORKDIR /app
 COPY artisyn-hooks-installer/ ./artisyn-hooks-installer/
 COPY hook/ ./hook/
@@ -26,7 +26,7 @@ RUN mkdir -p server/src/public/static \
  && node scripts/build-hooks-installer.js
 
 # Stage 3 — server-build
-FROM --platform=$BUILDPLATFORM node:24.22.1-slim AS server-build
+FROM --platform=$BUILDPLATFORM node:26.13.0-slim AS server-build
 RUN npm install -g @vercel/ncc@0.38.4
 WORKDIR /app/server
 # server/package.json depends on the repo-local @loghub/pricing (file:../packages/pricing).
@@ -49,7 +49,7 @@ RUN mkdir -p /app/dist/drizzle /app/dist/prebuilds /app/dist/wasm \
 # marks wont-fix (Snyk Container). argon2 ships musl prebuilds, which prebuilds/* below includes.
 # npm, npx, corepack and yarn are removed: the server never runs them, and npm's bundled packages
 # are the image's only remaining high findings.
-FROM node:24.22.1-alpine AS runtime
+FROM node:26.13.0-alpine AS runtime
 RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack \
     /usr/local/bin/npm /usr/local/bin/npx /usr/local/bin/corepack \
     /usr/local/bin/yarn /usr/local/bin/yarnpkg /opt/yarn-*
