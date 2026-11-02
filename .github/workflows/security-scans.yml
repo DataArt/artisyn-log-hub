@@ -964,6 +964,14 @@ jobs:
             while read -r v; do
               [ -n "$v" ] && placeholders+=("$v=/ci-placeholder")
             done < <(grep -oE '\$\{[A-Za-z_][A-Za-z0-9_]*:\?' "$file" | sed -E 's/^\$\{//; s/:\?$//' | sort -u)
+            # A compose file with `env_file: .env` (the release kit) needs that file to exist; a
+            # real install always has it (the installer writes it). The checkout has none, so give
+            # it an empty one — a CI-only file, never committed — instead of loosening the compose
+            # file (`required: false` needs Compose 2.24+, which older install hosts may lack).
+            env_dir="$(dirname "$file")"
+            if grep -qE '^\s*env_file:\s*\.env\s*$' "$file" && [ ! -e "$env_dir/.env" ]; then
+              : > "$env_dir/.env"
+            fi
             if ! env "${placeholders[@]}" docker compose -f "$file" config --quiet >> "$log" 2>&1; then
               failed=$((failed + 1))
               echo "::warning file=$file::docker compose config failed"

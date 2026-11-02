@@ -11,3 +11,5 @@
 - Uploads hit by a transient database error (e.g. a deadlock) are retried instead of being
   reported as a broken file, and a server-side failure no longer blames the hook.
 - Team pages scroll again on short windows.
+- Release kit: every setting in the install's `.env` now reaches the app container, so options such
+  as `SESSION_RETENTION_DAYS` or `PASSWORD_POLICY` need no edit of `docker-compose.yml`.
