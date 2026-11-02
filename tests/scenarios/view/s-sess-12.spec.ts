@@ -29,7 +29,7 @@ import type { Locator, Page } from '@playwright/test';
 import { test, expect } from '../fixtures';
 import type { ScenarioUser } from '../fixtures';
 import { loadExpected } from '../helpers/golden';
-import { openSession, uploadGoldenRepo } from '../helpers/session-view';
+import { openSession, revealSessionTab, uploadGoldenRepo } from '../helpers/session-view';
 import { addTeamRepo, createTeam, inviteAndAccept, setMemberRoles } from '../helpers/teams';
 
 const FIRST_PROMPT = 'Add a /health endpoint to the app and document it';
@@ -65,10 +65,10 @@ test('@S-SESS-12 Raw Logs only for the owner; anyone else gets 403 @mode-a @mode
 
   await test.step('1. U1 opens GS-01: the Raw Logs tab carries the lock hint «Only visible to you»', async () => {
     await openSession(page, u1, repo.repoId, sid);
-    const tab = page.getByTestId('tab-session-raw-logs');
+    const tab = await revealSessionTab(page, 'raw-logs');
     await expect(tab).toBeVisible();
     await tab.hover();
-    await expect(page.getByText('Only visible to you')).toBeVisible();
+    await expect(page.getByText('Only visible to you', { exact: true })).toBeVisible();
     await tab.click();
     await expect(page).toHaveURL(/tab=raw-logs/);
   });

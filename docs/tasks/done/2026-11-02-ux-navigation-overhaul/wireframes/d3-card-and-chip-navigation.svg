@@ -1,0 +1,77 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="402" viewBox="0 0 1000 402" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <filter id="sh" x="-10%" y="-10%" width="120%" height="140%"><feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000" flood-opacity="0.12"/></filter>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#2563eb"/></marker>
+  </defs>
+  <rect x="0" y="0" width="1000" height="402" fill="#ffffff"/>
+  <text x="24" y="32" font-size="17" fill="#111827" font-weight="700">D3 · Where a card and a chip take you</text>
+  <text x="24" y="52" font-size="12" fill="#6b7280">Starting point: Summary under the Cost lens.</text>
+  <text x="24" y="82" font-size="12.5" fill="#374151" font-weight="700">“Open →” on a card — lens unchanged</text>
+  <rect x="24" y="100" width="232" height="104" rx="8" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="38" y="122" font-size="12" fill="#374151" font-weight="600">Bash</text>
+  <text x="38" y="152" font-size="18" fill="#111827" font-weight="700" font-family="Consolas, monospace">196 calls</text>
+  <text x="38" y="172" font-size="11" fill="#6b7280">main + sub-agents</text>
+  <text x="242" y="192" font-size="12" fill="#2563eb" text-anchor="end">Open →</text>
+  <rect x="176" y="180" width="70" height="22" rx="6" fill="none" stroke="#f59e0b" stroke-width="2" stroke-dasharray="5 3"/>
+  <path d="M234,190 l0,16 l4,-4 l3,7 l3,-1.5 l-3,-6.5 l6,0 z" fill="#111827" stroke="#ffffff" stroke-width="1"/>
+  <line x1="268" y1="148" x2="300" y2="148" stroke="#2563eb" stroke-width="2" marker-end="url(#ah)"/>
+  <rect x="308" y="92" width="668" height="120" rx="8" fill="#ffffff" stroke="#e5e7eb"/>
+  <rect x="324" y="104" width="520" height="24" rx="12" fill="#f3f4f6" stroke="#e5e7eb"/>
+  <text x="336" y="120" font-size="11" fill="#9ca3af">⌂</text>
+  <text x="352" y="120" font-size="11.5" fill="#374151" font-family="Consolas, monospace">…?session=8f3c21</text>
+  <rect x="456.2" y="107" width="124.17500000000001" height="18" rx="4" fill="#dbeafe"/>
+  <text x="458.2" y="120" font-size="11.5" fill="#1d4ed8" font-weight="700" font-family="Consolas, monospace">&amp;tab=bash&amp;lens=cost</text>
+  <rect x="324" y="138" width="445" height="26" rx="13" fill="#f3f4f6"/>
+  <text x="377" y="155" font-size="12" fill="#6b7280" text-anchor="middle">What happened</text>
+  <rect x="429" y="140" width="49" height="22" rx="11" fill="#ffffff" stroke="#2563eb" stroke-width="1.5"/>
+  <text x="453.5" y="155" font-size="12" fill="#1d4ed8" font-weight="700" text-anchor="middle">Cost</text>
+  <text x="542" y="155" font-size="12" fill="#6b7280" text-anchor="middle">Harness &amp; context</text>
+  <text x="665" y="155" font-size="12" fill="#6b7280" text-anchor="middle">Failed tool call</text>
+  <text x="746" y="155" font-size="12" fill="#6b7280" text-anchor="middle">All</text>
+  <rect x="324" y="172" width="522" height="32" rx="6" fill="#f9fafb"/>
+  <text x="341" y="193" font-size="13" fill="#6b7280">Summary</text>
+  <text x="411" y="193" font-size="13" fill="#6b7280">Statistics</text>
+  <text x="500" y="193" font-size="13" fill="#6b7280">Charts</text>
+  <text x="563" y="193" font-size="13" fill="#6b7280">Advisor</text>
+  <text x="633" y="193" font-size="13" fill="#6b7280">OTEL</text>
+  <line x1="678" y1="179" x2="678" y2="197" stroke="#9ca3af" stroke-width="1.5"/>
+  <rect x="686" y="176" width="78" height="24" rx="5" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="697" y="193" font-size="13" fill="#111827" font-weight="600">Bash</text>
+  <text x="732.12" y="193" font-size="11.5" fill="#6b7280" font-family="Consolas, monospace">196</text>
+  <rect x="770" y="176" width="68" height="24" rx="5" fill="#f3f4f6"/>
+  <text x="780" y="193" font-size="13" fill="#111827">More ▾</text>
+  <rect x="682" y="172" width="86" height="32" rx="8" fill="none" stroke="#2563eb" stroke-width="2"/>
+  <text x="24" y="252" font-size="12.5" fill="#374151" font-weight="700">“Explore” chip — switches lens and tab</text>
+  <rect x="24" y="300" width="243" height="30" rx="15" fill="#f3f4f6" stroke="#e5e7eb"/>
+  <text x="38" y="320" font-size="12.5" fill="#111827">Which tool failed?</text>
+  <rect x="160.5" y="306" width="94" height="18" rx="9" fill="#dbeafe"/>
+  <text x="165.5" y="319" font-size="10.5" fill="#1d4ed8">Failed tool call</text>
+  <rect x="20" y="296" width="251" height="38" rx="19" fill="none" stroke="#f59e0b" stroke-width="2" stroke-dasharray="5 3"/>
+  <path d="M110,312 l0,16 l4,-4 l3,7 l3,-1.5 l-3,-6.5 l6,0 z" fill="#111827" stroke="#ffffff" stroke-width="1"/>
+  <line x1="268" y1="316" x2="300" y2="316" stroke="#2563eb" stroke-width="2" marker-end="url(#ah)"/>
+  <rect x="308" y="262" width="668" height="120" rx="8" fill="#ffffff" stroke="#e5e7eb"/>
+  <rect x="324" y="274" width="520" height="24" rx="12" fill="#f3f4f6" stroke="#e5e7eb"/>
+  <text x="336" y="290" font-size="11" fill="#9ca3af">⌂</text>
+  <text x="352" y="290" font-size="11.5" fill="#374151" font-family="Consolas, monospace">…?session=8f3c21</text>
+  <rect x="456.2" y="277" width="174.775" height="18" rx="4" fill="#dbeafe"/>
+  <text x="458.2" y="290" font-size="11.5" fill="#1d4ed8" font-weight="700" font-family="Consolas, monospace">&amp;tab=tools&amp;lens=failed-tool</text>
+  <rect x="324" y="308" width="454" height="26" rx="13" fill="#f3f4f6"/>
+  <text x="377" y="325" font-size="12" fill="#6b7280" text-anchor="middle">What happened</text>
+  <text x="452" y="325" font-size="12" fill="#6b7280" text-anchor="middle">Cost</text>
+  <text x="539" y="325" font-size="12" fill="#6b7280" text-anchor="middle">Harness &amp; context</text>
+  <rect x="603" y="310" width="130" height="22" rx="11" fill="#ffffff" stroke="#2563eb" stroke-width="1.5"/>
+  <text x="668" y="325" font-size="12" fill="#1d4ed8" font-weight="700" text-anchor="middle">Failed tool call</text>
+  <text x="755" y="325" font-size="12" fill="#6b7280" text-anchor="middle">All</text>
+  <rect x="599" y="304" width="138" height="34" rx="8" fill="none" stroke="#2563eb" stroke-width="2"/>
+  <rect x="324" y="342" width="369" height="32" rx="6" fill="#f9fafb"/>
+  <rect x="330" y="346" width="104" height="24" rx="5" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="341" y="363" font-size="13" fill="#111827" font-weight="600">Tools/MCP</text>
+  <circle cx="417.52" cy="358" r="4" fill="#dc2626"/>
+  <text x="447" y="363" font-size="13" fill="#6b7280">Logs</text>
+  <text x="497" y="363" font-size="13" fill="#6b7280">Bash</text>
+  <text x="529" y="363" font-size="11.5" fill="#6b7280" font-family="Consolas, monospace">196</text>
+  <text x="574" y="363" font-size="13" fill="#6b7280">OTEL</text>
+  <rect x="617" y="346" width="68" height="24" rx="5" fill="#f3f4f6"/>
+  <text x="627" y="363" font-size="13" fill="#111827">More ▾</text>
+  <rect x="326" y="342" width="112" height="32" rx="8" fill="none" stroke="#2563eb" stroke-width="2"/>
+</svg>

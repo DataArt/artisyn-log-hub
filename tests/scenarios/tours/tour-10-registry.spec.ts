@@ -28,7 +28,6 @@ import { APP_ROUTES } from '../../../client/src/app-routes';
 import {
   ADMIN_TABS,
   API_KEYS_TABS,
-  CHART_TABS,
   REPO_MAIN_TABS,
   SESSION_TABS,
   SETTINGS_TABS,
@@ -49,7 +48,6 @@ const TAB_SOURCES: Record<string, readonly string[]> = {
   settings: SETTINGS_TABS,
   team: TEAM_TABS,
   apikeys: API_KEYS_TABS,
-  chart: CHART_TABS,
 };
 
 /** Everything the app has that needs a registry row, as coverage keys. */

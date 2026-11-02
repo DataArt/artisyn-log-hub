@@ -53,7 +53,7 @@ export type TourId =
   'tour-01' | 'tour-02' | 'tour-03' | 'tour-04' | 'tour-05' | 'tour-06' | 'tour-07' | 'tour-08' | 'tour-09';
 
 /** `data-testid` groups of tab triggers (`tab-<group>-<id>`, DD G1). */
-export type TabGroup = 'repo' | 'session' | 'chart' | 'admin' | 'settings' | 'team' | 'apikeys';
+export type TabGroup = 'repo' | 'session' | 'admin' | 'settings' | 'team' | 'apikeys';
 
 /** A section of the documentation that describes the screen (block J). */
 export interface DocRef {
@@ -355,7 +355,7 @@ ADMIN_ROWS.push(
     modes: A,
     title: 'Admin panel: a plain user has no «Admin Panel» link and #/admin bounces to #/main',
     negative: true,
-    expectText: 'Select an item from the left panel',
+    expectTestId: 'home-page',
     expectUrl: '#/main$',
   },
 );
@@ -381,7 +381,7 @@ const OWNER_REPO_ROWS: ScreenRow[] = (
       id: 'main',
       route: '/main',
       title: 'Main page',
-      expectText: 'Select an item from the left panel',
+      expectTestId: 'home-page',
     },
     {
       id: 'redirect.unknown-path',
@@ -475,6 +475,14 @@ const OWNER_REPO_ROWS: ScreenRow[] = (
         file: `${HELP}/security-hardening.md`,
         heading: '3.6 API keys (hook authentication)',
       },
+    },
+    {
+      id: 'map',
+      route: '/map',
+      query: '?repoId={repoId}',
+      title: 'All views map (scoped to a repository)',
+      expectTestId: 'map-filter',
+      expectText: '{repoUrl}',
     },
   ] satisfies Array<Omit<ScreenRow, 'story' | 'role' | 'modes'>>
 ).map((r): ScreenRow => ({ ...r, story: 'tour-03', role: 'owner', modes: A }));
@@ -675,12 +683,15 @@ const SESSION_TAB_ROWS: Array<Omit<ScreenRow, 'story' | 'role' | 'modes' | 'rout
     docRef: { file: SESSION_DOC, heading: 'Bash' },
   },
   {
-    id: 'session.charts',
+    // The charts used to be sub-tabs of one Charts tab; an old `tab=charts` link opens the chart
+    // this browser last showed — the Dashboard in a fresh browser.
+    id: 'session.charts.redirect',
     query: `${SESSION_QUERY}&tab=charts`,
     tab: { group: 'session', id: 'charts' },
-    title: 'Session: Charts',
-    expectTestId: 'tab-chart-dashboard',
-    docRef: { file: SESSION_DOC, heading: 'Charts' },
+    title: 'Session: the legacy tab=charts deep link lands on the Dashboard chart tab',
+    negative: true,
+    expectUrl: 'tab=dashboard',
+    expectTestId: 'session-chart-dashboard',
   },
   {
     id: 'session.advisor',
@@ -764,15 +775,6 @@ const SESSION_TAB_ROWS: Array<Omit<ScreenRow, 'story' | 'role' | 'modes' | 'rout
     docRef: { file: `${HELP}/otel-tab.md`, heading: 'Session OTEL tab' },
   },
   {
-    id: 'session.call-tree.redirect',
-    query: `${SESSION_QUERY}&tab=call-tree`,
-    tab: { group: 'session', id: 'call-tree' },
-    title: 'Session: the legacy tab=call-tree deep link lands on Charts',
-    negative: true,
-    expectUrl: 'tab=charts',
-    expectTestId: 'tab-chart-dashboard',
-  },
-  {
     id: 'session.advisor.absent-redirect',
     query: '?session={plainSessionId}&tab=advisor',
     title: 'Session without an advisor result: no Advisor tab, tab=advisor falls back to Summary',
@@ -814,8 +816,8 @@ const SESSION_ROWS: ScreenRow[] = [
     id: `session.charts.${chart}`,
     story: 'tour-05',
     route: '/repos/:repoId',
-    query: `${SESSION_QUERY}&tab=charts`,
-    tab: { group: 'chart', id: chart },
+    query: `${SESSION_QUERY}&tab=${chart}`,
+    tab: { group: 'session', id: chart },
     role: 'owner',
     modes: A,
     title: `Session charts: ${label}`,
@@ -1029,6 +1031,7 @@ const HELP_ARTICLES: Array<[string, string]> = [
   ['how-hook-works', 'How the Telemetry Hook Works'],
   ['data-collection-notice', 'Data Collection Notice'],
   ['connect-repository', 'Connecting a Repository'],
+  ['all-views', 'All views'],
   ['session-list', 'Working with the Session List'],
   ['session-log', 'Session Log'],
   ['analytics-reports', 'Analytics & Reports'],

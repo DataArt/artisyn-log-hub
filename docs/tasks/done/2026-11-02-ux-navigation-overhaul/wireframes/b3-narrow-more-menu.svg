@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="448" viewBox="0 0 960 448" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <filter id="sh" x="-10%" y="-20%" width="120%" height="160%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000" flood-opacity="0.14"/>
+    </filter>
+    <marker id="ah" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#2563eb"/></marker>
+  </defs>
+  <rect x="0" y="0" width="960" height="448" fill="#ffffff"/>
+  <text x="24" y="34" font-size="18" font-weight="700" fill="#111827">B3 · Narrow pane: what does not fit goes into a "More" menu at the end of its row</text>
+  <text x="24" y="56" font-size="12" fill="#6b7280">Both rows overflow independently.</text>
+<text x="24" y="92" font-size="13" font-weight="600" fill="#111827">Tab row overflow</text>
+<rect x="24" y="102" width="330" height="300" rx="8" fill="#fff" stroke="#e5e7eb"/>
+<rect x="38" y="121" width="20" height="20" rx="4" fill="#fff" stroke="#d1d5db"/><text x="43" y="135" font-size="11" fill="#6b7280">☆</text><rect x="64" y="121" width="20" height="20" rx="4" fill="#fff" stroke="#d1d5db"/><text x="68" y="135" font-size="11" fill="#6b7280">↻</text><text x="105" y="136" font-size="14" font-weight="600" fill="#111827">Overview</text><line x1="96" y1="148" x2="173.8878" y2="148" stroke="#111827" stroke-width="2"/><text x="190.8878" y="136" font-size="14" fill="#6b7280">Transcript</text><text x="279.7632" y="136" font-size="14" fill="#6b7280">More</text><path d="M316.6824 129.52 L320.1824 133.52 L323.6824 129.52" fill="none" stroke="#6b7280" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+<line x1="24" y1="149" x2="354" y2="149" stroke="#e5e7eb"/>
+<rect x="38" y="214" width="302" height="172" rx="6" fill="#f9fafb" stroke="#e5e7eb" stroke-dasharray="4 3"/><text x="54" y="238" font-size="12" fill="#9ca3af">Summary content</text>
+<rect x="38" y="164" width="196.65511" height="30" rx="6" fill="#f3f4f6"/><rect x="43" y="168" width="77.87491" height="22" rx="5" fill="#fff" stroke="#d1d5db"/><text x="54" y="184" font-size="13" font-weight="600" fill="#111827">Summary</text><text x="133.87491" y="184" font-size="13" fill="#6b7280">Info</text><rect x="168.18581" y="168" width="61.4693" height="22" rx="5" fill="#e5e7eb"/><text x="179.18581" y="184" font-size="13" fill="#111827">More</text><path d="M213.93221 177.84 L217.43221 181.84 L220.93221 177.84" fill="none" stroke="#111827" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="168.18581" y="196" width="170" height="66" rx="6" fill="#fff" stroke="#e5e7eb" filter="url(#sh)"/><rect x="173.18581" y="201" width="160" height="28" rx="4" fill="#f3f4f6"/><text x="184.18581" y="220" font-size="13" fill="#111827">Statistics</text><text x="184.18581" y="248" font-size="13" fill="#111827">Advisor</text>
+<path transform="translate(298.18581,214)" d="M0 0 L0 16 L4.2 12.2 L7 18.4 L9.6 17.3 L6.9 11.2 L12 11.2 Z" fill="#111827" stroke="#ffffff" stroke-width="1.2" stroke-linejoin="round"/>
+<rect x="164.18581" y="164" width="69.4693" height="30" rx="7" fill="none" stroke="#2563eb" stroke-width="2" stroke-dasharray="5 3"/>
+<circle cx="38" cy="330" r="10" fill="#2563eb"/><text x="38" y="334.5" font-size="12" font-weight="700" fill="#fff" text-anchor="middle">1</text><text x="56" y="334.5" font-size="12" fill="#2563eb">tabs of the selected group</text><text x="56" y="350.5" font-size="12" fill="#2563eb">that do not fit</text>
+<text x="424" y="92" font-size="13" font-weight="600" fill="#111827">Group row overflow</text>
+<rect x="424" y="102" width="330" height="300" rx="8" fill="#fff" stroke="#e5e7eb"/>
+<rect x="438" y="121" width="20" height="20" rx="4" fill="#fff" stroke="#d1d5db"/><text x="443" y="135" font-size="11" fill="#6b7280">☆</text><rect x="464" y="121" width="20" height="20" rx="4" fill="#fff" stroke="#d1d5db"/><text x="468" y="135" font-size="11" fill="#6b7280">↻</text><text x="505" y="136" font-size="14" font-weight="600" fill="#111827">Overview</text><line x1="496" y1="148" x2="573.8878" y2="148" stroke="#111827" stroke-width="2"/><text x="590.8878" y="136" font-size="14" fill="#6b7280">Transcript</text><rect x="668.7632" y="119" width="64.50540000000001" height="25" rx="5" fill="#f3f4f6"/><text x="679.7632" y="136" font-size="14" fill="#111827">More</text><path d="M716.6824 129.52 L720.1824 133.52 L723.6824 129.52" fill="none" stroke="#111827" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+<line x1="424" y1="149" x2="754" y2="149" stroke="#e5e7eb"/>
+<rect x="438" y="214" width="302" height="172" rx="6" fill="#f9fafb" stroke="#e5e7eb" stroke-dasharray="4 3"/><text x="454" y="238" font-size="12" fill="#9ca3af">Summary content</text>
+<rect x="438" y="164" width="196.65510999999992" height="30" rx="6" fill="#f3f4f6"/><rect x="443" y="168" width="77.87491" height="22" rx="5" fill="#fff" stroke="#d1d5db"/><text x="454" y="184" font-size="13" font-weight="600" fill="#111827">Summary</text><text x="533.87491" y="184" font-size="13" fill="#6b7280">Info</text><text x="579.18581" y="184" font-size="13" fill="#6b7280">More</text><path d="M613.9322099999999 177.84 L617.4322099999999 181.84 L620.9322099999999 177.84" fill="none" stroke="#6b7280" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="628.7632" y="152" width="170" height="66" rx="6" fill="#fff" stroke="#e5e7eb" filter="url(#sh)"/><rect x="633.7632" y="157" width="160" height="28" rx="4" fill="#f3f4f6"/><text x="644.7632" y="176" font-size="13" fill="#111827">Cost &amp; context</text><text x="644.7632" y="204" font-size="13" fill="#111827">Effects</text>
+<path transform="translate(774.7632,170)" d="M0 0 L0 16 L4.2 12.2 L7 18.4 L9.6 17.3 L6.9 11.2 L12 11.2 Z" fill="#111827" stroke="#ffffff" stroke-width="1.2" stroke-linejoin="round"/>
+<rect x="664.7632" y="115" width="72.50540000000001" height="30" rx="7" fill="none" stroke="#2563eb" stroke-width="2" stroke-dasharray="5 3"/>
+<circle cx="438" cy="330" r="10" fill="#2563eb"/><text x="438" y="334.5" font-size="12" font-weight="700" fill="#fff" text-anchor="middle">2</text><text x="456" y="334.5" font-size="12" fill="#2563eb">groups that do not fit; picking one</text><text x="456" y="350.5" font-size="12" fill="#2563eb">opens its last-used tab (B2)</text>
+<text x="24" y="432" font-size="12" fill="#6b7280">Picking from "More" = clicking the tab in the bar: same tab= value, same test id. Every tab is one or two clicks away.</text>
+</svg>

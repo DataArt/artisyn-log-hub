@@ -19,6 +19,7 @@ export const ROUTE = {
   teamRepo: '/teams/:teamId/repos/:repoId',
   hookState: '/repos/:repoId/hook-state',
   admin: '/admin',
+  map: '/map',
   // Catch-all: an unknown path inside the authenticated layout redirects to `/main`.
   notFound: '*',
 } as const;
@@ -46,5 +47,6 @@ export const ROUTE_ACCESS: Record<RoutePath, 'public' | 'auth' | 'admin'> = {
   [ROUTE.teamRepo]: 'auth',
   [ROUTE.hookState]: 'auth',
   [ROUTE.admin]: 'admin',
+  [ROUTE.map]: 'auth',
   [ROUTE.notFound]: 'auth',
 };

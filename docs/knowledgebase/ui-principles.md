@@ -32,6 +32,32 @@ if API call fails due to access error - got to login page
 
 ---
 
+## Status colours (app-wide) and Home tones
+
+The palette must stay consistent across the whole app: a colour that means a status in one place
+means the same status everywhere, and never decorates something unrelated.
+
+| Meaning | Tailwind family | Typical use |
+|---|---|---|
+| Needs attention / warning | `amber` | hook issues and outdated hooks, the Raw Logs privacy tooltip, the "agent received" bar |
+| Failure / error | `red` | failed tool calls, errors, the notification dot, destructive actions |
+| Healthy / success / savings | `emerald` | a healthy hook, Advisor savings, success badges |
+| Cost | `blue` | cost bars and cost figures (the chart blue `#3b82f6`) |
+| Neutral / inactive | `slate` / `muted` | secondary text, recent history, `n/a` |
+
+Badges and soft fills use the pale shades: `bg-<c>-50 text-<c>-700 ring-1 ring-<c>-100`; bars and
+dots use `-300`; icons `-500`/`-600`. Saturated `-500`+ fills are for charts only.
+
+**Home tones.** Every Home widget has one muted identity tone (`client/src/viewer/pages/main/home/home-tones.ts`,
+`HOME_TONES`), shown as a tinted icon chip in its header and a 2 px accent strip at the top of the card (a fill inside the card, clipped by its rounded corners — never a coloured top border, whose corners look jagged):
+Repositories `sky`, Start from a question `violet`, Needs attention `amber`, This week `blue`,
+Pinned `indigo`, Recent `slate`, Get started `teal`. Inside widgets the status colours above apply
+(Needs attention groups: hooks `amber`, Advisor `emerald`, failed tool calls `red`; the hook status
+badge `emerald`/`amber`; cost bars `blue`). An identity tone never borrows a status colour for
+anything else. Icons come from `lucide-react`, like everywhere in the app — no emoji.
+
+---
+
 ## Zone-color pattern (bar charts)
 
 When a bar chart ranks items by a metric value, colour each bar relative to the max value in the current dataset:

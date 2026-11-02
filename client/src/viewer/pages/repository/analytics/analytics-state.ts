@@ -47,74 +47,89 @@ export const VIEW_OPTIONS: {
   value: AnalyticsState['view'];
   label: string;
   description: string;
+  /** Extra words the All views filter matches. */
+  synonyms: string[];
 }[] = [
   {
     value: 'work-time',
+    synonyms: ['hours', 'time'],
     label: 'Work Time',
     description: 'Total autonomous agent work time per session',
   },
   {
     value: 'cost',
+    synonyms: ['expensive', 'spend', 'money'],
     label: 'Cost',
     description: 'Total API cost per session per hour',
   },
   {
     value: 'files',
+    synonyms: ['files', 'tools'],
     label: 'Files & Tools',
     description: 'Code files, bytes read, edits and lines changed per session',
   },
   {
     value: 'vision',
+    synonyms: ['images'],
     label: 'Vision',
     description: 'Images examined and total image bytes per session',
   },
   {
     value: 'mcp',
+    synonyms: ['mcp', 'servers'],
     label: 'MCP Invocations',
     description: 'Total MCP tool calls per session',
   },
   {
     value: 'productivity',
+    synonyms: ['lines'],
     label: 'Productivity',
     description: 'Lines and cost efficiency per autonomous hour',
   },
   {
     value: 'log-lines',
+    synonyms: ['lines', 'volume'],
     label: 'Log Lines',
     description: 'Number of JSONL records in the Claude session log',
   },
   {
     value: 'cache-read-ratio',
+    synonyms: ['cache'],
     label: 'Cache Read Ratio',
     description:
       'Share of input context served from cache instead of rewritten',
   },
   {
     value: 'change-surface',
+    synonyms: ['files', 'diff'],
     label: 'Change Surface',
     description:
       "How widely a session's file changes spread across folders and modules",
   },
   {
     value: 'tools',
+    synonyms: ['fail', 'errors'],
     label: 'Tool Analytics',
     description:
       'Every tool ranked by calls, with success rate, unresolved calls and duration',
   },
   {
     value: 'tokens',
+    synonyms: ['tokens'],
     label: 'Token Breakdown',
     description:
       'Input, output and cache tokens with the TTL and service-tier splits',
   },
   {
     value: 'productivity-counters',
+    synonyms: ['counters'],
     label: 'Productivity Counters',
     description:
       'Diff-based lines added and removed, commits and pull requests',
   },
   {
     value: 'active-sessions',
+    synonyms: ['running', 'active'],
     label: 'Active Sessions',
     description: 'Sessions in the selected range, most recently active first',
   },

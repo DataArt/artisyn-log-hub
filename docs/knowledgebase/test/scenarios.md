@@ -206,6 +206,19 @@ per day, the Cost and Work Time views), S-REPT-01 (Executive Summary tiles, week
 top 5, branch filter, previous period, PDF) and S-REPT-02 (Cache Read Ratio: ratio of sums for
 both scopes, branch groups, causes and the personal threshold).
 
+The navigation scenario S-NAV-01 (`tests/scenarios/view/s-nav-01.spec.ts`, mode A; helpers
+`openMap`, `mapFilter`, `mapNode`, `expandMapNode`, `homeWidget`, `expectHomeWidgetFilled` in
+`helpers/nav.ts`) walks the UX navigation overhaul end to end with an admin owner, a member and a
+fresh user, one restricted team and three repositories (GS-01; a hook-status issue via
+`uploadHookStatusSession`; a member's prompt session added to the team): Home (one entry per
+visible repository, every widget filling after its placeholder, Needs attention → Hook state, a
+question card → its DD-12 target, Get started for a fresh user), the session lenses with their
+default tabs, the "All" groups with remembered tabs, "More ▾" at a narrow viewport, a Summary card
+and an Explore chip, the All views map (rail from a team session, Back, greyed session nodes and
+the picker with an empty Recent, the filter, the tree keyboard), the member's visibility, a pin
+seen in another browser, Recent kept per user across an identity switch, and the old `tab=` /
+`mtab=` / `stab=` / admin `tab=` deep links.
+
 The ingest and platform scenarios (`tests/scenarios/ingest/s-ingest-0[1-4].spec.ts`,
 `tests/scenarios/platform/s-plat-01.spec.ts`; modes A and C) talk to the
 upload route byte by byte: S-INGEST-01 (key created, working, expired, revoked; one 401 body for

@@ -4,8 +4,12 @@ import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { MainNav } from '../pages/main/MainNav';
 import { AppLeftNav } from './AppLeftNav';
 import { useDraggableWidth } from '../hooks/useDraggableWidth';
+import { useAllViewsShortcut } from '../hooks/useAllViewsShortcut';
 
 export function AppShell({ children }: { children: ReactNode }) {
+  // Ctrl/Cmd+K opens the All views map from every page of the authenticated layout (DD-18).
+  useAllViewsShortcut();
+
   const [isCollapsed, setIsCollapsed] = useState<boolean>(
     () => localStorage.getItem('artisyn:leftNavCollapsed') === 'true',
   );

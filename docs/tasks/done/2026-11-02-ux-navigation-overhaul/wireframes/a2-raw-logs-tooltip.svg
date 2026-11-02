@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="346" viewBox="0 0 1000 346" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <filter id="sh" x="-10%" y="-20%" width="120%" height="160%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000" flood-opacity="0.14"/>
+    </filter>
+    <marker id="ah" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#2563eb"/></marker>
+  </defs>
+  <rect x="0" y="0" width="1000" height="346" fill="#ffffff"/>
+  <text x="24" y="34" font-size="18" font-weight="700" fill="#111827">A2 · Raw Logs keeps its amber tooltip, with the description on top</text>
+  <text x="24" y="56" font-size="12" fill="#6b7280">Lock icon stays in the tab; the tab is shown only when the viewer may see raw logs.</text>
+<rect x="24" y="80" width="952" height="250" rx="8" fill="#fff" stroke="#e5e7eb"/>
+<text x="44.5" y="116" font-size="13" fill="#6b7280">…</text><text x="68.1833" y="116" font-size="13" fill="#6b7280">OKF</text><text x="109.0162" y="116" font-size="13" fill="#6b7280">Tools/MCP</text><rect x="179.6835" y="98" width="89.5016" height="26" rx="4" fill="#f3f4f6"/><g transform="translate(188.1835,105) scale(1)"><path d="M2.5 5 V3.5 a3 3 0 0 1 6 0 V5" fill="none" stroke="#f59e0b" stroke-width="1.8"/><rect x="0.5" y="5" width="10" height="7" rx="1.5" fill="#f59e0b"/></g><text x="203.1835" y="116" font-size="13" fill="#111827">Raw Logs</text><text x="277.68510000000003" y="116" font-size="13" fill="#6b7280">System context anatomy</text><text x="437.4303" y="116" font-size="13" fill="#6b7280">OTEL</text>
+<line x1="24" y1="126" x2="976" y2="126" stroke="#e5e7eb"/>
+<rect x="44" y="262" width="912" height="52" rx="6" fill="#f9fafb" stroke="#e5e7eb" stroke-dasharray="4 3"/><text x="60" y="286" font-size="12" fill="#9ca3af">Raw Logs content (unchanged)</text>
+<rect x="173.6835" y="132" width="398.1046000000001" height="99" rx="6" fill="#fffbeb" stroke="#fcd34d" filter="url(#sh)"/><text x="186.6835" y="153" font-size="12" font-weight="700" fill="#78350f">Unprocessed hook log lines of this session, exactly as received.</text><line x1="185.6835" y1="161" x2="559.7881000000001" y2="161" stroke="#fcd34d"/><text x="186.6835" y="176" font-size="12" font-weight="700" fill="#78350f">Only visible to you</text><text x="186.6835" y="193" font-size="12" font-weight="700" fill="#78350f">Raw logs contain unfiltered session data. Other users viewing</text><text x="186.6835" y="210" font-size="12" font-weight="700" fill="#78350f">this session cannot see this tab.</text>
+<path transform="translate(257.18510000000003,114)" d="M0 0 L0 16 L4.2 12.2 L7 18.4 L9.6 17.3 L6.9 11.2 L12 11.2 Z" fill="#111827" stroke="#ffffff" stroke-width="1.2" stroke-linejoin="round"/>
+<path d="M605.7881000000001 153 L569.7881000000001 153" stroke="#2563eb" stroke-width="1.5" stroke-dasharray="4 3" fill="none" marker-end="url(#ah)"/>
+<circle cx="617.7881000000001" cy="153" r="10" fill="#2563eb"/><text x="617.7881000000001" y="157.5" font-size="12" font-weight="700" fill="#fff" text-anchor="middle">1</text><text x="635.7881000000001" y="157.5" font-size="12" fill="#2563eb">registry description — first line</text>
+<path d="M605.7881000000001 210 L569.7881000000001 210" stroke="#2563eb" stroke-width="1.5" stroke-dasharray="4 3" fill="none" marker-end="url(#ah)"/>
+<circle cx="617.7881000000001" cy="210" r="10" fill="#2563eb"/><text x="617.7881000000001" y="214.5" font-size="12" font-weight="700" fill="#fff" text-anchor="middle">2</text><text x="635.7881000000001" y="214.5" font-size="12" fill="#2563eb">existing privacy text, as today</text>
+</svg>

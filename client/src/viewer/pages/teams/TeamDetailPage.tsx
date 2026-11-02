@@ -1,10 +1,15 @@
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useLocation, useParams } from 'react-router-dom';
 import type { TeamMember } from '../../../models/teams';
 import { fetchTeamMembers, fetchTeams } from '../../api';
 import { useAuth } from '../../context/AuthContext';
-import { TEAM_TABS, type TeamTab } from '../../tab-ids';
+import {
+  TEAM_TABS,
+  teamWideAccess,
+  visibleTabs,
+  type TeamTab,
+} from '../../tab-ids';
 import { PageTabs, PageTabsContent } from '../../ui/page-tabs';
 import { TeamInvitationsTab } from './tabs/TeamInvitationsTab';
 import { TeamMembersTab } from './tabs/TeamMembersTab';
@@ -13,18 +18,24 @@ import { TeamOtelTab } from './otel/TeamOtelTab';
 
 type Tab = TeamTab;
 
-const TAB_LABELS: Record<Tab, string> = {
-  members: 'Members',
-  repositories: 'Repositories',
-  invitations: 'Invitations',
-  otel: 'OTEL',
-};
+/**
+ * The tab a link asked for through `navigate(path, { state: { teamTab } })` (the All views map),
+ * or `members`. Team tabs have no URL param, so the state is read once as the initial value.
+ */
+function initialTeamTab(state: unknown): Tab {
+  const wanted: unknown =
+    typeof state === 'object' && state !== null && 'teamTab' in state
+      ? state.teamTab
+      : undefined;
+  return TEAM_TABS.find((t) => t === wanted) ?? 'members';
+}
 
 export function TeamDetailPage() {
   const { teamId: teamIdStr } = useParams<{ teamId: string }>();
   const teamId = parseInt(teamIdStr!, 10);
   const { user } = useAuth();
-  const [tab, setTab] = useState<Tab>('members');
+  const location = useLocation();
+  const [tab, setTab] = useState<Tab>(() => initialTeamTab(location.state));
 
   const { data: teams = [] } = useQuery({
     queryKey: ['teams'],
@@ -45,9 +56,7 @@ export function TeamDetailPage() {
    * `canSeeTeamWideTabs`): everyone in a `transparent` team, only the owner and
    * managers in a `restricted` one. The server enforces it (403 → "No access").
    */
-  const canSeeOtel =
-    team !== undefined &&
-    (team.accessMode !== 'restricted' || isOwner || team.myIsManager);
+  const canSeeOtel = team !== undefined && teamWideAccess(team, user?.id);
   const role = isOwner ? 'owner' : team?.myIsManager ? 'manager' : 'member';
 
   if (!team) {
@@ -57,15 +66,20 @@ export function TeamDetailPage() {
   }
 
   return (
-    <div className="flex flex-col h-full p-6 gap-6">
+    // AppShell's content pane clips (`overflow-hidden`), so the page scrolls itself.
+    <div
+      className="flex flex-col h-full overflow-y-auto p-6 gap-6"
+      data-testid="team-detail-page"
+    >
       <div className="flex items-center gap-3">
         <h1 className="text-xl font-semibold">{team.name}</h1>
       </div>
 
       <PageTabs
-        tabs={TEAM_TABS.filter((t) => t !== 'otel' || canSeeOtel).map((t) => ({
-          value: t,
-          label: TAB_LABELS[t],
+        tabs={visibleTabs('team', { canSeeOtel }).map((r) => ({
+          value: r.id,
+          label: r.label,
+          description: r.description,
         }))}
         value={tab}
         onValueChange={(v) => setTab(v as Tab)}

@@ -6,6 +6,7 @@ import {
   type APIRequestContext,
 } from '@playwright/test';
 import { BASE_URL, storageStatePath } from './helpers/credentials';
+import { openSessionTab } from './helpers/session-tabs';
 import { seedRepoWithSessions, type SeededRepo } from './helpers/seed';
 
 // UI edits run as the repo `owner` (ROLES.owner.email) via saved storageState.
@@ -259,7 +260,7 @@ test('png file category is applied in session log view', async ({ page }) => {
   await waitForSpinnerGone(page);
 
   // The bare `?session=` navigation now lands on Summary — select Logs explicitly.
-  await page.getByRole('button', { name: 'Logs', exact: true }).click();
+  await openSessionTab(page, 'logs');
 
   // Wait for the session log view to be rendered (look for the turns list)
   await expect(page.locator('.animate-spin').first()).not.toBeVisible({ timeout: 15_000 });

@@ -7,7 +7,7 @@ tags:
   - client
   - build
   - site
-timestamp: "2026-10-29T00:00:00+04:00"
+timestamp: "2026-11-02T00:00:00+04:00"
 ---
 
 # User Docs and Site
@@ -164,6 +164,23 @@ wireframes).
   cropped to the content pane. Rule: English UI text only, no e-mail, user name or local path on
   them. Features and deck show them as `<figure class="shot">` with a "where in the app" caption;
   they are not dataset figures and carry no illustrative label.
+
+  | Shot | Shows | Used on |
+  |---|---|---|
+  | `context-usage.png`, `change-surface.png`, `analytics.png`, `okf-usage.png`, `tool-analytics.png` | Features blocks B, C, D, G, H | Features (the first three also in the deck) |
+  | `agent-tree.png`, `call-tree.png`, `context-growth-start.png`, `context-growth-later.png`, `cost-by-branch.png`, `harness-usage.png`, `lines-per-hour.png`, `metric-list.png`, `sessions-by-cost.png`, `timeline.png`, `tool-heatmap.png`, `tools-mcp.png` | session charts, reports, analytics | deck |
+  | `nav-lenses.png` | one row of session tabs: the View select on Cost, its row and "More" open | Features → Navigation |
+  | `nav-chart-tabs.png` | View: All tabs, Call Tree open as a session tab of its own | Features → Navigation |
+  | `summary-hub.png` | Summary tiles, "Where to look next" cards, Explore chips | Features → Navigation |
+  | `all-views-map.png` | All views map filtered "cost" | Features → Navigation |
+  | `home.png` | Home widgets | Home (`.hero-shot` under the hero) |
+
+  The navigation shots (v1.2.0) were taken in the dev app from a demo-repository export of local
+  prod (bootstrap-imported via "Import repo sessions" into a neutral identity, so Home lists only
+  that repository), at least three framings each in `tmp/site-shots/`, and picked by a
+  `model: "fable"` judge (clarity of the navigation idea, readability at 900 px, balance, clutter;
+  1–10, best of each subject, retake below 7). Features stacks a block's further shots in
+  `.shot-grid` (one column, max 960 px, never upscaled past the image's own width).
 
 ## Example dataset placeholders
 

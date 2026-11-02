@@ -21,6 +21,7 @@ import {
   consentSettingValue,
 } from './helpers/notice-hash';
 import { buildSeedRepoUrl, workerIndex } from './helpers/repo-url';
+import { openSessionTab } from './helpers/session-tabs';
 
 // Runs as the repo owner (`primary`) via saved storageState. Seeds its
 // own repo + a claude turn session, then creates a run-unique team and adds the
@@ -464,7 +465,8 @@ test.describe('Session interaction', () => {
     await sessionButton.click();
 
     // Session tabs (Summary / Logs / Call Tree / Info / Raw Logs) appear only when a session is selected
-    await expect(page.getByRole('button', { name: 'Logs', exact: true })).toBeVisible({
+    await openSessionTab(page, 'logs');
+    await expect(page.getByTestId('tab-session-logs')).toBeVisible({
       timeout: 5_000,
     });
   });
@@ -479,7 +481,8 @@ test.describe('Session interaction', () => {
     await sessionButton.click();
 
     // Session tabs (Summary / Logs / Call Tree / Info / Raw Logs) appear only when a session is selected
-    await expect(page.getByRole('button', { name: 'Logs', exact: true })).toBeVisible({
+    await openSessionTab(page, 'logs');
+    await expect(page.getByTestId('tab-session-logs')).toBeVisible({
       timeout: 10_000,
     });
 

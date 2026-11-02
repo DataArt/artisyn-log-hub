@@ -1,4 +1,7 @@
-import { useSearchParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
+import { PinToggle } from '../../../components/PinToggle';
+import type { Pin } from '../../../lib/home-pins';
+import { findReport } from './report-catalog';
 import { formatGeneratedAt, formatPeriodLabel } from './report-format';
 import { formatAttributeFilterLabel } from './report-url';
 
@@ -39,10 +42,30 @@ export function ReportDocumentHeader({
     .getAll('attr')
     .map(formatAttributeFilterLabel);
 
+  // The report pin (FR-F3, `report:<id>`): the repository and team come from the route, the
+  // report from the `report` URL param, so every report gets it through this one header. Outside
+  // a repository route (or before `report` is set) there is nothing to pin.
+  const params = useParams<{ repoId?: string; teamId?: string }>();
+  const repoId = params.repoId ? Number.parseInt(params.repoId, 10) : NaN;
+  const teamId = params.teamId ? Number.parseInt(params.teamId, 10) : undefined;
+  const reportId = searchParams.get('report');
+  const pin: Pin | null =
+    Number.isInteger(repoId) && repoId > 0 && findReport(reportId) !== undefined
+      ? {
+          kind: 'view',
+          repoId,
+          teamId: teamId !== undefined && teamId > 0 ? teamId : undefined,
+          view: `report:${reportId}`,
+        }
+      : null;
+
   return (
     <div className="mb-4 border-b border-border pb-3">
       <div className="flex items-baseline justify-between">
-        <h1 className="text-xl font-bold text-foreground">{title}</h1>
+        <div className="flex items-center gap-1">
+          <h1 className="text-xl font-bold text-foreground">{title}</h1>
+          {pin && <PinToggle pin={pin} />}
+        </div>
         <span className="text-xs text-muted-foreground">
           Generated on {formatGeneratedAt()} UTC
         </span>

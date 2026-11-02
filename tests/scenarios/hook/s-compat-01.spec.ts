@@ -94,7 +94,7 @@ import { callLines, chunkBody, floor5m, otelTurn, transcriptBodies } from '../fi
 import { repoFacts, sessionOtel, waitForOtelProjected } from '../helpers/otel';
 import { ownRepoId } from '../helpers/prompt-session';
 import { waitForQueueIdle } from '../helpers/queue';
-import { openSession } from '../helpers/session-view';
+import { openSession, selectSessionTab } from '../helpers/session-view';
 
 const LEGACY_DIR = path.join(REPO_ROOT, 'tests', 'fixtures', 'legacy-hooks');
 const PROMPT = 'compat: fix the old bug';
@@ -469,9 +469,9 @@ test('@S-COMPAT-01 frozen 1.6.2, 2.6.1 and 2.28.0 hooks against the current serv
       // 2.6.1 reports no otel-status: the generic `no-status` reason panel (shared-receiver task, DD-31).
       await expect(page.getByTestId('otel-reason-panel')).toContainText('No OTEL data for this session');
       await expect(page.getByTestId('otel-reason-status-line')).toHaveCount(0);
-      await page.getByTestId('tab-session-summary').click();
+      await selectSessionTab(page, 'summary');
       await expect(page.getByTestId('summary-executive-band')).toBeVisible();
-      await page.getByTestId('tab-session-logs').click();
+      await selectSessionTab(page, 'logs');
       await expect(page.locator('[data-turn-index]').first()).toBeVisible();
       await page.goto(`/#/repos/${repoId}?mtab=otel`);
       // 0 of M sessions with OTEL: the `reason` variant, dominated by the old hook's `no-status`.

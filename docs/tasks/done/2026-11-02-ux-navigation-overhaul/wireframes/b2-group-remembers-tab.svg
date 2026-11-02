@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="412" viewBox="0 0 1000 412" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <filter id="sh" x="-10%" y="-20%" width="120%" height="160%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000" flood-opacity="0.14"/>
+    </filter>
+    <marker id="ah" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#2563eb"/></marker>
+  </defs>
+  <rect x="0" y="0" width="1000" height="412" fill="#ffffff"/>
+  <text x="24" y="34" font-size="18" font-weight="700" fill="#111827">B2 · Clicking a group reopens the tab you last used in it</text>
+  <text x="24" y="56" font-size="12" fill="#6b7280">Remembered per viewer in browser storage; nothing remembered → the group's first visible tab.</text>
+<circle cx="38" cy="114" r="10" fill="#2563eb"/><text x="38" y="118.5" font-size="12" font-weight="700" fill="#fff" text-anchor="middle">1</text>
+<text x="56" y="118" font-size="13.5" font-weight="600" fill="#111827">You are reading Bash</text>
+<text x="56" y="136" font-size="12" fill="#6b7280">Transcript › Bash</text>
+<rect x="250" y="84" width="726" height="92" rx="8" fill="#fff" stroke="#e5e7eb"/>
+<text x="277" y="116" font-size="14" fill="#6b7280">Overview</text><text x="360.036" y="116" font-size="14" font-weight="600" fill="#111827">Transcript</text><line x1="351.036" y1="128" x2="435.05517" y2="128" stroke="#111827" stroke-width="2"/><text x="452.05517" y="116" font-size="14" fill="#6b7280">Cost &amp; context</text><text x="570.94237" y="116" font-size="14" fill="#6b7280">Effects</text>
+<line x1="250" y1="129" x2="976" y2="129" stroke="#e5e7eb"/>
+<rect x="266" y="140" width="234.29546" height="30" rx="6" fill="#f3f4f6"/><text x="282" y="160" font-size="13" fill="#6b7280">Logs</text><rect x="322.9942" y="144" width="75.79966" height="22" rx="5" fill="#fff" stroke="#d1d5db"/><text x="333.9942" y="160" font-size="13" font-weight="600" fill="#111827">Bash</text><text x="369.38811" y="160" font-size="11.5" fill="#6b7280" font-family="Consolas, monospace">196</text><g transform="translate(411.79386,149) scale(1)"><path d="M2.5 5 V3.5 a3 3 0 0 1 6 0 V5" fill="none" stroke="#f59e0b" stroke-width="1.8"/><rect x="0.5" y="5" width="10" height="7" rx="1.5" fill="#f59e0b"/></g><text x="426.79386" y="160" font-size="13" fill="#6b7280">Raw Logs</text>
+<path d="M38 130 L38 184" stroke="#2563eb" stroke-width="1.5" fill="none" marker-end="url(#ah)"/>
+<circle cx="38" cy="224" r="10" fill="#2563eb"/><text x="38" y="228.5" font-size="12" font-weight="700" fill="#fff" text-anchor="middle">2</text>
+<text x="56" y="228" font-size="13.5" font-weight="600" fill="#111827">Click "Overview"</text>
+<text x="56" y="246" font-size="12" fill="#6b7280">opens Summary (first visit)</text>
+<rect x="250" y="194" width="726" height="92" rx="8" fill="#fff" stroke="#e5e7eb"/>
+<text x="277" y="226" font-size="14" font-weight="600" fill="#111827">Overview</text><line x1="268" y1="238" x2="345.88779999999997" y2="238" stroke="#111827" stroke-width="2"/><text x="362.88779999999997" y="226" font-size="14" fill="#6b7280">Transcript</text><text x="451.7632" y="226" font-size="14" fill="#6b7280">Cost &amp; context</text><text x="570.6504" y="226" font-size="14" fill="#6b7280">Effects</text>
+<line x1="250" y1="239" x2="976" y2="239" stroke="#e5e7eb"/>
+<rect x="266" y="250" width="278.91331" height="30" rx="6" fill="#f3f4f6"/><rect x="271" y="254" width="77.87491" height="22" rx="5" fill="#fff" stroke="#d1d5db"/><text x="282" y="270" font-size="13" font-weight="600" fill="#111827">Summary</text><text x="361.87491" y="270" font-size="13" fill="#6b7280">Info</text><text x="407.18581" y="270" font-size="13" fill="#6b7280">Statistics</text><text x="486.29151" y="270" font-size="13" fill="#6b7280">Advisor</text>
+<rect x="262" y="205" width="89.8878" height="30" rx="7" fill="none" stroke="#2563eb" stroke-width="2" stroke-dasharray="5 3"/>
+<path transform="translate(337.88779999999997,226)" d="M0 0 L0 16 L4.2 12.2 L7 18.4 L9.6 17.3 L6.9 11.2 L12 11.2 Z" fill="#111827" stroke="#ffffff" stroke-width="1.2" stroke-linejoin="round"/>
+<path d="M38 240 L38 294" stroke="#2563eb" stroke-width="1.5" fill="none" marker-end="url(#ah)"/>
+<circle cx="38" cy="334" r="10" fill="#2563eb"/><text x="38" y="338.5" font-size="12" font-weight="700" fill="#fff" text-anchor="middle">3</text>
+<text x="56" y="338" font-size="13.5" font-weight="600" fill="#111827">Click "Transcript" again</text>
+<text x="56" y="356" font-size="12" fill="#6b7280">Bash reopens — remembered</text>
+<rect x="250" y="304" width="726" height="92" rx="8" fill="#fff" stroke="#e5e7eb"/>
+<text x="277" y="336" font-size="14" fill="#6b7280">Overview</text><text x="360.036" y="336" font-size="14" font-weight="600" fill="#111827">Transcript</text><line x1="351.036" y1="348" x2="435.05517" y2="348" stroke="#111827" stroke-width="2"/><text x="452.05517" y="336" font-size="14" fill="#6b7280">Cost &amp; context</text><text x="570.94237" y="336" font-size="14" fill="#6b7280">Effects</text>
+<line x1="250" y1="349" x2="976" y2="349" stroke="#e5e7eb"/>
+<rect x="266" y="360" width="234.29546" height="30" rx="6" fill="#f3f4f6"/><text x="282" y="380" font-size="13" fill="#6b7280">Logs</text><rect x="322.9942" y="364" width="75.79966" height="22" rx="5" fill="#fff" stroke="#d1d5db"/><text x="333.9942" y="380" font-size="13" font-weight="600" fill="#111827">Bash</text><text x="369.38811" y="380" font-size="11.5" fill="#6b7280" font-family="Consolas, monospace">196</text><g transform="translate(411.79386,369) scale(1)"><path d="M2.5 5 V3.5 a3 3 0 0 1 6 0 V5" fill="none" stroke="#f59e0b" stroke-width="1.8"/><rect x="0.5" y="5" width="10" height="7" rx="1.5" fill="#f59e0b"/></g><text x="426.79386" y="380" font-size="13" fill="#6b7280">Raw Logs</text>
+<rect x="345.036" y="315" width="96.01917" height="30" rx="7" fill="none" stroke="#2563eb" stroke-width="2" stroke-dasharray="5 3"/>
+<path transform="translate(427.05517,336)" d="M0 0 L0 16 L4.2 12.2 L7 18.4 L9.6 17.3 L6.9 11.2 L12 11.2 Z" fill="#111827" stroke="#ffffff" stroke-width="1.2" stroke-linejoin="round"/>
+<rect x="318.9942" y="360" width="83.79966" height="30" rx="7" fill="none" stroke="#2563eb" stroke-width="2" stroke-dasharray="5 3"/>
+</svg>

@@ -3,7 +3,7 @@
  *
  * Carries only the figures the usage analytics add: the tool outcome/duration table, the TTL and
  * `service_tier` token splits, the per-`iterations` drill-down, and the diff-based productivity
- * counters. The Charts → Tool Heatmap sub-tab and the Info → Tokens & Cost section are
+ * counters. The Tool Heatmap chart tab and the Info → Tokens & Cost section are
  * untouched and remain the single source for what they already render, so no figure appears in
  * two tabs.
  *

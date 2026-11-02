@@ -18,6 +18,7 @@ import type { ParsedSession } from './session-log/types';
 import type { RepoConfig } from '../../../models/repositories';
 
 import type { SessionTab } from './useRepositoryViewState';
+import type { LensId } from './session-lenses';
 import { otelReasonShortLabel, otelReasonTooltip } from './otel/otel.constants';
 
 export interface RepositorySessionsPanelProps {
@@ -47,6 +48,10 @@ export interface RepositorySessionsPanelProps {
   onShowAllUsers: () => void;
   sessionTab: SessionTab;
   onSessionTabChange: (tab: SessionTab) => void;
+  /** The `lens` URL param (DD-7); `null` → remembered lens, then the default. */
+  lensParam: LensId | null;
+  /** Writes `lens` and its default tab in one URL update. */
+  onLensSwitch: (lens: LensId, defaultTab: SessionTab) => void;
   isFavorite: boolean;
   favoriteMutationPending: boolean;
   onFavoriteToggle: (newValue: boolean) => void;
@@ -92,6 +97,8 @@ export function RepositorySessionsPanel({
   onShowAllUsers,
   sessionTab,
   onSessionTabChange,
+  lensParam,
+  onLensSwitch,
   isFavorite,
   favoriteMutationPending,
   onFavoriteToggle,
@@ -192,6 +199,8 @@ export function RepositorySessionsPanel({
             selectedSession={selectedSession}
             sessionTab={sessionTab}
             onSessionTabChange={onSessionTabChange}
+            lensParam={lensParam}
+            onLensSwitch={onLensSwitch}
             isFavorite={isFavorite}
             favoriteMutationPending={favoriteMutationPending}
             onFavoriteToggle={onFavoriteToggle}

@@ -18,7 +18,7 @@ import { test, expect } from '../fixtures';
 import type { ScenarioUser } from '../fixtures';
 import { createApiKey } from '../helpers/api-key';
 import { ownRepoId, uploadPromptSession } from '../helpers/prompt-session';
-import { logTurns } from '../helpers/session-view';
+import { logTurns, selectSessionTab } from '../helpers/session-view';
 import { addTeamRepo, browserAs, createTeam, inviteAndAccept } from '../helpers/teams';
 import {
   buildToolCallsLog,
@@ -367,7 +367,7 @@ test('@S-REPO-17 Tools/MCP tab: configured tools, MCP and wrapped CLI calls, cal
 
     const { context, page } = await browserAs(browser, stand.url, owner, `/#/repos/${repoId}?session=${sid('s2')}`);
     try {
-      await page.getByTestId('tab-session-tools').click();
+      await selectSessionTab(page, 'tools');
       await expect(page).toHaveURL(/tab=tools/);
       const tab = page.getByTestId('session-tools-tab');
       await expect(tab.getByTestId('tools-tree-all')).toHaveAttribute('title', 'All tools: 1 calls');
@@ -378,7 +378,7 @@ test('@S-REPO-17 Tools/MCP tab: configured tools, MCP and wrapped CLI calls, cal
       await expect(page).toHaveURL(/tcall=/);
       await expect(page.getByTestId('tools-call-details')).toBeVisible();
       // Leaving the tab drops its `t*` params (the selected call means nothing elsewhere).
-      await page.getByTestId('tab-session-info').click();
+      await selectSessionTab(page, 'info');
       await expect(page).not.toHaveURL(/tcall=/);
     } finally {
       await context.close();

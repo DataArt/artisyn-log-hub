@@ -263,6 +263,10 @@ export class TourWalker {
  * the ones hidden for this role / data). Compares `data-testid="tab-<group>-<id>"`.
  */
 export async function expectTabsOnScreen(page: Page, group: string, expected: readonly string[]): Promise<void> {
+  if (group === 'session') {
+    await expectSessionTabsOnScreen(page, expected);
+    return;
+  }
   const prefix = `tab-${group}-`;
   const triggers = page.locator(`[data-testid^="${prefix}"]`);
   await expect(triggers.first()).toBeVisible({ timeout: 15_000 });
@@ -270,6 +274,44 @@ export async function expectTabsOnScreen(page: Page, group: string, expected: re
     t.slice(prefix.length),
   );
   expect([...ids].sort(), `tab triggers of group ${group} vs the registry`).toEqual([...expected].sort());
+}
+
+/**
+ * The session bar has one level of tabs, but only part of them is in the row (the lens's tabs,
+ * the rest under "More ▾"). So the current session is reopened with `lens=all` and the visible
+ * `tab-session-<id>` triggers of the row plus the entries of "More ▾" are collected. Their union
+ * must be exactly `expected`. The walk ends back on Summary.
+ */
+async function expectSessionTabsOnScreen(page: Page, expected: readonly string[]): Promise<void> {
+  const url = new URL(page.url());
+  const [hashPath, hashQuery = ''] = url.hash.split('?');
+  const q = new URLSearchParams(hashQuery);
+  q.set('lens', 'all');
+  q.delete('tab');
+  await page.goto(`${url.pathname}${url.search}${hashPath}?${q.toString()}`);
+  await expect(page.getByTestId('session-lens')).toHaveValue('all', { timeout: 15_000 });
+
+  const tabIds = async (): Promise<string[]> =>
+    (
+      await page
+        .locator('[data-testid^="tab-session-"]')
+        .evaluateAll((els) => els.map((e) => e.getAttribute('data-testid') ?? ''))
+    ).map((t) => t.slice('tab-session-'.length));
+
+  await expect(async () => {
+    const seen = new Set<string>(await tabIds());
+    const tabsMore = page.getByTestId('session-tabs-more');
+    if (await tabsMore.isVisible()) {
+      await tabsMore.click();
+      await page.getByRole('dialog').last().waitFor({ state: 'visible', timeout: 1_500 });
+      for (const id of await tabIds()) seen.add(id);
+      await page.keyboard.press('Escape');
+    }
+    expect([...seen].sort(), 'tab triggers of group session vs the registry').toEqual([...expected].sort());
+  }).toPass({ timeout: 30_000 });
+
+  await page.getByTestId('tab-session-summary').click();
+  await expect(page.getByTestId('tab-session-summary')).toHaveAttribute('aria-selected', 'true');
 }
 
 /** Ids of the story's rows that open a tab of `group` (registry order). */

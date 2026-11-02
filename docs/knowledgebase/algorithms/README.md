@@ -43,6 +43,7 @@ format where the two differ).
 | [change-surface-concentration](change-surface-concentration.md) | `server/src/logs/change-surface/change-surface-metrics.ts` | jest |
 | [repo-url-normalization](repo-url-normalization.md) | `server/src/logs/repo-url-normalizer.ts` | jest |
 | [ndjson-tolerance](ndjson-tolerance.md) | hook `ndjson-sanitize.js`, `server/src/logs/ndjson-parser.ts` | `node --test`, jest |
+| [upload-error-classify](upload-error-classify.md) | `server/src/logs/upload-error.ts` | jest |
 | [login-backoff](login-backoff.md) | `server/src/auth/login-backoff.service.ts` | jest |
 | [password-policy](password-policy.md) | `server/src/auth/utils/password-policy.ts` | jest |
 | [auth-startup-config](auth-startup-config.md) | `server/src/auth/config/auth-startup-validation.ts` | jest |
@@ -52,6 +53,8 @@ format where the two differ).
 | [sysctx-anatomy](sysctx-anatomy.md) | `client/.../session-log/sysctx-anatomy/sysctx-anatomy.ts` | vitest |
 | [tool-call-sections](tool-call-sections.md) | `client/.../session-log/tool-calls.ts` | vitest |
 | [tool-call-outcome](tool-call-outcome.md) | `client/.../session-log/tool-outcome.ts`; twin `server/src/logs/tool-stats.ts` | vitest, jest |
+| [session-lens-row](session-lens-row.md) | `client/.../repository/session-lenses.ts` (`lensRow`, `lensDefaultTab`), `client/.../repository/session-tab-groups.ts` (`pickGroupTab`) | vitest |
+| [nav-filter-match](nav-filter-match.md) | `client/.../pages/map/nav-tree.ts` (`matchNavFilter`) | vitest |
 | [bash-command-view](bash-command-view.md) | `packages/bash-view/src/*` (`@loghub/bash-view`; client loader `client/src/viewer/lib/bash-view/`) | vitest |
 | [okf-access-extraction](okf-access-extraction.md) | `server/src/logs/okf/okf-access-extractor.ts` | jest |
 | [okf-task-context](okf-task-context.md) | `server/src/logs/okf/okf-task-context.ts` | jest |

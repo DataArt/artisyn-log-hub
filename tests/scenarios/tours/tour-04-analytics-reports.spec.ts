@@ -116,11 +116,15 @@ test('@TOUR-04 owner: analytics & reports tour @mode-a', async ({ stand, api, db
   });
 
   // The repo OTEL tab (2026-10-30-otel-tabs-traces): the golden sessions carry no OTEL records.
+  // Which empty state shows depends on whether golden sessions fall into the default period:
+  // none in scope → variant A; N = 0 of M > 0 in scope → the `reason` variant (DD-29).
   await walker.screen(page, 'repo.otel', {
     check: async () => {
       await expect(page).toHaveURL(/mtab=otel(&|$)/);
       await expect(page.getByTestId('otel-realtime-badge')).toBeVisible();
-      await expect(page.getByTestId('otel-empty-A').or(page.getByTestId('otel-cost-chart'))).toBeVisible({ timeout: 20_000 });
+      await expect(
+        page.getByTestId('otel-empty-A').or(page.getByTestId('otel-empty-reason')).or(page.getByTestId('otel-cost-chart')),
+      ).toBeVisible({ timeout: 20_000 });
     },
   });
 

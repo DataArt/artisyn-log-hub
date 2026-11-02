@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="532" viewBox="0 0 1100 532" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <filter id="sh" x="-10%" y="-20%" width="120%" height="160%">
+      <feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000" flood-opacity="0.14"/>
+    </filter>
+    <marker id="ah" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#2563eb"/></marker>
+  </defs>
+  <rect x="0" y="0" width="1100" height="532" fill="#ffffff"/>
+  <text x="24" y="34" font-size="18" font-weight="700" fill="#111827">B1 · "All" lens: groups on top, the selected group's tabs below</text>
+  <text x="24" y="56" font-size="12" fill="#6b7280">Wide pane, everything fits. tab= values and tab-session-* test ids stay as today.</text>
+<rect x="24" y="80" width="1052" height="322" rx="8" fill="#fff" stroke="#e5e7eb"/>
+<text x="44" y="100" font-size="9.5" fill="#6b7280" letter-spacing="0.5">START</text><text x="44" y="116" font-size="11.5" fill="#111827" font-family="Consolas, monospace">2026-10-21 22:53:15</text><text x="200" y="100" font-size="9.5" fill="#6b7280" letter-spacing="0.5">END</text><text x="200" y="116" font-size="11.5" fill="#111827" font-family="Consolas, monospace">2026-10-22 01:12:16</text><text x="356" y="100" font-size="9.5" fill="#6b7280" letter-spacing="0.5">COST</text><text x="356" y="116" font-size="11.5" fill="#111827" font-family="Consolas, monospace">$28.7908</text><text x="456" y="100" font-size="9.5" fill="#6b7280" letter-spacing="0.5">USER</text><text x="456" y="116" font-size="11.5" fill="#111827" font-family="Consolas, monospace">dt@dataart.com</text><line x1="24" y1="130" x2="1076" y2="130" stroke="#e5e7eb"/>
+<text x="44" y="162" font-size="11" fill="#6b7280">Lens</text><rect x="76" y="146" width="396.42786750000005" height="24" rx="12" fill="#f3f4f6"/><text x="89" y="162" font-size="11.5" fill="#6b7280">What happened</text><text x="187.30020000000002" y="162" font-size="11.5" fill="#6b7280">Cost</text><text x="232.16795000000002" y="162" font-size="11.5" fill="#6b7280">Harness &amp; context</text><text x="348.2046" y="162" font-size="11.5" fill="#6b7280">Failed tool call</text><rect x="434.72395000000006" y="148" width="35.703917499999996" height="20" rx="10" fill="#fff" stroke="#d1d5db"/><text x="445.72395000000006" y="162" font-size="11.5" font-weight="600" fill="#111827">All</text>
+<rect x="44" y="191" width="20" height="20" rx="4" fill="#fff" stroke="#d1d5db"/><text x="49" y="205" font-size="11" fill="#6b7280">☆</text><rect x="70" y="191" width="20" height="20" rx="4" fill="#fff" stroke="#d1d5db"/><text x="74" y="205" font-size="11" fill="#6b7280">↻</text><text x="111" y="206" font-size="14" font-weight="600" fill="#111827">Overview</text><line x1="102" y1="218" x2="179.8878" y2="218" stroke="#111827" stroke-width="2"/><text x="196.8878" y="206" font-size="14" fill="#6b7280">Transcript</text><text x="285.7632" y="206" font-size="14" fill="#6b7280">Cost &amp; context</text><text x="404.6504" y="206" font-size="14" fill="#6b7280">Effects</text>
+<rect x="980" y="190" width="80" height="24" rx="5" fill="#fff" stroke="#fca5a5"/>
+<text x="994" y="206" font-size="12" fill="#dc2626">🗑 Remove</text>
+<line x1="24" y1="219" x2="1076" y2="219" stroke="#e5e7eb"/>
+<rect x="44" y="232" width="278.91331" height="30" rx="6" fill="#f3f4f6"/><rect x="49" y="236" width="77.87491" height="22" rx="5" fill="#fff" stroke="#d1d5db"/><text x="60" y="252" font-size="13" font-weight="600" fill="#111827">Summary</text><text x="139.87491" y="252" font-size="13" fill="#6b7280">Info</text><text x="185.18581" y="252" font-size="13" fill="#6b7280">Statistics</text><text x="264.29151" y="252" font-size="13" fill="#6b7280">Advisor</text>
+<line x1="24" y1="270" x2="1076" y2="270" stroke="#e5e7eb"/>
+<rect x="44" y="284" width="1012" height="100" rx="6" fill="#f9fafb" stroke="#e5e7eb"/>
+<text x="68" y="322" font-size="20" font-weight="600" fill="#111827">$28.79</text>
+<text x="68" y="344" font-size="11" fill="#6b7280">cost</text>
+<text x="258" y="322" font-size="20" font-weight="600" fill="#111827">2h 19m</text>
+<text x="258" y="344" font-size="11" fill="#6b7280">duration</text>
+<text x="448" y="322" font-size="20" font-weight="600" fill="#111827">61</text>
+<text x="448" y="344" font-size="11" fill="#6b7280">turns</text>
+<text x="638" y="322" font-size="20" font-weight="600" fill="#111827">92%</text>
+<text x="638" y="344" font-size="11" fill="#6b7280">cache read</text>
+<text x="828" y="322" font-size="20" font-weight="600" fill="#b45309">3</text>
+<text x="828" y="344" font-size="11" fill="#6b7280">detected issues</text>
+<text x="68" y="370" font-size="11" fill="#9ca3af">Summary content (unchanged)</text>
+<rect x="94" y="186" width="372.46439999999996" height="30" rx="7" fill="none" stroke="#2563eb" stroke-width="2" stroke-dasharray="5 3"/>
+<rect x="38" y="228" width="290.91331" height="32" rx="7" fill="none" stroke="#2563eb" stroke-width="2" stroke-dasharray="5 3"/>
+<circle cx="494.46439999999996" cy="201" r="10" fill="#2563eb"/><text x="494.46439999999996" y="205.5" font-size="12" font-weight="700" fill="#fff" text-anchor="middle">1</text><text x="512.4644" y="205.5" font-size="12" fill="#2563eb">groups — top row</text>
+<circle cx="352.91331" cy="247" r="10" fill="#2563eb"/><text x="352.91331" y="251.5" font-size="12" font-weight="700" fill="#fff" text-anchor="middle">2</text><text x="370.91331" y="251.5" font-size="12" fill="#2563eb">tabs of the selected group</text>
+<text x="24" y="436" font-size="10" font-weight="700" fill="#6b7280" letter-spacing="0.6">WHAT EACH GROUP HOLDS (registry group field, registry order)</text>
+<rect x="24" y="446" width="254" height="70" rx="6" fill="#fff" stroke="#e5e7eb"/>
+<text x="38" y="470" font-size="13.5" font-weight="600" fill="#111827">Overview</text>
+<text x="38" y="492" font-size="12" fill="#6b7280">Summary · Info · Statistics · Advisor</text>
+<rect x="290" y="446" width="254" height="70" rx="6" fill="#fff" stroke="#e5e7eb"/>
+<text x="304" y="470" font-size="13.5" font-weight="600" fill="#111827">Transcript</text>
+<text x="304" y="492" font-size="12" fill="#6b7280">Logs · Bash · Raw Logs</text>
+<rect x="556" y="446" width="254" height="70" rx="6" fill="#fff" stroke="#e5e7eb"/>
+<text x="570" y="470" font-size="13.5" font-weight="600" fill="#111827">Cost &amp; context</text>
+<text x="570" y="492" font-size="12" fill="#6b7280">Charts · System context anatomy ·</text>
+<text x="570" y="508" font-size="12" fill="#6b7280">Harness usage · OTEL</text>
+<rect x="822" y="446" width="254" height="70" rx="6" fill="#fff" stroke="#e5e7eb"/>
+<text x="836" y="470" font-size="13.5" font-weight="600" fill="#111827">Effects</text>
+<text x="836" y="492" font-size="12" fill="#6b7280">Change surface · Tools/MCP · OKF</text>
+</svg>

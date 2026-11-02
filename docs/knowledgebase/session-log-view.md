@@ -645,7 +645,7 @@ Collapsible section, omitted entirely when the session ran no workflows (`workfl
 
 ## Context Growth steps (`charts/context-usage/`)
 
-The Context Growth chart (`ContextGrowthChart.tsx`; mounted by the Charts tab, the Charts
+The Context Growth chart (`ContextGrowthChart.tsx`; mounted by the Context Growth session tab, the Charts
 dashboard and the Summary tab's extended details) composes `TurnBreakdownDialog`,
 `ContextGrowthSubStepRow`, `StepDetailsModal`, `step-bars.ts` and `step-label.ts`.
 

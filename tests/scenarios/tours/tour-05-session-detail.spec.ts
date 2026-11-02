@@ -1,8 +1,9 @@
 // Tour 5 — session owner: every tab of the session detail and every Charts sub-tab (impl-plan DD G5;
 // docs/qaa-overview/scenarios/06-ui-tab-walk.md §2.3 story 5, §1.3, §1.4; checks per screen §2.2).
 //
-// Tabs are reached by their `data-testid="tab-session-<id>"` / `tab-chart-<id>` triggers (DD G1)
-// and both tab bars are compared with the registry (06 §2.4, layer B). Then the redirects: the
+// Tabs are reached by their `data-testid="tab-session-<id>"` triggers (DD G1)
+// and both tab bars are compared with the registry (06 §2.4, layer B; the session bar under the
+// "All" lens, group by group, since it shows one group's tabs at a time). Then the redirects: the
 // legacy `tab=call-tree` lands on Charts, `tab=advisor` on a session without an advisor result
 // lands on Summary, and `tab=raw-logs` on a team member's session seen by a restricted-team
 // MANAGER shows no Raw Logs and falls back.
@@ -27,7 +28,7 @@ import { randomBytes } from 'crypto';
 import { test, expect } from '../fixtures';
 import { createApiKey } from '../helpers/api-key';
 import { uploadPromptSession } from '../helpers/prompt-session';
-import { uploadGoldenRepo } from '../helpers/session-view';
+import { selectSessionTab, uploadGoldenRepo } from '../helpers/session-view';
 import { addTeamRepo, createTeam, inviteAndAccept, setMemberRoles, skipNewUserNudge } from '../helpers/teams';
 import { TourWalker, expectTabsOnScreen, registryTabIds } from './tour-kit';
 
@@ -89,30 +90,23 @@ test('@TOUR-05 session: detail tour @mode-a', async ({ stand, api, db, users, pa
   walker.attach(page);
   await skipNewUserNudge(page);
   await owner.signIn(page);
-  const clickTab = (group: string, id: string) => async () => {
-    await page.getByTestId(`tab-${group}-${id}`).click();
-  };
+  // Session tabs sit in the lens row or its "More ▾": `selectSessionTab` reaches each of them.
+  const clickTab = (id: string) => () => selectSessionTab(page, id);
 
   await walker.screen(page, 'session.summary', {
     check: () => expectTabsOnScreen(page, 'session', registryTabIds(walker, 'session')),
   });
   for (const id of ['info', 'logs', 'bash', 'advisor', 'usage', 'change-surface', 'harness-usage', 'okf', 'tools', 'raw-logs', 'sysctx', 'otel']) {
-    await walker.screen(page, `session.${id}`, { go: clickTab('session', id) });
+    await walker.screen(page, `session.${id}`, { go: clickTab(id) });
+  }
+  // The seven charts are plain session tabs (one level of tabs, no Charts sub-tab bar).
+  for (const id of ['dashboard', 'context-growth', 'context-usage', 'agent-tree', 'timeline', 'tool-heatmap', 'call-tree']) {
+    await walker.screen(page, `session.charts.${id}`, { go: clickTab(id) });
   }
 
-  await walker.screen(page, 'session.charts', {
-    go: async () => {
-      // The sub-tab is remembered per browser; the walk starts on the default one.
-      await page.evaluate(() => localStorage.removeItem('charts-sub-tab'));
-      await page.getByTestId('tab-session-charts').click();
-    },
-    check: () => expectTabsOnScreen(page, 'chart', registryTabIds(walker, 'chart')),
-  });
-  for (const id of registryTabIds(walker, 'chart')) {
-    await walker.screen(page, `session.charts.${id}`, { go: clickTab('chart', id) });
-  }
-
-  await walker.screen(page, 'session.call-tree.redirect');
+  // An old `tab=charts` link opens the chart last shown; in a fresh browser that is the Dashboard.
+  await page.evaluate(() => localStorage.removeItem('charts-sub-tab'));
+  await walker.screen(page, 'session.charts.redirect');
   await walker.screen(page, 'session.advisor.absent-redirect', {
     check: async () => {
       await expect(page.getByTestId('tab-session-advisor')).toHaveCount(0);
@@ -124,6 +118,59 @@ test('@TOUR-05 session: detail tour @mode-a', async ({ stand, api, db, users, pa
       await expect(page.getByTestId('tab-session-raw-logs')).toHaveCount(0);
       await expect(page).not.toHaveURL(/tab=raw-logs/);
     },
+  });
+
+  // The All views map from a session (DD-18): Ctrl+K, the filter, a jump onto the Call Tree
+  // chart tab while another chart tab is open, and Esc back.
+  const sessionUrl = `/#/repos/${params.repoId}?session=${encodeURIComponent(params.sessionId)}`;
+  const callTreeNode = page.locator(
+    `[data-testid="map-node-repo:${params.repoId}/session/group:cost-context/tab:call-tree"]:not([aria-disabled])`,
+  );
+
+  await test.step('map 1. the session is open on the Timeline chart tab', async () => {
+    await page.goto(`${sessionUrl}&tab=timeline`);
+    await expect(page.getByTestId('tab-session-timeline')).toHaveAttribute('aria-selected', 'true');
+  });
+
+  await test.step('map 2. Ctrl+K opens the map with the filter focused', async () => {
+    await page.keyboard.press('Control+k');
+    await expect(page).toHaveURL(/#\/map/);
+    await expect(page.getByTestId('map-filter')).toBeFocused();
+    await expect(page.getByTestId('map-counter')).toContainText(' views');
+  });
+
+  await test.step('map 3. filter "cost" highlights the Call Tree tab (by its synonym)', async () => {
+    await page.getByTestId('map-filter').fill('cost');
+    await expect(page).toHaveURL(/q=cost/);
+    await expect(callTreeNode).toBeVisible();
+    await expect(callTreeNode).toContainText('≈ cost');
+    await expect(callTreeNode).not.toHaveClass(/opacity-45/);
+  });
+
+  await test.step('map 4. ↓ walks the matches to Call Tree; Enter opens the Call Tree tab, not Timeline', async () => {
+    await page.getByTestId('map-filter').press('ArrowDown');
+    await expect(async () => {
+      if ((await callTreeNode.getAttribute('aria-selected')) === 'true') return;
+      await page.keyboard.press('ArrowDown');
+      expect(await callTreeNode.getAttribute('aria-selected')).toBe('true');
+    }).toPass({ timeout: 20_000, intervals: [50] });
+    await expect(callTreeNode).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(page).toHaveURL(/tab=call-tree/);
+    await expect(page).toHaveURL(new RegExp(`session=${params.sessionId}`));
+    await expect(page.getByTestId('tab-session-call-tree')).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByTestId('session-chart-call-tree')).toBeVisible();
+  });
+
+  await test.step('map 5. Esc on the empty filter returns to the session', async () => {
+    await page.keyboard.press('Control+k');
+    await expect(page).toHaveURL(/#\/map/);
+    await expect(page.getByTestId('map-filter')).toBeFocused();
+    await expect(page.getByTestId('map-filter')).toHaveValue('');
+    await page.keyboard.press('Escape');
+    await expect(page).toHaveURL(/tab=call-tree/);
+    await expect(page).not.toHaveURL(/#\/map/);
+    await expect(page.getByTestId('tab-session-call-tree')).toHaveAttribute('aria-selected', 'true');
   });
 
   walker.finish();

@@ -1,0 +1,123 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1100" height="720" viewBox="0 0 1100 720" font-family="Segoe UI, Arial, sans-serif">
+  <rect width="1100" height="720" fill="#ffffff"/>
+
+  <text x="24" y="34" font-size="18" font-weight="700" fill="#111827">F1 · Home (/main): one overview of every repository you can see, no repo picker</text>
+  <text x="24" y="56" font-size="12" fill="#6b7280">Repositories sorted by last activity, first 10 + "Show all". Every line deep-links into an existing view.</text>
+
+  <rect x="24" y="72" width="1052" height="632" rx="8" fill="#ffffff" stroke="#e5e7eb"/>
+
+  <!-- top nav -->
+  <rect x="25" y="73" width="1050" height="40" rx="7" fill="#fafafa"/>
+  <circle cx="46" cy="93" r="7" fill="#3b4fd0"/>
+  <text x="62" y="98" font-size="13.5" font-weight="600" fill="#111827">Artisyn Log Hub</text>
+  <rect x="640" y="80" width="190" height="26" rx="6" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="652" y="97" font-size="12.5" fill="#6b7280">🔍  Jump to…</text>
+  <rect x="784" y="85" width="40" height="16" rx="3" fill="#f3f4f6" stroke="#d1d5db"/>
+  <text x="788" y="97" font-size="10" fill="#374151" font-family="Consolas, monospace">Ctrl K</text>
+  <text x="856" y="98" font-size="12.5" fill="#6b7280">dt@dataart.com</text>
+  <text x="986" y="98" font-size="12.5" font-weight="600" fill="#111827">Edit email</text>
+  <line x1="24" y1="113" x2="1076" y2="113" stroke="#e5e7eb"/>
+
+  <!-- left nav -->
+  <line x1="200" y1="114" x2="200" y2="703" stroke="#e5e7eb" stroke-width="3"/>
+  <rect x="25" y="124" width="174" height="22" fill="#f9fafb"/>
+  <text x="36" y="139" font-size="10" fill="#9ca3af" letter-spacing="0.6">TEAMS</text>
+  <text x="44" y="166" font-size="12" fill="#374151">LogHubLocal</text>
+  <text x="44" y="188" font-size="12" fill="#374151">LogHub Demo</text>
+  <rect x="25" y="200" width="174" height="22" fill="#f9fafb"/>
+  <text x="36" y="215" font-size="10" fill="#9ca3af" letter-spacing="0.6">MY REPOS</text>
+  <text x="36" y="242" font-size="12" fill="#374151">artisyn-log-hub</text>
+  <text x="36" y="264" font-size="12" fill="#374151">at-scanner</text>
+  <text x="36" y="286" font-size="12" fill="#374151">codex-wiki</text>
+  <text x="36" y="308" font-size="12" fill="#374151">billing-api</text>
+  <rect x="25" y="322" width="174" height="22" fill="#f9fafb"/>
+  <text x="36" y="337" font-size="10" fill="#9ca3af" letter-spacing="0.6">INSTALLED HOOKS</text>
+  <circle cx="40" cy="360" r="3.5" fill="#f97316"/>
+  <text x="50" y="364" font-size="12" fill="#111827">artisyn-log-hub  1 issue</text>
+
+  <!-- main -->
+  <text x="222" y="146" font-size="20" font-weight="700" fill="#111827">Home</text>
+
+  <!-- repositories column -->
+  <text x="222" y="178" font-size="14" font-weight="600" fill="#111827">Repositories</text>
+  <text x="318" y="178" font-size="11" fill="#6b7280">14 · by last activity</text>
+
+  <!-- repo 1 -->
+  <rect x="222" y="190" width="460" height="92" rx="8" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="236" y="212" font-size="13" font-weight="600" fill="#111827" font-family="Consolas, monospace">artisyn-log-hub</text>
+  <circle cx="586" cy="208" r="4" fill="#f97316"/><text x="595" y="212" font-size="11.5" fill="#c2410c">hook: 1 issue</text>
+  <text x="236" y="232" font-size="11.5" fill="#6b7280">2 h ago · 44 sessions · this week $197.97</text>
+  <rect x="236" y="244" width="200" height="24" rx="12" fill="#f3f4f6" stroke="#e5e7eb"/><text x="248" y="260" font-size="11.5" fill="#111827">Why was this session expensive?</text>
+  <rect x="444" y="244" width="146" height="24" rx="12" fill="#f3f4f6" stroke="#e5e7eb"/><text x="456" y="260" font-size="11.5" fill="#111827">Which tools fail most?</text>
+  <rect x="598" y="244" width="40" height="24" rx="12" fill="#ffffff" stroke="#e5e7eb"/><text x="608" y="260" font-size="11.5" fill="#6b7280">+3</text>
+
+  <!-- repo 2 -->
+  <rect x="222" y="290" width="460" height="92" rx="8" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="236" y="312" font-size="13" font-weight="600" fill="#111827" font-family="Consolas, monospace">at-scanner</text>
+  <circle cx="586" cy="308" r="4" fill="#16a34a"/><text x="595" y="312" font-size="11.5" fill="#15803d">hook OK</text>
+  <text x="236" y="332" font-size="11.5" fill="#6b7280">yesterday · 12 sessions · this week $41.10</text>
+  <rect x="236" y="344" width="200" height="24" rx="12" fill="#f3f4f6" stroke="#e5e7eb"/><text x="248" y="360" font-size="11.5" fill="#111827">Why was this session expensive?</text>
+  <rect x="444" y="344" width="146" height="24" rx="12" fill="#f3f4f6" stroke="#e5e7eb"/><text x="456" y="360" font-size="11.5" fill="#111827">Which tools fail most?</text>
+  <rect x="598" y="344" width="40" height="24" rx="12" fill="#ffffff" stroke="#e5e7eb"/><text x="608" y="360" font-size="11.5" fill="#6b7280">+3</text>
+
+  <!-- repo 3 -->
+  <rect x="222" y="390" width="460" height="92" rx="8" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="236" y="412" font-size="13" font-weight="600" fill="#111827" font-family="Consolas, monospace">codex-wiki</text>
+  <circle cx="586" cy="408" r="4" fill="#f59e0b"/><text x="595" y="412" font-size="11.5" fill="#b45309">hook outdated</text>
+  <text x="236" y="432" font-size="11.5" fill="#6b7280">3 days ago · 5 sessions · this week $8.40</text>
+  <rect x="236" y="444" width="200" height="24" rx="12" fill="#f3f4f6" stroke="#e5e7eb"/><text x="248" y="460" font-size="11.5" fill="#111827">Why was this session expensive?</text>
+  <rect x="444" y="444" width="146" height="24" rx="12" fill="#f3f4f6" stroke="#e5e7eb"/><text x="456" y="460" font-size="11.5" fill="#111827">Which tools fail most?</text>
+  <rect x="598" y="444" width="40" height="24" rx="12" fill="#ffffff" stroke="#e5e7eb"/><text x="608" y="460" font-size="11.5" fill="#6b7280">+3</text>
+
+  <!-- repo 4 (abridged) -->
+  <rect x="222" y="490" width="460" height="44" rx="8" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="236" y="512" font-size="13" font-weight="600" fill="#111827" font-family="Consolas, monospace">billing-api</text>
+  <text x="236" y="527" font-size="11" fill="#6b7280">2 weeks ago · 31 sessions · this week $0.00</text>
+  <circle cx="586" cy="508" r="4" fill="#16a34a"/><text x="595" y="512" font-size="11.5" fill="#15803d">hook OK</text>
+  <text x="452" y="556" text-anchor="middle" font-size="12" fill="#9ca3af">⋮ up to 10</text>
+  <text x="222" y="584" font-size="12.5" font-weight="600" fill="#2563eb">Show all 14 repositories →</text>
+
+  <!-- right column -->
+  <!-- needs attention -->
+  <rect x="702" y="160" width="354" height="158" rx="8" fill="#fffbeb" stroke="#fcd34d"/>
+  <text x="716" y="182" font-size="13" font-weight="600" fill="#111827">Needs attention</text>
+  <text x="1042" y="182" text-anchor="end" font-size="10.5" fill="#92400e">last 7 days</text>
+  <g font-size="11.5" fill="#111827">
+    <circle cx="720" cy="202" r="3.5" fill="#f97316"/><text x="730" y="206">Hook · artisyn-log-hub · 2 errors</text>
+    <circle cx="720" cy="224" r="3.5" fill="#f59e0b"/><text x="730" y="228">Hook · codex-wiki · outdated</text>
+    <text x="716" y="250" fill="#2563eb">◆</text><text x="730" y="250">Advisor · 3f2a91 · artisyn-log-hub</text>
+    <text x="716" y="272" fill="#2563eb">◆</text><text x="730" y="272">Advisor · 77c0de · at-scanner</text>
+    <text x="715" y="294" fill="#dc2626">✕</text><text x="730" y="294">4 failed tool calls · 91bc04</text>
+  </g>
+  <text x="1042" y="308" text-anchor="end" font-size="11" fill="#2563eb">Show all →</text>
+
+  <!-- this week -->
+  <rect x="702" y="330" width="354" height="160" rx="8" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="716" y="352" font-size="13" font-weight="600" fill="#111827">This week</text>
+  <text x="1042" y="352" text-anchor="end" font-size="10.5" fill="#6b7280">last 7 days</text>
+  <g font-size="11.5" fill="#374151">
+    <text x="716" y="376">artisyn-log-hub</text><rect x="830" y="367" width="124" height="11" rx="2" fill="#93c5fd"/><text x="1042" y="376" text-anchor="end" font-family="Consolas, monospace" font-size="11">$197.97</text>
+    <text x="716" y="398">at-scanner</text><rect x="830" y="389" width="26" height="11" rx="2" fill="#93c5fd"/><text x="1042" y="398" text-anchor="end" font-family="Consolas, monospace" font-size="11">$41.10</text>
+    <text x="716" y="420">codex-wiki</text><rect x="830" y="411" width="5" height="11" rx="2" fill="#93c5fd"/><text x="1042" y="420" text-anchor="end" font-family="Consolas, monospace" font-size="11">$8.40</text>
+    <line x1="716" y1="432" x2="1042" y2="432" stroke="#f3f4f6"/>
+    <text x="716" y="452" font-weight="600" fill="#111827">team LogHubLocal</text><rect x="830" y="443" width="150" height="11" rx="2" fill="#a5b4fc"/><text x="1042" y="452" text-anchor="end" font-family="Consolas, monospace" font-size="11" fill="#111827">$239.07</text>
+    <text x="716" y="474" font-weight="600" fill="#111827">team LogHub Demo</text><rect x="830" y="465" width="5" height="11" rx="2" fill="#a5b4fc"/><text x="1042" y="474" text-anchor="end" font-family="Consolas, monospace" font-size="11" fill="#111827">$8.40</text>
+  </g>
+
+  <!-- pinned -->
+  <rect x="702" y="502" width="354" height="94" rx="8" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="716" y="524" font-size="13" font-weight="600" fill="#111827">Pinned</text>
+  <g font-size="11.5" fill="#111827">
+    <text x="716" y="546">📌 at-scanner</text>
+    <text x="716" y="566">📌 artisyn-log-hub › Reports › Executive Summary</text>
+    <text x="716" y="586"><tspan fill="#f59e0b">★</tspan> 3f2a91 · Fix flaky upload test</text>
+  </g>
+
+  <!-- recent -->
+  <rect x="702" y="608" width="354" height="84" rx="8" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="716" y="630" font-size="13" font-weight="600" fill="#111827">Recent</text>
+  <g font-size="11.5" fill="#111827">
+    <text x="716" y="652">3f2a91 · artisyn-log-hub <tspan fill="#6b7280">› Statistics</tspan></text>
+    <text x="716" y="672">artisyn-log-hub <tspan fill="#6b7280">› Analytics</tspan></text>
+  </g>
+</svg>

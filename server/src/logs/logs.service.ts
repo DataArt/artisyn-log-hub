@@ -37,6 +37,7 @@ import {
   storeHarnessSnapshot,
 } from './harness-snapshot';
 import { storeAndBindOkfSnapshot } from './okf/okf-snapshot';
+import { lockSessionTreeForIngest } from './session-tree.sql';
 import {
   loadSessionTreeEditRecords,
   resolveSessionRepoRoots,
@@ -314,8 +315,17 @@ export class LogsService {
         return;
       }
 
-      // Step 1 — Session upsert
+      // Step 0b — one ingest at a time per session tree (see lockSessionTreeForIngest): the
+      // artisyn upload's changed-path re-normalisation and a sub-agent upload otherwise
+      // deadlock on the same node's rows. Taken after the owner lock, so the order is fixed.
       const isSubagent = logType === 'claude-subagent' && !!parentSessionId;
+      await lockSessionTreeForIngest(
+        tx,
+        sessionId,
+        isSubagent ? parentSessionId : undefined,
+      );
+
+      // Step 1 — Session upsert
       const hasWorkflowRunId = logType === 'claude-subagent' && !!workflowRunId;
       const [sessionRow] = await tx
         .insert(sessions)

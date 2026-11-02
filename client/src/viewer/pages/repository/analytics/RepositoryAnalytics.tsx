@@ -343,6 +343,7 @@ export function RepositoryAnalytics({
       {/* Header controls */}
       <AnalyticsControls
         state={state}
+        repoId={repoId}
         teamId={teamId}
         branchList={branchList}
         showBranchFilter={showBranchFilter}

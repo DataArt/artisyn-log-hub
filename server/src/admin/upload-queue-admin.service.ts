@@ -171,7 +171,14 @@ export class UploadQueueAdminService {
   async reprocessFailed(): Promise<{ updatedCount: number }> {
     const result = await this.db
       .update(uploadQueue)
-      .set({ status: 'pending', errorMessage: null, updatedAt: new Date() })
+      // A manual retry starts a fresh attempt budget (and no backoff delay).
+      .set({
+        status: 'pending',
+        errorMessage: null,
+        errorKind: null,
+        attempts: 0,
+        updatedAt: new Date(),
+      })
       .where(eq(uploadQueue.status, 'failed'))
       .returning({ id: uploadQueue.id });
 
