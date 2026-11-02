@@ -80,8 +80,13 @@ const ApiKeysPage = lazy(() =>
     default: m.ApiKeysPage,
   })),
 );
+const MapPage = lazy(() =>
+  import('./viewer/pages/workspace-lazy-group').then((m) => ({
+    default: m.MapPage,
+  })),
+);
 const HookStatePage = lazy(() =>
-  import('./viewer/pages/hook-state/HookStatePage').then((m) => ({
+  import('./viewer/pages/workspace-lazy-group').then((m) => ({
     default: m.HookStatePage,
   })),
 );
@@ -278,6 +283,7 @@ const router = createHashRouter([
                 element: withSuspense(<TeamDetailPage />),
               },
               { path: ROUTE.apiKeys, element: withSuspense(<ApiKeysPage />) },
+              { path: ROUTE.map, element: withSuspense(<MapPage />) },
               { path: ROUTE.repo, element: <RepositoryView /> },
               {
                 path: ROUTE.teamRepo,

@@ -246,7 +246,9 @@ Do the same check whenever you switch `AUTH_MODE` on a fresh database.
 
 The generated `.env` sets `NODE_ENV=production`, which turns on the production checks below. Each
 setting is documented in `.env.example`; uncomment it in `.env`, then run `docker compose up -d` to
-apply it.
+apply it. `docker-compose.yml` loads the whole `.env` into the app container (`env_file: .env`), so
+every setting goes into `.env` only — never edit `docker-compose.yml` for it, the installer replaces
+that file on every upgrade. A setting that is not in `.env` keeps the app's built-in default.
 
 | Setting | When you need it |
 |---|---|
@@ -260,12 +262,14 @@ apply it.
 | `AZURE_SCOPES`, `AZURE_AUTHORITY` | Optional for `azure-oauth`: scopes (default `openid profile email`) and a custom authority URL for the same tenant (default `https://login.microsoftonline.com/<tenant>/v2.0`). |
 | `AUTH_RATE_LIMIT_POINTS`, `AUTH_RATE_LIMIT_WINDOW_SEC` | Rate limit on sign-up, forgot password, resend confirmation and reset password, per client IP and per email. Defaults: 5 requests per 900 seconds; `0` points turns it off. |
 | `IMPORT_MAX_UPLOAD_BYTES`, `IMPORT_MAX_ENTRIES`, `IMPORT_MAX_UNCOMPRESSED_BYTES`, `IMPORT_MAX_ENTRY_BYTES` | Limits for repository zip imports. Defaults: 5 GiB upload, 20000 entries, 20 GiB uncompressed, 400 MiB per entry. An import over a limit is rejected with a message naming the setting to raise. |
+| `SESSION_RETENTION_DAYS` | How long session data is kept. Root sessions whose first log is older than this many days are deleted for good. Default: 30. `SESSION_RETENTION_CHECK_INTERVAL_MS` and `SESSION_RETENTION_PURGE_BATCH_SIZE` tune how often the job runs (30 min) and how many sessions one run deletes (200). |
+| `PASSWORD_POLICY` | Password strength for `password` / `password-confirm`: `any`, `mid` or `long` (default). |
+| `LOGS_MAX_BODY_MB`, `UPLOAD_QUEUE_MAX_ATTEMPTS` | Largest hook upload in MiB (default 2500) and retries of a queued upload (default 5). |
 
 The app also makes two outbound requests a day: the public npm registry, for the latest Claude Code
-version, and the public Anthropic pricing page, for model prices. To turn them off (for example on an
-air-gapped host), add `AI_TOOL_VERSION_CHECK_ENABLED: "false"` and
-`MODEL_PRICING_FETCH_ENABLED: "false"` under the `app` service's `environment:` in
-`docker-compose.yml` (and re-apply that edit after each upgrade, like a changed `ports:` mapping).
+version, and the public Anthropic pricing page, for model prices. To turn them off (for example
+on an air-gapped host), add `AI_TOOL_VERSION_CHECK_ENABLED=false` and
+`MODEL_PRICING_FETCH_ENABLED=false` to `.env` and run `docker compose up -d`.
 
 ## OTEL telemetry from the hook
 

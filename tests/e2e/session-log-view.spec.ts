@@ -7,6 +7,7 @@ import {
 } from '@playwright/test';
 import * as crypto from 'crypto';
 import { BASE_URL, storageStatePath } from './helpers/credentials';
+import { openSessionTab } from './helpers/session-tabs';
 import { seedRepoWithSessions, type SeededRepo } from './helpers/seed';
 import { waitForUploadQueueDrained } from './helpers/db';
 
@@ -139,116 +140,90 @@ async function openTestSession(page: Page) {
   // Click the session item that shows the artisyn firstPrompt
   await page.getByText('e2e: skills and rules test').click();
   // The default landing tab is now Summary — select Logs explicitly.
-  await page.getByRole('button', { name: 'Logs', exact: true }).click();
+  await openSessionTab(page, 'logs');
   // Wait for the log view to render the claude log's first turn
   await expect(page.locator('text=e2e test prompt for skills and rules')).toBeVisible({ timeout: 10_000 });
 }
 
-// The session detail nav uses button role (not tab), so we use getByRole('button')
-async function openChartsTab(page: Page) {
+/** Opens the test session on the chart tab `chart` (a plain session tab since the one-level bar). */
+async function openChartTab(page: Page, chart: string) {
   await openTestSession(page);
-  await page.getByRole('button', { name: 'Charts', exact: true }).click();
-  // Wait for the sub-tab bar to appear (sub-tabs do use tab role from Radix Tabs)
-  await expect(page.getByRole('tab', { name: 'Timeline' })).toBeVisible({ timeout: 5_000 });
+  await openSessionTab(page, chart);
+  await expect(page.getByTestId(`session-chart-${chart}`)).toBeVisible({ timeout: 10_000 });
 }
 
-test.describe('Session Charts sub-tabs', () => {
-  test('Dashboard is the default active tab', async ({ page }) => {
-    // Clear localStorage to ensure fresh default
+/** Opens the test session through an old `tab=charts` link (the charts used to be sub-tabs of it). */
+async function openLegacyChartsLink(page: Page) {
+  await openTestSession(page);
+  const url = new URL(page.url());
+  const [hashPath, hashQuery = ''] = url.hash.split('?');
+  const q = new URLSearchParams(hashQuery);
+  q.set('tab', 'charts');
+  await page.goto(`${url.pathname}${url.search}${hashPath}?${q.toString()}`);
+}
+
+test.describe('Session chart tabs', () => {
+  test('an old tab=charts link opens the Charts dashboard tab in a fresh browser', async ({ page }) => {
     await page.goto('/#/login');
     await page.evaluate(() => localStorage.removeItem('charts-sub-tab'));
 
-    await openChartsTab(page);
+    await openLegacyChartsLink(page);
 
-    // Dashboard trigger should be active — it became the default sub-tab when
-    // the charts dashboard landed (commit 9438b2f).
-    await expect(page.getByRole('tab', { name: 'Dashboard' })).toHaveAttribute('data-state', 'active');
-
-    // The chart sub-tabs tablist contains exactly one active trigger: Dashboard
-    // Scope to the tablist that contains the chart sub-tabs
-    const chartTabList = page.locator('[role="tablist"]').filter({ has: page.getByRole('tab', { name: 'Timeline' }) });
-    const activeTabsTriggers = chartTabList.locator('[data-slot="tabs-trigger"][data-state="active"]');
-    await expect(activeTabsTriggers).toHaveCount(1);
-    await expect(activeTabsTriggers).toHaveText('Dashboard');
+    await expect(page).toHaveURL(/tab=dashboard/);
+    await expect(page.getByTestId('tab-session-dashboard')).toHaveAttribute('aria-selected', 'true');
+    await expect(page.getByTestId('session-chart-dashboard')).toBeVisible();
+    // One level of tabs: no Charts sub-tab bar.
+    await expect(page.locator('[data-testid^="tab-chart-"]')).toHaveCount(0);
   });
 
-  test('Agent Tree tab switch', async ({ page }) => {
-    await openChartsTab(page);
-
-    await page.getByRole('tab', { name: 'Agent Tree' }).click();
-
-    // Agent Tree trigger should now be active
-    await expect(page.getByRole('tab', { name: 'Agent Tree' })).toHaveAttribute('data-state', 'active');
-
-    // Scope to the chart sub-tabs tablist
-    const chartTabList = page.locator('[role="tablist"]').filter({ has: page.getByRole('tab', { name: 'Timeline' }) });
-    const activeTabsTriggers = chartTabList.locator('[data-slot="tabs-trigger"][data-state="active"]');
-    await expect(activeTabsTriggers).toHaveCount(1);
-    await expect(activeTabsTriggers).toHaveText('Agent Tree');
+  test('Agent Tree tab', async ({ page }) => {
+    await openChartTab(page, 'agent-tree');
+    await expect(page.getByTestId('tab-session-agent-tree')).toHaveAttribute('aria-selected', 'true');
+    await expect(page).toHaveURL(/tab=agent-tree/);
   });
 
-  test('Tool Heatmap tab switch', async ({ page }) => {
-    await openChartsTab(page);
-
-    await page.getByRole('tab', { name: 'Tool Heatmap' }).click();
-
-    // Tool Heatmap trigger should be active
-    await expect(page.getByRole('tab', { name: 'Tool Heatmap' })).toHaveAttribute('data-state', 'active');
-
-    // Scope to the chart sub-tabs tablist
-    const chartTabList = page.locator('[role="tablist"]').filter({ has: page.getByRole('tab', { name: 'Timeline' }) });
-    const activeTabsTriggers = chartTabList.locator('[data-slot="tabs-trigger"][data-state="active"]');
-    await expect(activeTabsTriggers).toHaveCount(1);
-    await expect(activeTabsTriggers).toHaveText('Tool Heatmap');
+  test('Tool Heatmap tab', async ({ page }) => {
+    await openChartTab(page, 'tool-heatmap');
+    await expect(page.getByTestId('tab-session-tool-heatmap')).toHaveAttribute('aria-selected', 'true');
+    await expect(page).toHaveURL(/tab=tool-heatmap/);
   });
 
-  test('localStorage persistence', async ({ page }) => {
-    await openChartsTab(page);
+  test('a reload keeps the chart tab (it is in the URL)', async ({ page }) => {
+    await openChartTab(page, 'agent-tree');
 
-    // Switch to Agent Tree
-    await page.getByRole('tab', { name: 'Agent Tree' }).click();
-    await expect(page.getByRole('tab', { name: 'Agent Tree' })).toHaveAttribute('data-state', 'active');
-
-    // Reload page — URL retains ?session=...&tab=charts so the session + tab reopen automatically
     await page.reload();
     await page.waitForFunction(() => !window.location.hash.startsWith('#/login'), { timeout: 10_000 });
 
-    // Wait for the sub-tab bar to reappear
-    await expect(page.getByRole('tab', { name: 'Agent Tree' })).toBeVisible({ timeout: 10_000 });
-
-    // Agent Tree should still be active (persisted via localStorage)
-    await expect(page.getByRole('tab', { name: 'Agent Tree' })).toHaveAttribute('data-state', 'active');
+    await expect(page.getByTestId('tab-session-agent-tree')).toHaveAttribute('aria-selected', 'true', { timeout: 10_000 });
+    await expect(page.getByTestId('session-chart-agent-tree')).toBeVisible();
   });
 });
 
 test.describe('Session Charts — Context Usage tab', () => {
   test('Context Usage tab shows a Total row in the table', async ({ page }) => {
-    await openChartsTab(page);
-
-    await page.getByRole('tab', { name: 'Context Usage' }).click();
+    await openChartTab(page, 'context-usage');
 
     // The summary table should have a Total row
     await expect(page.getByRole('cell', { name: 'Total' }).first()).toBeVisible({ timeout: 5_000 });
   });
 
   test('Context Usage tab renders at least one SVG chart', async ({ page }) => {
-    await openChartsTab(page);
-
-    await page.getByRole('tab', { name: 'Context Usage' }).click();
+    await openChartTab(page, 'context-usage');
 
     // Wait for content to render and check for an svg element
     await expect(page.locator('svg').first()).toBeVisible({ timeout: 5_000 });
   });
 
-  test('localStorage persistence restores Context Usage as active tab', async ({ page }) => {
+  test('an old tab=charts link reopens the remembered chart (Context Usage)', async ({ page }) => {
     // Navigate to app and set localStorage before opening
     await page.goto('/#/login');
     await page.evaluate(() => localStorage.setItem('charts-sub-tab', 'context-usage'));
 
-    await openChartsTab(page);
+    await openLegacyChartsLink(page);
 
-    // Context Usage trigger should be active
-    await expect(page.getByRole('tab', { name: 'Context Usage' })).toHaveAttribute('data-state', 'active');
+    // The old Charts tab reopened the remembered sub-tab; the link now opens that chart tab.
+    await expect(page).toHaveURL(/tab=context-usage/);
+    await expect(page.getByTestId('tab-session-context-usage')).toHaveAttribute('aria-selected', 'true');
   });
 });
 
@@ -589,7 +564,7 @@ test.describe('Session Log View — Workflow agent visibility', () => {
     await page.goto(`/#/repos/${wfRepoId}`);
     await page.getByText(listLabel, { exact: true }).click();
     // The default landing tab is now Summary — select Logs explicitly.
-    await page.getByRole('button', { name: 'Logs', exact: true }).click();
+    await openSessionTab(page, 'logs');
     await expect(page.getByText(turnPrompt).first()).toBeVisible({
       timeout: 10_000,
     });
@@ -597,8 +572,8 @@ test.describe('Session Log View — Workflow agent visibility', () => {
 
   async function openWfChartsTab(page: Page, listLabel: string, turnPrompt: string) {
     await openWfSession(page, listLabel, turnPrompt);
-    await page.getByRole('button', { name: 'Charts', exact: true }).click();
-    await expect(page.getByRole('tab', { name: 'Timeline' })).toBeVisible({
+    await openSessionTab(page, 'dashboard');
+    await expect(page.getByTestId('session-chart-dashboard')).toBeVisible({
       timeout: 5_000,
     });
   }
@@ -636,7 +611,7 @@ test.describe('Session Log View — Workflow agent visibility', () => {
     page,
   }) => {
     await openWfChartsTab(page, WORKFLOW_ROOT_LIST_LABEL, WORKFLOW_ROOT_PROMPT);
-    await page.getByRole('tab', { name: 'Agent Tree' }).click();
+    await openSessionTab(page, 'agent-tree');
 
     // Before workflow agent visibility this rendered the "No sub-agents spawned" empty state.
     await expect(page.getByText('No sub-agents spawned')).not.toBeVisible();
@@ -652,7 +627,7 @@ test.describe('Session Log View — Workflow agent visibility', () => {
     page,
   }) => {
     await openWfChartsTab(page, WORKFLOW_ROOT_LIST_LABEL, WORKFLOW_ROOT_PROMPT);
-    await page.getByRole('tab', { name: 'Tool Heatmap' }).click();
+    await openSessionTab(page, 'tool-heatmap');
 
     // Column label carries the "<workflow name>:<agent label>" prefix (design
     // decision — Tool Heatmap visual/UX notes), exposed via the column's title attr.
@@ -665,14 +640,14 @@ test.describe('Session Log View — Workflow agent visibility', () => {
     page,
   }) => {
     await openWfChartsTab(page, REGULAR_ROOT_LIST_LABEL, REGULAR_ROOT_PROMPT);
-    await page.getByRole('tab', { name: 'Agent Tree' }).click();
+    await openSessionTab(page, 'agent-tree');
 
     await expect(page.getByText('No sub-agents spawned')).not.toBeVisible();
     await expect(page.getByTestId('agent-tree-node').first()).toBeVisible({
       timeout: 5_000,
     });
     // No workflow-only prefixed column should leak into an unrelated session.
-    await page.getByRole('tab', { name: 'Tool Heatmap' }).click();
+    await openSessionTab(page, 'tool-heatmap');
     await expect(page.locator(`[title^="${WORKFLOW_NAME}:"]`)).toHaveCount(0);
   });
 
@@ -691,13 +666,13 @@ test.describe('Session Log View — Workflow agent visibility', () => {
     await page.getByText('Agents (1)').click();
     await page.waitForTimeout(300);
 
-    await page.getByRole('button', { name: 'Charts', exact: true }).click();
-    await expect(page.getByRole('tab', { name: 'Timeline' })).toBeVisible({
+    await openSessionTab(page, 'dashboard');
+    await expect(page.getByTestId('session-chart-dashboard')).toBeVisible({
       timeout: 5_000,
     });
-    await page.getByRole('tab', { name: 'Agent Tree' }).click();
+    await openSessionTab(page, 'agent-tree');
     await page.waitForTimeout(300);
-    await page.getByRole('tab', { name: 'Tool Heatmap' }).click();
+    await openSessionTab(page, 'tool-heatmap');
     await page.waitForTimeout(300);
 
     expect(errors).toHaveLength(0);

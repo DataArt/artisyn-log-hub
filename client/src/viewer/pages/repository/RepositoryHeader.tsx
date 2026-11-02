@@ -1,3 +1,5 @@
+import { PinToggle } from '../../components/PinToggle';
+
 export interface RepoContext {
   key: string;
   value: string;
@@ -8,6 +10,9 @@ export interface RepositoryHeaderProps {
   sessionCountDisplay: React.ReactNode;
   userCountDisplay: React.ReactNode;
   repoContexts: RepoContext[];
+  /** The repository to pin to Home (FR-F3); its team when opened from a team route. */
+  repoId: number;
+  teamId?: number;
 }
 
 export function RepositoryHeader({
@@ -15,15 +20,18 @@ export function RepositoryHeader({
   sessionCountDisplay,
   userCountDisplay,
   repoContexts,
+  repoId,
+  teamId,
 }: RepositoryHeaderProps) {
   return (
     <div className="px-4 py-3 border-b border-border flex flex-wrap items-center gap-3 shrink-0">
       {/* No access-mode badge here: `AccessModeBadge` in `MainNav` already covers
           the `/teams/:teamId/repos/:repoId` route, and exactly one such badge
           renders per route. */}
-      <p className="text-sm font-mono flex-1 min-w-0 truncate">
-        {repoUrl ?? '—'}
-      </p>
+      <div className="flex min-w-0 flex-1 items-center gap-1">
+        <p className="text-sm font-mono min-w-0 truncate">{repoUrl ?? '—'}</p>
+        <PinToggle pin={{ kind: 'repo', repoId, teamId }} />
+      </div>
       <div className="flex flex-wrap items-center gap-3 text-sm text-muted-foreground">
         <span className="flex items-center gap-1">
           Sessions: {sessionCountDisplay}

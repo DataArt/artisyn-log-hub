@@ -22,6 +22,7 @@ import {
 } from './upload-queue-stats.constants';
 import { UploadQueueService } from './upload-queue.service';
 import { FOREIGN_SESSION_WARNING } from './upload-warnings';
+import { classifyUploadError } from './upload-error';
 
 const TICK_INTERVAL_NAME = 'upload-queue-tick';
 
@@ -43,7 +44,17 @@ interface UploadQueueRawRow extends Record<string, unknown> {
   upload_id: string | null;
   chunks_received: number | null;
   total_chunks: number | null;
+  attempts: number;
 }
+
+/**
+ * Processing attempts per row before a transient database error (deadlock, serialization
+ * failure, lock timeout, lost connection) is recorded as `failed`. Overridable via
+ * `UPLOAD_QUEUE_MAX_ATTEMPTS`.
+ */
+const DEFAULT_MAX_ATTEMPTS = 5;
+/** A retried row waits `attempts × this` before it can be claimed again. */
+const RETRY_BACKOFF_SECONDS = 2;
 
 /**
  * Drives the async `POST /api/v2/logs` pipeline: each tick claims and
@@ -142,6 +153,12 @@ export class UploadQueueSchedulerService
   private getTickBudgetMs(): number {
     const raw = Number(process.env.UPLOAD_QUEUE_TICK_BUDGET_MS);
     return Number.isFinite(raw) && raw >= 0 ? raw : 500;
+  }
+
+  /** Attempts before a transient error is final; at least 1 (1 = no retry). */
+  private getMaxAttempts(): number {
+    const raw = Number(process.env.UPLOAD_QUEUE_MAX_ATTEMPTS);
+    return Number.isInteger(raw) && raw >= 1 ? raw : DEFAULT_MAX_ATTEMPTS;
   }
 
   /**
@@ -315,6 +332,10 @@ export class UploadQueueSchedulerService
           WHERE id = (
             SELECT id FROM upload_queue
             WHERE status = 'pending'
+              -- A row sent back after a transient error waits a little, so the transaction it
+              -- collided with can finish first.
+              AND (attempts = 0
+                   OR updated_at <= now() - make_interval(secs => attempts * ${sql.raw(String(RETRY_BACKOFF_SECONDS))}))
             ORDER BY received_at ASC
             LIMIT 1
             FOR UPDATE SKIP LOCKED
@@ -425,27 +446,51 @@ export class UploadQueueSchedulerService
       // admin Error Logs tab, with zero changes needed to ErrorLogsService),
       // with enough identifying detail (id/sessionId/logType/fileName) to
       // correlate an Error Logs tab entry back to the Upload Queue tab row.
-      let message = err instanceof Error ? err.message : String(err);
-      if (
-        err instanceof Error &&
-        'code' in err &&
-        (err as NodeJS.ErrnoException).code === 'ENOENT'
-      ) {
+      // The stored message is the short classified summary — never Drizzle's raw
+      // `Failed query: <SQL> params: <values>`, which carried the uploader's local paths and
+      // hid the real reason in `err.cause`. The full Postgres fields go to the log instead.
+      const classified = classifyUploadError(err);
+      let message = classified.summary;
+      if (classified.code === 'ENOENT') {
         message += ` (${await this.diagnoseMissingFile(stagingDir, row)})`;
       }
-      this.logger.error(
-        `Upload queue processing failed: id=${row.id} sessionId=${row.session_id} logType=${row.log_type} fileName=${row.file_name}: ${message}`,
-        err instanceof Error ? err.stack : undefined,
-      );
+      const attempt = Number(row.attempts ?? 0) + 1;
+      const maxAttempts = this.getMaxAttempts();
+      const ident = `id=${row.id} sessionId=${row.session_id} logType=${row.log_type} fileName=${row.file_name}`;
+      const detail = classified.logDetail ? ` [${classified.logDetail}]` : '';
 
-      await this.db
-        .update(uploadQueue)
-        .set({
-          status: 'failed',
-          errorMessage: message,
-          updatedAt: new Date(),
-        })
-        .where(eq(uploadQueue.id, row.id));
+      if (classified.kind === 'transient' && attempt < maxAttempts) {
+        this.logger.warn(
+          `Upload queue processing hit a transient error, retrying (attempt ${attempt}/${maxAttempts}): ${ident}: ${message}${detail}`,
+        );
+        await this.db
+          .update(uploadQueue)
+          .set({
+            status: 'pending',
+            attempts: attempt,
+            errorMessage: message,
+            updatedAt: new Date(),
+          })
+          .where(eq(uploadQueue.id, row.id));
+      } else {
+        if (classified.kind === 'transient') {
+          message += ` (after ${attempt} attempts)`;
+        }
+        this.logger.error(
+          `Upload queue processing failed (attempt ${attempt}/${maxAttempts}, kind=${classified.kind}): ${ident}: ${message}${detail}`,
+          err instanceof Error ? err.stack : undefined,
+        );
+        await this.db
+          .update(uploadQueue)
+          .set({
+            status: 'failed',
+            attempts: attempt,
+            errorMessage: message,
+            errorKind: classified.kind === 'file' ? 'file' : 'server',
+            updatedAt: new Date(),
+          })
+          .where(eq(uploadQueue.id, row.id));
+      }
 
       try {
         // A failed attempt still consumed worker time, so it counts towards utilisation —

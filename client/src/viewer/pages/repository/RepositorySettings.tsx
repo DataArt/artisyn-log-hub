@@ -24,21 +24,17 @@ import {
 import { PageTabs, PageTabsContent } from '../../ui/page-tabs';
 import { DEFAULT_HIGH_CACHE_CREATION_THRESHOLD } from '../../lib/cache-ratio-ui';
 import { DEFAULT_SESSION_ATTRIBUTION_ATTRIBUTES } from '../../lib/session-attribution-ui';
+import { tabsOf } from '../../tab-ids';
 import {
-  SETTINGS_TABS,
   useRepositorySettingsTabState,
   type SettingsTab,
 } from './useRepositorySettingsTabState';
 
-const SETTINGS_TAB_LABELS: Record<SettingsTab, string> = {
-  display: 'Display',
-  'file-categories': 'File Categories',
-  analysis: 'Analysis',
-  'monitored-tools': 'Monitored Tools',
-  'session-attribution': 'Session Attributes',
-  maintenance: 'Maintenance',
-  'import-export': 'Import/Export',
-};
+const SETTINGS_PAGE_TABS = tabsOf('settings').map((r) => ({
+  value: r.id,
+  label: r.label,
+  description: r.description,
+}));
 
 // ---------------------------------------------------------------------------
 // Types
@@ -224,10 +220,7 @@ export function RepositorySettings({
   return (
     <div className="h-full flex flex-col overflow-hidden">
       <PageTabs
-        tabs={SETTINGS_TABS.map((t) => ({
-          value: t,
-          label: SETTINGS_TAB_LABELS[t],
-        }))}
+        tabs={SETTINGS_PAGE_TABS}
         value={tab}
         onValueChange={(v) => setTab(v as SettingsTab)}
         className="flex flex-col flex-1 min-h-0"

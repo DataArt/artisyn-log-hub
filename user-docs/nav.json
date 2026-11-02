@@ -21,6 +21,7 @@
   {
     "section": "Using Log Hub",
     "articles": [
+      { "slug": "all-views", "title": "All views" },
       { "slug": "session-list", "title": "Working with the Session List" },
       { "slug": "session-log", "title": "Session Log" },
       { "slug": "cost-and-context", "title": "Understanding Cost & Context" },

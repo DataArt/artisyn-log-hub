@@ -48,11 +48,27 @@ parsed on the request path. Column-level detail lives in
    An in-process flag stops two ticks of the same process from overlapping.
 4. **Ingest.** The staged file is parsed and passed to `LogsService.upsert()`. On success the row is
    deleted first, then a measurement is recorded and the file is unlinked (best effort — the row is
-   the source of truth).
-5. **Fail.** A read, parse or DB error marks the row `failed` with `error_message` and logs it with
-   `Logger.error`, which is how it reaches the admin Error Logs tab. The hook sees it as a warning on
-   its next upload. An upload into a session owned by another user is marked
-   `rejected_foreign_session` instead, and its file is deleted.
+   the source of truth). The ingest transaction takes two advisory xact locks first, always in this
+   order: the session-owner lock, then the per-tree lock of `lockSessionTreeForIngest`
+   (`session-tree.sql.ts`, keyed by the tree's top-ancestor `session_id`). The tree lock serialises
+   uploads of one session tree across cluster workers: an `artisyn` upload re-normalises the
+   changed paths of every node while a sub-agent upload writes the same node's rows, and without
+   the lock the two deadlocked (`40P01`).
+5. **Fail or retry.** A read, parse or DB error is classified by `classifyUploadError`
+   (`upload-error.ts`, rules in
+   [algorithms/upload-error-classify.md](algorithms/upload-error-classify.md)). A **transient** DB
+   error (deadlock, serialization failure, lock not available, lost connection) sends the row back
+   to `pending` with `attempts + 1`; the claim skips it for `attempts × 2` s, and after
+   `UPLOAD_QUEUE_MAX_ATTEMPTS` (default 5) it fails. Any other error fails the row at once. A failed
+   row gets `status = 'failed'`, a short one-line `error_message` (never Drizzle's raw SQL and
+   parameters) and `error_kind` = `server` (Log Hub could not process a good file) or `file` (the
+   body is broken). The log line (`Logger.error`, which is how it reaches the admin Error Logs tab)
+   carries the attempt number, the kind and the Postgres `code` / `detail` / `constraint` / `table`.
+   The hook sees the row as a warning on its next upload: `Hook uploaded broken file: …` for a
+   `file` row, `Log Hub could not process upload … (server-side error, not a hook problem; …)` for a
+   `server` row (and for a pre-0083 row whose message is a raw `Failed query:`). An upload into a
+   session owned by another user is marked `rejected_foreign_session` instead, and its file is
+   deleted.
 6. **Recover.** A `processing` row whose `updated_at` is older than
    `UPLOAD_QUEUE_LEASE_TIMEOUT_MS` (default 3 min) goes back to `pending`. This runs at bootstrap and
    at the start of every tick, and only touches lapsed leases, so a row another worker is still
@@ -62,7 +78,7 @@ A tick-level DB error is logged and swallowed, and the next tick retries. On shu
 scheduler stops the interval and awaits the in-flight tick before the DB pool closes.
 
 Admins manage failed rows from the Upload Queue tab: `DELETE /api/v1/admin/upload-queue/failed`
-clears them, `POST /api/v1/admin/upload-queue/reprocess-failed` re-queues them, and
+clears them, `POST /api/v1/admin/upload-queue/reprocess-failed` re-queues them (with `attempts` reset to 0), and
 `GET /api/v1/admin/upload-queue/:id/file` downloads the staged file behind one row. That staged
 file is debugging data and sits outside the privacy boundary of the access model (the admin role
 otherwise grants no session-data access — see

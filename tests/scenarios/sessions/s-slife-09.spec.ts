@@ -32,7 +32,7 @@ import {
   uploadGolden,
   type GoldenRootExpected,
 } from '../helpers/golden';
-import { usd4 } from '../helpers/session-view';
+import { usd4, selectSessionTab } from '../helpers/session-view';
 import { skipNewUserNudge } from '../helpers/teams';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -183,8 +183,7 @@ test('@S-SLIFE-09 session metrics count the whole agent tree, not just the root 
     await expect(band).toContainText(`${treeLines} lines`);
     await expect(band).toContainText('3 agents');
 
-    await page.getByTestId('tab-session-charts').click();
-    await page.getByTestId('tab-chart-agent-tree').click();
+    await selectSessionTab(page, 'agent-tree');
     const agent = (k: string) => page.locator(`g[data-testid="agent-tree-node"][data-agent-id="${sid(k).replace(/^agent-/, '')}"]`);
     for (const k of ['a', 'b', 'd']) await expect(agent(k), k).toHaveCount(1);
     const slug = async (k: string) => ((await agent(k).getAttribute('aria-label')) ?? '').replace(/^Agent node: /, '');

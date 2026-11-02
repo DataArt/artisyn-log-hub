@@ -1831,6 +1831,12 @@ export const uploadQueue = pgTable(
     // ingest transaction has stored the okf_snapshots row. No FK and no index, like
     // harnessSnapshotId.
     okfSnapshotId: varchar('okf_snapshot_id', { length: 64 }),
+    // Migration 0083: processing attempts so far. A transient database error (deadlock,
+    // serialization failure, …) sends the row back to `pending` until UPLOAD_QUEUE_MAX_ATTEMPTS.
+    attempts: integer('attempts').notNull().default(0),
+    // Migration 0083: `server` (Log Hub could not process a good file) or `file` (the body is
+    // broken), set with `failed`; NULL on rows written before it (see upload-error.ts).
+    errorKind: varchar('error_kind', { length: 16 }),
   },
   (table) => [
     index('idx_upload_queue_status_received_at').on(

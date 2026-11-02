@@ -13,6 +13,7 @@
     <li><a href="#f">F · Who or what is off the usual?</a></li>
     <li><a href="#g">G · Does the agent use our knowledge base?</a></li>
     <li><a href="#h">H · Where did the agent struggle?</a></li>
+    <li><a href="#nav">Navigation · How do I find the right view?</a></li>
   </ul>
   <p class="toc-aside">Want to try it? <a href="docs/install-server.html">Get started</a></p>
 </div>
@@ -265,3 +266,39 @@
   </div>
   <figure class="shot"><img src="assets/shots/tool-analytics.png" alt="Tool analytics: Bash 43 calls 97.7% success, Edit and Write 100%, PowerShell 85.7% with one failure" loading="lazy"><figcaption>Session → Statistics → Tool analytics · real screen, demo repository</figcaption></figure>
 </section>
+
+<section class="feature" id="nav" aria-labelledby="nav-title">
+  <div>
+    <h2 id="nav-title">Navigation: how do I find the right view?</h2>
+    <dl>
+      <dt>What it shows</dt>
+      <dd>
+        <ul>
+          <li>One row of session tabs with a View select: What happened, Cost, Harness &amp;
+            context and Failed tool call each show only the tabs for that question, the rest is
+            one click away under "More". The view is part of the link, so a shared URL opens the
+            same view.</li>
+          <li>Every chart is a tab of its own (Dashboard, Context Growth, Call Tree,
+            Timeline, …), so a chart is one click away instead of two levels down.</li>
+          <li>Summary as a hub: "Where to look next" cards with one figure each and an "Open →"
+            link, plus Explore chips that switch the view.</li>
+          <li>All views (Ctrl+K): every view of Log Hub in one tree, with a filter that also finds
+            synonyms ("expensive" finds cost) and a "What it answers" column.</li>
+          <li>Home: your repositories with question shortcuts, what needs attention, this week's
+            cost, pinned views and recent sessions.</li>
+        </ul>
+      </dd>
+      <dt>Where in the app</dt>
+      <dd>Session view → the View select at the start of the tab row; the "All views" button in
+        the top bar or Ctrl+K; Home after sign-in. See <a href="docs/session-log.html#views-and-tabs">Session
+        Log → Views and tabs</a> and <a href="docs/all-views.html">All views</a>.</dd>
+    </dl>
+  </div>
+  <figure class="shot"><img src="assets/shots/nav-lenses.png" alt="One row of session tabs: the View select on Cost, then Summary, Statistics, Call Tree, Context Growth and Dashboard, and the More menu open with the other tabs under Overview, Transcript, Cost and context and Effects" loading="lazy"><figcaption>Session → View: Cost → More · real screen, demo repository</figcaption></figure>
+</section>
+
+<div class="shot-grid" aria-label="More navigation screens">
+  <figure class="shot"><img src="assets/shots/nav-chart-tabs.png" alt="View: All tabs, with Call Tree open as a session tab of its own: the cost of every call of the session as a tree with token counts and cost shares" loading="lazy"><figcaption>Session → View: All tabs → Call Tree · real screen, demo repository</figcaption></figure>
+  <figure class="shot"><img src="assets/shots/summary-hub.png" alt="Session Summary: the cost, context, turns and code impact tiles, then Where to look next cards for Statistics, Charts, Info, Change surface, Bash, Tools/MCP and OKF, and Explore chips" loading="lazy"><figcaption>Session → Summary → Where to look next · real screen, demo repository</figcaption></figure>
+  <figure class="shot"><img src="assets/shots/all-views-map.png" alt="All views map filtered by cost: 19 of 97 views match, the matches highlighted in the tree of teams, repositories, analytics views and reports" loading="lazy"><figcaption>Top bar → All views, filter "cost" · real screen, demo repository</figcaption></figure>
+</div>

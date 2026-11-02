@@ -21,7 +21,7 @@
 //   - client/src/viewer/__tests__/components/no-pricing-badge.test.tsx (19)
 //   - server/src/logs/cost.sql.spec.ts (null against 0: ≈ 4)
 import { test, expect } from '../fixtures';
-import { infoTableValue, infoValue, int, openSession, summaryTile, usd4 } from '../helpers/session-view';
+import { infoTableValue, infoValue, int, openSession, summaryTile, usd4, selectSessionTab } from '../helpers/session-view';
 import { downloadPdfText, openReport, repoGet, reportSection, uploadRepoGold } from '../helpers/reports';
 
 test.use({ timezoneId: 'UTC' });
@@ -97,7 +97,7 @@ test('@S-COST-03 the first model, an unknown model, public prices @mode-a @mode-
     await expect(page.getByTestId('session-item').filter({ hasText: prompt('gs06a') }).getByTestId('session-item-cost')).toContainText(text);
     await expect(page.locator('xpath=//p[normalize-space(text())="Cost"]/following-sibling::div').first()).toContainText(text);
     await expect(summaryTile(page, 'Cost')).toContainText(text);
-    await page.getByTestId('tab-session-info').click();
+    await selectSessionTab(page, 'info');
     await expect(infoValue(page, 'Model')).toContainText(A.model);
     const t = A.tokens.own;
     const tokens = (label: string) =>
@@ -122,7 +122,7 @@ test('@S-COST-03 the first model, an unknown model, public prices @mode-a @mode-
     await expect(header).not.toContainText('$0.0000');
     await expect(summaryTile(page, 'Cost').getByTestId('no-pricing-badge')).toBeVisible();
     await expect(summaryTile(page, 'Cost')).not.toContainText('$0.0000');
-    await page.getByTestId('tab-session-info').click();
+    await selectSessionTab(page, 'info');
     await expect(infoValue(page, 'Model')).toContainText(UNPRICED);
     await expect(infoValue(page, 'Model').getByTestId('no-pricing-badge')).toBeVisible();
     await expect(infoTableValue(page, 'Calculated total').getByTestId('no-pricing-badge')).toBeVisible();

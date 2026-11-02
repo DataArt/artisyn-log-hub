@@ -121,5 +121,11 @@ test('@TOUR-03 owner: repo tour @mode-a', async ({ stand, api, db, users, page }
     },
   });
 
+  await walker.screen(page, 'map', {
+    check: async () => {
+      await expect(page.getByTestId('map-counter')).toBeVisible();
+    },
+  });
+
   walker.finish();
 });

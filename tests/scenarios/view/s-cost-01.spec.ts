@@ -43,7 +43,7 @@
 import type { Page } from '@playwright/test';
 import { randomBytes } from 'crypto';
 import { test, expect, type ScenarioUser } from '../fixtures';
-import { infoTableValue, logTurns, openSession, summaryTile, turnMetric, usd4 } from '../helpers/session-view';
+import { infoTableValue, logTurns, openSession, summaryTile, turnMetric, usd4, selectSessionTab } from '../helpers/session-view';
 import { repoGet, uploadRepoGold } from '../helpers/reports';
 import { insertRow, sessionRowId } from '../helpers/db-seed';
 import { createApiKey } from '../helpers/api-key';
@@ -175,10 +175,9 @@ test('@S-COST-01 one session, one cost in every place @mode-a @mode-c', async ({
       await expect(item.getByTestId('session-item-cost')).toContainText(text);
       await expect(page.locator('xpath=//p[normalize-space(text())="Cost"]/following-sibling::div').first()).toContainText(text);
       await expect(summaryTile(page, 'Cost')).toContainText(text);
-      await page.getByTestId('tab-session-info').click();
+      await selectSessionTab(page, 'info');
       await expect(infoTableValue(page, 'Calculated total')).toHaveText(text);
-      await page.getByTestId('tab-session-charts').click();
-      await page.getByTestId('tab-chart-call-tree').click();
+      await selectSessionTab(page, 'call-tree');
       // KNOWN DEVIATION (task Notes, Chunk 18): «Session Total» is the main thread only, so for GS-02
       // it prints the root's own cost, not the tree cost every other surface prints.
       const own = usd4(gold.expected.get(key)!.ownCostUsd!);
@@ -250,7 +249,7 @@ test('@S-COST-01 one session, one cost in every place @mode-a @mode-c', async ({
       await openFresh(page, owner, tieredRepoId, s.sessionId);
       await expectListAndHeaderCost(page, s.prompt, text);
       await expect(summaryTile(page, 'Cost')).toContainText(text);
-      await page.getByTestId('tab-session-info').click();
+      await selectSessionTab(page, 'info');
       await expect(infoTableValue(page, 'Calculated total')).toHaveText(text);
       await openFresh(page, owner, tieredRepoId, s.sessionId, 'logs');
       const turns = logTurns(page);

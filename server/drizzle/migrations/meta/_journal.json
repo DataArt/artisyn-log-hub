@@ -582,6 +582,13 @@
       "when": 1791590400000,
       "tag": "0082_team_repo_recompute_queue",
       "breakpoints": true
+    },
+    {
+      "idx": 83,
+      "version": "7",
+      "when": 1791676800000,
+      "tag": "0083_upload_queue_attempts",
+      "breakpoints": true
     }
   ]
 }

@@ -7,6 +7,7 @@ import { DRIZZLE } from '../database/database.constants';
 import type { DrizzleDb } from '../database/database.module';
 import { uploadQueue } from '../database/schema/index';
 import { findSessionOwnerId } from './logs.service';
+import { formatFailedUploadWarning } from './upload-error';
 
 export interface SaveRawUploadMeta {
   sessionId: string;
@@ -325,6 +326,10 @@ export class UploadQueueService {
         sizeBytes: combined.length,
         status: 'pending',
         chunksReceived: meta.totalChunks,
+        // A freshly reassembled body is a new file: a fresh attempt budget, no stale error.
+        attempts: 0,
+        errorMessage: null,
+        errorKind: null,
         updatedAt: new Date(),
       })
       .where(eq(uploadQueue.id, row.id));
@@ -403,6 +408,7 @@ export class UploadQueueService {
       .select({
         fileName: uploadQueue.fileName,
         errorMessage: uploadQueue.errorMessage,
+        errorKind: uploadQueue.errorKind,
       })
       .from(uploadQueue)
       .where(
@@ -422,9 +428,12 @@ export class UploadQueueService {
       .returning({ errorMessage: uploadQueue.errorMessage });
 
     return [
-      ...rows.map(
-        (row) =>
-          `Hook uploaded broken file: ${row.fileName} — ${row.errorMessage}`,
+      ...rows.map((row) =>
+        formatFailedUploadWarning(
+          row.fileName,
+          row.errorMessage,
+          row.errorKind,
+        ),
       ),
       ...rejectedRows
         .map((row) => row.errorMessage)

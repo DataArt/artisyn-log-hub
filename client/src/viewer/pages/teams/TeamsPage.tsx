@@ -70,7 +70,8 @@ export function TeamsPage() {
   const myTeams = teams.filter((t: Team) => t.isMember !== false);
 
   return (
-    <div className="flex flex-col h-full p-6 gap-6">
+    // AppShell's content pane clips (`overflow-hidden`), so the page scrolls itself.
+    <div className="flex flex-col h-full overflow-y-auto p-6 gap-6">
       <div className="flex items-center gap-2">
         <Users className="size-5" />
         <h1 className="text-xl font-semibold">Teams</h1>

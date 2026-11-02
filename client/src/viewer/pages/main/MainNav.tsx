@@ -1,9 +1,9 @@
 ﻿import { lazy, Suspense, useState } from 'react';
-import { HelpCircle, Loader2 } from 'lucide-react';
+import { HelpCircle, House, LayoutGrid, Loader2 } from 'lucide-react';
 import { logout } from '../../api';
 import { useAuth } from '../../context/AuthContext';
 import { useAuthConfig } from '../../hooks/useAuthConfig';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { routes } from '../../hooks/useHashRoute';
 import { NotificationBell } from '../../components/top-nav/NotificationBell';
 import { AppLogo } from '../../components/top-nav/AppLogo';
@@ -11,6 +11,13 @@ import { UserMenu } from '../../components/top-nav/UserMenu';
 import { AccessModeBadge } from '../../components/teams/AccessModeBadge';
 import { Button } from '../../ui/button';
 import { useBuildVersion } from '../../hooks/useBuildVersion';
+import { useOpenAllViews } from '../../hooks/useAllViewsShortcut';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '../../ui/tooltip';
 
 const HelpModal = lazy(() =>
   import('../../help/HelpModal').then((m) => ({ default: m.HelpModal })),
@@ -20,10 +27,12 @@ export function MainNav() {
   const { user, setUser } = useAuth();
   const { data: authConfig } = useAuthConfig();
   const navigate = useNavigate();
+  const onHome = useLocation().pathname === routes.main;
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [helpLoaded, setHelpLoaded] = useState(false);
   const { data: buildVersion } = useBuildVersion();
+  const openAllViews = useOpenAllViews();
   // The short commit identifies the running build; the package version is not bumped per
   // release, so it went stale. Without a baked-in commit (local dev) fall back to the version.
   const buildLabel = !buildVersion
@@ -48,7 +57,7 @@ export function MainNav() {
   return (
     <div className="flex items-center gap-3 border-b border-border bg-card px-4 py-2">
       <AppLogo />
-      <span className="font-semibold text-sm flex-1">
+      <span className="font-semibold text-sm">
         {user?.env_name
           ? `[${user.env_name}] Artisyn Log Hub`
           : 'Artisyn Log Hub'}
@@ -61,9 +70,41 @@ export function MainNav() {
           </span>
         )}
       </span>
+      {/* Home sits on the left, next to the app name, where it is looked for first. */}
+      <Button
+        variant="ghost"
+        size="sm"
+        data-testid="nav-home"
+        aria-current={onHome ? 'page' : undefined}
+        className={onHome ? 'bg-accent' : undefined}
+        onClick={() => void navigate(routes.main)}
+      >
+        <House className="size-4" />
+        Home
+      </Button>
+      <div className="flex-1" />
       {/* Names the access mode of the team whose route is open; renders
           nothing on every other route. */}
       <AccessModeBadge />
+      {/* The All views map, scoped to the current route (DD-18). */}
+      <TooltipProvider>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              variant="ghost"
+              size="sm"
+              data-testid="nav-all-views"
+              onClick={openAllViews}
+            >
+              <LayoutGrid className="size-4" />
+              All views
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent variant="light" side="bottom">
+            All views (Ctrl+K)
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
       <Button
         variant="ghost"
         size="sm"

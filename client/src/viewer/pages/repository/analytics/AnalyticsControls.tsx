@@ -26,6 +26,7 @@ import {
   type ChangeSurfaceMetricKey,
 } from './change-surface-metrics';
 import { MetricSelect } from './MetricSelect';
+import { PinToggle } from '../../../components/PinToggle';
 
 // Header toolbar for RepositoryAnalytics — date range, groupBy, branch/user filters,
 // layout toggle, view selector and per-view sub-metric selectors. Split out of
@@ -40,6 +41,8 @@ interface FilesMetricOption {
 
 interface Props {
   state: AnalyticsState;
+  /** The repository whose Analytics view the pin toggle pins to Home (FR-F3). */
+  repoId: number;
   teamId?: number;
   branchList: string[];
   showBranchFilter: boolean;
@@ -72,6 +75,7 @@ interface Props {
 
 export function AnalyticsControls({
   state,
+  repoId,
   teamId,
   branchList,
   showBranchFilter,
@@ -324,6 +328,10 @@ export function AnalyticsControls({
           </Select.Content>
         </Select.Portal>
       </Select.Root>
+      <PinToggle
+        pin={{ kind: 'view', repoId, teamId, view: `analytics:${state.view}` }}
+        className="-ml-2"
+      />
 
       {/* Sub-metric selector — only for views that have multiple metrics */}
       {state.view === 'files' && (

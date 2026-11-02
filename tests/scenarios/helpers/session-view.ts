@@ -83,12 +83,60 @@ export async function openSession(
   user: ScenarioUser,
   repoId: number,
   sessionId: string,
-  { tab, teamId }: { tab?: string; teamId?: number } = {},
+  { tab, teamId, lens }: { tab?: string; teamId?: number; lens?: string } = {},
 ): Promise<void> {
   await skipNewUserNudge(page.context());
   await user.signIn(page);
   const scope = teamId !== undefined ? `/#/teams/${teamId}/repos/${repoId}` : `/#/repos/${repoId}`;
-  await page.goto(`${scope}?session=${encodeURIComponent(sessionId)}${tab ? `&tab=${tab}` : ''}`);
+  await page.goto(
+    `${scope}?session=${encodeURIComponent(sessionId)}${tab ? `&tab=${tab}` : ''}${lens ? `&lens=${lens}` : ''}`,
+  );
+}
+
+/**
+ * Makes the session tab `id` reachable on screen and returns its trigger, without clicking it.
+ * The tab bar has one level: the lens's row of tabs, every other tab under "More ▾". So: the
+ * trigger if it is already visible, else the "More ▾" entry (same test id).
+ */
+export async function revealSessionTab(page: Page, id: string): Promise<Locator> {
+  const trigger = page.getByTestId(`tab-session-${id}`);
+  const tabsMore = page.getByTestId('session-tabs-more');
+  await expect(page.locator('[role="group"][aria-label="Session tabs"]').first()).toBeVisible({ timeout: 15_000 });
+  await expect(async () => {
+    if (await trigger.isVisible()) return;
+    if (!(await tabsMore.isVisible())) throw new Error(`session tab ${id}: not in the row and no "More"`);
+    await tabsMore.click();
+    const shown = await trigger
+      .waitFor({ state: 'visible', timeout: 1_500 })
+      .then(() => true)
+      .catch(() => false);
+    if (shown) return;
+    await page.keyboard.press('Escape');
+    throw new Error(`session tab ${id}: not in the row and not in "More"`);
+  }).toPass({ timeout: 20_000 });
+  return trigger;
+}
+
+/** Selects the session tab `id` however the bar shows it (see `revealSessionTab`) and waits until it is active. */
+export async function selectSessionTab(page: Page, id: string): Promise<void> {
+  const trigger = await revealSessionTab(page, id);
+  await trigger.click();
+  await expect(page.getByTestId(`tab-session-${id}`), `session tab ${id} is active`).toHaveAttribute(
+    'aria-selected',
+    'true',
+  );
+}
+
+/** The session "View" select (the lens). */
+export function lensSelect(page: Page): Locator {
+  return page.getByTestId('session-lens');
+}
+
+/** Picks the session lens `lens` in the "View" select (`what-happened`, `cost`, `harness`, `failed-tool`, `all`). */
+export async function selectLens(page: Page, lens: string): Promise<void> {
+  const select = lensSelect(page);
+  if ((await select.inputValue()) !== lens) await select.selectOption(lens);
+  await expect(select).toHaveValue(lens);
 }
 
 /** `0.0825` → `$0.0825`, as every cost cell of the session pane prints it. */
