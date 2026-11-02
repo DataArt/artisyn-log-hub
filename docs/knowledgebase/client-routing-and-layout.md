@@ -49,6 +49,9 @@ Routing uses `react-router-dom`'s `createHashRouter`. Path helpers are in `viewe
 |---|---|
 | `#/login` | `LoginPage` |
 | `#/signup` | `SignupPage` |
+| `#/forgot-password` | `ForgotPasswordPage` (public) |
+| `#/reset-password` | `ResetPasswordPage` (public) |
+| `#/confirm-email` | `ConfirmEmailPage` (public) |
 | `#/main` | `MainPage` (Home) |
 | `#/map` | `MapPage` (All views map; `teamId`, `repoId`, `session` prefill the context rail, `q` is the filter) |
 | `#/teams` | `TeamsPage` |
@@ -130,7 +133,7 @@ Used by all authenticated routes.
 
 ```
 AppShell
-  MainNav                     — top bar: logo, NotificationBell, user email, logout
+  MainNav                     — top bar: logo, title, Home, All views, Help, NotificationBell, user email / account menu
   AppLeftNav                  — collapsible, resizable left sidebar (default 320px)
     TeamNavItem[]             — collapsible team rows; fetches team repos on expand
     [My Repos section]        — flat list of user's own repos
@@ -139,7 +142,7 @@ AppShell
 ```
 
 ### `MainNav`
-Top bar: app title, "All views" button (`nav-all-views`, light tooltip "All views (Ctrl+K)"), Help button (`HelpCircle` icon — opens `HelpModal`), `NotificationBell`, user email from `useAuth()`, logout button. Calls `logout()` API then redirects to `#/login`.
+Top bar: app title, "Home" button on the left next to the title (`nav-home`, navigates to `routes.main`; `aria-current="page"` + `bg-accent` while on Home), then right-aligned `AccessModeBadge` (team routes only), "All views" button (`nav-all-views`, light tooltip "All views (Ctrl+K)"), Help button (`HelpCircle` icon — opens `HelpModal`), `NotificationBell`, then, under `AUTH_MODE=none`, user email from `useAuth()` plus an "Edit email" button (calls `logout()` API then redirects to `#/login`); in every other mode the `UserMenu` account menu (Log out, Change password, Delete account).
 
 ### The All views map and its doors (`/map`, Ctrl+K)
 `MapPage` (`pages/map/`, in the Workspace chunk) is the tree of every view; its model is the pure `nav-tree.ts` (`buildNavTree`, `matchNavFilter`) plus `nav-questions.ts` (`NAV_QUESTIONS`, shared with Home). Two doors open it, both through `useOpenAllViews()` in `hooks/useAllViewsShortcut.ts`:
@@ -212,7 +215,7 @@ List of all teams; click navigates to `TeamDetailPage`. Owner can delete.
 Manage personal API keys (create, list, delete) and the hook install guide (`API_KEYS_TABS`: Install, Keys). The initial tab is seeded from `location.state.apiKeysTab`.
 
 ### `AdminPage` (`pages/admin/AdminPage.tsx`)
-Admin-only panel. Wraps content in `<TooltipProvider>`. Uses `PageTabs` with five tabs:
+Admin-only panel. Wraps content in `<TooltipProvider>`. Uses `PageTabs` with the `ADMIN_TABS` rows of the tab registry (`visibleTabs('admin', { isAdmin })`), in this order: System Info, Repos, Teams, Users, Error Logs, Upload Queue (`AdminUploadQueueTab`), Data Retention (`AdminDataRetentionTab`), Auth (`AdminAuthTab`), Model Pricing (`AdminModelPricingTab`). The first five:
 - **All Repos** (`AdminReposTab`) — all repositories with owner, session count, last session, first seen. Filter by URL substring.
 - **All Teams** (`AdminTeamsTab`) — all teams with owner, member count, repo count. Filter by name.
 - **All Users** (`AdminUsersTab`) — all users with role, team count, last activity. Filter by email. Each row has a role-toggle button (Make Admin / Revoke Admin). Self-row button is disabled with a tooltip.
@@ -294,7 +297,7 @@ Team and API-keys tabs have no URL param. A link that must open a specific tab (
 
 | Name | Value | Written by |
 |---|---|---|
-| `session-lens` | last picked lens id | `SessionDetailPane` on a lens switch |
+| `session-lens` | last picked lens id | `useSessionLens` (used by `SessionDetailPane`) on a lens switch |
 | `recent-visits` | `{v:1, repos[], sessions[]}`, at most 10 + 10 (`recent-visits.ts`) | `RepositoryView` via `useRecentVisits` |
 | `map-expanded` | string[] of expanded map node ids | `MapTree` |
 
