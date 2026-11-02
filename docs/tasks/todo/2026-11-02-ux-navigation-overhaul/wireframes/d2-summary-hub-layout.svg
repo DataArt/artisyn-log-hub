@@ -1,0 +1,120 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="726" viewBox="0 0 1000 726" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <filter id="sh" x="-10%" y="-10%" width="120%" height="140%"><feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000" flood-opacity="0.12"/></filter>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#2563eb"/></marker>
+  </defs>
+  <rect x="0" y="0" width="1000" height="726" fill="#ffffff"/>
+  <text x="24" y="32" font-size="17" fill="#111827" font-weight="700">D2 · Summary as a hub: page layout</text>
+  <text x="24" y="52" font-size="12" fill="#6b7280">① executive band (as today) → ② “Where to look next” cards → ③ “Explore” chips → rest of Summary.</text>
+  <rect x="24" y="66" width="952" height="640" rx="8" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="44" y="97" font-size="11" fill="#6b7280">Lens</text>
+  <rect x="76" y="80" width="445" height="26" rx="13" fill="#f3f4f6"/>
+  <text x="129" y="97" font-size="12" fill="#6b7280" text-anchor="middle">What happened</text>
+  <rect x="181" y="82" width="49" height="22" rx="11" fill="#ffffff" stroke="#2563eb" stroke-width="1.5"/>
+  <text x="205.5" y="97" font-size="12" fill="#1d4ed8" font-weight="700" text-anchor="middle">Cost</text>
+  <text x="294" y="97" font-size="12" fill="#6b7280" text-anchor="middle">Harness &amp; context</text>
+  <text x="417" y="97" font-size="12" fill="#6b7280" text-anchor="middle">Failed tool call</text>
+  <text x="498" y="97" font-size="12" fill="#6b7280" text-anchor="middle">All</text>
+  <rect x="44" y="116" width="433" height="32" rx="6" fill="#f9fafb"/>
+  <rect x="50" y="120" width="73" height="24" rx="5" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="61" y="137" font-size="13" fill="#111827" font-weight="600">Summary</text>
+  <text x="136" y="137" font-size="13" fill="#6b7280">Statistics</text>
+  <text x="225" y="137" font-size="13" fill="#6b7280">Charts</text>
+  <text x="288" y="137" font-size="13" fill="#6b7280">Advisor</text>
+  <text x="358" y="137" font-size="13" fill="#6b7280">OTEL</text>
+  <rect x="401" y="120" width="68" height="24" rx="5" fill="#f3f4f6"/>
+  <text x="411" y="137" font-size="13" fill="#111827">More ▾</text>
+  <line x1="24" y1="158" x2="976" y2="158" stroke="#e5e7eb"/>
+  <rect x="64" y="170" width="906" height="74" rx="8" fill="#f9fafb" stroke="#e5e7eb"/>
+  <rect x="72" y="178" width="122" height="58" rx="5" fill="#ffffff" stroke="#e5e7eb"/>
+  <rect x="72" y="178" width="3" height="58" rx="0" fill="#16a34a"/>
+  <text x="82" y="196" font-size="10.5" fill="#6b7280">Cost</text>
+  <text x="82" y="220" font-size="14" fill="#111827" font-weight="700" font-family="Consolas, monospace">$28.79</text>
+  <rect x="200" y="178" width="122" height="58" rx="5" fill="#ffffff" stroke="#e5e7eb"/>
+  <rect x="200" y="178" width="3" height="58" rx="0" fill="#f97316"/>
+  <text x="210" y="196" font-size="10.5" fill="#6b7280">Peak context</text>
+  <text x="210" y="220" font-size="14" fill="#111827" font-weight="700" font-family="Consolas, monospace">129,831</text>
+  <rect x="328" y="178" width="122" height="58" rx="5" fill="#ffffff" stroke="#e5e7eb"/>
+  <rect x="328" y="178" width="3" height="58" rx="0" fill="#3b82f6"/>
+  <text x="338" y="196" font-size="10.5" fill="#6b7280">Turns</text>
+  <text x="338" y="220" font-size="14" fill="#111827" font-weight="700" font-family="Consolas, monospace">7 prompts</text>
+  <rect x="456" y="178" width="122" height="58" rx="5" fill="#ffffff" stroke="#e5e7eb"/>
+  <rect x="456" y="178" width="3" height="58" rx="0" fill="#14b8a6"/>
+  <text x="466" y="196" font-size="10.5" fill="#6b7280">Code impact</text>
+  <text x="466" y="220" font-size="14" fill="#111827" font-weight="700" font-family="Consolas, monospace">6,751 lines</text>
+  <rect x="584" y="178" width="122" height="58" rx="5" fill="#ffffff" stroke="#e5e7eb"/>
+  <rect x="584" y="178" width="3" height="58" rx="0" fill="#8b5cf6"/>
+  <text x="594" y="196" font-size="10.5" fill="#6b7280">Delegation</text>
+  <text x="594" y="220" font-size="14" fill="#111827" font-weight="700" font-family="Consolas, monospace">18 agents</text>
+  <rect x="712" y="178" width="122" height="58" rx="5" fill="#ffffff" stroke="#e5e7eb"/>
+  <rect x="712" y="178" width="3" height="58" rx="0" fill="#6366f1"/>
+  <text x="722" y="196" font-size="10.5" fill="#6b7280">Session shape</text>
+  <text x="722" y="220" font-size="14" fill="#111827" font-weight="700" font-family="Consolas, monospace">opus-4-5</text>
+  <rect x="840" y="178" width="122" height="58" rx="5" fill="#ffffff" stroke="#e5e7eb"/>
+  <rect x="840" y="178" width="3" height="58" rx="0" fill="#f59e0b"/>
+  <text x="850" y="196" font-size="10.5" fill="#6b7280">Change surface</text>
+  <text x="850" y="220" font-size="14" fill="#111827" font-weight="700" font-family="Consolas, monospace">48 files</text>
+  <circle cx="46" cy="207" r="10" fill="#2563eb"/><text x="46" y="211" font-size="11" fill="#ffffff" font-weight="700" text-anchor="middle">1</text>
+  <text x="72" y="286" font-size="15" fill="#111827" font-weight="600">Where to look next</text>
+  <circle cx="46" cy="281" r="10" fill="#2563eb"/><text x="46" y="285" font-size="11" fill="#ffffff" font-weight="700" text-anchor="middle">2</text>
+  <rect x="72" y="300" width="216" height="104" rx="8" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="86" y="322" font-size="12" fill="#374151" font-weight="600">Statistics</text>
+  <text x="86" y="352" font-size="18" fill="#111827" font-weight="700" font-family="Consolas, monospace">$28.79</text>
+  <text x="86" y="372" font-size="11" fill="#6b7280">3.85M cache read · 24,570 out</text>
+  <text x="274" y="392" font-size="12" fill="#2563eb" text-anchor="end">Open →</text>
+  <rect x="300" y="300" width="216" height="104" rx="8" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="314" y="322" font-size="12" fill="#374151" font-weight="600">Charts</text>
+  <text x="314" y="352" font-size="18" fill="#111827" font-weight="700" font-family="Consolas, monospace">129,831</text>
+  <text x="314" y="372" font-size="11" fill="#6b7280">peak context · 13% of 1,000,000</text>
+  <text x="502" y="392" font-size="12" fill="#2563eb" text-anchor="end">Open →</text>
+  <rect x="528" y="300" width="216" height="104" rx="8" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="542" y="322" font-size="12" fill="#374151" font-weight="600">Info</text>
+  <text x="542" y="352" font-size="18" fill="#111827" font-weight="700" font-family="Consolas, monospace">18 agents</text>
+  <text x="542" y="372" font-size="11" fill="#6b7280">1 workflow · 93% of cost</text>
+  <text x="730" y="392" font-size="12" fill="#2563eb" text-anchor="end">Open →</text>
+  <rect x="756" y="300" width="216" height="104" rx="8" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="770" y="322" font-size="12" fill="#374151" font-weight="600">Change surface</text>
+  <text x="770" y="352" font-size="18" fill="#111827" font-weight="700" font-family="Consolas, monospace">48 files</text>
+  <text x="770" y="372" font-size="11" fill="#6b7280">21 folders · +5,872 / −376</text>
+  <text x="958" y="392" font-size="12" fill="#2563eb" text-anchor="end">Open →</text>
+  <rect x="72" y="416" width="216" height="104" rx="8" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="86" y="438" font-size="12" fill="#374151" font-weight="600">Bash</text>
+  <text x="86" y="468" font-size="18" fill="#111827" font-weight="700" font-family="Consolas, monospace">196 calls</text>
+  <text x="86" y="488" font-size="11" fill="#6b7280">main + sub-agents</text>
+  <text x="274" y="508" font-size="12" fill="#2563eb" text-anchor="end">Open →</text>
+  <rect x="300" y="416" width="216" height="104" rx="8" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="314" y="438" font-size="12" fill="#374151" font-weight="600">Advisor</text>
+  <rect x="314" y="450" width="54" height="20" rx="10" fill="#dc2626"/>
+  <text x="341" y="464" font-size="11" fill="#ffffff" font-weight="600" text-anchor="middle">critical</text>
+  <text x="376" y="466" font-size="16" fill="#111827" font-weight="700">1 issue</text>
+  <text x="314" y="488" font-size="11" fill="#6b7280">Outdated Claude Code version</text>
+  <text x="502" y="508" font-size="12" fill="#2563eb" text-anchor="end">Open →</text>
+  <rect x="528" y="416" width="216" height="104" rx="8" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="542" y="438" font-size="12" fill="#374151" font-weight="600">Tools/MCP</text>
+  <text x="542" y="462" font-size="11.5" fill="#4b5563">MCP and CLI tool calls of this session</text>
+  <text x="730" y="508" font-size="12" fill="#2563eb" text-anchor="end">Open →</text>
+  <rect x="756" y="416" width="216" height="104" rx="8" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="770" y="438" font-size="12" fill="#374151" font-weight="600">OKF</text>
+  <text x="770" y="462" font-size="11.5" fill="#4b5563">Knowledge-base reads of this session</text>
+  <text x="958" y="508" font-size="12" fill="#2563eb" text-anchor="end">Open →</text>
+  <rect x="64" y="292" width="916" height="236" rx="8" fill="none" stroke="#2563eb" stroke-width="2"/>
+  <text x="72" y="564" font-size="15" fill="#111827" font-weight="600">Explore</text>
+  <circle cx="46" cy="559" r="10" fill="#2563eb"/><text x="46" y="563" font-size="11" fill="#ffffff" font-weight="700" text-anchor="middle">3</text>
+  <rect x="72" y="576" width="173" height="30" rx="15" fill="#f3f4f6" stroke="#e5e7eb"/>
+  <text x="86" y="596" font-size="12.5" fill="#111827">Why so expensive?</text>
+  <rect x="202.25" y="582" width="31" height="18" rx="9" fill="#dbeafe"/>
+  <text x="207.25" y="595" font-size="10.5" fill="#1d4ed8">Cost</text>
+  <rect x="253" y="576" width="202" height="30" rx="15" fill="#f3f4f6" stroke="#e5e7eb"/>
+  <text x="267" y="596" font-size="12.5" fill="#111827">What happened?</text>
+  <rect x="364.5" y="582" width="78.25" height="18" rx="9" fill="#dbeafe"/>
+  <text x="369.5" y="595" font-size="10.5" fill="#1d4ed8">What happened</text>
+  <rect x="463" y="576" width="242" height="30" rx="15" fill="#f3f4f6" stroke="#e5e7eb"/>
+  <text x="477" y="596" font-size="12.5" fill="#111827">What gets loaded?</text>
+  <rect x="593.25" y="582" width="99.25" height="18" rx="9" fill="#dbeafe"/>
+  <text x="598.25" y="595" font-size="10.5" fill="#1d4ed8">Harness &amp; context</text>
+  <rect x="713" y="576" width="243" height="30" rx="15" fill="#f3f4f6" stroke="#e5e7eb"/>
+  <text x="727" y="596" font-size="12.5" fill="#111827">Which tool failed?</text>
+  <rect x="849.5" y="582" width="94" height="18" rx="9" fill="#dbeafe"/>
+  <text x="854.5" y="595" font-size="10.5" fill="#1d4ed8">Failed tool call</text>
+  <rect x="72" y="626" width="896" height="50" rx="6" fill="#f9fafb" stroke="#e5e7eb" stroke-dasharray="4 3"/><text x="86" y="655" font-size="12" fill="#9ca3af">… rest of today’s Summary (detected issues, details) — unchanged</text>
+</svg>

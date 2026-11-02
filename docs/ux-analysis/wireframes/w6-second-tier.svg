@@ -1,0 +1,49 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="360" viewBox="0 0 1000 360" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <style>
+    .t{font-size:13px;fill:#1f2937}
+    .s{font-size:11px;fill:#6b7280}
+    .h{font-size:13px;font-weight:600;fill:#111827}
+    .g{font-size:10px;font-weight:700;fill:#6b7280;letter-spacing:.06em}
+    .box{fill:#fff;stroke:#d1d5db}
+    .lnk{fill:#2563eb}
+    .note{font-size:12px;fill:#b45309}
+  </style>
+  <rect width="1000" height="360" fill="#fff"/>
+
+  <!-- breadcrumb -->
+  <text x="20" y="30" class="s">Breadcrumb</text>
+  <text x="20" y="52" font-size="13"><tspan class="lnk">Team Platform</tspan><tspan fill="#9ca3af">  ›  </tspan><tspan class="lnk">log-hub</tspan><tspan fill="#9ca3af">  ›  </tspan><tspan class="lnk">3f2a</tspan><tspan fill="#9ca3af">  ›  </tspan><tspan class="lnk">Transcript</tspan><tspan fill="#9ca3af">  ›  </tspan><tspan fill="#111827">Logs</tspan></text>
+
+  <!-- tabs with info -->
+  <text x="20" y="96" class="s">ⓘ on every tab</text>
+  <line x1="10" y1="104" x2="990" y2="104" stroke="#e5e7eb"/>
+  <text x="20" y="122" class="g">OVERVIEW</text>
+  <text x="220" y="122" class="g">TRANSCRIPT</text>
+  <line x1="208" y1="112" x2="208" y2="150" stroke="#d1d5db"/>
+  <text x="20" y="144" class="t">Summary ⓘ</text>
+  <text x="110" y="144" class="t">Info ⓘ</text>
+  <text x="220" y="144" class="t" font-weight="600" fill="#2563eb">Logs ⓘ</text>
+  <text x="290" y="144" class="t">Bash ⓘ</text>
+  <line x1="10" y1="154" x2="990" y2="154" stroke="#e5e7eb"/>
+
+  <rect x="230" y="162" width="390" height="56" rx="6" fill="#111827"/>
+  <text x="244" y="186" font-size="12" fill="#fff">Answers: what happened, turn by turn.</text>
+  <text x="244" y="206" font-size="12" fill="#93c5fd">Learn more → (opens the offline help article)</text>
+
+  <!-- repo header with gear -->
+  <text x="20" y="256" class="s">Repository header: configuration moves under ⚙</text>
+  <rect x="10" y="266" width="980" height="44" rx="4" class="box"/>
+  <text x="24" y="293" class="h">log-hub</text>
+  <text x="110" y="293" class="t" font-weight="600" fill="#2563eb">Sessions</text>
+  <text x="186" y="293" class="t">Analytics</text>
+  <text x="262" y="293" class="t">Reports</text>
+  <text x="330" y="293" class="t">Tools/MCP</text>
+  <text x="412" y="293" class="t">OKF</text>
+  <text x="456" y="293" class="t">OTEL</text>
+  <rect x="900" y="274" width="76" height="28" rx="4" fill="#eff6ff" stroke="#2563eb"/><text x="914" y="293" class="t">⚙ ▴</text>
+  <rect x="696" y="314" width="280" height="40" rx="4" class="box"/>
+  <text x="710" y="338" class="t">Settings · Hook health <tspan fill="#16a34a">●</tspan> · Import/export</text>
+
+  <text x="660" y="180" class="note">Also second tier: group Admin / Settings tabs,</text>
+  <text x="660" y="198" class="note">focus mode (f), Analytics view picker by question.</text>
+</svg>

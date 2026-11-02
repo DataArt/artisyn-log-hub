@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="286" viewBox="0 0 1000 286" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <filter id="sh" x="-10%" y="-10%" width="120%" height="140%"><feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000" flood-opacity="0.12"/></filter>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#2563eb"/></marker>
+  </defs>
+  <rect x="0" y="0" width="1000" height="286" fill="#ffffff"/>
+  <text x="24" y="32" font-size="17" fill="#111827" font-weight="700">C5 · “All” lens = the two-level grouped bar (Part B)</text>
+  <text x="24" y="52" font-size="12" fill="#6b7280">Default tab of “All” is Summary.</text>
+  <rect x="24" y="70" width="952" height="196" rx="8" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="44" y="105" font-size="11" fill="#6b7280">Lens</text>
+  <rect x="76" y="88" width="444" height="26" rx="13" fill="#f3f4f6"/>
+  <text x="129" y="105" font-size="12" fill="#6b7280" text-anchor="middle">What happened</text>
+  <text x="204" y="105" font-size="12" fill="#6b7280" text-anchor="middle">Cost</text>
+  <text x="291" y="105" font-size="12" fill="#6b7280" text-anchor="middle">Harness &amp; context</text>
+  <text x="414" y="105" font-size="12" fill="#6b7280" text-anchor="middle">Failed tool call</text>
+  <rect x="475" y="90" width="42" height="22" rx="11" fill="#ffffff" stroke="#2563eb" stroke-width="1.5"/>
+  <text x="496" y="105" font-size="12" fill="#1d4ed8" font-weight="700" text-anchor="middle">All</text>
+  <rect x="471" y="84" width="50" height="34" rx="8" fill="none" stroke="#2563eb" stroke-width="2"/>
+  <line x1="24" y1="128" x2="976" y2="128" stroke="#e5e7eb"/>
+  <text x="70" y="154" font-size="14" fill="#111827" font-weight="600">Overview</text>
+  <line x1="64" y1="168" x2="138.72" y2="168" stroke="#111827" stroke-width="2"/>
+  <text x="166.72" y="154" font-size="14" fill="#6b7280">Transcript</text>
+  <text x="270.72" y="154" font-size="14" fill="#6b7280">Cost &amp; context</text>
+  <text x="402.72" y="154" font-size="14" fill="#6b7280">Effects</text>
+  <line x1="24" y1="168" x2="976" y2="168" stroke="#e5e7eb"/>
+  <circle cx="40" cy="150" r="10" fill="#2563eb"/><text x="40" y="154" font-size="11" fill="#ffffff" font-weight="700" text-anchor="middle">1</text>
+  <text x="505.72" y="154" font-size="11.5" fill="#1e3a8a">groups</text>
+  <rect x="60" y="178" width="294" height="32" rx="6" fill="#f9fafb"/>
+  <rect x="66" y="182" width="73" height="24" rx="5" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="77" y="199" font-size="13" fill="#111827" font-weight="600">Summary</text>
+  <text x="152" y="199" font-size="13" fill="#6b7280">Info</text>
+  <text x="202" y="199" font-size="13" fill="#6b7280">Statistics</text>
+  <text x="291" y="199" font-size="13" fill="#6b7280">Advisor</text>
+  <circle cx="40" cy="194" r="10" fill="#2563eb"/><text x="40" y="198" font-size="11" fill="#ffffff" font-weight="700" text-anchor="middle">2</text>
+  <text x="374" y="198" font-size="11.5" fill="#1e3a8a">tabs of the selected group</text>
+  <rect x="44" y="222" width="912" height="32" rx="6" fill="#f9fafb" stroke="#e5e7eb" stroke-dasharray="4 3"/><text x="58" y="242" font-size="12" fill="#9ca3af">Summary content</text>
+</svg>

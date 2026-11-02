@@ -1,0 +1,137 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="780" viewBox="0 0 1200 780" font-family="Segoe UI, Helvetica, Arial, sans-serif">
+  <style>
+    .t{font-size:13px;fill:#1f2937}
+    .s{font-size:11px;fill:#6b7280}
+    .h{font-size:12px;font-weight:600;fill:#374151}
+    .b{font-size:20px;font-weight:600;fill:#111827}
+    .g{font-size:10px;font-weight:700;fill:#6b7280;letter-spacing:.06em}
+    .box{fill:#fff;stroke:#d1d5db}
+    .panel{fill:#f9fafb;stroke:#d1d5db}
+    .acc{fill:#2563eb}
+    .note{font-size:12px;fill:#b45309}
+  </style>
+  <rect width="1200" height="780" fill="#fff"/>
+  <!-- top bar -->
+  <rect x="0" y="0" width="1200" height="44" fill="#1f2937"/>
+  <text x="16" y="28" font-size="15" font-weight="700" fill="#fff">Log Hub</text>
+  <rect x="820" y="10" width="230" height="24" rx="4" fill="#374151"/>
+  <text x="832" y="27" font-size="12" fill="#d1d5db">🔍 Jump to…            Ctrl+K</text>
+  <text x="1066" y="27" font-size="12" fill="#d1d5db">?   🔔   dt@…</text>
+
+  <!-- left nav -->
+  <rect x="0" y="44" width="170" height="736" class="panel"/>
+  <text x="16" y="74" class="h">Teams</text>
+  <text x="28" y="96" class="t">▸ Platform</text>
+  <text x="16" y="126" class="h">My Repos</text>
+  <text x="28" y="148" class="t">▸ log-hub</text>
+  <text x="16" y="178" class="h">API Keys</text>
+  <text x="16" y="206" class="h">Installed Hooks</text>
+  <circle cx="140" cy="202" r="8" fill="#f59e0b"/><text x="137" y="206" font-size="10" fill="#fff">1</text>
+  <text x="16" y="234" class="h">Admin</text>
+
+  <!-- session list -->
+  <rect x="170" y="44" width="210" height="736" class="box"/>
+  <rect x="182" y="56" width="186" height="26" rx="4" class="box"/>
+  <text x="192" y="73" class="s">Search sessions…</text>
+  <text x="184" y="106" class="h">▾ main</text>
+  <rect x="178" y="114" width="196" height="26" rx="3" fill="#dbeafe"/>
+  <text x="192" y="132" class="t">● 3f2a</text><text x="320" y="132" class="t">$4.10</text>
+  <text x="192" y="160" class="t">○ 91bc</text><text x="320" y="160" class="t">$0.80</text>
+  <text x="184" y="190" class="h">▾ feature/x</text>
+  <text x="192" y="214" class="t">○ 77de</text><text x="320" y="214" class="t">$2.35</text>
+
+  <!-- session pane header -->
+  <text x="398" y="72" class="h">Session 3f2a… · main · dt@dataart.com · 2h 14m</text>
+
+  <!-- lens switcher -->
+  <text x="398" y="104" class="s">Lens:</text>
+  <rect x="434" y="88" width="110" height="24" rx="12" class="acc"/>
+  <text x="449" y="105" font-size="12" fill="#fff">What happened</text>
+  <rect x="550" y="88" width="56" height="24" rx="12" class="box"/><text x="565" y="105" class="t">Cost</text>
+  <rect x="612" y="88" width="74" height="24" rx="12" class="box"/><text x="626" y="105" class="t">Harness</text>
+  <rect x="692" y="88" width="96" height="24" rx="12" class="box"/><text x="706" y="105" class="t">Failed tool</text>
+  <rect x="794" y="88" width="44" height="24" rx="12" class="box"/><text x="808" y="105" class="t">All</text>
+
+  <!-- grouped tab bar -->
+  <line x1="390" y1="124" x2="1190" y2="124" stroke="#e5e7eb"/>
+  <text x="400" y="142" class="g">OVERVIEW</text>
+  <text x="590" y="142" class="g">TRANSCRIPT</text>
+  <text x="790" y="142" class="g">EFFECTS</text>
+  <line x1="578" y1="132" x2="578" y2="172" stroke="#d1d5db"/>
+  <line x1="778" y1="132" x2="778" y2="172" stroke="#d1d5db"/>
+  <text x="400" y="164" class="t" font-weight="600" fill="#2563eb">Summary</text>
+  <rect x="398" y="170" width="58" height="3" class="acc"/>
+  <text x="472" y="164" class="t">Info</text>
+  <text x="590" y="164" class="t">Logs</text>
+  <text x="636" y="164" class="t">Bash</text>
+  <rect x="670" y="152" width="24" height="16" rx="8" fill="#e5e7eb"/><text x="675" y="164" font-size="10" fill="#374151">34</text>
+  <text x="790" y="164" class="t">Change surface</text>
+  <rect x="1100" y="148" width="74" height="24" rx="4" class="box"/><text x="1112" y="165" class="t">More ▾</text>
+  <line x1="390" y1="176" x2="1190" y2="176" stroke="#e5e7eb"/>
+
+  <!-- executive band -->
+  <rect x="400" y="192" width="776" height="64" rx="6" class="panel"/>
+  <g>
+    <text x="420" y="220" class="b">$4.10</text><text x="420" y="242" class="s">cost</text>
+    <text x="560" y="220" class="b">2h 14m</text><text x="560" y="242" class="s">duration</text>
+    <text x="710" y="220" class="b">61</text><text x="710" y="242" class="s">turns</text>
+    <text x="840" y="220" class="b">92%</text><text x="840" y="242" class="s">cache read</text>
+    <text x="990" y="220" class="b" fill="#b45309">3</text><text x="990" y="242" class="s">detected issues</text>
+  </g>
+
+  <text x="400" y="290" class="h">Where to look next</text>
+  <!-- cards row 1 -->
+  <g>
+    <rect x="400" y="302" width="250" height="110" rx="6" class="box"/>
+    <text x="416" y="326" class="h">Bash</text>
+    <text x="416" y="356" class="b">34 calls</text>
+    <text x="416" y="376" class="s">2 errors</text>
+    <text x="416" y="400" font-size="12" fill="#2563eb">Open →</text>
+
+    <rect x="663" y="302" width="250" height="110" rx="6" fill="#fff" stroke="#f59e0b" stroke-width="1.5"/>
+    <text x="679" y="326" class="h">Tools/MCP</text>
+    <text x="679" y="356" class="b" fill="#b45309">3 failed ⚠</text>
+    <text x="679" y="376" class="s">of 112 calls</text>
+    <text x="679" y="400" font-size="12" fill="#2563eb">Open →</text>
+
+    <rect x="926" y="302" width="250" height="110" rx="6" class="box"/>
+    <text x="942" y="326" class="h">Startup context</text>
+    <text x="942" y="356" class="b">18.2k tokens</text>
+    <text x="942" y="376" class="s">CLAUDE.md 4k</text>
+    <text x="942" y="400" font-size="12" fill="#2563eb">Open →</text>
+  </g>
+  <!-- cards row 2 -->
+  <g>
+    <rect x="400" y="424" width="250" height="110" rx="6" class="box"/>
+    <text x="416" y="448" class="h">Changes</text>
+    <text x="416" y="478" class="b">14 files</text>
+    <text x="416" y="498" class="s">+412 / −88</text>
+    <text x="416" y="522" font-size="12" fill="#2563eb">Open →</text>
+
+    <rect x="663" y="424" width="250" height="110" rx="6" class="box"/>
+    <text x="679" y="448" class="h">Advisor</text>
+    <text x="679" y="478" class="b">2 hints</text>
+    <text x="679" y="498" class="s">cache, long prompt</text>
+    <text x="679" y="522" font-size="12" fill="#2563eb">Open →</text>
+
+    <rect x="926" y="424" width="250" height="110" rx="6" fill="#f9fafb" stroke="#d1d5db" stroke-dasharray="5 4"/>
+    <text x="942" y="448" class="h" fill="#9ca3af">OKF</text>
+    <text x="942" y="478" font-size="16" fill="#9ca3af">no reads</text>
+    <text x="942" y="498" class="s">dimmed: nothing here</text>
+  </g>
+
+  <!-- explore row -->
+  <text x="400" y="568" class="h">Explore:</text>
+  <rect x="460" y="552" width="140" height="26" rx="13" class="box"/><text x="474" y="570" class="t">Debug a tool call</text>
+  <rect x="608" y="552" width="116" height="26" rx="13" class="box"/><text x="622" y="570" class="t">Why this cost</text>
+  <rect x="732" y="552" width="148" height="26" rx="13" class="box"/><text x="746" y="570" class="t">Harness &amp; context</text>
+  <rect x="888" y="552" width="118" height="26" rx="13" class="box"/><text x="902" y="570" class="t">Code changes</text>
+
+  <!-- annotations -->
+  <rect x="400" y="616" width="776" height="140" rx="6" fill="#fffbeb" stroke="#fcd34d"/>
+  <text x="416" y="642" class="note">① Lens decides which groups and tabs come first ("What happened" here). A lens only reorders — nothing is removed.</text>
+  <text x="416" y="666" class="note">② Tab bar is grouped (Overview / Transcript / Effects); everything else lives in More ▾. Ids and URLs unchanged.</text>
+  <text x="416" y="690" class="note">③ Counts and health dots (Bash 34) come only from data the page has already loaded.</text>
+  <text x="416" y="714" class="note">④ Summary is the hub: one card per tab, one figure, Open →. Empty tabs are dimmed.</text>
+  <text x="416" y="738" class="note">⑤ Explore chips switch to the matching tab and lens.</text>
+</svg>

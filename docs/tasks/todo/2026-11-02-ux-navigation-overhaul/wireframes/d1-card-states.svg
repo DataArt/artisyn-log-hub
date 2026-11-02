@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="262" viewBox="0 0 1000 262" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <filter id="sh" x="-10%" y="-10%" width="120%" height="140%"><feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000" flood-opacity="0.12"/></filter>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#2563eb"/></marker>
+  </defs>
+  <rect x="0" y="0" width="1000" height="262" fill="#ffffff"/>
+  <text x="24" y="32" font-size="17" fill="#111827" font-weight="700">D1 · “Where to look next” card: three states</text>
+  
+  <rect x="24" y="92" width="280" height="104" rx="8" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="38" y="114" font-size="12" fill="#374151" font-weight="600">Charts</text>
+  <text x="38" y="144" font-size="20" fill="#111827" font-weight="700" font-family="Consolas, monospace">129,831</text>
+  <text x="38" y="164" font-size="11" fill="#6b7280">peak context · 13% of 1,000,000</text>
+  <text x="290" y="184" font-size="12" fill="#2563eb" text-anchor="end">Open →</text>
+  <g opacity="0.5">
+  <rect x="360" y="92" width="280" height="104" rx="8" fill="#f9fafb" stroke="#e5e7eb" stroke-dasharray="4 3"/>
+  <text x="374" y="114" font-size="12" fill="#374151" font-weight="600">Change surface</text>
+  <text x="374" y="144" font-size="16" fill="#6b7280" font-weight="700">No changed files</text>
+  <text x="374" y="164" font-size="11" fill="#6b7280">this session changed nothing</text>
+  <text x="626" y="184" font-size="12" fill="#2563eb" text-anchor="end">Open →</text>
+  </g>
+  <rect x="696" y="92" width="280" height="104" rx="8" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="710" y="114" font-size="12" fill="#374151" font-weight="600">OKF</text>
+  <text x="710" y="138" font-size="11.5" fill="#4b5563">Knowledge-base reads of this session</text>
+  <text x="962" y="184" font-size="12" fill="#2563eb" text-anchor="end">Open →</text>
+  <circle cx="34" cy="80" r="10" fill="#2563eb"/><text x="34" y="84" font-size="11" fill="#ffffff" font-weight="700" text-anchor="middle">1</text>
+  <text x="24" y="222" font-size="12" fill="#374151" font-weight="600">Figure from already-loaded data</text>
+  <text x="24" y="240" font-size="11.5" fill="#6b7280">+ optional sub-line</text>
+  <circle cx="370" cy="80" r="10" fill="#2563eb"/><text x="370" y="84" font-size="11" fill="#ffffff" font-weight="700" text-anchor="middle">2</text>
+  <text x="360" y="222" font-size="12" fill="#374151" font-weight="600">No data (known from loaded data)</text>
+  <text x="360" y="240" font-size="11.5" fill="#6b7280">→ dimmed, says so</text>
+  <circle cx="706" cy="80" r="10" fill="#2563eb"/><text x="706" y="84" font-size="11" fill="#ffffff" font-weight="700" text-anchor="middle">3</text>
+  <text x="696" y="222" font-size="12" fill="#374151" font-weight="600">Data behind the tab’s own query</text>
+  <text x="696" y="240" font-size="11.5" fill="#6b7280">→ no figure, not dimmed</text>
+</svg>

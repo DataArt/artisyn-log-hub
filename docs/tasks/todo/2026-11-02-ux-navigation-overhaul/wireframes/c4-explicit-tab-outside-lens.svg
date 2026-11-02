@@ -1,0 +1,40 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="266" viewBox="0 0 1000 266" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <filter id="sh" x="-10%" y="-10%" width="120%" height="140%"><feDropShadow dx="0" dy="2" stdDeviation="3" flood-color="#000" flood-opacity="0.12"/></filter>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 z" fill="#2563eb"/></marker>
+  </defs>
+  <rect x="0" y="0" width="1000" height="266" fill="#ffffff"/>
+  <text x="24" y="32" font-size="17" fill="#111827" font-weight="700">C4 · ?tab=logs&amp;lens=cost — a tab outside the lens</text>
+  <text x="24" y="52" font-size="12" fill="#6b7280">Cost lens stays marked; Logs is not promoted by Cost, so it is appended to the row as the active tab.</text>
+  <rect x="24" y="70" width="952" height="176" rx="8" fill="#ffffff" stroke="#e5e7eb"/>
+  <rect x="44" y="86" width="520" height="24" rx="12" fill="#f3f4f6" stroke="#e5e7eb"/>
+  <text x="56" y="102" font-size="11" fill="#9ca3af">⌂</text>
+  <text x="72" y="102" font-size="11.5" fill="#374151" font-family="Consolas, monospace">…/log-hub?session=8f3c21</text>
+  <rect x="226.8" y="89" width="124.17500000000001" height="18" rx="4" fill="#dbeafe"/>
+  <text x="228.8" y="102" font-size="11.5" fill="#1d4ed8" font-weight="700" font-family="Consolas, monospace">&amp;tab=logs&amp;lens=cost</text>
+  <text x="44" y="141" font-size="11" fill="#6b7280">Lens</text>
+  <rect x="76" y="124" width="445" height="26" rx="13" fill="#f3f4f6"/>
+  <text x="129" y="141" font-size="12" fill="#6b7280" text-anchor="middle">What happened</text>
+  <rect x="181" y="126" width="49" height="22" rx="11" fill="#ffffff" stroke="#2563eb" stroke-width="1.5"/>
+  <text x="205.5" y="141" font-size="12" fill="#1d4ed8" font-weight="700" text-anchor="middle">Cost</text>
+  <text x="294" y="141" font-size="12" fill="#6b7280" text-anchor="middle">Harness &amp; context</text>
+  <text x="417" y="141" font-size="12" fill="#6b7280" text-anchor="middle">Failed tool call</text>
+  <text x="498" y="141" font-size="12" fill="#6b7280" text-anchor="middle">All</text>
+  <rect x="177" y="120" width="57" height="34" rx="8" fill="none" stroke="#2563eb" stroke-width="2"/>
+  <rect x="44" y="166" width="495" height="32" rx="6" fill="#f9fafb"/>
+  <text x="61" y="187" font-size="13" fill="#6b7280">Summary</text>
+  <text x="131" y="187" font-size="13" fill="#6b7280">Statistics</text>
+  <text x="220" y="187" font-size="13" fill="#6b7280">Charts</text>
+  <text x="283" y="187" font-size="13" fill="#6b7280">Advisor</text>
+  <text x="353" y="187" font-size="13" fill="#6b7280">OTEL</text>
+  <line x1="398" y1="173" x2="398" y2="191" stroke="#9ca3af" stroke-width="1.5"/>
+  <rect x="406" y="170" width="51" height="24" rx="5" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="417" y="187" font-size="13" fill="#111827" font-weight="600">Logs</text>
+  <rect x="463" y="170" width="68" height="24" rx="5" fill="#f3f4f6"/>
+  <text x="473" y="187" font-size="13" fill="#111827">More ▾</text>
+  <rect x="402" y="162" width="59" height="40" rx="8" fill="none" stroke="#2563eb" stroke-width="2"/>
+  <line x1="471.5" y1="112" x2="437.5" y2="160" stroke="#2563eb" stroke-width="1.5" marker-end="url(#ah)"/>
+  <text x="563" y="180" font-size="11.5" fill="#1e3a8a">tab= wins: Logs is open,</text>
+  <text x="563" y="196" font-size="11.5" fill="#1e3a8a">shown after the divider</text>
+  <rect x="44" y="210" width="912" height="26" rx="6" fill="#f9fafb" stroke="#e5e7eb" stroke-dasharray="4 3"/><text x="58" y="227" font-size="12" fill="#9ca3af">Logs content</text>
+</svg>

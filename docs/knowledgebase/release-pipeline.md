@@ -27,12 +27,12 @@ that pins the image tag, and Docker pulls it.
 ## Node.js version in CI
 
 Every `actions/setup-node` step in `.github/workflows/` (`checks.yml`, `release.yml`,
-`security-scans.yml`, `security-report.yml`, `virustotal.yml`) uses `node-version: 24`, the same
-major line as the `Dockerfile` (`node:24.22.1-slim` build stages, `node:24.22.1-alpine` runtime) and
-`docker-dev/Dockerfile` (`ARG NODE_VERSION=24.22.1`). Checks and builds therefore run on the major
+`security-scans.yml`, `security-report.yml`, `virustotal.yml`) uses `node-version: 26`, the same
+major line as the `Dockerfile` (`node:26.13.0-slim` build stages, `node:26.13.0-alpine` runtime) and
+`docker-dev/Dockerfile` (`ARG NODE_VERSION=26.13.0`). Checks and builds therefore run on the major
 line the product runs on.
 
-- CI pins only the major line, not the patch: `setup-node` resolves it to the latest 24.x on each
+- CI pins only the major line, not the patch: `setup-node` resolves it to the latest 26.x on each
   run, so CI gets Node security patches without a manual bump. The exact patch is pinned in the
   two Dockerfiles, where the `node-runtime` scan checks it (see [CI Security Scans](ci-security-scans.md)).
 - Dependabot does not bump `node-version`. On a move to the next LTS major, change all of these
