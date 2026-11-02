@@ -82,14 +82,12 @@ Get-ChildItem server/logs | Sort-Object LastWriteTime -Descending | Select-Objec
 
 Check server/logs/ for errors when debugging.
 
-# api.md document
-
-Each time you change server code, review docs/knowledgebase/api-reference.md and update the document to reflect actual controller state.
-
 # Endpoint map
 
-Before adding or modifying any endpoint, read `docs/knowledgebase/server-endpoint-map.md`.  
-After any endpoint change, update that file to keep it in sync with the actual controllers.
+`docs/knowledgebase/server-endpoint-map.md` is the one HTTP API article (routes, guards,
+access-control rules, cross-cutting API behaviour). Read it before adding or modifying an
+endpoint. Update it when a route is added, removed or renamed, or its guard changes.
+Request/response shapes are not documented there — keep them in the DTO / `*.types.ts` files.
 
 # Performance tests
 

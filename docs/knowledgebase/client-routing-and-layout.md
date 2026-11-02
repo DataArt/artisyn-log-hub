@@ -5,7 +5,7 @@ description: "React SPA routing, layout, provider hierarchy, major page componen
 tags:
   - client
   - routing
-timestamp: "2026-11-02T00:00:00+04:00"
+timestamp: "2026-11-03T00:00:00+04:00"
 ---
 
 # Client Component Hierarchy
@@ -169,117 +169,59 @@ Active item is highlighted. Scrolls active item into view on route change.
 
 ## Page components
 
+Which folder and file holds each page: [`client-component-map.md`](client-component-map.md). This
+section covers only the page-level behaviour that the files do not make obvious.
+
 ### `RepositoryView` (`pages/repository/RepositoryView.tsx`)
-Main content for a repository. Reads `repoId` and optional `teamId` from react-router-dom `useParams()`; no props.
+Reads `repoId` and optional `teamId` from `useParams()`; no props. A thin shell: URL-derived state is in
+`useRepositoryViewState.ts`, every query of the page in `useRepositoryData.ts` (query keys
+`['repo-sessions' | 'repo-summary' | 'repo-contexts', repoId, teamId]`,
+`['session-logs', repoId, sessionId, teamId]`, …). Main tabs (`mtab`, `REPO_MAIN_TABS`): Sessions,
+Analytics, Reports, Tools/MCP, OKF, OTEL, Settings; Tools/MCP, OKF and OTEL only where
+`canSeeTeamWideTabs` allows.
 
-**Header bar** — shows `repoUrl` (read from react-query cache), session count, user count (from `/summary`), then all context key:value pairs (from `/contexts`).
+**Sessions tab** — session list on the left, `SessionDetailPane` on the right.
 
-**Data fetching:**
-- `useQuery(['repo-sessions', repoId, teamId])` → `GET /api/v1/repositories/:id/sessions`
-- `useQuery(['repo-summary', repoId, teamId])` → `GET /api/v1/repositories/:id/summary`
-- `useQuery(['repo-contexts', repoId, teamId])` → `GET /api/v1/repositories/:id/contexts`
-- `useQuery(['session-contexts', repoId, sessionId, teamId])` → `GET /api/v1/repositories/:id/sessions/:sid/contexts` (enabled when session selected)
-- `useQuery(['session-logs', repoId, sessionId, teamId])` → `GET /api/v1/repositories/:id/sessions/:sid/logs` (enabled when Logs tab active)
-
-**Tab layout** via `PageTabs`:
-- **Sessions tab** — left column: scrollable session list (date, first prompt, branch); right panel:
-  - **Top summary strip** (always visible when session selected): start time, end time, user email, session context key:value pairs.
-  - **Inner tab bar** (`SessionTabBar.tsx`, rows in `tab-ids.ts` `TAB_REGISTRY` / `SESSION_TABS`, group order): one level of tabs. Registry order (also the "More ▾" section order): Overview (Summary, Info, Statistics, [Advisor]) · Transcript (Logs, Bash, [Raw Logs]) · Cost & context (Charts dashboard, Context Growth, Context Usage, Agent Tree, Timeline, Tool Heatmap, Call Tree, System context anatomy, Harness usage, OTEL) · Effects (Change surface, Tools/MCP, OKF); the row shows the lens's tabs (below). The seven charts are plain session tabs (`CHART_TABS`); `tab=charts` is a legacy alias the pane redirects to the last chart shown (`charts-sub-tab`, else `dashboard`).
-    - **Logs tab** (`SessionLogView`): structured prompt-turn list, headed by the one-line `StartupContextLine` (startup token total + "View anatomy →" link to the `sysctx` tab).
-    - **Bash tab** (`SessionBashTab`, tab id `bash`): every Bash command of the session tree (main + sub-agents) in a keyboard-navigable list, with the readable command view of the selected one. The selected call lives in the `bashCall` search param (`useBashCallParam`, `setSearchParams(next, { replace: true })`); a missing or unknown id selects the first row without rewriting the URL.
-    - **Call Tree tab** (`CallTreeView`): hierarchical token-cost breakdown tree (System Context → Prompt turns → per-turn children). Token counts and cost-share percentages with progress bars. Expandable rows for prompt turns, groups (Skills, Rules, Code, Docs), and sub-agent rows.
-    - **Chart tabs** (`SessionChartsTab chart={id}`): Dashboard, Context Growth, Context Usage, Agent Tree, Timeline, Tool Heatmap and Call Tree, each its own `tab=` value.
-    - **Info tab** (`SessionInfoTab`): session metadata panel with sections — Identity, Timeline, Activity, Tokens & Cost, Files & Tools, MCP Usage, Vision, Productivity, CLAUDE.md Context.
-    - **Usage tab** (`SessionUsageTab`): transcript-derived analytics for this session only — productivity counters, per-tool table, cache-TTL/service-tier breakdown, iterations drill-down. Computed client-side from the already-fetched `/logs` payload; carries only figures not already shown by the Tool Heatmap chart tab or Info → Tokens & Cost.
-    - **Raw Logs tab** (`RawLogsTab`): Kibana-style table of all raw log entries.
-    - **System context anatomy tab** (`SessionSysctxAnatomyTab`, tab id `sysctx`, in the Cost & context group): the first request's startup context split into estimated partitions with drill-downs, git status and Harness internals; lazy, computed client-side from the `/logs` `main` + `harnessSnapshot` — see `sysctx-anatomy-tab.md`.
-  - Tab value is persisted in URL search params so it is bookmarkable.
-  - **Lens** (`lens=` URL param, `session-lenses.ts`, DD-7): the `SessionLensSwitcher` "View" select at the start of the tab row picks `what-happened` / `cost` / `harness` / `failed-tool` / `all`. The bar always has one row (`SessionLensRow`): the lens's promoted tabs (`all` = every visible tab), the out-of-lens active tab after a divider, and every other tab in "More ▾" under its group heading. There is no group row and no sub-tab bar. Effective lens = valid `lens=` → the per-user `session-lens` storage item → `cost`. A lens switch writes `lens` and the lens's default tab in one `replace` (`switchLens`) and stores `session-lens`; every other tab change (`setSessionTab`) leaves `lens` alone. Loading never writes a lens or a tab: no `tab=` opens Summary under every lens, an explicit `tab=` always wins. `lens` survives session switches and is dropped with `tab` when leaving the Sessions tab or closing the session.
-  - **Per-user storage** (`lib/user-storage.ts`, key `artisyn:<userId>:<name>`): `session-lens` (last picked lens id).
-- **Analytics tab** — `RepositoryAnalytics` component with date range picker, group-by, bar/horizontal chart layouts, and view selector (work-time/cost/files/vision/mcp/productivity/log-lines/cache-read-ratio/tools/tokens/productivity-counters/active-sessions — the last four are usage-analytics table views, not charts).
-- **Settings tab** — `RepositorySettings` modal for team/user file-category config.
+- **Session tabs** come from the tab registry (`tab-ids.ts` `TAB_REGISTRY` / `SESSION_TABS`): labels,
+  groups (Overview · Transcript · Cost & context · Effects, also the "More ▾" section order) and
+  visibility live there, not in the pane. The chart views are plain session tabs (`CHART_TABS`);
+  `tab=charts` is a legacy alias the pane redirects to the last chart shown (`charts-sub-tab`, else
+  `dashboard`). Heavy tabs load lazily (see [Code splitting](#code-splitting)).
+- **Lens** (`lens=` URL param, `session-lenses.ts`, DD-7): the `SessionLensSwitcher` "View" select at the start of the tab row picks `what-happened` / `cost` / `harness` / `failed-tool` / `all`. The bar always has one row (`SessionLensRow`): the lens's promoted tabs (`all` = every visible tab), the out-of-lens active tab after a divider, and every other tab in "More ▾" under its group heading. There is no group row and no sub-tab bar. Effective lens = valid `lens=` → the per-user `session-lens` storage item → `cost`. A lens switch writes `lens` and the lens's default tab in one `replace` (`switchLens`) and stores `session-lens`; every other tab change (`setSessionTab`) leaves `lens` alone. Loading never writes a lens or a tab: no `tab=` opens Summary under every lens, an explicit `tab=` always wins. `lens` survives session switches and is dropped with `tab` when leaving the Sessions tab or closing the session.
+- Tab-specific behaviour is in each tab's own article (index in [`client-component-map.md`](client-component-map.md#pagesrepositorysession-log)).
 
 ### `HookStatePage` (`pages/hook-state/HookStatePage.tsx`)
 Standalone page (not a `RepositoryView` tab). Reads `repoId` via `useParams()`. `useQuery(['hook-state', repoId])` → `fetchHookState`. Renders, in order: header (repo URL) with a manual refresh button; `HookStatusCard` (orange/green status summary — installed vs. latest version, last activity, "Copy upgrade cmd" button); Recommendations card; Non-uploadable logs table; Errors & warnings list; a dark monospace hook-log-tail `<pre>` block (intentional dark-surface exception — see `ui-principles.md`). 404/403 responses render "not reported yet" / "No access" via `PageState`.
 
-### `TeamDetailPage` (`pages/teams/TeamDetailPage.tsx`)
-Detail view for a team. Uses `PageTabs` with the `TEAM_TABS` rows of the registry: **Members**, **Repositories**, **Invitations** and, with team-wide access, **OTEL**. The initial tab is seeded from `location.state.teamTab` (see [location.state tab seeding](#locationstate-tab-seeding)).
-- Members tab: list with inline role/invite controls, transfer ownership.
-- Repositories tab: list team repos, add from URL or from "My Repos", remove.
-- Invitations tab: `TeamInvitationsTab` sub-component — send/cancel invitations.
-
-### `TeamsPage` (`pages/teams/TeamsPage.tsx`)
-List of all teams; click navigates to `TeamDetailPage`. Owner can delete.
-
-### `ApiKeysPage` (`pages/api-keys/ApiKeysPage.tsx`)
-Manage personal API keys (create, list, delete) and the hook install guide (`API_KEYS_TABS`: Install, Keys). The initial tab is seeded from `location.state.apiKeysTab`.
+### `TeamDetailPage` and `ApiKeysPage`
+Their tabs (`TEAM_TABS`: Members, Repositories, Invitations and, with team-wide access, OTEL;
+`API_KEYS_TABS`: Install, Keys) are local `useState`, seeded once from `location.state` (see
+[location.state tab seeding](#locationstate-tab-seeding)).
 
 ### `AdminPage` (`pages/admin/AdminPage.tsx`)
-Admin-only panel. Wraps content in `<TooltipProvider>`. Uses `PageTabs` with the `ADMIN_TABS` rows of the tab registry (`visibleTabs('admin', { isAdmin })`), in this order: System Info, Repos, Teams, Users, Error Logs, Upload Queue (`AdminUploadQueueTab`), Data Retention (`AdminDataRetentionTab`), Auth (`AdminAuthTab`), Model Pricing (`AdminModelPricingTab`). The first five:
-- **All Repos** (`AdminReposTab`) — all repositories with owner, session count, last session, first seen. Filter by URL substring.
-- **All Teams** (`AdminTeamsTab`) — all teams with owner, member count, repo count. Filter by name.
-- **All Users** (`AdminUsersTab`) — all users with role, team count, last activity. Filter by email. Each row has a role-toggle button (Make Admin / Revoke Admin). Self-row button is disabled with a tooltip.
-- **System Info** (`AdminSystemTab`) — live server/cluster-worker metrics (10 s auto-refresh via `GET /api/v1/admin/system`); see `system-info-and-cluster.md` for the full subsystem.
-- **Error Logs** (`AdminErrorLogsTab`) — server app-log `ERROR` entries fetched once per tab open (no auto-refresh) via `GET /api/v1/admin/error-logs`; columns: Timestamp, Source, Message (with details line).
+Admin-only panel; tabs from `visibleTabs('admin', { isAdmin })` (`ADMIN_TABS`), URL-backed via `useAdminTabState`. The Repos / Teams / Users tabs use `AdminDataTable` (TanStack Table): client-side sort, a debounced 300 ms filter on the name / URL / email column. System Info: [`system-info-and-cluster.md`](system-info-and-cluster.md).
 
-The Repos/Teams/Users tabs use `AdminDataTable` (TanStack Table + Shadcn `viewer/ui/table.tsx` primitives). Sorting is client-side; filtering is debounced 300 ms global filter restricted to the name/URL/email column. The System Info tab is not a filterable data table — it renders live metric cards plus a per-instance breakdown table.
-
-**Route guard** (`AdminGuard` in `main.tsx`): reads `user` from `useAuth()`; redirects to `/main` if `user.role !== 'admin'`. Placed as a wrapper route inside `AppLayout` children before the `*` catch-all.
-
-**Left nav**: `AppLeftNav` renders a `ShieldCheck` icon link to `#/admin` only when `user.role === 'admin'` — in both expanded (labeled "Admin Panel") and collapsed (icon-only) variants.
-
-### `LoginPage` / `SignupPage`
-Auth forms. On success set user via `useAuth()` and redirect.
+**Route guard** (`AdminGuard` in `main.tsx`): redirects to `/main` if `user.role !== 'admin'`; placed inside `AppLayout` before the `*` catch-all. `AppLeftNav` shows the `ShieldCheck` "Admin Panel" link only to admins.
 
 ### `MainPage`
-Home: repository entries, questions, Needs attention, This week, Pinned and Recent widgets (`pages/main/home/`, see `client-component-map.md`); Get started when the viewer has no repositories and no teams.
+Home: repository entries, questions, Needs attention, This week, Pinned and Recent widgets (`pages/main/home/`); Get started when the viewer has no repositories and no teams.
 
 ---
 
 ## Shared UI components
 
-### `PageTabs` / `PageTabsContent` (`ui/page-tabs.tsx`)
-Thin wrapper over Radix UI Tabs with `variant="line"` style.
-
-```tsx
-<PageTabs
-  tabs={[{ value: 'foo', label: 'Foo' }, ...]}
-  value={activeTab}
-  onValueChange={setActiveTab}
->
-  <PageTabsContent value="foo">...</PageTabsContent>
-</PageTabs>
-```
-
-`PageTabsContent` is re-exported directly as `TabsContent`. Used in `RepositoryView` and `TeamDetailPage`.
-
-### `NotificationBell` (`components/top-nav/NotificationBell.tsx`)
-Bell icon with pending invitation count badge. Fetches `GET /api/v1/invitations` and shows accept/decline actions in a popover.
-
 ### `HelpModal` (`help/HelpModal.tsx`)
-Full-screen dialog opened from the Help button in `MainNav`. Left sidebar lists help articles grouped by section. The navigation comes from the repo-root `user-docs/nav.json` (the shared page set of the in-app help and the site, see [user-docs-and-site.md](user-docs-and-site.md)), imported by `help/articles/index.ts` through the `@loghub/user-docs` alias and exported as `helpNav`. Right pane renders the selected Markdown article via `ReactMarkdown` + `remark-gfm`, with `rehype-slug` giving every heading a GitHub-style id. Articles are static files served from `public/help/<slug>.md`, which is **generated** from `user-docs/` by `scripts/user-docs/generate-help.js` (gitignored — never edit it); `HelpModal` fetches the active article at runtime via `fetch('/help/<slug>.md')`. Default article is `DEFAULT_HELP_SLUG = 'getting-started'` ("Your first session"). Links in an article go through `help/HelpMarkdownLink.tsx` (parsing in the pure `parseHelpHref` of `help/help-links.ts`): `#anchor` scrolls to that heading in the content pane (missing id → no-op); `<slug>.md[#anchor]` with a known slug switches the article (and the menu highlight) and, after it renders, scrolls to the anchor or to the top (`pendingAnchor` state); an unknown slug only logs `console.warn('[help] unknown help page: …')`; `http(s):`/`mailto:` links open in a new tab (`target="_blank" rel="noopener noreferrer"`) with a trailing ` ↗`. `React.lazy()`-loaded from `MainNav.tsx`, its own chunk — see [Code splitting](#code-splitting).
+Opened from the Help button in `MainNav`, `React.lazy()`-loaded, its own chunk (see [Code splitting](#code-splitting)). The left nav is the repo-root `user-docs/nav.json` (imported through the `@loghub/user-docs` alias as `helpNav`), the shared page set of the in-app help and the site — see [user-docs-and-site.md](user-docs-and-site.md). The right pane fetches `/help/<slug>.md` at runtime — files **generated** from `user-docs/` into `client/public/help/` (gitignored, never edit them) — and renders it with `ReactMarkdown` + `remark-gfm`, `rehype-slug` giving every heading a GitHub-style id. Default article: `DEFAULT_HELP_SLUG = 'getting-started'`.
+
+Links go through `help/HelpMarkdownLink.tsx` (parsing: the pure `parseHelpHref` in `help/help-links.ts`): `#anchor` scrolls inside the pane (missing id → no-op); `<slug>.md[#anchor]` with a known slug switches the article and then scrolls to the anchor or the top; an unknown slug only logs `console.warn('[help] unknown help page: …')`; `http(s):` / `mailto:` open in a new tab with a trailing ` ↗`.
 
 ---
 
-## Contexts
+## Contexts and models
 
-| Context | File | Provides |
-|---|---|---|
-| `AuthContext` | `context/AuthContext.tsx` | `user: UserProfile \| null`, `setUser` |
-
----
-
-## Models (`src/models/`)
-
-Type-only files mirroring API response shapes. Not imported by server code.
-
-| File | Types |
-|---|---|
-| `auth.ts` | `UserProfile` |
-| `teams.ts` | `Team`, `TeamMember`, `TeamRepository`, `Invitation` |
-| `repositories.ts` | `RepositoryContext`, `RepositorySession`, `RepositorySummary`, `BranchSummary`, `TimelineSession`, `WorkTimeBucket`, `RepoConfig`, `FileCategory` |
-| `admin.ts` | `AdminRepo`, `AdminTeam`, `AdminUser` |
-| `pricing.ts` | `ModelPricingEntry`, `ModelPricingMap` |
+`AuthContext` (`context/AuthContext.tsx`) provides `user: UserProfile | null` and `setUser` through
+`useAuth()`; it is the only React context. `src/models/` holds type-only mirrors of API response
+shapes, one file per area; server code never imports them.
 
 ---
 

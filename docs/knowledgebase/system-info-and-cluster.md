@@ -415,9 +415,8 @@ without provider plumbing. `workerStatsReporter` follows the same precedent.
 ## Admin Panel UI — System Info tab
 
 **Component:** `client/src/viewer/pages/admin/tabs/AdminSystemTab.tsx` — the first tab (`system-info`) in
-`AdminPage.tsx`. See `client-component-map.md` and
-`client-routing-and-layout.md` for the tab's place in the admin panel, and `client-component-map.md`'s
-`AdminSystemTab.tsx` entry for the exact card/tile layout.
+`AdminPage.tsx`. See `client-routing-and-layout.md` for the tab's place in the admin panel; the
+card/tile layout is in the component itself.
 
 - Polls `GET /api/v1/admin/system` via react-query with `refetchInterval: 10_000` (10 s auto-refresh).
 - Core card grid: Node Instances (actual/expected + status dot), Visible CPUs, Database (connected + ping),
