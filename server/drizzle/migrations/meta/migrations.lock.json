@@ -850,6 +850,16 @@
         "2058c4af9508ee84adca64d1c4a3f26584e35123624ade865e26112f51996629",
         "c2db4e9a382ca5db951035739fc09e86ef1a2c2e45051923182be1f4518e215c"
       ]
+    },
+    {
+      "idx": 84,
+      "tag": "0084_schema_comments",
+      "when": 1791763200000,
+      "sha256": "7792177a82ef2ca9247754ae87eba5f33de22785152f2f5f2e69ffa8469346e6",
+      "acceptedHashes": [
+        "655a5e91abaf86914069248a34626336f93c97cce6f3f1180df05171026fe14e",
+        "7792177a82ef2ca9247754ae87eba5f33de22785152f2f5f2e69ffa8469346e6"
+      ]
     }
   ]
 }

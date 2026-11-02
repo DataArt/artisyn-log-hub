@@ -1,11 +1,11 @@
 ---
 type: "Schema Reference"
 title: "DB Schema - Code Location and Structure"
-description: "Drizzle schema location, DI wiring, full table/enum reference, safe migration patterns (hand-written SQL, never `drizzle-kit generate`), and Drizzle limitations."
+description: "Drizzle schema location, DI wiring, how to add a table (hand-written SQL migration with COMMENT ON, then npm run db:state), never `drizzle-kit generate`, and Drizzle limitations."
 tags:
   - database
   - drizzle
-timestamp: "2026-08-04T19:40:00+04:00"
+timestamp: "2026-11-03T00:00:00+04:00"
 ---
 
 # DB Schema — Code Location and Structure
@@ -34,43 +34,17 @@ constructor(@Inject(DRIZZLE) private readonly db: DrizzleDb) {}
 
 ## What the schema file exports
 
-| Export | Kind | Notes |
-|---|---|---|
-| `userRoleEnum` | pgEnum | `'admin' \| 'user'` |
-| `users` | pgTable | Auth users |
-| `apiKeys` | pgTable | Per-user API keys |
-| `sessions` | pgTable | Session dedup table; stores `session_id` string + optional `parent_session_id` (true immediate parent session/agent, not always the root — see db-tables.md) + soft-delete flag |
-| `repositories` | pgTable | Per-user repo URLs |
-| `contexts` | pgTable | Key/value context pairs |
-| `logs` | pgTable | Central telemetry log table |
-| `logRepositories` | pgTable | Junction: logs ↔ repositories |
-| `logContexts` | pgTable | Junction: logs ↔ contexts |
-| `teams` | pgTable | |
-| `teamMembers` | pgTable | Junction: teams ↔ users |
-| `teamRepositories` | pgTable | Per-team repo URLs |
-| `invitations` | pgTable | Team invitations |
-| `modelPricing` | pgTable | Read-only reference table: per-model token pricing (USD) |
-| `deletedSessionLog` | pgTable | Audit log of soft-deleted sessions; written on deletion |
-| `sessionStats` | pgTable | Per-session pre-computed token / work-time / file-edit metrics |
-| `repoConfig` | pgTable | File-category config per repository, scoped to team or user |
-| `sessionFileStats` | pgTable | Per-session, per-category file-read statistics |
-| `userFavoriteSessions` | pgTable | Junction: users ↔ favorited sessions |
-| `userSettings` | pgTable | Generic per-user key/value settings: `(user_id, setting_name, setting_value)`, composite PK (migration `0062`). Domain-agnostic — the server never interprets a name or parses a value |
-| `uploadQueueStatusEnum` | pgEnum | `'pending' \| 'processing' \| 'partially_uploaded' \| 'failed'` (`partially_uploaded` added migration `0032`) |
-| `uploadQueue` | pgTable | Staging rows for the async `/api/v2/logs` upload path; extended with chunked-upload columns |
-| `uploadQueueMeasurements` | pgTable | Append-only per-attempt worker measurements (duration, queue latency, size, outcome) backing the admin Upload Queue stats block (migration `0059`); no FK on `sessionId`, pruned at `UPLOAD_QUEUE_MEASUREMENT_RETENTION_MS` |
-| `exportImportJobKindEnum` | pgEnum | `'export' \| 'import' \| 'staged_upload'` |
-| `exportImportJobStatusEnum` | pgEnum | `'staged' \| 'running' \| 'done' \| 'error'` |
-| `exportImportJobs` | pgTable | Background export/import/staged-upload jobs for the repository session export/import feature; `id` is app-generated, not serial |
-
-For column details and relationships see `db-tables.md`.
+The file exports every `pgTable` (57 today), the `pgEnum`s and the jsonb column types. For the
+current tables, columns, keys, indexes and per-table comments read the generated
+[`db_state.sql`](db_state.sql); for cross-table behaviour read [db-tables.md](db-tables.md).
 
 ## Adding or changing a table
 
 1. Edit `server/src/database/schema/index.ts`.
 2. **Hand-write** a new migration SQL file in `server/drizzle/migrations/` (pattern: `NNNN_<short-description>.sql`) and register it in `meta/_journal.json`. See "Do not run `drizzle-kit generate`" below — do not let it write this file for you.
 3. Run `npm run migrations:lock` (from `server/`) to append the new migration's row to `meta/migrations.lock.json`, then `npm run migrate` to apply. Never edit an already committed migration — the pre-commit hook, `npm run test:scripts` and the startup check (below) reject it.
-4. Update `db-tables.md` to reflect the new columns/tables.
+4. Give a new table a `COMMENT ON TABLE` (and non-obvious columns a `COMMENT ON COLUMN`) in the same migration.
+5. After the new migration is applied to the dev DB, follow the `db-state-update` skill (`.claude/skills/db-state-update/`): run `npm run db:state` and commit the regenerated `docs/knowledgebase/db_state.sql`; update `db-tables.md` only when a cross-table rule changes.
 
 Do **not** rely on Drizzle's `push` command in production — only SQL migration files are applied on startup.
 

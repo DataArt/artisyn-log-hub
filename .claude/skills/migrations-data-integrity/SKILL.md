@@ -11,6 +11,9 @@ Try to figure out possible edge cases in data and if it can break data
 
 Do this on implementation plan stage
 
+Once a new migration is applied to the local dev DB, follow the `db-state-update` skill: comment
+new tables / non-obvious columns with `COMMENT ON` and regenerate `docs/knowledgebase/db_state.sql`.
+
 ## Committed migrations are immutable
 
 Never edit, rename or delete a migration `.sql` file (or an existing `meta/_journal.json` entry)

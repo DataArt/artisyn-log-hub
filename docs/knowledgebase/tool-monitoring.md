@@ -251,7 +251,7 @@ Types: `server/src/logs/tool-monitoring/tool-monitoring.types.ts`, mirrored in
 ## Client: the Tools/MCP tab
 
 `client/src/viewer/pages/repository/tools/` — `RepoToolsTab.tsx`, main tab `tools` ("Tools/MCP",
-after Reports and before OKF, where `canSeeTeamWideTabs` allows). File-by-file:
+after Reports and before OKF, where `canSeeTeamWideTabs` allows). Folder-level map:
 [client-component-map.md](client-component-map.md).
 
 - Top bar (date range, status, search, scope chip, "Monitored tools (N)" — opens the settings'

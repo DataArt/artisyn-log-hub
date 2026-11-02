@@ -12,6 +12,7 @@
     "build:hooks-installer": "node scripts/build-hooks-installer.js",
     "build:help": "node scripts/user-docs/generate-help.js",
     "build:site": "node scripts/site/build-site.mjs",
+    "db:state": "node scripts/db-state.mjs",
     "build:client": "cd client && bun run build",
     "build:server": "ncc build server/src/main.ts -o dist",
     "build:copy:client": "copyfiles -u 2 \"client/dist/**/*\" dist/public",
