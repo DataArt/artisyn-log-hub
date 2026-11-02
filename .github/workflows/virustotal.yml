@@ -37,7 +37,7 @@ env:
 jobs:
   # Uploads `pr-meta` ({"pr": <n>, "sha": "<head sha>"}) for security-report.yml.
   pr-meta:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
       - name: Write pr-meta.json
@@ -61,7 +61,7 @@ jobs:
 
   # Builds the installer tarballs without any secret (Design Decision 6).
   build-kit:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -100,7 +100,7 @@ jobs:
     # Runs even when build-kit failed: the rows then become `error` rows ("no output").
     if: >-
       always()
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:
       contents: read
