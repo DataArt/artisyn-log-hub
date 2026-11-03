@@ -1,6 +1,6 @@
 # 2026-11-01: Session Map Tab (Realtime and Replay)
 
-**Status:** todo
+**Status:** done
 **Priority:** medium
 **Type:** feature
 **Module(s):** client, server
