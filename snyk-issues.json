@@ -3,15 +3,6 @@
   "snyk-oss/dev": [
     {
       "severity": "high",
-      "id": "SNYK-JS-PICOMATCH-21248802",
-      "title": "Regular Expression Denial of Service (ReDoS)",
-      "package": "picomatch",
-      "version": "4.0.7",
-      "fixedIn": [],
-      "project": "client/package.json"
-    },
-    {
-      "severity": "high",
       "id": "SNYK-JS-URIJS-19963963",
       "title": "Infinite loop",
       "package": "uri-js",
