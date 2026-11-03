@@ -4,10 +4,12 @@
  * Loads the worked examples of an algorithm doc so a table-driven test can run them.
  *
  * An algorithm doc lives at `docs/knowledgebase/algorithms/<name>.md` (format: that directory's
- * README.md). Its `## Examples` section holds exactly one fenced block tagged `examples`: a JSON
- * array of `{id, input, expected, note}` objects. The test does
- * `it.each(loadExamples('<name>'))`, so the numbers live only in the doc: editing a row changes
- * the test without touching test code, and changing the code without the doc breaks it.
+ * README.md); its rows live next to the KB, in `docs/algorithm-examples/<name>.json`: a JSON
+ * array of `{id, input, expected, note}` objects. They used to be a fenced ```examples block in
+ * the doc; they moved out so the KB an agent reads and greps holds the rules, not hundreds of KB
+ * of test data. The test does `it.each(loadExamples('<name>'))`, so the numbers live only in the
+ * rows file: editing a row changes the test without touching test code, and changing the code
+ * without the rows breaks it.
  *
  * Pure CommonJS on `fs`/`path` only, so all three runners can load it as-is:
  * - server jest (ts-jest): a plain `import`/`require` of this `.cjs` file. The jest transform only
@@ -16,17 +18,16 @@
  * - client vitest: `createRequire(import.meta.url)`.
  * - hook `node --test`: `require`.
  *
- * Every malformed doc throws with the file path in the message, so a broken table fails the test
- * loudly instead of turning into zero cases.
+ * Every malformed rows file throws with the file path in the message, so a broken table fails the
+ * test loudly instead of turning into zero cases.
  */
 
 const fs = require('fs');
 const path = require('path');
 
 const ALGORITHMS_REL = path.join('docs', 'knowledgebase', 'algorithms');
+const EXAMPLES_REL = path.join('docs', 'algorithm-examples');
 const NAME_RE = /^[a-z0-9][a-z0-9-]*$/;
-const EXAMPLES_HEADING_RE = /^##\s+Examples\s*$/;
-const ANY_SECTION_HEADING_RE = /^#{1,2}\s/;
 const FENCE_OPEN_RE = /^ {0,3}(`{3,}|~{3,})(.*)$/;
 
 /**
@@ -100,52 +101,40 @@ function scanFences(lines, source) {
   return fences;
 }
 
-function insideAnyFence(fences, lineIndex) {
-  return fences.some((f) => lineIndex > f.openLine && lineIndex < f.closeLine);
+/**
+ * Line numbers (1-based) of ```examples blocks left in an algorithm doc's markdown. Rows belong in
+ * the rows file; `scripts/__tests__/algo-docs.test.js` fails on any doc this returns lines for,
+ * so a doc from an older branch that still carries its table is caught instead of silently
+ * diverging from the rows file.
+ *
+ * @param {string} markdown the doc text (LF or CRLF)
+ * @param {string} [source] a label for error messages
+ * @returns {number[]}
+ */
+function findInlineExamplesBlocks(markdown, source) {
+  const lines = String(markdown).split(/\r?\n/);
+  return scanFences(lines, source || '<markdown>')
+    .filter((f) => f.info === 'examples')
+    .map((f) => f.openLine + 1);
 }
 
 /**
- * Parses the examples table of one algorithm doc's markdown text.
+ * Parses the rows of one rows file.
  *
- * @param {string} markdown the doc text (LF or CRLF)
- * @param {string} [source] a label for error messages, normally the doc path
- * @returns {{id: string, input: unknown, expected: unknown, note: string}[]} rows in doc order
+ * @param {string} json the rows file text
+ * @param {string} [source] a label for error messages, normally the rows file path
+ * @returns {{id: string, input: unknown, expected: unknown, note: string}[]} rows in file order
  */
-function parseExamples(markdown, source) {
-  const label = source || '<markdown>';
-  const lines = String(markdown).split(/\r?\n/);
-  const fences = scanFences(lines, label);
-
-  const examplesFences = fences.filter((f) => f.info === 'examples');
-  if (examplesFences.length === 0) {
-    throw new Error(`load-examples: ${label}: no \`\`\`examples block`);
-  }
-  if (examplesFences.length > 1) {
-    const at = examplesFences.map((f) => f.openLine + 1).join(', ');
-    throw new Error(`load-examples: ${label}: ${examplesFences.length} \`\`\`examples blocks (lines ${at}), expected exactly one`);
-  }
-  const block = examplesFences[0];
-
-  const headingLine = lastHeadingBefore(lines, fences, block.openLine);
-  if (headingLine === -1 || !EXAMPLES_HEADING_RE.test(lines[headingLine])) {
-    throw new Error(`load-examples: ${label}: the \`\`\`examples block (line ${block.openLine + 1}) is not under a "## Examples" heading`);
-  }
-
+function parseExamples(json, source) {
+  const label = source || '<rows>';
   let rows;
   try {
-    rows = JSON.parse(block.body);
+    rows = JSON.parse(json);
   } catch (err) {
-    throw new Error(`load-examples: ${label}: the \`\`\`examples block (line ${block.openLine + 1}) is not valid JSON: ${err.message}`);
+    throw new Error(`load-examples: ${label}: not valid JSON: ${err.message}`);
   }
   validateRows(rows, label);
   return rows;
-}
-
-function lastHeadingBefore(lines, fences, lineIndex) {
-  for (let i = lineIndex - 1; i >= 0; i--) {
-    if (ANY_SECTION_HEADING_RE.test(lines[i]) && !insideAnyFence(fences, i)) return i;
-  }
-  return -1;
 }
 
 function isPlainObject(v) {
@@ -154,10 +143,10 @@ function isPlainObject(v) {
 
 function validateRows(rows, label) {
   if (!Array.isArray(rows)) {
-    throw new Error(`load-examples: ${label}: the \`\`\`examples block must be a JSON array of rows`);
+    throw new Error(`load-examples: ${label}: must be a JSON array of rows`);
   }
   if (rows.length === 0) {
-    throw new Error(`load-examples: ${label}: the \`\`\`examples block has no rows`);
+    throw new Error(`load-examples: ${label}: has no rows`);
   }
   const seen = new Set();
   rows.forEach((row, i) => {
@@ -184,11 +173,11 @@ function validateRows(rows, label) {
 }
 
 /**
- * Loads the examples of `docs/knowledgebase/algorithms/<name>.md`.
+ * Loads the examples of algorithm doc `<name>` from `docs/algorithm-examples/<name>.json`.
  *
  * @param {string} name the doc slug, e.g. `change-surface-concentration`
  * @param {{root?: string}} [options] `root` overrides the repo root (tests use a temp dir)
- * @returns {{id: string, input: unknown, expected: unknown, note: string}[]} rows in doc order;
+ * @returns {{id: string, input: unknown, expected: unknown, note: string}[]} rows in file order;
  *   a fresh copy on every call, so a test may mutate its rows freely
  */
 function loadExamples(name, options) {
@@ -196,7 +185,7 @@ function loadExamples(name, options) {
     throw new Error(`load-examples: invalid doc name ${JSON.stringify(name)} (expected a slug like "cost-formula")`);
   }
   const root = (options && options.root) || findRepoRoot(__dirname);
-  const file = path.join(root, ALGORITHMS_REL, `${name}.md`);
+  const file = path.join(root, EXAMPLES_REL, `${name}.json`);
   let text;
   try {
     text = fs.readFileSync(file, 'utf8');
@@ -206,4 +195,4 @@ function loadExamples(name, options) {
   return parseExamples(text, file);
 }
 
-module.exports = { loadExamples, parseExamples, findRepoRoot };
+module.exports = { loadExamples, parseExamples, findInlineExamplesBlocks, findRepoRoot };

@@ -20,6 +20,8 @@ export const SESSION_TABS = [
   'usage',
   // Turn-End Cost Advisor result; hidden unless the session has an advisor result.
   'advisor',
+  // Live and replay map of the session tree: main session, workflow runs and agents over time.
+  'session-map',
   // --- transcript ---
   'logs',
   // Every Bash command of the session tree (main + sub-agents), one per row; always shown.
@@ -237,6 +239,15 @@ export const TAB_REGISTRY: readonly TabRow[] = [
     synonyms: ['advice', 'savings', 'issues', 'cost'],
     visible: hasAdvisorResult,
     gate: 'data',
+  },
+  {
+    scope: 'session',
+    id: 'session-map',
+    label: 'Session Map',
+    group: 'overview',
+    description:
+      'The main session, workflow runs and agents as cards, live or replayed over time.',
+    synonyms: ['map', 'agents map', 'live', 'replay'],
   },
   {
     scope: 'session',

@@ -4,7 +4,7 @@
  */
 
 /**
- * One row of an algorithm doc's ```examples block.
+ * One row of an algorithm doc's rows file `docs/algorithm-examples/<name>.json`.
  *
  * `I`/`E` type `input`/`expected` the way `JSON.parse` is typed: the loader checks the row
  * shape (`id`, `input`, `expected`, `note`), not the contents, so a test that names a shape
@@ -29,14 +29,17 @@ export interface LoadExamplesOptions {
   root?: string;
 }
 
-/** Loads the rows of `docs/knowledgebase/algorithms/<name>.md`, in doc order. Throws on any malformed doc. */
+/** Loads the rows of algorithm doc `<name>` from `docs/algorithm-examples/<name>.json`, in file order. Throws on any malformed rows file. */
 export function loadExamples<I = unknown, E = unknown>(
   name: string,
   options?: LoadExamplesOptions,
 ): AlgoExample<I, E>[];
 
-/** Parses the rows out of one doc's markdown text; `source` labels error messages. */
-export function parseExamples(markdown: string, source?: string): AlgoExample[];
+/** Parses the rows of one rows file's JSON text; `source` labels error messages. */
+export function parseExamples(json: string, source?: string): AlgoExample[];
+
+/** 1-based lines of ```examples blocks still inside a doc's markdown (there must be none). */
+export function findInlineExamplesBlocks(markdown: string, source?: string): number[];
 
 /** The repo root: first ancestor with `.git`, else first ancestor with `docs/knowledgebase/algorithms/`. */
 export function findRepoRoot(startDir?: string): string;

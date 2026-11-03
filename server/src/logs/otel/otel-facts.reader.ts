@@ -324,8 +324,45 @@ const NO_OTEL_STATUS_REPORT: OtelStatusReport = {
   costExcludesUtilityCalls: false,
 };
 
-function isRecent(at: Date | null, now: Date, ms: number): boolean {
+export function isRecent(at: Date | null, now: Date, ms: number): boolean {
   return at !== null && now.getTime() - at.getTime() <= ms;
+}
+
+/** A session's OTEL liveness — the one definition of `live` (session-map DD-9). */
+export interface OtelLiveness {
+  /** False when the session has no `otel_session_state` row. */
+  hasOtel: boolean;
+  /** Realtime or chunk activity within `OTEL_SESSION_ENDED_MS` of `now`. */
+  live: boolean;
+  /** ISO of the later of `rtLastAt` / `chunkLastAt`, or null when neither is set. */
+  lastActivityAt: string | null;
+}
+
+/**
+ * The liveness of a session from its state row (`null` = no OTEL data): live while either
+ * the realtime or the chunk stream was seen within `OTEL_SESSION_ENDED_MS`.
+ */
+export function computeOtelLiveness(
+  state: Pick<OtelStateRow, 'rtLastAt' | 'chunkLastAt'> | null,
+  now: Date,
+): OtelLiveness {
+  if (state === null) {
+    return { hasOtel: false, live: false, lastActivityAt: null };
+  }
+  const { rtLastAt, chunkLastAt } = state;
+  const last =
+    rtLastAt === null
+      ? chunkLastAt
+      : chunkLastAt === null || rtLastAt.getTime() >= chunkLastAt.getTime()
+        ? rtLastAt
+        : chunkLastAt;
+  return {
+    hasOtel: true,
+    live:
+      isRecent(rtLastAt, now, OTEL_SESSION_ENDED_MS) ||
+      isRecent(chunkLastAt, now, OTEL_SESSION_ENDED_MS),
+    lastActivityAt: last === null ? null : last.toISOString(),
+  };
 }
 
 /**
@@ -376,9 +413,7 @@ export function buildOtelSessionStatus(
     ...report,
     hasOtel: true,
     hasSpans: state.hasSpans,
-    live:
-      isRecent(rtLastAt, now, OTEL_SESSION_ENDED_MS) ||
-      isRecent(chunkLastAt, now, OTEL_SESSION_ENDED_MS),
+    live: computeOtelLiveness(state, now).live,
     slowUpdates,
     slowReason,
     otelHookVersion: state.otelHookVersion,

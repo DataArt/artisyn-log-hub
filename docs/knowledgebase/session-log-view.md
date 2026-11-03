@@ -1,11 +1,11 @@
 ---
 type: "Architecture Guide"
 title: "Session Log View"
-description: "Session log view (Logs tab): component architecture, log parser, tool-call core (sections, status, permission attribution), types, the shared tool view, Context Growth steps, the Bash tab, text extraction, and MCP handling."
+description: "Session log view (Logs tab): the /logs payload contract (agent- prefix rules, descendant loading, client-only types), the Workflow tool lifecycle in transcripts, log parser, tool-call core (sections, status, permission attribution), the shared tool view, Context Growth steps, the Bash tab, text extraction, and MCP handling."
 tags:
   - client
   - logs
-timestamp: "2026-10-29T00:00:00+04:00"
+timestamp: "2026-11-03T00:00:00+04:00"
 ---
 
 # Session Log View
@@ -33,6 +33,7 @@ Key files live in `client/src/viewer/pages/repository/session-log/`:
 | `tool-call-view/` | The shared tool view (`ToolCallView`, `ToolViewProvider` / `useToolView`, `StatusBadge` / `StatusMark`, `ToolOutputBlock`, `BashCommandView`, `tool-bodies.tsx`, `useBashView`) used by the Logs modal, `SubAgentDetail`, the Context Growth step modal and the Bash tab |
 | `ToolCallDetailModal.tsx` | Modal shell for one tool call: `Dialog` + `ToolCallView` (header with badges, a body per tool, the output block) |
 | `prompt-turn-helpers.tsx` | Extracted helper components: `ToolCallRow`, `FileRow` (status mark, clickable when it has a call), `ImageRow`, `SectionHeader`, summary builders |
+| `session-map/` | The Session Map tab (`session-map`): its own delta poll (`GET …/logs/delta`), merge, `parseSessionLogs` + map model, cards, side panel and timeline — see [Session Map Tab](session-map.md) |
 | `bash-tab/` | The session Bash tab: `collectBashCalls`, `SessionBashTab`, `BashCallList`, `useBashCallParam` — see [Bash tab](#bash-tab) |
 | `SubAgentNode.tsx` | Collapsible sub-agent node for the turn-level Sub-agents section (supports arbitrary nesting depth); trigger + `children` recursion, the body is `SubAgentDetail` |
 | `SubAgentDetail.tsx` | Sub-agent detail body of `SubAgentNode` — prompt (200-char collapse), model, tokens + cost tooltip, duration, Skills, Rules, Tools (`ToolCallDetailModal`), Files |
@@ -56,7 +57,7 @@ Key files live in `client/src/viewer/pages/repository/session-log/`:
 ### Deep links into the Logs tab
 
 The Logs tab can be opened scrolled to one turn. Two sources feed the same transient target-turn
-state, which `SessionDetailPane.tsx` owns (`targetTurnIndex`, `onGoToTurn`) and `SessionLogView`
+state, which `SessionTabContent.tsx` owns (`targetTurnIndex`, `onGoToTurn`) and `SessionLogView`
 consumes once (scroll via `resolveTurnAnchor`, then `onTargetTurnConsumed`, so a later manual visit
 does not re-scroll):
 
@@ -73,26 +74,72 @@ does not re-scroll):
   not re-scroll. An unknown id just opens the Logs tab at the top. An `indirect` wrapper call without
   a `toolUseId` links to the session without `tu`.
 
+### The `/logs` payload contract
+
+`GET /api/v1/repositories/:repoId/sessions/:sessionId/logs` is `getSessionLogs` in
+`server/src/logs/repositories.controller.ts`. The server writes the body as a **hand-concatenated
+JSON string** (log bodies are spliced in as text, never parsed), so there is no server-side
+response type to grep. The named types live only on the client: `SessionLogsData` and
+`SubagentStats` in `client/src/viewer/api.ts` (the parser's narrower view is `SubagentStatEntry`
+in `log-parser.ts`). `WorkflowRun` is the exception: declared in
+`server/src/logs/workflow-extractor.ts` and mirrored by hand in `client/src/models/workflows.ts`.
+
+- **`main`** = the session's `artisyn` body spliced **before** its `claude` body (one array, artisyn
+  lines first). No `claude` row → 404; a null body → 422.
+- **Descendants** (`subagents`): every session below the root at any depth
+  (`getDescendantSessionIds`), each `LEFT JOIN`ed only to its `claude-subagent` log row. A
+  descendant without that row is dropped from `subagents` but still feeds the workflow linkage;
+  `subagentStats` (`selectSubagentStats`) has its own guard — a `session_stats` row plus some
+  transcript row, so an OTEL-only node is left out. A descendant's `claude` rows are never read. `parentSessionId` is the
+  DB-authoritative immediate parent (`sessions.parent_session_id`) — the only reliable nesting
+  source beyond depth 1 (see "Sub-agent nesting").
+- **`agent-` prefix rules.** Server-side ids are `sessions.session_id`, so `subagents[].sessionId`,
+  `parentSessionId` (unless it is the root), every `subagentStats` key and every
+  `workflows[].agentSessionIds` entry carry the `agent-` prefix. The client maps (`subagentLogsMap`,
+  `agentParentMap`, `turn.agentActivations[].agentId`, the `subagentLogs` option of
+  `parseSessionLogs`) are keyed by the **bare** id — strip the prefix when building them, re-add it
+  when looking up `subagentStats` (`subagentStats['agent-' + id]`). A row whose id lacks the prefix
+  (the legacy workflow `journal` upload) is ignored by the workflow linkage.
+- **`workflows`** come from the root's `claude` body only (`extractWorkflows`), then
+  `resolveWorkflowAgentLinkage` (`server/src/logs/workflow-linkage.ts`) fills `agentSessionIds` from
+  `sessions.workflow_run_id` + `parent_session_id`. See "Workflow tool lifecycle" below.
+- **`harnessSnapshot`** is loaded by the artisyn log **owner**, not the viewer (see "Special log
+  event fields").
+- Adding a field: extend the string in `getSessionLogs` and `SessionLogsData`; keep it optional on
+  the client if older cached responses may lack it.
+
+### Workflow tool lifecycle in transcripts
+
+How a `Workflow` tool call becomes a `WorkflowRun` (`extractWorkflows`,
+`server/src/logs/workflow-extractor.ts`):
+
+1. **Call** — an assistant `tool_use` block with `name: "Workflow"` and an `id`. Its input names the
+   workflow by `name` or by `scriptPath`.
+2. **Launch result** — the matching `tool_result` on a `user` line. A launched call returns at once
+   with `toolUseResult.workflowName`. A call **rejected before launch** (input validation, unknown
+   script …) has `is_error: true` and its text wrapped in `<tool_use_error>`; it never gets a
+   notification, so it must be shown as **failed** with that text as the summary — reading only
+   notifications left such runs "running" forever.
+3. **Completion** — a `queue-operation` line with `operation: "enqueue"` whose `content` is a
+   `<task-notification>` (`<tool-use-id>`, `<status>`, `<usage>` as JSON or XML, `<result>` JSON
+   that may be truncated, `<diagnostics>` carrying the `wf_…` run id). It can arrive long after the
+   turn, and never if the session ends first.
+
+Status: notification `completed` / `failed` wins; without one, `failed` when the launch result is
+an error, else `running`. Name: input `name`, else `workflowName` from the launch result, else the
+`scriptPath` basename. `wfId` comes only from the notification, so a running or rejected run has no
+`agentSessionIds`. The session-list flag `has_workflow` counts the `tool_use` alone, so a session
+whose only Workflow call was rejected still has the flag
+([algorithms/session-list-flags.md](algorithms/session-list-flags.md)).
+
 ---
 
 ## Log Parser (`log-parser.ts`)
 
 ### Entry point
 
-```ts
-parseSessionLogs(
-  raw: Record<string, unknown>[],
-  options?: {
-    isSubagent?: boolean;
-    repoRoot?: string;
-    repoConfig?: RepoConfig | null;
-    subagentStats?: Record<string, SubagentStatEntry>;
-    workflows?: WorkflowRun[]; // NEW — from SessionLogsData.workflows; attached to turns by toolUseId
-  }
-): ParsedSession
-```
-
-`WorkflowRun` is imported from `client/src/models/workflows.ts` — not re-declared in `types.ts`.
+`parseSessionLogs(raw, options)` — read the options type in `log-parser.ts`; the inputs that come
+from `/logs` are described in "The `/logs` payload contract" above.
 
 - Filters non-object entries (null, strings, numbers) — silently skipped.
 - Builds a `uuid → event` index and a `parentUuid → [childUuid[]]` map.
@@ -211,8 +258,8 @@ Sub-agents absent from the completion map fall back to `subagentStats` (from `se
 carries inline `usage`. Only when neither source has data are `tokens`/`durationMs` left undefined; `durationMs`
 has no fallback and is always sourced from `completionMap` only.
 
-The turn-level "main" `tokenBreakdown`'s own `session_stats` fallback fold (`log-parser.ts:1719`,
-just after `workflowAgentIds` is built at `log-parser.ts:1541`) is explicitly restricted to agent
+The turn-level "main" `tokenBreakdown`'s own `session_stats` fallback fold (`log-parser.ts`,
+after `workflowAgentIds` is built) is explicitly restricted to agent
 ids present in `workflowAgentIds` — a `Set` built once per session parse from
 `workflows[].agentSessionIds` (stripped of the `agent-` prefix) — **not** to any agent whose inline
 `toolUseResult.usage` happens to be null. Prior to this fix the guard only checked for a missing
@@ -234,7 +281,7 @@ descendant sources per turn-level `agentActivation`, in order of decreasing reli
    `SessionLogView.tsx` builds `agentParentMap: Map<agentId, parentAgentId | null>` directly from
    `logsData.subagents[].parentSessionId` (both stripped of any `agent-` prefix) — this field comes
    from `sessions.parent_session_id` via the `/logs` endpoint (added specifically for this; see
-   `api-reference.md`'s `SubagentLog.parentSessionId`) and is threaded down through
+   "The `/logs` payload contract" above) and is threaded down through
    `PromptTurnList` to `PromptTurnItem`. Since it reflects the DB linkage (Chunks 1-2's fix), it is
    correct at any depth regardless of what transcript content does or doesn't contain.
 2. `collectDescendantAgentIds` — walks each agent's own transcript for `Agent` tool_use +
@@ -293,18 +340,9 @@ Research (2026-10-21, Claude Code on Windows), kept for the case the decision is
 Decision: none of these is implemented. A `claude -p` run is its own session and its cost is **not**
 rolled into the launching session's tree (see `session-metrics-scope.md`).
 
-### Exported utility functions
-
-| Function | Purpose |
-|---|---|
-| `formatDuration(ms)` | `h:mm:ss` string |
-| `formatWorkflowDuration(ms)` | `"Xm Ys"` when ≥60 s, `"Xs"` when <60 s — used in workflow badges |
-| `formatInt(n)` | `toLocaleString()` |
-| `formatTimestamp(ts)` | ISO string → `YYYY-MM-DD HH:mm:ss`; `'—'` if absent |
-| `formatBytes(bytes)` | Human-readable file size (B / KB / MB) |
-| `formatCompact(n)` | Compact number (K / M suffix) |
-| `getPromptText(turn)` | Joins all `type=text` blocks (string content is instead reconstructed from `<command-name>`/`<command-args>` for slash commands) |
-| `stripSystemBlocks(text)` | Removes Claude Code system XML blocks from prompt text |
+The display formatters (`formatDuration`, `formatTimestamp`, `formatCompact` …) and
+`getPromptText` / `stripSystemBlocks` are exported from `log-parser.ts` — reuse them rather than
+writing a new formatter in a component.
 
 ---
 
@@ -389,26 +427,18 @@ permission event belongs to. Nothing else in the client hard-codes tool names fo
 
 ## Types (`types.ts`)
 
-Key types:
+Read the fields in `types.ts`; only the rules a field list does not show are kept here:
 
-- `TelemetryEvent` — union of `UserEvent | AssistantEvent | SystemTurnDurationEvent | SystemCompactBoundaryEvent | ProgressAgentEvent | BaseEvent`
-- `PromptTurn` — one user prompt with `workTimeMs`, `tokenBreakdown`, `ownTokenBreakdown: TokenBreakdown | null` (main-session assistant events only — see above), `contextTokens`, `contextTokensStart`, `assistantSteps: AssistantStep[]`, `skills`, `files`, `subAgents`, `agentActivations`, `allToolCalls: ToolCallDetail[]` (every call, the source of the derived lists), `toolCalls: ToolCallDetail[]` (section `'tool'` only), `rulesInjected`, `linesChanged`, `workflows?: WorkflowRun[]`
-- `ToolCallDetail` — `id?`, `name`, `input`, `section: ToolSection` (`'file' | 'skill' | 'agent' | 'tool'`), `result?`, `status: ToolCallStatus` (`'success' | 'error' | 'rejected' | 'missing'`), `startedAt?`, `endedAt?`, `durationMs?`, `interrupted?: true`, `denialKind?`, `permissionRequested?`, `permissionDenied?`
-- `AssistantStep` (exported) — `contextTokens`, `text`, `stopReason`, `timestamp`, and the parallel arrays `toolCallNames` / `toolCallSummaries` / `toolCallInputs` / `toolCallIds` over the step's named `tool_use` blocks
-- `TokenBreakdown` — `input`, `output`, `cacheRead`, `cacheWrite`, plus the required TTL split `cacheWrite5m` / `cacheWrite1h` and the required `webSearchRequests` / `inputFast` / `outputFast` (the fast pair are subsets of `input` / `output`, see above)
-- `TokenUsage` — the raw on-wire shape; carries the optional `cache_creation?: { ephemeral_5m_input_tokens?, ephemeral_1h_input_tokens? }` object the TTL split reads, plus `server_tool_use?: { web_search_requests?: number }` and `speed?: 'standard' | 'fast'`
-- `WorkflowRun` — re-exported from `client/src/models/workflows.ts`; attached to `PromptTurn.workflows` by log parser during post-turn pass
-- `SessionSummary` — session-wide aggregates: `promptCount`, `totalTokens`, `tokenBreakdown`, `totalWorkTimeMs`, `maxContextTokens`, `skillsUsed`, `fileStats`, `linesChanged`, `model?`, `claudeMd?`, `deferredTools: string[]` (tool names announced via `deferred_tools_delta` events)
-- `FileAccess` — `path`, `tool`, `accessCount` (1-based), `category: string` (free-form, from `resolveFileCategory`/`RepoConfig`; default config yields `'knowledgebase'`, `'docs'`, or fallback `'code'` — not a fixed `'code'|'doc'` union), `globMatchCount?`, `bytes?`, `estTokens?` (both absent unless the Read succeeded), `toolUseId?`, `status?`, `error?` (first result line, ≤ 200 chars, only when status ≠ success)
-- `SkillDefinition` — `name`, `description`, `argumentHint?`, `body`, `path`, `bytes`, `source: 'project'|'user'|'plugin'|'org-synced'`, `plugin?`
-- `SkillInvocation` — `name`, `isDuplicate`, `path?`, `bytes?`, `estTokens?`, `definition?: SkillDefinition` (resolved post-parse), `toolUseId?`, `status?` (of the `Skill` call)
-- `SubAgentNode` — `agentId`, `prompt`, `model?`, `tokens?`, `durationMs?`, `toolUseID?`, `parentToolUseID?`, `allToolCalls?` (deduped by id; the source of its `toolCalls` / `files` / `skills`), `children: SubAgentNode[]`
-- `AgentActivation` — `toolUseId?` (the `Agent` call), `agentId`, `description?`, `prompt`, `resultText?`, `tokens?`, `totalTokens?`, `durationMs?`
-- `RuleInjection` — `name`, `path?`, `bytes?`, `estTokens?`
-- `ClaudeMdFile` — `path`, `bytes`, `role?: 'claude-md'|'local-md'|'rule'` (classified by parser; absent = `'claude-md'` for old sessions)
-- `ClaudeMdContext` — `totalBytes`, `estTokens`, `files: ClaudeMdFile[]`
-- `SessionSummary` — additionally carries `skillDefinitions?: Map<string, SkillDefinition>` (optional; absent without a harness snapshot). The former `visibleSkills` / `visibleAgents` / `agentDefinitions` / `mcpConfig` fields were removed together with the System Context panel, their only reader
-- `ParsedSession` includes `mcpCalls: Record<string, number>` — map of `mcp__<server>__<tool>` names → invocation count, accumulated from `tool_use` blocks across all assistant events; `repoRoot: string` (display-only repo root, see [Tool calls](#tool-calls-tool-callsts-tool-outcomets)); `unattributedPermissionEvents: number` (diagnostics)
+- `WorkflowRun` is not declared in `types.ts`: it is re-exported from
+  `client/src/models/workflows.ts` (a hand mirror of the server type, see the `/logs` contract).
+- `PromptTurn.allToolCalls` is the source; `toolCalls`, `files`, `skills` are derived from it
+  (see [Tool calls](#tool-calls-tool-callsts-tool-outcomets)).
+- `TokenBreakdown`'s TTL split and fast / web-search fields are **required** on purpose (see
+  "Token counting rules").
+- `FileAccess.category` is a free-form string from `resolveFileCategory` / `RepoConfig`, not a fixed
+  union; `bytes` / `estTokens` exist only for a successful Read.
+- `ClaudeMdFile.role` absent means `'claude-md'` (old sessions).
+- `SessionSummary.skillDefinitions` is absent without a harness snapshot.
 
 ---
 
@@ -496,12 +526,8 @@ Prompt text in `type=user` events may contain XML-like system blocks injected by
 
 > There used to be a separate `<ide_opened_file>` extraction step (`extractIdeOpenedFiles()` / `IdeOpenedFile` in `prompt-turn-helpers.tsx`, `stripIdeContext()` in `session-list-helpers.tsx`) that pulled IDE-opened-file mentions out of the prompt text and rendered them as filename badges. That code no longer exists anywhere in `client/src/` — it was removed with no replacement. IDE-opened-file text is no longer specially extracted or badged; it is only affected by the generic stripping described below.
 
-### Functions (all in `prompt-turn-helpers.tsx` unless noted)
-
-| Function | File | Purpose |
-|---|---|---|
-| `stripSystemBlocks(text)` | `log-parser.ts` | Removes Claude Code system XML blocks (e.g. `<system>`, `<context>`) from the raw text. Used first in `PromptTurnItem` before any further stripping. |
-| `cleanText(text)` | `prompt-turn-helpers.tsx` | Calls `stripSystemBlocks`, then removes all remaining `<tag>` patterns and collapses whitespace. Used for the one-line collapsed preview in `PromptTurnItem`. |
+`stripSystemBlocks` (`log-parser.ts`) removes Claude Code system XML blocks; `cleanText`
+(`prompt-turn-helpers.tsx`) additionally strips every remaining `<tag>` and collapses whitespace.
 
 ### Rendering in `PromptTurnItem`
 

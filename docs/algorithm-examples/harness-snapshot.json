@@ -1,0 +1,217 @@
+[
+  {
+    "id": "HS-01",
+    "kind": "catalog",
+    "input": {
+      "tree": {
+        "plugin:v1/skills/foo/SKILL.md": "---\nname: foo-old\n---\nOld body",
+        "plugin:v2/skills/foo/SKILL.md": "---\nname: foo\n---\nNew body"
+      },
+      "settings": { "project": { "enabledPlugins": { "demo@mp": true } } },
+      "installedPlugins": { "demo@mp": [{ "scope": "user", "installPath": "v2", "version": "2.0.0" }] }
+    },
+    "expected": {
+      "present": [{ "name": "demo:foo", "kind": "skill", "source": "plugin" }],
+      "absentNames": ["demo:foo-old"]
+    },
+    "note": "Rule 3 resolves demo@mp to the single installed_plugins record, installPath v2; rule 4 scans only that path, so the stray v1 copy on disk (no record points at it) contributes nothing: demo:foo is present, demo:foo-old is not."
+  },
+  {
+    "id": "HS-02",
+    "kind": "catalog",
+    "input": {
+      "tree": { "plugin:v1/skills/foo/SKILL.md": "---\nname: foo\n---\nBody" },
+      "settings": {
+        "user": { "enabledPlugins": { "demo@mp": true } },
+        "local": { "enabledPlugins": { "demo@mp": false } }
+      },
+      "installedPlugins": { "demo@mp": [{ "scope": "user", "installPath": "v1" }] }
+    },
+    "expected": { "absentNames": ["demo:foo"] },
+    "note": "Rule 2 merges user, then project (absent), then local; local's false for the same key overwrites the user-level true, so the plugin never reaches rule 3 and demo:foo is absent."
+  },
+  {
+    "id": "HS-03",
+    "kind": "catalog",
+    "input": {
+      "tree": { "plugin:v1/skills/foo/SKILL.md": "---\nname: foo\n---\nBody" },
+      "settings": { "project": { "enabledPlugins": { "demo@mp": true } } },
+      "installedPlugins": { "demo@mp": [{ "scope": "project", "projectPath": "foreign", "installPath": "v1" }] }
+    },
+    "expected": { "absentNames": ["demo:foo"], "logContains": "demo@mp" },
+    "note": "The only record is scope project but its projectPath normalises to an unrelated directory, not the project root or cwd, so rule 3 finds no match: the plugin is skipped and the skip line is logged."
+  },
+  {
+    "id": "HS-04",
+    "kind": "catalog",
+    "input": {
+      "tree": { "plugin:v1/workflows/sample.js": "const meta = {\n  name: 'demo-workflow',\n  description: 'Sample workflow',\n};\nmodule.exports = { meta };\n" },
+      "settings": { "project": { "enabledPlugins": { "demo@mp": true } } },
+      "installedPlugins": { "demo@mp": [{ "scope": "user", "installPath": "v1", "version": "1.2.0" }] }
+    },
+    "expected": { "present": [{ "name": "demo:demo-workflow", "kind": "workflow", "source": "plugin" }] },
+    "note": "Rule 1's meta regex reads name demo-workflow from the un-executed file text; the manifest is absent so the plugin name falls back to the id part demo, giving demo:demo-workflow."
+  },
+  {
+    "id": "HS-05",
+    "kind": "catalog",
+    "input": { "tree": { ".claude/commands/x.md": "---\ndescription: test command\n---\nBody text" } },
+    "expected": { "present": [{ "name": "x", "kind": "command", "source": "project", "path": ".claude/commands/x.md" }] },
+    "note": "Rule 1: a command's name is always its file basename; the frontmatter here has no name field anyway, so x is the name regardless, at its project-relative path."
+  },
+  {
+    "id": "HS-06",
+    "kind": "catalog",
+    "input": {
+      "tree": {},
+      "settings": { "project": { "enabledPlugins": { "ghost@mp": true } } },
+      "installedPlugins": {}
+    },
+    "expected": { "logContains": "ghost@mp enabled but not installed for this project — skipped" },
+    "note": "ghost@mp has no installed_plugins.json record at all (empty map), so rule 3's record list is empty and nothing matches: the skip line names ghost@mp exactly as rule 3 specifies."
+  },
+  {
+    "id": "HS-07",
+    "kind": "compare",
+    "input": {
+      "before": { "tree": { ".claude/skills/foo/SKILL.md": "---\nname: foo\n---\nHello" }, "mtimeOverride": { ".claude/skills/foo/SKILL.md": 1577836800000 } },
+      "after": { "tree": { ".claude/skills/foo/SKILL.md": "---\nname: foo\n---\nHello" }, "mtimeOverride": { ".claude/skills/foo/SKILL.md": 1735689600000 } }
+    },
+    "expected": { "sameId": true },
+    "note": "Rule 6/8: identical content gives the identical contentHash regardless of the forced mtime (2020 vs. 2025), so the two canon.skills tuples match and the ids are equal."
+  },
+  {
+    "id": "HS-08",
+    "kind": "compare",
+    "input": {
+      "before": { "tree": { ".claude/skills/foo/SKILL.md": "---\nname: foo\n---\nHello" }, "mtimeOverride": { ".claude/skills/foo/SKILL.md": 1577836800000 } },
+      "after": { "tree": { ".claude/skills/foo/SKILL.md": "---\nname: foo\n---\nHello world" }, "mtimeOverride": { ".claude/skills/foo/SKILL.md": 1577836800000 } }
+    },
+    "expected": { "sameId": false },
+    "note": "Rule 6/8: the forced mtime is identical in both trees, but the text differs, so contentHash differs and the ids differ — mtime never masks a real content change."
+  },
+  {
+    "id": "HS-09",
+    "kind": "probe",
+    "input": {
+      "tree": { ".mcp.json": "{\"mcpServers\":{\"demo\":{\"command\":\"node\",\"args\":[\"server.js\"]}}}" },
+      "probeServerName": "demo",
+      "probeFields": { "connected": true, "tools": [{ "name": "ping", "schemaSizeTokens": 12 }] }
+    },
+    "expected": { "sameId": true },
+    "note": "Rule 7's mcp tuple is [name, command, args, url, configSource] only; rule 8 excludes connected/tools, so attaching them to the demo entry after the static read leaves canon.mcp, and the id, unchanged."
+  },
+  {
+    "id": "HS-10",
+    "kind": "compare",
+    "input": {
+      "before": { "tree": { ".mcp.json": "{\"mcpServers\":{\"demo\":{\"command\":\"node\",\"args\":[\"server.js\"]}}}" } },
+      "after": { "tree": { ".mcp.json": "{\"mcpServers\":{\"demo\":{\"command\":\"node\",\"args\":[\"server-v2.js\"]}}}" } }
+    },
+    "expected": { "sameId": false },
+    "note": "Rule 7: args is part of the mcp tuple, so a real static-config change (server.js to server-v2.js) changes canon.mcp and the id, unlike the probe-only change in HS-09."
+  },
+  {
+    "id": "HS-11",
+    "kind": "catalog",
+    "input": { "tree": { "user:skills/bar/SKILL.md": "No frontmatter, just a body." } },
+    "expected": { "present": [{ "name": "bar", "kind": "skill", "source": "user", "path": "~/.claude/skills/bar/SKILL.md" }] },
+    "note": "No project skills dir exists, so the user-level entry is read; it has no frontmatter name, so rule 1's directory-name fallback gives bar; rule 6 writes the path as the literal ~/.claude/skills/bar/SKILL.md, never the real CLAUDE_CONFIG_DIR used to run the test."
+  },
+  {
+    "id": "HS-12",
+    "kind": "catalog",
+    "input": {
+      "tree": {
+        ".claude/skills/dup/SKILL.md": "---\nname: dup\n---\nProject body",
+        "user:skills/dup/SKILL.md": "---\nname: dup\n---\nUser body"
+      }
+    },
+    "expected": {
+      "present": [{ "name": "dup", "kind": "skill", "source": "project", "path": ".claude/skills/dup/SKILL.md" }],
+      "exactlyOne": ["dup"]
+    },
+    "note": "Rule 5: project and user both define a skill named dup; only the project one survives, so dup appears exactly once and it is the project entry at its project-relative path."
+  },
+  {
+    "id": "HS-13",
+    "kind": "git",
+    "input": {
+      "tree": {
+        "CLAUDE.md": "# Project\n",
+        "CLAUDE.local.md": "# Local\n",
+        ".claude/skills/hello/SKILL.md": "---\nname: hello\n---\nHello",
+        ".claude/skills/shipped/SKILL.md": "---\nname: shipped\n---\nShipped",
+        ".claude/agents/rev/AGENT.md": "---\nname: rev\n---\nReview",
+        "user:skills/bar/SKILL.md": "---\nname: bar\n---\nUser",
+        "../CLAUDE.md": "# Parent\n"
+      },
+      "gitAdd": ["CLAUDE.md", ".claude/skills/shipped/SKILL.md", ".claude/agents/rev/AGENT.md"],
+      "gitignore": ["CLAUDE.local.md"]
+    },
+    "expected": {
+      "statuses": {
+        "CLAUDE.md": "tracked",
+        "CLAUDE.local.md": "ignored",
+        ".claude/skills/hello/SKILL.md": "untracked",
+        ".claude/skills/shipped/SKILL.md": "tracked",
+        ".claude/agents/rev/AGENT.md": "tracked",
+        "~/.claude/skills/bar/SKILL.md": "outside-repo",
+        "../CLAUDE.md": "outside-repo"
+      }
+    },
+    "note": "Rule 9: the user skill and the ../ context file are outside-repo without asking git. Rule 10: ls-files returns the three git-added paths (tracked); check-ignore over the other two returns CLAUDE.local.md (ignored) and leaves the hello skill untracked."
+  },
+  {
+    "id": "HS-14",
+    "kind": "git",
+    "input": {
+      "git": false,
+      "tree": {
+        "CLAUDE.md": "# Hi\n",
+        ".claude/skills/hello/SKILL.md": "---\nname: hello\n---\nHello"
+      }
+    },
+    "expected": {
+      "statuses": { "CLAUDE.md": null, ".claude/skills/hello/SKILL.md": null },
+      "snapshotId": "57a1bdff8f18063521ee9a0936ac389fcc877ac41a87aee893e0aa838bebf223"
+    },
+    "note": "Rule 11: ls-files fails outside a repository, so no entry gets a gitStatus. Rule 7: with no gitStatus the tuples are the old ones, and the id equals sha256 of {v:1, skills:[[hello, project, '', <hash>]], agents:[], mcp:[], context:[[CLAUDE.md, <hash>]]} — the id an older hook computed for the same files."
+  },
+  {
+    "id": "HS-15",
+    "kind": "git",
+    "input": {
+      "before": { "tree": { "CLAUDE.md": "# Hi\n" }, "gitAdd": ["CLAUDE.md"] },
+      "after": { "tree": { "CLAUDE.md": "# Hi\n" } }
+    },
+    "expected": { "sameId": false },
+    "note": "Rule 7: same content and path, but the context tuple ends in tracked in one snapshot and untracked in the other, so the ids differ."
+  },
+  {
+    "id": "HS-16",
+    "kind": "git",
+    "input": { "tree": { "user:skills/bar/SKILL.md": "---\nname: bar\n---\nUser" } },
+    "expected": { "statuses": { "~/.claude/skills/bar/SKILL.md": "outside-repo" } },
+    "note": "Rule 10: there is no in-root candidate, so process 1 is the rev-parse repo probe; it succeeds in the git-init project, and the user skill is marked outside-repo."
+  },
+  {
+    "id": "HS-17",
+    "kind": "catalog",
+    "input": {
+      "tree": {
+        "user:skills/synced/acme-org/greet/SKILL.md": "---\nname: greet\ndescription: Say hello\n---\nSecret org body",
+        "user:skills/synced/acme-org/dup/SKILL.md": "---\nname: dup\n---\nOrg dup body",
+        ".claude/skills/dup/SKILL.md": "---\nname: dup\n---\nProject dup body"
+      }
+    },
+    "expected": {
+      "present": [
+        { "name": "greet", "kind": "skill", "source": "org-synced", "path": "~/.claude/skills/synced/<org>/greet/SKILL.md", "body": "", "description": "Say hello" },
+        { "name": "dup", "kind": "skill", "source": "project", "path": ".claude/skills/dup/SKILL.md" }
+      ],
+      "exactlyOne": ["greet", "dup"]
+    },
+    "note": "Rule 5a: greet under synced/acme-org becomes an org-synced entry with the bare name, an empty body (description is still read) and, per rule 6, the org folder masked as the literal <org>. The org-synced dup collides with the project dup and is skipped, so dup appears once, as the project entry. The user scan finds no synced/SKILL.md and adds nothing."
+  }
+]

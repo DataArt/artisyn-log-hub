@@ -4,7 +4,7 @@ title: Scenario suite (isolated stand, Playwright)
 description: npm run test:scenarios — builds an isolated stand into tmp/scenarios/stand, runs it per auth mode (A none, B password-confirm, C password) on its own port and scn_* schema, drives it with Playwright through shared fixtures and helpers, and proves the dev DB and server/src/public/static stayed untouched.
 resource: scripts/scenarios/run.mjs
 tags: [testing, scenarios, playwright, stand, e2e, fixtures]
-timestamp: 2026-10-15T00:00:00Z
+timestamp: 2026-11-03T00:00:00Z
 ---
 
 The scenario suite replaces the dev-server e2e suite ([e2e-tests.md](./e2e-tests.md)) step by
@@ -22,8 +22,8 @@ npm run test:scenarios -- --mode b --grep S-AUTH-01 --skip-build
 ```
 
 Flags (`scripts/scenarios/run.mjs` `parseArgs`): `--mode a,b,c`, `--grep <re>`, `--skip-build`,
-`--only <steps>`. Steps: `scenarios` and `contract` (both by default); `corpus` is planned and
-asking for it is a usage error (exit 2). `contract` runs `npm run test:contract` in `server/` after
+`--only <steps>`. Steps: `AVAILABLE_STEPS` in `run.mjs` — `scenarios`, `corpus` and `contract`
+(all by default; `corpus` is described below). `contract` runs `npm run test:contract` in `server/` after
 the modes with the runner's `DATABASE_URL` ([contract-tests.md](./contract-tests.md)); `--only
 contract` skips the stand build and the Mailpit/browser preflight. Around the contract step
 `server/src/public/static` is compared by content only (`contentDrift`): booting `AppModule`
@@ -41,7 +41,8 @@ neither variable is usually set.
 
 Health checks: `scenarios-a`, `scenarios-b`, `scenarios-c` in
 `.claude/repo_config/repo-health-checks.json` (`npm run test:scenarios -- --mode <x> --only
-scenarios`, for mode A `--only scenarios,corpus`, group `app`, 600 s, `finalOnly`). The `corpus`
+scenarios`, for mode A `--only scenarios,corpus`, group `app`, `finalOnly`; each check's timeout
+is its `timeoutSeconds` in that file). The `corpus`
 step (Playwright project `corpus`, `tests/scenarios/corpus/corpus.spec.ts`, S-CORPUS-01…05) replays
 the session corpus of `tests/corpus/` (see its README; the sets are gitignored and recorded
 locally with `npm run corpus:bootstrap`, without one the step's tests skip) and always runs on the mode-A stand: in the
@@ -98,12 +99,13 @@ The input hash covers every file `git ls-files -co --exclude-standard` lists und
 `scripts/scenarios/coverage-compare.mjs` merges every istanbul `coverage-final.json` under a
 directory (jest, vitest, c8, the stand report) by line and groups it by `server/src/*`,
 `client/src/viewer/*` and `hook/.claude/telemetry_tool`. `--save-baseline` writes
-`coverage-baseline.json` into the task folder (`docs/tasks/todo/2026-10-14-qaa-test-suite-cleanup/`),
+`coverage-baseline.json` into the folder of the task `2026-10-14-qaa-test-suite-cleanup` (the script's
+`TASK_DIR`; that task folder is no longer in the repo, so pass `--baseline <file>` to choose the path),
 `--compare` writes `tmp/coverage/compare.md`. `--kind mutation` does the same for a Stryker JSON
 report (`server/stryker.config.json`, units only via `server/jest.stryker.config.js`) into
 `mutation-baseline.json` / `tmp/stryker/compare.md`, and `--compare` exits 1 when a module scores
-below the baseline. The exact commands of the old-suite baseline are in the task's
-`requirements.md` Notes; the old Playwright e2e suite is not part of it.
+below the baseline. The old-suite baseline was recorded by that task; the old Playwright e2e
+suite is not part of it.
 
 # Modes (`tests/scenarios/modes.ts`)
 

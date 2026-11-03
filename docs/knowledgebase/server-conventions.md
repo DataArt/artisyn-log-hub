@@ -4,8 +4,26 @@ title: "Server Conventions"
 description: "Backend implementation patterns: DB query optimization, Argon2id password hashing, performance testing, and pino logging."
 tags:
   - server
-timestamp: "2026-11-01T00:00:00+04:00"
+timestamp: "2026-11-03T00:00:00+04:00"
 ---
+
+## Gotchas
+
+- Never bind a JS array as one Drizzle parameter (`= ANY(${arr}::int[])`): Drizzle expands it into a
+  parameter list and Postgres fails with `malformed array literal`. Use `textList()` or the
+  `{…}::int[]` literal of `scopedUserFilterSql()` in `server/src/logs/analytics/scoped-sessions.sql.ts`.
+- List and analytics endpoints must never read stored transcripts (`logs.body`) per request: the
+  session list and analytics timeline took 13–29 s on a real instance and dropped below 1 s once they
+  read the derived per-session tables (`docs/tasks/done/2026-10-31-session-list-slow-jsonb`, f085911).
+  The perf `-heavy` scenarios below catch a regression.
+- Schema or data startup steps go inside `initializeDatabase()`, never in a lifecycle hook:
+  schedulers started querying mid-migration (`.claude/rules/server.md`, [db-schema-code.md](db-schema-code.md)).
+- Nest matches routes in declaration order: declare a literal segment before a `:param` sibling
+  ([server-endpoint-map.md](server-endpoint-map.md)).
+- A background job copies the upload-queue pattern (`SKIP LOCKED` claim, leases), see
+  [twins-and-cross-cutting-rules.md](twins-and-cross-cutting-rules.md).
+
+## General rules
 
 - avoid n+1 pattern when quering DB
 - try to do all possible aggregations and basic calculations in SQL queries, not in code.

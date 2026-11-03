@@ -98,9 +98,9 @@ into two barrels:
 
 | Chunk | Contents | Barrel |
 |---|---|---|
-| Repository tabs | `RepositoryAnalytics`, `RepoToolsTab`, `RepoOkfTab`, `RepoOtelTab` (`RepositoryView`; `RepoToolsTab` is also the session Tools/MCP tab) | `pages/repository/repository-tabs-lazy-group.ts` |
-| Reports | `ReportsPanel` — kept apart because it carries the PDF and zip export libraries (~1.4 MB), which the light tabs above must not download | own `import()` in `RepositoryView` |
-| Session tabs | `SessionChartsTab`, `SessionChangeSurfaceTab`, `SessionHarnessUsageTab`, `SessionOkfTab`, `SessionSysctxAnatomyTab`, `SessionOtelTab`, `SessionBashTab` (`SessionDetailPane`, through `session-lazy-tabs.ts`) | `pages/repository/session-tabs-lazy-group.ts` |
+| Repository tabs | `RepositoryAnalytics`, `RepoToolsTab`, `RepoOkfTab`, `RepoOtelTab` (`RepositoryTeamWideTabs`; `RepoToolsTab` is also the session Tools/MCP tab) | `pages/repository/repository-tabs-lazy-group.ts` |
+| Reports | `ReportsPanel` — kept apart because it carries the PDF and zip export libraries (~1.4 MB), which the light tabs above must not download | own `import()` in `RepositoryTeamWideTabs` |
+| Session tabs | `SessionChartsTab`, `SessionChangeSurfaceTab`, `SessionHarnessUsageTab`, `SessionOkfTab`, `SessionSysctxAnatomyTab`, `SessionOtelTab`, `SessionBashTab` (`SessionTabContent`, through `session-lazy-tabs.ts`) | `pages/repository/session-tabs-lazy-group.ts` |
 
 The code is fetched when the first tab of a group opens; the other tabs of that group then open with no
 further request. Shared heavy dependencies (recharts and the like) are split out by Rollup on its own.

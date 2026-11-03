@@ -1635,6 +1635,73 @@ export async function fetchSessionLogs(
   return (await res.json()) as SessionLogsData;
 }
 
+/** One JSONL line of a stored log body. */
+export type SessionLogLine = Record<string, unknown>;
+
+/** OTEL liveness of the root session (session-map DD-9). */
+export interface SessionLogsDeltaLiveness {
+  hasOtel: boolean;
+  live: boolean;
+  lastActivityAt: string | null;
+}
+
+/** A sub-agent first seen by a delta: full lines plus its DB linkage. */
+export interface SessionLogsDeltaNewSubagent {
+  sessionId: string;
+  parentSessionId: string | null;
+  /** `sessions.workflow_run_id` — set for an agent spawned by a Workflow run. */
+  workflowRunId: string | null;
+  logs: SessionLogLine[];
+}
+
+/**
+ * Response of `GET …/sessions/:sessionId/logs/delta` (session-map DD-8). Mirrors the server's
+ * `SessionLogsDeltaResponse` (`server/src/logs/dto/session-logs-delta.dto.ts`), kept in sync by
+ * convention. `reload: true` = the cursor no longer matches what is stored; poll again without one.
+ */
+export type SessionLogsDeltaData =
+  | { reload: true; serverTime: string }
+  | {
+      reload: false;
+      /** Root session's new artisyn lines (body[n:]) — full body when the row is new. */
+      rootArtisynLines: SessionLogLine[];
+      /** Root session's new claude lines. */
+      rootClaudeLines: SessionLogLine[];
+      /** Sub-agent logs that grew: new lines only. */
+      subagentAppends: { sessionId: string; lines: SessionLogLine[] }[];
+      /** Sub-agent sessions/logs not in the cursor: full lines plus linkage. */
+      newSubagents: SessionLogsDeltaNewSubagent[];
+      /** Full stats rows of every new/changed sub-agent, keyed by sessionId. */
+      subagentStats: Record<string, SubagentStats>;
+      /** Full recomputed list, or `null` = unchanged since the cursor. */
+      workflows: WorkflowRun[] | null;
+      liveness: SessionLogsDeltaLiveness;
+      serverTime: string;
+      /** Next cursor; `''` = too large to issue, the next poll is a full snapshot. */
+      cursor: string;
+    };
+
+/**
+ * What changed in a session's logs since `cursor` (the previous delta's cursor). A `null` or
+ * `''` cursor is omitted from the request and yields a full snapshot (session-map DD-10).
+ */
+export async function fetchSessionLogsDelta(
+  repoId: number,
+  sessionId: string,
+  cursor: string | null,
+  teamId?: number,
+  signal?: AbortSignal,
+): Promise<SessionLogsDeltaData> {
+  const q = new URLSearchParams();
+  if (cursor) q.set('cursor', cursor);
+  if (teamId != null) q.set('teamId', String(teamId));
+  const qs = q.toString();
+  const base = `/api/v1/repositories/${repoId}/sessions/${encodeURIComponent(sessionId)}/logs/delta`;
+  const res = await apiFetch(qs ? `${base}?${qs}` : base, { signal });
+  if (!res.ok) throw await readApiError(res);
+  return res.json() as Promise<SessionLogsDeltaData>;
+}
+
 export interface ExportScopeFilters {
   teamId?: number;
   /** ISO 8601 date-time, inclusive lower bound on session start time. */

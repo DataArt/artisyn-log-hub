@@ -5,10 +5,24 @@ description: "Install, upgrade, or uninstall the hook as a Claude Code plugin vi
 tags:
   - hooks
   - otel
-timestamp: "2026-10-31T00:00:00+04:00"
+timestamp: "2026-11-03T00:00:00+04:00"
 ---
 
 # Hook Installation Guide
+
+## Gotchas
+
+- `claude plugin marketplace add` dedups by **directory path**, not by the `marketplace.json` name: a
+  stale user-level registration of the same path under another name makes `add` a silent no-op and
+  every later plugin install fails with "not found in marketplace". The installer removes it first
+  (`findStaleUserLevelMarketplaceName` in `install.ts`, 7fdfd02, `@S-INST-01`).
+- `npx <url>` caches the installer by package **name + version**, not by URL, so a hook change must
+  change the installer version or users get old cached hook code. The build bumps it automatically;
+  see `.claude/rules/installer.md`.
+- A hook change also needs the dogfood copy under `.artisyn/marketplace/plugins/log-hub-hooks/`
+  refreshed by hand (`.claude/rules/hook.md`).
+- Installed hooks lag the server for weeks; logic copied into the hook is listed in
+  [twins-and-cross-cutting-rules.md](twins-and-cross-cutting-rules.md).
 
 The hook ships as a **Claude Code plugin** (`log-hub-hooks`) served from a project-local marketplace (`artisyn`)
 under `.artisyn/marketplace/`. Configuration lives in JSON files under `.artisyn/config/`. There is no manual
@@ -321,7 +335,7 @@ Two fixed limits on the upload side are not config keys:
   limits are per route (see `hook-api-versioning.md`) and per repository (`repositories.max_upload_bytes`).
 - **Plugin resolution for the harness snapshot (hook `2.22.0`+, DD-4).** The catalog the hook
   uploads (as part of the `harness-snapshot` line — see `docs/knowledgebase/hook-system-overview.md`'s
-  "Context injection") no longer does a recursive, depth-bounded scan of `~/.claude/plugins/`.
+  "Lines injected into the current session's `artisyn` upload") no longer does a recursive, depth-bounded scan of `~/.claude/plugins/`.
   Instead, for each `<name>@<marketplace>` left enabled after merging `enabledPlugins` from
   `<claudeConfigDir>/settings.json`, the project's own `.claude/settings.json`, then
   `.claude/settings.local.json` (a later file's `false` disables an earlier `true`),

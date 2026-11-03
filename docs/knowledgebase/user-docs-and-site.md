@@ -173,7 +173,6 @@ wireframes).
   | `nav-chart-tabs.png` | View: All tabs, Call Tree open as a session tab of its own | Features → Navigation |
   | `summary-hub.png` | Summary tiles, "Where to look next" cards, Explore chips | Features → Navigation |
   | `all-views-map.png` | All views map filtered "cost" | Features → Navigation |
-  | `home.png` | Home widgets | Home (`.hero-shot` under the hero) |
 
   The navigation shots (v1.2.0) were taken in the dev app from a demo-repository export of local
   prod (bootstrap-imported via "Import repo sessions" into a neutral identity, so Home lists only

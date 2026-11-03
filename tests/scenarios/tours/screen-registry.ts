@@ -775,6 +775,16 @@ const SESSION_TAB_ROWS: Array<Omit<ScreenRow, 'story' | 'role' | 'modes' | 'rout
     docRef: { file: `${HELP}/otel-tab.md`, heading: 'Session OTEL tab' },
   },
   {
+    // Built from the delta route (2026-11-01 session-map-tab); the golden tour session has no
+    // OTEL records, so it opens in Replay. S-SESS-03/04 and S-OTEL-01 walk the cards and LIVE.
+    id: 'session.session-map',
+    query: `${SESSION_QUERY}&tab=session-map`,
+    tab: { group: 'session', id: 'session-map' },
+    title: 'Session: Session Map (agents as cards over a time position)',
+    expectTestId: 'session-map',
+    docRef: { file: SESSION_DOC, heading: 'Session Map' },
+  },
+  {
     id: 'session.advisor.absent-redirect',
     query: '?session={plainSessionId}&tab=advisor',
     title: 'Session without an advisor result: no Advisor tab, tab=advisor falls back to Summary',

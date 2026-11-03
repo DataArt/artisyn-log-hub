@@ -1,10 +1,10 @@
 ---
 type: Knowledgebase Bundle
 title: Algorithm docs (doc-driven table tests)
-description: Format of the per-algorithm docs in docs/knowledgebase/algorithms/, how their single examples block becomes a table-driven unit test through scripts/algo-docs/load-examples.cjs in jest, vitest and node --test, and the AI-plus-owner review recorded in front-matter.
+description: Format of the per-algorithm docs in docs/knowledgebase/algorithms/, how their rows file docs/algorithm-examples/<name>.json becomes a table-driven unit test through scripts/algo-docs/load-examples.cjs in jest, vitest and node --test, and the AI-plus-owner review recorded in front-matter.
 resource: scripts/algo-docs/load-examples.cjs
 tags: [testing, algorithms, unit-tests, docs, review]
-timestamp: 2026-10-15T00:00:00Z
+timestamp: 2026-11-03T00:00:00Z
 ---
 
 # Algorithm docs
@@ -13,10 +13,14 @@ Unit tests in this repo are kept only for **readable algorithms**: pure logic wh
 can read and repeat on paper (cost formula, login backoff, change-surface concentration, ...).
 Everything else is covered by the scenario suite ([../test/scenarios.md](../test/scenarios.md)).
 
-Each such algorithm has one doc here, and **the doc's worked examples are the test cases**. The
-test holds no numbers of its own: it loads the doc's examples block and runs every row against
-the real code. Editing a row changes the test without touching test code; changing the code
-without the doc (or the doc without the code) turns the test red. Doc and test cannot drift.
+Each such algorithm has one doc here and one **rows file** `docs/algorithm-examples/<name>.json`:
+**the worked examples are the test cases**. The test holds no numbers of its own: it loads the
+rows and runs every row against the real code. Editing a row changes the test without touching
+test code; changing the code without the rows (or the rows without the code) turns the test red.
+
+The rows live outside the KB on purpose (moved out 2026-11-03): they were ~55 % of this folder,
+and agents reading or grepping the KB for the rules paid for them. Read a rows file only when you
+change rows or debug a failing row.
 
 Design background: `docs/qaa-overview/14-algorithm-units.md` (this README is the binding
 format where the two differ).
@@ -40,6 +44,7 @@ format where the two differ).
 | [work-time](work-time.md) | `server/src/logs/claude-extractor.ts`; twin hook `post-turn-analysis-worker.js` | jest, `node --test` |
 | [session-time-span](session-time-span.md) | `server/src/logs/artisyn-extractor.ts` | jest |
 | [session-list-flags](session-list-flags.md) | `server/src/logs/session-list-flags.ts` (`computeSessionListFlags`); twin backfill SQL `server/src/database/backfill-session-list-flags.ts` | jest |
+| [session-logs-delta](session-logs-delta.md) | `server/src/logs/session-logs-delta.ts` (`encodeDeltaCursor`, `decodeDeltaCursor`, `classifyDeltaRows`, `checkGrowth`) | jest |
 | [change-surface-concentration](change-surface-concentration.md) | `server/src/logs/change-surface/change-surface-metrics.ts` | jest |
 | [repo-url-normalization](repo-url-normalization.md) | `server/src/logs/repo-url-normalizer.ts` | jest |
 | [ndjson-tolerance](ndjson-tolerance.md) | hook `ndjson-sanitize.js`, `server/src/logs/ndjson-parser.ts` | `node --test`, jest |
@@ -54,6 +59,8 @@ format where the two differ).
 | [tool-call-sections](tool-call-sections.md) | `client/.../session-log/tool-calls.ts` | vitest |
 | [tool-call-outcome](tool-call-outcome.md) | `client/.../session-log/tool-outcome.ts`; twin `server/src/logs/tool-stats.ts` | vitest, jest |
 | [session-lens-row](session-lens-row.md) | `client/.../repository/session-lenses.ts` (`lensRow`, `lensDefaultTab`), `client/.../repository/session-tab-groups.ts` (`pickGroupTab`) | vitest |
+| [session-map-delta-merge](session-map-delta-merge.md) | `client/.../session-log/session-map/session-map-delta-merge.ts` (`mergeSessionMapDelta`, `toParseInputs`) | vitest |
+| [session-map-model](session-map-model.md) | `client/.../session-log/session-map/session-map-model.ts` | vitest |
 | [nav-filter-match](nav-filter-match.md) | `client/.../pages/map/nav-tree.ts` (`matchNavFilter`) | vitest |
 | [bash-command-view](bash-command-view.md) | `packages/bash-view/src/*` (`@loghub/bash-view`; client loader `client/src/viewer/lib/bash-view/`) | vitest |
 | [okf-access-extraction](okf-access-extraction.md) | `server/src/logs/okf/okf-access-extractor.ts` | jest |
@@ -79,14 +86,16 @@ format where the two differ).
 
 - Doc: `docs/knowledgebase/algorithms/<name>.md`; `<name>` is a lowercase slug
   (`[a-z0-9-]`), e.g. `change-surface-concentration`.
+- Rows: `docs/algorithm-examples/<name>.json`, same slug.
 - Test: next to the code it tests.
   - server (jest): `<module>.algo.spec.ts` beside the module in `server/src/...`;
   - client (vitest): `<module>.algo.test.ts` under `client/src/...`;
   - hook (`node --test`): `hook/.claude/telemetry_tool/__tests__/<name>.algo.test.js`.
 - Loader: `scripts/algo-docs/load-examples.cjs` (types: `load-examples.d.cts`), tested by
-  `scripts/__tests__/algo-docs.test.js` (`npm run test:scripts`). That test also loads every doc
-  in this directory except this README, so a malformed doc fails there even before its own test
-  runs.
+  `scripts/__tests__/algo-docs.test.js` (`npm run test:scripts`). That test also loads the rows of
+  every doc in this directory except this README, checks that every rows file has its doc, and
+  fails on a doc that still carries an inline ```examples table (e.g. one from an older branch),
+  so a malformed table fails there even before its own test runs.
 - Reviewer prompt: `scripts/algo-docs/review-prompt.md`.
 
 Docs are written in English.
@@ -120,18 +129,8 @@ to compute every example by hand from this section alone.
 - One line per case, each naming the example id(s) that pin it: "Empty input: CS-13".
 
 ## Examples
-Prose describing the input shape, then exactly one block:
-
-```examples
-[
-  {
-    "id": "CS-01",
-    "input": {"folders": {"src/api": 1}},
-    "expected": {"changedFiles": 1, "concentration": 100, "band": "focused"},
-    "note": "K=1: E=S=M=D=1, score=1"
-  }
-]
-```
+Prose describing the input shape, then one pointer line:
+Rows (13): [`docs/algorithm-examples/change-surface-concentration.json`](../../algorithm-examples/change-surface-concentration.json) — test data for the table test; ...
 
 ## Mutations
 3-6 plausible wrong implementations and the example id that kills each:
@@ -146,11 +145,23 @@ Screen and field, or API field, or "safe behaviour: ...".
 `Purpose`, `Code`, `Rules`, `Edge cases`, `Examples`, `Mutations`, `Where the result is visible`.
 `Input and output` and anything else are added only when the doc is unclear without them.
 
-### The examples block
+### The rows file
 
-- The `## Examples` section holds **exactly one** fenced block whose info string is `examples`
-  (the loader fails on zero, on two, or on one outside `## Examples`).
-- Its body is a JSON array. Each row is an object:
+- `docs/algorithm-examples/<name>.json`, one per doc; the doc's `## Examples` section keeps the
+  prose about the input shape and a link to it, never the rows themselves.
+- Its body is a JSON array (shown below as one `examples` row). Each row is an object:
+
+  ```json
+  [
+    {
+      "id": "CS-01",
+      "input": {"folders": {"src/api": 1}},
+      "expected": {"changedFiles": 1, "concentration": 100, "band": "focused"},
+      "note": "K=1: E=S=M=D=1, score=1"
+    }
+  ]
+  ```
+
 
   | Key | Required | Meaning |
   |---|---|---|
@@ -160,7 +171,7 @@ Screen and field, or API field, or "safe behaviour: ...".
   | `note` | yes | The **independent derivation** of `expected` from the Rules section, with the arithmetic. Never "what the code returned". |
   | other | no | Passed through untouched, e.g. `tol` for a numeric tolerance the test honours, or `"only": "server"` for a row a twin cannot receive (the twin's test skips it, and the doc's Code section says why). |
 
-- Rows are returned in doc order. One case per row: a boundary checked on both sides is two rows.
+- Rows are returned in file order. One case per row: a boundary checked on both sides is two rows.
 - Numbers are **verified by running the real code** before the doc is accepted; a mismatch with
   the hand derivation is a defect in either the doc or the code and is settled by review, never
   by silently copying the code's output into `expected`.
@@ -227,8 +238,8 @@ for (const row of loadExamples('<name>')) {
 ```
 
 The loader finds the repo root by walking up from its own directory to the first `.git`, or,
-without one, to the first directory holding `docs/knowledgebase/algorithms/`; it is independent
-of the runner's working directory. The hook test reaches outside `hook/`, which is fine because
+without one, to the first directory holding `docs/knowledgebase/algorithms/`, and reads
+`docs/algorithm-examples/<name>.json` there; it is independent of the runner's working directory. The hook test reaches outside `hook/`, which is fine because
 `hook/` tests never ship with the plugin.
 
 ## Review process
@@ -240,7 +251,7 @@ of the runner's working directory. The hook test reaches outside `hook/`, which 
    and the rules without looking at `expected`, checks doc against code, mutations and
    boundaries, and returns a verdict.
 3. On `reviewed`, the front-matter becomes `reviewed: <date>` / `reviewer: ai`, and the doc goes on
-   the owner's sign-off list. The owner reads only Purpose, Rules and the examples table; after
+   the owner's sign-off list. The owner reads only Purpose, Rules and the rows file; after
    sign-off the front-matter becomes `reviewer: ai+owner`.
 4. On `needs-changes`, fix the doc or the code and re-run the review.
 

@@ -27,7 +27,7 @@ The subsystem renders the **Raw Logs tab** (`RawLogsTab.tsx`): a Kibana-style ta
 
 | Consumer | `rawLogs` | `parsedSession` |
 |---|---|---|
-| Raw Logs tab (`SessionDetailPane.tsx`) | The whole session's log array | The session's `parseSessionLogs` result — one `TurnHeader` per prompt turn |
+| Raw Logs tab (`SessionTabContent.tsx`) | The whole session's log array | The session's `parseSessionLogs` result — one `TurnHeader` per prompt turn |
 | `WorkflowAgentModal.tsx` (workflow "Agents (N)" table → row click → "Raw logs" tab) | One workflow agent's log array (`subagentLogsMap.get(agentId)`, already loaded with `/logs`) | That agent's own `parseSessionLogs(logs, { isSubagent: true, pricing, subagentLogs })`, memoized while the modal is open — one `TurnHeader` per turn of the agent (`Turn #1`, …) |
 
 The modal passes `isLoading={false}` and `sessionModel = agent.model ?? sessionModel`; the same parse feeds its "Logs" tab (`PromptTurnList`). See `session-log-view.md` § Workflow "Agents (N)" drill-down.

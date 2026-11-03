@@ -39,6 +39,7 @@ export const LENSES: readonly LensDef[] = [
       'bash',
       'timeline',
       'agent-tree',
+      'session-map',
       'change-surface',
     ],
     defaultTab: 'summary',

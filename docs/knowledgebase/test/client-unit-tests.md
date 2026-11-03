@@ -27,8 +27,8 @@ What stays: **8 `*.algo.test.ts`** co-located with the code under `client/src/vi
 | `pages/repository/tools/output-format.algo.test.ts` | `algorithms/tool-output-format.md` (Tools/MCP output format detection and table re-alignment) |
 
 The list of docs and their runners is [algorithms/README.md](../algorithms/README.md).
-Each loads the examples block of its doc in `docs/knowledgebase/algorithms/` through
-`scripts/algo-docs/load-examples.cjs` and runs every row against the real code. Change the doc row,
+Each loads the rows of its doc from `docs/algorithm-examples/<name>.json` through
+`scripts/algo-docs/load-examples.cjs` and runs every row against the real code. Change the row,
 not the test. **Do not add other client tests.**
 
 # How to run

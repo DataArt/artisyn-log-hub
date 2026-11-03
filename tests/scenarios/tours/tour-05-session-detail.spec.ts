@@ -96,7 +96,7 @@ test('@TOUR-05 session: detail tour @mode-a', async ({ stand, api, db, users, pa
   await walker.screen(page, 'session.summary', {
     check: () => expectTabsOnScreen(page, 'session', registryTabIds(walker, 'session')),
   });
-  for (const id of ['info', 'logs', 'bash', 'advisor', 'usage', 'change-surface', 'harness-usage', 'okf', 'tools', 'raw-logs', 'sysctx', 'otel']) {
+  for (const id of ['info', 'logs', 'bash', 'advisor', 'usage', 'change-surface', 'harness-usage', 'okf', 'tools', 'raw-logs', 'sysctx', 'otel', 'session-map']) {
     await walker.screen(page, `session.${id}`, { go: clickTab(id) });
   }
   // The seven charts are plain session tabs (one level of tabs, no Charts sub-tab bar).

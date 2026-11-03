@@ -4,7 +4,7 @@ title: Legacy E2E Tests (Playwright, tests/e2e)
 description: The remaining Playwright specs in tests/e2e that drive the running dev app (UI + API + dev DB) and are not yet replaced by scenarios; storageState auth reuse, self-owned seed data, @core/extended split. New browser tests go to the scenario suite instead.
 resource: playwright.config.ts
 tags: [testing, e2e, playwright, browser, integration, legacy]
-timestamp: 2026-10-16T00:00:00Z
+timestamp: 2026-11-03T00:00:00Z
 ---
 
 **This is the legacy browser suite.** User flows now live in the scenario suite
@@ -49,8 +49,14 @@ A dev backend in `AUTH_MODE=password-confirm` (the `server/.env.example` default
 Mailpit before `npm run start:dev`; an unreachable relay fails startup with
 `SMTP relay <host>:<port> is unreachable; AUTH_MODE=password-confirm requires a working relay`.
 
-Not to be confused with the server suite's `*.e2e-spec.ts` files: those are Jest + supertest API
-tests in `server/test/` ([server-tests.md](./server-tests.md)).
+In the password modes the dev server must run with **`PASSWORD_POLICY=any`** and
+`AUTH_RATE_LIMIT_POINTS=0` in `server/.env` (restart after changing them): the shared e2e
+password in `helpers/credentials.ts` is too short for `mid` / `long`, and the suite repeats
+signups and resets. The contract suite and the scenario stand pin `PASSWORD_POLICY=long` themselves
+and do not depend on the dev server's value.
+
+The server has no `*.e2e-spec.ts` files any more (deleted 2026-10-16); see
+[overview.md](./overview.md#the-server-jest-runner).
 
 # Config & projects (`playwright.config.ts`)
 

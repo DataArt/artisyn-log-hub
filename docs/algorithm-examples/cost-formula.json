@@ -1,0 +1,196 @@
+[
+  {
+    "id": "CF-01",
+    "input": {"tokens": {"inputTokens": 1000000}, "pricing": {"priceIn": 5, "priceOut": 25, "priceCacheR": 0.5, "priceCacheW5m": 6.25, "priceCacheW1h": 10, "priceWebSearch": 0.01}},
+    "expected": {"cost": 5},
+    "note": "Input term only: 1,000,000 / 1e6 * 5 = 5."
+  },
+  {
+    "id": "CF-02",
+    "input": {"tokens": {"outputTokens": 100000}, "pricing": {"priceIn": 5, "priceOut": 25, "priceCacheR": 0.5, "priceCacheW5m": 6.25, "priceCacheW1h": 10, "priceWebSearch": 0.01}},
+    "expected": {"cost": 2.5},
+    "note": "Output term only: 100,000 / 1e6 * 25 = 2.5. Swapping the input and output rates would give 0.5."
+  },
+  {
+    "id": "CF-03",
+    "input": {"tokens": {"cacheReadTokens": 2000000}, "pricing": {"priceIn": 5, "priceOut": 25, "priceCacheR": 0.5, "priceCacheW5m": 6.25, "priceCacheW1h": 10, "priceWebSearch": 0.01}},
+    "expected": {"cost": 1},
+    "note": "Cache read: 2,000,000 / 1e6 * 0.5 = 1."
+  },
+  {
+    "id": "CF-04",
+    "input": {"tokens": {"cacheWrite1hTokens": 1000000}, "pricing": {"priceIn": 5, "priceOut": 25, "priceCacheR": 0.5, "priceCacheW5m": 6.25, "priceCacheW1h": 10, "priceWebSearch": 0.01}},
+    "expected": {"cost": 10},
+    "note": "1h cache write at its own rate: 1,000,000 / 1e6 * 10 = 10. Pricing it at the 5m rate (the bug before the TTL split) gives 6.25. S-COST-02 checks this through SQL; the row holds the client and hook twins to it."
+  },
+  {
+    "id": "CF-05",
+    "input": {"tokens": {"cacheWrite5mTokens": 400000, "cacheWrite1hTokens": 600000}, "pricing": {"priceIn": 5, "priceOut": 25, "priceCacheR": 0.5, "priceCacheW5m": 6.25, "priceCacheW1h": 10, "priceWebSearch": 0.01}},
+    "expected": {"cost": 8.5},
+    "note": "0.4 * 6.25 + 0.6 * 10 = 2.5 + 6 = 8.5. Adding a flat 'whole cache write' term on top would double it."
+  },
+  {
+    "id": "CF-06",
+    "input": {"tokens": {"inputTokens": 1000000, "inputTokensFast": 1000000}, "pricing": {"priceIn": 5, "priceOut": 25, "priceCacheR": 0.5, "priceCacheW5m": 6.25, "priceCacheW1h": 10, "priceWebSearch": 0.01}},
+    "expected": {"cost": 10},
+    "note": "All input billed fast. in = 1,000,000 + 1,000,000 * (2 - 1) = 2,000,000; 2 * 5 = 10, exactly 2x the standard 5. Using F = M = 2 gives 15."
+  },
+  {
+    "id": "CF-07",
+    "input": {"tokens": {"inputTokens": 1000000, "inputTokensFast": 250000}, "pricing": {"priceIn": 5, "priceOut": 25, "priceCacheR": 0.5, "priceCacheW5m": 6.25, "priceCacheW1h": 10, "priceWebSearch": 0.01}},
+    "expected": {"cost": 6.25},
+    "note": "Fast is a subset: in = 1,000,000 + 250,000 = 1,250,000; 1.25 * 5 = 6.25 (750k standard at 5 = 3.75 plus 250k fast at 10 = 2.5). Treating fast as extra tokens at 2x gives 7.5."
+  },
+  {
+    "id": "CF-08",
+    "input": {"tokens": {"outputTokens": 200000, "outputTokensFast": 200000}, "pricing": {"priceIn": 5, "priceOut": 25, "priceCacheR": 0.5, "priceCacheW5m": 6.25, "priceCacheW1h": 10, "priceWebSearch": 0.01}},
+    "expected": {"cost": 10},
+    "note": "Output fast surcharge: out = 200,000 + 200,000 = 400,000; 0.4 * 25 = 10. Forgetting the output surcharge gives 5."
+  },
+  {
+    "id": "CF-09",
+    "input": {"tokens": {"webSearchRequests": 7}, "pricing": {"priceIn": 5, "priceOut": 25, "priceCacheR": 0.5, "priceCacheW5m": 6.25, "priceCacheW1h": 10, "priceWebSearch": 0.01}},
+    "expected": {"cost": 0.07},
+    "note": "Per request: 7 * 0.01 = 0.07. Dividing by 1e6 as for tokens gives 0.00000007. Also in S-COST-02 via SQL; here for the twins."
+  },
+  {
+    "id": "CF-10",
+    "only": "server",
+    "input": {"tokens": {"inputTokens": 5000000, "cacheWrite1hTokens": 1000000}, "pricing": null},
+    "expected": {"cost": null},
+    "note": "Rule 1: no pricing row, so null whatever the tokens. Returning 0 would show a fake $0.00. S-COST-03 checks the API; this row pins the TS function the audit row uses."
+  },
+  {
+    "id": "CF-11",
+    "input": {"tokens": {"inputTokens": 1000000, "webSearchRequests": 5}, "pricing": {"priceIn": 0, "priceOut": 0, "priceCacheR": 0, "priceCacheW5m": 0, "priceCacheW1h": 0, "priceWebSearch": 0}},
+    "expected": {"cost": 0},
+    "note": "Rule 5: a row exists, every term is 1 * 0 or 5 * 0, so 0, not null."
+  },
+  {
+    "id": "CF-12",
+    "only": "server",
+    "input": {"tokens": {"inputTokens": "1000000", "outputTokens": "0", "cacheReadTokens": "0", "cacheWrite5mTokens": "0", "cacheWrite1hTokens": "1000000", "webSearchRequests": "3", "inputTokensFast": "0", "outputTokensFast": "0"}, "pricing": {"priceIn": "5.000000", "priceOut": "25.000000", "priceCacheR": "0.500000", "priceCacheW5m": "6.250000", "priceCacheW1h": "10.000000", "priceWebSearch": "0.010000"}},
+    "expected": {"cost": 15.03},
+    "note": "Rule 2, strings parsed: input 1 * 5 = 5, 1h write 1 * 10 = 10, web 3 * 0.01 = 0.03; total 15.03. String concatenation or NaN would break it."
+  },
+  {
+    "id": "CF-13",
+    "only": "server",
+    "input": {"tokens":{"inputTokens":1000000,"outputTokens":null,"cacheWrite5mTokens":null,"cacheWrite1hTokens":null,"webSearchRequests":null,"inputTokensFast":null},"pricing":{"priceIn":5,"priceOut":25,"priceCacheR":0.5,"priceCacheW5m":6.25,"priceCacheW1h":10,"priceWebSearch":0.01}},
+    "expected": {"cost":5},
+    "note": "Rule 2: null and absent columns count as 0, so only the input term remains: 1 * 5 = 5. Kills a guard that sends null to parseFloat without the finite check (parseFloat(null) is NaN). Plain arithmetic would also turn null into 0, so this row does not need the null check itself."
+  },
+  {
+    "id": "CF-14",
+    "input": {"tokens": {"inputTokens": 2000000, "inputTokensFast": 500000, "outputTokens": 300000, "outputTokensFast": 100000, "cacheReadTokens": 10000000, "cacheWrite5mTokens": 1000000, "cacheWrite1hTokens": 500000, "webSearchRequests": 4}, "pricing": {"priceIn": 5, "priceOut": 25, "priceCacheR": 0.5, "priceCacheW5m": 6.25, "priceCacheW1h": 10, "priceWebSearch": 0.01}},
+    "expected": {"cost": 38.79},
+    "note": "All six terms: in = 2.5M -> 12.5; out = 0.4M -> 10; read 10M * 0.5 = 5; 5m 1M * 6.25 = 6.25; 1h 0.5M * 10 = 5; web 4 * 0.01 = 0.04. Sum 12.5 + 10 + 5 + 6.25 + 5 + 0.04 = 38.79."
+  },
+  {
+    "id": "CF-15",
+    "only": "server",
+    "input": {"tokens": {"inputTokens": "abc", "outputTokens": 1000000}, "pricing": {"priceIn": 5, "priceOut": 25, "priceCacheR": 0.5, "priceCacheW5m": 6.25, "priceCacheW1h": 10, "priceWebSearch": 0.01}},
+    "expected": {"cost": 25},
+    "note": "Rule 2: 'abc' parses to NaN, which is not finite, so 0; only the output term remains: 1 * 25 = 25. Without the finite check the sum is NaN."
+  },
+  {
+    "id": "CF-16",
+    "only": "server",
+    "input": {"tokens": {"inputTokens": 1000000}},
+    "expected": {"cost": null},
+    "note": "Rule 1: an absent pricing row (not even null) is no pricing row: null. A check for === null alone would crash on it."
+  },
+  {
+    "id": "CF-17",
+    "input": {"tokens": {}, "pricing": {"priceIn": 5, "priceOut": 25, "priceCacheR": 0.5, "priceCacheW5m": 6.25, "priceCacheW1h": 10, "priceWebSearch": 0.01}},
+    "expected": {"cost": 0},
+    "note": "Every term is 0 * rate: 0. A priced session with no usage costs $0.00, it is not 'n/a'."
+  },
+  {
+    "id": "CF-18",
+    "input": {"tokens": {"inputTokens": 1}, "pricing": {"priceIn": 5, "priceOut": 25, "priceCacheR": 0.5, "priceCacheW5m": 6.25, "priceCacheW1h": 10, "priceWebSearch": 0.01}},
+    "expected": {"cost": 0.000005},
+    "note": "1 / 1e6 * 5 = 0.000005: the formula does not round (rounding to cents would give 0)."
+  },
+  {
+    "id": "CF-19",
+    "only": "server",
+    "input": {"tokens":{"inputTokens":"1000000abc"},"pricing":{"priceIn":5,"priceOut":25,"priceCacheR":0.5,"priceCacheW5m":6.25,"priceCacheW1h":10,"priceWebSearch":0.01}},
+    "expected": {"cost":5},
+    "note": "Rule 2: parseFloat reads the leading number of '1000000abc', 1,000,000: 1 * 5 = 5. Number() would give NaN, then 0."
+  },
+  {
+    "id": "CF-20",
+    "only": "server",
+    "input": {"tokens":{"inputTokens":"Infinity","outputTokens":100000},"pricing":{"priceIn":5,"priceOut":25,"priceCacheR":0.5,"priceCacheW5m":6.25,"priceCacheW1h":10,"priceWebSearch":0.01}},
+    "expected": {"cost":2.5},
+    "note": "Rule 2: 'Infinity' parses to Infinity, which is not finite, so 0; only the output term: 0.1 * 25 = 2.5. A NaN-only check would give Infinity."
+  },
+  {
+    "id": "CF-21",
+    "only": "server",
+    "input": {"tokens":{"inputTokens":1000000,"outputTokens":100000,"cacheReadTokens":1000000,"webSearchRequests":3},"pricing":{"priceIn":5,"priceOut":"n/a","priceCacheW5m":6.25,"priceCacheW1h":10,"priceWebSearch":null}},
+    "expected": {"cost":5},
+    "note": "Rule 2 for rates: priceOut 'n/a' is not a number (0), priceCacheR is absent (0), priceWebSearch is null (0). Only the input term: 1 * 5 = 5. Using the rates without the guard gives NaN."
+  },
+  {
+    "id": "CF-22",
+    "input": {"tokens":{"cacheReadTokens":1},"pricing":{"priceIn":5,"priceOut":25,"priceCacheR":0.5,"priceCacheW5m":6.25,"priceCacheW1h":10,"priceWebSearch":0.01}},
+    "expected": {"cost":5e-7},
+    "note": "1 / 1e6 * 0.5 = 0.0000005: seven decimal places, so even rounding to 6 places (0.000001) is wrong."
+  },
+  {
+    "id": "CF-23",
+    "input": {"tokens":{"inputTokens":60000,"cacheReadTokens":50000},"calls":[{"inputTokens":60000,"cacheReadTokens":50000}],"pricing":{"priceIn":0.1,"priceOut":0.5,"priceCacheR":0.01,"priceCacheW5m":0.125,"priceCacheW1h":0.2,"priceWebSearch":0.01,"tiers":[{"aboveTokens":100000,"priceIn":0.5,"priceOut":2.5,"priceCacheR":0.05,"priceCacheW5m":0.625,"priceCacheW1h":1}]}},
+    "expected": {"cost":0.0325,"tierDelta":0.026},
+    "note": "Rule 7: P = 60,000 + 50,000 = 110,000 > 100,000, so the tier rates apply to every token: 0.06 * 0.5 = 0.03 plus 0.05 * 0.05 = 0.0025; cost 0.0325. At base rates 0.06 * 0.1 + 0.05 * 0.01 = 0.0065, so tierDelta 0.0325 - 0.0065 = 0.026. Leaving cache reads out of P (60,000, base) gives 0.0065."
+  },
+  {
+    "id": "CF-24",
+    "input": {"tokens":{"inputTokens":90000},"calls":[{"inputTokens":90000}],"pricing":{"priceIn":0.1,"priceOut":0.5,"priceCacheR":0.01,"priceCacheW5m":0.125,"priceCacheW1h":0.2,"priceWebSearch":0.01,"tiers":[{"aboveTokens":100000,"priceIn":0.5,"priceOut":2.5,"priceCacheR":0.05,"priceCacheW5m":0.625,"priceCacheW1h":1}]}},
+    "expected": {"cost":0.009,"tierDelta":0},
+    "note": "Rule 7: P = 90,000 is not > 100,000, so base rates: 0.09 * 0.1 = 0.009, tierDelta 0. Applying the tier to every call of a tiered model gives 0.045."
+  },
+  {
+    "id": "CF-25",
+    "input": {"tokens":{"inputTokens":100000},"calls":[{"inputTokens":100000}],"pricing":{"priceIn":0.1,"priceOut":0.5,"priceCacheR":0.01,"priceCacheW5m":0.125,"priceCacheW1h":0.2,"priceWebSearch":0.01,"tiers":[{"aboveTokens":100000,"priceIn":0.5,"priceOut":2.5,"priceCacheR":0.05,"priceCacheW5m":0.625,"priceCacheW1h":1}]}},
+    "expected": {"cost":0.01,"tierDelta":0},
+    "note": "Rule 7, boundary: P = 100,000 exactly is not strictly greater than 100,000, so base rates: 0.1 * 0.1 = 0.01. A >= comparison gives 0.05."
+  },
+  {
+    "id": "CF-26",
+    "input": {"tokens":{"inputTokens":150000,"cacheReadTokens":50000},"calls":[{"inputTokens":60000,"cacheReadTokens":50000},{"inputTokens":90000}],"pricing":{"priceIn":0.1,"priceOut":0.5,"priceCacheR":0.01,"priceCacheW5m":0.125,"priceCacheW1h":0.2,"priceWebSearch":0.01,"tiers":[{"aboveTokens":100000,"priceIn":0.5,"priceOut":2.5,"priceCacheR":0.05,"priceCacheW5m":0.625,"priceCacheW1h":1}]}},
+    "expected": {"cost":0.0415,"tierDelta":0.026},
+    "note": "Rule 7, per call: call 1 is CF-23 (0.0325, tier), call 2 is CF-24 (0.009, base); 0.0325 + 0.009 = 0.0415. Only call 1 differs from base, tierDelta 0.026. Testing P on the aggregates (200,000 > 100,000) prices everything at the tier: 0.075 + 0.0025 = 0.0775."
+  },
+  {
+    "id": "CF-27",
+    "input": {"tokens":{"inputTokens":60000,"cacheReadTokens":50000},"pricing":{"priceIn":0.1,"priceOut":0.5,"priceCacheR":0.01,"priceCacheW5m":0.125,"priceCacheW1h":0.2,"priceWebSearch":0.01,"tiers":[{"aboveTokens":100000,"priceIn":0.5,"priceOut":2.5,"priceCacheR":0.05,"priceCacheW5m":0.625,"priceCacheW1h":1}]}},
+    "expected": {"cost":0.0065,"tierDelta":0},
+    "note": "Rule 6: CF-23's tokens but no per-call list (a session ingested before per-call capture), so the aggregate path at base rates: 0.06 * 0.1 + 0.05 * 0.01 = 0.0065, tierDelta 0. Guessing a tier from the aggregates gives 0.0325."
+  },
+  {
+    "id": "CF-28",
+    "input": {"tokens":{"inputTokens":150000,"cacheReadTokens":50000},"calls":[{"inputTokens":60000,"cacheReadTokens":50000},{"inputTokens":90000}],"pricing":{"priceIn":0.1,"priceOut":0.5,"priceCacheR":0.01,"priceCacheW5m":0.125,"priceCacheW1h":0.2,"priceWebSearch":0.01,"tiers":null}},
+    "expected": {"cost":0.0155,"tierDelta":0},
+    "note": "Rule 6: per-call tokens but tiers null, so the aggregate path: 0.15 * 0.1 + 0.05 * 0.01 = 0.015 + 0.0005 = 0.0155, the same as rules 3-4 on the aggregates. Reading tiers without the null guard crashes."
+  },
+  {
+    "id": "CF-29",
+    "input": {"tokens":{"inputTokens":110000,"inputTokensFast":110000,"outputTokens":1000,"outputTokensFast":1000},"calls":[{"inputTokens":110000,"inputTokensFast":110000,"outputTokens":1000,"outputTokensFast":1000}],"pricing":{"priceIn":0.1,"priceOut":0.5,"priceCacheR":0.01,"priceCacheW5m":0.125,"priceCacheW1h":0.2,"priceWebSearch":0.01,"tiers":[{"aboveTokens":100000,"priceIn":0.5,"priceOut":2.5,"priceCacheR":0.05,"priceCacheW5m":0.625,"priceCacheW1h":1}]}},
+    "expected": {"cost":0.115,"tierDelta":0.092},
+    "note": "Rules 3 and 7: P = 110,000 (output is not prompt) > 100,000, tier. in = 110,000 + 110,000 * 1 = 220,000 -> 0.22 * 0.5 = 0.11; out = 1,000 + 1,000 = 2,000 -> 0.002 * 2.5 = 0.005; cost 0.115. Base: 0.22 * 0.1 + 0.002 * 0.5 = 0.023, tierDelta 0.092. A fast surcharge at the base rate gives 0.055 + 0.011 + 0.0025 + 0.0005 = 0.069."
+  },
+  {
+    "id": "CF-30",
+    "input": {"tokens":{"inputTokens":60000,"cacheReadTokens":50000,"webSearchRequests":2},"calls":[{"inputTokens":60000,"cacheReadTokens":50000}],"pricing":{"priceIn":0.1,"priceOut":0.5,"priceCacheR":0.01,"priceCacheW5m":0.125,"priceCacheW1h":0.2,"priceWebSearch":0.01,"tiers":[{"aboveTokens":100000,"priceIn":0.5,"priceOut":2.5,"priceCacheR":0.05,"priceCacheW5m":0.625,"priceCacheW1h":1}]}},
+    "expected": {"cost":0.0525,"tierDelta":0.026},
+    "note": "Rule 7: CF-23's call (0.0325) plus web search at the base per-request price, 2 * 0.01 = 0.02; cost 0.0525. tierDelta stays 0.026 (web search is the same on both sides). Dropping web search on the per-call path gives 0.0325."
+  },
+  {
+    "id": "CF-31",
+    "input": {"tokens":{"inputTokens":250000},"calls":[{"inputTokens":250000}],"pricing":{"priceIn":0.1,"priceOut":0.5,"priceCacheR":0.01,"priceCacheW5m":0.125,"priceCacheW1h":0.2,"priceWebSearch":0.01,"tiers":[{"aboveTokens":100000,"priceIn":0.5,"priceOut":2.5,"priceCacheR":0.05,"priceCacheW5m":0.625,"priceCacheW1h":1},{"aboveTokens":200000,"priceIn":1,"priceOut":5,"priceCacheR":0.1,"priceCacheW5m":1.25,"priceCacheW1h":2}]}},
+    "expected": {"cost":0.25,"tierDelta":0.225},
+    "note": "Rule 7: P = 250,000 is above both 100,000 and 200,000; the last matching tier wins: 0.25 * 1 = 0.25. Base 0.25 * 0.1 = 0.025, tierDelta 0.225. Taking the first matching tier gives 0.125."
+  }
+]

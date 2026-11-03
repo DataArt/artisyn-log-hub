@@ -8,7 +8,7 @@ tags:
   - session-view
   - reports
   - teams
-timestamp: "2026-10-31T00:00:00+04:00"
+timestamp: "2026-11-03T00:00:00+04:00"
 ---
 
 # OTEL Tabs
@@ -197,6 +197,14 @@ The projection clears `rt_gap_at` once the session has no pending `logs_otel` ro
 `chunk_last_at >= rt_gap_at` (best-effort: chunks still on the user's disk are invisible). A
 receiver restart starts a new `receiverId`, which the gap rule cannot see; the chunks fill it.
 
+**Live rule, two consumers.** `computeOtelLiveness(state, now)` (`otel-facts.reader.ts`, with the
+exported `isRecent`) is the one definition of "live": `rt_last_at` or `chunk_last_at` within
+`OTEL_SESSION_ENDED_MS` (10 min); `lastActivityAt` = the later of the two; no state row →
+`hasOtel: false`, `live: false`. It feeds `buildOtelSessionStatus` (the OTEL tab's `live`) and the
+`liveness` field of `GET /api/v1/repositories/:repoId/sessions/:sessionId/logs/delta`, which the
+Session Map tab polls ([`session-map.md`](session-map.md)). The delta returns only
+`{hasOtel, live, lastActivityAt}`, no OTEL figures.
+
 **Slow updates.** `otel_hook_version` = highest `hookVersion` seen. A session with OTEL data but no
 `rt_last_at` is slow: `old-hook` when that version is NULL or below `OTEL_LIVE_HOOK_MIN_VERSION`
 (`2.29.0`), else `realtime-off`. A repository / team is slow when the highest
@@ -305,7 +313,7 @@ calls (no OTEL)" with a tooltip from `cost-hints.ts`) shows next to the cost in
 | `GET /api/v1/teams/:teamId/otel/facts` | session | + `repoId[]`, `userId[]`, `stackBy=person\|repository\|…`; + `coverage` |
 | `GET /api/v1/repositories/:repoId/sessions` | session | (existing list) + `costBreakdown.costExcludesUtilityCalls` per item and the `otelReason=<key>` filter (root sessions without OTEL data whose `COALESCE(otel_reason,'no-status')` equals it; unknown or repeated value → `400`) |
 
-Shapes: [api-reference.md](api-reference.md) § "OTEL Tabs". Endpoint list:
+Shapes: `server/src/logs/otel/otel-facts.types.ts`. Controllers and access rules:
 [server-endpoint-map.md](server-endpoint-map.md). No existing route, upload kind or chunk line
 type changed incompatibly: the `coverage` / `otelStatus` / `costExcludesUtilityCalls` fields and the
 `otelReason` param are additive, and `otel-status` is a new artisyn line type.

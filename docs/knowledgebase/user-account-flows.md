@@ -7,14 +7,14 @@ tags:
   - server
   - client
   - users
-timestamp: "2026-10-14T00:00:00+04:00"
+timestamp: "2026-11-03T00:00:00+04:00"
 ---
 
 # User Account Flows
 
 Login, auth modes, rate limits and email delivery are described in
 [authorization-and-authentificaiton.md](authorization-and-authentificaiton.md); password strength
-rules are in [password-requirements.md](password-requirements.md). This article covers the
+rules are in [algorithms/password-policy.md](algorithms/password-policy.md). This article covers the
 account flows around them.
 
 ## Signup
@@ -61,7 +61,7 @@ Self-service reset exists in the password modes (`password`, `password-confirm`)
   resets cannot both succeed. Unknown → `400`, expired → `410`, already used → `409`. After a
   successful reset every other outstanding token of the user is retired too.
 - The new password must match its confirmation and pass `PASSWORD_POLICY` (see
-  [password-requirements.md](password-requirements.md)).
+  [algorithms/password-policy.md](algorithms/password-policy.md)).
 - There is **no auto-login** after a reset: the user signs in with the new password.
 - The emailed link is built only from `PUBLIC_BASE_URL`, never from the request `Host` header (see
   [authorization-and-authentificaiton.md](authorization-and-authentificaiton.md) § "Email flows").

@@ -34,6 +34,12 @@ interface UseRepositoryDataParams {
   branchSelectedSession: BranchSelectedSession | null;
   /** The sessions list `otelReason` filter (2026-10-30 otel-shared-receiver, DD-33). */
   otelReason?: OtelReasonKey | null;
+  /**
+   * True while a tab that keeps its own copy of the logs is open (the Session Map, session-map
+   * DD-11): the silent watermark refetch of `/logs` is held back, and leaving the tab catches up
+   * with one refetch.
+   */
+  suspendSilentLogsRefetch?: boolean;
 }
 
 export function useRepositoryData({
@@ -44,6 +50,7 @@ export function useRepositoryData({
   sessionId,
   branchSelectedSession,
   otelReason = null,
+  suspendSilentLogsRefetch = false,
 }: UseRepositoryDataParams) {
   const queryClient = useQueryClient();
 
@@ -199,6 +206,9 @@ export function useRepositoryData({
     prevSessionIdRef.current = currentSessionId;
 
     if (currentWatermark === null) return;
+    // The Map tab polls its own delta; the old watermark is kept so leaving the tab re-runs this
+    // effect (the flag is a dependency) and refetches once.
+    if (suspendSilentLogsRefetch) return;
     const seenEndTime = seenEndTimeRef.current.get(currentSessionId);
     // No prior fetch to compare against (first time viewing this session) — the normal
     // loading path already handles this, nothing to reconcile here.
@@ -209,7 +219,14 @@ export function useRepositoryData({
     void queryClient.invalidateQueries({
       queryKey: ['session-logs', repoId, currentSessionId, teamId],
     });
-  }, [selectedSession, currentWatermark, queryClient, repoId, teamId]);
+  }, [
+    selectedSession,
+    currentWatermark,
+    queryClient,
+    repoId,
+    teamId,
+    suspendSilentLogsRefetch,
+  ]);
 
   const reloadSelectedSessionLogs = useCallback(() => {
     if (!selectedSession) return;
@@ -237,6 +254,7 @@ export function useRepositoryData({
   }, [logsQuery.isFetching, selectedSession]);
 
   useEffect(() => {
+    if (suspendSilentLogsRefetch) return;
     if (selectedSession && logsQuery.isSuccess && currentWatermark !== null) {
       seenEndTimeRef.current.set(selectedSession.sessionId, currentWatermark);
     }
@@ -245,6 +263,7 @@ export function useRepositoryData({
     logsQuery.isSuccess,
     logsQuery.dataUpdatedAt,
     currentWatermark,
+    suspendSilentLogsRefetch,
   ]);
 
   const isFavorite = selectedSession?.isFavorite ?? false;

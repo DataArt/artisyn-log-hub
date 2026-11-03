@@ -1,0 +1,330 @@
+[
+  {
+    "id": "NF-01",
+    "input": {
+      "query": "cost",
+      "nodes": [
+        {"id": "questions", "label": "Start from a question", "children": [
+          {"id": "question:expensive", "label": "Why was this session expensive?", "synonyms": ["cost", "spend", "why", "money"]}
+        ]},
+        {"id": "repo:1", "label": "log-hub", "children": [
+          {"id": "repo:1/view:cost", "label": "Cost", "synonyms": ["expensive", "spend", "money"], "description": "Cost per day, model and user over a period."},
+          {"id": "repo:1/session", "label": "Session", "children": [
+            {"id": "repo:1/session/group:cost-context", "label": "Cost & context", "children": [
+              {"id": "repo:1/session/group:cost-context/tab:charts", "label": "Charts", "children": [
+                {"id": "repo:1/session/group:cost-context/tab:charts/chart:call-tree", "label": "Call tree", "synonyms": ["cost", "calls", "expensive", "spend"], "description": "Cost of every call in the session tree."},
+                {"id": "repo:1/session/group:cost-context/tab:charts/chart:timeline", "label": "Timeline", "synonyms": ["time", "gantt", "duration"], "description": "When each agent worked, to the second."}
+              ]},
+              {"id": "repo:1/session/group:cost-context/tab:sysctx", "label": "System context", "synonyms": ["system prompt", "startup", "claude.md", "context", "loaded"], "description": "What Claude loads at startup and how many tokens each part costs."}
+            ]},
+            {"id": "repo:1/session/group:effects", "label": "Effects", "children": [
+              {"id": "repo:1/session/group:effects/tab:tools", "label": "Tools/MCP", "synonyms": ["mcp", "tools", "failed", "errors", "fail"], "description": "MCP and monitored CLI tool calls of this session, with failures."}
+            ]}
+          ]}
+        ]}
+      ]
+    },
+    "expected": {
+      "matches": [
+        "question:expensive",
+        "repo:1/view:cost",
+        "repo:1/session/group:cost-context/tab:charts/chart:call-tree",
+        "repo:1/session/group:cost-context/tab:sysctx"
+      ],
+      "expand": [
+        "questions",
+        "repo:1",
+        "repo:1/session",
+        "repo:1/session/group:cost-context",
+        "repo:1/session/group:cost-context/tab:charts"
+      ],
+      "total": 6,
+      "synonymHit": {
+        "question:expensive": "cost",
+        "repo:1/session/group:cost-context/tab:charts/chart:call-tree": "cost"
+      }
+    },
+    "note": "One word 'cost'. question: label words why/was/this/session/expensive miss; synonym 'cost' matches (hit). view:cost: label 'Cost' matches, no hit. call-tree: label 'Call tree' misses; synonym 'cost' (hit). timeline: no field holds 'cost'. sysctx: label words system/context miss (and 'cost' is not inside 'system context'); synonyms miss ('context' has no 'cost'); description word 'costs' starts with 'cost', no hit. tools: misses. Expand = the ancestors of the four matches in first-reached order. total = 6 leaves."
+  },
+  {
+    "id": "NF-02",
+    "input": {
+      "query": "expensive",
+      "nodes": [
+        {"id": "questions", "label": "Start from a question", "children": [
+          {"id": "question:expensive", "label": "Why was this session expensive?", "synonyms": ["cost", "spend", "why", "money"]}
+        ]},
+        {"id": "repo:1", "label": "log-hub", "children": [
+          {"id": "repo:1/view:cost", "label": "Cost", "synonyms": ["expensive", "spend", "money"], "description": "Cost per day, model and user over a period."},
+          {"id": "repo:1/session", "label": "Session", "children": [
+            {"id": "repo:1/session/group:cost-context", "label": "Cost & context", "children": [
+              {"id": "repo:1/session/group:cost-context/tab:charts", "label": "Charts", "children": [
+                {"id": "repo:1/session/group:cost-context/tab:charts/chart:call-tree", "label": "Call tree", "synonyms": ["cost", "calls", "expensive", "spend"], "description": "Cost of every call in the session tree."},
+                {"id": "repo:1/session/group:cost-context/tab:charts/chart:timeline", "label": "Timeline", "synonyms": ["time", "gantt", "duration"], "description": "When each agent worked, to the second."}
+              ]},
+              {"id": "repo:1/session/group:cost-context/tab:sysctx", "label": "System context", "synonyms": ["system prompt", "startup", "claude.md", "context", "loaded"], "description": "What Claude loads at startup and how many tokens each part costs."}
+            ]},
+            {"id": "repo:1/session/group:effects", "label": "Effects", "children": [
+              {"id": "repo:1/session/group:effects/tab:tools", "label": "Tools/MCP", "synonyms": ["mcp", "tools", "failed", "errors", "fail"], "description": "MCP and monitored CLI tool calls of this session, with failures."}
+            ]}
+          ]}
+        ]}
+      ]
+    },
+    "expected": {
+      "matches": [
+        "question:expensive",
+        "repo:1/view:cost",
+        "repo:1/session/group:cost-context/tab:charts/chart:call-tree"
+      ],
+      "expand": [
+        "questions",
+        "repo:1",
+        "repo:1/session",
+        "repo:1/session/group:cost-context",
+        "repo:1/session/group:cost-context/tab:charts"
+      ],
+      "total": 6,
+      "synonymHit": {
+        "repo:1/view:cost": "expensive",
+        "repo:1/session/group:cost-context/tab:charts/chart:call-tree": "expensive"
+      }
+    },
+    "note": "question: label 'Why was this session expensive?' splits to ...expensive (the '?' is a separator), so the label matches first and there is no synonym hit (rule 4). view:cost and call-tree: labels miss, synonym 'expensive' hits. Others hold no 'expensive'."
+  },
+  {
+    "id": "NF-03",
+    "input": {
+      "query": "fail",
+      "nodes": [
+        {"id": "questions", "label": "Start from a question", "children": [
+          {"id": "question:expensive", "label": "Why was this session expensive?", "synonyms": ["cost", "spend", "why", "money"]}
+        ]},
+        {"id": "repo:1", "label": "log-hub", "children": [
+          {"id": "repo:1/view:cost", "label": "Cost", "synonyms": ["expensive", "spend", "money"], "description": "Cost per day, model and user over a period."},
+          {"id": "repo:1/session", "label": "Session", "children": [
+            {"id": "repo:1/session/group:cost-context", "label": "Cost & context", "children": [
+              {"id": "repo:1/session/group:cost-context/tab:charts", "label": "Charts", "children": [
+                {"id": "repo:1/session/group:cost-context/tab:charts/chart:call-tree", "label": "Call tree", "synonyms": ["cost", "calls", "expensive", "spend"], "description": "Cost of every call in the session tree."},
+                {"id": "repo:1/session/group:cost-context/tab:charts/chart:timeline", "label": "Timeline", "synonyms": ["time", "gantt", "duration"], "description": "When each agent worked, to the second."}
+              ]},
+              {"id": "repo:1/session/group:cost-context/tab:sysctx", "label": "System context", "synonyms": ["system prompt", "startup", "claude.md", "context", "loaded"], "description": "What Claude loads at startup and how many tokens each part costs."}
+            ]},
+            {"id": "repo:1/session/group:effects", "label": "Effects", "children": [
+              {"id": "repo:1/session/group:effects/tab:tools", "label": "Tools/MCP", "synonyms": ["mcp", "tools", "failed", "errors", "fail"], "description": "MCP and monitored CLI tool calls of this session, with failures."}
+            ]}
+          ]}
+        ]}
+      ]
+    },
+    "expected": {
+      "matches": ["repo:1/session/group:effects/tab:tools"],
+      "expand": ["repo:1", "repo:1/session", "repo:1/session/group:effects"],
+      "total": 6,
+      "synonymHit": {"repo:1/session/group:effects/tab:tools": "failed"}
+    },
+    "note": "Only Tools/MCP holds 'fail'. Label words tools/mcp miss; synonyms in list order mcp, tools miss, 'failed' starts with 'fail', so the hit is 'failed' (the exact synonym 'fail' comes later and is never tried; the description's 'failures' is tried only after all synonyms)."
+  },
+  {
+    "id": "NF-04",
+    "input": {
+      "query": "co",
+      "nodes": [
+        {"id": "questions", "label": "Start from a question", "children": [
+          {"id": "question:expensive", "label": "Why was this session expensive?", "synonyms": ["cost", "spend", "why", "money"]}
+        ]},
+        {"id": "repo:1", "label": "log-hub", "children": [
+          {"id": "repo:1/view:cost", "label": "Cost", "synonyms": ["expensive", "spend", "money"], "description": "Cost per day, model and user over a period."},
+          {"id": "repo:1/session", "label": "Session", "children": [
+            {"id": "repo:1/session/group:cost-context", "label": "Cost & context", "children": [
+              {"id": "repo:1/session/group:cost-context/tab:charts", "label": "Charts", "children": [
+                {"id": "repo:1/session/group:cost-context/tab:charts/chart:call-tree", "label": "Call tree", "synonyms": ["cost", "calls", "expensive", "spend"], "description": "Cost of every call in the session tree."},
+                {"id": "repo:1/session/group:cost-context/tab:charts/chart:timeline", "label": "Timeline", "synonyms": ["time", "gantt", "duration"], "description": "When each agent worked, to the second."}
+              ]},
+              {"id": "repo:1/session/group:cost-context/tab:sysctx", "label": "System context", "synonyms": ["system prompt", "startup", "claude.md", "context", "loaded"], "description": "What Claude loads at startup and how many tokens each part costs."}
+            ]},
+            {"id": "repo:1/session/group:effects", "label": "Effects", "children": [
+              {"id": "repo:1/session/group:effects/tab:tools", "label": "Tools/MCP", "synonyms": ["mcp", "tools", "failed", "errors", "fail"], "description": "MCP and monitored CLI tool calls of this session, with failures."}
+            ]}
+          ]}
+        ]}
+      ]
+    },
+    "expected": {
+      "matches": [
+        "question:expensive",
+        "repo:1/view:cost",
+        "repo:1/session/group:cost-context/tab:charts/chart:call-tree",
+        "repo:1/session/group:cost-context/tab:sysctx"
+      ],
+      "expand": [
+        "questions",
+        "repo:1",
+        "repo:1/session",
+        "repo:1/session/group:cost-context",
+        "repo:1/session/group:cost-context/tab:charts"
+      ],
+      "total": 6,
+      "synonymHit": {
+        "question:expensive": "cost",
+        "repo:1/session/group:cost-context/tab:charts/chart:call-tree": "cost"
+      }
+    },
+    "note": "'co' has 2 chars: prefix only (rule 3). question: synonym 'cost' (hit). view:cost: label 'Cost'. call-tree: label words call/tree miss, synonym 'cost' (hit). sysctx: label word 'context' starts with 'co', no hit. timeline: 'second' contains 'co' but not as a prefix, so no match. tools: no field word starts with 'co'. The container 'Cost & context' would match but containers are never matched (rule 7)."
+  },
+  {
+    "id": "NF-05",
+    "input": {
+      "query": "cl md",
+      "nodes": [
+        {"id": "questions", "label": "Start from a question", "children": [
+          {"id": "question:expensive", "label": "Why was this session expensive?", "synonyms": ["cost", "spend", "why", "money"]}
+        ]},
+        {"id": "repo:1", "label": "log-hub", "children": [
+          {"id": "repo:1/view:cost", "label": "Cost", "synonyms": ["expensive", "spend", "money"], "description": "Cost per day, model and user over a period."},
+          {"id": "repo:1/session", "label": "Session", "children": [
+            {"id": "repo:1/session/group:cost-context", "label": "Cost & context", "children": [
+              {"id": "repo:1/session/group:cost-context/tab:charts", "label": "Charts", "children": [
+                {"id": "repo:1/session/group:cost-context/tab:charts/chart:call-tree", "label": "Call tree", "synonyms": ["cost", "calls", "expensive", "spend"], "description": "Cost of every call in the session tree."},
+                {"id": "repo:1/session/group:cost-context/tab:charts/chart:timeline", "label": "Timeline", "synonyms": ["time", "gantt", "duration"], "description": "When each agent worked, to the second."}
+              ]},
+              {"id": "repo:1/session/group:cost-context/tab:sysctx", "label": "System context", "synonyms": ["system prompt", "startup", "claude.md", "context", "loaded"], "description": "What Claude loads at startup and how many tokens each part costs."}
+            ]},
+            {"id": "repo:1/session/group:effects", "label": "Effects", "children": [
+              {"id": "repo:1/session/group:effects/tab:tools", "label": "Tools/MCP", "synonyms": ["mcp", "tools", "failed", "errors", "fail"], "description": "MCP and monitored CLI tool calls of this session, with failures."}
+            ]}
+          ]}
+        ]}
+      ]
+    },
+    "expected": {
+      "matches": ["repo:1/session/group:cost-context/tab:sysctx"],
+      "expand": ["repo:1", "repo:1/session", "repo:1/session/group:cost-context"],
+      "total": 6,
+      "synonymHit": {"repo:1/session/group:cost-context/tab:sysctx": "claude.md"}
+    },
+    "note": "Two words, both must match (rule 5). sysctx: 'cl' misses the label, synonym 'claude.md' splits to claude, md and 'claude' starts with 'cl' (hit claude.md); 'md' also matches 'claude.md'. tools: 'cl' matches the description word 'cli', but 'md' matches no field, so tools is out. call-tree: 'call' and 'calls' do not start with 'cl'."
+  },
+  {
+    "id": "NF-06",
+    "input": {
+      "query": "ntext",
+      "nodes": [
+        {"id": "questions", "label": "Start from a question", "children": [
+          {"id": "question:expensive", "label": "Why was this session expensive?", "synonyms": ["cost", "spend", "why", "money"]}
+        ]},
+        {"id": "repo:1", "label": "log-hub", "children": [
+          {"id": "repo:1/view:cost", "label": "Cost", "synonyms": ["expensive", "spend", "money"], "description": "Cost per day, model and user over a period."},
+          {"id": "repo:1/session", "label": "Session", "children": [
+            {"id": "repo:1/session/group:cost-context", "label": "Cost & context", "children": [
+              {"id": "repo:1/session/group:cost-context/tab:charts", "label": "Charts", "children": [
+                {"id": "repo:1/session/group:cost-context/tab:charts/chart:call-tree", "label": "Call tree", "synonyms": ["cost", "calls", "expensive", "spend"], "description": "Cost of every call in the session tree."},
+                {"id": "repo:1/session/group:cost-context/tab:charts/chart:timeline", "label": "Timeline", "synonyms": ["time", "gantt", "duration"], "description": "When each agent worked, to the second."}
+              ]},
+              {"id": "repo:1/session/group:cost-context/tab:sysctx", "label": "System context", "synonyms": ["system prompt", "startup", "claude.md", "context", "loaded"], "description": "What Claude loads at startup and how many tokens each part costs."}
+            ]},
+            {"id": "repo:1/session/group:effects", "label": "Effects", "children": [
+              {"id": "repo:1/session/group:effects/tab:tools", "label": "Tools/MCP", "synonyms": ["mcp", "tools", "failed", "errors", "fail"], "description": "MCP and monitored CLI tool calls of this session, with failures."}
+            ]}
+          ]}
+        ]}
+      ]
+    },
+    "expected": {
+      "matches": ["repo:1/session/group:cost-context/tab:sysctx"],
+      "expand": ["repo:1", "repo:1/session", "repo:1/session/group:cost-context"],
+      "total": 6,
+      "synonymHit": {}
+    },
+    "note": "'ntext' has 5 chars, so a substring is enough (rule 3): it occurs inside the label 'system context' of sysctx, which matches on the label (no hit). No other leaf contains 'ntext'."
+  },
+  {
+    "id": "NF-07",
+    "input": {
+      "query": "FAIL",
+      "nodes": [
+        {"id": "questions", "label": "Start from a question", "children": [
+          {"id": "question:expensive", "label": "Why was this session expensive?", "synonyms": ["cost", "spend", "why", "money"]}
+        ]},
+        {"id": "repo:1", "label": "log-hub", "children": [
+          {"id": "repo:1/view:cost", "label": "Cost", "synonyms": ["expensive", "spend", "money"], "description": "Cost per day, model and user over a period."},
+          {"id": "repo:1/session", "label": "Session", "children": [
+            {"id": "repo:1/session/group:cost-context", "label": "Cost & context", "children": [
+              {"id": "repo:1/session/group:cost-context/tab:charts", "label": "Charts", "children": [
+                {"id": "repo:1/session/group:cost-context/tab:charts/chart:call-tree", "label": "Call tree", "synonyms": ["cost", "calls", "expensive", "spend"], "description": "Cost of every call in the session tree."},
+                {"id": "repo:1/session/group:cost-context/tab:charts/chart:timeline", "label": "Timeline", "synonyms": ["time", "gantt", "duration"], "description": "When each agent worked, to the second."}
+              ]},
+              {"id": "repo:1/session/group:cost-context/tab:sysctx", "label": "System context", "synonyms": ["system prompt", "startup", "claude.md", "context", "loaded"], "description": "What Claude loads at startup and how many tokens each part costs."}
+            ]},
+            {"id": "repo:1/session/group:effects", "label": "Effects", "children": [
+              {"id": "repo:1/session/group:effects/tab:tools", "label": "Tools/MCP", "synonyms": ["mcp", "tools", "failed", "errors", "fail"], "description": "MCP and monitored CLI tool calls of this session, with failures."}
+            ]}
+          ]}
+        ]}
+      ]
+    },
+    "expected": {
+      "matches": ["repo:1/session/group:effects/tab:tools"],
+      "expand": ["repo:1", "repo:1/session", "repo:1/session/group:effects"],
+      "total": 6,
+      "synonymHit": {"repo:1/session/group:effects/tab:tools": "failed"}
+    },
+    "note": "Rule 1 lower-cases 'FAIL' to 'fail'; the result equals NF-03."
+  },
+  {
+    "id": "NF-08",
+    "input": {
+      "query": "",
+      "nodes": [
+        {"id": "questions", "label": "Start from a question", "children": [
+          {"id": "question:expensive", "label": "Why was this session expensive?", "synonyms": ["cost", "spend", "why", "money"]}
+        ]},
+        {"id": "repo:1", "label": "log-hub", "children": [
+          {"id": "repo:1/view:cost", "label": "Cost", "synonyms": ["expensive", "spend", "money"], "description": "Cost per day, model and user over a period."},
+          {"id": "repo:1/session", "label": "Session", "children": [
+            {"id": "repo:1/session/group:cost-context", "label": "Cost & context", "children": [
+              {"id": "repo:1/session/group:cost-context/tab:charts", "label": "Charts", "children": [
+                {"id": "repo:1/session/group:cost-context/tab:charts/chart:call-tree", "label": "Call tree", "synonyms": ["cost", "calls", "expensive", "spend"], "description": "Cost of every call in the session tree."},
+                {"id": "repo:1/session/group:cost-context/tab:charts/chart:timeline", "label": "Timeline", "synonyms": ["time", "gantt", "duration"], "description": "When each agent worked, to the second."}
+              ]},
+              {"id": "repo:1/session/group:cost-context/tab:sysctx", "label": "System context", "synonyms": ["system prompt", "startup", "claude.md", "context", "loaded"], "description": "What Claude loads at startup and how many tokens each part costs."}
+            ]},
+            {"id": "repo:1/session/group:effects", "label": "Effects", "children": [
+              {"id": "repo:1/session/group:effects/tab:tools", "label": "Tools/MCP", "synonyms": ["mcp", "tools", "failed", "errors", "fail"], "description": "MCP and monitored CLI tool calls of this session, with failures."}
+            ]}
+          ]}
+        ]}
+      ]
+    },
+    "expected": {"matches": [], "expand": [], "total": 6, "synonymHit": {}},
+    "note": "Rule 9: no words, nothing matches. total counts the 6 leaves only (7 containers are not counted)."
+  },
+  {
+    "id": "NF-09",
+    "input": {
+      "query": "   ",
+      "nodes": [
+        {"id": "questions", "label": "Start from a question", "children": [
+          {"id": "question:expensive", "label": "Why was this session expensive?", "synonyms": ["cost", "spend", "why", "money"]}
+        ]},
+        {"id": "repo:1", "label": "log-hub", "children": [
+          {"id": "repo:1/view:cost", "label": "Cost", "synonyms": ["expensive", "spend", "money"], "description": "Cost per day, model and user over a period."},
+          {"id": "repo:1/session", "label": "Session", "children": [
+            {"id": "repo:1/session/group:cost-context", "label": "Cost & context", "children": [
+              {"id": "repo:1/session/group:cost-context/tab:charts", "label": "Charts", "children": [
+                {"id": "repo:1/session/group:cost-context/tab:charts/chart:call-tree", "label": "Call tree", "synonyms": ["cost", "calls", "expensive", "spend"], "description": "Cost of every call in the session tree."},
+                {"id": "repo:1/session/group:cost-context/tab:charts/chart:timeline", "label": "Timeline", "synonyms": ["time", "gantt", "duration"], "description": "When each agent worked, to the second."}
+              ]},
+              {"id": "repo:1/session/group:cost-context/tab:sysctx", "label": "System context", "synonyms": ["system prompt", "startup", "claude.md", "context", "loaded"], "description": "What Claude loads at startup and how many tokens each part costs."}
+            ]},
+            {"id": "repo:1/session/group:effects", "label": "Effects", "children": [
+              {"id": "repo:1/session/group:effects/tab:tools", "label": "Tools/MCP", "synonyms": ["mcp", "tools", "failed", "errors", "fail"], "description": "MCP and monitored CLI tool calls of this session, with failures."}
+            ]}
+          ]}
+        ]}
+      ]
+    },
+    "expected": {"matches": [], "expand": [], "total": 6, "synonymHit": {}},
+    "note": "Rule 1: splitting three spaces gives only empty pieces, which are dropped, so rule 9 applies as for the empty query."
+  }
+]
