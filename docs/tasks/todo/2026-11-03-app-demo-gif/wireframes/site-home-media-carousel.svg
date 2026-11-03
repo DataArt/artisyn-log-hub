@@ -1,0 +1,154 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="1500" viewBox="0 0 1280 1500" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif">
+  <title>Site home page with a Steam-style media carousel (desktop, light theme)</title>
+  <defs>
+    <pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse">
+      <path d="M24 0H0V24" fill="none" stroke="#17201b" stroke-opacity="0.06"/>
+    </pattern>
+    <pattern id="hatch" width="10" height="10" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+      <line x1="0" y1="0" x2="0" y2="10" stroke="#b8b5a8" stroke-width="1"/>
+    </pattern>
+    <style>
+      .mono{font-family:ui-monospace,'Cascadia Mono',Consolas,monospace}
+      .h{fill:#1f5c45;font-weight:600}
+      .t{fill:#17201b}
+      .t2{fill:#36433c}
+      .t3{fill:#66726a}
+      .amber{fill:#9a6614}
+      .note{fill:#9a6614;font-size:12px;font-style:italic}
+      .card{fill:#faf9f4;stroke:#b8b5a8}
+    </style>
+  </defs>
+
+  <rect width="1280" height="1500" fill="#f3f1ea"/>
+  <rect width="1280" height="1500" fill="url(#grid)"/>
+
+  <!-- top nav (unchanged) -->
+  <rect width="1280" height="54" fill="#f3f1ea"/>
+  <line x1="0" y1="54" x2="1280" y2="54" stroke="#d9d6ca"/>
+  <text x="24" y="33" class="mono h" font-size="18">Artisyn Log Hub</text>
+  <g class="mono t2" font-size="13">
+    <text x="203" y="32" class="h">Home</text><text x="255" y="32">Features</text><text x="340" y="32">Get started</text>
+    <text x="451" y="32">Configuration</text><text x="579" y="32">Using Log Hub</text><text x="707" y="32">Data &amp; security</text>
+    <text x="851" y="32">Questions</text><text x="945" y="32">Deck</text><text x="996" y="32">GitHub ↗</text>
+  </g>
+
+  <!-- hero (unchanged, collapsed) -->
+  <text x="64" y="112" class="mono amber" font-size="12" letter-spacing="1">// SELF-HOSTED ANALYTICS FOR CLAUDE CODE</text>
+  <text x="64" y="165" class="mono h" font-size="30">This session cost $8. Is that good?</text>
+  <rect x="64" y="190" width="610" height="10" fill="#d9d6ca"/>
+  <rect x="64" y="210" width="580" height="10" fill="#d9d6ca"/>
+  <rect x="64" y="230" width="600" height="10" fill="#d9d6ca"/>
+  <rect x="64" y="262" width="136" height="44" fill="#1f5c45"/>
+  <text x="132" y="289" text-anchor="middle" class="mono" fill="#faf9f4" font-size="13" font-weight="600">GET STARTED</text>
+  <rect x="213" y="262" width="199" height="44" fill="none" stroke="#1f5c45"/>
+  <text x="312" y="289" text-anchor="middle" class="mono h" font-size="13">WHY LOG HUB (DECK)</text>
+  <rect x="707" y="100" width="508" height="210" class="card"/>
+  <rect x="707" y="100" width="508" height="210" fill="url(#hatch)" opacity="0.5"/>
+  <text x="961" y="200" text-anchor="middle" class="mono t3" font-size="13">existing "Illustrative example" insight figure</text>
+  <text x="961" y="220" text-anchor="middle" class="mono t3" font-size="13">(unchanged — or replaced, see open question)</text>
+  <text x="64" y="340" class="note">Hero kept as is; the carousel is a new section directly below it.</text>
+
+  <!-- section heading -->
+  <text x="64" y="398" class="mono amber" font-size="12" letter-spacing="1">// SEE IT IN ACTION</text>
+  <text x="64" y="432" class="mono h" font-size="24">Log Hub, screen by screen</text>
+
+  <!-- category chips -->
+  <g class="mono" font-size="12">
+    <rect x="64" y="452" width="56" height="28" fill="#1f5c45"/><text x="92" y="471" text-anchor="middle" fill="#faf9f4">All 32</text>
+    <rect x="128" y="452" width="92" height="28" fill="none" stroke="#b8b5a8"/><text x="174" y="471" text-anchor="middle" class="t2">Cost · 9</text>
+    <rect x="228" y="452" width="130" height="28" fill="none" stroke="#b8b5a8"/><text x="293" y="471" text-anchor="middle" class="t2">Harness · 7</text>
+    <rect x="366" y="452" width="118" height="28" fill="none" stroke="#b8b5a8"/><text x="425" y="471" text-anchor="middle" class="t2">Replay · 6</text>
+    <rect x="492" y="452" width="126" height="28" fill="none" stroke="#b8b5a8"/><text x="555" y="471" text-anchor="middle" class="t2">Team · 10</text>
+  </g>
+  <text x="640" y="471" class="note">Optional filter chips = the Features A–E groups; "All" by default.</text>
+
+  <!-- main viewer -->
+  <rect x="64" y="496" width="1152" height="640" class="card"/>
+  <rect x="64" y="496" width="1152" height="4" fill="#1f5c45"/>
+  <!-- mock app frame inside -->
+  <rect x="96" y="524" width="1088" height="560" fill="#ffffff" stroke="#d9d6ca"/>
+  <rect x="96" y="524" width="1088" height="34" fill="#f6f6f8" stroke="#d9d6ca"/>
+  <g font-size="13" fill="#555">
+    <text x="112" y="546">What happened</text><rect x="214" y="532" width="48" height="20" rx="4" fill="#e6e8f4"/><text x="224" y="546" fill="#222" font-weight="600">Cost</text>
+    <text x="276" y="546">Harness &amp; context</text><text x="400" y="546">Failed tool call</text><text x="510" y="546">All</text>
+  </g>
+  <g font-size="13" fill="#555"><text x="112" y="584" fill="#222" font-weight="600">Summary</text><text x="186" y="584">Statistics</text><text x="262" y="584">Charts</text><text x="318" y="584">OTEL</text><text x="368" y="584">More ⌄</text></g>
+  <line x1="106" y1="592" x2="168" y2="592" stroke="#3b5bdb" stroke-width="2"/>
+  <!-- KPI tiles -->
+  <g>
+    <rect x="116" y="610" width="196" height="120" rx="4" fill="#fff" stroke="#222"/><rect x="116" y="610" width="3" height="120" fill="#2f9e44"/>
+    <text x="130" y="632" font-size="12" fill="#555">Cost</text><text x="130" y="660" class="mono" font-size="20" font-weight="700" fill="#222">$3.4632</text>
+    <rect x="326" y="610" width="196" height="120" rx="4" fill="#fff" stroke="#222"/><rect x="326" y="610" width="3" height="120" fill="#f08c00"/>
+    <text x="340" y="632" font-size="12" fill="#555">Peak context</text><text x="340" y="660" class="mono" font-size="20" font-weight="700" fill="#222">168,311</text>
+    <rect x="340" y="690" width="140" height="5" fill="#e9ecef"/><rect x="340" y="690" width="26" height="5" fill="#f08c00"/>
+    <rect x="536" y="610" width="196" height="120" rx="4" fill="#fff" stroke="#222"/><rect x="536" y="610" width="3" height="120" fill="#3b5bdb"/>
+    <text x="550" y="632" font-size="12" fill="#555">Turns</text><text x="550" y="660" class="mono" font-size="20" font-weight="700" fill="#222">2 prompts</text>
+    <rect x="746" y="610" width="196" height="120" rx="4" fill="#fff" stroke="#222"/><rect x="746" y="610" width="3" height="120" fill="#12b886"/>
+    <text x="760" y="632" font-size="12" fill="#555">Code impact</text><text x="760" y="660" class="mono" font-size="20" font-weight="700" fill="#222">635 lines</text>
+    <rect x="956" y="610" width="196" height="120" rx="4" fill="#fff" stroke="#222"/><rect x="956" y="610" width="3" height="120" fill="#7950f2"/>
+    <text x="970" y="632" font-size="12" fill="#555">Delegation</text><text x="970" y="660" class="mono" font-size="20" font-weight="700" fill="#222">0 agents</text>
+  </g>
+  <rect x="116" y="748" width="1036" height="310" fill="#f8f9fa" stroke="#e9ecef"/>
+  <text x="634" y="900" text-anchor="middle" fill="#868e96" font-size="14">current item — PNG screenshot or looping GIF / muted video, 16:10, shown at full width</text>
+
+  <!-- play badge for GIF items -->
+  <rect x="1104" y="1040" width="64" height="26" fill="#17201b" opacity="0.8"/>
+  <text x="1136" y="1058" text-anchor="middle" class="mono" fill="#faf9f4" font-size="12">▶ GIF</text>
+
+  <!-- prev / next -->
+  <rect x="72" y="780" width="40" height="72" fill="#17201b" opacity="0.55"/>
+  <text x="92" y="826" text-anchor="middle" fill="#faf9f4" font-size="26">‹</text>
+  <rect x="1168" y="780" width="40" height="72" fill="#17201b" opacity="0.55"/>
+  <text x="1188" y="826" text-anchor="middle" fill="#faf9f4" font-size="26">›</text>
+
+  <!-- caption row -->
+  <text x="96" y="1112" class="mono h" font-size="15">Session Summary hub — cost, peak context, delegation at a glance</text>
+  <text x="1184" y="1112" text-anchor="end" class="mono t3" font-size="13">07 / 32</text>
+  <text x="96" y="1128" class="t3" font-size="12">Features → A · Why it costs this much</text>
+  <text x="1184" y="1128" text-anchor="end" class="note">← / → keys · pause on hover</text>
+
+  <!-- thumbnail strip -->
+  <rect x="64" y="1152" width="1152" height="108" class="card"/>
+  <g>
+    <rect x="80" y="1166" width="128" height="80" fill="#e8e5db" stroke="#b8b5a8"/>
+    <rect x="218" y="1166" width="128" height="80" fill="#e8e5db" stroke="#b8b5a8"/>
+    <rect x="356" y="1166" width="128" height="80" fill="#e8e5db" stroke="#b8b5a8"/>
+    <rect x="494" y="1166" width="128" height="80" fill="#e8e5db" stroke="#b8b5a8"/>
+    <rect x="632" y="1166" width="128" height="80" fill="#e8e5db" stroke="#b8b5a8"/>
+    <rect x="770" y="1166" width="128" height="80" fill="#e8e5db" stroke="#b8b5a8"/>
+    <rect x="908" y="1166" width="128" height="80" fill="#faf9f4" stroke="#1f5c45" stroke-width="3"/>
+    <rect x="1046" y="1166" width="128" height="80" fill="#e8e5db" stroke="#b8b5a8"/>
+  </g>
+  <g class="mono t3" font-size="10">
+    <text x="88" y="1240">Home repos</text><text x="226" y="1240">Sessions $</text><text x="364" y="1240">Context</text>
+    <text x="502" y="1240">Call tree</text><text x="640" y="1240">Map replay</text><text x="778" y="1240">Heatmap</text>
+    <text x="916" y="1240" class="h">Summary</text><text x="1054" y="1240">Cost/branch</text>
+  </g>
+  <!-- gif markers on thumbs -->
+  <g class="mono" font-size="10" fill="#faf9f4">
+    <rect x="166" y="1170" width="38" height="16" fill="#17201b" opacity="0.8"/><text x="185" y="1182" text-anchor="middle">▶ GIF</text>
+    <rect x="442" y="1170" width="38" height="16" fill="#17201b" opacity="0.8"/><text x="461" y="1182" text-anchor="middle">▶ GIF</text>
+    <rect x="718" y="1170" width="38" height="16" fill="#17201b" opacity="0.8"/><text x="737" y="1182" text-anchor="middle">▶ GIF</text>
+  </g>
+  <rect x="1180" y="1196" width="28" height="22" fill="none" stroke="#b8b5a8"/><text x="1194" y="1212" text-anchor="middle" class="t2" font-size="14">›</text>
+  <!-- scroll track -->
+  <rect x="80" y="1252" width="1094" height="3" fill="#d9d6ca"/><rect x="760" y="1252" width="276" height="3" fill="#1f5c45"/>
+
+  <!-- notes -->
+  <g class="note">
+    <text x="64" y="1290">• Thumbnails are static PNGs (GIF items get a "▶ GIF" badge); only the selected item's full file loads — the rest load on select (lazy), so the home page stays light.</text>
+    <text x="64" y="1310">• Strip scrolls horizontally with 30+ items; the active thumbnail has a green frame and is scrolled into view. Autoplay off; a GIF/video item plays only while selected.</text>
+    <text x="64" y="1330">• Before an item loads: its thumbnail stretched under a "loading…" label. One item only: no strip, no arrows, no counter.</text>
+    <text x="64" y="1350">• Vanilla JS + CSS in site/assets/ (no CDN library). Items listed in one data file (path, caption, Features group, kind png|gif|video).</text>
+    <text x="64" y="1370">• prefers-reduced-motion: GIF/video items show their first-frame PNG with a "Play" button instead of auto-playing.</text>
+  </g>
+
+  <!-- existing cards row (unchanged) -->
+  <rect x="64" y="1400" width="370" height="80" class="card"/><rect x="64" y="1400" width="370" height="3" fill="#1f5c45"/>
+  <text x="84" y="1432" class="mono h" font-size="17">Why it costs this much</text>
+  <rect x="455" y="1400" width="370" height="80" class="card"/><rect x="455" y="1400" width="370" height="3" fill="#1f5c45"/>
+  <text x="475" y="1432" class="mono h" font-size="17">Does the harness work?</text>
+  <rect x="846" y="1400" width="370" height="80" class="card"/><rect x="846" y="1400" width="370" height="3" fill="#1f5c45"/>
+  <text x="866" y="1432" class="mono h" font-size="17">What it really brings</text>
+  <text x="84" y="1462" class="t3" font-size="12">existing three cards, unchanged</text>
+</svg>

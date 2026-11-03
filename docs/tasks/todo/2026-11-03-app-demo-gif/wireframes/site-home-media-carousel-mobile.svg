@@ -1,0 +1,90 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="760" viewBox="0 0 760 760" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif">
+  <title>Site home media carousel at phone width (375 px, light theme)</title>
+  <defs>
+    <pattern id="grid" width="24" height="24" patternUnits="userSpaceOnUse">
+      <path d="M24 0H0V24" fill="none" stroke="#17201b" stroke-opacity="0.06"/>
+    </pattern>
+    <style>
+      .mono{font-family:ui-monospace,'Cascadia Mono',Consolas,monospace}
+      .h{fill:#1f5c45;font-weight:600}
+      .t2{fill:#36433c}
+      .t3{fill:#66726a}
+      .amber{fill:#9a6614}
+      .note{fill:#9a6614;font-size:12px;font-style:italic}
+      .card{fill:#faf9f4;stroke:#b8b5a8}
+    </style>
+  </defs>
+  <rect width="760" height="760" fill="#ece9e0"/>
+
+  <!-- phone frame -->
+  <rect x="20" y="20" width="375" height="720" fill="#f3f1ea" stroke="#17201b" stroke-width="2"/>
+  <rect x="20" y="20" width="375" height="720" fill="url(#grid)"/>
+  <rect x="20" y="20" width="375" height="48" fill="#f3f1ea"/>
+  <line x1="20" y1="68" x2="395" y2="68" stroke="#d9d6ca"/>
+  <text x="36" y="50" class="mono h" font-size="15">Artisyn Log Hub</text>
+  <text x="375" y="50" text-anchor="end" class="mono t2" font-size="18">☰</text>
+
+  <text x="36" y="104" class="mono amber" font-size="11" letter-spacing="1">// SEE IT IN ACTION</text>
+  <text x="36" y="130" class="mono h" font-size="18">Log Hub, screen by screen</text>
+
+  <!-- chips scroll -->
+  <g class="mono" font-size="11">
+    <rect x="36" y="146" width="52" height="26" fill="#1f5c45"/><text x="62" y="163" text-anchor="middle" fill="#faf9f4">All 32</text>
+    <rect x="94" y="146" width="70" height="26" fill="none" stroke="#b8b5a8"/><text x="129" y="163" text-anchor="middle" class="t2">Cost · 9</text>
+    <rect x="170" y="146" width="96" height="26" fill="none" stroke="#b8b5a8"/><text x="218" y="163" text-anchor="middle" class="t2">Harness · 7</text>
+    <rect x="272" y="146" width="90" height="26" fill="none" stroke="#b8b5a8"/><text x="317" y="163" text-anchor="middle" class="t2">Replay · 6</text>
+    <rect x="368" y="146" width="27" height="26" fill="none" stroke="#b8b5a8"/>
+  </g>
+
+  <!-- main viewer, full bleed inside 16px gutters -->
+  <rect x="36" y="188" width="343" height="214" class="card"/>
+  <rect x="36" y="188" width="343" height="3" fill="#1f5c45"/>
+  <rect x="46" y="200" width="323" height="190" fill="#ffffff" stroke="#d9d6ca"/>
+  <rect x="46" y="200" width="323" height="18" fill="#f6f6f8"/>
+  <rect x="56" y="228" width="92" height="56" rx="3" fill="#fff" stroke="#222"/><rect x="56" y="228" width="2" height="56" fill="#2f9e44"/>
+  <rect x="158" y="228" width="92" height="56" rx="3" fill="#fff" stroke="#222"/><rect x="158" y="228" width="2" height="56" fill="#f08c00"/>
+  <rect x="260" y="228" width="98" height="56" rx="3" fill="#fff" stroke="#222"/><rect x="260" y="228" width="2" height="56" fill="#3b5bdb"/>
+  <text x="64" y="262" class="mono" font-size="11" font-weight="700" fill="#222">$3.4632</text>
+  <text x="166" y="262" class="mono" font-size="11" font-weight="700" fill="#222">168,311</text>
+  <text x="268" y="262" class="mono" font-size="11" font-weight="700" fill="#222">2 prompts</text>
+  <rect x="56" y="296" width="302" height="84" fill="#f8f9fa" stroke="#e9ecef"/>
+  <rect x="320" y="364" width="44" height="20" fill="#17201b" opacity="0.8"/><text x="342" y="378" text-anchor="middle" class="mono" fill="#faf9f4" font-size="10">▶ GIF</text>
+
+  <!-- caption -->
+  <text x="36" y="426" class="mono h" font-size="13">Session Summary hub</text>
+  <text x="379" y="426" text-anchor="end" class="mono t3" font-size="12">07 / 32</text>
+  <text x="36" y="444" class="t3" font-size="11">cost, peak context, delegation at a glance</text>
+
+  <!-- dots instead of thumbnail strip -->
+  <g fill="#b8b5a8">
+    <circle cx="159" cy="470" r="3"/><circle cx="171" cy="470" r="3"/><circle cx="183" cy="470" r="3"/>
+    <circle cx="195" cy="470" r="3"/><circle cx="207" cy="470" r="3"/><circle cx="219" cy="470" r="3"/>
+    <circle cx="231" cy="470" r="3"/><circle cx="243" cy="470" r="3"/><circle cx="255" cy="470" r="3"/>
+  </g>
+  <rect x="200" y="466" width="14" height="8" rx="4" fill="#1f5c45"/>
+  <text x="207" y="492" text-anchor="middle" class="t3" font-size="10">sliding window of 9 dots</text>
+
+  <!-- swipe hint -->
+  <path d="M120 540 h175" stroke="#9a6614" stroke-width="1.5" stroke-dasharray="4 4" fill="none"/>
+  <path d="M120 540 l10 -6 v12 z M295 540 l-10 -6 v12 z" fill="#9a6614"/>
+  <text x="207" y="530" text-anchor="middle" class="note">swipe left / right</text>
+
+  <rect x="36" y="580" width="343" height="80" class="card"/><rect x="36" y="580" width="343" height="3" fill="#1f5c45"/>
+  <text x="52" y="612" class="mono h" font-size="15">Why it costs this much</text>
+  <text x="52" y="636" class="t3" font-size="11">existing cards follow, stacked</text>
+
+  <!-- annotations -->
+  <g class="note">
+    <text x="420" y="120">Below 768 px:</text>
+    <text x="420" y="144">• viewer spans the column inside the</text>
+    <text x="436" y="160">16 px gutters; no horizontal page scroll</text>
+    <text x="420" y="184">• prev/next arrows hidden — swipe instead</text>
+    <text x="436" y="200">(arrows stay reachable for keyboard users)</text>
+    <text x="420" y="224">• thumbnail strip replaced by position dots</text>
+    <text x="420" y="248">• filter chips scroll horizontally in a row</text>
+    <text x="420" y="272">• tap on the item opens it full screen</text>
+    <text x="420" y="296">• caption wraps; counter stays right-aligned</text>
+  </g>
+  <line x1="379" y1="300" x2="416" y2="190" stroke="#9a6614" stroke-dasharray="3 3"/>
+  <line x1="260" y1="470" x2="416" y2="224" stroke="#9a6614" stroke-dasharray="3 3"/>
+</svg>
