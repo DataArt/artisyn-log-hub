@@ -11,6 +11,8 @@ export interface HelpArticle {
    * resolves it; the app always fetches `/help/<slug>.md`.
    */
   source?: string;
+  /** Plain-text page description used by the static site's meta tags; not shown in the app. */
+  description?: string;
 }
 
 export interface HelpSection {

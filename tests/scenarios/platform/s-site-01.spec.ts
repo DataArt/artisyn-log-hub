@@ -39,10 +39,17 @@ const CONTENT_TYPES: Record<string, string> = {
   '.json': 'application/json',
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
+  '.xml': 'application/xml; charset=utf-8',
 };
 
 /** Text files of the build output that the artifact grep reads. */
-const TEXT_EXT = new Set(['.html', '.css', '.js', '.json', '.md', '.svg', '.txt']);
+const TEXT_EXT = new Set(['.html', '.css', '.js', '.json', '.md', '.svg', '.txt', '.xml']);
+
+/** Published site root and og-image values — must equal SITE_URL / OG_IMAGE_* in scripts/site/layout.mjs. */
+const SITE_URL = 'https://dataart.github.io/artisyn-log-hub/';
+const SITE_NAME = 'Artisyn Log Hub';
+const OG_IMAGE_URL = `${SITE_URL}assets/og-image.png`;
+const OG_IMAGE_ALT = 'Log Hub cost flow: model to user to branch';
 
 const EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
 /** Not mailboxes: the SSH remote form of a git URL used as an example in how-hook-works. */
@@ -75,7 +82,13 @@ function startSiteServer(root: string): Promise<SiteServer> {
     const file = path.resolve(root, rel);
     const inside = path.relative(root, file);
     if (inside.startsWith('..') || path.isAbsolute(inside)) return notFound();
-    if (!fs.existsSync(file) || !fs.statSync(file).isFile()) return notFound();
+    if (!fs.existsSync(file) || !fs.statSync(file).isFile()) {
+      // Like GitHub Pages: a miss at any depth under the site answers 404 with the site's 404.html.
+      const page404 = path.join(root, '404.html');
+      if (!fs.existsSync(page404)) return notFound();
+      res.writeHead(404, { 'Content-Type': CONTENT_TYPES['.html'] });
+      return res.end(fs.readFileSync(page404));
+    }
     res.writeHead(200, { 'Content-Type': CONTENT_TYPES[path.extname(file)] ?? 'application/octet-stream' });
     res.end(fs.readFileSync(file));
   });
@@ -92,6 +105,45 @@ function startSiteServer(root: string): Promise<SiteServer> {
 
 function decodeAttr(s: string): string {
   return s.replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+}
+
+/** Canonical URL of a site file (path relative to the site root), as layout.mjs canonicalUrl() builds it. */
+function canonical(relPath: string): string {
+  const p = relPath.replace(/\\/g, '/');
+  if (p === 'index.html') return SITE_URL;
+  if (p.endsWith('/index.html')) return SITE_URL + p.slice(0, -'index.html'.length);
+  return SITE_URL + p;
+}
+
+/** Decoded `content` of every `<meta {attr}="{key}" content="…">` in `html`. */
+function metaContent(html: string, attr: 'name' | 'property', key: string): string[] {
+  const out: string[] = [];
+  for (const m of html.matchAll(/<meta\s+([^>]*)>/g)) {
+    const attrs = m[1];
+    const k = new RegExp(`(?:^|\\s)${attr}="([^"]*)"`).exec(attrs)?.[1];
+    if (k === undefined || decodeAttr(k) !== key) continue;
+    const content = /(?:^|\s)content="([^"]*)"/.exec(attrs)?.[1];
+    if (content !== undefined) out.push(decodeAttr(content));
+  }
+  return out;
+}
+
+/** Decoded `href` of every `<link rel="{rel}" …>` in `html`. */
+function linkHrefs(html: string, rel: string): string[] {
+  const out: string[] = [];
+  for (const m of html.matchAll(/<link\s+([^>]*)>/g)) {
+    if (/(?:^|\s)rel="([^"]*)"/.exec(m[1])?.[1] !== rel) continue;
+    const href = /(?:^|\s)href="([^"]*)"/.exec(m[1])?.[1];
+    if (href !== undefined) out.push(decodeAttr(href));
+  }
+  return out;
+}
+
+/** Width and height of a PNG from its IHDR chunk (bytes 16–23, big-endian). */
+function pngSize(file: string): { width: number; height: number } {
+  const buf = fs.readFileSync(file);
+  expect(buf.subarray(1, 4).toString('latin1'), `${file}: PNG signature`).toBe('PNG');
+  return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) };
 }
 
 interface CrawlResult {
@@ -423,6 +475,152 @@ test('@S-SITE-01 static site and deck: built, served under a base path, navigabl
         for (const p of ownPaths) if (text.includes(p)) hits.push(`${where}: build machine path ${p}`);
       }
       expect(hits).toEqual([]);
+    });
+
+    const builtHtml = listFiles(SITE_DIR)
+      .filter((f) => path.extname(f) === '.html')
+      .map((f) => path.relative(SITE_DIR, f).split(path.sep).join('/'));
+
+    await test.step('15. sitemap.xml lists every indexable page in canonical form', async () => {
+      const res = await fetch(`${server.base}sitemap.xml`);
+      expect(res.status).toBe(200);
+      expect(res.headers.get('content-type') ?? '').toMatch(/^application\/xml/);
+      const xml = await res.text();
+      await page.goto(`${server.base}index.html`);
+      const parsed = await page.evaluate((src) => {
+        const doc = new DOMParser().parseFromString(src, 'application/xml');
+        const ns = 'http://www.sitemaps.org/schemas/sitemap/0.9';
+        return {
+          parseError: doc.getElementsByTagName('parsererror').length > 0,
+          rootName: doc.documentElement.localName,
+          rootNs: doc.documentElement.namespaceURI,
+          locs: [...doc.getElementsByTagNameNS(ns, 'loc')].map((n) => (n.textContent ?? '').trim()),
+          extras: ['lastmod', 'changefreq', 'priority'].reduce((n, t) => n + doc.getElementsByTagNameNS(ns, t).length, 0),
+        };
+      }, xml);
+      expect(parsed.parseError, 'sitemap.xml parses').toBe(false);
+      expect(parsed.rootName).toBe('urlset');
+      expect(parsed.rootNs).toBe('http://www.sitemaps.org/schemas/sitemap/0.9');
+      expect(parsed.extras, 'no lastmod / changefreq / priority').toBe(0);
+      const expected = builtHtml.filter((p) => p !== '404.html').map(canonical).sort();
+      expect(expected.length).toBeGreaterThan(0);
+      expect([...parsed.locs].sort()).toEqual(expected);
+    });
+
+    await test.step('16. every page has a unique description, canonical and matching og/twitter tags', async () => {
+      const seen = new Map<string, string>();
+      for (const [url, html] of site.html) {
+        const rel = url.slice(server.base.length);
+        const title = decodeAttr(/<title>([^<]*)<\/title>/.exec(html)?.[1] ?? '');
+        expect(title, `${rel}: title`).not.toBe('');
+        const descriptions = metaContent(html, 'name', 'description');
+        expect(descriptions, `${rel}: exactly one description`).toHaveLength(1);
+        const d = descriptions[0];
+        expect(d.length, `${rel}: description length`).toBeGreaterThanOrEqual(50);
+        expect(d.length, `${rel}: description length`).toBeLessThanOrEqual(160);
+        expect(seen.get(d), `${rel}: description duplicates ${seen.get(d)}`).toBeUndefined();
+        seen.set(d, rel);
+        const c = canonical(rel);
+        expect(linkHrefs(html, 'canonical'), `${rel}: canonical`).toEqual([c]);
+        expect(metaContent(html, 'property', 'og:title'), `${rel}: og:title`).toEqual([title]);
+        expect(metaContent(html, 'property', 'og:description'), `${rel}: og:description`).toEqual([d]);
+        expect(metaContent(html, 'property', 'og:url'), `${rel}: og:url`).toEqual([c]);
+        expect(metaContent(html, 'property', 'og:image'), `${rel}: og:image`).toEqual([OG_IMAGE_URL]);
+        expect(metaContent(html, 'property', 'og:image:width'), `${rel}: og:image:width`).toEqual(['1200']);
+        expect(metaContent(html, 'property', 'og:image:height'), `${rel}: og:image:height`).toEqual(['630']);
+        expect(metaContent(html, 'property', 'og:image:alt'), `${rel}: og:image:alt`).toEqual([OG_IMAGE_ALT]);
+        expect(metaContent(html, 'property', 'og:type'), `${rel}: og:type`).toEqual(['website']);
+        expect(metaContent(html, 'property', 'og:site_name'), `${rel}: og:site_name`).toEqual([SITE_NAME]);
+        expect(metaContent(html, 'name', 'twitter:card'), `${rel}: twitter:card`).toEqual(['summary_large_image']);
+      }
+      expect(site.html.has(`${server.base}deck/index.html`), 'the deck is among the checked pages').toBe(true);
+    });
+
+    await test.step('17. favicon and apple-touch-icon are real files, og-image is 1200×630', async () => {
+      for (const rel of builtHtml) {
+        const html = fs.readFileSync(path.join(SITE_DIR, rel), 'utf8');
+        expect(html.includes('href="data:,"'), `${rel}: empty data: icon`).toBe(false);
+      }
+      const favicon = `${server.base}assets/favicon.svg`;
+      const touchIcon = `${server.base}assets/apple-touch-icon.png`;
+      for (const p of ['index.html', 'deck/index.html']) {
+        const pageUrl = `${server.base}${p}`;
+        const html = site.html.get(pageUrl) as string;
+        const icons = linkHrefs(html, 'icon').map((h) => new URL(h, pageUrl).href);
+        expect(icons, `${p}: <link rel="icon">`).toEqual([favicon]);
+        const touch = linkHrefs(html, 'apple-touch-icon').map((h) => new URL(h, pageUrl).href);
+        expect(touch, `${p}: <link rel="apple-touch-icon">`).toEqual([touchIcon]);
+      }
+      expect(site.status.get(favicon), 'favicon status').toBe(200);
+      expect(site.status.get(touchIcon), 'apple-touch-icon status').toBe(200);
+      const built = fs.readFileSync(path.join(SITE_DIR, 'assets', 'favicon.svg'));
+      const source = fs.readFileSync(path.join(REPO_ROOT, 'client', 'public', 'favicon.svg'));
+      expect(built.equals(source), 'site favicon is byte-equal to client/public/favicon.svg').toBe(true);
+      expect(pngSize(path.join(SITE_DIR, 'assets', 'og-image.png'))).toEqual({ width: 1200, height: 630 });
+      expect(pngSize(path.join(SITE_DIR, 'assets', 'apple-touch-icon.png'))).toEqual({ width: 180, height: 180 });
+    });
+
+    await test.step('18. 404.html: noindex, no canonical, absolute URLs, styled from a nested missing URL', async () => {
+      const missing = `${server.base}docs/no/such/deeper/page.html`;
+      const res = await fetch(missing);
+      expect(res.status).toBe(404);
+      expect(res.headers.get('content-type') ?? '').toMatch(/^text\/html/);
+      const html = await res.text();
+      expect(decodeAttr(/<title>([^<]*)<\/title>/.exec(html)?.[1] ?? '')).toBe('Page not found — Artisyn Log Hub');
+      expect(metaContent(html, 'name', 'robots')).toEqual(['noindex']);
+      expect(linkHrefs(html, 'canonical'), 'no canonical').toEqual([]);
+      expect(/<meta\s[^>]*property="og:/.test(html), 'no og: meta').toBe(false);
+      expect(metaContent(html, 'name', 'description'), 'no description').toEqual([]);
+      expect(html.includes('aria-current'), 'no aria-current').toBe(false);
+      const relative: string[] = [];
+      for (const m of html.matchAll(/\s(?:href|src)="([^"]*)"/g)) {
+        const href = decodeAttr(m[1]);
+        if (href.startsWith('#') || href.startsWith('data:') || href.startsWith('mailto:')) continue;
+        if (new URL(href, SITE_URL).href.startsWith(SITE_URL) && !href.startsWith(SITE_URL)) relative.push(href);
+      }
+      expect(relative, 'local href/src not absolute under SITE_URL').toEqual([]);
+
+      // Served from the published origin (routed to the local build), the 404 page is styled and has its icon.
+      const routed = new Map<string, number>();
+      await page.route(`${SITE_URL}**`, async (route) => {
+        const url = new URL(route.request().url());
+        const rel = decodeURIComponent(url.pathname).slice(new URL(SITE_URL).pathname.length);
+        const file = path.resolve(SITE_DIR, rel === '' || rel.endsWith('/') ? `${rel}index.html` : rel);
+        const inside = path.relative(SITE_DIR, file);
+        const ok = !inside.startsWith('..') && !path.isAbsolute(inside) && fs.existsSync(file) && fs.statSync(file).isFile();
+        routed.set(`${url.origin}${url.pathname}`, ok ? 200 : 404);
+        if (!ok) return route.fulfill({ status: 404, contentType: 'text/plain', body: 'not found' });
+        return route.fulfill({
+          status: 200,
+          contentType: CONTENT_TYPES[path.extname(file)] ?? 'application/octet-stream',
+          body: fs.readFileSync(file),
+        });
+      });
+      try {
+        await page.setViewportSize({ width: 1280, height: 720 });
+        const nav = await page.goto(missing);
+        expect(nav?.status()).toBe(404);
+        await expect(page).toHaveTitle('Page not found — Artisyn Log Hub');
+        await expect(page.locator('.not-found h1')).toHaveText('This page does not exist.');
+        // theme.css is applied: .not-found gets its max-width (the browser default is none).
+        await expect
+          .poll(() => page.evaluate(() => getComputedStyle(document.querySelector('.not-found') as Element).maxWidth))
+          .toBe('720px');
+        expect(routed.get(`${SITE_URL}assets/theme.css`), 'theme.css served').toBe(200);
+        const iconLoaded = await page.evaluate(() => {
+          const href = (document.querySelector('link[rel="icon"]') as HTMLLinkElement).href;
+          return new Promise<boolean>((resolve) => {
+            const img = new Image();
+            img.onload = () => resolve(true);
+            img.onerror = () => resolve(false);
+            img.src = href;
+          });
+        });
+        expect(iconLoaded, 'the favicon loads').toBe(true);
+        expect(routed.get(`${SITE_URL}assets/favicon.svg`), 'favicon status').toBe(200);
+      } finally {
+        await page.unroute(`${SITE_URL}**`);
+      }
     });
   } finally {
     await server.close();

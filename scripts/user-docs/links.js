@@ -36,6 +36,7 @@ function loadNav(repoRoot) {
         downloadable: article.downloadable === true,
         section: section.section,
         file: path.resolve(docsDir, article.source || `${article.slug}.md`),
+        description: typeof article.description === 'string' ? article.description : undefined,
       });
     }
   }

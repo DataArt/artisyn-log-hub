@@ -7,6 +7,9 @@
 //   docs/images/                  the user-docs/images/ files those pages link to
 //   deck/                         copy of site/deck/ with placeholders filled in every .html
 //   assets/                       copy of site/assets/
+//   404.html                      site/pages/404.html (noindex, absolute SITE_URL links; GitHub Pages
+//                                 serves it for a miss at any depth)
+//   sitemap.xml                   canonical URL of every .html page except 404.html
 //
 // ESM exemption from the nodejs-script CJS rule: unified/remark/rehype are ESM-only packages
 // (precedent: scripts/scenarios/*.mjs). Everything else follows the rule — sync file I/O,
@@ -15,7 +18,11 @@
 // Validation (all errors are collected and printed, then exit 1, nothing is written):
 //   - every relative link in every page resolves to a nav page (scripts/user-docs/links.js);
 //   - site/data/example-dataset.json is consistent (dataset.mjs checkDataset);
-//   - every {{ds:…}} / {{site:…}} placeholder in Home, Features and the deck is known.
+//   - every {{ds:…}} / {{site:…}} placeholder in Home, Features, Questions, 404 and the deck is known;
+//   - site/assets/favicon.svg exists (committed copy of client/public/favicon.svg);
+//   - every indexable page (docs, Home, Features, Questions, deck) has a description of 50–160
+//     chars, unique across the site (docs: nav.json `description`; deck: its <meta name="description">);
+//   - every sitemap URL is under SITE_URL.
 // Docs pages get {{RETENTION_DAYS}} replaced by a generic phrase (DD-16).
 //
 // Output guard: --out must be inside the repo and not the repo root. An existing output folder is
@@ -36,7 +43,7 @@ import remarkRehype from 'remark-rehype';
 import { unified } from 'unified';
 
 import { checkDataset, fillPlaceholders } from './dataset.mjs';
-import { RELEASES_URL, REPO_URL, SITE_NAME, SITE_URL, page } from './layout.mjs';
+import { RELEASES_URL, REPO_URL, SITE_NAME, SITE_URL, canonicalUrl, page, sitemapXml } from './layout.mjs';
 
 const require = createRequire(import.meta.url);
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -48,6 +55,17 @@ const RETENTION_PHRASE = 'the retention period configured on your server (defaul
 const SITE_VALUES = { url: SITE_URL, repo: REPO_URL, releases: RELEASES_URL };
 const SITE_RE = /\{\{site:([^}]*)\}\}/g;
 const LEFTOVER_RE = /\{\{(?:ds|site):[^}]*\}\}/;
+const DECK_TITLE_RE = /<title>([^<]*)<\/title>/;
+const DECK_DESCRIPTION_RE = /<meta name="description" content="([^"]*)">/;
+const DESCRIPTION_MIN = 50;
+const DESCRIPTION_MAX = 160;
+
+/** Layout pages: [source name in site/pages/, title, activeSection, description (50–160 chars)]. */
+const LAYOUT_PAGES = [
+  ['home', SITE_NAME, 'home', 'Self-hosted analytics for Claude Code: see why a session cost what it did, whether your harness works, and what AI coding brings your team.'],
+  ['features', 'Features', 'features', 'Eight questions Log Hub answers about Claude Code sessions: cost drivers, harness health, real impact, team trends, anomalies and knowledge-base use.'],
+  ['questions', 'Questions', 'questions', 'Answers to the questions teams ask before adopting Log Hub: what data it collects, where it is stored, who can see it and how long it is kept.'],
+];
 
 function fail(code, lines) {
   for (const line of lines) process.stderr.write(`${line}\n`);
@@ -101,6 +119,36 @@ function fillAll(text, ds) {
   const left = LEFTOVER_RE.exec(filled);
   if (left) throw new Error(`unfilled placeholder: ${left[0]}`);
   return filled;
+}
+
+/** Decodes the entities escapeHtml produces, so a hand-written attribute is measured as raw text. */
+function decodeAttr(s) {
+  return s
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&');
+}
+
+/** Description rules (impl-plan DD-6): present, DESCRIPTION_MIN–MAX chars (raw `.length`), unique. */
+function checkDescriptions(meta) {
+  const errors = [];
+  const seen = new Map();
+  for (const m of meta) {
+    if (typeof m.description !== 'string' || m.description.trim() === '') {
+      errors.push(`${m.source}: description missing`);
+      continue;
+    }
+    const len = m.description.length;
+    if (len < DESCRIPTION_MIN || len > DESCRIPTION_MAX) {
+      errors.push(`${m.source}: description is ${len} chars (${DESCRIPTION_MIN}–${DESCRIPTION_MAX})`);
+    }
+    const first = seen.get(m.description);
+    if (first !== undefined) errors.push(`${m.source}: description duplicates ${first}`);
+    else seen.set(m.description, m.path);
+  }
+  return errors;
 }
 
 function substituteRetention(md) {
@@ -258,7 +306,14 @@ function main() {
   }
   if (ds !== null) for (const e of checkDataset(ds)) errors.push(`${rel(dsFile)}: ${e}`);
 
+  // Favicon (the site keeps a committed copy; Pages does not build client/).
+  if (!fs.existsSync(path.join(SITE_DIR, 'assets', 'favicon.svg'))) {
+    errors.push('site/assets/favicon.svg: missing (copy of client/public/favicon.svg)');
+  }
+
   if (errors.length === 0) {
+    // Description of every indexable page: { path (POSIX output path), source (where it is authored), description }.
+    const meta = [];
     // Docs pages.
     const linkErrors = [];
     nav.pages.forEach((p, i) => {
@@ -267,6 +322,8 @@ function main() {
       const { html, toc, diagrams } = renderMarkdown(substituteRetention(md), p.file, nav, linkErrors);
       const prev = i > 0 ? nav.pages[i - 1] : undefined;
       const next = i < nav.pages.length - 1 ? nav.pages[i + 1] : undefined;
+      const outPath = `docs/${p.slug}.html`;
+      meta.push({ path: outPath, source: `user-docs/nav.json: ${p.slug}`, description: p.description });
       files.set(path.join('docs', `${p.slug}.html`), page({
         title: p.title,
         depth: 1,
@@ -277,20 +334,36 @@ function main() {
         toc,
         prevNext: { prev, next },
         diagrams,
+        path: outPath,
+        description: p.description,
       }));
     });
     for (const e of linkErrors) if (!errors.includes(e)) errors.push(e);
 
-    // Home and Features.
-    for (const [name, title, activeSection] of [['home', SITE_NAME, 'home'], ['features', 'Features', 'features'], ['questions', 'Questions', 'questions']]) {
+    // Home, Features and Questions.
+    for (const [name, title, activeSection, description] of LAYOUT_PAGES) {
       const src = path.join(SITE_DIR, 'pages', `${name}.html`);
       const text = readUtf8(src, errors);
       if (text === null) continue;
+      const outPath = name === 'home' ? 'index.html' : `${name}.html`;
+      meta.push({ path: outPath, source: `scripts/site/build-site.mjs: ${name}`, description });
       try {
         const body = fillAll(text, ds);
-        files.set(name === 'home' ? 'index.html' : `${name}.html`, page({ title, depth: 0, nav, activeSection, body }));
+        files.set(outPath, page({ title, depth: 0, nav, activeSection, body, path: outPath, description }));
       } catch (err) {
         errors.push(`${rel(src)}: ${err.message}`);
+      }
+    }
+
+    // 404 (absolute SITE_URL links, noindex; not in the sitemap).
+    const notFoundSrc = path.join(SITE_DIR, 'pages', '404.html');
+    const notFoundText = readUtf8(notFoundSrc, errors);
+    if (notFoundText !== null) {
+      try {
+        const body = fillAll(notFoundText, ds);
+        files.set('404.html', page({ title: 'Page not found', depth: 0, nav, activeSection: '404', body, notFound: true }));
+      } catch (err) {
+        errors.push(`${rel(notFoundSrc)}: ${err.message}`);
       }
     }
 
@@ -303,16 +376,37 @@ function main() {
       for (const f of listFiles(dir)) {
         const src = path.join(dir, f);
         if (fill && f.toLowerCase().endsWith('.html')) {
+          let filled;
           try {
-            files.set(path.join(target, f), fillAll(fs.readFileSync(src, 'utf8'), ds));
+            filled = fillAll(fs.readFileSync(src, 'utf8'), ds);
           } catch (err) {
             errors.push(`${rel(src)}: ${err.message}`);
+            continue;
           }
+          files.set(path.join(target, f), filled);
+          const dm = DECK_DESCRIPTION_RE.exec(filled);
+          if (dm) meta.push({ path: `${target}/${f.split(path.sep).join('/')}`, source: rel(src), description: decodeAttr(dm[1]) });
+          else errors.push(`${rel(src)}: <meta name="description"> missing`);
+          if (!DECK_TITLE_RE.test(filled)) errors.push(`${rel(src)}: <title> missing`);
         } else {
           files.set(path.join(target, f), fs.readFileSync(src));
         }
       }
     }
+
+    // Descriptions: present, 50–160 chars, unique.
+    for (const e of checkDescriptions(meta)) errors.push(e);
+
+    // Sitemap: every .html page except 404.html, canonical URLs (last, once all pages are in `files`).
+    const urls = [];
+    for (const key of files.keys()) {
+      const posix = key.split(path.sep).join('/');
+      if (!posix.toLowerCase().endsWith('.html') || posix === '404.html') continue;
+      const url = canonicalUrl(posix);
+      if (!url.startsWith(SITE_URL)) errors.push(`sitemap: ${url} is not under SITE_URL`);
+      urls.push(url);
+    }
+    files.set('sitemap.xml', sitemapXml(urls));
   }
 
   if (errors.length > 0) {
