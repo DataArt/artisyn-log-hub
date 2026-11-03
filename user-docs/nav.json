@@ -2,48 +2,155 @@
   {
     "section": "Get started",
     "articles": [
-      { "slug": "install-server", "title": "Install the server" },
-      { "slug": "install-hook", "title": "Install the hook", "downloadable": true, "source": "../hook/INSTALL_HOOK.md" },
-      { "slug": "getting-started", "title": "Your first session" },
-      { "slug": "connect-repository", "title": "Connecting a Repository", "downloadable": true }
+      {
+        "slug": "install-server",
+        "title": "Install the server",
+        "description": "Install the self-hosted Log Hub server from a release Docker image and install kit, check that you are its admin, and see other ways to run it."
+      },
+      {
+        "slug": "install-hook",
+        "title": "Install the hook",
+        "downloadable": true,
+        "source": "../hook/INSTALL_HOOK.md",
+        "description": "Install, upgrade or uninstall the Log Hub telemetry hook, a Claude Code plugin that records sessions in a repository and uploads them to your server."
+      },
+      {
+        "slug": "getting-started",
+        "title": "Your first session",
+        "description": "Record your first Claude Code session with Log Hub: check the prerequisites, install the hook, run a session and explore it from the Home page."
+      },
+      {
+        "slug": "connect-repository",
+        "title": "Connecting a Repository",
+        "downloadable": true,
+        "description": "Connect a git repository to Log Hub with one install command and one config entry, confirm data flows, and fix the common problems on the way."
+      }
     ]
   },
   {
     "section": "Configuration",
     "articles": [
-      { "slug": "authentication-modes", "title": "Authentication modes" },
-      { "slug": "server-configuration", "title": "Server settings" },
-      { "slug": "tuning-your-setup", "title": "Tuning Your Setup" },
-      { "slug": "otel-admin-guide", "title": "OTEL for organization admins" },
-      { "slug": "security-hardening", "title": "Security Hardening & Configuration", "downloadable": true }
+      {
+        "slug": "authentication-modes",
+        "title": "Authentication modes",
+        "description": "Choose how people sign in to Log Hub: no password for one local user, email and password, emailed confirmation, or Microsoft Entra ID single sign-on."
+      },
+      {
+        "slug": "server-configuration",
+        "title": "Server settings",
+        "description": "Configure the Log Hub server with environment variables in the install directory, from the database connection to the main options you may change."
+      },
+      {
+        "slug": "tuning-your-setup",
+        "title": "Tuning Your Setup",
+        "description": "Adjust repository settings, hook configuration and your harness based on what sessions cost and why, then compare the next sessions to close the loop."
+      },
+      {
+        "slug": "otel-admin-guide",
+        "title": "OTEL for organization admins",
+        "description": "For admins who manage Claude Code through managed settings: which telemetry keys to set so OTEL data still reaches Log Hub, and how to verify it."
+      },
+      {
+        "slug": "security-hardening",
+        "title": "Security Hardening & Configuration",
+        "downloadable": true,
+        "description": "Harden a Log Hub installation beyond a single local user: deployment checklist, authentication, TLS, data visibility, retention, backups and limits."
+      }
     ]
   },
   {
     "section": "Using Log Hub",
     "articles": [
-      { "slug": "all-views", "title": "All views" },
-      { "slug": "session-list", "title": "Working with the Session List" },
-      { "slug": "session-log", "title": "Session Log" },
-      { "slug": "cost-and-context", "title": "Understanding Cost & Context" },
-      { "slug": "analytics-reports", "title": "Analytics & Reports" },
-      { "slug": "otel-tab", "title": "OTEL tab" },
-      { "slug": "otel-architecture", "title": "OTEL collection architecture" }
+      {
+        "slug": "all-views",
+        "title": "All views",
+        "description": "Find any screen in Log Hub from one map of team, repository, session and admin views, opened with Ctrl+K and filtered by the question you have."
+      },
+      {
+        "slug": "session-list",
+        "title": "Working with the Session List",
+        "description": "Browse the sessions of a repository: group them by branch or other modes, read each row, filter the list, stay up to date and work in team repositories."
+      },
+      {
+        "slug": "session-log",
+        "title": "Session Log",
+        "description": "Read the full record of one Claude Code session: pick a view, move between its tabs such as Summary, Logs, Timeline and Agent Tree, and navigate within it."
+      },
+      {
+        "slug": "cost-and-context",
+        "title": "Understanding Cost & Context",
+        "description": "Learn how Log Hub computes session cost from token usage and model prices, where cost appears, and how context size drives the cost of every call."
+      },
+      {
+        "slug": "analytics-reports",
+        "title": "Analytics & Reports",
+        "description": "Explore recorded sessions with interactive Analytics charts, or share printable Reports with KPIs and trends that download as PDF for a team or management."
+      },
+      {
+        "slug": "otel-tab",
+        "title": "OTEL tab",
+        "description": "Use the OTEL tabs of a session, repository or team to see what Claude Code spent per model and call source, including calls missing from transcripts."
+      },
+      {
+        "slug": "otel-architecture",
+        "title": "OTEL collection architecture",
+        "description": "How OpenTelemetry data travels from Claude Code through the local hook receiver to the Log Hub OTEL tabs, and why it holds up across many repositories."
+      }
     ]
   },
   {
     "section": "Data and security",
     "articles": [
-      { "slug": "data-collection-notice", "title": "Data Collection Notice" },
-      { "slug": "data-collection", "title": "Data Collection & Upload" },
-      { "slug": "trust-model", "title": "Trust model" },
-      { "slug": "component-reference", "title": "Component Reference", "downloadable": true },
-      { "slug": "responsibility-matrix", "title": "Responsibility Matrix (RACI)", "downloadable": true },
-      { "slug": "third-party-components", "title": "Third-Party Components", "downloadable": true },
-      { "slug": "how-hook-works", "title": "How the hook works", "downloadable": true, "source": "../hook/HOW_HOOK_WORKS.md" }
+      {
+        "slug": "data-collection-notice",
+        "title": "Data Collection Notice",
+        "description": "Read before you start: which prompts and transcripts Log Hub stores, who can see them, and how to avoid handing secrets to your AI coding assistant."
+      },
+      {
+        "slug": "data-collection",
+        "title": "Data Collection & Upload",
+        "description": "What the hook collects from your Claude Code sessions, when and how it uploads the data in the background, and how the post-turn analysis works."
+      },
+      {
+        "slug": "trust-model",
+        "title": "Trust model",
+        "description": "Who and what you trust when you run Log Hub and install its hook: the server, your API key, the installer, the hook's user rights and the local OTEL receiver."
+      },
+      {
+        "slug": "component-reference",
+        "title": "Component Reference",
+        "downloadable": true,
+        "description": "The components of Log Hub (server, web client, PostgreSQL database, telemetry hook and installer), where each runs and how they talk to each other."
+      },
+      {
+        "slug": "responsibility-matrix",
+        "title": "Responsibility Matrix (RACI)",
+        "downloadable": true,
+        "description": "Who is responsible for each part of running Log Hub, from releases and deployment to access, data protection and incidents: maintainers or your organisation."
+      },
+      {
+        "slug": "third-party-components",
+        "title": "Third-Party Components",
+        "downloadable": true,
+        "description": "Every third-party open-source component shipped in Log Hub, on the server, in the browser and in the hook, with its version, license and role."
+      },
+      {
+        "slug": "how-hook-works",
+        "title": "How the hook works",
+        "downloadable": true,
+        "source": "../hook/HOW_HOOK_WORKS.md",
+        "description": "Technical reference for the Log Hub hook: its configuration files, the events it records, how uploads work, its diagnostic log and how it cleans up."
+      }
     ]
   },
   {
     "section": "Changelog",
-    "articles": [{ "slug": "changelog", "title": "Changelog" }]
+    "articles": [
+      {
+        "slug": "changelog",
+        "title": "Changelog",
+        "description": "Find what changed in each version of Log Hub: the release notes on the releases page and the notes file shipped with every release for offline installs."
+      }
+    ]
   }
 ]

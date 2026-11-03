@@ -146,6 +146,8 @@ a user's project; they are listed here because the site they build is published.
 | `remark-rehype` | 11.1.2 | MIT | mdast → hast conversion |
 | `rehype-slug` | 6.0.0 | MIT | Heading ids (github-slugger), same anchors as the in-app help |
 | `rehype-stringify` | 10.0.1 | MIT | hast → HTML serialisation |
+| `gifenc` | 1.0.3 | MIT | GIF encoder of the manual demo-media recorder (`scripts/site/record-demo.mjs`, `npm run record:demo`) for the home carousel and the README tour GIF |
+| `pngjs` | 7.0.0 | MIT | Decodes Playwright PNG screenshots to RGBA for `gifenc` in the same recorder |
 
 The site's "Why Log Hub" deck (`site/deck/index.html`) loads one more component in the visitor's
 browser — not an npm dependency, not in `dist/`, the image or the in-app help:

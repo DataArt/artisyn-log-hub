@@ -9,6 +9,8 @@ whether your harness works as designed, what your tools bring — per session an
 [Site](https://dataart.github.io/artisyn-log-hub/) ·
 [Deck](https://dataart.github.io/artisyn-log-hub/deck/)
 
+![Log Hub tour: repositories, sessions by cost, session summary, context growth, call tree, Session Map replay, change surface, cost by branch](site/assets/demo/app-tour.gif)
+
 [![Security scan](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/DataArt/artisyn-log-hub/ci-reports/badges/security.json)](https://github.com/DataArt/artisyn-log-hub/blob/ci-reports/REPORT.md)
 [![security-scans](https://github.com/DataArt/artisyn-log-hub/actions/workflows/security-scans.yml/badge.svg)](https://github.com/DataArt/artisyn-log-hub/actions/workflows/security-scans.yml)
 

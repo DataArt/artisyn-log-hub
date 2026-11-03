@@ -39,10 +39,19 @@ const CONTENT_TYPES: Record<string, string> = {
   '.json': 'application/json',
   '.svg': 'image/svg+xml',
   '.png': 'image/png',
+  '.gif': 'image/gif',
+  '.jpg': 'image/jpeg',
+  '.xml': 'application/xml; charset=utf-8',
 };
 
 /** Text files of the build output that the artifact grep reads. */
-const TEXT_EXT = new Set(['.html', '.css', '.js', '.json', '.md', '.svg', '.txt']);
+const TEXT_EXT = new Set(['.html', '.css', '.js', '.json', '.md', '.svg', '.txt', '.xml']);
+
+/** Published site root and og-image values — must equal SITE_URL / OG_IMAGE_* in scripts/site/layout.mjs. */
+const SITE_URL = 'https://dataart.github.io/artisyn-log-hub/';
+const SITE_NAME = 'Artisyn Log Hub';
+const OG_IMAGE_URL = `${SITE_URL}assets/og-image.png`;
+const OG_IMAGE_ALT = 'Log Hub cost flow: model to user to branch';
 
 const EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
 /** Not mailboxes: the SSH remote form of a git URL used as an example in how-hook-works. */
@@ -75,7 +84,13 @@ function startSiteServer(root: string): Promise<SiteServer> {
     const file = path.resolve(root, rel);
     const inside = path.relative(root, file);
     if (inside.startsWith('..') || path.isAbsolute(inside)) return notFound();
-    if (!fs.existsSync(file) || !fs.statSync(file).isFile()) return notFound();
+    if (!fs.existsSync(file) || !fs.statSync(file).isFile()) {
+      // Like GitHub Pages: a miss at any depth under the site answers 404 with the site's 404.html.
+      const page404 = path.join(root, '404.html');
+      if (!fs.existsSync(page404)) return notFound();
+      res.writeHead(404, { 'Content-Type': CONTENT_TYPES['.html'] });
+      return res.end(fs.readFileSync(page404));
+    }
     res.writeHead(200, { 'Content-Type': CONTENT_TYPES[path.extname(file)] ?? 'application/octet-stream' });
     res.end(fs.readFileSync(file));
   });
@@ -92,6 +107,103 @@ function startSiteServer(root: string): Promise<SiteServer> {
 
 function decodeAttr(s: string): string {
   return s.replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+}
+
+/** Canonical URL of a site file (path relative to the site root), as layout.mjs canonicalUrl() builds it. */
+function canonical(relPath: string): string {
+  const p = relPath.replace(/\\/g, '/');
+  if (p === 'index.html') return SITE_URL;
+  if (p.endsWith('/index.html')) return SITE_URL + p.slice(0, -'index.html'.length);
+  return SITE_URL + p;
+}
+
+/** Decoded `content` of every `<meta {attr}="{key}" content="…">` in `html`. */
+function metaContent(html: string, attr: 'name' | 'property', key: string): string[] {
+  const out: string[] = [];
+  for (const m of html.matchAll(/<meta\s+([^>]*)>/g)) {
+    const attrs = m[1];
+    const k = new RegExp(`(?:^|\\s)${attr}="([^"]*)"`).exec(attrs)?.[1];
+    if (k === undefined || decodeAttr(k) !== key) continue;
+    const content = /(?:^|\s)content="([^"]*)"/.exec(attrs)?.[1];
+    if (content !== undefined) out.push(decodeAttr(content));
+  }
+  return out;
+}
+
+/** Decoded `href` of every `<link rel="{rel}" …>` in `html`. */
+function linkHrefs(html: string, rel: string): string[] {
+  const out: string[] = [];
+  for (const m of html.matchAll(/<link\s+([^>]*)>/g)) {
+    if (/(?:^|\s)rel="([^"]*)"/.exec(m[1])?.[1] !== rel) continue;
+    const href = /(?:^|\s)href="([^"]*)"/.exec(m[1])?.[1];
+    if (href !== undefined) out.push(decodeAttr(href));
+  }
+  return out;
+}
+
+/** Width and height of a PNG from its IHDR chunk (bytes 16–23, big-endian). */
+function pngSize(file: string): { width: number; height: number } {
+  const buf = fs.readFileSync(file);
+  expect(buf.subarray(1, 4).toString('latin1'), `${file}: PNG signature`).toBe('PNG');
+  return { width: buf.readUInt32BE(16), height: buf.readUInt32BE(20) };
+}
+
+interface GifInfo {
+  width: number;
+  height: number;
+  /** NETSCAPE2.0 loop count (0 = forever); null when the block is absent. */
+  loop: number | null;
+  frames: number;
+  /** Sum of the Graphic Control Extension delays, in ms. */
+  durationMs: number;
+}
+
+/** Walk the blocks of a GIF89a file: logical size (bytes 6–9, little-endian), loop count, frame delays. */
+function gifInfo(file: string): GifInfo {
+  const buf = fs.readFileSync(file);
+  expect(buf.subarray(0, 6).toString('latin1'), `${file}: GIF signature`).toBe('GIF89a');
+  const width = buf.readUInt16LE(6);
+  const height = buf.readUInt16LE(8);
+  const colorTable = (packed: number) => ((packed & 0x80) !== 0 ? 3 * 2 ** ((packed & 0x07) + 1) : 0);
+  const skipSubBlocks = (at: number) => {
+    let i = at;
+    while (buf[i] !== 0) i += buf[i] + 1;
+    return i + 1;
+  };
+  let i = 13 + colorTable(buf[10]);
+  let loop: number | null = null;
+  let frames = 0;
+  let delayCs = 0;
+  while (i < buf.length && buf[i] !== 0x3b) {
+    if (buf[i] === 0x21) {
+      const label = buf[i + 1];
+      if (label === 0xf9) delayCs += buf.readUInt16LE(i + 4);
+      if (label === 0xff && buf.subarray(i + 3, i + 14).toString('latin1') === 'NETSCAPE2.0' && buf[i + 15] === 1) {
+        loop = buf.readUInt16LE(i + 16);
+      }
+      i = skipSubBlocks(i + 2);
+    } else if (buf[i] === 0x2c) {
+      frames += 1;
+      i = skipSubBlocks(i + 10 + colorTable(buf[i + 9]) + 1);
+    } else {
+      throw new Error(`${file}: unexpected GIF block 0x${buf[i].toString(16)} at ${i}`);
+    }
+  }
+  expect(buf[i], `${file}: GIF trailer`).toBe(0x3b);
+  return { width, height, loop, frames, durationMs: delayCs * 10 };
+}
+
+/** One entry of site/assets/demo/items.json (written by scripts/site/record-demo.mjs). */
+interface DemoItem {
+  id: string;
+  kind: 'tour' | 'still' | 'clip';
+  src: string;
+  still?: string;
+  thumb: string;
+  duration?: number;
+  caption: string;
+  where: string;
+  alt: string;
 }
 
 interface CrawlResult {
@@ -174,8 +286,8 @@ async function bodyBackground(page: Page): Promise<string> {
   return page.evaluate(() => getComputedStyle(document.body).backgroundColor);
 }
 
-test('@S-SITE-01 static site and deck: built, served under a base path, navigable, responsive @mode-a', async ({ page }) => {
-  test.setTimeout(240_000);
+test('@S-SITE-01 static site and deck: built, served under a base path, navigable, responsive @mode-a', async ({ page, browser }) => {
+  test.setTimeout(300_000);
 
   await test.step('0. build-site.mjs writes the site into tmp/scenarios/site/', async () => {
     const run = spawnSync(process.execPath, ['scripts/site/build-site.mjs', '--out', 'tmp/scenarios/site'], {
@@ -423,6 +535,250 @@ test('@S-SITE-01 static site and deck: built, served under a base path, navigabl
         for (const p of ownPaths) if (text.includes(p)) hits.push(`${where}: build machine path ${p}`);
       }
       expect(hits).toEqual([]);
+    });
+
+    const builtHtml = listFiles(SITE_DIR)
+      .filter((f) => path.extname(f) === '.html')
+      .map((f) => path.relative(SITE_DIR, f).split(path.sep).join('/'));
+
+    await test.step('15. sitemap.xml lists every indexable page in canonical form', async () => {
+      const res = await fetch(`${server.base}sitemap.xml`);
+      expect(res.status).toBe(200);
+      expect(res.headers.get('content-type') ?? '').toMatch(/^application\/xml/);
+      const xml = await res.text();
+      await page.goto(`${server.base}index.html`);
+      const parsed = await page.evaluate((src) => {
+        const doc = new DOMParser().parseFromString(src, 'application/xml');
+        const ns = 'http://www.sitemaps.org/schemas/sitemap/0.9';
+        return {
+          parseError: doc.getElementsByTagName('parsererror').length > 0,
+          rootName: doc.documentElement.localName,
+          rootNs: doc.documentElement.namespaceURI,
+          locs: [...doc.getElementsByTagNameNS(ns, 'loc')].map((n) => (n.textContent ?? '').trim()),
+          extras: ['lastmod', 'changefreq', 'priority'].reduce((n, t) => n + doc.getElementsByTagNameNS(ns, t).length, 0),
+        };
+      }, xml);
+      expect(parsed.parseError, 'sitemap.xml parses').toBe(false);
+      expect(parsed.rootName).toBe('urlset');
+      expect(parsed.rootNs).toBe('http://www.sitemaps.org/schemas/sitemap/0.9');
+      expect(parsed.extras, 'no lastmod / changefreq / priority').toBe(0);
+      const expected = builtHtml.filter((p) => p !== '404.html').map(canonical).sort();
+      expect(expected.length).toBeGreaterThan(0);
+      expect([...parsed.locs].sort()).toEqual(expected);
+    });
+
+    await test.step('16. every page has a unique description, canonical and matching og/twitter tags', async () => {
+      const seen = new Map<string, string>();
+      for (const [url, html] of site.html) {
+        const rel = url.slice(server.base.length);
+        const title = decodeAttr(/<title>([^<]*)<\/title>/.exec(html)?.[1] ?? '');
+        expect(title, `${rel}: title`).not.toBe('');
+        const descriptions = metaContent(html, 'name', 'description');
+        expect(descriptions, `${rel}: exactly one description`).toHaveLength(1);
+        const d = descriptions[0];
+        expect(d.length, `${rel}: description length`).toBeGreaterThanOrEqual(50);
+        expect(d.length, `${rel}: description length`).toBeLessThanOrEqual(160);
+        expect(seen.get(d), `${rel}: description duplicates ${seen.get(d)}`).toBeUndefined();
+        seen.set(d, rel);
+        const c = canonical(rel);
+        expect(linkHrefs(html, 'canonical'), `${rel}: canonical`).toEqual([c]);
+        expect(metaContent(html, 'property', 'og:title'), `${rel}: og:title`).toEqual([title]);
+        expect(metaContent(html, 'property', 'og:description'), `${rel}: og:description`).toEqual([d]);
+        expect(metaContent(html, 'property', 'og:url'), `${rel}: og:url`).toEqual([c]);
+        expect(metaContent(html, 'property', 'og:image'), `${rel}: og:image`).toEqual([OG_IMAGE_URL]);
+        expect(metaContent(html, 'property', 'og:image:width'), `${rel}: og:image:width`).toEqual(['1200']);
+        expect(metaContent(html, 'property', 'og:image:height'), `${rel}: og:image:height`).toEqual(['630']);
+        expect(metaContent(html, 'property', 'og:image:alt'), `${rel}: og:image:alt`).toEqual([OG_IMAGE_ALT]);
+        expect(metaContent(html, 'property', 'og:type'), `${rel}: og:type`).toEqual(['website']);
+        expect(metaContent(html, 'property', 'og:site_name'), `${rel}: og:site_name`).toEqual([SITE_NAME]);
+        expect(metaContent(html, 'name', 'twitter:card'), `${rel}: twitter:card`).toEqual(['summary_large_image']);
+      }
+      expect(site.html.has(`${server.base}deck/index.html`), 'the deck is among the checked pages').toBe(true);
+    });
+
+    await test.step('17. favicon and apple-touch-icon are real files, og-image is 1200×630', async () => {
+      for (const rel of builtHtml) {
+        const html = fs.readFileSync(path.join(SITE_DIR, rel), 'utf8');
+        expect(html.includes('href="data:,"'), `${rel}: empty data: icon`).toBe(false);
+      }
+      const favicon = `${server.base}assets/favicon.svg`;
+      const touchIcon = `${server.base}assets/apple-touch-icon.png`;
+      for (const p of ['index.html', 'deck/index.html']) {
+        const pageUrl = `${server.base}${p}`;
+        const html = site.html.get(pageUrl) as string;
+        const icons = linkHrefs(html, 'icon').map((h) => new URL(h, pageUrl).href);
+        expect(icons, `${p}: <link rel="icon">`).toEqual([favicon]);
+        const touch = linkHrefs(html, 'apple-touch-icon').map((h) => new URL(h, pageUrl).href);
+        expect(touch, `${p}: <link rel="apple-touch-icon">`).toEqual([touchIcon]);
+      }
+      expect(site.status.get(favicon), 'favicon status').toBe(200);
+      expect(site.status.get(touchIcon), 'apple-touch-icon status').toBe(200);
+      const built = fs.readFileSync(path.join(SITE_DIR, 'assets', 'favicon.svg'));
+      const source = fs.readFileSync(path.join(REPO_ROOT, 'client', 'public', 'favicon.svg'));
+      expect(built.equals(source), 'site favicon is byte-equal to client/public/favicon.svg').toBe(true);
+      expect(pngSize(path.join(SITE_DIR, 'assets', 'og-image.png'))).toEqual({ width: 1200, height: 630 });
+      expect(pngSize(path.join(SITE_DIR, 'assets', 'apple-touch-icon.png'))).toEqual({ width: 180, height: 180 });
+    });
+
+    await test.step('18. 404.html: noindex, no canonical, absolute URLs, styled from a nested missing URL', async () => {
+      const missing = `${server.base}docs/no/such/deeper/page.html`;
+      const res = await fetch(missing);
+      expect(res.status).toBe(404);
+      expect(res.headers.get('content-type') ?? '').toMatch(/^text\/html/);
+      const html = await res.text();
+      expect(decodeAttr(/<title>([^<]*)<\/title>/.exec(html)?.[1] ?? '')).toBe('Page not found — Artisyn Log Hub');
+      expect(metaContent(html, 'name', 'robots')).toEqual(['noindex']);
+      expect(linkHrefs(html, 'canonical'), 'no canonical').toEqual([]);
+      expect(/<meta\s[^>]*property="og:/.test(html), 'no og: meta').toBe(false);
+      expect(metaContent(html, 'name', 'description'), 'no description').toEqual([]);
+      expect(html.includes('aria-current'), 'no aria-current').toBe(false);
+      const relative: string[] = [];
+      for (const m of html.matchAll(/\s(?:href|src)="([^"]*)"/g)) {
+        const href = decodeAttr(m[1]);
+        if (href.startsWith('#') || href.startsWith('data:') || href.startsWith('mailto:')) continue;
+        if (new URL(href, SITE_URL).href.startsWith(SITE_URL) && !href.startsWith(SITE_URL)) relative.push(href);
+      }
+      expect(relative, 'local href/src not absolute under SITE_URL').toEqual([]);
+
+      // Served from the published origin (routed to the local build), the 404 page is styled and has its icon.
+      const routed = new Map<string, number>();
+      await page.route(`${SITE_URL}**`, async (route) => {
+        const url = new URL(route.request().url());
+        const rel = decodeURIComponent(url.pathname).slice(new URL(SITE_URL).pathname.length);
+        const file = path.resolve(SITE_DIR, rel === '' || rel.endsWith('/') ? `${rel}index.html` : rel);
+        const inside = path.relative(SITE_DIR, file);
+        const ok = !inside.startsWith('..') && !path.isAbsolute(inside) && fs.existsSync(file) && fs.statSync(file).isFile();
+        routed.set(`${url.origin}${url.pathname}`, ok ? 200 : 404);
+        if (!ok) return route.fulfill({ status: 404, contentType: 'text/plain', body: 'not found' });
+        return route.fulfill({
+          status: 200,
+          contentType: CONTENT_TYPES[path.extname(file)] ?? 'application/octet-stream',
+          body: fs.readFileSync(file),
+        });
+      });
+      try {
+        await page.setViewportSize({ width: 1280, height: 720 });
+        const nav = await page.goto(missing);
+        expect(nav?.status()).toBe(404);
+        await expect(page).toHaveTitle('Page not found — Artisyn Log Hub');
+        await expect(page.locator('.not-found h1')).toHaveText('This page does not exist.');
+        // theme.css is applied: .not-found gets its max-width (the browser default is none).
+        await expect
+          .poll(() => page.evaluate(() => getComputedStyle(document.querySelector('.not-found') as Element).maxWidth))
+          .toBe('720px');
+        expect(routed.get(`${SITE_URL}assets/theme.css`), 'theme.css served').toBe(200);
+        const iconLoaded = await page.evaluate(() => {
+          const href = (document.querySelector('link[rel="icon"]') as HTMLLinkElement).href;
+          return new Promise<boolean>((resolve) => {
+            const img = new Image();
+            img.onload = () => resolve(true);
+            img.onerror = () => resolve(false);
+            img.src = href;
+          });
+        });
+        expect(iconLoaded, 'the favicon loads').toBe(true);
+        expect(routed.get(`${SITE_URL}assets/favicon.svg`), 'favicon status').toBe(200);
+      } finally {
+        await page.unroute(`${SITE_URL}**`);
+      }
+    });
+
+    await test.step('19. Home media carousel: items.json, media files, tour GIF, first load, autoplay, reduced motion, 375 px', async () => {
+      const home = `${server.base}index.html`;
+      const homeHtml = site.html.get(home) as string;
+      // The section sits after the hero (the crawl saw the page; the DOM order is checked in the browser below).
+      expect(homeHtml.includes('class="media-section"'), 'Home has the media section').toBe(true);
+
+      const res = await fetch(`${server.base}assets/demo/items.json`);
+      expect(res.status, 'items.json status').toBe(200);
+      const items = (await res.json()) as DemoItem[];
+      expect(Array.isArray(items), 'items.json is an array').toBe(true);
+      expect(items.length).toBeGreaterThanOrEqual(30);
+      expect(items[0].kind).toBe('tour');
+      expect(items[0].src).toBe('assets/demo/app-tour.gif');
+      // The crawl does not read JSON paths: every src / still / thumb must answer 200 with its media type.
+      const media = new Set<string>();
+      for (const it of items) for (const p of [it.src, it.still, it.thumb]) if (p) media.add(p);
+      for (const p of media) {
+        const r = await fetch(`${server.base}${p}`);
+        expect(r.status, `${p} status`).toBe(200);
+        expect(r.headers.get('content-type'), `${p} content-type`).toBe(CONTENT_TYPES[path.extname(p)]);
+        await r.arrayBuffer();
+      }
+
+      const tourFile = path.join(SITE_DIR, 'assets', 'demo', 'app-tour.gif');
+      const tour = gifInfo(tourFile);
+      expect({ width: tour.width, height: tour.height }, 'app-tour.gif logical size').toEqual({ width: 960, height: 600 });
+      expect(tour.loop, 'app-tour.gif NETSCAPE2.0 loop count').toBe(0);
+      expect(fs.statSync(tourFile).size, 'app-tour.gif bytes').toBeLessThanOrEqual(5_000_000);
+      expect(tour.durationMs, 'app-tour.gif duration').toBeGreaterThanOrEqual(22_000);
+      expect(tour.durationMs, 'app-tour.gif duration').toBeLessThanOrEqual(28_000);
+
+      const nn = String(items.length).padStart(2, '0');
+      const stageLoaded = (p: Page, srcEnd: string) =>
+        p.waitForFunction((end) => {
+          const img = document.querySelector('.mc-stage img.mc-media') as HTMLImageElement | null;
+          return img !== null && img.getAttribute('src')?.endsWith(end) === true && img.complete && img.naturalWidth > 0;
+        }, srcEnd);
+
+      // Desktop first load: only the tour GIF is requested as full media (thumbnails and items.json aside).
+      const desktop = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+      try {
+        const dp = await desktop.newPage();
+        const demoRequests: string[] = [];
+        dp.on('request', (req) => {
+          const u = req.url();
+          if (u.startsWith(`${server.base}assets/demo/`) && !u.includes('/thumbs/') && /\.(gif|png)$/.test(u)) demoRequests.push(u);
+        });
+        await dp.goto(home);
+        const mc = dp.locator('.media-section [data-mc]');
+        await expect(mc).toHaveCount(1);
+        const afterHero = await dp.evaluate(() => {
+          const hero = document.querySelector('.hero');
+          const section = document.querySelector('.media-section');
+          return hero !== null && section !== null && (hero.compareDocumentPosition(section) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0;
+        });
+        expect(afterHero, '.media-section follows .hero').toBe(true);
+        const counter = dp.locator('.mc-counter');
+        await expect(counter).toHaveText(`01 / ${nn}`);
+        await stageLoaded(dp, 'app-tour.gif');
+        expect(demoRequests, 'full media requested on first load').toEqual([`${server.base}assets/demo/app-tour.gif`]);
+
+        // Autoplay: a still stays 5 s after its image has loaded, then the next item comes.
+        expect(items[1].kind, 'item 2 is a still').toBe('still');
+        await dp.locator('.mc-strip .mc-thumb').nth(1).click();
+        await expect(counter).toHaveText(`02 / ${nn}`);
+        await stageLoaded(dp, items[1].src);
+        const t0 = Date.now();
+        await expect(counter).toHaveText(`03 / ${nn}`, { timeout: 8000 });
+        expect(Date.now() - t0, 'the still stayed before advancing').toBeGreaterThanOrEqual(4500);
+        // Pause stops the slideshow.
+        const pause = dp.locator('.mc-pause');
+        await pause.click();
+        await expect(pause).toHaveAttribute('aria-pressed', 'true');
+        await dp.waitForTimeout(6000);
+        await expect(counter).toHaveText(`03 / ${nn}`);
+      } finally {
+        await desktop.close();
+      }
+
+      // Reduced motion: starts paused and the tour shows its still first frame.
+      const reduced = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: 'reduce' });
+      try {
+        const rp = await reduced.newPage();
+        await rp.goto(home);
+        await expect(rp.locator('.mc-pause')).toHaveAttribute('aria-pressed', 'true');
+        await expect(rp.locator('.mc-stage img.mc-media')).toHaveAttribute('src', /app-tour\.png$/);
+      } finally {
+        await reduced.close();
+      }
+
+      // 375 px: the strip is hidden, the controls and the counter stay (no horizontal scroll is step 7).
+      await page.setViewportSize({ width: 375, height: 812 });
+      await page.goto(home);
+      await expect(page.locator('.mc-counter')).toHaveText(`01 / ${nn}`);
+      await expect(page.locator('.mc-strip')).toBeHidden();
+      for (const sel of ['.mc-prev', '.mc-next', '.mc-pause', '.mc-counter']) await expect(page.locator(sel), sel).toBeVisible();
     });
   } finally {
     await server.close();
