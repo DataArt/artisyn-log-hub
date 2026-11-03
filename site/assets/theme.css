@@ -608,12 +608,6 @@ hr {
   padding: 6px 2px 0;
 }
 
-/* Home: one wide screenshot under the hero. */
-.hero-shot {
-  max-width: 960px;
-  margin: 0 0 32px;
-}
-
 /* Features: further screenshots of a block, stacked at a readable width (about 900 px). */
 .shot-grid {
   display: grid;

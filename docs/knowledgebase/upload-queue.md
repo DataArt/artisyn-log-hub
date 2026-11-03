@@ -6,10 +6,14 @@ tags:
   - server
   - hooks
   - upload
-timestamp: "2026-10-14T00:00:00+04:00"
+timestamp: "2026-11-03T00:00:00+04:00"
 ---
 
 # Upload Queue
+
+This is also the house pattern for **any** background job: a queue table every cluster worker
+claims with `FOR UPDATE SKIP LOCKED`, a lease that returns lapsed `processing` rows to `pending`,
+and transient-error retry (steps 3, 5 and 6 below) — copy it instead of inventing a new scheduler.
 
 Every log upload from the hook goes through one asynchronous pipeline: `POST /api/v2/logs` stages
 the raw body and answers at once, and a background scheduler parses and ingests it later. Nothing is

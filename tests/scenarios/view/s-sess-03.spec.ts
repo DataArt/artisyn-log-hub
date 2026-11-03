@@ -551,4 +551,47 @@ test('@S-SESS-03 Logs: what counts as a prompt, what is hidden, how a turn reads
     for (const git of gits) expect(['unknown', 'outside-repo'], 'no snapshot: no tracked/ignored/untracked status').toContain(git);
     expect(pageErrors, pageErrors.join('\n')).toEqual([]);
   });
+
+  await test.step('10. GS-05 Session Map: one ResearchWorkflow column (no direct column — GS-05 has no plain Agent sub-agents), its header totals = the sum of W1 and W2', async () => {
+    const G5 = loadExpected('gs-05').roots[0];
+    const cost = (key: string) => G5.nodes.find((n) => n.key === key)?.costUsd ?? 0;
+    await openSession(page, owner, repo.repoId, repo.rootId('gs-05'), { tab: 'session-map' });
+    const map = page.getByTestId('session-map');
+    await expect(page.getByTestId('session-map-badge')).toContainText('Replay', { timeout: 20_000 });
+    const columns = map.locator('[data-testid^="session-map-group-"]:not([data-testid$="-header"])');
+    await expect(columns).toHaveCount(1);
+    await expect(page.getByTestId('session-map-group-direct')).toHaveCount(0);
+    const header = columns.first().locator('[data-testid$="-header"]');
+    await expect(header).toContainText('ResearchWorkflow · run #1');
+    const cards = columns.first().locator('[data-testid^="session-map-agent-"]');
+    await expect(cards).toHaveCount(2);
+    await expect(columns.first().locator('[data-testid$="gs05w1"]')).toHaveCount(1);
+    await expect(columns.first().locator('[data-testid$="gs05w2"]')).toHaveCount(1);
+    const cardCalls = await cards.evaluateAll((els) =>
+      els.map((e) => {
+        // The card's own «N calls» span (the top-tools text next to it also ends in a digit).
+        const span = [...e.querySelectorAll('span')].find((s) => /^\d+ calls$/.test(s.textContent?.trim() ?? ''));
+        return Number(/^(\d+)/.exec(span?.textContent?.trim() ?? '')?.[1] ?? NaN);
+      }),
+    );
+    const calls = cardCalls.reduce((n, c) => n + c, 0);
+    expect(calls, 'W1 Edit + W2 Skill, Read').toBe(3);
+    await expect(header).toContainText(`$${(cost('w1') + cost('w2')).toFixed(2)}`);
+    await expect(header).toContainText('2 agents');
+    await expect(header).toContainText(`${calls} calls`);
+  });
+
+  await test.step('11. GS-05 Session Map: Highlight top 5 dims nobody (two agents), "with failed calls" dims both (none failed); Order by cost puts W1 ($0.008) before W2 ($0.0045)', async () => {
+    const cards = page.locator('[data-testid^="session-map-agent-"]');
+    await expect(page.locator('[data-testid^="session-map-agent-"][data-dimmed="true"]')).toHaveCount(0);
+    await page.getByTestId('session-map-highlight').selectOption('top');
+    await expect(page.locator('[data-testid^="session-map-agent-"][data-dimmed="true"]')).toHaveCount(0);
+    await page.getByTestId('session-map-highlight').selectOption('failed');
+    await expect(page.locator('[data-testid^="session-map-agent-"][data-dimmed="true"]')).toHaveCount(2);
+    await page.getByTestId('session-map-highlight').selectOption('none');
+    await page.getByTestId('session-map-order').selectOption('cost');
+    const order = await cards.evaluateAll((els) => els.map((e) => e.getAttribute('data-testid') ?? ''));
+    expect(order.map((t) => t.slice(-6))).toEqual(['gs05w1', 'gs05w2']);
+    expect(pageErrors, pageErrors.join('\n')).toEqual([]);
+  });
 });

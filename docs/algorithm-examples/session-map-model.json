@@ -1,0 +1,285 @@
+[
+  {
+    "id": "SMM-01",
+    "input": {"op": "family", "names": ["Read", "Grep", "WebSearch", "Edit", "NotebookEdit", "Bash", "PowerShell", "KillShell", "mcp__github__get_issue", "Skill", "Agent", "Task", "Workflow", "ToolSearch", "CronDelete", "TodoWrite", "read", "mcp_x"]},
+    "expected": {"families": ["explore", "explore", "explore", "edit", "edit", "shell", "shell", "shell", "mcp", "orch", "orch", "orch", "orch", "orch", "orch", "other", "other", "other"]},
+    "note": "Family rule: exact names per the table; mcp__ by prefix; TodoWrite is in no list → other; names are case-sensitive (read → other); mcp_x lacks the double underscore → other."
+  },
+  {
+    "id": "SMM-02",
+    "input": {"op": "failed", "statuses": ["success", "error", "rejected", "missing"]},
+    "expected": {"failed": [false, true, true, false]},
+    "note": "Failed rule: only error and rejected are failed; a missing result is not a failure."
+  },
+  {
+    "id": "SMM-03",
+    "input": {"op": "perCall", "total": 8, "pricing": {"m": {"in": 1, "out": 1}}, "fallbackModel": null, "firstAt": "2026-11-01T10:00:00.000Z", "lines": [
+      {"type": "assistant", "uuid": "l1", "timestamp": "2026-11-01T10:00:00.000Z", "message": {"id": "m1", "model": "m", "usage": {"input_tokens": 300000, "output_tokens": 0}, "content": [{"type": "tool_use", "id": "t1", "name": "Read", "input": {}}, {"type": "tool_use", "id": "t2", "name": "Grep", "input": {}}]}},
+      {"type": "assistant", "uuid": "l2", "timestamp": "2026-11-01T10:01:00.000Z", "message": {"id": "m2", "model": "m", "usage": {"input_tokens": 100000, "output_tokens": 0}, "content": [{"type": "text", "text": "done"}]}}
+    ]},
+    "expected": {"events": [
+      {"at": "2026-11-01T10:00:00.000Z", "cost": 3, "toolUseId": "t1"},
+      {"at": "2026-11-01T10:00:00.000Z", "cost": 3, "toolUseId": "t2"},
+      {"at": "2026-11-01T10:01:00.000Z", "cost": 2}
+    ]},
+    "note": "Weights at $1/M: m1 = 0.3, m2 = 0.1, Σ = 0.4. Shares: 8 × 0.3/0.4 = 6, 8 × 0.1/0.4 = 2. m1 has 2 tool_use blocks → 3 each; m2 is text-only → keeps 2 at its own timestamp, no toolUseId. Sum 8 = total."
+  },
+  {
+    "id": "SMM-04",
+    "input": {"op": "perCall", "total": 4, "pricing": {"m": {"in": 1, "out": 1}}, "fallbackModel": null, "firstAt": "2026-11-01T10:00:00.000Z", "lines": [
+      {"type": "assistant", "uuid": "l1", "timestamp": "2026-11-01T10:00:00.000Z", "message": {"id": "m1", "model": "m", "usage": {"input_tokens": 200000, "output_tokens": 0}, "content": [{"type": "text", "text": "looking"}]}},
+      {"type": "assistant", "uuid": "l2", "timestamp": "2026-11-01T10:00:02.000Z", "message": {"id": "m1", "model": "m", "usage": {"input_tokens": 200000, "output_tokens": 0}, "content": [{"type": "tool_use", "id": "t1", "name": "Read", "input": {}}]}},
+      {"type": "assistant", "uuid": "l3", "timestamp": "2026-11-01T10:02:00.000Z", "message": {"id": "m2", "model": "m", "usage": {"input_tokens": 200000, "output_tokens": 0}, "content": [{"type": "tool_use", "id": "t2", "name": "Bash", "input": {}}]}}
+    ]},
+    "expected": {"events": [
+      {"at": "2026-11-01T10:00:00.000Z", "cost": 2, "toolUseId": "t1"},
+      {"at": "2026-11-01T10:02:00.000Z", "cost": 2, "toolUseId": "t2"}
+    ]},
+    "note": "Dedup by message.id: lines l1 and l2 are one message m1 (weight = its last usage line, 0.2, not 0.4), placed at its first timestamp 10:00:00, with the tool_use t1 from l2. m2 weighs 0.2. Shares 4 × 0.2/0.4 = 2 each, one tool_use each."
+  },
+  {
+    "id": "SMM-05",
+    "input": {"op": "perCall", "total": 5, "pricing": {"m": {"in": 1, "out": 1}}, "fallbackModel": null, "firstAt": "2026-11-01T09:59:00.000Z", "lines": [
+      {"type": "assistant", "uuid": "l1", "timestamp": "2026-11-01T10:00:00.000Z", "message": {"id": "m1", "model": "unpriced-model", "usage": {"input_tokens": 300000, "output_tokens": 0}, "content": [{"type": "tool_use", "id": "t1", "name": "Read", "input": {}}]}}
+    ]},
+    "expected": {"events": [{"at": "2026-11-01T09:59:00.000Z", "cost": 5}]},
+    "note": "The only message's model has no price → weight 0, Σweight = 0, so the whole total 5 sits at the node's first activity 09:59:00 with no toolUseId."
+  },
+  {
+    "id": "SMM-06",
+    "input": {"op": "perCall", "total": 6, "pricing": {"m": {"in": 1, "out": 1}}, "fallbackModel": "m", "firstAt": "2026-11-01T10:00:00.000Z", "lines": [
+      {"type": "assistant", "uuid": "l1", "timestamp": "2026-11-01T10:00:00.000Z", "message": {"id": "m1", "usage": {"input_tokens": 100000, "output_tokens": 100000}, "content": [{"type": "tool_use", "id": "t1", "name": "Edit", "input": {}}]}},
+      {"type": "assistant", "uuid": "l2", "timestamp": "2026-11-01T10:00:30.000Z", "message": {"id": "m2", "usage": {"input_tokens": 100000, "output_tokens": 0}, "content": [{"type": "tool_use", "id": "t2", "name": "Bash", "input": {}}]}}
+    ]},
+    "expected": {"events": [
+      {"at": "2026-11-01T10:00:00.000Z", "cost": 4, "toolUseId": "t1"},
+      {"at": "2026-11-01T10:00:30.000Z", "cost": 2, "toolUseId": "t2"}
+    ]},
+    "note": "No message names a model, so both are priced with the fallback model m: m1 = 0.1 + 0.1 = 0.2, m2 = 0.1, Σ = 0.3. Shares 6 × 0.2/0.3 = 4 and 6 × 0.1/0.3 = 2."
+  },
+  {
+    "id": "SMM-07",
+    "input": {"op": "perCall", "total": 0, "pricing": {"m": {"in": 1, "out": 1}}, "fallbackModel": null, "firstAt": "2026-11-01T10:00:00.000Z", "lines": [
+      {"type": "assistant", "uuid": "l1", "timestamp": "2026-11-01T10:00:00.000Z", "message": {"id": "m1", "model": "m", "usage": {"input_tokens": 100000, "output_tokens": 0}, "content": []}}
+    ]},
+    "expected": {"events": []},
+    "note": "A node whose priced total is 0 gets no cost events."
+  },
+  {
+    "id": "SMM-08",
+    "input": {"op": "model", "pricing": {"m": {"in": 1, "out": 1}},
+      "main": [
+        {"type": "user", "uuid": "u0", "timestamp": "2026-11-01T10:00:00.000Z", "message": {"role": "user", "content": "go"}},
+        {"type": "assistant", "uuid": "a0", "parentUuid": "u0", "timestamp": "2026-11-01T10:00:10.000Z", "message": {"id": "msg-main", "role": "assistant", "model": "m", "usage": {"input_tokens": 1000000, "output_tokens": 0}, "content": [{"type": "text", "text": "ok"}]}}
+      ],
+      "subagents": [
+        {"sessionId": "agent-a", "parentSessionId": null, "workflowRunId": null, "logs": [
+          {"type": "user", "uuid": "ua", "timestamp": "2026-11-01T10:01:00.000Z", "message": {"role": "user", "content": "task a"}},
+          {"type": "assistant", "uuid": "aa", "parentUuid": "ua", "timestamp": "2026-11-01T10:01:05.000Z", "message": {"id": "msg-a", "role": "assistant", "model": "m", "usage": {"input_tokens": 2000000, "output_tokens": 0}, "content": [{"type": "tool_use", "id": "r1", "name": "Read", "input": {"file_path": "src/a.ts"}}]}}
+        ]},
+        {"sessionId": "agent-b", "parentSessionId": null, "workflowRunId": null, "logs": [
+          {"type": "user", "uuid": "ub", "timestamp": "2026-11-01T10:02:00.000Z", "message": {"role": "user", "content": "task b"}},
+          {"type": "assistant", "uuid": "ab", "parentUuid": "ub", "timestamp": "2026-11-01T10:02:05.000Z", "message": {"id": "msg-b", "role": "assistant", "model": "m", "usage": {"input_tokens": 500000, "output_tokens": 0}, "content": [{"type": "text", "text": "done"}]}}
+        ]}
+      ],
+      "stats": {"agent-a": {"model": "m", "inputTokens": 3000000}}
+    },
+    "expected": {"mainCost": 1, "agentCosts": {"a": 3, "b": 0.5}, "treeCost": 4.5, "costAtEnd": 4.5},
+    "note": "Main = its own 1M input tokens at $1/M = 1. Agent a has a stats row (3M tokens) → 3, not its transcript's 2. Agent b has none → its transcript's 0.5M = 0.5. Tree = 1 + 3 + 0.5 = 4.5. Every cost event lies at or before the last activity 10:02:05, so the cumulative cost at the end (counters and last timeline bin) is the tree total 4.5."
+  },
+  {
+    "id": "SMM-09",
+    "input": {"op": "timeline", "start": 0, "end": 5400000, "nodes": [
+      {"costEvents": [{"t": 0, "cost": 1}, {"t": 5400000, "cost": 2}]},
+      {"costEvents": [{"t": 2700000, "cost": 5}]}
+    ]},
+    "expected": {"binCount": 120, "lastCumulative": 8, "tickStepMin": 30, "ticks": [0, 1800000, 3600000, 5400000]},
+    "note": "120 bins. Cumulative at the end = 1 + 2 + 5 = 8 (the event at the end falls in the last bin). Span 90 min: step 5 gives 19 ticks, 10 gives 10, 30 gives 4 ≤ 8 → 30 min: 0, 30, 60, 90 min."
+  },
+  {
+    "id": "SMM-10",
+    "input": {"op": "timeline", "start": 0, "end": 1800000, "nodes": [
+      {"costEvents": [{"t": 600000, "cost": 0.25}]}
+    ]},
+    "expected": {"binCount": 120, "lastCumulative": 0.25, "tickStepMin": 5, "ticks": [0, 300000, 600000, 900000, 1200000, 1500000, 1800000]},
+    "note": "Span 30 min: step 5 gives floor(30/5) + 1 = 7 ≤ 8 ticks → 5 min."
+  },
+  {
+    "id": "SMM-11",
+    "input": {"op": "group",
+      "agents": [
+        {"agentId": "a", "parentId": null, "workflowRunId": "W1", "startMs": 2000},
+        {"agentId": "b", "parentId": null, "workflowRunId": "W1", "startMs": 1500},
+        {"agentId": "c", "parentId": null, "workflowRunId": null, "startMs": 1000},
+        {"agentId": "d", "parentId": null, "workflowRunId": "W2", "startMs": 1200}
+      ],
+      "workflows": [
+        {"toolUseId": "tu1", "name": "review", "status": "completed", "wfId": "W1"},
+        {"toolUseId": "tu2", "name": "build", "status": "completed", "wfId": "W2"}
+      ]},
+    "expected": {"columns": [
+      {"key": "wf-W2", "label": "build · run #1", "rootIds": ["d"]},
+      {"key": "wf-W1", "label": "review · run #2", "rootIds": ["a", "b"]},
+      {"key": "direct", "label": "Agents spawned by the main session", "rootIds": ["c"]}
+    ], "nested": {}},
+    "note": "Workflow columns by earliest start: W2 (1200) before W1 (min 2000, 1500 = 1500); run #index is the position among workflow columns. The direct column is last although c started first (1000). Roots keep input order (a, b)."
+  },
+  {
+    "id": "SMM-12",
+    "input": {"op": "group",
+      "agents": [
+        {"agentId": "e", "parentId": null, "workflowRunId": "R9", "startMs": 200},
+        {"agentId": "f", "parentId": null, "workflowRunId": "R8", "startMs": 100},
+        {"agentId": "g", "parentId": null, "workflowRunId": "R7", "startMs": 300}
+      ],
+      "workflows": [
+        {"toolUseId": "tu-b", "name": "deploy", "status": "running", "wfId": null},
+        {"toolUseId": "tu-a", "name": "lint", "status": "running", "wfId": null}
+      ]},
+    "expected": {"columns": [
+      {"key": "wf-R8", "label": "lint · run #1", "rootIds": ["f"]},
+      {"key": "wf-R9", "label": "deploy · run #2", "rootIds": ["e"]},
+      {"key": "wf-R7", "label": "workflow run", "rootIds": ["g"]}
+    ], "nested": {}},
+    "note": "No run has a wfId, so every column is keyed by workflowRunId and labelled from the running runs in toolUseId order (tu-a lint, tu-b deploy) by start rank: R8 (100) → lint, R9 (200) → deploy; R7 (300) has no running run left → 'workflow run'."
+  },
+  {
+    "id": "SMM-13",
+    "input": {"op": "group",
+      "agents": [
+        {"agentId": "p", "parentId": null, "workflowRunId": "W1", "startMs": 100},
+        {"agentId": "q", "parentId": "p", "workflowRunId": null, "startMs": 150},
+        {"agentId": "r", "parentId": "q", "workflowRunId": "W5", "startMs": 50}
+      ],
+      "workflows": [
+        {"toolUseId": "tu1", "name": "review", "status": "completed", "wfId": "W1"}
+      ]},
+    "expected": {"columns": [
+      {"key": "wf-W1", "label": "review · run #1", "rootIds": ["p"]}
+    ], "nested": {"q": "p", "r": "q"}},
+    "note": "q's parent p is an agent → nested; r's parent q is an agent → nested although r has its own workflowRunId W5 (a Workflow run inside a sub-agent). Only p is top-level; no direct column since it would be empty."
+  },
+  {
+    "id": "SMM-14",
+    "input": {"op": "group", "agents": [], "workflows": []},
+    "expected": {"columns": [], "nested": {}},
+    "note": "No agents → no columns (the UI shows 'No groups')."
+  },
+  {
+    "id": "SMM-15",
+    "input": {"op": "state", "node": {"f": 100, "l": 200, "finished": false}, "t": 50, "live": false, "atNow": false},
+    "expected": {"state": "future"},
+    "note": "t = 50 < f = 100 → future."
+  },
+  {
+    "id": "SMM-16",
+    "input": {"op": "state", "node": {"f": 100, "l": 200, "finished": false}, "t": 100, "live": false, "atNow": false},
+    "expected": {"state": "running"},
+    "note": "f ≤ t ≤ l at the lower bound t = f = 100 → running."
+  },
+  {
+    "id": "SMM-17",
+    "input": {"op": "state", "node": {"f": 100, "l": 200, "finished": false}, "t": 200, "live": false, "atNow": false},
+    "expected": {"state": "running"},
+    "note": "Upper bound t = l = 200 is still running."
+  },
+  {
+    "id": "SMM-18",
+    "input": {"op": "state", "node": {"f": 100, "l": 200, "finished": false}, "t": 250, "live": false, "atNow": true},
+    "expected": {"state": "done"},
+    "note": "t > l in replay (live false): the not-finished clause never applies → done."
+  },
+  {
+    "id": "SMM-19",
+    "input": {"op": "state", "node": {"f": 100, "l": 200, "finished": false}, "t": 250, "live": true, "atNow": true},
+    "expected": {"state": "running"},
+    "note": "Realtime at now: t ≥ f, the session is live and the agent is not finished → running although t > l."
+  },
+  {
+    "id": "SMM-20",
+    "input": {"op": "state", "node": {"f": 100, "l": 200, "finished": true}, "t": 250, "live": true, "atNow": true},
+    "expected": {"state": "done"},
+    "note": "Same as SMM-19 but the agent is finished → done."
+  },
+  {
+    "id": "SMM-21",
+    "input": {"op": "state", "node": {"f": 100, "l": 200, "finished": false}, "t": 250, "live": true, "atNow": false},
+    "expected": {"state": "done"},
+    "note": "Live but paused away from now (atNow false) → the clause does not apply → done."
+  },
+  {
+    "id": "SMM-22",
+    "input": {"op": "state", "node": {"f": null, "l": null, "finished": false}, "t": 250, "live": true, "atNow": true},
+    "expected": {"state": "done"},
+    "note": "A node without any activity is done."
+  },
+  {
+    "id": "SMM-23",
+    "input": {"op": "counters", "sessionStart": 0, "treeCost": 15, "t": 40,
+      "main": {"f": 0, "events": [{"t": 10}, {"t": 50, "failed": true}], "costEvents": [{"t": 10, "cost": 1}, {"t": 50, "cost": 2}]},
+      "agents": [
+        {"id": "x", "f": 20, "events": [{"t": 30}, {"t": null}], "costEvents": [{"t": 30, "cost": 4}]},
+        {"id": "y", "f": 100, "events": [{"t": 120, "failed": true}], "costEvents": [{"t": 120, "cost": 8}]}
+      ]},
+    "expected": {"counters": {"elapsedMs": 40, "costSoFar": 5, "costTotal": 15, "agentsStarted": 1, "agentsTotal": 2, "calls": 2, "failed": 0}},
+    "note": "At t = 40: cost 1 (main at 10) + 4 (x at 30) = 5; calls at 10 and 30 = 2 (the call without a timestamp never counts); failed 0 (main's failure is at 50); started: x (20 ≤ 40), not y; elapsed 40 − 0."
+  },
+  {
+    "id": "SMM-24",
+    "input": {"op": "counters", "sessionStart": 0, "treeCost": 15, "t": 120,
+      "main": {"f": 0, "events": [{"t": 10}, {"t": 50, "failed": true}], "costEvents": [{"t": 10, "cost": 1}, {"t": 50, "cost": 2}]},
+      "agents": [
+        {"id": "x", "f": 20, "events": [{"t": 30}, {"t": null}], "costEvents": [{"t": 30, "cost": 4}]},
+        {"id": "y", "f": 100, "events": [{"t": 120, "failed": true}], "costEvents": [{"t": 120, "cost": 8}]}
+      ]},
+    "expected": {"counters": {"elapsedMs": 120, "costSoFar": 15, "costTotal": 15, "agentsStarted": 2, "agentsTotal": 2, "calls": 4, "failed": 2}},
+    "note": "At the end t = 120 (inclusive): cost 1 + 2 + 4 + 8 = 15 = the tree total; calls 10, 50, 30, 120 = 4; failed at 50 and 120 = 2; both agents started."
+  },
+  {
+    "id": "SMM-25",
+    "input": {"op": "highlight", "mode": "top", "agents": [
+      {"id": "a1", "cost": 1}, {"id": "a2", "cost": 7}, {"id": "a3", "cost": 3}, {"id": "a4", "cost": 7},
+      {"id": "a5", "cost": 5}, {"id": "a6", "cost": 2}, {"id": "a7", "cost": 4}
+    ]},
+    "expected": {"ids": ["a2", "a3", "a4", "a5", "a7"]},
+    "note": "Top TOP_N_HIGHLIGHT = 5 by cost: 7 (a2), 7 (a4), 5 (a5), 4 (a7), 3 (a3); a6 (2) and a1 (1) are dimmed. Listed sorted."
+  },
+  {
+    "id": "SMM-26",
+    "input": {"op": "highlight", "mode": "top", "agents": [
+      {"id": "b", "cost": 1}, {"id": "a", "cost": 1}, {"id": "c", "cost": 1}, {"id": "e", "cost": 1}, {"id": "d", "cost": 1}, {"id": "f", "cost": 1}
+    ]},
+    "expected": {"ids": ["a", "b", "c", "d", "e"]},
+    "note": "Six agents tie at cost 1: ties by id, so a-e are kept and f is dimmed."
+  },
+  {
+    "id": "SMM-27",
+    "input": {"op": "highlight", "mode": "failed", "agents": [
+      {"id": "a1", "failures": 0}, {"id": "a2", "failures": 2}, {"id": "a3", "failures": 0}, {"id": "a4", "failures": 1}
+    ]},
+    "expected": {"ids": ["a2", "a4"]},
+    "note": "With failed: every agent with at least one failed call (a2, a4)."
+  },
+  {
+    "id": "SMM-28",
+    "input": {"op": "highlight", "mode": "none", "agents": [{"id": "a1", "cost": 1}]},
+    "expected": {"ids": null},
+    "note": "none → null: nothing is dimmed."
+  },
+  {
+    "id": "SMM-29",
+    "input": {"op": "order", "order": "start", "agents": [
+      {"id": "x", "f": 300, "cost": 1}, {"id": "y", "f": 100, "cost": 1}, {"id": "z", "f": null, "cost": 9}, {"id": "w", "f": 200, "cost": 5}
+    ]},
+    "expected": {"ids": ["y", "w", "x", "z"]},
+    "note": "By start ascending: y (100), w (200), x (300); z has no activity → last."
+  },
+  {
+    "id": "SMM-30",
+    "input": {"op": "order", "order": "cost", "agents": [
+      {"id": "x", "f": 300, "cost": 1}, {"id": "y", "f": 100, "cost": 1}, {"id": "z", "f": null, "cost": 9}, {"id": "w", "f": 200, "cost": 5}
+    ]},
+    "expected": {"ids": ["z", "w", "y", "x"]},
+    "note": "By cost descending: z (9), w (5), then x and y tie at 1 → by start: y (100) before x (300)."
+  }
+]

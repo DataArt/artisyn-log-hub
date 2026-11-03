@@ -9,7 +9,7 @@ answer one question and shows them in the row:
 
 | View | Tabs in the row | Opens on |
 |---|---|---|
-| What happened | Summary, Logs, Bash, Timeline, Agent Tree, Change surface | Summary |
+| What happened | Summary, Logs, Bash, Timeline, Agent Tree, Session Map, Change surface | Summary |
 | Cost | Summary, Statistics, Call Tree, Context Growth, Dashboard, Advisor, OTEL | Statistics |
 | Harness & context | System context anatomy, Context Usage, Harness usage, OKF, Info | System context anatomy |
 | Failed tool call | Tools/MCP, Logs, Bash, Tool Heatmap, OTEL | Tools/MCP |
@@ -33,7 +33,7 @@ The headings in **More ▾** group the tabs like this:
 
 | Heading | Tabs |
 |---|---|
-| Overview | Summary, Info, Statistics, Advisor |
+| Overview | Summary, Info, Statistics, Advisor, Session Map |
 | Transcript | Logs, Bash, Raw Logs |
 | Cost & context | Dashboard, Context Growth, Context Usage, Agent Tree, Timeline, Tool Heatmap, Call Tree, System context anatomy, Harness usage, OTEL |
 | Effects | Change surface, Tools/MCP, OKF |
@@ -133,6 +133,64 @@ Session metadata including:
 | Files touched | Source files read or modified |
 | MCP servers | External MCP servers invoked |
 | Total cost | Estimated USD cost for the session |
+
+### Session Map
+
+In the **Overview** group, and in the **What happened** view after Agent Tree. It shows the whole
+session as a map of cards — the main session, every workflow run and every agent — and lets you
+watch it unfold over time, live or as a replay.
+
+**Realtime and replay.** The badge at the top left says which mode you are in:
+
+| Badge | Meaning |
+|---|---|
+| LIVE · following now | The session is running. The map checks for new activity every 10 seconds and shows the current moment. |
+| LIVE · paused at HH:MM | The session is running, but you moved back in time. Click **Live** to follow it again. |
+| LIVE · updates paused | The page is hidden or you have been idle; checking resumes when you come back. |
+| Replay · finished session | The session has ended. Use **Play** or the timeline to move through it. |
+
+A session counts as running only when its **OTEL data** is arriving (realtime OTEL or a recent
+OTEL upload in the last 10 minutes; see the OTEL tab). Without OTEL the map still works, but always
+as a replay: refresh the session to see new activity.
+
+**Header.** The first prompt of the session and five counters for the chosen moment: elapsed time,
+failed calls (red when there are any), calls, agents started out of all agents, and cost so far out
+of the total.
+
+**Controls.**
+
+- **Highlight** — None, **Top 5 by cost**, or **Agents with failed calls**. Other cards are dimmed.
+- **Order** — cards in each column **By start** or **By cost**.
+- The colour legend next to them explains the cost bar on each card (green to red as an agent's
+  cost approaches the most expensive agent).
+
+**Cards.**
+
+- The **main card** is the main session. Below it, one column per **workflow run**
+  (`<workflow name> · run #N`), ordered by when it started, and a last column **Agents spawned by
+  the main session**. An agent started by another agent is shown indented under it.
+- Each agent card shows its name, cost bar, a strip of its tool calls by kind, its most used tools,
+  a red **N failed** badge, its context use and its duration.
+- A card for an agent that has not started yet at the chosen moment is faded with a dashed border;
+  a running agent has a **running** label and a growing duration; a finished one looks normal.
+- **No groups** means the session started no agents.
+
+**Side panel.** Click a card to open a panel with its model, cost and share, calls, failed calls,
+peak context (against the model's context window, `n/a` when unknown), duration and start time.
+Below is its call log: filter it with the chips (**all**, each tool kind, **failed**), click a row
+to move the map to that call's moment, or click **⤢** to open the call's full details. The selected
+card is part of the page address, so a copied link opens it again.
+
+**Timeline.** At the bottom, the session split into equal time slices. Each slice is coloured by
+the kinds of tool calls in it — Read · Grep · Glob, Edit · Write, Bash · PowerShell, MCP,
+Skill · Agent · Workflow and other — with a red mark for slices with failed calls, and a blue line
+for the cost so far. Click or drag on it to move to a moment. Below it:
+
+- **Play / Pause** and the speeds **1×, 10×, 60×, 300×** (60× by default);
+- **End** jumps to the end of the session;
+- **Live** (live sessions only) goes back to following the current moment.
+
+The **refresh** button in the session header checks for new activity at once while this tab is open.
 
 ### Raw Logs
 

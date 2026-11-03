@@ -6,7 +6,7 @@ tags:
   - hooks
   - api
   - otel
-timestamp: "2026-10-31T00:00:00+04:00"
+timestamp: "2026-11-03T00:00:00+04:00"
 ---
 
 # Hook API Versioning (v2 logs upload, v1 removed)
@@ -53,8 +53,8 @@ The URL itself is the version signal — no version-detection logic needed on ei
 `1.7.0`+ simply builds its upload URL against `/api/v2/logs` instead of `/api/v1/logs`
 (`uploadFile()`, one literal path change).
 
-See `docs/knowledgebase/server-endpoint-map.md` and `docs/knowledgebase/api-reference.md` for the
-full request/response shape of the v2 route, and `docs/knowledgebase/hook-system-overview.md` for
+The v2 route's query and response shapes are typed in `server/src/logs/logs-v2.controller.ts` (rules in
+`docs/knowledgebase/server-endpoint-map.md`); see `docs/knowledgebase/hook-system-overview.md` for
 the general hook architecture (including the `broken-upload-file` recommendation rule this
 mechanism feeds).
 
@@ -301,7 +301,7 @@ route (or a new `contract`), not an in-place edit.
 
 A third capability-versioning problem, distinct from both routes above: the hook's MCP reporting
 (originally the standalone `mcp-config` synthetic event; since hook `2.22.0` the `mcpServers` array
-of the `harness-snapshot` body — see `hook-system-overview.md`'s "Context injection" and the new
+of the `harness-snapshot` body — see `hook-system-overview.md`'s "Lines injected into the current session's `artisyn` upload" and the new
 snapshot section below) gained per-server `connected`/`tools` fields and a top-level
 `perToolDetailSupported: true` flag when the hook added a live `tools/list` probe of each
 configured MCP server. **`2.22.0` moved `perToolDetailSupported` from the `mcp-config` event's own
@@ -357,10 +357,9 @@ read the same in storage (the column is left unchanged either way) but have diff
 
 The harness-snapshot flow (DD-1–DD-9 in
 `docs/tasks/done/2026-10-16-sysctx-skill-source/impl-plan.md`; see `hook-system-overview.md`'s
-"Context injection" for the full shape and per-run flow) adds a fourth query param pair to
+"Lines injected into the current session's `artisyn` upload" and `hook/HOW_HOOK_WORKS.md` for the shape and per-run flow) adds a fourth query param pair to
 `POST /api/v2/logs`, on top of the existing `type`/`sessionId`/`parentSessionId`/`workflowRunId`
-and the hook-`1.8.0`+ chunk params — see `docs/knowledgebase/api-reference.md` for the full
-`PostLogsQuery` shape:
+and the hook-`1.8.0`+ chunk params — the full query shape is typed in `server/src/logs/logs-v2.controller.ts`:
 
 | Query param | Sent when | Server behaviour |
 |---|---|---|
@@ -558,7 +557,7 @@ are never mistaken for edit records.
 
 ## `okfSnapshotId` / `okfSnapshotFull` / `unknownOkfSnapshotId` — OKF snapshot (hook `2.26.0`+)
 
-The OKF usage tabs ([okf-usage.md](okf-usage.md); plan `docs/tasks/todo/2026-10-27-okf-usage-tab/`,
+The OKF usage tabs ([okf-usage.md](okf-usage.md); plan `docs/tasks/done/2026-10-27-okf-usage-tab/`,
 DD-13–DD-22) add a second, independent snapshot loop beside the harness one, with the same shape:
 
 - **Body.** On the current root session's own `artisyn` upload (the `getHarnessPrefix` gate;
@@ -601,7 +600,7 @@ a session decides, never rebound.
 ## `GET /api/v2/tool-monitoring/config` and the `tool-calls` log kind — CLI tool wrapper (hook `2.27.0`+)
 
 The Tools/MCP tab ([tool-monitoring.md](tool-monitoring.md); plan
-`docs/tasks/todo/2026-06-19-mcp-invocation-log-tab/`, DD-3, DD-5, DD-6, DD-16) adds one hook-facing
+`docs/tasks/done/2026-06-19-mcp-invocation-log-tab/`, DD-3, DD-5, DD-6, DD-16) adds one hook-facing
 route and one upload log kind. Both are purely additive: no existing route, query param or line type
 changes.
 
@@ -720,3 +719,29 @@ task:
   perf harness (`server/perf-tests/`) via v2 scenarios.
 - The changelog's `Open-source readiness` entry tells operators that hooks older than `1.7.0` stop
   uploading and must be upgraded.
+
+## Hook-side behaviour history
+
+What changed on the hook side by version, for reasoning about an old hook still installed on a
+user's machine. Only facts not already covered by the sections above; current behaviour is in
+[hook-system-overview.md](hook-system-overview.md).
+
+| Hook version | Change | What an older hook does |
+|---|---|---|
+| `1.4.0` | `hook-status` line on the current session's artisyn upload (Hook State panel) | Sends none; the panel shows no state for that repo |
+| `1.5.0` / `1.6.0` | Sub-agent `parentSessionId` from `<agent-id>.meta.json` (any depth) / `workflowRunId` for workflow agents | Every sub-agent is linked to the main session; no workflow linkage |
+| `1.8.0` | Background upload on `UserPromptSubmit`; shared `.upload.lock` | Uploads only on `Stop` |
+| `2.6.0` | Windows detached launch no longer goes through a self-deleting VBScript run by `wscript.exe` (flagged by EDR) | Hooks `≤ 2.5.1` pass receiver / prompt-upload parameters as env only, which is why current launchers still send every parameter as both argv and env |
+| `2.6.1` | `CHUNK_SIZE_BYTES` lowered from 10 MB (see "Known limitation" above) | Large single requests can be cut by a reverse-proxy cap |
+| `2.8.0` | `SessionEnd` scoped flush; lock waiting with per-event budgets; gzip transport; `.claude-logs.pending` became whole-file JSON v2 with `nextChunkIndex` = next chunk *to send* (was last acked); one `hook.log` line per run incl. early exits | A session ending while another session's `Stop` holds the lock strands its last delta (and can be invisible: no `prompt_start` → `first_prompt = NULL`); a v1 pending file is dropped by new hooks, never mis-parsed |
+| `2.11.0` | `ARTISYN_PROC_*` process markers and `killProcessTree()`; batched manifest writes | Orphaned MCP servers / `claude -p` processes on Windows; manifest cost grows with history |
+| `2.12.0` / `2.13.0` | Artisyn telemetry suppressed under `ARTISYN_HOOK_SERVICE`; from `2.13.0` not even the `hook_service` marker line is written | Older hooks upload the evaluation sessions; the server keeps its `logs.body @> '[{"event":"hook_service"}]'` check to hide them |
+| `2.13.0` | `claude-otel` chunks deleted after upload; manifest pruning | Chunks linger until `otelRetentionDays`; new hooks reclaim them via the skip branch |
+| `2.14.0` | Current session's `claude` / `claude-subagent` files uploaded first | Post-turn analysis may run before the transcript reached the server |
+| `2.17.4` | Per-append `<session_id>.jsonl.lock` | Torn lines on WSL `/mnt/<drive>` and network shares |
+| `2.18.1` | `$CLAUDE_CONFIG_DIR` honoured (`claude-config-dir.js`) | Always reads `~/.claude`: a user with `CLAUDE_CONFIG_DIR` gets no `claude` / `claude-subagent` uploads |
+| `2.19.0` | `PreToolUse` guardrail (`guardrail-hook.js`) removed; upgrade deletes the script | Leftover `guardrail*` config keys are kept on purpose: an older hook would fall back to guardrail-on defaults without them |
+| `2.23.0` | `ARTISYN_PROJECT_ROOT` override | Root always from `--git-common-dir` |
+| `2.24.1` | `scripts/package.json` `{"type":"commonjs"}` | In a repo whose root `package.json` is `"type": "module"` every hook dies with `require is not defined` and nothing is recorded |
+| `2.24.2` | `--self-check` on every entry script (installer load check) | The installer cannot verify the install loads |
+| `2.27.0` | `PreToolUse` entry again, but only the PowerShell tool wrapper (`tool-wrap-powershell.js`), never a permission decision | No CLI tool capture |

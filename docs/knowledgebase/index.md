@@ -17,7 +17,8 @@ article itself holds the details. Keep new lines to one or two sentences.
 * [Client Component Hierarchy](client-routing-and-layout.md) - Read before touching SPA routing, the provider tree / consent gate, lazy chunks (~8, never more than 10), URL state (`lens=`, `session=`, tab params), per-user browser storage keys, window events or `location.state` tab seeding
 * [UI Principles](ui-principles.md) - Read before implementing any UI behaviour: access messaging, error handling, light-only colour scheme, chart patterns
 * [Client Feature Flags](client-feature-flags.md) - Read before hiding an unfinished client feature behind a `VITE_*` build flag (`lib/feature-flags.ts`)
-* [Session Log View](session-log-view.md) - Read before touching the session Logs tab: log parser, the tool-call core (`allToolCalls`, sections, statuses, permission attribution), `ToolCallView` and the Bash view/tab, Context Growth steps, nested `claude -p` sessions
+* [Session Log View](session-log-view.md) - Read before touching the session Logs tab or the `/logs` payload: the payload contract (`agent-` prefix rules, descendant loading, client-only types), the Workflow tool lifecycle (rejected-before-launch = failed), log parser, tool-call core, `ToolCallView` and the Bash tab, Context Growth steps, nested `claude -p` sessions
+* [Session Map Tab](session-map.md) - Read before touching the session Map tab (`session-log/session-map/`) or `GET …/logs/delta`: delta → merge → parse → model flow, polling and reload, `/logs` watermark suspension, tool families, file list
 * [Raw Logs Renderer Subsystem](raw-logs-renderers.md) - Read before touching `session-log/raw-logs/`: layers, dependency graph, adding a renderer
 * [System Context Anatomy Tab](sysctx-anatomy-tab.md) - Read before touching the `sysctx` session tab or the Logs `StartupContextLine`: data sources, partitions, banners, test ids
 * [Harness Usage Tab](harness-usage-tab.md) - Read before touching the session "Harness usage" tab: the five element kinds, slash-command shapes, tree assembly rules, why it bypasses `parseSessionLogs`
@@ -26,23 +27,23 @@ article itself holds the details. Keep new lines to one or two sentences.
 
 ## Server and API
 
-* [Server HTTP API map](server-endpoint-map.md) - Read before adding, changing or looking for any HTTP route: every route → controller / handler, guard, purpose and the file of its request/response types; guards legend, access rules, error / body-limit / security-header conventions, hook-route backward compatibility
-* [API Specification (moved)](api-reference.md) - Stub: merged into `server-endpoint-map.md`; do not read
-* [Server Conventions](server-conventions.md) - Read before writing server code: DB query patterns, Argon2id hashing, perf-test framework, pino logging
-* [Server Log Subsystem](log-subsystem.md) - Read before touching the server's own operational logs (not session telemetry): pino loggers, rotation, admin Error Logs and Logs Archive
-* [Upload Queue](upload-queue.md) - Read before touching `POST /api/v2/logs` ingest, `UploadQueueService` or the admin Upload Queue tab: staging, `SKIP LOCKED` claim, leases, 900 KB chunks, malformed-line tolerance, worker stats
+* [Server HTTP API map](server-endpoint-map.md) - Read before adding or changing an HTTP route: guards legend, access rules (admin grants no session-data access), error / body-limit / security-header conventions, hook-route backward compatibility, a controller index and the routes with non-obvious behaviour. Not a route list — grep the controllers
+* [Twins Registry and Cross-Cutting Rules](twins-and-cross-cutting-rules.md) - Read before changing any constant, regex or rule that may also exist in another package (server / client / hook / installer), and before adding an env var, a lazy chunk, an installer-written setting, a background job or a Workflow status rule
+* [Server Conventions](server-conventions.md) - Read before writing server code: gotchas (Drizzle array binding → `malformed array literal`, never read transcripts in list/analytics endpoints), DB query patterns, Argon2id hashing, perf-test framework, pino logging
+* [Server Log Subsystem](log-subsystem.md) - Read before touching the server's own operational logs (not session telemetry): pino loggers, rotation, no retention, logs lost on container recreate
+* [Upload Queue](upload-queue.md) - Read before touching `POST /api/v2/logs` ingest or adding any background job/queue (the house `SKIP LOCKED` + lease pattern): staging, claim, 900 KB chunks, malformed-line tolerance, worker stats, admin Upload Queue tab
 * [Repository Identity](repo-identity.md) - Read before touching how `repositories.repo_url` is derived: URL normalisation, local `<email>/<path>` identities, team add-repo mapping, the startup merge
 * [Session Data Retention](data-retention.md) - Read before touching the session purge job (`SESSION_RETENTION_*` env vars, eligibility, audit) or the hook-side OTEL file prune
 * [Session Export, Import and Statistics Export](session-export-import.md) - Read before touching repository export/import or the statistics export: zip format, `export_import_jobs`, import validation and merge
 * [System Info & Cluster](system-info-and-cluster.md) - Read before touching `server/src/cluster/` (worker launch, `CLUSTER_MODE`), the System Info API/tab or the `ai-tool-versions` scheduler
-* [Static Asset Serving](static-asset-serving.md) - Read before touching how the built SPA is served: brotli/gzip precompression, `Accept-Encoding` negotiation, `/assets/` cache policy
+* [Static Asset Serving](static-asset-serving.md) - Read before touching how the built SPA or server static files are served: the three `static-dir.ts` runtime layouts (installer 404 trap), brotli/gzip precompression, `Accept-Encoding` negotiation, `/assets/` cache policy
 * [Repo-Local Packages](repo-local-packages.md) - Read before touching `packages/` (`@loghub/pricing`, `@loghub/bash-view`) or sharing code between server and client: linking, alias, Docker, package rules
 
 ## Database
 
-* [Database Structure — cross-table rules](db-tables.md) - Read before writing queries or ingest logic that span tables: core ER diagram and the rules the DDL cannot show (session trees, soft vs hard delete and cascades, extracted `logs` fields, OTEL rows, derived per-session tables, pricing, team vs personal scoping)
-* [DB Schema - Code Location and Structure](db-schema-code.md) - Read when adding or changing a table: Drizzle schema location, DI wiring, the hand-written migration with `COMMENT ON` then `npm run db:state` (**never run `drizzle-kit generate`**), Drizzle limitations
-* [Current DB State (DDL)](db_state.sql) - Read when you need the schema as it is now (last state after all migrations, with table and column comments), not the migration history; regenerated by `npm run db:state`, never edit by hand
+* [Database Structure — cross-table rules](db-tables.md) - Read before writing queries or ingest logic that span tables: core ER diagram and the rules the DDL cannot show (session trees, soft vs hard delete and cascades, extracted `logs` fields, hook upload replaces `logs.body` vs keep-longer on zip import, OTEL rows, derived per-session tables, pricing, team vs personal scoping)
+* [DB Schema - Code Location and Structure](db-schema-code.md) - Read when adding or changing a table: Drizzle schema location (`server/src/database/schema/index.ts`), DI wiring, the hand-written migration with `COMMENT ON` then `npm run db:state` (**never run `drizzle-kit generate`**), Drizzle limitations
+* [Current DB State (DDL)](db_state.sql) - First stop for any table or column name and schema question: the current DDL with table and column comments (not the migration history); regenerated by `npm run db:state`, never edit by hand
 
 ## Cost, sessions and analytics
 
@@ -56,9 +57,9 @@ article itself holds the details. Keep new lines to one or two sentences.
 
 ## Hook
 
-* [Hook System Overview](hook-system-overview.md) - Read first for any hook change: events, telemetry recording, OTEL receiver files, upload dedup namespaces, `tool-wrap-*.js`, file layout, design rules (transparent code only, every Node.js LTS)
-* [Hook Installation Guide](hook-installation.md) - Read before touching install / upgrade / uninstall or the hook config: `log-hub.json` keys (OTEL, `okf`, `toolWrap`), per-user OTEL state, the user-scope and project `settings*.json` env blocks
-* [Hook API Versioning](hook-api-versioning.md) - Read before changing any hook-facing route or payload: `/api/v2/logs` (v1 removed), the hook-version × route compatibility matrix, body limits, receiver contracts, additive fields by hook version
+* [Hook System Overview](hook-system-overview.md) - Read first for any hook change: where the source lives (`hook/.claude/telemetry_tool/`) vs the installed and dogfooded copies, event wiring, non-obvious scripts, path resolution, upload pipeline (namespaces, manifest, lock, gzip/chunks, injected lines), design rules (fail-open, transparent code, every Node.js LTS, CommonJS)
+* [Hook Installation Guide](hook-installation.md) - Read before touching install / upgrade / uninstall or the hook config: gotchas (marketplace dedup by folder path, `npx` caches by name+version), `log-hub.json` keys (OTEL, `okf`, `toolWrap`), per-user OTEL state, the user-scope and project `settings*.json` env blocks
+* [Hook API Versioning](hook-api-versioning.md) - Read before changing any hook-facing route or payload: `/api/v2/logs` (v1 removed), the hook-version × route compatibility matrix, body limits, receiver contracts, additive fields by hook version, and the hook-side behaviour history by version
 * [OTEL Receiver](otel-receiver.md) - Read before touching `otel-receiver.js`, `otel-register.js`, `user-state.js` or the receiver install steps: the per-user shared receiver (2.30.0), register / hello / routing, legacy per-project mode, restarts, chunk layout, realtime sender
 * [Log Schema Reference](log-schema/index.md) - Read when you need the shape of a Claude Code transcript line: message types, assistant/user structure, attachment sub-types
 
@@ -70,8 +71,7 @@ article itself holds the details. Keep new lines to one or two sentences.
 
 ## Auth and accounts
 
-* [Authorization and Authentication](authorization-and-authentificaiton.md) - Read before touching auth: the four `AUTH_MODE`s, startup validation, rate limits, route gating, Mode 1's local-caller gate, team access modes and roles
-* [Password Requirements](password-requirements.md) - Read before touching `PASSWORD_POLICY` (`any` / `mid` / `long`) and where it is enforced
+* [Authorization and Authentication](authorization-and-authentificaiton.md) - Read before touching auth or any data-access check: the admin role grants no session-data access, the four `AUTH_MODE`s, startup validation, rate limits, route gating, Mode 1's local-caller gate, team access modes and roles
 * [User Account Flows](user-account-flows.md) - Read before touching invites, signup, password reset, admin reset link / email rename, the data-collection consent or the new-user nudge
 * [Deployment Auth Mode](deployment-auth-mode.md) - Read before changing a deployed instance's auth: why Mode 4 never falls back, how `AZURE_*` and other env vars reach the container, verifying the live mode
 
@@ -80,14 +80,18 @@ article itself holds the details. Keep new lines to one or two sentences.
 * [Release Pipeline](release-pipeline.md) - Read before touching `release.yml` / `checks.yml`, `scripts/release-kit.js`, `release-template/` or when cutting a release: versioning, job order, GHCR tags, install kit, local test bundle, Node.js version
 * [CI Security Scans](ci-security-scans.md) - Read before touching `security-scans.yml`, `virustotal.yml`, `scripts/ci/` or the config-guard allowlist, or when a scan row / PR security block looks wrong
 * [Git Hooks and Secret Scanning](git-hooks.md) - Read before touching `.githooks/`, gitleaks config or when a commit/push is blocked by the scan
-* [Claude Code Dev Container (sandboxes)](docker-dev-container.md) - Read before touching `scripts/claude-docker*` or `docker-dev/`, or when a sandbox misbehaves: commands, ports, DBs, mounts, `devctl`, state and prune rules
+* [Claude Code Dev Container (sandboxes)](docker-dev-container.md) - Read before touching `scripts/claude-docker*` or `docker-dev/`, or when a sandbox misbehaves: sandbox model, launcher rules and deletion guards, mounts, `TEST_DATABASE_URL`, provisioning, prune rules, Windows menu quirks, limitations (commands: `--help`)
 * [User Docs and Site](user-docs-and-site.md) - Read before editing `user-docs/`, the in-app help menu or the GitHub Pages site/deck: `nav.json`, link rules, the help generator, the site renderer
 
 ## Tests and algorithm docs
 
 * [Test Knowledgebase](test/index.md) - Read before writing or changing tests: suites (scenarios, contracts, algorithm tables, legacy e2e), the 80 % scenario-coverage target, run commands, the scenario stand and contract registry
 * [Task Workflow and Post-Implementation Checks](task-checks-guide.md) - Read before running or adding a post-implementation check: the `/adlc-lh:*` lifecycle in short, the checks, discovery and naming
-* [Algorithm Docs (doc-driven table tests)](algorithms/README.md) - Read before writing a unit test for an algorithm: one doc per algorithm with an `examples` block that is the test table; required sections and review. Lists every algorithm doc, including those not repeated below
+* [Algorithm Docs (doc-driven table tests)](algorithms/README.md) - Read before writing a unit test for an algorithm: one doc per algorithm plus its rows file `docs/algorithm-examples/<name>.json` (the test table — read it only to change rows); required sections and review. Lists every algorithm doc, including those not repeated below
+* [Cost Formula](algorithms/cost-formula.md) - Read before touching the per-call cost formula or its twins (`@loghub/pricing`, hook `post-turn-analysis-worker.js`)
+* [Work Time](algorithms/work-time.md) - Read before touching session work-time (idle gaps) in `claude-extractor.ts` or its hook twin
+* [Upload Error Classify](algorithms/upload-error-classify.md) - Read before touching how ingest errors are classified (`upload-error.ts`)
+* [Password Policy](algorithms/password-policy.md) - Read before touching `PASSWORD_POLICY` (`any` / `mid` / `long`), its limits and where it is enforced
 * [Anthropic Pricing Page Parse](algorithms/anthropic-pricing-parse.md) - Read before touching `parseAnthropicPricing` (model table, web-search price, prompt-length tiers)
 * [Harness Snapshot](algorithms/harness-snapshot.md) - Read before touching the hook's harness catalog build or its `snapshotId` hash
 * [OTEL Shared Routing](algorithms/otel-shared-routing.md) - Read before touching the shared receiver's `routeRecord`, pending spool, register validation or forwarding

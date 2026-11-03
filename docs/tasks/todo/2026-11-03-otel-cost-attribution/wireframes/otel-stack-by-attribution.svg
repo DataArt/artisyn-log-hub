@@ -1,0 +1,157 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="760" viewBox="0 0 1120 760" font-family="Segoe UI, Arial, sans-serif">
+  <rect width="1120" height="760" fill="#ffffff"/>
+  <!-- Repository header + tabs -->
+  <text x="20" y="32" font-family="Consolas, monospace" font-size="14" fill="#111827">https://github.com/DataArt/artisyn-log-hub</text>
+  <text x="1000" y="32" font-size="12" fill="#6b7280">Sessions: 44 · Users: 1</text>
+  <line x1="0" y1="50" x2="1120" y2="50" stroke="#e5e7eb"/>
+  <g font-size="14" fill="#4b5563">
+    <text x="20" y="78">Sessions</text><text x="98" y="78">Analytics</text><text x="180" y="78">Reports</text>
+    <text x="250" y="78">Tools/MCP</text><text x="332" y="78">OKF</text>
+    <text x="378" y="78" fill="#111827" font-weight="600">OTEL</text><text x="430" y="78">Settings</text>
+  </g>
+  <rect x="372" y="88" width="46" height="2" fill="#111827"/>
+  <line x1="0" y1="92" x2="1120" y2="92" stroke="#e5e7eb"/>
+
+  <text x="20" y="126" font-size="16" font-weight="600" fill="#111827">Cost over time</text>
+  <rect x="140" y="112" width="106" height="20" rx="10" fill="#eff6ff" stroke="#93c5fd"/>
+  <text x="150" y="126" font-size="11" fill="#1d4ed8">ⓘ Realtime data</text>
+  <text x="256" y="126" font-size="12" fill="#6b7280">Claude Code per-call estimate (cost_usd) · bucketed by event time</text>
+
+  <!-- Filters row (unchanged) -->
+  <g font-size="12" fill="#6b7280">
+    <text x="20" y="160">Period</text>
+    <rect x="62" y="146" width="210" height="24" rx="4" fill="#fff" stroke="#e5e7eb"/>
+    <text x="72" y="162" fill="#111827">24 h</text><text x="108" y="162" fill="#111827">7 d</text>
+    <text x="138" y="162" fill="#111827">30 d</text>
+    <rect x="171" y="147" width="40" height="22" fill="#eff6ff"/><text x="178" y="162" fill="#1d4ed8" font-weight="600">90 d</text>
+    <text x="220" y="162" fill="#111827">Custom</text>
+    <text x="290" y="160">Model</text>
+    <rect x="330" y="146" width="110" height="24" rx="4" fill="#fff" stroke="#d1d5db"/>
+    <text x="340" y="162" fill="#111827">All models ▾</text>
+    <text x="458" y="160">Claude Code</text>
+    <rect x="530" y="146" width="100" height="24" rx="4" fill="#fff" stroke="#d1d5db"/>
+    <text x="540" y="162" fill="#111827">All versions ▾</text>
+    <text x="648" y="160">Calls</text>
+    <rect x="682" y="146" width="210" height="24" rx="4" fill="#fff" stroke="#e5e7eb"/>
+    <rect x="683" y="147" width="30" height="22" fill="#eff6ff"/><text x="690" y="162" fill="#1d4ed8" font-weight="600">All</text>
+    <text x="722" y="162" fill="#111827">Hidden only</text><text x="800" y="162" fill="#111827">In transcript</text>
+  </g>
+
+  <!-- Chart controls with extended Stack by -->
+  <g font-size="12">
+    <text x="20" y="200" fill="#6b7280">Metric</text>
+    <rect x="62" y="186" width="132" height="24" rx="4" fill="#fff" stroke="#e5e7eb"/>
+    <rect x="63" y="187" width="40" height="22" fill="#eff6ff"/>
+    <text x="70" y="202" fill="#1d4ed8" font-weight="600">Cost</text>
+    <text x="112" y="202" fill="#111827">Calls</text><text x="150" y="202" fill="#111827">Tokens</text>
+
+    <text x="214" y="200" fill="#6b7280">Stack by</text>
+    <rect x="268" y="186" width="560" height="24" rx="4" fill="#fff" stroke="#e5e7eb"/>
+    <text x="276" y="202" fill="#111827">Structure</text>
+    <line x1="336" y1="186" x2="336" y2="210" stroke="#e5e7eb"/>
+    <text x="344" y="202" fill="#111827">query_source</text>
+    <line x1="426" y1="186" x2="426" y2="210" stroke="#e5e7eb"/>
+    <text x="434" y="202" fill="#111827">Model</text>
+    <line x1="476" y1="186" x2="476" y2="210" stroke="#e5e7eb"/>
+    <text x="484" y="202" fill="#111827">CC version</text>
+    <line x1="552" y1="186" x2="552" y2="210" stroke="#e5e7eb"/>
+    <rect x="553" y="187" width="46" height="22" fill="#eff6ff"/>
+    <text x="562" y="202" fill="#1d4ed8" font-weight="600">Skill</text>
+    <line x1="600" y1="186" x2="600" y2="210" stroke="#e5e7eb"/>
+    <text x="608" y="202" fill="#111827">MCP server</text>
+    <line x1="682" y1="186" x2="682" y2="210" stroke="#e5e7eb"/>
+    <text x="690" y="202" fill="#111827">Effort</text>
+    <line x1="736" y1="186" x2="736" y2="210" stroke="#e5e7eb"/>
+    <text x="744" y="202" fill="#111827">Fast mode</text>
+
+    <text x="848" y="200" fill="#6b7280">Interval</text>
+    <rect x="898" y="186" width="170" height="24" rx="4" fill="#fff" stroke="#e5e7eb"/>
+    <rect x="899" y="187" width="42" height="22" fill="#eff6ff"/><text x="906" y="202" fill="#1d4ed8" font-weight="600">Auto</text>
+    <text x="948" y="202" fill="#111827">5 min</text><text x="992" y="202" fill="#111827">1 h</text><text x="1024" y="202" fill="#111827">1 day</text>
+  </g>
+  <!-- NEW annotation on stack-by -->
+  <rect x="552" y="182" width="276" height="32" rx="5" fill="none" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="5 3"/>
+  <text x="20" y="230" font-size="11" fill="#b45309">NEW stackBy values: skill · mcpServer · effort · speed (labels Skill / MCP server / Effort / Fast mode); existing View / Cumulative controls unchanged</text>
+  <g font-size="12">
+    <text x="760" y="234" fill="#6b7280">View</text>
+    <rect x="792" y="220" width="104" height="22" rx="4" fill="#fff" stroke="#e5e7eb"/>
+    <rect x="793" y="221" width="56" height="20" fill="#eff6ff"/><text x="799" y="235" fill="#1d4ed8" font-weight="600">Stacked</text>
+    <text x="858" y="235" fill="#111827">100 %</text>
+    <text x="910" y="234" fill="#6b7280">Cumulative</text>
+    <rect x="978" y="220" width="64" height="22" rx="4" fill="#fff" stroke="#e5e7eb"/>
+    <text x="986" y="235" fill="#111827">On</text>
+    <rect x="1012" y="221" width="29" height="20" fill="#eff6ff"/><text x="1017" y="235" fill="#1d4ed8" font-weight="600">Off</text>
+  </g>
+
+  <!-- Chart -->
+  <g font-size="10" fill="#6b7280">
+    <text x="20" y="272">$180</text><text x="26" y="352">$90</text><text x="32" y="432">$0</text>
+  </g>
+  <line x1="60" y1="268" x2="1100" y2="268" stroke="#e5e7eb" stroke-dasharray="3 3"/>
+  <line x1="60" y1="348" x2="1100" y2="348" stroke="#e5e7eb" stroke-dasharray="3 3"/>
+  <line x1="60" y1="428" x2="1100" y2="428" stroke="#9ca3af"/>
+  <!-- bar 1 -->
+  <rect x="120" y="378" width="240" height="50" fill="#3b82f6"/>
+  <rect x="120" y="350" width="240" height="28" fill="#8b5cf6"/>
+  <rect x="120" y="336" width="240" height="14" fill="#14b8a6"/>
+  <rect x="120" y="322" width="240" height="14" fill="#d1d5db"/>
+  <!-- bar 2 -->
+  <rect x="440" y="350" width="240" height="78" fill="#3b82f6"/>
+  <rect x="440" y="310" width="240" height="40" fill="#8b5cf6"/>
+  <rect x="440" y="290" width="240" height="20" fill="#14b8a6"/>
+  <rect x="440" y="272" width="240" height="18" fill="#d1d5db"/>
+  <!-- bar 3 -->
+  <rect x="760" y="414" width="240" height="14" fill="#3b82f6"/>
+  <rect x="760" y="406" width="240" height="8" fill="#14b8a6"/>
+  <rect x="760" y="400" width="240" height="6" fill="#d1d5db"/>
+  <g font-size="11" fill="#6b7280"><text x="225" y="444">10/20</text><text x="545" y="444">10/21</text><text x="865" y="444">10/22</text></g>
+
+  <!-- Legend -->
+  <g font-size="12" fill="#111827">
+    <circle cx="26" cy="472" r="5" fill="#3b82f6"/><text x="36" y="476">adlc-lh:implement-deep</text>
+    <circle cx="196" cy="472" r="5" fill="#8b5cf6"/><text x="206" y="476">adlc-lh:review-deep</text>
+    <circle cx="346" cy="472" r="5" fill="#14b8a6"/><text x="356" y="476">changelog</text>
+    <circle cx="446" cy="472" r="5" fill="#d1d5db" stroke="#9ca3af"/><text x="456" y="476" font-style="italic">not reported ⓘ</text>
+    <text x="560" y="476" fill="#6b7280">· click a legend item to hide / show it</text>
+  </g>
+  <rect x="440" y="460" width="112" height="24" rx="4" fill="none" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="5 3"/>
+  <!-- Tooltip on "not reported" -->
+  <rect x="450" y="492" width="460" height="52" rx="4" fill="#111827"/>
+  <polygon points="490,492 498,484 506,492" fill="#111827"/>
+  <text x="462" y="512" font-size="11" fill="#f9fafb">Calls without this attribute. It is sent only by newer Claude Code;</text>
+  <text x="462" y="530" font-size="11" fill="#f9fafb">skill / MCP names also need OTEL_LOG_TOOL_DETAILS=1.</text>
+  <text x="20" y="564" font-size="11" fill="#b45309">Calls without the attribute (old CC, no skill / MCP / effort) form an explicit "not reported" group (gray, with tooltip) — the stack still sums to Total OTEL cost.</text>
+
+  <!-- KPI tiles (unchanged) -->
+  <g font-size="12">
+    <rect x="20" y="580" width="170" height="96" rx="4" fill="#fff" stroke="#111827"/>
+    <text x="36" y="604" fill="#4b5563" text-decoration="underline">Total OTEL cost</text>
+    <text x="36" y="630" font-family="Consolas, monospace" font-size="19" font-weight="700" fill="#111827">$278.95</text>
+    <text x="36" y="650" fill="#6b7280">Claude Code estimate</text>
+    <polyline points="36,666 70,658 110,668 150,662" fill="none" stroke="#3b82f6"/>
+    <rect x="202" y="580" width="170" height="96" rx="4" fill="#fff" stroke="#111827"/>
+    <text x="218" y="604" fill="#4b5563" text-decoration="underline">Per day</text>
+    <text x="218" y="630" font-family="Consolas, monospace" font-size="19" font-weight="700" fill="#111827">$92.98</text>
+    <text x="218" y="650" fill="#6b7280">3 active days</text>
+    <rect x="384" y="580" width="170" height="96" rx="4" fill="#fff" stroke="#111827"/>
+    <text x="400" y="604" fill="#4b5563" text-decoration="underline">Per session</text>
+    <text x="400" y="630" font-family="Consolas, monospace" font-size="19" font-weight="700" fill="#111827">$6.64</text>
+    <text x="400" y="650" fill="#6b7280">median $2.98</text>
+    <rect x="566" y="580" width="170" height="96" rx="4" fill="#fff" stroke="#111827"/>
+    <text x="582" y="604" fill="#4b5563" text-decoration="underline">API calls</text>
+    <text x="582" y="630" font-family="Consolas, monospace" font-size="19" font-weight="700" fill="#111827">4,749</text>
+    <text x="582" y="650" fill="#6b7280">3 models</text>
+    <rect x="748" y="580" width="170" height="96" rx="4" fill="#fff" stroke="#111827"/>
+    <text x="764" y="604" fill="#4b5563" text-decoration="underline">Hidden cost</text>
+    <text x="764" y="630" font-family="Consolas, monospace" font-size="19" font-weight="700" fill="#111827">$13.08</text>
+    <text x="764" y="650" fill="#6b7280">4.7 % · 348 calls</text>
+    <rect x="930" y="580" width="170" height="96" rx="4" fill="#fff" stroke="#111827"/>
+    <text x="946" y="604" fill="#4b5563" text-decoration="underline">Sessions</text>
+    <text x="946" y="630" font-family="Consolas, monospace" font-size="19" font-weight="700" fill="#111827">42</text>
+    <text x="946" y="650" fill="#6b7280">1 user</text>
+  </g>
+
+  <text x="20" y="708" font-size="12" fill="#374151">Same "Stack by" control on the repository, session and team OTEL tabs. Defaults unchanged (Structure).</text>
+  <text x="20" y="728" font-size="12" fill="#374151">Session tab: options Structure · query_source · Model · Skill · MCP server · Effort · Fast mode (no CC version, as today).</text>
+  <text x="20" y="748" font-size="12" fill="#374151">Fast mode buckets: "fast" / "standard" / not reported. Effort buckets: reported effort values / not reported.</text>
+</svg>

@@ -11,3 +11,4 @@ export { SessionOkfTab } from './session-log/okf/SessionOkfTab';
 export { SessionSysctxAnatomyTab } from './session-log/sysctx-anatomy/SessionSysctxAnatomyTab';
 export { SessionOtelTab } from './session-log/otel/SessionOtelTab';
 export { SessionBashTab } from './session-log/bash-tab/SessionBashTab';
+export { SessionMapTab } from './session-log/session-map/SessionMapTab';

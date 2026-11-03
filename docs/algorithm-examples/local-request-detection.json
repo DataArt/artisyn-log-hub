@@ -1,0 +1,452 @@
+[
+  {
+    "id": "LR-01",
+    "input": {"kind": "request", "remoteAddress": "127.0.0.1", "trustedGateway": null},
+    "expected": {"local": true},
+    "note": "Rule 3: IPv4 loopback."
+  },
+  {
+    "id": "LR-02",
+    "input": {"kind": "request", "remoteAddress": "::1", "trustedGateway": null},
+    "expected": {"local": true},
+    "note": "Rule 3: IPv6 loopback."
+  },
+  {
+    "id": "LR-03",
+    "input": {"kind": "request", "remoteAddress": "::ffff:127.0.0.1", "trustedGateway": null},
+    "expected": {"local": true},
+    "note": "Rule 2 strips ::ffff:, leaving 127.0.0.1 (the normal case for a browser using localhost on the dual-stack socket)."
+  },
+  {
+    "id": "LR-04",
+    "input": {"kind": "request", "remoteAddress": "10.0.0.5", "trustedGateway": null},
+    "expected": {"local": false},
+    "note": "Rule 3 fails, no gateway (rule 4)."
+  },
+  {
+    "id": "LR-05",
+    "input": {"kind": "request", "remoteAddress": "::ffff:10.0.0.5", "trustedGateway": null},
+    "expected": {"local": false},
+    "note": "Rule 2 gives 10.0.0.5, not loopback."
+  },
+  {
+    "id": "LR-06",
+    "input": {"kind": "request", "remoteAddress": "127.0.0.2", "trustedGateway": null},
+    "expected": {"local": false},
+    "note": "Rule 3 is an exact match: 127.0.0.2 is in 127/8 but is not 127.0.0.1."
+  },
+  {
+    "id": "LR-07",
+    "input": {"kind": "request", "remoteAddress": null, "trustedGateway": null},
+    "expected": {"local": false},
+    "note": "Rule 1: no address is '', which matches nothing."
+  },
+  {
+    "id": "LR-08",
+    "input": {"kind": "request", "remoteAddress": "10.0.0.5", "headers": {"x-forwarded-for": "127.0.0.1"}, "trustedGateway": null},
+    "expected": {"local": false},
+    "note": "Part A ignores X-Forwarded-For: the peer is 10.0.0.5."
+  },
+  {
+    "id": "LR-09",
+    "input": {"kind": "request", "remoteAddress": "172.17.0.1", "trustedGateway": "172.17.0.1"},
+    "expected": {"local": true},
+    "note": "Rule 4: equals the trusted gateway."
+  },
+  {
+    "id": "LR-10",
+    "input": {"kind": "request", "remoteAddress": "::ffff:172.17.0.1", "trustedGateway": "172.17.0.1"},
+    "expected": {"local": true},
+    "note": "Rules 2 and 4: the mapped form of the gateway (how Docker delivers host traffic)."
+  },
+  {
+    "id": "LR-11",
+    "input": {"kind": "request", "remoteAddress": "172.17.0.9", "trustedGateway": "172.17.0.1"},
+    "expected": {"local": false},
+    "note": "Rule 4 trusts one address, not the subnet."
+  },
+  {
+    "id": "LR-12",
+    "input": {"kind": "request", "remoteAddress": "172.17.0.1", "trustedGateway": null},
+    "expected": {"local": false},
+    "note": "Rule 4: without a trusted gateway from part B the Docker gateway address is remote like any other (it is not hard-coded)."
+  },
+  {
+    "id": "LR-13",
+    "input": {"kind": "gateway", "files": {"/.dockerenv": "", "/proc/net/route": "Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\tMTU\tWindow\tIRTT\neth0\t00000000\t010011AC\t0003\t0\t0\t0\t00000000\t0\t0\t0\neth0\t000011AC\t00000000\t0001\t0\t0\t0\t0000FFFF\t0\t0\t0\n"}, "env": {}, "pid": 1234},
+    "expected": {"trustedGateway": "172.17.0.1"},
+    "note": "Rule 5.1 marker file. Rule 6: the default route's gateway 010011AC read backwards is AC.11.00.01 = 172.17.0.1. Rule 7: 172.17 is in 172.16-31."
+  },
+  {
+    "id": "LR-14",
+    "input": {"kind": "gateway", "files": {"/proc/1/cgroup": "0::/init.scope\n", "/proc/self/mountinfo": "25 0 8:2 / / rw,relatime shared:1 - ext4 /dev/sda2 rw\n", "/proc/1/comm": "systemd\n", "/proc/net/route": "Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\tMTU\tWindow\tIRTT\neth0\t00000000\t0101A8C0\t0003\t0\t0\t100\t00000000\t0\t0\t0\n"}, "env": {}, "pid": 1234},
+    "expected": {"trustedGateway": null},
+    "note": "Rule 5: no marker, no variable, cgroup without a runtime name, root on ext4, PID 1 is systemd, own pid 1234: not a container, so the private gateway 192.168.1.1 is not trusted."
+  },
+  {
+    "id": "LR-15",
+    "input": {"kind": "gateway", "files": {"/proc/net/route": "Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\tMTU\tWindow\tIRTT\neth0\t00000000\t08080808\t0003\t0\t0\t0\t00000000\t0\t0\t0\n"}, "env": {"KUBERNETES_SERVICE_HOST": "10.96.0.1"}, "pid": 1234},
+    "expected": {"trustedGateway": null},
+    "note": "Rule 5.2 fires (Kubernetes), rule 6 gives 8.8.8.8, rule 7 refuses a public address."
+  },
+  {
+    "id": "LR-16",
+    "input": {"kind": "gateway", "files": {"/.dockerenv": ""}, "env": {}, "pid": 1234},
+    "expected": {"trustedGateway": null},
+    "note": "Containerized, but there is no /proc/net/route, so rule 6 finds no gateway."
+  },
+  {
+    "id": "LR-17",
+    "input": {"kind": "gateway", "files": {"/run/.containerenv": "", "/proc/net/route": "Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\tMTU\tWindow\tIRTT\neth0\t00000000\t0101A8C0\t0003\t0\t0\t100\t00000000\t0\t0\t0\neth1\t00000000\t010011AC\t0003\t0\t0\t50\t00000000\t0\t0\t0\n"}, "env": {}, "pid": 1234},
+    "expected": {"trustedGateway": "172.17.0.1"},
+    "note": "Rule 5.1 (podman marker). Rule 6: two default routes, metric 50 (172.17.0.1) beats metric 100 (192.168.1.1)."
+  },
+  {
+    "id": "LR-18",
+    "input": {"kind":"gateway","files":{"/.dockerenv":"","/proc/net/route":"Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\tMTU\tWindow\tIRTT\neth0\t00000000\t00000000\t0003\t0\t0\t0\t00000000\t0\t0\t0\neth0\t00000000\t010011AC\t0003\t0\t0\t100\t00000000\t0\t0\t0\n"},"env":{},"pid":1234},
+    "expected": {"trustedGateway":"172.17.0.1"},
+    "note": "Rule 6: the on-link default route (gateway 00000000, metric 0) is skipped although its metric is lower, so the real gateway 010011AC at metric 100 is used: 172.17.0.1. Keeping it would give 0.0.0.0, which rule 7 refuses: null."
+  },
+  {
+    "id": "LR-19",
+    "input": {"kind": "private", "address": "172.15.255.255"},
+    "expected": {"trusted": false},
+    "note": "Rule 7: second octet 15 < 16."
+  },
+  {
+    "id": "LR-20",
+    "input": {"kind": "private", "address": "172.16.0.1"},
+    "expected": {"trusted": true},
+    "note": "Rule 7: 172.16 is the first block of 172.16.0.0/12."
+  },
+  {
+    "id": "LR-21",
+    "input": {"kind": "private", "address": "172.31.255.254"},
+    "expected": {"trusted": true},
+    "note": "Rule 7: 172.31 is the last block."
+  },
+  {
+    "id": "LR-22",
+    "input": {"kind": "private", "address": "172.32.0.1"},
+    "expected": {"trusted": false},
+    "note": "Rule 7: second octet 32 > 31."
+  },
+  {
+    "id": "LR-23",
+    "input": {"kind": "private", "address": "10.255.0.1"},
+    "expected": {"trusted": true},
+    "note": "Rule 7: 10.0.0.0/8."
+  },
+  {
+    "id": "LR-24",
+    "input": {"kind": "private", "address": "192.169.0.1"},
+    "expected": {"trusted": false},
+    "note": "Rule 7: 192.168/16 only; 192.169 is public."
+  },
+  {
+    "id": "LR-25",
+    "input": {"kind": "private", "address": "169.254.10.1"},
+    "expected": {"trusted": true},
+    "note": "Rule 7: link-local 169.254/16."
+  },
+  {
+    "id": "LR-26",
+    "input": {"kind": "private", "address": "10.0.0.256"},
+    "expected": {"trusted": false},
+    "note": "Rule 7 needs four octets 0..255; 256 is not an octet, so not an address at all."
+  },
+  {
+    "id": "LR-27",
+    "input": {"kind":"gateway","files":{"/.dockerenv":"","/proc/net/route":"Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\tMTU\tWindow\tIRTT\neth0\t00000000\t010011AC\t0003\t0\t0\t100\t00000000\t0\t0\t0\neth1\t000011AC\t0101A8C0\t0003\t0\t0\t0\t00000000\t0\t0\t0\n"},"env":{},"pid":1234},
+    "expected": {"trustedGateway":"172.17.0.1"},
+    "note": "Rule 6 only reads rows with Destination 00000000: the eth1 row (destination 000011AC, gateway 192.168.1.1, metric 0) is not a default route, so 172.17.0.1 is used."
+  },
+  {
+    "id": "LR-28",
+    "input": {"kind":"gateway","files":{"/.dockerenv":"","/proc/net/route":"Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\tMTU\tWindow\tIRTT\neth0\t00000000\t010011AC\t0003\t0\t0\t0\t00000000\t0\t0\t0\neth1\t00000000\t0101A8C0\t0003\t0\t0\t0\t00000000\t0\t0\t0\n"},"env":{},"pid":1234},
+    "expected": {"trustedGateway":"172.17.0.1"},
+    "note": "Rule 6: equal metrics, the first default route in the file wins: 172.17.0.1, not 192.168.1.1."
+  },
+  {
+    "id": "LR-29",
+    "input": {"kind":"gateway","files":{"/proc/net/route":"Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\tMTU\tWindow\tIRTT\neth0\t00000000\neth0\t00000000\tnot-hex\t0003\t0\t0\t0\t00000000\neth0\t00000000\t0a01a8c0\t0003\t0\t0\tx\t00000000\t0\t0\t0\neth0\t00000000\t010011ac\t0003\t0\t0\t5\t00000000\t0\t0\t0\n"},"env":{"container":" Podman "},"pid":1234},
+    "expected": {"trustedGateway":"172.17.0.1"},
+    "note": "Rule 5.2: container trimmed and lowercased is podman. Rule 6 skips the 2-field row, the non-hex gateway and the row with metric x; the lower-case hex 010011ac is read: 172.17.0.1."
+  },
+  {
+    "id": "LR-30",
+    "input": {"kind":"gateway","files":{"/proc/1/cgroup":"12:memory:/docker/0123456789ab\n","/proc/net/route":"Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\tMTU\tWindow\tIRTT\neth0\t00000000\t010011AC\t0003\t0\t0\t0\t00000000\t0\t0\t0\n"},"env":{},"pid":1234},
+    "expected": {"trustedGateway":"172.17.0.1"},
+    "note": "Rule 5.3: a cgroup v1 line naming docker."
+  },
+  {
+    "id": "LR-31",
+    "input": {"kind":"gateway","files":{"/proc/1/cgroup":"0::/\n","/proc/self/mountinfo":"1234 1233 0:100 / / rw,relatime - overlay overlay rw,lowerdir=/l\n","/proc/net/route":"Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\tMTU\tWindow\tIRTT\neth0\t00000000\t010011AC\t0003\t0\t0\t0\t00000000\t0\t0\t0\n"},"env":{},"pid":1234},
+    "expected": {"trustedGateway":"172.17.0.1"},
+    "note": "Rule 5.4: / is mounted as overlay (cgroup v2 says nothing)."
+  },
+  {
+    "id": "LR-32",
+    "input": {"kind":"gateway","files":{"/proc/self/mountinfo":"25 0 8:2 / / rw - ext4 /dev/sda2 rw\n1240 25 0:24 /docker/containers/abc/hostname /etc/hostname rw - ext4 /dev/sdc rw\n","/proc/net/route":"Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\tMTU\tWindow\tIRTT\neth0\t00000000\t010011AC\t0003\t0\t0\t0\t00000000\t0\t0\t0\n"},"env":{},"pid":1234},
+    "expected": {"trustedGateway":"172.17.0.1"},
+    "note": "Rule 5.4: root is ext4, but /etc/hostname is mounted from a root path containing docker/containers."
+  },
+  {
+    "id": "LR-33",
+    "input": {"kind":"gateway","files":{"/proc/1/comm":"node\n","/proc/net/route":"Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\tMTU\tWindow\tIRTT\neth0\t00000000\t010011AC\t0003\t0\t0\t0\t00000000\t0\t0\t0\n"},"env":{},"pid":1234},
+    "expected": {"trustedGateway":"172.17.0.1"},
+    "note": "Rule 5.5: PID 1 is node, not a host init."
+  },
+  {
+    "id": "LR-34",
+    "input": {"kind":"gateway","files":{"/proc/net/route":"Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\tMTU\tWindow\tIRTT\neth0\t00000000\t010011AC\t0003\t0\t0\t0\t00000000\t0\t0\t0\n"},"env":{},"pid":1},
+    "expected": {"trustedGateway":"172.17.0.1"},
+    "note": "Rule 5.6: no other signal fires, but the process itself is PID 1."
+  },
+  {
+    "id": "LR-35",
+    "input": {"kind":"gateway","files":{"/proc/net/route":"Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\tMTU\tWindow\tIRTT\neth0\t00000000\t010011AC\t0003\t0\t0\t0\t00000000\t0\t0\t0\n"},"env":{"KUBERNETES_SERVICE_HOST":"   ","container":""},"pid":1234},
+    "expected": {"trustedGateway":null},
+    "note": "Rule 5.2 needs a non-empty value after trimming; spaces and an empty container value do not count. No other signal: not a container, so null."
+  },
+  {
+    "id": "LR-36",
+    "input": {"kind":"gateway","files":{},"env":{},"pid":1234,"throws":true},
+    "expected": {"trustedGateway":null},
+    "note": "Rule 8: the fake machine throws on every file access, so probing fails and no gateway is trusted (no crash)."
+  },
+  {
+    "id": "LR-37",
+    "input": {"kind":"private","address":"192.168.0.1"},
+    "expected": {"trusted":true},
+    "note": "Rule 7: 192.168.0.0/16."
+  },
+  {
+    "id": "LR-38",
+    "input": {"kind":"private","address":"192.167.255.255"},
+    "expected": {"trusted":false},
+    "note": "Rule 7: second octet 167 is not 168."
+  },
+  {
+    "id": "LR-39",
+    "input": {"kind":"private","address":"169.253.0.1"},
+    "expected": {"trusted":false},
+    "note": "Rule 7: only 169.254 is link-local."
+  },
+  {
+    "id": "LR-40",
+    "input": {"kind":"private","address":"11.0.0.1"},
+    "expected": {"trusted":false},
+    "note": "Rule 7: only first octet 10, not 11."
+  },
+  {
+    "id": "LR-41",
+    "input": {"kind":"private","address":"10.0.0"},
+    "expected": {"trusted":false},
+    "note": "Rule 7: three parts, not four."
+  },
+  {
+    "id": "LR-42",
+    "input": {"kind":"private","address":"10.0.0.1e1"},
+    "expected": {"trusted":false},
+    "note": "Rule 7: an octet must be 1-3 decimal digits; '1e1' is not (Number would read it as 10)."
+  },
+  {
+    "id": "LR-43",
+    "input": {"kind":"gateway","files":{"/proc/net/route":"Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\tMTU\tWindow\tIRTT\neth0\t00000000\t010011AC\t0003\t0\t0\t0\t00000000\t0\t0\t0\n"},"env":{"ECS_CONTAINER_METADATA_URI_V4":"http://169.254.170.2/v4/abc"},"pid":1234},
+    "expected": {"trustedGateway":"172.17.0.1"},
+    "note": "Rule 5.2: a platform variable alone makes it a container; the private gateway is trusted."
+  },
+  {
+    "id": "LR-44",
+    "input": {"kind":"private","address":"10.0.0."},
+    "expected": {"trusted":false},
+    "note": "Rule 7: the fourth part is empty (Number would read it as 0)."
+  },
+  {
+    "id": "LR-45",
+    "input": {"kind":"private","address":"10.0.0.0001"},
+    "expected": {"trusted":false},
+    "note": "Rule 7: four digits in one octet."
+  },
+  {
+    "id": "LR-46",
+    "input": {"kind":"private","address":"10.0.0.1.5"},
+    "expected": {"trusted":false},
+    "note": "Rule 7: five parts, not four."
+  },
+  {
+    "id": "LR-47",
+    "input": {"kind":"gateway","files":{"/.dockerenv":"","/proc/net/route":"Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\tMTU\tWindow\tIRTT\neth0\t00000000\t010011AC\t0003\t0\t0\t0\n"},"env":{},"pid":1234},
+    "expected": {"trustedGateway":"172.17.0.1"},
+    "note": "Rule 6: a route row with exactly 7 fields is enough."
+  },
+  {
+    "id": "LR-48",
+    "input": {"kind":"request","remoteAddress":"::FFFF:127.0.0.1","trustedGateway":null},
+    "expected": {"local":false},
+    "note": "Rule 2 strips only the lower-case prefix: the upper-case form is left as it is and matches neither loopback form."
+  },
+  {
+    "id": "LR-49",
+    "input": {"kind":"gateway","files":{"/proc/self/mountinfo":"30 25 0:50 / /var/lib/docker rw - overlay overlay rw\n","/proc/net/route":"Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\tMTU\tWindow\tIRTT\neth0\t00000000\t010011AC\t0003\t0\t0\t0\t00000000\t0\t0\t0\n"},"env":{},"pid":1234},
+    "expected": {"trustedGateway":null},
+    "note": "Rule 5.4: an overlay mount that is not the mount point / is no signal; nothing else fires: null."
+  },
+  {
+    "id": "LR-50",
+    "input": {"kind":"gateway","files":{"/proc/self/mountinfo":"1240 25 0:24 / /etc/hostname rw - ext4 /var/lib/docker/containers/abc rw\n","/proc/net/route":"Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\tMTU\tWindow\tIRTT\neth0\t00000000\t010011AC\t0003\t0\t0\t0\t00000000\t0\t0\t0\n"},"env":{},"pid":1234},
+    "expected": {"trustedGateway":"172.17.0.1"},
+    "note": "Rule 5.4: the root is /, but the source contains docker/containers, which is enough."
+  },
+  {
+    "id": "LR-51",
+    "input": {"kind":"gateway","files":{"/proc/self/mountinfo":"1241 25 0:24 /var/lib/kubelet/pods/p1/etc-hosts /etc/resolv.conf rw - ext4 /dev/sda1 rw\n","/proc/net/route":"Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\tMTU\tWindow\tIRTT\neth0\t00000000\t010011AC\t0003\t0\t0\t0\t00000000\t0\t0\t0\n"},"env":{},"pid":1234},
+    "expected": {"trustedGateway":"172.17.0.1"},
+    "note": "Rule 5.4: /etc/resolv.conf counts like /etc/hostname; its root contains kubelet/pods."
+  },
+  {
+    "id": "LR-52",
+    "input": {"kind":"gateway","files":{"/proc/1/comm":"  \n","/proc/net/route":"Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\tMTU\tWindow\tIRTT\neth0\t00000000\t010011AC\t0003\t0\t0\t0\t00000000\t0\t0\t0\n"},"env":{},"pid":1234},
+    "expected": {"trustedGateway":null},
+    "note": "Rule 5.5: a blank comm is no signal (only a non-empty name that is not a host init counts); nothing else fires: null."
+  },
+  {
+    "id": "LR-53",
+    "input": {"kind":"request","remoteAddress":"172.17.0.10","trustedGateway":"172.17.0.1"},
+    "expected": {"local":false},
+    "note": "Rule 4 compares the whole address: 172.17.0.10 only starts with the gateway 172.17.0.1."
+  },
+  {
+    "id": "LR-54",
+    "input": {"kind":"gateway","files":{"/proc/self/mountinfo":"1 2 3 / / - overlay none\n","/proc/net/route":"Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\tMTU\tWindow\tIRTT\neth0\t00000000\t010011AC\t0003\t0\t0\t0\t00000000\t0\t0\t0\n"},"env":{},"pid":1234},
+    "expected": {"trustedGateway":"172.17.0.1"},
+    "note": "Rule 5.4: exactly 5 fields before the separator and 2 after is enough: mount point /, type overlay."
+  },
+  {
+    "id": "LR-56",
+    "input": {"kind":"gateway","files":{"/proc/1/cgroup":"12:memory:/DOCKER/abc\n","/proc/net/route":"Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\tMTU\tWindow\tIRTT\neth0\t00000000\t010011AC\t0003\t0\t0\t0\t00000000\t0\t0\t0\n"},"env":{},"pid":1234},
+    "expected": {"trustedGateway":"172.17.0.1"},
+    "note": "Rule 5.3 ignores case: DOCKER counts."
+  },
+  {
+    "id": "LR-57",
+    "input": {"kind":"gateway","files":{"/proc/self/mountinfo":"1234 1233 0:100 / / rw - fuse.fuse-overlayfs fuse-overlayfs rw\n","/proc/net/route":"Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\tMTU\tWindow\tIRTT\neth0\t00000000\t010011AC\t0003\t0\t0\t0\t00000000\t0\t0\t0\n"},"env":{},"pid":1234},
+    "expected": {"trustedGateway":null},
+    "note": "Rule 5.4: the type must be exactly overlay; fuse.fuse-overlayfs is not. Nothing else fires."
+  },
+  {
+    "id": "LR-58",
+    "input": {"kind":"gateway","files":{"/proc/self/mountinfo":"1240 25 0:24 /DOCKER/CONTAINERS/abc/hostname /etc/hostname rw - ext4 /dev/sdc rw\n","/proc/net/route":"Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\tMTU\tWindow\tIRTT\neth0\t00000000\t010011AC\t0003\t0\t0\t0\t00000000\t0\t0\t0\n"},"env":{},"pid":1234},
+    "expected": {"trustedGateway":null},
+    "note": "Rule 5.4 hints are case-sensitive: DOCKER/CONTAINERS is not docker/containers. Nothing else fires."
+  },
+  {
+    "id": "LR-59",
+    "input": {"kind":"gateway","files":{"/.dockerenv":"","/proc/net/route":"Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\tMTU\tWindow\tIRTT\neth0\t00000000\t0101A8C0\t0003\t0\t0\t1.5\neth1\t00000000\t0201A8C0\t0003\t0\t0\t2abc\neth2\t00000000\t010011AC\t0003\t0\t0\t5\n"},"env":{},"pid":1234},
+    "expected": {"trustedGateway":"172.17.0.1"},
+    "note": "Rule 6: metrics 1.5 and 2abc are not integers, so those rows are skipped; 172.17.0.1 at metric 5 is the only one counted. Reading metrics with parseInt would pick 192.168.1.1 (1.5 -> 1), with parseFloat 192.168.1.2 (2abc -> 2)."
+  },
+  {
+    "id": "LR-60",
+    "input": {"kind":"gateway","files":{"/.dockerenv":"","/proc/net/route":"Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\tMTU\tWindow\tIRTT\neth0\t00000000\t010011A\t0003\t0\t0\t0\neth1\t00000000\t010011AC0\t0003\t0\t0\t0\n"},"env":{},"pid":1234},
+    "expected": {"trustedGateway":null},
+    "note": "Rule 6 needs exactly 8 hex digits: 7 and 9 digits are skipped, nothing is left."
+  },
+  {
+    "id": "LR-61",
+    "input": {"kind":"gateway","files":{"/proc/1/comm":"Systemd\n","/proc/net/route":"Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\tMTU\tWindow\tIRTT\neth0\t00000000\t010011AC\t0003\t0\t0\t0\t00000000\t0\t0\t0\n"},"env":{},"pid":1234},
+    "expected": {"trustedGateway":"172.17.0.1"},
+    "note": "Rule 5.5 compares names case-sensitively: Systemd is not systemd, so it counts as a signal."
+  },
+  {
+    "id": "LR-62",
+    "input": {"kind":"private","address":"169.255.0.1"},
+    "expected": {"trusted":false},
+    "note": "Rule 7: only 169.254 is link-local; 169.255 is not."
+  },
+  {
+    "id": "LR-63",
+    "input": {"kind":"gateway","files":{"/proc/self/mountinfo":"1 2 3 / / rw - overlay\n","/proc/net/route":"Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\tMTU\tWindow\tIRTT\neth0\t00000000\t010011AC\t0003\t0\t0\t0\t00000000\t0\t0\t0\n"},"env":{},"pid":1234},
+    "expected": {"trustedGateway":null},
+    "note": "Rule 5.4: 6 fields before the separator but only 1 after it: the row does not count; nothing else fires."
+  },
+  {
+    "id": "LR-64",
+    "input": {"kind":"gateway","files":{"/.dockerenv":"","/proc/net/route":"Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\tMTU\tWindow\tIRTT\neth0\t00000000\t0101A8C0\t0003\t0\t0\t0\neth1\t00000000\t010011AC\t0003\t0\t0\t-1\n"},"env":{},"pid":1234},
+    "expected": {"trustedGateway":"172.17.0.1"},
+    "note": "Rule 6: Number(\"-1\") is an integer, so the eth1 row counts, and -1 is lower than 0: 172.17.0.1 wins over 192.168.1.1."
+  },
+  {
+    "id": "LR-65",
+    "input": {"kind":"request","remoteAddress":"127.0.0.1","trustedGateway":"172.17.0.1"},
+    "expected": {"local":true},
+    "note": "Rule 3 before rule 4: loopback stays local inside a container with a trusted gateway."
+  },
+  {
+    "id": "LR-66",
+    "input": {"kind":"gateway","files":{"/proc/1/cgroup":"0::/user.slice/specs.scope\n","/proc/net/route":"Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\tMTU\tWindow\tIRTT\neth0\t00000000\t010011AC\t0003\t0\t0\t0\t00000000\t0\t0\t0\n"},"env":{},"pid":1234},
+    "expected": {"trustedGateway":"172.17.0.1"},
+    "note": "Rule 5.3 is a plain substring match: \"specs\" contains \"ecs\", so it counts as a container signal (a known over-detection, bounded by rule 7)."
+  },
+  {
+    "id": "LR-67",
+    "input": {"kind":"gateway","files":{"/proc/self/mountinfo":"1234 1233 0:100 / / rw - overlayfs overlay rw\n","/proc/net/route":"Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\tMTU\tWindow\tIRTT\neth0\t00000000\t010011AC\t0003\t0\t0\t0\t00000000\t0\t0\t0\n"},"env":{},"pid":1234},
+    "expected": {"trustedGateway":null},
+    "note": "Rule 5.4: the type must be exactly overlay; overlayfs is not. Nothing else fires."
+  },
+  {
+    "id": "LR-68",
+    "input": {"kind":"private","address":"10.0.0.255"},
+    "expected": {"trusted":true},
+    "note": "Rule 7: 255 is a valid octet (\"at most 255\")."
+  },
+  {
+    "id": "LR-69",
+    "input": {"kind":"gateway","files":{"/.dockerenv":"","/proc/net/route":"Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\tMTU\tWindow\tIRTT\neth0\t00000000\t0101A8C0\t0003\t0\t0\t20\neth1\t00000000\t010011AC\t0003\t0\t0\t0x10\n"},"env":{},"pid":1234},
+    "expected": {"trustedGateway":"172.17.0.1"},
+    "note": "Rule 6: Number(\"0x10\") is 16, an integer, and 16 < 20: 172.17.0.1 wins. A digits-only metric check would skip it and pick 192.168.1.1."
+  },
+  {
+    "id": "LR-70",
+    "input": {"kind":"gateway","files":{"/proc/self/mountinfo":"1240 25 0:24 /docker/containers/abc/data /var/lib/data rw - ext4 /dev/sdc rw\n","/proc/net/route":"Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\tMTU\tWindow\tIRTT\neth0\t00000000\t010011AC\t0003\t0\t0\t0\t00000000\t0\t0\t0\n"},"env":{},"pid":1234},
+    "expected": {"trustedGateway":null},
+    "note": "Rule 5.4: the bind hint only counts for /etc/hostname and /etc/resolv.conf; a docker/containers root mounted at /var/lib/data is no signal. Nothing else fires."
+  },
+  {
+    "id": "LR-71",
+    "input": {"kind":"gateway","files":{"/.dockerenv":"","/proc/net/route":"Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\tMTU\tWindow\tIRTT\n eth0\t00000000\t010011AC\t0003\t0\t0\t0\n"},"env":{},"pid":1234},
+    "expected": {"trustedGateway":"172.17.0.1"},
+    "note": "Rule 6 trims each line: the leading space before eth0 does not shift the fields."
+  },
+  {
+    "id": "LR-72",
+    "input": {"kind":"gateway","files":{"/proc/self/mountinfo":"1 2 3 / / - ext4 x - overlay overlay\n","/proc/net/route":"Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\tMTU\tWindow\tIRTT\neth0\t00000000\t010011AC\t0003\t0\t0\t0\t00000000\t0\t0\t0\n"},"env":{},"pid":1234},
+    "expected": {"trustedGateway":null},
+    "note": "Rule 5.4 uses the first \" - \": the type is ext4, not overlay (the later \" - overlay\" is part of the right side). Nothing else fires."
+  },
+  {
+    "id": "LR-73",
+    "input": {"kind":"gateway","files":{"/.dockerenv":"","/proc/net/route":"Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\tMTU\tWindow\tIRTT\neth0\t00000000\t0101A8C0\t0003\t0\t0\t150\neth1\t00000000\t010011AC\t0003\t0\t0\t1e2\n"},"env":{},"pid":1234},
+    "expected": {"trustedGateway":"172.17.0.1"},
+    "note": "Rule 6: Number(\"1e2\") is 100, an integer, below 150: 172.17.0.1 wins."
+  },
+  {
+    "id": "LR-74",
+    "input": {"kind":"private","address":"173.16.0.1"},
+    "expected": {"trusted":false},
+    "note": "Rule 7: second octet 16 is in 16-31, but the first octet must be 172."
+  },
+  {
+    "id": "LR-75",
+    "input": {"kind":"private","address":"193.168.0.1"},
+    "expected": {"trusted":false},
+    "note": "Rule 7: 168 as second octet counts only after 192."
+  },
+  {
+    "id": "LR-76",
+    "input": {"kind":"private","address":"170.254.0.1"},
+    "expected": {"trusted":false},
+    "note": "Rule 7: 254 as second octet counts only after 169."
+  }
+]

@@ -84,10 +84,12 @@ Check server/logs/ for errors when debugging.
 
 # Endpoint map
 
-`docs/knowledgebase/server-endpoint-map.md` is the one HTTP API article (routes, guards,
-access-control rules, cross-cutting API behaviour). Read it before adding or modifying an
-endpoint. Update it when a route is added, removed or renamed, or its guard changes.
-Request/response shapes are not documented there — keep them in the DTO / `*.types.ts` files.
+`docs/knowledgebase/server-endpoint-map.md` is the one HTTP API article (guards, access-control
+rules, cross-cutting API behaviour, a controller index and the routes with non-obvious
+behaviour). Read it before adding or modifying an endpoint. Update it when a guard, an access
+rule or a convention changes, a controller is added, or a route gets behaviour a reader would not
+guess. It does not list every route (grep the controllers), and request/response shapes are not
+documented there — keep them in the DTO / `*.types.ts` files.
 
 # Performance tests
 

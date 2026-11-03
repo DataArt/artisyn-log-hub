@@ -10,6 +10,12 @@ timestamp: "2026-11-03T00:00:00+04:00"
 
 # DB Schema — Code Location and Structure
 
+**First stop for a table or column name: [`db_state.sql`](db_state.sql)** (generated DDL with
+table and column comments). Grep it before writing a query or a review finding that names a
+column — do not guess (`sessions` has no `created_at`, for example), and do not query
+`information_schema`. The schema code is `server/src/database/schema/index.ts` — not
+`server/src/db/…` or `server/src/database/schema.ts`.
+
 ## Source of truth
 
 All table and enum definitions live in a single file:
@@ -34,7 +40,7 @@ constructor(@Inject(DRIZZLE) private readonly db: DrizzleDb) {}
 
 ## What the schema file exports
 
-The file exports every `pgTable` (57 today), the `pgEnum`s and the jsonb column types. For the
+The file exports every `pgTable`, the `pgEnum`s and the jsonb column types. For the
 current tables, columns, keys, indexes and per-table comments read the generated
 [`db_state.sql`](db_state.sql); for cross-table behaviour read [db-tables.md](db-tables.md).
 

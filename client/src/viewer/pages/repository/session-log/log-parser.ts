@@ -1154,7 +1154,7 @@ export function extractSubagentStats(logs: Record<string, unknown>[]): {
  * find a prompt for them — this instead reads the prompt straight out of the agent's own log, the
  * same way `extractSubagentStats` reads tokens/model from it.
  */
-function firstUserPromptText(logs: Record<string, unknown>[]): string {
+export function firstUserPromptText(logs: Record<string, unknown>[]): string {
   for (const rec of logs) {
     if (rec['type'] !== 'user') continue;
     if (rec['isMeta'] === true) continue;

@@ -6,7 +6,7 @@ tags:
   - product
   - privacy
   - hook
-timestamp: "2026-10-13T17:40:19+04:00"
+timestamp: "2026-11-03T00:00:00+04:00"
 ---
 
 # Product Purpose and Full Data Capture
@@ -34,7 +34,7 @@ Therefore:
 - Privacy of the *collected* data is handled by **access control and consent**, not by capture minimisation:
   raw logs are owner-only, team visibility is governed by the team access modes (`transparent` /
   `restricted`), and the data-collection notice must be accepted in the UI. See
-  `authorization-and-authentificaiton.md` and `api-reference.md` for the rules. These are the privacy
+  `authorization-and-authentificaiton.md` and `server-endpoint-map.md` for the rules. These are the privacy
   behaviours worth protecting with tests.
 
 ## Known narrowing (for accuracy, not a policy change)
@@ -42,7 +42,7 @@ Therefore:
 Capture is not literally unlimited. Example: from hook `2.16.0` the `PostToolUse` event carries the call's
 identity (`tool_name`, `tool_input`, ids) and only a small derived `edit_result` for edits; the tool's own
 output (`tool_response`) is not shipped, because the metric needs four derived numbers rather than file
-contents or command output (see `hook-system-overview.md`, "`PostToolUse` payload change"). That narrowing is a
+contents or command output (see `hook-system-overview.md`, "Scripts worth knowing about", `edit-result-counts.js`). That narrowing is a
 product/metric decision, not a privacy measure.
 
 ## Implications for testing and review

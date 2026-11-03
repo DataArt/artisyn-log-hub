@@ -49,6 +49,13 @@ import type {
 } from './hook-state.service';
 import { SetSessionFavoriteDto } from './dto/set-session-favorite.dto';
 import { extractWorkflows } from './workflow-extractor';
+import { resolveWorkflowAgentLinkage } from './workflow-linkage';
+import { resolveSessionLogsAccess } from './session-logs-access';
+import {
+  SessionLogsDeltaService,
+  selectSubagentStats,
+} from './session-logs-delta.service';
+import type { SessionLogsDeltaResponse } from './dto/session-logs-delta.dto';
 import {
   descendantSessionsCte,
   getDescendantSessionIds,
@@ -384,6 +391,7 @@ export class RepositoriesController {
     private readonly changeSurfaceService: ChangeSurfaceService,
     private readonly changeSurfaceAggregateService: ChangeSurfaceAggregateService,
     private readonly okfUsageService: OkfUsageService,
+    private readonly sessionLogsDeltaService: SessionLogsDeltaService,
   ) {}
 
   @Get()
@@ -1688,6 +1696,37 @@ export class RepositoriesController {
     return { sessionCount: result.sessionCount, userCount: result.userCount };
   }
 
+  /**
+   * Incremental session logs for the Session Map (session-map DD-4..9): only what changed since
+   * the opaque `cursor` (absent, invalid or oversized = full snapshot), or `{reload:true}` when
+   * the stored logs no longer extend what the client holds. Same access chain and errors as
+   * `/logs` (`resolveSessionLogsAccess`).
+   */
+  @Get(':repoId/sessions/:sessionId/logs/delta')
+  async getSessionLogsDelta(
+    @Req() req: Request,
+    @Param('repoId', ParseIntPipe) repoId: number,
+    @Param('sessionId') sessionId: string,
+    @Query('cursor') cursor?: string,
+    @Query('teamId', new ParseIntPipe({ optional: true })) teamId?: number,
+  ): Promise<SessionLogsDeltaResponse> {
+    const user = req.user as AuthUser;
+    const access = await resolveSessionLogsAccess(
+      this.db,
+      this.repositoriesService,
+      user,
+      repoId,
+      sessionId,
+      teamId,
+    );
+    // A repeated `?cursor=` arrives as an array — treat anything but one string as no cursor.
+    return this.sessionLogsDeltaService.getDelta(
+      access.sessionRowId,
+      typeof cursor === 'string' ? cursor : undefined,
+      new Date(),
+    );
+  }
+
   @Get(':repoId/sessions/:sessionId/logs')
   async getSessionLogs(
     @Req() req: Request,
@@ -1696,118 +1735,22 @@ export class RepositoriesController {
     @Param('sessionId') sessionId: string,
     @Query('teamId', new ParseIntPipe({ optional: true })) teamId?: number,
   ) {
-    if (teamId !== undefined && teamId <= 0) {
-      throw new BadRequestException('teamId must be a positive integer');
-    }
-
     const user = req.user as AuthUser;
-    const repo = await this.repositoriesService.assertRepoAccess(
-      user,
-      repoId,
-      teamId,
-    );
-    const repoIds = await this.repositoriesService.resolveRepoIds(
-      repoId,
-      repo.repoUrl,
-      teamId,
-    );
-    const repoCondition =
-      repoIds.length === 1
-        ? eq(schema.logRepositories.repoId, repoIds[0])
-        : inArray(schema.logRepositories.repoId, repoIds);
-
-    // Step 1: verify session belongs to this repo (or any team-member repo with the
-    // same repoUrl) via the artisyn log's repo link.
-    // (Only artisyn logs are linked in log_repositories; claude logs share the session row.)
-    // Also reject if the session has been soft-deleted.
-    const [sessionCheck] = await this.db
-      .select({
-        sessionRowId: schema.sessions.id,
-        harnessSnapshotId: schema.sessions.harnessSnapshotId,
-      })
-      .from(schema.sessions)
-      .innerJoin(schema.logs, eq(schema.logs.sessionId, schema.sessions.id))
-      .innerJoin(
-        schema.logRepositories,
-        eq(schema.logRepositories.logId, schema.logs.id),
-      )
-      .where(
-        and(
-          eq(schema.sessions.sessionId, sessionId),
-          repoCondition,
-          eq(schema.logs.logType, 'artisyn'),
-          eq(schema.sessions.deleted, false),
-        ),
-      );
-
-    if (!sessionCheck) throw new NotFoundException('Session logs not found');
-
-    // Step 1b: owner-only guard — non-owner callers receive 403 Forbidden unless a
-    // team rule below admits them. The app admin role grants no bypass.
-    const [sessionOwnerRow] = await this.db
-      .select({ userId: schema.logs.userId })
-      .from(schema.logs)
-      .where(
-        and(
-          eq(schema.logs.sessionId, sessionCheck.sessionRowId),
-          eq(schema.logs.logType, 'artisyn'),
-        ),
-      );
-    if (sessionOwnerRow?.userId !== user.id) {
-      // Team-owner exception: the owner of the team this repo/session is shared with
-      // may fetch any member's session logs.
-      const isTeamOwnerCaller =
-        teamId !== undefined &&
-        (await this.repositoriesService.isTeamOwner(user.id, teamId));
-
-      // This route returns the raw conversation, so the team access
-      // mode reaches it through two extra conditions, both only in a `restricted` team:
-      //
-      // - the team-owner exception above additionally requires the target member to have
-      //   acknowledged the disclosure — an unacknowledged member is invisible to
-      //   their team owner everywhere, this route included;
-      // - a new clause admits an `adlc trainer` (`team-with-prompts` without being the
-      //   team owner), under the same acknowledgement condition.
-      //
-      // A `manager` resolves to `team-no-prompts` and so still gets 403 here (the
-      // conversation body is not returned).
-      //
-      // In a `transparent` team every member sees everything, raw logs included — the old
-      // "raw logs stay owner-only" rule no longer applies there. Team membership
-      // and the repo's team link were already enforced by `assertRepoAccess`.
-      const scope = await this.repositoriesService.resolveTeamScope(
+    const { repo, sessionRowId, harnessSnapshotId, ownerUserId } =
+      await resolveSessionLogsAccess(
+        this.db,
+        this.repositoriesService,
         user,
+        repoId,
+        sessionId,
         teamId,
       );
-
-      let allowed: boolean;
-      if (scope.accessMode === 'restricted' && scope.visibleUserIds !== null) {
-        const ownerId = sessionOwnerRow?.userId;
-        const ownerAcknowledged =
-          ownerId !== undefined && scope.visibleUserIds.includes(ownerId);
-        allowed =
-          ownerAcknowledged &&
-          (isTeamOwnerCaller || scope.visibility === 'team-with-prompts');
-      } else if (scope.accessMode === 'transparent') {
-        allowed = true;
-      } else {
-        allowed = isTeamOwnerCaller;
-      }
-
-      if (!allowed) {
-        throw new ForbiddenException();
-      }
-    }
 
     // DD-12: the harness snapshot, keyed by the artisyn log owner (not the caller) —
     // same access checks as the rest of this route, computed only once they pass.
     const harnessSnapshot =
-      sessionCheck.harnessSnapshotId && sessionOwnerRow?.userId
-        ? await loadHarnessSnapshot(
-            this.db,
-            sessionOwnerRow.userId,
-            sessionCheck.harnessSnapshotId,
-          )
+      harnessSnapshotId && ownerUserId
+        ? await loadHarnessSnapshot(this.db, ownerUserId, harnessSnapshotId)
         : null;
 
     // Step 2: fetch the artisyn and claude log bodies for this session.
@@ -1822,7 +1765,7 @@ export class RepositoriesController {
       .from(schema.logs)
       .where(
         and(
-          eq(schema.logs.sessionId, sessionCheck.sessionRowId),
+          eq(schema.logs.sessionId, sessionRowId),
           inArray(schema.logs.logType, ['artisyn', 'claude']),
         ),
       );
@@ -1855,9 +1798,9 @@ export class RepositoriesController {
     // intermediate agent rather than always this root session, so we must walk the
     // full descendant tree instead of a one-level equality match.
     const descendantsMap = await getDescendantSessionIds(this.db, [
-      sessionCheck.sessionRowId,
+      sessionRowId,
     ]);
-    const descendantIds = descendantsMap.get(sessionCheck.sessionRowId) ?? [];
+    const descendantIds = descendantsMap.get(sessionRowId) ?? [];
 
     const [subagentRows, subagentStatsRows, rootStatsRows] = await Promise.all([
       this.db
@@ -1877,51 +1820,7 @@ export class RepositoriesController {
         )
         .where(inArray(schema.sessions.id, descendantIds))
         .orderBy(asc(schema.sessions.sessionId)),
-      this.db
-        .select({
-          sessionId: schema.sessions.sessionId,
-          model: schema.sessionStats.model,
-          inputTokens: schema.sessionStats.inputTokens,
-          outputTokens: schema.sessionStats.outputTokens,
-          cacheReadTokens: schema.sessionStats.cacheReadTokens,
-          cacheWriteTokens: schema.sessionStats.cacheWriteTokens,
-          // Without these the client's Workflow-agent fallback fold
-          // (log-parser.ts) can only fill the new TokenBreakdown fields with 0, which
-          // would under-price every web search and every fast-mode token an agent spent.
-          webSearchRequests: schema.sessionStats.webSearchRequests,
-          inputTokensFast: schema.sessionStats.inputTokensFast,
-          outputTokensFast: schema.sessionStats.outputTokensFast,
-          // The productivity counters, so the client can compute a tree-scoped
-          // code-impact figure from the same `session_stats` rows the server-side
-          // rollup (`session-tree-metrics.sql.ts`) sums — the Info/Summary tabs and the
-          // analytics pages therefore cannot disagree. Additive: no existing field
-          // changes meaning.
-          linesChanged: schema.sessionStats.linesChanged,
-          filesEditedWritten: schema.sessionStats.filesEditedWritten,
-          linesAdded: schema.sessionStats.linesAdded,
-          linesRemoved: schema.sessionStats.linesRemoved,
-          diffLinesCoveredCalls: schema.sessionStats.diffLinesCoveredCalls,
-          diffLinesTotalCalls: schema.sessionStats.diffLinesTotalCalls,
-        })
-        .from(schema.sessions)
-        .innerJoin(
-          schema.sessionStats,
-          eq(schema.sessionStats.sessionId, schema.sessions.id),
-        )
-        .where(
-          and(
-            inArray(schema.sessions.id, descendantIds),
-            // Guard, same predicate as the server-side tree rollup: a descendant
-            // whose `session_stats` row exists only because OTEL cost telemetry arrived
-            // (no transcript ever uploaded) contributes nothing. Without it the client
-            // would sum a node the server rollup skips, and the two figures would drift.
-            sql`EXISTS (
-              SELECT 1 FROM logs tl
-              WHERE tl.session_id = ${schema.sessions.id}
-                AND tl.log_type IN ('claude', 'claude-subagent')
-            )`,
-          ),
-        ),
+      selectSubagentStats(this.db, descendantIds),
       // The root session's own productivity counters (`rootStats`), read from the
       // same `session_stats` row the server-side tree rollup sums for the root node,
       // with the same transcript guard as the descendant select above.
@@ -1937,7 +1836,7 @@ export class RepositoriesController {
         .from(schema.sessionStats)
         .where(
           and(
-            eq(schema.sessionStats.sessionId, sessionCheck.sessionRowId),
+            eq(schema.sessionStats.sessionId, sessionRowId),
             sql`EXISTS (
               SELECT 1 FROM logs tl
               WHERE tl.session_id = ${schema.sessionStats.sessionId}
@@ -1965,50 +1864,9 @@ export class RepositoriesController {
       // malformed body — return empty workflows
     }
 
-    // Resolve each WorkflowRun's full multi-level agent linkage:
-    // a workflow's direct agents (sessions whose `workflow_run_id`
-    // matches the run's `wfId`) plus their own regular Task-tool sub-agents at any
-    // depth — but NOT a sub-agent's own nested `Workflow` tool call (out of scope).
-    // Both maps are built only from `subagentRows`, which is already scoped to
-    // `descendantIds`, so the BFS below is implicitly restricted to this session's
-    // own descendant tree — no cross-session leakage possible.
-    if (workflows.length > 0) {
-      const wfDirectAgentsMap = new Map<string, string[]>();
-      const childrenByParentMap = new Map<string, string[]>();
-      for (const r of subagentRows) {
-        // Guard against the workflow runtime's own `journal.jsonl` bookkeeping file —
-        // historically uploaded (pre-hook-fix) with the literal, unprefixed sessionId
-        // "journal" — being mistaken for a real spawned agent.
-        if (!r.subSessionId.startsWith('agent-')) continue;
-        if (r.workflowRunId) {
-          const directList = wfDirectAgentsMap.get(r.workflowRunId);
-          if (directList) directList.push(r.subSessionId);
-          else wfDirectAgentsMap.set(r.workflowRunId, [r.subSessionId]);
-        }
-        if (r.parentSessionId) {
-          const childList = childrenByParentMap.get(r.parentSessionId);
-          if (childList) childList.push(r.subSessionId);
-          else childrenByParentMap.set(r.parentSessionId, [r.subSessionId]);
-        }
-      }
-
-      for (const wf of workflows) {
-        if (!wf.wfId) continue; // running workflow — no linkage yet
-        const directAgentIds = wfDirectAgentsMap.get(wf.wfId);
-        if (!directAgentIds || directAgentIds.length === 0) continue;
-
-        const visited = new Set<string>();
-        const queue = [...directAgentIds];
-        while (queue.length > 0) {
-          const current = queue.shift()!;
-          if (visited.has(current)) continue;
-          visited.add(current);
-          const children = childrenByParentMap.get(current);
-          if (children) queue.push(...children);
-        }
-        wf.agentSessionIds = [...visited];
-      }
-    }
+    // Each WorkflowRun's full multi-level agent linkage, from `subagentRows` — already
+    // scoped to `descendantIds`, so no cross-session leakage is possible.
+    resolveWorkflowAgentLinkage(workflows, subagentRows);
 
     // Latest submitted Turn-End Cost Advisor result for the session
     // detail Advisor tab (no separate session-detail cost/advisor
@@ -2018,7 +1876,7 @@ export class RepositoriesController {
     // Only runs recorded by the session owner count (open-source readiness):
     // the filter compares against the session owner, not the viewer, so
     // team visibility is unchanged, and a NULL `user_id` never matches.
-    const advisorOwnerId = sessionOwnerRow?.userId;
+    const advisorOwnerId = ownerUserId;
     const [turnEndAdvisorRow] =
       advisorOwnerId === undefined
         ? []
@@ -2083,17 +1941,13 @@ export class RepositoriesController {
         updatedAt: schema.sessionAttribution.updatedAt,
       })
       .from(schema.sessionAttribution)
-      .where(
-        eq(schema.sessionAttribution.sessionId, sessionCheck.sessionRowId),
-      );
+      .where(eq(schema.sessionAttribution.sessionId, sessionRowId));
     const [currentWatermarkRow] = await this.db
       .select({
         promptWatermark: schema.sessionPromptWatermark.promptWatermark,
       })
       .from(schema.sessionPromptWatermark)
-      .where(
-        eq(schema.sessionPromptWatermark.sessionId, sessionCheck.sessionRowId),
-      );
+      .where(eq(schema.sessionPromptWatermark.sessionId, sessionRowId));
     const [lastAttributionRunRow] = await this.db
       .select({
         outcome: schema.sessionAttributionRuns.outcome,
@@ -2101,9 +1955,7 @@ export class RepositoriesController {
         failureReason: schema.sessionAttributionRuns.failureReason,
       })
       .from(schema.sessionAttributionRuns)
-      .where(
-        eq(schema.sessionAttributionRuns.sessionId, sessionCheck.sessionRowId),
-      )
+      .where(eq(schema.sessionAttributionRuns.sessionId, sessionRowId))
       .orderBy(desc(schema.sessionAttributionRuns.startedAt))
       .limit(1);
 

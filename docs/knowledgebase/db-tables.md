@@ -134,7 +134,10 @@ that repository row ("last report wins", replaced wholesale) — see
 ### logs
 
 One row per `(session_id, log_type)`; a re-upload upserts `body`, `updated_at` and the extracted
-fields.
+fields. A hook upload **replaces** `body` every time (`excluded.body` in `logs.service.ts` `upsert()`;
+the hook sends the whole file, and nothing guarantees the new body is longer). "Keep the longer
+body" (by line count, `jsonb_array_length`) applies only to zip import (`importSession()`, see
+[session-export-import.md](session-export-import.md)).
 
 **Extracted fields:** for `log_type = 'artisyn'` the ingest parses `body` at write time into
 `first_prompt`, `start_time`, `end_time`, `git_branch`, `git_repo_root` and `git_worktree_root`;
@@ -143,11 +146,11 @@ even inside a linked worktree; `git_worktree_root` (`--show-toplevel`) is what k
 worktree session from being classified out-of-repo.
 
 **Session start and end ignore non-activity lines.** `extractTimestampRange()`
-(`server/src/logs/artisyn-extractor.ts`) skips every line type in `NON_ACTIVITY_LINE_TYPES`
-(`hook-status`, `system-context`, `skill-definitions`, `agent-definitions`, `mcp-config`,
-`code-inventory`): the hook prepends these synthetic events, and their timestamps record when the
-hook reported, not when the session worked (a `code-inventory` snapshot can predate the session
-by up to 6 h).
+(`server/src/logs/artisyn-extractor.ts`) skips every line type in the `NON_ACTIVITY_LINE_TYPES` set
+there (the list is in code; a new synthetic hook line type must be added to it): the hook prepends
+or appends these events (status, harness / OKF snapshots and their `-ref` lines, code inventory,
+OTEL status …), and their timestamps record when the hook reported, not when the session worked
+(a `code-inventory` snapshot can predate the session by hours).
 
 **`claude-otel` rows are not raw OTLP.** The session's `claude-otel` row holds a normalised result
 derived from its raw chunks in `logs_otel`. No cost reader parses it (they read

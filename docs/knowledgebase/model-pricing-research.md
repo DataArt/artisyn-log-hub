@@ -5,7 +5,7 @@ description: "Where to look up current Claude model pricing and context-window v
 tags:
   - pricing
   - database
-timestamp: "2026-10-26T00:00:00+04:00"
+timestamp: "2026-11-03T00:00:00+04:00"
 ---
 
 # Researching Model Pricing & Context Length
@@ -184,8 +184,8 @@ writers:
 
 ### Admin actions
 
-`ModelPricingAdminService` backs the Admin → Model Pricing tab. Endpoints are listed in
-[api-reference.md](api-reference.md). Allowed actions per resolved state (any other combination
+`ModelPricingAdminService` backs the Admin → Model Pricing tab. Endpoints are in
+`server/src/model-pricing/model-pricing-admin.controller.ts`. Allowed actions per resolved state (any other combination
 returns 409):
 
 | Resolved source | Override active | Allowed |

@@ -1,0 +1,130 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="760" viewBox="0 0 1000 760" font-family="Segoe UI, Arial, sans-serif" font-size="12">
+  <defs>
+    <style>
+      .muted{fill:#6b7280}
+      .cap{fill:#6b7280;font-size:10px;letter-spacing:.5px}
+      .mono{font-family:Consolas,Menlo,monospace}
+      .card{fill:#fff;stroke:#e5e7eb;stroke-width:1}
+      .new{fill:none;stroke:#7c3aed;stroke-width:1.5;stroke-dasharray:5 3}
+      .newlbl{fill:#7c3aed;font-size:10px;font-weight:600}
+      .bar{fill:#0b8fe8}
+    </style>
+  </defs>
+  <rect width="1000" height="760" fill="#fafafa"/>
+
+  <!-- session sub-tabs -->
+  <rect x="0" y="0" width="1000" height="38" fill="#fff" stroke="#e5e7eb"/>
+  <text x="80" y="24">Summary</text><text x="150" y="24">Statistics</text><text x="226" y="24">Call Tree</text>
+  <text x="300" y="24">Context Growth</text><text x="406" y="24">More ▾</text>
+  <text x="480" y="24" font-weight="600">OKF</text><line x1="470" y1="36" x2="520" y2="36" stroke="#111" stroke-width="2"/>
+
+  <text x="16" y="62" class="cap">OKF · WHOLE SESSION TREE (MAIN + 2 SUB-AGENTS) · 2 BUNDLES</text>
+  <text x="380" y="62" class="muted">Read heat</text>
+  <rect x="440" y="48" width="84" height="22" rx="4" class="card"/><rect x="441" y="49" width="42" height="20" fill="#e5e7eb"/>
+  <text x="448" y="63" font-size="11">Bytes</text><text x="490" y="63" font-size="11">Calls</text>
+
+  <!-- verdict card -->
+  <rect x="16" y="82" width="968" height="214" rx="6" class="card"/>
+  <text x="30" y="106" class="cap">VERDICT · ACCESS &amp; LAYOUT</text>
+  <rect x="190" y="93" width="34" height="20" rx="10" fill="#dcfce7" stroke="#16a34a"/>
+  <text x="198" y="107" font-size="11" fill="#15803d">OK</text>
+  <text x="236" y="107" class="muted" font-size="11">how the KB was read — not whether it helped; see value signals</text>
+  <rect x="24" y="90" width="600" height="26" rx="3" class="new"/><text x="630" y="107" class="newlbl">NFR</text>
+
+  <text x="30" y="134" class="cap">READ · TOP 5 BY BYTES (UPKEEP EXCLUDED)</text>
+  <text x="30" y="152" class="mono" font-size="11">docs/knowledgebase/session-log-view.md</text><text x="560" y="152" class="mono" font-size="11">9.1 KB</text>
+  <text x="30" y="170" class="mono" font-size="11">docs/knowledgebase/api-reference.md</text>
+  <rect x="300" y="160" width="86" height="14" rx="7" fill="#ecfdf5" stroke="#16a34a"/><text x="306" y="171" font-size="10" fill="#15803d">§ lines 120–210</text>
+  <text x="560" y="170" class="mono" font-size="11">3.6 KB</text>
+  <text x="30" y="188" class="mono" font-size="11">docs/knowledgebase/server-endpoint-map.md</text><text x="560" y="188" class="mono" font-size="11">3.6 KB</text>
+  <text x="30" y="210" class="muted" font-size="11">Upkeep (read by an agent that also edits it): <tspan class="mono">client-component-map.md</tspan> 9.5 KB</text>
+  <rect x="24" y="196" width="440" height="20" rx="3" class="new"/><text x="470" y="210" class="newlbl">FR-5</text>
+
+  <!-- value signals -->
+  <text x="640" y="134" class="cap" fill="#7c3aed">VALUE SIGNALS</text>
+  <text x="640" y="154" font-size="11">Pointer yield</text><text x="870" y="154" class="mono" font-weight="600">3 / 5 reads</text>
+  <text x="640" y="174" font-size="11">Code explored after a read</text><text x="870" y="174" class="mono" font-weight="600">7 calls</text>
+  <text x="640" y="194" font-size="11">Routing misses</text><text x="870" y="194" class="mono" font-weight="600" fill="#dc2626">2 articles</text>
+  <text x="640" y="214" class="muted" font-size="10">click a row to see it in the tree</text>
+  <rect x="632" y="122" width="344" height="100" rx="4" class="new"/><text x="900" y="236" class="newlbl">FR-1 · FR-2 · FR-3</text>
+
+  <text x="30" y="244" class="cap">HOW AGENTS REACHED THE KB · 2 AGENTS</text>
+  <rect x="30" y="252" width="160" height="22" rx="4" class="card"/><text x="38" y="267" font-size="11">agen → 2 articles <tspan font-weight="600">via index</tspan></text>
+  <rect x="198" y="252" width="198" height="22" rx="4" class="card"/><text x="206" y="267" font-size="11">agen → 3 articles <tspan font-weight="600">grep</tspan> (hit in result)</text>
+  <text x="410" y="267" class="muted" font-size="11"><tspan class="mono">ls docs/knowledgebase/x.md</tspan> without a read — not an entry</text>
+  <rect x="404" y="254" width="370" height="20" rx="3" class="new"/><text x="780" y="268" class="newlbl">FR-8</text>
+
+  <!-- tree -->
+  <rect x="16" y="310" width="640" height="380" rx="6" class="card"/>
+  <text x="28" y="330" class="cap">BUNDLE → FOLDER → FILE</text>
+  <text x="250" y="330" class="cap">MARKERS</text>
+  <text x="420" y="330" class="cap">READ</text>
+  <text x="490" y="330" class="cap" fill="#7c3aed">POINTERS USED</text>
+  <text x="580" y="330" class="cap" fill="#7c3aed">EXPL. AFTER</text>
+  <rect x="484" y="316" width="166" height="20" rx="3" class="new"/>
+  <line x1="16" y1="338" x2="656" y2="338" stroke="#e5e7eb"/>
+
+  <text x="28" y="360" class="mono" font-weight="600">⌄ docs/knowledgebase</text>
+  <text x="420" y="360" class="mono">33.3 KB</text><text x="500" y="360" class="mono">3 / 5</text><text x="590" y="360" class="mono">7</text>
+
+  <text x="48" y="386" class="mono">session-log-view.md</text>
+  <rect x="420" y="378" width="40" height="6" class="bar"/>
+  <text x="500" y="386" class="mono">2 / 6</text><text x="590" y="386" class="mono">0</text>
+  <!-- expanded pointer list -->
+  <text x="64" y="406" class="muted" font-size="10">▸ pointers in the read · ✓ = opened / searched / edited later by the same agent</text>
+  <text x="76" y="422" class="mono" font-size="10">✓ client/src/viewer/pages/repository/session-log/log-parser.ts</text>
+  <text x="76" y="436" class="mono" font-size="10">✓ client/src/viewer/pages/repository/SessionDetailPane.tsx</text>
+  <text x="76" y="450" class="mono" font-size="10" fill="#9ca3af">· server/src/logs/session-logs-delta.service.ts</text>
+  <rect x="58" y="394" width="400" height="62" rx="3" class="new"/><text x="466" y="432" class="newlbl">FR-1</text>
+
+  <text x="48" y="478" class="mono">api-reference.md</text>
+  <rect x="250" y="467" width="98" height="15" rx="7" fill="#ecfdf5" stroke="#16a34a"/><text x="256" y="478" font-size="10" fill="#15803d">§ section read ×2</text>
+  <rect x="420" y="470" width="16" height="6" class="bar"/>
+  <text x="500" y="478" class="mono">1 / 1</text><text x="590" y="478" class="mono">0</text>
+
+  <text x="48" y="504" class="mono">server-endpoint-map.md</text>
+  <rect x="420" y="496" width="16" height="6" class="bar"/>
+  <text x="500" y="504" class="mono">0 / 4</text><text x="590" y="504" class="mono" fill="#dc2626">7</text>
+  <text x="64" y="520" class="muted" font-size="10">7 greps over server/src/logs/** after the read — the article did not save the search</text>
+  <rect x="58" y="508" width="420" height="18" rx="3" class="new"/><text x="486" y="521" class="newlbl">FR-2</text>
+
+  <text x="48" y="546" class="mono">client-component-map.md</text>
+  <rect x="250" y="535" width="86" height="15" rx="7" fill="#f3f4f6" stroke="#d1d5db"/><text x="256" y="546" font-size="10" class="muted">upkeep · 9.5 KB</text>
+  <text x="420" y="546" class="mono muted">—</text><text x="500" y="546" class="mono muted">—</text><text x="590" y="546" class="mono muted">—</text>
+
+  <text x="48" y="572" class="mono" fill="#6b7280">db-tables.md</text>
+  <rect x="250" y="561" width="122" height="15" rx="7" fill="#fef2f2" stroke="#dc2626"/><text x="256" y="572" font-size="10" fill="#b91c1c">routing miss · 5 greps</text>
+  <text x="420" y="572" class="mono muted">not read</text>
+  <text x="64" y="588" class="muted" font-size="10">main searched server/src/db/schema/** without opening this article</text>
+  <rect x="244" y="556" width="134" height="24" rx="3" class="new"/><text x="384" y="572" class="newlbl">FR-3</text>
+
+  <text x="28" y="618" class="mono" font-weight="600">⌄ docs/kb-local</text>
+  <rect x="140" y="607" width="58" height="15" rx="7" fill="#fff" stroke="#d1d5db"/><text x="146" y="618" font-size="10" class="muted">gitignored</text>
+  <text x="420" y="618" class="mono">0 B</text>
+
+  <text x="28" y="652" class="muted" font-size="10">Upkeep rows are greyed and left out of Read, shares and the verdict. Section-read marker replaces the coarse-read warning</text>
+  <text x="28" y="666" class="muted" font-size="10">for offset/limit and sed -n reads of big articles.</text>
+
+  <!-- agents panel -->
+  <rect x="672" y="310" width="312" height="380" rx="6" class="card"/>
+  <text x="686" y="330" class="cap">AGENTS · 3 · EACH ON ITS OWN TASK</text>
+  <text x="686" y="356" font-weight="600">main</text>
+  <text x="686" y="372" class="muted" font-size="11">/adlc-lh:implement-deep 2026-11-01…</text>
+  <text x="686" y="388" class="muted" font-size="11">0 KB files · 0 B into context</text>
+  <text x="686" y="404" font-size="11" fill="#b91c1c">routing misses: db-tables.md</text>
+  <line x1="672" y1="416" x2="984" y2="416" stroke="#e5e7eb"/>
+  <text x="686" y="438" font-weight="600">agen <tspan class="muted" font-weight="400" font-size="11">found by grep</tspan></text>
+  <text x="686" y="454" class="muted" font-size="11">3 KB files · 7.1 KB into context</text>
+  <text x="686" y="470" font-size="11">yield 1 / 3 · explored after read 7</text>
+  <line x1="672" y1="482" x2="984" y2="482" stroke="#e5e7eb"/>
+  <text x="686" y="504" font-weight="600">agen <tspan class="muted" font-weight="400" font-size="11">via index</tspan></text>
+  <text x="686" y="520" class="muted" font-size="11">2 KB files · 26.2 KB into context</text>
+  <text x="686" y="536" font-size="11">yield 2 / 2 · explored after read 0</text>
+  <text x="686" y="552" class="muted" font-size="11">+ upkeep: client-component-map.md</text>
+  <rect x="680" y="388" width="298" height="172" rx="3" class="new"/><text x="900" y="574" class="newlbl">FR-1/3/5 per agent</text>
+
+  <!-- legend -->
+  <rect x="16" y="710" width="22" height="12" class="new"/>
+  <text x="46" y="720" class="muted" font-size="11">Dashed purple outline = new or changed by this task (labels name the FR). Rest = existing session OKF tab.</text>
+  <text x="16" y="744" class="muted" font-size="11">Wireframe — numbers illustrative. Light theme.</text>
+</svg>

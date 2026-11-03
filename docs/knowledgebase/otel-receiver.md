@@ -5,7 +5,7 @@ description: "Why the hook runs its own loopback OTLP/JSON receiver, why it is o
 tags:
   - hooks
   - otel
-timestamp: "2026-10-31T00:00:00+04:00"
+timestamp: "2026-11-03T00:00:00+04:00"
 ---
 
 # OTEL Receiver
@@ -179,7 +179,7 @@ throttled re-arms:
 `{receiverVersion, registered, received:{logs,metrics,spans}, firstRecordAt|null, pending, forward:'ok'|'degraded'|'off'}`.
 An unknown session → `registered:false` with zero counts. `received` counts only routed records
 (pending ones are in `pending`). The hook asks it at `Stop` and `SessionEnd` to build the
-`otel-status` event ([hook-system-overview.md](hook-system-overview.md) § "`otel-status` event",
+`otel-status` event ([hook-system-overview.md](hook-system-overview.md) § "Lines injected into the current session's `artisyn` upload",
 algorithm [otel-status-reason](algorithms/otel-status-reason.md)).
 
 ### Per-record routing and the pending spool (DD-18)
@@ -311,7 +311,7 @@ In legacy mode both call `otel-register.js`, which does two things in this order
 2. **Spawn** — `spawnDetachedHidden(otel-receiver.js, …)` with every parameter passed as **both**
    argv and an `ARTISYN_OTEL_*` env var (argv first, env fallback — cross-version insurance for
    hooks whose Windows launcher carried env only, see `spawn-hidden.js` in
-   [hook-system-overview.md](hook-system-overview.md) § "Files"). This covers "no receiver was
+   [hook-system-overview.md](hook-system-overview.md) § "Scripts worth knowing about"). This covers "no receiver was
    running". If one already holds the port, the new process gets `EADDRINUSE` and exits `0`, which
    is the normal path for the second and later sessions of a project. The step is skipped when the
    register step already spawned a replacement during a restart.

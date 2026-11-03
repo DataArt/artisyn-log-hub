@@ -70,7 +70,9 @@ chunks ([code splitting](client-routing-and-layout.md#code-splitting)): a new pa
 ### `pages/repository/`
 
 `RepositoryView.tsx` is a thin shell over `useRepositoryViewState.ts` (URL-backed tab / session / filter
-state) and `useRepositoryData.ts` (all of the page's queries). Its main tabs:
+state) and `useRepositoryData.ts` (all of the page's queries); `useRepoTeamAccess.ts` decides the
+team-wide tabs and the restricted notice, `useSessionListPrefs.ts` keeps the list's `localStorage`
+preferences, and `RepositoryTeamWideTabs.tsx` renders every main tab but Sessions. Its main tabs:
 
 | Main tab | Where |
 |---|---|
@@ -86,7 +88,8 @@ The **session detail pane** and its tab bar live in this folder, not in `session
 
 | File | Role |
 |---|---|
-| `SessionDetailPane.tsx` | Renders the header, the tab bar and the active tab's content; computes the effective lens |
+| `SessionDetailPane.tsx` | Renders the header and the tab bar; derives the shared usage / code-impact memos; computes the effective lens; routes Refresh (Session Map) |
+| `SessionTabContent.tsx` | The active tab's content (one branch per session tab); owns the Logs deep-link turn target and the Summary's change-surface aggregate query |
 | `SessionTabBar.tsx`, `SessionLensRow.tsx`, `SessionTabTrigger.tsx` | The one-level tab row with the "More ▾" menu (built on `ui/overflow-row.tsx`) |
 | `SessionLensSwitcher.tsx`, `session-lenses.ts`, `useSessionLens.ts` | The "View" select (lens): pure lens model and its URL / per-user storage hook — [`algorithms/session-lens-row.md`](algorithms/session-lens-row.md) |
 | `session-tab-groups.ts` | Visible session registry rows with typed tab ids |
@@ -108,6 +111,7 @@ One folder per session tab; flat files are the Logs tab and the shared parsing. 
 | `usage/` | Statistics tab (session-scope usage, computed client-side) | [`session-metrics-scope.md`](session-metrics-scope.md) |
 | `charts/` | Chart tabs (Dashboard, Context Growth, Context Usage, Agent Tree, Timeline, Tool Heatmap); `chart-tab.ts` = `CHART_TABS` and the last-chart storage | [`llm-call-math.md`](llm-call-math.md) |
 | `call-tree/`, `CallTreeView.tsx` | Call Tree tab | — |
+| `session-map/` | Session Map tab (realtime / replay, `smSel` URL param, own `logs/delta` poll) | [`session-map.md`](session-map.md) |
 | `bash-tab/` | Bash tab (`bashCall` URL param) | [`algorithms/bash-command-view.md`](algorithms/bash-command-view.md) |
 | `RawLogsTab.tsx`, `raw-logs/` | Raw Logs tab | [`raw-logs-renderers.md`](raw-logs-renderers.md) |
 | `change-surface/` | Change surface tab | [`change-surface.md`](change-surface.md) |
