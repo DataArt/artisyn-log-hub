@@ -52,9 +52,10 @@ to me. If something outside the repo really needs deleting, tell me the exact pa
 Do not multiply tests. A change gets tests of **only these three kinds**:
 
 1. **Algorithm** — only if the change touches an algorithm that has a doc in
-   `docs/knowledgebase/algorithms/`. Add or change rows in that doc's examples block; the
-   existing `*.algo.spec.ts` / `*.algo.test.ts` / `*.algo.test.js` table test picks them up. A
-   new algorithm test file only together with a new algorithm doc.
+   `docs/knowledgebase/algorithms/`. Add or change rows in its rows file
+   `docs/algorithm-examples/<name>.json` (never an inline table in the doc); the existing
+   `*.algo.spec.ts` / `*.algo.test.ts` / `*.algo.test.js` table test picks them up. A new
+   algorithm test file only together with a new algorithm doc and its rows file.
 2. **API contract** — a new or changed route gets its row in `server/test/contract/registry/`
    (the router meta-test fails without it).
 3. **Scenario** — behaviour is checked by a **step in an existing scenario** in `tests/scenarios/`
@@ -192,8 +193,9 @@ Optional, for the developer: `scripts/claude-docker.ps1 <name>` (or `scripts\cla
 sandbox with its own git worktree and branch, its own DBs in the shared `log-hub-postgres`, its own
 backend/client/Mailpit on a per-sandbox `127.0.0.1` port triple and its own Log Hub for the hook.
 `--list`, `--serve`, `--shell`, `--stop`, `--reset`, `--remove`, `--prune`. The host workflow above is
-unchanged. Everything (commands, env vars, mounts, `devctl`, `TEST_DATABASE_URL`, limitations) is in
-`docs/knowledgebase/docker-dev-container.md`; the in-container rules are `docker-dev/CLAUDE.container.md`.
+unchanged. Commands and flags: `node scripts/claude-docker.mjs --help`. Rules, env vars, mounts, `devctl`,
+`TEST_DATABASE_URL` and limitations are in `docs/knowledgebase/docker-dev-container.md`; the in-container
+rules are `docker-dev/CLAUDE.container.md`.
 
 ## Work cycle
 

@@ -1,55 +1,30 @@
-import { useState, useCallback, useEffect, lazy, Suspense } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { useQueryClient, useMutation, useQuery } from '@tanstack/react-query';
+import { useQueryClient, useMutation } from '@tanstack/react-query';
 import { Loader2, Lock, RefreshCw } from 'lucide-react';
-import { deleteSession, fetchTeams } from '../../api';
+import { deleteSession } from '../../api';
 import { RESTRICTED_SESSIONS_NOTICE } from '../../lib/access-mode-copy';
 import { routes } from '../../hooks/useHashRoute';
 import { useAuth } from '../../context/AuthContext';
 import { useRecentVisits } from '../../lib/useRecentVisits';
 import { PageTabs, PageTabsContent } from '../../ui/page-tabs';
 import { useModelPricing } from '../../hooks/useModelPricing';
-import { LazyFallback } from '../../components/LazyFallback';
 import { type ViewMode } from './session-list/SessionListPanel';
 import { type AnalyticsState } from './analytics/RepositoryAnalytics';
-import { RepositorySettings } from './RepositorySettings';
-import { analyticsFromParams } from './analytics/analytics-url';
 import { useRepositoryData } from './useRepositoryData';
-import {
-  teamWideAccess,
-  visibleTabs,
-  type RepoMainTab as MainTab,
-} from '../../tab-ids';
+import { visibleTabs, type RepoMainTab as MainTab } from '../../tab-ids';
 import { RepositoryHeader } from './RepositoryHeader';
 import { RepositorySessionsPanel } from './RepositorySessionsPanel';
+import { RepositoryTeamWideTabs } from './RepositoryTeamWideTabs';
 import { useRepositoryViewState } from './useRepositoryViewState';
+import { useRepoTeamAccess } from './useRepoTeamAccess';
+import { useSessionListPrefs } from './useSessionListPrefs';
 import { useOpenBranches } from './useOpenBranches';
 import { useNewSessionPoll } from './useNewSessionPoll';
 import { useSessionListRefreshing } from './useSessionListRefresh';
 import { NotificationDot } from '../../ui/notification-dot';
 
 export type { AnalyticsState };
-
-// The light repository tabs load through one barrel, so they share one chunk (lazy-chunk budget).
-// Reports keeps its own chunk: it carries the PDF and zip export libraries.
-const loadRepoTabs = () => import('./repository-tabs-lazy-group');
-const RepositoryAnalytics = lazy(() =>
-  loadRepoTabs().then((m) => ({ default: m.RepositoryAnalytics })),
-);
-const ReportsPanel = lazy(() =>
-  import('./reports/ReportsPanel').then((m) => ({
-    default: m.ReportsPanel,
-  })),
-);
-const RepoToolsTab = lazy(() =>
-  loadRepoTabs().then((m) => ({ default: m.RepoToolsTab })),
-);
-const RepoOkfTab = lazy(() =>
-  loadRepoTabs().then((m) => ({ default: m.RepoOkfTab })),
-);
-const RepoOtelTab = lazy(() =>
-  loadRepoTabs().then((m) => ({ default: m.RepoOtelTab })),
-);
 
 function getHttpStatusCode(error: unknown): number | null {
   if (error && typeof error === 'object' && 'statusCode' in error) {
@@ -76,73 +51,15 @@ export function RepositoryView() {
 
   const isRefreshing = useSessionListRefreshing(repoId, teamId);
 
-  const { data: teams = [] } = useQuery({
-    queryKey: ['teams'],
-    queryFn: fetchTeams,
-    enabled: teamId !== undefined,
-  });
-  const currentTeam =
-    teamId !== undefined ? teams.find((t) => t.id === teamId) : undefined;
+  const { canSeeTeamWideTabs, showRestrictedNotice } =
+    useRepoTeamAccess(teamId);
 
-  /**
-   * What this caller may reach inside a `restricted` team. Mirrors the server-side
-   * scope — the tabs below are a cosmetic second layer over
-   * real 403s, never the enforcement itself.
-   *
-   * While the `['teams']` query is still in flight `currentTeam` is `undefined`,
-   * which reads as "not restricted" so the tab bar does not flash a narrower set
-   * and then widen.
-   */
-  const isRestrictedTeam = currentTeam?.accessMode === 'restricted';
-  const isTeamOwner =
-    currentTeam !== undefined &&
-    user != null &&
-    currentTeam.ownerId === user.id;
-
-  /**
-   * Team owner and `manager` keep Analytics / Reports / Settings. The app admin role
-   * grants nothing here — an admin is scoped by their team role like anyone else.
-   */
-  const canSeeTeamWideTabs =
-    currentTeam === undefined || teamWideAccess(currentTeam, user?.id);
-
-  /**
-   * Only a caller whose scope really is `own-only` gets the notice — a `manager`
-   * and an `adlc trainer` both see every member's rows, so the "you see only your
-   * own sessions" wording would be wrong for them.
-   */
-  const showRestrictedNotice =
-    isRestrictedTeam &&
-    !isTeamOwner &&
-    !currentTeam?.myIsManager &&
-    !currentTeam?.myIsAdlcTrainer;
-
-  const [viewMode, setViewMode] = useState<ViewMode>(() => {
-    const stored = localStorage.getItem(
-      'artisyn:sessionViewMode',
-    ) as ViewMode | null;
-    return stored ?? 'branch';
-  });
-
-  function handleViewModeChange(mode: ViewMode) {
-    localStorage.setItem('artisyn:sessionViewMode', mode);
-    setViewMode(mode);
-  }
-
-  const [hideHookSessions, setHideHookSessions] = useState<boolean>(() => {
-    const stored = localStorage.getItem(
-      `artisyn:repo-${repoId}-hideHookSessions`,
-    );
-    return stored !== null ? stored === 'true' : true;
-  });
-
-  function handleHideHookSessionsChange(value: boolean) {
-    localStorage.setItem(
-      `artisyn:repo-${repoId}-hideHookSessions`,
-      String(value),
-    );
-    setHideHookSessions(value);
-  }
+  const {
+    viewMode,
+    handleViewModeChange,
+    hideHookSessions,
+    handleHideHookSessionsChange,
+  } = useSessionListPrefs(repoId);
 
   const [branchSelectedSession, setBranchSelectedSession] = useState<{
     sessionId: string;
@@ -245,6 +162,8 @@ export function RepositoryView() {
     sessionId,
     branchSelectedSession,
     otelReason: otelReasonFilter,
+    // The Session Map polls its own delta (session-map DD-11).
+    suspendSilentLogsRefetch: sessionTab === 'session-map',
   });
 
   // Recent visits (DD-15): a repository open, every session / session-tab visit, and the removal
@@ -481,69 +400,16 @@ export function RepositoryView() {
         </PageTabsContent>
 
         {canSeeTeamWideTabs && (
-          <>
-            <PageTabsContent value="analytics" className="flex-1 min-h-0">
-              <Suspense fallback={<LazyFallback />}>
-                <RepositoryAnalytics
-                  key={searchParams.get('av') ?? 'work-time'}
-                  repoId={repoId}
-                  teamId={teamId}
-                  initialState={(() => {
-                    const fromParams = analyticsFromParams(searchParams);
-                    if (teamId === undefined && user?.email) {
-                      return {
-                        ...fromParams,
-                        users: [user.email],
-                        ...(fromParams.groupBy === 'user'
-                          ? { groupBy: 'none' as const }
-                          : {}),
-                      };
-                    }
-                    return fromParams;
-                  })()}
-                  onStateChange={handleAnalyticsStateChange}
-                  onSessionClick={handleAnalyticsSessionClick}
-                />
-              </Suspense>
-            </PageTabsContent>
-
-            <PageTabsContent value="reports" className="flex-1 min-h-0">
-              <Suspense fallback={<LazyFallback />}>
-                <ReportsPanel repoId={repoId} teamId={teamId} />
-              </Suspense>
-            </PageTabsContent>
-
-            <PageTabsContent value="tools" className="flex-1 min-h-0">
-              <Suspense fallback={<LazyFallback />}>
-                <RepoToolsTab repoId={repoId} teamId={teamId} />
-              </Suspense>
-            </PageTabsContent>
-
-            <PageTabsContent value="okf" className="flex-1 min-h-0">
-              <Suspense fallback={<LazyFallback />}>
-                <RepoOkfTab repoId={repoId} teamId={teamId} />
-              </Suspense>
-            </PageTabsContent>
-
-            <PageTabsContent value="otel" className="flex-1 min-h-0">
-              <Suspense fallback={<LazyFallback />}>
-                <RepoOtelTab
-                  repoId={repoId}
-                  teamId={teamId}
-                  onReasonFilter={setOtelReasonFilter}
-                />
-              </Suspense>
-            </PageTabsContent>
-
-            <PageTabsContent value="settings" className="flex-1 min-h-0">
-              <RepositorySettings
-                repoId={repoId}
-                teamId={teamId}
-                hideHookSessions={hideHookSessions}
-                onHideHookSessionsChange={handleHideHookSessionsChange}
-              />
-            </PageTabsContent>
-          </>
+          <RepositoryTeamWideTabs
+            repoId={repoId}
+            teamId={teamId}
+            searchParams={searchParams}
+            onAnalyticsStateChange={handleAnalyticsStateChange}
+            onAnalyticsSessionClick={handleAnalyticsSessionClick}
+            onOtelReasonFilter={setOtelReasonFilter}
+            hideHookSessions={hideHookSessions}
+            onHideHookSessionsChange={handleHideHookSessionsChange}
+          />
         )}
       </PageTabs>
 

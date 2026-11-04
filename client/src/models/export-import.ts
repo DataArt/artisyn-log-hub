@@ -3,7 +3,7 @@
  * `RepositoryExportImportController`'s response shapes
  * (`server/src/logs/repository-export-import.controller.ts`,
  * `server/src/logs/export-import-zip.ts`). See
- * `docs/knowledgebase/api-reference.md` § "Repository Export/Import".
+ * `docs/knowledgebase/server-endpoint-map.md` § "`/api/v1/repositories` — export/import".
  */
 
 /** Scope a `GET .../export-import/scope`, `POST .../export`, or
@@ -30,7 +30,7 @@ export interface ExportImportJobStatus {
 }
 
 /** Top-level `meta.json` shape (also embedded in `ImportUploadSummary`) — see
- * `docs/knowledgebase/api-reference.md` § "Repository Export/Import". */
+ * `docs/knowledgebase/session-export-import.md` § "Export format". */
 export interface ExportMetaJson {
   formatVersion: number;
   createdAt: string;

@@ -36,20 +36,7 @@ first success. The regular chunk upload is unaffected, so nothing is lost while 
 
 ## Examples
 
-```examples
-[
-  {"id": "RB-01", "input": {"failures": 0}, "expected": {"delayMs": 5000}, "note": "5000 * 2^0 = 5000"},
-  {"id": "RB-02", "input": {"failures": 1}, "expected": {"delayMs": 10000}, "note": "5000 * 2 = 10000"},
-  {"id": "RB-03", "input": {"failures": 2}, "expected": {"delayMs": 20000}, "note": "5000 * 4 = 20000"},
-  {"id": "RB-04", "input": {"failures": 3}, "expected": {"delayMs": 40000}, "note": "5000 * 8 = 40000 < 60000"},
-  {"id": "RB-05", "input": {"failures": 4}, "expected": {"delayMs": 60000}, "note": "5000 * 16 = 80000 -> capped at 60000"},
-  {"id": "RB-06", "input": {"failures": 5}, "expected": {"delayMs": 60000}, "note": "5000 * 32 = 160000 -> 60000"},
-  {"id": "RB-07", "input": {"failures": 1000}, "expected": {"delayMs": 60000}, "note": "exponent bounded at 30, 5000 * 2^30 -> 60000"},
-  {"id": "RB-08", "input": {"failures": -3}, "expected": {"delayMs": 5000}, "note": "Rule 1: negative counts as 0 -> 5000"},
-  {"id": "RB-09", "input": {"failures": 2.9}, "expected": {"delayMs": 20000}, "note": "Rule 1: 2.9 cut to 2 -> 20000"},
-  {"id": "RB-10", "input": {"failures": "3"}, "expected": {"delayMs": 5000}, "note": "Rule 1: a string is not a number -> 0 -> 5000"}
-]
-```
+Rows (10): [`docs/algorithm-examples/otel-realtime-backoff.json`](../../algorithm-examples/otel-realtime-backoff.json) — test data for the table test; the rules above are enough to understand the algorithm.
 
 ## Mutations
 

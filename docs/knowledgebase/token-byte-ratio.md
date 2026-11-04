@@ -4,7 +4,7 @@ title: "Bytes-per-Token Ratio"
 description: "The BYTES_PER_TOKEN constant: rationale, usage locations in the UI, and change procedures."
 tags:
   - tokens
-timestamp: "2026-10-29T00:00:00+04:00"
+timestamp: "2026-11-03T00:00:00+04:00"
 ---
 
 # Bytes-per-Token Ratio
@@ -82,4 +82,4 @@ If empirical evidence or updated Anthropic documentation suggests a different va
 2. Verify its consumers (`prompt-turn-helpers.tsx`, `ToolCallDetailModal.tsx`, `context-data.ts`)
    still import it and `resolveCharsPerToken` still falls back to it (no local override).
 3. Update the table in this file if the reasoning changes.
-4. Run `npm run build` and `npx vitest run` — no test values hardcode the ratio.
+4. Run `npm run build` and the client algorithm tests (`bun run test` from `client/`) — no test values hardcode the ratio.

@@ -8,12 +8,12 @@ This is the Vite + React front-end for Artisyn Log Hub.
 # UI Component Navigation
 
 **Before changing any UI component**, read [
-`docs/knowledgebase/client-component-map.md`](../docs/knowledgebase/client-component-map.md).
-It maps every file to its purpose and has a lookup table to find the right file without searching the tree.
+`docs/knowledgebase/client-component-map.md`](../docs/knowledgebase/client-component-map.md)
+(small, read it whole): it tells you which folder holds the area, which KB article has its details,
+and which modules are not where their name suggests. Then find the file itself with grep/glob.
 
-**After adding, removing, renaming, or significantly changing a component**, update that file to keep it accurate.
-
-Instead of doing grep etc, first read file docs/knowledgebase/client-component-map.md and plan your changes accordingly.
+The map lists folders, not files. Update it only when a folder, an entry point or a cross-cutting
+module is added, removed or renamed — not for a new component inside an existing folder.
 
 # Work cycle
 

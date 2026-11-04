@@ -7,7 +7,7 @@ tags:
   - change-surface
   - concentration
   - aggregation
-timestamp: "2026-08-27T00:00:00+04:00"
+timestamp: "2026-11-03T00:00:00+04:00"
 ---
 
 # Change Surface
@@ -357,8 +357,8 @@ a listing limit.
   classification this feature's union class extends
 - [`db-tables.md`](db-tables.md) — `session_changed_paths`, `repo_code_inventory` and the six new
   columns
-- [`server-endpoint-map.md`](server-endpoint-map.md) / [`api-reference.md`](api-reference.md) — the
-  four routes and their payloads
+- [`server-endpoint-map.md`](server-endpoint-map.md) — access rules for the four routes (payloads:
+  `server/src/logs/change-surface/change-surface.types.ts`)
 - [`hook-system-overview.md`](hook-system-overview.md) / [`hook-api-versioning.md`](hook-api-versioning.md)
   — the `git.root` / `git.worktreeRoot` fields, the `code-inventory` event and `edit_result`
 - [`ui-principles.md`](ui-principles.md) — why a bounded 0–100 ratio uses a fixed axis and fixed

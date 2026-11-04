@@ -1,0 +1,200 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1060" viewBox="0 0 1200 1060" font-family="Segoe UI, Arial, sans-serif" font-size="12">
+  <defs>
+    <style>
+      .muted{fill:#6b7280}
+      .cap{fill:#6b7280;font-size:10px;letter-spacing:.5px}
+      .mono{font-family:Consolas,Menlo,monospace}
+      .card{fill:#fff;stroke:#e5e7eb;stroke-width:1}
+      .new{fill:none;stroke:#7c3aed;stroke-width:1.5;stroke-dasharray:5 3}
+      .newlbl{fill:#7c3aed;font-size:10px;font-weight:600}
+      .bar{fill:#0b8fe8}
+      .track{fill:#e5e7eb}
+      .wbar{fill:#f59e0b}
+    </style>
+  </defs>
+  <rect width="1200" height="1060" fill="#fafafa"/>
+
+  <!-- repo header + tabs -->
+  <rect x="0" y="0" width="1200" height="44" fill="#fff" stroke="#e5e7eb"/>
+  <text x="16" y="27" class="mono" font-size="14">https://github.com/DataArt/artisyn-log-hub</text>
+  <text x="1080" y="27" class="muted">Sessions: 162  Users: 1</text>
+  <rect x="0" y="44" width="1200" height="36" fill="#fff" stroke="#e5e7eb"/>
+  <text x="44" y="67">Sessions</text><text x="116" y="67">Analytics</text><text x="190" y="67">Reports</text>
+  <text x="252" y="67">Tools/MCP</text>
+  <rect x="326" y="50" width="42" height="26" rx="4" fill="#fff" stroke="#111"/>
+  <text x="335" y="67" font-weight="600">OKF</text>
+  <text x="384" y="67">OTEL</text><text x="430" y="67">Settings</text>
+
+  <!-- filter strip (unchanged) -->
+  <text x="16" y="102" class="cap">DATE RANGE</text>
+  <rect x="16" y="108" width="110" height="30" rx="4" class="card"/><text x="26" y="128">Oct 4 → Nov 3</text>
+  <text x="140" y="102" class="cap">BRANCHES (OPTIONAL)</text>
+  <rect x="140" y="108" width="120" height="30" rx="4" class="card"/><text x="150" y="128">All branches ▾</text>
+  <text x="274" y="102" class="cap">ATTRIBUTES</text>
+  <rect x="274" y="108" width="130" height="30" rx="4" fill="#fff" stroke="#111"/><text x="290" y="128">⧩ Filter by attribute</text>
+  <text x="418" y="102" class="cap">BUNDLE (2 IN THIS REPO)</text>
+  <rect x="418" y="108" width="120" height="30" rx="4" class="card"/><text x="428" y="128">All bundles ▾</text>
+  <text x="552" y="102" class="cap">READ HEAT</text>
+  <rect x="552" y="108" width="84" height="30" rx="4" class="card"/><rect x="553" y="109" width="42" height="28" fill="#e5e7eb"/>
+  <text x="560" y="127" font-size="11">Bytes</text><text x="602" y="127" font-size="11">Calls</text>
+
+  <!-- FR-11 coverage banner -->
+  <rect x="16" y="150" width="1168" height="34" rx="4" fill="#fffbeb" stroke="#f59e0b"/>
+  <text x="30" y="172">ⓘ  <tspan font-weight="600">38 of 153 sessions (25 %)</tspan> in this period have no OKF analysis yet (ingested before the extractor). Numbers below cover the other 115.</text>
+  <rect x="940" y="156" width="230" height="22" rx="4" fill="#fff" stroke="#111"/>
+  <text x="952" y="171">↻ Recompute all sessions (admin)</text>
+  <rect x="12" y="146" width="1176" height="42" rx="6" class="new"/>
+  <text x="1110" y="200" class="newlbl">FR-11</text>
+
+  <!-- verdict card -->
+  <rect x="16" y="206" width="1168" height="150" rx="6" class="card"/>
+  <text x="30" y="230" class="cap">VERDICT · ACCESS &amp; LAYOUT</text>
+  <rect x="192" y="217" width="106" height="20" rx="10" fill="#fef3c7" stroke="#f59e0b"/>
+  <text x="202" y="231" font-size="11">Something to fix</text>
+  <rect x="306" y="217" width="262" height="20" rx="10" fill="#fff" stroke="#e5e7eb"/>
+  <text x="316" y="231" font-size="11" class="muted">partial data — 2 of 58 sessions without a snapshot</text>
+  <text x="580" y="231" class="muted" font-size="11">58 KB sessions of 153 · 9 upkeep-only sessions excluded</text>
+  <text x="30" y="252" class="muted" font-size="11">Measures which KB files agents read and how — not whether the KB is useful. Value signals: Pointer yield / Explored after read / Routing miss columns below.</text>
+  <rect x="24" y="240" width="900" height="18" rx="3" class="new"/>
+  <text x="930" y="253" class="newlbl">NFR: says what it measures</text>
+
+  <text x="30" y="278" class="cap">ANOMALIES</text>
+  <circle cx="34" cy="294" r="3" fill="#f59e0b"/>
+  <text x="44" y="298" class="mono" font-size="11">docs/knowledgebase/hook-api-versioning.md</text>
+  <text x="314" y="298" font-size="11">(54.2 KB) whole-file reads in 4 sessions, ~5.1 KB used per read — split it or add section pointers</text>
+  <text x="844" y="298" font-size="11" class="muted">· 11 section reads (offset/limit) not counted</text>
+  <circle cx="34" cy="316" r="3" fill="#9ca3af"/>
+  <text x="44" y="320" class="mono" font-size="11" fill="#6b7280">docs/knowledgebase/server-endpoint-map.md</text>
+  <rect x="312" y="308" width="44" height="16" rx="8" fill="#f3f4f6" stroke="#9ca3af"/>
+  <text x="320" y="320" font-size="10" class="muted">stale</text>
+  <text x="364" y="320" font-size="11" class="muted">coarse read based on snapshot 2026-10-30 (61.0 KB) — now 18.4 KB · current snapshot 2026-11-03</text>
+  <circle cx="34" cy="338" r="3" fill="#60a5fa"/>
+  <rect x="40" y="329" width="26" height="14" rx="7" fill="#eff6ff" stroke="#60a5fa"/>
+  <text x="45" y="340" font-size="9" fill="#2563eb">info</text>
+  <text x="72" y="342" font-size="11">docs/knowledgebase: KB flood in 1 session of 50 (below the 3-session minimum) — does not change the verdict</text>
+  <rect x="24" y="284" width="1150" height="66" rx="3" class="new"/>
+  <text x="1080" y="366" class="newlbl">FR-4 · FR-7 · FR-10</text>
+
+  <!-- KPI tiles -->
+  <g>
+    <rect x="16" y="378" width="186" height="96" rx="6" class="card"/><rect x="16" y="378" width="4" height="96" fill="#0b8fe8"/>
+    <text x="30" y="400" class="cap">KB FILES · 2 BUNDLES</text><text x="30" y="430" font-size="18" font-weight="600">116</text>
+    <text x="30" y="452" class="muted" font-size="10">snapshot 2026-11-03</text>
+    <rect x="212" y="378" width="186" height="96" rx="6" class="card"/><rect x="212" y="378" width="4" height="96" fill="#9ca3af"/>
+    <text x="226" y="400" class="cap">NOT READ (PERIOD) · INFO</text><text x="226" y="430" font-size="18" font-weight="600">18</text>
+    <rect x="408" y="378" width="186" height="96" rx="6" class="card"/><rect x="408" y="378" width="4" height="96" fill="#7c3aed"/>
+    <text x="422" y="400" class="cap">SESSIONS · TOUCHED KB</text><text x="422" y="430" font-size="18" font-weight="600">49 / 115</text>
+    <text x="422" y="452" class="muted" font-size="10">+ 9 upkeep-only</text>
+    <rect x="604" y="378" width="186" height="96" rx="6" class="card"/><rect x="604" y="378" width="4" height="96" fill="#14b8a6"/>
+    <text x="618" y="400" class="cap">MEDIAN FILE SHARE / SESSION</text><text x="618" y="430" font-size="18" font-weight="600">9 %</text>
+    <text x="618" y="452" class="muted" font-size="10">bundles ≥ 5 files only</text>
+    <!-- new tiles -->
+    <rect x="800" y="378" width="186" height="96" rx="6" class="card"/><rect x="800" y="378" width="4" height="96" fill="#16a34a"/>
+    <text x="814" y="400" class="cap">POINTER YIELD</text><text x="814" y="430" font-size="18" font-weight="600">41 %</text>
+    <text x="814" y="452" class="muted" font-size="10">KB reads followed by opening</text>
+    <text x="814" y="465" class="muted" font-size="10">a code path the article named</text>
+    <rect x="996" y="378" width="188" height="96" rx="6" class="card"/><rect x="996" y="378" width="4" height="96" fill="#dc2626"/>
+    <text x="1010" y="400" class="cap">ROUTING MISSES</text><text x="1010" y="430" font-size="18" font-weight="600">23</text>
+    <text x="1010" y="452" class="muted" font-size="10">code searches in an article's</text>
+    <text x="1010" y="465" class="muted" font-size="10">area by agents that never read it</text>
+    <rect x="796" y="372" width="392" height="108" rx="8" class="new"/>
+    <text x="1120" y="494" class="newlbl">FR-1 · FR-3</text>
+  </g>
+
+  <!-- tree -->
+  <rect x="16" y="500" width="800" height="380" rx="6" class="card"/>
+  <text x="28" y="520" class="cap">BUNDLE → FOLDER → FILE</text>
+  <text x="300" y="520" class="cap">MARKERS</text>
+  <text x="470" y="520" class="cap">READ</text>
+  <text x="560" y="520" class="cap">SESS.</text>
+  <text x="604" y="520" class="cap" fill="#7c3aed">YIELD</text>
+  <text x="652" y="520" class="cap" fill="#7c3aed">EXPL. AFTER</text>
+  <text x="726" y="520" class="cap" fill="#7c3aed">ROUTE MISS</text>
+  <rect x="598" y="506" width="212" height="20" rx="3" class="new"/>
+  <line x1="16" y1="528" x2="816" y2="528" stroke="#e5e7eb"/>
+
+  <text x="28" y="550" class="mono" font-weight="600">⌄ docs/knowledgebase</text>
+  <text x="300" y="550" class="muted" font-size="10">grep / ls over folder ×62</text>
+  <rect x="470" y="542" width="60" height="6" class="bar"/><text x="560" y="550" class="mono">56</text>
+  <text x="608" y="550" class="mono">41 %</text><text x="660" y="550" class="mono">88</text><text x="734" y="550" class="mono">23</text>
+
+  <text x="48" y="576" class="mono">client-component-map.md</text>
+  <rect x="300" y="565" width="64" height="15" rx="7" fill="#f3f4f6" stroke="#d1d5db"/>
+  <text x="306" y="576" font-size="10" class="muted">upkeep ×14</text>
+  <text x="370" y="576" font-size="10">🔥 hot #3</text>
+  <rect x="470" y="568" width="34" height="6" class="bar"/><text x="560" y="576" class="mono">17</text>
+  <text x="608" y="576" class="mono">62 %</text><text x="660" y="576" class="mono">9</text><text x="734" y="576" class="mono">2</text>
+
+  <text x="48" y="602" class="mono">hook-api-versioning.md</text>
+  <rect x="300" y="591" width="98" height="15" rx="7" fill="#ecfdf5" stroke="#16a34a"/>
+  <text x="306" y="602" font-size="10" fill="#15803d">§ section reads ×11</text>
+  <rect x="470" y="594" width="22" height="6" class="bar"/><text x="560" y="602" class="mono">9</text>
+  <text x="608" y="602" class="mono">55 %</text><text x="660" y="602" class="mono">4</text><text x="734" y="602" class="mono">1</text>
+
+  <text x="48" y="628" class="mono">server-endpoint-map.md</text>
+  <rect x="300" y="617" width="118" height="15" rx="7" fill="#f3f4f6" stroke="#9ca3af"/>
+  <text x="306" y="628" font-size="10" class="muted">stale · now 18.4 KB</text>
+  <rect x="470" y="620" width="18" height="6" class="bar"/><text x="560" y="628" class="mono">15</text>
+  <text x="608" y="628" class="mono">33 %</text><text x="660" y="628" class="mono">21</text><text x="734" y="628" class="mono">6</text>
+
+  <text x="48" y="654" class="mono">ci-security-scans.md</text>
+  <rect x="470" y="646" width="6" height="6" class="bar"/><text x="560" y="654" class="mono">3</text>
+  <text x="608" y="654" class="mono">100 %</text><text x="660" y="654" class="mono">0</text><text x="734" y="654" class="mono">0</text>
+
+  <text x="48" y="680" class="mono">db-tables.md</text>
+  <rect x="470" y="672" width="26" height="6" class="bar"/><text x="560" y="680" class="mono">20</text>
+  <text x="608" y="680" class="mono">18 %</text><text x="660" y="680" class="mono" fill="#dc2626">37</text><text x="734" y="680" class="mono">4</text>
+
+  <text x="48" y="706" class="mono" fill="#6b7280">upload-queue.md</text>
+  <text x="300" y="706" font-size="10" class="muted">not read</text>
+  <text x="560" y="706" class="mono">0</text><text x="608" y="706" class="mono muted">—</text><text x="660" y="706" class="mono muted">—</text>
+  <text x="734" y="706" class="mono" fill="#dc2626">9</text>
+
+  <text x="28" y="736" class="mono" font-weight="600">⌄ docs/kb-local</text>
+  <rect x="140" y="725" width="58" height="15" rx="7" fill="#fff" stroke="#d1d5db"/><text x="146" y="736" font-size="10" class="muted">gitignored</text>
+  <text x="300" y="736" class="muted" font-size="10">2 files · not in share histogram</text>
+  <rect x="470" y="728" width="40" height="6" class="bar"/><text x="560" y="736" class="mono">26</text>
+  <text x="608" y="736" class="mono">—</text><text x="660" y="736" class="mono">—</text><text x="734" y="736" class="mono">—</text>
+
+  <text x="28" y="770" class="cap">COLUMN LEGEND</text>
+  <text x="28" y="788" font-size="11" class="muted">Yield — share of KB reads after which the same agent opened, searched or edited a code path first seen in that read (FR-1).</text>
+  <text x="28" y="806" font-size="11" class="muted">Expl. after — code searches/reads in the article's area by the same agent after reading it; redundancy signal (FR-2).</text>
+  <text x="28" y="824" font-size="11" class="muted">Route miss — code searches in the article's area by agents that never opened it (FR-3).</text>
+  <text x="28" y="842" font-size="11" class="muted">upkeep — reads by an agent that also edits the article; excluded from Read, Sess., shares, hot files and verdict (FR-5).</text>
+  <text x="28" y="860" font-size="11" class="muted">§ section reads — Read offset/limit or sed -n range; not a coarse_article finding (FR-4). stale — article changed since the snapshot (FR-10).</text>
+  <rect x="294" y="560" width="132" height="76" rx="3" class="new"/>
+  <text x="300" y="652" class="newlbl">FR-4 · FR-5 · FR-10 markers</text>
+
+  <!-- right column -->
+  <rect x="832" y="500" width="352" height="160" rx="6" class="card"/>
+  <text x="846" y="520" class="cap">FILE SHARE PER SESSION · 49 SESSIONS</text>
+  <text x="846" y="534" class="muted" font-size="10">bundles with ≥ 5 files only</text>
+  <rect x="840" y="524" width="150" height="16" rx="3" class="new"/><text x="996" y="536" class="newlbl">FR-6</text>
+  <rect x="852" y="560" width="70" height="70" class="bar"/><text x="880" y="554">31</text>
+  <rect x="932" y="592" width="70" height="38" class="bar"/><text x="960" y="586">14</text>
+  <rect x="1012" y="618" width="70" height="12" class="bar"/><text x="1042" y="612">4</text>
+  <rect x="1092" y="628" width="70" height="2" class="bar"/><text x="1122" y="622">0</text>
+  <text x="866" y="648" class="muted" font-size="10">0–10 %</text><text x="944" y="648" class="muted" font-size="10">10–25 %</text>
+  <text x="1024" y="648" class="muted" font-size="10">25–50 %</text><text x="1110" y="648" class="muted" font-size="10">&gt;50 %</text>
+
+  <rect x="832" y="672" width="352" height="120" rx="6" class="card"/>
+  <text x="846" y="692" class="cap">HOT FILES · TOP BY READ BYTES (UPKEEP EXCLUDED)</text>
+  <text x="866" y="710" class="muted" font-size="10">File</text><text x="1060" y="710" class="muted" font-size="10">Sess.</text>
+  <text x="1100" y="710" class="muted" font-size="10" fill="#7c3aed">Yield</text><text x="1144" y="710" class="muted" font-size="10">Read</text>
+  <text x="846" y="728" class="muted">1</text><text x="866" y="728" class="mono" font-size="11">db-tables.md</text><text x="1066" y="728" class="mono" font-size="11">20</text><text x="1100" y="728" class="mono" font-size="11">18%</text><text x="1136" y="728" class="mono" font-size="11">354 KB</text>
+  <text x="846" y="746" class="muted">2</text><text x="866" y="746" class="mono" font-size="11">client-routing-and-l…</text><text x="1066" y="746" class="mono" font-size="11">16</text><text x="1100" y="746" class="mono" font-size="11">47%</text><text x="1136" y="746" class="mono" font-size="11">284 KB</text>
+  <text x="846" y="764" class="muted">3</text><text x="866" y="764" class="mono" font-size="11">client-component-map.md</text><text x="1066" y="764" class="mono" font-size="11">17</text><text x="1100" y="764" class="mono" font-size="11">62%</text><text x="1136" y="764" class="mono" font-size="11">166 KB</text>
+  <text x="846" y="782" class="muted">…</text>
+
+  <rect x="832" y="804" width="352" height="76" rx="6" class="card"/>
+  <text x="846" y="824" class="cap">UPKEEP · READS BY AGENTS THAT EDIT THE ARTICLE</text>
+  <text x="846" y="844" class="mono" font-size="11">client-component-map.md</text><text x="1060" y="844" class="mono" font-size="11">14 sess · 0.4 MB</text>
+  <text x="846" y="862" class="mono" font-size="11">index.md</text><text x="1060" y="862" class="mono" font-size="11">22 sess · 0.3 MB</text>
+  <rect x="828" y="800" width="360" height="84" rx="8" class="new"/>
+  <text x="1150" y="898" class="newlbl">FR-5</text>
+
+  <!-- legend -->
+  <rect x="16" y="1000" width="22" height="12" class="new"/>
+  <text x="46" y="1010" class="muted" font-size="11">Dashed purple outline = new or changed by this task (labels name the FR). Everything else is the existing repo OKF tab, unchanged.</text>
+  <text x="16" y="1034" class="muted" font-size="11">Wireframe — numbers illustrative. Light theme.</text>
+</svg>

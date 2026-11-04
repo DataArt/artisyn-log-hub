@@ -50,6 +50,7 @@ import { HarnessUsageService } from './reports/harness-usage.service';
 import { ReportsController } from './reports/reports.controller';
 import { SessionAttributionModule } from './session-attribution/session-attribution.module';
 import { SessionCostRecomputeService } from './session-cost/session-cost-recompute.service';
+import { SessionLogsDeltaService } from './session-logs-delta.service';
 import { ToolMonitorConfigService } from './tool-monitoring/tool-monitor-config.service';
 import { ToolMonitoringHookController } from './tool-monitoring/tool-monitoring-hook.controller';
 import { ToolMonitoringController } from './tool-monitoring/tool-monitoring.controller';
@@ -139,6 +140,8 @@ import { UploadQueueService } from './upload-queue.service';
     OtelProjectionService,
     // OTEL tabs: the read model behind OtelFactsController (DD-2 reader rule, DD-22 masking).
     OtelFactsReader,
+    // Session Map: incremental session logs behind GET …/logs/delta (session-map DD-7).
+    SessionLogsDeltaService,
   ],
   exports: [RepositoriesService, HookStateService, UploadQueueService],
 })

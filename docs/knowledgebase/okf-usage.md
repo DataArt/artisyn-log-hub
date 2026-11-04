@@ -8,7 +8,7 @@ tags:
   - session-view
   - reports
   - hook
-timestamp: "2026-10-28T00:00:00+04:00"
+timestamp: "2026-11-03T00:00:00+04:00"
 ---
 
 # OKF Usage
@@ -21,7 +21,7 @@ from the index, and is the KB laid out well for them (verdict). It has two sides
 an API-key route that hands the plain facts of one session to a local analysis skill. There is no
 LLM anywhere in it (FR-19).
 
-Task of origin: `docs/tasks/todo/2026-10-27-okf-usage-tab/` (requirements, impl-plan with the
+Task of origin: `docs/tasks/done/2026-10-27-okf-usage-tab/` (requirements, impl-plan with the
 DD-n design decisions quoted below).
 
 ## Data flow
@@ -83,7 +83,7 @@ A tree node with no usable repo root gets no rows (FR-2).
 | `POST /api/v2/logs` + `okfSnapshotId?`, `okfSnapshotFull?=1` → `unknownOkfSnapshotId?` | existing upload | `logs-v2.controller.ts` |
 
 Response types: `server/src/logs/okf/okf-usage.types.ts`, mirrored in
-`client/src/models/repositories.ts`. Full field lists: [api-reference.md](api-reference.md).
+`client/src/models/repositories.ts`.
 
 - An invalid `okfSnapshotId` (not `^[0-9a-f]{64}$`) is ignored silently, never a 400; an
   over-cap body (`OKF_SNAPSHOT_MAX_BYTES` = 10 MB) is ignored and the id stays unknown.

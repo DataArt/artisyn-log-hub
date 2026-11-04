@@ -1,28 +1,21 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQueryClient } from '@tanstack/react-query';
 import { Loader2, RefreshCw, Star, Trash2 } from 'lucide-react';
-import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import type { RepositorySession } from '../../../models/repositories';
 import type { ModelPricingMap } from '../../../models/pricing';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { cn } from '../../lib/cn';
 import { useAuth } from '../../context/AuthContext';
-import { LazyFallback } from '../../components/LazyFallback';
-import { SessionInfoTab } from './session-log/SessionInfoTab';
-import { SessionLogView } from './session-log/SessionLogView';
 import { SessionDetailHeader } from './SessionDetailHeader';
-import { RawLogsTab } from './session-log/RawLogsTab';
-import { SessionUsageTab } from './session-log/usage/SessionUsageTab';
-import { SessionSummaryTab } from './session-log/summary/SessionSummaryTab';
-import { useAiToolVersions } from '../../hooks/useAiToolVersions';
-import { AdvisorTab } from './AdvisorTab';
 import { deriveSessionUsage } from './session-log/usage/session-usage-derive';
 import { computeTreeCodeImpact } from './session-log/tree-code-impact';
 import type { ParsedSession } from './session-log/types';
-import { fetchSessionChangeSurface, type SessionLogsData } from '../../api';
+import type { SessionLogsData } from '../../api';
 import type { RepoConfig } from '../../../models/repositories';
 import { ToolViewProvider } from './session-log/tool-call-view/ToolViewContext';
 import { SessionTabBar } from './SessionTabBar';
+import { SessionTabContent } from './SessionTabContent';
 import { isChartTab, type TabVisibilityContext } from '../../tab-ids';
 import { collectBashCalls } from './session-log/bash-tab/collect-bash-calls';
 import { readChartTab, rememberChartTab } from './session-log/charts/chart-tab';
@@ -30,17 +23,6 @@ import type { LensId } from './session-lenses';
 import { useSessionLens } from './useSessionLens';
 
 import type { SessionTab } from './useRepositoryViewState';
-
-import {
-  SessionBashTab,
-  SessionChangeSurfaceTab,
-  SessionChartsTab,
-  SessionHarnessUsageTab,
-  SessionOkfTab,
-  SessionOtelTab,
-  SessionSysctxAnatomyTab,
-  SessionToolsTab,
-} from './session-lazy-tabs';
 
 export interface SessionDetailPaneProps {
   selectedSession: RepositorySession;
@@ -118,18 +100,21 @@ export function SessionDetailPane({
     (user?.id === selectedSession.userId ||
       (teamId !== undefined && logsQuery.isSuccess));
 
-  // Cross-tab turn targeting — transient, not a URL param.
-  const [targetTurnIndex, setTargetTurnIndex] = useState<number | null>(null);
-
-  // Called by a Summary deep link (a finding, a per-prompt cost row) to jump to a turn in the
-  // Logs tab.
-  const onGoToTurn = useCallback(
-    (turnIndex: number) => {
-      setTargetTurnIndex(turnIndex);
-      onSessionTabChange('logs');
-    },
-    [onSessionTabChange],
-  );
+  // session-map DD-10: on the Map tab, Refresh runs the Map's own poll, not a `/logs` refetch.
+  const mapRefreshRef = useRef<(() => void) | null>(null);
+  const registerMapRefresh = useCallback((fn: (() => void) | null) => {
+    mapRefreshRef.current = fn;
+  }, []);
+  const handleRefresh = () => {
+    const mapRefresh = mapRefreshRef.current;
+    if (sessionTab === 'session-map' && mapRefresh !== null) {
+      mapRefresh();
+      return;
+    }
+    void queryClient.invalidateQueries({
+      queryKey: ['session-logs', repoId, selectedSession.sessionId, teamId],
+    });
+  };
 
   useEffect(() => {
     if (sessionTab === 'raw-logs' && !canSeeRawLogs && !logsQuery.isPending) {
@@ -173,24 +158,6 @@ export function SessionDetailPane({
     () => collectBashCalls(mainLogs, subagentLogsMap).length,
     [mainLogs, subagentLogsMap],
   );
-
-  // Release history for the Summary tab's version detector.
-  const claudeReleaseHistory = useAiToolVersions();
-
-  // Only the *aggregate* is fetched here, for the Summary tab's
-  // Change-surface tile and its three CS detectors; the per-path rows stay behind the Change
-  // surface tab's own query. Same query key as that tab uses, so opening the tab reuses this
-  // cache entry rather than issuing a second identical request.
-  const changeSurfaceQuery = useQuery({
-    queryKey: [
-      'session-change-surface',
-      repoId,
-      selectedSession.sessionId,
-      teamId,
-    ],
-    queryFn: () =>
-      fetchSessionChangeSurface(repoId, selectedSession.sessionId, teamId),
-  });
 
   // A stale/bookmarked `tab=charts` deep link — the charts used to be sub-tabs of one Charts tab
   // and are plain session tabs now — opens the chart this browser last showed (Dashboard by
@@ -256,16 +223,7 @@ export function SessionDetailPane({
           />
         </button>
         <button
-          onClick={() =>
-            void queryClient.invalidateQueries({
-              queryKey: [
-                'session-logs',
-                repoId,
-                selectedSession.sessionId,
-                teamId,
-              ],
-            })
-          }
+          onClick={handleRefresh}
           title="Refresh"
           className="mr-2 flex items-center justify-center rounded border border-border p-1 text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
         >
@@ -322,155 +280,30 @@ export function SessionDetailPane({
           pricing={pricing ?? undefined}
           sessionModel={parsedLogs?.summary.model}
         >
-          {sessionTab === 'summary' ? (
-            <SessionSummaryTab
-              selectedSession={selectedSession}
-              parsedLogs={parsedLogs}
-              logsQuery={logsQuery}
-              mainLogs={mainLogs}
-              pricing={pricing}
-              sessionCost={sessionCost}
-              subagentLogsMap={subagentLogsMap}
-              agentParentMap={agentParentMap}
-              onSessionTabChange={onSessionTabChange}
-              onGoToTurn={onGoToTurn}
-              usage={usage}
-              codeImpact={codeImpact}
-              changeSurface={changeSurfaceQuery.data ?? null}
-              changeSurfaceLoading={changeSurfaceQuery.isLoading}
-              claudeReleaseHistory={claudeReleaseHistory}
-              bashCount={logsQuery.data ? bashCount : undefined}
-              onLensSwitch={handleLensChange}
-            />
-          ) : sessionTab === 'logs' ? (
-            <SessionLogView
-              logsData={logsQuery.data}
-              isLoading={logsQuery.isLoading}
-              error={logsQuery.error}
-              pricing={pricing ?? undefined}
-              repoConfig={repoConfig}
-              sessionSubagentCost={selectedSession.costBreakdown.subagentCost}
-              targetTurnIndex={targetTurnIndex}
-              onTargetTurnConsumed={() => setTargetTurnIndex(null)}
-              targetToolUseId={targetToolUseId}
-              onTargetTurnResolved={setTargetTurnIndex}
-              onTargetToolUseConsumed={onTargetToolUseConsumed}
-              onOpenAnatomy={() => onSessionTabChange('sysctx')}
-            />
-          ) : sessionTab === 'bash' ? (
-            <Suspense fallback={<LazyFallback />}>
-              <SessionBashTab
-                mainLogs={mainLogs}
-                subagentLogsMap={subagentLogsMap}
-                pricing={pricing ?? undefined}
-                sessionModel={parsedLogs?.summary.model}
-              />
-            </Suspense>
-          ) : isChartTab(sessionTab) ? (
-            <Suspense fallback={<LazyFallback />}>
-              <SessionChartsTab
-                chart={sessionTab}
-                onOpenChart={onSessionTabChange}
-                parsedLogs={parsedLogs}
-                subagentLogsMap={subagentLogsMap}
-                agentParentMap={agentParentMap}
-                isLoading={logsQuery.isLoading}
-                error={logsQuery.error}
-                pricing={pricing ?? null}
-                logsData={logsQuery.data}
-                topN={topN}
-                onTopNChange={onTopNChange}
-              />
-            </Suspense>
-          ) : sessionTab === 'usage' ? (
-            <SessionUsageTab
-              mainLogs={mainLogs}
-              subagentLogsMap={subagentLogsMap}
-              isLoading={logsQuery.isLoading}
-              error={logsQuery.error}
-              usage={usage}
-              codeImpact={codeImpact}
-            />
-          ) : sessionTab === 'advisor' ? (
-            <AdvisorTab
-              turnEndAdvisor={turnEndAdvisor}
-              isLoading={logsQuery.isLoading}
-              error={logsQuery.error}
-            />
-          ) : sessionTab === 'change-surface' ? (
-            <Suspense fallback={<LazyFallback />}>
-              <SessionChangeSurfaceTab
-                repoId={repoId}
-                sessionId={selectedSession.sessionId}
-                teamId={teamId}
-              />
-            </Suspense>
-          ) : sessionTab === 'harness-usage' ? (
-            <Suspense fallback={<LazyFallback />}>
-              <SessionHarnessUsageTab
-                mainLogs={mainLogs}
-                subagentLogsMap={subagentLogsMap}
-                agentParentMap={agentParentMap}
-                workflows={logsQuery.data?.workflows}
-                isLoading={logsQuery.isLoading}
-                error={logsQuery.error}
-              />
-            </Suspense>
-          ) : sessionTab === 'okf' ? (
-            <Suspense fallback={<LazyFallback />}>
-              <SessionOkfTab
-                repoId={repoId}
-                sessionId={selectedSession.sessionId}
-                teamId={teamId}
-              />
-            </Suspense>
-          ) : sessionTab === 'tools' ? (
-            <Suspense fallback={<LazyFallback />}>
-              <SessionToolsTab
-                repoId={repoId}
-                teamId={teamId}
-                sessionId={selectedSession.sessionId}
-              />
-            </Suspense>
-          ) : sessionTab === 'sysctx' ? (
-            <Suspense fallback={<LazyFallback />}>
-              <SessionSysctxAnatomyTab
-                mainLogs={mainLogs}
-                harnessSnapshot={logsQuery.data?.harnessSnapshot}
-                repoRoot={parsedLogs?.repoRoot ?? ''}
-                pricing={pricing}
-                sessionModel={parsedLogs?.summary.model}
-                isLoading={logsQuery.isLoading}
-                error={logsQuery.error}
-              />
-            </Suspense>
-          ) : sessionTab === 'otel' ? (
-            <Suspense fallback={<LazyFallback />}>
-              <SessionOtelTab
-                repoId={repoId}
-                sessionId={selectedSession.sessionId}
-                teamId={teamId}
-              />
-            </Suspense>
-          ) : sessionTab === 'raw-logs' ? (
-            <RawLogsTab
-              rawLogs={logsQuery.data?.main ?? []}
-              isLoading={logsQuery.isLoading}
-              parsedSession={parsedLogs}
-              pricing={pricing ?? undefined}
-              sessionModel={parsedLogs?.summary.model}
-            />
-          ) : (
-            <SessionInfoTab
-              session={selectedSession}
-              repoUrl={repoUrl}
-              parsedLogs={parsedLogs}
-              isLoading={logsQuery.isLoading}
-              eventCount={logsQuery.data?.main.length}
-              pricing={pricing ?? undefined}
-              codeImpact={codeImpact}
-            />
-          )}
+          <SessionTabContent
+            selectedSession={selectedSession}
+            sessionTab={sessionTab}
+            onSessionTabChange={onSessionTabChange}
+            onLensSwitch={handleLensChange}
+            repoId={repoId}
+            teamId={teamId}
+            logsQuery={logsQuery}
+            parsedLogs={parsedLogs}
+            subagentLogsMap={subagentLogsMap}
+            agentParentMap={agentParentMap}
+            pricing={pricing}
+            repoConfig={repoConfig}
+            topN={topN}
+            onTopNChange={onTopNChange}
+            repoUrl={repoUrl}
+            sessionCost={sessionCost}
+            usage={usage}
+            codeImpact={codeImpact}
+            bashCount={logsQuery.data ? bashCount : undefined}
+            registerMapRefresh={registerMapRefresh}
+            targetToolUseId={targetToolUseId}
+            onTargetToolUseConsumed={onTargetToolUseConsumed}
+          />
         </ToolViewProvider>
       </div>
     </>

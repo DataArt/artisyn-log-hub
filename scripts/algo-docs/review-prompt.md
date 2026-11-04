@@ -18,8 +18,9 @@ the author. Do not run anything and do not change any file. Write in English. Do
 Input: the doc docs/knowledgebase/algorithms/<name>.md and the code and test files named in its
 "## Code" section (implementation, twins, test).
 
-Background: the doc's "## Examples" section holds one ```examples block, a JSON array of rows
-{id, input, expected, note}. The test loads these rows with scripts/algo-docs/load-examples.cjs
+Background: the doc's rows live in docs/algorithm-examples/<name>.json (its "## Examples" section
+links to it), a JSON array of rows {id, input, expected, note}. Read that file too. The test loads
+these rows with scripts/algo-docs/load-examples.cjs
 and runs each one against the real code, so the rows ARE the test cases.
 
 Steps:

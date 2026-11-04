@@ -16,7 +16,7 @@ that pins the image tag, and Docker pulls it.
 | Piece | File |
 |---|---|
 | Release workflow | `.github/workflows/release.yml` (`name: release`) |
-| Fast checks (also the PR gate) | `.github/workflows/checks.yml` (`name: checks`, job `fast-checks`) |
+| Fast checks (also the PR gate) | `.github/workflows/checks.yml` (`name: checks`, jobs `fast-checks` and `db-state`) |
 | Version and run state | `scripts/ci/release-version.js` — algorithm doc `algorithms/release-version.md` |
 | Install kit and `SHA256SUMS` | `scripts/release-kit.js` — algorithm doc `algorithms/release-assets.md` |
 | Release notes | `scripts/ci/release-notes.js` — same doc |
@@ -50,7 +50,7 @@ line the product runs on.
   run that failed after its tag was created. The `plan` job refuses any ref other than
   `refs/heads/release`, so dispatching on another branch fails at once.
 - Runs are serialised (`concurrency: release`, never cancelled): a second push waits for the first.
-- `release.yml` is not a required check; `checks.yml` (job `fast-checks`) is, for PRs into `main`
+- `release.yml` is not a required check; `checks.yml` (jobs `fast-checks` and `db-state`) is, for PRs into `main`
   and `release` — see [Git Hooks and Secret Scanning](git-hooks.md).
 
 ## Version rules
@@ -97,8 +97,8 @@ table-tested in `algorithms/release-version.md`.
 | Job | Does |
 |---|---|
 | `plan` | Run state and version (above). |
-| `checks` | Calls `checks.yml`: client/server/tests typechecks, client/server/hook algorithm tests, build-script tests. A release is never built from a commit that fails them. |
-| `build` | Full mode only. One native runner per arch (`ubuntu-latest`, `ubuntu-24.04-arm`), `docker/build-push-action` with `VERSION=<version>`, `GIT_COMMIT=<sha>`, `provenance: mode=max`, `sbom: true`, pushed **by digest only** (no tag). |
+| `checks` | Calls `checks.yml`: client/server/tests typechecks, client/server/hook algorithm tests, build-script tests, and `db-state` (`npm run db:state -- --check` on a Postgres service: `docs/knowledgebase/db_state.sql` matches the migrations). A release is never built from a commit that fails them. |
+| `build` | Full mode only. One native runner per arch (`ubuntu-24.04`, `ubuntu-24.04-arm`; pinned, not `ubuntu-latest`), `docker/build-push-action` with `VERSION=<version>`, `GIT_COMMIT=<sha>`, `provenance: mode=max`, `sbom: true`, pushed **by digest only** (no tag). |
 | `manifest` | Full mode only. Joins both digests into the staging index `IMAGE:sha-<commit>`. |
 | `kit` | Secret-free: `node scripts/release-kit.js --version <version> --commit <sha> --out …`, uploaded as artifact `release-kit`. |
 | `vt-scan` | VirusTotal on the zip, `install.sh`, `install.ps1` (scopes `release-zip`, `install-sh`, `install-ps1`). Report-only: no `VIRUS_TOTAL_KEY` → `skipped` rows; a failure or the 40 min timeout never blocks `publish`. |
@@ -222,7 +222,7 @@ colleague for a manual test.
 
 Settings, not files — do these once:
 
-1. After the first PR run of `checks.yml`, add the status check `fast-checks` to the
+1. After the first PR run of `checks.yml`, add the status checks `fast-checks` and `db-state` to the
    `protect-main-release` ruleset next to `scan`.
 2. After the first release push, make the GHCR package `artisyn-log-hub` public and link it to the
    repository. Public is greyed out ("disabled by organization administrators") until an org owner

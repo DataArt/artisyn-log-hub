@@ -193,4 +193,68 @@ test('@S-SESS-04 delegator three levels deep: nesting and the cost of the tree @
     await expect(page).toHaveURL(/tab=timeline/);
     await expect(page.getByTestId('tab-session-timeline')).toHaveAttribute('aria-selected', 'true');
   });
+
+  // Session Map (2026-11-01 session-map-tab). Card ids are the agent ids without `agent-`;
+  // the Map prints costs as `$0.00`, so the Info figures are compared at two decimals.
+  const cardId = (k: string) => `session-map-agent-${id(k).replace(/^agent-/, '')}`;
+  const card = (k: string) => page.getByTestId(cardId(k));
+  const usd2 = (v: number) => `$${v.toFixed(2)}`;
+  const totalCalls = Object.values(E.tools).reduce((n, t) => n + t.calls, 0);
+
+  await test.step('13. Session Map: a finished session opens in Replay; main card own cost and the tree cost equal Info', async () => {
+    await openSession(page, owner, repo.repoId, sid, { tab: 'session-map' });
+    await expect(page.getByTestId('session-map-badge')).toContainText('Replay', { timeout: 20_000 });
+    await expect(page.getByTestId('session-map-live')).toHaveCount(0);
+    await expect(page.getByTestId('session-map-main')).toContainText(usd2(E.ownCostUsd!));
+    await expect(page.getByTestId('session-map-counter-cost')).toContainText(`/ ${usd2(E.costUsd!)}`);
+  });
+
+  await test.step('14. Session Map: every agent once, all in the direct column; B nested under A', async () => {
+    await expect(page.locator('[data-testid^="session-map-agent-"]')).toHaveCount(3);
+    const direct = page.getByTestId('session-map-group-direct');
+    await expect(direct.getByTestId('session-map-group-direct-header')).toContainText('Agents spawned by the main session');
+    for (const k of ['a', 'b', 'd']) await expect(direct.getByTestId(cardId(k))).toHaveCount(1);
+    // A nested card is indented by one NEST_INDENT and directly follows its parent.
+    await expect(card('b').locator('xpath=..')).toHaveCSS('margin-left', '16px');
+    await expect(card('a').locator('xpath=..')).toHaveCSS('margin-left', '0px');
+    const order = await direct
+      .locator('[data-testid^="session-map-agent-"]')
+      .evaluateAll((els) => els.map((e) => e.getAttribute('data-testid')));
+    expect(order.indexOf(cardId('b'))).toBe(order.indexOf(cardId('a')) + 1);
+  });
+
+  await test.step('15. Session Map: a card opens the panel; chips filter; a call row moves the marker; ⤢ opens the call modal', async () => {
+    await card('a').click();
+    const panel = page.getByTestId('session-map-panel');
+    await expect(panel).toBeVisible();
+    await expect(page).toHaveURL(/smSel=/);
+    const calls = panel.getByTestId('session-map-call');
+    const all = await calls.count();
+    expect(all).toBeGreaterThan(0);
+    await panel.getByTestId('session-map-chip-edit').click();
+    await expect(calls).not.toHaveCount(all);
+    await expect(calls.first()).toBeVisible();
+    await panel.getByTestId('session-map-chip-all').click();
+    await expect(calls).toHaveCount(all);
+
+    const marker = page.getByTestId('session-map-marker');
+    const before = Number(await marker.getAttribute('data-t'));
+    await calls.first().locator('button').first().click();
+    await expect.poll(async () => Number(await marker.getAttribute('data-t'))).toBeLessThan(before);
+
+    await calls.first().getByTestId('session-map-call-open').click();
+    const modal = page.getByRole('dialog', { name: /^Tool call:/ });
+    await expect(modal).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(modal).toHaveCount(0);
+  });
+
+  await test.step('16. Session Map: at the replay end the counters equal the totals', async () => {
+    await page.getByTestId('session-map-timeline').getByRole('button', { name: 'End' }).click();
+    await expect(page.getByTestId('session-map-counter-agents')).toContainText('3 / 3');
+    await expect(page.getByTestId('session-map-counter-cost')).toContainText(`${usd2(E.costUsd!)} / ${usd2(E.costUsd!)}`);
+    await expect(page.getByTestId('session-map-counter-calls').locator('span').nth(1)).toHaveText(String(totalCalls));
+    await expect(page.getByTestId('session-map-counter-failed').locator('span').nth(1)).toHaveText('0');
+    await expect(page.locator('[data-testid^="session-map-agent-"][data-state="future"]')).toHaveCount(0);
+  });
 });

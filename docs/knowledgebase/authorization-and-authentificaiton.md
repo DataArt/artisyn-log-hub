@@ -4,10 +4,17 @@ title: "Authorization and Authentication"
 description: "The four configurable auth modes, their env vars, per-mode route gating, the auth security hardening (TRUST_PROXY, brute-force login delay, self-service password change and account deletion), how Mode 1's localhost gate works inside a container, and the per-team access modes that decide whose sessions and prompts a caller may read."
 tags:
   - auth
-timestamp: "2026-08-06T22:00:00+04:00"
+timestamp: "2026-11-03T00:00:00+04:00"
 ---
 
 # Authorization and Authentication
+
+## Gotchas
+
+- The app-level `admin` role grants **no** session-data access: an admin sees an empty session list
+  for another user's personal repo and gets only their team role's rights in a team. Never add a
+  `role === 'admin'` branch to a data-access check. To view someone's sessions, sign in as the owner
+  (2c2b2d2; [The admin role grants no data access](#the-admin-role-grants-no-data-access)).
 
 Authentication is server-side session-based (`express-session` + `connect-pg-simple`, `auth_sessions`
 table), unchanged across all four modes — `SessionAuthGuard`/`SessionSerializer` don't vary by mode. What varies is
@@ -60,7 +67,7 @@ still throws at startup — only "not set at all" is treated as "assume Mode 2".
 A second env var, `PASSWORD_POLICY` (`any` | `mid` | `long`, default `long`), controls the strength rule applied to every
 password set under Mode 2/3 (`applyPasswordPolicy()`, `server/src/auth/utils/password-policy.ts`)
 — read directly from `process.env` rather than validated per-call, since the startup validator already guarantees a
-valid value. See [Password Requirements](password-requirements.md) for the exact per-level thresholds.
+valid value. See [Password policy](algorithms/password-policy.md) for the exact per-level thresholds.
 
 ### Signup and the session
 
@@ -201,8 +208,8 @@ a password, a password hash, or a reset/confirmation token. Logs land in
 Every mode-specific route is decorated `@AllowedAuthModes(...modes)` + `@UseGuards(AuthModeGuard, ...)`
 (`server/src/auth/guards/auth-mode.guard.ts`) — the guard 404s the route (not 403, to avoid confirming it exists) when
 the active `AUTH_MODE` isn't in its allow-list, checked before any credential/session guard runs. Routes with no
-`@AllowedAuthModes` (`logout`, `me`, `GET config`) are active in every mode. See `server-endpoint-map.md`'s
-`/api/v1/auth`/`/api/auth` sections for the full per-route matrix.
+`@AllowedAuthModes` (`logout`, `me`, `GET config`) are active in every mode. See `server-endpoint-map.md`
+§ Auth flows (summary); the per-route mode list is the `@AllowedAuthModes` decorators themselves.
 
 `GET me` has one further mode-conditional wrinkle even though it carries no `@AllowedAuthModes`:
 `AutoIdentifyGuard` (`server/src/auth/guards/auto-identify.guard.ts`) runs ahead of `SessionAuthGuard`

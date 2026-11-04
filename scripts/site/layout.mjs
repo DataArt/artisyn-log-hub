@@ -3,6 +3,8 @@
 //
 // Every URL the layout emits is relative (prefix `../` × depth), so the site works under any base
 // path (GitHub Pages serves it under /artisyn-log-hub/) and from a plain static server.
+// The one exception is 404.html (`page({ notFound: true })`): GitHub Pages serves it for a miss at
+// any depth, so a relative prefix cannot work there and every URL it emits is absolute (SITE_URL).
 // ESM because its only caller is ESM (unified/remark are ESM-only).
 
 export const SITE_URL = 'https://dataart.github.io/artisyn-log-hub/';
@@ -10,6 +12,12 @@ export const REPO_URL = 'https://github.com/DataArt/artisyn-log-hub';
 export const RELEASES_URL = `${REPO_URL}/releases`;
 
 export const SITE_NAME = 'Artisyn Log Hub';
+
+/** Link-preview image (Open Graph); the deck and the S-SITE-01 scenario hand-copy these values. */
+export const OG_IMAGE_URL = `${SITE_URL}assets/og-image.png`;
+export const OG_IMAGE_WIDTH = 1200;
+export const OG_IMAGE_HEIGHT = 630;
+export const OG_IMAGE_ALT = 'Log Hub cost flow: model to user to branch';
 
 /** Top-nav labels for nav.json sections (sections not listed here stay out of the top nav). */
 const SECTION_LABELS = [
@@ -31,6 +39,46 @@ export function escapeHtml(s) {
 /** Relative prefix from a page at `depth` (0 = site root) back to the site root. */
 export function prefixFor(depth) {
   return '../'.repeat(depth);
+}
+
+/**
+ * Absolute canonical URL of an output file (path relative to the site root, `/` or `\`).
+ * `index.html` → SITE_URL, `<dir>/index.html` → SITE_URL + `<dir>/`, anything else → SITE_URL + path.
+ */
+export function canonicalUrl(outPath) {
+  const p = String(outPath).replace(/\\/g, '/');
+  if (p === 'index.html') return SITE_URL;
+  if (p.endsWith('/index.html')) return SITE_URL + p.slice(0, -'index.html'.length);
+  return SITE_URL + p;
+}
+
+/** sitemap.xml (protocol 0.9) listing `urls`, sorted, with only `<loc>` per URL. */
+export function sitemapXml(urls) {
+  const locs = [...urls].sort().map((u) => `  <url><loc>${escapeHtml(u)}</loc></url>\n`).join('');
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${locs}</urlset>\n`;
+}
+
+/** Head tags after <title>: SEO + link-preview + icons for an indexable page, noindex + icons for 404. */
+function headMeta(prefix, fullTitle, path, description, notFound) {
+  const icons = `<link rel="icon" href="${escapeHtml(prefix)}assets/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="${escapeHtml(prefix)}assets/apple-touch-icon.png">`;
+  if (notFound) return `<meta name="robots" content="noindex">\n${icons}`;
+  const t = escapeHtml(fullTitle);
+  const d = escapeHtml(description);
+  const c = escapeHtml(canonicalUrl(path));
+  return `<meta name="description" content="${d}">
+<link rel="canonical" href="${c}">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="${escapeHtml(SITE_NAME)}">
+<meta property="og:title" content="${t}">
+<meta property="og:description" content="${d}">
+<meta property="og:url" content="${c}">
+<meta property="og:image" content="${escapeHtml(OG_IMAGE_URL)}">
+<meta property="og:image:width" content="${OG_IMAGE_WIDTH}">
+<meta property="og:image:height" content="${OG_IMAGE_HEIGHT}">
+<meta property="og:image:alt" content="${escapeHtml(OG_IMAGE_ALT)}">
+<meta name="twitter:card" content="summary_large_image">
+${icons}`;
 }
 
 export function docHref(prefix, slug) {
@@ -69,7 +117,7 @@ function sidebar(prefix, nav, activeSlug) {
     const links = sec.articles
       .map((a) => navLink(docHref(prefix, a.slug), a.title, a.slug === activeSlug))
       .join('');
-    return `<div class="docs-group"><h2 class="docs-group-title">${escapeHtml(sec.section)}</h2><ul>${links}</ul></div>`;
+    return `<div class="docs-group"><p class="docs-group-title">${escapeHtml(sec.section)}</p><ul>${links}</ul></div>`;
   });
   return `<aside class="docs-sidebar" aria-label="Documentation">${groups.join('')}</aside>`;
 }
@@ -124,9 +172,14 @@ function diagramScripts(prefix) {
  * @param {string} [o.activeSlug]  docs page slug; when set the three-column docs layout is used
  * @param {{depth: number, id: string, text: string}[]} [o.toc]  h2/h3 entries (shown when ≥ 3)
  * @param {{prev?: {slug: string, title: string}, next?: {slug: string, title: string}}} [o.prevNext]
+ * @param {boolean} [o.diagrams]   load Mermaid + diagrams.js
+ * @param {string} [o.path]        POSIX output path below the site root (`docs/<slug>.html`); required
+ *                                 unless `notFound` — gives the canonical / og:url
+ * @param {string} [o.description] meta / og description (50–160 chars); required unless `notFound`
+ * @param {boolean} [o.notFound]   the 404 page: noindex, no canonical/og tags, every URL absolute (SITE_URL)
  */
-export function page({ title, depth, nav, activeSection, body, activeSlug, toc, prevNext, diagrams }) {
-  const prefix = prefixFor(depth);
+export function page({ title, depth, nav, activeSection, body, activeSlug, toc, prevNext, diagrams, path, description, notFound }) {
+  const prefix = notFound ? SITE_URL : prefixFor(depth);
   const fullTitle = title && title !== SITE_NAME ? `${title} — ${SITE_NAME}` : SITE_NAME;
   const main = activeSlug
     ? `<div class="docs-layout">
@@ -141,7 +194,7 @@ ${tocBlock(toc)}
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${escapeHtml(fullTitle)}</title>
-<link rel="icon" href="data:,">
+${headMeta(prefix, fullTitle, path, description, notFound)}
 <link rel="stylesheet" href="${prefix}assets/theme.css">
 <script src="${prefix}assets/site.js" defer></script>
 ${diagrams ? diagramScripts(prefix) : ''}</head>

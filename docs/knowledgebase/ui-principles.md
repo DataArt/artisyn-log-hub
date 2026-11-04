@@ -5,7 +5,7 @@ description: "Access control messaging, error handling, color scheme (light-only
 tags:
   - client
   - ui
-timestamp: "2026-10-28T00:00:00+04:00"
+timestamp: "2026-11-03T00:00:00+04:00"
 ---
 
 if user tryies to access to something that he does not have acceess to - show "No access"
@@ -86,7 +86,7 @@ Such a metric instead uses **fixed colours per reported scope**, with a two-swat
 | Root + all recursive descendants | teal | `#14b8a6` |
 | Undefined ratio (zero denominator, renders `n/a`) | slate-400 | `#94a3b8` |
 
-Exported once as `CACHE_RATIO_SCOPE_COLORS` in `client/src/viewer/lib/cache-ratio-ui.ts` — never inline the hexes; six files consume them.
+Exported once as `CACHE_RATIO_SCOPE_COLORS` in `client/src/viewer/lib/cache-ratio-ui.ts` — never inline the hexes; grep `CACHE_RATIO_SCOPE_COLORS` to find every consumer before changing a colour.
 
 Two rules that follow from the same reasoning:
 

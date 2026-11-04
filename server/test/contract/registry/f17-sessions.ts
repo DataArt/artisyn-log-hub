@@ -487,6 +487,86 @@ export const f17Sessions: ContractFamily = {
       noDb: true,
     },
     {
+      // Session Map delta (2026-11-01 session-map-tab, DD-4..8): with no cursor the answer is a
+      // full snapshot — the root's artisyn and claude bodies, element for element.
+      id: 'F17-session-logs-delta',
+      route: 'GET /api/v1/repositories/:repoId/sessions/:sessionId/logs/delta',
+      actor: 'owner',
+      params: { repoId: '@R1.id', sessionId: '@s04.sessionId' },
+      expect: {
+        status: 200,
+        bodyMatches: { reload: false, subagentAppends: [], newSubagents: [] },
+      },
+      read: {
+        sql: `SELECT coalesce((SELECT body FROM logs WHERE session_id = $1 AND log_type = 'artisyn'),
+                              '[]'::jsonb) AS artisyn,
+                     (SELECT body FROM logs WHERE session_id = $1 AND log_type = 'claude') AS claude`,
+        args: ['@s04.id'],
+        shape: 'object',
+        fields: {
+          rootArtisynLines: { col: 'artisyn', as: 'json' },
+          rootClaudeLines: { col: 'claude', as: 'json' },
+        },
+      },
+    },
+    {
+      // A descendant contributes only its claude-subagent row (the /logs rule): `newSubagents`
+      // is every such row of s02's tree with its linkage, ordered by session id.
+      id: 'F17-session-logs-delta-subagents',
+      route: 'GET /api/v1/repositories/:repoId/sessions/:sessionId/logs/delta',
+      actor: 'owner',
+      params: { repoId: '@R1.id', sessionId: '@s02.sessionId' },
+      expect: {
+        status: 200,
+        bodyMatches: { reload: false, subagentAppends: [] },
+      },
+      read: {
+        sql: `WITH RECURSIVE tree AS (
+                SELECT s.id, s.session_id FROM sessions s WHERE s.id = $1
+                UNION ALL
+                SELECT c.id, c.session_id FROM sessions c JOIN tree t ON c.parent_session_id = t.session_id
+              )
+              SELECT s.session_id, s.parent_session_id, s.workflow_run_id, l.body AS logs
+                FROM tree t
+                JOIN sessions s ON s.id = t.id
+                JOIN logs l ON l.session_id = s.id AND l.log_type = 'claude-subagent'
+               WHERE s.id <> $1
+               ORDER BY s.session_id`,
+        args: ['@s02.id'],
+        shape: 'array',
+        path: 'newSubagents',
+        fields: {
+          sessionId: 'session_id',
+          parentSessionId: 'parent_session_id',
+          workflowRunId: 'workflow_run_id',
+          logs: { col: 'logs', as: 'json' },
+        },
+        strict: true,
+      },
+    },
+    {
+      id: 'F17-session-logs-delta-outsider',
+      route: 'GET /api/v1/repositories/:repoId/sessions/:sessionId/logs/delta',
+      actor: 'outsider',
+      params: { repoId: '@R1.id', sessionId: '@s04.sessionId' },
+      expect: { status: 403 },
+    },
+    {
+      // DD-4: an undecodable cursor is treated as empty — a full snapshot, never a 400.
+      id: 'F17-session-logs-delta-bad-cursor',
+      route: 'GET /api/v1/repositories/:repoId/sessions/:sessionId/logs/delta',
+      actor: 'owner',
+      params: { repoId: '@R1.id', sessionId: '@s04.sessionId' },
+      query: { cursor: 'not-a-cursor!!' },
+      expect: { status: 200, bodyMatches: { reload: false } },
+      read: {
+        sql: `SELECT body AS claude FROM logs WHERE session_id = $1 AND log_type = 'claude'`,
+        args: ['@s04.id'],
+        shape: 'object',
+        fields: { rootClaudeLines: { col: 'claude', as: 'json' } },
+      },
+    },
+    {
       id: 'F17-export-scope',
       route: 'GET /api/v1/repositories/:repoId/sessions/export-scope',
       actor: 'owner',

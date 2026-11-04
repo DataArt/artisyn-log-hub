@@ -19,7 +19,7 @@ permissions:
 jobs:
   scan:
     if: vars.GITLEAKS_ENABLED == 'true' || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     env:
       # Keep equal to the GITLEAKS_VERSION in docker-dev/Dockerfile.

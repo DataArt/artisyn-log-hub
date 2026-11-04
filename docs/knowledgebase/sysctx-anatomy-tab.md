@@ -25,7 +25,7 @@ It replaced the collapsible **System Context panel** at the top of the Logs tab
 
 The computation rules and worked examples are in the algorithm doc
 [System Context Anatomy Algorithm](algorithms/sysctx-anatomy.md) — this article is about the tab,
-its data flow and its UI contract. Task: `docs/tasks/todo/2026-10-29-sysctx-anatomy-tab/`.
+its data flow and its UI contract. Task: `docs/tasks/done/2026-10-29-sysctx-anatomy-tab/`.
 
 ## Files
 
@@ -42,7 +42,7 @@ All under `client/src/viewer/pages/repository/`:
 | `session-log/sysctx-anatomy/AnatomyDrilldowns.tsx` | Skills / Files / MCP / generic child tables |
 | `session-log/sysctx-anatomy/AnatomyCells.tsx` | Shared cells: number formatting, `GitBadge`, `DrillTable`, "Show all" toggle, hint content |
 | `session-log/StartupContextLine.tsx` | One-line summary at the top of Logs |
-| `SessionDetailPane.tsx` | Lazy import of the tab; passes `onOpenAnatomy={() => onSessionTabChange('sysctx')}` to `SessionLogView` |
+| `SessionTabContent.tsx` | Lazy import of the tab; passes `onOpenAnatomy={() => onSessionTabChange('sysctx')}` to `SessionLogView` |
 | `SessionTabBar.tsx`, `client/src/viewer/tab-ids.ts` | `sysctx` is the **last** tab, after Raw Logs |
 
 ## Data sources — no new request

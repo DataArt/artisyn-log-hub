@@ -17,7 +17,7 @@ The **Tools/MCP** main tab of a repository answers: which MCP servers and CLI to
 call, how often did a call fail or get killed, was the output useful (heuristic signals), and what
 exactly went in and came out of each call. There is no LLM anywhere in it.
 
-Task of origin: `docs/tasks/todo/2026-06-19-mcp-invocation-log-tab/` (requirements FR-1 … FR-8,
+Task of origin: `docs/tasks/done/2026-06-19-mcp-invocation-log-tab/` (requirements FR-1 … FR-8,
 impl-plan with the DD-n design decisions quoted below, research and POC).
 
 ## Two channels
@@ -251,7 +251,7 @@ Types: `server/src/logs/tool-monitoring/tool-monitoring.types.ts`, mirrored in
 ## Client: the Tools/MCP tab
 
 `client/src/viewer/pages/repository/tools/` — `RepoToolsTab.tsx`, main tab `tools` ("Tools/MCP",
-after Reports and before OKF, where `canSeeTeamWideTabs` allows). File-by-file:
+after Reports and before OKF, where `canSeeTeamWideTabs` allows). Folder-level map:
 [client-component-map.md](client-component-map.md).
 
 - Top bar (date range, status, search, scope chip, "Monitored tools (N)" — opens the settings'

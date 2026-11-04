@@ -1,0 +1,63 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 780" width="1280" height="780" font-family="ui-monospace, Consolas, monospace">
+  <!-- Light theme tokens from site/assets/theme.css: page #f3f1ea, surface #faf9f4, text #17201b, accent #1f5c45, label #9a6614, border #b8b5a8 -->
+  <rect width="1280" height="780" fill="#ffffff"/>
+  <text x="20" y="28" font-size="16" font-weight="bold" fill="#17201b">Wireframe: 404 page (FR4 candidate) + real favicon in the browser tab (FR2)</text>
+
+  <!-- Browser chrome -->
+  <rect x="20" y="44" width="1240" height="716" fill="#e8e5db" stroke="#b8b5a8"/>
+  <rect x="20" y="44" width="1240" height="36" fill="#d9d6ca"/>
+  <rect x="32" y="50" width="330" height="30" fill="#f3f1ea" stroke="#b8b5a8"/>
+  <!-- favicon (client/public/favicon.svg reused as site/assets/favicon.svg) -->
+  <g transform="translate(42,57) scale(0.5)">
+    <rect width="32" height="32" rx="16" fill="#3352cc"/>
+    <rect x="8" y="11" width="16" height="2.4" rx="1.2" fill="#ffffff"/>
+    <rect x="8" y="15" width="11" height="2.4" rx="1.2" fill="#c3cdfa"/>
+    <rect x="8" y="19" width="14" height="2.4" rx="1.2" fill="#ffffff"/>
+  </g>
+  <text x="66" y="70" font-size="12" fill="#17201b" font-family="system-ui, Segoe UI, sans-serif">Page not found — Artisyn Log Hub</text>
+  <rect x="32" y="84" width="1216" height="26" fill="#faf9f4" stroke="#b8b5a8"/>
+  <text x="44" y="101" font-size="12" fill="#555">dataart.github.io/artisyn-log-hub/docs/old-page-that-moved.html</text>
+
+  <!-- Callout: favicon -->
+  <line x1="50" y1="56" x2="420" y2="56" stroke="#9a6614" stroke-dasharray="4 3"/>
+  <rect x="420" y="46" width="560" height="22" fill="#fff8e6" stroke="#9a6614"/>
+  <text x="428" y="61" font-size="11" fill="#9a6614">FR2: &lt;link rel="icon" href="{abs}/assets/favicon.svg" type="image/svg+xml"&gt; (was data:,)</text>
+
+  <!-- Site page -->
+  <rect x="32" y="114" width="1216" height="634" fill="#f3f1ea"/>
+  <!-- Header (same as every site page) -->
+  <rect x="32" y="114" width="1216" height="52" fill="#f3f1ea" stroke="#d9d6ca"/>
+  <text x="56" y="146" font-size="17" font-weight="bold" fill="#1f5c45">Artisyn Log Hub</text>
+  <text x="236" y="146" font-size="13" fill="#17201b">Home   Features   Get started   Configuration   Using Log Hub   Data &amp; security   Questions   Deck   GitHub ↗</text>
+
+  <!-- Main content -->
+  <text x="96" y="226" font-size="13" fill="#9a6614" letter-spacing="1">// 404 · PAGE NOT FOUND</text>
+  <text x="96" y="282" font-size="38" font-weight="bold" fill="#1f5c45">This page does not exist.</text>
+  <text x="96" y="324" font-size="16" fill="#17201b" font-family="system-ui, Segoe UI, sans-serif">The link may be old, or the page moved when the docs were reorganised.</text>
+  <text x="96" y="350" font-size="16" fill="#17201b" font-family="system-ui, Segoe UI, sans-serif">Start from the home page or the documentation.</text>
+
+  <rect x="96" y="382" width="150" height="44" fill="#1f5c45"/>
+  <text x="171" y="409" font-size="13" fill="#ffffff" text-anchor="middle" letter-spacing="1">HOME</text>
+  <rect x="260" y="382" width="190" height="44" fill="#faf9f4" stroke="#1f5c45"/>
+  <text x="355" y="409" font-size="13" fill="#1f5c45" text-anchor="middle" letter-spacing="1">GET STARTED</text>
+  <rect x="464" y="382" width="150" height="44" fill="#faf9f4" stroke="#1f5c45"/>
+  <text x="539" y="409" font-size="13" fill="#1f5c45" text-anchor="middle" letter-spacing="1">QUESTIONS</text>
+
+  <!-- Footer -->
+  <line x1="32" y1="700" x2="1248" y2="700" stroke="#d9d6ca"/>
+  <text x="96" y="728" font-size="12" fill="#555">MIT · GitHub · Releases · Changelog · not affiliated with Anthropic</text>
+
+  <!-- Annotation panel -->
+  <rect x="720" y="200" width="500" height="250" fill="#ffffff" stroke="#9a6614" stroke-dasharray="5 3"/>
+  <text x="736" y="224" font-size="13" font-weight="bold" fill="#9a6614">Notes (open questions, not decided)</text>
+  <text x="736" y="250" font-size="12" fill="#17201b">• Output file: 404.html at the site root; GitHub</text>
+  <text x="736" y="268" font-size="12" fill="#17201b">  Pages serves it for a missing URL at any depth,</text>
+  <text x="736" y="286" font-size="12" fill="#17201b">  so CSS/JS/favicon/nav links must be absolute</text>
+  <text x="736" y="304" font-size="12" fill="#17201b">  (SITE_URL-based or &lt;base href&gt;), not ../ relative.</text>
+  <text x="736" y="328" font-size="12" fill="#17201b">• &lt;meta name="robots" content="noindex"&gt;,</text>
+  <text x="736" y="346" font-size="12" fill="#17201b">  no canonical, not listed in sitemap.xml.</text>
+  <text x="736" y="370" font-size="12" fill="#17201b">• Same header/footer as page() in layout.mjs;</text>
+  <text x="736" y="388" font-size="12" fill="#17201b">  no nav item is marked aria-current.</text>
+  <text x="736" y="412" font-size="12" fill="#17201b">• No new scripts/fonts; buttons reuse the</text>
+  <text x="736" y="430" font-size="12" fill="#17201b">  home-page hero button styles.</text>
+</svg>

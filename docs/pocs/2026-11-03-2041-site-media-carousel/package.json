@@ -1,0 +1,16 @@
+{
+  "name": "poc-site-media-carousel",
+  "version": "0.0.0",
+  "private": true,
+  "description": "PoC: capture Log Hub screens for the site media carousel and README GIF; preview the carousel in the built home page",
+  "type": "module",
+  "scripts": {
+    "stills": "node capture.mjs stills",
+    "clip": "node capture.mjs clip",
+    "preview": "node preview.mjs"
+  },
+  "dependencies": {
+    "gifenc": "^1.0.3",
+    "pngjs": "^7.0.0"
+  }
+}

@@ -7,7 +7,9 @@
 # Required check: the job `fast-checks` — the status-check name in the `protect-main-release`
 # ruleset next to `scan`.
 #
-# No secrets, no DB, no dev app: the same `static` checks as .claude/repo_config/repo-health-checks.json
+# The second job, `db-state`, is the one exception to "no DB": see its own comment below.
+#
+# fast-checks: no secrets, no DB, no dev app: the same `static` checks as .claude/repo_config/repo-health-checks.json
 # (minus lint). A called workflow does not inherit the caller's `env`, hence its own BUN_VERSION.
 # No top-level concurrency: a release run must never be cancelled by a PR run (or vice versa).
 # Rules: docs/tasks/todo/2026-10-20-github-release-pipeline/impl-plan.md (Design Decisions 1-2).
@@ -27,7 +29,7 @@ env:
 jobs:
   fast-checks:
     name: fast-checks
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -88,3 +90,46 @@ jobs:
       - name: Hook algorithm tests
         working-directory: hook
         run: npm test
+
+  # docs/knowledgebase/db_state.sql must match the migrations: a new migration without a regenerated
+  # file (or a hand edit of it) fails here. Its own job, because fast-checks runs without a DB. The
+  # generator migrates a throw-away database on the service Postgres with the server's own
+  # `npm run migrate` and compares the DDL it reads back. Keep the Postgres major in step with the
+  # dev DB and the production image: the catalog's DDL text can differ between majors.
+  # Required check: `db-state`, next to `fast-checks` in the `protect-main-release` ruleset.
+  db-state:
+    name: db-state
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:18.4@sha256:a02db8cac496f15b094798a38254f14d6e00741f709360e5e00bb6668ea31636
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+          package-manager-cache: false
+
+      - name: Install dependencies
+        run: |
+          set -eu
+          npm ci --ignore-scripts
+          (cd server && npm ci --ignore-scripts)
+
+      - name: db_state.sql is up to date
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/postgres
+        run: npm run db:state -- --check

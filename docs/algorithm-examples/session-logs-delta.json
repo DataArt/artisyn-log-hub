@@ -1,0 +1,169 @@
+[
+  {
+    "id": "SLD-01",
+    "input": {"op": "roundtrip", "rows": [
+      {"sid": 1, "t": "a", "ut": "k2m9x0", "n": 0, "fp": ""},
+      {"sid": 1, "t": "c", "ut": "k2m9x1", "n": 7, "fp": "0123456789ab"},
+      {"sid": 42, "t": "s", "ut": "k2m9x2", "n": 3, "fp": "ffffffffffff"}
+    ]},
+    "expected": {"rows": [
+      {"sid": 1, "t": "a", "ut": "k2m9x0", "n": 0, "fp": ""},
+      {"sid": 1, "t": "c", "ut": "k2m9x1", "n": 7, "fp": "0123456789ab"},
+      {"sid": 42, "t": "s", "ut": "k2m9x2", "n": 3, "fp": "ffffffffffff"}
+    ]},
+    "note": "Codec rules 1-2: every entry is valid (n = 0 pairs with fp '', n > 0 with a 12-hex fp), so decode returns exactly what was encoded, in order."
+  },
+  {
+    "id": "SLD-02",
+    "input": {"op": "decode", "json": {"v": 1, "r": [["z", "c", "abc", 2, "00aa00aa00aa"]]}},
+    "expected": {"rows": [{"sid": 35, "t": "c", "ut": "abc", "n": 2, "fp": "00aa00aa00aa"}]},
+    "note": "sid is base 36: 'z' = 35. ut stays the base-36 string 'abc'."
+  },
+  {
+    "id": "SLD-03",
+    "input": {"op": "decode", "raw": "eyJ2IjoxfQ==!"},
+    "expected": {"rows": []},
+    "note": "Rule 2: '=' and '!' are outside base64url, so the cursor is empty."
+  },
+  {
+    "id": "SLD-04",
+    "input": {"op": "decode", "raw": "bm90LWpzb24"},
+    "expected": {"rows": []},
+    "note": "Rule 2: valid base64url of the text 'not-json', which is not JSON, so the cursor is empty."
+  },
+  {
+    "id": "SLD-05",
+    "input": {"op": "decode", "json": {"v": 2, "r": [["1", "c", "abc", 2, "00aa00aa00aa"]]}},
+    "expected": {"rows": []},
+    "note": "Rule 2: v = 2 is not the known version 1, so the cursor is empty although the entry is valid."
+  },
+  {
+    "id": "SLD-06",
+    "input": {"op": "decode", "json": {"v": 1, "r": {"1": "c"}}},
+    "expected": {"rows": []},
+    "note": "Rule 2: r is an object, not an array, so the cursor is empty."
+  },
+  {
+    "id": "SLD-07",
+    "input": {"op": "decode", "json": {"v": 1, "r": [["1", "c", "abc", 2, "00aa00aa00aa"], ["2", "x", "abc", 2, "00aa00aa00aa"]]}},
+    "expected": {"rows": []},
+    "note": "Rule 2: the second entry has type code 'x'; any bad entry empties the whole cursor, so the good first entry is not kept either."
+  },
+  {
+    "id": "SLD-08",
+    "input": {"op": "decode", "json": {"v": 1, "r": [["1", "c", "abc", 0, "00aa00aa00aa"]]}},
+    "expected": {"rows": []},
+    "note": "Rule 2: n = 0 must have fp '' (there is no line n-1 to fingerprint), so the entry and the cursor are bad."
+  },
+  {
+    "id": "SLD-09",
+    "input": {"op": "decode", "repeat": {"char": "A", "count": 12001}},
+    "expected": {"rows": []},
+    "note": "Rule 2: 12 001 characters > DELTA_CURSOR_MAX_CHARS (12 000), so the cursor is empty before any decoding."
+  },
+  {
+    "id": "SLD-10",
+    "input": {"op": "decode", "raw": ""},
+    "expected": {"rows": []},
+    "note": "Rule 2: '' is the empty cursor (first poll)."
+  },
+  {
+    "id": "SLD-11",
+    "input": {"op": "encode", "count": 300, "row": {"t": "s", "ut": "zzzzzzzzzz", "n": 100, "fp": "0123456789ab"}},
+    "expected": {"empty": true},
+    "note": "Rule 1: each entry like [\"8c\",\"s\",\"zzzzzzzzzz\",100,\"0123456789ab\"] is 41-42 JSON characters, so 300 of them plus commas and the {\"v\":1,\"r\":[…]} wrapper are 12 878; base64 adds a third, 17 171 > 12 000, so the cursor is ''."
+  },
+  {
+    "id": "SLD-12",
+    "input": {"op": "encode", "count": 100, "row": {"t": "s", "ut": "zzzzzzzzzz", "n": 100, "fp": "0123456789ab"}},
+    "expected": {"empty": false},
+    "note": "Rule 1: 100 entries of at most 42 JSON characters are under 4 300; base64 gives under 5 800 ≤ 12 000, so the cursor is kept."
+  },
+  {
+    "id": "SLD-13",
+    "input": {"op": "classify",
+      "cursor": [{"sid": 1, "t": "c", "ut": "aa", "n": 5, "fp": "0123456789ab"}],
+      "current": [{"sid": 1, "t": "c", "ut": "aa"}],
+      "tree": [1]},
+    "expected": {"unchanged": ["1:c"], "changed": [], "new": [], "stale": []},
+    "note": "Rule 3: same key, same ut 'aa', sid 1 in the tree → unchanged."
+  },
+  {
+    "id": "SLD-14",
+    "input": {"op": "classify",
+      "cursor": [{"sid": 1, "t": "c", "ut": "aa", "n": 5, "fp": "0123456789ab"}],
+      "current": [{"sid": 1, "t": "c", "ut": "ab"}],
+      "tree": [1]},
+    "expected": {"unchanged": [], "changed": ["1:c"], "new": [], "stale": []},
+    "note": "Rule 3: ut moved from 'aa' to 'ab' → changed (the body slice after n = 5 is read)."
+  },
+  {
+    "id": "SLD-15",
+    "input": {"op": "classify",
+      "cursor": [{"sid": 1, "t": "c", "ut": "aa", "n": 5, "fp": "0123456789ab"}],
+      "current": [{"sid": 1, "t": "c", "ut": "aa"}, {"sid": 7, "t": "s", "ut": "b1"}],
+      "tree": [1, 7]},
+    "expected": {"unchanged": ["1:c"], "changed": [], "new": ["7:s"], "stale": []},
+    "note": "Rule 4: 7:s is in current but not in the cursor → new (read in full); 1:c unchanged by rule 3."
+  },
+  {
+    "id": "SLD-16",
+    "input": {"op": "classify",
+      "cursor": [{"sid": 1, "t": "c", "ut": "aa", "n": 5, "fp": "0123456789ab"}, {"sid": 7, "t": "s", "ut": "b1", "n": 2, "fp": "abcdefabcdef"}],
+      "current": [{"sid": 1, "t": "c", "ut": "aa"}, {"sid": 7, "t": "s", "ut": "b1"}],
+      "tree": [1]},
+    "expected": {"unchanged": ["1:c"], "changed": [], "new": [], "stale": ["7:s"]},
+    "note": "Rule 2: sid 7 is no longer in the tree → stale, even though a current row with the same ut exists. 7:s is in the cursor, so rule 4 does not make it new."
+  },
+  {
+    "id": "SLD-17",
+    "input": {"op": "classify",
+      "cursor": [{"sid": 1, "t": "a", "ut": "aa", "n": 3, "fp": "0123456789ab"}, {"sid": 1, "t": "c", "ut": "ab", "n": 5, "fp": "0123456789ab"}],
+      "current": [{"sid": 1, "t": "c", "ut": "ab"}],
+      "tree": [1]},
+    "expected": {"unchanged": ["1:c"], "changed": [], "new": [], "stale": ["1:a"]},
+    "note": "Rule 2: no current row has key 1:a (the artisyn row is gone) → stale; 1:c unchanged."
+  },
+  {
+    "id": "SLD-18",
+    "input": {"op": "classify",
+      "cursor": [{"sid": 1, "t": "c", "ut": "aa", "n": 5, "fp": "0123456789ab"}, {"sid": 1, "t": "c", "ut": "zz", "n": 9, "fp": "ffffffffffff"}],
+      "current": [{"sid": 1, "t": "c", "ut": "aa"}],
+      "tree": [1]},
+    "expected": {"unchanged": ["1:c"], "changed": [], "new": [], "stale": []},
+    "note": "Rule 1: the second 1:c entry is skipped; the first one has the current ut 'aa' → unchanged, and the row is in exactly one bucket."
+  },
+  {
+    "id": "SLD-19",
+    "input": {"op": "classify",
+      "cursor": [{"sid": 1, "t": "a", "ut": "a1", "n": 2, "fp": "111111111111"}, {"sid": 1, "t": "c", "ut": "c1", "n": 9, "fp": "222222222222"}, {"sid": 4, "t": "s", "ut": "s4", "n": 6, "fp": "333333333333"}, {"sid": 5, "t": "s", "ut": "s5", "n": 1, "fp": "444444444444"}],
+      "current": [{"sid": 1, "t": "a", "ut": "a1"}, {"sid": 1, "t": "c", "ut": "c1"}, {"sid": 4, "t": "s", "ut": "s4"}, {"sid": 5, "t": "s", "ut": "s5"}],
+      "tree": [1, 4, 5]},
+    "expected": {"unchanged": ["1:a", "1:c", "4:s", "5:s"], "changed": [], "new": [], "stale": []},
+    "note": "Nothing moved: every key is in the tree with the same ut (rule 3), and every current key is in the cursor (rule 4). changed and new are empty, so the service reads no logs.body."
+  },
+  {
+    "id": "SLD-20",
+    "input": {"op": "growth", "prevN": 5, "prevFp": "0123456789ab", "newLen": 8, "fpAtPrevN": "0123456789ab"},
+    "expected": {"growth": "append"},
+    "note": "Growth rules 1-3: 8 ≥ 5 and line 4 still has the same fingerprint → append body[5:], i.e. 3 lines."
+  },
+  {
+    "id": "SLD-21",
+    "input": {"op": "growth", "prevN": 5, "prevFp": "0123456789ab", "newLen": 5, "fpAtPrevN": "0123456789ab"},
+    "expected": {"growth": "append"},
+    "note": "Rule 3: same length and fingerprint (updated_at moved without new lines) → append body[5:], which is empty."
+  },
+  {
+    "id": "SLD-22",
+    "input": {"op": "growth", "prevN": 5, "prevFp": "0123456789ab", "newLen": 4, "fpAtPrevN": ""},
+    "expected": {"growth": "stale"},
+    "note": "Rule 1: 4 < 5, the body shrank → stale (reload)."
+  },
+  {
+    "id": "SLD-23",
+    "input": {"op": "growth", "prevN": 5, "prevFp": "0123456789ab", "newLen": 9, "fpAtPrevN": "ba9876543210"},
+    "expected": {"growth": "stale"},
+    "note": "Rule 2: the body is longer, but line 4 now has another fingerprint (it was rewritten) → stale."
+  }
+]

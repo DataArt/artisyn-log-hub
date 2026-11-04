@@ -5,7 +5,7 @@ description: "Token counting and cost formulas: TokenBreakdown fields, computeCo
 tags:
   - tokens
   - cost
-timestamp: "2026-07-20T16:37:18+04:00"
+timestamp: "2026-11-03T00:00:00+04:00"
 ---
 
 # LLM Call Math
@@ -170,7 +170,7 @@ Worked checks: 1 000 000 Opus-5 **1h** cache-write tokens → `1e6/1e6 × 10.00 
 `SELECT` wants `NULL`; a rollup `SUM` wants `0.0` for the unpriced member so its priced siblings
 still add up). For the stored cost (`session_costs`, below) "unpriced" is `sc.cost IS NULL`, and a
 missing `session_costs` row counts as unpriced too. A fake `$0.00` is indistinguishable from a genuinely free session — which is exactly
-why `costUnavailableReason: 'unknown-model'` exists on the API rows (§ `api-reference.md`) and why
+why `costUnavailableReason: 'unknown-model'` exists on the API rows (`client/src/models/repositories.ts`) and why
 `NoPricingBadge` replaces the figure in the UI. Derive that flag from the same value that produced the cost (`sc.cost IS NULL` for stored
 readers, `model_id IS NULL` for a live lookup), so the two can never contradict each other.
 

@@ -7,7 +7,7 @@ tags:
   - server
   - build
   - performance
-timestamp: "2026-08-21T22:40:00+04:00"
+timestamp: "2026-11-03T00:00:00+04:00"
 ---
 
 # Static Asset Serving
@@ -15,6 +15,17 @@ timestamp: "2026-08-21T22:40:00+04:00"
 Read this before touching anything that serves the built client: the `ServeStaticModule`
 registration, `client/package.json` `"build"`, the `Dockerfile` `client-build` stage, or the
 `Cache-Control`/`Content-Encoding` headers on client assets.
+
+## Gotchas
+
+- Never hard-code `../public/static` for server-side files (installer tarballs,
+  `installer-version.json`): use `resolveStaticDir()` in `server/src/common/static-dir.ts`. It covers
+  three runtime layouts — the ncc bundle (`dist/index.js`, assets in `dist/public/static`), TS source
+  under ts-node / jest (`server/src/public/static`) and the plain-tsc `dist/` of `nest start --watch`,
+  where `dist/public/static` exists but holds no tarball. The naive path made the installer download
+  404 twice, once per missed layout (header comment of `static-dir.ts`).
+- `npm run start:dev` exercises only the plain-tsc layout, so check a change to static paths also
+  in the ncc bundle (Docker image or the scenario stand), not just in dev.
 
 ## 1. How client assets reach the runtime
 

@@ -7,8 +7,8 @@ After you change server code, add tests of **only these three kinds** (CLAUDE.md
 and only where the change needs them — do not multiply tests:
 
 1. **Algorithm** — the change touches an algorithm with a doc in `docs/knowledgebase/algorithms/`:
-   add/change rows in that doc's examples block; the existing `*.algo.spec.ts` reads them. A new
-   `*.algo.spec.ts` only with a new algorithm doc.
+   add/change rows in its rows file `docs/algorithm-examples/<name>.json`; the existing
+   `*.algo.spec.ts` reads them. A new `*.algo.spec.ts` only with a new algorithm doc and rows file.
 2. **API contract** — a new or changed route: its row in `server/test/contract/registry/` (the
    meta-test fails otherwise). Run `npm run test:contract` (from `server/`).
 3. **Scenario** — the behaviour: a step in an existing scenario in `tests/scenarios/` (grep the

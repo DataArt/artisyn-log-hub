@@ -1,0 +1,18 @@
+{
+  "env": {
+    "MCP_TIMEOUT": "90000"
+  },
+  "enabledPlugins": {
+    "typescript-lsp@claude-plugins-official": true,
+    "log-hub-hooks@artisyn-e798dd87": true,
+    "adlc-lh@artisyn-e798dd87": true
+  },
+  "extraKnownMarketplaces": {
+    "artisyn-e798dd87": {
+      "source": {
+        "source": "directory",
+        "path": "./.artisyn/marketplace"
+      }
+    }
+  }
+}

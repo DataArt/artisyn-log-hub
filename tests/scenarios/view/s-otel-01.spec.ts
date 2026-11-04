@@ -50,6 +50,7 @@ import {
   plus,
   spanLine,
   spanLines,
+  transcriptBodies,
   UNKNOWN_QUERY_SOURCE,
   type OtelLine,
   type TranscriptSpec,
@@ -71,11 +72,27 @@ import {
   type OtelSpanRow,
 } from '../helpers/otel';
 import { ownRepoId } from '../helpers/prompt-session';
+import { waitForQueueIdle } from '../helpers/queue';
 import { openSession, selectSessionTab } from '../helpers/session-view';
 import { addTeamRepo, createTeam, inviteAndAccept, setMemberRoles, skipNewUserNudge } from '../helpers/teams';
 import { shiftSessionTree } from '../helpers/time-shift';
 
 const HOUR_MS = 60 * 60 * 1000;
+
+/** `GET …/sessions/:sessionId/logs/delta` (2026-11-01 session-map-tab), the fields the steps read. */
+type SessionLogsDelta =
+  | { reload: true; serverTime: string }
+  | {
+      reload: false;
+      rootArtisynLines: Array<Record<string, unknown>>;
+      rootClaudeLines: Array<Record<string, unknown>>;
+      subagentAppends: unknown[];
+      newSubagents: unknown[];
+      workflows: unknown[] | null;
+      liveness: { hasOtel: boolean; live: boolean; lastActivityAt: string | null };
+      serverTime: string;
+      cursor: string;
+    };
 
 /**
  * The hook-reported reasons of a session without OTEL, with the panel title, help label and help
@@ -629,7 +646,7 @@ test('@S-OTEL-01 repository and session OTEL tabs from uploaded chunks @mode-a',
 // =============================================================================================
 
 test('@S-OTEL-01 live session tab: realtime batches, highlight, delta polls, pause, confirm and gap fill @mode-a', async ({ api, db, users, page }) => {
-  test.setTimeout(360_000);
+  test.setTimeout(480_000);
   const run = randomBytes(4).toString('hex');
   const owner = await users.user('user', { label: 'otel01-live' });
   const key = await createApiKey(owner.api);
@@ -833,6 +850,99 @@ test('@S-OTEL-01 live session tab: realtime batches, highlight, delta polls, pau
     await fresh.clock.fastForward('10:30');
     await expect(indicator).toHaveAttribute('data-state', 'idle');
     await fresh.close();
+  });
+
+  // --- Session Map (2026-11-01 session-map-tab): the logs delta route and the LIVE / Replay tab ---
+  const mapSid = `otel01-${run}-map`;
+  const mapSpec = (requestIds: string[]): TranscriptSpec => ({ sessionId: mapSid, prompt: `map session ${run}`, repoUrls: [repoUrl], branch: 'main', at: base, requestIds });
+  const uploadClaude = async (sessionId: string, body: string): Promise<void> => {
+    const res = await api.post('/api/v2/logs', {
+      params: { sessionId, type: 'claude' },
+      headers: { 'Content-Type': 'application/x-ndjson', 'X-API-Key': key.key },
+      data: body,
+    });
+    expect(res.status(), `claude log of ${sessionId}: ${await res.text()}`).toBe(201);
+    await waitForQueueIdle(db, owner.id);
+  };
+  const delta = async (sessionId: string, cursor?: string): Promise<SessionLogsDelta> => {
+    const q = cursor ? `?cursor=${encodeURIComponent(cursor)}` : '';
+    const res = await owner.api.get(`/api/v1/repositories/${repoId}/sessions/${encodeURIComponent(sessionId)}/logs/delta${q}`);
+    expect(res.status(), `logs delta of ${sessionId}: ${await res.text()}`).toBe(200);
+    return (await res.json()) as SessionLogsDelta;
+  };
+  const uuids = (lines: Array<Record<string, unknown>>) => lines.map((l) => l.uuid);
+
+  let mapCursor = '';
+  await test.step('Session Map (API). the delta without a cursor is a full snapshot of a session without OTEL: both root logs, no liveness', async () => {
+    await uploadTranscript(api, key.key, mapSpec([`m${run}-req-1`]), queue);
+    const d = await delta(mapSid);
+    if (d.reload) throw new Error('an empty cursor never answers reload');
+    expect(uuids(d.rootClaudeLines)).toEqual([`${mapSid}-u0`, `${mapSid}-a0`]);
+    expect(d.rootArtisynLines.length).toBeGreaterThan(0);
+    expect(d).toMatchObject({ subagentAppends: [], newSubagents: [], liveness: { hasOtel: false, live: false, lastActivityAt: null } });
+    expect(d.cursor).not.toBe('');
+    mapCursor = d.cursor;
+  });
+
+  await test.step('Session Map (API). the hook re-uploads the transcript with one more answer: the cursor call returns exactly the new lines; an unchanged call returns no lines and workflows null', async () => {
+    await uploadClaude(mapSid, transcriptBodies(mapSpec([`m${run}-req-1`, `m${run}-req-2`])).claude);
+    const grown = await delta(mapSid, mapCursor);
+    if (grown.reload) throw new Error('a grown log is not a rewrite');
+    expect(uuids(grown.rootClaudeLines)).toEqual([`${mapSid}-u1`, `${mapSid}-a1`]);
+    expect(grown.rootArtisynLines).toEqual([]);
+    expect(grown.cursor).not.toBe(mapCursor);
+    const same = await delta(mapSid, grown.cursor);
+    expect(same).toMatchObject({ reload: false, rootArtisynLines: [], rootClaudeLines: [], subagentAppends: [], newSubagents: [], workflows: null, cursor: grown.cursor });
+    mapCursor = grown.cursor;
+  });
+
+  await test.step('Session Map (API). a shortened body is a rewrite: reload', async () => {
+    await uploadClaude(mapSid, transcriptBodies(mapSpec([`m${run}-req-1`])).claude);
+    expect(await delta(mapSid, mapCursor)).toMatchObject({ reload: true });
+  });
+
+  await test.step('Session Map (UI). a session without OTEL opens in Replay, with no Live button', async () => {
+    await openSession(page, owner, repoId, mapSid, { tab: 'session-map' });
+    // The SPA's session list was loaded before this session existed.
+    await page.reload();
+    await expect(page.getByTestId('session-map-badge')).toContainText('Replay', { timeout: 20_000 });
+    await expect(page.getByTestId('session-map-live')).toHaveCount(0);
+  });
+
+  await test.step('Session Map (UI). the live session opens LIVE following now; a new upload (one Bash call) appears without a refresh', async () => {
+    await openSession(page, owner, repoId, live, { tab: 'session-map' });
+    await page.reload();
+    await expect(page.getByTestId('session-map-badge')).toContainText('LIVE', { timeout: 20_000 });
+    await expect(page.getByTestId('session-map-live')).toBeVisible();
+    await expect(page.getByTestId('session-map-counter-calls').locator('span').nth(1)).toHaveText('0');
+    const now = Date.now();
+    const toolId = `toolu_${tag}_map`;
+    const extra = [
+      {
+        type: 'assistant', uuid: `${live}-a9`, parentUuid: `${live}-a1`, sessionId: live, timestamp: new Date(now - 20_000).toISOString(),
+        message: { id: `msg-${tag}-map`, role: 'assistant', model: MODEL_A, usage: { input_tokens: 10, output_tokens: 5 }, content: [{ type: 'tool_use', id: toolId, name: 'Bash', input: { command: 'echo map' } }] },
+      },
+      {
+        type: 'user', uuid: `${live}-u9`, parentUuid: `${live}-a9`, sessionId: live, timestamp: new Date(now - 15_000).toISOString(),
+        message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: toolId, content: 'map' }] },
+      },
+    ];
+    await uploadClaude(live, transcriptBodies(liveSpec).claude + extra.map((l) => JSON.stringify(l)).join('\n') + '\n');
+    // SESSION_MAP_POLL_MS is 10 s: the next poll brings the call in, no reload.
+    await expect(page.getByTestId('session-map-counter-calls').locator('span').nth(1)).toHaveText('1', { timeout: 25_000 });
+    await expect(page.getByTestId('session-map-badge')).toContainText('LIVE');
+  });
+
+  await test.step('Session Map (UI). the OTEL state aged past OTEL_SESSION_ENDED_MS (10 min): the next poll switches the tab to Replay', async () => {
+    await db.query(
+      `UPDATE otel_session_state
+          SET rt_last_at = rt_last_at - interval '30 minutes', chunk_last_at = chunk_last_at - interval '30 minutes'
+        WHERE session_id = (SELECT id FROM sessions WHERE session_id = $1)`,
+      [live],
+    );
+    expect(await delta(live)).toMatchObject({ reload: false, liveness: { hasOtel: true, live: false } });
+    await expect(page.getByTestId('session-map-badge')).toContainText('Replay', { timeout: 25_000 });
+    await expect(page.getByTestId('session-map-live')).toHaveCount(0);
   });
 });
 

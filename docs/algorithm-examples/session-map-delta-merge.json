@@ -1,0 +1,125 @@
+[
+  {
+    "id": "SMD-01",
+    "input": {"prev": null, "delta": {
+      "rootArtisynLines": [{"uuid": "a1"}],
+      "rootClaudeLines": [{"uuid": "c1"}, {"uuid": "c2"}],
+      "cursor": "k1"
+    }},
+    "expected": {"rootArtisynLines": [{"uuid": "a1"}], "rootClaudeLines": [{"uuid": "c1"}, {"uuid": "c2"}], "subagents": [], "cursor": "k1"},
+    "note": "Rule 1: prev is null (first poll, no cursor sent), so the base is the empty state and the delta's lines are the whole state; cursor k1 (rule 7)."
+  },
+  {
+    "id": "SMD-02",
+    "input": {
+      "prev": {"rootArtisynLines": [{"uuid": "a1"}], "rootClaudeLines": [{"uuid": "c1"}], "cursor": "k1"},
+      "delta": {"rootArtisynLines": [{"uuid": "a2"}], "rootClaudeLines": [{"uuid": "c2"}, {"uuid": "c3"}], "cursor": "k2"}
+    },
+    "expected": {"rootArtisynLines": [{"uuid": "a1"}, {"uuid": "a2"}], "rootClaudeLines": [{"uuid": "c1"}, {"uuid": "c2"}, {"uuid": "c3"}], "cursor": "k2"},
+    "note": "Rule 2: prev has cursor k1, so the delta appends: artisyn a1 ++ a2, claude c1 ++ c2, c3. Each list keeps its own lines; no line appears twice."
+  },
+  {
+    "id": "SMD-03",
+    "input": {
+      "prev": {"subagents": [{"sessionId": "agent-x", "parentSessionId": null, "workflowRunId": null, "logs": [{"uuid": "x1"}]}], "cursor": "k1"},
+      "delta": {"subagentAppends": [{"sessionId": "agent-x", "lines": [{"uuid": "x2"}]}]}
+    },
+    "expected": {"subagents": [{"sessionId": "agent-x", "parentSessionId": null, "workflowRunId": null, "logs": [{"uuid": "x1"}, {"uuid": "x2"}]}]},
+    "note": "Rule 3: agent-x is known, its append x2 goes after x1; linkage unchanged."
+  },
+  {
+    "id": "SMD-04",
+    "input": {
+      "prev": {"subagents": [{"sessionId": "agent-x", "parentSessionId": null, "workflowRunId": null, "logs": [{"uuid": "x1"}]}], "cursor": "k1"},
+      "delta": {"newSubagents": [{"sessionId": "agent-y", "parentSessionId": "agent-x", "workflowRunId": "wf-1", "logs": [{"uuid": "y1"}, {"uuid": "y2"}]}]}
+    },
+    "expected": {"subagents": [
+      {"sessionId": "agent-x", "parentSessionId": null, "workflowRunId": null, "logs": [{"uuid": "x1"}]},
+      {"sessionId": "agent-y", "parentSessionId": "agent-x", "workflowRunId": "wf-1", "logs": [{"uuid": "y1"}, {"uuid": "y2"}]}
+    ]},
+    "note": "Rule 4: agent-y is not in the state, so it is added after the known ones with its linkage (parent agent-x, run wf-1) and full lines."
+  },
+  {
+    "id": "SMD-05",
+    "input": {
+      "prev": {"subagents": [{"sessionId": "agent-x", "parentSessionId": null, "workflowRunId": null, "logs": [{"uuid": "x1"}, {"uuid": "x2"}]}], "cursor": "k1"},
+      "delta": {"newSubagents": [{"sessionId": "agent-x", "parentSessionId": null, "workflowRunId": null, "logs": [{"uuid": "x1"}, {"uuid": "x2"}, {"uuid": "x3"}]}]}
+    },
+    "expected": {"subagents": [{"sessionId": "agent-x", "parentSessionId": null, "workflowRunId": null, "logs": [{"uuid": "x1"}, {"uuid": "x2"}, {"uuid": "x3"}]}]},
+    "note": "Rule 4: a new entry for a known sub-agent carries its full lines and replaces it in place: x1, x2, x3, not x1, x2, x1, x2, x3."
+  },
+  {
+    "id": "SMD-06",
+    "input": {
+      "prev": {"subagents": [{"sessionId": "agent-x", "parentSessionId": null, "workflowRunId": null, "logs": [{"uuid": "x1"}]}], "cursor": "k1"},
+      "delta": {"subagentAppends": [{"sessionId": "agent-z", "lines": [{"uuid": "z5"}]}]}
+    },
+    "expected": {"subagents": [{"sessionId": "agent-x", "parentSessionId": null, "workflowRunId": null, "logs": [{"uuid": "x1"}]}]},
+    "note": "Rule 3: agent-z is not in the state and has no linkage, so its append is dropped; agent-x is unchanged."
+  },
+  {
+    "id": "SMD-07",
+    "input": {
+      "prev": {"stats": {"agent-x": 100, "agent-y": 200}, "cursor": "k1"},
+      "delta": {"stats": {"agent-y": 250, "agent-z": 30}}
+    },
+    "expected": {"stats": {"agent-x": 100, "agent-y": 250, "agent-z": 30}},
+    "note": "Rule 5: stats are overwritten per key: agent-x kept (100), agent-y replaced (200 → 250), agent-z added (30)."
+  },
+  {
+    "id": "SMD-08",
+    "input": {
+      "prev": {"workflows": ["tu-1"], "cursor": "k1"},
+      "delta": {"workflows": null}
+    },
+    "expected": {"workflows": ["tu-1"]},
+    "note": "Rule 6: workflows null means unchanged, so the previous list [tu-1] is kept."
+  },
+  {
+    "id": "SMD-09",
+    "input": {
+      "prev": {"workflows": ["tu-1"], "cursor": "k1"},
+      "delta": {"workflows": ["tu-1", "tu-2"]}
+    },
+    "expected": {"workflows": ["tu-1", "tu-2"]},
+    "note": "Rule 6: a list replaces the previous one as a whole: [tu-1, tu-2]."
+  },
+  {
+    "id": "SMD-10",
+    "input": {
+      "prev": {"cursor": "k1", "liveness": {"hasOtel": true, "live": true, "lastActivityAt": "2026-11-01T09:59:00.000Z"}, "serverTime": "2026-11-01T09:59:30.000Z"},
+      "delta": {"cursor": "k2", "liveness": {"hasOtel": true, "live": false, "lastActivityAt": "2026-11-01T09:59:00.000Z"}, "serverTime": "2026-11-01T10:10:00.000Z"}
+    },
+    "expected": {"cursor": "k2", "liveness": {"hasOtel": true, "live": false, "lastActivityAt": "2026-11-01T09:59:00.000Z"}, "serverTime": "2026-11-01T10:10:00.000Z"},
+    "note": "Rule 7: cursor, liveness and server time are always taken from the delta."
+  },
+  {
+    "id": "SMD-11",
+    "input": {
+      "prev": {"rootClaudeLines": [{"uuid": "c1"}, {"uuid": "c2"}], "subagents": [{"sessionId": "agent-x", "parentSessionId": null, "workflowRunId": null, "logs": [{"uuid": "x1"}]}], "stats": {"agent-x": 100}, "workflows": ["tu-1"], "cursor": ""},
+      "delta": {"rootClaudeLines": [{"uuid": "c1"}, {"uuid": "c2"}, {"uuid": "c3"}], "newSubagents": [{"sessionId": "agent-x", "parentSessionId": null, "workflowRunId": null, "logs": [{"uuid": "x1"}]}], "workflows": null, "cursor": ""}
+    },
+    "expected": {"rootClaudeLines": [{"uuid": "c1"}, {"uuid": "c2"}, {"uuid": "c3"}], "subagents": [{"sessionId": "agent-x", "parentSessionId": null, "workflowRunId": null, "logs": [{"uuid": "x1"}]}], "stats": {}, "workflows": [], "cursor": ""},
+    "note": "Rule 1: prev.cursor is '' (the server could not issue a cursor), so the poll was sent without one and its delta is a full snapshot: it replaces the state. c1, c2 are not doubled; stats and workflows come only from the delta (none, null → [])."
+  },
+  {
+    "id": "SMD-12",
+    "input": {"parse": {
+      "rootArtisynLines": [{"uuid": "a1"}],
+      "rootClaudeLines": [{"uuid": "c1"}, {"uuid": "c2"}],
+      "subagents": [
+        {"sessionId": "agent-p", "parentSessionId": null, "workflowRunId": "wf-1", "logs": [{"uuid": "p1"}]},
+        {"sessionId": "agent-q", "parentSessionId": "agent-p", "workflowRunId": null, "logs": [{"uuid": "q1"}]},
+        {"sessionId": "agent-r", "parentSessionId": null, "workflowRunId": null, "logs": []}
+      ],
+      "cursor": "k1"
+    }},
+    "expected": {
+      "main": [{"uuid": "a1"}, {"uuid": "c1"}, {"uuid": "c2"}],
+      "subagentLogs": {"p": [{"uuid": "p1"}], "q": [{"uuid": "q1"}], "r": []},
+      "agentParentMap": {"p": null, "q": "p", "r": null},
+      "workflowRunIds": {"p": "wf-1"}
+    },
+    "note": "Parse rules 1-4: main = artisyn ++ claude; every key and parent loses the agent- prefix; q's parent agent-p → p; only p has a workflowRunId."
+  }
+]

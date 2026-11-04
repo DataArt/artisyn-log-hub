@@ -5,7 +5,7 @@ description: "Native node:cluster launch (server/src/cluster/), the System Info 
 tags:
   - server
   - cluster
-timestamp: "2026-10-25T00:00:00+04:00"
+timestamp: "2026-11-03T00:00:00+04:00"
 ---
 
 # System Info & Cluster Parallel Launch
@@ -314,7 +314,7 @@ with `NODE_APP_INSTANCE` unset and writes the unsuffixed file. See `server-conve
 
 **Endpoint:** `GET /api/v1/admin/system` — `AdminPanelController.getSystemInfo()` in
 `server/src/admin/admin-panel.controller.ts`. Guards: `SessionAuthGuard` + `AdminGuard` (same as the rest of
-`AdminPanelController`). See `server-endpoint-map.md` for the full route table.
+`AdminPanelController`). Guard and access conventions: `server-endpoint-map.md`.
 
 **Response shape:** `SystemInfoResponse` in `server/src/system-info/system-info.types.ts` — the single named
 source of truth for the endpoint. The client declares an independent `SystemInfo` interface in
@@ -415,9 +415,8 @@ without provider plumbing. `workerStatsReporter` follows the same precedent.
 ## Admin Panel UI — System Info tab
 
 **Component:** `client/src/viewer/pages/admin/tabs/AdminSystemTab.tsx` — the first tab (`system-info`) in
-`AdminPage.tsx`. See `client-component-map.md` and
-`client-routing-and-layout.md` for the tab's place in the admin panel, and `client-component-map.md`'s
-`AdminSystemTab.tsx` entry for the exact card/tile layout.
+`AdminPage.tsx`. See `client-routing-and-layout.md` for the tab's place in the admin panel; the
+card/tile layout is in the component itself.
 
 - Polls `GET /api/v1/admin/system` via react-query with `refetchInterval: 10_000` (10 s auto-refresh).
 - Core card grid: Node Instances (actual/expected + status dot), Visible CPUs, Database (connected + ping),

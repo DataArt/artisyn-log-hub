@@ -1,0 +1,124 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="900" viewBox="0 0 1280 900" font-family="system-ui, -apple-system, 'Segoe UI', Roboto, Arial, sans-serif">
+  <title>README placement of the demo GIF and the GIF scene storyboard (light theme)</title>
+  <defs>
+    <style>
+      .mono{font-family:ui-monospace,'Cascadia Mono',Consolas,monospace}
+      .gh{fill:#1f2328}
+      .gh2{fill:#59636e}
+      .h{fill:#1f5c45;font-weight:600}
+      .t2{fill:#36433c}
+      .t3{fill:#66726a}
+      .note{fill:#9a6614;font-size:12px;font-style:italic}
+      .scene{fill:#ffffff;stroke:#b8b5a8}
+    </style>
+  </defs>
+  <rect width="1280" height="900" fill="#f6f8fa"/>
+
+  <!-- Part 1: README on GitHub -->
+  <text x="40" y="36" class="mono h" font-size="14">1 · README.md on GitHub</text>
+  <rect x="40" y="50" width="760" height="420" fill="#ffffff" stroke="#d1d9e0" rx="6"/>
+  <rect x="40" y="50" width="760" height="40" fill="#f6f8fa" stroke="#d1d9e0" rx="6"/>
+  <text x="60" y="75" class="gh" font-size="13" font-weight="600">README.md</text>
+  <text x="64" y="128" class="gh" font-size="26" font-weight="600">Artisyn Log Hub</text>
+  <line x1="64" y1="140" x2="776" y2="140" stroke="#d1d9e0"/>
+  <rect x="64" y="154" width="640" height="8" fill="#d1d9e0"/>
+  <rect x="64" y="170" width="600" height="8" fill="#d1d9e0"/>
+  <rect x="64" y="186" width="620" height="8" fill="#d1d9e0"/>
+  <text x="64" y="214" fill="#0969da" font-size="13">Docs · Site · Deck</text>
+  <!-- gif -->
+  <rect x="64" y="228" width="420" height="226" fill="#f3f1ea" stroke="#1f5c45" stroke-width="2"/>
+  <text x="274" y="350" text-anchor="middle" class="mono h" font-size="15">demo GIF · loops</text>
+  <text x="274" y="372" text-anchor="middle" class="mono t3" font-size="12">~960 px wide, scaled by GitHub</text>
+  <rect x="404" y="424" width="72" height="22" fill="#17201b" opacity="0.8"/>
+  <text x="440" y="440" text-anchor="middle" class="mono" fill="#faf9f4" font-size="11">03 / 08</text>
+  <g class="note">
+    <text x="500" y="250">GIF goes right after the intro</text>
+    <text x="500" y="266">paragraph and the Docs · Site · Deck</text>
+    <text x="500" y="282">links, before the badges.</text>
+    <text x="500" y="314">Relative path, e.g.</text>
+    <text x="500" y="330" class="mono" font-style="normal">site/assets/demo/app-tour.gif</text>
+    <text x="500" y="362">alt: "Log Hub tour: repositories,</text>
+    <text x="500" y="378">sessions by cost, session summary,</text>
+    <text x="500" y="394">context growth, call tree, map replay…"</text>
+    <text x="500" y="426">Same file is reused as one item of</text>
+    <text x="500" y="442">the site carousel.</text>
+  </g>
+
+  <!-- Part 2: frame rules -->
+  <text x="840" y="36" class="mono h" font-size="14">2 · Every frame</text>
+  <rect x="840" y="50" width="400" height="420" fill="#ffffff" stroke="#b8b5a8"/>
+  <!-- app frame with cropped top bar -->
+  <rect x="864" y="76" width="352" height="34" fill="none" stroke="#e03131" stroke-dasharray="5 4"/>
+  <rect x="864" y="76" width="352" height="34" fill="#e03131" opacity="0.08"/>
+  <text x="874" y="97" fill="#c92a2a" font-size="11">top bar: e-mail, "Edit email" — cropped out</text>
+  <rect x="864" y="114" width="352" height="232" fill="#fafafa" stroke="#1f5c45" stroke-width="2"/>
+  <text x="1040" y="214" text-anchor="middle" class="mono h" font-size="13">recorded area</text>
+  <text x="1040" y="234" text-anchor="middle" class="mono t3" font-size="11">content pane only</text>
+  <text x="1040" y="252" text-anchor="middle" class="mono t3" font-size="11">captured at 1280 × 800</text>
+  <rect x="1110" y="318" width="98" height="20" fill="#17201b" opacity="0.8"/>
+  <text x="1159" y="332" text-anchor="middle" class="mono" fill="#faf9f4" font-size="10">caption overlay</text>
+  <g class="t2" font-size="12">
+    <text x="864" y="372">• light theme, English UI, demo-repo data</text>
+    <text x="864" y="392">• no e-mail, user name or local absolute path</text>
+    <text x="864" y="412">• one short caption per scene (bottom-right)</text>
+    <text x="864" y="432">• cursor visible; a click is a short pulse</text>
+    <text x="864" y="452">• 10–12 fps, ≤ 5 MB, loops forever</text>
+  </g>
+
+  <!-- Part 3: storyboard -->
+  <text x="40" y="520" class="mono h" font-size="14">3 · Storyboard — 8 scenes, about 3 s each, ~25 s total</text>
+  <g>
+    <rect x="40" y="536" width="140" height="96" class="scene"/>
+    <rect x="196" y="536" width="140" height="96" class="scene"/>
+    <rect x="352" y="536" width="140" height="96" class="scene"/>
+    <rect x="508" y="536" width="140" height="96" class="scene"/>
+    <rect x="664" y="536" width="140" height="96" class="scene"/>
+    <rect x="820" y="536" width="140" height="96" class="scene"/>
+    <rect x="976" y="536" width="140" height="96" class="scene"/>
+    <rect x="1132" y="536" width="140" height="96" class="scene"/>
+  </g>
+  <!-- tiny pictograms -->
+  <g fill="#e8e5db" stroke="#b8b5a8">
+    <rect x="52" y="548" width="116" height="12"/><rect x="52" y="566" width="116" height="12"/><rect x="52" y="584" width="116" height="12"/>
+    <rect x="208" y="548" width="116" height="10"/><rect x="208" y="562" width="116" height="10"/><rect x="208" y="576" width="116" height="10"/><rect x="208" y="590" width="116" height="10"/>
+    <rect x="364" y="548" width="34" height="30"/><rect x="404" y="548" width="34" height="30"/><rect x="444" y="548" width="36" height="30"/><rect x="364" y="584" width="116" height="16"/>
+  </g>
+  <polyline points="520,604 548,596 572,584 600,566 636,550" fill="none" stroke="#f08c00" stroke-width="2"/>
+  <g stroke="#1f5c45" fill="none"><path d="M690 552 v40 M690 562 h20 v10 h20 M690 580 h20 v12 h30"/></g>
+  <g fill="#1f5c45"><circle cx="890" cy="568" r="10"/><circle cx="852" cy="592" r="6"/><circle cx="930" cy="594" r="6"/></g>
+  <g stroke="#1f5c45"><line x1="890" y1="568" x2="852" y2="592"/><line x1="890" y1="568" x2="930" y2="594"/></g>
+  <g fill="#4a8068"><rect x="988" y="548" width="60" height="20"/><rect x="1052" y="548" width="52" height="20" fill="#c4a46a"/><rect x="988" y="572" width="40" height="28" fill="#9a6614"/><rect x="1032" y="572" width="72" height="28" fill="#8d968f"/></g>
+  <g fill="#1f5c45"><rect x="1150" y="586" width="14" height="14"/><rect x="1170" y="566" width="14" height="34"/><rect x="1190" y="576" width="14" height="24"/><rect x="1210" y="552" width="14" height="48"/><rect x="1230" y="580" width="14" height="20"/></g>
+  <g class="mono" font-size="11" fill="#36433c">
+    <text x="48" y="620">01 Home repos</text>
+    <text x="204" y="620">02 Sessions by $</text>
+    <text x="360" y="620">03 Summary hub</text>
+    <text x="516" y="620">04 Context growth</text>
+    <text x="672" y="620">05 Call tree</text>
+    <text x="828" y="620">06 Map replay</text>
+    <text x="984" y="620">07 Change surface</text>
+    <text x="1140" y="620">08 Cost by branch</text>
+  </g>
+  <!-- timeline -->
+  <line x1="40" y1="660" x2="1272" y2="660" stroke="#b8b5a8"/>
+  <g class="mono t3" font-size="10">
+    <text x="40" y="676">0 s</text><text x="196" y="676">3 s</text><text x="352" y="676">6 s</text><text x="508" y="676">10 s</text>
+    <text x="664" y="676">14 s</text><text x="820" y="676">17 s</text><text x="976" y="676">22 s</text><text x="1132" y="676">25 s</text><text x="1272" y="676" text-anchor="end">28 s ↺</text>
+  </g>
+  <g font-size="11" class="t3">
+    <text x="40" y="700">which repos, what</text><text x="40" y="714">they cost</text>
+    <text x="196" y="700">sort by cost → the</text><text x="196" y="714">$8 session</text>
+    <text x="352" y="700">"is that good?" —</text><text x="352" y="714">tiles + where to look</text>
+    <text x="508" y="700">context climbs turn</text><text x="508" y="714">by turn (4 s, animates)</text>
+    <text x="664" y="700">expand an agent</text><text x="664" y="714">branch</text>
+    <text x="820" y="700">agents spawn and</text><text x="820" y="714">return (5 s replay)</text>
+    <text x="976" y="700">files and folders</text><text x="976" y="714">the session touched</text>
+    <text x="1132" y="700">team view: cost</text><text x="1132" y="714">per branch</text>
+  </g>
+  <g class="note">
+    <text x="40" y="760">• Order follows the home page story: cost number → why it costs that (A) → harness and agents (B) → what it brings across the team (C–E).</text>
+    <text x="40" y="780">• Each scene starts on a stable view and ends on one; transitions are a plain cut, no fades (keeps the GIF palette and size small).</text>
+    <text x="40" y="800">• Scenes 04 and 06 are the "motion" scenes and get a little longer; the others are still frames with one cursor action.</text>
+    <text x="40" y="820">• Short per-feature GIFs for the carousel reuse the same recorder, one scene each (3–8 s), plus the 21 existing site/assets/shots/*.png.</text>
+  </g>
+</svg>

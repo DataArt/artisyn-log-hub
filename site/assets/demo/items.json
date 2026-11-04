@@ -1,0 +1,312 @@
+[
+  {
+    "id": "app-tour",
+    "kind": "tour",
+    "src": "assets/demo/app-tour.gif",
+    "still": "assets/demo/app-tour.png",
+    "thumb": "assets/demo/thumbs/app-tour.jpg",
+    "duration": 25000,
+    "caption": "A 25-second tour of Log Hub",
+    "where": "Repositories, sessions and analytics",
+    "alt": "Log Hub tour: repositories, sessions by cost, session summary, context growth, call tree, Session Map replay, change surface, cost by branch"
+  },
+  {
+    "id": "repos",
+    "kind": "still",
+    "src": "assets/demo/repos.png",
+    "thumb": "assets/demo/thumbs/repos.jpg",
+    "caption": "Repositories at a glance",
+    "where": "Home",
+    "alt": "Repositories at a glance"
+  },
+  {
+    "id": "sessions",
+    "kind": "still",
+    "src": "assets/demo/sessions.png",
+    "thumb": "assets/demo/thumbs/sessions.jpg",
+    "caption": "Sessions grouped by branch",
+    "where": "Repository → Sessions",
+    "alt": "Sessions grouped by branch"
+  },
+  {
+    "id": "summary",
+    "kind": "still",
+    "src": "assets/demo/summary.png",
+    "thumb": "assets/demo/thumbs/summary.jpg",
+    "caption": "Summary tiles and where to look next",
+    "where": "Session → Summary",
+    "alt": "Summary tiles and where to look next"
+  },
+  {
+    "id": "usage",
+    "kind": "still",
+    "src": "assets/demo/usage.png",
+    "thumb": "assets/demo/thumbs/usage.jpg",
+    "caption": "Token and cost usage of one session",
+    "where": "Session → Usage",
+    "alt": "Token and cost usage of one session"
+  },
+  {
+    "id": "dashboard",
+    "kind": "still",
+    "src": "assets/demo/dashboard.png",
+    "thumb": "assets/demo/thumbs/dashboard.jpg",
+    "caption": "Session dashboard",
+    "where": "Session → Dashboard",
+    "alt": "Session dashboard"
+  },
+  {
+    "id": "context-growth",
+    "kind": "still",
+    "src": "assets/demo/context-growth.png",
+    "thumb": "assets/demo/thumbs/context-growth.jpg",
+    "caption": "Context growth turn by turn",
+    "where": "Session → Context Growth",
+    "alt": "Context growth turn by turn"
+  },
+  {
+    "id": "context-usage",
+    "kind": "still",
+    "src": "assets/demo/context-usage.png",
+    "thumb": "assets/demo/thumbs/context-usage.jpg",
+    "caption": "What fills the context window",
+    "where": "Session → Context Usage",
+    "alt": "What fills the context window"
+  },
+  {
+    "id": "sysctx",
+    "kind": "still",
+    "src": "assets/demo/sysctx.png",
+    "thumb": "assets/demo/thumbs/sysctx.jpg",
+    "caption": "Startup system context anatomy",
+    "where": "Session → System context",
+    "alt": "Startup system context anatomy"
+  },
+  {
+    "id": "harness-usage",
+    "kind": "still",
+    "src": "assets/demo/harness-usage.png",
+    "thumb": "assets/demo/thumbs/harness-usage.jpg",
+    "caption": "Harness elements per session",
+    "where": "Session → Harness usage",
+    "alt": "Harness elements per session"
+  },
+  {
+    "id": "agent-tree",
+    "kind": "still",
+    "src": "assets/demo/agent-tree.png",
+    "thumb": "assets/demo/thumbs/agent-tree.jpg",
+    "caption": "Agent tree with cost per agent",
+    "where": "Session → Agent Tree",
+    "alt": "Agent tree with cost per agent"
+  },
+  {
+    "id": "call-tree",
+    "kind": "still",
+    "src": "assets/demo/call-tree.png",
+    "thumb": "assets/demo/thumbs/call-tree.jpg",
+    "caption": "Call tree of the session",
+    "where": "Session → Call Tree",
+    "alt": "Call tree of the session"
+  },
+  {
+    "id": "timeline",
+    "kind": "still",
+    "src": "assets/demo/timeline.png",
+    "thumb": "assets/demo/thumbs/timeline.jpg",
+    "caption": "Timeline of turns and agents",
+    "where": "Session → Timeline",
+    "alt": "Timeline of turns and agents"
+  },
+  {
+    "id": "tool-heatmap",
+    "kind": "still",
+    "src": "assets/demo/tool-heatmap.png",
+    "thumb": "assets/demo/thumbs/tool-heatmap.jpg",
+    "caption": "Tool heatmap",
+    "where": "Session → Tool Heatmap",
+    "alt": "Tool heatmap"
+  },
+  {
+    "id": "session-map",
+    "kind": "still",
+    "src": "assets/demo/session-map.png",
+    "thumb": "assets/demo/thumbs/session-map.jpg",
+    "caption": "Session map of a workflow run",
+    "where": "Session → Session Map",
+    "alt": "Session map of a workflow run"
+  },
+  {
+    "id": "change-surface",
+    "kind": "still",
+    "src": "assets/demo/change-surface.png",
+    "thumb": "assets/demo/thumbs/change-surface.jpg",
+    "caption": "Files and folders the session touched",
+    "where": "Session → Change surface",
+    "alt": "Files and folders the session touched"
+  },
+  {
+    "id": "session-tools",
+    "kind": "still",
+    "src": "assets/demo/session-tools.png",
+    "thumb": "assets/demo/thumbs/session-tools.jpg",
+    "caption": "MCP and CLI tool calls of one session",
+    "where": "Session → Tools",
+    "alt": "MCP and CLI tool calls of one session"
+  },
+  {
+    "id": "analytics-cost-ranked",
+    "kind": "still",
+    "src": "assets/demo/analytics-cost-ranked.png",
+    "thumb": "assets/demo/thumbs/analytics-cost-ranked.jpg",
+    "caption": "Cost per session, ranked",
+    "where": "Repository → Analytics → Cost",
+    "alt": "Cost per session, ranked"
+  },
+  {
+    "id": "analytics-cost-branch",
+    "kind": "still",
+    "src": "assets/demo/analytics-cost-branch.png",
+    "thumb": "assets/demo/thumbs/analytics-cost-branch.jpg",
+    "caption": "Cost by branch",
+    "where": "Repository → Analytics → Cost",
+    "alt": "Cost by branch"
+  },
+  {
+    "id": "analytics-cache",
+    "kind": "still",
+    "src": "assets/demo/analytics-cache.png",
+    "thumb": "assets/demo/thumbs/analytics-cache.jpg",
+    "caption": "Cache read ratio over time",
+    "where": "Repository → Analytics",
+    "alt": "Cache read ratio over time"
+  },
+  {
+    "id": "analytics-productivity",
+    "kind": "still",
+    "src": "assets/demo/analytics-productivity.png",
+    "thumb": "assets/demo/thumbs/analytics-productivity.jpg",
+    "caption": "Productivity per session",
+    "where": "Repository → Analytics",
+    "alt": "Productivity per session"
+  },
+  {
+    "id": "repo-tools",
+    "kind": "still",
+    "src": "assets/demo/repo-tools.png",
+    "thumb": "assets/demo/thumbs/repo-tools.jpg",
+    "caption": "Tool and MCP analytics for the repo",
+    "where": "Repository → Tools",
+    "alt": "Tool and MCP analytics for the repo"
+  },
+  {
+    "id": "clip-map-replay",
+    "kind": "clip",
+    "src": "assets/demo/clip-map-replay.gif",
+    "still": "assets/demo/clip-map-replay.png",
+    "thumb": "assets/demo/thumbs/clip-map-replay.jpg",
+    "duration": 7000,
+    "caption": "Replay a workflow run",
+    "where": "Session → Session Map",
+    "alt": "Replay a workflow run"
+  },
+  {
+    "id": "clip-map-replay-fast",
+    "kind": "clip",
+    "src": "assets/demo/clip-map-replay-fast.gif",
+    "still": "assets/demo/clip-map-replay-fast.png",
+    "thumb": "assets/demo/thumbs/clip-map-replay-fast.jpg",
+    "duration": 6000,
+    "caption": "Replay at 300×",
+    "where": "Session → Session Map",
+    "alt": "Replay at 300×"
+  },
+  {
+    "id": "clip-session-tabs",
+    "kind": "clip",
+    "src": "assets/demo/clip-session-tabs.gif",
+    "still": "assets/demo/clip-session-tabs.png",
+    "thumb": "assets/demo/thumbs/clip-session-tabs.jpg",
+    "duration": 7000,
+    "caption": "Switching session views",
+    "where": "Session → tabs",
+    "alt": "Switching session views"
+  },
+  {
+    "id": "clip-summary-jump",
+    "kind": "clip",
+    "src": "assets/demo/clip-summary-jump.gif",
+    "still": "assets/demo/clip-summary-jump.png",
+    "thumb": "assets/demo/thumbs/clip-summary-jump.jpg",
+    "duration": 6000,
+    "caption": "From summary to the answer",
+    "where": "Session → Summary",
+    "alt": "From summary to the answer"
+  },
+  {
+    "id": "clip-analytics-range",
+    "kind": "clip",
+    "src": "assets/demo/clip-analytics-range.gif",
+    "still": "assets/demo/clip-analytics-range.png",
+    "thumb": "assets/demo/thumbs/clip-analytics-range.jpg",
+    "duration": 6000,
+    "caption": "Changing the analytics range",
+    "where": "Repository → Analytics",
+    "alt": "Changing the analytics range"
+  },
+  {
+    "id": "clip-analytics-group",
+    "kind": "clip",
+    "src": "assets/demo/clip-analytics-group.gif",
+    "still": "assets/demo/clip-analytics-group.png",
+    "thumb": "assets/demo/thumbs/clip-analytics-group.jpg",
+    "duration": 6000,
+    "caption": "Grouping cost by branch and workflow stage",
+    "where": "Repository → Analytics",
+    "alt": "Grouping cost by branch and workflow stage"
+  },
+  {
+    "id": "clip-analytics-metrics",
+    "kind": "clip",
+    "src": "assets/demo/clip-analytics-metrics.gif",
+    "still": "assets/demo/clip-analytics-metrics.png",
+    "thumb": "assets/demo/thumbs/clip-analytics-metrics.jpg",
+    "duration": 8000,
+    "caption": "Thirteen metrics, one chart",
+    "where": "Repository → Analytics",
+    "alt": "Thirteen metrics, one chart"
+  },
+  {
+    "id": "clip-call-tree",
+    "kind": "clip",
+    "src": "assets/demo/clip-call-tree.gif",
+    "still": "assets/demo/clip-call-tree.png",
+    "thumb": "assets/demo/thumbs/clip-call-tree.jpg",
+    "duration": 6000,
+    "caption": "Drilling into the call tree",
+    "where": "Session → Call Tree",
+    "alt": "Drilling into the call tree"
+  },
+  {
+    "id": "clip-context-agents",
+    "kind": "clip",
+    "src": "assets/demo/clip-context-agents.gif",
+    "still": "assets/demo/clip-context-agents.png",
+    "thumb": "assets/demo/thumbs/clip-context-agents.jpg",
+    "duration": 7000,
+    "caption": "What each agent loads into its context",
+    "where": "Session → Context Usage",
+    "alt": "What each agent loads into its context"
+  },
+  {
+    "id": "clip-repo-tabs",
+    "kind": "clip",
+    "src": "assets/demo/clip-repo-tabs.gif",
+    "still": "assets/demo/clip-repo-tabs.png",
+    "thumb": "assets/demo/thumbs/clip-repo-tabs.jpg",
+    "duration": 7000,
+    "caption": "Repository views",
+    "where": "Repository → tabs",
+    "alt": "Repository views"
+  }
+]

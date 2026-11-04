@@ -33,9 +33,10 @@ This skill's steps:
 - `Run pre-run health check (if enabled)`
 - `Locate the implementation plan`
 - `Extract the chunk list`
-- `Run the workflow (chunks + verify)` — the chunks run inside the workflow, so their progress
+- `Run the workflow (chunks + plan check)` — the chunks run inside the workflow, so their progress
   shows up in the 15-minute status, not as step lines
-- `Report chunk and verification results`
+- `Run final verification (check-health, finalRun: true)`
+- `Report chunk, plan-check and verification results`
 
 ## Steps
 
@@ -150,13 +151,13 @@ in `adlc-lh:tracker`), then end your turn. Its status sources for this skill, al
   is running now and how many remain.
 - Any new entry in `docs/BLOCKED.md`.
 - "Looks stuck" means no new file changes across two statuses while chunks are still running.
-  Once the changes cover the last chunk, the workflow is in Verify (health checks + judge), which
-  runs long and normally changes no files — there, no changes is not a stuck signal.
+  Once the changes cover the last chunk, the run is in the plan check or in final verification
+  (step 4), which run long and normally change few or no files — there, no changes is not a stuck
+  signal.
 
-### 4 — Wait and report
+Keep the status cron running through step 4; delete it only in step 5.
 
-First thing on completion (any outcome, including `halted`): `CronDelete(PROGRESS_CRON_ID)` if a
-status cron was created, so no statuses fire after the run is over.
+### 4 — Final verification
 
 When the workflow completes, its result is:
 
@@ -164,28 +165,46 @@ When the workflow completes, its result is:
 {
   chunks: [{ chunk: '<name>', result: { status, filesChanged, blockers, summary } }, ...],
   halted: { index, reason: 'blocked' | 'no-result' | 'no-chunks' | 'invalid-chunk-shape' | 'invalid-args-json' } | null,
-  verification: { status, checks: [{ name, status }], fixesApplied, blockers, judgeVerdict: 'ok' | 'not_ok', judgeReasoning, judgeConcerns } | null,
+  planCheck: { status: 'ok' | 'fixed' | 'gaps' | 'unchecked', itemsChecked, gaps: [{ chunk, item, problem }],
+               fixup: { status, filesChanged, blockers, summary } | null } | null,
+  verification: null,   // always null — kept for result-shape compatibility; step 4 produces it
 }
 ```
 
-`verification` comes from a runner agent that invokes the `adlc-lh:check-health` skill (`finalRun: true`,
-so it includes the full e2e suite) plus a second judge agent that independently double-checks that
-self-report. `verification.status` is already downgraded to `"blocked"` if the judge disagreed —
-report `judgeReasoning`/`judgeConcerns` alongside it when that happens.
+`planCheck` comes from a fresh reviewer that checked every plan item against the code (not
+against the chunks' own reports). `fixed` means it found gaps and one fix-up round closed them;
+`gaps` means gaps remain (or the fix-up was blocked); `unchecked` means the reviewer returned
+nothing.
+
+- If `halted` is non-null: skip this step — do not verify a half-implemented task — and go to
+  step 5.
+- Otherwise invoke the `adlc-lh:check-health` skill with `finalRun: true` (default `workflow`
+  mode). It runs every check, including the `finalOnly` ones, and the final-only post-check
+  skills. Its workflow result (`status`, `checks` with each check's `status` incl. `skipped`,
+  `fixesApplied`, `blockers`, `skipped`) is the verification result — use it as returned, it
+  comes straight from the checks. Run it even when `planCheck.status` is `gaps`, so the report
+  shows both; the task is still not done in that case.
+
+### 5 — Report
+
+First thing: `CronDelete(PROGRESS_CRON_ID)` if a status cron was created, so no statuses fire
+after the run is over.
 
 `invalid-chunk-shape` / `invalid-args-json` mean the workflow never started any chunk — the
 `chunks` array passed in was malformed (a chunk missing `name`/`items`, or unparsable JSON).
 Report this as a setup problem, not a task failure: tell the user which chunk index was invalid
 and that no work was attempted.
 
-Use it, plus `docs/BLOCKED.md` (if written), to report back:
+Use the workflow result, the step 4 result, and `docs/BLOCKED.md` (if written) to report back:
 - Whether the step 0 pre-run health check ran or was skipped (disabled by `preImplHealthCheck`)
 - Task number and slug implemented
 - Chunks completed vs. total (if `halted` is non-null, say clearly which chunk stopped progress
   and why, quoting its `blockers`, and that later chunks were skipped — do not report the task
   as done)
-- Files created or modified (collected from each chunk's `filesChanged`)
-- Any blockers encountered (from chunk results, `verification.blockers`, and `docs/BLOCKED.md` if written)
-- Final check results per `verification.checks` (name + status for each), and the judge's verdict —
-  if `judgeVerdict` is `"not_ok"`, say so explicitly and quote `judgeReasoning`/`judgeConcerns`, even
-  if the runner's own self-reported `status` was `"ok"`
+- Files created or modified (collected from each chunk's `filesChanged` and `planCheck.fixup.filesChanged`)
+- Plan check: `planCheck.status` and `itemsChecked`; list every gap (`chunk`, `item`, `problem`) and
+  whether the fix-up closed it. With `gaps` or `unchecked`, say explicitly the task is not confirmed done.
+- Any blockers encountered (from chunk results, the fix-up, the step 4 `blockers`, and
+  `docs/BLOCKED.md` if written)
+- Final check results from step 4 — name + status for every check, naming each `skipped` one — or
+  that step 4 did not run because the workflow halted

@@ -7,6 +7,8 @@ export interface NavArticle {
   downloadable?: boolean;
   /** Source path relative to `user-docs/` (e.g. `../hook/INSTALL_HOOK.md`); default `<slug>.md`. */
   source?: string;
+  /** Plain-text page description (50–160 chars) used by the site for meta description / og tags. */
+  description?: string;
 }
 
 /** One section of `user-docs/nav.json`. */
@@ -23,6 +25,8 @@ export interface NavPage {
   section: string;
   /** Absolute source path. */
   file: string;
+  /** `description` from nav.json, if set. */
+  description?: string;
 }
 
 export interface Nav {

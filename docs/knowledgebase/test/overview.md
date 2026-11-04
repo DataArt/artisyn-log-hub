@@ -3,7 +3,7 @@ type: Test Strategy
 title: Test Strategy Overview
 description: The test suites of this repo — scenarios on an isolated stand, API vs DB contracts, doc-driven algorithm units (the only unit tests left, since 2026-10-16), the legacy tests/e2e remainder — the canonical commands and health checks, the shared-DB rule, the 80 % scenario-coverage target and where a new test belongs.
 tags: [testing, strategy, overview]
-timestamp: 2026-10-16T00:00:00Z
+timestamp: 2026-11-03T00:00:00Z
 ---
 
 The repo's tests are organised around **user scenarios on an isolated stand**. The scenario suite
@@ -18,7 +18,7 @@ code. Start here, then open the suite you need:
 | **Scenarios** (P0 user scenarios, screen tours, corpus) | Playwright on its own stand, auth modes A/B/C | `tests/scenarios/`, `tests/golden/`, `tests/corpus/` | [scenarios.md](./scenarios.md) |
 | **API vs DB contracts** | Jest, own app and `contract_*` schema | `server/test/contract/` | [contract-tests.md](./contract-tests.md) |
 | **Algorithm units** (doc examples = test rows) | jest / vitest / `node --test` | `*.algo.spec.ts`, `*.algo.test.ts` next to the code | [../algorithms/README.md](../algorithms/README.md) |
-| Server jest runner (algorithm tests + migration lock check, no DB) | Jest | `server/src/**` | [server-tests.md](./server-tests.md) |
+| Server jest runner (algorithm tests + migration lock check, no DB) | Jest | `server/src/**` | [below](#the-server-jest-runner) |
 | Client vitest runner (algorithm tests) | Vitest | `client/src/**` | [client-unit-tests.md](./client-unit-tests.md) |
 | Hook `node:test` runner (algorithm tests) | `node --test` | `hook/.claude/telemetry_tool/__tests__/` | below |
 | **Legacy e2e** (specs not yet replaced by scenarios) | Playwright against the running dev app | `tests/e2e/` | [e2e-tests.md](./e2e-tests.md) |
@@ -84,6 +84,17 @@ and this table mirror it.
 - The `static` group (lint, typecheck, the server jest run, vitest, script and hook tests) needs no DB and no
   dev app and runs alongside the `app` group.
 
+# The server jest runner
+
+`npm run test` in `server/` runs only the `*.algo.spec.ts` table tests and
+`src/database/migration-lock-check.spec.ts` (the startup half of the migration immutability guard,
+[../db-schema-code.md](../db-schema-code.md)). The `jest` block of `server/package.json` has **no
+`globalSetup`**: no Postgres, no schema, no app, which is why it is a `static` health check. Every
+other server spec, including all `*.e2e-spec.ts`, was deleted on 2026-10-16 — do not add new ones.
+`jest.contract.config.js` runs the contract suite; `jest.stryker.config.js` is for mutation runs.
+`server/test/` holds only the contract suite and the two helpers it imports
+(`helpers/create-app.helper.ts`, `helpers/env-snapshot.helper.ts`).
+
 # The hook algorithm tests
 
 The hook (`hook/`) is a standalone, dependency-free Node package. `npm test` (from `hook/`) runs
@@ -103,7 +114,7 @@ Only three kinds of tests exist (CLAUDE.md → "Test policy"); do not multiply t
 
 | You changed… | Test | Where |
 |---|---|---|
-| An algorithm that has a doc in `docs/knowledgebase/algorithms/` | Rows in that doc's examples block (the `*.algo.*` test reads them); a new test file only with a new doc | [../algorithms/README.md](../algorithms/README.md) |
+| An algorithm that has a doc in `docs/knowledgebase/algorithms/` | Rows in its rows file `docs/algorithm-examples/<name>.json` (the `*.algo.*` test reads them); a new test file only with a new doc | [../algorithms/README.md](../algorithms/README.md) |
 | A route (new or changed response) | A contract registry row | [contract-tests.md](./contract-tests.md) |
 | Behaviour (UI, API flow, hook, installer, schedulers, error paths) | A **step in an existing scenario**; a new scenario file only for a genuinely new feature (screen tours and golden sessions are scenarios too) | [scenarios.md](./scenarios.md) |
 
@@ -114,5 +125,5 @@ Do not add new specs to `tests/e2e/`: write a scenario instead.
 # Related
 
 - [../task-checks-guide.md](../task-checks-guide.md) — where tests fit in the task lifecycle and post-implementation checks
-- [../api-reference.md](../api-reference.md) — endpoints exercised by the server, contract and scenario suites
+- [../server-endpoint-map.md](../server-endpoint-map.md) — guards and access rules of the routes the contract and scenario suites exercise
 - `docs/qaa-overview/13-new-test-suite.md` — design of the scenario-based suite

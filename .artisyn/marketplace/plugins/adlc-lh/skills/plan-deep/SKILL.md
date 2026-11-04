@@ -238,6 +238,16 @@ Every action item lives here and ONLY here — items are never listed in another
 - tasks from chunk N+1 depend on tasks from chunk N
 - Tightly coupled items stay in the same chunk; files that are edited together (e.g. a service and its module
   registration) stay in the same chunk.
+- **One chunk = one area of the code.** `/adlc-lh:implement-deep` runs every chunk in a fresh agent context
+  on purpose: an agent works best when it reads only the part of the codebase its chunk changes, and is not
+  carrying another chunk's exploration in its context. That only pays off if the split follows the code: a
+  chunk's items should sit in one module/package/layer, and an agent should be able to do the whole chunk
+  without studying the code another chunk owns.
+- **Pin the seams in the plan, not in the code.** A later chunk sees an earlier one only as its name and its
+  list of changed files. Any interface a later chunk consumes from an earlier one — function/endpoint
+  signatures, DTO/type shapes, table and column names, event or config keys — must be stated in the plan
+  (Design Decisions, API changes, Database changes), so the later agent builds against the plan instead of
+  reverse-engineering the earlier chunk's code.
 - **4–8 items per chunk.** If a natural group has more than 8 items, split it at a sub-boundary instead of
   exceeding 8.
 - Order chunks: Schema → Services → API → Frontend → Tests. Tests are always the last chunk(s).
@@ -281,7 +291,9 @@ Check for:
    does not allow
 5. Frontend components referenced but not listed
 6. Implementation Chunks section: chunk ordering respects Schema → Services → API → Frontend → Tests, and each
-   chunk has 4–8 items
+   chunk has 4–8 items. Each chunk stays in one area of the code (an agent could do it without studying code
+   another chunk owns), and every interface a later chunk consumes from an earlier one (signatures, type
+   shapes, table/column names, keys) is stated in the plan rather than left to be discovered in the code
 7. Missing constants, configuration parameters.
 8. Any chunk item over 60 words, or containing rationale/tradeoff prose instead of a bare action (referencing a
    plan section or decision by name is fine and encouraged)

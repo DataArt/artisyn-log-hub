@@ -23,7 +23,7 @@
     <figcaption id="home-figure-title">One session, {{ds:session.total|usd}} — and what to do about it</figcaption>
 
     <div class="insight-step">
-      <h3><span class="step-no">01</span>Where the money went</h3>
+      <h2><span class="step-no">01</span>Where the money went</h2>
       <div class="cost-bar" aria-hidden="true">
         <span style="flex-grow: {{ds:session.parts.input}}"></span>
         <span style="flex-grow: {{ds:session.parts.output}}"></span>
@@ -44,7 +44,7 @@
     </div>
 
     <div class="insight-step">
-      <h3><span class="step-no">02</span>How the harness worked</h3>
+      <h2><span class="step-no">02</span>How the harness worked</h2>
       <ul class="readout">
         <li><span>system context per turn</span><b>{{ds:insight.systemContextTokens}} tokens</b></li>
         <li><span>of it, never invoked here</span><b class="flag">{{ds:insight.unusedContextPct|pct}}</b></li>
@@ -54,7 +54,7 @@
     </div>
 
     <div class="insight-step">
-      <h3><span class="step-no">03</span>Against the repo and the team</h3>
+      <h2><span class="step-no">03</span>Against the repo and the team</h2>
       <ul class="readout">
         <li><span>cost vs repo median</span><b class="flag">{{ds:session.total|usd}} vs {{ds:insight.repoMedianSession|usd}}</b></li>
         <li><span>turns vs repo median</span><b class="flag">{{ds:insight.turns}} vs {{ds:insight.repoMedianTurns}}</b></li>
@@ -63,7 +63,7 @@
     </div>
 
     <div class="insight-do">
-      <h3>→ What to do</h3>
+      <h2>→ What to do</h2>
       <ol>
         <li>Unload the MCP servers and skills this session never touched: <span class="nowrap">−{{ds:insight.trimPerSession|usd}}</span>
           here; if they idle like this in every session, about {{ds:insight.trimMonthly|usd0}} a month
@@ -76,8 +76,19 @@
   </figure>
 </section>
 
-<section class="hero-shot" aria-label="The Log Hub Home page">
-  <figure class="shot"><img src="assets/shots/home.png" alt="Log Hub Home: the repository with sessions and cost this week and question shortcuts, Start from a question cards, Needs attention, This week cost per repository and team, Pinned and Recent" loading="lazy"><figcaption>Home, after sign-in · real screen, demo repository</figcaption></figure>
+<section class="media-section" aria-labelledby="media-title">
+  <h2 id="media-title">See it in action</h2>
+  <div class="mc" data-mc tabindex="0" aria-roledescription="carousel" aria-label="Log Hub screens">
+    <div class="mc-stage">
+      <div class="mc-loading">loading…</div>
+      <button class="mc-btn mc-prev" type="button" aria-label="Previous">‹</button>
+      <button class="mc-btn mc-next" type="button" aria-label="Next">›</button>
+      <button class="mc-btn mc-pause" type="button" aria-pressed="false" aria-label="Pause slideshow">❚❚</button>
+    </div>
+    <div class="mc-meta"><span class="mc-caption"></span><span><span class="mc-where"></span><span class="mc-sep"> · </span><span class="mc-counter"></span></span></div>
+    <div class="mc-strip"></div>
+  </div>
+  <script src="assets/carousel.js" defer></script>
 </section>
 
 <section class="cards" aria-label="Three questions Log Hub answers">
