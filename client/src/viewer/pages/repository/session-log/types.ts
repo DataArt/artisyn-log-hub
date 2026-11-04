@@ -264,6 +264,11 @@ export interface SubAgentNode {
   prompt: string;
   model?: string;
   tokens?: TokenBreakdown;
+  /**
+   * Server-chosen OTEL cost (USD) of this sub-agent — `subagentStats[*].otelCostUsd` (FR-6).
+   * When non-null it is shown instead of `computeCost(tokens)`, with a "from OTEL" hint.
+   */
+  otelCostUsd?: number | null;
   durationMs?: number;
   /** Epoch ms of the agent's first timestamped transcript record. */
   startMs?: number;

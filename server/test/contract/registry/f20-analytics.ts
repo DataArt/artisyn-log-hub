@@ -5,7 +5,11 @@
 // Token and line totals cover the session TREE (root + sub-agent children); work time and
 // turns are the root's own (sub-agents run inside the root's wall-clock span).
 import type { ContractFamily } from '../types';
-import { listedRootsSql, treeCostSql } from './oracle-sql';
+import {
+  listedRootsSql,
+  treeCostSql,
+  treeCostWithOtelSubagentsSql,
+} from './oracle-sql';
 
 export const MONTH = { startDate: '2026-01-01', endDate: '2026-01-31' };
 
@@ -90,6 +94,28 @@ export const f20Analytics: ContractFamily = {
         args: ['@R1.id'],
         shape: 'array',
         fields: { sessionId: 'session_id', group: 'grp' },
+      },
+    },
+    {
+      // FR-6 (2026-11-03 otel-cost-attribution): Rtwins' old-CC root w1-s12 (16th) counts its
+      // sub-agent at the OTEL cost (0.37 USD); the new-CC root w1-s14 (17th) keeps the
+      // transcript (0.18 USD). See F17's FR-6 rows for the world.
+      id: 'F20-timeline-subagent-otel-cost',
+      route: 'GET /api/v1/repositories/:repoId/analytics/timeline',
+      actor: 'owner',
+      params: { repoId: '@Rtwins.id' },
+      query: MONTH,
+      expect: { status: 200, minRows: 2 },
+      read: {
+        sql: `${ROOTS_AND_TREES}
+              SELECT r.session_id, ${treeCostWithOtelSubagentsSql('r.id')} AS total_cost
+                FROM roots r ORDER BY r.start_time`,
+        args: ['@Rtwins.id'],
+        shape: 'array',
+        fields: {
+          sessionId: 'session_id',
+          totalCost: { col: 'total_cost', as: 'numeric' },
+        },
       },
     },
     {

@@ -209,6 +209,21 @@ from two channels: the realtime route and the projection drain over `logs_otel`
   reads ignore zero rows.
 - `otel_reclass_queue` gets a row after every transcript request-id rewrite; the drain claims
   rows with `DELETE … FOR UPDATE SKIP LOCKED … RETURNING`.
+- Cost attribution (migration `0088`, task `2026-11-03-otel-cost-attribution`), all written by
+  `applyOtelLines` (`otel-facts-writer.ts`) from both channels and filled for history by the
+  projection version bump to 2:
+  - `otel_calls`: `cache_write_5m_tokens`, `cache_write_1h_tokens` (bigint), `effort`, `speed`
+    (varchar 64), `skill_name`, `plugin_name`, `agent_name`, `mcp_server_name`, `mcp_tool_name`
+    (varchar 255) — all nullable; NULL = not reported (older Claude Code). Upserted with the call;
+    a change in any of them is a call change. Partial index `idx_otel_calls_session_agent`
+    `(session_id, agent_id) WHERE agent_id IS NOT NULL` serves the FR-6 sub-agent OTEL cost sum
+    (`subagentOtelCostSql`).
+  - `otel_cost_buckets`: grain columns `skill`, `mcp_server` (varchar 255), `effort`, `speed`
+    (varchar 64), `NOT NULL DEFAULT ''` (`''` = not reported) and part of `otel_cost_buckets_pk`
+    (recreated over all 10 key columns).
+  - `otel_session_state`: `plan`, `seat_type`, `provider` (varchar 64), `custom_base_url`
+    (varchar 1024, sanitised: scheme + host + path), `account_event_at` (timestamptz) — nullable,
+    latest-wins by `account_event_at`, a null never overwrites (`extractOtelAccount`).
 
 Design, lock order and cursor: [otel-tabs.md](otel-tabs.md).
 

@@ -890,6 +890,16 @@
         "35fbf1662b5d3a44901262e9716825e50dea29a4b993d27d7a6f7619ae29cd56",
         "75d87aa4e5224a688054ab03cc050f37cfb70bb5682a99b04356f574e610c9c2"
       ]
+    },
+    {
+      "idx": 88,
+      "tag": "0088_otel_cost_attribution",
+      "when": 1792108800000,
+      "sha256": "6f3c28e3adeceec3deb7f33d464e7bdae08e3d520228878756acab329f4c3de7",
+      "acceptedHashes": [
+        "6f3c28e3adeceec3deb7f33d464e7bdae08e3d520228878756acab329f4c3de7",
+        "7b89745c59c33921dd3d879a57d72a037243e4c235e8ed48efaa511b6277de0c"
+      ]
     }
   ]
 }

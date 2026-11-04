@@ -137,6 +137,7 @@ const EMPTY_COST_BREAKDOWN: Readonly<CostBreakdown> = Object.freeze({
   subagentPricingMissing: false,
   unpricedModels: [],
   costExcludesUtilityCalls: false,
+  subagentCostFromOtel: false,
 });
 
 /**
@@ -711,6 +712,7 @@ export class RepositoriesController {
             subagentPricingMissing: tree.subagentPricingMissing,
             unpricedModels: tree.unpricedModels,
             costExcludesUtilityCalls: row.cost_excludes_utility_calls === true,
+            subagentCostFromOtel: tree.subagentCostFromOtel,
           },
           // 'unknown-model' only when some model of the tree has no price. A session
           // whose transcript carries no model at all has nothing to price, so its reason
@@ -1822,7 +1824,7 @@ export class RepositoriesController {
         )
         .where(inArray(schema.sessions.id, descendantIds))
         .orderBy(asc(schema.sessions.sessionId)),
-      selectSubagentStats(this.db, descendantIds),
+      selectSubagentStats(this.db, descendantIds, sessionRowId),
       // The root session's own productivity counters (`rootStats`), read from the
       // same `session_stats` row the server-side tree rollup sums for the root node,
       // with the same transcript guard as the descendant select above.
@@ -2030,6 +2032,8 @@ export class RepositoriesController {
             linesRemoved: r.linesRemoved,
             diffLinesCoveredCalls: r.diffLinesCoveredCalls,
             diffLinesTotalCalls: r.diffLinesTotalCalls,
+            // FR-6: OTEL cost of an old-CC sub-agent when above its transcript cost.
+            otelCostUsd: r.otelCostUsd,
           },
         ]),
       ),

@@ -995,11 +995,13 @@ function buildSubAgentTree(
       durationMs = completion.toolUseResult.totalDurationMs;
     }
 
+    const otelCostUsd = subagentOtelCost(subagentStats, agentId);
     const node: SubAgentNode = {
       agentId,
       prompt: representative.data.prompt!,
       ...(model !== undefined && { model }),
       ...(tokens !== undefined && { tokens }),
+      ...(otelCostUsd !== null && { otelCostUsd }),
       ...(durationMs !== undefined && { durationMs }),
       ...(representative.toolUseID !== undefined && {
         toolUseID: representative.toolUseID,
@@ -1302,12 +1304,14 @@ export function buildAgentNodesForIds(
     const skills = parsed.turns.flatMap((t) => t.skills);
     const rulesInjected = parsed.turns.flatMap((t) => t.rulesInjected);
     const { startMs, endMs } = agentLogTimeSpan(logs);
+    const otelCostUsd = subagentOtelCost(subagentStats, agentId);
 
     nodeMap.set(agentId, {
       agentId,
       prompt,
       ...(model !== null ? { model } : {}),
       ...(tokens !== undefined ? { tokens } : {}),
+      ...(otelCostUsd !== null ? { otelCostUsd } : {}),
       ...(startMs !== undefined ? { startMs } : {}),
       ...(startMs !== undefined && endMs !== undefined
         ? { durationMs: endMs - startMs }
@@ -1707,6 +1711,22 @@ export interface SubagentStatEntry {
   webSearchRequests?: number;
   inputTokensFast?: number;
   outputTokensFast?: number;
+  /** Server-chosen OTEL cost of this sub-agent (FR-6); see `SubagentStats.otelCostUsd`. */
+  otelCostUsd?: number | null;
+}
+
+/**
+ * The server-chosen OTEL cost of a sub-agent (FR-6, DD-14): looked up under
+ * `'agent-' + agentId` (its `sessions.session_id`), falling back to the bare `agentId`.
+ * Returns `null` when there is no entry or the server did not choose OTEL for it.
+ */
+export function subagentOtelCost(
+  subagentStats: Record<string, SubagentStatEntry> | undefined,
+  agentId: string,
+): number | null {
+  if (!subagentStats) return null;
+  const entry = subagentStats[`agent-${agentId}`] ?? subagentStats[agentId];
+  return entry?.otelCostUsd ?? null;
 }
 
 export function parseSessionLogs(

@@ -501,6 +501,16 @@ export const otelCalls = pgTable(
     cacheWriteTokens: bigint('cache_write_tokens', { mode: 'number' })
       .notNull()
       .default(0),
+    // Per-call OTEL attributes (migration 0088); NULL = not reported.
+    cacheWrite5mTokens: bigint('cache_write_5m_tokens', { mode: 'number' }),
+    cacheWrite1hTokens: bigint('cache_write_1h_tokens', { mode: 'number' }),
+    effort: varchar('effort', { length: 64 }),
+    speed: varchar('speed', { length: 64 }),
+    skillName: varchar('skill_name', { length: 255 }),
+    pluginName: varchar('plugin_name', { length: 255 }),
+    agentName: varchar('agent_name', { length: 255 }),
+    mcpServerName: varchar('mcp_server_name', { length: 255 }),
+    mcpToolName: varchar('mcp_tool_name', { length: 255 }),
     costUsdMicros: bigint('cost_usd_micros', { mode: 'bigint' }),
     structure: varchar('structure', { length: 16 }).notNull(),
     provisional: boolean('provisional').notNull(),
@@ -518,6 +528,9 @@ export const otelCalls = pgTable(
     index('idx_otel_calls_session_request_id')
       .on(table.sessionId, table.requestId)
       .where(sql`${table.requestId} IS NOT NULL`),
+    index('idx_otel_calls_session_agent')
+      .on(table.sessionId, table.agentId)
+      .where(sql`${table.agentId} IS NOT NULL`),
   ],
 );
 
@@ -564,7 +577,8 @@ export const otelSpans = pgTable(
 );
 
 // 5-minute UTC cost rollups of otel_calls per (root session, bucket, structure, query_source,
-// model, cc_version). NULL dimensions are stored as ''. A key that no longer exists after a
+// model, cc_version, skill, mcp_server, effort, speed). NULL dimensions are stored as '' (for the
+// last four, '' = not reported). A key that no longer exists after a
 // rebuild is zeroed, never deleted; reads ignore zero rows.
 export const otelCostBuckets = pgTable(
   'otel_cost_buckets',
@@ -580,6 +594,10 @@ export const otelCostBuckets = pgTable(
     querySource: varchar('query_source', { length: 255 }).notNull().default(''),
     model: varchar('model', { length: 255 }).notNull().default(''),
     ccVersion: varchar('cc_version', { length: 64 }).notNull().default(''),
+    skill: varchar('skill', { length: 255 }).notNull().default(''),
+    mcpServer: varchar('mcp_server', { length: 255 }).notNull().default(''),
+    effort: varchar('effort', { length: 64 }).notNull().default(''),
+    speed: varchar('speed', { length: 64 }).notNull().default(''),
     calls: integer('calls').notNull().default(0),
     costUsdMicros: bigint('cost_usd_micros', { mode: 'bigint' })
       .notNull()
@@ -609,6 +627,10 @@ export const otelCostBuckets = pgTable(
         table.querySource,
         table.model,
         table.ccVersion,
+        table.skill,
+        table.mcpServer,
+        table.effort,
+        table.speed,
       ],
     }),
     index('idx_otel_cost_buckets_session_seq').on(table.sessionId, table.seq),
@@ -637,6 +659,12 @@ export const otelSessionState = pgTable(
     rtGapAt: timestamp('rt_gap_at', { withTimezone: true }),
     rtReceiverId: varchar('rt_receiver_id', { length: 64 }),
     rtBatchSeq: bigint('rt_batch_seq', { mode: 'number' }),
+    // Account facts reported by OTEL (migration 0088), latest event wins; NULL = never reported.
+    plan: varchar('plan', { length: 64 }),
+    seatType: varchar('seat_type', { length: 64 }),
+    provider: varchar('provider', { length: 64 }),
+    customBaseUrl: varchar('custom_base_url', { length: 1024 }),
+    accountEventAt: timestamp('account_event_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),

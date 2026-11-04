@@ -1,0 +1,12 @@
+flowchart TB
+  subgraph net["Company network (office LAN / VPN) · no inbound access from the internet"]
+    browser["Browser"]
+    hook["Claude Code + hook"]
+    proxy["VM loghub.internal · nginx :443<br/>TLS certificate"]
+    app["VM · app container<br/>Log Hub server<br/>127.0.0.1:5003 → :3000"]
+    pg[("VM · db container<br/>PostgreSQL, not published")]
+    browser ==>|"HTTPS · encrypted"| proxy
+    hook ==>|"HTTPS · encrypted"| proxy
+    proxy -->|"HTTP · loopback only"| app
+    app -->|SQL| pg
+  end

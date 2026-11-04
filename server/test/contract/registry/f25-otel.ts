@@ -12,6 +12,7 @@
 //
 // The SQL below is written from the documented rules, not copied from otel-facts-read.sql.ts:
 // one sub-query per metric over the scoped roots' non-zero buckets of the window.
+import { WORLD_V1_S01_PLAN } from '../fixtures/world-v1.sql';
 import type {
   CallCase,
   ContractCase,
@@ -1471,8 +1472,330 @@ const teamRows: ContractCase[] = [
   },
 ];
 
+// -------------------------------------------------------------------------------------------
+// Cost attribution (2026-11-03 otel-cost-attribution)
+//
+// World: s01's hidden call ran in skill `adlc-lh:tracker` at effort `low`; s04's call used skill
+// `deploy`, MCP server `github`, effort `medium`, speed `fast`; every other call reports none
+// (`''`). s01's state row carries the account WORLD_V1_S01_PLAN; s04's and s11's carry none.
+
+/** The four new `stackBy` values (DD-8) and the bucket column each groups by. */
+const ATTRIBUTION_STACKS = [
+  ['skill', 'skill'],
+  ['mcpServer', 'mcp_server'],
+  ['effort', 'effort'],
+  ['speed', 'speed'],
+] as const;
+
+/**
+ * The buckets of `roots` in `[from, to)` grouped by `column` (`daily`: the 1d interval in UTC;
+ * otherwise 5m = the stored start). The rows come back only when the grouping is complete: a
+ * `''` ("not reported") key is among them, and the keys' cost sums to the ungrouped total —
+ * the roots' `otel_calls` of the window, a table the buckets are derived from. Otherwise the
+ * SQL returns no row and the row fails on the element count.
+ */
+function attributionBucketsSql(
+  roots: string,
+  from: string,
+  to: string,
+  column: string,
+  daily: boolean,
+): string {
+  const start = daily
+    ? `date_trunc('day', bucket_start AT TIME ZONE 'UTC') AT TIME ZONE 'UTC'`
+    : 'bucket_start';
+  return `${bucketsOf(roots, from, to)},
+  g AS (SELECT ${start} AS start, ${column} AS key, sum(calls) AS calls,
+               sum(cost_usd_micros) AS cost_n,
+               sum(input_tokens + output_tokens + cache_read_tokens + cache_write_tokens)::text
+                 AS tokens,
+               (array_agg(change_kind ORDER BY seq DESC))[1] AS change_kind
+          FROM b GROUP BY 1, 2)
+  SELECT start, key, calls, cost_n::text AS cost, tokens, change_kind
+    FROM g
+   WHERE EXISTS (SELECT 1 FROM g WHERE key = '')
+     AND (SELECT sum(cost_n) FROM g)
+           = (SELECT sum(c.cost_usd_micros) FROM otel_calls c
+               WHERE c.session_id IN (SELECT id FROM roots)
+                 AND c.event_time >= ${from}::timestamptz AND c.event_time < ${to}::timestamptz)
+   ORDER BY start, key`;
+}
+
+const BUCKET_FIELDS: ReadSpec['fields'] = {
+  start: { col: 'start', as: 'iso' },
+  key: 'key',
+  calls: { col: 'calls', as: 'number' },
+  costUsdMicros: 'cost',
+  tokens: 'tokens',
+  changeKind: 'change_kind',
+};
+
+/** The session route's root `$1` (a `sessions.id`) over every bucket it has. */
+const SESSION_ROOT = 'SELECT $1::bigint AS id';
+const ALL_TIME = {
+  from: `'2000-01-01T00:00:00Z'`,
+  to: `'2100-01-01T00:00:00Z'`,
+};
+
+const attributionRows: ContractCase[] = ATTRIBUTION_STACKS.flatMap(
+  ([stackBy, column]): ContractCase[] => [
+    {
+      // R1, owner, January: s01 and s04; the keys sum to the total and include ''.
+      id: `F25-repo-buckets-${stackBy}`,
+      route: REPO_FACTS,
+      actor: 'owner',
+      params: { repoId: '@R1.id' },
+      query: { ...JAN, stackBy },
+      expect: { status: 200, minRows: 2 },
+      read: {
+        sql: attributionBucketsSql(PERSONAL_ROOTS, '$3', '$4', column, true),
+        args: ['@R1.id', '@owner.id', JAN.from, JAN.to],
+        shape: 'array',
+        path: 'buckets',
+        fields: BUCKET_FIELDS,
+        strict: true,
+      },
+    },
+    {
+      // s01 alone (both buckets at 10:05 -> the 5m interval).
+      id: `F25-session-buckets-${stackBy}`,
+      route: SESSION_OTEL,
+      actor: 'owner',
+      params: S01,
+      query: { stackBy },
+      expect: { status: 200, minRows: 1, bodyMatches: { interval: '5m' } },
+      read: {
+        sql: attributionBucketsSql(
+          SESSION_ROOT,
+          ALL_TIME.from,
+          ALL_TIME.to,
+          column,
+          false,
+        ),
+        args: ['@s01.id'],
+        shape: 'array',
+        path: 'buckets',
+        fields: BUCKET_FIELDS,
+        strict: true,
+      },
+    },
+    {
+      // T2's manager (`team-no-prompts`): s01, s04 and s11 — the keys are never masked.
+      id: `F25-team-buckets-${stackBy}`,
+      route: TEAM_FACTS,
+      actor: 'manager',
+      params: { teamId: '@T2.id' },
+      query: { ...JAN, stackBy },
+      expect: { status: 200, minRows: 2 },
+      read: {
+        sql: attributionBucketsSql(teamRoots(true), '$2', '$3', column, true),
+        args: ['@T2.id', JAN.from, JAN.to],
+        shape: 'array',
+        path: 'buckets',
+        fields: BUCKET_FIELDS,
+        strict: true,
+      },
+    },
+  ],
+);
+
+/** Root `$1`'s reported account (DD-10); `masked` forces the base URL to null (DD-22). */
+function sessionPlanSql(masked: boolean): string {
+  return `SELECT plan, seat_type, provider,
+                 ${masked ? 'NULL::text' : 'custom_base_url'} AS custom_base_url
+            FROM otel_session_state
+           WHERE session_id = $1
+             AND coalesce(plan, seat_type, provider, custom_base_url) IS NOT NULL`;
+}
+
+const PLAN_FIELDS: ReadSpec['fields'] = {
+  plan: 'plan',
+  seatType: 'seat_type',
+  provider: 'provider',
+  customBaseUrl: 'custom_base_url',
+};
+
+/**
+ * The plan mix of `roots` in `[from, to)` (DD-9): per reported plan (NULL = not reported) the
+ * roots with buckets in the window and their cost; reported plans first, most expensive first.
+ */
+function planMixSql(roots: string, from: string, to: string): string {
+  return `${bucketsOf(roots, from, to)},
+  costed AS (SELECT DISTINCT session_id,
+                    (SELECT sum(b2.cost_usd_micros) FROM b b2 WHERE b2.session_id = b.session_id)
+                      AS cost
+               FROM b),
+  planned AS (SELECT c.cost,
+                     (SELECT nullif(st.plan, '') FROM otel_session_state st
+                       WHERE st.session_id = c.session_id) AS plan
+                FROM costed c)
+  SELECT plan, count(*) AS sessions, sum(cost)::text AS cost
+    FROM planned
+   GROUP BY plan
+   ORDER BY plan IS NULL, sum(cost) DESC, plan`;
+}
+
+const PLAN_MIX_FIELDS: ReadSpec['fields'] = {
+  plan: 'plan',
+  sessions: { col: 'sessions', as: 'number' },
+  costUsdMicros: 'cost',
+};
+
+const planRows: ContractCase[] = [
+  {
+    // s01 reported its account: every value as stored (the base URL sanitised on write).
+    id: 'F25-session-plan',
+    route: SESSION_OTEL,
+    actor: 'owner',
+    params: S01,
+    expect: {
+      status: 200,
+      minRows: 1,
+      bodyMatches: { plan: { ...WORLD_V1_S01_PLAN } },
+    },
+    read: {
+      sql: sessionPlanSql(false),
+      args: ['@s01.id'],
+      shape: 'object',
+      path: 'plan',
+      fields: PLAN_FIELDS,
+      strict: true,
+    },
+  },
+  {
+    // ... on a delta too (DD-10): the empty delta still carries it.
+    id: 'F25-session-plan-empty-delta',
+    route: SESSION_OTEL,
+    actor: 'owner',
+    params: S01,
+    query: { since: 'v1.3' },
+    expect: {
+      status: 200,
+      bodyMatches: { full: false, plan: { ...WORLD_V1_S01_PLAN } },
+    },
+    noDb: true,
+  },
+  {
+    // s04's hook (2.28.0) reported no account: its state row has none of the four -> null.
+    id: 'F25-session-no-plan',
+    route: SESSION_OTEL,
+    actor: 'owner',
+    params: { repoId: '@R1.id', sessionId: '@s04.sessionId' },
+    expect: { status: 200, bodyMatches: { plan: null } },
+    noDb: true,
+  },
+  {
+    // DD-10 / DD-22: T2's manager gets the plan, seat and provider, but no base URL.
+    id: 'F25-session-plan-masked',
+    route: SESSION_OTEL,
+    actor: 'manager',
+    params: S01,
+    query: { teamId: '@T2.id' },
+    expect: {
+      status: 200,
+      minRows: 1,
+      bodyMatches: {
+        plan: { ...WORLD_V1_S01_PLAN, customBaseUrl: null },
+      },
+    },
+    read: {
+      sql: sessionPlanSql(true),
+      args: ['@s01.id'],
+      shape: 'object',
+      path: 'plan',
+      fields: PLAN_FIELDS,
+      strict: true,
+    },
+  },
+  {
+    // R1, owner, January: s01 on `max`, s04 not reported. Golden in bodyMatches.
+    id: 'F25-repo-plan-mix',
+    route: REPO_FACTS,
+    actor: 'owner',
+    params: { repoId: '@R1.id' },
+    query: { ...JAN },
+    expect: {
+      status: 200,
+      minRows: 2,
+      bodyMatches: {
+        planMix: [
+          { plan: 'max', sessions: 1, costUsdMicros: '720000' },
+          { plan: null, sessions: 1, costUsdMicros: '500000' },
+        ],
+      },
+    },
+    read: {
+      sql: planMixSql(PERSONAL_ROOTS, '$3', '$4'),
+      args: ['@R1.id', '@owner.id', JAN.from, JAN.to],
+      shape: 'array',
+      path: 'planMix',
+      fields: PLAN_MIX_FIELDS,
+      strict: true,
+    },
+  },
+  {
+    // T2's manager (`team-no-prompts`): s01 on `max`; s04 and s11 not reported. The plan
+    // values are aggregates and stay unmasked.
+    id: 'F25-team-plan-mix',
+    route: TEAM_FACTS,
+    actor: 'manager',
+    params: { teamId: '@T2.id' },
+    query: { ...JAN },
+    expect: {
+      status: 200,
+      minRows: 2,
+      bodyMatches: {
+        planMix: [
+          { plan: 'max', sessions: 1, costUsdMicros: '720000' },
+          { plan: null, sessions: 2, costUsdMicros: '600000' },
+        ],
+      },
+    },
+    read: {
+      sql: planMixSql(teamRoots(true), '$2', '$3'),
+      args: ['@T2.id', JAN.from, JAN.to],
+      shape: 'array',
+      path: 'planMix',
+      fields: PLAN_MIX_FIELDS,
+      strict: true,
+    },
+  },
+  {
+    // `team-no-prompts` keeps the skill keys verbatim (DD-10): golden daily buckets of T2's
+    // manager — s01 on Jan 10 ('' and adlc-lh:tracker), s04 on Jan 12 (deploy), s11 on Jan 15.
+    id: 'F25-team-no-prompts-skill-keys',
+    route: TEAM_FACTS,
+    actor: 'manager',
+    params: { teamId: '@T2.id' },
+    query: { ...JAN, stackBy: 'skill' },
+    expect: { status: 200, minRows: 4 },
+    read: {
+      sql: `SELECT * FROM (VALUES
+              ('2026-01-10T00:00:00.000Z', '', '700000'),
+              ('2026-01-10T00:00:00.000Z', 'adlc-lh:tracker', '20000'),
+              ('2026-01-12T00:00:00.000Z', 'deploy', '500000'),
+              ('2026-01-15T00:00:00.000Z', '', '100000')
+            ) AS g(start, key, cost)`,
+      shape: 'array',
+      path: 'buckets',
+      fields: {
+        start: { col: 'start', as: 'iso' },
+        key: 'key',
+        costUsdMicros: 'cost',
+      },
+    },
+  },
+];
+
 export const f25Otel: ContractFamily = {
   id: 'F25',
   name: 'otel',
-  cases: [...realtimeRows, ...repoRows, ...sessionRows, ...teamRows],
+  cases: [
+    ...realtimeRows,
+    ...repoRows,
+    ...sessionRows,
+    ...teamRows,
+    ...attributionRows,
+    ...planRows,
+  ],
 };

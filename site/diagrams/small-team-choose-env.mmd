@@ -1,0 +1,18 @@
+flowchart TB
+  smtp{"SMTP relay reachable<br/>from the VM?"}
+  confirm{"Limit sign-up to your mail domain,<br/>with emailed confirmation?"}
+  m2["Mode 2 · password"]
+  m2smtp["Mode 2 + SMTP<br/>password reset works"]
+  m3["Mode 3 · password-confirm"]
+  tls{"TLS certificate for the<br/>server name (internal CA)?"}
+  http[".env “plain http://”<br/>+ section 4: open the port"]
+  https[".env “https:// behind a reverse proxy”<br/>+ section 5: nginx"]
+  smtp -->|no| m2
+  smtp -->|yes| confirm
+  confirm -->|no| m2smtp
+  confirm -->|yes| m3
+  m2 --> tls
+  m2smtp --> tls
+  m3 --> tls
+  tls -->|no| http
+  tls -->|"yes (recommended)"| https

@@ -39,9 +39,11 @@ import {
   OTEL_SESSION_ENDED_MS,
 } from './otel-facts.constants';
 import type {
+  OtelAttributionStackBy,
   OtelCallsFilter,
   OtelChangeKind,
   OtelInterval,
+  OtelPlanMixRow,
   OtelStructure,
 } from './otel-facts.types';
 import { OTEL_SOURCE_CHUNK_BIT } from './otel-facts-writer';
@@ -126,8 +128,13 @@ export type OtelStackColumn =
   | 'structure'
   | 'querySource'
   | 'model'
-  | 'ccVersion';
+  | 'ccVersion'
+  | OtelAttributionStackBy;
 
+/**
+ * The stack key of alias `fb`. The cost-attribution groupings (2026-11-03
+ * otel-cost-attribution, DD-8) keep `''` as the "not reported" key and are never masked.
+ */
 export function stackKeySql(stackBy: OtelStackColumn): SQL {
   switch (stackBy) {
     case 'structure':
@@ -138,6 +145,14 @@ export function stackKeySql(stackBy: OtelStackColumn): SQL {
       return sql`fb.model`;
     case 'ccVersion':
       return sql`fb.cc_version`;
+    case 'skill':
+      return sql`fb.skill`;
+    case 'mcpServer':
+      return sql`fb.mcp_server`;
+    case 'effort':
+      return sql`fb.effort`;
+    case 'speed':
+      return sql`fb.speed`;
   }
 }
 
@@ -193,7 +208,8 @@ export function repoBucketSource(
   return sql`WITH RECURSIVE ${roots},
   fb AS (
     SELECT b.session_id, COALESCE(b.user_id, r.user_id) AS uid, b.bucket_start, b.structure,
-           b.query_source, b.model, b.cc_version, b.calls, b.cost_usd_micros, b.input_tokens,
+           b.query_source, b.model, b.cc_version, b.skill, b.mcp_server, b.effort, b.speed,
+           b.calls, b.cost_usd_micros, b.input_tokens,
            b.output_tokens, b.cache_read_tokens, b.cache_write_tokens, b.seq, b.change_kind
            ${extra ? sql`, ${extra.columns}` : sql``}
       FROM scoped_roots r
@@ -213,7 +229,8 @@ export function repoBucketSource(
 export function sessionBucketSource(rootId: number, includeZero = false): SQL {
   return sql`WITH fb AS (
     SELECT b.session_id, b.user_id AS uid, b.bucket_start, b.structure, b.query_source,
-           b.model, b.cc_version, b.calls, b.cost_usd_micros, b.input_tokens, b.output_tokens,
+           b.model, b.cc_version, b.skill, b.mcp_server, b.effort, b.speed, b.calls,
+           b.cost_usd_micros, b.input_tokens, b.output_tokens,
            b.cache_read_tokens, b.cache_write_tokens, b.seq, b.change_kind
       FROM otel_cost_buckets b
      WHERE b.session_id = ${rootId}
@@ -407,6 +424,41 @@ export async function loadKpiSums(
     cacheWriteTokens: microsText(r?.cache_write_tokens),
     medianSessionCostUsdMicros: microsTextOrNull(r?.median_session_cost),
   };
+}
+
+interface PlanMixDbRow {
+  plan: string | null;
+  sessions: DbValue;
+  cost: DbValue;
+}
+
+/**
+ * The Total KPI of `source` split by each root's reported plan (2026-11-03
+ * otel-cost-attribution, DD-9): the same `fb` source as {@link loadKpiSums}, so the filters are
+ * identical by construction. Cost descending, not reported (`plan` null) last. Never masked.
+ */
+export async function loadPlanMix(
+  db: DrizzleDb,
+  source: SQL,
+): Promise<OtelPlanMixRow[]> {
+  const result = await db.execute(sql`
+    ${source},
+    per_session AS (
+      SELECT fb.session_id, SUM(fb.cost_usd_micros) AS cost FROM fb GROUP BY fb.session_id
+    )
+    SELECT NULLIF(st.plan, '') AS plan,
+           COUNT(*) AS sessions,
+           COALESCE(SUM(per_session.cost), 0) AS cost
+      FROM per_session
+      LEFT JOIN otel_session_state st ON st.session_id = per_session.session_id
+     GROUP BY 1
+     ORDER BY (NULLIF(st.plan, '') IS NULL), 3 DESC, 1
+  `);
+  return (result.rows as unknown as PlanMixDbRow[]).map((r) => ({
+    plan: r.plan,
+    sessions: toNum(r.sessions),
+    costUsdMicros: microsText(r.cost),
+  }));
 }
 
 // ---------------------------------------------------------------------------
@@ -1016,6 +1068,11 @@ export interface OtelStateRow {
   rtLastAt: Date | null;
   chunkLastAt: Date | null;
   rtGapAt: Date | null;
+  /** The reported account (2026-11-03 otel-cost-attribution, DD-5, DD-10). */
+  plan: string | null;
+  seatType: string | null;
+  provider: string | null;
+  customBaseUrl: string | null;
 }
 
 /** One primary-key read of the root's state (DD-2: the reader reads S first). */
@@ -1024,7 +1081,8 @@ export async function readOtelStateRow(
   rootId: number,
 ): Promise<OtelStateRow | null> {
   const result = await db.execute(sql`
-    SELECT seq, user_id, otel_hook_version, has_spans, rt_last_at, chunk_last_at, rt_gap_at
+    SELECT seq, user_id, otel_hook_version, has_spans, rt_last_at, chunk_last_at, rt_gap_at,
+           plan, seat_type, provider, custom_base_url
       FROM otel_session_state
      WHERE session_id = ${rootId}
   `);
@@ -1037,6 +1095,10 @@ export async function readOtelStateRow(
       rt_last_at: DbDate;
       chunk_last_at: DbDate;
       rt_gap_at: DbDate;
+      plan: string | null;
+      seat_type: string | null;
+      provider: string | null;
+      custom_base_url: string | null;
     }[]
   )[0];
   if (!r) return null;
@@ -1049,6 +1111,10 @@ export async function readOtelStateRow(
     rtLastAt: toDate(r.rt_last_at),
     chunkLastAt: toDate(r.chunk_last_at),
     rtGapAt: toDate(r.rt_gap_at),
+    plan: r.plan ?? null,
+    seatType: r.seat_type ?? null,
+    provider: r.provider ?? null,
+    customBaseUrl: r.custom_base_url ?? null,
   };
 }
 

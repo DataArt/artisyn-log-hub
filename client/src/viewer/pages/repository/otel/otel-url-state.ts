@@ -95,6 +95,10 @@ const STACK_BY_VALUES: readonly RepoOtelStackBy[] = [
   'querySource',
   'model',
   'ccVersion',
+  'skill',
+  'mcpServer',
+  'effort',
+  'speed',
 ];
 
 const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;

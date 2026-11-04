@@ -36,6 +36,8 @@ function agentCost(
   pricing: ModelPricingMap | undefined,
   sessionModel: string | undefined,
 ): number | undefined {
+  // FR-6: the server-chosen OTEL cost replaces the token×price estimate when it is set.
+  if (node.otelCostUsd != null) return node.otelCostUsd;
   if (!node.tokens || !pricing) return undefined;
   const model = node.model ?? sessionModel;
   const entry = model ? pricing[model] : undefined;
@@ -157,6 +159,11 @@ export function WorkflowAgentsTable({
                 </td>
                 <td className="w-24 py-0.5 text-right font-mono text-xs">
                   {formatCost(agentCost(node, pricing, sessionModel))}
+                  {node.otelCostUsd != null && (
+                    <div className="font-sans text-[10px] text-muted-foreground">
+                      from OTEL
+                    </div>
+                  )}
                 </td>
               </tr>
             );

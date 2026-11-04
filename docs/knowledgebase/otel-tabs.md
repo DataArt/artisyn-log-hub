@@ -1,14 +1,14 @@
 ---
 type: "Architecture Guide"
 title: "OTEL Tabs (realtime + projected OTEL facts)"
-description: "How the repository, session and team OTEL tabs get their data: the two channels (hook realtime batches and the durable claude-otel chunk upload drained by a projection), the five OTEL fact tables, the per-root seq cursor and lock order, call structure (main / subagent / hidden) and queued reclassification, realtime / gap / fill states, the per-session OTEL status (otel-status event, reason panel, partial banner), repository and team coverage with reason chips, the utility-call cost marker, the routes, retention, the hook-by-server and Claude Code compatibility matrix and the measured per-request cost."
+description: "How the repository, session and team OTEL tabs get their data: the two channels (hook realtime batches and the durable claude-otel chunk upload drained by a projection), the five OTEL fact tables, the per-root seq cursor and lock order, call structure (main / subagent / hidden) and queued reclassification, realtime / gap / fill states, the per-session OTEL status (otel-status event, reason panel, partial banner), repository and team coverage with reason chips, the utility-call cost marker, the routes, the attribution stack-bys (skill / MCP server / effort / speed, \"not reported\"), the account latest-wins rule, plan mix and session plan, projection version 2, retention, the hook-by-server and Claude Code compatibility matrix and the measured per-request cost."
 tags:
   - otel
   - hooks
   - session-view
   - reports
   - teams
-timestamp: "2026-11-03T00:00:00+04:00"
+timestamp: "2026-11-04T00:00:00+04:00"
 ---
 
 # OTEL Tabs
@@ -42,7 +42,7 @@ startup re-mark in `database-init.ts`, and one `HOOK_API_ROUTES` entry.
 | File | Role |
 |---|---|
 | `otel-facts.constants.ts` | every constant below (`OTEL_*`) |
-| `otel-records.ts` | pure: `resolveOtelEventTime`, `otelCallKey`, `extractOtelCalls`, `extractOtelSpans` (caps, 64 KiB attribute limit), `maxHookVersion` |
+| `otel-records.ts` | pure: `resolveOtelEventTime`, `otelCallKey`, `extractOtelCalls`, `extractOtelAccount`, `sanitizeOtelBaseUrl`, `extractOtelSpans` (caps, 64 KiB attribute limit), `maxHookVersion` |
 | `otel-classify.ts` | pure: `classifyOtelCall`, `bucketStart5m`, `pickOtelInterval` |
 | `otel-query-source-dictionary.ts` | `query_source` names, descriptions and `hidden`; `lookupQuerySource` (unknown → `known: false`, a "new" chip in the UI) |
 | `otel-span-names.ts` | `claude_code.interaction` / `.llm_request` / `.tool` / `.tool.blocked_on_user` / `.tool.execution` |
@@ -151,10 +151,18 @@ ids), so backfilled history never stays provisional.
 
 ## Buckets and intervals (DD-7, DD-18, DD-19)
 
-- Grain `(session_id, bucket_start, structure, query_source, model, cc_version)`, `bucket_start`
-  = 5-minute UTC floor. A call upsert subtracts the old contribution and adds the new one
-  (identical values → no seq bump); a rebuild upserts only changed keys and zeroes vanished ones
-  (reads ignore zero rows).
+- Grain `(session_id, bucket_start, structure, query_source, model, cc_version, skill,
+  mcp_server, effort, speed)` (the four attribution columns since migration `0088`, task
+  `2026-11-03-otel-cost-attribution`, also the columns of `otel_cost_buckets_pk`), `bucket_start`
+  = 5-minute UTC floor. `CallContribution` takes the attribution parts from `otel_calls.skill_name`,
+  `mcp_server_name`, `effort`, `speed` with `?? ''`; `bucketKey` joins all 9 grain parts (session
+  aside). A call upsert subtracts the old contribution and adds the new one (identical values → no
+  seq bump), so a call whose attribution changed moves between keys; a rebuild
+  (`rebuildOtelBuckets`) groups by and FULL JOINs on all grain columns, upserts only changed keys
+  and zeroes vanished ones (reads ignore zero rows).
+- `''` in an attribution column = **not reported** (the attribute was absent: older Claude Code,
+  default value, or no `OTEL_LOG_TOOL_DETAILS=1` for skill / MCP names). Rows written before `0088`
+  read as `''` through the column default.
 - The routes return **server-rolled** buckets: `interval=auto` → repository ≤ 24 h `5m`, ≤ 14 d
   `1h`, else `1d`; session ≤ 24 h `5m`, else `1h`. `tz` is an IANA name (validated with
   `Intl.DateTimeFormat`, 400 otherwise); SQL rolls up with `date_trunc(unit, bucket_start, tz)`.
@@ -229,6 +237,31 @@ Session Map tab polls ([`session-map.md`](session-map.md)). The delta returns on
 One summary log line per tick with work (chunks, sessions, fills, failures, duration). The
 `ingestOtelChunk` upsert resets `otel_projection_version` to NULL on a re-upload, and every
 `logs_otel` row that existed before `0078` starts NULL — that is the backfill.
+
+**Projection version.** `OTEL_PROJECTION_VERSION` is `2` since task
+`2026-11-03-otel-cost-attribution` (v1 had no attribution / account fields). The startup re-mark
+(`database-init.ts`, `< current` → NULL) requeues every v1 chunk, and the normal drain re-projects
+all history: the new `otel_calls` columns, the attribution bucket grain and the account fields fill
+in without an extra startup wait. Bump it again whenever extraction gains fields history should get.
+
+## Account fields (latest wins, task `2026-11-03-otel-cost-attribution`)
+
+`applyOtelLines` calls `extractOtelAccount(lines)` (`otel-records.ts`, algorithm
+[otel-facts](algorithms/otel-facts.md)) and writes `otel_session_state.plan`, `seat_type`,
+`provider`, `custom_base_url` and `account_event_at`:
+
+- sources: `anthropic.plan`, `anthropic.seat_type`, `anthropic.provider`,
+  `anthropic.custom_base_url` on `logs` `claude_code.api_request` records and `traces` spans —
+  record / span attributes first, then `entry.resource`; the base URL is sanitised
+  (`sanitizeOtelBaseUrl`: scheme + host:port + path only);
+- inside a batch each field takes the non-null value with the greatest event time
+  (`resolveOtelEventTime`; ties → later line); `eventAt` = greatest event time of any record that
+  carried a field;
+- in SQL a non-null value overwrites when `stored IS NULL OR $eventAt >= account_event_at`, then
+  `account_event_at = GREATEST(account_event_at, $eventAt)`; **null never overwrites**, so a
+  re-projected old chunk cannot erase a newer plan;
+- any changed stored value counts as a change (bumps `seq`, so a `since=` delta carries the new
+  `plan`).
 
 ## Realtime ingest (DD-17)
 
@@ -308,15 +341,37 @@ calls (no OTEL)" with a tooltip from `cost-hints.ts`) shows next to the cost in
 | Route | Auth | Notes |
 |---|---|---|
 | `POST /api/v2/otel-realtime` | API key | hook `2.29.0`+; [hook-api-versioning.md](hook-api-versioning.md) |
-| `GET /api/v1/repositories/:repoId/otel/facts` | session | `from`/`to` ≤ 93 days, filters, `interval`, `stackBy`, `tz`, `teamId`; + `coverage` |
-| `GET /api/v1/repositories/:repoId/sessions/:sessionId/otel` | session | snapshot or `since=` delta; + `status.otelStatus`, `status.costExcludesUtilityCalls` |
-| `GET /api/v1/teams/:teamId/otel/facts` | session | + `repoId[]`, `userId[]`, `stackBy=person\|repository\|…`; + `coverage` |
-| `GET /api/v1/repositories/:repoId/sessions` | session | (existing list) + `costBreakdown.costExcludesUtilityCalls` per item and the `otelReason=<key>` filter (root sessions without OTEL data whose `COALESCE(otel_reason,'no-status')` equals it; unknown or repeated value → `400`) |
+| `GET /api/v1/repositories/:repoId/otel/facts` | session | `from`/`to` ≤ 93 days, filters, `interval`, `stackBy` (+ `skill\|mcpServer\|effort\|speed`), `tz`, `teamId`; + `coverage`, `planMix` |
+| `GET /api/v1/repositories/:repoId/sessions/:sessionId/otel` | session | snapshot or `since=` delta, `stackBy` (+ the same 4); + `status.otelStatus`, `status.costExcludesUtilityCalls`, `plan` |
+| `GET /api/v1/teams/:teamId/otel/facts` | session | + `repoId[]`, `userId[]`, `stackBy=person\|repository\|…\|skill\|mcpServer\|effort\|speed`; + `coverage`, `planMix` |
+| `GET /api/v1/repositories/:repoId/sessions` | session | (existing list) + `costBreakdown.costExcludesUtilityCalls` and `costBreakdown.subagentCostFromOtel` per item and the `otelReason=<key>` filter (root sessions without OTEL data whose `COALESCE(otel_reason,'no-status')` equals it; unknown or repeated value → `400`) |
+| `GET …/sessions/:sessionId/logs`, `…/logs/delta` | session | (existing) + `subagentStats[*].otelCostUsd` |
 
 Shapes: `server/src/logs/otel/otel-facts.types.ts`. Controllers and access rules:
 [server-endpoint-map.md](server-endpoint-map.md). No existing route, upload kind or chunk line
-type changed incompatibly: the `coverage` / `otelStatus` / `costExcludesUtilityCalls` fields and the
-`otelReason` param are additive, and `otel-status` is a new artisyn line type.
+type changed incompatibly: the `coverage` / `otelStatus` / `costExcludesUtilityCalls` /
+`planMix` / `plan` / `subagentCostFromOtel` / `otelCostUsd` fields and the `otelReason` param and
+new `stackBy` values are additive, and `otel-status` is a new artisyn line type.
+
+**Attribution and plan fields (task `2026-11-03-otel-cost-attribution`).**
+
+- `stackBy=skill|mcpServer|effort|speed` maps to `fb.skill`, `fb.mcp_server`, `fb.effort`,
+  `fb.speed` (`stackKeySql`, `teamStackKeySql`); `''` is the "not reported" key, shown by the
+  client as a grey **not reported** series with an ⓘ hint (`OTEL_NOT_REPORTED_HINT`,
+  `otel-chart-data.ts`). Defaults are unchanged; unknown values → 400.
+- `planMix: OtelPlanMixRow[]` (`{ plan, sessions, costUsdMicros }`) — `loadPlanMix(db, source)`
+  over the same `fb` source and filters as the Total KPI, `LEFT JOIN otel_session_state` grouped by
+  `NULLIF(plan,'')`, cost descending, NULL last. Rendered by `OtelPlanMix.tsx` on the Total tile
+  only when some row has a non-null plan.
+- `plan: OtelSessionPlan | null` (`{ plan, seatType, provider, customBaseUrl }`) — from
+  `readOtelStateRow` on every response including the empty-delta fast path; `null` when all four
+  are null. `customBaseUrl` is forced to `null` when `attributesMasked` — the only new masked
+  value; attribution keys and plan-mix values are aggregates and stay unmasked on every route.
+  Client: `SessionOtelAccount.tsx` (Account row + plan note, help anchor `plan-and-notional-cost`)
+  and the `plan:` chip on the session OTEL cost tile; `mergeOtelDelta` keeps the previous `plan`
+  when a delta (old server) has none.
+- Sub-agent OTEL cost (FR-6): see [llm-call-math.md](llm-call-math.md) and
+  [otel-cost-selection](algorithms/otel-cost-selection.md) rule for sub-agents.
 
 Client polling (DD-20, `client/src/viewer/pages/repository/otel/otel.constants.ts`): session tab
 every `OTEL_SESSION_POLL_MS` (5 s) with `since=` while the page is visible, there was input within
@@ -361,6 +416,16 @@ return from a hidden tab send one catch-up request.
 | `≥ 2.1.282` | user or managed only | project keys ignored → no OTEL (reason not reported: `no-status`) | user-scope keys work; project-only keys → `project-only` reason and a SessionStart `warn` |
 | unknown version | treated as `≥ 2.1.282` | — | as `≥ 2.1.282` |
 | any, managed endpoint / disabled | managed wins per key | no OTEL to Log Hub for pinned signals | `managed-endpoint` / `managed-disabled`; the installer writes no user keys |
+
+**Claude Code version × cost attribution** (task `2026-11-03-otel-cost-attribution`; server-side
+only, any hook that sends OTEL):
+
+| Claude Code | Effect | Scenario step |
+|---|---|---|
+| `< 2.1.300` | no `cache_creation_5m_tokens` / `_1h_tokens` → `cache_write_5m_tokens` / `cache_write_1h_tokens` NULL (the cache-write total is unchanged) | algorithm row (pre-2.1.300 `calls`) |
+| no attribution attributes (old CC, default values, no `OTEL_LOG_TOOL_DETAILS`) | every attribution `stackBy` returns one `''` "not reported" group equal to the total | `s-compat-01` frozen 2.28.0 OTEL |
+| `< 2.1.307` | sub-agent transcripts can miss API calls → sub-agent cost = `GREATEST(transcript, OTEL)` (FR-6), `subagentCostFromOtel`, "from OTEL" | `s-cost-01` GS-02 old-CC sub-agent |
+| `< 2.1.317` | no `anthropic.plan` / account attributes → `plan: null`, no Account row, no chip, counted as "not reported" in `planMix` | `s-compat-01` frozen 2.28.0 OTEL |
 
 The trace keys are opt-in at install (`--otel-traces`, stored `otelTraces`), see
 [hook-installation.md](hook-installation.md).

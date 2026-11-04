@@ -18,13 +18,15 @@ Open a repository and pick **OTEL** (between **OKF** and **Settings**). From top
   Code version and calls (all, hidden only, in transcript), with the live indicator and a
   **Pause** button at the end.
 - **Chart controls** — metric (cost, calls, tokens), stack by (structure, `query_source`, model,
-  Claude Code version), interval (auto, 5 min, 1 h, 1 day), stacked or 100 % view, and a
-  cumulative line on the right axis.
+  Claude Code version, **Skill**, **MCP server**, **Effort**, **Fast mode**), interval (auto,
+  5 min, 1 h, 1 day), stacked or 100 % view, and a cumulative line on the right axis. See
+  [Grouping by skill, MCP server, effort and fast mode](#grouping-by-skill-mcp-server-effort-and-fast-mode).
 - **Chart** — hover a bar for its parts sorted by value with their shares, the total and the
   cumulative value. Click a legend item to hide or show that series.
 - **KPI tiles** — total cost, per day, per session, API calls, hidden cost and sessions, each with
   the change against the previous period of the same length; a second row with tokens by type,
-  the cache read ratio and the cost per user.
+  the cache read ratio and the cost per user. When Claude Code reports a plan, the total cost tile
+  also shows the **Mix of plans** — see [Plan and notional cost](#plan-and-notional-cost).
 - **Cost structure & hidden calls** — the share of each `query_source` (click a row to isolate it
   in the chart) and the hidden calls.
 - **Cost flow** — how the cost splits from model to branch (and to user, when the repository is
@@ -48,11 +50,16 @@ The **OTEL** tab of a session (the rightmost session tab) covers the session and
 sub-agents. From top to bottom:
 
 - **Header** — the cost source, the hook version that sent the data and whether traces are on,
-  with the **Realtime data** badge and its notices.
-- **Chart** — the same chart as on the repository tab, with a 5 min or 1 h interval.
+  with the **Realtime data** badge and its notices. When Claude Code reports account details, an
+  **Account:** row below it shows the plan, seat type, provider and custom API base URL, with a
+  note on what the plan means for the amounts — see [Plan and notional cost](#plan-and-notional-cost).
+- **Chart** — the same chart as on the repository tab, with a 5 min or 1 h interval. It can be
+  stacked by structure, `query_source`, model, **Skill**, **MCP server**, **Effort** or
+  **Fast mode** (see
+  [Grouping by skill, MCP server, effort and fast mode](#grouping-by-skill-mcp-server-effort-and-fast-mode)).
 - **KPI tiles** — OTEL cost, hidden cost, API calls, turns (and how many are still running),
   sub-agents and the time the session waited for you; a further row with tokens by type and the
-  cache read ratio.
+  cache read ratio. The OTEL cost tile carries a `plan: <value>` chip when a plan is reported.
 - **Cost by source** — the share of each `query_source`.
 - **Trace navigator** — step through the turns with **‹ Turn n of N ›**, ordered by **Start**,
   **Cost** or **Slowest**. Each turn shows its start, duration, cost, hidden cost, model calls,
@@ -78,8 +85,12 @@ press **Pause**; **Resume** catches up at once.
 A team page has an **OTEL** tab over all of the team's repositories and people. From top to
 bottom: a filter strip (period, repositories, people, model, calls) with the live indicator and
 **Pause**; the **Realtime data** badge and notices; the chart, stacked by person by default (the
-five people with the highest cost by name, the rest as "others (N)"); two rows of tiles, including
-the cost per active person and the number of repositories; the **Cost flow** from model to person
+five people with the highest cost by name, the rest as "others (N)") and also by **Skill**,
+**MCP server**, **Effort** or **Fast mode** (see
+[Grouping by skill, MCP server, effort and fast mode](#grouping-by-skill-mcp-server-effort-and-fast-mode));
+two rows of tiles, including the cost per active person, the number of repositories and the
+**Mix of plans** on the total cost tile (see [Plan and notional cost](#plan-and-notional-cost));
+the **Cost flow** from model to person
 to repository (switch **Repository / Branch** to see the branch of each session as well); a
 **People** table and a **Repositories** table.
 
@@ -107,6 +118,51 @@ tree — for example the grey next-prompt suggestion, progress summaries of sub-
 generation. These calls cost money but never show up in the session log. The OTEL tabs show them
 in red in the chart and list them under **Hidden calls**. While a turn is still running, a call
 can be counted as visible for a moment until its transcript arrives.
+
+## Grouping by skill, MCP server, effort and fast mode
+
+Newer Claude Code versions tag each model API call with what it was made for. The **stack by**
+control of the repository, session and team tabs can split the chart by these tags:
+
+- **Skill** — the skill that was active for the call (`skill.name`);
+- **MCP server** — the MCP server whose tool led to the call (`mcp_server.name`);
+- **Effort** — the reasoning effort of the call (`effort`);
+- **Fast mode** — the speed setting of the call (`speed`).
+
+Values are shown exactly as Claude Code sends them. Calls without the tag form one grey
+**not reported** series; hover its ⓘ in the legend for the reason. A call is "not reported" when
+the Claude Code version does not send that tag yet, when the setting was left at its default, or —
+for skill and MCP server names — when `OTEL_LOG_TOOL_DETAILS=1` is not set (the installer sets
+it). Older sessions, or sessions from an older Claude Code, show only the **not reported** series;
+the totals are the same under every grouping.
+
+## Plan and notional cost
+
+Recent Claude Code versions (2.1.317 and newer) also report the account a session ran under: the
+**plan** (for example `pro` or `max`), the seat type, the API provider and, when one is set, a
+custom API base URL. Log Hub shows them on the session OTEL tab as the **Account:** row and as a
+`plan: <value>` chip on the OTEL cost tile. Only the address part of the base URL is kept — user
+names, passwords, query and fragment are removed — and in a team where prompts are hidden from
+you, another member's base URL is not shown.
+
+On a **subscription plan** Claude Code's `cost_usd` is a **list-price equivalent**: what the calls
+would cost at API prices, not money that was billed. The session tab says so in a blue note, and
+on the repository and team tabs the total cost tile lists the **Mix of plans** — for each plan the
+number of sessions and their cost, with sessions that reported no plan as **not reported**. The
+amounts themselves are not changed.
+
+Sessions from an older Claude Code have no plan: they show no Account row, no chip and no note,
+and count as **not reported** in the mix.
+
+## Sub-agent cost from OTEL
+
+In Claude Code before **2.1.307** a sub-agent's transcript can miss some of its API calls, so the
+cost computed from such a transcript can be too low. For those sessions Log Hub takes a sub-agent's
+cost from its OTEL calls whenever that is higher than the transcript cost. The sub-agent's cost
+then reads **from OTEL**, and the session's cost breakdown shows **Sub-agents (from OTEL)**.
+Session totals of older sessions can therefore be higher than before — on the session list, the
+session header, analytics and reports alike. Sessions from 2.1.307 and newer, and sessions
+without OTEL data, keep the transcript cost.
 
 ## The realtime channel
 

@@ -33,6 +33,17 @@ export const WORLD_V1_S03_SUBAGENT_BODY = [
 export const WORLD_V1_S03_SUBAGENT_LINE_JSONB_TEXT =
   '{"type": "user", "sessionId": "w1-s03-child"}';
 
+/**
+ * The account s01's OTEL data reported (2026-11-03 otel-cost-attribution, DD-5 / DD-10), as
+ * stored in `otel_session_state`; the session OTEL route returns it as `plan`.
+ */
+export const WORLD_V1_S01_PLAN = {
+  plan: 'max',
+  seatType: 'premium',
+  provider: 'firstParty',
+  customBaseUrl: 'https://llm-gateway.arrakis.test:8443/anthropic',
+} as const;
+
 /** Ids and natural keys of everything the world inserts; registry rows reference these. */
 export const WORLD_V1 = {
   users: {
@@ -123,6 +134,17 @@ export const WORLD_V1 = {
       userId: 2,
       url: 'https://github.com/arrakis/deep-desert',
     },
+    /**
+     * The owner's sub-agent OTEL cost repository (2026-11-03 otel-cost-attribution, FR-6, F17 /
+     * F20 / F21): linked to no team, so no R1 / team view changes. Two roots with one sub-agent
+     * each — s12 -> s13 on Claude Code 2.1.300 (before the 2.1.307 fix: the sub-agent's OTEL
+     * cost above its transcript cost is taken) and s14 -> s15 on 2.1.310 (transcript kept).
+     */
+    Rtwins: {
+      id: 8,
+      userId: 2,
+      url: 'https://github.com/arrakis/twin-suns',
+    },
   },
   sessions: {
     s01: { id: 1, sessionId: 'w1-s01-plain' },
@@ -138,6 +160,14 @@ export const WORLD_V1 = {
     s10: { id: 10, sessionId: 'w1-s10-member-claude-only' },
     /** Owner's Rdesert-only session: one artisyn log without a git branch, OTEL data (F25). */
     s11: { id: 11, sessionId: 'w1-s11-desert-nobranch' },
+    /** Rtwins root on Claude Code 2.1.300 (FR-6); its sub-agent is s13. */
+    s12: { id: 12, sessionId: 'w1-s12-oldcc-root' },
+    /** s12's sub-agent: OTEL calls on s12 with `agent_id` = `w1oldsub` exceed its transcript. */
+    s13: { id: 13, sessionId: 'agent-w1oldsub' },
+    /** Rtwins root on Claude Code 2.1.310 (FR-6); its sub-agent is s15. */
+    s14: { id: 14, sessionId: 'w1-s14-newcc-root' },
+    /** s14's sub-agent: OTEL calls on s14 with `agent_id` = `w1newsub`, ignored (new CC). */
+    s15: { id: 15, sessionId: 'agent-w1newsub' },
   },
   models: {
     a: 'world-model-a',
@@ -305,7 +335,7 @@ function claudeBody(s: SessionSpec): unknown[] {
     entrypoint: 'cli',
     cwd: ROOT,
     gitBranch: s.branch,
-    version: '2.1.99',
+    version: CLAUDE_VERSION_BY_SESSION[s.key] ?? '2.1.99',
   };
   const lines: unknown[] = [];
   s.turns.forEach((t, i) => {
@@ -627,7 +657,97 @@ const SESSIONS: SessionSpec[] = [
       },
     ],
   },
+  // FR-6 (2026-11-03 otel-cost-attribution), Rtwins: each root costs 0.12 USD
+  // (100,000 in + 10,000 out of world-model-a), each sub-agent 0.06 USD by its transcript
+  // (50,000 in + 5,000 out); the OTEL calls of each sub-agent sum to 0.25 USD.
+  {
+    key: 's12',
+    userId: U.owner.id,
+    repoId: R.Rtwins.id,
+    repoUrl: R.Rtwins.url,
+    branch: 'main',
+    start: '2026-01-16T10:00:00.000Z',
+    end: '2026-01-16T10:30:00.000Z',
+    turns: [
+      {
+        prompt: 'Map the twin-sun orbits',
+        at: '2026-01-16T10:00:00.000Z',
+        answeredAt: '2026-01-16T10:30:00.000Z',
+        model: M.a,
+        usage: { input: 100_000, output: 10_000 },
+      },
+    ],
+  },
+  {
+    key: 's13',
+    userId: U.owner.id,
+    repoId: R.Rtwins.id,
+    repoUrl: R.Rtwins.url,
+    branch: 'main',
+    noArtisyn: true,
+    start: '2026-01-16T10:05:00.000Z',
+    end: '2026-01-16T10:15:00.000Z',
+    turns: [
+      {
+        prompt: 'Compute the eclipse calendar',
+        at: '2026-01-16T10:05:00.000Z',
+        answeredAt: '2026-01-16T10:15:00.000Z',
+        model: M.a,
+        usage: { input: 50_000, output: 5_000 },
+      },
+    ],
+  },
+  {
+    key: 's14',
+    userId: U.owner.id,
+    repoId: R.Rtwins.id,
+    repoUrl: R.Rtwins.url,
+    branch: 'main',
+    start: '2026-01-17T10:00:00.000Z',
+    end: '2026-01-17T10:30:00.000Z',
+    turns: [
+      {
+        prompt: 'Chart the second sun',
+        at: '2026-01-17T10:00:00.000Z',
+        answeredAt: '2026-01-17T10:30:00.000Z',
+        model: M.a,
+        usage: { input: 100_000, output: 10_000 },
+      },
+    ],
+  },
+  {
+    key: 's15',
+    userId: U.owner.id,
+    repoId: R.Rtwins.id,
+    repoUrl: R.Rtwins.url,
+    branch: 'main',
+    noArtisyn: true,
+    start: '2026-01-17T10:05:00.000Z',
+    end: '2026-01-17T10:15:00.000Z',
+    turns: [
+      {
+        prompt: 'Measure the second sun',
+        at: '2026-01-17T10:05:00.000Z',
+        answeredAt: '2026-01-17T10:15:00.000Z',
+        model: M.a,
+        usage: { input: 50_000, output: 5_000 },
+      },
+    ],
+  },
 ];
+
+/**
+ * `session_stats.claude_version` of the sessions that do not run the world's default 2.1.99
+ * (FR-6: the sub-agent cost fix landed in Claude Code 2.1.307).
+ */
+const CLAUDE_VERSION_BY_SESSION: Partial<
+  Record<keyof typeof WORLD_V1.sessions, string>
+> = {
+  s12: '2.1.300',
+  s13: '2.1.300',
+  s14: '2.1.310',
+  s15: '2.1.310',
+};
 
 // -------------------------------------------------------------------------------------------
 // Statements
@@ -1086,6 +1206,19 @@ function buildStatements(): WorldStatement[] {
           null,
           null,
         ],
+        [
+          R.Rtwins.id,
+          R.Rtwins.url,
+          R.Rtwins.userId,
+          null,
+          '2.29.0',
+          '2026-01-17T10:30:00.000Z',
+          null,
+          null,
+          null,
+          null,
+          null,
+        ],
       ],
     ),
   );
@@ -1178,6 +1311,31 @@ function buildStatements(): WorldStatement[] {
         ],
         [S.s10.id, S.s10.sessionId, null, null, false, null, null, null, null],
         [S.s11.id, S.s11.sessionId, null, null, false, null, null, null, null],
+        // FR-6 (Rtwins): two roots with one sub-agent each.
+        [S.s12.id, S.s12.sessionId, null, null, false, null, null, null, null],
+        [
+          S.s13.id,
+          S.s13.sessionId,
+          S.s12.sessionId,
+          null,
+          false,
+          null,
+          null,
+          null,
+          null,
+        ],
+        [S.s14.id, S.s14.sessionId, null, null, false, null, null, null, null],
+        [
+          S.s15.id,
+          S.s15.sessionId,
+          S.s14.sessionId,
+          null,
+          false,
+          null,
+          null,
+          null,
+          null,
+        ],
       ],
     ),
   );
@@ -1344,6 +1502,30 @@ function buildStatements(): WorldStatement[] {
     null,
     null,
   ]);
+  // FR-6 (Rtwins): the sub-agents s13 and s15 have their own `claude-subagent` transcript, as
+  // the hook uploads them, so `/logs/delta` reports them as new sub-agents with their stats.
+  // Not linked to a repository, like s03's.
+  for (const sub of [S.s13, S.s15]) {
+    const spec = SESSIONS.find((s) => S[s.key].id === sub.id);
+    if (spec === undefined)
+      throw new Error(`world-v1: no spec for ${sub.sessionId}`);
+    logId += 1;
+    logRows.push([
+      logId,
+      spec.end,
+      spec.end,
+      sub.id,
+      'claude-subagent',
+      json([{ type: 'user', sessionId: sub.sessionId }]),
+      U.owner.id,
+      null,
+      spec.start,
+      spec.end,
+      'main',
+      null,
+      null,
+    ]);
+  }
   out.push(
     insert(
       'logs',
@@ -1502,7 +1684,7 @@ function buildStatements(): WorldStatement[] {
       cs ? cs[1] : null,
       cs ? cs[2] : null,
       cs ? s.end : null,
-      '2.1.99',
+      CLAUDE_VERSION_BY_SESSION[s.key] ?? '2.1.99',
       otel ? otel[0] : null,
       otel ? otel[1] : null,
       otel ? json(otel[2]) : null,
@@ -2751,8 +2933,19 @@ function buildStatements(): WorldStatement[] {
  * - s04 (owner, R1 + Rdesert): one main call 0.50 USD, chunk only, hook 2.28.0 (no spans).
  * - s06 (member, R1member): one main call 0.30 USD, chunk only, no hook version.
  * - s11 (owner, Rdesert only, no git branch): one hidden `compact` call 0.10 USD.
+ * - s12 / s14 (owner, Rtwins; FR-6 of 2026-11-03 otel-cost-attribution): one main call
+ *   0.12 USD each, plus sub-agent calls of 0.25 USD in total under `agent_id` `w1oldsub` (s12,
+ *   two calls) / `w1newsub` (s14, one call).
  *
- * Every bucket equals the sum of its calls (one call per bucket key here).
+ * Cost-attribution attributes (2026-11-03 otel-cost-attribution, DD-3, DD-7): s01's hidden call
+ * ran inside skill `adlc-lh:tracker` at effort `low`; s04's call used skill `deploy`, MCP server
+ * `github`, effort `medium` and speed `fast`. Every other call reports none (`''` = "not
+ * reported" in the buckets). s01's main call `req_s01_1` stays attribute-free on purpose: the
+ * realtime replay row (F25) re-sends it without attributes and must change nothing. s01's state
+ * row carries the reported account (`WORLD_V1_S01_PLAN`); every other state row has none.
+ *
+ * Every bucket equals the sum of its calls (one call per bucket key here, s12's two sub-agent
+ * calls share one).
  */
 function otelStatements(): WorldStatement[] {
   const S = WORLD_V1.sessions;
@@ -2774,6 +2967,11 @@ function otelStatements(): WorldStatement[] {
         'rt_receiver_id',
         'rt_batch_seq',
         'created_at',
+        'plan',
+        'seat_type',
+        'provider',
+        'custom_base_url',
+        'account_event_at',
       ],
       [
         [
@@ -2790,6 +2988,13 @@ function otelStatements(): WorldStatement[] {
           'w1-recv-01',
           4,
           '2026-01-10T10:00:05.000Z',
+          // 2026-11-03 otel-cost-attribution (DD-5, DD-6): the account s01's OTEL reported,
+          // the base URL already sanitised (no userinfo, query or fragment; port kept).
+          WORLD_V1_S01_PLAN.plan,
+          WORLD_V1_S01_PLAN.seatType,
+          WORLD_V1_S01_PLAN.provider,
+          WORLD_V1_S01_PLAN.customBaseUrl,
+          '2026-01-10T10:05:00.000Z',
         ],
         [
           S.s04.id,
@@ -2805,6 +3010,12 @@ function otelStatements(): WorldStatement[] {
           null,
           null,
           '2026-01-12T14:25:00.000Z',
+          // s04's hook (2.28.0) predates the account attributes: nothing reported.
+          null,
+          null,
+          null,
+          null,
+          null,
         ],
         [
           S.s06.id,
@@ -2820,6 +3031,11 @@ function otelStatements(): WorldStatement[] {
           null,
           null,
           '2026-01-13T08:20:00.000Z',
+          null,
+          null,
+          null,
+          null,
+          null,
         ],
         [
           S.s11.id,
@@ -2835,7 +3051,32 @@ function otelStatements(): WorldStatement[] {
           null,
           null,
           '2026-01-15T09:05:00.000Z',
+          null,
+          null,
+          null,
+          null,
+          null,
         ],
+        ...[S.s12, S.s14].map((root, i) => [
+          root.id,
+          U.owner.id,
+          1,
+          1,
+          '2.29.0',
+          false,
+          false,
+          null,
+          `2026-01-1${6 + i}T10:35:00.000Z`,
+          null,
+          null,
+          null,
+          `2026-01-1${6 + i}T10:35:00.000Z`,
+          null,
+          null,
+          null,
+          null,
+          null,
+        ]),
       ],
     ),
   );
@@ -2862,119 +3103,239 @@ function otelStatements(): WorldStatement[] {
     'seq',
     'change_kind',
   ];
-  out.push(
-    insert('otel_calls', callColumns, [
-      [
-        S.s01.id,
-        'req_s01_1',
-        'req_s01_1',
-        'repl_main_thread',
-        M.a,
-        '2.1.99',
-        's01-p1',
-        null,
-        '2026-01-10T10:05:00.000Z',
-        400_000,
-        100_000,
-        0,
-        100_000,
-        700_000,
-        'main',
-        false,
-        3,
-        1,
-        2,
-        'confirm',
-      ],
-      [
-        S.s01.id,
-        'rec:w1-s01-suggestion',
-        null,
-        'prompt_suggestion',
-        M.b,
-        '2.1.99',
-        's01-p1',
-        null,
-        '2026-01-10T10:06:00.000Z',
-        1_000,
-        50,
-        9_000,
-        0,
-        20_000,
-        'hidden',
-        false,
-        2,
-        3,
-        3,
-        'new',
-      ],
-      [
-        S.s04.id,
-        'req_s04_1',
-        'req_s04_1',
-        'repl_main_thread',
-        M.a,
-        '2.1.98',
-        's04-p1',
-        null,
-        '2026-01-12T14:20:00.000Z',
-        100_000,
-        50_000,
-        400_000,
-        0,
-        500_000,
-        'main',
-        false,
-        2,
-        1,
-        1,
-        'new',
-      ],
-      [
-        S.s06.id,
-        'req_s06_1',
-        'req_s06_1',
-        'sdk',
-        M.unpriced,
-        '2.1.99',
-        's06-p1',
-        null,
-        '2026-01-13T08:15:00.000Z',
-        300_000,
-        30_000,
-        0,
-        0,
-        300_000,
-        'main',
-        false,
-        2,
-        1,
-        1,
-        'new',
-      ],
-      [
-        S.s11.id,
-        'rec:w1-s11-compact',
-        null,
-        'compact',
-        M.b,
-        '2.1.99',
-        null,
-        null,
-        '2026-01-15T09:00:00.000Z',
-        50_000,
-        1_000,
-        0,
-        0,
-        100_000,
-        'hidden',
-        false,
-        2,
-        1,
-        1,
-        'new',
-      ],
+  const callRows: unknown[][] = [
+    [
+      S.s01.id,
+      'req_s01_1',
+      'req_s01_1',
+      'repl_main_thread',
+      M.a,
+      '2.1.99',
+      's01-p1',
+      null,
+      '2026-01-10T10:05:00.000Z',
+      400_000,
+      100_000,
+      0,
+      100_000,
+      700_000,
+      'main',
+      false,
+      3,
+      1,
+      2,
+      'confirm',
+    ],
+    [
+      S.s01.id,
+      'rec:w1-s01-suggestion',
+      null,
+      'prompt_suggestion',
+      M.b,
+      '2.1.99',
+      's01-p1',
+      null,
+      '2026-01-10T10:06:00.000Z',
+      1_000,
+      50,
+      9_000,
+      0,
+      20_000,
+      'hidden',
+      false,
+      2,
+      3,
+      3,
+      'new',
+    ],
+    [
+      S.s04.id,
+      'req_s04_1',
+      'req_s04_1',
+      'repl_main_thread',
+      M.a,
+      '2.1.98',
+      's04-p1',
+      null,
+      '2026-01-12T14:20:00.000Z',
+      100_000,
+      50_000,
+      400_000,
+      0,
+      500_000,
+      'main',
+      false,
+      2,
+      1,
+      1,
+      'new',
+    ],
+    [
+      S.s06.id,
+      'req_s06_1',
+      'req_s06_1',
+      'sdk',
+      M.unpriced,
+      '2.1.99',
+      's06-p1',
+      null,
+      '2026-01-13T08:15:00.000Z',
+      300_000,
+      30_000,
+      0,
+      0,
+      300_000,
+      'main',
+      false,
+      2,
+      1,
+      1,
+      'new',
+    ],
+    [
+      S.s11.id,
+      'rec:w1-s11-compact',
+      null,
+      'compact',
+      M.b,
+      '2.1.99',
+      null,
+      null,
+      '2026-01-15T09:00:00.000Z',
+      50_000,
+      1_000,
+      0,
+      0,
+      100_000,
+      'hidden',
+      false,
+      2,
+      1,
+      1,
+      'new',
+    ],
+    // FR-6 (Rtwins): each root's own main call, then its sub-agent's calls (structure
+    // subagent, `agent_id` = the sub-agent's session id without `agent-`).
+    ...[
+      { root: S.s12, key: 's12', day: 16, cc: '2.1.300' },
+      { root: S.s14, key: 's14', day: 17, cc: '2.1.310' },
+    ].map(({ root, key, day, cc }) => [
+      root.id,
+      `req_${key}_1`,
+      `req_${key}_1`,
+      'repl_main_thread',
+      M.a,
+      cc,
+      `${key}-p1`,
+      null,
+      `2026-01-${day}T10:30:00.000Z`,
+      100_000,
+      10_000,
+      0,
+      0,
+      120_000,
+      'main',
+      false,
+      2,
+      1,
+      1,
+      'new',
     ]),
+    ...(
+      [
+        [
+          S.s12,
+          'req_s12_sa1',
+          'w1oldsub',
+          '2026-01-16T10:10:00.000Z',
+          60_000,
+          8_000,
+          150_000,
+          '2.1.300',
+        ],
+        [
+          S.s12,
+          'req_s12_sa2',
+          'w1oldsub',
+          '2026-01-16T10:12:00.000Z',
+          40_000,
+          6_000,
+          100_000,
+          '2.1.300',
+        ],
+        [
+          S.s14,
+          'req_s14_sa1',
+          'w1newsub',
+          '2026-01-17T10:10:00.000Z',
+          100_000,
+          14_000,
+          250_000,
+          '2.1.310',
+        ],
+      ] as const
+    ).map(([root, key, agentId, at, input, output, cost, cc]) => [
+      root.id,
+      key,
+      key,
+      'agent:custom',
+      M.a,
+      cc,
+      null,
+      agentId,
+      at,
+      input,
+      output,
+      0,
+      0,
+      cost,
+      'subagent',
+      false,
+      2,
+      1,
+      1,
+      'new',
+    ]),
+  ];
+  // Cost-attribution columns (2026-11-03 otel-cost-attribution, DD-3), by call key; a call
+  // not listed reports none of them.
+  const attrColumns = [
+    'cache_write_5m_tokens',
+    'cache_write_1h_tokens',
+    'effort',
+    'speed',
+    'skill_name',
+    'plugin_name',
+    'agent_name',
+    'mcp_server_name',
+    'mcp_tool_name',
+  ] as const;
+  const attrsByCallKey: Record<
+    string,
+    Partial<Record<(typeof attrColumns)[number], string | number>>
+  > = {
+    'rec:w1-s01-suggestion': {
+      effort: 'low',
+      skill_name: 'adlc-lh:tracker',
+      plugin_name: 'adlc-lh',
+    },
+    req_s04_1: {
+      effort: 'medium',
+      speed: 'fast',
+      skill_name: 'deploy',
+      mcp_server_name: 'github',
+      mcp_tool_name: 'create_pull_request',
+    },
+  };
+  out.push(
+    insert(
+      'otel_calls',
+      [...callColumns, ...attrColumns],
+      callRows.map((row) => [
+        ...row,
+        ...attrColumns.map((c) => attrsByCallKey[String(row[1])]?.[c] ?? null),
+      ]),
+    ),
   );
 
   out.push(
@@ -3084,6 +3445,11 @@ function otelStatements(): WorldStatement[] {
         'cache_write_tokens',
         'seq',
         'change_kind',
+        // Cost-attribution grain (2026-11-03 otel-cost-attribution, DD-7); '' = not reported.
+        'skill',
+        'mcp_server',
+        'effort',
+        'speed',
       ],
       [
         [
@@ -3102,6 +3468,10 @@ function otelStatements(): WorldStatement[] {
           100_000,
           2,
           'confirm',
+          '',
+          '',
+          '',
+          '',
         ],
         [
           S.s01.id,
@@ -3119,6 +3489,10 @@ function otelStatements(): WorldStatement[] {
           0,
           3,
           'new',
+          'adlc-lh:tracker',
+          '',
+          'low',
+          '',
         ],
         [
           S.s04.id,
@@ -3136,6 +3510,10 @@ function otelStatements(): WorldStatement[] {
           0,
           1,
           'new',
+          'deploy',
+          'github',
+          'medium',
+          'fast',
         ],
         [
           S.s06.id,
@@ -3153,6 +3531,10 @@ function otelStatements(): WorldStatement[] {
           0,
           1,
           'new',
+          '',
+          '',
+          '',
+          '',
         ],
         [
           S.s11.id,
@@ -3170,7 +3552,82 @@ function otelStatements(): WorldStatement[] {
           0,
           1,
           'new',
+          '',
+          '',
+          '',
+          '',
         ],
+        // FR-6 (Rtwins): per root, the sub-agent bucket and the main bucket.
+        ...(
+          [
+            [
+              S.s12,
+              '2026-01-16T10:10:00.000Z',
+              'subagent',
+              'agent:custom',
+              '2.1.300',
+              2,
+              250_000,
+              100_000,
+              14_000,
+            ],
+            [
+              S.s12,
+              '2026-01-16T10:30:00.000Z',
+              'main',
+              'repl_main_thread',
+              '2.1.300',
+              1,
+              120_000,
+              100_000,
+              10_000,
+            ],
+            [
+              S.s14,
+              '2026-01-17T10:10:00.000Z',
+              'subagent',
+              'agent:custom',
+              '2.1.310',
+              1,
+              250_000,
+              100_000,
+              14_000,
+            ],
+            [
+              S.s14,
+              '2026-01-17T10:30:00.000Z',
+              'main',
+              'repl_main_thread',
+              '2.1.310',
+              1,
+              120_000,
+              100_000,
+              10_000,
+            ],
+          ] as const
+        ).map(
+          ([root, at, structure, source, cc, calls, cost, input, output]) => [
+            root.id,
+            U.owner.id,
+            at,
+            structure,
+            source,
+            M.a,
+            cc,
+            calls,
+            cost,
+            input,
+            output,
+            0,
+            0,
+            1,
+            'new',
+            '',
+            '',
+            '',
+            '',
+          ],
+        ),
       ],
     ),
   );

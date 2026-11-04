@@ -100,5 +100,37 @@
       ]}},
     "expected": {"highlighted": []},
     "note": "Rule 6: the first snapshot highlights nothing"
+  },
+  {
+    "id": "DM-12",
+    "input": {"kind": "merge",
+      "state": {"full": true, "kpis": 7, "calls": [], "spans": [], "buckets": [], "plan": "pro"},
+      "delta": {"full": false, "kpis": null, "calls": [], "spans": [], "buckets": [], "plan": "max"}},
+    "expected": {"plan": "max", "kpis": 7},
+    "note": "Rule 7: a delta that carries plan replaces the previous one (pro -> max), even an otherwise empty delta"
+  },
+  {
+    "id": "DM-13",
+    "input": {"kind": "merge",
+      "state": {"full": true, "kpis": 7, "calls": [], "spans": [], "buckets": [], "plan": "max"},
+      "delta": {"full": false, "kpis": null, "calls": [], "spans": [], "buckets": [], "plan": null}},
+    "expected": {"plan": null},
+    "note": "Rule 7: a delta with plan null (no account reported) replaces the previous value with null"
+  },
+  {
+    "id": "DM-14",
+    "input": {"kind": "merge",
+      "state": {"full": true, "kpis": 7, "calls": [], "spans": [], "buckets": [], "plan": "max"},
+      "delta": {"full": false, "kpis": null, "calls": [], "spans": [], "buckets": []}},
+    "expected": {"plan": "max"},
+    "note": "Rule 7: a delta without the plan field (an older server) keeps the previous value"
+  },
+  {
+    "id": "DM-15",
+    "input": {"kind": "merge",
+      "state": {"full": true, "kpis": 7, "calls": [], "spans": [], "buckets": []},
+      "delta": {"full": false, "kpis": null, "calls": [], "spans": [], "buckets": []}},
+    "expected": {"plan": "absent"},
+    "note": "Rule 7: an older server never sends plan -> the state stays without it (the UI shows no account)"
   }
 ]

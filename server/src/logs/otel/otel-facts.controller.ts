@@ -40,11 +40,19 @@ const REPO_STACK_BY: readonly RepoOtelStackBy[] = [
   'querySource',
   'model',
   'ccVersion',
+  'skill',
+  'mcpServer',
+  'effort',
+  'speed',
 ];
 const SESSION_STACK_BY: readonly SessionOtelStackBy[] = [
   'structure',
   'querySource',
   'model',
+  'skill',
+  'mcpServer',
+  'effort',
+  'speed',
 ];
 /** Upper bounds on free-text parameters. */
 const TEXT_MAX_CHARS = 255;

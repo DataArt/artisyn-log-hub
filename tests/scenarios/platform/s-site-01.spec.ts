@@ -54,8 +54,11 @@ const OG_IMAGE_URL = `${SITE_URL}assets/og-image.png`;
 const OG_IMAGE_ALT = 'Log Hub cost flow: model to user to branch';
 
 const EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
-/** Not mailboxes: the SSH remote form of a git URL used as an example in how-hook-works. */
-const EMAIL_ALLOWED = new Set(['git@github.com']);
+/**
+ * Not real mailboxes: the SSH remote form of a git URL used as an example in how-hook-works, and
+ * the RFC 2606 reserved-domain placeholders of the small-team-setup `.env` examples.
+ */
+const EMAIL_ALLOWED = new Set(['git@github.com', 'loghub@example.com', 'you@example.com']);
 /** Absolute local paths: a Windows drive, a macOS or Linux home folder. */
 const LOCAL_PATH = /\b[A-Za-z]:\\[^\s<"']*|\/Users\/[A-Za-z0-9._-]+|\/home\/[A-Za-z0-9._-]+/g;
 /** Fictional example home folders the docs use on purpose (tuning-your-setup, how-hook-works). */

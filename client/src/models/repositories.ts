@@ -121,6 +121,12 @@ export interface CostBreakdown {
    * older servers.
    */
   costExcludesUtilityCalls?: boolean;
+  /**
+   * At least one sub-agent's cost in `subagentCost` comes from OTEL (`otel_calls` of the root,
+   * matched by agent id) rather than its transcript, because its Claude Code version predates
+   * the sub-agent transcript cost fix and OTEL reports more (FR-6). Absent from older servers.
+   */
+  subagentCostFromOtel?: boolean;
 }
 
 export interface RepositorySession {
@@ -1037,8 +1043,15 @@ export type RepoOtelStackBy =
   | 'structure'
   | 'querySource'
   | 'model'
-  | 'ccVersion';
-export type SessionOtelStackBy = 'structure' | 'querySource' | 'model';
+  | 'ccVersion'
+  | OtelAttributionStackBy;
+/** Stack-bys over the 2026-11-03 attribution grain columns ('' = not reported). */
+export type OtelAttributionStackBy = 'skill' | 'mcpServer' | 'effort' | 'speed';
+export type SessionOtelStackBy =
+  | 'structure'
+  | 'querySource'
+  | 'model'
+  | OtelAttributionStackBy;
 
 /** Why a session's OTEL data updates slowly (DD-15). */
 export type OtelSlowReason = 'old-hook' | 'realtime-off';
@@ -1196,6 +1209,32 @@ export interface RepoOtelFactsResponse {
   sessions: OtelSessionRow[];
   /** OTEL coverage of the roots active in the period (DD-29). */
   coverage: OtelCoverage;
+  /**
+   * Cost of the scoped roots grouped by reported plan (2026-11-03 otel-cost-attribution, DD-9);
+   * absent from older servers.
+   */
+  planMix?: OtelPlanMixRow[];
+}
+
+/**
+ * Cost of the scoped roots grouped by their reported plan (DD-9); `plan` null = not reported.
+ * Mirrors `server/src/logs/otel/otel-facts.types.ts`.
+ */
+export interface OtelPlanMixRow {
+  plan: string | null;
+  sessions: number;
+  costUsdMicros: string;
+}
+
+/**
+ * The account a session's OTEL data reports (DD-10). `customBaseUrl` is null when masked for the
+ * caller.
+ */
+export interface OtelSessionPlan {
+  plan: string | null;
+  seatType: string | null;
+  provider: string | null;
+  customBaseUrl: string | null;
 }
 
 /** One OTEL API call of a session. */
@@ -1288,6 +1327,11 @@ export interface SessionOtelResponse {
   /** Null in an empty delta. */
   kpis: OtelSessionKpis | null;
   querySources: OtelQuerySourceRow[] | null;
+  /**
+   * The reported account (2026-11-03 otel-cost-attribution, DD-10), on snapshots and deltas;
+   * null when nothing was reported. Absent from older servers.
+   */
+  plan?: OtelSessionPlan | null;
 }
 
 /** Query of the repository OTEL facts route. */

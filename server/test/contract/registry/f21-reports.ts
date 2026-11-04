@@ -3,7 +3,7 @@
 // not repeated. Owner on R1, January 2026 (see F20 for the session set).
 import type { ContractFamily } from '../types';
 import { MONTH, ROOTS_AND_TREES } from './f20-analytics';
-import { treeCostSql } from './oracle-sql';
+import { treeCostSql, treeCostWithOtelSubagentsSql } from './oracle-sql';
 
 export const f21Reports: ContractFamily = {
   id: 'F21',
@@ -63,6 +63,44 @@ export const f21Reports: ContractFamily = {
       expect: { status: 200 },
       read: {
         sql: `SELECT 3.925 AS total_cost, 3 AS sessions`,
+        shape: 'object',
+        fields: {
+          totalCost: { col: 'total_cost', as: 'numeric' },
+          totalSessions: 'sessions',
+        },
+      },
+    },
+    {
+      // FR-6 (2026-11-03 otel-cost-attribution): Rtwins' period cost counts the old-CC
+      // sub-agent at its OTEL cost — 0.37 (w1-s12) + 0.18 (w1-s14). Formula here, golden below.
+      id: 'F21-executive-summary-subagent-otel-cost',
+      route: 'GET /api/v1/repositories/:repoId/reports/executive-summary',
+      actor: 'owner',
+      params: { repoId: '@Rtwins.id' },
+      query: MONTH,
+      expect: { status: 200 },
+      read: {
+        sql: `${ROOTS_AND_TREES}
+              SELECT sum(${treeCostWithOtelSubagentsSql('r.id')}) AS total_cost,
+                     count(*) AS sessions
+                FROM roots r`,
+        args: ['@Rtwins.id'],
+        shape: 'object',
+        fields: {
+          totalCost: { col: 'total_cost', as: 'numeric' },
+          totalSessions: { col: 'sessions', as: 'number' },
+        },
+      },
+    },
+    {
+      id: 'F21-executive-summary-subagent-otel-cost-golden',
+      route: 'GET /api/v1/repositories/:repoId/reports/executive-summary',
+      actor: 'owner',
+      params: { repoId: '@Rtwins.id' },
+      query: MONTH,
+      expect: { status: 200 },
+      read: {
+        sql: `SELECT 0.55 AS total_cost, 2 AS sessions`,
         shape: 'object',
         fields: {
           totalCost: { col: 'total_cost', as: 'numeric' },

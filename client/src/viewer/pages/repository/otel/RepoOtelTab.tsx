@@ -313,6 +313,7 @@ export function RepoOtelTab({
                   buckets={state.buckets}
                   stackBy={url.stackBy}
                   coverage={state.coverage}
+                  planMix={state.planMix}
                 />
                 <OtelStructureSection
                   querySources={state.querySources}

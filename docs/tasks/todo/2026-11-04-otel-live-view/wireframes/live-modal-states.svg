@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="560" viewBox="0 0 1440 560" font-family="Segoe UI, Arial, sans-serif">
+  <rect width="1440" height="560" fill="#ffffff"/>
+
+  <!-- ===== A. Nothing is live (empty state) ===== -->
+  <text x="16" y="24" font-size="12" font-weight="600" fill="#7c3aed">A. Nothing is live for this user (FR-3 empty state)</text>
+  <rect x="16" y="36" width="692" height="500" rx="10" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="36" y="68" font-size="18" font-weight="600" fill="#6b7280">Live</text>
+  <rect x="82" y="51" width="98" height="22" rx="11" fill="#eff6ff" stroke="#93c5fd"/>
+  <text x="94" y="66" font-size="12" fill="#1d4ed8">ⓘ OTEL only</text>
+  <text x="192" y="66" font-size="12" fill="#6b7280">Updated 3 s ago</text>
+  <rect x="582" y="49" width="88" height="28" rx="6" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="598" y="68" font-size="13" fill="#9ca3af">❚❚  Pause</text>
+  <text x="684" y="69" font-size="16" fill="#6b7280">✕</text>
+  <line x1="16" y1="88" x2="708" y2="88" stroke="#e5e7eb"/>
+  <path d="M16 88 H196 V536 H26 a10 10 0 0 1 -10 -10 z" fill="#f9fafb"/>
+  <line x1="196" y1="88" x2="196" y2="536" stroke="#e5e7eb"/>
+  <text x="30" y="112" font-size="11" font-weight="600" fill="#6b7280" letter-spacing="0.5">LIVE NOW</text>
+  <rect x="24" y="122" width="164" height="28" rx="5" fill="#e5e7eb"/>
+  <text x="36" y="141" font-size="13" font-weight="600" fill="#111827">⌂ Home</text>
+  <text x="30" y="172" font-size="12" fill="#9ca3af">Nothing is live</text>
+
+  <rect x="262" y="200" width="380" height="200" rx="6" fill="#ffffff" stroke="#9ca3af" stroke-dasharray="4 3"/>
+  <circle cx="452" cy="244" r="11" fill="none" stroke="#6b7280" stroke-width="1.5"/>
+  <line x1="444" y1="252" x2="460" y2="236" stroke="#6b7280" stroke-width="1.5"/>
+  <text x="452" y="282" font-size="14" font-weight="600" fill="#111827" text-anchor="middle">Nothing is live right now</text>
+  <text x="452" y="304" font-size="12" fill="#6b7280" text-anchor="middle">Sessions appear here while Claude Code sends OTEL</text>
+  <text x="452" y="320" font-size="12" fill="#6b7280" text-anchor="middle">data from a repository you can see.</text>
+  <rect x="362" y="340" width="180" height="32" rx="6" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="452" y="361" font-size="13" fill="#111827" text-anchor="middle">How to enable OTEL</text>
+
+  <!-- ===== B. Paused + refresh failing ===== -->
+  <text x="732" y="24" font-size="12" font-weight="600" fill="#7c3aed">B. Paused (FR-8) and a failed refresh (last data kept)</text>
+  <rect x="732" y="36" width="692" height="500" rx="10" fill="#ffffff" stroke="#d1d5db"/>
+  <circle cx="756" cy="62" r="4.5" fill="#9ca3af"/>
+  <text x="768" y="68" font-size="18" font-weight="600" fill="#111827">Live</text>
+  <rect x="814" y="51" width="98" height="22" rx="11" fill="#eff6ff" stroke="#93c5fd"/>
+  <text x="826" y="66" font-size="12" fill="#1d4ed8">ⓘ OTEL only</text>
+  <rect x="920" y="51" width="142" height="22" rx="11" fill="#fef3c7" stroke="#fcd34d"/>
+  <text x="932" y="66" font-size="12" fill="#92400e">❚❚ Paused at 14:33:12</text>
+  <rect x="1292" y="49" width="94" height="28" rx="6" fill="#2563eb"/>
+  <text x="1308" y="68" font-size="13" font-weight="600" fill="#ffffff">▶  Resume</text>
+  <text x="1400" y="69" font-size="16" fill="#6b7280">✕</text>
+  <line x1="732" y1="88" x2="1424" y2="88" stroke="#e5e7eb"/>
+
+  <!-- paused banner -->
+  <rect x="748" y="100" width="660" height="30" rx="6" fill="#fffbeb" stroke="#fcd34d"/>
+  <text x="762" y="120" font-size="12" fill="#92400e">View frozen. 7 updates arrived since pause — Resume jumps to the latest state.</text>
+  <!-- error banner -->
+  <rect x="748" y="138" width="660" height="30" rx="6" fill="#fef2f2" stroke="#fca5a5"/>
+  <text x="762" y="158" font-size="12" fill="#b91c1c">Connection lost — showing the last data received at 14:33:12. Retrying in 5 s…</text>
+
+  <path d="M732 180 H912 V536 H742 a10 10 0 0 1 -10 -10 z" fill="#f9fafb"/>
+  <line x1="912" y1="180" x2="912" y2="536" stroke="#e5e7eb"/>
+  <line x1="732" y1="180" x2="1424" y2="180" stroke="#e5e7eb"/>
+  <rect x="740" y="192" width="164" height="28" rx="5" fill="#e5e7eb"/>
+  <text x="752" y="211" font-size="13" font-weight="600" fill="#111827">⌂ Home</text>
+  <text x="896" y="211" font-size="12" fill="#111827" text-anchor="end">$4.82</text>
+  <text x="758" y="241" font-size="13" fill="#111827">👥 LogHub Demo</text>
+  <text x="896" y="241" font-size="12" fill="#374151" text-anchor="end">$3.10</text>
+  <text x="770" y="271" font-size="13" fill="#111827">▣ artisyn-log…</text>
+  <text x="896" y="271" font-size="12" fill="#374151" text-anchor="end">$2.64</text>
+  <text x="758" y="301" font-size="13" fill="#111827">👤 No team</text>
+  <text x="896" y="301" font-size="12" fill="#374151" text-anchor="end">$1.72</text>
+
+  <!-- frozen content placeholders -->
+  <rect x="928" y="196" width="480" height="150" rx="8" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="944" y="220" font-size="13" font-weight="600" fill="#111827">Cost per minute (USD)</text>
+  <polyline points="944,330 984,322 1024,326 1064,308 1104,312 1144,296 1184,300 1224,280 1264,270 1304,276 1344,252 1384,244" fill="none" stroke="#3b82f6" stroke-width="2"/>
+  <line x1="1392" y1="232" x2="1392" y2="336" stroke="#f59e0b" stroke-dasharray="3 3"/>
+  <text x="1388" y="232" font-size="10" fill="#92400e" text-anchor="end">paused</text>
+  <rect x="928" y="360" width="480" height="26" fill="#f9fafb" stroke="#e5e7eb"/>
+  <text x="938" y="377" font-size="11" font-weight="600" fill="#6b7280">Name</text>
+  <text x="1398" y="377" font-size="11" font-weight="600" fill="#6b7280" text-anchor="end">Cost</text>
+  <g font-size="12" fill="#111827">
+    <text x="938" y="404">👥 LogHub Demo</text><text x="1398" y="404" text-anchor="end">$3.10</text>
+    <text x="938" y="432">👤 No team (personal)</text><text x="1398" y="432" text-anchor="end">$1.72</text>
+  </g>
+  <text x="928" y="470" font-size="11" fill="#9ca3af">Numbers and the "last activity" ages stay frozen until Resume.</text>
+</svg>

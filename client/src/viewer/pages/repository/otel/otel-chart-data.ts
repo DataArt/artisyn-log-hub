@@ -51,8 +51,28 @@ export const OTEL_SERIES_PALETTE = [
   '#64748b',
 ];
 
+/** The neutral grey pinned to the `''` (not reported) series of an attribution stack-by. */
+export const OTEL_NOT_REPORTED_COLOR = '#64748b';
+
+/** Legend hint of the `''` series under an attribution stack-by (Design Decision 17). */
+export const OTEL_NOT_REPORTED_HINT =
+  'Calls without this attribute: not sent by this Claude Code version or left at the default value; skill / MCP names also need OTEL_LOG_TOOL_DETAILS=1.';
+
+const ATTRIBUTION_STACK_BYS: ReadonlySet<string> = new Set([
+  'skill',
+  'mcpServer',
+  'effort',
+  'speed',
+]);
+
+/** True for the stack-bys over the attribution grain columns, whose `''` key means "not reported". */
+export function isAttributionStackBy(stackBy: string): boolean {
+  return ATTRIBUTION_STACK_BYS.has(stackBy);
+}
+
 export function otelSeriesLabel(stackBy: string, key: string): string {
-  if (key === '') return '(unknown)';
+  if (key === '')
+    return isAttributionStackBy(stackBy) ? 'not reported' : '(unknown)';
   if (stackBy === 'structure') return STRUCTURE_LABELS[key] ?? key;
   return key;
 }
@@ -88,15 +108,30 @@ export function buildOtelSeries(
         (totals.get(b) ?? 0) - (totals.get(a) ?? 0) || a.localeCompare(b),
     );
   }
-  return keys.map((key, i) => ({
-    key,
-    label: otelSeriesLabel(stackBy, key),
-    color:
-      stackBy === 'structure' && STRUCTURE_COLORS[key]
-        ? STRUCTURE_COLORS[key]
-        : OTEL_SERIES_PALETTE[i % OTEL_SERIES_PALETTE.length],
-    total: totals.get(key) ?? 0,
-  }));
+  const attribution = isAttributionStackBy(stackBy);
+  // Under an attribution stack-by the grey is reserved for '' — reported keys cycle the rest.
+  const palette = attribution
+    ? OTEL_SERIES_PALETTE.filter((c) => c !== OTEL_NOT_REPORTED_COLOR)
+    : OTEL_SERIES_PALETTE;
+  let next = 0;
+  return keys.map((key) => {
+    let color: string;
+    if (stackBy === 'structure' && STRUCTURE_COLORS[key]) {
+      color = STRUCTURE_COLORS[key];
+      next += 1;
+    } else if (attribution && key === '') {
+      color = OTEL_NOT_REPORTED_COLOR;
+    } else {
+      color = palette[next % palette.length];
+      next += 1;
+    }
+    return {
+      key,
+      label: otelSeriesLabel(stackBy, key),
+      color,
+      total: totals.get(key) ?? 0,
+    };
+  });
 }
 
 /** The next bucket start after `iso` for an interval (local calendar day for `1d`). */

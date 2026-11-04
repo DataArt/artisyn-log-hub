@@ -24,9 +24,11 @@ import {
 } from './otel-classify';
 import type { OtelChangeKind, OtelStructure } from './otel-facts.types';
 import {
+  extractOtelAccount,
   extractOtelCalls,
   extractOtelSpans,
   maxHookVersion,
+  type ExtractedOtelAccount,
   type ExtractedOtelCall,
   type ExtractedOtelSpan,
 } from './otel-records';
@@ -78,6 +80,12 @@ export interface OtelSessionState {
   rtReceiverId: string | null;
   rtBatchSeq: number | null;
   createdAt: Date;
+  /** Account fields Claude Code reports (DD-5 of otel-cost-attribution), latest-wins. */
+  plan: string | null;
+  seatType: string | null;
+  provider: string | null;
+  customBaseUrl: string | null;
+  accountEventAt: Date | null;
 }
 
 /** The state lock of one root (DD-2). */
@@ -107,6 +115,11 @@ interface StateDbRow {
   rt_receiver_id: string | null;
   rt_batch_seq: DbNumber;
   created_at: Date | string;
+  plan: string | null;
+  seat_type: string | null;
+  provider: string | null;
+  custom_base_url: string | null;
+  account_event_at: Date | string | null;
 }
 
 function numOrNull(value: DbNumber): number | null {
@@ -133,6 +146,11 @@ function toState(row: StateDbRow): OtelSessionState {
     rtReceiverId: row.rt_receiver_id,
     rtBatchSeq: numOrNull(row.rt_batch_seq),
     createdAt: dateOrNull(row.created_at) ?? new Date(0),
+    plan: row.plan,
+    seatType: row.seat_type,
+    provider: row.provider,
+    customBaseUrl: row.custom_base_url,
+    accountEventAt: dateOrNull(row.account_event_at),
   };
 }
 
@@ -160,7 +178,8 @@ async function selectStateForUpdate(
   const result = await tx.execute(sql`
     SELECT session_id, user_id, seq, transcript_seq, otel_hook_version, has_spans,
            has_provisional, rt_last_at, chunk_last_at, rt_gap_at, rt_receiver_id,
-           rt_batch_seq, created_at
+           rt_batch_seq, created_at, plan, seat_type, provider, custom_base_url,
+           account_event_at
       FROM otel_session_state
      WHERE session_id = ${rootId}
        FOR UPDATE
@@ -326,19 +345,36 @@ interface OldCallRow {
   cache_read_tokens: number | string;
   cache_write_tokens: number | string;
   cost_usd_micros: number | string | null;
+  cache_write_5m_tokens: number | string | null;
+  cache_write_1h_tokens: number | string | null;
+  effort: string | null;
+  speed: string | null;
+  skill_name: string | null;
+  plugin_name: string | null;
+  agent_name: string | null;
+  mcp_server_name: string | null;
+  mcp_tool_name: string | null;
   structure: OtelStructure;
   provisional: boolean;
   source_mask: number;
   first_seq: number | string;
 }
 
-/** The values one call contributes to its bucket. */
-interface CallContribution {
+/** The bucket grain dimensions every call contributes to (DD-7). */
+interface BucketGrain {
   bucketStart: Date;
   structure: OtelStructure;
   querySource: string;
   model: string;
   ccVersion: string;
+  skill: string;
+  mcpServer: string;
+  effort: string;
+  speed: string;
+}
+
+/** The values one call contributes to its bucket. */
+interface CallContribution extends BucketGrain {
   cost: bigint;
   inputTokens: number;
   outputTokens: number;
@@ -346,12 +382,7 @@ interface CallContribution {
   cacheWriteTokens: number;
 }
 
-interface BucketDelta {
-  bucketStart: Date;
-  structure: OtelStructure;
-  querySource: string;
-  model: string;
-  ccVersion: string;
+interface BucketDelta extends BucketGrain {
   calls: number;
   cost: bigint;
   inputTokens: number;
@@ -368,6 +399,10 @@ function bucketKey(c: CallContribution): string {
     c.querySource,
     c.model,
     c.ccVersion,
+    c.skill,
+    c.mcpServer,
+    c.effort,
+    c.speed,
   ].join('\u0000');
 }
 
@@ -386,6 +421,10 @@ function addContribution(
       querySource: c.querySource,
       model: c.model,
       ccVersion: c.ccVersion,
+      skill: c.skill,
+      mcpServer: c.mcpServer,
+      effort: c.effort,
+      speed: c.speed,
       calls: 0,
       cost: 0n,
       inputTokens: 0,
@@ -423,6 +462,10 @@ function contributionOfOld(row: OldCallRow): CallContribution {
     querySource: row.query_source ?? '',
     model: row.model ?? '',
     ccVersion: row.claude_code_version ?? '',
+    skill: row.skill_name ?? '',
+    mcpServer: row.mcp_server_name ?? '',
+    effort: row.effort ?? '',
+    speed: row.speed ?? '',
     cost: row.cost_usd_micros === null ? 0n : BigInt(row.cost_usd_micros),
     inputTokens: Number(row.input_tokens),
     outputTokens: Number(row.output_tokens),
@@ -441,6 +484,10 @@ function contributionOfNew(
     querySource: call.querySource ?? '',
     model: call.model ?? '',
     ccVersion: call.claudeCodeVersion ?? '',
+    skill: call.skillName ?? '',
+    mcpServer: call.mcpServerName ?? '',
+    effort: call.effort ?? '',
+    speed: call.speed ?? '',
     cost: call.costUsdMicros ?? 0n,
     inputTokens: call.inputTokens,
     outputTokens: call.outputTokens,
@@ -466,7 +513,16 @@ function callDataChanged(old: OldCallRow, call: ExtractedOtelCall): boolean {
     Number(old.output_tokens) !== call.outputTokens ||
     Number(old.cache_read_tokens) !== call.cacheReadTokens ||
     Number(old.cache_write_tokens) !== call.cacheWriteTokens ||
-    oldCost !== call.costUsdMicros
+    oldCost !== call.costUsdMicros ||
+    numOrNull(old.cache_write_5m_tokens) !== call.cacheWrite5mTokens ||
+    numOrNull(old.cache_write_1h_tokens) !== call.cacheWrite1hTokens ||
+    old.effort !== call.effort ||
+    old.speed !== call.speed ||
+    old.skill_name !== call.skillName ||
+    old.plugin_name !== call.pluginName ||
+    old.agent_name !== call.agentName ||
+    old.mcp_server_name !== call.mcpServerName ||
+    old.mcp_tool_name !== call.mcpToolName
   );
 }
 
@@ -496,6 +552,10 @@ async function applyBucketDeltas(
       query_source: d.querySource,
       model: d.model,
       cc_version: d.ccVersion,
+      skill: d.skill,
+      mcp_server: d.mcpServer,
+      effort: d.effort,
+      speed: d.speed,
       calls: d.calls,
       cost_usd_micros: d.cost,
       input_tokens: d.inputTokens,
@@ -508,17 +568,20 @@ async function applyBucketDeltas(
   const result = await tx.execute(sql`
     INSERT INTO otel_cost_buckets (
       session_id, user_id, bucket_start, structure, query_source, model, cc_version,
+      skill, mcp_server, effort, speed,
       calls, cost_usd_micros, input_tokens, output_tokens, cache_read_tokens,
       cache_write_tokens, seq, change_kind
     )
     SELECT ${rootId},
            (SELECT user_id FROM otel_session_state WHERE session_id = ${rootId}),
            r.bucket_start, r.structure, r.query_source, r.model, r.cc_version,
+           r.skill, r.mcp_server, r.effort, r.speed,
            r.calls, r.cost_usd_micros, r.input_tokens, r.output_tokens,
            r.cache_read_tokens, r.cache_write_tokens, ${seq}, r.change_kind
       FROM jsonb_to_recordset(${jsonParam(rows)}::jsonb) AS r(
              bucket_start timestamptz, structure text, query_source text, model text,
-             cc_version text, calls integer, cost_usd_micros bigint, input_tokens bigint,
+             cc_version text, skill text, mcp_server text, effort text, speed text,
+             calls integer, cost_usd_micros bigint, input_tokens bigint,
              output_tokens bigint, cache_read_tokens bigint, cache_write_tokens bigint,
              change_kind text)
     ON CONFLICT ON CONSTRAINT otel_cost_buckets_pk DO UPDATE SET
@@ -589,7 +652,9 @@ export async function upsertOtelCalls(
   const oldRes = await tx.execute(sql`
     SELECT call_key, request_id, query_source, model, claude_code_version, prompt_id,
            agent_id, event_time, input_tokens, output_tokens, cache_read_tokens,
-           cache_write_tokens, cost_usd_micros, structure, provisional, source_mask, first_seq
+           cache_write_tokens, cost_usd_micros, cache_write_5m_tokens,
+           cache_write_1h_tokens, effort, speed, skill_name, plugin_name, agent_name,
+           mcp_server_name, mcp_tool_name, structure, provisional, source_mask, first_seq
       FROM otel_calls
      WHERE session_id = ${rootId}
        AND call_key IN (SELECT jsonb_array_elements_text(${textArrayJson(keys)}))
@@ -654,6 +719,15 @@ export async function upsertOtelCalls(
       cache_read_tokens: call.cacheReadTokens,
       cache_write_tokens: call.cacheWriteTokens,
       cost_usd_micros: call.costUsdMicros,
+      cache_write_5m_tokens: call.cacheWrite5mTokens,
+      cache_write_1h_tokens: call.cacheWrite1hTokens,
+      effort: call.effort,
+      speed: call.speed,
+      skill_name: call.skillName,
+      plugin_name: call.pluginName,
+      agent_name: call.agentName,
+      mcp_server_name: call.mcpServerName,
+      mcp_tool_name: call.mcpToolName,
       structure,
       provisional,
       source_mask: sourceMask,
@@ -667,18 +741,24 @@ export async function upsertOtelCalls(
     INSERT INTO otel_calls (
       session_id, call_key, request_id, query_source, model, claude_code_version, prompt_id,
       agent_id, event_time, input_tokens, output_tokens, cache_read_tokens,
-      cache_write_tokens, cost_usd_micros, structure, provisional, source_mask, first_seq,
-      seq, change_kind
+      cache_write_tokens, cost_usd_micros, cache_write_5m_tokens, cache_write_1h_tokens,
+      effort, speed, skill_name, plugin_name, agent_name, mcp_server_name, mcp_tool_name,
+      structure, provisional, source_mask, first_seq, seq, change_kind
     )
     SELECT ${rootId}, r.call_key, r.request_id, r.query_source, r.model,
            r.claude_code_version, r.prompt_id, r.agent_id, r.event_time, r.input_tokens,
            r.output_tokens, r.cache_read_tokens, r.cache_write_tokens, r.cost_usd_micros,
+           r.cache_write_5m_tokens, r.cache_write_1h_tokens, r.effort, r.speed,
+           r.skill_name, r.plugin_name, r.agent_name, r.mcp_server_name, r.mcp_tool_name,
            r.structure, r.provisional, r.source_mask, r.first_seq, ${seq}, r.change_kind
       FROM jsonb_to_recordset(${jsonParam(writes)}::jsonb) AS r(
              call_key text, request_id text, query_source text, model text,
              claude_code_version text, prompt_id text, agent_id text,
              event_time timestamptz, input_tokens bigint, output_tokens bigint,
              cache_read_tokens bigint, cache_write_tokens bigint, cost_usd_micros bigint,
+             cache_write_5m_tokens bigint, cache_write_1h_tokens bigint, effort text,
+             speed text, skill_name text, plugin_name text, agent_name text,
+             mcp_server_name text, mcp_tool_name text,
              structure text, provisional boolean, source_mask smallint, first_seq bigint,
              change_kind text)
     ON CONFLICT ON CONSTRAINT otel_calls_pk DO UPDATE SET
@@ -694,6 +774,15 @@ export async function upsertOtelCalls(
       cache_read_tokens = EXCLUDED.cache_read_tokens,
       cache_write_tokens = EXCLUDED.cache_write_tokens,
       cost_usd_micros = EXCLUDED.cost_usd_micros,
+      cache_write_5m_tokens = EXCLUDED.cache_write_5m_tokens,
+      cache_write_1h_tokens = EXCLUDED.cache_write_1h_tokens,
+      effort = EXCLUDED.effort,
+      speed = EXCLUDED.speed,
+      skill_name = EXCLUDED.skill_name,
+      plugin_name = EXCLUDED.plugin_name,
+      agent_name = EXCLUDED.agent_name,
+      mcp_server_name = EXCLUDED.mcp_server_name,
+      mcp_tool_name = EXCLUDED.mcp_tool_name,
       structure = EXCLUDED.structure,
       provisional = EXCLUDED.provisional,
       source_mask = EXCLUDED.source_mask,
@@ -914,6 +1003,58 @@ export async function recomputeSpanRollups(
 // One write: realtime batch or projected chunk
 // ---------------------------------------------------------------------------
 
+/** The account columns of `otel_session_state` after merging one batch (DD-5). */
+interface MergedOtelAccount {
+  plan: string | null;
+  seatType: string | null;
+  provider: string | null;
+  customBaseUrl: string | null;
+  eventAt: Date | null;
+  /** Any of the four stored values changed. */
+  changed: boolean;
+}
+
+/**
+ * Latest-wins merge of a batch's account fields into the locked state row (DD-5 of
+ * otel-cost-attribution): a non-null batch value overwrites the stored one when the stored value
+ * is NULL or the batch's event time is not older than `account_event_at`; NULL never overwrites.
+ * `account_event_at` becomes the greater of the two times. Runs on the row read `FOR UPDATE`, so
+ * the result is written back as plain values.
+ */
+function mergeOtelAccount(
+  state: OtelSessionState,
+  batch: ExtractedOtelAccount | null,
+): MergedOtelAccount {
+  const stored: MergedOtelAccount = {
+    plan: state.plan,
+    seatType: state.seatType,
+    provider: state.provider,
+    customBaseUrl: state.customBaseUrl,
+    eventAt: state.accountEventAt,
+    changed: false,
+  };
+  if (!batch) return stored;
+  const storedAt = state.accountEventAt;
+  const notOlder = storedAt === null || batch.eventAt >= storedAt;
+  const pick = (current: string | null, next: string | null): string | null =>
+    next !== null && (current === null || notOlder) ? next : current;
+  const merged: MergedOtelAccount = {
+    plan: pick(state.plan, batch.plan),
+    seatType: pick(state.seatType, batch.seatType),
+    provider: pick(state.provider, batch.provider),
+    customBaseUrl: pick(state.customBaseUrl, batch.customBaseUrl),
+    eventAt:
+      storedAt === null || batch.eventAt > storedAt ? batch.eventAt : storedAt,
+    changed: false,
+  };
+  merged.changed =
+    merged.plan !== state.plan ||
+    merged.seatType !== state.seatType ||
+    merged.provider !== state.provider ||
+    merged.customBaseUrl !== state.customBaseUrl;
+  return merged;
+}
+
 /** Outcome of {@link applyOtelLines}. */
 export interface OtelApplyResult {
   /** The state's `seq` after the write (unchanged when nothing changed). */
@@ -933,7 +1074,9 @@ export interface OtelApplyResult {
  * deltas), upserts spans, recomputes the touched traces' rollups, then updates the state row:
  * `seq` (only when a row changed), `user_id` (when still NULL), `has_spans`,
  * `has_provisional`, `otel_hook_version` (the highest seen) and, for `source: 'realtime'`,
- * `rt_last_at = now()`. `chunk_last_at` and the `rt_*` gap fields are the callers' (DD-14,
+ * `rt_last_at = now()`, plus the account fields (`plan`, `seat_type`, `provider`,
+ * `custom_base_url`, `account_event_at`) merged latest-wins by {@link mergeOtelAccount} — a
+ * changed account value counts as a change. `chunk_last_at` and the `rt_*` gap fields are the callers' (DD-14,
  * DD-16, DD-17).
  */
 export async function applyOtelLines(
@@ -964,22 +1107,31 @@ export async function applyOtelLines(
   const callRes = await upsertOtelCalls(tx, rootId, calls, source, seq);
   const spanRes = await upsertOtelSpans(tx, rootId, spans, source, seq);
   const rolled = await recomputeSpanRollups(tx, rootId, spanRes.traceIds, seq);
+  const account = mergeOtelAccount(state, extractOtelAccount(lineList));
   const changed =
     callRes.changed + callRes.bucketsChanged + spanRes.changed + rolled > 0 ||
-    spanRes.traceIds.length > 0;
+    spanRes.traceIds.length > 0 ||
+    account.changed;
 
   const hookVersion = maxVersion([
     state.otelHookVersion,
     maxHookVersion(lineList),
   ]);
   const realtime = source === 'realtime';
+  const accountEventAt =
+    account.eventAt === null ? null : account.eventAt.toISOString();
   await tx.execute(sql`
     UPDATE otel_session_state SET
       seq = ${changed ? seq : state.seq},
       has_spans = has_spans OR ${spans.length > 0},
       has_provisional = has_provisional OR ${callRes.anyProvisional},
       otel_hook_version = ${hookVersion},
-      rt_last_at = CASE WHEN ${realtime} THEN now() ELSE rt_last_at END
+      rt_last_at = CASE WHEN ${realtime} THEN now() ELSE rt_last_at END,
+      plan = ${account.plan},
+      seat_type = ${account.seatType},
+      provider = ${account.provider},
+      custom_base_url = ${account.customBaseUrl},
+      account_event_at = ${accountEventAt}::timestamptz
      WHERE session_id = ${rootId}
   `);
 
@@ -1017,6 +1169,10 @@ export async function rebuildOtelBuckets(
              COALESCE(query_source, '') AS query_source,
              COALESCE(model, '') AS model,
              COALESCE(claude_code_version, '') AS cc_version,
+             COALESCE(skill_name, '') AS skill,
+             COALESCE(mcp_server_name, '') AS mcp_server,
+             COALESCE(effort, '') AS effort,
+             COALESCE(speed, '') AS speed,
              COUNT(*)::int AS calls,
              COALESCE(SUM(cost_usd_micros), 0)::bigint AS cost_usd_micros,
              COALESCE(SUM(input_tokens), 0)::bigint AS input_tokens,
@@ -1025,7 +1181,7 @@ export async function rebuildOtelBuckets(
              COALESCE(SUM(cache_write_tokens), 0)::bigint AS cache_write_tokens
         FROM otel_calls
        WHERE session_id = ${rootId}
-       GROUP BY 1, 2, 3, 4, 5
+       GROUP BY 1, 2, 3, 4, 5, 6, 7, 8, 9
     ),
     cur AS (
       SELECT * FROM otel_cost_buckets WHERE session_id = ${rootId}
@@ -1036,6 +1192,10 @@ export async function rebuildOtelBuckets(
              COALESCE(t.query_source, b.query_source) AS query_source,
              COALESCE(t.model, b.model) AS model,
              COALESCE(t.cc_version, b.cc_version) AS cc_version,
+             COALESCE(t.skill, b.skill) AS skill,
+             COALESCE(t.mcp_server, b.mcp_server) AS mcp_server,
+             COALESCE(t.effort, b.effort) AS effort,
+             COALESCE(t.speed, b.speed) AS speed,
              COALESCE(t.calls, 0) AS calls,
              COALESCE(t.cost_usd_micros, 0) AS cost_usd_micros,
              COALESCE(t.input_tokens, 0) AS input_tokens,
@@ -1049,6 +1209,10 @@ export async function rebuildOtelBuckets(
          AND b.query_source = t.query_source
          AND b.model = t.model
          AND b.cc_version = t.cc_version
+         AND b.skill = t.skill
+         AND b.mcp_server = t.mcp_server
+         AND b.effort = t.effort
+         AND b.speed = t.speed
        WHERE b.session_id IS NULL
           OR ROW(b.calls, b.cost_usd_micros, b.input_tokens, b.output_tokens,
                  b.cache_read_tokens, b.cache_write_tokens)
@@ -1059,12 +1223,14 @@ export async function rebuildOtelBuckets(
     )
     INSERT INTO otel_cost_buckets (
       session_id, user_id, bucket_start, structure, query_source, model, cc_version,
+      skill, mcp_server, effort, speed,
       calls, cost_usd_micros, input_tokens, output_tokens, cache_read_tokens,
       cache_write_tokens, seq, change_kind
     )
     SELECT ${rootId},
            (SELECT user_id FROM otel_session_state WHERE session_id = ${rootId}),
            d.bucket_start, d.structure, d.query_source, d.model, d.cc_version,
+           d.skill, d.mcp_server, d.effort, d.speed,
            d.calls, d.cost_usd_micros, d.input_tokens, d.output_tokens,
            d.cache_read_tokens, d.cache_write_tokens, ${seq}, ${changeKind}
       FROM diff d

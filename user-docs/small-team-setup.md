@@ -48,6 +48,43 @@ means:
 - The hook accepts a non-local `http://` server URL, and the installer is downloaded from that
   same URL — both without encryption ([accepted risks](security-hardening.md#112-hook-and-installer-developer-machines)).
 
+**Plain `http://`** — the app port is published on the VM's internal address:
+
+```text diagram=small-team-http
+ Company network (office LAN / VPN)
+ ┌──────────────────────────────────────────────────────────────────────┐
+ │                                     VM 10.0.0.15 (Docker)            │
+ │ Developer machine                   ┌──────────────────────────────┐ │
+ │ ┌───────────────────┐  plain HTTP   │ app  10.0.0.15:5003 → :3000  │ │
+ │ │ Browser           ├──────────────►│ Log Hub server               │ │
+ │ │ Claude Code + hook├──────────────►│        │ SQL                 │ │
+ │ └───────────────────┘  unencrypted  │        ▼                     │ │
+ │                                     │ db   PostgreSQL (not         │ │
+ │                                     │      published)              │ │
+ │                                     └──────────────────────────────┘ │
+ └──────────────────────────────────────────────────────────────────────┘
+          Internet ──✕── no inbound access to the VM
+```
+
+**`https://`** — a reverse proxy on the same VM terminates TLS; the app stays on `127.0.0.1`:
+
+```text diagram=small-team-https
+ Company network (office LAN / VPN)
+ ┌──────────────────────────────────────────────────────────────────────┐
+ │                                 VM loghub.internal (Docker)          │
+ │ Developer machine               ┌──────────────────────────────────┐ │
+ │ ┌───────────────────┐   HTTPS   │ nginx :443  (TLS certificate)    │ │
+ │ │ Browser           ├──────────►│        │ HTTP, loopback only     │ │
+ │ │ Claude Code + hook├──────────►│        ▼                         │ │
+ │ └───────────────────┘ encrypted │ app  127.0.0.1:5003 → :3000      │ │
+ │                                 │        │ SQL                     │ │
+ │                                 │        ▼                         │ │
+ │                                 │ db   PostgreSQL (not published)  │ │
+ │                                 └──────────────────────────────────┘ │
+ └──────────────────────────────────────────────────────────────────────┘
+          Internet ──✕── no inbound access to the VM
+```
+
 **Recommended:** `http://` is fine to try things out; for daily use put a TLS-terminating reverse
 proxy in front of the app (section 5) and give the team the `https://` address. The `.env`
 examples below come in both variants — the differences are `PUBLIC_BASE_URL`, `TRUST_PROXY`
@@ -66,7 +103,31 @@ emailed links, and in production Modes 2 and 3 refuse to start without it.
 ## 3. Write the `.env`
 
 Open `.env` in the install directory, keep your generated `POSTGRES_PASSWORD` and
-`SESSION_SECRET` lines, and make the rest look like one of the examples below.
+`SESSION_SECRET` lines, and make the rest look like one of the examples below. Which one:
+
+```text diagram=small-team-choose-env
+                Do you have an SMTP relay the VM can reach?
+                 │                                   │
+                 no                                 yes
+                 │                                   │
+                 ▼                                   ▼
+          Mode 2 (password)              Should sign-up be limited to
+                 │                       your mail domain, with emailed
+                 │                       confirmation?
+                 │                        │                    │
+                 │                        no                  yes
+                 │                        │                    │
+                 │                        ▼                    ▼
+                 │              Mode 2 + SMTP          Mode 3 (password-confirm)
+                 │              (password reset works)         │
+                 ▼                        │                    ▼
+        Can you get a TLS certificate for the server name (internal CA)?
+                 │                                   │
+                 no                                 yes
+                 ▼                                   ▼
+      .env "plain http://"              .env "https:// behind a reverse proxy"
+      + section 4 (open the port)       + section 5 (nginx)
+```
 
 ### Mode 2, plain `http://`
 
@@ -246,6 +307,24 @@ More on the proxy (HSTS, body limits, `TRUST_PROXY` values): [Security Hardening
    [Team repositories](session-list.md#team-repositories). Repositories are private to their
    owner until shared through a team.
 
+How a teammate gets an account in Mode 3:
+
+```text diagram=small-team-signup
+ Teammate                  Log Hub                    SMTP relay
+    │  sign up (email,        │                           │
+    │  password)              │                           │
+    ├────────────────────────►│ check ALLOWED_EMAIL_DOMAINS
+    │                         │ create unconfirmed account│
+    │                         ├──────────────────────────►│ confirmation email
+    │◄────────────────────────┼───────────────────────────┤ link = PUBLIC_BASE_URL/…
+    │  open the link          │                           │
+    ├────────────────────────►│ account confirmed         │
+    │  sign in                │                           │
+    ├────────────────────────►│                           │
+```
+
+In Mode 2 the same teammate signs up and is signed in at once — no email, no domain check.
+
 Forgotten passwords:
 
 - **Mode 3, or Mode 2 with SMTP** — "Forgot password?" on the login page sends a reset link.
@@ -271,12 +350,53 @@ Each teammate, on their own machine:
 3. Restarts Claude Code and runs a session, then opens Log Hub: the repository and the session
    appear on the Home page.
 
+What happens on the way:
+
+```text diagram=small-team-hook-flow
+ Developer            Developer machine                       Log Hub server
+    │                       │                                      │
+    │ copy the one-liner from My API Keys → Install                │
+    │◄─────────────────────────────────────────────────────────────┤
+    │ run it in the repo    │                                      │
+    ├──────────────────────►│ npx downloads the installer          │
+    │                       ├─────────────────────────────────────►│ /static/artisyn-hooks-installer.tgz
+    │                       │ writes .artisyn/ (serverUrl, apiKey) │
+    │                       │ and enables the plugin in .claude/   │
+    │ work in Claude Code   │                                      │
+    ├──────────────────────►│ hook records the session locally     │
+    │                       │ end of each turn: upload, x-api-key  │
+    │                       ├─────────────────────────────────────►│ queued and ingested
+    │ open Log Hub in the browser                                  │
+    ├─────────────────────────────────────────────────────────────►│ session on the Home page
+```
+
 Details and troubleshooting: [Install the hook](../hook/INSTALL_HOOK.md) and
 [Connecting a Repository](connect-repository.md).
 
 If you later move from `http://` to `https://`, each teammate re-runs the Full Auto Install
 one-liner copied from the new address: its `--server-url` points the hook at the new server, and
 the installer asks to confirm the destination change.
+
+## What about the public internet?
+
+Technically nothing stops you from running the same setup on a server reachable from the
+internet: `https://` behind a reverse proxy, Mode 3 (`password-confirm`), and sign-up limited to
+your company's domains with `ALLOWED_EMAIL_DOMAINS`. It is a supported setup: Log Hub goes through a
+security audit regularly — the latest one in October 2026 — and the settings for an exposed
+server are in [Security Hardening & Configuration](security-hardening.md#2-deployment-checklist).
+
+Still, most teams keep it inside the company network, and we recommend the same:
+
+- **The data is sensitive.** Log Hub stores prompts, assistant responses and tool output, which
+  often contain source code and sometimes secrets
+  ([what is stored](security-hardening.md#61-what-is-stored)).
+- **A server on the internet is exposed to bugs below Log Hub too.** A recent remote code
+  execution vulnerability in Node.js itself is a good example: Log Hub cannot defend against a
+  flaw in the runtime it runs on; it can only ship an updated image once a fix exists. Inside the
+  company network such a bug is reachable only by people who are already on that network.
+
+If you do publish it, keep the image up to date (re-run the installer), add HSTS and rate limits
+at the proxy, and review **Admin Panel → Users** from time to time.
 
 ## Checklist
 

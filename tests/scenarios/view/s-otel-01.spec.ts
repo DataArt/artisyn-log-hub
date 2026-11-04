@@ -79,6 +79,15 @@ import { shiftSessionTree } from '../helpers/time-shift';
 
 const HOUR_MS = 60 * 60 * 1000;
 
+/** Attribution values of S1's attributed call (2026-11-03 otel-cost-attribution, AC-3). */
+const ATTR = { skill: 'scn-review', mcpServer: 'scn-mcp', effort: 'high', speed: 'fast' } as const;
+/** The account S1 reports; the base URL is sent with userinfo, query and fragment (DD-6). */
+const ACCOUNT = { plan: 'max', seatType: 'individual', provider: 'firstParty', customBaseUrl: 'https://proxy.arrakis.test:8443/anthropic' } as const;
+/** `OTEL_NOT_REPORTED_HINT` (client `otel-chart-data.ts`, DD-17). */
+const NOT_REPORTED_HINT = 'Calls without this attribute: not sent by this Claude Code version or left at the default value; skill / MCP names also need OTEL_LOG_TOOL_DETAILS=1.';
+/** `OTEL_PLAN_NOTE(plan)` (client `otel.constants.ts`, DD-18). */
+const planNote = (plan: string) => `Claude Code reports plan ${plan}. On a subscription plan, OTEL cost_usd is a list-price equivalent, not billed money.`;
+
 /** `GET …/sessions/:sessionId/logs/delta` (2026-11-01 session-map-tab), the fields the steps read. */
 type SessionLogsDelta =
   | { reload: true; serverTime: string }
@@ -216,6 +225,19 @@ test('@S-OTEL-01 repository and session OTEL tabs from uploaded chunks @mode-a',
   const s1 = `otel01-${run}-s1`;
   const tag1 = `a${run}`;
   const turn1 = otelTurn(tag1, base);
+  // 2026-11-03 otel-cost-attribution: S1's first main call carries the per-call attribution
+  // attributes (Claude Code 2.1.300+) and the account resource attributes; every other call of
+  // the test reports none, so it lands in the «not reported» ('') series.
+  turn1.calls.main1 = {
+    ...turn1.calls.main1,
+    attributes: { 'skill.name': ATTR.skill, 'mcp_server.name': ATTR.mcpServer, effort: ATTR.effort, speed: ATTR.speed, cache_creation_5m_tokens: 600, cache_creation_1h_tokens: 400 },
+    resourceAttributes: {
+      'anthropic.plan': ACCOUNT.plan,
+      'anthropic.seat_type': ACCOUNT.seatType,
+      'anthropic.provider': ACCOUNT.provider,
+      'anthropic.custom_base_url': 'https://scn:secret@proxy.arrakis.test:8443/anthropic?token=scn#frag',
+    },
+  };
   const nb = `otel01-${run}-nobranch`;
   const nbCall = { requestId: `nb${run}-req-1`, querySource: 'repl_main_thread', model: MODEL_B, at: plus(base, 12 * 60), costUsd: 0.01, input: 400, output: 40 };
   const s1Spec: TranscriptSpec = { sessionId: s1, prompt: `otel main session ${run}`, repoUrls: [repoUrl], branch: 'feature/otel', at: plus(base, 20), requestIds: turn1.transcriptRequestIds };
@@ -291,6 +313,19 @@ test('@S-OTEL-01 repository and session OTEL tabs from uploaded chunks @mode-a',
     await expect(page.getByTestId('otel-qs-row').filter({ hasText: 'prompt_suggestion' }).getByTestId('otel-qs-new')).toHaveCount(0);
   });
 
+  await test.step('AC-5 (2026-11-03 otel-cost-attribution). plan mix: the facts route splits the Total by the session’s reported plan (cost descending, not reported last); the Total tile prints «Mix of plans: …» and the list-price explanation', async () => {
+    const f = await repoFacts(owner, repoId);
+    expect(f.planMix).toEqual([
+      { plan: ACCOUNT.plan, sessions: 1, costUsdMicros: String(turn1.totalMicros) },
+      { plan: null, sessions: 1, costUsdMicros: String(micros(nbCall.costUsd)) },
+    ]);
+    const mix = page.getByTestId('otel-kpi-total').getByTestId('otel-plan-mix');
+    await expect(mix).toContainText(
+      `Mix of plans: ${ACCOUNT.plan} · 1 session · ${otelUsd(turn1.totalMicros)} — not reported · 1 · ${otelUsd(micros(nbCall.costUsd))}`,
+    );
+    await expect(mix).toContainText('On subscription plans cost_usd is list-price equivalent, not billed.');
+  });
+
   await test.step('AC-C4 (full coverage). both sessions carry OTEL: coverage 2 of 2, the «Sessions with OTEL» tile says 2 / 2 · 100 %, and no coverage banner', async () => {
     const f = await repoFacts(owner, repoId);
     expect(f.coverage).toEqual({ otelSessions: 2, totalSessions: 2, otelUsers: 1, reasons: [] });
@@ -329,7 +364,8 @@ test('@S-OTEL-01 repository and session OTEL tabs from uploaded chunks @mode-a',
     await expect(page.getByTestId('otel-kpi-total')).toContainText(otelUsd(totalMain));
     await page.getByTestId('otel-model-filter').selectOption(MODEL_B);
     await lastQuery('model', MODEL_B);
-    await expect(page.getByTestId('otel-kpi-total')).toContainText(otelUsd(micros(nbCall.costUsd)));
+    // The tile's value itself: the plan-mix line under it already prints the no-branch session's cost.
+    await expect(page.getByTestId('otel-kpi-total').locator('.font-mono.text-lg')).toHaveText(otelUsd(micros(nbCall.costUsd)));
     await page.getByTestId('otel-model-filter').selectOption('');
     await expect(page.getByTestId('otel-kpi-total')).toContainText(otelUsd(totalMain));
     await page.getByTestId('otel-filter-strip').getByRole('button', { name: '24 h', exact: true }).click();
@@ -337,6 +373,32 @@ test('@S-OTEL-01 repository and session OTEL tabs from uploaded chunks @mode-a',
       const u = facts.length > 0 ? new URL(facts[facts.length - 1]) : null;
       return u ? Date.parse(u.searchParams.get('to')!) - Date.parse(u.searchParams.get('from')!) : 0;
     }).toBe(24 * HOUR_MS);
+
+    // 2026-11-03 otel-cost-attribution, AC-3: Skill, MCP server, Effort and Fast mode stack the
+    // same total by the call's attribute; every call without it is the grey «not reported» series
+    // (key ''), whose legend item carries the ⓘ hint.
+    const attribution = [
+      { button: 'Skill', stackBy: 'skill', value: ATTR.skill },
+      { button: 'MCP server', stackBy: 'mcpServer', value: ATTR.mcpServer },
+      { button: 'Effort', stackBy: 'effort', value: ATTR.effort },
+      { button: 'Fast mode', stackBy: 'speed', value: ATTR.speed },
+    ] as const;
+    for (const a of attribution) {
+      const f = await repoFacts(owner, repoId, { stackBy: a.stackBy });
+      expect(new Set(f.buckets.map((b) => b.key)), a.stackBy).toEqual(new Set([a.value, '']));
+      expect(sumMicros(f.buckets), `${a.stackBy}: Σ buckets = the total`).toBe(totalMain);
+      expect(sumMicros(f.buckets.filter((b) => b.key === a.value)), a.stackBy).toBe(micros(turn1.calls.main1.costUsd));
+      await controls.getByRole('button', { name: a.button, exact: true }).click();
+      await lastQuery('stackBy', a.stackBy);
+      const legend = page.getByTestId('otel-chart-legend');
+      await expect(legend).toContainText(a.value);
+      await expect(legend).toContainText('not reported');
+      await expect(legend.getByTestId('otel-legend-not-reported-hint')).toHaveCount(1);
+    }
+    await page.getByTestId('otel-legend-not-reported-hint').hover();
+    await expect(page.getByRole('tooltip').first()).toContainText(NOT_REPORTED_HINT);
+    await controls.getByRole('button', { name: 'Model', exact: true }).click();
+    await expect(page.getByTestId('otel-legend-not-reported-hint'), 'no hint for the existing groupings').toHaveCount(0);
   });
 
   await test.step('FR-27. the chart tooltip lists the bucket’s series sorted by value with share bars, then the total', async () => {
@@ -369,6 +431,40 @@ test('@S-OTEL-01 repository and session OTEL tabs from uploaded chunks @mode-a',
     const banner = tab.getByTestId('otel-slow-banner');
     await expect(banner).toHaveAttribute('data-reason', 'realtime-off');
     await expect(banner).toContainText("realtime channel is off or cannot reach the server");
+  });
+
+  await test.step('AC-4, AC-5 (2026-11-03 otel-cost-attribution). S1 reports its account: the session route returns plan, seat, provider and the base URL without userinfo / query / fragment; the tab shows the Account row, the plan note with its help link and the «plan: max» chip on the OTEL cost tile; a session without a plan shows none of them', async () => {
+    const snap = await sessionOtel(owner, repoId, s1);
+    expect(snap.plan).toEqual(ACCOUNT);
+    const stacked = await sessionOtel(owner, repoId, s1, { stackBy: 'skill' });
+    expect(new Set(stacked.buckets.map((b) => b.key))).toEqual(new Set([ATTR.skill, '']));
+    expect(sumMicros(stacked.buckets)).toBe(turn1.totalMicros);
+
+    const tab = page.getByTestId('session-otel-tab');
+    const account = tab.getByTestId('session-otel-account');
+    await expect(account).toContainText('Account:');
+    await expect(account.getByTestId('session-otel-account-plan')).toHaveText(`plan: ${ACCOUNT.plan}`);
+    await expect(account.getByTestId('session-otel-account-seat')).toHaveText(`seat: ${ACCOUNT.seatType}`);
+    await expect(account.getByTestId('session-otel-account-provider')).toHaveText(`provider: ${ACCOUNT.provider}`);
+    await expect(account.getByTestId('session-otel-account-baseUrl')).toHaveText(`base URL: ${ACCOUNT.customBaseUrl}`);
+    const note = tab.getByTestId('session-otel-plan-note');
+    await expect(note).toContainText(planNote(ACCOUNT.plan));
+    await expect(note.getByText('What is this?')).toBeVisible();
+    const chip = tab.getByTestId('otel-kpi-total').getByTestId('otel-kpi-plan-chip');
+    await expect(chip).toHaveText(`plan: ${ACCOUNT.plan}`);
+    await chip.hover();
+    await expect(page.getByRole('tooltip').first()).toContainText(planNote(ACCOUNT.plan));
+
+    expect((await sessionOtel(owner, repoId, nb)).plan, 'no account reported').toBeNull();
+    await openSession(page, owner, repoId, nb, { tab: 'otel' });
+    const nbTab = page.getByTestId('session-otel-tab');
+    await expect(nbTab.getByTestId('otel-kpi-total')).toBeVisible({ timeout: 20_000 });
+    await expect(nbTab.getByTestId('session-otel-account')).toHaveCount(0);
+    await expect(nbTab.getByTestId('session-otel-plan-note')).toHaveCount(0);
+    await expect(nbTab.getByTestId('otel-kpi-plan-chip')).toHaveCount(0);
+    // Back to S1 for the waterfall step below.
+    await openSession(page, owner, repoId, s1, { tab: 'otel' });
+    await expect(page.getByTestId('session-otel-tab').getByTestId('otel-kpi-total')).toBeVisible({ timeout: 20_000 });
   });
 
   await test.step('AC-5. one trace per turn; tool and execution nested; each llm_request shows its call’s cost; the interaction’s Σ = its two LLM calls; the standalone suggestion is hidden', async () => {
@@ -432,6 +528,17 @@ test('@S-OTEL-01 repository and session OTEL tabs from uploaded chunks @mode-a',
     const factsAfter = await repoFacts(owner, repoId, { interval: '5m', from: new Date(base.getTime() - HOUR_MS).toISOString(), to: new Date(Date.now() + 60_000).toISOString() });
     const shape = (f: typeof factsAfter) => f.buckets.map((x) => `${x.start}|${x.key}|${x.calls}|${x.costUsdMicros}`).sort();
     expect(shape(factsAfter)).toEqual(shape(factsBefore));
+    // AC-7 (2026-11-03 otel-cost-attribution): the re-projection under projection version 2 fills
+    // the new grain and the account from the stored chunks — nothing re-uploaded.
+    const { rows: versions } = await db.query<{ v: number | null }>(
+      `SELECT DISTINCT lo.otel_projection_version AS v FROM logs_otel lo JOIN sessions s ON s.id = lo.session_id WHERE s.session_id = $1`,
+      [s1],
+    );
+    expect(versions.map((r) => r.v)).toEqual([2]);
+    const bySkill = await repoFacts(owner, repoId, { stackBy: 'skill' });
+    const skillMicros = sumMicros(bySkill.buckets.filter((b) => b.key === ATTR.skill));
+    expect(skillMicros, 'non-empty stackBy=skill buckets after re-projection').toBe(micros(turn1.calls.main1.costUsd));
+    expect((await sessionOtel(owner, repoId, s1)).plan).toEqual(ACCOUNT);
     await openSession(page, owner, repoId, s1, { tab: 'otel' });
     await expect(row(page, `${tag1}t1`)).toBeVisible();
   });

@@ -89,14 +89,23 @@ export interface OtelCallSpec {
   output: number;
   cacheRead?: number;
   cacheWrite?: number;
+  /**
+   * Extra record attributes, appended after the fixed ones (2026-11-03 otel-cost-attribution):
+   * e.g. `skill.name`, `mcp_server.name`, `effort`, `speed`, `agent_id`,
+   * `cache_creation_5m_tokens` / `cache_creation_1h_tokens`. A number is sent as `intValue`.
+   */
+  attributes?: Record<string, string | number>;
+  /** Extra resource attributes merged into the fixed resource (e.g. `anthropic.plan`). */
+  resourceAttributes?: Record<string, string>;
 }
 
 export function apiRequestLine(sessionId: string, c: OtelCallSpec, opts: LineOptions = {}): OtelLine {
   const base = lineBase(opts);
+  const extra = Object.entries(c.attributes ?? {}).map(([k, v]) => (typeof v === 'number' ? i(k, v) : s(k, v)));
   return {
     signal: 'logs',
     receivedAt: base.receivedAt,
-    resource: base.resource,
+    resource: { ...base.resource, ...(c.resourceAttributes ?? {}) },
     scope: LOGS_SCOPE,
     record: {
       timeUnixNano: nanos(c.at),
@@ -116,6 +125,7 @@ export function apiRequestLine(sessionId: string, c: OtelCallSpec, opts: LineOpt
         i('cache_creation_tokens', c.cacheWrite ?? 0),
         d('cost_usd', c.costUsd),
         i('duration_ms', 1200),
+        ...extra,
       ],
     },
     ...(base.hookVersion === undefined ? {} : { hookVersion: base.hookVersion }),

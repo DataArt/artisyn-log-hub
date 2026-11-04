@@ -1450,6 +1450,12 @@ export interface SubagentStats {
    * reason as {@link SubagentStats.linesChanged}.
    */
   diffLinesTotalCalls?: number;
+  /**
+   * OTEL-reported cost (USD) of this sub-agent, set only when the server chose it over the
+   * transcript cost (old Claude Code version and OTEL reports more — FR-6). `null` otherwise;
+   * absent from older servers. When non-null the UI shows it instead of `computeCost(tokens)`.
+   */
+  otelCostUsd?: number | null;
 }
 
 /**

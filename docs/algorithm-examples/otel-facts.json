@@ -337,5 +337,196 @@
     "input": {"kind": "querySource", "name": "sdk"},
     "expected": {"hidden": false, "known": true},
     "note": "Rule 10: sdk is a visible dictionary name"
+  },
+  {
+    "id": "OF-50",
+    "input": {"kind": "calls", "lines": [
+      {"signal": "logs", "resource": {"service.version": "2.1.317"}, "record": {"timeUnixNano": "1793354550000000000", "body": {"stringValue": "claude_code.api_request"}, "attributes": [
+        {"key": "request_id", "value": {"stringValue": "req_050"}},
+        {"key": "cache_creation_tokens", "value": {"intValue": "500"}},
+        {"key": "cache_creation_5m_tokens", "value": {"intValue": "300"}},
+        {"key": "cache_creation_1h_tokens", "value": {"doubleValue": 199.6}},
+        {"key": "effort", "value": {"stringValue": "high"}},
+        {"key": "speed", "value": {"stringValue": "fast"}},
+        {"key": "skill.name", "value": {"stringValue": "commit"}},
+        {"key": "plugin.name", "value": {"stringValue": "git-tools"}},
+        {"key": "agent.name", "value": {"stringValue": "Explore"}},
+        {"key": "mcp_server.name", "value": {"stringValue": "github"}},
+        {"key": "mcp_tool.name", "value": {"stringValue": "create_issue"}}
+      ]}}
+    ]},
+    "expected": {"calls": [{"callKey": "req_050", "claudeCodeVersion": "2.1.317", "cacheWriteTokens": 500, "cacheWrite5mTokens": 300, "cacheWrite1hTokens": 200, "effort": "high", "speed": "fast", "skillName": "commit", "pluginName": "git-tools", "agentName": "Explore", "mcpServerName": "github", "mcpToolName": "create_issue"}]},
+    "note": "Rule 8 optional fields: the 5m/1h split present (199.6 rounds to 200; the total cacheWriteTokens stays 500, not derived) and all seven attributes present, taken verbatim"
+  },
+  {
+    "id": "OF-51",
+    "input": {"kind": "calls", "lines": [
+      {"signal": "logs", "record": {"timeUnixNano": "1793354550000000000", "body": {"stringValue": "claude_code.api_request"}, "attributes": [
+        {"key": "request_id", "value": {"stringValue": "req_051"}},
+        {"key": "cache_creation_tokens", "value": {"intValue": "400"}},
+        {"key": "cache_creation_5m_tokens", "value": {"intValue": "0"}},
+        {"key": "cache_creation_1h_tokens", "value": {"stringValue": "lots"}},
+        {"key": "effort", "value": {"stringValue": ""}},
+        {"key": "speed", "value": {"boolValue": true}},
+        {"key": "skill.name", "value": {"stringValue": "review"}},
+        {"key": "mcp_server.name", "value": {"stringValue": "jira"}}
+      ]}}
+    ]},
+    "expected": {"calls": [{"callKey": "req_051", "cacheWriteTokens": 400, "cacheWrite5mTokens": 0, "cacheWrite1hTokens": null, "effort": null, "speed": null, "skillName": "review", "pluginName": null, "agentName": null, "mcpServerName": "jira", "mcpToolName": null}]},
+    "note": "Rule 8 optional fields: a reported 0 stays 0 while a non-numeric 1h value is null; empty effort and a non-string speed are null; skill and MCP server present, plugin, agent and MCP tool absent -> null"
+  },
+  {
+    "id": "OF-52",
+    "input": {"kind": "calls", "lines": [
+      {"signal": "logs", "record": {"timeUnixNano": "1793354550000000000", "body": {"stringValue": "claude_code.api_request"}, "attributes": [
+        {"key": "request_id", "value": {"stringValue": "req_052"}},
+        {"key": "effort", "value": {"stringValue": {"$repeat": ["e", 70]}}},
+        {"key": "speed", "value": {"stringValue": {"$repeat": ["s", 65]}}},
+        {"key": "skill.name", "value": {"stringValue": {"$repeat": ["k", 300]}}},
+        {"key": "plugin.name", "value": {"stringValue": {"$repeat": ["p", 256]}}},
+        {"key": "agent.name", "value": {"stringValue": {"$repeat": ["a", 255]}}},
+        {"key": "mcp_server.name", "value": {"stringValue": {"$repeat": ["m", 1000]}}},
+        {"key": "mcp_tool.name", "value": {"stringValue": {"$repeat": ["t", 256]}}}
+      ]}}
+    ]},
+    "expected": {"calls": [{"callKey": "req_052", "effort": {"$repeat": ["e", 64]}, "speed": {"$repeat": ["s", 64]}, "skillName": {"$repeat": ["k", 255]}, "pluginName": {"$repeat": ["p", 255]}, "agentName": {"$repeat": ["a", 255]}, "mcpServerName": {"$repeat": ["m", 255]}, "mcpToolName": {"$repeat": ["t", 255]}}]},
+    "note": "Rule 8 optional fields: over-width values are cut to the column width (effort/speed 64, names 255); a value of exactly 255 is kept whole"
+  },
+  {
+    "id": "OF-53",
+    "input": {"kind": "calls", "lines": [
+      {"signal": "logs", "resource": {"service.version": "2.1.299"}, "record": {"timeUnixNano": "1793354550000000000", "body": {"stringValue": "claude_code.api_request"}, "attributes": [
+        {"key": "request_id", "value": {"stringValue": "req_053"}},
+        {"key": "query_source", "value": {"stringValue": "repl_main_thread"}},
+        {"key": "model", "value": {"stringValue": "claude-opus-5-5"}},
+        {"key": "input_tokens", "value": {"intValue": "1200"}},
+        {"key": "output_tokens", "value": {"intValue": "300"}},
+        {"key": "cache_read_tokens", "value": {"intValue": "4000"}},
+        {"key": "cache_creation_tokens", "value": {"intValue": "500"}},
+        {"key": "cost_usd", "value": {"doubleValue": 0.0123}}
+      ]}}
+    ]},
+    "expected": {"calls": [{"callKey": "req_053", "requestId": "req_053", "querySource": "repl_main_thread", "model": "claude-opus-5-5", "claudeCodeVersion": "2.1.299", "promptId": null, "agentId": null, "eventTime": "2026-10-30T10:02:30.000Z", "inputTokens": 1200, "outputTokens": 300, "cacheReadTokens": 4000, "cacheWriteTokens": 500, "costUsdMicros": "12300", "cacheWrite5mTokens": null, "cacheWrite1hTokens": null, "effort": null, "speed": null, "skillName": null, "pluginName": null, "agentName": null, "mcpServerName": null, "mcpToolName": null}]},
+    "note": "Rule 8 (AC-9): a pre-2.1.300 call sends none of the optional attributes -> all nine new fields are null (never 0 or ''), the existing fields are extracted as before"
+  },
+  {
+    "id": "OF-54",
+    "input": {"kind": "account", "lines": [
+      {"signal": "logs", "resource": {"anthropic.plan": "pro", "anthropic.seat_type": "team"}, "record": {"timeUnixNano": "1793354550000000000", "body": {"stringValue": "claude_code.api_request"}, "attributes": [
+        {"key": "anthropic.plan", "value": {"stringValue": "max"}}
+      ]}}
+    ]},
+    "expected": {"account": {"plan": "max", "seatType": "team", "provider": null, "customBaseUrl": null, "eventAt": "2026-10-30T10:02:30.000Z"}},
+    "note": "Rule 11: the record attribute (max) wins over the resource (pro); seat type only on the resource -> resource fallback; unreported fields null"
+  },
+  {
+    "id": "OF-55",
+    "input": {"kind": "account", "lines": [
+      {"signal": "logs", "resource": {"anthropic.plan": "enterprise", "anthropic.seat_type": "premium", "anthropic.provider": "firstParty", "anthropic.custom_base_url": "https://user:pw@proxy.example:8443/v1/?key=abc#top"}, "record": {"timeUnixNano": "1793354550000000000", "body": {"stringValue": "claude_code.api_request"}, "attributes": [
+        {"key": "request_id", "value": {"stringValue": "req_055"}}
+      ]}}
+    ]},
+    "expected": {"account": {"plan": "enterprise", "seatType": "premium", "provider": "firstParty", "customBaseUrl": "https://proxy.example:8443/v1/", "eventAt": "2026-10-30T10:02:30.000Z"}},
+    "note": "Rule 11: no account keys on the record -> all four from the resource; the base URL is sanitised by rule 12 (userinfo, query and fragment dropped, port and the non-lone trailing / of /v1/ kept)"
+  },
+  {
+    "id": "OF-56",
+    "input": {"kind": "account", "lines": [
+      {"signal": "logs", "record": {"timeUnixNano": "1793354700000000000", "body": {"stringValue": "claude_code.api_request"}, "attributes": [
+        {"key": "anthropic.plan", "value": {"stringValue": "max"}},
+        {"key": "anthropic.seat_type", "value": {"stringValue": "standard"}}
+      ]}},
+      {"signal": "logs", "record": {"timeUnixNano": "1793354550000000000", "body": {"stringValue": "claude_code.api_request"}, "attributes": [
+        {"key": "anthropic.plan", "value": {"stringValue": "pro"}}
+      ]}},
+      {"signal": "logs", "record": {"timeUnixNano": "1793354700000000000", "body": {"stringValue": "claude_code.api_request"}, "attributes": [
+        {"key": "anthropic.seat_type", "value": {"stringValue": "premium"}}
+      ]}}
+    ]},
+    "expected": {"account": {"plan": "max", "seatType": "premium", "provider": null, "customBaseUrl": null, "eventAt": "2026-10-30T10:05:00.000Z"}},
+    "note": "Rule 11: latest event time wins, not line order -> plan max (10:05) beats the later line's pro (10:02:30); on the 10:05 tie the later line wins -> seat premium; eventAt = the greatest time 10:05"
+  },
+  {
+    "id": "OF-57",
+    "input": {"kind": "account", "lines": [
+      {"signal": "logs", "record": {"timeUnixNano": "1793354400000000000", "body": {"stringValue": "claude_code.api_request"}, "attributes": [
+        {"key": "anthropic.plan", "value": {"stringValue": "pro"}},
+        {"key": "anthropic.provider", "value": {"stringValue": "firstParty"}}
+      ]}},
+      {"signal": "logs", "record": {"timeUnixNano": "1793354550000000000", "body": {"stringValue": "claude_code.api_request"}, "attributes": [
+        {"key": "anthropic.plan", "value": {"stringValue": "max"}},
+        {"key": "anthropic.provider", "value": {"stringValue": ""}},
+        {"key": "anthropic.custom_base_url", "value": {"stringValue": "not a url"}}
+      ]}}
+    ]},
+    "expected": {"account": {"plan": "max", "seatType": null, "provider": "firstParty", "customBaseUrl": null, "eventAt": "2026-10-30T10:02:30.000Z"}},
+    "note": "Rule 11: the later line updates plan to max, but its empty provider and unparsable base URL read as null and never clear the earlier provider firstParty"
+  },
+  {
+    "id": "OF-58",
+    "input": {"kind": "account", "lines": [
+      {"signal": "spans", "receivedAt": "2026-10-30T10:10:00.000Z", "record": {"traceId": "t-58", "spanId": "s-58", "name": "claude_code.llm_request", "startTimeUnixNano": "1793354400000000000", "attributes": [
+        {"key": "anthropic.plan", "value": {"stringValue": "team"}},
+        {"key": "anthropic.provider", "value": {"stringValue": "bedrock"}}
+      ]}},
+      {"signal": "logs", "record": {"timeUnixNano": "1793354550000000000", "body": {"stringValue": "claude_code.api_request"}, "attributes": [
+        {"key": "request_id", "value": {"stringValue": "req_058"}}
+      ]}},
+      {"signal": "metrics", "receivedAt": "2026-10-30T10:10:00.000Z", "resource": {"anthropic.plan": "max"}, "record": {"name": "claude_code.cost.usage"}}
+    ]},
+    "expected": {"account": {"plan": "team", "seatType": null, "provider": "bedrock", "customBaseUrl": null, "eventAt": "2026-10-30T10:00:00.000Z"}},
+    "note": "Rule 11: a span-sourced value, dated by the span start (10:00), not its receivedAt; the api_request carries no account key so eventAt stays 10:00; the metrics line is ignored"
+  },
+  {
+    "id": "OF-59",
+    "input": {"kind": "account", "lines": [
+      {"signal": "logs", "record": {"timeUnixNano": "1793354550000000000", "body": {"stringValue": "claude_code.api_request"}, "attributes": [
+        {"key": "request_id", "value": {"stringValue": "req_059"}}
+      ]}},
+      {"signal": "logs", "record": {"timeUnixNano": "1793354550000000000", "body": {"stringValue": "claude_code.user_prompt"}, "attributes": [
+        {"key": "anthropic.plan", "value": {"stringValue": "max"}}
+      ]}},
+      {"signal": "logs", "record": {"body": {"stringValue": "claude_code.api_request"}, "attributes": [
+        {"key": "anthropic.plan", "value": {"stringValue": "pro"}}
+      ]}}
+    ]},
+    "expected": {"account": null},
+    "note": "Rule 11: no api_request record or span with a time carries an account key (user_prompt is not read, the record without any time is skipped) -> null"
+  },
+  {
+    "id": "OF-60",
+    "input": {"kind": "baseUrl", "raw": "https://user:secret@proxy.example.com/v1/messages?key=abc#frag"},
+    "expected": {"url": "https://proxy.example.com/v1/messages"},
+    "note": "Rule 12: userinfo, query and fragment stripped; the path kept"
+  },
+  {
+    "id": "OF-61",
+    "input": {"kind": "baseUrl", "raw": "http://localhost:8080/"},
+    "expected": {"url": "http://localhost:8080"},
+    "note": "Rule 12: the port is kept; a lone trailing / path is dropped"
+  },
+  {
+    "id": "OF-62",
+    "input": {"kind": "baseUrl", "raw": "not a url"},
+    "expected": {"url": null},
+    "note": "Rule 12: unparsable by new URL -> null"
+  },
+  {
+    "id": "OF-63",
+    "input": {"kind": "baseUrl", "raw": "   "},
+    "expected": {"url": null},
+    "note": "Rule 12: blank -> null"
+  },
+  {
+    "id": "OF-64",
+    "input": {"kind": "baseUrl", "raw": 8080},
+    "expected": {"url": null},
+    "note": "Rule 12: non-string -> null"
+  },
+  {
+    "id": "OF-65",
+    "input": {"kind": "baseUrl", "raw": {"$concat": ["https://h.example/", {"$repeat": ["a", 1100]}]}},
+    "expected": {"url": {"$concat": ["https://h.example/", {"$repeat": ["a", 1006]}]}},
+    "note": "Rule 12: the 1118-character result is cut to 1024 (18 + 1006)"
   }
 ]

@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="640" viewBox="0 0 1440 640" font-family="Segoe UI, Arial, sans-serif">
+  <rect width="1440" height="640" fill="#ffffff"/>
+  <text x="16" y="24" font-size="12" font-weight="600" fill="#7c3aed">Chart carousel pages (FR-5) — source: otel_cost_buckets, 5-minute grain, last 2 hours; pages with no data for the node are skipped</text>
+
+  <!-- 1 cost over time -->
+  <rect x="16" y="40" width="460" height="280" rx="8" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="32" y="64" font-size="13" font-weight="600" fill="#111827">1 · Cost over time (USD / 5 min)</text>
+  <text x="460" y="64" font-size="11" fill="#6b7280" text-anchor="end">always</text>
+  <line x1="48" y1="290" x2="460" y2="290" stroke="#e5e7eb"/>
+  <line x1="48" y1="90" x2="48" y2="290" stroke="#e5e7eb"/>
+  <g fill="#3b82f6">
+    <rect x="56" y="270" width="12" height="20"/><rect x="74" y="262" width="12" height="28"/><rect x="92" y="266" width="12" height="24"/>
+    <rect x="110" y="250" width="12" height="40"/><rect x="128" y="240" width="12" height="50"/><rect x="146" y="256" width="12" height="34"/>
+    <rect x="164" y="230" width="12" height="60"/><rect x="182" y="214" width="12" height="76"/><rect x="200" y="226" width="12" height="64"/>
+    <rect x="218" y="200" width="12" height="90"/><rect x="236" y="186" width="12" height="104"/><rect x="254" y="196" width="12" height="94"/>
+    <rect x="272" y="170" width="12" height="120"/><rect x="290" y="160" width="12" height="130"/><rect x="308" y="176" width="12" height="114"/>
+    <rect x="326" y="150" width="12" height="140"/><rect x="344" y="140" width="12" height="150"/><rect x="362" y="156" width="12" height="134"/>
+    <rect x="380" y="130" width="12" height="160"/><rect x="398" y="124" width="12" height="166"/><rect x="416" y="138" width="12" height="152"/>
+  </g>
+  <rect x="434" y="150" width="12" height="140" fill="#93c5fd" stroke="#3b82f6" stroke-dasharray="2 2"/>
+  <text x="440" y="144" font-size="10" fill="#6b7280" text-anchor="middle">now</text>
+  <text x="48" y="306" font-size="10" fill="#9ca3af">−2 h</text>
+  <text x="446" y="306" font-size="10" fill="#9ca3af" text-anchor="end">now (bucket filling)</text>
+
+  <!-- 2 tokens -->
+  <rect x="490" y="40" width="460" height="280" rx="8" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="506" y="64" font-size="13" font-weight="600" fill="#111827">2 · Tokens over time (stacked)</text>
+  <text x="934" y="64" font-size="11" fill="#6b7280" text-anchor="end">always</text>
+  <line x1="522" y1="290" x2="934" y2="290" stroke="#e5e7eb"/>
+  <path d="M522 290 L522 250 L600 240 L680 220 L760 200 L840 180 L920 170 L920 290 Z" fill="#c7d2fe"/>
+  <path d="M522 290 L522 268 L600 262 L680 250 L760 236 L840 222 L920 214 L920 290 Z" fill="#a5b4fc"/>
+  <path d="M522 290 L522 280 L600 278 L680 272 L760 266 L840 258 L920 252 L920 290 Z" fill="#6366f1"/>
+  <path d="M522 290 L522 286 L600 285 L680 283 L760 281 L840 279 L920 277 L920 290 Z" fill="#312e81"/>
+  <g font-size="11" fill="#374151">
+    <rect x="522" y="82" width="10" height="10" fill="#c7d2fe"/><text x="538" y="91">cache read</text>
+    <rect x="612" y="82" width="10" height="10" fill="#a5b4fc"/><text x="628" y="91">cache write</text>
+    <rect x="706" y="82" width="10" height="10" fill="#6366f1"/><text x="722" y="91">input</text>
+    <rect x="766" y="82" width="10" height="10" fill="#312e81"/><text x="782" y="91">output</text>
+  </g>
+
+  <!-- 3 by model -->
+  <rect x="964" y="40" width="460" height="280" rx="8" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="980" y="64" font-size="13" font-weight="600" fill="#111827">3 · Calls and cost by model</text>
+  <text x="1408" y="64" font-size="11" fill="#6b7280" text-anchor="end">always</text>
+  <g font-size="12" fill="#111827">
+    <text x="980" y="108">claude-opus-5-5</text>
+    <rect x="1120" y="96" width="220" height="16" rx="3" fill="#3b82f6"/><text x="1408" y="108" text-anchor="end">$4.90 · 212</text>
+    <text x="980" y="148">claude-sonnet-5-5</text>
+    <rect x="1120" y="136" width="70" height="16" rx="3" fill="#3b82f6"/><text x="1408" y="148" text-anchor="end">$1.22 · 340</text>
+    <text x="980" y="188">claude-haiku-5-5</text>
+    <rect x="1120" y="176" width="14" height="16" rx="3" fill="#3b82f6"/><text x="1408" y="188" text-anchor="end">$0.28 · 515</text>
+  </g>
+  <text x="980" y="240" font-size="11" fill="#6b7280">Bar = cost; label = cost · call count.</text>
+
+  <!-- 4 by structure -->
+  <rect x="16" y="336" width="460" height="280" rx="8" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="32" y="360" font-size="13" font-weight="600" fill="#111827">4 · Cost by structure</text>
+  <text x="460" y="360" font-size="11" fill="#6b7280" text-anchor="end">always</text>
+  <rect x="32" y="400" width="420" height="28" rx="4" fill="#e5e7eb"/>
+  <rect x="32" y="400" width="250" height="28" rx="4" fill="#2563eb"/>
+  <rect x="282" y="400" width="140" height="28" fill="#60a5fa"/>
+  <rect x="422" y="400" width="30" height="28" fill="#bfdbfe"/>
+  <g font-size="12" fill="#374151">
+    <rect x="32" y="452" width="10" height="10" fill="#2563eb"/><text x="48" y="461">main agent · $3.80 (59%)</text>
+    <rect x="32" y="474" width="10" height="10" fill="#60a5fa"/><text x="48" y="483">sub-agents · $2.14 (34%)</text>
+    <rect x="32" y="496" width="10" height="10" fill="#bfdbfe"/><text x="48" y="505">hidden (compaction, titles…) · $0.46 (7%)</text>
+  </g>
+
+  <!-- 5 by skill / MCP -->
+  <rect x="490" y="336" width="460" height="280" rx="8" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="506" y="360" font-size="13" font-weight="600" fill="#111827">5 · Cost by skill / MCP server</text>
+  <text x="934" y="360" font-size="11" fill="#6b7280" text-anchor="end">if reported</text>
+  <rect x="506" y="374" width="70" height="22" rx="11" fill="#dbeafe"/><text x="541" y="389" font-size="11" fill="#1d4ed8" text-anchor="middle">Skill</text>
+  <rect x="582" y="374" width="90" height="22" rx="11" fill="#ffffff" stroke="#e5e7eb"/><text x="627" y="389" font-size="11" fill="#374151" text-anchor="middle">MCP server</text>
+  <g font-size="12" fill="#111827">
+    <text x="506" y="430">adlc-lh:review-deep</text><rect x="660" y="418" width="180" height="16" rx="3" fill="#3b82f6"/><text x="934" y="430" text-anchor="end">$2.10</text>
+    <text x="506" y="462">use-playwright</text><rect x="660" y="450" width="64" height="16" rx="3" fill="#3b82f6"/><text x="934" y="462" text-anchor="end">$0.74</text>
+    <text x="506" y="494">(no skill)</text><rect x="660" y="482" width="150" height="16" rx="3" fill="#cbd5e1"/><text x="934" y="494" text-anchor="end">$3.56</text>
+  </g>
+
+  <!-- 6 latency + errors -->
+  <rect x="964" y="336" width="460" height="280" rx="8" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="980" y="360" font-size="13" font-weight="600" fill="#111827">6 · Latency p50/p95 and API errors</text>
+  <text x="1408" y="360" font-size="11" fill="#6b7280" text-anchor="end">spans only (hook ≥ 2.29.0)</text>
+  <line x1="996" y1="580" x2="1408" y2="580" stroke="#e5e7eb"/>
+  <polyline points="996,520 1076,514 1156,522 1236,506 1316,510 1396,500" fill="none" stroke="#3b82f6" stroke-width="2"/>
+  <polyline points="996,460 1076,440 1156,470 1236,430 1316,446 1396,420" fill="none" stroke="#3b82f6" stroke-width="2" stroke-dasharray="5 3"/>
+  <circle cx="1156" cy="580" r="5" fill="#ef4444"/><circle cx="1316" cy="580" r="5" fill="#ef4444"/>
+  <g font-size="11" fill="#374151">
+    <line x1="996" y1="386" x2="1016" y2="386" stroke="#3b82f6" stroke-width="2"/><text x="1022" y="390">LLM p50</text>
+    <line x1="1086" y1="386" x2="1106" y2="386" stroke="#3b82f6" stroke-width="2" stroke-dasharray="5 3"/><text x="1112" y="390">LLM p95</text>
+    <circle cx="1186" cy="386" r="4" fill="#ef4444"/><text x="1196" y="390">API error</text>
+    <text x="1270" y="390" fill="#6b7280">toggle: LLM | tools</text>
+  </g>
+
+  <text x="16" y="634" font-size="11" fill="#9ca3af">Out of scope: lines of code, commits/PRs, active time — Claude Code metrics are not forwarded in real time.</text>
+</svg>

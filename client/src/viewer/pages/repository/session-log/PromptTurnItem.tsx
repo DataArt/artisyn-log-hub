@@ -7,6 +7,7 @@ import {
   resolveCharsPerToken,
   stripAgentPrefix,
   stripSystemBlocks,
+  subagentOtelCost,
 } from './log-parser';
 import type { SubagentMetaMap, SubagentStatEntry } from './log-parser';
 import { WorkflowNode } from './WorkflowNode';
@@ -253,6 +254,10 @@ export function PromptTurnItem({
                 pricing={pricing}
                 sessionModel={sessionModel}
                 subagentMeta={subagentMeta}
+                otelCostUsd={subagentOtelCost(
+                  subagentStats,
+                  activation.agentId,
+                )}
                 renderSubTurn={(t) => <PromptTurnItem key={t.index} turn={t} />}
               />
             ))}

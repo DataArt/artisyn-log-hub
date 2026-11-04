@@ -23,6 +23,11 @@
 // out Claude Code's utility calls — no OTEL calls and an OTEL state other than `ok` — carries the
 // muted «excl. utility calls (no OTEL)» marker in the header and on the Summary Cost tile.
 //
+// Step 15 (task 2026-11-03 otel-cost-attribution, FR-6 / AC-6): a sub-agent of an old Claude Code
+// (GS-02 is 2.1.99) whose OTEL cost exceeds its transcript cost is costed from OTEL — the tree
+// total rises by the difference, the header tooltip says «Sub-agents (from OTEL)» and the
+// sub-agent's detail shows the OTEL amount with «from OTEL».
+//
 // Code facts that differ from the design text:
 //   - The list groups sessions by branch and folds the groups; the scenario switches it to «Plain list».
 //   - Info's total row is «Calculated total» («Calculated approx. total» is the turn cost tooltip).
@@ -48,6 +53,8 @@ import { repoGet, uploadRepoGold } from '../helpers/reports';
 import { insertRow, sessionRowId } from '../helpers/db-seed';
 import { createApiKey } from '../helpers/api-key';
 import { ownRepoId, uploadPromptSession, type PromptSession } from '../helpers/prompt-session';
+import { apiRequestLine } from '../fixtures/otel/otel-lines';
+import { uploadOtelChunk, waitForOtelProjected } from '../helpers/otel';
 
 const FIXTURES = ['gs-01', 'gs-02', 'gs-03', 'gs-04'];
 const KEYS = ['gs01', 'gs02', 'gs03', 'gs04'];
@@ -107,7 +114,7 @@ interface SessionRow {
   firstPrompt: string | null;
   totalCost: number | null;
   costUnavailableReason?: string | null;
-  costBreakdown?: { utilityCost: number; calculatedCost: number | null; unpricedModels?: string[]; costExcludesUtilityCalls?: boolean };
+  costBreakdown?: { utilityCost: number; calculatedCost: number | null; unpricedModels?: string[]; costExcludesUtilityCalls?: boolean; subagentCostFromOtel?: boolean };
 }
 interface TimelineRow {
   sessionId: string;
@@ -366,5 +373,64 @@ test('@S-COST-01 one session, one cost in every place @mode-a @mode-c', async ({
     await openFresh(page, owner, tieredRepoId, tiered.old.sessionId);
     await expect(header()).toContainText(usd4(TIERED_COST + UTILITY_COST));
     await expect(header().getByTestId('utility-calls-marker')).toHaveCount(0);
+  });
+
+  // 2026-11-03 otel-cost-attribution FR-6 (AC-6): GS-02's transcripts are Claude Code 2.1.99,
+  // below OTEL_SUBAGENT_COST_FIX_VERSION (2.1.307), whose sub-agent transcripts can miss calls. Its
+  // root gets OTEL api_request records of sub-agent D (agent_id = D's id without `agent-`, D's own
+  // request ids, so none is a utility call) whose cost_usd sum exceeds D's transcript cost.
+  const otelD = { perCall: 0.015, calls: 3 };
+  const otelDCost = otelD.perCall * otelD.calls;
+  await test.step(`15, AC-6 (FR-6). GS-02 sub-agent D (CC 2.1.99) with OTEL cost ${usd4(otelDCost)} above its transcript cost: the tree cost rises by the difference in the API and the list; the header tooltip says «Sub-agents (from OTEL)»; D's detail shows the OTEL amount «from OTEL»`, async () => {
+    const rootSid = gold.sid('gs02');
+    const dSid = `agent-${rootSid}d`;
+    const { rows: dRows } = await db.query<{ claude_version: string | null }>(
+      `SELECT st.claude_version FROM sessions s JOIN session_stats st ON st.session_id = s.id WHERE s.session_id = $1`,
+      [dSid],
+    );
+    expect(dRows[0]?.claude_version, `sub-agent ${dSid}`).toBe('2.1.99');
+    const transcriptD = 0.0175;
+    const raise = otelDCost - transcriptD;
+    const before = (await repoGet<SessionRow[]>(owner, gold.repoId, '/sessions')).find((r) => r.sessionId === rootSid)!;
+    expect(before.totalCost).toBeCloseTo(cost('gs02'), 6);
+
+    const key = await createApiKey(owner.api);
+    const lines = Array.from({ length: otelD.calls }, (_, n) =>
+      apiRequestLine(rootSid, {
+        requestId: `req_gs02d_00${n + 1}`,
+        querySource: 'agent:deep-research',
+        model: 'claude-opus-5',
+        at: gold.at(`2026-01-06T10:04:${10 + n * 10}.000Z`),
+        costUsd: otelD.perCall,
+        input: 400,
+        output: 200,
+        attributes: { agent_id: dSid.replace(/^agent-/, '') },
+      }),
+    );
+    await uploadOtelChunk(api, key.key, rootSid, lines, { db, userId: owner.id });
+    await waitForOtelProjected(db, rootSid);
+
+    const after = (await repoGet<SessionRow[]>(owner, gold.repoId, '/sessions')).find((r) => r.sessionId === rootSid)!;
+    expect(after.costBreakdown?.subagentCostFromOtel).toBe(true);
+    expect(after.costBreakdown?.utilityCost, 'D’s calls are transcript-recorded, not utility').toBeCloseTo(0, 6);
+    expect(after.totalCost).toBeCloseTo(cost('gs02') + raise, 6);
+    const logs = await repoGet<{ subagentStats: Record<string, { otelCostUsd?: number | null }> }>(owner, gold.repoId, `/sessions/${encodeURIComponent(rootSid)}/logs`);
+    expect(logs.subagentStats[dSid]?.otelCostUsd).toBeCloseTo(otelDCost, 6);
+    expect(logs.subagentStats[`agent-${rootSid}a`]?.otelCostUsd ?? null, 'A has no OTEL calls').toBeNull();
+
+    const prompt = rows.find((r) => r.sessionId === rootSid)!.firstPrompt!;
+    await openFresh(page, owner, gold.repoId, rootSid, 'logs');
+    await expectListAndHeaderCost(page, prompt.slice(0, 40), usd4(cost('gs02') + raise));
+    const header = page.locator('xpath=//p[normalize-space(text())="Cost"]/following-sibling::div').first();
+    await header.locator('.cursor-help').first().hover();
+    // CostBreakdownTooltip is a HoverPopover (a plain table), not a role=tooltip element.
+    const tip = page.locator('table', { hasText: 'Sub-agents (from OTEL)' });
+    await expect(tip).toBeVisible();
+    await page.mouse.move(0, 0);
+
+    const p2 = logTurns(page).nth(1);
+    await p2.getByText('deep-research', { exact: true }).click();
+    await expect(p2.getByText('from OTEL').first()).toBeVisible();
+    await expect(p2).toContainText(usd4(otelDCost));
   });
 });

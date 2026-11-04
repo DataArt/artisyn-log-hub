@@ -19,10 +19,12 @@ import {
   lookupQuerySource,
 } from './otel-query-source-dictionary';
 import {
+  extractOtelAccount,
   extractOtelCalls,
   extractOtelSpans,
   otelCallKey,
   resolveOtelEventTime,
+  sanitizeOtelBaseUrl,
 } from './otel-records';
 
 type FactsInput =
@@ -38,6 +40,8 @@ type FactsInput =
   | { kind: 'tz'; tz: string }
   | { kind: 'calls'; lines: unknown[] }
   | { kind: 'spans'; lines: unknown[] }
+  | { kind: 'account'; lines: unknown[] }
+  | { kind: 'baseUrl'; raw: unknown }
   | { kind: 'dictionary' }
   | { kind: 'querySource'; name: string };
 
@@ -45,7 +49,10 @@ const rows = loadExamples<FactsInput, Record<string, unknown>>('otel-facts');
 
 const iso = (d: Date | null) => (d === null ? null : d.toISOString());
 
-/** Expands the doc's `{"$repeat": [char, count]}` placeholder into a long string. */
+/**
+ * Expands the doc's `{"$repeat": [char, count]}` placeholder into a long string, and
+ * `{"$concat": [part, ...]}` into the joined (expanded) parts.
+ */
 function expandRepeat(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(expandRepeat);
   if (value !== null && typeof value === 'object') {
@@ -53,6 +60,10 @@ function expandRepeat(value: unknown): unknown {
     const repeat = obj['$repeat'];
     if (Array.isArray(repeat) && Object.keys(obj).length === 1) {
       return String(repeat[0]).repeat(Number(repeat[1]));
+    }
+    const concat = obj['$concat'];
+    if (Array.isArray(concat) && Object.keys(obj).length === 1) {
+      return concat.map((part) => String(expandRepeat(part))).join('');
     }
     return Object.fromEntries(
       Object.entries(obj).map(([k, v]) => [k, expandRepeat(v)]),
@@ -108,13 +119,17 @@ it.each(rows)('$id', ({ input, expected }) => {
       expect({ valid: isValidOtelTimeZone(input.tz) }).toEqual(expected);
       return;
     case 'calls': {
-      const calls = extractOtelCalls(input.lines).map((c) => ({
+      const calls = extractOtelCalls(
+        expandRepeat(input.lines) as unknown[],
+      ).map((c) => ({
         ...c,
         eventTime: c.eventTime.toISOString(),
         costUsdMicros:
           c.costUsdMicros === null ? null : c.costUsdMicros.toString(),
       }));
-      expect({ calls }).toMatchObject(expected);
+      expect({ calls }).toMatchObject(
+        expandRepeat(expected) as Record<string, unknown>,
+      );
       return;
     }
     case 'spans': {
@@ -127,6 +142,23 @@ it.each(rows)('$id', ({ input, expected }) => {
       expect({ spans, skipped: result.skipped }).toMatchObject(expected);
       return;
     }
+    case 'account': {
+      const account = extractOtelAccount(
+        expandRepeat(input.lines) as unknown[],
+      );
+      expect({
+        account:
+          account === null
+            ? null
+            : { ...account, eventAt: account.eventAt.toISOString() },
+      }).toEqual(expected);
+      return;
+    }
+    case 'baseUrl':
+      expect({ url: sanitizeOtelBaseUrl(expandRepeat(input.raw)) }).toEqual(
+        expandRepeat(expected),
+      );
+      return;
     case 'dictionary':
       expect({
         visible: [...OTEL_VISIBLE_QUERY_SOURCES],

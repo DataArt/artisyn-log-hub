@@ -9,6 +9,7 @@ import type {
   SessionLogsDeltaUpdate,
   SubagentStatsRow,
 } from './dto/session-logs-delta.dto';
+import { subagentOtelCostSql } from './otel-cost.sql';
 import { readOtelStateRow } from './otel/otel-facts-read.sql';
 import { computeOtelLiveness } from './otel/otel-facts.reader';
 import {
@@ -34,7 +35,19 @@ import {
  * client's cost attribution — shared by `/logs` (every descendant of the root) and the delta
  * (the new and changed sub-agents only), so both return the same fields under the same guard.
  */
-export function selectSubagentStats(db: DrizzleDb, sessionRowIds: number[]) {
+export function selectSubagentStats(
+  db: DrizzleDb,
+  sessionRowIds: number[],
+  rootRowId: number,
+) {
+  // FR-6 (2026-11-03 otel-cost-attribution): the sub-agent's OTEL cost, non-null exactly
+  // when `selectSubagentCost` would take it (old Claude Code, OTEL above the transcript cost).
+  const otelCost = subagentOtelCostSql({
+    claudeVersion: sql`${schema.sessionStats.claudeVersion}`,
+    claudeVersionOtel: sql`${schema.sessionStats.claudeVersionOtel}`,
+    subSessionId: sql`${schema.sessions.sessionId}`,
+    rootRowId: sql`${rootRowId}::bigint`,
+  });
   return db
     .select({
       sessionId: schema.sessions.sessionId,
@@ -60,6 +73,13 @@ export function selectSubagentStats(db: DrizzleDb, sessionRowIds: number[]) {
       linesRemoved: schema.sessionStats.linesRemoved,
       diffLinesCoveredCalls: schema.sessionStats.diffLinesCoveredCalls,
       diffLinesTotalCalls: schema.sessionStats.diffLinesTotalCalls,
+      otelCostUsd: sql<number | null>`(
+        SELECT CASE WHEN o.v > COALESCE((
+          SELECT sc_sa.cost::float FROM session_costs sc_sa
+          WHERE sc_sa.session_id = ${schema.sessions.id}
+        ), 0.0) THEN o.v END
+        FROM (SELECT ${otelCost} AS v) o
+      )`.mapWith((v: unknown) => (v == null ? null : Number(v))),
     })
     .from(schema.sessions)
     .innerJoin(
@@ -263,7 +283,7 @@ export class SessionLogsDeltaService {
     const newSubagentAppeared = classified.new.some((r) => r.t === 's');
     const [statsRows, otelState, workflows] = await Promise.all([
       movedSubagentIds.length > 0
-        ? selectSubagentStats(this.db, movedSubagentIds)
+        ? selectSubagentStats(this.db, movedSubagentIds, sessionRowId)
         : Promise.resolve([]),
       readOtelStateRow(this.db, sessionRowId),
       // (f) workflows only when the root claude log moved or a new agent appeared.
