@@ -17,6 +17,8 @@ import {
   parseSessionLogs,
   stripAgentPrefix,
 } from '../log-parser';
+import type { SubagentMetaMap } from '../log-parser';
+import { agentDescriptionText } from '../workflow-agent-rows';
 import type {
   AgentActivation,
   ParsedSession,
@@ -345,8 +347,16 @@ function resolveAgent(
   subagentLogsMap: SubagentLogsMap | undefined,
   fallbackModel: string | undefined,
   childrenByParent?: Map<string, string[]>,
+  subagentMeta?: SubagentMetaMap,
 ): ResolvedAgent {
-  const label = activation.description ?? `agent-${activation.agentId}`;
+  // Label order (DD-10): the spawning Agent call's description, then the agent's
+  // `.meta.json` description, then the bare `agent-<id>` fallback.
+  const label =
+    activation.description ??
+    agentDescriptionText(
+      subagentMeta?.get(activation.agentId)?.agentDescription,
+    ) ??
+    `agent-${activation.agentId}`;
   const logs = subagentLogsMap?.get(activation.agentId);
 
   if (logs) {
@@ -444,6 +454,7 @@ function buildWorkflowAgentNodes(
   fallbackModel: string | undefined,
   pricing: ModelPricingMap | null | undefined,
   childrenByParent: Map<string, string[]> | undefined,
+  subagentMeta?: SubagentMetaMap,
 ): AgentNode[] {
   const idSet = new Set(agentIds);
   const nodeMap = new Map<string, AgentNode>();
@@ -455,6 +466,7 @@ function buildWorkflowAgentNodes(
       subagentLogsMap,
       fallbackModel,
       childrenByParent,
+      subagentMeta,
     );
     nodeMap.set(agentId, {
       agentId: resolved.agentId,
@@ -528,6 +540,7 @@ function collectAgentSteps(
   session: ParsedSession,
   subagentLogsMap: SubagentLogsMap | undefined,
   childrenByParent?: Map<string, string[]>,
+  subagentMeta?: SubagentMetaMap,
 ): ResolvedAgent[] {
   const model = session.summary.model;
   const out: ResolvedAgent[] = [];
@@ -538,6 +551,7 @@ function collectAgentSteps(
       subagentLogsMap,
       model,
       childrenByParent,
+      subagentMeta,
     );
     out.push(agent);
     for (const nested of agent.nestedActivations) walk(nested);
@@ -663,13 +677,19 @@ export function assistantTimeline(
   pricing: ModelPricingMap | null | undefined,
   subagentLogsMap?: SubagentLogsMap,
   agentParentMap?: Map<string, string | null>,
+  subagentMeta?: SubagentMetaMap,
 ): TimelineData {
   const turns = session.turns;
   const model = session.summary.model;
   const childrenByParent = agentParentMap
     ? buildChildrenByParentMap(agentParentMap)
     : undefined;
-  const steps = collectAgentSteps(session, subagentLogsMap, childrenByParent);
+  const steps = collectAgentSteps(
+    session,
+    subagentLogsMap,
+    childrenByParent,
+    subagentMeta,
+  );
 
   // Workflow-spawned agents have no `Task` tool_use activation of their own, so
   // `collectAgentSteps` (built from `turn.agentActivations`) never surfaces them —
@@ -691,6 +711,7 @@ export function assistantTimeline(
           subagentLogsMap,
           model,
           childrenByParent,
+          subagentMeta,
         );
         steps.push({ ...resolved, label: `${wf.name}:${resolved.label}` });
       }
@@ -849,6 +870,7 @@ export function toolHeatmap(
   session: ParsedSession,
   subagentLogsMap?: SubagentLogsMap,
   agentParentMap?: Map<string, string | null>,
+  subagentMeta?: SubagentMetaMap,
 ): HeatmapData {
   const childrenByParent = agentParentMap
     ? buildChildrenByParentMap(agentParentMap)
@@ -888,6 +910,7 @@ export function toolHeatmap(
     session,
     subagentLogsMap,
     childrenByParent,
+    subagentMeta,
   )) {
     pushColumn(agent.label, agent.toolCounts);
     includedAgentIds.add(agent.agentId);
@@ -906,6 +929,7 @@ export function toolHeatmap(
           subagentLogsMap,
           session.summary.model,
           childrenByParent,
+          subagentMeta,
         );
         pushColumn(`${wf.name}:${resolved.label}`, resolved.toolCounts);
       }
@@ -937,6 +961,7 @@ export function agentTree(
   pricing: ModelPricingMap | null | undefined,
   subagentLogsMap?: SubagentLogsMap,
   agentParentMap?: Map<string, string | null>,
+  subagentMeta?: SubagentMetaMap,
 ): AgentNode {
   const model = session.summary.model;
   const childrenByParent = agentParentMap
@@ -948,7 +973,7 @@ export function agentTree(
     // parent-map children merged in by `resolveAgent`) are themselves grouped by
     // overlap so deeper sequential/parallel structure is preserved.
     const nested = agent.nestedActivations.map((a) =>
-      resolveAgent(a, subagentLogsMap, model, childrenByParent),
+      resolveAgent(a, subagentLogsMap, model, childrenByParent, subagentMeta),
     );
     nested.sort((a, b) => (a.startMs ?? Infinity) - (b.startMs ?? Infinity));
     return {
@@ -1003,7 +1028,13 @@ export function agentTree(
   for (const turn of session.turns) {
     for (const activation of turn.agentActivations) {
       topAgents.push(
-        resolveAgent(activation, subagentLogsMap, model, childrenByParent),
+        resolveAgent(
+          activation,
+          subagentLogsMap,
+          model,
+          childrenByParent,
+          subagentMeta,
+        ),
       );
     }
   }
@@ -1032,6 +1063,7 @@ export function agentTree(
         model,
         pricing,
         childrenByParent,
+        subagentMeta,
       );
       for (const id of bareIds) includedAgentIds.add(id);
       topChildren.push(buildWorkflowNode(wf, children));

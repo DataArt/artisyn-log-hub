@@ -281,5 +281,28 @@
     ]},
     "expected": {"ids": ["z", "w", "y", "x"]},
     "note": "By cost descending: z (9), w (5), then x and y tie at 1 → by start: y (100) before x (300)."
+  },
+  {
+    "id": "SMM-31",
+    "input": {"op": "model", "pricing": {"m": {"in": 1, "out": 1}},
+      "main": [
+        {"type": "user", "uuid": "u0", "timestamp": "2026-11-01T10:00:00.000Z", "message": {"role": "user", "content": "go"}},
+        {"type": "assistant", "uuid": "a0", "parentUuid": "u0", "timestamp": "2026-11-01T10:00:10.000Z", "message": {"id": "msg-main", "role": "assistant", "model": "m", "usage": {"input_tokens": 1000000, "output_tokens": 0}, "content": [{"type": "text", "text": "ok"}]}}
+      ],
+      "subagents": [
+        {"sessionId": "agent-a", "parentSessionId": null, "workflowRunId": null, "agentDescription": null, "workflowPhase": null, "logs": [
+          {"type": "user", "uuid": "ua", "timestamp": "2026-11-01T10:01:00.000Z", "message": {"role": "user", "content": "task a"}},
+          {"type": "assistant", "uuid": "aa", "parentUuid": "ua", "timestamp": "2026-11-01T10:01:05.000Z", "message": {"id": "msg-a", "role": "assistant", "model": "m", "usage": {"input_tokens": 2000000, "output_tokens": 0}, "content": [{"type": "text", "text": "done"}]}}
+        ]},
+        {"sessionId": "agent-b", "parentSessionId": null, "workflowRunId": null, "agentDescription": null, "workflowPhase": null, "logs": [
+          {"type": "user", "uuid": "ub", "timestamp": "2026-11-01T10:02:00.000Z", "message": {"role": "user", "content": "task b"}},
+          {"type": "assistant", "uuid": "ab", "parentUuid": "ub", "timestamp": "2026-11-01T10:02:05.000Z", "message": {"id": "msg-b", "role": "assistant", "model": "m", "usage": {"input_tokens": 500000, "output_tokens": 0}, "content": [{"type": "text", "text": "done"}]}}
+        ]}
+      ],
+      "stats": {},
+      "agentDescriptions": {"a": "Review billing"}
+    },
+    "expected": {"mainCost": 1, "agentCosts": {"a": 2, "b": 0.5}, "treeCost": 3.5, "costAtEnd": 3.5, "labels": {"a": "Review billing", "b": "task b"}},
+    "note": "Card label rule: agent a has the description 'Review billing', which wins over its prompt 'task a'; agent b has none, so its label is its cleaned prompt 'task b'. Labelling from the prompt only would give a = 'task a'. Costs: main 1M → 1, a 2M → 2, b 0.5M → 0.5 (no stats rows), tree 3.5, all events by 10:02:05 so the cost at the end is 3.5."
   }
 ]

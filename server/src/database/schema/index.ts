@@ -140,6 +140,9 @@ export const sessions = pgTable(
     sessionId: varchar('session_id', { length: 255 }).notNull().unique(),
     parentSessionId: varchar('parent_session_id', { length: 255 }),
     workflowRunId: varchar('workflow_run_id', { length: 255 }),
+    // Migration 0085: Task description / workflow phase of a sub-agent, from its .meta.json.
+    agentDescription: varchar('agent_description', { length: 255 }),
+    workflowPhase: varchar('workflow_phase', { length: 255 }),
     deleted: boolean('deleted').notNull().default(false),
     // Migration 0073: the DD-2 id of the harness_snapshots row this session is bound to.
     // No FK — the row is looked up by (owning user_id, this id) in application code, and an
@@ -1807,6 +1810,9 @@ export const uploadQueue = pgTable(
       .references(() => users.id, { onDelete: 'cascade' }),
     parentSessionId: varchar('parent_session_id', { length: 255 }),
     workflowRunId: varchar('workflow_run_id', { length: 255 }),
+    // Migration 0085: Task description / workflow phase of a sub-agent, from its .meta.json.
+    agentDescription: varchar('agent_description', { length: 255 }),
+    workflowPhase: varchar('workflow_phase', { length: 255 }),
     status: uploadQueueStatusEnum('status').notNull().default('pending'),
     errorMessage: text('error_message'),
     updatedAt: timestamp('updated_at', { withTimezone: true })

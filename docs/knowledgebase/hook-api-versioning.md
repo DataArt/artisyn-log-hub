@@ -43,7 +43,8 @@ Instead:
   been **removed** (see the note at the top) and returns `404`.
 - **`POST /api/v2/logs`** (`server/src/logs/logs-v2.controller.ts`, `LogsV2Controller`) implements
   the new async stage → queue → background-process flow exclusively (no legacy branch inside it).
-  Same query params (`sessionId`, `type`, `parentSessionId`, `workflowRunId`) and the same three
+  Same query params (`sessionId`, `type`, `parentSessionId`, `workflowRunId`; plus the optional
+  sub-agent meta `agentDescription` / `workflowPhase` since hook `2.31.0`) and the same three
   structural `400` checks v1 had, but the NDJSON line-parsing moves out of the request path
   entirely: a bad line becomes a `status='failed'` `upload_queue` row instead of aborting the
   request. The `201` response body is `{ warnings: string[] }` — one message per outstanding
@@ -72,6 +73,7 @@ mechanism feeds).
 | `>= 2.28.0` | unchanged — the root `artisyn` upload's `harness-snapshot` line gains optional `gitStatus` on `skills[]` / `agents[]` / `systemContext.files[]` and skill entries of source `org-synced` | unchanged | As `>= 1.7.0`; any server stores the snapshot body verbatim, so the new fields need no server change. A server older than this change lists org-synced skills in Harness usage as never-used rows — see the harness snapshot `gitStatus` / `org-synced` section below |
 | `>= 2.29.0` | unchanged uploads (chunk lines gain `hookVersion`, `spans` lines from `/v1/traces` when traces are on); plus `POST /api/v2/otel-realtime` | `200`, `{ accepted, cursor, minIntervalMs, ignored? }` | Realtime is best-effort: a `404` (older server), `401` or `403` disables it for 1 h, a `409` (foreign session) stops it for that session, a `413` halves the batch once; chunks still upload as before — see the OTEL realtime section below |
 | `>= 2.30.0` | unchanged — the root `artisyn` upload gains `otel-status` lines at `Stop` / `SessionEnd`; chunk lines gain `receiverVersion` | unchanged | As `>= 1.7.0`; an older server stores `otel-status` as an inert artisyn line (it is not an activity type, so session times are not moved on a new server) — see "Hook ↔ OTEL receiver" below |
+| `>= 2.31.0` | `POST /api/v2/logs` + optional `agentDescription` / `workflowPhase` on `claude-subagent` uploads (plain and chunked) | unchanged | As `>= 1.7.0`; an invalid, empty or repeated value is ignored, never a `400`; an older server ignores both params — see the sub-agent meta section below |
 
 The route requires `ApiKeyAuthGuard` (the `X-API-Key` header) and accepts this body encoding
 (`express.text()`, `Content-Type: application/x-ndjson`/`application/json`/`text/plain`, 2500MB
@@ -359,6 +361,7 @@ The harness-snapshot flow (DD-1–DD-9 in
 `docs/tasks/done/2026-10-16-sysctx-skill-source/impl-plan.md`; see `hook-system-overview.md`'s
 "Lines injected into the current session's `artisyn` upload" and `hook/HOW_HOOK_WORKS.md` for the shape and per-run flow) adds a fourth query param pair to
 `POST /api/v2/logs`, on top of the existing `type`/`sessionId`/`parentSessionId`/`workflowRunId`
+(and, since hook `2.31.0`, the sub-agent-only `agentDescription`/`workflowPhase` — see below)
 and the hook-`1.8.0`+ chunk params — the full query shape is typed in `server/src/logs/logs-v2.controller.ts`:
 
 | Query param | Sent when | Server behaviour |
@@ -555,6 +558,49 @@ Both server readers of artisyn `tool_use_id` (`extractEditResultRecords` in `art
 and `change-surface/changed-paths.sql.ts`) filter to `PostToolUse`, so the new ids on other events
 are never mistaken for edit records.
 
+## `agentDescription` / `workflowPhase` — sub-agent meta labels (hook `2.31.0`+)
+
+Plan: `docs/tasks/todo/2026-10-21-workflow-agent-meta-labels/impl-plan.md` (DD-1–DD-7, DD-15).
+Claude Code writes `<agent-id>.meta.json` next to every sub-agent transcript (under `subagents/`
+and `workflows/<wf>/`). Besides `parentAgentId` (read since `1.5.0`), it may carry a human
+`description` and, for workflow agents, a `workflowPhase`.
+
+- **Hook.** `readAgentMeta(metaPath)` (`send-logs-hook.js`, replaces `readParentAgentId`) reads
+  the file once per agent and returns `{ parentAgentId, description, workflowPhase }`; any error
+  gives all three `null` (fail-open). Both scans put `agentDescription` / `workflowPhase` on the
+  `filesToProcess` entry, and the upload passes them as the trailing `agentMeta` argument of
+  `uploadFile` / `uploadFileChunked` / `uploadFileMaybeCompressed` (`upload-logs.js`). Each param is
+  appended (`encodeURIComponent`) only when truthy, on the plain upload and on **every** chunk.
+  `agentType`, `spawnDepth` and the other `.meta.json` keys are not sent.
+- **Sanitising (shared contract).** `sanitizeAgentMeta(v)` — the server copy in
+  `server/src/logs/agent-meta-param.ts`, the hook's plain-JS twin in `send-logs-hook.js`
+  (`AGENT_META_MAX_LENGTH = 255` on both, keep in sync): a non-string (including a repeated query
+  param, which reaches Nest as `string[]`) → `null`; otherwise trimmed; empty → `null`; otherwise
+  cut to 255 **code points** (`Array.from`), so a surrogate pair is never split and the value fits
+  `varchar(255)`.
+
+| Query param | Server behaviour |
+|---|---|
+| `agentDescription` | Sanitised; kept only when `type=claude-subagent` (dropped silently for any other type). Staged on `upload_queue.agent_description`, then copied to `sessions.agent_description`. **Never a `400`** |
+| `workflowPhase` | Same, into `upload_queue.workflow_phase` → `sessions.workflow_phase` |
+
+**No overwrite with absent.** `LogsService.upsert` sets each column only when its new value is
+non-null (the two columns independently, like `workflow_run_id`), so a later upload without meta
+never clears a stored label. The same rule applies to the export/import path, which stores the
+fields only for `agent-…` session ids.
+
+**Read side.** `GET …/sessions/:id/logs` `subagents[]` and `GET …/logs/delta` `newSubagents[]` /
+`subagentAppends[]` gain `agentDescription` / `workflowPhase` (`string | null`, additive). A changed
+sub-agent with no new lines but non-null meta yields an append with `lines: []` (DD-15); an older
+client already skips empty-line appends.
+
+| Combination | Behaviour |
+|---|---|
+| Hook `< 2.31.0` → any server | No params; both columns stay `NULL`; views fall back to today's labels (prompt / agent id) |
+| Hook `2.31.0` → server older than this change | Unknown query params are ignored; upload works as before |
+| Hook `2.31.0` → server with this change | Stored per above; the client shows the description as the sub-agent label and the phase in the Agents table |
+| `.meta.json` without `description` / `workflowPhase` (older Claude Code) | Params omitted; same as an older hook |
+
 ## `okfSnapshotId` / `okfSnapshotFull` / `unknownOkfSnapshotId` — OKF snapshot (hook `2.26.0`+)
 
 The OKF usage tabs ([okf-usage.md](okf-usage.md); plan `docs/tasks/done/2026-10-27-okf-usage-tab/`,
@@ -745,3 +791,4 @@ user's machine. Only facts not already covered by the sections above; current be
 | `2.24.1` | `scripts/package.json` `{"type":"commonjs"}` | In a repo whose root `package.json` is `"type": "module"` every hook dies with `require is not defined` and nothing is recorded |
 | `2.24.2` | `--self-check` on every entry script (installer load check) | The installer cannot verify the install loads |
 | `2.27.0` | `PreToolUse` entry again, but only the PowerShell tool wrapper (`tool-wrap-powershell.js`), never a permission decision | No CLI tool capture |
+| `2.31.0` | Sub-agent `.meta.json` `description` / `workflowPhase` sent as `agentDescription` / `workflowPhase` on `claude-subagent` uploads (`readAgentMeta`) | Sends neither; the sub-agent is labelled by its prompt or agent id and the Agents table has no Phase column |

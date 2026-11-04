@@ -16,6 +16,7 @@ import {
 import { SESSION_POLL_INTERVAL_MS } from '../../lib/settings';
 import {
   buildAgentParentMap,
+  buildSubagentMeta,
   parseSessionLogs,
 } from './session-log/log-parser';
 import type { ViewMode } from './session-list/SessionListPanel';
@@ -338,6 +339,12 @@ export function useRepositoryData({
     [logsQuery.data],
   );
 
+  // Per-agent `.meta.json` labels (agent description, workflow phase) from the server.
+  const subagentMeta = useMemo(
+    () => buildSubagentMeta(logsQuery.data?.subagents ?? []),
+    [logsQuery.data],
+  );
+
   const parsedLogs = useMemo(() => {
     if (logsQuery.data?.main === undefined) return null;
     return parseSessionLogs(logsQuery.data.main, {
@@ -346,8 +353,9 @@ export function useRepositoryData({
       workflows: logsQuery.data.workflows,
       subagentLogs: subagentLogsMap,
       harnessSnapshot: logsQuery.data.harnessSnapshot ?? null,
+      subagentMeta,
     });
-  }, [logsQuery.data, repoDetailQuery.data, subagentLogsMap]);
+  }, [logsQuery.data, repoDetailQuery.data, subagentLogsMap, subagentMeta]);
 
   const handleRefresh = useCallback(() => {
     void queryClient.invalidateQueries({

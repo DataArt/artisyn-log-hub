@@ -178,5 +178,29 @@
     "input": {"label": {"agentId": "agent-0123456789012345678901234567890123456789012345678901234567", "prompt": ""}},
     "expected": {"label": "agent-01234567890123456789012345678901234567890123456789012…"},
     "note": "Label rules 2 and 3: the empty prompt falls back to the agentId, which is 'agent-' (6) + 58 digits = 64 characters > 60, so it is cut to its first 59 characters ('agent-' + 53 digits '0123456789'×5 + '012') followed by '…'. Cutting only the cleaned prompt and never the fallback would return the whole 64-character id."
+  },
+  {
+    "id": "AL-10",
+    "input": {"label": {"agentId": "agent-a1", "prompt": "Add a billing section", "agentDescription": "  Review billing  "}},
+    "expected": {"label": "Review billing"},
+    "note": "Label rule 0: the description '  Review billing  ' trims to 'Review billing' (14 characters, not empty), so it is the label and the prompt is ignored. Prompt-first ordering would give 'Add a billing section'; no trim would keep the outer spaces."
+  },
+  {
+    "id": "AL-11",
+    "input": {"label": {"agentId": "agent-a1", "prompt": "Add a billing section", "agentDescription": ""}},
+    "expected": {"label": "Add a billing section"},
+    "note": "Label rule 0: an empty description is no description, so rule 1 uses the cleaned prompt. Testing the description against null/undefined only would give an empty label."
+  },
+  {
+    "id": "AL-12",
+    "input": {"label": {"agentId": "agent-a1", "prompt": "Add a billing section", "agentDescription": "   "}},
+    "expected": {"label": "Add a billing section"},
+    "note": "Label rule 0: the description '   ' trims to empty, so it is no description and rule 1 uses the cleaned prompt. Checking emptiness before the trim would give a label of three spaces (or an empty one after the trim)."
+  },
+  {
+    "id": "AL-13",
+    "input": {"label": {"agentId": "agent-a1", "prompt": "Add a billing section", "agentDescription": "0123456789012345678901234567890123456789012345678901234567890"}},
+    "expected": {"label": "01234567890123456789012345678901234567890123456789012345678…"},
+    "note": "Label rules 0 and 3: the description is '0123456789' six times + '0' = 61 characters > 60, so it is cut to its first 59 characters followed by '…'. Applying the cut to the prompt only and never to the description would return all 61 characters."
   }
 ]

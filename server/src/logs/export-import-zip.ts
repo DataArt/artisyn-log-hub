@@ -88,6 +88,14 @@ export interface SessionJson {
    * value as "no snapshot" (DD-42 of docs/tasks/todo/2026-10-27-okf-usage-tab/impl-plan.md).
    */
   okfSnapshotId?: string | null;
+  /**
+   * A sub-agent's `.meta.json` description and workflow phase. Optional because zips exported
+   * before agent meta labels lack them — import treats a missing value as `null`. Applied on
+   * import only to `agent-` sessions (DD-14 of
+   * docs/tasks/todo/2026-10-21-workflow-agent-meta-labels/impl-plan.md).
+   */
+  agentDescription?: string | null;
+  workflowPhase?: string | null;
   stats: Record<string, unknown> | null;
   logs: {
     claude?: SessionJsonLogEntry;

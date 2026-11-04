@@ -1,7 +1,7 @@
 {
   "name": "log-hub-hooks",
   "displayName": "Log Hub Hooks",
-  "version": "2.30.4",
+  "version": "2.31.0",
   "description": "Records Claude Code session telemetry and uploads it to artisyn-log-hub.",
   "author": {
     "name": "Artisyn"

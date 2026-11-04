@@ -931,6 +931,7 @@ function buildSubAgentTree(
   completionMap: Map<string, UserEvent>,
   eventIndex: Map<string, TelemetryEvent>,
   subagentStats?: Record<string, SubagentStatEntry>,
+  subagentMeta?: SubagentMetaMap,
 ): SubAgentNode[] {
   // Group progress events by agentId
   const grouped = new Map<string, ProgressAgentEvent[]>();
@@ -1006,6 +1007,7 @@ function buildSubAgentTree(
       ...(representative.parentToolUseID !== undefined && {
         parentToolUseID: representative.parentToolUseID,
       }),
+      ...subagentMetaFields(subagentMeta, agentId),
       children: [],
     };
 
@@ -1237,6 +1239,7 @@ export function buildAgentNodesForIds(
   subagentLogsMap: Map<string, Record<string, unknown>[]>,
   subagentStats?: Record<string, SubagentStatEntry>,
   pricing?: ModelPricingMap,
+  subagentMeta?: SubagentMetaMap,
 ): SubAgentNode[] {
   const idSet = new Set(agentIds);
   const nodeMap = new Map<string, SubAgentNode>();
@@ -1314,6 +1317,7 @@ export function buildAgentNodesForIds(
       ...(files.length > 0 ? { files } : {}),
       ...(skills.length > 0 ? { skills } : {}),
       ...(rulesInjected.length > 0 ? { rulesInjected } : {}),
+      ...subagentMetaFields(subagentMeta, agentId),
       children: [],
     });
   }
@@ -1462,6 +1466,50 @@ export function buildAgentParentMap(
     );
   }
   return map;
+}
+
+/**
+ * Per-agent labels from the agent's `.meta.json` (via the hook and the server), keyed by agentId
+ * without the "agent-" prefix. A field the server did not send (old server) is `null`.
+ */
+export type SubagentMetaMap = Map<
+  string,
+  { agentDescription: string | null; workflowPhase: string | null }
+>;
+
+/** Builds the `SubagentMetaMap` from the server's per-subagent `agentDescription` / `workflowPhase`. */
+export function buildSubagentMeta(
+  subagents: {
+    sessionId: string;
+    agentDescription?: string | null;
+    workflowPhase?: string | null;
+  }[],
+): SubagentMetaMap {
+  const map: SubagentMetaMap = new Map();
+  for (const sa of subagents) {
+    map.set(stripAgentPrefix(sa.sessionId), {
+      agentDescription: sa.agentDescription ?? null,
+      workflowPhase: sa.workflowPhase ?? null,
+    });
+  }
+  return map;
+}
+
+/** The non-null meta fields of one agent, ready to spread into a `SubAgentNode`. */
+function subagentMetaFields(
+  subagentMeta: SubagentMetaMap | undefined,
+  agentId: string,
+): Pick<SubAgentNode, 'agentDescription' | 'workflowPhase'> {
+  const meta = subagentMeta?.get(agentId);
+  if (!meta) return {};
+  return {
+    ...(meta.agentDescription != null
+      ? { agentDescription: meta.agentDescription }
+      : {}),
+    ...(meta.workflowPhase != null
+      ? { workflowPhase: meta.workflowPhase }
+      : {}),
+  };
 }
 
 /** Inverts an `agentId -> parentAgentId` map into `parentAgentId -> childAgentId[]`. */
@@ -1692,12 +1740,18 @@ export function parseSessionLogs(
      * concept).
      */
     harnessSnapshot?: HarnessSnapshot | null;
+    /**
+     * Per-agent `.meta.json` labels from the server (`buildSubagentMeta`), copied onto the
+     * sub-agent nodes this parse builds. Absent = no labels (old server, or a sub-agent's own log).
+     */
+    subagentMeta?: SubagentMetaMap;
   },
 ): ParsedSession {
   const isSubagent = options?.isSubagent ?? false;
   const repoRoot = options?.repoRoot ?? '';
   const repoConfig = options?.repoConfig ?? null;
   const subagentStats = options?.subagentStats;
+  const subagentMeta = options?.subagentMeta;
   const workflowsOption = options?.workflows;
   const subagentLogsOption = options?.subagentLogs;
   const pricingOption = options?.pricing;
@@ -2201,6 +2255,7 @@ export function parseSessionLogs(
       completionMap,
       eventIndex,
       subagentStats,
+      subagentMeta,
     );
 
     const agentActivations = extractAgentActivations(events, uuidSet);

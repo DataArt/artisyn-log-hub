@@ -23,7 +23,8 @@
           "key": "d",
           "sessionId": "agent-{{RUN}}-gs02d",
           "file": "subagents/agent-gs02d.jsonl",
-          "parentSessionId": "{{RUN}}-gs02"
+          "parentSessionId": "{{RUN}}-gs02",
+          "agentDescription": "deep-research"
         }
       ]
     }

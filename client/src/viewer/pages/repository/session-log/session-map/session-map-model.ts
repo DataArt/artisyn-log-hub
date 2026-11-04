@@ -762,7 +762,12 @@ export function buildSessionMapModel(
       kind: 'agent',
       sessionId: `agent-${d.agentId}`,
       label: truncateLabel(
-        agentRowLabel({ agentId: d.agentId, prompt: d.prompt, children: [] }),
+        agentRowLabel({
+          agentId: d.agentId,
+          prompt: d.prompt,
+          agentDescription: inputs.agentDescriptions.get(d.agentId),
+          children: [],
+        }),
       ),
       share: 0,
       finished,

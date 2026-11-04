@@ -332,7 +332,7 @@ As shipped in the tarball; the installer replaces `"name"` with this repo's `art
 {
   "name": "log-hub-hooks",
   "displayName": "Log Hub Hooks",
-  "version": "2.30.2",
+  "version": "2.31.0",
   "description": "Records Claude Code session telemetry and uploads it to artisyn-log-hub.",
   "author": { "name": "Artisyn" }
 }

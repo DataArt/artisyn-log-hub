@@ -338,6 +338,23 @@ test('@S-COMPAT-01 frozen 1.6.2, 2.6.1 and 2.28.0 hooks against the current serv
       expect(by.get(v26.wfAgent)?.parent_session_id).toBe(v26.sid);
       expect(by.get(v26.wfAgent)?.workflow_run_id).toBe(v26.wfRun);
 
+      // 2.6.1 predates the agent meta labels (agentDescription / workflowPhase upload params):
+      // its workflow agent is stored with both columns NULL, and /logs reports null for both.
+      const meta = await db.query<{ agent_description: string | null; workflow_phase: string | null }>(
+        'SELECT agent_description, workflow_phase FROM sessions WHERE session_id = $1',
+        [v26.wfAgent],
+      );
+      expect(meta.rows).toHaveLength(1);
+      expect(meta.rows[0].agent_description).toBeNull();
+      expect(meta.rows[0].workflow_phase).toBeNull();
+      const logsRes = await owner.api.get(`/api/v1/repositories/${repoId}/sessions/${encodeURIComponent(v26.sid)}/logs`);
+      expect(logsRes.status()).toBe(200);
+      const logs = (await logsRes.json()) as { subagents?: Array<{ sessionId: string; agentDescription?: string | null; workflowPhase?: string | null }> };
+      const wfSub = (logs.subagents ?? []).find((s) => s.sessionId === v26.wfAgent);
+      expect(wfSub, 'the 2.6.1 workflow agent is in /logs subagents').toBeTruthy();
+      expect(wfSub!.agentDescription).toBeNull();
+      expect(wfSub!.workflowPhase).toBeNull();
+
       // 2.6.1 predates the harness-snapshot lines (DD-1): it never sends snapshotId, so the
       // session is never bound to one.
       const bound = await db.query<{ harness_snapshot_id: string | null }>(

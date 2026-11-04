@@ -88,6 +88,10 @@ interface TreeMetaRow extends DeltaCurrentRow {
   sessionId: string;
   parentSessionId: string | null;
   workflowRunId: string | null;
+  /** `sessions.agent_description` (sub-agent `.meta.json` description). */
+  agentDescription: string | null;
+  /** `sessions.workflow_phase` (sub-agent `.meta.json` workflow phase). */
+  workflowPhase: string | null;
 }
 
 /** Step (c): what was read of one changed or new row. */
@@ -214,8 +218,18 @@ export class SessionLogsDeltaService {
       if (current.t !== 's') continue;
       const lines = linesByKey.get(sliceKey(current.sid, 's')) ?? [];
       const row = metaBySid.get(current.sid);
-      if (lines.length === 0 || row === undefined) continue;
-      subagentAppends.push({ sessionId: row.sessionId, lines });
+      if (row === undefined) continue;
+      // A meta-only re-upload (no new lines) still reaches the client when it carries
+      // labels (DD-15); an old client skips empty-line appends.
+      const hasMeta =
+        row.agentDescription !== null || row.workflowPhase !== null;
+      if (lines.length === 0 && !hasMeta) continue;
+      subagentAppends.push({
+        sessionId: row.sessionId,
+        lines,
+        agentDescription: row.agentDescription,
+        workflowPhase: row.workflowPhase,
+      });
     }
 
     const newSubagents: SessionLogsDeltaUpdate['newSubagents'] = [];
@@ -227,6 +241,8 @@ export class SessionLogsDeltaService {
         sessionId: row.sessionId,
         parentSessionId: row.parentSessionId,
         workflowRunId: row.workflowRunId,
+        agentDescription: row.agentDescription,
+        workflowPhase: row.workflowPhase,
         logs: linesByKey.get(sliceKey(current.sid, 's')) ?? [],
       });
     }
@@ -282,7 +298,8 @@ export class SessionLogsDeltaService {
   ): Promise<TreeMetaRow[]> {
     const descendantsLiteral = `{${descendantIds.join(',')}}`;
     const result = await this.db.execute(sql`
-      SELECT s.id, s.session_id, s.parent_session_id, s.workflow_run_id, l.log_type,
+      SELECT s.id, s.session_id, s.parent_session_id, s.workflow_run_id,
+             s.agent_description, s.workflow_phase, l.log_type,
              floor(extract(epoch from l.updated_at) * 1000000)::bigint AS ut
         FROM sessions s
         JOIN logs l ON l.session_id = s.id
@@ -295,6 +312,8 @@ export class SessionLogsDeltaService {
       session_id: string;
       parent_session_id: string | null;
       workflow_run_id: string | null;
+      agent_description: string | null;
+      workflow_phase: string | null;
       log_type: string;
       ut: DbScalar;
     }[];
@@ -309,6 +328,8 @@ export class SessionLogsDeltaService {
         sessionId: r.session_id,
         parentSessionId: r.parent_session_id,
         workflowRunId: r.workflow_run_id,
+        agentDescription: r.agent_description ?? null,
+        workflowPhase: r.workflow_phase ?? null,
       });
     }
     return out;

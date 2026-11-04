@@ -6,10 +6,40 @@
 //   w1-s01 1.725 = 1.0 in + 0.5 out + 0.1 cache-read + 0.125 cache-write-5m;
 //   w1-s02 1.4 own (model b: 1.0 + 0.2 + 0.2 cache-write-1h) + 0.4 for its child w1-s03 = 1.8;
 //   w1-s04 0.4 = 0.1 + 0.1 + 0.2 cache-read; w1-s06 runs an unpriced model: cost null.
+import { createHash } from 'node:crypto';
+import {
+  WORLD_V1,
+  WORLD_V1_S03_SUBAGENT_BODY,
+  WORLD_V1_S03_SUBAGENT_LINE_JSONB_TEXT,
+} from '../fixtures/world-v1.sql';
 import type { ContractFamily } from '../types';
 import { isoSql, listedRootsSql, ownCostSql, treeCostSql } from './oracle-sql';
 
 const MONTH = { startDate: '2026-01-01', endDate: '2026-01-31' };
+
+/**
+ * A `/logs/delta` cursor v1 (session-logs-delta.ts) holding every line of s03's
+ * `claude-subagent` log, under a `ut` (`0`) that never equals the stored `updated_at` — exactly
+ * the state a client is in after s03's same body was uploaded again.
+ */
+const S03_HELD_CURSOR = Buffer.from(
+  JSON.stringify({
+    v: 1,
+    r: [
+      [
+        WORLD_V1.sessions.s03.id.toString(36),
+        's',
+        '0',
+        WORLD_V1_S03_SUBAGENT_BODY.length,
+        createHash('md5')
+          .update(WORLD_V1_S03_SUBAGENT_LINE_JSONB_TEXT)
+          .digest('hex')
+          .slice(0, 12),
+      ],
+    ],
+  }),
+  'utf8',
+).toString('base64url');
 
 /**
  * `costBreakdown.costExcludesUtilityCalls` (2026-10-30 otel-shared-receiver, DD-30) of the root
@@ -454,6 +484,42 @@ export const f17Sessions: ContractFamily = {
       },
     },
     {
+      // Sub-agent `.meta.json` labels (2026-10-21 workflow-agent-meta-labels, FR-3): every
+      // `subagents[]` entry carries its session's `agentDescription` / `workflowPhase` (s03 is
+      // seeded with 'contract-desc' / 'Implement').
+      id: 'F17-session-logs-subagent-meta',
+      route: 'GET /api/v1/repositories/:repoId/sessions/:sessionId/logs',
+      actor: 'owner',
+      params: { repoId: '@R1.id', sessionId: '@s02.sessionId' },
+      // The oracle keeps only rows with the seeded values, so a server that drops them fails.
+      expect: { status: 200, minRows: 1 },
+      read: {
+        sql: `WITH RECURSIVE tree AS (
+                SELECT s.id, s.session_id FROM sessions s WHERE s.id = $1
+                UNION ALL
+                SELECT c.id, c.session_id FROM sessions c JOIN tree t ON c.parent_session_id = t.session_id
+              )
+              SELECT s.session_id, s.parent_session_id, s.agent_description, s.workflow_phase
+                FROM tree t
+                JOIN sessions s ON s.id = t.id
+                JOIN logs l ON l.session_id = s.id AND l.log_type = 'claude-subagent'
+               WHERE s.id <> $1
+                 AND s.agent_description = 'contract-desc'
+                 AND s.workflow_phase = 'Implement'
+               ORDER BY s.session_id`,
+        args: ['@s02.id'],
+        shape: 'array',
+        path: 'subagents',
+        sortBy: 'sessionId',
+        fields: {
+          sessionId: 'session_id',
+          parentSessionId: 'parent_session_id',
+          agentDescription: 'agent_description',
+          workflowPhase: 'workflow_phase',
+        },
+      },
+    },
+    {
       id: 'F17-session-logs-outsider',
       route: 'GET /api/v1/repositories/:repoId/sessions/:sessionId/logs',
       actor: 'outsider',
@@ -526,7 +592,8 @@ export const f17Sessions: ContractFamily = {
                 UNION ALL
                 SELECT c.id, c.session_id FROM sessions c JOIN tree t ON c.parent_session_id = t.session_id
               )
-              SELECT s.session_id, s.parent_session_id, s.workflow_run_id, l.body AS logs
+              SELECT s.session_id, s.parent_session_id, s.workflow_run_id,
+                     s.agent_description, s.workflow_phase, l.body AS logs
                 FROM tree t
                 JOIN sessions s ON s.id = t.id
                 JOIN logs l ON l.session_id = s.id AND l.log_type = 'claude-subagent'
@@ -539,7 +606,41 @@ export const f17Sessions: ContractFamily = {
           sessionId: 'session_id',
           parentSessionId: 'parent_session_id',
           workflowRunId: 'workflow_run_id',
+          agentDescription: 'agent_description',
+          workflowPhase: 'workflow_phase',
           logs: { col: 'logs', as: 'json' },
+        },
+        strict: true,
+      },
+    },
+    {
+      // DD-15 (2026-10-21 workflow-agent-meta-labels): the cursor already holds all of s03's
+      // lines, but under an older `updated_at` — what a re-upload of the same body (now carrying
+      // `.meta.json` labels) leaves behind. No new lines, yet s03 still comes back as a
+      // `subagentAppends` entry with `lines: []` and its meta, so an open Session Map gets the
+      // labels live. The root rows are not in the cursor, so they come back in full.
+      id: 'F17-session-logs-delta-meta-only-append',
+      route: 'GET /api/v1/repositories/:repoId/sessions/:sessionId/logs/delta',
+      actor: 'owner',
+      params: { repoId: '@R1.id', sessionId: '@s02.sessionId' },
+      query: { cursor: S03_HELD_CURSOR },
+      expect: {
+        status: 200,
+        minRows: 1,
+        bodyMatches: { reload: false, newSubagents: [] },
+      },
+      read: {
+        sql: `SELECT s.session_id, '[]'::jsonb AS lines, s.agent_description, s.workflow_phase
+                FROM sessions s
+               WHERE s.id = $1 AND s.agent_description IS NOT NULL`,
+        args: ['@s03.id'],
+        shape: 'array',
+        path: 'subagentAppends',
+        fields: {
+          sessionId: 'session_id',
+          lines: { col: 'lines', as: 'json' },
+          agentDescription: 'agent_description',
+          workflowPhase: 'workflow_phase',
         },
         strict: true,
       },

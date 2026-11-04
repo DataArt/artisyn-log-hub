@@ -6,7 +6,12 @@ import { computeCost, formatCost, formatTokens } from '../../../lib/format';
 import { cn } from '../../../lib/cn';
 import { cleanText, truncateAgentId } from './prompt-turn-helpers';
 import { CopyButton } from './raw-logs/primitives';
-import { orderAgentRows, agentRowLabel } from './workflow-agent-rows';
+import {
+  orderAgentRows,
+  agentRowLabel,
+  agentDescriptionText,
+  cutAgentLabel,
+} from './workflow-agent-rows';
 import { WorkflowAgentModal } from './WorkflowAgentModal';
 
 interface Props {
@@ -37,8 +42,24 @@ function agentCost(
   return entry ? computeCost(node.tokens, entry) : undefined;
 }
 
+/** The Phase cell: the agent's workflow phase (cut like a label), or a muted dash when it has none. */
+function PhaseCell({ phase }: { phase: string | null }) {
+  return (
+    <td className="w-32 min-w-0 py-0.5 pr-3">
+      {phase !== null ? (
+        <div className="truncate text-xs" title={phase}>
+          {cutAgentLabel(phase)}
+        </div>
+      ) : (
+        <span className="text-xs text-muted-foreground">—</span>
+      )}
+    </td>
+  );
+}
+
 /**
- * The workflow agents table: one row per agent (`#`, Task, Duration, Tokens, Cost), ordered and
+ * The workflow agents table: one row per agent (`#`, Task, [Phase], Duration, Tokens, Cost) —
+ * the Phase column only when some agent of the run has a workflow phase — ordered and
  * numbered by `orderAgentRows`; nested agents are always shown, indented under their parent.
  * Clicking a row (or its `#` button, for keyboard) opens that agent's session — its
  * `SubAgentDetail` and its transcript — in `WorkflowAgentModal`. Rows never expand inline.
@@ -51,6 +72,11 @@ export function WorkflowAgentsTable({
 }: Props) {
   const rows = useMemo(() => orderAgentRows(agentNodes), [agentNodes]);
   const [openAgent, setOpenAgent] = useState<SubAgentNode | null>(null);
+  // The Phase column shows only when some agent of the run (nested ones included) has a phase.
+  const showPhase = useMemo(
+    () => rows.some((r) => agentDescriptionText(r.node.workflowPhase) !== null),
+    [rows],
+  );
 
   return (
     <>
@@ -61,6 +87,9 @@ export function WorkflowAgentsTable({
           <tr className="border-b border-border text-[10px] uppercase tracking-wider text-muted-foreground">
             <th className="w-10 pb-1 pr-2 text-right font-medium">#</th>
             <th className="min-w-0 pb-1 pr-3 text-left font-medium">Task</th>
+            {showPhase && (
+              <th className="w-32 pb-1 pr-3 text-left font-medium">Phase</th>
+            )}
             <th className="w-20 pb-1 pr-3 text-right font-medium">Duration</th>
             <th className="w-20 pb-1 pr-3 text-right font-medium">Tokens</th>
             <th className="w-24 pb-1 text-right font-medium">Cost</th>
@@ -115,6 +144,9 @@ export function WorkflowAgentsTable({
                     <CopyButton text={node.agentId} />
                   </div>
                 </td>
+                {showPhase && (
+                  <PhaseCell phase={agentDescriptionText(node.workflowPhase)} />
+                )}
                 <td className="w-20 py-0.5 pr-3 text-right font-mono text-xs">
                   {node.durationMs !== undefined
                     ? formatDuration(node.durationMs)

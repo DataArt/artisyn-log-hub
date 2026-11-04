@@ -22,6 +22,10 @@ export interface SaveRawUploadMeta {
    * (mirrors `harnessSnapshotId`).
    */
   okfSnapshotId?: string;
+  /** Sub-agent `.meta.json` description, sanitised; `claude-subagent` uploads only. */
+  agentDescription?: string | null;
+  /** Sub-agent `.meta.json` workflow phase, sanitised; `claude-subagent` uploads only. */
+  workflowPhase?: string | null;
 }
 
 export interface SaveChunkMeta {
@@ -41,6 +45,10 @@ export interface SaveChunkMeta {
    * (mirrors `harnessSnapshotId`).
    */
   okfSnapshotId?: string;
+  /** Sub-agent `.meta.json` description, sanitised; `claude-subagent` uploads only. */
+  agentDescription?: string | null;
+  /** Sub-agent `.meta.json` workflow phase, sanitised; `claude-subagent` uploads only. */
+  workflowPhase?: string | null;
 }
 
 /**
@@ -123,6 +131,8 @@ export class UploadQueueService {
       status: 'pending',
       harnessSnapshotId: meta.harnessSnapshotId,
       okfSnapshotId: meta.okfSnapshotId,
+      agentDescription: meta.agentDescription ?? null,
+      workflowPhase: meta.workflowPhase ?? null,
     });
   }
 
@@ -194,6 +204,8 @@ export class UploadQueueService {
           totalChunks: meta.totalChunks,
           harnessSnapshotId: meta.harnessSnapshotId,
           okfSnapshotId: meta.okfSnapshotId,
+          agentDescription: meta.agentDescription ?? null,
+          workflowPhase: meta.workflowPhase ?? null,
         });
       }
     } else {

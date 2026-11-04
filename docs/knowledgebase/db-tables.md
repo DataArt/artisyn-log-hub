@@ -73,6 +73,15 @@ table stores the integer `sessions.id`.
   OKF snapshot are resolved through its root.
 - `workflow_run_id` mirrors `parent_session_id` for workflow-spawned agents (resolves
   `WorkflowRun.agentSessionIds`).
+- `agent_description` / `workflow_phase` (`varchar(255)`, nullable, migration 0085) hold the
+  sub-agent's `.meta.json` `description` / `workflowPhase`, sent by hook 2.31.0+ as the
+  `agentDescription` / `workflowPhase` query params of `POST /api/v2/logs`. They are written
+  **only for `claude-subagent` sessions** (root sessions stay `NULL`), sanitised by
+  `sanitizeAgentMeta` (`server/src/logs/agent-meta-param.ts`: non-string → `NULL`, trimmed,
+  empty → `NULL`, cut to 255 code points). `LogsService.upsert` never overwrites a stored value
+  with an absent one — each column is set only when its new value is non-null, independently.
+  Rows from older hooks stay `NULL`; there is no backfill. The client uses them as the sub-agent
+  label (description first) and the Agents-table Phase column.
 - `tool_usage_version` is the rebuild marker of `session_tool_usage` (see
   [tool-monitoring.md](tool-monitoring.md)); `initializeDatabase()` re-queues every value below the
   current extractor version on start.
@@ -374,6 +383,10 @@ than 1 h. `ai_tool_version_history` gets a row only when the `{stable, latest}` 
 - **Expiry:** a `partially_uploaded` chunk set expires after `UPLOAD_QUEUE_PARTIAL_UPLOAD_TTL_MS`.
   No other status expires.
 - **Foreign session:** a `rejected_foreign_session` warning is delivered to the hook once.
+- **Agent meta:** `agent_description` / `workflow_phase` (`varchar(255)`, nullable) stage the
+  sanitised sub-agent meta per plain upload or chunk (only for `claude-subagent`; `NULL`
+  otherwise); the scheduler passes them to `LogsService.upsert`, which copies non-null values
+  onto `sessions`.
 
 See [upload-queue.md](upload-queue.md).
 

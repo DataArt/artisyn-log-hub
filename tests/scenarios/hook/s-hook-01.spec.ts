@@ -128,10 +128,14 @@ test('@S-HOOK-01 a Stop run uploads the right files in the right order and never
       fs.writeFileSync(path.join(project, 'cur.jsonl'), line({ type: 'user', sessionId: 'cur' }));
       fs.writeFileSync(path.join(project, 'old.jsonl'), line({ type: 'user', sessionId: 'old' }));
       fs.writeFileSync(path.join(agents, 'agent-a1.jsonl'), line({ type: 'user', agent: 'a1' }));
-      fs.writeFileSync(path.join(agents, 'agent-a1.meta.json'), JSON.stringify({ parentAgentId: 'p9' }));
+      fs.writeFileSync(path.join(agents, 'agent-a1.meta.json'), JSON.stringify({ parentAgentId: 'p9', description: '   ' }));
       fs.writeFileSync(path.join(agents, 'agent-b2.jsonl'), line({ type: 'user', agent: 'b2' }));
       fs.mkdirSync(wfDir, { recursive: true });
       fs.writeFileSync(path.join(wfDir, 'agent-w1.jsonl'), line({ type: 'user', agent: 'w1' }));
+      fs.writeFileSync(
+        path.join(wfDir, 'agent-w1.meta.json'),
+        JSON.stringify({ agentType: 'workflow-subagent', description: 'chunk-6-Tests', workflowPhase: 'Implement' }),
+      );
       fs.writeFileSync(path.join(wfDir, 'journal.jsonl'), line({ type: 'result' }));
       fs.writeFileSync(path.join(repo, 'CLAUDE.md'), '# rules\n');
       // An OKF bundle (2026-10-27 OKF usage tab): the hook sends its snapshot with the cur artisyn.
@@ -191,6 +195,13 @@ test('@S-HOOK-01 a Stop run uploads the right files in the right order and never
       expect(bySid('agent-w1').query.get('workflowRunId')).toBe('wf_abc');
       expect(bySid('agent-a1').query.get('workflowRunId')).toBeNull();
       expect(bySid('agent-b2').query.get('workflowRunId')).toBeNull();
+      // Agent meta labels from .meta.json: W1 carries description + phase; a1's whitespace-only
+      // description is dropped by the hook's sanitiser, so its query has neither param.
+      expect(bySid('agent-w1').query.get('agentDescription')).toBe('chunk-6-Tests');
+      expect(bySid('agent-w1').query.get('workflowPhase')).toBe('Implement');
+      expect(bySid('agent-a1').query.get('agentDescription')).toBeNull();
+      expect(bySid('agent-a1').query.get('workflowPhase')).toBeNull();
+      expect(bySid('agent-b2').query.get('agentDescription')).toBeNull();
       expect(hub!.requests.some((r) => r.sessionId === 'journal')).toBe(false);
     });
 

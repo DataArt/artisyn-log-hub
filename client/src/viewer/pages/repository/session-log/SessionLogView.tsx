@@ -5,6 +5,7 @@ import type { ModelPricingMap } from '../../../../models/pricing';
 import type { RepoConfig } from '../../../../models/repositories';
 import {
   buildAgentParentMap,
+  buildSubagentMeta,
   computeWorkflowCostPerToken,
   parseSessionLogs,
 } from './log-parser';
@@ -79,6 +80,12 @@ export function SessionLogView({
     [logsData],
   );
 
+  // Per-agent `.meta.json` labels (agent description, workflow phase) from the server.
+  const subagentMeta = useMemo(
+    () => buildSubagentMeta(logsData?.subagents ?? []),
+    [logsData],
+  );
+
   const parsed = useMemo(
     () =>
       logsData !== undefined
@@ -89,9 +96,10 @@ export function SessionLogView({
             subagentLogs: subagentLogsMap,
             pricing,
             harnessSnapshot: logsData.harnessSnapshot ?? null,
+            subagentMeta,
           })
         : null,
-    [logsData, repoConfig, subagentLogsMap, pricing],
+    [logsData, repoConfig, subagentLogsMap, pricing, subagentMeta],
   );
 
   // Same single filter `PromptTurnList` applies, so the anchor list and the rendered list
@@ -209,6 +217,7 @@ export function SessionLogView({
           compactBoundaries={parsed.compactBoundaries}
           subagentLogsMap={subagentLogsMap}
           agentParentMap={agentParentMap}
+          subagentMeta={subagentMeta}
           pricing={pricing}
           sessionModel={parsed?.summary.model}
           costPerToken={costPerToken}

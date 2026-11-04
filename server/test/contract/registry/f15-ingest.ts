@@ -142,6 +142,73 @@ export const f15Ingest: ContractFamily = {
       },
     },
     {
+      // Sub-agent `.meta.json` labels (2026-10-21 workflow-agent-meta-labels, DD-1/DD-3): a
+      // `claude-subagent` upload stages `agentDescription` / `workflowPhase` on its queue row.
+      id: 'F15-upload-subagent-meta',
+      route: 'POST /api/v2/logs',
+      actor: 'authorKey',
+      query: {
+        sessionId: 'agent-w1-new-meta',
+        type: 'claude-subagent',
+        parentSessionId: 'w1-s07-author',
+        agentDescription: 'load-config',
+        workflowPhase: 'Config',
+      },
+      headers: { 'Content-Type': 'application/x-ndjson' },
+      body: NDJSON,
+      expect: { status: 201 },
+      write: {
+        watch: ['upload_queue'],
+        delta: {
+          inserted: [
+            {
+              table: 'upload_queue',
+              where: `session_id = 'agent-w1-new-meta'`,
+              check: [
+                `status = 'pending'`,
+                `log_type = 'claude-subagent'`,
+                `agent_description = 'load-config'`,
+                `workflow_phase = 'Config'`,
+              ],
+            },
+          ],
+        },
+      },
+    },
+    {
+      // DD-1: a 300-char description is cut to 255 code points and a whitespace-only phase is
+      // dropped to NULL — silently, never a 4xx.
+      id: 'F15-upload-subagent-meta-sanitised',
+      route: 'POST /api/v2/logs',
+      actor: 'authorKey',
+      query: {
+        sessionId: 'agent-w1-new-meta-long',
+        type: 'claude-subagent',
+        parentSessionId: 'w1-s07-author',
+        agentDescription: 'x'.repeat(300),
+        workflowPhase: '  ',
+      },
+      headers: { 'Content-Type': 'application/x-ndjson' },
+      body: NDJSON,
+      expect: { status: 201 },
+      write: {
+        watch: ['upload_queue'],
+        delta: {
+          inserted: [
+            {
+              table: 'upload_queue',
+              where: `session_id = 'agent-w1-new-meta-long'`,
+              check: [
+                `status = 'pending'`,
+                `agent_description = '${'x'.repeat(255)}'`,
+                'workflow_phase IS NULL',
+              ],
+            },
+          ],
+        },
+      },
+    },
+    {
       // DD-8: a valid but never-stored id, ref-only (no snapshotFull) — the hook is told to
       // resend the full snapshot next time. The queue row still has no harness_snapshot_id:
       // that column is only set on a snapshotFull=1 upload.

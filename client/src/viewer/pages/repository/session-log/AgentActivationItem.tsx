@@ -18,12 +18,16 @@ import type { ModelPricingMap } from '../../../../models/pricing';
 import { computeCost, formatCost } from '../../../lib/format';
 import { CostBreakdownTooltip } from '../../../components/CostBreakdownTooltip';
 import { cn } from '../../../lib/cn';
+import type { SubagentMetaMap } from './log-parser';
+import { agentDescriptionText } from './workflow-agent-rows';
 
 interface AgentActivationItemProps {
   activation: AgentActivation;
   subagentLogsMap?: Map<string, Record<string, unknown>[]>;
   pricing?: ModelPricingMap;
   sessionModel?: string;
+  /** Per-agent `.meta.json` labels; the description is the label fallback when the activation has none. */
+  subagentMeta?: SubagentMetaMap;
   renderSubTurn: (turn: PromptTurn) => React.ReactNode;
 }
 
@@ -32,6 +36,7 @@ export function AgentActivationItem({
   subagentLogsMap,
   pricing,
   sessionModel,
+  subagentMeta,
   renderSubTurn,
 }: AgentActivationItemProps) {
   const [open, setOpen] = useState(false);
@@ -54,7 +59,12 @@ export function AgentActivationItem({
     [parsedSubagent],
   );
 
-  const label = activation.description ?? `agent-${activation.agentId}`;
+  const label =
+    activation.description ??
+    agentDescriptionText(
+      subagentMeta?.get(activation.agentId)?.agentDescription,
+    ) ??
+    `agent-${activation.agentId}`;
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>

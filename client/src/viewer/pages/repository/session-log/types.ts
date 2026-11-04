@@ -287,6 +287,10 @@ export interface SubAgentNode {
   skills?: SkillInvocation[];
   /** Rule/CLAUDE.md injections in this agent's own transcript. See `skills` above. */
   rulesInjected?: RuleInjection[];
+  /** Agent `description` from the agent's `.meta.json` via the server; absent for old hooks/servers. */
+  agentDescription?: string | null;
+  /** Workflow phase from the agent's `.meta.json` via the server; absent for old hooks/servers. */
+  workflowPhase?: string | null;
   children: SubAgentNode[];
 }
 

@@ -1808,6 +1808,8 @@ export class RepositoriesController {
           subSessionId: schema.sessions.sessionId,
           parentSessionId: schema.sessions.parentSessionId,
           workflowRunId: schema.sessions.workflowRunId,
+          agentDescription: schema.sessions.agentDescription,
+          workflowPhase: schema.sessions.workflowPhase,
           bodyText: sql<string | null>`${schema.logs.body}::text`,
         })
         .from(schema.sessions)
@@ -1852,6 +1854,8 @@ export class RepositoriesController {
       .map((r) => ({
         sessionId: r.subSessionId,
         parentSessionId: r.parentSessionId,
+        agentDescription: r.agentDescription ?? null,
+        workflowPhase: r.workflowPhase ?? null,
         logsText: r.bodyText!,
       }));
 
@@ -1997,7 +2001,7 @@ export class RepositoriesController {
     const subagentJson = subagents
       .map(
         (s) =>
-          `{"sessionId":${JSON.stringify(s.sessionId)},"parentSessionId":${JSON.stringify(s.parentSessionId)},"logs":${s.logsText}}`,
+          `{"sessionId":${JSON.stringify(s.sessionId)},"parentSessionId":${JSON.stringify(s.parentSessionId)},"agentDescription":${JSON.stringify(s.agentDescription)},"workflowPhase":${JSON.stringify(s.workflowPhase)},"logs":${s.logsText}}`,
       )
       .join(',');
     // `rootStats` (the root session's own counters, `null` when it has no

@@ -12,7 +12,9 @@
           "sessionId": "agent-{{RUN}}-gs05w1",
           "file": "subagents/workflows/wf-gs05/agent-gs05w1.jsonl",
           "parentSessionId": "{{RUN}}-gs05",
-          "workflowRunId": "wf_{{RUN}}-gs05"
+          "workflowRunId": "wf_{{RUN}}-gs05",
+          "agentDescription": "load-config",
+          "workflowPhase": "Config"
         },
         {
           "key": "w2",

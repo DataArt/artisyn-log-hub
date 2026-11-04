@@ -15,6 +15,7 @@ import type { GanttMode } from './charts/useGanttLayout';
 import type { ChartTab } from './charts/chart-tab';
 import { buildSubagentSessions } from './charts/subagent-sessions';
 import { CallTreeView } from './CallTreeView';
+import { buildSubagentMeta } from './log-parser';
 import type { ParsedSession } from './types';
 
 interface Props {
@@ -63,6 +64,13 @@ export function SessionChartsTab({
   const [selectedTurnId, setSelectedTurnId] = useState<string | null>(null);
   const [selectedAgentId, setSelectedAgentId] = useState<string | null>(null);
 
+  // Per-agent `.meta.json` labels — the chart label fallback after the spawning
+  // Agent call's description (DD-10/DD-11).
+  const subagentMeta = useMemo(
+    () => buildSubagentMeta(logsData?.subagents ?? []),
+    [logsData],
+  );
+
   const timeline = useMemo(
     () =>
       parsedLogs
@@ -71,23 +79,30 @@ export function SessionChartsTab({
             pricing,
             subagentLogsMap,
             agentParentMap,
+            subagentMeta,
           )
         : null,
-    [parsedLogs, pricing, subagentLogsMap, agentParentMap],
+    [parsedLogs, pricing, subagentLogsMap, agentParentMap, subagentMeta],
   );
   const heatmap = useMemo(
     () =>
       parsedLogs
-        ? toolHeatmap(parsedLogs, subagentLogsMap, agentParentMap)
+        ? toolHeatmap(parsedLogs, subagentLogsMap, agentParentMap, subagentMeta)
         : null,
-    [parsedLogs, subagentLogsMap, agentParentMap],
+    [parsedLogs, subagentLogsMap, agentParentMap, subagentMeta],
   );
   const tree = useMemo(
     () =>
       parsedLogs
-        ? agentTree(parsedLogs, pricing, subagentLogsMap, agentParentMap)
+        ? agentTree(
+            parsedLogs,
+            pricing,
+            subagentLogsMap,
+            agentParentMap,
+            subagentMeta,
+          )
         : null,
-    [parsedLogs, pricing, subagentLogsMap, agentParentMap],
+    [parsedLogs, pricing, subagentLogsMap, agentParentMap, subagentMeta],
   );
 
   // Labelled sub-agent sessions for the Context Usage chart

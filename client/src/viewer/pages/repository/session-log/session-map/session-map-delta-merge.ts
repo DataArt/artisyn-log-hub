@@ -6,6 +6,7 @@ import type {
 } from '../../../../api';
 import type { WorkflowRun } from '../../../../../models/workflows';
 import { buildAgentParentMap, stripAgentPrefix } from '../log-parser';
+import { agentDescriptionText } from '../workflow-agent-rows';
 
 /** A non-reload delta response — the only kind that is merged. */
 export type SessionLogsDeltaUpdate = Extract<
@@ -19,7 +20,17 @@ export interface SessionMapSubagent {
   sessionId: string;
   parentSessionId: string | null;
   workflowRunId: string | null;
+  /** `description` from the agent's `.meta.json`; `null` when unknown (old hook/server). */
+  agentDescription: string | null;
+  /** `workflowPhase` from the agent's `.meta.json`; `null` when unknown. */
+  workflowPhase: string | null;
   logs: SessionLogLine[];
+}
+
+/** Non-null meta carried by one `subagentAppends` entry (DD-15). */
+interface AppendMeta {
+  agentDescription: string | null;
+  workflowPhase: string | null;
 }
 
 /**
@@ -62,8 +73,14 @@ function mergeSubagents(
   if (delta.subagentAppends.length === 0 && delta.newSubagents.length === 0)
     return prev;
   const appends = new Map<string, SessionLogLine[]>();
+  // Meta that arrives later for a known agent (DD-15): an entry may carry it with empty lines.
+  const appendMeta = new Map<string, AppendMeta>();
   for (const a of delta.subagentAppends) {
     if (a.lines.length > 0) appends.set(a.sessionId, a.lines);
+    const agentDescription = a.agentDescription ?? null;
+    const workflowPhase = a.workflowPhase ?? null;
+    if (agentDescription !== null || workflowPhase !== null)
+      appendMeta.set(a.sessionId, { agentDescription, workflowPhase });
   }
   const fresh = new Map<string, SessionMapSubagent>();
   for (const n of delta.newSubagents) {
@@ -71,6 +88,8 @@ function mergeSubagents(
       sessionId: n.sessionId,
       parentSessionId: n.parentSessionId,
       workflowRunId: n.workflowRunId,
+      agentDescription: n.agentDescription ?? null,
+      workflowPhase: n.workflowPhase ?? null,
       logs: n.logs,
     });
   }
@@ -84,7 +103,18 @@ function mergeSubagents(
       continue;
     }
     const lines = appends.get(sa.sessionId);
-    next.push(lines ? { ...sa, logs: [...sa.logs, ...lines] } : sa);
+    const meta = appendMeta.get(sa.sessionId);
+    if (!lines && !meta) {
+      next.push(sa);
+      continue;
+    }
+    // A non-null append value overwrites the stored one; `null` never clears it.
+    next.push({
+      ...sa,
+      agentDescription: meta?.agentDescription ?? sa.agentDescription,
+      workflowPhase: meta?.workflowPhase ?? sa.workflowPhase,
+      logs: lines ? [...sa.logs, ...lines] : sa.logs,
+    });
   }
   // Appends for a sub-agent the state never saw cannot be placed (no linkage) and are dropped.
   for (const n of fresh.values()) next.push(n);
@@ -137,15 +167,20 @@ export interface SessionMapParseInputs {
   workflows: WorkflowRun[];
   /** agentId (unprefixed) -> `workflowRunId`, only for agents spawned by a Workflow run. */
   workflowRunIds: Map<string, string>;
+  /** agentId (unprefixed) -> trimmed `.meta.json` description, only for agents that have one. */
+  agentDescriptions: Map<string, string>;
 }
 
 export function toParseInputs(state: SessionMapState): SessionMapParseInputs {
   const subagentLogs = new Map<string, SessionLogLine[]>();
   const workflowRunIds = new Map<string, string>();
+  const agentDescriptions = new Map<string, string>();
   for (const sa of state.subagents) {
     const agentId = stripAgentPrefix(sa.sessionId);
     subagentLogs.set(agentId, sa.logs);
     if (sa.workflowRunId != null) workflowRunIds.set(agentId, sa.workflowRunId);
+    const description = agentDescriptionText(sa.agentDescription);
+    if (description !== null) agentDescriptions.set(agentId, description);
   }
   return {
     main: [...state.rootArtisynLines, ...state.rootClaudeLines],
@@ -154,5 +189,6 @@ export function toParseInputs(state: SessionMapState): SessionMapParseInputs {
     subagentStats: state.subagentStats,
     workflows: state.workflows,
     workflowRunIds,
+    agentDescriptions,
   };
 }

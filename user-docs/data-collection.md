@@ -83,7 +83,12 @@ The hook collects and uploads four kinds of data:
   contents of files Claude read and command output, and earlier sessions of the project that
   are still on disk. Transcripts are **not** redacted.
 - **Sub-agent and workflow transcripts** — logs of agents spawned during the session, linked to
-  their parent session so costs roll up correctly.
+  their parent session so costs roll up correctly. From the small `<agent-id>.meta.json` file
+  Claude Code writes next to each sub-agent transcript, the hook also sends the agent's parent
+  agent id, its `description` (the short task title, for example "Review the API layer") and, for
+  workflow agents, its `workflowPhase` (hook 2.31.0 and later). The description and phase are
+  trimmed and cut to 255 characters; Log Hub shows them as the agent's label and in the Phase
+  column of a workflow run's Agents table.
 - **Claude Code metrics (optional)** — if the OpenTelemetry option is enabled, Claude Code's own
   usage metrics are captured locally and uploaded per session.
 

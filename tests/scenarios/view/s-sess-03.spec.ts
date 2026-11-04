@@ -387,7 +387,7 @@ test('@S-SESS-03 Logs: what counts as a prompt, what is hidden, how a turn reads
     await expect(page.getByTestId('startup-context-line')).toBeVisible();
   });
 
-  await test.step('8b. GS-05 workflow Agents table: shown as soon as the workflow opens; one row per agent with label, duration, tokens and cost; numbers 1/2 and 12-char ids; a row opens a modal with the agent Logs and Raw logs tabs; no extra request', async () => {
+  await test.step('8b. GS-05 workflow Agents table: shown as soon as the workflow opens; one row per agent with label (W1 its .meta.json description, W2 its prompt), phase (W1 Config, W2 —), duration, tokens and cost; numbers 1/2 and 12-char ids; a row opens a modal titled by the label with the agent Logs and Raw logs tabs; no extra request', async () => {
     const G5 = loadExpected('gs-05').roots[0];
     const node = (key: string) => {
       const n = G5.nodes.find((x) => x.key === key);
@@ -404,24 +404,34 @@ test('@S-SESS-03 Logs: what counts as a prompt, what is hidden, how a turn reads
     await expect(page.getByText('Agents (2)', { exact: true })).toBeVisible();
     const rows = page.getByTestId('workflow-agent-row');
     await expect(rows).toHaveCount(2);
+    // W1 has a .meta.json description and phase (upload.json agentDescription / workflowPhase):
+    // the description is the label, the prompt stays the hover title. W2 has neither: prompt label, «—».
     const expectedRows = [
-      { key: 'w1', label: 'Add a billing section to src/report.ts', duration: '0:00:18' },
-      { key: 'w2', label: 'Review the billing flow in depth', duration: '0:00:23' },
+      { key: 'w1', label: 'load-config', prompt: 'Add a billing section to src/report.ts', phase: 'Config', duration: '0:00:18' },
+      { key: 'w2', label: 'Review the billing flow in depth', prompt: 'Review the billing flow in depth', phase: '—', duration: '0:00:23' },
     ];
-    for (const { key, label, duration } of expectedRows) {
+    // Columns: # · TASK · PHASE · DURATION · TOKENS · COST (Phase shows because W1 has one).
+    await expect(page.getByRole('columnheader', { name: 'Phase' })).toHaveCount(1);
+    for (const { key, label, prompt, phase, duration } of expectedRows) {
       const row = page.locator(`[data-testid="workflow-agent-row"][data-agent-id$="gs05${key}"]`);
       await expect(row, `${key} row`).toHaveCount(1);
       const cells = row.locator(':scope > td');
       const n = node(key);
       await expect(cells.nth(1), `${key} label`).toContainText(label);
-      await expect(cells.nth(2), `${key} duration`).toHaveText(duration);
+      await expect(cells.nth(1).locator('div[title]').first(), `${key} hover title is the prompt`).toHaveAttribute('title', prompt);
+      await expect(cells.nth(2), `${key} phase`).toHaveText(phase);
+      await expect(cells.nth(3), `${key} duration`).toHaveText(duration);
       const t = n.tokens;
       const tokens = t.input + t.output + t.cacheRead + t.cacheWrite5m + t.cacheWrite1h;
-      await expect(cells.nth(3), `${key} tokens`).toHaveText(`${(tokens / 1000).toFixed(1)}K`);
-      await expect(cells.nth(4), `${key} cost`).toHaveText(usd4(n.costUsd));
+      await expect(cells.nth(4), `${key} tokens`).toHaveText(`${(tokens / 1000).toFixed(1)}K`);
+      await expect(cells.nth(5), `${key} cost`).toHaveText(usd4(n.costUsd));
       const agentId = (await row.getAttribute('data-agent-id'))!;
       await expect(cells.nth(1), `${key} id line`).toContainText(`${agentId.slice(0, 12)}…`);
     }
+    await expect(
+      page.locator('[data-testid="workflow-agent-row"][data-agent-id$="gs05w1"]').locator(':scope > td').nth(1),
+      'W1 label is the description, not the prompt',
+    ).not.toContainText(expectedRows[0].prompt);
     const numbers = await rows.evaluateAll((trs) => trs.map((tr) => tr.querySelector('td')?.textContent?.trim()));
     expect(new Set(numbers), 'the # cells (both agents start together: order is AO-02, not checked here)').toEqual(new Set(['1', '2']));
 
@@ -429,10 +439,11 @@ test('@S-SESS-03 Logs: what counts as a prompt, what is hidden, how a turn reads
     await w1.click();
     const dialog = page.getByRole('dialog');
     await expect(dialog).toBeVisible();
-    await expect(dialog).toContainText(expectedRows[0].label);
+    const agentIdW1 = (await w1.getAttribute('data-agent-id'))!;
+    await expect(dialog.getByRole('heading').first(),'the modal title is the W1 label (its description) and its id').toHaveText(`${expectedRows[0].label}${agentIdW1}`);
     // "Logs" tab (default): the agent's own turn, rendered like the session's Logs tab.
     const agentLogs = dialog.getByTestId('workflow-agent-logs');
-    await expect(agentLogs).toContainText(expectedRows[0].label);
+    await expect(agentLogs, 'the turn shows the agent prompt').toContainText(expectedRows[0].prompt);
     // "Raw logs" tab: the agent's transcript, rendered like the session's Raw Logs tab.
     await dialog.getByRole('tab', { name: 'Raw logs' }).click();
     const rawLogs = dialog.getByTestId('workflow-agent-raw-logs');
@@ -446,6 +457,24 @@ test('@S-SESS-03 Logs: what counts as a prompt, what is hidden, how a turn reads
 
     page.off('request', onRequest);
     expect(apiRequests, 'the table and the agent modal reuse the loaded Logs payload').toEqual([]);
+  });
+
+  await test.step('8b2. GS-05 agent description in Charts and Session Map: the Agent Tree node and the Session Map card of W1 read load-config', async () => {
+    await openSession(page, owner, repo.repoId, repo.rootId('gs-05'), { tab: 'agent-tree' });
+    const treeNode = page.locator('g[data-testid="agent-tree-node"][data-agent-id$="gs05w1"]');
+    await expect(treeNode, 'W1 node in the Agent Tree').toHaveCount(1);
+    await expect(treeNode.getByText('load-config'), 'the Agent Tree labels W1 by its description').toBeVisible();
+
+    // The Map is built from /logs/delta, so this also covers the newSubagents path.
+    await openSession(page, owner, repo.repoId, repo.rootId('gs-05'), { tab: 'session-map' });
+    await expect(page.getByTestId('session-map-badge')).toContainText('Replay', { timeout: 20_000 });
+    const card = page.locator('[data-testid^="session-map-agent-"][data-testid$="gs05w1"]');
+    await expect(card, 'W1 card').toHaveCount(1);
+    await expect(card.locator('[title="load-config"]'), 'the W1 card title is its description').toHaveText('load-config');
+
+    // Back to Logs, the state 8c starts from.
+    await openSession(page, owner, repo.repoId, repo.rootId('gs-05'), { tab: 'logs' });
+    await expect(page.getByTestId('startup-context-line')).toBeVisible();
   });
 
   await test.step('8c. a Workflow call rejected before launch (is_error, no <task-notification>) is «failed» with its error, not «running»; a call launched by scriptPath (no name input) is named from toolUseResult.workflowName', async () => {
@@ -496,6 +525,8 @@ test('@S-SESS-03 Logs: what counts as a prompt, what is hidden, how a turn reads
     await rejected.click();
     await expect(page.getByText(launchError, { exact: true }), 'the launch error is the summary, wrapper stripped').toBeVisible();
     await expect(page.getByRole('button', { name: /⚡ ScriptWorkflow/ })).toContainText('completed');
+    await page.getByRole('button', { name: /⚡ ScriptWorkflow/ }).click();
+    await expect(page.getByRole('columnheader', { name: 'Phase' }), 'no agent of these runs has a phase: no Phase column').toHaveCount(0);
   });
 
   await test.step('8d. attributed > measured total (a 10,000-byte instruction file, first usage 100 tokens): the over-total warning, no harness internals row', async () => {

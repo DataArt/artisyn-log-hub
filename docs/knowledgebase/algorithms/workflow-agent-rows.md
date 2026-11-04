@@ -15,7 +15,8 @@ opening every row.
 ## Code
 
 - Implementation: `client/src/viewer/pages/repository/session-log/workflow-agent-rows.ts`
-  (`orderAgentRows`, `agentRowLabel`, `AGENT_LABEL_LIMIT`). The label uses `cleanText` from
+  (`orderAgentRows`, `agentRowLabel`, `agentDescriptionText`, `cutAgentLabel`,
+  `AGENT_LABEL_LIMIT`). The label uses `cleanText` from
   `prompt-turn-helpers.tsx` (with `stripSystemBlocks` / `SYSTEM_BLOCK_RE` from `log-parser.ts`).
 - Input producer (not part of the rule): `buildAgentNodesForIds` in `log-parser.ts` emits the
   forest in `agentIds` (`wf.agentSessionIds`) order and sets `startMs` from the agent's own log
@@ -32,8 +33,9 @@ opening every row.
   optional `startMs` (epoch ms; when present it is a finite number — the producer derives it
   with `Date.parse` and drops `NaN`) and `children` (an array of the same nodes). The output is a flat
   array of rows `{node, depth, number}`: `depth` is 0 for a root; `number` is a string.
-- `agentRowLabel(node)`: `node` has an `agentId` and a `prompt` string; the output is the label
-  string.
+- `agentRowLabel(node)`: `node` has an `agentId`, a `prompt` string and an optional
+  `agentDescription` (`string | null`, the sub-agent's `.meta.json` `description`); the output is
+  the label string.
 
 ## Rules
 
@@ -60,7 +62,10 @@ copy, so the caller's arrays (React props) are never changed.
 
 ### Label
 
-1. `text` = `cleanText(prompt)`: remove every system block (`<local-command-caveat>`,
+0. **Description first.** `desc` = `agentDescriptionText(agentDescription)`: the trimmed
+   description, or none when it is absent, `null`, empty or whitespace-only. When there is a
+   `desc`, `text` = `desc` and rules 1–2 are skipped (the prompt is ignored); rule 3 still applies.
+1. Otherwise `text` = `cleanText(prompt)`: remove every system block (`<local-command-caveat>`,
    `<system-reminder>`, `<command-name>`, `<command-message>`, `<command-args>`,
    `<local-command-stdout>`, `<ide_opened_file>`, each with its content up to the matching
    closing tag), replace every remaining `<...>` tag with a space, collapse each run of
@@ -89,6 +94,8 @@ copy, so the caller's arrays (React props) are never changed.
 - Length boundary: exactly 60 characters AL-03, 61 characters AL-04.
 - Empty prompt: AL-05. A prompt that is only a system block: AL-06. A fallback `agentId` longer
   than 60 characters is cut too: AL-08.
+- Description present (trimmed, wins over the prompt): AL-10. Empty description: AL-11.
+  Whitespace-only description: AL-12. A description longer than 60 characters is cut: AL-13.
 
 ## Examples
 
@@ -99,10 +106,11 @@ Two kinds of rows.
   `prompt`, `children` = the mapped `children` (none = empty) and `startMs` only when the row
   gives one. `expected.rows` is the output as `{"id", "number", "depth"}` per row, in output
   order.
-- **Label rows** have `input.label`: `{"agentId": string, "prompt": string}`; `expected.label` is
+- **Label rows** have `input.label`: `{"agentId": string, "prompt": string,
+  "agentDescription"?: string}` (the description is set on the node only when the row gives it); `expected.label` is
   the label.
 
-Rows (17): [`docs/algorithm-examples/workflow-agent-rows.json`](../../algorithm-examples/workflow-agent-rows.json) — test data for the table test; the rules above are enough to understand the algorithm.
+Rows (21): [`docs/algorithm-examples/workflow-agent-rows.json`](../../algorithm-examples/workflow-agent-rows.json) — test data for the table test; the rules above are enough to understand the algorithm.
 
 ## Mutations
 
@@ -120,6 +128,10 @@ Rows (17): [`docs/algorithm-examples/workflow-agent-rows.json`](../../algorithm-
 - One global sort across all levels -> AO-07 (pc first).
 - Numbers from the input index instead of the sorted position -> AO-01 (b = 2, c = 3, a = 1).
 - Children appended after all roots instead of right after their parent -> AO-04 (p, q, p2, p1).
+- The prompt checked before the description -> AL-10 (`Add a billing section`).
+- The description not trimmed -> AL-10 (outer spaces kept). A blank description not treated as
+  absent -> AL-12 (a blank label).
+- The cut skipped for the description -> AL-13 (all 61 characters).
 - Truncation at `>=` 60 instead of `>` 60 -> AL-03.
 - No fallback when the prompt cleans to empty (only the raw prompt checked) -> AL-06.
 

@@ -63,12 +63,22 @@ examples: [`algorithms/session-logs-delta.md`](algorithms/session-logs-delta.md)
 
 - `mergeSessionMapDelta(prev, delta)` (`session-map-delta-merge.ts`) appends root artisyn / claude
   lines and sub-agent lines, adds new sub-agents with their linkage (`sessionId`,
-  `parentSessionId`, `workflowRunId`), replaces stats, keeps the old `workflows` on `null`, and
-  stores `cursor`, `liveness`, `serverTime` and `receivedAt`. A poll sent with an empty cursor
-  replaces the state. Examples: [`algorithms/session-map-delta-merge.md`](algorithms/session-map-delta-merge.md).
+  `parentSessionId`, `workflowRunId`) and meta (`agentDescription`, `workflowPhase`: `string | null`,
+  from `newSubagents[]`; `null` from an older server), replaces stats, keeps the old `workflows` on
+  `null`, and stores `cursor`, `liveness`, `serverTime` and `receivedAt`. A poll sent with an empty
+  cursor replaces the state. The initial load is itself a delta from cursor 0, so `mergeSubagents`
+  is the single place the meta enters, for the first load and for live arrivals. Examples:
+  [`algorithms/session-map-delta-merge.md`](algorithms/session-map-delta-merge.md).
+- **Live meta for known agents (DD-15).** `subagentAppends[]` entries also carry `agentDescription` /
+  `workflowPhase`. The server pushes an append with `lines: []` when a changed sub-agent has no new
+  lines but non-null meta (a meta-only re-upload still bumps `logs.updated_at`). `mergeSubagents`
+  copies a non-null append value onto the known `SessionMapSubagent` and never clears a stored value
+  with `null`; an empty-lines entry changes only the meta. An older client already skips
+  empty-line appends.
 - `toParseInputs(state)` gives `parseSessionLogs` the same inputs `/logs` would: `main` =
   `artisyn ++ claude`, `subagentLogs` keyed **without** the `agent-` prefix, `agentParentMap`,
-  `subagentStats`, `workflows`, plus a `workflowRunId` map for grouping. `harnessSnapshot` is `null`.
+  `subagentStats`, `workflows`, plus a `workflowRunId` map for grouping and `agentDescriptions`
+  (`Map<bareAgentId, string>`, only non-empty `agentDescriptionText` values). `harnessSnapshot` is `null`.
 - `buildSessionMapModel(parsed, inputs, pricing, {live, serverTimeMs})` (`session-map-model.ts`)
   builds the nodes (cost, share, family counts, top tools, calls, failures, peak context, first /
   last activity, finished flag, per-call events), the columns (`groupAgents`) and the timeline bins.
@@ -129,6 +139,10 @@ One table, `FAMILIES` in `session-map.constants.ts`, matched by tool name in thi
   of that workflow run (a still-running run gets a column keyed by `workflowRunId`, labelled from
   the k-th running `WorkflowRun`, or "workflow run"); otherwise it goes to "Agents spawned by the
   main session" (always last). Workflow columns are ordered by their earliest agent start.
+- **Card label:** `agentRowLabel({agentId, prompt, agentDescription: inputs.agentDescriptions.get(agentId)})`
+  — the `.meta.json` description (hook `2.31.0`+) first, else the cleaned prompt, else the agent
+  id — then `truncateLabel`. The phase is not shown on the Map (only in the Agents table, see
+  [session-log-view.md](session-log-view.md) § "Sub-agent meta labels").
 - **Per-call cost:** an agent's priced total (its `subagentStats` row, else transcript tokens) is
   spread over its assistant messages by their own priced usage, split evenly over the message's
   `tool_use` blocks; the cumulative line ends at the tree cost.

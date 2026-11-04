@@ -22,6 +22,17 @@ export const WORLD_V1_PASSWORD = 'contract-world-v1-password';
 const PASSWORD_HASH =
   '$argon2id$v=19$m=19,t=2,p=1$6HMAknF3szeFkcUZ1A+GlA$QqYiZdC73441a+hOXcRGc9fzmkw+sqHa79szU959AZM';
 
+/**
+ * Body of s03's `claude-subagent` log: one flat line. `WORLD_V1_S03_SUBAGENT_LINE_JSONB_TEXT` is
+ * that line exactly as Postgres prints `jsonb::text` (keys shorter-first, `": "` / `", "`), so a
+ * registry row can derive the `/logs/delta` cursor fingerprint `left(md5(line::text), 12)`.
+ */
+export const WORLD_V1_S03_SUBAGENT_BODY = [
+  { type: 'user', sessionId: 'w1-s03-child' },
+];
+export const WORLD_V1_S03_SUBAGENT_LINE_JSONB_TEXT =
+  '{"type": "user", "sessionId": "w1-s03-child"}';
+
 /** Ids and natural keys of everything the world inserts; registry rows reference these. */
 export const WORLD_V1 = {
   users: {
@@ -1099,6 +1110,7 @@ function buildStatements(): WorldStatement[] {
   // SessionsService.deleteSession leaves it); s03 is s02's child. harness_snapshot_id: only s04
   // (HARNESS_SNAPSHOT_BODY) and s09 (HARNESS_SNAPSHOT_BODY_ORPHAN) are bound (05 §F17/F18/F12
   // chunk 13); every other session predates the snapshot feature and stays NULL.
+  // agent_description / workflow_phase (sub-agent .meta.json labels): only s03 carries them.
   const S = WORLD_V1.sessions;
   out.push(
     insert(
@@ -1111,9 +1123,11 @@ function buildStatements(): WorldStatement[] {
         'deleted',
         'harness_snapshot_id',
         'okf_snapshot_id',
+        'agent_description',
+        'workflow_phase',
       ],
       [
-        [S.s01.id, S.s01.sessionId, null, null, false, null, null],
+        [S.s01.id, S.s01.sessionId, null, null, false, null, null, null, null],
         [
           S.s02.id,
           S.s02.sessionId,
@@ -1122,8 +1136,20 @@ function buildStatements(): WorldStatement[] {
           false,
           null,
           WORLD_V1.okfSnapshotId,
+          null,
+          null,
         ],
-        [S.s03.id, S.s03.sessionId, S.s02.sessionId, null, false, null, null],
+        [
+          S.s03.id,
+          S.s03.sessionId,
+          S.s02.sessionId,
+          null,
+          false,
+          null,
+          null,
+          'contract-desc',
+          'Implement',
+        ],
         [
           S.s04.id,
           S.s04.sessionId,
@@ -1132,11 +1158,13 @@ function buildStatements(): WorldStatement[] {
           false,
           WORLD_V1.harnessSnapshotId,
           null,
+          null,
+          null,
         ],
-        [S.s05.id, S.s05.sessionId, null, null, true, null, null],
-        [S.s06.id, S.s06.sessionId, null, null, false, null, null],
-        [S.s07.id, S.s07.sessionId, null, null, false, null, null],
-        [S.s08.id, S.s08.sessionId, null, null, false, null, null],
+        [S.s05.id, S.s05.sessionId, null, null, true, null, null, null, null],
+        [S.s06.id, S.s06.sessionId, null, null, false, null, null, null, null],
+        [S.s07.id, S.s07.sessionId, null, null, false, null, null, null, null],
+        [S.s08.id, S.s08.sessionId, null, null, false, null, null, null, null],
         [
           S.s09.id,
           S.s09.sessionId,
@@ -1145,9 +1173,11 @@ function buildStatements(): WorldStatement[] {
           false,
           WORLD_V1.harnessSnapshotIdOrphan,
           null,
+          null,
+          null,
         ],
-        [S.s10.id, S.s10.sessionId, null, null, false, null, null],
-        [S.s11.id, S.s11.sessionId, null, null, false, null, null],
+        [S.s10.id, S.s10.sessionId, null, null, false, null, null, null, null],
+        [S.s11.id, S.s11.sessionId, null, null, false, null, null, null, null],
       ],
     ),
   );
@@ -1295,6 +1325,25 @@ function buildStatements(): WorldStatement[] {
     null,
   ]);
   logRepoRows.push([s11LogId, R.Rdesert.id]);
+  // s03's own transcript as the hook uploads a sub-agent's (log_type claude-subagent), so the
+  // s02 tree has one entry in `/logs` `subagents[]` and in `/logs/delta` `newSubagents[]`
+  // (2026-10-21 workflow-agent-meta-labels). Not linked to a repository: it changes no repo view.
+  logId += 1;
+  logRows.push([
+    logId,
+    '2026-01-11T09:20:00.000Z',
+    '2026-01-11T09:20:00.000Z',
+    S.s03.id,
+    'claude-subagent',
+    json(WORLD_V1_S03_SUBAGENT_BODY),
+    U.owner.id,
+    null,
+    '2026-01-11T09:10:00.000Z',
+    '2026-01-11T09:20:00.000Z',
+    'main',
+    null,
+    null,
+  ]);
   out.push(
     insert(
       'logs',

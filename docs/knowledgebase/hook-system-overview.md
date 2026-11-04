@@ -153,7 +153,7 @@ fail.
 |---|---|---|
 | `artisyn` | `<telemetryDir>/<session_id>.jsonl` | The hook's own events, plus lines injected at upload (below) |
 | `claude` | `<claudeConfigDir>/projects/<slug>/<session>.jsonl` | Claude Code transcripts, uploaded **as is** — never augmented |
-| `claude-subagent` | `…/<session>/subagents/*.jsonl` and `…/subagents/workflows/<wf-id>/agent-*.jsonl` | `parentSessionId` = `agent-<parentAgentId>` from the sibling `<agent-id>.meta.json` (any nesting depth), falling back to the main session when the meta is missing; workflow agents also send `workflowRunId` = the `<wf-id>` folder name |
+| `claude-subagent` | `…/<session>/subagents/*.jsonl` and `…/subagents/workflows/<wf-id>/agent-*.jsonl` | `parentSessionId` = `agent-<parentAgentId>` from the sibling `<agent-id>.meta.json` (any nesting depth), falling back to the main session when the meta is missing; workflow agents also send `workflowRunId` = the `<wf-id>` folder name. Since `2.31.0` the same `.meta.json` read (`readAgentMeta`, one read per agent, fail-open) also gives `agentDescription` (its `description`) and `workflowPhase`, sanitised (`sanitizeAgentMeta`: trimmed, empty dropped, cut to 255 code points) and sent as query params only when non-empty, on the plain upload and every chunk — see [hook-api-versioning.md](hook-api-versioning.md) § "agentDescription / workflowPhase" |
 | `claude-otel` | `<telemetryDir>/otel/<session_id>/<epochMs>-<seq>.jsonl` | One immutable chunk per inbound OTLP request; gated on `otelEnabled`; collected unfiltered |
 | `tool-calls` | `<workDir>/tool-wrap/upload/<session_id>.jsonl` | Assembled by `tool-wrap-records.js` just before upload; the whole cumulative set is re-sent each time (the server keeps one per session) |
 

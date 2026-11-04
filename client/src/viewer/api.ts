@@ -1567,6 +1567,10 @@ export interface SessionLogsData {
      * 1. Use this field, not transcript heuristics, to build the real descendant tree.
      */
     parentSessionId: string | null;
+    /** `description` from the agent's `.meta.json` (via the hook); absent for an old server. */
+    agentDescription?: string | null;
+    /** `workflowPhase` from the agent's `.meta.json` (via the hook); absent for an old server. */
+    workflowPhase?: string | null;
     logs: Record<string, unknown>[];
   }[];
   /** Token totals from session_stats for each child session, keyed by sessionId (e.g. "agent-abc123"). */
@@ -1651,6 +1655,10 @@ export interface SessionLogsDeltaNewSubagent {
   parentSessionId: string | null;
   /** `sessions.workflow_run_id` — set for an agent spawned by a Workflow run. */
   workflowRunId: string | null;
+  /** `description` from the agent's `.meta.json`; absent for an old server. */
+  agentDescription?: string | null;
+  /** `workflowPhase` from the agent's `.meta.json`; absent for an old server. */
+  workflowPhase?: string | null;
   logs: SessionLogLine[];
 }
 
@@ -1667,8 +1675,16 @@ export type SessionLogsDeltaData =
       rootArtisynLines: SessionLogLine[];
       /** Root session's new claude lines. */
       rootClaudeLines: SessionLogLine[];
-      /** Sub-agent logs that grew: new lines only. */
-      subagentAppends: { sessionId: string; lines: SessionLogLine[] }[];
+      /**
+       * Sub-agent logs that grew: new lines only. `lines` may be empty when only the agent's
+       * `.meta.json` labels changed; the two label fields are absent for an old server.
+       */
+      subagentAppends: {
+        sessionId: string;
+        lines: SessionLogLine[];
+        agentDescription?: string | null;
+        workflowPhase?: string | null;
+      }[];
       /** Sub-agent sessions/logs not in the cursor: full lines plus linkage. */
       newSubagents: SessionLogsDeltaNewSubagent[];
       /** Full stats rows of every new/changed sub-agent, keyed by sessionId. */

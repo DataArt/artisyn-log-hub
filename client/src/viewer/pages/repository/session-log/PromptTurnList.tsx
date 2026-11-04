@@ -6,7 +6,7 @@ import {
   getPromptText,
   stripSystemBlocks,
 } from './log-parser';
-import type { SubagentStatEntry } from './log-parser';
+import type { SubagentMetaMap, SubagentStatEntry } from './log-parser';
 import { PromptTurnItem } from './PromptTurnItem';
 import { compactBoundariesBetween } from './compact-boundary-placement';
 
@@ -16,6 +16,8 @@ interface Props {
   subagentLogsMap?: Map<string, Record<string, unknown>[]>;
   /** agentId -> parentAgentId, from the DB's authoritative sessions.parent_session_id. */
   agentParentMap?: Map<string, string | null>;
+  /** Per-agent `.meta.json` labels from the server (`buildSubagentMeta`). */
+  subagentMeta?: SubagentMetaMap;
   pricing?: ModelPricingMap;
   sessionModel?: string;
   costPerToken?: number | null;
@@ -97,6 +99,7 @@ export function PromptTurnList({
   compactBoundaries = [],
   subagentLogsMap,
   agentParentMap,
+  subagentMeta,
   pricing,
   sessionModel,
   costPerToken,
@@ -133,6 +136,7 @@ export function PromptTurnList({
               turn={turn}
               subagentLogsMap={subagentLogsMap}
               agentParentMap={agentParentMap}
+              subagentMeta={subagentMeta}
               pricing={pricing}
               sessionModel={sessionModel}
               costPerToken={costPerToken}

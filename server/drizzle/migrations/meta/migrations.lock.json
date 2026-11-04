@@ -860,6 +860,16 @@
         "655a5e91abaf86914069248a34626336f93c97cce6f3f1180df05171026fe14e",
         "7792177a82ef2ca9247754ae87eba5f33de22785152f2f5f2e69ffa8469346e6"
       ]
+    },
+    {
+      "idx": 85,
+      "tag": "0085_agent_meta_labels",
+      "when": 1791849600000,
+      "sha256": "80c0923f70e9496adb02423aea7c5b6f36d58d322f5b74d5c21c43e3217a74bf",
+      "acceptedHashes": [
+        "3c2608bbed96dab6373ba23dcf08c07c0c6e75b620e6ca279a3aba5b82224647",
+        "80c0923f70e9496adb02423aea7c5b6f36d58d322f5b74d5c21c43e3217a74bf"
+      ]
     }
   ]
 }

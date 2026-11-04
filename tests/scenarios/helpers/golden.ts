@@ -65,6 +65,10 @@ export interface GoldenSubagentManifest {
   file: string;
   parentSessionId: string;
   workflowRunId?: string;
+  /** Sent as `agentDescription` (the hook reads it from the agent's `.meta.json` `description`). */
+  agentDescription?: string;
+  /** Sent as `workflowPhase` (the hook reads it from the agent's `.meta.json` `workflowPhase`). */
+  workflowPhase?: string;
 }
 
 export interface GoldenRootManifest {
@@ -235,6 +239,8 @@ export interface GoldenUpload {
   type: 'artisyn' | 'claude' | 'claude-subagent';
   parentSessionId?: string;
   workflowRunId?: string;
+  agentDescription?: string;
+  workflowPhase?: string;
   /** Path relative to the fixture folder. */
   file: string;
   body: string;
@@ -367,6 +373,8 @@ export function materializeGolden(fixtureId: string, opts: GoldenOptions = {}): 
         body: readBody(dir, agent.file, runId, repoUrl, deltaMs),
       };
       if (agent.workflowRunId !== undefined) upload.workflowRunId = sub(agent.workflowRunId);
+      if (agent.agentDescription !== undefined) upload.agentDescription = agent.agentDescription;
+      if (agent.workflowPhase !== undefined) upload.workflowPhase = agent.workflowPhase;
       uploads.push(upload);
       subagents.push({ key: agent.key, sessionId: upload.sessionId, parentSessionId: upload.parentSessionId ?? rootSessionId });
     }
@@ -401,6 +409,8 @@ export async function uploadGolden(
     const params: Record<string, string> = { sessionId: upload.sessionId, type: upload.type };
     if (upload.parentSessionId !== undefined) params.parentSessionId = upload.parentSessionId;
     if (upload.workflowRunId !== undefined) params.workflowRunId = upload.workflowRunId;
+    if (upload.agentDescription !== undefined) params.agentDescription = upload.agentDescription;
+    if (upload.workflowPhase !== undefined) params.workflowPhase = upload.workflowPhase;
     const res = await api.post('/api/v2/logs', {
       params,
       headers: { 'Content-Type': 'text/plain', 'X-API-Key': apiKey },
