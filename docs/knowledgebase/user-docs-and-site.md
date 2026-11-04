@@ -42,7 +42,7 @@ the order of the help menu and of the site sidebar.
 
 | Section | Pages (slug) |
 |---|---|
-| Get started | `install-server`, `install-hook` (source `../hook/INSTALL_HOOK.md`), `getting-started` ("Your first session"), `connect-repository` |
+| Get started | `install-server`, `small-team-setup` ("Quick setup for a small team": VM in a company network, Modes 2/3, copy-paste `.env`, http vs https), `install-hook` (source `../hook/INSTALL_HOOK.md`), `getting-started` ("Your first session"), `connect-repository` |
 | Configuration | `authentication-modes`, `server-configuration`, `tuning-your-setup`, `otel-admin-guide`, `security-hardening` |
 | Using Log Hub | `all-views`, `session-list`, `session-log`, `cost-and-context`, `analytics-reports`, `otel-tab`, `otel-architecture` |
 | Data and security | `data-collection-notice`, `data-collection`, `trust-model`, `component-reference`, `responsibility-matrix`, `third-party-components`, `how-hook-works` (source `../hook/HOW_HOOK_WORKS.md`) |

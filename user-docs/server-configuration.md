@@ -18,7 +18,11 @@ The main settings are below. The full list, with the security relevance of each 
 | `COOKIE_SECURE` | `true` | Set `false` when served over plain HTTP. |
 | `TRUST_PROXY` | `false` | Set when running behind a reverse proxy. When enabled it overrides `COOKIE_SECURE`. |
 | `SESSION_RETENTION_DAYS` | `30` | Sessions older than this are deleted. |
+| `LOG_RETENTION_DAYS` | `5` | Days of server app logs (`logs/app-*.log`) kept, today included. `0` = no age limit. |
+| `SQL_LOG_RETENTION_DAYS` | `3` | Days of server SQL logs (`logs/sql-*.log`) kept, today included. `0` = no age limit. |
+| `LOG_RETENTION_MAX_MB` | `100` | Cap on the total size of those log files; the oldest are deleted first, today's never. `0` = no cap. Checked at startup and hourly. |
 | `AI_TOOL_VERSION_CHECK_ENABLED` | on | `false` turns off the outbound npm version check. |
+| `LOG_HUB_RELEASE_CHECK_ENABLED` | on | New Log Hub release check for the admin badge: one `api.github.com` call per 24 h, official release images only. Only `false` turns it off (air-gapped installs). |
 | `MODEL_PRICING_FETCH_ENABLED` | on | `false` turns off the outbound pricing-page fetch. |
 
 Mode-specific settings (SMTP for Modes 2/3, `AZURE_*` for Mode 4) are described in

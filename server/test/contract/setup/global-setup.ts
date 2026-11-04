@@ -74,6 +74,7 @@ export default async function globalSetup(): Promise<void> {
   process.env.UPLOAD_QUEUE_LEASE_TIMEOUT_MS = '150';
   process.env.UPLOAD_QUEUE_TICK_BUDGET_MS = '500';
   process.env.AI_TOOL_VERSION_CHECK_ENABLED = 'false';
+  process.env.LOG_HUB_RELEASE_CHECK_ENABLED = 'false';
   process.env.MODEL_PRICING_FETCH_ENABLED = 'false';
   process.env.LOGS_MAX_BODY_MB = '2';
   // Session costs: a pricing write awaits its own re-pricing (`notifySessionCostsStale`), so a

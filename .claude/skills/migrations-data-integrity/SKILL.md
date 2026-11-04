@@ -14,10 +14,15 @@ Do this on implementation plan stage
 Once a new migration is applied to the local dev DB, follow the `db-state-update` skill: comment
 new tables / non-obvious columns with `COMMENT ON` and regenerate `docs/knowledgebase/db_state.sql`.
 
-## Committed migrations are immutable
+## Migrations are immutable
 
 Never edit, rename or delete a migration `.sql` file (or an existing `meta/_journal.json` entry)
 once it is committed — not even a comment, and not in an unpushed commit (no `--amend` fix).
+The same holds for an uncommitted migration once it has been locked and applied anywhere (dev DB,
+scenario stand, a check's throw-away DB): treat it as shipped. A wrong text inside the file — a
+`--` comment, a stale class name — just stays as it is. A wrong `COMMENT ON TABLE/COLUMN` that
+needs fixing in the DB ships as a new comments-only migration (`COMMENT ON` replaces the old text),
+never as an edit of the old one.
 Drizzle does not re-check applied migrations: on an already-migrated database the edit is never
 applied, while a clean database gets a different schema. Every DB change is a **new** migration,
 followed by `npm run migrations:lock` (from `server/`) to append its row to

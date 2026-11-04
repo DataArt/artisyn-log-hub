@@ -113,7 +113,7 @@ in `log-parser.ts`). `WorkflowRun` is the exception: declared in
 
 ### Sub-agent meta labels (description / phase)
 
-Plan: `docs/tasks/todo/2026-10-21-workflow-agent-meta-labels/impl-plan.md` (DD-8–DD-13).
+Plan: `docs/tasks/done/2026-10-21-workflow-agent-meta-labels/impl-plan.md` (DD-8–DD-13).
 
 - **Meta map.** `buildSubagentMeta(subagents)` (`log-parser.ts`, next to `buildAgentParentMap`)
   returns a `SubagentMetaMap` = `Map<bareAgentId, { agentDescription, workflowPhase }>`, keyed by

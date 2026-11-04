@@ -19,6 +19,9 @@ export const f01Infra: ContractFamily = {
       noDb: true,
     },
     {
+      // `origin` (build.origin.json) is optional and absent here: the contract app runs unbundled,
+      // so `readBuildOrigin()` finds no file next to `server/src/common/`. The bundled stand
+      // asserts it in @S-PLAT-01.
       id: 'F01-health-version',
       route: 'GET /health/version',
       actor: 'anon',
@@ -82,6 +85,21 @@ export const f01Infra: ContractFamily = {
     {
       id: 'F01-admin-system-member',
       route: 'GET /api/v1/admin/system',
+      actor: 'member',
+      expect: { status: 403 },
+    },
+    {
+      // Unbundled contract app: no build.origin.json → not an eligible deployment → never an
+      // update. `getState()` is a pure SELECT, so nothing is written.
+      id: 'F01-admin-log-hub-release',
+      route: 'GET /api/v1/admin/log-hub-release',
+      actor: 'admin',
+      expect: { status: 200, bodyMatches: { updateAvailable: false } },
+      noDb: true,
+    },
+    {
+      id: 'F01-admin-log-hub-release-member',
+      route: 'GET /api/v1/admin/log-hub-release',
       actor: 'member',
       expect: { status: 403 },
     },

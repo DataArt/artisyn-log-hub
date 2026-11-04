@@ -3,7 +3,11 @@
   ChangePasswordResult,
   UserProfile,
 } from '../models/auth';
-import type { AdminAuthConfig, PendingRegistration } from '../models/admin';
+import type {
+  AdminAuthConfig,
+  LogHubReleaseState,
+  PendingRegistration,
+} from '../models/admin';
 import type { UserSetting } from '../models/user-settings';
 import type {
   Team,
@@ -2343,6 +2347,13 @@ export async function fetchSystemInfo(): Promise<SystemInfo> {
   const res = await apiFetch('/api/v1/admin/system');
   if (!res.ok) throw new ApiError(res.status);
   return res.json() as Promise<SystemInfo>;
+}
+
+/** Admin only — whether a newer official Log Hub release exists (403 for any non-admin). */
+export async function fetchLogHubRelease(): Promise<LogHubReleaseState> {
+  const res = await apiFetch('/api/v1/admin/log-hub-release');
+  if (!res.ok) throw new ApiError(res.status);
+  return res.json() as Promise<LogHubReleaseState>;
 }
 
 export async function fetchDataRetention(): Promise<DataRetentionStats> {

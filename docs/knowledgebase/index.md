@@ -30,7 +30,7 @@ article itself holds the details. Keep new lines to one or two sentences.
 * [Server HTTP API map](server-endpoint-map.md) - Read before adding or changing an HTTP route: guards legend, access rules (admin grants no session-data access), error / body-limit / security-header conventions, hook-route backward compatibility, a controller index and the routes with non-obvious behaviour. Not a route list — grep the controllers
 * [Twins Registry and Cross-Cutting Rules](twins-and-cross-cutting-rules.md) - Read before changing any constant, regex or rule that may also exist in another package (server / client / hook / installer), and before adding an env var, a lazy chunk, an installer-written setting, a background job or a Workflow status rule
 * [Server Conventions](server-conventions.md) - Read before writing server code: gotchas (Drizzle array binding → `malformed array literal`, never read transcripts in list/analytics endpoints), DB query patterns, Argon2id hashing, perf-test framework, pino logging
-* [Server Log Subsystem](log-subsystem.md) - Read before touching the server's own operational logs (not session telemetry): pino loggers, rotation, no retention, logs lost on container recreate
+* [Server Log Subsystem](log-subsystem.md) - Read before touching the server's own operational logs (not session telemetry): pino loggers, rotation, hourly retention sweep, logs lost on container recreate
 * [Upload Queue](upload-queue.md) - Read before touching `POST /api/v2/logs` ingest or adding any background job/queue (the house `SKIP LOCKED` + lease pattern): staging, claim, 900 KB chunks, malformed-line tolerance, worker stats, admin Upload Queue tab
 * [Repository Identity](repo-identity.md) - Read before touching how `repositories.repo_url` is derived: URL normalisation, local `<email>/<path>` identities, team add-repo mapping, the startup merge
 * [Session Data Retention](data-retention.md) - Read before touching the session purge job (`SESSION_RETENTION_*` env vars, eligibility, audit) or the hook-side OTEL file prune
@@ -109,6 +109,7 @@ article itself holds the details. Keep new lines to one or two sentences.
 * [Tool Output Format](algorithms/tool-output-format.md) - Read before touching Tools/MCP `output-format.ts`: JSON / table / plain detection and re-alignment
 * [Tool Wrapper Fidelity](algorithms/tool-wrapper-fidelity.md) - Read before changing the hook's CLI tool wrapper: fidelity and fail-open rows, the env-gated check project
 * [Sandbox Prune Classification](algorithms/sandbox-prune-classification.md) - Read before touching `classifyPruneCandidate` in `scripts/claude-docker/prune.mjs`
+* [Log Retention](algorithms/log-retention.md) - Read before touching `planLogCleanup` / `LogRetentionService`: which `logs/app-*` / `sql-*` files are deleted by age and size cap
 * [Executable-Config Guard](algorithms/executable-config-guard.md) - Read before touching `checkConfigGuard` (`scripts/ci/config-guard.js`) or its allowlist
 * [Security Scan Summary](algorithms/security-scan-summary.md) - Read before touching `scripts/ci/security-summary.js`: row validation, PR block, badge
 

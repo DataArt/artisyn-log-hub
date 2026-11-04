@@ -58,7 +58,10 @@
   <dl class="qa">
     <dt>How long is data kept?</dt>
     <dd>The server deletes sessions older than <code>SESSION_RETENTION_DAYS</code> (default 30) — set
-      it to your policy. Deleting an account is a hard delete of the user and all of their data.</dd>
+      it to your policy. Deleting an account is a hard delete of the user and all of their data.
+      The server's own log files are kept for 5 days (SQL logs 3 days, 100 MB in total) by default —
+      see <code>LOG_RETENTION_DAYS</code>, <code>SQL_LOG_RETENTION_DAYS</code> and
+      <code>LOG_RETENTION_MAX_MB</code>.</dd>
 
     <dt>We have record-keeping obligations. Does Log Hub cover them?</dt>
     <dd>No. Log Hub has no immutable (WORM) storage; long-term retention belongs to your backup layer.</dd>

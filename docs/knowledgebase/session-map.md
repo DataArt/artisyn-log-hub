@@ -22,7 +22,7 @@ position** `t`; every card, counter and the side panel show the session as it wa
   follows "now".
 - **Replay:** a finished session is loaded once; Play / speeds / scrubbing move `t` over it.
 
-Task: `docs/tasks/todo/2026-11-01-session-map-tab/` (impl-plan Design Decisions are cited as DD-n).
+Task: `docs/tasks/done/2026-11-01-session-map-tab/` (impl-plan Design Decisions are cited as DD-n).
 
 ## Data flow
 

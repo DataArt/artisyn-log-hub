@@ -39,16 +39,25 @@ test('@S-PLAT-01 health, build version and security headers everywhere @mode-a @
     expect(await res.json()).toMatchObject({ status: 'ok', info: { database: { status: 'up' } } });
   });
 
-  await test.step('2. GET /health/version without a session → exactly {version, gitCommit}, none empty', async () => {
+  await test.step('2. GET /health/version without a session → exactly {version, gitCommit, origin}, none empty; origin is the stand\'s official build.origin.json', async () => {
     const res = await api.get('/health/version');
     expect(res.status()).toBe(200);
     const info = (await res.json()) as Record<string, unknown>;
-    // Exactly these two keys: an old third field (the removed release stamp) fails here.
-    expect(Object.keys(info).sort()).toEqual(['gitCommit', 'version']);
+    // Exactly these keys: an old extra field (the removed release stamp) fails here. `origin` is
+    // present because the stand ships build.origin.json (build-stand.mjs step 7).
+    expect(Object.keys(info).sort()).toEqual(['gitCommit', 'origin', 'version']);
     for (const field of ['version', 'gitCommit']) {
       expect(typeof info[field], field).toBe('string');
       expect((info[field] as string).length, field).toBeGreaterThan(0);
     }
+    const origin = info.origin as Record<string, unknown>;
+    for (const field of ['branch', 'version']) {
+      expect(typeof origin[field], `origin.${field}`).toBe('string');
+      expect((origin[field] as string).length, `origin.${field}`).toBeGreaterThan(0);
+    }
+    expect(typeof origin.builtAt, 'origin.builtAt').toBe('string');
+    expect(Number.isNaN(Date.parse(origin.builtAt as string)), 'origin.builtAt parses as a date').toBe(false);
+    expect(origin.officialRelease).toBe(true);
   });
 
   await test.step('3. The same three headers, strictly, on 200/401/403/404, the SPA, static files and assets', async () => {

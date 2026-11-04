@@ -31,3 +31,4 @@ Folders are named `<YYYY-MM-DD>-<slug>` (the day the task was created).
 - [2026-11-03-app-demo-gif] App Demo GIF and Media Carousel for README and Site Home Page — archived 2026-11-03
 - [2026-11-03-site-seo-sitemap-favicon] Site SEO — Sitemap, Favicon and Missing Basics — archived 2026-11-03
 - [2026-10-21-workflow-agent-meta-labels] Workflow Agent Labels From .meta.json — archived 2026-11-04
+- [2026-11-04-admin-new-release-badge] Admin New Release Notification — archived 2026-11-04

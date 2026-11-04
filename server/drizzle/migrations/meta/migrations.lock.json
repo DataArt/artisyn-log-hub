@@ -870,6 +870,26 @@
         "3c2608bbed96dab6373ba23dcf08c07c0c6e75b620e6ca279a3aba5b82224647",
         "80c0923f70e9496adb02423aea7c5b6f36d58d322f5b74d5c21c43e3217a74bf"
       ]
+    },
+    {
+      "idx": 86,
+      "tag": "0086_log_hub_release_check",
+      "when": 1791936000000,
+      "sha256": "e7785493869f16343267a259d4221ff457d2a6b501f59af2414bc66b5cf9bac4",
+      "acceptedHashes": [
+        "2fa170c787424bcfa9ec192b79f20439b06500031fcf3b25d0213260be367fa6",
+        "e7785493869f16343267a259d4221ff457d2a6b501f59af2414bc66b5cf9bac4"
+      ]
+    },
+    {
+      "idx": 87,
+      "tag": "0087_log_hub_release_check_comment",
+      "when": 1792022400000,
+      "sha256": "35fbf1662b5d3a44901262e9716825e50dea29a4b993d27d7a6f7619ae29cd56",
+      "acceptedHashes": [
+        "35fbf1662b5d3a44901262e9716825e50dea29a4b993d27d7a6f7619ae29cd56",
+        "75d87aa4e5224a688054ab03cc050f37cfb70bb5682a99b04356f574e610c9c2"
+      ]
     }
   ]
 }

@@ -218,6 +218,7 @@ controller itself. Several controllers share the `api/v1/repositories` prefix 鈥
 | `admin/admin.controller.ts` | `/api/v1/users` | Role change, reset-password link | `admin/dto/` 路 `f06` |
 | `admin/admin-panel.controller.ts` | `/api/v1/admin` | Users, auth settings, pending registrations, repos, teams, system info, error logs, upload queue | `admin/*.service.ts`, client `models/admin.ts` 路 `f06`鈥揱f09` |
 | `model-pricing/model-pricing-admin.controller.ts` | `/api/v1/admin/model-pricing` | Admin price table, overrides, fetch/import | `model-pricing/model-pricing.types.ts`, `dto/` 路 `f22` |
+| `log-hub-release/log-hub-release.controller.ts` | `/api/v1/admin/log-hub-release` | `admin`: new Log Hub release badge state (read-only; GitHub fetch runs in the scheduler) | `log-hub-release/log-hub-release.types.ts`, client `models/admin.ts` 路 `f01` |
 
 Feature articles own the semantics behind each area: [upload-queue.md](upload-queue.md),
 [turn-end-cost-advisor.md](turn-end-cost-advisor.md), [okf-usage.md](okf-usage.md),

@@ -372,6 +372,22 @@ conditional `UPDATE` matches only when the data is older than 24 h and the last 
 than 1 h. `ai_tool_version_history` gets a row only when the `{stable, latest}` map changes. See
 [claude-version-check.md](claude-version-check.md).
 
+### log_hub_release_check
+
+`log_hub_release_check` is a single-row cache (`id smallint PK DEFAULT 1 CHECK (id = 1)`) of the
+latest published Log Hub GitHub release, for the admin "new release" badge (migration
+`0086_log_hub_release_check`). All other columns are nullable:
+
+- `latest_tag` (`varchar(64)`) — last *validated* tag, e.g. `v1.3.0`.
+- `release_url` (`text`) — its validated `html_url` on `github.com/DataArt/artisyn-log-hub/releases/`.
+- `fetched_at` (`timestamptz`) — last successful fetch.
+- `last_attempt_at` (`timestamptz`) — the cluster claim: one attempt per 24 h whatever the outcome
+  (no success clause, no 1 h retry, unlike `ai_tool_version`).
+
+The row is inserted by the first eligible check; until then the table is empty, which reads as "no
+newer release known". "Update available" is never stored — it is computed at read time against the
+running version. See [system-info-and-cluster.md](system-info-and-cluster.md) (`log-hub-release` scheduler).
+
 ## Queues, jobs and run logs
 
 ### upload_queue

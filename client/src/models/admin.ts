@@ -172,6 +172,20 @@ export interface DataRetentionStats {
   otelOnlySessions: number;
 }
 
+/**
+ * `GET /api/v1/admin/log-hub-release` (admin only). `updateAvailable` is computed by the server at
+ * read time against the running version; `latestVersion` / `releaseUrl` are set only when it is true.
+ */
+export interface LogHubReleaseState {
+  updateAvailable: boolean;
+  /** The running version when this deployment is an official release, else `null`. */
+  currentVersion: string | null;
+  /** Latest release version without the `v`, e.g. `"1.3.0"`; only when `updateAvailable`. */
+  latestVersion: string | null;
+  /** GitHub release page; only when `updateAvailable`. */
+  releaseUrl: string | null;
+}
+
 export interface SystemInfo {
   instances: { expected: number; actual: number };
   cpus: { visible: number; raw: number };

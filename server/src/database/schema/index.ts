@@ -2137,6 +2137,21 @@ export const aiToolVersionHistory = pgTable(
 );
 
 /**
+ * Log Hub new-release check (migration 0086) — a single-row cache (`id` is always 1, enforced by
+ * a CHECK constraint in the migration) of the latest published Log Hub GitHub release, shown to
+ * admins as the new-release badge. `latestTag` / `releaseUrl` / `fetchedAt` change only on a
+ * successful, validated fetch. `lastAttemptAt` is the cluster claim: one fetch attempt per 24 h
+ * across all instances, whatever its outcome.
+ */
+export const logHubReleaseCheck = pgTable('log_hub_release_check', {
+  id: smallint('id').primaryKey().default(1),
+  latestTag: varchar('latest_tag', { length: 64 }),
+  releaseUrl: text('release_url'),
+  fetchedAt: timestamp('fetched_at', { withTimezone: true }),
+  lastAttemptAt: timestamp('last_attempt_at', { withTimezone: true }),
+});
+
+/**
  * Server-generated secrets (migration 0069) — one row per named secret. Today only
  * `session_secret`: when the SESSION_SECRET env var is empty, resolveSessionSecret() inserts a
  * random value with ON CONFLICT DO NOTHING and re-reads it, so all cluster workers and every

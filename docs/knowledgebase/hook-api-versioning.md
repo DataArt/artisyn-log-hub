@@ -560,7 +560,7 @@ are never mistaken for edit records.
 
 ## `agentDescription` / `workflowPhase` — sub-agent meta labels (hook `2.31.0`+)
 
-Plan: `docs/tasks/todo/2026-10-21-workflow-agent-meta-labels/impl-plan.md` (DD-1–DD-7, DD-15).
+Plan: `docs/tasks/done/2026-10-21-workflow-agent-meta-labels/impl-plan.md` (DD-1–DD-7, DD-15).
 Claude Code writes `<agent-id>.meta.json` next to every sub-agent transcript (under `subagents/`
 and `workflows/<wf>/`). Besides `parentAgentId` (read since `1.5.0`), it may carry a human
 `description` and, for workflow agents, a `workflowPhase`.

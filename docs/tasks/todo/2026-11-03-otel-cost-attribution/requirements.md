@@ -10,28 +10,19 @@
 
 ## Description
 
-OTEL cost attribution from new Claude Code releases (2.1.300–2.1.317). Four changes:
+Use the OTEL telemetry added in Claude Code 2.1.300–2.1.317 for cost attribution. Today
+`extractOtelCalls` (`server/src/logs/otel/otel-records.ts`) reads only `cache_creation_tokens` and
+none of the new attributes. Four changes:
 
-1. `api_request` `cache_creation_5m_tokens` / `cache_creation_1h_tokens` (CC 2.1.300) —
-   `extractOtelCalls` in `server/src/logs/otel/otel-records.ts` reads only
-   `cache_creation_tokens`; add nullable 5m/1h columns to `otel_calls`, use them to cross-check
-   against the transcript `ephemeral_1h` pricing.
-2. `api_request` / `cost.usage` attribution attributes `effort`, `speed` (fast mode),
-   `skill.name`, `plugin.name`, `agent.name`, `mcp_server.name`, `mcp_tool.name` (names need
-   `OTEL_LOG_TOOL_DETAILS=1`, already written by the installer) — not extracted; store them in
-   `otel_calls` and add cost grouping by skill / MCP / effort / fast mode on the OTEL tabs (cost
-   control).
-3. `anthropic.plan`, `anthropic.seat_type`, `anthropic.provider`, `anthropic.custom_base_url`
-   (CC 2.1.317) on metrics / events / spans — store per session, show in the UI; for subscription
-   plans `cost_usd` is notional, so explain the cost basis in text (no fixed list of plan values).
+1. Store the 5m/1h cache-write split (CC 2.1.300) — FR-1.
+2. Store the attribution attributes (`effort`, `speed`, skill / plugin / agent / MCP names; the
+   names need `OTEL_LOG_TOOL_DETAILS=1`, already written by the installer) and group cost by them
+   on the OTEL tabs for cost control — FR-2, FR-3.
+3. Store the `anthropic.*` plan / provider attributes (CC 2.1.317) per session and explain that on
+   a subscription plan `cost_usd` is notional — FR-4, FR-5.
 4. CC 2.1.307 fixed sub-agent transcripts recording placeholder token usage for streamed
-   responses — sessions on CC < 2.1.307 may undercount sub-agent cost from the transcript; use OTEL
-   `cost_usd` for the sub-agent part when it exists.
-
-Constraints: backward compatible with old hooks and old Claude Code versions (attributes absent →
-NULL), offline-first, test policy (algorithm doc rows in `algorithms/otel-facts.md` and
-`algorithms/otel-cost-selection.md` for FR-6, contract rows
-`f25-otel.ts`, steps in `s-otel-01`).
+   responses, so sessions on older CC may undercount sub-agent cost; use OTEL `cost_usd` for the
+   sub-agent part when it exists — FR-6.
 
 Source: `review-claude-code-news` run 2026-11-03 (changelog 2.1.292–2.1.317 and
 `code.claude.com/docs/en/monitoring-usage`).

@@ -8,7 +8,8 @@ paths:
 Every time you create or modify a migration file, perform this safety audit **before finishing**. Warn the user
 explicitly if any risk is found — do not silently proceed.
 
-**Never edit a committed migration** (even a comment) — add a new one and run `npm run migrations:lock`
+**Never edit a committed migration, or one already locked and applied** (even a comment; a wrong
+`COMMENT ON` is fixed by a new comments-only migration) — add a new one and run `npm run migrations:lock`
 from `server/`. See the `migrations-data-integrity` skill.
 
 ## Blocking risks (will stall deployment on prod)

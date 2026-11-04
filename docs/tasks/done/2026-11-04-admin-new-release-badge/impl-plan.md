@@ -411,7 +411,22 @@ Load the `ui-components` skill before writing UI.
   - Add the REGULAR build-tooltip step after step 1, per Test coverage plan.
 - [ ] `tests/scenarios/auth/s-adm-01.spec.ts`: after step 4, add one step that covers the ADMIN dot and banner, the team-owner check and the upgrade, all inside one `try/finally`. Seed with a `db.query` upsert on `log_hub_release_check` and delete the row in the `finally`. Follows the Test coverage plan.
 - [ ] Iterate with `npm run test:scenarios -- --mode a --only scenarios,contract --grep "@S-ADM-01|@S-PLAT-01"` until green, then run the full `adlc-lh:check-health` final set.
-- [ ] Manual check of the fetch path (AC-2, AC-8):
+- [x] Manual check of the fetch path (AC-2, AC-8):
   1. Hand-write an official `dist/build.origin.json` (version `1.0.0`) on a local `npm run build`.
   2. Start `node dist/index.js`. The row gets `latest_tag`, and a restart within 24 h makes no second call.
   3. With the network blocked, a fresh row gives one `warn` and no dot.
+
+  **Result (2026-11-04, local dev DB, `node dist/index.js` on port 3099, Node 26):**
+  1. `dist/build.origin.json` replaced by `{"branch":"main","version":"1.0.0",...,"officialRelease":true}`
+     (the original local-build file was backed up and restored afterwards).
+  2. First start: the row was seeded and filled — `latest_tag = v1.2.1`,
+     `release_url = https://github.com/DataArt/artisyn-log-hub/releases/tag/v1.2.1`,
+     `fetched_at` and `last_attempt_at` set. A restart ~40 s later left `last_attempt_at` and
+     `fetched_at` unchanged (claim refused, no second GitHub call). PASS.
+  3. Row deleted, server started with outbound traffic sent to a dead proxy
+     (`NODE_USE_ENV_PROXY=1`, `HTTPS_PROXY=http://127.0.0.1:9`): exactly one
+     `WARN {LogHubReleaseService} Log Hub release check failed: fetch failed`; the row kept
+     `latest_tag`/`release_url`/`fetched_at` NULL with only `last_attempt_at` set, so `getState`
+     returns `updateAvailable: false` — no dot. PASS. (The admin endpoint itself was not called:
+     `dist/.env` does not run in auth mode `none`; the "no dot" result follows from the NULL row.)
+  The test row was deleted after the check.

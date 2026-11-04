@@ -603,6 +603,20 @@
       "when": 1791849600000,
       "tag": "0085_agent_meta_labels",
       "breakpoints": true
+    },
+    {
+      "idx": 86,
+      "version": "7",
+      "when": 1791936000000,
+      "tag": "0086_log_hub_release_check",
+      "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
+      "when": 1792022400000,
+      "tag": "0087_log_hub_release_check_comment",
+      "breakpoints": true
     }
   ]
 }

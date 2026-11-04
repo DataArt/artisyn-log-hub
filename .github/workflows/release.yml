@@ -126,6 +126,8 @@ jobs:
           build-args: |
             VERSION=${{ needs.plan.outputs.version }}
             GIT_COMMIT=${{ github.sha }}
+            GIT_BRANCH=${{ github.ref_name }}
+            OFFICIAL_RELEASE=true
           provenance: mode=max
           sbom: true
           outputs: type=image,name=${{ env.IMAGE }},push-by-digest=true,name-canonical=true,push=true
