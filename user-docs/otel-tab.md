@@ -111,6 +111,76 @@ A session linked to two of the team's repositories is counted once in the totals
 tiles, the People table and the cost flow, and once per repository in the Repositories table (its
 footer says so).
 
+## Live view
+
+The **Live** button in the top bar (next to **Home**) shows what is running right now, across
+your own repositories and every team you belong to. A red dot on it means at least one session is
+live; hover it for "Live now: N sessions · M agents · $x.xx" (or "Nothing live right now"). The
+button checks every 10 seconds while the page is visible.
+
+**Opening.** Click **Live** to open the Live window over the current page. It is kept in the page
+address (`live=`), so **Back** closes it and a link to it opens the same node. Close it with ✕ or
+Esc. Like the OTEL tabs, it uses OTEL data only.
+
+**The tree** on the left: **Home** → each of your teams (by name) and **No team** (your own
+repositories that are linked to none of your teams) → repositories → sessions (owner email on
+the first line, the start of the first prompt on the second) → their agents (the main agent and
+sub-agents). Live rows are shown normally; sessions and agents that stopped in the last 2 hours
+stay, greyed with an **ended** chip. Click a row to show it in the middle; hover a row and click ⓘ
+to open its details panel on the right. A session linked to two repositories appears under both;
+parent totals count it once, and the breakdown says so in a footnote. When new data arrives, every
+row whose cost went up flashes green for a moment, so you can see which session just ticked.
+
+Drag the borders between the tree, the middle pane and the details panel to resize them; the
+widths are remembered in your browser.
+
+**The middle pane** for the selected node: KPI tiles (cost, running time, live sessions and
+agents — or calls and model for an agent — and cost per minute), a chart carousel (cost, tokens, calls and cost by model,
+cost by structure, cost by skill / MCP server and, with traces on, LLM and tool latency p50 / p95)
+and a breakdown table of the node's children (cost, input, output, cache read and write, calls,
+running time, last activity). Below the charts, a **Cost flow** diagram shows where the cost of
+the last 2 hours went: from models to teams, users and sessions on Home, to users, repositories
+and sessions for a team, and to users and sessions for a repository. For a session it is a
+**Token flow** from models to its agents. Hover a band or a node for its value, share and calls.
+A session's breakdown lists its agents, including finished ones
+(up to 50, then "+N more"); a session row has **Open session ↗**, which opens that session in its
+repository. An agent shows its latest 50 calls instead.
+
+**The details panel** shows top users, models and repositories for a team, repository or Home;
+the owner, start time, Claude Code version, first prompt, agents, top tools and latest events for
+a session; and the model, top tools, events and calls for an agent. Team and repository panels
+have an **Open OTEL tab ↗** link, a session panel an **Open session ↗** link.
+
+**Since start and last 2 h.** Totals and running time cover the whole session ("since start"),
+even when it has run for days; running time is wall-clock time from the first to the latest call,
+shown like `45s`, `12m`, `3h 12m` or `2d 4h`. The charts, top models and top tools cover the last
+2 hours in 5-minute steps; cost per minute covers the last 5 minutes.
+
+**Updates and Pause.** The window refreshes every 5 seconds while it is visible. **Pause** freezes
+it ("Paused at hh:mm:ss") until you click **Resume**. Like the OTEL tabs, it also stops after
+10 minutes without any input and resumes on the next one. If the server cannot be reached, an
+amber banner says "Connection lost — showing data from hh:mm:ss, retrying" and the last data stays
+on screen.
+
+**Ended sessions.** A session with no OTEL data for 10 minutes is no longer live. It stays in the
+tree, greyed with an **ended** chip, for 2 hours after its last activity (longer if it is the node
+you are looking at or its details panel is open), and its details say "No OTEL data for 10 min —
+figures are final." Its cost still counts in the totals of its repository, team and Home, but not
+in the live session and agent counts or in the header button. A link to a session that ended more
+than 24 hours ago opens Home instead. With nothing in the tree, Home shows "Nothing is live right
+now" and a link to [Enable OTEL and traces](#enable-otel-and-traces).
+
+**Access.** You see the same sessions as on the OTEL tabs: your own, and in each team the
+sessions its access rules let you see. In a team whose analytics you may not see (a
+**restricted** team where you are not the owner or a manager) the team shows 🔒 and only your own
+sessions. Where the team hides other members' prompts, their first prompt reads "prompt hidden" and
+tool names read "masked"; costs and counts are still shown. Sessions that are not linked to any
+repository are not shown.
+
+**What is not shown.** API errors, user-prompt events and Claude Code metrics (lines of code,
+commits, active time) are not part of the Live view, and there is no count of updates missed
+while paused.
+
 ## Hidden calls
 
 A **hidden** call is a model API call whose request id appears in no transcript of the session

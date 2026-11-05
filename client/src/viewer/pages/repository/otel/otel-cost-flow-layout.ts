@@ -108,15 +108,55 @@ export function layoutOtelCostFlow(
   columns: readonly OtelFlowColumn[],
   opts: OtelFlowLayoutOptions,
 ): OtelFlowLayout {
+  const flowRows = rows.map((r) => ({
+    values: columns.map((c) => otelFlowValue(r, c)),
+    weight: microsToUsd(r.costUsdMicros) ?? 0,
+    calls: r.calls,
+    sessions: r.sessions,
+  }));
+  return {
+    columns: [...columns],
+    ...layoutFlow(flowRows, columns.length, {
+      ...opts,
+      sessionBand: (ci) =>
+        columns[ci] === 'model' || columns[ci + 1] === 'model',
+    }),
+  };
+}
+
+/** One row of a generic flow: its node label per column and its weight (cost, tokens, …). */
+export interface FlowInputRow {
+  values: readonly string[];
+  weight: number;
+  calls: number;
+  sessions: number;
+}
+
+export interface FlowLayoutOptions extends OtelFlowLayoutOptions {
+  /** Whether the bands between column `ci` and `ci + 1` may sum sessions (default: never). */
+  sessionBand?: (ci: number) => boolean;
+}
+
+/**
+ * The column-agnostic Sankey layout behind `layoutOtelCostFlow` (also used by the Live view).
+ * Node and band `cost` hold the row weight, whatever its unit.
+ */
+export function layoutFlow(
+  rows: readonly FlowInputRow[],
+  columnCount: number,
+  opts: FlowLayoutOptions,
+): Omit<OtelFlowLayout, 'columns'> {
   const labelWidth = opts.labelWidth ?? 180;
-  const costs = rows.map((r) => microsToUsd(r.costUsdMicros) ?? 0);
+  const columns = Array.from({ length: columnCount }, (_, i) => i);
+  const costs = rows.map((r) => r.weight);
   const total = costs.reduce((a, b) => a + b, 0);
+  const valueOf = (row: FlowInputRow, ci: number) => row.values[ci] ?? UNKNOWN;
 
   // Nodes per column.
   const nodeMaps = columns.map(() => new Map<string, OtelFlowNode>());
   rows.forEach((row, ri) => {
-    columns.forEach((col, ci) => {
-      const label = otelFlowValue(row, col);
+    columns.forEach((ci) => {
+      const label = valueOf(row, ci);
       const map = nodeMaps[ci];
       const node =
         map.get(label) ??
@@ -169,7 +209,7 @@ export function layoutOtelCostFlow(
   // Bands between consecutive columns.
   const bands: OtelFlowBand[] = [];
   for (let ci = 0; ci + 1 < columns.length; ci += 1) {
-    const withModel = columns[ci] === 'model' || columns[ci + 1] === 'model';
+    const withModel = opts.sessionBand?.(ci) ?? false;
     const agg = new Map<
       string,
       {
@@ -181,8 +221,8 @@ export function layoutOtelCostFlow(
       }
     >();
     rows.forEach((row, ri) => {
-      const s = nodeMaps[ci].get(otelFlowValue(row, columns[ci]));
-      const t = nodeMaps[ci + 1].get(otelFlowValue(row, columns[ci + 1]));
+      const s = nodeMaps[ci].get(valueOf(row, ci));
+      const t = nodeMaps[ci + 1].get(valueOf(row, ci + 1));
       if (!s || !t) return;
       const key = `${s.id}→${t.id}`;
       const a = agg.get(key) ?? { s, t, cost: 0, calls: 0, sessions: 0 };
@@ -237,7 +277,6 @@ export function layoutOtelCostFlow(
   }
 
   return {
-    columns: [...columns],
     nodes: cols.flat(),
     bands,
     total,

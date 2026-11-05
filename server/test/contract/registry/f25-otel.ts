@@ -483,6 +483,9 @@ const OTEL_TABLES = [
   'otel_reclass_queue',
 ];
 
+/** DD-22 (otel-live-view): lifetime totals the OTEL writer keeps next to the buckets. */
+const OTEL_TOTALS_TABLES = ['otel_session_totals', 'otel_agent_totals'];
+
 const RT_ROOT = `(SELECT id FROM sessions WHERE session_id = '${RT_SESSION}')`;
 
 // -------------------------------------------------------------------------------------------
@@ -509,7 +512,7 @@ const realtimeRows: ContractCase[] = [
       bodyMatches: { accepted: { calls: 1, spans: 1 }, minIntervalMs: 5000 },
     },
     write: {
-      watch: ['sessions', ...OTEL_TABLES],
+      watch: ['sessions', ...OTEL_TABLES, ...OTEL_TOTALS_TABLES],
       delta: {
         inserted: [
           {
@@ -572,6 +575,28 @@ const realtimeRows: ContractCase[] = [
               'cost_usd_micros = 4000',
             ],
           },
+          {
+            // DD-22 (otel-live-view): the writer keeps the session's lifetime totals.
+            table: 'otel_session_totals',
+            where: `session_id = ${RT_ROOT}`,
+            check: [
+              'calls = 1',
+              'cost_usd_micros = 4000',
+              'input_tokens = 1000 AND output_tokens = 100',
+              `first_call_at = '2026-01-20T10:00:00Z'`,
+              `last_call_at = '2026-01-20T10:00:00Z'`,
+            ],
+          },
+          {
+            // The main thread's call (agent_id NULL, not hidden) -> agent key `main`.
+            table: 'otel_agent_totals',
+            where: `session_id = ${RT_ROOT}`,
+            check: [
+              `agent_key = 'main'`,
+              'calls = 1',
+              'cost_usd_micros = 4000',
+            ],
+          },
         ],
       },
     },
@@ -593,6 +618,9 @@ const realtimeRows: ContractCase[] = [
     expect: { status: 200, bodyMatches: { minIntervalMs: 5000 } },
     write: {
       watch: ['sessions', ...OTEL_TABLES],
+      // The world stores no totals rows for s01, so this write rebuilds them (DD-22 freshness
+      // rule); their contents are the writer's business, checked in F25-realtime-accepted.
+      derived: OTEL_TOTALS_TABLES,
       delta: {
         updated: [
           {
@@ -1787,6 +1815,97 @@ const planRows: ContractCase[] = [
   },
 ];
 
+// -------------------------------------------------------------------------------------------
+// Live view (2026-11-04 otel-live-view): `GET /api/v1/otel/live/status` and `GET /api/v1/otel/live`.
+// The world's OTEL activity is fixed to January 2026, far older than the 10-minute live rule and
+// the 24-hour retention cap, so nothing is live and nothing is retained (AC-12): the answers are
+// golden constants and the rows only read (noDb).
+
+const ZERO_LIVE_TOTALS = {
+  costUsdMicros: '0',
+  inputTokens: '0',
+  outputTokens: '0',
+  cacheReadTokens: '0',
+  cacheWriteTokens: '0',
+  calls: 0,
+  liveSessions: 0,
+  liveAgents: 0,
+  runningMs: 0,
+  firstEventAt: null,
+  lastActivityAt: null,
+};
+
+const LIVE_HOME_NODE = {
+  key: 'home',
+  type: 'home',
+  parentKey: null,
+  label: 'Home',
+  live: false,
+  inTree: true,
+  restricted: false,
+  teamId: null,
+  repoId: null,
+  rootId: null,
+  sessionUuid: null,
+  agentKey: null,
+  userEmail: null,
+  totals: ZERO_LIVE_TOTALS,
+};
+
+const liveRows: ContractCase[] = [
+  {
+    // The owner has OTEL sessions (s01, s04, s11) and team T2, but none is live.
+    id: 'F25-live-status-idle',
+    route: 'GET /api/v1/otel/live/status',
+    actor: 'owner',
+    expect: {
+      status: 200,
+      bodyMatches: {
+        live: false,
+        liveSessions: 0,
+        liveAgents: 0,
+        costUsdMicros: '0',
+      },
+    },
+    noDb: true,
+  },
+  {
+    // Nothing live: the tree is Home alone, the view is empty, no details without `panel`.
+    id: 'F25-live-home-idle',
+    route: 'GET /api/v1/otel/live',
+    actor: 'owner',
+    query: { node: 'home' },
+    expect: {
+      status: 200,
+      bodyMatches: {
+        selected: 'home',
+        nodes: [LIVE_HOME_NODE],
+        view: {
+          costPerMinUsdMicros: '0',
+          buckets: [],
+          latency: [],
+          hasSpans: false,
+          breakdown: [],
+          moreAgents: 0,
+          calls: null,
+          distinctFootnote: false,
+          flows: [],
+        },
+        details: null,
+      },
+    },
+    noDb: true,
+  },
+  {
+    // A malformed node key (DD-3 grammar).
+    id: 'F25-live-bad-node',
+    route: 'GET /api/v1/otel/live',
+    actor: 'owner',
+    query: { node: 'bogus' },
+    expect: { status: 400 },
+  },
+];
+
 export const f25Otel: ContractFamily = {
   id: 'F25',
   name: 'otel',
@@ -1797,5 +1916,6 @@ export const f25Otel: ContractFamily = {
     ...teamRows,
     ...attributionRows,
     ...planRows,
+    ...liveRows,
   ],
 };

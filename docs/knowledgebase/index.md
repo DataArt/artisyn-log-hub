@@ -96,6 +96,7 @@ article itself holds the details. Keep new lines to one or two sentences.
 * [Harness Snapshot](algorithms/harness-snapshot.md) - Read before touching the hook's harness catalog build or its `snapshotId` hash
 * [OTEL Shared Routing](algorithms/otel-shared-routing.md) - Read before touching the shared receiver's `routeRecord`, pending spool, register validation or forwarding
 * [OTEL Status Reason](algorithms/otel-status-reason.md) - Read before touching `otel-status.js` (effective scope, config warnings, ok / partial / none, reasons)
+* [OTEL Live Tree](algorithms/otel-live-tree.md) - Read before touching the Live view's node-key grammar or `buildOtelLiveTree` (placement under teams / No team, retention, DISTINCT-root totals, agent liveness)
 * [Workflow Agent Rows](algorithms/workflow-agent-rows.md) - Read before touching the "#" numbering in the workflow Agents table
 * [Session List Flags](algorithms/session-list-flags.md) - Read before touching `session_stats` `main_model` / `has_workflow` / `has_main_assistant`
 * [System Context Anatomy](algorithms/sysctx-anatomy.md) - Read before touching `sysctx-anatomy.ts` (startup block, per-partition token estimates)

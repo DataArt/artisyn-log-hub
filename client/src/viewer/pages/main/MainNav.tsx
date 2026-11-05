@@ -7,6 +7,7 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { routes } from '../../hooks/useHashRoute';
 import { NotificationBell } from '../../components/top-nav/NotificationBell';
 import { AppLogo } from '../../components/top-nav/AppLogo';
+import { LiveNavItem } from '../../components/top-nav/LiveNavItem';
 import { UserMenu } from '../../components/top-nav/UserMenu';
 import { AccessModeBadge } from '../../components/teams/AccessModeBadge';
 import { Button } from '../../ui/button';
@@ -67,6 +68,8 @@ export function MainNav() {
         <House className="size-4" />
         Home
       </Button>
+      {/* Live OTEL view across the caller's teams (2026-11-04 otel-live-view). */}
+      <LiveNavItem />
       <div className="flex-1" />
       {/* Names the access mode of the team whose route is open; renders
           nothing on every other route. */}

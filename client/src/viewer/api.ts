@@ -87,6 +87,11 @@ import type {
 } from '../models';
 import type { WorkflowRun } from '../models/workflows';
 import type {
+  OtelLiveParams,
+  OtelLiveResponse,
+  OtelLiveStatusResponse,
+} from '../models/otel-live';
+import type {
   HookRepositorySummary,
   HookStateDetail,
 } from '../models/hook-state';
@@ -927,6 +932,38 @@ export async function fetchTeamOtelFacts(
   );
   if (!res.ok) throw await readApiError(res);
   return res.json() as Promise<TeamOtelFactsResponse>;
+}
+
+// --- OTEL Live view (2026-11-04 otel-live-view) -------------------------------------
+
+/** Header status of the Live view: whether the caller has any live session (DD-12). */
+export async function fetchOtelLiveStatus(
+  signal?: AbortSignal,
+): Promise<OtelLiveStatusResponse> {
+  const res = await apiFetch('/api/v1/otel/live/status', { signal });
+  if (!res.ok) throw await readApiError(res);
+  return res.json() as Promise<OtelLiveStatusResponse>;
+}
+
+/**
+ * The Live view snapshot: tree, the selected node's view and the details of `panel`. A
+ * malformed node key or unknown `tz` → 400; an unknown / invisible key falls back to
+ * `selected: 'home'` (DD-3).
+ */
+export async function fetchOtelLive(
+  params: OtelLiveParams,
+  signal?: AbortSignal,
+): Promise<OtelLiveResponse> {
+  const q = new URLSearchParams();
+  if (params.node) q.set('node', params.node);
+  if (params.panel) q.set('panel', params.panel);
+  if (params.tz) q.set('tz', params.tz);
+  const qs = q.toString();
+  const res = await apiFetch(`/api/v1/otel/live${qs ? `?${qs}` : ''}`, {
+    signal,
+  });
+  if (!res.ok) throw await readApiError(res);
+  return res.json() as Promise<OtelLiveResponse>;
 }
 
 /**

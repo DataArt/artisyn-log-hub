@@ -531,6 +531,10 @@ export const otelCalls = pgTable(
     index('idx_otel_calls_session_agent')
       .on(table.sessionId, table.agentId)
       .where(sql`${table.agentId} IS NOT NULL`),
+    index('idx_otel_calls_session_event_time').on(
+      table.sessionId,
+      table.eventTime,
+    ),
   ],
 );
 
@@ -573,6 +577,10 @@ export const otelSpans = pgTable(
     index('idx_otel_spans_session_request_id')
       .on(table.sessionId, table.requestId)
       .where(sql`${table.requestId} IS NOT NULL`),
+    index('idx_otel_spans_session_start_time').on(
+      table.sessionId,
+      table.startTime,
+    ),
   ],
 );
 
@@ -672,6 +680,75 @@ export const otelSessionState = pgTable(
   (table) => [
     index('idx_otel_session_state_user_id').on(table.userId),
     index('idx_otel_session_state_created_at').on(table.createdAt),
+    // Live view candidate filter (migration 0089); GREATEST ignores NULLs.
+    index('idx_otel_session_state_last_at').on(
+      sql`(GREATEST(${table.rtLastAt}, ${table.chunkLastAt}))`,
+    ),
+  ],
+);
+
+// Stored lifetime OTEL totals of a root session (migration 0089), derived from otel_calls by
+// the OTEL writer: additive deltas while `seq >= MAX(otel_cost_buckets.seq)` of the root, a
+// rebuild otherwise. Hidden calls included. Read by the Live view.
+export const otelSessionTotals = pgTable('otel_session_totals', {
+  sessionId: integer('session_id')
+    .primaryKey()
+    .references(() => sessions.id, { onDelete: 'cascade' }),
+  calls: integer('calls').notNull().default(0),
+  costUsdMicros: bigint('cost_usd_micros', { mode: 'bigint' })
+    .notNull()
+    .default(sql`0`),
+  inputTokens: bigint('input_tokens', { mode: 'number' }).notNull().default(0),
+  outputTokens: bigint('output_tokens', { mode: 'number' })
+    .notNull()
+    .default(0),
+  cacheReadTokens: bigint('cache_read_tokens', { mode: 'number' })
+    .notNull()
+    .default(0),
+  cacheWriteTokens: bigint('cache_write_tokens', { mode: 'number' })
+    .notNull()
+    .default(0),
+  firstCallAt: timestamp('first_call_at', { withTimezone: true }),
+  lastCallAt: timestamp('last_call_at', { withTimezone: true }),
+  seq: bigint('seq', { mode: 'number' }).notNull().default(0),
+});
+
+// Stored lifetime OTEL totals per agent of a root session (migration 0089). `agent_key` is
+// otel_calls.agent_id, or `main` for calls with no agent_id; hidden calls have no row. An agent
+// with no calls left is zeroed, never deleted.
+export const otelAgentTotals = pgTable(
+  'otel_agent_totals',
+  {
+    sessionId: integer('session_id')
+      .notNull()
+      .references(() => sessions.id, { onDelete: 'cascade' }),
+    agentKey: varchar('agent_key', { length: 255 }).notNull(),
+    agentName: varchar('agent_name', { length: 255 }),
+    calls: integer('calls').notNull().default(0),
+    costUsdMicros: bigint('cost_usd_micros', { mode: 'bigint' })
+      .notNull()
+      .default(sql`0`),
+    inputTokens: bigint('input_tokens', { mode: 'number' })
+      .notNull()
+      .default(0),
+    outputTokens: bigint('output_tokens', { mode: 'number' })
+      .notNull()
+      .default(0),
+    cacheReadTokens: bigint('cache_read_tokens', { mode: 'number' })
+      .notNull()
+      .default(0),
+    cacheWriteTokens: bigint('cache_write_tokens', { mode: 'number' })
+      .notNull()
+      .default(0),
+    firstCallAt: timestamp('first_call_at', { withTimezone: true }),
+    lastCallAt: timestamp('last_call_at', { withTimezone: true }),
+    seq: bigint('seq', { mode: 'number' }).notNull().default(0),
+  },
+  (table) => [
+    primaryKey({
+      name: 'otel_agent_totals_pk',
+      columns: [table.sessionId, table.agentKey],
+    }),
   ],
 );
 

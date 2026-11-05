@@ -35,6 +35,7 @@ format where the two differ).
 | [anthropic-pricing-parse](anthropic-pricing-parse.md) | `server/src/model-pricing/anthropic-pricing-parser.ts` | jest |
 | [otel-cost-selection](otel-cost-selection.md) | `server/src/logs/otel-cost.sql.ts` | jest |
 | [otel-facts](otel-facts.md) | `server/src/logs/otel/otel-classify.ts`, `otel-records.ts`, `otel-query-source-dictionary.ts` | jest |
+| [otel-live-tree](otel-live-tree.md) | `server/src/logs/otel/otel-live-tree.ts` (`parseOtelLiveNodeKey`, `formatOtelLiveNodeKey`, `buildOtelLiveTree`) | jest |
 | [otel-trace-assembly](otel-trace-assembly.md) | `client/.../session-log/otel/otel-trace-assembly.ts` | vitest |
 | [otel-delta-merge](otel-delta-merge.md) | `client/.../repository/otel/otel-merge.ts` | vitest |
 | [otel-realtime-backoff](otel-realtime-backoff.md) | hook `otel-receiver.js` (`nextRealtimeDelay`) | `node --test` |

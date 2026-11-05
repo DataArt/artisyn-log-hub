@@ -64,7 +64,7 @@ const FILTER_MAX_VALUES = 100;
 export type RawQuery = Record<string, unknown>;
 
 /** A single-valued query parameter (a repeated one is a 400). */
-function single(raw: RawQuery, name: string): string | undefined {
+export function single(raw: RawQuery, name: string): string | undefined {
   const value = raw[name];
   if (value === undefined) return undefined;
   if (typeof value !== 'string') {
@@ -132,7 +132,7 @@ function requiredDate(raw: RawQuery, name: string): Date {
 }
 
 /** IANA time zone (DD-18): default `UTC`, an unknown name is a 400. */
-function tzParam(raw: RawQuery): string {
+export function tzParam(raw: RawQuery): string {
   const value = single(raw, 'tz');
   if (value === undefined || value === '') return 'UTC';
   if (value.length > TZ_MAX_CHARS || !isValidOtelTimeZone(value)) {

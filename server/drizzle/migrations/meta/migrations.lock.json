@@ -900,6 +900,16 @@
         "6f3c28e3adeceec3deb7f33d464e7bdae08e3d520228878756acab329f4c3de7",
         "7b89745c59c33921dd3d879a57d72a037243e4c235e8ed48efaa511b6277de0c"
       ]
+    },
+    {
+      "idx": 89,
+      "tag": "0089_otel_live_totals",
+      "when": 1792195200000,
+      "sha256": "059df468fd72230a4e75a7071feeb140f08b5eafb44a321518f7adcd330b6d46",
+      "acceptedHashes": [
+        "059df468fd72230a4e75a7071feeb140f08b5eafb44a321518f7adcd330b6d46",
+        "54048de6689ea292b41087d414bc625d8905075286aaa1c2ed78bbebf431df88"
+      ]
     }
   ]
 }

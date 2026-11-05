@@ -253,7 +253,7 @@ test('@S-HOOK-04 the hook never blocks Claude: server down, hanging, 500 or 401 
 
     await test.step('7. prompt hook returns fast and starts the background upload once; a second prompt within 60 s is throttled; off means off', async () => {
       const slow = await hub(() => 'hang');
-      const p = project(dirs, slow.url, { sendLogsOnPromptEnabled: true, sendLogsOnPromptTimeoutMs: 3000 });
+      const p = project(dirs, slow.url, { sendLogsOnPromptEnabled: true, sendLogsOnPromptTimeoutMs: 6000 });
       const prompt = () =>
         runScript(
           toolDir,
@@ -263,9 +263,10 @@ test('@S-HOOK-04 the hook never blocks Claude: server down, hanging, 500 or 401 
         );
       const first = await prompt();
       expect(first.code, first.stderr).toBe(0);
-      // The upload hangs until its 3000 ms watchdog, so anything under 2500 ms proves the prompt
-      // hook did not wait for it, with room for a slow process spawn on a loaded machine.
-      expect(first.elapsedMs, 'the prompt hook never waits for the upload').toBeLessThan(2500);
+      // The upload hangs until its 6000 ms watchdog, so anything under 4500 ms proves the prompt
+      // hook did not wait for it. The margin covers a slow process spawn on a loaded machine:
+      // during the full mode-A run the spawn alone has been measured at ~2.7 s (see step 2).
+      expect(first.elapsedMs, 'the prompt hook never waits for the upload').toBeLessThan(4500);
       expect(await waitFor(() => slow.requests.length > 0, 8000), 'background prompt-upload-hook reached the server').toBe(true);
 
       const second = await prompt();

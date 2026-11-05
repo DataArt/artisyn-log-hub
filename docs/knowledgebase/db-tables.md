@@ -48,7 +48,8 @@ This article keeps only what the DDL does not say: how tables relate in behaviou
    session_harness_usage, session_changed_paths, session_file_stats*, session_cause_stats*,
    session_okf_access, session_tool_usage, session_attribution, session_attribution_runs,
    session_prompt_watermark, user_favorite_sessions, logs_otel, otel_api_calls,
-   otel_calls, otel_spans, otel_cost_buckets, otel_session_state, otel_reclass_queue
+   otel_calls, otel_spans, otel_cost_buckets, otel_session_state, otel_reclass_queue,
+   otel_session_totals, otel_agent_totals
 
  U = unique key   * = scoped rows: nullable team_id / user_id FKs (CASCADE)
 ```
@@ -224,6 +225,17 @@ from two channels: the realtime route and the projection drain over `logs_otel`
   - `otel_session_state`: `plan`, `seat_type`, `provider` (varchar 64), `custom_base_url`
     (varchar 1024, sanitised: scheme + host + path), `account_event_at` (timestamptz) — nullable,
     latest-wins by `account_event_at`, a null never overwrites (`extractOtelAccount`).
+- Stored live totals (migration `0089`, task `2026-11-04-otel-live-view`): `otel_session_totals`
+  (one row per root, hidden calls included) and `otel_agent_totals` (PK `(session_id, agent_key)`,
+  `agent_key` = `agent_id` or `main`; hidden calls have no row) are **derived** from `otel_calls`
+  by `upsertOtelCalls` in the same writer transaction. While the session row is current
+  (`seq >= MAX(otel_cost_buckets.seq)` of the root, or the root has no bucket row yet, so no call)
+  the writer adds the call deltas; otherwise — a session older than the migration, buckets written
+  by an older server process — it runs `rebuildOtelTotals` (also called after every reclassification). An agent with no calls
+  left is zeroed, never deleted. Both are purged with the other OTEL tables on a soft delete.
+  The same migration adds `idx_otel_session_state_last_at` on
+  `GREATEST(rt_last_at, chunk_last_at)` and the time indexes
+  `idx_otel_calls_session_event_time` / `idx_otel_spans_session_start_time`.
 
 Design, lock order and cursor: [otel-tabs.md](otel-tabs.md).
 

@@ -624,6 +624,13 @@
       "when": 1792108800000,
       "tag": "0088_otel_cost_attribution",
       "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "7",
+      "when": 1792195200000,
+      "tag": "0089_otel_live_totals",
+      "breakpoints": true
     }
   ]
 }
