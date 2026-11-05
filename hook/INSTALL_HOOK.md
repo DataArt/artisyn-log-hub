@@ -10,6 +10,10 @@ editing.
   installed and on `PATH`. Claude Code runs the hook with your own `node`, so Node.js is a hard requirement
   even if you installed Claude Code with the native installer (which does not need Node itself). Any
   current LTS works; you do not need a specific version.
+  **Security:** keep that Node.js patched. Node.js 18 and 20 are end-of-life and get no security fixes,
+  so use 22, 24 or 26 at no less than **22.23.4 / 24.22.1 / 26.12.1** (the October 2026 security
+  releases, which fix high-severity CVEs such as CVE-2026-111497). The hook still starts on older
+  Node.js (technical floor `18.19`), so an old install keeps working, but it runs on an unpatched runtime.
 - Git; the project must be a git repository.
 - Claude Code with plugin support.
 

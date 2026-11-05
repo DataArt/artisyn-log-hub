@@ -30,7 +30,8 @@ file-copying or `.claude/settings.json` hand-editing step.
 
 Prerequisites:
 - Node.js in PATH — any current LTS release (the user-facing promise in `hook/INSTALL_HOOK.md`; the
-  technical floor is `engines >=18.19`). The hook runs with the user's own `node`; see the
+  technical floor is `engines >=18.19`; the docs recommend a patched 22.23.4 / 24.22.1 / 26.12.1 or later
+  because 18 and 20 are EOL — a recommendation only, nothing enforces it). The hook runs with the user's own `node`; see the
   "Runs on every current Node.js LTS" principle in [hook-system-overview.md](hook-system-overview.md)
 - Git installed; project must be a git repository
 - Claude Code with plugin support on `PATH` (the installer shells out to `claude plugin marketplace add` /
