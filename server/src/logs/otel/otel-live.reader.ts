@@ -27,6 +27,7 @@ import {
   loadOtelLivePlacements,
   loadOtelLiveRepoLabel,
   loadOtelLiveRootTotals,
+  loadOtelLiveSpark,
   loadOtelLiveTeams,
   loadOtelLiveTopModels,
   loadOtelLiveTopTools,
@@ -41,6 +42,7 @@ import {
   OTEL_LIVE_AGENT_CALLS_LIMIT,
   OTEL_LIVE_BREAKDOWN_AGENTS,
   OTEL_LIVE_RECENT_MS,
+  OTEL_LIVE_SPARK_MINUTES,
   OTEL_LIVE_WINDOW_MS,
 } from './otel-live.constants';
 import type {
@@ -129,11 +131,18 @@ export class OtelLiveReader {
     const home = tree.resolve(OTEL_LIVE_HOME_KEY);
     const totals = home?.totals;
     const liveSessions = totals?.liveSessions ?? 0;
+    const spark = await loadOtelLiveSpark(
+      this.db,
+      home === null ? [] : tree.rootIdsOf(home.key),
+      now,
+      OTEL_LIVE_SPARK_MINUTES,
+    );
     return {
       live: liveSessions > 0,
       liveSessions,
       liveAgents: totals?.liveAgents ?? 0,
       costUsdMicros: totals?.costUsdMicros ?? '0',
+      spark,
     };
   }
 

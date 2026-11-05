@@ -131,7 +131,7 @@ One folder per session tab; flat files are the Logs tab and the shared parsing. 
 |---|---|
 | `AppShell.tsx` | Authenticated shell: `MainNav` + `AppLeftNav` + page area; mounts the Ctrl+K shortcut |
 | `AppLeftNav.tsx`, `TeamAccordion.tsx` | Left sidebar: teams tree, My Repos, API Keys, Installed Hooks, Admin link |
-| `top-nav/` | `NotificationBell`, `UserMenu`, `ChangePasswordModal`, `AppLogo`, `LiveNavItem` (the OTEL Live entry: red dot + tooltip from `GET /api/v1/otel/live/status`, lazily mounts `viewer/live/LiveModal`) (the bar itself is `pages/main/MainNav.tsx`) |
+| `top-nav/` | `NotificationBell`, `UserMenu`, `ChangePasswordModal`, `AppLogo`, `LiveNavItem` (the OTEL Live entry: glowing activity icon + token sparkline + tooltip from `GET /api/v1/otel/live/status`, lazily mounts `viewer/live/LiveModal`) (the bar itself is `pages/main/MainNav.tsx`) |
 | `teams/` | Team access mode: `AccessModeBadge`, `TeamDisclosureModal`, `PendingDisclosureGate` |
 
 ### Shared components

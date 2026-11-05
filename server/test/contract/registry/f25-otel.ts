@@ -1865,6 +1865,12 @@ const liveRows: ContractCase[] = [
         liveSessions: 0,
         liveAgents: 0,
         costUsdMicros: '0',
+        // Header sparkline: 15 empty one-minute points.
+        spark: {
+          minutes: 15,
+          tokens: new Array<number>(15).fill(0),
+          costUsdMicros: new Array<string>(15).fill('0'),
+        },
       },
     },
     noDb: true,

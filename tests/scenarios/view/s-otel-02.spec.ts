@@ -78,6 +78,7 @@ interface LiveStatus {
   liveSessions: number;
   liveAgents?: number;
   costUsdMicros?: string;
+  spark?: { minutes: number; tokens: number[]; costUsdMicros: string[] };
 }
 
 async function liveApi(user: ScenarioUser, q: { node?: string; panel?: string } = {}): Promise<LiveResponse> {
@@ -260,6 +261,12 @@ test('@S-OTEL-02 Live view: header entry, user-wide tree, node view, live update
   await test.step('AC-1, AC-2, AC-4. the header dot shows within 30 s; a click opens a ~90 % dialog at live=home with Home selected; ?live=repo:<id> survives a reload; Back closes the modal', async () => {
     const status = await liveStatus(owner.user);
     expect(status).toMatchObject({ live: true, liveSessions: 5, costUsdMicros: String(homeMicros) });
+    // Header sparkline: 15 one-minute points; the setup calls (~5 min old) are in it, unless a
+    // slow setup pushed them past 15 min — so only «some tokens, no more cost than home».
+    expect(status.spark?.minutes).toBe(15);
+    expect(status.spark?.tokens).toHaveLength(15);
+    expect(status.spark!.tokens.reduce((a, b) => a + b, 0)).toBeGreaterThan(0);
+    expect(status.spark!.costUsdMicros.reduce((a, b) => a + Number(b), 0)).toBeLessThanOrEqual(homeMicros);
 
     await skipNewUserNudge(page.context());
     await owner.user.signIn(page);
@@ -268,6 +275,13 @@ test('@S-OTEL-02 Live view: header entry, user-wide tree, node view, live update
     await page.reload();
     await expect(page.getByTestId('nav-live-dot')).toBeVisible({ timeout: 30_000 });
     await expect(page.getByTestId('nav-live')).toHaveAttribute('data-live', 'true');
+    // 100 px button: the dot plus the token sparkline; hovering shows the last-minutes summary.
+    await expect(page.getByTestId('nav-live-spark')).toBeVisible();
+    await page.getByTestId('nav-live').hover();
+    const tip = page.getByTestId('nav-live-tooltip').first();
+    await expect(tip).toContainText('Last 15 min:');
+    await expect(tip).toContainText('tokens');
+    await expect(tip).toContainText('Click for details');
 
     await page.getByTestId('nav-live').click();
     const modal = page.getByTestId('live-modal');

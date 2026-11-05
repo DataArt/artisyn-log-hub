@@ -1,7 +1,8 @@
 /**
  * The SVG Sankey card shared by the OTEL "Cost flow" (`OtelCostFlow`) and the Live view
  * (`LiveFlowSankey`): it measures its width, asks `buildLayout` for the layout at that width and
- * draws columns, bands and nodes. Hovering a band shows its value, share, calls and (where they
+ * draws columns, bands and nodes. The columns spread over at most 1200 px; the svg spans the whole
+ * card, and last-column labels are cut to the room actually left (`fitFlowLabel`). Hovering a band shows its value, share, calls and (where they
  * add up) sessions; hovering a node shows value, share and calls. The tooltip renders through
  * `ViewportPopover`. No click action.
  */
@@ -15,6 +16,7 @@ import {
   type OtelFlowLayout,
   type OtelFlowNode,
 } from './otel-cost-flow-layout';
+import { fitFlowLabel, OTEL_FLOW_INNER_LABEL_CHARS } from './otel-flow-label';
 
 export interface OtelFlowSankeyProps {
   title: string;
@@ -40,6 +42,12 @@ type Hover =
 
 const PLOT_HEIGHT = 260;
 const TOP = 22;
+/** The columns never spread wider than this; a wider card leaves the rest to the labels. */
+const MAX_PLOT_WIDTH = 1200;
+/** Between a node and its label. */
+const LABEL_GAP = 4;
+/** Until the card's own font is read (first effect). */
+const LABEL_FONT_FALLBACK = 'system-ui, sans-serif';
 
 export function OtelFlowSankey({
   title,
@@ -53,22 +61,38 @@ export function OtelFlowSankey({
   testId,
 }: OtelFlowSankeyProps) {
   const wrapRef = useRef<HTMLDivElement>(null);
-  const [width, setWidth] = useState(900);
+  /** The card's full width: the svg spans it, so last-column labels can use the room. */
+  const [boxWidth, setBoxWidth] = useState(900);
+  const [labelFont, setLabelFont] = useState(`11px ${LABEL_FONT_FALLBACK}`);
   const [hover, setHover] = useState<Hover | null>(null);
 
   useEffect(() => {
     const el = wrapRef.current;
-    if (!el || typeof ResizeObserver === 'undefined') return;
+    if (!el) return;
+    setLabelFont(`11px ${getComputedStyle(el).fontFamily}`);
+    if (typeof ResizeObserver === 'undefined') return;
     const ro = new ResizeObserver(([entry]) => {
       const w = entry.contentRect.width;
-      if (w > 0) setWidth(Math.min(1200, w));
+      if (w > 0) setBoxWidth(w);
     });
     ro.observe(el);
     return () => ro.disconnect();
   }, []);
 
+  // The columns spread over at most 1200 px; the rest of a wide card is label room.
+  const width = Math.min(MAX_PLOT_WIDTH, boxWidth);
   // A few hundred rows at most: laying out on every render is cheap.
   const layout = buildLayout(width, PLOT_HEIGHT);
+  const lastColumn = Math.max(0, ...layout.nodes.map((n) => n.column));
+  const nodeLabel = (n: OtelFlowNode): string => {
+    if (n.column !== lastColumn) {
+      return n.label.length > OTEL_FLOW_INNER_LABEL_CHARS
+        ? `${n.label.slice(0, OTEL_FLOW_INNER_LABEL_CHARS - 1)}…`
+        : n.label;
+    }
+    const free = boxWidth - (n.x + OTEL_FLOW_NODE_WIDTH + LABEL_GAP) - 4;
+    return fitFlowLabel(n.label, formatValue(n.cost), free, labelFont);
+  };
 
   return (
     <section className="rounded-md border p-4" data-testid={testId}>
@@ -80,7 +104,11 @@ export function OtelFlowSankey({
             {emptyText}
           </p>
         ) : (
-          <svg width={width} height={layout.height + TOP + 4} className="block">
+          <svg
+            width={boxWidth}
+            height={layout.height + TOP + 4}
+            className="block"
+          >
             {columnLabels.map((c, i) => (
               <text
                 key={`${i}:${c}`}
@@ -135,7 +163,7 @@ export function OtelFlowSankey({
                     rx={2}
                   />
                   <text
-                    x={n.x + OTEL_FLOW_NODE_WIDTH + 4}
+                    x={n.x + OTEL_FLOW_NODE_WIDTH + LABEL_GAP}
                     y={n.y + n.height / 2}
                     dominantBaseline="middle"
                     className="fill-foreground text-[11px]"
@@ -143,8 +171,7 @@ export function OtelFlowSankey({
                     strokeWidth={3}
                     paintOrder="stroke"
                   >
-                    {n.label.length > 40 ? `${n.label.slice(0, 39)}…` : n.label}{' '}
-                    {formatValue(n.cost)}
+                    {nodeLabel(n)} {formatValue(n.cost)}
                   </text>
                 </g>
               ))}

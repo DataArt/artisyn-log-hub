@@ -8,6 +8,9 @@ export const OTEL_LIVE_WINDOW_MS = 7_200_000;
 /** Cost-per-minute window: the last 5 min, divided by 5 (DD-8). */
 export const OTEL_LIVE_COST_RATE_MS = 300_000;
 
+/** Header sparkline of the status route: this many one-minute points, newest last. */
+export const OTEL_LIVE_SPARK_MINUTES = 15;
+
 /** Latest calls listed for an agent node (DD-9). */
 export const OTEL_LIVE_AGENT_CALLS_LIMIT = 50;
 

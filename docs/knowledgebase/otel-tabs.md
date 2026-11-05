@@ -354,7 +354,7 @@ calls (no OTEL)" with a tooltip from `cost-hints.ts`) shows next to the cost in
 | `GET /api/v1/teams/:teamId/otel/facts` | session | + `repoId[]`, `userId[]`, `stackBy=person\|repository\|…\|skill\|mcpServer\|effort\|speed`; + `coverage`, `planMix` |
 | `GET /api/v1/repositories/:repoId/sessions` | session | (existing list) + `costBreakdown.costExcludesUtilityCalls` and `costBreakdown.subagentCostFromOtel` per item and the `otelReason=<key>` filter (root sessions without OTEL data whose `COALESCE(otel_reason,'no-status')` equals it; unknown or repeated value → `400`) |
 | `GET …/sessions/:sessionId/logs`, `…/logs/delta` | session | (existing) + `subagentStats[*].otelCostUsd` |
-| `GET /api/v1/otel/live/status` | session | Live header entry: `{ live, liveSessions, liveAgents, costUsdMicros }`, user-wide, no params (§ "Live view") |
+| `GET /api/v1/otel/live/status` | session | Live header entry: `{ live, liveSessions, liveAgents, costUsdMicros, spark }`, user-wide, no params (§ "Live view") |
 | `GET /api/v1/otel/live` | session | Live modal: `node`, `panel` (node keys), `tz`; tree + selected-node view + details; malformed key / unknown `tz` → 400, never 403 (§ "Live view") |
 
 Shapes: `server/src/logs/otel/otel-facts.types.ts`. Controllers and access rules:
@@ -404,6 +404,11 @@ declared before `@Get()`):
   live roots, live agents and the lifetime cost of the live roots; the same candidate / placement
   path as the tree, without retention and without the recently ended roots. Polled by
   `LiveNavItem` every `LIVE_STATUS_POLL_MS` (10 s, React Query, visible tab only).
+  Also `spark: { minutes, tokens[], costUsdMicros[] }` (2026-11-05, additive; the client treats
+  it as optional): `otel_calls` tokens (input + output + cache read + cache write) and cost of
+  the live roots per minute over the last `OTEL_LIVE_SPARK_MINUTES` (15), counted back from now,
+  oldest first (`loadOtelLiveSpark`). `LiveNavItem` is a 100 px button — a square activity icon
+  (grey idle, green glow while live) plus a framed bar `LiveSparkline` of `tokens` — and its tooltip sums the series («Last 15 min: N tokens · $X»).
 - `GET /api/v1/otel/live?node=&panel=&tz=` → `{ generatedAt, tz, windowFrom, windowTo, selected,
   nodes, view, details }`. `node` defaults to `home`; `details` is filled only for `panel`. A
   malformed key (or > 320 chars) or an unknown `tz` → 400. Both routes **row-filter and never

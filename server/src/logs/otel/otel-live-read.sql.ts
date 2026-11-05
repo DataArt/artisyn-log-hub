@@ -50,6 +50,7 @@ import type {
   OtelLivePlacementRow,
   OtelLiveRootTotalsRow,
   OtelLiveScopeTeam,
+  OtelLiveSpark,
   OtelLiveTopModel,
   OtelLiveTopTool,
   OtelLiveWindow,
@@ -598,6 +599,47 @@ export async function loadOtelLiveLatency(
 // ---------------------------------------------------------------------------
 // Cost rate and agent calls (DD-8, DD-9)
 // ---------------------------------------------------------------------------
+
+/**
+ * The header sparkline: `otel_calls` tokens and cost of the last `minutes` minutes over
+ * `rootIds`, one point per minute counted back from `now` (see `OtelLiveSpark`).
+ */
+export async function loadOtelLiveSpark(
+  db: DrizzleDb,
+  rootIds: number[],
+  now: Date,
+  minutes: number,
+): Promise<OtelLiveSpark> {
+  const spark: OtelLiveSpark = {
+    minutes,
+    tokens: new Array<number>(minutes).fill(0),
+    costUsdMicros: new Array<string>(minutes).fill('0'),
+  };
+  if (rootIds.length === 0 || minutes <= 0) return spark;
+  const from = new Date(now.getTime() - minutes * 60_000);
+  const result = await db.execute(sql`
+    SELECT floor(EXTRACT(EPOCH FROM (${now}::timestamptz - c.event_time)) / 60)::int AS age,
+           SUM(c.input_tokens + c.output_tokens + c.cache_read_tokens + c.cache_write_tokens)
+             AS tokens,
+           COALESCE(SUM(c.cost_usd_micros), 0) AS cost
+      FROM otel_calls c
+     WHERE c.session_id = ANY(${intArray(rootIds)})
+       AND c.event_time > ${from}
+       AND c.event_time <= ${now}
+     GROUP BY 1
+  `);
+  for (const r of result.rows as unknown as {
+    age: DbValue;
+    tokens: DbValue;
+    cost: DbValue;
+  }[]) {
+    const i = minutes - 1 - toNum(r.age);
+    if (i < 0 || i >= minutes) continue;
+    spark.tokens[i] = toNum(r.tokens);
+    spark.costUsdMicros[i] = microsText(r.cost);
+  }
+  return spark;
+}
 
 /**
  * Cost per minute (DD-8): the `otel_calls` cost of the last `OTEL_LIVE_COST_RATE_MS` over

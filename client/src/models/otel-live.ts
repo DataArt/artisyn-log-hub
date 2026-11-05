@@ -16,6 +16,17 @@ export interface OtelLiveStatusResponse {
   liveAgents?: number;
   /** Lifetime cost of the live roots. */
   costUsdMicros?: string;
+  /** Header sparkline; absent from servers before 2026-11-05. */
+  spark?: OtelLiveSpark;
+}
+
+/** Per-minute activity of the last `minutes` minutes, oldest first (last point = last 60 s). */
+export interface OtelLiveSpark {
+  minutes: number;
+  /** input + output + cache read + cache write tokens per minute. */
+  tokens: number[];
+  /** Cost per minute, decimal strings. */
+  costUsdMicros: string[];
 }
 
 export type OtelLiveNodeType =
