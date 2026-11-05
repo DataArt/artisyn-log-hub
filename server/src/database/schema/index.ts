@@ -528,8 +528,8 @@ export const otelCalls = pgTable(
     index('idx_otel_calls_session_request_id')
       .on(table.sessionId, table.requestId)
       .where(sql`${table.requestId} IS NOT NULL`),
-    index('idx_otel_calls_session_agent')
-      .on(table.sessionId, table.agentId)
+    index('idx_otel_calls_session_agent_event_time')
+      .on(table.sessionId, table.agentId, table.eventTime)
       .where(sql`${table.agentId} IS NOT NULL`),
     index('idx_otel_calls_session_event_time').on(
       table.sessionId,
