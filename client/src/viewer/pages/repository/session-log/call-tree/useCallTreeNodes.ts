@@ -8,6 +8,8 @@ import {
 } from '../log-parser';
 import type { SessionLogsData } from '../../../../api';
 import type { AgentActivation, TelemetryEvent } from '../types';
+import type { SubagentMetaMap } from '../log-parser';
+import { agentDescriptionText } from '../workflow-agent-rows';
 import type { ModelPricingMap } from '../../../../../models/pricing';
 import type { DetailRow } from '../../../../components/DetailTooltip';
 import { formatCost, formatLocalTimestamp } from '../../../../lib/format';
@@ -34,6 +36,7 @@ function buildAgentNode(
   subagentLogsMap: Map<string, Record<string, unknown>[]>,
   childrenByParent: Map<string, string[]>,
   pricing: ModelPricingMap | undefined,
+  subagentMeta?: SubagentMetaMap,
 ): CallTreeNode {
   const agentChildren: CallTreeNode[] = [];
   const nestedActivations: AgentActivation[] = [];
@@ -243,13 +246,20 @@ function buildAgentNode(
         subagentLogsMap,
         childrenByParent,
         pricing,
+        subagentMeta,
       ),
     );
   }
 
   return {
     type: 'sub-agent',
-    label: `Agent: ${activation.description ?? activation.agentId.slice(0, 20)}`,
+    label: `Agent: ${
+      activation.description ??
+      agentDescriptionText(
+        subagentMeta?.get(activation.agentId)?.agentDescription,
+      ) ??
+      activation.agentId.slice(0, 20)
+    }`,
     tokens: activation.totalTokens ?? null,
     model: agentModel,
     // Use the completion-event breakdown (same source as session total) to avoid over-counting.
@@ -283,6 +293,7 @@ export function useCallTreeNodes(
   subagentLogsMap: Map<string, Record<string, unknown>[]>,
   pricing: ModelPricingMap | undefined,
   agentParentMap?: Map<string, string | null>,
+  subagentMeta?: SubagentMetaMap,
 ): CallTreeNode[] {
   return useMemo((): CallTreeNode[] => {
     if (!parsed) return [];
@@ -604,6 +615,7 @@ export function useCallTreeNodes(
             subagentLogsMap,
             childrenByParent,
             pricing,
+            subagentMeta,
           ),
         );
       }
@@ -749,5 +761,12 @@ export function useCallTreeNodes(
     });
 
     return nodes;
-  }, [parsed, logsData, subagentLogsMap, pricing, agentParentMap]);
+  }, [
+    parsed,
+    logsData,
+    subagentLogsMap,
+    pricing,
+    agentParentMap,
+    subagentMeta,
+  ]);
 }

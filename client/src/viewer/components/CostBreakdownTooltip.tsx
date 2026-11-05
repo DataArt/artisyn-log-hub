@@ -24,6 +24,9 @@ interface Props {
    * it disagrees with `reportedCost` by the whole sub-agent spend. The Sub-agents row renders
    * only when it is greater than 0 (the server sends 0 for a session with no sub-agents). */
   subAgentCost?: number | null;
+  /** `costBreakdown.subagentCostFromOtel` (FR-6): some sub-agent's cost in `subAgentCost` comes
+   * from OTEL, so the row reads "Sub-agents (from OTEL)". */
+  subAgentCostFromOtel?: boolean;
   /** Rough workflow-agent cost estimate, shown/added only when `showWorkflowCostRow` is true. */
   workflowEstimatedCost?: number | null;
   workflowSubagentTokens?: number;
@@ -86,6 +89,7 @@ export function CostBreakdownTooltip({
   pricing,
   reportedCost,
   subAgentCost,
+  subAgentCostFromOtel,
   workflowEstimatedCost,
   workflowSubagentTokens,
   showWorkflowCostRow,
@@ -165,7 +169,9 @@ export function CostBreakdownTooltip({
             {subAgentCost != null && subAgentCost > 0 && (
               <tr>
                 <td className="whitespace-nowrap pr-4 text-muted-foreground">
-                  Sub-agents
+                  {subAgentCostFromOtel
+                    ? 'Sub-agents (from OTEL)'
+                    : 'Sub-agents'}
                 </td>
                 <td colSpan={2} />
                 <td className="whitespace-nowrap text-right font-mono tabular-nums text-orange-500 dark:text-orange-400">

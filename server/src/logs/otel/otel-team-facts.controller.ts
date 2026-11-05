@@ -31,6 +31,10 @@ const TEAM_STACK_BY: readonly TeamOtelStackBy[] = [
   'structure',
   'model',
   'querySource',
+  'skill',
+  'mcpServer',
+  'effort',
+  'speed',
 ];
 
 /** A repeatable positive-integer filter (`repoId`, `userId`); anything else is a 400. */

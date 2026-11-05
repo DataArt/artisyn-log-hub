@@ -37,6 +37,7 @@ import {
   resolveExportImportStagingDir,
   serializeArrayToJsonl,
 } from './export-import-zip';
+import { sanitizeAgentMeta } from './agent-meta-param';
 import { ExportImportJobsService } from './export-import-jobs.service';
 import { getImportLimits, ImportLimitError } from './import-limits';
 import { loadHarnessSnapshot } from './harness-snapshot';
@@ -78,6 +79,9 @@ interface MatchingSessionRow {
   harnessSnapshotId: string | null;
   /** Non-null when an OKF snapshot is bound to this (root) session (DD-21). */
   okfSnapshotId: string | null;
+  /** Sub-agent `.meta.json` labels (DD-14) — `null` for root sessions. */
+  agentDescription: string | null;
+  workflowPhase: string | null;
 }
 
 /**
@@ -649,10 +653,19 @@ export class RepositoryExportImportService {
       });
     }
 
+    // Agent meta labels apply only to sub-agent sessions (DD-3 / DD-14); an archive from before
+    // this field existed lacks them and imports with `null`.
+    const isSubagentSession = meta.sessionId.startsWith('agent-');
     const result = await this.logsService.importSession({
       sessionId: meta.sessionId,
       parentSessionId: meta.parentSessionId ?? null,
       workflowRunId: meta.workflowRunId ?? null,
+      agentDescription: isSubagentSession
+        ? sanitizeAgentMeta(meta.agentDescription)
+        : null,
+      workflowPhase: isSubagentSession
+        ? sanitizeAgentMeta(meta.workflowPhase)
+        : null,
       firstPrompt: meta.firstPrompt ?? null,
       gitBranch: meta.gitBranch ?? null,
       startTime: meta.startTime ?? null,
@@ -918,6 +931,8 @@ export class RepositoryExportImportService {
         ).toISOString(),
         gitBranch: artisynLog?.gitBranch ?? null,
         okfSnapshotId: session.okfSnapshotId,
+        agentDescription: session.agentDescription,
+        workflowPhase: session.workflowPhase,
         stats,
         logs: {
           ...(claudeLog ? { claude: { userEmail: claudeLog.userEmail } } : {}),
@@ -1093,6 +1108,8 @@ export class RepositoryExportImportService {
         workflowRunId: sessions.workflowRunId,
         harnessSnapshotId: sessions.harnessSnapshotId,
         okfSnapshotId: sessions.okfSnapshotId,
+        agentDescription: sessions.agentDescription,
+        workflowPhase: sessions.workflowPhase,
       })
       .from(sessions)
       .innerJoin(logs, eq(logs.sessionId, sessions.id))

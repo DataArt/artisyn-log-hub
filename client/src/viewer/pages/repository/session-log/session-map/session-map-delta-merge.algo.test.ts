@@ -70,6 +70,7 @@ interface MergeExpected {
   subagentLogs?: Record<string, SessionLogLine[]>;
   agentParentMap?: Record<string, string | null>;
   workflowRunIds?: Record<string, string>;
+  agentDescriptions?: Record<string, string>;
 }
 
 const DEFAULT_LIVENESS: SessionLogsDeltaLiveness = {
@@ -176,6 +177,7 @@ it.each(rows)('$id', ({ input, expected }) => {
       subagentLogs: Object.fromEntries(out.subagentLogs),
       agentParentMap: Object.fromEntries(out.agentParentMap),
       workflowRunIds: Object.fromEntries(out.workflowRunIds),
+      agentDescriptions: Object.fromEntries(out.agentDescriptions),
     }).toEqual(expected);
     return;
   }

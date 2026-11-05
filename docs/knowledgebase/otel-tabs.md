@@ -1,14 +1,14 @@
 ---
 type: "Architecture Guide"
 title: "OTEL Tabs (realtime + projected OTEL facts)"
-description: "How the repository, session and team OTEL tabs get their data: the two channels (hook realtime batches and the durable claude-otel chunk upload drained by a projection), the five OTEL fact tables, the per-root seq cursor and lock order, call structure (main / subagent / hidden) and queued reclassification, realtime / gap / fill states, the per-session OTEL status (otel-status event, reason panel, partial banner), repository and team coverage with reason chips, the utility-call cost marker, the routes, retention, the hook-by-server and Claude Code compatibility matrix and the measured per-request cost."
+description: "How the repository, session and team OTEL tabs get their data: the two channels (hook realtime batches and the durable claude-otel chunk upload drained by a projection), the five OTEL fact tables, the per-root seq cursor and lock order, call structure (main / subagent / hidden) and queued reclassification, realtime / gap / fill states, the per-session OTEL status (otel-status event, reason panel, partial banner), repository and team coverage with reason chips, the utility-call cost marker, the routes, the attribution stack-bys (skill / MCP server / effort / speed, \"not reported\"), the account latest-wins rule, plan mix and session plan, projection version 2, the user-wide Live view (routes, node keys, placement, retention, stored totals tables, long sessions, scope cuts), retention, the hook-by-server and Claude Code compatibility matrix and the measured per-request cost."
 tags:
   - otel
   - hooks
   - session-view
   - reports
   - teams
-timestamp: "2026-11-03T00:00:00+04:00"
+timestamp: "2026-11-05T00:00:00+04:00"
 ---
 
 # OTEL Tabs
@@ -42,11 +42,14 @@ startup re-mark in `database-init.ts`, and one `HOOK_API_ROUTES` entry.
 | File | Role |
 |---|---|
 | `otel-facts.constants.ts` | every constant below (`OTEL_*`) |
-| `otel-records.ts` | pure: `resolveOtelEventTime`, `otelCallKey`, `extractOtelCalls`, `extractOtelSpans` (caps, 64 KiB attribute limit), `maxHookVersion` |
+| `otel-records.ts` | pure: `resolveOtelEventTime`, `otelCallKey`, `extractOtelCalls`, `extractOtelAccount`, `sanitizeOtelBaseUrl`, `extractOtelSpans` (caps, 64 KiB attribute limit), `maxHookVersion` |
 | `otel-classify.ts` | pure: `classifyOtelCall`, `bucketStart5m`, `pickOtelInterval` |
 | `otel-query-source-dictionary.ts` | `query_source` names, descriptions and `hidden`; `lookupQuerySource` (unknown → `known: false`, a "new" chip in the UI) |
 | `otel-span-names.ts` | `claude_code.interaction` / `.llm_request` / `.tool` / `.tool.blocked_on_user` / `.tool.execution` |
-| `otel-facts-writer.ts` | `lockOtelState`, `upsertOtelCalls`, `upsertOtelSpans`, `recomputeSpanRollups`, `applyOtelLines`, `rebuildOtelBuckets`, `reclassifyOtelSession`, `enqueueOtelReclass` |
+| `otel-facts-writer.ts` | `lockOtelState`, `upsertOtelCalls`, `upsertOtelSpans`, `recomputeSpanRollups`, `applyOtelLines`, `rebuildOtelBuckets`, `reclassifyOtelSession`, `enqueueOtelReclass`; Live totals: `applyOtelTotalsDeltas`, `rebuildOtelTotals` |
+| `otel-live.constants.ts`, `otel-live.types.ts` | Live view limits (`OTEL_LIVE_*`), DTOs and internal shapes (client mirror `client/src/models/otel-live.ts`) |
+| `otel-live-tree.ts` | pure: `parseOtelLiveNodeKey`, `formatOtelLiveNodeKey`, `buildOtelLiveTree`, `summarizeOtelLiveNode` |
+| `otel-live-read.sql.ts`, `otel-live.reader.ts`, `otel-live.controller.ts` | Live view SQL (`loadOtelLive*`), `OtelLiveReader.getStatus` / `getLive`, the two Live routes |
 | `otel-realtime.controller.ts` / `.service.ts` | hook route (API key) |
 | `otel-projection.service.ts` | the drain (tick every 5 s) |
 | `otel-facts-read.sql.ts`, `otel-facts.reader.ts` | UI read SQL and assembly |
@@ -151,10 +154,18 @@ ids), so backfilled history never stays provisional.
 
 ## Buckets and intervals (DD-7, DD-18, DD-19)
 
-- Grain `(session_id, bucket_start, structure, query_source, model, cc_version)`, `bucket_start`
-  = 5-minute UTC floor. A call upsert subtracts the old contribution and adds the new one
-  (identical values → no seq bump); a rebuild upserts only changed keys and zeroes vanished ones
-  (reads ignore zero rows).
+- Grain `(session_id, bucket_start, structure, query_source, model, cc_version, skill,
+  mcp_server, effort, speed)` (the four attribution columns since migration `0088`, task
+  `2026-11-03-otel-cost-attribution`, also the columns of `otel_cost_buckets_pk`), `bucket_start`
+  = 5-minute UTC floor. `CallContribution` takes the attribution parts from `otel_calls.skill_name`,
+  `mcp_server_name`, `effort`, `speed` with `?? ''`; `bucketKey` joins all 9 grain parts (session
+  aside). A call upsert subtracts the old contribution and adds the new one (identical values → no
+  seq bump), so a call whose attribution changed moves between keys; a rebuild
+  (`rebuildOtelBuckets`) groups by and FULL JOINs on all grain columns, upserts only changed keys
+  and zeroes vanished ones (reads ignore zero rows).
+- `''` in an attribution column = **not reported** (the attribute was absent: older Claude Code,
+  default value, or no `OTEL_LOG_TOOL_DETAILS=1` for skill / MCP names). Rows written before `0088`
+  read as `''` through the column default.
 - The routes return **server-rolled** buckets: `interval=auto` → repository ≤ 24 h `5m`, ≤ 14 d
   `1h`, else `1d`; session ≤ 24 h `5m`, else `1h`. `tz` is an IANA name (validated with
   `Intl.DateTimeFormat`, 400 otherwise); SQL rolls up with `date_trunc(unit, bucket_start, tz)`.
@@ -197,13 +208,16 @@ The projection clears `rt_gap_at` once the session has no pending `logs_otel` ro
 `chunk_last_at >= rt_gap_at` (best-effort: chunks still on the user's disk are invisible). A
 receiver restart starts a new `receiverId`, which the gap rule cannot see; the chunks fill it.
 
-**Live rule, two consumers.** `computeOtelLiveness(state, now)` (`otel-facts.reader.ts`, with the
+**Live rule, three consumers.** `computeOtelLiveness(state, now)` (`otel-facts.reader.ts`, with the
 exported `isRecent`) is the one definition of "live": `rt_last_at` or `chunk_last_at` within
 `OTEL_SESSION_ENDED_MS` (10 min); `lastActivityAt` = the later of the two; no state row →
-`hasOtel: false`, `live: false`. It feeds `buildOtelSessionStatus` (the OTEL tab's `live`) and the
+`hasOtel: false`, `live: false`. It feeds `buildOtelSessionStatus` (the OTEL tab's `live`), the
 `liveness` field of `GET /api/v1/repositories/:repoId/sessions/:sessionId/logs/delta`, which the
-Session Map tab polls ([`session-map.md`](session-map.md)). The delta returns only
-`{hasOtel, live, lastActivityAt}`, no OTEL figures.
+Session Map tab polls ([`session-map.md`](session-map.md)) — the delta returns only
+`{hasOtel, live, lastActivityAt}`, no OTEL figures — and the **Live view** routes
+(§ "Live view" below), which apply the same rule in SQL as
+`GREATEST(rt_last_at, chunk_last_at) >= now − OTEL_SESSION_ENDED_MS` (`GREATEST` ignores NULLs, so
+it equals the TS rule; `now` is taken once per request in TS). Change the rule in all three.
 
 **Slow updates.** `otel_hook_version` = highest `hookVersion` seen. A session with OTEL data but no
 `rt_last_at` is slow: `old-hook` when that version is NULL or below `OTEL_LIVE_HOOK_MIN_VERSION`
@@ -229,6 +243,33 @@ Session Map tab polls ([`session-map.md`](session-map.md)). The delta returns on
 One summary log line per tick with work (chunks, sessions, fills, failures, duration). The
 `ingestOtelChunk` upsert resets `otel_projection_version` to NULL on a re-upload, and every
 `logs_otel` row that existed before `0078` starts NULL — that is the backfill.
+
+**Projection version.** `OTEL_PROJECTION_VERSION` is `2` since task
+`2026-11-03-otel-cost-attribution` (v1 had no attribution / account fields). The startup re-mark
+(`database-init.ts`, `< current` → NULL) requeues every v1 chunk, and the normal drain re-projects
+all history: the new `otel_calls` columns, the attribution bucket grain and the account fields fill
+in without an extra startup wait. Bump it again whenever extraction gains fields history should get.
+
+## Account fields (latest wins, task `2026-11-03-otel-cost-attribution`)
+
+`applyOtelLines` calls `extractOtelAccount(lines)` (`otel-records.ts`, algorithm
+[otel-facts](algorithms/otel-facts.md)) and writes `otel_session_state.plan`, `seat_type`,
+`provider`, `custom_base_url` and `account_event_at`:
+
+- sources: `anthropic.plan`, `anthropic.seat_type`, `anthropic.provider`,
+  `anthropic.custom_base_url` on `signal: "logs"` `claude_code.api_request` records and
+  `signal: "spans"` lines —
+  record / span attributes first, then `entry.resource`; the base URL is sanitised
+  (`sanitizeOtelBaseUrl`: scheme + host:port + path only);
+- inside a batch each field takes the non-null value with the greatest event time
+  (a span's `startTimeUnixNano`, a record's `resolveOtelEventTime`; ties → later line);
+  `eventAt` = greatest event time of any line that carried a field;
+- across batches `mergeOtelAccount` (TypeScript, on the `otel_session_state` row read
+  `FOR UPDATE`, written back as plain values) lets a non-null value overwrite when the stored one is
+  null or `eventAt >= account_event_at`, then sets `account_event_at` to the greater of the two;
+  **null never overwrites**, so a re-projected old chunk cannot erase a newer plan;
+- any changed stored value counts as a change (bumps `seq`, so a `since=` delta carries the new
+  `plan`).
 
 ## Realtime ingest (DD-17)
 
@@ -308,15 +349,39 @@ calls (no OTEL)" with a tooltip from `cost-hints.ts`) shows next to the cost in
 | Route | Auth | Notes |
 |---|---|---|
 | `POST /api/v2/otel-realtime` | API key | hook `2.29.0`+; [hook-api-versioning.md](hook-api-versioning.md) |
-| `GET /api/v1/repositories/:repoId/otel/facts` | session | `from`/`to` ≤ 93 days, filters, `interval`, `stackBy`, `tz`, `teamId`; + `coverage` |
-| `GET /api/v1/repositories/:repoId/sessions/:sessionId/otel` | session | snapshot or `since=` delta; + `status.otelStatus`, `status.costExcludesUtilityCalls` |
-| `GET /api/v1/teams/:teamId/otel/facts` | session | + `repoId[]`, `userId[]`, `stackBy=person\|repository\|…`; + `coverage` |
-| `GET /api/v1/repositories/:repoId/sessions` | session | (existing list) + `costBreakdown.costExcludesUtilityCalls` per item and the `otelReason=<key>` filter (root sessions without OTEL data whose `COALESCE(otel_reason,'no-status')` equals it; unknown or repeated value → `400`) |
+| `GET /api/v1/repositories/:repoId/otel/facts` | session | `from`/`to` ≤ 93 days, filters, `interval`, `stackBy` (+ `skill\|mcpServer\|effort\|speed`), `tz`, `teamId`; + `coverage`, `planMix` |
+| `GET /api/v1/repositories/:repoId/sessions/:sessionId/otel` | session | snapshot or `since=` delta, `stackBy` (+ the same 4); + `status.otelStatus`, `status.costExcludesUtilityCalls`, `plan` |
+| `GET /api/v1/teams/:teamId/otel/facts` | session | + `repoId[]`, `userId[]`, `stackBy=person\|repository\|…\|skill\|mcpServer\|effort\|speed`; + `coverage`, `planMix` |
+| `GET /api/v1/repositories/:repoId/sessions` | session | (existing list) + `costBreakdown.costExcludesUtilityCalls` and `costBreakdown.subagentCostFromOtel` per item and the `otelReason=<key>` filter (root sessions without OTEL data whose `COALESCE(otel_reason,'no-status')` equals it; unknown or repeated value → `400`) |
+| `GET …/sessions/:sessionId/logs`, `…/logs/delta` | session | (existing) + `subagentStats[*].otelCostUsd` |
+| `GET /api/v1/otel/live/status` | session | Live header entry: `{ live, liveSessions, liveAgents, costUsdMicros, spark }`, user-wide, no params (§ "Live view") |
+| `GET /api/v1/otel/live` | session | Live modal: `node`, `panel` (node keys), `tz`; tree + selected-node view + details; malformed key / unknown `tz` → 400, never 403 (§ "Live view") |
 
 Shapes: `server/src/logs/otel/otel-facts.types.ts`. Controllers and access rules:
 [server-endpoint-map.md](server-endpoint-map.md). No existing route, upload kind or chunk line
-type changed incompatibly: the `coverage` / `otelStatus` / `costExcludesUtilityCalls` fields and the
-`otelReason` param are additive, and `otel-status` is a new artisyn line type.
+type changed incompatibly: the `coverage` / `otelStatus` / `costExcludesUtilityCalls` /
+`planMix` / `plan` / `subagentCostFromOtel` / `otelCostUsd` fields and the `otelReason` param and
+new `stackBy` values are additive, and `otel-status` is a new artisyn line type.
+
+**Attribution and plan fields (task `2026-11-03-otel-cost-attribution`).**
+
+- `stackBy=skill|mcpServer|effort|speed` maps to `fb.skill`, `fb.mcp_server`, `fb.effort`,
+  `fb.speed` (`stackKeySql`, `teamStackKeySql`); `''` is the "not reported" key, shown by the
+  client as a grey **not reported** series with an ⓘ hint (`OTEL_NOT_REPORTED_HINT`,
+  `otel-chart-data.ts`). Defaults are unchanged; unknown values → 400.
+- `planMix: OtelPlanMixRow[]` (`{ plan, sessions, costUsdMicros }`) — `loadPlanMix(db, source)`
+  over the same `fb` source and filters as the Total KPI, `LEFT JOIN otel_session_state` grouped by
+  `NULLIF(plan,'')`, cost descending, NULL last. Rendered by `OtelPlanMix.tsx` on the Total tile
+  only when some row has a non-null plan.
+- `plan: OtelSessionPlan | null` (`{ plan, seatType, provider, customBaseUrl }`) — from
+  `readOtelStateRow` on every response including the empty-delta fast path; `null` when all four
+  are null. `customBaseUrl` is forced to `null` when `attributesMasked` — the only new masked
+  value; attribution keys and plan-mix values are aggregates and stay unmasked on every route.
+  Client: `SessionOtelAccount.tsx` (Account row + plan note, help anchor `plan-and-notional-cost`)
+  and the `plan:` chip on the session OTEL cost tile; `mergeOtelDelta` keeps the previous `plan`
+  when a delta (old server) has none.
+- Sub-agent OTEL cost (FR-6): see [llm-call-math.md](llm-call-math.md) and
+  [otel-cost-selection](algorithms/otel-cost-selection.md) rule for sub-agents.
 
 Client polling (DD-20, `client/src/viewer/pages/repository/otel/otel.constants.ts`): session tab
 every `OTEL_SESSION_POLL_MS` (5 s) with `since=` while the page is visible, there was input within
@@ -324,10 +389,170 @@ every `OTEL_SESSION_POLL_MS` (5 s) with `since=` while the page is visible, ther
 (30 s) snapshot while the period end ≥ now. The user's Pause stops every tab; Resume and the
 return from a hidden tab send one catch-up request.
 
+## Live view (task `2026-11-04-otel-live-view`)
+
+A user-wide view of what is running **now**: a **Live** item in the top navigation (red dot +
+tooltip "Live now: N sessions · M agents · $x.xx") opens a modal with a tree (Home → team / No
+team → repository → session → agent), a middle view pane (KPI tiles, chart carousel, breakdown or
+agent calls) and an optional details panel. OTEL data only. User help:
+`user-docs/otel-tab.md` § "Live view".
+
+**Routes** (`OtelLiveController`, `@Controller('api/v1/otel/live')`, session guard; `status` is
+declared before `@Get()`):
+
+- `GET /api/v1/otel/live/status` → `{ live, liveSessions, liveAgents, costUsdMicros }` — DISTINCT
+  live roots, live agents and the lifetime cost of the live roots; the same candidate / placement
+  path as the tree, without retention and without the recently ended roots. Polled by
+  `LiveNavItem` every `LIVE_STATUS_POLL_MS` (10 s, React Query, visible tab only).
+  Also `spark: { minutes, tokens[], costUsdMicros[] }` (2026-11-05, additive; the client treats
+  it as optional): `otel_calls` tokens (input + output + cache read + cache write) and cost of
+  the live roots per minute over the last `OTEL_LIVE_SPARK_MINUTES` (15), counted back from now,
+  oldest first (`loadOtelLiveSpark`). `LiveNavItem` is a 100 px button — a square activity icon
+  (grey idle, green glow while live) plus a framed bar `LiveSparkline` of `tokens` — and its tooltip sums the series («Last 15 min: N tokens · $X»).
+- `GET /api/v1/otel/live?node=&panel=&tz=` → `{ generatedAt, tz, windowFrom, windowTo, selected,
+  nodes, view, details }`. `node` defaults to `home`; `details` is filled only for `panel`. A
+  malformed key (or > 320 chars) or an unknown `tz` → 400. Both routes **row-filter and never
+  403**: a key the caller cannot see falls back to `selected: 'home'`. Polled by the modal through
+  `useOtelLivePoll` every `OTEL_SESSION_POLL_MS` (`refreshAbortsInFlight: true` on a selection
+  change; Pause / idle stop as on the other tabs). Shapes: `otel-live.types.ts`.
+
+**Node keys (DD-3).** One parser / formatter, `otel-live-tree.ts`; the client never builds keys
+(it uses `key` / `type` / ids sent on every node; `client/src/viewer/live/live-node-key.ts` only
+has `HOME_LIVE_KEY` and a prefix-based `liveNodeType`).
+
+| Type | Canonical key | Also accepted |
+|---|---|---|
+| home | `home` | — |
+| team | `team:<teamId>` | — |
+| No team | `noteam` | — |
+| repo | `repo:<repoId>@<teamId\|noteam>` | `repo:<repoId>` |
+| session | `session:<rootId>@<teamId\|noteam>` | `session:<rootId>` |
+| agent | `agent:<rootId>:<agentKey>@<teamId\|noteam>` | `agent:<rootId>:<agentKey>` |
+
+`rootId` = `sessions.id`; a team `repoId` is the team repository id (`MIN(repositories.id)` per
+URL), a No-team `repoId` the caller's own `repositories.id`; `agentKey` = `otel_calls.agent_id`, or
+`main` for `agent_id IS NULL AND structure <> 'hidden'`. The suffix splits at the last `@`, agent
+ids at the first two `:`. An unqualified key resolves to its first placement (teams by name, then
+No team).
+
+**Placement and access (DD-4, DD-11).** Teams = the caller's `team_members` rows (`loadOtelLiveTeams`,
+by name). Each team's row filter comes from `resolveTeamScope`: `visibleUserIds` when
+`analyticsAllowed`, else only the caller's own rows and the team node gets `restricted: true` (🔒).
+A root is placed under team T when its `artisyn` log (not deleted) links a repository whose URL is
+linked to T and the log owner passes T's filter; a root in two repos of a team sits under both repo
+nodes but counts once in the team. **No team** = roots linked to a repository the caller owns whose
+URL is linked to none of the caller's teams. Roots with no `log_repositories` link are not placed.
+One SQL statement places everything (per-team filters passed as a `scope_teams` VALUES CTE, plus
+its own multi-team `live_team_repo_ids` CTE). `team-no-prompts` masking of another member's session:
+`firstPrompt` via `maskFirstPrompt` (before the tree, so labels are masked too), `topTools` and
+tool-span event labels `null`, `attributesMasked: true`; counts and costs stay unmasked.
+
+**Recently ended (2026-11-05 follow-up).** The live route's candidates also include every root whose
+last activity is within `OTEL_LIVE_RECENT_MS` (2 h = the chart window) as `live: false`, and an
+ended agent stays `inTree` while its `last_call_at` is within it — so finished sessions and agents
+stay in the tree, greyed with an "ended" chip. They count in their parents' sums but not in
+`liveSessions` / `liveAgents`; `/status` keeps the live-only candidates. Same index range scan
+(`idx_otel_session_state_last_at`), only a longer range.
+
+**Candidates and retention (DD-5).** Candidates = live roots plus the roots named by `node` /
+`panel` (session / agent keys), retained with `live: false` while their last activity is within
+`OTEL_LIVE_RETAIN_MAX_MS` (24 h) — an older deep link falls back to home. Team / No-team / repo keys
+are passed to `buildOtelLiveTree` as `retainedKeys` and kept with zero totals when nothing live is
+left under them (a repo label via `loadOtelLiveRepoLabel`, null → dropped). Retention lives only on
+the server: a node disappears on the next poll after the client stops sending its key. An agent is
+live when its `last_call_at` is within `OTEL_SESSION_ENDED_MS` and its root is live (DD-2).
+
+**Totals (DD-6).** Session sums (cost, four token kinds, calls) are its lifetime ("since start");
+`runningMs = last_call_at − first_call_at` (calls only, wall clock); agents the same from their
+agent row, labelled `agent_name` or `agentKey`. Parents sum over DISTINCT roots, take the max
+`runningMs` and `lastActivityAt`, and count DISTINCT live sessions / agents. Hidden calls count in
+session and parent totals but get no agent node. `view.distinctFootnote` is true when a parent's
+total is below the sum of its children. Window figures: charts (`buckets` from
+`otel_cost_buckets`, or from `otel_calls` for an agent; `latency` p50 / p95 from `otel_spans`),
+`topModels` and `topTools` cover the 2 h window (`OTEL_LIVE_WINDOW_MS`, 24 UTC five-minute
+buckets, `tz` only echoed); `costPerMinUsdMicros` is the last 5 min / 5.
+
+**Stored totals (DD-22, migration `0089`).** `otel_session_totals` (PK `session_id`) and
+`otel_agent_totals` (PK `session_id, agent_key`, `agent_name`; hidden calls have no row), both
+`ON DELETE CASCADE` to `sessions`, with calls / cost / token sums, `first_call_at`, `last_call_at`
+and `seq`. Written only by the OTEL writer (a GET never writes), inside the transaction that already
+holds the `otel_session_state` lock, so no new lock:
+
+- **delta path** — `upsertOtelCalls` adds each changed call's −old / +new contribution (the same
+  one it adds to the buckets) to a session delta and per-`agentKey` deltas; `applyOtelTotalsDeltas`
+  upserts them (`x = x + EXCLUDED.x`, `LEAST` / `GREATEST` on the times, `COALESCE` on the agent
+  name) and stamps `seq` whenever the write touched `otel_cost_buckets`;
+- **freshness rule** — the delta path runs only when the session row exists and its
+  `seq >= MAX(otel_cost_buckets.seq)` of the root before this write; otherwise
+  `rebuildOtelTotals(tx, rootId, seq)` recomputes both tables from `otel_calls` with one
+  `GROUP BY`. This covers new sessions, sessions older than `0089` and buckets written by an older
+  server process; there is no backfill. `reclassifyOtelSession` also calls the rebuild after
+  `rebuildOtelBuckets`;
+- **read path** — the reader takes the rows by primary key; a missing or stale row is computed
+  inline with the rebuild `GROUP BY` (read-only) and repaired by the next write;
+- the delta path can leave `first_call_at` / `last_call_at` slightly wide after an `event_time`
+  update until the next rebuild — accepted for a running-time display.
+
+Migration `0089` also adds `idx_otel_session_state_last_at` on
+`(GREATEST(rt_last_at, chunk_last_at))` (the candidate filter) and the window indexes
+`otel_calls (session_id, event_time)` and `otel_spans (session_id, start_time)`. Columns:
+[db-tables.md](db-tables.md).
+
+**Long sessions (DD-23).** Tiles and the breakdown header say "since start"; Cost/min, charts and
+top lists are labelled "last 2 h" / "last 5 min". Durations use `formatLiveDuration` (`45s`, `12m`,
+`3h 12m`, `2d 4h`), times `formatLiveClock` (`hh:mm:ss` today, else `MMM d, hh:mm`), both in
+`client/src/viewer/live/live-format.ts`. Bounded lists: session agents in the breakdown
+(`OTEL_LIVE_BREAKDOWN_AGENTS` 50 + `view.moreAgents` "+N more"), agent calls (50), events (20), top
+lists (5 / 8). Per poll the cost is R primary-key reads per totals table plus R index steps
+(R = live roots), independent of session age. A tab hidden for days gets the current snapshot;
+nothing is replayed.
+
+**Client.** `components/top-nav/LiveNavItem.tsx` (in `MainNav`, between Home and All views) lazily
+mounts `LiveModal`, exported from the `repository-tabs-lazy-group.ts` barrel (no new chunk). The
+modal is open iff `?live=<nodeKey>` is in the URL (`useLiveUrlState`; open pushes, select / close
+replace); the details-panel key is local state. Files: `client/src/viewer/live/` — see
+[client-component-map.md](client-component-map.md).
+
+- **Splitters.** Tree | view | details are split by `LiveSplitter` handles driven by
+  `useDraggableWidth` (`artisyn:liveTreeWidth`, `artisyn:liveDetailsWidth` in `localStorage`); the
+  view pane keeps at least `LIVE_VIEW_MIN_WIDTH_PX`.
+- **Session labels.** `LiveNodeLabel` (in `LiveTree.tsx`) splits the server's single
+  `userEmail · excerpt` label into two lines — email on top, prompt below — in the tree and the
+  breakdown; the wire format is unchanged.
+- **Tick flash.** `useLiveTreeTicks` compares each node's `costUsdMicros` with the previous
+  answer; a row whose cost grew gets `data-ticked="true"` and the one-shot `.live-tick-flash`
+  overlay (`app.css`, off under `prefers-reduced-motion`). Nothing flashes on the first answer.
+- **"Cost over time"** is one series named `Total` (an empty key would read "(unknown)" in
+  `OtelCostChart`).
+- **Share page** (last carousel page, Home / team / No team / repository only): three doughnuts
+  side by side — cost or tokens by team, repository and user (`LiveSharePage`,
+  `live-share-data.ts`). Client-only, from `nodes`: the DISTINCT session roots under the selected
+  node with their lifetime totals, each counted once under its first placement in display order,
+  so every doughnut adds up to the same total. Each shows the top `LIVE_SHARE_TOP` (10) slices,
+  the rest folded into "Other (n)", the legend beside it (name and share; value in the hover hint;
+  a repository by its last path segment, full URL in the hint).
+- **Sankey** (`LiveFlowSankey`, below the carousel; not for an agent). The server adds
+  `view.flows` (`loadOtelLiveFlows`: one `GROUP BY` over `otel_calls` in the 2 h window on the
+  `(session_id, event_time)` index, ≤ `OTEL_LIVE_FLOW_ROWS`) — per root × model for a parent node,
+  per model × agent (hidden calls → null agent) for a session. `live-flow-data.ts` maps each
+  root to its first placement under the selected node from `nodes` (team, user, repository,
+  session label): Home model → team → user → session, a team model → user → repository →
+  session, No team model → repository → session, a repository model → user → session (cost);
+  a session model → agent (tokens). Drawn by the shared `OtelFlowSankey` over the
+  column-agnostic `layoutFlow` (`otel-cost-flow-layout.ts`), which the OTEL "Cost flow" uses too.
+  `flows` is optional on the client model, so a client against an older server shows no sankey.
+
+**Scope cuts.** No "API errors" series and no `api_error` / `user_prompt` events (not stored in any
+`otel_*` table); no Claude Code metrics (LOC, commits, active time); no "N updates since pause"
+counter; the chart grain is 5 min over 2 h. Compatibility: both routes are new, hooks are
+unchanged, and old-hook chunk-only sessions are live through `chunk_last_at`.
+
 ## Retention and lifecycle (DD-25)
 
 - All five tables cascade on a hard delete of `sessions`; `purgeSessionChildData` (soft delete,
-  hard delete, admin family delete, retention) deletes them explicitly, state row first.
+  hard delete, admin family delete, retention) deletes them explicitly, state row first. The Live
+  totals tables (`otel_session_totals`, `otel_agent_totals`) cascade too and are deleted next to
+  `otel_cost_buckets` by `purgeSessionChildData` and the projection's deleted-session cleanup.
 - Retention also purges **OTEL-only roots** (no `logs` rows) by `otel_session_state.created_at`;
   `getRetentionStats` reports them as `otelOnlySessions` (admin Data Retention tab). Account
   deletion also collects the user's OTEL-only roots. Details:
@@ -362,6 +587,16 @@ return from a hidden tab send one catch-up request.
 | unknown version | treated as `≥ 2.1.282` | — | as `≥ 2.1.282` |
 | any, managed endpoint / disabled | managed wins per key | no OTEL to Log Hub for pinned signals | `managed-endpoint` / `managed-disabled`; the installer writes no user keys |
 
+**Claude Code version × cost attribution** (task `2026-11-03-otel-cost-attribution`; server-side
+only, any hook that sends OTEL):
+
+| Claude Code | Effect | Scenario step |
+|---|---|---|
+| `< 2.1.300` | no `cache_creation_5m_tokens` / `_1h_tokens` → `cache_write_5m_tokens` / `cache_write_1h_tokens` NULL (the cache-write total is unchanged) | algorithm row (pre-2.1.300 `calls`) |
+| no attribution attributes (old CC, default values, no `OTEL_LOG_TOOL_DETAILS`) | every attribution `stackBy` returns one `''` "not reported" group equal to the total | `s-compat-01` frozen 2.28.0 OTEL |
+| `< 2.1.307` | sub-agent transcripts can miss API calls → sub-agent cost = `GREATEST(transcript, OTEL)` (FR-6), `subagentCostFromOtel`, "from OTEL" | `s-cost-01` GS-02 old-CC sub-agent |
+| `< 2.1.317` | no `anthropic.plan` / account attributes → `plan: null`, no Account row, no chip, counted as "not reported" in `planMix` | `s-compat-01` frozen 2.28.0 OTEL |
+
 The trace keys are opt-in at install (`--otel-traces`, stored `otelTraces`), see
 [hook-installation.md](hook-installation.md).
 
@@ -386,7 +621,9 @@ re-run `npm run perf` against a seeded database to fill them in.
 
 - Algorithm docs: `algorithms/otel-facts.md` (server), `otel-trace-assembly.md`,
   `otel-delta-merge.md` (client), `otel-realtime-backoff.md`, `otel-shared-routing.md`,
-  `otel-status-reason.md` (hook).
-- Contract rows: `server/test/contract/registry/f25-otel.ts`.
+  `otel-status-reason.md` (hook), `otel-live-tree.md` (server, Live view keys and tree).
+- Contract rows: `server/test/contract/registry/f25-otel.ts` (incl. the Live status, home and 400
+  rows).
 - Scenario: `tests/scenarios/view/s-otel-01.spec.ts`, plus steps in `s-compat-01`, `s-hook-01`,
-  `s-hook-07`, `s-inst-01`, `s-inst-04`, `s-slife-08`.
+  `s-hook-07`, `s-inst-01`, `s-inst-04`, `s-slife-08`; Live view: `tests/scenarios/view/s-otel-02.spec.ts`
+  (`@S-OTEL-02`).

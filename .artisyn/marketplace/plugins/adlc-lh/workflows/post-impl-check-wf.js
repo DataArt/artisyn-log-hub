@@ -88,8 +88,15 @@ if (!Array.isArray(input.checks) || input.checks.length === 0) {
   return { checks: [], halted: { index: -1, reason: 'no-checks', argsType: typeof args } }
 }
 
+// Guard against fake-success results: an agent that ends prematurely (e.g. waiting on a
+// background command) may emit a placeholder StructuredOutput instead of a real report.
+// Match only interim-report phrasing — a bare word like "placeholder" is legitimate in a real
+// summary ("paths that did not resolve are placeholder examples") and must not void it.
+const INTERIM_SUMMARY = /\bplaceholder (result|summary|report|value|output)s?\b|\bwill be (replaced|updated|filled in)\b|\bto be filled\b|\bTBD\b/i
+
 phase('Checks')
 const results = []
+const noResult = []
 let halted = null
 for (let i = 0; i < input.checks.length; i++) {
   const check = input.checks[i]
@@ -99,21 +106,19 @@ for (let i = 0; i < input.checks.length; i++) {
     label: `check-${i + 1}-${check.id ?? 'unknown'}`,
     schema: CHECK_RESULT_SCHEMA,
   })
-  // Guard against fake-success results: an agent that ends prematurely (e.g. waiting on a
-  // background command) may emit a placeholder StructuredOutput instead of a real report.
-  const suspect = result && (
-    /placeholder|will be replaced|to be filled|TBD/i.test(result.summary ?? '') ||
-    (result.summary ?? '').trim().length < 10
-  )
+  const summary = (result?.summary ?? '').trim()
+  const suspect = result && (INTERIM_SUMMARY.test(summary) || summary.length < 10)
   if (suspect) {
     log(`Check ${i + 1}/${input.checks.length} (${check.name}) returned a placeholder/empty summary — treating as no-result`)
   }
   results.push({ check: check.name, id: check.id, result: suspect ? null : result })
 
+  // A check with no usable result says nothing about the others — record it and go on.
+  // Only a hard blocker stops the run.
   if (!result || suspect) {
-    log(`Check ${i + 1}/${input.checks.length} (${check.name}) produced no result — halting, remaining checks skipped`)
-    halted = { index: i, reason: 'no-result' }
-    break
+    log(`Check ${i + 1}/${input.checks.length} (${check.name}) produced no result — continuing with the next check`)
+    noResult.push({ index: i, id: check.id, check: check.name })
+    continue
   }
   if (result.status === 'hard-blocker') {
     log(`Check ${i + 1}/${input.checks.length} (${check.name}) hit a hard blocker — halting, remaining checks skipped`)
@@ -124,5 +129,5 @@ for (let i = 0; i < input.checks.length; i++) {
 }
 
 const totalFindings = results.reduce((sum, r) => sum + (r.result?.findings?.length ?? 0), 0)
-log(`Checks done: ${results.length}/${input.checks.length} ran, ${totalFindings} finding(s) total${halted ? `, halted (${halted.reason})` : ''}`)
-return { checks: results, halted }
+log(`Checks done: ${results.length}/${input.checks.length} ran, ${totalFindings} finding(s) total${noResult.length ? `, ${noResult.length} without a result` : ''}${halted ? `, halted (${halted.reason})` : ''}`)
+return { checks: results, noResult, halted }

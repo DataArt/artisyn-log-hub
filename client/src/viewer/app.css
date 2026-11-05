@@ -262,6 +262,22 @@ body,
   }
 }
 
+/* Live view tree: a row whose cost grew on the latest poll flashes once and fades out. */
+@keyframes live-tick-flash {
+  0% { background-color: rgb(16 185 129 / 0.35); }
+  100% { background-color: transparent; }
+}
+
+.live-tick-flash {
+  animation: live-tick-flash 1.6s ease-out forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live-tick-flash {
+    animation: none !important;
+  }
+}
+
 /* New-user nudge: a ~3s gradient sweep across the "Give Me String" button,
    after which the button settles back into its normal appearance. */
 @keyframes give-me-string-shimmer {

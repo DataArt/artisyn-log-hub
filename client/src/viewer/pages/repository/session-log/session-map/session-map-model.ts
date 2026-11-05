@@ -706,8 +706,12 @@ export function buildSessionMapModel(
     const stats: SubagentStats | undefined =
       inputs.subagentStats[`agent-${agentId}`];
     const model = stats?.model ?? own.model;
+    // FR-6: the server-chosen OTEL cost replaces the token×price estimate when it is set.
+    const otelCostUsd = (stats ?? inputs.subagentStats[agentId])?.otelCostUsd;
     let cost = 0;
-    if (stats) {
+    if (otelCostUsd != null) {
+      cost = otelCostUsd;
+    } else if (stats) {
       const entry = pricingFor(pricing, stats.model ?? own.model);
       if (entry) cost = computeCost(statsBreakdown(stats), entry);
     } else {
@@ -762,7 +766,12 @@ export function buildSessionMapModel(
       kind: 'agent',
       sessionId: `agent-${d.agentId}`,
       label: truncateLabel(
-        agentRowLabel({ agentId: d.agentId, prompt: d.prompt, children: [] }),
+        agentRowLabel({
+          agentId: d.agentId,
+          prompt: d.prompt,
+          agentDescription: inputs.agentDescriptions.get(d.agentId),
+          children: [],
+        }),
       ),
       share: 0,
       finished,

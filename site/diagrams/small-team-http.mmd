@@ -1,0 +1,10 @@
+flowchart TB
+  subgraph net["Company network (office LAN / VPN) · no inbound access from the internet"]
+    browser["Browser"]
+    hook["Claude Code + hook"]
+    app["VM 10.0.0.15 · app container<br/>Log Hub server<br/>10.0.0.15:5003 → :3000"]
+    pg[("VM · db container<br/>PostgreSQL, not published")]
+    browser -->|"plain HTTP · unencrypted"| app
+    hook -->|"plain HTTP · unencrypted"| app
+    app -->|SQL| pg
+  end

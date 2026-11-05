@@ -6,7 +6,7 @@ tags:
   - server
   - api
   - auth
-timestamp: "2026-11-03T00:00:00+04:00"
+timestamp: "2026-11-05T00:00:00+04:00"
 ---
 
 # Server HTTP API map
@@ -208,6 +208,7 @@ controller itself. Several controllers share the `api/v1/repositories` prefix �
 | `logs/analytics/usage-analytics.controller.ts` | `/api/v1/repositories` | `analytics/{tools,tokens,productivity,active-sessions,claude-versions}` | `usage-analytics.types.ts` · `f20` |
 | `logs/reports/reports.controller.ts` | `/api/v1/repositories` | `reports/*` | `logs/reports/*.service.ts` · `f21` |
 | `logs/otel/otel-facts.controller.ts` | `/api/v1/repositories` | Repo and session OTEL tabs | `logs/otel/otel-facts.types.ts` · `f25` |
+| `logs/otel/otel-live.controller.ts` (`OtelLiveController`) | `/api/v1/otel/live` | OTEL Live view: `status` (header entry) and the live tree (`node`, `panel`, `tz`), user-wide | `logs/otel/otel-live.types.ts`, client `models/otel-live.ts` · `f25` |
 | `logs/tool-monitoring/tool-monitoring.controller.ts` | `/api/v1/repositories` | Tools/MCP tab config, summary, calls | `tool-monitoring.types.ts` · `f24` |
 | `logs/repository-export-import.controller.ts` | `/api/v1/repositories` | Export, import, bootstrap import (background jobs) | inline + `logs/export-import-zip.ts`, client `models/export-import.ts` · `f23` |
 | `sessions/sessions.controller.ts` | `/api/v1/sessions` | Retention days, session delete | — · `f18` |
@@ -218,6 +219,7 @@ controller itself. Several controllers share the `api/v1/repositories` prefix �
 | `admin/admin.controller.ts` | `/api/v1/users` | Role change, reset-password link | `admin/dto/` · `f06` |
 | `admin/admin-panel.controller.ts` | `/api/v1/admin` | Users, auth settings, pending registrations, repos, teams, system info, error logs, upload queue | `admin/*.service.ts`, client `models/admin.ts` · `f06`–`f09` |
 | `model-pricing/model-pricing-admin.controller.ts` | `/api/v1/admin/model-pricing` | Admin price table, overrides, fetch/import | `model-pricing/model-pricing.types.ts`, `dto/` · `f22` |
+| `log-hub-release/log-hub-release.controller.ts` | `/api/v1/admin/log-hub-release` | `admin`: new Log Hub release badge state (read-only; GitHub fetch runs in the scheduler) | `log-hub-release/log-hub-release.types.ts`, client `models/admin.ts` · `f01` |
 
 Feature articles own the semantics behind each area: [upload-queue.md](upload-queue.md),
 [turn-end-cost-advisor.md](turn-end-cost-advisor.md), [okf-usage.md](okf-usage.md),
@@ -281,6 +283,15 @@ grep the controller.
   `DELETE …/repositories/:repoId` also removes the repo row when no other team references it.
 - `GET /api/v1/teams/:teamId/otel/facts` is only `session`-guarded; membership and
   `analyticsAllowed` are checked in the handler.
+
+**OTEL Live** (`session`; [otel-tabs.md](otel-tabs.md) § "Live view")
+
+- `GET /api/v1/otel/live/status` and `GET /api/v1/otel/live` take no repository or team id: they
+  cover the caller's own (No team) sessions plus every team the caller belongs to. They
+  **row-filter and never 403** — a team whose analytics the caller may not see is shown with only
+  the caller's own sessions (`restricted: true`), and a well-formed `node` / `panel` key the caller
+  cannot see, or one without data, answers 200 with `selected: 'home'`. Only a malformed key
+  (or one over 320 chars) or an unknown `tz` is a 400. `status` is declared before `@Get()`.
 
 **Admin** (rows are metadata only and link to no session data)
 

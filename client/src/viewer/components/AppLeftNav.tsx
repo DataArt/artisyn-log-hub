@@ -22,6 +22,7 @@ import {
 } from '../api';
 import { useAuth } from '../context/AuthContext';
 import { routes } from '../hooks/useHashRoute';
+import { useLogHubRelease } from '../hooks/useLogHubRelease';
 import { CreateTeamDialog } from './CreateTeamDialog';
 import { ImportRepoSessionsDialog } from './ImportRepoSessionsDialog';
 import { TeamAccordionList } from './TeamAccordion';
@@ -65,6 +66,9 @@ export function AppLeftNav({ isCollapsed = false }: { isCollapsed?: boolean }) {
   });
 
   const isAdmin = user?.role === 'admin';
+  // Admin-only query (disabled for everyone else): a newer official Log Hub release exists.
+  const { data: release } = useLogHubRelease(isAdmin);
+  const showReleaseDot = isAdmin && release?.updateAvailable === true;
   const isTeamOwner = teams.some((t) => t.ownerId === user?.id);
   const myTeams = useMemo(
     () => teams.filter((t: Team) => t.isMember !== false),
@@ -144,11 +148,22 @@ export function AppLeftNav({ isCollapsed = false }: { isCollapsed?: boolean }) {
         </button>
         {(isAdmin || isTeamOwner) && (
           <button
-            title="Admin Panel"
+            title={
+              showReleaseDot
+                ? 'Admin Panel — new Log Hub release available'
+                : 'Admin Panel'
+            }
             onClick={() => navigate(routes.admin)}
-            className="flex items-center justify-center p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors"
+            className="relative flex items-center justify-center p-1.5 rounded text-muted-foreground hover:text-foreground hover:bg-accent/50 transition-colors"
           >
             <ShieldCheck className="size-4" />
+            {showReleaseDot && (
+              <span
+                data-testid="admin-release-dot"
+                aria-hidden="true"
+                className="absolute top-0.5 right-0.5 size-1.5 rounded-full bg-orange-500"
+              />
+            )}
           </button>
         )}
       </nav>
@@ -333,6 +348,13 @@ export function AppLeftNav({ isCollapsed = false }: { isCollapsed?: boolean }) {
           >
             <ShieldCheck className="size-3.5 shrink-0" />
             <span>Admin Panel</span>
+            {showReleaseDot && (
+              <span
+                data-testid="admin-release-dot"
+                title="New Log Hub release available"
+                className="ml-auto size-1.5 rounded-full shrink-0 bg-orange-500"
+              />
+            )}
           </button>
         </>
       )}

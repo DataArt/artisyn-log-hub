@@ -172,6 +172,21 @@ export function computeWorkerPoolMax(instances: number): number {
   absent (local/dev, unbundled) it falls back to `{ version: 'dev', gitCommit: 'unknown' }`. The same
   two fields are the **public** `GET /health/version` payload, read by
   `client/src/viewer/hooks/useBuildVersion.ts`.
+- **`GIT_BRANCH` and `OFFICIAL_RELEASE` build args, `build.origin.json`** (2026-11-04): `ARG GIT_BRANCH=unknown`
+  and `ARG OFFICIAL_RELEASE=false` in the runtime stage. Only `release.yml` passes them
+  (`GIT_BRANCH=${{ github.ref_name }}`, `OFFICIAL_RELEASE=true`); every other image build (`local-loghub.js`,
+  `local-release-bundle.js`, a plain `docker build`) gets `unknown` / `false`. The same `RUN` as
+  `build-info.json` then writes
+  `dist/build.origin.json` = `{"branch","version","builtAt","officialRelease"}` with `printf`:
+  `version` is `$VERSION`, `builtAt` is `date -u` ISO 8601, and `OFFICIAL_RELEASE` is normalised (exactly
+  `true` → `true`, anything else → `false`) so the JSON is always valid. The file sits next to `index.js`,
+  outside `dist/public/`, so it is never served. The Docker build stages never run
+  `scripts/build-assets.js`, so this `printf` is the image's only writer. Outside Docker,
+  `scripts/build-origin.js` writes it: `npm run build` / `build:serial` with the git branch and
+  `officialRelease: false`, the scenario stand with `branch: "scenario-stand"` and `officialRelease: true`.
+  Read by `readBuildOrigin()` (`server/src/common/build-info.ts`, `null` when absent/unparseable, never
+  cached); `GET /health/version` adds it as an optional `origin` key (omitted when `null`), and it gates the
+  `log-hub-release` scheduler below.
 - **Cluster launch**: the runtime stage installs no process manager. It sets `ENV CLUSTER_MODE=primary`
   beside `ENV PORT=3000` and the container `CMD` is plain `["node", "index.js"]` — the bundle's own mode
   switch turns that one process into the primary, and the primary forks the workers.
@@ -293,6 +308,53 @@ the `ai-tool-versions` pattern above. The parser, apply rules and OpenRouter imp
   - The admin-only OpenRouter import (`https://openrouter.ai/api/v1/models`, 20 s timeout) is **not**
     scheduled. It runs only on the admin's button click, in the request's worker, and is serialized
     against the fetch by the same advisory lock.
+
+---
+
+## `log-hub-release` scheduler: admin "new Log Hub release" check (2026-11-04)
+
+`server/src/log-hub-release/` (`LogHubReleaseModule`, registered in `app.module.ts` after
+`ModelPricingModule`) tells admins when a newer Log Hub release is published on GitHub. Table:
+`log_hub_release_check` (single row, see `db-tables.md`). Read side: admin-only
+`GET /api/v1/admin/log-hub-release` (`SessionAuthGuard` + `AdminGuard`), which drives the dot on the
+"Admin Panel" left-nav entry and the banner above the Admin tabs (`useLogHubRelease`,
+`NewReleaseBanner.tsx`).
+
+- **Eligibility** (`LogHubReleaseService.isEligible`). The running version is `origin.version` from
+  `build.origin.json` (see the Dockerfile section). A deployment is eligible only when the file exists,
+  `officialRelease === true` and the version is strict `X.Y.Z` (`isValidSemver` from
+  `server/src/common/semver.ts`). Local builds, dev, `local-loghub` and bundles are never eligible.
+- **Scheduler.** `LogHubReleaseScheduler` copies the `ai-tool-versions` mechanics: one unawaited tick in
+  `onApplicationBootstrap`, then a `setInterval` of `TICK_INTERVAL_MS` (1 h, constant, no env var)
+  registered in `SchedulerRegistry` as `log-hub-release-check`, an `isTickRunning` guard, and
+  `onModuleDestroy` awaiting an in-flight tick. Bootstrap returns early — no fetch, no DB write — when
+  the check is disabled or the deployment is not eligible.
+- **Cluster claim** (`runCheck`). Seed `INSERT INTO log_hub_release_check (id) VALUES (1) ON CONFLICT (id) DO NOTHING`,
+  then `UPDATE … SET last_attempt_at = now() WHERE id = 1 AND (last_attempt_at IS NULL OR last_attempt_at < now() - make_interval(hours => 24)) RETURNING id`
+  (`ATTEMPT_EVERY_HOURS`). There is no success clause and no 1 h retry: exactly one attempt per 24 h
+  cluster-wide, whatever its outcome. Only the winner fetches; the others return `'skipped'`.
+- **Fetch and validation.** `GET https://api.github.com/repos/DataArt/artisyn-log-hub/releases/latest` with
+  `Accept: application/vnd.github+json`, `X-GitHub-Api-Version: 2022-11-28`,
+  `User-Agent: artisyn-log-hub/<running version>`. `tag_name` must match `RELEASE_TAG_RE`
+  (`vX.Y.Z`, no leading zeros) and `html_url` must start with
+  `https://github.com/DataArt/artisyn-log-hub/releases/`; anything else is a failure, so the server never
+  stores or renders a link to another host. Only success writes `latest_tag`, `release_url`,
+  `fetched_at`. Any failure (network, timeout, non-2xx, bad payload, persist error) logs **one**
+  `logger.warn` line, returns `'failed'` and leaves stored values untouched.
+- **Read-time state** (`getState`, a pure `SELECT` by PK, never writes). `updateAvailable` is true only
+  when the deployment is eligible, the stored tag and URL pass the same validation, and
+  `compareSemver(latest_tag.slice(1), origin.version) > 0`. Because it compares at read time, an upgraded
+  server stops showing the badge at once even with an old row; a missing row or a never-successful check
+  gives `updateAvailable: false`. `latestVersion` / `releaseUrl` are set only when `updateAvailable`.
+- **Env flag** (read at bootstrap, not import time; documented in `server/.env.example`):
+  `LOG_HUB_RELEASE_CHECK_ENABLED` — only the literal `false` disables the fetch. It does not affect
+  `getState()`, so an already stored result is still shown. `server/test/contract/setup/global-setup.ts`
+  and the scenario stand (`FAST_TICK_ENV` in `tests/scenarios/modes.ts`) set it; the stand is an eligible
+  deployment and its scenarios seed the row directly, so no test reaches GitHub.
+- **Outbound dependency.** `api.github.com` — one global `fetch` with a 10 s `AbortSignal.timeout`
+  (`FETCH_TIMEOUT_MS`), at most one attempt per 24 h per cluster, official releases only. A deployment
+  without egress logs one `warn` per day and the badge never appears — nothing user-visible breaks. Set
+  `LOG_HUB_RELEASE_CHECK_ENABLED=false` to silence it.
 
 ---
 

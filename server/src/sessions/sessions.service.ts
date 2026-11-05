@@ -14,10 +14,12 @@ import {
   deletedSessionLog,
   logContexts,
   logs,
+  otelAgentTotals,
   otelCalls,
   otelCostBuckets,
   otelReclassQueue,
   otelSessionState,
+  otelSessionTotals,
   otelSpans,
   sessionCallTokens,
   sessionCosts,
@@ -188,7 +190,7 @@ export class SessionsService {
   ): Promise<void> {
     // 0. OTEL facts (DD-25). The state row goes first: every OTEL writer locks it FOR UPDATE
     // before its deleted check (DD-2), so this waits for a running writer, and a later writer
-    // finds no row (or `deleted = true`) and writes nothing. All five tables would cascade on a
+    // finds no row (or `deleted = true`) and writes nothing. All seven tables would cascade on a
     // hard delete, but a soft delete keeps the `sessions` row.
     await tx
       .delete(otelSessionState)
@@ -198,6 +200,12 @@ export class SessionsService {
     await tx
       .delete(otelCostBuckets)
       .where(inArray(otelCostBuckets.sessionId, ids));
+    await tx
+      .delete(otelSessionTotals)
+      .where(inArray(otelSessionTotals.sessionId, ids));
+    await tx
+      .delete(otelAgentTotals)
+      .where(inArray(otelAgentTotals.sessionId, ids));
     await tx
       .delete(otelReclassQueue)
       .where(inArray(otelReclassQueue.sessionId, ids));

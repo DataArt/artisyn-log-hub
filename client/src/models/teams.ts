@@ -104,7 +104,11 @@ export type TeamOtelStackBy =
   | 'repository'
   | 'structure'
   | 'model'
-  | 'querySource';
+  | 'querySource'
+  | 'skill'
+  | 'mcpServer'
+  | 'effort'
+  | 'speed';
 
 export interface OtelTeamKpis extends OtelRepoKpis {
   /** Total / active people; null without people. */

@@ -27,13 +27,16 @@ state and which keys it highlights.
 A state and a response are compact: `{ full, kpis, calls, spans, buckets }`. A call is
 `{ key, kind, v }` (call key, change kind, a cost value that shows which copy of a row survived),
 a span `{ id, kind }`, a bucket `{ start, key, cost, calls, tokens, kind }`. `kpis` is a number
-or null (it stands for the KPI object). `input.state` may be null (nothing loaded yet).
+or null (it stands for the KPI object). An optional `plan` is a string, null or absent (it
+stands for the account object carrying that plan; absent = an older server). `input.state` may be
+null (nothing loaded yet).
 
 `input.kind`:
 - `merge` → `mergeOtelDelta(state, delta)` as `{ calls, spans, buckets, kpis, highlighted,
   filled }`: `calls` lists the state's calls as `key:v` in order, `spans` the span ids in order,
   `buckets` the bucket keys `start|key`; `highlighted` holds the highlighted keys per kind
-  (sorted); `filled` the filled counts.
+  (sorted); `filled` the filled counts; `plan` the state's plan string, `null`, or `"absent"`
+  when the state has no `plan` field.
 - `diff` → `diffOtelBuckets(state, next)` (repository / team snapshots) as `{ highlighted }`
   (bucket keys only).
 
@@ -61,6 +64,11 @@ or null (it stands for the KPI object). `input.state` may be null (nothing loade
    clears them).
 6. **Repository / team snapshots** (`diffOtelBuckets`): the next snapshot becomes the state;
    buckets are highlighted by rule 3; the first snapshot highlights nothing.
+7. **Account plan** (task `2026-11-03-otel-cost-attribution`, DD-10). The session route sends
+   `plan` (the account object, or `null` when nothing is reported) on snapshots and deltas alike.
+   A response that carries the field replaces the previous value, `null` included, even when the
+   rest of the delta is empty. A response without the field (an older server) keeps the previous
+   value; a state that never had it stays without it.
 
 ## Edge cases
 
@@ -70,10 +78,12 @@ or null (it stands for the KPI object). `input.state` may be null (nothing loade
 - Empty delta keeps rows and KPIs: DM-05.
 - Buckets: grew + update vs grew + confirm vs unchanged + update vs unknown: DM-08.
 - Snapshot diff: DM-10; first snapshot: DM-11.
+- Plan: replaced by the delta DM-12, replaced by `null` DM-13, absent keeps it DM-14, never sent
+  DM-15.
 
 ## Examples
 
-Rows (11): [`docs/algorithm-examples/otel-delta-merge.json`](../../algorithm-examples/otel-delta-merge.json) — test data for the table test; the rules above are enough to understand the algorithm.
+Rows (15): [`docs/algorithm-examples/otel-delta-merge.json`](../../algorithm-examples/otel-delta-merge.json) — test data for the table test; the rules above are enough to understand the algorithm.
 
 ## Mutations
 
@@ -84,6 +94,8 @@ Rows (11): [`docs/algorithm-examples/otel-delta-merge.json`](../../algorithm-exa
 - "Buckets highlighted on any change" (without the growth check) -> DM-08 (subagent).
 - "Buckets highlighted for every kind" -> DM-08 (hidden), DM-10.
 - "Empty delta clears KPIs" -> DM-05.
+- "`plan` kept from the state like the KPIs" (`delta.plan ?? state.plan`) -> DM-13; "an absent
+  `plan` clears it" -> DM-14; "a delta's `plan` ignored" -> DM-12.
 
 ## Where the result is visible
 

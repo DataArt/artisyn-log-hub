@@ -5,7 +5,7 @@ description: "Folder-level index of client/src: what each folder holds, its entr
 tags:
   - client
   - ui
-timestamp: "2026-11-03T00:00:00+04:00"
+timestamp: "2026-11-05T00:00:00+04:00"
 ---
 
 # Client Components Structure
@@ -47,6 +47,7 @@ For routing, the provider tree, lazy chunks, URL state and browser storage see
 | `lib/` | Shared non-page logic — [below](#viewerlib) |
 | `ui/` | Shadcn/Radix primitives (`button`, `dialog`, `tabs`, `page-tabs`, `overflow-row`, `popover`, `tooltip`, `switch`, …). Prefer these over raw HTML elements |
 | `pages/` | One folder per page — [below](#viewerpages) |
+| `live/` | OTEL **Live view** modal (opened from the top-nav Live item, `?live=<nodeKey>`): `LiveModal` (shell, polling via `useOtelLivePoll`, banners) + `LiveModalHeader`, `LiveTree` (left pane), `LiveViewPane` (breadcrumb, `LiveKpiTiles`, `LiveChartCarousel` / `LiveLatencyChart` fed by `live-chart-data.ts`, `LiveBreakdownTable`), `LiveDetailsPanel` + `LiveDetailsParts` (right panel), `useLiveUrlState` (`?live=`), `live-links.ts` (Open session / OTEL tab targets), `live-format.ts` (`formatLiveDuration`, `formatLiveClock`), `live-node-key.ts`, `live.constants.ts`. Exported through `pages/repository/repository-tabs-lazy-group.ts` — [`otel-tabs.md`](otel-tabs.md) § "Live view" |
 
 ---
 
@@ -130,7 +131,7 @@ One folder per session tab; flat files are the Logs tab and the shared parsing. 
 |---|---|
 | `AppShell.tsx` | Authenticated shell: `MainNav` + `AppLeftNav` + page area; mounts the Ctrl+K shortcut |
 | `AppLeftNav.tsx`, `TeamAccordion.tsx` | Left sidebar: teams tree, My Repos, API Keys, Installed Hooks, Admin link |
-| `top-nav/` | `NotificationBell`, `UserMenu`, `ChangePasswordModal`, `AppLogo` (the bar itself is `pages/main/MainNav.tsx`) |
+| `top-nav/` | `NotificationBell`, `UserMenu`, `ChangePasswordModal`, `AppLogo`, `LiveNavItem` (the OTEL Live entry: glowing activity icon + token sparkline + tooltip from `GET /api/v1/otel/live/status`, lazily mounts `viewer/live/LiveModal`) (the bar itself is `pages/main/MainNav.tsx`) |
 | `teams/` | Team access mode: `AccessModeBadge`, `TeamDisclosureModal`, `PendingDisclosureGate` |
 
 ### Shared components

@@ -9,6 +9,7 @@ import type {
   SessionLogsDeltaUpdate,
   SubagentStatsRow,
 } from './dto/session-logs-delta.dto';
+import { subagentOtelCostSql } from './otel-cost.sql';
 import { readOtelStateRow } from './otel/otel-facts-read.sql';
 import { computeOtelLiveness } from './otel/otel-facts.reader';
 import {
@@ -34,7 +35,19 @@ import {
  * client's cost attribution — shared by `/logs` (every descendant of the root) and the delta
  * (the new and changed sub-agents only), so both return the same fields under the same guard.
  */
-export function selectSubagentStats(db: DrizzleDb, sessionRowIds: number[]) {
+export function selectSubagentStats(
+  db: DrizzleDb,
+  sessionRowIds: number[],
+  rootRowId: number,
+) {
+  // FR-6 (2026-11-03 otel-cost-attribution): the sub-agent's OTEL cost, non-null exactly
+  // when `selectSubagentCost` would take it (old Claude Code, OTEL above the transcript cost).
+  const otelCost = subagentOtelCostSql({
+    claudeVersion: sql`${schema.sessionStats.claudeVersion}`,
+    claudeVersionOtel: sql`${schema.sessionStats.claudeVersionOtel}`,
+    subSessionId: sql`${schema.sessions.sessionId}`,
+    rootRowId: sql`${rootRowId}::bigint`,
+  });
   return db
     .select({
       sessionId: schema.sessions.sessionId,
@@ -60,6 +73,13 @@ export function selectSubagentStats(db: DrizzleDb, sessionRowIds: number[]) {
       linesRemoved: schema.sessionStats.linesRemoved,
       diffLinesCoveredCalls: schema.sessionStats.diffLinesCoveredCalls,
       diffLinesTotalCalls: schema.sessionStats.diffLinesTotalCalls,
+      otelCostUsd: sql<number | null>`(
+        SELECT CASE WHEN o.v > COALESCE((
+          SELECT sc_sa.cost::float FROM session_costs sc_sa
+          WHERE sc_sa.session_id = ${schema.sessions.id}
+        ), 0.0) THEN o.v END
+        FROM (SELECT ${otelCost} AS v) o
+      )`.mapWith((v: unknown) => (v == null ? null : Number(v))),
     })
     .from(schema.sessions)
     .innerJoin(
@@ -88,6 +108,10 @@ interface TreeMetaRow extends DeltaCurrentRow {
   sessionId: string;
   parentSessionId: string | null;
   workflowRunId: string | null;
+  /** `sessions.agent_description` (sub-agent `.meta.json` description). */
+  agentDescription: string | null;
+  /** `sessions.workflow_phase` (sub-agent `.meta.json` workflow phase). */
+  workflowPhase: string | null;
 }
 
 /** Step (c): what was read of one changed or new row. */
@@ -214,8 +238,18 @@ export class SessionLogsDeltaService {
       if (current.t !== 's') continue;
       const lines = linesByKey.get(sliceKey(current.sid, 's')) ?? [];
       const row = metaBySid.get(current.sid);
-      if (lines.length === 0 || row === undefined) continue;
-      subagentAppends.push({ sessionId: row.sessionId, lines });
+      if (row === undefined) continue;
+      // A meta-only re-upload (no new lines) still reaches the client when it carries
+      // labels (DD-15); an old client skips empty-line appends.
+      const hasMeta =
+        row.agentDescription !== null || row.workflowPhase !== null;
+      if (lines.length === 0 && !hasMeta) continue;
+      subagentAppends.push({
+        sessionId: row.sessionId,
+        lines,
+        agentDescription: row.agentDescription,
+        workflowPhase: row.workflowPhase,
+      });
     }
 
     const newSubagents: SessionLogsDeltaUpdate['newSubagents'] = [];
@@ -227,6 +261,8 @@ export class SessionLogsDeltaService {
         sessionId: row.sessionId,
         parentSessionId: row.parentSessionId,
         workflowRunId: row.workflowRunId,
+        agentDescription: row.agentDescription,
+        workflowPhase: row.workflowPhase,
         logs: linesByKey.get(sliceKey(current.sid, 's')) ?? [],
       });
     }
@@ -247,7 +283,7 @@ export class SessionLogsDeltaService {
     const newSubagentAppeared = classified.new.some((r) => r.t === 's');
     const [statsRows, otelState, workflows] = await Promise.all([
       movedSubagentIds.length > 0
-        ? selectSubagentStats(this.db, movedSubagentIds)
+        ? selectSubagentStats(this.db, movedSubagentIds, sessionRowId)
         : Promise.resolve([]),
       readOtelStateRow(this.db, sessionRowId),
       // (f) workflows only when the root claude log moved or a new agent appeared.
@@ -282,7 +318,8 @@ export class SessionLogsDeltaService {
   ): Promise<TreeMetaRow[]> {
     const descendantsLiteral = `{${descendantIds.join(',')}}`;
     const result = await this.db.execute(sql`
-      SELECT s.id, s.session_id, s.parent_session_id, s.workflow_run_id, l.log_type,
+      SELECT s.id, s.session_id, s.parent_session_id, s.workflow_run_id,
+             s.agent_description, s.workflow_phase, l.log_type,
              floor(extract(epoch from l.updated_at) * 1000000)::bigint AS ut
         FROM sessions s
         JOIN logs l ON l.session_id = s.id
@@ -295,6 +332,8 @@ export class SessionLogsDeltaService {
       session_id: string;
       parent_session_id: string | null;
       workflow_run_id: string | null;
+      agent_description: string | null;
+      workflow_phase: string | null;
       log_type: string;
       ut: DbScalar;
     }[];
@@ -309,6 +348,8 @@ export class SessionLogsDeltaService {
         sessionId: r.session_id,
         parentSessionId: r.parent_session_id,
         workflowRunId: r.workflow_run_id,
+        agentDescription: r.agent_description ?? null,
+        workflowPhase: r.workflow_phase ?? null,
       });
     }
     return out;

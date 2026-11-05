@@ -140,6 +140,9 @@ export const sessions = pgTable(
     sessionId: varchar('session_id', { length: 255 }).notNull().unique(),
     parentSessionId: varchar('parent_session_id', { length: 255 }),
     workflowRunId: varchar('workflow_run_id', { length: 255 }),
+    // Migration 0085: Task description / workflow phase of a sub-agent, from its .meta.json.
+    agentDescription: varchar('agent_description', { length: 255 }),
+    workflowPhase: varchar('workflow_phase', { length: 255 }),
     deleted: boolean('deleted').notNull().default(false),
     // Migration 0073: the DD-2 id of the harness_snapshots row this session is bound to.
     // No FK — the row is looked up by (owning user_id, this id) in application code, and an
@@ -498,6 +501,16 @@ export const otelCalls = pgTable(
     cacheWriteTokens: bigint('cache_write_tokens', { mode: 'number' })
       .notNull()
       .default(0),
+    // Per-call OTEL attributes (migration 0088); NULL = not reported.
+    cacheWrite5mTokens: bigint('cache_write_5m_tokens', { mode: 'number' }),
+    cacheWrite1hTokens: bigint('cache_write_1h_tokens', { mode: 'number' }),
+    effort: varchar('effort', { length: 64 }),
+    speed: varchar('speed', { length: 64 }),
+    skillName: varchar('skill_name', { length: 255 }),
+    pluginName: varchar('plugin_name', { length: 255 }),
+    agentName: varchar('agent_name', { length: 255 }),
+    mcpServerName: varchar('mcp_server_name', { length: 255 }),
+    mcpToolName: varchar('mcp_tool_name', { length: 255 }),
     costUsdMicros: bigint('cost_usd_micros', { mode: 'bigint' }),
     structure: varchar('structure', { length: 16 }).notNull(),
     provisional: boolean('provisional').notNull(),
@@ -515,6 +528,13 @@ export const otelCalls = pgTable(
     index('idx_otel_calls_session_request_id')
       .on(table.sessionId, table.requestId)
       .where(sql`${table.requestId} IS NOT NULL`),
+    index('idx_otel_calls_session_agent')
+      .on(table.sessionId, table.agentId)
+      .where(sql`${table.agentId} IS NOT NULL`),
+    index('idx_otel_calls_session_event_time').on(
+      table.sessionId,
+      table.eventTime,
+    ),
   ],
 );
 
@@ -557,11 +577,16 @@ export const otelSpans = pgTable(
     index('idx_otel_spans_session_request_id')
       .on(table.sessionId, table.requestId)
       .where(sql`${table.requestId} IS NOT NULL`),
+    index('idx_otel_spans_session_start_time').on(
+      table.sessionId,
+      table.startTime,
+    ),
   ],
 );
 
 // 5-minute UTC cost rollups of otel_calls per (root session, bucket, structure, query_source,
-// model, cc_version). NULL dimensions are stored as ''. A key that no longer exists after a
+// model, cc_version, skill, mcp_server, effort, speed). NULL dimensions are stored as '' (for the
+// last four, '' = not reported). A key that no longer exists after a
 // rebuild is zeroed, never deleted; reads ignore zero rows.
 export const otelCostBuckets = pgTable(
   'otel_cost_buckets',
@@ -577,6 +602,10 @@ export const otelCostBuckets = pgTable(
     querySource: varchar('query_source', { length: 255 }).notNull().default(''),
     model: varchar('model', { length: 255 }).notNull().default(''),
     ccVersion: varchar('cc_version', { length: 64 }).notNull().default(''),
+    skill: varchar('skill', { length: 255 }).notNull().default(''),
+    mcpServer: varchar('mcp_server', { length: 255 }).notNull().default(''),
+    effort: varchar('effort', { length: 64 }).notNull().default(''),
+    speed: varchar('speed', { length: 64 }).notNull().default(''),
     calls: integer('calls').notNull().default(0),
     costUsdMicros: bigint('cost_usd_micros', { mode: 'bigint' })
       .notNull()
@@ -606,6 +635,10 @@ export const otelCostBuckets = pgTable(
         table.querySource,
         table.model,
         table.ccVersion,
+        table.skill,
+        table.mcpServer,
+        table.effort,
+        table.speed,
       ],
     }),
     index('idx_otel_cost_buckets_session_seq').on(table.sessionId, table.seq),
@@ -634,6 +667,12 @@ export const otelSessionState = pgTable(
     rtGapAt: timestamp('rt_gap_at', { withTimezone: true }),
     rtReceiverId: varchar('rt_receiver_id', { length: 64 }),
     rtBatchSeq: bigint('rt_batch_seq', { mode: 'number' }),
+    // Account facts reported by OTEL (migration 0088), latest event wins; NULL = never reported.
+    plan: varchar('plan', { length: 64 }),
+    seatType: varchar('seat_type', { length: 64 }),
+    provider: varchar('provider', { length: 64 }),
+    customBaseUrl: varchar('custom_base_url', { length: 1024 }),
+    accountEventAt: timestamp('account_event_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
@@ -641,6 +680,75 @@ export const otelSessionState = pgTable(
   (table) => [
     index('idx_otel_session_state_user_id').on(table.userId),
     index('idx_otel_session_state_created_at').on(table.createdAt),
+    // Live view candidate filter (migration 0089); GREATEST ignores NULLs.
+    index('idx_otel_session_state_last_at').on(
+      sql`(GREATEST(${table.rtLastAt}, ${table.chunkLastAt}))`,
+    ),
+  ],
+);
+
+// Stored lifetime OTEL totals of a root session (migration 0089), derived from otel_calls by
+// the OTEL writer: additive deltas while `seq >= MAX(otel_cost_buckets.seq)` of the root, a
+// rebuild otherwise. Hidden calls included. Read by the Live view.
+export const otelSessionTotals = pgTable('otel_session_totals', {
+  sessionId: integer('session_id')
+    .primaryKey()
+    .references(() => sessions.id, { onDelete: 'cascade' }),
+  calls: integer('calls').notNull().default(0),
+  costUsdMicros: bigint('cost_usd_micros', { mode: 'bigint' })
+    .notNull()
+    .default(sql`0`),
+  inputTokens: bigint('input_tokens', { mode: 'number' }).notNull().default(0),
+  outputTokens: bigint('output_tokens', { mode: 'number' })
+    .notNull()
+    .default(0),
+  cacheReadTokens: bigint('cache_read_tokens', { mode: 'number' })
+    .notNull()
+    .default(0),
+  cacheWriteTokens: bigint('cache_write_tokens', { mode: 'number' })
+    .notNull()
+    .default(0),
+  firstCallAt: timestamp('first_call_at', { withTimezone: true }),
+  lastCallAt: timestamp('last_call_at', { withTimezone: true }),
+  seq: bigint('seq', { mode: 'number' }).notNull().default(0),
+});
+
+// Stored lifetime OTEL totals per agent of a root session (migration 0089). `agent_key` is
+// otel_calls.agent_id, or `main` for calls with no agent_id; hidden calls have no row. An agent
+// with no calls left is zeroed, never deleted.
+export const otelAgentTotals = pgTable(
+  'otel_agent_totals',
+  {
+    sessionId: integer('session_id')
+      .notNull()
+      .references(() => sessions.id, { onDelete: 'cascade' }),
+    agentKey: varchar('agent_key', { length: 255 }).notNull(),
+    agentName: varchar('agent_name', { length: 255 }),
+    calls: integer('calls').notNull().default(0),
+    costUsdMicros: bigint('cost_usd_micros', { mode: 'bigint' })
+      .notNull()
+      .default(sql`0`),
+    inputTokens: bigint('input_tokens', { mode: 'number' })
+      .notNull()
+      .default(0),
+    outputTokens: bigint('output_tokens', { mode: 'number' })
+      .notNull()
+      .default(0),
+    cacheReadTokens: bigint('cache_read_tokens', { mode: 'number' })
+      .notNull()
+      .default(0),
+    cacheWriteTokens: bigint('cache_write_tokens', { mode: 'number' })
+      .notNull()
+      .default(0),
+    firstCallAt: timestamp('first_call_at', { withTimezone: true }),
+    lastCallAt: timestamp('last_call_at', { withTimezone: true }),
+    seq: bigint('seq', { mode: 'number' }).notNull().default(0),
+  },
+  (table) => [
+    primaryKey({
+      name: 'otel_agent_totals_pk',
+      columns: [table.sessionId, table.agentKey],
+    }),
   ],
 );
 
@@ -1807,6 +1915,9 @@ export const uploadQueue = pgTable(
       .references(() => users.id, { onDelete: 'cascade' }),
     parentSessionId: varchar('parent_session_id', { length: 255 }),
     workflowRunId: varchar('workflow_run_id', { length: 255 }),
+    // Migration 0085: Task description / workflow phase of a sub-agent, from its .meta.json.
+    agentDescription: varchar('agent_description', { length: 255 }),
+    workflowPhase: varchar('workflow_phase', { length: 255 }),
     status: uploadQueueStatusEnum('status').notNull().default('pending'),
     errorMessage: text('error_message'),
     updatedAt: timestamp('updated_at', { withTimezone: true })
@@ -2129,6 +2240,21 @@ export const aiToolVersionHistory = pgTable(
     ),
   ],
 );
+
+/**
+ * Log Hub new-release check (migration 0086) — a single-row cache (`id` is always 1, enforced by
+ * a CHECK constraint in the migration) of the latest published Log Hub GitHub release, shown to
+ * admins as the new-release badge. `latestTag` / `releaseUrl` / `fetchedAt` change only on a
+ * successful, validated fetch. `lastAttemptAt` is the cluster claim: one fetch attempt per 24 h
+ * across all instances, whatever its outcome.
+ */
+export const logHubReleaseCheck = pgTable('log_hub_release_check', {
+  id: smallint('id').primaryKey().default(1),
+  latestTag: varchar('latest_tag', { length: 64 }),
+  releaseUrl: text('release_url'),
+  fetchedAt: timestamp('fetched_at', { withTimezone: true }),
+  lastAttemptAt: timestamp('last_attempt_at', { withTimezone: true }),
+});
 
 /**
  * Server-generated secrets (migration 0069) — one row per named secret. Today only

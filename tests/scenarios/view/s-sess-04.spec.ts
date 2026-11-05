@@ -106,7 +106,23 @@ test('@S-SESS-04 delegator three levels deep: nesting and the cost of the tree @
     await expect(b).toBeVisible();
     await b.click();
     await expect(p1.getByText(id('b'), { exact: true })).toBeVisible();
+    // D also has a .meta.json description (upload.json agentDescription «deep-research»): the
+    // spawning Agent call's description still comes first in the Agents row (FR-4a order); the
+    // description shows only in the turn's Sub-agents tree (step 4a).
     await expect(turns.nth(1).getByText('Add tax preview route')).toBeVisible();
+  });
+
+  await test.step('4a. Logs: P2 Sub-agents tree labels D by its .meta.json description deep-research, full id in the tooltip, not monospace', async () => {
+    // GS-02's root log carries one agent_progress event for D (P2), so P2 has a «Sub-agents» tree.
+    const p2 = logTurns(page).nth(1);
+    await expect(p2.getByText('Sub-agents', { exact: true })).toBeVisible();
+    const dRow = p2.getByText('deep-research', { exact: true });
+    await expect(dRow).toHaveCount(1);
+    await expect(dRow).toHaveAttribute('title', id('d').replace(/^agent-/, ''));
+    await expect(dRow).not.toHaveClass(/font-mono/);
+    await expect(p2.getByText(`${id('d').replace(/^agent-/, '').slice(0, 12)}…`)).toHaveCount(0);
+    // P1 has no agent_progress events: no Sub-agents tree there.
+    await expect(logTurns(page).first().getByText('Sub-agents', { exact: true })).toHaveCount(0);
   });
 
   await test.step('5. turn headers: main + sub-agents = total, each sub-agent counted once', async () => {
@@ -221,6 +237,14 @@ test('@S-SESS-04 delegator three levels deep: nesting and the cost of the tree @
       .locator('[data-testid^="session-map-agent-"]')
       .evaluateAll((els) => els.map((e) => e.getAttribute('data-testid')));
     expect(order.indexOf(cardId('b'))).toBe(order.indexOf(cardId('a')) + 1);
+  });
+
+  await test.step('14a. agent D is labelled by its .meta.json description deep-research instead of its prompt or truncated id; A and B (no description) are not', async () => {
+    // The Logs Sub-agents tree label is step 4a; here the Session Map card.
+    const dLabel = card('d').locator('[title="deep-research"]');
+    await expect(dLabel, 'D card title').toHaveText('deep-research');
+    await expect(card('d'), 'no truncated id in the D card').not.toContainText(`${id('d').slice(0, 12)}…`);
+    for (const k of ['a', 'b']) await expect(card(k), `${k} has no description`).not.toContainText('deep-research');
   });
 
   await test.step('15. Session Map: a card opens the panel; chips filter; a call row moves the marker; ⤢ opens the call modal', async () => {

@@ -38,6 +38,8 @@ interface UploadQueueRawRow extends Record<string, unknown> {
   user_id: number;
   parent_session_id: string | null;
   workflow_run_id: string | null;
+  agent_description: string | null;
+  workflow_phase: string | null;
   status: string;
   error_message: string | null;
   updated_at: Date;
@@ -409,6 +411,10 @@ export class UploadQueueSchedulerService
         Number(row.size_bytes),
         row.parent_session_id ?? undefined,
         row.workflow_run_id ?? undefined,
+        {
+          agentDescription: row.agent_description ?? null,
+          workflowPhase: row.workflow_phase ?? null,
+        },
       );
 
       if (upsertResult.status === 'foreign-session') {

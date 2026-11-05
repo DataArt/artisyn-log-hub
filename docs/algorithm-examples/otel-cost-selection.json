@@ -202,5 +202,41 @@
     "input": {"kind": "mismatch", "telemetry": 1, "calculated": 1.049},
     "expected": {"mismatch": false},
     "note": "Rule 4 is not rounded: delta = 0.049 < 0.05. Rounding the delta to cents (0.05) would flag it."
+  },
+  {
+    "id": "SA-01",
+    "input": {"kind": "subagent", "transcriptCost": 0.5, "modelId": "claude-opus-5-5", "otelCostUsd": 1.25},
+    "expected": {"cost": 1.25, "pricingMissing": false, "fromOtel": true},
+    "note": "Rule 5: OTEL above the transcript (old Claude Code missed calls) -> the OTEL amount, fromOtel."
+  },
+  {
+    "id": "SA-02",
+    "input": {"kind": "subagent", "transcriptCost": 1.25, "modelId": "claude-opus-5-5", "otelCostUsd": 0.75},
+    "expected": {"cost": 1.25, "pricingMissing": false, "fromOtel": false},
+    "note": "Rule 5: OTEL below the transcript -> the transcript stays (max, not OTEL)."
+  },
+  {
+    "id": "SA-03",
+    "input": {"kind": "subagent", "transcriptCost": 0.5, "modelId": "claude-opus-5-5", "otelCostUsd": null},
+    "expected": {"cost": 0.5, "pricingMissing": false, "fromOtel": false},
+    "note": "Rule 5: no OTEL cost (new Claude Code, unknown version or no matching calls) -> the transcript cost."
+  },
+  {
+    "id": "SA-04",
+    "input": {"kind": "subagent", "transcriptCost": null, "modelId": "some-unpriced-model", "otelCostUsd": 0.75},
+    "expected": {"cost": 0.75, "pricingMissing": false, "fromOtel": true},
+    "note": "Rule 5: an unpriced transcript with an OTEL cost -> the OTEL amount, and the sub-agent is not missing pricing."
+  },
+  {
+    "id": "SA-05",
+    "input": {"kind": "subagent", "transcriptCost": null, "modelId": "some-unpriced-model", "otelCostUsd": null},
+    "expected": {"cost": null, "pricingMissing": true, "fromOtel": false},
+    "note": "Rule 5: unpriced and no OTEL cost -> cost null, pricing missing."
+  },
+  {
+    "id": "SA-06",
+    "input": {"kind": "subagent", "transcriptCost": 0.75, "modelId": "claude-opus-5-5", "otelCostUsd": 0.75},
+    "expected": {"cost": 0.75, "pricingMissing": false, "fromOtel": false},
+    "note": "Rule 5: equal amounts -> not fromOtel (strict >); a >= would flag it."
   }
 ]

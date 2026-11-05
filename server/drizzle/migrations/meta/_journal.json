@@ -596,6 +596,41 @@
       "when": 1791763200000,
       "tag": "0084_schema_comments",
       "breakpoints": true
+    },
+    {
+      "idx": 85,
+      "version": "7",
+      "when": 1791849600000,
+      "tag": "0085_agent_meta_labels",
+      "breakpoints": true
+    },
+    {
+      "idx": 86,
+      "version": "7",
+      "when": 1791936000000,
+      "tag": "0086_log_hub_release_check",
+      "breakpoints": true
+    },
+    {
+      "idx": 87,
+      "version": "7",
+      "when": 1792022400000,
+      "tag": "0087_log_hub_release_check_comment",
+      "breakpoints": true
+    },
+    {
+      "idx": 88,
+      "version": "7",
+      "when": 1792108800000,
+      "tag": "0088_otel_cost_attribution",
+      "breakpoints": true
+    },
+    {
+      "idx": 89,
+      "version": "7",
+      "when": 1792195200000,
+      "tag": "0089_otel_live_totals",
+      "breakpoints": true
     }
   ]
 }

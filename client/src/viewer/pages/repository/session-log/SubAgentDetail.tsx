@@ -104,20 +104,34 @@ export function SubAgentDetail({ agent, pricing, sessionModel }: Props) {
               <span className="text-muted-foreground">Cache↓</span>
               <span>{formatInt(agent.tokens.cacheWrite)}</span>
             </span>
-            {costEntry && (
-              <CostBreakdownTooltip
-                breakdown={agent.tokens}
-                pricing={costEntry}
-              >
-                <span className="flex cursor-help items-center gap-1">
-                  <span className="text-violet-600 dark:text-violet-400">
-                    Cost
-                  </span>
-                  <span className="font-medium">
-                    {formatCost(computeCost(agent.tokens, costEntry))}
-                  </span>
+            {agent.otelCostUsd != null ? (
+              <span className="flex items-center gap-1">
+                <span className="text-violet-600 dark:text-violet-400">
+                  Cost
                 </span>
-              </CostBreakdownTooltip>
+                <span className="font-medium">
+                  {formatCost(agent.otelCostUsd)}
+                </span>
+                <span className="font-sans text-muted-foreground">
+                  from OTEL
+                </span>
+              </span>
+            ) : (
+              costEntry && (
+                <CostBreakdownTooltip
+                  breakdown={agent.tokens}
+                  pricing={costEntry}
+                >
+                  <span className="flex cursor-help items-center gap-1">
+                    <span className="text-violet-600 dark:text-violet-400">
+                      Cost
+                    </span>
+                    <span className="font-medium">
+                      {formatCost(computeCost(agent.tokens, costEntry))}
+                    </span>
+                  </span>
+                </CostBreakdownTooltip>
+              )
             )}
           </div>
         )}

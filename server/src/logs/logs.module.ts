@@ -32,6 +32,8 @@ import { OkfFactsService } from './okf/okf-facts.service';
 import { OkfUsageService } from './okf/okf-usage.service';
 import { OtelFactsController } from './otel/otel-facts.controller';
 import { OtelFactsReader } from './otel/otel-facts.reader';
+import { OtelLiveController } from './otel/otel-live.controller';
+import { OtelLiveReader } from './otel/otel-live.reader';
 import { OtelTeamFactsController } from './otel/otel-team-facts.controller';
 import { OtelRealtimeController } from './otel/otel-realtime.controller';
 import { OtelRealtimeService } from './otel/otel-realtime.service';
@@ -89,6 +91,8 @@ import { UploadQueueService } from './upload-queue.service';
     // OTEL tabs: the repository / session tab read routes (DD-6, DD-19).
     OtelFactsController,
     OtelTeamFactsController,
+    // OTEL Live view (2026-11-04 otel-live-view): header status + live tree routes.
+    OtelLiveController,
   ],
   providers: [
     LogsService,
@@ -140,6 +144,8 @@ import { UploadQueueService } from './upload-queue.service';
     OtelProjectionService,
     // OTEL tabs: the read model behind OtelFactsController (DD-2 reader rule, DD-22 masking).
     OtelFactsReader,
+    // OTEL Live view: the read model behind OtelLiveController (DD-4, DD-11, DD-12).
+    OtelLiveReader,
     // Session Map: incremental session logs behind GET …/logs/delta (session-map DD-7).
     SessionLogsDeltaService,
   ],

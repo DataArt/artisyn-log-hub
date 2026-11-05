@@ -265,6 +265,23 @@ delete-time audit row) loads the parts through `session-tree-cost.sql.ts` (`tree
 `loadTreeCostRows` + `readTreeCost`), so they cannot disagree. Algorithm and worked examples:
 [algorithms/otel-cost-selection.md](algorithms/otel-cost-selection.md).
 
+**Exception — sub-agents of an old Claude Code (task `2026-11-03-otel-cost-attribution`, FR-6).**
+Before Claude Code `2.1.307` (`OTEL_SUBAGENT_COST_FIX_VERSION`) a sub-agent's transcript can miss
+API calls, so its computed cost is too low. For such a sub-agent `treeCostCtes`
+(`tree_subagent_rows` → `tree_subagent_costs`) takes `GREATEST(COALESCE(transcript cost, 0),
+OTEL cost)`, where the OTEL cost (`subagentOtelCostSql`, `otel-cost.sql.ts`) is the sum of the
+root's projected `otel_calls.cost_usd_micros` with `agent_id` = the sub-agent's `session_id`
+without `agent-` (index `idx_otel_calls_session_agent`). The version is the sub-agent's
+`session_stats.claude_version`, else `claude_version_otel`; an unknown or unparsable version, a
+version ≥ `2.1.307` or no matching call keeps the transcript cost. An OTEL cost also prices a
+sub-agent whose model has no Log Hub price (it is then not "pricing missing"). The root's own
+cost and utility calls never take OTEL. Pure twin with algorithm rows: `selectSubagentCost`
+(rule 5 of `otel-cost-selection.md`). This raises historical totals of old-CC sessions with OTEL
+data on every `treeCostCtes` surface; `costBreakdown.subagentCostFromOtel` and the
+per-sub-agent `subagentStats[*].otelCostUsd` of `/logs` (`selectSubagentStats`) tell the UI, which
+shows "from OTEL" / "Sub-agents (from OTEL)". The discrepancy and mismatch checks keep comparing
+full totals.
+
 ### Utility calls (calls no transcript records)
 
 The OTEL exporter meters **every** API call the Claude Code process makes, including side calls
@@ -322,7 +339,7 @@ non-optional `costBreakdown` per session (`CostBreakdown` in `otel-cost.sql.ts`,
 | Field | Meaning |
 |---|---|
 | `mainCost` | Root session's own stored cost; `null` when the main model is unpriced |
-| `subagentCost` | Stored costs of the priced descendants with a transcript (0 without sub-agents) |
+| `subagentCost` | Stored costs of the priced descendants with a transcript (0 without sub-agents); for an old-CC (< 2.1.307) sub-agent the larger of that and its OTEL cost (FR-6, above) |
 | `utilityCost` | `utilityCostsCte` total (0 without telemetry) |
 | `calculatedCost` | `resolveSessionTotalCost`: `mainCost + subagentCost + utilityCost`, or `null` when any part is unpriced |
 | `telemetryCost` | The root's `session_stats.telemetry_cost` in USD; `null` without telemetry |
@@ -330,6 +347,7 @@ non-optional `costBreakdown` per session (`CostBreakdown` in `otel-cost.sql.ts`,
 | `utilityPricingMissing` | At least one utility call's model has no price |
 | `subagentPricingMissing` | At least one sub-agent's model has no price (added later; optional for consumers) |
 | `unpricedModels` | The model ids with no price in Log Hub, root + sub-agents + utility calls, sorted (added later; optional) |
+| `subagentCostFromOtel` | Some sub-agent's cost in `subagentCost` was taken from OTEL (FR-6; added later; optional) |
 
 `totalCost` = `computedCost` = `calculatedCost`. `costUnavailableReason` is `'unknown-model'`
 exactly when it is `null` because some model is unpriced; the client then shows `$???` with a

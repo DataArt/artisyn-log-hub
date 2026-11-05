@@ -8,12 +8,15 @@ import {
   costMismatch,
   otelComputedDiscrepancy,
   resolveSessionTotalCost,
+  selectSubagentCost,
   unpricedModelList,
   type SessionCostParts,
+  type SubagentCostInput,
 } from './otel-cost.sql';
 
 type OtelInput =
   | ({ kind: 'total' } & SessionCostParts)
+  | ({ kind: 'subagent' } & SubagentCostInput)
   | { kind: 'unpriced'; lists: Array<Array<string | null>> }
   | { kind: 'discrepancy'; otel: number | null; computed: number | null }
   | {
@@ -33,6 +36,15 @@ it.each(rows)('$id', ({ input, expected }) => {
       return;
     case 'unpriced':
       expect({ models: unpricedModelList(...input.lists) }).toEqual(expected);
+      return;
+    case 'subagent':
+      expect(
+        selectSubagentCost({
+          transcriptCost: input.transcriptCost,
+          modelId: input.modelId,
+          otelCostUsd: input.otelCostUsd,
+        }),
+      ).toEqual(expected);
       return;
     case 'discrepancy':
       expect({

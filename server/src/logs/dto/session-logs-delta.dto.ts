@@ -33,13 +33,23 @@ export interface SessionLogsDeltaUpdate {
   rootArtisynLines: SessionLogLine[];
   /** Root session's new claude lines. */
   rootClaudeLines: SessionLogLine[];
-  /** Sub-agent logs that grew: new lines only. */
-  subagentAppends: { sessionId: string; lines: SessionLogLine[] }[];
+  /**
+   * Sub-agent logs that changed: new lines only, plus the agent's `.meta.json` labels. An entry
+   * with `lines: []` is sent when the log changed without new lines but carries non-null meta.
+   */
+  subagentAppends: {
+    sessionId: string;
+    lines: SessionLogLine[];
+    agentDescription: string | null;
+    workflowPhase: string | null;
+  }[];
   /** Sub-agent sessions/logs not in the cursor: full lines plus linkage. */
   newSubagents: {
     sessionId: string;
     parentSessionId: string | null;
     workflowRunId: string | null;
+    agentDescription: string | null;
+    workflowPhase: string | null;
     logs: SessionLogLine[];
   }[];
   /** Full SubagentStats rows (same fields + EXISTS guard as /logs) of every new/changed sub-agent. */

@@ -71,6 +71,12 @@ export interface UseOtelLivePollOptions<S> {
   isLive: (state: S) => boolean;
   /** The data updates slowly (old hook / realtime off), shown as `slow` while live. */
   isSlow?: (state: S) => boolean;
+  /**
+   * `refresh()` aborts the request in flight and polls at once, instead of being ignored while
+   * one is in flight (Live view selection change, 2026-11-04 otel-live-view DD-14). An aborted
+   * run never sets `error`, `state` or `isLoading`. Default false.
+   */
+  refreshAbortsInFlight?: boolean;
 }
 
 export interface OtelLivePollResult<S> {
@@ -89,7 +95,10 @@ export interface OtelLivePollResult<S> {
   setPaused: (paused: boolean) => void;
   /** When the latest poll answered (ms epoch); null before the first answer. */
   lastUpdatedAt: number | null;
-  /** Polls now (e.g. a manual refresh); ignored while a request is in flight. */
+  /**
+   * Polls now (e.g. a manual refresh); ignored while a request is in flight, unless
+   * `refreshAbortsInFlight` is set, which aborts that request first.
+   */
   refresh: () => void;
 }
 
@@ -133,6 +142,7 @@ export function useOtelLivePoll<S>({
   poll,
   isLive,
   isSlow,
+  refreshAbortsInFlight = false,
 }: UseOtelLivePollOptions<S>): OtelLivePollResult<S> {
   const [state, setState] = useState<S | null>(null);
   const [error, setError] = useState<unknown>(null);
@@ -154,6 +164,8 @@ export function useOtelLivePoll<S>({
   const abortRef = useRef<AbortController | null>(null);
   const pausedRef = useRef(false);
   pausedRef.current = paused;
+  const refreshAbortsRef = useRef(refreshAbortsInFlight);
+  refreshAbortsRef.current = refreshAbortsInFlight;
 
   const runPoll = useCallback(async () => {
     if (inFlightRef.current) return;
@@ -161,9 +173,15 @@ export function useOtelLivePoll<S>({
     const generation = generationRef.current;
     const controller = new AbortController();
     abortRef.current = controller;
+    // Only the run that still owns abortRef may touch state: a run aborted by a later
+    // `refresh()` (refreshAbortsInFlight) or by a reset never sets error / state / isLoading.
+    const current = () =>
+      generation === generationRef.current &&
+      abortRef.current === controller &&
+      !controller.signal.aborted;
     try {
       const result = await pollRef.current(stateRef.current, controller.signal);
-      if (generation !== generationRef.current) return;
+      if (!current()) return;
       stateRef.current = result.state;
       setState(result.state);
       setError(null);
@@ -176,12 +194,13 @@ export function useOtelLivePoll<S>({
         setFilled(result.filled);
       }
     } catch (e) {
-      if (generation !== generationRef.current || controller.signal.aborted) {
-        return;
-      }
+      if (!current()) return;
       setError(e);
     } finally {
-      if (generation === generationRef.current) {
+      if (
+        generation === generationRef.current &&
+        abortRef.current === controller
+      ) {
         inFlightRef.current = false;
         abortRef.current = null;
         setIsLoading(false);
@@ -299,7 +318,12 @@ export function useOtelLivePoll<S>({
   }, [filled]);
 
   const refresh = useCallback(() => {
-    if (enabled) void runPoll();
+    if (!enabled) return;
+    if (refreshAbortsRef.current && abortRef.current) {
+      abortRef.current.abort();
+      inFlightRef.current = false;
+    }
+    void runPoll();
   }, [enabled, runPoll]);
 
   const setPaused = useCallback(

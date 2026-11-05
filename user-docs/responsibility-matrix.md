@@ -58,7 +58,7 @@ supply the software and documentation, and the operator runs it on its own infra
 | Database and `.env` backups, restore tests | – | **A/R** | I | I | – | – |
 | Availability and resource monitoring (`/health`, host metrics) | – | **A/R** | – | I | – | – |
 | Monitoring the upload queue and error logs in the admin panel | C | C | – | **A/R** | – | – |
-| Server log file retention on the host | – | **A/R** | C | – | – | – |
+| Server log file retention on the host (`LOG_RETENTION_*` settings or own tooling) | – | **A/R** | C | – | – | – |
 | Capacity planning (disk for DB, queue and logs) | C | **A/R** | – | C | – | – |
 | Model pricing maintenance | C | – | – | **A/R** | – | I |
 | Diagnosing application defects | R | C | – | **A** | – | C |

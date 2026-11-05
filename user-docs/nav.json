@@ -8,6 +8,11 @@
         "description": "Install the self-hosted Log Hub server from a release Docker image and install kit, check that you are its admin, and see other ways to run it."
       },
       {
+        "slug": "small-team-setup",
+        "title": "Quick setup for a small team",
+        "description": "Set up Log Hub for a small team on a VM in your company network: password sign-in modes, ready-to-paste .env files, http or https, and connecting the hook."
+      },
+      {
         "slug": "install-hook",
         "title": "Install the hook",
         "downloadable": true,

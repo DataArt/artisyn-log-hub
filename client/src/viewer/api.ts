@@ -3,7 +3,11 @@
   ChangePasswordResult,
   UserProfile,
 } from '../models/auth';
-import type { AdminAuthConfig, PendingRegistration } from '../models/admin';
+import type {
+  AdminAuthConfig,
+  LogHubReleaseState,
+  PendingRegistration,
+} from '../models/admin';
 import type { UserSetting } from '../models/user-settings';
 import type {
   Team,
@@ -82,6 +86,11 @@ import type {
   UploadQueueStats,
 } from '../models';
 import type { WorkflowRun } from '../models/workflows';
+import type {
+  OtelLiveParams,
+  OtelLiveResponse,
+  OtelLiveStatusResponse,
+} from '../models/otel-live';
 import type {
   HookRepositorySummary,
   HookStateDetail,
@@ -925,6 +934,38 @@ export async function fetchTeamOtelFacts(
   return res.json() as Promise<TeamOtelFactsResponse>;
 }
 
+// --- OTEL Live view (2026-11-04 otel-live-view) -------------------------------------
+
+/** Header status of the Live view: whether the caller has any live session (DD-12). */
+export async function fetchOtelLiveStatus(
+  signal?: AbortSignal,
+): Promise<OtelLiveStatusResponse> {
+  const res = await apiFetch('/api/v1/otel/live/status', { signal });
+  if (!res.ok) throw await readApiError(res);
+  return res.json() as Promise<OtelLiveStatusResponse>;
+}
+
+/**
+ * The Live view snapshot: tree, the selected node's view and the details of `panel`. A
+ * malformed node key or unknown `tz` → 400; an unknown / invisible key falls back to
+ * `selected: 'home'` (DD-3).
+ */
+export async function fetchOtelLive(
+  params: OtelLiveParams,
+  signal?: AbortSignal,
+): Promise<OtelLiveResponse> {
+  const q = new URLSearchParams();
+  if (params.node) q.set('node', params.node);
+  if (params.panel) q.set('panel', params.panel);
+  if (params.tz) q.set('tz', params.tz);
+  const qs = q.toString();
+  const res = await apiFetch(`/api/v1/otel/live${qs ? `?${qs}` : ''}`, {
+    signal,
+  });
+  if (!res.ok) throw await readApiError(res);
+  return res.json() as Promise<OtelLiveResponse>;
+}
+
 /**
  * OTEL facts and traces of one session (session OTEL tab): a snapshot, or with `since` (the
  * previous response's cursor) only what changed after it (DD-2).
@@ -1446,6 +1487,12 @@ export interface SubagentStats {
    * reason as {@link SubagentStats.linesChanged}.
    */
   diffLinesTotalCalls?: number;
+  /**
+   * OTEL-reported cost (USD) of this sub-agent, set only when the server chose it over the
+   * transcript cost (old Claude Code version and OTEL reports more — FR-6). `null` otherwise;
+   * absent from older servers. When non-null the UI shows it instead of `computeCost(tokens)`.
+   */
+  otelCostUsd?: number | null;
 }
 
 /**
@@ -1567,6 +1614,10 @@ export interface SessionLogsData {
      * 1. Use this field, not transcript heuristics, to build the real descendant tree.
      */
     parentSessionId: string | null;
+    /** `description` from the agent's `.meta.json` (via the hook); absent for an old server. */
+    agentDescription?: string | null;
+    /** `workflowPhase` from the agent's `.meta.json` (via the hook); absent for an old server. */
+    workflowPhase?: string | null;
     logs: Record<string, unknown>[];
   }[];
   /** Token totals from session_stats for each child session, keyed by sessionId (e.g. "agent-abc123"). */
@@ -1651,6 +1702,10 @@ export interface SessionLogsDeltaNewSubagent {
   parentSessionId: string | null;
   /** `sessions.workflow_run_id` — set for an agent spawned by a Workflow run. */
   workflowRunId: string | null;
+  /** `description` from the agent's `.meta.json`; absent for an old server. */
+  agentDescription?: string | null;
+  /** `workflowPhase` from the agent's `.meta.json`; absent for an old server. */
+  workflowPhase?: string | null;
   logs: SessionLogLine[];
 }
 
@@ -1667,8 +1722,16 @@ export type SessionLogsDeltaData =
       rootArtisynLines: SessionLogLine[];
       /** Root session's new claude lines. */
       rootClaudeLines: SessionLogLine[];
-      /** Sub-agent logs that grew: new lines only. */
-      subagentAppends: { sessionId: string; lines: SessionLogLine[] }[];
+      /**
+       * Sub-agent logs that grew: new lines only. `lines` may be empty when only the agent's
+       * `.meta.json` labels changed; the two label fields are absent for an old server.
+       */
+      subagentAppends: {
+        sessionId: string;
+        lines: SessionLogLine[];
+        agentDescription?: string | null;
+        workflowPhase?: string | null;
+      }[];
       /** Sub-agent sessions/logs not in the cursor: full lines plus linkage. */
       newSubagents: SessionLogsDeltaNewSubagent[];
       /** Full stats rows of every new/changed sub-agent, keyed by sessionId. */
@@ -2327,6 +2390,13 @@ export async function fetchSystemInfo(): Promise<SystemInfo> {
   const res = await apiFetch('/api/v1/admin/system');
   if (!res.ok) throw new ApiError(res.status);
   return res.json() as Promise<SystemInfo>;
+}
+
+/** Admin only — whether a newer official Log Hub release exists (403 for any non-admin). */
+export async function fetchLogHubRelease(): Promise<LogHubReleaseState> {
+  const res = await apiFetch('/api/v1/admin/log-hub-release');
+  if (!res.ok) throw new ApiError(res.status);
+  return res.json() as Promise<LogHubReleaseState>;
 }
 
 export async function fetchDataRetention(): Promise<DataRetentionStats> {

@@ -62,12 +62,33 @@ export function orderAgentRows(forest: readonly SubAgentNode[]): AgentRow[] {
 }
 
 /**
- * The row label: the cleaned prompt (`cleanText`: system blocks and tags stripped, whitespace
- * collapsed), falling back to `agentId` when it cleans to empty, cut to `AGENT_LABEL_LIMIT`.
+ * A sub-agent's `.meta.json` description (or phase) as label text: trimmed, `null` when it is
+ * absent or blank.
  */
-export function agentRowLabel(node: SubAgentNode): string {
-  const text = cleanText(node.prompt) || node.agentId;
+export function agentDescriptionText(
+  v: string | null | undefined,
+): string | null {
+  if (typeof v !== 'string') return null;
+  const trimmed = v.trim();
+  return trimmed === '' ? null : trimmed;
+}
+
+/** Cuts a label to `AGENT_LABEL_LIMIT`: longer text becomes `AGENT_LABEL_LIMIT - 1` chars + `…`. */
+export function cutAgentLabel(text: string): string {
   return text.length > AGENT_LABEL_LIMIT
     ? `${text.slice(0, AGENT_LABEL_LIMIT - 1)}…`
     : text;
+}
+
+/**
+ * The row label, description first: the agent's `.meta.json` description
+ * (`agentDescriptionText`) when it has one; otherwise the cleaned prompt (`cleanText`: system
+ * blocks and tags stripped, whitespace collapsed), falling back to `agentId` when it cleans to
+ * empty. The result is cut to `AGENT_LABEL_LIMIT` (`cutAgentLabel`).
+ */
+export function agentRowLabel(node: SubAgentNode): string {
+  return cutAgentLabel(
+    agentDescriptionText(node.agentDescription) ??
+      (cleanText(node.prompt) || node.agentId),
+  );
 }

@@ -55,13 +55,20 @@ RUN rm -rf /usr/local/lib/node_modules/npm /usr/local/lib/node_modules/corepack 
     /usr/local/bin/yarn /usr/local/bin/yarnpkg /opt/yarn-*
 ARG VERSION=unknown
 ARG GIT_COMMIT=unknown
+# build.origin.json (read by the server, never served): only release.yml passes
+# OFFICIAL_RELEASE=true and GIT_BRANCH; any value other than exactly "true" becomes false.
+ARG GIT_BRANCH=unknown
+ARG OFFICIAL_RELEASE=false
 ENV NODE_ENV=production
 WORKDIR /app
 COPY --from=server-build /app/dist                        ./dist
 COPY --from=client-build /app/client/dist                 ./dist/public
 COPY --from=hooks-build  /app/server/src/public/static/   ./dist/public/static/
 RUN mkdir -p dist/public/static \
- && printf '{"version":"%s","gitCommit":"%s"}' "$VERSION" "$GIT_COMMIT" > dist/public/static/build-info.json
+ && printf '{"version":"%s","gitCommit":"%s"}' "$VERSION" "$GIT_COMMIT" > dist/public/static/build-info.json \
+ && if [ "$OFFICIAL_RELEASE" = "true" ]; then official=true; else official=false; fi \
+ && printf '{"branch":"%s","version":"%s","builtAt":"%s","officialRelease":%s}' \
+      "$GIT_BRANCH" "$VERSION" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$official" > dist/build.origin.json
 EXPOSE 3000
 ENV PORT=3000
 ENV CLUSTER_MODE=primary

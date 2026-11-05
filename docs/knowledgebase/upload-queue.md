@@ -142,6 +142,19 @@ when the uploaded body's `artisyn` file carries the full `harness-snapshot` line
   resending the full snapshot on its next upload — see
   `docs/knowledgebase/hook-system-overview.md`.
 
+## Sub-agent meta columns
+
+Hook `2.31.0`+ sends the optional query params `agentDescription` / `workflowPhase` on
+`claude-subagent` uploads (from the agent's `.meta.json`; see
+[hook-api-versioning.md](hook-api-versioning.md)). The controller sanitises both with
+`sanitizeAgentMeta` (`server/src/logs/agent-meta-param.ts`) and drops them for any other `type`.
+They are staged on the `upload_queue` row as `agent_description` / `workflow_phase`
+(`varchar(255)`, nullable) — on the plain-upload insert and on the insert that creates a chunked
+upload's row (later chunks only update the counters). The scheduler reads them from the claimed
+row (`UploadQueueRawRow`) and passes `{ agentDescription, workflowPhase }` as the trailing
+`agentMeta` argument of `LogsService.upsert`, which copies only non-null values onto `sessions`
+(never clearing a stored value). An invalid or empty value is stored as `NULL`, never a `400`.
+
 ## Malformed lines
 
 Concurrent hook appends to one session `.jsonl` can tear a few lines on filesystems where

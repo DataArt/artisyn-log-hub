@@ -5,8 +5,8 @@ import {
   HealthIndicatorResult,
 } from '@nestjs/terminus';
 import { Pool } from 'pg';
-import type { BuildInfo } from '../common/build-info';
-import { readBuildInfo } from '../common/build-info';
+import type { BuildInfo, BuildOrigin } from '../common/build-info';
+import { readBuildInfo, readBuildOrigin } from '../common/build-info';
 import { PG_POOL } from '../database/database.constants';
 
 @Controller('health')
@@ -22,10 +22,14 @@ export class HealthController {
     return this.health.check([() => this.checkDatabase()]);
   }
 
-  /** Public (no auth) — lets the top nav show the running version to every user. */
+  /**
+   * Public (no auth) — lets the top nav show the running version to every user. `origin`
+   * (from `build.origin.json`) is additive and omitted entirely when the file is absent.
+   */
   @Get('version')
-  getVersion(): BuildInfo {
-    return readBuildInfo();
+  getVersion(): BuildInfo & { origin?: BuildOrigin } {
+    const origin = readBuildOrigin();
+    return { ...readBuildInfo(), ...(origin ? { origin } : {}) };
   }
 
   private async checkDatabase(): Promise<HealthIndicatorResult> {

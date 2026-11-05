@@ -159,7 +159,7 @@ const callKey = (c: OtelCallRow) => c.callKey;
  *   still compared with the previous state, so rows it adds are highlighted.
  * - A delta replaces or extends rows by key; `kpis` / `querySources` that are null (an empty
  *   delta) keep their previous value. `cursor`, `interval` and `status` always come from the
- *   response.
+ *   response. `plan` comes from the response when present; absent (older server) keeps it.
  */
 export function mergeOtelDelta(
   state: SessionOtelResponse | null,
@@ -197,6 +197,9 @@ export function mergeOtelDelta(
       spans: mergeRows(state.spans, delta.spans, spanKey, full),
       kpis: delta.kpis ?? (full ? null : state.kpis),
       querySources: delta.querySources ?? (full ? null : state.querySources),
+      // 2026-11-03 otel-cost-attribution, DD-10: the delta's value when present (null included);
+      // an older server never sends it, so the previous value is kept.
+      plan: delta.plan !== undefined ? delta.plan : state.plan,
     },
     newKeys: { spans: spans.highlighted, calls: calls.highlighted, buckets },
     filled: { calls: calls.filled, spans: spans.filled },

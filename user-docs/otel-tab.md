@@ -18,13 +18,15 @@ Open a repository and pick **OTEL** (between **OKF** and **Settings**). From top
   Code version and calls (all, hidden only, in transcript), with the live indicator and a
   **Pause** button at the end.
 - **Chart controls** — metric (cost, calls, tokens), stack by (structure, `query_source`, model,
-  Claude Code version), interval (auto, 5 min, 1 h, 1 day), stacked or 100 % view, and a
-  cumulative line on the right axis.
+  Claude Code version, **Skill**, **MCP server**, **Effort**, **Fast mode**), interval (auto,
+  5 min, 1 h, 1 day), stacked or 100 % view, and a cumulative line on the right axis. See
+  [Grouping by skill, MCP server, effort and fast mode](#grouping-by-skill-mcp-server-effort-and-fast-mode).
 - **Chart** — hover a bar for its parts sorted by value with their shares, the total and the
   cumulative value. Click a legend item to hide or show that series.
 - **KPI tiles** — total cost, per day, per session, API calls, hidden cost and sessions, each with
   the change against the previous period of the same length; a second row with tokens by type,
-  the cache read ratio and the cost per user.
+  the cache read ratio and the cost per user. When Claude Code reports a plan, the total cost tile
+  also shows the **Mix of plans** — see [Plan and notional cost](#plan-and-notional-cost).
 - **Cost structure & hidden calls** — the share of each `query_source` (click a row to isolate it
   in the chart) and the hidden calls.
 - **Cost flow** — how the cost splits from model to branch (and to user, when the repository is
@@ -48,11 +50,16 @@ The **OTEL** tab of a session (the rightmost session tab) covers the session and
 sub-agents. From top to bottom:
 
 - **Header** — the cost source, the hook version that sent the data and whether traces are on,
-  with the **Realtime data** badge and its notices.
-- **Chart** — the same chart as on the repository tab, with a 5 min or 1 h interval.
+  with the **Realtime data** badge and its notices. When Claude Code reports account details, an
+  **Account:** row below it shows the plan, seat type, provider and custom API base URL, with a
+  note on what the plan means for the amounts — see [Plan and notional cost](#plan-and-notional-cost).
+- **Chart** — the same chart as on the repository tab, with a 5 min or 1 h interval. It can be
+  stacked by structure, `query_source`, model, **Skill**, **MCP server**, **Effort** or
+  **Fast mode** (see
+  [Grouping by skill, MCP server, effort and fast mode](#grouping-by-skill-mcp-server-effort-and-fast-mode)).
 - **KPI tiles** — OTEL cost, hidden cost, API calls, turns (and how many are still running),
   sub-agents and the time the session waited for you; a further row with tokens by type and the
-  cache read ratio.
+  cache read ratio. The OTEL cost tile carries a `plan: <value>` chip when a plan is reported.
 - **Cost by source** — the share of each `query_source`.
 - **Trace navigator** — step through the turns with **‹ Turn n of N ›**, ordered by **Start**,
   **Cost** or **Slowest**. Each turn shows its start, duration, cost, hidden cost, model calls,
@@ -78,8 +85,12 @@ press **Pause**; **Resume** catches up at once.
 A team page has an **OTEL** tab over all of the team's repositories and people. From top to
 bottom: a filter strip (period, repositories, people, model, calls) with the live indicator and
 **Pause**; the **Realtime data** badge and notices; the chart, stacked by person by default (the
-five people with the highest cost by name, the rest as "others (N)"); two rows of tiles, including
-the cost per active person and the number of repositories; the **Cost flow** from model to person
+five people with the highest cost by name, the rest as "others (N)") and also by **Skill**,
+**MCP server**, **Effort** or **Fast mode** (see
+[Grouping by skill, MCP server, effort and fast mode](#grouping-by-skill-mcp-server-effort-and-fast-mode));
+two rows of tiles, including the cost per active person, the number of repositories and the
+**Mix of plans** on the total cost tile (see [Plan and notional cost](#plan-and-notional-cost));
+the **Cost flow** from model to person
 to repository (switch **Repository / Branch** to see the branch of each session as well); a
 **People** table and a **Repositories** table.
 
@@ -100,6 +111,78 @@ A session linked to two of the team's repositories is counted once in the totals
 tiles, the People table and the cost flow, and once per repository in the Repositories table (its
 footer says so).
 
+## Live view
+
+The **Live** button in the top bar (next to **Home**) shows what is running right now, across
+your own repositories and every team you belong to. A red dot on it means at least one session is
+live; hover it for "Live now: N sessions · M agents · $x.xx" (or "Nothing live right now"). The
+button checks every 10 seconds while the page is visible.
+
+**Opening.** Click **Live** to open the Live window over the current page. It is kept in the page
+address (`live=`), so **Back** closes it and a link to it opens the same node. Close it with ✕ or
+Esc. Like the OTEL tabs, it uses OTEL data only.
+
+**The tree** on the left: **Home** → each of your teams (by name) and **No team** (your own
+repositories that are linked to none of your teams) → repositories → sessions (owner email on
+the first line, the start of the first prompt on the second) → their agents (the main agent and
+sub-agents). Live rows are shown normally; sessions and agents that stopped in the last 2 hours
+stay, greyed with an **ended** chip. Click a row to show it in the middle; hover a row and click ⓘ
+to open its details panel on the right. A session linked to two repositories appears under both;
+parent totals count it once, and the breakdown says so in a footnote. When new data arrives, every
+row whose cost went up flashes green for a moment, so you can see which session just ticked.
+
+Drag the borders between the tree, the middle pane and the details panel to resize them; the
+widths are remembered in your browser.
+
+**The middle pane** for the selected node: KPI tiles (cost, running time, live sessions and
+agents — or calls and model for an agent — and cost per minute), a chart carousel (cost, tokens, calls and cost by model,
+cost by structure, cost by skill / MCP server, with traces on LLM and tool latency p50 / p95, and on
+Home, a team or a repository three doughnuts side by side — cost or tokens by team, by repository
+and by user; these count each session's totals since start once, under its first team and repository)
+and a breakdown table of the node's children (cost, input, output, cache read and write, calls,
+running time, last activity). Below the charts, a **Cost flow** diagram shows where the cost of
+the last 2 hours went: from models to teams, users and sessions on Home, to users, repositories
+and sessions for a team, and to users and sessions for a repository. For a session it is a
+**Token flow** from models to its agents. Hover a band or a node for its value, share and calls.
+A session's breakdown lists its agents, including finished ones
+(up to 50, then "+N more"); a session row has **Open session ↗**, which opens that session in its
+repository. An agent shows its latest 50 calls instead.
+
+**The details panel** shows top users, models and repositories for a team, repository or Home;
+the owner, start time, Claude Code version, first prompt, agents, top tools and latest events for
+a session; and the model, top tools, events and calls for an agent. Team and repository panels
+have an **Open OTEL tab ↗** link, a session panel an **Open session ↗** link.
+
+**Since start and last 2 h.** Totals and running time cover the whole session ("since start"),
+even when it has run for days; running time is wall-clock time from the first to the latest call,
+shown like `45s`, `12m`, `3h 12m` or `2d 4h`. The charts, top models and top tools cover the last
+2 hours in 5-minute steps; cost per minute covers the last 5 minutes.
+
+**Updates and Pause.** The window refreshes every 5 seconds while it is visible. **Pause** freezes
+it ("Paused at hh:mm:ss") until you click **Resume**. Like the OTEL tabs, it also stops after
+10 minutes without any input and resumes on the next one. If the server cannot be reached, an
+amber banner says "Connection lost — showing data from hh:mm:ss, retrying" and the last data stays
+on screen.
+
+**Ended sessions.** A session with no OTEL data for 10 minutes is no longer live. It stays in the
+tree, greyed with an **ended** chip, for 2 hours after its last activity (longer if it is the node
+you are looking at or its details panel is open), and its details say "No OTEL data for 10 min —
+figures are final." Its cost still counts in the totals of its repository, team and Home, but not
+in the live session and agent counts or in the header button. A link to a session that ended more
+than 24 hours ago opens Home instead. With nothing in the tree, Home shows "Nothing is live right
+now" and a link to [Enable OTEL and traces](#enable-otel-and-traces).
+
+**Access.** You see the same sessions as on the OTEL tabs: your own, and in each team the
+sessions its access rules let you see. In a team whose analytics you may not see (a
+**restricted** team where you are not the owner or a manager) the team shows 🔒 and only your own
+sessions. Where the team hides other members' prompts, their first prompt reads "prompt hidden" and
+tool names read "masked"; costs and counts are still shown. Sessions that are not linked to any
+repository are not shown.
+
+**What is not shown.** API errors, user-prompt events and Claude Code metrics (lines of code,
+commits, active time) are not part of the Live view, and there is no count of updates missed
+while paused.
+
 ## Hidden calls
 
 A **hidden** call is a model API call whose request id appears in no transcript of the session
@@ -107,6 +190,51 @@ tree — for example the grey next-prompt suggestion, progress summaries of sub-
 generation. These calls cost money but never show up in the session log. The OTEL tabs show them
 in red in the chart and list them under **Hidden calls**. While a turn is still running, a call
 can be counted as visible for a moment until its transcript arrives.
+
+## Grouping by skill, MCP server, effort and fast mode
+
+Newer Claude Code versions tag each model API call with what it was made for. The **stack by**
+control of the repository, session and team tabs can split the chart by these tags:
+
+- **Skill** — the skill that was active for the call (`skill.name`);
+- **MCP server** — the MCP server whose tool led to the call (`mcp_server.name`);
+- **Effort** — the reasoning effort of the call (`effort`);
+- **Fast mode** — the speed setting of the call (`speed`).
+
+Values are shown exactly as Claude Code sends them. Calls without the tag form one grey
+**not reported** series; hover its ⓘ in the legend for the reason. A call is "not reported" when
+the Claude Code version does not send that tag yet, when the setting was left at its default, or —
+for skill and MCP server names — when `OTEL_LOG_TOOL_DETAILS=1` is not set (the installer sets
+it). Older sessions, or sessions from an older Claude Code, show only the **not reported** series;
+the totals are the same under every grouping.
+
+## Plan and notional cost
+
+Recent Claude Code versions (2.1.317 and newer) also report the account a session ran under: the
+**plan** (for example `pro` or `max`), the seat type, the API provider and, when one is set, a
+custom API base URL. Log Hub shows them on the session OTEL tab as the **Account:** row and as a
+`plan: <value>` chip on the OTEL cost tile. Only the address part of the base URL is kept — user
+names, passwords, query and fragment are removed — and in a team where prompts are hidden from
+you, another member's base URL is not shown.
+
+On a **subscription plan** Claude Code's `cost_usd` is a **list-price equivalent**: what the calls
+would cost at API prices, not money that was billed. The session tab says so in a blue note, and
+on the repository and team tabs the total cost tile lists the **Mix of plans** — for each plan the
+number of sessions and their cost, with sessions that reported no plan as **not reported**. The
+amounts themselves are not changed.
+
+Sessions from an older Claude Code have no plan: they show no Account row, no chip and no note,
+and count as **not reported** in the mix.
+
+## Sub-agent cost from OTEL
+
+In Claude Code before **2.1.307** a sub-agent's transcript can miss some of its API calls, so the
+cost computed from such a transcript can be too low. For those sessions Log Hub takes a sub-agent's
+cost from its OTEL calls whenever that is higher than the transcript cost. The sub-agent's cost
+then reads **from OTEL**, and the session's cost breakdown shows **Sub-agents (from OTEL)**.
+Session totals of older sessions can therefore be higher than before — on the session list, the
+session header, analytics and reports alike. Sessions from 2.1.307 and newer, and sessions
+without OTEL data, keep the transcript cost.
 
 ## The realtime channel
 

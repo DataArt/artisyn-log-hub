@@ -164,6 +164,7 @@ An import over a limit is rejected with HTTP 400 and a message naming the variab
 | `TURN_END_ADVISOR_ORPHAN_CLEANUP_INTERVAL_MS`, `TURN_END_ADVISOR_ORPHAN_RETENTION_MS` | 30 min, 24 h | Cleanup of advisor runs without a session. |
 | `AI_TOOL_VERSION_CHECK_ENABLED` | on | Daily request to the public npm registry for the latest Claude Code version. Set `false` to turn it off (air-gapped installs). |
 | `AI_TOOL_VERSION_CHECK_INTERVAL_MS` | 1 h | Scheduler tick for that check. |
+| `LOG_HUB_RELEASE_CHECK_ENABLED` | on | Daily request to `api.github.com` for the latest Log Hub release, shown to admins as a "new release" badge. Runs only on official release builds (`build.origin.json` with `officialRelease: true`), at most once per 24 h across the cluster. Only `false` turns it off (air-gapped installs). |
 | `MODEL_PRICING_FETCH_ENABLED` | on | Daily fetch of the public Anthropic pricing page for model prices. Set `false` to turn it off. |
 | `MODEL_PRICING_FETCH_INTERVAL_MS` | 1 h | Scheduler tick for that fetch. |
 

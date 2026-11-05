@@ -1,0 +1,109 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="620" viewBox="0 0 1440 620" font-family="Segoe UI, Arial, sans-serif">
+  <rect width="1440" height="620" fill="#ffffff"/>
+  <text x="16" y="24" font-size="12" font-weight="600" fill="#7c3aed">Details panel per node type (FR-9) — live numbers from otel_*; names and first prompt from regular tables</text>
+
+  <!-- ===== Team / repo ===== -->
+  <rect x="16" y="40" width="340" height="564" rx="10" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="32" y="68" font-size="15" font-weight="600" fill="#111827">▣ artisyn-log-hub</text>
+  <text x="340" y="68" font-size="15" fill="#6b7280" text-anchor="end">✕</text>
+  <text x="32" y="88" font-size="11" fill="#6b7280">Repository · Platform team</text>
+  <line x1="16" y1="100" x2="356" y2="100" stroke="#e5e7eb"/>
+  <g font-size="12">
+    <text x="32" y="124" fill="#6b7280">Live sessions</text><text x="340" y="124" text-anchor="end" fill="#111827">3</text>
+    <text x="32" y="146" fill="#6b7280">Live users</text><text x="340" y="146" text-anchor="end" fill="#111827">2</text>
+    <text x="32" y="168" fill="#6b7280">Cost (live sessions)</text><text x="340" y="168" text-anchor="end" fill="#111827">$2.64</text>
+    <text x="32" y="190" fill="#6b7280">Longest running</text><text x="340" y="190" text-anchor="end" fill="#111827">42 m</text>
+  </g>
+  <text x="32" y="226" font-size="11" font-weight="600" fill="#6b7280" letter-spacing="0.5">TOP USERS</text>
+  <g font-size="12" fill="#111827">
+    <text x="32" y="250">alice</text><rect x="140" y="240" width="120" height="12" rx="2" fill="#3b82f6"/><text x="340" y="250" text-anchor="end">$1.80</text>
+    <text x="32" y="274">bob</text><rect x="140" y="264" width="56" height="12" rx="2" fill="#3b82f6"/><text x="340" y="274" text-anchor="end">$0.84</text>
+  </g>
+  <text x="32" y="310" font-size="11" font-weight="600" fill="#6b7280" letter-spacing="0.5">TOP MODELS</text>
+  <g font-size="12" fill="#111827">
+    <text x="32" y="334">opus-5-5</text><text x="340" y="334" text-anchor="end">$2.10</text>
+    <text x="32" y="358">sonnet-5-5</text><text x="340" y="358" text-anchor="end">$0.54</text>
+  </g>
+  <rect x="32" y="388" width="308" height="32" rx="6" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="186" y="409" font-size="12" fill="#2563eb" text-anchor="middle">Open repository OTEL tab ↗</text>
+  <text x="32" y="446" font-size="11" fill="#6b7280">Team panel: same layout, plus "Top repos".</text>
+  <text x="32" y="462" font-size="11" fill="#6b7280">Restricted-team member: only own figures.</text>
+
+  <!-- ===== Session ===== -->
+  <rect x="372" y="40" width="340" height="564" rx="10" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="388" y="68" font-size="15" font-weight="600" fill="#111827">● Session</text>
+  <text x="696" y="68" font-size="15" fill="#6b7280" text-anchor="end">✕</text>
+  <rect x="388" y="80" width="308" height="32" rx="6" fill="#2563eb"/>
+  <text x="542" y="101" font-size="12" font-weight="600" fill="#ffffff" text-anchor="middle">Open session ↗</text>
+  <g font-size="12">
+    <text x="388" y="136" fill="#6b7280">User</text><text x="696" y="136" text-anchor="end" fill="#111827">bob@example.com</text>
+    <text x="388" y="158" fill="#6b7280">Started</text><text x="696" y="158" text-anchor="end" fill="#111827">13:51 (42 m)</text>
+    <text x="388" y="180" fill="#6b7280">Last activity</text><text x="696" y="180" text-anchor="end" fill="#111827">4 s ago</text>
+    <text x="388" y="202" fill="#6b7280">Cost / tokens</text><text x="696" y="202" text-anchor="end" fill="#111827">$0.84 · 430k</text>
+  </g>
+  <rect x="388" y="214" width="308" height="44" rx="6" fill="#f9fafb" stroke="#e5e7eb"/>
+  <text x="398" y="232" font-size="11" fill="#6b7280">First prompt</text>
+  <text x="398" y="250" font-size="12" fill="#111827">"Fix cost tiles on the team page…"</text>
+  <text x="388" y="286" font-size="11" font-weight="600" fill="#6b7280" letter-spacing="0.5">AGENTS</text>
+  <g font-size="12" fill="#111827">
+    <text x="388" y="308">◆ main</text><rect x="500" y="298" width="110" height="12" rx="2" fill="#2563eb"/><text x="696" y="308" text-anchor="end">$0.52</text>
+    <text x="388" y="330">◇ Explore</text><rect x="500" y="320" width="68" height="12" rx="2" fill="#60a5fa"/><text x="696" y="330" text-anchor="end">$0.32</text>
+  </g>
+  <text x="388" y="364" font-size="11" font-weight="600" fill="#6b7280" letter-spacing="0.5">TOP TOOLS (spans)</text>
+  <g font-size="12" fill="#111827">
+    <text x="388" y="386">Read</text><text x="696" y="386" text-anchor="end">48</text>
+    <text x="388" y="408">Edit</text><text x="696" y="408" text-anchor="end">19</text>
+    <text x="388" y="430">Bash</text><text x="696" y="430" text-anchor="end">11</text>
+  </g>
+  <text x="388" y="464" font-size="11" font-weight="600" fill="#6b7280" letter-spacing="0.5">LATEST OTEL EVENTS</text>
+  <g font-size="11" fill="#374151">
+    <text x="388" y="486">14:33:08  api_request  opus-5-5  $0.021</text>
+    <text x="388" y="506">14:33:05  tool span  Edit  120 ms</text>
+    <text x="388" y="526">14:32:58  tool span  Bash  2.1 s</text>
+  </g>
+  <text x="388" y="560" font-size="11" fill="#6b7280">team-no-prompts viewer: first prompt and</text>
+  <text x="388" y="576" font-size="11" fill="#6b7280">span attributes masked for other members.</text>
+
+  <!-- ===== Agent ===== -->
+  <rect x="728" y="40" width="340" height="564" rx="10" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="744" y="68" font-size="15" font-weight="600" fill="#111827">◇ Agent: Explore</text>
+  <text x="1052" y="68" font-size="15" fill="#6b7280" text-anchor="end">✕</text>
+  <text x="744" y="88" font-size="11" fill="#6b7280">Sub-agent of bob · "Fix cost tiles…"</text>
+  <line x1="728" y1="100" x2="1068" y2="100" stroke="#e5e7eb"/>
+  <g font-size="12">
+    <text x="744" y="124" fill="#6b7280">agent_id</text><text x="1052" y="124" text-anchor="end" fill="#111827" font-family="Consolas, monospace">a7f3…91c</text>
+    <text x="744" y="146" fill="#6b7280">Type</text><text x="1052" y="146" text-anchor="end" fill="#111827">sub-agent</text>
+    <text x="744" y="168" fill="#6b7280">Model</text><text x="1052" y="168" text-anchor="end" fill="#111827">haiku-5-5</text>
+    <text x="744" y="190" fill="#6b7280">Calls</text><text x="1052" y="190" text-anchor="end" fill="#111827">17</text>
+    <text x="744" y="212" fill="#6b7280">Cost / tokens</text><text x="1052" y="212" text-anchor="end" fill="#111827">$0.32 · 107k</text>
+    <text x="744" y="234" fill="#6b7280">Running</text><text x="1052" y="234" text-anchor="end" fill="#111827">6 m</text>
+  </g>
+  <text x="744" y="270" font-size="11" font-weight="600" fill="#6b7280" letter-spacing="0.5">TOP TOOLS (spans)</text>
+  <g font-size="12" fill="#111827">
+    <text x="744" y="292">Grep</text><text x="1052" y="292" text-anchor="end">22</text>
+    <text x="744" y="314">Read</text><text x="1052" y="314" text-anchor="end">14</text>
+  </g>
+  <text x="744" y="348" font-size="11" font-weight="600" fill="#6b7280" letter-spacing="0.5">LATEST CALLS</text>
+  <g font-size="11" fill="#374151">
+    <text x="744" y="370">14:33:08  $0.021  2.4 s</text>
+    <text x="744" y="390">14:32:55  $0.018  3.1 s</text>
+    <text x="744" y="410">14:32:41  $0.014  1.7 s</text>
+  </g>
+  <text x="744" y="446" font-size="11" fill="#6b7280">No "Open session" button here: the agent's</text>
+  <text x="744" y="462" font-size="11" fill="#6b7280">session row and panel carry it.</text>
+
+  <!-- ===== Ended ===== -->
+  <rect x="1084" y="40" width="340" height="300" rx="10" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="1100" y="68" font-size="15" font-weight="600" fill="#9ca3af">○ Session</text>
+  <rect x="1186" y="55" width="50" height="18" rx="9" fill="#f3f4f6" stroke="#d1d5db"/>
+  <text x="1211" y="68" font-size="10" fill="#6b7280" text-anchor="middle">ended</text>
+  <text x="1408" y="68" font-size="15" fill="#6b7280" text-anchor="end">✕</text>
+  <rect x="1100" y="82" width="308" height="30" rx="6" fill="#fffbeb" stroke="#fcd34d"/>
+  <text x="1110" y="101" font-size="11" fill="#92400e">No OTEL data for 10 min — figures are final.</text>
+  <rect x="1100" y="122" width="308" height="32" rx="6" fill="#2563eb"/>
+  <text x="1254" y="143" font-size="12" font-weight="600" fill="#ffffff" text-anchor="middle">Open session ↗</text>
+  <text x="1100" y="184" font-size="12" fill="#6b7280">Cost / tokens</text><text x="1408" y="184" font-size="12" text-anchor="end" fill="#9ca3af">$0.40 · 210k</text>
+  <text x="1100" y="206" font-size="12" fill="#6b7280">Last activity</text><text x="1408" y="206" font-size="12" text-anchor="end" fill="#9ca3af">10 m ago</text>
+  <text x="1100" y="246" font-size="11" fill="#6b7280">Stays open while selected (FR-7);</text>
+  <text x="1100" y="262" font-size="11" fill="#6b7280">disappears from the tree after deselection.</text>
+</svg>

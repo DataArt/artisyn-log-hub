@@ -1,0 +1,14 @@
+sequenceDiagram
+  actor D as Developer
+  participant M as Developer machine
+  participant L as Log Hub server
+  L-->>D: My API Keys → Install: one-liner with server URL and API key
+  D->>M: run it in the repository root
+  M->>L: npx downloads /static/artisyn-hooks-installer.tgz
+  M->>M: write .artisyn/ (serverUrl, apiKey), enable the plugin in .claude/
+  D->>M: work in Claude Code
+  M->>M: hook records the session locally
+  M->>L: end of each turn: upload with x-api-key
+  L->>L: queue and ingest
+  D->>L: open Log Hub in the browser
+  L-->>D: session on the Home page

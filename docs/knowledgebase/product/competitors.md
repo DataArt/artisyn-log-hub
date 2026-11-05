@@ -12,7 +12,9 @@ timestamp: "2026-11-01T00:00:00+04:00"
 
 Snapshot as of **2026-11-01**. The evidence for every statement here is in the parity study
 `docs/competitive-research/` (README with the combined matrix, plus one file per tool). Update both
-when a competitor changes materially or a new one appears.
+when a competitor changes materially or a new one appears. What competitors published after the study
+(watched sources, last-checked dates, seen items) is logged in `docs/competitive-watch/` by the
+`morning-check` skill.
 
 ## Positioning
 

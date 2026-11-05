@@ -1033,6 +1033,7 @@ const NON_MEMBER_ROWS: ScreenRow[] = (
 // ---------------------------------------------------------------------------------------------
 const HELP_ARTICLES: Array<[string, string]> = [
   ['install-server', 'Install the server'],
+  ['small-team-setup', 'Quick setup for a small team'],
   ['install-hook', 'Install Telemetry Hook'],
   ['getting-started', 'Your first session'],
   ['authentication-modes', 'Authentication modes'],

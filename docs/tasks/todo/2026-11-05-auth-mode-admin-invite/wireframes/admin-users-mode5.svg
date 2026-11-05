@@ -1,0 +1,121 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="760" viewBox="0 0 1280 760" font-family="Segoe UI, Arial, sans-serif">
+  <rect width="1280" height="760" fill="#ffffff"/>
+
+  <!-- top nav -->
+  <rect x="0" y="0" width="1280" height="48" fill="#ffffff" stroke="#e5e7eb"/>
+  <circle cx="24" cy="24" r="8" fill="#3451cc"/>
+  <text x="44" y="29" font-size="14" font-weight="600" fill="#111827">Artisyn Log Hub</text>
+  <text x="1080" y="29" font-size="13" fill="#6b7280">admin@corp.local</text>
+  <text x="1210" y="29" font-size="13" font-weight="600" fill="#111827">Logout</text>
+
+  <!-- sidebar -->
+  <rect x="0" y="48" width="320" height="712" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="12" y="80" font-size="11" fill="#9ca3af">TEAMS</text>
+  <rect x="12" y="92" width="200" height="10" rx="3" fill="#f3f4f6"/>
+  <rect x="12" y="114" width="160" height="10" rx="3" fill="#f3f4f6"/>
+  <text x="12" y="150" font-size="11" fill="#9ca3af">MY REPOS</text>
+  <rect x="12" y="162" width="260" height="10" rx="3" fill="#f3f4f6"/>
+  <rect x="12" y="184" width="230" height="10" rx="3" fill="#f3f4f6"/>
+  <rect x="0" y="712" width="320" height="48" fill="#f3f4f6"/>
+  <text x="34" y="741" font-size="13" font-weight="600" fill="#111827">Admin Panel</text>
+
+  <!-- admin tabs -->
+  <rect x="320" y="48" width="960" height="40" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="352" y="73" font-size="14" fill="#374151">System Info</text>
+  <text x="450" y="73" font-size="14" fill="#374151">Repos</text>
+  <text x="510" y="73" font-size="14" fill="#374151">Teams</text>
+  <rect x="564" y="54" width="52" height="28" rx="4" fill="none" stroke="#111827"/>
+  <text x="572" y="73" font-size="14" font-weight="600" fill="#111827">Users</text>
+  <text x="630" y="73" font-size="14" fill="#374151">Error Logs</text>
+  <text x="716" y="73" font-size="14" fill="#374151">Upload Queue</text>
+  <text x="830" y="73" font-size="14" fill="#374151">Data Retention</text>
+  <text x="946" y="73" font-size="14" fill="#374151">Auth</text>
+  <text x="998" y="73" font-size="14" fill="#374151">Model Pricing</text>
+
+  <!-- toolbar -->
+  <rect x="342" y="110" width="256" height="32" rx="6" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="354" y="131" font-size="13" fill="#9ca3af">Filter by email…</text>
+  <rect x="612" y="110" width="118" height="32" rx="6" fill="#3451cc"/>
+  <text x="671" y="131" font-size="13" font-weight="600" fill="#ffffff" text-anchor="middle">+ Create user</text>
+  <text x="744" y="131" font-size="11" fill="#dc2626">NEW (Mode 5 only)</text>
+
+  <!-- table header -->
+  <line x1="342" y1="180" x2="1262" y2="180" stroke="#e5e7eb"/>
+  <text x="350" y="172" font-size="13" font-weight="600" fill="#111827">Email ↑</text>
+  <text x="560" y="172" font-size="13" font-weight="600" fill="#111827">Role</text>
+  <text x="630" y="172" font-size="13" font-weight="600" fill="#111827">Password</text>
+  <text x="730" y="172" font-size="13" font-weight="600" fill="#111827">Created</text>
+  <text x="880" y="172" font-size="13" font-weight="600" fill="#111827">Last Activity</text>
+  <text x="1010" y="172" font-size="13" font-weight="600" fill="#111827">Actions</text>
+  <rect x="626" y="154" width="88" height="24" rx="3" fill="none" stroke="#dc2626" stroke-dasharray="4 3"/>
+
+  <!-- row 1: admin with password -->
+  <line x1="342" y1="228" x2="1262" y2="228" stroke="#e5e7eb"/>
+  <text x="350" y="209" font-size="13" fill="#111827">admin@corp.local</text>
+  <text x="560" y="209" font-size="13" fill="#111827">admin</text>
+  <text x="630" y="209" font-size="13" fill="#111827">Set</text>
+  <text x="730" y="209" font-size="13" fill="#111827">2026.11.05 09:00</text>
+  <text x="880" y="209" font-size="13" fill="#111827">2026.11.05 10:12</text>
+  <rect x="1010" y="191" width="108" height="28" rx="5" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="1064" y="210" font-size="12" fill="#9ca3af" text-anchor="middle">Revoke Admin</text>
+  <rect x="1126" y="191" width="128" height="28" rx="5" fill="#ffffff" stroke="#111827"/>
+  <text x="1190" y="210" font-size="12" fill="#111827" text-anchor="middle">Send reset link</text>
+
+  <!-- row 2: pending user -->
+  <rect x="342" y="229" width="920" height="47" fill="#fffbeb"/>
+  <line x1="342" y1="276" x2="1262" y2="276" stroke="#e5e7eb"/>
+  <text x="350" y="257" font-size="13" fill="#111827">bob@corp.local</text>
+  <text x="560" y="257" font-size="13" fill="#111827">user</text>
+  <rect x="628" y="243" width="64" height="20" rx="10" fill="#fef3c7" stroke="#f59e0b"/>
+  <text x="660" y="257" font-size="11" fill="#92400e" text-anchor="middle">Not set</text>
+  <text x="730" y="257" font-size="13" fill="#111827">2026.11.05 10:30</text>
+  <text x="880" y="257" font-size="13" fill="#111827">—</text>
+  <rect x="1010" y="239" width="108" height="28" rx="5" fill="#ffffff" stroke="#111827"/>
+  <text x="1064" y="258" font-size="12" fill="#111827" text-anchor="middle">Make Admin</text>
+  <rect x="1126" y="239" width="128" height="28" rx="5" fill="#ffffff" stroke="#111827"/>
+  <text x="1190" y="258" font-size="12" font-weight="600" fill="#111827" text-anchor="middle">Resend link</text>
+
+  <!-- row 3: user with password -->
+  <line x1="342" y1="324" x2="1262" y2="324" stroke="#e5e7eb"/>
+  <text x="350" y="305" font-size="13" fill="#111827">carol@corp.local</text>
+  <text x="560" y="305" font-size="13" fill="#111827">user</text>
+  <text x="630" y="305" font-size="13" fill="#111827">Set</text>
+  <text x="730" y="305" font-size="13" fill="#111827">2026.11.05 10:31</text>
+  <text x="880" y="305" font-size="13" fill="#111827">2026.11.05 11:02</text>
+  <rect x="1010" y="287" width="108" height="28" rx="5" fill="#ffffff" stroke="#111827"/>
+  <text x="1064" y="306" font-size="12" fill="#111827" text-anchor="middle">Make Admin</text>
+  <rect x="1126" y="287" width="128" height="28" rx="5" fill="#ffffff" stroke="#111827"/>
+  <text x="1190" y="306" font-size="12" fill="#111827" text-anchor="middle">Send reset link</text>
+  <text x="1262" y="342" font-size="11" fill="#6b7280" text-anchor="end">… Rename Email, Delete (scrolled) — unchanged</text>
+
+  <!-- notes -->
+  <text x="342" y="372" font-size="11" fill="#6b7280">"Password" column and "Resend link" are proposals — see Open Questions (show who has not set a password; resend for everyone or only for them;</text>
+  <text x="342" y="387" font-size="11" fill="#6b7280">fate of the existing "Reset Password" button that shows a link in a modal instead of emailing it).</text>
+
+  <!-- create user dialog -->
+  <rect x="320" y="400" width="960" height="360" fill="#111827" opacity="0.08"/>
+  <rect x="560" y="420" width="480" height="300" rx="8" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="584" y="454" font-size="16" font-weight="600" fill="#111827">Create user</text>
+  <text x="1016" y="454" font-size="16" fill="#6b7280" text-anchor="end">×</text>
+  <text x="584" y="480" font-size="12" fill="#6b7280">The user gets an email with a link to set their own password.</text>
+  <text x="584" y="496" font-size="12" fill="#6b7280">The link is valid for 24 h. No password is sent.</text>
+  <text x="584" y="524" font-size="12" font-weight="600" fill="#374151">Email</text>
+  <rect x="584" y="532" width="432" height="34" rx="6" fill="#fafafa" stroke="#e5e7eb"/>
+  <text x="596" y="554" font-size="13" fill="#111827">dave@corp.local</text>
+  <text x="584" y="586" font-size="12" fill="#dc2626">A user with this email already exists.</text>
+  <text x="1016" y="586" font-size="11" fill="#9ca3af" text-anchor="end">(error example)</text>
+  <rect x="584" y="600" width="432" height="40" rx="6" fill="none" stroke="#d1d5db" stroke-dasharray="4 3"/>
+  <text x="800" y="625" font-size="11" fill="#9ca3af" text-anchor="middle">Role / team selectors — only if Open Question "role/team in the same form" says yes</text>
+  <rect x="806" y="664" width="90" height="34" rx="6" fill="#ffffff" stroke="#111827"/>
+  <text x="851" y="686" font-size="13" fill="#111827" text-anchor="middle">Cancel</text>
+  <rect x="906" y="664" width="110" height="34" rx="6" fill="#3451cc"/>
+  <text x="961" y="686" font-size="13" font-weight="600" fill="#ffffff" text-anchor="middle">Create &amp; send</text>
+
+  <!-- toast -->
+  <rect x="1060" y="690" width="210" height="58" rx="6" fill="#f0fdf4" stroke="#86efac"/>
+  <text x="1072" y="712" font-size="12" font-weight="600" fill="#166534">User created</text>
+  <text x="1072" y="730" font-size="11" fill="#166534">Set-password link sent to</text>
+  <text x="1072" y="743" font-size="11" fill="#166534">dave@corp.local</text>
+  <text x="340" y="740" font-size="11" fill="#6b7280">Email delivery failed → keep the account, amber notice "Link not sent — use Resend link" (proposal);</text>
+  <text x="340" y="754" font-size="11" fill="#6b7280">per-IP limit / 60 s cooldown → "Too many requests, try again in Ns" (HTTP 429).</text>
+</svg>

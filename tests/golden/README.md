@@ -34,7 +34,7 @@ Each folder's `README.md` lists its numbers.
 | `session.jsonl` | the root's Claude Code transcript (`type=claude`) |
 | `artisyn.jsonl` | the hook's own lines for the root (`type=artisyn`): `SessionStart` (with `git`) at the transcript's first timestamp, `prompt_start` with `git` per prompt, `SessionEnd` at the transcript's last timestamp, plus the harness self-report where the fixture needs it. The lifecycle lines matter: the session's start/end come from this log, and the work-time report clamps each session to its end |
 | `subagents/<agent-id>.jsonl` | sub-agent transcripts (`type=claude-subagent`); workflow agents under `subagents/workflows/<wf>/` |
-| `upload.json` | upload manifest: roots, their files and every sub-agent's `sessionId`, `parentSessionId` and `workflowRunId` |
+| `upload.json` | upload manifest: roots, their files and every sub-agent's `sessionId`, `parentSessionId` and `workflowRunId`, plus the optional `agentDescription` / `workflowPhase` (sent as the same-named upload query params, as the hook does from the agent's `.meta.json`; GS-05 W1 and GS-02 `d` carry them) |
 | `expected.json` | the numbers a test asserts (DD D3), per root: branch, week, start/end, work time, cost (tree and own), tokens per node, cache ratios, tools, lines, change surface, plus fixture-specific rows from `scenarios/03` §2.3 |
 | `README.md` | what the fixture checks |
 

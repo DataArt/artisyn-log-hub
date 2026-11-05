@@ -10,28 +10,19 @@
 
 ## Description
 
-OTEL cost attribution from new Claude Code releases (2.1.300–2.1.317). Four changes:
+Use the OTEL telemetry added in Claude Code 2.1.300–2.1.317 for cost attribution. Today
+`extractOtelCalls` (`server/src/logs/otel/otel-records.ts`) reads only `cache_creation_tokens` and
+none of the new attributes. Four changes:
 
-1. `api_request` `cache_creation_5m_tokens` / `cache_creation_1h_tokens` (CC 2.1.300) —
-   `extractOtelCalls` in `server/src/logs/otel/otel-records.ts` reads only
-   `cache_creation_tokens`; add nullable 5m/1h columns to `otel_calls`, use them to cross-check
-   against the transcript `ephemeral_1h` pricing.
-2. `api_request` / `cost.usage` attribution attributes `effort`, `speed` (fast mode),
-   `skill.name`, `plugin.name`, `agent.name`, `mcp_server.name`, `mcp_tool.name` (names need
-   `OTEL_LOG_TOOL_DETAILS=1`, already written by the installer) — not extracted; store them in
-   `otel_calls` and add cost grouping by skill / MCP / effort / fast mode on the OTEL tabs (cost
-   control).
-3. `anthropic.plan`, `anthropic.seat_type`, `anthropic.provider`, `anthropic.custom_base_url`
-   (CC 2.1.317) on metrics / events / spans — store per session, show in the UI; for subscription
-   plans `cost_usd` is notional, so explain the cost basis in text (no fixed list of plan values).
+1. Store the 5m/1h cache-write split (CC 2.1.300) — FR-1.
+2. Store the attribution attributes (`effort`, `speed`, skill / plugin / agent / MCP names; the
+   names need `OTEL_LOG_TOOL_DETAILS=1`, already written by the installer) and group cost by them
+   on the OTEL tabs for cost control — FR-2, FR-3.
+3. Store the `anthropic.*` plan / provider attributes (CC 2.1.317) per session and explain that on
+   a subscription plan `cost_usd` is notional — FR-4, FR-5.
 4. CC 2.1.307 fixed sub-agent transcripts recording placeholder token usage for streamed
-   responses — sessions on CC < 2.1.307 may undercount sub-agent cost from the transcript; use OTEL
-   `cost_usd` for the sub-agent part when it exists.
-
-Constraints: backward compatible with old hooks and old Claude Code versions (attributes absent →
-NULL), offline-first, test policy (algorithm doc rows in `algorithms/otel-facts.md` and
-`algorithms/otel-cost-selection.md` for FR-6, contract rows
-`f25-otel.ts`, steps in `s-otel-01`).
+   responses, so sessions on older CC may undercount sub-agent cost; use OTEL `cost_usd` for the
+   sub-agent part when it exists — FR-6.
 
 Source: `review-claude-code-news` run 2026-11-03 (changelog 2.1.292–2.1.317 and
 `code.claude.com/docs/en/monitoring-usage`).
@@ -228,3 +219,49 @@ None.
 ## Notes
 
 <!-- Append timestamped notes here as work progresses -->
+
+### 2026-11-04 — perf check (NFR: OTEL routes ≤ +20 %)
+
+Setup: `main` (via `git archive main`) and the branch working tree were each built and run on
+their own port against their own fresh database (`perf_cmp_main` / `perf_cmp_branch`, dropped
+afterwards), never against the dev DB, one server at a time. `npm run perf` harness
+(`server/perf-tests`, 200 iterations, 40 warmup, 5 parallel) against each. The harness seed has
+no session with a claude log, so it skips `otel:session-snapshot` (as in earlier runs, see
+`otel-tabs.md`). That route was timed with a separate script using the same shape (40 warmup +
+200 requests, 5 parallel): one session with a 100-line transcript and 2 realtime batches of 50
+attributed `api_request` calls (skill / MCP / effort / speed, 5m/1h split, `anthropic.plan`
+resource, some `agent_id`).
+
+| Scenario | main mean / p95 (ms) | branch mean / p95 (ms) | Δ mean / p95 |
+|---|---|---|---|
+| `otel:repo-facts-week` (harness) | 12.24 / 17.16 | 12.75 / 17.25 | +4 % / +1 % |
+| `otel:repo-facts-week` (seeded OTEL repo) | 12.77 / 14.44 | 12.03 / 13.81 | −6 % / −4 % |
+| `otel:session-snapshot` (seeded) | 13.89 / 16.34 | 14.67 / 16.41 | +6 % / +0 % |
+| `repos:sessions` (FR-6 tree CTE, seeded) | 19.49 / 26.15 | 14.17 / 20.58 | −27 % / −21 % |
+| `otel:repo-facts-week-heavy` | 4.26 / 5.23 | 4.19 / 5.07 | −2 % / −3 % |
+| `otel:realtime-50` (writer) | 29.78 / 36.07 | 25.33 / 33.15 | −15 % / −8 % |
+
+All within +20 %. In the first branch run `repos:sessions-heavy` (20 serial calls) read 17.49 /
+30.15 vs main 13.08 / 20.52; two re-runs on the branch gave 13.26 / 19.86 and 12.80 / 21.03, so
+that was noise. Other non-OTEL rows moved both ways by similar noise.
+
+### 2026-11-04 — FR-6 real-data check (AC-6) and 5m/1h spot check (dev DB)
+
+Read-only queries against the dev DB after the v2 re-projection had finished (every `logs_otel`
+chunk at `otel_projection_version = 2`, 0 pending, 0 failed).
+
+- Sub-agent calls in OTEL: only 6 `otel_calls` rows carry an `agent_id`. They match 2 sub-agent
+  sessions (`agent-<agent_id>`), both Claude Code 2.1.314, so the FR-6 gate (< 2.1.307) does not
+  apply. Transcript cost vs OTEL sum: 0.068849 vs 0.068850 and 0.0461617 vs 0.046161. Every one of
+  the 6 calls is also in the sub-agent's transcript (`session_request_ids`). This confirms the
+  matching key (DD-15) and that a fixed Claude Code's sub-agent transcript is complete.
+- The dev DB has **no old-CC (< 2.1.307) sub-agent with `agent_id`-tagged OTEL calls**, so the
+  "OTEL above transcript" case could not be seen on real data. It is covered by the algorithm rows
+  (`otel-cost-selection.json`, kind `subagent`), the f17/f20/f21 contract rows and S-COST-01 step 15.
+- 5m/1h: 60 calls carry the split (from 43 chunks of 2026-10-31). For all 60,
+  `cache_write_5m_tokens + cache_write_1h_tokens = cache_write_tokens`, and 53 have a 1h part.
+  50 of them have a transcript line with the same `requestId`: all 50 match the transcript's
+  `usage.cache_creation.ephemeral_5m_input_tokens` / `ephemeral_1h_input_tokens` exactly. The
+  other 10 are utility calls that no transcript records.
+- Other attributes after re-projection: 9 390 calls with `skill_name`, 18 539 with `effort`.
+  No session reports `anthropic.plan` yet (0 `otel_session_state.plan`).

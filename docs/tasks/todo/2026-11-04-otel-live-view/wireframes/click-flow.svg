@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="520" viewBox="0 0 1440 520" font-family="Segoe UI, Arial, sans-serif">
+  <defs>
+    <marker id="arr" markerWidth="10" markerHeight="8" refX="9" refY="4" orient="auto">
+      <path d="M0 0 L10 4 L0 8 z" fill="#6b7280"/>
+    </marker>
+  </defs>
+  <rect width="1440" height="520" fill="#ffffff"/>
+  <text x="16" y="24" font-size="12" font-weight="600" fill="#7c3aed">Click targets and navigation (FR-2, FR-5, FR-9, FR-10)</text>
+
+  <!-- any page -->
+  <rect x="16" y="60" width="220" height="110" rx="10" fill="#f9fafb" stroke="#d1d5db"/>
+  <text x="126" y="88" font-size="13" font-weight="600" fill="#111827" text-anchor="middle">Any app page</text>
+  <rect x="76" y="104" width="100" height="30" rx="6" fill="#ffffff" stroke="#d1d5db"/>
+  <circle cx="96" cy="119" r="4.5" fill="#ef4444"/>
+  <text x="134" y="124" font-size="13" fill="#111827" text-anchor="middle">Live</text>
+  <text x="126" y="156" font-size="11" fill="#6b7280" text-anchor="middle">status poll every 30 s</text>
+
+  <line x1="236" y1="115" x2="320" y2="115" stroke="#6b7280" marker-end="url(#arr)"/>
+  <text x="278" y="106" font-size="11" fill="#6b7280" text-anchor="middle">click</text>
+
+  <!-- modal -->
+  <rect x="320" y="40" width="720" height="300" rx="10" fill="#ffffff" stroke="#2563eb"/>
+  <text x="336" y="64" font-size="13" font-weight="600" fill="#111827">Live modal · URL gets ?live=home</text>
+  <rect x="336" y="80" width="190" height="240" rx="6" fill="#f9fafb" stroke="#e5e7eb"/>
+  <text x="346" y="100" font-size="11" font-weight="600" fill="#6b7280">TREE</text>
+  <rect x="344" y="110" width="174" height="24" rx="4" fill="#dbeafe"/>
+  <text x="354" y="127" font-size="12" fill="#111827">⌂ Home</text>
+  <text x="362" y="153" font-size="12" fill="#111827">▣ repo</text>
+  <text x="372" y="177" font-size="12" fill="#111827">● session  ⓘ</text>
+
+  <rect x="540" y="80" width="300" height="240" rx="6" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="550" y="100" font-size="11" font-weight="600" fill="#6b7280">LIVE VIEW of selected node</text>
+  <rect x="550" y="110" width="280" height="60" rx="4" fill="#f9fafb" stroke="#e5e7eb"/>
+  <text x="690" y="145" font-size="11" fill="#9ca3af" text-anchor="middle">KPIs + chart carousel</text>
+  <rect x="550" y="182" width="280" height="26" fill="#f9fafb" stroke="#e5e7eb"/>
+  <text x="560" y="199" font-size="11" fill="#6b7280">Breakdown</text>
+  <rect x="550" y="208" width="280" height="28" fill="#eff6ff" stroke="#e5e7eb"/>
+  <text x="560" y="227" font-size="12" fill="#111827">● bob · $0.84</text>
+  <text x="820" y="227" font-size="12" fill="#2563eb" text-anchor="end">↗</text>
+
+  <rect x="854" y="80" width="170" height="240" rx="6" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="864" y="100" font-size="11" font-weight="600" fill="#6b7280">DETAILS PANEL</text>
+  <rect x="864" y="112" width="150" height="28" rx="5" fill="#2563eb"/>
+  <text x="939" y="131" font-size="11" font-weight="600" fill="#ffffff" text-anchor="middle">Open session ↗</text>
+
+  <!-- arrows inside modal -->
+  <path d="M430 160 C 470 160, 500 180, 540 180" fill="none" stroke="#f59e0b" stroke-width="1.5" marker-end="url(#arr)"/>
+  <path d="M830 222 C 845 222, 845 200, 854 200" fill="none" stroke="#f59e0b" stroke-width="1.5" marker-end="url(#arr)"/>
+  <path d="M480 177 C 600 300, 800 300, 900 320" fill="none" stroke="#f59e0b" stroke-width="1.5" stroke-dasharray="4 3" marker-end="url(#arr)"/>
+
+  <!-- session page -->
+  <line x1="1040" y1="200" x2="1130" y2="200" stroke="#6b7280" marker-end="url(#arr)"/>
+  <text x="1085" y="190" font-size="11" fill="#6b7280" text-anchor="middle">↗ click</text>
+  <rect x="1130" y="130" width="294" height="140" rx="10" fill="#f9fafb" stroke="#d1d5db"/>
+  <text x="1277" y="160" font-size="13" font-weight="600" fill="#111827" text-anchor="middle">Session page</text>
+  <text x="1277" y="184" font-size="11" fill="#374151" text-anchor="middle" font-family="Consolas, monospace">/repositories/:repoId/</text>
+  <text x="1277" y="200" font-size="11" fill="#374151" text-anchor="middle" font-family="Consolas, monospace">sessions/:sessionId</text>
+  <text x="1277" y="226" font-size="11" fill="#6b7280" text-anchor="middle">modal closed; team context kept</text>
+  <text x="1277" y="242" font-size="11" fill="#6b7280" text-anchor="middle">when opened from a team node</text>
+
+  <!-- legend table -->
+  <rect x="16" y="364" width="1408" height="140" rx="8" fill="#ffffff" stroke="#e5e7eb"/>
+  <g font-size="12" fill="#111827">
+    <text x="32" y="390" font-weight="600" fill="#6b7280">Action</text>
+    <text x="420" y="390" font-weight="600" fill="#6b7280">Result</text>
+    <text x="32" y="416">Click a tree node</text><text x="420" y="416">Select it; middle pane shows its live view; URL becomes ?live=&lt;nodeKey&gt; (replace, not push)</text>
+    <text x="32" y="440">Click a breakdown row / ⓘ on a tree node</text><text x="420" y="440">Open the details panel for that item; selection unchanged</text>
+    <text x="32" y="464">Click ↗ on a session row or "Open session ↗"</text><text x="420" y="464">Close the modal and navigate to the session page</text>
+    <text x="32" y="488">✕, Esc or browser Back</text><text x="420" y="488">Close the modal; ?live= removed; the page underneath is unchanged</text>
+  </g>
+</svg>

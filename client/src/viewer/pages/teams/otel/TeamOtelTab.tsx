@@ -116,6 +116,10 @@ const TEAM_STACK_OPTIONS = [
   { value: 'structure', label: 'Structure' },
   { value: 'model', label: 'Model' },
   { value: 'querySource', label: 'query_source' },
+  { value: 'skill', label: 'Skill' },
+  { value: 'mcpServer', label: 'MCP server' },
+  { value: 'effort', label: 'Effort' },
+  { value: 'speed', label: 'Fast mode' },
 ] as const;
 
 const NO_KEYS: ReadonlySet<string> = new Set();
@@ -385,6 +389,7 @@ export function TeamOtelTab({ teamId, accessMode, role }: TeamOtelTabProps) {
                 stackBy={s.stackBy}
                 showPerUser={false}
                 coverage={state.coverage}
+                planMix={state.planMix}
               />
               <div className="flex flex-wrap gap-2">
                 <OtelKpiTile

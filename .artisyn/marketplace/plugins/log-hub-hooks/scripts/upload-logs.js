@@ -416,6 +416,10 @@ function planIdentitySlices(body, sliceSize) {
  *   old hook. OKF (plan `2026-10-27-okf-usage-tab`, DD-20): the optional `okfSnapshotId` /
  *   `okfSnapshotFull` fields append `&okfSnapshotId=…` (+ `&okfSnapshotFull=1`) independently of
  *   the harness pair; an old server ignores both params.
+ * @param {{agentDescription?: string|null, workflowPhase?: string|null}|null} [agentMeta] - sub-agent
+ *   labels read from the agent's `.meta.json` (plan `2026-10-21-workflow-agent-meta-labels`, DD-5):
+ *   appends `&agentDescription=…` / `&workflowPhase=…`, each only when truthy. Omitted sends neither,
+ *   exactly like an old hook; an old server ignores both params.
  * @returns {Promise<{ success: boolean, reason: string|null, warnings?: string[], complete?: boolean,
  *   unknownSnapshotId?: string, unknownOkfSnapshotId?: string, statusCode?: number|null, snippet?: string,
  *   sentEncoding?: 'gzip'|null }>}
@@ -424,7 +428,7 @@ function planIdentitySlices(body, sliceSize) {
  *   `unknownSnapshotId`, when the server's 201 JSON carries one, is DD-8's answer to the
  *   `snapshotQuery` this request sent; `unknownOkfSnapshotId` is the same answer for its OKF id.
  */
-function uploadFile(serverUrl, apiKey, namespace, sessionId, body, timeoutMs, hookSessionId, cwd, parentSessionId, workflowRunId, chunkMeta, bodyEncoding, snapshotQuery) {
+function uploadFile(serverUrl, apiKey, namespace, sessionId, body, timeoutMs, hookSessionId, cwd, parentSessionId, workflowRunId, chunkMeta, bodyEncoding, snapshotQuery, agentMeta) {
   const sentEncoding = bodyEncoding === 'gzip' ? 'gzip' : null;
   return new Promise((resolve) => {
     let urlStr = `${serverUrl}/api/v2/logs?type=${encodeURIComponent(namespace)}&sessionId=${encodeURIComponent(sessionId)}`;
@@ -459,6 +463,12 @@ function uploadFile(serverUrl, apiKey, namespace, sessionId, body, timeoutMs, ho
       if (snapshotQuery.okfSnapshotFull) {
         urlStr += '&okfSnapshotFull=1';
       }
+    }
+    if (agentMeta && agentMeta.agentDescription) {
+      urlStr += `&agentDescription=${encodeURIComponent(agentMeta.agentDescription)}`;
+    }
+    if (agentMeta && agentMeta.workflowPhase) {
+      urlStr += `&workflowPhase=${encodeURIComponent(agentMeta.workflowPhase)}`;
     }
     let urlObj;
     try {
@@ -763,6 +773,9 @@ function writePendingUploads(telemetryDir, pendingPath, map, sessionId, cwd) {
  * @param {string} manifestKey
  * @param {{snapshotId?: string, snapshotFull?: boolean, okfSnapshotId?: string, okfSnapshotFull?: boolean}|null} [snapshotQuery] - DD-7: every chunk of
  *   this upload carries the same query params, forwarded to each `uploadFile()` call below.
+ * @param {{agentDescription?: string|null, workflowPhase?: string|null}|null} [agentMeta] - DD-5 of
+ *   plan `2026-10-21-workflow-agent-meta-labels`: sub-agent labels, sent on every chunk (like
+ *   `workflowRunId`) by forwarding to each `uploadFile()` call below.
  * @returns {Promise<{ success: boolean, reason: string|null, warnings?: string[], wireBytes: number,
  *   plainBytes: number, requests: number, fallback: boolean, unknownSnapshotId?: string,
  *   unknownOkfSnapshotId?: string }>}
@@ -772,7 +785,7 @@ function writePendingUploads(telemetryDir, pendingPath, map, sessionId, cwd) {
  *   gzipped body and the run had to fall back to sending it uncompressed. `unknownSnapshotId`
  *   (DD-8) is set only on a completing result, taken from the final chunk's response.
  */
-async function uploadFileChunked(serverUrl, apiKey, namespace, sessionId, body, timeoutMs, hookSessionId, cwd, parentSessionId, workflowRunId, telemetryDir, manifestKey, snapshotQuery) {
+async function uploadFileChunked(serverUrl, apiKey, namespace, sessionId, body, timeoutMs, hookSessionId, cwd, parentSessionId, workflowRunId, telemetryDir, manifestKey, snapshotQuery, agentMeta) {
   const totalSize = Buffer.byteLength(body);
   const pendingPath = path.join(telemetryDir, '.claude-logs.pending');
   const pending = readPendingUploads(pendingPath);
@@ -833,7 +846,7 @@ async function uploadFileChunked(serverUrl, apiKey, namespace, sessionId, body, 
 
     const result = await uploadFile(
       serverUrl, apiKey, namespace, sessionId, chunkBody, timeoutMs, hookSessionId, cwd,
-      parentSessionId, workflowRunId, chunkMeta, useGzip ? 'gzip' : null, snapshotQuery,
+      parentSessionId, workflowRunId, chunkMeta, useGzip ? 'gzip' : null, snapshotQuery, agentMeta,
     );
     requests++;
     wireBytes += chunkBody.length;
@@ -938,13 +951,16 @@ async function uploadFileChunked(serverUrl, apiKey, namespace, sessionId, body, 
  * @param {string|null} [workflowRunId]
  * @param {{snapshotId?: string, snapshotFull?: boolean, okfSnapshotId?: string, okfSnapshotFull?: boolean}|null} [snapshotQuery] - DD-7: forwarded to
  *   every `uploadFile()` call this function makes — the one attempt, or the plain retry.
+ * @param {{agentDescription?: string|null, workflowPhase?: string|null}|null} [agentMeta] - DD-5 of
+ *   plan `2026-10-21-workflow-agent-meta-labels`: sub-agent labels, forwarded to every
+ *   `uploadFile()` call this function makes.
  * @returns {Promise<{ success: boolean, reason: string|null, warnings?: string[], wireBytes: number,
  *   plainBytes: number, requests: number, fallback: boolean, unknownSnapshotId?: string,
  *   unknownOkfSnapshotId?: string }>} the
  *   underlying `uploadFile()` result plus the same reporting fields as `uploadFileChunked()`;
  *   `requests` is 2 when the compressed attempt was rejected and the plain retry was made.
  */
-async function uploadFileMaybeCompressed(serverUrl, apiKey, namespace, sessionId, body, timeoutMs, hookSessionId, cwd, parentSessionId, workflowRunId, snapshotQuery) {
+async function uploadFileMaybeCompressed(serverUrl, apiKey, namespace, sessionId, body, timeoutMs, hookSessionId, cwd, parentSessionId, workflowRunId, snapshotQuery, agentMeta) {
   const plainBytes = Buffer.byteLength(body);
   const loopback = isLoopbackServerUrl(serverUrl);
   let fallback = gzipUnsupported && !loopback;
@@ -961,7 +977,7 @@ async function uploadFileMaybeCompressed(serverUrl, apiKey, namespace, sessionId
 
   const result = await uploadFile(
     serverUrl, apiKey, namespace, sessionId, wireBody, timeoutMs, hookSessionId, cwd,
-    parentSessionId, workflowRunId, null, encoding, snapshotQuery,
+    parentSessionId, workflowRunId, null, encoding, snapshotQuery, agentMeta,
   );
   let requests = 1;
   let wireBytes = Buffer.byteLength(wireBody);
@@ -970,7 +986,7 @@ async function uploadFileMaybeCompressed(serverUrl, apiKey, namespace, sessionId
     // Same body, same URL, same query params — only the encoding changes.
     const retry = await uploadFile(
       serverUrl, apiKey, namespace, sessionId, body, timeoutMs, hookSessionId, cwd,
-      parentSessionId, workflowRunId, null, null, snapshotQuery,
+      parentSessionId, workflowRunId, null, null, snapshotQuery, agentMeta,
     );
     requests++;
     wireBytes += plainBytes;

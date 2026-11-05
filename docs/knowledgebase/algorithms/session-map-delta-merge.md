@@ -27,7 +27,8 @@ parser and the map model take, keyed the same way the rest of the session view k
 
 `mergeSessionMapDelta(prev, delta)` takes the previous state (or `null`) and one non-reload delta
 and returns a new state: `rootArtisynLines`, `rootClaudeLines`, `subagents` (each
-`{sessionId, parentSessionId, workflowRunId, logs}`), `subagentStats` keyed by sub-agent
+`{sessionId, parentSessionId, workflowRunId, agentDescription, workflowPhase, logs}`, the two meta
+fields from the agent's `.meta.json`, `string | null`), `subagentStats` keyed by sub-agent
 `sessionId`, `workflows`, `cursor`, `liveness`, `serverTime`. A `reload: true` answer is never
 merged; the caller restarts with an empty cursor.
 
@@ -42,9 +43,14 @@ merged; the caller restarts with an empty cursor.
 3. **Sub-agent appends.** For a sub-agent already in the base, its `subagentAppends` lines are
    appended to its `logs`. An append for a sub-agent the base does not hold is dropped: there is no
    linkage to place it with.
+   - **3a. Append meta.** A `subagentAppends` entry may carry `agentDescription` / `workflowPhase`
+     (DD-15 of the workflow-agent-meta-labels task). For a known sub-agent each non-null value
+     overwrites the stored one; a `null` (or absent) value never clears it. An entry with no lines
+     but non-null meta changes only the meta.
 4. **New sub-agents.** A `newSubagents` entry for a sub-agent not in the base is added after the
-   known ones, in delta order, with its linkage and full lines. An entry for a sub-agent the base
-   already holds replaces it in place (its lines are the full body, never appended).
+   known ones, in delta order, with its linkage, `agentDescription` / `workflowPhase` (absent from
+   an old server → `null`) and full lines. An entry for a sub-agent the base already holds
+   replaces it in place (its lines are the full body, never appended).
 5. **Stats.** `subagentStats = {...base, ...delta.subagentStats}`: overwritten per key.
 6. **Workflows.** `delta.workflows === null` keeps the base list; a list replaces it.
 7. **Cursor, liveness, server time** are taken from the delta.
@@ -56,6 +62,9 @@ merged; the caller restarts with an empty cursor.
 3. `agentParentMap`: agent id → parent agent id, both without the prefix; `null` when
    `parentSessionId` is `null`.
 4. `workflowRunIds`: agent id (no prefix) → `workflowRunId`, only for sub-agents that have one.
+5. `agentDescriptions`: agent id (no prefix) → `agentDescriptionText(agentDescription)` (the
+   trimmed description), only for sub-agents whose description is not `null`, empty or
+   whitespace-only.
 
 ## Edge cases
 
@@ -68,6 +77,10 @@ merged; the caller restarts with an empty cursor.
 - `workflows: null` keeps the list: SMD-08; a list replaces it: SMD-09.
 - Cursor, liveness, server time replaced: SMD-10.
 - Parse inputs (main order, prefix stripping, parent map, workflow run ids): SMD-12.
+- A new sub-agent with meta carries it: SMD-13; without meta (old server) stores `null`: SMD-14.
+- An append with lines and meta relabels a known agent: SMD-15. An empty-line append with meta
+  changes only the meta: SMD-16. An append with `null` meta keeps the stored values: SMD-17.
+- `agentDescriptions` trimmed, blank and `null` descriptions skipped: SMD-18.
 
 ## Examples
 
@@ -76,9 +89,9 @@ is written in short form: missing lists are empty, `stats` maps a sub-agent `ses
 `inputTokens` (the other stats fields are 0), `workflows` lists the runs' `toolUseId`s, a missing
 delta `workflows` is `null`, a missing delta `cursor` is `next`, a missing state `cursor` is `''`.
 `expected` lists only the state keys the row checks, in the same short form. Rows with
-`input.parse` run `toParseInputs` on that state; `expected` holds the four maps as objects.
+`input.parse` run `toParseInputs` on that state; `expected` holds the five maps as objects.
 
-Rows (12): [`docs/algorithm-examples/session-map-delta-merge.json`](../../algorithm-examples/session-map-delta-merge.json) — test data for the table test; the rules above are enough to understand the algorithm.
+Rows (18): [`docs/algorithm-examples/session-map-delta-merge.json`](../../algorithm-examples/session-map-delta-merge.json) — test data for the table test; the rules above are enough to understand the algorithm.
 
 ## Mutations
 
@@ -88,6 +101,10 @@ Rows (12): [`docs/algorithm-examples/session-map-delta-merge.json`](../../algori
 - "`workflows: null` clears the list" -> SMD-08.
 - "Unknown appends create a sub-agent without linkage" -> SMD-06.
 - "`subagentLogs` keyed with the `agent-` prefix" -> SMD-12.
+- "Meta of a new entry dropped" -> SMD-13. "Absent meta stored as `undefined`" -> SMD-14.
+- "Append meta ignored" -> SMD-15. "Empty-line appends skipped" -> SMD-16.
+- "Append meta copied as-is, `null` included" -> SMD-17 (stored values cleared).
+- "Blank descriptions kept in `agentDescriptions`" -> SMD-18.
 
 ## Where the result is visible
 

@@ -931,6 +931,7 @@ function buildSubAgentTree(
   completionMap: Map<string, UserEvent>,
   eventIndex: Map<string, TelemetryEvent>,
   subagentStats?: Record<string, SubagentStatEntry>,
+  subagentMeta?: SubagentMetaMap,
 ): SubAgentNode[] {
   // Group progress events by agentId
   const grouped = new Map<string, ProgressAgentEvent[]>();
@@ -994,11 +995,13 @@ function buildSubAgentTree(
       durationMs = completion.toolUseResult.totalDurationMs;
     }
 
+    const otelCostUsd = subagentOtelCost(subagentStats, agentId);
     const node: SubAgentNode = {
       agentId,
       prompt: representative.data.prompt!,
       ...(model !== undefined && { model }),
       ...(tokens !== undefined && { tokens }),
+      ...(otelCostUsd !== null && { otelCostUsd }),
       ...(durationMs !== undefined && { durationMs }),
       ...(representative.toolUseID !== undefined && {
         toolUseID: representative.toolUseID,
@@ -1006,6 +1009,7 @@ function buildSubAgentTree(
       ...(representative.parentToolUseID !== undefined && {
         parentToolUseID: representative.parentToolUseID,
       }),
+      ...subagentMetaFields(subagentMeta, agentId),
       children: [],
     };
 
@@ -1237,6 +1241,7 @@ export function buildAgentNodesForIds(
   subagentLogsMap: Map<string, Record<string, unknown>[]>,
   subagentStats?: Record<string, SubagentStatEntry>,
   pricing?: ModelPricingMap,
+  subagentMeta?: SubagentMetaMap,
 ): SubAgentNode[] {
   const idSet = new Set(agentIds);
   const nodeMap = new Map<string, SubAgentNode>();
@@ -1299,12 +1304,14 @@ export function buildAgentNodesForIds(
     const skills = parsed.turns.flatMap((t) => t.skills);
     const rulesInjected = parsed.turns.flatMap((t) => t.rulesInjected);
     const { startMs, endMs } = agentLogTimeSpan(logs);
+    const otelCostUsd = subagentOtelCost(subagentStats, agentId);
 
     nodeMap.set(agentId, {
       agentId,
       prompt,
       ...(model !== null ? { model } : {}),
       ...(tokens !== undefined ? { tokens } : {}),
+      ...(otelCostUsd !== null ? { otelCostUsd } : {}),
       ...(startMs !== undefined ? { startMs } : {}),
       ...(startMs !== undefined && endMs !== undefined
         ? { durationMs: endMs - startMs }
@@ -1314,6 +1321,7 @@ export function buildAgentNodesForIds(
       ...(files.length > 0 ? { files } : {}),
       ...(skills.length > 0 ? { skills } : {}),
       ...(rulesInjected.length > 0 ? { rulesInjected } : {}),
+      ...subagentMetaFields(subagentMeta, agentId),
       children: [],
     });
   }
@@ -1462,6 +1470,50 @@ export function buildAgentParentMap(
     );
   }
   return map;
+}
+
+/**
+ * Per-agent labels from the agent's `.meta.json` (via the hook and the server), keyed by agentId
+ * without the "agent-" prefix. A field the server did not send (old server) is `null`.
+ */
+export type SubagentMetaMap = Map<
+  string,
+  { agentDescription: string | null; workflowPhase: string | null }
+>;
+
+/** Builds the `SubagentMetaMap` from the server's per-subagent `agentDescription` / `workflowPhase`. */
+export function buildSubagentMeta(
+  subagents: {
+    sessionId: string;
+    agentDescription?: string | null;
+    workflowPhase?: string | null;
+  }[],
+): SubagentMetaMap {
+  const map: SubagentMetaMap = new Map();
+  for (const sa of subagents) {
+    map.set(stripAgentPrefix(sa.sessionId), {
+      agentDescription: sa.agentDescription ?? null,
+      workflowPhase: sa.workflowPhase ?? null,
+    });
+  }
+  return map;
+}
+
+/** The non-null meta fields of one agent, ready to spread into a `SubAgentNode`. */
+function subagentMetaFields(
+  subagentMeta: SubagentMetaMap | undefined,
+  agentId: string,
+): Pick<SubAgentNode, 'agentDescription' | 'workflowPhase'> {
+  const meta = subagentMeta?.get(agentId);
+  if (!meta) return {};
+  return {
+    ...(meta.agentDescription != null
+      ? { agentDescription: meta.agentDescription }
+      : {}),
+    ...(meta.workflowPhase != null
+      ? { workflowPhase: meta.workflowPhase }
+      : {}),
+  };
 }
 
 /** Inverts an `agentId -> parentAgentId` map into `parentAgentId -> childAgentId[]`. */
@@ -1659,6 +1711,22 @@ export interface SubagentStatEntry {
   webSearchRequests?: number;
   inputTokensFast?: number;
   outputTokensFast?: number;
+  /** Server-chosen OTEL cost of this sub-agent (FR-6); see `SubagentStats.otelCostUsd`. */
+  otelCostUsd?: number | null;
+}
+
+/**
+ * The server-chosen OTEL cost of a sub-agent (FR-6, DD-14): looked up under
+ * `'agent-' + agentId` (its `sessions.session_id`), falling back to the bare `agentId`.
+ * Returns `null` when there is no entry or the server did not choose OTEL for it.
+ */
+export function subagentOtelCost(
+  subagentStats: Record<string, SubagentStatEntry> | undefined,
+  agentId: string,
+): number | null {
+  if (!subagentStats) return null;
+  const entry = subagentStats[`agent-${agentId}`] ?? subagentStats[agentId];
+  return entry?.otelCostUsd ?? null;
 }
 
 export function parseSessionLogs(
@@ -1692,12 +1760,18 @@ export function parseSessionLogs(
      * concept).
      */
     harnessSnapshot?: HarnessSnapshot | null;
+    /**
+     * Per-agent `.meta.json` labels from the server (`buildSubagentMeta`), copied onto the
+     * sub-agent nodes this parse builds. Absent = no labels (old server, or a sub-agent's own log).
+     */
+    subagentMeta?: SubagentMetaMap;
   },
 ): ParsedSession {
   const isSubagent = options?.isSubagent ?? false;
   const repoRoot = options?.repoRoot ?? '';
   const repoConfig = options?.repoConfig ?? null;
   const subagentStats = options?.subagentStats;
+  const subagentMeta = options?.subagentMeta;
   const workflowsOption = options?.workflows;
   const subagentLogsOption = options?.subagentLogs;
   const pricingOption = options?.pricing;
@@ -2201,6 +2275,7 @@ export function parseSessionLogs(
       completionMap,
       eventIndex,
       subagentStats,
+      subagentMeta,
     );
 
     const agentActivations = extractAgentActivations(events, uuidSet);

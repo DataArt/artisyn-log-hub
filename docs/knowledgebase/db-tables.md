@@ -48,7 +48,8 @@ This article keeps only what the DDL does not say: how tables relate in behaviou
    session_harness_usage, session_changed_paths, session_file_stats*, session_cause_stats*,
    session_okf_access, session_tool_usage, session_attribution, session_attribution_runs,
    session_prompt_watermark, user_favorite_sessions, logs_otel, otel_api_calls,
-   otel_calls, otel_spans, otel_cost_buckets, otel_session_state, otel_reclass_queue
+   otel_calls, otel_spans, otel_cost_buckets, otel_session_state, otel_reclass_queue,
+   otel_session_totals, otel_agent_totals
 
  U = unique key   * = scoped rows: nullable team_id / user_id FKs (CASCADE)
 ```
@@ -73,6 +74,15 @@ table stores the integer `sessions.id`.
   OKF snapshot are resolved through its root.
 - `workflow_run_id` mirrors `parent_session_id` for workflow-spawned agents (resolves
   `WorkflowRun.agentSessionIds`).
+- `agent_description` / `workflow_phase` (`varchar(255)`, nullable, migration 0085) hold the
+  sub-agent's `.meta.json` `description` / `workflowPhase`, sent by hook 2.31.0+ as the
+  `agentDescription` / `workflowPhase` query params of `POST /api/v2/logs`. They are written
+  **only for `claude-subagent` sessions** (root sessions stay `NULL`), sanitised by
+  `sanitizeAgentMeta` (`server/src/logs/agent-meta-param.ts`: non-string → `NULL`, trimmed,
+  empty → `NULL`, cut to 255 code points). `LogsService.upsert` never overwrites a stored value
+  with an absent one — each column is set only when its new value is non-null, independently.
+  Rows from older hooks stay `NULL`; there is no backfill. The client uses them as the sub-agent
+  label (description first) and the Agents-table Phase column.
 - `tool_usage_version` is the rebuild marker of `session_tool_usage` (see
   [tool-monitoring.md](tool-monitoring.md)); `initializeDatabase()` re-queues every value below the
   current extractor version on start.
@@ -200,6 +210,32 @@ from two channels: the realtime route and the projection drain over `logs_otel`
   reads ignore zero rows.
 - `otel_reclass_queue` gets a row after every transcript request-id rewrite; the drain claims
   rows with `DELETE … FOR UPDATE SKIP LOCKED … RETURNING`.
+- Cost attribution (migration `0088`, task `2026-11-03-otel-cost-attribution`), all written by
+  `applyOtelLines` (`otel-facts-writer.ts`) from both channels and filled for history by the
+  projection version bump to 2:
+  - `otel_calls`: `cache_write_5m_tokens`, `cache_write_1h_tokens` (bigint), `effort`, `speed`
+    (varchar 64), `skill_name`, `plugin_name`, `agent_name`, `mcp_server_name`, `mcp_tool_name`
+    (varchar 255) — all nullable; NULL = not reported (older Claude Code). Upserted with the call;
+    a change in any of them is a call change. Partial index `idx_otel_calls_session_agent`
+    `(session_id, agent_id) WHERE agent_id IS NOT NULL` serves the FR-6 sub-agent OTEL cost sum
+    (`subagentOtelCostSql`).
+  - `otel_cost_buckets`: grain columns `skill`, `mcp_server` (varchar 255), `effort`, `speed`
+    (varchar 64), `NOT NULL DEFAULT ''` (`''` = not reported) and part of `otel_cost_buckets_pk`
+    (recreated over all 10 key columns).
+  - `otel_session_state`: `plan`, `seat_type`, `provider` (varchar 64), `custom_base_url`
+    (varchar 1024, sanitised: scheme + host + path), `account_event_at` (timestamptz) — nullable,
+    latest-wins by `account_event_at`, a null never overwrites (`extractOtelAccount`).
+- Stored live totals (migration `0089`, task `2026-11-04-otel-live-view`): `otel_session_totals`
+  (one row per root, hidden calls included) and `otel_agent_totals` (PK `(session_id, agent_key)`,
+  `agent_key` = `agent_id` or `main`; hidden calls have no row) are **derived** from `otel_calls`
+  by `upsertOtelCalls` in the same writer transaction. While the session row is current
+  (`seq >= MAX(otel_cost_buckets.seq)` of the root, or the root has no bucket row yet, so no call)
+  the writer adds the call deltas; otherwise — a session older than the migration, buckets written
+  by an older server process — it runs `rebuildOtelTotals` (also called after every reclassification). An agent with no calls
+  left is zeroed, never deleted. Both are purged with the other OTEL tables on a soft delete.
+  The same migration adds `idx_otel_session_state_last_at` on
+  `GREATEST(rt_last_at, chunk_last_at)` and the time indexes
+  `idx_otel_calls_session_event_time` / `idx_otel_spans_session_start_time`.
 
 Design, lock order and cursor: [otel-tabs.md](otel-tabs.md).
 
@@ -363,6 +399,22 @@ conditional `UPDATE` matches only when the data is older than 24 h and the last 
 than 1 h. `ai_tool_version_history` gets a row only when the `{stable, latest}` map changes. See
 [claude-version-check.md](claude-version-check.md).
 
+### log_hub_release_check
+
+`log_hub_release_check` is a single-row cache (`id smallint PK DEFAULT 1 CHECK (id = 1)`) of the
+latest published Log Hub GitHub release, for the admin "new release" badge (migration
+`0086_log_hub_release_check`). All other columns are nullable:
+
+- `latest_tag` (`varchar(64)`) — last *validated* tag, e.g. `v1.3.0`.
+- `release_url` (`text`) — its validated `html_url` on `github.com/DataArt/artisyn-log-hub/releases/`.
+- `fetched_at` (`timestamptz`) — last successful fetch.
+- `last_attempt_at` (`timestamptz`) — the cluster claim: one attempt per 24 h whatever the outcome
+  (no success clause, no 1 h retry, unlike `ai_tool_version`).
+
+The row is inserted by the first eligible check; until then the table is empty, which reads as "no
+newer release known". "Update available" is never stored — it is computed at read time against the
+running version. See [system-info-and-cluster.md](system-info-and-cluster.md) (`log-hub-release` scheduler).
+
 ## Queues, jobs and run logs
 
 ### upload_queue
@@ -374,6 +426,10 @@ than 1 h. `ai_tool_version_history` gets a row only when the `{stable, latest}` 
 - **Expiry:** a `partially_uploaded` chunk set expires after `UPLOAD_QUEUE_PARTIAL_UPLOAD_TTL_MS`.
   No other status expires.
 - **Foreign session:** a `rejected_foreign_session` warning is delivered to the hook once.
+- **Agent meta:** `agent_description` / `workflow_phase` (`varchar(255)`, nullable) stage the
+  sanitised sub-agent meta per plain upload or chunk (only for `claude-subagent`; `NULL`
+  otherwise); the scheduler passes them to `LogsService.upsert`, which copies non-null values
+  onto `sessions`.
 
 See [upload-queue.md](upload-queue.md).
 

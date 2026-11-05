@@ -88,6 +88,10 @@ export const OTEL_REPO_STACK_OPTIONS = [
   { value: 'querySource', label: 'query_source' },
   { value: 'model', label: 'Model' },
   { value: 'ccVersion', label: 'CC version' },
+  { value: 'skill', label: 'Skill' },
+  { value: 'mcpServer', label: 'MCP server' },
+  { value: 'effort', label: 'Effort' },
+  { value: 'speed', label: 'Fast mode' },
 ] as const;
 
 const VIEW_OPTIONS: readonly OtelSegmentedOption<OtelChartView>[] = [

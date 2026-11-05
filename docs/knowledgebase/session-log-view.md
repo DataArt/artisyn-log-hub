@@ -92,7 +92,10 @@ in `log-parser.ts`). `WorkflowRun` is the exception: declared in
   `subagentStats` (`selectSubagentStats`) has its own guard — a `session_stats` row plus some
   transcript row, so an OTEL-only node is left out. A descendant's `claude` rows are never read. `parentSessionId` is the
   DB-authoritative immediate parent (`sessions.parent_session_id`) — the only reliable nesting
-  source beyond depth 1 (see "Sub-agent nesting").
+  source beyond depth 1 (see "Sub-agent nesting"). Each entry also carries `agentDescription` /
+  `workflowPhase` (`string | null`; `sessions.agent_description` / `workflow_phase`, sent by hook
+  `2.31.0`+ from the agent's `.meta.json`, see "Sub-agent meta labels" below). Both are optional
+  on the client type, because an older server omits them.
 - **`agent-` prefix rules.** Server-side ids are `sessions.session_id`, so `subagents[].sessionId`,
   `parentSessionId` (unless it is the root), every `subagentStats` key and every
   `workflows[].agentSessionIds` entry carry the `agent-` prefix. The client maps (`subagentLogsMap`,
@@ -107,6 +110,43 @@ in `log-parser.ts`). `WorkflowRun` is the exception: declared in
   event fields").
 - Adding a field: extend the string in `getSessionLogs` and `SessionLogsData`; keep it optional on
   the client if older cached responses may lack it.
+
+### Sub-agent meta labels (description / phase)
+
+Plan: `docs/tasks/done/2026-10-21-workflow-agent-meta-labels/impl-plan.md` (DD-8–DD-13).
+
+- **Meta map.** `buildSubagentMeta(subagents)` (`log-parser.ts`, next to `buildAgentParentMap`)
+  returns a `SubagentMetaMap` = `Map<bareAgentId, { agentDescription, workflowPhase }>`, keyed by
+  `stripAgentPrefix(sessionId)`; a missing field (old server) maps to `null`. It is built with
+  `useMemo` wherever `agentParentMap` is derived from `logsData`: `useRepositoryData.ts`,
+  `SessionLogView.tsx`, `CallTreeView.tsx`, `SessionChartsTab.tsx`. `parseSessionLogs` takes it as
+  the `subagentMeta` option and copies non-null values onto `SubAgentNode.agentDescription` /
+  `workflowPhase` (`buildSubAgentTree`); `buildAgentNodesForIds` takes it as a trailing argument
+  (threaded `SessionLogView → PromptTurnList → PromptTurnItem`).
+- **Helpers** (`workflow-agent-rows.ts`): `agentDescriptionText(v)` trims and returns `null` when
+  empty; `cutAgentLabel(text)` is the `AGENT_LABEL_LIMIT` (60) "…" cut; `agentRowLabel(node)` =
+  `cutAgentLabel(agentDescriptionText(node.agentDescription) ?? (cleanText(node.prompt) || node.agentId))`.
+- **Label order, every view:** (1) the spawning Agent tool call's `description`, where the view
+  has one; (2) else the meta description (`agentDescriptionText(subagentMeta.get(id)?.agentDescription)`);
+  (3) else that view's old fallback.
+
+| View | Label |
+|---|---|
+| Agents table (`WorkflowAgentsTable`) and its modal title | `agentRowLabel(node)`; the Task cell's hover `title` is unchanged (cleaned prompt, else agent id) |
+| Turn Sub-agents tree (`SubAgentNode.tsx`) | `cutAgentLabel(description)` with `title` = full agent id and no `font-mono`; else `truncateAgentId(agentId)` (mono) |
+| `AgentActivationItem.tsx` | `activation.description ?? metaDesc ?? agent-<id>` |
+| Call Tree (`useCallTreeNodes.ts`) | `Agent: ${activation.description ?? metaDesc ?? agentId.slice(0, 20)}` |
+| Charts (`chart-data.ts` `resolveAgent`) | `activation.description ?? metaDesc ?? agent-<id>` |
+| "Open sub-agent →" modal (`ToolViewContext.tsx`) | caller's `label`; else `agentRowLabel(node)` when the node has a description; else `Agent <id 8>` |
+| Session Map card | see [session-map.md](session-map.md) |
+
+- **Phase column.** `WorkflowAgentsTable` shows a `Phase` column between Task and Duration only
+  when some row of the run (nested rows included) has a non-empty `workflowPhase`; the cell is
+  `cutAgentLabel(phase)` or a muted `—`. Row order and nesting are unchanged. Phase is shown in no
+  other view.
+- **Freshness.** The Logs and Charts tabs receive the meta when they refetch `/logs` (the root
+  `endTime` watermark moves); a sub-agent upload alone does not move it — an existing limitation
+  for all sub-agent data. The Session Map gets meta live through `/logs/delta`.
 
 ### Workflow tool lifecycle in transcripts
 

@@ -6,10 +6,199 @@
 //   w1-s01 1.725 = 1.0 in + 0.5 out + 0.1 cache-read + 0.125 cache-write-5m;
 //   w1-s02 1.4 own (model b: 1.0 + 0.2 + 0.2 cache-write-1h) + 0.4 for its child w1-s03 = 1.8;
 //   w1-s04 0.4 = 0.1 + 0.1 + 0.2 cache-read; w1-s06 runs an unpriced model: cost null.
-import type { ContractFamily } from '../types';
-import { isoSql, listedRootsSql, ownCostSql, treeCostSql } from './oracle-sql';
+import { createHash } from 'node:crypto';
+import {
+  WORLD_V1,
+  WORLD_V1_S03_SUBAGENT_BODY,
+  WORLD_V1_S03_SUBAGENT_LINE_JSONB_TEXT,
+} from '../fixtures/world-v1.sql';
+import type { ContractCase, ContractFamily, ReadSpec } from '../types';
+import {
+  isoSql,
+  listedRootsSql,
+  ownCostSql,
+  subagentOtelUsdSql,
+  treeCostSql,
+  treeCostWithOtelSubagentsSql,
+} from './oracle-sql';
 
 const MONTH = { startDate: '2026-01-01', endDate: '2026-01-31' };
+
+// -------------------------------------------------------------------------------------------
+// FR-6 (2026-11-03 otel-cost-attribution): sub-agent cost from OTEL for old Claude Code.
+//
+// Rtwins (owner, no team) holds two roots, newest first in the list: w1-s14 (2.1.310) and
+// w1-s12 (2.1.300). Each costs 0.12 USD itself; each sub-agent costs 0.06 USD by its transcript,
+// and the root's OTEL calls under the sub-agent's id sum to 0.25 USD. Only s12's sub-agent is
+// before the 2.1.307 fix, so s12 counts 0.12 + 0.25 = 0.37 and s14 keeps 0.12 + 0.06 = 0.18.
+
+/** The breakdown of root `$1` (a `sessions.id`) under FR-6. */
+const FR6_BREAKDOWN_SQL = `
+  SELECT ${ownCostSql('own')} AS main_cost,
+         ${treeCostWithOtelSubagentsSql('own.session_id')} - ${ownCostSql('own')} AS subagent_cost,
+         ${treeCostWithOtelSubagentsSql('own.session_id')} AS total_cost,
+         EXISTS (SELECT 1 FROM sessions c JOIN session_stats k ON k.session_id = c.id
+                  WHERE c.parent_session_id = (SELECT session_id FROM sessions WHERE id = own.session_id)
+                    AND ${subagentOtelUsdSql('k', 'c.session_id', 'own.session_id')}
+                          > coalesce(${ownCostSql('k')}, 0)) AS from_otel,
+         false AS flag
+    FROM session_stats own WHERE own.session_id = $1`;
+
+const FR6_BREAKDOWN_FIELDS: ReadSpec['fields'] = {
+  mainCost: { col: 'main_cost', as: 'numeric' },
+  subagentCost: { col: 'subagent_cost', as: 'numeric' },
+  calculatedCost: { col: 'total_cost', as: 'numeric' },
+  subagentCostFromOtel: 'from_otel',
+  subagentPricingMissing: 'flag',
+};
+
+const FR6_LIST_ROWS: ContractCase[] = [
+  {
+    // Golden constants: the old-CC root's total rises by its sub-agent's OTEL excess.
+    id: 'F17-list-fr6-golden-cost',
+    route: 'GET /api/v1/repositories/:repoId/sessions',
+    actor: 'owner',
+    params: { repoId: '@Rtwins.id' },
+    expect: { status: 200, minRows: 2 },
+    read: {
+      sql: `SELECT * FROM (VALUES ('w1-s14-newcc-root', 0.18), ('w1-s12-oldcc-root', 0.37))
+              AS g(session_id, cost)`,
+      shape: 'array',
+      fields: {
+        sessionId: 'session_id',
+        totalCost: { col: 'cost', as: 'numeric' },
+        computedCost: { col: 'cost', as: 'numeric' },
+      },
+    },
+  },
+  {
+    // The same totals by the FR-6 formula.
+    id: 'F17-list-fr6-cost',
+    route: 'GET /api/v1/repositories/:repoId/sessions',
+    actor: 'owner',
+    params: { repoId: '@Rtwins.id' },
+    expect: { status: 200, minRows: 2 },
+    read: {
+      sql: `SELECT r.session_id, ${treeCostWithOtelSubagentsSql('r.id')} AS total_cost
+              FROM ${listedRootsSql('$1')} r
+             ORDER BY r.end_time DESC`,
+      args: ['@Rtwins.id'],
+      shape: 'array',
+      fields: {
+        sessionId: 'session_id',
+        totalCost: { col: 'total_cost', as: 'numeric' },
+      },
+    },
+  },
+  {
+    // The old-CC root (second in the list): the sub-agent part is the OTEL cost, flagged —
+    // what the session header's cost tooltip shows as "Sub-agents (from OTEL)".
+    id: 'F17-list-cost-breakdown-subagent-otel',
+    route: 'GET /api/v1/repositories/:repoId/sessions',
+    actor: 'owner',
+    params: { repoId: '@Rtwins.id' },
+    expect: { status: 200 },
+    read: {
+      sql: FR6_BREAKDOWN_SQL,
+      args: ['@s12.id'],
+      shape: 'object',
+      path: '1.costBreakdown',
+      fields: FR6_BREAKDOWN_FIELDS,
+    },
+  },
+  {
+    // The new-CC root (first): the transcript cost stays, no flag.
+    id: 'F17-list-cost-breakdown-subagent-transcript',
+    route: 'GET /api/v1/repositories/:repoId/sessions',
+    actor: 'owner',
+    params: { repoId: '@Rtwins.id' },
+    expect: { status: 200 },
+    read: {
+      sql: FR6_BREAKDOWN_SQL,
+      args: ['@s14.id'],
+      shape: 'object',
+      path: '0.costBreakdown',
+      fields: FR6_BREAKDOWN_FIELDS,
+    },
+  },
+];
+
+/**
+ * `subagentStats[<sub-agent>].otelCostUsd` of sub-agent `$1` (a `sessions.session_id`) under
+ * root `$2` (a `sessions.id`): its OTEL cost when that exceeds its transcript cost, else NULL.
+ */
+const FR6_SUBAGENT_OTEL_SQL = `
+  SELECT CASE WHEN o.usd > coalesce(${ownCostSql('k')}, 0) THEN o.usd END AS otel_cost
+    FROM sessions c
+    JOIN session_stats k ON k.session_id = c.id
+    CROSS JOIN LATERAL (SELECT ${subagentOtelUsdSql('k', 'c.session_id', '$2::bigint')} AS usd) o
+   WHERE c.session_id = $1`;
+
+/** `/logs` and `/logs/delta` (no cursor: every sub-agent is new) of both Rtwins roots. */
+const FR6_LOGS_ROWS: ContractCase[] = (
+  [
+    ['logs', 'GET /api/v1/repositories/:repoId/sessions/:sessionId/logs'],
+    [
+      'logs-delta',
+      'GET /api/v1/repositories/:repoId/sessions/:sessionId/logs/delta',
+    ],
+  ] as const
+).flatMap(([name, route]): ContractCase[] => [
+  {
+    // Old CC: the OTEL cost (0.25) is above the transcript (0.06) -> sent.
+    id: `F17-session-${name}-subagent-otel-cost`,
+    route,
+    actor: 'owner',
+    params: { repoId: '@Rtwins.id', sessionId: '@s12.sessionId' },
+    expect: { status: 200, minRows: 1 },
+    read: {
+      sql: FR6_SUBAGENT_OTEL_SQL,
+      args: ['@s13.sessionId', '@s12.id'],
+      shape: 'object',
+      path: 'subagentStats.agent-w1oldsub',
+      fields: { otelCostUsd: { col: 'otel_cost', as: 'numeric' } },
+    },
+  },
+  {
+    // New CC: the same OTEL excess is ignored -> null.
+    id: `F17-session-${name}-subagent-no-otel-cost`,
+    route,
+    actor: 'owner',
+    params: { repoId: '@Rtwins.id', sessionId: '@s14.sessionId' },
+    expect: { status: 200, minRows: 1 },
+    read: {
+      sql: FR6_SUBAGENT_OTEL_SQL,
+      args: ['@s15.sessionId', '@s14.id'],
+      shape: 'object',
+      path: 'subagentStats.agent-w1newsub',
+      fields: { otelCostUsd: { col: 'otel_cost', as: 'numeric' } },
+    },
+  },
+]);
+
+/**
+ * A `/logs/delta` cursor v1 (session-logs-delta.ts) holding every line of s03's
+ * `claude-subagent` log, under a `ut` (`0`) that never equals the stored `updated_at` — exactly
+ * the state a client is in after s03's same body was uploaded again.
+ */
+const S03_HELD_CURSOR = Buffer.from(
+  JSON.stringify({
+    v: 1,
+    r: [
+      [
+        WORLD_V1.sessions.s03.id.toString(36),
+        's',
+        '0',
+        WORLD_V1_S03_SUBAGENT_BODY.length,
+        createHash('md5')
+          .update(WORLD_V1_S03_SUBAGENT_LINE_JSONB_TEXT)
+          .digest('hex')
+          .slice(0, 12),
+      ],
+    ],
+  }),
+  'utf8',
+).toString('base64url');
 
 /**
  * `costBreakdown.costExcludesUtilityCalls` (2026-10-30 otel-shared-receiver, DD-30) of the root
@@ -167,6 +356,8 @@ export const f17Sessions: ContractFamily = {
           subagentPricingMissing: 'flag',
           unpricedModels: { col: 'unpriced_models', as: 'json' },
           costExcludesUtilityCalls: 'excludes_utility',
+          // FR-6: s03 runs 2.1.99 (before the fix), but s02 has no OTEL call under its id.
+          subagentCostFromOtel: 'flag',
         },
         strict: true,
       },
@@ -201,10 +392,12 @@ export const f17Sessions: ContractFamily = {
           subagentPricingMissing: 'flag',
           unpricedModels: { col: 'unpriced_models', as: 'json' },
           costExcludesUtilityCalls: 'excludes_utility',
+          subagentCostFromOtel: 'flag',
         },
         strict: true,
       },
     },
+    ...FR6_LIST_ROWS,
     {
       // Transparent team T1: the member sees every T1 member's sessions in the URL, prompts
       // included — their own unpriced w1-s06 too (cost null). Golden.
@@ -454,6 +647,42 @@ export const f17Sessions: ContractFamily = {
       },
     },
     {
+      // Sub-agent `.meta.json` labels (2026-10-21 workflow-agent-meta-labels, FR-3): every
+      // `subagents[]` entry carries its session's `agentDescription` / `workflowPhase` (s03 is
+      // seeded with 'contract-desc' / 'Implement').
+      id: 'F17-session-logs-subagent-meta',
+      route: 'GET /api/v1/repositories/:repoId/sessions/:sessionId/logs',
+      actor: 'owner',
+      params: { repoId: '@R1.id', sessionId: '@s02.sessionId' },
+      // The oracle keeps only rows with the seeded values, so a server that drops them fails.
+      expect: { status: 200, minRows: 1 },
+      read: {
+        sql: `WITH RECURSIVE tree AS (
+                SELECT s.id, s.session_id FROM sessions s WHERE s.id = $1
+                UNION ALL
+                SELECT c.id, c.session_id FROM sessions c JOIN tree t ON c.parent_session_id = t.session_id
+              )
+              SELECT s.session_id, s.parent_session_id, s.agent_description, s.workflow_phase
+                FROM tree t
+                JOIN sessions s ON s.id = t.id
+                JOIN logs l ON l.session_id = s.id AND l.log_type = 'claude-subagent'
+               WHERE s.id <> $1
+                 AND s.agent_description = 'contract-desc'
+                 AND s.workflow_phase = 'Implement'
+               ORDER BY s.session_id`,
+        args: ['@s02.id'],
+        shape: 'array',
+        path: 'subagents',
+        sortBy: 'sessionId',
+        fields: {
+          sessionId: 'session_id',
+          parentSessionId: 'parent_session_id',
+          agentDescription: 'agent_description',
+          workflowPhase: 'workflow_phase',
+        },
+      },
+    },
+    {
       id: 'F17-session-logs-outsider',
       route: 'GET /api/v1/repositories/:repoId/sessions/:sessionId/logs',
       actor: 'outsider',
@@ -526,7 +755,8 @@ export const f17Sessions: ContractFamily = {
                 UNION ALL
                 SELECT c.id, c.session_id FROM sessions c JOIN tree t ON c.parent_session_id = t.session_id
               )
-              SELECT s.session_id, s.parent_session_id, s.workflow_run_id, l.body AS logs
+              SELECT s.session_id, s.parent_session_id, s.workflow_run_id,
+                     s.agent_description, s.workflow_phase, l.body AS logs
                 FROM tree t
                 JOIN sessions s ON s.id = t.id
                 JOIN logs l ON l.session_id = s.id AND l.log_type = 'claude-subagent'
@@ -539,7 +769,42 @@ export const f17Sessions: ContractFamily = {
           sessionId: 'session_id',
           parentSessionId: 'parent_session_id',
           workflowRunId: 'workflow_run_id',
+          agentDescription: 'agent_description',
+          workflowPhase: 'workflow_phase',
           logs: { col: 'logs', as: 'json' },
+        },
+        strict: true,
+      },
+    },
+    ...FR6_LOGS_ROWS,
+    {
+      // DD-15 (2026-10-21 workflow-agent-meta-labels): the cursor already holds all of s03's
+      // lines, but under an older `updated_at` — what a re-upload of the same body (now carrying
+      // `.meta.json` labels) leaves behind. No new lines, yet s03 still comes back as a
+      // `subagentAppends` entry with `lines: []` and its meta, so an open Session Map gets the
+      // labels live. The root rows are not in the cursor, so they come back in full.
+      id: 'F17-session-logs-delta-meta-only-append',
+      route: 'GET /api/v1/repositories/:repoId/sessions/:sessionId/logs/delta',
+      actor: 'owner',
+      params: { repoId: '@R1.id', sessionId: '@s02.sessionId' },
+      query: { cursor: S03_HELD_CURSOR },
+      expect: {
+        status: 200,
+        minRows: 1,
+        bodyMatches: { reload: false, newSubagents: [] },
+      },
+      read: {
+        sql: `SELECT s.session_id, '[]'::jsonb AS lines, s.agent_description, s.workflow_phase
+                FROM sessions s
+               WHERE s.id = $1 AND s.agent_description IS NOT NULL`,
+        args: ['@s03.id'],
+        shape: 'array',
+        path: 'subagentAppends',
+        fields: {
+          sessionId: 'session_id',
+          lines: { col: 'lines', as: 'json' },
+          agentDescription: 'agent_description',
+          workflowPhase: 'workflow_phase',
         },
         strict: true,
       },

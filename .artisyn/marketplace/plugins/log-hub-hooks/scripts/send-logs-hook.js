@@ -20,8 +20,10 @@
  *                     agent) upload with their true immediate parent, not always flattened onto
  *                     the root session. Falls back to the root session id when .meta.json is
  *                     missing, has no parentAgentId (older Claude Code / true depth-1 agents), or
- *                     fails to parse.
- *   claude-otel     — chunk files from <TELEMETRY_DIR>/otel/<session-id>/, written by this
+ *                     fails to parse. The same .meta.json's `description` / `workflowPhase`
+ *                     (trimmed, cut to 255 code points) are sent as the optional
+ *                     `agentDescription` / `workflowPhase` upload params (hook 2.31.0+).
+ *   claude-otel    — chunk files from <TELEMETRY_DIR>/otel/<session-id>/, written by this
  *                     project's own OTLP receiver (otel-receiver.js). The directory belongs to
  *                     exactly one project, so every file in it is uploaded unfiltered. Gated on
  *                     the `otelEnabled` config key, and pruned by `otelRetentionDays` at the end
@@ -455,24 +457,54 @@ function listOtelChunks(otelDir) {
 }
 
 /**
- * Read the sibling <agent-id>.meta.json file for a sub-agent JSONL file and return its
- * parentAgentId, if present. Fail-open: a missing file, unreadable file, malformed JSON, or a
- * parentAgentId field that isn't a non-empty string all resolve to null so the caller falls back
- * to root-session flattening (the pre-existing behavior).
- * @param {string} metaPath
+ * Max length (in code points) of an agent meta label sent to the server. Mirrors
+ * `AGENT_META_MAX_LENGTH` in `server/src/logs/agent-meta-param.ts` — keep the two in sync.
+ */
+const AGENT_META_MAX_LENGTH = 255;
+
+/**
+ * Sanitise an agent meta label (description / workflow phase). Plain-JS copy of the server's
+ * `sanitizeAgentMeta` (`server/src/logs/agent-meta-param.ts`): a non-string gives null; otherwise
+ * the value is trimmed, an empty result gives null, and the rest is cut to
+ * AGENT_META_MAX_LENGTH code points (never splitting a surrogate pair).
+ * @param {unknown} v
  * @returns {string|null}
  */
-function readParentAgentId(metaPath) {
+function sanitizeAgentMeta(v) {
+  if (typeof v !== 'string') return null;
+  const trimmed = v.trim();
+  if (!trimmed) return null;
+  return Array.from(trimmed).slice(0, AGENT_META_MAX_LENGTH).join('');
+}
+
+/**
+ * Read the sibling <agent-id>.meta.json file for a sub-agent JSONL file (once) and return the
+ * fields the hook forwards:
+ *  - `parentAgentId` — a non-empty string, not trimmed (drives `parentSessionId`);
+ *  - `description` — the agent's `description`, sanitised per `sanitizeAgentMeta`;
+ *  - `workflowPhase` — the agent's `workflowPhase`, sanitised per `sanitizeAgentMeta`.
+ * Other meta fields (`agentType`, `spawnDepth`, …) are ignored. Fail-open: a missing file,
+ * unreadable file or malformed JSON gives all three as null, so the caller falls back to
+ * root-session flattening and sends no labels (the pre-existing behavior).
+ * @param {string} metaPath
+ * @returns {{parentAgentId: string|null, description: string|null, workflowPhase: string|null}}
+ */
+function readAgentMeta(metaPath) {
   try {
     const raw = fs.readFileSync(metaPath, 'utf8');
     const parsed = JSON.parse(raw);
-    if (parsed && typeof parsed.parentAgentId === 'string' && parsed.parentAgentId) {
-      return parsed.parentAgentId;
+    if (parsed && typeof parsed === 'object') {
+      return {
+        parentAgentId:
+          typeof parsed.parentAgentId === 'string' && parsed.parentAgentId ? parsed.parentAgentId : null,
+        description: sanitizeAgentMeta(parsed.description),
+        workflowPhase: sanitizeAgentMeta(parsed.workflowPhase),
+      };
     }
   } catch {
     // missing/unreadable file or malformed JSON — fail open, caller falls back to the root
   }
-  return null;
+  return { parentAgentId: null, description: null, workflowPhase: null };
 }
 
 /**
@@ -1129,8 +1161,8 @@ async function runUpload(cwd, hookSessionId, serverUrl, apiKey, timeoutMs, telem
         for (const { name, size } of subagentFiles) {
           if (!keepSession(sessionDir.name, path.join(subagentsDir, name))) continue;
           const agentId = name.slice(0, -'.jsonl'.length);
-          const parentAgentId = readParentAgentId(path.join(subagentsDir, `${agentId}.meta.json`));
-          const parentSessionId = parentAgentId ? `agent-${parentAgentId}` : sessionDir.name;
+          const agentMeta = readAgentMeta(path.join(subagentsDir, `${agentId}.meta.json`));
+          const parentSessionId = agentMeta.parentAgentId ? `agent-${agentMeta.parentAgentId}` : sessionDir.name;
           filesToProcess.push({
             namespace: 'claude-subagent',
             sessionId: agentId,
@@ -1140,6 +1172,8 @@ async function runUpload(cwd, hookSessionId, serverUrl, apiKey, timeoutMs, telem
             isCurrentSession: hookSessionId !== null && sessionDir.name === hookSessionId,
             manifestKey: `claude-subagent/${sessionDir.name}/${name}`,
             parentSessionId,
+            agentDescription: agentMeta.description,
+            workflowPhase: agentMeta.workflowPhase,
           });
         }
 
@@ -1162,10 +1196,12 @@ async function runUpload(cwd, hookSessionId, serverUrl, apiKey, timeoutMs, telem
             for (const { name: wfName, size: wfSize } of wfAgentFiles) {
               if (!keepSession(sessionDir.name, path.join(workflowsSubdir, wfDir.name, wfName))) continue;
               const agentId = wfName.slice(0, -'.jsonl'.length);
-              const parentAgentId = readParentAgentId(
+              const wfAgentMeta = readAgentMeta(
                 path.join(workflowsSubdir, wfDir.name, `${agentId}.meta.json`),
               );
-              const parentSessionId = parentAgentId ? `agent-${parentAgentId}` : sessionDir.name;
+              const parentSessionId = wfAgentMeta.parentAgentId
+                ? `agent-${wfAgentMeta.parentAgentId}`
+                : sessionDir.name;
               filesToProcess.push({
                 namespace: 'claude-subagent',
                 sessionId: agentId,
@@ -1175,6 +1211,8 @@ async function runUpload(cwd, hookSessionId, serverUrl, apiKey, timeoutMs, telem
                 manifestKey: `claude-subagent/${sessionDir.name}/workflows/${wfDir.name}/${wfName}`,
                 parentSessionId,
                 workflowRunId: wfDir.name,
+                agentDescription: wfAgentMeta.description,
+                workflowPhase: wfAgentMeta.workflowPhase,
               });
             }
           }
@@ -1609,7 +1647,8 @@ async function runUpload(cwd, hookSessionId, serverUrl, apiKey, timeoutMs, telem
    *   call passes no `snapshotQuery`, so the server never returns the field for them.
    */
   async function processFile(entry, extraEvents) {
-    const { namespace, sessionId, filePath, size, isCurrentSession, manifestKey: mkOverride, parentSessionId, workflowRunId } = entry;
+    const { namespace, sessionId, filePath, size, isCurrentSession, manifestKey: mkOverride, parentSessionId, workflowRunId, agentDescription, workflowPhase } = entry;
+    const agentMeta = agentDescription || workflowPhase ? { agentDescription, workflowPhase } : null;
     const manifestKey = mkOverride ?? `${namespace}/${path.basename(filePath)}`;
 
     // Skip logic. Applies to the current session's own files too — only the current-session
@@ -1717,8 +1756,8 @@ async function runUpload(cwd, hookSessionId, serverUrl, apiKey, timeoutMs, telem
     // The routing test stays the *uncompressed* size: `uploadFileMaybeCompressed()` decides for
     // itself whether the single request it sends is gzipped.
     const result = bodyBytes > CHUNK_SIZE_BYTES
-      ? await uploadFileChunked(serverUrl, apiKey, namespace, sessionId, body, timeoutMs, hookSessionId, cwd, parentSessionId || null, workflowRunId || null, telemetryDir, manifestKey, snapshotQuery)
-      : await uploadFileMaybeCompressed(serverUrl, apiKey, namespace, sessionId, body, timeoutMs, hookSessionId, cwd, parentSessionId || null, workflowRunId || null, snapshotQuery);
+      ? await uploadFileChunked(serverUrl, apiKey, namespace, sessionId, body, timeoutMs, hookSessionId, cwd, parentSessionId || null, workflowRunId || null, telemetryDir, manifestKey, snapshotQuery, agentMeta)
+      : await uploadFileMaybeCompressed(serverUrl, apiKey, namespace, sessionId, body, timeoutMs, hookSessionId, cwd, parentSessionId || null, workflowRunId || null, snapshotQuery, agentMeta);
     const { success, reason, warnings, unknownSnapshotId, unknownOkfSnapshotId } = result;
 
     if (success) {

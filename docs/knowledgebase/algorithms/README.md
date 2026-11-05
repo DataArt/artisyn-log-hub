@@ -35,6 +35,7 @@ format where the two differ).
 | [anthropic-pricing-parse](anthropic-pricing-parse.md) | `server/src/model-pricing/anthropic-pricing-parser.ts` | jest |
 | [otel-cost-selection](otel-cost-selection.md) | `server/src/logs/otel-cost.sql.ts` | jest |
 | [otel-facts](otel-facts.md) | `server/src/logs/otel/otel-classify.ts`, `otel-records.ts`, `otel-query-source-dictionary.ts` | jest |
+| [otel-live-tree](otel-live-tree.md) | `server/src/logs/otel/otel-live-tree.ts` (`parseOtelLiveNodeKey`, `formatOtelLiveNodeKey`, `buildOtelLiveTree`) | jest |
 | [otel-trace-assembly](otel-trace-assembly.md) | `client/.../session-log/otel/otel-trace-assembly.ts` | vitest |
 | [otel-delta-merge](otel-delta-merge.md) | `client/.../repository/otel/otel-merge.ts` | vitest |
 | [otel-realtime-backoff](otel-realtime-backoff.md) | hook `otel-receiver.js` (`nextRealtimeDelay`) | `node --test` |
@@ -49,6 +50,7 @@ format where the two differ).
 | [repo-url-normalization](repo-url-normalization.md) | `server/src/logs/repo-url-normalizer.ts` | jest |
 | [ndjson-tolerance](ndjson-tolerance.md) | hook `ndjson-sanitize.js`, `server/src/logs/ndjson-parser.ts` | `node --test`, jest |
 | [upload-error-classify](upload-error-classify.md) | `server/src/logs/upload-error.ts` | jest |
+| [log-retention](log-retention.md) | `server/src/log-retention/log-retention-plan.ts` | jest |
 | [login-backoff](login-backoff.md) | `server/src/auth/login-backoff.service.ts` | jest |
 | [password-policy](password-policy.md) | `server/src/auth/utils/password-policy.ts` | jest |
 | [auth-startup-config](auth-startup-config.md) | `server/src/auth/config/auth-startup-validation.ts` | jest |

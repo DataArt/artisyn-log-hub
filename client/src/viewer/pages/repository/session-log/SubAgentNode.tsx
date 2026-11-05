@@ -11,6 +11,7 @@ import { cn } from '../../../lib/cn';
 import type { ModelPricingMap } from '../../../../models/pricing';
 import { truncateAgentId } from './prompt-turn-helpers';
 import { SubAgentDetail } from './SubAgentDetail';
+import { agentDescriptionText, cutAgentLabel } from './workflow-agent-rows';
 
 interface Props {
   agent: SubAgentNodeType;
@@ -21,6 +22,7 @@ interface Props {
 
 export function SubAgentNode({ agent, depth, pricing, sessionModel }: Props) {
   const [open, setOpen] = useState(false);
+  const desc = agentDescriptionText(agent.agentDescription);
 
   return (
     <div style={{ paddingLeft: depth * 16 }}>
@@ -32,9 +34,15 @@ export function SubAgentNode({ agent, depth, pricing, sessionModel }: Props) {
               open && 'rotate-90',
             )}
           />
-          <span className="font-mono font-medium text-foreground">
-            {truncateAgentId(agent.agentId)}
-          </span>
+          {desc !== null ? (
+            <span className="font-medium text-foreground" title={agent.agentId}>
+              {cutAgentLabel(desc)}
+            </span>
+          ) : (
+            <span className="font-mono font-medium text-foreground">
+              {truncateAgentId(agent.agentId)}
+            </span>
+          )}
           {agent.durationMs !== undefined && (
             <span className="ml-1 text-muted-foreground">
               {formatDuration(agent.durationMs)}

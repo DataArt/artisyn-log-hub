@@ -60,7 +60,15 @@ sessions/<sessionId>/artisyn.jsonl
   `userEmail`. An email is stored instead of a user id because a raw id means nothing in another
   database. Since the OKF usage tab it also carries `okfSnapshotId` (the root's bound OKF snapshot
   id or `null`) — optional, so older zips without it stay valid; import binds from the
-  `artisyn.jsonl` lines below, never from this field.
+  `artisyn.jsonl` lines below, never from this field. Since hook `2.31.0` it also carries the
+  optional `agentDescription` / `workflowPhase` (`sessions.agent_description` / `workflow_phase`,
+  `string | null`), symmetric with the workflow run id. On import they pass through
+  `sanitizeAgentMeta` and are stored only for an `agent-…` session id and only when non-null (the
+  ingest rule; never clearing a stored value). An archive from before this change has neither
+  field and imports them as `NULL`. **Scope:** `findMatchingSessions` exports only root sessions
+  (an `artisyn` plus a `claude` log), so sub-agent sessions — the only ones that carry these
+  values — never reach a zip today (the same limit as `workflowRunId`); the fields guarantee the
+  format-level round-trip only. Exporting sub-agent sessions is out of scope.
 
 Scope is `all`, a date range or a list of session ids. `GET …/export-import/scope` previews the
 session count and approximate size before a job starts. Sessions are processed in batches of
@@ -120,7 +128,9 @@ The OKF snapshot ([okf-usage.md](okf-usage.md)) travels the same way as the harn
 - **Backward compatibility (DD-42)** — a zip from an older Log Hub (no `okfSnapshotId`, no OKF
   lines) imports with no snapshot (`okf_snapshot_id` stays `NULL`; the OKF tab shows the
   "no snapshot" state, access rows are still extracted). An older Log Hub importing a newer zip
-  ignores the unknown field and skips the unknown NDJSON line types.
+  ignores the unknown field and skips the unknown NDJSON line types. The same holds for the
+  optional `agentDescription` / `workflowPhase` in `session.json`: missing → `NULL`, ignored by an
+  older Log Hub.
 
 ### Jobs
 

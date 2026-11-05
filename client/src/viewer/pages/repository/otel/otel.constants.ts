@@ -48,7 +48,18 @@ export const OTEL_HELP_ANCHORS = {
   claudeCodeChange: 'claude-code-21282-change',
   troubleshooting: 'troubleshooting-otel-tab-is-empty',
   tabEmpty: 'otel-tab-is-empty',
+  // 2026-11-03 otel-cost-attribution, DD-18: slug of `## Plan and notional cost`.
+  plan: 'plan-and-notional-cost',
 } as const;
+
+/** Session plan note (2026-11-03 otel-cost-attribution, DD-18). */
+export function OTEL_PLAN_NOTE(plan: string): string {
+  return `Claude Code reports plan ${plan}. On a subscription plan, OTEL cost_usd is a list-price equivalent, not billed money.`;
+}
+
+/** The one-line explanation under the plan mix of the repository / team Total tile (DD-18). */
+export const OTEL_PLAN_EXPLANATION =
+  'On subscription plans cost_usd is list-price equivalent, not billed.';
 
 /**
  * Values of the sessions list `otelReason=` filter: every reason a hook reports plus `no-status`

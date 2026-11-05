@@ -191,6 +191,97 @@ export interface CostBreakdown {
   subagentPricingMissing: boolean;
   unpricedModels: string[];
   costExcludesUtilityCalls: boolean;
+  /**
+   * Whether some sub-agent's cost in `subagentCost` was taken from OTEL because it exceeds
+   * the transcript cost ({@link selectSubagentCost}; 2026-11-03 otel-cost-attribution FR-6).
+   * Added later, so a consumer must treat it as optional.
+   */
+  subagentCostFromOtel?: boolean;
+}
+
+/**
+ * First Claude Code version whose sub-agent transcripts record every API call
+ * (2026-11-03 otel-cost-attribution FR-6). Before it, a sub-agent's transcript can miss
+ * calls, so its OTEL-reported cost may exceed the transcript cost.
+ */
+export const OTEL_SUBAGENT_COST_FIX_VERSION = '2.1.307';
+
+/**
+ * Boolean SQL: whether the version string `versionExpr` is strictly below `version`
+ * (both `major.minor.patch`, compared numerically). NULL when `versionExpr` is NULL or does
+ * not start with a parsable `\d+.\d+.\d+`.
+ */
+export function ccVersionBeforeSql(versionExpr: SQL, version: string): SQL {
+  const m = /^(\d+)\.(\d+)\.(\d+)/.exec(version);
+  if (!m) throw new Error(`ccVersionBeforeSql: bad version ${version}`);
+  const [a, b, c] = [Number(m[1]), Number(m[2]), Number(m[3])];
+  return sql`((regexp_match(${versionExpr}, '^(\\d+)\\.(\\d+)\\.(\\d+)'))::int[] < ARRAY[${sql.raw(String(a))}, ${sql.raw(String(b))}, ${sql.raw(String(c))}]::int[])`;
+}
+
+/**
+ * Float USD SQL: the OTEL-reported cost of one sub-agent of an old Claude Code
+ * (< {@link OTEL_SUBAGENT_COST_FIX_VERSION}) — the sum of the root's `otel_calls` whose
+ * `agent_id` is the sub-agent's session id without its `agent-` prefix. NULL when the version
+ * gate fails, the version is unknown, or there are no matching calls.
+ *
+ * - `claudeVersion` / `claudeVersionOtel`: the sub-agent's `session_stats` version columns
+ *   (the transcript one wins when non-empty);
+ * - `subSessionId`: the sub-agent's `sessions.session_id`;
+ * - `rootRowId`: the root's `sessions.id` (OTEL calls are recorded under the root).
+ */
+export function subagentOtelCostSql({
+  claudeVersion,
+  claudeVersionOtel,
+  subSessionId,
+  rootRowId,
+}: {
+  claudeVersion: SQL;
+  claudeVersionOtel: SQL;
+  subSessionId: SQL;
+  rootRowId: SQL;
+}): SQL {
+  const version = sql`COALESCE(NULLIF(${claudeVersion}, ''), ${claudeVersionOtel})`;
+  return sql`(CASE WHEN ${ccVersionBeforeSql(version, OTEL_SUBAGENT_COST_FIX_VERSION)} THEN (
+    SELECT SUM(oc_sa.cost_usd_micros)::float / 1e6
+    FROM otel_calls oc_sa
+    WHERE oc_sa.session_id = ${rootRowId}
+      AND oc_sa.agent_id = regexp_replace(${subSessionId}, '^agent-', '')
+  ) END)`;
+}
+
+/** Input of {@link selectSubagentCost}: one sub-agent's cost sources. */
+export interface SubagentCostInput {
+  transcriptCost: number | null;
+  modelId: string | null;
+  otelCostUsd: number | null;
+}
+
+/** Output of {@link selectSubagentCost}. */
+export interface SubagentCostSelection {
+  cost: number | null;
+  pricingMissing: boolean;
+  fromOtel: boolean;
+}
+
+/**
+ * The FR-6 rule for one sub-agent's cost (TypeScript twin of the SQL in `treeCostCtes`,
+ * pinned by algorithm rows): with an OTEL cost (old Claude Code only, see
+ * {@link subagentOtelCostSql}) the larger of transcript and OTEL; otherwise the transcript
+ * cost. Unpriced only when there is neither a transcript cost nor an OTEL cost for a named
+ * model. `fromOtel` when the OTEL cost strictly exceeds the transcript cost.
+ */
+export function selectSubagentCost({
+  transcriptCost,
+  modelId,
+  otelCostUsd,
+}: SubagentCostInput): SubagentCostSelection {
+  const base = transcriptCost ?? 0;
+  return {
+    cost: otelCostUsd != null ? Math.max(base, otelCostUsd) : transcriptCost,
+    pricingMissing:
+      otelCostUsd == null && transcriptCost == null && modelId != null,
+    fromOtel: otelCostUsd != null && otelCostUsd > base,
+  };
 }
 
 /**

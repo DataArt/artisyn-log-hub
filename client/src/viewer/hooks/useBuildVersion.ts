@@ -1,8 +1,19 @@
 import { useQuery } from '@tanstack/react-query';
 
-interface BuildVersion {
+/** `dist/build.origin.json` as served by `/health/version` — where and how the build was made. */
+export interface BuildOrigin {
+  branch: string;
+  version: string;
+  /** ISO 8601 UTC. */
+  builtAt: string;
+  officialRelease: boolean;
+}
+
+export interface BuildVersion {
   version: string;
   gitCommit: string;
+  /** Absent on older servers and on unbundled (dev) servers without `build.origin.json`. */
+  origin?: BuildOrigin;
 }
 
 async function fetchBuildVersion(): Promise<BuildVersion> {

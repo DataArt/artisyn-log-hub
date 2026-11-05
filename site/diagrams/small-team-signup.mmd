@@ -1,0 +1,11 @@
+sequenceDiagram
+  participant T as Teammate
+  participant L as Log Hub
+  participant S as SMTP relay
+  T->>L: sign up (email, password)
+  L->>L: check ALLOWED_EMAIL_DOMAINS, create unconfirmed account
+  L->>S: confirmation email
+  S-->>T: link = PUBLIC_BASE_URL/…
+  T->>L: open the link
+  L-->>T: account confirmed
+  T->>L: sign in

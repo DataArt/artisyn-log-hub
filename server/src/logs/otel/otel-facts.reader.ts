@@ -34,6 +34,7 @@ import {
   loadOtelTeamRepoCounts,
   loadOtelTeamRepos,
   loadOtelTeamRepositories,
+  loadPlanMix,
   loadPresence,
   loadQuerySourceRows,
   loadRealtimeCounts,
@@ -87,6 +88,7 @@ import type {
   OtelReasonKey,
   OtelRepoKpis,
   OtelSessionKpis,
+  OtelSessionPlan,
   OtelSessionStatus,
   OtelSlowReason,
   OtelSpanRow,
@@ -582,6 +584,7 @@ export class OtelFactsReader {
       filterOptions: { models: [], ccVersions: [] },
       sessions: [],
       coverage: toOtelCoverage(coverage),
+      planMix: [],
     };
     if (!presence.hasOtel) return base;
 
@@ -596,6 +599,7 @@ export class OtelFactsReader {
       filterOptions,
       sessions,
       realtime,
+      planMix,
     ] = await Promise.all([
       loadRolledBuckets(
         this.db,
@@ -611,6 +615,7 @@ export class OtelFactsReader {
       loadFilterOptions(this.db, roots, window),
       loadSessionRows(this.db, source, OTEL_SESSIONS_LIMIT),
       loadRealtimeCounts(this.db, roots, query.from, now),
+      loadPlanMix(this.db, source),
     ]);
 
     return {
@@ -619,6 +624,7 @@ export class OtelFactsReader {
       buckets: toOtelBuckets(buckets),
       kpis: deriveRepoKpis(kpiSums),
       kpisPrev: prevSums.rowCount > 0 ? deriveRepoKpis(prevSums) : null,
+      planMix,
       flows,
       querySources: toQuerySourceRows(querySources),
       filterOptions: {
@@ -724,6 +730,7 @@ export class OtelFactsReader {
       people: [],
       repositories: [],
       coverage: toOtelCoverage(coverage),
+      planMix: [],
     };
     if (!presence.hasOtel) return base;
 
@@ -755,6 +762,7 @@ export class OtelFactsReader {
       people,
       repositories,
       realtime,
+      planMix,
     ] = await Promise.all([
       loadRolledBuckets(
         this.db,
@@ -777,6 +785,7 @@ export class OtelFactsReader {
       loadOtelTeamPeople(this.db, source, now),
       loadOtelTeamRepositories(this.db, source, now),
       loadRealtimeCounts(this.db, roots, query.from, now),
+      loadPlanMix(this.db, source),
     ]);
     const trends = buildOtelPersonTrends(personBuckets ?? buckets);
 
@@ -787,6 +796,7 @@ export class OtelFactsReader {
       kpis: deriveTeamKpis(kpiSums, repoCounts),
       kpisPrev:
         prevSums.rowCount > 0 ? deriveTeamKpis(prevSums, prevRepoCounts) : null,
+      planMix,
       flows,
       querySources: toQuerySourceRows(querySources),
       filterOptions: {
@@ -857,6 +867,7 @@ export class OtelFactsReader {
         );
         const interval = await this.sessionInterval(tx, root.rootId, query);
         const cursor = formatOtelCursor(state.seq);
+        const plan = toSessionPlan(state, attributesMasked);
 
         // Empty-delta fast path: nothing changed since the client's cursor.
         if (since !== null && since === state.seq) {
@@ -870,6 +881,7 @@ export class OtelFactsReader {
             spans: [],
             kpis: null,
             querySources: null,
+            plan,
           };
         }
 
@@ -942,6 +954,7 @@ export class OtelFactsReader {
           ),
           kpis: deriveSessionKpis(kpiSums),
           querySources: toQuerySourceRows(querySources),
+          plan,
         };
       },
       { isolationLevel: 'repeatable read', accessMode: 'read only' },
@@ -983,6 +996,31 @@ export class OtelFactsReader {
       spans: [],
       kpis: null,
       querySources: null,
+      plan: null,
     };
   }
+}
+
+/**
+ * The session's reported account (2026-11-03 otel-cost-attribution, DD-10): null when none of
+ * the four values was reported; `customBaseUrl` is masked like span attributes.
+ */
+function toSessionPlan(
+  state: OtelStateRow,
+  attributesMasked: boolean,
+): OtelSessionPlan | null {
+  if (
+    state.plan === null &&
+    state.seatType === null &&
+    state.provider === null &&
+    state.customBaseUrl === null
+  ) {
+    return null;
+  }
+  return {
+    plan: state.plan,
+    seatType: state.seatType,
+    provider: state.provider,
+    customBaseUrl: attributesMasked ? null : state.customBaseUrl,
+  };
 }

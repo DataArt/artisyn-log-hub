@@ -1,0 +1,1344 @@
+[
+  {
+    "id": "LT-01",
+    "input": {
+      "kind": "key",
+      "key": "home"
+    },
+    "expected": {
+      "parsed": {
+        "type": "home",
+        "qualified": false
+      },
+      "formatted": "home"
+    },
+    "note": "Rule 1: the literal home key, no suffix."
+  },
+  {
+    "id": "LT-02",
+    "input": {
+      "kind": "key",
+      "key": "team:7"
+    },
+    "expected": {
+      "parsed": {
+        "type": "team",
+        "teamId": 7,
+        "qualified": false
+      },
+      "formatted": "team:7"
+    },
+    "note": "Rule 1: team:<teamId>; a team key never carries a placement suffix."
+  },
+  {
+    "id": "LT-03",
+    "input": {
+      "kind": "key",
+      "key": "noteam"
+    },
+    "expected": {
+      "parsed": {
+        "type": "noteam",
+        "noteam": true,
+        "qualified": false
+      },
+      "formatted": "noteam"
+    },
+    "note": "Rule 1: the literal No-team key."
+  },
+  {
+    "id": "LT-04",
+    "input": {
+      "kind": "key",
+      "key": "repo:12@7"
+    },
+    "expected": {
+      "parsed": {
+        "type": "repo",
+        "repoId": 12,
+        "teamId": 7,
+        "qualified": true
+      },
+      "formatted": "repo:12@7"
+    },
+    "note": "Rule 2: suffix after the last @ is team 7, so the key is qualified; formatting gives it back unchanged."
+  },
+  {
+    "id": "LT-05",
+    "input": {
+      "kind": "key",
+      "key": "repo:31@noteam"
+    },
+    "expected": {
+      "parsed": {
+        "type": "repo",
+        "repoId": 31,
+        "noteam": true,
+        "qualified": true
+      },
+      "formatted": "repo:31@noteam"
+    },
+    "note": "Rule 2: the suffix noteam places the repo under No team."
+  },
+  {
+    "id": "LT-06",
+    "input": {
+      "kind": "key",
+      "key": "session:40"
+    },
+    "expected": {
+      "parsed": {
+        "type": "session",
+        "rootId": 40,
+        "qualified": false
+      },
+      "formatted": "session:40"
+    },
+    "note": "Rule 2: no @, so the key is unqualified (resolved to its first placement, rule 12)."
+  },
+  {
+    "id": "LT-07",
+    "input": {
+      "kind": "key",
+      "key": "agent:40:ag-1:x@7"
+    },
+    "expected": {
+      "parsed": {
+        "type": "agent",
+        "rootId": 40,
+        "agentKey": "ag-1:x",
+        "teamId": 7,
+        "qualified": true
+      },
+      "formatted": "agent:40:ag-1:x@7"
+    },
+    "note": "Rule 3: split at the first two ':' only, so the agent id keeps its own ':'; the suffix is split at the last @."
+  },
+  {
+    "id": "LT-08",
+    "input": {
+      "kind": "key",
+      "key": "agent:40:main@noteam"
+    },
+    "expected": {
+      "parsed": {
+        "type": "agent",
+        "rootId": 40,
+        "agentKey": "main",
+        "noteam": true,
+        "qualified": true
+      },
+      "formatted": "agent:40:main@noteam"
+    },
+    "note": "Rule 3: the main thread's agent key is the literal main."
+  },
+  {
+    "id": "LT-09",
+    "input": {
+      "kind": "key",
+      "key": "bogus"
+    },
+    "expected": {
+      "parsed": null,
+      "formatted": null
+    },
+    "note": "Rule 4: not home / noteam and no known prefix -> malformed (400 at the route)."
+  },
+  {
+    "id": "LT-10",
+    "input": {
+      "kind": "key",
+      "key": "team:0"
+    },
+    "expected": {
+      "parsed": null,
+      "formatted": null
+    },
+    "note": "Rule 4: an id is a positive integer without a leading zero; 0 is rejected."
+  },
+  {
+    "id": "LT-11",
+    "input": {
+      "kind": "key",
+      "key": "repo:012@7"
+    },
+    "expected": {
+      "parsed": null,
+      "formatted": null
+    },
+    "note": "Rule 4: a leading zero is rejected, so one id has one spelling."
+  },
+  {
+    "id": "LT-12",
+    "input": {
+      "kind": "key",
+      "key": "session:2147483648"
+    },
+    "expected": {
+      "parsed": null,
+      "formatted": null
+    },
+    "note": "Rule 4: 2147483648 > 2147483647, the largest Postgres int."
+  },
+  {
+    "id": "LT-13",
+    "input": {
+      "kind": "key",
+      "key": "session:40@x"
+    },
+    "expected": {
+      "parsed": null,
+      "formatted": null
+    },
+    "note": "Rule 4: the suffix must be a team id or noteam."
+  },
+  {
+    "id": "LT-14",
+    "input": {
+      "kind": "key",
+      "key": "agent:40"
+    },
+    "expected": {
+      "parsed": null,
+      "formatted": null
+    },
+    "note": "Rule 4: an agent key needs <rootId>:<agentKey>; there is no second ':'."
+  },
+  {
+    "id": "LT-15",
+    "input": {
+      "kind": "key",
+      "key": "agent:40:"
+    },
+    "expected": {
+      "parsed": null,
+      "formatted": null
+    },
+    "note": "Rule 4: an empty agent key is malformed."
+  },
+  {
+    "id": "LT-16",
+    "input": {
+      "kind": "key",
+      "key": "team:7@1"
+    },
+    "expected": {
+      "parsed": null,
+      "formatted": null
+    },
+    "note": "Rule 4: a team key has no suffix, and '7@1' is not an id."
+  },
+  {
+    "id": "LT-20",
+    "input": {
+      "kind": "tree",
+      "now": "2026-01-10T12:00:00.000Z",
+      "scopeTeams": [
+        {
+          "teamId": 2,
+          "teamName": "Beta",
+          "userIds": null,
+          "restricted": false
+        },
+        {
+          "teamId": 1,
+          "teamName": "Alpha",
+          "userIds": null,
+          "restricted": false
+        }
+      ],
+      "candidates": [
+        {
+          "rootId": 100,
+          "live": true
+        }
+      ],
+      "placements": [
+        {
+          "rootId": 100,
+          "userId": 10,
+          "userEmail": "ann@x.io",
+          "teamId": 2,
+          "repoId": 21,
+          "repoLabel": "https://git/r",
+          "firstPrompt": "Fix the build"
+        },
+        {
+          "rootId": 100,
+          "userId": 10,
+          "userEmail": "ann@x.io",
+          "teamId": 1,
+          "repoId": 11,
+          "repoLabel": "https://git/r",
+          "firstPrompt": "Fix the build"
+        }
+      ],
+      "rootTotals": [
+        {
+          "rootId": 100,
+          "costUsdMicros": "1000",
+          "calls": 2,
+          "firstEventAt": "2026-01-10T11:00:00.000Z",
+          "lastActivityAt": "2026-01-10T11:55:00.000Z"
+        }
+      ],
+      "agents": [
+        {
+          "rootId": 100,
+          "agentKey": "main",
+          "agentLabel": "",
+          "costUsdMicros": "1000",
+          "calls": 2,
+          "firstEventAt": "2026-01-10T11:00:00.000Z",
+          "lastEventAt": "2026-01-10T11:55:00.000Z"
+        }
+      ],
+      "retainedKeys": [],
+      "retainedRepoLabels": []
+    },
+    "expected": {
+      "nodes": [
+        {
+          "key": "home",
+          "parentKey": null,
+          "live": true,
+          "cost": "1000",
+          "calls": 2,
+          "liveSessions": 1,
+          "liveAgents": 1,
+          "runningMs": 3300000
+        },
+        {
+          "key": "team:1",
+          "parentKey": "home",
+          "label": "Alpha",
+          "live": true,
+          "cost": "1000",
+          "liveSessions": 1
+        },
+        {
+          "key": "repo:11@1",
+          "parentKey": "team:1",
+          "label": "https://git/r",
+          "cost": "1000"
+        },
+        {
+          "key": "session:100@1",
+          "parentKey": "repo:11@1",
+          "label": "ann@x.io · Fix the build",
+          "live": true,
+          "cost": "1000",
+          "liveSessions": 1,
+          "liveAgents": 1,
+          "runningMs": 3300000
+        },
+        {
+          "key": "agent:100:main@1",
+          "parentKey": "session:100@1",
+          "label": "main",
+          "live": true,
+          "inTree": true,
+          "cost": "1000",
+          "liveAgents": 1,
+          "runningMs": 3300000
+        },
+        {
+          "key": "team:2",
+          "parentKey": "home",
+          "label": "Beta",
+          "live": true,
+          "cost": "1000"
+        },
+        {
+          "key": "repo:21@2",
+          "parentKey": "team:2",
+          "cost": "1000"
+        },
+        {
+          "key": "session:100@2",
+          "parentKey": "repo:21@2",
+          "cost": "1000"
+        },
+        {
+          "key": "agent:100:main@2",
+          "parentKey": "session:100@2",
+          "live": true
+        }
+      ],
+      "resolve": {
+        "session:100": "session:100@1",
+        "repo:21": "repo:21@2",
+        "agent:100:main": "agent:100:main@1",
+        "session:100@2": "session:100@2"
+      },
+      "rootIdsOf": {
+        "home": [
+          100
+        ],
+        "team:2": [
+          100
+        ]
+      },
+      "distinctFootnote": {
+        "home": true,
+        "team:1": false
+      }
+    },
+    "note": "Rules 5, 9, 10, 12, 14: one root of a URL linked to two teams is placed under both teams (sorted by name: Alpha before Beta, whatever the input order). Home sums DISTINCT roots: 1000, not 2000; runningMs = 11:55 - 11:00 = 3 300 000. The children of home sum to 2000 > 1000 -> footnote. Unqualified keys resolve to the first placement in display order (Alpha); agentLabel '' -> label = agentKey 'main'."
+  },
+  {
+    "id": "LT-21",
+    "input": {
+      "kind": "tree",
+      "now": "2026-01-10T12:00:00.000Z",
+      "scopeTeams": [
+        {
+          "teamId": 1,
+          "teamName": "Alpha",
+          "userIds": null,
+          "restricted": false
+        }
+      ],
+      "candidates": [
+        {
+          "rootId": 200,
+          "live": true
+        }
+      ],
+      "placements": [
+        {
+          "rootId": 200,
+          "userId": 10,
+          "userEmail": "ann@x.io",
+          "teamId": 1,
+          "repoId": 12,
+          "repoLabel": "https://git/b",
+          "firstPrompt": "Deploy"
+        },
+        {
+          "rootId": 200,
+          "userId": 10,
+          "userEmail": "ann@x.io",
+          "teamId": 1,
+          "repoId": 11,
+          "repoLabel": "https://git/a",
+          "firstPrompt": "Deploy"
+        }
+      ],
+      "rootTotals": [
+        {
+          "rootId": 200,
+          "costUsdMicros": "500",
+          "calls": 1,
+          "firstEventAt": "2026-01-10T11:50:00.000Z",
+          "lastActivityAt": "2026-01-10T11:50:00.000Z"
+        }
+      ],
+      "agents": [],
+      "retainedKeys": [],
+      "retainedRepoLabels": []
+    },
+    "expected": {
+      "nodes": [
+        {
+          "key": "home",
+          "cost": "500",
+          "calls": 1,
+          "liveSessions": 1,
+          "liveAgents": 0,
+          "runningMs": 0
+        },
+        {
+          "key": "team:1",
+          "cost": "500",
+          "liveSessions": 1
+        },
+        {
+          "key": "repo:11@1",
+          "label": "https://git/a",
+          "cost": "500"
+        },
+        {
+          "key": "session:200@1",
+          "parentKey": "repo:11@1"
+        },
+        {
+          "key": "repo:12@1",
+          "label": "https://git/b",
+          "cost": "500"
+        },
+        {
+          "key": "session:200@1",
+          "parentKey": "repo:12@1"
+        }
+      ],
+      "rootIdsOf": {
+        "team:1": [
+          200
+        ],
+        "repo:12@1": [
+          200
+        ]
+      },
+      "childrenOf": {
+        "repo:12@1": [
+          "session:200@1"
+        ],
+        "team:1": [
+          "repo:11@1",
+          "repo:12@1"
+        ]
+      },
+      "distinctFootnote": {
+        "team:1": true,
+        "repo:11@1": false,
+        "home": false
+      }
+    },
+    "note": "Rules 5, 10, 11, 14: a root linked to two repos of one team sits under both repo nodes; the team counts it once (500). Repos tie on cost 500, so they sort by label (a before b). Team children sum to 1000 > 500 -> footnote; home's only child is the team (500 = 500) -> none. A single call: runningMs = 0."
+  },
+  {
+    "id": "LT-22",
+    "input": {
+      "kind": "tree",
+      "now": "2026-01-10T12:00:00.000Z",
+      "scopeTeams": [
+        {
+          "teamId": 1,
+          "teamName": "Zeta",
+          "userIds": null,
+          "restricted": false
+        }
+      ],
+      "candidates": [
+        {
+          "rootId": 300,
+          "live": true
+        },
+        {
+          "rootId": 301,
+          "live": true
+        }
+      ],
+      "placements": [
+        {
+          "rootId": 300,
+          "userId": 10,
+          "userEmail": "ann@x.io",
+          "teamId": null,
+          "repoId": 31,
+          "repoLabel": "https://git/own",
+          "firstPrompt": "Own work"
+        },
+        {
+          "rootId": 301,
+          "userId": 10,
+          "userEmail": "ann@x.io",
+          "teamId": 1,
+          "repoId": 11,
+          "repoLabel": "https://git/team",
+          "firstPrompt": "Team work"
+        }
+      ],
+      "rootTotals": [
+        {
+          "rootId": 300,
+          "costUsdMicros": "700",
+          "calls": 2,
+          "firstEventAt": "2026-01-10T11:58:00.000Z",
+          "lastActivityAt": "2026-01-10T11:59:00.000Z"
+        },
+        {
+          "rootId": 301,
+          "costUsdMicros": "200",
+          "calls": 1,
+          "firstEventAt": "2026-01-10T11:59:00.000Z",
+          "lastActivityAt": "2026-01-10T11:59:00.000Z"
+        }
+      ],
+      "agents": [],
+      "retainedKeys": [],
+      "retainedRepoLabels": []
+    },
+    "expected": {
+      "nodes": [
+        {
+          "key": "home",
+          "cost": "900",
+          "calls": 3,
+          "liveSessions": 2,
+          "runningMs": 60000
+        },
+        {
+          "key": "team:1",
+          "label": "Zeta",
+          "cost": "200"
+        },
+        {
+          "key": "repo:11@1",
+          "cost": "200"
+        },
+        {
+          "key": "session:301@1",
+          "cost": "200"
+        },
+        {
+          "key": "noteam",
+          "type": "noteam",
+          "parentKey": "home",
+          "label": "No team",
+          "live": true,
+          "cost": "700",
+          "liveSessions": 1
+        },
+        {
+          "key": "repo:31@noteam",
+          "parentKey": "noteam",
+          "label": "https://git/own",
+          "cost": "700"
+        },
+        {
+          "key": "session:300@noteam",
+          "parentKey": "repo:31@noteam",
+          "label": "ann@x.io · Own work",
+          "runningMs": 60000
+        }
+      ],
+      "resolve": {
+        "session:300": "session:300@noteam",
+        "repo:31": "repo:31@noteam",
+        "noteam": "noteam"
+      },
+      "distinctFootnote": {
+        "home": false
+      }
+    },
+    "note": "Rules 6, 9: a placement with teamId null goes under No team, which sorts after every team even though 'Zeta' sorts late. Home = 700 + 200 = 900, 3 calls, 2 live; runningMs = max(60 000, 0). Children of home sum to 900 = home -> no footnote."
+  },
+  {
+    "id": "LT-23",
+    "input": {
+      "kind": "tree",
+      "now": "2026-01-10T12:00:00.000Z",
+      "scopeTeams": [
+        {
+          "teamId": 1,
+          "teamName": "Alpha",
+          "userIds": [
+            10
+          ],
+          "restricted": true
+        }
+      ],
+      "candidates": [
+        {
+          "rootId": 400,
+          "live": true
+        },
+        {
+          "rootId": 401,
+          "live": true
+        }
+      ],
+      "placements": [
+        {
+          "rootId": 400,
+          "userId": 10,
+          "userEmail": "ann@x.io",
+          "teamId": 1,
+          "repoId": 11,
+          "repoLabel": "https://git/r",
+          "firstPrompt": null
+        },
+        {
+          "rootId": 401,
+          "userId": 11,
+          "userEmail": "bob@x.io",
+          "teamId": 1,
+          "repoId": 11,
+          "repoLabel": "https://git/r",
+          "firstPrompt": "Bob's work"
+        },
+        {
+          "rootId": 402,
+          "userId": 10,
+          "userEmail": "ann@x.io",
+          "teamId": 1,
+          "repoId": 11,
+          "repoLabel": "https://git/r",
+          "firstPrompt": "Not a candidate"
+        }
+      ],
+      "rootTotals": [
+        {
+          "rootId": 400,
+          "costUsdMicros": "300",
+          "calls": 1,
+          "firstEventAt": "2026-01-10T11:59:00.000Z",
+          "lastActivityAt": "2026-01-10T11:59:00.000Z"
+        },
+        {
+          "rootId": 401,
+          "costUsdMicros": "900",
+          "calls": 3,
+          "firstEventAt": "2026-01-10T11:00:00.000Z",
+          "lastActivityAt": "2026-01-10T11:59:00.000Z"
+        }
+      ],
+      "agents": [],
+      "retainedKeys": [],
+      "retainedRepoLabels": []
+    },
+    "expected": {
+      "nodes": [
+        {
+          "key": "home",
+          "cost": "300",
+          "calls": 1,
+          "liveSessions": 1
+        },
+        {
+          "key": "team:1",
+          "restricted": true,
+          "cost": "300",
+          "liveSessions": 1
+        },
+        {
+          "key": "repo:11@1",
+          "restricted": false,
+          "cost": "300"
+        },
+        {
+          "key": "session:400@1",
+          "label": "ann@x.io · prompt hidden",
+          "cost": "300"
+        }
+      ],
+      "resolve": {
+        "session:401": null,
+        "session:402": null
+      },
+      "rootIdsOf": {
+        "team:1": [
+          400
+        ]
+      }
+    },
+    "note": "Rules 5, 7, 13: the restricted team's filter is [10], so bob's root 401 is dropped (home 300, not 1200); the team node carries restricted. Root 402 is not a candidate and is not placed. A prompt masked to null labels the session 'prompt hidden'."
+  },
+  {
+    "id": "LT-24",
+    "input": {
+      "kind": "tree",
+      "now": "2026-01-10T12:00:00.000Z",
+      "scopeTeams": [
+        {
+          "teamId": 1,
+          "teamName": "Alpha",
+          "userIds": null,
+          "restricted": false
+        }
+      ],
+      "candidates": [
+        {
+          "rootId": 500,
+          "live": false
+        }
+      ],
+      "placements": [
+        {
+          "rootId": 500,
+          "userId": 10,
+          "userEmail": "ann@x.io",
+          "teamId": 1,
+          "repoId": 11,
+          "repoLabel": "https://git/r",
+          "firstPrompt": "Old"
+        }
+      ],
+      "rootTotals": [
+        {
+          "rootId": 500,
+          "costUsdMicros": "300",
+          "calls": 1,
+          "firstEventAt": "2026-01-10T08:00:00.000Z",
+          "lastActivityAt": "2026-01-10T09:00:00.000Z"
+        }
+      ],
+      "agents": [
+        {
+          "rootId": 500,
+          "agentKey": "main",
+          "agentLabel": "",
+          "costUsdMicros": "300",
+          "calls": 1,
+          "firstEventAt": "2026-01-10T08:00:00.000Z",
+          "lastEventAt": "2026-01-10T09:00:00.000Z"
+        }
+      ],
+      "retainedKeys": [
+        "session:500@1"
+      ],
+      "retainedRepoLabels": []
+    },
+    "expected": {
+      "nodes": [
+        {
+          "key": "home",
+          "live": false,
+          "cost": "300",
+          "calls": 1,
+          "liveSessions": 0,
+          "liveAgents": 0,
+          "runningMs": 0
+        },
+        {
+          "key": "team:1",
+          "live": false,
+          "cost": "300"
+        },
+        {
+          "key": "repo:11@1",
+          "live": false,
+          "cost": "300"
+        },
+        {
+          "key": "session:500@1",
+          "live": false,
+          "inTree": true,
+          "cost": "300",
+          "liveSessions": 0,
+          "liveAgents": 0,
+          "runningMs": 3600000
+        },
+        {
+          "key": "agent:500:main@1",
+          "live": false,
+          "inTree": false,
+          "cost": "300",
+          "liveAgents": 0
+        }
+      ],
+      "resolve": {
+        "session:500": "session:500@1",
+        "agent:500:main": null
+      }
+    },
+    "note": "Rules 8, 9, 13, 15: a retained ended root (candidate live:false) is placed and figured like a live one but stays live:false; its session runningMs is 09:00 - 08:00 = 3 600 000, yet parents take runningMs only over live sessions -> 0. Its agent is not live (root ended), and its last call (09:00) is older than OTEL_LIVE_RECENT_MS (2 h), so it is only in the breakdown (inTree false) and does not resolve."
+  },
+  {
+    "id": "LT-25",
+    "input": {
+      "kind": "tree",
+      "now": "2026-01-10T12:00:00.000Z",
+      "scopeTeams": [
+        {
+          "teamId": 1,
+          "teamName": "Alpha",
+          "userIds": null,
+          "restricted": false
+        }
+      ],
+      "candidates": [
+        {
+          "rootId": 500,
+          "live": false
+        }
+      ],
+      "placements": [
+        {
+          "rootId": 500,
+          "userId": 10,
+          "userEmail": "ann@x.io",
+          "teamId": 1,
+          "repoId": 11,
+          "repoLabel": "https://git/r",
+          "firstPrompt": "Old"
+        }
+      ],
+      "rootTotals": [
+        {
+          "rootId": 500,
+          "costUsdMicros": "300",
+          "calls": 1,
+          "firstEventAt": "2026-01-10T08:00:00.000Z",
+          "lastActivityAt": "2026-01-10T09:00:00.000Z"
+        }
+      ],
+      "agents": [
+        {
+          "rootId": 500,
+          "agentKey": "main",
+          "agentLabel": "",
+          "costUsdMicros": "300",
+          "calls": 1,
+          "firstEventAt": "2026-01-10T08:00:00.000Z",
+          "lastEventAt": "2026-01-10T09:00:00.000Z"
+        }
+      ],
+      "retainedKeys": [
+        "agent:500:main"
+      ],
+      "retainedRepoLabels": []
+    },
+    "expected": {
+      "nodes": [
+        {
+          "key": "home"
+        },
+        {
+          "key": "team:1"
+        },
+        {
+          "key": "repo:11@1"
+        },
+        {
+          "key": "session:500@1",
+          "live": false
+        },
+        {
+          "key": "agent:500:main@1",
+          "live": false,
+          "inTree": true
+        }
+      ],
+      "resolve": {
+        "agent:500:main": "agent:500:main@1"
+      }
+    },
+    "note": "Rule 15: a retained agent key (here unqualified, so it matches any placement) keeps the ended agent in the tree, still live:false."
+  },
+  {
+    "id": "LT-26",
+    "input": {
+      "kind": "tree",
+      "now": "2026-01-10T12:00:00.000Z",
+      "scopeTeams": [
+        {
+          "teamId": 1,
+          "teamName": "Alpha",
+          "userIds": null,
+          "restricted": false
+        }
+      ],
+      "candidates": [],
+      "placements": [],
+      "rootTotals": [],
+      "agents": [],
+      "retainedKeys": [
+        "repo:11@1"
+      ],
+      "retainedRepoLabels": [
+        {
+          "teamId": 1,
+          "repoId": 11,
+          "label": "https://git/r"
+        }
+      ]
+    },
+    "expected": {
+      "nodes": [
+        {
+          "key": "home",
+          "live": false,
+          "cost": "0",
+          "calls": 0,
+          "liveSessions": 0
+        },
+        {
+          "key": "team:1",
+          "label": "Alpha",
+          "live": false,
+          "cost": "0"
+        },
+        {
+          "key": "repo:11@1",
+          "parentKey": "team:1",
+          "label": "https://git/r",
+          "live": false,
+          "cost": "0",
+          "calls": 0
+        }
+      ],
+      "resolve": {
+        "repo:11@1": "repo:11@1",
+        "repo:11": "repo:11@1"
+      },
+      "rootIdsOf": {
+        "repo:11@1": []
+      }
+    },
+    "note": "Rule 16: a retained repo with nothing live keeps itself and its ancestors with zero totals; the label comes from retainedRepoLabels."
+  },
+  {
+    "id": "LT-27",
+    "input": {
+      "kind": "tree",
+      "now": "2026-01-10T12:00:00.000Z",
+      "scopeTeams": [
+        {
+          "teamId": 1,
+          "teamName": "Alpha",
+          "userIds": null,
+          "restricted": false
+        }
+      ],
+      "candidates": [],
+      "placements": [],
+      "rootTotals": [],
+      "agents": [],
+      "retainedKeys": [
+        "repo:11@1"
+      ],
+      "retainedRepoLabels": []
+    },
+    "expected": {
+      "nodes": [
+        {
+          "key": "home",
+          "live": false
+        }
+      ],
+      "resolve": {
+        "repo:11@1": null
+      }
+    },
+    "note": "Rule 16: a retained repo with no label (the caller cannot see it) is dropped, so the route falls back to home."
+  },
+  {
+    "id": "LT-28",
+    "input": {
+      "kind": "tree",
+      "now": "2026-01-10T12:00:00.000Z",
+      "scopeTeams": [
+        {
+          "teamId": 1,
+          "teamName": "Alpha",
+          "userIds": null,
+          "restricted": false
+        }
+      ],
+      "candidates": [],
+      "placements": [],
+      "rootTotals": [],
+      "agents": [],
+      "retainedKeys": [
+        "team:9"
+      ],
+      "retainedRepoLabels": []
+    },
+    "expected": {
+      "nodes": [
+        {
+          "key": "home"
+        }
+      ],
+      "resolve": {
+        "team:9": null
+      }
+    },
+    "note": "Rule 16: a retained team key is kept only for a team in scopeTeams; team 9 is not one."
+  },
+  {
+    "id": "LT-29",
+    "input": {
+      "kind": "tree",
+      "now": "2026-01-10T12:00:00.000Z",
+      "scopeTeams": [],
+      "candidates": [],
+      "placements": [],
+      "rootTotals": [],
+      "agents": [],
+      "retainedKeys": [
+        "noteam"
+      ],
+      "retainedRepoLabels": []
+    },
+    "expected": {
+      "nodes": [
+        {
+          "key": "home"
+        },
+        {
+          "key": "noteam",
+          "live": false,
+          "cost": "0"
+        }
+      ],
+      "resolve": {
+        "noteam": "noteam"
+      }
+    },
+    "note": "Rule 16: a retained No-team key keeps the empty No-team node."
+  },
+  {
+    "id": "LT-30",
+    "input": {
+      "kind": "tree",
+      "now": "2026-01-10T12:00:00.000Z",
+      "scopeTeams": [
+        {
+          "teamId": 1,
+          "teamName": "Alpha",
+          "userIds": null,
+          "restricted": false
+        }
+      ],
+      "candidates": [
+        {
+          "rootId": 600,
+          "live": true
+        },
+        {
+          "rootId": 601,
+          "live": true
+        },
+        {
+          "rootId": 602,
+          "live": false
+        }
+      ],
+      "placements": [
+        {
+          "rootId": 600,
+          "userId": 10,
+          "userEmail": "ann@x.io",
+          "teamId": 1,
+          "repoId": 11,
+          "repoLabel": "https://git/r",
+          "firstPrompt": "Long"
+        },
+        {
+          "rootId": 601,
+          "userId": 10,
+          "userEmail": "ann@x.io",
+          "teamId": 1,
+          "repoId": 11,
+          "repoLabel": "https://git/r",
+          "firstPrompt": "Short"
+        },
+        {
+          "rootId": 602,
+          "userId": 10,
+          "userEmail": "ann@x.io",
+          "teamId": 1,
+          "repoId": 11,
+          "repoLabel": "https://git/r",
+          "firstPrompt": "Ended"
+        }
+      ],
+      "rootTotals": [
+        {
+          "rootId": 600,
+          "costUsdMicros": "100",
+          "calls": 1,
+          "firstEventAt": "2026-01-10T10:00:00.000Z",
+          "lastActivityAt": "2026-01-10T11:58:00.000Z"
+        },
+        {
+          "rootId": 601,
+          "costUsdMicros": "200",
+          "calls": 1,
+          "firstEventAt": "2026-01-10T11:30:00.000Z",
+          "lastActivityAt": "2026-01-10T11:59:00.000Z"
+        },
+        {
+          "rootId": 602,
+          "costUsdMicros": "50",
+          "calls": 1,
+          "firstEventAt": "2026-01-10T06:00:00.000Z",
+          "lastActivityAt": "2026-01-10T11:00:00.000Z"
+        }
+      ],
+      "agents": [],
+      "retainedKeys": [
+        "session:602@1"
+      ],
+      "retainedRepoLabels": []
+    },
+    "expected": {
+      "nodes": [
+        {
+          "key": "home",
+          "cost": "350",
+          "calls": 3,
+          "liveSessions": 2,
+          "runningMs": 7080000,
+          "firstEventAt": "2026-01-10T06:00:00.000Z",
+          "lastActivityAt": "2026-01-10T11:59:00.000Z"
+        },
+        {
+          "key": "team:1",
+          "runningMs": 7080000
+        },
+        {
+          "key": "repo:11@1",
+          "runningMs": 7080000,
+          "liveSessions": 2
+        },
+        {
+          "key": "session:601@1",
+          "cost": "200",
+          "runningMs": 1740000
+        },
+        {
+          "key": "session:600@1",
+          "cost": "100",
+          "runningMs": 7080000
+        },
+        {
+          "key": "session:602@1",
+          "cost": "50",
+          "live": false,
+          "runningMs": 18000000
+        }
+      ]
+    },
+    "note": "Rules 9, 11: parent runningMs = max over LIVE sessions = max(11:58-10:00 = 7 080 000, 11:59-11:30 = 1 740 000); the ended 602 spans 5 h = 18 000 000 but is not live. Sums cover all three roots: 350, 3 calls; first = min (06:00), last = max (11:59). Sessions sort by cost desc: 601, 600, 602."
+  },
+  {
+    "id": "LT-31",
+    "input": {
+      "kind": "tree",
+      "now": "2026-01-10T12:00:00.000Z",
+      "scopeTeams": [
+        {
+          "teamId": 1,
+          "teamName": "Alpha",
+          "userIds": null,
+          "restricted": false
+        }
+      ],
+      "candidates": [
+        {
+          "rootId": 700,
+          "live": true
+        }
+      ],
+      "placements": [
+        {
+          "rootId": 700,
+          "userId": 10,
+          "userEmail": "ann@x.io",
+          "teamId": 1,
+          "repoId": 11,
+          "repoLabel": "https://git/r",
+          "firstPrompt": "Agents"
+        }
+      ],
+      "rootTotals": [
+        {
+          "rootId": 700,
+          "costUsdMicros": "900",
+          "calls": 5,
+          "firstEventAt": "2026-01-10T11:00:00.000Z",
+          "lastActivityAt": "2026-01-10T11:58:00.000Z"
+        }
+      ],
+      "agents": [
+        {
+          "rootId": 700,
+          "agentKey": "ag-3",
+          "agentLabel": "Plan",
+          "costUsdMicros": "0",
+          "calls": 1,
+          "firstEventAt": "2026-01-10T11:50:00.000Z",
+          "lastEventAt": "2026-01-10T11:50:00.000Z"
+        },
+        {
+          "rootId": 700,
+          "agentKey": "main",
+          "agentLabel": "",
+          "costUsdMicros": "600",
+          "calls": 2,
+          "firstEventAt": "2026-01-10T11:00:00.000Z",
+          "lastEventAt": "2026-01-10T11:58:00.000Z"
+        },
+        {
+          "rootId": 700,
+          "agentKey": "ag-1",
+          "agentLabel": "Explore",
+          "costUsdMicros": "200",
+          "calls": 1,
+          "firstEventAt": "2026-01-10T11:30:00.000Z",
+          "lastEventAt": "2026-01-10T11:40:00.000Z"
+        },
+        {
+          "rootId": 700,
+          "agentKey": "ag-2",
+          "agentLabel": "Empty",
+          "costUsdMicros": "0",
+          "calls": 0,
+          "firstEventAt": "2026-01-10T11:45:00.000Z",
+          "lastEventAt": "2026-01-10T11:45:00.000Z"
+        }
+      ],
+      "retainedKeys": [],
+      "retainedRepoLabels": []
+    },
+    "expected": {
+      "nodes": [
+        {
+          "key": "home",
+          "cost": "900",
+          "calls": 5,
+          "liveSessions": 1,
+          "liveAgents": 2
+        },
+        {
+          "key": "team:1",
+          "liveAgents": 2
+        },
+        {
+          "key": "repo:11@1",
+          "liveAgents": 2
+        },
+        {
+          "key": "session:700@1",
+          "cost": "900",
+          "calls": 5,
+          "liveAgents": 2,
+          "runningMs": 3480000
+        },
+        {
+          "key": "agent:700:main@1",
+          "label": "main",
+          "live": true,
+          "inTree": true,
+          "cost": "600",
+          "calls": 2,
+          "runningMs": 3480000
+        },
+        {
+          "key": "agent:700:ag-1@1",
+          "label": "Explore",
+          "live": false,
+          "inTree": true,
+          "cost": "200",
+          "liveAgents": 0,
+          "runningMs": 600000
+        },
+        {
+          "key": "agent:700:ag-3@1",
+          "label": "Plan",
+          "live": true,
+          "inTree": true,
+          "cost": "0",
+          "liveAgents": 1,
+          "runningMs": 0
+        }
+      ],
+      "childrenOf": {
+        "session:700@1": [
+          "agent:700:main@1",
+          "agent:700:ag-1@1",
+          "agent:700:ag-3@1"
+        ]
+      },
+      "distinctFootnote": {
+        "session:700@1": false
+      }
+    },
+    "note": "Rules 9, 15, 17: session totals include the hidden calls (900 / 5 calls) although the agents sum to 800 / 4 (no agent node for hidden). Agent liveness: main 2 min ago, ag-3 exactly 600 000 ms ago (<= OTEL_SESSION_ENDED_MS -> live), ag-1 20 min ago -> ended, but within OTEL_LIVE_RECENT_MS (2 h), so it stays in the tree greyed (inTree true, live false). ag-2 has 0 calls -> no node. Agents sort by cost desc (600, 200, 0). A session never carries the footnote."
+  }
+]

@@ -34,6 +34,7 @@ export const FAST_TICK_ENV: Readonly<Record<string, string>> = {
   SESSION_COST_RECOMPUTE_INTERVAL_MS: '50',
   AI_TOOL_VERSION_CHECK_ENABLED: 'false',
   MODEL_PRICING_FETCH_ENABLED: 'false',
+  LOG_HUB_RELEASE_CHECK_ENABLED: 'false',
 };
 
 /**

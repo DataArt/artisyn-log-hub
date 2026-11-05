@@ -16,6 +16,10 @@ root (sonnet-4-6) → A (haiku-4-5) → B (haiku-4-5, grandchild, `parentSession
   edits `invoice.ts` again (+1 −1); D edits `src/api/routes.ts` (+4 −0). Tree: written 36,
   diff +27 / −3, 3 unique files in 2 folders, concentration 62 (focused).
 - Tools (tree): Agent 3, Read 5, Edit 3, Write 1, Bash 1 (`git commit` at the root) = 13.
+- Agent meta label: D is uploaded with `agentDescription` `deep-research` (no `workflowPhase`), so the
+  turn's Sub-agents tree labels it by that description; A and B carry no meta and keep their ids.
+  The root log has one `agent_progress` event for D (`gs02-0008p`, P2, no usage), so P2 has a
+  Sub-agents tree; P1 has none. It carries no tokens and no tool call, so no figure above changes.
 
 Checks: 3-level nesting, tree-scoped cost/lines/change surface, the double-count trap, per-turn
 "main + sub-agents" cost, delegation share.

@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="620" viewBox="0 0 1440 620" font-family="Segoe UI, Arial, sans-serif">
+  <rect width="1440" height="620" fill="#ffffff"/>
+
+  <!-- ===== A. Session node selected ===== -->
+  <text x="16" y="24" font-size="12" font-weight="600" fill="#7c3aed">A. Middle pane for a session node (FR-5): children = agents</text>
+  <rect x="16" y="36" width="700" height="568" rx="10" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="32" y="64" font-size="11" fill="#6b7280">Home › Platform team › artisyn-log-hub ›</text>
+  <text x="32" y="86" font-size="16" font-weight="600" fill="#111827">● bob · "Fix cost tiles on the team page"</text>
+  <rect x="560" y="70" width="140" height="28" rx="6" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="630" y="89" font-size="12" fill="#2563eb" text-anchor="middle">Open session ↗</text>
+
+  <!-- KPI tiles -->
+  <g font-size="11" fill="#6b7280">
+    <rect x="32" y="108" width="158" height="62" rx="6" fill="#f9fafb" stroke="#e5e7eb"/>
+    <text x="44" y="128">Cost</text><text x="44" y="156" font-size="20" font-weight="600" fill="#111827">$0.84</text>
+    <rect x="200" y="108" width="158" height="62" rx="6" fill="#f9fafb" stroke="#e5e7eb"/>
+    <text x="212" y="128">Tokens in / out</text><text x="212" y="156" font-size="20" font-weight="600" fill="#111827">412k / 18k</text>
+    <rect x="368" y="108" width="158" height="62" rx="6" fill="#f9fafb" stroke="#e5e7eb"/>
+    <text x="380" y="128">Agents live</text><text x="380" y="156" font-size="20" font-weight="600" fill="#111827">2</text>
+    <rect x="536" y="108" width="164" height="62" rx="6" fill="#f9fafb" stroke="#e5e7eb"/>
+    <text x="548" y="128">Cost / min (last 5 min)</text><text x="548" y="156" font-size="20" font-weight="600" fill="#111827">$0.06</text>
+  </g>
+
+  <!-- carousel compact -->
+  <rect x="32" y="182" width="668" height="150" rx="8" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="48" y="204" font-size="12" font-weight="600" fill="#111827">Cost over time</text>
+  <text x="56" y="268" font-size="18" fill="#9ca3af">‹</text><text x="680" y="268" font-size="18" fill="#9ca3af">›</text>
+  <polyline points="80,310 140,304 200,296 260,290 320,270 380,262 440,240 500,236 560,220 620,212 660,208" fill="none" stroke="#3b82f6" stroke-width="2"/>
+  <g fill="#d1d5db"><circle cx="340" cy="322" r="3" fill="#2563eb"/><circle cx="352" cy="322" r="3"/><circle cx="364" cy="322" r="3"/><circle cx="376" cy="322" r="3"/></g>
+
+  <!-- breakdown: agents -->
+  <rect x="32" y="346" width="668" height="28" fill="#f9fafb" stroke="#e5e7eb"/>
+  <g font-size="11" font-weight="600" fill="#6b7280">
+    <text x="42" y="364">Agent</text><text x="270" y="364" text-anchor="end">Cost</text><text x="330" y="364" text-anchor="end">In</text>
+    <text x="384" y="364" text-anchor="end">Out</text><text x="444" y="364" text-anchor="end">Cache R</text><text x="504" y="364" text-anchor="end">Cache W</text>
+    <text x="550" y="364" text-anchor="end">Calls</text><text x="620" y="364" text-anchor="end">Running</text><text x="690" y="364" text-anchor="end">Last</text>
+  </g>
+  <g font-size="12" fill="#111827">
+    <rect x="32" y="374" width="668" height="30" fill="#eff6ff"/>
+    <text x="42" y="394">◆ main</text><text x="270" y="394" text-anchor="end">$0.52</text><text x="330" y="394" text-anchor="end">8.1k</text>
+    <text x="384" y="394" text-anchor="end">11k</text><text x="444" y="394" text-anchor="end">290k</text><text x="504" y="394" text-anchor="end">22k</text>
+    <text x="550" y="394" text-anchor="end">31</text><text x="620" y="394" text-anchor="end">42 m</text><text x="690" y="394" text-anchor="end">4 s</text>
+    <text x="42" y="424">◇ Explore</text><text x="270" y="424" text-anchor="end">$0.32</text><text x="330" y="424" text-anchor="end">3.0k</text>
+    <text x="384" y="424" text-anchor="end">7k</text><text x="444" y="424" text-anchor="end">88k</text><text x="504" y="424" text-anchor="end">9k</text>
+    <text x="550" y="424" text-anchor="end">17</text><text x="620" y="424" text-anchor="end">6 m</text><text x="690" y="424" text-anchor="end">12 s</text>
+  </g>
+  <line x1="32" y1="434" x2="700" y2="434" stroke="#e5e7eb"/>
+  <text x="32" y="458" font-size="11" fill="#6b7280">Row click → details panel for that agent. Running = last − first OTEL event of the agent.</text>
+  <text x="32" y="476" font-size="11" fill="#6b7280">Hidden calls (compaction, titles) are counted in the session total, not as an agent row.</text>
+
+  <!-- ===== B. Agent node selected ===== -->
+  <text x="740" y="24" font-size="12" font-weight="600" fill="#7c3aed">B. Middle pane for an agent node: children = latest calls</text>
+  <rect x="740" y="36" width="684" height="568" rx="10" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="756" y="64" font-size="11" fill="#6b7280">Home › … › bob · "Fix cost tiles…" ›</text>
+  <text x="756" y="86" font-size="16" font-weight="600" fill="#111827">◇ Explore (sub-agent)</text>
+  <g font-size="11" fill="#6b7280">
+    <rect x="756" y="108" width="158" height="62" rx="6" fill="#f9fafb" stroke="#e5e7eb"/>
+    <text x="768" y="128">Cost</text><text x="768" y="156" font-size="20" font-weight="600" fill="#111827">$0.32</text>
+    <rect x="924" y="108" width="158" height="62" rx="6" fill="#f9fafb" stroke="#e5e7eb"/>
+    <text x="936" y="128">Calls</text><text x="936" y="156" font-size="20" font-weight="600" fill="#111827">17</text>
+    <rect x="1092" y="108" width="158" height="62" rx="6" fill="#f9fafb" stroke="#e5e7eb"/>
+    <text x="1104" y="128">Model</text><text x="1104" y="156" font-size="15" font-weight="600" fill="#111827">haiku-5-5</text>
+    <rect x="1260" y="108" width="148" height="62" rx="6" fill="#f9fafb" stroke="#e5e7eb"/>
+    <text x="1272" y="128">Running</text><text x="1272" y="156" font-size="20" font-weight="600" fill="#111827">6 m</text>
+  </g>
+  <rect x="756" y="182" width="652" height="28" fill="#f9fafb" stroke="#e5e7eb"/>
+  <g font-size="11" font-weight="600" fill="#6b7280">
+    <text x="766" y="200">Time</text><text x="840" y="200">Model</text><text x="960" y="200">Source</text>
+    <text x="1150" y="200" text-anchor="end">Cost</text><text x="1220" y="200" text-anchor="end">In / Out</text>
+    <text x="1300" y="200" text-anchor="end">Cache R</text><text x="1398" y="200" text-anchor="end">Duration</text>
+  </g>
+  <g font-size="12" fill="#111827">
+    <text x="766" y="230">14:33:08</text><text x="840" y="230">haiku-5-5</text><text x="960" y="230">agent:Explore</text>
+    <text x="1150" y="230" text-anchor="end">$0.021</text><text x="1220" y="230" text-anchor="end">410 / 380</text><text x="1300" y="230" text-anchor="end">6.1k</text><text x="1398" y="230" text-anchor="end">2.4 s</text>
+    <text x="766" y="260">14:32:55</text><text x="840" y="260">haiku-5-5</text><text x="960" y="260">agent:Explore</text>
+    <text x="1150" y="260" text-anchor="end">$0.018</text><text x="1220" y="260" text-anchor="end">220 / 512</text><text x="1300" y="260" text-anchor="end">5.9k</text><text x="1398" y="260" text-anchor="end">3.1 s</text>
+    <text x="766" y="290">14:32:41</text><text x="840" y="290">haiku-5-5</text><text x="960" y="290">agent:Explore</text>
+    <text x="1150" y="290" text-anchor="end">$0.014</text><text x="1220" y="290" text-anchor="end">160 / 240</text><text x="1300" y="290" text-anchor="end">5.6k</text><text x="1398" y="290" text-anchor="end">1.7 s</text>
+    <text x="766" y="320">14:32:30</text><text x="840" y="320">haiku-5-5</text><text x="960" y="320">agent:Explore</text>
+    <text x="1150" y="320" text-anchor="end">$0.016</text><text x="1220" y="320" text-anchor="end">198 / 301</text><text x="1300" y="320" text-anchor="end">5.7k</text><text x="1398" y="320" text-anchor="end">1.9 s</text>
+  </g>
+  <g stroke="#f3f4f6"><line x1="756" y1="240" x2="1408" y2="240"/><line x1="756" y1="270" x2="1408" y2="270"/><line x1="756" y1="300" x2="1408" y2="300"/></g>
+  <text x="756" y="352" font-size="11" fill="#6b7280">Latest 50 calls of this agent, newest first; new rows slide in on each 5 s refresh.</text>
+  <text x="756" y="370" font-size="11" fill="#6b7280">An agent node has no children in the tree, so the breakdown lists calls instead.</text>
+</svg>
