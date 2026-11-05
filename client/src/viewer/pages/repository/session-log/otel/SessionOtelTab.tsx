@@ -47,6 +47,7 @@ import { OtelPartialBanner } from '../../otel/OtelPartialBanner';
 import type { OtelStatusDto } from '../../../../../models/repositories';
 import { assembleOtelTraces } from './otel-trace-assembly';
 import { SessionOtelTraces } from './SessionOtelTraces';
+import { SessionOtelAccount, SessionOtelPlanChip } from './SessionOtelAccount';
 import {
   otelSessionDerivedKpis,
   useOtelKpiHighlight,
@@ -62,6 +63,10 @@ const STACK_OPTIONS = [
   { value: 'structure', label: 'Structure' },
   { value: 'querySource', label: 'query_source' },
   { value: 'model', label: 'Model' },
+  { value: 'skill', label: 'Skill' },
+  { value: 'mcpServer', label: 'MCP server' },
+  { value: 'effort', label: 'Effort' },
+  { value: 'speed', label: 'Fast mode' },
 ] as const;
 
 const INTERVAL_OPTIONS = [
@@ -241,6 +246,7 @@ export function SessionOtelTab({
               onResume={live.refresh}
             />
           </div>
+          <SessionOtelAccount plan={state.plan} />
           <OtelRealtimeNotice
             input={otelNoticeFromSession(status.realtime)}
             filled={live.filled}
@@ -286,6 +292,7 @@ export function SessionOtelTab({
               calls={state.calls}
               derived={derived}
               highlighted={kpiHighlight}
+              totalChip={<SessionOtelPlanChip plan={state.plan} />}
             />
           )}
           {state.querySources && state.querySources.length > 0 && (

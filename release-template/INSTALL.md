@@ -266,10 +266,11 @@ that file on every upgrade. A setting that is not in `.env` keeps the app's buil
 | `PASSWORD_POLICY` | Password strength for `password` / `password-confirm`: `any`, `mid` or `long` (default). |
 | `LOGS_MAX_BODY_MB`, `UPLOAD_QUEUE_MAX_ATTEMPTS` | Largest hook upload in MiB (default 2500) and retries of a queued upload (default 5). |
 
-The app also makes two outbound requests a day: the public npm registry, for the latest Claude Code
-version, and the public Anthropic pricing page, for model prices. To turn them off (for example
-on an air-gapped host), add `AI_TOOL_VERSION_CHECK_ENABLED=false` and
-`MODEL_PRICING_FETCH_ENABLED=false` to `.env` and run `docker compose up -d`.
+The app also makes three outbound requests a day: the public npm registry, for the latest Claude Code
+version; the public Anthropic pricing page, for model prices; and `api.github.com`, for the latest
+Log Hub release (admins then see a "new release" badge). To turn them off (for example on an
+air-gapped host), add `AI_TOOL_VERSION_CHECK_ENABLED=false`, `MODEL_PRICING_FETCH_ENABLED=false`
+and `LOG_HUB_RELEASE_CHECK_ENABLED=false` to `.env` and run `docker compose up -d`.
 
 ## OTEL telemetry from the hook
 

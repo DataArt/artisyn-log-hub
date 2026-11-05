@@ -18,12 +18,21 @@ import type { ModelPricingMap } from '../../../../models/pricing';
 import { computeCost, formatCost } from '../../../lib/format';
 import { CostBreakdownTooltip } from '../../../components/CostBreakdownTooltip';
 import { cn } from '../../../lib/cn';
+import type { SubagentMetaMap } from './log-parser';
+import { agentDescriptionText } from './workflow-agent-rows';
 
 interface AgentActivationItemProps {
   activation: AgentActivation;
   subagentLogsMap?: Map<string, Record<string, unknown>[]>;
   pricing?: ModelPricingMap;
   sessionModel?: string;
+  /** Per-agent `.meta.json` labels; the description is the label fallback when the activation has none. */
+  subagentMeta?: SubagentMetaMap;
+  /**
+   * Server-chosen OTEL cost of this agent — `subagentStats[*].otelCostUsd` of its stats entry
+   * (FR-6). When non-null it replaces `computeCost(tokens)`, with a "from OTEL" hint.
+   */
+  otelCostUsd?: number | null;
   renderSubTurn: (turn: PromptTurn) => React.ReactNode;
 }
 
@@ -32,6 +41,8 @@ export function AgentActivationItem({
   subagentLogsMap,
   pricing,
   sessionModel,
+  subagentMeta,
+  otelCostUsd,
   renderSubTurn,
 }: AgentActivationItemProps) {
   const [open, setOpen] = useState(false);
@@ -54,7 +65,12 @@ export function AgentActivationItem({
     [parsedSubagent],
   );
 
-  const label = activation.description ?? `agent-${activation.agentId}`;
+  const label =
+    activation.description ??
+    agentDescriptionText(
+      subagentMeta?.get(activation.agentId)?.agentDescription,
+    ) ??
+    `agent-${activation.agentId}`;
 
   return (
     <Collapsible open={open} onOpenChange={setOpen}>
@@ -137,22 +153,36 @@ export function AgentActivationItem({
                   {formatInt(activation.tokens.cacheWrite)}
                 </span>
               </span>
-              {pricing && sessionModel && pricing[sessionModel] && (
-                <CostBreakdownTooltip
-                  breakdown={activation.tokens}
-                  pricing={pricing[sessionModel]}
-                >
-                  <span className="flex cursor-help items-center gap-1">
-                    <span className="text-violet-600 dark:text-violet-400">
-                      Cost
-                    </span>
-                    <span className="font-medium">
-                      {formatCost(
-                        computeCost(activation.tokens, pricing[sessionModel]),
-                      )}
-                    </span>
+              {otelCostUsd != null ? (
+                <span className="flex items-center gap-1">
+                  <span className="text-violet-600 dark:text-violet-400">
+                    Cost
                   </span>
-                </CostBreakdownTooltip>
+                  <span className="font-medium">{formatCost(otelCostUsd)}</span>
+                  <span className="font-sans text-muted-foreground">
+                    from OTEL
+                  </span>
+                </span>
+              ) : (
+                pricing &&
+                sessionModel &&
+                pricing[sessionModel] && (
+                  <CostBreakdownTooltip
+                    breakdown={activation.tokens}
+                    pricing={pricing[sessionModel]}
+                  >
+                    <span className="flex cursor-help items-center gap-1">
+                      <span className="text-violet-600 dark:text-violet-400">
+                        Cost
+                      </span>
+                      <span className="font-medium">
+                        {formatCost(
+                          computeCost(activation.tokens, pricing[sessionModel]),
+                        )}
+                      </span>
+                    </span>
+                  </CostBreakdownTooltip>
+                )
               )}
             </div>
           )}

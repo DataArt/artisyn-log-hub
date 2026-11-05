@@ -22,9 +22,9 @@ read, and never for an already committed migration (they are immutable — see t
    `COMMENT ON COLUMN <t>.<c> IS '…'` **only** when name and type do not explain it:
    discriminator values, units, what NULL means, a cached copy of other data, soft-delete or legacy
    flags, an id stored as text without an FK. Most columns get none. Plain English, no task ids,
-   DD numbers or dates. If the migration is already locked, editing it means re-running
-   `npm run migrations:lock` — fine while it is uncommitted; a committed migration needs a new
-   comments-only migration instead.
+   DD numbers or dates. Get the comments right before the first `npm run migrations:lock`: once a
+   migration is locked and applied it is immutable, even if uncommitted, so a wrong comment is
+   fixed by a new comments-only migration (see the `migrations-data-integrity` skill).
 2. **Regenerate** from the repo root:
    ```sh
    npm run db:state

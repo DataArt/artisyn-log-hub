@@ -1,0 +1,116 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="700" viewBox="0 0 1040 700" font-family="Segoe UI, Arial, sans-serif">
+  <style>
+    .muted { fill: #6b7280; }
+    .fg { fill: #111827; }
+    .mono { font-family: Consolas, 'Courier New', monospace; }
+    .note { fill: #b45309; font-size: 11px; }
+    .title { fill: #111827; font-size: 15px; font-weight: 600; }
+    .h { fill: #111827; font-size: 13px; font-weight: 600; }
+    .strike { fill: #9ca3af; text-decoration: line-through; }
+  </style>
+  <rect width="1040" height="700" fill="#ffffff"/>
+
+  <text x="24" y="30" class="title">Other views that name a sub-agent - description-first label (FR-4a, light theme)</text>
+  <text x="24" y="50" class="muted" font-size="12">Only the fallback label changes. Layout, metrics, colours and ordering of every view stay as today.</text>
+
+  <!-- ===== 1. Session Map ===== -->
+  <text x="24" y="86" class="h">1. Session Map tab - workflow run lane, agent cards</text>
+  <rect x="24" y="96" width="560" height="270" rx="6" fill="#f9fafb" stroke="#e5e7eb"/>
+
+  <!-- workflow run header card -->
+  <rect x="40" y="108" width="260" height="58" rx="6" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="50" y="126" class="fg" font-size="12" font-weight="600">adlc-lh:implement-deep-wf · run #1</text>
+  <text x="50" y="143" class="fg" font-size="12" font-weight="600">$29.19 <tspan class="muted" font-weight="400">27 agents  920 calls</tspan> <tspan fill="#dc2626" font-weight="400">11 failed</tspan></text>
+  <text x="50" y="158" class="muted" font-size="11">129m 40s</text>
+
+  <!-- agent card: after -->
+  <rect x="40" y="176" width="260" height="176" rx="6" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="50" y="196" class="fg" font-size="12" font-weight="600">load-config</text>
+  <text x="50" y="213" class="fg" font-size="12" font-weight="600">$0.04 <tspan class="muted" font-weight="400" font-size="11">&lt;1% of session</tspan></text>
+  <text x="290" y="213" class="muted" font-size="11" text-anchor="end">19.7s</text>
+  <text x="50" y="238" class="muted" font-size="11">cost</text>
+  <rect x="120" y="232" width="170" height="6" rx="3" fill="#e5e7eb"/>
+  <rect x="120" y="232" width="4" height="6" rx="3" fill="#22c55e"/>
+  <text x="50" y="264" class="muted" font-size="11">tools</text>
+  <rect x="120" y="258" width="86" height="6" fill="#0ea5e9"/>
+  <rect x="206" y="258" width="84" height="6" fill="#94a3b8"/>
+  <text x="50" y="290" class="muted" font-size="11">Read 1 · StructuredOutput 1</text>
+  <text x="290" y="290" class="muted" font-size="11" text-anchor="end">2 calls</text>
+  <text x="50" y="316" class="muted" font-size="11">context</text>
+  <rect x="120" y="310" width="86" height="6" rx="3" fill="#e5e7eb"/>
+  <rect x="120" y="310" width="14" height="6" rx="3" fill="#64748b"/>
+  <text x="290" y="316" class="muted" font-size="11" text-anchor="end">32.9K / 200.0K</text>
+  <text x="50" y="340" class="muted" font-size="10">… next card: chunk-1-Schema-migration</text>
+
+  <!-- before label -->
+  <text x="316" y="190" class="muted" font-size="11">Before (today), card title:</text>
+  <text x="316" y="206" class="strike" font-size="12" font-weight="600">[Workflow harness — user request] The h…</text>
+  <line x1="120" y1="192" x2="312" y2="192" stroke="#f59e0b" stroke-dasharray="3 3"/>
+  <text x="316" y="232" class="note">Title = agentRowLabel with the agent's</text>
+  <text x="316" y="246" class="note">agentDescription (from /logs subagents[] and</text>
+  <text x="316" y="260" class="note">/logs/delta newSubagents[]), same card cut.</text>
+  <text x="316" y="282" class="note">A sub-agent that first arrives through</text>
+  <text x="316" y="296" class="note">/logs/delta while live gets it too.</text>
+  <text x="316" y="318" class="muted" font-size="11">No description (old hook): prompt label</text>
+  <text x="316" y="332" class="muted" font-size="11">as today.</text>
+
+  <!-- ===== 2. Charts Agent Tree ===== -->
+  <text x="24" y="398" class="h">2. Dashboard (Charts) tab - Agent Tree node</text>
+  <rect x="24" y="408" width="560" height="140" rx="6" fill="#f9fafb" stroke="#e5e7eb"/>
+
+  <!-- main node -->
+  <rect x="40" y="446" width="110" height="52" rx="4" fill="#ecfdf5" stroke="#86efac"/>
+  <text x="50" y="464" class="fg" font-size="11" font-weight="600">main</text>
+  <text x="50" y="478" class="muted" font-size="10">$8.0446 · 143m 15s</text>
+  <text x="50" y="491" class="muted" font-size="10">Opus</text>
+  <line x1="150" y1="472" x2="176" y2="472" stroke="#9ca3af"/>
+
+  <!-- workflow node -->
+  <rect x="176" y="446" width="130" height="52" rx="4" fill="#f3e8ff" stroke="#d8b4fe"/>
+  <text x="186" y="464" class="fg" font-size="11" font-weight="600">adlc-lh:implemen…</text>
+  <text x="186" y="478" class="muted" font-size="10">27 agents · 129m 40s</text>
+  <line x1="306" y1="472" x2="330" y2="440" stroke="#9ca3af"/>
+  <line x1="306" y1="472" x2="330" y2="504" stroke="#9ca3af"/>
+
+  <!-- agent nodes -->
+  <rect x="330" y="418" width="140" height="44" rx="4" fill="#ecfdf5" stroke="#86efac"/>
+  <text x="340" y="435" class="fg" font-size="11" font-weight="600">load-config</text>
+  <text x="340" y="450" class="muted" font-size="10">$0.4681 · 2m 20s · Opus</text>
+
+  <rect x="330" y="482" width="140" height="44" rx="4" fill="#ecfdf5" stroke="#86efac"/>
+  <text x="340" y="499" class="fg" font-size="11" font-weight="600">chunk-6-Tests</text>
+  <text x="340" y="514" class="muted" font-size="10">$1.2548 · 1m 18s · Opus</text>
+
+  <text x="482" y="432" class="muted" font-size="10">Before:</text>
+  <text x="482" y="446" class="strike mono" font-size="10">agent-a30d0eba1a…</text>
+  <line x1="420" y1="432" x2="478" y2="432" stroke="#f59e0b" stroke-dasharray="3 3"/>
+
+  <!-- ===== 3. Turn-level Sub-agents tree ===== -->
+  <text x="24" y="584" class="h">3. Logs tab - turn-level Sub-agents tree / sub-agent detail</text>
+  <rect x="24" y="594" width="560" height="92" rx="6" fill="#f9fafb" stroke="#e5e7eb"/>
+  <text x="40" y="618" class="muted" font-size="11">›</text>
+  <text x="52" y="618" class="fg" font-size="12">Explore session-log folder</text>
+  <text x="250" y="618" class="muted" font-size="11">Agent tool description - unchanged</text>
+  <text x="40" y="642" class="muted" font-size="11">›</text>
+  <text x="52" y="642" class="fg" font-size="12">chunk-6-Tests</text>
+  <text x="250" y="642" class="muted" font-size="11">was: prompt-derived / agent-&lt;id&gt; fallback</text>
+  <text x="40" y="666" class="muted" font-size="11">›</text>
+  <text x="52" y="666" class="fg" font-size="12">Review the requirements file and…</text>
+  <text x="250" y="666" class="muted" font-size="11">no description, no tool label: as today</text>
+
+  <!-- right-hand rule box -->
+  <rect x="610" y="408" width="406" height="278" rx="6" fill="#fffbeb" stroke="#fcd34d"/>
+  <text x="626" y="432" class="fg" font-size="12" font-weight="600">Label order in every view (FR-4a)</text>
+  <text x="626" y="458" class="fg" font-size="12">1. Label from the spawning Agent tool call's</text>
+  <text x="642" y="474" class="fg" font-size="12">description, where the view shows one today</text>
+  <text x="642" y="490" class="muted" font-size="11">(Charts activation.description, Sub-agents tree)</text>
+  <text x="626" y="516" class="fg" font-size="12">2. agentDescription from &lt;agent-id&gt;.meta.json,</text>
+  <text x="642" y="532" class="fg" font-size="12">when non-empty after trimming</text>
+  <text x="626" y="558" class="fg" font-size="12">3. Today's fallback: prompt-derived label,</text>
+  <text x="642" y="574" class="fg" font-size="12">or agent-&lt;id&gt; in the Agent Tree</text>
+  <text x="626" y="604" class="note">workflowPhase is not shown in these views;</text>
+  <text x="626" y="618" class="note">only the workflow Agents table has a Phase</text>
+  <text x="626" y="632" class="note">column (FR-4b).</text>
+  <text x="626" y="660" class="muted" font-size="11">Same AGENT_LABEL_LIMIT / per-view truncation</text>
+  <text x="626" y="674" class="muted" font-size="11">as today.</text>
+</svg>

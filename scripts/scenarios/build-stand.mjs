@@ -44,6 +44,9 @@ export const BUILDER_FILES = [
   'scripts/copy-wasm.js',
   'scripts/user-docs/generate-help.js',
   'scripts/user-docs/links.js',
+  'scripts/build-origin.js',
+  // build-origin.js reads the stand's version from here.
+  'package.json',
 ];
 
 /** Repo-relative input files (forward slashes), sorted, de-duplicated. Read-only git call. */
@@ -187,6 +190,15 @@ export function buildStandFresh(standDir = STAND_DIR) {
     path.join(ROOT, 'server', 'node_modules', 'connect-pg-simple', 'table.sql'),
     path.join(standDir, 'table.sql'),
   );
+
+  // 7. build.origin.json next to the bundle (readBuildOrigin). officialRelease: true makes the
+  //    stand an eligible deployment for the release-update check; its scheduler stays off via
+  //    LOG_HUB_RELEASE_CHECK_ENABLED=false, scenarios seed the release state in the DB instead.
+  process.stderr.write('[build-stand] write build.origin.json\n');
+  require(path.join(ROOT, 'scripts', 'build-origin.js')).writeBuildOrigin(standDir, {
+    branch: 'scenario-stand',
+    officialRelease: true,
+  });
 }
 
 /**

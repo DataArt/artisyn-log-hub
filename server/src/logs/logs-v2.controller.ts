@@ -18,6 +18,7 @@ import { UploadQueueService } from './upload-queue.service';
 import { FOREIGN_SESSION_WARNING } from './upload-warnings';
 import { SNAPSHOT_ID_RE, isHarnessSnapshotKnown } from './harness-snapshot';
 import { OKF_SNAPSHOT_ID_RE, isOkfSnapshotKnown } from './okf/okf-snapshot';
+import { sanitizeAgentMeta } from './agent-meta-param';
 
 /**
  * `POST /api/v2/logs` — the log upload route: async stage-then-queue.
@@ -55,6 +56,8 @@ export class LogsV2Controller {
     @Query('snapshotFull') snapshotFullRaw: string | undefined,
     @Query('okfSnapshotId') okfSnapshotIdRaw: string | undefined,
     @Query('okfSnapshotFull') okfSnapshotFullRaw: string | undefined,
+    @Query('agentDescription') agentDescriptionRaw: unknown,
+    @Query('workflowPhase') workflowPhaseRaw: unknown,
     @Body() rawBody: unknown,
     @Req() req: Request & { userId: number },
   ): Promise<
@@ -113,6 +116,16 @@ export class LogsV2Controller {
     const queuedOkfSnapshotId =
       okfSnapshotFull && okfSnapshotId ? okfSnapshotId : undefined;
 
+    // Sub-agent `.meta.json` labels: sanitised (an invalid, empty or repeated
+    // value is silently ignored) and applied to `claude-subagent` uploads only.
+    const isSubagent = logType === 'claude-subagent';
+    const agentDescription = isSubagent
+      ? sanitizeAgentMeta(agentDescriptionRaw)
+      : null;
+    const workflowPhase = isSubagent
+      ? sanitizeAgentMeta(workflowPhaseRaw)
+      : null;
+
     // Open-source readiness: a session owned by another user is
     // rejected before anything is staged. Lock-free — `LogsService.upsert()` repeats the
     // check under the per-session lock, so a race still ends in `rejected_foreign_session`.
@@ -141,6 +154,8 @@ export class LogsV2Controller {
         workflowRunId,
         harnessSnapshotId,
         okfSnapshotId: queuedOkfSnapshotId,
+        agentDescription,
+        workflowPhase,
       });
 
       const warnings = await this.uploadQueueService.getPendingWarnings(
@@ -259,6 +274,8 @@ export class LogsV2Controller {
       totalSize,
       harnessSnapshotId,
       okfSnapshotId: queuedOkfSnapshotId,
+      agentDescription,
+      workflowPhase,
     });
 
     if (!complete) {

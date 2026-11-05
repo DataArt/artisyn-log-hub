@@ -244,6 +244,9 @@ export function SessionDetailHeader({
                   pricing={pricing[parsedLogs.summary.model]}
                   reportedCost={sessionCost}
                   subAgentCost={subAgentCost}
+                  subAgentCostFromOtel={
+                    session.costBreakdown.subagentCostFromOtel === true
+                  }
                   workflowEstimatedCost={workflowEstimatedCost}
                   workflowSubagentTokens={workflowSubagentTokens}
                   showWorkflowCostRow={showWorkflowCostRow}

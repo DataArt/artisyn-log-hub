@@ -11,3 +11,6 @@ export { RepositoryAnalytics } from './analytics/RepositoryAnalytics';
 export { RepoToolsTab } from './tools/RepoToolsTab';
 export { RepoOkfTab } from './okf/RepoOkfTab';
 export { RepoOtelTab } from './otel/RepoOtelTab';
+// The Live view modal shares this chunk: it carries Recharts and the OTEL tab code it reuses
+// (2026-11-04 otel-live-view, DD-17).
+export { LiveModal } from '../../live/LiveModal';

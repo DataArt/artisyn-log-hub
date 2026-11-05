@@ -9,6 +9,7 @@ import {
 import type { ModelPricingMap } from '../../../../../models/pricing';
 import type { ParsedSession, SubAgentNode } from '../types';
 import { WorkflowAgentModal } from '../WorkflowAgentModal';
+import { agentDescriptionText, agentRowLabel } from '../workflow-agent-rows';
 
 /**
  * What every tool-call view of one session needs from around it (DD-7): the session's repo root
@@ -83,7 +84,12 @@ export function ToolViewProvider({
       }
       setOpen({
         node: node ?? { agentId, prompt: '', children: [] },
-        label: label || `Agent ${agentId.slice(0, 8)}`,
+        // Caller's label first; else the node's `.meta.json` description label; else the short id.
+        label:
+          label ||
+          (node && agentDescriptionText(node.agentDescription)
+            ? agentRowLabel(node)
+            : `Agent ${agentId.slice(0, 8)}`),
         logs,
       });
     },

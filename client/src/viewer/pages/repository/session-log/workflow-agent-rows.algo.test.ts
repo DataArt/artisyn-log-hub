@@ -22,7 +22,7 @@ interface ForestNode {
 
 interface RowsInput {
   forest?: ForestNode[];
-  label?: { agentId: string; prompt: string };
+  label?: { agentId: string; prompt: string; agentDescription?: string | null };
 }
 
 interface RowsExpected {
@@ -50,6 +50,9 @@ it.each(rows)('$id', ({ input, expected }) => {
       agentRowLabel({
         agentId: input.label.agentId,
         prompt: input.label.prompt,
+        ...(input.label.agentDescription !== undefined && {
+          agentDescription: input.label.agentDescription,
+        }),
         children: [],
       }),
     ).toBe(expected.label);

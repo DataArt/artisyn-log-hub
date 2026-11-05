@@ -5,7 +5,7 @@ description: "React SPA routing, layout, provider hierarchy, major page componen
 tags:
   - client
   - routing
-timestamp: "2026-11-03T00:00:00+04:00"
+timestamp: "2026-11-05T00:00:00+04:00"
 ---
 
 # Client Component Hierarchy
@@ -98,7 +98,7 @@ into two barrels:
 
 | Chunk | Contents | Barrel |
 |---|---|---|
-| Repository tabs | `RepositoryAnalytics`, `RepoToolsTab`, `RepoOkfTab`, `RepoOtelTab` (`RepositoryTeamWideTabs`; `RepoToolsTab` is also the session Tools/MCP tab) | `pages/repository/repository-tabs-lazy-group.ts` |
+| Repository tabs | `RepositoryAnalytics`, `RepoToolsTab`, `RepoOkfTab`, `RepoOtelTab` (`RepositoryTeamWideTabs`; `RepoToolsTab` is also the session Tools/MCP tab), and `LiveModal` (the OTEL Live view, lazy in `LiveNavItem` — it shares the OTEL chart code and Recharts, so no own chunk) | `pages/repository/repository-tabs-lazy-group.ts` |
 | Reports | `ReportsPanel` — kept apart because it carries the PDF and zip export libraries (~1.4 MB), which the light tabs above must not download | own `import()` in `RepositoryTeamWideTabs` |
 | Session tabs | `SessionChartsTab`, `SessionChangeSurfaceTab`, `SessionHarnessUsageTab`, `SessionOkfTab`, `SessionSysctxAnatomyTab`, `SessionOtelTab`, `SessionBashTab` (`SessionTabContent`, through `session-lazy-tabs.ts`) | `pages/repository/session-tabs-lazy-group.ts` |
 
@@ -142,7 +142,7 @@ AppShell
 ```
 
 ### `MainNav`
-Top bar: app title, "Home" button on the left next to the title (`nav-home`, navigates to `routes.main`; `aria-current="page"` + `bg-accent` while on Home), then right-aligned `AccessModeBadge` (team routes only), "All views" button (`nav-all-views`, light tooltip "All views (Ctrl+K)"), Help button (`HelpCircle` icon — opens `HelpModal`), `NotificationBell`, then, under `AUTH_MODE=none`, user email from `useAuth()` plus an "Edit email" button (calls `logout()` API then redirects to `#/login`); in every other mode the `UserMenu` account menu (Log out, Change password, Delete account).
+Top bar: app title, "Home" button on the left next to the title (`nav-home`, navigates to `routes.main`; `aria-current="page"` + `bg-accent` while on Home), then `LiveNavItem` (the OTEL "Live" button with a red dot while something is live; see § "The `live` param" below), then right-aligned `AccessModeBadge` (team routes only), "All views" button (`nav-all-views`, light tooltip "All views (Ctrl+K)"), Help button (`HelpCircle` icon — opens `HelpModal`), `NotificationBell`, then, under `AUTH_MODE=none`, user email from `useAuth()` plus an "Edit email" button (calls `logout()` API then redirects to `#/login`); in every other mode the `UserMenu` account menu (Log out, Change password, Delete account).
 
 ### The All views map and its doors (`/map`, Ctrl+K)
 `MapPage` (`pages/map/`, in the Workspace chunk) is the tree of every view; its model is the pure `nav-tree.ts` (`buildNavTree`, `matchNavFilter`) plus `nav-questions.ts` (`NAV_QUESTIONS`, shared with Home). Two doors open it, both through `useOpenAllViews()` in `hooks/useAllViewsShortcut.ts`:
@@ -257,5 +257,7 @@ Other browser keys: `artisyn:leftNavCollapsed` / `artisyn:leftNavWidth` (not per
 - **The URL `session` param is the only source of the selected session.** `useRepositoryData.ts` uses the branch-local selection only while its `sessionId` equals the URL's; otherwise the session is resolved from the sessions query, and `RepositoryView.tsx` clears a stale branch selection. Back/forward and hand-edited `?session=` therefore switch the pane without a reload.
 - **The detail pane is keyed by session.** `RepositorySessionsPanel.tsx` renders `<SessionDetailPane key={selectedSession.sessionId}>`, so a session change remounts it and resets all per-tab local state — no per-tab reset code is needed.
 - **Not-found state.** When `session` is set, the sessions query has settled (success, or 403/404) and no listed session (nor the matching branch query) has that id, the pane shows `SessionNotFoundState`. Its Close removes `session` and `tab` with `{ replace: true }`. With no `session` param the "Select a session…" placeholder stays.
+
+**The `live` param** (OTEL Live view, `client/src/viewer/live/useLiveUrlState.ts`, `LIVE_URL_PARAM`). `?live=<nodeKey>` works on every route that has the top bar: `LiveNavItem` (inside `MainNav`) mounts `LiveModal`, which is open iff `searchParams.has('live')`. Opening copies the current params, sets `live=home` and **pushes**; selecting a tree node **replaces** with the node's canonical key (as sent by the server; the client never builds keys); ✕ / Esc delete `live` with `{ replace: true }`; Back pops the opening push. When the server answers a different `selected` key (an unqualified key resolved to its canonical form, or the fallback to `home`), the URL is replaced with it. The details-panel key is local state, not a param. "Open session ↗" navigates to `routes.teamRepo` / `routes.repo` + `?session=`, which drops `live` and closes the modal.
 
 **Left nav lazy loading** — team repositories are fetched only when the team node is expanded (`enabled: isExpanded`). The active item is scrolled into view after route changes.

@@ -14,6 +14,7 @@ const fs = require('fs');
 const path = require('path');
 const { copyNative } = require('./copy-native');
 const { copyWasm } = require('./copy-wasm');
+const { writeBuildOrigin } = require('./build-origin');
 
 const ROOT = path.join(__dirname, '..');
 
@@ -78,6 +79,7 @@ try {
   copyNative();
   copyWasm();
   copyMigrations();
+  writeBuildOrigin(path.join(ROOT, 'dist'), { officialRelease: false });
   postclean();
   process.exit(0);
 } catch (err) {

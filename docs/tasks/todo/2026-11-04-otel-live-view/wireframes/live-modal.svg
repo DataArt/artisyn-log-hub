@@ -1,0 +1,351 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900" font-family="Segoe UI, Arial, sans-serif">
+  <!-- Underlying page (dimmed) -->
+  <rect width="1440" height="900" fill="#ffffff"/>
+  <rect x="0" y="0" width="1440" height="48" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="44" y="29" font-size="14" font-weight="600" fill="#111827">[local] Artisyn Log Hub</text>
+  <text x="246" y="29" font-size="14" font-weight="600" fill="#111827">⌂ Home</text>
+  <circle cx="333" cy="24" r="4" fill="#dc2626"/>
+  <text x="345" y="29" font-size="14" font-weight="600" fill="#111827">Live</text>
+  <rect x="0" y="48" width="320" height="852" fill="#ffffff" stroke="#e5e7eb"/>
+  <rect x="0" y="0" width="1440" height="900" fill="#111827" fill-opacity="0.40"/>
+
+  <!-- Modal 90% x 90% -->
+  <rect x="72" y="45" width="1296" height="810" rx="10" fill="#ffffff" stroke="#e5e7eb"/>
+
+  <!-- Modal header -->
+  <circle cx="98" cy="71" r="9" fill="#dc2626" fill-opacity="0.18"/>
+  <circle cx="98" cy="71" r="4.5" fill="#dc2626"/>
+  <text x="114" y="77" font-size="18" font-weight="600" fill="#111827">Live</text>
+  <rect x="160" y="60" width="98" height="22" rx="11" fill="#eff6ff" stroke="#93c5fd"/>
+  <text x="172" y="75" font-size="12" fill="#1d4ed8">ⓘ OTEL only</text>
+  <circle cx="276" cy="71" r="4" fill="#16a34a"/>
+  <text x="286" y="75" font-size="12" fill="#6b7280">Updated 2 s ago · 3 live sessions · 5 agents</text>
+  <rect x="1206" y="58" width="88" height="28" rx="6" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="1222" y="77" font-size="13" fill="#111827">❚❚  Pause</text>
+  <text x="1330" y="78" font-size="18" fill="#6b7280">✕</text>
+  <line x1="72" y1="97" x2="1368" y2="97" stroke="#e5e7eb"/>
+
+  <!-- LEFT: live tree -->
+  <path d="M72 97 H352 V855 H82 a10 10 0 0 1 -10 -10 z" fill="#f9fafb"/>
+  <line x1="352" y1="97" x2="352" y2="855" stroke="#e5e7eb"/>
+  <text x="88" y="122" font-size="11" font-weight="600" fill="#6b7280" letter-spacing="0.5">LIVE NOW</text>
+
+  <!-- selected root -->
+  <rect x="80" y="132" width="264" height="28" rx="5" fill="#e5e7eb"/>
+  <text x="88" y="151" font-size="13" fill="#6b7280">▾</text>
+  <text x="102" y="151" font-size="13" font-weight="600" fill="#111827">⌂ Home</text>
+  <text x="336" y="151" font-size="12" fill="#111827" text-anchor="end">$4.82</text>
+
+  <text x="102" y="181" font-size="13" fill="#6b7280">▾</text>
+  <text x="116" y="181" font-size="13" fill="#111827">👥 LogHub Demo</text>
+  <text x="336" y="181" font-size="12" fill="#374151" text-anchor="end">$3.10</text>
+
+  <text x="116" y="211" font-size="13" fill="#6b7280">▾</text>
+  <text x="130" y="211" font-size="13" fill="#111827">▣ DataArt/artisyn-log-hub</text>
+  <text x="336" y="211" font-size="12" fill="#374151" text-anchor="end">$2.64</text>
+
+  <text x="130" y="241" font-size="13" fill="#6b7280">▾</text>
+  <circle cx="148" cy="237" r="3.5" fill="#dc2626"/>
+  <text x="156" y="241" font-size="13" fill="#111827">Fix OTEL merge…</text>
+  <text x="336" y="241" font-size="12" fill="#374151" text-anchor="end">$1.92</text>
+
+  <text x="170" y="271" font-size="13" fill="#374151">◆ main</text>
+  <text x="336" y="271" font-size="12" fill="#374151" text-anchor="end">$1.40</text>
+  <text x="170" y="301" font-size="13" fill="#374151">◆ Explore</text>
+  <text x="336" y="301" font-size="12" fill="#374151" text-anchor="end">$0.52</text>
+
+  <text x="130" y="331" font-size="13" fill="#6b7280">▸</text>
+  <circle cx="148" cy="327" r="3.5" fill="#dc2626"/>
+  <text x="156" y="331" font-size="13" fill="#111827">Add live view…</text>
+  <text x="336" y="331" font-size="12" fill="#374151" text-anchor="end">$0.72</text>
+
+  <text x="116" y="361" font-size="13" fill="#6b7280">▸</text>
+  <text x="130" y="361" font-size="13" fill="#111827">▣ _ADLC_DataArt/proto.skills</text>
+  <text x="336" y="361" font-size="12" fill="#374151" text-anchor="end">$0.46</text>
+
+  <text x="102" y="391" font-size="13" fill="#6b7280">▾</text>
+  <text x="116" y="391" font-size="13" fill="#111827">👤 No team (personal)</text>
+  <text x="336" y="391" font-size="12" fill="#374151" text-anchor="end">$1.72</text>
+  <text x="116" y="421" font-size="13" fill="#6b7280">▸</text>
+  <text x="130" y="421" font-size="13" fill="#111827">▣ denistsyplakov/at-scanner</text>
+  <text x="336" y="421" font-size="12" fill="#374151" text-anchor="end">$1.72</text>
+
+  <!-- ended node (greyed) -->
+  <text x="116" y="451" font-size="13" fill="#9ca3af">▸</text>
+  <text x="130" y="451" font-size="13" fill="#9ca3af">▣ denistsyplakov/codex-wiki</text>
+  <text x="336" y="451" font-size="11" fill="#9ca3af" text-anchor="end">ended</text>
+
+  <text x="88" y="830" font-size="11" fill="#9ca3af">Only nodes with OTEL activity in the</text>
+  <text x="88" y="845" font-size="11" fill="#9ca3af">live window are shown.</text>
+
+  <!-- MIDDLE: live view for selected node -->
+  <text x="376" y="126" font-size="16" font-weight="600" fill="#111827">Home</text>
+  <text x="426" y="126" font-size="12" fill="#6b7280">everything live that you can see</text>
+
+  <!-- KPI tiles -->
+  <g font-size="11" fill="#6b7280">
+    <rect x="376" y="140" width="153" height="62" rx="8" fill="#ffffff" stroke="#e5e7eb"/>
+    <text x="388" y="160">Cost (live)</text>
+    <text x="388" y="188" font-size="20" font-weight="600" fill="#111827">$4.82</text>
+    <rect x="541" y="140" width="153" height="62" rx="8" fill="#ffffff" stroke="#e5e7eb"/>
+    <text x="553" y="160">Tokens in / out</text>
+    <text x="553" y="188" font-size="20" font-weight="600" fill="#111827">612k / 51k</text>
+    <rect x="706" y="140" width="153" height="62" rx="8" fill="#ffffff" stroke="#e5e7eb"/>
+    <text x="718" y="160">Live sessions · agents</text>
+    <text x="718" y="188" font-size="20" font-weight="600" fill="#111827">3 · 5</text>
+    <rect x="871" y="140" width="153" height="62" rx="8" fill="#ffffff" stroke="#e5e7eb"/>
+    <text x="883" y="160">Cost rate</text>
+    <text x="883" y="188" font-size="20" font-weight="600" fill="#111827">$0.21/min</text>
+  </g>
+
+  <!-- Chart carousel -->
+  <rect x="376" y="216" width="648" height="236" rx="8" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="392" y="240" font-size="13" font-weight="600" fill="#111827">Cost per minute (USD)</text>
+  <text x="550" y="240" font-size="11" fill="#6b7280">last 60 min · 2-min buckets</text>
+  <!-- chart picker pills -->
+  <g font-size="11">
+    <rect x="392" y="250" width="44" height="20" rx="4" fill="#eff6ff" stroke="#93c5fd"/>
+    <text x="402" y="264" fill="#1d4ed8">Cost</text>
+    <rect x="440" y="250" width="54" height="20" rx="4" fill="#ffffff" stroke="#e5e7eb"/>
+    <text x="448" y="264" fill="#374151">Tokens</text>
+    <rect x="498" y="250" width="92" height="20" rx="4" fill="#ffffff" stroke="#e5e7eb"/>
+    <text x="506" y="264" fill="#374151">Calls by model</text>
+    <rect x="594" y="250" width="70" height="20" rx="4" fill="#ffffff" stroke="#e5e7eb"/>
+    <text x="602" y="264" fill="#374151">Tool calls</text>
+    <rect x="668" y="250" width="80" height="20" rx="4" fill="#ffffff" stroke="#e5e7eb"/>
+    <text x="676" y="264" fill="#374151">LLM latency</text>
+    <rect x="752" y="250" width="72" height="20" rx="4" fill="#ffffff" stroke="#e5e7eb"/>
+    <text x="760" y="264" fill="#374151">API errors</text>
+  </g>
+  <!-- arrows -->
+  <rect x="954" y="226" width="26" height="24" rx="4" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="962" y="243" font-size="14" fill="#374151">‹</text>
+  <rect x="984" y="226" width="26" height="24" rx="4" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="993" y="243" font-size="14" fill="#374151">›</text>
+  <!-- axes -->
+  <line x1="420" y1="420" x2="1004" y2="420" stroke="#d1d5db"/>
+  <line x1="420" y1="290" x2="1004" y2="290" stroke="#f3f4f6"/>
+  <line x1="420" y1="333" x2="1004" y2="333" stroke="#f3f4f6"/>
+  <line x1="420" y1="376" x2="1004" y2="376" stroke="#f3f4f6"/>
+  <text x="414" y="294" font-size="10" fill="#9ca3af" text-anchor="end">0.40</text>
+  <text x="414" y="337" font-size="10" fill="#9ca3af" text-anchor="end">0.27</text>
+  <text x="414" y="380" font-size="10" fill="#9ca3af" text-anchor="end">0.13</text>
+  <text x="414" y="424" font-size="10" fill="#9ca3af" text-anchor="end">0</text>
+  <!-- bars: stacked by team (blue = LogHub Demo, teal = personal) -->
+  <g fill="#3b82f6">
+    <rect x="426" y="412" width="20" height="8"/>
+    <rect x="455" y="408" width="20" height="12"/>
+    <rect x="484" y="414" width="20" height="6"/>
+    <rect x="513" y="402" width="20" height="18"/>
+    <rect x="542" y="398" width="20" height="22"/>
+    <rect x="571" y="406" width="20" height="14"/>
+    <rect x="600" y="394" width="20" height="26"/>
+    <rect x="629" y="384" width="20" height="36"/>
+    <rect x="658" y="390" width="20" height="30"/>
+    <rect x="687" y="396" width="20" height="24"/>
+    <rect x="716" y="378" width="20" height="42"/>
+    <rect x="745" y="368" width="20" height="52"/>
+    <rect x="774" y="372" width="20" height="48"/>
+    <rect x="803" y="386" width="20" height="34"/>
+    <rect x="832" y="382" width="20" height="38"/>
+    <rect x="861" y="362" width="20" height="58"/>
+    <rect x="890" y="356" width="20" height="64"/>
+    <rect x="919" y="366" width="20" height="54"/>
+    <rect x="948" y="348" width="20" height="72"/>
+    <rect x="977" y="338" width="20" height="82"/>
+  </g>
+  <g fill="#14b8a6">
+    <rect x="600" y="388" width="20" height="6"/>
+    <rect x="629" y="378" width="20" height="6"/>
+    <rect x="716" y="370" width="20" height="8"/>
+    <rect x="745" y="356" width="20" height="12"/>
+    <rect x="774" y="362" width="20" height="10"/>
+    <rect x="861" y="346" width="20" height="16"/>
+    <rect x="890" y="336" width="20" height="20"/>
+    <rect x="919" y="350" width="20" height="16"/>
+    <rect x="948" y="326" width="20" height="22"/>
+    <rect x="977" y="312" width="20" height="26"/>
+  </g>
+  <text x="426" y="434" font-size="10" fill="#9ca3af">13:30</text>
+  <text x="700" y="434" font-size="10" fill="#9ca3af">14:00</text>
+  <text x="972" y="434" font-size="10" fill="#9ca3af">now</text>
+  <!-- legend + page dots -->
+  <rect x="392" y="440" width="8" height="8" fill="#3b82f6"/>
+  <text x="404" y="448" font-size="10" fill="#6b7280">LogHub Demo</text>
+  <rect x="476" y="440" width="8" height="8" fill="#14b8a6"/>
+  <text x="488" y="448" font-size="10" fill="#6b7280">No team</text>
+  <circle cx="680" cy="444" r="3.5" fill="#2563eb"/>
+  <circle cx="692" cy="444" r="3" fill="#d1d5db"/>
+  <circle cx="704" cy="444" r="3" fill="#d1d5db"/>
+  <circle cx="716" cy="444" r="3" fill="#d1d5db"/>
+  <circle cx="728" cy="444" r="3" fill="#d1d5db"/>
+  <circle cx="740" cy="444" r="3" fill="#d1d5db"/>
+  <text x="1008" y="448" font-size="10" fill="#9ca3af" text-anchor="end">1 / 6</text>
+
+  <!-- Breakdown table -->
+  <text x="376" y="480" font-size="13" font-weight="600" fill="#111827">Live breakdown</text>
+  <text x="484" y="480" font-size="11" fill="#6b7280">click a row for details</text>
+  <rect x="376" y="490" width="648" height="26" fill="#f9fafb" stroke="#e5e7eb"/>
+  <g font-size="11" font-weight="600" fill="#6b7280">
+    <text x="386" y="507">Name</text>
+    <text x="680" y="507" text-anchor="end">Cost</text>
+    <text x="790" y="507" text-anchor="end">Tokens in / out</text>
+    <text x="864" y="507" text-anchor="end">Cache read</text>
+    <text x="930" y="507" text-anchor="end">Running</text>
+    <text x="1014" y="507" text-anchor="end">Last activity</text>
+  </g>
+  <g font-size="12" fill="#111827">
+    <!-- r1 -->
+    <line x1="376" y1="544" x2="1024" y2="544" stroke="#f3f4f6"/>
+    <text x="386" y="535" fill="#6b7280">▾</text>
+    <text x="400" y="535" font-weight="600">👥 LogHub Demo</text>
+    <text x="680" y="535" text-anchor="end">$3.10</text>
+    <text x="790" y="535" text-anchor="end">412k / 38k</text>
+    <text x="864" y="535" text-anchor="end">1.2M</text>
+    <text x="930" y="535" text-anchor="end">47 m</text>
+    <text x="1014" y="535" text-anchor="end" fill="#6b7280">2 s ago</text>
+    <!-- r2 -->
+    <line x1="376" y1="572" x2="1024" y2="572" stroke="#f3f4f6"/>
+    <text x="400" y="563" fill="#6b7280">▾</text>
+    <text x="414" y="563">▣ DataArt/artisyn-log-hub</text>
+    <text x="680" y="563" text-anchor="end">$2.64</text>
+    <text x="790" y="563" text-anchor="end">350k / 31k</text>
+    <text x="864" y="563" text-anchor="end">1.0M</text>
+    <text x="930" y="563" text-anchor="end">47 m</text>
+    <text x="1014" y="563" text-anchor="end" fill="#6b7280">2 s ago</text>
+    <!-- r3 selected session -->
+    <rect x="377" y="573" width="646" height="27" fill="#eff6ff"/>
+    <rect x="376" y="573" width="3" height="27" fill="#2563eb"/>
+    <text x="414" y="591" fill="#6b7280">▾</text>
+    <circle cx="432" cy="587" r="3.5" fill="#dc2626"/>
+    <text x="440" y="591">Fix OTEL merge for sub-agents</text>
+    <text x="620" y="591" font-size="11" fill="#2563eb">↗</text>
+    <text x="680" y="591" text-anchor="end">$1.92</text>
+    <text x="790" y="591" text-anchor="end">280k / 24k</text>
+    <text x="864" y="591" text-anchor="end">810k</text>
+    <text x="930" y="591" text-anchor="end">41 m</text>
+    <text x="1014" y="591" text-anchor="end" fill="#6b7280">2 s ago</text>
+    <!-- r4 -->
+    <line x1="376" y1="628" x2="1024" y2="628" stroke="#f3f4f6"/>
+    <text x="446" y="619" fill="#374151">◆ main</text>
+    <text x="510" y="619" font-size="10" fill="#6b7280">opus · 38 calls</text>
+    <text x="680" y="619" text-anchor="end">$1.40</text>
+    <text x="790" y="619" text-anchor="end">210k / 18k</text>
+    <text x="864" y="619" text-anchor="end">620k</text>
+    <text x="930" y="619" text-anchor="end">41 m</text>
+    <text x="1014" y="619" text-anchor="end" fill="#6b7280">2 s ago</text>
+    <!-- r5 -->
+    <line x1="376" y1="656" x2="1024" y2="656" stroke="#f3f4f6"/>
+    <text x="446" y="647" fill="#374151">◆ Explore</text>
+    <text x="510" y="647" font-size="10" fill="#6b7280">sonnet · 14 calls</text>
+    <text x="680" y="647" text-anchor="end">$0.52</text>
+    <text x="790" y="647" text-anchor="end">70k / 6k</text>
+    <text x="864" y="647" text-anchor="end">190k</text>
+    <text x="930" y="647" text-anchor="end">6 m</text>
+    <text x="1014" y="647" text-anchor="end" fill="#6b7280">9 s ago</text>
+    <!-- r6 -->
+    <line x1="376" y1="684" x2="1024" y2="684" stroke="#f3f4f6"/>
+    <text x="414" y="675" fill="#6b7280">▸</text>
+    <circle cx="432" cy="671" r="3.5" fill="#dc2626"/>
+    <text x="440" y="675">Add live view to header</text>
+    <text x="680" y="675" text-anchor="end">$0.72</text>
+    <text x="790" y="675" text-anchor="end">70k / 7k</text>
+    <text x="864" y="675" text-anchor="end">200k</text>
+    <text x="930" y="675" text-anchor="end">12 m</text>
+    <text x="1014" y="675" text-anchor="end" fill="#6b7280">31 s ago</text>
+    <!-- r7 -->
+    <line x1="376" y1="712" x2="1024" y2="712" stroke="#f3f4f6"/>
+    <text x="400" y="703" fill="#6b7280">▸</text>
+    <text x="414" y="703">▣ _ADLC_DataArt/proto.skills</text>
+    <text x="680" y="703" text-anchor="end">$0.46</text>
+    <text x="790" y="703" text-anchor="end">62k / 7k</text>
+    <text x="864" y="703" text-anchor="end">180k</text>
+    <text x="930" y="703" text-anchor="end">9 m</text>
+    <text x="1014" y="703" text-anchor="end" fill="#6b7280">1 m ago</text>
+    <!-- r8 -->
+    <line x1="376" y1="740" x2="1024" y2="740" stroke="#f3f4f6"/>
+    <text x="386" y="731" fill="#6b7280">▾</text>
+    <text x="400" y="731" font-weight="600">👤 No team (personal)</text>
+    <text x="680" y="731" text-anchor="end">$1.72</text>
+    <text x="790" y="731" text-anchor="end">200k / 13k</text>
+    <text x="864" y="731" text-anchor="end">540k</text>
+    <text x="930" y="731" text-anchor="end">22 m</text>
+    <text x="1014" y="731" text-anchor="end" fill="#6b7280">5 s ago</text>
+    <!-- r9 -->
+    <line x1="376" y1="768" x2="1024" y2="768" stroke="#f3f4f6"/>
+    <text x="400" y="759" fill="#6b7280">▸</text>
+    <text x="414" y="759">▣ denistsyplakov/at-scanner</text>
+    <text x="680" y="759" text-anchor="end">$1.72</text>
+    <text x="790" y="759" text-anchor="end">200k / 13k</text>
+    <text x="864" y="759" text-anchor="end">540k</text>
+    <text x="930" y="759" text-anchor="end">22 m</text>
+    <text x="1014" y="759" text-anchor="end" fill="#6b7280">5 s ago</text>
+  </g>
+  <text x="376" y="792" font-size="11" fill="#9ca3af">Parent totals count each live root session once, so a team total can be less than the sum of its repos.</text>
+  <text x="376" y="808" font-size="11" fill="#9ca3af">↗ = session is stored and visible to you: opens its session page.</text>
+
+  <!-- RIGHT: details panel -->
+  <line x1="1048" y1="97" x2="1048" y2="855" stroke="#e5e7eb"/>
+  <text x="1064" y="122" font-size="11" font-weight="600" fill="#6b7280" letter-spacing="0.5">SESSION DETAILS</text>
+  <text x="1348" y="123" font-size="14" fill="#6b7280">✕</text>
+  <circle cx="1068" cy="143" r="4" fill="#dc2626"/>
+  <text x="1078" y="148" font-size="14" font-weight="600" fill="#111827">Fix OTEL merge for sub-agents</text>
+  <text x="1064" y="168" font-size="11" fill="#6b7280">DataArt/artisyn-log-hub · LogHub Demo</text>
+  <rect x="1064" y="180" width="128" height="28" rx="6" fill="#2563eb"/>
+  <text x="1078" y="199" font-size="12" font-weight="600" fill="#ffffff">Open session →</text>
+
+  <g font-size="12">
+    <text x="1064" y="234" fill="#6b7280">User</text>
+    <text x="1352" y="234" fill="#111827" text-anchor="end">dt@dataart.com</text>
+    <text x="1064" y="256" fill="#6b7280">Started</text>
+    <text x="1352" y="256" fill="#111827" text-anchor="end">13:52 (41 m)</text>
+    <text x="1064" y="278" fill="#6b7280">Models</text>
+    <text x="1352" y="278" fill="#111827" text-anchor="end">opus-4.x, sonnet-4.x</text>
+    <text x="1064" y="300" fill="#6b7280">Claude Code</text>
+    <text x="1352" y="300" fill="#111827" text-anchor="end">2.1.x</text>
+    <text x="1064" y="322" fill="#6b7280">Cost</text>
+    <text x="1352" y="322" fill="#111827" text-anchor="end">$1.92</text>
+    <text x="1064" y="344" fill="#6b7280">Tokens in / out</text>
+    <text x="1352" y="344" fill="#111827" text-anchor="end">280k / 24k</text>
+    <text x="1064" y="366" fill="#6b7280">Cache read / write</text>
+    <text x="1352" y="366" fill="#111827" text-anchor="end">810k / 64k</text>
+    <text x="1064" y="388" fill="#6b7280">API calls · errors</text>
+    <text x="1352" y="388" fill="#111827" text-anchor="end">52 · 1</text>
+    <text x="1064" y="410" fill="#6b7280">LLM latency p50 / p95</text>
+    <text x="1352" y="410" fill="#111827" text-anchor="end">4.1 s / 11.8 s</text>
+  </g>
+  <line x1="1064" y1="424" x2="1352" y2="424" stroke="#f3f4f6"/>
+
+  <text x="1064" y="446" font-size="11" font-weight="600" fill="#6b7280" letter-spacing="0.5">AGENTS</text>
+  <g font-size="12" fill="#111827">
+    <text x="1064" y="468">◆ main</text>
+    <rect x="1150" y="460" width="140" height="8" rx="2" fill="#f3f4f6"/>
+    <rect x="1150" y="460" width="102" height="8" rx="2" fill="#3b82f6"/>
+    <text x="1352" y="468" text-anchor="end">$1.40</text>
+    <text x="1064" y="490">◆ Explore</text>
+    <rect x="1150" y="482" width="140" height="8" rx="2" fill="#f3f4f6"/>
+    <rect x="1150" y="482" width="38" height="8" rx="2" fill="#3b82f6"/>
+    <text x="1352" y="490" text-anchor="end">$0.52</text>
+  </g>
+  <line x1="1064" y1="504" x2="1352" y2="504" stroke="#f3f4f6"/>
+
+  <text x="1064" y="526" font-size="11" font-weight="600" fill="#6b7280" letter-spacing="0.5">TOP TOOLS</text>
+  <g font-size="12" fill="#111827">
+    <text x="1064" y="548">Read</text><text x="1352" y="548" text-anchor="end">41</text>
+    <text x="1064" y="570">Edit</text><text x="1352" y="570" text-anchor="end">17</text>
+    <text x="1064" y="592">Bash</text><text x="1352" y="592" text-anchor="end">12 · 1 failed</text>
+    <text x="1064" y="614">mcp: playwright</text><text x="1352" y="614" text-anchor="end">6</text>
+  </g>
+  <line x1="1064" y1="628" x2="1352" y2="628" stroke="#f3f4f6"/>
+
+  <text x="1064" y="650" font-size="11" font-weight="600" fill="#6b7280" letter-spacing="0.5">LATEST EVENTS</text>
+  <g font-size="11">
+    <text x="1064" y="672" fill="#6b7280">14:33:12</text><text x="1120" y="672" fill="#111827">api_request · opus · $0.06</text>
+    <text x="1064" y="692" fill="#6b7280">14:33:09</text><text x="1120" y="692" fill="#111827">tool_result · Edit · ok</text>
+    <text x="1064" y="712" fill="#6b7280">14:32:58</text><text x="1120" y="712" fill="#b91c1c">api_error · 529 overloaded</text>
+    <text x="1064" y="732" fill="#6b7280">14:32:41</text><text x="1120" y="732" fill="#111827">user_prompt · (masked)</text>
+  </g>
+
+  <!-- annotations outside modal -->
+  <text x="72" y="880" font-size="12" fill="#ffffff">Modal = 90% × 90% of viewport (FR-2) · left: live tree, Home selected by default (FR-3/4) · middle: live view of selected node with chart carousel + breakdown (FR-5) · right: details panel (FR-9)</text>
+</svg>

@@ -68,6 +68,8 @@ export interface OtelKpiTileProps {
   hint: string;
   value: ReactNode;
   secondary?: ReactNode;
+  /** A small chip beside the label (2026-11-03 otel-cost-attribution: the session `plan:` chip). */
+  chip?: ReactNode;
   change?: OtelKpiChange | null;
   sparkline?: readonly number[];
   /** Amber outline while the value just changed (live highlight). */
@@ -81,6 +83,7 @@ export function OtelKpiTile({
   hint,
   value,
   secondary,
+  chip,
   change,
   sparkline,
   highlighted,
@@ -97,7 +100,14 @@ export function OtelKpiTile({
       data-testid={testId}
     >
       <div className="flex items-start justify-between gap-2">
-        <TileLabel label={label} hint={hint} />
+        {chip ? (
+          <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+            <TileLabel label={label} hint={hint} />
+            {chip}
+          </div>
+        ) : (
+          <TileLabel label={label} hint={hint} />
+        )}
         {change && (
           <span
             className="shrink-0 rounded bg-muted px-1.5 py-0.5 text-[10px] text-muted-foreground"

@@ -2,6 +2,7 @@ import { sql, type SQL } from 'drizzle-orm';
 import type { DrizzleDb } from '../database/database.module';
 import {
   resolveSessionTotalCost,
+  subagentOtelCostSql,
   unpricedModelList,
   utilityCostsCte,
 } from './otel-cost.sql';
@@ -19,17 +20,24 @@ import { descendantSessionsCte } from './session-tree.sql';
  */
 
 /**
- * Three CTEs (no `WITH RECURSIVE`, no trailing comma) over the given root ids:
+ * Four CTEs (no `WITH RECURSIVE`, no trailing comma) over the given root ids:
  *
+ * - `tree_subagent_rows(root_id, stats_session_id, cost, model_id, otel_cost)` — one row per
+ *   descendant (depth > 0) that has a `claude` / `claude-subagent` transcript; an OTEL-only
+ *   `session_stats` row is not a sub-agent. `otel_cost` is {@link subagentOtelCostSql}
+ *   (non-null only for an old Claude Code sub-agent with OTEL calls; FR-6 of
+ *   2026-11-03 otel-cost-attribution).
  * - `tree_subagent_costs(session_row_id, subagent_cost, subagent_count,
- *   subagent_pricing_missing, subagent_unpriced_models)` — the descendants (depth > 0) that
- *   have a `claude` / `claude-subagent` transcript; an OTEL-only `session_stats` row is not a
- *   sub-agent. A sub-agent is unpriced when its `session_costs` row has a NULL cost for a
+ *   subagent_pricing_missing, subagent_unpriced_models, subagent_cost_from_otel)` — the
+ *   per-root aggregate of those rows with the `selectSubagentCost` rule: a sub-agent's cost
+ *   is `GREATEST(transcript, otel)` when `otel_cost` is set, the transcript cost otherwise.
+ *   A sub-agent is unpriced when it has neither an OTEL cost nor a transcript cost for a
  *   named model (a sub-agent without a model has no tokens to price); `subagent_count`
- *   counts those with a `session_stats` row.
+ *   counts those with a `session_stats` row; `subagent_cost_from_otel` says whether some
+ *   OTEL cost exceeded its transcript cost.
  * - `utility_costs` — {@link utilityCostsCte}.
  * - `tree_costs(session_row_id, main_cost, main_model, subagent_cost, subagent_count,
- *   subagent_pricing_missing, subagent_unpriced_models, utility_cost,
+ *   subagent_pricing_missing, subagent_unpriced_models, subagent_cost_from_otel, utility_cost,
  *   utility_pricing_missing, utility_unpriced_models)` — one row per root id.
  *   `main_cost` is NULL when the root is unpriced or has no `session_costs` row;
  *   `main_model` is the stored model id (snapshot suffix stripped).
@@ -37,18 +45,18 @@ import { descendantSessionsCte } from './session-tree.sql';
  * Requires `descendantSessionsCte(rootIdsArray)` earlier in the same `WITH RECURSIVE`.
  */
 export function treeCostCtes(rootIdsArray: SQL): SQL {
-  return sql`tree_subagent_costs AS (
+  return sql`tree_subagent_rows AS (
     SELECT
-      ds.root_id AS session_row_id,
-      COALESCE(SUM(sub_sc.cost), 0.0)::float AS subagent_cost,
-      COUNT(sub_ss.session_id) AS subagent_count,
-      COALESCE(BOOL_OR(sub_sc.cost IS NULL AND sub_sc.model_id IS NOT NULL), false)
-        AS subagent_pricing_missing,
-      COALESCE(
-        ARRAY_AGG(DISTINCT sub_sc.model_id::text)
-          FILTER (WHERE sub_sc.cost IS NULL AND sub_sc.model_id IS NOT NULL),
-        '{}'::text[]
-      ) AS subagent_unpriced_models
+      ds.root_id,
+      sub_ss.session_id AS stats_session_id,
+      sub_sc.cost::float AS cost,
+      sub_sc.model_id,
+      ${subagentOtelCostSql({
+        claudeVersion: sql`sub_ss.claude_version`,
+        claudeVersionOtel: sql`sub_ss.claude_version_otel`,
+        subSessionId: sql`ds.session_id`,
+        rootRowId: sql`ds.root_id`,
+      })} AS otel_cost
     FROM descendant_sessions ds
     LEFT JOIN session_stats sub_ss ON sub_ss.session_id = ds.id
     LEFT JOIN session_costs sub_sc ON sub_sc.session_id = ds.id
@@ -57,7 +65,30 @@ export function treeCostCtes(rootIdsArray: SQL): SQL {
         SELECT 1 FROM logs tl
         WHERE tl.session_id = ds.id AND tl.log_type IN ('claude', 'claude-subagent')
       )
-    GROUP BY ds.root_id
+  ),
+  tree_subagent_costs AS (
+    SELECT
+      tsr.root_id AS session_row_id,
+      COALESCE(SUM(
+        CASE WHEN tsr.otel_cost IS NOT NULL
+          THEN GREATEST(COALESCE(tsr.cost, 0.0), tsr.otel_cost)
+          ELSE tsr.cost END
+      ), 0.0)::float AS subagent_cost,
+      COUNT(tsr.stats_session_id) AS subagent_count,
+      COALESCE(BOOL_OR(
+        tsr.otel_cost IS NULL AND tsr.cost IS NULL AND tsr.model_id IS NOT NULL
+      ), false) AS subagent_pricing_missing,
+      COALESCE(
+        ARRAY_AGG(DISTINCT tsr.model_id::text)
+          FILTER (WHERE tsr.otel_cost IS NULL AND tsr.cost IS NULL
+            AND tsr.model_id IS NOT NULL),
+        '{}'::text[]
+      ) AS subagent_unpriced_models,
+      COALESCE(BOOL_OR(
+        tsr.otel_cost IS NOT NULL AND tsr.otel_cost > COALESCE(tsr.cost, 0.0)
+      ), false) AS subagent_cost_from_otel
+    FROM tree_subagent_rows tsr
+    GROUP BY tsr.root_id
   ),
   ${utilityCostsCte(rootIdsArray)},
   tree_costs AS (
@@ -69,6 +100,7 @@ export function treeCostCtes(rootIdsArray: SQL): SQL {
       COALESCE(tsc.subagent_count, 0) AS subagent_count,
       COALESCE(tsc.subagent_pricing_missing, false) AS subagent_pricing_missing,
       COALESCE(tsc.subagent_unpriced_models, '{}'::text[]) AS subagent_unpriced_models,
+      COALESCE(tsc.subagent_cost_from_otel, false) AS subagent_cost_from_otel,
       COALESCE(uc.utility_cost, 0.0)::float AS utility_cost,
       COALESCE(uc.utility_pricing_missing, false) AS utility_pricing_missing,
       COALESCE(uc.utility_unpriced_models, '{}'::text[]) AS utility_unpriced_models
@@ -91,6 +123,8 @@ export interface TreeCostSqlRow {
   subagent_count: NumericLike;
   subagent_pricing_missing: boolean | null;
   subagent_unpriced_models: string[] | null;
+  /** Absent in a hand-built row; treated as false. */
+  subagent_cost_from_otel?: boolean | null;
   utility_cost: NumericLike;
   utility_pricing_missing: boolean | null;
   utility_unpriced_models: string[] | null;
@@ -99,7 +133,7 @@ export interface TreeCostSqlRow {
 /** The SELECT list that carries every `tree_costs` column out under its own name. */
 export const TREE_COST_COLUMNS_SQL = sql`tc.main_cost, tc.main_model, tc.subagent_cost,
   tc.subagent_count, tc.subagent_pricing_missing, tc.subagent_unpriced_models,
-  tc.utility_cost, tc.utility_pricing_missing, tc.utility_unpriced_models`;
+  tc.subagent_cost_from_otel, tc.utility_cost, tc.utility_pricing_missing, tc.utility_unpriced_models`;
 
 /** A session tree's cost, as every surface reports it. */
 export interface SessionTreeCost {
@@ -107,6 +141,8 @@ export interface SessionTreeCost {
   subagentCost: number;
   subagentCount: number;
   subagentPricingMissing: boolean;
+  /** Some sub-agent's cost was taken from OTEL (FR-6, `selectSubagentCost`). */
+  subagentCostFromOtel: boolean;
   utilityCost: number;
   utilityPricingMissing: boolean;
   /** {@link resolveSessionTotalCost} — complete, or null. */
@@ -161,6 +197,7 @@ export function readTreeCost(
     subagentCost,
     subagentCount: toNum(row?.subagent_count) ?? 0,
     subagentPricingMissing,
+    subagentCostFromOtel: row?.subagent_cost_from_otel === true,
     utilityCost,
     utilityPricingMissing,
     total,

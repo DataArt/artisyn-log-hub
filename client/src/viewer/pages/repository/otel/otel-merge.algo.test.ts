@@ -10,6 +10,7 @@ import type {
   OtelCallRow,
   OtelChangeKind,
   OtelSessionKpis,
+  OtelSessionPlan,
   OtelSpanRow,
   SessionOtelResponse,
 } from '../../../../models/repositories';
@@ -34,6 +35,8 @@ interface CompactState {
     tokens: string;
     kind: OtelChangeKind;
   }[];
+  /** The plan string stands for the whole account object; absent = an older server. */
+  plan?: string | null;
 }
 
 interface MergeInput {
@@ -109,8 +112,15 @@ function toKpis(value: number | null): OtelSessionKpis | null {
       };
 }
 
+/** The doc's `plan` string stands for an account object carrying only that plan. */
+function toPlan(value: string | null): OtelSessionPlan | null {
+  return value === null
+    ? null
+    : { plan: value, seatType: null, provider: null, customBaseUrl: null };
+}
+
 function toResponse(s: CompactState): SessionOtelResponse {
-  return {
+  const response: SessionOtelResponse = {
     cursor: 'v1.1',
     full: s.full,
     interval: '5m',
@@ -140,6 +150,8 @@ function toResponse(s: CompactState): SessionOtelResponse {
     kpis: toKpis(s.kpis),
     querySources: null,
   };
+  if (s.plan !== undefined) response.plan = toPlan(s.plan);
+  return response;
 }
 
 const sorted = (keys: ReadonlySet<string>) => [...keys].sort();
@@ -156,7 +168,10 @@ it.each(
   }
   const result = mergeOtelDelta(state, delta);
   const kpis = result.state.kpis;
+  const plan = result.state.plan;
   expect({
+    // 'absent' marks a state without the field (only an older server's responses).
+    plan: plan === undefined ? 'absent' : (plan?.plan ?? null),
     calls: result.state.calls.map((c) => `${c.callKey}:${c.costUsdMicros}`),
     spans: result.state.spans.map((s) => s.spanId),
     buckets: result.state.buckets.map(otelBucketKey),

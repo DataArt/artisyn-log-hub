@@ -21,40 +21,40 @@
   {
     "id": "SMD-03",
     "input": {
-      "prev": {"subagents": [{"sessionId": "agent-x", "parentSessionId": null, "workflowRunId": null, "logs": [{"uuid": "x1"}]}], "cursor": "k1"},
+      "prev": {"subagents": [{"sessionId": "agent-x", "parentSessionId": null, "workflowRunId": null, "agentDescription": null, "workflowPhase": null, "logs": [{"uuid": "x1"}]}], "cursor": "k1"},
       "delta": {"subagentAppends": [{"sessionId": "agent-x", "lines": [{"uuid": "x2"}]}]}
     },
-    "expected": {"subagents": [{"sessionId": "agent-x", "parentSessionId": null, "workflowRunId": null, "logs": [{"uuid": "x1"}, {"uuid": "x2"}]}]},
+    "expected": {"subagents": [{"sessionId": "agent-x", "parentSessionId": null, "workflowRunId": null, "agentDescription": null, "workflowPhase": null, "logs": [{"uuid": "x1"}, {"uuid": "x2"}]}]},
     "note": "Rule 3: agent-x is known, its append x2 goes after x1; linkage unchanged."
   },
   {
     "id": "SMD-04",
     "input": {
-      "prev": {"subagents": [{"sessionId": "agent-x", "parentSessionId": null, "workflowRunId": null, "logs": [{"uuid": "x1"}]}], "cursor": "k1"},
+      "prev": {"subagents": [{"sessionId": "agent-x", "parentSessionId": null, "workflowRunId": null, "agentDescription": null, "workflowPhase": null, "logs": [{"uuid": "x1"}]}], "cursor": "k1"},
       "delta": {"newSubagents": [{"sessionId": "agent-y", "parentSessionId": "agent-x", "workflowRunId": "wf-1", "logs": [{"uuid": "y1"}, {"uuid": "y2"}]}]}
     },
     "expected": {"subagents": [
-      {"sessionId": "agent-x", "parentSessionId": null, "workflowRunId": null, "logs": [{"uuid": "x1"}]},
-      {"sessionId": "agent-y", "parentSessionId": "agent-x", "workflowRunId": "wf-1", "logs": [{"uuid": "y1"}, {"uuid": "y2"}]}
+      {"sessionId": "agent-x", "parentSessionId": null, "workflowRunId": null, "agentDescription": null, "workflowPhase": null, "logs": [{"uuid": "x1"}]},
+      {"sessionId": "agent-y", "parentSessionId": "agent-x", "workflowRunId": "wf-1", "agentDescription": null, "workflowPhase": null, "logs": [{"uuid": "y1"}, {"uuid": "y2"}]}
     ]},
     "note": "Rule 4: agent-y is not in the state, so it is added after the known ones with its linkage (parent agent-x, run wf-1) and full lines."
   },
   {
     "id": "SMD-05",
     "input": {
-      "prev": {"subagents": [{"sessionId": "agent-x", "parentSessionId": null, "workflowRunId": null, "logs": [{"uuid": "x1"}, {"uuid": "x2"}]}], "cursor": "k1"},
+      "prev": {"subagents": [{"sessionId": "agent-x", "parentSessionId": null, "workflowRunId": null, "agentDescription": null, "workflowPhase": null, "logs": [{"uuid": "x1"}, {"uuid": "x2"}]}], "cursor": "k1"},
       "delta": {"newSubagents": [{"sessionId": "agent-x", "parentSessionId": null, "workflowRunId": null, "logs": [{"uuid": "x1"}, {"uuid": "x2"}, {"uuid": "x3"}]}]}
     },
-    "expected": {"subagents": [{"sessionId": "agent-x", "parentSessionId": null, "workflowRunId": null, "logs": [{"uuid": "x1"}, {"uuid": "x2"}, {"uuid": "x3"}]}]},
+    "expected": {"subagents": [{"sessionId": "agent-x", "parentSessionId": null, "workflowRunId": null, "agentDescription": null, "workflowPhase": null, "logs": [{"uuid": "x1"}, {"uuid": "x2"}, {"uuid": "x3"}]}]},
     "note": "Rule 4: a new entry for a known sub-agent carries its full lines and replaces it in place: x1, x2, x3, not x1, x2, x1, x2, x3."
   },
   {
     "id": "SMD-06",
     "input": {
-      "prev": {"subagents": [{"sessionId": "agent-x", "parentSessionId": null, "workflowRunId": null, "logs": [{"uuid": "x1"}]}], "cursor": "k1"},
+      "prev": {"subagents": [{"sessionId": "agent-x", "parentSessionId": null, "workflowRunId": null, "agentDescription": null, "workflowPhase": null, "logs": [{"uuid": "x1"}]}], "cursor": "k1"},
       "delta": {"subagentAppends": [{"sessionId": "agent-z", "lines": [{"uuid": "z5"}]}]}
     },
-    "expected": {"subagents": [{"sessionId": "agent-x", "parentSessionId": null, "workflowRunId": null, "logs": [{"uuid": "x1"}]}]},
+    "expected": {"subagents": [{"sessionId": "agent-x", "parentSessionId": null, "workflowRunId": null, "agentDescription": null, "workflowPhase": null, "logs": [{"uuid": "x1"}]}]},
     "note": "Rule 3: agent-z is not in the state and has no linkage, so its append is dropped; agent-x is unchanged."
   },
   {
@@ -96,10 +96,10 @@
   {
     "id": "SMD-11",
     "input": {
-      "prev": {"rootClaudeLines": [{"uuid": "c1"}, {"uuid": "c2"}], "subagents": [{"sessionId": "agent-x", "parentSessionId": null, "workflowRunId": null, "logs": [{"uuid": "x1"}]}], "stats": {"agent-x": 100}, "workflows": ["tu-1"], "cursor": ""},
+      "prev": {"rootClaudeLines": [{"uuid": "c1"}, {"uuid": "c2"}], "subagents": [{"sessionId": "agent-x", "parentSessionId": null, "workflowRunId": null, "agentDescription": null, "workflowPhase": null, "logs": [{"uuid": "x1"}]}], "stats": {"agent-x": 100}, "workflows": ["tu-1"], "cursor": ""},
       "delta": {"rootClaudeLines": [{"uuid": "c1"}, {"uuid": "c2"}, {"uuid": "c3"}], "newSubagents": [{"sessionId": "agent-x", "parentSessionId": null, "workflowRunId": null, "logs": [{"uuid": "x1"}]}], "workflows": null, "cursor": ""}
     },
-    "expected": {"rootClaudeLines": [{"uuid": "c1"}, {"uuid": "c2"}, {"uuid": "c3"}], "subagents": [{"sessionId": "agent-x", "parentSessionId": null, "workflowRunId": null, "logs": [{"uuid": "x1"}]}], "stats": {}, "workflows": [], "cursor": ""},
+    "expected": {"rootClaudeLines": [{"uuid": "c1"}, {"uuid": "c2"}, {"uuid": "c3"}], "subagents": [{"sessionId": "agent-x", "parentSessionId": null, "workflowRunId": null, "agentDescription": null, "workflowPhase": null, "logs": [{"uuid": "x1"}]}], "stats": {}, "workflows": [], "cursor": ""},
     "note": "Rule 1: prev.cursor is '' (the server could not issue a cursor), so the poll was sent without one and its delta is a full snapshot: it replaces the state. c1, c2 are not doubled; stats and workflows come only from the delta (none, null → [])."
   },
   {
@@ -108,9 +108,9 @@
       "rootArtisynLines": [{"uuid": "a1"}],
       "rootClaudeLines": [{"uuid": "c1"}, {"uuid": "c2"}],
       "subagents": [
-        {"sessionId": "agent-p", "parentSessionId": null, "workflowRunId": "wf-1", "logs": [{"uuid": "p1"}]},
-        {"sessionId": "agent-q", "parentSessionId": "agent-p", "workflowRunId": null, "logs": [{"uuid": "q1"}]},
-        {"sessionId": "agent-r", "parentSessionId": null, "workflowRunId": null, "logs": []}
+        {"sessionId": "agent-p", "parentSessionId": null, "workflowRunId": "wf-1", "agentDescription": null, "workflowPhase": null, "logs": [{"uuid": "p1"}]},
+        {"sessionId": "agent-q", "parentSessionId": "agent-p", "workflowRunId": null, "agentDescription": null, "workflowPhase": null, "logs": [{"uuid": "q1"}]},
+        {"sessionId": "agent-r", "parentSessionId": null, "workflowRunId": null, "agentDescription": null, "workflowPhase": null, "logs": []}
       ],
       "cursor": "k1"
     }},
@@ -118,8 +118,73 @@
       "main": [{"uuid": "a1"}, {"uuid": "c1"}, {"uuid": "c2"}],
       "subagentLogs": {"p": [{"uuid": "p1"}], "q": [{"uuid": "q1"}], "r": []},
       "agentParentMap": {"p": null, "q": "p", "r": null},
-      "workflowRunIds": {"p": "wf-1"}
+      "workflowRunIds": {"p": "wf-1"},
+      "agentDescriptions": {}
     },
-    "note": "Parse rules 1-4: main = artisyn ++ claude; every key and parent loses the agent- prefix; q's parent agent-p → p; only p has a workflowRunId."
+    "note": "Parse rules 1-4: main = artisyn ++ claude; every key and parent loses the agent- prefix; q's parent agent-p → p; only p has a workflowRunId. Parse rule 5: no sub-agent has a description, so agentDescriptions is empty."
+  },
+  {
+    "id": "SMD-13",
+    "input": {
+      "prev": {"cursor": "k1"},
+      "delta": {"newSubagents": [{"sessionId": "agent-w", "parentSessionId": null, "workflowRunId": "wf-1", "agentDescription": "Review billing", "workflowPhase": "Implement", "logs": [{"uuid": "w1"}]}]}
+    },
+    "expected": {"subagents": [{"sessionId": "agent-w", "parentSessionId": null, "workflowRunId": "wf-1", "agentDescription": "Review billing", "workflowPhase": "Implement", "logs": [{"uuid": "w1"}]}]},
+    "note": "Rule 4: the new agent-w carries its .meta.json description 'Review billing' and phase 'Implement' into the state unchanged. Dropping the meta of a new entry would give null for both."
+  },
+  {
+    "id": "SMD-14",
+    "input": {
+      "prev": {"cursor": "k1"},
+      "delta": {"newSubagents": [{"sessionId": "agent-w", "parentSessionId": null, "workflowRunId": null, "logs": [{"uuid": "w1"}]}]}
+    },
+    "expected": {"subagents": [{"sessionId": "agent-w", "parentSessionId": null, "workflowRunId": null, "agentDescription": null, "workflowPhase": null, "logs": [{"uuid": "w1"}]}]},
+    "note": "Rule 4: an old server sends a new entry without the two fields, so the state stores null for both (never undefined)."
+  },
+  {
+    "id": "SMD-15",
+    "input": {
+      "prev": {"subagents": [{"sessionId": "agent-x", "parentSessionId": null, "workflowRunId": null, "agentDescription": "Old label", "workflowPhase": null, "logs": [{"uuid": "x1"}]}], "cursor": "k1"},
+      "delta": {"subagentAppends": [{"sessionId": "agent-x", "lines": [{"uuid": "x2"}], "agentDescription": "New label", "workflowPhase": "Verify"}]}
+    },
+    "expected": {"subagents": [{"sessionId": "agent-x", "parentSessionId": null, "workflowRunId": null, "agentDescription": "New label", "workflowPhase": "Verify", "logs": [{"uuid": "x1"}, {"uuid": "x2"}]}]},
+    "note": "Rules 3 and 3a: x2 is appended after x1, and the append's non-null meta overwrites the stored values: 'Old label' → 'New label', phase null → 'Verify'. Ignoring append meta would keep 'Old label' and null."
+  },
+  {
+    "id": "SMD-16",
+    "input": {
+      "prev": {"subagents": [{"sessionId": "agent-x", "parentSessionId": null, "workflowRunId": null, "agentDescription": null, "workflowPhase": null, "logs": [{"uuid": "x1"}]}], "cursor": "k1"},
+      "delta": {"subagentAppends": [{"sessionId": "agent-x", "lines": [], "agentDescription": "Review billing", "workflowPhase": null}]}
+    },
+    "expected": {"subagents": [{"sessionId": "agent-x", "parentSessionId": null, "workflowRunId": null, "agentDescription": "Review billing", "workflowPhase": null, "logs": [{"uuid": "x1"}]}]},
+    "note": "Rule 3a: an append with no lines but a description changes only the meta: the description becomes 'Review billing', the lines stay [x1]. Skipping empty-line appends (the old client rule) would keep null."
+  },
+  {
+    "id": "SMD-17",
+    "input": {
+      "prev": {"subagents": [{"sessionId": "agent-x", "parentSessionId": null, "workflowRunId": null, "agentDescription": "Review billing", "workflowPhase": "Implement", "logs": [{"uuid": "x1"}]}], "cursor": "k1"},
+      "delta": {"subagentAppends": [{"sessionId": "agent-x", "lines": [{"uuid": "x2"}], "agentDescription": null, "workflowPhase": null}]}
+    },
+    "expected": {"subagents": [{"sessionId": "agent-x", "parentSessionId": null, "workflowRunId": null, "agentDescription": "Review billing", "workflowPhase": "Implement", "logs": [{"uuid": "x1"}, {"uuid": "x2"}]}]},
+    "note": "Rule 3a: null append meta never clears a stored value: x2 is appended, 'Review billing' and 'Implement' are kept. Copying the append's meta as-is would set both to null."
+  },
+  {
+    "id": "SMD-18",
+    "input": {"parse": {
+      "subagents": [
+        {"sessionId": "agent-p", "parentSessionId": null, "workflowRunId": null, "agentDescription": "  Review billing  ", "workflowPhase": "Implement", "logs": []},
+        {"sessionId": "agent-q", "parentSessionId": null, "workflowRunId": null, "agentDescription": "   ", "workflowPhase": null, "logs": []},
+        {"sessionId": "agent-r", "parentSessionId": null, "workflowRunId": null, "agentDescription": null, "workflowPhase": null, "logs": []}
+      ],
+      "cursor": "k1"
+    }},
+    "expected": {
+      "main": [],
+      "subagentLogs": {"p": [], "q": [], "r": []},
+      "agentParentMap": {"p": null, "q": null, "r": null},
+      "workflowRunIds": {},
+      "agentDescriptions": {"p": "Review billing"}
+    },
+    "note": "Parse rule 5: only p has a non-blank description, stored trimmed under the unprefixed key: 'Review billing'. q's whitespace-only description and r's null give no entry. Keeping blank descriptions would add q: '' (or '   ')."
   }
 ]

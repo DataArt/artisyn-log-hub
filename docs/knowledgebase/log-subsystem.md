@@ -1,11 +1,11 @@
 ---
 type: "Reference"
 title: "Server Log Subsystem"
-description: "The server's own operational logging (not telemetry/session logs): pino app and SQL loggers, daily file rotation, no built-in retention, the Admin Panel Error Logs tab and Logs Archive download."
+description: "The server's own operational logging (not telemetry/session logs): pino app and SQL loggers, daily file rotation, hourly retention sweep (days + size cap), the Admin Panel Error Logs tab and Logs Archive download."
 tags:
   - server
   - logging
-timestamp: "2026-11-03T00:00:00+04:00"
+timestamp: "2026-11-04T00:00:00+04:00"
 ---
 
 # Server Log Subsystem
@@ -42,8 +42,15 @@ appends `-i<N>` so parallel workers don't interleave writes into one file. A res
 re-forked into the same slot, so it keeps writing to the same `-i<N>` file rather than starting a new
 series. Empty/unset in local dev (single process) and in the cluster primary itself.
 
-**Retention: none.** No code anywhere deletes old `app-*.log`/`sql-*.log` files — they accumulate
-in `server/logs/` indefinitely until removed externally. See "Gotchas" below.
+**Retention:** `LogRetentionService` (`server/src/log-retention/`) sweeps `logs/` at bootstrap and
+then every `LOG_RETENTION_CHECK_INTERVAL_MS` (default 1 h), in every cluster worker (idempotent,
+`ENOENT` ignored). It keeps `LOG_RETENTION_DAYS` (default 5) days of `app-*` logs,
+`SQL_LOG_RETENTION_DAYS` (default 3) days of `sql-*` logs, and deletes the oldest until all of them
+fit `LOG_RETENTION_MAX_MB` (default 100); today's files are never deleted, other files in `logs/`
+are ignored. The exact rules are the algorithm doc
+[algorithms/log-retention.md](algorithms/log-retention.md). A file a worker still holds open on
+Windows (yesterday's, before that worker's first write of the new day) may fail to unlink — it is
+retried on the next tick.
 
 ## Admin Panel features built on top of these files
 
@@ -63,9 +70,8 @@ in `server/logs/` indefinitely until removed externally. See "Gotchas" below.
 
 ## Gotchas
 
-- **No day-based cleanup exists in code.** If you see stale documentation or assumptions about an
-  "N-day retention," verify against `app-logger.ts`/`sql-logger.ts` directly — there is no
-  `setInterval`/cron/`@Cron` anywhere in `server/src` that deletes log files.
+- **Retention is not size-based rotation.** A single day's file is never split or truncated; with a
+  very busy day the size cap can stay exceeded until that day is over.
 - **Logs are not persisted across container recreation.** `docker-compose.yml` mounts no volume
   for `server/logs/` — it lives in the container's writable layer only. A container restart
   (`restart: unless-stopped`) keeps the same filesystem, but recreating the container (rebuild/

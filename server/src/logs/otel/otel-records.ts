@@ -2,7 +2,9 @@ import { createHash } from 'crypto';
 import { maxVersion } from '../../common/semver';
 import {
   attributesOf,
+  cappedStringAttrOf,
   costMicrosOf,
+  nullableTokenCountOf,
   stringAttrOf,
   tokenCountOf,
 } from '../otel-chunk';
@@ -26,6 +28,15 @@ const CC_VERSION_MAX = 64;
 
 /** Width of the `otel_spans` text columns `name`, `request_id`, `agent_id`, `query_source`. */
 const SPAN_TEXT_MAX = 255;
+
+/** Width of `otel_calls.effort` / `speed` and of the `otel_session_state` plan / seat / provider. */
+const SHORT_TEXT_MAX = 64;
+
+/** Width of the `otel_calls` skill / plugin / agent / MCP name columns. */
+const NAME_TEXT_MAX = 255;
+
+/** Width of `otel_session_state.custom_base_url`. */
+const BASE_URL_MAX = 1024;
 
 /** Width of `otel_spans.context`. */
 const SPAN_CONTEXT_MAX = 32;
@@ -147,6 +158,17 @@ export interface ExtractedOtelCall {
   cacheReadTokens: number;
   cacheWriteTokens: number;
   costUsdMicros: bigint | null;
+  /** `cache_creation_5m_tokens`; null when not reported (older Claude Code). */
+  cacheWrite5mTokens: number | null;
+  /** `cache_creation_1h_tokens`; null when not reported. */
+  cacheWrite1hTokens: number | null;
+  effort: string | null;
+  speed: string | null;
+  skillName: string | null;
+  pluginName: string | null;
+  agentName: string | null;
+  mcpServerName: string | null;
+  mcpToolName: string | null;
 }
 
 /** Resource `service.version`, cut to the column width, or null. */
@@ -194,9 +216,150 @@ export function extractOtelCalls(lines: unknown[]): ExtractedOtelCall[] {
       cacheReadTokens: tokenCountOf(attrs, 'cache_read_tokens'),
       cacheWriteTokens: tokenCountOf(attrs, 'cache_creation_tokens'),
       costUsdMicros: costMicrosOf(attrs),
+      cacheWrite5mTokens: nullableTokenCountOf(
+        attrs,
+        'cache_creation_5m_tokens',
+      ),
+      cacheWrite1hTokens: nullableTokenCountOf(
+        attrs,
+        'cache_creation_1h_tokens',
+      ),
+      effort: cappedStringAttrOf(attrs, 'effort', SHORT_TEXT_MAX),
+      speed: cappedStringAttrOf(attrs, 'speed', SHORT_TEXT_MAX),
+      skillName: cappedStringAttrOf(attrs, 'skill.name', NAME_TEXT_MAX),
+      pluginName: cappedStringAttrOf(attrs, 'plugin.name', NAME_TEXT_MAX),
+      agentName: cappedStringAttrOf(attrs, 'agent.name', NAME_TEXT_MAX),
+      mcpServerName: cappedStringAttrOf(
+        attrs,
+        'mcp_server.name',
+        NAME_TEXT_MAX,
+      ),
+      mcpToolName: cappedStringAttrOf(attrs, 'mcp_tool.name', NAME_TEXT_MAX),
     });
   }
   return [...byKey.values()];
+}
+
+/**
+ * `ANTHROPIC_BASE_URL` as Claude Code reports it, reduced to `protocol//host[:port]pathname`
+ * (DD-6): userinfo, query and fragment are dropped, a lone trailing `/` path too, and the result
+ * is cut to the column width. Empty, non-string or unparsable → null.
+ */
+export function sanitizeOtelBaseUrl(raw: unknown): string | null {
+  if (typeof raw !== 'string' || raw.trim() === '') return null;
+  let url: URL;
+  try {
+    url = new URL(raw.trim());
+  } catch {
+    return null;
+  }
+  if (!url.host) return null;
+  const path = url.pathname === '/' ? '' : url.pathname;
+  return `${url.protocol}//${url.host}${path}`.slice(0, BASE_URL_MAX);
+}
+
+/** The account fields Claude Code reports on its records (DD-5), with the time they were seen. */
+export interface ExtractedOtelAccount {
+  plan: string | null;
+  seatType: string | null;
+  provider: string | null;
+  customBaseUrl: string | null;
+  /** Greatest event time among the records that carried any field. */
+  eventAt: Date;
+}
+
+type AccountField = 'plan' | 'seatType' | 'provider' | 'customBaseUrl';
+
+const ACCOUNT_KEYS: ReadonlyArray<{
+  field: AccountField;
+  key: string;
+  read: (raw: unknown) => string | null;
+}> = [
+  { field: 'plan', key: 'anthropic.plan', read: shortText },
+  { field: 'seatType', key: 'anthropic.seat_type', read: shortText },
+  { field: 'provider', key: 'anthropic.provider', read: shortText },
+  {
+    field: 'customBaseUrl',
+    key: 'anthropic.custom_base_url',
+    read: sanitizeOtelBaseUrl,
+  },
+];
+
+function shortText(raw: unknown): string | null {
+  if (typeof raw !== 'string' || raw === '') return null;
+  return raw.slice(0, SHORT_TEXT_MAX);
+}
+
+/** A resource attribute by key (the receiver flattens the resource to plain values). */
+function resourceAttrOf(resource: unknown, key: string): unknown {
+  if (!resource || typeof resource !== 'object') return undefined;
+  return (resource as Record<string, unknown>)[key];
+}
+
+/**
+ * Plan, seat type, provider and custom base URL of the lines (DD-5), or null when no record
+ * carries any of them. Reads `logs` `claude_code.api_request` records and `spans` lines: the
+ * record / span attribute first, then the line's resource. Each field keeps the non-null value of
+ * the record with the greatest event time; on a tie the later line wins. Lines without an event
+ * time are skipped.
+ */
+export function extractOtelAccount(
+  lines: unknown[],
+): ExtractedOtelAccount | null {
+  const best: Record<AccountField, { value: string; at: number } | null> = {
+    plan: null,
+    seatType: null,
+    provider: null,
+    customBaseUrl: null,
+  };
+  let eventAt: number | null = null;
+  for (const line of lines) {
+    const entry = asLine(line);
+    if (!entry) continue;
+    let attrOf: (key: string) => unknown;
+    // A span has no `timeUnixNano`; its start time stands in for it so a span is not dated by
+    // the later `receivedAt` and does not outrank an api_request record of the same moment.
+    let spanStartMs: number | null = null;
+    if (entry.signal === 'logs') {
+      const record = entry.record as
+        | { body?: { stringValue?: unknown } }
+        | undefined;
+      if (record?.body?.stringValue !== API_REQUEST_EVENT) continue;
+      const attrs = attributesOf(record);
+      attrOf = (key) => attrs.get(key);
+    } else if (entry.signal === 'spans') {
+      const span = entry.record as
+        | { attributes?: unknown; startTimeUnixNano?: unknown }
+        | undefined;
+      if (!span || typeof span !== 'object') continue;
+      const attrs = flattenSpanAttributes(span.attributes);
+      attrOf = (key) => attrs[key];
+      spanStartMs = nanosToMs(span.startTimeUnixNano);
+    } else {
+      continue;
+    }
+    const at = spanStartMs ?? resolveOtelEventTime(entry)?.getTime() ?? null;
+    if (at === null) continue;
+
+    let carried = false;
+    for (const { field, key, read } of ACCOUNT_KEYS) {
+      const value =
+        read(attrOf(key)) ?? read(resourceAttrOf(entry.resource, key));
+      if (value === null) continue;
+      carried = true;
+      const current = best[field];
+      if (!current || at >= current.at) best[field] = { value, at };
+    }
+    if (carried && (eventAt === null || at > eventAt)) eventAt = at;
+  }
+  if (eventAt === null) return null;
+  return {
+    plan: best.plan?.value ?? null,
+    seatType: best.seatType?.value ?? null,
+    provider: best.provider?.value ?? null,
+    customBaseUrl: best.customBaseUrl?.value ?? null,
+    eventAt: new Date(eventAt),
+  };
 }
 
 /** One OTLP span, as `otel_spans` stores it (before cost and rollup). */

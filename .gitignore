@@ -6,6 +6,8 @@ tmp
 /client/.ai_work_dir/
 /test-results/
 /docs/perftests/
+# Daily morning-check report pages (.claude/skills/morning-check), local only.
+/docs/morning-check/daily/
 /server/perf-tests/dist/
 server/perf-tests/*.js
 .claude/settings.local.json

@@ -12,6 +12,8 @@ import { ServeStaticModule } from '@nestjs/serve-static';
 import { AdminModule } from './admin/admin.module';
 import { AiToolVersionsModule } from './ai-tool-versions/ai-tool-versions.module';
 import { ModelPricingModule } from './model-pricing/model-pricing.module';
+import { LogHubReleaseModule } from './log-hub-release/log-hub-release.module';
+import { LogRetentionModule } from './log-retention/log-retention.module';
 import { ApiKeysModule } from './api-keys/api-keys.module';
 import { AuthModule } from './auth/auth.module';
 import { validateAuthStartupConfig } from './auth/config/auth-startup-validation';
@@ -112,6 +114,8 @@ function requireSessionSecret(): string {
     UserSettingsModule,
     AiToolVersionsModule,
     ModelPricingModule,
+    LogHubReleaseModule,
+    LogRetentionModule,
   ],
 })
 export class AppModule

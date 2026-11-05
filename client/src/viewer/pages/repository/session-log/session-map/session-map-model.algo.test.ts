@@ -100,6 +100,8 @@ type ModelInput =
       subagents: SessionMapSubagent[];
       stats: Record<string, { model: string; inputTokens: number }>;
       pricing: PriceSpec;
+      /** Unprefixed agent id -> description, added to the parse inputs' `agentDescriptions`. */
+      agentDescriptions?: Record<string, string>;
     }
   | { op: 'group'; agents: GroupAgentInput[]; workflows: RunSpec[] }
   | {
@@ -137,6 +139,8 @@ interface ModelExpected {
   state?: MapNodeState;
   counters?: Partial<MapCounters>;
   ids?: string[] | null;
+  /** Agent id -> node label; checked only when present. */
+  labels?: Record<string, string>;
 }
 
 /** Cost comparisons tolerate float rounding. */
@@ -295,13 +299,20 @@ it.each(rows)('$id', ({ input, expected }) => {
     }
     case 'model': {
       const pricing = pricingOf(input.pricing);
-      const inputs = toParseInputs({
+      const derived = toParseInputs({
         ...emptyMapState,
         rootClaudeLines: input.main,
         subagents: input.subagents,
         subagentStats: statsOf(input.stats),
         cursor: 'k',
       });
+      const inputs = {
+        ...derived,
+        agentDescriptions: new Map([
+          ...derived.agentDescriptions,
+          ...Object.entries(input.agentDescriptions ?? {}),
+        ]),
+      };
       const parsed = parseSessionLogs(inputs.main, {
         subagentStats: inputs.subagentStats,
         workflows: inputs.workflows,
@@ -320,6 +331,10 @@ it.each(rows)('$id', ({ input, expected }) => {
         Object.keys(agentCosts).sort(),
       );
       for (const a of model.agents) expectClose(a.cost, agentCosts[a.id]);
+      if (expected.labels)
+        expect(
+          Object.fromEntries(model.agents.map((a) => [a.id, a.label])),
+        ).toEqual(expected.labels);
       expectClose(model.treeCost, expected.treeCost);
       expect(model.sessionEnd).not.toBeNull();
       expectClose(

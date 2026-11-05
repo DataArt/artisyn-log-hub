@@ -22,7 +22,7 @@ that pins the image tag, and Docker pulls it.
 | Release notes | `scripts/ci/release-notes.js` — same doc |
 | VirusTotal scopes | `scripts/ci/virustotal-scan.js` (`scopeFor`) — same doc; see [CI Security Scans](ci-security-scans.md) |
 | Kit templates | `release-template/` (`INSTALL.md` → `README.md`, `docker-compose.yml`, `.env.example`, `install.sh`, `install.ps1`) |
-| Image build | repo-root `Dockerfile` (`ARG VERSION`, `ARG GIT_COMMIT` → `build-info.json`, see [System Info & Cluster](system-info-and-cluster.md)) |
+| Image build | repo-root `Dockerfile` (`ARG VERSION`, `ARG GIT_COMMIT` → `build-info.json`; `ARG GIT_BRANCH`, `ARG OFFICIAL_RELEASE` (+ `VERSION`) → `dist/build.origin.json`, which gates the admin new-release check; see [System Info & Cluster](system-info-and-cluster.md)) |
 
 ## Node.js version in CI
 
@@ -98,7 +98,7 @@ table-tested in `algorithms/release-version.md`.
 |---|---|
 | `plan` | Run state and version (above). |
 | `checks` | Calls `checks.yml`: client/server/tests typechecks, client/server/hook algorithm tests, build-script tests, and `db-state` (`npm run db:state -- --check` on a Postgres service: `docs/knowledgebase/db_state.sql` matches the migrations). A release is never built from a commit that fails them. |
-| `build` | Full mode only. One native runner per arch (`ubuntu-24.04`, `ubuntu-24.04-arm`; pinned, not `ubuntu-latest`), `docker/build-push-action` with `VERSION=<version>`, `GIT_COMMIT=<sha>`, `provenance: mode=max`, `sbom: true`, pushed **by digest only** (no tag). |
+| `build` | Full mode only. One native runner per arch (`ubuntu-24.04`, `ubuntu-24.04-arm`; pinned, not `ubuntu-latest`), `docker/build-push-action` with `VERSION=<version>`, `GIT_COMMIT=<sha>`, `GIT_BRANCH=<github.ref_name>`, `OFFICIAL_RELEASE=true` (the only build that marks an image as an official release), `provenance: mode=max`, `sbom: true`, pushed **by digest only** (no tag). |
 | `manifest` | Full mode only. Joins both digests into the staging index `IMAGE:sha-<commit>`. |
 | `kit` | Secret-free: `node scripts/release-kit.js --version <version> --commit <sha> --out …`, uploaded as artifact `release-kit`. |
 | `vt-scan` | VirusTotal on the zip, `install.sh`, `install.ps1` (scopes `release-zip`, `install-sh`, `install-ps1`). Report-only: no `VIRUS_TOTAL_KEY` → `skipped` rows; a failure or the 40 min timeout never blocks `publish`. |

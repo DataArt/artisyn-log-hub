@@ -105,6 +105,22 @@ test('@S-ADM-01 admin panel only for admins, tabs and deep links work @mode-a @m
     await expect(page).toHaveURL(/#\/main$/);
   });
 
+  await test.step('1b. UI (REGULAR): hovering the build label shows Branch / Version / Built / Official release / Commit, no undefined / null', async () => {
+    const info = (await (await api.get('/health/version')).json()) as { gitCommit: string };
+    const label = page.getByTestId('nav-build-label');
+    await expect(label).toBeVisible();
+    await label.hover();
+    const tooltip = page.getByTestId('nav-build-tooltip');
+    await expect(tooltip).toBeVisible();
+    const labels = ['Branch', 'Version', 'Built', 'Official release'];
+    // The Commit row is dropped when the build carries no commit ('unknown').
+    if (info.gitCommit !== 'unknown') labels.push('Commit');
+    for (const text of labels) await expect(tooltip.getByText(text, { exact: true }), text).toBeVisible();
+    expect(await tooltip.innerText()).not.toMatch(/\bundefined\b|\bnull\b/);
+    await page.keyboard.press('Escape');
+    await expect(tooltip).toHaveCount(0);
+  });
+
   await test.step('2. API: every admin route → 403 for REGULAR, 401 anonymously', async () => {
     const gets = [
       '/api/v1/admin/repos',
@@ -116,6 +132,7 @@ test('@S-ADM-01 admin panel only for admins, tabs and deep links work @mode-a @m
       '/api/v1/admin/upload-queue',
       '/api/v1/admin/upload-queue/stats',
       '/api/v1/admin/auth',
+      '/api/v1/admin/log-hub-release',
     ];
     for (const path of gets) {
       expect((await regular.api.get(path)).status(), `REGULAR GET ${path}`).toBe(403);
@@ -130,7 +147,7 @@ test('@S-ADM-01 admin panel only for admins, tabs and deep links work @mode-a @m
     expect((await admin.api.get('/api/v1/auth/me')).status()).toBe(200);
   });
 
-  await test.step('3. API: GET /admin/retention → 200 for a team owner, 403 for REGULAR', async () => {
+  await test.step('3. API: GET /admin/retention → 200 for a team owner, 403 for REGULAR; /admin/log-hub-release → 403 for a team owner', async () => {
     expect((await teamOwner.api.post('/api/v1/teams', { data: { name: `Adm1-${runId}` } })).status()).toBe(201);
     const res = await teamOwner.api.get('/api/v1/admin/retention');
     expect(res.status()).toBe(200);
@@ -138,6 +155,7 @@ test('@S-ADM-01 admin panel only for admins, tabs and deep links work @mode-a @m
     expect(typeof body.retentionDays).toBe('number');
     expect(Array.isArray(body.dailySeries)).toBe(true);
     expect((await regular.api.get('/api/v1/admin/retention')).status()).toBe(403);
+    expect((await teamOwner.api.get('/api/v1/admin/log-hub-release')).status()).toBe(403);
   });
 
   await test.step('4. UI (ADMIN): «Admin Panel» → #/admin with System Info active', async () => {
@@ -148,6 +166,60 @@ test('@S-ADM-01 admin panel only for admins, tabs and deep links work @mode-a @m
     await page.getByRole('button', { name: 'Admin Panel' }).click();
     await expect(page).toHaveURL(/#\/admin$/);
     await expect(tab(page, 'system-info')).toHaveAttribute('data-state', 'active');
+  });
+
+  await test.step('4b. UI: a newer release → ADMIN sees the left-nav dot and the banner on every tab; a team owner sees neither; after the upgrade both are gone', async () => {
+    const releaseUrl = 'https://github.com/DataArt/artisyn-log-hub/releases/tag/v999.0.0';
+    const { origin } = (await (await api.get('/health/version')).json()) as { origin: { version: string } };
+    const dot = page.getByTestId('admin-release-dot');
+    const banner = page.getByTestId('admin-new-release-banner');
+    try {
+      // The stand's scheduler is off (LOG_HUB_RELEASE_CHECK_ENABLED=false); the state is seeded.
+      await db.query(
+        `INSERT INTO log_hub_release_check (id, latest_tag, release_url, fetched_at)
+         VALUES (1, $1, $2, now())
+         ON CONFLICT (id) DO UPDATE SET latest_tag = EXCLUDED.latest_tag, release_url = EXCLUDED.release_url, fetched_at = EXCLUDED.fetched_at`,
+        ['v999.0.0', releaseUrl],
+      );
+      await page.reload();
+      await expect(dot).toBeVisible({ timeout: 15_000 });
+      await expect(banner).toBeVisible();
+      await expect(banner).toContainText('999.0.0');
+      await expect(banner.getByRole('link', { name: 'View release' })).toHaveAttribute('href', releaseUrl);
+
+      await tab(page, 'all-teams').click();
+      await expect(tab(page, 'all-teams')).toHaveAttribute('data-state', 'active');
+      await expect(dot).toBeVisible();
+      await expect(banner).toBeVisible();
+
+      await page.context().clearCookies();
+      await teamOwner.signIn(page);
+      await page.goto('/#/main');
+      await page.reload();
+      // A team owner has the «Admin Panel» entry, but no dot on it; the client AdminGuard sends
+      // them from /#/admin back to /#/main, so the banner never renders either.
+      await expect(page.getByRole('button', { name: 'Admin Panel' })).toBeVisible({ timeout: 15_000 });
+      await page.getByRole('button', { name: 'Admin Panel' }).click();
+      await expect(page).toHaveURL(/#\/main$/);
+      await expect(page.getByRole('button', { name: 'Admin Panel' })).toBeVisible();
+      await expect(dot).toHaveCount(0);
+      await expect(banner).toHaveCount(0);
+
+      await page.context().clearCookies();
+      await admin.signIn(page);
+      await db.query('UPDATE log_hub_release_check SET latest_tag = $1 WHERE id = 1', [`v${origin.version}`]);
+      await page.goto('/#/main');
+      await page.reload();
+      await page.getByRole('button', { name: 'Admin Panel' }).click();
+      await expect(page).toHaveURL(/#\/admin$/);
+      await expect(tab(page, 'system-info')).toHaveAttribute('data-state', 'active', { timeout: 15_000 });
+      const state = (await (await admin.api.get('/api/v1/admin/log-hub-release')).json()) as { updateAvailable: boolean };
+      expect(state.updateAvailable).toBe(false);
+      await expect(dot).toHaveCount(0);
+      await expect(banner).toHaveCount(0);
+    } finally {
+      await db.query('DELETE FROM log_hub_release_check WHERE id = 1');
+    }
   });
 
   await test.step('5. UI: all 9 tabs activate; no NaN / undefined / null on screen, no page errors', async () => {

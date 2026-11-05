@@ -137,6 +137,7 @@ const EMPTY_COST_BREAKDOWN: Readonly<CostBreakdown> = Object.freeze({
   subagentPricingMissing: false,
   unpricedModels: [],
   costExcludesUtilityCalls: false,
+  subagentCostFromOtel: false,
 });
 
 /**
@@ -711,6 +712,7 @@ export class RepositoriesController {
             subagentPricingMissing: tree.subagentPricingMissing,
             unpricedModels: tree.unpricedModels,
             costExcludesUtilityCalls: row.cost_excludes_utility_calls === true,
+            subagentCostFromOtel: tree.subagentCostFromOtel,
           },
           // 'unknown-model' only when some model of the tree has no price. A session
           // whose transcript carries no model at all has nothing to price, so its reason
@@ -1808,6 +1810,8 @@ export class RepositoriesController {
           subSessionId: schema.sessions.sessionId,
           parentSessionId: schema.sessions.parentSessionId,
           workflowRunId: schema.sessions.workflowRunId,
+          agentDescription: schema.sessions.agentDescription,
+          workflowPhase: schema.sessions.workflowPhase,
           bodyText: sql<string | null>`${schema.logs.body}::text`,
         })
         .from(schema.sessions)
@@ -1820,7 +1824,7 @@ export class RepositoriesController {
         )
         .where(inArray(schema.sessions.id, descendantIds))
         .orderBy(asc(schema.sessions.sessionId)),
-      selectSubagentStats(this.db, descendantIds),
+      selectSubagentStats(this.db, descendantIds, sessionRowId),
       // The root session's own productivity counters (`rootStats`), read from the
       // same `session_stats` row the server-side tree rollup sums for the root node,
       // with the same transcript guard as the descendant select above.
@@ -1852,6 +1856,8 @@ export class RepositoriesController {
       .map((r) => ({
         sessionId: r.subSessionId,
         parentSessionId: r.parentSessionId,
+        agentDescription: r.agentDescription ?? null,
+        workflowPhase: r.workflowPhase ?? null,
         logsText: r.bodyText!,
       }));
 
@@ -1997,7 +2003,7 @@ export class RepositoriesController {
     const subagentJson = subagents
       .map(
         (s) =>
-          `{"sessionId":${JSON.stringify(s.sessionId)},"parentSessionId":${JSON.stringify(s.parentSessionId)},"logs":${s.logsText}}`,
+          `{"sessionId":${JSON.stringify(s.sessionId)},"parentSessionId":${JSON.stringify(s.parentSessionId)},"agentDescription":${JSON.stringify(s.agentDescription)},"workflowPhase":${JSON.stringify(s.workflowPhase)},"logs":${s.logsText}}`,
       )
       .join(',');
     // `rootStats` (the root session's own counters, `null` when it has no
@@ -2026,6 +2032,8 @@ export class RepositoriesController {
             linesRemoved: r.linesRemoved,
             diffLinesCoveredCalls: r.diffLinesCoveredCalls,
             diffLinesTotalCalls: r.diffLinesTotalCalls,
+            // FR-6: OTEL cost of an old-CC sub-agent when above its transcript cost.
+            otelCostUsd: r.otelCostUsd,
           },
         ]),
       ),

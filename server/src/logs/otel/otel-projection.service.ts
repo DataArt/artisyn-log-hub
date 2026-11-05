@@ -512,6 +512,12 @@ export class OtelProjectionService implements OnModuleInit, OnModuleDestroy {
             sql`DELETE FROM otel_cost_buckets WHERE session_id = ${rootId}`,
           );
           await tx.execute(
+            sql`DELETE FROM otel_session_totals WHERE session_id = ${rootId}`,
+          );
+          await tx.execute(
+            sql`DELETE FROM otel_agent_totals WHERE session_id = ${rootId}`,
+          );
+          await tx.execute(
             sql`DELETE FROM otel_reclass_queue WHERE session_id = ${rootId}`,
           );
           return true;

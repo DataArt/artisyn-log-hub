@@ -114,9 +114,16 @@ When the workflow completes, its result is:
     { check: '<name>', id: '<id>', result: { status, findings, hardBlockerReason, summary } },
     ...
   ],
-  halted: { index, reason: 'hard-blocker' | 'no-result' | 'no-checks' | 'invalid-args-json' } | null,
+  noResult: [ { index, id, check } ],  // checks that returned nothing usable; the run went on past them
+  halted: { index, reason: 'hard-blocker' | 'no-checks' | 'invalid-args-json' } | null,
 }
 ```
+
+- For every entry in `noResult` (its `result` is `null`): before reporting it as failed, look up
+  that check's `{"type":"result",...}` line in the workflow's `journal.jsonl` (path in the
+  completion notice's diagnostics) — the agent may have reported fine and only the placeholder
+  guard voided it. Report the journal result if there is one, otherwise list the check as
+  "no result" and offer to re-run just that check.
 
 - If `halted.reason` is `'no-checks'` or `'invalid-args-json'`: no check ever ran — the `args` you
   passed were malformed (not the `{ taskLabel, checks: [...] }` object above). Report that plainly

@@ -10,13 +10,16 @@
  * - `OtelSessionKpiTiles` — session: OTEL cost, hidden, API calls, turns (running), sub-agents,
  *   waiting for you; a further row with tokens by type and cache read ratio summed from `calls`.
  */
+import type { ReactNode } from 'react';
 import type {
   OtelBucket,
   OtelCallRow,
   OtelCoverage,
+  OtelPlanMixRow,
   OtelRepoKpis,
   OtelSessionKpis,
 } from '../../../../models/repositories';
+import { OtelPlanMix } from './OtelPlanMix';
 import { formatDuration } from '../../../lib/format';
 import { otelDailySparkline, otelSparkline } from './otel-chart-data';
 import {
@@ -51,6 +54,8 @@ export interface OtelRepoKpiTilesProps {
   showPerUser?: boolean;
   /** OTEL coverage of the scope (DD-29); adds the "Sessions with OTEL" tile. */
   coverage?: OtelCoverage;
+  /** Cost by reported plan (2026-11-03 otel-cost-attribution, DD-9); shown under the total. */
+  planMix?: readonly OtelPlanMixRow[];
 }
 
 /** `<round(N/M·100)> % coverage · <users> users` (Visual/UX notes); 0 % for an empty scope. */
@@ -69,6 +74,7 @@ export function OtelRepoKpiTiles({
   stackBy,
   showPerUser = true,
   coverage,
+  planMix,
 }: OtelRepoKpiTilesProps) {
   const p = kpisPrev;
   const tokens: OtelTokenTotals = {
@@ -87,7 +93,12 @@ export function OtelRepoKpiTiles({
           label="Total OTEL cost"
           hint="Sum of Claude Code's per-call cost estimate (cost_usd) over the period and filters."
           value={formatMicrosUsd(kpis.totalCostUsdMicros)}
-          secondary="Claude Code estimate"
+          secondary={
+            <>
+              Claude Code estimate
+              <OtelPlanMix planMix={planMix} />
+            </>
+          }
           change={otelKpiChange(
             usd(kpis.totalCostUsdMicros),
             usd(p?.totalCostUsdMicros),
@@ -218,6 +229,8 @@ export interface OtelSessionKpiTilesProps {
   derived: OtelSessionDerivedKpis;
   /** KPI names whose value just changed (live highlight). */
   highlighted?: ReadonlySet<string>;
+  /** Chip beside the "OTEL cost" label (2026-11-03 otel-cost-attribution: `plan: <value>`). */
+  totalChip?: ReactNode;
 }
 
 export function OtelSessionKpiTiles({
@@ -225,6 +238,7 @@ export function OtelSessionKpiTiles({
   calls,
   derived,
   highlighted,
+  totalChip,
 }: OtelSessionKpiTilesProps) {
   const tokens = sumOtelCallTokens(calls);
   const total = usd(kpis.totalCostUsdMicros) ?? 0;
@@ -236,6 +250,7 @@ export function OtelSessionKpiTiles({
           testId="otel-kpi-total"
           label="OTEL cost"
           hint="Sum of Claude Code's per-call cost estimate (cost_usd) for this session and its sub-agents."
+          chip={totalChip}
           value={formatMicrosUsd(kpis.totalCostUsdMicros)}
           secondary={`${formatCount(derived.modelCount)} model${derived.modelCount === 1 ? '' : 's'}`}
           highlighted={highlighted?.has('total')}

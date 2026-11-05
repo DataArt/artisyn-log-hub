@@ -38,6 +38,9 @@ W1 Thursday 10:00:00–10:03:30.
 - Workflow agents are uploaded with `workflowRunId`: W1 edits `src/report.ts` **without** a
   `toolUseResult` (+1 −0 from the inputs), W2 runs `Skill(adlc:review-deep)` and `Read`. The
   completion notification reports 45 000 ms, 2 agents, 6 500 tokens.
+- Agent meta labels (the hook's `.meta.json` `description` / `workflowPhase`): W1 is uploaded with
+  `agentDescription` `load-config` and `workflowPhase` `Config`; W2 has neither, so it keeps the
+  prompt fallback label and shows `—` in the Agents table's Phase column.
 - Cost: root 0.0735 + W1 0.0080 + W2 0.0045 = **$0.0860**; work time 60 + 90 = **150 s**.
 
 Checks: both slash-command shapes, skill/rule/MCP/workflow rows, the System context anatomy tab, workflow

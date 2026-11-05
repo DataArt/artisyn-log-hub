@@ -136,6 +136,11 @@ air-gapped host), add `AI_TOOL_VERSION_CHECK_ENABLED: "false"` and
 `MODEL_PRICING_FETCH_ENABLED: "false"` under the `app` service's `environment:` in
 `docker-compose.yml`.
 
+A third outbound request, to `api.github.com` for the latest Log Hub release (the admin "new
+release" badge), runs only on official release images, so a local bundle never makes it. It is
+switched off with `LOG_HUB_RELEASE_CHECK_ENABLED: "false"` in the same place, should you run an
+official release image this way.
+
 ## Update to a newer local bundle
 
 1. Copy the newer bundle's image tar and `docker-compose.yml` onto the host — from its `{{ARCH}}`

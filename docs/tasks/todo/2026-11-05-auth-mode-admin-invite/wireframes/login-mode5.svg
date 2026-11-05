@@ -1,0 +1,48 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="620" viewBox="0 0 1200 620" font-family="Segoe UI, Arial, sans-serif">
+  <rect width="1200" height="620" fill="#ffffff"/>
+  <text x="24" y="34" font-size="18" font-weight="600" fill="#111827">Mode 5 — login page and "Forgot password?" (FR5, FR7, FR8)</text>
+  <text x="24" y="56" font-size="13" fill="#6b7280">Same PasswordLoginForm as Modes 2/3; only the signup line is gone. No password is ever emailed — only links.</text>
+
+  <!-- Panel A: login -->
+  <text x="60" y="100" font-size="13" font-weight="600" fill="#374151">A. Login page (/login)</text>
+  <rect x="60" y="112" width="500" height="470" rx="8" fill="#ffffff" stroke="#e5e7eb"/>
+  <rect x="118" y="160" width="384" height="340" rx="6" fill="#fafafa"/>
+  <text x="142" y="198" font-size="15" font-weight="600" fill="#111827">Log in</text>
+  <rect x="142" y="222" width="336" height="36" rx="6" fill="#fafafa" stroke="#e5e7eb"/>
+  <text x="155" y="245" font-size="13" fill="#6b7280">Email</text>
+  <rect x="142" y="272" width="336" height="36" rx="6" fill="#fafafa" stroke="#e5e7eb"/>
+  <text x="155" y="295" font-size="13" fill="#6b7280">Password</text>
+  <text x="478" y="332" font-size="13" fill="#6b7280" text-anchor="end" text-decoration="underline">Forgot password?</text>
+  <rect x="142" y="356" width="336" height="36" rx="6" fill="#3451cc"/>
+  <text x="310" y="379" font-size="13" font-weight="600" fill="#ffffff" text-anchor="middle">&#x2192;] Log in</text>
+  <!-- removed signup line -->
+  <rect x="142" y="410" width="336" height="26" rx="4" fill="none" stroke="#dc2626" stroke-dasharray="4 3"/>
+  <text x="310" y="428" font-size="12" fill="#9ca3af" text-anchor="middle" text-decoration="line-through">Don't have an account? Sign up</text>
+  <text x="142" y="460" font-size="11" fill="#dc2626">Removed in Mode 5 — no signup link, /signup route not offered;</text>
+  <text x="142" y="475" font-size="11" fill="#dc2626">POST signup rejected by the server (FR5).</text>
+  <text x="88" y="540" font-size="11" fill="#6b7280">Account with no password yet: any password → "Invalid email or password."</text>
+  <text x="88" y="556" font-size="11" fill="#6b7280">Brute-force throttling banner ("Too many attempts") as in Modes 2/3 (FR7).</text>
+
+  <!-- Panel B: forgot password (existing page, unchanged) -->
+  <text x="640" y="100" font-size="13" font-weight="600" fill="#374151">B. Forgot password (/forgot-password) — existing page, reused</text>
+  <rect x="640" y="112" width="500" height="470" rx="8" fill="#ffffff" stroke="#e5e7eb"/>
+  <rect x="698" y="140" width="384" height="220" rx="6" fill="#fafafa"/>
+  <text x="722" y="176" font-size="15" font-weight="600" fill="#111827">Forgot password?</text>
+  <text x="722" y="202" font-size="12" fill="#6b7280">Enter your email and we'll send you a link to reset your password.</text>
+  <rect x="722" y="218" width="336" height="36" rx="6" fill="#fafafa" stroke="#e5e7eb"/>
+  <text x="735" y="241" font-size="13" fill="#6b7280">Email</text>
+  <rect x="722" y="270" width="336" height="36" rx="6" fill="#3451cc"/>
+  <text x="890" y="293" font-size="13" font-weight="600" fill="#ffffff" text-anchor="middle">&#x2709; Send reset link</text>
+  <text x="890" y="336" font-size="12" fill="#6b7280" text-anchor="middle" text-decoration="underline">Back to log in</text>
+
+  <text x="698" y="384" font-size="12" font-weight="600" fill="#374151">After submit (same for known and unknown email — FR8):</text>
+  <rect x="698" y="394" width="384" height="40" rx="6" fill="#fafafa"/>
+  <text x="712" y="419" font-size="12" fill="#6b7280">If that email is registered, a reset link has been sent.</text>
+
+  <text x="698" y="458" font-size="12" font-weight="600" fill="#374151">Over the per-IP email limit (FR10):</text>
+  <rect x="698" y="468" width="384" height="44" rx="6" fill="#fffbeb" stroke="#fcd34d"/>
+  <text x="710" y="486" font-size="12" font-weight="600" fill="#92400e">Too many requests</text>
+  <text x="710" y="503" font-size="12" fill="#92400e">Please try again later. (HTTP 429, nothing is sent)</text>
+  <text x="668" y="548" font-size="11" fill="#6b7280">Also the way the first admin gets a new link if the bootstrap email was lost</text>
+  <text x="668" y="564" font-size="11" fill="#6b7280">or expired — no special button.</text>
+</svg>

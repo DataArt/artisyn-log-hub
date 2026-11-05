@@ -79,6 +79,31 @@ export function tokenCountOf(attrs: Map<string, unknown>, key: string): number {
   return Number.isFinite(parsed) ? Math.round(parsed) : 0;
 }
 
+/**
+ * Token count of an optional api_request attribute, as an integer, or null when it is missing or
+ * non-numeric — so "not reported" (older Claude Code) stays distinguishable from a real 0.
+ */
+export function nullableTokenCountOf(
+  attrs: Map<string, unknown>,
+  key: string,
+): number | null {
+  const raw = attrs.get(key);
+  if (raw === undefined || raw === null || raw === '') return null;
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? Math.round(parsed) : null;
+}
+
+/** A non-empty string attribute cut to `max` characters, or null (empty or non-string). */
+export function cappedStringAttrOf(
+  attrs: Map<string, unknown>,
+  key: string,
+  max: number,
+): string | null {
+  const raw = attrs.get(key);
+  if (typeof raw !== 'string' || raw === '') return null;
+  return raw.slice(0, max);
+}
+
 /** Width of the `otel_api_calls` varchar columns. */
 const CALL_TEXT_MAX = 255;
 

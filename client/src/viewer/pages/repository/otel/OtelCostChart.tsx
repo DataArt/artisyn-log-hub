@@ -23,8 +23,16 @@ import { ChartResponsiveContainer } from '../../../components/ChartResponsiveCon
 import type { OtelBucket, OtelInterval } from '../../../../models/repositories';
 import { cn } from '@/lib/cn';
 import {
+  Tooltip as HintTooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/ui/tooltip';
+import {
   buildOtelChartRows,
   buildOtelSeries,
+  isAttributionStackBy,
+  OTEL_NOT_REPORTED_HINT,
   otelViewValue,
   type OtelChartRow,
 } from './otel-chart-data';
@@ -82,6 +90,7 @@ export function OtelCostChart({
     () => buildOtelSeries(buckets, metric, stackBy),
     [buckets, metric, stackBy],
   );
+  const notReportedHint = isAttributionStackBy(stackBy);
   const visibleKeys = useMemo(
     () => new Set(series.map((s) => s.key).filter((k) => !hiddenKeys.has(k))),
     [series, hiddenKeys],
@@ -231,7 +240,7 @@ export function OtelCostChart({
       >
         {series.map((s) => {
           const hidden = hiddenKeys.has(s.key);
-          return (
+          const item = (
             <button
               key={s.key}
               type="button"
@@ -247,6 +256,28 @@ export function OtelCostChart({
               />
               {s.label}
             </button>
+          );
+          if (s.key !== '' || !notReportedHint) return item;
+          // The ⓘ is a sibling of the toggle button — a trigger button cannot nest inside it.
+          return (
+            <span key={s.key} className="inline-flex items-center">
+              {item}
+              <TooltipProvider>
+                <HintTooltip>
+                  <TooltipTrigger
+                    type="button"
+                    aria-label="What does not reported mean?"
+                    className="text-muted-foreground hover:text-foreground"
+                    data-testid="otel-legend-not-reported-hint"
+                  >
+                    ⓘ
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-[360px]">
+                    {OTEL_NOT_REPORTED_HINT}
+                  </TooltipContent>
+                </HintTooltip>
+              </TooltipProvider>
+            </span>
           );
         })}
         {cumulative && (

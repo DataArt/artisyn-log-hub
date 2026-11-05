@@ -164,6 +164,7 @@ export function SummaryExecutiveBand({
       pricing={pricing[model]}
       reportedCost={sessionCost}
       subAgentCost={info.subAgentCost}
+      subAgentCostFromOtel={session.costBreakdown.subagentCostFromOtel === true}
       workflowEstimatedCost={info.workflowEstimatedCost}
       workflowSubagentTokens={info.workflowSubagentTokens}
       showWorkflowCostRow={info.showWorkflowCostRow}

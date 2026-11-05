@@ -338,6 +338,23 @@ test('@S-COMPAT-01 frozen 1.6.2, 2.6.1 and 2.28.0 hooks against the current serv
       expect(by.get(v26.wfAgent)?.parent_session_id).toBe(v26.sid);
       expect(by.get(v26.wfAgent)?.workflow_run_id).toBe(v26.wfRun);
 
+      // 2.6.1 predates the agent meta labels (agentDescription / workflowPhase upload params):
+      // its workflow agent is stored with both columns NULL, and /logs reports null for both.
+      const meta = await db.query<{ agent_description: string | null; workflow_phase: string | null }>(
+        'SELECT agent_description, workflow_phase FROM sessions WHERE session_id = $1',
+        [v26.wfAgent],
+      );
+      expect(meta.rows).toHaveLength(1);
+      expect(meta.rows[0].agent_description).toBeNull();
+      expect(meta.rows[0].workflow_phase).toBeNull();
+      const logsRes = await owner.api.get(`/api/v1/repositories/${repoId}/sessions/${encodeURIComponent(v26.sid)}/logs`);
+      expect(logsRes.status()).toBe(200);
+      const logs = (await logsRes.json()) as { subagents?: Array<{ sessionId: string; agentDescription?: string | null; workflowPhase?: string | null }> };
+      const wfSub = (logs.subagents ?? []).find((s) => s.sessionId === v26.wfAgent);
+      expect(wfSub, 'the 2.6.1 workflow agent is in /logs subagents').toBeTruthy();
+      expect(wfSub!.agentDescription).toBeNull();
+      expect(wfSub!.workflowPhase).toBeNull();
+
       // 2.6.1 predates the harness-snapshot lines (DD-1): it never sends snapshotId, so the
       // session is never bound to one.
       const bound = await db.query<{ harness_snapshot_id: string | null }>(
@@ -415,7 +432,7 @@ test('@S-COMPAT-01 frozen 1.6.2, 2.6.1 and 2.28.0 hooks against the current serv
       await expect(page).toHaveURL(/#\/api-keys/);
     });
 
-    await test.step('12. AC-10: frozen 2.28.0 — Stop uploads the transcript, its --otel-sweep ships the OTEL logs chunk; the OTEL tabs show chart and hidden breakdown, «No traces — upgrade the hook» instead of the waterfall, no error', async () => {
+    const v228 = await test.step('12. AC-10: frozen 2.28.0 — Stop uploads the transcript, its --otel-sweep ships the OTEL logs chunk; the OTEL tabs show chart and hidden breakdown, «No traces — upgrade the hook» instead of the waterfall, no error', async () => {
       const { toolDir, frozen } = copyFrozenHook(dirs, '2.28.0');
       expect(frozen.version).toBe('2.28.0');
       const repoUrl = `https://git.arrakis.test/compat/${run}/v228`;
@@ -457,6 +474,32 @@ test('@S-COMPAT-01 frozen 1.6.2, 2.6.1 and 2.28.0 hooks against the current serv
       await expect(tab.getByTestId('otel-empty-B')).toContainText('No traces — upgrade the hook');
       await expect(tab.getByTestId('otel-slow-banner')).toHaveAttribute('data-reason', 'old-hook');
       await expect(tab.getByText('Could not load OTEL data.')).toHaveCount(0);
+      return { sid, repoId, totalMicros: turn.totalMicros };
+    });
+
+    await test.step('12a. AC-8 (2026-11-03 otel-cost-attribution): the 2.28.0 OTEL lines carry no attribution and no account — each new stack-by is one «not reported» bucket equal to the total, the session route returns plan: null, and the UI shows no Account row, plan note, plan chip or plan mix', async () => {
+      for (const stackBy of ['skill', 'mcpServer', 'effort', 'speed']) {
+        const facts = await repoFacts(owner, v228.repoId, { stackBy });
+        expect(new Set(facts.buckets.map((b) => b.key)), `repository stackBy=${stackBy}`).toEqual(new Set(['']));
+        expect(facts.buckets.reduce((n, b) => n + Number(b.costUsdMicros), 0), `repository stackBy=${stackBy}`).toBe(v228.totalMicros);
+        const session = await sessionOtel(owner, v228.repoId, v228.sid, { stackBy });
+        expect(new Set(session.buckets.map((b) => b.key)), `session stackBy=${stackBy}`).toEqual(new Set(['']));
+        expect(session.buckets.reduce((n, b) => n + Number(b.costUsdMicros), 0), `session stackBy=${stackBy}`).toBe(v228.totalMicros);
+      }
+      expect((await sessionOtel(owner, v228.repoId, v228.sid)).plan).toBeNull();
+      const facts = await repoFacts(owner, v228.repoId);
+      expect(facts.planMix?.every((r) => r.plan === null), 'no session reports a plan').toBe(true);
+
+      await openSession(page, owner, v228.repoId, v228.sid, { tab: 'otel' });
+      const tab = page.getByTestId('session-otel-tab');
+      await expect(tab.getByTestId('otel-kpi-total')).toBeVisible({ timeout: 20_000 });
+      await expect(tab.getByTestId('session-otel-account')).toHaveCount(0);
+      await expect(tab.getByTestId('session-otel-plan-note')).toHaveCount(0);
+      await expect(tab.getByTestId('otel-kpi-plan-chip')).toHaveCount(0);
+      await page.goto(`/#/repos/${v228.repoId}?mtab=otel`);
+      await page.reload();
+      await expect(page.getByTestId('repo-otel-tab').getByTestId('otel-kpi-total')).toBeVisible({ timeout: 20_000 });
+      await expect(page.getByTestId('otel-plan-mix')).toHaveCount(0);
     });
 
     await test.step('13. AC-11: 1.6.2 reached nothing (steps 1–3); the 2.6.1 session, recorded with OTEL off, shows the OTEL empty state in its session and repository tabs, and its other views are unchanged', async () => {

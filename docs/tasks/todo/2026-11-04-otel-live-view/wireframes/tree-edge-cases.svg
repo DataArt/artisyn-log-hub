@@ -1,0 +1,131 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="600" viewBox="0 0 1440 600" font-family="Segoe UI, Arial, sans-serif">
+  <rect width="1440" height="600" fill="#ffffff"/>
+
+  <!-- ===== A. Full tree with placement rules ===== -->
+  <text x="16" y="24" font-size="12" font-weight="600" fill="#7c3aed">A. Live tree placement rules (FR-3)</text>
+  <rect x="16" y="36" width="440" height="548" rx="10" fill="#f9fafb" stroke="#d1d5db"/>
+  <text x="32" y="62" font-size="11" font-weight="600" fill="#6b7280" letter-spacing="0.5">LIVE NOW</text>
+
+  <g font-size="13" fill="#111827">
+    <rect x="24" y="72" width="424" height="28" rx="5" fill="#dbeafe"/>
+    <text x="36" y="91" font-weight="600">⌂ Home</text>
+    <text x="436" y="91" text-anchor="end" font-weight="600">$5.14</text>
+
+    <text x="44" y="125">▾ 👥 Platform team</text>
+    <text x="436" y="125" text-anchor="end" fill="#374151">$3.90</text>
+    <text x="62" y="153">▾ ▣ artisyn-log-hub</text>
+    <text x="436" y="153" text-anchor="end" fill="#374151">$2.64</text>
+    <text x="80" y="181">▸ ● alice · "Add live tree…"</text>
+    <text x="436" y="181" text-anchor="end" fill="#374151">$1.80</text>
+    <text x="80" y="209">▾ ● bob · "Fix cost tiles…"</text>
+    <text x="436" y="209" text-anchor="end" fill="#374151">$0.84</text>
+    <text x="100" y="237" fill="#374151">◆ main</text>
+    <text x="436" y="237" text-anchor="end" fill="#374151">$0.52</text>
+    <text x="100" y="265" fill="#374151">◇ Explore (sub-agent)</text>
+    <text x="436" y="265" text-anchor="end" fill="#374151">$0.32</text>
+    <text x="62" y="293">▸ ▣ shared-ui-kit</text>
+    <text x="436" y="293" text-anchor="end" fill="#374151">$1.26</text>
+
+    <text x="44" y="327">▾ 👥 Design team</text>
+    <text x="436" y="327" text-anchor="end" fill="#374151">$1.26</text>
+    <text x="62" y="355">▸ ▣ shared-ui-kit</text>
+    <text x="436" y="355" text-anchor="end" fill="#374151">$1.26</text>
+
+    <text x="44" y="389">▾ 👤 No team</text>
+    <text x="436" y="389" text-anchor="end" fill="#374151">$1.24</text>
+    <text x="62" y="417">▸ ▣ my-sandbox</text>
+    <text x="436" y="417" text-anchor="end" fill="#374151">$1.24</text>
+
+    <!-- ended node -->
+    <rect x="72" y="428" width="376" height="26" rx="5" fill="#ffffff" stroke="#2563eb"/>
+    <text x="80" y="446" fill="#9ca3af">○ alice · "Rename columns" </text>
+    <rect x="300" y="434" width="50" height="16" rx="8" fill="#f3f4f6" stroke="#d1d5db"/>
+    <text x="325" y="446" font-size="10" fill="#6b7280" text-anchor="middle">ended</text>
+    <text x="436" y="446" text-anchor="end" fill="#9ca3af">$0.40</text>
+  </g>
+
+  <!-- callouts -->
+  <g font-size="11" fill="#6b7280">
+    <line x1="456" y1="293" x2="476" y2="293" stroke="#f59e0b"/>
+    <line x1="456" y1="355" x2="476" y2="355" stroke="#f59e0b"/>
+    <line x1="476" y1="293" x2="476" y2="355" stroke="#f59e0b"/>
+    <text x="484" y="318" fill="#92400e">Repo linked to two teams:</text>
+    <text x="484" y="333" fill="#92400e">shown under each of them.</text>
+
+    <line x1="456" y1="91" x2="476" y2="91" stroke="#f59e0b"/>
+    <text x="484" y="86" fill="#92400e">Home $5.14 &lt; 3.90 + 1.26 + 1.24 = $6.40:</text>
+    <text x="484" y="101" fill="#92400e">shared-ui-kit's sessions are counted once (DISTINCT root).</text>
+
+    <line x1="456" y1="389" x2="476" y2="389" stroke="#f59e0b"/>
+    <text x="484" y="393" fill="#92400e">Personal repos with no team link.</text>
+
+    <line x1="456" y1="441" x2="476" y2="441" stroke="#f59e0b"/>
+    <text x="484" y="437" fill="#92400e">Selected node that stopped being live:</text>
+    <text x="484" y="452" fill="#92400e">kept greyed + "ended" until deselected.</text>
+
+    <line x1="456" y1="251" x2="476" y2="251" stroke="#f59e0b"/>
+    <text x="484" y="247" fill="#92400e">Agents told apart by otel_calls.agent_id.</text>
+    <text x="484" y="262" fill="#92400e">main = root agent, ◇ = sub-agent.</text>
+  </g>
+  <text x="32" y="490" font-size="11" fill="#6b7280">● pulsing green = live session · ○ grey = ended</text>
+  <text x="32" y="508" font-size="11" fill="#6b7280">Sessions without a repository link are not shown yet.</text>
+
+  <!-- ===== B. Restricted team, plain member ===== -->
+  <text x="760" y="24" font-size="12" font-weight="600" fill="#7c3aed">B. Plain member of a restricted team (FR-11)</text>
+  <rect x="760" y="36" width="320" height="250" rx="10" fill="#f9fafb" stroke="#d1d5db"/>
+  <g font-size="13" fill="#111827">
+    <rect x="768" y="50" width="304" height="28" rx="5" fill="#dbeafe"/>
+    <text x="780" y="69" font-weight="600">⌂ Home</text>
+    <text x="1060" y="69" text-anchor="end" font-weight="600">$0.84</text>
+    <text x="788" y="103">▾ 👥 Platform team 🔒</text>
+    <text x="1060" y="103" text-anchor="end" fill="#374151">$0.84</text>
+    <text x="806" y="131">▾ ▣ artisyn-log-hub</text>
+    <text x="1060" y="131" text-anchor="end" fill="#374151">$0.84</text>
+    <text x="824" y="159">▸ ● bob (me) · "Fix cost…"</text>
+    <text x="1060" y="159" text-anchor="end" fill="#374151">$0.84</text>
+  </g>
+  <text x="776" y="196" font-size="11" fill="#6b7280">Only my own sessions. Team and repo totals</text>
+  <text x="776" y="211" font-size="11" fill="#6b7280">cover just these; alice's $1.80 is invisible.</text>
+  <text x="776" y="236" font-size="11" fill="#6b7280">🔒 = team analytics restricted for me</text>
+
+  <!-- ===== C. team-no-prompts viewer ===== -->
+  <text x="1100" y="24" font-size="12" font-weight="600" fill="#7c3aed">C. team-no-prompts viewer (FR-11)</text>
+  <rect x="1100" y="36" width="324" height="250" rx="10" fill="#f9fafb" stroke="#d1d5db"/>
+  <g font-size="13" fill="#111827">
+    <text x="1116" y="69">▾ ▣ artisyn-log-hub</text>
+    <text x="1408" y="69" text-anchor="end" fill="#374151">$2.64</text>
+    <text x="1134" y="97">▸ ● alice · </text>
+    <rect x="1210" y="85" width="96" height="16" rx="3" fill="#e5e7eb"/>
+    <text x="1258" y="97" font-size="10" fill="#6b7280" text-anchor="middle">prompt hidden</text>
+    <text x="1408" y="97" text-anchor="end" fill="#374151">$1.80</text>
+    <text x="1134" y="125">▸ ● me · "Fix cost tiles…"</text>
+    <text x="1408" y="125" text-anchor="end" fill="#374151">$0.84</text>
+  </g>
+  <text x="1116" y="166" font-size="11" fill="#6b7280">Other members' first prompts and span</text>
+  <text x="1116" y="181" font-size="11" fill="#6b7280">attributes masked (maskFirstPrompt,</text>
+  <text x="1116" y="196" font-size="11" fill="#6b7280">attributesMasked) — like the session OTEL tab.</text>
+  <text x="1116" y="221" font-size="11" fill="#6b7280">Cost and tokens stay visible.</text>
+
+  <!-- ===== D. Node key / URL ===== -->
+  <text x="760" y="320" font-size="12" font-weight="600" fill="#7c3aed">D. Node keys used in ?live= and the API (FR-2, FR-12)</text>
+  <rect x="760" y="332" width="664" height="252" rx="10" fill="#ffffff" stroke="#d1d5db"/>
+  <rect x="760" y="332" width="664" height="30" rx="10" fill="#f9fafb"/>
+  <g font-size="12">
+    <text x="776" y="352" font-weight="600" fill="#6b7280">Node</text>
+    <text x="960" y="352" font-weight="600" fill="#6b7280">Key</text>
+    <text x="1180" y="352" font-weight="600" fill="#6b7280">Children in breakdown</text>
+    <g fill="#111827">
+      <text x="776" y="388">⌂ Home</text><text x="960" y="388" font-family="Consolas, monospace">home</text><text x="1180" y="388">teams + No team</text>
+      <text x="776" y="418">👥 Team</text><text x="960" y="418" font-family="Consolas, monospace">team:&lt;teamId&gt;</text><text x="1180" y="418">repos</text>
+      <text x="776" y="448">👤 No team</text><text x="960" y="448" font-family="Consolas, monospace">noteam</text><text x="1180" y="448">repos</text>
+      <text x="776" y="478">▣ Repo</text><text x="960" y="478" font-family="Consolas, monospace">repo:&lt;repoId&gt;</text><text x="1180" y="478">sessions</text>
+      <text x="776" y="508">● Session</text><text x="960" y="508" font-family="Consolas, monospace">session:&lt;rootId&gt;</text><text x="1180" y="508">agents</text>
+      <text x="776" y="538">◆ Agent</text><text x="960" y="538" font-family="Consolas, monospace">agent:&lt;rootId&gt;:&lt;agentId&gt;</text><text x="1180" y="538">latest calls</text>
+    </g>
+  </g>
+  <g stroke="#f3f4f6">
+    <line x1="770" y1="400" x2="1414" y2="400"/><line x1="770" y1="430" x2="1414" y2="430"/>
+    <line x1="770" y1="460" x2="1414" y2="460"/><line x1="770" y1="490" x2="1414" y2="490"/>
+    <line x1="770" y1="520" x2="1414" y2="520"/>
+  </g>
+</svg>

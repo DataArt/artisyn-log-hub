@@ -64,8 +64,9 @@ After any DB related changes, check that there are relevant migrations and migra
 Logs are written to `server/logs/` (gitignored).
 
 - **Format:** `app-YYYY-MM-DD.log` — a new file starts every day.
-- **Retention:** no automatic cleanup exists — files accumulate indefinitely until manually
-  removed or the container is recreated.
+- **Retention:** `LogRetentionService` deletes old `app-*`/`sql-*` logs hourly — 5 days of app logs,
+  3 days of SQL logs, 100 MB total by default (`LOG_RETENTION_*`, `SQL_LOG_RETENTION_DAYS`); see
+  `docs/knowledgebase/algorithms/log-retention.md`.
 - **Console:** colourised output is also written to stdout at the same time, prefixed with
   `[iN]` (N = `NODE_APP_INSTANCE`, the worker slot index) when running as a cluster worker, so log
   lines from different cluster workers can be told apart. No prefix in dev or in the cluster primary

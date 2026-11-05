@@ -246,6 +246,12 @@ export type ImportSessionInput = {
   sessionId: string;
   parentSessionId: string | null;
   workflowRunId: string | null;
+  /**
+   * Sub-agent `.meta.json` labels, already sanitised by the caller and `null` for non-`agent-`
+   * sessions (DD-14). Optional: an archive from before the field imports without it.
+   */
+  agentDescription?: string | null;
+  workflowPhase?: string | null;
   firstPrompt: string | null;
   gitBranch: string | null;
   startTime: string | null;
@@ -283,6 +289,10 @@ export class LogsService {
     bodyBytes: number,
     parentSessionId?: string,
     workflowRunId?: string,
+    agentMeta?: {
+      agentDescription: string | null;
+      workflowPhase: string | null;
+    },
   ): Promise<UpsertResult> {
     // Reject uploads for soft-deleted sessions silently
     const deletedRow = await this.db
@@ -327,12 +337,24 @@ export class LogsService {
 
       // Step 1 — Session upsert
       const hasWorkflowRunId = logType === 'claude-subagent' && !!workflowRunId;
+      // Sub-agent meta labels: each column is written only when its value is
+      // non-null, so an upload without meta never clears a stored value.
+      const agentDescription =
+        logType === 'claude-subagent'
+          ? (agentMeta?.agentDescription ?? null)
+          : null;
+      const workflowPhase =
+        logType === 'claude-subagent'
+          ? (agentMeta?.workflowPhase ?? null)
+          : null;
       const [sessionRow] = await tx
         .insert(sessions)
         .values({
           sessionId,
           parentSessionId: isSubagent ? parentSessionId : undefined,
           workflowRunId: hasWorkflowRunId ? workflowRunId : undefined,
+          agentDescription: agentDescription ?? undefined,
+          workflowPhase: workflowPhase ?? undefined,
         })
         .onConflictDoUpdate({
           target: sessions.sessionId,
@@ -343,6 +365,12 @@ export class LogsService {
               : {}),
             ...(hasWorkflowRunId
               ? { workflowRunId: sql`excluded.workflow_run_id` }
+              : {}),
+            ...(agentDescription !== null
+              ? { agentDescription: sql`excluded.agent_description` }
+              : {}),
+            ...(workflowPhase !== null
+              ? { workflowPhase: sql`excluded.workflow_phase` }
               : {}),
           },
         })
@@ -926,6 +954,8 @@ export class LogsService {
    */
   async importSession(input: ImportSessionInput): Promise<ImportSessionResult> {
     const { sessionId, parentSessionId, workflowRunId, targetUserId } = input;
+    const agentDescription = input.agentDescription ?? null;
+    const workflowPhase = input.workflowPhase ?? null;
     const result = await this.db.transaction(
       async (tx): Promise<ImportSessionResult> => {
         // Step 1 — same per-session advisory lock key as upsert().
@@ -967,6 +997,8 @@ export class LogsService {
             sessionId,
             parentSessionId: parentSessionId ?? undefined,
             workflowRunId: workflowRunId ?? undefined,
+            agentDescription: agentDescription ?? undefined,
+            workflowPhase: workflowPhase ?? undefined,
           })
           .onConflictDoUpdate({
             target: sessions.sessionId,
@@ -977,6 +1009,13 @@ export class LogsService {
                 : {}),
               ...(workflowRunId
                 ? { workflowRunId: sql`excluded.workflow_run_id` }
+                : {}),
+              // DD-4: an absent value never clears a stored label.
+              ...(agentDescription !== null
+                ? { agentDescription: sql`excluded.agent_description` }
+                : {}),
+              ...(workflowPhase !== null
+                ? { workflowPhase: sql`excluded.workflow_phase` }
                 : {}),
             },
           })

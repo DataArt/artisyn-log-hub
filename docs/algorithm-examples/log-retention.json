@@ -1,0 +1,116 @@
+[
+  {
+    "id": "LR-01",
+    "input": {"today": "2026-11-04", "policy": {"appDays": 5, "sqlDays": 3, "maxTotalBytes": 104857600}, "files": [["app-2026-11-04.log", 1000], ["app-2026-11-03.log", 1000], ["app-2026-11-02.log", 1000], ["app-2026-11-01.log", 1000], ["app-2026-10-31.log", 1000], ["app-2026-10-30.log", 1000], ["app-2026-10-29.log", 1000], ["sql-2026-11-04.log", 1000], ["sql-2026-11-03.log", 1000], ["sql-2026-11-02.log", 1000], ["sql-2026-11-01.log", 1000], ["sql-2026-10-31.log", 1000], ["sql-2026-10-30.log", 1000], ["sql-2026-10-29.log", 1000]]},
+    "expected": {"deleted": ["app-2026-10-29.log", "app-2026-10-30.log", "sql-2026-10-29.log", "sql-2026-10-30.log", "sql-2026-10-31.log", "sql-2026-11-01.log"]},
+    "note": "Defaults. Rule 2: app keeps ages 0..4 (11-04 .. 10-31), sql keeps ages 0..2 (11-04 .. 11-02). Size far below the cap."
+  },
+  {
+    "id": "LR-02",
+    "input": {"today": "2026-11-04", "policy": {"appDays": 5, "sqlDays": 3, "maxTotalBytes": 104857600}, "files": [["app-2026-10-30-i0.log", 10], ["app-2026-10-30-i1.log", 10], ["app-2026-10-31-i0.log", 10], ["sql-2026-11-01-i2.log", 10], ["sql-2026-11-02-i2.log", 10]]},
+    "expected": {"deleted": ["app-2026-10-30-i0.log", "app-2026-10-30-i1.log", "sql-2026-11-01-i2.log"]},
+    "note": "Rule 1: cluster-worker files (-i<N>) are day logs like any other."
+  },
+  {
+    "id": "LR-03",
+    "input": {"today": "2026-11-04", "policy": {"appDays": 5, "sqlDays": 3, "maxTotalBytes": 1000}, "files": [["README.txt", 5000], ["app-2026-10-01.log.gz", 5000], ["sql-old.log", 5000], ["app-2026-10-01.zip", 5000], ["myapp-2026-10-01.log", 5000], ["APP-2026-10-01.log", 5000], ["app-2026-10-1.log", 5000], ["app-2026-10-01-ix.log", 5000], ["app-2026-11-03.log", 500], ["app-2026-11-04.log", 400]]},
+    "expected": {"deleted": []},
+    "note": "Rule 1: only exact app-/sql-YYYY-MM-DD[-iN].log names are touched; the others are neither deleted nor counted (900 <= 1000)."
+  },
+  {
+    "id": "LR-04",
+    "input": {"today": "2026-11-04", "policy": {"appDays": 5, "sqlDays": 3, "maxTotalBytes": 1000}, "files": [["app-2026-11-04.log", 300], ["sql-2026-11-04.log", 300], ["app-2026-11-03.log", 200], ["sql-2026-11-03.log", 200], ["app-2026-11-02.log", 100], ["sql-2026-11-02.log", 100]]},
+    "expected": {"deleted": ["sql-2026-11-02.log", "app-2026-11-02.log"]},
+    "note": "Rule 3: total 1200 > 1000. Oldest day first, sql before app: 1200 - 100 = 1100, - 100 = 1000 <= cap, stop."
+  },
+  {
+    "id": "LR-05",
+    "input": {"today": "2026-11-04", "policy": {"appDays": 5, "sqlDays": 3, "maxTotalBytes": 1000}, "files": [["app-2026-11-04.log", 900], ["sql-2026-11-04.log", 900], ["app-2026-11-03.log", 10]]},
+    "expected": {"deleted": ["app-2026-11-03.log"]},
+    "note": "Rule 3: today's files are never deleted, even when they alone exceed the cap."
+  },
+  {
+    "id": "LR-06",
+    "input": {"today": "2026-11-04", "policy": {"appDays": 0, "sqlDays": 3, "maxTotalBytes": 0}, "files": [["app-2020-01-01.log", 10], ["sql-2026-11-01.log", 10]]},
+    "expected": {"deleted": ["sql-2026-11-01.log"]},
+    "note": "Rule 2: appDays 0 switches the app age limit off; sql still ages out."
+  },
+  {
+    "id": "LR-07",
+    "input": {"today": "2026-11-04", "policy": {"appDays": 5, "sqlDays": 3, "maxTotalBytes": 0}, "files": [["app-2026-11-03.log", 1000000000000], ["app-2026-11-04.log", 1]]},
+    "expected": {"deleted": []},
+    "note": "Rule 3: maxTotalBytes 0 switches the size cap off."
+  },
+  {
+    "id": "LR-08",
+    "input": {"today": "2026-11-04", "policy": {"appDays": 5, "sqlDays": 3, "maxTotalBytes": 100}, "files": [["app-2026-11-05.log", 500], ["app-2026-11-04.log", 10]]},
+    "expected": {"deleted": []},
+    "note": "A file dated after today (clock moved back) is treated like today's: never deleted."
+  },
+  {
+    "id": "LR-09",
+    "input": {"today": "2026-01-02", "policy": {"appDays": 5, "sqlDays": 3, "maxTotalBytes": 0}, "files": [["app-2025-12-28.log", 10], ["app-2025-12-29.log", 10], ["sql-2025-12-30.log", 10], ["sql-2025-12-31.log", 10]]},
+    "expected": {"deleted": ["app-2025-12-28.log", "sql-2025-12-30.log"]},
+    "note": "Rule 2 across a year boundary: 12-28 is 5 days old, 12-29 is 4; 12-30 is 3 days old, 12-31 is 2."
+  },
+  {
+    "id": "LR-10",
+    "input": {"today": "2026-11-04", "policy": {"appDays": 5, "sqlDays": 3, "maxTotalBytes": 1000}, "files": [["sql-2026-10-31.log", 5000], ["app-2026-11-03.log", 600], ["app-2026-11-04.log", 300]]},
+    "expected": {"deleted": ["sql-2026-10-31.log"]},
+    "note": "Rule 3 runs after rule 2: the aged-out 5000 bytes no longer count, 900 <= 1000."
+  },
+  {
+    "id": "LR-11",
+    "input": {"today": "2026-11-04", "policy": {"appDays": 5, "sqlDays": 3, "maxTotalBytes": 1000}, "files": [["app-2026-11-03.log", 500], ["app-2026-11-04.log", 500]]},
+    "expected": {"deleted": []},
+    "note": "Rule 3: exactly at the cap is within it."
+  },
+  {
+    "id": "LR-12",
+    "input": {"today": "2026-11-04", "policy": {"appDays": 5, "sqlDays": 3, "maxTotalBytes": 100}, "files": [["app-2026-11-03-i1.log", 60], ["app-2026-11-03-i0.log", 60], ["app-2026-11-04.log", 10]]},
+    "expected": {"deleted": ["app-2026-11-03-i0.log"]},
+    "note": "Rule 3: same day and kind go by name; 130 - 60 = 70 <= 100, stop."
+  },
+  {
+    "id": "LR-13",
+    "input": {"today": "2028-03-01", "policy": {"appDays": 5, "sqlDays": 3, "maxTotalBytes": 0}, "files": [["sql-2028-02-27.log", 10], ["sql-2028-02-28.log", 10], ["sql-2028-02-29.log", 10]]},
+    "expected": {"deleted": ["sql-2028-02-27.log"]},
+    "note": "Rule 2 over a leap day: 02-27 is 3 days before 03-01 in 2028."
+  },
+  {
+    "id": "LR-14",
+    "input": {"today": "2026-11-04", "policy": {"appDays": 5, "sqlDays": 3, "maxTotalBytes": 1000}, "files": [["app-2026-11-01.log", 200], ["sql-2026-11-02.log", 400], ["app-2026-11-03.log", 400], ["app-2026-11-04.log", 300]]},
+    "expected": {"deleted": ["app-2026-11-01.log", "sql-2026-11-02.log"]},
+    "note": "Rule 3 orders by day before kind: the older app file goes first (1300 - 200 = 1100), then the sql file (700 <= 1000). Kind first would stop after the sql file alone."
+  },
+  {
+    "id": "LR-20",
+    "input": {"env": {}},
+    "expected": {"policy": {"appDays": 5, "sqlDays": 3, "maxTotalBytes": 104857600}},
+    "note": "Rule 4: defaults 5 days, 3 days, 100 MB."
+  },
+  {
+    "id": "LR-21",
+    "input": {"env": {"LOG_RETENTION_DAYS": "7", "SQL_LOG_RETENTION_DAYS": "1", "LOG_RETENTION_MAX_MB": "50"}},
+    "expected": {"policy": {"appDays": 7, "sqlDays": 1, "maxTotalBytes": 52428800}},
+    "note": "Rule 4: explicit values; MB is 1024 * 1024 bytes."
+  },
+  {
+    "id": "LR-22",
+    "input": {"env": {"LOG_RETENTION_DAYS": "0", "SQL_LOG_RETENTION_DAYS": "0", "LOG_RETENTION_MAX_MB": "0"}},
+    "expected": {"policy": {"appDays": 0, "sqlDays": 0, "maxTotalBytes": 0}},
+    "note": "Rule 4: 0 is accepted and means no limit."
+  },
+  {
+    "id": "LR-23",
+    "input": {"env": {"LOG_RETENTION_DAYS": "-1", "SQL_LOG_RETENTION_DAYS": "2.5", "LOG_RETENTION_MAX_MB": "abc"}},
+    "expected": {"policy": {"appDays": 5, "sqlDays": 3, "maxTotalBytes": 104857600}},
+    "note": "Rule 4: negative, fractional and non-numeric values fall back to the defaults."
+  },
+  {
+    "id": "LR-24",
+    "input": {"env": {"LOG_RETENTION_DAYS": " ", "SQL_LOG_RETENTION_DAYS": "", "LOG_RETENTION_MAX_MB": " 20 "}},
+    "expected": {"policy": {"appDays": 5, "sqlDays": 3, "maxTotalBytes": 20971520}},
+    "note": "Rule 4: blank values fall back; surrounding spaces around a number are allowed."
+  }
+]

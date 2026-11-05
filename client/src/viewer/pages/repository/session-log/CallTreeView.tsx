@@ -3,7 +3,11 @@ import type * as React from 'react';
 import { ChevronRight, Loader2 } from 'lucide-react';
 import type { SessionLogsData } from '../../../api';
 import type { ModelPricingMap } from '../../../../models/pricing';
-import { parseSessionLogs, buildAgentParentMap } from './log-parser';
+import {
+  parseSessionLogs,
+  buildAgentParentMap,
+  buildSubagentMeta,
+} from './log-parser';
 import { cn } from '../../../lib/cn';
 import { formatTokens, formatCost } from '../../../lib/format';
 import { DetailTooltip } from '../../../components/DetailTooltip';
@@ -88,12 +92,18 @@ export function CallTreeView({
     [logsData],
   );
 
+  const subagentMeta = useMemo(
+    () => buildSubagentMeta(logsData?.subagents ?? []),
+    [logsData],
+  );
+
   const treeNodes = useCallTreeNodes(
     parsed,
     logsData,
     subagentLogsMap,
     pricing,
     agentParentMap,
+    subagentMeta,
   );
 
   // Tracks nodes that have been toggled away from their default expand state. The lazy

@@ -11,6 +11,7 @@ import { AdminDataRetentionTab } from './tabs/AdminDataRetentionTab';
 import { AdminAuthTab } from './tabs/AdminAuthTab';
 import { AdminModelPricingTab } from './tabs/AdminModelPricingTab';
 import { visibleTabs } from '../../tab-ids';
+import { NewReleaseBanner } from './NewReleaseBanner';
 import { type AdminTab, useAdminTabState } from './useAdminTabState';
 
 export function AdminPage() {
@@ -35,11 +36,12 @@ export function AdminPage() {
   return (
     <TooltipProvider>
       <div className="flex flex-col h-full overflow-hidden">
+        <NewReleaseBanner />
         <PageTabs
           tabs={shownTabs}
           value={activeTab}
           onValueChange={(v) => setTab(v as AdminTab)}
-          className="flex flex-col h-full"
+          className="flex flex-col flex-1 min-h-0"
           testIdGroup="admin"
         >
           {shownTabs.some((t) => t.value === 'system-info') && (

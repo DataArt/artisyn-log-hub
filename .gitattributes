@@ -4,3 +4,6 @@ server/drizzle/migrations/*.sql text eol=lf
 docker-dev/** text eol=lf
 .github/** text eol=lf
 release-template/install.sh text eol=lf
+# The site favicon is a byte-for-byte copy of the app favicon (@S-SITE-01 compares them); keep both LF.
+site/assets/*.svg text eol=lf
+client/public/favicon.svg text eol=lf

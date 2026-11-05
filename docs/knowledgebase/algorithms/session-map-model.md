@@ -68,6 +68,10 @@ The events of a node always sum to its `total`.
   in its own transcript.
 - Tree total = main + Σ agents. Since every event sits at or before the last activity, the
   cumulative cost at the session end equals the tree total.
+- An agent card's label = `agentRowLabel` (see [workflow-agent-rows](workflow-agent-rows.md),
+  label rules) of the agent with its `agentDescription` looked up in the parse inputs'
+  `agentDescriptions` (by unprefixed agent id): the `.meta.json` description when it has one,
+  otherwise the cleaned prompt, otherwise the agent id; then cut to `AGENT_LABEL_MAX` with `…`.
 
 ### Timeline (`buildTimeline`)
 
@@ -130,23 +134,27 @@ For first activity `f` and last activity `l`:
 - Counters mid-session and at the end: SMM-23, SMM-24.
 - Highlight: top 5 SMM-25, ties by id SMM-26, failed SMM-27, none SMM-28.
 - Order by start SMM-29, by cost with a tie SMM-30.
+- Card label: a description wins over the prompt, an agent without one keeps its prompt: SMM-31.
 
 ## Examples
 
 Each row's `input.op` picks the call: `family`, `failed`, `perCall` (times in `lines` and `firstAt`
 are ISO; `expected.events` gives each event's `at` as ISO), `timeline` (`nodes` with `costEvents`
 in epoch ms), `model` (root claude lines, sub-agents with linkage, `stats` as `{model,
-inputTokens}`, the rest 0), `group`, `state`, `counters` (nodes with `f`, call `events` and
+inputTokens}`, the rest 0, an optional `agentDescriptions` map of unprefixed agent id →
+description added to the parse inputs; an optional `expected.labels` maps agent id → card label
+and is checked only when present), `group`, `state`, `counters` (nodes with `f`, call `events` and
 `costEvents`), `highlight`, `order`. `pricing` maps a model to `{in, out}` USD per million tokens;
 every other rate is 0. Costs are compared with a 1e-9 tolerance.
 
-Rows (30): [`docs/algorithm-examples/session-map-model.json`](../../algorithm-examples/session-map-model.json) — test data for the table test; the rules above are enough to understand the algorithm.
+Rows (31): [`docs/algorithm-examples/session-map-model.json`](../../algorithm-examples/session-map-model.json) — test data for the table test; the rules above are enough to understand the algorithm.
 
 ## Mutations
 
 - "Family matched case-insensitively" -> SMM-01.
 - "Duplicated message lines weighed twice" -> SMM-04.
 - "Agent total from the transcript even with a stats row" -> SMM-08.
+- "Card label from the prompt only, description ignored" -> SMM-31 (a = `task a`).
 - "Agent nested only when it has no `workflowRunId`" -> SMM-13.
 - "Direct column ordered by start like the workflow columns" -> SMM-11.
 - "Realtime running clause used in replay" -> SMM-18.

@@ -5,7 +5,9 @@ confirm data is flowing. You do this once per repository.
 
 ## Prerequisites
 
-- **Node.js 18.19+** and **Git** (the project must be a git repository)
+- **Node.js** — a current LTS line (22, 24 or 26), patched to at least 22.23.4 / 24.22.1 / 26.12.1.
+  The hook still starts on Node.js 18.19+, but 18 and 20 are end-of-life and get no security fixes
+- **Git** (the project must be a git repository)
 - **Claude Code** installed and working in the project
 - An account on this Log Hub server
 

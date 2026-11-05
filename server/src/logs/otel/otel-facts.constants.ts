@@ -32,7 +32,7 @@ export const OTEL_PROJECTION_BATCH = 50;
  * Current projection version stamped into `logs_otel.otel_projection_version` (DD-16). Bumping it
  * makes the startup re-mark in `initializeDatabase()` re-queue every projected chunk.
  */
-export const OTEL_PROJECTION_VERSION = 1;
+export const OTEL_PROJECTION_VERSION = 2;
 
 /** Value of `logs_otel.otel_projection_version` for a chunk whose projection failed (DD-16). */
 export const OTEL_PROJECTION_FAILED = -1;

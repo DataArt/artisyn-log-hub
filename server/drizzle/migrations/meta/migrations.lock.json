@@ -860,6 +860,56 @@
         "655a5e91abaf86914069248a34626336f93c97cce6f3f1180df05171026fe14e",
         "7792177a82ef2ca9247754ae87eba5f33de22785152f2f5f2e69ffa8469346e6"
       ]
+    },
+    {
+      "idx": 85,
+      "tag": "0085_agent_meta_labels",
+      "when": 1791849600000,
+      "sha256": "80c0923f70e9496adb02423aea7c5b6f36d58d322f5b74d5c21c43e3217a74bf",
+      "acceptedHashes": [
+        "3c2608bbed96dab6373ba23dcf08c07c0c6e75b620e6ca279a3aba5b82224647",
+        "80c0923f70e9496adb02423aea7c5b6f36d58d322f5b74d5c21c43e3217a74bf"
+      ]
+    },
+    {
+      "idx": 86,
+      "tag": "0086_log_hub_release_check",
+      "when": 1791936000000,
+      "sha256": "e7785493869f16343267a259d4221ff457d2a6b501f59af2414bc66b5cf9bac4",
+      "acceptedHashes": [
+        "2fa170c787424bcfa9ec192b79f20439b06500031fcf3b25d0213260be367fa6",
+        "e7785493869f16343267a259d4221ff457d2a6b501f59af2414bc66b5cf9bac4"
+      ]
+    },
+    {
+      "idx": 87,
+      "tag": "0087_log_hub_release_check_comment",
+      "when": 1792022400000,
+      "sha256": "35fbf1662b5d3a44901262e9716825e50dea29a4b993d27d7a6f7619ae29cd56",
+      "acceptedHashes": [
+        "35fbf1662b5d3a44901262e9716825e50dea29a4b993d27d7a6f7619ae29cd56",
+        "75d87aa4e5224a688054ab03cc050f37cfb70bb5682a99b04356f574e610c9c2"
+      ]
+    },
+    {
+      "idx": 88,
+      "tag": "0088_otel_cost_attribution",
+      "when": 1792108800000,
+      "sha256": "6f3c28e3adeceec3deb7f33d464e7bdae08e3d520228878756acab329f4c3de7",
+      "acceptedHashes": [
+        "6f3c28e3adeceec3deb7f33d464e7bdae08e3d520228878756acab329f4c3de7",
+        "7b89745c59c33921dd3d879a57d72a037243e4c235e8ed48efaa511b6277de0c"
+      ]
+    },
+    {
+      "idx": 89,
+      "tag": "0089_otel_live_totals",
+      "when": 1792195200000,
+      "sha256": "059df468fd72230a4e75a7071feeb140f08b5eafb44a321518f7adcd330b6d46",
+      "acceptedHashes": [
+        "059df468fd72230a4e75a7071feeb140f08b5eafb44a321518f7adcd330b6d46",
+        "54048de6689ea292b41087d414bc625d8905075286aaa1c2ed78bbebf431df88"
+      ]
     }
   ]
 }

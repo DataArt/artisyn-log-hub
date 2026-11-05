@@ -203,6 +203,22 @@ export interface RepoFacts {
   sessions: Array<{ sessionId: string; costUsdMicros: string; unconfirmedCalls: number; hasTraces: boolean }>;
   /** OTEL coverage of the scope (2026-10-30 otel-shared-receiver, DD-29). */
   coverage: OtelCoverage;
+  /** Cost by the session's reported plan (2026-11-03 otel-cost-attribution, DD-9). */
+  planMix?: OtelPlanMixRow[];
+}
+
+export interface OtelPlanMixRow {
+  plan: string | null;
+  sessions: number;
+  costUsdMicros: string;
+}
+
+/** `plan` of the session OTEL route (DD-10). */
+export interface OtelSessionPlan {
+  plan: string | null;
+  seatType: string | null;
+  provider: string | null;
+  customBaseUrl: string | null;
 }
 
 /** `coverage` of the repository and team facts routes (DD-29). */
@@ -274,6 +290,8 @@ export interface SessionOtel {
   calls: OtelCallRow[];
   spans: OtelSpanRow[];
   kpis: { totalCostUsdMicros: string; hiddenCostUsdMicros: string; hiddenCalls: number; apiCalls: number } | null;
+  /** The account Claude Code reports (2026-11-03 otel-cost-attribution, DD-10); null = none. */
+  plan?: OtelSessionPlan | null;
 }
 
 /** `from`/`to` of the last `days` days, ending a minute from now (the 7-day preset by default). */

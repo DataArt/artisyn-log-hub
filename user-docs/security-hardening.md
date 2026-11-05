@@ -274,9 +274,10 @@ The web client loads no external resources (fonts, CDNs, analytics).
 | `registry.npmjs.org` (HTTPS) | Periodic AI tool version check | `AI_TOOL_VERSION_CHECK_ENABLED=false` disables it |
 | `platform.claude.com` (HTTPS) | Daily model pricing fetch: reads Anthropic's public pricing page, at most once per 24 h cluster-wide | `MODEL_PRICING_FETCH_ENABLED=false` disables it |
 | `openrouter.ai` (HTTPS) | Only when an admin clicks **Import from OpenRouter** on the Model Pricing tab | Not scheduled; don't click the button |
+| `api.github.com` (HTTPS) | New Log Hub release check: reads the latest release of the Log Hub GitHub repository so admins see a "new release" badge. Official release images only, at most one call per 24 h cluster-wide | `LOG_HUB_RELEASE_CHECK_ENABLED=false` disables it |
 
-On air-gapped installs set `AI_TOOL_VERSION_CHECK_ENABLED=false` and
-`MODEL_PRICING_FETCH_ENABLED=false`. No telemetry is sent to the project maintainers or any other
+On air-gapped installs set `AI_TOOL_VERSION_CHECK_ENABLED=false`,
+`MODEL_PRICING_FETCH_ENABLED=false` and `LOG_HUB_RELEASE_CHECK_ENABLED=false`. No telemetry is sent to the project maintainers or any other
 third party.
 
 ## 5. Authorization and data visibility
@@ -314,6 +315,10 @@ Users are informed of this by a data-collection notice they must accept on first
 | `SESSION_RETENTION_DAYS` | `30` | Sessions whose earliest log is older than this are permanently deleted. |
 | `SESSION_RETENTION_CHECK_INTERVAL_MS` | `1800000` | Purge job interval. |
 | `SESSION_RETENTION_PURGE_BATCH_SIZE` | `200` | Sessions purged per run. |
+| `LOG_RETENTION_DAYS` | `5` | Days of server app log files kept, today included (`0` = no age limit). |
+| `SQL_LOG_RETENTION_DAYS` | `3` | Days of server SQL log files kept, today included (`0` = no age limit). |
+| `LOG_RETENTION_MAX_MB` | `100` | Cap on the total size of server log files; the oldest are deleted first, today's never (`0` = no cap). |
+| `LOG_RETENTION_CHECK_INTERVAL_MS` | `3600000` | Log cleanup interval; it also runs at startup. |
 
 On developer machines the hook deletes local OTEL files older than `otelRetentionDays`
 (default 7) in `log-hub.json`.
@@ -371,8 +376,10 @@ A value that is not a positive integer falls back to the default.
 
 ## 8. Logging and monitoring
 
-- Server logs: `$LOG_HUB_DATA_DIR/logs`, daily-rotated files; no automatic deletion — apply
-  your own retention (e.g. logrotate or a scheduled cleanup).
+- Server logs: `$LOG_HUB_DATA_DIR/logs`, daily-rotated files. The server deletes old ones itself
+  (hourly and at startup): 5 days of app logs, 3 days of SQL logs and 100 MB in total by default —
+  see the `LOG_RETENTION_*` settings in §6.2. Raise them, or set `0` and apply your own
+  retention, if your policy requires keeping logs longer.
 - Security events are logged as structured `key=value` lines: login success/failure and applied
   delay, signup, email confirmation, password reset and change, account deletion. They contain
   email addresses and user IDs only — never passwords, hashes or tokens.
@@ -418,6 +425,7 @@ Protect backups with the same controls as the live data (§6.1) and apply the sa
 | `AI_TOOL_VERSION_CHECK_ENABLED` | on | Outbound call to `registry.npmjs.org`. |
 | `MODEL_PRICING_FETCH_ENABLED` | on | Daily outbound call to `platform.claude.com` that keeps Anthropic model prices current. Only the value `false` turns it off. |
 | `MODEL_PRICING_FETCH_INTERVAL_MS` | `3600000` | How often each server process checks whether the daily pricing fetch is due (the fetch itself still runs at most once per 24 h). |
+| `LOG_HUB_RELEASE_CHECK_ENABLED` | on | Outbound call to `api.github.com` (at most once per 24 h, official release images only) that shows admins a badge when a newer Log Hub release exists. Only the value `false` turns it off. |
 | `LOG_HUB_DATA_DIR` | `./loghub-db` | Host directory for all persistent data. |
 
 ## 11. Known limitations and accepted risks
@@ -438,6 +446,7 @@ what an administrator can do about it.
 | **Account deletion needs no password.** A signed-in user deletes their account by typing the confirmation word `delete`; anyone with access to an unlocked session can do it. | All modes | Keep the session lifetime short; back up the database (§9) so a deleted account can be restored manually. |
 | **Mode 1 trusts the container gateway.** With Docker port forwarding every connection appears local, so the port binding is the only boundary. | Mode 1 (`AUTH_MODE=none`) | Publish the port on `127.0.0.1` only (the shipped default); switch mode before widening `ports:` (§3.1). |
 | **Outbound npm registry check.** The server periodically calls `registry.npmjs.org` to check AI tool versions. | All modes, by default | `AI_TOOL_VERSION_CHECK_ENABLED=false`. |
+| **Outbound GitHub release check.** An official release image calls `api.github.com` once a day to learn whether a newer Log Hub release exists. | All modes, by default (official release images only) | `LOG_HUB_RELEASE_CHECK_ENABLED=false`. |
 | **Security headers.** `X-Frame-Options` and `Content-Security-Policy` can be sent twice, the CSP allows `style-src 'unsafe-inline'`, and HSTS is not enabled by the application. | All modes | Add HSTS at the TLS proxy (§4.1); do not add conflicting headers at the proxy. |
 | **Zip export contains personal data.** An export holds user email addresses and the exporting server's `sourceHost`. | Repository export | Treat export files as confidential; delete them after import (§6.4). |
 

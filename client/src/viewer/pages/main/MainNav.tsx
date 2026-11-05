@@ -7,10 +7,11 @@ import { useLocation, useNavigate } from 'react-router-dom';
 import { routes } from '../../hooks/useHashRoute';
 import { NotificationBell } from '../../components/top-nav/NotificationBell';
 import { AppLogo } from '../../components/top-nav/AppLogo';
+import { LiveNavItem } from '../../components/top-nav/LiveNavItem';
 import { UserMenu } from '../../components/top-nav/UserMenu';
 import { AccessModeBadge } from '../../components/teams/AccessModeBadge';
 import { Button } from '../../ui/button';
-import { useBuildVersion } from '../../hooks/useBuildVersion';
+import { BuildLabel } from '../../components/top-nav/BuildLabel';
 import { useOpenAllViews } from '../../hooks/useAllViewsShortcut';
 import {
   Tooltip,
@@ -31,15 +32,7 @@ export function MainNav() {
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [helpLoaded, setHelpLoaded] = useState(false);
-  const { data: buildVersion } = useBuildVersion();
   const openAllViews = useOpenAllViews();
-  // The short commit identifies the running build; the package version is not bumped per
-  // release, so it went stale. Without a baked-in commit (local dev) fall back to the version.
-  const buildLabel = !buildVersion
-    ? null
-    : buildVersion.gitCommit && buildVersion.gitCommit !== 'unknown'
-      ? buildVersion.gitCommit.slice(0, 7)
-      : buildVersion.version;
   // Mode 1 has no separate logout concept — "Edit email" calls the same
   // endpoint but returns to the identify prompt instead of the login form.
   const isNoAuthMode = authConfig?.mode === 'none';
@@ -61,14 +54,7 @@ export function MainNav() {
         {user?.env_name
           ? `[${user.env_name}] Artisyn Log Hub`
           : 'Artisyn Log Hub'}
-        {buildLabel && (
-          <span
-            className="ml-1.5 font-normal text-xs text-muted-foreground font-mono"
-            title={buildVersion?.gitCommit}
-          >
-            {buildLabel}
-          </span>
-        )}
+        <BuildLabel />
       </span>
       {/* Home sits on the left, next to the app name, where it is looked for first. */}
       <Button
@@ -82,6 +68,8 @@ export function MainNav() {
         <House className="size-4" />
         Home
       </Button>
+      {/* Live OTEL view across the caller's teams (2026-11-04 otel-live-view). */}
+      <LiveNavItem />
       <div className="flex-1" />
       {/* Names the access mode of the team whose route is open; renders
           nothing on every other route. */}
