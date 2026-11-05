@@ -271,7 +271,7 @@ API calls, so its computed cost is too low. For such a sub-agent `treeCostCtes`
 (`tree_subagent_rows` → `tree_subagent_costs`) takes `GREATEST(COALESCE(transcript cost, 0),
 OTEL cost)`, where the OTEL cost (`subagentOtelCostSql`, `otel-cost.sql.ts`) is the sum of the
 root's projected `otel_calls.cost_usd_micros` with `agent_id` = the sub-agent's `session_id`
-without `agent-` (index `idx_otel_calls_session_agent`). The version is the sub-agent's
+without `agent-` (index `idx_otel_calls_session_agent_event_time`). The version is the sub-agent's
 `session_stats.claude_version`, else `claude_version_otel`; an unknown or unparsable version, a
 version ≥ `2.1.307` or no matching call keeps the transcript cost. An OTEL cost also prices a
 sub-agent whose model has no Log Hub price (it is then not "pricing missing"). The root's own

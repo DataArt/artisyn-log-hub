@@ -33,3 +33,4 @@ Folders are named `<YYYY-MM-DD>-<slug>` (the day the task was created).
 - [2026-10-21-workflow-agent-meta-labels] Workflow Agent Labels From .meta.json — archived 2026-11-04
 - [2026-11-04-admin-new-release-badge] Admin New Release Notification — archived 2026-11-04
 - [2026-11-03-otel-cost-attribution] OTEL Cost Attribution from New Claude Code Telemetry — archived 2026-11-05
+- [2026-11-04-otel-live-view] OTEL Live View — archived 2026-11-05

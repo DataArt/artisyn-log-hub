@@ -217,8 +217,11 @@ from two channels: the realtime route and the projection drain over `logs_otel`
     (varchar 64), `skill_name`, `plugin_name`, `agent_name`, `mcp_server_name`, `mcp_tool_name`
     (varchar 255) — all nullable; NULL = not reported (older Claude Code). Upserted with the call;
     a change in any of them is a call change. Partial index `idx_otel_calls_session_agent`
-    `(session_id, agent_id) WHERE agent_id IS NOT NULL` serves the FR-6 sub-agent OTEL cost sum
-    (`subagentOtelCostSql`).
+    `(session_id, agent_id) WHERE agent_id IS NOT NULL` served the FR-6 sub-agent OTEL cost sum
+    (`subagentOtelCostSql`); migration `0090` replaced it with
+    `idx_otel_calls_session_agent_event_time` `(session_id, agent_id, event_time) WHERE agent_id
+    IS NOT NULL`, which serves that sum through its prefix and the Live view's per-sub-agent
+    time-ordered / time-window reads (`otel-live-read.sql.ts`).
   - `otel_cost_buckets`: grain columns `skill`, `mcp_server` (varchar 255), `effort`, `speed`
     (varchar 64), `NOT NULL DEFAULT ''` (`''` = not reported) and part of `otel_cost_buckets_pk`
     (recreated over all 10 key columns).
