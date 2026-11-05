@@ -10,6 +10,11 @@
  * | `okfAttr` | raw `<key>:<op>[:<value>]`, repeatable | no attribute filter |
  * | `okfBundle` | bundle root | all bundles |
  * | `okfHeat` | `calls` | `bytes` |
+ * | `okfArticle` | KB article path whose drill-down is open | the tab overview |
+ *
+ * `okfArticle` is not a filter: it is kept out of `OKF_PARAM_KEYS`, so `writeOkfFilters` leaves
+ * it alone and a filter change keeps the drill-down open. Leaving the tab still drops it, since
+ * `setMainTab` removes every `okf*` param.
  */
 import type { SessionAttributionAttributeDef } from '../../../../models/repositories';
 import { defaultDateRange } from '../reports/report-url';
@@ -71,6 +76,56 @@ export function writeOkfFilters(
   for (const a of f.attr) next.append('okfAttr', a);
   if (f.bundle) next.set('okfBundle', f.bundle);
   if (f.heat === 'calls') next.set('okfHeat', 'calls');
+  return next;
+}
+
+const OKF_ARTICLE_PARAM = 'okfArticle';
+
+/** The KB article whose drill-down is open, or `null` for the tab overview. */
+export function okfArticleFromParams(p: URLSearchParams): string | null {
+  return p.get(OKF_ARTICLE_PARAM) || null;
+}
+
+/**
+ * A copy of `p` with the drill-down article set to `path`; `null` (or an empty path) clears it.
+ * The filter params are left untouched.
+ */
+export function writeOkfArticle(
+  p: URLSearchParams,
+  path: string | null,
+): URLSearchParams {
+  const next = new URLSearchParams(p);
+  if (path) next.set(OKF_ARTICLE_PARAM, path);
+  else next.delete(OKF_ARTICLE_PARAM);
+  return next;
+}
+
+/** A copy of `p` without the drill-down article (back to the tab overview). */
+export function clearOkfArticle(p: URLSearchParams): URLSearchParams {
+  return writeOkfArticle(p, null);
+}
+
+/** `sfocus` value that scrolls Settings → Analysis to the OKF thresholds card. */
+export const OKF_THRESHOLDS_FOCUS = 'okf-thresholds';
+
+/**
+ * A copy of `p` that opens Settings → Analysis focused on the OKF thresholds card
+ * (`mtab=settings&stab=analysis&sfocus=okf-thresholds`). Search params, not a URL hash: the app
+ * uses a hash router, so the hash holds the route. Like `setMainTab`, it drops the session
+ * selection and every `okf*` param (the repo OKF tab's filters); the card drops `sfocus` once it
+ * has scrolled into view.
+ */
+export function okfThresholdsSettingsParams(
+  p: URLSearchParams,
+): URLSearchParams {
+  const next = new URLSearchParams(p);
+  for (const key of [...next.keys()]) {
+    if (key.startsWith('okf')) next.delete(key);
+  }
+  for (const key of ['session', 'tab', 'lens', 'tu']) next.delete(key);
+  next.set('mtab', 'settings');
+  next.set('stab', 'analysis');
+  next.set('sfocus', OKF_THRESHOLDS_FOCUS);
   return next;
 }
 

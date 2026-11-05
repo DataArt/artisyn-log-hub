@@ -29,7 +29,10 @@
 // (a file grep, not counted in the folder-scan marker); its sub-agent
 // reads a04.md (8 KB). Shares count articles only (index.md is the entry point): main agent 3 of
 // the 10 articles it did not write (30 % > 25 %) → «Something to fix» with one Why line; the
-// sub-agent's 1 of 11 is fine.
+// sub-agent's 1 of 11 is fine. Since 2026-11-03 (OKF value signals, DD-15) the a01.md read back
+// after the own edit is upkeep: it leaves Read top 5 for the Upkeep line and its tree row shows
+// `upkeep ×1` next to `own edit`. Step 11 uploads a second tree in the same repository for the
+// value-signal UI (section reads, pointers, searches after reading, the agents panel columns).
 //
 // Replaces:
 //   - server/test/change-surface.e2e-spec.ts (24, part ≈ 10)
@@ -268,7 +271,7 @@ test('@S-SESS-09 Windows change surface: scattered change, a file outside the re
     return id;
   });
 
-  await test.step('8. verdict card: «Something to fix», one Why line for the main agent (3 of 10, 30 %), read top 5 with the own-edit icon, two agents', async () => {
+  await test.step('8. verdict card: «Something to fix», one Why line for the main agent (3 of 10, 30 %), read top 5 without the upkeep a01.md (on the Upkeep line), two agents', async () => {
     await openSession(page, owner, okfRepoId, okfSid, { tab: 'okf' });
     await expect(page.getByTestId('session-okf-tab')).toBeVisible();
     await expect(page.getByTestId('okf-no-snapshot')).toHaveCount(0);
@@ -279,7 +282,11 @@ test('@S-SESS-09 Windows change surface: scattered change, a file outside the re
     const readTop = page.getByTestId('okf-read-top');
     await expect(readTop).toHaveCount(5);
     await expect(readTop.first()).toContainText('docs/kb/a04.md');
-    await expect(readTop.filter({ hasText: 'docs/kb/a01.md' }).getByLabel('read after own edit')).toBeVisible();
+    // FR-5 (2026-11-03 DD-15): a01.md, read back after the agent's own edit, is upkeep — it
+    // leaves Read top 5 for the muted Upkeep line.
+    await expect(readTop.filter({ hasText: 'docs/kb/a01.md' })).toHaveCount(0);
+    await expect(page.getByTestId('okf-upkeep-line')).toContainText('docs/kb/a01.md');
+    await expect(page.getByTestId('okf-upkeep-line')).toContainText('1 read');
     await expect(page.getByTestId('okf-agent-row')).toHaveCount(2);
     await expect(page.getByTestId('okf-bundle-card')).toContainText('docs/kb');
   });
@@ -289,6 +296,7 @@ test('@S-SESS-09 Windows change surface: scattered change, a file outside the re
     await expect(rows.first()).toContainText('docs/kb');
     await expect(rows.nth(1)).toContainText('a04.md');
     await expect(rows.filter({ hasText: 'a01.md' })).toContainText('own edit');
+    await expect(rows.filter({ hasText: 'a01.md' })).toContainText('upkeep ×1');
     // The bundle's grepCalls (2) include the file grep on a03.md; the marker counts the folder's own grep only.
     await expect(rows.first()).toContainText('grep / ls over folder ×1');
     await expect(rows.filter({ hasText: 'a11.md' })).toContainText('not read');
@@ -308,5 +316,76 @@ test('@S-SESS-09 Windows change surface: scattered change, a file outside the re
     await expect(rows.filter({ hasText: 'a02.md' }), 'the Why click clears the agent filter').toHaveCount(1);
     await expect(rows.first()).toHaveClass(/\bbg-accent\b/);
     await expect(rows.first()).toBeInViewport();
+  });
+
+  await test.step('11. value signals (2026-11-03): § section chip, POINTERS USED / EXPL. AFTER columns, per-agent pointers with the prompt-named count, agents panel yield / misses / upkeep / searches', async () => {
+    // Main agent: reads lines 10–29 of a06.md (a section read), which names two payment files;
+    // it opens charge.ts (a followed pointer) and greps both files twice after reading. The
+    // sub-agent's task already names refund.ts, so only ledger.ts is new in its read of a07.md.
+    const sid2 = `ss09okf2-${run}`;
+    const sub2 = `agent-${run}ptr`;
+    const key = await createApiKey(owner.api);
+    await uploadOkfSessionTree(
+      api,
+      key.key,
+      {
+        sessionId: sid2,
+        repoUrl: okfRepoUrl,
+        prompt: 'trace the card charge flow',
+        snapshot: { bundles: [{ root: 'docs/kb', files: [{ path: 'docs/kb/index.md', size: 600 }, ...articles] }] },
+        actions: [
+          {
+            read: 'docs/kb/a06.md',
+            offset: 10,
+            limit: 20,
+            result: 'Charge flow: `server/pay/charge.ts`; refunds: `server/pay/refund.ts`.\n',
+          },
+          { read: 'server/pay/charge.ts' },
+          { grep: 'server/pay/charge.ts', pattern: 'chargeCard' },
+          { grep: 'server/pay/refund.ts', pattern: 'refundAll' },
+        ],
+        subAgents: [
+          {
+            agentId: sub2,
+            task: 'check `server/pay/refund.ts` against the ledger',
+            actions: [{ read: 'docs/kb/a07.md', result: 'Ledger: `server/pay/ledger.ts`; refunds in `server/pay/refund.ts`.\n' }],
+          },
+        ],
+      },
+      { db, userId: owner.id },
+    );
+
+    await openSession(page, owner, okfRepoId, sid2, { tab: 'okf' });
+    // Same page, hash-only navigation: reload so the session list sees the new tree.
+    await page.reload();
+    await expect(page.getByTestId('session-okf-tab')).toBeVisible();
+    await expect(page.getByTestId('okf-read-top').filter({ hasText: 'docs/kb/a06.md' }).getByTestId('okf-section-chip')).toHaveText(
+      '§ section ×1',
+    );
+    const tile = page.getByTestId('okf-value-signals-tile');
+    await expect(tile.getByTestId('okf-signal-pointers-used')).toContainText('1 / 2 reads');
+    await expect(tile.getByTestId('okf-signal-searched-after')).toContainText('1 pair');
+
+    const rows = page.getByTestId('okf-tree-row');
+    const a06 = rows.filter({ hasText: 'a06.md' });
+    await expect(a06).toContainText('§ section reads ×1');
+    await expect(a06.getByTestId('okf-tree-pointers-used')).toHaveText('1 / 1');
+    await expect(a06.getByTestId('okf-tree-searched-after')).toHaveText('1 · 2');
+    const a07 = rows.filter({ hasText: 'a07.md' });
+    await expect(a07.getByTestId('okf-tree-pointers-used')).toHaveText('0 / 1');
+    await a07.getByTestId('okf-pointers-toggle').click();
+    const sub = page.getByTestId('okf-agent-pointers').filter({ hasText: sub2.slice(0, 4) });
+    await expect(sub.getByTestId('okf-agent-pointer')).toHaveText(['· server/pay/ledger.ts']);
+    await expect(sub.getByTestId('okf-prompt-named')).toContainText('1 path already named in its prompt');
+
+    const mainRow = page.getByTestId('okf-agent-row').filter({ hasText: 'trace the card charge flow' });
+    await expect(mainRow.getByTestId('okf-agent-yield')).toContainText('1 / 1');
+    await expect(mainRow.getByTestId('okf-agent-misses')).toContainText('0');
+    await expect(mainRow.getByTestId('okf-agent-upkeep')).toContainText('0');
+    await expect(mainRow.getByTestId('okf-agent-searches')).toContainText('2');
+    const subRow = page.getByTestId('okf-agent-row').filter({ hasNotText: 'trace the card charge flow' });
+    await expect(subRow).toHaveCount(1);
+    await expect(subRow.getByTestId('okf-agent-yield')).toContainText('0 / 1');
+    await expect(subRow.getByTestId('okf-agent-searches')).toContainText('0');
   });
 });

@@ -218,6 +218,28 @@ export function findOkfNodePath(
   return search(true) ?? search(false);
 }
 
+/** A "dead pointers" marker is shown only from this many dead pointers up (Visual/UX notes). */
+export const OKF_DEAD_MARKER_MIN = 3;
+
+/** YIELD cell: "k / n", or "—" when no read showed a new pointer (or an older server). */
+export function formatOkfYield(
+  y: { k: number; n: number } | null | undefined,
+): string {
+  return y && y.n > 0 ? `${y.k} / ${y.n}` : '—';
+}
+
+/** EXPL. AFTER cell: "agents · searches", empty when nobody searched after reading. */
+export function formatOkfSearchedAfter(
+  s: OkfTreeNode['searchedAfter'],
+): string {
+  return s && s.agents > 0 ? `${s.agents} · ${s.searches}` : '';
+}
+
+/** ROUTE MISS cell: "X / Y" (missing agents of all area agents), empty without a miss. */
+export function formatOkfRoutingMiss(r: OkfTreeNode['routingMiss']): string {
+  return r && r.agents > 0 ? `${r.agents} / ${r.areaAgents}` : '';
+}
+
 /** Short agent label: `main` for the root session, else the first 4 chars of its id (DD-47). */
 export function okfAgentLabel(agentId: string, rootSessionId: string): string {
   return agentId === rootSessionId ? 'main' : agentId.slice(0, 4);

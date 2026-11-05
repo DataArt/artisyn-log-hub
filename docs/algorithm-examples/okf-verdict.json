@@ -221,9 +221,9 @@
     "input": {"bundles": [{"root": "docs/kb", "files": 10}], "sessions": [
       {"count": 1, "hasSnapshot": true, "rows": [{"pathKey": "docs/kb/a1.md", "op": "read"}, {"pathKey": "docs/kb/a2.md", "op": "read"}, {"pathKey": "docs/kb/a3.md", "op": "read"}]},
       {"count": 19, "hasSnapshot": true, "rows": [{"pathKey": "docs/kb/index.md", "op": "read"}]}]},
-    "expected": {"verdict": {"level": "fix", "qualifiers": [], "findings": [
-      {"rule": "kb_flood", "severity": "fix", "params": {"bundle": "docs/kb", "sessions": 1, "bundleSessions": 20, "share": 0.05}}]}},
-    "note": "Rule 8: 20 snapshot-bound docs/kb sessions; one read 3/10 = 0.3 > 0.25 -> flooded, the others 1/10. 1/20 = 0.05 < 0.20 -> fix. Rule 7: a1..a3 1/20 each; index excluded."
+    "expected": {"verdict": {"level": "ok", "qualifiers": [], "findings": [
+      {"rule": "kb_flood", "severity": "info", "params": {"bundle": "docs/kb", "sessions": 1, "bundleSessions": 20, "share": 0.05, "flooded": 1, "kbSessions": 20}}]}},
+    "note": "Rule 8: 20 snapshot-bound docs/kb sessions; one read 3/10 = 0.3 > 0.25 -> flooded, the others 1/10. 1 flooded < floodMinSessions 3 -> info finding, level stays ok (FR-7). Rule 7: a1..a3 1/20 each; index excluded."
   },
   {
     "id": "RV-10",
@@ -270,5 +270,110 @@
     "expected": {"verdict": {"level": "fix", "qualifiers": [], "findings": [
       {"rule": "always_read", "severity": "fix", "params": {"bundle": "docs/kb/api", "path": "docs/kb/api/a1.md", "sessions": 5, "kbSessions": 5, "share": 1}}]}},
     "note": "docs/kb/api/a1.md lies under both roots; the deepest, docs/kb/api, owns it, and only that bundle's file list contains it -> one always_read naming docs/kb/api."
+  },
+  {
+    "id": "OV-17",
+    "kind": "session",
+    "input": {"bundles": [{"root": "docs/kb", "files": 10}], "nodes": [
+      {"agentId": "main", "rows": [{"pathKey": "docs/kb/a1.md", "op": "read"}, {"pathKey": "docs/kb/a1.md", "op": "write"}]}]},
+    "expected": {"verdict": {"level": "kb_not_used", "qualifiers": [], "findings": []}},
+    "note": "Upkeep (FR-5): the node read a1 and also wrote it, so its read is an upkeep row and is dropped; no KB read is left -> rule 2 kb_not_used, although a bundle exists."
+  },
+  {
+    "id": "OV-18",
+    "kind": "session",
+    "input": {"okf": {"sessionShareFix": 0.1}, "bundles": [{"root": "docs/kb", "files": 10}], "nodes": [
+      {"agentId": "main", "rows": [{"pathKey": "docs/kb/a1.md", "op": "read"}, {"pathKey": "docs/kb/a2.md", "op": "read"}]}]},
+    "expected": {"verdict": {"level": "fix", "qualifiers": [], "findings": [
+      {"rule": "session_share", "severity": "fix", "params": {"agentId": "main", "bundle": "docs/kb", "read": 2, "total": 10, "share": 0.2}}]}},
+    "note": "Threshold override: sessionShareFix 0.1 (default 0.25). 2/10 = 0.2 > 0.1 -> fix; with the default it would be ok (OV-03)."
+  },
+  {
+    "id": "OV-19",
+    "kind": "session",
+    "input": {"okf": {"shareMinBundleFiles": 5}, "bundles": [{"root": "docs/kb", "files": 6}], "nodes": [
+      {"agentId": "main", "rows": [{"pathKey": "docs/kb/a1.md", "op": "read"}, {"pathKey": "docs/kb/a2.md", "op": "read"}, {"pathKey": "docs/kb/a3.md", "op": "read"}, {"pathKey": "docs/kb/a4.md", "op": "read"}]}]},
+    "expected": {"verdict": {"level": "mess", "qualifiers": [], "findings": [
+      {"rule": "session_share", "severity": "mess", "params": {"agentId": "main", "bundle": "docs/kb", "read": 4, "total": 6, "share": 0.6666666666666666}}]}},
+    "note": "FR-6 guard as a setting: shareMinBundleFiles 5, so a 6-article bundle is judged (with the default 10 it is skipped, OV-06). 4/6 = 0.667 > 0.5 -> mess."
+  },
+  {
+    "id": "RV-15",
+    "kind": "repo",
+    "input": {"bundles": [{"root": "docs/kb", "files": [{"path": "docs/kb/index.md", "size": 100}, {"path": "docs/kb/a1.md", "size": 60000}, {"path": "docs/kb/a2.md", "size": 1000}]}], "sessions": [
+      {"count": 5, "hasSnapshot": true, "rows": [{"pathKey": "docs/kb/a1.md", "op": "read", "bytes": 22000, "calls": 2, "rangedCalls": 1, "rangedBytes": 20000}]},
+      {"hasSnapshot": true, "rows": [{"pathKey": "docs/kb/a1.md", "op": "read", "bytes": 500, "calls": 1, "rangedCalls": 1, "rangedBytes": 500}]},
+      {"count": 2, "hasSnapshot": true, "rows": [{"pathKey": "docs/kb/a2.md", "op": "read"}]}]},
+    "expected": {"verdict": {"level": "fix", "qualifiers": [], "findings": [
+      {"rule": "coarse_article", "severity": "fix", "params": {"bundle": "docs/kb", "path": "docs/kb/a1.md", "size": 60000, "sessions": 5, "avgReadBytes": 2000, "ratio": 0.03333333333333333}}]}},
+    "note": "FR-4 (rule 9, whole-file reads only): each of the 5 sessions has 22000 - 20000 = 2000 whole bytes over 2 - 1 = 1 whole call -> avg 2000 / 60000 = 0.033 < 0.1 -> coarse. Counting the ranged call too would give 11000 / 60000 = 0.18 -> no finding. The session with only a ranged read has no whole call and is not a reader (sessions 5, not 6). always_read: a1 6/8 = 0.75 < 0.8 -> none. 8 KB sessions >= 5 -> level fix."
+  },
+  {
+    "id": "RV-16",
+    "kind": "repo",
+    "input": {"bundles": [{"root": "docs/kb", "files": [{"path": "docs/kb/index.md", "size": 100}, {"path": "docs/kb/a1.md", "size": 1000}, {"path": "docs/kb/a2.md", "size": 1000}]}], "sessions": [
+      {"count": 4, "hasSnapshot": true, "rows": [{"pathKey": "docs/kb/a1.md", "op": "read"}]},
+      {"hasSnapshot": true, "rows": [{"pathKey": "docs/kb/a2.md", "op": "read", "nodeId": "n1"}, {"pathKey": "docs/kb/a2.md", "op": "write", "nodeId": "n1"}]},
+      {"hasSnapshot": true, "rows": [{"pathKey": "docs/kb/a2.md", "op": "read", "nodeId": "n1"}, {"pathKey": "docs/kb/a2.md", "op": "write", "nodeId": "n2"}]},
+      {"hasSnapshot": true, "rows": [{"pathKey": "docs/kb/a1.md", "op": "read", "nodeId": "n0"}, {"pathKey": "docs/kb/a2.md", "op": "read", "nodeId": "n1"}, {"pathKey": "docs/kb/a2.md", "op": "write", "nodeId": "n1"}]}]},
+    "expected": {"verdict": {"level": "fix", "qualifiers": [], "upkeepOnlySessions": 1, "findings": [
+      {"rule": "always_read", "severity": "fix", "params": {"bundle": "docs/kb", "path": "docs/kb/a1.md", "sessions": 5, "kbSessions": 6, "share": 0.8333333333333334}}]}},
+    "note": "Upkeep (FR-5, rule 6): session 5's node n1 read and wrote a2 -> its read is dropped and only a bundle write is left -> upkeep-only, upkeepOnlySessions 1, not a KB session. Session 6: n1 read a2 but n2 wrote it -> not upkeep, a KB session. Session 7: the a2 pair of n1 is upkeep, the a1 read keeps it a KB session. KB sessions 4 + 1 + 1 = 6; a1 in 5/6 = 0.833 >= 0.8 -> always_read. Without the upkeep rule: 7 KB sessions, 5/7 = 0.714 -> none."
+  },
+  {
+    "id": "RV-17",
+    "kind": "repo",
+    "input": {"bundles": [{"root": "docs/kb", "files": 10}], "sessions": [
+      {"count": 3, "hasSnapshot": true, "rows": [{"pathKey": "docs/kb/a1.md", "op": "read"}, {"pathKey": "docs/kb/a2.md", "op": "read"}, {"pathKey": "docs/kb/a3.md", "op": "read"}]},
+      {"count": 17, "hasSnapshot": true, "rows": [{"pathKey": "docs/kb/index.md", "op": "read"}]}]},
+    "expected": {"verdict": {"level": "fix", "qualifiers": [], "findings": [
+      {"rule": "kb_flood", "severity": "fix", "params": {"bundle": "docs/kb", "sessions": 3, "bundleSessions": 20, "share": 0.15, "flooded": 3, "kbSessions": 20}}]}},
+    "note": "FR-7 (rule 8): 3 of 20 sessions read 3/10 = 0.3 > 0.25 -> flooded 3 >= floodMinSessions 3, so the flood counts; 3/20 = 0.15 < 0.2 -> fix. Compare RV-09 (1 flooded -> info)."
+  },
+  {
+    "id": "RV-18",
+    "kind": "repo",
+    "input": {"okf": {"floodMinSessions": 1}, "bundles": [{"root": "docs/kb", "files": 10}], "sessions": [
+      {"count": 1, "hasSnapshot": true, "rows": [{"pathKey": "docs/kb/a1.md", "op": "read"}, {"pathKey": "docs/kb/a2.md", "op": "read"}, {"pathKey": "docs/kb/a3.md", "op": "read"}]},
+      {"count": 19, "hasSnapshot": true, "rows": [{"pathKey": "docs/kb/index.md", "op": "read"}]}]},
+    "expected": {"verdict": {"level": "fix", "qualifiers": [], "findings": [
+      {"rule": "kb_flood", "severity": "fix", "params": {"bundle": "docs/kb", "sessions": 1, "bundleSessions": 20, "share": 0.05, "flooded": 1, "kbSessions": 20}}]}},
+    "note": "Threshold override on RV-09's data: floodMinSessions 1, so the single flooded session counts; 1/20 = 0.05 < 0.2 -> fix."
+  },
+  {
+    "id": "RV-19",
+    "kind": "repo",
+    "input": {"okf": {"floodMinSessions": 0, "alwaysReadShare": 0.05}, "bundles": [{"root": "docs/kb", "files": 10}], "sessions": [
+      {"count": 1, "hasSnapshot": true, "rows": [{"pathKey": "docs/kb/a1.md", "op": "read"}, {"pathKey": "docs/kb/a2.md", "op": "read"}, {"pathKey": "docs/kb/a3.md", "op": "read"}]},
+      {"count": 19, "hasSnapshot": true, "rows": [{"pathKey": "docs/kb/index.md", "op": "read"}]}]},
+    "expected": {"verdict": {"level": "fix", "qualifiers": [], "findings": [
+      {"rule": "always_read", "severity": "fix", "params": {"bundle": "docs/kb", "path": "docs/kb/a1.md", "sessions": 1, "kbSessions": 20, "share": 0.05}},
+      {"rule": "always_read", "severity": "fix", "params": {"bundle": "docs/kb", "path": "docs/kb/a2.md", "sessions": 1, "kbSessions": 20, "share": 0.05}},
+      {"rule": "always_read", "severity": "fix", "params": {"bundle": "docs/kb", "path": "docs/kb/a3.md", "sessions": 1, "kbSessions": 20, "share": 0.05}},
+      {"rule": "kb_flood", "severity": "info", "params": {"bundle": "docs/kb", "sessions": 1, "flooded": 1, "kbSessions": 20}}]}},
+    "note": "Per-field merge (resolveOkfThresholds): the stored floodMinSessions 0 is invalid (integer >= 1) and falls back to its default 3, so RV-09's single flood stays info; the valid alwaysReadShare 0.05 is applied, so a1..a3 (1/20 = 0.05 each) are always_read. fix before info."
+  },
+  {
+    "id": "RV-20",
+    "kind": "repo",
+    "input": {"bundles": [{"root": "docs/kb", "files": [{"path": "docs/kb/index.md", "size": 100}, {"path": "docs/kb/a1.md", "size": 2000}]}],
+      "latestFiles": {"docs/kb/index.md": {"hash": "i1", "size": 100}, "docs/kb/a1.md": {"hash": "h2", "size": 2000}},
+      "sessions": [
+        {"count": 5, "hasSnapshot": true, "rows": [{"pathKey": "docs/kb/a1.md", "op": "read"}], "files": {"docs/kb/a1.md": {"hash": "h1", "size": 1000}}},
+        {"hasSnapshot": true, "rows": [{"pathKey": "docs/kb/a1.md", "op": "read"}], "files": {"docs/kb/a1.md": {"hash": "h2", "size": 2000}}}]},
+    "expected": {"verdict": {"level": "fix", "qualifiers": [], "findings": [
+      {"rule": "always_read", "severity": "fix", "params": {"bundle": "docs/kb", "path": "docs/kb/a1.md", "sessions": 6, "kbSessions": 6, "share": 1}, "stale": {"sessions": 1, "total": 6, "oldSize": 1000}}]}},
+    "note": "FR-10 stale (rule 11): only 1 session was bound to a1's current hash h2, below repoMinKbSessions 5, while all 6 sessions reach it -> always_read is computed over all 6 (6/6) and marked stale {sessions 1, total 6, oldSize 1000 = the size of the other version}. A stale finding still counts for the level -> fix."
+  },
+  {
+    "id": "RV-21",
+    "kind": "repo",
+    "input": {"bundles": [{"root": "docs/kb", "files": [{"path": "docs/kb/index.md", "size": 100}, {"path": "docs/kb/a2.md", "size": 1000}]}],
+      "latestFiles": {"docs/kb/index.md": {"hash": "i1", "size": 100}, "docs/kb/a2.md": {"hash": "h2", "size": 1000}},
+      "sessions": [
+        {"count": 5, "hasSnapshot": true, "rows": [{"pathKey": "docs/kb/a1.md", "op": "read"}], "files": {"docs/kb/a1.md": {"hash": "h1", "size": 3000}}}]},
+    "expected": {"verdict": {"level": "ok", "qualifiers": [], "findings": [
+      {"rule": "always_read", "severity": "fix", "params": {"bundle": "docs/kb", "path": "docs/kb/a1.md", "sessions": 5, "kbSessions": 5, "share": 1}, "removed": true}]}},
+    "note": "FR-10 removed: a1 is gone from the latest snapshot but the sessions' bound snapshot listed it -> it is still judged (5/5 -> always_read), marked removed, and dropped from the level -> ok."
   }
 ]

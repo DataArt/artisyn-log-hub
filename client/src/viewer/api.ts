@@ -30,6 +30,7 @@ import type {
   ChangeSurfaceTimeline,
   ChangeSurfaceTimelineBucket,
   ExecutiveSummaryReportData,
+  OkfThresholds,
   OtelReasonKey,
   RepoConfig,
   RepositoryContext,
@@ -45,6 +46,7 @@ import type {
   WorkTimeBucket,
   ActiveSessionsResponse,
   ProductivityAnalyticsResponse,
+  RepoOkfArticleResponse,
   RepoOkfUsageResponse,
   RepoOtelFactsParams,
   RepoOtelFactsResponse,
@@ -855,11 +857,10 @@ export interface RepoOkfUsageQueryParams {
   bundle?: string;
 }
 
-/** How the repo's OKF knowledge bases were read over a period (repo OKF tab). */
-export async function fetchRepoOkfUsage(
-  repoId: number,
-  params: RepoOkfUsageQueryParams,
-): Promise<RepoOkfUsageResponse> {
+/** Scope/period query shared by the repo OKF usage and article routes. */
+function repoOkfScopeQuery(
+  params: Omit<RepoOkfUsageQueryParams, 'bundle'>,
+): URLSearchParams {
   const url = new URLSearchParams();
   if (params.teamId != null) url.set('teamId', String(params.teamId));
   url.set('startDate', params.startDate);
@@ -874,12 +875,40 @@ export async function fetchRepoOkfUsage(
     url.set('users', params.users.map((u) => encodeURIComponent(u)).join(','));
   }
   for (const a of params.attr ?? []) url.append('attr', a);
+  return url;
+}
+
+/** How the repo's OKF knowledge bases were read over a period (repo OKF tab). */
+export async function fetchRepoOkfUsage(
+  repoId: number,
+  params: RepoOkfUsageQueryParams,
+): Promise<RepoOkfUsageResponse> {
+  const url = repoOkfScopeQuery(params);
   if (params.bundle) url.set('bundle', params.bundle);
   const res = await apiFetch(
     `/api/v1/repositories/${repoId}/reports/okf-usage?${url.toString()}`,
   );
   if (!res.ok) throw new ApiError(res.status);
   return res.json() as Promise<RepoOkfUsageResponse>;
+}
+
+/**
+ * Per-article drill-down of the repo OKF tab: the same scope and filters as
+ * {@link fetchRepoOkfUsage} (the `bundle` narrowing does not apply). A `path` that is not a
+ * stored KB article in scope comes back with `found: false`.
+ */
+export async function getOkfArticle(
+  repoId: number,
+  path: string,
+  filters: Omit<RepoOkfUsageQueryParams, 'bundle'>,
+): Promise<RepoOkfArticleResponse> {
+  const url = repoOkfScopeQuery(filters);
+  url.set('path', path);
+  const res = await apiFetch(
+    `/api/v1/repositories/${repoId}/reports/okf-usage/article?${url.toString()}`,
+  );
+  if (!res.ok) throw new ApiError(res.status);
+  return res.json() as Promise<RepoOkfArticleResponse>;
 }
 
 // --- OTEL tabs (2026-10-30 otel-tabs-traces) ------------------------------------
@@ -1335,6 +1364,19 @@ export interface RepoSettingsResponse {
   userConfig: RepoConfig | null;
   teamId: number | null;
   canEditTeamConfig: boolean;
+  /** Server defaults of every OKF View threshold, so the client keeps no twin of them. */
+  okfDefaults: OkfThresholds;
+  /** Fixed OKF View limits that are not settings (Settings "Not settings" footer). */
+  okfFixedLimits: OkfFixedLimits;
+}
+
+/** OKF View limits fixed in server code, reported read-only by the settings routes. */
+export interface OkfFixedLimits {
+  readTopN: number;
+  hotFilesTopN: number;
+  taskHeadMaxChars: number;
+  patternMaxChars: number;
+  eventCapPerNode: number;
 }
 
 /** `teamId` lets a team member read a teammate's repo through the team's access (D4.8). */

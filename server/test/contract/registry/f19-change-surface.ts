@@ -230,7 +230,16 @@ export const f19ChangeSurface: ContractFamily = {
                          AND a.path_key NOT LIKE '%/') AS kb_reads,
                      (SELECT coalesce(sum(a.bytes), 0) FROM session_okf_access a
                        WHERE a.session_id = t.id AND a.op IN ('read', 'grep')
-                         AND a.path_key NOT LIKE '%/') AS kb_read_bytes
+                         AND a.path_key NOT LIKE '%/') AS kb_read_bytes,
+                     (SELECT count(*) FROM session_okf_event e
+                       WHERE e.session_id = t.id AND e.op = 'search') AS searches,
+                     (SELECT CASE WHEN count(*) = 0 THEN NULL
+                                  ELSE jsonb_build_object('k', count(*) FILTER (WHERE r.followed),
+                                                          'n', count(*)) END
+                        FROM (SELECT p.read_ord, bool_or(p.followed) AS followed
+                                FROM session_okf_pointer p
+                               WHERE p.session_id = t.id AND p.is_new AND NOT p.partial
+                               GROUP BY p.read_ord) r) AS yield
                 FROM tree t`,
         args: ['@s02.id'],
         shape: 'array',
@@ -240,7 +249,49 @@ export const f19ChangeSurface: ContractFamily = {
           id: 'id',
           kbReads: { col: 'kb_reads', as: 'number' },
           kbReadBytes: { col: 'kb_read_bytes', as: 'number' },
+          // 2026-11-03 value signals: code search events and pointer yield (FR-1) per node.
+          searches: { col: 'searches', as: 'number' },
+          yield: { col: 'yield', as: 'json' },
         },
+      },
+    },
+    {
+      // 2026-11-03 value signals: the whole tree's signal totals. Reads that showed a new
+      // pointer: s02's index.md read and s03's first scheduler.md read; only s03 followed one.
+      // No node searched an area after reading or instead of reading, no dead pointer, no
+      // upkeep, no cap hit, default thresholds.
+      id: 'F19-okf-session-signals',
+      route: OKF_ROUTE,
+      actor: 'owner',
+      params: { repoId: '@R1.id', sessionId: '@s02.sessionId' },
+      expect: {
+        status: 200,
+        bodyMatches: {
+          thresholds: { custom: [] },
+          upkeep: [],
+          eventsTruncated: false,
+        },
+      },
+      read: {
+        sql: `${TREE_NODES},
+              shown AS (SELECT p.session_id, p.read_ord, bool_or(p.followed) AS followed
+                          FROM tree t JOIN session_okf_pointer p ON p.session_id = t.id
+                         WHERE p.is_new AND NOT p.partial
+                         GROUP BY p.session_id, p.read_ord)
+              SELECT (SELECT count(*) FROM shown) AS with_new,
+                     (SELECT count(*) FROM shown WHERE followed) AS followed,
+                     0 AS routing, 0 AS searched_after, 0 AS dead`,
+        args: ['@s02.id'],
+        shape: 'object',
+        path: 'signals',
+        fields: {
+          readsWithNewPointers: { col: 'with_new', as: 'number' },
+          readsFollowed: { col: 'followed', as: 'number' },
+          routingMissArticles: { col: 'routing', as: 'number' },
+          searchedAfterPairs: { col: 'searched_after', as: 'number' },
+          deadPointers: { col: 'dead', as: 'number' },
+        },
+        strict: true,
       },
     },
     {
@@ -282,6 +333,13 @@ export const f19ChangeSurface: ContractFamily = {
               kbReads: 0,
               kbReadBytes: 0,
               files: [],
+              // 2026-11-03 value signals: empty, not absent, on a node with no OKF rows.
+              pointers: [],
+              promptNamedPaths: 0,
+              routingMisses: [],
+              upkeepArticles: [],
+              searches: 0,
+              yield: null,
             },
           ],
         },

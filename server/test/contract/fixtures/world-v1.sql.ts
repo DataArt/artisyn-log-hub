@@ -1244,6 +1244,8 @@ function buildStatements(): WorldStatement[] {
   // (HARNESS_SNAPSHOT_BODY) and s09 (HARNESS_SNAPSHOT_BODY_ORPHAN) are bound (05 §F17/F18/F12
   // chunk 13); every other session predates the snapshot feature and stays NULL.
   // agent_description / workflow_phase (sub-agent .meta.json labels): only s03 carries them.
+  // okf_extract_version (2026-11-03 OKF value signals, DD-11): only the OKF tree s02 -> s03 was
+  // extracted by the current extractor (2); every other session is "no OKF analysis yet".
   const S = WORLD_V1.sessions;
   out.push(
     insert(
@@ -1258,9 +1260,21 @@ function buildStatements(): WorldStatement[] {
         'okf_snapshot_id',
         'agent_description',
         'workflow_phase',
+        'okf_extract_version',
       ],
       [
-        [S.s01.id, S.s01.sessionId, null, null, false, null, null, null, null],
+        [
+          S.s01.id,
+          S.s01.sessionId,
+          null,
+          null,
+          false,
+          null,
+          null,
+          null,
+          null,
+          null,
+        ],
         [
           S.s02.id,
           S.s02.sessionId,
@@ -1271,6 +1285,7 @@ function buildStatements(): WorldStatement[] {
           WORLD_V1.okfSnapshotId,
           null,
           null,
+          2,
         ],
         [
           S.s03.id,
@@ -1282,6 +1297,7 @@ function buildStatements(): WorldStatement[] {
           null,
           'contract-desc',
           'Implement',
+          2,
         ],
         [
           S.s04.id,
@@ -1293,11 +1309,56 @@ function buildStatements(): WorldStatement[] {
           null,
           null,
           null,
+          null,
         ],
-        [S.s05.id, S.s05.sessionId, null, null, true, null, null, null, null],
-        [S.s06.id, S.s06.sessionId, null, null, false, null, null, null, null],
-        [S.s07.id, S.s07.sessionId, null, null, false, null, null, null, null],
-        [S.s08.id, S.s08.sessionId, null, null, false, null, null, null, null],
+        [
+          S.s05.id,
+          S.s05.sessionId,
+          null,
+          null,
+          true,
+          null,
+          null,
+          null,
+          null,
+          null,
+        ],
+        [
+          S.s06.id,
+          S.s06.sessionId,
+          null,
+          null,
+          false,
+          null,
+          null,
+          null,
+          null,
+          null,
+        ],
+        [
+          S.s07.id,
+          S.s07.sessionId,
+          null,
+          null,
+          false,
+          null,
+          null,
+          null,
+          null,
+          null,
+        ],
+        [
+          S.s08.id,
+          S.s08.sessionId,
+          null,
+          null,
+          false,
+          null,
+          null,
+          null,
+          null,
+          null,
+        ],
         [
           S.s09.id,
           S.s09.sessionId,
@@ -1308,11 +1369,45 @@ function buildStatements(): WorldStatement[] {
           null,
           null,
           null,
+          null,
         ],
-        [S.s10.id, S.s10.sessionId, null, null, false, null, null, null, null],
-        [S.s11.id, S.s11.sessionId, null, null, false, null, null, null, null],
+        [
+          S.s10.id,
+          S.s10.sessionId,
+          null,
+          null,
+          false,
+          null,
+          null,
+          null,
+          null,
+          null,
+        ],
+        [
+          S.s11.id,
+          S.s11.sessionId,
+          null,
+          null,
+          false,
+          null,
+          null,
+          null,
+          null,
+          null,
+        ],
         // FR-6 (Rtwins): two roots with one sub-agent each.
-        [S.s12.id, S.s12.sessionId, null, null, false, null, null, null, null],
+        [
+          S.s12.id,
+          S.s12.sessionId,
+          null,
+          null,
+          false,
+          null,
+          null,
+          null,
+          null,
+          null,
+        ],
         [
           S.s13.id,
           S.s13.sessionId,
@@ -1323,14 +1418,27 @@ function buildStatements(): WorldStatement[] {
           null,
           null,
           null,
+          null,
         ],
-        [S.s14.id, S.s14.sessionId, null, null, false, null, null, null, null],
+        [
+          S.s14.id,
+          S.s14.sessionId,
+          null,
+          null,
+          false,
+          null,
+          null,
+          null,
+          null,
+          null,
+        ],
         [
           S.s15.id,
           S.s15.sessionId,
           S.s14.sessionId,
           null,
           false,
+          null,
           null,
           null,
           null,
@@ -1953,7 +2061,7 @@ function buildStatements(): WorldStatement[] {
 
   // OKF usage (2026-10-27): s02 is bound to OKF_SNAPSHOT_BODY; the s02 -> s03 tree read the
   // bundle. s02 (main agent) read index.md first, then the gitignored private.md; its sub-agent
-  // s03 read scheduler.md twice. No other session has OKF rows.
+  // s03 read scheduler.md twice (once as a section read). No other session has OKF rows.
   out.push(
     insert(
       'okf_snapshots',
@@ -1981,11 +2089,135 @@ function buildStatements(): WorldStatement[] {
         'bytes',
         'calls',
         'seq',
+        'ranged_calls',
+        'ranged_bytes',
+        'search_hits',
       ],
       [
-        [1, S.s02.id, 'docs/kb/index.md', 'read', false, 400, 1, 1],
-        [2, S.s02.id, 'docs/kb/private.md', 'read', false, 800, 1, 2],
-        [3, S.s03.id, 'docs/kb/scheduler.md', 'read', false, 1500, 2, 1],
+        [1, S.s02.id, 'docs/kb/index.md', 'read', false, 400, 1, 1, 0, 0, 0],
+        [2, S.s02.id, 'docs/kb/private.md', 'read', false, 800, 1, 2, 0, 0, 0],
+        // One of s03's two scheduler.md reads was a section read (FR-4).
+        [
+          3,
+          S.s03.id,
+          'docs/kb/scheduler.md',
+          'read',
+          false,
+          1500,
+          2,
+          1,
+          1,
+          500,
+          0,
+        ],
+      ],
+    ),
+  );
+  // OKF value signals (2026-11-03): the code-side calls (`session_okf_event`) and the pointers of
+  // each KB read (`session_okf_pointer`) of the same tree; `ord` / `read_ord` share the node's
+  // tool-call counter. s02's index.md read named scheduler.md (new, never followed by s02
+  // itself). s03's first scheduler.md read showed two new code pointers: it then read
+  // server/src/scheduler.ts (followed, a ranged read) and grepped it; legacy-cron.ts it never
+  // touched. Its second read showed the same pointers again (not new). s02 grepped server/src/.
+  out.push(
+    insert(
+      'session_okf_event',
+      [
+        'id',
+        'session_id',
+        'ord',
+        'op',
+        'path',
+        'range_from',
+        'range_to',
+        'pattern',
+      ],
+      [
+        [1, S.s02.id, 3, 'search', 'server/src/', null, null, 'harvest'],
+        [2, S.s03.id, 3, 'read', 'server/src/scheduler.ts', 10, 40, null],
+        [
+          3,
+          S.s03.id,
+          4,
+          'search',
+          'server/src/scheduler.ts',
+          null,
+          null,
+          'runJob',
+        ],
+      ],
+    ),
+  );
+  out.push(
+    insert(
+      'session_okf_pointer',
+      [
+        'id',
+        'session_id',
+        'article_path',
+        'article_hash',
+        'read_ord',
+        'pointer',
+        'is_new',
+        'followed',
+        'partial',
+      ],
+      [
+        [
+          1,
+          S.s02.id,
+          'docs/kb/index.md',
+          '1'.repeat(64),
+          1,
+          'docs/kb/scheduler.md',
+          true,
+          false,
+          false,
+        ],
+        [
+          2,
+          S.s03.id,
+          'docs/kb/scheduler.md',
+          '3'.repeat(64),
+          1,
+          'server/src/scheduler.ts',
+          true,
+          true,
+          false,
+        ],
+        [
+          3,
+          S.s03.id,
+          'docs/kb/scheduler.md',
+          '3'.repeat(64),
+          1,
+          'server/src/legacy-cron.ts',
+          true,
+          false,
+          false,
+        ],
+        [
+          4,
+          S.s03.id,
+          'docs/kb/scheduler.md',
+          '3'.repeat(64),
+          2,
+          'server/src/scheduler.ts',
+          false,
+          true,
+          false,
+        ],
+        [
+          5,
+          S.s03.id,
+          'docs/kb/scheduler.md',
+          '3'.repeat(64),
+          2,
+          'server/src/legacy-cron.ts',
+          false,
+          false,
+          false,
+        ],
       ],
     ),
   );

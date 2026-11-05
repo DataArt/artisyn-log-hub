@@ -1,7 +1,8 @@
 /**
- * The five KPI tiles of the repo OKF tab (styled like the executive-summary `KpiTiles`): KB
- * files, not read, KB sessions, started from index, median file share per session. The
- * "not read" and "started from index" tiles are information only — never a finding.
+ * The KPI tiles of the repo OKF tab (styled like the executive-summary `KpiTiles`): KB
+ * files, not read, KB sessions (+ upkeep-only), started from index, median file share per
+ * session, and — when the server sends them — pointer yield and articles with routing misses.
+ * The "not read" and "started from index" tiles are information only — never a finding.
  */
 import type { RepoOkfUsageResponse } from '../../../../models/repositories';
 
@@ -61,10 +62,16 @@ export function OkfKpiTiles({
 }) {
   const fromIndexShare =
     tiles.kbSessions > 0 ? tiles.startedFromIndex / tiles.kbSessions : null;
+  // Value-signal tiles only when the server sends them (an older server omits the fields).
+  const hasSignals =
+    tiles.pointerYield !== undefined || tiles.routingMissArticles !== undefined;
+  const upkeepOnly = tiles.upkeepOnlySessions ?? 0;
   return (
     <div
       data-testid="okf-kpi-tiles"
-      className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5"
+      className={`grid grid-cols-2 gap-3 md:grid-cols-3 ${
+        hasSignals ? 'xl:grid-cols-4 2xl:grid-cols-7' : 'xl:grid-cols-5'
+      }`}
     >
       <Tile
         testId="okf-tile-kb-files"
@@ -84,6 +91,11 @@ export function OkfKpiTiles({
         testId="okf-tile-sessions"
         label="Sessions in filter · touched KB"
         value={`${tiles.kbSessions.toLocaleString()} / ${tiles.totalSessions.toLocaleString()}`}
+        subLine={
+          upkeepOnly > 0
+            ? `+ ${upkeepOnly.toLocaleString()} upkeep-only (not counted)`
+            : undefined
+        }
         accent="bg-violet-500"
       />
       <Tile
@@ -104,6 +116,28 @@ export function OkfKpiTiles({
         }
         accent="bg-teal-500"
       />
+      {hasSignals ? (
+        <>
+          <Tile
+            testId="okf-tile-pointer-yield"
+            label="Pointer yield"
+            value={
+              tiles.pointerYield && tiles.pointerYield.n > 0
+                ? `${tiles.pointerYield.k.toLocaleString()} of ${tiles.pointerYield.n.toLocaleString()} reads`
+                : '—'
+            }
+            subLine="reads with a new pointer that was followed"
+            accent="bg-emerald-500"
+          />
+          <Tile
+            testId="okf-tile-routing-miss"
+            label="Articles with routing misses"
+            value={(tiles.routingMissArticles ?? 0).toLocaleString()}
+            subLine={`${(tiles.routingMissPairs ?? 0).toLocaleString()} agent · article misses`}
+            accent="bg-amber-500"
+          />
+        </>
+      ) : null}
     </div>
   );
 }

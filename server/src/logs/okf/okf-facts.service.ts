@@ -8,6 +8,9 @@
  * `session_okf_access` — and no tool result text ever leaves the server, only paths, byte counts
  * and labels.
  *
+ * 2026-11-03 value signals: each agent also carries `accessSeq`, its KB and code accesses in call
+ * order (`extractOkfDetail(...).seq`, with the root's snapshot files as the writer passes them).
+ *
  * Ownership (DD-33): the session is found by its `sessions.session_id` string and must have a
  * `logs` row of the API key's user; a missing session and a foreign one both get the same 404.
  */
@@ -24,10 +27,11 @@ import {
 } from '../change-surface/path-normalise';
 import { getDescendantSessionIds } from '../session-tree.sql';
 import {
-  extractOkfAccess,
+  extractOkfDetail,
   toAbsolute,
   toolResultBytes,
   type OkfAccessRow,
+  type OkfSnapshotFileInfo,
 } from './okf-access-extractor';
 import {
   loadOkfSnapshot,
@@ -35,7 +39,7 @@ import {
   type OkfSnapshotBody,
 } from './okf-snapshot';
 import { filterUserPrompts } from './okf-task-context';
-import type { OkfFactsResponse } from './okf-usage.types';
+import type { OkfFactsResponse, OkfFactsSeqItem } from './okf-usage.types';
 import { bundleOfPath } from './okf-verdict';
 import { getServerBashParser } from './server-bash-parser';
 
@@ -255,8 +259,20 @@ export class OkfFactsService {
       rootsBySessionId.get(id) ?? rootsBySessionId.get(rootId) ?? [];
     const bundles = snapshot?.bundles ?? null;
     const sizeOf = new Map<string, number>();
+    // Same `snapshotFiles` the writer passes (DD-5, DD-7, DD-10), so `accessSeq` tells KB
+    // articles from code files exactly like the stored rows.
+    const snapshotFiles: Map<string, OkfSnapshotFileInfo> | undefined =
+      bundles === null ? undefined : new Map();
     for (const b of bundles ?? []) {
-      for (const f of b.files) sizeOf.set(f.path, f.size);
+      for (const f of b.files) {
+        sizeOf.set(f.path, f.size);
+        if (snapshotFiles !== undefined && !snapshotFiles.has(f.path)) {
+          snapshotFiles.set(f.path, {
+            size: Number.isFinite(f.size) && f.size >= 0 ? f.size : null,
+            hash: typeof f.hash === 'string' && f.hash !== '' ? f.hash : null,
+          });
+        }
+      }
     }
     const isKbPath = (path: string): boolean =>
       bundles === null
@@ -277,12 +293,11 @@ export class OkfFactsService {
 
     const agents: OkfFactsResponse['agents'] = nodes.map((node) => {
       const roots = repoRootsOf(node.id);
-      const access: OkfAccessRow[] = extractOkfAccess(
-        node.lines,
-        roots,
-        parser,
-        { isSubagentLog: node.isSubagent },
-      );
+      const detail = extractOkfDetail(node.lines, roots, parser, {
+        isSubagentLog: node.isSubagent,
+        snapshotFiles,
+      });
+      const access: OkfAccessRow[] = detail.access;
       const fileFacts = collectNodeFileFacts(
         node.lines,
         roots,
@@ -327,6 +342,12 @@ export class OkfFactsService {
         .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
         .slice(0, OKF_FACTS_OTHER_READS_TOP)
         .map(([path, bytes]) => ({ path, bytes }));
+      const accessSeq: OkfFactsSeqItem[] = detail.seq.map((item) => ({
+        ...item,
+        ...(item.newPointers !== undefined
+          ? { newPointers: [...item.newPointers] }
+          : {}),
+      }));
 
       const changes = [...fileFacts.changes].sort();
       for (const c of changes) treeChanges.add(c);
@@ -352,6 +373,7 @@ export class OkfFactsService {
         kbSeq,
         otherReadsTop,
         changes,
+        accessSeq,
       };
     });
 

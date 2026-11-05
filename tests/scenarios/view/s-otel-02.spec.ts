@@ -372,6 +372,10 @@ test('@S-OTEL-02 Live view: header entry, user-wide tree, node view, live update
     await expect(pies.nth(0).getByTestId('live-share-legend-item').filter({ hasText: 'No team' })).toHaveCount(1);
     expect(Number(await pies.nth(0).getAttribute('data-slices'))).toBeGreaterThanOrEqual(2);
     await expect(pies.nth(2).getByTestId('live-share-legend-item').filter({ hasText: owner.user.email })).toHaveCount(1);
+    // The carousel remembers its page across node selections, so wrap back to the first page
+    // (cost) for the next step.
+    await page.getByTestId('live-chart-next').click();
+    await expect(carousel).toHaveAttribute('data-page', 'cost');
   });
 
   const repoAKey = await test.step('AC-5, AC-6. a selected repository shows the tiles, the FR-5 breakdown columns and the cost and tokens charts; the OTEL-only session is listed; after a realtime call the session’s Live cost = its session OTEL tab cost', async () => {

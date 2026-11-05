@@ -9,9 +9,11 @@
  *     the prompt_start / prompt_stop pair that gives the session its repository, branch and
  *     `git.root`;
  *   - a `claude` body for the main agent and one `claude-subagent` body per sub-agent, whose
- *     tool calls (Read, Grep over a folder, Edit) are what the server's OKF extraction turns into
- *     `session_okf_access` rows. Each Read's `tool_result` is `bytes` long, so the read bytes are
- *     exactly what the scenario says.
+ *     tool calls (Read, Grep, Bash, Edit) are what the server's OKF extraction turns into
+ *     `session_okf_access` rows and, since 2026-11-03 (OKF value signals), `session_okf_event`
+ *     (code reads / searches) and `session_okf_pointer` (code paths an article read names) rows.
+ *     Each Read's `tool_result` is `bytes` long unless the action gives its `result` text, so the
+ *     read bytes are exactly what the scenario says.
  *
  * `uploadOkfSessionTree()` posts them in hook order (artisyn first, so the repo roots are known
  * when the transcripts land) through `POST /api/v2/logs` and waits until the queue is idle.
@@ -55,19 +57,28 @@ export interface OkfSnapshotSpec {
 
 /**
  * One tool call of an agent, in transcript order:
- *  - `read`: the Read tool on a repo-relative file, its result `bytes` long (default 1000);
- *  - `grep`: the Grep tool over a repo-relative folder (or file), result `bytes` long (default 100);
+ *  - `read`: the Read tool on a repo-relative file. Its result is `result` when given (e.g. an
+ *    article text that names code paths in back-ticks — the pointers of 2026-11-03 DD-8), else
+ *    `bytes` long (default 1000). `offset` / `limit` make it a ranged (section) read (DD-4);
+ *  - `grep`: the Grep tool over a repo-relative folder (or file) with `pattern` (default
+ *    `TODO`), result `bytes` long (default 100);
+ *  - `bash`: the Bash tool with `command` as given (paths in it are the caller's business), its
+ *    result `result` (default empty);
  *  - `edit`: the Edit tool on a repo-relative file.
  */
 export type OkfAction =
-  | { read: string; bytes?: number }
-  | { grep: string; bytes?: number }
+  | { read: string; bytes?: number; result?: string; offset?: number; limit?: number }
+  | { grep: string; bytes?: number; pattern?: string }
+  | { bash: string; result?: string }
   | { edit: string };
 
 export interface OkfSubAgentSpec {
   /** String session id of the sub-agent (the hook's `agent-<id>`). */
   agentId: string;
-  /** The task the parent gave it — its first user message. */
+  /**
+   * The task the parent gave it — its first user message. A code path named here is already
+   * known to the sub-agent, so the same path in a later article read is not a new pointer (DD-9).
+   */
   task: string;
   actions: OkfAction[];
 }
@@ -252,13 +263,23 @@ export function agentTranscriptLines(o: AgentTranscriptOptions, steps: readonly 
   return lines;
 }
 
-/** The tool step of one OKF action (Read / Grep / Edit under `OKF_REPO_ROOT`). */
+/** The tool step of one OKF action (Read / Grep / Bash / Edit under `OKF_REPO_ROOT`). */
 function okfStep(action: OkfAction): AgentToolStep {
   if ('read' in action) {
-    return { name: 'Read', input: { file_path: abs(action.read) }, result: 'r'.repeat(action.bytes ?? 1000) };
+    const input: Record<string, unknown> = { file_path: abs(action.read) };
+    if (action.offset !== undefined) input.offset = action.offset;
+    if (action.limit !== undefined) input.limit = action.limit;
+    return { name: 'Read', input, result: action.result ?? 'r'.repeat(action.bytes ?? 1000) };
   }
   if ('grep' in action) {
-    return { name: 'Grep', input: { pattern: 'TODO', path: abs(action.grep) }, result: 'g'.repeat(action.bytes ?? 100) };
+    return {
+      name: 'Grep',
+      input: { pattern: action.pattern ?? 'TODO', path: abs(action.grep) },
+      result: 'g'.repeat(action.bytes ?? 100),
+    };
+  }
+  if ('bash' in action) {
+    return { name: 'Bash', input: { command: action.bash }, result: action.result ?? '' };
   }
   return {
     name: 'Edit',

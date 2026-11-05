@@ -604,6 +604,7 @@ const OKF_REPO_ROW: ScreenRow = {
   modes: A,
   title: 'Repository: OKF (knowledge base usage)',
   expectTestId: 'repo-okf-tab',
+  docRef: { file: `${HELP}/okf-tab.md`, heading: 'Repository OKF tab' },
 };
 
 /**
@@ -733,6 +734,7 @@ const SESSION_TAB_ROWS: Array<Omit<ScreenRow, 'story' | 'role' | 'modes' | 'rout
     tab: { group: 'session', id: 'okf' },
     title: 'Session: OKF (knowledge base usage)',
     expectTestId: 'session-okf-tab',
+    docRef: { file: `${HELP}/okf-tab.md`, heading: 'Session OKF tab' },
     dataOptional: true,
     emptyText: 'No OKF knowledge base',
   },
@@ -1046,6 +1048,7 @@ const HELP_ARTICLES: Array<[string, string]> = [
   ['session-list', 'Working with the Session List'],
   ['session-log', 'Session Log'],
   ['analytics-reports', 'Analytics & Reports'],
+  ['okf-tab', 'OKF tab'],
   ['otel-tab', 'OTEL tab'],
   ['otel-architecture', 'OTEL collection architecture'],
   ['cost-and-context', 'Understanding Cost & Context'],

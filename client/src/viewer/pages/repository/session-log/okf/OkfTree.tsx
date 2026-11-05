@@ -7,6 +7,7 @@
  * highlights the node and scrolls it into view after the next render.
  */
 import {
+  Fragment,
   useEffect,
   useImperativeHandle,
   useMemo,
@@ -29,6 +30,16 @@ import {
   OkfTreeRow,
   type OkfTreeVariant,
 } from './okf-tree-rows';
+import { OkfTreeLegend } from './okf-tree-columns';
+import {
+  okfTreeFilePaths,
+  type OkfSessionDetails,
+} from './okf-session-details';
+import {
+  OkfAgentPointerRow,
+  OkfMissRow,
+  OkfOrphanMisses,
+} from './okf-tree-session-rows';
 
 export interface OkfTreeHandle {
   scrollToNode: (bundle: string | null, path?: string) => void;
@@ -46,6 +57,10 @@ export interface OkfTreeProps {
   fileFilter?: ReadonlySet<string> | null;
   /** Note shown above the rows while `fileFilter` is set. */
   filterNote?: string;
+  /** Repo tab: a file name opens the article drill-down. */
+  onOpenArticle?: (path: string) => void;
+  /** Session tab: per-agent new pointers and routing misses by article path. */
+  details?: OkfSessionDetails;
   ref?: Ref<OkfTreeHandle>;
 }
 
@@ -57,8 +72,28 @@ export function OkfTree({
   nullGroupLabel,
   fileFilter = null,
   filterNote,
+  onOpenArticle,
+  details,
   ref,
 }: OkfTreeProps) {
+  const [openPointers, setOpenPointers] = useState<ReadonlySet<string>>(
+    new Set(),
+  );
+  const orphanMisses = useMemo(() => {
+    if (!details) return [];
+    const inTree = okfTreeFilePaths(tree);
+    return [...details.misses]
+      .filter(([path]) => !inTree.has(path))
+      .flatMap(([, list]) => list);
+  }, [details, tree]);
+  const togglePointers = (path: string) => {
+    setOpenPointers((prev) => {
+      const next = new Set(prev);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
+  };
   const [overrides, setOverrides] = useState<ReadonlyMap<string, boolean>>(
     new Map(),
   );
@@ -118,38 +153,77 @@ export function OkfTree({
     <div
       ref={containerRef}
       data-testid="okf-tree"
-      className="min-w-0 rounded-md border border-border bg-card"
+      className="min-w-0 overflow-x-auto rounded-md border border-border bg-card"
     >
-      <OkfTreeHeader metric={metric} variant={variant} />
-      {fileFilter && filterNote ? (
-        <div className="border-b border-border bg-accent/40 px-3 py-1 text-[11px] text-muted-foreground">
-          {filterNote}
-        </div>
-      ) : null}
-      {rows.length === 0 ? (
-        <div className="px-3 py-6 text-center text-xs text-muted-foreground">
-          No KB paths to show
-        </div>
-      ) : (
-        <div>
-          {rows.map((entry) => (
-            <OkfTreeRow
-              key={entry.key}
-              entry={entry}
-              metric={metric}
-              variant={variant}
-              bundleLabel={entry.top.bundle ?? nullGroupLabel}
-              bundleIgnored={
-                entry.top.bundle !== null &&
-                (ignoredBundles?.has(entry.top.bundle) ?? false)
-              }
-              folderScans={folderScans.get(entry.key) ?? 0}
-              highlighted={highlight === entry.key}
-              onToggle={toggle}
-            />
-          ))}
-        </div>
-      )}
+      {/* The repo variant's fixed columns are wider than the tree beside the side panel at
+          xl widths; the name column keeps a minimum width and the tree scrolls sideways. */}
+      <div className="min-w-fit">
+        <OkfTreeHeader metric={metric} variant={variant} />
+        {fileFilter && filterNote ? (
+          <div className="border-b border-border bg-accent/40 px-3 py-1 text-[11px] text-muted-foreground">
+            {filterNote}
+          </div>
+        ) : null}
+        {rows.length === 0 ? (
+          <div className="px-3 py-6 text-center text-xs text-muted-foreground">
+            No KB paths to show
+          </div>
+        ) : (
+          <div>
+            {rows.map((entry) => {
+              const path = entry.node.kind === 'file' ? entry.node.path : null;
+              const ptrs = path ? details?.pointers.get(path) : undefined;
+              const misses = path ? details?.misses.get(path) : undefined;
+              const open = path !== null && openPointers.has(path);
+              return (
+                <Fragment key={entry.key}>
+                  <OkfTreeRow
+                    entry={entry}
+                    metric={metric}
+                    variant={variant}
+                    bundleLabel={entry.top.bundle ?? nullGroupLabel}
+                    bundleIgnored={
+                      entry.top.bundle !== null &&
+                      (ignoredBundles?.has(entry.top.bundle) ?? false)
+                    }
+                    folderScans={folderScans.get(entry.key) ?? 0}
+                    highlighted={highlight === entry.key}
+                    onToggle={toggle}
+                    onOpenArticle={onOpenArticle}
+                    pointerToggle={
+                      path && ptrs
+                        ? {
+                            open,
+                            agents: ptrs.length,
+                            onToggle: () => togglePointers(path),
+                          }
+                        : undefined
+                    }
+                  />
+                  {open
+                    ? ptrs?.map((p) => (
+                        <OkfAgentPointerRow
+                          key={`p:${p.agentId}`}
+                          entry={p}
+                          depth={entry.depth}
+                        />
+                      ))
+                    : null}
+                  {misses?.map((m) => (
+                    <OkfMissRow
+                      key={`m:${m.agentId}`}
+                      miss={m}
+                      depth={entry.depth}
+                    />
+                  ))}
+                </Fragment>
+              );
+            })}
+          </div>
+        )}
+        {!fileFilter ? <OkfOrphanMisses misses={orphanMisses} /> : null}
+        {variant === 'repo' ? <OkfTreeLegend /> : null}
+      </div>
     </div>
   );
 }

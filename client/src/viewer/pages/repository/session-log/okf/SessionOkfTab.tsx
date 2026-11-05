@@ -12,16 +12,22 @@
  */
 import { useQuery } from '@tanstack/react-query';
 import { useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Skeleton } from '@/ui/skeleton';
 import { ToggleGroup, ToggleGroupItem } from '@/ui/toggle-group';
 import { fetchSessionOkfUsage } from '../../../../api';
 import { routes } from '../../../../hooks/useHashRoute';
+import { okfThresholdsSettingsParams } from '../../okf/okf-url-state';
 import { getSessionLogsErrorMessage } from '../session-logs-error';
 import { OkfAgentsPanel } from './OkfAgentsPanel';
 import { OkfBundleCards } from './OkfBundleCards';
 import { OkfTree, type OkfTreeHandle } from './OkfTree';
+import { OkfValueSignalsTile } from './OkfValueSignalsTile';
 import { OkfVerdictCard } from './OkfVerdictCard';
+import {
+  buildOkfSessionDetails,
+  okfRangedCallsByPath,
+} from './okf-session-details';
 import { okfAgentLabel, type OkfHeatMetric } from './okf-tree';
 
 export interface SessionOkfTabProps {
@@ -109,6 +115,11 @@ export function SessionOkfTab({
   const [agentFilter, setAgentFilter] = useState<string | null>(null);
   const treeRef = useRef<OkfTreeHandle | null>(null);
   const treeBoxRef = useRef<HTMLDivElement | null>(null);
+  const [, setSearchParams] = useSearchParams();
+  // The verdict card's thresholds chip opens Settings → Analysis at the OKF thresholds card.
+  const openSettings = () => {
+    setSearchParams(okfThresholdsSettingsParams, { replace: true });
+  };
 
   const query = useQuery({
     queryKey: ['session-okf-usage', repoId, sessionId, teamId],
@@ -121,6 +132,15 @@ export function SessionOkfTab({
     const agent = data.agents.find((a) => a.id === agentFilter);
     return agent ? new Set(agent.files) : null;
   }, [agentFilter, data]);
+
+  const details = useMemo(
+    () => (data ? buildOkfSessionDetails(data.agents, sessionId) : undefined),
+    [data, sessionId],
+  );
+  const rangedCalls = useMemo(
+    () => okfRangedCallsByPath(data?.tree ?? []),
+    [data],
+  );
 
   const ignoredBundles = useMemo(
     () =>
@@ -195,11 +215,20 @@ export function SessionOkfTab({
           verdict={data.verdict}
           variant="session"
           readTop={data.readTop}
+          upkeep={data.upkeep}
+          rangedCalls={rangedCalls}
           agents={data.agents}
           rootSessionId={sessionId}
           onNodeClick={scrollToNode}
+          thresholds={data.thresholds}
+          onOpenSettings={openSettings}
         />
       </div>
+
+      <OkfValueSignalsTile
+        signals={data.signals}
+        eventsTruncated={data.eventsTruncated}
+      />
 
       <OkfBundleCards
         bundles={data.bundles}
@@ -223,6 +252,7 @@ export function SessionOkfTab({
                 : 'Accessed KB paths (no snapshot)'
             }
             fileFilter={fileFilter}
+            details={details}
             filterNote={`Showing only agent ${selectedLabel}'s reads — folder and bundle totals are the whole tree's.`}
           />
         </div>

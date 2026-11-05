@@ -46,7 +46,8 @@ This article keeps only what the DDL does not say: how tables relate in behaviou
                              ▼
    session_stats, session_costs, session_call_tokens, session_request_ids, session_tool_stats,
    session_harness_usage, session_changed_paths, session_file_stats*, session_cause_stats*,
-   session_okf_access, session_tool_usage, session_attribution, session_attribution_runs,
+   session_okf_access, session_okf_event, session_okf_pointer, session_tool_usage,
+   session_attribution, session_attribution_runs,
    session_prompt_watermark, user_favorite_sessions, logs_otel, otel_api_calls,
    otel_calls, otel_spans, otel_cost_buckets, otel_session_state, otel_reclass_queue,
    otel_session_totals, otel_agent_totals
@@ -86,15 +87,21 @@ table stores the integer `sessions.id`.
 - `tool_usage_version` is the rebuild marker of `session_tool_usage` (see
   [tool-monitoring.md](tool-monitoring.md)); `initializeDatabase()` re-queues every value below the
   current extractor version on start.
+- `okf_extract_version` (`smallint`, nullable) / `okf_events_truncated` (`boolean`, default
+  `false`), migration 0091: the OKF extraction marker. The OKF writer sets `OKF_EXTRACT_VERSION`
+  (2) on every node it rebuilds, even with zero rows, and the truncated flag when the per-node
+  event / pointer cap was hit. `NULL` or a lower value on a root = "no OKF analysis yet" (the repo
+  OKF tab's recompute banner). Unlike `tool_usage_version`, nothing is re-queued on start; only
+  `recompute-all-sessions` rebuilds.
 - Repos and sessions are **private to their owner**; the owner is the `user_id` of the session's
   logs. Team visibility comes from `team_repositories` (by URL) and `teams.access_mode`.
 
 **Soft delete** (`deleted = true`, by the owner): `SessionsService.purgeSessionChildData` deletes
 the OTEL facts (state row first, so a running writer finishes), `session_stats`,
 `session_call_tokens`, `session_costs`, `user_favorite_sessions`, `session_file_stats`,
-`session_okf_access`, `session_tool_usage`, `logs` (cascading `log_repositories` /
-`log_contexts`), orphan `contexts`, queued `upload_queue` rows, then clears the snapshot ids and
-sweeps orphan `harness_snapshots` / `okf_snapshots`. The `sessions` row stays, so a re-upload of
+`session_okf_access`, `session_okf_event`, `session_okf_pointer`, `session_tool_usage`, `logs` (cascading `log_repositories` /
+`log_contexts`), orphan `contexts`, queued `upload_queue` rows, then clears the snapshot ids (and
+resets the OKF marker) and sweeps orphan `harness_snapshots` / `okf_snapshots`. The `sessions` row stays, so a re-upload of
 a deleted session is rejected. Child tables not in that list (`session_tool_stats`,
 `session_harness_usage`, `session_changed_paths`, `session_cause_stats`, `session_request_ids`,
 `logs_otel`, `otel_api_calls`, the attribution tables) stay until the hard delete cascades them.
@@ -321,8 +328,31 @@ These tables are not written inline by ingest:
 - `session_tool_usage` is rebuilt per session tree by `ToolUsageRebuildService` whenever
   `sessions.tool_usage_version IS NULL`. Its `aggregates`, `calls` and `outputs` columns are
   TOASTed separately, so the summary never detoasts the call lists.
-- `session_okf_access` is rebuilt per node on ingest, import, heal and recompute
+- `session_okf_access`, `session_okf_event` and `session_okf_pointer` are rebuilt per node on
+  ingest, import, heal and recompute; `sessions.okf_extract_version` records the extractor version
+  they were built with
   ([okf-usage.md](okf-usage.md)).
+
+### session_okf_access, session_okf_event, session_okf_pointer
+
+```
+ sessions (id) ──CASCADE──► session_okf_access   U(session_id, path_key, op, after_own_edit)
+      │                      + ranged_calls, ranged_bytes, search_hits (0091, default 0)
+      ├──CASCADE──► session_okf_event    U(session_id, ord, op, path)            (0091)
+      │                      op ∈ read | search | write; range_from, range_to, pattern ≤ 200
+      └──CASCADE──► session_okf_pointer  U(session_id, read_ord, article_path, pointer) (0091)
+                             article_hash, is_new, followed, partial; pointer '' = partial read
+```
+
+- One row set per **tree node** (root or sub-agent), keyed by the node's own `sessions.id`; no
+  team / user scope columns.
+- `ord` / `read_ord` = the node's 1-based tool-call ordinal, shared by events and pointers, so
+  the read side can tell whether a search came after a read.
+- `session_okf_event` holds code-side accesses only (KB `.md` files of the snapshot stay in
+  `session_okf_access`); folders end in `/`. At most 3000 rows per node, 5000 pointer rows.
+- The unique keys lead with `session_id`, which serves the per-node delete and the scoped reads;
+  there is no path index — all-time queries select the in-scope node ids first.
+- Rules: [algorithms/okf-access-extraction.md](algorithms/okf-access-extraction.md).
 
 ## Snapshots
 
@@ -351,7 +381,9 @@ exist under several owners (export/import: [session-export-import.md](session-ex
 - **Team view:** that team → defaults.
 
 Personal config is found **by URL** (`findPersonalRepoConfig`, lowest `repo_id` wins).
-`sessionAttribution` lives only in the team config. Adding a repository to a team seeds the link's
+`sessionAttribution` lives only in the team config. The `okf` section (OKF thresholds, no
+migration — it lives in the jsonb) is the one exception to whole-object resolution: it is resolved
+per section (personal `okf` → team `okf` → defaults), see [okf-usage.md](okf-usage.md). Adding a repository to a team seeds the link's
 config from the owner's personal config and enqueues `team_repo_recompute_queue`, which
 `TeamRepoRecomputeService` drains with `FOR UPDATE SKIP LOCKED`.
 

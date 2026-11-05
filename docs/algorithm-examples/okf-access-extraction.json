@@ -2,58 +2,58 @@
   {
     "id": "OA-01",
     "input": {"calls": [{"name": "Read", "input": {"file_path": "/work/acme-app/docs/kb/db-tables.md", "offset": 10, "limit": 40}, "resultBytes": 1200}]},
-    "expected": {"rows": [{"pathKey": "docs/kb/db-tables.md", "op": "read", "afterOwnEdit": false, "bytes": 1200, "calls": 1, "seq": 1}]},
+    "expected": {"rows": [{"pathKey": "docs/kb/db-tables.md", "op": "read", "afterOwnEdit": false, "bytes": 1200, "calls": 1, "seq": 1, "rangedCalls": 1, "rangedBytes": 1200, "searchHits": 0}]},
     "note": "Rule 4: Read -> read of the file; offset/limit do not change the key. Rule 3: the root /work/acme-app is stripped. Rule 2: 1200 result bytes. First key -> seq 1."
   },
   {
     "id": "OA-02",
     "input": {"calls": [{"name": "Bash", "input": {"command": "sed -n 10,40p docs/kb/db-tables.md"}, "resultBytes": 900}]},
-    "expected": {"rows": [{"pathKey": "docs/kb/db-tables.md", "op": "read", "afterOwnEdit": false, "bytes": 900, "calls": 1, "seq": 1}]},
+    "expected": {"rows": [{"pathKey": "docs/kb/db-tables.md", "op": "read", "afterOwnEdit": false, "bytes": 900, "calls": 1, "seq": 1, "rangedCalls": 1, "rangedBytes": 900, "searchHits": 0}]},
     "note": "Rule 5: analyzeBash takes 10,40p as the sed script and the file as a read (kind read). Rule 3: relative path joined to cwd /work/acme-app, then made repo-relative. One read-side access gets all 900 bytes."
   },
   {
     "id": "OA-03",
     "input": {"calls": [{"name": "Bash", "input": {"command": "grep -n okf docs/kb/api-reference.md"}, "resultBytes": 300}]},
-    "expected": {"rows": [{"pathKey": "docs/kb/api-reference.md", "op": "grep", "afterOwnEdit": false, "bytes": 300, "calls": 1, "seq": 1}]},
+    "expected": {"rows": [{"pathKey": "docs/kb/api-reference.md", "op": "grep", "afterOwnEdit": false, "bytes": 300, "calls": 1, "seq": 1, "rangedCalls": 0, "rangedBytes": 0, "searchHits": 1}]},
     "note": "Rule 4: grep's first positional is the pattern, the second a read of kind grep; the path has an extension -> file key, op grep, 300 bytes."
   },
   {
     "id": "OA-04",
     "input": {"calls": [{"name": "Bash", "input": {"command": "cat docs/kb/index.md"}, "resultBytes": 500}]},
-    "expected": {"rows": [{"pathKey": "docs/kb/index.md", "op": "read", "afterOwnEdit": false, "bytes": 500, "calls": 1, "seq": 1}]},
+    "expected": {"rows": [{"pathKey": "docs/kb/index.md", "op": "read", "afterOwnEdit": false, "bytes": 500, "calls": 1, "seq": 1, "rangedCalls": 0, "rangedBytes": 0, "searchHits": 0}]},
     "note": "Rule 4: cat reads its positional (kind read) -> read row with all 500 bytes."
   },
   {
     "id": "OA-05",
     "input": {"calls": [{"name": "Bash", "input": {"command": "cat docs/kb/a.md docs/kb/b.md"}, "resultBytes": 1001}]},
     "expected": {"rows": [
-      {"pathKey": "docs/kb/a.md", "op": "read", "afterOwnEdit": false, "bytes": 501, "calls": 1, "seq": 1},
-      {"pathKey": "docs/kb/b.md", "op": "read", "afterOwnEdit": false, "bytes": 500, "calls": 1, "seq": 2}
+      {"pathKey": "docs/kb/a.md", "op": "read", "afterOwnEdit": false, "bytes": 501, "calls": 1, "seq": 1, "rangedCalls": 0, "rangedBytes": 0, "searchHits": 0},
+      {"pathKey": "docs/kb/b.md", "op": "read", "afterOwnEdit": false, "bytes": 500, "calls": 1, "seq": 2, "rangedCalls": 0, "rangedBytes": 0, "searchHits": 0}
     ]},
     "note": "Rule 8: two read-side accesses, floor(1001 / 2) = 500 each, remainder 1001 - 1000 = 1 to the first -> a.md 501, b.md 500; the sum stays 1001. Each gets calls 1. Rule 10: a.md first -> seq 1, b.md seq 2."
   },
   {
     "id": "OA-06",
     "input": {"calls": [{"name": "Bash", "input": {"command": "cat src/main.ts docs/kb/a.md"}, "resultBytes": 1000}]},
-    "expected": {"rows": [{"pathKey": "docs/kb/a.md", "op": "read", "afterOwnEdit": false, "bytes": 500, "calls": 1, "seq": 1}]},
+    "expected": {"rows": [{"pathKey": "docs/kb/a.md", "op": "read", "afterOwnEdit": false, "bytes": 500, "calls": 1, "seq": 1, "rangedCalls": 0, "rangedBytes": 0, "searchHits": 0}]},
     "note": "Rule 8 splits before the .md filter: 1000 / 2 = 500 each (main.ts would get the 0 remainder too). Rule 6 drops src/main.ts (not .md), so only a.md is stored, with 500 bytes; its seq is 1 because main.ts was never stored."
   },
   {
     "id": "OA-07",
     "input": {"calls": [{"name": "Bash", "input": {"command": "grep -rn TODO docs/kb"}, "resultBytes": 700}]},
-    "expected": {"rows": [{"pathKey": "docs/kb/", "op": "grep", "afterOwnEdit": false, "bytes": 700, "calls": 1, "seq": 1}]},
+    "expected": {"rows": [{"pathKey": "docs/kb/", "op": "grep", "afterOwnEdit": false, "bytes": 700, "calls": 1, "seq": 1, "rangedCalls": 0, "rangedBytes": 0, "searchHits": 1}]},
     "note": "Rule 4: a grep path with no extension is a folder -> folder key docs/kb/ (rule 6), op grep, all 700 bytes."
   },
   {
     "id": "OA-08",
     "input": {"calls": [{"name": "Bash", "input": {"command": "ls docs/kb"}, "resultBytes": 120}]},
-    "expected": {"rows": [{"pathKey": "docs/kb/", "op": "list", "afterOwnEdit": false, "bytes": 120, "calls": 1, "seq": 1}]},
+    "expected": {"rows": [{"pathKey": "docs/kb/", "op": "list", "afterOwnEdit": false, "bytes": 120, "calls": 1, "seq": 1, "rangedCalls": 0, "rangedBytes": 0, "searchHits": 1}]},
     "note": "Rule 4: ls reads its positional with kind list -> always a folder key, op list. list is read-side (rule 8), so it carries the 120 bytes."
   },
   {
     "id": "OA-09",
     "input": {"calls": [{"name": "Glob", "input": {"pattern": "docs/kb/**/*.md"}, "resultBytes": 400}]},
-    "expected": {"rows": [{"pathKey": "docs/kb/", "op": "list", "afterOwnEdit": false, "bytes": 400, "calls": 1, "seq": 1}]},
+    "expected": {"rows": [{"pathKey": "docs/kb/", "op": "list", "afterOwnEdit": false, "bytes": 400, "calls": 1, "seq": 1, "rangedCalls": 0, "rangedBytes": 0, "searchHits": 1}]},
     "note": "Rule 4: Glob without path -> cwd; the static prefix of docs/kb/**/*.md is docs/kb (the ** segment stops it) -> folder docs/kb/, op list, 400 bytes."
   },
   {
@@ -64,9 +64,9 @@
       {"name": "Grep", "input": {"pattern": "okf", "path": "docs/kb/index.md"}, "resultBytes": 60}
     ]},
     "expected": {"rows": [
-      {"pathKey": "docs/kb/", "op": "grep", "afterOwnEdit": false, "bytes": 250, "calls": 1, "seq": 1},
-      {"pathKey": "/", "op": "grep", "afterOwnEdit": false, "bytes": 90, "calls": 1, "seq": 2},
-      {"pathKey": "docs/kb/index.md", "op": "grep", "afterOwnEdit": false, "bytes": 60, "calls": 1, "seq": 3}
+      {"pathKey": "docs/kb/", "op": "grep", "afterOwnEdit": false, "bytes": 250, "calls": 1, "seq": 1, "rangedCalls": 0, "rangedBytes": 0, "searchHits": 1},
+      {"pathKey": "/", "op": "grep", "afterOwnEdit": false, "bytes": 90, "calls": 1, "seq": 2, "rangedCalls": 0, "rangedBytes": 0, "searchHits": 1},
+      {"pathKey": "docs/kb/index.md", "op": "grep", "afterOwnEdit": false, "bytes": 60, "calls": 1, "seq": 3, "rangedCalls": 0, "rangedBytes": 0, "searchHits": 1}
     ]},
     "note": "Rule 4: Grep with a path without extension -> folder docs/kb/; Grep with no path -> the cwd, which is the root -> '' -> folder key '/' (rule 6); Grep with a relative file path -> joined to cwd, file key. Three keys in order -> seq 1, 2, 3."
   },
@@ -78,9 +78,9 @@
       {"name": "Bash", "input": {"command": "grep -n b docs/kb/x.md"}, "resultBytes": 40}
     ]},
     "expected": {"rows": [
-      {"pathKey": "docs/kb/x.md", "op": "write", "afterOwnEdit": false, "bytes": 0, "calls": 1, "seq": 1},
-      {"pathKey": "docs/kb/x.md", "op": "read", "afterOwnEdit": true, "bytes": 800, "calls": 1, "seq": 1},
-      {"pathKey": "docs/kb/x.md", "op": "grep", "afterOwnEdit": true, "bytes": 40, "calls": 1, "seq": 1}
+      {"pathKey": "docs/kb/x.md", "op": "write", "afterOwnEdit": false, "bytes": 0, "calls": 1, "seq": 1, "rangedCalls": 0, "rangedBytes": 0, "searchHits": 0},
+      {"pathKey": "docs/kb/x.md", "op": "read", "afterOwnEdit": true, "bytes": 800, "calls": 1, "seq": 1, "rangedCalls": 0, "rangedBytes": 0, "searchHits": 0},
+      {"pathKey": "docs/kb/x.md", "op": "grep", "afterOwnEdit": true, "bytes": 40, "calls": 1, "seq": 1, "rangedCalls": 0, "rangedBytes": 0, "searchHits": 1}
     ]},
     "note": "Rule 8: the Edit is a write -> 0 bytes (its 50 result bytes are not counted). Rule 9: after the Edit x.md is in the written set, so the Read and the grep go to afterOwnEdit rows. Rule 10: all rows of x.md share seq 1."
   },
@@ -99,7 +99,7 @@
       {"name": "Read", "input": {"file_path": "D:\\work\\acme-app\\docs\\kb\\db-tables.md"}, "resultBytes": 700},
       {"name": "Read", "input": {"file_path": "d:/work/acme-app/docs/kb/db-tables.md"}, "resultBytes": 700}
     ]},
-    "expected": {"rows": [{"pathKey": "docs/kb/db-tables.md", "op": "read", "afterOwnEdit": false, "bytes": 1400, "calls": 2, "seq": 1}]},
+    "expected": {"rows": [{"pathKey": "docs/kb/db-tables.md", "op": "read", "afterOwnEdit": false, "bytes": 1400, "calls": 2, "seq": 1, "rangedCalls": 0, "rangedBytes": 0, "searchHits": 0}]},
     "note": "Rule 3: \\ becomes /, and the root matches case-insensitively (d: vs D:), so both spellings resolve to docs/kb/db-tables.md: one row, 700 + 700 = 1400 bytes, calls 2."
   },
   {
@@ -108,7 +108,7 @@
       {"id": "dup", "name": "Read", "input": {"file_path": "/work/acme-app/docs/kb/a.md"}, "resultBytes": 300},
       {"id": "dup", "name": "Read", "input": {"file_path": "/work/acme-app/docs/kb/b.md"}, "resultBytes": 900}
     ]},
-    "expected": {"rows": [{"pathKey": "docs/kb/a.md", "op": "read", "afterOwnEdit": false, "bytes": 300, "calls": 1, "seq": 1}]},
+    "expected": {"rows": [{"pathKey": "docs/kb/a.md", "op": "read", "afterOwnEdit": false, "bytes": 300, "calls": 1, "seq": 1, "rangedCalls": 0, "rangedBytes": 0, "searchHits": 0}]},
     "note": "Rule 7: the second tool_use with id dup is skipped whole (b.md never appears). Rule 2: the first tool_result of dup (300 bytes) wins."
   },
   {
@@ -129,7 +129,7 @@
   {
     "id": "OA-17",
     "input": {"calls": [{"name": "Bash", "input": {"command": "cd docs/kb && cat index.md"}, "resultBytes": 400}]},
-    "expected": {"rows": [{"pathKey": "docs/kb/index.md", "op": "read", "afterOwnEdit": false, "bytes": 400, "calls": 1, "seq": 1}]},
+    "expected": {"rows": [{"pathKey": "docs/kb/index.md", "op": "read", "afterOwnEdit": false, "bytes": 400, "calls": 1, "seq": 1, "rangedCalls": 0, "rangedBytes": 0, "searchHits": 0}]},
     "note": "Rule 3 / 5: analyzeBash gives workDir docs/kb and the read index.md relative to it; index.md joined to docs/kb, then to cwd /work/acme-app -> /work/acme-app/docs/kb/index.md -> docs/kb/index.md."
   },
   {
@@ -141,16 +141,16 @@
       {"name": "Read", "input": {"file_path": "/work/acme-app/docs/kb/b.md", "offset": 50}, "resultBytes": 100}
     ]},
     "expected": {"rows": [
-      {"pathKey": "docs/kb/b.md", "op": "read", "afterOwnEdit": false, "bytes": 200, "calls": 2, "seq": 1},
-      {"pathKey": "docs/kb/", "op": "grep", "afterOwnEdit": false, "bytes": 30, "calls": 1, "seq": 2},
-      {"pathKey": "docs/kb/a.md", "op": "read", "afterOwnEdit": false, "bytes": 200, "calls": 1, "seq": 3}
+      {"pathKey": "docs/kb/b.md", "op": "read", "afterOwnEdit": false, "bytes": 200, "calls": 2, "seq": 1, "rangedCalls": 1, "rangedBytes": 100, "searchHits": 0},
+      {"pathKey": "docs/kb/", "op": "grep", "afterOwnEdit": false, "bytes": 30, "calls": 1, "seq": 2, "rangedCalls": 0, "rangedBytes": 0, "searchHits": 1},
+      {"pathKey": "docs/kb/a.md", "op": "read", "afterOwnEdit": false, "bytes": 200, "calls": 1, "seq": 3, "rangedCalls": 0, "rangedBytes": 0, "searchHits": 0}
     ]},
     "note": "Rule 10: first-access order b.md (1), docs/kb/ (2, a Grep path with a trailing / is a folder), a.md (3); the second Read of b.md keeps seq 1 and adds to its row: 100 + 100 = 200 bytes, calls 2."
   },
   {
     "id": "OA-19",
     "input": {"calls": [{"name": "Read", "input": {"file_path": "/work/acme-app/docs/kb/a.md"}, "result": [{"type": "text", "text": "h\u00e9llo"}, {"type": "image", "source": {"type": "base64", "data": "AAAA"}}]}]},
-    "expected": {"rows": [{"pathKey": "docs/kb/a.md", "op": "read", "afterOwnEdit": false, "bytes": 6, "calls": 1, "seq": 1}]},
+    "expected": {"rows": [{"pathKey": "docs/kb/a.md", "op": "read", "afterOwnEdit": false, "bytes": 6, "calls": 1, "seq": 1, "rangedCalls": 0, "rangedBytes": 0, "searchHits": 0}]},
     "note": "Rule 2: the text block 'h\u00e9llo' is 5 characters but 6 UTF-8 bytes (\u00e9 = 2 bytes); the image block counts 0 -> 6."
   },
   {
@@ -162,7 +162,7 @@
   {
     "id": "OA-21",
     "input": {"subagent": true, "calls": [{"name": "Read", "input": {"file_path": "/work/acme-app/docs/kb/a.md"}, "sidechain": true, "resultBytes": 500}]},
-    "expected": {"rows": [{"pathKey": "docs/kb/a.md", "op": "read", "afterOwnEdit": false, "bytes": 500, "calls": 1, "seq": 1}]},
+    "expected": {"rows": [{"pathKey": "docs/kb/a.md", "op": "read", "afterOwnEdit": false, "bytes": 500, "calls": 1, "seq": 1, "rangedCalls": 0, "rangedBytes": 0, "searchHits": 0}]},
     "note": "Rule 1: in a sub-agent log every line counts, sidechain or not -> the read is stored with its 500 bytes."
   },
   {
@@ -172,8 +172,8 @@
       {"name": "Write", "input": {"file_path": "/work/acme-app/docs/kb/NEW.MD", "content": "x"}, "resultBytes": 20}
     ]},
     "expected": {"rows": [
-      {"pathKey": "docs/kb/a.md", "op": "write", "afterOwnEdit": false, "bytes": 0, "calls": 1, "seq": 1},
-      {"pathKey": "docs/kb/NEW.MD", "op": "write", "afterOwnEdit": false, "bytes": 0, "calls": 1, "seq": 2}
+      {"pathKey": "docs/kb/a.md", "op": "write", "afterOwnEdit": false, "bytes": 0, "calls": 1, "seq": 1, "rangedCalls": 0, "rangedBytes": 0, "searchHits": 0},
+      {"pathKey": "docs/kb/NEW.MD", "op": "write", "afterOwnEdit": false, "bytes": 0, "calls": 1, "seq": 2, "rangedCalls": 0, "rangedBytes": 0, "searchHits": 0}
     ]},
     "note": "Rule 4: sed -i makes a.md a Bash change -> write; the Write tool -> write. Rule 8: writes get 0 bytes. Rule 6: .MD matches .md case-insensitively, the key keeps its case."
   },
@@ -183,5 +183,15 @@
     "input": {"calls": [{"name": "Bash", "input": {"command": "cat docs/kb/a.md"}, "resultBytes": 500}]},
     "expected": {"rows": []},
     "note": "Rule 5: with parser null (WASM failed to load) Bash calls add nothing; Read/Grep/Glob/Edit would still be extracted."
-  }
+  },
+  {"id":"OA-24","input":{"calls":[{"name":"Bash","input":{"command":"head -n 20 docs/kb/a.md"},"resultBytes":300},{"name":"Bash","input":{"command":"tail -n 10 docs/kb/a.md"},"resultBytes":200}]},"expected":{"rows":[{"pathKey":"docs/kb/a.md","op":"read","afterOwnEdit":false,"bytes":500,"calls":2,"seq":1,"rangedCalls":2,"rangedBytes":500,"searchHits":0}],"events":[{"ord":1,"op":"read","path":"docs/kb/a.md","rangeFrom":1,"rangeTo":20,"pattern":null},{"ord":2,"op":"read","path":"docs/kb/a.md","rangeFrom":-10,"rangeTo":null,"pattern":null}],"pointers":[]},"note":"Rule 4 ranges: head -n 20 -> 1..20, tail -n 10 -> from -10 to the end; both calls are ranged -> rangedCalls 2, rangedBytes 300 + 200 = 500, also in calls / bytes. Rule 13: no snapshotFiles -> the .md reads are events too, with their ranges. Rule 15: the results name no pointer and are not partial -> no pointer rows."},
+  {"id":"OA-25","input":{"calls":[{"name":"Bash","input":{"command":"ls docs/kb/a.md"},"resultBytes":13}]},"expected":{"rows":[],"events":[]},"note":"Rule 4 (FR-8): ls of a path with an extension lists one named file -> no folder row and no access at all, so no event either."},
+  {"id":"OA-26","input":{"calls":[{"name":"Grep","input":{"pattern":"okf","path":"docs/kb"},"result":"No files found"},{"name":"Bash","input":{"command":"grep -rn okf docs/kb"},"result":"boom","isError":true},{"name":"Grep","input":{"pattern":"okf","path":"docs/kb"},"result":"docs/kb/a.md"},{"name":"Glob","input":{"pattern":"docs/kb/*.md"},"result":"No matches found"}]},"expected":{"rows":[{"pathKey":"docs/kb/","op":"grep","afterOwnEdit":false,"bytes":30,"calls":3,"seq":1,"rangedCalls":0,"rangedBytes":0,"searchHits":1},{"pathKey":"docs/kb/","op":"list","afterOwnEdit":false,"bytes":16,"calls":1,"seq":1,"rangedCalls":0,"rangedBytes":0,"searchHits":0}],"events":[{"ord":1,"op":"search","path":"docs/kb/","rangeFrom":null,"rangeTo":null,"pattern":"okf"},{"ord":2,"op":"search","path":"docs/kb/","rangeFrom":null,"rangeTo":null,"pattern":"okf"},{"ord":3,"op":"search","path":"docs/kb/","rangeFrom":null,"rangeTo":null,"pattern":"okf"},{"ord":4,"op":"search","path":"docs/kb/","rangeFrom":null,"rangeTo":null,"pattern":null}]},"note":"Rule 11: 'No files found' (call 1), an is_error result (call 2) and 'No matches found' (call 4) are no hits; only call 3's non-empty listing is -> grep row searchHits 1 of 3 calls (14 + 4 + 12 = 30 bytes), list row 0. Rule 13: grep / list -> search events; the Grep and Bash grep patterns are kept, Glob keeps none."},
+  {"id":"OA-27","input":{"snapshotFiles":{"docs/kb/a.md":{"size":3000,"hash":"ha"},"docs/kb/b.md":{"size":1000,"hash":"hb"}},"calls":[{"name":"Bash","input":{"command":"cat docs/kb/a.md docs/kb/b.md"},"resultBytes":1001}]},"expected":{"rows":[{"pathKey":"docs/kb/a.md","op":"read","afterOwnEdit":false,"bytes":751,"calls":1,"seq":1,"rangedCalls":0,"rangedBytes":0,"searchHits":0},{"pathKey":"docs/kb/b.md","op":"read","afterOwnEdit":false,"bytes":250,"calls":1,"seq":2,"rangedCalls":0,"rangedBytes":0,"searchHits":0}],"events":[],"pointers":[{"articlePath":"docs/kb/a.md","articleHash":"ha","readOrd":1,"pointer":"","isNew":false,"followed":false,"partial":true},{"articlePath":"docs/kb/b.md","articleHash":"hb","readOrd":1,"pointer":"","isNew":false,"followed":false,"partial":true}]},"note":"Rule 8 proportional: sizes 3000 / 1000 -> floor(1001 x 3000 / 4000) = 750, floor(1001 x 1000 / 4000) = 250, remainder 1 to the first -> 751 / 250 (the even split would give 501 / 500). Rule 13: both are .md files of the snapshot -> no events. Rule 15: a multi-file KB read stores only one partial \"\" row per article, with its snapshot hash."},
+  {"id":"OA-28","input":{"snapshotFiles":{"docs/kb/a.md":{"size":3000,"hash":"ha"}},"calls":[{"name":"Bash","input":{"command":"cat docs/kb/a.md docs/kb/c.md"},"resultBytes":1001},{"name":"Bash","input":{"command":"grep -rn foo docs/kb/a.md docs/kb"},"resultBytes":101}]},"expected":{"rows":[{"pathKey":"docs/kb/a.md","op":"read","afterOwnEdit":false,"bytes":501,"calls":1,"seq":1,"rangedCalls":0,"rangedBytes":0,"searchHits":0},{"pathKey":"docs/kb/c.md","op":"read","afterOwnEdit":false,"bytes":500,"calls":1,"seq":2,"rangedCalls":0,"rangedBytes":0,"searchHits":0},{"pathKey":"docs/kb/a.md","op":"grep","afterOwnEdit":false,"bytes":51,"calls":1,"seq":1,"rangedCalls":0,"rangedBytes":0,"searchHits":1},{"pathKey":"docs/kb/","op":"grep","afterOwnEdit":false,"bytes":50,"calls":1,"seq":3,"rangedCalls":0,"rangedBytes":0,"searchHits":1}],"events":[{"ord":1,"op":"read","path":"docs/kb/c.md","rangeFrom":null,"rangeTo":null,"pattern":null},{"ord":2,"op":"search","path":"docs/kb/","rangeFrom":null,"rangeTo":null,"pattern":"foo"}],"pointers":[{"articlePath":"docs/kb/a.md","articleHash":"ha","readOrd":1,"pointer":"","isNew":false,"followed":false,"partial":true},{"articlePath":"docs/kb/c.md","articleHash":null,"readOrd":1,"pointer":"","isNew":false,"followed":false,"partial":true}]},"note":"Rule 8 even fallback: c.md is missing from snapshotFiles -> 1001 / 2 = 500 each, remainder to a.md (501); call 2 has a folder target (no size) -> 101 / 2 = 50 each, a.md 51. Rule 13: a.md is a snapshot .md -> no event; c.md is not in the snapshot -> a read event; the docs/kb/ search keeps the pattern foo. Rule 15: call 1 reads two .md keys -> one partial \"\" row each, c.md without a hash."},
+  {"id":"OA-29","input":{"calls":[{"name":"Grep","input":{"pattern":"fooBar","path":"server/src"},"result":"server/src/x.ts:1:fooBar"},{"name":"Read","input":{"file_path":"/work/acme-app/server/src/x.ts","offset":5,"limit":10},"resultBytes":100},{"name":"Bash","input":{"command":"rg -n useThing client/src node_modules/lib"},"resultBytes":40},{"name":"Edit","input":{"file_path":"/work/acme-app/server/dist/x.js","old_string":"a","new_string":"b"},"resultBytes":10},{"name":"Glob","input":{"pattern":"server/**/*.ts"},"resultBytes":30},{"name":"Grep","input":{"pattern":"ppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp","path":"hook"},"resultBytes":0}]},"expected":{"rows":[{"pathKey":"server/src/","op":"grep","afterOwnEdit":false,"bytes":24,"calls":1,"seq":1,"rangedCalls":0,"rangedBytes":0,"searchHits":1},{"pathKey":"client/src/","op":"grep","afterOwnEdit":false,"bytes":20,"calls":1,"seq":2,"rangedCalls":0,"rangedBytes":0,"searchHits":1},{"pathKey":"node_modules/lib/","op":"grep","afterOwnEdit":false,"bytes":20,"calls":1,"seq":3,"rangedCalls":0,"rangedBytes":0,"searchHits":1},{"pathKey":"server/","op":"list","afterOwnEdit":false,"bytes":30,"calls":1,"seq":4,"rangedCalls":0,"rangedBytes":0,"searchHits":1},{"pathKey":"hook/","op":"grep","afterOwnEdit":false,"bytes":0,"calls":1,"seq":5,"rangedCalls":0,"rangedBytes":0,"searchHits":0}],"events":[{"ord":1,"op":"search","path":"server/src/","rangeFrom":null,"rangeTo":null,"pattern":"fooBar"},{"ord":2,"op":"read","path":"server/src/x.ts","rangeFrom":5,"rangeTo":14,"pattern":null},{"ord":3,"op":"search","path":"client/src/","rangeFrom":null,"rangeTo":null,"pattern":"useThing"},{"ord":5,"op":"search","path":"server/","rangeFrom":null,"rangeTo":null,"pattern":null},{"ord":6,"op":"search","path":"hook/","rangeFrom":null,"rangeTo":null,"pattern":"pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp"}],"pointers":[]},"note":"Rule 13 code events: the Read of the code file x.ts (no access row, not .md) is an event with range 5..14; the rg search of node_modules/lib and the Edit under server/dist are dropped by OKF_EVENT_SKIP_SEGMENTS (their folder access row stays); Glob -> a search event with no pattern; the 205-character pattern is cut to 200. Rule 11: the empty hook/ result is no hit. Ordinals count every call (4 has no event)."},
+  {"id":"OA-30","input":{"calls":[{"name":"Read","input":{"file_path":"/work/acme-app/src/a.ts"},"resultBytes":10,"repeat":3001}]},"expected":{"rows":[],"eventCount":3000,"truncated":true},"note":"Rule 18: 3001 code reads give 3001 events; OKF_EVENT_CAP_PER_NODE keeps 3000 and sets truncated. No .md -> no access rows."},
+  {"id":"OA-31","input":{"prompt":"Fix the bug in `server/src/known.ts`","calls":[{"name":"Read","input":{"file_path":"/work/acme-app/docs/kb/a.md"},"result":"See `server/src/a.ts:12-20`, `./client/src/b.tsx#L5`, `hook/lib/*.js`, `https://x.io/y.md`, `npm run build`, `server/src/known.ts`, `README.md`, `-flag`, `/work/acme-app/scripts/c.mjs`, `/elsewhere/d.ts`, `server/src/a.ts`."},{"name":"Read","input":{"file_path":"/work/acme-app/server/src/a.ts"},"resultBytes":50},{"name":"Grep","input":{"pattern":"x","path":"hook/lib/util"},"resultBytes":5}]},"expected":{"rows":[{"pathKey":"docs/kb/a.md","op":"read","afterOwnEdit":false,"bytes":223,"calls":1,"seq":1,"rangedCalls":0,"rangedBytes":0,"searchHits":0},{"pathKey":"hook/lib/util/","op":"grep","afterOwnEdit":false,"bytes":5,"calls":1,"seq":2,"rangedCalls":0,"rangedBytes":0,"searchHits":1}],"events":[{"ord":1,"op":"read","path":"docs/kb/a.md","rangeFrom":null,"rangeTo":null,"pattern":null},{"ord":2,"op":"read","path":"server/src/a.ts","rangeFrom":null,"rangeTo":null,"pattern":null},{"ord":3,"op":"search","path":"hook/lib/util/","rangeFrom":null,"rangeTo":null,"pattern":"x"}],"pointers":[{"articlePath":"docs/kb/a.md","articleHash":null,"readOrd":1,"pointer":"server/src/a.ts","isNew":true,"followed":true,"partial":false},{"articlePath":"docs/kb/a.md","articleHash":null,"readOrd":1,"pointer":"client/src/b.tsx","isNew":true,"followed":false,"partial":false},{"articlePath":"docs/kb/a.md","articleHash":null,"readOrd":1,"pointer":"hook/lib","isNew":true,"followed":true,"partial":false},{"articlePath":"docs/kb/a.md","articleHash":null,"readOrd":1,"pointer":"server/src/known.ts","isNew":false,"followed":false,"partial":false},{"articlePath":"docs/kb/a.md","articleHash":null,"readOrd":1,"pointer":"README.md","isNew":true,"followed":false,"partial":false},{"articlePath":"docs/kb/a.md","articleHash":null,"readOrd":1,"pointer":"scripts/c.mjs","isNew":true,"followed":false,"partial":false}]},"note":"Rule 14: :12-20 stripped; #L5 anchor and ./ stripped; the glob hook/lib/*.js reduced to hook/lib; http..., a span with spaces and -flag dropped; README.md kept for its extension; the absolute /work/acme-app/scripts/c.mjs resolved to scripts/c.mjs, /elsewhere/d.ts dropped (no root); the repeated server/src/a.ts kept once. Rule 15: known.ts is named in the prompt -> not new; server/src/a.ts is followed by the Read at ord 2, hook/lib by the Grep of hook/lib/util/ under it (ord 3)."},
+  {"id":"OA-32","input":{"calls":[{"name":"Read","input":{"file_path":"/work/acme-app/docs/kb/a.md"},"result":"<persisted-output>\nOutput too large. Preview: `server/x.ts`"},{"name":"Read","input":{"file_path":"/work/acme-app/docs/kb/b.md"},"resultBytes":0},{"name":"Read","input":{"file_path":"/work/acme-app/docs/kb/c.md"},"result":"File does not exist. `server/y.ts`","isError":true},{"name":"Read","input":{"file_path":"/work/acme-app/docs/kb/d.md"},"result":"`server/z.ts`"}]},"expected":{"rows":[{"pathKey":"docs/kb/a.md","op":"read","afterOwnEdit":false,"bytes":59,"calls":1,"seq":1,"rangedCalls":0,"rangedBytes":0,"searchHits":0},{"pathKey":"docs/kb/b.md","op":"read","afterOwnEdit":false,"bytes":0,"calls":1,"seq":2,"rangedCalls":0,"rangedBytes":0,"searchHits":0},{"pathKey":"docs/kb/c.md","op":"read","afterOwnEdit":false,"bytes":34,"calls":1,"seq":3,"rangedCalls":0,"rangedBytes":0,"searchHits":0},{"pathKey":"docs/kb/d.md","op":"read","afterOwnEdit":false,"bytes":13,"calls":1,"seq":4,"rangedCalls":0,"rangedBytes":0,"searchHits":0}],"pointers":[{"articlePath":"docs/kb/a.md","articleHash":null,"readOrd":1,"pointer":"server/x.ts","isNew":true,"followed":false,"partial":true},{"articlePath":"docs/kb/b.md","articleHash":null,"readOrd":2,"pointer":"","isNew":false,"followed":false,"partial":true},{"articlePath":"docs/kb/c.md","articleHash":null,"readOrd":3,"pointer":"","isNew":false,"followed":false,"partial":true},{"articlePath":"docs/kb/d.md","articleHash":null,"readOrd":4,"pointer":"server/z.ts","isNew":true,"followed":false,"partial":false}]},"note":"Rule 15 partial: a <persisted-output> preview keeps its pointers, each flagged partial; an empty result has no pointers -> one \"\" partial row; an is_error result yields no pointers at all (server/y.ts is ignored) -> one \"\" partial row; a normal read -> a non-partial row."},
+  {"id":"OA-33","input":{"calls":[{"name":"Read","input":{"file_path":"/work/acme-app/docs/kb/a.md"},"result":"`server/a.ts`","repeat":5001}]},"expected":{"rows":[{"pathKey":"docs/kb/a.md","op":"read","afterOwnEdit":false,"bytes":65013,"calls":5001,"seq":1,"rangedCalls":0,"rangedBytes":0,"searchHits":0}],"eventCount":3000,"pointerCount":5000,"truncated":true},"note":"Rule 18: 5001 single-article reads give one pointer row each; OKF_POINTER_CAP_PER_NODE keeps 5000 (events stop at 3000) and sets truncated. The access row is not capped: 5001 calls x 13 bytes = 65013."}
 ]

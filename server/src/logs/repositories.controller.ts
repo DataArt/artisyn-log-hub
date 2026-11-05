@@ -1516,7 +1516,7 @@ export class RepositoriesController {
     @Param('sessionId') sessionId: string,
     @Query('teamId', new ParseIntPipe({ optional: true })) teamId?: number,
   ): Promise<SessionOkfUsageResponse> {
-    const { repoIds, scope, teamScope } =
+    const { repoIds, scope, teamScope, repoUrl } =
       await this.resolveChangeSurfaceSessionScope(
         req,
         repoId,
@@ -1531,12 +1531,32 @@ export class RepositoriesController {
     if (sessionDbId === null) return this.okfUsageService.emptySessionUsage();
 
     const user = req.user as AuthUser;
+    // 2026-11-03 value signals: thresholds in force for this caller and view (DD-20), and the
+    // all-time area scope (DD-12): the same repos and access-mode scope, no period. Read-only.
+    const thresholds = await this.repositoriesService.resolveOkfThresholds(
+      user.id,
+      repoUrl,
+      teamId,
+    );
     return this.okfUsageService.getSessionOkfUsage(sessionDbId, {
       teamFilter: teamId !== undefined,
       promptMask:
         teamId === undefined
           ? undefined
           : { scope: teamScope, requesterUserId: user.id },
+      thresholds,
+      areaScope: {
+        repoIds,
+        scope: {
+          teamId,
+          requesterUserId: user.id,
+          scope: teamScope,
+          startDate: new Date(0),
+          endDate: new Date(0),
+          branches: [],
+          users: [],
+        },
+      },
     });
   }
 
@@ -1559,6 +1579,8 @@ export class RepositoriesController {
     repoIds: number[];
     scope: ChangeSurfaceSessionScope;
     teamScope: TeamScope;
+    /** The asserted repository's URL (per-repo settings lookups, e.g. OKF thresholds). */
+    repoUrl: string;
   }> {
     if (teamId !== undefined && teamId <= 0) {
       throw new BadRequestException('teamId must be a positive integer');
@@ -1592,6 +1614,7 @@ export class RepositoriesController {
         visibleUserIds: teamId === undefined ? null : teamScope.visibleUserIds,
       },
       teamScope,
+      repoUrl: repo.repoUrl,
     };
   }
 

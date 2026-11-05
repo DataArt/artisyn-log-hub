@@ -8,7 +8,7 @@
   - `server/src/logs/okf/okf-thresholds.ts`: `DEFAULT_OKF_THRESHOLDS`, `resolveOkfThresholds`, `validateOkfThresholds`.
 - **Extractor:** `extractOkfDetail` returns access rows plus code events, pointers and the ordered sequence. `extractOkfAccess` becomes a thin wrapper around it.
 - **`@loghub/bash-view`:** `BashReadAccess` gets two optional fields, `range` and `pattern`, and `git grep` becomes a `grep` read.
-- **DB, migration `0085_okf_value_signals.sql`, additive only:**
+- **DB, migration `0091_okf_value_signals.sql`, additive only:**
   - New tables `session_okf_event` and `session_okf_pointer`.
   - `session_okf_access`: new columns `ranged_calls`, `ranged_bytes` and `search_hits`.
   - `sessions`: new columns `okf_extract_version` and `okf_events_truncated`.
@@ -130,7 +130,7 @@
     - This is a proxy: Log Hub has no repo file list, so the UI label is "path not found in any session".
   - **FR-14 patterns:** top `OKF_TOP_PATTERNS = 5` by count, ties broken by pattern ascending. Patterns are never masked.
   - **FR-15:** an article whose area has more than `areaMaxFiles` files gets an `info` finding `catalog` with params `{ files }`.
-- **DD-15 Upkeep (FR-5).** A (node, article) pair is upkeep when the node has a `write` row for the article.
+- **DD-15 Upkeep (FR-5).** A (node, article) pair is upkeep when the node has a `write` row for the article. The existing DD-7 "own edit" marker stays; an upkeep pair carries both markers (`own edit` and `upkeep ×N`), and its read leaves Read top 5 for the Upkeep line.
   - Its `read` / `grep` rows are excluded from read totals, shares, hot files, the verdict and FR-1, FR-2 and FR-3, and are summed into an `upkeep` block instead.
   - A root tree whose only KB rows are upkeep is not a KB session; it is counted in `tiles.upkeepOnlySessions`.
   - Computed at read time from the existing rows, so it needs no recompute.
@@ -254,8 +254,8 @@
 
 | Path | Purpose | Note |
 |---|---|---|
-| `server/drizzle/migrations/0085_okf_value_signals.sql` | new tables and columns | per Database changes; + `meta/_journal.json`, migrations lock |
-| `server/src/database/schema/index.ts` | `sessionOkfEvent`, `sessionOkfPointer`, new columns, `OkfThresholds`, `RepoConfigJson.okf` | comment style like `sessionOkfAccess` (~:1720) |
+| `server/drizzle/migrations/0091_okf_value_signals.sql` | new tables and columns | per Database changes; + `meta/_journal.json`, migrations lock |
+| `server/src/database/schema/index.ts` | `sessionOkfEvent`, `sessionOkfPointer`, new columns, `OkfThresholds`, `RepoConfigJson.okf` | comment style like `sessionOkfAccess` (~:1836) |
 | `packages/bash-view/src/bash-analyze.ts` | `BashReadAccess.range?`, `.pattern?`, `git grep` | `GREP_CMDS` :78, `sed` branch :272, `readAccess` build :491 |
 | `server/src/logs/okf/okf-constants.ts` | new: shared constants | DD-0 |
 | `server/src/logs/okf/okf-snapshot.ts` | receives `normaliseSnapshot` (moved from `okf-usage.service.ts:133`) | used by writer + read side |
@@ -264,15 +264,15 @@
 | `server/src/logs/okf/okf-access-writer.ts` | write events/pointers/marker, load snapshot files | writer :25-79, `rebuildSessionOkfAccess` :70, `rebuildOkfAccessForNodes` |
 | `server/src/logs/okf/okf-thresholds.ts` | new: defaults, resolve, validate | DD-19 |
 | `server/src/logs/okf/okf-value-signals.ts` | new: pure read-time signals | DD-12..DD-14 |
-| `server/src/logs/okf/okf-verdict.ts` | constants → `OkfThresholds`; FR-4/5/7/10, info, stale | constants :22-51, `computeRepoVerdict` :371, flood :429, coarse :445 |
+| `server/src/logs/okf/okf-verdict.ts` | constants → `OkfThresholds`; FR-4/5/7/10, info, stale | constants :22-51, `computeRepoVerdict` :371, flood :412, coarse :445 |
 | `server/src/logs/okf/okf-usage-tree.ts` | new markers, ranged counters, upkeep, team filter for new rows | `applyOkfTeamFilter`, `buildOkfTree` |
 | `server/src/logs/okf/okf-usage.service.ts` | load new rows, thresholds, signals, FR-6, FR-11, article route | session :352, repo :482, histogram :614-623, hot files :640-675, entry :461 |
 | `server/src/logs/okf/okf-usage.types.ts` | additive response fields + `RepoOkfArticleResponse` | per API changes |
 | `server/src/logs/okf/okf-facts.service.ts` | per-agent `accessSeq` | next to `otherReadsTop` :325; extractor call :280 |
 | `server/src/logs/reports/reports.controller.ts` | new article route; pass `repoId`/user to service for thresholds | next to `getOkfUsageReport` :350 |
-| `server/src/logs/repositories.controller.ts` | session route passes thresholds context | `getSessionOkfUsage` :1510 |
+| `server/src/logs/repositories.controller.ts` | session route passes thresholds context | `getSessionOkfUsage` :1513 |
 | `server/src/logs/repositories.service.ts` | `resolveOkfThresholds`, `validateConfig` okf, skip-recompute, `okfDefaults` | :637, :714, :970, :1032, `RepoSettingsResponse` :89 |
-| `server/src/sessions/sessions.service.ts` | purge new tables, reset marker | step c2 :224-228, :265 |
+| `server/src/sessions/sessions.service.ts` | purge new tables, reset marker | step c2 :232-236, step g :273 |
 | `client/src/models/repositories.ts` | mirror of all type additions | :859+ |
 | `client/src/viewer/lib/okf/okf-action-text.ts` | new: FR-16 dictionary | DD-26 |
 | `client/src/viewer/lib/okf/okf-verdict-text.ts` | texts for new rules, `info` severity | `formatOkfFinding` :82 |
@@ -300,10 +300,10 @@
 | `docs/algorithm-examples/okf-access-extraction.json`, `okf-verdict.json`, `bash-command-view.json` | new/changed rows | |
 | `server/src/logs/okf/okf-access-extractor.algo.spec.ts` | compare optional `expected.events` / `expected.pointers` | harness only |
 | `server/src/logs/okf/okf-verdict.algo.spec.ts` | pass optional row `thresholds` and hash maps into the verdict | harness only |
-| `server/src/logs/logs.service.ts`, `server/src/logs/session-file-stats-writer.ts` | check writer call sites (:498, :1140; :270) | no signature change expected |
-| `docs/knowledgebase/okf-usage.md`, `db-tables.md`, `server-endpoint-map.md`, `client-component-map.md`, `algorithms/index` (or `index.md`) | KB updates | |
+| `server/src/logs/logs.service.ts`, `server/src/logs/session-file-stats-writer.ts` | check writer call sites (:526, :1179; :270) | no signature change expected |
+| `docs/knowledgebase/okf-usage.md`, `db-tables.md`, `server-endpoint-map.md`, `client-component-map.md`, `algorithms/README.md` (table ~:68-71), `index.md` (~:106-109) | KB updates | |
 | `docs/knowledgebase/db_state.sql` | regenerated | `db-state-update` skill |
-| `user-docs/session-log.md` (OKF section) | user help for new columns, drill-down, thresholds | then `npm run build:help` |
+| `user-docs/okf-tab.md` (new, modelled on `otel-tab.md`), `user-docs/nav.json`, `tests/scenarios/tours/screen-registry.ts` | user help for the OKF tabs: new columns, drill-down, thresholds | `session-log.md` has no OKF section; then `npm run build:help` |
 | `server/test/contract/registry/f21-reports.ts`, `f19-change-surface.ts`, `f16-post-turn.ts`, `f14-repositories.ts` | contract rows | |
 | `server/test/contract/fixtures/world-v1.sql.ts` | a few event/pointer rows for the OKF fixture session | |
 | `tests/scenarios/helpers/okf.ts` | richer `OkfAction` | :62, `agentTranscriptLines` :199 |
@@ -373,7 +373,7 @@ All additions are optional fields, so older clients and skills ignore them.
 
 ## Database changes
 
-Migration `server/drizzle/migrations/0085_okf_value_signals.sql`, additive only and with no data deletion. It carries `COMMENT ON` statements for every new table and column, as in `0084_schema_comments.sql`.
+Migration `server/drizzle/migrations/0091_okf_value_signals.sql`, additive only and with no data deletion. It carries `COMMENT ON` statements for every new table and column, as in `0084_schema_comments.sql`.
 
 - **`session_okf_event`:**
   - Columns: `id serial PK`, `session_id integer NOT NULL REFERENCES sessions(id) ON DELETE CASCADE`, `ord integer NOT NULL`, `op varchar(8) NOT NULL CHECK (op IN ('read','search','write'))`, `path varchar(1024) NOT NULL`, `range_from integer NULL`, `range_to integer NULL`, `pattern varchar(200) NULL`.
@@ -435,7 +435,7 @@ Under the CLAUDE.md test policy: algorithm rows, contract rows and scenario step
   - yield hit versus a prompt-named path;
   - a dead pointer;
   - upkeep exclusion;
-  - patterns visible in the team view to a `team-no-prompts` member;
+  - patterns visible in the team view to a `team-no-prompts` member (s-repo-16 step 15 switches the team to `restricted` and back);
   - `routingMinSearches` changed in Settings changes the list without recompute, with the chip;
   - the FR-11 banner and the recompute link.
 - **Scenario — extend `s-repo-09.spec.ts`:** one step checks that import re-creates event / pointer rows and delete removes them.
@@ -481,7 +481,7 @@ Follow the `ui-components` skill and the existing OKF tab styles (chips, tree co
 - The card is read-only when `readOnly` (team view, not the team owner).
 - Inline validation mirrors DD-19 and the server 400 message is shown.
 
-Every new component stays under the component-size limit (10 KB); split it rather than grow `RepoOkfTab.tsx` / `SessionOkfTab.tsx`.
+Every new component stays under the component-size limit (10 KB); split it rather than grow `RepoOkfTab.tsx` (7.8 KB) / `SessionOkfTab.tsx` (8.25 KB) / `okf-tree-rows.tsx` (6.4 KB). `RepositorySettings.tsx` is already 15.2 KB: add nothing to it beyond the mount and the `okf` carry-through. Thresholds controls are read-only when `readOnly` (team view, not the team owner) or — if the `2026-11-05-readonly-demo-user` task has landed — the current user is read-only.
 
 ## Wireframes
 
@@ -512,11 +512,11 @@ No wireframe changes. The `real-*` wireframes are authoritative, except for the 
 | 19 | Tests: scenario steps | 7 | last |
 
 ### Chunk 1 — Schema & migration
-- [ ] Create `server/drizzle/migrations/0085_okf_value_signals.sql` with the tables, columns, constraints and `COMMENT ON` statements listed under Database changes.
-- [ ] Add the `0085_okf_value_signals` entry to `server/drizzle/migrations/meta/_journal.json` and run `npm run migrations:lock` from `server/`.
-- [ ] In `server/src/database/schema/index.ts` add `sessionOkfEvent` and `sessionOkfPointer` tables next to `sessionOkfAccess` (~:1728), per Database changes, with comment blocks in the same style.
-- [ ] In `server/src/database/schema/index.ts` add `rangedCalls`, `rangedBytes`, `searchHits` to `sessionOkfAccess` and `okfExtractVersion`, `okfEventsTruncated` to `sessions` (~:156-180).
-- [ ] In `server/src/database/schema/index.ts` add an exported `OkfThresholds` interface (all fields optional, per DD-19) and `okf?: OkfThresholds` to `RepoConfigJson` (:1416) with a doc comment describing DD-20 resolution.
+- [ ] Create `server/drizzle/migrations/0091_okf_value_signals.sql` with the tables, columns, constraints and `COMMENT ON` statements listed under Database changes.
+- [ ] Add the `0091_okf_value_signals` entry to `server/drizzle/migrations/meta/_journal.json` and run `npm run migrations:lock` from `server/`.
+- [ ] In `server/src/database/schema/index.ts` add `sessionOkfEvent` and `sessionOkfPointer` tables next to `sessionOkfAccess` (~:1836), per Database changes, with comment blocks in the same style.
+- [ ] In `server/src/database/schema/index.ts` add `rangedCalls`, `rangedBytes`, `searchHits` to `sessionOkfAccess` and `okfExtractVersion`, `okfEventsTruncated` to `sessions` after `toolUsageVersion` (table ~:136-185). Use `// Migration 0091:` in the schema comments (`0085` is now `0085_agent_meta_labels`).
+- [ ] In `server/src/database/schema/index.ts` add an exported `OkfThresholds` interface (all fields optional, per DD-19) and `okf?: OkfThresholds` to `RepoConfigJson` (:1524) with a doc comment describing DD-20 resolution.
 - [ ] Check the migration against the `migrations-data-integrity` skill, apply it to the dev DB (`npm run migrate` in `server/`), then run the `db-state-update` skill to regenerate `docs/knowledgebase/db_state.sql`.
 
 ### Chunk 2 — bash-view range / pattern
@@ -547,8 +547,8 @@ No wireframe changes. The `real-*` wireframes are authoritative, except for the 
 - [ ] Extend `writeSessionOkfAccess` to write `rangedCalls`, `rangedBytes`, `searchHits` (also in the `onConflictDoUpdate` set).
 - [ ] Add `writeSessionOkfEvents` and `writeSessionOkfPointers`: delete-then-insert per node in chunks with `ON CONFLICT DO UPDATE` on their unique keys. Set `sessions.okf_extract_version = OKF_EXTRACT_VERSION` (2) and `okf_events_truncated` (DD-11).
 - [ ] Make `rebuildSessionOkfAccess` and `rebuildOkfAccessForNodes` call `extractOkfDetail` with `snapshotFiles` and run the three writers; keep their exported signatures unchanged.
-- [ ] Check each writer call site — `logs.service.ts:498` (ingest), `:1140` (import, inside a tx), `repositories.service.ts:1515` (recompute) and `session-file-stats-writer.ts:270` (heal). Each must pass its own db / tx handle through to `loadSnapshotFilesForNode`.
-- [ ] In `server/src/sessions/sessions.service.ts` step c2 (:224-228) delete `session_okf_event` and `session_okf_pointer` rows, and reset `okf_extract_version` to NULL beside the `okfSnapshotId` clear (:265).
+- [ ] Check each writer call site — `logs.service.ts:526` (ingest), `:1179` (import, inside a tx), `repositories.service.ts:1515` (recompute) and `session-file-stats-writer.ts:270` (heal). Each must pass its own db / tx handle through to `loadSnapshotFilesForNode`.
+- [ ] In `server/src/sessions/sessions.service.ts` `purgeSessionChildData` add the `session_okf_event` and `session_okf_pointer` deletes right after step c2 (:232-236), before c3 `session_tool_usage`, and add `okfExtractVersion: null` to the step g `.set({ harnessSnapshotId: null, okfSnapshotId: null })` (:273).
 
 ### Chunk 6 — Thresholds & settings service
 - [ ] Create `server/src/logs/okf/okf-thresholds.ts` exporting `DEFAULT_OKF_THRESHOLDS`, `resolveOkfThresholds(raw)` (per-field merge, invalid → default) and `validateOkfThresholds(raw)`, which throws `BadRequestException`. Rules per DD-19.
@@ -556,13 +556,13 @@ No wireframe changes. The `real-*` wireframes are authoritative, except for the 
 - [ ] Add `RepositoriesService.resolveOkfThresholds(userId, repoUrl, teamId?)` returning `{ values, custom }` per DD-20, using `findPersonalRepoConfig`, `resolveUserTeamForUrl` and `findTeamRepoConfig`.
 - [ ] In `saveTeamConfig` (:970) and `saveUserConfig` (:1032) load the stored row first and skip the recompute call when the stored and new configs are deep-equal ignoring `okf` (DD-21).
 - [ ] Add `okfDefaults: OkfThresholds` and `okfFixedLimits` (DD-0) to `RepoSettingsResponse` (:89) and fill them in `getRepoSettings`.
-- [ ] Add a helper `okfCanRecompute(user, repoId, teamId?)` in `RepositoriesService`, reusing the authority check of `recompute-all-sessions` (`repositories.controller.ts:2108-2133`): team owner for the team view, repo owner for the personal view.
+- [ ] Add a helper `okfCanRecompute(user, repoId, teamId?)` in `RepositoriesService`, reusing the authority check of `recompute-all-sessions` (`repositories.controller.ts:2116-2144`): team owner for the team view, repo owner for the personal view. Note: if the `2026-11-05-readonly-demo-user` task lands first, `okfCanRecompute` must return false for a read-only user, and the `okf` PUTs fall under its write guard; the new GET routes must perform no writes.
 
 ### Chunk 7 — Verdict changes
 - [ ] In `server/src/logs/okf/okf-verdict.ts` replace the constants (:22-51) with an `OkfThresholds`-typed parameter on `computeSessionVerdict` (:300) and `computeRepoVerdict` (:371), defaulting to `DEFAULT_OKF_THRESHOLDS`.
 - [ ] Apply FR-5 upkeep (DD-15) in both verdicts: exclude upkeep read and grep rows, and skip upkeep-only trees as KB sessions while returning `upkeepOnlySessions`.
 - [ ] Make `coarse_article` (:445+) use whole-file calls and bytes only (DD-16), with `coarseMinSizeBytes`, `coarseMinSessions` and `coarseMaxReadRatio`.
-- [ ] Make `kb_flood` (:429) gate the level on `floodMinSessions` and otherwise emit an `info` finding (DD-17). Make `info` findings never affect the level.
+- [ ] Make `kb_flood` (:412) gate the level on `floodMinSessions` and otherwise emit an `info` finding (DD-17). Make `info` findings never affect the level.
 - [ ] Add FR-10 stale and removed handling per DD-17, with the repo verdict input extended by the DD-18a hash maps.
 - [ ] In `server/src/logs/okf/okf-usage.types.ts` add the DD-18 rule, severity, finding and marker additions. Add every optional field listed under API changes for `SessionOkfUsageResponse`, `RepoOkfUsageResponse`, `OkfTreeNode` and `OkfAgent`, plus `OkfSignalSummary`.
 
@@ -581,7 +581,7 @@ No wireframe changes. The `real-*` wireframes are authoritative, except for the 
 - [ ] Apply DD-6 entry rules in `agentEntry` (used at :461): `search` only with `searchHits > 0` on a folder row followed by a bundle read.
 - [ ] Extend `getSessionOkfUsage` (:352) to accept `thresholds`, compute signals with `okf-value-signals.ts`, and fill `upkeep`, `signals`, `thresholds.custom`, `eventsTruncated` and the `OkfAgent` additions (patterns unmasked).
 - [ ] Extend `getRepoOkfUsage` (:482) the same way, plus the tiles additions and FR-11 counts (DD-11) over period roots, `upkeep` and `canRecompute`.
-- [ ] In `reports.controller.ts` (:350) and `repositories.controller.ts` (:1510) resolve `RepositoriesService.resolveOkfThresholds(user.id, repoUrl, teamId)` and `okfCanRecompute`, and pass them to the service.
+- [ ] In `reports.controller.ts` (:350) and `repositories.controller.ts` (:1513) resolve `RepositoriesService.resolveOkfThresholds(user.id, repoUrl, teamId)` and `okfCanRecompute`, and pass them to the service.
 
 ### Chunk 10 — Article route & facts route
 - [ ] Add `RepoOkfArticleResponse` (shape under API changes) to `server/src/logs/okf/okf-usage.types.ts`.
@@ -591,11 +591,11 @@ No wireframe changes. The `real-*` wireframes are authoritative, except for the 
 - [ ] Add `accessSeq?` to `OkfFactsResponse` in `okf-usage.types.ts` (:158) per API changes.
 
 ### Chunk 11 — Client models & libs
-- [ ] Mirror every type addition from `okf-usage.types.ts` (DD-18, API changes, `RepoOkfArticleResponse`, `accessSeq`) and `okfDefaults` / `OkfThresholds` in `client/src/models/repositories.ts` (:859+).
+- [ ] Mirror every type addition from `okf-usage.types.ts` (DD-18, API changes, `RepoOkfArticleResponse`) in `client/src/models/repositories.ts` (OKF block :863+). Do NOT mirror `accessSeq`: the facts route is not called by the client (see the note at :865-867). Add `OkfThresholds` and `okf?` to `RepoConfig` (`models/repositories.ts:11`), and `okfDefaults` / `okfFixedLimits` to `RepoSettingsResponse` in `client/src/viewer/api.ts` (:1332).
 - [ ] Create `client/src/viewer/lib/okf/okf-action-text.ts` exporting `okfActionText(finding)` with the DD-26 text table, the stale suffix and `null` for `session_share` and unknown rules.
 - [ ] Extend `formatOkfFinding` in `client/src/viewer/lib/okf/okf-verdict-text.ts` (:82) with titles for the new rules and the `info` severity, keeping the raw fallback for unknown ids.
 - [ ] Add `getOkfArticle(repoId, path, filters)` next to the existing repo OKF usage API call (grep `reports/okf-usage` in `client/src`).
-- [ ] Add the `okfArticle` URL param (read, write, clear) to `client/src/viewer/pages/repository/okf/okf-url-state.ts`.
+- [ ] Add the `okfArticle` URL param (read, write, clear) to `client/src/viewer/pages/repository/okf/okf-url-state.ts`. Keep it OUT of `OKF_PARAM_KEYS`, so a filter change keeps the drill-down open; leaving the tab still clears it via `setMainTab` (`useRepositoryViewState.ts:164-170`).
 
 ### Chunk 12 — Client repo tab
 - [ ] In `OkfVerdictCard.tsx` add the "→ action" second line per finding (`okfActionText`), grey `info` rows, the `stale` / `removed` chips, the custom / default thresholds chip that links to Settings, and the "measures access, layout and value proxies" subtitle.
@@ -603,8 +603,8 @@ No wireframe changes. The `real-*` wireframes are authoritative, except for the 
 - [ ] In the shared tree (`OkfTree.tsx`, `okf-tree-rows.tsx`, `okf-tree.ts`) add the YIELD, EXPL. AFTER and ROUTE MISS columns, the new marker chips and a column legend. File names become drill-down links in the repo tab.
 - [ ] In `OkfHotFiles.tsx` add a Yield column; in `OkfShareHistogram.tsx` add the caption "bundles of ≥ N files".
 - [ ] Create `client/src/viewer/pages/repository/okf/OkfUpkeepPanel.tsx` (article · sessions · bytes) and mount it in `RepoOkfTab.tsx`.
-- [ ] Create `OkfAnalysisCoverageBanner.tsx` for FR-11: "X of Y sessions in this period have no OKF analysis yet". The recompute link shows only when `canRecompute` and calls `recomputeAllSessions(repoId, teamId)` as `MaintenanceSection.tsx` does.
-- [ ] In `RepoOkfTab.tsx` render `OkfArticleDrillDown` instead of the overview when `okfArticle` is set; keep the file under 10 KB.
+- [ ] Create `OkfAnalysisCoverageBanner.tsx` for FR-11: "X of Y sessions in this period have no OKF analysis yet". The recompute link shows only when `canRecompute` and calls `recomputeAllSessions(repoId, teamId)` as `MaintenanceSection.tsx` does; on success it invalidates the `['repo-okf-usage', …]` query (MaintenanceSection invalidates nothing).
+- [ ] In `RepoOkfTab.tsx` render `OkfArticleDrillDown` instead of the overview when `okfArticle` is set; keep the file under 10 KB (it is 7.8 KB now — move the overview into its own component if needed).
 
 ### Chunk 13 — Client article drill-down
 - [ ] Create `client/src/viewer/pages/repository/okf/article/OkfArticleDrillDown.tsx`: fetch `getOkfArticle` with the tab filters; render the back link, header (size, hash status, read summary incl. partial count) and the DD-29 value signals strip, plus the `found: false` and loading states.
@@ -613,7 +613,7 @@ No wireframe changes. The `real-*` wireframes are authoritative, except for the 
 - [ ] Add the "same finding on other articles" list (clickable, switching `okfArticle`) and the "area from an older version" note.
 
 ### Chunk 14 — Client session tab
-- [ ] In `SessionOkfTab.tsx` add the whole-tree value-signals tile from `signals`, the "Upkeep" line under Read top 5, and the "events truncated" note.
+- [ ] In `SessionOkfTab.tsx` (8.25 KB) add the whole-tree value-signals tile from `signals`, the "Upkeep" line under Read top 5, and the "events truncated" note — in new files (e.g. `OkfValueSignalsTile.tsx`, `OkfReadTop.tsx`), so the tab stays under 10 KB.
 - [ ] Add `§ section ×N` chips to Read top 5 entries and tree rows that have `rangedCalls`.
 - [ ] In the session tree rows add POINTERS USED "k / n" and EXPL. AFTER, and an expandable sub-row per agent listing its new pointers (✓ followed) plus "N paths already named in its prompt".
 - [ ] Render unread-article rows from `OkfAgent.routingMisses` as "routing miss · N searches" with the action line.
@@ -623,18 +623,18 @@ No wireframe changes. The `real-*` wireframes are authoritative, except for the 
 ### Chunk 15 — Client Settings block
 - [ ] Create `client/src/viewer/pages/repository/OkfThresholdsSection.tsx` (root `id="okf-thresholds"`): a two-group table SETTING / DEFAULT (from `okfDefaults`) / VALUE / WHAT IT AFFECTS, using the DD-19 labels, with a `codeRoots` tag list and a "Not settings" footer built from `okfFixedLimits`.
 - [ ] Add inline validation mirroring DD-19 and show the server 400 message on save failure.
-- [ ] Implement diff-only save, "Reset to defaults" and "Copy from team settings" per DD-22 through the existing read-modify-write helper (`withSavedAnalysisSettings`, `RepositorySettings.tsx:129-180`).
-- [ ] Mount the section in the analysis tab of `RepositorySettings.tsx` (:308-346), honouring `readOnly` (:127), and make sure every other save helper carries `okf` through unchanged.
-- [ ] Link the verdict card's thresholds chip to the Settings analysis tab (reuse its existing tab URL param) with hash `#okf-thresholds`. On mount with that hash, `RepositorySettings.tsx` selects the analysis tab and calls `scrollIntoView` on the section.
+- [ ] Implement diff-only save, "Reset to defaults" and "Copy from team settings" per DD-22 inside `OkfThresholdsSection` (props: `data`, `isTeamView`, `readOnly`, a `save(config)` callback built on the existing read-modify-write helper `withSavedAnalysisSettings`, `RepositorySettings.tsx:129-180`). `RepositorySettings.tsx` is already 15.2 KB — keep the logic out of it.
+- [ ] Mount the section in the analysis tab of `RepositorySettings.tsx` (:308-346), honouring `readOnly` (:127). Add `okf` to `withSavedAnalysisSettings` (:147-156) so the categories save carries it through; `saveThreshold` and `saveTurnEndCostAdvisor` already spread `base` — verify they keep `okf`.
+- [ ] Link the verdict card's thresholds chip to Settings via search params `mtab=settings&stab=analysis&sfocus=okf-thresholds` — NOT a URL hash: the app uses `createHashRouter` (`client/src/main.tsx:257`), so the hash holds the route. Pass an `onOpenThresholds` callback into `OkfVerdictCard` from `RepoOkfTab` and `SessionOkfTab`, built on the `setMainTab` logic (`useRepositoryViewState.ts:145-170`, `useRepositorySettingsTabState.ts`). On mount with `sfocus=okf-thresholds`, the section calls `scrollIntoView` and drops the param with `replace`. `id="okf-thresholds"` stays only as a DOM anchor.
 
 ### Chunk 16 — Docs & KB
-- [ ] Create `docs/knowledgebase/algorithms/okf-value-signals.md` per `algorithms/README.md` (the rules of DD-12..DD-14), with a pointer to the rows file `docs/algorithm-examples/okf-value-signals.json`. Add it to the KB index.
+- [ ] Create `docs/knowledgebase/algorithms/okf-value-signals.md` per `algorithms/README.md` (the rules of DD-12..DD-14), with a pointer to the rows file `docs/algorithm-examples/okf-value-signals.json`. Add it to the table in `docs/knowledgebase/algorithms/README.md` and to `docs/knowledgebase/index.md`.
 - [ ] Update `docs/knowledgebase/algorithms/okf-access-extraction.md`: rule 4 (ranges), rule 8 (proportional split), plus new rules for search hits, `ls <file>`, events, pointers, partial reads and the caps.
 - [ ] Update `docs/knowledgebase/algorithms/okf-verdict.md`: the thresholds table (DD-19) replaces the DD-23 constants, plus the upkeep, whole-only coarse ratio, FR-6, FR-7 `info` and FR-10 stale rules. Note that the defaults were calibrated on the Log Hub repo, with a pointer to this task's `notes.md`.
-- [ ] Update `docs/knowledgebase/algorithms/bash-command-view.md` rule 5.9 (`range`, `pattern`, `git grep`) and add the `okf/article/` folder to `docs/knowledgebase/client-component-map.md` next to the OKF lines (~:83, :120, :163).
+- [ ] Update `docs/knowledgebase/algorithms/bash-command-view.md` rule 5.9 (`range`, `pattern`, `git grep`) and add the `okf/article/` folder to `docs/knowledgebase/client-component-map.md` next to the OKF lines (~:84, :121, :164).
 - [ ] Update `docs/knowledgebase/okf-usage.md`: the new tables, the marker, the writers, the team filter for the new rows, the article route, settings resolution (DD-20) and the backward-compatibility table.
-- [ ] Update `docs/knowledgebase/db-tables.md` with the new tables and columns, and `server-endpoint-map.md` with the article route (scope and 403 like `okf-usage`, the `found: false` rule).
-- [ ] Update the OKF section of `user-docs/session-log.md` (and the repo OKF help page if one exists) for the new columns, drill-down, actions, upkeep and thresholds, then run `npm run build:help`.
+- [ ] Update `docs/knowledgebase/db-tables.md` with the new tables and columns (in the same diagram style as the recently added `otel_session_totals` / `otel_agent_totals`, :44-52), and `server-endpoint-map.md` with the article route (scope and 403 like `okf-usage`, the `found: false` rule).
+- [ ] `user-docs/session-log.md` has no OKF section (only tab-table rows :14, :39). Create `user-docs/okf-tab.md` (session and repo OKF tabs: columns, drill-down, actions, upkeep, thresholds) modelled on `otel-tab.md`, add it to `user-docs/nav.json`, link it from the `session-log.md` tab tables, add its `docRef` / help row in `tests/scenarios/tours/screen-registry.ts` (`tour-10-registry` fails otherwise), then run `npm run build:help`.
 
 ### Chunk 17 — Tests: algorithm rows
 - [ ] In `server/src/logs/okf/okf-access-extractor.algo.spec.ts` compare optional `expected.events` and `expected.pointers` (against `extractOkfDetail`) when a row has them, and allow a row-level `snapshotFiles`.
@@ -646,10 +646,10 @@ No wireframe changes. The `real-*` wireframes are authoritative, except for the 
 - [ ] Run `npm run perf` from `server/` and compare with the baseline; stop and ask the user if any metric degrades by more than 20 %.
 
 ### Chunk 18 — Tests: contract rows
-- [ ] Add a few `session_okf_event` / `session_okf_pointer` rows and a marker for the existing OKF fixture session in `server/test/contract/fixtures/world-v1.sql.ts`.
-- [ ] Extend `F21-okf-usage` in `server/test/contract/registry/f21-reports.ts` (:338-440) for the new optional fields, then add `F21-okf-article`, `F21-okf-article-outsider` (403) and `F21-okf-article-missing-path` (400).
+- [ ] Add a few `session_okf_event` / `session_okf_pointer` rows and a marker for the existing OKF fixture session in `server/test/contract/fixtures/world-v1.sql.ts`: extend the now 9-column `sessions` insert (:1248, ends with `agent_description, workflow_phase`) with `okf_extract_version`, and add the event/pointer inserts after the `session_okf_access` block (~:1974).
+- [ ] Extend `F21-okf-usage` in `server/test/contract/registry/f21-reports.ts` (`F21-okf-usage` :376, `-hot-files` :422, `-outsider` :477) for the new optional fields, then add `F21-okf-article`, `F21-okf-article-outsider` (403) and `F21-okf-article-missing-path` (400).
 - [ ] Extend the session `okf-usage` row in `f19-change-surface.ts` (:65) with the new fields.
-- [ ] Extend the facts rows in `f16-post-turn.ts` (:394-444) with `accessSeq`.
+- [ ] Extend the facts rows in `f16-post-turn.ts` (:394-444) with `accessSeq` (server-only field; the client does not mirror it).
 - [ ] Add rows to `f14-repositories.ts` (:178-357): an `okf` round-trip on the user and team PUT, an invalid `okf.routingMinSearches` → 400, and `okfDefaults` in the GET and PUT responses.
 - [ ] Run `npm run test:contract` from `server/` (in the background, never alongside a build or e2e run) and fix failures.
 
@@ -658,6 +658,8 @@ No wireframe changes. The `real-*` wireframes are authoritative, except for the 
 - [ ] In `tests/scenarios/repos/s-repo-16.spec.ts` add step 12: routing miss — 3 sub-agents grep 3× in an article's area without reading it, another greps 2×. The drill-down shows "3 of 4" with patterns; a sub-agent read does not clear the main agent.
 - [ ] Add step 13: yield and dead pointers — a read whose pointer is then opened counts as a hit; the same path named in the sub-agent task does not; a pointer shown in 4 reads and never followed is listed dead.
 - [ ] Add step 14: upkeep — the reads of an agent that edits the article appear in the Upkeep panel, not in hot files or the yield.
-- [ ] Add step 15: in the team view a `team-no-prompts` member sees the search patterns unmasked in the drill-down.
+- [ ] Add step 15: switch the s-repo-16 team (now `transparent`, :72) to `restricted` via the owner PATCH of `accessMode`, and use a member whose role gives `team-no-prompts` visibility (`team-scope.ts:60-69`). In the drill-down the search patterns are unmasked and `missing[].taskHead` is masked. Restore `transparent` at the end of the step, because later steps assume it.
 - [ ] Add step 16: set `routingMinSearches` to 2 in Settings → OKF thresholds; the routing-miss list grows without recompute, the "custom thresholds" chip shows, and the FR-11 banner and recompute link follow authority.
+- [ ] Update `tests/scenarios/view/s-sess-09.spec.ts` for DD-15: in step 8 (:282) `a01.md` (read after own edit) moves from Read top 5 to the Upkeep line; in step 9 (:290) the tree row keeps `own edit` and also shows `upkeep ×1`. Add a step 11 for the Chunk 14 UI (POINTERS USED, EXPL. AFTER, agents panel yield / routing misses / upkeep / searches columns, `§` chips).
+- [ ] Regression check: run `tests/scenarios/view/s-rept-01.spec.ts` step 9 (:252, exact `toEqual` on repo findings) — its 5-file bundle should gain no FR-6 / FR-7 findings; if it does, record it in `docs/BLOCKED.md` instead of loosening the assertion.
 - [ ] In `tests/scenarios/repos/s-repo-09.spec.ts` extend steps 5a / 9: after import the tree has `session_okf_event` / `session_okf_pointer` rows; after delete they are gone. Run each touched scenario with `--grep`.

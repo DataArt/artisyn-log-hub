@@ -204,9 +204,9 @@ controller itself. Several controllers share the `api/v1/repositories` prefix �
 | `logs/okf/okf-facts.controller.ts` | `/api/v2/okf-usage` | KB-access facts for a local skill (hook key) | `logs/okf/okf-usage.types.ts` · `f16` |
 | `logs/tool-monitoring/tool-monitoring-hook.controller.ts` | `/api/v2/tool-monitoring` | Monitored-tools config for the hook | `tool-monitoring.types.ts` · `f24` |
 | `logs/otel/otel-realtime.controller.ts` | `/api/v2/otel-realtime` | Realtime OTEL batch from the receiver | `OtelRealtimeDto` in the controller · `f25` |
-| `logs/repositories.controller.ts` | `/api/v1/repositories` | Repos, settings, hook state, sessions, session logs (+ delta), change surface, OKF, timeline / work-time analytics | `logs/repositories.service.ts`, `logs/dto/`, client `models/repositories.ts` · `f14`, `f17`, `f19`, `f20` |
+| `logs/repositories.controller.ts` | `/api/v1/repositories` | Repos, settings, hook state, sessions, session logs (+ delta), change surface, session OKF, timeline / work-time analytics | `logs/repositories.service.ts`, `logs/dto/`, client `models/repositories.ts` · `f14`, `f17`, `f19`, `f20` |
 | `logs/analytics/usage-analytics.controller.ts` | `/api/v1/repositories` | `analytics/{tools,tokens,productivity,active-sessions,claude-versions}` | `usage-analytics.types.ts` · `f20` |
-| `logs/reports/reports.controller.ts` | `/api/v1/repositories` | `reports/*` | `logs/reports/*.service.ts` · `f21` |
+| `logs/reports/reports.controller.ts` | `/api/v1/repositories` | `reports/*` (incl. repo `okf-usage` and `okf-usage/article`) | `logs/reports/*.service.ts` · `f21` |
 | `logs/otel/otel-facts.controller.ts` | `/api/v1/repositories` | Repo and session OTEL tabs | `logs/otel/otel-facts.types.ts` · `f25` |
 | `logs/otel/otel-live.controller.ts` (`OtelLiveController`) | `/api/v1/otel/live` | OTEL Live view: `status` (header entry) and the live tree (`node`, `panel`, `tz`), user-wide | `logs/otel/otel-live.types.ts`, client `models/otel-live.ts` · `f25` |
 | `logs/tool-monitoring/tool-monitoring.controller.ts` | `/api/v1/repositories` | Tools/MCP tab config, summary, calls | `tool-monitoring.types.ts` · `f24` |
@@ -266,9 +266,17 @@ grep the controller.
   cursor. Types: `logs/dto/session-logs-delta.dto.ts`.
 - `GET …/sessions/export-scope` (statistics export) is repo owner or team owner and bypasses the
   team access mode.
-- `PUT …/settings/team` is team owner only; both settings PUTs trigger a recompute.
+- `PUT …/settings/team` is team owner only; both settings PUTs trigger a recompute, except when
+  the stored and new config differ only in the `okf` thresholds section (read-time settings). An
+  invalid `okf` → 400 `okf.<field> …`; every settings response carries `okfDefaults` and
+  `okfFixedLimits`.
 - `GET …/hook-state` answers 404 when the repo never reported hook state.
 - Each `reports/X` that mirrors an `analytics/X` returns a byte-identical body (same service).
+- `GET …/reports/okf-usage` and `GET …/reports/okf-usage/article?path=` (the per-article
+  drill-down) share the scope and the 403 of `harness-usage` (`resolveUsageScope`) and the OKF
+  team filter. The article route answers 400 without `path`, and 200 with `found: false` (never
+  404) for a `path` that is not a stored KB article in the scope. Both are read-only and resolve
+  the OKF thresholds per section ([okf-usage.md](okf-usage.md)).
 - Export/import: jobs answer `202 { jobId }` and are polled; uploads are `multipart/form-data`
   field `file`; 422 invalid archive, 409 `{ conflicts[] }`; the download leaves the job in place
   (no GET mutates). `bootstrap-import/*` has no target repo and is scoped by user.
