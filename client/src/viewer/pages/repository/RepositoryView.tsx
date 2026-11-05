@@ -66,7 +66,7 @@ export function RepositoryView() {
     branch: string | null;
   } | null>(null);
 
-  const { isBranchOpen, toggleBranch } = useOpenBranches();
+  const { isBranchOpen, toggleBranch, openBranch } = useOpenBranches();
 
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [deleteSuccessMsg, setDeleteSuccessMsg] = useState<string | null>(null);
@@ -165,6 +165,17 @@ export function RepositoryView() {
     // The Session Map polls its own delta (session-map DD-11).
     suspendSilentLogsRefetch: sessionTab === 'session-map',
   });
+
+  // A session opened by a link (Home, Recent visits, a report) must be visible in the list:
+  // open its branch once per selection. The user can still collapse it afterwards.
+  const selectedBranchKey =
+    selectedSession !== null
+      ? (selectedSession.gitBranch ?? '__no_branch__')
+      : null;
+  const selectedListSessionId = selectedSession?.sessionId ?? null;
+  useEffect(() => {
+    if (selectedBranchKey !== null) openBranch(selectedBranchKey);
+  }, [selectedListSessionId, selectedBranchKey, openBranch]);
 
   // Recent visits (DD-15): a repository open, every session / session-tab visit, and the removal
   // of a session whose open failed (the `SessionNotFoundState` pane).

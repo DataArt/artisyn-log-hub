@@ -122,15 +122,14 @@ test('@S-NAV-01 navigation walk: Home, one-level session tabs with views, Summar
     await expect(page).toHaveURL(new RegExp(`#/repos/${b}/hook-state`));
   });
 
-  await test.step('home 4. the question card "Why was this session expensive?" for A opens Analytics › Cost, 1 week (DD-12)', async () => {
+  await test.step('home 4. with no session of A opened yet, "Why was this session expensive?" opens the map filtered by "expensive" (DD-12)', async () => {
     await page.goto('/#/main');
     await page.getByTestId('home-questions-repo').selectOption(`${a}:`);
     await page.getByTestId('home-question-expensive').click();
-    await expect(page).toHaveURL(new RegExp(`#/repos/${a}\\?`));
-    await expect(page).toHaveURL(/mtab=analytics/);
-    await expect(page).toHaveURL(/av=cost/);
-    await expect(page).toHaveURL(/ar=1w/);
-    await expect(page.getByTestId('tab-repo-analytics')).toHaveAttribute('data-state', 'active');
+    await expect(page).toHaveURL(/#\/map\?/);
+    await expect(page).toHaveURL(new RegExp(`repoId=${a}`));
+    await expect(page).toHaveURL(/q=expensive/);
+    await expect(page.getByTestId('map-rail-repo')).toHaveValue(String(a));
   });
 
   await test.step('home 5. a FRESH user (no repositories, no teams) gets Get started instead of the empty sections', async () => {
@@ -232,6 +231,30 @@ test('@S-NAV-01 navigation walk: Home, one-level session tabs with views, Summar
     await expect(page).toHaveURL(/tab=sysctx/);
     await expect(lensSelect(page)).toHaveValue('harness');
     await expect(sessionTab(page, 'sysctx')).toHaveAttribute('aria-selected', 'true');
+  });
+
+  await test.step('session 6. Home "Why was this session expensive?" opens the session just visited under the Cost lens, selected in the list in every list mode', async () => {
+    await page.goto('/#/main');
+    await page.getByTestId('home-questions-repo').selectOption(`${a}:`);
+    await page.getByTestId('home-question-expensive').click();
+    await expect(page).toHaveURL(new RegExp(`#/repos/${a}\\?`));
+    await expect(page).toHaveURL(new RegExp(`session=${sidA}`));
+    await expect(page).toHaveURL(/lens=cost/);
+    await expect(sessionTab(page, 'usage')).toHaveAttribute('aria-selected', 'true');
+    const viewMode = page.getByTestId('session-list-view-mode');
+    const original = await viewMode.inputValue();
+    try {
+      for (const mode of ['branch', 'date', 'user', 'plain']) {
+        await viewMode.selectOption(mode);
+        // A reload re-opens the deep link: the group holding the session must open by itself.
+        await page.reload();
+        const selected = page.locator('[data-testid="session-item"][aria-current="true"]');
+        await expect(selected, `${mode}: the opened session is selected and visible`).toBeVisible();
+        await expect(selected).toBeInViewport();
+      }
+    } finally {
+      await viewMode.selectOption(original);
+    }
   });
 
   // ---------------------------------------------------------------- Map

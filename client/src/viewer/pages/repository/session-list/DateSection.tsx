@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useOpenOnSelection } from './useOpenOnSelection';
 import { ChevronRight } from 'lucide-react';
 import type {
   RepositorySession,
@@ -37,6 +38,7 @@ export function DateSection({
   attributeDefs,
 }: DateSectionProps) {
   const [isOpen, setIsOpen] = useState(isInitiallyOpen);
+  useOpenOnSelection(sessions, selectedSession, setIsOpen);
 
   const thresholds = useMemo(() => computeCostThresholds(sessions), [sessions]);
 

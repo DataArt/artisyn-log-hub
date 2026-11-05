@@ -84,7 +84,9 @@ Filtering does not change which groups you opened. The filter is part of the add
 At the top of the map, **Start from a question** lists common questions. Each opens the view
 that answers it for the repository in the context:
 
-- **Why was this session expensive?** opens Analytics › Cost for the last week.
+- **Why was this session expensive?** opens your most recent session in that repository under the
+  Cost lens (Statistics: tokens and cost by model and tool); without a recent session it filters
+  this map to the cost views, where you pick a session.
 - **Which tools fail most?** opens Tools/MCP filtered to errors of the last week.
 - **Is my hook healthy?** opens the repository's Hook state.
 - **What context does Claude load at startup?** opens the System context anatomy tab of your most
