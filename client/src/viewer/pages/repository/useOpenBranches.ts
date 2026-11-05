@@ -26,5 +26,15 @@ export function useOpenBranches() {
     });
   }, []);
 
-  return { isBranchOpen, toggleBranch };
+  /** Opens a branch without toggling: a deep-linked session's branch must be shown. */
+  const openBranch = useCallback((key: string) => {
+    setOverrides((prev) => {
+      if (prev.get(key) === true) return prev;
+      const next = new Map(prev);
+      next.set(key, true);
+      return next;
+    });
+  }, []);
+
+  return { isBranchOpen, toggleBranch, openBranch };
 }

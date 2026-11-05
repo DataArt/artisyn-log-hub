@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { Lightbulb } from 'lucide-react';
 import type {
   RepositorySession,
@@ -242,9 +243,16 @@ export function SessionItem({
     session.attribution?.values,
     attributeDefs ?? [],
   );
+  // A session selected by a link may sit below the fold of the list: bring it into view.
+  const rowRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (selected) rowRef.current?.scrollIntoView({ block: 'nearest' });
+  }, [selected]);
   return (
     <button
+      ref={rowRef}
       data-testid="session-item"
+      aria-current={selected ? 'true' : undefined}
       className={cn(
         'relative w-full border-b border-border text-left transition-colors hover:bg-accent/50',
         selected

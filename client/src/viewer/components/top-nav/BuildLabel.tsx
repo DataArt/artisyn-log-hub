@@ -48,17 +48,21 @@ export function buildTooltipRows(v: BuildVersion): BuildTooltipRow[] {
 }
 
 /**
- * The short build label next to the app name, with a tooltip naming where the build came from.
- * The short commit identifies the running build; without a baked-in commit (local dev) the label
- * falls back to the version.
+ * The label text: `v<version>` for an official release, otherwise the short commit that
+ * identifies the running build, falling back to the version without a baked-in commit (local dev).
  */
+export function buildLabelText(v: BuildVersion): string | null {
+  const version = v.origin?.version ?? v.version;
+  if (v.origin?.officialRelease && isKnown(version)) return `v${version}`;
+  if (isKnown(v.gitCommit)) return v.gitCommit.slice(0, 7);
+  return v.version || null;
+}
+
+/** The short build label next to the app name, with a tooltip naming where the build came from. */
 export function BuildLabel() {
   const { data: buildVersion } = useBuildVersion();
   if (!buildVersion) return null;
-  const label =
-    buildVersion.gitCommit && buildVersion.gitCommit !== 'unknown'
-      ? buildVersion.gitCommit.slice(0, 7)
-      : buildVersion.version;
+  const label = buildLabelText(buildVersion);
   if (!label) return null;
   const rows = buildTooltipRows(buildVersion);
 

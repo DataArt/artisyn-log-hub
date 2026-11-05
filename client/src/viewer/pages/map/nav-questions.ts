@@ -54,14 +54,37 @@ function repoRoute(
   return { kind: 'route', path: repoBasePath(repo), search };
 }
 
+/**
+ * A session question: the latest session of this repository the user opened, on the given tab and
+ * lens; without one, the All views map filtered by `q`, where a session view opens its picker.
+ */
+function latestSessionOrMap(
+  repo: NavQuestionRepoCtx,
+  recent: readonly NavQuestionRecentSession[],
+  view: { tab: string; lens: string },
+  q: string,
+): NavTarget {
+  const last = recent.find((s) => s.repoId === repo.repoId);
+  if (last) return repoRoute(repo, { session: last.sessionId, ...view });
+  const search: Record<string, string> = { repoId: String(repo.repoId), q };
+  if (repo.teamId !== undefined) search.teamId = String(repo.teamId);
+  return { kind: 'route', path: routes.map(), search };
+}
+
 export const NAV_QUESTIONS: readonly NavQuestion[] = [
   {
     id: 'expensive',
     label: 'Why was this session expensive?',
-    description: 'Analytics › Cost over the last week.',
+    description:
+      'Cost lens of the latest session: tokens and cost by model and tool.',
     synonyms: ['cost', 'spend', 'why', 'money'],
-    build: (repo) =>
-      repoRoute(repo, { mtab: 'analytics', av: 'cost', ar: '1w' }),
+    build: (repo, recent) =>
+      latestSessionOrMap(
+        repo,
+        recent,
+        { tab: 'usage', lens: 'cost' },
+        'expensive',
+      ),
   },
   {
     id: 'tools',
@@ -90,22 +113,13 @@ export const NAV_QUESTIONS: readonly NavQuestion[] = [
     label: 'What context does Claude load at startup?',
     description: 'System context anatomy of the latest session.',
     synonyms: ['startup', 'loaded', 'context', 'system prompt'],
-    build: (repo, recent) => {
-      const last = recent.find((s) => s.repoId === repo.repoId);
-      if (last) {
-        return repoRoute(repo, {
-          session: last.sessionId,
-          tab: 'sysctx',
-          lens: 'harness',
-        });
-      }
-      const search: Record<string, string> = {
-        repoId: String(repo.repoId),
-        q: 'startup',
-      };
-      if (repo.teamId !== undefined) search.teamId = String(repo.teamId);
-      return { kind: 'route', path: routes.map(), search };
-    },
+    build: (repo, recent) =>
+      latestSessionOrMap(
+        repo,
+        recent,
+        { tab: 'sysctx', lens: 'harness' },
+        'startup',
+      ),
   },
   {
     id: 'claude-md',
