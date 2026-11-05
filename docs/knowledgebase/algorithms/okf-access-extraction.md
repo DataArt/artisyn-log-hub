@@ -55,7 +55,7 @@ bound OKF snapshot as `repoRelPath → { size, hash }`. It returns
 - `events`: `{ord, op: 'read'|'search'|'write', path, rangeFrom, rangeTo, pattern}[]` (rule 13).
 - `pointers`: `{articlePath, articleHash, readOrd, pointer, isNew, followed, partial}[]` (rules
   14-16).
-- `seq`: `{ord, op, path, offset?, limit?, pattern?, newPointers?}[]`, `op` one of `kb_read`,
+- `seq`: `{ord, op, path, offset?, limit?, pattern?, newPointers?, hit?}[]`, `op` one of `kb_read`,
   `kb_search`, `kb_write`, `read`, `search`, `write` (rule 17).
 - `truncated`: an event or pointer cap was hit (rule 18).
 
@@ -190,7 +190,10 @@ bound OKF snapshot as `repoRelPath → { size, hash }`. It returns
     (an `.md` file of `snapshotFiles`, or any `.md` file when there is none) as `kb_read` /
     `kb_search` / `kb_write`, a code path kept by rule 13 as `read` / `search` / `write`. A ranged
     item carries `offset = from` and, when `to` is known, `limit = to - from + 1`; a pattern item
-    carries `pattern`; a single-article KB read carries `newPointers` (its new pointers).
+    carries `pattern`; a single-article KB read carries `newPointers` (its new pointers); a search
+    item (`kb_search` / `search`) carries `hit`, the rule-11 hit test of its call's result (an error,
+    empty, `No files found` or `No matches found` result is `false`). `hit` is derived per request
+    from the transcript (the trail and facts routes), never stored.
 18. **Caps.** At most `OKF_EVENT_CAP_PER_NODE` (3000) events and `OKF_POINTER_CAP_PER_NODE` (5000)
     pointer rows per node. Anything beyond is dropped and `truncated = true`, which the writer
     stores as `sessions.okf_events_truncated`. Access rows and the sequence are not capped.
@@ -226,6 +229,7 @@ bound OKF snapshot as `repoRelPath → { size, hash }`. It returns
 - `head -n` / `tail -n` ranges and their events: OA-24.
 - `ls <file>` produces no row (FR-8): OA-25.
 - `No files found` / `No matches found` / an error result is no hit, a listing is: OA-26.
+- The sequence `hit` of a search item (true, `No matches found`, an error, a blank result): OA-34.
 - Size-proportional split: OA-27; even fallback for a file missing from the snapshot and for a
   folder target: OA-28.
 - Code events: ranges, patterns (cut to 200), Glob without pattern, skipped segments, snapshot
@@ -250,9 +254,10 @@ call with `isError: true` gets `is_error: true` on its `tool_result`; a call wit
 emitted N times (ids keep counting `t<k>`). `expected.rows` is the exact `access` result, in order. A row may also give
 `input.snapshotFiles` (`{ path: { size, hash } }`, passed as the `snapshotFiles` map) and
 `expected.events` / `expected.pointers`, which are then compared with `extractOkfDetail`'s lists,
-and `expected.eventCount` / `expected.pointerCount` (list lengths) and `expected.truncated`.
+and `expected.eventCount` / `expected.pointerCount` (list lengths), `expected.truncated` and
+`expected.seq` (the exact sequence).
 
-Rows (33): [`docs/algorithm-examples/okf-access-extraction.json`](../../algorithm-examples/okf-access-extraction.json) — test data for the table test; the rules above are enough to understand the algorithm.
+Rows (34): [`docs/algorithm-examples/okf-access-extraction.json`](../../algorithm-examples/okf-access-extraction.json) — test data for the table test; the rules above are enough to understand the algorithm.
 
 ## Mutations
 
@@ -278,6 +283,7 @@ Rows (33): [`docs/algorithm-examples/okf-access-extraction.json`](../../algorith
 - `tail -n N` stored as `from: N` -> OA-24.
 - `ls <file>` kept as a folder row -> OA-25.
 - `No files found` or an error result counted as a hit -> OA-26 (`searchHits` 3).
+- `hit` set on a non-search item, or `true` for an error / blank result -> OA-34.
 - Even split with a snapshot -> OA-27 (501 / 500); proportional split with a folder or an unknown
   size -> OA-28.
 - Events not skipping `node_modules` / `dist`, or the pattern not cut -> OA-29; no event cap ->
@@ -301,6 +307,8 @@ Rows (33): [`docs/algorithm-examples/okf-access-extraction.json`](../../algorith
   and the article drill-down — computed from the events and pointer rows by
   [okf-value-signals](okf-value-signals.md).
 - `GET /api/v2/okf-usage/facts` per-agent `accessSeq` (the sequence, built on demand).
+- `GET …/sessions/:sessionId/okf-usage/trail` (the session OKF tab's agent trail: the sequence
+  with `hit`, capped, plus in-area marks — see [okf-value-signals](okf-value-signals.md) rule 11).
 - Storage: `session_okf_access`, `session_okf_event`, `session_okf_pointer`, and the
   `sessions.okf_extract_version` / `okf_events_truncated` marker (see
   [../okf-usage.md](../okf-usage.md)).

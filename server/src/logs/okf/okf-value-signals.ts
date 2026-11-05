@@ -13,7 +13,9 @@
  * - **FR-1 yield:** `n` = non-partial reads that showed at least one new pointer, `k` = those
  *   reads with at least one followed new pointer.
  * - **FR-2 searched after (DD-13/DD-14):** a (node, article) read pair whose node made at least
- *   `exploredMinSearches` in-area `search` events after its first read of the article.
+ *   `exploredMinSearches` in-area `search` events after its first read of the article. For FR-2
+ *   only, a search of a folder that holds an area file also counts, when the folder is at least
+ *   `OKF_SEARCH_FOLDER_MIN_DEPTH` segments deep.
  * - **FR-3 routing miss:** nodes with at least `routingMinSearches` in-area searches and no read
  *   of the article (X) of the nodes with at least one in-area search (Y); a finding when
  *   X ≥ `routingMinAgents`. Skipped for catalog articles.
@@ -28,7 +30,7 @@
  *
  * Findings carry the DD-26 params (`file`, `patterns`, `area`, `files`, `path`) plus counts.
  */
-import { OKF_TOP_PATTERNS } from './okf-constants';
+import { OKF_SEARCH_FOLDER_MIN_DEPTH, OKF_TOP_PATTERNS } from './okf-constants';
 import type { ResolvedOkfThresholds } from './okf-thresholds';
 import type { OkfFinding, OkfYield } from './okf-usage.types';
 
@@ -405,6 +407,63 @@ export function computeArticleArea(
   return areas;
 }
 
+// ── DD-13 in-area index ────────────────────────────────────────────────────────────────────────
+
+/** The DD-13 lookup of the article areas: by area file, and by deep-enough folder (FR-2 only). */
+export interface OkfAreaIndex {
+  /** Area file → articles whose area holds it. */
+  files: Map<string, string[]>;
+  /** Folder (≥ `OKF_SEARCH_FOLDER_MIN_DEPTH` segments, no trailing `/`) holding an area file → articles. */
+  folders: Map<string, Set<string>>;
+}
+
+/** DD-13: indexes the area files of every article (article path → its area files). */
+export function buildAreaIndex(
+  areas: ReadonlyMap<string, { area: { files: readonly string[] } }>,
+): OkfAreaIndex {
+  const files = new Map<string, string[]>();
+  const folders = new Map<string, Set<string>>();
+  for (const [path, a] of areas) {
+    for (const f of a.area.files) {
+      const list = files.get(f);
+      if (list) list.push(path);
+      else files.set(f, [path]);
+      for (const folder of selfAndAncestors(f).slice(1)) {
+        if (folder.split('/').length < OKF_SEARCH_FOLDER_MIN_DEPTH) break;
+        const arts = folders.get(folder);
+        if (arts) arts.add(path);
+        else folders.set(folder, new Set([path]));
+      }
+    }
+  }
+  return { files, folders };
+}
+
+/**
+ * DD-13: the articles whose area `path` falls in — the path, without a trailing `/`, is an area
+ * file or lies under one (`false`); with `folderRule`, also a folder that holds an area file and
+ * is at least `OKF_SEARCH_FOLDER_MIN_DEPTH` segments deep (`true` = matched by the folder rule
+ * only).
+ */
+export function inAreaArticles(
+  index: OkfAreaIndex,
+  path: string,
+  folderRule: boolean,
+): Map<string, boolean> {
+  const hit = new Map<string, boolean>();
+  for (const p of selfAndAncestors(path)) {
+    const arts = index.files.get(p);
+    if (arts) for (const art of arts) hit.set(art, false);
+  }
+  if (folderRule) {
+    const folderArts = index.folders.get(stripSlash(path));
+    if (folderArts) {
+      for (const art of folderArts) if (!hit.has(art)) hit.set(art, true);
+    }
+  }
+  return hit;
+}
+
 // ── computeArticleSignals ──────────────────────────────────────────────────────────────────────
 
 interface ReadAgg {
@@ -594,37 +653,26 @@ export function computeArticleSignals(
   }
 
   // ── Events: in-area search index (DD-13) ──
-  // area file → articles whose area holds it (catalog articles included; FR-2 still applies).
-  const areaIndex = new Map<string, string[]>();
-  for (const [path, a] of articles) {
-    for (const f of a.area.files) {
-      const list = areaIndex.get(f);
-      if (list) list.push(path);
-      else areaIndex.set(f, [path]);
-    }
-  }
-  // node → article → in-area search events (ord, pattern)
+  // Catalog articles included; FR-2 still applies to them.
+  const areaIndex = buildAreaIndex(articles);
+  // node → article → in-area search events (ord, pattern; `folder` = a folder search, FR-2 only)
   const nodeArticleSearches = new Map<
     OkfNodeId,
-    Map<string, { ord: number; pattern: string | null }[]>
+    Map<string, { ord: number; pattern: string | null; folder: boolean }[]>
   >();
   for (const e of input.events) {
     if (e.op !== 'search') continue;
     node(e.nodeId).searches += 1;
-    const hit = new Set<string>();
-    for (const p of selfAndAncestors(e.path)) {
-      const arts = areaIndex.get(p);
-      if (arts) for (const art of arts) hit.add(art);
-    }
+    const hit = inAreaArticles(areaIndex, e.path, true);
     if (hit.size === 0) continue;
     let byArticle = nodeArticleSearches.get(e.nodeId);
     if (!byArticle) {
       byArticle = new Map();
       nodeArticleSearches.set(e.nodeId, byArticle);
     }
-    for (const art of hit) {
+    for (const [art, folder] of hit) {
       const list = byArticle.get(art);
-      const item = { ord: e.ord, pattern: e.pattern };
+      const item = { ord: e.ord, pattern: e.pattern, folder };
       if (list) list.push(item);
       else byArticle.set(art, [item]);
     }
@@ -678,8 +726,11 @@ export function computeArticleSignals(
     { nodeId: OkfNodeId; searches: { ord: number; pattern: string | null }[] }[]
   >();
   for (const [nodeId, byArticle] of nodeArticleSearches) {
-    for (const [art, searches] of byArticle) {
+    for (const [art, all] of byArticle) {
       if (isUpkeep(nodeId, art)) continue;
+      // A folder search does not say which article the agent was after: file searches only.
+      const searches = all.filter((s) => !s.folder);
+      if (searches.length === 0) continue;
       const list = articleSearchers.get(art);
       const item = { nodeId, searches };
       if (list) list.push(item);

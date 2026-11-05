@@ -1,5 +1,6 @@
 /**
- * Verdict card of the OKF tabs: level badge, qualifiers, clickable "Why" lines (worst first),
+ * Verdict card of the OKF tabs: level badge, qualifiers, the Checks block (`OkfChecksBlock`, one
+ * line per structure rule from `verdict.checks`), clickable "Why" lines (worst first),
  * and — on the session variant — the Read top 5 and the "How agents reached the KB" chips.
  * The repo variant shows the KB session count instead; its anomaly lines are the same Why
  * lines. Every line click is forwarded to `onNodeClick` so the tab can scroll the tree to it.
@@ -20,7 +21,9 @@ import type {
   OkfVerdict,
   OkfVerdictLevel,
 } from '../../../../../models/repositories';
-import { okfAgentLabel } from './okf-tree';
+import { okfAgentLabel, type OkfAgentLabels } from '@/lib/okf/okf-agent-label';
+import { okfCount } from '@/lib/okf/okf-check-text';
+import { OkfChecksBlock } from './OkfChecksBlock';
 import { OkfFindingLine } from './OkfFindingLine';
 import { OkfReadTop } from './OkfReadTop';
 import { OkfThresholdsChip } from './OkfThresholdsChip';
@@ -43,10 +46,12 @@ export interface OkfVerdictCardProps {
   readTop?: readonly OkfReadTopItem[];
   /** Session variant: the "Upkeep" line under Read top 5 (FR-5). */
   upkeep?: readonly OkfSessionUpkeepItem[];
-  /** Session variant: ranged read calls by file path, for the `§ section` chips. */
+  /** Session variant: ranged read calls by file path, for the "partial reads" chips. */
   rangedCalls?: ReadonlyMap<string, number>;
   agents?: readonly OkfAgent[];
   rootSessionId?: string;
+  /** Session variant: agent labels by id (`buildOkfAgentLabels`). */
+  agentLabels?: OkfAgentLabels;
   /** Repo variant. */
   kbSessions?: number;
   totalSessions?: number;
@@ -54,6 +59,13 @@ export interface OkfVerdictCardProps {
   thresholds?: OkfThresholdsInfo;
   /** Opens Settings → Analysis (OKF thresholds) from the thresholds chip. */
   onOpenSettings?: () => void;
+  /** Session variant: switches to the repository OKF tab (the Checks block's link). */
+  onOpenRepoTab?: () => void;
+  /**
+   * Repo variant: value-signal findings (section B) that count for the level although they are
+   * listed in section B; 0 or absent hides the note.
+   */
+  signalFindingsInLevel?: number;
 }
 
 function SectionTitle({ children }: { children: ReactNode }) {
@@ -62,6 +74,14 @@ function SectionTitle({ children }: { children: ReactNode }) {
       {children}
     </div>
   );
+}
+
+/** Tooltip of an entry chip: the full label, the full agent id and its task head. */
+function entryChipTitle(agent: OkfAgent, label: string): string {
+  const task = agent.taskHead.trim();
+  return [label, `id: ${agent.id}`, task ? `task: ${task}` : '']
+    .filter(Boolean)
+    .join('\n');
 }
 
 export function OkfVerdictCard({
@@ -73,12 +93,17 @@ export function OkfVerdictCard({
   rangedCalls,
   agents = [],
   rootSessionId = '',
+  agentLabels,
   kbSessions,
   totalSessions,
   thresholds,
   onOpenSettings,
+  onOpenRepoTab,
+  signalFindingsInLevel = 0,
 }: OkfVerdictCardProps) {
   const entryAgents = agents.filter((a) => a.entry !== null);
+  const agentName = (id: string) =>
+    okfAgentLabel(id, rootSessionId, agentLabels);
 
   return (
     <TooltipProvider>
@@ -124,7 +149,19 @@ export function OkfVerdictCard({
             className="-mt-2 text-[11px] text-muted-foreground"
           >
             Measures access, layout and value proxies
+            {signalFindingsInLevel > 0
+              ? ` · the level also counts ${okfCount(signalFindingsInLevel, 'value-signal finding', 'value-signal findings')} listed in section B`
+              : ''}
           </div>
+        ) : null}
+
+        {verdict.checks ? (
+          <OkfChecksBlock
+            checks={verdict.checks}
+            variant={variant}
+            agentName={variant === 'session' ? agentName : undefined}
+            onOpenRepoTab={onOpenRepoTab}
+          />
         ) : null}
 
         {verdict.findings.length > 0 ? (
@@ -136,6 +173,7 @@ export function OkfVerdictCard({
               <OkfFindingLine
                 key={`${f.rule}:${i}`}
                 finding={f}
+                agentName={variant === 'session' ? agentName : undefined}
                 onClick={() => onNodeClick(f.node.bundle, f.node.path)}
               />
             ))}
@@ -167,11 +205,11 @@ export function OkfVerdictCard({
                 <span
                   key={a.id}
                   data-testid="okf-entry-chip"
-                  className="inline-flex items-center gap-1 rounded border border-border px-1.5 py-0.5 text-[11px]"
-                  title={a.taskHead}
+                  className="inline-flex max-w-full flex-wrap items-center gap-x-1 rounded border border-border px-1.5 py-0.5 text-[11px]"
+                  title={entryChipTitle(a, agentName(a.id))}
                 >
-                  <span className="font-mono">
-                    {okfAgentLabel(a.id, rootSessionId)}
+                  <span className="break-words font-medium">
+                    {agentName(a.id)}
                   </span>
                   <span className="text-muted-foreground">
                     → {a.files.length}{' '}

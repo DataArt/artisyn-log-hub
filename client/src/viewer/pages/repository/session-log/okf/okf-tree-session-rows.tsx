@@ -4,7 +4,9 @@
  * that searched the article's code area without opening it ("routing miss · N searches") with
  * its action line. Misses on articles that are not in the tree are listed after the rows.
  */
+import { useSearchParams } from 'react-router-dom';
 import { okfActionText } from '@/lib/okf/okf-action-text';
+import { OkfMissCheck } from './OkfMissCheck';
 import {
   okfMissFinding,
   type OkfAgentMiss,
@@ -30,8 +32,8 @@ export function OkfAgentPointerRow({
         <span className="font-mono font-medium text-foreground">
           {entry.label}
         </span>{' '}
-        · {entry.pointers.length} new{' '}
-        {entry.pointers.length === 1 ? 'pointer' : 'pointers'} · {followed}{' '}
+        · {entry.pointers.length} new code{' '}
+        {entry.pointers.length === 1 ? 'path' : 'paths'} shown · {followed}{' '}
         followed
         {entry.promptNamedPaths > 0 ? (
           <span data-testid="okf-prompt-named">
@@ -69,6 +71,12 @@ export function OkfMissRow({
   showArticle?: boolean;
 }) {
   const action = okfActionText(okfMissFinding(miss));
+  // Same session page, Bash tab: keep the current URL params (repo, team, session), swap the tab.
+  const [searchParams] = useSearchParams();
+  const next = new URLSearchParams(searchParams);
+  next.set('tab', 'bash');
+  next.delete('bashCall');
+  const bashTo = `?${next.toString()}`;
   return (
     <div
       data-testid="okf-routing-miss-row"
@@ -85,10 +93,11 @@ export function OkfMissRow({
         ) : null}
         <span className="text-amber-600 dark:text-amber-400">
           {' '}
-          · routing miss · {miss.searches}{' '}
+          · searched without reading · {miss.searches}{' '}
           {miss.searches === 1 ? 'search' : 'searches'}
         </span>
       </div>
+      <OkfMissCheck patterns={miss.patterns} to={bashTo} />
       {action ? (
         <div
           data-testid="okf-routing-miss-action"
@@ -111,7 +120,7 @@ export function OkfOrphanMisses({
   return (
     <div className="border-t border-border py-1">
       <div className="px-3 text-[10px] uppercase tracking-wide text-muted-foreground">
-        Routing misses on articles outside the tree
+        Searched without reading — articles outside the tree
       </div>
       {misses.map((m) => (
         <OkfMissRow

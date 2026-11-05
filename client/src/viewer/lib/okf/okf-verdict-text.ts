@@ -15,6 +15,10 @@ import type {
   OkfVerdictLevel,
 } from '../../../models/repositories';
 import { formatBytes } from '../format';
+import { okfShortAgentId } from './okf-agent-label';
+
+/** Names an agent id in a finding; default: its short id (`okfShortAgentId`). */
+export type OkfAgentNamer = (agentId: string) => string;
 
 const LEVEL_LABELS: Record<OkfVerdictLevel, string> = {
   ok: 'OK',
@@ -25,9 +29,9 @@ const LEVEL_LABELS: Record<OkfVerdictLevel, string> = {
 };
 
 const ENTRY_LABELS: Record<OkfAgentEntry, string> = {
-  index: '✓ index',
-  search: 'grep',
-  given: 'given',
+  index: 'via index.md',
+  search: 'via search',
+  given: 'path given in its task',
 };
 
 /** Badge text of a verdict level; an unknown level (newer server) is shown as is. */
@@ -106,12 +110,18 @@ export function isInfoFinding(finding: OkfFinding): boolean {
   return finding.severity === 'info';
 }
 
-/** One "Why" line of the verdict card. */
-export function formatOkfFinding(finding: OkfFinding): string {
+/**
+ * One "Why" line of the verdict card. `agentName` names the `agentId` param (the session tab
+ * resolves it from its agents list); without it the short id is shown.
+ */
+export function formatOkfFinding(
+  finding: OkfFinding,
+  agentName: OkfAgentNamer = okfShortAgentId,
+): string {
   const p = finding.params ?? {};
   switch (finding.rule) {
     case 'session_share':
-      return `agent ${str(p.agentId).slice(0, 4)} read ${pct(p.share)}% of ${str(p.bundle)} files (${num(p.read)} of ${num(p.total)})`;
+      return `agent ${agentName(str(p.agentId))} read ${pct(p.share)}% of ${str(p.bundle)} files (${num(p.read)} of ${num(p.total)})`;
     case 'always_read':
       return `${str(p.path)} is read in ${num(p.sessions)} of ${num(p.kbSessions)} KB sessions (${pct(p.share)}%) — its key facts probably belong in index.md/CLAUDE.md, or it should be split`;
     case 'kb_flood':

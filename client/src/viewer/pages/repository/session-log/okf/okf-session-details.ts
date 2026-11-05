@@ -9,7 +9,7 @@ import type {
   OkfFinding,
   OkfTreeNode,
 } from '../../../../../models/repositories';
-import { okfAgentLabel } from './okf-tree';
+import { okfAgentLabel, type OkfAgentLabels } from '@/lib/okf/okf-agent-label';
 
 export interface OkfAgentPointers {
   agentId: string;
@@ -43,11 +43,12 @@ function push<T>(map: Map<string, T[]>, key: string, value: T): void {
 export function buildOkfSessionDetails(
   agents: readonly OkfAgent[],
   rootSessionId: string,
+  labels?: OkfAgentLabels,
 ): OkfSessionDetails {
   const pointers = new Map<string, OkfAgentPointers[]>();
   const misses = new Map<string, OkfAgentMiss[]>();
   for (const a of agents) {
-    const label = okfAgentLabel(a.id, rootSessionId);
+    const label = okfAgentLabel(a.id, rootSessionId, labels);
     const byArticle = new Map<
       string,
       { pointer: string; followed: boolean }[]

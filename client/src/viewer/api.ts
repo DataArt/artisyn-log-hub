@@ -50,6 +50,7 @@ import type {
   RepoOkfUsageResponse,
   RepoOtelFactsParams,
   RepoOtelFactsResponse,
+  SessionOkfTrailResponse,
   SessionOkfUsageResponse,
   SessionOtelParams,
   SessionOtelResponse,
@@ -843,6 +844,22 @@ export async function fetchSessionOkfUsage(
   const res = await apiFetch(teamId ? `${base}?teamId=${teamId}` : base);
   if (!res.ok) throw new ApiError(res.status);
   return res.json() as Promise<SessionOkfUsageResponse>;
+}
+
+/** One agent's trail on the session OKF tab (`agent` = a node id of the session's tree). */
+export async function fetchSessionOkfTrail(
+  repoId: number,
+  sessionId: string,
+  agentId: string,
+  teamId?: number,
+): Promise<SessionOkfTrailResponse> {
+  const q = new URLSearchParams({ agent: agentId });
+  if (teamId) q.set('teamId', String(teamId));
+  const res = await apiFetch(
+    `/api/v1/repositories/${repoId}/sessions/${encodeURIComponent(sessionId)}/okf-usage/trail?${q.toString()}`,
+  );
+  if (!res.ok) throw new ApiError(res.status);
+  return res.json() as Promise<SessionOkfTrailResponse>;
 }
 
 export interface RepoOkfUsageQueryParams {

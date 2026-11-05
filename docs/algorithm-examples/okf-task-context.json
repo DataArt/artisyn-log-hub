@@ -99,5 +99,23 @@
     ]},
     "expected": {"prompts": ["Read docs/knowledgebase/index.md and report the db tables"]},
     "note": "In a sub-agent log every line is a sidechain line, so isSidechain does not exclude it; rule 4 keeps the text."
+  },
+  {
+    "id": "TC-16",
+    "input": {"text": "fix this error:\n<pasted_content id=\"p1\" lines=\"3\">\nTypeError: x is undefined\n</pasted_content>\nthanks"},
+    "expected": {"text": "fix this error: TypeError: x is undefined thanks"},
+    "note": "Rule 4: the <pasted_content ...> opening tag (with attributes) and the closing tag become spaces; the pasted text is kept; whitespace collapsed."
+  },
+  {
+    "id": "TC-17",
+    "input": {"text": "<pasted_content id=\"7\">stack trace line one\nline two"},
+    "expected": {"text": "stack trace line one line two"},
+    "note": "Rule 4: closing tag missing (prompt head truncated) - the opening tag is still stripped, the text kept."
+  },
+  {
+    "id": "TC-18",
+    "input": {"text": "review the diff <pasted_content id=\"9"},
+    "expected": {"text": "review the diff"},
+    "note": "Rule 4: an opening tag cut off at the very end (no '>') is stripped too."
   }
 ]

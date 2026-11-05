@@ -96,6 +96,7 @@ A tree node with no usable repo root gets no rows (FR-2).
 | `GET /api/v1/repositories/:repoId/sessions/:sessionId/okf-usage` (`teamId?`) | `SessionAuthGuard`; same scope and 403 rules as the change-surface session routes; a session not visible in the scope answers the empty response, not 404 | `OkfUsageService.getSessionOkfUsage` (`repositories.controller.ts`) |
 | `GET /api/v1/repositories/:repoId/reports/okf-usage` (`startDate`, `endDate` required; `branches`, `users`, `teamId`, `attr`, `bundle?`) | `SessionAuthGuard`; scope via `resolveUsageScope` (same as `harness-usage`); unknown `bundle` = all | `OkfUsageService.getRepoOkfUsage` (`reports/reports.controller.ts`) |
 | `GET /api/v1/repositories/:repoId/reports/okf-usage/article?path=` (same `teamId`, `startDate`, `endDate`, `branches`, `users`, `attr`) | `SessionAuthGuard`; same scope, 403 and team filter as `okf-usage` (`resolveUsageScope`); missing / empty `path` → 400; a `path` that is not a stored KB article in scope → 200 with `found: false` | `OkfUsageService.getRepoOkfArticle` (`reports/reports.controller.ts`) |
+| `GET /api/v1/repositories/:repoId/sessions/:sessionId/okf-usage/trail?agent=` (`teamId?`) | `SessionAuthGuard`; same scope, 403 and team rules as the session route; missing / empty `agent` → 400; a session with no visible row in the scope, or an `agent` that is not a node of its tree → 404 | `OkfUsageService.getSessionOkfTrail` (`repositories.controller.ts`) |
 | `GET /api/v2/okf-usage/facts?sessionId=` | API key; 400 without `sessionId`; 404 for a missing session and for one whose logs the key's user does not own (DD-33) | `OkfFactsService.getFacts` (`okf/okf-facts.controller.ts`) |
 | `POST /api/v2/logs` + `okfSnapshotId?`, `okfSnapshotFull?=1` → `unknownOkfSnapshotId?` | existing upload | `logs-v2.controller.ts` |
 
@@ -112,9 +113,20 @@ Response types: `server/src/logs/okf/okf-usage.types.ts`, mirrored in
   `otherReadsTop` (top 20 non-KB reads), `changes`; and tree-wide `changes`, `reads`, `runs`. No
   tool result text. Prompt filter: [algorithms/okf-task-context.md](algorithms/okf-task-context.md).
   Since the value view each agent also carries `accessSeq` — the ordered accesses
-  (`kb_read` / `kb_search` / `kb_write` / `read` / `search` / `write`, with range, pattern and the
-  new pointers of a KB read), built on demand from `extractOkfDetail(...).seq`; the client does
-  not mirror it.
+  (`kb_read` / `kb_search` / `kb_write` / `read` / `search` / `write`, with range, pattern, the
+  new pointers of a KB read and, since package 3, `hit` on search items), built on demand from
+  `extractOkfDetail(...).seq`; the client does not mirror it.
+- **Agent trail** (package 3, `SessionOkfTrailResponse`): `agent` `{id, label}` (label masked
+  like `agents[].label`), `truncated`, `items[]` = one node's `seq` rebuilt from its transcript
+  per request (transcript loader `loadOkfNodeTranscripts` shared with the facts route, the
+  writer's `loadSnapshotFilesForNode` for the snapshot files), capped at `OKF_TRAIL_MAX_ITEMS`
+  (2000). Each item may carry `hit` (search found something — the extraction's DD-6 test of the
+  call's result, read per request, never stored), `inArea` (articles read earlier whose DD-12
+  area the code read / search falls in) and `followedAt` (a KB read's new pointer → first later
+  call touching it) — [algorithms/okf-value-signals.md](algorithms/okf-value-signals.md) rule 11.
+  The areas come from the same all-time scope as the session route (`loadAllTimeSignalRows`
+  without its touched-paths query). Team view: a snapshot-less tree shows nothing, KB items only
+  for visible files. Patterns are never masked; no task text. No DB or migration change.
 - Every new response field of the session and repo routes is optional (`thresholds`, `upkeep`,
   `signals`, `eventsTruncated`, tile and tree-node additions, `canRecompute`), so older clients
   and skills ignore them. `canRecompute` uses the authority of `recompute-all-sessions`
@@ -123,8 +135,9 @@ Response types: `server/src/logs/okf/okf-usage.types.ts`, mirrored in
 - **Article drill-down** (`RepoOkfArticleResponse`): header (`size`, `oldSize`, `hashStatus` =
   `current` / `stale` / `removed` / `unknown`, `areaFromOlderVersion`), `reads` (`whole`,
   `section`, `upkeep`, `partial`), `yield`, `pointers` (dead first), `area`, `catalog`,
-  `routingMiss` (with `missing[]` agents and masked `taskHead`), `searchedAfter`, `findings` and
-  `sameFindingElsewhere` (top 5). Patterns are never masked; task heads follow the
+  `routingMiss` (with `missing[]` agents and masked `taskHead`), `searchedAfter` (since package 3
+  with optional `pairs[]` `{sessionId, agentId, label, searches}` — the root session, the agent and
+  its masked description), `findings` and `sameFindingElsewhere` (top 5). Patterns are never masked; task heads follow the
   `team-no-prompts` masking of `okf-usage`.
 
 ## Session OKF tab
@@ -132,48 +145,101 @@ Response types: `server/src/logs/okf/okf-usage.types.ts`, mirrored in
 `client/src/viewer/pages/repository/session-log/okf/` — `SessionOkfTab.tsx` (tab id `okf`,
 between "Harness usage" and "Raw Logs"):
 
-- a one-line "Deeper analysis" hint under the toggle bar (`data-testid="okf-deeper-analysis"`)
+- agent names: one helper, `client/src/viewer/lib/okf/okf-agent-label.ts` — `main` for the root,
+  `1.N · <text>` for the N-th sub-agent of `agents[]` (server order), text = `agents[].label`
+  (optional, `sessions.agent_description`, masked like the prompt in a team-no-prompts view), else
+  the task head, else 8 characters of the id after `agent-`; finding text resolves `agentId` through
+  the same map (`formatOkfFinding(f, agentName)`), the repo drill-down falls back to the short id;
+- a one-line "Deeper analysis" hint at the bottom of the tab (`data-testid="okf-deeper-analysis"`)
   naming the local on-demand command `/log-hub-hooks:kb-analysis <sessionId>` (constant
   `KB_ANALYSIS_COMMAND`; the skill itself is the not-yet-shipped task `2026-10-27-kb-completeness-deep`);
+- **A/B split** (2026-11-05, `OkfSection.tsx`, shared with the repo tab): section
+  `okf-section-a` "A · How the KB was navigated (verified)" holds the verdict card and the KB
+  folder cards; section `okf-section-b` "B · Did the articles help? (heuristic — check by hand)"
+  holds the value-signals tile and legend, with an intro line and a count "N signals to check"
+  (`searchedAfterPairs + routingMissArticles + deadPointers`) or "nothing to check" (no count on
+  an older server without `signals`). The tree and the Agents panel stay below both sections.
+- **Agent trail** (package 3, `OkfAgentTrail.tsx`, `OkfTrailRow.tsx`, grouping in `okf-trail.ts`):
+  section B shows the selected agent's trail — `okfAgent=<agent id>` in the URL (hook
+  `useOkfAgentParam`, helpers in `okf-url-state.ts`), set by an Agents panel click (which also
+  narrows the tree, as before) or by the "Check by hand: show an agent's trail" link under the
+  tile's "searched without / after reading" cells (first agent with `routingMisses` /
+  `searchedAfter`; `agents[].searchedAfter` is a package-3 optional field). Episodes start at a
+  KB article read; a read lists its new code paths with "opened / searched at #N" or "never
+  opened", an "── after reading: N searches in its area, M files opened ──" line follows, rows in
+  the area of an article read earlier are highlighted ("in area of …"), searches show the full
+  pattern and `found` / `nothing found`; loading / error / empty / truncated states and a "Judge:
+  …" hint. `okfAgent` is dropped by `setSessionTab` (another tab), `switchLens` (a lens without
+  the OKF tab), `handleSessionSelect` (another session), `setMainTab` and `okfRepoTabParams`.
+- **Checks block** (`OkfChecksBlock.tsx`, inside the verdict card under the badge, both
+  variants): one line per `verdict.checks` entry — ✓ / ! / – by `status`, a short name, the
+  counted value with its threshold and, for a finding, a "→ action" line; texts in
+  `client/src/viewer/lib/okf/okf-check-text.ts` (unknown rule → raw params). Hidden when the
+  server sends no `checks`. The session variant ends with a line pointing to the repository
+  OKF tab (link via `okfRepoTabParams` in `okf-url-state.ts`, the same params as
+  `setMainTab('okf')`; shown only when `canSeeTeamWideTabs`).
 - verdict card (`OkfVerdictCard.tsx`, width-capped at `max-w-4xl`): badge, "partial data" chip,
   clickable Why lines that scroll the tree to the node, Read top 5 with the own-edit icon (a
   tooltip, `data-testid="okf-own-edit-icon"`, explains "read after the agent edited this file
-  itself"), "How agents reached the KB" chips (`✓ index` / `grep` / `given`);
-- bundle cards (`OkfBundleCards.tsx`): tracked / gitignored, "started from index.md", FILES READ,
-  BYTES INTO CONTEXT;
-- tree (`OkfTree.tsx`, `okf-tree.ts`, `okf-tree-rows.tsx`): bundle → folder → file, READ heat
-  (Bytes / Calls toggle), WRITE bar, markers `folder_scan`, `entry_point`, `own_edit`. A folder or
+  itself"), "How agents reached the KB" chips (`via index.md` / `via search` / `path given in its task`);
+- KB folder cards (`OkfBundleCards.tsx`, session only): one card per bundle with a file read —
+  tracked / gitignored, "started from index.md", "N of M articles read", BYTES INTO CONTEXT; the
+  untouched bundles are one line "N other KB folders not opened: …" (`okf-bundle-idle`);
+- tree (`OkfTree.tsx`, `okf-tree.ts`, `okf-tree-rows.tsx`, `okf-tree-columns.tsx`): header
+  "KB folder → file", READ heat (Bytes / Calls toggle), WRITE bar on the repo variant only, a
+  flexible markers cell (shrinks and truncates first; the name keeps `min-w-32`), a column legend
+  under both variants. Session variant: a folder's "not read" children fold into one
+  "N articles not read in this session · show" row (`okf-tree-unread-group`, local state;
+  `scrollToNode` opens the group on the path) and are hidden while the agent filter is on. The
+  Agents panel sits beside the tree from a 56rem tab width (container query `@4xl/okf`), below
+  it otherwise; markers `folder_scan`, `entry_point`, `own_edit`. A folder or
   bundle node's numbers are its own folder rows plus its children's, so its READ can exceed the
   sum of the visible children; the `folder_scan` text («grep / ls over folder ×N») counts only the
   folder's own rows (`folderScanCounts` in `okf-tree.ts`: node minus children, taken before the
   agent filter drops children). Files not
-  read are grey ("not read") and sorted last; accessed files absent from the snapshot carry the
+  read are grey ("not read") and sorted last (repo variant; folded on the session variant); accessed files absent from the snapshot carry the
   "not in KB at start" chip, paths outside every bundle form a "Not in the KB snapshot" group;
-- Agents panel (`OkfAgentsPanel.tsx`): one row per tree node with its task head (200 characters),
-  entry and KB reads; clicking narrows the tree to that agent.
-- value view: the verdict subtitle says "upkeep excluded"; Read top 5 carries `§ section ×N`
-  chips and a muted "Upkeep" line (articles the agent read because it edited them); a whole-tree
-  value-signals tile (`OkfValueSignalsTile.tsx`); the tree gains POINTERS USED "k / n" and EXPL.
-  AFTER columns, an expandable per-agent pointer sub-row (✓ followed, "N paths already named in
-  its prompt") and "routing miss · N searches" rows for unread articles; the Agents panel gains
-  yield, routing misses, upkeep and searches; an "events truncated" note when
+- Agents panel (`OkfAgentsPanel.tsx`, header "Agents · N"): one row per tree node with its label,
+  entry, task head (200 characters; not repeated when it is the label) and KB reads; clicking
+  narrows the tree to that agent and opens its trail (`okfAgent`).
+- value view: the verdict subtitle says "upkeep excluded"; Read top 5 carries "1 partial read
+  (line range)" / "N partial reads" chips and a muted "Upkeep" line (articles the agent read
+  because it edited them); a whole-tree "Value signals (heuristic)" tile
+  (`OkfValueSignalsTile.tsx`, each cell with a visible caption); the tree gains CODE PATHS
+  FOLLOWED "k / n" and SEARCHED AFTER READING columns, an expandable per-agent sub-row behind
+  "code paths shown · N agents" (✓ followed, "N paths already named in its prompt") and
+  "searched without reading · N searches" rows for unread articles; the Agents panel gains
+  paths followed, searched w/o reading, edited KB and code searches; an "events truncated" note when
   `eventsTruncated`. Finding lines carry a second "→ action" line (`okf-action-text.ts`).
 - No snapshot (old hook): amber banner "No KB snapshot for this session …" with a "How to update"
   link to the API-keys page (Install tab); the tree then holds only the accessed `.md` paths, in
   one `bundle: null` group "Accessed KB paths (no snapshot)", and no not-read list.
 
 Verdict strings: `client/src/viewer/lib/okf/okf-verdict-text.ts` (rule id + params → text; an
-unknown rule id renders as the id plus raw params).
+unknown rule id renders as the id plus raw params). Check strings: `okf-check-text.ts`.
+
+**`verdict.checks`** (2026-11-05, optional on both routes): one `{rule, status: 'ok' | 'finding'
+| 'na', params}` per structure rule of the level, always present when the verdict is — session
+`kb_used`, `entry`, `session_share`, `upkeep`; repo `kb_sessions`, `kb_flood`, `always_read`,
+`coarse_article` — with the nearest actual value and its threshold. Computed in `okf-verdict.ts`
+in the same pass as the rules; definitions in [algorithms/okf-verdict.md](algorithms/okf-verdict.md)
+rules 13–14. They cover structure (group A) only: the repo route's merged value-signal findings
+never change a check.
 
 ## Repository OKF tab
 
 `client/src/viewer/pages/repository/okf/` — `RepoOkfTab.tsx` (main tab `okf`, between Reports and
 Settings, shown where `canSeeTeamWideTabs` allows):
 
-- filter strip (`OkfFilterStrip.tsx`): dates, branches, users, attributes, bundle, Bytes / Calls;
+- filter strip (`OkfFilterStrip.tsx`): dates, branches, users, attributes, KB folder (bundle), Bytes / Calls;
   applied at once, mirrored to the `okf*` URL params (`okf-url-state.ts`; `setMainTab` drops them
   when leaving the tab);
-- verdict card with the anomaly lines, five KPI tiles (`OkfKpiTiles.tsx`), share histogram
+- section A: verdict card with the Checks block and the structure findings only (`isStructureFinding`:
+  `session_share`, `always_read`, `kb_flood`, `coarse_article`), five KPI tiles
+  (`OkfKpiTiles.tsx`); section B: the value-signal tiles (`OkfSignalTiles`) and the value-signal
+  findings (`OkfSignalFindings.tsx`), count = number of value-signal findings. The server still
+  merges those findings into one level (`mergeSignalFindings`); the card's subtitle says how many
+  non-info value-signal findings count for it. Below: share histogram
   (`OkfShareHistogram.tsx`, four CSS bars), hot files top 10 (`OkfHotFiles.tsx`), not-read list
   (`OkfNotReadList.tsx`, neutral, inline "Show all"), and the tree with markers `hot` / `coarse`
   and the "No longer in KB" group (paths absent from the latest snapshot).
@@ -186,16 +252,21 @@ Settings, shown where `canSeeTeamWideTabs` allows):
   a "custom thresholds" / "default thresholds ⚙" chip (`OkfThresholdsChip.tsx`, links to
   Settings via `mtab=settings&stab=analysis&sfocus=okf-thresholds`) and an "→ action" line per
   finding; `info` findings are grey. Tiles add pointer yield, articles with routing misses and the
-  upkeep-only count; the tree adds YIELD, EXPL. AFTER and ROUTE MISS columns and the markers
-  `routing miss`, `§ section reads`, `catalog`, `N dead`, `upkeep`, `stale`, `not read`; the
-  histogram is captioned "bundles of ≥ N files"; hot files get a Yield column; an Upkeep panel
+  upkeep-only count; the tree adds PATHS FOLLOWED, SEARCHED AFTER READING and SEARCHED WITHOUT
+  READING columns and the markers `routing miss`, "N partial reads", `catalog`, `N dead`,
+  `upkeep`, `stale`, `not read`; the histogram is captioned "KB folders of ≥ N files"; hot
+  files get a Yield column; the side column sits beside the tree from a 72rem tab width
+  (container query `@6xl/okfrepo`; the tree keeps `TREE_MIN_WIDTH` 720 px when dragged); an Upkeep panel
   (`OkfUpkeepPanel.tsx`) lists articles read only to edit them. An info banner
   (`OkfAnalysisCoverageBanner.tsx`) shows when `tiles.sessionsWithoutAnalysis > 0`, with a
   "Recompute all sessions" link only when `canRecompute`.
 - **Article drill-down** (`okf/article/`, URL param `okfArticle`): a tree row's file name opens
   it; header, value-signals strip, pointer table (17 rows, then "Show all"; dead first with
   "path not found in any session"), routing-miss / searched-after / catalog blocks with their
-  action lines, and "same finding on other articles".
+  action lines, and "same finding on other articles". Package 3: every routing-miss "missing agent"
+  row and every searched-after agent (`searchedAfter.pairs`, `OkfArticleAgentLinks.tsx`) links to
+  the session OKF tab with that agent's trail (`okfSessionTrailParams`: `session`, `tab=okf`,
+  `okfAgent`).
 
 Personal vs team view follows the route (`/repos/:id` vs `/teams/:t/repos/:id` → `teamId`), not a
 toggle (DD-32).
@@ -265,8 +336,8 @@ in [algorithms/okf-verdict.md](algorithms/okf-verdict.md)). They are applied at 
 | Old zip → new server | Imports with no snapshot. |
 | New zip → old server | `okfSnapshotId` and OKF lines are ignored. |
 | Sessions ingested before 0091 → new server | No events / pointers, zero ranged / search-hit counters, marker `NULL`: value signals show "—", `agentEntry` keeps the older search rule (rows without `searchHits`), the even byte split stays, and the repo tab shows the FR-11 banner until `recompute-all-sessions`. Nothing is re-queued at startup. |
-| Old client → new server | Every new response field is optional; unknown rule ids (`routing_miss`, `searched_after`, `dead_pointers`, `catalog`) and the `info` severity render raw; the article route is simply not called. |
-| New client → old server | The new fields are absent, so the value-signal columns and tiles show no data ("—"); the article route does not exist (404) and the drill-down shows its error state. |
+| Old client → new server | Every new response field is optional (incl. package 3's `hit`, `agents[].searchedAfter`, `searchedAfter.pairs`; the trail route is simply not called); unknown rule ids (`routing_miss`, `searched_after`, `dead_pointers`, `catalog`) and the `info` severity render raw; the article route is simply not called. |
+| New client → old server | The new fields are absent, so the value-signal columns and tiles show no data ("—"), the Checks block is hidden and section B shows no count; the article route does not exist (404) and the drill-down shows its error state; the trail route answers 404 → the trail shows its error line, the drill-down shows no searched-after agents. |
 | Old settings rows / older clients saving settings | A row without `okf` resolves to the defaults; a client that does not know `okf` keeps it through the read-modify-write save; an invalid stored field falls back to its default on read. |
 | Hook | No change: the value signals come from the transcripts and the existing snapshot. |
 

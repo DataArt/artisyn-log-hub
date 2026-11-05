@@ -8,6 +8,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { ArrowLeft } from 'lucide-react';
 import { formatBytes } from '@/lib/format';
+import { okfCount } from '@/lib/okf/okf-check-text';
 import { Skeleton } from '@/ui/skeleton';
 import { ApiError, getOkfArticle } from '../../../../api';
 import type {
@@ -101,7 +102,11 @@ function SignalsStrip({ data }: { data: RepoOkfArticleResponse }) {
       <Signal
         label="Searched after"
         testId="okf-article-signal-searched-after"
-        value={sa && sa.agents > 0 ? `${sa.agents} · ${sa.searches}` : NONE}
+        value={
+          sa && sa.agents > 0
+            ? `${okfCount(sa.agents, 'agent', 'agents')} · ${okfCount(sa.searches, 'search', 'searches')}`
+            : NONE
+        }
       />
       <Signal
         label="Routing miss"
@@ -203,9 +208,13 @@ function SameFindingElsewhere({
 
 function ArticleBody({
   data,
+  repoId,
+  teamId,
   onOpenArticle,
 }: {
   data: RepoOkfArticleResponse;
+  repoId: number;
+  teamId?: number;
   onOpenArticle: (path: string) => void;
 }) {
   return (
@@ -238,7 +247,7 @@ function ArticleBody({
         </div>
       ) : null}
       <OkfPointerTable pointers={data.pointers} />
-      <OkfSignalBlocks data={data} />
+      <OkfSignalBlocks data={data} repoId={repoId} teamId={teamId} />
       <SameFindingElsewhere
         items={data.sameFindingElsewhere}
         onOpenArticle={onOpenArticle}
@@ -310,7 +319,14 @@ export function OkfArticleDrillDown({
       </div>
     );
   } else {
-    body = <ArticleBody data={data} onOpenArticle={onOpenArticle} />;
+    body = (
+      <ArticleBody
+        data={data}
+        repoId={repoId}
+        teamId={teamId}
+        onOpenArticle={onOpenArticle}
+      />
+    );
   }
 
   return (

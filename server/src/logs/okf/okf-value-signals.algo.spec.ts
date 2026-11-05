@@ -7,7 +7,9 @@
  * have the same length.
  */
 import { loadExamples } from '../../../../scripts/algo-docs/load-examples.cjs';
+import type { OkfSeqItem } from './okf-access-extractor';
 import { resolveOkfThresholds } from './okf-thresholds';
+import { buildOkfTrail, type OkfTrailResult } from './okf-trail';
 import {
   computeArticleSignals,
   type OkfSignalAllTimePointerRow,
@@ -48,9 +50,30 @@ interface SignalsInput {
   thresholds?: Record<string, unknown>;
 }
 
+/** Rows of `computeArticleSignals`; `kind: "trail"` rows run `buildOkfTrail` (rule 11) below. */
 const rows = loadExamples<SignalsInput, Record<string, unknown>>(
   'okf-value-signals',
-);
+).filter((r) => r.kind !== 'trail');
+
+/** A `kind: "trail"` row (rule 11): `buildOkfTrail` input, `areas` as `{ article: files[] }`. */
+interface TrailInput {
+  seq: OkfSeqItem[];
+  areas?: Record<string, string[]>;
+  cap?: number;
+}
+
+const trailRows = loadExamples<TrailInput, OkfTrailResult>(
+  'okf-value-signals',
+).filter((r) => r.kind === 'trail');
+
+it.each(trailRows)('$id', ({ input, expected }) => {
+  const result = buildOkfTrail({
+    seq: input.seq,
+    areas: new Map(Object.entries(input.areas ?? {})),
+    ...(input.cap !== undefined ? { cap: input.cap } : {}),
+  });
+  expect(result).toEqual(expected);
+});
 
 function toPointers(specs: PointerSpec[]): OkfSignalPointerRow[] {
   return specs.map((p) => ({

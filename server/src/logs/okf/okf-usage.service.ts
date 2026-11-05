@@ -29,9 +29,15 @@ import {
   type AnalyticsScope,
   type ScopedRootSession,
 } from '../analytics/scoped-sessions.sql';
+import { loadArtisynRootsBySessionIds } from '../change-surface/changed-paths.sql';
 import { descendantSessionsCte } from '../session-tree.sql';
 import { maskFirstPrompt, type TeamScope } from '../team-scope';
+import { extractOkfDetail, type OkfSeqItem } from './okf-access-extractor';
+import { loadSnapshotFilesForNode } from './okf-access-writer';
 import { OKF_EXTRACT_VERSION } from './okf-constants';
+import { loadOkfNodeTranscripts } from './okf-facts.service';
+import { buildOkfTrail } from './okf-trail';
+import { getServerBashParser } from './server-bash-parser';
 import {
   normaliseSnapshot,
   resolveRootOkfSnapshotId,
@@ -71,9 +77,11 @@ import type {
   OkfVerdict,
   RepoOkfArticleResponse,
   RepoOkfUsageResponse,
+  SessionOkfTrailResponse,
   SessionOkfUsageResponse,
 } from './okf-usage.types';
 import {
+  computeArticleArea,
   computeArticleSignals,
   type OkfSignalAllTimePointerRow,
   type OkfSignalEventRow,
@@ -172,6 +180,8 @@ interface NodeRows {
   sessionId: string;
   startTime: number | null;
   firstPrompt: string | null;
+  /** `sessions.agent_description` of a sub-agent (the Agent tool's description), else null. */
+  agentDescription: string | null;
   userId: number | null;
   rows: OkfVerdictRow[];
   pointers: OkfSignalPointerRow[];
@@ -892,6 +902,15 @@ export class OkfUsageService {
             n.firstPrompt,
           )
         : n.firstPrompt;
+      // The sub-agent's description is derived from its prompt: hidden whenever the prompt is.
+      const label = options.promptMask
+        ? maskFirstPrompt(
+            options.promptMask.scope,
+            options.promptMask.requesterUserId,
+            n.userId,
+            n.agentDescription,
+          )
+        : n.agentDescription;
       const upkeepArticles = [
         ...new Set(
           n.rows
@@ -907,6 +926,7 @@ export class OkfUsageService {
       agents.push({
         id: n.sessionId,
         taskHead: cutTaskHead(prompt),
+        label,
         entry: agentEntry(n.rows, bundles),
         kbReads,
         kbReadBytes,
@@ -918,6 +938,7 @@ export class OkfUsageService {
           searches: m.searches,
           patterns: [...m.patterns],
         })),
+        searchedAfter: (ns?.searchedAfter ?? []).map((s) => ({ ...s })),
         upkeepArticles,
         searches: ns?.searches ?? 0,
         yield: ns?.yield ?? null,
@@ -946,6 +967,133 @@ export class OkfUsageService {
         deadPointers: signals.summary.deadPointers,
       },
       eventsTruncated,
+    };
+  }
+
+  /**
+   * One agent's trail (package 3): the ordered KB and code accesses of the tree node `agentId`
+   * under the opened session `sessionDbId`, rebuilt from its transcript like the facts route's
+   * `accessSeq` (same transcript loader, the writer's snapshot files), with the in-area marks
+   * of okf-value-signals.md rule 11. `null` when `agentId` is not a node of the tree.
+   *
+   * Team view (`teamFilter`): DD-30 / DD-24 fail closed — a tree without a snapshot shows
+   * nothing, a KB item is kept only for a visible file of the root's snapshot; code items stay.
+   * The label is masked like `agents[].label`; patterns are never masked; no task text.
+   */
+  async getSessionOkfTrail(
+    sessionDbId: number,
+    agentId: string,
+    options: SessionOkfUsageOptions,
+  ): Promise<SessionOkfTrailResponse | null> {
+    const node = await this.findTreeNode(sessionDbId, agentId);
+    if (node === null) return null;
+    const thresholds = options.thresholds ?? defaultThresholds();
+
+    const [snapshot, transcripts, rootsById, snapshotFiles, parser] =
+      await Promise.all([
+        this.loadRootSnapshot(sessionDbId),
+        loadOkfNodeTranscripts(this.db, [node.id]),
+        loadArtisynRootsBySessionIds(this.db, [node.id, sessionDbId]),
+        loadSnapshotFilesForNode(this.db, node.id),
+        getServerBashParser(),
+      ]);
+    const transcript = transcripts[0];
+    const roots = rootsById.get(node.id) ?? rootsById.get(sessionDbId) ?? [];
+    let seq: OkfSeqItem[] =
+      transcript === undefined
+        ? []
+        : extractOkfDetail(transcript.lines, roots, parser, {
+            isSubagentLog: transcript.isSubagent,
+            snapshotFiles,
+          }).seq;
+
+    let bundles: OkfSnapshotBundle[] | null = snapshot?.bundles ?? null;
+    if (options.teamFilter) {
+      if (snapshot === null) {
+        seq = [];
+      } else {
+        bundles = applyOkfTeamFilter(
+          [{ snapshot, nodes: [] }],
+          bundles,
+        ).bundles;
+        const visible = visibleArticleSet(bundles);
+        seq = seq.filter((i) => !i.op.startsWith('kb_') || visible.has(i.path));
+      }
+    }
+
+    // DD-12 areas of the view's articles, over the all-time scope (no touched paths needed).
+    const allTime =
+      options.areaScope === undefined || seq.length === 0
+        ? { pointers: [], touched: new Set<string>() }
+        : await this.loadAllTimeSignalRows(
+            options.areaScope.repoIds,
+            options.areaScope.scope,
+            options.teamFilter ? visibleArticleSet(bundles) : null,
+            false,
+          );
+    const areas = new Map<string, string[]>();
+    for (const [path, area] of computeArticleArea(
+      allTime.pointers.filter((p) => isViewArticle(p.articlePath, bundles)),
+      thresholds.values,
+      snapshot === null ? undefined : snapshotFileMap(snapshot),
+    )) {
+      areas.set(path, area.files);
+    }
+    const trail = buildOkfTrail({ seq, areas });
+
+    const label = options.promptMask
+      ? maskFirstPrompt(
+          options.promptMask.scope,
+          options.promptMask.requesterUserId,
+          node.userId,
+          node.agentDescription,
+        )
+      : node.agentDescription;
+    return {
+      agent: { id: node.sessionId, label },
+      truncated: trail.truncated,
+      items: trail.items,
+    };
+  }
+
+  /** The tree node `agentId` (`sessions.session_id`) under `sessionDbId` (itself included). */
+  private async findTreeNode(
+    sessionDbId: number,
+    agentId: string,
+  ): Promise<{
+    id: number;
+    sessionId: string;
+    agentDescription: string | null;
+    userId: number | null;
+  } | null> {
+    const result = await this.db.execute(sql`
+      WITH RECURSIVE ${descendantSessionsCte(sessionIdsArray([sessionDbId]))}
+      SELECT
+        ds.id,
+        ds.session_id,
+        (SELECT s.agent_description FROM sessions s WHERE s.id = ds.id) AS agent_description,
+        (SELECT l.user_id FROM logs l
+          WHERE l.session_id = ds.id
+          ORDER BY l.id
+          LIMIT 1) AS user_id
+      FROM descendant_sessions ds
+      WHERE ds.session_id = ${agentId}
+      LIMIT 1
+    `);
+    const row = result.rows[0] as
+      | {
+          id: string | number;
+          session_id: string;
+          agent_description: string | null;
+          user_id: string | number | null;
+        }
+      | undefined;
+    if (row === undefined) return null;
+    return {
+      id: Number(row.id),
+      sessionId: row.session_id,
+      agentDescription: row.agent_description?.trim() || null,
+      userId: row.user_id === null ? null : Number(row.user_id),
     };
   }
 
@@ -1490,18 +1638,28 @@ export class OkfUsageService {
       }
     }
 
-    // Routing-miss agents: node → its root tree, session ids and (masked) task head.
+    // Routing-miss and searched-after agents: node → its root tree, session ids and the (masked)
+    // task head / description.
+    const rootOfNode = new Map<number, ScopedRootSession>();
+    for (const c of classified) {
+      for (const n of c.tree.nodes) rootOfNode.set(n.id, c.tree.root);
+    }
+    const identity = await this.loadNodeIdentity([
+      ...(article?.routingMiss?.missing ?? []).map((m) => Number(m.nodeId)),
+      ...(article?.searchedAfter?.pairs ?? []).map((p) => Number(p.nodeId)),
+    ]);
+    const teamView = scope.teamId !== undefined;
+    const maskFor = (nodeId: number, text: string | null): string | null =>
+      teamView
+        ? maskFirstPrompt(
+            scope.scope,
+            scope.requesterUserId,
+            identity.get(nodeId)?.userId ?? null,
+            text,
+          )
+        : text;
     let routingMiss: RepoOkfArticleResponse['routingMiss'] = null;
     if (article?.routingMiss) {
-      const rootOfNode = new Map<number, ScopedRootSession>();
-      for (const c of classified) {
-        for (const n of c.tree.nodes) rootOfNode.set(n.id, c.tree.root);
-      }
-      const missNodeIds = article.routingMiss.missing.map((m) =>
-        Number(m.nodeId),
-      );
-      const identity = await this.loadNodeIdentity(missNodeIds);
-      const teamView = scope.teamId !== undefined;
       routingMiss = {
         agents: article.routingMiss.agents,
         areaAgents: article.routingMiss.areaAgents,
@@ -1509,15 +1667,7 @@ export class OkfUsageService {
         missing: article.routingMiss.missing.map((m) => {
           const nodeId = Number(m.nodeId);
           const node = identity.get(nodeId);
-          const prompt = node?.firstPrompt ?? null;
-          const masked = teamView
-            ? maskFirstPrompt(
-                scope.scope,
-                scope.requesterUserId,
-                node?.userId ?? null,
-                prompt,
-              )
-            : prompt;
+          const masked = maskFor(nodeId, node?.firstPrompt ?? null);
           return {
             sessionId:
               rootOfNode.get(nodeId)?.sessionId ?? node?.sessionId ?? '',
@@ -1570,6 +1720,18 @@ export class OkfUsageService {
             agents: article.searchedAfter.agents,
             searches: article.searchedAfter.searches,
             patterns: article.searchedAfter.patterns.map((p) => ({ ...p })),
+            pairs: article.searchedAfter.pairs.map((p) => {
+              const nodeId = Number(p.nodeId);
+              const node = identity.get(nodeId);
+              return {
+                sessionId:
+                  rootOfNode.get(nodeId)?.sessionId ?? node?.sessionId ?? '',
+                agentId: node?.sessionId ?? '',
+                // The description is derived from the prompt: hidden whenever the prompt is.
+                label: maskFor(nodeId, node?.agentDescription ?? null),
+                searches: p.searches,
+              };
+            }),
           }
         : null,
       findings,
@@ -1580,23 +1742,32 @@ export class OkfUsageService {
   // ── Loaders ──────────────────────────────────────────────────────────────────────────────────
 
   /** Per node: its `sessions.session_id`, first prompt and uploader (task heads, masking). */
-  private async loadNodeIdentity(
-    nodeIds: number[],
-  ): Promise<
+  private async loadNodeIdentity(nodeIds: number[]): Promise<
     Map<
       number,
-      { sessionId: string; firstPrompt: string | null; userId: number | null }
+      {
+        sessionId: string;
+        firstPrompt: string | null;
+        agentDescription: string | null;
+        userId: number | null;
+      }
     >
   > {
     const out = new Map<
       number,
-      { sessionId: string; firstPrompt: string | null; userId: number | null }
+      {
+        sessionId: string;
+        firstPrompt: string | null;
+        agentDescription: string | null;
+        userId: number | null;
+      }
     >();
     if (nodeIds.length === 0) return out;
     const result = await this.db.execute(sql`
       SELECT
         s.id,
         s.session_id,
+        s.agent_description,
         (SELECT l.first_prompt FROM logs l
           WHERE l.session_id = s.id
             AND l.log_type IN ('claude', 'claude-subagent', 'artisyn')
@@ -1613,12 +1784,14 @@ export class OkfUsageService {
     for (const r of result.rows as unknown as {
       id: string | number;
       session_id: string;
+      agent_description: string | null;
       first_prompt: string | null;
       user_id: string | number | null;
     }[]) {
       out.set(Number(r.id), {
         sessionId: r.session_id,
         firstPrompt: r.first_prompt,
+        agentDescription: r.agent_description?.trim() || null,
         userId: r.user_id === null ? null : Number(r.user_id),
       });
     }
@@ -1641,6 +1814,8 @@ export class OkfUsageService {
             AND l.first_prompt IS NOT NULL
           ORDER BY (l.log_type = 'artisyn'), l.id
           LIMIT 1) AS first_prompt,
+        (SELECT s.agent_description FROM sessions s
+          WHERE s.id = ds.id) AS agent_description,
         (SELECT l.user_id FROM logs l
           WHERE l.session_id = ds.id
           ORDER BY l.id
@@ -1655,6 +1830,7 @@ export class OkfUsageService {
       depth: string | number;
       start_time: string | Date | null;
       first_prompt: string | null;
+      agent_description: string | null;
       user_id: string | number | null;
     }[]) {
       const id = Number(r.id);
@@ -1666,6 +1842,7 @@ export class OkfUsageService {
         depth: num(r.depth),
         startTime: toMs(r.start_time),
         firstPrompt: r.first_prompt,
+        agentDescription: r.agent_description?.trim() || null,
         userId: r.user_id === null ? null : Number(r.user_id),
         rows: [],
         pointers: [],
@@ -1908,6 +2085,8 @@ export class OkfUsageService {
     repoIds: number[],
     scope: AnalyticsScope,
     visibleArticles: ReadonlySet<string> | null,
+    /** `false`: skip the touched-paths query (the caller needs the area only). */
+    withTouched = true,
   ): Promise<OkfAllTimeSignalRows> {
     const roots = await loadScopedRootSessions(this.db, repoIds, {
       ...scope,
@@ -1942,7 +2121,9 @@ export class OkfUsageService {
         LEFT JOIN root_start rst ON rst.id = tn.root_id
         GROUP BY p.article_path, p.article_hash, p.pointer, p.is_new, p.partial
       `),
-      this.db.execute(sql`
+      !withTouched
+        ? Promise.resolve({ rows: [] })
+        : this.db.execute(sql`
         WITH RECURSIVE ${descendantSessionsCte(idsArray)},
         tree_nodes AS (
           SELECT DISTINCT root_id, id FROM descendant_sessions

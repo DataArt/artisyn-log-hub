@@ -19,11 +19,24 @@ const DROPPED_PREFIXES = [
 ] as const;
 
 const SYSTEM_REMINDER_RE = /<system-reminder>[\s\S]*?<\/system-reminder>/g;
+/**
+ * `<pasted_content …>` / `</pasted_content>` wrapper tags (the inner text is kept). The opening
+ * tag may carry attributes or be cut off at the very end of a truncated prompt.
+ */
+const PASTED_CONTENT_TAG_RE =
+  /<pasted_content\b[^>]*(?:>|$)|<\/pasted_content>/g;
 const COMMAND_NAME_RE = /<command-name>([\s\S]*?)<\/command-name>/;
 const COMMAND_ARGS_RE = /<command-args>([\s\S]*?)<\/command-args>/;
 
 function collapseWhitespace(text: string): string {
   return text.replace(/\s+/g, ' ').trim();
+}
+
+/** Replaces system-reminder blocks and pasted-content wrapper tags by a space. */
+function stripMarkup(text: string): string {
+  return text
+    .replace(SYSTEM_REMINDER_RE, ' ')
+    .replace(PASTED_CONTENT_TAG_RE, ' ');
 }
 
 /**
@@ -42,15 +55,12 @@ export function cleanTaskText(raw: string): string | null {
     ).replace(/^\/+/, '');
     if (name === '') return null;
     const args = collapseWhitespace(
-      (COMMAND_ARGS_RE.exec(trimmed)?.[1] ?? '').replace(
-        SYSTEM_REMINDER_RE,
-        ' ',
-      ),
+      stripMarkup(COMMAND_ARGS_RE.exec(trimmed)?.[1] ?? ''),
     );
     return args === '' ? `/${name}` : `/${name} ${args}`;
   }
 
-  const text = collapseWhitespace(raw.replace(SYSTEM_REMINDER_RE, ' '));
+  const text = collapseWhitespace(stripMarkup(raw));
   return text === '' ? null : text;
 }
 

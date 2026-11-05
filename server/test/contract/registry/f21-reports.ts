@@ -5,6 +5,12 @@ import type { ContractFamily } from '../types';
 import { MONTH, ROOTS_AND_TREES } from './f20-analytics';
 import { treeCostSql, treeCostWithOtelSubagentsSql } from './oracle-sql';
 
+/**
+ * Root sessions of R1 listed for the owner in January (golden; the same count is proven against
+ * SQL as `tiles.totalSessions` by F21-okf-usage).
+ */
+const OKF_PERIOD_ROOTS = 3;
+
 export const f21Reports: ContractFamily = {
   id: 'F21',
   name: 'reports',
@@ -461,8 +467,8 @@ export const f21Reports: ContractFamily = {
           verdict: {
             level: 'not_enough_data',
             qualifiers: [],
-            findings: ['docs/kb/private.md', 'docs/kb/scheduler.md'].map(
-              (path) => ({
+            findings: [
+              ...['docs/kb/private.md', 'docs/kb/scheduler.md'].map((path) => ({
                 rule: 'always_read',
                 severity: 'fix',
                 params: {
@@ -473,8 +479,70 @@ export const f21Reports: ContractFamily = {
                   share: 1,
                 },
                 node: { bundle: 'docs/kb', path },
-              }),
-            ),
+              })),
+              // Value-signal findings follow the structure findings: s03 searched scheduler.md's
+              // area twice after reading it (F21-okf-article).
+              {
+                rule: 'searched_after',
+                severity: 'fix',
+                params: {
+                  file: 'docs/kb/scheduler.md',
+                  patterns: 'cronTick, runJob',
+                  agents: 1,
+                  searches: 2,
+                },
+                node: { bundle: 'docs/kb', path: 'docs/kb/scheduler.md' },
+              },
+            ],
+            // Checks (2026-11-05, okf-verdict.md rule 14): 1 KB session of the period's roots
+            // (`tiles.totalSessions`, proven by F21-okf-usage), below the minimum 5; the
+            // 2-article bundle is too small for kb_flood; private.md comes first of the two
+            // 1-of-1 articles; no article reaches 50 KB.
+            checks: [
+              {
+                rule: 'kb_sessions',
+                status: 'na',
+                params: {
+                  kbSessions: 1,
+                  sessions: OKF_PERIOD_ROOTS,
+                  minimum: 5,
+                  upkeepOnly: 0,
+                },
+              },
+              {
+                rule: 'kb_flood',
+                status: 'na',
+                params: {
+                  reason: 'small_bundles',
+                  floodShare: 0.25,
+                  minSessions: 3,
+                  minFiles: 10,
+                },
+              },
+              {
+                rule: 'always_read',
+                status: 'finding',
+                params: {
+                  bundle: 'docs/kb',
+                  path: 'docs/kb/private.md',
+                  sessions: 1,
+                  kbSessions: 1,
+                  share: 1,
+                  threshold: 0.8,
+                },
+              },
+              {
+                rule: 'coarse_article',
+                status: 'na',
+                params: {
+                  reason: 'no_big_articles',
+                  bigArticles: 0,
+                  minSize: 51200,
+                  maxRatio: 0.1,
+                  minSessions: 5,
+                },
+              },
+            ],
           },
         },
       },
@@ -564,8 +632,25 @@ export const f21Reports: ContractFamily = {
           ],
           // s03 searched the area (scheduler.ts) but read the article, so it is no miss.
           routingMiss: { agents: 0, areaAgents: 1, patterns: [], missing: [] },
-          // One search after reading is below exploredMinSearches (2).
-          searchedAfter: null,
+          // s03 grepped scheduler.ts twice after its first read (= exploredMinSearches 2): one
+          // searched-after pair. Package 3: the pair names the root session (s02) to open, the
+          // agent (s03) whose trail to show and its description.
+          searchedAfter: {
+            agents: 1,
+            searches: 2,
+            patterns: [
+              { pattern: 'cronTick', count: 1 },
+              { pattern: 'runJob', count: 1 },
+            ],
+            pairs: [
+              {
+                sessionId: '@s02.sessionId',
+                agentId: '@s03.sessionId',
+                label: 'contract-desc',
+                searches: 2,
+              },
+            ],
+          },
           findings: [
             {
               rule: 'always_read',
@@ -576,6 +661,17 @@ export const f21Reports: ContractFamily = {
                 sessions: 1,
                 kbSessions: 1,
                 share: 1,
+              },
+              node: { bundle: 'docs/kb', path: 'docs/kb/scheduler.md' },
+            },
+            {
+              rule: 'searched_after',
+              severity: 'fix',
+              params: {
+                file: 'docs/kb/scheduler.md',
+                patterns: 'cronTick, runJob',
+                agents: 1,
+                searches: 2,
               },
               node: { bundle: 'docs/kb', path: 'docs/kb/scheduler.md' },
             },

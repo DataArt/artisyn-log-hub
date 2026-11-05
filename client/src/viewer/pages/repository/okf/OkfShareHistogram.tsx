@@ -44,7 +44,7 @@ export function OkfShareHistogram({
           data-testid="okf-share-histogram-caption"
           className="-mt-1 mb-2 text-[11px] text-muted-foreground"
         >
-          bundles of ≥ {minBundleFiles} files
+          KB folders of ≥ {minBundleFiles} files
         </div>
       ) : null}
       {total === 0 ? (

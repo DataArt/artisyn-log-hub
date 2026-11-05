@@ -21,7 +21,7 @@
  * the same.
  */
 import { createHash } from 'crypto';
-import type { APIRequestContext } from '@playwright/test';
+import { expect, type APIRequestContext, type Page } from '@playwright/test';
 import type { Pool } from 'pg';
 import { ndjson } from './ingest';
 import { waitForQueueIdle } from './queue';
@@ -61,14 +61,15 @@ export interface OkfSnapshotSpec {
  *    article text that names code paths in back-ticks — the pointers of 2026-11-03 DD-8), else
  *    `bytes` long (default 1000). `offset` / `limit` make it a ranged (section) read (DD-4);
  *  - `grep`: the Grep tool over a repo-relative folder (or file) with `pattern` (default
- *    `TODO`), result `bytes` long (default 100);
+ *    `TODO`), result `result` when given (e.g. `No matches found` — a search that found
+ *    nothing, package 3's trail `hit`), else `bytes` long (default 100);
  *  - `bash`: the Bash tool with `command` as given (paths in it are the caller's business), its
  *    result `result` (default empty);
  *  - `edit`: the Edit tool on a repo-relative file.
  */
 export type OkfAction =
   | { read: string; bytes?: number; result?: string; offset?: number; limit?: number }
-  | { grep: string; bytes?: number; pattern?: string }
+  | { grep: string; bytes?: number; pattern?: string; result?: string }
   | { bash: string; result?: string }
   | { edit: string };
 
@@ -80,6 +81,8 @@ export interface OkfSubAgentSpec {
    * known to the sub-agent, so the same path in a later article read is not a new pointer (DD-9).
    */
   task: string;
+  /** The Agent tool's `description` (`.meta.json`), sent as `agentDescription`; omitted when unset. */
+  description?: string;
   actions: OkfAction[];
 }
 
@@ -275,7 +278,7 @@ function okfStep(action: OkfAction): AgentToolStep {
     return {
       name: 'Grep',
       input: { pattern: action.pattern ?? 'TODO', path: abs(action.grep) },
-      result: 'g'.repeat(action.bytes ?? 100),
+      result: action.result ?? 'g'.repeat(action.bytes ?? 100),
     };
   }
   if ('bash' in action) {
@@ -338,7 +341,12 @@ export function okfSessionTree(spec: OkfSessionTreeSpec): OkfSessionTree {
   subAgents.forEach((agent, i) => {
     const agentStart = new Date(start.getTime() + (30 + i * 60) * 1000);
     uploads.push({
-      params: { sessionId: agent.agentId, type: 'claude-subagent', parentSessionId: spec.sessionId },
+      params: {
+        sessionId: agent.agentId,
+        type: 'claude-subagent',
+        parentSessionId: spec.sessionId,
+        ...(agent.description ? { agentDescription: agent.description } : {}),
+      },
       body: ndjson(agentLines(spec.sessionId, agent.agentId, agent.task, agent.actions, agentStart, true)),
     });
   });
@@ -381,5 +389,25 @@ export async function postUploadsInOrder(
       throw new Error(`Uploading ${u.params.type} of ${u.params.sessionId} failed (${res.status()}): ${await res.text()}`);
     }
     await waitForQueueIdle(queue.db, queue.userId);
+  }
+}
+
+/**
+ * OKF tab quick wins: the OKF tree on the open page needs no sideways scroll at 1280 px and at
+ * 1600 px (its `overflow-x-auto` is only a safety net). The viewport is restored afterwards.
+ */
+export async function expectOkfTreeFits(page: Page): Promise<void> {
+  const before = page.viewportSize();
+  try {
+    for (const width of [1280, 1600]) {
+      await page.setViewportSize({ width, height: before?.height ?? 900 });
+      await expect
+        .poll(() => page.getByTestId('okf-tree').evaluate((el) => el.scrollWidth - el.clientWidth), {
+          message: `the OKF tree scrolls sideways at ${width} px`,
+        })
+        .toBeLessThanOrEqual(0);
+    }
+  } finally {
+    if (before) await page.setViewportSize(before);
   }
 }

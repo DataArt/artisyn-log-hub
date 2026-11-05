@@ -44,10 +44,12 @@ reader can recompute every verdict by hand.
   {hash, size}` from its bound snapshot; `latestFiles` = the same for the latest snapshot.
 - A **bundle** is `{root, index, files: [{path, size}]}` from the snapshot, already team-filtered.
   A path belongs to the bundle with the **deepest** root containing it (`bundleOfPath`).
-- Output `OkfVerdict` = `{level, qualifiers, partialData?, findings}`; a finding is `{rule,
+- Output `OkfVerdict` = `{level, qualifiers, partialData?, findings, checks}`; a finding is `{rule,
   severity: 'fix' | 'mess' | 'info', params, node: {bundle, path?}, stale?, removed?}`; findings
   are ordered worst first (`mess`, then `fix`, then `info`, otherwise in the order below). The
-  repo verdict also returns `upkeepOnlySessions` when it is above 0.
+  repo verdict also returns `upkeepOnlySessions` when it is above 0. `checks` (rules 13–14) is one
+  `{rule, status: 'ok' | 'finding' | 'na', params}` per structure rule of the level, always
+  present — also when the rule found nothing.
 
 ## Rules
 
@@ -165,6 +167,48 @@ rows from all its nodes):
 12. **Share histogram** (FR-6, repo route): bundles with fewer than `t.shareMinBundleFiles`
     articles are skipped, like rule 8; the tab captions it "bundles of ≥ N files".
 
+**Checks** (2026-11-05): the verdict lists one check per structure rule, so the tab can say what
+was counted even when nothing fired — the nearest actual value next to its threshold. They are
+computed in the same pass as the rules, from the same inputs. `ok` = the rule did not fire,
+`finding` = it did, `na` = it could not run, with `params.reason` (`no_snapshot`, `kb_not_used`,
+`small_bundles`, `no_big_articles`). A `null` session verdict has no checks.
+
+13. **Session checks**, in this order:
+    - `kb_used`: `{agentsWithKb, agents, folders, articles}` — nodes with KB access (rule 1, after
+      upkeep) of all nodes; `folders` = the roots of the bundles some node read (read / grep of a
+      path under the root), in bundle order, joined by `, `, and `articles` = their article count
+      (both `null` without a snapshot) — OV-21. `finding` when no node has KB access; `folders` /
+      `articles` then cover every bundle of the snapshot.
+    - `entry`: `{index, search, given, agents}` — nodes per `agentEntry` (on the node's rows as
+      given, like `agents[].entry`); always `ok`; `na` when no node entered a bundle.
+    - `session_share`: the highest share of rule 4 over (node, bundle) pairs with read > 0 —
+      `{agentId, bundle, read, total, share, fix, mess, minFiles}` (thresholds `t.sessionShareFix`,
+      `t.sessionShareMess`, `t.shareMinBundleFiles`); when no node read a judged bundle,
+      `agentId: null`, read 0, the first judged bundle. `finding` when rule 4 produced a finding;
+      `na`: `no_snapshot` (rule 3), `kb_not_used` (rule 2), `small_bundles` (no bundle reaches
+      `t.shareMinBundleFiles`).
+    - `upkeep`: `{agents, articles, agentId, path}` — nodes with upkeep pairs, distinct upkeep
+      articles, the first such node and its first article (sorted); always `ok`.
+14. **Repo checks**, in this order:
+    - `kb_sessions`: `{kbSessions, sessions, minimum, upkeepOnly}` — `sessions` = all root trees
+      of the view, `minimum` = `t.repoMinKbSessions`. `finding` at 0 KB sessions, `na` below the
+      minimum (`not_enough_data`), else `ok`.
+    - `kb_flood`: over bundles judged by rule 8, the one with the most flooded trees (ties: the
+      higher single-tree share) — `{bundle, flooded, bundleSessions, maxShare, floodShare,
+      minSessions, minFiles}`, `maxShare` = the highest single-tree article share in it.
+      `finding` when flooded ≥ `t.floodMinSessions` (the rule's `fix` / `mess`), `ok` otherwise
+      (an `info` flood is `ok` here); `na` `small_bundles` when no bundle is judged.
+    - `always_read`: the article with the highest rule-7 share (ties: more sessions) —
+      `{bundle, path, sessions, kbSessions, share, threshold}`; `path: null` when no article was
+      read. `finding` when that article has the rule-7 finding.
+    - `coarse_article`: `bigArticles` = articles of ≥ `t.coarseMinSizeBytes`; `na`
+      `no_big_articles` when 0. Otherwise the coarse article, else the big article read whole
+      with the lowest ratio, whatever its session count — `{bundle, path, size, sessions,
+      avgReadBytes, ratio, bigArticles, minSize, maxRatio, minSessions}` (all `null` / 0 when no
+      big article was read whole). `finding` when it is a rule-9 finding.
+    - Without a snapshot anywhere the last three are `na` `no_snapshot`; at 0 KB sessions all
+      three are `na` `kb_not_used`.
+
 **Team view** (DD-30, `applyOkfTeamFilter`, applied before the verdict): a row stays only when the
 accessing tree's own snapshot lists its path `ignored: false` and no contributing snapshot lists it
 ignored (a folder row stays when a visible file lies under it); snapshot-less trees contribute
@@ -198,6 +242,11 @@ nothing; ignored bundles are dropped and ignored files leave the bundle file lis
   applies: RV-19.
 - Personal vs team view of an ignored file: RV-12, RV-13.
 - Nested bundles — the finding names the deepest: RV-14.
+- Checks: session `finding` OV-01, OV-15 (highest agent named), `ok` with the nearest share
+  OV-03, OV-20 (several agents, upkeep, an agent without KB reads), `na` OV-06, OV-14, OV-17
+  (`kb_used` finding); repo `kb_not_used` RV-01, `not_enough_data` RV-02, `ok` nearest
+  `always_read` RV-04, `coarse_article` finding RV-06 / ratio at the bar RV-08 / below the
+  session minimum RV-22, `info` flood is `ok` RV-09, flood `finding` RV-17, upkeep-only RV-16.
 
 ## Examples
 
@@ -227,8 +276,11 @@ nothing; ignored bundles are dropped and ignored files leave the bundle file lis
   `{level, qualifiers, partialData?, upkeepOnlySessions?, findings}`.
 - Findings compare exactly on `rule`, `severity`, `stale`, `removed` (absent = false) and the
   listed `params` (shares within 1e-9).
+- `expected.verdict.checks` (optional): the checks in order, `rule` and `status` exact, the
+  listed `params` compared (non-integer numbers within 1e-9, `null` exact). Every non-null
+  verdict must carry `checks`.
 
-Rows (40): [`docs/algorithm-examples/okf-verdict.json`](../../algorithm-examples/okf-verdict.json) — test data for the table test; the rules above are enough to understand the algorithm.
+Rows (43): [`docs/algorithm-examples/okf-verdict.json`](../../algorithm-examples/okf-verdict.json) — test data for the table test; the rules above are enough to understand the algorithm.
 
 ## Mutations
 
@@ -259,12 +311,20 @@ Rows (40): [`docs/algorithm-examples/okf-verdict.json`](../../algorithm-examples
 - Stale sessions not used when the current ones are too few -> RV-20 (no finding); a removed file
   counted in the level -> RV-21 (`fix`).
 - The stored `okf` section applied whole, or an invalid field taken as is -> RV-19.
+- Checks: the first agent kept instead of the highest share -> OV-15 (`aaaa1111`); upkeep reads
+  kept in the share -> OV-20 (main 2/9); `kb_used` listing every snapshot folder instead of the
+  read ones -> OV-21 (`docs/kb, docs/kb-local, docs/watch`); `kb_used` counting upkeep reads -> OV-17 (`ok`); an
+  `info` flood reported as `finding` -> RV-09; the nearest coarse candidate limited to
+  `t.coarseMinSessions` sessions -> RV-22 (`path: null`); `kb_sessions` `ok` below the minimum
+  -> RV-02.
 
 ## Where the result is visible
 
-- Session pane → **OKF** tab: the verdict card (badge, "partial data" chip, Why lines) and the
-  "How agents reached the KB" chips (`✓ index` / `grep` / `given`).
-- Repository → **OKF** tab: the verdict card and anomaly list (`info` findings grey, a `stale ·
+- Session pane → **OKF** tab, section "A · How the KB was navigated": the verdict card (badge,
+  "partial data" chip, Why lines, the Checks block from `verdict.checks`) and the "How agents
+  reached the KB" chips (`✓ index` / `grep` / `given`).
+- Repository → **OKF** tab, section A: the verdict card with the Checks block, the structure
+  findings; value-signal findings merged into the same level render under section B. The anomaly list (`info` findings grey, a `stale ·
   now X KB` chip, the "custom thresholds" chip), `coarse` / `hot` / `upkeep` / `stale` tree
   markers, the upkeep-only count on the KB sessions tile, the histogram caption.
 - Settings → Analysis → **OKF thresholds** (the thresholds table above).

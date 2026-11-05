@@ -30,6 +30,13 @@ export const OKF_EVENT_CAP_PER_NODE = 3000;
 /** At most this many pointer rows per node; beyond it the node is marked truncated (DD-9). */
 export const OKF_POINTER_CAP_PER_NODE = 5000;
 
+/**
+ * A folder search counts towards FR-2 "searched after" of an article when the folder holds one of
+ * the article's area files and has at least this many path segments (`server/src/logs`), so a
+ * repo-wide grep (`server/`, `server/src/`) never does (DD-13).
+ */
+export const OKF_SEARCH_FOLDER_MIN_DEPTH = 3;
+
 /** Top search patterns shown per finding (FR-14). */
 export const OKF_TOP_PATTERNS = 5;
 
@@ -41,3 +48,6 @@ export const OKF_CODE_ROOTS_MAX = 50;
 
 /** An event path or article path longer than this is dropped, not truncated. */
 export const OKF_PATH_MAX_CHARS = 1024;
+
+/** Items one agent trail returns (`GET …/okf-usage/trail`); beyond it the response says `truncated`. */
+export const OKF_TRAIL_MAX_ITEMS = 2000;

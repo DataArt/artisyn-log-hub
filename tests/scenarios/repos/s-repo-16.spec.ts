@@ -23,6 +23,11 @@
 // dead one (FR-1, FR-13), an upkeep read (FR-5); then the team view of a `team-no-prompts`
 // manager (patterns shown, task heads masked) and a personal `routingMinSearches` override that
 // changes the list at read time, plus the FR-11 «no OKF analysis yet» banner.
+// Package 2 (2026-11-05): step 8 checks the repo Checks lines (not enough data, too-small
+// folder, the most-read article below 80 %, no big article) and an empty section B; step 12 the
+// routing-miss finding listed under section B, not A.
+// Package 3 (agent trail): step 12 follows a missing agent's «Agent trail» link from the article
+// drill-down to its session's OKF tab (`okfAgent` in the URL) and checks the trail.
 //
 // Replaces: none (2026-10-16-team-vs-personal-config).
 import { randomBytes } from 'crypto';
@@ -30,7 +35,7 @@ import type { Page } from '@playwright/test';
 import { test, expect } from '../fixtures';
 import type { ScenarioUser } from '../fixtures';
 import { createApiKey } from '../helpers/api-key';
-import { uploadOkfSessionTree, type OkfAction, type OkfSubAgentSpec } from '../helpers/okf';
+import { expectOkfTreeFits, uploadOkfSessionTree, type OkfAction, type OkfSubAgentSpec } from '../helpers/okf';
 import { ownRepoId, rangeAround, uploadPromptSession } from '../helpers/prompt-session';
 import { addTeamRepo, browserAs, createTeam, inviteAndAccept, setMemberRoles } from '../helpers/teams';
 
@@ -300,6 +305,34 @@ test('@S-REPO-16 team-view analytics follow the team config for every member’s
       await expect(kbFilesTile(page)).toHaveText('3');
       await expect(page.getByTestId('repo-okf-tab')).not.toContainText('secret.md');
       await expect(page.getByTestId('repo-okf-tab')).not.toContainText(priv);
+
+      // Package 2 (2026-11-05): section A's verdict card lists the four repo checks with the
+      // counted value and the threshold; section B (value signals) has nothing to check here.
+      const sectionA = page.getByTestId('okf-section-a');
+      await expect(sectionA.getByTestId('okf-section-title')).toHaveText('A · How the KB was navigated (verified)');
+      await expect(sectionA.getByTestId('okf-kpi-tiles')).toHaveCount(1);
+      const check = (rule: string) => sectionA.getByTestId('okf-check-line').and(page.locator(`[data-rule="${rule}"]`));
+      await expect(sectionA.getByTestId('okf-check-line')).toHaveCount(4);
+      await expect(sectionA.getByTestId('okf-checks-repo-note'), 'the repo-level note is the session variant’s').toHaveCount(0);
+      await expect(check('kb_sessions')).toHaveAttribute('data-status', 'na');
+      await expect(check('kb_sessions').getByTestId('okf-check-text')).toHaveText(
+        /^Only 2 of \d+ sessions read the KB — the repository checks need 5, so the level is "Not enough data"$/,
+      );
+      await expect(check('kb_flood')).toHaveAttribute('data-status', 'na');
+      await expect(check('kb_flood').getByTestId('okf-check-text')).toHaveText(
+        'No KB folder has 10+ articles — flooding is not judged on small folders',
+      );
+      // a.md and b.md are each read in 1 of the 2 KB sessions; the first is named.
+      await expect(check('always_read')).toHaveAttribute('data-status', 'ok');
+      await expect(check('always_read').getByTestId('okf-check-text')).toHaveText(
+        `Most-read article: ${kb}/a.md is read in 1 of 2 KB sessions (50 %); finding at ≥ 80 % — an article nearly every session needs belongs in CLAUDE.md`,
+      );
+      await expect(check('coarse_article')).toHaveAttribute('data-status', 'na');
+      await expect(check('coarse_article').getByTestId('okf-check-text')).toHaveText('No article reaches 50 KB — nothing to split');
+      const sectionB = page.getByTestId('okf-section-b');
+      await expect(sectionB.getByTestId('okf-section-title')).toHaveText('B · Did the articles help? (heuristic — check by hand)');
+      await expect(sectionB.getByTestId('okf-section-b-count')).toHaveText('nothing to check');
+      await expect(sectionB.getByTestId('okf-signal-findings')).toContainText('No value signal fired in this period.');
     } finally {
       await context.close();
     }
@@ -451,6 +484,15 @@ test('@S-REPO-16 team-view analytics follow the team config for every member’s
     try {
       const row = page.getByTestId('okf-tree-row').filter({ hasText: 'route.md' });
       await expect(row.getByTestId('okf-tree-route-miss')).toHaveText('3 / 4');
+      // Package 2: the routing-miss finding counts for the level but is listed under section B
+      // (heuristic), never among section A's structure findings.
+      const sectionB = page.getByTestId('okf-section-b');
+      await expect(sectionB.getByTestId('okf-section-b-count')).toHaveText(/^[1-9]\d* signals? to check$/);
+      await expect(sectionB.getByTestId('okf-why-line').filter({ hasText: 'routing miss: 3 of 4 agents' })).toHaveCount(1);
+      await expect(page.getByTestId('okf-section-a').getByTestId('okf-why-line').filter({ hasText: 'routing miss' })).toHaveCount(0);
+      await expect(sectionB.getByTestId('okf-tile-routing-miss')).toContainText('3 misses, counted per agent and article');
+      // OKF tab quick wins: the repo tree fits beside its side column without sideways scroll.
+      await expectOkfTreeFits(page);
       // A real click: at the stand's 1280 px viewport the name cell keeps its minimum width.
       await row.getByTestId('okf-tree-file-link').click();
       await expect(page).toHaveURL(new RegExp(articleUrl(route).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
@@ -461,6 +503,29 @@ test('@S-REPO-16 team-view analytics follow the team config for every member’s
       await expect(block.getByTestId('okf-article-action')).toContainText('without opening');
       await page.getByTestId('okf-article-back').click();
       await expect(page.getByTestId('okf-article-drilldown')).toHaveCount(0);
+
+      // Package 3: a missing agent's «Agent trail» link opens its session on the OKF tab with
+      // `okfAgent` set; the trail lists its three searches of the router in order, before any
+      // KB read and so with no in-area mark (it never opened route.md).
+      await row.getByTestId('okf-tree-file-link').click();
+      const link = page
+        .getByTestId('okf-article-missing-agent')
+        .getByTestId('okf-article-trail-link')
+        .and(page.locator(`[href*="okfAgent=${encodeURIComponent(agent('s1'))}"]`));
+      await expect(link).toHaveCount(1);
+      await link.click();
+      await expect(page).toHaveURL(new RegExp(`[?&]session=${okfSid('route')}(&|$)`));
+      await expect(page).toHaveURL(/[?&]tab=okf(&|$)/);
+      await expect(page).toHaveURL(new RegExp(`[?&]okfAgent=${agent('s1')}(&|$)`));
+      await expect(page).not.toHaveURL(/[?&]mtab=/);
+      const trail = page.getByTestId('okf-agent-trail');
+      await expect(trail).toHaveAttribute('data-agent', agent('s1'));
+      const items = trail.getByTestId('okf-trail-item');
+      await expect(items).toHaveCount(3);
+      await expect(items.getByTestId('okf-trail-pattern')).toHaveText(['"routeTable"', '"resolveRoute"', '"routeTable"']);
+      await expect(items.getByTestId('okf-trail-path').first()).toHaveText(ROUTER);
+      await expect(trail.locator('[data-in-area="true"]')).toHaveCount(0);
+      await expect(trail).toContainText('Before any KB article was read');
     } finally {
       await context.close();
     }

@@ -1,6 +1,8 @@
 /**
- * The OKF tree: bundle → folder → file with read heat, write bar and markers. Shared by the
- * session OKF tab and the repo OKF tab (`variant`).
+ * The OKF tree: KB folder (bundle) → folder → file with read heat, markers and value signals.
+ * The repo variant adds a write bar; the session variant folds each folder's "not read" rows
+ * into one "N articles not read in this session" row (hidden while filtered to one agent).
+ * Shared by the session OKF tab and the repo OKF tab (`variant`).
  *
  * All rows render unconditionally (no inner scroll container), like the change-surface tree.
  * The parent can call `scrollToNode(bundle, path)` through `ref`: it opens every ancestor,
@@ -22,6 +24,7 @@ import {
   folderScanCounts,
   flattenOkfTree,
   isExpanded,
+  okfUnreadGroupsOnPath,
   sortOkfTree,
   type OkfHeatMetric,
 } from './okf-tree';
@@ -30,7 +33,11 @@ import {
   OkfTreeRow,
   type OkfTreeVariant,
 } from './okf-tree-rows';
-import { OkfTreeLegend } from './okf-tree-columns';
+import {
+  OkfSessionTreeLegend,
+  OkfTreeLegend,
+  OkfUnreadGroupRow,
+} from './okf-tree-columns';
 import {
   okfTreeFilePaths,
   type OkfSessionDetails,
@@ -97,6 +104,8 @@ export function OkfTree({
   const [overrides, setOverrides] = useState<ReadonlyMap<string, boolean>>(
     new Map(),
   );
+  // Session variant: opened "N articles not read in this session" groups.
+  const [openUnread, setOpenUnread] = useState<ReadonlySet<string>>(new Set());
   const [highlight, setHighlight] = useState<string | null>(null);
   const [scrollTick, setScrollTick] = useState(0);
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -108,8 +117,15 @@ export function OkfTree({
     [sorted, fileFilter],
   );
   const rows = useMemo(
-    () => flattenOkfTree(shown, overrides),
-    [shown, overrides],
+    () =>
+      flattenOkfTree(
+        shown,
+        overrides,
+        variant === 'session'
+          ? { mode: fileFilter ? 'hide' : 'group', open: openUnread }
+          : undefined,
+      ),
+    [shown, overrides, variant, fileFilter, openUnread],
   );
 
   useImperativeHandle(
@@ -124,6 +140,10 @@ export function OkfTree({
           for (const key of trail.slice(0, -1)) next.set(key, true);
           return next;
         });
+        const groups = okfUnreadGroupsOnPath(sorted, trail);
+        if (groups.length > 0) {
+          setOpenUnread((prev) => new Set([...prev, ...groups]));
+        }
         setHighlight(trail[trail.length - 1]);
         setScrollTick((t) => t + 1);
       },
@@ -142,9 +162,19 @@ export function OkfTree({
   const toggle = (key: string) => {
     setOverrides((prev) => {
       const next = new Map(prev);
-      const node = rows.find((r) => r.key === key)?.node;
+      const row = rows.find((r) => r.key === key);
+      const node = row?.kind === 'node' ? row.node : undefined;
       const current = node ? isExpanded(node, prev) : true;
       next.set(key, !current);
+      return next;
+    });
+  };
+
+  const toggleUnread = (key: string) => {
+    setOpenUnread((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
       return next;
     });
   };
@@ -155,9 +185,10 @@ export function OkfTree({
       data-testid="okf-tree"
       className="min-w-0 overflow-x-auto rounded-md border border-border bg-card"
     >
-      {/* The repo variant's fixed columns are wider than the tree beside the side panel at
-          xl widths; the name column keeps a minimum width and the tree scrolls sideways. */}
-      <div className="min-w-fit">
+      {/* The columns fit the tree's box at 1280 px and up (the markers cell shrinks first, the
+          name keeps a minimum width). The minimum below is what the fixed columns need, not the
+          rows' full text, so sideways scrolling is only a last-resort safety net. */}
+      <div className={variant === 'repo' ? 'min-w-[700px]' : 'min-w-[500px]'}>
         <OkfTreeHeader metric={metric} variant={variant} />
         {fileFilter && filterNote ? (
           <div className="border-b border-border bg-accent/40 px-3 py-1 text-[11px] text-muted-foreground">
@@ -171,6 +202,15 @@ export function OkfTree({
         ) : (
           <div>
             {rows.map((entry) => {
+              if (entry.kind === 'unread') {
+                return (
+                  <OkfUnreadGroupRow
+                    key={entry.key}
+                    group={entry}
+                    onToggle={() => toggleUnread(entry.key)}
+                  />
+                );
+              }
               const path = entry.node.kind === 'file' ? entry.node.path : null;
               const ptrs = path ? details?.pointers.get(path) : undefined;
               const misses = path ? details?.misses.get(path) : undefined;
@@ -222,7 +262,7 @@ export function OkfTree({
           </div>
         )}
         {!fileFilter ? <OkfOrphanMisses misses={orphanMisses} /> : null}
-        {variant === 'repo' ? <OkfTreeLegend /> : null}
+        {variant === 'repo' ? <OkfTreeLegend /> : <OkfSessionTreeLegend />}
       </div>
     </div>
   );

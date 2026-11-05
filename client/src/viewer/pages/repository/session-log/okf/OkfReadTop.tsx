@@ -1,5 +1,5 @@
 /**
- * "Read · top 5 by bytes" of the session OKF verdict card, with the `§ section ×N` chip on an
+ * "Read · top 5 by bytes" of the session OKF verdict card, with the "N partial reads" chip on an
  * article read partly by line range (FR-4) and, under it, the muted "Upkeep" line: articles an
  * agent edited itself, whose re-reads are excluded from the totals and the verdict (FR-5).
  */
@@ -10,6 +10,7 @@ import type {
   OkfReadTopItem,
   OkfSessionUpkeepItem,
 } from '../../../../../models/repositories';
+import { okfPartialReadsText } from './okf-tree';
 
 function OwnEditIcon() {
   return (
@@ -66,7 +67,7 @@ export function OkfReadTop({
                 className="shrink-0 rounded border border-border px-1 text-[10px] text-muted-foreground"
                 title="Read calls with a line range (not the whole file)"
               >
-                § section ×{ranged}
+                {okfPartialReadsText(ranged)}
               </span>
             ) : null}
             {r.ownEdit ? <OwnEditIcon /> : null}

@@ -11,6 +11,8 @@ import {
   heatValue,
   isNotRead,
   OKF_DEAD_MARKER_MIN,
+  OKF_ROW_HEIGHT,
+  okfPartialReadsText,
   type FlatOkfRow,
   type OkfHeatMetric,
 } from './okf-tree';
@@ -22,7 +24,12 @@ import {
 } from './okf-tree-columns';
 
 /** Uniform row height, in px (same as the change-surface tree). */
-export const ROW_HEIGHT = 28;
+export const ROW_HEIGHT = OKF_ROW_HEIGHT;
+
+/** Name column: keeps a readable minimum and shares the free width with the markers. */
+const NAME_COL = 'min-w-32 flex-[1_1_0%]';
+/** Markers column: shrinks first and truncates (full text in the title). */
+const MARKERS_COL = 'min-w-0 flex-[1_1_0%]';
 
 export type OkfTreeVariant = 'session' | 'repo';
 
@@ -59,7 +66,7 @@ function valueMarkerLabel(
     case 'routing_miss':
       return 'routing miss';
     case 'section':
-      return `§ section reads ×${node.rangedCalls ?? 0}`;
+      return okfPartialReadsText(node.rangedCalls ?? 0);
     case 'catalog':
       return `catalog ${node.catalogFiles ?? ''}`.trim();
     case 'dead': {
@@ -102,7 +109,7 @@ function markerLabels(
     }
   }
   if (variant === 'session' && node.kind === 'file' && node.agents > 1) {
-    out.push(`read by ${node.agents}`);
+    out.push(`read by ${node.agents} agents`);
   }
   if (collapsed && node.kind !== 'file') {
     out.push(`(${countFiles(node)} files)`);
@@ -184,13 +191,13 @@ export function OkfTreeRow({
           type="button"
           data-testid="okf-tree-file-link"
           onClick={() => onOpenArticle(node.path)}
-          className="min-w-40 flex-1 truncate text-left font-mono hover:underline"
+          className={`${NAME_COL} truncate text-left font-mono hover:underline`}
         >
           {label}
         </button>
       ) : (
         <span
-          className={`min-w-40 flex-1 truncate font-mono ${
+          className={`${NAME_COL} truncate font-mono ${
             node.kind === 'file' ? '' : 'font-medium'
           }`}
         >
@@ -203,9 +210,11 @@ export function OkfTreeRow({
           data-testid="okf-pointers-toggle"
           aria-expanded={pointerToggle.open}
           onClick={pointerToggle.onToggle}
-          className="shrink-0 rounded border border-border px-1 text-[10px] text-muted-foreground hover:text-foreground"
+          title={`Code paths shown in this article · ${pointerToggle.agents} ${pointerToggle.agents === 1 ? 'agent' : 'agents'}`}
+          className="min-w-10 shrink truncate rounded border border-border px-1 text-[10px] text-muted-foreground hover:text-foreground"
         >
-          {pointerToggle.open ? '▾' : '▸'} pointers · {pointerToggle.agents}{' '}
+          {pointerToggle.open ? '▾' : '▸'} code paths shown ·{' '}
+          {pointerToggle.agents}{' '}
           {pointerToggle.agents === 1 ? 'agent' : 'agents'}
         </button>
       ) : null}
@@ -220,7 +229,7 @@ export function OkfTreeRow({
         </span>
       ) : null}
       <span
-        className="w-48 shrink-0 truncate text-[11px] text-muted-foreground"
+        className={`${MARKERS_COL} truncate text-[11px] text-muted-foreground`}
         title={markerText || undefined}
       >
         {markerText}
@@ -229,7 +238,7 @@ export function OkfTreeRow({
         value={value}
         max={heatValue(top, metric)}
         colour="bg-sky-500"
-        width="w-24"
+        width="w-16"
       />
       <span className="w-16 shrink-0 text-right font-mono tabular-nums">
         {value === 0
@@ -248,17 +257,19 @@ export function OkfTreeRow({
       ) : (
         <OkfSessionSignalCells node={node} />
       )}
-      <span
-        className="flex w-16 shrink-0 items-center"
-        title={`${node.writeCalls} writes`}
-      >
-        <HeatBar
-          value={node.writeCalls}
-          max={top.writeCalls}
-          colour="bg-amber-500"
-          width="w-16"
-        />
-      </span>
+      {variant === 'repo' ? (
+        <span
+          className="flex w-16 shrink-0 items-center"
+          title={`${node.writeCalls} writes`}
+        >
+          <HeatBar
+            value={node.writeCalls}
+            max={top.writeCalls}
+            colour="bg-amber-500"
+            width="w-16"
+          />
+        </span>
+      ) : null}
     </div>
   );
 }
@@ -272,10 +283,10 @@ export function OkfTreeHeader({
   variant: OkfTreeVariant;
 }) {
   return (
-    <div className="flex items-center gap-2 border-b border-border px-2 py-1 text-[10px] uppercase tracking-wide text-muted-foreground">
-      <span className="min-w-40 flex-1">Bundle → folder → file</span>
-      <span className="w-48 shrink-0">Markers</span>
-      <span className="w-[168px] shrink-0">
+    <div className="flex items-end gap-2 border-b border-border px-2 py-1 text-[10px] uppercase tracking-wide text-muted-foreground">
+      <span className={NAME_COL}>KB folder → file</span>
+      <span className={MARKERS_COL}>Markers</span>
+      <span className="w-[136px] shrink-0">
         Read ({metric === 'bytes' ? 'bytes' : 'calls'})
       </span>
       {variant === 'repo' ? (
@@ -286,7 +297,7 @@ export function OkfTreeHeader({
       ) : (
         <OkfSessionSignalHeaderCells />
       )}
-      <span className="w-16 shrink-0">Write</span>
+      {variant === 'repo' ? <span className="w-16 shrink-0">Write</span> : null}
     </div>
   );
 }

@@ -19,13 +19,15 @@ event rows, so a reader can recompute every number by hand.
 ## Code
 
 - Implementation: `server/src/logs/okf/okf-value-signals.ts` — `computeArticleSignals`,
-  `computeArticleArea`, `topPatterns`, `commonFolder`, `isFilePointer`.
+  `computeArticleArea`, `buildAreaIndex` / `inAreaArticles` (rule 3), `topPatterns`,
+  `commonFolder`, `isFilePointer`; `server/src/logs/okf/okf-trail.ts` — `buildOkfTrail` (rule 11,
+  the agent trail).
 - Thresholds: the value-signal group of `OkfThresholds` (`server/src/logs/okf/okf-thresholds.ts`,
   defaults in the table under Rules); `OKF_TOP_PATTERNS` from `okf-constants.ts`.
 - Rows it reads: `session_okf_pointer` and `session_okf_event`, written by the extraction
   ([okf-access-extraction](okf-access-extraction.md) rules 13-16).
-- Caller: `server/src/logs/okf/okf-usage.service.ts` (session route, repo route, article route),
-  after the team filter (`applyOkfTeamFilter`).
+- Caller: `server/src/logs/okf/okf-usage.service.ts` (session route, repo route, article route,
+  and the session trail route for rule 11), after the team filter (`applyOkfTeamFilter`).
 - Action text (client): `client/src/viewer/lib/okf/okf-action-text.ts` (`okfActionText`) maps the
   rule ids and params below to one action line.
 - Twins: none.
@@ -84,7 +86,11 @@ probe in `docs/tasks/todo/2026-11-03-okf-view-kb-value/notes.md`, under `done/` 
    reads and in-area searches of a node on an article it also writes).
 3. **In-area search** (DD-13): a `search` event is in an article's area when its path, without a
    trailing `/`, equals an area file or starts with `areaFile + '/'`. `read` / `write` events are
-   never in-area searches.
+   never in-area searches. For FR-2 only, a search of a **folder** also counts when that folder
+   holds an area file and has at least `OKF_SEARCH_FOLDER_MIN_DEPTH` (3) path segments
+   (`server/src/svc/` counts, `server/src/` does not): agents usually grep a folder, not a file,
+   after reading an article. FR-3 keeps file searches only — a folder grep does not say which
+   article the agent was after.
 4. **Yield (FR-1).** A *read* = the pointer rows of one (node, article, `readOrd`). A read is
    partial if any of its rows is. Over non-partial, non-upkeep reads: `n` = reads with at least one
    new pointer, `k` = those with at least one `followed` new pointer. Per article, per node and
@@ -122,6 +128,23 @@ probe in `docs/tasks/todo/2026-11-03-okf-view-kb-value/notes.md`, under `done/` 
     | `catalog` | `file`, `files`, `area` |
 
     The verdict level never reads these findings; they are listed next to it.
+11. **Agent trail** (`buildOkfTrail`, package 3 — the session tab's "check by hand" view). Input:
+    one node's ordered access sequence (`seq` of [okf-access-extraction](okf-access-extraction.md)
+    rule 17, team filter applied) and the rule-1 area files per article of the view. Per item:
+    - `inArea` of a code `search` item = the articles whose area its path falls in by rule 3,
+      **with** the folder rule (as for FR-2); of a code `read` item = the articles whose area
+      holds the file (no folder rule). Only articles the node read (`kb_read`) at a smaller
+      `ord`, never an upkeep article (the node has a `kb_write` of it anywhere, rule 2). Sorted;
+      absent when empty. `kb_*` and `write` items get none. Unlike FR-2 the start is the first
+      `kb_read` of any kind (the sequence does not say which reads were partial) and no
+      `exploredMinSearches` applies: the trail shows every search for a human to judge.
+    - `followedAt` of a `kb_read` item with `newPointers`: per new pointer, the `ord` of the first
+      later item whose path (without a trailing `/`) equals the pointer or lies under it — the
+      extraction's "followed" test; absent for a pointer never touched, and absent when none
+      was. Computed over the whole sequence.
+    - The other fields are copied (`ord`, `op`, `path`, `offset`, `limit`, `pattern`,
+      `newPointers`, `hit`). The first `cap` items are kept (`OKF_TRAIL_MAX_ITEMS` = 2000);
+      `truncated` says more existed.
 
 ## Edge cases
 
@@ -136,6 +159,11 @@ probe in `docs/tasks/todo/2026-11-03-okf-view-kb-value/notes.md`, under `done/` 
 - Catalog suppresses the routing miss: VS-08.
 - Partial reads give no yield, no shown count and no area pointer: VS-09.
 - Dead pointers found through a touched path under them and through the latest snapshot: VS-10.
+- Folder searches after a read count for searched after, a too-wide folder does not: VS-11.
+- Folder searches never make a routing miss: VS-12.
+- Trail: a search before the read, a folder search, a too-wide folder, an area read, an upkeep
+  article, an unread article's area, `followedAt` first-later-touch: VS-13; the cap and a
+  folder pointer followed through a path under it: VS-14.
 
 ## Examples
 
@@ -148,7 +176,11 @@ the fields that differ from the defaults. `expected` is compared as a subset on 
 nested (arrays exactly, element by element), against `{articles, nodes, summary, findings,
 yield}` with the two maps turned into objects keyed by path / node id.
 
-Rows (10): [`docs/algorithm-examples/okf-value-signals.json`](../../algorithm-examples/okf-value-signals.json) — test data for the table test; the rules above are enough to understand the algorithm.
+Rows with `"kind": "trail"` run `buildOkfTrail` (rule 11) instead: `input.seq` is the sequence,
+`input.areas` an object `{article: areaFiles[]}` (default none), `input.cap` the cap (default
+`OKF_TRAIL_MAX_ITEMS`); `expected` is the exact `{items, truncated}`.
+
+Rows (14): [`docs/algorithm-examples/okf-value-signals.json`](../../algorithm-examples/okf-value-signals.json) — test data for the table test; the rules above are enough to understand the algorithm.
 
 ## Mutations
 
@@ -169,6 +201,13 @@ Rows (10): [`docs/algorithm-examples/okf-value-signals.json`](../../algorithm-ex
 - FR-3 computed for a catalog article -> VS-08.
 - Partial reads counted in yield or `shown` -> VS-09.
 - `notFound` ignoring paths under the pointer or the latest snapshot -> VS-10.
+- Folder searches ignored for FR-2 -> VS-11 (`searchedAfter` null); the depth limit dropped ->
+  VS-11 (`searches` 3).
+- Folder searches fed into FR-3 -> VS-12 (`routingMiss` set, 3 agents).
+- Trail: searches before the first read marked -> VS-13 (#1); the folder rule dropped -> VS-13
+  (#4 unmarked); upkeep or unread articles marked -> VS-13 (#9, #10); `followedAt` taking an
+  earlier touch or only exact paths -> VS-13 (1), VS-14 (`server/b/` absent); `followedAt`
+  computed after the cap -> VS-14 (`server/a.ts` absent).
 
 ## Where the result is visible
 
@@ -182,4 +221,6 @@ Rows (10): [`docs/algorithm-examples/okf-value-signals.json`](../../algorithm-ex
   searches.
 - API: `signals`, tree-node `yield` / `searchedAfter` / `routingMiss` / `deadPointers` /
   `catalogFiles`, `agents[].pointers` / `routingMisses` of the session and repo `okf-usage`
-  routes; the whole `GET …/reports/okf-usage/article` response.
+  routes; the whole `GET …/reports/okf-usage/article` response (incl. `searchedAfter.pairs`).
+- Session pane → **OKF** tab → section B: the agent trail (`okfAgent`), from
+  `GET …/sessions/:sessionId/okf-usage/trail?agent=` (rule 11).

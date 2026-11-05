@@ -52,6 +52,23 @@ export interface OkfVerdict {
   partialData?: { withoutSnapshot: number; total: number };
   /** Worst first. */
   findings: OkfFinding[];
+  /**
+   * 2026-11-05: one entry per structure (group A) rule of the level, always present — also when
+   * the rule found nothing — with the nearest actual value and its threshold, so the tab can say
+   * what was counted. Optional: absent on older servers. Session: `kb_used`, `entry`,
+   * `session_share`, `upkeep`; repo: `kb_sessions`, `kb_flood`, `always_read`, `coarse_article`.
+   */
+  checks?: OkfVerdictCheck[];
+}
+
+/** `ok` = the rule did not fire; `finding` = it did; `na` = it could not run (`params.reason`). */
+export type OkfVerdictCheckStatus = 'ok' | 'finding' | 'na';
+
+/** One structure rule's outcome (see `okf-verdict.md` → "Checks"). */
+export interface OkfVerdictCheck {
+  rule: string;
+  status: OkfVerdictCheckStatus;
+  params: Record<string, number | string | null>;
 }
 
 export interface OkfBundleSummary {
@@ -155,6 +172,11 @@ export interface OkfAgent {
   /** `sessions.session_id` string. */
   id: string;
   taskHead: string;
+  /**
+   * Sub-agent description (`sessions.agent_description`, the Agent tool's `description`); null
+   * for the root session or when the hook did not send one. Optional: absent on older servers.
+   */
+  label?: string | null;
   entry: OkfAgentEntry | null;
   /** This agent's `read` + `grep` calls on bundle files. */
   kbReads: number;
@@ -169,6 +191,8 @@ export interface OkfAgent {
   promptNamedPaths?: number;
   /** FR-3 misses of this agent. */
   routingMisses?: { article: string; searches: number; patterns: string[] }[];
+  /** FR-2: articles this agent kept searching after reading (package 3 trail links). */
+  searchedAfter?: { article: string; searches: number }[];
   /** FR-5: articles this agent edited (upkeep pairs). */
   upkeepArticles?: string[];
   /** Code search events of this agent. */
@@ -198,6 +222,39 @@ export interface OkfReadTopItem {
   path: string;
   readBytes: number;
   ownEdit: boolean;
+}
+
+/**
+ * One item of an agent trail (`okf-trail.ts`, okf-value-signals.md rule 11): one ordered access
+ * of the agent's transcript (`OkfSeqItem`) plus the in-area marks.
+ */
+export interface OkfTrailItem {
+  /** 1-based call ordinal within the agent; one call can give several items. */
+  ord: number;
+  op: 'kb_read' | 'kb_search' | 'kb_write' | 'read' | 'search' | 'write';
+  /** Repo-relative; folders end in `/`. */
+  path: string;
+  offset?: number;
+  limit?: number;
+  /** Search pattern, never masked. */
+  pattern?: string;
+  /** New code paths a single-article KB read showed (DD-9). */
+  newPointers?: string[];
+  /** Search items: the call's result was a hit (not an error, not empty / "no match"). */
+  hit?: boolean;
+  /** Code reads / searches: articles read earlier whose area this path falls in (DD-13). */
+  inArea?: string[];
+  /** `kb_read` items: new pointer → ordinal of the first later call that touched it. */
+  followedAt?: Record<string, number>;
+}
+
+/** `GET /api/v1/repositories/:repoId/sessions/:sessionId/okf-usage/trail?agent=`. */
+export interface SessionOkfTrailResponse {
+  /** `label` = the sub-agent's description (masked like `agents[].label`), null for the root. */
+  agent: { id: string; label: string | null };
+  /** More than `OKF_TRAIL_MAX_ITEMS` items existed; the first ones are returned. */
+  truncated: boolean;
+  items: OkfTrailItem[];
 }
 
 /** `GET /api/v1/repositories/:repoId/sessions/:sessionId/okf-usage`. */
@@ -308,6 +365,8 @@ export interface OkfFactsSeqItem {
   pattern?: string;
   /** New pointers of a single-article KB read (DD-9). */
   newPointers?: string[];
+  /** Search items: the call's result was a hit (package 3, additive). */
+  hit?: boolean;
 }
 
 /** A pattern with its count (FR-14). */
@@ -359,6 +418,17 @@ export interface RepoOkfArticleResponse {
     agents: number;
     searches: number;
     patterns: OkfPatternCountItem[];
+    /**
+     * The (agent, article) pairs behind the counts: root session, agent (tree node) id, its
+     * description (masked like `agents[].label`) and its in-area searches after reading.
+     * Optional: absent from an older server.
+     */
+    pairs?: {
+      sessionId: string;
+      agentId: string;
+      label: string | null;
+      searches: number;
+    }[];
   } | null;
   /** This article's findings, value-signal rules included. */
   findings: OkfFinding[];

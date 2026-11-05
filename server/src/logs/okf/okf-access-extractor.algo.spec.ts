@@ -3,7 +3,7 @@
  * against each row's `expected.rows` (the `access` list), with the real server `tree-sitter-bash`
  * parser (DD-37), so the Bash rows also cover `analyzeBash`'s `readAccess` on the server. A row
  * that also gives `expected.events` / `expected.pointers` / `expected.eventCount` /
- * `expected.pointerCount` / `expected.truncated` has those compared too.
+ * `expected.pointerCount` / `expected.truncated` / `expected.seq` has those compared too.
  */
 import type { BashParser } from '@loghub/bash-view';
 import { loadExamples } from '../../../../scripts/algo-docs/load-examples.cjs';
@@ -13,6 +13,7 @@ import {
   type OkfAccessRow,
   type OkfEventRow,
   type OkfPointerRow,
+  type OkfSeqItem,
   type OkfSnapshotFileInfo,
 } from './okf-access-extractor';
 import { getServerBashParser } from './server-bash-parser';
@@ -48,6 +49,7 @@ interface RowExpected {
   eventCount?: number;
   pointerCount?: number;
   truncated?: boolean;
+  seq?: OkfSeqItem[];
 }
 
 const DEFAULT_CWD = '/work/acme-app';
@@ -147,5 +149,8 @@ it.each(rows)('$id', (row) => {
   }
   if (expected.truncated !== undefined) {
     expect(detail.truncated).toBe(expected.truncated);
+  }
+  if (expected.seq !== undefined) {
+    expect(detail.seq).toEqual(expected.seq);
   }
 });

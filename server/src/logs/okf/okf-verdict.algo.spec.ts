@@ -9,7 +9,12 @@
 import { loadExamples } from '../../../../scripts/algo-docs/load-examples.cjs';
 import type { OkfSnapshotBundle } from './okf-snapshot';
 import { resolveOkfThresholds } from './okf-thresholds';
-import type { OkfAgentEntry, OkfOp, OkfVerdict } from './okf-usage.types';
+import type {
+  OkfAgentEntry,
+  OkfOp,
+  OkfVerdict,
+  OkfVerdictCheckStatus,
+} from './okf-usage.types';
 import { applyOkfTeamFilter } from './okf-usage-tree';
 import {
   agentEntry,
@@ -70,11 +75,19 @@ interface ExpectedFinding {
   removed?: boolean;
 }
 
+interface ExpectedCheck {
+  rule: string;
+  status: OkfVerdictCheckStatus;
+  params: Record<string, string | number | null>;
+}
+
 interface VerdictExpected {
   verdict:
-    | (Omit<OkfVerdict, 'findings'> & {
+    | (Omit<OkfVerdict, 'findings' | 'checks'> & {
         findings: ExpectedFinding[];
         upkeepOnlySessions?: number;
+        /** When given: the checks in order, rule + status exact, the listed params compared. */
+        checks?: ExpectedCheck[];
       })
     | null;
   entries?: (OkfAgentEntry | null)[];
@@ -149,9 +162,32 @@ function expectVerdict(
     return;
   }
   expect(actual).not.toBeNull();
-  const { findings, ...head } = expected;
-  const { findings: actualFindings, ...actualHead } = actual!;
+  const { findings, checks, ...head } = expected;
+  const {
+    findings: actualFindings,
+    checks: actualChecks,
+    ...actualHead
+  } = actual!;
   expect(actualHead).toEqual(head);
+  // Every verdict carries one check per structure rule of its level.
+  expect(actualChecks).toBeDefined();
+  if (checks !== undefined) {
+    expect(actualChecks!.map((c) => [c.rule, c.status])).toEqual(
+      checks.map((c) => [c.rule, c.status]),
+    );
+    checks.forEach((want, i) => {
+      const got = actualChecks![i].params;
+      for (const [key, value] of Object.entries(want.params)) {
+        if (typeof value === 'number' && !Number.isInteger(value)) {
+          expect(Math.abs(Number(got[key]) - value)).toBeLessThan(
+            SHARE_TOLERANCE,
+          );
+        } else {
+          expect(got[key]).toBe(value);
+        }
+      }
+    });
+  }
   expect(actualFindings).toHaveLength(findings.length);
   findings.forEach((want, i) => {
     const got = actualFindings[i];

@@ -207,13 +207,81 @@ export function collectNodeFileFacts(
   return facts;
 }
 
-interface FactsNode {
+/** One tree node with its transcript lines (`loadOkfNodeTranscripts`). */
+export interface OkfTranscriptNode {
   id: number;
   sessionId: string;
   parentSessionId: string | null;
   startTime: number | null;
   lines: object[];
   isSubagent: boolean;
+}
+
+/**
+ * Tree nodes with their stored `claude` / `claude-subagent` transcript lines; `nodeIds[0]` first,
+ * then by start time. Shared by the facts route and the session OKF trail.
+ */
+export async function loadOkfNodeTranscripts(
+  db: DrizzleDb,
+  nodeIds: number[],
+): Promise<OkfTranscriptNode[]> {
+  const result = await db.execute(sql`
+    SELECT
+      s.id,
+      s.session_id,
+      s.parent_session_id,
+      l.log_type,
+      l.start_time,
+      l.body
+    FROM sessions s
+    LEFT JOIN logs l
+      ON l.session_id = s.id
+     AND l.log_type IN ('claude', 'claude-subagent')
+    WHERE s.id = ANY(${sessionIdsArray(nodeIds)})
+    ORDER BY s.id, l.id
+  `);
+  const byId = new Map<number, OkfTranscriptNode>();
+  for (const r of result.rows as unknown as {
+    id: string | number;
+    session_id: string;
+    parent_session_id: string | null;
+    log_type: string | null;
+    start_time: string | Date | null;
+    body: unknown;
+  }[]) {
+    const id = Number(r.id);
+    const node = byId.get(id) ?? {
+      id,
+      sessionId: r.session_id,
+      parentSessionId: r.parent_session_id,
+      startTime: null,
+      lines: [],
+      isSubagent: false,
+    };
+    if (r.log_type === 'claude-subagent') node.isSubagent = true;
+    if (r.start_time !== null) {
+      const ms = new Date(r.start_time).getTime();
+      if (
+        !Number.isNaN(ms) &&
+        (node.startTime === null || ms < node.startTime)
+      ) {
+        node.startTime = ms;
+      }
+    }
+    if (Array.isArray(r.body)) {
+      for (const line of r.body as unknown[]) {
+        if (typeof line === 'object' && line !== null) node.lines.push(line);
+      }
+    }
+    byId.set(id, node);
+  }
+  const rootId = nodeIds[0];
+  return [...byId.values()].sort(
+    (a, b) =>
+      Number(b.id === rootId) - Number(a.id === rootId) ||
+      (a.startTime ?? Infinity) - (b.startTime ?? Infinity) ||
+      a.id - b.id,
+  );
 }
 
 @Injectable()
@@ -249,7 +317,7 @@ export class OkfFactsService {
 
     const [nodes, rootsBySessionId, snapshot, startedAt, parser] =
       await Promise.all([
-        this.loadNodes(nodeIds),
+        loadOkfNodeTranscripts(this.db, nodeIds),
         loadArtisynRootsBySessionIds(this.db, nodeIds),
         this.loadSnapshot(rootId, userId),
         this.loadStartedAt(rootId),
@@ -391,72 +459,11 @@ export class OkfFactsService {
   }
 
   /** A sub-agent's first user message through `cleanTaskText` (`''` when none survives). */
-  private firstTaskText(node: FactsNode): string {
+  private firstTaskText(node: OkfTranscriptNode): string {
     const first = filterUserPrompts(node.lines, {
       isSubagentLog: node.isSubagent,
     })[0];
     return first ?? '';
-  }
-
-  /** Tree nodes with their transcript lines; root first, then by start time. */
-  private async loadNodes(nodeIds: number[]): Promise<FactsNode[]> {
-    const result = await this.db.execute(sql`
-      SELECT
-        s.id,
-        s.session_id,
-        s.parent_session_id,
-        l.log_type,
-        l.start_time,
-        l.body
-      FROM sessions s
-      LEFT JOIN logs l
-        ON l.session_id = s.id
-       AND l.log_type IN ('claude', 'claude-subagent')
-      WHERE s.id = ANY(${sessionIdsArray(nodeIds)})
-      ORDER BY s.id, l.id
-    `);
-    const byId = new Map<number, FactsNode>();
-    for (const r of result.rows as unknown as {
-      id: string | number;
-      session_id: string;
-      parent_session_id: string | null;
-      log_type: string | null;
-      start_time: string | Date | null;
-      body: unknown;
-    }[]) {
-      const id = Number(r.id);
-      const node = byId.get(id) ?? {
-        id,
-        sessionId: r.session_id,
-        parentSessionId: r.parent_session_id,
-        startTime: null,
-        lines: [],
-        isSubagent: false,
-      };
-      if (r.log_type === 'claude-subagent') node.isSubagent = true;
-      if (r.start_time !== null) {
-        const ms = new Date(r.start_time).getTime();
-        if (
-          !Number.isNaN(ms) &&
-          (node.startTime === null || ms < node.startTime)
-        ) {
-          node.startTime = ms;
-        }
-      }
-      if (Array.isArray(r.body)) {
-        for (const line of r.body as unknown[]) {
-          if (typeof line === 'object' && line !== null) node.lines.push(line);
-        }
-      }
-      byId.set(id, node);
-    }
-    const rootId = nodeIds[0];
-    return [...byId.values()].sort(
-      (a, b) =>
-        Number(b.id === rootId) - Number(a.id === rootId) ||
-        (a.startTime ?? Infinity) - (b.startTime ?? Infinity) ||
-        a.id - b.id,
-    );
   }
 
   private async loadSnapshot(

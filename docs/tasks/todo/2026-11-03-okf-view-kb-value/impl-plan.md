@@ -120,6 +120,7 @@
 - **DD-13 In-area search.**
   - A `search` event is in an article's area when its path (with any trailing `/` dropped) equals an area file or starts with `areaFile + '/'`. This is the probe's definition, which the defaults were calibrated on.
   - The `read` and `write` events on area files are FR-1 hits, never FR-2.
+  - Post-implementation change (2026-11-05, after the first real session on local prod): agents grep folders, not files, so with the file-only rule FR-2 never fired. For FR-2 only, a search of a folder that holds an area file and has ≥ `OKF_SEARCH_FOLDER_MIN_DEPTH` (3) path segments also counts. FR-3 keeps file searches only, since a folder grep does not say which article the agent was after. Rows VS-11 / VS-12.
 - **DD-14 Value signal rules.**
   - All per-node signals ignore upkeep pairs (DD-15) and are computed over period sessions.
   - **FR-1 yield:** `n` = non-partial reads with at least one new pointer; `k` = those reads with at least one `followed` new pointer.

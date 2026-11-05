@@ -1,24 +1,21 @@
 /**
- * The session OKF tab's Agents panel: one row per agent of the tree (main + sub-agents), each on
- * its own task. Clicking an agent narrows the tree to that agent's KB reads; clicking it again
- * clears the filter.
+ * The session OKF tab's Agents panel: one row per agent of the tree (main + sub-agents), named
+ * by `okfAgentLabel` (main / 1.N · description). Clicking an agent (`okfAgent` in the URL) narrows the
+ * tree to that agent's KB reads and opens its trail in section B; clicking it again clears both.
  */
 import { formatBytes } from '@/lib/format';
-import type {
-  OkfAgent,
-  OkfAgentEntry,
-} from '../../../../../models/repositories';
-import { formatOkfYield, okfAgentLabel } from './okf-tree';
-
-const ENTRY_TEXT: Record<OkfAgentEntry, string> = {
-  index: '✓ started from index',
-  search: 'found by grep',
-  given: 'path given in its prompt',
-};
+import {
+  okfAgentLabel,
+  okfLabelIsTaskHead,
+  type OkfAgentLabels,
+} from '@/lib/okf/okf-agent-label';
+import { entryLabel } from '@/lib/okf/okf-verdict-text';
+import type { OkfAgent } from '../../../../../models/repositories';
+import { formatOkfYield } from './okf-tree';
 
 /**
- * Value-signal columns of one agent (2026-11-03): pointer yield, routing misses, upkeep articles
- * and code searches. Hidden on an older server that sends none of them.
+ * Value-signal columns of one agent (2026-11-03): code paths followed (pointer yield), searches
+ * without reading (routing misses), KB articles it edited (upkeep) and code searches. Hidden on an older server that sends none of them.
  */
 function AgentSignals({ agent }: { agent: OkfAgent }) {
   if (
@@ -37,41 +34,43 @@ function AgentSignals({ agent }: { agent: OkfAgent }) {
     warn?: boolean;
   }[] = [
     {
-      label: 'yield',
+      label: 'paths followed',
       value: formatOkfYield(agent.yield),
       testId: 'okf-agent-yield',
     },
     {
-      label: 'misses',
+      label: 'searched w/o reading',
       value: String(misses),
       testId: 'okf-agent-misses',
       warn: misses > 0,
     },
     {
-      label: 'upkeep',
+      label: 'edited KB',
       value: String(agent.upkeepArticles?.length ?? 0),
       testId: 'okf-agent-upkeep',
     },
     {
-      label: 'searches',
+      label: 'code searches',
       value: String(agent.searches ?? 0),
       testId: 'okf-agent-searches',
     },
   ];
   return (
-    <div className="grid grid-cols-4 gap-1 pt-0.5 text-[11px]">
+    <div className="grid max-w-sm grid-cols-2 gap-x-3 gap-y-1 pt-0.5 text-[11px]">
       {cells.map((c) => (
-        <div key={c.label} data-testid={c.testId}>
-          <div className="text-[9px] uppercase tracking-wide text-muted-foreground">
-            {c.label}
-          </div>
-          <div
+        <div
+          key={c.label}
+          data-testid={c.testId}
+          className="flex items-baseline justify-between gap-2"
+        >
+          <span className="text-[10px] text-muted-foreground">{c.label}</span>
+          <span
             className={`font-mono tabular-nums ${
               c.warn ? 'text-amber-600 dark:text-amber-400' : ''
             }`}
           >
             {c.value}
-          </div>
+          </span>
         </div>
       ))}
     </div>
@@ -81,21 +80,23 @@ function AgentSignals({ agent }: { agent: OkfAgent }) {
 export function OkfAgentsPanel({
   agents,
   rootSessionId,
+  labels,
   selected,
   onSelect,
 }: {
   agents: readonly OkfAgent[];
   rootSessionId: string;
+  labels: OkfAgentLabels;
   selected: string | null;
   onSelect: (agentId: string | null) => void;
 }) {
   return (
     <div
       data-testid="okf-agents-panel"
-      className="w-full shrink-0 rounded-md border border-border bg-card lg:w-[280px]"
+      className="w-full shrink-0 rounded-md border border-border bg-card @4xl/okf:w-[300px]"
     >
       <div className="border-b border-border px-3 py-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-        Agents · {agents.length} · each on its own task
+        Agents · {agents.length}
       </div>
       {agents.length === 0 ? (
         <div className="px-3 py-4 text-xs text-muted-foreground">
@@ -105,6 +106,7 @@ export function OkfAgentsPanel({
         <div className="divide-y divide-border">
           {agents.map((a) => {
             const active = selected === a.id;
+            const label = okfAgentLabel(a.id, rootSessionId, labels);
             return (
               <button
                 key={a.id}
@@ -117,18 +119,20 @@ export function OkfAgentsPanel({
                 }`}
               >
                 <div className="flex items-center gap-2">
-                  <span className="font-mono font-medium">
-                    {okfAgentLabel(a.id, rootSessionId)}
+                  <span
+                    className="min-w-0 truncate font-medium"
+                    data-testid="okf-agent-label"
+                    title={label}
+                  >
+                    {label}
                   </span>
                   {a.entry ? (
-                    <span className="text-[11px] text-muted-foreground">
-                      {(ENTRY_TEXT as Record<string, string | undefined>)[
-                        a.entry
-                      ] ?? a.entry}
+                    <span className="shrink-0 text-[11px] text-muted-foreground">
+                      {entryLabel(a.entry)}
                     </span>
                   ) : null}
                 </div>
-                {a.taskHead ? (
+                {a.taskHead && !okfLabelIsTaskHead(a, rootSessionId) ? (
                   <div
                     className="truncate text-muted-foreground"
                     title={a.taskHead}
@@ -147,7 +151,7 @@ export function OkfAgentsPanel({
         </div>
       )}
       <div className="border-t border-border px-3 py-1.5 text-[11px] text-muted-foreground">
-        Click an agent → the tree shows only its reads.
+        Click an agent → the tree shows only its reads, section B its trail.
       </div>
     </div>
   );

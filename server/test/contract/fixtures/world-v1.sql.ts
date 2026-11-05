@@ -2117,8 +2117,9 @@ function buildStatements(): WorldStatement[] {
   // each KB read (`session_okf_pointer`) of the same tree; `ord` / `read_ord` share the node's
   // tool-call counter. s02's index.md read named scheduler.md (new, never followed by s02
   // itself). s03's first scheduler.md read showed two new code pointers: it then read
-  // server/src/scheduler.ts (followed, a ranged read) and grepped it; legacy-cron.ts it never
-  // touched. Its second read showed the same pointers again (not new). s02 grepped server/src/.
+  // server/src/scheduler.ts (followed, a ranged read) and grepped it twice; legacy-cron.ts it
+  // never touched. Its second read showed the same pointers again (not new). s02 grepped
+  // server/src/.
   out.push(
     insert(
       'session_okf_event',
@@ -2144,6 +2145,18 @@ function buildStatements(): WorldStatement[] {
           null,
           null,
           'runJob',
+        ],
+        // Package 3 (agent trail links): a second in-area search after reading, so s03's
+        // (s03, scheduler.md) pair reaches exploredMinSearches (2) — searched after.
+        [
+          4,
+          S.s03.id,
+          5,
+          'search',
+          'server/src/scheduler.ts',
+          null,
+          null,
+          'cronTick',
         ],
       ],
     ),

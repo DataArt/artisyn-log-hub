@@ -118,7 +118,7 @@ One folder per session tab; flat files are the Logs tab and the shared parsing. 
 | `change-surface/` | Change surface tab | [`change-surface.md`](change-surface.md) |
 | `harness-usage/` | Harness usage tab | [`harness-usage-tab.md`](harness-usage-tab.md) |
 | `sysctx-anatomy/` | System context anatomy tab (`sysctx`) | [`sysctx-anatomy-tab.md`](sysctx-anatomy-tab.md) |
-| `okf/` | Session OKF tab; verdict card (with `OkfFindingLine.tsx`, `OkfThresholdsChip.tsx`), bundle cards, value-signals tile, Read top 5 and tree shared with the repo tab (the article drill-down is in `repository/okf/article/`) | [`okf-usage.md`](okf-usage.md) |
+| `okf/` | Session OKF tab; verdict card (with `OkfFindingLine.tsx`, `OkfThresholdsChip.tsx`), KB folder (bundle) cards, value-signals tile, Read top 5 and tree shared with the repo tab (the article drill-down is in `repository/okf/article/`) | [`okf-usage.md`](okf-usage.md) |
 | `otel/` | Session OTEL tab (traces, waterfall) | [`otel-tabs.md`](otel-tabs.md) |
 
 ---
@@ -161,7 +161,7 @@ pages; a page-only helper stays next to its page.
 | `chart-colors.ts`, `cache-ratio-ui.ts`, `change-surface-ui.ts` | Shared chart colours and band legends |
 | `semver.ts`, `release-versions.ts` | Version comparison for the Claude Code version checks — [`claude-version-check.md`](claude-version-check.md) |
 | `bash-view/` | Loader of the tree-sitter Bash parser (logic is `packages/bash-view`) |
-| `okf/`, `tools/` | Strings shared by the OKF tabs (`okf-verdict-text.ts`, the FR-16 action lines `okf-action-text.ts`); string truncation |
+| `okf/`, `tools/` | Strings shared by the OKF tabs (`okf-verdict-text.ts`, the verdict Checks lines and the A/B rule split `okf-check-text.ts`, the FR-16 action lines `okf-action-text.ts`, agent names `okf-agent-label.ts`); string truncation |
 
 ---
 

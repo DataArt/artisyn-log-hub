@@ -5,7 +5,9 @@
     "input": {"bundles": [{"root": "docs/kb", "files": 10}], "nodes": [{"agentId": "a1b2c3", "rows": [
       {"pathKey": "docs/kb/a1.md", "op": "read"}, {"pathKey": "docs/kb/a2.md", "op": "read"}, {"pathKey": "docs/kb/a3.md", "op": "read"},
       {"pathKey": "docs/kb/a4.md", "op": "read"}, {"pathKey": "docs/kb/a5.md", "op": "grep"}, {"pathKey": "docs/kb/a6.md", "op": "read"}]}]},
-    "expected": {"verdict": {"level": "mess", "qualifiers": [], "findings": [
+    "expected": {"verdict": {
+      "checks": [{"rule":"kb_used","status":"ok","params":{"agentsWithKb":1,"agents":1,"folders":"docs/kb","articles":10}},{"rule":"entry","status":"ok","params":{"index":0,"search":0,"given":1,"agents":1}},{"rule":"session_share","status":"finding","params":{"agentId":"a1b2c3","bundle":"docs/kb","read":6,"total":10,"share":0.6,"fix":0.25,"mess":0.5,"minFiles":10}},{"rule":"upkeep","status":"ok","params":{"agents":0,"articles":0,"agentId":null,"path":null}}],
+      "level": "mess", "qualifiers": [], "findings": [
       {"rule": "session_share", "severity": "mess", "params": {"agentId": "a1b2c3", "bundle": "docs/kb", "read": 6, "total": 10, "share": 0.6}}]}, "entries": ["given"]},
     "note": "Rule 4: 10 articles, no writes; 6 distinct articles with read rows (grep counts) -> 6/10 = 0.6 > 0.5 -> mess. Entry: first row a1.md is a non-index read and no grep/list comes before it -> given."
   },
@@ -23,7 +25,9 @@
     "kind": "session",
     "input": {"bundles": [{"root": "docs/kb", "files": 10}], "nodes": [{"agentId": "a1b2c3", "rows": [
       {"pathKey": "docs/kb/a1.md", "op": "read"}, {"pathKey": "docs/kb/a2.md", "op": "read"}, {"pathKey": "docs/kb/", "op": "list"}]}]},
-    "expected": {"verdict": {"level": "ok", "qualifiers": [], "findings": []}},
+    "expected": {"verdict": {
+      "checks": [{"rule":"kb_used","status":"ok","params":{"agentsWithKb":1,"agents":1}},{"rule":"entry","status":"ok","params":{"given":1}},{"rule":"session_share","status":"ok","params":{"agentId":"a1b2c3","bundle":"docs/kb","read":2,"total":10,"share":0.2,"fix":0.25,"mess":0.5,"minFiles":10}},{"rule":"upkeep","status":"ok","params":{"agents":0}}],
+      "level": "ok", "qualifiers": [], "findings": []}},
     "note": "Rule 4: the folder list row is no file read; 2/10 = 0.2 <= 0.25 -> no finding -> ok."
   },
   {
@@ -52,7 +56,9 @@
       {"pathKey": "docs/kb/index.md", "op": "read"}, {"pathKey": "docs/kb/a1.md", "op": "read"}, {"pathKey": "docs/kb/a2.md", "op": "read"},
       {"pathKey": "docs/kb/a3.md", "op": "read"}, {"pathKey": "docs/kb/a4.md", "op": "read"}, {"pathKey": "docs/kb/a5.md", "op": "read"},
       {"pathKey": "docs/kb/a6.md", "op": "read"}, {"pathKey": "docs/kb/a7.md", "op": "read"}, {"pathKey": "docs/kb/a8.md", "op": "read"}]}]},
-    "expected": {"verdict": {"level": "ok", "qualifiers": [], "findings": []}, "entries": ["index"]},
+    "expected": {"verdict": {
+      "checks": [{"rule":"kb_used","status":"ok","params":{"agentsWithKb":1}},{"rule":"entry","status":"ok","params":{"index":1}},{"rule":"session_share","status":"na","params":{"reason":"small_bundles","minFiles":10}},{"rule":"upkeep","status":"ok","params":{"agents":0}}],
+      "level": "ok", "qualifiers": [], "findings": []}, "entries": ["index"]},
     "note": "Rule 4: 9 articles < SHARE_MIN_BUNDLE_FILES 10 -> the bundle is skipped even at 9/9 -> ok. Entry: the first row is the index -> index."
   },
   {
@@ -126,7 +132,9 @@
     "id": "OV-14",
     "kind": "session",
     "input": {"bundles": null, "nodes": [{"agentId": "a1b2c3", "rows": [{"pathKey": "docs/kb/a1.md", "op": "read", "bytes": 900}]}]},
-    "expected": {"verdict": {"level": "ok", "qualifiers": ["partial_data"], "findings": []}},
+    "expected": {"verdict": {
+      "checks": [{"rule":"kb_used","status":"ok","params":{"agentsWithKb":1,"agents":1,"folders":null,"articles":null}},{"rule":"entry","status":"na","params":{"reason":"no_snapshot"}},{"rule":"session_share","status":"na","params":{"reason":"no_snapshot"}},{"rule":"upkeep","status":"ok","params":{"agents":0}}],
+      "level": "ok", "qualifiers": ["partial_data"], "findings": []}},
     "note": "Rule 1: without a snapshot any read row is KB access. Rule 3: no file list -> the share rule is skipped -> ok + partial_data."
   },
   {
@@ -136,7 +144,9 @@
       {"agentId": "aaaa1111", "rows": [{"pathKey": "docs/kb/a1.md", "op": "read"}, {"pathKey": "docs/kb/a2.md", "op": "read"}, {"pathKey": "docs/kb/a3.md", "op": "read"}]},
       {"agentId": "bbbb2222", "rows": [{"pathKey": "docs/kb/a1.md", "op": "read"}, {"pathKey": "docs/kb/a2.md", "op": "read"}, {"pathKey": "docs/kb/a3.md", "op": "read"},
         {"pathKey": "docs/kb/a4.md", "op": "read"}, {"pathKey": "docs/kb/a5.md", "op": "read"}, {"pathKey": "docs/kb/a6.md", "op": "read"}, {"pathKey": "docs/kb/a7.md", "op": "read"}]}]},
-    "expected": {"verdict": {"level": "mess", "qualifiers": [], "findings": [
+    "expected": {"verdict": {
+      "checks": [{"rule":"kb_used","status":"ok","params":{"agentsWithKb":2,"agents":2}},{"rule":"entry","status":"ok","params":{"given":2}},{"rule":"session_share","status":"finding","params":{"agentId":"bbbb2222","read":7,"total":10,"share":0.7}},{"rule":"upkeep","status":"ok","params":{"agents":0}}],
+      "level": "mess", "qualifiers": [], "findings": [
       {"rule": "session_share", "severity": "mess", "params": {"agentId": "bbbb2222", "read": 7, "share": 0.7}},
       {"rule": "session_share", "severity": "fix", "params": {"agentId": "aaaa1111", "read": 3, "share": 0.3}}]}},
     "note": "Rule 4: aaaa1111 3/10 = 0.3 -> fix, bbbb2222 7/10 = 0.7 -> mess. Rule 5: worst first (mess before fix) and level mess."
@@ -146,7 +156,9 @@
     "kind": "repo",
     "input": {"bundles": [{"root": "docs/kb", "files": 10}], "sessions": [
       {"count": 3, "hasSnapshot": true, "rows": [{"pathKey": "docs/kb/", "op": "list"}, {"pathKey": "src/main.md", "op": "read"}]}]},
-    "expected": {"verdict": {"level": "kb_not_used", "qualifiers": [], "findings": []}},
+    "expected": {"verdict": {
+      "checks": [{"rule":"kb_sessions","status":"finding","params":{"kbSessions":0,"sessions":3,"minimum":5}},{"rule":"kb_flood","status":"na","params":{"reason":"kb_not_used"}},{"rule":"always_read","status":"na","params":{"reason":"kb_not_used"}},{"rule":"coarse_article","status":"na","params":{"reason":"kb_not_used"}}],
+      "level": "kb_not_used", "qualifiers": [], "findings": []}},
     "note": "Rule 6: a list row is no read row and src/main.md lies in no bundle -> 0 KB sessions. Rule 10 -> kb_not_used."
   },
   {
@@ -154,7 +166,9 @@
     "kind": "repo",
     "input": {"bundles": [{"root": "docs/kb", "files": 3}], "sessions": [
       {"count": 3, "hasSnapshot": true, "rows": [{"pathKey": "docs/kb/a1.md", "op": "read"}]}]},
-    "expected": {"verdict": {"level": "not_enough_data", "qualifiers": [], "findings": [
+    "expected": {"verdict": {
+      "checks": [{"rule":"kb_sessions","status":"na","params":{"kbSessions":3,"sessions":3,"minimum":5}},{"rule":"kb_flood","status":"na","params":{"reason":"small_bundles","minFiles":10}},{"rule":"always_read","status":"finding","params":{"path":"docs/kb/a1.md","sessions":3,"kbSessions":3,"share":1,"threshold":0.8}},{"rule":"coarse_article","status":"na","params":{"reason":"no_big_articles","minSize":51200}}],
+      "level": "not_enough_data", "qualifiers": [], "findings": [
       {"rule": "always_read", "severity": "fix", "params": {"bundle": "docs/kb", "path": "docs/kb/a1.md", "sessions": 3, "kbSessions": 3, "share": 1}}]}},
     "note": "Rule 7: a1.md in 3 of 3 KB sessions = 1.0 >= 0.8 -> finding. Rule 10: 3 < REPO_MIN_KB_SESSIONS 5 -> level not_enough_data, the finding stays listed."
   },
@@ -174,7 +188,9 @@
     "input": {"bundles": [{"root": "docs/kb", "files": 3}], "sessions": [
       {"count": 39, "hasSnapshot": true, "rows": [{"pathKey": "docs/kb/index.md", "op": "read"}, {"pathKey": "docs/kb/a1.md", "op": "read"}]},
       {"count": 10, "hasSnapshot": true, "rows": [{"pathKey": "docs/kb/index.md", "op": "read"}, {"pathKey": "docs/kb/a2.md", "op": "grep"}]}]},
-    "expected": {"verdict": {"level": "ok", "qualifiers": [], "findings": []}},
+    "expected": {"verdict": {
+      "checks": [{"rule":"kb_sessions","status":"ok","params":{"kbSessions":49,"sessions":49,"minimum":5,"upkeepOnly":0}},{"rule":"kb_flood","status":"na","params":{"reason":"small_bundles"}},{"rule":"always_read","status":"ok","params":{"bundle":"docs/kb","path":"docs/kb/a1.md","sessions":39,"kbSessions":49,"share":0.7959183673469388,"threshold":0.8}},{"rule":"coarse_article","status":"na","params":{"reason":"no_big_articles","bigArticles":0}}],
+      "level": "ok", "qualifiers": [], "findings": []}},
     "note": "Rule 7: 39/49 = 0.796 < 0.8 -> no finding; a2.md 10/49 no -> ok."
   },
   {
@@ -193,7 +209,9 @@
     "input": {"bundles": [{"root": "docs/kb", "files": [{"path": "docs/kb/index.md", "size": 2000}, {"path": "docs/kb/big.md", "size": 164864}, {"path": "docs/kb/a2.md", "size": 1000}]}], "sessions": [
       {"count": 14, "hasSnapshot": true, "rows": [{"pathKey": "docs/kb/big.md", "op": "read", "bytes": 16384, "calls": 4}, {"pathKey": "docs/kb/big.md", "op": "grep", "bytes": 900000, "calls": 1}]},
       {"count": 6, "hasSnapshot": true, "rows": [{"pathKey": "docs/kb/a2.md", "op": "read", "bytes": 1000}]}]},
-    "expected": {"verdict": {"level": "fix", "qualifiers": [], "findings": [
+    "expected": {"verdict": {
+      "checks": [{"rule":"kb_sessions","status":"ok","params":{"kbSessions":20,"sessions":20}},{"rule":"kb_flood","status":"na","params":{"reason":"small_bundles"}},{"rule":"always_read","status":"ok","params":{"path":"docs/kb/big.md","sessions":14,"kbSessions":20,"share":0.7}},{"rule":"coarse_article","status":"finding","params":{"path":"docs/kb/big.md","size":164864,"sessions":14,"avgReadBytes":4096,"ratio":0.024844720496894408,"bigArticles":1,"minSize":51200,"maxRatio":0.1,"minSessions":5}}],
+      "level": "fix", "qualifiers": [], "findings": [
       {"rule": "coarse_article", "severity": "fix", "params": {"bundle": "docs/kb", "path": "docs/kb/big.md", "size": 164864, "sessions": 14, "avgReadBytes": 4096, "ratio": 0.024844720496894408}}]}},
     "note": "Rule 9: big.md (161 KB = 164864 B >= 51200) read in 14 >= 5 KB sessions; read bytes 14 x 16384 = 229376 over 14 x 4 = 56 calls -> 4096 B/call; 4096 / 164864 = 0.0248 < 0.10 -> fix. The grep rows (900000 B) are ignored. Rule 7: big.md 14/20 = 0.7 and a2.md 6/20 -> no always_read."
   },
@@ -212,7 +230,9 @@
     "input": {"bundles": [{"root": "docs/kb", "files": [{"path": "docs/kb/index.md", "size": 2000}, {"path": "docs/kb/big.md", "size": 100000}, {"path": "docs/kb/a2.md", "size": 1000}]}], "sessions": [
       {"count": 5, "hasSnapshot": true, "rows": [{"pathKey": "docs/kb/big.md", "op": "read", "bytes": 20000, "calls": 2}]},
       {"count": 2, "hasSnapshot": true, "rows": [{"pathKey": "docs/kb/a2.md", "op": "read", "bytes": 1000}]}]},
-    "expected": {"verdict": {"level": "ok", "qualifiers": [], "findings": []}},
+    "expected": {"verdict": {
+      "checks": [{"rule":"kb_sessions","status":"ok","params":{"kbSessions":7}},{"rule":"kb_flood","status":"na","params":{"reason":"small_bundles"}},{"rule":"always_read","status":"ok","params":{"path":"docs/kb/big.md","sessions":5,"kbSessions":7}},{"rule":"coarse_article","status":"ok","params":{"path":"docs/kb/big.md","size":100000,"sessions":5,"avgReadBytes":10000,"ratio":0.1,"maxRatio":0.1}}],
+      "level": "ok", "qualifiers": [], "findings": []}},
     "note": "Rule 9: 5 sessions, 100000 B over 10 calls = 10000 B/call; 10000 / 100000 = 0.10, not < 0.10 -> no finding. Rule 7: big.md 5/7 = 0.714 -> no always_read."
   },
   {
@@ -221,7 +241,9 @@
     "input": {"bundles": [{"root": "docs/kb", "files": 10}], "sessions": [
       {"count": 1, "hasSnapshot": true, "rows": [{"pathKey": "docs/kb/a1.md", "op": "read"}, {"pathKey": "docs/kb/a2.md", "op": "read"}, {"pathKey": "docs/kb/a3.md", "op": "read"}]},
       {"count": 19, "hasSnapshot": true, "rows": [{"pathKey": "docs/kb/index.md", "op": "read"}]}]},
-    "expected": {"verdict": {"level": "ok", "qualifiers": [], "findings": [
+    "expected": {"verdict": {
+      "checks": [{"rule":"kb_sessions","status":"ok","params":{"kbSessions":20,"sessions":20}},{"rule":"kb_flood","status":"ok","params":{"bundle":"docs/kb","flooded":1,"bundleSessions":20,"maxShare":0.3,"floodShare":0.25,"minSessions":3}},{"rule":"always_read","status":"ok","params":{"path":"docs/kb/a1.md","sessions":1,"kbSessions":20,"share":0.05}},{"rule":"coarse_article","status":"na","params":{"reason":"no_big_articles"}}],
+      "level": "ok", "qualifiers": [], "findings": [
       {"rule": "kb_flood", "severity": "info", "params": {"bundle": "docs/kb", "sessions": 1, "bundleSessions": 20, "share": 0.05, "flooded": 1, "kbSessions": 20}}]}},
     "note": "Rule 8: 20 snapshot-bound docs/kb sessions; one read 3/10 = 0.3 > 0.25 -> flooded, the others 1/10. 1 flooded < floodMinSessions 3 -> info finding, level stays ok (FR-7). Rule 7: a1..a3 1/20 each; index excluded."
   },
@@ -276,7 +298,9 @@
     "kind": "session",
     "input": {"bundles": [{"root": "docs/kb", "files": 10}], "nodes": [
       {"agentId": "main", "rows": [{"pathKey": "docs/kb/a1.md", "op": "read"}, {"pathKey": "docs/kb/a1.md", "op": "write"}]}]},
-    "expected": {"verdict": {"level": "kb_not_used", "qualifiers": [], "findings": []}},
+    "expected": {"verdict": {
+      "checks": [{"rule":"kb_used","status":"finding","params":{"agentsWithKb":0,"agents":1,"folders":"docs/kb","articles":10}},{"rule":"entry","status":"ok","params":{"given":1}},{"rule":"session_share","status":"na","params":{"reason":"kb_not_used"}},{"rule":"upkeep","status":"ok","params":{"agents":1,"articles":1,"agentId":"main","path":"docs/kb/a1.md"}}],
+      "level": "kb_not_used", "qualifiers": [], "findings": []}},
     "note": "Upkeep (FR-5): the node read a1 and also wrote it, so its read is an upkeep row and is dropped; no KB read is left -> rule 2 kb_not_used, although a bundle exists."
   },
   {
@@ -316,7 +340,9 @@
       {"hasSnapshot": true, "rows": [{"pathKey": "docs/kb/a2.md", "op": "read", "nodeId": "n1"}, {"pathKey": "docs/kb/a2.md", "op": "write", "nodeId": "n1"}]},
       {"hasSnapshot": true, "rows": [{"pathKey": "docs/kb/a2.md", "op": "read", "nodeId": "n1"}, {"pathKey": "docs/kb/a2.md", "op": "write", "nodeId": "n2"}]},
       {"hasSnapshot": true, "rows": [{"pathKey": "docs/kb/a1.md", "op": "read", "nodeId": "n0"}, {"pathKey": "docs/kb/a2.md", "op": "read", "nodeId": "n1"}, {"pathKey": "docs/kb/a2.md", "op": "write", "nodeId": "n1"}]}]},
-    "expected": {"verdict": {"level": "fix", "qualifiers": [], "upkeepOnlySessions": 1, "findings": [
+    "expected": {"verdict": {
+      "checks": [{"rule":"kb_sessions","status":"ok","params":{"kbSessions":6,"sessions":7,"upkeepOnly":1}},{"rule":"kb_flood","status":"na","params":{"reason":"small_bundles"}},{"rule":"always_read","status":"finding","params":{"path":"docs/kb/a1.md","sessions":5,"kbSessions":6}},{"rule":"coarse_article","status":"na","params":{"reason":"no_big_articles"}}],
+      "level": "fix", "qualifiers": [], "upkeepOnlySessions": 1, "findings": [
       {"rule": "always_read", "severity": "fix", "params": {"bundle": "docs/kb", "path": "docs/kb/a1.md", "sessions": 5, "kbSessions": 6, "share": 0.8333333333333334}}]}},
     "note": "Upkeep (FR-5, rule 6): session 5's node n1 read and wrote a2 -> its read is dropped and only a bundle write is left -> upkeep-only, upkeepOnlySessions 1, not a KB session. Session 6: n1 read a2 but n2 wrote it -> not upkeep, a KB session. Session 7: the a2 pair of n1 is upkeep, the a1 read keeps it a KB session. KB sessions 4 + 1 + 1 = 6; a1 in 5/6 = 0.833 >= 0.8 -> always_read. Without the upkeep rule: 7 KB sessions, 5/7 = 0.714 -> none."
   },
@@ -326,7 +352,9 @@
     "input": {"bundles": [{"root": "docs/kb", "files": 10}], "sessions": [
       {"count": 3, "hasSnapshot": true, "rows": [{"pathKey": "docs/kb/a1.md", "op": "read"}, {"pathKey": "docs/kb/a2.md", "op": "read"}, {"pathKey": "docs/kb/a3.md", "op": "read"}]},
       {"count": 17, "hasSnapshot": true, "rows": [{"pathKey": "docs/kb/index.md", "op": "read"}]}]},
-    "expected": {"verdict": {"level": "fix", "qualifiers": [], "findings": [
+    "expected": {"verdict": {
+      "checks": [{"rule":"kb_sessions","status":"ok","params":{"kbSessions":20}},{"rule":"kb_flood","status":"finding","params":{"bundle":"docs/kb","flooded":3,"bundleSessions":20,"maxShare":0.3,"minSessions":3}},{"rule":"always_read","status":"ok","params":{"path":"docs/kb/a1.md","sessions":3,"share":0.15}},{"rule":"coarse_article","status":"na","params":{"reason":"no_big_articles"}}],
+      "level": "fix", "qualifiers": [], "findings": [
       {"rule": "kb_flood", "severity": "fix", "params": {"bundle": "docs/kb", "sessions": 3, "bundleSessions": 20, "share": 0.15, "flooded": 3, "kbSessions": 20}}]}},
     "note": "FR-7 (rule 8): 3 of 20 sessions read 3/10 = 0.3 > 0.25 -> flooded 3 >= floodMinSessions 3, so the flood counts; 3/20 = 0.15 < 0.2 -> fix. Compare RV-09 (1 flooded -> info)."
   },
@@ -375,5 +403,29 @@
     "expected": {"verdict": {"level": "ok", "qualifiers": [], "findings": [
       {"rule": "always_read", "severity": "fix", "params": {"bundle": "docs/kb", "path": "docs/kb/a1.md", "sessions": 5, "kbSessions": 5, "share": 1}, "removed": true}]}},
     "note": "FR-10 removed: a1 is gone from the latest snapshot but the sessions' bound snapshot listed it -> it is still judged (5/5 -> always_read), marked removed, and dropped from the level -> ok."
-  }
+  },
+  {
+    "id": "OV-20",
+    "kind": "session",
+    "input": {"bundles": [{"root": "docs/kb", "files": 10}], "nodes": [
+      {"agentId": "main", "rows": [{"pathKey": "docs/kb/index.md", "op": "read"}, {"pathKey": "docs/kb/a1.md", "op": "read"}, {"pathKey": "docs/kb/a2.md", "op": "read"}, {"pathKey": "docs/kb/a2.md", "op": "write"}]},
+      {"agentId": "sub", "rows": [{"pathKey": "docs/kb/", "op": "grep"}, {"pathKey": "docs/kb/a3.md", "op": "read"}, {"pathKey": "docs/kb/a4.md", "op": "read"}]},
+      {"agentId": "coder", "rows": [{"pathKey": "src/x.ts", "op": "read"}]}]},
+    "expected": {"verdict": {
+      "checks": [{"rule":"kb_used","status":"ok","params":{"agentsWithKb":2,"agents":3,"folders":"docs/kb","articles":10}},{"rule":"entry","status":"ok","params":{"index":1,"search":1,"given":0,"agents":2}},{"rule":"session_share","status":"ok","params":{"agentId":"sub","bundle":"docs/kb","read":2,"total":10,"share":0.2,"fix":0.25,"mess":0.5}},{"rule":"upkeep","status":"ok","params":{"agents":1,"articles":1,"agentId":"main","path":"docs/kb/a2.md"}}],
+      "level": "ok", "qualifiers": [], "findings": []}, "entries": ["index", "search", null]},
+    "note": "Checks (session): 2 of 3 agents read the KB (coder only read code). Entry: main from the index, sub by a folder grep before its reads. session_share: main's a2 read is upkeep and a2 is its own write -> 1 of 9 = 0.11; sub 2 of 10 = 0.2 is the highest share -> the check shows 0.2, below the 0.25 fix threshold -> ok. upkeep: main edited a2."
+  },
+  {
+    "id": "RV-22",
+    "kind": "repo",
+    "input": {"bundles": [{"root": "docs/kb", "files": [{"path": "docs/kb/index.md", "size": 100}, {"path": "docs/kb/big.md", "size": 60000}, {"path": "docs/kb/a2.md", "size": 1000}]}], "sessions": [
+      {"count": 2, "hasSnapshot": true, "rows": [{"pathKey": "docs/kb/big.md", "op": "read", "bytes": 3000, "calls": 1}]},
+      {"count": 3, "hasSnapshot": true, "rows": [{"pathKey": "docs/kb/a2.md", "op": "read", "bytes": 1000}]}]},
+    "expected": {"verdict": {
+      "checks": [{"rule":"kb_sessions","status":"ok","params":{"kbSessions":5,"sessions":5,"minimum":5,"upkeepOnly":0}},{"rule":"kb_flood","status":"na","params":{"reason":"small_bundles","minFiles":10}},{"rule":"always_read","status":"ok","params":{"bundle":"docs/kb","path":"docs/kb/a2.md","sessions":3,"kbSessions":5,"share":0.6,"threshold":0.8}},{"rule":"coarse_article","status":"ok","params":{"path":"docs/kb/big.md","size":60000,"sessions":2,"avgReadBytes":3000,"ratio":0.05,"bigArticles":1,"minSessions":5}}],
+      "level": "ok", "qualifiers": [], "findings": []}},
+    "note": "Checks (repo), nearest candidates without a finding: big.md (60000 B >= 51200) is read whole at 3000 B per read = 0.05 < 0.1, but only by 2 sessions (< coarseMinSessions 5) -> no coarse_article; the check names it with sessions 2. always_read: a2 3/5 = 0.6 beats big.md 2/5 = 0.4 and stays below 0.8. 2 articles -> kb_flood cannot run (small_bundles)."
+  },
+  {"id":"OV-21","kind":"session","input":{"bundles":[{"root":"docs/kb","files":10},{"root":"docs/kb-local","files":4},{"root":"docs/watch","files":3}],"nodes":[{"agentId":"main","rows":[{"pathKey":"docs/kb/index.md","op":"read"},{"pathKey":"docs/kb/a1.md","op":"read"},{"pathKey":"docs/watch/a1.md","op":"write"}]}]},"expected":{"verdict":{"checks":[{"rule":"kb_used","status":"ok","params":{"agentsWithKb":1,"agents":1,"folders":"docs/kb","articles":10}},{"rule":"entry","status":"ok","params":{"index":1}},{"rule":"session_share","status":"ok","params":{"bundle":"docs/kb","read":1,"total":10}},{"rule":"upkeep","status":"ok","params":{"agents":0}}],"level":"ok","qualifiers":[],"findings":[]}},"note":"Rule 13 kb_used (package 3): the snapshot has three KB folders but main read only docs/kb (index.md and a1.md; writing docs/watch/a1.md is no read) -> folders lists docs/kb alone and articles its 10. A finding (no node read the KB) still lists every folder: OV-17."}
 ]

@@ -49,7 +49,8 @@
  *   with `pointer: ''`; a call reading several `.md` keys stores only such a `''` partial row per
  *   article. At most `OKF_POINTER_CAP_PER_NODE` rows, beyond it `truncated` (DD-8..DD-10).
  * - `seq`: every access of every call in order (`kb_*` ops for KB articles, code paths filtered
- *   like events), with range, pattern and the new pointers of a single-article KB read; uncapped.
+ *   like events), with range, pattern and the new pointers of a single-article KB read, and `hit`
+ *   (the DD-6 search-hit test of the call's result) on search items; uncapped.
  */
 import { analyzeBash, type BashParser } from '@loghub/bash-view';
 import {
@@ -479,6 +480,11 @@ export interface OkfSeqItem {
   pattern?: string;
   /** New pointers of a single-article KB read (DD-9). */
   newPointers?: string[];
+  /**
+   * Search items only (`kb_search` / `search`): the call's result was a hit — not an error and,
+   * trimmed, neither empty nor `No files found` / `No matches found` (rule 11, read per request).
+   */
+  hit?: boolean;
 }
 
 /** Everything one node's transcript yields for OKF (DD-1). */
@@ -796,6 +802,7 @@ export function extractOkfDetail(
           if (kb && access.op === 'read' && newPointers !== null) {
             item.newPointers = newPointers;
           }
+          if (op === 'search') item.hit = hit;
           seq.push(item);
         }
       }

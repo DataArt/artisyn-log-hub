@@ -5,7 +5,11 @@
  */
 import { formatBytes } from '@/lib/format';
 import { okfActionText } from '@/lib/okf/okf-action-text';
-import { formatOkfFinding, isInfoFinding } from '@/lib/okf/okf-verdict-text';
+import {
+  formatOkfFinding,
+  isInfoFinding,
+  type OkfAgentNamer,
+} from '@/lib/okf/okf-verdict-text';
 import type { OkfFinding } from '../../../../../models/repositories';
 
 function dotColour(finding: OkfFinding): string {
@@ -32,9 +36,12 @@ function staleText(stale: NonNullable<OkfFinding['stale']>): string {
 
 export function OkfFindingLine({
   finding,
+  agentName,
   onClick,
 }: {
   finding: OkfFinding;
+  /** Names the finding's `agentId` param (session tab); default: its short id. */
+  agentName?: OkfAgentNamer;
   onClick: () => void;
 }) {
   const info = isInfoFinding(finding);
@@ -53,7 +60,9 @@ export function OkfFindingLine({
         <span
           className={`size-1.5 shrink-0 rounded-full ${dotColour(finding)}`}
         />
-        <span className="min-w-0 flex-1">{formatOkfFinding(finding)}</span>
+        <span className="min-w-0 flex-1">
+          {formatOkfFinding(finding, agentName)}
+        </span>
         {finding.stale ? (
           <Chip testId="okf-finding-stale">{staleText(finding.stale)}</Chip>
         ) : null}

@@ -969,6 +969,21 @@ export interface OkfVerdict {
   partialData?: { withoutSnapshot: number; total: number };
   /** Worst first. */
   findings: OkfFinding[];
+  /**
+   * One entry per structure (group A) rule of the level, also when it found nothing, with the
+   * nearest actual value and its threshold. Absent on older servers (the Checks block hides).
+   */
+  checks?: OkfVerdictCheck[];
+}
+
+/** `ok` = the rule did not fire; `finding` = it did; `na` = it could not run (`params.reason`). */
+export type OkfVerdictCheckStatus = 'ok' | 'finding' | 'na';
+
+/** One structure rule's outcome (`okf-verdict.md` → "Checks"). */
+export interface OkfVerdictCheck {
+  rule: string;
+  status: OkfVerdictCheckStatus;
+  params: Record<string, number | string | null>;
 }
 
 export interface OkfBundleSummary {
@@ -1072,6 +1087,8 @@ export interface OkfAgent {
   /** `sessions.session_id` string. */
   id: string;
   taskHead: string;
+  /** Sub-agent description (Agent tool `description`); null / absent for the root or older servers. */
+  label?: string | null;
   entry: OkfAgentEntry | null;
   /** This agent's `read` + `grep` calls on bundle files. */
   kbReads: number;
@@ -1086,6 +1103,8 @@ export interface OkfAgent {
   promptNamedPaths?: number;
   /** Routing misses of this agent. */
   routingMisses?: { article: string; searches: number; patterns: string[] }[];
+  /** Articles this agent kept searching after reading (newer servers only). */
+  searchedAfter?: { article: string; searches: number }[];
   /** Articles this agent edited (upkeep pairs). */
   upkeepArticles?: string[];
   /** Code search events of this agent. */
@@ -1132,6 +1151,34 @@ export interface SessionOkfUsageResponse {
   signals?: OkfSignalSummary;
   /** A node hit the per-node event / pointer cap. */
   eventsTruncated?: boolean;
+}
+
+/** One ordered KB or code access of an agent's trail. */
+export interface OkfTrailItem {
+  /** Call number within the agent; one call can give several items. */
+  ord: number;
+  op: 'kb_read' | 'kb_search' | 'kb_write' | 'read' | 'search' | 'write';
+  /** Repo-relative; folders end in `/`. */
+  path: string;
+  offset?: number;
+  limit?: number;
+  pattern?: string;
+  /** New code paths a KB article read showed. */
+  newPointers?: string[];
+  /** Searches: the call found something. */
+  hit?: boolean;
+  /** Code reads / searches: articles read earlier whose code area this path is in. */
+  inArea?: string[];
+  /** KB reads: new code path → call number that first touched it afterwards. */
+  followedAt?: Record<string, number>;
+}
+
+/** `GET /api/v1/repositories/:repoId/sessions/:sessionId/okf-usage/trail?agent=`. */
+export interface SessionOkfTrailResponse {
+  agent: { id: string; label: string | null };
+  /** Only the first accesses are listed. */
+  truncated: boolean;
+  items: OkfTrailItem[];
 }
 
 export type OkfShareBin = '0-10' | '10-25' | '25-50' | '50+';
@@ -1238,6 +1285,13 @@ export interface RepoOkfArticleResponse {
     agents: number;
     searches: number;
     patterns: OkfPatternCountItem[];
+    /** The agents behind the counts (newer servers only): root session, agent id, description. */
+    pairs?: {
+      sessionId: string;
+      agentId: string;
+      label: string | null;
+      searches: number;
+    }[];
   } | null;
   /** This article's findings, value-signal rules included. */
   findings: OkfFinding[];

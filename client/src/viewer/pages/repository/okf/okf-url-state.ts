@@ -11,6 +11,7 @@
  * | `okfBundle` | bundle root | all bundles |
  * | `okfHeat` | `calls` | `bytes` |
  * | `okfArticle` | KB article path whose drill-down is open | the tab overview |
+ * | `okfAgent` | session OKF tab only: the selected agent (tree filter + trail) | no agent |
  *
  * `okfArticle` is not a filter: it is kept out of `OKF_PARAM_KEYS`, so `writeOkfFilters` leaves
  * it alone and a filter change keeps the drill-down open. Leaving the tab still drops it, since
@@ -105,6 +106,52 @@ export function clearOkfArticle(p: URLSearchParams): URLSearchParams {
   return writeOkfArticle(p, null);
 }
 
+/**
+ * The session OKF tab's selected agent (package 3): it narrows the KB tree to the agent's reads
+ * and opens its trail in section B. An `okf*` param, so leaving the repo's OKF context drops it;
+ * `setSessionTab` drops it when the session leaves its OKF tab, and selecting another session
+ * drops it too.
+ */
+export const OKF_AGENT_PARAM = 'okfAgent';
+
+/** The agent selected on the session OKF tab, or `null`. */
+export function okfAgentFromParams(p: URLSearchParams): string | null {
+  return p.get(OKF_AGENT_PARAM) || null;
+}
+
+/** A copy of `p` with the session OKF tab's agent set to `agentId` (`null` clears it). */
+export function writeOkfAgent(
+  p: URLSearchParams,
+  agentId: string | null,
+): URLSearchParams {
+  const next = new URLSearchParams(p);
+  if (agentId) next.set(OKF_AGENT_PARAM, agentId);
+  else next.delete(OKF_AGENT_PARAM);
+  return next;
+}
+
+/**
+ * A copy of `p` that opens session `sessionId` on its OKF tab with agent `agentId`'s trail —
+ * the repo OKF drill-down's links. Like the OTEL tab's "open session", the repo tab (`mtab`)
+ * and its `okf*` filters are left, `tu` is dropped.
+ */
+export function okfSessionTrailParams(
+  p: URLSearchParams,
+  sessionId: string,
+  agentId: string,
+): URLSearchParams {
+  const next = new URLSearchParams(p);
+  for (const key of [...next.keys()]) {
+    if (key.startsWith('okf')) next.delete(key);
+  }
+  next.delete('mtab');
+  next.delete('tu');
+  next.set('session', sessionId);
+  next.set('tab', 'okf');
+  next.set(OKF_AGENT_PARAM, agentId);
+  return next;
+}
+
 /** `sfocus` value that scrolls Settings → Analysis to the OKF thresholds card. */
 export const OKF_THRESHOLDS_FOCUS = 'okf-thresholds';
 
@@ -126,6 +173,20 @@ export function okfThresholdsSettingsParams(
   next.set('mtab', 'settings');
   next.set('stab', 'analysis');
   next.set('sfocus', OKF_THRESHOLDS_FOCUS);
+  return next;
+}
+
+/**
+ * A copy of `p` that opens the repository OKF tab (`mtab=okf`) from a session's OKF tab — the
+ * same params `setMainTab('okf')` writes: the session selection (`session`, `tab`, `lens`, `tu`)
+ * is dropped; the tab's own `okf*` filters are kept (none are set from a session view).
+ */
+export function okfRepoTabParams(p: URLSearchParams): URLSearchParams {
+  const next = new URLSearchParams(p);
+  for (const key of ['session', 'tab', 'lens', 'tu', OKF_AGENT_PARAM]) {
+    next.delete(key);
+  }
+  next.set('mtab', 'okf');
   return next;
 }
 

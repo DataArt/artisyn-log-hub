@@ -77,7 +77,8 @@ Most repository routes are only `session`-guarded; the real check is in the hand
   - list/aggregate routes **row-filter** (a plain member sees only own rows, not a 403);
   - per-session `:sessionId` routes **403** when the owner is not visible
     (`assertSessionVisible`); the change-surface, OKF and OTEL session routes answer an
-    empty / `computed: false` payload for a session outside the scope instead of a 404;
+    empty / `computed: false` payload for a session outside the scope instead of a 404 (the
+    OKF agent trail is the exception: 404, since it names one agent of the tree);
   - `analytics/*`, `reports/*`, `otel/facts` and team OTEL **403** when `analyticsAllowed` is
     false; the session-list support routes (`sessions/branches`, `session-attribution/values`,
     `sessions/:sessionId/contexts`) are deliberately not analytics-gated;
@@ -271,6 +272,11 @@ grep the controller.
   invalid `okf` → 400 `okf.<field> …`; every settings response carries `okfDefaults` and
   `okfFixedLimits`.
 - `GET …/hook-state` answers 404 when the repo never reported hook state.
+- `GET …/sessions/:sessionId/okf-usage/trail?agent=` (the session OKF tab's agent trail) resolves
+  the same scope, 403 and team rules as `…/okf-usage` (`resolveChangeSurfaceSessionScope`), but
+  answers **404**, not the empty payload, when the session has no visible row in the scope or
+  `agent` is not a node of its tree; missing `agent` → 400. It reparses the node's stored
+  transcript per request (like the facts route) and writes nothing ([okf-usage.md](okf-usage.md)).
 - Each `reports/X` that mirrors an `analytics/X` returns a byte-identical body (same service).
 - `GET …/reports/okf-usage` and `GET …/reports/okf-usage/article?path=` (the per-article
   drill-down) share the scope and the 403 of `harness-usage` (`resolveUsageScope`) and the OKF
