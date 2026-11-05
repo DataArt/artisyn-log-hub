@@ -524,6 +524,13 @@ replace); the details-panel key is local state. Files: `client/src/viewer/live/`
   overlay (`app.css`, off under `prefers-reduced-motion`). Nothing flashes on the first answer.
 - **"Cost over time"** is one series named `Total` (an empty key would read "(unknown)" in
   `OtelCostChart`).
+- **Share page** (last carousel page, Home / team / No team / repository only): three doughnuts
+  side by side — cost or tokens by team, repository and user (`LiveSharePage`,
+  `live-share-data.ts`). Client-only, from `nodes`: the DISTINCT session roots under the selected
+  node with their lifetime totals, each counted once under its first placement in display order,
+  so every doughnut adds up to the same total. Each shows the top `LIVE_SHARE_TOP` (10) slices,
+  the rest folded into "Other (n)", the legend beside it (name and share; value in the hover hint;
+  a repository by its last path segment, full URL in the hint).
 - **Sankey** (`LiveFlowSankey`, below the carousel; not for an agent). The server adds
   `view.flows` (`loadOtelLiveFlows`: one `GROUP BY` over `otel_calls` in the 2 h window on the
   `(session_id, event_time)` index, ≤ `OTEL_LIVE_FLOW_ROWS`) — per root × model for a parent node,

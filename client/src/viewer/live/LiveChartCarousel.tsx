@@ -6,7 +6,7 @@
  */
 import { useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import type { OtelLiveView } from '../../models/otel-live';
+import type { OtelLiveNode, OtelLiveView } from '../../models/otel-live';
 import { OtelCostChart } from '../pages/repository/otel/OtelCostChart';
 import { OtelSegmented } from '../pages/repository/otel/OtelChartControls';
 import type { OtelMetric } from '../pages/repository/otel/otel-url-state';
@@ -16,6 +16,14 @@ import {
   type LiveLatencyChartPage,
 } from './live-chart-data';
 import { LiveLatencyChart } from './LiveLatencyChart';
+import { LiveSharePage } from './LiveSharePage';
+import { buildLiveShare } from './live-share-data';
+
+interface LiveSharePageRef {
+  kind: 'share';
+  id: 'share';
+  title: string;
+}
 
 const NO_NEW_KEYS: ReadonlySet<string> = new Set();
 
@@ -122,8 +130,29 @@ function LatencyPage({ page }: { page: LiveLatencyChartPage }) {
   );
 }
 
-export function LiveChartCarousel({ view }: { view: OtelLiveView }) {
-  const pages = useMemo(() => buildLiveChartPages(view), [view]);
+export function LiveChartCarousel({
+  view,
+  nodes,
+  selected,
+}: {
+  view: OtelLiveView;
+  nodes: readonly OtelLiveNode[];
+  selected: OtelLiveNode;
+}) {
+  const pages = useMemo(() => {
+    const list: (
+      | ReturnType<typeof buildLiveChartPages>[number]
+      | LiveSharePageRef
+    )[] = buildLiveChartPages(view);
+    if (buildLiveShare(nodes, selected, 'cost') !== null) {
+      list.push({
+        kind: 'share',
+        id: 'share',
+        title: 'Share by team / repository / user',
+      });
+    }
+    return list;
+  }, [view, nodes, selected]);
   const [pageId, setPageId] = useState<string>('cost');
   const found = pages.findIndex((p) => p.id === pageId);
   const index = found >= 0 ? found : 0;
@@ -170,11 +199,15 @@ export function LiveChartCarousel({ view }: { view: OtelLiveView }) {
           {page.title}
         </h3>
         <span className="text-xs text-muted-foreground">
-          · last 2 h, 5-min buckets
+          {page.kind === 'share'
+            ? '· totals since start'
+            : '· last 2 h, 5-min buckets'}
         </span>
       </div>
       {page.kind === 'buckets' ? (
         <BucketPage key={page.id} page={page} />
+      ) : page.kind === 'share' ? (
+        <LiveSharePage nodes={nodes} selected={selected} />
       ) : (
         <LatencyPage page={page} />
       )}

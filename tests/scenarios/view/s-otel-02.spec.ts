@@ -360,6 +360,18 @@ test('@S-OTEL-02 Live view: header entry, user-wide tree, node view, live update
     expect(liveParam(page), 'collapsing does not select').not.toBe(oldKey);
     await oldToggle.click();
     await expect(oldAgents.first()).toBeVisible();
+
+    // The last carousel page splits Home by team / repository / user: three doughnuts, the
+    // personal and «old» sessions under No team next to the team ones.
+    const carousel = page.getByTestId('live-chart-carousel');
+    await page.getByTestId('live-chart-prev').click();
+    await expect(carousel).toHaveAttribute('data-page', 'share');
+    const pies = carousel.getByTestId('live-share-pie');
+    await expect(pies).toHaveCount(3);
+    await expect(pies.nth(0)).toHaveAttribute('data-dimension', 'team');
+    await expect(pies.nth(0).getByTestId('live-share-legend-item').filter({ hasText: 'No team' })).toHaveCount(1);
+    expect(Number(await pies.nth(0).getAttribute('data-slices'))).toBeGreaterThanOrEqual(2);
+    await expect(pies.nth(2).getByTestId('live-share-legend-item').filter({ hasText: owner.user.email })).toHaveCount(1);
   });
 
   const repoAKey = await test.step('AC-5, AC-6. a selected repository shows the tiles, the FR-5 breakdown columns and the cost and tokens charts; the OTEL-only session is listed; after a realtime call the session’s Live cost = its session OTEL tab cost', async () => {

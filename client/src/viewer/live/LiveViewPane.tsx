@@ -138,7 +138,7 @@ export function LiveViewPane({
         </span>
       </div>
       <LiveKpiTiles node={node} view={res.view} />
-      <LiveChartCarousel view={res.view} />
+      <LiveChartCarousel view={res.view} nodes={res.nodes} selected={node} />
       <LiveFlowSankey view={res.view} nodes={res.nodes} selected={node} />
       <LiveBreakdownTable
         node={node}

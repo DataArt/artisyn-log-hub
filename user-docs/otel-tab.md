@@ -136,7 +136,9 @@ widths are remembered in your browser.
 
 **The middle pane** for the selected node: KPI tiles (cost, running time, live sessions and
 agents — or calls and model for an agent — and cost per minute), a chart carousel (cost, tokens, calls and cost by model,
-cost by structure, cost by skill / MCP server and, with traces on, LLM and tool latency p50 / p95)
+cost by structure, cost by skill / MCP server, with traces on LLM and tool latency p50 / p95, and on
+Home, a team or a repository three doughnuts side by side — cost or tokens by team, by repository
+and by user; these count each session's totals since start once, under its first team and repository)
 and a breakdown table of the node's children (cost, input, output, cache read and write, calls,
 running time, last activity). Below the charts, a **Cost flow** diagram shows where the cost of
 the last 2 hours went: from models to teams, users and sessions on Home, to users, repositories
