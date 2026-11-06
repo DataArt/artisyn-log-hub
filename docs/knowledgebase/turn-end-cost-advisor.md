@@ -121,6 +121,15 @@ model:
 The prompt tells the model not to claim *when* a figure was reached ("upfront", "early") unless that
 point's number is given — only the initial, current and peak context lines carry timing.
 
+**Isolation of the LLM call (both branches).** `callLlmAsync()` runs `claude -p` with
+`--tools= --strict-mcp-config --disable-slash-commands`: everything the model needs is in the
+prompt, so it gets no tools, MCP servers or skills. Both prompts fence the user prompts in a
+`<session_prompts>` block marked as data, then repeat the JSON-only instruction after it. Before
+this, a session whose last prompt was a live instruction had that instruction carried out by the
+evaluator (Grep, Bash, Write in the user's repo) and the run failed with "no JSON object found". An
+older Claude Code that rejects one of these flags with `unknown option` is retried once without
+them.
+
 ## Attribute extraction
 
 - **When it runs.** The config call reports a prompt watermark: the number of `prompt_start` events
@@ -135,6 +144,8 @@ point's number is given — only the initial, current and peak context lines car
   [db-tables.md](db-tables.md#session_attribution)).
 - **Failure cap.** After 3 consecutive failures for a session, the hook stops retrying until a
   success or a change of the attribute definitions resets the count (`session-attribution-state.js`).
+  The signature also carries `ATTRIBUTION_EVALUATOR_REVISION`; bumping it clears every streak
+  earned by an older evaluator.
 - **Filtering.** Session lists, charts and reports accept `attr=<key>:<op>:<value>` with a fixed
   operator set (`eq`, `is`, `any`, `gte`, `lte`, `isnull`, `unattributed`). One shared helper builds
   the predicate everywhere, so it matches the GIN index `idx_session_attribution_values_gin`.
