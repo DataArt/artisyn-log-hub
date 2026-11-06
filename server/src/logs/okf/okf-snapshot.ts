@@ -55,6 +55,49 @@ export interface OkfSnapshotBody {
 }
 
 /**
+ * Defensive shape check of a stored body (it is the hook's JSON, stored verbatim). Used by the
+ * OKF read side and by the access writer (`loadSnapshotFilesForNode`). A file with no numeric
+ * `size` gets 0, one with no string `hash` gets `''`.
+ */
+export function normaliseSnapshot(body: unknown): OkfSnapshotBody | null {
+  if (body === null || typeof body !== 'object') return null;
+  const rec = body as Partial<OkfSnapshotBody>;
+  if (typeof rec.okfSnapshotId !== 'string' || !Array.isArray(rec.bundles)) {
+    return null;
+  }
+  const bundles: OkfSnapshotBundle[] = rec.bundles
+    .filter(
+      (b): b is OkfSnapshotBundle =>
+        b !== null &&
+        typeof b === 'object' &&
+        typeof b.root === 'string' &&
+        typeof b.index === 'string',
+    )
+    .map((b) => ({
+      root: b.root,
+      index: b.index,
+      ignored: b.ignored === true,
+      files: (Array.isArray(b.files) ? b.files : [])
+        .filter(
+          (f) =>
+            f !== null && typeof f === 'object' && typeof f.path === 'string',
+        )
+        .map((f) => ({
+          path: f.path,
+          ignored: f.ignored === true,
+          size: typeof f.size === 'number' ? f.size : 0,
+          hash: typeof f.hash === 'string' ? f.hash : '',
+        })),
+    }));
+  return {
+    okfSnapshotId: rec.okfSnapshotId,
+    schemaVersion:
+      typeof rec.schemaVersion === 'number' ? rec.schemaVersion : 1,
+    bundles,
+  };
+}
+
+/**
  * Extracts and validates the first `okf-snapshot` line of an artisyn upload. The first line
  * that validates wins; every rejected line is logged, and the upload is still processed
  * otherwise unchanged.

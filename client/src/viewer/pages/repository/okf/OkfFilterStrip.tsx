@@ -228,7 +228,7 @@ export function OkfFilterStrip({
         </Field>
       ) : null}
 
-      <Field label={`Bundle (${bundleRoots.length} in this repo)`}>
+      <Field label={`KB folder (${bundleRoots.length} in this repo)`}>
         <Select.Root
           value={filters.bundle ?? ALL_BUNDLES}
           onValueChange={(v) =>
@@ -253,7 +253,7 @@ export function OkfFilterStrip({
             >
               <Select.Viewport>
                 <Select.Item value={ALL_BUNDLES} className={ITEM_CLASS}>
-                  <Select.ItemText>All bundles</Select.ItemText>
+                  <Select.ItemText>All KB folders</Select.ItemText>
                 </Select.Item>
                 {bundleOptions.map((root) => (
                   <Select.Item

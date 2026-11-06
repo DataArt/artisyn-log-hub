@@ -391,8 +391,9 @@ return from a hidden tab send one catch-up request.
 
 ## Live view (task `2026-11-04-otel-live-view`)
 
-A user-wide view of what is running **now**: a **Live** item in the top navigation (red dot +
-tooltip "Live now: N sessions · M agents · $x.xx") opens a modal with a tree (Home → team / No
+A user-wide view of what is running **now**: a **Live** item in the top navigation (activity icon
+glowing green while live + token sparkline; tooltip "Live now: N sessions · M agents · $x.xx total",
+"Last 15 min: …", or "Nothing live right now") opens a modal with a tree (Home → team / No
 team → repository → session → agent), a middle view pane (KPI tiles, chart carousel, breakdown or
 agent calls) and an optional details panel. OTEL data only. User help:
 `user-docs/otel-tab.md` § "Live view".

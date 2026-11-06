@@ -3,17 +3,25 @@
  * `computeSessionVerdict` (and `agentEntry` per node when `expected.entries` is given), `repo` rows
  * run `computeRepoVerdict`, after `applyOkfTeamFilter` when the row says `"team": true`. The input
  * shorthand (bundle file counts, row defaults, `count` expansion) is the one the doc's Examples
- * preamble defines.
+ * preamble defines. A row's raw `input.okf` goes through `resolveOkfThresholds` (absent = the
+ * defaults); `input.latestFiles` and a session's `files` feed the FR-10 hash maps.
  */
 import { loadExamples } from '../../../../scripts/algo-docs/load-examples.cjs';
 import type { OkfSnapshotBundle } from './okf-snapshot';
-import type { OkfAgentEntry, OkfOp, OkfVerdict } from './okf-usage.types';
+import { resolveOkfThresholds } from './okf-thresholds';
+import type {
+  OkfAgentEntry,
+  OkfOp,
+  OkfVerdict,
+  OkfVerdictCheckStatus,
+} from './okf-usage.types';
 import { applyOkfTeamFilter } from './okf-usage-tree';
 import {
   agentEntry,
   computeRepoVerdict,
   computeSessionVerdict,
   type OkfVerdictBundle,
+  type OkfVerdictFileHash,
   type OkfVerdictRow,
   type RepoVerdictSession,
 } from './okf-verdict';
@@ -36,23 +44,51 @@ interface RowSpec {
   calls?: number;
   afterOwnEdit?: boolean;
   seq?: number;
+  rangedCalls?: number;
+  rangedBytes?: number;
+  searchHits?: number;
+  nodeId?: string;
 }
+
+/** `path → {hash, size}` of one snapshot (FR-10, DD-18a). */
+type FilesSpec = Record<string, OkfVerdictFileHash>;
 
 interface VerdictInput {
   bundles: BundleSpec[] | null;
   nodes?: { agentId: string; count?: number; rows: RowSpec[] }[];
-  sessions?: { count?: number; hasSnapshot: boolean; rows: RowSpec[] }[];
+  sessions?: {
+    count?: number;
+    hasSnapshot: boolean;
+    rows: RowSpec[];
+    files?: FilesSpec;
+  }[];
+  /** Raw stored `okf` section; resolved field by field over the defaults. */
+  okf?: unknown;
+  latestFiles?: FilesSpec;
 }
 
 interface ExpectedFinding {
   rule: string;
   severity: string;
   params: Record<string, string | number>;
+  stale?: { sessions: number; total: number; oldSize: number | null };
+  removed?: boolean;
+}
+
+interface ExpectedCheck {
+  rule: string;
+  status: OkfVerdictCheckStatus;
+  params: Record<string, string | number | null>;
 }
 
 interface VerdictExpected {
   verdict:
-    | (Omit<OkfVerdict, 'findings'> & { findings: ExpectedFinding[] })
+    | (Omit<OkfVerdict, 'findings' | 'checks'> & {
+        findings: ExpectedFinding[];
+        upkeepOnlySessions?: number;
+        /** When given: the checks in order, rule + status exact, the listed params compared. */
+        checks?: ExpectedCheck[];
+      })
     | null;
   entries?: (OkfAgentEntry | null)[];
 }
@@ -91,7 +127,15 @@ function toRows(specs: RowSpec[]): OkfVerdictRow[] {
     bytes: r.bytes ?? 0,
     calls: r.calls ?? 1,
     seq: r.seq ?? i + 1,
+    ...(r.rangedCalls !== undefined ? { rangedCalls: r.rangedCalls } : {}),
+    ...(r.rangedBytes !== undefined ? { rangedBytes: r.rangedBytes } : {}),
+    ...(r.searchHits !== undefined ? { searchHits: r.searchHits } : {}),
+    ...(r.nodeId !== undefined ? { nodeId: r.nodeId } : {}),
   }));
+}
+
+function toFileMap(spec: FilesSpec): Map<string, OkfVerdictFileHash> {
+  return new Map(Object.entries(spec));
 }
 
 /** Expands `count: N` into N copies, named `<name>-1` … `<name>-N`. */
@@ -118,14 +162,39 @@ function expectVerdict(
     return;
   }
   expect(actual).not.toBeNull();
-  const { findings, ...head } = expected;
-  const { findings: actualFindings, ...actualHead } = actual!;
+  const { findings, checks, ...head } = expected;
+  const {
+    findings: actualFindings,
+    checks: actualChecks,
+    ...actualHead
+  } = actual!;
   expect(actualHead).toEqual(head);
+  // Every verdict carries one check per structure rule of its level.
+  expect(actualChecks).toBeDefined();
+  if (checks !== undefined) {
+    expect(actualChecks!.map((c) => [c.rule, c.status])).toEqual(
+      checks.map((c) => [c.rule, c.status]),
+    );
+    checks.forEach((want, i) => {
+      const got = actualChecks![i].params;
+      for (const [key, value] of Object.entries(want.params)) {
+        if (typeof value === 'number' && !Number.isInteger(value)) {
+          expect(Math.abs(Number(got[key]) - value)).toBeLessThan(
+            SHARE_TOLERANCE,
+          );
+        } else {
+          expect(got[key]).toBe(value);
+        }
+      }
+    });
+  }
   expect(actualFindings).toHaveLength(findings.length);
   findings.forEach((want, i) => {
     const got = actualFindings[i];
     expect(got.rule).toBe(want.rule);
     expect(got.severity).toBe(want.severity);
+    expect(got.stale).toEqual(want.stale);
+    expect(got.removed ?? false).toBe(want.removed ?? false);
     for (const [key, value] of Object.entries(want.params)) {
       if (key === 'share' || key === 'ratio') {
         expect(Math.abs(Number(got.params[key]) - Number(value))).toBeLessThan(
@@ -143,12 +212,16 @@ it.each(rows)('$id', (row) => {
   const snapshotBundles =
     input.bundles === null ? null : toSnapshotBundles(input.bundles);
   const bundles: OkfVerdictBundle[] | null = snapshotBundles;
+  const thresholds = resolveOkfThresholds(input.okf);
 
   if (row.kind === 'session') {
     const nodes = expand(input.nodes ?? [], (n, _k, i) =>
       i === undefined ? n.agentId : `${n.agentId}-${i}`,
     ).map(({ item, name }) => ({ agentId: name, rows: toRows(item.rows) }));
-    expectVerdict(computeSessionVerdict({ nodes, bundles }), expected.verdict);
+    expectVerdict(
+      computeSessionVerdict({ nodes, bundles }, thresholds),
+      expected.verdict,
+    );
     if (expected.entries !== undefined) {
       expect(nodes.map((n) => agentEntry(n.rows, bundles))).toEqual(
         expected.entries,
@@ -158,14 +231,23 @@ it.each(rows)('$id', (row) => {
   }
 
   expect(row.kind).toBe('repo');
-  let sessions: RepoVerdictSession[] = expand(
+  const expanded = expand(
     input.sessions ?? [],
     (_s, k, i) => `s${k}-${i ?? 0}`,
-  ).map(({ item, name }) => ({
+  );
+  let sessions: RepoVerdictSession[] = expanded.map(({ item, name }) => ({
     sessionId: name,
     hasSnapshot: item.hasSnapshot,
     rows: toRows(item.rows),
   }));
+  const sessionFiles = new Map<string, Map<string, OkfVerdictFileHash>>();
+  for (const { item, name } of expanded) {
+    if (item.files !== undefined) sessionFiles.set(name, toFileMap(item.files));
+  }
+  const hashMaps =
+    input.latestFiles !== undefined
+      ? { sessionFiles, latestFiles: toFileMap(input.latestFiles) }
+      : {};
   let repoBundles: OkfVerdictBundle[] | null = bundles;
   if (row.team === true) {
     const filtered = applyOkfTeamFilter(
@@ -190,7 +272,10 @@ it.each(rows)('$id', (row) => {
     repoBundles = filtered.bundles;
   }
   expectVerdict(
-    computeRepoVerdict({ sessions, bundles: repoBundles }),
+    computeRepoVerdict(
+      { sessions, bundles: repoBundles, ...hashMaps },
+      thresholds,
+    ),
     expected.verdict,
   );
 });

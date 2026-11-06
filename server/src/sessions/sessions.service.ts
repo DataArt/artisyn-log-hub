@@ -25,6 +25,8 @@ import {
   sessionCosts,
   sessionFileStats,
   sessionOkfAccess,
+  sessionOkfEvent,
+  sessionOkfPointer,
   sessionStats,
   sessionToolUsage,
   sessions,
@@ -234,6 +236,13 @@ export class SessionsService {
     await tx
       .delete(sessionOkfAccess)
       .where(inArray(sessionOkfAccess.sessionId, ids));
+    // c2b. Delete session_okf_event and session_okf_pointer — same reason as c2.
+    await tx
+      .delete(sessionOkfEvent)
+      .where(inArray(sessionOkfEvent.sessionId, ids));
+    await tx
+      .delete(sessionOkfPointer)
+      .where(inArray(sessionOkfPointer.sessionId, ids));
 
     // c3. Delete session_tool_usage (derived MCP / CLI tool usage) — same reason as c2.
     await tx
@@ -268,9 +277,15 @@ export class SessionsService {
 
     // g. Clear the harness (DD-11) and OKF snapshot references on these sessions — must run
     // before h, since h's orphan test is "no session references this snapshot id any more".
+    // The OKF extraction marker (DD-11) is reset with them: the OKF rows are gone.
     await tx
       .update(sessions)
-      .set({ harnessSnapshotId: null, okfSnapshotId: null })
+      .set({
+        harnessSnapshotId: null,
+        okfSnapshotId: null,
+        okfExtractVersion: null,
+        okfEventsTruncated: false,
+      })
       .where(inArray(sessions.id, ids));
 
     // h. Delete every harness_snapshots row no session references any more (DD-11), across

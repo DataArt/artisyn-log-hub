@@ -37,3 +37,14 @@ numbers.
   routing miss (29 of 33 agents searched its area without it); `hook-system-overview.md` paths
   written relative to `hook/.claude/telemetry_tool/` (agents looked for `scripts/hook-log.js`,
   already changed in 582ff31); `algorithms/README.md` 21 dead pointers.
+
+## 2026-11-05 — Accepted perf regression
+
+- `npm run perf` (`tmp/perftests/results_2026-11-05_15-25-54.json`) showed
+  `repos:session-okf-usage-heavy` (`GET /api/v1/repositories/:repoId/sessions/:sid/okf-usage`,
+  heavy ~5 MB session + sub-agent, 20 iterations): mean 5.09 → 22.93 ms, p95 5.74 → 26.99 ms,
+  p50 5.06 → 12.88 ms, p99 5.98 → 188.67 ms (first-hit outlier). Budget 500 ms.
+- Likely cause (not profiled): the route now also reads `session_okf_event` / `session_okf_pointer` and computes the
+  value signals (yield, routing misses, upkeep, searches).
+- The user accepted it on 2026-11-05. Only this endpoint's entry in `tmp/perftests/baseline.json`
+  was updated from that results file; every other baseline entry is unchanged.

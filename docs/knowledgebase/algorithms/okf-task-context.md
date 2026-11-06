@@ -37,10 +37,14 @@ task is often just a one-line question, which stays as it is.
 3. If `t` starts with `<command-message>` (a real slash command): `name` = the text of
    `<command-name>…</command-name>` with whitespace collapsed and leading `/` removed; empty →
    `null`. `args` = the text of `<command-args>…</command-args>` with every
-   `<system-reminder>…</system-reminder>` block replaced by a space and whitespace collapsed.
+   `<system-reminder>…</system-reminder>` block and every `<pasted_content …>` /
+   `</pasted_content>` tag replaced by a space and whitespace collapsed.
    Result `/<name> <args>`, or `/<name>` when `args` is empty.
-4. Otherwise every `<system-reminder>…</system-reminder>` block is replaced by a space, every run
-   of whitespace becomes one space, the ends are trimmed; an empty result → `null`.
+4. Otherwise every `<system-reminder>…</system-reminder>` block is replaced by a space, and so is
+   every `<pasted_content …>` opening tag (any attributes; one cut off at the very end of a
+   truncated prompt counts too) and `</pasted_content>` closing tag — the pasted text itself is
+   kept, a missing closing tag is fine. Then every run of whitespace becomes one space, the ends
+   are trimmed; an empty result → `null`.
 
 **`filterUserPrompts(entries, { isSubagentLog })`** returns the cleaned prompts in order. An entry
 is a candidate only when `type` is `user`, it is not `isMeta`, it has no `toolUseResult`, its
@@ -56,6 +60,8 @@ is a candidate only when `type` is `user`, it is not `isMeta`, it has no `toolUs
   `<local-command-stdout>` TC-07, `<local-command-caveat>` TC-08, `<bash-stdout>` TC-09.
 - One-line question kept unchanged: TC-05.
 - Embedded system reminder stripped, whitespace collapsed: TC-06.
+- Pasted-content wrapper stripped, inner text kept: TC-16; closing tag missing (truncated
+  prompt): TC-17; opening tag cut off at the end: TC-18.
 - Whitespace only: TC-12. A dropped tag that is not at the start: TC-13.
 - Entry filter (meta, block-array tool result, `toolUseResult`, assistant, sidechain in a root log,
   `/clear`): TC-14. Sidechain lines kept in a sub-agent log: TC-15.
@@ -67,7 +73,7 @@ A row has either `input.text` — the test runs `cleanTaskText(text)` and compar
 `input.subagent` (`isSubagentLog`, default false) — the test runs `filterUserPrompts` and compares
 with `expected.prompts`.
 
-Rows (15): [`docs/algorithm-examples/okf-task-context.json`](../../algorithm-examples/okf-task-context.json) — test data for the table test; the rules above are enough to understand the algorithm.
+Rows (18): [`docs/algorithm-examples/okf-task-context.json`](../../algorithm-examples/okf-task-context.json) — test data for the table test; the rules above are enough to understand the algorithm.
 
 ## Mutations
 
@@ -78,6 +84,8 @@ Rows (15): [`docs/algorithm-examples/okf-task-context.json`](../../algorithm-exa
 - Slash-command args kept raw (reminder or extra spaces left) -> TC-11; a trailing space for empty
   args -> TC-10.
 - Whitespace not collapsed -> TC-06; whitespace-only kept as `''` -> TC-12.
+- Pasted-content tags left in -> TC-16; the inner text dropped with them -> TC-16, TC-17; the
+  opening tag required to end with `>` -> TC-18.
 - `isMeta`, `toolUseResult` or the sidechain check missing from the entry filter -> TC-14;
   sidechain excluded in a sub-agent log -> TC-15.
 

@@ -5,6 +5,12 @@ import type { ContractFamily } from '../types';
 import { MONTH, ROOTS_AND_TREES } from './f20-analytics';
 import { treeCostSql, treeCostWithOtelSubagentsSql } from './oracle-sql';
 
+/**
+ * Root sessions of R1 listed for the owner in January (golden; the same count is proven against
+ * SQL as `tiles.totalSessions` by F21-okf-usage).
+ */
+const OKF_PERIOD_ROOTS = 3;
+
 export const f21Reports: ContractFamily = {
   id: 'F21',
   name: 'reports',
@@ -378,6 +384,13 @@ export const f21Reports: ContractFamily = {
       actor: 'owner',
       params: { repoId: '@R1.id' },
       query: MONTH,
+      //
+      // 2026-11-03 value signals: FR-11 counts the period roots whose `okf_extract_version` is
+      // NULL or older than the extractor (3) — every root but s02. Pointer yield (FR-1) over the
+      // tree's non-partial reads that showed a new pointer: s02's index.md read (scheduler.md,
+      // not followed) and s03's first scheduler.md read (scheduler.ts followed) → 1 of 2. No
+      // write rows, so no upkeep; no node searched an area 3 times, so no routing miss. The
+      // owner owns T1, which links R1, so it may recompute; it set no OKF thresholds.
       expect: {
         status: 200,
         bodyMatches: {
@@ -386,6 +399,9 @@ export const f21Reports: ContractFamily = {
             takenAt: '2026-01-11T09:00:00.000Z',
             branch: 'main',
           },
+          thresholds: { custom: [] },
+          upkeep: [],
+          canRecompute: true,
         },
       },
       read: {
@@ -397,14 +413,26 @@ export const f21Reports: ContractFamily = {
                            JOIN sessions s ON s.id = r.id
                            JOIN okf_snapshots o ON o.snapshot_id = s.okf_snapshot_id
                                                AND o.user_id = r.user_id
-                          ORDER BY r.start_time DESC LIMIT 1)
+                          ORDER BY r.start_time DESC LIMIT 1),
+              shown AS (SELECT p.session_id, p.read_ord, bool_or(p.followed) AS followed
+                          FROM tree t JOIN session_okf_pointer p ON p.session_id = t.id
+                         WHERE p.is_new AND NOT p.partial
+                         GROUP BY p.session_id, p.read_ord)
               SELECT (SELECT count(*) FROM roots) AS total_sessions,
                      (SELECT count(DISTINCT root_id) FROM acc) AS kb_sessions,
                      (SELECT count(*) FROM latest, jsonb_array_elements(latest.body->'bundles') b,
                                       jsonb_array_elements(b->'files') f) AS kb_files,
                      (SELECT count(*) FROM latest, jsonb_array_elements(latest.body->'bundles') b,
                                       jsonb_array_elements(b->'files') f
-                       WHERE f->>'path' NOT IN (SELECT path_key FROM acc)) AS not_read`,
+                       WHERE f->>'path' NOT IN (SELECT path_key FROM acc)) AS not_read,
+                     (SELECT count(*) FROM roots) AS in_period,
+                     (SELECT count(*) FROM roots r JOIN sessions s ON s.id = r.id
+                       WHERE s.okf_extract_version IS NULL
+                          OR s.okf_extract_version < 3) AS without_analysis,
+                     (SELECT jsonb_build_object('k', count(*) FILTER (WHERE followed),
+                                                'n', count(*))
+                        FROM shown) AS pointer_yield,
+                     0 AS upkeep_only, 0 AS routing_articles, 0 AS routing_pairs`,
         args: ['@R1.id'],
         shape: 'object',
         path: 'tiles',
@@ -413,6 +441,12 @@ export const f21Reports: ContractFamily = {
           kbSessions: { col: 'kb_sessions', as: 'number' },
           kbFiles: { col: 'kb_files', as: 'number' },
           notRead: { col: 'not_read', as: 'number' },
+          sessionsInPeriod: { col: 'in_period', as: 'number' },
+          sessionsWithoutAnalysis: { col: 'without_analysis', as: 'number' },
+          pointerYield: { col: 'pointer_yield', as: 'json' },
+          upkeepOnlySessions: { col: 'upkeep_only', as: 'number' },
+          routingMissArticles: { col: 'routing_articles', as: 'number' },
+          routingMissPairs: { col: 'routing_pairs', as: 'number' },
         },
       },
     },
@@ -433,8 +467,8 @@ export const f21Reports: ContractFamily = {
           verdict: {
             level: 'not_enough_data',
             qualifiers: [],
-            findings: ['docs/kb/private.md', 'docs/kb/scheduler.md'].map(
-              (path) => ({
+            findings: [
+              ...['docs/kb/private.md', 'docs/kb/scheduler.md'].map((path) => ({
                 rule: 'always_read',
                 severity: 'fix',
                 params: {
@@ -445,15 +479,88 @@ export const f21Reports: ContractFamily = {
                   share: 1,
                 },
                 node: { bundle: 'docs/kb', path },
-              }),
-            ),
+              })),
+              // Value-signal findings follow the structure findings: s03 searched scheduler.md's
+              // area twice after reading it (F21-okf-article).
+              {
+                rule: 'searched_after',
+                severity: 'fix',
+                params: {
+                  file: 'docs/kb/scheduler.md',
+                  patterns: 'cronTick, runJob',
+                  agents: 1,
+                  searches: 2,
+                },
+                node: { bundle: 'docs/kb', path: 'docs/kb/scheduler.md' },
+              },
+            ],
+            // Checks (2026-11-05, okf-verdict.md rule 14): 1 KB session of the period's roots
+            // (`tiles.totalSessions`, proven by F21-okf-usage), below the minimum 5; the
+            // 2-article bundle is too small for kb_flood; private.md comes first of the two
+            // 1-of-1 articles; no article reaches 50 KB.
+            checks: [
+              {
+                rule: 'kb_sessions',
+                status: 'na',
+                params: {
+                  kbSessions: 1,
+                  sessions: OKF_PERIOD_ROOTS,
+                  minimum: 5,
+                  upkeepOnly: 0,
+                },
+              },
+              {
+                rule: 'kb_flood',
+                status: 'na',
+                params: {
+                  reason: 'small_bundles',
+                  floodShare: 0.25,
+                  minSessions: 3,
+                  minFiles: 10,
+                },
+              },
+              {
+                rule: 'always_read',
+                status: 'finding',
+                params: {
+                  bundle: 'docs/kb',
+                  path: 'docs/kb/private.md',
+                  sessions: 1,
+                  kbSessions: 1,
+                  share: 1,
+                  threshold: 0.8,
+                },
+              },
+              {
+                rule: 'coarse_article',
+                status: 'na',
+                params: {
+                  reason: 'no_big_articles',
+                  bigArticles: 0,
+                  minSize: 51200,
+                  maxRatio: 0.1,
+                  minSessions: 5,
+                },
+              },
+            ],
           },
         },
       },
       read: {
-        sql: `${ROOTS_AND_TREES}
+        // `yield` (FR-1): per file, the non-partial reads that showed a new pointer (n) and
+        // those with one followed (k); null when no read showed one (private.md).
+        sql: `${ROOTS_AND_TREES},
+              shown AS (SELECT p.article_path, p.session_id, p.read_ord,
+                               bool_or(p.followed) AS followed
+                          FROM tree t JOIN session_okf_pointer p ON p.session_id = t.id
+                         WHERE p.is_new AND NOT p.partial
+                         GROUP BY p.article_path, p.session_id, p.read_ord)
               SELECT 'docs/kb' AS bundle, a.path_key, sum(a.bytes) AS read_bytes,
-                     count(DISTINCT t.root_id) AS sessions
+                     count(DISTINCT t.root_id) AS sessions,
+                     (SELECT CASE WHEN count(*) = 0 THEN NULL
+                                  ELSE jsonb_build_object('k', count(*) FILTER (WHERE followed),
+                                                          'n', count(*)) END
+                        FROM shown WHERE shown.article_path = a.path_key) AS yield
                 FROM tree t JOIN session_okf_access a ON a.session_id = t.id
                WHERE a.op IN ('read', 'grep') AND a.path_key LIKE 'docs/kb/%'
                  AND a.path_key NOT LIKE '%/'
@@ -469,6 +576,7 @@ export const f21Reports: ContractFamily = {
           path: 'path_key',
           readBytes: { col: 'read_bytes', as: 'number' },
           sessions: { col: 'sessions', as: 'number' },
+          yield: { col: 'yield', as: 'json' },
         },
         strict: true,
       },
@@ -480,6 +588,136 @@ export const f21Reports: ContractFamily = {
       params: { repoId: '@R1.id' },
       query: MONTH,
       expect: { status: 403 },
+    },
+    {
+      // Per-article drill-down (2026-11-03 value signals, DD-23) of scheduler.md, read only by
+      // s03: two read calls, one of them a section read (FR-4), none partial and no upkeep.
+      // The pointer list, the area and the yield are an algorithm (okf-value-signals.md) and
+      // are golden here: of the first read's two new code pointers scheduler.ts was followed
+      // and legacy-cron.ts was not (shown in one node only, below deadPointerMinShown, so not
+      // dead). Both are files under the `server/` code root, so both are the article's area.
+      id: 'F21-okf-article',
+      route: 'GET /api/v1/repositories/:repoId/reports/okf-usage/article',
+      actor: 'owner',
+      params: { repoId: '@R1.id' },
+      query: { ...MONTH, path: 'docs/kb/scheduler.md' },
+      expect: {
+        status: 200,
+        bodyMatches: {
+          found: true,
+          path: 'docs/kb/scheduler.md',
+          bundle: 'docs/kb',
+          size: 2000,
+          hashStatus: 'current',
+          areaFromOlderVersion: false,
+          yield: { k: 1, n: 1 },
+          area: ['server/src/legacy-cron.ts', 'server/src/scheduler.ts'],
+          catalog: null,
+          // `notFound` is only ever set on a dead pointer (FR-13).
+          pointers: [
+            {
+              pointer: 'server/src/legacy-cron.ts',
+              shown: 1,
+              followed: 0,
+              dead: false,
+              notFound: false,
+            },
+            {
+              pointer: 'server/src/scheduler.ts',
+              shown: 1,
+              followed: 1,
+              dead: false,
+              notFound: false,
+            },
+          ],
+          // s03 searched the area (scheduler.ts) but read the article, so it is no miss.
+          routingMiss: { agents: 0, areaAgents: 1, patterns: [], missing: [] },
+          // s03 grepped scheduler.ts twice after its first read (= exploredMinSearches 2): one
+          // searched-after pair. Package 3: the pair names the root session (s02) to open, the
+          // agent (s03) whose trail to show and its description.
+          searchedAfter: {
+            agents: 1,
+            searches: 2,
+            patterns: [
+              { pattern: 'cronTick', count: 1 },
+              { pattern: 'runJob', count: 1 },
+            ],
+            pairs: [
+              {
+                sessionId: '@s02.sessionId',
+                agentId: '@s03.sessionId',
+                label: 'contract-desc',
+                searches: 2,
+              },
+            ],
+          },
+          findings: [
+            {
+              rule: 'always_read',
+              severity: 'fix',
+              params: {
+                bundle: 'docs/kb',
+                path: 'docs/kb/scheduler.md',
+                sessions: 1,
+                kbSessions: 1,
+                share: 1,
+              },
+              node: { bundle: 'docs/kb', path: 'docs/kb/scheduler.md' },
+            },
+            {
+              rule: 'searched_after',
+              severity: 'fix',
+              params: {
+                file: 'docs/kb/scheduler.md',
+                patterns: 'cronTick, runJob',
+                agents: 1,
+                searches: 2,
+              },
+              node: { bundle: 'docs/kb', path: 'docs/kb/scheduler.md' },
+            },
+          ],
+          sameFindingElsewhere: [
+            { path: 'docs/kb/private.md', rule: 'always_read', value: 1 },
+          ],
+        },
+      },
+      read: {
+        sql: `${ROOTS_AND_TREES}
+              SELECT coalesce(sum(a.calls - a.ranged_calls), 0) AS whole,
+                     coalesce(sum(a.ranged_calls), 0) AS section,
+                     0 AS upkeep,
+                     (SELECT count(DISTINCT (p.session_id, p.read_ord))
+                        FROM tree t2 JOIN session_okf_pointer p ON p.session_id = t2.id
+                       WHERE p.article_path = 'docs/kb/scheduler.md' AND p.partial) AS partial
+                FROM tree t JOIN session_okf_access a ON a.session_id = t.id
+               WHERE a.op = 'read' AND a.path_key = 'docs/kb/scheduler.md'`,
+        args: ['@R1.id'],
+        shape: 'object',
+        path: 'reads',
+        fields: {
+          whole: { col: 'whole', as: 'number' },
+          section: { col: 'section', as: 'number' },
+          upkeep: { col: 'upkeep', as: 'number' },
+          partial: { col: 'partial', as: 'number' },
+        },
+        strict: true,
+      },
+    },
+    {
+      id: 'F21-okf-article-outsider',
+      route: 'GET /api/v1/repositories/:repoId/reports/okf-usage/article',
+      actor: 'outsider',
+      params: { repoId: '@R1.id' },
+      query: { ...MONTH, path: 'docs/kb/scheduler.md' },
+      expect: { status: 403 },
+    },
+    {
+      id: 'F21-okf-article-missing-path',
+      route: 'GET /api/v1/repositories/:repoId/reports/okf-usage/article',
+      actor: 'owner',
+      params: { repoId: '@R1.id' },
+      query: MONTH,
+      expect: { status: 400 },
     },
     {
       // One section per attribute; a row per stored value, plus "Not determined" (evaluated, no

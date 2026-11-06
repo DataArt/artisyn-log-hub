@@ -21,8 +21,11 @@ const BAR_AREA_PX = 96;
 
 export function OkfShareHistogram({
   bins,
+  minBundleFiles = null,
 }: {
   bins: RepoOkfUsageResponse['shareBins'];
+  /** `shareMinBundleFiles` in effect; smaller bundles are skipped (FR-6). Null hides the caption. */
+  minBundleFiles?: number | null;
 }) {
   const counts = new Map(bins.map((b) => [b.bin, b.sessions]));
   const total = bins.reduce((s, b) => s + b.sessions, 0);
@@ -36,6 +39,14 @@ export function OkfShareHistogram({
       <div className="mb-2 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
         File share per session · {total.toLocaleString()} sessions
       </div>
+      {minBundleFiles !== null ? (
+        <div
+          data-testid="okf-share-histogram-caption"
+          className="-mt-1 mb-2 text-[11px] text-muted-foreground"
+        >
+          KB folders of ≥ {minBundleFiles} files
+        </div>
+      ) : null}
       {total === 0 ? (
         <div className="py-4 text-center text-xs text-muted-foreground">
           No snapshot-bound KB session

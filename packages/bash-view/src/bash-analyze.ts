@@ -82,9 +82,117 @@ const LIST_CMDS = /^(ls|find|tree|dir)$/;
 /** How a command reached a read path: its content, a search through it, or a directory listing. */
 export type BashReadKind = 'read' | 'grep' | 'list';
 
+/** A line range of a read: 1-based, `to` inclusive; `to: null` = to the end; a negative `from` counts from the end. */
+export interface BashReadRange {
+  from: number;
+  to: number | null;
+}
+
 export interface BashReadAccess {
   path: string;
   kind: BashReadKind;
+  /** Line range of a `sed -n 'a,bp'` / `head -n N` / `tail -n N` read; only when known. */
+  range?: BashReadRange;
+  /** Search pattern of a `grep`-kind read (first non-option argument or the `-e` value); only when known. */
+  pattern?: string;
+}
+
+/** The optional extras of one read access, taken from the first command that read the path. */
+type ReadMeta = Pick<BashReadAccess, 'range' | 'pattern'>;
+
+/** Positive integer of a literal argument, or null. */
+const posInt = (s: string | null | undefined): number | null =>
+  s !== null && s !== undefined && /^\d+$/.test(s) ? Number(s) : null;
+
+/**
+ * `head` / `tail` line count: `-n N`, `-nN`, `--lines=N`, `--lines N` or `-N`. For `tail` a `+N`
+ * count means "from line N". Null when absent or not a plain number (`-n -5`, `-c 10`).
+ */
+function headTailRange(
+  base: 'head' | 'tail',
+  args: (string | null)[],
+): BashReadRange | null {
+  let count: string | null = null;
+  for (let k = 0; k < args.length; k++) {
+    const a = args[k];
+    if (a === null) continue;
+    if (a === '-n' || a === '--lines') count = args[++k] ?? null;
+    else if (a.startsWith('--lines=')) count = a.slice('--lines='.length);
+    else if (/^-n.+/.test(a)) count = a.slice(2);
+    else if (/^-\d+$/.test(a)) count = a.slice(1);
+  }
+  if (count === null) return null;
+  if (base === 'tail' && /^\+\d+$/.test(count)) {
+    const from = Number(count.slice(1));
+    return { from: Math.max(from, 1), to: null };
+  }
+  const n = posInt(count);
+  if (n === null) return null;
+  return base === 'head' ? { from: 1, to: n } : { from: -n, to: null };
+}
+
+/** `sed -n` print script `a,bp` / `Np` → its line range, else null. */
+function sedPrintRange(script: string | null | undefined): BashReadRange | null {
+  if (script === null || script === undefined) return null;
+  const m = /^\s*(\d+)(?:\s*,\s*(\d+))?\s*p\s*;?\s*$/.exec(script);
+  if (!m) return null;
+  const from = Number(m[1]);
+  const to = m[2] === undefined ? from : Number(m[2]);
+  return { from, to };
+}
+
+/** Search-command options whose value is the next argument (so it is neither pattern nor path). */
+const GREP_VALUE_FLAGS = new Set([
+  '-A',
+  '-B',
+  '-C',
+  '-m',
+  '--max-count',
+  '-g',
+  '--glob',
+  '-t',
+  '--type',
+  '-T',
+  '--type-not',
+  '--include',
+  '--exclude',
+]);
+
+/**
+ * Pattern and path arguments of a search command's arguments (`grep`-like, or `git grep` after
+ * the sub-command): the first `-e` / `--regexp` value, else the first positional; the paths are
+ * the positionals after the pattern (all positionals when `-e` gave it), and everything after `--`.
+ */
+function grepArgs(args: (string | null)[]): {
+  pattern: string | null;
+  paths: (string | null)[];
+} {
+  let pattern: string | null | undefined;
+  let fromFlag = false;
+  const pos: (string | null)[] = [];
+  for (let k = 0; k < args.length; k++) {
+    const a = args[k];
+    if (a === '--') {
+      pos.push(...args.slice(k + 1));
+      break;
+    }
+    if (a === '-e' || a === '--regexp') {
+      const v = args[++k] ?? null;
+      if (!fromFlag) pattern = v;
+      fromFlag = true;
+    } else if (a !== null && a.startsWith('--regexp=')) {
+      if (!fromFlag) pattern = a.slice('--regexp='.length);
+      fromFlag = true;
+    } else if (a === '-f' || a === '--file') {
+      // Patterns from a file: the pattern is not known, and no positional is the pattern.
+      k++;
+      if (!fromFlag) pattern = null;
+      fromFlag = true;
+    } else if (a !== null && GREP_VALUE_FLAGS.has(a)) k++;
+    else if (a === null || !a.startsWith('-')) pos.push(a);
+  }
+  if (!fromFlag) pattern = pos.shift();
+  return { pattern: pattern ?? null, paths: pos };
 }
 
 /** `readAccess` kind of a read path by the base name of the command that reads it. */
@@ -194,6 +302,8 @@ function analyzeTree(rootNode: Node): BashAnalysis {
   const read: string[] = [];
   /** `readAccess` kind per read path; the first read wins, like the order of `read`. */
   const readKind = new Map<string, BashReadKind>();
+  /** `range` / `pattern` per read path, from the same first read as `readKind`. */
+  const readMeta = new Map<string, ReadMeta>();
   const runs: string[] = [];
   const scripts: InlineScript[] = [];
   /** Start offsets of the script commands already noted (rule 5.3). */
@@ -205,6 +315,7 @@ function analyzeTree(rootNode: Node): BashAnalysis {
     st: WalkState,
     p: string | null,
     kind: BashReadKind = 'read',
+    meta: ReadMeta = {},
   ): void => {
     if (p === null) {
       unresolved++;
@@ -215,7 +326,10 @@ function analyzeTree(rootNode: Node): BashAnalysis {
     // A device is ignored however it is reached (`/dev/null`, `../dev/null` from `/tmp`).
     if (full.startsWith('/dev/')) return;
     if (!list.includes(full)) list.push(full);
-    if (list === read && !readKind.has(full)) readKind.set(full, kind);
+    if (list === read && !readKind.has(full)) {
+      readKind.set(full, kind);
+      readMeta.set(full, meta);
+    }
   };
   const run = (label: string): void => {
     if (!runs.includes(label)) runs.push(label);
@@ -265,11 +379,30 @@ function analyzeTree(rootNode: Node): BashAnalysis {
       return;
     }
     if (W_CMDS.has(base)) pos.forEach((p) => add(written, st, p));
-    else if (R_CMDS.has(base))
-      pos.forEach((p) => add(read, st, p, readKindOf(base)));
-    else if (base === 'grep' || base === 'rg')
-      pos.slice(1).forEach((p) => add(read, st, p, readKindOf(base)));
-    else if (base === 'sed') {
+    else if (R_CMDS.has(base)) {
+      const range =
+        base === 'head' || base === 'tail' ? headTailRange(base, args) : null;
+      pos
+        // `tail -n +5`: the `+N` count is not a path.
+        .filter((p) => !(range && p !== null && /^\+\d+$/.test(p)))
+        .forEach((p) =>
+          add(read, st, p, readKindOf(base), range ? { range } : {}),
+        );
+    } else if (base === 'grep' || base === 'rg') {
+      const g = grepArgs(args);
+      const meta: ReadMeta = g.pattern !== null ? { pattern: g.pattern } : {};
+      g.paths.forEach((p) => add(read, st, p, 'grep', meta));
+    } else if (
+      base === 'git' &&
+      args[0] === 'grep' &&
+      grepArgs(args.slice(1)).paths.length > 0
+    ) {
+      // `git grep <pattern> <paths>` searches like `grep`; without paths it searches the whole
+      // tree and stays a `git grep` run.
+      const g = grepArgs(args.slice(1));
+      const meta: ReadMeta = g.pattern !== null ? { pattern: g.pattern } : {};
+      g.paths.forEach((p) => add(read, st, p, 'grep', meta));
+    } else if (base === 'sed') {
       const inPlace = flags.some(
         (f) => /^-i/.test(f) || /^--in-place(=|$)/.test(f),
       );
@@ -277,26 +410,43 @@ function analyzeTree(rootNode: Node): BashAnalysis {
       // `-f <file>` / `--file <file>` give a script file (a read). Either means no positional
       // is the script.
       let scriptGiven = false;
+      /** The first `-e` script, when one is given that way. */
+      let exprScript: string | null | undefined;
       const files: (string | null)[] = [];
       for (let k = 0; k < args.length; k++) {
         const a = args[k];
         if (a === '-e' || a === '--expression') {
           scriptGiven = true;
           k++;
+          if (exprScript === undefined) exprScript = args[k] ?? null;
         } else if (a === '-f' || a === '--file') {
           scriptGiven = true;
           k++;
           add(read, st, args[k] ?? '');
         } else if (a !== null && a.startsWith('--expression=')) {
           scriptGiven = true;
+          if (exprScript === undefined)
+            exprScript = a.slice('--expression='.length);
         } else if (a !== null && a.startsWith('--file=')) {
           scriptGiven = true;
           add(read, st, a.slice('--file='.length));
         } else if (a === null || !a.startsWith('-')) files.push(a);
       }
+      // `sed -n 'a,bp' file` prints only lines a..b: a ranged read (DD-4).
+      const quiet = flags.some(
+        (f) => /^-[a-zA-Z]*n/.test(f) || f === '--quiet' || f === '--silent',
+      );
+      const range =
+        quiet && !inPlace
+          ? sedPrintRange(scriptGiven ? exprScript : files[0])
+          : null;
       files
         .slice(scriptGiven ? 0 : 1)
-        .forEach((p) => add(inPlace ? written : read, st, p));
+        .forEach((p) =>
+          inPlace
+            ? add(written, st, p)
+            : add(read, st, p, 'read', range ? { range } : {}),
+        );
     } else if (base === 'mv') {
       pos.forEach((p) => add(written, st, p));
     } else if (base === 'cp') {
@@ -491,6 +641,7 @@ function analyzeTree(rootNode: Node): BashAnalysis {
     readAccess: reads.map((p) => ({
       path: rel(p),
       kind: readKind.get(p) ?? 'read',
+      ...readMeta.get(p),
     })),
     runs,
     inline: scripts.map(

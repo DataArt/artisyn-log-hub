@@ -73,7 +73,10 @@ import {
   type HarnessUsageReportData,
 } from './harness-usage.service';
 import { OkfUsageService } from '../okf/okf-usage.service';
-import type { RepoOkfUsageResponse } from '../okf/okf-usage.types';
+import type {
+  RepoOkfArticleResponse,
+  RepoOkfUsageResponse,
+} from '../okf/okf-usage.types';
 
 // Whitelist for the cache-read-ratio report's fixed (non-`attr:`) `groupBy` values.
 // `groupBy=attr:<key>` is validated separately,
@@ -346,6 +349,10 @@ export class ReportsController {
    * of the scope (DD-29, DD-38, DD-39). Same scope and 403 rules as `harness-usage`; with
    * `teamId` the service applies the DD-30 fail-closed team filter. `bundle` narrows to one
    * bundle root of the latest snapshot — an unknown or empty value means all bundles.
+   *
+   * 2026-11-03 value signals: the OKF thresholds in force for this caller and view
+   * (`resolveOkfThresholds`, DD-20) and the recompute authority (`okfCanRecompute`, FR-11) are
+   * resolved here and passed to the service. Read-only — performs no writes.
    */
   @Get(':repoId/reports/okf-usage')
   async getOkfUsageReport(
@@ -359,17 +366,80 @@ export class ReportsController {
     @Query('attr') attr?: string | string[],
     @Query('bundle') bundle?: string,
   ): Promise<RepoOkfUsageResponse> {
-    const { repoIds, scope } = await this.resolveUsageScope(req, repoId, {
-      teamId,
-      startDate,
-      endDate,
-      branches,
-      users,
-      attr,
-    });
+    const { repoIds, scope, repoUrl } = await this.resolveUsageScope(
+      req,
+      repoId,
+      {
+        teamId,
+        startDate,
+        endDate,
+        branches,
+        users,
+        attr,
+      },
+    );
+    const user = req.user as AuthUser;
+    const [thresholds, canRecompute] = await Promise.all([
+      this.repositoriesService.resolveOkfThresholds(
+        user.id,
+        repoUrl,
+        scope.teamId,
+      ),
+      this.repositoriesService.okfCanRecompute(user, repoId, scope.teamId),
+    ]);
     const bundleRoot =
       typeof bundle === 'string' && bundle.length > 0 ? bundle : undefined;
-    return this.okfUsageService.getRepoOkfUsage(repoIds, scope, bundleRoot);
+    return this.okfUsageService.getRepoOkfUsage(repoIds, scope, bundleRoot, {
+      thresholds,
+      canRecompute,
+    });
+  }
+
+  /**
+   * The per-article drill-down of the repo OKF tab (2026-11-03 value signals, DD-23): same
+   * scope, 403 and team-filter rules as `okf-usage` (through `resolveUsageScope`) and the same
+   * thresholds (`resolveOkfThresholds`, DD-20). A missing or empty `path` → 400; a `path` that
+   * is not a stored KB article in scope → 200 with `found: false`. Read-only.
+   */
+  @Get(':repoId/reports/okf-usage/article')
+  async getOkfArticleReport(
+    @Req() req: Request,
+    @Param('repoId', ParseIntPipe) repoId: number,
+    @Query('path') path?: string,
+    @Query('teamId', new ParseIntPipe({ optional: true })) teamId?: number,
+    @Query('startDate') startDate?: string,
+    @Query('endDate') endDate?: string,
+    @Query('branches') branches?: string,
+    @Query('users') users?: string,
+    @Query('attr') attr?: string | string[],
+  ): Promise<RepoOkfArticleResponse> {
+    if (typeof path !== 'string' || path.trim() === '') {
+      throw new BadRequestException('path is required');
+    }
+    const { repoIds, scope, repoUrl } = await this.resolveUsageScope(
+      req,
+      repoId,
+      {
+        teamId,
+        startDate,
+        endDate,
+        branches,
+        users,
+        attr,
+      },
+    );
+    const user = req.user as AuthUser;
+    const thresholds = await this.repositoriesService.resolveOkfThresholds(
+      user.id,
+      repoUrl,
+      scope.teamId,
+    );
+    return this.okfUsageService.getRepoOkfArticle(
+      repoIds,
+      scope,
+      path,
+      thresholds,
+    );
   }
 
   /**
@@ -744,6 +814,8 @@ export class ReportsController {
     repoIds: number[];
     scope: AnalyticsScope;
     resolvedDefinitions: SessionAttributionAttributeDef[];
+    /** The asserted repository's URL (per-repo settings lookups, e.g. OKF thresholds). */
+    repoUrl: string;
   }> {
     const query = parseAnalyticsQuery(raw);
     const user = req.user as AuthUser;
@@ -770,6 +842,7 @@ export class ReportsController {
     return {
       repoIds,
       resolvedDefinitions,
+      repoUrl: repo.repoUrl,
       scope: {
         teamId: query.teamId,
         requesterUserId: user.id,

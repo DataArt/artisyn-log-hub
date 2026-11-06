@@ -325,9 +325,29 @@ gives the target as the number `N`); it can only come from a command argument su
    **first** command that read the path (`readKindOf`): `grep rg ag egrep fgrep` → `grep`;
    `ls find tree dir` → `list`; anything else — the other read commands, `sed`, `cp` sources, a
    `<` redirect — → `read`. Only commands that produce reads under rule 5.2 reach it, so of those
-   names only `grep`, `rg` (`grep`) and `ls` (`list`) occur today; `find`, `tree`, `egrep`, … are
-   runs, not reads. The server's OKF extraction maps the kinds to its ops
+   names only `grep`, `rg`, `git grep` (`grep`) and `ls` (`list`) occur today; `find`, `tree`,
+   `egrep`, … are runs, not reads. The server's OKF extraction maps the kinds to its ops
    ([okf-access-extraction](okf-access-extraction.md)).
+
+   Two optional fields, taken from the same first command, are set only when known:
+   - **`range`** `{from, to}` (1-based, `to` inclusive, `to: null` = to the end, a negative
+     `from` counts from the end) on a `read`:
+     - `sed -n 'a,bp' f` (or `Np`, `a` = `b` = N; quiet via `-n` / `--quiet` / `--silent`, not
+       with `-i`; the script is the first positional or the first `-e` / `--expression` value)
+       → `{from: a, to: b}`;
+     - `head -n N` / `-nN` / `--lines=N` / `--lines N` / `-N` → `{from: 1, to: N}`;
+     - `tail -n N` (same spellings) → `{from: -N, to: null}`; `tail -n +N` → `{from: max(N, 1),
+       to: null}`, and the `+N` is not a path;
+     - a count that is not a plain number (`-n -5`, `-c 10`) or a sed script of any other shape
+       gives no range.
+   - **`pattern`** on a `grep`: the first `-e` / `--regexp` / `--regexp=` value, else the first
+     positional; `-f` / `--file` (patterns from a file) leaves it unknown. The value flags `-A -B
+     -C -m --max-count -g --glob -t --type -T --type-not --include --exclude` skip their value.
+     The paths are the positionals after the pattern (all positionals when a flag gave it) and
+     everything after `--`.
+   - **`git grep <pattern> <paths…>`** reads its paths like `grep`, with the same pattern rule
+     applied after the `grep` sub-command. Without paths it searches the whole tree and stays a
+     `git grep` run, not a read.
 
 ### 6. Repo-relative display (`toRepoRelative`)
 
@@ -463,7 +483,7 @@ gives the target as the number `N`); it can only come from a command argument su
 - `readAccess` (rule 5.9): one kind each (`sed -n` read, `grep -n` grep, `ls` list) BV-92;
   folders searched by `grep -rn` BV-93; a `<` redirect is `read`, the first command decides the
   kind BV-94; paths relative to the analysis root, `ls .`, a read that is also a change left out
-  BV-95; `find` / `tree` / `egrep` are runs, no reads BV-96.
+  BV-95; `find` / `tree` / `egrep` are runs, no reads BV-96. `range`: `sed -n Np` / `head -n` / `tail -n` BV-97, `head -N` / `tail -n +N` / `--lines=` BV-98, no range for other sed scripts and non-numeric counts BV-99. `pattern`: `-e` and `rg` BV-100, value flags skipped BV-101, `git grep … -- paths` BV-102, `git grep` without paths and `grep -f` BV-103.
 
 ## Examples
 
@@ -484,7 +504,7 @@ Two kinds of rows.
 
 Commands are anonymised (`/work/acme-app`, `C:\work\acme-app`).
 
-Rows (103): [`docs/algorithm-examples/bash-command-view.json`](../../algorithm-examples/bash-command-view.json) — test data for the table test; the rules above are enough to understand the algorithm.
+Rows (110): [`docs/algorithm-examples/bash-command-view.json`](../../algorithm-examples/bash-command-view.json) — test data for the table test; the rules above are enough to understand the algorithm.
 
 ## Mutations
 
@@ -502,6 +522,9 @@ Rows (103): [`docs/algorithm-examples/bash-command-view.json`](../../algorithm-e
 - `sed`'s script argument taken as a path -> BV-07 (`s/a/b/` change); `-e` scripts taken as paths
   -> BV-45.
 - Numbers not ignored as paths -> BV-33 (`20` read).
+- `tail -n +N` count taken as a path -> BV-98 (`+40` read); `head -n` value taken as a path -> BV-97.
+- The last `-e` taken as the pattern, or `-e` not making every positional a path -> BV-100 (`bar`, `docs/kb` dropped).
+- Grep value flags not skipping their value -> BV-101 (`3` as the pattern).
 - `FOR_VALUES_MAX` off by one or missing -> BV-36 (`f31.txt`).
 - The loop variable kept after the loop -> BV-38; a pipeline element sharing the variables ->
   BV-38 (`out.txt` change).

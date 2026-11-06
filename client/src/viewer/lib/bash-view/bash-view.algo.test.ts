@@ -57,7 +57,12 @@ interface BashViewExpected {
   readGroups?: unknown[] | null;
   runGroups?: unknown[] | null;
   inlineGroups?: unknown[] | null;
-  readAccess?: { path: string; kind: string }[];
+  readAccess?: {
+    path: string;
+    kind: string;
+    range?: { from: number; to: number | null };
+    pattern?: string;
+  }[];
   highlights?: [string, string][];
 }
 

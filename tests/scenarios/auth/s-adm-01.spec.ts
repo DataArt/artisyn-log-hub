@@ -106,9 +106,20 @@ test('@S-ADM-01 admin panel only for admins, tabs and deep links work @mode-a @m
   });
 
   await test.step('1b. UI (REGULAR): hovering the build label shows Branch / Version / Built / Official release / Commit, no undefined / null', async () => {
-    const info = (await (await api.get('/health/version')).json()) as { gitCommit: string };
+    const info = (await (await api.get('/health/version')).json()) as {
+      version: string;
+      gitCommit: string;
+      origin?: { version: string; officialRelease: boolean };
+    };
     const label = page.getByTestId('nav-build-label');
     await expect(label).toBeVisible();
+    // An official release is labelled by its version, any other build by its short commit.
+    const expectedLabel = info.origin?.officialRelease
+      ? `v${info.origin.version}`
+      : info.gitCommit !== 'unknown'
+        ? info.gitCommit.slice(0, 7)
+        : info.version;
+    await expect(label).toHaveText(expectedLabel);
     await label.hover();
     const tooltip = page.getByTestId('nav-build-tooltip');
     await expect(tooltip).toBeVisible();

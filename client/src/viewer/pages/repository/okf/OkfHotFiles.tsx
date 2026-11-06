@@ -4,6 +4,7 @@
  */
 import { formatBytes } from '@/lib/format';
 import type { RepoOkfUsageResponse } from '../../../../models/repositories';
+import { formatOkfYield } from '../session-log/okf/okf-tree';
 import { pathInBundle } from './okf-url-state';
 
 export function OkfHotFiles({
@@ -25,6 +26,12 @@ export function OkfHotFiles({
         <div className="flex items-center gap-2 px-1 text-[10px] text-muted-foreground">
           <span className="min-w-0 flex-1 pl-6">File</span>
           <span className="w-8 shrink-0 text-right">Sess.</span>
+          <span
+            className="w-12 shrink-0 text-right"
+            title="Pointer yield: reads with a new pointer that was followed / all such reads"
+          >
+            Yield
+          </span>
           <span className="w-16 shrink-0 text-right">Read</span>
         </div>
       ) : null}
@@ -48,6 +55,12 @@ export function OkfHotFiles({
             </span>
             <span className="w-8 shrink-0 text-right text-[11px] tabular-nums text-muted-foreground">
               {f.sessions}
+            </span>
+            <span
+              data-testid="okf-hot-file-yield"
+              className="w-12 shrink-0 text-right font-mono text-[11px] tabular-nums text-muted-foreground"
+            >
+              {formatOkfYield(f.yield)}
             </span>
             <span className="w-16 shrink-0 text-right font-mono tabular-nums">
               {formatBytes(f.readBytes)}
