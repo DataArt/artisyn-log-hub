@@ -14,24 +14,33 @@
     <dt>What exactly does the hook collect?</dt>
     <dd>The full Claude Code transcript, unredacted by design: prompts, tool results, file contents
       Claude read and command output. Plus CLAUDE.md, rules, skills, MCP configuration and the git
-      remote (credentials stripped), branch and git user. The installer shows this notice before it
-      installs. <a href="docs/data-collection.html">Data Collection &amp; Upload</a></dd>
+      remote (credentials stripped), branch and git user. Plus Claude Code's OpenTelemetry data
+      (cost, tokens and calls per model and call source), a snapshot of each OKF knowledge base in
+      the repository (file paths, sizes and hashes, no content) and the input and output of the
+      command-line tools you choose to monitor (up to 100 KB per stream). The installer shows this
+      notice before it installs. <a href="docs/data-collection.html">Data collection &amp; upload</a></dd>
 
     <dt>Can we keep secrets or sensitive files out?</dt>
     <dd>Yes, at the source: Claude Code <code>permissions.deny</code> rules keep files out of what
       Claude can read, so they never reach a transcript. The hook itself does not redact.
-      <a href="docs/security-hardening.html">Security Hardening</a></dd>
+      <a href="docs/security-hardening.html">Security hardening</a></dd>
 
     <dt>Does anything you add call out to the internet or to the model provider?</dt>
-    <dd>The server makes two public GETs at most once a day — the model price list and the Claude
-      Code version list — and sends no data; both can be turned off. The optional post-turn analysis
-      (cost advisor, session attribution) runs <code>claude -p</code> on the developer's machine
-      through the same Claude connection the session already uses, and is switched per repository.
+    <dd>The server makes three public GET checks and sends no data with them: the Claude Code version
+      list from npm (hourly, <code>AI_TOOL_VERSION_CHECK_ENABLED</code>), the model price list (daily,
+      <code>MODEL_PRICING_FETCH_ENABLED</code>) and the latest Log Hub release from GitHub (daily,
+      official release images only, <code>LOG_HUB_RELEASE_CHECK_ENABLED</code>). Set any of them to
+      <code>false</code> to turn it off. The optional post-turn analysis (cost advisor, session
+      attribution) runs <code>claude -p</code> on the developer's machine through the same Claude
+      connection the session already uses, and is switched per repository. Since hook 2.31.1 that
+      <code>claude -p</code> runs with no tools, no MCP servers and no skills on a current Claude
+      Code, so it can only answer — it cannot read files, run commands or call an MCP server. Keep Claude
+      Code current: a version too old for those flags runs it without them.
       <a href="docs/server-configuration.html">Server settings</a></dd>
 
     <dt>Does it work in an air-gapped network?</dt>
-    <dd>Yes. The app, its in-app help and every user document ship with the product; with the two
-      fetches turned off nothing leaves the host.</dd>
+    <dd>Yes. The app, its in-app help and every user document ship with the product; with the three
+      checks turned off nothing leaves the host.</dd>
   </dl>
 
   <h2 id="access">Access</h2>
@@ -40,10 +49,11 @@
     <dd>In a restricted team (the default) members see only their own sessions, the team owner and
       ADLC trainers see prompts, managers see analytics without prompt text. A transparent team is
       opt-in. The admin role grants no access to session data. A member becomes visible to the team
-      only after accepting a disclosure notice. <a href="docs/trust-model.html">Trust model</a></dd>
+      only after accepting a disclosure notice.
+      <a href="docs/data-collection-notice.html">Data collection notice</a></dd>
 
     <dt>Which sign-in methods are there? SSO?</dt>
-    <dd>Identify by email, email and password (optionally with email confirmation), or Azure
+    <dd>Identify by email, email and password (optionally with email confirmation), or Microsoft
       Entra ID, single tenant. Other identity providers are not supported today.
       <a href="docs/authentication-modes.html">Authentication modes</a></dd>
 
@@ -51,7 +61,7 @@
     <dd>Security events — sign-ins and their failures, sign-up, email confirmation, password reset
       and change, account deletion — are logged as structured lines with email and user ID only.
       There is no log of who opened which session.
-      <a href="docs/security-hardening.html">Security Hardening</a></dd>
+      <a href="docs/security-hardening.html">Security hardening</a></dd>
   </dl>
 
   <h2 id="storage">Storage and retention</h2>
@@ -86,6 +96,12 @@
       <a href="docs/how-hook-works.html">How the hook works</a></dd>
 
     <dt>Is it open source?</dt>
-    <dd>Yes — open source by DataArt, MIT licence. <a href="{{site:repo}}" rel="noopener noreferrer">GitHub ↗</a></dd>
+    <dd>Yes — open source by DataArt, MIT license. <a href="{{site:repo}}" rel="noopener noreferrer">GitHub ↗</a></dd>
+
+    <dt>What does Log Hub show about our harness?</dt>
+    <dd>What each element — CLAUDE.md, rules, skills, hooks, agents, workflows, MCP servers, the
+      knowledge base, memory — does to the quality, cost, speed, autonomy and safety of a session,
+      for one session and across the team. Nine questions, A to I, each with the screens that answer it.
+      <a href="features.html">Features</a></dd>
   </dl>
 </section>

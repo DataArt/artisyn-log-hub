@@ -27,7 +27,7 @@ const REPO_URL = 'https://github.com/DataArt/artisyn-log-hub';
 const RELEASES_URL = `${REPO_URL}/releases`;
 
 /** Top-nav labels in order (DD-20). */
-const TOP_NAV = ['Home', 'Features', 'Get started', 'Configuration', 'Using Log Hub', 'Data & security', 'Questions', 'Deck', 'GitHub ↗'];
+const TOP_NAV = ['Home', 'Features', 'Get started', 'Configuration', 'Using Log Hub', 'Data & security', 'FAQ', 'Deck', 'GitHub ↗'];
 
 /** An external request may only go to jsDelivr with an exact `name@x.y.z` version. */
 const VERSIONED_CDN = /^https:\/\/cdn\.jsdelivr\.net\/npm\/(?:@[^/]+\/)?[^/@]+@\d+\.\d+\.\d+\//;
@@ -51,7 +51,7 @@ const TEXT_EXT = new Set(['.html', '.css', '.js', '.json', '.md', '.svg', '.txt'
 const SITE_URL = 'https://dataart.github.io/artisyn-log-hub/';
 const SITE_NAME = 'Artisyn Log Hub';
 const OG_IMAGE_URL = `${SITE_URL}assets/og-image.png`;
-const OG_IMAGE_ALT = 'Log Hub cost flow: model to user to branch';
+const OG_IMAGE_ALT = 'Artisyn Log Hub: It ran alone for 10 minutes, cost $8 and shipped the feature. All good? Quality, cost, speed, autonomy, safety';
 
 const EMAIL = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g;
 /**
@@ -353,20 +353,40 @@ test('@S-SITE-01 static site and deck: built, served under a base path, navigabl
       }
     });
 
-    await test.step('3. Home: the thesis, three questions and links to the deck, Features and Get started', async () => {
+    await test.step('3. Home: the hook with dataset figures, five dimension tiles, the anatomy strip, six cards and links to the deck, Features and Get started', async () => {
       await page.goto(`${server.base}index.html`);
-      await expect(page.locator('h1')).toContainText('Is that good?');
-      await expect(page.locator('.hero .lead').first()).toContainText('right and useful');
+      const ds = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'site', 'data', 'example-dataset.json'), 'utf8')) as {
+        session: { durationMin: number; total: number; outcome: string };
+      };
+      const h1 = page.locator('h1');
+      await expect(h1).toContainText(`It ran alone for ${ds.session.durationMin} minutes`);
+      await expect(h1).toContainText(`$${Math.round(ds.session.total)}`);
+      await expect(h1).toContainText(ds.session.outcome);
+      await expect(h1).toContainText('All good?');
+      await expect(page.locator('.hero .lead').first()).toContainText('harness');
+      await expect(page.locator('.hero')).toContainText('right and useful');
       await expect(page.locator('.hero')).toContainText('Log Hub answers the next questions');
-      await expect(page.locator('.cards .card')).toHaveCount(3);
+      // Five dimension tiles in the hero, each a link into a Features block that exists.
+      const tiles = page.locator('.hero .dimensions a.dimension');
+      await expect(tiles).toHaveCount(5);
+      const tileTargets = await tiles.evaluateAll((as) => as.map((a) => a.getAttribute('href') ?? ''));
+      expect(tileTargets).toEqual(['features.html#c', 'features.html#a', 'features.html#i', 'features.html#i', 'features.html#e']);
+      // The harness anatomy strip: nine elements, each linking to the view that shows it.
+      await expect(page.locator('section.anatomy li')).toHaveCount(9);
+      await expect(page.locator('section.anatomy li a[href^="features.html#"]')).toHaveCount(9);
+      // Six cards: five dimensions plus team scale; speed and autonomy both lead to block I.
+      await expect(page.locator('.cards .card')).toHaveCount(6);
+      await expect(page.locator('.cards .card a[href="features.html#i"]')).toHaveCount(2);
+      await expect(page.locator('.cards .card a[href="features.html#d"]')).toHaveCount(1);
       await expect(page.locator('main a[href="deck/index.html"]')).not.toHaveCount(0);
       await expect(page.locator('main a[href^="features.html"]')).not.toHaveCount(0);
       await expect(page.locator('main a[href="docs/install-server.html"]')).not.toHaveCount(0);
     });
 
-    await test.step('4. Features: eight blocks A–H, each with its question', async () => {
+    await test.step('4. Features: nine blocks A–I, each with its question', async () => {
       await page.goto(`${server.base}features.html`);
-      for (const block of ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']) {
+      await expect(page.locator('h1')).toHaveText('Nine questions Log Hub answers');
+      for (const block of ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i']) {
         const marker = page.locator(`section#${block} h2 .block-marker`);
         await expect(marker, block).toHaveText(block.toUpperCase());
         await expect(page.locator(`section#${block} h2`), block).toContainText('?');
@@ -435,12 +455,12 @@ test('@S-SITE-01 static site and deck: built, served under a base path, navigabl
       }
     });
 
-    const slideCount = await test.step('9. deck: 10–20 slides, every slide fits 1280×720, arrows move between slides', async () => {
+    const slideCount = await test.step('9. deck: 10–24 slides, every slide fits 1280×720, arrows move between slides', async () => {
       await page.goto(`${server.base}deck/index.html`);
       await page.waitForFunction(() => document.querySelector('.reveal.ready') !== null);
       const count = await page.locator('.reveal .slides > section').count();
       expect(count).toBeGreaterThanOrEqual(10);
-      expect(count).toBeLessThanOrEqual(20);
+      expect(count).toBeLessThanOrEqual(24);
       for (let i = 0; i < count; i++) {
         const overflow = await page.evaluate((idx) => {
           const frame = document.querySelectorAll('.reveal .slides > section')[idx].querySelector('.slide-frame');
@@ -472,8 +492,9 @@ test('@S-SITE-01 static site and deck: built, served under a base path, navigabl
           const body = el.querySelector('.slide-body') as HTMLElement | null;
           let words = 0;
           if (body) {
+            // Text in a dataset figure block or a visual slot is not body text.
             const copy = body.cloneNode(true) as HTMLElement;
-            copy.querySelectorAll('.illustrative').forEach((n) => n.remove());
+            copy.querySelectorAll('.deck-figure, .visual-slot').forEach((n) => n.remove());
             words = (copy.textContent ?? '').split(/\s+/).filter((w) => /[\p{L}\p{N}]/u.test(w)).length;
           }
           return {
@@ -494,17 +515,17 @@ test('@S-SITE-01 static site and deck: built, served under a base path, navigabl
       }
     });
 
-    await test.step('11. every figure block carries the "Illustrative example" label (deck and site)', async () => {
-      const unlabeled = async (selector: string) =>
-        page.locator(selector).evaluateAll((els) =>
-          els.filter((el) => !el.querySelector('.illustrative')).map((el) => (el.textContent ?? '').trim().slice(0, 60)),
-        );
+    await test.step('11. no "Illustrative example" label and no speaker notes anywhere (deck, Home, Features)', async () => {
+      // Dataset figures are an ordinary worked example: the blocks exist, with no hedging label.
       expect(await page.locator('.deck-figure').count()).toBeGreaterThan(0);
-      expect(await unlabeled('.deck-figure'), 'deck').toEqual([]);
+      expect(await page.locator('.reveal').evaluate((e) => e.textContent ?? '')).not.toMatch(/illustrative example/i);
+      expect(await page.locator('.illustrative').count(), 'deck .illustrative').toBe(0);
+      expect(await page.locator('aside.notes').count(), 'deck speaker notes').toBe(0);
       for (const p of ['index.html', 'features.html']) {
         await page.goto(`${server.base}${p}`);
         expect(await page.locator('.figure-block').count(), p).toBeGreaterThan(0);
-        expect(await unlabeled('.figure-block'), p).toEqual([]);
+        expect(await page.locator('main').evaluate((e) => e.textContent ?? ''), p).not.toMatch(/illustrative example/i);
+        expect(await page.locator('.illustrative').count(), `${p} .illustrative`).toBe(0);
       }
     });
 

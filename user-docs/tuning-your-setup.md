@@ -1,7 +1,8 @@
 # Tuning Your Setup
 
-The value of the Log Hub comes from a loop: run sessions → look at what they cost and why →
-adjust your setup → compare the next sessions. This article covers the "adjust" step.
+The value of Log Hub comes from a loop: run sessions → look at what each part of your harness
+did to their quality, cost, speed, autonomy and safety → adjust your setup → compare the next
+sessions. This article covers the "adjust" step.
 
 ## Repository settings
 
@@ -39,6 +40,15 @@ see at a glance whether a session burned its budget reading documentation or act
   report's "Why was cache creation high?" section. Default 25,000.
 - **Turn-End Cost Advisor** — the checkbox that turns automatic per-turn cost advice on, plus a
   **Minimum session cost (USD)** field (default $0.10).
+- **OKF thresholds** — the levels behind the [OKF tab](okf-tab.md)'s verdict and value signals,
+  as a table of each setting with its default, its value and what it affects, in two groups
+  (verdict, value signals). **codeRoots** lists the folders that hold this repository's code
+  (default `server/`, `client/`, `hook/`, `scripts/`, `packages/`, `tests/`); an article's code
+  area is built from the paths under them, so set it to your repository's own folders — type a
+  folder and press Enter or **Add**. **Save for this repo** writes only the values that differ
+  from the defaults, **Reset to defaults** removes them, and in your personal view **Copy from
+  team settings** fills the form from the team's values. Changes apply at once, with no
+  recompute. See [OKF tab → Thresholds](okf-tab.md#thresholds).
 
 ### Monitored Tools
 
@@ -71,16 +81,20 @@ changed-file list, so ask for things visible there. Each evaluation is a small e
 
 Per-project hook options live in `.artisyn/config/log-hub.json` (shared, committable) and
 `log-hub.local.json` (personal, gitignored — this is where the API key goes). Notable knobs:
-context labels to tag every session (e.g. team or environment), upload timeouts, and the analyzer's model/timeout choices. See "Data Collection & Upload" and the
-install guide for details.
+context labels to tag every session (e.g. team or environment), upload timeouts, and the
+analyzer's model/timeout choices. See [Data Collection & Upload](data-collection.md) and
+[the install guide](../hook/INSTALL_HOOK.md) for details.
 
 ## Acting on the Advisor's advice
 
-The Advisor tab names concrete cost drivers per session. Common patterns and what to do:
+The Advisor tab names concrete cost drivers per session; the session's other tabs show what the
+rest of the harness did. Common patterns and what to do:
 
-| Advisor points at… | What to change |
+| Log Hub points at… | What to change |
 |---|---|
-| Large fixed context (CLAUDE.md, rules, skills, MCP tool schemas) | Trim CLAUDE.md, remove stale rules. Open **Harness Usage** — it lists every harness element with its usage count and token share; disable MCP servers and skills that are never used. |
+| Large fixed context (CLAUDE.md, rules, skills, MCP tool schemas) | Open **System context anatomy** — it shows what Claude loads at startup and how many tokens each part costs. Trim CLAUDE.md and remove stale rules. **Harness usage** lists every harness element with its usage count and token share; disable MCP servers and skills that are never used. |
+| A knowledge base the agents do not use, or use without effect | Open the **OKF** tab — it shows which articles the agents read, which led them to the code and which change to make to the KB next to every problem. |
+| An MCP server or CLI tool that fails or is never useful | Open **Tools/MCP** — it lists the MCP calls and the calls of monitored CLI tools, with their failures. Fix or remove the server, or narrow which of its tools the agent may use. |
 | Heavy file reading / re-reading | Check the **Cache Read Ratio** report's causes. Split oversized files; point the AI at specific files instead of letting it scan. |
 | Frequent compactions / peak context near the window | Prefer smaller, focused tasks and fresh sessions over one marathon session. |
 | A few sessions dominating spend | Open the **Executive Summary**'s Top 5 most expensive sessions and read their logs — the pattern is usually visible in the Context Growth chart. |
@@ -88,6 +102,7 @@ The Advisor tab names concrete cost drivers per session. Common patterns and wha
 ## Closing the loop
 
 After a change, give it a few sessions and compare: the **Cost** and **Cache Read Ratio** views
-with a 1w preset before/after, and the per-engineer table in the **Executive Summary** week over
-week. Tuning is never finished — attribute definitions, file categories, and the harness all
+with a 1w preset before/after, the per-engineer table in the **Executive Summary** week over
+week, and the tab that showed the problem (System context anatomy, OKF, Tools/MCP) on the next
+sessions. Tuning is never finished — attribute definitions, file categories, and the harness all
 drift as the project evolves, so revisit them when the reports start looking noisy.

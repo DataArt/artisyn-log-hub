@@ -17,7 +17,7 @@ export const SITE_NAME = 'Artisyn Log Hub';
 export const OG_IMAGE_URL = `${SITE_URL}assets/og-image.png`;
 export const OG_IMAGE_WIDTH = 1200;
 export const OG_IMAGE_HEIGHT = 630;
-export const OG_IMAGE_ALT = 'Log Hub cost flow: model to user to branch';
+export const OG_IMAGE_ALT = 'Artisyn Log Hub: It ran alone for 10 minutes, cost $8 and shipped the feature. All good? Quality, cost, speed, autonomy, safety';
 
 /** Top-nav labels for nav.json sections (sections not listed here stay out of the top nav). */
 const SECTION_LABELS = [
@@ -100,7 +100,7 @@ function topNav(prefix, nav, activeSection) {
     if (!sec || sec.articles.length === 0) continue;
     items.push(navLink(docHref(prefix, sec.articles[0].slug), label, activeSection === section));
   }
-  items.push(navLink(`${prefix}questions.html`, 'Questions', activeSection === 'questions'));
+  items.push(navLink(`${prefix}questions.html`, 'FAQ', activeSection === 'questions'));
   items.push(navLink(`${prefix}deck/index.html`, 'Deck', activeSection === 'deck'));
   items.push(navLink(REPO_URL, 'GitHub ↗', false, ' rel="noopener noreferrer"'));
   return `<header class="site-header">
@@ -180,7 +180,8 @@ function diagramScripts(prefix) {
  */
 export function page({ title, depth, nav, activeSection, body, activeSlug, toc, prevNext, diagrams, path, description, notFound }) {
   const prefix = notFound ? SITE_URL : prefixFor(depth);
-  const fullTitle = title && title !== SITE_NAME ? `${title} — ${SITE_NAME}` : SITE_NAME;
+  // A title that already starts with the site name (Home) is used as is.
+  const fullTitle = !title ? SITE_NAME : title.startsWith(SITE_NAME) ? title : `${title} — ${SITE_NAME}`;
   const main = activeSlug
     ? `<div class="docs-layout">
 ${sidebar(prefix, nav, activeSlug)}

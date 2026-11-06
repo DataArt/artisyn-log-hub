@@ -19,7 +19,46 @@
       "cacheRead": 5200000,
       "cacheWrite": 240000
     },
-    "contextRereadPct": 92
+    "contextRereadPct": 92,
+    "durationMin": 10,
+    "autonomousMin": 10,
+    "outcome": "shipped the feature",
+    "linesChanged": 280,
+    "subAgents": 8,
+    "parallelPeak": 4,
+    "mcpCalls": 41,
+    "mcpErrors": 3
+  },
+  "kb": {
+    "articlesRead": 6,
+    "pointerYieldPct": 31,
+    "alwaysReadPct": 84,
+    "orgSyncedContextPct": 18
+  },
+  "costShare": {
+    "skill": {
+      "implement": 46,
+      "review": 21,
+      "plan": 9,
+      "none": 24
+    },
+    "mcp": {
+      "docsMcp": 14,
+      "issueTracker": 6,
+      "none": 80
+    },
+    "effort": {
+      "high": 62,
+      "medium": 38
+    },
+    "fastMode": {
+      "on": 12,
+      "off": 88
+    }
+  },
+  "live": {
+    "tokensPerMin": 1200000,
+    "sessionsNow": 3
   },
   "daily": {
     "sessions": 18,
@@ -123,6 +162,7 @@
     }
   ],
   "productivity": {
-    "costPerLine": 0.007
+    "costPerLine": 0.007,
+    "linesPerAutoHour": 1680
   }
 }

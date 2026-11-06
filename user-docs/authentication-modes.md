@@ -7,12 +7,12 @@
 | `none` | Mode 1, no password | One user on their own machine. A caller types an email and is signed in as that user, without verification. Only local callers are accepted (localhost and, in a container, the container's default gateway). **Never** for a shared or network-reachable installation. |
 | `password` | Mode 2, email and password | A small team on a trusted network. SMTP is optional; without it password reset is unavailable. |
 | `password-confirm` | Mode 3, email, password and emailed confirmation | Anything reachable from the internet. An account is usable only after an emailed confirmation link. Needs SMTP: the app refuses to start without a reachable relay. |
-| `azure-oauth` | Mode 4, Azure Entra ID sign-in | Organisations on Microsoft Entra ID, single tenant. No local passwords. Recommended for organisations that use Entra ID. |
+| `azure-oauth` | Mode 4, Microsoft Entra ID sign-in | Organizations on Microsoft Entra ID, single tenant. No local passwords. Recommended for organizations that use Entra ID. |
 
 - In every mode the first user to sign in becomes the admin — see
   [Check that you are the admin](install-server.md#check-that-you-are-the-admin).
 - An unset `AUTH_MODE` means `password`. The release install sets `none`.
-- An unrecognised value, or a mode whose required settings are missing, stops the server at
+- An unrecognized value, or a mode whose required settings are missing, stops the server at
   startup.
 - Routes that belong to a different mode answer `404`.
 - The user's email is the identity in every mode, so switching modes needs no data migration.

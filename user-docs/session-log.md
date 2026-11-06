@@ -25,7 +25,9 @@ answer one question and shows them in the row:
 - When you open a tab that is not in the view (from More, a Summary card or a link), it shows at
   the end of the row after a divider, so you always see which tab is open.
 - Tabs that have nothing to show for this session are left out, for example Advisor without an
-  advisor result. Raw Logs is shown only to the session's owner.
+  advisor result. Raw Logs is shown to the session's owner and, in a team view, to whoever the
+  server lets read the session's logs (any member of a transparent team; the team owner and ADLC
+  trainers of a restricted one). The administrator role alone does not show it.
 - The view is part of the page address (`&lens=harness`), so a copied link opens the same view.
   Choosing a tab never changes the view.
 
@@ -47,13 +49,49 @@ gets loaded?**, **Which tool failed?**) that switch to the matching view.
 
 ## Tabs
 
-### Timeline
+### Summary
 
-Shows each **prompt turn** in chronological order. Expand a turn to see:
+The session at a glance: tiles for cost, peak context, turns, code impact, delegation, session
+shape and change surface, the **Detected issues** findings (for example "Low cache reuse"),
+**Extended details** with token, cache and sub-agent figures, and **Where to look next** (see
+above).
 
-- The user message and assistant response
-- Tool calls made during the turn (file reads, bash commands, MCP calls, etc.)
-- A call tree showing nested tool invocations
+### Info
+
+Session metadata in collapsible sections, plus the token and cost table:
+
+| Section | What it shows |
+|---|---|
+| Identity | Session UUID, repository, branch and user. |
+| Timeline | Start, end, duration and autonomous work time. |
+| Activity | Log records, prompts, sub-agents spawned, skills invoked and rules injected, with their context size. |
+| Tokens & Cost | Tokens by kind and the cost of each, with the **"Calculated approx. total"** row. |
+| Workflows | Each workflow run with its agents, tokens and cost (only when workflows ran). |
+| Files & Tools | Reads and bytes per file category, edit/write calls, lines changed and log size. |
+| MCP Usage | MCP calls by server (only when MCP servers were called). |
+| Vision | Images examined (only when the session read images). |
+| Productivity | Lines per autonomous hour, cost per autonomous hour and cost per line. |
+| CLAUDE.md Context | Total bytes, estimated tokens and the instruction files loaded. |
+
+### Statistics
+
+Counters and tables for the whole session tree: **Productivity counters** (lines added and removed
+from the edit diffs, commits, pull requests, turns), **Tool analytics** (calls, success rate,
+failures and unresolved calls per tool), **Cache TTL and service tier**, and a **Per-API-call
+iterations breakdown**. It is the tab the **Cost** view opens on.
+
+### Advisor
+
+Shown only when the hook's Turn-End Cost Advisor analysed the session: a **Summary**, the **Cost
+factors** it found and **Harness advice**, with the cost and tokens of the analysis itself. The
+lightbulb on a session row opens this tab.
+
+### Logs
+
+Shows each **prompt turn** in chronological order. The turn header carries the time, work time,
+token chips, the **Cost** chip and the **Context** chip. Expand a turn to see the prompt, the
+assistant's reply and the turn's sections: **Files**, **Skills**, **Rules**, **Tools**,
+**Agents**, **Sub-agents** and **Workflows** (each only when it has entries).
 
 Every tool call is listed once, in the section it belongs to: **Files** (Read, Edit, Write,
 MultiEdit, Glob), **Skills**, **Agents** or **Tools** (everything else). Click a row in Files,
@@ -77,6 +115,21 @@ Each call shows how it ended:
 | ⚠ requested / ⚠ denied | Claude Code asked for permission to run this call / the permission was denied. |
 
 Rejected, interrupted and uncaptured calls are not counted as failures on the Statistics tab.
+
+#### Sub-agents and workflow agents
+
+The **Sub-agents** section shows the agents a turn started as a tree, nested agents under their
+parent. A **Workflows** section lists each workflow run with its status, duration and a stats
+strip (`N agents · M tokens · ~$cost · P tool uses`). Expand a run to see its args, summary,
+findings and the **Agents (N)** table: one row per agent with `#`, Task, Duration, Tokens and
+Cost, numbered `1`, `1.1`, … for nested agents. The table gains a **Phase** column when any agent
+of the run has a workflow phase. Click a row to open that agent's session in a window with its own
+**Logs** and **Raw logs** tabs.
+
+A sub-agent is labelled by the description its parent gave it (sessions recorded with **hook
+2.31.0 or newer** also carry the description and phase from the agent's own metadata), else by
+the start of its task, else by its agent id. The same label is used in the Logs tab, the charts,
+the Call Tree and the Session Map.
 
 ### Bash
 
@@ -107,38 +160,57 @@ PowerShell commands) are shown as plain text.
 
 ### Charts
 
-Each chart is a tab of its own: **Dashboard** (the key charts on one screen — click a card to open
-the full chart tab), **Context Growth**, **Context Usage**, **Agent Tree**, **Timeline**, **Tool
-Heatmap** and **Call Tree**. An older link that ends in `tab=charts` opens the chart you looked at
-last (the dashboard the first time). The charts show:
+Each chart is a tab of its own, all under **Cost & context** in **More ▾**. An older link that ends
+in `tab=charts` opens the chart you looked at last (the dashboard the first time).
 
-- **Cost** — cumulative spend over time
-- **Token usage** — input vs output tokens per turn
-- **Work time** — active vs idle periods
-- **Productivity** — lines added / removed per turn
-- **Context growth** — how the context window grew turn by turn. Expand a turn to see its steps;
+- **Dashboard** — Context Growth, Context Usage, Agent Tree, Timeline, Tool Heatmap and Call Tree
+  as small cards on one screen; click a card to open its full tab.
+- **Context Growth** — how the context window grew turn by turn. Expand a turn to see its steps;
   the number on the right of a step is how much the context grew until the next step (`+20k`,
   `−3k`, or `—` for the last step). Click a step row (or focus it and press Enter) to open its
   details: every tool call of the step with its status, input and output — the largest result
   first — followed by the assistant's text.
+- **Context Usage** — what the context is made of at its peak: system overhead, file contents,
+  tool results, images, prompt text and conversation history.
+- **Agent Tree** — the main session and its sub-agents as a tree, workflow agents grouped under
+  their workflow. Hover a node for its task, cost, duration and model; click it for its details.
+- **Timeline** — a Gantt chart of when each agent worked, one lane per agent on one time axis.
+  Hover a bar for its duration, cost, tool calls and model.
+- **Tool Heatmap** — which tools were called when: one row per tool, one column per step, darker
+  cells for more calls.
+- **Call Tree** — where the session's tokens and cost went, as a tree: the system context and
+  CLAUDE.md files, each prompt with its skills, files, output and cache, and each agent with a
+  branch of its own. Every row shows its share of the cost, so the most expensive branch stands
+  out.
 
-### Info
+### Harness usage
 
-Session metadata including:
+What harness the session used: a tree of the main session and every agent sub-session it spawned
+(workflow fan-outs grouped under one node), and for the selected session a chronological list of
+the skills, rules, sub-agent spawns, workflow runs, MCP tool calls and slash commands it used.
+Turn on **Include sub-sessions** to fold in everything its descendants used as well. Ordinary
+tool calls (Read, Bash, Edit…) are not listed here — the Logs and Statistics tabs cover those.
 
-| Field | Description |
-|---|---|
-| Model | The Claude model used (e.g. claude-sonnet-4-5) |
-| Duration | Wall-clock time from first to last event |
-| Files touched | Source files read or modified |
-| MCP servers | External MCP servers invoked |
-| Total cost | Estimated USD cost for the session |
+### Change surface
+
+Where the session tree wrote: the changed files, folders and modules, the lines changed, and how
+concentrated or spread out the changes were.
+
+### Tools/MCP
+
+The MCP server calls and monitored CLI tool calls of the session and all its sub-agents — the
+repository's [Tools/MCP tab](session-list.md#toolsmcp-tab) narrowed to this one session. A red dot
+on the tab means an MCP call of the session failed. The tree on the left groups calls by MCP / CLI,
+tool and operation; the table lists each call with its status; click a call for its parameters,
+input, output, stderr and signals. **Open in session ↗** opens the call's turn on the Logs tab.
 
 ### Session Map
 
 In the **Overview** group, and in the **What happened** view after Agent Tree. It shows the whole
 session as a map of cards — the main session, every workflow run and every agent — and lets you
 watch it unfold over time, live or as a replay.
+
+![Session Map replaying a finished workflow session: the main card, one column per workflow run with its agent cards, and the timeline at the bottom](images/session-map.png)
 
 **Realtime and replay.** The badge at the top left says which mode you are in:
 
@@ -203,6 +275,8 @@ startup context of the session's first request — and how big each part of it w
 Logs tab shows the same total in one line, "Startup context · N tokens", with a **View anatomy →**
 link to this tab.
 
+![System context anatomy tab: the startup context split by source in a coloured bar, with the table of parts below](images/system-context-anatomy.png)
+
 - **Total** — the exact size of the first request in tokens (input + cache write + cache read, as
   the model reported it).
 - **The bar** — the total split into coloured parts: the system prompt, the memory index
@@ -237,7 +311,3 @@ Git status and file sizes on disk come from the hook. Git status needs **hook 2.
 with an older hook the tab says so and shows `unknown` (or `outside repo` for files clearly outside
 the repository). Sessions recorded with a hook older than 2.22.0 have no file sizes on disk either.
 A skill synced to you by your organisation is shown with the source **org-synced**.
-
-## Navigation
-
-Use the **back arrow** in the session header to return to the repository session list without losing your scroll position.
