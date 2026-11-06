@@ -1,7 +1,7 @@
 # PoC: Session Map — a practical 2D map of one session's agents
 
 No task folder yet. Follow-up of `../2026-11-01-2137-session-galaxy-3d/` (the 3D galaxy turned out to be a
-marketing asset, too bright and not usable for analysis) and of `docs/competitive-research/gap-closing-plan.md`
+marketing asset, too bright and not usable for analysis) and of `docs/product-kb/competitive-research/gap-closing-plan.md`
 (P4 swimlanes / running markers, P6 by-agent tables). The layout idea comes from Agent Flow (agents as
 cards with cost and context, tool calls attached, a timeline); the styling follows `ui-principles.md`.
 

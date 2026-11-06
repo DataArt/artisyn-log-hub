@@ -1,6 +1,6 @@
 # Raw report 5 — Patterns from observability and LLM-ops products
 
-Basis: competitor KB and study (`docs/competitive-research/`), `client-routing-and-layout.md`,
+Basis: competitor KB and study (`docs/product-kb/competitive-research/`), `client-routing-and-layout.md`,
 `tab-ids.ts`. Read-only study, 2026-11-01.
 
 **What users face today:** session pane 14 tabs (Charts has 7 sub-tabs); repository 7 tabs, Analytics

@@ -7,7 +7,7 @@ argument-hint: "[only=<ids comma-separated: cc,security,nightly,github,competito
 Read-only for product code. It writes only its own state: `tmp/morning-check/*.json` (collector
 snapshots), `docs/morning-check/daily/*.md` (the report pages, gitignored),
 `.claude/skills/morning-check/cc-last-reviewed.json` and
-`docs/competitive-watch/{sources,seen}.md`. It never creates tasks, issues or branches and never
+`docs/product-kb/competitive-watch/{sources,seen}.md`. It never creates tasks, issues or branches and never
 runs `audit fix` — it proposes, the user decides.
 
 Collector scripts (CommonJS, Node built-ins + `gh`), all print JSON to stdout:
@@ -65,9 +65,9 @@ format given, max ~40 lines". Pass `effort: "lower"` to `nightly` and `github`.
 
 ### `competitors` — new competitive features
 
-> Knowledge base: `docs/competitive-watch/` (read `index.md`, `sources.md`, `seen.md`) and, for
-> what each tool already has, `docs/knowledgebase/product/competitors.md` and the tool files in
-> `docs/competitive-research/`.
+> Knowledge base: `docs/product-kb/competitive-watch/` (read `index.md`, `sources.md`, `seen.md`) and, for
+> what each tool already has, `docs/product-kb/competitors.md` and the tool files in
+> `docs/product-kb/competitive-research/`.
 > 1. For every source in `sources.md`: fetch it, keep only items published after its
 >    `Last checked` (or after 2026-11-01 when `—`) whose URL is not in `seen.md`. Run every
 >    search query the same way. Focus: Claude Code / AI coding agent monitoring, cost
@@ -82,7 +82,7 @@ format given, max ~40 lines". Pass `effort: "lower"` to `nightly` and `github`.
 >    (low items too, so they are not reported again), set `Last checked` to today for every
 >    source and query you actually read (leave it unchanged on fetch failure and say so), add a
 >    `sources.md` row for any new competitor, bump `timestamp` in the front matter of changed
->    files. Do not edit `docs/competitive-research/` — propose those edits instead.
+>    files. Do not edit `docs/product-kb/competitive-research/` — propose those edits instead.
 > 4. Output: **High** and **Medium** items (tool · what · URL · verdict); **Misc — may be
 >    interesting** (source · title · URL · one line why, plus points/comments for HN / Reddit);
 >    counts of low items; sources that failed.

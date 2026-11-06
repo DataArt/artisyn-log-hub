@@ -10,7 +10,7 @@ timestamp: "2026-11-01T00:00:00+04:00"
 
 # Gap-closing plan
 
-Companion to `README.md` (the matrix) and `docs/knowledgebase/product/competitors.md`. Every claim about
+Companion to `README.md` (the matrix) and `docs/product-kb/competitors.md`. Every claim about
 Log Hub below was checked against the KB or the code on 2026-11-01; the matrix verdicts were made by
 research agents from a short baseline and several are wrong (see "Verdict corrections").
 
@@ -228,7 +228,7 @@ research agents from a short baseline and several are wrong (see "Verdict correc
 
 Each increment: scenario steps in `tests/scenarios/` (one new scenario only for budgets), contract rows for
 new routes, algorithm docs for pattern rules, user-doc page updates in `user-docs/` (offline help), and a
-`docs/knowledgebase/product/competitors.md` refresh of the "Gaps they expose" list.
+`docs/product-kb/competitors.md` refresh of the "Gaps they expose" list.
 
 ## LLM observability as a market
 

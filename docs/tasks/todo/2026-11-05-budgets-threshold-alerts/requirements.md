@@ -14,8 +14,8 @@ Budgets With Threshold Alerts — set a spend budget (per user, team, repository
 
 Context:
 
-- `docs/knowledgebase/product/competitors.md` → "Gaps they expose": #1 is "Alerts, budgets, burn rate
-  (10 of 14)". Found again by the morning check on 2026-11-05 (`docs/competitive-watch/seen.md`).
+- `docs/product-kb/competitors.md` → "Gaps they expose": #1 is "Alerts, budgets, burn rate
+  (10 of 14)". Found again by the morning check on 2026-11-05 (`docs/product-kb/competitive-watch/seen.md`).
 - Spend must come from the same cost math the rest of the app uses (`docs/knowledgebase/llm-call-math.md`,
   `docs/knowledgebase/algorithms/cost-formula.md`, `@loghub/pricing`). OTEL cost
   (`docs/knowledgebase/otel-tabs.md`) is a possible near-realtime source.

@@ -4,7 +4,7 @@ title: "Competitive watch — seen log"
 description: "Every competitor item (release, blog post, docs change, new tool) the morning check has already seen, newest first, with its relevance and verdict for Log Hub."
 tags:
   - competitive-research
-timestamp: "2026-11-05T10:00:00+04:00"
+timestamp: "2026-11-06T10:00:00+04:00"
 ---
 
 # Seen log
@@ -13,12 +13,18 @@ Newest first. One row per item; the URL is the identity. `Relevance`: `high` (a 
 lacks or a direct positioning threat), `medium` (worth knowing, maybe borrow), `misc` (on topic
 but not a competitor feature — community posts, user complaints, tips, home-made tools; "may be
 interesting"), `low` (noise, kept so it is not reported again). `Verdict`: what to do — `none`, `idea: <short>`, `task: <task id>`, or
-`study: <file in docs/competitive-research/ updated>`.
+`study: <file in docs/product-kb/competitive-research/ updated>`.
 
 Baseline: everything published before 2026-11-01 is in the parity study and is not repeated here.
 
 | Seen | Source id | Published | Item | URL | Relevance | Verdict |
 |---|---|---|---|---|---|---|
+| 2026-11-06 | hn | 2026-11-06 | Ask HN: Engineers Focus Using AI — HN 1 / 0 | https://news.ycombinator.com/item?id=50390444 | low | none |
+| 2026-11-06 | hn | 2026-11-05 | Show HN: KeepPlain – trace code to the agent session and open the matching dialogue segment; records Claude Code/Codex/Cursor/Pi/Antigravity sessions to a SaaS (searchable past work, rules carried into new sessions, token counts per model, usage-limit-based hand-off to another agent; per-seat team plan) — HN 2 / 0 | https://github.com/keepplain/keepplain-plugin | misc | idea: reverse lookup from a file/line (or commit) to the session and transcript segment that wrote it — Log Hub stores Edit/Write tool calls per session but has no such lookup |
+| 2026-11-06 | hn | 2026-11-05 | Ask HN: Are you building an AI company brain? — HN 5 / 3 | https://news.ycombinator.com/item?id=50379710 | low | none |
+| 2026-11-06 | hn | 2026-11-05 | Show HN: Ski – voice-first multilingual coding harness — HN 2 / 0 | https://justski.it/ | low | none |
+| 2026-11-06 | hn | 2026-11-05 | Show HN: Penthera – offline rule-based pentest scanner — HN 1 / 0 | https://github.com/danoszz/penthera | low | none |
+| 2026-11-06 | grafana-cloud | 2026-11 | Grafana Cloud Claude Code integration 1.0.2: updated mixin dependencies only (dashboards unchanged: Claude Code, stats, usage breakdown, productivity) | https://grafana.com/docs/grafana-cloud/monitor-infrastructure/integrations/integration-reference/integration-claude-code/ (1.0.2) | low | none |
 | 2026-11-05 | langfuse-changelog | 2026-11-04 | Langfuse AI Gateway public beta: proxy for Claude Code / Codex / Copilot CLI / OpenCode with per-member keys, per-user/key/model cost analytics, model allowlists, key metadata (team, cost center) on every generation; self-hostable | https://langfuse.com/changelog/2026-11-04-ai-gateway-public-beta | medium | idea: optional team / cost-center tag per hook install so cost can be grouped by it; gateway capture itself is a different model (no transcript/harness), positioning only |
 | 2026-11-05 | hn | 2026-11-04 | Ravenry: local board for every Claude Code/Codex session (needs-you grouping, context fill, hand-off at half context, rule suggestions from repeated corrections) — HN 2 pts / 0 comments | https://github.com/patoles/ravenry | misc | idea: "corrections you keep typing" mined from transcripts as CLAUDE.md rule suggestions; not a cost competitor |
 | 2026-11-05 | hn | 2026-11-04 | Background subagents in Claude Code now use less of your usage limit (ClaudeDevs) — HN 2 / 0 | https://twitter.com/ClaudeDevs/status/2118063143167693011 | misc | none (cc news sub-check owns Claude Code changes; may affect subagent cost share) |

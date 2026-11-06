@@ -361,7 +361,7 @@ not waited for.
 - **Write cost**: recomputing the FR-7 rows of a session on every upload must stay proportional to
   that session's size; a row rewrite must not need to re-read other sessions.
 - **Data capture**: full input and output are captured by design — see
-  `docs/knowledgebase/product-purpose-and-data-capture.md`.
+  `docs/product-kb/product-purpose-and-data-capture.md`.
 - Hook changes follow the hook rules: version bump, installer rebuild, dogfooded copy refresh,
   `INSTALL_HOOK.md` sync.
 
