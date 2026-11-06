@@ -34,3 +34,4 @@ Folders are named `<YYYY-MM-DD>-<slug>` (the day the task was created).
 - [2026-11-04-admin-new-release-badge] Admin New Release Notification — archived 2026-11-04
 - [2026-11-03-otel-cost-attribution] OTEL Cost Attribution from New Claude Code Telemetry — archived 2026-11-05
 - [2026-11-04-otel-live-view] OTEL Live View — archived 2026-11-05
+- [2026-11-03-okf-view-kb-value] OKF View — Tell What to Change in the KB and Where — archived 2026-11-06
