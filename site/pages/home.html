@@ -1,24 +1,34 @@
 <section class="hero" aria-labelledby="hero-title">
   <div>
     <p class="eyebrow">Self-hosted analytics for Claude Code</p>
-    <h1 id="hero-title">This session cost {{ds:session.total|usd0}}. Is that good?</h1>
-    <p class="lead">You already know what AI coding costs — per month, per day, per session — and
-      controlling that is right and useful. But a number alone is not an answer: is
-      {{ds:session.total|usd0}} a lot or a little, good or bad? How do you make it cheaper — or when
-      is it worth spending more for better quality?</p>
-    <p class="lead">Log Hub answers the next questions: why it costs that much, which factors drive
-      it, whether your harness works the way you designed it, and what your tools really bring — for
-      one session and across the team.</p>
+    <h1 id="hero-title">It ran alone for {{ds:session.durationMin}} minutes, cost {{ds:session.total|usd0}} and {{ds:session.outcome}}. All good?</h1>
+    <p class="lead">A harness is what makes Claude Code effective: CLAUDE.md, rules, skills, hooks,
+      agents, MCP servers, a knowledge base. It moves five things — the quality of the result, cost,
+      speed, how long the agent works alone, and safety. With the same model, the harness alone
+      changes the cost per task up to five times at similar success rates (UC Berkeley and Arena,
+      2026). Yet it is tuned as a black box.</p>
+    <p class="lead">You already control the cost — right and useful. Log Hub answers the next
+      questions: what each harness element does to each of the five, for one session and across the
+      team.</p>
     <p class="actions">
       <a class="button button-primary" href="docs/install-server.html">Get started</a>
-      <a class="button" href="deck/index.html">Why Log Hub (deck)</a>
+      <a class="button" href="deck/index.html">Your harness, measured (deck)</a>
       <a class="button" href="{{site:repo}}" rel="noopener noreferrer">GitHub ↗</a>
     </p>
+    <nav class="dimensions" aria-labelledby="dimensions-title">
+      <p class="dimensions-title" id="dimensions-title">Five questions behind “all good”</p>
+      <ol>
+        <li><a class="dimension" href="features.html#c"><span class="dim-no">01 · quality</span>Right thing built?<span class="dim-link">Features → C, H</span></a></li>
+        <li><a class="dimension" href="features.html#a"><span class="dim-no">02 · cost</span>Was {{ds:session.total|usd0}} a lot?<span class="dim-link">Features → A</span></a></li>
+        <li><a class="dimension" href="features.html#i"><span class="dim-no">03 · speed</span>Was it fast?<span class="dim-link">Features → I</span></a></li>
+        <li><a class="dimension" href="features.html#i"><span class="dim-no">04 · autonomy</span>How far alone?<span class="dim-link">Features → I</span></a></li>
+        <li><a class="dimension" href="features.html#e"><span class="dim-no">05 · safety</span>What did it read and send?<span class="dim-link">Features → E</span></a></li>
+      </ol>
+    </nav>
   </div>
   <figure class="figure-block insight" aria-labelledby="home-figure-title">
     <div class="insight-head">
-      <span class="illustrative">Illustrative example</span>
-      <span>{{ds:insight.turns}} turns</span>
+      <span>{{ds:insight.turns}} turns · {{ds:session.durationMin}} min</span>
     </div>
     <figcaption id="home-figure-title">One session, {{ds:session.total|usd}} — and what to do about it</figcaption>
 
@@ -39,7 +49,7 @@
         <li>sub-agents {{ds:session.parts.subAgents|usd}}</li>
       </ul>
       <p class="insight-note">Cache reads are {{ds:session.contextRereadPct|pct}} of the tokens — cheap per
-        token, expensive by volume. The breakdown says where the money went — not why, and not what to
+        token, expensive by volume. The breakdown shows where the money went, but not why or what to
         change.</p>
     </div>
 
@@ -48,8 +58,11 @@
       <ul class="readout">
         <li><span>system context per turn</span><b>{{ds:insight.systemContextTokens}} tokens</b></li>
         <li><span>of it, never invoked here</span><b class="flag">{{ds:insight.unusedContextPct|pct}}</b></li>
+        <li><span>of it, synced from the organization</span><b>{{ds:kb.orgSyncedContextPct|pct}}</b></li>
         <li><span>MCP servers used / loaded</span><b>{{ds:insight.mcpUsed}} / {{ds:insight.mcpLoaded}}</b></li>
         <li><span>skills used / loaded</span><b>{{ds:insight.skillsUsed}} / {{ds:insight.skillsLoaded}}</b></li>
+        <li><span>KB articles read · pointer yield</span><b>{{ds:kb.articlesRead}} · {{ds:kb.pointerYieldPct|pct}}</b></li>
+        <li><span>MCP calls · errors</span><b class="flag">{{ds:session.mcpCalls}} · {{ds:session.mcpErrors}}</b></li>
       </ul>
     </div>
 
@@ -71,6 +84,8 @@
         <li>Start a fresh session at the task boundary — {{ds:insight.turns}} turns where the repo median
           is {{ds:insight.repoMedianTurns}}, and every turn re-reads the whole context.</li>
         <li>Check the workflow that spawns sub-agents: their share is well above the team's.</li>
+        <li>Move the KB article read in {{ds:kb.alwaysReadPct|pct}} of sessions into CLAUDE.md; fix
+          the MCP tool that failed {{ds:session.mcpErrors}} of {{ds:session.mcpCalls}} calls.</li>
       </ol>
     </div>
   </figure>
@@ -91,24 +106,59 @@
   <script src="assets/carousel.js" defer></script>
 </section>
 
-<section class="cards" aria-label="Three questions Log Hub answers">
+<section class="anatomy" aria-labelledby="anatomy-title">
+  <h2 id="anatomy-title">Anatomy of a harness — and where Log Hub shows each part</h2>
+  <ul>
+    <li><span class="part">CLAUDE.md</span><a href="features.html#b">System context →</a></li>
+    <li><span class="part">Rules</span><a href="features.html#b">System context →</a></li>
+    <li><span class="part">Skills</span><a href="features.html#b">Harness usage →</a></li>
+    <li><span class="part">Hooks</span><a href="features.html#h">Logs →</a></li>
+    <li><span class="part">Agents</span><a href="features.html#i">Agents →</a></li>
+    <li><span class="part">Workflows</span><a href="features.html#i">Session Map →</a></li>
+    <li><span class="part">MCP servers</span><a href="features.html#e">Tools/MCP →</a></li>
+    <li><span class="part">Knowledge base</span><a href="features.html#g">OKF →</a></li>
+    <li><span class="part">Memory</span><a href="features.html#b">System context →</a></li>
+  </ul>
+</section>
+
+<section class="cards cards-six" aria-label="Six questions Log Hub answers">
   <article class="card">
-    <h2>Why it costs this much</h2>
-    <p>Context growth, cache reads, sub-agents — the factors that drive the cost of each session,
-      turn by turn.</p>
+    <p class="card-dim">Quality</p>
+    <h2>Did it build the right thing?</h2>
+    <p>What changed and who judged it: change surface, a separate post-turn evaluator, where the
+      agent struggled.</p>
+    <a class="card-link" href="features.html#c">Features → C, H</a>
+  </article>
+  <article class="card">
+    <p class="card-dim">Cost</p>
+    <h2>Was {{ds:session.total|usd0}} a lot or a little?</h2>
+    <p>Four token prices, context growth, cost by skill, MCP server, effort and fast mode.</p>
     <a class="card-link" href="features.html#a">Features → A</a>
   </article>
   <article class="card">
-    <h2>Does the harness work?</h2>
-    <p>What CLAUDE.md, rules, skills and MCP servers add to every turn — and what the agent actually
-      uses.</p>
-    <a class="card-link" href="features.html#b">Features → B</a>
+    <p class="card-dim">Speed</p>
+    <h2>Was it fast?</h2>
+    <p>Session Map replay, the Timeline and the per-turn trace waterfall.</p>
+    <a class="card-link" href="features.html#i">Features → I</a>
   </article>
   <article class="card">
-    <h2>What it really brings</h2>
-    <p>Changes, productivity and the value of your tools — per session and across the team, with
-      anomalies.</p>
-    <a class="card-link" href="features.html#c">Features → C, D, E</a>
+    <p class="card-dim">Autonomy</p>
+    <h2>How far could it go alone?</h2>
+    <p>Autonomous minutes, lines per autonomous hour, the Agents table with workflow phases.</p>
+    <a class="card-link" href="features.html#i">Features → I</a>
+  </article>
+  <article class="card">
+    <p class="card-dim">Safety</p>
+    <h2>What did it read and send?</h2>
+    <p>Full capture, permission denials, every tool answer, and a post-turn evaluator that runs
+      without tools.</p>
+    <p class="card-links"><a href="features.html#e">Features → E</a> · <a href="docs/data-collection.html">Data &amp; security →</a></p>
+  </article>
+  <article class="card card-team">
+    <p class="card-dim">Team scale</p>
+    <h2>What happens across the team?</h2>
+    <p>Analytics, 17 reports and the outliers worth a look, live or over a month.</p>
+    <a class="card-link" href="features.html#d">Features → D</a>
   </article>
 </section>
 

@@ -15,8 +15,7 @@ Four token kinds matter:
 - **Cache write** — input stored into the cache. More expensive than plain input; it pays off
   only when later turns read it back.
 
-The app also records the cost the AI tooling reported about itself. If the computed and reported
-figures disagree by 33% or more, an amber ⚠ appears next to the session's cost — treat that
+The app also records Claude Code's OTEL cost. If the computed and OTEL figures disagree by 33% or more, an amber ⚠ appears next to the session's cost — treat that
 session's number as approximate.
 
 ## Where you see cost
@@ -36,6 +35,19 @@ including nested agents at any depth. Workflow agents report only a total token 
 the input/output/cache split needed for exact pricing, so their cost is an **estimate** (marked
 with `~`, based on the session's average token rate). When a total can't include workflow costs
 exactly, it's marked **"(partial)"**.
+
+In the session header's cost tooltip, sub-agents have a row of their own. It reads **Sub-agents
+(from OTEL)** when some sub-agent's cost was taken from its OTEL calls because its transcript
+missed some of them (older Claude Code versions; see
+[Sub-agent cost from OTEL](otel-tab.md#sub-agent-cost-from-otel)).
+
+## Hidden (utility) calls
+
+Claude Code also makes model calls that never appear in a transcript: title generation,
+summaries, the next-prompt suggestion and similar. Log Hub learns about them from OTEL and prices
+them like any other call, so the session cost includes them; that is also why the tooltip's
+"Calculated approx. total" can differ slightly from the session cost. The OTEL tab lists them as
+[hidden calls](otel-tab.md#hidden-calls). Sessions without OTEL data have no utility-call cost.
 
 ## The "⚠ no pricing" badge
 
@@ -68,13 +80,17 @@ Where to see it:
   the turn, and how much of the model's window remains.
 - **Summary tab:** the **Peak context** tile — the largest context any turn reached, as a
   percentage of the model's window.
-- **Charts → Context Growth:** one bar per LLM call showing prior context vs. new growth, with
+- **Context Growth** tab: one bar per LLM call showing prior context vs. new growth, with
   **⚡ Compaction** markers where Claude Code compressed the history (e.g. `150k → 40k`).
   Compactions are expensive turns — frequent ones are a sign the session ran too long or read
   too much.
-- **Charts → Context Usage:** a breakdown by category — system overhead, file contents, tool
+- **Context Usage** tab: a breakdown by category — system overhead, file contents, tool
   results, images, prompt text, conversation history — showing what actually fills the window.
+
+Context Growth is in the **Cost** view and Context Usage in **Harness & context**; both are also
+under **More ▾ → Cost & context** (see [Views and tabs](session-log.md#views-and-tabs)).
 
 **Rule of thumb:** a session that keeps its context lean stays cheap; a session pushed near the
 window ceiling burns tokens on compaction and re-reading. When peak context is regularly high,
-prefer smaller tasks and fresh sessions — and see "Tuning Your Setup" for what to trim.
+prefer smaller tasks and fresh sessions — and see [Tuning Your Setup](tuning-your-setup.md) for
+what to trim.

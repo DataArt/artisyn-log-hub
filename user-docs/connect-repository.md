@@ -1,12 +1,12 @@
 # Connecting a Repository
 
-Connecting a project takes one install command, one config entry, and one Claude Code session to
-confirm data is flowing. You do this once per repository.
+Connecting a project takes one install command and one Claude Code session to confirm data is
+flowing. You do this once per repository.
 
 ## Prerequisites
 
 - **Node.js** — a current LTS line (22, 24 or 26), patched to at least 22.23.4 / 24.22.1 / 26.12.1.
-  The hook still starts on Node.js 18.19+, but 18 and 20 are end-of-life and get no security fixes
+  The hook still starts on Node.js 18.19+, but 18 and 20 are end-of-life and get no security fixes.
 - **Git** (the project must be a git repository)
 - **Claude Code** installed and working in the project
 - An account on this Log Hub server
@@ -29,6 +29,9 @@ Within seconds of the first completed turn:
 - An **Installed Hooks** section appears in the sidebar with a green dot and **OK** next to your
   repository.
 - Opening the repository shows your session in the **Sessions** tab.
+- While the session runs, the **Live** item in the top bar shows it under your repository, with
+  its tokens and cost updating every few seconds (see
+  [OTEL tab → Live view](otel-tab.md#live-view)).
 
 ## The Hook State page
 

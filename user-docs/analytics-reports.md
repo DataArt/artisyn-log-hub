@@ -13,7 +13,8 @@ The toolbar at the top controls every view:
 
 - **Time window:** presets **1d / 2d / 3d / 1w / 2w / 1m** (rolling from now), or **Custom** for
   an exact date range.
-- **Group by:** no grouping, by branch, or by user (team repositories only).
+- **Group by:** no grouping, by branch, by user (team repositories only), or — under
+  **Attributes**, once session attributes are configured — by any session attribute.
 - **Branches** / **Users:** popovers to limit the data to a selection.
 - **Layout:** **Vertical (timeline)** — values over time — or **Horizontal (ranking)** — totals
   side by side.
@@ -30,11 +31,11 @@ Available views:
 | Productivity | Lines per hour, cost per hour, cost per line |
 | Log Lines | Volume of recorded log data |
 | Cache Read Ratio | How well prompt caching is being reused |
+| Change Surface | How widely each session's file changes spread across folders and modules |
 | Tool Analytics | Call counts per tool |
 | Token Breakdown | Input / output / cache token volumes |
 | Productivity Counters | Diff-based line counts per day |
 | Active Sessions | Sessions by last activity |
-| Attributes | Session count or cost per attribute value |
 
 ## Reports tab
 
@@ -47,15 +48,17 @@ preview and a **Download as PDF** button.
   mix, a per-engineer table, and the top 5 most expensive sessions.
 - **Activity** — **Session Timeline** (sessions per day), **Work Time Distribution**,
   **Tool Analytics** (tools, main agent vs sub-agents, MCP servers), **Active Sessions**.
-- **Code → Branch Summary** — sortable per-branch totals.
+- **Code** — **Branch Summary** (sortable per-branch totals) and **Change Surface** (the files,
+  folders and modules the period's sessions changed, and how spread out the changes were).
 - **Cost** — **Cost by Branch**, **Cost by User**, **Cache Read Ratio** (including "Why was
   cache creation high?"), **Token Usage** (by service tier and by day).
 - **Productivity** — **Productivity** (cost per line by day) and **Productivity Counters**.
-- **Harness → Harness Usage** — every skill, rule, MCP server, and tool available in your
+- **Harness** — **Harness Usage**: every skill, rule, MCP server, and tool available in your
   setup, with how often each was actually used and its token share — the report that finds
-  never-used harness elements you're paying context for.
-- **Attribution** — **Attribution Breakdown** (sessions and cost per attribute value) and
-  **Attribution Usage** (what the attribute evaluations themselves cost).
+  never-used harness elements you're paying context for. **Claude Code Version Usage**: the
+  Claude Code versions each user ran in the period.
+- **Attributes** — **Attribute Breakdown** (sessions and cost per attribute value) and
+  **Attribute Extraction Usage** (what the attribute evaluations themselves cost).
 
 If an attribute filter is active in the session list, the reports inherit it and print an
 "Attribute filter:" line in their header.
@@ -68,5 +71,6 @@ If an attribute filter is active in the session list, the reports inherit it and
 | "Which branch / person is spending the most?" | Cost by Branch, Cost by User |
 | "Are we reusing the prompt cache well?" | Cache Read Ratio |
 | "Which skills and MCP servers are dead weight?" | Harness Usage |
-| "What kind of work were the sessions doing?" | Attribution Breakdown, Attributes view |
+| "What kind of work were the sessions doing?" | Attribute Breakdown, Analytics grouped by an attribute |
+| "Is everyone on a current Claude Code?" | Claude Code Version Usage |
 | "What's happening right now / this week?" | Analytics tab with a 1d–1w preset |

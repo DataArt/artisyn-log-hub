@@ -154,7 +154,7 @@ browser — not an npm dependency, not in `dist/`, the image or the in-app help:
 
 | Component | Version | License | Role |
 |---|---|---|---|
-| reveal.js (from jsDelivr, pinned version + SRI `sha384`) | 5.2.1 | MIT | Slide engine of the site deck only (`reset.css`, `reveal.css`, `reveal.js`, notes plugin) |
+| reveal.js (from jsDelivr, pinned version + SRI `sha384`) | 5.2.1 | MIT | Slide engine of the site deck only (`reset.css`, `reveal.css`, `reveal.js`) |
 | mermaid (from jsDelivr, pinned version + SRI `sha384`) | 12.2.0 | MIT | Renders the architecture diagram on the site docs pages only (`site/diagrams/*.mmd`); the app never loads it |
 
 ---

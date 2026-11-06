@@ -7,7 +7,7 @@ reviewer: none
 
 ## Purpose
 
-The site (Home, Features) and the deck show one fictional example — an average $8 session, $144 a day,
+The site (Home, Features) and the deck show one worked example — an average $8 session, $144 a day,
 $2,880 a month for a team of six. Every figure comes from `site/data/example-dataset.json`, so the
 pages never disagree with each other, and the arithmetic between the figures is checked at build
 time so a reader who multiplies them gets the same numbers.
@@ -26,7 +26,7 @@ The dataset (money in USD numbers):
 contextRereadPct }`, `daily { sessions, total }`, `monthly { total }`, an optional `insight`
 block (the Home "what to do about it" figure: `turns`, `systemContextTokens`,
 `unusedContextTokens`, `unusedContextPct`, `subAgentsPct`, `trimPerSession`, `trimMonthly`, plus
-comparison figures no rule checks), plus `tools` rows that no rule checks. A placeholder is `{{ds:<dot.path>}}` or `{{ds:<dot.path>|<format>}}`.
+comparison figures no rule checks), plus `tools` rows, `anomalies`, `productivity`, `kb`, `costShare`, `live` and the extra `session` keys of deck v2 (`durationMin`, `autonomousMin`, `outcome`, …) that no rule checks. A placeholder is `{{ds:<dot.path>}}` or `{{ds:<dot.path>|<format>}}`.
 
 ## Rules
 
@@ -107,6 +107,6 @@ Rows (21): [`docs/algorithm-examples/site-example-dataset.json`](../../algorithm
 
 ## Where the result is visible
 
-The figures on the site's Home and Features pages and in the deck (all blocks labelled
-"Illustrative example"). Safe behaviour: `npm run build:site` exits 1 on an inconsistent dataset
+The figures on the site's Home and Features pages and in the deck (stated plainly, with no
+hedging label). Safe behaviour: `npm run build:site` exits 1 on an inconsistent dataset
 or an unknown placeholder, so a wrong figure never reaches GitHub Pages.

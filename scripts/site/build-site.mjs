@@ -62,9 +62,9 @@ const DESCRIPTION_MAX = 160;
 
 /** Layout pages: [source name in site/pages/, title, activeSection, description (50–160 chars)]. */
 const LAYOUT_PAGES = [
-  ['home', SITE_NAME, 'home', 'Self-hosted analytics for Claude Code: see why a session cost what it did, whether your harness works, and what AI coding brings your team.'],
-  ['features', 'Features', 'features', 'Eight questions Log Hub answers about Claude Code sessions: cost drivers, harness health, real impact, team trends, anomalies and knowledge-base use.'],
-  ['questions', 'Questions', 'questions', 'Answers to the questions teams ask before adopting Log Hub: what data it collects, where it is stored, who can see it and how long it is kept.'],
+  ['home', `${SITE_NAME} — your Claude Code harness, measured`, 'home', 'Self-hosted analytics for Claude Code: see what each part of your harness does to the quality, cost, speed, autonomy and safety of a session.'],
+  ['features', 'Features', 'features', 'Nine questions Log Hub answers about Claude Code sessions: cost drivers, harness health, impact, speed, autonomy, team trends, tools and KB use.'],
+  ['questions', 'FAQ', 'questions', 'Answers to the questions teams ask before adopting Log Hub: what data it collects, where it is stored, who can see it and how long it is kept.'],
 ];
 
 function fail(code, lines) {

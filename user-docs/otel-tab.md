@@ -46,8 +46,9 @@ sessions of the team members you may see, and the cost flow gains a user column;
 
 ## Session OTEL tab
 
-The **OTEL** tab of a session (the rightmost session tab) covers the session and all of its
-sub-agents. From top to bottom:
+The **OTEL** tab of a session is in the **Cost** and **Failed tool call** views and under
+**More ▾ → Cost & context** (see [Views and tabs](session-log.md#views-and-tabs)). It covers the
+session and all of its sub-agents. From top to bottom:
 
 - **Header** — the cost source, the hook version that sent the data and whether traces are on,
   with the **Realtime data** badge and its notices. When Claude Code reports account details, an
@@ -73,6 +74,8 @@ sub-agents. From top to bottom:
 - **Details panel** — click a row for its request id, `query_source`, agent, model, tokens, cache,
   cost and context, and **show all raw** attributes. In a team where prompts are hidden from you,
   another member's raw attributes say "hidden for your role".
+
+![Session OTEL tab, Traces: one turn with its Time bar, the minimap and the waterfall of model calls and tools with their cost and duration](images/trace-waterfall.png)
 
 While the session runs, the tab asks for new data every 5 seconds and briefly highlights what is
 new: a **NEW** tag on added rows, a flash on the Σ values above them, an outline on the changed
@@ -114,9 +117,13 @@ footer says so).
 ## Live view
 
 The **Live** button in the top bar (next to **Home**) shows what is running right now, across
-your own repositories and every team you belong to. A red dot on it means at least one session is
-live; hover it for "Live now: N sessions · M agents · $x.xx" (or "Nothing live right now"). The
-button checks every 10 seconds while the page is visible.
+your own repositories and every team you belong to. Its square activity icon is grey when
+nothing is live and glows green while at least one session is live; next to it, a sparkline
+shows the tokens per minute of the last 15 minutes. Hover it for "Live now: N sessions · M agents ·
+$x.xx total" (or "Nothing live right now") and, below, "Last 15 min: N tokens · $x". The button
+checks every 10 seconds while the page is visible.
+
+![Live window: the tree of teams, repositories, sessions and agents on the left, KPI tiles and the "Tokens over time" chart in the middle](images/live-view.png)
 
 **Opening.** Click **Live** to open the Live window over the current page. It is kept in the page
 address (`live=`), so **Back** closes it and a link to it opens the same node. Close it with ✕ or
@@ -207,6 +214,8 @@ the Claude Code version does not send that tag yet, when the setting was left at
 for skill and MCP server names — when `OTEL_LOG_TOOL_DETAILS=1` is not set (the installer sets
 it). Older sessions, or sessions from an older Claude Code, show only the **not reported** series;
 the totals are the same under every grouping.
+
+![Repository OTEL tab, 7 days, cost stacked by Skill: one colour per skill and a grey "not reported" series](images/otel-cost-by-skill.png)
 
 ## Plan and notional cost
 

@@ -3,32 +3,32 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Why Log Hub — Artisyn Log Hub deck</title>
-  <meta name="description" content="Why AI coding costs what it costs — and what you get for it. An introduction to Artisyn Log Hub, open source by DataArt.">
+  <title>Your harness, measured — Artisyn Log Hub deck</title>
+  <meta name="description" content="Your Claude Code harness, measured: what each skill, hook, MCP server and KB article does to quality, cost, speed, autonomy and safety.">
   <!--
-    "Why Log Hub" deck (impl-plan DD-23, DD-24). Built by scripts/site/build-site.mjs, which fills
-    the site and ds placeholders (site/data/example-dataset.json — every figure here is
-    fictional and labelled "Illustrative example").
+    "Your harness, measured" deck (task 2026-11-06-deck-v2-harness-measured). Built by
+    scripts/site/build-site.mjs, which fills the site and ds placeholders (site/data/example-dataset.json).
     reveal.js 5.2.1 from jsDelivr, pinned version + SRI (sha384 of the published files); no reveal
-    theme — ../assets/theme.css + deck.css. Keys: arrows / space, S = speaker view (notes are the
-    <aside class="notes"> blocks), ?print-pdf = PDF export.
+    theme — ../assets/theme.css + deck.css. Keys: arrows / space, ?print-pdf = PDF export.
+    No speaker notes, no footnotes, no source URLs: a study figure is attributed in its own sentence
+    (institution or group, year); the source list lives in docs/knowledgebase/user-docs-and-site.md.
     Structure the site scenario relies on: content slides are <section class="content-slide">;
     their body text is .slide-body (one headline sentence in .headline, at most 3 bullets, at most
-    40 words of body text); every block that shows dataset figures is a .deck-figure carrying
-    <span class="illustrative">Illustrative example</span>.
+    40 words of body text; text in a .deck-figure or .visual-slot is not body text); every block
+    that shows dataset figures is a .deck-figure. Slide 2 is the section.thesis-slide (the hook).
   -->
   <!-- Head tags hand-copied from scripts/site/layout.mjs page() (og:image values = OG_IMAGE_*);
        og:title must stay equal to the page title, og:description to the description above. -->
   <link rel="canonical" href="{{site:url}}deck/">
   <meta property="og:type" content="website">
   <meta property="og:site_name" content="Artisyn Log Hub">
-  <meta property="og:title" content="Why Log Hub — Artisyn Log Hub deck">
-  <meta property="og:description" content="Why AI coding costs what it costs — and what you get for it. An introduction to Artisyn Log Hub, open source by DataArt.">
+  <meta property="og:title" content="Your harness, measured — Artisyn Log Hub deck">
+  <meta property="og:description" content="Your Claude Code harness, measured: what each skill, hook, MCP server and KB article does to quality, cost, speed, autonomy and safety.">
   <meta property="og:url" content="{{site:url}}deck/">
   <meta property="og:image" content="{{site:url}}assets/og-image.png">
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
-  <meta property="og:image:alt" content="Log Hub cost flow: model to user to branch">
+  <meta property="og:image:alt" content="Artisyn Log Hub: It ran alone for 10 minutes, cost $8 and shipped the feature. All good? Quality, cost, speed, autonomy, safety">
   <meta name="twitter:card" content="summary_large_image">
   <link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="../assets/apple-touch-icon.png">
@@ -46,28 +46,24 @@
 <section class="title-slide" data-slide="title">
   <div class="slide-frame">
     <h1>Artisyn Log Hub</h1>
-    <p class="subtitle">Why AI coding costs what it costs —<br>and what you get for it</p>
+    <p class="subtitle">Your harness, measured</p>
+    <p class="subtitle-2">what each skill, hook, MCP server and KB article does to quality, cost, speed, autonomy and safety</p>
     <div class="title-rule"></div>
     <p class="tagline">Self-hosted analytics for Claude Code sessions</p>
     <p class="byline">Open source by DataArt · MIT · no hosted service, your data stays with you</p>
     <p class="slide-footer">{{site:url}}</p>
   </div>
-  <aside class="notes">
-    Log Hub is self-hosted: a hook in each repository uploads Claude Code sessions to your own
-    server, and the web app answers the questions that come after the cost number. Keys: arrows to
-    move, S for this speaker view, ?print-pdf for a PDF.
-  </aside>
 </section>
 
-<!-- 2 · Problem / thesis (DD-22a, wireframes/slide-opening-thesis.svg) -->
-<section class="thesis-slide" data-slide="thesis">
+<!-- 2 · The hook (thesis-slide; wireframes/deck-slide-02-hook.svg) -->
+<section class="thesis-slide hook-slide" data-slide="hook">
   <div class="slide-frame">
     <header class="slide-head">
-      <p class="block-marker">The problem</p>
-      <ol class="pills" aria-label="Storyline"><li class="active">P</li><li>A</li><li>B</li><li>C</li><li>D</li><li>E</li><li>F</li></ol>
+      <p class="block-marker">The hook</p>
+      <ol class="pills" aria-label="Storyline"><li class="active">hook</li><li>harness</li><li>cost</li><li>speed</li><li>context</li><li>quality</li><li>team</li><li>tools</li><li>safety</li></ol>
     </header>
-    <h2 class="headline">This session cost {{ds:session.total|usd0}}. Is that good?</h2>
-    <div class="thesis-cols">
+    <h2 class="headline">It ran alone for {{ds:session.durationMin}} minutes, cost {{ds:session.total|usd0}} and {{ds:session.outcome}}. All good?</h2>
+    <div class="hook-cols">
       <div class="thesis-col control deck-figure">
         <h3>You already control</h3>
         <p class="sub">right and useful</p>
@@ -77,48 +73,134 @@
           <li><span class="big">{{ds:session.total|usd0}}</span> / session</li>
         </ul>
         <p class="thesis-ok">✓ cost is tracked</p>
-        <p class="thesis-label"><span class="illustrative">Illustrative example</span></p>
+        <p class="hook-meta">{{ds:session.durationMin}} min · {{ds:insight.turns}} turns · {{ds:session.linesChanged}} lines changed</p>
       </div>
-      <div class="thesis-col questions">
+      <div class="hook-questions">
         <h3>The number does not say</h3>
-        <ul>
-          <li>A lot or a little?</li>
-          <li>Good or bad?</li>
-          <li>How to make it cheaper?</li>
-          <li>Or spend more for better quality?</li>
-        </ul>
-      </div>
-      <div class="thesis-col answers">
-        <h3>Log Hub answers</h3>
-        <ul>
-          <li>Why it costs this much</li>
-          <li>Which factors drive it</li>
-          <li>Does the harness work as designed</li>
-          <li>What each tool brings</li>
-        </ul>
-        <p class="sub">per session and across the team</p>
+        <ol class="dim-tiles">
+          <li><span class="dim-no">01 · quality</span>Did it build the right thing?</li>
+          <li><span class="dim-no">02 · cost</span>Was {{ds:session.total|usd0}} a lot?</li>
+          <li><span class="dim-no">03 · speed</span>Was it fast?</li>
+          <li><span class="dim-no">04 · autonomy</span>How far could it go alone?</li>
+          <li><span class="dim-no">05 · safety</span>What did it read and send?</li>
+        </ol>
+        <p class="hook-answer">Log Hub answers each one per session and across the team, split by harness element: CLAUDE.md, rules, skills, hooks, agents, MCP servers, knowledge base, memory.</p>
       </div>
     </div>
     <p class="slide-footer">{{site:url}}</p>
   </div>
-  <aside class="notes">
-    You already know what AI coding costs — per month, per day, per session — and controlling that
-    is right and useful. But a number alone is not an answer: this session cost
-    {{ds:session.total|usd0}}. Is that a lot or a little, good or bad? How do you make it cheaper — or
-    when is it worth spending more for better quality? Log Hub answers the next questions: why it
-    costs that much, which factors drive it, whether your harness works the way you designed it, and
-    what your tools really bring — for one session and across the team.
-    The example: a team of {{ds:team.developers}} developers, {{ds:daily.sessions}} sessions a day,
-    {{ds:team.workingDays}} working days — {{ds:monthly.total|usd}} a month. All figures are fictional.
-  </aside>
 </section>
 
-<!-- 3 · A: cost breakdown of the session -->
-<section class="content-slide" data-block="A">
+<!-- 3 · The harness decides (study figures only; no dataset figure on this slide) -->
+<section class="content-slide board-slide" data-block="harness">
   <div class="slide-frame">
     <header class="slide-head">
-      <p class="block-marker">A · Why it costs this much</p>
-      <ol class="pills" aria-label="Storyline"><li>P</li><li class="active">A</li><li>B</li><li>C</li><li>D</li><li>E</li><li>F</li></ol>
+      <p class="block-marker">The harness decides</p>
+      <ol class="pills" aria-label="Storyline"><li>hook</li><li class="active">harness</li><li>cost</li><li>speed</li><li>context</li><li>quality</li><li>team</li><li>tools</li><li>safety</li></ol>
+    </header>
+    <h2 class="headline">The harness moves all five.</h2>
+    <div class="slide-body">
+      <ul>
+        <li>Same model, different harness: a different bill and a different number of tasks solved.</li>
+      </ul>
+    </div>
+    <div class="visual-slot study-board" role="list" aria-label="One measured finding per dimension">
+      <div class="study" role="listitem"><p class="study-dim">Quality</p><p class="study-fig">43 → 72</p><p class="study-text">of 169 SWE-bench Verified tasks fully solved after a harness-only change</p><p class="study-src">“Same Model, Different Harness”, 2026</p></div>
+      <div class="study" role="listitem"><p class="study-dim">Cost</p><p class="study-fig">up to 5×</p><p class="study-text">the cost per task for the same model at similar success rates</p><p class="study-src">UC Berkeley and Arena, 2026</p></div>
+      <div class="study" role="listitem"><p class="study-dim">Speed</p><p class="study-fig">20×</p><p class="study-text">the fixed context read before the first action: Claude Code 16,581 tokens, mini-SWE-agent 829</p><p class="study-src">Liu and Han, 2026</p></div>
+      <div class="study" role="listitem"><p class="study-dim">Autonomy</p><p class="study-fig">18 models</p><p class="study-text">tested; performance degrades as the input grows, and a long run alone keeps growing it</p><p class="study-src">Chroma, 2025</p></div>
+      <div class="study" role="listitem"><p class="study-dim">Safety</p><p class="study-fig">36.5 %</p><p class="study-text">average success of poisoned MCP tool descriptions across 20 agent settings</p><p class="study-src">MCPTox, 2025</p></div>
+    </div>
+    <p class="slide-footer">{{site:url}}</p>
+  </div>
+</section>
+
+<!-- 4 · Black box vs glass box -->
+<section class="content-slide" data-block="harness">
+  <div class="slide-frame">
+    <header class="slide-head">
+      <p class="block-marker">Black box or glass box</p>
+      <ol class="pills" aria-label="Storyline"><li>hook</li><li class="active">harness</li><li>cost</li><li>speed</li><li>context</li><li>quality</li><li>team</li><li>tools</li><li>safety</li></ol>
+    </header>
+    <h2 class="headline">Tuned as a black box. Log Hub opens it.</h2>
+    <div class="slide-cols">
+      <div class="slide-body">
+        <ul>
+          <li>Today: edit CLAUDE.md, run a session, decide it “feels better”.</li>
+          <li>Even the vendor advises reading the traces and removing one component at a time (Anthropic, 2026).</li>
+          <li>Log Hub is those traces, split by harness element.</li>
+        </ul>
+      </div>
+      <div class="visual-slot deck-visual has-figure contrast-board">
+        <div class="contrast-col black">
+          <p class="board-title">Black box</p>
+          <ul>
+            <li>CLAUDE.md edited</li>
+            <li>a skill added</li>
+            <li>an MCP server connected</li>
+            <li class="verdict">→ “feels better”</li>
+          </ul>
+        </div>
+        <div class="contrast-col glass">
+          <p class="board-title">Glass box</p>
+          <ul>
+            <li>tokens it loads every turn</li>
+            <li>calls, errors, denials</li>
+            <li>its share of the cost</li>
+            <li class="verdict">→ before vs after, per element</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+    <p class="slide-footer">{{site:url}}</p>
+  </div>
+</section>
+
+<!-- 5 · Anatomy of an ADLC harness -->
+<section class="content-slide" data-block="harness">
+  <div class="slide-frame">
+    <header class="slide-head">
+      <p class="block-marker">Anatomy of a harness</p>
+      <ol class="pills" aria-label="Storyline"><li>hook</li><li class="active">harness</li><li>cost</li><li>speed</li><li>context</li><li>quality</li><li>team</li><li>tools</li><li>safety</li></ol>
+    </header>
+    <h2 class="headline">Ten parts. Each one has a view.</h2>
+    <div class="slide-cols">
+      <div class="col-stack">
+        <div class="slide-body">
+          <ul>
+            <li>Find any view with All views (Ctrl/Cmd+K) or “Start from a question”.</li>
+          </ul>
+        </div>
+        <div class="visual-slot anatomy-table">
+          <table>
+            <thead><tr><th scope="col">Harness element</th><th scope="col">Where Log Hub shows it</th></tr></thead>
+            <tbody>
+              <tr><td>CLAUDE.md</td><td>System context anatomy</td></tr>
+              <tr><td>Rules</td><td>System context · Harness usage</td></tr>
+              <tr><td>Skills</td><td>Harness usage · OTEL by skill</td></tr>
+              <tr><td>Hooks</td><td>Raw Logs · each run, exit code</td></tr>
+              <tr><td>Agents</td><td>Agents · Session Map</td></tr>
+              <tr><td>Workflows</td><td>Agents (Phase) · Session Map</td></tr>
+              <tr><td>MCP servers</td><td>Tools/MCP · OTEL by MCP server</td></tr>
+              <tr><td>Knowledge base</td><td>OKF · KB access, KB value</td></tr>
+              <tr><td>Memory</td><td>System context anatomy</td></tr>
+              <tr><td>Settings</td><td>Logs · permission requests, denials</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <figure class="shot deck-shot"><img src="../assets/shots/system-context-anatomy.png" alt="System context anatomy: 51,524 startup tokens split by source — system prompt, memory, MCP servers, subagent types, skills listing, instruction files, first prompt and harness internals — with bytes, tokens and share" loading="lazy"><figcaption>Session → System context anatomy</figcaption></figure>
+    </div>
+    <p class="slide-footer">{{site:url}}</p>
+  </div>
+</section>
+
+<!-- 6 · Cost: four prices plus sub-agents -->
+<section class="content-slide" data-block="cost">
+  <div class="slide-frame">
+    <header class="slide-head">
+      <p class="block-marker">Cost · was {{ds:session.total|usd0}} a lot?</p>
+      <ol class="pills" aria-label="Storyline"><li>hook</li><li>harness</li><li class="active">cost</li><li>speed</li><li>context</li><li>quality</li><li>team</li><li>tools</li><li>safety</li></ol>
     </header>
     <h2 class="headline">One {{ds:session.total|usd0}} session: four token prices, plus <span class="nowrap">sub-agents</span>.</h2>
     <div class="slide-cols">
@@ -131,7 +213,6 @@
         <div class="key-box deck-figure">
           <span class="key-figure">{{ds:session.parts.subAgents|usd}}</span>
           <span class="key-caption">spent by sub-agents</span>
-          <span class="illustrative">Illustrative example</span>
         </div>
       </div>
       <div class="visual-slot deck-visual has-figure deck-figure" role="img" aria-label="One session's cost: four token kinds of the main conversation plus sub-agents">
@@ -149,26 +230,18 @@
           <span class="swatch s4"></span><span>Cache write</span><span class="num">{{ds:session.parts.cacheWrite|usd}}</span>
           <span class="swatch s5"></span><span>Sub-agents (same four kinds)</span><span class="num">{{ds:session.parts.subAgents|usd}}</span>
         </div>
-        <span class="illustrative">Illustrative example</span>
       </div>
     </div>
     <p class="slide-footer">{{site:url}}</p>
   </div>
-  <aside class="notes">
-    The per-turn token breakdown covers input, output, cache read, cache write (5 minute and 1 hour)
-    and vision. The cost of the tree — root session, sub-agents and workflow agents — is in the Agents
-    table. The Turn-End Cost Advisor reviews the cost with an LLM after each turn. Statistics, Bash and
-    tool-call views show success, error and denial rates, heavy Bash commands and files read, changed
-    and run. Where: session view → Summary, Charts, Statistics, Bash and Advisor tabs.
-  </aside>
 </section>
 
-<!-- 4 · A: context growth + detectors -->
-<section class="content-slide" data-block="A">
+<!-- 7 · Cost: context growth -->
+<section class="content-slide" data-block="cost">
   <div class="slide-frame">
     <header class="slide-head">
-      <p class="block-marker">A · Why it costs this much</p>
-      <ol class="pills" aria-label="Storyline"><li>P</li><li class="active">A</li><li>B</li><li>C</li><li>D</li><li>E</li><li>F</li></ol>
+      <p class="block-marker">Cost · was {{ds:session.total|usd0}} a lot?</p>
+      <ol class="pills" aria-label="Storyline"><li>hook</li><li>harness</li><li class="active">cost</li><li>speed</li><li>context</li><li>quality</li><li>team</li><li>tools</li><li>safety</li></ol>
     </header>
     <h2 class="headline">Context growth, not output, drives the bill.</h2>
     <div class="slide-cols">
@@ -180,36 +253,54 @@
         </ul>
         <div class="key-box deck-figure">
           <span class="key-figure">{{ds:session.contextRereadPct|pct}}</span>
-          <span class="key-caption">of the session's tokens re-read context</span>
-          <span class="illustrative">Illustrative example</span>
+          <span class="key-caption">of the session's tokens were context read again</span>
         </div>
       </div>
       <figure class="shot deck-shot shot-pair">
         <img class="shot-crop-top" src="../assets/shots/context-growth-start.png" alt="Context Growth at the start of a prompt: short bars, each step adds a few thousand tokens">
-        <p class="shot-gap">⋯ same prompt, an hour later ⋯</p>
+        <p class="shot-gap">⋯ same prompt, later ⋯</p>
         <img class="shot-crop-top" src="../assets/shots/context-growth-later.png" alt="Context Growth later in the same prompt: every bar is almost full — each small step re-reads the whole prior context">
-        <figcaption>Session → Charts → Context Growth · real screen, demo repository</figcaption>
+        <figcaption>Session → Charts → Context Growth</figcaption>
       </figure>
     </div>
     <p class="slide-footer">{{site:url}}</p>
   </div>
-  <aside class="notes">
-    In the example, {{ds:session.tokens.cacheRead}} of the session's tokens were cache reads. Summary
-    findings name the cost drivers: context-compression, context-ceiling-pressure,
-    low-cache-read-ratio, change-surface-spread, change-surface-modules,
-    change-surface-single-file-folders and claude-version. Where: session view → Charts (Context
-    Growth, Context usage) and Summary.
-  </aside>
 </section>
 
-<!-- 4b · A: one session from every side (mosaic of real charts) -->
-<section class="content-slide mosaic-slide" data-block="A">
+<!-- 8 · Cost: OTEL attribution by skill, MCP server, effort, fast mode -->
+<section class="content-slide" data-block="cost">
   <div class="slide-frame">
     <header class="slide-head">
-      <p class="block-marker">A · Why it costs this much</p>
-      <ol class="pills" aria-label="Storyline"><li>P</li><li class="active">A</li><li>B</li><li>C</li><li>D</li><li>E</li><li>F</li></ol>
+      <p class="block-marker">Cost · was {{ds:session.total|usd0}} a lot?</p>
+      <ol class="pills" aria-label="Storyline"><li>hook</li><li>harness</li><li class="active">cost</li><li>speed</li><li>context</li><li>quality</li><li>team</li><li>tools</li><li>safety</li></ol>
     </header>
-    <h2 class="headline">Dozens of charts turn one session around.</h2>
+    <h2 class="headline">Which skill and MCP server spent the money.</h2>
+    <div class="slide-cols">
+      <div class="slide-body">
+        <ul>
+          <li>Cost per call, stacked by skill, MCP server, effort or fast mode.</li>
+          <li>Cost over time, plan mix and sub-agent cost from OpenTelemetry.</li>
+          <li>Hidden calls with no transcript record are priced too.</li>
+        </ul>
+        <div class="key-box deck-figure">
+          <span class="key-figure">{{ds:costShare.skill.implement|pct}}</span>
+          <span class="key-caption">of the session's cost went to the implement skill; {{ds:costShare.fastMode.on|pct}} ran in fast mode</span>
+        </div>
+      </div>
+      <figure class="shot deck-shot"><img src="../assets/shots/otel-cost-by-skill.png" alt="Repository OTEL tab: cost over one week stacked by skill, with a legend of more than twenty skills" loading="lazy"><figcaption>Repository → OTEL → Stack by: Skill</figcaption></figure>
+    </div>
+    <p class="slide-footer">{{site:url}}</p>
+  </div>
+</section>
+
+<!-- 9 · Cost: one session from every side (mosaic of real charts) -->
+<section class="content-slide mosaic-slide" data-block="cost">
+  <div class="slide-frame">
+    <header class="slide-head">
+      <p class="block-marker">Cost · was {{ds:session.total|usd0}} a lot?</p>
+      <ol class="pills" aria-label="Storyline"><li>hook</li><li>harness</li><li class="active">cost</li><li>speed</li><li>context</li><li>quality</li><li>team</li><li>tools</li><li>safety</li></ol>
+    </header>
+    <h2 class="headline">Dozens of charts show one session from every side.</h2>
     <div class="slide-cols">
       <div class="slide-body">
         <ol class="questions">
@@ -227,155 +318,221 @@
     </div>
     <p class="slide-footer">{{site:url}}</p>
   </div>
-  <aside class="notes">
-    All four are real charts of one Log Hub development session (session view → Charts): the agent
-    tree with cost and time per agent, the Gantt timeline, the tool heatmap per agent and the call
-    tree that splits tokens and cost by system-context file, prompt, skills, output and cache. Also on
-    the Charts tab: Dashboard, Context Growth and Context Usage.
-  </aside>
 </section>
 
-<!-- 5 · B: system context = harness tax -->
-<section class="content-slide" data-block="B">
+<!-- 10 · Speed and autonomy (mosaic) -->
+<section class="content-slide mosaic-slide" data-block="speed">
   <div class="slide-frame">
     <header class="slide-head">
-      <p class="block-marker">B · Does the harness work?</p>
-      <ol class="pills" aria-label="Storyline"><li>P</li><li>A</li><li class="active">B</li><li>C</li><li>D</li><li>E</li><li>F</li></ol>
+      <p class="block-marker">Speed · autonomy</p>
+      <ol class="pills" aria-label="Storyline"><li>hook</li><li>harness</li><li>cost</li><li class="active">speed</li><li>context</li><li>quality</li><li>team</li><li>tools</li><li>safety</li></ol>
+    </header>
+    <h2 class="headline">Was it fast, and how far could it go alone?</h2>
+    <div class="slide-cols">
+      <div class="col-stack">
+        <div class="slide-body">
+          <ol class="questions">
+            <li><span class="q-no">1</span>Where did agents wait on each other?</li>
+            <li><span class="q-no">2</span>Which step of a turn ate the time?</li>
+            <li><span class="q-no">3</span>How long did it work without you?</li>
+          </ol>
+        </div>
+        <div class="key-box deck-figure">
+          <span class="key-figure">{{ds:productivity.linesPerAutoHour}}</span>
+          <span class="key-caption">lines per autonomous hour: {{ds:session.linesChanged}} lines in {{ds:session.autonomousMin}} minutes with no human turn</span>
+        </div>
+      </div>
+      <div class="mosaic">
+        <figure class="tile"><img src="../assets/shots/session-map.png" alt="Session Map replay of a workflow session: the main session card and agent cards with cost, tool mix and context bars" loading="lazy"><figcaption><span class="q-no">1</span>Session Map</figcaption></figure>
+        <figure class="tile"><img src="../assets/shots/timeline.png" alt="Timeline (Gantt): main session and workflow agents running one after another" loading="lazy"><figcaption><span class="q-no">1</span>Timeline</figcaption></figure>
+        <figure class="tile"><img src="../assets/shots/trace-waterfall.png" alt="OTEL trace waterfall of one turn: model requests, tool calls, permission waits and execution on one time axis" loading="lazy"><figcaption><span class="q-no">2</span>Trace waterfall</figcaption></figure>
+        <figure class="tile"><img src="../assets/shots/lines-per-hour.png" alt="Repository analytics, lines per autonomous hour per session" loading="lazy"><figcaption><span class="q-no">3</span>Lines per autonomous hour</figcaption></figure>
+      </div>
+    </div>
+    <p class="slide-footer">{{site:url}}</p>
+  </div>
+</section>
+
+<!-- 11 · Live -->
+<section class="content-slide" data-block="speed">
+  <div class="slide-frame">
+    <header class="slide-head">
+      <p class="block-marker">Live</p>
+      <ol class="pills" aria-label="Storyline"><li>hook</li><li>harness</li><li>cost</li><li class="active">speed</li><li>context</li><li>quality</li><li>team</li><li>tools</li><li>safety</li></ol>
+    </header>
+    <h2 class="headline">See the session while it runs.</h2>
+    <div class="slide-cols">
+      <div class="slide-body">
+        <ul>
+          <li>Who is in a session right now, and what each agent costs.</li>
+          <li>Tokens, cost and calls of the last two hours.</li>
+          <li>Cost flow from each model down to team, user, session and agent.</li>
+        </ul>
+        <div class="key-box deck-figure">
+          <span class="key-figure">{{ds:live.tokensPerMin}}</span>
+          <span class="key-caption">tokens per minute at the team's peak; {{ds:live.sessionsNow}} sessions live</span>
+        </div>
+      </div>
+      <figure class="shot deck-shot"><img src="../assets/shots/live-view.png" alt="Live view: tree of team, repository, sessions and agents with cost, tiles for cost, tokens, live sessions and cost per minute, and tokens over the last two hours" loading="lazy"><figcaption>Top bar → Live</figcaption></figure>
+    </div>
+    <p class="slide-footer">{{site:url}}</p>
+  </div>
+</section>
+
+<!-- 12 · Context: harness tax -->
+<section class="content-slide" data-block="context">
+  <div class="slide-frame">
+    <header class="slide-head">
+      <p class="block-marker">Context · what the harness loads</p>
+      <ol class="pills" aria-label="Storyline"><li>hook</li><li>harness</li><li>cost</li><li>speed</li><li class="active">context</li><li>quality</li><li>team</li><li>tools</li><li>safety</li></ol>
     </header>
     <h2 class="headline">Your harness charges a tax on every turn.</h2>
     <div class="slide-cols">
       <div class="slide-body">
         <ul>
           <li>CLAUDE.md, rules, skills, agents and MCP servers load before any work.</li>
-          <li>Log Hub shows their size in tokens.</li>
-          <li>Open sessions before and after a harness change side by side.</li>
+          <li>System context anatomy splits them by source, down to each file.</li>
+          <li>A harness snapshot per session: compare before and after a change.</li>
         </ul>
         <div class="key-box deck-figure">
           <span class="key-figure">{{ds:insight.unusedContextPct|pct}}</span>
-          <span class="key-caption">of the system context loaded every turn is never used</span>
-          <span class="illustrative">Illustrative example</span>
+          <span class="key-caption">of the system context loaded every turn went unused in this session</span>
         </div>
       </div>
-      <figure class="shot deck-shot"><img src="../assets/shots/context-usage.png" alt="Context Usage: system context by source" loading="lazy"><figcaption>Session → Charts → Context Usage · real screen</figcaption></figure>
+      <figure class="shot deck-shot"><img src="../assets/shots/system-context-anatomy.png" alt="System context anatomy: startup context by source with bytes, tokens and share" loading="lazy"><figcaption>Session → System context anatomy</figcaption></figure>
     </div>
     <p class="slide-footer">{{site:url}}</p>
   </div>
-  <aside class="notes">
-    The system context is paid on every turn before any work starts, so a heavy CLAUDE.md or many MCP
-    servers cost money in every session. Log Hub keeps a harness snapshot per session, so two
-    sessions — before and after a harness change — can be compared. Where: session view → Charts
-    (Context usage) and Harness usage.
-  </aside>
 </section>
 
-<!-- 6 · B: harness usage + Tools/MCP -->
-<section class="content-slide" data-block="B">
+<!-- 13 · Context: harness usage + Tools/MCP -->
+<section class="content-slide" data-block="context">
   <div class="slide-frame">
     <header class="slide-head">
-      <p class="block-marker">B · Does the harness work?</p>
-      <ol class="pills" aria-label="Storyline"><li>P</li><li>A</li><li class="active">B</li><li>C</li><li>D</li><li>E</li><li>F</li></ol>
+      <p class="block-marker">Context · what the agent uses</p>
+      <ol class="pills" aria-label="Storyline"><li>hook</li><li>harness</li><li>cost</li><li>speed</li><li class="active">context</li><li>quality</li><li>team</li><li>tools</li><li>safety</li></ol>
     </header>
-    <h2 class="headline">See what the agent really uses, and what it ignores.</h2>
+    <h2 class="headline">What the agent uses, and what it ignores.</h2>
     <div class="slide-cols">
       <div class="slide-body">
         <ul>
           <li>Skills, rules, workflows, MCP servers and tools used, and how often.</li>
-          <li>Knowledge-base reads, including articles nobody opens.</li>
+          <li>Knowledge-base reads, and the articles nobody opens.</li>
           <li>Every MCP and monitored CLI call, with errors.</li>
         </ul>
         <div class="key-box deck-figure">
           <span class="key-figure">{{ds:tools.0.calls}}</span>
-          <span class="key-caption">calls to {{ds:tools.0.name}}, {{ds:tools.0.errorPct|pct}} failed</span>
-          <span class="illustrative">Illustrative example</span>
+          <span class="key-caption">calls to {{ds:tools.0.name}} in {{ds:team.period}}, {{ds:tools.0.errorPct|pct}} failed</span>
         </div>
       </div>
-      <figure class="shot deck-shot"><img src="../assets/shots/harness-usage.png" alt="Harness usage: tools, MCP calls and skills used in a session, with counts" loading="lazy"><figcaption>Session → Harness usage · real screen</figcaption></figure>
+      <figure class="shot deck-shot"><img src="../assets/shots/harness-usage.png" alt="Harness usage: tools, MCP calls and skills used in a session, with counts" loading="lazy"><figcaption>Session → Harness usage</figcaption></figure>
     </div>
     <p class="slide-footer">{{site:url}}</p>
   </div>
-  <aside class="notes">
-    Knowledge-base usage (OKF): index or search entry, never-read articles and the signals
-    always_read, kb_flood and coarse_article, with verdicts. Permission attribution shows tool calls
-    that asked for permission or were denied. The Tools/MCP tab shows an operation tree with calls
-    and error %, call details and the usefulness signals empty, retried and opened file. Where:
-    session view → Harness usage, OKF and Tools/MCP tabs; the same tabs on the repository.
-  </aside>
 </section>
 
-<!-- 7 · C: change surface + productivity -->
-<section class="content-slide" data-block="C">
+<!-- 14 · Context: knowledge base -->
+<section class="content-slide" data-block="context">
   <div class="slide-frame">
     <header class="slide-head">
-      <p class="block-marker">C · What does it bring?</p>
-      <ol class="pills" aria-label="Storyline"><li>P</li><li>A</li><li>B</li><li class="active">C</li><li>D</li><li>E</li><li>F</li></ol>
+      <p class="block-marker">Context · knowledge base</p>
+      <ol class="pills" aria-label="Storyline"><li>hook</li><li>harness</li><li>cost</li><li>speed</li><li class="active">context</li><li>quality</li><li>team</li><li>tools</li><li>safety</li></ol>
     </header>
-    <h2 class="headline">Measure what a session changed, not only what it cost.</h2>
+    <h2 class="headline">Knowledge base: second brain, or ballast?</h2>
+    <div class="slide-cols">
+      <div class="col-stack">
+        <div class="slide-body">
+          <ul>
+            <li>Does the index route, or does the agent read the KB wholesale?</li>
+            <li>An article read in 80&nbsp;% of KB sessions belongs in always-loaded context.</li>
+            <li>Dead pointers, routing misses and the agent's trail, per article.</li>
+          </ul>
+        </div>
+        <div class="visual-slot split-board">
+          <div class="split verified"><p class="split-title">A · verified checks</p><p>counted from tool calls: KB sessions, flood, always-read, coarse articles, dead pointers</p></div>
+          <div class="split heuristic"><p class="split-title">B · heuristic signals</p><p>pointer yield, routing misses, searches after reading — check by hand</p></div>
+        </div>
+      </div>
+      <figure class="shot deck-shot shot-stack">
+        <img src="../assets/shots/okf-kb-value.png" alt="Repository OKF tab, A · how the KB was navigated (verified): verdict Something to fix and the checks counted from tool calls" loading="lazy">
+        <p class="shot-gap">⋯ same tab, further down ⋯</p>
+        <img src="../assets/shots/okf-kb-value-heuristic.png" alt="Repository OKF tab, B · did the articles help (heuristic, check by hand): pointer yield 125 of 408 reads, 8 articles with routing misses" loading="lazy">
+        <figcaption>Repository → OKF</figcaption>
+      </figure>
+    </div>
+    <p class="slide-footer">{{site:url}}</p>
+  </div>
+</section>
+
+<!-- 15 · Quality: change surface + evaluator -->
+<section class="content-slide" data-block="quality">
+  <div class="slide-frame">
+    <header class="slide-head">
+      <p class="block-marker">Quality · the right thing?</p>
+      <ol class="pills" aria-label="Storyline"><li>hook</li><li>harness</li><li>cost</li><li>speed</li><li>context</li><li class="active">quality</li><li>team</li><li>tools</li><li>safety</li></ol>
+    </header>
+    <h2 class="headline">What changed, and who judged it.</h2>
     <div class="slide-cols">
       <div class="slide-body">
         <ul>
-          <li>Files, folders and modules touched, and how concentrated.</li>
-          <li>Diff lines, commits, pull requests, cost per line.</li>
-          <li>Task type and outcome labels group every chart.</li>
+          <li>Files, folders and modules touched; diff lines, commits, cost per line.</li>
+          <li>A separate post-turn run labels task type and outcome for every chart.</li>
+          <li>The session never grades itself: LLM judges favor their own output (Panickssery et al., NeurIPS 2024).</li>
         </ul>
         <div class="key-box deck-figure">
           <span class="key-figure">${{ds:productivity.costPerLine}}</span>
           <span class="key-caption">per changed line — repo median, by task type and outcome</span>
-          <span class="illustrative">Illustrative example</span>
         </div>
       </div>
-      <figure class="shot deck-shot"><img src="../assets/shots/change-surface.png" alt="Change Surface of one session" loading="lazy"><figcaption>Session → Change surface · real screen</figcaption></figure>
+      <figure class="shot deck-shot"><img src="../assets/shots/change-surface.png" alt="Change Surface of one session" loading="lazy"><figcaption>Session → Change surface</figcaption></figure>
     </div>
     <p class="slide-footer">{{site:url}}</p>
   </div>
-  <aside class="notes">
-    Change Surface shows which files, folders and modules a session tree touched and how concentrated
-    the change was. Productivity counters: diff lines, commits, pull requests, cost per line, lines
-    per hour. Session Attributes are labels an LLM extracts from each session (task type, outcome, …)
-    and work as a group-by for every chart and report. Where: session view → Change surface tab;
-    repository → Analytics and Reports; repository Settings → Session Attributes.
-  </aside>
 </section>
 
-<!-- 8 · D: team analytics + 17 reports -->
-<section class="content-slide" data-block="D">
+<!-- 16 · Team: analytics, reports, anomalies -->
+<section class="content-slide" data-block="team">
   <div class="slide-frame">
     <header class="slide-head">
-      <p class="block-marker">D · Across the team</p>
-      <ol class="pills" aria-label="Storyline"><li>P</li><li>A</li><li>B</li><li>C</li><li class="active">D</li><li>E</li><li>F</li></ol>
+      <p class="block-marker">Team · across every session</p>
+      <ol class="pills" aria-label="Storyline"><li>hook</li><li>harness</li><li>cost</li><li>speed</li><li>context</li><li>quality</li><li class="active">team</li><li>tools</li><li>safety</li></ol>
     </header>
-    <h2 class="headline">One view of the whole team's AI work.</h2>
+    <h2 class="headline">The whole team's AI work, and what deviates.</h2>
     <div class="slide-cols">
       <div class="slide-body">
         <ul>
           <li>Work time, cost and cache ratio by hour and day, per user or branch.</li>
           <li>17 reports, each exportable to PDF.</li>
-          <li>Teams with transparent or restricted access.</li>
+          <li>Outliers: cost per line, cache-read ratio, lagging versions, tool error spikes.</li>
         </ul>
         <div class="key-box deck-figure">
           <span class="key-figure">{{ds:daily.sessions}}</span>
           <span class="key-caption">sessions a day across {{ds:team.developers}} developers</span>
-          <span class="illustrative">Illustrative example</span>
         </div>
       </div>
-      <figure class="shot deck-shot"><img src="../assets/shots/analytics.png" alt="Repository analytics: work time per hour" loading="lazy"><figcaption>Repository → Analytics · real screen</figcaption></figure>
+      <div class="visual-slot deck-visual has-figure deck-figure anomaly-board">
+        <div class="board-head"><span>team · {{ds:team.period}}</span></div>
+        <p class="board-title">What the reports surface — value vs baseline</p>
+        <ul class="anomalies">
+            <li class="lvl-{{ds:anomalies.0.level}}"><span class="lvl">{{ds:anomalies.0.level}}</span><span class="sig">{{ds:anomalies.0.signal}}<small>{{ds:anomalies.0.subject}}</small></span><b>{{ds:anomalies.0.value}}<small>{{ds:anomalies.0.baseline}}</small></b></li>
+            <li class="lvl-{{ds:anomalies.1.level}}"><span class="lvl">{{ds:anomalies.1.level}}</span><span class="sig">{{ds:anomalies.1.signal}}<small>{{ds:anomalies.1.subject}}</small></span><b>{{ds:anomalies.1.value}}<small>{{ds:anomalies.1.baseline}}</small></b></li>
+            <li class="lvl-{{ds:anomalies.2.level}}"><span class="lvl">{{ds:anomalies.2.level}}</span><span class="sig">{{ds:anomalies.2.signal}}<small>{{ds:anomalies.2.subject}}</small></span><b>{{ds:anomalies.2.value}}<small>{{ds:anomalies.2.baseline}}</small></b></li>
+            <li class="lvl-{{ds:anomalies.3.level}}"><span class="lvl">{{ds:anomalies.3.level}}</span><span class="sig">{{ds:anomalies.3.signal}}<small>{{ds:anomalies.3.subject}}</small></span><b>{{ds:anomalies.3.value}}<small>{{ds:anomalies.3.baseline}}</small></b></li>
+            <li class="lvl-{{ds:anomalies.4.level}}"><span class="lvl">{{ds:anomalies.4.level}}</span><span class="sig">{{ds:anomalies.4.signal}}<small>{{ds:anomalies.4.subject}}</small></span><b>{{ds:anomalies.4.value}}<small>{{ds:anomalies.4.baseline}}</small></b></li>
+            <li class="lvl-{{ds:anomalies.5.level}}"><span class="lvl">{{ds:anomalies.5.level}}</span><span class="sig">{{ds:anomalies.5.signal}}<small>{{ds:anomalies.5.subject}}</small></span><b>{{ds:anomalies.5.value}}<small>{{ds:anomalies.5.baseline}}</small></b></li>
+        </ul>
+      </div>
     </div>
     <p class="slide-footer">{{site:url}}</p>
   </div>
-  <aside class="notes">
-    Repository Analytics covers work time, cost, files, vision, MCP and cache ratio by hour and by
-    day, grouped by user, branch or session attribute, plus Top-N rankings. Reports include Executive
-    Summary, Cost by Branch, Cost by User, Token Usage, Tool Analytics, Harness Usage, Claude Code
-    Version Usage, Cache Read Ratio, Change Surface and Attribute Breakdown. Teams have manager and
-    ADLC trainer roles. Where: repository → Analytics, Reports; Admin → Teams.
-  </aside>
 </section>
 
-<!-- 8b · D: the team data from every side (mosaic of real charts) -->
-<section class="content-slide mosaic-slide" data-block="D">
+<!-- 17 · Team: the team data from every side (mosaic of real charts) -->
+<section class="content-slide mosaic-slide" data-block="team">
   <div class="slide-frame">
     <header class="slide-head">
-      <p class="block-marker">D · Across the team</p>
-      <ol class="pills" aria-label="Storyline"><li>P</li><li>A</li><li>B</li><li>C</li><li class="active">D</li><li>E</li><li>F</li></ol>
+      <p class="block-marker">Team · across every session</p>
+      <ol class="pills" aria-label="Storyline"><li>hook</li><li>harness</li><li>cost</li><li>speed</li><li>context</li><li>quality</li><li class="active">team</li><li>tools</li><li>safety</li></ol>
     </header>
     <h2 class="headline">Team data from every side: 13 metrics.</h2>
     <div class="slide-cols">
@@ -395,193 +552,82 @@
     </div>
     <p class="slide-footer">{{site:url}}</p>
   </div>
-  <aside class="notes">
-    Real charts of the Log Hub repository (repository → Analytics): any of 13 metrics — work time,
-    cost, files and tools, vision, MCP invocations, productivity, log lines, cache read ratio, change
-    surface, tool analytics, token breakdown, productivity counters, active sessions — over 1 day to
-    1 month or a custom range, as bars or a ranking, with no grouping or grouped by branch, user or
-    session attribute.
-  </aside>
 </section>
 
-<!-- 9 · D: anomalies -->
-<section class="content-slide" data-block="D">
+<!-- 18 · Tools: author and admin (former E1 + E2, both visuals kept) -->
+<section class="content-slide" data-block="tools">
   <div class="slide-frame">
     <header class="slide-head">
-      <p class="block-marker">D · Across the team</p>
-      <ol class="pills" aria-label="Storyline"><li>P</li><li>A</li><li>B</li><li>C</li><li class="active">D</li><li>E</li><li>F</li></ol>
+      <p class="block-marker">Tools · does this tool work?</p>
+      <ol class="pills" aria-label="Storyline"><li>hook</li><li>harness</li><li>cost</li><li>speed</li><li>context</li><li>quality</li><li>team</li><li class="active">tools</li><li>safety</li></ol>
     </header>
-    <h2 class="headline">See what deviates before the invoice does.</h2>
+    <h2 class="headline">Authors see every call; admins see its worth.</h2>
     <div class="slide-cols">
-      <div class="slide-body">
-        <ul>
-          <li>Ranking outliers and unusual cost per line.</li>
-          <li>Low cache-read ratio, knowledge-base flooding, lagging Claude Code versions.</li>
-          <li>Per-tool error spikes and tools nobody calls.</li>
-        </ul>
-        <div class="key-box deck-figure">
-          <span class="key-figure">{{ds:tools.1.errorPct|pct}}</span>
-          <span class="key-caption">errors on {{ds:tools.1.name}}, worth a look</span>
-          <span class="illustrative">Illustrative example</span>
+      <div class="col-stack">
+        <div class="slide-body">
+          <ul>
+            <li>Token dashboards are common; per-call tool visibility is not.</li>
+            <li>Arguments, errors, empty answers, truncated output — MCP and CLI alike.</li>
+            <li>No integration on the tool side. Keep, tune or remove on evidence.</li>
+          </ul>
+        </div>
+        <div class="visual-slot deck-visual has-figure deck-figure tool-slot">
+          <table class="tool-table">
+            <thead><tr><th scope="col">Tool</th><th scope="col" class="num">Calls</th><th scope="col" class="num">Errors</th><th scope="col" class="num">Retried</th></tr></thead>
+            <tbody>
+              <tr><td>{{ds:tools.0.name}}</td><td class="num">{{ds:tools.0.calls}}</td><td class="num">{{ds:tools.0.errorPct|pct}}</td><td class="num">{{ds:tools.0.retriedPct|pct}}</td></tr>
+              <tr><td>{{ds:tools.1.name}}</td><td class="num">{{ds:tools.1.calls}}</td><td class="num">{{ds:tools.1.errorPct|pct}}</td><td class="num">{{ds:tools.1.retriedPct|pct}}</td></tr>
+              <tr><td>{{ds:tools.2.name}}</td><td class="num">{{ds:tools.2.calls}}</td><td class="num">{{ds:tools.2.errorPct|pct}}</td><td class="num">{{ds:tools.2.retriedPct|pct}}</td></tr>
+              <tr><td>{{ds:tools.3.name}}</td><td class="num">{{ds:tools.3.calls}}</td><td class="num">—</td><td class="num">—</td></tr>
+            </tbody>
+          </table>
         </div>
       </div>
-      <div class="visual-slot deck-visual has-figure deck-figure anomaly-board">
-        <div class="board-head"><span class="illustrative">Illustrative example</span><span>team · {{ds:team.period}}</span></div>
-        <p class="board-title">What the reports surface — value vs baseline</p>
-        <ul class="anomalies">
-            <li class="lvl-{{ds:anomalies.0.level}}"><span class="lvl">{{ds:anomalies.0.level}}</span><span class="sig">{{ds:anomalies.0.signal}}<small>{{ds:anomalies.0.subject}}</small></span><b>{{ds:anomalies.0.value}}<small>{{ds:anomalies.0.baseline}}</small></b></li>
-            <li class="lvl-{{ds:anomalies.1.level}}"><span class="lvl">{{ds:anomalies.1.level}}</span><span class="sig">{{ds:anomalies.1.signal}}<small>{{ds:anomalies.1.subject}}</small></span><b>{{ds:anomalies.1.value}}<small>{{ds:anomalies.1.baseline}}</small></b></li>
-            <li class="lvl-{{ds:anomalies.2.level}}"><span class="lvl">{{ds:anomalies.2.level}}</span><span class="sig">{{ds:anomalies.2.signal}}<small>{{ds:anomalies.2.subject}}</small></span><b>{{ds:anomalies.2.value}}<small>{{ds:anomalies.2.baseline}}</small></b></li>
-            <li class="lvl-{{ds:anomalies.3.level}}"><span class="lvl">{{ds:anomalies.3.level}}</span><span class="sig">{{ds:anomalies.3.signal}}<small>{{ds:anomalies.3.subject}}</small></span><b>{{ds:anomalies.3.value}}<small>{{ds:anomalies.3.baseline}}</small></b></li>
-            <li class="lvl-{{ds:anomalies.4.level}}"><span class="lvl">{{ds:anomalies.4.level}}</span><span class="sig">{{ds:anomalies.4.signal}}<small>{{ds:anomalies.4.subject}}</small></span><b>{{ds:anomalies.4.value}}<small>{{ds:anomalies.4.baseline}}</small></b></li>
-            <li class="lvl-{{ds:anomalies.5.level}}"><span class="lvl">{{ds:anomalies.5.level}}</span><span class="sig">{{ds:anomalies.5.signal}}<small>{{ds:anomalies.5.subject}}</small></span><b>{{ds:anomalies.5.value}}<small>{{ds:anomalies.5.baseline}}</small></b></li>
-        </ul>
-      </div>
+      <figure class="shot deck-shot"><img src="../assets/shots/tools-mcp.png" alt="Tools/MCP tab: operation tree with call counts and error rates, call list with status" loading="lazy"><figcaption>Repository → Tools/MCP</figcaption></figure>
     </div>
     <p class="slide-footer">{{site:url}}</p>
   </div>
-  <aside class="notes">
-    Anomalies: ranking outliers, a low cache-read ratio, kb_flood, lagging Claude Code versions,
-    unusual cost per line, per-tool error spikes, monitored tools that are never called and a high
-    retried rate. Where: repository → Analytics and Tools/MCP tabs.
-  </aside>
 </section>
 
-<!-- 10 · E: tool authors -->
-<section class="content-slide" data-block="E">
+<!-- 19 · Safety (replaces F1) -->
+<section class="content-slide" data-block="safety">
   <div class="slide-frame">
     <header class="slide-head">
-      <p class="block-marker">E · Does this tool work?</p>
-      <ol class="pills" aria-label="Storyline"><li>P</li><li>A</li><li>B</li><li>C</li><li>D</li><li class="active">E</li><li>F</li></ol>
+      <p class="block-marker">Safety · what it read and sent</p>
+      <ol class="pills" aria-label="Storyline"><li>hook</li><li>harness</li><li>cost</li><li>speed</li><li>context</li><li>quality</li><li>team</li><li>tools</li><li class="active">safety</li></ol>
     </header>
-    <h2 class="headline">Tool authors see how the agent really calls their tool.</h2>
+    <h2 class="headline">What it read, sent, and who could steer it.</h2>
     <div class="slide-cols">
       <div class="slide-body">
-        <ul>
-          <li>Arguments, errors, empty answers, truncated output.</li>
-          <li>For MCP servers and monitored CLI tools alike.</li>
-          <li>No integration needed on the tool side.</li>
-        </ul>
-        <div class="key-box deck-figure">
-          <span class="key-figure">{{ds:tools.1.retriedPct|pct}}</span>
-          <span class="key-caption">of {{ds:tools.1.name}} calls retried</span>
-          <span class="illustrative">Illustrative example</span>
-        </div>
-      </div>
-      <div class="visual-slot deck-visual has-figure deck-figure">
-        <table class="tool-table">
-          <thead><tr><th scope="col">Tool</th><th scope="col" class="num">Calls</th><th scope="col" class="num">Errors</th><th scope="col" class="num">Retried</th></tr></thead>
-          <tbody>
-            <tr><td>{{ds:tools.0.name}}</td><td class="num">{{ds:tools.0.calls}}</td><td class="num">{{ds:tools.0.errorPct|pct}}</td><td class="num">{{ds:tools.0.retriedPct|pct}}</td></tr>
-            <tr><td>{{ds:tools.1.name}}</td><td class="num">{{ds:tools.1.calls}}</td><td class="num">{{ds:tools.1.errorPct|pct}}</td><td class="num">{{ds:tools.1.retriedPct|pct}}</td></tr>
-            <tr><td>{{ds:tools.2.name}}</td><td class="num">{{ds:tools.2.calls}}</td><td class="num">{{ds:tools.2.errorPct|pct}}</td><td class="num">{{ds:tools.2.retriedPct|pct}}</td></tr>
-          </tbody>
-        </table>
-        <span class="illustrative">Illustrative example</span>
-      </div>
-    </div>
-    <p class="slide-footer">{{site:url}}</p>
-  </div>
-  <aside class="notes">
-    Log Hub reads the session transcript, so the author of an MCP server or CLI sees every call the
-    agent made — arguments, errors, empty answers, truncated output — without adding telemetry to the
-    tool. The usefulness signals are empty, retried and opened file. Where: repository → Tools/MCP tab.
-  </aside>
-</section>
-
-<!-- 11 · E: admins who rolled a tool out -->
-<section class="content-slide" data-block="E">
-  <div class="slide-frame">
-    <header class="slide-head">
-      <p class="block-marker">E · Does this tool work?</p>
-      <ol class="pills" aria-label="Storyline"><li>P</li><li>A</li><li>B</li><li>C</li><li>D</li><li class="active">E</li><li>F</li></ol>
-    </header>
-    <h2 class="headline">You rolled out {{ds:tools.0.name}} — do you know what it actually advised?</h2>
-    <div class="slide-cols">
-      <div class="slide-body">
-        <ul>
-          <li>Without monitoring you can only hope it helps.</li>
-          <li>Log Hub shows every call: what the agent asked, what came back.</li>
-          <li>Then decide on evidence: keep, tune or remove.</li>
-        </ul>
-        <div class="key-box deck-figure">
-          <span class="key-figure">{{ds:tools.0.calls}}</span>
-          <span class="key-caption">{{ds:tools.0.name}} answers in {{ds:team.period}} — each one readable</span>
-          <span class="illustrative">Illustrative example</span>
-        </div>
-      </div>
-      <figure class="shot deck-shot"><img src="../assets/shots/tools-mcp.png" alt="Tools/MCP tab: operation tree with call counts and error rates, call list with status" loading="lazy"><figcaption>Repository → Tools/MCP · real screen</figcaption></figure>
-    </div>
-    <p class="slide-footer">{{site:url}}</p>
-  </div>
-  <aside class="notes">
-    For admins and team leads: is the tool called at all, by whom, how often, with what error %; does
-    the agent trust its output (opened file) or abandon it (retried). {{ds:tools.3.name}} had
-    {{ds:tools.3.calls}} calls in {{ds:team.period}}: it is monitored
-    but never called — a candidate to remove. The CLI tools to monitor are set in repository Settings
-    → Monitored Tools; results are on the repository Tools/MCP tab.
-  </aside>
-</section>
-
-<!-- 12 · F: self-hosted foundation + install -->
-<section class="content-slide" data-block="F">
-  <div class="slide-frame">
-    <header class="slide-head">
-      <p class="block-marker">F · Where does the data go?</p>
-      <ol class="pills" aria-label="Storyline"><li>P</li><li>A</li><li>B</li><li>C</li><li>D</li><li>E</li><li class="active">F</li></ol>
-    </header>
-    <h2 class="headline">You control exactly where the data flows.</h2>
-    <div class="slide-cols">
-      <div class="slide-body">
-        <ul>
-          <li>One machine: everything on 127.0.0.1, nothing leaves the host.</li>
-          <li>A team: the same setup on your LAN or VPN, behind your own TLS proxy.</li>
-          <li>Works fully air-gapped: no outbound calls<sup>*</sup>, no vendor telemetry.</li>
-        </ul>
+        <ol class="layers">
+          <li>What the harness exposed: full capture, so a leak can be traced.</li>
+          <li>The injection surface: every tool answer and permission denial, readable.</li>
+          <li>The post-turn evaluator (hook 2.31.1) has no tools, MCP or skills: a planted prompt cannot act through it.</li>
+        </ol>
       </div>
       <div class="visual-slot deck-visual has-figure seal-board">
-        <p class="board-title">What crosses the boundary</p>
+        <div class="study-inline"><span class="study-fig">62–100 %</span><span>MCP prompt-injection success across 18 model–server pairs (Log-To-Leak, 2026)</span></div>
+        <p class="board-title">Data stays on your host</p>
         <ul class="anomalies seal">
           <li><span class="sig">web UI and API<small>one machine · or your LAN / VPN</small></span><b>127.0.0.1 · your network</b></li>
           <li><span class="sig">session data</span><b>your Postgres, your host</b></li>
-          <li><span class="sig">sign-in</span><b>email · password · Entra ID SSO</b></li>
-          <li><span class="sig">outbound calls</span><b>none<sup>*</sup></b></li>
           <li><span class="sig">vendor telemetry · data to DataArt</span><b>none</b></li>
-          <li><span class="sig">hook<small>plain, readable Node.js scripts</small></span><b>zero third-party deps</b></li>
+          <li><span class="sig">outbound calls<small>daily price and version list, both can be off</small></span><b>two public GETs</b></li>
+          <li><span class="sig">post-turn evaluator<small>developer's machine, same Claude connection</small></span><b>no tools · no MCP · no skills</b></li>
           <li><span class="sig">air-gapped network<small>app, in-app help and docs ship inside</small></span><b>works fully</b></li>
         </ul>
-        <p class="footnote">* except a once-a-day public GET of the model price list (and of the Claude Code
-          version list) — nothing is sent; switch them off and nothing leaves the host at all.<br>
-          Optional post-turn analysis (cost advisor, session attribution) runs <code>claude -p</code> on the
-          developer's machine through the same Claude connection the session already uses — no new
-          destination; switched per repository.</p>
       </div>
     </div>
     <p class="slide-footer">{{site:url}}</p>
   </div>
-  <aside class="notes">
-    You decide where the data flows. On one machine the shipped docker-compose.yml publishes the app
-    on 127.0.0.1:5003 only and sessions go to a Postgres container on the same host. For a team the
-    same setup runs on your LAN or behind your VPN with your own TLS proxy; developers' hooks upload
-    to that server and nowhere else. DataArt runs no hosted service and receives nothing. Sign-in:
-    identify by email, passwords (with optional email confirmation) or Azure Entra ID single tenant. Log Hub works fully in an air-gapped network: the
-    app, its in-app help and every user document ship with the product. The only
-    outbound requests are two public GETs at most once a day — the Anthropic price list and the
-    Claude Code version list on npm — which send no data; MODEL_PRICING_FETCH_ENABLED=false and
-    AI_TOOL_VERSION_CHECK_ENABLED=false turn them off for an air-gapped install.
-    Self-hosted: Docker and Postgres, a one-command install; your data stays in-house. The hook
-    installs into a repository via npx and captures the full session transcript by design — see Data
-    collection in the docs. Backward compatible: a new server keeps accepting uploads from older
-    hooks. Sessions can be exported and imported between Log Hub installations.
-  </aside>
 </section>
 
-<!-- 12b · F: what is collected, who can read it, how long it stays -->
-<section class="content-slide" data-block="F">
+<!-- 20 · Safety: what is collected, who can read it, how long it stays -->
+<section class="content-slide" data-block="safety">
   <div class="slide-frame">
     <header class="slide-head">
-      <p class="block-marker">F · Where does the data go?</p>
-      <ol class="pills" aria-label="Storyline"><li>P</li><li>A</li><li>B</li><li>C</li><li>D</li><li>E</li><li class="active">F</li></ol>
+      <p class="block-marker">Safety · who reads the data</p>
+      <ol class="pills" aria-label="Storyline"><li>hook</li><li>harness</li><li>cost</li><li>speed</li><li>context</li><li>quality</li><li>team</li><li>tools</li><li class="active">safety</li></ol>
     </header>
     <h2 class="headline">What is collected, who reads it, how long it stays.</h2>
     <div class="slide-cols">
@@ -603,30 +649,18 @@
           <li><span class="sig">before a member is visible</span><b>accepts a disclosure notice</b></li>
           <li><span class="sig">retention<small>SESSION_RETENTION_DAYS</small></span><b>default 30 days, hard delete</b></li>
         </ul>
-        <p class="footnote">Ships with a security hardening guide, a known-limitations table and a RACI
+        <p class="board-note">Ships with a security hardening guide, a known-limitations table and a RACI
           responsibility matrix. The hook only observes — it never blocks a tool call.</p>
       </div>
     </div>
     <p class="slide-footer">{{site:url}}</p>
   </div>
-  <aside class="notes">
-    The hook uploads the full Claude Code transcript, unredacted by design: prompts, tool results,
-    file contents Claude read and command output — if Claude saw a secret, it is in the transcript.
-    Keep files out at the source with Claude Code permissions.deny rules. It also collects CLAUDE.md,
-    rules, skills and MCP configuration (credentials stripped), the git remote (credentials
-    stripped), branch and git user. Access: in a restricted team (the default) members see only
-    their own sessions, the owner and ADLC trainers see prompts, managers see analytics without
-    prompt text; a transparent team is opt-in; the admin role grants no access to session data. A
-    member is visible to the team only after accepting a disclosure notice. Retention:
-    SESSION_RETENTION_DAYS (default 30), deletion is a hard delete. No encryption at rest in the
-    app — use volume encryption; TLS at your proxy. Documented in Data Collection, Trust model and
-    Security Hardening (with a known-limitations table) and the RACI responsibility matrix.
-  </aside>
 </section>
 
-<!-- 13 · Closing -->
+<!-- 21 · Closing -->
 <section class="closing-slide" data-slide="closing">
   <div class="slide-frame">
+    <p class="closing-answer">{{ds:session.total|usd0}} and {{ds:session.durationMin}} minutes: now you know whether that was good, and why.</p>
     <h2 class="headline">Start with one session.</h2>
     <p class="closing-sub">Open source by DataArt · MIT · install on one of your hosts, hook one repository</p>
     <ul class="closing-links">
@@ -637,16 +671,11 @@
     </ul>
     <p class="slide-footer">{{site:url}}</p>
   </div>
-  <aside class="notes">
-    Install the server, install the hook in one repository, run one Claude Code session and open it
-    in Log Hub. Releases: {{site:releases}}.
-  </aside>
 </section>
 
 </div>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/reveal.js@5.2.1/dist/reveal.js" integrity="sha384-rZIIVPQD/+U9IL3I62KrBHuVtPgYv+xdXvER5RBiVQRszJEJfLKRrcrZwI7fhcHT" crossorigin="anonymous"></script>
-<script src="https://cdn.jsdelivr.net/npm/reveal.js@5.2.1/plugin/notes/notes.js" integrity="sha384-zaxVZlTGBPySa6IWC61g+1BgKaWp4jQ7Qcm/TrxRPMAziaAmE0ZbNGwRAGI2vmkk" crossorigin="anonymous"></script>
 <script>
   (function () {
     'use strict';
@@ -663,8 +692,7 @@
       margin: 0.04,
       center: false,
       transition: 'fade',
-      slideNumber: 'c/t',
-      plugins: [RevealNotes]
+      slideNumber: 'c/t'
     });
   })();
 </script>

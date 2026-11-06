@@ -22,6 +22,10 @@ Both OKF tabs are split in two titled sections:
   judge the search patterns yourself. The section title says "N signals to check" when any signal
   fired, otherwise "nothing to check".
 
+![Repository OKF tab, section A: the verdict "Something to fix" and the checks KB sessions, KB flood, Always read and Coarse article with their counted values](images/okf-kb-value.png)
+
+![Repository OKF tab, section B: the Pointer yield and Articles with routing misses tiles, with the number of signals to check](images/okf-kb-value-heuristic.png)
+
 ### Checks
 
 Under the verdict, the card lists one line per structure check, also when the check found
@@ -44,7 +48,7 @@ a line pointing to the repository OKF tab, where the checks that need many sessi
 
 ## Repository OKF tab
 
-Open a repository and pick **OKF** (between **Reports** and **OTEL**). From top to bottom:
+Open a repository and pick **OKF** (between **Tools/MCP** and **OTEL**). From top to bottom:
 
 - **Filter strip** — period, branches, users, attributes, **KB folder** (one or all) and
   **Bytes / Calls** for the read heat. Every filter is kept in the page address.
@@ -80,11 +84,11 @@ Open a repository and pick **OKF** (between **Reports** and **OTEL**). From top 
 - **File share histogram** — how much of a KB folder each session read, only for KB folders of
   at least the configured number of files (the caption says "KB folders of ≥ N files").
 - **Hot files** — the most read articles, with their **Yield**.
+- **Upkeep** — articles read by an agent that also edited them; see [Upkeep](#upkeep).
+- **Not read** — KB files no session of the period read (information only).
 
 On a wide screen the histogram, hot files, upkeep and not-read lists sit in a column beside the
 tree; on a narrower one they move below it, so the tree's columns never need sideways scrolling.
-- **Upkeep** — articles read by an agent that also edited them; see [Upkeep](#upkeep).
-- **Not read** — KB files no session of the period read (information only).
 
 Opened from **My Repos**, the tab shows your own sessions. Opened from a team, it shows the
 sessions of the team members you may see; KB files the author's git ignores never appear there.

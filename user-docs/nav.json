@@ -26,9 +26,9 @@
       },
       {
         "slug": "connect-repository",
-        "title": "Connecting a Repository",
+        "title": "Connecting a repository",
         "downloadable": true,
-        "description": "Connect a git repository to Log Hub with one install command and one config entry, confirm data flows, and fix the common problems on the way."
+        "description": "Connect a git repository to Log Hub with one install command and one Claude Code session, confirm data flows, and fix the common problems on the way."
       }
     ]
   },
@@ -47,7 +47,7 @@
       },
       {
         "slug": "tuning-your-setup",
-        "title": "Tuning Your Setup",
+        "title": "Tuning your setup",
         "description": "Adjust repository settings, hook configuration and your harness based on what sessions cost and why, then compare the next sessions to close the loop."
       },
       {
@@ -57,7 +57,7 @@
       },
       {
         "slug": "security-hardening",
-        "title": "Security Hardening & Configuration",
+        "title": "Security hardening & configuration",
         "downloadable": true,
         "description": "Harden a Log Hub installation beyond a single local user: deployment checklist, authentication, TLS, data visibility, retention, backups and limits."
       }
@@ -73,7 +73,7 @@
       },
       {
         "slug": "session-list",
-        "title": "Working with the Session List",
+        "title": "Working with the session list",
         "description": "Browse the sessions of a repository: group them by branch or other modes, read each row, filter the list, stay up to date and work in team repositories."
       },
       {
@@ -83,12 +83,12 @@
       },
       {
         "slug": "cost-and-context",
-        "title": "Understanding Cost & Context",
+        "title": "Understanding cost & context",
         "description": "Learn how Log Hub computes session cost from token usage and model prices, where cost appears, and how context size drives the cost of every call."
       },
       {
         "slug": "analytics-reports",
-        "title": "Analytics & Reports",
+        "title": "Analytics & reports",
         "description": "Explore recorded sessions with interactive Analytics charts, or share printable Reports with KPIs and trends that download as PDF for a team or management."
       },
       {
@@ -113,12 +113,12 @@
     "articles": [
       {
         "slug": "data-collection-notice",
-        "title": "Data Collection Notice",
+        "title": "Data collection notice",
         "description": "Read before you start: which prompts and transcripts Log Hub stores, who can see them, and how to avoid handing secrets to your AI coding assistant."
       },
       {
         "slug": "data-collection",
-        "title": "Data Collection & Upload",
+        "title": "Data collection & upload",
         "description": "What the hook collects from your Claude Code sessions, when and how it uploads the data in the background, and how the post-turn analysis works."
       },
       {
@@ -128,19 +128,19 @@
       },
       {
         "slug": "component-reference",
-        "title": "Component Reference",
+        "title": "Component reference",
         "downloadable": true,
         "description": "The components of Log Hub (server, web client, PostgreSQL database, telemetry hook and installer), where each runs and how they talk to each other."
       },
       {
         "slug": "responsibility-matrix",
-        "title": "Responsibility Matrix (RACI)",
+        "title": "Responsibility matrix (RACI)",
         "downloadable": true,
-        "description": "Who is responsible for each part of running Log Hub, from releases and deployment to access, data protection and incidents: maintainers or your organisation."
+        "description": "Who is responsible for each part of running Log Hub, from releases and deployment to access, data protection and incidents: maintainers or your organization."
       },
       {
         "slug": "third-party-components",
-        "title": "Third-Party Components",
+        "title": "Third-party components",
         "downloadable": true,
         "description": "Every third-party open-source component shipped in Log Hub, on the server, in the browser and in the hook, with its version, license and role."
       },
