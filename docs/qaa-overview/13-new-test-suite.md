@@ -77,7 +77,7 @@ Only the contract suite has an effort estimate: 19–25 person-days. There are n
 
 ## Owner's decisions
 
-1. **Privacy:** full data capture, including `tool_input`, is deliberate (recorded in the [KB](../knowledgebase/product/product-purpose-and-data-capture.md)); the privacy scenarios check who sees the data, not that fields are stripped.
+1. **Privacy:** full data capture, including `tool_input`, is deliberate (recorded in the [KB](../product-kb/product-purpose-and-data-capture.md)); the privacy scenarios check who sees the data, not that fields are stripped.
 2. Does **Token Flow** ship? It is hidden behind the `VITE_ENABLE_TOKEN_FLOW` flag and has no scenarios; the tab walk proposes a build-dependent row.
 3. ~~Signup of an unconfirmed account immediately gives a live session~~ **Decided.** Mode 2 (`password`, closed networks): a session after signup is normal. Mode 3 (`password-confirm`): the user must not get a login until they confirm their e-mail; they only see the "check your e-mail" page. **In the code this is a defect:** `AuthController.signup` calls `req.logIn` for every mode, and the session never checks the e-mail confirmation (`emailConfirmedAt` is checked only in `local.strategy.ts` at login). Whether to fix it in the code is the owner's call; the `S-AUTH-01` scenario must stay red until it is fixed. The existing tests do not pin this defect: `auth-email-confirmation.e2e-spec` checks only the DB row and does not touch the session.
 4. ~~The data-collection consent blocks only the UI, the server does not block the API~~ **Decided: this is by design** (whoever calls the API around the UI deliberately bypasses the consent too). Scenarios must not require server-side blocking; recorded in the KB.

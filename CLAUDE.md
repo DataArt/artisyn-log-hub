@@ -235,6 +235,12 @@ KB files live in `docs/knowledgebase/`.
 
 (Path matches `project-env.json → kbIndexPath`; keep in sync with it.)
 
+There are two KBs: `docs/knowledgebase/` is the **development** KB (how the code works), and
+`docs/product-kb/` is the **product / PDLC** KB (product purpose, competitors, competitive research
+and watch, product ideas, UX research), with its own index `docs/product-kb/index.md` — same rules:
+read the index first, never glob, update the index after adding/removing/renaming a file. Product
+material (competitors, ideas, positioning, UX research) goes there, never into `docs/knowledgebase/`.
+
 ## Documentation language
 
 Everything written under `docs/` is in **English**, regardless of the language the user speaks in

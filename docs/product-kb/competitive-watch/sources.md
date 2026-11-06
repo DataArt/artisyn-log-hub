@@ -11,7 +11,7 @@ timestamp: "2026-11-06T10:00:00+04:00"
 
 `Last checked` is the date (YYYY-MM-DD) the source was last read by the morning check; `—` means
 never. Everything published before **2026-11-01** is covered by the parity study
-(`docs/competitive-research/`), so the first check of a source only looks at items after that date.
+(`docs/product-kb/competitive-research/`), so the first check of a source only looks at items after that date.
 
 Kinds: `gh-releases` — read `https://api.github.com/repos/<owner>/<repo>/releases` (or the
 releases page); `blog` / `docs` / `changelog` — read the page and look for posts or entries newer

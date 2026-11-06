@@ -1,8 +1,8 @@
 # PoC: Session Galaxy — a 3D replay of one Claude Code session
 
-No task folder yet. This PoC follows the competitive study: `docs/competitive-research/README.md`,
-`docs/competitive-research/gap-closing-plan.md` (the 3D graph was listed as "reject — novelty") and
-`docs/competitive-research/claude-hindsight.md` (3D execution graph built on `react-force-graph-3d`). The
+No task folder yet. This PoC follows the competitive study: `docs/product-kb/competitive-research/README.md`,
+`docs/product-kb/competitive-research/gap-closing-plan.md` (the 3D graph was listed as "reject — novelty") and
+`docs/product-kb/competitive-research/claude-hindsight.md` (3D execution graph built on `react-force-graph-3d`). The
 2D reference for the layout idea is Agent Flow (agents as nodes with cost, tool calls around them, a live timeline).
 
 ## Question

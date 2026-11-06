@@ -6,7 +6,7 @@ browse-mode / flat-result list (Ctrl+K now opens this map with its filter), and 
 (the filter highlights matches and dims the rest).
 Wireframes: `wireframes/g1`, `g2`, `g6`, `e1`–`e4`. Basis: the tab universe in `client/src/viewer/tab-ids.ts`, the report
 catalog (`reports/report-catalog.ts`), the Analytics view list, `user-docs/nav.json`, the left nav
-(`AppLeftNav.tsx`), the route helpers (`useHashRoute.ts`) and the UX analysis in `docs/ux-analysis/`.
+(`AppLeftNav.tsx`), the route helpers (`useHashRoute.ts`) and the UX analysis in `docs/product-kb/ux-analysis/`.
 
 ## Idea
 

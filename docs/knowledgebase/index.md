@@ -115,9 +115,10 @@ article itself holds the details. Keep new lines to one or two sentences.
 * [Executable-Config Guard](algorithms/executable-config-guard.md) - Read before touching `checkConfigGuard` (`scripts/ci/config-guard.js`) or its allowlist
 * [Security Scan Summary](algorithms/security-scan-summary.md) - Read before touching `scripts/ci/security-summary.js`: row validation, PR block, badge
 
-## Product
+## Product (separate KB) and history
 
-* [Product Purpose and Full Data Capture](product/product-purpose-and-data-capture.md) - Read before proposing redaction or "privacy fixes" to capture: the product captures session data in full by design
-* [Competitors](product/competitors.md) - Read before positioning, pitching or prioritising features: 14 tools by category and the gaps they expose
-* [Product idea: code → session reverse lookup](product/ideas/code-to-session-lookup.md) - Read before planning provenance / blame-style features (file, line or commit → the session that wrote it): what `session_changed_paths` already gives, what is missing, slicing
-* [Legacy Design Decisions Map](product/legacy-design-decisions-map.md) - Read when you meet a bare legacy task id (T-NN): its topic, summary and the KB section with the current behaviour
+Product, competitors, product ideas and UX research live in the separate product / PDLC KB:
+[`docs/product-kb/index.md`](../product-kb/index.md). The one article from it every developer needs:
+
+* [Product Purpose and Full Data Capture](../product-kb/product-purpose-and-data-capture.md) - Read before proposing redaction or "privacy fixes" to capture: the product captures session data in full by design
+* [Legacy Design Decisions Map](legacy-design-decisions-map.md) - Read when you meet a bare legacy task id (T-NN): its topic, summary and the KB section with the current behaviour

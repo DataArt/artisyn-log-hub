@@ -11,7 +11,7 @@
 ## Description
 
 Raw idea: a deterministic detector of fixed, named antipatterns in Claude Code sessions — the
-"Detected patterns" item P3 of `docs/competitive-research/gap-closing-plan.md` (Datadog's
+"Detected patterns" item P3 of `docs/product-kb/competitive-research/gap-closing-plan.md` (Datadog's
 "Detected Problems"). The existing Turn-End Cost Advisor is an LLM that gives generic prose advice;
 this feature instead searches for a fixed catalog of patterns with exact predicates, so a finding is
 reproducible, countable per repository and has a concrete fix.

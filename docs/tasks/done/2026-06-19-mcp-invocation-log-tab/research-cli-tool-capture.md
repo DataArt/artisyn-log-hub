@@ -134,7 +134,7 @@ UI (repo → Tool Monitoring → Settings)        server                        
   (pure PowerShell). To be measured on a high-frequency tool such as `find`.
 - PreToolUse `updatedInput` may interact with other PreToolUse hooks that also rewrite input.
 - `full` capture uploads tool output verbatim — consistent with the full-capture policy in
-  `docs/knowledgebase/product-purpose-and-data-capture.md`; size bounded by the fixed 100 KB per-call cap.
+  `docs/product-kb/product-purpose-and-data-capture.md`; size bounded by the fixed 100 KB per-call cap.
 - Detection regex for "command mentions tool X" (PowerShell path and transcript fallback) has edge
   cases: tool name inside a quoted argument, `& 'x'`, `x.exe`.
 

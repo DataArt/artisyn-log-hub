@@ -27,7 +27,7 @@ Why: a multi-agent session (e.g. an `implement-deep` run with 40+ agents in seve
 today read agent by agent — Logs tab, workflow "Agents (N)" table, one modal per agent. The map answers
 on one screen *where the money and time went, what failed and what each agent did*. It closes the
 "live view" and "by-agent table" gaps of the competitive study
-(`docs/competitive-research/gap-closing-plan.md`, P4 and P6); the PoC proved it on a real
+(`docs/product-kb/competitive-research/gap-closing-plan.md`, P4 and P6); the PoC proved it on a real
 41-agent / 517-call / $26 session (see its `README.md` and screenshots).
 
 Context from the KB (what exists today):
@@ -217,5 +217,5 @@ None.
 
 <!-- Append timestamped notes here as work progresses -->
 - **2026-11-01:** Prototype: `docs/pocs/2026-11-01-2253-session-map-2d/` (README, screenshots,
-  `index.html` on real data). Competitive context: `docs/competitive-research/gap-closing-plan.md`
+  `index.html` on real data). Competitive context: `docs/product-kb/competitive-research/gap-closing-plan.md`
   (P4 running markers / swimlanes, P6 by-agent tables).

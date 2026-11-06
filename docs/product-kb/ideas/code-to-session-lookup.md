@@ -70,6 +70,6 @@ Questions it answers:
 
 ## Related
 
-- [Change Surface](../../change-surface.md) — changed-path facts and the union rule.
-- [Session Map Tab](../../session-map.md) — per-session file list.
+- [Change Surface](../../knowledgebase/change-surface.md) — changed-path facts and the union rule.
+- [Session Map Tab](../../knowledgebase/session-map.md) — per-session file list.
 - [Competitors](../competitors.md)

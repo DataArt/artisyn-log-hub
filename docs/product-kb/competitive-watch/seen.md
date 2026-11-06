@@ -13,7 +13,7 @@ Newest first. One row per item; the URL is the identity. `Relevance`: `high` (a 
 lacks or a direct positioning threat), `medium` (worth knowing, maybe borrow), `misc` (on topic
 but not a competitor feature — community posts, user complaints, tips, home-made tools; "may be
 interesting"), `low` (noise, kept so it is not reported again). `Verdict`: what to do — `none`, `idea: <short>`, `task: <task id>`, or
-`study: <file in docs/competitive-research/ updated>`.
+`study: <file in docs/product-kb/competitive-research/ updated>`.
 
 Baseline: everything published before 2026-11-01 is in the parity study and is not repeated here.
 

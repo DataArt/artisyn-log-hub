@@ -10,8 +10,8 @@
 
 ## Description
 
-Implements all six ideas of the UX analysis `docs/ux-analysis/` (waves 1 and 2, wireframes W1–W5 in
-`docs/ux-analysis/wireframes.md`) as one task. The app has grown to 14 session tabs in one flat row,
+Implements all six ideas of the UX analysis `docs/product-kb/ux-analysis/` (waves 1 and 2, wireframes W1–W5 in
+`docs/product-kb/ux-analysis/wireframes.md`) as one task. The app has grown to 14 session tabs in one flat row,
 hand-written tab lists in every tab bar, no search or keyboard navigation and an empty `/main` page.
 The goal is to make the growing UI digestible without hiding or removing anything:
 
