@@ -1,6 +1,10 @@
 /**
  * The session view's "OKF" tab: how this session tree (main agent + sub-agents) read the repo's
- * OKF knowledge bases. Verdict card, bundle cards, then the KB tree beside the Agents panel.
+ * OKF knowledge bases. Section A (verdict card with the Checks block, KB folder cards), section B
+ * (value-signal tile, legend and the selected agent's trail — `okfAgent` in the URL, set by the
+ * Agents panel or a tile link), then the KB tree with the Agents panel
+ * beside it when the tab is at least 56rem wide (a container query: the session pane is much
+ * narrower than the viewport), below it otherwise,, and the on-demand deeper-analysis hint last.
  *
  * Nothing is recomputed here: the verdict, the tree aggregation and the per-agent lists come
  * from the server; the client only renders the verdict text (`okf-verdict-text.ts`), sorts the
@@ -12,92 +16,50 @@
  */
 import { useQuery } from '@tanstack/react-query';
 import { useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { Skeleton } from '@/ui/skeleton';
+import { useSearchParams } from 'react-router-dom';
 import { ToggleGroup, ToggleGroupItem } from '@/ui/toggle-group';
 import { fetchSessionOkfUsage } from '../../../../api';
-import { routes } from '../../../../hooks/useHashRoute';
+import {
+  okfRepoTabParams,
+  okfThresholdsSettingsParams,
+} from '../../okf/okf-url-state';
+import { useRepoTeamAccess } from '../../useRepoTeamAccess';
 import { getSessionLogsErrorMessage } from '../session-logs-error';
+import {
+  OkfAgentTrail,
+  OkfTrailPrompt,
+  useOkfAgentParam,
+} from './OkfAgentTrail';
 import { OkfAgentsPanel } from './OkfAgentsPanel';
 import { OkfBundleCards } from './OkfBundleCards';
+import {
+  OKF_SECTION_A_TITLE,
+  OkfSection,
+  OkfSignalsSection,
+  okfSessionSignalCount,
+} from './OkfSection';
 import { OkfTree, type OkfTreeHandle } from './OkfTree';
+import { OkfValueSignalsLegend } from './OkfValueSignalsLegend';
+import { OkfValueSignalsTile } from './OkfValueSignalsTile';
 import { OkfVerdictCard } from './OkfVerdictCard';
-import { okfAgentLabel, type OkfHeatMetric } from './okf-tree';
+import {
+  DeeperAnalysisHint,
+  EmptyState,
+  LoadingSkeleton,
+  NoSnapshotBanner,
+} from './SessionOkfStates';
+import {
+  buildOkfSessionDetails,
+  okfRangedCallsByPath,
+} from './okf-session-details';
+import type { OkfHeatMetric } from './okf-tree';
+import { okfTrailLinkAgents } from './okf-trail';
+import { buildOkfAgentLabels, okfAgentLabel } from '@/lib/okf/okf-agent-label';
 
 export interface SessionOkfTabProps {
   repoId: number;
   sessionId: string;
   teamId?: number;
-}
-
-function LoadingSkeleton() {
-  return (
-    <div className="space-y-3 p-4" data-testid="okf-loading">
-      <Skeleton className="h-28 w-full" />
-      <div className="flex gap-3">
-        <Skeleton className="h-20 w-72" />
-        <Skeleton className="h-20 w-72" />
-      </div>
-      <Skeleton className="h-64 w-full" />
-    </div>
-  );
-}
-
-function EmptyState({ title, body }: { title: string; body: string }) {
-  return (
-    <div
-      className="p-8 text-center text-sm text-muted-foreground"
-      data-testid="okf-empty"
-    >
-      <div className="font-medium text-foreground">{title}</div>
-      <div className="mt-1">{body}</div>
-    </div>
-  );
-}
-
-function NoSnapshotBanner() {
-  const navigate = useNavigate();
-  return (
-    <div
-      data-testid="okf-no-snapshot"
-      className="rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-sm text-warning-foreground"
-    >
-      <div>
-        ⚠ No KB snapshot for this session — the tree shows only the paths that
-        were accessed (no &quot;not read&quot; list).
-      </div>
-      <div className="mt-0.5 text-xs">
-        Update the Log Hub hook in this repository to see the full bundle tree.{' '}
-        <button
-          type="button"
-          onClick={() => {
-            void navigate(routes.apiKeys);
-          }}
-          className="font-medium underline underline-offset-2"
-        >
-          How to update
-        </button>
-      </div>
-    </div>
-  );
-}
-
-/** Name of the on-demand KB-analysis skill shipped with the hooks plugin (task kb-completeness-deep). */
-const KB_ANALYSIS_COMMAND = '/log-hub-hooks:kb-analysis';
-
-function DeeperAnalysisHint({ sessionId }: { sessionId: string }) {
-  return (
-    <p
-      data-testid="okf-deeper-analysis"
-      className="text-xs text-muted-foreground"
-    >
-      Deeper analysis (what should have been read, failed searches, KB gaps and
-      fixes) runs locally in Claude Code, on demand:{' '}
-      <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px] text-foreground">
-        {KB_ANALYSIS_COMMAND} {sessionId}
-      </code>
-    </p>
-  );
 }
 
 export function SessionOkfTab({
@@ -106,9 +68,29 @@ export function SessionOkfTab({
   teamId,
 }: SessionOkfTabProps) {
   const [metric, setMetric] = useState<OkfHeatMetric>('bytes');
-  const [agentFilter, setAgentFilter] = useState<string | null>(null);
   const treeRef = useRef<OkfTreeHandle | null>(null);
   const treeBoxRef = useRef<HTMLDivElement | null>(null);
+  const trailRef = useRef<HTMLDivElement | null>(null);
+  const [, setSearchParams] = useSearchParams();
+  // The selected agent lives in the URL (`okfAgent`): it narrows the tree and opens its trail.
+  const [agentFilter, setAgentFilter] = useOkfAgentParam();
+  // Section B's "show trail" links: select the agent and bring its trail into view.
+  const openTrail = (id: string) => {
+    setAgentFilter(id);
+    requestAnimationFrame(() =>
+      trailRef.current?.scrollIntoView({ block: 'nearest' }),
+    );
+  };
+  // The verdict card's thresholds chip opens Settings → Analysis at the OKF thresholds card.
+  const openSettings = () => {
+    setSearchParams(okfThresholdsSettingsParams, { replace: true });
+  };
+  // The Checks block's link to the repository OKF tab (repo-level rules); only for callers
+  // who see that tab.
+  const { canSeeTeamWideTabs } = useRepoTeamAccess(teamId);
+  const openRepoTab = () => {
+    setSearchParams(okfRepoTabParams, { replace: true });
+  };
 
   const query = useQuery({
     queryKey: ['session-okf-usage', repoId, sessionId, teamId],
@@ -121,6 +103,22 @@ export function SessionOkfTab({
     const agent = data.agents.find((a) => a.id === agentFilter);
     return agent ? new Set(agent.files) : null;
   }, [agentFilter, data]);
+
+  const agentLabels = useMemo(
+    () => buildOkfAgentLabels(data?.agents ?? [], sessionId),
+    [data, sessionId],
+  );
+  const details = useMemo(
+    () =>
+      data
+        ? buildOkfSessionDetails(data.agents, sessionId, agentLabels)
+        : undefined,
+    [data, sessionId, agentLabels],
+  );
+  const rangedCalls = useMemo(
+    () => okfRangedCallsByPath(data?.tree ?? []),
+    [data],
+  );
 
   const ignoredBundles = useMemo(
     () =>
@@ -158,16 +156,16 @@ export function SessionOkfTab({
 
   const subAgents = data.agents.filter((a) => a.id !== sessionId).length;
   const selectedLabel = agentFilter
-    ? okfAgentLabel(agentFilter, sessionId)
+    ? okfAgentLabel(agentFilter, sessionId, agentLabels)
     : '';
 
   return (
-    <div className="space-y-3 p-4" data-testid="session-okf-tab">
+    <div className="@container/okf space-y-3 p-4" data-testid="session-okf-tab">
       <div className="flex flex-wrap items-center gap-3">
         <h2 className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
           OKF · whole session tree (main + {subAgents} sub-agents) ·{' '}
           {data.bundles.length}{' '}
-          {data.bundles.length === 1 ? 'bundle' : 'bundles'}
+          {data.bundles.length === 1 ? 'KB folder' : 'KB folders'}
         </h2>
         <span className="text-xs text-muted-foreground">Read heat</span>
         <ToggleGroup
@@ -186,29 +184,58 @@ export function SessionOkfTab({
           </ToggleGroupItem>
         </ToggleGroup>
       </div>
-      <DeeperAnalysisHint sessionId={sessionId} />
-
       {!data.hasSnapshot ? <NoSnapshotBanner /> : null}
 
-      <div className="max-w-4xl">
-        <OkfVerdictCard
-          verdict={data.verdict}
-          variant="session"
-          readTop={data.readTop}
-          agents={data.agents}
-          rootSessionId={sessionId}
-          onNodeClick={scrollToNode}
+      <OkfSection testId="okf-section-a" title={OKF_SECTION_A_TITLE}>
+        <div className="max-w-4xl">
+          <OkfVerdictCard
+            verdict={data.verdict}
+            variant="session"
+            readTop={data.readTop}
+            upkeep={data.upkeep}
+            rangedCalls={rangedCalls}
+            agents={data.agents}
+            rootSessionId={sessionId}
+            agentLabels={agentLabels}
+            onNodeClick={scrollToNode}
+            thresholds={data.thresholds}
+            onOpenSettings={openSettings}
+            onOpenRepoTab={canSeeTeamWideTabs ? openRepoTab : undefined}
+          />
+        </div>
+        <OkfBundleCards
+          bundles={data.bundles}
+          onBundleClick={(root) => scrollToNode(root)}
         />
-      </div>
+      </OkfSection>
 
-      <OkfBundleCards
-        bundles={data.bundles}
-        onBundleClick={(root) => scrollToNode(root)}
-      />
+      <OkfSignalsSection count={okfSessionSignalCount(data.signals)}>
+        <OkfValueSignalsTile
+          signals={data.signals}
+          eventsTruncated={data.eventsTruncated}
+          trailAgents={okfTrailLinkAgents(data.agents)}
+          onShowTrail={openTrail}
+        />
+        <OkfValueSignalsLegend />
+        <div ref={trailRef}>
+          {agentFilter ? (
+            <OkfAgentTrail
+              repoId={repoId}
+              sessionId={sessionId}
+              teamId={teamId}
+              agentId={agentFilter}
+              label={selectedLabel}
+              onClose={() => setAgentFilter(null)}
+            />
+          ) : (
+            <OkfTrailPrompt />
+          )}
+        </div>
+      </OkfSignalsSection>
 
       <div
         ref={treeBoxRef}
-        className="flex flex-col gap-3 lg:flex-row lg:items-start"
+        className="flex flex-col gap-3 @4xl/okf:flex-row @4xl/okf:items-start"
       >
         <div className="min-w-0 flex-1">
           <OkfTree
@@ -223,12 +250,14 @@ export function SessionOkfTab({
                 : 'Accessed KB paths (no snapshot)'
             }
             fileFilter={fileFilter}
-            filterNote={`Showing only agent ${selectedLabel}'s reads — folder and bundle totals are the whole tree's.`}
+            details={details}
+            filterNote={`Showing only agent ${selectedLabel}'s reads (unread articles hidden) — folder totals are the whole tree's.`}
           />
         </div>
         <OkfAgentsPanel
           agents={data.agents}
           rootSessionId={sessionId}
+          labels={agentLabels}
           selected={agentFilter}
           onSelect={(id) => {
             setAgentFilter(id);
@@ -236,6 +265,8 @@ export function SessionOkfTab({
           }}
         />
       </div>
+
+      <DeeperAnalysisHint sessionId={sessionId} />
     </div>
   );
 }

@@ -8,6 +8,9 @@
  * `session_okf_access` — and no tool result text ever leaves the server, only paths, byte counts
  * and labels.
  *
+ * 2026-11-03 value signals: each agent also carries `accessSeq`, its KB and code accesses in call
+ * order (`extractOkfDetail(...).seq`, with the root's snapshot files as the writer passes them).
+ *
  * Ownership (DD-33): the session is found by its `sessions.session_id` string and must have a
  * `logs` row of the API key's user; a missing session and a foreign one both get the same 404.
  */
@@ -24,10 +27,11 @@ import {
 } from '../change-surface/path-normalise';
 import { getDescendantSessionIds } from '../session-tree.sql';
 import {
-  extractOkfAccess,
+  extractOkfDetail,
   toAbsolute,
   toolResultBytes,
   type OkfAccessRow,
+  type OkfSnapshotFileInfo,
 } from './okf-access-extractor';
 import {
   loadOkfSnapshot,
@@ -35,7 +39,7 @@ import {
   type OkfSnapshotBody,
 } from './okf-snapshot';
 import { filterUserPrompts } from './okf-task-context';
-import type { OkfFactsResponse } from './okf-usage.types';
+import type { OkfFactsResponse, OkfFactsSeqItem } from './okf-usage.types';
 import { bundleOfPath } from './okf-verdict';
 import { getServerBashParser } from './server-bash-parser';
 
@@ -203,13 +207,81 @@ export function collectNodeFileFacts(
   return facts;
 }
 
-interface FactsNode {
+/** One tree node with its transcript lines (`loadOkfNodeTranscripts`). */
+export interface OkfTranscriptNode {
   id: number;
   sessionId: string;
   parentSessionId: string | null;
   startTime: number | null;
   lines: object[];
   isSubagent: boolean;
+}
+
+/**
+ * Tree nodes with their stored `claude` / `claude-subagent` transcript lines; `nodeIds[0]` first,
+ * then by start time. Shared by the facts route and the session OKF trail.
+ */
+export async function loadOkfNodeTranscripts(
+  db: DrizzleDb,
+  nodeIds: number[],
+): Promise<OkfTranscriptNode[]> {
+  const result = await db.execute(sql`
+    SELECT
+      s.id,
+      s.session_id,
+      s.parent_session_id,
+      l.log_type,
+      l.start_time,
+      l.body
+    FROM sessions s
+    LEFT JOIN logs l
+      ON l.session_id = s.id
+     AND l.log_type IN ('claude', 'claude-subagent')
+    WHERE s.id = ANY(${sessionIdsArray(nodeIds)})
+    ORDER BY s.id, l.id
+  `);
+  const byId = new Map<number, OkfTranscriptNode>();
+  for (const r of result.rows as unknown as {
+    id: string | number;
+    session_id: string;
+    parent_session_id: string | null;
+    log_type: string | null;
+    start_time: string | Date | null;
+    body: unknown;
+  }[]) {
+    const id = Number(r.id);
+    const node = byId.get(id) ?? {
+      id,
+      sessionId: r.session_id,
+      parentSessionId: r.parent_session_id,
+      startTime: null,
+      lines: [],
+      isSubagent: false,
+    };
+    if (r.log_type === 'claude-subagent') node.isSubagent = true;
+    if (r.start_time !== null) {
+      const ms = new Date(r.start_time).getTime();
+      if (
+        !Number.isNaN(ms) &&
+        (node.startTime === null || ms < node.startTime)
+      ) {
+        node.startTime = ms;
+      }
+    }
+    if (Array.isArray(r.body)) {
+      for (const line of r.body as unknown[]) {
+        if (typeof line === 'object' && line !== null) node.lines.push(line);
+      }
+    }
+    byId.set(id, node);
+  }
+  const rootId = nodeIds[0];
+  return [...byId.values()].sort(
+    (a, b) =>
+      Number(b.id === rootId) - Number(a.id === rootId) ||
+      (a.startTime ?? Infinity) - (b.startTime ?? Infinity) ||
+      a.id - b.id,
+  );
 }
 
 @Injectable()
@@ -245,7 +317,7 @@ export class OkfFactsService {
 
     const [nodes, rootsBySessionId, snapshot, startedAt, parser] =
       await Promise.all([
-        this.loadNodes(nodeIds),
+        loadOkfNodeTranscripts(this.db, nodeIds),
         loadArtisynRootsBySessionIds(this.db, nodeIds),
         this.loadSnapshot(rootId, userId),
         this.loadStartedAt(rootId),
@@ -255,8 +327,20 @@ export class OkfFactsService {
       rootsBySessionId.get(id) ?? rootsBySessionId.get(rootId) ?? [];
     const bundles = snapshot?.bundles ?? null;
     const sizeOf = new Map<string, number>();
+    // Same `snapshotFiles` the writer passes (DD-5, DD-7, DD-10), so `accessSeq` tells KB
+    // articles from code files exactly like the stored rows.
+    const snapshotFiles: Map<string, OkfSnapshotFileInfo> | undefined =
+      bundles === null ? undefined : new Map();
     for (const b of bundles ?? []) {
-      for (const f of b.files) sizeOf.set(f.path, f.size);
+      for (const f of b.files) {
+        sizeOf.set(f.path, f.size);
+        if (snapshotFiles !== undefined && !snapshotFiles.has(f.path)) {
+          snapshotFiles.set(f.path, {
+            size: Number.isFinite(f.size) && f.size >= 0 ? f.size : null,
+            hash: typeof f.hash === 'string' && f.hash !== '' ? f.hash : null,
+          });
+        }
+      }
     }
     const isKbPath = (path: string): boolean =>
       bundles === null
@@ -277,12 +361,11 @@ export class OkfFactsService {
 
     const agents: OkfFactsResponse['agents'] = nodes.map((node) => {
       const roots = repoRootsOf(node.id);
-      const access: OkfAccessRow[] = extractOkfAccess(
-        node.lines,
-        roots,
-        parser,
-        { isSubagentLog: node.isSubagent },
-      );
+      const detail = extractOkfDetail(node.lines, roots, parser, {
+        isSubagentLog: node.isSubagent,
+        snapshotFiles,
+      });
+      const access: OkfAccessRow[] = detail.access;
       const fileFacts = collectNodeFileFacts(
         node.lines,
         roots,
@@ -327,6 +410,12 @@ export class OkfFactsService {
         .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
         .slice(0, OKF_FACTS_OTHER_READS_TOP)
         .map(([path, bytes]) => ({ path, bytes }));
+      const accessSeq: OkfFactsSeqItem[] = detail.seq.map((item) => ({
+        ...item,
+        ...(item.newPointers !== undefined
+          ? { newPointers: [...item.newPointers] }
+          : {}),
+      }));
 
       const changes = [...fileFacts.changes].sort();
       for (const c of changes) treeChanges.add(c);
@@ -352,6 +441,7 @@ export class OkfFactsService {
         kbSeq,
         otherReadsTop,
         changes,
+        accessSeq,
       };
     });
 
@@ -369,72 +459,11 @@ export class OkfFactsService {
   }
 
   /** A sub-agent's first user message through `cleanTaskText` (`''` when none survives). */
-  private firstTaskText(node: FactsNode): string {
+  private firstTaskText(node: OkfTranscriptNode): string {
     const first = filterUserPrompts(node.lines, {
       isSubagentLog: node.isSubagent,
     })[0];
     return first ?? '';
-  }
-
-  /** Tree nodes with their transcript lines; root first, then by start time. */
-  private async loadNodes(nodeIds: number[]): Promise<FactsNode[]> {
-    const result = await this.db.execute(sql`
-      SELECT
-        s.id,
-        s.session_id,
-        s.parent_session_id,
-        l.log_type,
-        l.start_time,
-        l.body
-      FROM sessions s
-      LEFT JOIN logs l
-        ON l.session_id = s.id
-       AND l.log_type IN ('claude', 'claude-subagent')
-      WHERE s.id = ANY(${sessionIdsArray(nodeIds)})
-      ORDER BY s.id, l.id
-    `);
-    const byId = new Map<number, FactsNode>();
-    for (const r of result.rows as unknown as {
-      id: string | number;
-      session_id: string;
-      parent_session_id: string | null;
-      log_type: string | null;
-      start_time: string | Date | null;
-      body: unknown;
-    }[]) {
-      const id = Number(r.id);
-      const node = byId.get(id) ?? {
-        id,
-        sessionId: r.session_id,
-        parentSessionId: r.parent_session_id,
-        startTime: null,
-        lines: [],
-        isSubagent: false,
-      };
-      if (r.log_type === 'claude-subagent') node.isSubagent = true;
-      if (r.start_time !== null) {
-        const ms = new Date(r.start_time).getTime();
-        if (
-          !Number.isNaN(ms) &&
-          (node.startTime === null || ms < node.startTime)
-        ) {
-          node.startTime = ms;
-        }
-      }
-      if (Array.isArray(r.body)) {
-        for (const line of r.body as unknown[]) {
-          if (typeof line === 'object' && line !== null) node.lines.push(line);
-        }
-      }
-      byId.set(id, node);
-    }
-    const rootId = nodeIds[0];
-    return [...byId.values()].sort(
-      (a, b) =>
-        Number(b.id === rootId) - Number(a.id === rootId) ||
-        (a.startTime ?? Infinity) - (b.startTime ?? Infinity) ||
-        a.id - b.id,
-    );
   }
 
   private async loadSnapshot(

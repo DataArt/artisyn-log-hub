@@ -9,6 +9,9 @@
  */
 import type { OkfTreeNode } from '../../../../../models/repositories';
 
+/** Uniform row height of the OKF tree, in px (same as the change-surface tree). */
+export const OKF_ROW_HEIGHT = 28;
+
 /** What the READ heat bar and value show. */
 export type OkfHeatMetric = 'bytes' | 'calls';
 
@@ -123,6 +126,7 @@ export function filterOkfTreeByFiles(
 
 /** One visible row of the flattened tree. */
 export interface FlatOkfRow {
+  kind: 'node';
   node: OkfTreeNode;
   key: string;
   depth: number;
@@ -154,11 +158,41 @@ export function isExpanded(
   return node.kind === 'bundle' || !isNotRead(node);
 }
 
+/**
+ * Session tree: the one row that stands for a folder's "not read" children (files and untouched
+ * sub-folders) — "N articles not read in this session · show". Opening it lists them below it.
+ */
+export interface FlatOkfUnreadGroup {
+  kind: 'unread';
+  /** `okfUnreadGroupKey(parent)`. */
+  key: string;
+  depth: number;
+  /** Files at or below the hidden rows. */
+  articles: number;
+  open: boolean;
+}
+
+export type FlatOkfEntry = FlatOkfRow | FlatOkfUnreadGroup;
+
+/** How `flattenOkfTree` treats "not read" rows (session variant only; the repo tree lists all). */
+export interface OkfUnreadMode {
+  /** `hide`: leave them out (tree filtered to one agent); `group`: one collapsible row per folder. */
+  mode: 'hide' | 'group';
+  /** Opened groups, by `okfUnreadGroupKey`. */
+  open: ReadonlySet<string>;
+}
+
+/** Key of the "not read" group under a folder / bundle node. */
+export function okfUnreadGroupKey(parentKey: string): string {
+  return `U:${parentKey}`;
+}
+
 export function flattenOkfTree(
   nodes: readonly OkfTreeNode[],
   overrides: ReadonlyMap<string, boolean>,
-): FlatOkfRow[] {
-  const out: FlatOkfRow[] = [];
+  unread?: OkfUnreadMode,
+): FlatOkfEntry[] {
+  const out: FlatOkfEntry[] = [];
   const walk = (
     node: OkfTreeNode,
     parent: OkfTreeNode | null,
@@ -167,9 +201,11 @@ export function flattenOkfTree(
   ) => {
     const hasChildren = (node.children?.length ?? 0) > 0;
     const expanded = hasChildren && isExpanded(node, overrides);
+    const key = okfNodeKey(node);
     out.push({
+      kind: 'node',
       node,
-      key: okfNodeKey(node),
+      key,
       depth,
       label: relativeLabel(node, parent),
       hasChildren,
@@ -177,9 +213,51 @@ export function flattenOkfTree(
       top,
     });
     if (!expanded) return;
-    for (const child of node.children ?? []) walk(child, node, top, depth + 1);
+    const children = node.children ?? [];
+    if (!unread) {
+      for (const child of children) walk(child, node, top, depth + 1);
+      return;
+    }
+    const idle = children.filter(isNotRead);
+    for (const child of children) {
+      if (!isNotRead(child)) walk(child, node, top, depth + 1);
+    }
+    if (idle.length === 0 || unread.mode === 'hide') return;
+    const groupKey = okfUnreadGroupKey(key);
+    const open = unread.open.has(groupKey);
+    out.push({
+      kind: 'unread',
+      key: groupKey,
+      depth: depth + 1,
+      articles: idle.reduce((sum, c) => sum + countFiles(c), 0),
+      open,
+    });
+    if (open) for (const child of idle) walk(child, node, top, depth + 1);
   };
   for (const n of nodes) walk(n, null, n, 0);
+  return out;
+}
+
+/**
+ * The "not read" groups that must open for the last node of `trail` (keys from
+ * `findOkfNodePath`) to be visible: one per "not read" node on the trail, keyed by its parent.
+ */
+export function okfUnreadGroupsOnPath(
+  nodes: readonly OkfTreeNode[],
+  trail: readonly string[],
+): string[] {
+  const out: string[] = [];
+  let level: readonly OkfTreeNode[] = nodes;
+  let parentKey: string | null = null;
+  for (const key of trail) {
+    const node = level.find((n) => okfNodeKey(n) === key);
+    if (!node) break;
+    if (parentKey !== null && isNotRead(node)) {
+      out.push(okfUnreadGroupKey(parentKey));
+    }
+    parentKey = key;
+    level = node.children ?? [];
+  }
   return out;
 }
 
@@ -218,7 +296,29 @@ export function findOkfNodePath(
   return search(true) ?? search(false);
 }
 
-/** Short agent label: `main` for the root session, else the first 4 chars of its id (DD-47). */
-export function okfAgentLabel(agentId: string, rootSessionId: string): string {
-  return agentId === rootSessionId ? 'main' : agentId.slice(0, 4);
+/** "1 partial read (line range)" / "N partial reads" — Read calls with a line range. */
+export function okfPartialReadsText(n: number): string {
+  return n === 1 ? '1 partial read (line range)' : `${n} partial reads`;
+}
+
+/** A "dead pointers" marker is shown only from this many dead pointers up (Visual/UX notes). */
+export const OKF_DEAD_MARKER_MIN = 3;
+
+/** YIELD cell: "k / n", or "—" when no read showed a new pointer (or an older server). */
+export function formatOkfYield(
+  y: { k: number; n: number } | null | undefined,
+): string {
+  return y && y.n > 0 ? `${y.k} / ${y.n}` : '—';
+}
+
+/** EXPL. AFTER cell: "agents · searches", empty when nobody searched after reading. */
+export function formatOkfSearchedAfter(
+  s: OkfTreeNode['searchedAfter'],
+): string {
+  return s && s.agents > 0 ? `${s.agents} · ${s.searches}` : '';
+}
+
+/** ROUTE MISS cell: "X / Y" (missing agents of all area agents), empty without a miss. */
+export function formatOkfRoutingMiss(r: OkfTreeNode['routingMiss']): string {
+  return r && r.agents > 0 ? `${r.agents} / ${r.areaAgents}` : '';
 }

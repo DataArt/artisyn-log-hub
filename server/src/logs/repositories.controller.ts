@@ -120,7 +120,10 @@ import {
 } from './change-surface/change-surface.types';
 import { maskFirstPrompt, type TeamScope } from './team-scope';
 import { OkfUsageService } from './okf/okf-usage.service';
-import type { SessionOkfUsageResponse } from './okf/okf-usage.types';
+import type {
+  SessionOkfTrailResponse,
+  SessionOkfUsageResponse,
+} from './okf/okf-usage.types';
 
 /**
  * `costBreakdown` of a listed session that has no cost row (no assistant lines yet): nothing
@@ -1516,7 +1519,7 @@ export class RepositoriesController {
     @Param('sessionId') sessionId: string,
     @Query('teamId', new ParseIntPipe({ optional: true })) teamId?: number,
   ): Promise<SessionOkfUsageResponse> {
-    const { repoIds, scope, teamScope } =
+    const { repoIds, scope, teamScope, repoUrl } =
       await this.resolveChangeSurfaceSessionScope(
         req,
         repoId,
@@ -1531,13 +1534,100 @@ export class RepositoriesController {
     if (sessionDbId === null) return this.okfUsageService.emptySessionUsage();
 
     const user = req.user as AuthUser;
+    // 2026-11-03 value signals: thresholds in force for this caller and view (DD-20), and the
+    // all-time area scope (DD-12): the same repos and access-mode scope, no period. Read-only.
+    const thresholds = await this.repositoriesService.resolveOkfThresholds(
+      user.id,
+      repoUrl,
+      teamId,
+    );
     return this.okfUsageService.getSessionOkfUsage(sessionDbId, {
       teamFilter: teamId !== undefined,
       promptMask:
         teamId === undefined
           ? undefined
           : { scope: teamScope, requesterUserId: user.id },
+      thresholds,
+      areaScope: {
+        repoIds,
+        scope: {
+          teamId,
+          requesterUserId: user.id,
+          scope: teamScope,
+          startDate: new Date(0),
+          endDate: new Date(0),
+          branches: [],
+          users: [],
+        },
+      },
     });
+  }
+
+  /**
+   * One agent's trail on the session OKF tab (package 3): the ordered KB and code accesses of
+   * the tree node `agent` (a `sessions.session_id` of the opened session's tree), rebuilt from
+   * its transcript, with the in-area marks of the value signals (okf-value-signals.md rule 11).
+   *
+   * Same scope, 403 and team rules as `okf-usage`. 400 without `agent`; 404 when the session
+   * has no visible row in the scope or `agent` is not a node of its tree. Read-only.
+   */
+  @Get(':repoId/sessions/:sessionId/okf-usage/trail')
+  async getSessionOkfTrail(
+    @Req() req: Request,
+    @Param('repoId', ParseIntPipe) repoId: number,
+    @Param('sessionId') sessionId: string,
+    @Query('agent') agent?: string,
+    @Query('teamId', new ParseIntPipe({ optional: true })) teamId?: number,
+  ): Promise<SessionOkfTrailResponse> {
+    if (typeof agent !== 'string' || agent.trim() === '') {
+      throw new BadRequestException('agent is required');
+    }
+    const { repoIds, scope, teamScope, repoUrl } =
+      await this.resolveChangeSurfaceSessionScope(
+        req,
+        repoId,
+        teamId,
+        sessionId,
+      );
+    const sessionDbId = await this.okfUsageService.findSessionDbId(
+      repoIds,
+      sessionId,
+      scope.visibleUserIds,
+    );
+    if (sessionDbId === null) throw new NotFoundException();
+
+    const user = req.user as AuthUser;
+    const thresholds = await this.repositoriesService.resolveOkfThresholds(
+      user.id,
+      repoUrl,
+      teamId,
+    );
+    const trail = await this.okfUsageService.getSessionOkfTrail(
+      sessionDbId,
+      agent,
+      {
+        teamFilter: teamId !== undefined,
+        promptMask:
+          teamId === undefined
+            ? undefined
+            : { scope: teamScope, requesterUserId: user.id },
+        thresholds,
+        areaScope: {
+          repoIds,
+          scope: {
+            teamId,
+            requesterUserId: user.id,
+            scope: teamScope,
+            startDate: new Date(0),
+            endDate: new Date(0),
+            branches: [],
+            users: [],
+          },
+        },
+      },
+    );
+    if (trail === null) throw new NotFoundException();
+    return trail;
   }
 
   /**
@@ -1559,6 +1649,8 @@ export class RepositoriesController {
     repoIds: number[];
     scope: ChangeSurfaceSessionScope;
     teamScope: TeamScope;
+    /** The asserted repository's URL (per-repo settings lookups, e.g. OKF thresholds). */
+    repoUrl: string;
   }> {
     if (teamId !== undefined && teamId <= 0) {
       throw new BadRequestException('teamId must be a positive integer');
@@ -1592,6 +1684,7 @@ export class RepositoriesController {
         visibleUserIds: teamId === undefined ? null : teamScope.visibleUserIds,
       },
       teamScope,
+      repoUrl: repo.repoUrl,
     };
   }
 

@@ -92,6 +92,11 @@
         "description": "Explore recorded sessions with interactive Analytics charts, or share printable Reports with KPIs and trends that download as PDF for a team or management."
       },
       {
+        "slug": "okf-tab",
+        "title": "OKF tab",
+        "description": "See how agents used a repository's knowledge base, which articles led them to the code, and which change to make to the KB next to every problem."
+      },
+      {
         "slug": "otel-tab",
         "title": "OTEL tab",
         "description": "Use the OTEL tabs of a session, repository or team to see what Claude Code spent per model and call source, including calls missing from transcripts."

@@ -410,12 +410,18 @@ export const f16PostTurn: ContractFamily = {
                 UNION ALL
                 SELECT c.id, c.session_id, c.parent_session_id
                   FROM sessions c JOIN tree t ON c.parent_session_id = t.session_id)
-              SELECT session_id, parent_session_id FROM tree
+              SELECT session_id, parent_session_id, '[]'::jsonb AS access_seq FROM tree
                ORDER BY (parent_session_id IS NOT NULL), id`,
         args: ['@s02.id'],
         shape: 'array',
         path: 'agents',
-        fields: { id: 'session_id', parentId: 'parent_session_id' },
+        // `accessSeq` (2026-11-03 value signals, server-only) is rebuilt from the stored bodies
+        // like every other list here, so with no tool calls it is empty for every agent.
+        fields: {
+          id: 'session_id',
+          parentId: 'parent_session_id',
+          accessSeq: { col: 'access_seq', as: 'json' },
+        },
       },
     },
     {

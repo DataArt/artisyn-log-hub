@@ -16,9 +16,13 @@
  *   carry their own folder rows plus the sum of their children; `agents` is the union of the
  *   distinct units (tree nodes on the session route, root sessions on the repo route).
  * - `size` of a folder / bundle is the sum of its children's known sizes (`null` when none).
+ * - 2026-11-03 value signals: upkeep contributions (FR-5) count only in `upkeepReadCalls`;
+ *   `rangedCalls` (FR-4) rolls up like the call counters; the per-article signal fields
+ *   (`yield`, `searchedAfter`, `routingMiss`, `deadPointers`, `catalogFiles`) and the FR-10
+ *   `stale` / `removed` flags sit on file nodes only, with the DD-18 markers.
  */
 import type { OkfSnapshotBody, OkfSnapshotBundle } from './okf-snapshot';
-import type { OkfTreeMarker, OkfTreeNode } from './okf-usage.types';
+import type { OkfTreeMarker, OkfTreeNode, OkfYield } from './okf-usage.types';
 import type { OkfVerdictRow } from './okf-verdict';
 
 // ── Path helpers ───────────────────────────────────────────────────────────────────────────────
@@ -55,10 +59,18 @@ function parentFolder(pathKey: string): string {
 
 // ── DD-30 team filter ──────────────────────────────────────────────────────────────────────────
 
-/** One root tree as the team filter sees it: its own snapshot and per-node rows. */
+/**
+ * One root tree as the team filter sees it: its own snapshot and per-node rows. `pointers` /
+ * `events` are the node's `session_okf_pointer` / `session_okf_event` rows (2026-11-03 DD-24),
+ * filtered only when present.
+ */
 export interface OkfTeamFilterTree {
   snapshot: OkfSnapshotBody | null;
-  nodes: { rows: OkfVerdictRow[] }[];
+  nodes: {
+    rows: OkfVerdictRow[];
+    pointers?: readonly { articlePath: string }[];
+    events?: readonly unknown[];
+  }[];
 }
 
 /** Files flagged ignored (by themselves or through their bundle's `index.md`) in any body. */
@@ -98,6 +110,11 @@ function teamVisibleFiles(
  * source passed in) lists it ignored; a folder row is kept only when its own snapshot lists a
  * visible file under it. A snapshot-less tree contributes nothing. Bundles flagged ignored are
  * dropped, and every ignored file leaves the remaining bundles' file lists.
+ *
+ * DD-24 (2026-11-03), same fail-closed rule for the new rows: a snapshot-less tree keeps no
+ * pointer and no event row; a pointer row is kept only when its article is a visible file of the
+ * tree's own snapshot (so an ignored article's pointers go); event rows are not filtered by
+ * `ignored`.
  */
 export function applyOkfTeamFilter<T extends OkfTeamFilterTree>(
   trees: readonly T[],
@@ -111,7 +128,15 @@ export function applyOkfTeamFilter<T extends OkfTeamFilterTree>(
 
   const filteredTrees = trees.map((tree) => {
     if (tree.snapshot === null) {
-      return { ...tree, nodes: tree.nodes.map((n) => ({ ...n, rows: [] })) };
+      return {
+        ...tree,
+        nodes: tree.nodes.map((n) => ({
+          ...n,
+          rows: [],
+          ...(n.pointers !== undefined ? { pointers: [] } : {}),
+          ...(n.events !== undefined ? { events: [] } : {}),
+        })),
+      };
     }
     const visible = teamVisibleFiles(tree.snapshot, ignoredAnywhere);
     const visibleList = [...visible];
@@ -125,6 +150,9 @@ export function applyOkfTeamFilter<T extends OkfTeamFilterTree>(
       nodes: tree.nodes.map((n) => ({
         ...n,
         rows: n.rows.filter((r) => keep(r.pathKey)),
+        ...(n.pointers !== undefined
+          ? { pointers: n.pointers.filter((p) => visible.has(p.articlePath)) }
+          : {}),
       })),
     };
   });
@@ -165,6 +193,28 @@ export interface OkfTreeContribution {
   groupKey: string;
   unit: string | number;
   row: OkfVerdictRow;
+  /**
+   * FR-5 (DD-15): a `read` / `grep` row of an upkeep pair (the same node wrote the article). Its
+   * calls go to `upkeepReadCalls` instead of the read totals.
+   */
+  upkeep?: boolean;
+}
+
+/** Per-article value signals shown on a file node (DD-14, API changes). */
+export interface OkfTreeArticleSignals {
+  yield: OkfYield | null;
+  searchedAfter: { agents: number; searches: number } | null;
+  routingMiss: { agents: number; areaAgents: number } | null;
+  /** The routing miss reached `routingMinAgents` (a `routing_miss` finding). */
+  routingMissFinding: boolean;
+  deadPointers: number;
+  catalogFiles: number | null;
+}
+
+/** FR-10 per-file flags taken from the verdict findings (DD-17). */
+export interface OkfTreeFileFlags {
+  stale?: { size: number | null; oldSize: number | null };
+  removed?: boolean;
 }
 
 export interface OkfTreeMarkerInput {
@@ -174,6 +224,12 @@ export interface OkfTreeMarkerInput {
   coarse?: ReadonlySet<string>;
   /** File path → 1-based `hotFiles` rank (repo route). */
   hotRank?: ReadonlyMap<string, number>;
+  /** Article path → value signals (DD-14). */
+  articleSignals?: ReadonlyMap<string, OkfTreeArticleSignals>;
+  /** File path → FR-10 stale / removed flags. */
+  fileFlags?: ReadonlyMap<string, OkfTreeFileFlags>;
+  /** Mark snapshot files with no non-upkeep read `not_read` (DD-18; repo route). */
+  notRead?: boolean;
 }
 
 interface Stats {
@@ -183,6 +239,12 @@ interface Stats {
   grepCalls: number;
   listCalls: number;
   writeCalls: number;
+  /** FR-4: read calls with a range (included in `readCalls`). */
+  rangedCalls: number;
+  /** FR-5: read / grep calls of upkeep pairs (not in `readCalls`). */
+  upkeepReadCalls: number;
+  /** Upkeep read rows after the node's own edit (keeps the `own_edit` marker). */
+  upkeepOwnEditCalls: number;
 }
 
 interface Acc {
@@ -204,13 +266,22 @@ function emptyStats(): Stats {
     grepCalls: 0,
     listCalls: 0,
     writeCalls: 0,
+    rangedCalls: 0,
+    upkeepReadCalls: 0,
+    upkeepOwnEditCalls: 0,
   };
 }
 
-function addRow(stats: Stats, row: OkfVerdictRow): void {
+function addRow(stats: Stats, row: OkfVerdictRow, upkeep: boolean): void {
   switch (row.op) {
     case 'read':
     case 'grep':
+      if (upkeep) {
+        stats.upkeepReadCalls += row.calls;
+        if (row.afterOwnEdit) stats.upkeepOwnEditCalls += row.calls;
+        break;
+      }
+      if (row.op === 'read') stats.rangedCalls += row.rangedCalls ?? 0;
       stats.readBytes += row.bytes;
       stats.readCalls += row.calls;
       if (row.afterOwnEdit) stats.ownEditReadBytes += row.bytes;
@@ -301,18 +372,54 @@ function finalize(
     stats.grepCalls += done.node.grepCalls;
     stats.listCalls += done.node.listCalls;
     stats.writeCalls += done.node.writeCalls;
+    stats.rangedCalls += done.node.rangedCalls ?? 0;
+    stats.upkeepReadCalls += done.node.upkeepReadCalls ?? 0;
     if (done.node.size !== null) size = (size ?? 0) + done.node.size;
     if (done.node.inSnapshot) anyChildInSnapshot = true;
   }
 
   const nodeMarkers: OkfTreeMarker[] = [];
   let hotRank: number | undefined;
+  const fileExtras: Partial<OkfTreeNode> = {};
   if (acc.kind === 'file') {
     if (markers.entryPoints?.has(acc.path)) nodeMarkers.push('entry_point');
-    if (stats.ownEditReadBytes > 0) nodeMarkers.push('own_edit');
+    if (stats.ownEditReadBytes > 0 || stats.upkeepOwnEditCalls > 0) {
+      nodeMarkers.push('own_edit');
+    }
     if (markers.coarse?.has(acc.path)) nodeMarkers.push('coarse');
     hotRank = markers.hotRank?.get(acc.path);
     if (hotRank !== undefined) nodeMarkers.push('hot');
+    if (stats.rangedCalls > 0) nodeMarkers.push('section');
+    if (stats.upkeepReadCalls > 0) nodeMarkers.push('upkeep');
+
+    const signals = markers.articleSignals?.get(acc.path);
+    if (signals !== undefined) {
+      fileExtras.yield = signals.yield;
+      if (signals.searchedAfter !== null) {
+        fileExtras.searchedAfter = { ...signals.searchedAfter };
+      }
+      if (signals.routingMiss !== null) {
+        fileExtras.routingMiss = { ...signals.routingMiss };
+      }
+      if (signals.routingMissFinding) nodeMarkers.push('routing_miss');
+      if (signals.catalogFiles !== null) {
+        fileExtras.catalogFiles = signals.catalogFiles;
+        nodeMarkers.push('catalog');
+      }
+      if (signals.deadPointers > 0) {
+        fileExtras.deadPointers = signals.deadPointers;
+        nodeMarkers.push('dead');
+      }
+    }
+    const flags = markers.fileFlags?.get(acc.path);
+    if (flags?.stale !== undefined) {
+      fileExtras.stale = { ...flags.stale };
+      nodeMarkers.push('stale');
+    }
+    if (flags?.removed === true) fileExtras.removed = true;
+    if (markers.notRead === true && acc.inSnapshot && stats.readCalls === 0) {
+      nodeMarkers.push('not_read');
+    }
   } else if (acc.own.grepCalls > 0 || acc.own.listCalls > 0) {
     nodeMarkers.push('folder_scan');
   }
@@ -323,10 +430,20 @@ function finalize(
     kind: acc.kind,
     inSnapshot: acc.kind === 'folder' ? anyChildInSnapshot : acc.inSnapshot,
     size,
-    ...stats,
+    readBytes: stats.readBytes,
+    readCalls: stats.readCalls,
+    ownEditReadBytes: stats.ownEditReadBytes,
+    grepCalls: stats.grepCalls,
+    listCalls: stats.listCalls,
+    writeCalls: stats.writeCalls,
     agents: units.size,
     markers: nodeMarkers,
     ...(hotRank !== undefined ? { hotRank } : {}),
+    ...(stats.rangedCalls > 0 ? { rangedCalls: stats.rangedCalls } : {}),
+    ...(stats.upkeepReadCalls > 0
+      ? { upkeepReadCalls: stats.upkeepReadCalls }
+      : {}),
+    ...fileExtras,
     ...(acc.kind === 'file' ? {} : { children: children.sort(compareNodes) }),
   };
   return { node, units };
@@ -371,7 +488,7 @@ export function buildOkfTree(
       if (!isUnderPrefix(key, spec.prefix)) continue;
       target = fileAcc(acc, spec.prefix, key, false, null);
     }
-    addRow(target.own, c.row);
+    addRow(target.own, c.row, c.upkeep === true);
     target.units.add(c.unit);
   }
 

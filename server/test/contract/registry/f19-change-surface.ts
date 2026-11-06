@@ -12,7 +12,7 @@
 // (okf-verdict.md); here the bundle summary and the per-agent read totals are proven against
 // `session_okf_access` and the stored snapshot body, in the personal view and in a team view,
 // where the DD-30 filter drops the gitignored file.
-import type { ContractFamily } from '../types';
+import type { ContractFamily, ReadSpec } from '../types';
 import { listedRootsSql } from './oracle-sql';
 
 const MONTH = { startDate: '2026-01-01', endDate: '2026-01-31' };
@@ -63,6 +63,38 @@ const OKF_BUNDLE_FIELDS = {
 
 const OKF_ROUTE =
   'GET /api/v1/repositories/:repoId/sessions/:sessionId/okf-usage' as const;
+const OKF_TRAIL_ROUTE =
+  'GET /api/v1/repositories/:repoId/sessions/:sessionId/okf-usage/trail' as const;
+
+/**
+ * The trail of tree node `$1` (package 3): its id and description, never truncated here, and one
+ * item per `tool_use` block of its stored claude transcript — the trail is rebuilt from the
+ * transcript, not from the stored OKF rows, and the world's bodies carry no tool calls.
+ */
+function trailRead(nodeRef: string): ReadSpec {
+  return {
+    sql: `SELECT jsonb_build_object('id', s.session_id, 'label', s.agent_description) AS agent,
+                 false AS truncated,
+                 (SELECT coalesce(jsonb_agg(b), '[]'::jsonb)
+                    FROM logs l, jsonb_array_elements(l.body) line,
+                         jsonb_array_elements(
+                           CASE jsonb_typeof(line->'message'->'content')
+                             WHEN 'array' THEN line->'message'->'content'
+                             ELSE '[]'::jsonb END) b
+                   WHERE l.session_id = s.id
+                     AND l.log_type IN ('claude', 'claude-subagent')
+                     AND b->>'type' = 'tool_use') AS items
+            FROM sessions s WHERE s.id = $1`,
+    args: [nodeRef],
+    shape: 'object',
+    fields: {
+      agent: { col: 'agent', as: 'json' },
+      truncated: 'truncated',
+      items: { col: 'items', as: 'json' },
+    },
+    strict: true,
+  };
+}
 
 /** `session_changed_paths` rows of the tree rooted at session pk `$1`. */
 const TREE_PATHS = `
@@ -203,7 +235,46 @@ export const f19ChangeSurface: ContractFamily = {
         minRows: 1,
         bodyMatches: {
           hasSnapshot: true,
-          verdict: { level: 'ok', qualifiers: [], findings: [] },
+          // Checks (2026-11-05, okf-verdict.md rule 13): both tree nodes read the bundle; s02
+          // started at index.md, s03 at scheduler.md (no search first → given); the 2-article
+          // bundle cannot be judged by share; no node wrote an article it read.
+          verdict: {
+            level: 'ok',
+            qualifiers: [],
+            findings: [],
+            checks: [
+              {
+                rule: 'kb_used',
+                status: 'ok',
+                params: {
+                  agentsWithKb: 2,
+                  agents: 2,
+                  folders: 'docs/kb',
+                  articles: 2,
+                },
+              },
+              {
+                rule: 'entry',
+                status: 'ok',
+                params: { index: 1, search: 0, given: 1, agents: 2 },
+              },
+              {
+                rule: 'session_share',
+                status: 'na',
+                params: {
+                  reason: 'small_bundles',
+                  fix: 0.25,
+                  mess: 0.5,
+                  minFiles: 10,
+                },
+              },
+              {
+                rule: 'upkeep',
+                status: 'ok',
+                params: { agents: 0, articles: 0, agentId: null, path: null },
+              },
+            ],
+          },
         },
       },
       read: {
@@ -225,12 +296,22 @@ export const f19ChangeSurface: ContractFamily = {
       read: {
         sql: `${TREE_NODES}
               SELECT t.session_id AS id,
+                     (SELECT s.agent_description FROM sessions s WHERE s.id = t.id) AS label,
                      (SELECT coalesce(sum(a.calls), 0) FROM session_okf_access a
                        WHERE a.session_id = t.id AND a.op IN ('read', 'grep')
                          AND a.path_key NOT LIKE '%/') AS kb_reads,
                      (SELECT coalesce(sum(a.bytes), 0) FROM session_okf_access a
                        WHERE a.session_id = t.id AND a.op IN ('read', 'grep')
-                         AND a.path_key NOT LIKE '%/') AS kb_read_bytes
+                         AND a.path_key NOT LIKE '%/') AS kb_read_bytes,
+                     (SELECT count(*) FROM session_okf_event e
+                       WHERE e.session_id = t.id AND e.op = 'search') AS searches,
+                     (SELECT CASE WHEN count(*) = 0 THEN NULL
+                                  ELSE jsonb_build_object('k', count(*) FILTER (WHERE r.followed),
+                                                          'n', count(*)) END
+                        FROM (SELECT p.read_ord, bool_or(p.followed) AS followed
+                                FROM session_okf_pointer p
+                               WHERE p.session_id = t.id AND p.is_new AND NOT p.partial
+                               GROUP BY p.read_ord) r) AS yield
                 FROM tree t`,
         args: ['@s02.id'],
         shape: 'array',
@@ -238,9 +319,68 @@ export const f19ChangeSurface: ContractFamily = {
         sortBy: 'id',
         fields: {
           id: 'id',
+          // Optional since the OKF tab quick wins: the sub-agent's description, null for the root.
+          label: 'label',
           kbReads: { col: 'kb_reads', as: 'number' },
           kbReadBytes: { col: 'kb_read_bytes', as: 'number' },
+          // 2026-11-03 value signals: code search events and pointer yield (FR-1) per node.
+          searches: { col: 'searches', as: 'number' },
+          yield: { col: 'yield', as: 'json' },
         },
+      },
+    },
+    {
+      // 2026-11-03 value signals: the whole tree's signal totals. Reads that showed a new
+      // pointer: s02's index.md read and s03's first scheduler.md read; only s03 followed one.
+      // s03 grepped scheduler.ts twice after reading scheduler.md (= exploredMinSearches) → one
+      // searched-after pair; no node searched an area instead of reading, no dead pointer, no
+      // upkeep, no cap hit, default thresholds.
+      id: 'F19-okf-session-signals',
+      route: OKF_ROUTE,
+      actor: 'owner',
+      params: { repoId: '@R1.id', sessionId: '@s02.sessionId' },
+      expect: {
+        status: 200,
+        bodyMatches: {
+          thresholds: { custom: [] },
+          upkeep: [],
+          eventsTruncated: false,
+        },
+      },
+      read: {
+        sql: `${TREE_NODES},
+              shown AS (SELECT p.session_id, p.read_ord, bool_or(p.followed) AS followed
+                          FROM tree t JOIN session_okf_pointer p ON p.session_id = t.id
+                         WHERE p.is_new AND NOT p.partial
+                         GROUP BY p.session_id, p.read_ord)
+              SELECT (SELECT count(*) FROM shown) AS with_new,
+                     (SELECT count(*) FROM shown WHERE followed) AS followed,
+                     0 AS routing,
+                     -- searched-after pairs (FR-2): in-area searches after the first read,
+                     -- per (node, article) with ≥ 2 (the area is scheduler.md's two pointers)
+                     (SELECT count(*) FROM (
+                        SELECT p.session_id, p.article_path
+                          FROM tree t JOIN session_okf_pointer p ON p.session_id = t.id
+                         WHERE NOT p.partial
+                         GROUP BY p.session_id, p.article_path
+                        HAVING (SELECT count(*) FROM session_okf_event e
+                                 WHERE e.session_id = p.session_id AND e.op = 'search'
+                                   AND e.ord > min(p.read_ord)
+                                   AND e.path IN ('server/src/scheduler.ts',
+                                                  'server/src/legacy-cron.ts')) >= 2
+                      ) x) AS searched_after,
+                     0 AS dead`,
+        args: ['@s02.id'],
+        shape: 'object',
+        path: 'signals',
+        fields: {
+          readsWithNewPointers: { col: 'with_new', as: 'number' },
+          readsFollowed: { col: 'followed', as: 'number' },
+          routingMissArticles: { col: 'routing', as: 'number' },
+          searchedAfterPairs: { col: 'searched_after', as: 'number' },
+          deadPointers: { col: 'dead', as: 'number' },
+        },
+        strict: true,
       },
     },
     {
@@ -278,10 +418,20 @@ export const f19ChangeSurface: ContractFamily = {
             {
               id: '@s01.sessionId',
               taskHead: 'Add a spice-yield endpoint',
+              label: null,
               entry: null,
               kbReads: 0,
               kbReadBytes: 0,
               files: [],
+              // 2026-11-03 value signals: empty, not absent, on a node with no OKF rows.
+              pointers: [],
+              promptNamedPaths: 0,
+              routingMisses: [],
+              // Package 3: the articles it searched after reading (trail links).
+              searchedAfter: [],
+              upkeepArticles: [],
+              searches: 0,
+              yield: null,
             },
           ],
         },
@@ -300,6 +450,53 @@ export const f19ChangeSurface: ContractFamily = {
       actor: 'outsider',
       params: { repoId: '@R1.id', sessionId: '@s02.sessionId' },
       expect: { status: 403 },
+    },
+    {
+      // Package 3 agent trail: the sub-agent s03 of the opened tree s02. The trail is rebuilt
+      // from the node's stored transcript (like the facts route), never from the stored OKF rows:
+      // one item per tool_use access — the world's bodies carry no tool calls, so none. The label
+      // is s03's own description; nothing is capped.
+      id: 'F19-okf-trail',
+      route: OKF_TRAIL_ROUTE,
+      actor: 'owner',
+      params: { repoId: '@R1.id', sessionId: '@s02.sessionId' },
+      query: { agent: '@s03.sessionId' },
+      expect: { status: 200 },
+      read: trailRead('@s03.id'),
+    },
+    {
+      // The opened node itself: the root has no description.
+      id: 'F19-okf-trail-root',
+      route: OKF_TRAIL_ROUTE,
+      actor: 'owner',
+      params: { repoId: '@R1.id', sessionId: '@s02.sessionId' },
+      query: { agent: '@s02.sessionId' },
+      expect: { status: 200 },
+      read: trailRead('@s02.id'),
+    },
+    {
+      id: 'F19-okf-trail-outsider',
+      route: OKF_TRAIL_ROUTE,
+      actor: 'outsider',
+      params: { repoId: '@R1.id', sessionId: '@s02.sessionId' },
+      query: { agent: '@s03.sessionId' },
+      expect: { status: 403 },
+    },
+    {
+      id: 'F19-okf-trail-no-agent',
+      route: OKF_TRAIL_ROUTE,
+      actor: 'owner',
+      params: { repoId: '@R1.id', sessionId: '@s02.sessionId' },
+      expect: { status: 400 },
+    },
+    {
+      // s01 is a session of the same repository but not a node of s02's tree.
+      id: 'F19-okf-trail-foreign-node',
+      route: OKF_TRAIL_ROUTE,
+      actor: 'owner',
+      params: { repoId: '@R1.id', sessionId: '@s02.sessionId' },
+      query: { agent: '@s01.sessionId' },
+      expect: { status: 404 },
     },
     {
       // One bucket per UTC day with at least one listed session that changed something; the

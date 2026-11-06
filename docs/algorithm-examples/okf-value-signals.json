@@ -1,0 +1,1278 @@
+[
+  {
+    "id": "VS-01",
+    "input": {
+      "pointers": [
+        {
+          "nodeId": "n1",
+          "articlePath": "docs/kb/a.md",
+          "articleHash": "h1",
+          "readOrd": 1,
+          "pointer": "server/x.ts",
+          "isNew": true,
+          "followed": true
+        },
+        {
+          "nodeId": "n1",
+          "articlePath": "docs/kb/a.md",
+          "articleHash": "h1",
+          "readOrd": 1,
+          "pointer": "server/y.ts",
+          "isNew": true,
+          "followed": false
+        },
+        {
+          "nodeId": "n2",
+          "articlePath": "docs/kb/a.md",
+          "articleHash": "h1",
+          "readOrd": 2,
+          "pointer": "server/x.ts",
+          "isNew": true,
+          "followed": false
+        }
+      ],
+      "latestFiles": {
+        "docs/kb/a.md": {
+          "hash": "h1",
+          "size": 1000
+        }
+      }
+    },
+    "expected": {
+      "articles": {
+        "docs/kb/a.md": {
+          "area": {
+            "files": [
+              "server/x.ts",
+              "server/y.ts"
+            ],
+            "hash": "h1",
+            "areaFromOlderVersion": false
+          },
+          "yield": {
+            "k": 1,
+            "n": 2
+          },
+          "pointers": [
+            {
+              "pointer": "server/x.ts",
+              "shown": 2,
+              "followed": 1,
+              "dead": false,
+              "notFound": false
+            },
+            {
+              "pointer": "server/y.ts",
+              "shown": 1,
+              "followed": 0,
+              "dead": false,
+              "notFound": false
+            }
+          ],
+          "routingMiss": null,
+          "searchedAfter": null,
+          "catalog": null
+        }
+      },
+      "summary": {
+        "readsWithNewPointers": 2,
+        "readsFollowed": 1,
+        "routingMissArticles": 0,
+        "routingMissPairs": 0,
+        "searchedAfterPairs": 0,
+        "deadPointers": 0
+      },
+      "findings": []
+    },
+    "note": "Area (rule 1): both pointers are new, non-partial files under the codeRoot server/, each a new pointer of 1 article <= pointerMaxArticles 3; current hash h1 has reads -> area [server/x.ts, server/y.ts], not older. FR-1 (rule 4): n1's read showed 2 new pointers, x followed -> n and k; n2's read showed x, not followed -> n only: k/n = 1/2. FR-13 (rule 8): x shown by 2 nodes, followed by 1; y shown by 1; both below deadPointerMinShown 4 -> not dead; sorted by shown desc. No events -> no routing miss, no searched-after; 2 area files <= 30 -> no catalog."
+  },
+  {
+    "id": "VS-02",
+    "input": {
+      "pointers": [
+        {
+          "nodeId": "n1",
+          "articlePath": "docs/kb/a.md",
+          "articleHash": "h1",
+          "readOrd": 1,
+          "pointer": "server/svc/a.ts",
+          "isNew": true,
+          "followed": false
+        }
+      ],
+      "events": [
+        {
+          "nodeId": "s1",
+          "ord": 1,
+          "op": "search",
+          "path": "server/svc/a.ts",
+          "pattern": "foo"
+        },
+        {
+          "nodeId": "s1",
+          "ord": 2,
+          "op": "search",
+          "path": "server/svc/a.ts",
+          "pattern": "foo"
+        },
+        {
+          "nodeId": "s1",
+          "ord": 3,
+          "op": "search",
+          "path": "server/svc/a.ts",
+          "pattern": "bar"
+        },
+        {
+          "nodeId": "s2",
+          "ord": 1,
+          "op": "search",
+          "path": "server/svc/a.ts",
+          "pattern": "foo"
+        },
+        {
+          "nodeId": "s2",
+          "ord": 2,
+          "op": "search",
+          "path": "server/svc/a.ts",
+          "pattern": "foo"
+        },
+        {
+          "nodeId": "s2",
+          "ord": 3,
+          "op": "search",
+          "path": "server/svc/a.ts",
+          "pattern": "foo"
+        },
+        {
+          "nodeId": "s3",
+          "ord": 1,
+          "op": "search",
+          "path": "server/svc/a.ts",
+          "pattern": "baz"
+        },
+        {
+          "nodeId": "s3",
+          "ord": 2,
+          "op": "search",
+          "path": "server/svc/a.ts",
+          "pattern": "baz"
+        },
+        {
+          "nodeId": "s3",
+          "ord": 3,
+          "op": "search",
+          "path": "server/svc/a.ts",
+          "pattern": "baz"
+        },
+        {
+          "nodeId": "s4",
+          "ord": 1,
+          "op": "search",
+          "path": "server/svc/a.ts",
+          "pattern": "foo"
+        },
+        {
+          "nodeId": "s4",
+          "ord": 2,
+          "op": "search",
+          "path": "server/svc/a.ts",
+          "pattern": "foo"
+        }
+      ]
+    },
+    "expected": {
+      "articles": {
+        "docs/kb/a.md": {
+          "area": {
+            "files": [
+              "server/svc/a.ts"
+            ]
+          },
+          "yield": {
+            "k": 0,
+            "n": 1
+          },
+          "routingMiss": {
+            "agents": 3,
+            "areaAgents": 4,
+            "patterns": [
+              {
+                "pattern": "foo",
+                "count": 5
+              },
+              {
+                "pattern": "baz",
+                "count": 3
+              },
+              {
+                "pattern": "bar",
+                "count": 1
+              }
+            ]
+          }
+        }
+      },
+      "summary": {
+        "routingMissArticles": 1,
+        "routingMissPairs": 3
+      },
+      "findings": [
+        {
+          "rule": "routing_miss",
+          "severity": "fix",
+          "params": {
+            "file": "docs/kb/a.md",
+            "area": "server/svc/",
+            "patterns": "foo, baz, bar",
+            "agents": 3,
+            "areaAgents": 4
+          }
+        }
+      ]
+    },
+    "note": "Area: [server/svc/a.ts]. Rule 3: every event is a search on the area file itself -> in-area. Y = nodes with >= 1 in-area search = s1..s4 = 4. X = nodes with >= routingMinSearches 3 in-area searches and no read of a.md = s1, s2, s3 (s4 has 2; n1 read it but did not search) = 3 >= routingMinAgents 3 -> finding. Patterns over the 3 missing nodes' searches: foo 2+3 = 5, baz 3, bar 1. area param = common folder of the area files = server/svc/. FR-1: n1's read showed 1 new pointer, not followed -> 0/1."
+  },
+  {
+    "id": "VS-03",
+    "input": {
+      "pointers": [
+        {
+          "nodeId": "n1",
+          "articlePath": "docs/kb/a.md",
+          "articleHash": null,
+          "readOrd": 1,
+          "pointer": "server/gone.ts",
+          "isNew": true,
+          "followed": false
+        },
+        {
+          "nodeId": "n2",
+          "articlePath": "docs/kb/a.md",
+          "articleHash": null,
+          "readOrd": 1,
+          "pointer": "server/gone.ts",
+          "isNew": true,
+          "followed": false
+        },
+        {
+          "nodeId": "n3",
+          "articlePath": "docs/kb/a.md",
+          "articleHash": null,
+          "readOrd": 1,
+          "pointer": "server/gone.ts",
+          "isNew": true,
+          "followed": false
+        },
+        {
+          "nodeId": "n4",
+          "articlePath": "docs/kb/a.md",
+          "articleHash": null,
+          "readOrd": 1,
+          "pointer": "server/gone.ts",
+          "isNew": true,
+          "followed": false
+        }
+      ]
+    },
+    "expected": {
+      "articles": {
+        "docs/kb/a.md": {
+          "yield": {
+            "k": 0,
+            "n": 4
+          },
+          "pointers": [
+            {
+              "pointer": "server/gone.ts",
+              "shown": 4,
+              "followed": 0,
+              "dead": true,
+              "notFound": true
+            }
+          ],
+          "deadPointers": 1
+        }
+      },
+      "summary": {
+        "deadPointers": 1
+      },
+      "findings": [
+        {
+          "rule": "dead_pointers",
+          "severity": "fix",
+          "params": {
+            "file": "docs/kb/a.md",
+            "path": "server/gone.ts",
+            "dead": 1,
+            "notFound": 1
+          }
+        }
+      ]
+    },
+    "note": "FR-13 (rule 8): server/gone.ts is new in non-partial reads of 4 distinct nodes >= deadPointerMinShown 4 and never followed -> dead. No touched path equals it or lies under it (allTimeTouchedPaths empty) and there is no latest snapshot -> notFound. FR-1: 4 reads with a new pointer, none followed -> 0/4."
+  },
+  {
+    "id": "VS-04",
+    "input": {
+      "pointers": [
+        {
+          "nodeId": "n1",
+          "articlePath": "docs/kb/a.md",
+          "articleHash": null,
+          "readOrd": 1,
+          "pointer": "server/gone.ts",
+          "isNew": true,
+          "followed": false
+        },
+        {
+          "nodeId": "n2",
+          "articlePath": "docs/kb/a.md",
+          "articleHash": null,
+          "readOrd": 1,
+          "pointer": "server/gone.ts",
+          "isNew": true,
+          "followed": false
+        },
+        {
+          "nodeId": "n3",
+          "articlePath": "docs/kb/a.md",
+          "articleHash": null,
+          "readOrd": 1,
+          "pointer": "server/gone.ts",
+          "isNew": true,
+          "followed": false
+        }
+      ]
+    },
+    "expected": {
+      "articles": {
+        "docs/kb/a.md": {
+          "pointers": [
+            {
+              "pointer": "server/gone.ts",
+              "shown": 3,
+              "followed": 0,
+              "dead": false,
+              "notFound": false
+            }
+          ],
+          "deadPointers": 0
+        }
+      },
+      "summary": {
+        "deadPointers": 0
+      },
+      "findings": []
+    },
+    "note": "FR-13 boundary of VS-03: shown by 3 nodes < deadPointerMinShown 4 -> not dead; notFound is only computed for dead pointers -> false; no finding."
+  },
+  {
+    "id": "VS-05",
+    "input": {
+      "allTimePointers": [
+        {
+          "articlePath": "docs/kb/a.md",
+          "pointer": "server/a.ts",
+          "isNew": true,
+          "articleHash": "h1",
+          "lastReadAt": 100
+        },
+        {
+          "articlePath": "docs/kb/a.md",
+          "pointer": "server/shared.ts",
+          "isNew": true,
+          "articleHash": "h1",
+          "lastReadAt": 100
+        },
+        {
+          "articlePath": "docs/kb/a.md",
+          "pointer": "server/lib",
+          "isNew": true,
+          "articleHash": "h1",
+          "lastReadAt": 100
+        },
+        {
+          "articlePath": "docs/kb/a.md",
+          "pointer": "docs/other.ts",
+          "isNew": true,
+          "articleHash": "h1",
+          "lastReadAt": 100
+        },
+        {
+          "articlePath": "docs/kb/a.md",
+          "pointer": "server/p.ts",
+          "isNew": true,
+          "articleHash": "h1",
+          "partial": true,
+          "lastReadAt": 100
+        },
+        {
+          "articlePath": "docs/kb/a.md",
+          "pointer": "server/n.ts",
+          "isNew": false,
+          "articleHash": "h1",
+          "lastReadAt": 100
+        },
+        {
+          "articlePath": "docs/kb/a.md",
+          "pointer": "server/old.ts",
+          "isNew": true,
+          "articleHash": "h0",
+          "lastReadAt": 50
+        },
+        {
+          "articlePath": "docs/kb/b.md",
+          "pointer": "server/shared.ts",
+          "isNew": true
+        },
+        {
+          "articlePath": "docs/kb/c.md",
+          "pointer": "server/shared.ts",
+          "isNew": true
+        },
+        {
+          "articlePath": "docs/kb/d.md",
+          "pointer": "server/shared.ts",
+          "isNew": true
+        }
+      ],
+      "latestFiles": {
+        "docs/kb/a.md": {
+          "hash": "h2",
+          "size": 1000
+        }
+      }
+    },
+    "expected": {
+      "articles": {
+        "docs/kb/a.md": {
+          "area": {
+            "files": [
+              "server/a.ts"
+            ],
+            "hash": "h1",
+            "areaFromOlderVersion": true,
+            "hasReads": true
+          }
+        },
+        "docs/kb/b.md": {
+          "area": {
+            "files": [],
+            "hash": null,
+            "hasReads": true
+          }
+        }
+      },
+      "findings": []
+    },
+    "note": "Rule 1 area: a.md's current hash h2 has no rows -> the version with the latest lastReadAt, h1 (100 > h0's 50), flagged areaFromOlderVersion. Of h1's pointers: server/shared.ts is a new pointer of 4 articles > pointerMaxArticles 3 -> dropped as shared; server/lib has no extension (a folder) -> dropped; docs/other.ts is under no codeRoot -> dropped; server/p.ts is partial and server/n.ts not new -> not qualifying. Area [server/a.ts]. b.md has reads but its only pointer is the shared one -> an empty area."
+  },
+  {
+    "id": "VS-06",
+    "input": {
+      "pointers": [
+        {
+          "nodeId": "n1",
+          "articlePath": "docs/kb/a.md",
+          "readOrd": 2,
+          "pointer": "server/svc/a.ts",
+          "isNew": true,
+          "followed": false
+        },
+        {
+          "nodeId": "n2",
+          "articlePath": "docs/kb/a.md",
+          "readOrd": 1,
+          "pointer": "server/svc/a.ts",
+          "isNew": true,
+          "followed": false
+        },
+        {
+          "nodeId": "n3",
+          "articlePath": "docs/kb/a.md",
+          "readOrd": 1,
+          "pointer": "server/svc/a.ts",
+          "isNew": true,
+          "followed": false
+        }
+      ],
+      "upkeep": [
+        {
+          "nodeId": "n3",
+          "articlePath": "docs/kb/a.md"
+        }
+      ],
+      "events": [
+        {
+          "nodeId": "n1",
+          "ord": 1,
+          "op": "search",
+          "path": "server/svc/a.ts",
+          "pattern": "early"
+        },
+        {
+          "nodeId": "n1",
+          "ord": 3,
+          "op": "search",
+          "path": "server/svc/a.ts",
+          "pattern": "foo"
+        },
+        {
+          "nodeId": "n1",
+          "ord": 4,
+          "op": "search",
+          "path": "server/svc/a.ts",
+          "pattern": "bar"
+        },
+        {
+          "nodeId": "n2",
+          "ord": 2,
+          "op": "search",
+          "path": "server/svc/a.ts",
+          "pattern": "foo"
+        },
+        {
+          "nodeId": "n3",
+          "ord": 2,
+          "op": "search",
+          "path": "server/svc/a.ts",
+          "pattern": "x"
+        },
+        {
+          "nodeId": "n3",
+          "ord": 3,
+          "op": "search",
+          "path": "server/svc/a.ts",
+          "pattern": "x"
+        },
+        {
+          "nodeId": "n3",
+          "ord": 4,
+          "op": "search",
+          "path": "server/svc/a.ts",
+          "pattern": "x"
+        }
+      ]
+    },
+    "expected": {
+      "articles": {
+        "docs/kb/a.md": {
+          "yield": {
+            "k": 0,
+            "n": 2
+          },
+          "searchedAfter": {
+            "agents": 1,
+            "searches": 2,
+            "patterns": [
+              {
+                "pattern": "bar",
+                "count": 1
+              },
+              {
+                "pattern": "foo",
+                "count": 1
+              }
+            ]
+          },
+          "routingMiss": {
+            "agents": 0,
+            "areaAgents": 2
+          }
+        }
+      },
+      "nodes": {
+        "n1": {
+          "searchedAfter": [
+            {
+              "article": "docs/kb/a.md",
+              "searches": 2
+            }
+          ]
+        }
+      },
+      "summary": {
+        "searchedAfterPairs": 1,
+        "routingMissArticles": 0
+      },
+      "findings": [
+        {
+          "rule": "searched_after",
+          "severity": "fix",
+          "params": {
+            "file": "docs/kb/a.md",
+            "patterns": "bar, foo",
+            "agents": 1,
+            "searches": 2
+          }
+        }
+      ]
+    },
+    "note": "Rule 5 (FR-2): n1 first read a.md at ord 2; its in-area searches after it are ord 3 and 4 (the ord 1 search came before) = 2 >= exploredMinSearches 2 -> listed. n2 has 1 search after its read -> not listed. n3 is an upkeep pair (rule 2): its reads, pointers and 3 searches are ignored. Patterns tie at 1 -> by pattern: bar, foo. Rule 6: Y = n1, n2 (n3 is upkeep); both read the article -> X 0. FR-1: n1 and n2 each showed 1 new pointer, not followed -> 0/2."
+  },
+  {
+    "id": "VS-07",
+    "input": {
+      "pointers": [
+        {
+          "nodeId": "sub1",
+          "articlePath": "docs/kb/a.md",
+          "readOrd": 4,
+          "pointer": "server/svc/a.ts",
+          "isNew": true,
+          "followed": false
+        }
+      ],
+      "events": [
+        {
+          "nodeId": "main",
+          "ord": 1,
+          "op": "search",
+          "path": "server/svc/a.ts",
+          "pattern": "p1"
+        },
+        {
+          "nodeId": "main",
+          "ord": 2,
+          "op": "search",
+          "path": "server/svc/a.ts",
+          "pattern": "p1"
+        },
+        {
+          "nodeId": "main",
+          "ord": 3,
+          "op": "search",
+          "path": "server/svc/a.ts",
+          "pattern": "p2"
+        },
+        {
+          "nodeId": "sub2",
+          "ord": 1,
+          "op": "search",
+          "path": "server/svc/a.ts",
+          "pattern": "p3"
+        },
+        {
+          "nodeId": "sub2",
+          "ord": 2,
+          "op": "search",
+          "path": "server/svc/a.ts",
+          "pattern": "p4"
+        },
+        {
+          "nodeId": "sub2",
+          "ord": 3,
+          "op": "search",
+          "path": "server/svc/a.ts",
+          "pattern": "p5"
+        },
+        {
+          "nodeId": "sub3",
+          "ord": 1,
+          "op": "search",
+          "path": "server/svc/a.ts",
+          "pattern": "p6"
+        },
+        {
+          "nodeId": "sub3",
+          "ord": 2,
+          "op": "search",
+          "path": "server/svc/a.ts",
+          "pattern": "p2"
+        },
+        {
+          "nodeId": "sub3",
+          "ord": 3,
+          "op": "search",
+          "path": "server/svc/a.ts",
+          "pattern": "p0"
+        },
+        {
+          "nodeId": "sub1",
+          "ord": 1,
+          "op": "search",
+          "path": "server/svc/a.ts",
+          "pattern": "q"
+        },
+        {
+          "nodeId": "sub1",
+          "ord": 2,
+          "op": "search",
+          "path": "server/svc/a.ts",
+          "pattern": "q"
+        },
+        {
+          "nodeId": "sub1",
+          "ord": 3,
+          "op": "search",
+          "path": "server/svc/a.ts",
+          "pattern": "q"
+        }
+      ]
+    },
+    "expected": {
+      "articles": {
+        "docs/kb/a.md": {
+          "searchedAfter": null,
+          "routingMiss": {
+            "agents": 3,
+            "areaAgents": 4,
+            "patterns": [
+              {
+                "pattern": "p1",
+                "count": 2
+              },
+              {
+                "pattern": "p2",
+                "count": 2
+              },
+              {
+                "pattern": "p0",
+                "count": 1
+              },
+              {
+                "pattern": "p3",
+                "count": 1
+              },
+              {
+                "pattern": "p4",
+                "count": 1
+              }
+            ]
+          }
+        }
+      },
+      "nodes": {
+        "main": {
+          "routingMisses": [
+            {
+              "article": "docs/kb/a.md",
+              "searches": 3,
+              "patterns": [
+                "p1",
+                "p2"
+              ]
+            }
+          ]
+        },
+        "sub1": {
+          "routingMisses": []
+        }
+      },
+      "summary": {
+        "routingMissArticles": 1,
+        "routingMissPairs": 3
+      },
+      "findings": [
+        {
+          "rule": "routing_miss",
+          "severity": "fix",
+          "params": {
+            "file": "docs/kb/a.md",
+            "area": "server/svc/",
+            "patterns": "p1, p2, p0, p3, p4",
+            "agents": 3,
+            "areaAgents": 4
+          }
+        }
+      ]
+    },
+    "note": "Rule 6 (FR-3): sub1 read a.md, so it is in Y but not in X; main, sub2 and sub3 each made 3 in-area searches without a read of their own -> X 3 >= routingMinAgents 3. The sub-agent's read does not clear the main agent. Rule 9: over X's searches p1 2, p2 2, then the 1-count ties by pattern p0, p3, p4; p5 and p6 fall past OKF_TOP_PATTERNS 5. Rule 5: sub1's searches (ord 1-3) came before its read (ord 4) -> no searched-after."
+  },
+  {
+    "id": "VS-08",
+    "input": {
+      "pointers": [
+        {
+          "nodeId": "n1",
+          "articlePath": "docs/kb/a.md",
+          "readOrd": 1,
+          "pointer": "server/svc/a.ts",
+          "isNew": true,
+          "followed": false
+        },
+        {
+          "nodeId": "n1",
+          "articlePath": "docs/kb/a.md",
+          "readOrd": 1,
+          "pointer": "server/svc/b.ts",
+          "isNew": true,
+          "followed": false
+        },
+        {
+          "nodeId": "n1",
+          "articlePath": "docs/kb/a.md",
+          "readOrd": 1,
+          "pointer": "server/svc/c.ts",
+          "isNew": true,
+          "followed": false
+        }
+      ],
+      "events": [
+        {
+          "nodeId": "s1",
+          "ord": 1,
+          "op": "search",
+          "path": "server/svc/a.ts",
+          "pattern": "x"
+        },
+        {
+          "nodeId": "s1",
+          "ord": 2,
+          "op": "search",
+          "path": "server/svc/b.ts",
+          "pattern": "x"
+        },
+        {
+          "nodeId": "s1",
+          "ord": 3,
+          "op": "search",
+          "path": "server/svc/c.ts",
+          "pattern": "x"
+        },
+        {
+          "nodeId": "s2",
+          "ord": 1,
+          "op": "search",
+          "path": "server/svc/a.ts",
+          "pattern": "x"
+        },
+        {
+          "nodeId": "s2",
+          "ord": 2,
+          "op": "search",
+          "path": "server/svc/b.ts",
+          "pattern": "x"
+        },
+        {
+          "nodeId": "s2",
+          "ord": 3,
+          "op": "search",
+          "path": "server/svc/c.ts",
+          "pattern": "x"
+        },
+        {
+          "nodeId": "s3",
+          "ord": 1,
+          "op": "search",
+          "path": "server/svc/a.ts",
+          "pattern": "x"
+        },
+        {
+          "nodeId": "s3",
+          "ord": 2,
+          "op": "search",
+          "path": "server/svc/b.ts",
+          "pattern": "x"
+        },
+        {
+          "nodeId": "s3",
+          "ord": 3,
+          "op": "search",
+          "path": "server/svc/c.ts",
+          "pattern": "x"
+        }
+      ],
+      "thresholds": {
+        "areaMaxFiles": 2
+      }
+    },
+    "expected": {
+      "articles": {
+        "docs/kb/a.md": {
+          "catalog": {
+            "files": 3
+          },
+          "routingMiss": null
+        }
+      },
+      "summary": {
+        "routingMissArticles": 0
+      },
+      "findings": [
+        {
+          "rule": "catalog",
+          "severity": "info",
+          "params": {
+            "file": "docs/kb/a.md",
+            "files": 3,
+            "area": "server/svc/"
+          }
+        }
+      ]
+    },
+    "note": "Rule 7 (FR-15): the area has 3 files > areaMaxFiles 2 -> catalog {files 3} and an info finding. Three nodes made 3 in-area searches each without reading a.md, which would be a routing miss (rule 6), but FR-3 is not computed for a catalog article."
+  },
+  {
+    "id": "VS-09",
+    "input": {
+      "pointers": [
+        {
+          "nodeId": "n1",
+          "articlePath": "docs/kb/a.md",
+          "readOrd": 1,
+          "pointer": "server/x.ts",
+          "isNew": true,
+          "followed": false,
+          "partial": true
+        },
+        {
+          "nodeId": "n2",
+          "articlePath": "docs/kb/a.md",
+          "readOrd": 1,
+          "pointer": "",
+          "isNew": false,
+          "followed": false,
+          "partial": true
+        },
+        {
+          "nodeId": "n3",
+          "articlePath": "docs/kb/a.md",
+          "readOrd": 1,
+          "pointer": "server/x.ts",
+          "isNew": true,
+          "followed": true
+        }
+      ]
+    },
+    "expected": {
+      "articles": {
+        "docs/kb/a.md": {
+          "area": {
+            "files": [
+              "server/x.ts"
+            ]
+          },
+          "yield": {
+            "k": 1,
+            "n": 1
+          },
+          "reads": {
+            "nonPartial": 1,
+            "partial": 2
+          },
+          "pointers": [
+            {
+              "pointer": "server/x.ts",
+              "shown": 1,
+              "followed": 1,
+              "dead": false,
+              "notFound": false
+            }
+          ]
+        }
+      },
+      "yield": {
+        "k": 1,
+        "n": 1
+      },
+      "summary": {
+        "readsWithNewPointers": 1,
+        "readsFollowed": 1
+      }
+    },
+    "note": "Partial reads (rules 1, 4, 8): n1's read is a preview (partial) and n2's is the '' row of an empty / failed read; both count as partial reads only. They give no yield, no shown count and no area pointer. n3's full read showed server/x.ts and followed it -> 1/1, shown 1."
+  },
+  {
+    "id": "VS-10",
+    "input": {
+      "pointers": [
+        {
+          "nodeId": "n1",
+          "articlePath": "docs/kb/a.md",
+          "readOrd": 1,
+          "pointer": "server/c.ts",
+          "isNew": true,
+          "followed": false
+        },
+        {
+          "nodeId": "n1",
+          "articlePath": "docs/kb/a.md",
+          "readOrd": 1,
+          "pointer": "server/lib",
+          "isNew": true,
+          "followed": false
+        },
+        {
+          "nodeId": "n2",
+          "articlePath": "docs/kb/a.md",
+          "readOrd": 1,
+          "pointer": "server/c.ts",
+          "isNew": true,
+          "followed": false
+        },
+        {
+          "nodeId": "n2",
+          "articlePath": "docs/kb/a.md",
+          "readOrd": 1,
+          "pointer": "server/lib",
+          "isNew": true,
+          "followed": false
+        },
+        {
+          "nodeId": "n3",
+          "articlePath": "docs/kb/a.md",
+          "readOrd": 1,
+          "pointer": "server/c.ts",
+          "isNew": true,
+          "followed": false
+        },
+        {
+          "nodeId": "n3",
+          "articlePath": "docs/kb/a.md",
+          "readOrd": 1,
+          "pointer": "server/lib",
+          "isNew": true,
+          "followed": false
+        },
+        {
+          "nodeId": "n4",
+          "articlePath": "docs/kb/a.md",
+          "readOrd": 1,
+          "pointer": "server/c.ts",
+          "isNew": true,
+          "followed": false
+        },
+        {
+          "nodeId": "n4",
+          "articlePath": "docs/kb/a.md",
+          "readOrd": 1,
+          "pointer": "server/lib",
+          "isNew": true,
+          "followed": false
+        }
+      ],
+      "allTimeTouchedPaths": [
+        "server/lib/x.ts"
+      ],
+      "latestFiles": {
+        "server/c.ts": {
+          "hash": "hc",
+          "size": 10
+        }
+      }
+    },
+    "expected": {
+      "articles": {
+        "docs/kb/a.md": {
+          "pointers": [
+            {
+              "pointer": "server/c.ts",
+              "shown": 4,
+              "followed": 0,
+              "dead": true,
+              "notFound": false
+            },
+            {
+              "pointer": "server/lib",
+              "shown": 4,
+              "followed": 0,
+              "dead": true,
+              "notFound": false
+            }
+          ],
+          "deadPointers": 2
+        }
+      },
+      "summary": {
+        "deadPointers": 2
+      },
+      "findings": [
+        {
+          "rule": "dead_pointers",
+          "severity": "fix",
+          "params": {
+            "file": "docs/kb/a.md",
+            "path": "server/c.ts, server/lib",
+            "dead": 2,
+            "notFound": 0
+          }
+        }
+      ]
+    },
+    "note": "Rule 8 (FR-13): both pointers are shown by 4 nodes and never followed -> dead. Neither is notFound: server/c.ts is a file of the latest snapshot, and a session touched server/lib/x.ts, which lies under server/lib. Ties on shown -> pointer ascending."
+  },
+  {
+    "id": "VS-11",
+    "input": {
+      "pointers": [
+        {
+          "nodeId": "n1",
+          "articlePath": "docs/kb/a.md",
+          "readOrd": 1,
+          "pointer": "server/src/svc/a.ts",
+          "isNew": true,
+          "followed": false
+        }
+      ],
+      "events": [
+        {
+          "nodeId": "n1",
+          "ord": 2,
+          "op": "search",
+          "path": "server/src/svc/",
+          "pattern": "foo"
+        },
+        {
+          "nodeId": "n1",
+          "ord": 3,
+          "op": "search",
+          "path": "server/src/",
+          "pattern": "wide"
+        },
+        {
+          "nodeId": "n1",
+          "ord": 4,
+          "op": "search",
+          "path": "server/src/svc/",
+          "pattern": "bar"
+        }
+      ]
+    },
+    "expected": {
+      "articles": {
+        "docs/kb/a.md": {
+          "searchedAfter": {
+            "agents": 1,
+            "searches": 2,
+            "patterns": [
+              {
+                "pattern": "bar",
+                "count": 1
+              },
+              {
+                "pattern": "foo",
+                "count": 1
+              }
+            ]
+          },
+          "routingMiss": null
+        }
+      },
+      "nodes": {
+        "n1": {
+          "searchedAfter": [
+            {
+              "article": "docs/kb/a.md",
+              "searches": 2
+            }
+          ]
+        }
+      },
+      "summary": {
+        "searchedAfterPairs": 1,
+        "routingMissArticles": 0
+      },
+      "findings": [
+        {
+          "rule": "searched_after",
+          "severity": "fix",
+          "params": {
+            "file": "docs/kb/a.md",
+            "patterns": "bar, foo",
+            "agents": 1,
+            "searches": 2
+          }
+        }
+      ]
+    },
+    "note": "Rule 3 (DD-13 folder searches): the area is [server/src/svc/a.ts]. n1 read a.md at ord 1, then grepped the folder server/src/svc/ twice (3 segments >= OKF_SEARCH_FOLDER_MIN_DEPTH 3, holds the area file) -> both count for FR-2; server/src/ (2 segments) is too wide and does not. Rule 5: 2 >= exploredMinSearches 2 -> searched_after. Folder searches never feed FR-3, so the article has no area searchers -> routingMiss null."
+  },
+  {
+    "id": "VS-12",
+    "input": {
+      "pointers": [
+        {
+          "nodeId": "n4",
+          "articlePath": "docs/kb/a.md",
+          "readOrd": 1,
+          "pointer": "server/src/svc/a.ts",
+          "isNew": true,
+          "followed": false
+        }
+      ],
+      "events": [
+        {
+          "nodeId": "n1",
+          "ord": 1,
+          "op": "search",
+          "path": "server/src/svc/",
+          "pattern": "n1-a"
+        },
+        {
+          "nodeId": "n1",
+          "ord": 2,
+          "op": "search",
+          "path": "server/src/svc/",
+          "pattern": "n1-b"
+        },
+        {
+          "nodeId": "n1",
+          "ord": 3,
+          "op": "search",
+          "path": "server/src/svc/",
+          "pattern": "n1-c"
+        },
+        {
+          "nodeId": "n2",
+          "ord": 1,
+          "op": "search",
+          "path": "server/src/svc/",
+          "pattern": "n2-a"
+        },
+        {
+          "nodeId": "n2",
+          "ord": 2,
+          "op": "search",
+          "path": "server/src/svc/",
+          "pattern": "n2-b"
+        },
+        {
+          "nodeId": "n2",
+          "ord": 3,
+          "op": "search",
+          "path": "server/src/svc/",
+          "pattern": "n2-c"
+        },
+        {
+          "nodeId": "n3",
+          "ord": 1,
+          "op": "search",
+          "path": "server/src/svc/",
+          "pattern": "n3-a"
+        },
+        {
+          "nodeId": "n3",
+          "ord": 2,
+          "op": "search",
+          "path": "server/src/svc/",
+          "pattern": "n3-b"
+        },
+        {
+          "nodeId": "n3",
+          "ord": 3,
+          "op": "search",
+          "path": "server/src/svc/",
+          "pattern": "n3-c"
+        }
+      ]
+    },
+    "expected": {
+      "articles": {
+        "docs/kb/a.md": {
+          "routingMiss": null,
+          "searchedAfter": null
+        }
+      },
+      "summary": {
+        "routingMissArticles": 0,
+        "routingMissPairs": 0,
+        "searchedAfterPairs": 0
+      },
+      "findings": []
+    },
+    "note": "Rule 6 (FR-3) counts file searches only: n1..n3 each grepped the area folder server/src/svc/ 3 times without reading a.md, but a folder search does not say which article the agent was after, so they are not area searchers and there is no routing miss. n4 read a.md (it gives the area) and made no searches -> no searched_after."
+  },
+  {"id":"VS-13","kind":"trail","input":{"areas":{"docs/kb/queue.md":["server/src/logs/upload-queue.service.ts","server/src/logs/queue/worker.ts"],"docs/kb/other.md":["client/src/x.ts"],"docs/kb/own.md":["server/src/logs/own.ts"]},"seq":[{"ord":1,"op":"search","path":"server/src/logs/upload-queue.service.ts","pattern":"enqueue","hit":true},{"ord":2,"op":"kb_read","path":"docs/kb/index.md","newPointers":[]},{"ord":3,"op":"kb_read","path":"docs/kb/queue.md","newPointers":["server/src/logs/upload-queue.service.ts","server/src/logs/logs.service.ts"]},{"ord":4,"op":"search","path":"server/src/logs/queue/","pattern":"retry","hit":true},{"ord":5,"op":"search","path":"server/","pattern":"enqueue","hit":false},{"ord":6,"op":"read","path":"server/src/logs/upload-queue.service.ts","offset":1,"limit":120},{"ord":7,"op":"kb_write","path":"docs/kb/own.md"},{"ord":8,"op":"kb_read","path":"docs/kb/own.md"},{"ord":9,"op":"search","path":"server/src/logs/own.ts","pattern":"own","hit":false},{"ord":10,"op":"search","path":"client/src/x.ts","pattern":"x","hit":true}]},"expected":{"items":[{"ord":1,"op":"search","path":"server/src/logs/upload-queue.service.ts","pattern":"enqueue","hit":true},{"ord":2,"op":"kb_read","path":"docs/kb/index.md","newPointers":[]},{"ord":3,"op":"kb_read","path":"docs/kb/queue.md","newPointers":["server/src/logs/upload-queue.service.ts","server/src/logs/logs.service.ts"],"followedAt":{"server/src/logs/upload-queue.service.ts":6}},{"ord":4,"op":"search","path":"server/src/logs/queue/","pattern":"retry","hit":true,"inArea":["docs/kb/queue.md"]},{"ord":5,"op":"search","path":"server/","pattern":"enqueue","hit":false},{"ord":6,"op":"read","path":"server/src/logs/upload-queue.service.ts","offset":1,"limit":120,"inArea":["docs/kb/queue.md"]},{"ord":7,"op":"kb_write","path":"docs/kb/own.md"},{"ord":8,"op":"kb_read","path":"docs/kb/own.md"},{"ord":9,"op":"search","path":"server/src/logs/own.ts","pattern":"own","hit":false},{"ord":10,"op":"search","path":"client/src/x.ts","pattern":"x","hit":true}],"truncated":false},"note":"Rule 11. #1 searches an area file of queue.md before the agent read it -> no mark. #3 reads queue.md: its new pointer upload-queue.service.ts is first touched later at #6 (the search at #1 is earlier, so it does not count) -> followedAt 6; logs.service.ts is never touched -> absent. #4 searches the folder server/src/logs/queue/ (4 segments, holds the area file worker.ts) after the read -> in the area by the folder rule. #5 searches server/ (1 segment) -> no mark. #6 reads an area file -> marked. own.md is upkeep (the node wrote it at #7) -> #9 is not marked although it searched own.md's area after reading it. #10 is in other.md's area, but the node never read other.md -> no mark. kb items never get inArea."},
+  {"id":"VS-14","kind":"trail","input":{"cap":2,"seq":[{"ord":1,"op":"kb_read","path":"docs/kb/a.md","newPointers":["server/a.ts","server/b/"]},{"ord":2,"op":"search","path":"server/","pattern":"a","hit":true},{"ord":2,"op":"search","path":"server/b/c.ts","pattern":"a","hit":true},{"ord":3,"op":"read","path":"server/a.ts"}]},"expected":{"items":[{"ord":1,"op":"kb_read","path":"docs/kb/a.md","newPointers":["server/a.ts","server/b/"],"followedAt":{"server/a.ts":3,"server/b/":2}},{"ord":2,"op":"search","path":"server/","pattern":"a","hit":true}],"truncated":true},"note":"Rule 11 cap: 4 items, cap 2 -> the first 2 and truncated. followedAt is computed over the whole sequence before the cap: server/a.ts is read at #3 (dropped by the cap, still reported). The folder pointer server/b/ is followed by #2's search of server/b/c.ts (a path under it); the search of server/ at #2 is a folder above server/a.ts and follows neither. No areas -> no inArea."}
+]

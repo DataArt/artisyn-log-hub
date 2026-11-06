@@ -9,11 +9,16 @@
 import type {
   OkfAgentEntry,
   OkfFinding,
+  OkfFindingSeverity,
   OkfQualifier,
   OkfVerdict,
   OkfVerdictLevel,
 } from '../../../models/repositories';
 import { formatBytes } from '../format';
+import { okfShortAgentId } from './okf-agent-label';
+
+/** Names an agent id in a finding; default: its short id (`okfShortAgentId`). */
+export type OkfAgentNamer = (agentId: string) => string;
 
 const LEVEL_LABELS: Record<OkfVerdictLevel, string> = {
   ok: 'OK',
@@ -24,9 +29,9 @@ const LEVEL_LABELS: Record<OkfVerdictLevel, string> = {
 };
 
 const ENTRY_LABELS: Record<OkfAgentEntry, string> = {
-  index: '✓ index',
-  search: 'grep',
-  given: 'given',
+  index: 'via index.md',
+  search: 'via search',
+  given: 'path given in its task',
 };
 
 /** Badge text of a verdict level; an unknown level (newer server) is shown as is. */
@@ -78,18 +83,62 @@ function rawParams(params: Record<string, string | number>): string {
   return parts.length > 0 ? ` (${parts.join(', ')})` : '';
 }
 
-/** One "Why" line of the verdict card. */
-export function formatOkfFinding(finding: OkfFinding): string {
+/** The article a finding is about: `file` (value-signal rules), else the finding node's path. */
+function findingFile(finding: OkfFinding): string {
+  return str(finding.params?.file) || finding.node?.path || '';
+}
+
+const SEVERITY_LABELS: Record<OkfFindingSeverity, string> = {
+  fix: 'fix',
+  mess: 'mess',
+  info: 'info',
+};
+
+/**
+ * Chip text of a finding severity. `info` findings are listed but never change the verdict
+ * level; an unknown severity (newer server) is shown as is.
+ */
+export function severityLabel(severity: OkfFindingSeverity): string {
+  return (
+    (SEVERITY_LABELS as Record<string, string | undefined>)[severity] ??
+    severity
+  );
+}
+
+/** True for a finding that is shown but never changes the verdict level. */
+export function isInfoFinding(finding: OkfFinding): boolean {
+  return finding.severity === 'info';
+}
+
+/**
+ * One "Why" line of the verdict card. `agentName` names the `agentId` param (the session tab
+ * resolves it from its agents list); without it the short id is shown.
+ */
+export function formatOkfFinding(
+  finding: OkfFinding,
+  agentName: OkfAgentNamer = okfShortAgentId,
+): string {
   const p = finding.params ?? {};
   switch (finding.rule) {
     case 'session_share':
-      return `agent ${str(p.agentId).slice(0, 4)} read ${pct(p.share)}% of ${str(p.bundle)} files (${num(p.read)} of ${num(p.total)})`;
+      return `agent ${agentName(str(p.agentId))} read ${pct(p.share)}% of ${str(p.bundle)} files (${num(p.read)} of ${num(p.total)})`;
     case 'always_read':
       return `${str(p.path)} is read in ${num(p.sessions)} of ${num(p.kbSessions)} KB sessions (${pct(p.share)}%) — its key facts probably belong in index.md/CLAUDE.md, or it should be split`;
     case 'kb_flood':
       return `${str(p.bundle)}: in ${num(p.sessions)} sessions an agent read more than 25% of its files (${pct(p.share)}% of the sessions that used it)`;
     case 'coarse_article':
       return `${str(p.path)} (${formatBytes(num(p.size))}) is read in ${num(p.sessions)} sessions, ~${formatBytes(num(p.avgReadBytes))} per read (${pct(p.ratio)}%) — split it or add section pointers`;
+    // 2026-11-03 OKF value signals.
+    case 'routing_miss':
+      return `routing miss: ${num(p.agents)} of ${num(p.areaAgents)} agents searched ${str(p.area)} without opening ${findingFile(finding)}`;
+    case 'searched_after':
+      return `searched after reading: ${num(p.agents)} agents made ${num(p.searches)} searches in the area of ${findingFile(finding)} after reading it`;
+    case 'dead_pointers': {
+      const notFound = num(p.notFound);
+      return `dead pointers: ${num(p.dead)} pointers in ${findingFile(finding)} were shown but never followed${notFound > 0 ? ` (${notFound} of them: path not found in any session)` : ''}`;
+    }
+    case 'catalog':
+      return `catalog: ${findingFile(finding)} points to ${num(p.files)} code files`;
     default:
       return `${String(finding.rule)}${rawParams(p)}`;
   }

@@ -14,30 +14,35 @@ import type {
   OkfOp,
   OkfShareBin,
   OkfVerdict,
+  OkfVerdictCheck,
 } from './okf-usage.types';
+import {
+  DEFAULT_OKF_THRESHOLDS,
+  type ResolvedOkfThresholds,
+} from './okf-thresholds';
 
 // ── DD-23 constants ────────────────────────────────────────────────────────────────────────────
+//
+// The rule thresholds (bundle size, shares, flood, coarse, minimum KB sessions) are per-repo
+// settings since 2026-11-03 (DD-19): `OkfThresholds`, passed into `computeSessionVerdict` /
+// `computeRepoVerdict` and defaulting to `DEFAULT_OKF_THRESHOLDS`. Only the fixed list sizes stay.
 
-/** A bundle with fewer files is skipped by the share rules (session share, kb_flood). */
-export const SHARE_MIN_BUNDLE_FILES = 10;
-/** Session share strictly greater than this → `fix`. */
-export const SESSION_SHARE_FIX = 0.25;
-/** Session share strictly greater than this → `mess`. */
-export const SESSION_SHARE_MESS = 0.5;
-/** Fewer KB sessions than this → `not_enough_data`. */
-export const REPO_MIN_KB_SESSIONS = 5;
-/** A non-index file read in at least this share of KB sessions → `always_read`. */
-export const ALWAYS_READ_SHARE = 0.8;
-/** A tree reading strictly more than this share of a bundle's files is flooded. */
-export const FLOOD_SHARE = 0.25;
-/** Flooded ÷ bundle sessions at least this → `kb_flood` is `mess`. */
-export const FLOOD_MESS_SESSION_SHARE = 0.2;
-/** `coarse_article` only for files at least this big (UTF-8 bytes). */
-export const COARSE_MIN_SIZE_BYTES = 51200;
-/** `coarse_article` only for files read in at least this many KB sessions. */
-export const COARSE_MIN_SESSIONS = 5;
-/** Average bytes per read ÷ size strictly below this → `coarse_article`. */
-export const COARSE_MAX_READ_RATIO = 0.1;
+/** The verdict-group thresholds the rules read (every field resolved). */
+export type OkfVerdictThresholds = Pick<
+  ResolvedOkfThresholds,
+  | 'shareMinBundleFiles'
+  | 'sessionShareFix'
+  | 'sessionShareMess'
+  | 'repoMinKbSessions'
+  | 'alwaysReadShare'
+  | 'floodShare'
+  | 'floodMessSessionShare'
+  | 'floodMinSessions'
+  | 'coarseMinSizeBytes'
+  | 'coarseMinSessions'
+  | 'coarseMaxReadRatio'
+>;
+
 export const READ_TOP_N = 5;
 export const HOT_FILES_TOP_N = 10;
 /** Lower bounds (inclusive) of the share histogram bins. */
@@ -68,6 +73,28 @@ export interface OkfVerdictRow {
   calls: number;
   /** DD-27 first-access rank within the node; only needed by `agentEntry` / `startedFromIndex`. */
   seq?: number;
+  /** DD-16: read calls with a line range (included in `calls`); absent = 0. */
+  rangedCalls?: number;
+  /** DD-16: bytes of those calls (included in `bytes`); absent = 0. */
+  rangedBytes?: number;
+  /**
+   * DD-15: the tree node the row belongs to (repo verdict, tree-wide rows). Upkeep is a
+   * (node, article) pair, so a write on an article only makes the same node's reads upkeep.
+   * Rows without it count as one node.
+   */
+  nodeId?: string | number;
+  /**
+   * DD-6: grep / list calls of the row whose result was a hit. Set only for rows of a node
+   * extracted at `okf_extract_version` ≥ `OKF_SEARCH_HITS_MIN_VERSION` (2); when any row of a node carries it, `agentEntry`
+   * applies the DD-6 search-entry rule.
+   */
+  searchHits?: number;
+}
+
+/** Hash and size of a snapshot file (DD-18a). */
+export interface OkfVerdictFileHash {
+  hash: string | null;
+  size: number | null;
 }
 
 export interface SessionVerdictNode {
@@ -96,6 +123,25 @@ export interface RepoVerdictInput {
   sessions: RepoVerdictSession[];
   /** Bundles of the latest snapshot visible in the view; `null` = no snapshot anywhere (DD-25). */
   bundles: OkfVerdictBundle[] | null;
+  /**
+   * FR-10 (DD-18a): file path → hash / size per root session (keyed by `sessionId`), from each
+   * root's bound snapshot. With `latestFiles`, enables the stale / removed handling.
+   */
+  sessionFiles?: ReadonlyMap<
+    string | number,
+    ReadonlyMap<string, OkfVerdictFileHash>
+  >;
+  /** FR-10 (DD-18a): file path → hash / size of the latest snapshot. */
+  latestFiles?: ReadonlyMap<string, OkfVerdictFileHash>;
+}
+
+/** `computeRepoVerdict` result: the verdict plus the FR-5 upkeep-only tree count (DD-15). */
+export interface RepoVerdictResult extends OkfVerdict {
+  /**
+   * Root trees whose only KB rows are upkeep — not KB sessions. Set only when > 0; the caller
+   * moves it into `tiles.upkeepOnlySessions` rather than the verdict.
+   */
+  upkeepOnlySessions?: number;
 }
 
 // ── Pure helpers ───────────────────────────────────────────────────────────────────────────────
@@ -183,6 +229,11 @@ function firstBySeq(rows: readonly OkfVerdictRow[]): OkfVerdictRow | null {
  * bundle: `index` when it targets that bundle's `index.md`; `search` when a `grep` / `list` row on
  * that bundle comes no later than its first non-index `read`; otherwise `given`. `null` when the
  * node never touched a bundle (or there are no bundles).
+ *
+ * DD-6 (2026-11-03), when the rows carry `searchHits` (extractor version ≥ 2): `search` only when
+ * the first bundle access is a `grep` / `list` row on a folder key with `searchHits > 0`, and the
+ * node later has a `read` row in that bundle; otherwise `given`. Rows without `searchHits` (older
+ * extraction) keep the rule above.
  */
 export function agentEntry(
   rows: readonly OkfVerdictRow[],
@@ -199,6 +250,17 @@ export function agentEntry(
   const inBundle = inKb.filter(
     (r) => bundleOfPath(r.pathKey, bundles) === bundle,
   );
+  if (rows.some((r) => r.searchHits !== undefined)) {
+    const isSearch =
+      (first.op === 'grep' || first.op === 'list') &&
+      first.pathKey.endsWith('/') &&
+      (first.searchHits ?? 0) > 0 &&
+      inBundle.some(
+        (r) =>
+          r.op === 'read' && (r.seq ?? Infinity) > (first.seq ?? -Infinity),
+      );
+    return isSearch ? 'search' : 'given';
+  }
   const firstRead = firstBySeq(
     inBundle.filter((r) => r.op === 'read' && r.pathKey !== bundle.index),
   );
@@ -239,9 +301,35 @@ export function startedFromIndex(
   return null;
 }
 
+function upkeepKey(nodeId: string | number | undefined, path: string): string {
+  return `${nodeId === undefined ? '' : String(nodeId)}\u0000${path}`;
+}
+
+/** True for a `read` / `grep` row of an upkeep pair (DD-15): the same node wrote that path. */
+export function upkeepPredicate(
+  rows: readonly OkfVerdictRow[],
+): (row: OkfVerdictRow) => boolean {
+  const written = new Set<string>();
+  for (const r of rows) {
+    if (r.op === 'write') written.add(upkeepKey(r.nodeId, r.pathKey));
+  }
+  return (row) =>
+    isReadLike(row.op) && written.has(upkeepKey(row.nodeId, row.pathKey));
+}
+
+/**
+ * FR-5 (DD-15): the rows without the `read` / `grep` rows of upkeep pairs — a node reading an
+ * article it also edits is maintaining the KB, not using it. Writes and `list` rows stay.
+ */
+export function withoutUpkeep(rows: readonly OkfVerdictRow[]): OkfVerdictRow[] {
+  const isUpkeep = upkeepPredicate(rows);
+  return rows.filter((r) => !isUpkeep(r));
+}
+
 const SEVERITY_RANK: Record<OkfFinding['severity'], number> = {
   mess: 0,
   fix: 1,
+  info: 2,
 };
 
 function sortFindings(findings: OkfFinding[]): OkfFinding[] {
@@ -254,9 +342,13 @@ function sortFindings(findings: OkfFinding[]): OkfFinding[] {
     .map((x) => x.f);
 }
 
+/** Worst severity; `info` findings and findings on removed files never count (DD-17). */
 function worstLevel(findings: readonly OkfFinding[]): 'ok' | 'fix' | 'mess' {
-  if (findings.some((f) => f.severity === 'mess')) return 'mess';
-  if (findings.length > 0) return 'fix';
+  const counted = findings.filter(
+    (f) => f.severity !== 'info' && f.removed !== true,
+  );
+  if (counted.some((f) => f.severity === 'mess')) return 'mess';
+  if (counted.length > 0) return 'fix';
   return 'ok';
 }
 
@@ -291,31 +383,59 @@ export function readFilesOfBundle(
 // ── DD-24 session verdict ──────────────────────────────────────────────────────────────────────
 
 /**
- * Session verdict (DD-24). Per agent and per bundle with ≥ `SHARE_MIN_BUNDLE_FILES` files:
+ * Session verdict (DD-24). Per agent and per bundle with ≥ `shareMinBundleFiles` files:
  * share = distinct bundle files the agent read/grepped ÷ bundle files, both without the files the
- * agent itself wrote; > `SESSION_SHARE_MESS` → `mess`, > `SESSION_SHARE_FIX` → `fix`.
+ * agent itself wrote; > `sessionShareMess` → `mess`, > `sessionShareFix` → `fix`.
  * No bundle and no KB access → `null`; no KB access → `kb_not_used`; no snapshot → the share rule
- * is skipped and the verdict carries `partial_data`.
+ * is skipped and the verdict carries `partial_data`. Upkeep reads (FR-5, DD-15: the node also
+ * wrote the article) are not KB access, so an upkeep-only session is `kb_not_used`.
  */
 export function computeSessionVerdict(
   input: SessionVerdictInput,
+  thresholds: OkfVerdictThresholds = DEFAULT_OKF_THRESHOLDS,
 ): OkfVerdict | null {
-  const { nodes, bundles } = input;
+  const { bundles } = input;
+  const nodes = input.nodes.map((n) => ({
+    ...n,
+    rows: withoutUpkeep(n.rows),
+  }));
   const hasAccess = nodes.some((n) => n.rows.some((r) => isKbRead(r, bundles)));
   const hasBundle = bundles !== null && bundles.length > 0;
+  const headChecks = sessionHeadChecks(input, nodes);
+  const upkeepCheck = sessionUpkeepCheck(input.nodes);
   if (!hasAccess) {
     if (!hasBundle) return null;
-    return { level: 'kb_not_used', qualifiers: [], findings: [] };
+    return {
+      level: 'kb_not_used',
+      qualifiers: [],
+      findings: [],
+      checks: [
+        ...headChecks,
+        naCheck('session_share', 'kb_not_used'),
+        upkeepCheck,
+      ],
+    };
   }
   if (bundles === null) {
-    return { level: 'ok', qualifiers: ['partial_data'], findings: [] };
+    return {
+      level: 'ok',
+      qualifiers: ['partial_data'],
+      findings: [],
+      checks: [
+        ...headChecks,
+        naCheck('session_share', 'no_snapshot'),
+        upkeepCheck,
+      ],
+    };
   }
 
   const findings: { finding: OkfFinding; share: number }[] = [];
+  let nearest: SessionShareCandidate | null = null;
+  let firstJudged: OkfVerdictBundle | null = null;
   for (const node of nodes) {
     for (const bundle of bundles) {
       const articles = bundleArticles(bundle);
-      if (articles.length < SHARE_MIN_BUNDLE_FILES) continue;
+      if (articles.length < thresholds.shareMinBundleFiles) continue;
       const listed = new Set(articles.map((f) => f.path));
       const written = new Set(
         node.rows
@@ -324,11 +444,21 @@ export function computeSessionVerdict(
       );
       const total = listed.size - written.size;
       const read = readFilesOfBundle(node.rows, bundle, written).size;
+      firstJudged ??= bundle;
       const share = fileShare(read, total);
       if (share === null) continue;
+      if (read > 0 && (nearest === null || share > nearest.share)) {
+        nearest = {
+          agentId: node.agentId,
+          bundle: bundle.root,
+          read,
+          total,
+          share,
+        };
+      }
       let severity: OkfFinding['severity'] | null = null;
-      if (share > SESSION_SHARE_MESS) severity = 'mess';
-      else if (share > SESSION_SHARE_FIX) severity = 'fix';
+      if (share > thresholds.sessionShareMess) severity = 'mess';
+      else if (share > thresholds.sessionShareFix) severity = 'fix';
       if (severity === null) continue;
       findings.push({
         share,
@@ -350,32 +480,343 @@ export function computeSessionVerdict(
   const ordered = sortFindings(
     findings.sort((a, b) => b.share - a.share).map((x) => x.finding),
   );
-  return { level: worstLevel(ordered), qualifiers: [], findings: ordered };
+  return {
+    level: worstLevel(ordered),
+    qualifiers: [],
+    findings: ordered,
+    checks: [
+      ...headChecks,
+      sessionShareCheck(nearest, firstJudged, findings.length > 0, thresholds),
+      upkeepCheck,
+    ],
+  };
+}
+
+// ── Checks (2026-11-05): one line per structure rule, also when it found nothing ──────────────
+
+interface SessionShareCandidate {
+  agentId: string;
+  bundle: string;
+  read: number;
+  total: number;
+  share: number;
+}
+
+function naCheck(rule: string, reason: string): OkfVerdictCheck {
+  return { rule, status: 'na', params: { reason } };
+}
+
+/** `kb_used` and `entry` of a session verdict (`nodes` = upkeep-free rows). */
+function sessionHeadChecks(
+  input: SessionVerdictInput,
+  nodes: readonly SessionVerdictNode[],
+): OkfVerdictCheck[] {
+  const { bundles } = input;
+  const agentsWithKb = nodes.filter((n) =>
+    n.rows.some((r) => isKbRead(r, bundles)),
+  ).length;
+  // `ok`: only the folders some node read (package 3); `finding`: every folder of the snapshot.
+  const readRoots = new Set<string>();
+  if (bundles !== null) {
+    for (const n of nodes) {
+      for (const r of n.rows) {
+        if (!isKbRead(r, bundles)) continue;
+        const b = bundleOfPath(r.pathKey, bundles);
+        if (b !== null) readRoots.add(b.root);
+      }
+    }
+  }
+  const listed =
+    bundles === null
+      ? null
+      : agentsWithKb > 0
+        ? bundles.filter((b) => readRoots.has(b.root))
+        : bundles;
+  const kbUsed: OkfVerdictCheck = {
+    rule: 'kb_used',
+    status: agentsWithKb > 0 ? 'ok' : 'finding',
+    params: {
+      agentsWithKb,
+      agents: nodes.length,
+      folders: listed === null ? null : listed.map((b) => b.root).join(', '),
+      articles:
+        listed === null
+          ? null
+          : listed.reduce((sum, b) => sum + bundleArticles(b).length, 0),
+    },
+  };
+  const counts: Record<OkfAgentEntry, number> = {
+    index: 0,
+    search: 0,
+    given: 0,
+  };
+  for (const n of input.nodes) {
+    const entry = agentEntry(n.rows, bundles);
+    if (entry !== null) counts[entry] += 1;
+  }
+  const entered = counts.index + counts.search + counts.given;
+  const entry: OkfVerdictCheck =
+    entered === 0
+      ? naCheck('entry', bundles === null ? 'no_snapshot' : 'kb_not_used')
+      : { rule: 'entry', status: 'ok', params: { ...counts, agents: entered } };
+  return [kbUsed, entry];
+}
+
+/** `session_share`: the highest per-agent share and the thresholds it was judged against. */
+function sessionShareCheck(
+  nearest: SessionShareCandidate | null,
+  firstJudged: OkfVerdictBundle | null,
+  hasFinding: boolean,
+  t: OkfVerdictThresholds,
+): OkfVerdictCheck {
+  const limits = {
+    fix: t.sessionShareFix,
+    mess: t.sessionShareMess,
+    minFiles: t.shareMinBundleFiles,
+  };
+  if (firstJudged === null) {
+    return {
+      rule: 'session_share',
+      status: 'na',
+      params: { reason: 'small_bundles', ...limits },
+    };
+  }
+  const best: SessionShareCandidate = nearest ?? {
+    agentId: '',
+    bundle: firstJudged.root,
+    read: 0,
+    total: bundleArticles(firstJudged).length,
+    share: 0,
+  };
+  return {
+    rule: 'session_share',
+    status: hasFinding ? 'finding' : 'ok',
+    params: {
+      agentId: nearest === null ? null : best.agentId,
+      bundle: best.bundle,
+      read: best.read,
+      total: best.total,
+      share: best.share,
+      ...limits,
+    },
+  };
+}
+
+/** `upkeep`: agents whose reads were dropped because they also edited the article (DD-15). */
+function sessionUpkeepCheck(
+  nodes: readonly SessionVerdictNode[],
+): OkfVerdictCheck {
+  let agents = 0;
+  let agentId: string | null = null;
+  const articles = new Set<string>();
+  let path: string | null = null;
+  for (const n of nodes) {
+    const isUpkeep = upkeepPredicate(n.rows);
+    const own = [
+      ...new Set(
+        n.rows
+          .filter((r) => isUpkeep(r) && !r.pathKey.endsWith('/'))
+          .map((r) => r.pathKey),
+      ),
+    ].sort();
+    if (own.length === 0) continue;
+    agents += 1;
+    agentId ??= n.agentId;
+    path ??= own[0];
+    for (const p of own) articles.add(p);
+  }
+  return {
+    rule: 'upkeep',
+    status: 'ok',
+    params: { agents, articles: articles.size, agentId, path },
+  };
 }
 
 // ── DD-25 / DD-38 repo verdict ─────────────────────────────────────────────────────────────────
 
+/** A per-file rule's session set after the FR-10 split (DD-17). */
+interface FileSessionSet<S> {
+  sessions: S[];
+  stale?: { sessions: number; total: number; oldSize: number | null };
+}
+
 /**
- * Repo verdict (DD-25, DD-38) over KB sessions — filtered root trees with ≥ 1 read/grep row in a
- * visible bundle (any read/grep row when `bundles` is `null`):
- * - `always_read` (fix): a non-index file read/grepped in ≥ `ALWAYS_READ_SHARE` of KB sessions.
- * - `kb_flood`: per bundle with ≥ `SHARE_MIN_BUNDLE_FILES` files, over snapshot-bound bundle
- *   sessions; a tree reading > `FLOOD_SHARE` of the files is flooded; any → fix, flooded ÷ bundle
- *   sessions ≥ `FLOOD_MESS_SESSION_SHARE` → mess.
- * - `coarse_article` (fix): a non-index file of ≥ `COARSE_MIN_SIZE_BYTES`, `read` in ≥
- *   `COARSE_MIN_SESSIONS` KB sessions, average bytes per read call ÷ size < `COARSE_MAX_READ_RATIO`.
- * Level: 0 KB sessions → `kb_not_used`; fewer than `REPO_MIN_KB_SESSIONS` → `not_enough_data`
- * (findings still listed); otherwise the worst severity, `ok` when none. Any snapshot-less KB
- * session adds `partial_data` with `{ withoutSnapshot, total }`.
+ * FR-10 (DD-17): the sessions a per-file rule is computed over. Base = the sessions whose bound
+ * hash of the file equals the latest snapshot's hash. When the base is below the rule's
+ * `minimum` but all `sessions` reach it, the rule runs over all of them and the finding is
+ * marked stale. Without hash maps, or without a latest hash for the file, all sessions are used.
  */
-export function computeRepoVerdict(input: RepoVerdictInput): OkfVerdict {
-  const { bundles } = input;
-  const kbSessions = input.sessions.filter((s) =>
-    s.rows.some((r) => isKbRead(r, bundles)),
+function fileSessionSet<S extends RepoVerdictSession>(
+  path: string,
+  sessions: readonly S[],
+  minimum: number,
+  input: RepoVerdictInput,
+): FileSessionSet<S> {
+  const latestHash = input.latestFiles?.get(path)?.hash ?? null;
+  if (input.sessionFiles === undefined || latestHash === null) {
+    return { sessions: [...sessions] };
+  }
+  const current = sessions.filter(
+    (s) => input.sessionFiles!.get(s.sessionId)?.get(path)?.hash === latestHash,
   );
+  if (current.length >= minimum || sessions.length < minimum) {
+    return current.length >= minimum
+      ? { sessions: current }
+      : { sessions: [...sessions] };
+  }
+  return {
+    sessions: [...sessions],
+    stale: {
+      sessions: current.length,
+      total: sessions.length,
+      oldSize: oldSizeOf(path, sessions, latestHash, input),
+    },
+  };
+}
+
+/** The most common size of the file among sessions bound to another version; null if unknown. */
+function oldSizeOf(
+  path: string,
+  sessions: readonly RepoVerdictSession[],
+  latestHash: string,
+  input: RepoVerdictInput,
+): number | null {
+  const counts = new Map<number, number>();
+  for (const s of sessions) {
+    const file = input.sessionFiles?.get(s.sessionId)?.get(path);
+    if (file === undefined || file.hash === latestHash || file.size === null) {
+      continue;
+    }
+    counts.set(file.size, (counts.get(file.size) ?? 0) + 1);
+  }
+  let best: number | null = null;
+  let bestCount = 0;
+  for (const [size, count] of counts) {
+    if (count > bestCount) {
+      best = size;
+      bestCount = count;
+    }
+  }
+  return best;
+}
+
+/**
+ * Files a per-file rule looks at for one bundle: the latest snapshot's articles, plus — when
+ * `latestFiles` is given (FR-10) — read files under the bundle root that the latest snapshot no
+ * longer lists but some session's bound snapshot did. Those carry `removed` and their size from
+ * that older snapshot.
+ */
+function ruleFiles(
+  bundle: OkfVerdictBundle,
+  bundles: readonly OkfVerdictBundle[],
+  kbSessions: readonly RepoVerdictSession[],
+  input: RepoVerdictInput,
+): { path: string; size: number; removed: boolean }[] {
+  const out = bundleArticles(bundle).map((f) => ({
+    path: f.path,
+    size: f.size,
+    removed: false,
+  }));
+  const latest = input.latestFiles;
+  if (latest === undefined || input.sessionFiles === undefined) return out;
+  const listed = new Set(bundle.files.map((f) => f.path));
+  const removed = new Map<string, number>();
+  for (const s of kbSessions) {
+    const own = input.sessionFiles.get(s.sessionId);
+    if (own === undefined) continue;
+    for (const r of s.rows) {
+      if (
+        !isReadLike(r.op) ||
+        listed.has(r.pathKey) ||
+        removed.has(r.pathKey)
+      ) {
+        continue;
+      }
+      if (
+        latest.has(r.pathKey) ||
+        bundleOfPath(r.pathKey, bundles) !== bundle
+      ) {
+        continue;
+      }
+      const file = own.get(r.pathKey);
+      if (file === undefined) continue;
+      removed.set(r.pathKey, file.size ?? 0);
+    }
+  }
+  for (const [path, size] of [...removed].sort((a, b) =>
+    a[0].localeCompare(b[0]),
+  )) {
+    out.push({ path, size, removed: true });
+  }
+  return out;
+}
+
+/** True when the tree has KB rows and every one of them is an upkeep pair (DD-15). */
+function isUpkeepOnly(
+  rows: readonly OkfVerdictRow[],
+  kbRows: readonly OkfVerdictRow[],
+  bundles: OkfVerdictBundle[] | null,
+): boolean {
+  if (kbRows.some((r) => isKbRead(r, bundles))) return false;
+  const inKb = (r: OkfVerdictRow): boolean =>
+    bundles === null || bundleOfPath(r.pathKey, bundles) !== null;
+  return rows.some((r) => r.op === 'write' && inKb(r));
+}
+
+/**
+ * Repo verdict (DD-25, DD-38) over KB sessions — filtered root trees with ≥ 1 non-upkeep
+ * read/grep row in a visible bundle (any read/grep row when `bundles` is `null`). Upkeep rows
+ * (FR-5, DD-15) are dropped first; a tree whose only KB rows are upkeep is counted in
+ * `upkeepOnlySessions` instead.
+ * - `always_read` (fix): a non-index file read/grepped in ≥ `alwaysReadShare` of KB sessions.
+ * - `kb_flood`: per bundle with ≥ `shareMinBundleFiles` files, over snapshot-bound bundle
+ *   sessions; a tree reading > `floodShare` of the files is flooded. With ≥ `floodMinSessions`
+ *   flooded → fix, flooded ÷ bundle sessions ≥ `floodMessSessionShare` → mess; with fewer it is
+ *   an `info` finding (FR-7, DD-17).
+ * - `coarse_article` (fix): a non-index file of ≥ `coarseMinSizeBytes`, read whole (calls without
+ *   a range, DD-16) in ≥ `coarseMinSessions` KB sessions, average whole-read bytes per call ÷
+ *   size < `coarseMaxReadRatio`.
+ * - FR-10 (DD-17): the per-file rules run over the sessions on the file's current version, or
+ *   over all with `stale` set; files gone from the latest snapshot carry `removed`.
+ * Level: 0 KB sessions → `kb_not_used`; fewer than `repoMinKbSessions` → `not_enough_data`
+ * (findings still listed); otherwise the worst severity, ignoring `info` and `removed`, `ok` when
+ * none. Any snapshot-less KB session adds `partial_data` with `{ withoutSnapshot, total }`.
+ */
+export function computeRepoVerdict(
+  input: RepoVerdictInput,
+  thresholds: OkfVerdictThresholds = DEFAULT_OKF_THRESHOLDS,
+): RepoVerdictResult {
+  const { bundles } = input;
+  let upkeepOnlySessions = 0;
+  const kbSessions: RepoVerdictSession[] = [];
+  for (const s of input.sessions) {
+    const rows = withoutUpkeep(s.rows);
+    if (rows.some((r) => isKbRead(r, bundles))) {
+      kbSessions.push({ ...s, rows });
+    } else if (isUpkeepOnly(s.rows, rows, bundles)) {
+      upkeepOnlySessions += 1;
+    }
+  }
+  const upkeep = upkeepOnlySessions > 0 ? { upkeepOnlySessions } : {};
   const total = kbSessions.length;
   if (total === 0) {
-    return { level: 'kb_not_used', qualifiers: [], findings: [] };
+    return {
+      level: 'kb_not_used',
+      qualifiers: [],
+      findings: [],
+      checks: [
+        kbSessionsCheck(
+          0,
+          input.sessions.length,
+          upkeepOnlySessions,
+          thresholds,
+        ),
+        naCheck('kb_flood', 'kb_not_used'),
+        naCheck('always_read', 'kb_not_used'),
+        naCheck('coarse_article', 'kb_not_used'),
+      ],
+      ...upkeep,
+    };
   }
   const withoutSnapshot = kbSessions.filter((s) => !s.hasSnapshot).length;
   const qualifiers: 'partial_data'[] =
@@ -383,17 +824,56 @@ export function computeRepoVerdict(input: RepoVerdictInput): OkfVerdict {
   const partialData =
     withoutSnapshot > 0 ? { withoutSnapshot, total } : undefined;
 
+  const fileMarks = (
+    set: FileSessionSet<RepoVerdictSession>,
+    removed: boolean,
+  ): Pick<OkfFinding, 'stale' | 'removed'> => ({
+    ...(set.stale ? { stale: set.stale } : {}),
+    ...(removed ? { removed: true } : {}),
+  });
+
   const findings: OkfFinding[] = [];
+  const near: RepoNearest = {
+    flood: null,
+    floodJudged: false,
+    always: null,
+    coarse: null,
+    bigArticles: 0,
+  };
   for (const bundle of bundles ?? []) {
     const nonIndex = bundleArticles(bundle);
+    const files = ruleFiles(bundle, bundles ?? [], kbSessions, input);
 
     // always_read
-    for (const file of nonIndex) {
-      const sessions = kbSessions.filter((s) =>
+    for (const file of files) {
+      const set = fileSessionSet(
+        file.path,
+        kbSessions,
+        thresholds.repoMinKbSessions,
+        input,
+      );
+      const base = set.sessions.length;
+      const sessions = set.sessions.filter((s) =>
         s.rows.some((r) => isReadLike(r.op) && r.pathKey === file.path),
       ).length;
-      const share = sessions / total;
-      if (sessions > 0 && share >= ALWAYS_READ_SHARE) {
+      const share = base > 0 ? sessions / base : 0;
+      const isAlways = sessions > 0 && share >= thresholds.alwaysReadShare;
+      if (
+        sessions > 0 &&
+        (near.always === null ||
+          share > near.always.share ||
+          (share === near.always.share && sessions > near.always.sessions))
+      ) {
+        near.always = {
+          bundle: bundle.root,
+          path: file.path,
+          sessions,
+          kbSessions: base,
+          share,
+          finding: isAlways,
+        };
+      }
+      if (isAlways) {
         findings.push({
           rule: 'always_read',
           severity: 'fix',
@@ -401,16 +881,17 @@ export function computeRepoVerdict(input: RepoVerdictInput): OkfVerdict {
             bundle: bundle.root,
             path: file.path,
             sessions,
-            kbSessions: total,
+            kbSessions: base,
             share,
           },
           node: { bundle: bundle.root, path: file.path },
+          ...fileMarks(set, file.removed),
         });
       }
     }
 
     // kb_flood
-    if (nonIndex.length >= SHARE_MIN_BUNDLE_FILES) {
+    if (nonIndex.length >= thresholds.shareMinBundleFiles) {
       const bundleSessions = kbSessions.filter(
         (s) =>
           s.hasSnapshot &&
@@ -419,23 +900,44 @@ export function computeRepoVerdict(input: RepoVerdictInput): OkfVerdict {
               isReadLike(r.op) && bundleOfPath(r.pathKey, bundles) === bundle,
           ),
       );
+      let maxShare = 0;
       const flooded = bundleSessions.filter((s) => {
         const share = fileShare(
           readFilesOfBundle(s.rows, bundle).size,
           nonIndex.length,
         );
-        return share !== null && share > FLOOD_SHARE;
+        if (share !== null && share > maxShare) maxShare = share;
+        return share !== null && share > thresholds.floodShare;
       }).length;
+      near.floodJudged = true;
+      if (
+        near.flood === null ||
+        flooded > near.flood.flooded ||
+        (flooded === near.flood.flooded && maxShare > near.flood.maxShare)
+      ) {
+        near.flood = {
+          bundle: bundle.root,
+          flooded,
+          bundleSessions: bundleSessions.length,
+          maxShare,
+        };
+      }
       if (flooded > 0) {
         const share = flooded / bundleSessions.length;
+        let severity: OkfFinding['severity'] = 'info';
+        if (flooded >= thresholds.floodMinSessions) {
+          severity = share >= thresholds.floodMessSessionShare ? 'mess' : 'fix';
+        }
         findings.push({
           rule: 'kb_flood',
-          severity: share >= FLOOD_MESS_SESSION_SHARE ? 'mess' : 'fix',
+          severity,
           params: {
             bundle: bundle.root,
             sessions: flooded,
             bundleSessions: bundleSessions.length,
             share,
+            flooded,
+            kbSessions: total,
           },
           node: { bundle: bundle.root },
         });
@@ -443,26 +945,56 @@ export function computeRepoVerdict(input: RepoVerdictInput): OkfVerdict {
     }
 
     // coarse_article
-    for (const file of nonIndex) {
-      if (file.size < COARSE_MIN_SIZE_BYTES) continue;
-      let sessions = 0;
+    for (const file of files) {
+      if (file.size < thresholds.coarseMinSizeBytes) continue;
+      near.bigArticles += 1;
+      const readers = kbSessions.filter((s) =>
+        s.rows.some(
+          (r) =>
+            r.op === 'read' &&
+            r.pathKey === file.path &&
+            r.calls - (r.rangedCalls ?? 0) > 0,
+        ),
+      );
+      const set = fileSessionSet(
+        file.path,
+        readers,
+        thresholds.coarseMinSessions,
+        input,
+      );
       let bytes = 0;
       let calls = 0;
-      for (const s of kbSessions) {
-        const readRows = s.rows.filter(
-          (r) => r.op === 'read' && r.pathKey === file.path,
-        );
-        if (readRows.length === 0) continue;
-        sessions += 1;
-        for (const r of readRows) {
-          bytes += r.bytes;
-          calls += r.calls;
+      for (const s of set.sessions) {
+        for (const r of s.rows) {
+          if (r.op !== 'read' || r.pathKey !== file.path) continue;
+          bytes += r.bytes - (r.rangedBytes ?? 0);
+          calls += r.calls - (r.rangedCalls ?? 0);
         }
       }
-      if (sessions < COARSE_MIN_SESSIONS || calls === 0) continue;
+      const sessions = set.sessions.length;
+      if (calls <= 0) continue;
       const avgReadBytes = bytes / calls;
       const ratio = avgReadBytes / file.size;
-      if (ratio < COARSE_MAX_READ_RATIO) {
+      const isCoarse =
+        sessions >= thresholds.coarseMinSessions &&
+        ratio < thresholds.coarseMaxReadRatio;
+      const prev = near.coarse;
+      if (
+        prev === null ||
+        (isCoarse && !prev.finding) ||
+        (isCoarse === prev.finding && ratio < prev.ratio)
+      ) {
+        near.coarse = {
+          bundle: bundle.root,
+          path: file.path,
+          size: file.size,
+          sessions,
+          avgReadBytes: Math.round(avgReadBytes),
+          ratio,
+          finding: isCoarse,
+        };
+      }
+      if (isCoarse) {
         findings.push({
           rule: 'coarse_article',
           severity: 'fix',
@@ -475,6 +1007,7 @@ export function computeRepoVerdict(input: RepoVerdictInput): OkfVerdict {
             ratio,
           },
           node: { bundle: bundle.root, path: file.path },
+          ...fileMarks(set, file.removed),
         });
       }
     }
@@ -482,11 +1015,157 @@ export function computeRepoVerdict(input: RepoVerdictInput): OkfVerdict {
 
   const ordered = sortFindings(findings);
   const level =
-    total < REPO_MIN_KB_SESSIONS ? 'not_enough_data' : worstLevel(ordered);
+    total < thresholds.repoMinKbSessions
+      ? 'not_enough_data'
+      : worstLevel(ordered);
   return {
     level,
     qualifiers,
     ...(partialData ? { partialData } : {}),
     findings: ordered,
+    checks: repoChecks(
+      near,
+      bundles,
+      total,
+      input.sessions.length,
+      upkeepOnlySessions,
+      thresholds,
+    ),
+    ...upkeep,
   };
+}
+
+/** The nearest candidate of each repo rule, collected while the rules run. */
+interface RepoNearest {
+  /** Bundle with the most flooded sessions (ties: the higher single-session share). */
+  flood: {
+    bundle: string;
+    flooded: number;
+    bundleSessions: number;
+    maxShare: number;
+  } | null;
+  /** True when some bundle had enough articles for `kb_flood`. */
+  floodJudged: boolean;
+  /** Most-read article (highest share, then more sessions). */
+  always: {
+    bundle: string;
+    path: string;
+    sessions: number;
+    kbSessions: number;
+    share: number;
+    finding: boolean;
+  } | null;
+  /** A coarse article, else the read-whole big article with the lowest ratio. */
+  coarse: {
+    bundle: string;
+    path: string;
+    size: number;
+    sessions: number;
+    avgReadBytes: number;
+    ratio: number;
+    finding: boolean;
+  } | null;
+  /** Articles of ≥ `coarseMinSizeBytes`. */
+  bigArticles: number;
+}
+
+function kbSessionsCheck(
+  kbSessions: number,
+  sessions: number,
+  upkeepOnly: number,
+  t: OkfVerdictThresholds,
+): OkfVerdictCheck {
+  let status: OkfVerdictCheck['status'] = 'ok';
+  if (kbSessions === 0) status = 'finding';
+  else if (kbSessions < t.repoMinKbSessions) status = 'na';
+  return {
+    rule: 'kb_sessions',
+    status,
+    params: {
+      kbSessions,
+      sessions,
+      minimum: t.repoMinKbSessions,
+      upkeepOnly,
+    },
+  };
+}
+
+function repoChecks(
+  near: RepoNearest,
+  bundles: OkfVerdictBundle[] | null,
+  kbSessions: number,
+  sessions: number,
+  upkeepOnly: number,
+  t: OkfVerdictThresholds,
+): OkfVerdictCheck[] {
+  const checks = [kbSessionsCheck(kbSessions, sessions, upkeepOnly, t)];
+  if (bundles === null) {
+    return [
+      ...checks,
+      naCheck('kb_flood', 'no_snapshot'),
+      naCheck('always_read', 'no_snapshot'),
+      naCheck('coarse_article', 'no_snapshot'),
+    ];
+  }
+  const floodLimits = {
+    floodShare: t.floodShare,
+    minSessions: t.floodMinSessions,
+    minFiles: t.shareMinBundleFiles,
+  };
+  const flood = near.flood;
+  checks.push(
+    !near.floodJudged || flood === null
+      ? {
+          rule: 'kb_flood',
+          status: 'na',
+          params: { reason: 'small_bundles', ...floodLimits },
+        }
+      : {
+          rule: 'kb_flood',
+          status: flood.flooded >= t.floodMinSessions ? 'finding' : 'ok',
+          params: { ...flood, ...floodLimits },
+        },
+  );
+  const always = near.always;
+  checks.push({
+    rule: 'always_read',
+    status: always?.finding === true ? 'finding' : 'ok',
+    params: {
+      bundle: always?.bundle ?? null,
+      path: always?.path ?? null,
+      sessions: always?.sessions ?? 0,
+      kbSessions: always?.kbSessions ?? kbSessions,
+      share: always?.share ?? 0,
+      threshold: t.alwaysReadShare,
+    },
+  });
+  const coarseLimits = {
+    bigArticles: near.bigArticles,
+    minSize: t.coarseMinSizeBytes,
+    maxRatio: t.coarseMaxReadRatio,
+    minSessions: t.coarseMinSessions,
+  };
+  const coarse = near.coarse;
+  if (near.bigArticles === 0) {
+    checks.push({
+      rule: 'coarse_article',
+      status: 'na',
+      params: { reason: 'no_big_articles', ...coarseLimits },
+    });
+  } else {
+    checks.push({
+      rule: 'coarse_article',
+      status: coarse?.finding === true ? 'finding' : 'ok',
+      params: {
+        bundle: coarse?.bundle ?? null,
+        path: coarse?.path ?? null,
+        size: coarse?.size ?? null,
+        sessions: coarse?.sessions ?? 0,
+        avgReadBytes: coarse?.avgReadBytes ?? null,
+        ratio: coarse?.ratio ?? null,
+        ...coarseLimits,
+      },
+    });
+  }
+  return checks;
 }

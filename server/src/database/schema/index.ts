@@ -161,6 +161,15 @@ export const sessions = pgTable(
     // rows are pending a rebuild by the background drain; otherwise the
     // `TOOL_USAGE_EXTRACTOR_VERSION` they were built with.
     toolUsageVersion: smallint('tool_usage_version'),
+    // Migration 0091: OKF extraction marker (DD-11). The `OKF_EXTRACT_VERSION` the node's
+    // OKF rows (session_okf_access / _event / _pointer) were built with; NULL = never built or
+    // built before the marker existed. NULL or below the current version reads as
+    // "no OKF analysis yet". Set by the OKF writer on every node it rebuilds, even with 0 rows.
+    okfExtractVersion: smallint('okf_extract_version'),
+    // Migration 0091: the per-node event or pointer cap was hit during OKF extraction.
+    okfEventsTruncated: boolean('okf_events_truncated')
+      .notNull()
+      .default(false),
   },
   (table) => [
     index('sessions_parent_session_id_idx').on(table.parentSessionId),
@@ -1559,6 +1568,63 @@ export interface RepoConfigJson {
     enabled: boolean;
     attributes: SessionAttributionAttributeDef[];
   };
+
+  /**
+   * OKF View thresholds (verdict rules and value signals). Dual-scope like `fileCategories`,
+   * but resolved per section, not as part of the whole-object `resolveEffectiveConfig()`:
+   * `RepositoriesService.resolveOkfThresholds()` takes, in the team view, the team row's `okf`
+   * -> defaults; in the personal view, the personal row's `okf` if present -> the `okf` of the
+   * lowest-id team linking the URL -> defaults. Within the chosen section every field is
+   * optional and merged field by field over `DEFAULT_OKF_THRESHOLDS`; an invalid stored field
+   * falls back to its default. Absent means "all defaults". Saving only this section does not
+   * trigger a recompute — the thresholds are applied at read time.
+   */
+  okf?: OkfThresholds;
+}
+
+/**
+ * OKF View thresholds, as stored in `RepoConfigJson.okf`. Every field is optional; an absent
+ * field uses its `DEFAULT_OKF_THRESHOLDS` value. Shares are numbers in (0, 1]; every other
+ * numeric field is an integer >= 1; `codeRoots` is a non-empty list (at most 50) of
+ * repo-relative folders ending in `/`.
+ */
+export interface OkfThresholds {
+  /** Bundles with fewer files are skipped by the share rules and the histogram (default 10). */
+  shareMinBundleFiles?: number;
+  /** Session verdict "fix" share level (default 0.25). */
+  sessionShareFix?: number;
+  /** Session verdict "mess" share level (default 0.5). */
+  sessionShareMess?: number;
+  /** Minimum KB sessions before repo rules apply (default 5). */
+  repoMinKbSessions?: number;
+  /** always_read share (default 0.8). */
+  alwaysReadShare?: number;
+  /** kb_flood bundle share (default 0.25). */
+  floodShare?: number;
+  /** kb_flood session share for the "mess" level (default 0.2). */
+  floodMessSessionShare?: number;
+  /** Flooded sessions needed before kb_flood changes the verdict (default 3). */
+  floodMinSessions?: number;
+  /** coarse_article minimum article size in bytes (default 51200). */
+  coarseMinSizeBytes?: number;
+  /** coarse_article minimum sessions (default 5). */
+  coarseMinSessions?: number;
+  /** coarse_article maximum read ratio (default 0.1). */
+  coarseMaxReadRatio?: number;
+  /** "Searched after reading" minimum in-area searches (default 2). */
+  exploredMinSearches?: number;
+  /** Routing miss: minimum in-area searches per agent (default 3). */
+  routingMinSearches?: number;
+  /** Routing miss: minimum agents (default 3). */
+  routingMinAgents?: number;
+  /** Article area: pointers shared by more articles than this are dropped (default 3). */
+  pointerMaxArticles?: number;
+  /** catalog: an article area with more files than this (default 30). */
+  areaMaxFiles?: number;
+  /** Dead pointers: minimum distinct nodes the pointer was shown to (default 4). */
+  deadPointerMinShown?: number;
+  /** Article area code folders, repo-relative, ending in `/`. */
+  codeRoots?: string[];
 }
 
 /**
@@ -1848,6 +1914,14 @@ export const sessionOkfAccess = pgTable(
     bytes: bigint('bytes', { mode: 'number' }).notNull().default(0),
     calls: integer('calls').notNull().default(0),
     seq: integer('seq').notNull(),
+    // Migration 0091: read calls carrying a line range (section reads, DD-4) and their bytes;
+    // both are also included in `calls` / `bytes`.
+    rangedCalls: integer('ranged_calls').notNull().default(0),
+    rangedBytes: bigint('ranged_bytes', { mode: 'number' })
+      .notNull()
+      .default(0),
+    // Migration 0091: grep / list calls on this row whose result was a hit (DD-6).
+    searchHits: integer('search_hits').notNull().default(0),
   },
   (table) => [
     unique('session_okf_access_session_path_op_edit_key').on(
@@ -1855,6 +1929,74 @@ export const sessionOkfAccess = pgTable(
       table.pathKey,
       table.op,
       table.afterOwnEdit,
+    ),
+  ],
+);
+
+// OKF code-side events per tree node (migration 0091): one row per (ord, op, path) — every
+// resolved non-KB access of a tool call (DD-5). `ord` is the 1-based tool-call ordinal within
+// the node (DD-2), shared with `sessionOkfPointer.readOrd`. `path` is repo-relative, folders end
+// in `/` (repo root = `/`); paths under build/vendor segments are dropped. `rangeFrom` /
+// `rangeTo` carry a ranged read (DD-4; negative `rangeFrom` = tail), `pattern` the grep pattern
+// cut to 200 chars. Derived data: rebuilt delete-then-insert per node, capped per node
+// (`sessions.okfEventsTruncated`). The CHECK on `op` ('read' | 'search' | 'write') is defined in
+// the SQL migration only. The UNIQUE index's leading session_id serves the per-node delete and
+// the read, so there is no separate session_id index.
+export const sessionOkfEvent = pgTable(
+  'session_okf_event',
+  {
+    id: serial('id').primaryKey(),
+    sessionId: integer('session_id')
+      .notNull()
+      .references(() => sessions.id, { onDelete: 'cascade' }),
+    ord: integer('ord').notNull(),
+    op: varchar('op', { length: 8 })
+      .$type<'read' | 'search' | 'write'>()
+      .notNull(),
+    path: varchar('path', { length: 1024 }).notNull(),
+    rangeFrom: integer('range_from'),
+    rangeTo: integer('range_to'),
+    pattern: varchar('pattern', { length: 200 }),
+  },
+  (table) => [
+    unique('session_okf_event_session_ord_op_path_key').on(
+      table.sessionId,
+      table.ord,
+      table.op,
+      table.path,
+    ),
+  ],
+);
+
+// OKF article pointers per tree node (migration 0091): one row per back-ticked path pointer
+// (DD-8) found in a KB article read (`readOrd`, the same ordinal as `sessionOkfEvent.ord`).
+// `articleHash` is the article's hash in the root's bound OKF snapshot (NULL when unknown).
+// `isNew` = not seen in the node's earlier text, `followed` = a later call of the node touched
+// the path or something under it, `partial` = the read result was an error / empty /
+// persisted-output (DD-9). A partial read with no pointers stores one row with `pointer = ''`.
+// Derived data: rebuilt delete-then-insert per node, capped per node. The UNIQUE index's leading
+// session_id serves the per-node delete and the all-time scope read (DD-28).
+export const sessionOkfPointer = pgTable(
+  'session_okf_pointer',
+  {
+    id: serial('id').primaryKey(),
+    sessionId: integer('session_id')
+      .notNull()
+      .references(() => sessions.id, { onDelete: 'cascade' }),
+    articlePath: varchar('article_path', { length: 1024 }).notNull(),
+    articleHash: varchar('article_hash', { length: 128 }),
+    readOrd: integer('read_ord').notNull(),
+    pointer: varchar('pointer', { length: 512 }).notNull(),
+    isNew: boolean('is_new').notNull(),
+    followed: boolean('followed').notNull(),
+    partial: boolean('partial').notNull().default(false),
+  },
+  (table) => [
+    unique('session_okf_pointer_session_ord_article_pointer_key').on(
+      table.sessionId,
+      table.readOrd,
+      table.articlePath,
+      table.pointer,
     ),
   ],
 );

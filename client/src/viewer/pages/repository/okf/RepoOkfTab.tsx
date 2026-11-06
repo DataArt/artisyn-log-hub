@@ -1,34 +1,31 @@
 /**
  * The repository view's "OKF" main tab: how the repo's OKF knowledge bases were read over a
- * period. Filter strip, verdict card with the anomaly lines, five KPI tiles, then the KB tree
- * beside the share histogram, hot files and not-read list.
+ * period. Filter strip on top; below it either the overview (`RepoOkfOverview`: banner, verdict
+ * card, KPI tiles, tree and side lists) or — when `okfArticle` is set — the per-article
+ * drill-down (`OkfArticleDrillDown`).
  *
  * Personal vs team view follows the route (`teamId`), not a toggle (DD-32). Every filter lives
  * in an `okf*` URL param (DD-44) and is applied at once; the query is keyed by the filter state.
- * Nothing is recomputed here — the server sends the verdict, tiles, bins, lists and tree.
+ * `okfArticle` is not a filter, so a filter change keeps the drill-down open.
  */
 import { useQuery } from '@tanstack/react-query';
-import { useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { Skeleton } from '@/ui/skeleton';
 import { ApiError, fetchRepoOkfUsage } from '../../../api';
-import { useDraggableWidth } from '../../../hooks/useDraggableWidth';
 import { toIsoDateBounds } from '../reports/report-url';
-import { OkfTree, type OkfTreeHandle } from '../session-log/okf/OkfTree';
-import { OkfVerdictCard } from '../session-log/okf/OkfVerdictCard';
+import { OkfArticleDrillDown } from './article/OkfArticleDrillDown';
+import { OkfAnalysisCoverageBanner } from './OkfAnalysisCoverageBanner';
 import { OkfFilterStrip } from './OkfFilterStrip';
-import { OkfHotFiles } from './OkfHotFiles';
-import { OkfKpiTiles } from './OkfKpiTiles';
-import { OkfNotReadList } from './OkfNotReadList';
-import { OkfShareHistogram } from './OkfShareHistogram';
+import { RepoOkfOverview } from './RepoOkfOverview';
 import {
+  okfArticleFromParams,
   okfFiltersFromParams,
+  okfThresholdsSettingsParams,
+  writeOkfArticle,
   writeOkfFilters,
   type RepoOkfFilters,
 } from './okf-url-state';
-
-/** Narrowest the KB tree may get when the side column is dragged wider, in px. */
-const TREE_MIN_WIDTH = 480;
 
 export interface RepoOkfTabProps {
   repoId: number;
@@ -60,20 +57,7 @@ export function RepoOkfTab({ repoId, teamId }: RepoOkfTabProps) {
     () => okfFiltersFromParams(searchParams),
     [searchParams],
   );
-  const treeRef = useRef<OkfTreeHandle | null>(null);
-  // Side column (histogram, hot files, not-read) beside the tree from `xl` up; its handle widens
-  // the tree when dragged right. The tree keeps at least TREE_MIN_WIDTH.
-  const splitRef = useRef<HTMLDivElement | null>(null);
-  const { width: sideWidth, onMouseDown: onSplitMouseDown } = useDraggableWidth(
-    {
-      storageKey: 'artisyn:okfRepoSideWidth',
-      defaultWidth: 340,
-      minWidth: 240,
-      rightPanel: true,
-      getMaxWidth: () =>
-        (splitRef.current?.clientWidth ?? window.innerWidth) - TREE_MIN_WIDTH,
-    },
-  );
+  const article = okfArticleFromParams(searchParams);
   // The response lists only the selected bundle when one is chosen, so the bundle select keeps
   // the last full list it saw.
   const [knownBundles, setKnownBundles] = useState<string[]>([]);
@@ -82,6 +66,14 @@ export function RepoOkfTab({ repoId, teamId }: RepoOkfTabProps) {
     setSearchParams((prev) => writeOkfFilters(prev, { ...filters, ...patch }), {
       replace: true,
     });
+  };
+  const openArticle = (path: string | null) => {
+    setSearchParams((prev) => writeOkfArticle(prev, path), { replace: true });
+  };
+  // Settings → Analysis, scrolled to the OKF thresholds card. Leaving the tab drops every
+  // `okf*` param, as `setMainTab` does.
+  const openSettings = () => {
+    setSearchParams(okfThresholdsSettingsParams, { replace: true });
   };
 
   const { startDate, endDate } = toIsoDateBounds(
@@ -126,20 +118,19 @@ export function RepoOkfTab({ repoId, teamId }: RepoOkfTabProps) {
   }
   const bundleRoots = filters.bundle === null ? responseRoots : knownBundles;
 
-  const ignoredBundles = useMemo(
-    () =>
-      new Set(
-        (data?.bundles ?? []).filter((b) => b.ignored).map((b) => b.root),
-      ),
-    [data],
-  );
-
-  const scrollToNode = (bundle: string | null, path?: string) => {
-    treeRef.current?.scrollToNode(bundle, path);
-  };
-
   let body;
-  if (query.isLoading) {
+  if (article !== null) {
+    body = (
+      <OkfArticleDrillDown
+        repoId={repoId}
+        teamId={teamId}
+        path={article}
+        filters={filters}
+        onBack={() => openArticle(null)}
+        onOpenArticle={openArticle}
+      />
+    );
+  } else if (query.isLoading) {
     body = <LoadingSkeleton />;
   } else if (query.error) {
     body = (
@@ -153,69 +144,43 @@ export function RepoOkfTab({ repoId, teamId }: RepoOkfTabProps) {
   } else if (!data) {
     body = null;
   } else if (data.tiles.kbSessions === 0 && data.bundles.length === 0) {
+    const without = data.tiles.sessionsWithoutAnalysis ?? 0;
     body = (
-      <div
-        data-testid="okf-empty"
-        className="p-8 text-center text-sm text-muted-foreground"
-      >
-        <div className="font-medium text-foreground">
-          KB not used in this period
+      <>
+        <OkfAnalysisCoverageBanner
+          className="mx-4 mt-4"
+          repoId={repoId}
+          teamId={teamId}
+          sessionsWithoutAnalysis={without}
+          sessionsInPeriod={
+            data.tiles.sessionsInPeriod ?? data.tiles.totalSessions
+          }
+          canRecompute={data.canRecompute === true}
+        />
+        <div
+          data-testid="okf-empty"
+          className="p-8 text-center text-sm text-muted-foreground"
+        >
+          <div className="font-medium text-foreground">
+            KB not used in this period
+          </div>
+          <div className="mt-1">
+            No session in the filter read an OKF knowledge base, and no KB
+            snapshot was uploaded.
+          </div>
         </div>
-        <div className="mt-1">
-          No session in the filter read an OKF knowledge base, and no KB
-          snapshot was uploaded.
-        </div>
-      </div>
+      </>
     );
   } else {
     body = (
-      <div className="space-y-3 p-4">
-        <OkfVerdictCard
-          verdict={data.verdict}
-          variant="repo"
-          kbSessions={data.tiles.kbSessions}
-          totalSessions={data.tiles.totalSessions}
-          onNodeClick={scrollToNode}
-        />
-        <OkfKpiTiles
-          tiles={data.tiles}
-          snapshot={data.snapshot}
-          bundleCount={data.bundles.length}
-        />
-        <div
-          ref={splitRef}
-          className="flex flex-col gap-3 xl:flex-row xl:items-stretch xl:gap-0"
-          style={{ '--okf-side-w': `${sideWidth}px` } as CSSProperties}
-        >
-          <div className="min-w-0 flex-1 xl:self-start">
-            <OkfTree
-              ref={treeRef}
-              tree={data.tree}
-              metric={filters.heat}
-              variant="repo"
-              ignoredBundles={ignoredBundles}
-              nullGroupLabel={
-                data.snapshot
-                  ? 'No longer in KB'
-                  : 'Accessed KB paths (no snapshot)'
-              }
-            />
-          </div>
-          <div
-            role="separator"
-            aria-orientation="vertical"
-            aria-label="Resize the KB tree"
-            data-testid="okf-split-handle"
-            onMouseDown={onSplitMouseDown}
-            className="mx-1 hidden w-1 shrink-0 cursor-col-resize rounded hover:bg-accent xl:block"
-          />
-          <div className="flex flex-col gap-3 xl:w-(--okf-side-w) xl:shrink-0 xl:self-start">
-            <OkfShareHistogram bins={data.shareBins} />
-            <OkfHotFiles files={data.hotFiles} onNodeClick={scrollToNode} />
-            <OkfNotReadList files={data.notRead} onNodeClick={scrollToNode} />
-          </div>
-        </div>
-      </div>
+      <RepoOkfOverview
+        repoId={repoId}
+        teamId={teamId}
+        data={data}
+        metric={filters.heat}
+        onOpenArticle={openArticle}
+        onOpenSettings={openSettings}
+      />
     );
   }
 

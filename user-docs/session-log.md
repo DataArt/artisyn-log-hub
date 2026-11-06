@@ -11,7 +11,7 @@ answer one question and shows them in the row:
 |---|---|---|
 | What happened | Summary, Logs, Bash, Timeline, Agent Tree, Session Map, Change surface | Summary |
 | Cost | Summary, Statistics, Call Tree, Context Growth, Dashboard, Advisor, OTEL | Statistics |
-| Harness & context | System context anatomy, Context Usage, Harness usage, OKF, Info | System context anatomy |
+| Harness & context | System context anatomy, Context Usage, Harness usage, [OKF](okf-tab.md#session-okf-tab), Info | System context anatomy |
 | Failed tool call | Tools/MCP, Logs, Bash, Tool Heatmap, OTEL | Tools/MCP |
 | All tabs | every tab | Summary |
 
@@ -36,7 +36,7 @@ The headings in **More ▾** group the tabs like this:
 | Overview | Summary, Info, Statistics, Advisor, Session Map |
 | Transcript | Logs, Bash, Raw Logs |
 | Cost & context | Dashboard, Context Growth, Context Usage, Agent Tree, Timeline, Tool Heatmap, Call Tree, System context anatomy, Harness usage, OTEL |
-| Effects | Change surface, Tools/MCP, OKF |
+| Effects | Change surface, Tools/MCP, [OKF](okf-tab.md#session-okf-tab) |
 
 A red dot on **Tools/MCP** means an MCP server call of this session failed. Hover any tab for a
 one-line description of what it shows.

@@ -810,18 +810,18 @@
     "input": {"command": "sed -n 10,40p docs/kb/a.md; grep -n okf docs/kb/b.md; ls docs/kb"},
     "expected": {
       "ok": true, "changes": [], "reads": ["docs/kb/a.md", "docs/kb/b.md", "docs/kb"], "runs": [],
-      "readAccess": [{"path": "docs/kb/a.md", "kind": "read"}, {"path": "docs/kb/b.md", "kind": "grep"}, {"path": "docs/kb", "kind": "list"}]
+      "readAccess": [{"path": "docs/kb/a.md", "kind": "read", "range": {"from": 10, "to": 40}}, {"path": "docs/kb/b.md", "kind": "grep", "pattern": "okf"}, {"path": "docs/kb", "kind": "list"}]
     },
-    "note": "Rule 5.2: sed's first positional 10,40p is the script, a.md a read; grep skips the pattern okf; ls reads its positional. Rule 5.9: kinds by base name -> sed read, grep grep, ls list, in reads order."
+    "note": "Rule 5.2: sed's first positional 10,40p is the script, a.md a read; grep skips the pattern okf; ls reads its positional. Rule 5.9: kinds by base name -> sed read, grep grep, ls list, in reads order; sed -n 10,40p gives a.md the range 10..40, grep gives b.md its pattern okf."
   },
   {
     "id": "BV-93",
     "input": {"command": "grep -rn TODO docs/kb src && cat docs/kb/a.md"},
     "expected": {
       "ok": true, "reads": ["docs/kb", "src", "docs/kb/a.md"],
-      "readAccess": [{"path": "docs/kb", "kind": "grep"}, {"path": "src", "kind": "grep"}, {"path": "docs/kb/a.md", "kind": "read"}]
+      "readAccess": [{"path": "docs/kb", "kind": "grep", "pattern": "TODO"}, {"path": "src", "kind": "grep", "pattern": "TODO"}, {"path": "docs/kb/a.md", "kind": "read"}]
     },
-    "note": "Rule 5.2: grep -rn: flags skipped, TODO is the pattern, both folders are reads. Rule 5.9: grep -> grep for both, cat -> read. The folder/file decision is the server's (okf-access-extraction rule 4), not this rule's."
+    "note": "Rule 5.2: grep -rn: flags skipped, TODO is the pattern, both folders are reads. Rule 5.9: grep -> grep for both, each carrying the pattern TODO; cat -> read. The folder/file decision is the server's (okf-access-extraction rule 4), not this rule's."
   },
   {
     "id": "BV-94",
@@ -846,6 +846,93 @@
     "input": {"command": "find docs -name '*.md'; tree docs; egrep x docs/a.md"},
     "expected": {"ok": true, "changes": [], "reads": [], "runs": ["find", "tree", "egrep"], "readAccess": []},
     "note": "Rule 5.2: find, tree and egrep are in no read table, so they are runs and read nothing; rule 5.9's list/grep names for them never apply -> readAccess empty."
+  },
+  {
+    "id": "BV-97",
+    "input": {"command": "sed -n 5p docs/kb/a.md; head -n 20 docs/kb/b.md; tail -n 30 docs/kb/c.md"},
+    "expected": {
+      "ok": true, "changes": [], "reads": ["docs/kb/a.md", "docs/kb/b.md", "docs/kb/c.md"],
+      "readAccess": [
+        {"path": "docs/kb/a.md", "kind": "read", "range": {"from": 5, "to": 5}},
+        {"path": "docs/kb/b.md", "kind": "read", "range": {"from": 1, "to": 20}},
+        {"path": "docs/kb/c.md", "kind": "read", "range": {"from": -30, "to": null}}
+      ]
+    },
+    "note": "Rule 5.9 range: sed -n with the script Np -> from = to = 5; head -n 20 -> 1..20; tail -n 30 -> from -30 (counted from the end), to null. The count values 20 / 30 are not paths."
+  },
+  {
+    "id": "BV-98",
+    "input": {"command": "head -15 docs/kb/a.md && tail -n +40 docs/kb/b.md && head --lines=8 docs/kb/c.md"},
+    "expected": {
+      "ok": true, "changes": [], "reads": ["docs/kb/a.md", "docs/kb/b.md", "docs/kb/c.md"],
+      "readAccess": [
+        {"path": "docs/kb/a.md", "kind": "read", "range": {"from": 1, "to": 15}},
+        {"path": "docs/kb/b.md", "kind": "read", "range": {"from": 40, "to": null}},
+        {"path": "docs/kb/c.md", "kind": "read", "range": {"from": 1, "to": 8}}
+      ]
+    },
+    "note": "Rule 5.9 range spellings: head -N -> 1..N; tail -n +N -> from N to the end, and +40 is not a path; head --lines=N -> 1..N."
+  },
+  {
+    "id": "BV-99",
+    "input": {"command": "sed -n '/x/p' docs/kb/a.md; head -n -5 docs/kb/b.md; cat docs/kb/c.md"},
+    "expected": {
+      "ok": true, "changes": [], "reads": ["docs/kb/a.md", "docs/kb/b.md", "docs/kb/c.md"],
+      "readAccess": [
+        {"path": "docs/kb/a.md", "kind": "read"},
+        {"path": "docs/kb/b.md", "kind": "read"},
+        {"path": "docs/kb/c.md", "kind": "read"}
+      ]
+    },
+    "note": "Rule 5.9 range is set only when known: a sed script of another shape (/x/p) and a count that is not a plain number (-n -5) give no range; cat never has one."
+  },
+  {
+    "id": "BV-100",
+    "input": {"command": "grep -e foo -e bar docs/kb src; rg -n 'class X' server/src"},
+    "expected": {
+      "ok": true, "changes": [], "reads": ["docs/kb", "src", "server/src"],
+      "readAccess": [
+        {"path": "docs/kb", "kind": "grep", "pattern": "foo"},
+        {"path": "src", "kind": "grep", "pattern": "foo"},
+        {"path": "server/src", "kind": "grep", "pattern": "class X"}
+      ]
+    },
+    "note": "Rule 5.9 pattern: the first -e value (foo) wins over the second; with -e giving the pattern every positional is a path (docs/kb, src). rg takes the first positional 'class X' (quotes removed) as the pattern."
+  },
+  {
+    "id": "BV-101",
+    "input": {"command": "grep -A 3 TODO docs/kb/a.md; rg --glob '*.ts' okf server"},
+    "expected": {
+      "ok": true, "changes": [], "reads": ["docs/kb/a.md", "server"],
+      "readAccess": [
+        {"path": "docs/kb/a.md", "kind": "grep", "pattern": "TODO"},
+        {"path": "server", "kind": "grep", "pattern": "okf"}
+      ]
+    },
+    "note": "Rule 5.9 pattern: the value flags -A and --glob skip their value (3, '*.ts'), so the first positional left is the pattern (TODO, okf) and the rest are paths."
+  },
+  {
+    "id": "BV-102",
+    "input": {"command": "git grep -n okfThresholds -- server client"},
+    "expected": {
+      "ok": true, "changes": [], "reads": ["server", "client"],
+      "readAccess": [
+        {"path": "server", "kind": "grep", "pattern": "okfThresholds"},
+        {"path": "client", "kind": "grep", "pattern": "okfThresholds"}
+      ]
+    },
+    "note": "Rule 5.9 git grep: after the grep sub-command the same pattern rule applies -> okfThresholds; everything after -- is a path, read with kind grep."
+  },
+  {
+    "id": "BV-103",
+    "input": {"command": "git grep okf; grep -f pats.txt docs/kb"},
+    "expected": {
+      "ok": true, "changes": [], "reads": ["docs/kb"],
+      "readAccess": [
+        {"path": "docs/kb", "kind": "grep"}
+      ]
+    },
+    "note": "Rule 5.9: git grep without paths searches the whole tree and reads nothing. grep -f takes its patterns from a file: the pattern is unknown (no pattern field) and no positional is the pattern, so docs/kb is a path."
   },
   {
     "id": "BH-01",

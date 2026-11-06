@@ -270,6 +270,12 @@ export const f23ExportImport: ContractFamily = {
           'harness_elements',
           // OKF DD-9: recompute rebuilds every tree node's rows from the claude bodies.
           'session_okf_access',
+          // 2026-11-03 OKF value signals (DD-11): the same rebuild rewrites the event / pointer
+          // rows and stamps `sessions.okf_extract_version` (and `okf_events_truncated`) on
+          // every node it rebuilds — checked in `after`.
+          'session_okf_event',
+          'session_okf_pointer',
+          'sessions',
           // 2026-10-30 OTEL tabs (DD-5): every re-read of a transcript queues its session for
           // OTEL reclassification (the drain is parked during the run).
           'otel_reclass_queue',
@@ -281,6 +287,7 @@ export const f23ExportImport: ContractFamily = {
               FROM session_stats WHERE session_id = @s01.id)`,
           `(SELECT input_tokens = 500000 AND cache_write_1h_tokens = 50000
               FROM session_stats WHERE session_id = @s02.id)`,
+          `(SELECT okf_extract_version = 3 FROM sessions WHERE id = @s01.id)`,
         ],
       },
     },
