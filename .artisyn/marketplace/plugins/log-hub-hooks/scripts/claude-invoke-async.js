@@ -2,7 +2,7 @@
 /**
  * Claude Code Hook helper — async `claude -p` invocation (not a hook entry point itself).
  *
- * A `--print --no-session-persistence --output-format json` call in
+ * A `--print --no-session-persistence --output-format json` call (tool-less — see ISOLATION_ARGS) in
  * async, spawn-based, Promise-returning form, so `post-turn-analysis-worker.js` can run its advisor
  * and attribution branches CONCURRENTLY (`Promise.allSettled`). Fail-open:
  * never throws, resolves `{ ok: false }` on any failure (spawn error, timeout, non-zero exit), and
@@ -50,6 +50,20 @@ const MAX_STDOUT_BYTES = 10 * 1024 * 1024;
 // stderr is only ever used for a diagnostic tail on a failure path, never parsed — a few KB is
 // plenty and keeps a chatty/looping child from growing this process's memory over it.
 const MAX_STDERR_BYTES = 4 * 1024;
+
+const BASE_ARGS = ['--print', '--no-session-persistence', '--output-format', 'json'];
+
+// Both callers pass every fact the model needs inside the prompt, so the spawned session gets no
+// tools, no MCP servers and no skills. Without this it runs in the user's cwd with the project's
+// full toolset and permissions, and a session whose last user prompt is a live instruction
+// ("fix the two chronology defects…") got that instruction carried out — Grep, Bash, Write — by
+// the classifier instead of a JSON answer. `--tools=` (empty value) needs no shell quoting, so it
+// survives `shell: true` on Windows unchanged.
+const ISOLATION_ARGS = ['--tools=', '--strict-mcp-config', '--disable-slash-commands'];
+
+// An older Claude Code that predates one of ISOLATION_ARGS rejects it up front with this message
+// on stderr; the call is then retried once with BASE_ARGS alone (the pre-isolation behaviour).
+const UNKNOWN_OPTION_RE = /unknown option/i;
 
 /**
  * Parse the `--output-format json` envelope: on a valid envelope, `result` is the LLM's text and
@@ -102,7 +116,28 @@ function parseEnvelope(raw) {
  *   { ok: false, failureKind: 'timeout'|'nonzero-exit'|'spawn-error', exitCode: number|null, stderrTail: string|null, errorMessage: string|null }
  * >}
  */
-function callLlmAsync(prompt, model, timeoutMs, claudeBin) {
+async function callLlmAsync(prompt, model, timeoutMs, claudeBin) {
+  const result = await spawnClaude(prompt, model, timeoutMs, claudeBin, ISOLATION_ARGS);
+  if (
+    !result.ok &&
+    result.failureKind === 'nonzero-exit' &&
+    result.stderrTail &&
+    UNKNOWN_OPTION_RE.test(result.stderrTail)
+  ) {
+    return spawnClaude(prompt, model, timeoutMs, claudeBin, []);
+  }
+  return result;
+}
+
+/**
+ * One `claude --print` run with `extraArgs` placed before the base flags.
+ * @param {string} prompt
+ * @param {string} model
+ * @param {number} timeoutMs
+ * @param {string} claudeBin
+ * @param {string[]} extraArgs
+ */
+function spawnClaude(prompt, model, timeoutMs, claudeBin, extraArgs) {
   return new Promise((resolve) => {
     let settled = false;
     const settle = (value) => {
@@ -122,7 +157,7 @@ function callLlmAsync(prompt, model, timeoutMs, claudeBin) {
     try {
       child = spawn(
         claudeBin,
-        ['--model', model, '--print', '--no-session-persistence', '--output-format', 'json'],
+        ['--model', model, ...extraArgs, ...BASE_ARGS],
         {
           // shell: true on Windows so a `claude.cmd` shim resolves.
           shell: process.platform === 'win32',

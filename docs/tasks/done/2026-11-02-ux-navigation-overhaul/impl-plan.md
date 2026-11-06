@@ -49,7 +49,7 @@
 
 - Requirements: [requirements.md](requirements.md)
 - Design note: [tab-map-idea.md](tab-map-idea.md); wireframes: [wireframes/](wireframes/). Wireframe codes (b1, c4, d2, f1, g1…) in this plan are the SVG file-name prefixes there, and they are part of the plan input.
-- UX analysis: `docs/ux-analysis/wave-1/*.md`, `docs/ux-analysis/wave-2/*.md`
+- UX analysis: `docs/product-kb/ux-analysis/wave-1/*.md`, `docs/product-kb/ux-analysis/wave-2/*.md`
 - Research archive: [research/findings-1.md](research/findings-1.md)
 
 ## Design Decisions

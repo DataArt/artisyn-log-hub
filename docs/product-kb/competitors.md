@@ -1,7 +1,7 @@
 ---
 type: "Reference"
 title: "Competitors (Claude Code telemetry and observability tools)"
-description: "Who Log Hub competes with, grouped by category, how Log Hub is positioned against them and which gaps they expose. Read before positioning, pitching or prioritising product features; the full row-by-row parity study is in docs/competitive-research/."
+description: "Who Log Hub competes with, grouped by category, how Log Hub is positioned against them and which gaps they expose. Read before positioning, pitching or prioritising product features; the full row-by-row parity study is in docs/product-kb/competitive-research/."
 tags:
   - product
   - competitive-research
@@ -11,9 +11,9 @@ timestamp: "2026-11-01T00:00:00+04:00"
 # Competitors
 
 Snapshot as of **2026-11-01**. The evidence for every statement here is in the parity study
-`docs/competitive-research/` (README with the combined matrix, plus one file per tool). Update both
+`docs/product-kb/competitive-research/` (README with the combined matrix, plus one file per tool). Update both
 when a competitor changes materially or a new one appears. What competitors published after the study
-(watched sources, last-checked dates, seen items) is logged in `docs/competitive-watch/` by the
+(watched sources, last-checked dates, seen items) is logged in `docs/product-kb/competitive-watch/` by the
 `morning-check` skill.
 
 ## Positioning
@@ -67,4 +67,4 @@ dashboards, Respan, Claudescope, claude-trace-replay, DX, LinearB, Worklytics.
 5. Agents other than Claude Code (7).
 6. Query access beyond REST (PromQL/DQL, MCP server) (6).
 
-The backlog of ideas to borrow is in `docs/competitive-research/README.md`.
+The backlog of ideas to borrow is in `docs/product-kb/competitive-research/README.md`.

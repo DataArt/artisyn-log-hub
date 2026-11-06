@@ -7,7 +7,7 @@ Client-only navigation overhaul in six parts, built in order A→F (GH-74); no s
 30 SVGs in `wireframes/`, plus the design note `tab-map-idea.md` (NavNode model, missing-context resolution, gaps table rows 1–20); `requirements.md` wins wherever they differ.
 - c3 / d3 use the URL values `lens=failed-tool` and `lens=harness`, which fixes the lens id vocabulary: likely `what-happened`, `cost`, `harness`, `failed-tool`, `all` (only the first is a guess).
 - Lens default tabs (c3): What happened → Summary; Cost → Statistics (`usage`); Harness & context → System context anatomy (`sysctx`); Failed tool call → Tools/MCP (`tools`); All → Summary.
-- Promoted tabs per lens (from `docs/ux-analysis/wave-1/03-use-case-lenses.md`):
+- Promoted tabs per lens (from `docs/product-kb/ux-analysis/wave-1/03-use-case-lenses.md`):
   - What happened: summary, logs, bash, charts, change-surface
   - Cost: summary, usage, charts, advisor, otel
   - Harness: sysctx, harness-usage, okf, info

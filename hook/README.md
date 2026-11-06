@@ -141,7 +141,8 @@ installing it, and before asking anyone else to.
 - **The API key identifies you.** Uploads are attributed to the key's owner. Keep the key in the
   gitignored `log-hub.local.json`, never in the tracked `log-hub.json`.
 - **The server can make the hook run `claude -p`.** Post-turn analysis runs on the server's request
-  with your Claude Code account and spends your usage.
+  with your Claude Code account and spends your usage. Since hook `2.31.1` that call gets no tools,
+  no MCP servers and no skills, so it can only answer; it cannot read, run or change anything.
 - **The hook runs with your user rights.** Like any Claude Code plugin, its scripts can read anything
   you can. Review the scripts under `.artisyn/marketplace/plugins/log-hub-hooks/scripts/` if in doubt.
 - **The OTEL receiver listens on `127.0.0.1` only** and accepts only `application/json` without

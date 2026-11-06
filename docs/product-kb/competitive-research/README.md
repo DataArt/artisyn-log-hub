@@ -24,7 +24,7 @@ none of a Claude Code session.
 **Caveat.** No tool was installed and run. Each verdict is the researcher's judgement from docs and
 screenshots. Re-verify a row before quoting it
 externally. The product-level summary (who the competitors are and how Log Hub is positioned) is in the KB:
-`docs/knowledgebase/product/competitors.md`.
+`docs/product-kb/competitors.md`.
 
 ## Tools covered
 

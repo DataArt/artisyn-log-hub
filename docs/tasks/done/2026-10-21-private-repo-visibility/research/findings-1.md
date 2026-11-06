@@ -37,7 +37,7 @@ This is a security bug. The Data Collection Notice promises that private repos a
 - **`docs/knowledgebase/upload-queue.md`:** l.64-66 describes the staged-file download.
 - **`docs/knowledgebase/log-subsystem.md`:** Error Logs and Logs Archive.
 - **`docs/knowledgebase/session-export-import.md`:** the "owner-or-admin gate".
-- **`docs/knowledgebase/product-purpose-and-data-capture.md`:**
+- **`docs/product-kb/product-purpose-and-data-capture.md`:**
   - Capture in full is by design. Do not redact what gets captured; this task restricts only who can read it.
   - l.62: consent gates the UI only.
 - **`docs/knowledgebase/algorithms/ndjson-tolerance.md`:** rule 7 / l.84. Server log and `errorMessage` text is built from the parser's message. Change this doc's rows only if the reason text changes.
