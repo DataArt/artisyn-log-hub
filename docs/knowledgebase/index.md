@@ -119,4 +119,5 @@ article itself holds the details. Keep new lines to one or two sentences.
 
 * [Product Purpose and Full Data Capture](product/product-purpose-and-data-capture.md) - Read before proposing redaction or "privacy fixes" to capture: the product captures session data in full by design
 * [Competitors](product/competitors.md) - Read before positioning, pitching or prioritising features: 14 tools by category and the gaps they expose
+* [Product idea: code → session reverse lookup](product/ideas/code-to-session-lookup.md) - Read before planning provenance / blame-style features (file, line or commit → the session that wrote it): what `session_changed_paths` already gives, what is missing, slicing
 * [Legacy Design Decisions Map](product/legacy-design-decisions-map.md) - Read when you meet a bare legacy task id (T-NN): its topic, summary and the KB section with the current behaviour
