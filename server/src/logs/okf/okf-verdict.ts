@@ -85,7 +85,7 @@ export interface OkfVerdictRow {
   nodeId?: string | number;
   /**
    * DD-6: grep / list calls of the row whose result was a hit. Set only for rows of a node
-   * extracted at `OKF_EXTRACT_VERSION` ≥ 2; when any row of a node carries it, `agentEntry`
+   * extracted at `okf_extract_version` ≥ `OKF_SEARCH_HITS_MIN_VERSION` (2); when any row of a node carries it, `agentEntry`
    * applies the DD-6 search-entry rule.
    */
   searchHits?: number;

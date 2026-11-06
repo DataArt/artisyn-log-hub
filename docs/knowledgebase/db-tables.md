@@ -89,7 +89,7 @@ table stores the integer `sessions.id`.
   current extractor version on start.
 - `okf_extract_version` (`smallint`, nullable) / `okf_events_truncated` (`boolean`, default
   `false`), migration 0091: the OKF extraction marker. The OKF writer sets `OKF_EXTRACT_VERSION`
-  (2) on every node it rebuilds, even with zero rows, and the truncated flag when the per-node
+  (3) on every node it rebuilds, even with zero rows, and the truncated flag when the per-node
   event / pointer cap was hit. `NULL` or a lower value on a root = "no OKF analysis yet" (the repo
   OKF tab's recompute banner). Unlike `tool_usage_version`, nothing is re-queued on start; only
   `recompute-all-sessions` rebuilds.

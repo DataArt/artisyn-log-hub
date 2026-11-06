@@ -386,7 +386,7 @@ export const f21Reports: ContractFamily = {
       query: MONTH,
       //
       // 2026-11-03 value signals: FR-11 counts the period roots whose `okf_extract_version` is
-      // NULL or older than the extractor (2) — every root but s02. Pointer yield (FR-1) over the
+      // NULL or older than the extractor (3) — every root but s02. Pointer yield (FR-1) over the
       // tree's non-partial reads that showed a new pointer: s02's index.md read (scheduler.md,
       // not followed) and s03's first scheduler.md read (scheduler.ts followed) → 1 of 2. No
       // write rows, so no upkeep; no node searched an area 3 times, so no routing miss. The
@@ -428,7 +428,7 @@ export const f21Reports: ContractFamily = {
                      (SELECT count(*) FROM roots) AS in_period,
                      (SELECT count(*) FROM roots r JOIN sessions s ON s.id = r.id
                        WHERE s.okf_extract_version IS NULL
-                          OR s.okf_extract_version < 2) AS without_analysis,
+                          OR s.okf_extract_version < 3) AS without_analysis,
                      (SELECT jsonb_build_object('k', count(*) FILTER (WHERE followed),
                                                 'n', count(*))
                         FROM shown) AS pointer_yield,

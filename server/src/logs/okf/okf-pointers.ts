@@ -6,26 +6,35 @@
  *
  * Rules (pinned by `docs/knowledgebase/algorithms/okf-access-extraction.md`):
  * - Spans: every `` `([^`\n]{1,512})` `` of the text.
- * - Normalise: trim; drop a span that starts with `http`, `-`, `$`, `<` or `@`, or contains a space;
- *   strip a trailing `:\d+(-\d+)?`, then a `#…` anchor, then a leading `./`; reduce a glob to its
- *   static prefix; drop a trailing `/`.
- * - Keep it only if it contains `/` or has an extension. An absolute path is resolved to a
+ * - Normalise: trim; drop a span that starts with `http`, `-`, `$`, `<` or `@`, or contains a space,
+ *   `(` or `)`; strip a trailing `:\d+(-\d+)?`, then a `#…` anchor, then a leading `./`; reduce a
+ *   glob to its static prefix; drop a trailing `/`.
+ * - Drop a bare version / number (`2.31.0`, `v1.2`). Keep a span with `/`; keep one without `/`
+ *   only when its extension is in `OKF_POINTER_FILE_EXTENSIONS` (`README.md` yes, `process.env`,
+ *   `Logger.error` no; a dotfile such as `.env` has no extension). An absolute path is resolved to a
  *   repo-relative one through `resolveRepoPath`; one that does not resolve is dropped.
  * - De-duplicated within one text, first occurrence order kept.
  * - New: the pointer string is not a substring of the node's earlier text.
  * - Partial: the result is an error, empty after trimming, or starts with `<persisted-output>`.
  */
 import { resolveRepoPath } from '../change-surface/path-normalise';
+import { globStaticPrefix, toAbsolute } from './okf-access-extractor';
 import {
-  globStaticPrefix,
-  hasExtension,
-  toAbsolute,
-} from './okf-access-extractor';
-import { OKF_POINTER_MAX_CHARS } from './okf-constants';
+  OKF_POINTER_FILE_EXTENSIONS,
+  OKF_POINTER_MAX_CHARS,
+} from './okf-constants';
 
 const SPAN_RE = new RegExp('`([^`\\n]{1,' + OKF_POINTER_MAX_CHARS + '})`', 'g');
 const DROP_PREFIXES = ['http', '-', '$', '<', '@'];
 const GLOB_CHARS = /[*?[\]{}]/;
+const VERSION_RE = /^v?\d+(\.\d+)*$/;
+
+/** A `/`-less name is a file pointer only with a known extension (a dotfile has none). */
+function hasKnownExtension(name: string): boolean {
+  const dot = name.lastIndexOf('.');
+  if (dot <= 0) return false;
+  return OKF_POINTER_FILE_EXTENSIONS.has(name.slice(dot + 1).toLowerCase());
+}
 
 /** One normalised pointer of a span, or null when the span is not a repo path. */
 function normalisePointer(
@@ -33,7 +42,7 @@ function normalisePointer(
   roots: readonly (string | null | undefined)[],
 ): string | null {
   let p = span.trim();
-  if (p === '' || /\s/.test(p)) return null;
+  if (p === '' || /[\s()]/.test(p)) return null;
   if (DROP_PREFIXES.some((prefix) => p.startsWith(prefix))) return null;
   p = p.replace(/\\/g, '/');
   p = p.replace(/:\d+(-\d+)?$/, '');
@@ -43,7 +52,8 @@ function normalisePointer(
   if (GLOB_CHARS.test(p)) p = globStaticPrefix(p);
   p = p.replace(/\/+$/, '');
   if (p === '' || p.startsWith('~')) return null;
-  if (!p.includes('/') && !hasExtension(p)) return null;
+  if (VERSION_RE.test(p)) return null;
+  if (!p.includes('/') && !hasKnownExtension(p)) return null;
   const abs = toAbsolute(p);
   if (abs !== null) {
     const rel = resolveRepoPath(abs, roots);

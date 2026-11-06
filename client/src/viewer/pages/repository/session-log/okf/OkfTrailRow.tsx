@@ -1,56 +1,16 @@
 /**
  * One row of the agent trail (package 3): `#N`, the op, the path, then what a reader needs to
  * judge it — the full search pattern, `found` / `nothing found`, the line range, the "in area of"
- * mark of an article read earlier, and under a KB read the new code paths it showed with
- * "opened at #N" / "never opened".
+ * mark of an article read earlier, and under a KB read the new code paths it showed
+ * (`OkfTrailPointers`).
  */
 import type { OkfTrailItem } from '../../../../../models/repositories';
-import {
-  isIndexPath,
-  isKbItem,
-  opWord,
-  pointerFate,
-  rangeText,
-} from './okf-trail';
+import { isIndexPath, isKbItem, opWord, rangeText } from './okf-trail';
+import { OkfTrailPointers } from './OkfTrailPointers';
 
 function baseName(path: string): string {
   const trimmed = path.replace(/\/+$/, '');
   return trimmed.slice(trimmed.lastIndexOf('/') + 1) || path;
-}
-
-function NewPointers({
-  item,
-  byOrd,
-}: {
-  item: OkfTrailItem;
-  byOrd: ReadonlyMap<number, OkfTrailItem>;
-}) {
-  const pointers = item.newPointers ?? [];
-  if (pointers.length === 0) return null;
-  return (
-    <div className="pl-14 text-[11px]" data-testid="okf-trail-pointers">
-      <span className="text-muted-foreground">
-        showed {pointers.length} new code{' '}
-        {pointers.length === 1 ? 'path' : 'paths'}:
-      </span>
-      <ul className="pl-3">
-        {pointers.map((p) => {
-          const fate = pointerFate(item, p, byOrd);
-          return (
-            <li key={p} data-testid="okf-trail-pointer" className="font-mono">
-              {fate ? '✓' : '·'} {p}{' '}
-              <span
-                className={`font-sans ${fate ? 'text-emerald-700 dark:text-emerald-400' : 'text-muted-foreground'}`}
-                data-testid="okf-trail-pointer-fate"
-              >
-                ({fate ? `${fate.verb} at #${fate.ord}` : 'never opened'})
-              </span>
-            </li>
-          );
-        })}
-      </ul>
-    </div>
-  );
 }
 
 export function OkfTrailRow({
@@ -127,7 +87,9 @@ export function OkfTrailRow({
           </span>
         ) : null}
       </div>
-      {item.op === 'kb_read' ? <NewPointers item={item} byOrd={byOrd} /> : null}
+      {item.op === 'kb_read' ? (
+        <OkfTrailPointers item={item} byOrd={byOrd} />
+      ) : null}
     </li>
   );
 }

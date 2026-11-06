@@ -411,7 +411,14 @@ test('@S-SESS-09 Windows change surface: scattered change, a file outside the re
             agentId: sub2,
             description: 'Check refunds vs ledger',
             task: 'check `server/pay/refund.ts` against the ledger',
-            actions: [{ read: 'docs/kb/a07.md', result: 'Ledger: `server/pay/ledger.ts`; refunds in `server/pay/refund.ts`.\n' }],
+            // The back-ticked identifiers, call and version are not code paths (extract version 3).
+            actions: [
+              {
+                read: 'docs/kb/a07.md',
+                result:
+                  'Ledger: `server/pay/ledger.ts` (logs via `Logger.error`, reads `process.env`, calls `LedgerService.post()`, since `2.31.0`); refunds in `server/pay/refund.ts`.\n',
+              },
+            ],
           },
         ],
       },
@@ -507,6 +514,8 @@ test('@S-SESS-09 Windows change surface: scattered change, a file outside the re
       '✓ server/pay/charge.ts (opened at #2)',
       '✓ server/pay/refund.ts (searched at #4)',
     ]);
+    // Every path was used, so nothing is folded.
+    await expect(items.nth(0).getByTestId('okf-trail-pointers-toggle')).toHaveCount(0);
     await expect(trail.getByTestId('okf-trail-after')).toHaveText('── after reading: 2 searches in its area, 1 file opened ──');
     // The searches: full pattern, the result, and the mark of the article whose area they hit.
     await expect(items.nth(2).getByTestId('okf-trail-pattern')).toHaveText('"chargeCard"');
@@ -524,6 +533,16 @@ test('@S-SESS-09 Windows change surface: scattered change, a file outside the re
     await expect(page).toHaveURL(new RegExp(`[?&]okfAgent=${sub2}(&|$)`));
     await expect(trail).toHaveAttribute('data-agent', sub2);
     await expect(trail.getByTestId('okf-trail-title')).toHaveText('Agent trail · 1.1 · Check refunds vs ledger · 1 call');
+    // No path was used: only the folded toggle shows until it is expanded; the identifiers,
+    // the call and the version of a07.md are not counted as code paths.
+    const ptrs = trail.getByTestId('okf-trail-pointers');
+    await expect(ptrs).toContainText('showed 1 new code path:');
+    await expect(trail.getByTestId('okf-trail-pointer')).toHaveCount(0);
+    const fold = trail.getByTestId('okf-trail-pointers-toggle');
+    await expect(fold).toHaveText('1 code path, none opened · show');
+    await expect(fold).toHaveAttribute('aria-expanded', 'false');
+    await fold.click();
+    await expect(fold).toHaveText('1 code path, none opened · hide');
     await expect(trail.getByTestId('okf-trail-pointer')).toHaveText(['· server/pay/ledger.ts (never opened)']);
     await expect(trail.getByTestId('okf-trail-after')).toHaveCount(0);
 

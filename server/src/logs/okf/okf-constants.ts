@@ -5,8 +5,36 @@
  * import them from here, and the settings response reports some of them as `okfFixedLimits`.
  */
 
-/** Version of the OKF extraction; a node with a lower `sessions.okf_extract_version` needs recompute (DD-11). */
-export const OKF_EXTRACT_VERSION = 2;
+/**
+ * Version of the OKF extraction; a node with a lower `sessions.okf_extract_version` needs recompute (DD-11).
+ * 2: events, pointers and `search_hits`; 3: the stricter pointer rule (no `(`/`)`, no bare
+ * version numbers, a span without `/` only with a {@link OKF_POINTER_FILE_EXTENSIONS} extension).
+ */
+export const OKF_EXTRACT_VERSION = 3;
+
+/**
+ * Lowest `okf_extract_version` whose `session_okf_access.search_hits` is filled (DD-6). Separate
+ * from {@link OKF_EXTRACT_VERSION} so a later bump does not discard the hit data of older nodes.
+ */
+export const OKF_SEARCH_HITS_MIN_VERSION = 2;
+
+/**
+ * A back-ticked span without `/` is a pointer only when its extension (lower-cased, after the last
+ * `.`) is one of these (DD-8), so identifiers like `Logger.error` or `process.env` are not.
+ */
+export const OKF_POINTER_FILE_EXTENSIONS: ReadonlySet<string> = new Set(
+  [
+    // source
+    'ts tsx mts cts js jsx mjs cjs vue svelte java kt kts scala groovy gradle cs csproj sln vb',
+    'go rs rb php swift c h cpp hpp cc dart lua pl sql prisma graphql gql proto',
+    // scripts
+    'sh bash zsh ps1 psm1 cmd bat',
+    // config / data
+    'json jsonc json5 jsonl yml yaml toml ini cfg conf xml lock csv tsv dockerfile tf hcl',
+    // docs / web
+    'md mdx txt rst adoc html htm css scss sass less svg',
+  ].flatMap((group) => group.split(' ')),
+);
 
 /** A code event whose path has one of these segments is dropped (DD-5). */
 export const OKF_EVENT_SKIP_SEGMENTS: readonly string[] = [

@@ -34,7 +34,10 @@ import { descendantSessionsCte } from '../session-tree.sql';
 import { maskFirstPrompt, type TeamScope } from '../team-scope';
 import { extractOkfDetail, type OkfSeqItem } from './okf-access-extractor';
 import { loadSnapshotFilesForNode } from './okf-access-writer';
-import { OKF_EXTRACT_VERSION } from './okf-constants';
+import {
+  OKF_EXTRACT_VERSION,
+  OKF_SEARCH_HITS_MIN_VERSION,
+} from './okf-constants';
 import { loadOkfNodeTranscripts } from './okf-facts.service';
 import { buildOkfTrail } from './okf-trail';
 import { getServerBashParser } from './server-bash-parser';
@@ -206,7 +209,7 @@ interface AccessSqlRow {
   seq: string | number;
   ranged_calls?: string | number | null;
   ranged_bytes?: string | number | null;
-  /** NULL for a node extracted before `OKF_EXTRACT_VERSION` (DD-6 needs the hit data). */
+  /** NULL for a node extracted before `OKF_SEARCH_HITS_MIN_VERSION` (DD-6 needs the hit data). */
   search_hits?: string | number | null;
 }
 
@@ -1855,7 +1858,7 @@ export class OkfUsageService {
       SELECT
         a.session_id, a.path_key, a.op, a.after_own_edit, a.bytes, a.calls, a.seq,
         a.ranged_calls, a.ranged_bytes,
-        CASE WHEN s.okf_extract_version >= ${OKF_EXTRACT_VERSION}
+        CASE WHEN s.okf_extract_version >= ${OKF_SEARCH_HITS_MIN_VERSION}
           THEN a.search_hits END AS search_hits
       FROM session_okf_access a
       JOIN sessions s ON s.id = a.session_id
@@ -1923,7 +1926,7 @@ export class OkfUsageService {
         ns.start_time,
         a.path_key, a.op, a.after_own_edit, a.bytes, a.calls, a.seq,
         a.ranged_calls, a.ranged_bytes,
-        CASE WHEN s.okf_extract_version >= ${OKF_EXTRACT_VERSION}
+        CASE WHEN s.okf_extract_version >= ${OKF_SEARCH_HITS_MIN_VERSION}
           THEN a.search_hits END AS search_hits
       FROM tree_nodes tn
       JOIN session_okf_access a ON a.session_id = tn.id

@@ -135,8 +135,12 @@ description its parent gave it, else by the start of its task, else by a short i
   trail** opens the trail of the first agent behind the number.
 - **Agent trail** (section B, once an agent is selected) — every KB and code call of that agent
   in order, numbered `#1`, `#2`, …, grouped into episodes that start at a KB article read. Under
-  a read: the new code paths the article showed, each "opened at #N", "searched at #N" or "never
-  opened"; then "after reading: N searches in its area, M files opened". Each search shows its
+  a read: the new code paths the article showed — the ones the agent used, each "opened at #N" or
+  "searched at #N", then a folded "N more not opened · show" (or "N code paths, none opened ·
+  show") that lists the rest as "never opened"; then "after reading: N searches in its area, M
+  files opened". A code path is a back-ticked repo path in the article (`server/src/app.ts`,
+  `package.json`); back-ticked names such as `Logger.error`, `process.env`, `upsert()` or a
+  version like `2.31.0` do not count. Each search shows its
   full pattern and whether it **found** something or **nothing found**; a read or search in the
   code area of an article the agent read earlier is highlighted ("in area of …"). The agent is
   in the page address, so a trail can be bookmarked or shared; **×** closes it.

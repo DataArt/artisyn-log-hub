@@ -157,12 +157,21 @@ bound OKF snapshot as `repoRelPath → { size, hash }`. It returns
       from the access pattern cut to `OKF_PATTERN_MAX_CHARS` (200), else `null`.
 14. **Pointers (DD-8).** `extractPointers(text, roots)` takes every back-ticked span
     `` `([^`\n]{1,512})` `` (`OKF_POINTER_MAX_CHARS`) of a KB read's result text and normalises it:
-    1. trim; drop it when empty, when it contains whitespace, or when it starts with `http`, `-`,
-       `$`, `<` or `@`;
+    1. trim; drop it when empty, when it contains whitespace, `(` or `)` (a call such as
+       `LogsService.upsert()`, even with a `/`), or when it starts with `http`, `-`, `$`, `<` or `@`;
     2. `\` → `/`; strip a trailing `:\d+(-\d+)?`, then a `#…` anchor, then any leading `./`;
     3. a glob (`* ? [ ] { }`) is reduced to its static prefix (rule 4); a trailing `/` is dropped;
-    4. drop it when it is empty or starts with `~`; keep it only if it contains `/` or has an
-       extension;
+    4. drop it when it is empty, starts with `~`, or is a bare version / number
+       (`^v?\d+(\.\d+)*$`: `2.31.0`, `v1.2`). A span with `/` is kept. A span without `/` is kept
+       only when its extension — the text after the last `.`, which must not be the first
+       character, compared lower-case — is in `OKF_POINTER_FILE_EXTENSIONS` (source, script,
+       config and doc extensions such as `ts`, `js`, `json`, `md`, `sql`, `yml`, `sh`, `ps1`,
+       `java`, `cs`, `go`, `xml`, `txt`, `lock`, `csv`; see `okf-constants.ts`). So `README.md`,
+       `package.json` are pointers and `Logger.error`, `process.env`, `location.state`,
+       `console.log` are not; a dotfile (`.env`, `.claude-logs.sent`) has no extension and is
+       dropped. Extensions that are common member names (`env`, `log`, `patch`, `properties`) are
+       deliberately not in the list. Since `OKF_EXTRACT_VERSION` 3 (version 2 kept any span with an
+       extension);
     5. an absolute path goes through `resolveRepoPath` (rule 3) and is dropped when it does not
        resolve or resolves to the repo root.
     Pointers are de-duplicated within one text, first occurrence order kept.
@@ -237,6 +246,8 @@ bound OKF snapshot as `repoRelPath → { size, hash }`. It returns
 - Pointer normalisation (`:12-20`, `#anchor`, `./`, glob, `http…`, spaces, `-flag`, absolute
   paths), a pointer named in the prompt is not new, followed by a later read or a search under it:
   OA-31.
+- Non-path spans dropped (identifiers without a known extension, bare versions, `(` / `)`,
+  dotfiles), known extensions kept case-insensitively, the read's `newPointers` in `seq`: OA-35.
 - Partial reads (`<persisted-output>`, empty, error): OA-32; a multi-file KB read stores only
   `''` partial rows: OA-27, OA-28; the pointer cap: OA-33.
 
@@ -257,7 +268,7 @@ emitted N times (ids keep counting `t<k>`). `expected.rows` is the exact `access
 and `expected.eventCount` / `expected.pointerCount` (list lengths), `expected.truncated` and
 `expected.seq` (the exact sequence).
 
-Rows (34): [`docs/algorithm-examples/okf-access-extraction.json`](../../algorithm-examples/okf-access-extraction.json) — test data for the table test; the rules above are enough to understand the algorithm.
+Rows (35): [`docs/algorithm-examples/okf-access-extraction.json`](../../algorithm-examples/okf-access-extraction.json) — test data for the table test; the rules above are enough to understand the algorithm.
 
 ## Mutations
 
@@ -289,6 +300,10 @@ Rows (34): [`docs/algorithm-examples/okf-access-extraction.json`](../../algorith
 - Events not skipping `node_modules` / `dist`, or the pattern not cut -> OA-29; no event cap ->
   OA-30.
 - A span with spaces, `http…` or `-flag` kept, or anchors / line suffixes not stripped -> OA-31.
+- Any extension accepted for a `/`-less span, or the extension matched case-sensitively -> OA-35
+  (`Logger.error` kept, or `CHANGELOG.MD` dropped); a span with `(` kept -> OA-35
+  (`server/src/foo(bar).ts`). (The bare-version drop is a guard that the extension list alone
+  already implies today; OA-35 pins `2.31.0` / `v1.2` as dropped either way.)
 - Pointers taken from an error result, or no `''` row for an empty read -> OA-32; pointers stored
   for a multi-file read -> OA-27.
 

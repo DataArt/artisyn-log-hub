@@ -118,7 +118,7 @@ first by `seq` names the bundle. `index` if that row is the bundle's `index.md`;
 `grep` / `list` row of that bundle has `seq` ≤ the `seq` of its first non-index `read`; else
 `given`. No such row → `null`.
 
-When any row of the node carries `searchHits` (extracted at `OKF_EXTRACT_VERSION` ≥ 2, DD-6), the
+When any row of the node carries `searchHits` (extracted at `okf_extract_version` ≥ `OKF_SEARCH_HITS_MIN_VERSION` = 2, DD-6), the
 `search` test is stricter: the first bundle row must itself be a `grep` / `list` row on a
 **folder** key (ending `/`) with `searchHits > 0`, and the node must have a later (`seq` greater)
 `read` row in that bundle; otherwise `given`. Rows of an older extraction keep the rule above.
