@@ -1,5 +1,4 @@
 {
-  "snyk-container/image": [],
   "snyk-oss/prod": [],
   "snyk-oss/dev": [
     {
@@ -12,5 +11,6 @@
       "project": "client/package.json"
     }
   ],
-  "snyk-oss/kit": []
+  "snyk-oss/kit": [],
+  "snyk-container/image": []
 }
