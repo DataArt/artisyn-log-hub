@@ -4,7 +4,7 @@ title: "Competitive watch — seen log"
 description: "Every competitor item (release, blog post, docs change, new tool) the morning check has already seen, newest first, with its relevance and verdict for Log Hub."
 tags:
   - competitive-research
-timestamp: "2026-11-06T10:00:00+04:00"
+timestamp: "2026-11-09T10:00:00+04:00"
 ---
 
 # Seen log
@@ -19,6 +19,23 @@ Baseline: everything published before 2026-11-01 is in the parity study and is n
 
 | Seen | Source id | Published | Item | URL | Relevance | Verdict |
 |---|---|---|---|---|---|---|
+| 2026-11-09 | hn | 2026-11-09 | Show HN: Airlock – policy-as-code for fleets of AI coding agents — HN 3 / 0 | https://airlock.lunareng.com/docs | low | none |
+| 2026-11-09 | hn | 2026-11-09 | Ask HN: Is it normal to not write code for years as a software engineer? — HN 3 / 4 | https://news.ycombinator.com/item?id=50420252 | low | none |
+| 2026-11-09 | hn | 2026-11-08 | Show HN: Plannotator inbox – email-like review of agent work — HN 7 / 1 | https://plannotator.ai/inbox/ | low | none |
+| 2026-11-09 | hn | 2026-11-08 | Show HN: Recalc – spreadsheet whose cells are Claude Code / Codex terminals — HN 3 / 5 | https://github.com/sshah03/recalc | low | none |
+| 2026-11-09 | hn | 2026-11-08 | Show HN: Loop – your coding agents from your phone — HN 2 / 8 | https://github.com/j-asefa/loop | low | none |
+| 2026-11-09 | hn | 2026-11-08 | Show HN: Grade or Skip – Pokémon card grading ROI — HN 1 / 0 | https://github.com/0x4rch/gradeorskip | low | none |
+| 2026-11-09 | hn | 2026-11-07 | Ask HN: How do you manage your AI agents' context across clients and projects? — HN 59 / 40 | https://news.ycombinator.com/item?id=50403153 | low | none |
+| 2026-11-09 | hn | 2026-11-06 | Ask HN: Is anyone running multi/always-on agents that don't cost a fortune? — HN 6 / 5 | https://news.ycombinator.com/item?id=50391647 | misc | none (spend complaint for always-on agents) |
+| 2026-11-09 | hn | 2026-11-06 | Show HN: AJX – find where AI agents get stuck using your product — HN 1 / 0 | https://ajx.dev/ | low | none |
+| 2026-11-09 | hn | 2026-11-06 | Show HN: Grid – Hold'em arena for AI agents — HN 4 / 3 | https://penguinbase.com/game-install?game=192471728&ref=hn | low | none |
+| 2026-11-09 | langfuse-changelog | 2026-11-06 | Langfuse retires automatic tokenization: generations without submitted usage now show "usage missing" instead of an estimated cost | https://langfuse.com/changelog/2026-11-06-retiring-tokenization | low | none |
+| 2026-11-09 | langfuse-changelog | 2026-11-06 | Langfuse S3 access via IAM role (Enterprise) | https://langfuse.com/changelog/2026-11-06-s3-iam-role-auth | low | none |
+| 2026-11-09 | anthropic-costs | — | Claude apps gateway (Anthropic, built into `claude` ≥ v2.1.195): self-hosted gateway for Bedrock / Claude Platform on AWS / Google Cloud / Foundry with SSO, per-group model access, per-user attribution, per-user spend limits, OTLP relay; gateway-signed-in sessions send OTLP to the gateway instead of a local `OTEL_EXPORTER_OTLP_ENDPOINT` unless a policy names the collector; not in the parity study | https://code.claude.com/docs/en/claude-apps-gateway | medium | idea: check/document Log Hub OTEL ingest for gateway sessions (OTLP is redirected); study: anthropic-builtin-analytics.md A11 should mention gateway per-user spend limits (proposed) |
+| 2026-11-09 | q-agent-observability | 2026-06-03 | HoneyHive for Coding Agents: local daemon on Claude Code hooks captures prompts/responses/tool calls as trace trees (5 views), sessions tagged by repo, custom ROI funnels via per-session feedback JSON (PR merge rate, code surviving in main 30 days), evals, risk view (shell/files outside cwd); not in the parity study | https://www.honeyhive.ai/post/honeyhive-for-coding-agents | medium | idea: per-session outcome signals (PR merged, code survival) — extends the known PR-attribution gap; study: new file proposed |
+| 2026-11-09 | q-agent-observability | — | OpenLIT coding agents (open source): auto-detects Claude Code / Cursor / Codex / OpenCode / Windsurf, captures tokens, cost, tool calls, outcomes, per-developer rollups, code acceptance, top repos, redaction tiers, repo scan of a session (Trustabl); not in the parity study | https://docs.openlit.io/latest/openlit/coding-agents/overview | medium | none (overlaps Log Hub; no budgets) — study: new file proposed |
+| 2026-11-09 | q-team-usage | — | Revenium AI Coding Dashboard for Claude Code: per-request USD cost grouped by developer / organization / product / session, budgets & alerts, team-wide setup through the Claude admin console (no per-developer install) or MDM; not in the parity study | https://docs.revenium.io/claude-code-dashboard | medium | idea: budgets with alerts (known A11 gap); none otherwise |
+| 2026-11-09 | q-agent-observability | 2026-05-18 | Arize open-source coding-agent tracing (Claude Code, Cursor, Codex, Copilot, Gemini CLI) into Arize AX / Phoenix: step-level traces, tokens, evals; no cost | https://arize.com/blog/open-source-coding-agent-tracing | low | none |
 | 2026-11-06 | hn | 2026-11-06 | Ask HN: Engineers Focus Using AI — HN 1 / 0 | https://news.ycombinator.com/item?id=50390444 | low | none |
 | 2026-11-06 | hn | 2026-11-05 | Show HN: KeepPlain – trace code to the agent session and open the matching dialogue segment; records Claude Code/Codex/Cursor/Pi/Antigravity sessions to a SaaS (searchable past work, rules carried into new sessions, token counts per model, usage-limit-based hand-off to another agent; per-seat team plan) — HN 2 / 0 | https://github.com/keepplain/keepplain-plugin | misc | idea: reverse lookup from a file/line (or commit) to the session and transcript segment that wrote it — Log Hub stores Edit/Write tool calls per session but has no such lookup |
 | 2026-11-06 | hn | 2026-11-05 | Ask HN: Are you building an AI company brain? — HN 5 / 3 | https://news.ycombinator.com/item?id=50379710 | low | none |

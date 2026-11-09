@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "poc": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["${POC_DIR}/mcp-server.cjs"]
+    }
+  }
+}
