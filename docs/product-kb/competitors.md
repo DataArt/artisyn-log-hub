@@ -42,6 +42,7 @@ combines full transcripts, a team server and self-hosted/offline operation.
 | Dynatrace Claude Code monitoring | apm-vendor | SaaS | OTel into Dynatrace AI Observability; alerting, DQL |
 | Coralogix Code Agents | apm-vendor | SaaS | Org-level cost, code impact, managed vs unmanaged repos |
 | Jellyfish AI Impact | eng-analytics | SaaS | Ties AI-tool adoption to delivery outcomes (PRs, cycle time) |
+| Beezi Analytics | hook-dashboard | SaaS | Summaries only (no content); budgets, subscription-vs-API value, waiting-time breakdown; Claude Code, Codex, Copilot |
 
 Not studied separately (variants named in the study): ccusage-live, li0nel/claude-otel, community Grafana
 dashboards, Respan, Claudescope, claude-trace-replay, DX, LinearB, Worklytics.

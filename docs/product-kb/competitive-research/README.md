@@ -45,6 +45,12 @@ externally. The product-level summary (who the competitors are and how Log Hub i
 | [Coralogix Code Agents](coralogix.md) | apm-vendor | SaaS | Usage-based | Vendor GA |
 | [Jellyfish AI Impact](jellyfish.md) | eng-analytics | SaaS | Sales-led | Established vendor |
 
+Added after the snapshot (not in the matrix below; the file has the same 25-row table):
+
+| Tool | Category | Deployment | License / pricing | Researched |
+|---|---|---|---|---|
+| [Beezi Analytics](beezi.md) | hook-dashboard (SaaS) | SaaS only, hook plugin sends summaries | Free single seat; $7.99/user/month team | 2026-11-09; competitor ahead on A8, A10, A11, T6, T7, T9 |
+
 These variants are mentioned in the tool files but were not researched on their own: ccusage-live,
 li0nel/claude-otel and the community Grafana dashboards, Respan, Claudescope, claude-trace-replay, DX,
 LinearB and Worklytics.
