@@ -11,6 +11,9 @@
  * - `tool` = `<server>` (segment 1), `operation` = the remaining segments joined with `__`;
  * - status (via `classifyToolOutcome`): no `tool_result` → `no_result`; `is_error: true`
  *   (a failure or a rejection) → `error`; anything else → `ok`;
+ * - a call moved to a background MCP task (`background-mcp.ts`) takes its status, end time and
+ *   result text from the matching `<task-notification>`; without one it is `no_result`, with
+ *   no duration and `backgroundPendingText` instead of the ack as its output;
  * - duration via `resolveToolDuration`;
  * - the agent-saw text is the result's text blocks joined with `\n`, other blocks as
  *   `[image]` / `[<type>]` placeholders, clamped to `CAPTURE_LIMIT_BYTES` (hint `truncated`);
@@ -27,6 +30,13 @@ import {
   flattenToolResultText,
 } from '../claude-extractor';
 import { classifyToolOutcome, resolveToolDuration } from '../tool-stats';
+import {
+  backgroundPendingText,
+  collectBackgroundTaskNotifications,
+  isBackgroundCandidate,
+  matchBackgroundAckTaskId,
+  type BackgroundTaskNotification,
+} from '../background-mcp';
 import type {
   ToolCallAgentKind,
   ToolCallHint,
@@ -82,6 +92,15 @@ export interface TranscriptToolResult {
   toolUseResult: AnyRecord | null;
   /** The carrying user line's `toolDenialKind`. */
   denialKind: string | null;
+  /**
+   * Set when the call was moved to a background MCP task (an `mcp__*` call whose non-error
+   * result is the hand-off ack). `status` is the task notification's `<status>`, or null when
+   * the log holds no notification. `content` / `text` are the notification's `<result>`, or
+   * `backgroundPendingText` when there is none — never the ack.
+   */
+  background?: { taskId: string; status: string | null };
+  /** Epoch ms of the background task's notification; null when there is none. */
+  backgroundEndTs?: number | null;
 }
 
 /** One `tool_use` of a node, in transcript order. */
@@ -122,6 +141,41 @@ export function toolResultFullText(content: unknown): string {
 }
 
 /**
+ * A call's result after the background-MCP join (impl-plan DD-1, DD-2, DD-5): unchanged unless
+ * the call is a background candidate whose full result text is a hand-off ack. Then it carries
+ * `background` / `backgroundEndTs`, and — when the notification exists — its `<result>` (or
+ * `''`) replaces the ack as `content` / `text`.
+ */
+function joinBackground(
+  name: string,
+  result: TranscriptToolResult,
+  notifications: ReadonlyMap<string, BackgroundTaskNotification>,
+): TranscriptToolResult {
+  if (!isBackgroundCandidate(name, result.isError)) return result;
+  const taskId = matchBackgroundAckTaskId(result.text);
+  if (taskId === null) return result;
+  const notification = notifications.get(taskId);
+  if (notification === undefined) {
+    const pending = backgroundPendingText(taskId);
+    return {
+      ...result,
+      content: pending,
+      text: pending,
+      background: { taskId, status: null },
+      backgroundEndTs: null,
+    };
+  }
+  const text = notification.result ?? '';
+  return {
+    ...result,
+    content: text,
+    text,
+    background: { taskId, status: notification.status },
+    backgroundEndTs: notification.ts,
+  };
+}
+
+/**
  * The node's `tool_use` blocks in transcript order, each joined to its first `tool_result`.
  * Sidechain lines of a root log are skipped; a repeated `tool_use` id counts once.
  */
@@ -158,6 +212,10 @@ export function collectToolUses(
     }
   }
 
+  // Background-MCP task notifications, keyed by task id. Collected over every line: task ids
+  // are unique, and a notification line need not share its call's sidechain flag.
+  const notifications = collectBackgroundTaskNotifications(entries);
+
   // Pass 2: tool_use blocks in transcript order.
   const out: TranscriptToolUse[] = [];
   const seenIds = new Set<string>();
@@ -180,6 +238,7 @@ export function collectToolUses(
       }
       const name = asString(b['name']);
       if (name === null || name === '') continue;
+      const rawResult = id === null ? null : (results.get(id) ?? null);
       out.push({
         id,
         name,
@@ -187,7 +246,10 @@ export function collectToolUses(
         ts,
         cwd,
         seq: out.length,
-        result: id === null ? null : (results.get(id) ?? null),
+        result:
+          rawResult === null
+            ? null
+            : joinBackground(name, rawResult, notifications),
       });
     }
   }
@@ -209,12 +271,19 @@ export function parseMcpToolName(
 
 /**
  * The DD-10 status of a transcript call (`classifyToolOutcome`): no result → `no_result`;
- * `is_error: true` → `error` (a rejection too); anything else → `ok`.
+ * `is_error: true` → `error` (a rejection too); anything else → `ok`. A call moved to a
+ * background MCP task follows its notification: none → `no_result`, `completed` → `ok`,
+ * any other status → `error`.
  */
 export function transcriptCallStatus(
   result: TranscriptToolResult | null,
 ): ToolCallStatus {
   if (result === null) return 'no_result';
+  if (result.background !== undefined) {
+    const { status } = result.background;
+    if (status === null) return 'no_result';
+    return status === 'completed' ? 'ok' : 'error';
+  }
   const outcome = classifyToolOutcome({
     isError: result.isError,
     text: flattenToolResultText(result.content),
@@ -225,14 +294,19 @@ export function transcriptCallStatus(
   return 'ok';
 }
 
-/** Duration of a transcript call in whole ms (`resolveToolDuration`), or null. */
+/**
+ * Duration of a transcript call in whole ms (`resolveToolDuration`), or null. Null too for a
+ * background call without a notification: the ack time is only the hand-off, not the end.
+ */
 export function transcriptCallDurationMs(
   use: TranscriptToolUse,
 ): number | null {
+  if (use.result?.background?.status === null) return null;
   const resolved = resolveToolDuration({
     toolUseResult: use.result?.toolUseResult ?? null,
     assistantTs: use.ts,
     resultTs: use.result?.resultTs ?? null,
+    backgroundEndTs: use.result?.backgroundEndTs ?? null,
   });
   return resolved === null ? null : Math.round(resolved.ms);
 }

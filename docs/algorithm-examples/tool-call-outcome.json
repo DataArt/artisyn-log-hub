@@ -154,5 +154,35 @@
     "input": {"result":{"isError":true,"text":"The user doesn't want to proceed with this tool use.","interrupted":false,"denialKind":"user-rejected"}},
     "expected": {"outcome":"unresolved","status":"rejected","denialKind":"user-rejected"},
     "note": "Rule 2: interrupted false does not apply. Rule 3: denialKind 'user-rejected' -> unresolved. Rule 7: rejected; interrupted is not true and denialKind is not 'interrupted', so no interrupted key; denialKind copied. This is what Logs passes for a user rejection (interrupted is always a boolean). An interrupted flag in rule 7 tested for presence would add interrupted: true."
+  },
+  {
+    "id": "TO-27",
+    "input": {"result":{"isError":null,"text":"slow_echo says: hi (after 10000 ms)","background":{"status":"completed"}}},
+    "expected": {"outcome":"success","status":"success"},
+    "note": "Rule 1a (background): the call was moved to the background and its task notification says 'completed' -> success. Rule 6a: a notified background call maps through its outcome -> success, with no interrupted / denialKind keys."
+  },
+  {
+    "id": "TO-28",
+    "input": {"result":{"isError":null,"text":"Task failed: slow_fail: d failed","background":{"status":"failed"}}},
+    "expected": {"outcome":"failure","status":"error"},
+    "note": "Rule 1a (background): notification status 'failed' (not 'completed') -> failure, although isError is null (the ack itself was not an error). Rule 6a -> error. With the background check moved after the isError rule (rule 5 first), this gives success / success."
+  },
+  {
+    "id": "TO-29",
+    "input": {"result":{"isError":null,"text":"MCP tool \"mock/slow_echo\" is still running after 2s. It was moved to the background as task kkumm8n15 and keeps running.","background":{"status":null}}},
+    "expected": {"outcome":"unresolved","status":"background"},
+    "note": "Rule 1a (background): no task notification in the log (status null) -> unresolved, not failure (the call may still be running). Rule 6a: status null -> background (badge '⧗ background'). Treating a null status as success would give success / success."
+  },
+  {
+    "id": "TO-30",
+    "input": {"result":{"isError":false,"text":"Task stopped","background":{"status":"stopped"}}},
+    "expected": {"outcome":"failure","status":"error"},
+    "note": "Rule 1a (background): any status other than 'completed' (here 'stopped'; also 'killed', 'failed') -> failure. Rule 6a -> error. Pins that only 'completed' is success, not just 'failed' is failure."
+  },
+  {
+    "id": "TO-31",
+    "input": {"result":{"isError":null,"text":"MCP tool \"mock/slow_echo\" is still running after 2s. It was moved to the background as task kkumm8n15 and keeps running."}},
+    "expected": {"outcome":"success","status":"success"},
+    "note": "Rule 1a does not apply: no background field (the producers set it only for an mcp__ call whose non-error result matches the ack; an old transcript or a Bash run_in_background ack never gets it), so ack-like text alone changes nothing (DD-1 guard). Rule 5 -> success; rule 9 -> success. Classifying by the text instead of the background field would give unresolved / background."
   }
 ]

@@ -24,7 +24,9 @@ verification or a doc change, and gives a size estimate.
    separate bug. Fix: add
    `--retry 4 --retry-all-errors --retry-delay 5` to every release download — `security-scans.yml:191,
    727, 932, 1187` and `gitleaks.yml:38`. Versions and SHA-256 pins stay as they are.
-2. **FIX:** Node.js has a security release due 2026-11-11 for 26.x, 24.x and 22.x, at up to
+2. **MOVED to `2026-11-09-after-11-11-node-image-bump`** (2026-11-09; not part of this task any
+   more, kept below for history).
+   **FIX:** Node.js has a security release due 2026-11-11 for 26.x, 24.x and 22.x, at up to
    HIGH severity
    ([announcement](https://nodejs.org/en/blog/vulnerability/november-2026-security-releases)).
    Once it lands, bump `node:26.13.0-alpine` / `-slim` in the Dockerfiles. Also check which
@@ -155,7 +157,7 @@ verification or a doc change, and gives a size estimate.
 ## Functional Requirements
 
 - FR1: The nightly security-scans workflow installs actionlint and hadolint reliably, and both rows produce real results.
-- FR2: The Docker images use a Node.js version that includes the 2026-11-11 security fixes and a supported Alpine base.
+- FR2: *(moved to `2026-11-09-after-11-11-node-image-bump`)* The Docker images use a Node.js version that includes the 2026-11-11 security fixes and a supported Alpine base.
 - FR3: Log Hub records MCP tool calls that moved to the background (CC ≥ 2.1.319) with the result, status and duration of their `<task-notification>`, joined through the task id in the hand-off acknowledgement; a call whose notification never arrives is not shown as `ok`.
 - FR4: How `denyInsteadOfPrompting` denials appear in hook, OTEL and transcript data is documented in the KB.
 - FR5: The KB documents the PostToolUse-after-interrupt behaviour and its 10 s cap.
@@ -165,7 +167,7 @@ verification or a doc change, and gives a size estimate.
 ## Acceptance Criteria
 
 - [ ] AC1 (FR1): Every github.com release download in `security-scans.yml` and `gitleaks.yml` retries on transient HTTP errors (`--retry 4 --retry-all-errors`). A re-run of security-scans completes, and the actionlint and hadolint rows in `REPORT.md` show pass or a non-empty finding list, never `error`. Real findings are triaged in Notes; they do not have to be zero.
-- [ ] AC2 (FR2): Every place listed in item 2 references a Node release from 2026-11-11 or later; the runtime stage pins an explicit, supported Alpine minor (`-alpine3.2x`); the image builds; `docker run --rm <image> apk info -v` shows musl/zlib/OpenSSL versions no older than today's (3.24.4 baseline) and the nightly container scan has no open HIGH for them; GH-107 Notes has a dated line with the new tag.
+- AC2 (FR2) — *moved to `2026-11-09-after-11-11-node-image-bump`, not checked here:* Every place listed in item 2 references a Node release from 2026-11-11 or later; the runtime stage pins an explicit, supported Alpine minor (`-alpine3.2x`); the image builds; `docker run --rm <image> apk info -v` shows musl/zlib/OpenSSL versions no older than today's (3.24.4 baseline) and the nightly container scan has no open HIGH for them; GH-107 Notes has a dated line with the new tag.
 - [ ] AC3 (FR3): For the PoC fixture shape, server and client show the notification's result, status (`completed`/failed) and duration (~10.1 s, not ~2.2 s); a background call without a notification is not `ok`; old transcripts are unchanged. Covered by `tool-call-outcome.json` rows and an S-SESS-03 step.
 - [ ] AC4 (FR4): `hook-system-overview.md` lists the hooks that fire and do not fire for these denials, the `tool_decision` values (`reject` / `config`) and the transcript fields (`toolDenialKind`, `permissionDecision.reasonType`).
 - [ ] AC5 (FR5): The hook-system-overview KB article mentions the 10 s PostToolUse cap after an interrupt.
@@ -203,3 +205,17 @@ None.
 <!-- Append timestamped notes here as work progresses -->
 
 - PoC evidence for items 1, 3 and 6 (run log, transcript timeline, Node version results): see `notes.md`.
+- 2026-11-09: PoC [`docs/pocs/2026-11-09-1318-mcp-mock-old-new-cc/`](../../../pocs/2026-11-09-1318-mcp-mock-old-new-cc/) found the following for item 3:
+  - Background MCP calls exist **since CC 2.1.212**, not 2.1.319. 2.1.319 only changed the defaults.
+  - A plain `-p` session that closes its MCP connection leaves an **enqueue-only** `failed` notification.
+  - The planned join is correct on 2.1.211, 2.1.318 and 2.1.319, and does not change old transcripts.
+  - Its sanitized captures are the scenario fixtures.
+  - Details are in `impl-plan.md` (DD-1, DD-3, DD-6, DD-19).
+- 2026-11-09: item 6 re-check after the installer change (installer 1.0.97, hook 2.31.2), `node run.mjs 18.19 20 22` in `docs/pocs/2026-11-09-1236-hook-node18-compat/`:
+  - `SUMMARY v18.19.1: 21/21 passed  [exit 0]`
+  - `SUMMARY v20.20.2: 21/21 passed  [exit 0]`
+  - `SUMMARY v22.23.4: 21/21 passed  [exit 0]`
+  - Observed installer warning on `node:18.19-slim` (stderr, first line of `install`; none on `node:22-slim`): `Warning: Node.js 18.19.1 is end-of-life and gets no security fixes. Log Hub hooks still work, but please upgrade to Node.js 22 or newer.`
+- 2026-11-09: item 2 (FR2, AC2, plan chunk 4) moved to its own task `2026-11-09-after-11-11-node-image-bump`, to start after the 2026-11-11 Node release; this task closes without it.
+- 2026-11-09: item 2 (Node image bump, plan chunk 4 / DD-14) gate check: **not met**. The Node.js security release with the 2026-11-11 fixes is scheduled for 2026-11-11, so no 26.x with `-slim` / `-alpine3.24` tags exists yet. Chunk 4 stays unchecked. `Dockerfile`, `docker-dev/Dockerfile`, the version/floor docs, GH-107 notes and the `apk info -v` package check are deferred until that release is published.
+- 2026-11-09: after the demo on local prod — a background MCP call with no notification no longer shows the hand-off ack as its output: both twins show `backgroundPendingText` ("⧗ Moved to the background as task … No result in this log …") and give the call no duration (the ack time was only the hand-off). A live session's later upload with the notification replaces it with the real result (checked on local prod with the demo `live-then-done` session, `scripts/demo-bg-mcp.js`). Scenario S-SESS-03 step 6b updated.

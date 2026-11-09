@@ -2,17 +2,19 @@
 // Workflow extractor — parses Workflow tool_use + queue-operation enqueue events
 // ---------------------------------------------------------------------------
 
-// Internal interfaces — not exported
+// Queue-operation line and task-notification shapes, also reused by
+// background-mcp.ts (background MCP task join).
 
-interface QueueOperationEvent {
+export interface QueueOperationEvent {
   type: 'queue-operation';
   operation: string;
   content?: string;
 }
 
-interface TaskNotification {
+export interface TaskNotification {
   taskId: string | null;
-  toolUseId: string;
+  // null for notifications without <tool-use-id> (e.g. background MCP tasks).
+  toolUseId: string | null;
   status: string;
   summary: string | null;
   result: string | null;
@@ -55,11 +57,9 @@ function extractTagContent(xml: string, tag: string): string | null {
   return match ? match[1] : null;
 }
 
-function parseTaskNotification(xmlStr: string): TaskNotification | null {
+export function parseTaskNotification(xmlStr: string): TaskNotification | null {
   try {
-    const toolUseIdRaw = extractTagContent(xmlStr, 'tool-use-id');
-    if (!toolUseIdRaw) return null;
-    const toolUseId = toolUseIdRaw.trim();
+    const toolUseId = extractTagContent(xmlStr, 'tool-use-id')?.trim() || null;
     const taskId = extractTagContent(xmlStr, 'task-id')?.trim() ?? null;
     const status = extractTagContent(xmlStr, 'status')?.trim() ?? '';
     const summary = extractTagContent(xmlStr, 'summary')?.trim() ?? null;
@@ -234,7 +234,7 @@ export function extractWorkflows(events: unknown[]): WorkflowRun[] {
     if (typeof qe.content !== 'string') continue;
 
     const notification = parseTaskNotification(qe.content);
-    if (!notification) continue;
+    if (!notification || notification.toolUseId === null) continue;
 
     enqueueMap.set(notification.toolUseId, notification);
   }

@@ -170,6 +170,9 @@ test('@S-ADM-01 admin panel only for admins, tabs and deep links work @mode-a @m
   });
 
   await test.step('4. UI (ADMIN): «Admin Panel» → #/admin with System Info active', async () => {
+    // Leave the app before swapping identity: sessions are `rolling`, so a request still in flight
+    // from the previous user's page answers with that user's Set-Cookie and overwrites the new one.
+    await page.goto('about:blank');
     await page.context().clearCookies();
     await admin.signIn(page);
     await page.goto('/#/main');
@@ -203,6 +206,7 @@ test('@S-ADM-01 admin panel only for admins, tabs and deep links work @mode-a @m
       await expect(dot).toBeVisible();
       await expect(banner).toBeVisible();
 
+      await page.goto('about:blank');
       await page.context().clearCookies();
       await teamOwner.signIn(page);
       await page.goto('/#/main');
@@ -216,6 +220,7 @@ test('@S-ADM-01 admin panel only for admins, tabs and deep links work @mode-a @m
       await expect(dot).toHaveCount(0);
       await expect(banner).toHaveCount(0);
 
+      await page.goto('about:blank');
       await page.context().clearCookies();
       await admin.signIn(page);
       await db.query('UPDATE log_hub_release_check SET latest_tag = $1 WHERE id = 1', [`v${origin.version}`]);

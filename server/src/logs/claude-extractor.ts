@@ -26,6 +26,11 @@ import {
   type ToolStatRow,
 } from './tool-stats';
 import { inferToolIsInitial, walkDeferredToolsDelta } from './turn-walk';
+import {
+  collectBackgroundTaskNotifications,
+  isBackgroundCandidate,
+  matchBackgroundAckInContent,
+} from './background-mcp';
 
 export type { FileCategory };
 
@@ -358,6 +363,12 @@ interface ToolResultRecord {
   toolUseResult: AnyRecord | null;
   /** The result line's top-level `toolDenialKind`, when Claude Code recorded one. */
   denialKind: string | null;
+  /**
+   * Task id of a background-MCP hand-off ack in the **full** result text (not the
+   * `MAX_RESULT_TEXT_SCAN` cut), else null. Name-free: the join decides with
+   * `isBackgroundCandidate` whether it applies.
+   */
+  backgroundTaskId: string | null;
 }
 
 /**
@@ -853,6 +864,8 @@ export function extractClaudeStats(
   const toolCalls: PendingToolCall[] = [];
   const toolUseBlocksByMessage = new Map<string, number>();
   const toolResults = new Map<string, ToolResultRecord>();
+  // Background-MCP task notifications, keyed by task id (joined to acks after the walk).
+  const backgroundNotifications = collectBackgroundTaskNotifications(lines);
 
   // promptId → earliest qualifying user event timestamp
   const promptMap = new Map<string, number>();
@@ -1080,6 +1093,7 @@ export function extractClaudeStats(
               resultTs: isNaN(resultTs) ? null : resultTs,
               toolUseResult,
               denialKind,
+              backgroundTaskId: matchBackgroundAckInContent(b['content']),
             });
           }
 
@@ -1200,6 +1214,19 @@ export function extractClaudeStats(
         ? (toolUseBlocksByMessage.get(call.messageKey) ?? 1)
         : 1;
 
+    // Background-MCP hand-off (DD-1/DD-2): the ack names a task whose notification, if any,
+    // carries the real status and end time.
+    const backgroundTaskId =
+      result !== null &&
+      result.backgroundTaskId !== null &&
+      isBackgroundCandidate(call.name, result.isError)
+        ? result.backgroundTaskId
+        : null;
+    const notification =
+      backgroundTaskId === null
+        ? undefined
+        : backgroundNotifications.get(backgroundTaskId);
+
     const outcome = classifyToolOutcome(
       result === null
         ? null
@@ -1208,12 +1235,16 @@ export function extractClaudeStats(
             text: result.text,
             interrupted: result.toolUseResult?.['interrupted'] === true,
             denialKind: result.denialKind ?? undefined,
+            ...(backgroundTaskId !== null
+              ? { background: { status: notification?.status ?? null } }
+              : {}),
           },
     );
     const duration = resolveToolDuration({
       toolUseResult: result?.toolUseResult ?? null,
       assistantTs: call.assistantTs,
       resultTs: result?.resultTs ?? null,
+      backgroundEndTs: notification?.ts ?? null,
     });
 
     let row = toolStatRows.get(call.name);

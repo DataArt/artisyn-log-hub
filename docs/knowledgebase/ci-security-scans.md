@@ -3,7 +3,7 @@ type: reference
 title: CI Security Scans
 description: The report-only security workflows (security-scans, virustotal, security-report), their triggers, the SNYK_TOKEN/VIRUS_TOTAL_KEY secrets, fork behaviour, the unified row format and label table, the PR-description block, the ci-reports branch and badge, the .snyk policy, the config-guard allowlist, the FR-27 repository settings and the owner rollout; also lists checks.yml / release.yml and the release VirusTotal scopes
 tags: [ci, security, github-actions, snyk, virustotal, supply-chain]
-timestamp: 2026-10-29
+timestamp: 2026-11-09
 ---
 
 # CI Security Scans
@@ -56,6 +56,12 @@ On a docs-only PR the scan jobs still run, skip their tool steps and write `skip
 note `docs-only change`. Every scan job uploads its raw tool output as artifact `raw-<job>`
 (14 days) and writes its rows to `$GITHUB_STEP_SUMMARY`. Every `npm ci`/`bun install` in CI runs
 with `--ignore-scripts`.
+
+Every release-binary download in the scan workflows (Snyk CLI in `snyk-oss` and `container`,
+actionlint in `workflow-lint`, hadolint in `dockerfile-lint`, gitleaks in `gitleaks.yml`) is
+`curl -fsSL --retry 4 --retry-all-errors --retry-delay 5`, so a transient GitHub/CDN error is
+retried instead of failing the job. Versions and SHA-256 pins are unchanged by the retries; a new
+download must use the same flags (`curl`, never `wget`).
 
 ## Secrets
 

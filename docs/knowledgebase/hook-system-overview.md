@@ -5,7 +5,7 @@ description: "Current behaviour of the Claude Code hook: where its source lives 
 tags:
   - hooks
   - otel
-timestamp: "2026-11-03T00:00:00+04:00"
+timestamp: "2026-11-09T00:00:00+04:00"
 ---
 
 # Hook System Overview
@@ -55,6 +55,27 @@ Detached processes that are **not** hook entry points: `prompt-upload-hook.js` (
 upload), `otel-receiver.js` (long-lived loopback OTLP receiver), `tool-wrap-tee.js` (stdout tee of
 a wrapped CLI tool), `post-turn-analysis-worker.js`, and `otel-ensure-receiver.js` (a user-level
 `SessionStart` hook the installer copies to `~/.artisyn/otel/bin/` in `proxy` mode only).
+
+**`permissions.denyInsteadOfPrompting` (Claude Code 2.1.319).** With this setting a call that would
+have prompted is denied without a prompt. Observed for one denied Bash call:
+
+- Hooks that fire: `PreToolUse`, `PermissionRequest` (no `tool_use_id`, so the viewer joins it by
+  name + input — `lifecycle-hook.js:146-149`) and `PostToolBatch` (its `tool_calls[]` carries the
+  id and the denial text).
+- Hooks that do **not** fire: `PermissionDenied`, `PostToolUse`, `PostToolUseFailure`.
+- OTEL `claude_code.tool_decision`: `decision:"reject"`, `source:"config"` — the same source as a
+  deny rule or an auto-allow, so OTEL cannot single these denials out; nothing is projected for it.
+- Transcript `tool_result`: `is_error:true`, `toolDenialKind:"permission-rule"`, and
+  `permissionDecision {decision:"reject", source:"config", reasonType:"asyncAgent",
+  reasonCode:"bashMiss:no-rule-match"}`.
+- The server counts the call as a denial and the UI shows "⊘ rejected". There is no separate
+  badge, because `reasonType:"asyncAgent"` likely also marks headless runs that do not use the
+  setting.
+
+**`PostToolUse` after an interrupt (Claude Code 2.1.319).** `PostToolUse` also fires after a
+Ctrl+Enter interrupt, with a 10 s cap; a hook still running at the cap is killed. `lifecycle-hook.js`
+calls `writeTelemetry` (`lifecycle-hook.js:205`) before the OTEL re-arm, so only the re-arm can be
+lost, never the event.
 
 There was once a `PreToolUse` guardrail (`guardrail-hook.js`, `guardrail*` config keys). It is
 gone; leftover `guardrail*` keys in `log-hub.json` are ignored but deliberately **not** removed by

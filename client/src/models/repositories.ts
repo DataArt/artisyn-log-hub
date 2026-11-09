@@ -602,7 +602,11 @@ export interface AttributionUsageReportData {
 // report and its analytics view can never disagree.
 
 /** Which source produced a tool call's duration. Displayed, never inferred. */
-export type DurationSource = 'toolUseResult' | 'taskTotal' | 'timestampDelta';
+export type DurationSource =
+  | 'backgroundTask'
+  | 'toolUseResult'
+  | 'taskTotal'
+  | 'timestampDelta';
 
 export interface ToolAnalyticsRow {
   tool: string;

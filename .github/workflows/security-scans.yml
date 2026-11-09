@@ -188,7 +188,7 @@ jobs:
         if: steps.gate.outputs.run == 'true'
         run: |
           set -eu
-          curl -fsSL -o "$RUNNER_TEMP/snyk" \
+          curl -fsSL --retry 4 --retry-all-errors --retry-delay 5 -o "$RUNNER_TEMP/snyk" \
             "https://downloads.snyk.io/cli/v${SNYK_VERSION}/snyk-linux"
           echo "${SNYK_SHA256}  $RUNNER_TEMP/snyk" | sha256sum -c -
           chmod +x "$RUNNER_TEMP/snyk"
@@ -724,7 +724,7 @@ jobs:
         run: |
           set -eu
           archive="actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz"
-          curl -fsSL -o "$RUNNER_TEMP/$archive" \
+          curl -fsSL --retry 4 --retry-all-errors --retry-delay 5 -o "$RUNNER_TEMP/$archive" \
             "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/${archive}"
           echo "${ACTIONLINT_SHA256}  $RUNNER_TEMP/$archive" | sha256sum -c -
           tar -xzf "$RUNNER_TEMP/$archive" -C "$RUNNER_TEMP" actionlint
@@ -929,7 +929,7 @@ jobs:
         continue-on-error: true
         run: |
           set -eu
-          curl -fsSL -o "$RUNNER_TEMP/hadolint" \
+          curl -fsSL --retry 4 --retry-all-errors --retry-delay 5 -o "$RUNNER_TEMP/hadolint" \
             "https://github.com/hadolint/hadolint/releases/download/v${HADOLINT_VERSION}/hadolint-linux-x86_64"
           echo "${HADOLINT_SHA256}  $RUNNER_TEMP/hadolint" | sha256sum -c -
           chmod +x "$RUNNER_TEMP/hadolint"
@@ -1184,7 +1184,7 @@ jobs:
         if: steps.gate.outputs.run == 'true'
         run: |
           set -eu
-          curl -fsSL -o "$RUNNER_TEMP/snyk" \
+          curl -fsSL --retry 4 --retry-all-errors --retry-delay 5 -o "$RUNNER_TEMP/snyk" \
             "https://downloads.snyk.io/cli/v${SNYK_VERSION}/snyk-linux"
           echo "${SNYK_SHA256}  $RUNNER_TEMP/snyk" | sha256sum -c -
           chmod +x "$RUNNER_TEMP/snyk"

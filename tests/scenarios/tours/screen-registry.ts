@@ -672,7 +672,7 @@ const SESSION_TAB_ROWS: Array<Omit<ScreenRow, 'story' | 'role' | 'modes' | 'rout
     tab: { group: 'session', id: 'logs' },
     title: 'Session: Logs',
     expectSelector: '[data-turn-index]',
-    docRef: { file: SESSION_DOC, heading: 'Timeline' },
+    docRef: { file: SESSION_DOC, heading: 'Logs' },
     screenshot: true,
   },
   {

@@ -5,7 +5,7 @@ description: "Session log view (Logs tab): the /logs payload contract (agent- pr
 tags:
   - client
   - logs
-timestamp: "2026-11-03T00:00:00+04:00"
+timestamp: "2026-11-09T00:00:00+04:00"
 ---
 
 # Session Log View
@@ -415,7 +415,9 @@ permission event belongs to. Nothing else in the client hard-codes tool names fo
 - **Status** (`outcomeToStatus` over `classifyToolOutcome`): no result → `'missing'` ("output not
   captured"); `interrupted`, a `denialKind`, or a rejection marker on an `is_error` result →
   `'rejected'` ("⊘ rejected", "⏸ interrupted" when `interrupted`, tooltip from `denialKind`);
-  other `is_error` → `'error'` ("✗ error"); else `'success'`. A marker in a successful result is
+  other `is_error` → `'error'` ("✗ error"); a background MCP call (below) → `'background'`
+  without a notification, else `'success'` / `'error'` by its `<status>`; else `'success'`. A
+  marker in a successful result is
   ordinary output. The Statistics walker (`usage/session-usage-derive.ts`) and the server twin
   `server/src/logs/tool-stats.ts` use the same rule. Rules and examples:
   `algorithms/tool-call-outcome.md`.
@@ -440,6 +442,49 @@ permission event belongs to. Nothing else in the client hard-codes tool names fo
   non-empty, else the first main event's `cwd`; forward slashes, no trailing slash, `''` when
   unknown. `ToolViewProvider` passes it to the tool views, which show paths repo-relative with
   `toRepoRelative` (`packages/bash-view/src/display-paths.ts`, `@loghub/bash-view`). Copy actions use the original text.
+
+### Background MCP calls (CC ≥ 2.1.212)
+
+Since Claude Code 2.1.212 an MCP call still running after a few seconds is moved to a background
+task: its `tool_result` is only an ack ("… It was moved to the background as task `<id>` …"), and
+the real end arrives later as a `<task-notification>`. `session-log/background-mcp.ts` is the client
+twin of `server/src/logs/background-mcp.ts` (rules, notification sources and the server side:
+[tool-monitoring.md](tool-monitoring.md) § "Background MCP calls").
+
+- **Detection (shape only, old and new CC):** the call name starts with `mcp__`, the result is not
+  `is_error: true` (`isBackgroundCandidate`), and the **full** result text matches
+  `BACKGROUND_ACK_RE` (`matchBackgroundAckTaskId`, never the 200-char scan cut). No match — old
+  CC, in-session MCP calls, Bash `run_in_background` acks — keeps today's handling.
+- **Notifications** (`collectBackgroundTaskNotifications(events)`): string-content user lines
+  starting with `<task-notification>` (which `buildToolResultIndex` skips) and `queue-operation`
+  `enqueue` lines (local `QueueOperationLine` guard, no `TelemetryEvent` change); the user line
+  wins for the timestamp, the enqueue is the fallback (a `-p` run that ends its turn writes only a
+  `failed` enqueue).
+- **Result index** (`buildToolResultIndex`): such a result gets `background: {taskId, status}`
+  (`status` null without a notification). With a notification its `<result>` (or `''`) replaces
+  `content` and `bytes`, and its time (`new Date(ts).toISOString()`) replaces `timestamp`, so the
+  Logs modal output and `durationMs` (`endedAt − startedAt`) show the real end. Without one,
+  `content` is `backgroundPendingText(taskId)` instead of the ack, and `buildAllToolCalls` gives
+  the call no `durationMs` (the ack time is only the hand-off). A live session's later upload with
+  the notification turns the call into its real result.
+- **Status** (`outcomeToStatus`, DD-4 of the plan, also in `algorithms/tool-call-outcome.md`):
+  no notification → `'background'`; `completed` → `'success'`; any other status → `'error'`; no
+  `interrupted`, no `denialKind`. `classifyToolOutcome` gives `unresolved` / `success` / `failure`,
+  so a call that may still be running never inflates the failure rate.
+- **Badge** (`StatusBadge.tsx`): `⧗ background`, the `missing` badge's muted style, tooltip
+  "Moved to the background; no completion notification in this log (still running, or the session
+  ended first)."
+- **Duration:** the Logs modal header shows `⏱ <duration>` for `mcp__*` calls as well as
+  Bash/PowerShell (`ToolCallView.tsx`). The Statistics walker (`usage/session-usage-derive.ts`)
+  uses the notification time first, source `backgroundTask`, labelled "background task
+  (notification time)".
+
+The four PoC shapes: `new-full` (user line + enqueue: `slow_echo` ✓ 8.1 s, `slow_fail` ✗ 10.0 s),
+`new-close` (enqueue only, `Task failed: Connection closed`: ✗ 10.3 s), `new-live` (no
+notification: `⧗ background`, no duration, the "No result in this log" text) and `old-full` (CC before 2.1.212: ✓ 8.0 s, unchanged). The
+server's per-session `session_tool_stats` of sessions stored before this change keeps the ack-based
+numbers until re-ingest or `recompute-all-sessions`. Re-capture with the PoC
+`docs/pocs/2026-11-09-1318-mcp-mock-old-new-cc/` when Claude Code changes the wording or shape.
 
 ### Shared tool view (`tool-call-view/`)
 
