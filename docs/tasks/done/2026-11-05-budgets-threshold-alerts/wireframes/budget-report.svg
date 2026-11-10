@@ -73,13 +73,10 @@
   <text x="565" y="174" class="lbl">DATE RANGE</text>
   <rect x="565" y="182" width="130" height="36" rx="6" fill="#ffffff" stroke="#d1d5db"/>
   <text x="578" y="205" font-size="14" class="t">Sep 1 → Nov 10</text>
-  <text x="711" y="174" class="lbl">BUDGET</text>
-  <rect x="711" y="182" width="190" height="36" rx="6" fill="#ffffff" stroke="#d1d5db"/>
-  <text x="724" y="205" font-size="14" class="t">All budgets (2)  ⌄</text>
   <rect x="1174" y="182" width="90" height="36" rx="6" fill="#2d4fd6"/>
   <text x="1219" y="205" font-size="14" font-weight="600" fill="#ffffff" text-anchor="middle">Generate</text>
-  <text x="917" y="196" class="note">No Group by, no branch / user / attribute</text>
-  <text x="917" y="210" class="note">filters, so spend always equals FR-2 (open q.)</text>
+  <text x="711" y="196" class="note">No Group by, no branch / user / attribute filters, no budget picker —</text>
+  <text x="711" y="210" class="note">every budget of the scope is listed, so spend always equals FR-2.</text>
 
   <text x="565" y="268" font-size="14" font-style="italic" class="muted">On-page preview — the PDF export contains the same data in print layout</text>
   <rect x="1107" y="247" width="157" height="34" rx="6" fill="#ffffff" stroke="#2d4fd6"/>
@@ -141,7 +138,7 @@
 
   <!-- budget 2: Week $80 (collapsed list) -->
   <text x="597" y="748" font-size="14" font-weight="700" class="t">Weekly budget · $80.00 <tspan font-weight="400" class="muted" font-size="12">· Europe/Berlin · notify at 75 / 100 %</tspan></text>
-  <text x="597" y="772" class="cell"><tspan font-weight="700">9–15 Nov (current)</tspan> · <tspan class="mono">$32.80</tspan> · 41 % · forecast <tspan class="mono">$57.40</tspan></text>
+  <text x="597" y="772" class="cell"><tspan font-weight="700">9–15 Nov (current)</tspan> · <tspan class="mono">$32.80</tspan> · 41 % · day 2 of 7 · forecast <tspan class="mono" fill="#b45309">$114.80 ⚠</tspan> (144 %)</text>
   <text x="597" y="792" class="cell muted">2–8 Nov · <tspan class="mono">$61.20</tspan> · 77 % · 75 % crossed  ·  26 Oct–1 Nov · <tspan class="mono">$44.10</tspan> · 55 %  ·  … 7 more weeks</text>
   <line x1="597" y1="810" x2="1231" y2="810" stroke="#e5e7eb"/>
 
@@ -151,6 +148,6 @@
   <text x="611" y="868" font-size="12" class="muted">"No budget is set for this scope." followed by spend per calendar month in the range (and its top slices).</text>
 
   <text x="597" y="914" class="note">FR-11: same server service as the Spend view, so spend / % / forecast match it.</text>
-  <text x="597" y="930" class="note">Forecast and risk flag only for the current period. "Budget" picker: all budgets or one.</text>
-  <text x="597" y="946" class="note">Team budgets: the team page has no Reports tab today — whether it gets one is an open question.</text>
+  <text x="597" y="930" class="note">Forecast and risk flag only for the current period; past periods show spend, % and crossed thresholds.</text>
+  <text x="597" y="946" class="note">Repository-only: team budgets are on the team Spend tab (team Reports is task 2026-11-10-team-analytics-reports).</text>
 </svg>

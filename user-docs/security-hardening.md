@@ -120,7 +120,8 @@ Settings: `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM`, `SMTP_USER`, `SMTP_PASSWORD`, `
     on the first email.
   - When `SMTP_HOST` is unset, password reset is unavailable: the login page shows
     "Forgot password?" disabled with the hint "SMTP server is not configured", and no reset token is
-    issued. Password-changed notifications are not sent.
+    issued. Password-changed notifications are not sent, and budget threshold notices stay
+    in-app only.
   - `ADMIN_CONTACT_EMAIL` is optional.
 - **Mode 3** (`password-confirm`): `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM` and `ADMIN_CONTACT_EMAIL`
   are required, and the relay must be reachable at startup — otherwise the server does not start.
@@ -139,6 +140,9 @@ which a caller controls. Set it to the canonical HTTPS address users open, for e
 - Outside production it defaults to `http://localhost:5173` (the development client).
 - If it is missing anyway, the email is not sent and the server logs
   `mail: PUBLIC_BASE_URL not set — email link not sent` once per process.
+- A budget threshold email ([Budgets](budgets.md#notices-bell-banner-and-email)) takes its link
+  to the Spend tab from the same `PUBLIC_BASE_URL`; when it is missing, that email is still sent,
+  without the link.
 
 Links shown in the admin panel to a signed-in admin (an admin-generated reset link) still use
 the address the admin is using.

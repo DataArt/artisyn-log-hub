@@ -17,6 +17,7 @@ import {
   UsageAnalyticsPanel,
 } from './UsageAnalyticsPanel';
 import { ChangeSurfaceBarChart } from './ChangeSurfaceBarChart';
+import { BudgetBurnView } from './BudgetBurnView';
 import type { ChangeSurfaceMetricKey } from './change-surface-metrics';
 import type {
   FilesMetricKey,
@@ -79,6 +80,19 @@ export function AnalyticsChartArea({
         branches={state.branches}
         users={state.users}
         onSessionClick={onSessionClick}
+      />
+    );
+  }
+
+  // Own endpoint (analytics/budget-burn) spanning the budget period, so it ignores the time
+  // window and the shared timeline payload.
+  if (state.view === 'budget-burn') {
+    return (
+      <BudgetBurnView
+        repoId={repoId}
+        teamId={teamId}
+        branches={state.branches}
+        users={state.users}
       />
     );
   }

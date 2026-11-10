@@ -5,7 +5,7 @@ description: "React SPA routing, layout, provider hierarchy, major page componen
 tags:
   - client
   - routing
-timestamp: "2026-11-05T00:00:00+04:00"
+timestamp: "2026-11-10T00:00:00+04:00"
 ---
 
 # Client Component Hierarchy
@@ -98,7 +98,7 @@ into two barrels:
 
 | Chunk | Contents | Barrel |
 |---|---|---|
-| Repository tabs | `RepositoryAnalytics`, `RepoToolsTab`, `RepoOkfTab`, `RepoOtelTab` (`RepositoryTeamWideTabs`; `RepoToolsTab` is also the session Tools/MCP tab), and `LiveModal` (the OTEL Live view, lazy in `LiveNavItem` — it shares the OTEL chart code and Recharts, so no own chunk) | `pages/repository/repository-tabs-lazy-group.ts` |
+| Repository tabs | `RepositoryAnalytics`, `RepoToolsTab`, `RepoOkfTab`, `RepoOtelTab` (`RepositoryTeamWideTabs`; `RepoToolsTab` is also the session Tools/MCP tab), `SpendTab` (repository and team Spend tab; no own chunk), and `LiveModal` (the OTEL Live view, lazy in `LiveNavItem` — it shares the OTEL chart code and Recharts, so no own chunk) | `pages/repository/repository-tabs-lazy-group.ts` |
 | Reports | `ReportsPanel` — kept apart because it carries the PDF and zip export libraries (~1.4 MB), which the light tabs above must not download | own `import()` in `RepositoryTeamWideTabs` |
 | Session tabs | `SessionChartsTab`, `SessionChangeSurfaceTab`, `SessionHarnessUsageTab`, `SessionOkfTab`, `SessionSysctxAnatomyTab`, `SessionOtelTab`, `SessionBashTab` (`SessionTabContent`, through `session-lazy-tabs.ts`) | `pages/repository/session-tabs-lazy-group.ts` |
 
@@ -177,8 +177,18 @@ Reads `repoId` and optional `teamId` from `useParams()`; no props. A thin shell:
 `useRepositoryViewState.ts`, every query of the page in `useRepositoryData.ts` (query keys
 `['repo-sessions' | 'repo-summary' | 'repo-contexts', repoId, teamId]`,
 `['session-logs', repoId, sessionId, teamId]`, …). Main tabs (`mtab`, `REPO_MAIN_TABS`): Sessions,
-Analytics, Reports, Tools/MCP, OKF, OTEL, Settings; Tools/MCP, OKF and OTEL only where
+Analytics, Spend, Reports, Tools/MCP, OKF, OTEL, Settings; all but Sessions and Spend only where
 `canSeeTeamWideTabs` allows.
+
+**Spend tab** (`mtab=spend`) — its `PageTabsContent` is rendered **outside** `RepositoryTeamWideTabs` and
+its registry row has no `visible` predicate, so a plain member of a restricted team reaches it (the server
+answers with an own-spend `restricted` view; see [budgets.md](budgets.md)). The tab fallback keeps
+`spend` like `sessions` when `canSeeTeamWideTabs` is false. URL params (`useSpendUrlState.ts`):
+`sp=day|week|month` (default `month`, dropped from the URL) and `so=<offset ≤ 0>` (default 0, clamped to
+`[-400, 0]`); a period change resets `so`. Writes use `{ replace: true }`. The same params drive the
+team Spend tab. Settings › Budgets is `stab=budgets`; a budget notice opens
+`#/repos/:id?mtab=spend&sp=…&so=…`, its team-repo variant, or `#/teams/:id?ttab=spend&…`
+(`budgetNoticePath` in `pages/budgets/budget-format.ts`).
 
 **Sessions tab** — session list on the left, `SessionDetailPane` on the right.
 
@@ -194,8 +204,12 @@ Analytics, Reports, Tools/MCP, OKF, OTEL, Settings; Tools/MCP, OKF and OTEL only
 Standalone page (not a `RepositoryView` tab). Reads `repoId` via `useParams()`. `useQuery(['hook-state', repoId])` → `fetchHookState`. Renders, in order: header (repo URL) with a manual refresh button; `HookStatusCard` (orange/green status summary — installed vs. latest version, last activity, "Copy upgrade cmd" button); Recommendations card; Non-uploadable logs table; Errors & warnings list; a dark monospace hook-log-tail `<pre>` block (intentional dark-surface exception — see `ui-principles.md`). 404/403 responses render "not reported yet" / "No access" via `PageState`.
 
 ### `TeamDetailPage` and `ApiKeysPage`
-Their tabs (`TEAM_TABS`: Members, Repositories, Invitations and, with team-wide access, OTEL;
-`API_KEYS_TABS`: Install, Keys) are local `useState`, seeded once from `location.state` (see
+`TEAM_TABS`: Members, Repositories, Invitations, Spend (every member) and, with team-wide access
+(`canSeeOtel`), OTEL and Settings (the team Budgets section). The team tab is URL-backed: `ttab=<TeamTab>`
+(`useTeamTabState` in `TeamDetailPage.tsx`), else the `location.state` seed, else `members`; a seed is
+written into `ttab` once with `replace`, so the tab survives a refresh, and the default tab is dropped from
+the URL. The team Spend tab uses the same `sp` / `so` params as the repository one.
+`API_KEYS_TABS` (Install, Keys) stay local `useState`, seeded once from `location.state` (see
 [location.state tab seeding](#locationstate-tab-seeding)).
 
 ### `AdminPage` (`pages/admin/AdminPage.tsx`)
@@ -229,10 +243,10 @@ shapes, one file per area; server code never imports them.
 
 **API fetching** — all API calls go through `src/viewer/api.ts`. The internal `apiFetch` wrapper redirects to `#/login` on 401. All data is cached via react-query (`useQuery` / `useMutation`).
 
-**Tab navigation** — `RepositoryView` and `AdminPage` use URL-backed tab state via `useSearchParams()` (see `useRepositoryViewState.ts` and `useAdminTabState.ts`) so the active tab is bookmarkable/shareable and survives refresh. `TeamDetailPage.tsx` and `ApiKeysPage.tsx` are exceptions — they keep local `useState` tab state, seeded once from `location.state` (below).
+**Tab navigation** — `RepositoryView`, `AdminPage` and `TeamDetailPage` (`ttab`) use URL-backed tab state via `useSearchParams()` (see `useRepositoryViewState.ts`, `useAdminTabState.ts` and `useTeamTabState` in `TeamDetailPage.tsx`) so the active tab is bookmarkable/shareable and survives refresh. `ApiKeysPage.tsx` is the exception — it keeps local `useState` tab state, seeded once from `location.state` (below).
 
 ### `location.state` tab seeding
-Team and API-keys tabs have no URL param. A link that must open a specific tab (an All views map leaf, Home's Get started "Install the hook") passes it as router state: `navigate(path, { state: { teamTab } })` / `{ state: { apiKeysTab: 'install' } }` (or `<Link state>`). `TeamDetailPage` (`initialTeamTab`) and `ApiKeysPage` (`initialApiKeysTab`) read `location.state` once as the `useState` initial value and accept it only when it is a valid `TEAM_TABS` / `API_KEYS_TABS` id; anything else falls back to the first tab. No URL param is added, so a reload keeps the tab only while the history entry keeps its state.
+API-keys tabs have no URL param (team tabs have `ttab`, but a `teamTab` state seed still works and is copied into `ttab`). A link that must open a specific tab (an All views map leaf, Home's Get started "Install the hook") passes it as router state: `navigate(path, { state: { teamTab } })` / `{ state: { apiKeysTab: 'install' } }` (or `<Link state>`). `ApiKeysPage` (`initialApiKeysTab`) reads `location.state` once as the `useState` initial value and accepts it only when it is a valid `API_KEYS_TABS` id; anything else falls back to the first tab. No URL param is added, so a reload keeps the tab only while the history entry keeps its state. `TeamDetailPage` (`stateTeamTab`) accepts a valid `TEAM_TABS` id the same way, but writes it into `ttab` (see [TeamDetailPage](#teamdetailpage-and-apikeyspage)).
 
 ### Per-user browser storage keys
 `lib/user-storage.ts` (`readUserItem` / `writeUserItem` / `removeUserItem`, every access in try/catch, a parse failure reads as `undefined`) stores per-user items in `localStorage` under `artisyn:<userId>:<name>`; the user id is `useAuth().user.id`, and without a user nothing is read or written.

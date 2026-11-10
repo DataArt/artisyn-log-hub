@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect } from 'react';
+import { lazy, Suspense, useState, useCallback, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQueryClient, useMutation } from '@tanstack/react-query';
 import { Loader2, Lock, RefreshCw } from 'lucide-react';
@@ -23,8 +23,16 @@ import { useOpenBranches } from './useOpenBranches';
 import { useNewSessionPoll } from './useNewSessionPoll';
 import { useSessionListRefreshing } from './useSessionListRefresh';
 import { NotificationDot } from '../../ui/notification-dot';
+import { LazyFallback } from '../../components/LazyFallback';
 
 export type { AnalyticsState };
+
+// Loads through the repository tabs barrel, so it shares their chunk (DD-16).
+const SpendTab = lazy(() =>
+  import('./repository-tabs-lazy-group').then((m) => ({
+    default: m.SpendTab,
+  })),
+);
 
 function getHttpStatusCode(error: unknown): number | null {
   if (error && typeof error === 'object' && 'statusCode' in error) {
@@ -308,11 +316,13 @@ export function RepositoryView() {
 
   /**
    * `mainTab` is URL state, so a hand-typed `?tab=settings` would otherwise render
-   * a panel whose trigger is not on screen. Fall back to Sessions — the one tab
-   * every caller keeps.
+   * a panel whose trigger is not on screen. Fall back to Sessions — Sessions and Spend are the
+   * tabs every caller keeps (Spend: DD-16).
    */
   const visibleMainTab: MainTab =
-    canSeeTeamWideTabs || mainTab === 'sessions' ? mainTab : 'sessions';
+    canSeeTeamWideTabs || mainTab === 'sessions' || mainTab === 'spend'
+      ? mainTab
+      : 'sessions';
 
   return (
     <div className="flex flex-col h-full">
@@ -408,6 +418,17 @@ export function RepositoryView() {
             targetToolUseId={targetToolUseId}
             onTargetToolUseConsumed={clearTargetToolUse}
           />
+        </PageTabsContent>
+
+        {/* Outside the team-wide wrapper: every member sees Spend (DD-16, DD-9). */}
+        <PageTabsContent value="spend" className="flex-1 min-h-0">
+          {visibleMainTab === 'spend' && (
+            <Suspense fallback={<LazyFallback />}>
+              <SpendTab
+                scope={teamId !== undefined ? { repoId, teamId } : { repoId }}
+              />
+            </Suspense>
+          )}
         </PageTabsContent>
 
         {canSeeTeamWideTabs && (

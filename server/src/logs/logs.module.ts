@@ -11,6 +11,7 @@ import { ApiKeysModule } from '../api-keys/api-keys.module';
 import { LOG_INGEST_ROUTES } from '../common/body-limits';
 import { throwMiddlewareErrors } from '../common/middleware-errors';
 import { getLogsBodyLimit } from '../common/logs-body-limit';
+import { MailModule } from '../mail/mail.module';
 import { TeamsModule } from '../teams/teams.module';
 import { ActiveSessionsService } from './analytics/active-sessions.service';
 import { ClaudeVersionUsageService } from './analytics/claude-version-usage.service';
@@ -18,6 +19,16 @@ import { ProductivityAnalyticsService } from './analytics/productivity-analytics
 import { TokenAnalyticsService } from './analytics/token-analytics.service';
 import { ToolAnalyticsService } from './analytics/tool-analytics.service';
 import { UsageAnalyticsController } from './analytics/usage-analytics.controller';
+import { BudgetAccessService } from './budgets/budget-access.service';
+import { BudgetNoticesController } from './budgets/budget-notices.controller';
+import { BudgetNoticesService } from './budgets/budget-notices.service';
+import { BudgetThresholdScheduler } from './budgets/budget-threshold.scheduler';
+import {
+  RepositoryBudgetsController,
+  TeamBudgetsController,
+} from './budgets/budgets.controller';
+import { BudgetsService } from './budgets/budgets.service';
+import { SpendService } from './budgets/spend.service';
 import { ChangeSurfaceAggregateService } from './change-surface/change-surface-aggregate.service';
 import { ChangeSurfaceService } from './change-surface/change-surface.service';
 import { ExportImportJobCleanupScheduler } from './export-import-job-cleanup.scheduler';
@@ -65,6 +76,8 @@ import { UploadQueueService } from './upload-queue.service';
     // Claude Code version usage report reads the release history via AiToolVersionsService.
     AiToolVersionsModule,
     ApiKeysModule,
+    // Budget threshold notices email the recipients (BudgetNoticesService → MailService).
+    MailModule,
     ScheduleModule.forRoot(),
     forwardRef(() => TeamsModule),
     // RepositoriesController's getRepositorySessions()/
@@ -93,6 +106,11 @@ import { UploadQueueService } from './upload-queue.service';
     OtelTeamFactsController,
     // OTEL Live view (2026-11-04 otel-live-view): header status + live tree routes.
     OtelLiveController,
+    // Budgets (2026-11-05 budgets-threshold-alerts): repository / team budget + Spend routes
+    // and the caller's notice tray.
+    RepositoryBudgetsController,
+    TeamBudgetsController,
+    BudgetNoticesController,
   ],
   providers: [
     LogsService,
@@ -148,6 +166,13 @@ import { UploadQueueService } from './upload-queue.service';
     OtelLiveReader,
     // Session Map: incremental session logs behind GET …/logs/delta (session-map DD-7).
     SessionLogsDeltaService,
+    // Budgets: scope access (DD-2), CRUD + event log, the caller-independent spend read model
+    // shared by Spend / report / burn / job, the notices, and the threshold job (DD-14).
+    BudgetAccessService,
+    BudgetsService,
+    SpendService,
+    BudgetNoticesService,
+    BudgetThresholdScheduler,
   ],
   exports: [RepositoriesService, HookStateService, UploadQueueService],
 })

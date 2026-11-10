@@ -284,6 +284,51 @@ export function selectSubagentCost({
   };
 }
 
+/** Input of {@link selectBudgetTreeCostMicros}: one root session tree's two cost sources. */
+export interface BudgetTreeCostInput {
+  /** The tree's shown cost in USD (`readTreeCost(row).total`), `null` when unpriced. */
+  hookUsd: number | null;
+  /** The root's `otel_session_totals.cost_usd_micros`; `0` or `null` counts as missing. */
+  otelMicros: number | null;
+}
+
+/** Output of {@link selectBudgetTreeCostMicros}. */
+export interface BudgetTreeCost {
+  micros: number;
+  source: 'hook' | 'otel' | 'none';
+}
+
+/**
+ * The cost one root session tree adds to a **budget** (2026-11-05 budgets-threshold-alerts,
+ * DD-5): the larger of the hook-computed tree cost and the root's OTEL total.
+ *
+ * **Budget-only exception** to the "OTEL is only a cross-check" rule of
+ * {@link resolveSessionTotalCost}: a budget must not under-count spend, so when OTEL reports more
+ * than Log Hub computes (e.g. calls the transcripts never recorded), the OTEL figure counts. Every
+ * other cost surface keeps showing the computed cost. Used only by the budget spend read (Spend
+ * tab, threshold notices, Budget report, Budget burn view).
+ *
+ * - `hookMicros = Math.round(hookUsd * 1e6)`;
+ * - both present: the larger one, `source: 'otel'` only when OTEL is strictly larger;
+ * - one side present: that side;
+ * - neither: `{ micros: 0, source: 'none' }` (counted as an unpriced tree).
+ */
+export function selectBudgetTreeCostMicros({
+  hookUsd,
+  otelMicros,
+}: BudgetTreeCostInput): BudgetTreeCost {
+  const hookMicros = hookUsd != null ? Math.round(hookUsd * 1e6) : null;
+  const otel = otelMicros != null && otelMicros !== 0 ? otelMicros : null;
+  if (hookMicros != null && otel != null) {
+    return otel > hookMicros
+      ? { micros: otel, source: 'otel' }
+      : { micros: hookMicros, source: 'hook' };
+  }
+  if (hookMicros != null) return { micros: hookMicros, source: 'hook' };
+  if (otel != null) return { micros: otel, source: 'otel' };
+  return { micros: 0, source: 'none' };
+}
+
 /**
  * Whether a root's computed cost leaves out Claude Code's utility calls because Log Hub never
  * saw them (2026-10-30 otel-shared-receiver, DD-30): the root has no OTEL API-call rows — neither

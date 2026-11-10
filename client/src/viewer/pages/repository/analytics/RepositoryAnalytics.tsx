@@ -320,7 +320,10 @@ export function RepositoryAnalytics({
     mutate({ users: next });
   }
 
-  const showBranchFilter = branchList.length > 0 && state.groupBy !== 'branch';
+  // Budget burn has no Group by, so a groupBy left over from another view never hides its filter.
+  const showBranchFilter =
+    branchList.length > 0 &&
+    (state.groupBy !== 'branch' || state.view === 'budget-burn');
 
   return (
     <div className="flex flex-col h-full gap-4 p-4">

@@ -398,6 +398,61 @@ a new setting needs no migration. The controller validates names against
 `/^[A-Za-z0-9._-]{1,100}$/`. Known name: `dataCollectionNotice`
 (`{"noticeHash","acceptedAt"}`, written by `DataCollectionConsentScreen.tsx`).
 
+## Budgets
+
+Migration `0093_budgets`: `budgets`, `budget_notices`, `budget_notice_recipients`,
+`budget_events`.
+
+### budgets
+
+One spend budget per (scope, period). The scope is stored as columns, with **no FK** to
+`repositories` / `team_repositories`, so a budget is keyed by repository URL:
+
+| `scope_kind` | `user_id` | `team_id` | `repo_url` |
+|---|---|---|---|
+| `repo` (personal repository) | owner | NULL | URL |
+| `team-repo` | NULL | team | URL |
+| `team` | NULL | team | NULL |
+
+- CHECK `budgets_scope_shape` enforces the table above. `period` is `day | week | month`.
+  `amount_micros > 0` is in micro-USD. `thresholds smallint[]` holds percents, sorted ascending,
+  default `{75,90,100}`. `time_zone` is the IANA zone of the period boundaries.
+- The unique expression index `budgets_scope_period_uq` is on `(scope_kind, COALESCE(user_id,0),
+  COALESCE(team_id,0), COALESCE(repo_url,''), period)`. It allows one budget per scope and period.
+- `created_by` is `SET NULL` on user deletion.
+
+### budget_notices, budget_notice_recipients
+
+- `budget_notices` has one row per crossed `(budget_id, period_start, threshold)`. The unique key
+  is the threshold job's claim: `INSERT … ON CONFLICT DO NOTHING RETURNING id`, and only the worker
+  that got the id sends email. `superseded_by` NULL marks the notice shown to users. Otherwise it
+  holds the higher threshold that replaced it in the same check.
+- `budget_notice_recipients (notice_id, user_id, read_at)` exists only for shown notices.
+  Recipients are the repository owner, or the team owner plus the team managers.
+  `read_at` NULL means unread, with a partial index for the unread badge.
+
+### budget_events
+
+An append-only log of a scope's budgets. It records `created`, `edited`, `deleted`,
+`threshold_crossed`, `threshold_superseded`, `email_sent`, `email_skipped` and `email_failed`
+(CHECK). `details` is jsonb. `actor_user_id` / `actor_email` NULL means the threshold job.
+`actor_user_id` is `SET NULL` on user deletion.
+
+### Snapshot columns and cascade
+
+- `budget_notices` and `budget_events` copy the budget's scope columns (`scope_kind`, `user_id`,
+  `team_id`, `repo_url`) and `budget_label` (e.g. `Monthly $50.00`). Notices also copy `period`,
+  `amount_micros` and `time_zone`. Both use the same scope-shape CHECK.
+- Their `budget_id` is `ON DELETE SET NULL`, so they outlive a deleted budget.
+- **Team deletion** cascades all three tables through `team_id`. **User deletion** cascades the
+  `repo` kind through `user_id`. Recipients cascade with their notice and their user.
+- **Repository removal and URL rewrites** have no FK to ride on. `BudgetsCleanup`
+  (`deletePersonalRepo`, `deleteTeamRepo`, `rewritePersonalRepoUrl`, `rewriteTeamRepoUrl`) is
+  called inside the existing transactions of admin / account / team repository deletion and of
+  `RepoBackfillService`. On a URL merge where the target already has a budget of the same period,
+  the target wins: the source budget is deleted, and its notices and events get the new
+  `repo_url` with `budget_id` NULL.
+
 ## Pricing and versions
 
 ### model_pricing

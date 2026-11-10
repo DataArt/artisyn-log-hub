@@ -19,6 +19,10 @@ import { test, expect } from '../fixtures';
 import { SCENARIO_EMAIL_DOMAIN } from '../modes';
 import { extractLinkFromEmailBody, extractTokenFromEmailBody, listEmailsTo } from '../helpers/mailpit';
 import { loginViaUi } from '../helpers/ui-auth';
+import { createApiKey } from '../helpers/api-key';
+import { createBudget, listBudgetEvents, recentAt } from '../helpers/budgets';
+import { ownRepoId, uploadPromptSession } from '../helpers/prompt-session';
+import { skipNewUserNudge } from '../helpers/teams';
 
 const PASSWORD = 'Str0ng!Passw0rd#1';
 
@@ -29,7 +33,7 @@ test('@S-AUTH-01 a new person signs up, confirms the e-mail from the letter and 
   users,
   page,
 }) => {
-  test.setTimeout(120_000);
+  test.setTimeout(180_000);
   const runId = randomBytes(4).toString('hex');
   const email = `new-${runId}@${SCENARIO_EMAIL_DOMAIN}`;
 
@@ -193,5 +197,49 @@ test('@S-AUTH-01 a new person signs up, confirms the e-mail from the letter and 
       data: { email: shouted, password: PASSWORD, passwordConfirm: PASSWORD },
     });
     expect(res.status()).toBe(409);
+  });
+
+  await test.step('12. a budget below the cost of the person’s first session: the threshold job sends exactly one email (the highest crossed threshold) and logs «Email sent»', async () => {
+    // 2026-11-05 budgets-threshold-alerts (FR-9, DD-10): the 75 and 90 % thresholds are
+    // superseded by 100 %, so one notice and one email; the link points at the stand's Spend tab.
+    const me = (await (await page.request.get('/api/v1/auth/me')).json()) as { id: number };
+    const key = await createApiKey(page.request);
+    const repoUrl = `https://git.arrakis.test/scn/${runId}/auth01-budget`;
+    await uploadPromptSession(
+      api,
+      key.key,
+      {
+        sessionId: `auth01-budget-${runId}`,
+        prompt: `budget mail ${runId}`,
+        repoUrl,
+        at: recentAt(),
+        usages: [{ input_tokens: 10, output_tokens: 200_000 }],
+      },
+      { db, userId: me.id },
+    );
+    const repoId = await ownRepoId(page.request, repoUrl);
+    const scope = { repoId };
+    await createBudget(page.request, scope, { period: 'month', amountUsd: 1 });
+
+    const isBudgetMail = (subject: string) => subject.startsWith('Log Hub budget:');
+    // Two confirmation letters arrived before; wait for the third and let a duplicate show up.
+    const letters = (await listEmailsTo(email, { atLeast: 3, settleMs: 1_500, timeoutMs: 20_000 })).filter((l) => isBudgetMail(l.subject));
+    expect(letters).toHaveLength(1);
+    expect(letters[0].subject).toContain('100 % of Monthly $1.00 reached');
+    expect(letters[0].text).toContain(`${stand.url}/#/repos/${repoId}?mtab=spend&sp=month&so=0`);
+    expect(letters[0].text).toContain('Log Hub does not stop usage when the budget is reached.');
+
+    const sent = await listBudgetEvents(page.request, scope, { event: 'email_sent' });
+    expect(sent).toHaveLength(1);
+    expect(sent[0].details).toMatchObject({ recipientEmail: email });
+    expect(await listBudgetEvents(page.request, scope, { event: 'email_skipped' })).toEqual([]);
+    expect(await listBudgetEvents(page.request, scope, { event: 'threshold_superseded' })).toHaveLength(2);
+
+    await skipNewUserNudge(page);
+    await page.goto(`/#/repos/${repoId}?mtab=settings&stab=budgets`);
+    await page.getByTestId('budget-event-log-open').click();
+    const row = page.getByTestId('budget-event-log').locator('[data-event-type="email_sent"]');
+    await expect(row).toHaveCount(1);
+    await expect(row).toContainText('Email sent');
   });
 });

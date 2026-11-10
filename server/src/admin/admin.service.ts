@@ -26,6 +26,10 @@ import { UsersService } from '../users/users.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { TeamsService } from '../teams/teams.service';
 import { getDescendantSessionIds } from '../logs/session-tree.sql';
+import {
+  deletePersonalRepo,
+  deleteTeamRepo,
+} from '../logs/budgets/budgets-cleanup';
 import { DRIZZLE } from '../database/database.constants';
 import type { DrizzleDb } from '../database/database.module';
 import {
@@ -365,9 +369,16 @@ export class AdminService {
         await tx.delete(repositories).where(eq(repositories.repoUrl, repoUrl));
       }
 
-      await tx
+      // Budgets are stored by URL with no FK (DD-13): every owner's personal budgets go too.
+      await deletePersonalRepo(tx, repoUrl);
+
+      const removedLinks = await tx
         .delete(teamRepositories) // team_repo_config rows go by FK cascade
-        .where(eq(teamRepositories.repoUrl, repoUrl));
+        .where(eq(teamRepositories.repoUrl, repoUrl))
+        .returning({ teamId: teamRepositories.teamId });
+      for (const link of removedLinks) {
+        await deleteTeamRepo(tx, link.teamId, repoUrl);
+      }
     });
   }
 
@@ -444,21 +455,27 @@ export class AdminService {
    * is removed only through {@link removeRepo}.
    */
   async removeOrphanTeamRepo(teamRepoId: number): Promise<void> {
-    const deleted = await this.db
-      .delete(teamRepositories)
-      .where(
-        and(
-          eq(teamRepositories.id, teamRepoId),
-          sql`NOT EXISTS (
-            SELECT 1 FROM repositories r
-            WHERE r.repo_url = ${teamRepositories.repoUrl}
-          )`,
-        ),
-      )
-      .returning({ id: teamRepositories.id });
-    if (deleted.length === 0) {
-      throw new NotFoundException('Orphan team repository link not found');
-    }
+    await this.db.transaction(async (tx) => {
+      const deleted = await tx
+        .delete(teamRepositories)
+        .where(
+          and(
+            eq(teamRepositories.id, teamRepoId),
+            sql`NOT EXISTS (
+              SELECT 1 FROM repositories r
+              WHERE r.repo_url = ${teamRepositories.repoUrl}
+            )`,
+          ),
+        )
+        .returning({
+          teamId: teamRepositories.teamId,
+          repoUrl: teamRepositories.repoUrl,
+        });
+      if (deleted.length === 0) {
+        throw new NotFoundException('Orphan team repository link not found');
+      }
+      await deleteTeamRepo(tx, deleted[0].teamId, deleted[0].repoUrl);
+    });
   }
 
   async getUsers(): Promise<UserRow[]> {

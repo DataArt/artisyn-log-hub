@@ -34,6 +34,7 @@ format where the two differ).
 | [cost-formula](cost-formula.md) | `packages/pricing/src/cost.ts` (server via `server/src/logs/cost.sql.ts`, client via `client/.../lib/format.ts`); twin hook `post-turn-analysis-worker.js` | jest, vitest, `node --test` |
 | [anthropic-pricing-parse](anthropic-pricing-parse.md) | `server/src/model-pricing/anthropic-pricing-parser.ts` | jest |
 | [otel-cost-selection](otel-cost-selection.md) | `server/src/logs/otel-cost.sql.ts` | jest |
+| [budget-spend-math](budget-spend-math.md) | `server/src/logs/budgets/budget-math.ts` | jest |
 | [otel-facts](otel-facts.md) | `server/src/logs/otel/otel-classify.ts`, `otel-records.ts`, `otel-query-source-dictionary.ts` | jest |
 | [otel-live-tree](otel-live-tree.md) | `server/src/logs/otel/otel-live-tree.ts` (`parseOtelLiveNodeKey`, `formatOtelLiveNodeKey`, `buildOtelLiveTree`) | jest |
 | [otel-trace-assembly](otel-trace-assembly.md) | `client/.../session-log/otel/otel-trace-assembly.ts` | vitest |

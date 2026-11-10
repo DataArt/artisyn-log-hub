@@ -13,6 +13,7 @@ import {
 import { MaintenanceSection } from './MaintenanceSection';
 import { MonitoredToolsSettings } from './tools/MonitoredToolsSettings';
 import { ImportExportSection } from './export-import/ImportExportSection';
+import { BudgetsSection } from '../budgets/BudgetsSection';
 import {
   SessionAttributionSettings,
   type SessionAttributionValue,
@@ -405,6 +406,19 @@ export function RepositorySettings({
                 readOnly={!canEditTeam}
                 isSaving={sessionAttributionMutation.isPending}
                 onSave={(value) => sessionAttributionMutation.mutate(value)}
+              />
+            )}
+          </div>
+        </PageTabsContent>
+
+        <PageTabsContent
+          value="budgets"
+          className="flex-1 min-h-0 overflow-auto p-6"
+        >
+          <div className="max-w-4xl">
+            {tab === 'budgets' && (
+              <BudgetsSection
+                scope={teamId !== undefined ? { repoId, teamId } : { repoId }}
               />
             )}
           </div>

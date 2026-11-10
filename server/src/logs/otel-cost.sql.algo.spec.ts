@@ -1,15 +1,17 @@
 /**
  * Table test for docs/knowledgebase/algorithms/otel-cost-selection.md: every row of the doc's
- * examples block runs against the real total, unpriced-model list, warning and mismatch
- * functions.
+ * examples block runs against the real total, unpriced-model list, warning, mismatch,
+ * sub-agent and budget tree-cost functions.
  */
 import { loadExamples } from '../../../scripts/algo-docs/load-examples.cjs';
 import {
   costMismatch,
   otelComputedDiscrepancy,
   resolveSessionTotalCost,
+  selectBudgetTreeCostMicros,
   selectSubagentCost,
   unpricedModelList,
+  type BudgetTreeCostInput,
   type SessionCostParts,
   type SubagentCostInput,
 } from './otel-cost.sql';
@@ -17,6 +19,7 @@ import {
 type OtelInput =
   | ({ kind: 'total' } & SessionCostParts)
   | ({ kind: 'subagent' } & SubagentCostInput)
+  | ({ kind: 'budget-tree-cost' } & BudgetTreeCostInput)
   | { kind: 'unpriced'; lists: Array<Array<string | null>> }
   | { kind: 'discrepancy'; otel: number | null; computed: number | null }
   | {
@@ -43,6 +46,14 @@ it.each(rows)('$id', ({ input, expected }) => {
           transcriptCost: input.transcriptCost,
           modelId: input.modelId,
           otelCostUsd: input.otelCostUsd,
+        }),
+      ).toEqual(expected);
+      return;
+    case 'budget-tree-cost':
+      expect(
+        selectBudgetTreeCostMicros({
+          hookUsd: input.hookUsd,
+          otelMicros: input.otelMicros,
         }),
       ).toEqual(expected);
       return;

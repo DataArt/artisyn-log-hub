@@ -16,5 +16,6 @@
   "repos:session-contexts-heavy": { "p95Ms": 500 },
   "repos:session-change-surface-heavy": { "p95Ms": 500 },
   "repos:session-change-surface-files-heavy": { "p95Ms": 500 },
-  "repos:session-okf-usage-heavy": { "p95Ms": 500 }
+  "repos:session-okf-usage-heavy": { "p95Ms": 500 },
+  "repos:spend-heavy": { "p95Ms": 500 }
 }

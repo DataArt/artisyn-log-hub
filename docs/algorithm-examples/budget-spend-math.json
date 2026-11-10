@@ -1,0 +1,175 @@
+[
+  {
+    "id": "BF-01",
+    "input": {"kind": "forecast", "spendMicros": 41200000, "amountMicros": 50000000, "elapsedUnits": 9, "totalUnits": 30, "isCurrent": true},
+    "expected": {"burnRateMicrosPerUnit": 4577777.777777778, "forecastMicros": 137333333, "percentUsed": 82.4, "unitsLeft": 1.9223300970873785, "status": "ok", "overspendRisk": true},
+    "note": "Monthly, day 9 of 30: burn = 41 200 000 / 9 = 4 577 777.78/day; forecast = round(41 200 000 + 4 577 777.78 x 21) = round(137 333 333.33) = 137 333 333 > 50 000 000 -> risk; percent = 41 200 000 x 100 / 50 000 000 = 82.4; unitsLeft = 8 800 000 / 4 577 777.78 = 1.92233 days."
+  },
+  {
+    "id": "BF-02",
+    "input": {"kind": "forecast", "spendMicros": 32800000, "amountMicros": 80000000, "elapsedUnits": 2, "totalUnits": 7, "isCurrent": true},
+    "expected": {"burnRateMicrosPerUnit": 16400000, "forecastMicros": 114800000, "percentUsed": 41, "unitsLeft": 2.8780487804878048, "status": "ok", "overspendRisk": true},
+    "note": "Weekly, day 2 of 7: burn = 32 800 000 / 2 = 16 400 000; forecast = 32 800 000 + 16 400 000 x 5 = 114 800 000 (143.5 % of 80 000 000) -> risk; percent = 41; unitsLeft = 47 200 000 / 16 400 000 = 2.878 days."
+  },
+  {
+    "id": "BF-03",
+    "input": {"kind": "forecast", "spendMicros": 6000000, "amountMicros": 10000000, "elapsedUnits": 15, "totalUnits": 24, "isCurrent": true},
+    "expected": {"burnRateMicrosPerUnit": 400000, "forecastMicros": 9600000, "percentUsed": 60, "unitsLeft": 10, "status": "ok", "overspendRisk": false},
+    "note": "Day budget in hours, hour 15 of 24: burn = 6 000 000 / 15 = 400 000/h; forecast = 6 000 000 + 400 000 x 9 = 9 600 000 <= 10 000 000 -> no risk; unitsLeft = 4 000 000 / 400 000 = 10 hours."
+  },
+  {
+    "id": "BF-04",
+    "input": {"kind": "forecast", "spendMicros": 60000000, "amountMicros": 50000000, "elapsedUnits": 10, "totalUnits": 30, "isCurrent": true},
+    "expected": {"burnRateMicrosPerUnit": 6000000, "forecastMicros": 180000000, "percentUsed": 120, "unitsLeft": null, "status": "exceeded", "overspendRisk": true},
+    "note": "spend 60 000 000 >= amount 50 000 000 -> exceeded, so no units left; burn 6 000 000; forecast 60 000 000 + 6 000 000 x 20 = 180 000 000 > amount -> risk; percent 120."
+  },
+  {
+    "id": "BF-05",
+    "input": {"kind": "forecast", "spendMicros": 50000000, "amountMicros": 50000000, "elapsedUnits": 10, "totalUnits": 30, "isCurrent": true},
+    "expected": {"burnRateMicrosPerUnit": 5000000, "forecastMicros": 150000000, "percentUsed": 100, "unitsLeft": null, "status": "exceeded", "overspendRisk": true},
+    "note": "spend exactly equal to the amount -> exceeded (>=), unitsLeft null rather than 0."
+  },
+  {
+    "id": "BF-06",
+    "input": {"kind": "forecast", "spendMicros": 0, "amountMicros": 50000000, "elapsedUnits": 5, "totalUnits": 30, "isCurrent": true},
+    "expected": {"burnRateMicrosPerUnit": 0, "forecastMicros": 0, "percentUsed": 0, "unitsLeft": null, "status": "no-rate", "overspendRisk": false},
+    "note": "Zero spend: burn 0 -> status no-rate, no units left (no division by zero), forecast 0, no risk."
+  },
+  {
+    "id": "BF-07",
+    "input": {"kind": "forecast", "spendMicros": 45000000, "amountMicros": 50000000, "elapsedUnits": 10, "totalUnits": 30, "isCurrent": false},
+    "expected": {"burnRateMicrosPerUnit": 4500000, "forecastMicros": 45000000, "percentUsed": 90, "unitsLeft": null, "status": "ok", "overspendRisk": false},
+    "note": "Past period: forecast = spend 45 000 000 (a projection would give 135 000 000), no units left, no risk although 135 000 000 would exceed 50 000 000; burn 45 000 000 / 10."
+  },
+  {
+    "id": "BF-08",
+    "input": {"kind": "forecast", "spendMicros": 10000000, "amountMicros": null, "elapsedUnits": 5, "totalUnits": 30, "isCurrent": true},
+    "expected": {"burnRateMicrosPerUnit": 2000000, "forecastMicros": 60000000, "percentUsed": null, "unitsLeft": null, "status": "ok", "overspendRisk": false},
+    "note": "No amount (Spend tab without a budget): percent null, nothing to run out of -> unitsLeft null, no risk; burn 2 000 000, forecast 10 000 000 + 2 000 000 x 25 = 60 000 000."
+  },
+  {
+    "id": "AD-01",
+    "input": {"kind": "anomaly-days", "dailyMicros": [1000000, 1000000, 1000000, 9000000, 1000000], "elapsedUnits": 5, "spendMicros": 13000000},
+    "expected": {"days": [3]},
+    "note": "Average 13 000 000 / 5 = 2 600 000; limit 2 x 2 600 000 = 5 200 000; only day 3 (9 000 000) reaches it."
+  },
+  {
+    "id": "AD-02",
+    "input": {"kind": "anomaly-days", "dailyMicros": [5000000], "elapsedUnits": 1, "spendMicros": 5000000},
+    "expected": {"days": []},
+    "note": "Only one elapsed day: no average to compare against -> none."
+  },
+  {
+    "id": "AD-03",
+    "input": {"kind": "anomaly-days", "dailyMicros": [0, 0, 0], "elapsedUnits": 3, "spendMicros": 0},
+    "expected": {"days": []},
+    "note": "Zero spend -> none (0 >= 2 x 0 would otherwise mark every day)."
+  },
+  {
+    "id": "AD-04",
+    "input": {"kind": "anomaly-days", "dailyMicros": [4000000, 1000000, 1000000], "elapsedUnits": 3, "spendMicros": 6000000},
+    "expected": {"days": [0]},
+    "note": "Average 6 000 000 / 3 = 2 000 000; limit 4 000 000; day 0 is exactly 4 000 000 -> marked (>=, inclusive)."
+  },
+  {
+    "id": "AD-05",
+    "input": {"kind": "anomaly-days", "dailyMicros": [3000000, 1000000, 2000000, 9000000], "elapsedUnits": 3, "spendMicros": 6000000},
+    "expected": {"days": []},
+    "note": "Only buckets i < elapsed (3) count: average 2 000 000, limit 4 000 000; days 0-2 stay below; bucket 3 (9 000 000) is not elapsed -> none."
+  },
+  {
+    "id": "CS-01",
+    "input": {"kind": "costly-sessions", "trees": [
+      {"id": 1, "micros": 1, "source": "hook"}, {"id": 2, "micros": 1, "source": "hook"},
+      {"id": 3, "micros": 1, "source": "hook"}, {"id": 4, "micros": 1, "source": "otel"},
+      {"id": 5, "micros": 1, "source": "hook"}, {"id": 6, "micros": 10, "source": "hook"}]},
+    "expected": {"mean": 2.5, "sigma": 3.3541019662496847, "marks": [{"id": 6, "level": 2}]},
+    "note": "n = 6: mean 15 / 6 = 2.5; variance (5 x 1.5^2 + 7.5^2) / 6 = 67.5 / 6 = 11.25, sigma = sqrt(11.25) = 3.3541; mean + 2 sigma = 9.208 <= 10 < mean + 3 sigma = 12.56 -> tree 6 at level 2."
+  },
+  {
+    "id": "CS-02",
+    "input": {"kind": "costly-sessions", "trees": [
+      {"id": 1, "micros": 1, "source": "hook"}, {"id": 2, "micros": 1, "source": "hook"},
+      {"id": 3, "micros": 1, "source": "hook"}, {"id": 4, "micros": 1, "source": "hook"},
+      {"id": 5, "micros": 1, "source": "hook"}, {"id": 6, "micros": 1, "source": "hook"},
+      {"id": 7, "micros": 1, "source": "hook"}, {"id": 8, "micros": 1, "source": "hook"},
+      {"id": 9, "micros": 1, "source": "hook"}, {"id": 10, "micros": 1, "source": "hook"},
+      {"id": 11, "micros": 1, "source": "hook"}, {"id": 12, "micros": 20, "source": "otel"}]},
+    "expected": {"mean": 2.5833333333333335, "sigma": 5.251322584729384, "marks": [{"id": 12, "level": 3}]},
+    "note": "n = 12: mean 31 / 12 = 2.5833; variance (11 x 1.5833^2 + 17.4167^2) / 12 = 27.576, sigma = 5.2513; mean + 3 sigma = 18.337 <= 20 -> tree 12 at level 3."
+  },
+  {
+    "id": "CS-03",
+    "input": {"kind": "costly-sessions", "trees": [
+      {"id": 1, "micros": 1, "source": "hook"}, {"id": 2, "micros": 1, "source": "hook"},
+      {"id": 3, "micros": 1, "source": "hook"}, {"id": 4, "micros": 100, "source": "hook"}]},
+    "expected": {"mean": 0, "sigma": 0, "marks": []},
+    "note": "Four trees < 5 -> no statistics: mean and sigma 0, no marks."
+  },
+  {
+    "id": "CS-04",
+    "input": {"kind": "costly-sessions", "trees": [
+      {"id": 1, "micros": 3, "source": "hook"}, {"id": 2, "micros": 3, "source": "hook"},
+      {"id": 3, "micros": 3, "source": "hook"}, {"id": 4, "micros": 3, "source": "hook"},
+      {"id": 5, "micros": 3, "source": "hook"}]},
+    "expected": {"mean": 3, "sigma": 0, "marks": []},
+    "note": "All equal: mean 3, sigma 0 -> no marks (every tree would otherwise reach mean + 3 x 0)."
+  },
+  {
+    "id": "CS-05",
+    "input": {"kind": "costly-sessions", "trees": [
+      {"id": 1, "micros": 1, "source": "hook"}, {"id": 2, "micros": 1, "source": "hook"},
+      {"id": 3, "micros": 1, "source": "hook"}, {"id": 4, "micros": 10, "source": "hook"},
+      {"id": 5, "micros": 0, "source": "none"}]},
+    "expected": {"mean": 0, "sigma": 0, "marks": []},
+    "note": "The unpriced tree (source none) does not count: n = 4 < 5 -> no marks; counting it would give n = 5."
+  },
+  {
+    "id": "TN-01",
+    "input": {"kind": "threshold-notices", "thresholds": [75, 90, 100], "spendMicros": 75, "amountMicros": 100, "existing": []},
+    "expected": {"notify": 75, "superseded": []},
+    "note": "75 x 100 >= 75 x 100 (inclusive): crossed {75}, fresh {75} -> notify 75."
+  },
+  {
+    "id": "TN-02",
+    "input": {"kind": "threshold-notices", "thresholds": [75, 90, 100], "spendMicros": 74, "amountMicros": 100, "existing": []},
+    "expected": {"notify": null, "superseded": []},
+    "note": "7 400 < 7 500 -> nothing crossed."
+  },
+  {
+    "id": "TN-03",
+    "input": {"kind": "threshold-notices", "thresholds": [75, 90, 100], "spendMicros": 95, "amountMicros": 100, "existing": []},
+    "expected": {"notify": 90, "superseded": [{"threshold": 75, "supersededBy": 90}]},
+    "note": "Crossed {75, 90}, fresh {75, 90}; top 90 > 0 -> notify 90, 75 superseded by 90 (one notice per jump)."
+  },
+  {
+    "id": "TN-04",
+    "input": {"kind": "threshold-notices", "thresholds": [75, 90, 100], "spendMicros": 95, "amountMicros": 100, "existing": [75]},
+    "expected": {"notify": 90, "superseded": []},
+    "note": "Fresh {90}; top 90 > max existing 75 -> notify 90, nothing else fresh."
+  },
+  {
+    "id": "TN-05",
+    "input": {"kind": "threshold-notices", "thresholds": [75, 90, 100], "spendMicros": 95, "amountMicros": 100, "existing": [75, 90]},
+    "expected": {"notify": null, "superseded": []},
+    "note": "Fresh is empty (75 and 90 already recorded) -> nothing."
+  },
+  {
+    "id": "TN-06",
+    "input": {"kind": "threshold-notices", "thresholds": [50, 75, 90, 100], "spendMicros": 80, "amountMicros": 100, "existing": [75]},
+    "expected": {"notify": null, "superseded": [{"threshold": 50, "supersededBy": 75}]},
+    "note": "A 50 % threshold added after 75 was notified: fresh {50}, top 50 <= max existing 75 -> no notice, 50 superseded by 75."
+  },
+  {
+    "id": "TN-07",
+    "input": {"kind": "threshold-notices", "thresholds": [75, 90, 100, 200], "spendMicros": 210, "amountMicros": 100, "existing": []},
+    "expected": {"notify": 200, "superseded": [{"threshold": 75, "supersededBy": 200}, {"threshold": 90, "supersededBy": 200}, {"threshold": 100, "supersededBy": 200}]},
+    "note": "21 000 >= 20 000: all four crossed and fresh; notify the top 200, the rest superseded by 200, ascending."
+  },
+  {
+    "id": "TN-08",
+    "input": {"kind": "threshold-notices", "thresholds": [100], "spendMicros": 999999999999, "amountMicros": 1000000000000, "existing": []},
+    "expected": {"notify": null, "superseded": []},
+    "note": "Largest amount (1 000 000 USD in micros), one micro short: 99 999 999 999 900 < 100 000 000 000 000 -> not crossed."
+  }
+]

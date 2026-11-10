@@ -92,6 +92,11 @@
         "description": "Explore recorded sessions with interactive Analytics charts, or share printable Reports with KPIs and trends that download as PDF for a team or management."
       },
       {
+        "slug": "budgets",
+        "title": "Budgets",
+        "description": "Set a daily, weekly or monthly spend budget for a repository or a team, read the Spend tab and its forecast, and get threshold notices in the app or by email."
+      },
+      {
         "slug": "okf-tab",
         "title": "OKF tab",
         "description": "See how agents used a repository's knowledge base, which articles led them to the code, and which change to make to the KB next to every problem."

@@ -2,9 +2,9 @@
 
 Open a repository from **My Repos** to land on the **Sessions** tab: the session list on the
 left, and the selected session's details on the right. (The other repository tabs are
-**Analytics**, **Reports**, **Tools/MCP**, **OKF**, **OTEL** and **Settings**; see
-[Analytics & Reports](analytics-reports.md), [Tools/MCP tab](#toolsmcp-tab),
-[OKF tab](okf-tab.md) and [OTEL tab](otel-tab.md).)
+**Analytics**, **Spend**, **Reports**, **Tools/MCP**, **OKF**, **OTEL** and **Settings**; see
+[Analytics & Reports](analytics-reports.md), [Budgets](budgets.md#the-spend-tab),
+[Tools/MCP tab](#toolsmcp-tab), [OKF tab](okf-tab.md) and [OTEL tab](otel-tab.md).)
 
 ## View modes
 
@@ -77,6 +77,9 @@ work time, token totals, cost, max context, and skills used. The toolbar below i
   repository header and everyone sees all members' sessions and analytics.
 - **Raw Logs** of another member's session are shown only where the team grants it: to every
   member of a transparent team, and to the team owner and ADLC trainers of a restricted one.
+- The **Spend** tab is open to every member. A plain member of a restricted team sees only their
+  own spend there; the team-wide spend, its slices and the budgets are for the team owner,
+  managers and members with team analytics access. See [Budgets](budgets.md).
 
 ## Tools/MCP tab
 

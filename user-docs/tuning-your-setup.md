@@ -71,6 +71,15 @@ review outcomes. Keep the extraction prompts specific; the AI only sees your pro
 changed-file list, so ask for things visible there. Each evaluation is a small extra LLM call
 (typically 1–5¢) — the **Attribution Usage** report tracks that spend.
 
+### Budgets
+
+A daily, weekly or monthly spend budget with the thresholds that raise a notice (75 %, 90 % and
+100 % by default). On a personal repository you set it yourself; on a team repository, and for
+the whole team on the team page's **Settings** tab, the team owner and managers set it. A budget
+does not stop anyone; it makes the **Spend** tab show the spend against it, the forecast and the
+cost slices, and it tells the people who manage it when a threshold is crossed. See
+[Budgets](budgets.md).
+
 ### Maintenance and Import/Export
 
 - **Recompute all sessions** — refreshes all statistics from the stored logs; use it after
@@ -104,5 +113,7 @@ rest of the harness did. Common patterns and what to do:
 After a change, give it a few sessions and compare: the **Cost** and **Cache Read Ratio** views
 with a 1w preset before/after, the per-engineer table in the **Executive Summary** week over
 week, and the tab that showed the problem (System context anatomy, OKF, Tools/MCP) on the next
-sessions. Tuning is never finished — attribute definitions, file categories, and the harness all
+sessions. A team budget keeps the loop honest over time: the **Spend** tab's **Previous period**
+tile and cost slices show whether this week or month costs less than the last one, and the
+forecast warns before a period runs over. Tuning is never finished — attribute definitions, file categories, and the harness all
 drift as the project evolves, so revisit them when the reports start looking noisy.

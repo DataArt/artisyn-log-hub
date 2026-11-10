@@ -56,12 +56,14 @@
 
   <!-- controls row (existing AnalyticsControls) -->
   <g font-size="14">
+    <g opacity="0.4">
     <rect x="341" y="167" width="250" height="36" rx="6" class="btn"/>
     <text x="354" y="190" class="t">1d</text><text x="393" y="190" class="t">2d</text><text x="434" y="190" class="t">3d</text>
     <text x="474" y="190" class="t">1w</text><text x="517" y="190" class="t">2w</text>
     <rect x="548" y="168" width="42" height="34" fill="#f3f4f6"/><text x="560" y="190" class="t">1m</text>
     <rect x="603" y="167" width="75" height="36" rx="6" class="btn"/><text x="616" y="190" class="t">Custom</text>
     <rect x="690" y="167" width="125" height="36" rx="6" class="btn"/><text x="703" y="190" class="t">No grouping ⌄</text>
+    </g>
     <rect x="827" y="167" width="102" height="36" rx="6" class="btn"/><text x="840" y="190" class="t">Branches ⌄</text>
     <rect x="941" y="167" width="80" height="36" rx="6" class="btn"/><text x="954" y="190" class="t">Users ⌄</text>
     <rect x="1033" y="167" width="130" height="36" rx="6" fill="#eef2ff" stroke="#6366f1" stroke-dasharray="3,2"/><text x="1046" y="190" class="t" font-weight="600">Budget burn ⌄</text>
@@ -70,7 +72,7 @@
   </g>
   <text x="1033" y="220" class="note">NEW view in the view selector</text>
   <text x="1203" y="220" class="note">NEW budget picker (only this view)</text>
-  <text x="341" y="220" class="note">Layout toggle hidden for this view (line chart, no horizontal ranking) — like the usage table views.</text>
+  <text x="341" y="220" class="note">Time window and Group by disabled (greyed) for this view; layout toggle hidden.</text>
 
   <!-- summary strip -->
   <text x="341" y="256" class="mono t" font-size="15" font-weight="700">$151.00 <tspan class="muted" font-weight="400">of $300.00</tspan> · 50 %</text>
@@ -164,10 +166,10 @@
   <!-- annotations -->
   <text x="341" y="726" class="note">FR-12 "Budget burn": cumulative spend per day of the selected budget's period against the budget line; linear forecast to period end dashed (FR-3 formulas);</text>
   <text x="341" y="742" class="note">threshold lines from the budget's own "Notify at" list. With no filters the last solid point equals the budget spend (FR-2) and the Spend view's bar.</text>
-  <text x="341" y="762" class="note">Budget picker: lists the scope's budgets (default Month, else Week, else Day). X axis = that budget's current period; ‹ › for previous periods is an open question.</text>
-  <text x="341" y="778" class="note">Branches / Users filters narrow the cumulative line (label becomes "Cumulative spend (filtered)"); budget and threshold lines stay for the whole scope.</text>
-  <text x="341" y="794" class="note">Group by branch / user: the cumulative area is stacked per group; the forecast stays one dashed line for the total.</text>
-  <text x="341" y="814" class="note">No budget on the scope: picker reads "No budget", chart shows cumulative spend for the tab's time window only (no budget / threshold / forecast lines)</text>
+  <text x="341" y="762" class="note">Budget picker: lists the scope's budgets (default Month, else Week, else Day). X axis = that budget's current period; the tab's time window is ignored. Previous periods: the Spend tab's ‹ ›.</text>
+  <text x="341" y="778" class="note">Branches / Users filters narrow the cumulative line (label "filtered — budget line is for the whole scope"); budget, forecast and threshold lines stay for the whole scope.</text>
+  <text x="341" y="794" class="note">Group by is disabled for this view (no stacked areas).</text>
+  <text x="341" y="814" class="note">No budget on the scope: picker reads "No budget", chart shows cumulative spend of the current calendar month in the viewer's time zone only (no budget / threshold / forecast lines)</text>
   <text x="341" y="830" class="note">and a hint "Set a budget in Settings › Budgets" (link only for users who may manage the scope).</text>
-  <text x="341" y="850" class="note">Team page has no Analytics tab today — a team budget's burn chart is shown on the team Spend tab (open question).</text>
+  <text x="341" y="850" class="note">Repository-only: a team budget is shown on the team Spend tab (team Analytics is task 2026-11-10-team-analytics-reports).</text>
 </svg>

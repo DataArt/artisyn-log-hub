@@ -1,21 +1,30 @@
 ---
 name: ce
-description: "Use when researching code structure in server/ or hook/ — who calls a function, which controller serves an HTTP route, how projects depend on each other. Uses the CodeExplorer (`ce`) code graph instead of grep, but only where it was measured to beat grep; skip it for client React code, text/string search and docs."
+description: "ALWAYS before answering a structural question about server/, hook/ or packages/ code with grep — who calls a function or method, which controller serves an HTTP route, what a module depends on, impact of changing a function. Uses the CodeExplorer (`ce`) code graph, where it was measured to beat grep; skip it only for client React components, text/string search and docs."
 ---
 
 # ce — CodeExplorer code graph
 
 `ce` (a dotnet global tool, `ce help`) indexes the repo into a graph (functions, types, endpoints,
-calls, projects) under `.codeexplorer/`. It is optional: if `ce` is not on PATH, skip this skill
-silently and use grep / WebStorm MCP.
+calls, projects) under `.codeexplorer/`. If `ce` is not on PATH, skip this skill silently and use
+grep.
+
+**Rule:** for a structural question in `server/`, `hook/` or `packages/` (callers, route → controller,
+dependencies, blast radius of a change) the first query is `ce`, not grep and not reading files
+one by one. Grep afterwards only to confirm completeness (renames, deletions) or for the cases
+listed under "Do NOT use ce". This applies to subagents and Explore agents too — put the rule into
+their prompt when you delegate code research.
 
 ## Setup / refresh
 
 - Workspace is already initialised in the repo root (`.codeexplorer/settings.json` holds the
   excludes; the DB `graph.db` is ignored by `.codeexplorer/.gitignore`). On a fresh clone without
   it: `ce init loghub`, then copy the excludes below.
-- The index does **not** auto-update. Before the first `ce` query in a session (and after you
-  changed the files you are about to query) refresh it — a full rescan takes ~20 s:
+- `/adlc-lh:implement` and `/adlc-lh:implement-deep` refresh the index once at their start
+  (`.claude/repo_config/project-env.json → preImplCommand`).
+- Otherwise the index does **not** auto-update. Before the first `ce` query in a session (and
+  after you changed the files you are about to query — through Edit or through Bash) refresh it
+  manually — a full rescan takes ~20 s:
   `timeout 180 ce scan --clear > /dev/null 2>&1`
   Always wrap it in `timeout`: ce 1.48.6 once hung forever at
   "PostIndexAnalyzer: Normalizing architectural edges" (with `.claude/` fixtures indexed).
@@ -37,7 +46,7 @@ silently and use grep / WebStorm MCP.
 
 - **Client React components** — many `export function X({...})` components are not indexed at all
   and JSX usage `<X/>` / `lazy(() => import(...))` is not a call: `ce callers RepoToolsTab` returns
-  nothing while it is used in two places. Use grep / WebStorm MCP.
+  nothing while it is used in two places. Use grep.
 - Literal strings, config keys, SQL text, comments, docs — grep.
 - `ce contracts` — hung > 60 s on this repo; don't use.
 

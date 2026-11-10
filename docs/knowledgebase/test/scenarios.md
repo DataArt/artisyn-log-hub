@@ -208,6 +208,14 @@ per day, the Cost and Work Time views), S-REPT-01 (Executive Summary tiles, week
 top 5, branch filter, previous period, PDF) and S-REPT-02 (Cache Read Ratio: ratio of sums for
 both scopes, branch groups, causes and the personal threshold).
 
+The budgets scenario S-BUDG-01 (`tests/scenarios/view/s-budg-01.spec.ts`, mode A; helpers in
+`helpers/budgets.ts`) walks a personal-repository budget end to end: Settings › Budgets, the Spend
+tab with a session whose OTEL cost beats its hook cost (DD-5 of the budgets task), the threshold
+job (`FAST_TICK_ENV.BUDGET_CHECK_INTERVAL_MS`, 200 ms) with the bell, banner and tray, Analytics ›
+Budget burn, Reports › Budget with its PDF, the help page and the event log after a delete. Team
+budgets for a manager and a plain member are steps 15–18 of S-TEAM-02; the one threshold email
+through Mailpit is step 12 of S-AUTH-01 (mode B).
+
 The navigation scenario S-NAV-01 (`tests/scenarios/view/s-nav-01.spec.ts`, mode A; helpers
 `openMap`, `mapFilter`, `mapNode`, `expandMapNode`, `homeWidget`, `expectHomeWidgetFilled` in
 `helpers/nav.ts`) walks the UX navigation overhaul end to end with an admin owner, a member and a

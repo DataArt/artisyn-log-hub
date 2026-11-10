@@ -10,6 +10,7 @@ import { AuthSessionsService } from '../auth/auth-sessions.service';
 import { invalidateApiKeyCache } from '../cluster/api-key-cache-ipc';
 import { DRIZZLE } from '../database/database.constants';
 import type { DrizzleDb } from '../database/database.module';
+import { deleteTeamRepo } from '../logs/budgets/budgets-cleanup';
 import {
   invitations,
   logs,
@@ -188,9 +189,18 @@ export class AccountDeletionService {
         exclusiveUrls.push(...chunk.filter((url) => !shared.has(url)));
       }
       for (const chunk of batched(exclusiveUrls)) {
-        await tx
+        const removedLinks = await tx
           .delete(teamRepositories)
-          .where(inArray(teamRepositories.repoUrl, chunk));
+          .where(inArray(teamRepositories.repoUrl, chunk))
+          .returning({
+            teamId: teamRepositories.teamId,
+            repoUrl: teamRepositories.repoUrl,
+          });
+        // Team-repo budgets are stored by URL with no FK (DD-13); the user's own personal
+        // budgets go by the `user_id` cascade below.
+        for (const link of removedLinks) {
+          await deleteTeamRepo(tx, link.teamId, link.repoUrl);
+        }
       }
 
       // The cascades do the bulk of the work here.

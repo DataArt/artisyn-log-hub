@@ -100,40 +100,48 @@ export function AnalyticsControls({
   onProductivityMetricChange,
   onChangeSurfaceMetricChange,
 }: Props) {
+  // Budget burn always spans the budget period (no time window) and draws one cumulative line
+  // (no Group by, no layout toggle); only the Branches / Users filters apply.
+  const isBudgetBurn = state.view === 'budget-burn';
+  const showGroupBy = !isUsageAnalyticsView(state.view) && !isBudgetBurn;
   return (
     <div className="flex flex-wrap items-center gap-3">
-      {/* Date range selector */}
-      <ToggleGroup
-        type="single"
-        variant="outline"
-        value={state.range !== 'custom' ? state.range : ''}
-        onValueChange={onRangeToggle}
-      >
-        {(['1d', '2d', '3d', '1w', '2w', '1m'] as const).map((r) => (
-          <ToggleGroupItem key={r} value={r}>
-            {r}
-          </ToggleGroupItem>
-        ))}
-      </ToggleGroup>
+      {!isBudgetBurn && (
+        <>
+          {/* Date range selector */}
+          <ToggleGroup
+            type="single"
+            variant="outline"
+            value={state.range !== 'custom' ? state.range : ''}
+            onValueChange={onRangeToggle}
+          >
+            {(['1d', '2d', '3d', '1w', '2w', '1m'] as const).map((r) => (
+              <ToggleGroupItem key={r} value={r}>
+                {r}
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
 
-      {/* Custom date range button */}
-      <button
-        onClick={onCustomButtonClick}
-        className={[
-          'flex h-9 items-center rounded-md border px-3 text-sm font-medium whitespace-nowrap transition-colors',
-          state.range === 'custom'
-            ? 'border-input bg-accent text-accent-foreground'
-            : 'border-input bg-transparent hover:bg-accent hover:text-accent-foreground',
-        ].join(' ')}
-      >
-        {state.range === 'custom' && state.customFrom && state.customTo
-          ? formatCustomLabel(state.customFrom, state.customTo)
-          : 'Custom'}
-      </button>
+          {/* Custom date range button */}
+          <button
+            onClick={onCustomButtonClick}
+            className={[
+              'flex h-9 items-center rounded-md border px-3 text-sm font-medium whitespace-nowrap transition-colors',
+              state.range === 'custom'
+                ? 'border-input bg-accent text-accent-foreground'
+                : 'border-input bg-transparent hover:bg-accent hover:text-accent-foreground',
+            ].join(' ')}
+          >
+            {state.range === 'custom' && state.customFrom && state.customTo
+              ? formatCustomLabel(state.customFrom, state.customTo)
+              : 'Custom'}
+          </button>
+        </>
+      )}
 
       {/* Group by — not applicable to the usage table views, which aggregate over the whole
           filtered set and carry their own in-view grouping/selector controls where relevant. */}
-      {!isUsageAnalyticsView(state.view) && (
+      {showGroupBy && (
         <Select.Root value={state.groupBy} onValueChange={onGroupByChange}>
           <Select.Trigger className="flex h-9 items-center gap-1 rounded-md border border-input bg-background px-3 text-sm shadow-xs focus:outline-none focus:ring-2 focus:ring-ring">
             <Select.Value />
@@ -228,7 +236,7 @@ export function AnalyticsControls({
       )}
 
       {/* User filter */}
-      {showUserFilter && state.groupBy !== 'user' && (
+      {showUserFilter && (state.groupBy !== 'user' || isBudgetBurn) && (
         <Popover>
           <PopoverTrigger asChild>
             <button className="flex h-9 items-center gap-1 rounded-md border border-input bg-background px-3 text-sm shadow-xs hover:bg-accent/50">
@@ -263,8 +271,8 @@ export function AnalyticsControls({
       )}
 
       {/* Layout toggle — vertical/horizontal applies to the D3 bar charts only; the usage
-          views are tables, so they have no second layout. */}
-      {!isUsageAnalyticsView(state.view) && (
+          views are tables and Budget burn is one line chart, so they have no second layout. */}
+      {showGroupBy && (
         <TooltipProvider>
           <div className="flex items-center border border-input rounded-md">
             <Tooltip>

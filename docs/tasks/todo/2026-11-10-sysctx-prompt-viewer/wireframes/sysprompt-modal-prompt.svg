@@ -1,0 +1,137 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="900" viewBox="0 0 1120 900" font-family="Segoe UI, Inter, Arial, sans-serif">
+  <style>
+    .t{fill:#0f172a;font-size:13px}
+    .b{fill:#0f172a;font-size:13px;font-weight:600}
+    .m{fill:#64748b;font-size:12px}
+    .s{fill:#64748b;font-size:11px}
+    .sz{fill:#64748b;font-size:12px;text-anchor:end}
+    .sec{fill:#0f172a;font-size:14px;font-weight:600}
+    .grp{fill:#475569;font-size:11px;font-weight:600;letter-spacing:.5px}
+    .mono{font-family:Consolas, 'JetBrains Mono', monospace;fill:#334155;font-size:12px}
+    .btn{fill:#0f172a;font-size:12px}
+    .note{fill:#b45309;font-size:12px}
+    .line{stroke:#e2e8f0;stroke-width:1}
+    .tab{fill:#64748b;font-size:13px}
+    .tabOn{fill:#4f46e5;font-size:13px;font-weight:600}
+  </style>
+  <!-- dimmed page backdrop -->
+  <rect width="1120" height="900" fill="#ffffff"/>
+  <rect width="1120" height="900" fill="#0f172a" opacity="0.35"/>
+  <text x="20" y="22" fill="#ffffff" font-size="11" font-weight="600">WIREFRAME · System prompt modal — "System prompt" tab (FR-2, FR-4, FR-5, FR-6, FR-8, privacy NFR)</text>
+
+  <!-- modal -->
+  <rect x="80" y="40" width="960" height="840" rx="10" fill="#ffffff" stroke="#e2e8f0"/>
+  <!-- close -->
+  <rect x="1000" y="56" width="24" height="24" rx="5" fill="#fff" stroke="#4f46e5"/>
+  <text x="1007" y="73" fill="#0f172a" font-size="14">✕</text>
+
+  <!-- header -->
+  <text x="104" y="80" fill="#0f172a" font-size="18" font-weight="600">System prompt</text>
+  <text x="104" y="101" class="m">Captured by Claude Code (prompt_snapshot). Internal, undocumented format — may change in any release.</text>
+  <text x="104" y="127" class="t" data-testid="sysprompt-totals">13 parts · 18 tools · 156,812 B · ≈ 42,382 tokens</text>
+  <rect x="756" y="110" width="138" height="28" rx="5" fill="#fff" stroke="#cbd5e1"/>
+  <text x="770" y="129" class="btn">⧉ Copy as Markdown</text>
+  <rect x="900" y="110" width="116" height="28" rx="5" fill="#fff" stroke="#cbd5e1"/>
+  <text x="914" y="129" class="btn">⤓ Download .md</text>
+
+  <!-- tabs -->
+  <text x="104" y="170" class="tabOn">System prompt</text>
+  <rect x="100" y="178" width="104" height="2" fill="#4f46e5"/>
+  <text x="228" y="170" class="tab">Tool definitions</text>
+  <text x="362" y="170" class="tab">Flags</text>
+  <text x="1016" y="170" class="note" text-anchor="end">One view per session: prompt + flags from the startup snapshot (FR-6)</text>
+  <line x1="80" y1="180" x2="1040" y2="180" class="line"/>
+
+  <!-- scroll body -->
+  <rect x="1028" y="186" width="5" height="250" rx="2" fill="#cbd5e1"/>
+
+  <!-- tab toolbar: summary + accordion controls -->
+  <text x="104" y="212" class="m">13 parts · 8,612 B · ≈ 2,328 tok</text>
+  <rect x="826" y="194" width="84" height="26" rx="5" fill="#fff" stroke="#cbd5e1"/>
+  <text x="838" y="211" class="btn">Expand all</text>
+  <rect x="916" y="194" width="92" height="26" rx="5" fill="#fff" stroke="#cbd5e1"/>
+  <text x="928" y="211" class="btn">Collapse all</text>
+
+  <!-- group Shared -->
+  <text x="104" y="244" class="grp">SHARED · 8 PARTS</text>
+  <g>
+    <rect x="104" y="252" width="912" height="34" rx="6" fill="#fff" stroke="#e2e8f0"/>
+    <text x="118" y="274" class="m">›</text>
+    <text x="134" y="274" class="t">You are Claude Code, Anthropic's official CLI for Claude…</text>
+    <text x="1004" y="274" class="sz">2,904 B · ≈ 785 tok</text>
+
+    <rect x="104" y="290" width="912" height="34" rx="6" fill="#fff" stroke="#e2e8f0"/>
+    <text x="118" y="312" class="m">›</text>
+    <text x="134" y="312" class="t"># Doing tasks</text>
+    <text x="1004" y="312" class="sz">1,212 B · ≈ 328 tok</text>
+
+    <rect x="104" y="328" width="912" height="34" rx="6" fill="#fff" stroke="#e2e8f0"/>
+    <text x="118" y="350" class="m">›</text>
+    <text x="134" y="350" class="t"># Using your tools</text>
+    <text x="1004" y="350" class="sz">986 B · ≈ 266 tok</text>
+
+    <text x="134" y="380" class="m">⋯ 5 more shared parts (collapsed) ⋯</text>
+  </g>
+
+  <!-- boundary note -->
+  <line x1="104" y1="396" x2="1016" y2="396" stroke="#cbd5e1" stroke-dasharray="4 3"/>
+  <text x="1016" y="390" class="note" text-anchor="end">__SYSTEM_PROMPT_DYNAMIC_BOUNDARY__ is not an item — it splits Shared / Session-specific</text>
+
+  <!-- group Session-specific -->
+  <text x="104" y="422" class="grp">SESSION-SPECIFIC · 5 PARTS</text>
+  <g>
+    <rect x="104" y="430" width="912" height="34" rx="6" fill="#fff" stroke="#e2e8f0"/>
+    <text x="118" y="452" class="m">›</text>
+    <text x="134" y="452" class="t"># Memory</text>
+    <text x="1004" y="452" class="sz">2,092 B · ≈ 565 tok</text>
+
+    <!-- expanded item -->
+    <rect x="104" y="468" width="912" height="300" rx="6" fill="#fff" stroke="#4f46e5"/>
+    <rect x="104" y="468" width="912" height="34" rx="6" fill="#eef2ff"/>
+    <text x="118" y="490" fill="#4f46e5" font-size="12">⌄</text>
+    <text x="134" y="490" class="b"># Environment</text>
+    <text x="1004" y="490" class="sz">1,148 B · ≈ 310 tok</text>
+    <line x1="104" y1="502" x2="1016" y2="502" class="line"/>
+
+    <!-- rendered markdown -->
+    <text x="128" y="530" fill="#0f172a" font-size="16" font-weight="600">Environment</text>
+    <text x="128" y="554" class="t">You have been invoked in the following environment:</text>
+    <circle cx="140" cy="574" r="2.5" fill="#0f172a"/>
+    <text x="150" y="578" class="t">Primary working directory:</text>
+    <rect x="320" y="565" width="20" height="18" rx="3" fill="#f1f5f9"/><text x="326" y="578" class="mono">.</text>
+    <circle cx="140" cy="598" r="2.5" fill="#0f172a"/>
+    <text x="150" y="602" class="t">Is a git repository: true</text>
+    <circle cx="140" cy="622" r="2.5" fill="#0f172a"/>
+    <text x="150" y="626" class="t">Scratchpad directory:</text>
+    <rect x="290" y="613" width="160" height="18" rx="3" fill="#f1f5f9"/><text x="296" y="626" class="mono">&lt;outside&gt;/scratchpad</text>
+    <circle cx="140" cy="646" r="2.5" fill="#0f172a"/>
+    <text x="150" y="650" class="t">Memory directory:</text>
+    <rect x="266" y="637" width="320" height="18" rx="3" fill="#f1f5f9"/><text x="272" y="650" class="mono">~/.claude/projects/&lt;project-slug&gt;/memory/</text>
+    <circle cx="140" cy="670" r="2.5" fill="#0f172a"/>
+    <text x="150" y="674" class="t">Platform: win32 · Shell: PowerShell</text>
+    <text x="128" y="704" class="t">Fenced code renders as a block:</text>
+    <rect x="128" y="714" width="460" height="40" rx="5" fill="#f8fafc" stroke="#e2e8f0"/>
+    <text x="140" y="738" class="mono">npm run test:scenarios -- --mode a</text>
+
+    <!-- privacy callout -->
+    <path d="M594 646 L640 646" stroke="#b45309" stroke-dasharray="3 3"/>
+    <text x="646" y="634" class="note">Absolute local paths are masked before render</text>
+    <text x="646" y="650" class="note">(repo-relative · ~/.claude/projects/&lt;project-slug&gt;/… ·</text>
+    <text x="646" y="666" class="note">&lt;outside&gt;/&lt;basename&gt;); Copy / Download use the same text.</text>
+    <text x="646" y="696" class="note">Body is rendered only while expanded (performance NFR);</text>
+    <text x="646" y="712" class="note">react-markdown + remark-gfm, raw HTML shown as text.</text>
+    <text x="646" y="742" class="note">Sizes are UTF-8 bytes (B); ≈ tok = B / chars-per-token.</text>
+
+    <rect x="104" y="776" width="912" height="34" rx="6" fill="#fff" stroke="#e2e8f0"/>
+    <text x="118" y="798" class="m">›</text>
+    <text x="134" y="798" class="t"># Context management</text>
+    <text x="1004" y="798" class="sz">644 B · ≈ 174 tok</text>
+
+    <rect x="104" y="814" width="912" height="34" rx="6" fill="#fff" stroke="#e2e8f0"/>
+    <text x="118" y="836" class="m">›</text>
+    <text x="134" y="836" class="t"># Session-specific guidance</text>
+    <text x="1004" y="836" class="sz">1,330 B · ≈ 359 tok</text>
+  </g>
+
+  <text x="560" y="868" class="s" text-anchor="middle">("Tool definitions" and "Flags" tabs — see sysprompt-modal-tools-flags.svg)</text>
+</svg>

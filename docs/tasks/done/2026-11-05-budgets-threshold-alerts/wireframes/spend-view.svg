@@ -145,7 +145,7 @@
   <text x="570" y="588" font-size="12" font-weight="700" fill="#c2410c">▲ 5 Nov · $16.30 · 3.6× avg</text>
   <text x="570" y="603" font-size="11" class="link">7 sessions →</text>
   <text x="900" y="600" class="note">FR-5: day ≥ 2× period daily average is marked orange;</text>
-  <text x="900" y="614" class="note">clicking it opens that day's sessions in the Sessions tab</text>
+  <text x="900" y="614" class="note">clicking it opens that day's sessions in a sessions modal</text>
 
   <!-- ============ COST SLICES ============ -->
   <rect x="341" y="768" width="700" height="392" rx="8" fill="#ffffff" stroke="#e5e7eb"/>
@@ -200,7 +200,7 @@
     <text x="850" y="1044" class="cellm" font-weight="700">$41.20</text>
     <text x="960" y="1044" class="cellm" font-weight="700">100 %</text>
   </g>
-  <text x="361" y="1076" class="note">FR-4: shares add to 100 %; the session count / row opens the Sessions tab filtered to that slice.</text>
+  <text x="361" y="1076" class="note">FR-4: shares add to 100 %; the session count / row opens a sessions modal listing that slice's sessions (each links to the session).</text>
   <text x="361" y="1092" class="note">"Not reported" row holds what a slice cannot attribute; skill / MCP use per-call OTEL cost. Sub-agent slice gets a "Main agent" row.</text>
   <text x="361" y="1108" class="note">Same block is shown with or without a budget (without one, the budget card above is replaced by a</text>
   <text x="361" y="1124" class="note">plain "Spent this month $41.20 · previous $38.90" line; no add button here — budgets live in Settings).</text>
@@ -229,7 +229,7 @@
   <text x="1113" y="989" font-size="12" class="muted">Write scenario for budgets…</text>
   <line x1="1075" y1="1002" x2="1394" y2="1002" stroke="#e5e7eb"/>
 
-  <text x="1075" y="1028" font-size="13" class="link">Show all 3 in Sessions →</text>
+  <text x="1075" y="1028" font-size="13" class="link">Show all 3 →</text>
   <text x="1075" y="1060" class="note">FR-5: sessions ≥ 2σ / 3σ above the scope's</text>
   <text x="1075" y="1076" class="note">mean; each row opens the session. Rows reuse</text>
   <text x="1075" y="1092" class="note">the session-list line (time | cost, prompt).</text>

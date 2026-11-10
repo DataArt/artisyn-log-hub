@@ -45,12 +45,19 @@
             fast mode, the plan mix, sub-agent cost and hidden calls with no transcript record — in
             the {{ds:session.total|usd0}} session, the implement skill took {{ds:costShare.skill.implement|pct}} of the
             session's cost and fast mode {{ds:costShare.fastMode.on|pct}}.</li>
+          <li>Budgets: a daily, weekly or monthly reference amount per repository, team repository
+            or team, with burn rate, forecast, the day it runs out, unusual days and costly
+            sessions, and spend sliced by model, user, branch, sub-agent, skill or MCP server. A
+            crossed threshold puts a notice in the bell and a banner on screen, and emails the
+            owner or the team managers when mail is configured. A budget never stops anyone
+            working.</li>
         </ul>
       </dd>
       <dt>Where in the app</dt>
       <dd>Session view → Summary, Charts (Context Growth, Context usage, Agent tree), Statistics,
-        Bash, Advisor and OTEL tabs; repository → OTEL tab. See <a href="docs/cost-and-context.html">Understanding Cost &amp;
-        Context</a>.</dd>
+        Bash, Advisor and OTEL tabs; repository → OTEL tab; repository and team → Spend tab and
+        Settings → Budgets; repository → Analytics → Budget burn and Reports → Budget. See <a href="docs/cost-and-context.html">Understanding Cost &amp;
+        Context</a> and <a href="docs/budgets.html">Budgets</a>.</dd>
     </dl>
   </div>
   <figure class="figure-block" aria-labelledby="a-figure-title">
@@ -67,6 +74,10 @@
       read again on every turn. Sub-agents alone cost {{ds:session.parts.subAgents|usd}}.</p>
   </figure>
 </section>
+
+<div class="shot-grid" aria-label="Budget screens">
+  <figure class="shot"><img src="assets/shots/spend-budget.png" alt="Repository Spend tab: a monthly budget bar at 27 percent with threshold ticks, burn rate, forecast, days until it runs out, the previous period, and daily spend against the dashed budget pace" loading="lazy"><figcaption>Repository → Spend</figcaption></figure>
+</div>
 
 <section class="feature" id="b" aria-labelledby="b-title">
   <div>
@@ -111,7 +122,8 @@
             concentrated the change was.</li>
           <li>Productivity counters: diff lines, commits, pull requests, cost per line, lines per
             hour.</li>
-          <li>Session Attributes: labels an LLM extracts from each session (task type, outcome, …),
+          <li>Session Attributes: tags your team defines and an LLM fills in for each session (Jira
+            ticket, workflow stage, customer, …),
             usable as a group-by for every chart and report.</li>
         </ul>
       </dd>
@@ -209,7 +221,8 @@
           <li>Lagging Claude Code versions per developer, a low cache-read ratio, an agent that
             floods the context with the knowledge base.</li>
           <li>Per-tool error spikes, monitored tools nobody calls, a high <code>retried</code> rate.</li>
-          <li>These are reports and rankings you look at — Log Hub does not page anyone.</li>
+          <li>These are reports and rankings you look at. The one thing Log Hub sends on its own
+            is a budget threshold notice (block A).</li>
         </ul>
       </dd>
       <dt>Where in the app</dt>

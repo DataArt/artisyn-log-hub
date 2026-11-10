@@ -170,6 +170,11 @@ function repoReadScenarios(
       'GET /api/v1/repositories/:repoId/otel/facts — 1-week OTEL snapshot',
       `${r}/otel/facts?${week}`,
     ],
+    [
+      'repos:spend',
+      'GET /api/v1/repositories/:repoId/spend — current month (budgets Spend tab)',
+      `${r}/spend?period=month&offset=0&tz=UTC`,
+    ],
   ];
   // The heavy repo is seeded from transcripts only and has no hook state (404).
   if (!suffix) {

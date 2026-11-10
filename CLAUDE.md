@@ -261,6 +261,18 @@ You can use only NodeJS or powershell
 No Python anywhere in the repo — not in scripts and not in test fixtures/sample projects either
 (a fixture repo a test session edits must be JS/TS/Java/.NET, never Python).
 
+### Code research and code quality
+
+- Structural questions about `server/`, `hook/`, `packages/` (who calls X, which controller serves
+  route Y, what depends on Z) — **always start with the `ce` skill** (CodeExplorer graph), grep only to
+  confirm or for client React code, strings and docs. Say so in subagent prompts too.
+- The `ce` index is refreshed once at the start of `/adlc-lh:implement` and `/adlc-lh:implement-deep`
+  (`project-env.json → preImplCommand`, ~20 s). Outside them refresh it manually as the `ce` skill
+  says before the first `ce` query.
+- No IDE/LSP in the loop: WebStorm MCP and the `typescript-lsp` plugin are off. Code quality is
+  judged only by the canonical commands (typecheck, lint, tests, build) — never by editor
+  diagnostics, which are noise on files a workflow is still writing.
+
 ### Text edits: don't fight shell escaping
 
 Inline `node -e "…"` / `sed` / PowerShell one-liners that carry backslashes, quotes, backticks

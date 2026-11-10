@@ -652,6 +652,13 @@
       "when": 1792454400000,
       "tag": "0092_model_pricing_fable_5_2",
       "breakpoints": true
+    },
+    {
+      "idx": 93,
+      "version": "7",
+      "when": 1792540800000,
+      "tag": "0093_budgets",
+      "breakpoints": true
     }
   ]
 }

@@ -55,7 +55,8 @@ test('@TOUR-07 restricted member @mode-a', async ({ stand, api, db, users, page 
     },
   });
   await walker.screen(page, 'member.team-repo.no-team-wide-tabs', {
-    check: () => expectTabsOnScreen(page, 'repo', ['sessions']),
+    // Spend is visible to every member (DD-16 of 2026-11-05-budgets-threshold-alerts).
+    check: () => expectTabsOnScreen(page, 'repo', ['sessions', 'spend']),
   });
   await walker.screen(page, 'member.team-repo.settings-fallback', {
     check: async () => {

@@ -320,7 +320,29 @@
   </div>
 </section>
 
-<!-- 10 · Speed and autonomy (mosaic) -->
+<!-- 10 · Cost: budgets, forecast and threshold notices (no dataset figure on this slide) -->
+<section class="content-slide" data-block="cost">
+  <div class="slide-frame">
+    <header class="slide-head">
+      <p class="block-marker">Cost · was {{ds:session.total|usd0}} a lot?</p>
+      <ol class="pills" aria-label="Storyline"><li>hook</li><li>harness</li><li class="active">cost</li><li>speed</li><li>context</li><li>quality</li><li>team</li><li>tools</li><li>safety</li></ol>
+    </header>
+    <h2 class="headline">A budget turns the bill into a forecast.</h2>
+    <div class="slide-cols">
+      <div class="slide-body">
+        <ul>
+          <li>Daily, weekly or monthly, per repository or team.</li>
+          <li>Burn rate, forecast and run-out date, sliced by model, user or skill.</li>
+          <li>A crossed threshold notifies in the bell, a banner and email — never a stop.</li>
+        </ul>
+      </div>
+      <figure class="shot deck-shot"><img src="../assets/shots/spend-budget.png" alt="Repository Spend tab: a monthly budget bar at 27 percent with threshold ticks, burn rate, forecast, days until it runs out, the previous period, and daily spend against the dashed budget pace" loading="lazy"><figcaption>Repository → Spend</figcaption></figure>
+    </div>
+    <p class="slide-footer">{{site:url}}</p>
+  </div>
+</section>
+
+<!-- 11 · Speed and autonomy (mosaic) -->
 <section class="content-slide mosaic-slide" data-block="speed">
   <div class="slide-frame">
     <header class="slide-head">
@@ -353,7 +375,7 @@
   </div>
 </section>
 
-<!-- 11 · Live -->
+<!-- 12 · Live -->
 <section class="content-slide" data-block="speed">
   <div class="slide-frame">
     <header class="slide-head">
@@ -379,7 +401,7 @@
   </div>
 </section>
 
-<!-- 12 · Context: harness tax -->
+<!-- 13 · Context: harness tax -->
 <section class="content-slide" data-block="context">
   <div class="slide-frame">
     <header class="slide-head">
@@ -405,7 +427,7 @@
   </div>
 </section>
 
-<!-- 13 · Context: harness usage + Tools/MCP -->
+<!-- 14 · Context: harness usage + Tools/MCP -->
 <section class="content-slide" data-block="context">
   <div class="slide-frame">
     <header class="slide-head">
@@ -431,7 +453,7 @@
   </div>
 </section>
 
-<!-- 14 · Context: knowledge base -->
+<!-- 15 · Context: knowledge base -->
 <section class="content-slide" data-block="context">
   <div class="slide-frame">
     <header class="slide-head">
@@ -464,24 +486,24 @@
   </div>
 </section>
 
-<!-- 15 · Quality: change surface + evaluator -->
+<!-- 16 · Quality: change surface + evaluator -->
 <section class="content-slide" data-block="quality">
   <div class="slide-frame">
     <header class="slide-head">
       <p class="block-marker">Quality · the right thing?</p>
       <ol class="pills" aria-label="Storyline"><li>hook</li><li>harness</li><li>cost</li><li>speed</li><li>context</li><li class="active">quality</li><li>team</li><li>tools</li><li>safety</li></ol>
     </header>
-    <h2 class="headline">What changed, and who judged it.</h2>
+    <h2 class="headline">What changed, and what it was about.</h2>
     <div class="slide-cols">
       <div class="slide-body">
         <ul>
           <li>Files, folders and modules touched; diff lines, commits, cost per line.</li>
-          <li>A separate post-turn run labels task type and outcome for every chart.</li>
-          <li>The session never grades itself: LLM judges favor their own output (Panickssery et al., NeurIPS 2024).</li>
+          <li>After each turn, Claude tags the session with your own attributes: Jira ticket, customer, workflow stage.</li>
+          <li>Slice every chart and report by those tags.</li>
         </ul>
         <div class="key-box deck-figure">
           <span class="key-figure">${{ds:productivity.costPerLine}}</span>
-          <span class="key-caption">per changed line — repo median, by task type and outcome</span>
+          <span class="key-caption">per changed line — repo median, split by any session attribute</span>
         </div>
       </div>
       <figure class="shot deck-shot"><img src="../assets/shots/change-surface.png" alt="Change Surface of one session" loading="lazy"><figcaption>Session → Change surface</figcaption></figure>
@@ -490,7 +512,7 @@
   </div>
 </section>
 
-<!-- 16 · Team: analytics, reports, anomalies -->
+<!-- 17 · Team: analytics, reports, anomalies -->
 <section class="content-slide" data-block="team">
   <div class="slide-frame">
     <header class="slide-head">
@@ -527,7 +549,7 @@
   </div>
 </section>
 
-<!-- 17 · Team: the team data from every side (mosaic of real charts) -->
+<!-- 18 · Team: the team data from every side (mosaic of real charts) -->
 <section class="content-slide mosaic-slide" data-block="team">
   <div class="slide-frame">
     <header class="slide-head">
@@ -554,7 +576,7 @@
   </div>
 </section>
 
-<!-- 18 · Tools: author and admin (former E1 + E2, both visuals kept) -->
+<!-- 19 · Tools: author and admin (former E1 + E2, both visuals kept) -->
 <section class="content-slide" data-block="tools">
   <div class="slide-frame">
     <header class="slide-head">
@@ -589,7 +611,7 @@
   </div>
 </section>
 
-<!-- 19 · Safety (replaces F1) -->
+<!-- 20 · Safety (replaces F1) -->
 <section class="content-slide" data-block="safety">
   <div class="slide-frame">
     <header class="slide-head">
@@ -622,7 +644,7 @@
   </div>
 </section>
 
-<!-- 20 · Safety: what is collected, who can read it, how long it stays -->
+<!-- 21 · Safety: what is collected, who can read it, how long it stays -->
 <section class="content-slide" data-block="safety">
   <div class="slide-frame">
     <header class="slide-head">
@@ -657,7 +679,7 @@
   </div>
 </section>
 
-<!-- 21 · Closing -->
+<!-- 22 · Closing -->
 <section class="closing-slide" data-slide="closing">
   <div class="slide-frame">
     <p class="closing-answer">{{ds:session.total|usd0}} and {{ds:session.durationMin}} minutes: now you know whether that was good, and why.</p>

@@ -25,6 +25,30 @@ from.
   under Overview, Transcript, Cost & context and Effects (each chart is a tab of its own).
 - **API keys**, **Admin panel** (administrators only) and **Help**.
 
+The tabs on the map:
+
+| Page | Tabs |
+|---|---|
+| Team | Members, Repositories, Invitations, OTEL, **Spend**, Settings |
+| Repository | Sessions, Analytics, **Spend**, Reports, Tools/MCP, OKF, OTEL, Settings |
+| Repository settings | Display, File Categories, Analysis, Monitored Tools, Session Attributes, **Budgets**, Maintenance, Import/Export |
+
+The team OTEL and Settings tabs, and the repository tabs other than Sessions and Spend of a
+restricted team, are listed only for those who may open them. **Spend** is listed for every
+member.
+
+### Spend and budgets on the map
+
+| Line | What it answers | Also found by |
+|---|---|---|
+| Team or repository → **Spend** | Spend against the budget, forecast, burn rate and what the cost went on | budget, spend, forecast, burn rate, limit |
+| Repository → Settings → **Budgets** | Spend budgets, alert thresholds and their event log | budget, limit, alerts |
+| Team → **Settings** | Team budgets and alert thresholds | settings, budgets |
+| Repository → Analytics → **Budget Burn** | Cumulative spend of the budget period against the budget, with forecast | budget, forecast, burn rate, limit |
+| Repository → Reports → Cost → **Budget** | Spend, percent of budget and forecast per budget period | budget, forecast, limit, spend, burn rate |
+
+See [Budgets](budgets.md) for how they work.
+
 Click a line to open that view. Click a group to expand or collapse it; a collapsed group shows
 how many views it holds. Log Hub remembers which groups you opened, per user, in this browser.
 

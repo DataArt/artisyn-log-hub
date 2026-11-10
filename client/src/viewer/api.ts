@@ -95,6 +95,19 @@ import type {
   OtelLiveStatusResponse,
 } from '../models/otel-live';
 import type {
+  BudgetBurnView,
+  BudgetDto,
+  BudgetEventsPage,
+  BudgetInput,
+  BudgetNoticesPage,
+  BudgetPeriod,
+  BudgetReport,
+  BudgetsListResponse,
+  SpendSessionsResult,
+  SpendSessionsSlice,
+  SpendView,
+} from '../models/budgets';
+import type {
   HookRepositorySummary,
   HookStateDetail,
 } from '../models/hook-state';
@@ -2756,4 +2769,249 @@ export async function fetchRetentionDays(): Promise<number> {
   if (!res.ok) throw new ApiError(res.status);
   const body = (await res.json()) as { retentionDays: number };
   return body.retentionDays;
+}
+
+// --- Budgets, spend and budget notices (2026-11-05 budgets-threshold-alerts) -----------
+
+/**
+ * The scope of a budget / spend route: a personal repository (`{repoId}`), a team repository
+ * (`{repoId, teamId}`) or a whole team (`{teamId}`).
+ */
+export type BudgetScopeRef =
+  | { repoId: number; teamId?: number }
+  | { teamId: number };
+
+/** `R/<path>` (with `?teamId=` for a team repository) or `T/<path>`, plus the query string. */
+function budgetScopeUrl(
+  scope: BudgetScopeRef,
+  path: string,
+  q: URLSearchParams = new URLSearchParams(),
+): string {
+  let base: string;
+  if ('repoId' in scope) {
+    base = `/api/v1/repositories/${scope.repoId}/${path}`;
+    if (scope.teamId != null) q.set('teamId', String(scope.teamId));
+  } else {
+    base = `/api/v1/teams/${scope.teamId}/${path}`;
+  }
+  const qs = q.toString();
+  return qs ? `${base}?${qs}` : base;
+}
+
+/** The scope's budgets and whether the caller may change them; 403 for a plain member (DD-9). */
+export async function fetchBudgets(
+  scope: BudgetScopeRef,
+): Promise<BudgetsListResponse> {
+  const res = await apiFetch(budgetScopeUrl(scope, 'budgets'));
+  if (!res.ok) throw await readApiError(res);
+  return res.json() as Promise<BudgetsListResponse>;
+}
+
+/** 400 on invalid input, 409 when the scope already has a budget of that period. */
+export async function createBudget(
+  scope: BudgetScopeRef,
+  input: BudgetInput,
+): Promise<BudgetDto> {
+  const res = await apiFetch(budgetScopeUrl(scope, 'budgets'), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw await readApiError(res);
+  return res.json() as Promise<BudgetDto>;
+}
+
+export async function updateBudget(
+  scope: BudgetScopeRef,
+  budgetId: number,
+  input: BudgetInput,
+): Promise<BudgetDto> {
+  const res = await apiFetch(budgetScopeUrl(scope, `budgets/${budgetId}`), {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  });
+  if (!res.ok) throw await readApiError(res);
+  return res.json() as Promise<BudgetDto>;
+}
+
+export async function deleteBudget(
+  scope: BudgetScopeRef,
+  budgetId: number,
+): Promise<void> {
+  const res = await apiFetch(budgetScopeUrl(scope, `budgets/${budgetId}`), {
+    method: 'DELETE',
+  });
+  if (!res.ok) throw await readApiError(res);
+}
+
+export interface BudgetEventsQueryParams {
+  budgetId?: number;
+  event?: string;
+  /** Event id: only older events (the previous page's `nextBefore`). */
+  before?: number;
+  /** 1–100, default 50. */
+  limit?: number;
+}
+
+/** The scope's budget event log, newest first. */
+export async function fetchBudgetEvents(
+  scope: BudgetScopeRef,
+  params: BudgetEventsQueryParams = {},
+): Promise<BudgetEventsPage> {
+  const q = new URLSearchParams();
+  if (params.budgetId != null) q.set('budgetId', String(params.budgetId));
+  if (params.event) q.set('event', params.event);
+  if (params.before != null) q.set('before', String(params.before));
+  if (params.limit != null) q.set('limit', String(params.limit));
+  const res = await apiFetch(budgetScopeUrl(scope, 'budgets/events', q));
+  if (!res.ok) throw await readApiError(res);
+  return res.json() as Promise<BudgetEventsPage>;
+}
+
+export interface SpendQueryParams {
+  period: BudgetPeriod;
+  /** ≤ 0: 0 is the current period, −1 the previous one. */
+  offset: number;
+  /** The viewer's IANA time zone, used when the scope has no budget of that period. */
+  tz: string;
+}
+
+function spendQuery(params: SpendQueryParams): URLSearchParams {
+  const q = new URLSearchParams();
+  q.set('period', params.period);
+  q.set('offset', String(params.offset));
+  q.set('tz', params.tz);
+  return q;
+}
+
+/** The Spend tab view of one period (the DD-9 restricted view for a plain team member). */
+export async function fetchSpend(
+  scope: BudgetScopeRef,
+  params: SpendQueryParams,
+  signal?: AbortSignal,
+): Promise<SpendView> {
+  const res = await apiFetch(
+    budgetScopeUrl(scope, 'spend', spendQuery(params)),
+    { signal },
+  );
+  if (!res.ok) throw await readApiError(res);
+  return res.json() as Promise<SpendView>;
+}
+
+export interface SpendSessionsQueryParams extends SpendQueryParams {
+  slice: SpendSessionsSlice;
+  /** A slice row key, a `YYYY-MM-DD` / `HH` day key, or `all` for the costly list. */
+  key: string;
+}
+
+/** The root sessions behind a slice row, an anomaly day or the costly list (DD-20). */
+export async function fetchSpendSessions(
+  scope: BudgetScopeRef,
+  params: SpendSessionsQueryParams,
+  signal?: AbortSignal,
+): Promise<SpendSessionsResult> {
+  const q = spendQuery(params);
+  q.set('slice', params.slice);
+  q.set('key', params.key);
+  const res = await apiFetch(budgetScopeUrl(scope, 'spend/sessions', q), {
+    signal,
+  });
+  if (!res.ok) throw await readApiError(res);
+  return res.json() as Promise<SpendSessionsResult>;
+}
+
+export interface BudgetBurnQueryParams {
+  teamId?: number;
+  /** Default: the month budget, else week, else day. */
+  budgetId?: number;
+  branches?: string[];
+  users?: string[];
+  tz: string;
+}
+
+/** Analytics › Budget burn of a repository (repository-only route). */
+export async function fetchBudgetBurn(
+  repoId: number,
+  params: BudgetBurnQueryParams,
+  signal?: AbortSignal,
+): Promise<BudgetBurnView> {
+  const q = new URLSearchParams();
+  if (params.budgetId != null) q.set('budgetId', String(params.budgetId));
+  // Same per-value encoding as `usageAnalyticsQuery` (the server's `parseCsvParam`).
+  if (params.branches && params.branches.length > 0) {
+    q.set(
+      'branches',
+      params.branches.map((b) => encodeURIComponent(b)).join(','),
+    );
+  }
+  if (params.users && params.users.length > 0) {
+    q.set('users', params.users.map((u) => encodeURIComponent(u)).join(','));
+  }
+  q.set('tz', params.tz);
+  const res = await apiFetch(
+    budgetScopeUrl(
+      { repoId, teamId: params.teamId },
+      'analytics/budget-burn',
+      q,
+    ),
+    { signal },
+  );
+  if (!res.ok) throw await readApiError(res);
+  return res.json() as Promise<BudgetBurnView>;
+}
+
+export interface BudgetReportQueryParams {
+  teamId?: number;
+  /** ISO 8601. */
+  startDate: string;
+  /** ISO 8601. */
+  endDate: string;
+  tz: string;
+}
+
+/** Reports › Budget of a repository (repository-only route). */
+export async function fetchBudgetReport(
+  repoId: number,
+  params: BudgetReportQueryParams,
+): Promise<BudgetReport> {
+  const q = new URLSearchParams();
+  q.set('startDate', params.startDate);
+  q.set('endDate', params.endDate);
+  q.set('tz', params.tz);
+  const res = await apiFetch(
+    budgetScopeUrl({ repoId, teamId: params.teamId }, 'reports/budget', q),
+  );
+  if (!res.ok) throw await readApiError(res);
+  return res.json() as Promise<BudgetReport>;
+}
+
+/** The caller's budget notices, newest first, plus the unread count (bell tray, banner). */
+export async function fetchBudgetNotices(
+  params: { before?: number; limit?: number } = {},
+  signal?: AbortSignal,
+): Promise<BudgetNoticesPage> {
+  const q = new URLSearchParams();
+  if (params.before != null) q.set('before', String(params.before));
+  if (params.limit != null) q.set('limit', String(params.limit));
+  const qs = q.toString();
+  const res = await apiFetch(
+    qs ? `/api/v1/budget-notices?${qs}` : '/api/v1/budget-notices',
+    { signal },
+  );
+  if (!res.ok) throw await readApiError(res);
+  return res.json() as Promise<BudgetNoticesPage>;
+}
+
+/** Marks the caller's own notices read (POST only, never a GET side effect). */
+export async function markBudgetNoticesRead(
+  body: { ids: number[] } | { all: true },
+): Promise<{ unreadCount: number }> {
+  const res = await apiFetch('/api/v1/budget-notices/read', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) throw await readApiError(res);
+  return res.json() as Promise<{ unreadCount: number }>;
 }

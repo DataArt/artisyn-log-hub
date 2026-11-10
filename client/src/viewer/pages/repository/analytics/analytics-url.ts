@@ -40,7 +40,9 @@ export function analyticsFromParams(
     av === 'productivity-counters' ||
     av === 'active-sessions' ||
     // change surface
-    av === 'change-surface'
+    av === 'change-surface' ||
+    // budgets
+    av === 'budget-burn'
   )
     out.view = av;
   const al = p.get('al');
