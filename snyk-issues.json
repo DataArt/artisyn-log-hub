@@ -1,6 +1,25 @@
 {
-  "snyk-oss/prod": [],
+  "snyk-oss/prod": [
+    {
+      "severity": "high",
+      "id": "SNYK-JS-FFLATE-22392372",
+      "title": "Memory Allocation with Excessive Size Value",
+      "package": "fflate",
+      "version": "0.8.3",
+      "fixedIn": [],
+      "project": "client/package.json"
+    }
+  ],
   "snyk-oss/dev": [
+    {
+      "severity": "high",
+      "id": "SNYK-JS-FFLATE-22392372",
+      "title": "Memory Allocation with Excessive Size Value",
+      "package": "fflate",
+      "version": "0.8.3",
+      "fixedIn": [],
+      "project": "client/package.json"
+    },
     {
       "severity": "high",
       "id": "SNYK-JS-URIJS-19963963",
