@@ -1,6 +1,6 @@
 # 2026-10-22: Claude-Docker Full-Screen Menu Kills the JetBrains Terminal
 
-**Status:** todo
+**Status:** done
 **Priority:**
 **Type:** bug
 **Module(s):** dev tooling (scripts/claude-docker)
@@ -71,3 +71,5 @@ uses Node's raw mode at all: `scripts/claude-docker/keys.mjs` reads keys in a Po
 JetBrains auto-switch to the line menu was removed (`CLAUDE_DOCKER_MENU=simple` still forces it).
 What remains of this task is optional: the root cause inside Node/libuv vs pty4j (FR-1…FR-4) and an
 upstream report; FR-5's "fix" branch is done by avoiding raw mode rather than repairing it.
+
+**2026-11-10 — archived.** Fix path delivered in 976d46b (no Node raw mode on Windows, full-screen menu works in WebStorm, JetBrains auto-fallback removed). The optional root-cause investigation (FR-1…FR-4) and an upstream report were not done and are dropped.
