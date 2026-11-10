@@ -1,6 +1,6 @@
 # 2026-11-05: Budgets, Spend Forecasts and Cost Slices (Display-Only)
 
-**Status:** todo
+**Status:** done
 **Priority:** high
 **Type:** feature
 **Module(s):** server, client
