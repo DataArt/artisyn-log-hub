@@ -5,7 +5,7 @@ description: "Folder-level index of client/src: what each folder holds, its entr
 tags:
   - client
   - ui
-timestamp: "2026-11-05T00:00:00+04:00"
+timestamp: "2026-11-10T00:00:00+04:00"
 ---
 
 # Client Components Structure
@@ -30,7 +30,7 @@ For routing, the provider tree, lazy chunks, URL state and browser storage see
 |---|---|
 | `main.tsx` | SPA entry: providers, `createHashRouter`, `Bootstrap` / `AuthGuard` / `AdminGuard` / consent gate (`AppLayout`). Route paths come from `ROUTE` in `app-routes.ts` |
 | `app-routes.ts` | Pure route table: `ROUTE`, `APP_ROUTES`, `ROUTE_ACCESS` (public / auth / admin) |
-| `models/` | Type-only mirrors of API response shapes, one file per area (`repositories.ts`, `teams.ts`, `admin.ts`, `pricing.ts`, `tool-monitoring.ts`, …) |
+| `models/` | Type-only mirrors of API response shapes, one file per area (`repositories.ts`, `teams.ts`, `admin.ts`, `pricing.ts`, `tool-monitoring.ts`, `budgets.ts`, …) |
 | `lib/` | `format.ts` (dates, durations) |
 | `viewer/` | Everything else — below |
 
@@ -63,7 +63,9 @@ chunks ([code splitting](client-routing-and-layout.md#code-splitting)): a new pa
 | `main/home/` | — | Home widgets (`HomeWidget.tsx` shell, `home-tones.ts` palette), `useHomeRepos.ts`, `home-queries.ts` | — |
 | `map/` | `#/map` (All views) | `MapPage.tsx`; pure model `nav-tree.ts`, questions `nav-questions.ts` (shared with Home) | [`algorithms/nav-filter-match.md`](algorithms/nav-filter-match.md) |
 | `repository/` | `#/repos/:id`, `#/teams/:tid/repos/:id` | `RepositoryView.tsx` | [below](#pagesrepository) |
-| `teams/` | `#/teams`, `#/teams/:id` | `TeamsPage.tsx`, `TeamDetailPage.tsx`; `tabs/` (members, repositories, invitations), `otel/` (team OTEL tab) | [`otel-tabs.md`](otel-tabs.md) |
+| `teams/` | `#/teams`, `#/teams/:id` | `TeamsPage.tsx`, `TeamDetailPage.tsx` (URL tab `ttab`); `tabs/` (members, repositories, invitations), `otel/` (team OTEL tab); the team Spend and Settings tabs reuse `spend/` and `budgets/` | [`otel-tabs.md`](otel-tabs.md), [`budgets.md`](budgets.md) |
+| `spend/` | — (repository and team **Spend** tab) | `SpendTab.tsx` (budget card, daily chart, slices, costly sessions, sessions modal; URL `sp` / `so` in `useSpendUrlState.ts`) | [`budgets.md`](budgets.md) |
+| `budgets/` | — (Settings › Budgets, team Settings tab) | `BudgetsSection.tsx` (table, inline `BudgetForm`, `BudgetEventLog`); `budget-format.ts` = money / band / notice-link helpers shared with Spend, bell and banner | [`budgets.md`](budgets.md) |
 | `api-keys/` | `#/api-keys` | `ApiKeysPage.tsx` (Install + API Keys tabs) | [`hook-installation.md`](hook-installation.md) |
 | `hook-state/` | `#/repos/:id/hook-state` | `HookStatePage.tsx` | [`hook-installation.md`](hook-installation.md) |
 | `admin/` | `#/admin` | `AdminPage.tsx`, one file per tab in `tabs/`, model pricing in `tabs/model-pricing/` | [`system-info-and-cluster.md`](system-info-and-cluster.md), [`upload-queue.md`](upload-queue.md), [`data-retention.md`](data-retention.md) |
@@ -73,13 +75,14 @@ chunks ([code splitting](client-routing-and-layout.md#code-splitting)): a new pa
 `RepositoryView.tsx` is a thin shell over `useRepositoryViewState.ts` (URL-backed tab / session / filter
 state) and `useRepositoryData.ts` (all of the page's queries); `useRepoTeamAccess.ts` decides the
 team-wide tabs and the restricted notice, `useSessionListPrefs.ts` keeps the list's `localStorage`
-preferences, and `RepositoryTeamWideTabs.tsx` renders every main tab but Sessions. Its main tabs:
+preferences, and `RepositoryTeamWideTabs.tsx` renders every main tab but Sessions and Spend. Its main tabs:
 
 | Main tab | Where |
 |---|---|
 | Sessions | `RepositorySessionsPanel.tsx`: the list in `session-list/` (`SessionListPanel.tsx`, branch / date / user / plain views) + the detail pane `SessionDetailPane.tsx` |
-| Analytics | `analytics/` (`RepositoryAnalytics.tsx`, D3 charts, URL state in `analytics-url.ts`) |
-| Reports | `reports/` (`ReportsPanel.tsx`, `report-catalog.ts` = the report tree; every report has an on-page document and a react-pdf export, shared PDF primitives in `reports/pdf/`, the Executive Summary in `reports/executive-summary/`) — [`executive-summary-report.md`](executive-summary-report.md) |
+| Analytics | `analytics/` (`RepositoryAnalytics.tsx`, D3 charts, URL state in `analytics-url.ts`; the Recharts `BudgetBurnView.tsx` for the `budget-burn` view) |
+| Spend | `../spend/SpendTab.tsx`, mounted outside `RepositoryTeamWideTabs` so every member reaches it — [`budgets.md`](budgets.md) |
+| Reports | `reports/` (`ReportsPanel.tsx`, `report-catalog.ts` = the report tree; every report has an on-page document and a react-pdf export, shared PDF primitives in `reports/pdf/`, the Executive Summary in `reports/executive-summary/`, the Budget report in `BudgetReport.tsx`) — [`executive-summary-report.md`](executive-summary-report.md) |
 | Tools/MCP | `tools/` (`RepoToolsTab.tsx`, also the session Tools/MCP tab) — [`tool-monitoring.md`](tool-monitoring.md) |
 | OKF | `okf/` (`RepoOkfTab.tsx`, `RepoOkfOverview.tsx`, tiles, hot files, histogram, `OkfUpkeepPanel.tsx`, `OkfAnalysisCoverageBanner.tsx`; URL state `okf-url-state.ts`; the tree and cards are shared from `session-log/okf/`); `okf/article/` = the per-article drill-down (`OkfArticleDrillDown.tsx`, `OkfPointerTable.tsx`, `OkfSignalBlocks.tsx`, URL param `okfArticle`) — [`okf-usage.md`](okf-usage.md) |
 | OTEL | `otel/` (`RepoOtelTab.tsx` and the OTEL data layer shared with the session and team tabs) — [`otel-tabs.md`](otel-tabs.md) |
@@ -129,9 +132,10 @@ One folder per session tab; flat files are the Logs tab and the shared parsing. 
 
 | File | Role |
 |---|---|
-| `AppShell.tsx` | Authenticated shell: `MainNav` + `AppLeftNav` + page area; mounts the Ctrl+K shortcut |
+| `AppShell.tsx` | Authenticated shell: `MainNav` + `BudgetNoticeBanner` + `AppLeftNav` + page area; mounts the Ctrl+K shortcut |
+| `BudgetNoticeBanner.tsx` | Unread budget notices under the top bar (at most 3, highest threshold first); data from `hooks/useBudgetNotices.ts` — [`budgets.md`](budgets.md) |
 | `AppLeftNav.tsx`, `TeamAccordion.tsx` | Left sidebar: teams tree, My Repos, API Keys, Installed Hooks, Admin link |
-| `top-nav/` | `NotificationBell`, `UserMenu`, `ChangePasswordModal`, `AppLogo`, `LiveNavItem` (the OTEL Live entry: glowing activity icon + token sparkline + tooltip from `GET /api/v1/otel/live/status`, lazily mounts `viewer/live/LiveModal`) (the bar itself is `pages/main/MainNav.tsx`) |
+| `top-nav/` | `NotificationBell` (team invitations + budget notices, the `BudgetNoticeTray`), `UserMenu`, `ChangePasswordModal`, `AppLogo`, `LiveNavItem` (the OTEL Live entry: glowing activity icon + token sparkline + tooltip from `GET /api/v1/otel/live/status`, lazily mounts `viewer/live/LiveModal`) (the bar itself is `pages/main/MainNav.tsx`) |
 | `teams/` | Team access mode: `AccessModeBadge`, `TeamDisclosureModal`, `PendingDisclosureGate` |
 
 ### Shared components

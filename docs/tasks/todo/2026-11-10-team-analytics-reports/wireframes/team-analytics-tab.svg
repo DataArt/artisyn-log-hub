@@ -1,0 +1,170 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900" font-family="Inter, Segoe UI, Arial, sans-serif">
+  <style>
+    .t { fill: #111827; }
+    .muted { fill: #6b7280; }
+    .mono { font-family: 'JetBrains Mono', Consolas, monospace; }
+    .link { fill: #2563eb; }
+    .note { fill: #92400e; font-size: 11px; }
+    .lbl { font-size: 11px; fill: #6b7280; letter-spacing: 0.5px; }
+    .ax { font-size: 10px; fill: #374151; }
+    .btn { fill: #ffffff; stroke: #d1d5db; }
+    .new { fill: #eef2ff; stroke: #6366f1; stroke-dasharray: 3,2; }
+  </style>
+  <rect width="1440" height="900" fill="#ffffff"/>
+
+  <!-- top bar (as in the current app) -->
+  <rect x="0" y="0" width="1440" height="48" fill="#fafafa"/>
+  <line x1="0" y1="48" x2="1440" y2="48" stroke="#e5e7eb"/>
+  <circle cx="24" cy="24" r="8" fill="#4f46e5"/>
+  <text x="44" y="29" font-size="14" font-weight="600" class="t">[local] Artisyn Log Hub <tspan class="muted" font-size="12" font-weight="400">dev</tspan></text>
+  <text x="262" y="29" font-size="14" font-weight="600" class="t">Home</text>
+  <text x="858" y="29" font-size="14" class="muted">LogHubLocal</text>
+  <rect x="948" y="13" width="72" height="22" rx="11" fill="#ea580c"/>
+  <text x="984" y="28" font-size="11" font-weight="700" fill="#ffffff" text-anchor="middle">Restricted</text>
+  <text x="1042" y="29" font-size="14" font-weight="600" class="t">All views</text>
+  <text x="1150" y="29" font-size="15" class="t">?</text>
+  <text x="1186" y="30" font-size="14" class="muted">🔔</text>
+  <text x="1226" y="29" font-size="14" class="muted">dt@dataart.com</text>
+  <text x="1350" y="29" font-size="14" font-weight="600" class="t">Edit email</text>
+
+  <!-- sidebar (abridged) -->
+  <rect x="0" y="49" width="320" height="851" fill="#ffffff"/>
+  <line x1="321" y1="49" x2="321" y2="900" stroke="#e5e7eb" stroke-width="4"/>
+  <text x="12" y="108" class="lbl">TEAMS</text>
+  <rect x="0" y="153" width="320" height="32" fill="#f3f4f6"/>
+  <text x="50" y="174" font-size="14" font-weight="700" class="t">LogHubLocal</text>
+  <text x="32" y="203" font-size="12" class="t">https://gitlab.dataart.com/da/cml/artisyn-log-hub</text>
+  <text x="32" y="225" font-size="12" class="t">https://github.com/DataArt/artisyn-log-hub</text>
+  <text x="32" y="247" font-size="12" class="t">https://github.com/denistsyplakov/at-scanner</text>
+  <text x="50" y="279" font-size="14" class="muted">LogHub Demo</text>
+  <text x="12" y="359" class="lbl">MY REPOS</text>
+  <text x="12" y="392" font-size="14" class="muted">https://github.com/DataArt/artisyn-log-hub</text>
+
+  <!-- team header -->
+  <text x="349" y="94" font-size="20" font-weight="600" class="t">LogHubLocal</text>
+  <text x="1424" y="92" font-size="13" class="muted" text-anchor="end">3 linked repositories · 4 members (2 acknowledged)</text>
+
+  <!-- team tabs: Analytics (NEW) active -->
+  <g font-size="14">
+    <text x="377" y="148" class="muted">Members</text>
+    <text x="459" y="148" class="muted">Repositories</text>
+    <text x="559" y="148" class="muted">Invitations</text>
+    <text x="648" y="148" class="muted">OTEL</text>
+    <text x="701" y="148" class="muted">Spend</text>
+    <rect x="752" y="128" width="84" height="28" rx="4" class="new"/>
+    <text x="764" y="148" font-weight="700" class="t">Analytics</text>
+    <rect x="844" y="128" width="72" height="28" rx="4" class="new"/>
+    <text x="856" y="148" class="muted">Reports</text>
+    <text x="934" y="148" class="muted">Settings</text>
+  </g>
+  <line x1="349" y1="162" x2="1416" y2="162" stroke="#e5e7eb"/>
+  <line x1="756" y1="162" x2="832" y2="162" stroke="#111827" stroke-width="2"/>
+  <text x="752" y="176" class="note">NEW tabs (FR-1, FR-2) — shown only to users with team-wide access (FR-5)</text>
+
+  <!-- controls row (existing AnalyticsControls + team additions) -->
+  <g font-size="14">
+    <rect x="349" y="190" width="250" height="36" rx="6" class="btn"/>
+    <text x="362" y="213" class="t">1d</text><text x="401" y="213" class="t">2d</text><text x="442" y="213" class="t">3d</text>
+    <text x="482" y="213" class="t">1w</text><text x="525" y="213" class="t">2w</text>
+    <rect x="556" y="191" width="42" height="34" fill="#f3f4f6"/><text x="568" y="213" class="t">1m</text>
+    <rect x="611" y="190" width="75" height="36" rx="6" class="btn"/><text x="624" y="213" class="t">Custom</text>
+    <rect x="698" y="190" width="170" height="36" rx="6" class="new"/><text x="711" y="213" class="t">By repository ⌄</text>
+    <rect x="880" y="190" width="138" height="36" rx="6" class="new"/><text x="893" y="213" class="t">Repositories ⌄</text>
+    <rect x="1030" y="190" width="102" height="36" rx="6" class="btn"/><text x="1043" y="213" class="t">Branches ⌄</text>
+    <rect x="1144" y="190" width="80" height="36" rx="6" class="btn"/><text x="1157" y="213" class="t">Users ⌄</text>
+    <rect x="1236" y="190" width="66" height="36" rx="6" class="btn"/><text x="1252" y="213" class="t">▮ ≡</text>
+    <rect x="1314" y="190" width="104" height="36" rx="6" class="btn"/><text x="1327" y="213" class="t">Cost ⌄</text>
+  </g>
+  <text x="698" y="242" class="note">NEW Group by option "By repository"?</text>
+  <text x="880" y="256" class="note">NEW Repository filter? (open question)</text>
+  <text x="1030" y="242" class="note">Branches: &lt;repo&gt;/&lt;branch&gt; or by name? (open q.)</text>
+  <text x="1418" y="256" class="note" text-anchor="end">View selector: same views as repo,</text>
+  <text x="1418" y="270" class="note" text-anchor="end">+ Budget burn (team budgets)</text>
+
+  <!-- totals strip -->
+  <text x="349" y="290" class="mono t" font-size="15" font-weight="700">$1,412.36</text>
+  <text x="440" y="290" font-size="13" class="muted">total cost · 312 sessions · 3 repositories · acknowledged members only (FR-3)</text>
+
+  <!-- ============ chart: stacked bars by repository ============ -->
+  <g stroke="#e5e7eb">
+    <line x1="390" y1="600" x2="1400" y2="600"/>
+    <line x1="390" y1="530" x2="1400" y2="530"/>
+    <line x1="390" y1="460" x2="1400" y2="460"/>
+    <line x1="390" y1="390" x2="1400" y2="390"/>
+    <line x1="390" y1="320" x2="1400" y2="320"/>
+  </g>
+  <line x1="390" y1="310" x2="390" y2="600" stroke="#9ca3af"/>
+  <g class="ax" text-anchor="end">
+    <text x="382" y="604">$0</text><text x="382" y="534">$25</text><text x="382" y="464">$50</text>
+    <text x="382" y="394">$75</text><text x="382" y="324">$100</text>
+  </g>
+  <text x="382" y="306" class="ax" text-anchor="end" fill="#6b7280">USD</text>
+
+  <!-- bars: green = gitlab artisyn, blue = github artisyn, orange = at-scanner -->
+  <g>
+    <rect x="404" y="560" width="22" height="40" fill="#22c55e"/><rect x="404" y="540" width="22" height="20" fill="#3b82f6"/>
+    <rect x="438" y="520" width="22" height="80" fill="#22c55e"/><rect x="438" y="495" width="22" height="25" fill="#3b82f6"/><rect x="438" y="485" width="22" height="10" fill="#f97316"/>
+    <rect x="472" y="570" width="22" height="30" fill="#22c55e"/>
+    <rect x="506" y="500" width="22" height="100" fill="#22c55e"/><rect x="506" y="470" width="22" height="30" fill="#3b82f6"/>
+    <rect x="540" y="580" width="22" height="20" fill="#22c55e"/><rect x="540" y="560" width="22" height="20" fill="#f97316"/>
+    <rect x="574" y="540" width="22" height="60" fill="#22c55e"/>
+    <rect x="608" y="510" width="22" height="90" fill="#22c55e"/><rect x="608" y="480" width="22" height="30" fill="#3b82f6"/>
+    <rect x="642" y="555" width="22" height="45" fill="#22c55e"/><rect x="642" y="535" width="22" height="20" fill="#f97316"/>
+    <rect x="676" y="590" width="22" height="10" fill="#22c55e"/>
+    <rect x="710" y="470" width="22" height="130" fill="#22c55e"/><rect x="710" y="420" width="22" height="50" fill="#3b82f6"/><rect x="710" y="400" width="22" height="20" fill="#f97316"/>
+    <rect x="744" y="530" width="22" height="70" fill="#22c55e"/>
+    <rect x="778" y="545" width="22" height="55" fill="#22c55e"/><rect x="778" y="525" width="22" height="20" fill="#3b82f6"/>
+    <rect x="812" y="500" width="22" height="100" fill="#22c55e"/>
+    <rect x="846" y="560" width="22" height="40" fill="#22c55e"/><rect x="846" y="530" width="22" height="30" fill="#f97316"/>
+    <rect x="880" y="480" width="22" height="120" fill="#22c55e"/><rect x="880" y="440" width="22" height="40" fill="#3b82f6"/>
+    <rect x="914" y="575" width="22" height="25" fill="#22c55e"/>
+    <rect x="948" y="515" width="22" height="85" fill="#22c55e"/><rect x="948" y="500" width="22" height="15" fill="#3b82f6"/>
+    <rect x="982" y="550" width="22" height="50" fill="#22c55e"/>
+    <rect x="1016" y="520" width="22" height="80" fill="#22c55e"/><rect x="1016" y="490" width="22" height="30" fill="#f97316"/>
+    <rect x="1050" y="585" width="22" height="15" fill="#22c55e"/>
+    <rect x="1084" y="505" width="22" height="95" fill="#22c55e"/><rect x="1084" y="475" width="22" height="30" fill="#3b82f6"/>
+    <rect x="1118" y="560" width="22" height="40" fill="#22c55e"/>
+    <rect x="1152" y="540" width="22" height="60" fill="#22c55e"/><rect x="1152" y="520" width="22" height="20" fill="#3b82f6"/>
+    <rect x="1186" y="590" width="22" height="10" fill="#22c55e"/>
+    <rect x="1220" y="535" width="22" height="65" fill="#22c55e"/><rect x="1220" y="510" width="22" height="25" fill="#f97316"/>
+    <rect x="1254" y="565" width="22" height="35" fill="#22c55e"/>
+    <rect x="1288" y="525" width="22" height="75" fill="#22c55e"/>
+    <rect x="1322" y="545" width="22" height="55" fill="#22c55e"/><rect x="1322" y="530" width="22" height="15" fill="#3b82f6"/>
+    <rect x="1356" y="580" width="22" height="20" fill="#22c55e"/>
+  </g>
+  <g class="ax" text-anchor="middle">
+    <text x="415" y="616">11 Oct</text><text x="619" y="616">17 Oct</text><text x="823" y="616">23 Oct</text>
+    <text x="1027" y="616">29 Oct</text><text x="1231" y="616">4 Nov</text><text x="1367" y="616">10 Nov</text>
+  </g>
+
+  <!-- tooltip -->
+  <rect x="736" y="330" width="290" height="84" rx="6" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="748" y="348" font-size="11" font-weight="700" class="t">20 Oct · $57.14 · 14 sessions</text>
+  <rect x="748" y="356" width="8" height="8" fill="#22c55e"/><text x="762" y="364" font-size="11" class="t">gitlab…/artisyn-log-hub <tspan class="mono">$37.10</tspan></text>
+  <rect x="748" y="372" width="8" height="8" fill="#3b82f6"/><text x="762" y="380" font-size="11" class="t">github…/artisyn-log-hub <tspan class="mono">$14.30</tspan></text>
+  <rect x="748" y="388" width="8" height="8" fill="#f97316"/><text x="762" y="396" font-size="11" class="t">github…/at-scanner <tspan class="mono">$5.74</tspan></text>
+  <text x="762" y="410" font-size="11" class="link">Sessions → open on own repo page (team context)?</text>
+
+  <!-- legend -->
+  <g font-size="12">
+    <rect x="390" y="640" width="10" height="10" fill="#22c55e"/><text x="406" y="650" class="t">https://gitlab.dataart.com/da/cml/artisyn-log-hub</text>
+    <rect x="720" y="640" width="10" height="10" fill="#3b82f6"/><text x="736" y="650" class="t">https://github.com/DataArt/artisyn-log-hub</text>
+    <rect x="1020" y="640" width="10" height="10" fill="#f97316"/><text x="1036" y="650" class="t">https://github.com/denistsyplakov/at-scanner</text>
+  </g>
+
+  <!-- empty state inset -->
+  <rect x="1040" y="690" width="378" height="92" rx="8" fill="#f9fafb" stroke="#d1d5db" stroke-dasharray="4,3"/>
+  <text x="1056" y="712" font-size="12" font-weight="700" class="t">Empty state (team has no linked repositories)</text>
+  <text x="1056" y="732" font-size="12" class="muted">No repositories are linked to this team yet.</text>
+  <text x="1056" y="750" font-size="12" class="link">Link a repository in the Repositories tab →</text>
+  <text x="1056" y="772" class="note">Exact copy / zero-state behaviour is an open question.</text>
+
+  <!-- annotations -->
+  <text x="349" y="700" class="note">FR-1 Same views and controls as the repository Analytics tab, computed over all the team's linked repositories.</text>
+  <text x="349" y="716" class="note">Additive totals (cost, tokens, sessions, work time…) = sum over the linked repositories for the same filters (AC FR-1);</text>
+  <text x="349" y="732" class="note">ratios and distinct counts (cache-read ratio, users) recomputed over the merged population — open question.</text>
+  <text x="349" y="752" class="note">FR-3 Counts only sessions of acknowledged members visible under the team access mode —</text>
+  <text x="349" y="768" class="note">same population as the team Spend tab (caller-independent vs viewer-dependent: open question).</text>
+  <text x="349" y="788" class="note">Attribute filters / attr:&lt;key&gt; group-by: excluded or limited to keys shared by all repos — open question.</text>
+  <text x="349" y="808" class="note">URL: #/teams/:teamId?ttab=analytics&amp;ar=1m&amp;… (filter state alongside ttab).</text>
+</svg>

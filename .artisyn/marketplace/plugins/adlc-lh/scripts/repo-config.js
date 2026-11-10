@@ -37,6 +37,7 @@ const SCHEMA = {
   taskDetailsSkill: { type: 'string', default: null },
   granularReview: { type: 'boolean', default: false },
   preImplHealthCheck: { type: 'boolean', default: false },
+  preImplCommand: { type: 'string', default: null },
   'simpleTrack.fileCountWarnThreshold': { type: 'number', default: 20 },
   'paths.tasksRoot': { type: 'relpath', default: 'docs/tasks', internal: true },
   'paths.todoDir': { type: 'relpath', default: null, internal: true },

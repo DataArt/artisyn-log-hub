@@ -2,6 +2,8 @@ import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as nodemailer from 'nodemailer';
 import { maskEmail } from '../common/mask-email';
+import { budgetMailSubject } from '../logs/budgets/budget.constants';
+import { formatUsdMicros } from '../logs/budgets/budget-scope';
 
 export type EmailDelivery = 'sent' | 'failed';
 
@@ -128,6 +130,47 @@ export class MailService implements OnModuleInit {
       email,
       'Confirm your email address',
       `Confirm your email address to finish creating your account (valid for 24 hours):\n\n${confirmUrl}\n\nIf you did not request this, you can ignore this email.`,
+    );
+  }
+
+  /**
+   * A budget threshold notice (2026-11-05 budgets-threshold-alerts, DD-10). `link` is the full
+   * URL of the scope's Spend tab, or `null` when `PUBLIC_BASE_URL` is unset — the email is then
+   * sent without a link.
+   */
+  async sendBudgetNoticeEmail(
+    email: string,
+    notice: {
+      scopeLabel: string;
+      budgetLabel: string;
+      threshold: number;
+      spendMicros: number;
+      amountMicros: number;
+      periodLabel: string;
+      link: string | null;
+    },
+  ): Promise<EmailDelivery> {
+    const lines = [
+      `Spend of ${notice.scopeLabel} reached ${notice.threshold} % of its ${notice.budgetLabel} budget for ${notice.periodLabel}.`,
+      '',
+      `Spent so far: ${formatUsdMicros(notice.spendMicros)} of ${formatUsdMicros(notice.amountMicros)}.`,
+      'Log Hub does not stop usage when the budget is reached.',
+    ];
+    if (notice.link !== null) {
+      lines.push('', `Open the Spend tab:\n${notice.link}`);
+    }
+    lines.push(
+      '',
+      'You get this email because you manage this budget in Log Hub.',
+    );
+    return this.send(
+      email,
+      budgetMailSubject(
+        notice.threshold,
+        notice.budgetLabel,
+        notice.scopeLabel,
+      ),
+      lines.join('\n'),
     );
   }
 

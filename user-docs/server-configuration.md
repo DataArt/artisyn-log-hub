@@ -24,6 +24,27 @@ The main settings are below. The full list, with the security relevance of each 
 | `AI_TOOL_VERSION_CHECK_ENABLED` | on | `false` turns off the outbound npm version check. |
 | `LOG_HUB_RELEASE_CHECK_ENABLED` | on | New Log Hub release check for the admin badge: one `api.github.com` call per 24 h, official release images only. Only `false` turns it off (air-gapped installs). |
 | `MODEL_PRICING_FETCH_ENABLED` | on | `false` turns off the outbound pricing-page fetch. |
+| `BUDGET_CHECK_INTERVAL_MS` | `300000` | How often the budget threshold job runs, in milliseconds (5 minutes). |
+| `BUDGET_CHECK_ENABLED` | on | `false` turns off the budget threshold job: no new budget notices or emails. |
 
 Mode-specific settings (SMTP for Modes 2/3, `AZURE_*` for Mode 4) are described in
 [Security Hardening & Configuration](security-hardening.md) §3.2–§3.4.
+
+## Budget threshold job
+
+A background job checks every [budget](budgets.md) every `BUDGET_CHECK_INTERVAL_MS`: it computes
+the spend of the budget's current period and raises a notice for each newly crossed threshold.
+It runs inside the server, never while sessions are uploaded, so it does not slow down uploads
+or the session list. With several server workers each one runs it; a notice is still written
+and emailed only once.
+
+Notices always appear in the app (the bell and the banner). **Emails** are sent only when the
+mail service is configured — the same SMTP settings that Modes 2/3 use for sign-up and password
+reset (`SMTP_HOST` and the rest, see the link above); there is no separate mail setup for
+budgets. The mail service is used only in Modes 2/3 (`AUTH_MODE` `password` or
+`password-confirm`) with `SMTP_HOST` set. In Mode 1 (`none`), Mode 4 (Entra ID) and Mode 2
+without SMTP, notices are in-app only and the budget event log records *Email skipped*. The link in the email is built from
+`PUBLIC_BASE_URL`; without it the email is sent without a link.
+
+With `BUDGET_CHECK_ENABLED=false` budgets, the Spend tab, the Budget burn view and the Budget
+report still work; only the notices stop.

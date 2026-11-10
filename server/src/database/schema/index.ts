@@ -1,6 +1,7 @@
 import { sql } from 'drizzle-orm';
 import {
   bigint,
+  bigserial,
   boolean,
   date,
   doublePrecision,
@@ -2411,3 +2412,187 @@ export const serverSecrets = pgTable('server_secrets', {
     .notNull()
     .defaultNow(),
 });
+
+/**
+ * Spend budgets (migration 0093) — one row per (scope, period). The scope is stored as columns,
+ * with no FK to `repositories` / `team_repositories`: `scope_kind` `repo` (user_id + repo_url),
+ * `team-repo` (team_id + repo_url) or `team` (team_id). The scope-shape CHECKs and the
+ * value CHECKs live in the migration only. The unique expression index
+ * `budgets_scope_period_uq` allows one budget per scope and period. Repository removal and URL
+ * rewrites go through `BudgetsCleanup`; team / user deletion cascades.
+ */
+export const budgets = pgTable(
+  'budgets',
+  {
+    id: serial('id').primaryKey(),
+    scopeKind: varchar('scope_kind', { length: 16 })
+      .$type<'repo' | 'team-repo' | 'team'>()
+      .notNull(),
+    userId: integer('user_id').references(() => users.id, {
+      onDelete: 'cascade',
+    }),
+    teamId: integer('team_id').references(() => teams.id, {
+      onDelete: 'cascade',
+    }),
+    repoUrl: varchar('repo_url', { length: 4000 }),
+    period: varchar('period', { length: 8 })
+      .$type<'day' | 'week' | 'month'>()
+      .notNull(),
+    amountMicros: bigint('amount_micros', { mode: 'number' }).notNull(),
+    thresholds: smallint('thresholds')
+      .array()
+      .notNull()
+      .default(sql`'{75,90,100}'::smallint[]`),
+    timeZone: varchar('time_zone', { length: 64 }).notNull(),
+    createdBy: integer('created_by').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    uniqueIndex('budgets_scope_period_uq').on(
+      table.scopeKind,
+      sql`COALESCE(${table.userId}, 0)`,
+      sql`COALESCE(${table.teamId}, 0)`,
+      sql`COALESCE(${table.repoUrl}, '')`,
+      table.period,
+    ),
+    index('idx_budgets_team_id').on(table.teamId),
+    index('idx_budgets_user_id').on(table.userId),
+  ],
+);
+
+/**
+ * Budget threshold notices (migration 0093) — one row per (budget, period start, threshold),
+ * written by the threshold job. `superseded_by` NULL marks a shown notice; otherwise it holds the
+ * higher threshold that replaced it. The scope and budget columns are snapshots, so a notice
+ * survives its budget's deletion (`budget_id` SET NULL); team / user deletion cascades.
+ */
+export const budgetNotices = pgTable(
+  'budget_notices',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    budgetId: integer('budget_id').references(() => budgets.id, {
+      onDelete: 'set null',
+    }),
+    scopeKind: varchar('scope_kind', { length: 16 })
+      .$type<'repo' | 'team-repo' | 'team'>()
+      .notNull(),
+    userId: integer('user_id').references(() => users.id, {
+      onDelete: 'cascade',
+    }),
+    teamId: integer('team_id').references(() => teams.id, {
+      onDelete: 'cascade',
+    }),
+    repoUrl: varchar('repo_url', { length: 4000 }),
+    budgetLabel: varchar('budget_label', { length: 64 }).notNull(),
+    period: varchar('period', { length: 8 })
+      .$type<'day' | 'week' | 'month'>()
+      .notNull(),
+    amountMicros: bigint('amount_micros', { mode: 'number' }).notNull(),
+    timeZone: varchar('time_zone', { length: 64 }).notNull(),
+    periodStart: timestamp('period_start', { withTimezone: true }).notNull(),
+    periodEnd: timestamp('period_end', { withTimezone: true }).notNull(),
+    threshold: smallint('threshold').notNull(),
+    spendMicros: bigint('spend_micros', { mode: 'number' }).notNull(),
+    supersededBy: smallint('superseded_by'),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    unique('budget_notices_budget_period_threshold_uq').on(
+      table.budgetId,
+      table.periodStart,
+      table.threshold,
+    ),
+    index('idx_budget_notices_team_id').on(table.teamId),
+    index('idx_budget_notices_user_id').on(table.userId),
+  ],
+);
+
+/**
+ * Budget notice recipients (migration 0093) — one row per (shown notice, recipient) with the
+ * recipient's read mark. Superseded notices get no recipients.
+ */
+export const budgetNoticeRecipients = pgTable(
+  'budget_notice_recipients',
+  {
+    noticeId: bigint('notice_id', { mode: 'number' })
+      .notNull()
+      .references(() => budgetNotices.id, { onDelete: 'cascade' }),
+    userId: integer('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    readAt: timestamp('read_at', { withTimezone: true }),
+  },
+  (table) => [
+    primaryKey({ columns: [table.noticeId, table.userId] }),
+    index('idx_budget_notice_recipients_user').on(
+      table.userId,
+      table.noticeId.desc(),
+    ),
+    index('idx_budget_notice_recipients_unread')
+      .on(table.userId)
+      .where(sql`${table.readAt} IS NULL`),
+  ],
+);
+
+/**
+ * Budget event log (migration 0093) — append-only history of a scope's budgets: CRUD by users,
+ * threshold crossings / supersedes and email outcomes by the threshold job (`actor_user_id` /
+ * `actor_email` NULL). Scope and label columns are snapshots; `budget_id` SET NULL on budget
+ * deletion, team / user deletion cascades.
+ */
+export const budgetEvents = pgTable(
+  'budget_events',
+  {
+    id: bigserial('id', { mode: 'number' }).primaryKey(),
+    budgetId: integer('budget_id').references(() => budgets.id, {
+      onDelete: 'set null',
+    }),
+    scopeKind: varchar('scope_kind', { length: 16 })
+      .$type<'repo' | 'team-repo' | 'team'>()
+      .notNull(),
+    userId: integer('user_id').references(() => users.id, {
+      onDelete: 'cascade',
+    }),
+    teamId: integer('team_id').references(() => teams.id, {
+      onDelete: 'cascade',
+    }),
+    repoUrl: varchar('repo_url', { length: 4000 }),
+    budgetLabel: varchar('budget_label', { length: 64 }).notNull(),
+    actorUserId: integer('actor_user_id').references(() => users.id, {
+      onDelete: 'set null',
+    }),
+    actorEmail: varchar('actor_email', { length: 320 }),
+    eventType: varchar('event_type', { length: 32 })
+      .$type<
+        | 'created'
+        | 'edited'
+        | 'deleted'
+        | 'threshold_crossed'
+        | 'threshold_superseded'
+        | 'email_sent'
+        | 'email_skipped'
+        | 'email_failed'
+      >()
+      .notNull(),
+    details: jsonb('details')
+      .$type<Record<string, unknown>>()
+      .notNull()
+      .default(sql`'{}'::jsonb`),
+    createdAt: timestamp('created_at', { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index('idx_budget_events_team').on(table.teamId, table.id.desc()),
+    index('idx_budget_events_user').on(table.userId, table.id.desc()),
+  ],
+);

@@ -17,6 +17,10 @@ import {
   type ParsedAttributeFilter,
   validateAttributeFilterTypes,
 } from '../attribute-filter.sql';
+import { BudgetAccessService } from '../budgets/budget-access.service';
+import { assertPositiveTeamId } from '../budgets/budget-query';
+import type { BudgetBurnView } from '../budgets/budgets.types';
+import { SpendService } from '../budgets/spend.service';
 import { RepositoriesService } from '../repositories.service';
 import type { AuthUser } from '../repositories.service';
 import { SessionAttributionService } from '../session-attribution/session-attribution.service';
@@ -25,6 +29,7 @@ import { ClaudeVersionUsageService } from './claude-version-usage.service';
 import {
   parseActiveSessionsLimit,
   parseAnalyticsQuery,
+  parseCsvParam,
 } from './analytics-query';
 import { ProductivityAnalyticsService } from './productivity-analytics.service';
 import type { AnalyticsScope } from './scoped-sessions.sql';
@@ -57,6 +62,8 @@ export class UsageAnalyticsController {
     private readonly productivityAnalyticsService: ProductivityAnalyticsService,
     private readonly activeSessionsService: ActiveSessionsService,
     private readonly claudeVersionUsageService: ClaudeVersionUsageService,
+    private readonly budgetAccess: BudgetAccessService,
+    private readonly spendService: SpendService,
   ) {}
 
   @Get(':repoId/analytics/tools')
@@ -172,6 +179,40 @@ export class UsageAnalyticsController {
       attr,
     });
     return this.claudeVersionUsageService.build(repoIds, scope);
+  }
+
+  /**
+   * Budget burn (2026-11-05 budgets-threshold-alerts, DD-19): the cumulative spend line of one
+   * budget's current period. Same gate as the other `analytics/*` routes (`assertRepoAccess`,
+   * then 403 for a team view without `analyticsAllowed`); the data comes from `SpendService`
+   * only, so it always agrees with the Spend tab. `branches` / `users` narrow only the line.
+   */
+  @Get(':repoId/analytics/budget-burn')
+  async getBudgetBurn(
+    @Req() req: Request,
+    @Param('repoId', ParseIntPipe) repoId: number,
+    @Query('teamId', new ParseIntPipe({ optional: true })) teamId?: number,
+    @Query('budgetId', new ParseIntPipe({ optional: true })) budgetId?: number,
+    @Query('branches') branches?: string,
+    @Query('users') users?: string,
+    @Query('tz') tz?: string,
+  ): Promise<BudgetBurnView> {
+    assertPositiveTeamId(teamId);
+    const user = req.user as AuthUser;
+    const access = await this.budgetAccess.resolveRepoScope(
+      user,
+      repoId,
+      teamId,
+    );
+    if (teamId !== undefined && !access.teamScope.analyticsAllowed) {
+      throw new ForbiddenException();
+    }
+    return this.spendService.getBudgetBurn(access, user.id, {
+      budgetId,
+      branches: parseCsvParam(branches),
+      users: parseCsvParam(users),
+      tz: tz ?? '',
+    });
   }
 
   /**

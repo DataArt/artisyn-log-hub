@@ -112,6 +112,19 @@ supply the software and documentation, and the operator runs it on its own infra
 | Resolving hook recommendations and upload errors | C | – | – | C | – | **A/R** |
 | Uninstalling the hook from a project | – | – | – | – | – | **A/R** |
 
+## 8. Spend budgets
+
+| Activity | Maintainers | Op. IT | Op. Security | LH Admin | Team Owner | End User |
+|---|:-:|:-:|:-:|:-:|:-:|:-:|
+| Setting a team or team repository budget and its thresholds (team owner and team managers) | – | – | – | – | **A/R** | I |
+| Setting a personal repository budget | – | – | – | – | – | **A/R** |
+| Receiving and acting on budget notices (bell, banner, email when SMTP is configured) | – | C | – | – | **A/R** | R |
+
+Budgets are reference amounts: Log Hub never stops or limits usage when one is reached. Team
+notices go to the team owner and the team managers; notices of a personal repository budget go to
+its owner (End User). Op. IT is consulted because notice emails need the SMTP relay. See
+[Budgets](budgets.md).
+
 ## Notes
 
 - The project maintainers have no access to operator installations or data unless the operator explicitly

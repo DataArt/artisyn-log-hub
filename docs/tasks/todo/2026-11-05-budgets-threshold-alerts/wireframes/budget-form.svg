@@ -172,7 +172,7 @@
   <text x="349" y="862" class="note">· team repository: Teams › team › repo › Settings › Budgets (this picture) — managed by the team owner and managers;</text>
   <text x="349" y="878" class="note">· team: team page › Settings › Budgets (budget-settings.svg) — managed by the team owner and managers.</text>
   <text x="349" y="902" class="note">"+ Add budget" opens the same form, empty, under the table; "Edit" opens it under its row (other rows stay visible). "+ Add budget" is disabled while a form is open.</text>
-  <text x="349" y="918" class="note">Users who may see but not manage the scope get the table read-only (no Add / Edit / Delete), with "Managed by team owner" as in File Categories (FR-7).</text>
+  <text x="349" y="918" class="note">Users who may see but not manage the scope get the table read-only (no Add / Edit / Delete), with "Managed by the team owner and managers" (FR-7). Plain members of a restricted team see only a "not visible" note.</text>
   <text x="349" y="934" class="note">"Delete budget" only in edit mode, asks for confirmation. Every save / delete writes a Budget event (FR-10). "Current period" links to the Spend view.</text>
-  <text x="349" y="950" class="note">The "one budget per period type" error is shown only if that rule is accepted (open question).</text>
+  <text x="349" y="950" class="note">A scope has at most one budget per period type: saving a second one shows the inline error above (server 409).</text>
 </svg>

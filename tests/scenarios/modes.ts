@@ -32,6 +32,9 @@ export const FAST_TICK_ENV: Readonly<Record<string, string>> = {
   UPLOAD_QUEUE_PARTIAL_UPLOAD_SWEEP_INTERVAL_MS: '200',
   SESSION_RETENTION_CHECK_INTERVAL_MS: '50',
   SESSION_COST_RECOMPUTE_INTERVAL_MS: '50',
+  // Budget threshold job (server/src/logs/budgets/budget-threshold.scheduler.ts): a scenario
+  // sees a crossed threshold's notice / email shortly after it creates or lowers a budget.
+  BUDGET_CHECK_INTERVAL_MS: '200',
   AI_TOOL_VERSION_CHECK_ENABLED: 'false',
   MODEL_PRICING_FETCH_ENABLED: 'false',
   LOG_HUB_RELEASE_CHECK_ENABLED: 'false',

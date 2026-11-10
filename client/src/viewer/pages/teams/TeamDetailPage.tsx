@@ -1,6 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
-import { useLocation, useParams } from 'react-router-dom';
+import { lazy, Suspense, useEffect } from 'react';
+import { useLocation, useParams, useSearchParams } from 'react-router-dom';
 import type { TeamMember } from '../../../models/teams';
 import { fetchTeamMembers, fetchTeams } from '../../api';
 import { useAuth } from '../../context/AuthContext';
@@ -15,27 +15,77 @@ import { TeamInvitationsTab } from './tabs/TeamInvitationsTab';
 import { TeamMembersTab } from './tabs/TeamMembersTab';
 import { TeamRepositoriesTab } from './tabs/TeamRepositoriesTab';
 import { TeamOtelTab } from './otel/TeamOtelTab';
+import { BudgetsSection } from '../budgets/BudgetsSection';
+import { LazyFallback } from '../../components/LazyFallback';
+
+// The Spend tab loads through the repository tabs barrel, so it shares their chunk (DD-16).
+const SpendTab = lazy(() =>
+  import('../repository/repository-tabs-lazy-group').then((m) => ({
+    default: m.SpendTab,
+  })),
+);
 
 type Tab = TeamTab;
 
+const DEFAULT_TEAM_TAB: Tab = 'members';
+
+/** A valid team tab id, or `undefined`. */
+function parseTeamTab(value: unknown): Tab | undefined {
+  return TEAM_TABS.find((t) => t === value);
+}
+
 /**
- * The tab a link asked for through `navigate(path, { state: { teamTab } })` (the All views map),
- * or `members`. Team tabs have no URL param, so the state is read once as the initial value.
+ * The tab a link asked for through `navigate(path, { state: { teamTab } })` (the All views map,
+ * the Live view), or `undefined`.
  */
-function initialTeamTab(state: unknown): Tab {
-  const wanted: unknown =
+function stateTeamTab(state: unknown): Tab | undefined {
+  return parseTeamTab(
     typeof state === 'object' && state !== null && 'teamTab' in state
       ? state.teamTab
-      : undefined;
-  return TEAM_TABS.find((t) => t === wanted) ?? 'members';
+      : undefined,
+  );
+}
+
+/**
+ * URL-backed team tab (DD-15): the `ttab` param, else the `location.state` seed, else
+ * `members`. A seed is written into the URL once, so the tab survives a refresh; writes replace
+ * the history entry and the default tab is dropped from the URL.
+ */
+function useTeamTabState() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const location = useLocation();
+  // Read on every render: the first `ttab` write replaces the entry and clears the state.
+  const seed = stateTeamTab(location.state);
+  const urlTab = parseTeamTab(searchParams.get('ttab'));
+  const tab: Tab = urlTab ?? seed ?? DEFAULT_TEAM_TAB;
+
+  useEffect(() => {
+    if (
+      urlTab === undefined &&
+      seed !== undefined &&
+      seed !== DEFAULT_TEAM_TAB
+    ) {
+      const next = new URLSearchParams(searchParams);
+      next.set('ttab', seed);
+      setSearchParams(next, { replace: true });
+    }
+  }, [urlTab, seed, searchParams, setSearchParams]);
+
+  function setTab(next: Tab) {
+    const nextParams = new URLSearchParams(searchParams);
+    if (next === DEFAULT_TEAM_TAB) nextParams.delete('ttab');
+    else nextParams.set('ttab', next);
+    setSearchParams(nextParams, { replace: true });
+  }
+
+  return { tab, setTab };
 }
 
 export function TeamDetailPage() {
   const { teamId: teamIdStr } = useParams<{ teamId: string }>();
   const teamId = parseInt(teamIdStr!, 10);
   const { user } = useAuth();
-  const location = useLocation();
-  const [tab, setTab] = useState<Tab>(() => initialTeamTab(location.state));
+  const { tab, setTab } = useTeamTabState();
 
   const { data: teams = [] } = useQuery({
     queryKey: ['teams'],
@@ -116,6 +166,30 @@ export function TeamDetailPage() {
               <div
                 className="p-6 text-sm text-muted-foreground"
                 data-testid="team-otel-tab"
+              >
+                No access
+              </div>
+            ))}
+        </PageTabsContent>
+
+        <PageTabsContent value="spend">
+          {tab === 'spend' && (
+            <Suspense fallback={<LazyFallback />}>
+              <SpendTab scope={{ teamId }} />
+            </Suspense>
+          )}
+        </PageTabsContent>
+
+        <PageTabsContent value="settings">
+          {tab === 'settings' &&
+            (canSeeOtel ? (
+              <div className="max-w-4xl" data-testid="team-settings-tab">
+                <BudgetsSection scope={{ teamId }} />
+              </div>
+            ) : (
+              <div
+                className="p-6 text-sm text-muted-foreground"
+                data-testid="team-settings-tab"
               >
                 No access
               </div>

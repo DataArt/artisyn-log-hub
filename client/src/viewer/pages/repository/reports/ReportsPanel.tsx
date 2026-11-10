@@ -26,6 +26,7 @@ import { ClaudeVersionUsageReport } from './ClaudeVersionUsageReport';
 import { ChangeSurfaceReport } from './ChangeSurfaceReport';
 import { AttributionBreakdownReport } from './AttributionBreakdownReport';
 import { AttributionUsageReport } from './AttributionUsageReport';
+import { BudgetReport } from './BudgetReport';
 
 interface Props {
   repoId: number;
@@ -295,6 +296,16 @@ function renderReport(
     case 'attribution-usage':
       return (
         <AttributionUsageReport
+          repoId={repoId}
+          teamId={teamId}
+          params={params}
+          generation={generation}
+        />
+      );
+    // budgets
+    case 'budget':
+      return (
+        <BudgetReport
           repoId={repoId}
           teamId={teamId}
           params={params}

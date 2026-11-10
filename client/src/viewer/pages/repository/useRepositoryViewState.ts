@@ -149,6 +149,7 @@ export function useRepositoryViewState({
     if (
       tab === 'analytics' ||
       tab === 'reports' ||
+      tab === 'spend' ||
       tab === 'tools' ||
       tab === 'okf' ||
       tab === 'otel' ||
@@ -178,6 +179,10 @@ export function useRepositoryViewState({
     // The OTEL tab owns its `otel*` filter / chart params; drop them likewise.
     if (tab !== 'otel') {
       for (const key of OTEL_PARAM_KEYS) next.delete(key);
+    }
+    // The Spend tab owns its period / offset / slice params (DD-15); drop them likewise.
+    if (tab !== 'spend') {
+      for (const key of ['sp', 'so', 'ssl']) next.delete(key);
     }
     setSearchParams(next, { replace: true });
   }

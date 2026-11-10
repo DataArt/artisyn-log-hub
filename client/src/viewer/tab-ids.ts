@@ -58,6 +58,8 @@ export const SESSION_TABS = [
 export const REPO_MAIN_TABS = [
   'sessions',
   'analytics',
+  // Spend against budgets, forecast and cost slices; visible to every member (DD-16).
+  'spend',
   'reports',
   // Monitored CLI tools and MCP servers: calls, outputs and usefulness signals.
   'tools',
@@ -89,6 +91,8 @@ export const SETTINGS_TABS = [
   // The CLI tools the hook wraps (the Tools/MCP tab's "Monitored tools" button opens it).
   'monitored-tools',
   'session-attribution',
+  // Spend budgets of the repository and their event log.
+  'budgets',
   'maintenance',
   'import-export',
 ] as const;
@@ -100,6 +104,10 @@ export const TEAM_TABS = [
   'invitations',
   // OTEL cost of every team repository; shown only to callers passing the analytics rule.
   'otel',
+  // Team spend against budgets; visible to every member (DD-16).
+  'spend',
+  // Team settings (the Budgets section); shown only to callers passing the analytics rule.
+  'settings',
 ] as const;
 
 /** API keys page tabs (group `apikeys`). */
@@ -421,6 +429,14 @@ export const TAB_REGISTRY: readonly TabRow[] = [
   },
   {
     scope: 'repo',
+    id: 'spend',
+    label: 'Spend',
+    description:
+      'Spend against the budget, forecast, burn rate and what the cost went on.',
+    synonyms: ['budget', 'spend', 'forecast', 'burn rate', 'limit'],
+  },
+  {
+    scope: 'repo',
     id: 'reports',
     label: 'Reports',
     description: 'Ready-made reports: executive summary, cost, code, harness.',
@@ -587,6 +603,13 @@ export const TAB_REGISTRY: readonly TabRow[] = [
   },
   {
     scope: 'settings',
+    id: 'budgets',
+    label: 'Budgets',
+    description: 'Spend budgets, alert thresholds and their event log.',
+    synonyms: ['budget', 'limit', 'alerts'],
+  },
+  {
+    scope: 'settings',
     id: 'maintenance',
     label: 'Maintenance',
     description: 'Recompute and clean-up actions for this repository.',
@@ -628,6 +651,23 @@ export const TAB_REGISTRY: readonly TabRow[] = [
     label: 'OTEL',
     description: 'OTEL cost of every team repository.',
     synonyms: ['telemetry', 'cost'],
+    visible: canSeeOtel,
+    gate: 'permission',
+  },
+  {
+    scope: 'team',
+    id: 'spend',
+    label: 'Spend',
+    description:
+      'Team spend against the budget, forecast, burn rate and what the cost went on.',
+    synonyms: ['budget', 'spend', 'forecast', 'burn rate', 'limit'],
+  },
+  {
+    scope: 'team',
+    id: 'settings',
+    label: 'Settings',
+    description: 'Team budgets and alert thresholds.',
+    synonyms: ['settings', 'budgets'],
     visible: canSeeOtel,
     gate: 'permission',
   },
@@ -678,7 +718,7 @@ export interface TeamAccessFacts {
 
 /**
  * Whether `userId` reaches a team's team-wide tabs (repo Analytics / Reports / Tools/MCP / OKF /
- * OTEL / Settings, the team OTEL tab): everyone in a non-`restricted` team, only the owner and
+ * OTEL / Settings, the team OTEL and Settings tabs): everyone in a non-`restricted` team, only the owner and
  * managers in a `restricted` one. The app admin role grants nothing here. A cosmetic layer over
  * the server's 403s, never the enforcement itself.
  */

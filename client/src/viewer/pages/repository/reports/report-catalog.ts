@@ -21,7 +21,9 @@ export type ReportId =
   | 'change-surface'
   // AI Session Attribution
   | 'attribution-breakdown'
-  | 'attribution-usage';
+  | 'attribution-usage'
+  // 2026-11-05 budgets-threshold-alerts
+  | 'budget';
 
 export type ReportCategoryId =
   | 'activity'
@@ -219,6 +221,19 @@ export const REPORT_CATEGORIES: ReportCategory[] = [
         supportsUserFilter: true,
         defaultGroupBy: 'none',
         supportsAttributeFilter: true,
+      },
+      {
+        // Budget spend is whole-scope by definition (DD-19): no grouping and no
+        // branch / user / attribute filter, only the date range.
+        id: 'budget',
+        title: 'Budget',
+        description: 'Spend, percent of budget and forecast per budget period.',
+        synonyms: ['budget', 'forecast', 'limit', 'spend', 'burn rate'],
+        supportsGroupBy: false,
+        supportsBranchFilter: false,
+        supportsUserFilter: false,
+        defaultGroupBy: 'none',
+        supportsAttributeFilter: false,
       },
     ],
   },

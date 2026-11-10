@@ -1,6 +1,7 @@
 import { useQueryClient, useQuery, useMutation } from '@tanstack/react-query';
 import { Bell } from 'lucide-react';
 import { useCallback, useEffect, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { fetchMyInvitations, respondToInvitation } from '../../api';
 import { useAuth } from '../../context/AuthContext';
 import type { Invitation, TeamAccessMode } from '../../../models/teams';
@@ -10,6 +11,8 @@ import {
 } from '../../lib/access-mode-copy';
 import { Badge } from '../../ui/badge';
 import { TeamDisclosureModal } from '../teams/TeamDisclosureModal';
+import { useBudgetNotices } from '../../hooks/useBudgetNotices';
+import { BudgetNoticeTray } from './BudgetNoticeTray';
 
 export function NotificationBell() {
   const queryClient = useQueryClient();
@@ -41,6 +44,10 @@ export function NotificationBell() {
   const pending = invitations.filter(
     (i: Invitation) => i.status === 'pending' && i.inviteeId === user?.id,
   );
+
+  // Budget notices (DD-18): the same `['budget-notices']` query the global banner reads.
+  const budgetNotices = useBudgetNotices();
+  const badgeCount = pending.length + budgetNotices.unreadCount;
 
   const respond = useMutation({
     mutationFn: ({
@@ -76,6 +83,14 @@ export function NotificationBell() {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [open, closePanel]);
 
+  // A route change (Back/Forward, a link elsewhere) must close the panel too, or its
+  // click-catcher stays over the new page. Keyed on the location only, so opening the
+  // panel does not re-run it.
+  const location = useLocation();
+  useEffect(() => {
+    setOpen(false);
+  }, [location.pathname, location.search]);
+
   return (
     <div className="relative">
       <button
@@ -84,9 +99,12 @@ export function NotificationBell() {
         aria-label="Notifications"
       >
         <Bell className="size-4 text-muted-foreground" />
-        {pending.length > 0 && (
-          <span className="absolute -top-0.5 -right-0.5 size-4 rounded-full bg-primary text-primary-foreground text-[10px] flex items-center justify-center font-medium">
-            {pending.length > 9 ? '9+' : pending.length}
+        {badgeCount > 0 && (
+          <span
+            className="absolute -top-0.5 -right-0.5 size-4 rounded-full bg-primary text-primary-foreground text-[10px] flex items-center justify-center font-medium"
+            data-testid="notification-badge"
+          >
+            {badgeCount > 9 ? '9+' : badgeCount}
           </span>
         )}
       </button>
@@ -94,7 +112,7 @@ export function NotificationBell() {
       {open && (
         <>
           <div className="fixed inset-0 z-30" onClick={closePanel} />
-          <div className="absolute right-0 top-8 z-40 w-80 rounded-md border border-border bg-card shadow-lg">
+          <div className="absolute right-0 top-8 z-40 w-96 max-w-[calc(100vw-1rem)] max-h-[calc(100vh-4rem)] overflow-y-auto rounded-md border border-border bg-card shadow-lg">
             <div className="px-3 py-2 border-b border-border">
               <p className="text-sm font-medium">Team invitations</p>
             </div>
@@ -151,6 +169,7 @@ export function NotificationBell() {
                 {errorMessage(respond.error)}
               </p>
             )}
+            <BudgetNoticeTray notices={budgetNotices} onOpen={closePanel} />
           </div>
         </>
       )}

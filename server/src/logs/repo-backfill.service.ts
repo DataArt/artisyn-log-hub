@@ -7,6 +7,11 @@ import {
 import { sql } from 'drizzle-orm';
 import { DRIZZLE } from '../database/database.constants';
 import type { DrizzleDb } from '../database/database.module';
+import {
+  deleteTeamRepo,
+  rewritePersonalRepoUrl,
+  rewriteTeamRepoUrl,
+} from './budgets/budgets-cleanup';
 import { isRawLocalPath, toLocalRepoIdentity } from './local-repo-identity';
 import { normalizeRepoUrl } from './repo-url-normalizer';
 
@@ -232,9 +237,14 @@ export class RepoBackfillService implements OnApplicationBootstrap {
           reposRewritten++;
         }
 
+        // Personal budgets are stored by URL (DD-13): follow every old URL to the identity.
+        const oldUrls = [...new Set(group.map((r) => r.repoUrl))];
+        for (const oldUrl of oldUrls) {
+          await rewritePersonalRepoUrl(tx, userId, oldUrl, identity);
+        }
+
         // Rewrite team_repositories in the owner's teams from each old URL to the identity,
         // skipping rows whose team already lists the identity.
-        const oldUrls = [...new Set(group.map((r) => r.repoUrl))];
         for (const oldUrl of oldUrls) {
           const updated = await tx.execute<{
             id: number;
@@ -256,6 +266,7 @@ export class RepoBackfillService implements OnApplicationBootstrap {
                 RETURNING tr.id AS "id", tr.team_id AS "teamId"`,
           );
           for (const row of updated.rows) {
+            await rewriteTeamRepoUrl(tx, row.teamId, oldUrl, identity);
             this.logger.log(
               `team_repositories #${row.id} (team #${row.teamId}) local identity: "${oldUrl}" → "${identity}"`,
             );
@@ -328,10 +339,32 @@ export class RepoBackfillService implements OnApplicationBootstrap {
       const survivor = groupRows[0]; // after dedup, only survivors remain
       const canonicalUrl = key.slice(key.indexOf(':') + 1);
 
+      // Personal budgets are stored by URL (DD-13): every URL of the group, the merged
+      // duplicates' included, follows the canonical one.
+      const staleUrls = [
+        ...new Set(
+          groupRows.map((r) => r.repoUrl).filter((u) => u !== canonicalUrl),
+        ),
+      ];
+      if (staleUrls.length > 0) {
+        await this.db.transaction(async (tx) => {
+          if (survivor.repoUrl !== canonicalUrl) {
+            await tx.execute(
+              sql`UPDATE repositories SET repo_url = ${canonicalUrl} WHERE id = ${survivor.id}`,
+            );
+          }
+          for (const staleUrl of staleUrls) {
+            await rewritePersonalRepoUrl(
+              tx,
+              survivor.userId,
+              staleUrl,
+              canonicalUrl,
+            );
+          }
+        });
+      }
+
       if (survivor.repoUrl !== canonicalUrl) {
-        await this.db.execute(
-          sql`UPDATE repositories SET repo_url = ${canonicalUrl} WHERE id = ${survivor.id}`,
-        );
         this.logger.log(
           `repo #${survivor.id} url normalised: "${survivor.repoUrl}" → "${canonicalUrl}"`,
         );
@@ -356,8 +389,12 @@ export class RepoBackfillService implements OnApplicationBootstrap {
   }
 
   async backfillTeamRepoUrls(): Promise<void> {
-    const result = await this.db.execute<{ id: number; repoUrl: string }>(
-      sql`SELECT id, repo_url AS "repoUrl" FROM team_repositories ORDER BY id ASC`,
+    const result = await this.db.execute<{
+      id: number;
+      teamId: number;
+      repoUrl: string;
+    }>(
+      sql`SELECT id, team_id AS "teamId", repo_url AS "repoUrl" FROM team_repositories ORDER BY id ASC`,
     );
     const rows = result.rows;
 
@@ -365,23 +402,32 @@ export class RepoBackfillService implements OnApplicationBootstrap {
     for (const row of rows) {
       const canonical = normalizeRepoUrl(row.repoUrl);
       if (row.repoUrl !== canonical) {
-        // Update in place; on conflict (canonical already exists for same team) delete this duplicate
-        const updated = await this.db.execute<{ id: number }>(
-          sql`UPDATE team_repositories SET repo_url = ${canonical}
-              WHERE id = ${row.id}
-              AND NOT EXISTS (
-                SELECT 1 FROM team_repositories t2
-                WHERE t2.team_id = (SELECT team_id FROM team_repositories WHERE id = ${row.id})
-                  AND t2.repo_url = ${canonical}
-                  AND t2.id <> ${row.id}
-              )
-              RETURNING id`,
-        );
-        if (updated.rows.length === 0) {
-          // Duplicate after normalisation — delete this row
-          await this.db.execute(
-            sql`DELETE FROM team_repositories WHERE id = ${row.id}`,
+        // Update in place; on conflict (canonical already exists for same team) delete this
+        // duplicate. The team-repo budgets (stored by URL, DD-13) follow in the same transaction.
+        const rewritten = await this.db.transaction(async (tx) => {
+          const updated = await tx.execute<{ id: number }>(
+            sql`UPDATE team_repositories SET repo_url = ${canonical}
+                WHERE id = ${row.id}
+                AND NOT EXISTS (
+                  SELECT 1 FROM team_repositories t2
+                  WHERE t2.team_id = (SELECT team_id FROM team_repositories WHERE id = ${row.id})
+                    AND t2.repo_url = ${canonical}
+                    AND t2.id <> ${row.id}
+                )
+                RETURNING id`,
           );
+          if (updated.rows.length === 0) {
+            // Duplicate after normalisation — delete this row
+            await tx.execute(
+              sql`DELETE FROM team_repositories WHERE id = ${row.id}`,
+            );
+            await deleteTeamRepo(tx, row.teamId, row.repoUrl);
+            return false;
+          }
+          await rewriteTeamRepoUrl(tx, row.teamId, row.repoUrl, canonical);
+          return true;
+        });
+        if (!rewritten) {
           this.logger.log(
             `team_repositories #${row.id} deleted (duplicate after normalise: "${row.repoUrl}" → "${canonical}")`,
           );

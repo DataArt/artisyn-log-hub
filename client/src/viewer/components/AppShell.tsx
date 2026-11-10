@@ -3,6 +3,7 @@ import type { ReactNode } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { MainNav } from '../pages/main/MainNav';
 import { AppLeftNav } from './AppLeftNav';
+import { BudgetNoticeBanner } from './BudgetNoticeBanner';
 import { useDraggableWidth } from '../hooks/useDraggableWidth';
 import { useAllViewsShortcut } from '../hooks/useAllViewsShortcut';
 
@@ -37,6 +38,7 @@ export function AppShell({ children }: { children: ReactNode }) {
   return (
     <div className="flex flex-col h-screen">
       <MainNav />
+      <BudgetNoticeBanner />
       <div className="flex flex-1 min-h-0 overflow-hidden">
         {/* Left nav wrapper */}
         <div

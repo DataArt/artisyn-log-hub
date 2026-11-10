@@ -98,7 +98,8 @@ function setTab(next: Tab) {
 **Rule: tab selection must always live in the URL.** Any page-level or panel-level tab state (`PageTabs`
 `value`/`onValueChange`) must be backed by `useSearchParams()`, not local `useState`, so the active tab is
 bookmarkable and survives a refresh. See `useRepositoryViewState.ts` and `useAdminTabState.ts` for the pattern.
-`TeamDetailPage.tsx` still uses local `useState` for its tabs — this is a known exception, not a pattern to copy.
+`TeamDetailPage.tsx` keeps its tab in the `ttab` URL param (the `location.state` seed is written into the URL
+once, then falls back to `members`).
 
 # Base URL for links (emails, generated URLs)
 

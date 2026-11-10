@@ -30,7 +30,10 @@ export interface AnalyticsState {
     | 'tools'
     | 'tokens'
     | 'productivity-counters'
-    | 'active-sessions';
+    | 'active-sessions'
+    // Cumulative spend of the current budget period, backed by its own endpoint
+    // (analytics/budget-burn, 2026-11-05 budgets-threshold-alerts). No time window, no Group by.
+    | 'budget-burn';
   layout: 'vertical' | 'horizontal';
 }
 
@@ -132,6 +135,13 @@ export const VIEW_OPTIONS: {
     synonyms: ['running', 'active'],
     label: 'Active Sessions',
     description: 'Sessions in the selected range, most recently active first',
+  },
+  {
+    value: 'budget-burn',
+    synonyms: ['budget', 'forecast', 'burn rate', 'limit'],
+    label: 'Budget Burn',
+    description:
+      'Cumulative spend of the budget period against the budget, with forecast',
   },
 ];
 

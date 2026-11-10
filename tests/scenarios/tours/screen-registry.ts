@@ -371,6 +371,8 @@ const SETTINGS_ANCHORS: Array<[string, string, string, string]> = [
   ['monitored-tools', 'Monitored Tools', 'Pause all wrapping', 'Monitored Tools'],
   // A personal repository has no team to configure session attributes for: that notice is the screen.
   ['session-attribution', 'Session Attribution', 'Session attributes are a team-level setting', 'Session Attribution'],
+  // The tour's repository has no budget: the section's empty table is the screen.
+  ['budgets', 'Budgets', 'No budgets yet.', 'Budgets'],
   ['maintenance', 'Maintenance', 'Recompute all sessions', 'Maintenance and Import/Export'],
   ['import-export', 'Import/Export', 'Export session', 'Maintenance and Import/Export'],
 ];
@@ -411,6 +413,17 @@ const OWNER_REPO_ROWS: ScreenRow[] = (
         file: `${HELP}/analytics-reports.md`,
         heading: 'Analytics tab',
       },
+    },
+    {
+      // Visible to every member (DD-16 of 2026-11-05-budgets-threshold-alerts). The tour's
+      // repository has no budget, so the card shows the spend without one; S-BUDG-01 walks a budget.
+      id: 'repo.spend',
+      route: '/repos/:repoId',
+      query: '?mtab=spend',
+      tab: { group: 'repo', id: 'spend' },
+      title: 'Repository: Spend (spend against the budget)',
+      expectTestId: 'budget-card',
+      docRef: { file: `${HELP}/budgets.md`, heading: 'The Spend tab' },
     },
     {
       id: 'repo.reports',
@@ -517,6 +530,8 @@ const ANALYTICS_VIEWS: Array<[string, string, Partial<ScreenRow>]> = [
   ['tokens', 'Token Breakdown', { expectTestId: 'token-breakdown-view' }],
   ['productivity-counters', 'Productivity Counters', { expectTestId: 'productivity-counters-view' }],
   ['active-sessions', 'Active Sessions', { expectTestId: 'active-sessions-view' }],
+  // REPO-GOLD has no budget: the view shows the cumulative spend of the current month.
+  ['budget-burn', 'Budget Burn', { expectTestId: 'budget-burn-chart' }],
 ];
 
 const ANALYTICS_ROWS: ScreenRow[] = ANALYTICS_VIEWS.map(([view, label, anchor]): ScreenRow => ({
@@ -571,6 +586,17 @@ const REPORTS: Array<[string, string, Partial<ScreenRow>?]> = [
   // No session attributes are configured on the golden repository: the empty report is accepted.
   ['attribution-breakdown', 'Attribute Breakdown', { dataOptional: true }],
   ['attribution-usage', 'Attribute Extraction Usage', { dataOptional: true }],
+  // REPO-GOLD has no budget: the report lists the calendar months of the range with their spend.
+  [
+    'budget',
+    'Budget',
+    {
+      docRef: {
+        file: `${HELP}/budgets.md`,
+        heading: 'Budgets in Analytics and Reports',
+      },
+    },
+  ],
 ];
 
 const REPORT_ROWS: ScreenRow[] = REPORTS.map(([report, title, extra]): ScreenRow => ({
@@ -883,6 +909,24 @@ const TEAM_OWNER_ROWS: ScreenRow[] = (
       docRef: { file: `${HELP}/otel-tab.md`, heading: 'Team OTEL tab' },
     },
     {
+      // Visible to every member (DD-16); the team has no budget, so the card shows the spend alone.
+      id: 'team.spend',
+      route: '/teams/:teamId',
+      tab: { group: 'team', id: 'spend' },
+      title: 'Team: Spend (team spend against the budget)',
+      expectTestId: 'budget-card',
+      docRef: { file: `${HELP}/budgets.md`, heading: 'The Spend tab' },
+    },
+    {
+      // The team owner passes the analytics rule; the team has no budget yet.
+      id: 'team.settings',
+      route: '/teams/:teamId',
+      tab: { group: 'team', id: 'settings' },
+      title: 'Team: Settings (team budgets)',
+      expectTestId: 'budgets-section',
+      docRef: { file: `${HELP}/budgets.md`, heading: 'Where you can set a budget' },
+    },
+    {
       id: 'team-repo.sessions',
       route: '/teams/:teamId/repos/:repoId',
       title: 'Team repository: Sessions',
@@ -1048,6 +1092,7 @@ const HELP_ARTICLES: Array<[string, string]> = [
   ['session-list', 'Working with the Session List'],
   ['session-log', 'Session Log'],
   ['analytics-reports', 'Analytics & Reports'],
+  ['budgets', 'Budgets'],
   ['okf-tab', 'OKF tab'],
   ['otel-tab', 'OTEL tab'],
   ['otel-architecture', 'OTEL collection architecture'],

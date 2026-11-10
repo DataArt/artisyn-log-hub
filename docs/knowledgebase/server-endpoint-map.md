@@ -84,9 +84,21 @@ Most repository routes are only `session`-guarded; the real check is in the hand
     `sessions/:sessionId/contexts`) are deliberately not analytics-gated;
   - prompt masking is a projection, not a `WHERE`: a `null` `firstPrompt` in a team payload
     means "hidden", never "absent".
+  - budgets and Spend (`BudgetAccessService`, one `ScopeAccess` per request) are the exception
+    to "row-filter": see **Budgets: owner-or-manager** below.
 
   Full matrix and rationale: [authorization-and-authentificaiton.md](authorization-and-authentificaiton.md)
   § "Team access modes" and § "Team visibility and restricted access".
+- **Budgets: owner-or-manager** — `logs/budgets/budget-access.service.ts` resolves the scope
+  of every budget / Spend route: `/repositories/:repoId/…` = the personal `repo` scope
+  (`assertRepoAccess`, the owner manages it), `…?teamId=T` = the `team-repo` scope,
+  `/teams/:teamId/…` = the whole-team `team` scope (non-member → 403). In team scopes only the
+  **team owner and managers** (`team_members.is_manager`) may create / edit / delete budgets
+  (`canManage`, 403 otherwise — no admin bypass, and unlike the other team settings, managers
+  count in `transparent` teams too). The budgets list, the event log and `spend/sessions` need
+  `analyticsAllowed` (`fullView`, 403 otherwise); `spend` answers every member, with a
+  `restricted` own-spend view for a caller without it. `analytics/budget-burn` and
+  `reports/budget` keep the usual analytics 403.
 - **Hook (`api-key`) routes** act on the key owner's data only: a session owned by another user
   answers 404 (post-turn submissions, OKF facts) or 409 (OTEL realtime), never confirming it
   exists. See [hook-api-versioning.md](hook-api-versioning.md) § "Uploads into another user's session".
@@ -139,7 +151,12 @@ Most repository routes are only `session`-guarded; the real check is in the hand
   route (same service).
 - **Costs** shown by any route are Log Hub's own computed tree cost, never the OTEL total; see
   [algorithms/otel-cost-selection.md](algorithms/otel-cost-selection.md) and
-  [session-metrics-scope.md](session-metrics-scope.md).
+  [session-metrics-scope.md](session-metrics-scope.md). **One exception — budgets:** the
+  budget / Spend routes, `analytics/budget-burn`, `reports/budget` and the threshold notices
+  count each root tree at the **larger** of the hook tree cost and `otel_session_totals`
+  (`selectBudgetTreeCostMicros`), so a budget never under-counts; their figures can therefore
+  exceed the cost the session list shows. Rules:
+  [algorithms/budget-spend-math.md](algorithms/budget-spend-math.md).
 - **SPA and static files** are served by `ServeStaticModule` + a precompressed-static middleware;
   see [static-asset-serving.md](static-asset-serving.md).
 
@@ -206,8 +223,11 @@ controller itself. Several controllers share the `api/v1/repositories` prefix �
 | `logs/tool-monitoring/tool-monitoring-hook.controller.ts` | `/api/v2/tool-monitoring` | Monitored-tools config for the hook | `tool-monitoring.types.ts` · `f24` |
 | `logs/otel/otel-realtime.controller.ts` | `/api/v2/otel-realtime` | Realtime OTEL batch from the receiver | `OtelRealtimeDto` in the controller · `f25` |
 | `logs/repositories.controller.ts` | `/api/v1/repositories` | Repos, settings, hook state, sessions, session logs (+ delta), change surface, session OKF, timeline / work-time analytics | `logs/repositories.service.ts`, `logs/dto/`, client `models/repositories.ts` · `f14`, `f17`, `f19`, `f20` |
-| `logs/analytics/usage-analytics.controller.ts` | `/api/v1/repositories` | `analytics/{tools,tokens,productivity,active-sessions,claude-versions}` | `usage-analytics.types.ts` · `f20` |
-| `logs/reports/reports.controller.ts` | `/api/v1/repositories` | `reports/*` (incl. repo `okf-usage` and `okf-usage/article`) | `logs/reports/*.service.ts` · `f21` |
+| `logs/analytics/usage-analytics.controller.ts` | `/api/v1/repositories` | `analytics/{tools,tokens,productivity,active-sessions,claude-versions,budget-burn}` | `usage-analytics.types.ts`, `logs/budgets/budgets.types.ts` · `f20`, `f26` |
+| `logs/reports/reports.controller.ts` | `/api/v1/repositories` | `reports/*` (incl. repo `okf-usage` and `okf-usage/article`, `budget`) | `logs/reports/*.service.ts`, `logs/budgets/budgets.types.ts` · `f21`, `f26` |
+| `logs/budgets/budgets.controller.ts` (`RepositoryBudgetsController`) | `/api/v1/repositories` | `:repoId/budgets*` (CRUD, `events`) and `:repoId/spend*` (Spend tab, `spend/sessions`), personal or `?teamId` | `logs/budgets/budgets.types.ts`, client `viewer/api.ts` · `f26` |
+| `logs/budgets/budgets.controller.ts` (`TeamBudgetsController`) | `/api/v1/teams` | `:teamId/budgets*` and `:teamId/spend*` (whole-team scope) | `logs/budgets/budgets.types.ts` · `f26` |
+| `logs/budgets/budget-notices.controller.ts` | `/api/v1/budget-notices` | Caller's budget threshold notices (bell tray, banner) and read marking | `logs/budgets/budgets.types.ts` · `f26` |
 | `logs/otel/otel-facts.controller.ts` | `/api/v1/repositories` | Repo and session OTEL tabs | `logs/otel/otel-facts.types.ts` · `f25` |
 | `logs/otel/otel-live.controller.ts` (`OtelLiveController`) | `/api/v1/otel/live` | OTEL Live view: `status` (header entry) and the live tree (`node`, `panel`, `tz`), user-wide | `logs/otel/otel-live.types.ts`, client `models/otel-live.ts` · `f25` |
 | `logs/tool-monitoring/tool-monitoring.controller.ts` | `/api/v1/repositories` | Tools/MCP tab config, summary, calls | `tool-monitoring.types.ts` · `f24` |
@@ -297,6 +317,24 @@ grep the controller.
   `DELETE …/repositories/:repoId` also removes the repo row when no other team references it.
 - `GET /api/v1/teams/:teamId/otel/facts` is only `session`-guarded; membership and
   `analyticsAllowed` are checked in the handler.
+
+**Budgets and Spend** (`session`; access per **Budgets: owner-or-manager** above)
+
+- `POST …/budgets` → 400 on invalid input (period, amount, thresholds, `timeZone`), **409** when
+  the scope already has a budget of that period; `PUT` / `DELETE …/budgets/:budgetId` → 404 for
+  an id outside the route's scope. Every change writes a `budget_events` row in the same
+  transaction; the event log (`…/budgets/events`, paged by `before` id) keeps rows of deleted
+  budgets (`budgetDeleted: true`). `budgets/events` and `spend/sessions` are declared before
+  their parametric siblings.
+- `GET …/spend` never 403s a member: without `analyticsAllowed` it answers `restricted: true`
+  with the caller's own spend and only the budgets that own spend exceeds (no daily / slices /
+  costly sessions). Its numbers are caller-independent otherwise — the Spend tab, the report,
+  the burn view and the notices agree.
+- `GET /api/v1/budget-notices` lists only the caller's own recipient rows; it never marks
+  anything read. Read marking is **POST only** — `POST /api/v1/budget-notices/read` with
+  `{ids: number[]}` (≤ 100 positive integers) or `{all: true}`, 200 `{unreadCount}`; ids of other
+  users' notices match nothing. The notices themselves are written by the background threshold
+  job (`BudgetThresholdScheduler`), never by a request.
 
 **OTEL Live** (`session`; [otel-tabs.md](otel-tabs.md) § "Live view")
 

@@ -71,6 +71,10 @@ export default async function globalSetup(): Promise<void> {
   // finalises idle roots, both writes no row made. The F25 rows read world-v1's hand-written
   // otel_* rows; what the drain produces is the scenarios' job.
   process.env.OTEL_PROJECTION_INTERVAL_MS = '3600000';
+  // The budget threshold job (2026-11-05 budgets-threshold-alerts, DD-14) is switched off for
+  // the same reason: a tick writes budget_notices / recipients / events no row made. The F26
+  // rows read world-v1's hand-written notice; what the job writes is the scenarios' job.
+  process.env.BUDGET_CHECK_ENABLED = 'false';
   process.env.UPLOAD_QUEUE_LEASE_TIMEOUT_MS = '150';
   process.env.UPLOAD_QUEUE_TICK_BUDGET_MS = '500';
   process.env.AI_TOOL_VERSION_CHECK_ENABLED = 'false';
