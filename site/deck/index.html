@@ -84,7 +84,7 @@
           <li><span class="dim-no">04 · autonomy</span>How far could it go alone?</li>
           <li><span class="dim-no">05 · safety</span>What did it read and send?</li>
         </ol>
-        <p class="hook-answer">Log Hub answers each one per session and across the team, split by harness element: CLAUDE.md, rules, skills, hooks, agents, MCP servers, knowledge base, memory.</p>
+        <p class="hook-answer">Log Hub answers each one per session and across the team, split by harness element: CLAUDE.md, rules, skills, hooks, agents, workflows, MCP servers, knowledge base, memory.</p>
       </div>
     </div>
     <p class="slide-footer">{{site:url}}</p>
@@ -98,7 +98,7 @@
       <p class="block-marker">The harness decides</p>
       <ol class="pills" aria-label="Storyline"><li>hook</li><li class="active">harness</li><li>cost</li><li>speed</li><li>context</li><li>quality</li><li>team</li><li>tools</li><li>safety</li></ol>
     </header>
-    <h2 class="headline">The harness moves all five.</h2>
+    <h2 class="headline">The harness moves all five: quality, cost, speed, autonomy, safety.</h2>
     <div class="slide-body">
       <ul>
         <li>Same model, different harness: a different bill and a different number of tasks solved.</li>
@@ -163,7 +163,7 @@
       <p class="block-marker">Anatomy of a harness</p>
       <ol class="pills" aria-label="Storyline"><li>hook</li><li class="active">harness</li><li>cost</li><li>speed</li><li>context</li><li>quality</li><li>team</li><li>tools</li><li>safety</li></ol>
     </header>
-    <h2 class="headline">Ten parts. Each one has a view.</h2>
+    <h2 class="headline">Nine parts. Each one has a view.</h2>
     <div class="slide-cols">
       <div class="col-stack">
         <div class="slide-body">
@@ -184,7 +184,6 @@
               <tr><td>MCP servers</td><td>Tools/MCP · OTEL by MCP server</td></tr>
               <tr><td>Knowledge base</td><td>OKF · KB access, KB value</td></tr>
               <tr><td>Memory</td><td>System context anatomy</td></tr>
-              <tr><td>Settings</td><td>Logs · permission requests, denials</td></tr>
             </tbody>
           </table>
         </div>
@@ -414,7 +413,7 @@
         <ul>
           <li>CLAUDE.md, rules, skills, agents and MCP servers load before any work.</li>
           <li>System context anatomy splits them by source, down to each file.</li>
-          <li>A harness snapshot per session: compare before and after a change.</li>
+          <li>Each session keeps a snapshot of the harness it ran with.</li>
         </ul>
         <div class="key-box deck-figure">
           <span class="key-figure">{{ds:insight.unusedContextPct|pct}}</span>
@@ -444,7 +443,7 @@
         </ul>
         <div class="key-box deck-figure">
           <span class="key-figure">{{ds:tools.0.calls}}</span>
-          <span class="key-caption">calls to {{ds:tools.0.name}} in {{ds:team.period}}, {{ds:tools.0.errorPct|pct}} failed</span>
+          <span class="key-caption">calls to {{ds:tools.0.name}} across the team in {{ds:team.period}}, {{ds:tools.0.errorPct|pct}} failed</span>
         </div>
       </div>
       <figure class="shot deck-shot"><img src="../assets/shots/harness-usage.png" alt="Harness usage: tools, MCP calls and skills used in a session, with counts" loading="lazy"><figcaption>Session → Harness usage</figcaption></figure>
@@ -466,7 +465,7 @@
         <div class="slide-body">
           <ul>
             <li>Does the index route, or does the agent read the KB wholesale?</li>
-            <li>An article read in 80&nbsp;% of KB sessions belongs in always-loaded context.</li>
+            <li>An article read in 80% of KB sessions is a candidate for always-loaded context.</li>
             <li>Dead pointers, routing misses and the agent's trail, per article.</li>
           </ul>
         </div>
@@ -524,7 +523,7 @@
       <div class="slide-body">
         <ul>
           <li>Work time, cost and cache ratio by hour and day, per user or branch.</li>
-          <li>17 reports, each exportable to PDF.</li>
+          <li>18 reports, each exportable to PDF.</li>
           <li>Outliers: cost per line, cache-read ratio, lagging versions, tool error spikes.</li>
         </ul>
         <div class="key-box deck-figure">
@@ -569,7 +568,7 @@
         <figure class="tile"><img src="../assets/shots/sessions-by-cost.png" alt="Repository analytics, cost per session ranked: the top session cost $64.26" loading="lazy"><figcaption><span class="q-no">1</span>Cost per session</figcaption></figure>
         <figure class="tile"><img src="../assets/shots/cost-by-branch.png" alt="Repository analytics, cost per hour for one week, grouped by branch" loading="lazy"><figcaption><span class="q-no">2</span>Cost by branch, 1 week</figcaption></figure>
         <figure class="tile"><img src="../assets/shots/lines-per-hour.png" alt="Repository analytics, lines per autonomous hour per session" loading="lazy"><figcaption><span class="q-no">3</span>Lines per hour</figcaption></figure>
-        <figure class="tile"><img src="../assets/shots/metric-list.png" alt="Metric picker: work time, cost, files and tools, vision, MCP invocations, productivity, cache read ratio, change surface, token breakdown and more" loading="lazy"><figcaption><span class="q-no">+</span>13 metrics</figcaption></figure>
+        <figure class="tile"><img src="../assets/shots/metric-list.png" alt="Metric picker: work time, cost, files and tools, vision, MCP invocations, productivity, cache read ratio, change surface, token breakdown and more" loading="lazy"><figcaption><span class="q-no">+</span>All 13 metrics</figcaption></figure>
       </div>
     </div>
     <p class="slide-footer">{{site:url}}</p>
@@ -583,7 +582,7 @@
       <p class="block-marker">Tools · does this tool work?</p>
       <ol class="pills" aria-label="Storyline"><li>hook</li><li>harness</li><li>cost</li><li>speed</li><li>context</li><li>quality</li><li>team</li><li class="active">tools</li><li>safety</li></ol>
     </header>
-    <h2 class="headline">Authors see every call; admins see its worth.</h2>
+    <h2 class="headline">Authors see every call; admins see if the tool is worth it.</h2>
     <div class="slide-cols">
       <div class="col-stack">
         <div class="slide-body">
@@ -624,7 +623,7 @@
         <ol class="layers">
           <li>What the harness exposed: full capture, so a leak can be traced.</li>
           <li>The injection surface: every tool answer and permission denial, readable.</li>
-          <li>The post-turn evaluator (hook 2.31.1) has no tools, MCP or skills: a planted prompt cannot act through it.</li>
+          <li>The post-turn analysis (hook 2.31.1) has no tools, MCP or skills: a planted prompt cannot act through it.</li>
         </ol>
       </div>
       <div class="visual-slot deck-visual has-figure seal-board">
@@ -635,7 +634,7 @@
           <li><span class="sig">session data</span><b>your Postgres, your host</b></li>
           <li><span class="sig">vendor telemetry · data to DataArt</span><b>none</b></li>
           <li><span class="sig">outbound calls<small>daily price and version list, both can be off</small></span><b>two public GETs</b></li>
-          <li><span class="sig">post-turn evaluator<small>developer's machine, same Claude connection</small></span><b>no tools · no MCP · no skills</b></li>
+          <li><span class="sig">post-turn analysis<small>developer's machine, same Claude connection</small></span><b>no tools · no MCP · no skills</b></li>
           <li><span class="sig">air-gapped network<small>app, in-app help and docs ship inside</small></span><b>works fully</b></li>
         </ul>
       </div>

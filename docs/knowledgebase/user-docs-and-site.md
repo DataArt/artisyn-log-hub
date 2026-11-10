@@ -317,7 +317,7 @@ slide head: hook · harness · cost · speed · context · quality · team · to
 | 2 | Hook (`section.thesis-slide`): "It ran alone for N minutes, cost $8 and shipped the feature. All good?" + the five questions | dataset control column, five tiles |
 | 3 | The harness decides — one study figure per dimension | `.visual-slot.study-board` (no dataset figure) |
 | 4 | Black box vs glass box — the vendor's own advice | contrast board |
-| 5 | Anatomy of a harness — element → view | table + `system-context-anatomy.png` |
+| 5 | Anatomy of a harness — nine elements → view (same nine as the Home strip; Settings dropped 2026-11-10) | table + `system-context-anatomy.png` |
 | 6 | Cost · four prices plus sub-agents | cost bar |
 | 7 | Cost · context growth | `context-growth-*.png` |
 | 8 | Cost · by skill, MCP server, effort, fast mode (OTEL) | `otel-cost-by-skill.png` |
