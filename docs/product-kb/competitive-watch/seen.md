@@ -4,7 +4,7 @@ title: "Competitive watch — seen log"
 description: "Every competitor item (release, blog post, docs change, new tool) the morning check has already seen, newest first, with its relevance and verdict for Log Hub."
 tags:
   - competitive-research
-timestamp: "2026-11-09T10:00:00+04:00"
+timestamp: "2026-11-10T10:00:00+04:00"
 ---
 
 # Seen log
@@ -19,6 +19,15 @@ Baseline: everything published before 2026-11-01 is in the parity study and is n
 
 | Seen | Source id | Published | Item | URL | Relevance | Verdict |
 |---|---|---|---|---|---|---|
+| 2026-11-10 | hn | 2026-11-10 | Show HN: Calculators for token costs and Claude Code API budgets (ModelFold): monthly API-spend estimate from a usage preset or own requests/tokens, compared across models; no tracking — HN 2 / 0 | https://modelfold.ai/tools/claude-code-cost | misc | none (static calculator; Log Hub reports real cost) |
+| 2026-11-10 | hn | 2026-11-10 | ByteAsk: build-aware context and checking harness for C++ coding agents — HN 2 / 0 | https://byteask.ai/research/byteask-system-cpp | low | none |
+| 2026-11-10 | datadog-docs | — | Datadog Agent Console docs now list a Tasks view (Trajectory sessions classified into categories/subcategories with share of tasks, cost per task, spend per active user, average turns), a Productivity tab (merged PRs, time to merge, cost per observed PR, resolved Jira issues vs AI cost), per-integration cards grouped by provider, and Bits AI Agents; not in the parity study | https://docs.datadoghq.com/ai_agents_console (Tasks view) | medium | idea: classify sessions by work type with cost per task — already an idea in jellyfish.md; study: datadog.md A10/T-rows should mention Tasks and cost per observed PR (proposed) |
+| 2026-11-10 | hn | 2026-11-09 | Show HN: Slopie – "Spotify wrapped" for Claude Code / Codex / Cursor / Pi history (`npx slopie audit`, local; which model costs most, swearing/thanks per model) — HN 1 / 0 | https://news.ycombinator.com/item?id=50424579 | misc | none (fun local transcript stats) |
+| 2026-11-10 | hn | 2026-11-09 | Show HN: Slurp – product analytics/BI for your agent — HN 2 / 0 | https://slurp.run/ | low | none |
+| 2026-11-10 | hn | 2026-11-09 | Show HN: Control layer demo for AI coding agents (mintigate) — HN 1 / 0 | https://github.com/MintCoderpro/mintigate-demo | low | none |
+| 2026-11-10 | hn | 2026-11-09 | Show HN: MergeAtlas – a better way to review PRs — HN 3 / 0 | https://mergeatlas.dev/ | low | none |
+| 2026-11-10 | hn | 2026-11-09 | Show HN: Search 17 years of "What are you working on?" — HN 1 / 0 | https://stillworkingonit.vercel.app/ | low | none |
+| 2026-11-10 | hn | 2026-11-09 | Show HN: Black Ops II statically recompiled to native ARM64 macOS — HN 1 / 0 | https://github.com/adrbn/bo2-mac | low | none |
 | 2026-11-09 | hn | 2026-11-09 | Show HN: Airlock – policy-as-code for fleets of AI coding agents — HN 3 / 0 | https://airlock.lunareng.com/docs | low | none |
 | 2026-11-09 | hn | 2026-11-09 | Ask HN: Is it normal to not write code for years as a software engineer? — HN 3 / 4 | https://news.ycombinator.com/item?id=50420252 | low | none |
 | 2026-11-09 | hn | 2026-11-08 | Show HN: Plannotator inbox – email-like review of agent work — HN 7 / 1 | https://plannotator.ai/inbox/ | low | none |
