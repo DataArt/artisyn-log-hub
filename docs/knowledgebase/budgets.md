@@ -169,7 +169,7 @@ Cookie session (`JwtAuthGuard`). Contract family `f26`.
 | `GET R\|T/budgets/events` | `budgetId?`, `event?`, `before?`, `limit?` (1–100, default 50); `fullView` |
 | `GET R\|T/spend` | `period`, `offset ≤ 0`, `tz` (viewer zone, used without a budget); every member, DD-9 when `!fullView` |
 | `GET R\|T/spend/sessions` | `slice` (`model\|user\|repo\|branch\|subagent\|skill\|mcp\|day\|costly`), `key`; max 200 costliest, `truncated`; `fullView` |
-| `GET R/analytics/budget-burn` | `budgetId?` (default month › week › day), `branches?`, `users?`, `tz`; filters narrow only the cumulative line (`filtered: true`) |
+| `GET R/analytics/budget-burn` | `budgetId?` (default month › week › day), `branches?`, `users?`, `tz`; filters narrow only the cumulative line (`filtered: true` only when they drop a session tree of the current period — the Analytics controls send every user when nothing is narrowed) |
 | `GET R/reports/budget` | `startDate`, `endDate`, `tz`; each budget's periods overlapping the range |
 | `GET /api/v1/budget-notices`, `POST /api/v1/budget-notices/read` | caller's own recipient rows |
 
