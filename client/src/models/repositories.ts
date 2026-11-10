@@ -150,7 +150,7 @@ export interface SessionAttributionValueBucket {
  * - `calculatedCost` = main + sub-agents + utility; `null` as soon as the main thread, a
  *   sub-agent or a utility call is unpriced (it is the session's shown cost, `totalCost`).
  * - `telemetryCost` is the OTEL-reported cost; `null` without telemetry. A cross-check only.
- * - `mismatch` is true when both totals are present and differ by at least $0.05 and 1%.
+ * - `mismatch` is true when both totals are present and differ by at least $0.50 and 1%.
  * - `utilityPricingMissing` / `subagentPricingMissing` are true when some utility call's /
  *   sub-agent's model has no price row.
  * - `unpricedModels` lists the model ids with no price in Log Hub (sorted). The last two

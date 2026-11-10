@@ -24,7 +24,7 @@ cost tooltip flags a mismatch between the calculated cost and telemetry.
 
 - Implementation: `server/src/logs/otel-cost.sql.ts` — `resolveSessionTotalCost`,
   `unpricedModelList`, `otelComputedDiscrepancy` (`OTEL_DISCREPANCY_THRESHOLD = 0.33`),
-  `costMismatch` (`COST_MISMATCH_TOLERANCE_USD = 0.05`, `COST_MISMATCH_TOLERANCE_RATIO = 0.01`),
+  `costMismatch` (`COST_MISMATCH_TOLERANCE_USD = 0.5`, `COST_MISMATCH_TOLERANCE_RATIO = 0.01`),
   `selectSubagentCost` (rule 5, with `OTEL_SUBAGENT_COST_FIX_VERSION = '2.1.307'`,
   `ccVersionBeforeSql`, `subagentOtelCostSql`).
   The parts come from SQL in `server/src/logs/session-tree-cost.sql.ts` (`treeCostCtes`,
@@ -71,7 +71,7 @@ The mismatch flag takes `telemetry` (the OTEL total) and `calculated` (the shown
 1), each USD or `null`:
 
 4. **Mismatch** (`mismatch`): false if either is `null`. Otherwise with
-   `delta = |calculated - telemetry|`, true only when `delta >= 0.05` **and**
+   `delta = |calculated - telemetry|`, true only when `delta >= 0.5` **and**
    `delta >= |telemetry| * 0.01`.
 
 The OTEL total arrives as `null`, never `0`: an OTEL total of exactly 0 is stored as `NULL` (an

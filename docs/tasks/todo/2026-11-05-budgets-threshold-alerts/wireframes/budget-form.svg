@@ -1,91 +1,178 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="740" viewBox="0 0 1120 740" font-family="Inter, Segoe UI, Arial, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="980" viewBox="0 0 1440 980" font-family="Inter, Segoe UI, Arial, sans-serif">
   <style>
     .t { fill: #111827; }
     .muted { fill: #6b7280; }
     .mono { font-family: 'JetBrains Mono', Consolas, monospace; }
+    .link { fill: #2563eb; }
     .note { fill: #92400e; font-size: 11px; }
     .lab { font-size: 13px; font-weight: 600; fill: #374151; }
+    .h { font-size: 15px; font-weight: 700; fill: #111827; }
+    .lbl { font-size: 11px; fill: #6b7280; letter-spacing: 0.5px; }
+    .cell { font-size: 13px; fill: #111827; }
+    .cellm { font-family: 'JetBrains Mono', Consolas, monospace; font-size: 13px; fill: #111827; }
+    .smallm { font-family: 'JetBrains Mono', Consolas, monospace; font-size: 12px; fill: #111827; }
   </style>
-  <rect width="1120" height="740" fill="#ffffff"/>
-  <text x="24" y="32" font-size="18" font-weight="700" class="t">Budget form: create / edit (FR-1, FR-6, FR-7)</text>
-  <text x="24" y="54" font-size="12" class="muted">Wireframe, light theme. Modal over Settings → Budgets, opened by "+ Add budget" or a row's "Edit". Sample values are illustrative.</text>
+  <rect width="1440" height="980" fill="#ffffff"/>
 
-  <!-- backdrop -->
-  <rect x="24" y="72" width="1072" height="648" fill="#f3f4f6"/>
-  <text x="40" y="94" font-size="11" class="muted">(behind: repository Settings tab → Budgets section, see budget-settings.svg)</text>
-  <!-- dialog -->
-  <rect x="200" y="106" width="560" height="594" rx="10" fill="#ffffff" stroke="#e5e7eb"/>
-  <text x="224" y="142" font-size="16" font-weight="700" class="t">Add budget</text>
-  <text x="732" y="142" font-size="16" class="muted">×</text>
-  <line x1="200" y1="158" x2="760" y2="158" stroke="#e5e7eb"/>
+  <!-- top bar (as in the current app: team name + access badge, All views, help, bell, identity) -->
+  <rect x="0" y="0" width="1440" height="48" fill="#fafafa"/>
+  <line x1="0" y1="48" x2="1440" y2="48" stroke="#e5e7eb"/>
+  <circle cx="24" cy="24" r="8" fill="#4f46e5"/>
+  <text x="44" y="29" font-size="14" font-weight="600" class="t">[local] Artisyn Log Hub <tspan class="muted" font-size="12" font-weight="400">dev</tspan></text>
+  <text x="262" y="29" font-size="14" font-weight="600" class="t">Home</text>
+  <text x="858" y="29" font-size="14" class="muted">LogHubLocal</text>
+  <rect x="948" y="13" width="72" height="22" rx="11" fill="#ea580c"/>
+  <text x="984" y="28" font-size="11" font-weight="700" fill="#ffffff" text-anchor="middle">Restricted</text>
+  <text x="1042" y="29" font-size="14" font-weight="600" class="t">All views</text>
+  <text x="1150" y="29" font-size="15" class="t">?</text>
+  <text x="1186" y="30" font-size="14" class="muted">🔔</text>
+  <text x="1226" y="29" font-size="14" class="muted">dt@dataart.com</text>
+  <text x="1350" y="29" font-size="14" font-weight="600" class="t">Edit email</text>
 
-  <!-- info -->
-  <rect x="224" y="174" width="512" height="44" rx="6" fill="#eff6ff" stroke="#bfdbfe"/>
-  <text x="238" y="193" font-size="12" fill="#1e40af">ⓘ A budget is a reference amount. Log Hub shows spend against it and</text>
-  <text x="238" y="209" font-size="12" fill="#1e40af">   warns at the thresholds — it never stops or limits Claude Code usage.</text>
+  <!-- sidebar (abridged) -->
+  <rect x="0" y="49" width="320" height="931" fill="#ffffff"/>
+  <line x1="321" y1="49" x2="321" y2="980" stroke="#e5e7eb" stroke-width="4"/>
+  <text x="12" y="108" class="lbl">TEAMS</text>
+  <text x="50" y="173" font-size="14" font-weight="700" class="t">LogHubLocal</text>
+  <rect x="0" y="186" width="320" height="24" fill="#f3f4f6"/>
+  <text x="32" y="203" font-size="12" font-weight="700" class="t">https://gitlab.dataart.com/da/cml/artisyn-log-hub</text>
+  <text x="50" y="229" font-size="14" class="muted">LogHub Demo</text>
+  <text x="50" y="261" font-size="14" class="muted">Live Test Team</text>
+  <text x="12" y="359" class="lbl">MY REPOS</text>
+  <text x="12" y="392" font-size="14" class="muted">https://github.com/DataArt/artisyn-log-hub</text>
+  <text x="12" y="424" font-size="14" class="muted">https://github.com/loghub-test/live-test-repo-2</text>
+  <text x="12" y="470" class="note">(sidebar unchanged; a repository opened</text>
+  <text x="12" y="484" class="note">under its team = team repository scope)</text>
 
-  <!-- scope (preset by the Settings page, read-only) -->
-  <text x="224" y="246" class="lab">Scope</text>
-  <g font-size="13">
-    <rect x="224" y="256" width="168" height="32" rx="6" fill="#f9fafb" stroke="#e5e7eb"/><text x="244" y="277" fill="#9ca3af">Personal repository</text>
-    <rect x="392" y="256" width="150" height="32" fill="#111827"/><text x="408" y="277" fill="#ffffff" font-weight="600">Team repository</text>
-    <rect x="542" y="256" width="80" height="32" rx="6" fill="#f9fafb" stroke="#e5e7eb"/><text x="566" y="277" fill="#9ca3af">Team</text>
-  </g>
-  <rect x="224" y="296" width="512" height="34" rx="6" fill="#f9fafb" stroke="#e5e7eb"/>
-  <text x="236" y="318" font-size="13" class="t">LogHubLocal · <tspan class="mono">https://github.com/loghub-test/live-test-repo-2</tspan></text>
-  <text x="716" y="318" font-size="12" class="muted">🔒</text>
+  <!-- repo header -->
+  <text x="341" y="82" class="mono t" font-size="14" font-weight="700">https://gitlab.dataart.com/da/cml/artisyn-log-hub</text>
+  <text x="1262" y="82" font-size="13" class="muted">Sessions: 1551   Users: 1</text>
+  <line x1="325" y1="105" x2="1440" y2="105" stroke="#e5e7eb"/>
+
+  <!-- repository tabs: Settings active -->
+  <rect x="341" y="113" width="22" height="22" rx="4" fill="none" stroke="#d1d5db"/>
+  <text x="385" y="129" font-size="14" class="muted">Sessions</text>
+  <text x="460" y="129" font-size="14" class="muted">Analytics</text>
+  <text x="544" y="129" font-size="14" class="muted">Spend</text>
+  <text x="608" y="129" font-size="14" class="muted">Reports</text>
+  <text x="676" y="129" font-size="14" class="muted">Tools/MCP</text>
+  <text x="757" y="129" font-size="14" class="muted">OKF</text>
+  <text x="800" y="129" font-size="14" class="muted">OTEL</text>
+  <text x="850" y="129" font-size="14" font-weight="700" class="t">Settings</text>
+  <line x1="846" y1="142" x2="912" y2="142" stroke="#111827" stroke-width="2"/>
+  <line x1="325" y1="143" x2="1440" y2="143" stroke="#e5e7eb"/>
+
+  <!-- Settings sub-tabs (existing PageTabs) + new "Budgets" sub-tab -->
+  <text x="353" y="174" font-size="14" class="muted">Display</text>
+  <text x="421" y="174" font-size="14" class="muted">File Categories</text>
+  <text x="537" y="174" font-size="14" class="muted">Analysis</text>
+  <text x="610" y="174" font-size="14" class="muted">Monitored Tools</text>
+  <text x="736" y="174" font-size="14" class="muted">Session Attributes</text>
+  <rect x="864" y="157" width="72" height="24" rx="4" fill="#eef2ff" stroke="#6366f1" stroke-dasharray="3,2"/>
+  <text x="873" y="174" font-size="14" font-weight="700" class="t">Budgets</text>
+  <line x1="864" y1="187" x2="936" y2="187" stroke="#111827" stroke-width="2"/>
+  <text x="954" y="174" font-size="14" class="muted">Maintenance</text>
+  <text x="1053" y="174" font-size="14" class="muted">Import/Export</text>
+  <line x1="325" y1="188" x2="1440" y2="188" stroke="#e5e7eb"/>
+  <text x="1160" y="174" class="note">NEW sub-tab "Budgets" (settings tab group,</text>
+  <text x="1160" y="188" class="note">id budgets) — URL keeps it like the others</text>
+
+  <!-- ============ Budgets sub-tab content (p-6, max-w-4xl) ============ -->
+  <text x="349" y="228" class="h">Budgets</text>
+  <text x="349" y="248" font-size="12" class="muted">Scope: team repository <tspan class="mono t">LogHubLocal · gitlab.dataart.com/da/cml/artisyn-log-hub</tspan></text>
+  <text x="349" y="264" font-size="12" class="muted">Reference amounts only — Log Hub does not stop or limit usage.</text>
+  <rect x="1053" y="214" width="130" height="30" rx="6" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="1072" y="234" font-size="13" font-weight="600" class="t">Budget event log</text>
+  <rect x="1193" y="214" width="110" height="30" rx="6" fill="#d1d5db"/>
+  <text x="1210" y="234" font-size="13" font-weight="600" fill="#ffffff">+ Add budget</text>
+
+  <!-- budgets table -->
+  <text x="349" y="284" class="lbl">PERIOD</text>
+  <text x="439" y="284" class="lbl">AMOUNT</text>
+  <text x="539" y="284" class="lbl">NOTIFY AT</text>
+  <text x="669" y="284" class="lbl">TIME ZONE</text>
+  <text x="799" y="284" class="lbl">CURRENT PERIOD</text>
+  <line x1="349" y1="294" x2="1303" y2="294" stroke="#e5e7eb"/>
+  <text x="349" y="322" class="cell">Month</text>
+  <text x="439" y="322" class="cellm">$300.00</text>
+  <text x="539" y="322" class="cellm">75 · 90 · 100 %</text>
+  <text x="669" y="322" class="smallm">Europe/Berlin</text>
+  <rect x="799" y="313" width="140" height="10" rx="5" fill="#f3f4f6"/><rect x="799" y="313" width="70" height="10" rx="5" fill="#22c55e"/>
+  <text x="951" y="322" class="smallm">$151.00 · 50 %</text>
+  <text x="1219" y="322" font-size="13" class="link">Edit</text>
+  <text x="1255" y="322" font-size="13" fill="#dc2626">Delete</text>
+  <line x1="349" y1="336" x2="1303" y2="336" stroke="#f3f4f6"/>
+
+  <!-- row 2: being edited, form opens right under it -->
+  <rect x="349" y="337" width="954" height="40" fill="#eef2ff"/>
+  <text x="357" y="362" class="cell" font-weight="600">Week</text>
+  <text x="439" y="362" class="cellm">$80.00</text>
+  <text x="539" y="362" class="cellm">75 · 100 %</text>
+  <text x="669" y="362" class="smallm">Europe/Berlin</text>
+  <rect x="799" y="353" width="140" height="10" rx="5" fill="#f3f4f6"/><rect x="799" y="353" width="57" height="10" rx="5" fill="#22c55e"/>
+  <text x="951" y="362" class="smallm">$32.80 · 41 %</text>
+  <text x="1219" y="362" font-size="13" font-weight="700" class="t">Editing…</text>
+
+  <!-- inline edit form -->
+  <rect x="349" y="377" width="954" height="420" rx="0" fill="#f9fafb" stroke="#c7d2fe"/>
+  <text x="373" y="408" font-size="15" font-weight="700" class="t">Edit budget</text>
+  <text x="469" y="408" font-size="12" class="muted">Scope: <tspan class="t">this team repository</tspan> (read-only — the page you are on)</text>
+
+  <rect x="373" y="422" width="906" height="36" rx="6" fill="#eff6ff" stroke="#bfdbfe"/>
+  <text x="387" y="445" font-size="12" fill="#1e40af">ⓘ A reference amount. Log Hub shows spend against it and warns at the thresholds below — it never stops or limits usage.</text>
 
   <!-- period + amount -->
-  <text x="224" y="358" class="lab">Period</text>
+  <text x="373" y="488" class="lab">Period</text>
   <g font-size="13">
-    <rect x="224" y="368" width="64" height="32" rx="6" fill="#ffffff" stroke="#d1d5db"/><text x="243" y="389" class="t">Day</text>
-    <rect x="288" y="368" width="72" height="32" fill="#ffffff" stroke="#d1d5db"/><text x="304" y="389" class="t">Week</text>
-    <rect x="360" y="368" width="78" height="32" rx="6" fill="#111827"/><text x="374" y="389" fill="#ffffff" font-weight="600">Month</text>
+    <rect x="373" y="498" width="64" height="32" rx="6" fill="#ffffff" stroke="#d1d5db"/><text x="392" y="519" class="t">Day</text>
+    <rect x="437" y="498" width="72" height="32" fill="#111827"/><text x="452" y="519" fill="#ffffff" font-weight="600">Week</text>
+    <rect x="509" y="498" width="78" height="32" rx="6" fill="#ffffff" stroke="#d1d5db"/><text x="525" y="519" class="t">Month</text>
   </g>
+  <text x="373" y="546" font-size="11" class="muted">Week starts Monday · Month = calendar month</text>
 
-  <text x="480" y="358" class="lab">Amount, USD</text>
-  <rect x="480" y="368" width="256" height="32" rx="6" fill="#ffffff" stroke="#d1d5db"/>
-  <text x="492" y="389" class="mono t" font-size="13">$ 300.00</text>
+  <text x="633" y="488" class="lab">Amount, USD</text>
+  <rect x="633" y="498" width="200" height="32" rx="6" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="645" y="519" class="mono t" font-size="13">$ 100.00</text>
+  <text x="633" y="546" font-size="11" class="muted">was $80.00 · applies to the whole period</text>
 
-  <!-- time zone -->
-  <text x="224" y="430" class="lab">Time zone</text>
-  <rect x="224" y="440" width="512" height="32" rx="6" fill="#ffffff" stroke="#d1d5db"/>
-  <text x="236" y="461" class="mono t" font-size="13">Europe/Berlin</text>
-  <text x="718" y="461" font-size="12" class="muted">▾</text>
-  <text x="224" y="490" font-size="11" class="muted">Default: your browser zone. Week starts Monday · calendar month · resets 00:00 here.</text>
+  <text x="873" y="488" class="lab">Time zone</text>
+  <rect x="873" y="498" width="260" height="32" rx="6" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="885" y="519" class="mono t" font-size="13">Europe/Berlin</text>
+  <text x="1117" y="519" font-size="12" class="muted">▾</text>
+  <text x="873" y="546" font-size="11" class="muted">Resets at 00:00 in this zone</text>
 
   <!-- thresholds -->
-  <text x="224" y="522" class="lab">Notify at</text>
+  <text x="373" y="586" class="lab">Notify at (% of amount)</text>
   <g font-size="12">
-    <rect x="224" y="532" width="64" height="26" rx="13" fill="#f3f4f6" stroke="#d1d5db"/><text x="238" y="549" class="t">75 % ×</text>
-    <rect x="294" y="532" width="64" height="26" rx="13" fill="#f3f4f6" stroke="#d1d5db"/><text x="308" y="549" class="t">90 % ×</text>
-    <rect x="364" y="532" width="72" height="26" rx="13" fill="#f3f4f6" stroke="#d1d5db"/><text x="377" y="549" class="t">100 % ×</text>
-    <rect x="442" y="532" width="70" height="26" rx="13" fill="#ffffff" stroke="#d1d5db" stroke-dasharray="3,2"/><text x="456" y="549" class="muted">+ add %</text>
+    <rect x="373" y="596" width="64" height="26" rx="13" fill="#f3f4f6" stroke="#d1d5db"/><text x="387" y="613" class="t">75 % ×</text>
+    <rect x="443" y="596" width="64" height="26" rx="13" fill="#f3f4f6" stroke="#d1d5db"/><text x="457" y="613" class="t">90 % ×</text>
+    <rect x="513" y="596" width="72" height="26" rx="13" fill="#f3f4f6" stroke="#d1d5db"/><text x="526" y="613" class="t">100 % ×</text>
+    <rect x="591" y="596" width="56" height="26" rx="6" fill="#ffffff" stroke="#d1d5db"/><text x="601" y="613" class="mono muted">120</text>
+    <rect x="651" y="596" width="56" height="26" rx="6" fill="#ffffff" stroke="#d1d5db"/><text x="664" y="613" class="t">+ Add</text>
   </g>
-  <text x="224" y="576" font-size="11" class="muted">Recipients: the team owner and managers (team repository / team budget); the repository</text>
-  <text x="224" y="591" font-size="11" class="muted">owner for a personal repository budget. In-app notice (bell tray + banner); email too when the</text>
-  <text x="224" y="606" font-size="11" class="muted">mail service is configured. Once per threshold per period; only the highest if several at once.</text>
+  <text x="373" y="642" font-size="11" class="muted">Whole numbers 1–200. Default 75 / 90 / 100. One notice per threshold per period; if several are crossed at once, only the highest.</text>
+  <text x="373" y="658" font-size="11" class="muted">Recipients: the team owner and managers — in-app (bell tray + banner), and email when the mail service is configured.</text>
+
+  <!-- validation example -->
+  <rect x="373" y="674" width="906" height="30" rx="6" fill="#fef2f2" stroke="#fecaca"/>
+  <text x="387" y="694" font-size="12" fill="#b91c1c">This scope already has a Week budget — one budget per period type. (shown only when the rule is broken)</text>
 
   <!-- footer -->
-  <line x1="200" y1="626" x2="760" y2="626" stroke="#e5e7eb"/>
-  <text x="224" y="668" font-size="13" fill="#dc2626">Delete budget</text>
-  <rect x="540" y="646" width="88" height="34" rx="6" fill="#ffffff" stroke="#d1d5db"/>
-  <text x="562" y="668" font-size="13" font-weight="600" class="t">Cancel</text>
-  <rect x="640" y="646" width="96" height="34" rx="6" fill="#111827"/>
-  <text x="667" y="668" font-size="13" font-weight="600" fill="#ffffff">Save</text>
+  <line x1="373" y1="720" x2="1279" y2="720" stroke="#e5e7eb"/>
+  <text x="373" y="760" font-size="13" fill="#dc2626">Delete budget</text>
+  <rect x="1087" y="738" width="88" height="34" rx="6" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="1109" y="760" font-size="13" font-weight="600" class="t">Cancel</text>
+  <rect x="1183" y="738" width="96" height="34" rx="6" fill="#2d4fd6"/>
+  <text x="1210" y="760" font-size="13" font-weight="600" fill="#ffffff">Save</text>
+  <line x1="349" y1="797" x2="1303" y2="797" stroke="#e5e7eb"/>
 
   <!-- annotations -->
-  <text x="780" y="262" class="note">Scope is preset by the Settings page the</text>
-  <text x="780" y="276" class="note">form was opened from and not editable:</text>
-  <text x="780" y="290" class="note">personal repo Settings → Personal repository,</text>
-  <text x="780" y="304" class="note">repo Settings in team context → Team repository,</text>
-  <text x="780" y="318" class="note">team settings → Team. No per-user and no</text>
-  <text x="780" y="332" class="note">org-wide budget (FR-1). Only owner / managers</text>
-  <text x="780" y="346" class="note">of the scope can open it (FR-7).</text>
-  <text x="780" y="456" class="note">IANA zone stored with the budget (FR-1).</text>
-  <text x="780" y="542" class="note">Per-budget list, whole numbers 1–200,</text>
-  <text x="780" y="556" class="note">default 75 / 90 / 100 (FR-6).</text>
-  <text x="780" y="590" class="note">Recipients per FR-6; read state per user (FR-9).</text>
-  <text x="780" y="668" class="note">"Delete budget" shown only in edit mode.</text>
-  <text x="780" y="684" class="note">Each save / delete writes a Budget event (FR-10).</text>
+  <text x="349" y="830" class="note">Budgets are created, edited and deleted ONLY here — Settings › Budgets of the scope (FR-1). No separate page, no modal, no scope selector:</text>
+  <text x="349" y="846" class="note">· personal repository: My Repos › repo › Settings › Budgets — scope "Personal repository", managed by the repository owner;</text>
+  <text x="349" y="862" class="note">· team repository: Teams › team › repo › Settings › Budgets (this picture) — managed by the team owner and managers;</text>
+  <text x="349" y="878" class="note">· team: team page › Settings › Budgets (budget-settings.svg) — managed by the team owner and managers.</text>
+  <text x="349" y="902" class="note">"+ Add budget" opens the same form, empty, under the table; "Edit" opens it under its row (other rows stay visible). "+ Add budget" is disabled while a form is open.</text>
+  <text x="349" y="918" class="note">Users who may see but not manage the scope get the table read-only (no Add / Edit / Delete), with "Managed by team owner" as in File Categories (FR-7).</text>
+  <text x="349" y="934" class="note">"Delete budget" only in edit mode, asks for confirmation. Every save / delete writes a Budget event (FR-10). "Current period" links to the Spend view.</text>
+  <text x="349" y="950" class="note">The "one budget per period type" error is shown only if that rule is accepted (open question).</text>
 </svg>

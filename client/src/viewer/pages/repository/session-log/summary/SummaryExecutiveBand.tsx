@@ -192,7 +192,7 @@ export function SummaryExecutiveBand({
       {(hasSubAgentMarker || session.hasCostDiscrepancy) && (
         <span className="inline-flex items-center gap-1">
           {hasSubAgentMarker && (
-            <span title="Includes sub-agent cost in addition to the main-thread total.">
+            <span title="The shown cost is the whole session: main thread plus sub-agents.">
               +sub-agents
             </span>
           )}
