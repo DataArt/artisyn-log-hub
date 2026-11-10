@@ -930,6 +930,16 @@
         "1509528bc531511dd44f37569a5c700d0dfb65fdbcb9c99b257a13de025f17dc",
         "d3feabf08f872e563a14a623a2b57cbe90220449288be6c5cb7e5fa9df7de43e"
       ]
+    },
+    {
+      "idx": 92,
+      "tag": "0092_model_pricing_fable_5_2",
+      "when": 1792454400000,
+      "sha256": "35819bef82a21f04e3949068fb82ed9411dc9cace047cb2125d05b5c36252092",
+      "acceptedHashes": [
+        "35819bef82a21f04e3949068fb82ed9411dc9cace047cb2125d05b5c36252092",
+        "f08d22fa0dfab536f1170bf2ad8e8bca1d5cdd016f9ebb3dc37ba41f4c509256"
+      ]
     }
   ]
 }
