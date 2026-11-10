@@ -3,8 +3,7 @@
 Claude Code can export OpenTelemetry (OTEL) data: every model call with its tokens and cost, every
 tool call, and — with traces on — the whole tree of a turn, including subagents. Log Hub turns that
 stream into the OTEL tabs of a session, a repository and a team. This page explains how the data
-gets from Claude Code to those tabs, and why the design holds up when you work in many repositories
-at once.
+gets from Claude Code to those tabs when you work in many repositories at once.
 
 ![Team OTEL tab: cost, calls and cache by member and model, with the "Sessions with OTEL" coverage tile](images/otel-team-tab.svg)
 
@@ -143,7 +142,7 @@ Log Hub log.
 
 ## When OTEL does not arrive
 
-At the end of each session the hook asks the receiver how many records it got for that session and
+At the end of each turn the hook asks the receiver how many records it got for that session and
 adds one small `otel-status` event to the upload:
 
 ```text diagram=otel-status-flow
@@ -157,8 +156,7 @@ adds one small `otel-status` event to the upload:
                                    repo and team coverage banner, reason chips, "Sessions with OTEL"
 ```
 
-So an empty tab is never a mystery: the session tab names the reason and how to fix it, and the
-repository and team tabs show "OTEL for N of M sessions", so totals are never read as zeros for the
+The session tab names the reason and how to fix it, and the repository and team tabs show "OTEL for N of M sessions", so totals are never read as zeros for the
 sessions that sent nothing. Every reason is explained in
 [Troubleshooting: OTEL tab is empty](otel-tab.md#troubleshooting-otel-tab-is-empty).
 

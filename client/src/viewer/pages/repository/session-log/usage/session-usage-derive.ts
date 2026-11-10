@@ -20,6 +20,12 @@
  * and `'missing'` there.
  */
 
+import {
+  collectBackgroundTaskNotifications,
+  isBackgroundCandidate,
+  matchBackgroundAckInContent,
+  type BackgroundTaskNotification,
+} from '../background-mcp';
 import { isEditWriteTool, type EditWriteToolName } from '../edit-tools';
 import { classifyToolOutcome, MAX_RESULT_TEXT_SCAN } from '../tool-outcome';
 
@@ -59,13 +65,36 @@ function parseTs(v: unknown): number | null {
 // --- Rules mirrored from server/src/logs/tool-stats.ts -----------------------------------
 // The outcome rule (`classifyToolOutcome`, DD-3) lives in `../tool-outcome.ts`, shared with Logs.
 
-export type DurationSource = 'toolUseResult' | 'taskTotal' | 'timestampDelta';
+export type DurationSource =
+  | 'backgroundTask'
+  | 'toolUseResult'
+  | 'taskTotal'
+  | 'timestampDelta';
 
+/**
+ * Fallback chain: a background-MCP call's notification time (`backgroundEndTs`), then
+ * `toolUseResult.durationMs`, then `totalDurationMs`, then the result − `tool_use` delta.
+ */
 export function resolveToolDuration(inputs: {
   toolUseResult: AnyRecord | null;
   assistantTs: number | null;
   resultTs: number | null;
+  backgroundEndTs?: number | null;
 }): { ms: number; source: DurationSource } | null {
+  const { backgroundEndTs } = inputs;
+  if (
+    backgroundEndTs !== undefined &&
+    backgroundEndTs !== null &&
+    inputs.assistantTs !== null &&
+    Number.isFinite(backgroundEndTs) &&
+    Number.isFinite(inputs.assistantTs) &&
+    backgroundEndTs >= inputs.assistantTs
+  ) {
+    return {
+      ms: backgroundEndTs - inputs.assistantTs,
+      source: 'backgroundTask',
+    };
+  }
   const result = inputs.toolUseResult;
   if (result !== null) {
     const selfReported = asDurationNumber(result['durationMs']);
@@ -261,6 +290,8 @@ interface ResultRecord {
   toolUseResult: AnyRecord | null;
   /** The result line's top-level `toolDenialKind` (DD-3). */
   denialKind: string | null;
+  /** Task id of a background-MCP hand-off ack in the full result text, else null. */
+  backgroundTaskId: string | null;
 }
 
 function emptyTokens(): SessionTokenTotals {
@@ -480,17 +511,34 @@ function walkTranscript(
           resultTs: parseTs(line['timestamp']),
           toolUseResult,
           denialKind: asString(line['toolDenialKind']),
+          backgroundTaskId: matchBackgroundAckInContent(b['content']),
         });
       }
     }
   }
 
+  let notifications: Map<string, BackgroundTaskNotification> | null = null;
   for (const call of calls) {
     const result = call.id !== null ? (results.get(call.id) ?? null) : null;
     const batchSize =
       call.messageKey !== null
         ? (blocksByMessage.get(call.messageKey) ?? 1)
         : 1;
+
+    // Background-MCP join (`../background-mcp.ts`): the ack id is only trusted for a non-error
+    // `mcp__*` call.
+    let background: { status: string | null } | undefined;
+    let backgroundEndTs: number | null = null;
+    if (
+      result !== null &&
+      result.backgroundTaskId !== null &&
+      isBackgroundCandidate(call.name, result.isError)
+    ) {
+      notifications ??= collectBackgroundTaskNotifications(lines);
+      const n = notifications.get(result.backgroundTaskId);
+      background = { status: n?.status ?? null };
+      backgroundEndTs = n?.ts ?? null;
+    }
 
     const outcome = classifyToolOutcome(
       result === null
@@ -502,12 +550,14 @@ function walkTranscript(
             ...(result.denialKind !== null
               ? { denialKind: result.denialKind }
               : {}),
+            ...(background !== undefined ? { background } : {}),
           },
     );
     const duration = resolveToolDuration({
       toolUseResult: result?.toolUseResult ?? null,
       assistantTs: call.assistantTs,
       resultTs: result?.resultTs ?? null,
+      backgroundEndTs,
     });
 
     for (const target of [combined, side]) {
@@ -601,7 +651,12 @@ function ensureAccumulator(
       failures: 0,
       unresolved: 0,
       durations: [],
-      bySource: { toolUseResult: 0, taskTotal: 0, timestampDelta: 0 },
+      bySource: {
+        backgroundTask: 0,
+        toolUseResult: 0,
+        taskTotal: 0,
+        timestampDelta: 0,
+      },
       parallelBatchCalls: 0,
     };
     target.set(tool, acc);

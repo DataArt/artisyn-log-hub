@@ -4,7 +4,8 @@
 
 Before using Artisyn Log Hub, make sure you have:
 
-- **Node.js 18+** installed on your machine
+- **Node.js** — a current LTS line (22, 24 or 26), patched to at least 22.23.4 / 24.22.1 / 26.12.1.
+  The hook still starts on Node.js 18.19+, but 18 and 20 are end-of-life and get no security fixes.
 - A running instance of Artisyn Log Hub — see [Install the server](install-server.md)
 - Claude Code CLI installed and configured
 
@@ -31,18 +32,28 @@ repository and the last week; **Start from a question** offers the same question
 repository you pick. On the right, **Needs attention** points at hooks with problems, sessions
 with Turn-End Cost Advisor advice and failed tool calls of the week; **This week** shows the cost
 per repository and per team; **Pinned** holds what you pinned with the pin button on a
-repository, an Analytics view or a report, plus your favourite sessions; and **Recent** lists the
+repository, an Analytics view or a report, plus your favorite sessions; and **Recent** lists the
 repositories and sessions you opened last. **All views →** opens a map of every screen (see
 [All views](all-views.md)). A new account with no repositories and no teams sees **Get started**
 instead, with links to install the hook and connect a repository.
 
 ## Exploring a Session
 
-Click any session row to open the **Session Log**. From there you can:
+Click any session row to open the **Session Log**. Each view of a session is a tab of its own.
+The **View** select at the start of the tab row picks the question you have and puts the tabs
+that answer it in the row; every other tab stays one click away under **More ▾**:
 
-- Browse the **prompt turns** and tool calls in the Timeline tab
-- Inspect **cost and token usage** in the chart tabs (Charts, Call Tree, Context Growth, …)
-- Review **raw log output** in the Raw Logs tab
-- See session metadata (model, duration, files touched) in the Info tab
-- Pick a **View** at the start of the tab row to see only the tabs that answer one question —
-  see [Session Log](session-log.md#views-and-tabs)
+- **What happened** — **Summary**, the turn-by-turn transcript in **Logs**, and the
+  **Session Map** of agents and steps (plus Bash, Timeline, Agent Tree and Change surface).
+- **Cost** — **Statistics** for tokens and cost, **OTEL** for what Claude Code spent per model
+  and call source (plus Call Tree, Context Growth, Dashboard and Advisor).
+- **Harness & context** — **System context anatomy** for what Claude loads at startup and what
+  each part costs, **Harness usage** for which skills, agents, hooks and MCP servers were used,
+  and **OKF** for how the agents read the knowledge base (plus Context Usage and Info).
+- **Failed tool call** — **Tools/MCP** for MCP calls and calls of monitored CLI tools, with their
+  failures (plus Logs, Bash, Tool Heatmap and OTEL).
+- **All tabs** — every tab in the row.
+
+See [Session Log](session-log.md#views-and-tabs) for every tab. The **Live** item in the top bar
+shows what is running right now, and **Ctrl+K** (**Cmd+K** on a Mac) opens
+[All views](all-views.md), a map of every screen.

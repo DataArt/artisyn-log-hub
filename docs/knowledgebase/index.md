@@ -17,7 +17,7 @@ article itself holds the details. Keep new lines to one or two sentences.
 * [Client Component Hierarchy](client-routing-and-layout.md) - Read before touching SPA routing, the provider tree / consent gate, lazy chunks (~8, never more than 10), URL state (`lens=`, `session=`, tab params), per-user browser storage keys, window events or `location.state` tab seeding
 * [UI Principles](ui-principles.md) - Read before implementing any UI behaviour: access messaging, error handling, light-only colour scheme, chart patterns
 * [Client Feature Flags](client-feature-flags.md) - Read before hiding an unfinished client feature behind a `VITE_*` build flag (`lib/feature-flags.ts`)
-* [Session Log View](session-log-view.md) - Read before touching the session Logs tab or the `/logs` payload: the payload contract (`agent-` prefix rules, descendant loading, client-only types), the Workflow tool lifecycle (rejected-before-launch = failed), log parser, tool-call core, `ToolCallView` and the Bash tab, Context Growth steps, nested `claude -p` sessions
+* [Session Log View](session-log-view.md) - Read before touching the session Logs tab or the `/logs` payload: the payload contract (`agent-` prefix rules, descendant loading, client-only types), the Workflow tool lifecycle (rejected-before-launch = failed), log parser, tool-call core, `ToolCallView` and the Bash tab, Context Growth steps, nested `claude -p` sessions, background MCP calls (`⧗ background`)
 * [Session Map Tab](session-map.md) - Read before touching the session Map tab (`session-log/session-map/`) or `GET …/logs/delta`: delta → merge → parse → model flow, polling and reload, `/logs` watermark suspension, tool families, file list
 * [Raw Logs Renderer Subsystem](raw-logs-renderers.md) - Read before touching `session-log/raw-logs/`: layers, dependency graph, adding a renderer
 * [System Context Anatomy Tab](sysctx-anatomy-tab.md) - Read before touching the `sysctx` session tab or the Logs `StartupContextLine`: data sources, partitions, banners, test ids
@@ -57,17 +57,17 @@ article itself holds the details. Keep new lines to one or two sentences.
 
 ## Hook
 
-* [Hook System Overview](hook-system-overview.md) - Read first for any hook change: where the source lives (`hook/.claude/telemetry_tool/`) vs the installed and dogfooded copies, event wiring, non-obvious scripts, path resolution, upload pipeline (namespaces, manifest, lock, gzip/chunks, injected lines), design rules (fail-open, transparent code, every Node.js LTS, CommonJS)
+* [Hook System Overview](hook-system-overview.md) - Read first for any hook change: where the source lives (`hook/.claude/telemetry_tool/`) vs the installed and dogfooded copies, event wiring, non-obvious scripts, path resolution, upload pipeline (namespaces, manifest, lock, gzip/chunks, injected lines), design rules (fail-open, transparent code, every Node.js LTS, CommonJS), `denyInsteadOfPrompting` and post-interrupt PostToolUse behaviour
 * [Hook Installation Guide](hook-installation.md) - Read before touching install / upgrade / uninstall or the hook config: gotchas (marketplace dedup by folder path, `npx` caches by name+version), `log-hub.json` keys (OTEL, `okf`, `toolWrap`), per-user OTEL state, the user-scope and project `settings*.json` env blocks
 * [Hook API Versioning](hook-api-versioning.md) - Read before changing any hook-facing route or payload: `/api/v2/logs` (v1 removed), the hook-version × route compatibility matrix, body limits, receiver contracts, additive fields by hook version, and the hook-side behaviour history by version
-* [OTEL Receiver](otel-receiver.md) - Read before touching `otel-receiver.js`, `otel-register.js`, `user-state.js` or the receiver install steps: the per-user shared receiver (2.30.0), register / hello / routing, legacy per-project mode, restarts, chunk layout, realtime sender
+* [OTEL Receiver](otel-receiver.md) - Read before touching `otel-receiver.js`, `otel-register.js`, `user-state.js` or the receiver install steps: the per-user shared receiver (2.30.0), register / hello / routing, legacy per-project mode, restarts, chunk layout, realtime sender, Claude apps gateway sessions
 * [Log Schema Reference](log-schema/index.md) - Read when you need the shape of a Claude Code transcript line: message types, assistant/user structure, attachment sub-types
 
 ## Feature subsystems (OTEL, OKF, Tools/MCP)
 
 * [OTEL Tabs](otel-tabs.md) - Read before touching `server/src/logs/otel/`, the repository / session / team OTEL tabs or `POST /api/v2/otel-realtime`: channels, `otel_*` tables, classification, states, access, per-session OTEL status, compatibility matrix
 * [OKF Usage](okf-usage.md) - Read before touching the session or repository OKF tab (incl. the article drill-down and the OKF thresholds settings), `server/src/logs/okf/`, `session_okf_access` / `session_okf_event` / `session_okf_pointer` / `okf_snapshots` or the hook's OKF snapshot upload
-* [Tool Monitoring (Tools/MCP tab)](tool-monitoring.md) - Read before touching the Tools/MCP tab, `server/src/logs/tool-monitoring/`, `packages/tool-monitor/` or the hook's CLI tool wrapper: channels, config merge, shims, safety, routes
+* [Tool Monitoring (Tools/MCP tab)](tool-monitoring.md) - Read before touching the Tools/MCP tab, `server/src/logs/tool-monitoring/`, `packages/tool-monitor/` or the hook's CLI tool wrapper: channels, config merge, shims, safety, routes, background MCP calls (CC ≥ 2.1.212)
 
 ## Auth and accounts
 

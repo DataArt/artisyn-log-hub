@@ -36,6 +36,9 @@ docker compose version
 `install.sh` also needs `curl`; `install.ps1` needs nothing extra. Both need outbound HTTPS to
 `github.com` and `ghcr.io`.
 
+The hooks on developer machines (not this server) run with the developer's own `node` from PATH.
+**Node.js:** 22+ recommended (18 and 20 are end-of-life); 18.19 minimum.
+
 ## Install or upgrade with one command
 
 Linux, macOS, WSL:

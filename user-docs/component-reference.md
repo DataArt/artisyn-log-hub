@@ -45,7 +45,7 @@ into PostgreSQL, and users read the result through the web client.
 
 ## 3. Log Hub server
 
-A NestJS application on Node.js 22. It is the only process that talks to the database.
+A NestJS application on Node.js 26 (the image uses `node:26.13.0-alpine`). It is the only process that talks to the database.
 
 ### 3.1 Process model
 
@@ -63,7 +63,7 @@ A NestJS application on Node.js 22. It is the only process that talks to the dat
 | **Auth** | Establishes user sessions in one of four modes (`AUTH_MODE`): none, password, password with email confirmation, Azure Entra ID (OAuth/OIDC). Login back-off, password change, account deletion. |
 | **Users / Admin** | User management, roles (`admin`, `user`), admin panel APIs. |
 | **API keys** | Per-user keys used by the hook. Keys are shown once and stored only as an Argon2id hash. |
-| **Logs ingestion** | `POST /api/v2/logs` accepts uploads from the hook, with chunked and gzip-compressed transfer and deduplication. It is the only upload route: the legacy `POST /api/v1/logs` was removed and returns `404`, so hooks older than 1.7.0 must be upgraded. |
+| **Logs ingestion** | `POST /api/v2/logs` accepts uploads from the hook, with chunked and gzip-compressed transfer and deduplication. It is the only upload route for logs: the legacy `POST /api/v1/logs` was removed and returns `404`, so hooks older than 1.7.0 must be upgraded. Hooks 2.29.0 and newer also post OTEL records to `POST /api/v2/otel-realtime` while a session runs (best effort; the regular upload stays the durable copy). |
 | **Upload queue** | Uploaded payloads are written to a disk-backed queue (`upload-queue/`) and processed by background workers with leases, retries and statistics (Admin → Upload Queue). |
 | **Repositories / Sessions** | Session list, session detail, sub-agent trees, metrics, favourites, export/import of sessions as zip archives. |
 | **Analytics & reports** | Burn rate, cost, cache, tool usage, change surface, harness usage and attribute reports. |
@@ -91,8 +91,15 @@ third-party fonts, analytics or CDN assets.
 
 Main areas:
 
-- **My Repos / Sessions** — session list (by branch, date or user), session detail with log view,
-  charts, context usage, harness usage and advisor tabs.
+- **Home** — your repositories with their recent sessions and cost, question chips, Needs
+  attention, This week, Pinned and Recent.
+- **Live** — what is running right now across your repositories and teams, from OTEL data.
+- **All views** — a searchable map of every screen (Ctrl+K / Cmd+K).
+- **My Repos / Sessions** — session list (by branch, date or user) and session detail: Summary,
+  Logs, Bash, the session charts, Session Map, System context anatomy, Harness usage, Change
+  surface, Tools/MCP, OKF, OTEL and the other session tabs.
+- **Repository tabs** — Analytics, Reports, Tools/MCP (MCP and monitored CLI tool calls), OKF
+  (knowledge-base use), OTEL (Claude Code's own telemetry) and Settings.
 - **Analytics & Reports** — per-repository and per-team reports, PDF and zip export.
 - **Teams** — team membership, access mode, role grants.
 - **My API Keys** — hook installation wizard and API key management.
@@ -122,9 +129,10 @@ dependencies, no native or minified code) packaged as the Claude Code plugin `lo
 | `.artisyn/marketplace/plugins/log-hub-hooks/` | The plugin: hook scripts and `hooks.json` wiring. |
 | `.artisyn/config/log-hub.json` | Project configuration (server URL, context labels, upload and OTEL settings). Tracked in git. |
 | `.artisyn/config/log-hub.local.json` | The user's API key. Git-ignored. |
-| `.artisyn/config/otel-port.json` | This checkout's OTEL receiver port. Git-ignored. |
 | `.artisyn/ai_work_dir/` | Local telemetry files, `hook.log`, upload state. |
-| `.claude/settings.json` (env block) | Points Claude Code's OpenTelemetry exporter at the local receiver. |
+| `~/.artisyn/otel/port.json` | The shared OTEL receiver's port, one per OS user (hook 2.30.0+; older installs kept it in `.artisyn/config/otel-port.json`, which the next install or upgrade deletes). |
+| `~/.claude/settings.json` (env block) | Points Claude Code's OpenTelemetry exporter at the local receiver. |
+| `.claude/settings.local.json` (env block) | A mirror of the same keys for Claude Code versions before 2.1.282, plus the `artisyn.repo` resource tag. Git-ignored. |
 
 ### 6.2 Hook scripts
 
@@ -132,16 +140,20 @@ dependencies, no native or minified code) packaged as the Claude Code plugin `lo
 |---|---|---|
 | `telemetry-hook.js` | `UserPromptSubmit` | Records the prompt event; starts a throttled background upload of the current session. |
 | `lifecycle-hook.js` | 12 lifecycle events | Records tool calls, permissions, sub-agents, compaction, session start/end. |
-| `send-logs-hook.js` | `Stop`, `Interrupt`, `SessionEnd` | Uploads new or changed telemetry and transcript files to the server. |
-| `otel-receiver.js` | Spawned by the hook | Loopback-only (`127.0.0.1`) OTLP/JSON receiver for Claude Code's own telemetry export. |
-| Post-turn analysis | End of turn (opt-in) | Optional Turn-End Cost Advisor and session attribution, run with the local `claude` CLI; results are posted to the server. |
+| `send-logs-hook.js` | `Stop`, `SessionEnd` | Uploads new or changed telemetry and transcript files to the server. |
+| `tool-wrap-powershell.js` | `PreToolUse` (PowerShell tool only) | Wraps monitored CLI tools in a PowerShell command so their exit code and output are recorded for the Tools/MCP tab (hook 2.27.0+). Never changes a permission decision. |
+| `otel-receiver.js` | Spawned by the hook | Loopback-only (`127.0.0.1`) OTLP/JSON receiver for Claude Code's own telemetry export. One receiver per OS user, shared by all of that user's repositories (hook 2.30.0+). |
+| Post-turn analysis | `Stop` (opt-in) | Optional Turn-End Cost Advisor and session attribution, run with the local `claude -p` CLI; results are posted to the server. Since hook 2.31.1 that run has no tools, MCP servers or skills. |
 
 ### 6.3 Data the hook sends
 
 - Hook event files (prompts, tool calls, lifecycle events, git context: remote URL, branch, git
   user name).
 - Claude Code session transcripts for the project (including sub-agent transcripts).
-- OpenTelemetry logs and metrics captured by the local receiver.
+- OpenTelemetry logs and metrics captured by the local receiver, and traces when you opted in to
+  them; while a session runs, new records also go over the realtime channel
+  (`POST /api/v2/otel-realtime`).
+- For monitored CLI tools: each call's exit code and captured output (`tool-calls`).
 - Aggregated code-inventory and edit-count data (per-file line counts only; file contents and
   diffs stay on the machine).
 
@@ -171,4 +183,7 @@ See **Connecting a Repository** in this help for the step-by-step procedure.
 | Server → PostgreSQL | Internal Docker network | PostgreSQL protocol, password auth |
 | Server → SMTP relay (optional) | Outbound | SMTP, optional TLS and auth |
 | Server → Azure Entra ID (Mode 4 only) | Outbound | OAuth 2.0 / OIDC |
-| Server → `registry.npmjs.org` (optional) | Outbound | HTTPS, AI tool version check; can be disabled |
+| Server → `registry.npmjs.org` (optional) | Outbound | HTTPS, latest Claude Code version check, hourly tick, re-fetched when older than 24 h; `AI_TOOL_VERSION_CHECK_ENABLED=false` turns it off |
+| Server → `api.github.com` (optional) | Outbound | HTTPS, latest Log Hub release check, at most once a day; `LOG_HUB_RELEASE_CHECK_ENABLED=false` turns it off |
+| Server → `platform.claude.com` (optional) | Outbound | HTTPS, Anthropic model pricing page, once a day; `MODEL_PRICING_FETCH_ENABLED=false` turns it off |
+| Server → `openrouter.ai` (on demand) | Outbound | HTTPS, non-Anthropic model prices, only when an admin presses the import button in Admin → Model Pricing |

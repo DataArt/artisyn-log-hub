@@ -8,7 +8,7 @@ tags:
   - hook
   - reports
   - session-view
-timestamp: "2026-10-29T00:00:00+04:00"
+timestamp: "2026-11-09T00:00:00+04:00"
 ---
 
 # Tool Monitoring (Tools/MCP tab)
@@ -217,6 +217,63 @@ Column details and migration `0076_tool_monitoring.sql`: [db-tables.md](db-table
 outBytes, agentSawBytes, toolUseId, agentId, agentKind` (`root` / `subagent` / `workflow`),
 `inputPreview, real, cwd, args, signals` (`empty`, `retried`, `opened_file`).
 `cut` = the consumer closed the pipe, or the agent saw fewer bytes than the wrapper captured.
+
+### Background MCP calls (CC ≥ 2.1.212)
+
+Since Claude Code 2.1.212 an MCP call still running after a few seconds is handed off to a
+background task. Its `tool_result` is then only an ack (`MCP tool "mock/slow_echo" is still running
+after 2s. It was moved to the background as task kkumm8n15 and keeps running; …`), and the real end
+arrives later as a `<task-notification>`. The join lives in `server/src/logs/background-mcp.ts`
+(client twin `session-log/background-mcp.ts`, hook port in `post-turn-analysis-worker.js`, see
+[twins-and-cross-cutting-rules.md](twins-and-cross-cutting-rules.md)):
+
+- **Shape rule, no version check (works on old and new Claude Code).** A call is background only
+  when its name starts with `mcp__`, its first `tool_result` is not `is_error: true`
+  (`isBackgroundCandidate`), and the **full** result text — never the 200-char
+  `MAX_RESULT_TEXT_SCAN` cut — matches `BACKGROUND_ACK_RE` =
+  `/moved to the background as task ([A-Za-z0-9_-]+)/` (`matchBackgroundAckTaskId`). Anything else
+  — transcripts from Claude Code before 2.1.212, MCP calls finished in-session, Bash
+  `run_in_background` acks (different wording), an old-CC "No such tool available" race failure —
+  keeps today's result, status and duration. The transcript `version` is never read.
+- **Notifications** (`collectBackgroundTaskNotifications`): a `type:"user"` line whose string
+  `message.content` starts with `<task-notification>`, or a `type:"queue-operation"` `enqueue` line
+  with that XML as `content`. `<task-id>`, `<status>`, `<result>` are parsed with the Workflow
+  parser `parseTaskNotification` (`workflow-extractor.ts`, which now also returns notifications
+  without `<tool-use-id>`; the Workflow join still skips those). The user line wins over the
+  enqueue for the timestamp; the enqueue is a required fallback, because a plain `-p` run that ends
+  its turn makes Claude Code close the MCP connection and write **only** an enqueue with
+  `<status>failed</status>` / `Task failed: Connection closed`. The first notification per task id
+  wins; a failed task's `<result>` starts `Task failed: ` and is shown as is.
+- **Result substitution** (`collectToolUses` → `joinBackground` in `mcp-call-extractor.ts`): with
+  a notification its `<result>` (or `''`) replaces the ack as the call's text, so agent-saw text,
+  `outBytes` and the `empty` / `persisted` / `truncated` hints come from it; `background` and
+  `backgroundEndTs` (the notification time) are set. Without one the ack is replaced by
+  `backgroundPendingText(taskId)` ("⧗ Moved to the background as task … No result in this log: …"),
+  since the ack only says the call was handed off; the call gets no duration. When a live
+  session's notification arrives later, the hook's next upload replaces the log and the call is
+  re-extracted with its real result.
+- **Status** (`transcriptCallStatus`): no notification → `no_result`; `completed` → `ok`; any other
+  status (`failed`, `killed`, `stopped`, …) → `error`. No new `ToolCallStatus` value.
+- **Duration** (`transcriptCallDurationMs` → `resolveToolDuration`): a finite `backgroundEndTs` ≥
+  the `tool_use` time wins first, source `backgroundTask` ("background task (notification time)").
+
+The four shapes (PoC captures, `tool_use` → end):
+
+| Capture | Call | Status | Duration before → now |
+|---|---|---|---|
+| `new-full` (user line + enqueue) | `slow_echo` | `ok` | 2.0 s (ack) → 8.1 s |
+| `new-full` | `slow_fail` (`status failed`) | `error` (was `ok`) | 4.0 s → 10.0 s |
+| `new-close` (enqueue only, `Connection closed`) | `slow_echo` | `error` | 2.0 s → 10.3 s |
+| `new-live` (session still running, no notification) | `slow_echo` | `no_result` | 2.0 s → none |
+| `old-full` (CC before 2.1.212, no ack) | `slow_echo` | `ok` | 8.0 s, unchanged |
+
+`TOOL_USAGE_EXTRACTOR_VERSION` is 3 for this, so every stored tree is rebuilt on the next start.
+The per-session `session_tool_stats` (counts, durations by source) is **not** rebuilt that way: old
+sessions keep the ack-based numbers until they are re-ingested or `recompute-all-sessions` runs.
+No hook route or payload changed, so old hooks keep working. When Claude Code changes the ack
+wording or the notification shape, re-capture with the PoC
+`docs/pocs/2026-11-09-1318-mcp-mock-old-new-cc/` (`run.cjs`, `sanitize.cjs`, `check.cjs`) and copy the
+captures into the scenario fixtures `tests/scenarios/fixtures/bg-mcp/`.
 
 ### Routes
 

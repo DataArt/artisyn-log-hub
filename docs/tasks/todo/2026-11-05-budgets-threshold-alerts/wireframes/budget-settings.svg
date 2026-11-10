@@ -1,0 +1,202 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="1100" viewBox="0 0 1440 1100" font-family="Inter, Segoe UI, Arial, sans-serif">
+  <style>
+    .t { fill: #111827; }
+    .muted { fill: #6b7280; }
+    .mono { font-family: 'JetBrains Mono', Consolas, monospace; }
+    .link { fill: #2563eb; }
+    .note { fill: #92400e; font-size: 11px; }
+    .h { font-size: 15px; font-weight: 700; fill: #111827; }
+    .lbl { font-size: 11px; fill: #6b7280; letter-spacing: 0.5px; }
+    .cell { font-size: 13px; fill: #111827; }
+    .cellm { font-family: 'JetBrains Mono', Consolas, monospace; font-size: 13px; fill: #111827; }
+    .small { font-size: 12px; fill: #111827; }
+    .smallm { font-family: 'JetBrains Mono', Consolas, monospace; font-size: 12px; fill: #111827; }
+  </style>
+  <rect width="1440" height="1100" fill="#ffffff"/>
+
+  <!-- top bar (copied from current app, with the new bell from threshold-banner.svg) -->
+  <rect x="0" y="0" width="1440" height="48" fill="#fafafa"/>
+  <line x1="0" y1="48" x2="1440" y2="48" stroke="#e5e7eb"/>
+  <circle cx="24" cy="24" r="8" fill="#4f46e5"/>
+  <text x="44" y="29" font-size="14" font-weight="600" class="t">[local] Artisyn Log Hub <tspan class="muted" font-size="12" font-weight="400">dev</tspan></text>
+  <text x="262" y="29" font-size="14" font-weight="600" class="t">Home</text>
+  <text x="1064" y="29" font-size="14" font-weight="600" class="t">All views</text>
+  <rect x="1172" y="10" width="40" height="28" rx="6" fill="#f3f4f6" stroke="#d1d5db"/>
+  <text x="1182" y="30" font-size="15" class="t">🔔</text>
+  <circle cx="1206" cy="14" r="8" fill="#dc2626"/>
+  <text x="1206" y="18" font-size="10" font-weight="700" fill="#ffffff" text-anchor="middle">2</text>
+  <text x="1226" y="29" font-size="14" class="muted">dt@dataart.com</text>
+  <text x="1350" y="29" font-size="14" font-weight="600" class="t">Edit email</text>
+
+  <!-- sidebar (abridged) -->
+  <rect x="0" y="49" width="320" height="1051" fill="#ffffff"/>
+  <line x1="321" y1="49" x2="321" y2="1100" stroke="#e5e7eb" stroke-width="4"/>
+  <text x="12" y="108" class="lbl">TEAMS</text>
+  <text x="50" y="141" font-size="14" font-weight="700" class="t">LogHubLocal</text>
+  <rect x="0" y="154" width="320" height="30" fill="#f3f4f6"/>
+  <text x="66" y="174" font-size="13" font-weight="700" class="t">DataArt/artisyn-log-hub</text>
+  <text x="66" y="204" font-size="13" class="muted">loghub-test/live-test-repo-2</text>
+  <text x="50" y="240" font-size="14" class="t">Live Test Team</text>
+  <text x="12" y="282" class="lbl">MY REPOS</text>
+  <text x="12" y="314" font-size="14" class="muted">https://github.com/loghub-test/live-test-repo-2</text>
+  <text x="12" y="346" font-size="14" class="muted">https://github.com/DataArt/artisyn-log-hub</text>
+  <text x="12" y="392" font-size="11" class="note">(sidebar unchanged; a team repository</text>
+  <text x="12" y="406" font-size="11" class="note">opened under its team = team context)</text>
+
+  <!-- repo header (team context) -->
+  <text x="341" y="82" font-size="14" class="t"><tspan font-weight="700">LogHubLocal</tspan> <tspan class="muted">/</tspan> <tspan class="mono">https://github.com/DataArt/artisyn-log-hub</tspan></text>
+  <text x="1260" y="82" font-size="13" class="muted">Sessions: 213   Users: 3</text>
+  <line x1="325" y1="105" x2="1440" y2="105" stroke="#e5e7eb"/>
+
+  <!-- tabs: Settings active -->
+  <rect x="341" y="113" width="22" height="22" rx="4" fill="none" stroke="#d1d5db"/>
+  <text x="385" y="129" font-size="14" class="muted">Sessions</text>
+  <text x="460" y="129" font-size="14" class="muted">Analytics</text>
+  <text x="544" y="129" font-size="14" class="muted">Spend</text>
+  <text x="608" y="129" font-size="14" class="muted">Reports</text>
+  <text x="676" y="129" font-size="14" class="muted">Tools/MCP</text>
+  <text x="757" y="129" font-size="14" class="muted">OKF</text>
+  <text x="800" y="129" font-size="14" class="muted">OTEL</text>
+  <text x="850" y="129" font-size="14" font-weight="700" class="t">Settings</text>
+  <line x1="846" y1="142" x2="912" y2="142" stroke="#111827" stroke-width="2"/>
+  <line x1="325" y1="143" x2="1440" y2="143" stroke="#e5e7eb"/>
+
+  <!-- existing settings blocks (collapsed) -->
+  <rect x="341" y="160" width="1073" height="30" rx="6" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="355" y="180" font-size="13" class="muted">› Repository analysis settings (existing)</text>
+  <rect x="341" y="196" width="1073" height="30" rx="6" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="355" y="216" font-size="13" class="muted">› OKF thresholds (existing)</text>
+
+  <!-- ============ BUDGETS SECTION ============ -->
+  <rect x="341" y="242" width="1073" height="268" rx="8" fill="#ffffff" stroke="#6366f1" stroke-width="1.5" stroke-dasharray="5,3"/>
+  <text x="361" y="272" class="h">Budgets</text>
+  <text x="432" y="272" font-size="12" class="muted">Team repository · reference amounts only — Log Hub does not stop or limit usage when a budget is reached.</text>
+  <rect x="1124" y="254" width="130" height="30" rx="6" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="1143" y="274" font-size="13" font-weight="600" class="t">Budget event log</text>
+  <rect x="1264" y="254" width="130" height="30" rx="6" fill="#111827"/>
+  <text x="1286" y="274" font-size="13" font-weight="600" fill="#ffffff">+ Add budget</text>
+
+  <!-- budgets table header -->
+  <text x="361" y="310" class="lbl">SCOPE</text>
+  <text x="521" y="310" class="lbl">PERIOD</text>
+  <text x="611" y="310" class="lbl">AMOUNT</text>
+  <text x="711" y="310" class="lbl">THRESHOLDS</text>
+  <text x="851" y="310" class="lbl">TIME ZONE</text>
+  <text x="981" y="310" class="lbl">CURRENT PERIOD</text>
+  <line x1="361" y1="320" x2="1394" y2="320" stroke="#e5e7eb"/>
+
+  <!-- row 1 -->
+  <text x="361" y="348" class="cell">Team repository</text>
+  <text x="521" y="348" class="cell">Month</text>
+  <text x="611" y="348" class="cellm">$300.00</text>
+  <text x="711" y="348" class="cellm">75 · 90 · 100 %</text>
+  <text x="851" y="348" class="cellm" font-size="12">Europe/Berlin</text>
+  <rect x="981" y="339" width="150" height="10" rx="5" fill="#f3f4f6"/><rect x="981" y="339" width="136" height="10" rx="5" fill="#f59e0b"/>
+  <text x="1141" y="348" class="smallm">$271.40 · 90 %</text>
+  <text x="1310" y="348" font-size="13" class="link">Edit</text>
+  <text x="1346" y="348" font-size="13" fill="#dc2626">Delete</text>
+  <text x="981" y="366" font-size="11" class="muted">November 2026 · resets on 1 Dec · <tspan class="link">Open spend →</tspan></text>
+  <line x1="361" y1="378" x2="1394" y2="378" stroke="#f3f4f6"/>
+
+  <!-- row 2 -->
+  <text x="361" y="406" class="cell">Team repository</text>
+  <text x="521" y="406" class="cell">Week</text>
+  <text x="611" y="406" class="cellm">$80.00</text>
+  <text x="711" y="406" class="cellm">75 · 100 %</text>
+  <text x="851" y="406" class="cellm" font-size="12">Europe/Berlin</text>
+  <rect x="981" y="397" width="150" height="10" rx="5" fill="#f3f4f6"/><rect x="981" y="397" width="62" height="10" rx="5" fill="#22c55e"/>
+  <text x="1141" y="406" class="smallm">$32.80 · 41 %</text>
+  <text x="1310" y="406" font-size="13" class="link">Edit</text>
+  <text x="1346" y="406" font-size="13" fill="#dc2626">Delete</text>
+  <text x="981" y="424" font-size="11" class="muted">week 9–15 Nov · resets on 16 Nov · <tspan class="link">Open spend →</tspan></text>
+  <line x1="361" y1="436" x2="1394" y2="436" stroke="#e5e7eb"/>
+
+  <text x="361" y="462" class="note">NEW section (dashed). "+ Add budget" / "Edit" open the Budget form (budget-form.svg) with the scope preset to this page; "Delete" asks for confirmation.</text>
+  <text x="361" y="478" class="note">Add / Edit / Delete only for the team owner and managers (FR-7); others with team analytics access see the table read-only. Bar colours as on the Spend view.</text>
+  <text x="361" y="494" class="note">Same section exists in personal repository Settings (scope Personal repository, managed by the owner) and in team settings (scope Team) — FR-1.</text>
+
+  <!-- ============ BUDGET EVENT LOG (window) ============ -->
+  <rect x="341" y="530" width="1073" height="470" rx="8" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="361" y="560" class="h">Budget event log</text>
+  <text x="490" y="560" font-size="12" class="muted">LogHubLocal / DataArt/artisyn-log-hub · newest first · includes deleted budgets</text>
+  <text x="1394" y="560" font-size="16" class="muted" text-anchor="end">×</text>
+  <rect x="361" y="574" width="170" height="28" rx="6" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="373" y="593" font-size="12" class="t">Budget: All budgets</text><text x="517" y="593" font-size="11" class="muted">▾</text>
+  <rect x="541" y="574" width="150" height="28" rx="6" fill="#ffffff" stroke="#d1d5db"/>
+  <text x="553" y="593" font-size="12" class="t">Event: All events</text><text x="677" y="593" font-size="11" class="muted">▾</text>
+
+  <!-- log table header -->
+  <text x="361" y="628" class="lbl">TIME</text>
+  <text x="501" y="628" class="lbl">ACTOR</text>
+  <text x="681" y="628" class="lbl">BUDGET</text>
+  <text x="811" y="628" class="lbl">EVENT</text>
+  <text x="961" y="628" class="lbl">DETAILS</text>
+  <line x1="361" y1="638" x2="1394" y2="638" stroke="#e5e7eb"/>
+
+  <g>
+    <!-- 1 -->
+    <text x="361" y="662" class="smallm">2026-11-09 08:40</text>
+    <text x="501" y="662" class="small muted">system · threshold job</text>
+    <text x="681" y="662" class="small">Monthly $300</text>
+    <rect x="811" y="649" width="104" height="18" rx="9" fill="#f3f4f6"/><text x="863" y="662" font-size="11" font-weight="700" fill="#374151" text-anchor="middle">Email skipped</text>
+    <text x="961" y="662" class="small">90 % notice · email skipped — mail not configured</text>
+    <line x1="361" y1="674" x2="1394" y2="674" stroke="#f3f4f6"/>
+    <!-- 2 -->
+    <text x="361" y="698" class="smallm">2026-11-09 08:40</text>
+    <text x="501" y="698" class="small muted">system · threshold job</text>
+    <text x="681" y="698" class="small">Monthly $300</text>
+    <rect x="811" y="685" width="124" height="18" rx="9" fill="#fef3c7"/><text x="873" y="698" font-size="11" font-weight="700" fill="#92400e" text-anchor="middle">Threshold crossed</text>
+    <text x="961" y="698" class="small">90 % crossed · <tspan class="smallm">$271.40 of $300.00</tspan> · November 2026</text>
+    <line x1="361" y1="710" x2="1394" y2="710" stroke="#f3f4f6"/>
+    <!-- 3 -->
+    <text x="361" y="734" class="smallm">2026-11-08 17:12</text>
+    <text x="501" y="734" class="small">dt@dataart.com</text>
+    <text x="681" y="734" class="small">Monthly $300</text>
+    <rect x="811" y="721" width="64" height="18" rx="9" fill="#dbeafe"/><text x="843" y="734" font-size="11" font-weight="700" fill="#1e40af" text-anchor="middle">Edited</text>
+    <text x="961" y="734" class="small">amount <tspan class="smallm">$200 → $300</tspan> · thresholds <tspan class="smallm">75 · 100 → 75 · 90 · 100 %</tspan></text>
+    <line x1="361" y1="746" x2="1394" y2="746" stroke="#f3f4f6"/>
+    <!-- 4 -->
+    <text x="361" y="770" class="smallm">2026-11-06 10:05</text>
+    <text x="501" y="770" class="small muted">system · threshold job</text>
+    <text x="681" y="770" class="small">Monthly $200</text>
+    <rect x="811" y="757" width="88" height="18" rx="9" fill="#dcfce7"/><text x="855" y="770" font-size="11" font-weight="700" fill="#166534" text-anchor="middle">Email sent</text>
+    <text x="961" y="770" class="small">75 % notice → 2 recipients (team owner, 1 manager)</text>
+    <line x1="361" y1="782" x2="1394" y2="782" stroke="#f3f4f6"/>
+    <!-- 5 -->
+    <text x="361" y="806" class="smallm">2026-11-06 10:05</text>
+    <text x="501" y="806" class="small muted">system · threshold job</text>
+    <text x="681" y="806" class="small">Monthly $200</text>
+    <rect x="811" y="793" width="124" height="18" rx="9" fill="#fef3c7"/><text x="873" y="806" font-size="11" font-weight="700" fill="#92400e" text-anchor="middle">Threshold crossed</text>
+    <text x="961" y="806" class="small">75 % crossed · <tspan class="smallm">$151.20 of $200.00</tspan> · November 2026</text>
+    <line x1="361" y1="818" x2="1394" y2="818" stroke="#f3f4f6"/>
+    <!-- 6 -->
+    <text x="361" y="842" class="smallm">2026-11-05 09:30</text>
+    <text x="501" y="842" class="small">anna.k@dataart.com</text>
+    <text x="681" y="842" class="small">Weekly $80</text>
+    <rect x="811" y="829" width="68" height="18" rx="9" fill="#dcfce7"/><text x="845" y="842" font-size="11" font-weight="700" fill="#166534" text-anchor="middle">Created</text>
+    <text x="961" y="842" class="small">Week · <tspan class="smallm">$80.00</tspan> · thresholds <tspan class="smallm">75 · 100 %</tspan> · Europe/Berlin</text>
+    <line x1="361" y1="854" x2="1394" y2="854" stroke="#f3f4f6"/>
+    <!-- 7 -->
+    <text x="361" y="878" class="smallm">2026-11-04 15:22</text>
+    <text x="501" y="878" class="small">dt@dataart.com</text>
+    <text x="681" y="878" class="small muted">Daily $20 (deleted)</text>
+    <rect x="811" y="865" width="68" height="18" rx="9" fill="#f3f4f6"/><text x="845" y="878" font-size="11" font-weight="700" fill="#374151" text-anchor="middle">Deleted</text>
+    <text x="961" y="878" class="small">Day · <tspan class="smallm">$20.00</tspan> · <tspan class="smallm">75 · 90 · 100 %</tspan> · its events are kept</text>
+    <line x1="361" y1="890" x2="1394" y2="890" stroke="#f3f4f6"/>
+    <!-- 8 -->
+    <text x="361" y="914" class="smallm">2026-11-03 18:00</text>
+    <text x="501" y="914" class="small muted">system · threshold job</text>
+    <text x="681" y="914" class="small muted">Daily $20 (deleted)</text>
+    <rect x="811" y="901" width="92" height="18" rx="9" fill="#fee2e2"/><text x="857" y="914" font-size="11" font-weight="700" fill="#991b1b" text-anchor="middle">Email failed</text>
+    <text x="961" y="914" class="small">100 % notice · SMTP error: connection refused</text>
+    <line x1="361" y1="926" x2="1394" y2="926" stroke="#e5e7eb"/>
+  </g>
+  <text x="878" y="954" font-size="12" class="link" text-anchor="middle">Load older events</text>
+  <text x="361" y="984" class="note">FR-10: window opened by "Budget event log" above. Written when the event happens (edit transaction or threshold job); kept after deletion.</text>
+
+  <!-- footnotes -->
+  <text x="341" y="1022" class="note">Event types: Created · Edited (old → new amount, period, thresholds, time zone) · Deleted · Threshold crossed · Email sent / skipped (mail not configured) / failed.</text>
+  <text x="341" y="1038" class="note">Actor = the user's email, or "system · threshold job" for events written by the periodic job.</text>
+  <text x="341" y="1054" class="note">Visible to whoever can see this scope's budgets (FR-7, FR-10); a user without access to the scope cannot read the log. Time shown in the viewer's browser time zone.</text>
+  <text x="341" y="1070" class="note">Personal repository Settings and team settings have the same "Budget event log" button and window, listing only that scope's budget events.</text>
+</svg>

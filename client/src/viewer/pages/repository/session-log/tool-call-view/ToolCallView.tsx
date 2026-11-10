@@ -58,7 +58,8 @@ function ToolCallBody({
 /**
  * One tool call, shared by the Logs modal, the Context Growth step modal, `SubAgentDetail` and the
  * Bash tab (DD-11): a header (tool badge, status and permission badges, `≈N tok`, `⏱` duration for
- * Bash) and a body chosen by tool name and section, always ending in the output block.
+ * Bash/PowerShell and `mcp__*` calls — for a backgrounded MCP call it runs to the completion
+ * notification) and a body chosen by tool name and section, always ending in the output block.
  */
 export function ToolCallView({
   call,
@@ -74,6 +75,7 @@ export function ToolCallView({
       ? Math.round(call.result.length / charsPerToken)
       : undefined;
   const isShell = call.name === 'Bash' || call.name === 'PowerShell';
+  const showDuration = isShell || call.name.startsWith('mcp__');
 
   const header = (
     <>
@@ -97,7 +99,7 @@ export function ToolCallView({
           ≈{formatCompact(tokens)} tok
         </span>
       )}
-      {isShell && call.durationMs !== undefined && (
+      {showDuration && call.durationMs !== undefined && (
         <span
           className="font-mono text-xs text-muted-foreground"
           title="duration"

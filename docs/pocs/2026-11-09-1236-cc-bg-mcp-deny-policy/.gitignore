@@ -1,0 +1,13 @@
+# dependencies
+node_modules/
+# build output
+dist/
+build/
+out/
+*.tsbuildinfo
+# runtime garbage (raw captures may contain machine data; only sanitized fixtures/ are kept)
+*.log
+.cache/
+coverage/
+.env
+raw/

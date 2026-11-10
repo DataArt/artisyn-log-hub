@@ -88,3 +88,9 @@ are therefore pinned the way existing ones are: one algorithm doc per rule with 
 - Behaviour must not change: where the copies already differ, the rows document the difference
   (`"only"` rows) and the owner decides in review whether to align them; installed hooks of older
   versions are not affected by tests.
+- 2026-11-09 (task `2026-11-09-morning-check-followups`, hook 2.31.2): the hook's
+  `classifyToolOutcome` (`hook/.claude/telemetry_tool/post-turn-analysis-worker.js`) now follows the
+  server rule — the background-MCP rule (DD-4: no notification → `unresolved`, `completed` →
+  `success`, any other status → `failure`), `denialKind` → `unresolved`, and the rejection marker
+  only on `is_error` results. It should be pinned to `docs/algorithm-examples/tool-call-outcome.json`
+  (rows TO-27…TO-31 included) as part of this task.

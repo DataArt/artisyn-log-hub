@@ -1,10 +1,10 @@
 # Artisyn Log Hub
 
-You already track AI coding cost per month, day and session — and you should.
-But a number is not an answer: this session cost $8. Is that a lot?
-How do you make it cheaper, or when is spending more worth it?
-Log Hub answers the next questions: why it costs that much, what drives it,
-whether your harness works as designed, what your tools bring — per session and team-wide.
+It ran alone for 10 minutes, cost $8 and shipped the feature. All good?
+Your harness — CLAUDE.md, rules, skills, hooks, agents, workflows, MCP servers, the knowledge base,
+memory — decides the quality, cost, speed, autonomy and safety of every Claude Code session.
+You already control the cost — right and useful. Log Hub answers the next questions:
+what each harness element does to each of the five, for one session and across the team.
 [Docs](user-docs/install-server.md) ·
 [Site](https://dataart.github.io/artisyn-log-hub/) ·
 [Deck](https://dataart.github.io/artisyn-log-hub/deck/)
@@ -14,11 +14,14 @@ whether your harness works as designed, what your tools bring — per session an
 [![Security scan](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/DataArt/artisyn-log-hub/ci-reports/badges/security.json)](https://github.com/DataArt/artisyn-log-hub/blob/ci-reports/REPORT.md)
 [![security-scans](https://github.com/DataArt/artisyn-log-hub/actions/workflows/security-scans.yml/badge.svg)](https://github.com/DataArt/artisyn-log-hub/actions/workflows/security-scans.yml)
 
-Artisyn Log Hub is a self-hosted server and web viewer for [Claude Code](https://docs.claude.com/en/docs/claude-code)
-sessions. A Claude Code hook, installed into a project, uploads the session transcripts and related
-telemetry to your own Log Hub server. The web app then lets you and your team browse sessions turn by
-turn, see token usage and cost, compare harness setups (CLAUDE.md, rules, skills, MCP servers) and
-produce reports.
+Artisyn Log Hub is a self-hosted server and web app that measures your
+[Claude Code](https://docs.claude.com/en/docs/claude-code) harness. A hook, installed into a project,
+uploads the session transcripts, OpenTelemetry data and a snapshot of the harness to your own Log Hub
+server. The web app shows what each element did: **Live** for what runs right now, the **Session Map**
+for how the agents worked through a session, **OTEL** for cost by model, skill and MCP server,
+**OKF** for how the agents used the knowledge base, **System context anatomy** for what Claude loads
+at startup, and **Tools/MCP** for the MCP and CLI tool calls and their failures — for
+one session, and across a team in analytics and reports.
 
 > **Disclaimer.** This project is not affiliated with or endorsed by Anthropic, Cursor or GitHub.
 > "Claude" and "Claude Code" are trademarks of Anthropic.
@@ -44,7 +47,7 @@ Options, upgrades and other ways to run: [Install the server](user-docs/install-
 Open http://localhost:5003, sign in first and check that you are the admin:
 [Check that you are the admin](user-docs/install-server.md#check-that-you-are-the-admin).
 
-Install the hook from the root of the project you want to record (the web app's **API Keys** →
+Install the hook from the root of the project you want to record (the web app's **My API Keys** →
 **Install** tab gives you the exact command):
 
 ```sh
@@ -60,10 +63,10 @@ The user documentation lives in [`user-docs/`](user-docs/). The same pages are t
 
 | Section | Pages |
 |---|---|
-| Get started | [Install the server](user-docs/install-server.md) · [Install the hook](hook/INSTALL_HOOK.md) · [Your first session](user-docs/getting-started.md) · [Connecting a Repository](user-docs/connect-repository.md) |
-| Configuration | [Authentication modes](user-docs/authentication-modes.md) · [Server settings](user-docs/server-configuration.md) · [Tuning Your Setup](user-docs/tuning-your-setup.md) · [Security Hardening & Configuration](user-docs/security-hardening.md) |
-| Using Log Hub | [Working with the Session List](user-docs/session-list.md) · [Session Log](user-docs/session-log.md) · [Understanding Cost & Context](user-docs/cost-and-context.md) · [Analytics & Reports](user-docs/analytics-reports.md) |
-| Data and security | [Data Collection Notice](user-docs/data-collection-notice.md) · [Data Collection & Upload](user-docs/data-collection.md) · [Trust model](user-docs/trust-model.md) · [Component Reference](user-docs/component-reference.md) · [Responsibility Matrix](user-docs/responsibility-matrix.md) · [Third-Party Components](user-docs/third-party-components.md) · [How the hook works](hook/HOW_HOOK_WORKS.md) |
+| Get started | [Install the server](user-docs/install-server.md) · [Quick setup for a small team](user-docs/small-team-setup.md) · [Install the hook](hook/INSTALL_HOOK.md) · [Your first session](user-docs/getting-started.md) · [Connecting a repository](user-docs/connect-repository.md) |
+| Configuration | [Authentication modes](user-docs/authentication-modes.md) · [Server settings](user-docs/server-configuration.md) · [Tuning your setup](user-docs/tuning-your-setup.md) · [OTEL for organization admins](user-docs/otel-admin-guide.md) · [Security hardening & configuration](user-docs/security-hardening.md) |
+| Using Log Hub | [All views](user-docs/all-views.md) · [Working with the session list](user-docs/session-list.md) · [Session Log](user-docs/session-log.md) · [Understanding cost & context](user-docs/cost-and-context.md) · [Analytics & reports](user-docs/analytics-reports.md) · [OKF tab](user-docs/okf-tab.md) · [OTEL tab](user-docs/otel-tab.md) · [OTEL collection architecture](user-docs/otel-architecture.md) |
+| Data and security | [Data collection notice](user-docs/data-collection-notice.md) · [Data collection & upload](user-docs/data-collection.md) · [Trust model](user-docs/trust-model.md) · [Component reference](user-docs/component-reference.md) · [Responsibility matrix (RACI)](user-docs/responsibility-matrix.md) · [Third-party components](user-docs/third-party-components.md) · [How the hook works](hook/HOW_HOOK_WORKS.md) |
 | Changelog | [Changelog](user-docs/changelog.md) |
 
 ## Repository layout
@@ -142,7 +145,7 @@ opt-in: the host workflow above is unchanged. The very first run builds the sand
 takes ~20–30 min; later runs reuse it and start in seconds. A sandbox never works on a branch
 listed in `.claude/claude-isolation.json` (by default `main`).
 
-## Licence
+## License
 
-Artisyn Log Hub is released under the MIT licence; see [LICENSE](LICENSE). Third-party packages and
-their licences are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
+Artisyn Log Hub is released under the MIT license; see [LICENSE](LICENSE). Third-party packages and
+their licenses are listed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).

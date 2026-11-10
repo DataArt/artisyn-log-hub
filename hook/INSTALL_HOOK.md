@@ -27,8 +27,9 @@ Run from the project root:
 npx <server-origin>/static/artisyn-hooks-installer.tgz install
 ```
 
-Where `<server-origin>` is the base URL of your artisyn-log-hub instance (e.g. `http://localhost:3000`). The API
-Keys page (Install tab) shows this command pre-filled with the correct origin — copy it from there.
+Where `<server-origin>` is the base URL of your artisyn-log-hub instance (e.g. `http://localhost:5003` for a release
+install, `http://localhost:3000` for a development server). The **My API Keys** page (**Install** tab) shows this
+command pre-filled with the correct origin — copy it from there.
 
 After installing, the installer starts every hook once with your `node`, in this project, the way Claude Code
 will (`--self-check`), and checks the OTEL receiver. If something cannot start — for example no `node` on
@@ -89,7 +90,7 @@ blocked. An unchanged destination (trailing slashes aside) is not a change and p
 `upgrade` also report `Telemetry destination: <serverUrl>` on success, including when the value was inherited from an
 existing config or carried over by the legacy `.env` → JSON migration rather than passed on the command line.
 
-**Full Auto Install** — the API Keys page → Install tab also has a "Full Auto Install" card that generates a
+**Full Auto Install** — the **My API Keys** page → **Install** tab also has a "Full Auto Install" card that generates a
 ready-to-run one-liner with both flags pre-filled (server URL from `window.location.origin`, API key generated on
 demand):
 
@@ -164,7 +165,7 @@ Configuration.
 npx <server-origin>/static/artisyn-hooks-installer.tgz upgrade
 ```
 
-The API Keys page (Install tab) has an "Upgrade Hooks" copy-and-paste box with this command pre-filled. `upgrade`
+The **My API Keys** page (**Install** tab) has an "Upgrade Hooks" copy-and-paste box with this command pre-filled. `upgrade`
 takes no `--server-url`/`--api-key`/`--otel-port`/`--otel-traces` flags — those are install-only; the
 already-configured values are read from `.artisyn/config/log-hub*.json` and `~/.artisyn/otel/port.json`. It does
 accept `--otel-existing=proxy|keep|replace`. The trace answer is the stored `otelTraces` when present (no question asked); an install that predates it gets the same
@@ -336,7 +337,7 @@ As shipped in the tarball; the installer replaces `"name"` with this repo's `art
 {
   "name": "log-hub-hooks",
   "displayName": "Log Hub Hooks",
-  "version": "2.31.0",
+  "version": "2.31.2",
   "description": "Records Claude Code session telemetry and uploads it to artisyn-log-hub.",
   "author": { "name": "Artisyn" }
 }
@@ -442,9 +443,16 @@ older than this feature stores that upload as an inert log.
 both run on every `Stop` event, independently of each other. It does no network I/O itself: it resolves
 `transcript_path`/`session_id`/`cwd` from the `Stop` payload plus this project's git remote, then spawns
 `post-turn-analysis-worker.js` as a detached background process and exits immediately, so the interactive turn is
-never blocked by the worker's `claude -p` calls or its HTTP round-trips. The worker fetches both the Turn-End Cost
-Advisor's and the AI Session Attribution's gate info from one combined endpoint and runs both evaluations
-concurrently — see `docs/knowledgebase/server-endpoint-map.md` and the config keys below.
+never blocked by the worker's `claude -p` calls or its HTTP round-trips. The worker asks the Log Hub server once,
+with your API key, whether the Turn-End Cost Advisor and the AI Session Attribution are on for this repository
+(`GET /api/v2/post-turn-analysis/config`), runs the evaluations that are on concurrently, and posts each result back
+to the server as soon as it is ready — see the config keys below.
+
+Since hook `2.31.1` every evaluation's `claude -p` runs with no tools, no MCP servers and no skills
+(`--tools=`, `--strict-mcp-config`, `--disable-slash-commands`): the prompt carries every fact the model needs, so it
+can only answer — it cannot read files, run commands or call an MCP server, even when the analysed turn contained an
+instruction. A Claude Code too old to know one of these flags rejects it; the hook then retries once without them,
+with the project's normal tools and permissions, as before `2.31.1`. Keep Claude Code current.
 
 Since `2.10.1` this trigger exits immediately when `ARTISYN_HOOK_SERVICE` is set in its environment. Every
 `claude -p` the hooks spawn (the advisor/attribution evaluations) exports that variable

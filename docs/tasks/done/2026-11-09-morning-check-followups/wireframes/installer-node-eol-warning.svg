@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="420" viewBox="0 0 1000 420" font-family="Segoe UI, Arial, sans-serif">
+  <title>Hook installer output with a non-blocking Node 22+ recommendation on Node 18/20 (item 6)</title>
+  <rect width="1000" height="420" fill="#ffffff"/>
+
+  <!-- terminal window, light theme -->
+  <rect x="20" y="20" width="960" height="280" rx="8" fill="#f9fafb" stroke="#d1d5db"/>
+  <rect x="20" y="20" width="960" height="30" rx="8" fill="#e5e7eb"/>
+  <circle cx="40" cy="35" r="5" fill="#f87171"/>
+  <circle cx="58" cy="35" r="5" fill="#fbbf24"/>
+  <circle cx="76" cy="35" r="5" fill="#34d399"/>
+  <text x="100" y="40" font-size="12" fill="#4b5563">Terminal — hook installer</text>
+
+  <g font-family="Consolas, monospace" font-size="13">
+    <text x="40" y="80" fill="#111827">$ node --version</text>
+    <text x="40" y="100" fill="#374151">v20.19.0</text>
+    <text x="40" y="128" fill="#111827">$ npx log-hub-hooks-installer --server http://loghub.local:3000</text>
+
+    <rect x="34" y="140" width="932" height="46" fill="#fef3c7" stroke="#2563eb" stroke-dasharray="5 3"/>
+    <text x="40" y="158" fill="#b45309">⚠ Node.js 20 is end-of-life and gets no security fixes. The hook still works,</text>
+    <text x="40" y="176" fill="#b45309">  but please move to Node.js 22 or later. (stderr, install continues)</text>
+
+    <text x="40" y="208" fill="#15803d">✓ hooks written to .claude/settings.json</text>
+    <text x="40" y="228" fill="#15803d">✓ OTEL resource attributes written to ~/.claude/settings.json</text>
+    <text x="40" y="248" fill="#15803d">✓ installed log-hub-hooks</text>
+    <text x="40" y="276" fill="#111827">$ echo $?</text>
+    <text x="40" y="294" fill="#374151">0</text>
+  </g>
+
+  <g font-size="12" fill="#1e3a8a">
+    <rect x="20" y="316" width="960" height="92" rx="6" fill="#f8fafc" stroke="#cbd5e1"/>
+    <text x="36" y="338" font-weight="600">Annotations (wireframe only, wording to be confirmed in Open Questions)</text>
+    <text x="36" y="360">1. Shown only when the Node major version is 18 or 20 (below 22); one warning, on stderr; exit code unchanged; engines stays &gt;=18.19.</text>
+    <text x="36" y="380">2. Runtime hook scripts print nothing extra — the advice lives in the installer and in hook/README.md (offline, self-contained).</text>
+    <text x="36" y="400">Dashed blue outline = the new line. Light theme only.</text>
+  </g>
+</svg>

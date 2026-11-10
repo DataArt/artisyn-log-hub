@@ -3,7 +3,7 @@ type: reference
 title: CI Security Scans
 description: The report-only security workflows (security-scans, virustotal, security-report), their triggers, the SNYK_TOKEN/VIRUS_TOTAL_KEY secrets, fork behaviour, the unified row format and label table, the PR-description block, the ci-reports branch and badge, the .snyk policy, the config-guard allowlist, the FR-27 repository settings and the owner rollout; also lists checks.yml / release.yml and the release VirusTotal scopes
 tags: [ci, security, github-actions, snyk, virustotal, supply-chain]
-timestamp: 2026-10-29
+timestamp: 2026-11-09
 ---
 
 # CI Security Scans
@@ -42,7 +42,7 @@ workflow that is not a required check (FR-30). `security-scans` uses no `paths-i
 | `changes` | Diffs `base.sha...head.sha`; outputs `docs_only` (every path under `docs/`) and `docker_changed` (`Dockerfile` or `docker-dev/Dockerfile`); on PRs uploads `pr-meta` | — |
 | `build-kit` | Builds the installer tarballs **without secrets** (`npm ci --ignore-scripts`, `npm run build:hooks-installer -- --static-dir …`), uploads artifact `installer-kit` | — |
 | `snyk-oss` | Snyk CLI (pinned, sha256-checked) `test` prod and `--dev` over `--all-projects`, plus the extracted tarballs; `snyk monitor` only on push to `main` and nightly; SARIF category `snyk-oss` | `snyk-oss/prod`, `/dev`, `/kit` |
-| `dependency-review` | `actions/dependency-review-action` (`warn-only`, GPL/AGPL `deny-licenses`); PRs only | `dependency-review/pr` |
+| `dependency-review` | `actions/dependency-review-action` (`warn-only`, GPL/AGPL `deny-licenses`); PRs only. The action has no path filter, so `scan-rows.js` drops changes whose manifest is under `docs/pocs/` (like Snyk's `--exclude=…pocs`) and notes "N PoC manifest(s) ignored" | `dependency-review/pr` |
 | `config-guard` | `node scripts/ci/config-guard.js` (executable-config guard, FR-4) | `config-guard/repo` |
 | `supply-chain` | `lockfile-lint` (every `resolved` URL is `registry.npmjs.org`) and `npm audit signatures` | `lockfile-lint/npm`, `npm-signatures/npm` |
 | `workflow-lint` | actionlint and zizmor (SARIF category `zizmor`) | `actionlint/workflows`, `zizmor/workflows` |
@@ -56,6 +56,12 @@ On a docs-only PR the scan jobs still run, skip their tool steps and write `skip
 note `docs-only change`. Every scan job uploads its raw tool output as artifact `raw-<job>`
 (14 days) and writes its rows to `$GITHUB_STEP_SUMMARY`. Every `npm ci`/`bun install` in CI runs
 with `--ignore-scripts`.
+
+Every release-binary download in the scan workflows (Snyk CLI in `snyk-oss` and `container`,
+actionlint in `workflow-lint`, hadolint in `dockerfile-lint`, gitleaks in `gitleaks.yml`) is
+`curl -fsSL --retry 4 --retry-all-errors --retry-delay 5`, so a transient GitHub/CDN error is
+retried instead of failing the job. Versions and SHA-256 pins are unchanged by the retries; a new
+download must use the same flags (`curl`, never `wget`).
 
 ## Secrets
 

@@ -2,7 +2,9 @@
 
 Open a repository from **My Repos** to land on the **Sessions** tab: the session list on the
 left, and the selected session's details on the right. (The other repository tabs are
-**Analytics**, **Reports**, and **Settings**.)
+**Analytics**, **Reports**, **Tools/MCP**, **OKF**, **OTEL** and **Settings**; see
+[Analytics & Reports](analytics-reports.md), [Tools/MCP tab](#toolsmcp-tab),
+[OKF tab](okf-tab.md) and [OTEL tab](otel-tab.md).)
 
 ## View modes
 
@@ -30,7 +32,7 @@ Your choice is remembered per browser.
 - A yellow **lightbulb** in the corner means the Advisor has cost-saving advice for this
   session — clicking it opens the session directly on its Advisor tab.
 - **⚠ no pricing** (amber) means the session's model has no pricing configured, so its cost
-  can't be computed — see the "Understanding Cost & Context" article.
+  can't be computed — see [The "⚠ no pricing" badge](cost-and-context.md#the--no-pricing-badge).
 
 ## Filtering
 
@@ -58,17 +60,12 @@ work time, token totals, cost, max context, and skills used. The toolbar below i
 
 - A **star** to favorite the session (favorites show the star in the list).
 - **Refresh** — reloads just this session's logs (useful while a session is still running).
-- The content tabs: **Summary**, **Info**, **Logs**, **Charts**, **Advisor** (when advice
-  exists), **Statistics**, **Change surface**, **Harness usage**, and **Raw Logs** (visible only
-  to the session's own uploader and admins).
-  - **Change surface** shows *where* this session's tree wrote — changed files, folders and
-    modules, and how concentrated those changes were.
-  - **Harness usage** shows *what harness the session used*: a tree of the main session and
-    every agent sub-session it spawned (workflow fan-outs grouped under one node), and for the
-    selected session a chronological list of the skills, rules, sub-agent spawns, workflow runs,
-    MCP tool calls and slash commands it used. Turn on **Include sub-sessions** to fold in
-    everything its descendants used as well. Ordinary tool calls (Read, Bash, Edit…) are not
-    listed here — the Logs and Statistics tabs cover those.
+- The session tabs: a **View** select picks the tabs shown in the row, **More ▾** holds the rest,
+  and each chart is a tab of its own. Every tab is described in
+  [Session Log → Views and tabs](session-log.md#views-and-tabs). **Raw Logs** is shown to the
+  session's owner and, in a team view, to whoever the server lets read the session's logs (any
+  member of a transparent team; the team owner and ADLC trainers of a restricted one), never to
+  an administrator as such.
 - **Remove** (session owner or admin only) — permanently deletes the session and all its data,
   after a confirmation dialog. This cannot be undone.
 
@@ -78,4 +75,25 @@ work time, token totals, cost, max context, and skills used. The toolbar below i
 - The team owner can enable **"Allow members to see each other's sessions"** on the team's
   Members tab. When it's on, a blue **Team-wide session visibility** badge appears in the
   repository header and everyone sees all members' sessions and analytics.
-- **Raw Logs** stay private to each session's uploader regardless of this setting.
+- **Raw Logs** of another member's session are shown only where the team grants it: to every
+  member of a transparent team, and to the team owner and ADLC trainers of a restricted one.
+
+## Tools/MCP tab
+
+The repository's **Tools/MCP** tab shows every MCP server call and every call of a monitored CLI
+tool the agents made in the chosen period, and whether each one worked. MCP calls are always
+recorded. CLI tools are recorded once you add them under **Monitored tools (N)** (the button opens
+**Settings → Monitored Tools**); the hook then captures their real exit code and full output
+(hook 2.27.0 or newer).
+
+- **Top bar** — date range, status, search, the active scope chip and **Monitored tools (N)**.
+- **Tools tree** — All tools → MCP / CLI → tool → operation, with calls, error %, retried % and
+  last use; sort by any of them. Click a node to narrow the table to it.
+- **Calls table** — one row per call with its time, status and input; ↑ / ↓ move through it.
+- **Call details** — Parameters, Input, Output, stderr and Signals, each with a copy button. The
+  output can be shown as a terminal, "As the agent saw it" or raw. **Open in session ↗** opens the
+  Logs tab of the call's session at its turn.
+
+Every filter and the selected call are kept in the page address. **Which tools fail most?** on
+Home opens this tab filtered to the errors of the last week. Each session has its own
+[Tools/MCP tab](session-log.md#toolsmcp) with the same layout for that session alone.

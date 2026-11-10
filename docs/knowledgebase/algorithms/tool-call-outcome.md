@@ -32,11 +32,12 @@ rejection.
 ## Input and output
 
 - Input `result`: `null` when the call has no `tool_result` in the log, else
-  `{isError: boolean | null, text: string, interrupted?: boolean, denialKind?: string}`.
+  `{isError: boolean | null, text: string, interrupted?: boolean, denialKind?: string,
+  background?: {status: string | null}}`.
   `isError` is `tool_result.is_error` (`null` when the field is missing, which is the common
-  success case).
+  success case). `background` is set only for a background-MCP hand-off (see rule 1a).
 - Output `outcome`: `success` | `failure` | `unresolved` (both twins).
-- Output (client only) `status`: `success` | `error` | `rejected` | `missing`, plus
+- Output (client only) `status`: `success` | `error` | `rejected` | `missing` | `background`, plus
   `interrupted: true` and `denialKind` when they apply. `status` drives the badge.
 
 ## Input producers (outside the rules, not pinned by the rows)
@@ -66,6 +67,21 @@ block, so this does not happen for them; aligning the producers is not worth the
 ### Outcome (`classifyToolOutcome`, both twins)
 
 1. `result` is `null` → `unresolved`.
+1a. `background` is set (the call was moved to a background task) → decided by the task
+    notification's `<status>` alone, before every rule below:
+    - `status === null` (no notification in the log) → `unresolved`: the call may still be
+      running, so it must not inflate failure rates;
+    - `status === 'completed'` → `success`;
+    - any other status (`failed`, `killed`, `stopped`, …) → `failure`.
+
+    The producers set `background` only when all three hold: the tool name starts with
+    `mcp__`, the first `tool_result` is not `is_error: true`, and its **full** text (not the
+    200-character cut) matches `/moved to the background as task ([A-Za-z0-9_-]+)/`. Claude Code
+    writes that hand-off from 2.1.212 on. The notification is the `<task-notification>` user line
+    with that task id, or, when the turn ended first, only its `queue-operation` enqueue. Its
+    `<result>` replaces the ack as the call's text and its time ends the call's duration; the
+    rule itself reads only `status`. Without the field (older Claude Code, an MCP call that
+    finished in-session, a Bash `run_in_background` ack) the rules below apply unchanged.
 2. `interrupted === true` → `unresolved`.
 3. `denialKind` is a non-empty string → `unresolved`. Claude Code writes it for
    `user-rejected`, `permission-rule`, `automode-blocked` and `interrupted`; any non-empty value
@@ -100,6 +116,10 @@ S0. Before rules 6-9, the outcome is computed by rules 1-5 on the first 200 char
     `text` (characters 1-200); a marker that is not complete within them does not match.
 
 6. `result` is `null` → `status: 'missing'` (badge "output not captured").
+6a. `background` is set (rule 1a): `status === null` → `status: 'background'` (badge
+    "⧗ background", tooltip "Moved to the background; no completion notification in this log");
+    otherwise outcome `success` → `status: 'success'` and any other outcome → `status: 'error'`.
+    No `interrupted` and no `denialKind` is set.
 7. Outcome `unresolved` → `status: 'rejected'` (badge "⊘ rejected"):
    - `interrupted: true` is added when `interrupted === true` **or** `denialKind ===
      'interrupted'` (badge "⏸ interrupted");
@@ -129,6 +149,12 @@ S0. Before rules 6-9, the outcome is computed by rules 1-5 on the first 200 char
 - An `is_error` result with empty text: TO-25.
 - The 200-character cut in `outcomeToStatus`: a marker ending at character 200 (TO-20) and at
   201 (TO-21).
+- Background call with a `completed` notification: TO-27; with `failed` (its text is the
+  notification's `Task failed: …` result, the ack was not an error): TO-28; with another status
+  (`stopped`): TO-30.
+- Background call with no notification (still running, or the session ended first): TO-29.
+- Old transcript without the ack (Claude Code before 2.1.212), or ack-like text with no
+  `background` field: the ordinary rules apply, TO-31.
 
 ## Examples
 
@@ -137,7 +163,7 @@ S0. Before rules 6-9, the outcome is computed by rules 1-5 on the first 200 char
 `expected.interrupted` and `expected.denialKind` are the client's status fields; a key that is
 not listed must be absent from the client's result.
 
-Rows (26): [`docs/algorithm-examples/tool-call-outcome.json`](../../algorithm-examples/tool-call-outcome.json) — test data for the table test; the rules above are enough to understand the algorithm.
+Rows (31): [`docs/algorithm-examples/tool-call-outcome.json`](../../algorithm-examples/tool-call-outcome.json) — test data for the table test; the rules above are enough to understand the algorithm.
 
 ## Mutations
 
@@ -165,6 +191,12 @@ Rows (26): [`docs/algorithm-examples/tool-call-outcome.json`](../../algorithm-ex
   `outcomeToStatus` when it sets the `interrupted` key (rule 7) -> TO-26 (an extra
   `interrupted: true`).
 - The empty-text guard in `isRejectionText` inverted -> TO-25 (unresolved / rejected).
+- The background check moved after the `isError` rule (rule 5 decides first) -> TO-28 / TO-30
+  (success / success).
+- A `null` background status treated as success -> TO-29 (success / success); treated as
+  failure -> TO-29 (failure / error).
+- Only `failed` treated as failure (other statuses as success) -> TO-30 (success / success).
+- The rule keyed on ack-like text instead of the `background` field -> TO-31.
 
 ## Where the result is visible
 

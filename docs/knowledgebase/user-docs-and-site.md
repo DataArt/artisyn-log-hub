@@ -7,7 +7,7 @@ tags:
   - client
   - build
   - site
-timestamp: "2026-11-03T00:00:00+04:00"
+timestamp: "2026-11-06T00:00:00+04:00"
 ---
 
 # User Docs and Site
@@ -188,33 +188,48 @@ wireframes).
   - `apple-touch-icon.png`: with Playwright MCP (`use-playwright` skill), a 180×180 viewport whose
     page is `client/public/favicon.svg` inline at `width`/`height` 180 on the SVG's own background;
     screenshot to `site/assets/apple-touch-icon.png`.
-  - `og-image.png`: the repository OTEL tab's team-context Sankey (`OtelCostFlow.tsx`, model → user
-    → branch) in the dev app, with the demo repository exported from local prod and imported via
-    Settings › Import/Export (the repository must belong to a team so the tab opens with
-    `teamId`). Before loading the tab, `page.route('**/api/v1/repositories/*/otel/facts?**')`
-    fetches the real response and maps each distinct non-null `userEmail` in `flows[]` and
-    `sessions[]` to `Developer A`, `Developer B`, … (first appearance), so no e-mail reaches the
-    image; branch names must carry no person's name. Viewport 1200×630, clipped to the Sankey card,
-    ≥ 3 framings in `tmp/site-shots/`, pick one. Never invent data.
+  - `og-image.png` (2026-11-06, harness thesis): a hand-written HTML card — "Artisyn Log Hub",
+    the tag "Your Claude Code harness, measured", the hook headline from the dataset ("It ran
+    alone for 10 minutes, cost $8 and shipped the feature. All good?"), the nine harness elements
+    and five tiles (quality, cost, speed, autonomy, safety) — in the dark site palette (`theme.css`
+    dark tokens, system and monospace font stacks, no external fonts), served from a temporary
+    local HTTP server (Playwright MCP blocks `file:`) and screenshotted at a 1200×630 viewport.
+    The HTML is not committed; rebuild it from this description. Its figures must stay equal to
+    `session.durationMin`, `session.total` and `session.outcome` in the dataset. (Until
+    2026-11-06 the image was the OTEL tab's cost-flow Sankey.)
   - Check both with an IHDR size read (bytes 16–23) — `@S-SITE-01` step 17 asserts 1200×630 and
     180×180, and that the output favicon equals `client/public/favicon.svg` byte-for-byte.
 - `layout.mjs` exports `SITE_URL` (`https://dataart.github.io/artisyn-log-hub/`), `REPO_URL`,
   `RELEASES_URL`, filled into `{{site:url}}`, `{{site:repo}}`, `{{site:releases}}`. Top nav: Home,
-  Features, Get started, Configuration, Using Log Hub, Data & security, Questions, Deck, GitHub ↗; a section
-  link opens that section's first page. Changelog is in the sidebar and footer only.
+  Features, Get started, Configuration, Using Log Hub, Data & security, FAQ (`questions.html`;
+  renamed from "Questions" 2026-11-06 so it does not collide with Features' "Nine questions"),
+  Deck, GitHub ↗; a section link opens that section's first page. Page titles are
+  `<title> — Artisyn Log Hub`, except a title that already starts with the site name, used as is
+  (Home: "Artisyn Log Hub — your Claude Code harness, measured"). Changelog is in the sidebar and footer only.
 - Style: "old digital" — warm paper / near-black palette, muted phosphor green and amber, monospace
   headings, nav, labels and numbers, a faint grid background, square corners; no neon or glow.
   Light/dark palette from `prefers-color-scheme`; sidebar collapses under "Menu" below 768 px,
   TOC hidden below 1024 px.
-- Screenshots: `site/assets/shots/*.png` are real screens of the demo repository in local prod,
-  cropped to the content pane. Rule: English UI text only, no e-mail, user name or local path on
-  them. Features and deck show them as `<figure class="shot">` with a "where in the app" caption;
-  they are not dataset figures and carry no illustrative label.
+- Spelling: the hand-written site pages (`site/pages/*.html`) and the deck use American spelling
+  ("organization", "favor", "color", "license"); `user-docs/` and `docs/` are not converted.
+- Screenshots: `site/assets/shots/*.png` are real screens from local prod — the demo repository,
+  or the Log Hub repository where the demo one has no data (OTEL, KB, Live) — cropped to the
+  content pane. Rule: English UI text only, no e-mail, user name or local path on them. Features
+  and deck show them as `<figure class="shot">` whose caption is only "where in the app" (e.g.
+  `Session → Change surface`), with no "real screen" or repository suffix; they are not dataset
+  figures.
 
   | Shot | Shows | Used on |
   |---|---|---|
-  | `context-usage.png`, `change-surface.png`, `analytics.png`, `okf-usage.png`, `tool-analytics.png` | Features blocks B, C, D, G, H | Features (the first three also in the deck) |
+  | `change-surface.png`, `analytics.png`, `okf-usage.png`, `tool-analytics.png` | Features blocks C, D, G, H | Features (`change-surface.png` also on deck slide 15) |
+  | `context-usage.png` | Session → Charts → Context Usage | no longer shown (replaced by `system-context-anatomy.png` in deck v2); kept for reuse |
   | `agent-tree.png`, `call-tree.png`, `context-growth-start.png`, `context-growth-later.png`, `cost-by-branch.png`, `harness-usage.png`, `lines-per-hour.png`, `metric-list.png`, `sessions-by-cost.png`, `timeline.png`, `tool-heatmap.png`, `tools-mcp.png` | session charts, reports, analytics | deck |
+  | `system-context-anatomy.png` (2026-11-06) | Session → System context anatomy: startup context by source (bar + table), demo repository, `/adlc-demo:implement` session | deck slides 5 and 12, Features B |
+  | `otel-cost-by-skill.png` (2026-11-06) | Repository → OTEL, 7 days, cost stacked by skill, Log Hub repository (taken at a 1100 px viewport so the chart stays readable at 600 px) | deck slide 8 |
+  | `session-map.png` (2026-11-06) | Session → Session Map, replay of a finished workflow session, demo repository | deck slide 10, Features I |
+  | `trace-waterfall.png` (2026-11-06) | Session → OTEL → Traces, one turn's waterfall (the demo repository has no traces, so a Log Hub repository session with English skill names) | deck slide 10, Features I |
+  | `live-view.png` (2026-11-06) | Top bar → Live: tree, tiles and "Tokens over time" (chart 2 / 7), paused; the user e-mail was replaced by "Developer A" and the team name by "Team A" in the DOM before the shot (as for `og-image.png`), the crop stops above a Cyrillic session title | deck slide 11, Features I |
+  | `okf-kb-value.png`, `okf-kb-value-heuristic.png` (2026-11-06) | Repository → OKF, KB folder `docs/knowledgebase`: section A (verified) and section B (heuristic, check by hand), Log Hub repository (the demo repository has no KB) | deck slide 14, Features G |
   | `nav-lenses.png` | one row of session tabs: the View select on Cost, its row and "More" open | Features → Navigation |
   | `nav-chart-tabs.png` | View: All tabs, Call Tree open as a session tab of its own | Features → Navigation |
   | `summary-hub.png` | Summary tiles, "Where to look next" cards, Explore chips | Features → Navigation |
@@ -224,6 +239,11 @@ wireframes).
   | `demo/clip-*.gif` (10 clips, 960×600, 5–8 s) + first frame `demo/clip-*.png` | short interactions (map replay, tab switching, analytics range/group/metric, call-tree drill-down, …); the first frame is the `prefers-reduced-motion` still | Home carousel |
   | `demo/thumbs/<id>.jpg` (256×160) | one thumbnail per item | Home carousel strip |
   | `demo/items.json` | manifest in carousel order: `{ id, kind, src, still?, thumb, duration?, caption, where, alt }` | read by `carousel.js` and `@S-SITE-01` |
+
+  The deck v2 shots were taken from local prod with Playwright MCP (identify-only login), clipped
+  to the content pane; none shows an e-mail, a person's name or a local path. Not captured: an
+  OKF single-article drill-down (the repository view shows the verified/heuristic split instead)
+  and the Agents table with the Phase column (the speed slide uses `lines-per-hour.png`).
 
   **Demo media (`site/assets/demo/`).** Written only by the manual
   `npm run record:demo -- <tour|items|all> [--only <id>[,<id>]]` (`scripts/site/record-demo.mjs`);
@@ -249,10 +269,21 @@ wireframes).
 
 ## Example dataset placeholders
 
-`site/data/example-dataset.json` is the only source of figures on Home, Features and the deck
-(fictional team: 6 developers, $8.00 session, 18 sessions/day = $144.00, 20 working days = $2,880.00).
-A figure that is not a key of this file must not appear; add the key first. Every block that shows
-dataset figures carries `<span class="illustrative">Illustrative example</span>`.
+`site/data/example-dataset.json` is the only source of Log Hub figures on Home, Features and the
+deck (one worked example: a team of 6 developers, a 10-minute $8.00 session, 18 sessions/day =
+$144.00, 20 working days = $2,880.00). A figure that is not a key of this file must not appear; add
+the key first. Values stay in the normal range for such sessions and teams and are stated plainly:
+no "Illustrative example" label, no "fictional" or "hypothetical" wording (removed 2026-11-06 with
+the `.illustrative` CSS). Dataset blocks are `.deck-figure` (deck) or `.figure-block` (site).
+
+Keys added for deck v2 (2026-11-06; no `checkDataset` rule reads them): `session.durationMin`,
+`session.autonomousMin`, `session.outcome` (the hook's "shipped the feature"),
+`session.linesChanged`, `session.subAgents`, `session.parallelPeak`, `session.mcpCalls`,
+`session.mcpErrors`, `kb.articlesRead`, `kb.pointerYieldPct`, `kb.alwaysReadPct`,
+`kb.orgSyncedContextPct`, `costShare.skill.*`, `costShare.mcp.*`, `costShare.effort.*`,
+`costShare.fastMode.*` (each group sums to 100), `live.tokensPerMin`, `live.sessionsNow`,
+`productivity.linesPerAutoHour` (= linesChanged / autonomousMin × 60, rounded). Money and percent
+placeholders state their format (`|usd`, `|usd0`, `|pct`); counts and strings use the raw form.
 
 - `{{ds:<dot.path>}}` raw value (thousands separator for integers), `|usd` (`$2,880.00`),
   `|usd0` (`$8`), `|pct` (`78%`).
@@ -269,9 +300,64 @@ dataset figures carries `<span class="illustrative">Illustrative example</span>`
 `site/deck/index.html` is a standalone reveal.js 5.2.1 page loaded from jsDelivr with pinned
 versions, `integrity="sha384-…"` and `crossorigin="anonymous"` (no npm dependency; the offline
 product does not depend on it — the site is an extra, the user docs ship with the app). No reveal
-theme: `../assets/theme.css` plus deck rules. 1280×720, `hash: true`, notes plugin, slide numbers
-`c/t`; `?print-pdf` prints it. Content slides: one headline, ≤ 3 bullets, ≤ 40 body words, one key
-figure from the dataset; the rest goes to `<aside class="notes">`.
+theme: `../assets/theme.css` plus deck rules. 1280×720, `hash: true`, slide numbers `c/t`;
+`?print-pdf` prints it. Content slides (`section.content-slide`): one headline, ≤ 3 bullets, ≤ 40
+words of `.slide-body` text (text in a `.deck-figure` or `.visual-slot` does not count), at most one
+key figure from the dataset. No speaker notes (`aside.notes`), no footnotes, no Sources slide, no
+source URLs.
+
+**"Your harness, measured" (v2, 2026-11-06).** Storyline: the hook, then the harness thesis, then
+the five dimensions (quality, cost, speed, autonomy, safety) answered one by one. Pills in each
+slide head: hook · harness · cost · speed · context · quality · team · tools · safety.
+
+| # | Slide | Visual |
+|---|---|---|
+| 1 | Title — "Your harness, measured" | — |
+| 2 | Hook (`section.thesis-slide`): "It ran alone for N minutes, cost $8 and shipped the feature. All good?" + the five questions | dataset control column, five tiles |
+| 3 | The harness decides — one study figure per dimension | `.visual-slot.study-board` (no dataset figure) |
+| 4 | Black box vs glass box — the vendor's own advice | contrast board |
+| 5 | Anatomy of a harness — element → view | table + `system-context-anatomy.png` |
+| 6 | Cost · four prices plus sub-agents | cost bar |
+| 7 | Cost · context growth | `context-growth-*.png` |
+| 8 | Cost · by skill, MCP server, effort, fast mode (OTEL) | `otel-cost-by-skill.png` |
+| 9 | Cost · one session from every side | mosaic (agent tree, timeline, tool heatmap, call tree) |
+| 10 | Speed · autonomy | mosaic (Session Map, timeline, trace waterfall, lines per hour) |
+| 11 | Live | `live-view.png` |
+| 12 | Context · harness tax | `system-context-anatomy.png` |
+| 13 | Context · what the agent uses | `harness-usage.png` |
+| 14 | Context · knowledge base, verified vs heuristic | `okf-kb-value*.png` |
+| 15 | Quality · what changed and who judged it | `change-surface.png` |
+| 16 | Team · analytics, reports, anomalies | anomaly board |
+| 17 | Team · 13 metrics | mosaic |
+| 18 | Tools · author and admin | tool table + `tools-mcp.png` |
+| 19 | Safety · three layers, hook 2.31.1 evaluator | seal board |
+| 20 | Safety · collected, visible to, kept for | seal board |
+| 21 | Closing — the hook's answer, links | — |
+
+**Home (v2).** Hero: the same hook (`h1` from the dataset), the harness claim in the lead with one
+attributed study figure, "right and useful" and "Log Hub answers the next questions", five
+dimension tiles (`.dimensions a.dimension` → Features C, A, I, I, E); the worked example (step 02
+gains KB and MCP lines, "What to do" a fourth action); the carousel; the harness anatomy strip
+(`section.anatomy`, nine elements → Features blocks); six cards (five dimensions + team scale).
+**Features** has nine blocks A–I ("Nine questions Log Hub answers"); block I is "Was it fast, and
+how far could it go alone?".
+
+**Study figures and sources.** A study figure on a slide or on Home is attributed in its own
+sentence (institution or group, year) and never shares a tile with a dataset figure. An Anthropic
+statement appears only as the vendor's own advice or admission. The source list lives only here
+(and in the task notes), never on the site:
+
+| Figure (where) | Source | Date · status | URL | Check (2026-11-06) |
+|---|---|---|---|---|
+| up to 5× cost per task at similar success (deck 3, Home lead) | HarnessTax — UC Berkeley Sky Computing Lab and Arena | 2026-09 · research blog, not peer-reviewed | https://harnesstax.github.io/ | confirmed: "similar success rates at up to 5x costs"; typical gap 1.5–2.0× |
+| 43 → 72 of 169 tasks fully solved (deck 3) | "Same Model, Different Harness: Different Coding-Agent Results", arXiv 2608.26218 v1 | 2026-08-26 · preprint | https://arxiv.org/abs/2608.26218 | confirmed (abstract, Table 2); the treatment is a harness-only bundle (old tool results, stall detection, command guards) on a SWE-bench Verified subset |
+| 16,581 vs 829 tokens of first-call fixed context, Claude Code vs mini-SWE-agent (deck 3, Speed tile) | Liu, Han, "What Does a Harness Buy? Tokens, Mostly", arXiv 2610.04433 | 2026-10-03 · preprint | https://arxiv.org/abs/2610.04433 | confirmed (16,581 / 7,025 / 829); its "accuracy within 2 pp" secondary claim is wrong (paper: within 5 pts) and is not used |
+| 18 models, performance degrades as input grows (deck 3, Autonomy tile: a long solo run is a growing input) | Chroma, "Context Rot" | 2025-07-14 · industry research report | https://www.trychroma.com/research/context-rot | confirmed |
+| not used: ~7 months doubling of the 50 % task horizon | METR, "Measuring AI Ability to Complete Long Tasks", arXiv 2503.14499 | 2025-03 · preprint | https://arxiv.org/abs/2503.14499 | confirmed, but it measures model progress, not a harness effect, so it left the Autonomy tile (2026-11-06 review) |
+| 36.5 % average success of poisoned MCP tool descriptions, 20 agent settings (deck 3) | MCPTox, arXiv 2508.14925 (AAAI-26) | 2025-08-19 · peer-reviewed | https://arxiv.org/abs/2508.14925 | confirmed (§4.1, §4.2) |
+| 62–100 % MCP injection success, 18 model–server pairs (deck 19) | "Log-To-Leak", arXiv 2610.36108 v1 | 2026-10-26 · preprint | https://arxiv.org/abs/2610.36108 | confirmed (abstract: 62.64–100 %) |
+| LLM judges favour their own output (deck 15) | Panickssery, Bowman, Feng, "LLM Evaluators Recognize and Favor Their Own Generations", NeurIPS 2024 | 2024 · peer-reviewed | https://arxiv.org/abs/2404.13076 | confirmed |
+| vendor advice: read the traces, remove one component at a time (deck 4) | Anthropic, "Harness design for long-running application development" | 2026-03-24 · vendor blog | https://www.anthropic.com/engineering/harness-design-long-running-apps | confirmed (verbatim fragments) |
 
 ## Deploy (`.github/workflows/pages.yml`)
 

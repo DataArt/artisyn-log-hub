@@ -27,7 +27,8 @@ type BadgeCall = Pick<
 /**
  * The one status + permission badge renderer for tool-call rows and headers (DD-3):
  * `⚠ denied` / `⚠ requested` (permission events), then `✗ error`, `⊘ rejected` /
- * `⏸ interrupted`, `output not captured` or — only with `showOk` — `✓ ok`.
+ * `⏸ interrupted`, `output not captured`, `⧗ background` (a backgrounded MCP call with no
+ * completion notification) or — only with `showOk` — `✓ ok`.
  */
 export function StatusBadge({
   call,
@@ -84,6 +85,15 @@ function statusBadge(call: BadgeCall, showOk: boolean) {
       return (
         <span className={cn(BADGE, 'bg-muted text-muted-foreground')}>
           output not captured
+        </span>
+      );
+    case 'background':
+      return (
+        <span
+          className={cn(BADGE, 'bg-muted text-muted-foreground')}
+          title="Moved to the background; no completion notification in this log (still running, or the session ended first)."
+        >
+          ⧗ background
         </span>
       );
     default:

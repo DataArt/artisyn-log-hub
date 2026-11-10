@@ -1,9 +1,11 @@
 <div class="prose">
   <p class="eyebrow">Features</p>
-  <h1>Eight questions Log Hub answers</h1>
-  <p class="lead">Knowing what AI coding costs is right and useful. Each block below starts from the
-    next question — the one the number alone cannot answer — and shows what Log Hub gives you for it
-    and where to find it in the app.</p>
+  <h1>Nine questions Log Hub answers</h1>
+  <p class="lead">Knowing what AI coding costs is right and useful. The harness — CLAUDE.md, rules,
+    skills, hooks, agents, MCP servers, the knowledge base — decides the quality, cost, speed,
+    autonomy and safety of every session. Each block below starts from the next question — the one
+    the number alone cannot answer — and shows what Log Hub gives you for it and where to find it in
+    the app.</p>
   <ul class="toc-inline" aria-label="Blocks on this page">
     <li><a href="#a">A · Why does it cost this much?</a></li>
     <li><a href="#b">B · Does my harness work as designed?</a></li>
@@ -13,6 +15,7 @@
     <li><a href="#f">F · Who or what is off the usual?</a></li>
     <li><a href="#g">G · Does the agent use our knowledge base?</a></li>
     <li><a href="#h">H · Where did the agent struggle?</a></li>
+    <li><a href="#i">I · Was it fast, and how far could it go alone?</a></li>
     <li><a href="#nav">Navigation · How do I find the right view?</a></li>
   </ul>
   <p class="toc-aside">Want to try it? <a href="docs/install-server.html">Get started</a></p>
@@ -38,16 +41,19 @@
           <li>The Turn-End Cost Advisor: an LLM review of the cost after each turn.</li>
           <li>Statistics, Bash and tool-call views: success, error and denial rates, heavy Bash
             commands, files read, changed and run.</li>
+          <li>OTEL cost attribution: cost over time stacked by skill, MCP server, effort level or
+            fast mode, the plan mix, sub-agent cost and hidden calls with no transcript record — in
+            the {{ds:session.total|usd0}} session, the implement skill took {{ds:costShare.skill.implement|pct}} of the
+            session's cost and fast mode {{ds:costShare.fastMode.on|pct}}.</li>
         </ul>
       </dd>
       <dt>Where in the app</dt>
       <dd>Session view → Summary, Charts (Context Growth, Context usage, Agent tree), Statistics,
-        Bash, Advisor tabs. See <a href="docs/cost-and-context.html">Understanding Cost &amp;
+        Bash, Advisor and OTEL tabs; repository → OTEL tab. See <a href="docs/cost-and-context.html">Understanding Cost &amp;
         Context</a>.</dd>
     </dl>
   </div>
   <figure class="figure-block" aria-labelledby="a-figure-title">
-    <span class="illustrative">Illustrative example</span>
     <figcaption id="a-figure-title">A team of {{ds:team.developers}} developers, {{ds:team.period}}</figcaption>
     <table>
       <tbody>
@@ -71,6 +77,9 @@
         <ul>
           <li>The system context — CLAUDE.md, rules, skills, agents, MCP servers — and its size in
             tokens: the "tax" every turn pays before any work starts.</li>
+          <li>System context anatomy: the startup context split by source, with a drill-down to each
+            skill, file and MCP server, the skills synced from the organization and the git status of
+            each file.</li>
           <li>Harness usage: which skills, rules, workflows, MCP servers and tools the session tree
             actually used, and how often. A harness snapshot is kept per session, so you can compare
             sessions before and after a harness change.</li>
@@ -84,11 +93,11 @@
         </ul>
       </dd>
       <dt>Where in the app</dt>
-      <dd>Session view → Charts (Context usage), Harness usage, OKF and Tools/MCP tabs; repository
-        → OKF and Tools/MCP tabs. See <a href="docs/session-log.html">Session Log</a>.</dd>
+      <dd>Session view → System context anatomy, Charts (Context usage), Harness usage, OKF and
+        Tools/MCP tabs; repository → OKF and Tools/MCP tabs. See <a href="docs/session-log.html">Session Log</a>.</dd>
     </dl>
   </div>
-  <figure class="shot"><img src="assets/shots/context-usage.png" alt="Context Usage: system context split into system files, MCP definitions, skills and built-in tools, next to tool results and conversation history" loading="lazy"><figcaption>Session → Charts → Context Usage · real screen, demo repository</figcaption></figure>
+  <figure class="shot"><img src="assets/shots/system-context-anatomy.png" alt="System context anatomy: 51,524 startup tokens split by source — system prompt, memory, MCP servers, subagent types, skills listing, instruction files, first prompt and harness internals — with bytes, tokens and share" loading="lazy"><figcaption>Session → System context anatomy</figcaption></figure>
 </section>
 
 <section class="feature" id="c" aria-labelledby="c-title">
@@ -111,7 +120,7 @@
         Settings → Session Attributes.</dd>
     </dl>
   </div>
-  <figure class="shot"><img src="assets/shots/change-surface.png" alt="Change Surface tab: 14 files in 9 folders, concentration 20 of 100, lines added and removed" loading="lazy"><figcaption>Session → Change surface · real screen, demo repository</figcaption></figure>
+  <figure class="shot"><img src="assets/shots/change-surface.png" alt="Change Surface tab: 14 files in 9 folders, concentration 20 of 100, lines added and removed" loading="lazy"><figcaption>Session → Change surface</figcaption></figure>
 </section>
 
 <section class="feature" id="d" aria-labelledby="d-title">
@@ -134,7 +143,7 @@
         <a href="docs/analytics-reports.html">Analytics &amp; Reports</a>.</dd>
     </dl>
   </div>
-  <figure class="shot"><img src="assets/shots/analytics.png" alt="Repository analytics: work time per hour, stacked by session, coloured by share of the period" loading="lazy"><figcaption>Repository → Analytics · real screen, demo repository</figcaption></figure>
+  <figure class="shot"><img src="assets/shots/analytics.png" alt="Repository analytics: work time per hour, stacked by session, colored by share of the period" loading="lazy"><figcaption>Repository → Analytics</figcaption></figure>
 </section>
 
 <section class="feature" id="e" aria-labelledby="e-title">
@@ -153,6 +162,10 @@
           <li>For admins and team leads: is the tool called at all, by whom, how often, with what
             error %; does the agent trust its output (<code>opened file</code>) or abandon it
             (<code>retried</code>) — the basis to keep, tune or remove it.</li>
+          <li>For security: every tool answer and every permission denial is readable, so the
+            prompt-injection surface of each MCP server is visible. The optional post-turn evaluator
+            (hook 2.31.1) runs without tools, MCP servers or skills, so the session it reviews cannot
+            act through it.</li>
         </ul>
       </dd>
       <dt>Where in the app</dt>
@@ -161,8 +174,7 @@
     </dl>
   </div>
   <figure class="figure-block" aria-labelledby="e-figure-title">
-    <span class="illustrative">Illustrative example</span>
-    <figcaption id="e-figure-title">Tools of the example team, {{ds:team.period}}</figcaption>
+    <figcaption id="e-figure-title">Tools of a team of {{ds:team.developers}} developers, {{ds:team.period}}</figcaption>
     <table>
       <thead>
         <tr>
@@ -206,7 +218,6 @@
     </dl>
   </div>
   <figure class="figure-block" aria-labelledby="f-figure-title">
-    <span class="illustrative">Illustrative example</span>
     <figcaption id="f-figure-title">What the reports surface for a team, {{ds:team.period}}</figcaption>
     <table>
       <thead><tr><th scope="col">Signal</th><th scope="col" class="num">Value</th><th scope="col" class="num">Baseline</th></tr></thead>
@@ -235,14 +246,24 @@
             read in the period; the hottest files.</li>
           <li>A verdict on the layout, with concrete hints — "this article is read in five sessions,
             split it or add section pointers". No LLM involved.</li>
+          <li>KB value in two parts. A · verified checks, counted from tool calls: KB sessions, flood,
+            an article read in ≥ 80 % of KB sessions (it belongs in always-loaded context), coarse
+            articles, dead pointers. B · heuristic signals to check by hand: pointer yield, routing
+            misses, searches after reading, and the agent's trail.</li>
+          <li>Thresholds per repository.</li>
         </ul>
       </dd>
       <dt>Where in the app</dt>
       <dd>Session view → OKF tab; Repository → OKF tab for a period, per bundle and branch.</dd>
     </dl>
   </div>
-  <figure class="shot"><img src="assets/shots/okf-usage.png" alt="Repository OKF tab: verdict Something to fix with two hints, KB files, files not read in the period, sessions that touched the KB, read heat per file and the hottest files" loading="lazy"><figcaption>Repository → OKF · real screen, Log Hub repository</figcaption></figure>
+  <figure class="shot"><img src="assets/shots/okf-usage.png" alt="Repository OKF tab: verdict Something to fix with two hints, KB files, files not read in the period, sessions that touched the KB, read heat per file and the hottest files" loading="lazy"><figcaption>Repository → OKF</figcaption></figure>
 </section>
+
+<div class="shot-grid" aria-label="Knowledge-base value screens">
+  <figure class="shot"><img src="assets/shots/okf-kb-value.png" alt="Repository OKF tab, A · how the KB was navigated (verified): verdict Something to fix and the checks counted from tool calls" loading="lazy"><figcaption>Repository → OKF → A · verified checks</figcaption></figure>
+  <figure class="shot"><img src="assets/shots/okf-kb-value-heuristic.png" alt="Repository OKF tab, B · did the articles help (heuristic, check by hand): pointer yield and articles with routing misses" loading="lazy"><figcaption>Repository → OKF → B · heuristic signals</figcaption></figure>
+</div>
 
 <section class="feature" id="h" aria-labelledby="h-title">
   <div>
@@ -264,8 +285,55 @@
         <a href="docs/session-log.html">Session Log</a>.</dd>
     </dl>
   </div>
-  <figure class="shot"><img src="assets/shots/tool-analytics.png" alt="Tool analytics: Bash 43 calls 97.7% success, Edit and Write 100%, PowerShell 85.7% with one failure" loading="lazy"><figcaption>Session → Statistics → Tool analytics · real screen, demo repository</figcaption></figure>
+  <figure class="shot"><img src="assets/shots/tool-analytics.png" alt="Tool analytics: Bash 43 calls 97.7% success, Edit and Write 100%, PowerShell 85.7% with one failure" loading="lazy"><figcaption>Session → Statistics → Tool analytics</figcaption></figure>
 </section>
+
+<section class="feature" id="i" aria-labelledby="i-title">
+  <div>
+    <h2 id="i-title"><span class="block-marker">I</span>Was it fast, and how far could it go alone?</h2>
+    <dl>
+      <dt>What it shows</dt>
+      <dd>
+        <ul>
+          <li>Session Map: a live and replayable map of the agent tree, with per-card cost, tool mix
+            and context bars.</li>
+          <li>Timeline: every turn and sub-agent on one time axis — where agents waited on each
+            other.</li>
+          <li>The OTEL per-turn trace waterfall: model requests, tool calls and permission waits of
+            one turn, so you see which step ate the time.</li>
+          <li>Lines per autonomous hour and the autonomous work time of each session.</li>
+          <li>The Agents table: each sub-agent labeled by its task, with a Phase column for workflow
+            agents.</li>
+          <li>Live: the sessions running now, tokens and cost of the last two hours, and the cost
+            flow from each model down to team, user, repository, session and agent.</li>
+        </ul>
+      </dd>
+      <dt>Where in the app</dt>
+      <dd>Session view → Session Map, Timeline, OTEL and Info (Agents) tabs; repository → Analytics
+        (lines per autonomous hour); top bar → Live.</dd>
+    </dl>
+  </div>
+  <figure class="figure-block" aria-labelledby="i-figure-title">
+    <figcaption id="i-figure-title">One session, {{ds:session.durationMin}} minutes</figcaption>
+    <table>
+      <tbody>
+        <tr><td>Wall-clock time</td><td class="num">{{ds:session.durationMin}} min</td></tr>
+        <tr><td>Autonomous</td><td class="num">{{ds:session.autonomousMin}} min</td></tr>
+        <tr><td>Lines changed</td><td class="num">{{ds:session.linesChanged}}</td></tr>
+        <tr><td>Sub-agents · parallel peak</td><td class="num">{{ds:session.subAgents}} · {{ds:session.parallelPeak}}</td></tr>
+      </tbody>
+    </table>
+    <div class="key-figure">{{ds:productivity.linesPerAutoHour}}</div>
+    <p>lines per autonomous hour — {{ds:session.linesChanged}} lines in {{ds:session.autonomousMin}}
+      minutes without a human turn.</p>
+  </figure>
+</section>
+
+<div class="shot-grid" aria-label="Speed and autonomy screens">
+  <figure class="shot"><img src="assets/shots/session-map.png" alt="Session Map replay of a workflow session: the main session card and agent cards with cost, tool mix and context bars" loading="lazy"><figcaption>Session → Session Map (replay)</figcaption></figure>
+  <figure class="shot"><img src="assets/shots/trace-waterfall.png" alt="OTEL trace waterfall of one turn: model requests, tool calls, permission waits and execution on one time axis" loading="lazy"><figcaption>Session → OTEL → Traces</figcaption></figure>
+  <figure class="shot"><img src="assets/shots/live-view.png" alt="Live view: tree of team, repository, sessions and agents with cost, tiles for cost, tokens, live sessions and cost per minute, and tokens over the last two hours" loading="lazy"><figcaption>Top bar → Live</figcaption></figure>
+</div>
 
 <section class="feature" id="nav" aria-labelledby="nav-title">
   <div>
@@ -294,11 +362,11 @@
         Log → Views and tabs</a> and <a href="docs/all-views.html">All views</a>.</dd>
     </dl>
   </div>
-  <figure class="shot"><img src="assets/shots/nav-lenses.png" alt="One row of session tabs: the View select on Cost, then Summary, Statistics, Call Tree, Context Growth and Dashboard, and the More menu open with the other tabs under Overview, Transcript, Cost and context and Effects" loading="lazy"><figcaption>Session → View: Cost → More · real screen, demo repository</figcaption></figure>
+  <figure class="shot"><img src="assets/shots/nav-lenses.png" alt="One row of session tabs: the View select on Cost, then Summary, Statistics, Call Tree, Context Growth and Dashboard, and the More menu open with the other tabs under Overview, Transcript, Cost and context and Effects" loading="lazy"><figcaption>Session → View: Cost → More</figcaption></figure>
 </section>
 
 <div class="shot-grid" aria-label="More navigation screens">
-  <figure class="shot"><img src="assets/shots/nav-chart-tabs.png" alt="View: All tabs, with Call Tree open as a session tab of its own: the cost of every call of the session as a tree with token counts and cost shares" loading="lazy"><figcaption>Session → View: All tabs → Call Tree · real screen, demo repository</figcaption></figure>
-  <figure class="shot"><img src="assets/shots/summary-hub.png" alt="Session Summary: the cost, context, turns and code impact tiles, then Where to look next cards for Statistics, Charts, Info, Change surface, Bash, Tools/MCP and OKF, and Explore chips" loading="lazy"><figcaption>Session → Summary → Where to look next · real screen, demo repository</figcaption></figure>
-  <figure class="shot"><img src="assets/shots/all-views-map.png" alt="All views map filtered by cost: 19 of 97 views match, the matches highlighted in the tree of teams, repositories, analytics views and reports" loading="lazy"><figcaption>Top bar → All views, filter "cost" · real screen, demo repository</figcaption></figure>
+  <figure class="shot"><img src="assets/shots/nav-chart-tabs.png" alt="View: All tabs, with Call Tree open as a session tab of its own: the cost of every call of the session as a tree with token counts and cost shares" loading="lazy"><figcaption>Session → View: All tabs → Call Tree</figcaption></figure>
+  <figure class="shot"><img src="assets/shots/summary-hub.png" alt="Session Summary: the cost, context, turns and code impact tiles, then Where to look next cards for Statistics, Charts, Info, Change surface, Bash, Tools/MCP and OKF, and Explore chips" loading="lazy"><figcaption>Session → Summary → Where to look next</figcaption></figure>
+  <figure class="shot"><img src="assets/shots/all-views-map.png" alt="All views map filtered by cost: 19 of 97 views match, the matches highlighted in the tree of teams, repositories, analytics views and reports" loading="lazy"><figcaption>Top bar → All views, filter "cost"</figcaption></figure>
 </div>

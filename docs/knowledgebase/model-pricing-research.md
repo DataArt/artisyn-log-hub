@@ -37,7 +37,7 @@ The three cache-write/web-search columns each need their own lookup, and all thr
 `price_cache_r` is **not** safely derivable either. It was `0.1 × price_in` on every model until
 Anthropic started publishing per-model exceptions: as of 2026-09-23 the multiplier is `0.025×` on
 Claude Fable 5.1 / Mythos 5.1 ($0.25) and `0.05×` on Claude Opus 5.5 ($0.20), while everything else
-stays at `0.1×`. Always read the cache-hit column off the pricing page per model instead of
+stays at `0.1×` (Fable 5.2 / Mythos 5.2, added 2026-11-10, are `0.025×` too: $0.20). Always read the cache-hit column off the pricing page per model instead of
 multiplying `price_in` (see `0064_model_pricing_2026_09_refresh.sql`).
 
 Prompt-length tiers live in the `tiers` jsonb column (`model_pricing.tiers`, mirrored by
@@ -268,6 +268,9 @@ The latest refresh is `0064_model_pricing_2026_09_refresh.sql` (2026-09-23): it 
 Fable 5.1 and Mythos 5.1, gave Sonnet 5 a `2026-09-01` row at $2/$10 (the scheduled increase to
 $3/$15 was cancelled, so the docs' "standard" rate is now the launch rate), and added the missing
 dateless rows `claude-sonnet-4-5`, `claude-sonnet-4`, `claude-opus-4` and `claude-3-5-haiku`.
+`0092_model_pricing_fable_5_2.sql` (2026-11-10) adds Fable 5.2 and Mythos 5.2 ($8 / $40, 1M context,
+effective 2026-11-09) for installations without the daily Anthropic fetch. It never overrides an
+existing row and only fills NULL `chars_per_token` / `context_length` on rows the fetch already wrote.
 
 **Store the dateless (alias) id.** Every cost lookup — server SQL (`REGEXP_REPLACE(model, '-[0-9]{8}$', '')`)
 and both client parsers (`.replace(/-\d{8}$/, '')`) — strips a `-YYYYMMDD` suffix before matching,

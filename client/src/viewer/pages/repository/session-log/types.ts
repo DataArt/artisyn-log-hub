@@ -195,9 +195,15 @@ export type ToolSection = 'file' | 'skill' | 'agent' | 'tool';
 
 /**
  * Outcome of a tool call (DD-3): `'missing'` = no result captured, `'rejected'` = denied by the
- * user/a rule or interrupted, `'error'` = `is_error` result, `'success'` otherwise.
+ * user/a rule or interrupted, `'error'` = `is_error` result, `'background'` = an MCP call moved to
+ * the background with no completion notification in the log, `'success'` otherwise.
  */
-export type ToolCallStatus = 'success' | 'error' | 'rejected' | 'missing';
+export type ToolCallStatus =
+  | 'success'
+  | 'error'
+  | 'rejected'
+  | 'missing'
+  | 'background';
 
 export interface ToolCallDetail {
   id?: string;
