@@ -39,6 +39,30 @@
 </head>
 <body>
 <a class="deck-exit" href="../index.html">← Log Hub site</a>
+<!-- The deck map: the slide after "black box" and every group divider clone it (script at the
+     end); a divider highlights its own group via data-active. -->
+<template id="deck-map">
+  <div class="deck-map">
+    <div class="map-problem">
+      <p class="map-tag">Black box</p>
+      <p class="map-figures">{{ds:session.durationMin}} minutes alone<br>{{ds:session.total|usd0}} spent<br>feature shipped</p>
+      <p class="map-question">All good?</p>
+    </div>
+    <p class="map-arrow" aria-hidden="true">→</p>
+    <ol class="map-nodes">
+      <li data-group="harness"><span class="map-no">01 · harness</span><b>Nine parts, each with a view</b></li>
+      <li data-group="cost"><span class="map-no">02 · cost</span><b>Was {{ds:session.total|usd0}} a lot?</b></li>
+      <li data-group="speed"><span class="map-no">03 · speed</span><b>How fast, how far alone?</b></li>
+      <li data-group="context"><span class="map-no">04 · context</span><b>What it loads, what it uses</b></li>
+      <li data-group="quality"><span class="map-no">05 · quality</span><b>What changed, and what about</b></li>
+      <li data-group="team"><span class="map-no">06 · team</span><b>Across every session</b></li>
+      <li data-group="tools"><span class="map-no">07 · tools</span><b>Does this tool work?</b></li>
+      <li data-group="safety"><span class="map-no">08 · safety</span><b>What the agent read and sent</b></li>
+      <li data-group="trust"><span class="map-no">09 · trust</span><b>Log Hub's own data</b></li>
+    </ol>
+  </div>
+</template>
+
 <div class="reveal">
 <div class="slides">
 
@@ -60,7 +84,7 @@
   <div class="slide-frame">
     <header class="slide-head">
       <p class="block-marker">The hook</p>
-      <ol class="pills" aria-label="Storyline"><li class="active">hook</li><li>harness</li><li>cost</li><li>speed</li><li>context</li><li>quality</li><li>team</li><li>tools</li><li>safety</li></ol>
+      <ol class="pills" aria-label="Storyline"><li class="active">hook</li><li>harness</li><li>cost</li><li>speed</li><li>context</li><li>quality</li><li>team</li><li>tools</li><li>safety</li><li>trust</li></ol>
     </header>
     <h2 class="headline">It ran alone for {{ds:session.durationMin}} minutes, cost {{ds:session.total|usd0}} and {{ds:session.outcome}}. All good?</h2>
     <div class="hook-cols">
@@ -96,7 +120,7 @@
   <div class="slide-frame">
     <header class="slide-head">
       <p class="block-marker">The harness decides</p>
-      <ol class="pills" aria-label="Storyline"><li>hook</li><li class="active">harness</li><li>cost</li><li>speed</li><li>context</li><li>quality</li><li>team</li><li>tools</li><li>safety</li></ol>
+      <ol class="pills" aria-label="Storyline"><li>hook</li><li class="active">harness</li><li>cost</li><li>speed</li><li>context</li><li>quality</li><li>team</li><li>tools</li><li>safety</li><li>trust</li></ol>
     </header>
     <h2 class="headline">The harness moves all five: quality, cost, speed, autonomy, safety.</h2>
     <div class="slide-body">
@@ -120,7 +144,7 @@
   <div class="slide-frame">
     <header class="slide-head">
       <p class="block-marker">Black box or glass box</p>
-      <ol class="pills" aria-label="Storyline"><li>hook</li><li class="active">harness</li><li>cost</li><li>speed</li><li>context</li><li>quality</li><li>team</li><li>tools</li><li>safety</li></ol>
+      <ol class="pills" aria-label="Storyline"><li>hook</li><li class="active">harness</li><li>cost</li><li>speed</li><li>context</li><li>quality</li><li>team</li><li>tools</li><li>safety</li><li>trust</li></ol>
     </header>
     <h2 class="headline">Tuned as a black box. Log Hub opens it.</h2>
     <div class="slide-cols">
@@ -156,12 +180,24 @@
   </div>
 </section>
 
-<!-- 5 · Anatomy of an ADLC harness -->
+<!-- 5 · Map: from the black box to the nine groups that follow -->
+<section class="map-slide" data-slide="map">
+  <div class="slide-frame">
+    <header class="slide-head">
+      <p class="block-marker">From the black box to the answers</p>
+    </header>
+    <h2 class="headline">One “All good?”, nine places to look.</h2>
+    <div class="map-host"></div>
+    <p class="slide-footer">{{site:url}}</p>
+  </div>
+</section>
+
+<!-- 6 · Anatomy of an ADLC harness -->
 <section class="content-slide" data-block="harness">
   <div class="slide-frame">
     <header class="slide-head">
       <p class="block-marker">Anatomy of a harness</p>
-      <ol class="pills" aria-label="Storyline"><li>hook</li><li class="active">harness</li><li>cost</li><li>speed</li><li>context</li><li>quality</li><li>team</li><li>tools</li><li>safety</li></ol>
+      <ol class="pills" aria-label="Storyline"><li>hook</li><li class="active">harness</li><li>cost</li><li>speed</li><li>context</li><li>quality</li><li>team</li><li>tools</li><li>safety</li><li>trust</li></ol>
     </header>
     <h2 class="headline">Nine parts. Each one has a view.</h2>
     <div class="slide-cols">
@@ -194,12 +230,24 @@
   </div>
 </section>
 
-<!-- 6 · Cost: four prices plus sub-agents -->
+<!-- 7 · Divider: cost -->
+<section class="divider-slide" data-slide="divider" data-group="cost">
+  <div class="slide-frame">
+    <header class="slide-head">
+      <p class="block-marker">Part 2 of 9 · cost</p>
+    </header>
+    <h2 class="headline">Cost: was {{ds:session.total|usd0}} a lot?</h2>
+    <div class="map-host" data-active="cost"></div>
+    <p class="slide-footer">{{site:url}}</p>
+  </div>
+</section>
+
+<!-- 8 · Cost: four prices plus sub-agents -->
 <section class="content-slide" data-block="cost">
   <div class="slide-frame">
     <header class="slide-head">
       <p class="block-marker">Cost · was {{ds:session.total|usd0}} a lot?</p>
-      <ol class="pills" aria-label="Storyline"><li>hook</li><li>harness</li><li class="active">cost</li><li>speed</li><li>context</li><li>quality</li><li>team</li><li>tools</li><li>safety</li></ol>
+      <ol class="pills" aria-label="Storyline"><li>hook</li><li>harness</li><li class="active">cost</li><li>speed</li><li>context</li><li>quality</li><li>team</li><li>tools</li><li>safety</li><li>trust</li></ol>
     </header>
     <h2 class="headline">One {{ds:session.total|usd0}} session: four token prices, plus <span class="nowrap">sub-agents</span>.</h2>
     <div class="slide-cols">
@@ -235,12 +283,12 @@
   </div>
 </section>
 
-<!-- 7 · Cost: context growth -->
+<!-- 9 · Cost: context growth -->
 <section class="content-slide" data-block="cost">
   <div class="slide-frame">
     <header class="slide-head">
       <p class="block-marker">Cost · was {{ds:session.total|usd0}} a lot?</p>
-      <ol class="pills" aria-label="Storyline"><li>hook</li><li>harness</li><li class="active">cost</li><li>speed</li><li>context</li><li>quality</li><li>team</li><li>tools</li><li>safety</li></ol>
+      <ol class="pills" aria-label="Storyline"><li>hook</li><li>harness</li><li class="active">cost</li><li>speed</li><li>context</li><li>quality</li><li>team</li><li>tools</li><li>safety</li><li>trust</li></ol>
     </header>
     <h2 class="headline">Context growth, not output, drives the bill.</h2>
     <div class="slide-cols">
@@ -266,12 +314,12 @@
   </div>
 </section>
 
-<!-- 8 · Cost: OTEL attribution by skill, MCP server, effort, fast mode -->
+<!-- 10 · Cost: OTEL attribution by skill, MCP server, effort, fast mode -->
 <section class="content-slide" data-block="cost">
   <div class="slide-frame">
     <header class="slide-head">
       <p class="block-marker">Cost · was {{ds:session.total|usd0}} a lot?</p>
-      <ol class="pills" aria-label="Storyline"><li>hook</li><li>harness</li><li class="active">cost</li><li>speed</li><li>context</li><li>quality</li><li>team</li><li>tools</li><li>safety</li></ol>
+      <ol class="pills" aria-label="Storyline"><li>hook</li><li>harness</li><li class="active">cost</li><li>speed</li><li>context</li><li>quality</li><li>team</li><li>tools</li><li>safety</li><li>trust</li></ol>
     </header>
     <h2 class="headline">Which skill and MCP server spent the money.</h2>
     <div class="slide-cols">
@@ -292,12 +340,12 @@
   </div>
 </section>
 
-<!-- 9 · Cost: one session from every side (mosaic of real charts) -->
+<!-- 11 · Cost: one session from every side (mosaic of real charts) -->
 <section class="content-slide mosaic-slide" data-block="cost">
   <div class="slide-frame">
     <header class="slide-head">
       <p class="block-marker">Cost · was {{ds:session.total|usd0}} a lot?</p>
-      <ol class="pills" aria-label="Storyline"><li>hook</li><li>harness</li><li class="active">cost</li><li>speed</li><li>context</li><li>quality</li><li>team</li><li>tools</li><li>safety</li></ol>
+      <ol class="pills" aria-label="Storyline"><li>hook</li><li>harness</li><li class="active">cost</li><li>speed</li><li>context</li><li>quality</li><li>team</li><li>tools</li><li>safety</li><li>trust</li></ol>
     </header>
     <h2 class="headline">Dozens of charts show one session from every side.</h2>
     <div class="slide-cols">
@@ -319,12 +367,12 @@
   </div>
 </section>
 
-<!-- 10 · Cost: budgets, forecast and threshold notices (no dataset figure on this slide) -->
+<!-- 12 · Cost: budgets, forecast and threshold notices (no dataset figure on this slide) -->
 <section class="content-slide" data-block="cost">
   <div class="slide-frame">
     <header class="slide-head">
       <p class="block-marker">Cost · was {{ds:session.total|usd0}} a lot?</p>
-      <ol class="pills" aria-label="Storyline"><li>hook</li><li>harness</li><li class="active">cost</li><li>speed</li><li>context</li><li>quality</li><li>team</li><li>tools</li><li>safety</li></ol>
+      <ol class="pills" aria-label="Storyline"><li>hook</li><li>harness</li><li class="active">cost</li><li>speed</li><li>context</li><li>quality</li><li>team</li><li>tools</li><li>safety</li><li>trust</li></ol>
     </header>
     <h2 class="headline">A budget turns the bill into a forecast.</h2>
     <div class="slide-cols">
@@ -341,12 +389,24 @@
   </div>
 </section>
 
-<!-- 11 · Speed and autonomy (mosaic) -->
+<!-- 13 · Divider: speed -->
+<section class="divider-slide" data-slide="divider" data-group="speed">
+  <div class="slide-frame">
+    <header class="slide-head">
+      <p class="block-marker">Part 3 of 9 · speed</p>
+    </header>
+    <h2 class="headline">Speed: how fast, and how far could it go alone?</h2>
+    <div class="map-host" data-active="speed"></div>
+    <p class="slide-footer">{{site:url}}</p>
+  </div>
+</section>
+
+<!-- 14 · Speed and autonomy (mosaic) -->
 <section class="content-slide mosaic-slide" data-block="speed">
   <div class="slide-frame">
     <header class="slide-head">
       <p class="block-marker">Speed · autonomy</p>
-      <ol class="pills" aria-label="Storyline"><li>hook</li><li>harness</li><li>cost</li><li class="active">speed</li><li>context</li><li>quality</li><li>team</li><li>tools</li><li>safety</li></ol>
+      <ol class="pills" aria-label="Storyline"><li>hook</li><li>harness</li><li>cost</li><li class="active">speed</li><li>context</li><li>quality</li><li>team</li><li>tools</li><li>safety</li><li>trust</li></ol>
     </header>
     <h2 class="headline">Was it fast, and how far could it go alone?</h2>
     <div class="slide-cols">
@@ -374,12 +434,12 @@
   </div>
 </section>
 
-<!-- 12 · Live -->
+<!-- 15 · Live -->
 <section class="content-slide" data-block="speed">
   <div class="slide-frame">
     <header class="slide-head">
       <p class="block-marker">Live</p>
-      <ol class="pills" aria-label="Storyline"><li>hook</li><li>harness</li><li>cost</li><li class="active">speed</li><li>context</li><li>quality</li><li>team</li><li>tools</li><li>safety</li></ol>
+      <ol class="pills" aria-label="Storyline"><li>hook</li><li>harness</li><li>cost</li><li class="active">speed</li><li>context</li><li>quality</li><li>team</li><li>tools</li><li>safety</li><li>trust</li></ol>
     </header>
     <h2 class="headline">See the session while it runs.</h2>
     <div class="slide-cols">
@@ -400,12 +460,24 @@
   </div>
 </section>
 
-<!-- 13 · Context: harness tax -->
+<!-- 16 · Divider: context -->
+<section class="divider-slide" data-slide="divider" data-group="context">
+  <div class="slide-frame">
+    <header class="slide-head">
+      <p class="block-marker">Part 4 of 9 · context</p>
+    </header>
+    <h2 class="headline">Context: what the harness loads, and what the agent uses.</h2>
+    <div class="map-host" data-active="context"></div>
+    <p class="slide-footer">{{site:url}}</p>
+  </div>
+</section>
+
+<!-- 17 · Context: harness tax -->
 <section class="content-slide" data-block="context">
   <div class="slide-frame">
     <header class="slide-head">
       <p class="block-marker">Context · what the harness loads</p>
-      <ol class="pills" aria-label="Storyline"><li>hook</li><li>harness</li><li>cost</li><li>speed</li><li class="active">context</li><li>quality</li><li>team</li><li>tools</li><li>safety</li></ol>
+      <ol class="pills" aria-label="Storyline"><li>hook</li><li>harness</li><li>cost</li><li>speed</li><li class="active">context</li><li>quality</li><li>team</li><li>tools</li><li>safety</li><li>trust</li></ol>
     </header>
     <h2 class="headline">Your harness charges a tax on every turn.</h2>
     <div class="slide-cols">
@@ -426,12 +498,12 @@
   </div>
 </section>
 
-<!-- 14 · Context: harness usage + Tools/MCP -->
+<!-- 18 · Context: harness usage + Tools/MCP -->
 <section class="content-slide" data-block="context">
   <div class="slide-frame">
     <header class="slide-head">
       <p class="block-marker">Context · what the agent uses</p>
-      <ol class="pills" aria-label="Storyline"><li>hook</li><li>harness</li><li>cost</li><li>speed</li><li class="active">context</li><li>quality</li><li>team</li><li>tools</li><li>safety</li></ol>
+      <ol class="pills" aria-label="Storyline"><li>hook</li><li>harness</li><li>cost</li><li>speed</li><li class="active">context</li><li>quality</li><li>team</li><li>tools</li><li>safety</li><li>trust</li></ol>
     </header>
     <h2 class="headline">What the agent uses, and what it ignores.</h2>
     <div class="slide-cols">
@@ -452,12 +524,12 @@
   </div>
 </section>
 
-<!-- 15 · Context: knowledge base -->
+<!-- 19 · Context: knowledge base -->
 <section class="content-slide" data-block="context">
   <div class="slide-frame">
     <header class="slide-head">
       <p class="block-marker">Context · knowledge base</p>
-      <ol class="pills" aria-label="Storyline"><li>hook</li><li>harness</li><li>cost</li><li>speed</li><li class="active">context</li><li>quality</li><li>team</li><li>tools</li><li>safety</li></ol>
+      <ol class="pills" aria-label="Storyline"><li>hook</li><li>harness</li><li>cost</li><li>speed</li><li class="active">context</li><li>quality</li><li>team</li><li>tools</li><li>safety</li><li>trust</li></ol>
     </header>
     <h2 class="headline">Knowledge base: second brain, or ballast?</h2>
     <div class="slide-cols">
@@ -485,12 +557,24 @@
   </div>
 </section>
 
-<!-- 16 · Quality: change surface + evaluator -->
+<!-- 20 · Divider: quality -->
+<section class="divider-slide" data-slide="divider" data-group="quality">
+  <div class="slide-frame">
+    <header class="slide-head">
+      <p class="block-marker">Part 5 of 9 · quality</p>
+    </header>
+    <h2 class="headline">Quality: what changed, and what it was about.</h2>
+    <div class="map-host" data-active="quality"></div>
+    <p class="slide-footer">{{site:url}}</p>
+  </div>
+</section>
+
+<!-- 21 · Quality: change surface + evaluator -->
 <section class="content-slide" data-block="quality">
   <div class="slide-frame">
     <header class="slide-head">
       <p class="block-marker">Quality · the right thing?</p>
-      <ol class="pills" aria-label="Storyline"><li>hook</li><li>harness</li><li>cost</li><li>speed</li><li>context</li><li class="active">quality</li><li>team</li><li>tools</li><li>safety</li></ol>
+      <ol class="pills" aria-label="Storyline"><li>hook</li><li>harness</li><li>cost</li><li>speed</li><li>context</li><li class="active">quality</li><li>team</li><li>tools</li><li>safety</li><li>trust</li></ol>
     </header>
     <h2 class="headline">What changed, and what it was about.</h2>
     <div class="slide-cols">
@@ -511,12 +595,24 @@
   </div>
 </section>
 
-<!-- 17 · Team: analytics, reports, anomalies -->
+<!-- 22 · Divider: team -->
+<section class="divider-slide" data-slide="divider" data-group="team">
+  <div class="slide-frame">
+    <header class="slide-head">
+      <p class="block-marker">Part 6 of 9 · team</p>
+    </header>
+    <h2 class="headline">Team: the whole team’s AI work.</h2>
+    <div class="map-host" data-active="team"></div>
+    <p class="slide-footer">{{site:url}}</p>
+  </div>
+</section>
+
+<!-- 23 · Team: analytics, reports, anomalies -->
 <section class="content-slide" data-block="team">
   <div class="slide-frame">
     <header class="slide-head">
       <p class="block-marker">Team · across every session</p>
-      <ol class="pills" aria-label="Storyline"><li>hook</li><li>harness</li><li>cost</li><li>speed</li><li>context</li><li>quality</li><li class="active">team</li><li>tools</li><li>safety</li></ol>
+      <ol class="pills" aria-label="Storyline"><li>hook</li><li>harness</li><li>cost</li><li>speed</li><li>context</li><li>quality</li><li class="active">team</li><li>tools</li><li>safety</li><li>trust</li></ol>
     </header>
     <h2 class="headline">The whole team's AI work, and what deviates.</h2>
     <div class="slide-cols">
@@ -548,12 +644,12 @@
   </div>
 </section>
 
-<!-- 18 · Team: the team data from every side (mosaic of real charts) -->
+<!-- 24 · Team: the team data from every side (mosaic of real charts) -->
 <section class="content-slide mosaic-slide" data-block="team">
   <div class="slide-frame">
     <header class="slide-head">
       <p class="block-marker">Team · across every session</p>
-      <ol class="pills" aria-label="Storyline"><li>hook</li><li>harness</li><li>cost</li><li>speed</li><li>context</li><li>quality</li><li class="active">team</li><li>tools</li><li>safety</li></ol>
+      <ol class="pills" aria-label="Storyline"><li>hook</li><li>harness</li><li>cost</li><li>speed</li><li>context</li><li>quality</li><li class="active">team</li><li>tools</li><li>safety</li><li>trust</li></ol>
     </header>
     <h2 class="headline">Team data from every side: 13 metrics.</h2>
     <div class="slide-cols">
@@ -575,12 +671,24 @@
   </div>
 </section>
 
-<!-- 19 · Tools: author and admin (former E1 + E2, both visuals kept) -->
+<!-- 25 · Divider: tools -->
+<section class="divider-slide" data-slide="divider" data-group="tools">
+  <div class="slide-frame">
+    <header class="slide-head">
+      <p class="block-marker">Part 7 of 9 · tools</p>
+    </header>
+    <h2 class="headline">Tools: does this tool work?</h2>
+    <div class="map-host" data-active="tools"></div>
+    <p class="slide-footer">{{site:url}}</p>
+  </div>
+</section>
+
+<!-- 26 · Tools: author and admin (former E1 + E2, both visuals kept) -->
 <section class="content-slide" data-block="tools">
   <div class="slide-frame">
     <header class="slide-head">
       <p class="block-marker">Tools · does this tool work?</p>
-      <ol class="pills" aria-label="Storyline"><li>hook</li><li>harness</li><li>cost</li><li>speed</li><li>context</li><li>quality</li><li>team</li><li class="active">tools</li><li>safety</li></ol>
+      <ol class="pills" aria-label="Storyline"><li>hook</li><li>harness</li><li>cost</li><li>speed</li><li>context</li><li>quality</li><li>team</li><li class="active">tools</li><li>safety</li><li>trust</li></ol>
     </header>
     <h2 class="headline">Authors see every call; admins see if the tool is worth it.</h2>
     <div class="slide-cols">
@@ -610,31 +718,86 @@
   </div>
 </section>
 
-<!-- 20 · Safety (replaces F1) -->
+<!-- 27 · Divider: safety -->
+<section class="divider-slide" data-slide="divider" data-group="safety">
+  <div class="slide-frame">
+    <header class="slide-head">
+      <p class="block-marker">Part 8 of 9 · safety</p>
+    </header>
+    <h2 class="headline">Safety: what the agent read, sent, and who could steer it.</h2>
+    <div class="map-host" data-active="safety"></div>
+    <p class="slide-footer">{{site:url}}</p>
+  </div>
+</section>
+
+<!-- 28 · Safety: what the agent read and sent, and who could steer it -->
 <section class="content-slide" data-block="safety">
   <div class="slide-frame">
     <header class="slide-head">
-      <p class="block-marker">Safety · what it read and sent</p>
-      <ol class="pills" aria-label="Storyline"><li>hook</li><li>harness</li><li>cost</li><li>speed</li><li>context</li><li>quality</li><li>team</li><li>tools</li><li class="active">safety</li></ol>
+      <p class="block-marker">Safety · what the agent read and sent</p>
+      <ol class="pills" aria-label="Storyline"><li>hook</li><li>harness</li><li>cost</li><li>speed</li><li>context</li><li>quality</li><li>team</li><li>tools</li><li class="active">safety</li><li>trust</li></ol>
     </header>
-    <h2 class="headline">What it read, sent, and who could steer it.</h2>
+    <h2 class="headline">What the agent read, sent, and who could steer it.</h2>
     <div class="slide-cols">
       <div class="slide-body">
         <ol class="layers">
-          <li>What the harness exposed: full capture, so a leak can be traced.</li>
+          <li>Full capture: every file read and command run, so a leak can be traced.</li>
           <li>The injection surface: every tool answer and permission denial, readable.</li>
-          <li>The post-turn analysis (hook 2.31.1) has no tools, MCP or skills: a planted prompt cannot act through it.</li>
+          <li>Which MCP servers and CLI tools fed text into the context.</li>
         </ol>
       </div>
       <div class="visual-slot deck-visual has-figure seal-board">
         <div class="study-inline"><span class="study-fig">62–100 %</span><span>MCP prompt-injection success across 18 model–server pairs (Log-To-Leak, 2026)</span></div>
+        <p class="board-title">Traceable afterwards</p>
+        <ul class="anomalies seal">
+          <li><span class="sig">files the agent read</span><b>full content</b></li>
+          <li><span class="sig">commands it ran</span><b>with their output</b></li>
+          <li><span class="sig">tool and MCP answers<small>where an injected instruction arrives</small></span><b>full text · errors</b></li>
+          <li><span class="sig">permission requests</span><b>granted · denied</b></li>
+          <li><span class="sig">sub-agents</span><b>each one’s own trail</b></li>
+        </ul>
+      </div>
+    </div>
+    <p class="slide-footer">{{site:url}}</p>
+  </div>
+</section>
+
+<!-- 29 · Divider: trust -->
+<section class="divider-slide" data-slide="divider" data-group="trust">
+  <div class="slide-frame">
+    <header class="slide-head">
+      <p class="block-marker">Part 9 of 9 · trust</p>
+    </header>
+    <h2 class="headline">Trust: where Log Hub keeps your data, and who reads it.</h2>
+    <div class="map-host" data-active="trust"></div>
+    <p class="slide-footer">{{site:url}}</p>
+  </div>
+</section>
+
+<!-- 30 · Trust: where Log Hub's own data lives -->
+<section class="content-slide" data-block="trust">
+  <div class="slide-frame">
+    <header class="slide-head">
+      <p class="block-marker">Trust · where the data lives</p>
+      <ol class="pills" aria-label="Storyline"><li>hook</li><li>harness</li><li>cost</li><li>speed</li><li>context</li><li>quality</li><li>team</li><li>tools</li><li>safety</li><li class="active">trust</li></ol>
+    </header>
+    <h2 class="headline">Log Hub’s own data stays on your host.</h2>
+    <div class="slide-cols">
+      <div class="slide-body">
+        <ul>
+          <li>The web UI, API and Postgres run on your machine or network.</li>
+          <li>No vendor telemetry; three public GETs (prices, versions, releases), each can be off.</li>
+          <li>The post-turn analysis (hook 2.31.1) runs with no tools, MCP or skills.</li>
+        </ul>
+      </div>
+      <div class="visual-slot deck-visual has-figure seal-board">
         <p class="board-title">Data stays on your host</p>
         <ul class="anomalies seal">
           <li><span class="sig">web UI and API<small>one machine · or your LAN / VPN</small></span><b>127.0.0.1 · your network</b></li>
           <li><span class="sig">session data</span><b>your Postgres, your host</b></li>
           <li><span class="sig">vendor telemetry · data to DataArt</span><b>none</b></li>
-          <li><span class="sig">outbound calls<small>daily price and version list, both can be off</small></span><b>two public GETs</b></li>
-          <li><span class="sig">post-turn analysis<small>developer's machine, same Claude connection</small></span><b>no tools · no MCP · no skills</b></li>
+          <li><span class="sig">outbound calls<small>prices, Claude Code versions, Log Hub releases · each can be off</small></span><b>three public GETs</b></li>
+          <li><span class="sig">post-turn analysis<small>developer’s machine, same Claude connection</small></span><b>no tools · no MCP · no skills</b></li>
           <li><span class="sig">air-gapped network<small>app, in-app help and docs ship inside</small></span><b>works fully</b></li>
         </ul>
       </div>
@@ -643,12 +806,12 @@
   </div>
 </section>
 
-<!-- 21 · Safety: what is collected, who can read it, how long it stays -->
-<section class="content-slide" data-block="safety">
+<!-- 31 · Trust: what is collected, who can read it, how long it stays -->
+<section class="content-slide" data-block="trust">
   <div class="slide-frame">
     <header class="slide-head">
-      <p class="block-marker">Safety · who reads the data</p>
-      <ol class="pills" aria-label="Storyline"><li>hook</li><li>harness</li><li>cost</li><li>speed</li><li>context</li><li>quality</li><li>team</li><li>tools</li><li class="active">safety</li></ol>
+      <p class="block-marker">Trust · who reads the data</p>
+      <ol class="pills" aria-label="Storyline"><li>hook</li><li>harness</li><li>cost</li><li>speed</li><li>context</li><li>quality</li><li>team</li><li>tools</li><li>safety</li><li class="active">trust</li></ol>
     </header>
     <h2 class="headline">What is collected, who reads it, how long it stays.</h2>
     <div class="slide-cols">
@@ -678,7 +841,7 @@
   </div>
 </section>
 
-<!-- 22 · Closing -->
+<!-- 32 · Closing -->
 <section class="closing-slide" data-slide="closing">
   <div class="slide-frame">
     <p class="closing-answer">{{ds:session.total|usd0}} and {{ds:session.durationMin}} minutes: now you know whether that was good, and why.</p>
@@ -705,6 +868,18 @@
     var print = /print-pdf/i.test(window.location.search);
     var narrow = !print && window.matchMedia('(max-width: 599px)').matches;
     if (narrow) document.documentElement.classList.add('deck-narrow');
+    // The deck map (template #deck-map) goes into every .map-host; data-active highlights a group.
+    var mapTemplate = document.getElementById('deck-map');
+    Array.prototype.forEach.call(document.querySelectorAll('.map-host'), function (host) {
+      var map = mapTemplate.content.cloneNode(true);
+      var active = host.getAttribute('data-active');
+      if (active) {
+        map.querySelector('.deck-map').classList.add('has-active');
+        var node = map.querySelector('[data-group="' + active + '"]');
+        if (node) node.classList.add('active');
+      }
+      host.appendChild(map);
+    });
     Reveal.initialize({
       hash: true,
       scrollActivationWidth: 0,
