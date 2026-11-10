@@ -50,15 +50,14 @@
     </div>
     <p class="map-arrow" aria-hidden="true">→</p>
     <ol class="map-nodes">
-      <li data-group="harness"><span class="map-no">01 · harness</span><b>Nine parts, each with a view</b></li>
-      <li data-group="cost"><span class="map-no">02 · cost</span><b>Was {{ds:session.total|usd0}} a lot?</b></li>
-      <li data-group="speed"><span class="map-no">03 · speed</span><b>How fast, how far alone?</b></li>
-      <li data-group="context"><span class="map-no">04 · context</span><b>What it loads, what it uses</b></li>
-      <li data-group="quality"><span class="map-no">05 · quality</span><b>What changed, and what about</b></li>
-      <li data-group="team"><span class="map-no">06 · team</span><b>Across every session</b></li>
-      <li data-group="tools"><span class="map-no">07 · tools</span><b>Does this tool work?</b></li>
-      <li data-group="safety"><span class="map-no">08 · safety</span><b>What the agent read and sent</b></li>
-      <li data-group="trust"><span class="map-no">09 · trust</span><b>Log Hub's own data</b></li>
+      <li data-group="cost"><span class="map-no">01 · cost</span><b>Was {{ds:session.total|usd0}} a lot?</b></li>
+      <li data-group="speed"><span class="map-no">02 · speed</span><b>How fast, how far alone?</b></li>
+      <li data-group="context"><span class="map-no">03 · context</span><b>What it loads, what it uses</b></li>
+      <li data-group="quality"><span class="map-no">04 · quality</span><b>Did its checks run and pass?</b></li>
+      <li data-group="team"><span class="map-no">05 · team</span><b>Across every session</b></li>
+      <li data-group="tools"><span class="map-no">06 · tools</span><b>Does this tool work?</b></li>
+      <li data-group="safety"><span class="map-no">07 · safety</span><b>What the agent read and sent</b></li>
+      <li data-group="trust"><span class="map-no">08 · trust</span><b>Log Hub's own data</b></li>
     </ol>
   </div>
 </template>
@@ -102,7 +101,7 @@
       <div class="hook-questions">
         <h3>The number does not say</h3>
         <ol class="dim-tiles">
-          <li><span class="dim-no">01 · quality</span>Did it build the right thing?</li>
+          <li><span class="dim-no">01 · quality</span>Did its checks run and pass?</li>
           <li><span class="dim-no">02 · cost</span>Was {{ds:session.total|usd0}} a lot?</li>
           <li><span class="dim-no">03 · speed</span>Was it fast?</li>
           <li><span class="dim-no">04 · autonomy</span>How far could it go alone?</li>
@@ -180,61 +179,23 @@
   </div>
 </section>
 
-<!-- 5 · Map: from the black box to the nine groups that follow -->
+<!-- 5 · Map: from the black box to the eight groups that follow -->
 <section class="map-slide" data-slide="map">
   <div class="slide-frame">
     <header class="slide-head">
       <p class="block-marker">From the black box to the answers</p>
     </header>
-    <h2 class="headline">One “All good?”, nine places to look.</h2>
+    <h2 class="headline">One “All good?”, eight places to look.</h2>
     <div class="map-host"></div>
     <p class="slide-footer">{{site:url}}</p>
   </div>
 </section>
 
-<!-- 6 · Anatomy of an ADLC harness -->
-<section class="content-slide" data-block="harness">
-  <div class="slide-frame">
-    <header class="slide-head">
-      <p class="block-marker">Anatomy of a harness</p>
-      <ol class="pills" aria-label="Storyline"><li>hook</li><li class="active">harness</li><li>cost</li><li>speed</li><li>context</li><li>quality</li><li>team</li><li>tools</li><li>safety</li><li>trust</li></ol>
-    </header>
-    <h2 class="headline">Nine parts. Each one has a view.</h2>
-    <div class="slide-cols">
-      <div class="col-stack">
-        <div class="slide-body">
-          <ul>
-            <li>Find any view with All views (Ctrl/Cmd+K) or “Start from a question”.</li>
-          </ul>
-        </div>
-        <div class="visual-slot anatomy-table">
-          <table>
-            <thead><tr><th scope="col">Harness element</th><th scope="col">Where Log Hub shows it</th></tr></thead>
-            <tbody>
-              <tr><td>CLAUDE.md</td><td>System context anatomy</td></tr>
-              <tr><td>Rules</td><td>System context · Harness usage</td></tr>
-              <tr><td>Skills</td><td>Harness usage · OTEL by skill</td></tr>
-              <tr><td>Hooks</td><td>Raw Logs · each run, exit code</td></tr>
-              <tr><td>Agents</td><td>Agents · Session Map</td></tr>
-              <tr><td>Workflows</td><td>Agents (Phase) · Session Map</td></tr>
-              <tr><td>MCP servers</td><td>Tools/MCP · OTEL by MCP server</td></tr>
-              <tr><td>Knowledge base</td><td>OKF · KB access, KB value</td></tr>
-              <tr><td>Memory</td><td>System context anatomy</td></tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-      <figure class="shot deck-shot"><img src="../assets/shots/system-context-anatomy.png" alt="System context anatomy: 51,524 startup tokens split by source — system prompt, memory, MCP servers, subagent types, skills listing, instruction files, first prompt and harness internals — with bytes, tokens and share" loading="lazy"><figcaption>Session → System context anatomy</figcaption></figure>
-    </div>
-    <p class="slide-footer">{{site:url}}</p>
-  </div>
-</section>
-
-<!-- 7 · Divider: cost -->
+<!-- 6 · Divider: cost -->
 <section class="divider-slide" data-slide="divider" data-group="cost">
   <div class="slide-frame">
     <header class="slide-head">
-      <p class="block-marker">Part 2 of 9 · cost</p>
+      <p class="block-marker">Part 1 of 8 · cost</p>
     </header>
     <h2 class="headline">Cost: was {{ds:session.total|usd0}} a lot?</h2>
     <div class="map-host" data-active="cost"></div>
@@ -242,7 +203,7 @@
   </div>
 </section>
 
-<!-- 8 · Cost: four prices plus sub-agents -->
+<!-- 7 · Cost: four prices plus sub-agents -->
 <section class="content-slide" data-block="cost">
   <div class="slide-frame">
     <header class="slide-head">
@@ -283,7 +244,7 @@
   </div>
 </section>
 
-<!-- 9 · Cost: context growth -->
+<!-- 8 · Cost: context growth -->
 <section class="content-slide" data-block="cost">
   <div class="slide-frame">
     <header class="slide-head">
@@ -314,7 +275,7 @@
   </div>
 </section>
 
-<!-- 10 · Cost: OTEL attribution by skill, MCP server, effort, fast mode -->
+<!-- 9 · Cost: OTEL attribution by skill, MCP server, effort, fast mode -->
 <section class="content-slide" data-block="cost">
   <div class="slide-frame">
     <header class="slide-head">
@@ -340,7 +301,7 @@
   </div>
 </section>
 
-<!-- 11 · Cost: one session from every side (mosaic of real charts) -->
+<!-- 10 · Cost: one session from every side (mosaic of real charts) -->
 <section class="content-slide mosaic-slide" data-block="cost">
   <div class="slide-frame">
     <header class="slide-head">
@@ -367,7 +328,7 @@
   </div>
 </section>
 
-<!-- 12 · Cost: budgets, forecast and threshold notices (no dataset figure on this slide) -->
+<!-- 11 · Cost: budgets, forecast and threshold notices (no dataset figure on this slide) -->
 <section class="content-slide" data-block="cost">
   <div class="slide-frame">
     <header class="slide-head">
@@ -389,11 +350,11 @@
   </div>
 </section>
 
-<!-- 13 · Divider: speed -->
+<!-- 12 · Divider: speed -->
 <section class="divider-slide" data-slide="divider" data-group="speed">
   <div class="slide-frame">
     <header class="slide-head">
-      <p class="block-marker">Part 3 of 9 · speed</p>
+      <p class="block-marker">Part 2 of 8 · speed</p>
     </header>
     <h2 class="headline">Speed: how fast, and how far could it go alone?</h2>
     <div class="map-host" data-active="speed"></div>
@@ -401,7 +362,7 @@
   </div>
 </section>
 
-<!-- 14 · Speed and autonomy (mosaic) -->
+<!-- 13 · Speed and autonomy (mosaic) -->
 <section class="content-slide mosaic-slide" data-block="speed">
   <div class="slide-frame">
     <header class="slide-head">
@@ -434,7 +395,7 @@
   </div>
 </section>
 
-<!-- 15 · Live -->
+<!-- 14 · Live -->
 <section class="content-slide" data-block="speed">
   <div class="slide-frame">
     <header class="slide-head">
@@ -460,11 +421,11 @@
   </div>
 </section>
 
-<!-- 16 · Divider: context -->
+<!-- 15 · Divider: context -->
 <section class="divider-slide" data-slide="divider" data-group="context">
   <div class="slide-frame">
     <header class="slide-head">
-      <p class="block-marker">Part 4 of 9 · context</p>
+      <p class="block-marker">Part 3 of 8 · context</p>
     </header>
     <h2 class="headline">Context: what the harness loads, and what the agent uses.</h2>
     <div class="map-host" data-active="context"></div>
@@ -472,7 +433,7 @@
   </div>
 </section>
 
-<!-- 17 · Context: harness tax -->
+<!-- 16 · Context: harness tax -->
 <section class="content-slide" data-block="context">
   <div class="slide-frame">
     <header class="slide-head">
@@ -498,7 +459,7 @@
   </div>
 </section>
 
-<!-- 18 · Context: harness usage + Tools/MCP -->
+<!-- 17 · Context: harness usage + Tools/MCP -->
 <section class="content-slide" data-block="context">
   <div class="slide-frame">
     <header class="slide-head">
@@ -524,7 +485,7 @@
   </div>
 </section>
 
-<!-- 19 · Context: knowledge base -->
+<!-- 18 · Context: knowledge base -->
 <section class="content-slide" data-block="context">
   <div class="slide-frame">
     <header class="slide-head">
@@ -557,49 +518,57 @@
   </div>
 </section>
 
-<!-- 20 · Divider: quality -->
+<!-- 19 · Divider: quality -->
 <section class="divider-slide" data-slide="divider" data-group="quality">
   <div class="slide-frame">
     <header class="slide-head">
-      <p class="block-marker">Part 5 of 9 · quality</p>
+      <p class="block-marker">Part 4 of 8 · quality</p>
     </header>
-    <h2 class="headline">Quality: what changed, and what it was about.</h2>
+    <h2 class="headline">Quality: did its checks run and pass?</h2>
     <div class="map-host" data-active="quality"></div>
     <p class="slide-footer">{{site:url}}</p>
   </div>
 </section>
 
-<!-- 21 · Quality: change surface + evaluator -->
+<!-- 20 · Quality: the team builds the checks, Log Hub shows which ran and with what result -->
 <section class="content-slide" data-block="quality">
   <div class="slide-frame">
     <header class="slide-head">
-      <p class="block-marker">Quality · the right thing?</p>
+      <p class="block-marker">Quality · which checks ran</p>
       <ol class="pills" aria-label="Storyline"><li>hook</li><li>harness</li><li>cost</li><li>speed</li><li>context</li><li class="active">quality</li><li>team</li><li>tools</li><li>safety</li><li>trust</li></ol>
     </header>
-    <h2 class="headline">What changed, and what it was about.</h2>
+    <h2 class="headline">You build the checks. Log Hub shows which ran.</h2>
     <div class="slide-cols">
       <div class="slide-body">
         <ul>
-          <li>Files, folders and modules touched; diff lines, commits, cost per line.</li>
-          <li>After each turn, Claude tags the session with your own attributes: Jira ticket, customer, workflow stage.</li>
-          <li>Slice every chart and report by those tags.</li>
+          <li>Skills, the knowledge base, tests, linters and hooks guard what ships.</li>
+          <li>Log Hub shows which of them ran in each session, and with what result.</li>
+          <li>Did the agent read the KB, call the review skill, run the tests?</li>
         </ul>
-        <div class="key-box deck-figure">
-          <span class="key-figure">${{ds:productivity.costPerLine}}</span>
-          <span class="key-caption">per changed line — repo median, split by any session attribute</span>
-        </div>
       </div>
-      <figure class="shot deck-shot"><img src="../assets/shots/change-surface.png" alt="Change Surface of one session" loading="lazy"><figcaption>Session → Change surface</figcaption></figure>
+      <div class="visual-slot checks-table">
+        <table>
+          <thead><tr><th scope="col">Quality check</th><th scope="col">What Log Hub shows</th></tr></thead>
+          <tbody>
+            <tr><td>Skills</td><td>Harness usage · each call, ✗ if it failed</td></tr>
+            <tr><td>Knowledge base</td><td>OKF · articles read, KB value</td></tr>
+            <tr><td>Tests, linters</td><td>Tools/MCP · exit code and output</td></tr>
+            <tr><td>Commands</td><td>Logs → Bash · ✗ on an error</td></tr>
+            <tr><td>Hooks</td><td>Raw Logs · each run, exit code</td></tr>
+            <tr><td>Workflows</td><td>Workflows · status of each run</td></tr>
+          </tbody>
+        </table>
+      </div>
     </div>
     <p class="slide-footer">{{site:url}}</p>
   </div>
 </section>
 
-<!-- 22 · Divider: team -->
+<!-- 21 · Divider: team -->
 <section class="divider-slide" data-slide="divider" data-group="team">
   <div class="slide-frame">
     <header class="slide-head">
-      <p class="block-marker">Part 6 of 9 · team</p>
+      <p class="block-marker">Part 5 of 8 · team</p>
     </header>
     <h2 class="headline">Team: the whole team’s AI work.</h2>
     <div class="map-host" data-active="team"></div>
@@ -607,7 +576,7 @@
   </div>
 </section>
 
-<!-- 23 · Team: analytics, reports, anomalies -->
+<!-- 22 · Team: analytics, reports, anomalies -->
 <section class="content-slide" data-block="team">
   <div class="slide-frame">
     <header class="slide-head">
@@ -644,6 +613,32 @@
   </div>
 </section>
 
+<!-- 23 · Team: what changed, sliced by session tags -->
+<section class="content-slide" data-block="team">
+  <div class="slide-frame">
+    <header class="slide-head">
+      <p class="block-marker">Team · what changed</p>
+      <ol class="pills" aria-label="Storyline"><li>hook</li><li>harness</li><li>cost</li><li>speed</li><li>context</li><li>quality</li><li class="active">team</li><li>tools</li><li>safety</li><li>trust</li></ol>
+    </header>
+    <h2 class="headline">What changed, and what it was about.</h2>
+    <div class="slide-cols">
+      <div class="slide-body">
+        <ul>
+          <li>Files, folders and modules touched; diff lines, commits, cost per line.</li>
+          <li>After each turn, Claude tags the session with your own attributes: Jira ticket, customer, workflow stage.</li>
+          <li>Slice every chart and report by those tags.</li>
+        </ul>
+        <div class="key-box deck-figure">
+          <span class="key-figure">${{ds:productivity.costPerLine}}</span>
+          <span class="key-caption">per changed line — repo median, split by any session attribute</span>
+        </div>
+      </div>
+      <figure class="shot deck-shot"><img src="../assets/shots/change-surface.png" alt="Change Surface of one session" loading="lazy"><figcaption>Session → Change surface</figcaption></figure>
+    </div>
+    <p class="slide-footer">{{site:url}}</p>
+  </div>
+</section>
+
 <!-- 24 · Team: the team data from every side (mosaic of real charts) -->
 <section class="content-slide mosaic-slide" data-block="team">
   <div class="slide-frame">
@@ -675,7 +670,7 @@
 <section class="divider-slide" data-slide="divider" data-group="tools">
   <div class="slide-frame">
     <header class="slide-head">
-      <p class="block-marker">Part 7 of 9 · tools</p>
+      <p class="block-marker">Part 6 of 8 · tools</p>
     </header>
     <h2 class="headline">Tools: does this tool work?</h2>
     <div class="map-host" data-active="tools"></div>
@@ -722,7 +717,7 @@
 <section class="divider-slide" data-slide="divider" data-group="safety">
   <div class="slide-frame">
     <header class="slide-head">
-      <p class="block-marker">Part 8 of 9 · safety</p>
+      <p class="block-marker">Part 7 of 8 · safety</p>
     </header>
     <h2 class="headline">Safety: what the agent read, sent, and who could steer it.</h2>
     <div class="map-host" data-active="safety"></div>
@@ -766,7 +761,7 @@
 <section class="divider-slide" data-slide="divider" data-group="trust">
   <div class="slide-frame">
     <header class="slide-head">
-      <p class="block-marker">Part 9 of 9 · trust</p>
+      <p class="block-marker">Part 8 of 8 · trust</p>
     </header>
     <h2 class="headline">Trust: where Log Hub keeps your data, and who reads it.</h2>
     <div class="map-host" data-active="trust"></div>

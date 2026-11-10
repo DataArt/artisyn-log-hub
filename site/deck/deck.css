@@ -930,7 +930,7 @@ html.deck-narrow .mosaic-slide ol.questions li {
   color: var(--text-3);
 }
 
-/* Left column that stacks the body and a visual (slides 6, 14, 19, 26). */
+/* Left column that stacks the body and a visual (slides 13, 18, 26). */
 .col-stack {
   display: flex;
   flex-direction: column;
@@ -1150,8 +1150,8 @@ html.deck-narrow .mosaic-slide ol.questions li {
   color: var(--accent);
 }
 
-/* Slide 6 · harness element → view. */
-.visual-slot.anatomy-table {
+/* Slide 20 · quality check → what Log Hub shows. */
+.visual-slot.checks-table {
   display: block;
   aspect-ratio: auto;
   padding: 6px 12px;
@@ -1161,7 +1161,7 @@ html.deck-narrow .mosaic-slide ol.questions li {
   text-align: left;
 }
 
-.reveal .anatomy-table table {
+.reveal .checks-table table {
   display: table;
   width: 100%;
   margin: 0;
@@ -1169,13 +1169,13 @@ html.deck-narrow .mosaic-slide ol.questions li {
   font-size: 16px;
 }
 
-.reveal .anatomy-table th,
-.reveal .anatomy-table td {
+.reveal .checks-table th,
+.reveal .checks-table td {
   border: 0;
   background: none;
 }
 
-.reveal .anatomy-table th {
+.reveal .checks-table th {
   padding: 4px 6px;
   font-family: var(--mono);
   font-size: 12px;
@@ -1185,18 +1185,18 @@ html.deck-narrow .mosaic-slide ol.questions li {
   text-align: left;
 }
 
-.reveal .anatomy-table td {
+.reveal .checks-table td {
   padding: 3px 6px;
   border-top: 1px dashed var(--border);
 }
 
-.reveal .anatomy-table td:first-child {
+.reveal .checks-table td:first-child {
   font-weight: 600;
   color: var(--text);
   white-space: nowrap;
 }
 
-/* Slide 19 · OKF split: verified checks vs heuristic signals. */
+/* Slide 18 · OKF split: verified checks vs heuristic signals. */
 .visual-slot.split-board {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1395,7 +1395,7 @@ html.deck-narrow .contrast-col ul {
   font-size: 14px;
 }
 
-html.deck-narrow .reveal .anatomy-table table {
+html.deck-narrow .reveal .checks-table table {
   font-size: 13px;
 }
 
@@ -1465,7 +1465,7 @@ html.deck-narrow .col-stack {
 
 .reveal .map-nodes {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
   list-style: none;
   padding: 0;
