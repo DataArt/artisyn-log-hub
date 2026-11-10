@@ -103,7 +103,8 @@ Things Beezi has that the standard rows do not capture:
   `AskUserQuestion`, `ExitPlanMode` (plan approval), a permission prompt, or simply waiting for the next
   prompt — from the tool-call timestamps Log Hub already parses. Extends the
   [work-time](../../knowledgebase/algorithms/work-time.md) algorithm.
-- **Subscription vs API-equivalent cost.** Log Hub already computes API-price cost; what is missing is
+- **Subscription vs API-equivalent cost** — *rejected 2026-11-09 (plan prices are volatile; users see
+  them in the vendor dashboard).* Log Hub already computes API-price cost; what is missing is
   which plan pays. Needs research on where the hook can read the plan type without collecting credentials
   (Beezi's credential fingerprint is a privacy pattern to avoid copying blindly).
 - **Rate-limit blocked time** — same as README idea 7 (capture `rate_limits`).

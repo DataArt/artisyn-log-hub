@@ -79,8 +79,12 @@ Beezi is the only tool that splits waiting by cause, and its method is undocumen
    exhausted" (no one shows it explicitly).
 5. 5 h block view: tokens/min, projected block total, ⌛ gaps, `max` = highest past block; P90 of the
    last 8 days as a personal limit when the plan limit is unknown.
-6. Capture statusline `rate_limits` / `spend_limit` through the hook for the real quota.
-7. Actual billing vs API-equivalent (Beezi); actual vs list price (Anthropic).
+6. ~~Capture statusline `rate_limits` / `spend_limit` through the hook for the real quota.~~ Rejected
+   2026-11-09: only reachable through a status-line wrapper (no hook or OTel carries it, `claude -p`
+   never runs the status line) — complex and fragile. PoC: `docs/pocs/2026-11-09-2049-statusline-quota-capture/`.
+7. ~~Actual billing vs API-equivalent (Beezi); actual vs list price (Anthropic).~~ Rejected 2026-11-09:
+   plan prices are volatile and users see them in the vendor dashboard. What-if model pricing is rejected
+   too: another model solves the same task with a different number of calls, so re-pricing misleads.
 8. Anomalies: day ≥ 2× average, session z-score 2σ / 3σ, "high spend, low output".
 9. Slices only transcripts give: skill, subagent, MCP server, repo, branch, effort.
 10. Waiting by cause from transcripts (`ExitPlanMode`, `AskUserQuestion`, permission prompt cross-checked
