@@ -46,9 +46,13 @@ Context in the code base:
 
 - FR-1 A budget is a USD amount for a scope (personal repository, team repository or team) and a period
   (day, week or calendar month; week starts Monday). It is a reference only — the UI says that Log Hub
-  does not stop usage when it is reached. Budgets are created, edited and deleted in a "Budgets" section
-  of the scope's Settings: the personal repository's Settings tab, the repository's Settings tab in team
-  context (team repository) or the team's settings. There is no per-user budget and no single org-wide
+  does not stop usage when it is reached. Budgets are created, edited and deleted in a new "Budgets"
+  sub-tab of the scope's Settings: the personal repository's Settings tab, the repository's Settings
+  tab in team context (team repository), or a new "Settings" tab on the team page (`TeamDetailPage.tsx`,
+  tab registry group `team`, team-wide access rule). The add / edit form opens inline in that sub-tab;
+  it has no scope selector — the scope is the page it was opened from, shown as read-only text. A
+  scope has at most one budget per period type; saving a second budget with the same period is
+  rejected with a validation error. There is no per-user budget and no single org-wide
   budget for admins: different teams (or whole organisations, modelled as teams) get their own budgets.
   Each budget stores an IANA time zone
   (default: the creator's browser time zone at creation); its period boundaries, "resets on <date>"
@@ -56,7 +60,9 @@ Context in the code base:
   repository scope is stored by repository URL, like team repositories.
 - FR-2 Spend for a budget is the total cost of the scope's sessions in the current period. Per root
   session tree (root plus all sub-agents) it takes the larger of the hook-upload cost (the app's
-  existing tree cost) and the near-realtime OTEL cost (`otel_session_totals`, `cost_usd`), so a budget
+  existing `session_costs` sum over the root and all descendants) and the near-realtime OTEL cost
+  (`otel_session_totals.cost_usd_micros` per root session), reusing the per-tree comparison in
+  `server/src/logs/otel-cost.sql.ts` rather than a new one; amounts are compared in micro-USD, so a budget
   warns as early as possible. A missing side is ignored; a tree with neither counts $0 and the view
   shows "N sessions unpriced". The whole tree cost lands on the day the root session started (its
   first OTEL call for an OTEL-only session). A session with only OTEL data counts once its first upload
@@ -70,7 +76,15 @@ Context in the code base:
   in `docs/knowledgebase/algorithms/` with a rows file): elapsed days = whole days so far including
   today; burn rate = spend / elapsed days; forecast = spend + burn rate × remaining days; days left =
   (amount − spend) / burn rate, "—" when burn rate is 0, "exceeded" when spend ≥ amount. The current
-  amount applies to the whole current period, also after a mid-period edit.
+  amount applies to the whole current period, also after a mid-period edit. A day budget uses the same
+  formulas in elapsed hours (current hour included) in the budget's time zone, and shows the run-out
+  point as a time ("~16:40").
+- FR-4a Spend tab: a new "Spend" tab (between Analytics and Reports) on the repository page — personal
+  and team context — and on the team page, registered in the tab registry with synonyms budget / spend /
+  forecast. It has a Day / Week / Month period picker with ‹ › to previous periods, both in the URL so
+  FR-9 links open the right period; the picker selects the scope's budget of that period type, or the
+  plain Spend view when there is none. It shows the FR-3 budget card, daily spend with FR-5 markers, the
+  FR-4 slices and a costly-sessions list.
 - FR-4 Cost slices for a scope and period: by model, user, repository, branch, skill, sub-agent and MCP
   server, each with its share of spend; clicking a slice opens the matching sessions. Slices are
   available for any scope the user can see, with or without a budget (a "Spend" view); a budget only
@@ -78,15 +92,21 @@ Context in the code base:
   repository, branch and sub-agent use the tree cost; the sub-agent slice shows the root's own cost as
   a "Main agent" row; for an OTEL-only session the model slice uses OTEL's per-call model. Skill and MCP
   server attribute the OTEL cost of the calls made inside that skill / after that MCP call. Whatever a
-  slice cannot attribute goes to a "Not reported" row, so shares always add up to 100 %.
-- FR-5 Anomaly markers: a day whose spend is ≥ 2× the period's daily average, and the sessions whose cost
-  is ≥ 2σ / 3σ above the scope's mean; each links to the sessions. Like slices, they are shown with or
-  without a budget.
+  slice cannot attribute goes to a "Not reported" row (budget spend minus the attributed sum, clamped at
+  0), so shares always add up to 100 %. The skill, MCP and OTEL-model slices select OTEL calls by the
+  period's set of root sessions (the FR-2 set), never by call or bucket time.
+- FR-5 Anomaly markers: a day whose spend is ≥ 2× the period's daily average (period spend / elapsed
+  days, today and zero-spend days included; no day markers on the first elapsed day), and the sessions
+  whose cost is ≥ 2σ / 3σ above the mean (population σ over the root session trees of the same scope and
+  period; no session markers with fewer than 5 priced trees or σ = 0); each links to the sessions. Like
+  slices, they are shown with or without a budget.
 - FR-6 Threshold notices: each budget has its own editable list of percentage thresholds (whole
   numbers 1–200, default 75 / 90 / 100), saved with the budget. A periodic server job (every 5 min,
   never inside ingest) checks budgets. Crossing thresholds creates one shared notice record per budget,
   period start and threshold (unique key, so cluster workers cannot duplicate it; only the worker whose
-  insert succeeds sends the email); when several are crossed at once only the highest gets a notice.
+  insert succeeds sends the email); when several are crossed at once a record is written for each, but
+  only the highest is shown and emailed as a notice — the others are logged as "crossed (superseded by
+  N %)" and never fire later in that period.
   Recipients: the owner for personal repository budgets; the team owner and managers for team
   repository and team budgets. Email is sent only when the mail service is configured. Notices already
   sent stay after an edit or if spend later drops; a threshold newly crossed after an edit fires once.
@@ -95,19 +115,55 @@ Context in the code base:
   repository and team budgets: created and edited by the team owner and managers; the bar and slices are
   visible to whoever has team analytics access; spend counts sessions in that repository (team
   repository) or in all the team's linked repositories (team), limited to acknowledged members visible
-  under the team's access mode.
+  under the team's access mode. A plain member without team analytics access sees a team repository or
+  team budget only when their own spend in the current period exceeds its amount — then only the bar
+  with their own spend, never the user slice or other members' sessions.
 - FR-8 Everything works offline: no external alerting service, no webhooks required.
-- FR-9 Notice tray: a bell in the top bar with an unread count opens a tray listing all of the user's
-  budget notices, newest first (scope, budget, threshold, spend, period, time), each linking to the
-  scope's Spend view for that period. A new unread notice is also shown as a dismissible banner at the
+- FR-9 Notice tray: budget notices go into the existing top-bar bell (`NotificationBell.tsx`, today
+  team invitations only); its unread count includes them and its tray lists all of the user's budget
+  notices, newest first (scope, budget, threshold, spend, period, time), each linking to the
+  scope's Spend tab for that budget and period. A new unread notice is also shown as a dismissible banner at the
   top of the app; dismissing the banner or opening the notice in the tray marks it read for that user
   only, and the notice stays in the tray. Read state is stored per user.
-- FR-10 Budget event log: the personal repository, team repository and team Settings each have a
-  "Budget event log" window listing that scope's budget events, newest first, with time and actor:
+- FR-10 Budget event log: the Budgets sub-tab of the personal repository, team repository and team
+  Settings each has a "Budget event log" window listing that scope's budget events, newest first, with time and actor:
   budget created, edited (old → new amount, period, thresholds, time zone), deleted, threshold crossed,
   notice email sent / skipped (mail not configured) / failed. Events are written when they happen (the
-  edit's transaction, or the threshold job) and are kept after the budget is deleted. The log is
+  edit's transaction, or the threshold job). The log is
   visible to whoever can see the scope's budgets.
+- FR-11 Budget report: the Reports tab gets a "Budget" report in the Cost category
+  (`report-catalog.ts`), with the usual parameter strip, on-page preview and PDF download. For the
+  chosen scope and date range it shows each budget's periods: amount, spend (FR-2), % used, forecast
+  and risk flag for the current period (FR-3), crossed thresholds (FR-6), the top cost slices (FR-4)
+  and the anomaly days (FR-5). With
+  no budget on the scope the report states that and still shows spend per period. Catalog flags: no
+  Group by, no branch / user / attribute filter, so its spend always matches FR-2.
+- FR-12 Analytics chart: the Analytics tab gets a "Budget burn" view — cumulative spend per day of the
+  selected budget's current period against a horizontal budget line, with the linear forecast to period
+  end drawn dashed and threshold lines marked. A budget picker chooses the budget (default: month, else
+  week, else day); the x-axis is that budget's period and ignores the time window. Branches / Users
+  filters narrow the cumulative line, labelled "filtered — budget line is for the whole scope"; Group by
+  is disabled for this view. With no budget on the scope it shows cumulative spend only.
+- FR-13 Documentation (offline, shipped with the product): a new user-docs page about budgets
+  (concept "reference only, nothing is stopped", how to set one per scope in Settings, the spend rule
+  of FR-2, forecast formulas, notices / tray / emails, event log) added to `user-docs/nav.json` and the
+  in-app help; `user-docs/analytics-reports.md` lists the Spend view, the Budget burn view and the Budget
+  report and adds rows to "Which one answers your question?"; the All views map gets the new view and
+  report with synonyms (budget, forecast, burn rate, limit); `user-docs/server-configuration.md`
+  describes the threshold job and that notice emails need the mail service; `user-docs/small-team-setup.md`
+  and `user-docs/tuning-your-setup.md` mention setting a team budget; `user-docs/cost-and-context.md`
+  explains why the budget may use the OTEL cost, and `user-docs/otel-tab.md` gets a short "Budgets use
+  the higher OTEL cost" paragraph; `user-docs/responsibility-matrix.md` gets rows for setting a team
+  budget (team owner, managers), setting a personal repository budget (end user) and receiving budget
+  notices; `user-docs/getting-started.md` mentions budget notices in the bell; `user-docs/session-list.md`
+  and the tab tables of `user-docs/all-views.md` list the Spend tab; `user-docs/changelog.md` gets an
+  entry. In the development KB: the new algorithm doc and a KB article on budgets, both in
+  `docs/knowledgebase/index.md`; `db-tables.md` and `client-component-map.md` updated; `db_state.sql`
+  regenerated via the db-state-update skill.
+- FR-14 Data and API: amounts are stored in micro-USD; notices and events keep snapshot columns and
+  survive budget deletion; budgets, notices and events are removed with their team or repository. Every
+  new route gets an API contract row with its FR-7 access rule; the Budget report and Budget burn view
+  reuse the Spend tab's server service, so all three agree.
 
 ![Spend tab with budget card, daily spend, cost slices and costly sessions](wireframes/spend-view.svg)
 
@@ -116,6 +172,10 @@ Context in the code base:
 ![Threshold notice banner and notice tray](wireframes/threshold-banner.svg)
 
 ![Budgets section and Budget event log in Settings](wireframes/budget-settings.svg)
+
+![Budget burn view on the Analytics tab](wireframes/budget-burn.svg)
+
+![Budget report on the Reports tab](wireframes/budget-report.svg)
 
 ## Non-Functional Requirements
 
@@ -148,21 +208,26 @@ Context in the code base:
 - [ ] FR-10 Creating, editing and deleting a budget and a crossed threshold each add one event to the
   scope's Budget event log with time and actor; an edit shows old and new values; events of a deleted
   budget remain; a user without access to the scope cannot read its log (API contract row).
+- [ ] FR-11 The Budget report for a seeded scope shows the same spend, % and forecast as the Spend view
+  for the same period and downloads as a PDF.
+- [ ] FR-4a The Spend tab opens on the personal repository, team repository and team pages; a tray
+  link opens it at the notice's budget and period.
+- [ ] FR-12 The Budget burn view draws the cumulative spend, the budget line and the dashed forecast;
+  with no filters, its last point equals the budget spend (FR-2).
+- [ ] FR-13 The budgets help page opens from the in-app help menu with the network off, and
+  `analytics-reports.md` and the All views map list the new view and report.
 
 ## Open Questions
 
-- What does a plain member of a restricted team see of a team budget: nothing (they have no team
-  analytics access), or only the bar with their own share — never the user slice or other members'
-  sessions?
-- Email is only set up in the password and password-confirm auth modes, so in auth mode `none` no
-  notice email would ever be sent, even with an SMTP host set. Is that acceptable (in-app banners only),
-  or should notice emails get their own SMTP setup independent of the auth mode?
 - Out of scope for now (possible later increment): a 5-hour window view built from session costs.
 - Rejected (user decision 2026-11-09): capturing the real subscription quota (5-hour / 7-day window %
   used) — it is only available through a status-line wrapper in the hook, which is complex and fragile
   (see the PoC in `notes.md`); actual plan billing vs API-equivalent cost — plan prices change
   too often, people see it in their vendor dashboard; what-if model pricing — different models solve the
   same task with very different numbers of calls, so re-pricing the same tokens is misleading.
+- Out of scope (separate task `2026-11-10-team-analytics-reports`): Analytics and Reports for the team
+  page. Here the Budget report (FR-11) and Budget burn view (FR-12) are repository-only; a team budget
+  is shown on the team Spend tab.
 
 ## Common sense considerations
 
@@ -186,10 +251,23 @@ Context in the code base:
 - When several thresholds are crossed at once, only the highest gets a notice.
 - A notice is one shared record per (budget, period start, threshold) with a unique key; read state is per user.
 - Sent notices stay after edits or spend drops; a threshold newly crossed after an edit fires once.
-- Email is sent only when the mail service is configured.
+- Email is sent only when the mail service is configured; no separate SMTP setup for notices (auth mode `none` → in-app only).
+- A plain team member sees a team budget only after personally exceeding it, and only their own spend.
 - A repository budget scope is stored by repository URL.
 - Budget event log and tray times are shown in the viewer's browser time zone.
 - Notice acceptance covers all default thresholds and dismissal persistence.
+- Budgets are a Settings sub-tab; the team page gets new Settings and Spend tabs.
+- The Spend tab has a Day / Week / Month picker and ‹ › periods in the URL; no separate "My spend" view.
+- At most one budget per scope and period type.
+- Budget burn: budget picker (month › week › day), x-axis = budget period, filters narrow the line, no Group by.
+- The Budget report has no Group by and no filters.
+- Budget spend reuses `otel-cost.sql.ts` and compares in micro-USD.
+- OTEL slices select calls by the period's root sessions; "Not reported" is clamped at 0.
+- Day budgets compute in hours.
+- Anomaly baselines: elapsed-day average; population σ over the period's trees; min 5 trees.
+- Superseded thresholds are recorded and never fire later in the period.
+- Budget notices use the existing bell.
+- Schema and routes are decided in the plan; notices and events keep snapshots.
 
 ## Notes
 

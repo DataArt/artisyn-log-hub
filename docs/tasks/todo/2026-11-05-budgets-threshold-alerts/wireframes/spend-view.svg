@@ -53,7 +53,7 @@
   <text x="800" y="129" font-size="14" class="muted">OTEL</text>
   <text x="850" y="129" font-size="14" class="muted">Settings</text>
   <line x1="325" y1="143" x2="1440" y2="143" stroke="#e5e7eb"/>
-  <text x="940" y="129" class="note">NEW tab "Spend" (also on team pages; "My spend" view: slices only, no budget; FR-4)</text>
+  <text x="940" y="129" class="note">NEW tab "Spend" (also on the team page; FR-4a)</text>
 
   <!-- period selector (same segmented control as Analytics) -->
   <rect x="341" y="163" width="246" height="36" rx="6" fill="#ffffff" stroke="#d1d5db"/>

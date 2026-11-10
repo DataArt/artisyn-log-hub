@@ -145,39 +145,39 @@
   },
   {
     "id": "CM-01",
-    "input": {"kind": "mismatch", "telemetry": 0, "calculated": 0.05},
+    "input": {"kind": "mismatch", "telemetry": 0, "calculated": 0.5},
     "expected": {"mismatch": true},
-    "note": "delta = 0.05 >= 0.05 (inclusive floor) and >= 0 * 0.01 = 0."
+    "note": "delta = 0.5 >= 0.5 (inclusive floor) and >= 0 * 0.01 = 0."
   },
   {
     "id": "CM-02",
-    "input": {"kind": "mismatch", "telemetry": 0, "calculated": 0.04},
+    "input": {"kind": "mismatch", "telemetry": 0, "calculated": 0.49},
     "expected": {"mismatch": false},
-    "note": "delta = 0.04 < 0.05 floor."
+    "note": "delta = 0.49 < 0.5 floor."
   },
   {
     "id": "CM-03",
     "input": {"kind": "mismatch", "telemetry": 100, "calculated": 101},
     "expected": {"mismatch": true},
-    "note": "delta = 1 >= 0.05 and 1 >= 100 * 0.01 = 1 (inclusive ratio)."
+    "note": "delta = 1 >= 0.5 and 1 >= 100 * 0.01 = 1 (inclusive ratio)."
   },
   {
     "id": "CM-04",
     "input": {"kind": "mismatch", "telemetry": 100, "calculated": 100.5},
     "expected": {"mismatch": false},
-    "note": "delta = 0.5 is above the 0.05 floor but below 1% of 100 = 1: both bounds are required."
+    "note": "delta = 0.5 reaches the 0.5 floor but is below 1% of 100 = 1: both bounds are required."
   },
   {
     "id": "CM-05",
-    "input": {"kind": "mismatch", "telemetry": 0.1, "calculated": 0.14},
+    "input": {"kind": "mismatch", "telemetry": 1, "calculated": 1.4},
     "expected": {"mismatch": false},
-    "note": "delta = 0.04 is 40% of telemetry but below the 0.05 floor: both bounds are required."
+    "note": "delta = 0.4 is 40% of telemetry but below the 0.5 floor: both bounds are required."
   },
   {
     "id": "CM-06",
     "input": {"kind": "mismatch", "telemetry": 100, "calculated": 99},
     "expected": {"mismatch": true},
-    "note": "Calculated below telemetry counts too: |99 - 100| = 1 >= 0.05 and >= 1."
+    "note": "Calculated below telemetry counts too: |99 - 100| = 1 >= 0.5 and >= 1."
   },
   {
     "id": "CM-07",
@@ -199,9 +199,9 @@
   },
   {
     "id": "CM-10",
-    "input": {"kind": "mismatch", "telemetry": 1, "calculated": 1.049},
+    "input": {"kind": "mismatch", "telemetry": 1, "calculated": 1.499},
     "expected": {"mismatch": false},
-    "note": "Rule 4 is not rounded: delta = 0.049 < 0.05. Rounding the delta to cents (0.05) would flag it."
+    "note": "Rule 4 is not rounded: delta = 0.499 < 0.5. Rounding the delta to cents (0.50) would flag it."
   },
   {
     "id": "SA-01",
