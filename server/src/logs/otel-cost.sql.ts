@@ -119,10 +119,10 @@ export function otelComputedDiscrepancy(
 }
 
 /**
- * Absolute floor of the `costBreakdown.mismatch` tolerance: a delta below five
- * cents is never a mismatch.
+ * Absolute floor of the `costBreakdown.mismatch` tolerance: a delta below fifty
+ * cents is never a mismatch (a smaller one is noise not worth a warning).
  */
-export const COST_MISMATCH_TOLERANCE_USD = 0.05;
+export const COST_MISMATCH_TOLERANCE_USD = 0.5;
 
 /**
  * Relative part of the `costBreakdown.mismatch` tolerance: a delta below 1% of the telemetry

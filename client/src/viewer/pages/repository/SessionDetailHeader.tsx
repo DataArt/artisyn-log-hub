@@ -266,7 +266,7 @@ export function SessionDetailHeader({
               {subAgentCost > 0 && (
                 <span
                   className="text-[10px] font-normal text-muted-foreground/70"
-                  title="Includes sub-agent cost in addition to the main-thread total shown above."
+                  title="The shown cost is the whole session: main thread plus sub-agents."
                 >
                   +sub-agents
                 </span>

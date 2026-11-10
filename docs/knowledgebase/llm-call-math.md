@@ -358,7 +358,7 @@ popover, Info tab) render `costBreakdown`, through the client `CostReconciliatio
 Per-turn and Call Tree costs stay client-calculated.
 
 **Mismatch tolerance.** `costMismatch()` is `true` only when both sides are non-null and
-`|calculated − telemetry|` reaches **both** `COST_MISMATCH_TOLERANCE_USD` (`0.05`) and
+`|calculated − telemetry|` reaches **both** `COST_MISMATCH_TOLERANCE_USD` (`0.5`) and
 `COST_MISMATCH_TOLERANCE_RATIO` (`0.01`) × telemetry. The 1% part absorbs the known utility-call
 residual: OTEL reports only a total `cache_creation_tokens`, so utility calls are priced at the
 5m write rate even when part of the write was 1h (cents per session). It is independent of the

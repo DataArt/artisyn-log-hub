@@ -2,6 +2,12 @@ import type { CostBreakdown } from '../../models/repositories';
 import { cn } from '../lib/cn';
 import { formatCost } from '../lib/format';
 import { costDiscrepancyHint, unpricedModelIds } from '../lib/cost-hints';
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '../ui/tooltip';
 import { NoPricingBadge } from './NoPricingBadge';
 
 interface Props {
@@ -51,20 +57,36 @@ function MismatchChip({ breakdown }: { breakdown: CostBreakdown }) {
 }
 
 /**
- * Muted footnote under a flagged mismatch: why the two figures differ and what to do
- * (`costDiscrepancyHint`). The calculated total is the shown session cost; the telemetry
- * figure Claude Code reports is only a cross-check.
+ * One muted line under a flagged mismatch; hovering it shows why the two figures differ and
+ * what to do (`costDiscrepancyHint`). The calculated total is the shown session cost; the
+ * telemetry figure Claude Code reports is only a cross-check.
  */
 function MismatchNote({ breakdown }: { breakdown: CostBreakdown }) {
   if (!breakdown.mismatch) return null;
   return (
-    <p
-      className="text-[10px] leading-snug text-muted-foreground/70"
-      data-testid="cost-mismatch-note"
-    >
-      *(The shown cost is Log Hub&apos;s.{' '}
-      {costDiscrepancyHint(breakdown.telemetryCost, breakdown.calculatedCost)})
-    </p>
+    <TooltipProvider delayDuration={150}>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <span
+            tabIndex={0}
+            className="w-fit cursor-help text-[10px] leading-snug text-muted-foreground/70 underline decoration-dotted underline-offset-2"
+            data-testid="cost-mismatch-note"
+          >
+            * why the costs differ
+          </span>
+        </TooltipTrigger>
+        <TooltipContent
+          className="max-w-xs text-left"
+          data-testid="cost-mismatch-note-hint"
+        >
+          The shown cost is Log Hub&apos;s.{' '}
+          {costDiscrepancyHint(
+            breakdown.telemetryCost,
+            breakdown.calculatedCost,
+          )}
+        </TooltipContent>
+      </Tooltip>
+    </TooltipProvider>
   );
 }
 
