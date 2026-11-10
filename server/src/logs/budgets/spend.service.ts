@@ -717,7 +717,8 @@ export class SpendService {
    * `GET …/analytics/budget-burn`: the cumulative spend line of the current period of one
    * budget (default month › week › day), the budget's forecast, the previous period's line
    * and the anomaly days. `branches` / `users` narrow only the cumulative lines
-   * (`filtered: true`); `spendMicros`, the forecast and the anomalies stay whole-scope. With
+   * (`filtered: true` when they drop at least one session tree of the current period);
+   * `spendMicros`, the forecast and the anomalies stay whole-scope. With
    * no budget the view covers the current calendar month in `tz`, with no forecast.
    */
   async getBudgetBurn(
@@ -749,16 +750,20 @@ export class SpendService {
       toOffset: 0,
     });
     const rows = await resolveScopeRows(this.db, access.scope);
-    const filtered = q.branches.length > 0 || q.users.length > 0;
-    const filters = filtered
+    const hasFilters = q.branches.length > 0 || q.users.length > 0;
+    const filters = hasFilters
       ? { branches: q.branches, userEmails: q.users }
       : undefined;
 
     const wholeTrees = await this.pricedTrees(rows, bounds);
-    const lineTrees = filtered
+    const lineTrees = hasFilters
       ? await this.pricedTrees(rows, bounds, filters)
       : wholeTrees;
     const prevTrees = await this.pricedTrees(rows, prevBounds, filters);
+    // The Analytics controls send every user / branch when nothing is narrowed, so "a filter
+    // was sent" is not "the line is narrower": only a filter that drops a session tree of the
+    // current period makes the line differ from the budget's scope.
+    const filtered = lineTrees.length < wholeTrees.length;
 
     const keys = periodBucketKeys(bounds);
     const spendMicros = sumMicros(wholeTrees);
