@@ -1,0 +1,8 @@
+# captured snapshots (machine/session data, not source)
+out/
+# generated settings with an absolute path
+claude-config/settings.json
+# runtime garbage
+*.log
+.cache/
+.env

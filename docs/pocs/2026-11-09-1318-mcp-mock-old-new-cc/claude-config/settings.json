@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__mock__fast_echo",
+      "mcp__mock__fast_fail",
+      "mcp__mock__slow_echo",
+      "mcp__mock__slow_fail"
+    ]
+  }
+}

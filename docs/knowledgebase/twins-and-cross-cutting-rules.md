@@ -6,7 +6,7 @@ tags:
   - twins
   - invariants
   - backward-compatibility
-timestamp: "2026-11-03T00:00:00+04:00"
+timestamp: "2026-11-09T00:00:00+04:00"
 ---
 
 # Twins Registry and Cross-Cutting Rules
@@ -43,7 +43,8 @@ known differences between copies.
 | Cost formula (per-call tiers, cache, fast mode) | `packages/pricing/src/cost.ts` (server + client); hook `post-turn-analysis-worker.js` (`computeLocalSessionCost`, `pickCallRates`) | Doc [cost-formula](algorithms/cost-formula.md); `hook/.claude/telemetry_tool/__tests__/cost-formula.algo.test.js` |
 | `FAST_MODE_MULTIPLIER` | `packages/pricing/src/cost.ts`; hook `post-turn-analysis-worker.js` | via the cost-formula rows only |
 | Work time | `server/src/logs/claude-extractor.ts` (`computeWorkTime`); hook `post-turn-analysis-worker.js` (`deriveWorkTimeMs`). The client's per-turn work time is a different algorithm | Doc [work-time](algorithms/work-time.md); `claude-extractor.algo.spec.ts`, `__tests__/work-time.algo.test.js` |
-| Rejection markers and tool outcome | `server/src/logs/tool-stats.ts` (`REJECTION_MARKERS`, `classifyToolOutcome`); hook `post-turn-analysis-worker.js` (hand-port, third copy, see client row below) | **none** for the hook copy |
+| Rejection markers and tool outcome | `server/src/logs/tool-stats.ts` (`REJECTION_MARKERS`, `classifyToolOutcome`); hook `post-turn-analysis-worker.js` (hand-port, third copy, see client row below). Since hook 2.31.2 the hook copy follows the server: the background-MCP rule (`background.status` null → `unresolved`, `completed` → `success`, other → `failure`) first, then `interrupted`, `toolDenialKind` → `unresolved`, and the rejection marker only on `is_error` results | **none** for the hook copy (pinning it to `tool-call-outcome.json` is task `2026-11-03-pin-twins-with-tests`) |
+| Background-MCP join (`BACKGROUND_ACK_RE`, `matchBackgroundAckTaskId`, `isBackgroundCandidate`, `collectBackgroundTaskNotifications`) | `server/src/logs/background-mcp.ts` (source of truth; reuses `parseTaskNotification` from `workflow-extractor.ts`); client `client/.../session-log/background-mcp.ts` (own tag parser, `QueueOperationLine` guard); hook `post-turn-analysis-worker.js` (plain-JS port, used by `deriveToolUsage`). Rules: [tool-monitoring.md](tool-monitoring.md) § "Background MCP calls" | Scenario fixtures `tests/scenarios/fixtures/bg-mcp/` (server + client); **none** for the hook copy |
 | `KNOWN_TOP_LEVEL_DIRS`, `normaliseFilePath`, `classifyFile`, `computeToolResultBytes`, file stats by category | `server/src/logs/claude-extractor.ts`; hook `post-turn-analysis-worker.js` | **none** |
 | Patch line counts (`countPatchLines`) | `server/src/logs/tool-stats.ts` (source of truth); hook `edit-result-counts.js` (`deriveEditResultCounts`) | **none**. The shared fixture `tests/fixtures/patch-line-counts.json` the hook comment names is run by no test today |
 | Edit/Write tool name list | `server/src/logs/edit-tools.ts` (`EDIT_WRITE_TOOL_NAMES`); hook `edit-result-counts.js` | **none** |

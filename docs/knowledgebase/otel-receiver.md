@@ -5,7 +5,7 @@ description: "Why the hook runs its own loopback OTLP/JSON receiver, why it is o
 tags:
   - hooks
   - otel
-timestamp: "2026-11-03T00:00:00+04:00"
+timestamp: "2026-11-09T00:00:00+04:00"
 ---
 
 # OTEL Receiver
@@ -248,6 +248,28 @@ see [hook-installation.md](hook-installation.md) § "Foreign collector"), the re
   summary.
 - `session-status.forward` (`forwardHealth`): `off` when the mode is not `proxy`; `degraded` after
   a drop or retry within `FORWARD_DEGRADED_WINDOW_MS` (5 min); else `ok`.
+
+### Claude apps gateway sessions
+
+Sessions signed in through a Claude apps gateway (`/login`) do not export OTEL to the local receiver:
+
+- The CLI sends OTLP/HTTP to the **gateway**, which relays it to the destinations in its
+  `telemetry.forward_to`. By default only metrics are relayed; logs and traces are opt-in per
+  destination. With no destination the data is discarded. A locally configured endpoint
+  (`OTEL_EXPORTER_OTLP_ENDPOINT`, the hook's settings) is ignored.
+- **Desktop sessions** keep using the local `OTEL_EXPORTER_OTLP_ENDPOINT`, so the receiver works as
+  usual.
+- Log Hub gets the gateway sessions' OTEL data **only** when its receiver is a `forward_to`
+  destination with logs enabled, or when a gateway-delivered policy names it as the endpoint. That
+  needs client Claude Code ≥ 2.1.265, an `https` URL or a loopback `http` URL, no
+  `otelHeadersHelper`, and the JSON protocol (below).
+- The gateway pushes `OTEL_EXPORTER_OTLP_PROTOCOL=http/protobuf`, but this receiver accepts only
+  `Content-Type: application/json` and answers `415 unsupported-media-type` otherwise
+  (`otel-receiver.js:3687-3691`). So a policy naming the receiver must also set `http/json`, and a
+  `forward_to` relay must be `https` and must be able to reach the receiver.
+- Not routed through the gateway, so unaffected: hook data (`artisyn` events, uploads) and local
+  transcripts.
+- Exact configuration keys: https://code.claude.com/docs/en/claude-apps-gateway-config.
 
 ### User-level SessionStart hook (DD-21)
 

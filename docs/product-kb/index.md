@@ -28,7 +28,8 @@ task folder from the article.
 
 ## Competitive research
 
-* [Competitive Research (parity study)](competitive-research/README.md) - Read for the row-by-row comparison of 14 tools with Log Hub (snapshot 2026-11-01): one file per tool, the verdict matrix, gaps
+* [Competitive Research (parity study)](competitive-research/README.md) - Read for the row-by-row comparison of 14 tools with Log Hub (snapshot 2026-11-01) plus Beezi (2026-11-09): one file per tool, the verdict matrix, gaps
+* [Budgets, forecasts and waiting time](competitive-research/budgets-forecasts-waiting.md) - Read before designing budgets, spend forecasts, cost slices or a waiting-time breakdown: what 18 tools show, display vs enforcement (2026-11-09)
 * [Gap-Closing Plan](competitive-research/gap-closing-plan.md) - Read before picking a competitor-inspired feature: ranked proposals with effort, corrected verdicts, rejected ideas and the first increments
 
 ## Competitive watch

@@ -14,7 +14,10 @@
 // `claude_line_count`) and that recompute-all-sessions leaves the list unchanged, then
 // restores the original body for the later steps. Step 6a uploads its own small session (a background agent, a
 // <task-notification> and the main thread finishing after it): the turn's work time runs from the
-// prompt to the last answer. Step 8c uploads one with a Workflow call rejected before launch and one
+// prompt to the last answer. Step 6b uploads four real Claude Code captures of MCP calls moved to
+// the background (tests/scenarios/fixtures/bg-mcp, from the PoC docs/pocs/2026-11-09-1318-mcp-mock-old-new-cc)
+// and checks the badge, duration and output of the slow_echo / slow_fail modals (algorithm doc
+// tool-call-outcome.md rule 1a, TO-27…TO-31). Step 8c uploads one with a Workflow call rejected before launch and one
 // launched by scriptPath (workflow status and name). Step 8d uploads one whose startup estimate
 // exceeds its measured total (the over-total edge state).
 //
@@ -41,6 +44,8 @@
 //   - server/src/logs/claude-extractor.spec.ts (dedup and sidechain: ≈ 20)
 //   - tests/e2e/session-log-view.spec.ts (basic Logs checks: ≈ 6)
 import { randomBytes } from 'node:crypto';
+import fs from 'node:fs';
+import path from 'node:path';
 import { test, expect } from '../fixtures';
 import { createApiKey } from '../helpers/api-key';
 import { loadExpected, materializeGolden } from '../helpers/golden';
@@ -288,6 +293,97 @@ test('@S-SESS-03 Logs: what counts as a prompt, what is hidden, how a turn reads
     await expect(turns.first()).toContainText(hms(310_000));
     await openSession(page, owner, repoId, s.sessionId, { tab: 'info' });
     await expect(infoValue(page, 'Autonomous work time')).toHaveText(hms(310_000));
+  });
+
+  await test.step('6b. MCP calls moved to the background (real captures, CC 2.1.211 and 2.1.319): the task notification decides the badge, ends the ⏱ duration and is the output; no notification → «⧗ background»; the old transcript is unchanged', async () => {
+    const runId = randomBytes(4).toString('hex');
+    const repoUrl = `https://git.arrakis.test/scn/${runId}/ss03-bg-mcp`;
+    const at = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const fixturesDir = path.resolve(__dirname, '..', 'fixtures', 'bg-mcp');
+    type Capture = 'old-full' | 'new-full' | 'new-live' | 'new-close';
+    // DD-19: the run's session id, uuids prefixed with it, every timestamp shifted by one constant
+    // so the first line lands at `at` (deltas stay exact). Task and tool_use ids stay as captured.
+    const captureBody = (capture: Capture, sessionId: string): string => {
+      const lines = fs.readFileSync(path.join(fixturesDir, `${capture}.transcript.jsonl`), 'utf8')
+        .split('\n').filter((l) => l.trim() !== '')
+        .map((l) => JSON.parse(l) as Record<string, unknown>);
+      const first = lines.find((r) => typeof r.timestamp === 'string')?.timestamp;
+      if (typeof first !== 'string') throw new Error(`${capture} has no timestamp`);
+      const shift = at.getTime() - Date.parse(first);
+      const prefixed = (v: unknown) => (typeof v === 'string' ? `${sessionId}-${v}` : v);
+      // The PoC sanitizer keeps only conversation lines, so a parentUuid can point at a dropped
+      // line (an attachment, …); re-link it to the nearest earlier kept line, as the dropped chain did.
+      const uuids = new Set(lines.map((r) => r.uuid).filter((u) => typeof u === 'string'));
+      let lastUuid: unknown = null;
+      return lines.map((r) => {
+        const parent = typeof r.parentUuid === 'string' && !uuids.has(r.parentUuid) ? lastUuid : r.parentUuid;
+        if (typeof r.uuid === 'string') lastUuid = r.uuid;
+        return JSON.stringify({
+          ...r,
+          sessionId,
+          ...('uuid' in r ? { uuid: prefixed(r.uuid) } : {}),
+          ...('parentUuid' in r ? { parentUuid: prefixed(parent) } : {}),
+          ...('sourceToolAssistantUUID' in r ? { sourceToolAssistantUUID: prefixed(r.sourceToolAssistantUUID) } : {}),
+          ...(typeof r.timestamp === 'string' ? { timestamp: new Date(Date.parse(r.timestamp) + shift).toISOString() } : {}),
+        });
+      }).join('\n') + '\n';
+    };
+    const key = await createApiKey(owner.api);
+    const sessions = {} as Record<Capture, string>;
+    for (const capture of ['old-full', 'new-full', 'new-live', 'new-close'] as const) {
+      const s: PromptSession = { sessionId: `ss03-${capture}-${runId}`, prompt: `ss03 background MCP ${capture} ${runId}`, repoUrl };
+      sessions[capture] = s.sessionId;
+      const bodies = { artisyn: promptSessionBodies({ ...s, at }).artisyn, claude: captureBody(capture, s.sessionId) };
+      for (const type of ['artisyn', 'claude'] as const) {
+        const res = await api.post('/api/v2/logs', {
+          params: { sessionId: s.sessionId, type },
+          headers: { 'Content-Type': 'application/x-ndjson', 'X-API-Key': key.key },
+          data: bodies[type],
+        });
+        expect(res.status(), `upload ${capture} ${type}`).toBe(201);
+      }
+    }
+    await waitForQueueIdle(db, owner.id);
+    const repoId = await ownRepoId(owner.api, repoUrl);
+
+    // The Logs modal of one call: badge, ⏱ (null = not checked) and the output it shows.
+    const checkCall = async (tool: 'slow_echo' | 'slow_fail', badge: string, duration: string | null, output: string) => {
+      const turn = logTurns(page).first();
+      await turn.locator('tr', { hasText: `mock:${tool}` }).first().click();
+      const dialog = page.getByRole('dialog');
+      await expect(dialog).toBeVisible();
+      await expect(dialog.getByTestId('tool-status-badge'), `${tool} badge`).toHaveText(badge);
+      if (duration !== null) await expect(dialog.getByTitle('duration'), `${tool} duration`).toHaveText(`⏱ ${duration}`);
+      await expect(dialog.getByTestId('tool-output-block'), `${tool} output`).toContainText(output);
+      await page.keyboard.press('Escape');
+      await expect(dialog).toHaveCount(0);
+    };
+    const openCapture = async (capture: Capture) => {
+      await openSession(page, owner, repoId, sessions[capture], { tab: 'logs' });
+      const turns = logTurns(page);
+      await expect(turns, `${capture}: the notifications are not prompts`).toHaveCount(1);
+      await turns.first().getByRole('button', { name: /Tools/ }).click();
+    };
+
+    // CC 2.1.319, both notifications: the notification time ends the call, its <result> is the output.
+    await openCapture('new-full');
+    await checkCall('slow_echo', '✓ ok', '8.1s', 'slow_echo: c');
+    await checkCall('slow_fail', '✗ error', '10.0s', 'Task failed: slow_fail: d failed');
+    // The turn ended first: only the enqueue of a failed task («Connection closed»).
+    await openCapture('new-close');
+    await checkCall('slow_echo', '✗ error', '10.3s', 'Task failed: Connection closed');
+    // No notification at all: still running or the session ended first — not a failure. The
+    // output says the result is missing (not the hand-off ack), and the ack time is no duration.
+    await openCapture('new-live');
+    await checkCall('slow_echo', '⧗ background', null, 'Moved to the background as task kkumm8n15. No result in this log');
+    await logTurns(page).first().locator('tr', { hasText: 'mock:slow_echo' }).first().click();
+    await expect(page.getByRole('dialog').getByTitle('duration'), 'no duration without a notification').toHaveCount(0);
+    await expect(page.getByRole('dialog').getByTestId('tool-output-block')).not.toContainText('keeps running');
+    await page.keyboard.press('Escape');
+    // CC 2.1.211 (before the hand-off, regression guard): the call ran in-session, nothing changes.
+    await openCapture('old-full');
+    await checkCall('slow_echo', '✓ ok', '8.0s', 'slow_echo: c');
+    await checkCall('slow_fail', '✗ error', null, 'slow_fail: d failed');
   });
 
   await test.step('7. GS-01 Files: src/app.ts with its repeat-access mark ×2, docs/api.md in the Docs group', async () => {

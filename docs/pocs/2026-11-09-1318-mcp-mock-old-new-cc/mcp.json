@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "mock": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["${POC_DIR}/mock-mcp.cjs"]
+    }
+  }
+}

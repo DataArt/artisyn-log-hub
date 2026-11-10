@@ -44,6 +44,12 @@ export interface ToolResultInfo {
   interrupted?: boolean;
   /** The result line's top-level `toolDenialKind` (`user-rejected`, `permission-rule`, …). */
   denialKind?: string;
+  /**
+   * Set when the result is a background-MCP hand-off ack (CC >= 2.1.212; `./background-mcp.ts`):
+   * the `mcp__*` call was moved to a background task. `status` is the matching
+   * `<task-notification>`'s `<status>`, or `null` when the log holds no notification for it.
+   */
+  background?: { status: string | null };
 }
 
 function hasDenialKind(result: ToolResultInfo): boolean {
@@ -51,14 +57,22 @@ function hasDenialKind(result: ToolResultInfo): boolean {
 }
 
 /**
- * DD-3: no result → `unresolved`; interrupted or a `denialKind` → `unresolved` (a rejection);
- * a rejection marker counts only on an `is_error` result (successful Grep/Bash output can quote
- * the marker text); any other `is_error` → `failure`; else `success`.
+ * DD-3: no result → `unresolved`; moved to the background (`background` set) → no
+ * notification (`status === null`) is `unresolved` (it may still be running, so it must not
+ * inflate failure rates), `completed` is `success`, any other status is `failure`;
+ * interrupted or a `denialKind` → `unresolved` (a rejection); a rejection marker counts only on
+ * an `is_error` result (successful Grep/Bash output can quote the marker text); any other
+ * `is_error` → `failure`; else `success`.
  */
 export function classifyToolOutcome(
   result: ToolResultInfo | null,
 ): ToolOutcome {
   if (result === null) return 'unresolved';
+  if (result.background !== undefined) {
+    const { status } = result.background;
+    if (status === null) return 'unresolved';
+    return status === 'completed' ? 'success' : 'failure';
+  }
   if (result.interrupted === true) return 'unresolved';
   if (hasDenialKind(result)) return 'unresolved';
   if (result.isError === true) {
@@ -75,7 +89,9 @@ export interface ToolCallOutcomeFields {
 }
 
 /**
- * DD-3 mapping to `ToolCallDetail.status`: no result → `'missing'`; interrupted or a rejection
+ * DD-3 mapping to `ToolCallDetail.status`: no result → `'missing'`; moved to the background
+ * with no notification → `'background'` (a notified one maps through its outcome below, with no
+ * `interrupted` / `denialKind`); interrupted or a rejection
  * → `'rejected'` (with `interrupted: true` when `interrupted` or `denialKind === 'interrupted'`,
  * and `denialKind` copied);
  * `is_error` → `'error'`; otherwise `'success'`.
@@ -88,6 +104,10 @@ export function outcomeToStatus(
     ...result,
     text: result.text.slice(0, MAX_RESULT_TEXT_SCAN),
   });
+  if (result.background !== undefined) {
+    if (result.background.status === null) return { status: 'background' };
+    return { status: outcome === 'success' ? 'success' : 'error' };
+  }
   if (outcome === 'unresolved') {
     const fields: ToolCallOutcomeFields = { status: 'rejected' };
     if (result.interrupted === true || result.denialKind === 'interrupted')

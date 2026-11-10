@@ -18,6 +18,7 @@
 //   snyk-container    --json <file> (snyk container test)     findings when critical+high > 0
 //   dependency-review env DR_VULNERABLE_CHANGES, DR_INVALID_LICENSE_CHANGES
 //                                                             findings when high+critical > 0 or a denied licence
+//                                                             (changes in docs/pocs/ manifests are ignored)
 //   outcome           --outcome <steps.x.outcome> [--failed <n>] [--note <text>]
 //                                                             success -> pass, failure -> findings (high = n)
 //   zizmor            --sarif <file>                          findings when any result
@@ -189,16 +190,29 @@ function parseEnvJson(value) {
  * `vulnerable-changes` is an array of changes, each with `vulnerabilities`;
  * `invalid-license-changes` is { forbidden: [], unresolved: [], unlicensed: [] }.
  * Only `forbidden` (a deny-licenses hit) makes the row fail; the others are
- * reported in the note.
+ * reported in the note. Changes in PoC manifests (docs/pocs/, never shipped and
+ * also excluded from Snyk) are not counted, only reported as ignored.
  */
+const POC_MANIFEST = /^docs\/pocs\//;
+
+function isPocChange(change) {
+  return !!change && typeof change === 'object' && POC_MANIFEST.test(String(change.manifest || ''));
+}
+
 function dependencyReviewRow(base, vulnerableRaw, licenseRaw) {
   const changes = parseEnvJson(vulnerableRaw);
   if (!Array.isArray(changes)) return noOutput(base);
   const licenses = parseEnvJson(licenseRaw);
   const counts = zeroCounts();
   const seen = new Set();
+  const pocManifests = new Set();
+  const notPoc = (change) => {
+    if (!isPocChange(change)) return true;
+    pocManifests.add(change.manifest);
+    return false;
+  };
   for (const change of changes) {
-    if (!change || typeof change !== 'object') continue;
+    if (!change || typeof change !== 'object' || !notPoc(change)) continue;
     for (const v of Array.isArray(change.vulnerabilities) ? change.vulnerabilities : []) {
       if (!v || typeof v !== 'object') continue;
       const key = `${v.advisory_ghsa_id}|${change.name}|${change.version}`;
@@ -207,11 +221,12 @@ function dependencyReviewRow(base, vulnerableRaw, licenseRaw) {
       counts[ghSeverity(v.severity)] += 1;
     }
   }
-  const listLen = (k) => (licenses && Array.isArray(licenses[k]) ? licenses[k].length : 0);
+  const listLen = (k) => (licenses && Array.isArray(licenses[k]) ? licenses[k].filter(notPoc).length : 0);
   const forbidden = listLen('forbidden');
   const unknown = listLen('unresolved') + listLen('unlicensed');
   const failing = counts.critical + counts.high > 0 || forbidden > 0;
-  const note = `${countsNote(counts)}; ${forbidden} denied licence(s), ${unknown} unknown licence(s)`;
+  const pocNote = pocManifests.size > 0 ? `; ${pocManifests.size} PoC manifest(s) ignored` : '';
+  const note = `${countsNote(counts)}; ${forbidden} denied licence(s), ${unknown} unknown licence(s)${pocNote}`;
   return makeRow({ ...base, status: failing ? 'findings' : 'pass', counts, note });
 }
 

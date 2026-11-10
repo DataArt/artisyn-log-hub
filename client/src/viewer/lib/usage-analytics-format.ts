@@ -68,6 +68,7 @@ export function formatCountOrDash(n: number): string {
  * states where it came from.
  */
 export const DURATION_SOURCE_LABELS: Record<string, string> = {
+  backgroundTask: 'background task (notification time)',
   toolUseResult: 'self-reported by the tool',
   taskTotal: "the Task tool's own total",
   timestampDelta: 'tool_use → tool_result wall clock',

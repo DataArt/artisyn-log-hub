@@ -943,7 +943,7 @@ async function applyHooksUpdate(
 function printNotWorking(action: string, newVersion: string, problems: string[]): void {
   console.warn(`⚠ Hooks ${action} (hooks v${newVersion}), but they are not working in this project yet:`);
   for (const p of problems) console.warn(`  - ${p}`);
-  console.warn('  See the warnings above. Claude Code runs the hooks with your own `node` from PATH; any current Node.js LTS release works.');
+  console.warn('  See the warnings above. Claude Code runs the hooks with your own `node` from PATH; Node.js 22+ is recommended (18 and 20 are end-of-life); 18.19 is the minimum.');
 }
 
 export async function runInstall(flags?: CliFlags): Promise<void> {
@@ -954,7 +954,8 @@ export async function runInstall(flags?: CliFlags): Promise<void> {
     process.exit(1);
   }
 
-  // Best-effort/non-blocking — see warnIfClaudeCodeLikelyRunning's doc comment.
+  // Best-effort/non-blocking — see warnIfNodeEol's and warnIfClaudeCodeLikelyRunning's doc comments.
+  warnIfNodeEol();
   warnIfClaudeCodeLikelyRunning();
 
   const claudeDir = path.join(cwd, '.claude');
@@ -1182,7 +1183,8 @@ export async function runUpgrade(flags?: Pick<CliFlags, 'otelExisting'>): Promis
     process.exit(1);
   }
 
-  // Best-effort/non-blocking — see warnIfClaudeCodeLikelyRunning's doc comment.
+  // Best-effort/non-blocking — see warnIfNodeEol's and warnIfClaudeCodeLikelyRunning's doc comments.
+  warnIfNodeEol();
   warnIfClaudeCodeLikelyRunning();
 
   const claudeDir = path.join(cwd, '.claude');
@@ -1262,7 +1264,8 @@ export async function runUninstall(): Promise<void> {
     process.exit(1);
   }
 
-  // Best-effort/non-blocking — see warnIfClaudeCodeLikelyRunning's doc comment.
+  // Best-effort/non-blocking — see warnIfNodeEol's and warnIfClaudeCodeLikelyRunning's doc comments.
+  warnIfNodeEol();
   warnIfClaudeCodeLikelyRunning();
 
   const claudeDir = path.join(cwd, '.claude');
@@ -2400,6 +2403,24 @@ function checkUserLevelMarketplaceCollision(cwd: string, marketplaceName: string
     `(user level) for ${typeof registeredPath === 'string' ? `"${registeredPath}"` : 'another source'} — ` +
     'another checkout of this repo or an unrelated registration; plugin activation re-points it to this repo.',
   );
+}
+
+// Advisory only: Node.js 18 and 20 are end-of-life. The hooks still run on them (engines
+// stays >=18.19), so this prints one stderr line and never blocks the run or changes the exit
+// code. Runtime hook scripts print nothing — only the installer warns.
+function warnIfNodeEol(): void {
+  try {
+    const nodeVersion = process.versions.node;
+    const major = Number.parseInt(nodeVersion.split('.')[0] ?? '', 10);
+    if (Number.isFinite(major) && major < 22) {
+      console.warn(
+        `Warning: Node.js ${nodeVersion} is end-of-life and gets no security fixes. ` +
+        'Log Hub hooks still work, but please upgrade to Node.js 22 or newer.',
+      );
+    }
+  } catch {
+    // Best-effort only — never fail the run because the version check itself failed.
+  }
 }
 
 // Best-effort, non-blocking heuristic for "Claude Code is probably running right now" — used

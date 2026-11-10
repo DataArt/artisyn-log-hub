@@ -84,6 +84,12 @@ export interface ToolResultInfo {
    * the structured form of a rejected call. Absent on older transcripts.
    */
   denialKind?: string;
+  /**
+   * Set when the result is a background-MCP hand-off ack (CC >= 2.1.212): the `mcp__*` call
+   * was moved to a background task. `status` is the matching `<task-notification>`'s
+   * `<status>`, or `null` when the log holds no notification for that task.
+   */
+  background?: { status: string | null };
 }
 
 /**
@@ -92,6 +98,9 @@ export interface ToolResultInfo {
  * - No matching `tool_result` at all (`null`) → `unresolved`: interrupted, abandoned or
  *   compacted away. This is the rule `log-parser.ts` gets wrong for our purposes (it
  *   reports a missing result as `'error'`), which is why that code is not reused here.
+ * - Moved to the background (`background` set): no notification (`status === null`) →
+ *   `unresolved` (it may still be running, so it must not inflate failure rates);
+ *   `completed` → `success`; any other status (`failed`, `killed`, …) → `failure`.
  * - Interrupted (`toolUseResult.interrupted`) or a non-empty `denialKind` → `unresolved`.
  * - `isError === true` → `unresolved` when the text carries a rejection marker (Claude Code
  *   sets `is_error: true` on rejection blocks), otherwise `failure`. The marker counts only on
@@ -105,6 +114,11 @@ export function classifyToolOutcome(
   result: ToolResultInfo | null,
 ): ToolOutcome {
   if (result === null) return 'unresolved';
+  if (result.background !== undefined) {
+    const { status } = result.background;
+    if (status === null) return 'unresolved';
+    return status === 'completed' ? 'success' : 'failure';
+  }
   if (result.interrupted === true) return 'unresolved';
   if (typeof result.denialKind === 'string' && result.denialKind !== '') {
     return 'unresolved';
@@ -132,7 +146,11 @@ export function computeFailureRate(
 // Duration resolution and histogram bucketing
 // ---------------------------------------------------------------------------
 
-export type DurationSource = 'toolUseResult' | 'taskTotal' | 'timestampDelta';
+export type DurationSource =
+  | 'backgroundTask'
+  | 'toolUseResult'
+  | 'taskTotal'
+  | 'timestampDelta';
 
 export interface ResolvedDuration {
   ms: number;
@@ -146,12 +164,20 @@ export interface DurationInputs {
   assistantTs: number | null;
   /** Epoch ms of the user event carrying the matching `tool_result`. */
   resultTs: number | null;
+  /**
+   * Epoch ms of the `<task-notification>` that finished a background-MCP call (the user
+   * line, else the queue enqueue). Absent / null when the call was not moved to the
+   * background or no notification exists.
+   */
+  backgroundEndTs?: number | null;
 }
 
 /**
  * Resolves one call's duration through the fixed fallback chain, naming its source so
  * every surface can say which measure it is showing:
  *
+ * 0. `backgroundEndTs - assistantTs` — a background-MCP call's end is its task
+ *    notification, not the hand-off ack (the ack only marks when it went to the background).
  * 1. `toolUseResult.durationMs` — exact, self-reported (438 results on the live DB,
  *    essentially `Bash`).
  * 2. `toolUseResult.totalDurationMs` — the `Task` tool's own total (265 results).
@@ -163,6 +189,21 @@ export interface DurationInputs {
 export function resolveToolDuration(
   inputs: DurationInputs,
 ): ResolvedDuration | null {
+  const { backgroundEndTs } = inputs;
+  if (
+    backgroundEndTs !== undefined &&
+    backgroundEndTs !== null &&
+    inputs.assistantTs !== null &&
+    Number.isFinite(backgroundEndTs) &&
+    Number.isFinite(inputs.assistantTs) &&
+    backgroundEndTs >= inputs.assistantTs
+  ) {
+    return {
+      ms: backgroundEndTs - inputs.assistantTs,
+      source: 'backgroundTask',
+    };
+  }
+
   const result = inputs.toolUseResult;
 
   if (result !== null) {
@@ -658,7 +699,12 @@ export interface ToolStatRow {
 }
 
 export function emptyDurationBySource(): Record<DurationSource, number> {
-  return { toolUseResult: 0, taskTotal: 0, timestampDelta: 0 };
+  return {
+    backgroundTask: 0,
+    toolUseResult: 0,
+    taskTotal: 0,
+    timestampDelta: 0,
+  };
 }
 
 export function createToolStatRow(toolName: string): ToolStatRow {

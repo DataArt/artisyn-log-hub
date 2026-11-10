@@ -495,7 +495,10 @@ function collectChangedFiles(entries) {
 // below is a hand-port (plain JS hook, no shared runtime with the TS
 // server) of the exact algorithm the server itself uses to build the same figures, named
 // identically to its server counterpart so the two stay easy to diff:
-//   - `classifyToolOutcome()`/`isRejectionText()` <- `tool-stats.ts:54-103`
+//   - `classifyToolOutcome()`/`isRejectionText()` <- `tool-stats.ts:54-116`
+//   - `BACKGROUND_ACK_RE`/`matchBackgroundAckTaskId()`/`isBackgroundCandidate()`/
+//     `collectBackgroundTaskNotifications()` <- `background-mcp.ts` (MCP calls Claude Code
+//     moved to the background, CC >= 2.1.212; detected by transcript shape, never by version)
 //   - `normaliseFilePath()`/`classifyFile()`/`computeToolResultBytes()` <- `claude-extractor.ts:39-84,1126-1138`
 //     (mirrors `extractFileStatsByCategory()`, `claude-extractor.ts:1062-1124`, which does NOT
 //     filter `isSidechain` — neither does this port, nor do this file's own pre-existing
@@ -532,15 +535,143 @@ function isRejectionText(text) {
 
 /**
  * Port of `tool-stats.ts`'s `classifyToolOutcome()`.
- * @param {{ isError: boolean|null, text: string, interrupted?: boolean }|null} result
+ *
+ * - No result → `unresolved`.
+ * - `background` set (an MCP call moved to the background): no notification (`status === null`)
+ *   → `unresolved`; `completed` → `success`; any other status → `failure`.
+ * - Interrupted or a non-empty `denialKind` → `unresolved`.
+ * - `isError === true` → `unresolved` when the text carries a rejection marker, else `failure`
+ *   (the marker counts only on an `is_error` result).
+ * @param {{ isError: boolean|null, text: string, interrupted?: boolean, denialKind?: string|null,
+ *   background?: { status: string|null } }|null} result
  * @returns {'success'|'failure'|'unresolved'}
  */
 function classifyToolOutcome(result) {
   if (result === null) return 'unresolved';
+  if (result.background) {
+    const status = result.background.status;
+    if (status === null || status === undefined) return 'unresolved';
+    return status === 'completed' ? 'success' : 'failure';
+  }
   if (result.interrupted === true) return 'unresolved';
-  if (isRejectionText(result.text)) return 'unresolved';
-  if (result.isError === true) return 'failure';
+  if (typeof result.denialKind === 'string' && result.denialKind !== '') return 'unresolved';
+  if (result.isError === true) {
+    return isRejectionText(result.text) ? 'unresolved' : 'failure';
+  }
   return 'success';
+}
+
+/**
+ * The hand-off acknowledgement Claude Code writes as the first `tool_result` of an MCP call it
+ * moved to the background (CC >= 2.1.212). Port of `background-mcp.ts`'s `BACKGROUND_ACK_RE`.
+ */
+const BACKGROUND_ACK_RE = /moved to the background as task ([A-Za-z0-9_-]+)/;
+
+/**
+ * Port of `background-mcp.ts`'s `matchBackgroundAckTaskId()`. Runs over the FULL flattened
+ * result text, never the `MAX_RESULT_TEXT_SCAN` cut.
+ * @param {string} fullText
+ * @returns {string|null}
+ */
+function matchBackgroundAckTaskId(fullText) {
+  if (typeof fullText !== 'string' || fullText === '') return null;
+  const m = BACKGROUND_ACK_RE.exec(fullText);
+  return m ? m[1] : null;
+}
+
+/**
+ * Port of `background-mcp.ts`'s `isBackgroundCandidate()`.
+ * @param {string} toolName
+ * @param {boolean|null} isError
+ * @returns {boolean}
+ */
+function isBackgroundCandidate(toolName, isError) {
+  return typeof toolName === 'string' && toolName.startsWith('mcp__') && isError !== true;
+}
+
+/**
+ * Reads one `<tag>…</tag>` value (trimmed) from a task-notification XML string.
+ * @param {string} xml
+ * @param {string} tag
+ * @returns {string|null}
+ */
+function readNotificationTag(xml, tag) {
+  const open = `<${tag}>`;
+  const start = xml.indexOf(open);
+  if (start === -1) return null;
+  const end = xml.indexOf(`</${tag}>`, start + open.length);
+  if (end === -1) return null;
+  return xml.slice(start + open.length, end).trim();
+}
+
+/**
+ * Port of `background-mcp.ts`'s `collectBackgroundTaskNotifications()`: `<task-notification>`
+ * entries keyed by task id, from string-content `user` lines and `queue-operation` enqueues.
+ * The first notification per task id wins; a user line's timestamp wins over the enqueue's.
+ * @param {Array<Record<string, *>>} entries
+ * @returns {Map<string, { taskId: string, status: string, result: string|null, ts: number|null }>}
+ */
+function collectBackgroundTaskNotifications(entries) {
+  /** @type {Map<string, { taskId: string, status: string, result: string|null, ts: number|null }>} */
+  const fromUser = new Map();
+  /** @type {Map<string, { taskId: string, status: string, result: string|null, ts: number|null }>} */
+  const fromEnqueue = new Map();
+
+  for (const e of entries) {
+    if (!e || typeof e !== 'object') continue;
+    let xml = null;
+    let target = null;
+    if (e.type === 'user') {
+      const content = e.message && e.message.content;
+      if (typeof content === 'string' && content.trimStart().startsWith('<task-notification>')) {
+        xml = content;
+        target = fromUser;
+      }
+    } else if (
+      e.type === 'queue-operation' &&
+      e.operation === 'enqueue' &&
+      typeof e.content === 'string' &&
+      e.content.includes('<task-notification>')
+    ) {
+      xml = e.content;
+      target = fromEnqueue;
+    }
+    if (xml === null || target === null) continue;
+
+    const taskId = readNotificationTag(xml, 'task-id');
+    if (taskId === null || taskId === '' || target.has(taskId)) continue;
+    const ts = typeof e.timestamp === 'string' ? Date.parse(e.timestamp) : NaN;
+    target.set(taskId, {
+      taskId,
+      status: readNotificationTag(xml, 'status') ?? '',
+      result: readNotificationTag(xml, 'result'),
+      ts: Number.isFinite(ts) ? ts : null,
+    });
+  }
+
+  const out = new Map(fromEnqueue);
+  for (const [taskId, n] of fromUser) {
+    const fallback = fromEnqueue.get(taskId);
+    out.set(taskId, n.ts === null && fallback ? { ...n, ts: fallback.ts } : n);
+  }
+  return out;
+}
+
+/**
+ * Flattens every `text` item of a `tool_result` content (no length cut) — the input
+ * {@link matchBackgroundAckTaskId} needs.
+ * @param {*} content
+ * @returns {string}
+ */
+function flattenToolResultFullText(content) {
+  if (typeof content === 'string') return content;
+  if (!Array.isArray(content)) return '';
+  let out = '';
+  for (const item of content) {
+    if (!item || typeof item !== 'object' || item.type !== 'text') continue;
+    if (typeof item.text === 'string') out += item.text;
+  }
+  return out;
 }
 
 /**
@@ -800,6 +931,7 @@ function deriveToolUsage(entries) {
       if (Array.isArray(content)) {
         const toolUseResult =
           e.toolUseResult && typeof e.toolUseResult === 'object' ? e.toolUseResult : null;
+        const denialKind = typeof e.toolDenialKind === 'string' ? e.toolDenialKind : null;
         for (const block of content) {
           if (!block || block.type !== 'tool_result') continue;
           const toolUseId = typeof block.tool_use_id === 'string' ? block.tool_use_id : null;
@@ -808,6 +940,9 @@ function deriveToolUsage(entries) {
               isError: typeof block.is_error === 'boolean' ? block.is_error : null,
               text: flattenToolResultText(block.content),
               interrupted: toolUseResult ? toolUseResult.interrupted === true : false,
+              denialKind,
+              // Matched on the full text: the ack's offset grows with the server/tool name.
+              ackTaskId: matchBackgroundAckTaskId(flattenToolResultFullText(block.content)),
             });
           }
         }
@@ -815,9 +950,19 @@ function deriveToolUsage(entries) {
     }
   }
 
+  let notifications = null;
   const rows = new Map();
   for (const call of pendingCalls) {
-    const result = call.id !== null ? (toolResults.get(call.id) ?? null) : null;
+    let result = call.id !== null ? (toolResults.get(call.id) ?? null) : null;
+    if (
+      result !== null &&
+      result.ackTaskId !== null &&
+      isBackgroundCandidate(call.name, result.isError)
+    ) {
+      if (notifications === null) notifications = collectBackgroundTaskNotifications(entries);
+      const notification = notifications.get(result.ackTaskId);
+      result = { ...result, background: { status: notification ? notification.status : null } };
+    }
     const outcome = classifyToolOutcome(result);
 
     let row = rows.get(call.name);
@@ -1891,6 +2036,10 @@ module.exports = {
   // local aggregate derivation
   isRejectionText,
   classifyToolOutcome,
+  BACKGROUND_ACK_RE,
+  matchBackgroundAckTaskId,
+  isBackgroundCandidate,
+  collectBackgroundTaskNotifications,
   flattenToolResultText,
   computeToolResultBytes,
   normaliseFilePath,

@@ -4,6 +4,13 @@
  * joined to its result, and which call a permission event belongs to.
  */
 
+import {
+  backgroundPendingText,
+  collectBackgroundTaskNotifications,
+  isBackgroundCandidate,
+  matchBackgroundAckTaskId,
+  type BackgroundTaskNotification,
+} from './background-mcp';
 import { outcomeToStatus } from './tool-outcome';
 import type {
   AssistantEvent,
@@ -133,6 +140,13 @@ export interface ToolResultEntry {
   uuid?: string;
   /** The result line's top-level `toolDenialKind`. */
   denialKind?: string;
+  /**
+   * Set when the result is a background-MCP hand-off ack (`./background-mcp.ts`): the task id
+   * the ack names and the matching `<task-notification>`'s `<status>` (null when the log holds
+   * no notification). With a notification, `content`, `timestamp` and `bytes` are the
+   * notification's instead of the ack's; without one, `content` is `backgroundPendingText`.
+   */
+  background?: { taskId: string; status: string | null };
 }
 
 type ContentValue = ContentBlock['content'];
@@ -181,11 +195,28 @@ function resultBytes(c: ContentValue): number | undefined {
 /**
  * One pass over a log: `tool_use_id` → its result. The first result for an id wins, as in the
  * per-call scans this replaces.
+ *
+ * Background-MCP join (`./background-mcp.ts`): a non-error result of an `mcp__*` call whose full
+ * text is a hand-off ack gets `background`; when the log holds the task's notification, its
+ * `<result>` (or `''`), its time and its size replace the ack's. Without one, the ack text is
+ * replaced by `backgroundPendingText` (the ack keeps its timestamp).
  */
 export function buildToolResultIndex(
   events: TelemetryEvent[],
 ): Map<string, ToolResultEntry> {
   const index = new Map<string, ToolResultEntry>();
+  const toolNames = new Map<string, string>();
+  for (const e of events) {
+    if (e.type !== 'assistant') continue;
+    const blocks = (e as AssistantEvent).message?.content;
+    if (!blocks) continue;
+    for (const block of blocks) {
+      if (block.type === 'tool_use' && block.id && block.name)
+        toolNames.set(block.id, block.name);
+    }
+  }
+  let notifications: Map<string, BackgroundTaskNotification> | null = null;
+
   for (const e of events) {
     if (e.type !== 'user') continue;
     const ue = e as UserEvent;
@@ -195,20 +226,44 @@ export function buildToolResultIndex(
       if (block.type !== 'tool_result') continue;
       const id = block.tool_use_id;
       if (!id || index.has(id)) continue;
-      const { content: text, isBinary } = resultContent(block.content);
-      const bytes = resultBytes(block.content);
+      const { content: fullText, isBinary } = resultContent(block.content);
+      let text = fullText;
+      let bytes = resultBytes(block.content);
+      let timestamp = ue.timestamp;
+      const isError = block.is_error === true;
       const denialKind = ue.toolDenialKind;
+
+      let background: ToolResultEntry['background'];
+      const toolName = toolNames.get(id);
+      const taskId =
+        toolName !== undefined && isBackgroundCandidate(toolName, isError)
+          ? matchBackgroundAckTaskId(fullText)
+          : null;
+      if (taskId !== null) {
+        notifications ??= collectBackgroundTaskNotifications(events);
+        const n = notifications.get(taskId);
+        background = { taskId, status: n?.status ?? null };
+        if (n !== undefined) {
+          text = n.result ?? '';
+          if (n.ts !== null) timestamp = new Date(n.ts).toISOString();
+        } else {
+          text = backgroundPendingText(taskId);
+        }
+        bytes = text.length;
+      }
+
       index.set(id, {
         content: text,
         isBinary,
-        isError: block.is_error === true,
-        ...(ue.timestamp ? { timestamp: ue.timestamp } : {}),
+        isError,
+        ...(timestamp ? { timestamp } : {}),
         interrupted: ue.toolUseResult?.interrupted === true,
         ...(bytes !== undefined ? { bytes } : {}),
         ...(ue.uuid ? { uuid: ue.uuid } : {}),
         ...(typeof denialKind === 'string' && denialKind !== ''
           ? { denialKind }
           : {}),
+        ...(background !== undefined ? { background } : {}),
       });
     }
   }
@@ -286,12 +341,21 @@ export function buildAllToolCalls(
             text: r.content,
             interrupted: r.interrupted,
             ...(r.denialKind !== undefined ? { denialKind: r.denialKind } : {}),
+            ...(r.background !== undefined
+              ? { background: { status: r.background.status } }
+              : {}),
           }
         : null,
     );
+    // For a notified background call `r.timestamp` is already the notification time (see
+    // `buildToolResultIndex`), so the duration below runs to the task's real end. Without a
+    // notification the ack time is only the hand-off, so the call gets no duration.
     const startedAt = call.timestamp;
     const endedAt = r?.timestamp;
-    const duration = durationMs(startedAt, endedAt);
+    const duration =
+      r?.background?.status === null
+        ? undefined
+        : durationMs(startedAt, endedAt);
     const detail: ToolCallDetail = {
       id: call.id,
       name: call.name,

@@ -1,0 +1,145 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="920" viewBox="0 0 1440 920" font-family="Inter, Segoe UI, Arial, sans-serif">
+  <style>
+    .t { fill: #111827; }
+    .muted { fill: #6b7280; }
+    .mono { font-family: 'JetBrains Mono', Consolas, monospace; }
+    .link { fill: #2563eb; }
+    .note { fill: #92400e; font-size: 11px; }
+  </style>
+  <rect width="1440" height="920" fill="#ffffff"/>
+  <text x="24" y="28" font-size="18" font-weight="700" class="t">Threshold notice banner and notice tray (FR-6, FR-9)</text>
+  <text x="24" y="48" font-size="12" class="muted">Wireframe, light theme. A bell with the unread count in the top bar opens the tray; new unread notices also show as dismissible banners under the top bar, on every page.</text>
+
+  <!-- ============ A: banners, tray closed ============ -->
+  <g transform="translate(0,64)">
+    <!-- top bar copied from the current app + new bell -->
+    <rect x="0" y="0" width="1440" height="48" fill="#fafafa"/>
+    <line x1="0" y1="48" x2="1440" y2="48" stroke="#e5e7eb"/>
+    <circle cx="24" cy="24" r="8" fill="#4f46e5"/>
+    <text x="44" y="29" font-size="14" font-weight="600" class="t">[local] Artisyn Log Hub <tspan class="muted" font-size="12" font-weight="400">dev</tspan></text>
+    <text x="262" y="29" font-size="14" font-weight="600" class="t">Home</text>
+    <text x="1064" y="29" font-size="14" font-weight="600" class="t">All views</text>
+    <rect x="1172" y="10" width="40" height="28" rx="6" fill="#eef2ff" stroke="#6366f1" stroke-dasharray="3,2"/>
+    <text x="1182" y="30" font-size="15" class="t">🔔</text>
+    <circle cx="1206" cy="14" r="8" fill="#dc2626"/>
+    <text x="1206" y="18" font-size="10" font-weight="700" fill="#ffffff" text-anchor="middle">2</text>
+    <text x="1226" y="29" font-size="14" class="muted">dt@dataart.com</text>
+    <text x="1350" y="29" font-size="14" font-weight="600" class="t">Edit email</text>
+
+    <!-- banner 1: 75 % (amber) -->
+    <rect x="0" y="49" width="1440" height="40" fill="#fffbeb"/>
+    <line x1="0" y1="89" x2="1440" y2="89" stroke="#fcd34d"/>
+    <rect x="0" y="49" width="4" height="40" fill="#f59e0b"/>
+    <text x="20" y="74" font-size="13" fill="#92400e"><tspan font-weight="700">⚠ 75 % of budget reached</tspan> — repo live-test-repo-2 · November 2026 · <tspan font-family="JetBrains Mono, Consolas, monospace">$41.20 of $50.00</tspan> · forecast <tspan font-family="JetBrains Mono, Consolas, monospace">$137.33</tspan> by 30 Nov. Usage is not blocked.</text>
+    <text x="1250" y="74" font-size="13" class="link" font-weight="600">Open spend →</text>
+    <text x="1404" y="75" font-size="16" fill="#92400e">×</text>
+
+    <!-- banner 2: 100 % (red) -->
+    <rect x="0" y="90" width="1440" height="40" fill="#fef2f2"/>
+    <line x1="0" y1="130" x2="1440" y2="130" stroke="#fca5a5"/>
+    <rect x="0" y="90" width="4" height="40" fill="#dc2626"/>
+    <text x="20" y="115" font-size="13" fill="#991b1b"><tspan font-weight="700">● 100 % of budget reached</tspan> — team Live Test Team · week 9–15 Nov · <tspan font-family="JetBrains Mono, Consolas, monospace">$212.00 of $200.00</tspan>. Usage is not blocked.</text>
+    <text x="1250" y="115" font-size="13" class="link" font-weight="600">Open spend →</text>
+    <text x="1404" y="116" font-size="16" fill="#991b1b">×</text>
+
+    <!-- page body ghost -->
+    <rect x="0" y="131" width="320" height="150" fill="#ffffff"/>
+    <line x1="321" y1="131" x2="321" y2="281" stroke="#e5e7eb" stroke-width="4"/>
+    <text x="12" y="160" font-size="11" class="muted">TEAMS</text>
+    <rect x="12" y="172" width="240" height="10" rx="5" fill="#f3f4f6"/>
+    <rect x="12" y="192" width="200" height="10" rx="5" fill="#f3f4f6"/>
+    <text x="349" y="168" font-size="18" font-weight="700" class="t">Home</text>
+    <rect x="349" y="186" width="620" height="90" rx="8" fill="#ffffff" stroke="#d6e4fb"/>
+    <rect x="997" y="186" width="420" height="90" rx="8" fill="#ffffff" stroke="#e5e7eb"/>
+    <text x="365" y="214" font-size="12" class="muted">(page content unchanged, pushed down by the banners)</text>
+  </g>
+  <text x="24" y="366" class="note">NEW bell (dashed): red badge = this user's unread budget notices (here 2, matching the 2 banners). The bell is always shown; the badge only when unread &gt; 0.</text>
+  <text x="24" y="382" class="note">× on a banner marks that notice read for this user only (stays read after reload); the notice stays in the tray. "Open spend" goes to the scope's Spend view for that period. Amber &lt; 100 %, red ≥ 100 %.</text>
+  <text x="24" y="398" class="note">One banner per unread notice (budget × period × threshold); when several thresholds were crossed at once only the highest has a notice (FR-6). Banners stack, highest threshold first.</text>
+
+  <!-- ============ B: tray open ============ -->
+  <text x="24" y="440" font-size="14" font-weight="700" class="t">B. Bell clicked: notice tray open</text>
+  <g transform="translate(0,456)">
+    <rect x="0" y="0" width="1440" height="48" fill="#fafafa"/>
+    <line x1="0" y1="48" x2="1440" y2="48" stroke="#e5e7eb"/>
+    <circle cx="24" cy="24" r="8" fill="#4f46e5"/>
+    <text x="44" y="29" font-size="14" font-weight="600" class="t">[local] Artisyn Log Hub <tspan class="muted" font-size="12" font-weight="400">dev</tspan></text>
+    <text x="262" y="29" font-size="14" font-weight="600" class="t">Home</text>
+    <text x="1064" y="29" font-size="14" font-weight="600" class="t">All views</text>
+    <rect x="1172" y="10" width="40" height="28" rx="6" fill="#f3f4f6" stroke="#d1d5db"/>
+    <text x="1182" y="30" font-size="15" class="t">🔔</text>
+    <circle cx="1206" cy="14" r="8" fill="#dc2626"/>
+    <text x="1206" y="18" font-size="10" font-weight="700" fill="#ffffff" text-anchor="middle">2</text>
+    <text x="1226" y="29" font-size="14" class="muted">dt@dataart.com</text>
+    <text x="1350" y="29" font-size="14" font-weight="600" class="t">Edit email</text>
+
+    <!-- page body ghost (behind the tray) -->
+    <line x1="321" y1="49" x2="321" y2="440" stroke="#e5e7eb" stroke-width="4"/>
+    <text x="349" y="88" font-size="18" font-weight="700" class="t">Home</text>
+    <rect x="349" y="106" width="560" height="140" rx="8" fill="#ffffff" stroke="#d6e4fb"/>
+
+    <!-- tray popover -->
+    <rect x="874" y="54" width="548" height="380" rx="8" fill="#000000" opacity="0.06" transform="translate(2,3)"/>
+    <rect x="874" y="54" width="548" height="380" rx="8" fill="#ffffff" stroke="#d1d5db"/>
+    <path d="M1186 54 l8 -8 l8 8 z" fill="#ffffff" stroke="#d1d5db"/>
+    <line x1="1187" y1="54" x2="1201" y2="54" stroke="#ffffff" stroke-width="2"/>
+    <text x="892" y="82" font-size="15" font-weight="700" class="t">Budget notices</text>
+    <text x="1012" y="82" font-size="12" class="muted">2 unread · newest first</text>
+    <text x="1404" y="82" font-size="12" class="link" text-anchor="end">Mark all read</text>
+    <line x1="874" y1="96" x2="1422" y2="96" stroke="#e5e7eb"/>
+
+    <!-- row 1: unread, red -->
+    <rect x="875" y="97" width="546" height="56" fill="#f5f7ff"/>
+    <circle cx="890" cy="117" r="4" fill="#2563eb"/>
+    <rect x="902" y="106" width="44" height="18" rx="9" fill="#fee2e2"/><text x="924" y="119" font-size="11" font-weight="700" fill="#991b1b" text-anchor="middle">100 %</text>
+    <text x="956" y="120" font-size="13" font-weight="700" class="t">Team Live Test Team · Weekly $200.00</text>
+    <text x="1404" y="120" font-size="11" class="muted" text-anchor="end">10 min ago</text>
+    <text x="956" y="140" font-size="12" class="muted"><tspan class="mono t">$212.00 of $200.00</tspan> · week 9–15 Nov <tspan class="link">· Open spend →</tspan></text>
+    <line x1="874" y1="153" x2="1422" y2="153" stroke="#f3f4f6"/>
+
+    <!-- row 2: unread, amber -->
+    <rect x="875" y="154" width="546" height="56" fill="#f5f7ff"/>
+    <circle cx="890" cy="174" r="4" fill="#2563eb"/>
+    <rect x="902" y="163" width="44" height="18" rx="9" fill="#fef3c7"/><text x="924" y="176" font-size="11" font-weight="700" fill="#92400e" text-anchor="middle">75 %</text>
+    <text x="956" y="177" font-size="13" font-weight="700" class="t">Repo live-test-repo-2 · Monthly $50.00</text>
+    <text x="1404" y="177" font-size="11" class="muted" text-anchor="end">2 h ago</text>
+    <text x="956" y="197" font-size="12" class="muted"><tspan class="mono t">$41.20 of $50.00</tspan> · November 2026 <tspan class="link">· Open spend →</tspan></text>
+    <line x1="874" y1="210" x2="1422" y2="210" stroke="#f3f4f6"/>
+
+    <!-- row 3: read (banner dismissed today) -->
+    <rect x="902" y="220" width="44" height="18" rx="9" fill="#fef3c7"/><text x="924" y="233" font-size="11" font-weight="700" fill="#92400e" text-anchor="middle">90 %</text>
+    <text x="956" y="234" font-size="13" class="t">Team repo artisyn-log-hub · Monthly $300.00</text>
+    <text x="1404" y="234" font-size="11" class="muted" text-anchor="end">Today 08:40</text>
+    <text x="956" y="254" font-size="12" class="muted"><tspan class="mono">$271.40 of $300.00</tspan> · November 2026 <tspan class="link">· Open spend →</tspan></text>
+    <line x1="874" y1="267" x2="1422" y2="267" stroke="#f3f4f6"/>
+
+    <!-- row 4: read, previous period -->
+    <rect x="902" y="277" width="44" height="18" rx="9" fill="#fee2e2"/><text x="924" y="290" font-size="11" font-weight="700" fill="#991b1b" text-anchor="middle">100 %</text>
+    <text x="956" y="291" font-size="13" class="t">Repo live-test-repo-2 · Monthly $50.00</text>
+    <text x="1404" y="291" font-size="11" class="muted" text-anchor="end">28 Oct 14:02</text>
+    <text x="956" y="311" font-size="12" class="muted"><tspan class="mono">$50.30 of $50.00</tspan> · October 2026 <tspan class="link">· Open spend →</tspan></text>
+    <line x1="874" y1="324" x2="1422" y2="324" stroke="#f3f4f6"/>
+
+    <!-- row 5: read, previous period -->
+    <rect x="902" y="334" width="44" height="18" rx="9" fill="#fef3c7"/><text x="924" y="347" font-size="11" font-weight="700" fill="#92400e" text-anchor="middle">75 %</text>
+    <text x="956" y="348" font-size="13" class="t">Repo live-test-repo-2 · Monthly $50.00</text>
+    <text x="1404" y="348" font-size="11" class="muted" text-anchor="end">21 Oct 11:15</text>
+    <text x="956" y="368" font-size="12" class="muted"><tspan class="mono">$37.60 of $50.00</tspan> · October 2026 <tspan class="link">· Open spend →</tspan></text>
+    <line x1="874" y1="381" x2="1422" y2="381" stroke="#e5e7eb"/>
+
+    <text x="1148" y="412" font-size="12" class="muted" text-anchor="middle">All 5 notices shown · older ones load on scroll</text>
+  </g>
+
+  <text x="24" y="560" class="note">Tray lists all of this user's budget notices,</text>
+  <text x="24" y="576" class="note">newest first: threshold, scope, budget, spend,</text>
+  <text x="24" y="592" class="note">period, time (FR-9). Blue dot + tinted row =</text>
+  <text x="24" y="608" class="note">unread. Clicking a row opens the scope's Spend</text>
+  <text x="24" y="624" class="note">view for that period and marks it read.</text>
+  <text x="24" y="652" class="note">Read state is per user: a dismissed banner</text>
+  <text x="24" y="668" class="note">(row 3) is read here, still unread for the</text>
+  <text x="24" y="684" class="note">other team managers. Notices from past</text>
+  <text x="24" y="700" class="note">periods stay in the tray.</text>
+  <text x="24" y="728" class="note">Only users who are recipients see a notice:</text>
+  <text x="24" y="744" class="note">personal repo owner; team owner + managers</text>
+  <text x="24" y="760" class="note">for team repository and team budgets (FR-6).</text>
+</svg>

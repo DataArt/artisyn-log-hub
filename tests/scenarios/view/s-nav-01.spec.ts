@@ -434,9 +434,12 @@ test('@S-NAV-01 navigation walk: Home, one-level session tabs with views, Summar
     await expect(recent.getByTestId(`home-recent-session-${sidC}`)).toBeVisible();
     await expect(recent.getByTestId(`home-recent-session-${sidA}`)).toBeVisible();
 
+    // Leave the app before swapping identity: sessions are `rolling`, so a request still in flight
+    // from the previous user's page answers with that user's Set-Cookie and overwrites the new one.
+    await page.goto('about:blank');
     await page.context().clearCookies();
     await member.signIn(page);
-    await page.reload();
+    await page.goto('/#/main');
     await expect(page.getByTestId(`home-repo-open-${a}`)).toHaveCount(0);
     await expect(page.getByTestId(`home-repo-open-${c}`)).toBeVisible();
     await expectHomeWidgetFilled(page, 'recent');
@@ -444,9 +447,10 @@ test('@S-NAV-01 navigation walk: Home, one-level session tabs with views, Summar
     await expect(recent.getByTestId(`home-recent-session-${sidC}`)).toHaveCount(0);
     await expect(recent.locator('[data-testid^="home-recent-"]')).toHaveCount(0);
 
+    await page.goto('about:blank');
     await page.context().clearCookies();
     await owner.signIn(page);
-    await page.reload();
+    await page.goto('/#/main');
     await expect(page.getByTestId(`home-repo-open-${a}`)).toBeVisible();
     await expect(recent.getByTestId(`home-recent-session-${sidC}`)).toBeVisible();
     await expect(recent.getByTestId(`home-recent-session-${sidA}`)).toBeVisible();
