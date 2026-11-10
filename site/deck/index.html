@@ -493,17 +493,17 @@
       <p class="block-marker">Quality · the right thing?</p>
       <ol class="pills" aria-label="Storyline"><li>hook</li><li>harness</li><li>cost</li><li>speed</li><li>context</li><li class="active">quality</li><li>team</li><li>tools</li><li>safety</li></ol>
     </header>
-    <h2 class="headline">What changed, and who judged it.</h2>
+    <h2 class="headline">What changed, and what it was about.</h2>
     <div class="slide-cols">
       <div class="slide-body">
         <ul>
           <li>Files, folders and modules touched; diff lines, commits, cost per line.</li>
-          <li>A separate post-turn run labels task type and outcome for every chart.</li>
-          <li>The session never grades itself: LLM judges favor their own output (Panickssery et al., NeurIPS 2024).</li>
+          <li>After each turn, Claude tags the session with your own attributes: Jira ticket, customer, workflow stage.</li>
+          <li>Slice every chart and report by those tags.</li>
         </ul>
         <div class="key-box deck-figure">
           <span class="key-figure">${{ds:productivity.costPerLine}}</span>
-          <span class="key-caption">per changed line — repo median, by task type and outcome</span>
+          <span class="key-caption">per changed line — repo median, split by any session attribute</span>
         </div>
       </div>
       <figure class="shot deck-shot"><img src="../assets/shots/change-surface.png" alt="Change Surface of one session" loading="lazy"><figcaption>Session → Change surface</figcaption></figure>

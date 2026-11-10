@@ -328,7 +328,7 @@ slide head: hook · harness · cost · speed · context · quality · team · to
 | 13 | Context · harness tax | `system-context-anatomy.png` |
 | 14 | Context · what the agent uses | `harness-usage.png` |
 | 15 | Context · knowledge base, verified vs heuristic | `okf-kb-value*.png` |
-| 16 | Quality · what changed and who judged it | `change-surface.png` |
+| 16 | Quality · what changed, and what it was about (session attributes as tags) | `change-surface.png` |
 | 17 | Team · analytics, reports, anomalies | anomaly board |
 | 18 | Team · 13 metrics | mosaic |
 | 19 | Tools · author and admin | tool table + `tools-mcp.png` |
@@ -357,8 +357,8 @@ statement appears only as the vendor's own advice or admission. The source list 
 | 18 models, performance degrades as input grows (deck 3, Autonomy tile: a long solo run is a growing input) | Chroma, "Context Rot" | 2025-07-14 · industry research report | https://www.trychroma.com/research/context-rot | confirmed |
 | not used: ~7 months doubling of the 50 % task horizon | METR, "Measuring AI Ability to Complete Long Tasks", arXiv 2503.14499 | 2025-03 · preprint | https://arxiv.org/abs/2503.14499 | confirmed, but it measures model progress, not a harness effect, so it left the Autonomy tile (2026-11-06 review) |
 | 36.5 % average success of poisoned MCP tool descriptions, 20 agent settings (deck 3) | MCPTox, arXiv 2508.14925 (AAAI-26) | 2025-08-19 · peer-reviewed | https://arxiv.org/abs/2508.14925 | confirmed (§4.1, §4.2) |
-| 62–100 % MCP injection success, 18 model–server pairs (deck 19) | "Log-To-Leak", arXiv 2610.36108 v1 | 2026-10-26 · preprint | https://arxiv.org/abs/2610.36108 | confirmed (abstract: 62.64–100 %) |
-| LLM judges favour their own output (deck 15) | Panickssery, Bowman, Feng, "LLM Evaluators Recognize and Favor Their Own Generations", NeurIPS 2024 | 2024 · peer-reviewed | https://arxiv.org/abs/2404.13076 | confirmed |
+| 62–100 % MCP injection success, 18 model–server pairs (deck 20) | "Log-To-Leak", arXiv 2610.36108 v1 | 2026-10-26 · preprint | https://arxiv.org/abs/2610.36108 | confirmed (abstract: 62.64–100 %) |
+| not used: LLM judges favour their own output | Panickssery, Bowman, Feng, "LLM Evaluators Recognize and Favor Their Own Generations", NeurIPS 2024 | 2024 · peer-reviewed | https://arxiv.org/abs/2404.13076 | confirmed, but it left deck slide 16 on 2026-11-10: session attributes are tags the team defines (ticket, customer, stage), not a verdict on the session |
 | vendor advice: read the traces, remove one component at a time (deck 4) | Anthropic, "Harness design for long-running application development" | 2026-03-24 · vendor blog | https://www.anthropic.com/engineering/harness-design-long-running-apps | confirmed (verbatim fragments) |
 
 ## Deploy (`.github/workflows/pages.yml`)
