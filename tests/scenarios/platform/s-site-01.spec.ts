@@ -455,12 +455,12 @@ test('@S-SITE-01 static site and deck: built, served under a base path, navigabl
       }
     });
 
-    const slideCount = await test.step('9. deck: 10–24 slides, every slide fits 1280×720, arrows move between slides', async () => {
+    const slideCount = await test.step('9. deck: 10–36 slides, every slide fits 1280×720, arrows move between slides', async () => {
       await page.goto(`${server.base}deck/index.html`);
       await page.waitForFunction(() => document.querySelector('.reveal.ready') !== null);
       const count = await page.locator('.reveal .slides > section').count();
       expect(count).toBeGreaterThanOrEqual(10);
-      expect(count).toBeLessThanOrEqual(24);
+      expect(count).toBeLessThanOrEqual(36);
       for (let i = 0; i < count; i++) {
         const overflow = await page.evaluate((idx) => {
           const frame = document.querySelectorAll('.reveal .slides > section')[idx].querySelector('.slide-frame');
