@@ -42,7 +42,7 @@ workflow that is not a required check (FR-30). `security-scans` uses no `paths-i
 | `changes` | Diffs `base.sha...head.sha`; outputs `docs_only` (every path under `docs/`) and `docker_changed` (`Dockerfile` or `docker-dev/Dockerfile`); on PRs uploads `pr-meta` | — |
 | `build-kit` | Builds the installer tarballs **without secrets** (`npm ci --ignore-scripts`, `npm run build:hooks-installer -- --static-dir …`), uploads artifact `installer-kit` | — |
 | `snyk-oss` | Snyk CLI (pinned, sha256-checked) `test` prod and `--dev` over `--all-projects`, plus the extracted tarballs; `snyk monitor` only on push to `main` and nightly; SARIF category `snyk-oss` | `snyk-oss/prod`, `/dev`, `/kit` |
-| `dependency-review` | `actions/dependency-review-action` (`warn-only`, GPL/AGPL `deny-licenses`); PRs only | `dependency-review/pr` |
+| `dependency-review` | `actions/dependency-review-action` (`warn-only`, GPL/AGPL `deny-licenses`); PRs only. The action has no path filter, so `scan-rows.js` drops changes whose manifest is under `docs/pocs/` (like Snyk's `--exclude=…pocs`) and notes "N PoC manifest(s) ignored" | `dependency-review/pr` |
 | `config-guard` | `node scripts/ci/config-guard.js` (executable-config guard, FR-4) | `config-guard/repo` |
 | `supply-chain` | `lockfile-lint` (every `resolved` URL is `registry.npmjs.org`) and `npm audit signatures` | `lockfile-lint/npm`, `npm-signatures/npm` |
 | `workflow-lint` | actionlint and zizmor (SARIF category `zizmor`) | `actionlint/workflows`, `zizmor/workflows` |
