@@ -81,7 +81,7 @@ test('@TOUR-03 owner: repo tour @mode-a', async ({ stand, api, db, users, page }
     },
   });
 
-  for (const tab of ['analytics', 'reports', 'settings'] as const) {
+  for (const tab of ['analytics', 'spend', 'reports', 'settings'] as const) {
     await walker.screen(page, `repo.${tab}`, {
       go: async () => {
         await page.getByTestId(`tab-repo-${tab}`).click();

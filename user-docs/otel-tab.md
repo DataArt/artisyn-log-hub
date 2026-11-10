@@ -245,6 +245,15 @@ Session totals of older sessions can therefore be higher than before — on the 
 session header, analytics and reports alike. Sessions from 2.1.307 and newer, and sessions
 without OTEL data, keep the transcript cost.
 
+## Budgets use the higher OTEL cost
+
+[Budgets](budgets.md) are the one place outside these tabs where Claude Code's OTEL cost decides
+a number. For each session tree a budget counts the higher of the cost Log Hub computes and the
+session's OTEL total, so a budget never under-counts a session whose transcript missed calls or
+has not arrived yet. A budget's spend can therefore be a little higher than the cost the other
+tabs show for the same sessions. The Spend tab's skill and MCP server slices use the per-call
+OTEL cost shown here. Details: [Budgets and the OTEL cost](cost-and-context.md#budgets-and-the-otel-cost).
+
 ## The realtime channel
 
 The hook sends OTEL data to Log Hub on two channels:

@@ -233,20 +233,31 @@ export const f10TeamsCore: ContractFamily = {
       expect: { status: 403 },
     },
     {
-      // T2's memberships, its two repository links and its (declined) invitation go with it.
+      // T2's memberships, its two repository links and its (declined) invitation go with it,
+      // and so do its two budgets (team-repo + team) with their events (FK cascade, F26 DD-13).
       id: 'F10-delete',
       route: 'DELETE /api/v1/teams/:teamId',
       actor: 'owner',
       params: { teamId: '@T2.id' },
       expect: { status: 204 },
       write: {
-        watch: ['teams', 'team_members', 'team_repositories', 'invitations'],
+        watch: [
+          'teams',
+          'team_members',
+          'team_repositories',
+          'invitations',
+          'budgets',
+          'budget_events',
+          'budget_notices',
+        ],
         delta: {
           deleted: [
             { table: 'teams', where: 'id = @T2.id' },
             { table: 'team_members', where: 'team_id = @T2.id', count: 4 },
             { table: 'team_repositories', where: 'team_id = @T2.id', count: 2 },
             { table: 'invitations', where: 'team_id = @T2.id', count: 1 },
+            { table: 'budgets', where: 'team_id = @T2.id', count: 2 },
+            { table: 'budget_events', where: 'team_id = @T2.id', count: 2 },
           ],
         },
       },

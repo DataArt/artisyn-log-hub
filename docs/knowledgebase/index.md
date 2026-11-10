@@ -49,6 +49,7 @@ article itself holds the details. Keep new lines to one or two sentences.
 
 * [LLM Call Math](llm-call-math.md) - Read before any token or cost formula: `TokenBreakdown`, `computeCost`, cache and vision costs, sub-agent aggregation, utility calls, the session price date, `costBreakdown` / `totalCost`
 * [Session Metric Scope (root vs tree)](session-metrics-scope.md) - Read before adding or showing ANY session metric: additive metrics are summed over the root and all sub-agents, canonical helpers, the double-count trap, per-surface status
+* [Budgets, Spend tab and Threshold Notices](budgets.md) - Read before touching `server/src/logs/budgets/`, the Spend tab, Settings › Budgets, the budget notices (bell, banner, email) or the Budget burn view / Budget report: scope kinds, who may view or manage, the caller-independent spend rows, root selection, the threshold job, cleanup, routes and file map
 * [Change Surface](change-surface.md) - Read before counting changed files / folders / modules: the concentration formula, union-never-SUM, path normalisation, `repo_code_inventory` denominators
 * [Turn-End Cost Advisor and Session Attributes](turn-end-cost-advisor.md) - Read before touching the post-turn analysis hook/worker, the advisor or session attributes (`attr=` filters, `attr:<key>` group-by)
 * [Claude Code Version Check](claude-version-check.md) - Read before touching `server/src/ai-tool-versions/`, per-session Claude Code version extraction or the `claude-version` detector
@@ -89,6 +90,7 @@ article itself holds the details. Keep new lines to one or two sentences.
 * [Task Workflow and Post-Implementation Checks](task-checks-guide.md) - Read before running or adding a post-implementation check: the `/adlc-lh:*` lifecycle in short, the checks, discovery and naming
 * [Algorithm Docs (doc-driven table tests)](algorithms/README.md) - Read before writing a unit test for an algorithm: one doc per algorithm plus its rows file `docs/algorithm-examples/<name>.json` (the test table — read it only to change rows); required sections and review. Lists every algorithm doc, including those not repeated below
 * [Cost Formula](algorithms/cost-formula.md) - Read before touching the per-call cost formula or its twins (`@loghub/pricing`, hook `post-turn-analysis-worker.js`)
+* [Budget Spend Math](algorithms/budget-spend-math.md) - Read before touching `budget-math.ts`: budget forecast / runs-out-in, anomaly days, costly sessions (2σ / 3σ) and which crossed threshold gets a notice vs is superseded
 * [Work Time](algorithms/work-time.md) - Read before touching session work-time (idle gaps) in `claude-extractor.ts` or its hook twin
 * [Upload Error Classify](algorithms/upload-error-classify.md) - Read before touching how ingest errors are classified (`upload-error.ts`)
 * [Password Policy](algorithms/password-policy.md) - Read before touching `PASSWORD_POLICY` (`any` / `mid` / `long`), its limits and where it is enforced

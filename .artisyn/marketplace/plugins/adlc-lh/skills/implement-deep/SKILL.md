@@ -58,6 +58,14 @@ When enabled: before any code changes call the `adlc-lh:check-health` skill, arg
 
 Mention in your final report whether the pre-run check ran or was skipped as disabled.
 
+### 0b — pre-implementation command (optional)
+
+If `project-env.json` sets `preImplCommand` (a non-empty string), run it once with the Bash tool
+in the foreground from the project root, `timeout` 300000, before step 1 and before any code
+change (e.g. a code-index refresh, so code research during the chunks sees the current tree). Its
+failure never stops the run: note the exit code in the final report and continue. Absent or
+empty — skip silently.
+
 ### 1 — Locate the implementation plan
 
 The project's open tasks, each with the whole absolute path of the files it owns:

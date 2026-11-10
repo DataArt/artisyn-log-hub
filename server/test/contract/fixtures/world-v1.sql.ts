@@ -217,6 +217,29 @@ export const WORLD_V1 = {
         "Import blocked: 1 session(s) in this archive conflict with another user's data: w1-x. Nothing was imported.",
     },
   },
+  /**
+   * Budgets (2026-11-05 budgets-threshold-alerts, F26), one per scope kind, each with its
+   * `created` event (budget_events ids 1-3, same order):
+   * - `budgetOwnerR1` — the owner's personal `repo` budget on R1: monthly 5.00 USD, UTC,
+   *   thresholds 75 / 90 / 100. January 2026's R1 spend (s01 + s02 tree + s04 = 3.925 USD) is
+   *   78.5 % of it, so 75 is crossed — the one shown notice below;
+   * - `budgetT2R1` — T2's `team-repo` budget on R1: monthly 50.00 USD, Europe/Berlin,
+   *   thresholds 50 / 80 / 100, created by the manager;
+   * - `budgetT2` — T2's whole-team `team` budget: weekly 20.00 USD, Europe/Berlin, default
+   *   thresholds, created by the owner.
+   */
+  budgets: {
+    budgetOwnerR1: { id: 1 },
+    budgetT2R1: { id: 2 },
+    budgetT2: { id: 3 },
+  },
+  /**
+   * The one threshold notice (F26): `budgetOwnerR1` crossed 75 % in January 2026 (3.925 of
+   * 5.00 USD), shown (not superseded), with one unread recipient row for the owner.
+   */
+  budgetNotices: {
+    noticeOwner75: { id: 1 },
+  },
 } as const;
 
 /**
@@ -233,6 +256,8 @@ export const WORLD_V1_REFS: Readonly<Record<string, string | number>> = (() => {
     WORLD_V1.sessions,
     WORLD_V1.jobs,
     WORLD_V1.toolUsage,
+    WORLD_V1.budgets,
+    WORLD_V1.budgetNotices,
   ] as const;
   for (const group of groups) {
     for (const [name, entry] of Object.entries(group)) {
@@ -3162,7 +3187,202 @@ function buildStatements(): WorldStatement[] {
   );
 
   out.push(...otelStatements());
+  out.push(...budgetStatements());
 
+  return out;
+}
+
+/**
+ * Budgets, their `created` events and the one threshold notice (2026-11-05
+ * budgets-threshold-alerts, F26); see `WORLD_V1.budgets` / `WORLD_V1.budgetNotices`.
+ */
+function budgetStatements(): WorldStatement[] {
+  const B = WORLD_V1.budgets;
+  const T = WORLD_V1.teams;
+  const out: WorldStatement[] = [];
+  const created = '2026-01-05T10:00:00.000Z';
+  const snapshot = (
+    period: string,
+    amountMicros: number,
+    thresholds: number[],
+    timeZone: string,
+  ) => ({ after: { period, amountMicros, thresholds, timeZone } });
+  out.push(
+    insert(
+      'budgets',
+      [
+        'id',
+        'scope_kind',
+        'user_id',
+        'team_id',
+        'repo_url',
+        'period',
+        'amount_micros',
+        'thresholds',
+        'time_zone',
+        'created_by',
+        'created_at',
+        'updated_at',
+      ],
+      [
+        [
+          B.budgetOwnerR1.id,
+          'repo',
+          U.owner.id,
+          null,
+          R.R1.url,
+          'month',
+          5_000_000,
+          [75, 90, 100],
+          'UTC',
+          U.owner.id,
+          created,
+          created,
+        ],
+        [
+          B.budgetT2R1.id,
+          'team-repo',
+          null,
+          T.T2.id,
+          R.R1.url,
+          'month',
+          50_000_000,
+          [50, 80, 100],
+          'Europe/Berlin',
+          U.manager.id,
+          '2026-01-05T11:00:00.000Z',
+          '2026-01-05T11:00:00.000Z',
+        ],
+        [
+          B.budgetT2.id,
+          'team',
+          null,
+          T.T2.id,
+          null,
+          'week',
+          20_000_000,
+          [75, 90, 100],
+          'Europe/Berlin',
+          U.owner.id,
+          '2026-01-05T12:00:00.000Z',
+          '2026-01-05T12:00:00.000Z',
+        ],
+      ],
+    ),
+  );
+  out.push(
+    insert(
+      'budget_events',
+      [
+        'id',
+        'budget_id',
+        'scope_kind',
+        'user_id',
+        'team_id',
+        'repo_url',
+        'budget_label',
+        'actor_user_id',
+        'actor_email',
+        'event_type',
+        'details',
+        'created_at',
+      ],
+      [
+        [
+          1,
+          B.budgetOwnerR1.id,
+          'repo',
+          U.owner.id,
+          null,
+          R.R1.url,
+          'Monthly $5.00',
+          U.owner.id,
+          U.owner.email,
+          'created',
+          json(snapshot('month', 5_000_000, [75, 90, 100], 'UTC')),
+          created,
+        ],
+        [
+          2,
+          B.budgetT2R1.id,
+          'team-repo',
+          null,
+          T.T2.id,
+          R.R1.url,
+          'Monthly $50.00',
+          U.manager.id,
+          U.manager.email,
+          'created',
+          json(snapshot('month', 50_000_000, [50, 80, 100], 'Europe/Berlin')),
+          '2026-01-05T11:00:00.000Z',
+        ],
+        [
+          3,
+          B.budgetT2.id,
+          'team',
+          null,
+          T.T2.id,
+          null,
+          'Weekly $20.00',
+          U.owner.id,
+          U.owner.email,
+          'created',
+          json(snapshot('week', 20_000_000, [75, 90, 100], 'Europe/Berlin')),
+          '2026-01-05T12:00:00.000Z',
+        ],
+      ],
+    ),
+  );
+  out.push(
+    insert(
+      'budget_notices',
+      [
+        'id',
+        'budget_id',
+        'scope_kind',
+        'user_id',
+        'team_id',
+        'repo_url',
+        'budget_label',
+        'period',
+        'amount_micros',
+        'time_zone',
+        'period_start',
+        'period_end',
+        'threshold',
+        'spend_micros',
+        'superseded_by',
+        'created_at',
+      ],
+      [
+        [
+          WORLD_V1.budgetNotices.noticeOwner75.id,
+          B.budgetOwnerR1.id,
+          'repo',
+          U.owner.id,
+          null,
+          R.R1.url,
+          'Monthly $5.00',
+          'month',
+          5_000_000,
+          'UTC',
+          '2026-01-01T00:00:00.000Z',
+          '2026-02-01T00:00:00.000Z',
+          75,
+          3_925_000,
+          null,
+          '2026-01-12T14:25:00.000Z',
+        ],
+      ],
+    ),
+  );
+  out.push(
+    insert(
+      'budget_notice_recipients',
+      ['notice_id', 'user_id', 'read_at'],
+      [[WORLD_V1.budgetNotices.noticeOwner75.id, U.owner.id, null]],
+    ),
+  );
   return out;
 }
 

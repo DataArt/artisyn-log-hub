@@ -44,7 +44,7 @@ the order of the help menu and of the site sidebar.
 |---|---|
 | Get started | `install-server`, `small-team-setup` ("Quick setup for a small team": VM in a company network, Modes 2/3, copy-paste `.env`, http vs https), `install-hook` (source `../hook/INSTALL_HOOK.md`), `getting-started` ("Your first session"), `connect-repository` |
 | Configuration | `authentication-modes`, `server-configuration`, `tuning-your-setup`, `otel-admin-guide`, `security-hardening` |
-| Using Log Hub | `all-views`, `session-list`, `session-log`, `cost-and-context`, `analytics-reports`, `otel-tab`, `otel-architecture` |
+| Using Log Hub | `all-views`, `session-list`, `session-log`, `cost-and-context`, `analytics-reports`, `budgets`, `okf-tab`, `otel-tab`, `otel-architecture` |
 | Data and security | `data-collection-notice`, `data-collection`, `trust-model`, `component-reference`, `responsibility-matrix`, `third-party-components`, `how-hook-works` (source `../hook/HOW_HOOK_WORKS.md`) |
 | Changelog | `changelog` |
 
@@ -221,15 +221,16 @@ wireframes).
 
   | Shot | Shows | Used on |
   |---|---|---|
-  | `change-surface.png`, `analytics.png`, `okf-usage.png`, `tool-analytics.png` | Features blocks C, D, G, H | Features (`change-surface.png` also on deck slide 15) |
+  | `change-surface.png`, `analytics.png`, `okf-usage.png`, `tool-analytics.png` | Features blocks C, D, G, H | Features (`change-surface.png` also on deck slide 16) |
   | `context-usage.png` | Session → Charts → Context Usage | no longer shown (replaced by `system-context-anatomy.png` in deck v2); kept for reuse |
   | `agent-tree.png`, `call-tree.png`, `context-growth-start.png`, `context-growth-later.png`, `cost-by-branch.png`, `harness-usage.png`, `lines-per-hour.png`, `metric-list.png`, `sessions-by-cost.png`, `timeline.png`, `tool-heatmap.png`, `tools-mcp.png` | session charts, reports, analytics | deck |
-  | `system-context-anatomy.png` (2026-11-06) | Session → System context anatomy: startup context by source (bar + table), demo repository, `/adlc-demo:implement` session | deck slides 5 and 12, Features B |
+  | `system-context-anatomy.png` (2026-11-06) | Session → System context anatomy: startup context by source (bar + table), demo repository, `/adlc-demo:implement` session | deck slides 5 and 13, Features B |
   | `otel-cost-by-skill.png` (2026-11-06) | Repository → OTEL, 7 days, cost stacked by skill, Log Hub repository (taken at a 1100 px viewport so the chart stays readable at 600 px) | deck slide 8 |
-  | `session-map.png` (2026-11-06) | Session → Session Map, replay of a finished workflow session, demo repository | deck slide 10, Features I |
-  | `trace-waterfall.png` (2026-11-06) | Session → OTEL → Traces, one turn's waterfall (the demo repository has no traces, so a Log Hub repository session with English skill names) | deck slide 10, Features I |
-  | `live-view.png` (2026-11-06) | Top bar → Live: tree, tiles and "Tokens over time" (chart 2 / 7), paused; the user e-mail was replaced by "Developer A" and the team name by "Team A" in the DOM before the shot (as for `og-image.png`), the crop stops above a Cyrillic session title | deck slide 11, Features I |
-  | `okf-kb-value.png`, `okf-kb-value-heuristic.png` (2026-11-06) | Repository → OKF, KB folder `docs/knowledgebase`: section A (verified) and section B (heuristic, check by hand), Log Hub repository (the demo repository has no KB) | deck slide 14, Features G |
+  | `session-map.png` (2026-11-06) | Session → Session Map, replay of a finished workflow session, demo repository | deck slide 11, Features I |
+  | `trace-waterfall.png` (2026-11-06) | Session → OTEL → Traces, one turn's waterfall (the demo repository has no traces, so a Log Hub repository session with English skill names) | deck slide 11, Features I |
+  | `live-view.png` (2026-11-06) | Top bar → Live: tree, tiles and "Tokens over time" (chart 2 / 7), paused; the user e-mail was replaced by "Developer A" and the team name by "Team A" in the DOM before the shot (as for `og-image.png`), the crop stops above a Cyrillic session title | deck slide 12, Features I |
+  | `okf-kb-value.png`, `okf-kb-value-heuristic.png` (2026-11-06) | Repository → OKF, KB folder `docs/knowledgebase`: section A (verified) and section B (heuristic, check by hand), Log Hub repository (the demo repository has no KB) | deck slide 15, Features G |
+  | `spend-budget.png` (2026-11-10) | Repository → Spend: the monthly budget card (bar, ticks, four tiles) and the daily chart with the budget-pace legend, Log Hub repository, 1100 px viewport; the slice table and costly-sessions list (which carry e-mails) were removed from the DOM before the shot | deck slide 10, Features → A |
   | `nav-lenses.png` | one row of session tabs: the View select on Cost, its row and "More" open | Features → Navigation |
   | `nav-chart-tabs.png` | View: All tabs, Call Tree open as a session tab of its own | Features → Navigation |
   | `summary-hub.png` | Summary tiles, "Where to look next" cards, Explore chips | Features → Navigation |
@@ -321,18 +322,19 @@ slide head: hook · harness · cost · speed · context · quality · team · to
 | 7 | Cost · context growth | `context-growth-*.png` |
 | 8 | Cost · by skill, MCP server, effort, fast mode (OTEL) | `otel-cost-by-skill.png` |
 | 9 | Cost · one session from every side | mosaic (agent tree, timeline, tool heatmap, call tree) |
-| 10 | Speed · autonomy | mosaic (Session Map, timeline, trace waterfall, lines per hour) |
-| 11 | Live | `live-view.png` |
-| 12 | Context · harness tax | `system-context-anatomy.png` |
-| 13 | Context · what the agent uses | `harness-usage.png` |
-| 14 | Context · knowledge base, verified vs heuristic | `okf-kb-value*.png` |
-| 15 | Quality · what changed and who judged it | `change-surface.png` |
-| 16 | Team · analytics, reports, anomalies | anomaly board |
-| 17 | Team · 13 metrics | mosaic |
-| 18 | Tools · author and admin | tool table + `tools-mcp.png` |
-| 19 | Safety · three layers, hook 2.31.1 evaluator | seal board |
-| 20 | Safety · collected, visible to, kept for | seal board |
-| 21 | Closing — the hook's answer, links | — |
+| 10 | Cost · budgets: forecast and threshold notices (2026-11-10, no dataset figure) | `spend-budget.png` |
+| 11 | Speed · autonomy | mosaic (Session Map, timeline, trace waterfall, lines per hour) |
+| 12 | Live | `live-view.png` |
+| 13 | Context · harness tax | `system-context-anatomy.png` |
+| 14 | Context · what the agent uses | `harness-usage.png` |
+| 15 | Context · knowledge base, verified vs heuristic | `okf-kb-value*.png` |
+| 16 | Quality · what changed and who judged it | `change-surface.png` |
+| 17 | Team · analytics, reports, anomalies | anomaly board |
+| 18 | Team · 13 metrics | mosaic |
+| 19 | Tools · author and admin | tool table + `tools-mcp.png` |
+| 20 | Safety · three layers, hook 2.31.1 evaluator | seal board |
+| 21 | Safety · collected, visible to, kept for | seal board |
+| 22 | Closing — the hook's answer, links | — |
 
 **Home (v2).** Hero: the same hook (`h1` from the dataset), the harness claim in the lead with one
 attributed study figure, "right and useful" and "Log Hub answers the next questions", five

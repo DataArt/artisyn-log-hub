@@ -1,0 +1,161 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1440" height="900" viewBox="0 0 1440 900" font-family="Inter, Segoe UI, Arial, sans-serif">
+  <style>
+    .t { fill: #111827; }
+    .muted { fill: #6b7280; }
+    .mono { font-family: 'JetBrains Mono', Consolas, monospace; }
+    .link { fill: #2563eb; }
+    .note { fill: #92400e; font-size: 11px; }
+    .lbl { font-size: 11px; fill: #6b7280; letter-spacing: 0.5px; }
+    .btn { fill: #ffffff; stroke: #d1d5db; }
+    .new { fill: #eef2ff; stroke: #6366f1; stroke-dasharray: 3,2; }
+    .cat { font-size: 14px; font-weight: 600; fill: #111827; }
+    .item { font-size: 14px; fill: #4b5563; }
+  </style>
+  <rect width="1440" height="900" fill="#ffffff"/>
+
+  <!-- top bar -->
+  <rect x="0" y="0" width="1440" height="48" fill="#fafafa"/>
+  <line x1="0" y1="48" x2="1440" y2="48" stroke="#e5e7eb"/>
+  <circle cx="24" cy="24" r="8" fill="#4f46e5"/>
+  <text x="44" y="29" font-size="14" font-weight="600" class="t">[local] Artisyn Log Hub <tspan class="muted" font-size="12" font-weight="400">dev</tspan></text>
+  <text x="262" y="29" font-size="14" font-weight="600" class="t">Home</text>
+  <text x="858" y="29" font-size="14" class="muted">LogHubLocal</text>
+  <rect x="948" y="13" width="72" height="22" rx="11" fill="#ea580c"/>
+  <text x="984" y="28" font-size="11" font-weight="700" fill="#ffffff" text-anchor="middle">Restricted</text>
+  <text x="1042" y="29" font-size="14" font-weight="600" class="t">All views</text>
+  <text x="1150" y="29" font-size="15" class="t">?</text>
+  <text x="1186" y="30" font-size="14" class="muted">🔔</text>
+  <text x="1226" y="29" font-size="14" class="muted">dt@dataart.com</text>
+  <text x="1350" y="29" font-size="14" font-weight="600" class="t">Edit email</text>
+
+  <!-- sidebar (abridged) -->
+  <rect x="0" y="49" width="320" height="851" fill="#ffffff"/>
+  <line x1="321" y1="49" x2="321" y2="900" stroke="#e5e7eb" stroke-width="4"/>
+  <text x="12" y="108" class="lbl">TEAMS</text>
+  <rect x="0" y="153" width="320" height="32" fill="#f3f4f6"/>
+  <text x="50" y="174" font-size="14" font-weight="700" class="t">LogHubLocal</text>
+  <text x="32" y="203" font-size="12" class="t">https://gitlab.dataart.com/da/cml/artisyn-log-hub</text>
+  <text x="32" y="225" font-size="12" class="t">https://github.com/DataArt/artisyn-log-hub</text>
+  <text x="32" y="247" font-size="12" class="t">https://github.com/denistsyplakov/at-scanner</text>
+  <text x="12" y="359" class="lbl">MY REPOS</text>
+
+  <!-- team header -->
+  <text x="349" y="94" font-size="20" font-weight="600" class="t">LogHubLocal</text>
+  <text x="1424" y="92" font-size="13" class="muted" text-anchor="end">3 linked repositories · 4 members (2 acknowledged)</text>
+
+  <!-- team tabs: Reports (NEW) active -->
+  <g font-size="14">
+    <text x="377" y="148" class="muted">Members</text>
+    <text x="459" y="148" class="muted">Repositories</text>
+    <text x="559" y="148" class="muted">Invitations</text>
+    <text x="648" y="148" class="muted">OTEL</text>
+    <text x="701" y="148" class="muted">Spend</text>
+    <rect x="752" y="128" width="84" height="28" rx="4" class="new"/>
+    <text x="764" y="148" class="muted">Analytics</text>
+    <rect x="844" y="128" width="72" height="28" rx="4" class="new"/>
+    <text x="856" y="148" font-weight="700" class="t">Reports</text>
+    <text x="934" y="148" class="muted">Settings</text>
+  </g>
+  <line x1="349" y1="162" x2="1416" y2="162" stroke="#e5e7eb"/>
+  <line x1="848" y1="162" x2="912" y2="162" stroke="#111827" stroke-width="2"/>
+
+  <!-- report catalog (left column, as in repo Reports) -->
+  <line x1="545" y1="163" x2="545" y2="900" stroke="#e5e7eb"/>
+  <text x="341" y="190" class="lbl">REPORTS</text>
+  <text x="343" y="216" class="cat">⌄ Summary</text>
+  <rect x="341" y="228" width="195" height="30" rx="4" fill="#f3f4f6" stroke="#d1d5db"/>
+  <rect x="341" y="228" width="3" height="30" fill="#4f46e5"/>
+  <text x="351" y="248" font-size="14" font-weight="700" class="t">Executive Summary</text>
+  <text x="343" y="284" class="cat">⌄ Activity</text>
+  <text x="351" y="312" class="item">Session Timeline</text>
+  <text x="351" y="340" class="item">Work Time Distribution</text>
+  <text x="351" y="368" class="item">Tool Analytics</text>
+  <text x="351" y="396" class="item">Active Sessions</text>
+  <text x="343" y="428" class="cat">⌄ Code</text>
+  <text x="351" y="456" class="item">Branch Summary <tspan class="note">(repo/branch?)</tspan></text>
+  <text x="351" y="484" class="item" opacity="0.45">Change Surface</text>
+  <text x="456" y="484" class="note">included?</text>
+  <text x="343" y="516" class="cat">⌄ Cost</text>
+  <text x="351" y="544" class="item">Cost by Branch</text>
+  <text x="351" y="572" class="item">Cost by User</text>
+  <text x="351" y="600" class="item">Cache Read Ratio</text>
+  <text x="351" y="628" class="item">Token Usage</text>
+  <rect x="345" y="636" width="160" height="26" rx="4" class="new"/>
+  <text x="351" y="654" class="item">Budget <tspan class="note">team budgets (FR-4)</tspan></text>
+  <text x="343" y="688" class="cat">⌄ Productivity</text>
+  <text x="351" y="716" class="item">Productivity</text>
+  <text x="351" y="744" class="item">Productivity Counters</text>
+  <text x="343" y="776" class="cat">⌄ Harness</text>
+  <text x="351" y="804" class="item">Harness Usage</text>
+  <text x="351" y="832" class="item" opacity="0.45">OKF Usage</text>
+  <text x="430" y="832" class="note">included?</text>
+
+  <!-- filter row -->
+  <text x="565" y="190" class="lbl">DATE RANGE</text>
+  <rect x="565" y="200" width="132" height="36" rx="6" class="btn"/><text x="578" y="223" font-size="14" class="t">Oct 11 → Nov 10</text>
+  <text x="709" y="190" class="lbl">REPOSITORIES (OPTIONAL)</text>
+  <rect x="709" y="200" width="150" height="36" rx="6" class="new"/><text x="722" y="223" font-size="14" class="t">All repositories ⌄</text>
+  <text x="871" y="190" class="lbl">BRANCHES (OPTIONAL)</text>
+  <rect x="871" y="200" width="122" height="36" rx="6" class="btn"/><text x="884" y="223" font-size="14" class="t">All branches ⌄</text>
+  <text x="1005" y="190" class="lbl">USERS (OPTIONAL)</text>
+  <rect x="1005" y="200" width="100" height="36" rx="6" class="btn"/><text x="1018" y="223" font-size="14" class="t">All users ⌄</text>
+  <rect x="1334" y="185" width="90" height="36" rx="6" fill="#3b4fd8"/><text x="1379" y="208" font-size="14" font-weight="600" fill="#ffffff" text-anchor="middle">Generate</text>
+  <text x="709" y="250" class="note">NEW Repository filter? (open question)</text>
+
+  <text x="565" y="282" font-size="14" font-style="italic" class="muted">On-page preview — the PDF export contains the same data in print layout</text>
+  <rect x="1267" y="264" width="157" height="34" rx="6" fill="#ffffff" stroke="#3b4fd8"/>
+  <text x="1345" y="286" font-size="14" font-weight="600" fill="#3b4fd8" text-anchor="middle">⤓ Download as PDF</text>
+
+  <!-- preview card -->
+  <rect x="565" y="310" width="859" height="590" rx="8" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="598" y="360" font-size="20" font-weight="700" class="t">AI Usage — Executive Summary</text>
+  <text x="1391" y="360" font-size="12" class="muted" text-anchor="end">Generated on Nov 10, 2026, 2:34 PM UTC</text>
+  <rect x="594" y="368" width="420" height="40" rx="4" class="new"/>
+  <text x="598" y="384" font-size="12" font-weight="600" class="t">Artisyn Log Hub · Telemetry Report</text>
+  <text x="598" y="401" font-size="12" class="t">Team <tspan font-weight="700">LogHubLocal</tspan> · 3 linked repositories</text>
+  <text x="1024" y="390" class="note">Header names the team (AC FR-2); linked repos</text>
+  <text x="1024" y="404" class="note">listed in a "Scope" line or appendix.</text>
+  <rect x="598" y="414" width="168" height="22" rx="11" fill="#f3f4f6"/><text x="682" y="430" font-size="12" class="t" text-anchor="middle">Oct 11, 2026 – Nov 10, 2026</text>
+
+  <!-- KPI cards -->
+  <g>
+    <rect x="598" y="452" width="188" height="110" rx="4" fill="#ffffff" stroke="#e5e7eb"/><rect x="598" y="452" width="4" height="110" fill="#16a34a"/>
+    <text x="614" y="474" font-size="10" font-weight="700" class="muted">TOTAL AI COST</text>
+    <text x="614" y="506" font-size="20" font-weight="700" fill="#16a34a">$1,412.36</text>
+    <text x="614" y="530" font-size="11" class="muted">sum over 3 repositories</text>
+
+    <rect x="799" y="452" width="188" height="110" rx="4" fill="#ffffff" stroke="#e5e7eb"/><rect x="799" y="452" width="4" height="110" fill="#3b82f6"/>
+    <text x="815" y="474" font-size="10" font-weight="700" class="muted">TOTAL SESSIONS</text>
+    <text x="815" y="506" font-size="20" font-weight="700" class="t">312</text>
+
+    <rect x="1000" y="452" width="188" height="110" rx="4" fill="#ffffff" stroke="#e5e7eb"/><rect x="1000" y="452" width="4" height="110" fill="#8b5cf6"/>
+    <text x="1016" y="474" font-size="10" font-weight="700" class="muted">ACTIVE USERS / TEAM SIZE</text>
+    <text x="1016" y="506" font-size="20" font-weight="700" class="t">2 of 4</text>
+    <text x="1016" y="530" font-size="11" class="muted">distinct across repos</text>
+
+    <rect x="1201" y="452" width="188" height="110" rx="4" fill="#ffffff" stroke="#e5e7eb"/><rect x="1201" y="452" width="4" height="110" fill="#f97316"/>
+    <text x="1217" y="474" font-size="10" font-weight="700" class="muted">AVG COST / SESSION</text>
+    <text x="1217" y="506" font-size="20" font-weight="700" class="t">$4.5268</text>
+  </g>
+
+  <!-- per-repository breakdown table (proposal) -->
+  <rect x="598" y="580" width="791" height="28" fill="#f9fafb"/>
+  <text x="606" y="598" font-size="10" font-weight="700" class="muted">REPOSITORY</text>
+  <text x="1150" y="598" font-size="10" font-weight="700" class="muted" text-anchor="end">SESSIONS</text>
+  <text x="1381" y="598" font-size="10" font-weight="700" class="muted" text-anchor="end">COST</text>
+  <g font-size="13">
+    <text x="606" y="634" class="t">https://gitlab.dataart.com/da/cml/artisyn-log-hub</text><text x="1150" y="634" text-anchor="end" class="t">157</text><text x="1381" y="634" text-anchor="end" class="mono t">$873.34</text>
+    <line x1="598" y1="646" x2="1389" y2="646" stroke="#f3f4f6"/>
+    <text x="606" y="672" class="t">https://github.com/DataArt/artisyn-log-hub</text><text x="1150" y="672" text-anchor="end" class="t">121</text><text x="1381" y="672" text-anchor="end" class="mono t">$451.20</text>
+    <line x1="598" y1="684" x2="1389" y2="684" stroke="#f3f4f6"/>
+    <text x="606" y="710" class="t">https://github.com/denistsyplakov/at-scanner</text><text x="1150" y="710" text-anchor="end" class="t">34</text><text x="1381" y="710" text-anchor="end" class="mono t">$87.82</text>
+  </g>
+  <text x="606" y="740" class="note">Per-repository breakdown row block — proposal; whether team reports add it is part of the aggregation open question.</text>
+
+  <!-- annotations -->
+  <text x="598" y="780" class="note">FR-2 Same report catalog as the repository Reports tab, computed over all the team's linked repositories, with on-page preview and PDF download.</text>
+  <text x="598" y="796" class="note">FR-3 Only sessions of acknowledged members visible under the team access mode are counted.</text>
+  <text x="598" y="812" class="note">FR-4 "Budget" report shows the team's budgets; spend equals the team Spend tab (AC FR-4).</text>
+  <text x="598" y="828" class="note">Greyed items (Change Surface, OKF Usage): repository-bound — offered at team scope or not is an open question.</text>
+  <text x="598" y="844" class="note">No linked repos / no data: Generate and Download as PDF disabled with an empty-state hint, or a "No data in this period" report — open question.</text>
+</svg>

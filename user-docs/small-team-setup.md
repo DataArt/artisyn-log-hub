@@ -306,6 +306,10 @@ More on the proxy (HSTS, body limits, `TRUST_PROXY` values): [Security Hardening
 4. Optional: create a team and add your repositories to it — see
    [Team repositories](session-list.md#team-repositories). Repositories are private to their
    owner until shared through a team.
+5. Optional: set a team budget on the team's **Settings** tab, for example a monthly amount with
+   notices at 75 %, 90 % and 100 %. You and the team's managers then get a notice in the bell
+   (and by email when the `.env` sets `SMTP_HOST`) when the team's spend crosses a
+   threshold. A budget never stops anyone working — see [Budgets](budgets.md).
 
 How a teammate gets an account in Mode 3:
 

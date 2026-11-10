@@ -67,6 +67,13 @@ size and the full flow may fit better next time.
 
 ## Steps
 
+### 0 — Pre-implementation command (optional)
+
+If `project-env.json` sets `preImplCommand` (a non-empty string), run it once with the Bash tool
+in the foreground from the project root, `timeout` 300000, before any code change (e.g. a
+code-index refresh, so code research sees the current tree). Its failure never stops the run:
+note the exit code in the final report and continue. Absent or empty — skip silently.
+
 ### 1 — Locate the plan
 
 The project's open tasks, each with the whole absolute path of the files it owns:

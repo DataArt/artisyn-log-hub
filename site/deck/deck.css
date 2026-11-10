@@ -930,7 +930,7 @@ html.deck-narrow .mosaic-slide ol.questions li {
   color: var(--text-3);
 }
 
-/* Left column that stacks the body and a visual (slides 5, 10, 14, 18). */
+/* Left column that stacks the body and a visual (slides 5, 11, 15, 19). */
 .col-stack {
   display: flex;
   flex-direction: column;
@@ -1196,7 +1196,7 @@ html.deck-narrow .mosaic-slide ol.questions li {
   white-space: nowrap;
 }
 
-/* Slide 14 · OKF split: verified checks vs heuristic signals. */
+/* Slide 15 · OKF split: verified checks vs heuristic signals. */
 .visual-slot.split-board {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1244,14 +1244,14 @@ html.deck-narrow .mosaic-slide ol.questions li {
   max-height: none;
 }
 
-/* Slide 18 · tool table under the bullets. */
+/* Slide 19 · tool table under the bullets. */
 .visual-slot.deck-visual.tool-slot {
   width: 100%;
   height: auto;
   padding: 10px 12px;
 }
 
-/* Slide 19 · three layers (a, b, c are list markers, not body words) and the study line. */
+/* Slide 20 · three layers (a, b, c are list markers, not body words) and the study line. */
 .slide-body ol.layers {
   padding-left: 1.4em;
   list-style: lower-alpha;

@@ -13,8 +13,10 @@ and the OTEL cost the Claude Code exporter reported. **The shown cost is always 
 one, complete or not at all.** Nothing is substituted: the OTEL cost never stands in for it
 (Claude Code prices a model it does not know at another model's rates, e.g. `claude-haiku-5-5`
 at Opus 5.5 rates, and reports that number with no marker), and no other model's price stands
-in for an unknown one. OTEL stays a cross-check — with **one documented exception**: the cost of
-a sub-agent recorded by Claude Code before `2.1.307`, whose transcript can miss API calls (rule 5).
+in for an unknown one. OTEL stays a cross-check — with **two documented exceptions**: the cost of
+a sub-agent recorded by Claude Code before `2.1.307`, whose transcript can miss API calls (rule 5),
+and the **budget-only** tree cost, which takes the larger of the computed tree cost and the root's
+OTEL total so a budget never under-counts spend (rule 6; no other surface uses it).
 
 This rule computes the shown total from its parts, lists the model ids the "no price" hint
 names, decides when the header shows the "sources disagree" warning icon, and decides when the
@@ -26,7 +28,8 @@ cost tooltip flags a mismatch between the calculated cost and telemetry.
   `unpricedModelList`, `otelComputedDiscrepancy` (`OTEL_DISCREPANCY_THRESHOLD = 0.33`),
   `costMismatch` (`COST_MISMATCH_TOLERANCE_USD = 0.5`, `COST_MISMATCH_TOLERANCE_RATIO = 0.01`),
   `selectSubagentCost` (rule 5, with `OTEL_SUBAGENT_COST_FIX_VERSION = '2.1.307'`,
-  `ccVersionBeforeSql`, `subagentOtelCostSql`).
+  `ccVersionBeforeSql`, `subagentOtelCostSql`), `selectBudgetTreeCostMicros` (rule 6, budgets
+  only; called by the budget spend read in `server/src/logs/budgets/`, no SQL twin).
   The parts come from SQL in `server/src/logs/session-tree-cost.sql.ts` (`treeCostCtes`,
   `readTreeCost`), which every cost surface uses.
 - Twins: `selectSubagentCost` is the TypeScript twin of the rule-5 SQL in `treeCostCtes`
@@ -99,6 +102,21 @@ unpriced or none), `modelId` (its model, `null` when none) and `otelCostUsd`:
    - Rules 3 and 4 keep comparing the full totals; with a raised sub-agent cost the computed total
      is closer to OTEL, so fewer old sessions warn.
 
+The budget tree cost takes one root tree's `hookUsd` (the shown total of rule 1, USD or `null`)
+and `otelMicros` (the root's `otel_session_totals.cost_usd_micros`, integer micro-USD, or `null`
+without a row):
+
+6. **Budget tree cost — budget-only exception** (`selectBudgetTreeCostMicros`, task
+   `2026-11-05-budgets-threshold-alerts` DD-5). Budgets alone count the **larger** of the two
+   sources; every other surface keeps rule 1.
+   - `hookMicros = Math.round(hookUsd * 1e6)` when `hookUsd != null`; `otelMicros` of `0` or
+     `null` counts as missing.
+   - Both present: `micros = max(hookMicros, otelMicros)`; `source = 'otel'` only when
+     `otelMicros > hookMicros` (strict), else `'hook'`.
+   - One side present: that side's micros and `source`.
+   - Neither: `{micros: 0, source: 'none'}` — the tree counts as unpriced (`unpricedTrees`).
+   - Comparison runs only in TypeScript: the SQL loads both values and calls this function.
+
 ## Edge cases
 
 - All parts priced, with and without sub-agents and utility calls: CT-01, CT-02; a genuine `0`:
@@ -115,6 +133,8 @@ unpriced or none), `modelId` (its model, `null` when none) and `otelCostUsd`:
 - Sub-agent (rule 5, `kind: "subagent"`): OTEL above the transcript → OTEL, `fromOtel` SA-01; OTEL
   below → transcript SA-02; no OTEL → transcript SA-03; unpriced transcript with OTEL → OTEL, not
   missing SA-04; unpriced without OTEL → missing SA-05; equal amounts → not `fromOtel` SA-06.
+- Budget tree cost (rule 6, `kind: "budget-tree-cost"`): OTEL larger BT-01; hook larger BT-02;
+  hook unpriced BT-03; OTEL 0 is missing BT-04, BT-05; neither BT-05, BT-06; equal → `hook` BT-07.
 
 ## Examples
 
@@ -123,11 +143,12 @@ Rows with `"kind": "total"` give the five parts and expect `total` (rule 1). Row
 `"kind": "discrepancy"` give `otel` and `computed` and expect `discrepancy` (rule 3). Rows with
 `"kind": "mismatch"` give `telemetry` and `calculated` and expect `mismatch` (rule 4). Rows with
 `"kind": "subagent"` give `transcriptCost`, `modelId` and `otelCostUsd` and expect `cost`,
-`pricingMissing` and `fromOtel` (rule 5). Amounts
+`pricingMissing` and `fromOtel` (rule 5). Rows with `"kind": "budget-tree-cost"` give `hookUsd`
+and `otelMicros` and expect `micros` and `source` (rule 6). Amounts
 are chosen so every boundary is exact in binary floating point (e.g. `33 / 100` is the same
 double as `0.33`, and the sums of rule 1 are exact).
 
-Rows (40): [`docs/algorithm-examples/otel-cost-selection.json`](../../algorithm-examples/otel-cost-selection.json) — test data for the table test; the rules above are enough to understand the algorithm.
+Rows (47): [`docs/algorithm-examples/otel-cost-selection.json`](../../algorithm-examples/otel-cost-selection.json) — test data for the table test; the rules above are enough to understand the algorithm.
 
 ## Mutations
 
@@ -147,6 +168,8 @@ Rows (40): [`docs/algorithm-examples/otel-cost-selection.json`](../../algorithm-
 - Rounding before comparing: rule 3 -> OC-16, rule 4 -> CM-10.
 - Rule 5: `otel` instead of `max(transcript, otel)` -> SA-02; `pricingMissing` ignoring OTEL ->
   SA-04; `>=` instead of `>` in `fromOtel` -> SA-06; OTEL ignored -> SA-01.
+- Rule 6: OTEL preferred whenever present -> BT-02; `>=` instead of `>` for `source` -> BT-07;
+  OTEL `0` treated as present -> BT-05; OTEL ignored (rule 1 reused) -> BT-01, BT-03.
 - Equivalent within the input domain: `|telemetry|` written without `abs` differs only for
   negative amounts, which never occur (see Rules).
 
@@ -163,3 +186,8 @@ Rows (40): [`docs/algorithm-examples/otel-cost-selection.json`](../../algorithm-
   through `readTreeCost`. Rule 5 raises these totals for old-CC sessions with OTEL data.
 - Rule 5 per sub-agent: "from OTEL" next to the cost in `SubAgentDetail`, `WorkflowAgentsTable`
   and `AgentActivationItem`, and "Sub-agents (from OTEL)" in `CostBreakdownTooltip`.
+- Rule 6 (budgets only): the Repository / Team **Spend** tab (budget bar, tiles, slices, costly
+  sessions, the "N sessions unpriced · M OTEL-only" line), the budget threshold **notices** (bell,
+  tray, banner, email), **Reports › Budget** and **Analytics › Budget burn**. A tree whose OTEL
+  total exceeds the computed cost shows the computed cost everywhere else but counts the OTEL
+  amount toward the budget.

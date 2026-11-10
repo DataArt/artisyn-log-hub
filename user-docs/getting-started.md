@@ -37,6 +37,11 @@ repositories and sessions you opened last. **All views →** opens a map of ever
 [All views](all-views.md)). A new account with no repositories and no teams sees **Get started**
 instead, with links to install the hook and connect a repository.
 
+The **bell** in the top bar collects what needs your answer: team invitations and, once you set a
+[budget](budgets.md) on a repository (or manage a team that has one), **budget notices** — a
+notice each time the spend crosses one of the budget's thresholds. Unread notices also show as a
+banner under the top bar; click one to open that period on the **Spend** tab.
+
 ## Exploring a Session
 
 Click any session row to open the **Session Log**. Each view of a session is a tab of its own.

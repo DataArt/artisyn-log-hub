@@ -39,6 +39,13 @@ import {
   validateAttributeFilterTypes,
 } from '../attribute-filter.sql';
 import type { SessionAttributionAttributeDef } from '../../database/schema/index';
+import { BudgetAccessService } from '../budgets/budget-access.service';
+import {
+  assertPositiveTeamId,
+  parseRequiredDate,
+} from '../budgets/budget-query';
+import type { BudgetReport } from '../budgets/budgets.types';
+import { SpendService } from '../budgets/spend.service';
 import { RepositoriesService } from '../repositories.service';
 import type { AuthUser } from '../repositories.service';
 import type { TeamScope } from '../team-scope';
@@ -123,6 +130,8 @@ export class ReportsController {
     private readonly activeSessionsService: ActiveSessionsService,
     private readonly claudeVersionUsageService: ClaudeVersionUsageService,
     private readonly okfUsageService: OkfUsageService,
+    private readonly budgetAccess: BudgetAccessService,
+    private readonly spendService: SpendService,
   ) {}
 
   @Get(':repoId/reports/executive-summary')
@@ -768,6 +777,39 @@ export class ReportsController {
       attr,
     });
     return this.claudeVersionUsageService.build(repoIds, scope);
+  }
+
+  /**
+   * Budget report (2026-11-05 budgets-threshold-alerts, DD-19): every budget period of the
+   * scope overlapping `[startDate, endDate]`, built by `SpendService` only. Same date
+   * validation and analytics gate as `reports/executive-summary`.
+   */
+  @Get(':repoId/reports/budget')
+  async getBudgetReport(
+    @Req() req: Request,
+    @Param('repoId', ParseIntPipe) repoId: number,
+    @Query('teamId', new ParseIntPipe({ optional: true })) teamId?: number,
+    @Query('startDate') startDateParam?: string,
+    @Query('endDate') endDateParam?: string,
+    @Query('tz') tz?: string,
+  ): Promise<BudgetReport> {
+    assertPositiveTeamId(teamId);
+    const startDate = parseRequiredDate('startDate', startDateParam);
+    const endDate = parseRequiredDate('endDate', endDateParam);
+    const user = req.user as AuthUser;
+    const access = await this.budgetAccess.resolveRepoScope(
+      user,
+      repoId,
+      teamId,
+    );
+    if (teamId !== undefined && !access.teamScope.analyticsAllowed) {
+      throw new ForbiddenException();
+    }
+    return this.spendService.getBudgetReport(access, user.id, {
+      startDate,
+      endDate,
+      tz: tz ?? '',
+    });
   }
 
   /**

@@ -238,5 +238,47 @@
     "input": {"kind": "subagent", "transcriptCost": 0.75, "modelId": "claude-opus-5-5", "otelCostUsd": 0.75},
     "expected": {"cost": 0.75, "pricingMissing": false, "fromOtel": false},
     "note": "Rule 5: equal amounts -> not fromOtel (strict >); a >= would flag it."
+  },
+  {
+    "id": "BT-01",
+    "input": {"kind": "budget-tree-cost", "hookUsd": 1.2, "otelMicros": 1500000},
+    "expected": {"micros": 1500000, "source": "otel"},
+    "note": "Rule 6: hook 1.20 USD = 1 200 000 micros < OTEL 1 500 000 -> the larger, OTEL."
+  },
+  {
+    "id": "BT-02",
+    "input": {"kind": "budget-tree-cost", "hookUsd": 2, "otelMicros": 1500000},
+    "expected": {"micros": 2000000, "source": "hook"},
+    "note": "Rule 6: hook 2.00 USD = 2 000 000 micros > OTEL 1 500 000 -> the larger, hook (OTEL is not preferred just because it is present)."
+  },
+  {
+    "id": "BT-03",
+    "input": {"kind": "budget-tree-cost", "hookUsd": null, "otelMicros": 300000},
+    "expected": {"micros": 300000, "source": "otel"},
+    "note": "Rule 6: unpriced hook tree, OTEL 300 000 -> the only side present, OTEL."
+  },
+  {
+    "id": "BT-04",
+    "input": {"kind": "budget-tree-cost", "hookUsd": 0.4, "otelMicros": 0},
+    "expected": {"micros": 400000, "source": "hook"},
+    "note": "Rule 6: OTEL 0 counts as missing; hook 0.40 USD = 400 000 micros."
+  },
+  {
+    "id": "BT-05",
+    "input": {"kind": "budget-tree-cost", "hookUsd": null, "otelMicros": 0},
+    "expected": {"micros": 0, "source": "none"},
+    "note": "Rule 6: hook null and OTEL 0 (missing) -> neither side: 0, source none (an unpriced tree). Treating OTEL 0 as present would give source otel."
+  },
+  {
+    "id": "BT-06",
+    "input": {"kind": "budget-tree-cost", "hookUsd": null, "otelMicros": null},
+    "expected": {"micros": 0, "source": "none"},
+    "note": "Rule 6: no hook cost and no otel_session_totals row -> 0, source none."
+  },
+  {
+    "id": "BT-07",
+    "input": {"kind": "budget-tree-cost", "hookUsd": 0.5, "otelMicros": 500000},
+    "expected": {"micros": 500000, "source": "hook"},
+    "note": "Rule 6: equal (0.50 USD = 500 000 micros) -> source hook; OTEL wins only when strictly larger."
   }
 ]

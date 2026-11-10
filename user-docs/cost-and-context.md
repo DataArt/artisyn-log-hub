@@ -49,6 +49,23 @@ them like any other call, so the session cost includes them; that is also why th
 "Calculated approx. total" can differ slightly from the session cost. The OTEL tab lists them as
 [hidden calls](otel-tab.md#hidden-calls). Sessions without OTEL data have no utility-call cost.
 
+## Budgets and the OTEL cost
+
+Everywhere else Log Hub shows its own computed cost. [Budgets](budgets.md) make one exception:
+for each session tree (a session with all its sub-agents) a budget counts the **higher** of the
+computed cost and Claude Code's OTEL total for the session. The reason is that a budget must
+never under-count — a cost that is too low would cross a threshold late or not at all:
+
+- The computed cost can be too low when a transcript misses calls (older Claude Code versions,
+  a session still uploading) or when the model has no price configured.
+- A session that has so far arrived only through OTEL has no computed cost at all.
+
+When only one figure exists the budget uses it; with neither the tree counts $0 and the Spend tab
+reports it as unpriced. The comparison is made once per tree, not per call, and uses the
+near-realtime OTEL totals, so a budget can react before the transcript is uploaded. That is why a
+budget's spend can be slightly higher than the cost of the same sessions on the session list,
+Analytics or the other reports.
+
 ## The "⚠ no pricing" badge
 
 This badge means the server has **no price configured for the session's model**, so cost cannot

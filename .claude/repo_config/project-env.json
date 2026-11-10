@@ -8,5 +8,6 @@
     "fileCountWarnThreshold": 20
   },
   "granularReview": false,
-  "preImplHealthCheck": false
+  "preImplHealthCheck": false,
+  "preImplCommand": "command -v ce >/dev/null 2>&1 && timeout 180 ce scan --clear >/dev/null 2>&1; echo \"ce refresh exit=$?\""
 }

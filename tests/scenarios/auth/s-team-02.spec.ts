@@ -18,6 +18,7 @@ import { randomBytes } from 'crypto';
 import { test, expect } from '../fixtures';
 import type { ScenarioUser } from '../fixtures';
 import { createApiKey } from '../helpers/api-key';
+import { getSpend, listBudgets, recentAt, usd2 } from '../helpers/budgets';
 import { ownRepoId, rangeAround, uploadPromptSession } from '../helpers/prompt-session';
 import { addTeamRepo, browserAs, createTeam, inviteAndAccept, setMemberRoles } from '../helpers/teams';
 import {
@@ -39,7 +40,7 @@ test('@S-TEAM-02 restricted team: who sees what (member, owner, trainer, manager
   users,
   browser,
 }) => {
-  test.setTimeout(240_000);
+  test.setTimeout(360_000);
   const runId = randomBytes(4).toString('hex');
   const repoUrl = `https://git.arrakis.test/scn/${runId}/restricted`;
   const owner = await users.user('user', { label: 'rst-owner' });
@@ -102,13 +103,15 @@ test('@S-TEAM-02 restricted team: who sees what (member, owner, trainer, manager
     expect(rows[0].firstPrompt).toBe(prompt('m1'));
   });
 
-  await test.step('2. UI (M1): only the Sessions tab, the restricted notice, ?mtab=analytics falls back to Sessions', async () => {
+  await test.step('2. UI (M1): only the Sessions and Spend tabs, the restricted notice, ?mtab=analytics falls back to Sessions', async () => {
     const { context, page } = await browserAs(browser, stand.url, m1, `/#/teams/${teamId}/repos/${repoId}`);
     try {
       await expect(page.getByTestId('restricted-sessions-notice')).toHaveText(RESTRICTED_SESSIONS_NOTICE);
       await expect(page.getByText(prompt('m1'))).toBeVisible();
       await expect(page.getByText(prompt('m2'))).toHaveCount(0);
-      await expect(page.locator('[data-testid^="tab-repo-"]')).toHaveCount(1);
+      // The Spend tab is open to every member (budgets task DD-16); it shows only the member's own spend.
+      await expect(page.locator('[data-testid^="tab-repo-"]')).toHaveCount(2);
+      await expect(page.getByTestId('tab-repo-spend')).toBeVisible();
       await expect(page.getByTestId('tab-repo-sessions')).toHaveAttribute('data-state', 'active');
       await expect(page.getByTestId('access-mode-badge')).toContainText('Restricted');
       await page.goto(`/#/teams/${teamId}/repos/${repoId}?mtab=analytics`);
@@ -255,5 +258,93 @@ test('@S-TEAM-02 restricted team: who sees what (member, owner, trainer, manager
     const members = (await (await admin.api.get(`/api/v1/teams/${teamId}/members`)).json()) as Array<{ disclosureAcknowledgedAt: string | null }>;
     expect(members.length).toBeGreaterThan(1);
     expect(members.every((m) => m.disclosureAcknowledgedAt === null)).toBe(true);
+  });
+
+  // 2026-11-05 budgets-threshold-alerts (FR-7, DD-9, DD-17): team budgets in a restricted team.
+  const teamScope = { teamId };
+
+  await test.step('15. UI (MG, manager): the team Settings tab → «+ Add budget», a $1.00 monthly team budget; the plain member M2 cannot list it (403)', async () => {
+    const { context, page } = await browserAs(browser, stand.url, mg, `/#/teams/${teamId}?ttab=settings`);
+    try {
+      const section = page.getByTestId('budgets-section');
+      await expect(section).toBeVisible({ timeout: 15_000 });
+      await section.getByTestId('budget-add').click();
+      const form = page.getByTestId('budget-form');
+      await expect(form).toContainText('Scope:');
+      await form.getByTestId('budget-amount').fill('1');
+      await form.getByTestId('budget-save').click();
+      await expect(page.getByTestId('budget-row-month')).toContainText('$1.00');
+    } finally {
+      await context.close();
+    }
+    const listed = await listBudgets(owner.api, teamScope);
+    expect(listed.canManage).toBe(true);
+    expect(listed.budgets.map((b) => [b.scopeKind, b.period, b.amountMicros])).toEqual([['team', 'month', 1_000_000]]);
+    expect(await status(m2, `/api/v1/teams/${teamId}/budgets`)).toBe(403);
+    expect(await status(m2, `/api/v1/teams/${teamId}/budgets/events`)).toBe(403);
+  });
+
+  await test.step('16. API+UI (M2, plain member): the team Spend tab shows only M2’s own spend and no budget card while it is below the amount', async () => {
+    const own = await getSpend(m2.api, teamScope, 'month', 'UTC');
+    expect(own.restricted).toBe(true);
+    expect(own.budget).toBeNull();
+    expect(own.spendMicros).toBeLessThan(1_000_000);
+    expect(own.slices).toEqual([]);
+    expect(await status(m2, `/api/v1/teams/${teamId}/spend/sessions?period=month&offset=0&tz=UTC&slice=user&key=all`)).toBe(403);
+    const { context, page } = await browserAs(browser, stand.url, m2, `/#/teams/${teamId}?ttab=spend`);
+    try {
+      await expect(page.getByTestId('spend-restricted')).toBeVisible({ timeout: 15_000 });
+      await expect(page.getByTestId('budget-card')).toHaveCount(0);
+      await expect(page.getByTestId('spend-slices')).toHaveCount(0);
+      await expect(page.getByTestId('tab-team-settings')).toHaveCount(0);
+    } finally {
+      await context.close();
+    }
+  });
+
+  const heavy = `rst-${runId}-m2-heavy`;
+  await test.step('17. M2 uploads a ≈ $3 session: now M2 sees the budget card with M2’s own spend only, still no slices and no User column', async () => {
+    const key = await createApiKey(m2.api);
+    await uploadPromptSession(
+      api,
+      key.key,
+      { sessionId: heavy, prompt: prompt('m2-heavy'), repoUrl, at: recentAt(), usages: [{ input_tokens: 10, output_tokens: 200_000 }] },
+      { db, userId: m2.id },
+    );
+    const own = await getSpend(m2.api, teamScope, 'month', 'UTC');
+    expect(own.restricted).toBe(true);
+    expect(own.budget?.amountMicros).toBe(1_000_000);
+    expect(own.spendMicros).toBeGreaterThan(1_000_000);
+    expect(own.slices).toEqual([]);
+    const { context, page } = await browserAs(browser, stand.url, m2, `/#/teams/${teamId}?ttab=spend`);
+    try {
+      const card = page.getByTestId('budget-card');
+      await expect(card).toBeVisible({ timeout: 15_000 });
+      await expect(card).toContainText('your own spend');
+      await expect(card.getByTestId('spend-total')).toHaveText(usd2(own.spendMicros));
+      await expect(page.getByTestId('spend-slices')).toHaveCount(0);
+      await expect(page.getByTestId('spend-slice-user')).toHaveCount(0);
+    } finally {
+      await context.close();
+    }
+  });
+
+  await test.step('18. UI+API (MG): the team Spend tab shows the whole team’s spend with its slices, including M2 in the User slice', async () => {
+    const team = await getSpend(mg.api, teamScope, 'month', 'UTC');
+    expect(team.restricted).toBe(false);
+    expect(team.canManage).toBe(true);
+    const users = team.slices.find((s) => s.kind === 'user');
+    expect(users?.rows.map((r) => r.label)).toContain(m2.email);
+    const { context, page } = await browserAs(browser, stand.url, mg, `/#/teams/${teamId}?ttab=spend`);
+    try {
+      await expect(page.getByTestId('budget-card').getByTestId('spend-total')).toHaveText(usd2(team.spendMicros), { timeout: 15_000 });
+      const slices = page.getByTestId('spend-slices');
+      await expect(slices).toBeVisible();
+      await slices.getByTestId('spend-slice-user').click();
+      await expect(slices.getByTestId('slice-row').filter({ hasText: m2.email })).toHaveCount(1);
+      await expect(slices.getByTestId('slice-total')).toContainText(usd2(team.spendMicros));
+    } finally {
+      await context.close();
+    }
   });
 });

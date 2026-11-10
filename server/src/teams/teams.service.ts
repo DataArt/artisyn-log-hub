@@ -25,6 +25,10 @@ import type { DrizzleDb } from '../database/database.module';
 import * as schema from '../database/schema';
 import type { RepoConfigJson } from '../database/schema';
 import { deleteOrphanHarnessSnapshots } from '../logs/harness-snapshot';
+import {
+  deletePersonalRepo,
+  deleteTeamRepo,
+} from '../logs/budgets/budgets-cleanup';
 import { deleteOrphanOkfSnapshots } from '../logs/okf/okf-snapshot';
 import { PLACEHOLDER_IMPORT_USER_PASSWORD_HASH } from '../logs/logs.service';
 import {
@@ -542,17 +546,21 @@ export class TeamsService {
   }
 
   async unlinkTeamRepository(teamId: number, repoId: number): Promise<void> {
-    // The link's team_repo_config row goes with it by FK cascade.
-    const rows = await this.db
-      .delete(schema.teamRepositories)
-      .where(
-        and(
-          eq(schema.teamRepositories.id, repoId),
-          eq(schema.teamRepositories.teamId, teamId),
-        ),
-      )
-      .returning();
-    if (!rows[0]) throw new NotFoundException('Repository not found');
+    // The link's team_repo_config row goes with it by FK cascade; its budgets are stored by
+    // URL with no FK, so they go through the budgets cleanup (DD-13).
+    await this.db.transaction(async (tx) => {
+      const rows = await tx
+        .delete(schema.teamRepositories)
+        .where(
+          and(
+            eq(schema.teamRepositories.id, repoId),
+            eq(schema.teamRepositories.teamId, teamId),
+          ),
+        )
+        .returning();
+      if (!rows[0]) throw new NotFoundException('Repository not found');
+      await deleteTeamRepo(tx, teamId, rows[0].repoUrl);
+    });
   }
 
   async removeTeamRepository(teamId: number, repoId: number): Promise<void> {
@@ -580,6 +588,7 @@ export class TeamsService {
             eq(schema.teamRepositories.teamId, teamId),
           ),
         );
+      await deleteTeamRepo(tx, teamId, repoUrl);
 
       // 3. Check if any other team still references this URL; if so, preserve logs/repositories
       const otherTeamRefs = await tx
@@ -653,10 +662,12 @@ export class TeamsService {
           }
         }
 
-        // 4e. Delete repositories rows (cascades repo_config)
+        // 4e. Delete repositories rows (cascades repo_config) and every owner's personal
+        //     budgets of the URL (no FK, DD-13)
         await tx
           .delete(schema.repositories)
           .where(eq(schema.repositories.repoUrl, repoUrl));
+        await deletePersonalRepo(tx, repoUrl);
       }
     });
   }

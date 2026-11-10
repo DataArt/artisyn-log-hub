@@ -1,0 +1,111 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1120" height="600" viewBox="0 0 1120 600" font-family="Segoe UI, Inter, Arial, sans-serif">
+  <style>
+    .t{fill:#0f172a;font-size:13px}
+    .m{fill:#64748b;font-size:12px}
+    .s{fill:#64748b;font-size:11px}
+    .h{fill:#0f172a;font-size:16px;font-weight:600}
+    .tab{fill:#475569;font-size:13px}
+    .mono{font-family:Consolas, 'JetBrains Mono', monospace;fill:#475569;font-size:12px}
+    .num{fill:#0f172a;font-size:13px;text-anchor:end}
+    .note{fill:#b45309;font-size:12px}
+    .line{stroke:#e2e8f0;stroke-width:1}
+  </style>
+  <rect width="1120" height="600" fill="#ffffff"/>
+  <text x="20" y="22" class="s" font-weight="600">WIREFRAME · System context anatomy tab — new "View system prompt" button (FR-1, FR-7)</text>
+
+  <!-- session tab bar -->
+  <rect x="20" y="36" width="1080" height="40" fill="#ffffff" stroke="#e2e8f0"/>
+  <rect x="32" y="45" width="22" height="22" rx="4" fill="none" stroke="#cbd5e1"/>
+  <rect x="60" y="45" width="22" height="22" rx="4" fill="none" stroke="#cbd5e1"/>
+  <rect x="92" y="45" width="130" height="22" rx="4" fill="#fff" stroke="#cbd5e1"/>
+  <text x="102" y="60" class="t">Cost</text>
+  <text x="246" y="61" class="tab">Summary</text>
+  <text x="330" y="61" class="tab">Statistics</text>
+  <text x="418" y="61" class="tab">Call Tree</text>
+  <text x="500" y="61" class="tab">More ▾</text>
+  <text x="572" y="61" class="t" font-weight="600">System context anatomy</text>
+  <rect x="560" y="73" width="176" height="2" fill="#0f172a"/>
+
+  <!-- header -->
+  <text x="40" y="110" class="h">System context anatomy</text>
+  <text x="40" y="132" class="t">Total 62,512 tokens · exact (input + cache write + cache read)</text>
+  <text x="40" y="151" class="m">≈ bytes / 2.7 — only the total is exact</text>
+
+  <!-- NEW button, kept next to the header (no wide empty gap) -->
+  <rect x="470" y="94" width="188" height="32" rx="6" fill="#ffffff" stroke="#4f46e5" stroke-width="1.5"/>
+  <rect x="484" y="103" width="12" height="14" rx="2" fill="none" stroke="#4f46e5" stroke-width="1.4"/>
+  <line x1="487" y1="108" x2="493" y2="108" stroke="#4f46e5" stroke-width="1.2"/>
+  <line x1="487" y1="112" x2="493" y2="112" stroke="#4f46e5" stroke-width="1.2"/>
+  <text x="504" y="115" fill="#4f46e5" font-size="13" font-weight="600">View system prompt</text>
+  <text x="470" y="144" class="s">4 snapshots · 14 parts · 18 tools</text>
+  <path d="M668 110 L700 110" stroke="#b45309" stroke-dasharray="3 3"/>
+  <text x="706" y="106" class="note">NEW · shown only when the main transcript has ≥ 1</text>
+  <text x="706" y="121" class="note">prompt_snapshot attachment; opens the lazy-loaded modal</text>
+  <text x="706" y="136" class="note">(data-testid="sysprompt-open")</text>
+
+  <!-- banner -->
+  <rect x="40" y="166" width="1040" height="34" rx="6" fill="#f0f9ff" stroke="#bae6fd"/>
+  <text x="54" y="188" fill="#0369a1" font-size="13">Git status needs hook 2.28.0 or newer.</text>
+
+  <!-- bar -->
+  <g>
+    <rect x="40" y="214" width="20" height="26" fill="#6366f1"/>
+    <rect x="60" y="214" width="12" height="26" fill="#a855f7"/>
+    <rect x="72" y="214" width="12" height="26" fill="#94a3b8"/>
+    <rect x="84" y="214" width="12" height="26" fill="#14b8a6"/>
+    <rect x="96" y="214" width="24" height="26" fill="#0ea5e9"/>
+    <rect x="120" y="214" width="12" height="26" fill="#f97316"/>
+    <rect x="132" y="214" width="124" height="26" fill="#22c55e"/>
+    <text x="140" y="231" fill="#fff" font-size="11" font-weight="600">Skills listing</text>
+    <rect x="256" y="214" width="76" height="26" fill="#f59e0b"/>
+    <rect x="332" y="214" width="10" height="26" fill="#ec4899"/>
+    <rect x="342" y="214" width="92" height="26" fill="#ef4444"/>
+    <text x="348" y="231" fill="#fff" font-size="11" font-weight="600">First user prompt</text>
+    <rect x="434" y="214" width="646" height="26" fill="#e2e8f0"/>
+    <text x="442" y="231" fill="#475569" font-size="11">Harness internals</text>
+  </g>
+
+  <!-- table -->
+  <g>
+    <text x="48" y="270" class="s" font-weight="600">PARTITION</text>
+    <text x="400" y="270" class="s" font-weight="600">KIND</text>
+    <text x="600" y="270" class="s" font-weight="600">SOURCE</text>
+    <text x="860" y="270" class="s" font-weight="600" text-anchor="end">BYTES</text>
+    <text x="960" y="270" class="s" font-weight="600" text-anchor="end">≈ TOKENS</text>
+    <text x="1060" y="270" class="s" font-weight="600" text-anchor="end">SHARE</text>
+    <line x1="40" y1="280" x2="1080" y2="280" class="line"/>
+
+    <text x="48" y="303" class="m">›</text><rect x="62" y="294" width="10" height="10" fill="#6366f1"/>
+    <text x="80" y="303" class="t">System prompt (harness core)</text><text x="400" y="303" class="mono">system-prompt</text><text x="600" y="303" class="t">harness</text>
+    <text x="860" y="303" class="num">4,481</text><text x="960" y="303" class="num">1,660</text><text x="1060" y="303" class="num">2.7 %</text>
+    <line x1="40" y1="316" x2="1080" y2="316" class="line"/>
+
+    <text x="48" y="339" class="m">›</text><rect x="62" y="330" width="10" height="10" fill="#a855f7"/>
+    <text x="80" y="339" class="t">Memory index (MEMORY.md)</text><text x="400" y="339" class="mono">memory</text><text x="600" y="339" class="t">user</text>
+    <text x="860" y="339" class="num">2,092</text><text x="960" y="339" class="num">775</text><text x="1060" y="339" class="num">1.2 %</text>
+    <line x1="40" y1="352" x2="1080" y2="352" class="line"/>
+
+    <text x="48" y="375" class="m">›</text><rect x="62" y="366" width="10" height="10" fill="#22c55e"/>
+    <text x="80" y="375" class="t">Skills listing</text><text x="400" y="375" class="mono">skills</text><text x="600" y="375" class="t">per row</text>
+    <text x="860" y="375" class="num">25,455</text><text x="960" y="375" class="num">9,428</text><text x="1060" y="375" class="num">15.1 %</text>
+    <line x1="40" y1="388" x2="1080" y2="388" class="line"/>
+
+    <text x="80" y="411" class="m">⋯ other partitions unchanged ⋯</text>
+    <line x1="40" y1="424" x2="1080" y2="424" class="line"/>
+
+    <rect x="62" y="438" width="10" height="10" fill="#e2e8f0"/>
+    <text x="80" y="447" class="t">Harness internals ⓘ</text><text x="400" y="447" class="mono">harness-internals</text><text x="600" y="447" class="t">harness</text>
+    <text x="860" y="447" class="num">—</text><text x="960" y="447" class="num">33,330</text><text x="1060" y="447" class="num">53.3 %</text>
+    <line x1="40" y1="460" x2="1080" y2="460" class="line"/>
+  </g>
+  <text x="40" y="484" class="note">The tab itself keeps its "no text in the DOM" rule — prompt text appears only inside the modal.</text>
+
+  <!-- variant: no snapshot -->
+  <rect x="40" y="500" width="1040" height="84" rx="6" fill="#f8fafc" stroke="#cbd5e1" stroke-dasharray="4 3"/>
+  <text x="54" y="520" class="s" font-weight="600">VARIANT · session without prompt_snapshot (old Claude Code) — FR-7</text>
+  <text x="54" y="544" class="h" font-size="14">System context anatomy</text>
+  <text x="54" y="563" class="t" font-size="12">Total 41,020 tokens · exact (input + cache write + cache read)</text>
+  <text x="470" y="544" class="m">no button (or disabled with tooltip — open question)</text>
+  <rect x="470" y="553" width="610" height="24" rx="5" fill="#f0f9ff" stroke="#bae6fd"/>
+  <text x="480" y="569" fill="#0369a1" font-size="12">This Claude Code version did not log its system prompt — it is counted in Harness internals.</text>
+</svg>

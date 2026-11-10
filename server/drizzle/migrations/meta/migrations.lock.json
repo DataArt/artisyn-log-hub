@@ -940,6 +940,16 @@
         "35819bef82a21f04e3949068fb82ed9411dc9cace047cb2125d05b5c36252092",
         "f08d22fa0dfab536f1170bf2ad8e8bca1d5cdd016f9ebb3dc37ba41f4c509256"
       ]
+    },
+    {
+      "idx": 93,
+      "tag": "0093_budgets",
+      "when": 1792540800000,
+      "sha256": "1617a65d8b151381a039bedfe0f543d02ad0e83f84d052a4766797118d34363f",
+      "acceptedHashes": [
+        "1617a65d8b151381a039bedfe0f543d02ad0e83f84d052a4766797118d34363f",
+        "9f0104baaf2a23751762be09831abaec341dfeeaf8b1c3089d947e327fa8bfb7"
+      ]
     }
   ]
 }
