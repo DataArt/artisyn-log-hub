@@ -41,6 +41,7 @@ const OTEL_COST_USD = 2; // per call, two calls
 
 interface BudgetBurnView {
   spendMicros: number;
+  filtered: boolean;
   points: { key: string; cumulativeMicros: number }[];
 }
 
@@ -222,10 +223,18 @@ test('@S-BUDG-01 a repository budget: settings, spend, threshold notices, burn, 
     const burn = await repoGet<BudgetBurnView>(owner, repoId, '/analytics/budget-burn', { tz: 'UTC' });
     expect(burn.spendMicros).toBe(spend);
     expect(burn.points.at(-1)?.cumulativeMicros).toBe(spend);
+    // The Analytics controls send every user when nothing is narrowed: a filter that drops no
+    // session is not "filtered".
+    const allUsers = await repoGet<BudgetBurnView>(owner, repoId, '/analytics/budget-burn', {
+      tz: 'UTC',
+      users: owner.email,
+    });
+    expect(allUsers.filtered).toBe(false);
     const { first, today } = currentUtcMonthDays();
     await openAnalytics(page, owner, repoId, { from: first, to: today, view: 'budget-burn' });
     await expect(page.getByTestId('budget-burn-last')).toHaveText(usd2(spend), { timeout: 15_000 });
     await expect(page.getByTestId('budget-burn-chart')).toBeVisible();
+    await expect(page.getByText('filtered — budget line is for the whole scope')).toHaveCount(0);
   });
 
   await test.step('5. Reports › Budget: the same spend, % and forecast as the Spend view; the PDF downloads', async () => {

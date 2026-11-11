@@ -18,8 +18,12 @@
 // the background (tests/scenarios/fixtures/bg-mcp, from the PoC docs/pocs/2026-11-09-1318-mcp-mock-old-new-cc)
 // and checks the badge, duration and output of the slow_echo / slow_fail modals (algorithm doc
 // tool-call-outcome.md rule 1a, TO-27…TO-31). Step 8c uploads one with a Workflow call rejected before launch and one
-// launched by scriptPath (workflow status and name). Step 8d uploads one whose startup estimate
-// exceeds its measured total (the over-total edge state).
+// launched by scriptPath (workflow status and name). Step 8a2 opens GS-05's View system prompt
+// modal (algorithm doc system-prompt-view.md; numbers from its expected.json `systemPromptView`
+// block): parts split at the dynamic boundary, tools from the later snapshot gs05-0003p, the
+// startup flags only, masked paths, and Copy as Markdown = Download .md. Step 8d uploads one whose
+// startup estimate exceeds its measured total (the over-total edge state) and has no
+// prompt_snapshot, so no View system prompt button.
 //
 // Code facts that differ from the design text:
 //   - the prompt text of a turn is shown in its header, not collapsed behind a click; the scenario
@@ -68,6 +72,28 @@ interface GoldenAnatomy {
   attributed: number;
   harnessInternals: number;
   partitions: Record<string, { bytes: number; tokens: number }>;
+}
+
+/** GS-05 `expected.json` → `roots[0].systemPromptView` (checked by tests/golden/check-arithmetic.mjs). */
+interface GoldenSystemPromptView {
+  charsPerToken: number;
+  parts: number;
+  shared: number;
+  session: number;
+  partsBytes: number;
+  partsTokens: number;
+  tools: number;
+  toolsBytes: number;
+  toolsTokens: number;
+  totalBytes: number;
+  totalTokens: number;
+}
+
+declare global {
+  interface Window {
+    /** Step 8a2: the text the stubbed `navigator.clipboard.writeText` received. */
+    __copied?: string;
+  }
 }
 
 /** The session-list fields step 1a compares (cost fields + the stored workflow flag). */
@@ -402,7 +428,7 @@ test('@S-SESS-03 Logs: what counts as a prompt, what is hidden, how a turn reads
     await expect(group('Docs').locator('tr', { hasText: 'docs/api.md' })).toHaveCount(1);
   });
 
-  await test.step('8. GS-05 System context anatomy: total 8,800, partitions and harness internals 5,971 from expected.json, the internals hint, a bar segment selects its row, skills drill-down = the listing (unused-skill not shown, adlc:review-deep from a plugin)', async () => {
+  await test.step('8. GS-05 System context anatomy: total 8,800, partitions (Tool definitions from the tools snapshot) and harness internals 5,773 from expected.json, the internals hint without a tools bullet, a bar segment selects its row, skills drill-down = the listing (unused-skill not shown, adlc:review-deep from a plugin)', async () => {
     const A5 = loadExpected('gs-05').roots[0].anatomy as GoldenAnatomy;
     await openSession(page, owner, repo.repoId, repo.rootId('gs-05'), { tab: 'sysctx' });
     const tab = page.getByTestId('sysctx-anatomy-tab');
@@ -420,9 +446,11 @@ test('@S-SESS-03 Logs: what counts as a prompt, what is hidden, how a turn reads
 
     await internals.getByTestId('anatomy-internals-hint').hover();
     const hint = page.getByTestId('anatomy-internals-hint-text').first();
-    await expect(hint).toContainText(`Harness internals — ≈ ${int(A5.harnessInternals)} tokens (67.9 % of the startup context)`);
-    await expect(hint).toContainText(`Measured total ${int(A5.total)} minus everything attributed above (${int(A5.attributed)})`);
-    await expect(hint).toContainText('Tool definitions');
+    await expect(row('harness-internals'), 'with the tools measured the remainder is named for what it is').toContainText('Formatting & unlogged text');
+    await expect(hint).toContainText(`Formatting & unlogged text — ≈ ${int(A5.harnessInternals)} tokens (${((A5.harnessInternals / A5.total) * 100).toFixed(1)} % of the startup context)`);
+    await expect(hint).toContainText(`The exact total ${int(A5.total)} minus everything attributed above (${int(A5.attributed)})`);
+    await expect(hint, 'the tools have their own row, so the hint does not list them').not.toContainText('Tool definitions');
+    await expect(hint).toContainText('Message wrapping');
     await expect(hint).not.toContainText('Unallocated');
     await page.mouse.move(0, 0);
     await expect(tab, 'the internals are never called unallocated or free').not.toContainText(/Unallocated|\bfree\b/);
@@ -430,6 +458,13 @@ test('@S-SESS-03 Logs: what counts as a prompt, what is hidden, how a turn reads
     await tab.locator('[data-testid="anatomy-segment"][data-kind="instruction-file"]').click();
     await expect(row('instruction-file')).toHaveAttribute('aria-selected', 'true');
     await expect(row('skills')).toHaveAttribute('aria-selected', 'false');
+
+    await row('tool-definitions').click();
+    const toolRows = tab.locator('[data-row-kind="tool-definitions"]');
+    await expect(toolRows, 'one row per tool of the tools snapshot').toHaveCount(2);
+    await expect(toolRows.nth(0)).toContainText('Read');
+    await expect(toolRows.nth(1)).toContainText('Bash');
+    await expect(toolRows.nth(1), 'an MCP tool').toContainText('MCP server');
 
     await row('skills').click();
     await expect(row('skills')).toHaveAttribute('aria-selected', 'true');
@@ -483,7 +518,123 @@ test('@S-SESS-03 Logs: what counts as a prompt, what is hidden, how a turn reads
     await expect(page.getByTestId('startup-context-line')).toBeVisible();
   });
 
-  await test.step('8b. GS-05 workflow Agents table: shown as soon as the workflow opens; one row per agent with label (W1 its .meta.json description, W2 its prompt), phase (W1 Config, W2 —), duration, tokens and cost; numbers 1/2 and 12-char ids; a row opens a modal titled by the label with the agent Logs and Raw logs tabs; no extra request', async () => {
+  await test.step('8a2. GS-05 View system prompt: totals from expected.json, Shared 2 / Session-specific 1 parts, Expand / Collapse all; Read and Bash (MCP · gs05-mcp) from the later snapshot with a table, raw <system-reminder> text and masked schema; startup flags only; Copy = Download, masked, no local path; no prompt text left in the tab', async () => {
+    const V = loadExpected('gs-05').roots[0].systemPromptView as GoldenSystemPromptView;
+    const A5 = loadExpected('gs-05').roots[0].anatomy as GoldenAnatomy;
+    // The modal's figures are the anatomy's rows: prompt = system prompt + memory index, tools = Tool definitions.
+    expect(V.partsBytes).toBe(A5.partitions['system-prompt'].bytes + A5.partitions.memory.bytes);
+    expect(V.toolsTokens).toBe(A5.partitions['tool-definitions'].tokens);
+    await openSession(page, owner, repo.repoId, repo.rootId('gs-05'), { tab: 'sysctx' });
+    const tab = page.getByTestId('sysctx-anatomy-tab');
+    await tab.getByTestId('sysprompt-open').click();
+    const modal = page.getByTestId('sysprompt-modal');
+    await expect(modal).toBeVisible();
+    await expect(modal.getByTestId('sysprompt-totals')).toHaveText(
+      `First request ${int(A5.total)} tokens (exact) = System prompt ≈ ${int(V.partsTokens)} (${int(V.parts)} parts) + Tool definitions ≈ ${int(V.toolsTokens)} (${int(V.tools)} tools) + ≈ ${int(A5.total - V.totalTokens)} everything else (opening messages — see the anatomy table)`,
+    );
+    const items = (panel: string) => modal.getByTestId(`sysprompt-panel-${panel}`).getByTestId('sysprompt-item');
+
+    // System prompt tab (default): split at the dynamic boundary marker, the marker itself not shown.
+    const prompt = modal.getByTestId('sysprompt-panel-prompt');
+    await expect(prompt.getByTestId('sysprompt-toolbar')).toHaveText(
+      `${int(V.parts)} parts · ${int(V.partsBytes)} B · ≈ ${int(V.partsTokens)} tok = harness core ${int(A5.partitions['system-prompt'].bytes)} B + memory index ${int(A5.partitions.memory.bytes)} B`,
+    );
+    await expect(prompt.locator('[data-testid="sysprompt-group"][data-group="shared"]')).toHaveText(`Shared · ${V.shared} parts`);
+    await expect(prompt.locator('[data-testid="sysprompt-group"][data-group="session"]')).toHaveText(`Session-specific · ${V.session} parts`);
+    const parts = items('prompt');
+    await expect(parts).toHaveCount(V.parts);
+    const titles: Array<[string, string]> = [
+      ['shared', 'You are a coding assistant working in the…'],
+      ['shared', '# Memory'],
+      ['session', '# Environment'],
+    ];
+    for (const [i, [section, title]] of titles.entries()) {
+      await expect(parts.nth(i), `part ${i + 1} section`).toHaveAttribute('data-section', section);
+      await expect(parts.nth(i).locator('.truncate').first(), `part ${i + 1} title`).toHaveText(title);
+    }
+    await expect(modal, 'the boundary marker is no part').not.toContainText('__SYSTEM_PROMPT_DYNAMIC_BOUNDARY__');
+    await prompt.getByTestId('sysprompt-expand-all').click();
+    for (let i = 0; i < V.parts; i += 1) await expect(parts.nth(i), `part ${i + 1} expanded`).toHaveAttribute('data-expanded', 'true');
+    await expect(parts.nth(2).getByTestId('sysprompt-item-body'), 'paths masked in the part text').toContainText('Working directory: src');
+    await prompt.getByTestId('sysprompt-collapse-all').click();
+    for (let i = 0; i < V.parts; i += 1) await expect(parts.nth(i), `part ${i + 1} collapsed`).toHaveAttribute('data-expanded', 'false');
+    await expect(prompt.getByTestId('sysprompt-item-body'), 'a collapsed part mounts no body').toHaveCount(0);
+
+    // Tool definitions: from the first snapshot that carries tools (gs05-0003p), not the startup one.
+    await modal.getByTestId('sysprompt-tab-tools').click();
+    const toolsPanel = modal.getByTestId('sysprompt-panel-tools');
+    await expect(toolsPanel.getByTestId('sysprompt-tools-summary')).toHaveText(
+      `${int(V.tools)} tools · ${int(V.toolsBytes)} B · ≈ ${int(V.toolsTokens)} tokens — the Tool definitions row of the anatomy tab, from the prompt snapshot`,
+    );
+    const tools = items('tools');
+    await expect(tools).toHaveCount(V.tools);
+    await expect(tools.nth(0).locator('.truncate .font-mono')).toHaveText('Read');
+    await expect(tools.nth(1).locator('.truncate .font-mono')).toHaveText('Bash');
+    await expect(tools.nth(1).locator('.truncate'), 'the MCP server badge after the name').toContainText('MCP · gs05-mcp');
+    await expect(tools.nth(0), 'Read has no server').not.toContainText('MCP ·');
+    await tools.nth(0).getByRole('button').first().click();
+    const readBody = tools.nth(0).getByTestId('sysprompt-item-body');
+    await expect(readBody.locator('table'), 'the description is Markdown: its table renders').toHaveCount(1);
+    await expect(readBody, 'raw HTML stays text').toContainText('<system-reminder>stays text</system-reminder>');
+    await expect(readBody.locator('system-reminder'), 'no raw HTML element').toHaveCount(0);
+    await expect(readBody, 'description path masked').toContainText('<outside>/notes.md');
+    await expect(readBody.locator('pre'), 'the schema JSON block, its strings masked').toContainText('<outside>/file.txt');
+    await expect(readBody).not.toContainText('C:\\Users');
+
+    // Flags: the startup snapshot's own keys, never the later snapshot's, never `type`.
+    await modal.getByTestId('sysprompt-tab-flags').click();
+    const flags = items('flags');
+    const keys = await flags.evaluateAll((rows) => rows.map((r) => r.querySelector('.truncate')?.textContent ?? ''));
+    // Sorted: the stored transcript is jsonb, which reorders object keys (length, then bytes).
+    expect([...keys].sort(), 'the startup flags; systemPrompt, tools and type excluded').toEqual(['cliPrefix', 'contextRendering', 'gs05Extra', 'reminderFold']);
+    const flag = (key: string) => flags.filter({ has: page.locator('.truncate', { hasText: new RegExp(`^${key}$`) }) });
+    await expect(flag('cliPrefix'), 'the startup value, not gs05-late').toHaveText('cliPrefixgs05');
+    await expect(flag('cliPrefix')).toHaveAttribute('data-section', 'flag');
+    await expect(flag('gs05Extra')).toHaveAttribute('data-expanded', 'false');
+    await flag('gs05Extra').getByRole('button').click();
+    await expect(flag('gs05Extra').getByTestId('sysprompt-item-body').locator('pre'), 'object flag JSON, cwd masked to the repo root').toContainText('"cwd": "."');
+    for (const t of ['prompt', 'tools', 'flags'] as const) {
+      await modal.getByTestId(`sysprompt-tab-${t}`).click();
+      await expect(modal, `${t}: the later snapshot's prompt is ignored`).not.toContainText('GS05-LATE-PART');
+      await expect(modal, `${t}: the later snapshot's flags are ignored`).not.toContainText('gs05-late');
+    }
+
+    // Copy as Markdown (clipboard stubbed) and Download .md export the same masked text.
+    await page.evaluate(() => {
+      Object.defineProperty(navigator, 'clipboard', {
+        configurable: true,
+        value: { writeText: async (text: string) => { window.__copied = text; } },
+      });
+    });
+    await modal.getByTestId('sysprompt-copy').click();
+    await expect(modal.getByTestId('sysprompt-copy')).toHaveText('Copied');
+    const copied = await page.evaluate(() => window.__copied ?? '');
+    const [download] = await Promise.all([page.waitForEvent('download'), modal.getByTestId('sysprompt-download').click()]);
+    expect(download.suggestedFilename()).toMatch(/^system-prompt-.*\.md$/);
+    const file = fs.readFileSync(await download.path(), 'utf8');
+    expect(file, 'Download writes what Copy copied').toBe(copied);
+    for (const masked of [
+      'Working directory: src',
+      '~/.claude/projects/<project-slug>/memory/MEMORY.md',
+      '<outside>/notes.txt',
+      '<outside>/notes.md',
+      '<outside>/file.txt',
+      '"cwd": "."',
+      '# Tool definitions',
+      '## Bash · server gs05-mcp',
+    ]) expect(file, `export holds ${masked}`).toContain(masked);
+    for (const local of ['/home/dev', '/tmp/gs05', 'C:\\Users', '/work/repo-gold', 'GS05-LATE-PART', '__SYSTEM_PROMPT_DYNAMIC_BOUNDARY__'])
+      expect(file, `export has no ${local}`).not.toContain(local);
+
+    await page.keyboard.press('Escape');
+    await expect(modal).toHaveCount(0);
+    await expect(tab, 'prompt text lives only in the modal').not.toContainText('GS05-SESSION-MARKER');
+    // Back to Logs, the state 8b starts from.
+    await openSession(page, owner, repo.repoId, repo.rootId('gs-05'), { tab: 'logs' });
+    await expect(page.getByTestId('startup-context-line')).toBeVisible();
+  });
+
+  await test.step('8b.GS-05 workflow Agents table: shown as soon as the workflow opens; one row per agent with label (W1 its .meta.json description, W2 its prompt), phase (W1 Config, W2 —), duration, tokens and cost; numbers 1/2 and 12-char ids; a row opens a modal titled by the label with the agent Logs and Raw logs tabs; no extra request', async () => {
     const G5 = loadExpected('gs-05').roots[0];
     const node = (key: string) => {
       const n = G5.nodes.find((x) => x.key === key);
@@ -665,6 +816,7 @@ test('@S-SESS-03 Logs: what counts as a prompt, what is hidden, how a turn reads
     await expect(tab.locator('[data-testid="anatomy-partition-row"][data-kind="instruction-file"]')).toBeVisible();
     await expect(tab.locator('[data-testid="anatomy-partition-row"][data-kind="harness-internals"]')).toHaveCount(0);
     await expect(tab.locator('[data-testid="anatomy-segment"][data-kind="harness-internals"]')).toHaveCount(0);
+    await expect(tab.getByTestId('sysprompt-open'), 'no prompt_snapshot: no View system prompt button').toHaveCount(0);
   });
 
   await test.step('9. GS-01 (no harness snapshot): the anatomy tab shows the old-hook banner, git status only unknown or outside repo, and no page error', async () => {

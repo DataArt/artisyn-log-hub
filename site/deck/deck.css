@@ -930,7 +930,7 @@ html.deck-narrow .mosaic-slide ol.questions li {
   color: var(--text-3);
 }
 
-/* Left column that stacks the body and a visual (slides 5, 11, 15, 19). */
+/* Left column that stacks the body and a visual (slides 13, 18, 26). */
 .col-stack {
   display: flex;
   flex-direction: column;
@@ -1150,8 +1150,8 @@ html.deck-narrow .mosaic-slide ol.questions li {
   color: var(--accent);
 }
 
-/* Slide 5 · harness element → view. */
-.visual-slot.anatomy-table {
+/* Slide 20 · quality check → what Log Hub shows. */
+.visual-slot.checks-table {
   display: block;
   aspect-ratio: auto;
   padding: 6px 12px;
@@ -1161,7 +1161,7 @@ html.deck-narrow .mosaic-slide ol.questions li {
   text-align: left;
 }
 
-.reveal .anatomy-table table {
+.reveal .checks-table table {
   display: table;
   width: 100%;
   margin: 0;
@@ -1169,13 +1169,13 @@ html.deck-narrow .mosaic-slide ol.questions li {
   font-size: 16px;
 }
 
-.reveal .anatomy-table th,
-.reveal .anatomy-table td {
+.reveal .checks-table th,
+.reveal .checks-table td {
   border: 0;
   background: none;
 }
 
-.reveal .anatomy-table th {
+.reveal .checks-table th {
   padding: 4px 6px;
   font-family: var(--mono);
   font-size: 12px;
@@ -1185,18 +1185,18 @@ html.deck-narrow .mosaic-slide ol.questions li {
   text-align: left;
 }
 
-.reveal .anatomy-table td {
+.reveal .checks-table td {
   padding: 3px 6px;
   border-top: 1px dashed var(--border);
 }
 
-.reveal .anatomy-table td:first-child {
+.reveal .checks-table td:first-child {
   font-weight: 600;
   color: var(--text);
   white-space: nowrap;
 }
 
-/* Slide 15 · OKF split: verified checks vs heuristic signals. */
+/* Slide 18 · OKF split: verified checks vs heuristic signals. */
 .visual-slot.split-board {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -1244,14 +1244,14 @@ html.deck-narrow .mosaic-slide ol.questions li {
   max-height: none;
 }
 
-/* Slide 19 · tool table under the bullets. */
+/* Slide 26 · tool table under the bullets. */
 .visual-slot.deck-visual.tool-slot {
   width: 100%;
   height: auto;
   padding: 10px 12px;
 }
 
-/* Slide 20 · three layers (a, b, c are list markers, not body words) and the study line. */
+/* Slide 28 · three layers (a, b, c are list markers, not body words) and the study line. */
 .slide-body ol.layers {
   padding-left: 1.4em;
   list-style: lower-alpha;
@@ -1395,7 +1395,7 @@ html.deck-narrow .contrast-col ul {
   font-size: 14px;
 }
 
-html.deck-narrow .reveal .anatomy-table table {
+html.deck-narrow .reveal .checks-table table {
   font-size: 13px;
 }
 
@@ -1409,4 +1409,137 @@ html.deck-narrow .closing-slide .closing-answer {
 
 html.deck-narrow .col-stack {
   gap: 10px;
+}
+
+/* Deck map (template #deck-map in index.html): the slide after "black box" shows the whole
+   map; every group divider (.divider-slide) shows it again with its own group highlighted. */
+.map-host {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  margin-top: 28px;
+}
+
+.deck-map {
+  display: grid;
+  grid-template-columns: 230px 40px minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+}
+
+.map-problem {
+  padding: 22px 20px;
+  background: var(--text);
+  color: var(--deck-slide);
+}
+
+.map-tag {
+  font-family: var(--mono);
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  opacity: 0.75;
+}
+
+.map-figures {
+  margin-top: 12px;
+  font-size: 19px;
+  line-height: 1.45;
+}
+
+.map-question {
+  margin-top: 14px;
+  font-family: var(--mono);
+  font-size: 28px;
+  font-weight: 700;
+}
+
+.map-arrow {
+  font-family: var(--mono);
+  font-size: 36px;
+  color: var(--accent);
+  text-align: center;
+}
+
+.reveal .map-nodes {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  list-style: none;
+  padding: 0;
+}
+
+.map-nodes li {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 88px;
+  padding: 12px 14px;
+  border: 1px solid var(--deck-slide-border);
+  background: var(--deck-slide);
+}
+
+.map-no {
+  font-family: var(--mono);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--accent-2);
+}
+
+.map-nodes b {
+  font-size: 19px;
+  line-height: 1.3;
+  color: var(--text);
+}
+
+.deck-map.has-active .map-problem,
+.deck-map.has-active .map-nodes li {
+  opacity: 0.35;
+}
+
+.deck-map.has-active .map-nodes li.active {
+  opacity: 1;
+  border: 2px solid var(--accent);
+  background: var(--deck-accent-soft);
+  box-shadow: inset 5px 0 0 var(--accent);
+}
+
+html.deck-narrow .deck-map {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 8px;
+}
+
+html.deck-narrow .map-arrow {
+  transform: rotate(90deg);
+  font-size: 26px;
+}
+
+html.deck-narrow .map-problem {
+  padding: 12px 14px;
+}
+
+html.deck-narrow .map-figures {
+  font-size: 15px;
+}
+
+html.deck-narrow .map-question {
+  font-size: 20px;
+}
+
+html.deck-narrow .reveal .map-nodes {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+html.deck-narrow .map-nodes li {
+  min-height: 0;
+  padding: 6px 8px;
+}
+
+html.deck-narrow .map-nodes b {
+  font-size: 14px;
 }

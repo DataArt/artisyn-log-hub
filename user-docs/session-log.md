@@ -280,8 +280,9 @@ link to this tab.
 - **Total** — the exact size of the first request in tokens (input + cache write + cache read, as
   the model reported it).
 - **The bar** — the total split into coloured parts: the system prompt, the memory index
-  (MEMORY.md), environment details, built-in tool names, MCP servers, subagent types, the skills
-  listing, instruction files (CLAUDE.md and friends), system reminders and your first prompt.
+  (MEMORY.md), the tool definitions, environment details, built-in tool names, MCP servers,
+  subagent types, the skills listing, instruction files (CLAUDE.md and friends), system reminders
+  and your first prompt.
   Hover a part for its size and share; click it (or its table row) to select it.
 - **The table** — the same parts with bytes, ≈ tokens and share. Expand a part to see what it is
   made of: one row per skill, per file, per MCP server (with its status, tool count and the tools
@@ -291,11 +292,43 @@ link to this tab.
 Every part except the total is an **estimate**: its size in bytes divided by a bytes-per-token
 ratio for the model (shown under the total). Only the total is exact.
 
-**Harness internals** (the hatched part) is what is left: tokens Claude Code sent in the first
-request but did not write to the session log, so they cannot be split further. It is mostly the
-definitions of the built-in and MCP tools, message wrapping, and the combined error of the
-estimates above. If the estimates add up to more than the measured total, a warning shows the
-difference and there is no Harness internals part.
+**Tool definitions** are the descriptions and input schemas of every tool offered to the model
+(Bash, Read, Edit, Agent, … and MCP tools loaded at start) — often the largest part of the
+first request. Expand the row to see one row per tool. They are measured when Claude Code logged
+them (version 2.1.280 or newer); tools that load only when searched are not counted.
+
+**Formatting & unlogged text** (the hatched part) is what is left: the exact total minus every
+part above — message formatting, short texts the log does not keep and the combined error of the
+estimates, usually a few percent. In sessions from older Claude Code versions, which did not log
+their tools, this part is called **Harness internals** and the tool definitions are in it. If the
+estimates add up to more than the measured total, a warning shows the difference and there is no
+Harness internals part.
+
+**View system prompt.** When Claude Code recorded a snapshot of its system prompt in the session
+log, a **View system prompt** button sits next to the total. Its header shows how the window fits
+into the first request: "First request N tokens (exact) = System prompt ≈ … + Tool definitions ≈ …
++ ≈ … everything else" — the system prompt is the table's System prompt and Memory index rows,
+the tool definitions are its Tool definitions row, and everything else is the other rows (the
+opening messages) plus Formatting & unlogged text. It has three tabs:
+
+- **System prompt** — the prompt parts Claude Code started the session with, each with its size.
+  They are grouped into **Shared** (the same for every session) and **Session-specific** (your
+  working directory, environment, memory) when Claude Code marked the split. The summary line
+  splits the size into the harness core and the memory index, the two table rows; the `# Memory`
+  part is tagged "Memory index row".
+- **Tool definitions** — every tool offered to the model, with its description and input schema
+  and its share of the tools' size. A tool from an MCP server has an `MCP · <server>` badge. The
+  total equals the **Tool definitions** row of the table above.
+- **Flags** — the other settings recorded with the snapshot.
+
+Click a row to expand it, or use **Expand all** / **Collapse all**. Local paths are masked:
+paths inside the repository are shown relative to its root, files under `~/.claude` keep that
+prefix with the project folder hidden, and any other absolute path is shown as
+`<outside>/<file name>`. **Copy as Markdown** copies the whole view to the clipboard and
+**Download .md** saves it as a Markdown file — both with the same masked paths. Sessions without a
+snapshot (older Claude Code versions, or logs without it) have no button. The snapshot is an
+internal, undocumented Claude Code format, so its contents may change with any Claude Code
+release.
 
 The skills and files tables show where each item lives and its **git status**:
 

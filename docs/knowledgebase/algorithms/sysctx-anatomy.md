@@ -19,7 +19,9 @@ trim — a skill they never use, an oversized `CLAUDE.md`, an MCP server with lo
   `client/src/viewer/pages/repository/session-log/sysctx-anatomy/sysctx-anatomy.ts`
   (`buildSysctxAnatomy`, `computeStartupTotal`, `splitSkillListing`, `mcpKey`); constants and
   vocabularies in `sysctx-anatomy-constants.ts` (`KIND_LABELS`, `GIT_LABELS`,
-  `FIRST_PROMPT_ROLE_LABELS`, `MEMORY_DISPLAY_PATH`, `OUTSIDE_PATH_PREFIX`). It reuses
+  `FIRST_PROMPT_ROLE_LABELS`, `MEMORY_DISPLAY_PATH`, `OUTSIDE_PATH_PREFIX`). The tool set and
+  its sizes come from `tool-definitions.ts` (`findToolDefinitions`), which the View system prompt
+  modal uses too, so the modal's Tool definitions equal this partition. It reuses
   `resolveCharsPerToken` and `normaliseClientPath` (`log-parser.ts`) and `toUserDisplayPath`,
   `classifyInstructionRole` (`instruction-files.ts`).
 - Twins: none. The PoC `docs/pocs/2026-10-29-1504-sysctx-anatomy/anatomy.cjs` is the reference it
@@ -33,7 +35,8 @@ trim — a skill they never use, an oversized `CLAUDE.md`, an MCP server with lo
   harness snapshot or `null`), `repoRoot` (absolute, may be empty), and the bytes-per-token ratio
   `cpt` — given directly, or `resolveCharsPerToken(pricing, model)` for the model of the first
   main assistant line (default 3.5).
-- Output: `total`, `attributed`, `internals`, `overBy`, `denominator`, `cpt`, `model`, `flags`
+- Output: `total`, `attributed`, `internals`, `overBy`, `denominator`, `cpt`, `model`,
+  `toolSource` (`wire` / `snapshot` / `null`, rule 10a), `flags`
   (`empty`, `noSnapshot`, `noGitStatus`, `noPromptSnapshot`, `unknownTotal`, `overTotal`) and
   `partitions` in table order. Each partition has `kind`, `label`, `source`, `bytes`, `tokens`,
   `share`, `estimated`, optional `count` and its drill-down `rows` (`label`, `source`, `bytes`,
@@ -74,11 +77,31 @@ trim — a skill they never use, an oversized `CLAUDE.md`, an MCP server with lo
 
 9. **`system-prompt`** (source `harness`): the first `prompt_snapshot` attachment of the block;
    each `systemPrompt[i]` block (a string, or an object's `text`) except memory blocks is one row
-   "Block i+1" (1-based index in the array, so a skipped memory block leaves a gap).
+   "Block i+1" (1-based index in the array, so a skipped block leaves a gap). The
+   `__SYSTEM_PROMPT_DYNAMIC_BOUNDARY__` marker and blocks that are blank after `trim()` are not
+   prompt text and are skipped, as in the modal — so system prompt + the memory block = the
+   modal's System prompt bytes.
 10. **`memory`** (source `user`): every `systemPrompt` block whose first non-empty line, trimmed,
     is exactly `# Memory`, plus every `instructions` file whose path ends with `/MEMORY.md`. One
     row, path `~/.claude/projects/<project-slug>/memory/MEMORY.md`, git `outside-repo`; no row
     when 0 bytes.
+10a. **`tool-definitions`** (source per row) — `findToolDefinitions(block, main)`:
+    - **wire** (Claude Code 2.1.312+): the first line of the block with `type === 'api-request'`,
+      a string `shapeHash` and `querySource` absent or `repl_main_thread`; its tools are
+      `shape.tools` of the `api-request-shape` line (anywhere in `main`) with the same
+      `shapeHash`, used when non-empty — the tools exactly as the first request sent them;
+    - else **snapshot** (2.1.280+): `tools` of the first non-sidechain `prompt_snapshot` anywhere
+      with a non-empty `tools` array (usually written after the first reply; same tool set);
+    - else no tools: the partition is 0 B and `toolSource` is `null`.
+
+    A tool whose definition has `defer_loading: true` is not in the context until searched and is
+    dropped. A tool's size is `name + description + JSON.stringify(inputSchema)`, where
+    `inputSchema` is `schema.input_schema` when the snapshot's `schema` is the whole wire tool
+    (it always is in real data), else `input_schema` when there is no `schema`, else `schema`. The
+    whole definition's JSON is not used: it counts the description's JSON escapes (~2 % more than
+    the text the model reads). One row per tool, label = the name (`(unnamed tool #n)`), source
+    `mcp-server` when it has a `server` or an `mcp__…__` name, else `built-in`; rows sorted by
+    bytes descending; `count` = the number of tools.
 11. **`environment`** (source `harness`, estimated): every other attachment of the block whose
     type is not measured by another partition (`prompt_snapshot`, `deferred_tools_delta`,
     `mcp_instructions_delta`, `agent_listing_delta`, `skill_listing`, `instructions`,
@@ -137,7 +160,12 @@ trim — a skill they never use, an oversized `CLAUDE.md`, an MCP server with lo
     the text contains `<command-name>` → `slash-command`; `isMeta` with array content →
     `injected-body`; otherwise `typed-prompt`. The label is the role's label, never the text.
 20. **`harness-internals`** (source `harness`): `internals` tokens (rule 7), `bytes` `null`, no
-    rows. Its hint text is `HARNESS_INTERNALS_HINT` in the constants file.
+    rows. Its label is "Formatting & unlogged text" (`INTERNALS_LABEL_TOOLS_MEASURED`) when
+    `toolSource` is not `null`, else "Harness internals". Its hint text is `HARNESS_INTERNALS_HINT`
+    in the constants file (titled with the same label); it lists Tool
+    definitions only when `toolSource` is `null` (then they are the largest part of internals).
+    With the tools measured, internals is message wrapping, short texts the log does not keep and
+    the estimate error — measured on local prod at 0.1–4.7 % of the total.
 
 ### Flags
 
@@ -165,6 +193,9 @@ trim — a skill they never use, an oversized `CLAUDE.md`, an MCP server with lo
 - Subagent types and system reminders: SA-12. Snapshot without any `gitStatus`: SA-13.
 - Helpers: `splitSkillListing` with UTF-8 and a repeated name SA-14, `mcpKey` SA-15, SA-16.
 - Empty transcript: SA-17.
+- Tool definitions from the wire shape, a deferred tool dropped, an `mcp__` tool; the boundary
+  marker and a blank block skipped: SA-TD1. From the tools snapshot after the anchor (the real
+  `schema` shape), an MCP tool by `server`: SA-GS05. No tools logged: every other builder row.
 - The GS-05 golden session: SA-GS05.
 
 ## Examples
@@ -186,7 +217,7 @@ Two kinds of rows.
 - **Helper rows** have `input.split` (`{content, names}` → `expected.sizes`, name → bytes) or
   `input.mcpKey` (a string → `expected.key`).
 
-Rows (18): [`docs/algorithm-examples/sysctx-anatomy.json`](../../algorithm-examples/sysctx-anatomy.json) — test data for the table test; the rules above are enough to understand the algorithm.
+Rows (19): [`docs/algorithm-examples/sysctx-anatomy.json`](../../algorithm-examples/sysctx-anatomy.json) — test data for the table test; the rules above are enough to understand the algorithm.
 
 ## Mutations
 
@@ -206,6 +237,10 @@ Rows (18): [`docs/algorithm-examples/sysctx-anatomy.json`](../../algorithm-examp
   treated as inside the repo -> SA-13 (`home/u/proj/CLAUDE.md`).
 - Skill slice sizes in UTF-16 characters instead of UTF-8 bytes -> SA-14 (b = 9).
 - Shares divided by a zero denominator -> SA-17 (`NaN`).
+- The boundary marker counted as prompt text -> SA-TD1 (37 B), SA-GS05 (3,150 B).
+- A tool sized as the JSON of the whole snapshot `schema` (name and description twice) ->
+  SA-GS05 (Read 511 B instead of 299); `defer_loading` tools kept -> SA-TD1 (3 rows); the tools snapshot used
+  although the wire shape is logged -> SA-TD1 has no snapshot, SPV-14 (tool `S`).
 
 ## Where the result is visible
 

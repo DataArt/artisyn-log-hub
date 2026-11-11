@@ -19,6 +19,7 @@ import { normaliseClientPath, resolveCharsPerToken } from '../log-parser';
 import {
   ANATOMY_PARTITION_KINDS,
   FIRST_PROMPT_ROLE_LABELS,
+  INTERNALS_LABEL_TOOLS_MEASURED,
   KIND_LABELS,
   MEMORY_DISPLAY_PATH,
   OUTSIDE_PATH_PREFIX,
@@ -28,6 +29,14 @@ import {
   type AnatomySource,
   type FirstPromptRole,
 } from './sysctx-anatomy-constants';
+import {
+  findToolDefinitions,
+  mcpServerOfTool,
+  type ToolSource,
+} from './tool-definitions';
+
+/** The `systemPrompt` part that splits the shared prompt from the per-session one (34 B). */
+export const DYNAMIC_BOUNDARY_MARKER = '__SYSTEM_PROMPT_DYNAMIC_BOUNDARY__';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -114,6 +123,8 @@ export interface SysctxAnatomy {
   cpt: number;
   /** Model of the first main assistant line, if any. */
   model: string | null;
+  /** Where the Tool definitions partition was read from; `null` when the session logged none. */
+  toolSource: ToolSource | null;
   flags: AnatomyFlags;
   /** In partition-table order (DD 6); harness internals only when `internals !== null`. */
   partitions: AnatomyPartition[];
@@ -138,13 +149,15 @@ export interface BuildSysctxAnatomyInput {
 
 const encoder = new TextEncoder();
 
-function utf8(text: string): number {
+/** UTF-8 byte length of a string. */
+export function utf8(text: string): number {
   return encoder.encode(text).length;
 }
 
 type Obj = Record<string, unknown>;
 
-function isObj(v: unknown): v is Obj {
+/** A plain object (not null, not an array). */
+export function isObj(v: unknown): v is Obj {
   return typeof v === 'object' && v !== null && !Array.isArray(v);
 }
 
@@ -160,7 +173,8 @@ function num(v: unknown): number {
   return typeof v === 'number' && Number.isFinite(v) ? v : 0;
 }
 
-function basename(p: string): string {
+/** Last path segment (`\` or `/` separated); the input itself when that segment is empty. */
+export function basename(p: string): string {
   const parts = p.replace(/\\/g, '/').split('/');
   return parts[parts.length - 1] || p;
 }
@@ -246,6 +260,29 @@ export function computeStartupTotal(
   return findStartupAnchor(main).total;
 }
 
+/**
+ * The startup block (DD 3), sidechain lines removed: every line before the first non-sidechain
+ * assistant line with `message.usage`; without one, before the first assistant line; without
+ * any assistant line, the whole of `main`.
+ */
+export function startupBlockLines(
+  main: Record<string, unknown>[],
+): Record<string, unknown>[] {
+  return startupBlock(main, findStartupAnchor(main));
+}
+
+function startupBlock(
+  main: Record<string, unknown>[],
+  anchor: StartupAnchor,
+): Record<string, unknown>[] {
+  let end = anchor.index;
+  if (end < 0) {
+    end = main.findIndex((l) => l.type === 'assistant');
+    if (end < 0) end = main.length;
+  }
+  return main.slice(0, end).filter((l) => l.isSidechain !== true);
+}
+
 // ---------------------------------------------------------------------------
 // Builder
 // ---------------------------------------------------------------------------
@@ -300,7 +337,8 @@ function pathKey(p: string): string {
   return p.replace(/\\/g, '/').toLowerCase();
 }
 
-function blockText(block: unknown): string {
+/** Text of one `systemPrompt[]` block: a string, `.text`, else its JSON. */
+export function blockText(block: unknown): string {
   if (typeof block === 'string') return block;
   if (isObj(block) && typeof block.text === 'string') return block.text;
   return JSON.stringify(block ?? '');
@@ -390,12 +428,7 @@ export function buildSysctxAnatomy(
 
   // --- startup block (DD 3) and total (DD 4) ---
   const anchor = findStartupAnchor(main);
-  let end = anchor.index;
-  if (end < 0) {
-    end = main.findIndex((l) => l.type === 'assistant');
-    if (end < 0) end = main.length;
-  }
-  const block = main.slice(0, end).filter((l) => l.isSidechain !== true);
+  const block = startupBlock(main, anchor);
   const attachments: Obj[] = [];
   const userLines: Obj[] = [];
   for (const line of block) {
@@ -423,6 +456,8 @@ export function buildSysctxAnatomy(
   if (promptSnapshot && Array.isArray(promptSnapshot.systemPrompt)) {
     promptSnapshot.systemPrompt.forEach((b: unknown, i: number) => {
       const text = blockText(b);
+      // The boundary marker and blank blocks are not prompt text (as in the modal).
+      if (text.trim() === DYNAMIC_BOUNDARY_MARKER || text.trim() === '') return;
       const bytes = utf8(text);
       if (isMemoryBlock(text)) {
         memoryBytes += bytes;
@@ -437,6 +472,22 @@ export function buildSysctxAnatomy(
       });
     });
   }
+
+  // --- tool definitions: wire shape of the first request, else the tools snapshot ---
+  const toolDefs = findToolDefinitions(block, main);
+  const toolRows: DraftRow[] = byBytesDesc(
+    (toolDefs?.tools ?? []).map((t) => {
+      const server = t.server ?? mcpServerOfTool(t.name);
+      return {
+        key: `tool-${t.index}`,
+        label: t.name ?? `(unnamed tool #${t.index})`,
+        kind: 'tool-definitions' as const,
+        source:
+          server !== null ? ('mcp-server' as const) : ('built-in' as const),
+        bytes: t.bytes,
+      };
+    }),
+  );
 
   // --- instruction files + MEMORY.md files (DD 10) ---
   const files = new Map<string, FileAcc>();
@@ -723,6 +774,13 @@ export function buildSysctxAnatomy(
     },
     { kind: 'memory', source: 'user', bytes: memoryBytes, rows: memoryRows },
     {
+      kind: 'tool-definitions',
+      source: null,
+      bytes: toolDefs?.bytes ?? 0,
+      count: toolRows.length,
+      rows: toolRows,
+    },
+    {
       kind: 'environment',
       source: 'harness',
       bytes: sum(envRows),
@@ -807,7 +865,11 @@ export function buildSysctxAnatomy(
   if (internals !== null) {
     partitions.push({
       kind: 'harness-internals',
-      label: KIND_LABELS['harness-internals'],
+      // With the tools measured the remainder is only formatting and unlogged text, so it is
+      // named for what it is; without them it still holds the tool definitions.
+      label: toolDefs
+        ? INTERNALS_LABEL_TOOLS_MEASURED
+        : KIND_LABELS['harness-internals'],
       source: 'harness',
       bytes: null,
       tokens: internals,
@@ -839,6 +901,7 @@ export function buildSysctxAnatomy(
     denominator,
     cpt,
     model: anchor.model,
+    toolSource: toolDefs?.source ?? null,
     flags: {
       empty: main.length === 0,
       noSnapshot: !snapshot,

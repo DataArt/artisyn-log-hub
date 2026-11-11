@@ -39,3 +39,4 @@ Folders are named `<YYYY-MM-DD>-<slug>` (the day the task was created).
 - [2026-11-09-morning-check-followups] Morning Check Follow-Ups — Fix and Verify — archived 2026-11-09
 - [2026-10-22-jetbrains-raw-mode-menu] Claude-Docker Full-Screen Menu Kills the JetBrains Terminal — archived 2026-11-10
 - [2026-11-05-budgets-threshold-alerts] Budgets, Spend Forecasts and Cost Slices (Display-Only) — archived 2026-11-10
+- [2026-11-10-sysctx-prompt-viewer] System Prompt Viewer on the System Context Anatomy Tab — archived 2026-11-11

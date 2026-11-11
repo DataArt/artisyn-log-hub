@@ -144,9 +144,9 @@
         <ul>
           <li>Repository Analytics: work time, cost, files, vision, MCP and cache ratio by hour and
             by day, grouped by user, branch or session attribute; Top-N rankings.</li>
-          <li>17 reports, every one exportable to PDF — Executive Summary, Cost by Branch, Cost by
+          <li>18 reports, every one exportable to PDF — Executive Summary, Cost by Branch, Cost by
             User, Token Usage, Tool Analytics, Harness Usage, Claude Code Version Usage, Cache Read
-            Ratio, Change Surface, Attribute Breakdown and more.</li>
+            Ratio, Change Surface, Attribute Breakdown, Budget and more.</li>
           <li>Teams with transparent or restricted access, and manager and ADLC trainer roles.</li>
         </ul>
       </dd>
@@ -175,8 +175,8 @@
             error %; does the agent trust its output (<code>opened file</code>) or abandon it
             (<code>retried</code>) — the basis to keep, tune or remove it.</li>
           <li>For security: every tool answer and every permission denial is readable, so the
-            prompt-injection surface of each MCP server is visible. The optional post-turn evaluator
-            (hook 2.31.1) runs without tools, MCP servers or skills, so the session it reviews cannot
+            prompt-injection surface of each MCP server is visible. The optional post-turn analysis
+            (hook 2.31.1) runs without tools, MCP servers or skills, so the session it reads cannot
             act through it.</li>
         </ul>
       </dd>
@@ -260,7 +260,7 @@
           <li>A verdict on the layout, with concrete hints — "this article is read in five sessions,
             split it or add section pointers". No LLM involved.</li>
           <li>KB value in two parts. A · verified checks, counted from tool calls: KB sessions, flood,
-            an article read in ≥ 80 % of KB sessions (it belongs in always-loaded context), coarse
+            an article read in ≥ 80% of KB sessions (a candidate for always-loaded context), coarse
             articles, dead pointers. B · heuristic signals to check by hand: pointer yield, routing
             misses, searches after reading, and the agent's trail.</li>
           <li>Thresholds per repository.</li>

@@ -16,6 +16,8 @@
 //     with the formula of docs/knowledgebase/change-surface.md §2;
 //   - the System context anatomy (GS-05 `anatomy`): partition bytes from the startup block, tokens
 //     at `charsPerToken`, attributed = Σ tokens, harness internals = total − attributed;
+//   - the System prompt viewer (GS-05 `systemPromptView`): parts per group, parts / tools bytes and
+//     tokens from the startup and tools `prompt_snapshot` lines;
 //   - every REPO-GOLD total in `repo-gold.expected.json`, including the merged work time per day.
 //
 // Usage: node tests/golden/check-arithmetic.mjs   (exit 0 all consistent, 1 on any mismatch)
@@ -226,7 +228,7 @@ function editedFolders(lines, repoRoot) {
 
 /** Partition kinds of the System context anatomy, harness internals excluded. */
 export const ANATOMY_KINDS = [
-  'system-prompt', 'memory', 'environment', 'deferred-tools', 'mcp-server',
+  'system-prompt', 'memory', 'tool-definitions', 'environment', 'deferred-tools', 'mcp-server',
   'agent-types', 'skills', 'instruction-file', 'system-reminder', 'first-prompt',
 ];
 const ANATOMY_OWN_TYPES = new Set([
@@ -260,6 +262,7 @@ export function startupAnatomy(lines) {
   const promptSnapshot = atts.find((a) => a.type === 'prompt_snapshot');
   for (const b of promptSnapshot?.systemPrompt ?? []) {
     const text = typeof b === 'string' ? b : typeof b?.text === 'string' ? b.text : JSON.stringify(b ?? '');
+    if (text.trim() === '' || text.trim() === DYNAMIC_BOUNDARY_MARKER) continue;
     const first = text.split('\n').find((l) => l.trim() !== '');
     bytes[first?.trim() === '# Memory' ? 'memory' : 'system-prompt'] += utf8(text);
   }
@@ -292,7 +295,101 @@ export function startupAnatomy(lines) {
       }
     }
   }
+  bytes['tool-definitions'] = firstRequestTools(block, lines).reduce((s, t) => s + t.bytes, 0);
   return { total, bytes };
+}
+
+/** Boundary part between the shared and the session-specific system prompt parts. */
+const DYNAMIC_BOUNDARY_MARKER = '__SYSTEM_PROMPT_DYNAMIC_BOUNDARY__';
+
+/**
+ * Tool definitions of the first request: the `api-request-shape` named by the first main
+ * `api-request` of the startup block, else the first non-sidechain `prompt_snapshot` with tools.
+ * A tool is name + description + compact JSON of its input schema (inside `schema` when the snapshot
+ * keeps the whole wire tool there, else `input_schema` / `schema`). `defer_loading` tools are dropped.
+ */
+export function firstRequestTools(block, lines) {
+  const utf8 = (s) => Buffer.byteLength(String(s), 'utf8');
+  const isObj = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
+  const req = block.find(
+    (l) => l.type === 'api-request' && typeof l.shapeHash === 'string' && (l.querySource === undefined || l.querySource === 'repl_main_thread'),
+  );
+  let tools = req ? lines.find((l) => l.type === 'api-request-shape' && l.shapeHash === req.shapeHash)?.shape?.tools : null;
+  if (!Array.isArray(tools) || tools.length === 0) {
+    const snap = lines.find(
+      (l) => l.isSidechain !== true && l.type === 'attachment' && l.attachment?.type === 'prompt_snapshot' && Array.isArray(l.attachment.tools) && l.attachment.tools.length > 0,
+    );
+    tools = snap ? snap.attachment.tools : [];
+  }
+  const out = [];
+  for (const t0 of tools) {
+    const t = isObj(t0) ? t0 : {};
+    const whole = isObj(t.schema) && 'input_schema' in t.schema;
+    if ((whole ? t.schema : t).defer_loading === true || t.defer_loading === true) continue;
+    const schema = whole ? t.schema.input_schema : t.schema === undefined ? t.input_schema : t.schema;
+    const bytes = utf8(t.name ?? '') + utf8(t.description ?? '') + (schema == null ? 0 : utf8(JSON.stringify(schema)));
+    out.push({ name: t.name ?? null, bytes });
+  }
+  return out;
+}
+
+/**
+ * System prompt viewer numbers of a root transcript, re-derived independently of the client builder
+ * (docs/knowledgebase/algorithms/system-prompt-view.md). Byte sizes only — masking does not change
+ * them, because sizes come from the raw text:
+ *   - startup snapshot = first non-sidechain `prompt_snapshot` inside the startup block (the lines
+ *     before the first non-sidechain assistant line with usage), else the first one anywhere;
+ *   - tools = `firstRequestTools` (wire shape, else the first snapshot with tools), the same set
+ *     as the anatomy's Tool definitions partition;
+ *   - parts before the first boundary marker are shared, after it session; further markers and
+ *     blank parts are dropped; ungrouped when there is no marker;
+ *   - tokens = round(Σ bytes / cpt), rounded once per sum.
+ */
+export function systemPromptView(lines, cpt) {
+  const utf8 = (s) => Buffer.byteLength(String(s), 'utf8');
+  const main = lines.filter((l) => l.isSidechain !== true);
+  const isSnapshot = (l) => l.type === 'attachment' && l.attachment && typeof l.attachment === 'object' && l.attachment.type === 'prompt_snapshot';
+  let anchor = main.findIndex((l) => l.type === 'assistant' && l.message?.usage);
+  if (anchor < 0) anchor = main.findIndex((l) => l.type === 'assistant');
+  if (anchor < 0) anchor = main.length;
+  const startup = main.slice(0, anchor).find(isSnapshot) ?? main.find(isSnapshot);
+
+  let shared = 0;
+  let session = 0;
+  let ungrouped = 0;
+  let partsBytes = 0;
+  let marker = false;
+  const raw = Array.isArray(startup?.attachment.systemPrompt) ? startup.attachment.systemPrompt : [];
+  const texts = raw.map((p) => (typeof p === 'string' ? p : typeof p?.text === 'string' ? p.text : JSON.stringify(p ?? '')));
+  const grouped = texts.some((t) => t.trim() === DYNAMIC_BOUNDARY_MARKER);
+  for (const text of texts) {
+    if (text.trim() === DYNAMIC_BOUNDARY_MARKER) {
+      marker = true;
+      continue;
+    }
+    if (text.trim() === '') continue;
+    partsBytes += utf8(text);
+    if (!grouped) ungrouped++;
+    else if (marker) session++;
+    else shared++;
+  }
+
+  const tools = firstRequestTools(main.slice(0, anchor), lines);
+  const toolsBytes = tools.reduce((s, t) => s + t.bytes, 0);
+  const parts = shared + session + ungrouped;
+  const totalBytes = partsBytes + toolsBytes;
+  return {
+    parts,
+    shared,
+    session,
+    partsBytes,
+    partsTokens: Math.round(partsBytes / cpt),
+    tools: tools.length,
+    toolsBytes,
+    toolsTokens: Math.round(toolsBytes / cpt),
+    totalBytes,
+    totalTokens: Math.round(totalBytes / cpt),
+  };
 }
 
 export function listFixtures(dir = GOLDEN_DIR) {
@@ -456,6 +553,13 @@ export function check({ dir = GOLDEN_DIR } = {}) {
         }
         eq(`${at}.anatomy.attributed`, attributed, an.attributed);
         eq(`${at}.anatomy.harnessInternals = total - attributed`, an.total - an.attributed, an.harnessInternals);
+      }
+
+      // System prompt viewer (GS-05): parts, groups, bytes and tokens re-derived from the snapshots.
+      if (exp.systemPromptView) {
+        const spv = exp.systemPromptView;
+        const derived = systemPromptView(rootLines, spv.charsPerToken);
+        for (const [k, v] of Object.entries(derived)) eq(`${at}.systemPromptView.${k}`, v, spv[k]);
       }
 
       // Lines, tools, change surface.

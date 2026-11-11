@@ -221,16 +221,16 @@ wireframes).
 
   | Shot | Shows | Used on |
   |---|---|---|
-  | `change-surface.png`, `analytics.png`, `okf-usage.png`, `tool-analytics.png` | Features blocks C, D, G, H | Features (`change-surface.png` also on deck slide 16) |
+  | `change-surface.png`, `analytics.png`, `okf-usage.png`, `tool-analytics.png` | Features blocks C, D, G, H | Features (`change-surface.png` also on deck slide 23, Team) |
   | `context-usage.png` | Session → Charts → Context Usage | no longer shown (replaced by `system-context-anatomy.png` in deck v2); kept for reuse |
   | `agent-tree.png`, `call-tree.png`, `context-growth-start.png`, `context-growth-later.png`, `cost-by-branch.png`, `harness-usage.png`, `lines-per-hour.png`, `metric-list.png`, `sessions-by-cost.png`, `timeline.png`, `tool-heatmap.png`, `tools-mcp.png` | session charts, reports, analytics | deck |
-  | `system-context-anatomy.png` (2026-11-06) | Session → System context anatomy: startup context by source (bar + table), demo repository, `/adlc-demo:implement` session | deck slides 5 and 13, Features B |
-  | `otel-cost-by-skill.png` (2026-11-06) | Repository → OTEL, 7 days, cost stacked by skill, Log Hub repository (taken at a 1100 px viewport so the chart stays readable at 600 px) | deck slide 8 |
-  | `session-map.png` (2026-11-06) | Session → Session Map, replay of a finished workflow session, demo repository | deck slide 11, Features I |
-  | `trace-waterfall.png` (2026-11-06) | Session → OTEL → Traces, one turn's waterfall (the demo repository has no traces, so a Log Hub repository session with English skill names) | deck slide 11, Features I |
-  | `live-view.png` (2026-11-06) | Top bar → Live: tree, tiles and "Tokens over time" (chart 2 / 7), paused; the user e-mail was replaced by "Developer A" and the team name by "Team A" in the DOM before the shot (as for `og-image.png`), the crop stops above a Cyrillic session title | deck slide 12, Features I |
-  | `okf-kb-value.png`, `okf-kb-value-heuristic.png` (2026-11-06) | Repository → OKF, KB folder `docs/knowledgebase`: section A (verified) and section B (heuristic, check by hand), Log Hub repository (the demo repository has no KB) | deck slide 15, Features G |
-  | `spend-budget.png` (2026-11-10) | Repository → Spend: the monthly budget card (bar, ticks, four tiles) and the daily chart with the budget-pace legend, Log Hub repository, 1100 px viewport; the slice table and costly-sessions list (which carry e-mails) were removed from the DOM before the shot | deck slide 10, Features → A |
+  | `system-context-anatomy.png` (2026-11-06) | Session → System context anatomy: startup context by source (bar + table), demo repository, `/adlc-demo:implement` session | deck slide 16, Features B |
+  | `otel-cost-by-skill.png` (2026-11-06) | Repository → OTEL, 7 days, cost stacked by skill, Log Hub repository (taken at a 1100 px viewport so the chart stays readable at 600 px) | deck slide 9 |
+  | `session-map.png` (2026-11-06) | Session → Session Map, replay of a finished workflow session, demo repository | deck slide 13, Features I |
+  | `trace-waterfall.png` (2026-11-06) | Session → OTEL → Traces, one turn's waterfall (the demo repository has no traces, so a Log Hub repository session with English skill names) | deck slide 13, Features I |
+  | `live-view.png` (2026-11-06) | Top bar → Live: tree, tiles and "Tokens over time" (chart 2 / 7), paused; the user e-mail was replaced by "Developer A" and the team name by "Team A" in the DOM before the shot (as for `og-image.png`), the crop stops above a Cyrillic session title | deck slide 14, Features I |
+  | `okf-kb-value.png`, `okf-kb-value-heuristic.png` (2026-11-06) | Repository → OKF, KB folder `docs/knowledgebase`: section A (verified) and section B (heuristic, check by hand), Log Hub repository (the demo repository has no KB) | deck slide 18, Features G |
+  | `spend-budget.png` (2026-11-10) | Repository → Spend: the monthly budget card (bar, ticks, four tiles) and the daily chart with the budget-pace legend, Log Hub repository, 1100 px viewport; the slice table and costly-sessions list (which carry e-mails) were removed from the DOM before the shot | deck slide 11, Features → A |
   | `nav-lenses.png` | one row of session tabs: the View select on Cost, its row and "More" open | Features → Navigation |
   | `nav-chart-tabs.png` | View: All tabs, Call Tree open as a session tab of its own | Features → Navigation |
   | `summary-hub.png` | Summary tiles, "Where to look next" cards, Explore chips | Features → Navigation |
@@ -307,34 +307,60 @@ words of `.slide-body` text (text in a `.deck-figure` or `.visual-slot` does not
 key figure from the dataset. No speaker notes (`aside.notes`), no footnotes, no Sources slide, no
 source URLs.
 
+**Map and dividers (2026-11-10).** One `<template id="deck-map">` (outside `.reveal`) holds the
+deck map: the black box ("N minutes alone, $8 spent, feature shipped — All good?") → eight group
+nodes (`li[data-group]`: cost, speed, context, quality, team, tools, safety, trust; the harness
+node went with the anatomy slide on 2026-11-10). The
+inline script clones it into every `.map-host` before `Reveal.initialize`; a host with
+`data-active="<group>"` gets `.deck-map.has-active` and its node `.active` (highlighted, the
+rest dimmed). `section.map-slide` (after "black box") shows the whole map; a
+`section.divider-slide` ("Part N of 8 · <group>", headline = the group's question) opens each
+group from cost to trust. Neither is a `.content-slide`, so the body-text rules do not apply to
+them. Styles: the "Deck map" block at the end of `deck.css`.
+
 **"Your harness, measured" (v2, 2026-11-06).** Storyline: the hook, then the harness thesis, then
 the five dimensions (quality, cost, speed, autonomy, safety) answered one by one. Pills in each
-slide head: hook · harness · cost · speed · context · quality · team · tools · safety.
+slide head: hook · harness · cost · speed · context · quality · team · tools · safety · trust.
+**Quality** (reworked 2026-11-10): the team builds the checks that guard the product's quality
+(skills, the knowledge base, tests, linters, hooks); Log Hub does not judge quality, it shows which
+checks ran in a session and with what result. Change surface moved to Team.
+**Safety** is about the agent (what it read and sent, the injection surface); **trust** is about
+Log Hub's own data (where it lives, outbound calls, who reads it, retention) — split 2026-11-10.
 
 | # | Slide | Visual |
 |---|---|---|
 | 1 | Title — "Your harness, measured" | — |
-| 2 | Hook (`section.thesis-slide`): "It ran alone for N minutes, cost $8 and shipped the feature. All good?" + the five questions | dataset control column, five tiles |
+| 2 | Hook (`section.thesis-slide`): "It ran alone for N minutes, cost $8 and shipped the feature. All good?" + the five questions (quality = "Did its checks run and pass?") | dataset control column, five tiles |
 | 3 | The harness decides — one study figure per dimension | `.visual-slot.study-board` (no dataset figure) |
 | 4 | Black box vs glass box — the vendor's own advice | contrast board |
-| 5 | Anatomy of a harness — element → view | table + `system-context-anatomy.png` |
-| 6 | Cost · four prices plus sub-agents | cost bar |
-| 7 | Cost · context growth | `context-growth-*.png` |
-| 8 | Cost · by skill, MCP server, effort, fast mode (OTEL) | `otel-cost-by-skill.png` |
-| 9 | Cost · one session from every side | mosaic (agent tree, timeline, tool heatmap, call tree) |
-| 10 | Cost · budgets: forecast and threshold notices (2026-11-10, no dataset figure) | `spend-budget.png` |
-| 11 | Speed · autonomy | mosaic (Session Map, timeline, trace waterfall, lines per hour) |
-| 12 | Live | `live-view.png` |
-| 13 | Context · harness tax | `system-context-anatomy.png` |
-| 14 | Context · what the agent uses | `harness-usage.png` |
-| 15 | Context · knowledge base, verified vs heuristic | `okf-kb-value*.png` |
-| 16 | Quality · what changed, and what it was about (session attributes as tags) | `change-surface.png` |
-| 17 | Team · analytics, reports, anomalies | anomaly board |
-| 18 | Team · 13 metrics | mosaic |
-| 19 | Tools · author and admin | tool table + `tools-mcp.png` |
-| 20 | Safety · three layers, hook 2.31.1 evaluator | seal board |
-| 21 | Safety · collected, visible to, kept for | seal board |
-| 22 | Closing — the hook's answer, links | — |
+| 5 | Map (`section.map-slide`): "One “All good?”, eight places to look." | deck map |
+| 6 | Divider · Part 1 of 8 · cost | deck map, cost highlighted |
+| 7 | Cost · four prices plus sub-agents | cost bar |
+| 8 | Cost · context growth | `context-growth-*.png` |
+| 9 | Cost · by skill, MCP server, effort, fast mode (OTEL) | `otel-cost-by-skill.png` |
+| 10 | Cost · one session from every side | mosaic (agent tree, timeline, tool heatmap, call tree) |
+| 11 | Cost · budgets: forecast and threshold notices (2026-11-10, no dataset figure) | `spend-budget.png` |
+| 12 | Divider · Part 2 of 8 · speed | deck map |
+| 13 | Speed · autonomy | mosaic (Session Map, timeline, trace waterfall, lines per hour) |
+| 14 | Live | `live-view.png` |
+| 15 | Divider · Part 3 of 8 · context | deck map |
+| 16 | Context · harness tax | `system-context-anatomy.png` |
+| 17 | Context · what the agent uses | `harness-usage.png` |
+| 18 | Context · knowledge base, verified vs heuristic | `okf-kb-value*.png` |
+| 19 | Divider · Part 4 of 8 · quality | deck map |
+| 20 | Quality · you build the checks, Log Hub shows which ran and with what result | checks table (`.visual-slot.checks-table`) |
+| 21 | Divider · Part 5 of 8 · team | deck map |
+| 22 | Team · analytics, reports, anomalies | anomaly board |
+| 23 | Team · what changed, and what it was about (session attributes as tags) | `change-surface.png` |
+| 24 | Team · 13 metrics | mosaic |
+| 25 | Divider · Part 6 of 8 · tools | deck map |
+| 26 | Tools · author and admin | tool table + `tools-mcp.png` |
+| 27 | Divider · Part 7 of 8 · safety | deck map |
+| 28 | Safety · what the agent read and sent, and who could steer it | study line + "traceable afterwards" board |
+| 29 | Divider · Part 8 of 8 · trust | deck map |
+| 30 | Trust · Log Hub's own data stays on your host (outbound calls, post-turn analysis without tools) | seal board |
+| 31 | Trust · collected, visible to, kept for | seal board |
+| 32 | Closing — the hook's answer, links | — |
 
 **Home (v2).** Hero: the same hook (`h1` from the dataset), the harness claim in the lead with one
 attributed study figure, "right and useful" and "Log Hub answers the next questions", five
@@ -357,7 +383,7 @@ statement appears only as the vendor's own advice or admission. The source list 
 | 18 models, performance degrades as input grows (deck 3, Autonomy tile: a long solo run is a growing input) | Chroma, "Context Rot" | 2025-07-14 · industry research report | https://www.trychroma.com/research/context-rot | confirmed |
 | not used: ~7 months doubling of the 50 % task horizon | METR, "Measuring AI Ability to Complete Long Tasks", arXiv 2503.14499 | 2025-03 · preprint | https://arxiv.org/abs/2503.14499 | confirmed, but it measures model progress, not a harness effect, so it left the Autonomy tile (2026-11-06 review) |
 | 36.5 % average success of poisoned MCP tool descriptions, 20 agent settings (deck 3) | MCPTox, arXiv 2508.14925 (AAAI-26) | 2025-08-19 · peer-reviewed | https://arxiv.org/abs/2508.14925 | confirmed (§4.1, §4.2) |
-| 62–100 % MCP injection success, 18 model–server pairs (deck 20) | "Log-To-Leak", arXiv 2610.36108 v1 | 2026-10-26 · preprint | https://arxiv.org/abs/2610.36108 | confirmed (abstract: 62.64–100 %) |
+| 62–100 % MCP injection success, 18 model–server pairs (deck 28) | "Log-To-Leak", arXiv 2610.36108 v1 | 2026-10-26 · preprint | https://arxiv.org/abs/2610.36108 | confirmed (abstract: 62.64–100 %) |
 | not used: LLM judges favour their own output | Panickssery, Bowman, Feng, "LLM Evaluators Recognize and Favor Their Own Generations", NeurIPS 2024 | 2024 · peer-reviewed | https://arxiv.org/abs/2404.13076 | confirmed, but it left deck slide 16 on 2026-11-10: session attributes are tags the team defines (ticket, customer, stage), not a verdict on the session |
 | vendor advice: read the traces, remove one component at a time (deck 4) | Anthropic, "Harness design for long-running application development" | 2026-03-24 · vendor blog | https://www.anthropic.com/engineering/harness-design-long-running-apps | confirmed (verbatim fragments) |
 

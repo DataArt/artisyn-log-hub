@@ -21,9 +21,38 @@
     "expected": {
       "total": 105, "attributed": 0, "internals": 105,
       "flags": {"empty": false, "noSnapshot": true, "noGitStatus": false, "noPromptSnapshot": true, "unknownTotal": false, "overTotal": false},
-      "kinds": ["system-prompt", "memory", "environment", "deferred-tools", "mcp-server", "agent-types", "skills", "instruction-file", "system-reminder", "first-prompt", "harness-internals"]
+      "kinds": ["system-prompt", "memory", "tool-definitions", "environment", "deferred-tools", "mcp-server", "agent-types", "skills", "instruction-file", "system-reminder", "first-prompt", "harness-internals"]
     },
-    "note": "Rule 3: the missing cache_creation_input_tokens counts 0: 5 + 0 + 100 = 105. The block is empty, so every partition is 0 and internals = 105. All ten measured kinds are listed in table order, then harness-internals. Rule 21: no snapshot, no prompt_snapshot."
+    "note": "Rule 3: the missing cache_creation_input_tokens counts 0: 5 + 0 + 100 = 105. The block is empty, so every partition is 0 and internals = 105. All eleven measured kinds are listed in table order, then harness-internals. Rule 21: no snapshot, no prompt_snapshot."
+  },
+  {
+    "id": "SA-TD1",
+    "input": {"cpt": 1, "main": [
+      {"type": "api-request-shape", "shapeHash": "h1", "shape": {"tools": [
+        {"name": "Edit", "description": "edit a file", "input_schema": {"type": "object"}},
+        {"name": "mcp__pg__query", "description": "q", "input_schema": {}},
+        {"name": "Later", "description": "x", "input_schema": {}, "defer_loading": true}
+      ]}},
+      {"type": "api-request", "shapeHash": "h1", "querySource": "repl_main_thread"},
+      {"type": "attachment", "attachment": {"type": "prompt_snapshot", "systemPrompt": ["abc", "__SYSTEM_PROMPT_DYNAMIC_BOUNDARY__", "  "]}},
+      {"type": "assistant", "message": {"id": "m1", "usage": {"input_tokens": 200}}}
+    ]},
+    "expected": {
+      "total": 200, "attributed": 52, "internals": 148, "overBy": null, "cpt": 1,
+      "partitions": {
+        "system-prompt": {"bytes": 3, "tokens": 3},
+        "tool-definitions": {"bytes": 49, "tokens": 49, "count": 2},
+        "harness-internals": {"bytes": null, "tokens": 148, "sharePct": 74}
+      },
+      "rows": {
+        "system-prompt": [{"key": "block-1", "label": "Block 1", "bytes": 3}],
+        "tool-definitions": [
+          {"key": "tool-1", "label": "Edit", "source": "built-in", "bytes": 32, "tokens": 32},
+          {"key": "tool-2", "label": "mcp__pg__query", "source": "mcp-server", "bytes": 17, "tokens": 17}
+        ]
+      }
+    },
+    "note": "Rules 6 and 6a. The boundary marker and the blank block are not prompt text: system prompt = 'abc' 3 B (Block 1 only). Tool definitions come from the wire shape of the first main api-request (h1); each tool is name + description + compact input_schema: Edit 4 + 11 + 17 = 32 B, mcp__pg__query 14 + 1 + 2 = 17 B (an mcp__ name -> source mcp-server); 'Later' has defer_loading and is dropped. Attributed 3 + 49 = 52, internals 200 - 52 = 148 (74 %)."
   },
   {
     "id": "SA-03",
@@ -106,7 +135,7 @@
     "expected": {
       "total": null, "attributed": 4, "internals": null, "overBy": null, "denominator": 4,
       "flags": {"noSnapshot": true, "noGitStatus": false, "unknownTotal": true, "overTotal": false},
-      "kinds": ["system-prompt", "memory", "environment", "deferred-tools", "mcp-server", "agent-types", "skills", "instruction-file", "system-reminder", "first-prompt"],
+      "kinds": ["system-prompt", "memory", "tool-definitions", "environment", "deferred-tools", "mcp-server", "agent-types", "skills", "instruction-file", "system-reminder", "first-prompt"],
       "partitions": {"skills": {"bytes": 7, "tokens": 2, "sharePct": 50}, "first-prompt": {"bytes": 7, "tokens": 2, "sharePct": 50}},
       "rows": {"skills": [{"label": "a", "source": null, "git": null}], "first-prompt": [{"bytes": 7}]}
     },
@@ -193,7 +222,7 @@
     "expected": {
       "total": 150, "attributed": 200, "internals": null, "overBy": 50, "denominator": 200,
       "flags": {"overTotal": true, "unknownTotal": false},
-      "kinds": ["system-prompt", "memory", "environment", "deferred-tools", "mcp-server", "agent-types", "skills", "instruction-file", "system-reminder", "first-prompt"],
+      "kinds": ["system-prompt", "memory", "tool-definitions", "environment", "deferred-tools", "mcp-server", "agent-types", "skills", "instruction-file", "system-reminder", "first-prompt"],
       "partitions": {"first-prompt": {"bytes": 700, "tokens": 200, "sharePct": 100}}
     },
     "note": "700/3.5 = 200 tokens > total 150. Rule 7: internals 150 - 200 < 0 -> null, no harness-internals partition; overBy = 200 - 150 = 50. Rule 8: denominator = attributed = 200, so the prompt is 100 %."
@@ -313,7 +342,7 @@
       "repoRoot": "/work/repo-gold",
       "main": [
         {"type": "mode", "mode": "normal"},
-        {"type": "attachment", "attachment": {"type": "prompt_snapshot", "systemPrompt": [{"$fill": 2800, "start": "You are"}, {"$fill": 700, "start": "# Memory\n"}]}},
+        {"type": "attachment", "attachment": {"type": "prompt_snapshot", "systemPrompt": [{"$fill": 2800, "start": "You are"}, {"$fill": 700, "start": "# Memory\n"}, "__SYSTEM_PROMPT_DYNAMIC_BOUNDARY__", "# Environment\nWorking directory: /work/repo-gold/src\nUser memory: /home/dev/.claude/projects/-work-repo-gold/memory/MEMORY.md\nScratchpad: /tmp/gs05-scratch/notes.txt\nGS05-SESSION-MARKER xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"], "cliPrefix": "gs05", "reminderFold": true, "contextRendering": "announced", "gs05Extra": {"mode": "compact", "cwd": "/work/repo-gold"}}},
         {"type": "attachment", "attachment": {"type": "date", "date": "2026-01-08"}},
         {"type": "attachment", "attachment": {"type": "skill_listing", "isInitial": true, "skillCount": 2, "names": ["adlc:review-deep", "adlc:review"], "content": "- adlc:review-deep: Deep review of a change\n- adlc:review: Quick review of a change"}},
         {"type": "attachment", "attachment": {"type": "deferred_tools_delta", "addedNames": ["mcp__postgres__query", "mcp__postgres__list_tables", "mcp__playwright__browser_click"], "addedLines": ["mcp__postgres__query", "mcp__postgres__list_tables", "mcp__playwright__browser_click"], "removedNames": []}},
@@ -326,7 +355,8 @@
         {"type": "attachment", "attachment": {"type": "session_context", "context": {"userEmail": "dev@arrakis.test", "gitStatus": {"$fill": 334, "start": "Current branch: feature/billing"}}}},
         {"type": "user", "message": {"content": {"$fill": 130, "start": "<command-name>/clear</command-name>"}}},
         {"type": "user", "message": {"content": {"$fill": 122, "start": "<command-message>adlc:review</command-message>\n<command-name>/adlc:review</command-name>"}}},
-        {"type": "assistant", "message": {"id": "msg_gs05_001", "model": "claude-sonnet-4-6", "usage": {"input_tokens": 800, "cache_creation_input_tokens": 8000, "cache_read_input_tokens": 0}}}
+        {"type": "assistant", "message": {"id": "msg_gs05_001", "model": "claude-sonnet-4-6", "usage": {"input_tokens": 800, "cache_creation_input_tokens": 8000, "cache_read_input_tokens": 0}}},
+        {"type": "attachment", "attachment": {"type": "prompt_snapshot", "systemPrompt": ["GS05-LATE-PART"], "tools": [{"name":"Read","description":"Reads a file.\n\n| Param | Meaning |\n|---|---|\n| file_path | absolute, e.g. /home/dev/notes.md |\n\nGS05-TOOL-MARKER <system-reminder>stays text</system-reminder>","schema":{"name":"Read","description":"Reads a file.\n\n| Param | Meaning |\n|---|---|\n| file_path | absolute, e.g. /home/dev/notes.md |\n\nGS05-TOOL-MARKER <system-reminder>stays text</system-reminder>","input_schema":{"type":"object","properties":{"file_path":{"type":"string","description":"Example: C:\\Users\\dev\\file.txt"}},"required":["file_path"]}}},{"name":"Bash","description":"Runs a command.","schema":{"name":"Bash","description":"Runs a command.","input_schema":{"type":"object","properties":{"command":{"type":"string"}}}},"server":"gs05-mcp"}]}}
       ],
       "snapshot": {
         "skills": [
@@ -345,12 +375,13 @@
       }
     },
     "expected": {
-      "total": 8800, "attributed": 2829, "internals": 5971, "overBy": null, "denominator": 8800, "cpt": 3.5,
+      "total": 8800, "attributed": 3027, "internals": 5773, "overBy": null, "denominator": 8800, "cpt": 3.5,
       "flags": {"empty": false, "noSnapshot": false, "noGitStatus": false, "noPromptSnapshot": false, "unknownTotal": false, "overTotal": false},
-      "kinds": ["system-prompt", "memory", "environment", "deferred-tools", "mcp-server", "agent-types", "skills", "instruction-file", "system-reminder", "first-prompt", "harness-internals"],
+      "kinds": ["system-prompt", "memory", "tool-definitions", "environment", "deferred-tools", "mcp-server", "agent-types", "skills", "instruction-file", "system-reminder", "first-prompt", "harness-internals"],
       "partitions": {
-        "system-prompt": {"bytes": 2800, "tokens": 800},
+        "system-prompt": {"bytes": 3116, "tokens": 890},
         "memory": {"bytes": 700, "tokens": 200},
+        "tool-definitions": {"bytes": 378, "tokens": 108, "count": 2},
         "environment": {"bytes": 35, "tokens": 10},
         "deferred-tools": {"bytes": 0, "tokens": 0, "count": 0},
         "mcp-server": {"bytes": 429, "tokens": 123},
@@ -359,9 +390,17 @@
         "instruction-file": {"bytes": 5250, "tokens": 1500, "sharePct": 17},
         "system-reminder": {"bytes": 350, "tokens": 100},
         "first-prompt": {"bytes": 252, "tokens": 72},
-        "harness-internals": {"bytes": null, "tokens": 5971, "sharePct": 67.9}
+        "harness-internals": {"bytes": null, "tokens": 5773, "sharePct": 65.6}
       },
       "rows": {
+        "system-prompt": [
+          {"key": "block-1", "label": "Block 1", "bytes": 2800, "tokens": 800},
+          {"key": "block-4", "label": "Block 4", "bytes": 316, "tokens": 90}
+        ],
+        "tool-definitions": [
+          {"key": "tool-1", "label": "Read", "source": "built-in", "bytes": 299, "tokens": 85},
+          {"key": "tool-2", "label": "Bash", "source": "mcp-server", "bytes": 79, "tokens": 23}
+        ],
         "mcp-server": [
           {"label": "postgres", "tools": 2, "namesBytes": 48, "instrBytes": 350, "bytes": 398, "tokens": 114},
           {"label": "playwright", "tools": 1, "namesBytes": 31, "instrBytes": 0, "bytes": 31, "tokens": 9}
@@ -383,6 +422,6 @@
         ]
       }
     },
-    "note": "Impl-plan DD 21-22 (cpt 3.5). System prompt block 1 2800 B -> 800; block 2 starts '# Memory' -> memory 700 B -> 200. Environment: the date JSON 35 B -> 10 (the mode line is ignored). MCP: postgres names 20+1 + 26+1 = 48 plus 350 B instructions = 398 -> round(113.71) = 114; playwright 30+1 = 31 -> 9; partition 429 -> round(122.57) = 123. Skills 44 + 39 = 83 -> round(23.71) = 24; rows 44/3.5 = 12.57 -> 13, 39/3.5 = 11.14 -> 11; plugin sources from the snapshot; gold-sync is not listed, so no row. Files 1050 + 3500 + 700 = 5250 -> 1500 (17.0 %); the rules are on demand. Reminders 16 + 334 = 350 -> 100. User lines 130 + 122 = 252 -> 72 (both contain <command-name>). Attributed 800+200+10+0+123+0+24+1500+100+72 = 2829. Total 800 + 8000 + 0 = 8800; internals 8800 - 2829 = 5971 = 67.85 % -> 67.9."
+    "note": "Impl-plan DD 21-22 (cpt 3.5). System prompt block 1 2800 B + block 4 ('# Environment', session part) 316 B = 3116 B -> 890; block 3, the dynamic boundary marker, is not prompt text (the snapshot's flags count nowhere); block 2 starts '# Memory' -> memory 700 B -> 200. Environment: the date JSON 35 B -> 10 (the mode line is ignored). MCP: postgres names 20+1 + 26+1 = 48 plus 350 B instructions = 398 -> round(113.71) = 114; playwright 30+1 = 31 -> 9; partition 429 -> round(122.57) = 123. Skills 44 + 39 = 83 -> round(23.71) = 24; rows 44/3.5 = 12.57 -> 13, 39/3.5 = 11.14 -> 11; plugin sources from the snapshot; gold-sync is not listed, so no row. Files 1050 + 3500 + 700 = 5250 -> 1500 (17.0 %); the rules are on demand. Reminders 16 + 334 = 350 -> 100. User lines 130 + 122 = 252 -> 72 (both contain <command-name>). Tool definitions from the tools snapshot after the anchor (no wire shape logged): Read 299 B -> 85, Bash 79 B -> 23 (server gs05-mcp -> source mcp-server), partition 378 -> round(108.0) = 108; each is name + description + the compact `input_schema` inside `schema` (the whole wire tool). Attributed 890+200+108+10+0+123+0+24+1500+100+72 = 3027. Total 800 + 8000 + 0 = 8800; internals 8800 - 3027 = 5773 = 65.60 % -> 65.6."
   }
 ]

@@ -1,5 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="640" viewBox="0 0 1200 640" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="13">
-  <!-- Wireframe: one Logs-tab turn with the proposed Signals section expanded (light theme). -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="720" viewBox="0 0 1200 720" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="13">
+  <!-- Wireframe: one Logs-tab turn with the proposed Signals section expanded (light theme).
+       Example is setup-neutral on purpose: a C project, labels taken from the payload itself
+       (diagnostics `source`, hook `command`), IDE shown without a name when `ideName` is absent. -->
   <defs>
     <style>
       .mono{font-family:'JetBrains Mono',Consolas,monospace}
@@ -8,121 +10,141 @@
       .callout{stroke:#0284c7;stroke-dasharray:4 3;fill:none}
       .badge{fill:#f3f4f6;stroke:#e5e7eb}
       .btxt{font-size:11px;font-weight:600;fill:#4b5563}
+      .grp{font-size:10px;font-weight:600;fill:#9ca3af}
+      .sub{font-size:10px;font-weight:600;fill:#6b7280}
+      .lg{fill:#334155}
     </style>
   </defs>
-  <rect width="1200" height="640" fill="#ffffff"/>
+  <rect width="1200" height="720" fill="#ffffff"/>
   <text x="20" y="26" font-size="16" font-weight="700" fill="#111827">Logs tab — Signals section of a turn, expanded (proposal)</text>
-  <text x="20" y="44" class="muted" font-size="12">Rows reuse the Tools-row layout: kind badge · mono metric · mono detail · › opens the raw entry (same modal as Raw logs).</text>
+  <text x="20" y="44" class="muted" font-size="12">Rows reuse the Tools-row layout: kind badge · mono metric · mono detail · › opens the raw entry (same modal as Raw logs). Example: a C session with an IDE and clangd.</text>
 
-  <rect x="20" y="60" width="860" height="560" fill="#ffffff" stroke="#e5e7eb"/>
+  <rect x="20" y="60" width="860" height="640" fill="#ffffff" stroke="#e5e7eb"/>
 
-  <!-- Turn header (current UI) -->
+  <!-- Turn header (current UI + timing chip) -->
   <text x="40" y="88" fill="#3b82f6">✦</text>
-  <text x="56" y="88" class="muted">2026-10-21 01:00:49</text>
-  <text x="196" y="88" class="muted">⏱ 0:11:22</text>
-  <rect x="270" y="75" width="258" height="18" rx="9" fill="#f3f4f6" stroke="#e5e7eb"/>
-  <text x="280" y="88" font-size="11" fill="#374151" class="mono">turn 0:11:30 · 212 msgs · hooks 6.1s</text>
-  <text x="40" y="114" fill="#111827" font-size="15">›  обновляй и планируй только оставшееся</text>
-  <text x="56" y="140" class="mono" font-size="13"><tspan fill="#2563eb">In 104</tspan>  <tspan fill="#dc2626">Out 55,107</tspan>  <tspan fill="#2563eb">cache_r 8,291,164</tspan>  <tspan fill="#2563eb">cache_w 142,349</tspan></text>
-  <rect x="490" y="127" width="132" height="20" rx="5" fill="#ecfdf5" stroke="#34d399"/><text x="498" y="141" class="mono" font-size="12" fill="#047857">cache_ratio 98.3%</text>
-  <text x="56" y="164" class="mono" font-size="13" fill="#7c3aed">$3.8996 <tspan fill="#ea580c">+ $2.0410</tspan><tspan fill="#111827"> = $5.9406</tspan>  <tspan fill="#d97706">Context: 93.9K → 236.3K (Δ +142.4K)</tspan><tspan fill="#111827"> | 763.7K left</tspan></text>
+  <text x="56" y="88" class="muted">2026-11-12 10:02:14</text>
+  <text x="196" y="88" class="muted">⏱ 0:00:41</text>
+  <rect x="270" y="75" width="250" height="18" rx="9" fill="#f3f4f6" stroke="#e5e7eb"/>
+  <text x="280" y="88" font-size="11" fill="#374151" class="mono">turn 0:00:42 · 34 msgs · hooks 3.9s</text>
+  <text x="40" y="114" fill="#111827" font-size="15">›  fix the build errors in parser.c</text>
+  <text x="56" y="140" class="mono" font-size="13"><tspan fill="#2563eb">In 22</tspan>  <tspan fill="#dc2626">Out 3,104</tspan>  <tspan fill="#2563eb">cache_r 412,880</tspan>  <tspan fill="#2563eb">cache_w 21,377</tspan></text>
 
-  <rect x="56" y="176" width="2" height="22" fill="#fcd34d"/>
-  <text x="66" y="192" class="muted">›  ⚙</text><text x="96" y="192" font-weight="600">Tools</text><text x="140" y="192" class="mono muted" font-size="12">24 calls · ~16.2K tok</text>
+  <rect x="56" y="156" width="2" height="22" fill="#fcd34d"/>
+  <text x="66" y="172" class="muted">›  ⚙</text><text x="96" y="172" font-weight="600">Tools</text><text x="140" y="172" class="mono muted" font-size="12">9 calls · ~2.4K tok</text>
 
   <!-- Signals section expanded -->
-  <rect x="56" y="206" width="2" height="390" fill="#38bdf8"/>
-  <text x="66" y="222" class="muted">⌄  ⚑</text><text x="96" y="222" font-weight="600">Signals</text>
-  <text x="160" y="222" class="mono muted" font-size="12">7 events · 1 error</text>
+  <rect x="56" y="186" width="2" height="492" fill="#38bdf8"/>
+  <text x="66" y="202" class="muted">⌄  ⚑</text><text x="96" y="202" font-weight="600">Signals</text>
+  <text x="160" y="202" class="mono muted" font-size="12">12 events · 3 errors</text>
 
-  <!-- group: Hooks -->
-  <text x="72" y="248" font-size="10" font-weight="600" fill="#9ca3af">HOOKS  · 23 runs · 6.1 s total</text>
-  <rect x="72" y="256" width="52" height="20" rx="4" fill="#fef2f2" stroke="#fca5a5"/><text x="80" y="270" font-size="11" font-weight="600" fill="#b91c1c">error</text>
-  <text x="136" y="270" class="mono" font-size="12" fill="#b91c1c">exit 1 · 0.4s</text>
-  <text x="250" y="270" class="mono" font-size="12" fill="#374151">PostToolUse · lint-on-save — "eslint: Parsing error: Unexpected token"</text>
-  <text x="860" y="270" class="muted">›</text>
-  <rect x="72" y="282" width="52" height="20" rx="4" class="badge"/><text x="84" y="296" class="btxt">ok ×22</text>
-  <text x="136" y="296" class="mono muted" font-size="12">5.7s</text>
-  <text x="250" y="296" class="mono" font-size="12" fill="#374151">Stop ×1 · PreToolUse ×12 · PostToolUse ×9 — slowest: log-hub-hook 0.9s</text>
-  <text x="860" y="296" class="muted">›</text>
+  <!-- group: Hooks (label = hook `command` / status text from the payload; event from hookEvent) -->
+  <text x="72" y="228" class="grp">HOOKS  · 4 runs · 4.6 s total</text>
+  <rect x="72" y="236" width="52" height="20" rx="4" fill="#fef2f2" stroke="#fca5a5"/><text x="80" y="250" font-size="11" font-weight="600" fill="#b91c1c">error</text>
+  <text x="136" y="250" class="mono" font-size="12" fill="#b91c1c">exit 2 · 0.7s</text>
+  <text x="250" y="250" class="mono" font-size="12" fill="#374151">PostToolUse · "make lint" — "main.c:12: missing prototype"</text>
+  <text x="860" y="250" class="muted">›</text>
+  <rect x="72" y="262" width="52" height="20" rx="4" class="badge"/><text x="84" y="276" class="btxt">ok ×3</text>
+  <text x="136" y="276" class="mono muted" font-size="12">3.9s</text>
+  <text x="250" y="276" class="mono" font-size="12" fill="#374151">Stop ×2 · PostToolUse ×1 — slowest: "Uploading logs..." 3.5s</text>
+  <text x="860" y="276" class="muted">›</text>
+
+  <!-- group: IDE (only when the session has *_in_ide entries) -->
+  <text x="72" y="308" class="grp">IDE  · name not recorded</text>
+  <rect x="72" y="316" width="52" height="20" rx="4" class="badge"/><text x="78" y="330" class="btxt">opened</text>
+  <text x="136" y="330" class="mono muted" font-size="12">09:15:12</text>
+  <text x="250" y="330" class="mono" font-size="12" fill="#374151">src/main.c</text>
+  <text x="860" y="330" class="muted">›</text>
+  <rect x="72" y="342" width="52" height="20" rx="4" class="badge"/><text x="76" y="356" class="btxt">selected</text>
+  <text x="136" y="356" class="mono muted" font-size="12">L40–52</text>
+  <text x="250" y="356" class="mono" font-size="12" fill="#374151">src/parser.c</text>
+  <text x="860" y="356" class="muted">›</text>
 
   <!-- group: Files changed outside the agent -->
-  <text x="72" y="328" font-size="10" font-weight="600" fill="#9ca3af">EDITED OUTSIDE THE AGENT</text>
-  <rect x="72" y="336" width="52" height="20" rx="4" fill="#fffbeb" stroke="#fcd34d"/><text x="80" y="350" font-size="11" font-weight="600" fill="#92400e">edited</text>
-  <text x="136" y="350" class="mono muted" font-size="12">01:04:12</text>
-  <text x="250" y="350" class="mono" font-size="12" fill="#374151">client/src/viewer/api.ts</text>
-  <text x="860" y="350" class="muted">›</text>
-  <rect x="72" y="362" width="52" height="20" rx="4" fill="#fffbeb" stroke="#fcd34d"/><text x="80" y="376" font-size="11" font-weight="600" fill="#92400e">edited</text>
-  <text x="136" y="376" class="mono muted" font-size="12">01:07:45</text>
-  <text x="250" y="376" class="mono" font-size="12" fill="#374151">docs/tasks/todo/…/impl-plan.md</text>
-  <text x="860" y="376" class="muted">›</text>
+  <text x="72" y="388" class="grp">EDITED OUTSIDE THE AGENT</text>
+  <rect x="72" y="396" width="52" height="20" rx="4" fill="#fffbeb" stroke="#fcd34d"/><text x="80" y="410" font-size="11" font-weight="600" fill="#92400e">edited</text>
+  <text x="136" y="410" class="mono muted" font-size="12">09:15:40</text>
+  <text x="250" y="410" class="mono" font-size="12" fill="#374151">src/main.c</text>
+  <text x="860" y="410" class="muted">›</text>
 
-  <!-- group: Diagnostics -->
-  <text x="72" y="408" font-size="10" font-weight="600" fill="#9ca3af">IDE DIAGNOSTICS  · 3 (2 errors, 1 hint) · 1 never fixed</text>
-  <rect x="72" y="416" width="52" height="20" rx="4" fill="#fef2f2" stroke="#fca5a5"/><text x="82" y="430" font-size="11" font-weight="600" fill="#b91c1c">TS2304</text>
-  <text x="136" y="430" class="mono muted" font-size="12">fixed ✓</text>
-  <text x="250" y="430" class="mono" font-size="12" fill="#374151">client/src/…/PromptTurnItem.tsx:142 — Cannot find name 'turnTiming'</text>
-  <text x="860" y="430" class="muted">›</text>
-  <rect x="72" y="442" width="52" height="20" rx="4" fill="#fef2f2" stroke="#fca5a5"/><text x="80" y="456" font-size="11" font-weight="600" fill="#b91c1c">TS80001</text>
-  <text x="136" y="456" class="mono" font-size="12" fill="#b91c1c">not fixed</text>
-  <text x="250" y="456" class="mono" font-size="12" fill="#374151">scripts/build.js:1 — File is a CommonJS module</text>
-  <text x="860" y="456" class="muted">›</text>
+  <!-- group: Diagnostics, one sub-group per `source` value -->
+  <text x="72" y="442" class="grp">DIAGNOSTICS  · 3 (2 errors, 1 warning) · 1 never fixed</text>
+  <text x="84" y="460" class="sub">clangd · 2</text>
+  <rect x="84" y="466" width="40" height="20" rx="4" fill="#fef2f2" stroke="#fca5a5"/><text x="92" y="480" font-size="11" font-weight="600" fill="#b91c1c">Error</text>
+  <text x="136" y="480" class="mono muted" font-size="12">fixed ✓</text>
+  <text x="250" y="480" class="mono" font-size="12" fill="#374151">src/main.c:31 — use of undeclared identifier 'buf_len'</text>
+  <text x="860" y="480" class="muted">›</text>
+  <rect x="84" y="492" width="40" height="20" rx="4" fill="#fef2f2" stroke="#fca5a5"/><text x="92" y="506" font-size="11" font-weight="600" fill="#b91c1c">Error</text>
+  <text x="136" y="506" class="mono" font-size="12" fill="#b91c1c">not fixed</text>
+  <text x="250" y="506" class="mono" font-size="12" fill="#374151">src/parser.c:88 — incompatible pointer types</text>
+  <text x="860" y="506" class="muted">›</text>
+  <text x="84" y="528" class="sub">other (no source) · 1</text>
+  <rect x="84" y="534" width="40" height="20" rx="4" fill="#fffbeb" stroke="#fcd34d"/><text x="88" y="548" font-size="11" font-weight="600" fill="#92400e">Warn</text>
+  <text x="136" y="548" class="mono muted" font-size="12">fixed ✓</text>
+  <text x="250" y="548" class="mono" font-size="12" fill="#374151">CMakeLists.txt:7 — unused variable</text>
+  <text x="860" y="548" class="muted">›</text>
 
   <!-- group: Context -->
-  <text x="72" y="488" font-size="10" font-weight="600" fill="#9ca3af">CONTEXT</text>
-  <rect x="72" y="496" width="52" height="20" rx="4" class="badge"/><text x="78" y="510" class="btxt">partial</text>
-  <text x="136" y="510" class="mono muted" font-size="12">2,000 / 6,412 lines</text>
-  <text x="290" y="510" class="mono" font-size="12" fill="#374151">Read truncated: server/src/logs/turn-walk.ts</text>
-  <text x="860" y="510" class="muted">›</text>
-  <rect x="72" y="522" width="52" height="20" rx="4" class="badge"/><text x="76" y="536" class="btxt">re-inject</text>
-  <text x="136" y="536" class="mono muted" font-size="12">~2.0K tok</text>
-  <text x="250" y="536" class="mono" font-size="12" fill="#374151">rules re-injected: .claude/rules/server.md, installer.md</text>
-  <text x="860" y="536" class="muted">›</text>
-  <rect x="72" y="548" width="52" height="20" rx="4" class="badge"/><text x="78" y="562" class="btxt">tools Δ</text>
-  <text x="136" y="562" class="mono muted" font-size="12">+3 / −0</text>
-  <text x="250" y="562" class="mono" font-size="12" fill="#374151">deferred tools loaded: mcp__playwright__browser_click, …</text>
-  <text x="860" y="562" class="muted">›</text>
+  <text x="72" y="580" class="grp">CONTEXT</text>
+  <rect x="72" y="588" width="52" height="20" rx="4" class="badge"/><text x="78" y="602" class="btxt">partial</text>
+  <text x="136" y="602" class="mono muted" font-size="12">2,000 / 9,140 lines</text>
+  <text x="290" y="602" class="mono" font-size="12" fill="#374151">Read truncated: src/generated/tables.c</text>
+  <text x="860" y="602" class="muted">›</text>
+  <rect x="72" y="614" width="52" height="20" rx="4" class="badge"/><text x="76" y="628" class="btxt">re-inject</text>
+  <text x="136" y="628" class="mono muted" font-size="12">~1.1K tok</text>
+  <text x="250" y="628" class="mono" font-size="12" fill="#374151">rules re-injected: 1 file</text>
+  <text x="860" y="628" class="muted">›</text>
 
-  <text x="72" y="590" font-size="11" class="muted">Unknown harness entry types are not listed here; they stay visible on the Raw logs tab only.</text>
+  <text x="72" y="662" font-size="11" class="muted">Groups whose producer is absent in this session are not shown (see "Signal sources" on the Logs toolbar).</text>
+  <text x="72" y="680" font-size="11" class="muted">Unknown harness entry types are not listed here; they stay visible on the Raw logs tab only.</text>
 
   <!-- Legend -->
   <g font-size="12">
-    <rect x="900" y="60" width="280" height="560" fill="#f8fafc" stroke="#e2e8f0"/>
+    <rect x="900" y="60" width="280" height="640" fill="#f8fafc" stroke="#e2e8f0"/>
     <text x="914" y="84" font-weight="700" fill="#0f172a">Sources per group</text>
 
-    <text x="914" y="112" class="new">HOOKS</text>
-    <text x="914" y="128" fill="#334155">hook_success, hook_non_blocking_error,</text>
-    <text x="914" y="143" fill="#334155">stop_hook_summary: name, event, exit</text>
-    <text x="914" y="158" fill="#334155">code, durationMs, first stderr line.</text>
-    <text x="914" y="173" fill="#334155">ok runs collapse into one summary row.</text>
-    <path class="callout" d="M840 280 C 870 280, 880 150, 900 150"/>
+    <text x="914" y="110" class="new">HOOKS</text>
+    <text x="914" y="126" class="lg">hook_success / _non_blocking_error,</text>
+    <text x="914" y="141" class="lg">stop_hook_summary. Label = the hook's</text>
+    <text x="914" y="156" class="lg">command / status text (hookName is</text>
+    <text x="914" y="171" class="lg">only the event). Absolute paths in</text>
+    <text x="914" y="186" class="lg">command / stderr → basename.</text>
+    <path class="callout" d="M840 262 C 870 262, 880 160, 900 160"/>
 
-    <text x="914" y="206" class="new">EDITED OUTSIDE THE AGENT</text>
-    <text x="914" y="222" fill="#334155">edited_text_file: repo-relative path +</text>
-    <text x="914" y="237" fill="#334155">time; snippet only in the › modal.</text>
-    <path class="callout" d="M560 362 C 750 362, 860 230, 900 230"/>
+    <text x="914" y="216" class="new">IDE</text>
+    <text x="914" y="232" class="lg">opened_file_in_ide, selected_lines_in_ide.</text>
+    <text x="914" y="247" class="lg">Name from ideName when present,</text>
+    <text x="914" y="262" class="lg">else "name not recorded". Absent with</text>
+    <text x="914" y="277" class="lg">no IDE integration (plain terminal,</text>
+    <text x="914" y="292" class="lg">desktop, web, SDK).</text>
+    <path class="callout" d="M300 336 C 600 336, 860 270, 900 270"/>
 
-    <text x="914" y="270" class="new">IDE DIAGNOSTICS</text>
-    <text x="914" y="286" fill="#334155">diagnostics: file, severity, code,</text>
-    <text x="914" y="301" fill="#334155">message. "fixed" = a later Edit/Write</text>
-    <text x="914" y="316" fill="#334155">of that file in the session. Scratch /</text>
-    <text x="914" y="331" fill="#334155">tmp/ files are folded into a count.</text>
-    <path class="callout" d="M760 444 C 840 444, 870 310, 900 310"/>
+    <text x="914" y="322" class="new">EDITED OUTSIDE THE AGENT</text>
+    <text x="914" y="338" class="lg">edited_text_file: repo-relative path +</text>
+    <text x="914" y="353" class="lg">time; snippet only in the › modal.</text>
+    <path class="callout" d="M330 406 C 700 406, 860 350, 900 350"/>
 
-    <text x="914" y="364" class="new">CONTEXT</text>
-    <text x="914" y="380" fill="#334155">read_truncation_notice, re-injected</text>
-    <text x="914" y="395" fill="#334155">nested_memory / instructions /</text>
-    <text x="914" y="410" fill="#334155">skill_listing, deferred_tools_delta</text>
-    <text x="914" y="425" fill="#334155">(mid-session only; startup stays on</text>
-    <text x="914" y="440" fill="#334155">the anatomy tab).</text>
-    <path class="callout" d="M760 530 C 850 530, 870 420, 900 420"/>
+    <text x="914" y="383" class="new">DIAGNOSTICS</text>
+    <text x="914" y="399" class="lg">diagnostics: source, file, severity,</text>
+    <text x="914" y="414" class="lg">message, code (in › modal). Any</text>
+    <text x="914" y="429" class="lg">language server; the entry does not</text>
+    <text x="914" y="444" class="lg">say LSP plugin vs. IDE. One sub-group</text>
+    <text x="914" y="459" class="lg">per raw source value; missing → "other".</text>
+    <text x="914" y="474" class="lg">"fixed" = later Edit/Write of the file.</text>
+    <text x="914" y="489" class="lg">No entries ≠ clean code.</text>
+    <path class="callout" d="M760 500 C 840 500, 870 450, 900 450"/>
 
-    <text x="914" y="474" font-weight="700" fill="#0f172a">Rules</text>
-    <text x="914" y="492" fill="#334155">· Section hidden when the turn has</text>
-    <text x="914" y="507" fill="#334155">  no signals.</text>
-    <text x="914" y="525" fill="#334155">· Client-only from the /logs payload;</text>
-    <text x="914" y="540" fill="#334155">  no hook or server change.</text>
-    <text x="914" y="558" fill="#334155">· Paths repo-relative; absolute or</text>
-    <text x="914" y="573" fill="#334155">  out-of-repo paths shown as basename.</text>
+    <text x="914" y="519" class="new">CONTEXT</text>
+    <text x="914" y="535" class="lg">read_truncation_notice, mid-session</text>
+    <text x="914" y="550" class="lg">nested_memory / instructions /</text>
+    <text x="914" y="565" class="lg">skill_listing, deferred_tools_delta.</text>
+    <path class="callout" d="M760 620 C 850 620, 870 560, 900 560"/>
+
+    <text x="914" y="597" font-weight="700" fill="#0f172a">Rules</text>
+    <text x="914" y="615" class="lg">· Section hidden when the turn has none.</text>
+    <text x="914" y="633" class="lg">· Client-only from the /logs payload.</text>
+    <text x="914" y="651" class="lg">· Paths: file:// URI, X:\ or / → repo-</text>
+    <text x="914" y="666" class="lg">  relative (drive letter case-insensitive);</text>
+    <text x="914" y="681" class="lg">  out-of-repo → basename.</text>
   </g>
 </svg>
