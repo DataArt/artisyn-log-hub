@@ -8,6 +8,17 @@
       "version": "0.8.3",
       "fixedIn": [],
       "project": "client/package.json"
+    },
+    {
+      "severity": "high",
+      "id": "SNYK-JS-NODEMAILER-22409044",
+      "title": "Interpretation Conflict",
+      "package": "nodemailer",
+      "version": "10.2.1",
+      "fixedIn": [
+        "10.4.1"
+      ],
+      "project": "server/package-lock.json"
     }
   ],
   "snyk-oss/dev": [
@@ -19,6 +30,17 @@
       "version": "0.8.3",
       "fixedIn": [],
       "project": "client/package.json"
+    },
+    {
+      "severity": "high",
+      "id": "SNYK-JS-NODEMAILER-22409044",
+      "title": "Interpretation Conflict",
+      "package": "nodemailer",
+      "version": "10.2.1",
+      "fixedIn": [
+        "10.4.1"
+      ],
+      "project": "server/package-lock.json"
     },
     {
       "severity": "high",
