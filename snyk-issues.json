@@ -1,57 +1,6 @@
 {
-  "snyk-oss/prod": [
-    {
-      "severity": "high",
-      "id": "SNYK-JS-FFLATE-22392372",
-      "title": "Memory Allocation with Excessive Size Value",
-      "package": "fflate",
-      "version": "0.8.3",
-      "fixedIn": [],
-      "project": "client/package.json"
-    },
-    {
-      "severity": "high",
-      "id": "SNYK-JS-NODEMAILER-22409044",
-      "title": "Interpretation Conflict",
-      "package": "nodemailer",
-      "version": "10.2.1",
-      "fixedIn": [
-        "10.4.1"
-      ],
-      "project": "server/package-lock.json"
-    }
-  ],
-  "snyk-oss/dev": [
-    {
-      "severity": "high",
-      "id": "SNYK-JS-FFLATE-22392372",
-      "title": "Memory Allocation with Excessive Size Value",
-      "package": "fflate",
-      "version": "0.8.3",
-      "fixedIn": [],
-      "project": "client/package.json"
-    },
-    {
-      "severity": "high",
-      "id": "SNYK-JS-NODEMAILER-22409044",
-      "title": "Interpretation Conflict",
-      "package": "nodemailer",
-      "version": "10.2.1",
-      "fixedIn": [
-        "10.4.1"
-      ],
-      "project": "server/package-lock.json"
-    },
-    {
-      "severity": "high",
-      "id": "SNYK-JS-URIJS-19963963",
-      "title": "Infinite loop",
-      "package": "uri-js",
-      "version": "4.4.1",
-      "fixedIn": [],
-      "project": "client/package.json"
-    }
-  ],
+  "snyk-oss/prod": [],
+  "snyk-oss/dev": [],
   "snyk-oss/kit": [],
   "snyk-container/image": []
 }
