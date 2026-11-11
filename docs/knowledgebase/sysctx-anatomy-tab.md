@@ -1,7 +1,7 @@
 ---
 type: "Architecture Guide"
 title: "System Context Anatomy Tab"
-description: "The session view's System context anatomy tab: where its data comes from (raw main transcript + harness snapshot, no extra request), the partitions and drill-downs, the edge-state banners, the test ids, the one-line Logs summary that replaced the System Context panel, and the hook 2.28.0 gitStatus / org-synced fields it reads."
+description: "The session view's System context anatomy tab: where its data comes from (raw main transcript + harness snapshot, no extra request), the partitions and drill-downs, the edge-state banners, the View system prompt modal, the test ids, the one-line Logs summary that replaced the System Context panel, and the hook 2.28.0 gitStatus / org-synced fields it reads."
 tags:
   - client
   - session-view
