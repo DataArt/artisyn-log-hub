@@ -1,0 +1,9 @@
+{"type":"assistant","timestamp":"2026-11-11T10:00:00.000Z","message":{"content":[{"type":"tool_use","id":"tu1","name":"WebSearch","input":{"query":"node diagnostics_channel undici fetch events"}}]}}
+{"type":"assistant","timestamp":"2026-11-11T10:00:05.000Z","message":{"content":[{"type":"tool_use","id":"tu2","name":"WebFetch","input":{"url":"https://nodejs.org/api/diagnostics_channel.html","prompt":"list the http channels"}}]}}
+{"type":"assistant","timestamp":"2026-11-11T10:00:20.000Z","message":{"content":[{"type":"tool_use","id":"tu3","name":"Bash","input":{"command":"curl -sS https://example.com/x | head -5 && git clone https://github.com/org/repo.git"}}]}}
+{"type":"assistant","timestamp":"2026-11-11T10:00:40.000Z","message":{"content":[{"type":"tool_use","id":"tu4","name":"PowerShell","input":{"command":"iwr https://downloads.example.com/a.zip -OutFile a.zip"}}]}}
+{"type":"assistant","timestamp":"2026-11-11T10:00:50.000Z","message":{"content":[{"type":"tool_use","id":"tu5","name":"Bash","input":{"command":"ssh user@build.example.net ls"}}]}}
+{"type":"assistant","timestamp":"2026-11-11T10:01:00.000Z","message":{"content":[{"type":"tool_use","id":"tu6","name":"mcp__docs__search","input":{"q":"x"}}]}}
+{"type":"assistant","timestamp":"2026-11-11T10:01:10.000Z","message":{"content":[{"type":"tool_use","id":"tu7","name":"Bash","input":{"command":"node target/target.cjs"}}]}}
+not json at all
+{"type":"user","timestamp":"2026-11-11T10:01:20.000Z","message":{"content":"plain user text"}}
