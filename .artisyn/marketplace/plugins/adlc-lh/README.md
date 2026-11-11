@@ -10,7 +10,7 @@ thresholds, templates) lives in one directory you provide: `.claude/repo_config/
 
 ## Install
 
-> **adlc-lh** is this repo's local copy of `adlc` 1.3.0, renamed so its skills (`/adlc-lh:*`) never
+> **adlc-lh** is this repo's local copy of `adlc`, renamed so its skills (`/adlc-lh:*`) never
 > collide with an installed `adlc`. In this repo it ships from the project-local `artisyn-e798dd87`
 > marketplace (`.artisyn/marketplace`, registered in `.claude/settings.json`) and is enabled as
 > `adlc-lh@artisyn-e798dd87`.
