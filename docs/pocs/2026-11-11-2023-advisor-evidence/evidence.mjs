@@ -227,7 +227,7 @@ export function buildEvidence(transcriptPath) {
       const human = !queued.origin || queued.origin.kind === 'human';
       current = human
         ? { text: `${queued.prompt} (typed while the model was working)`, calls: 0, usd: 0, ctxStart: null, ctxEnd: null }
-        : { text: `(automatic turn: ${queued.origin.kind}) ${queued.prompt}`, auto: true, calls: 0, usd: 0, ctxStart: null, ctxEnd: null };
+        : { text: queued.prompt.trimStart().startsWith('<task-notification>') ? '(automatic turn: a background task finished)' : `(automatic turn: ${queued.origin.kind}) ${queued.prompt.slice(0, 150)}`, auto: true, calls: 0, usd: 0, ctxStart: null, ctxEnd: null };
       prompts.push(current);
     } else if (worker.isQualifyingUserEvent(e)) {
       const text = worker.getPromptText(e);

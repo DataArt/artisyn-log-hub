@@ -44,6 +44,11 @@ const { hookLog, hookLogTo } = require('./hook-log');
 const { buildSkillCatalog } = require('./skill-catalog');
 const { callLlmAsync, describeLlmFailure } = require('./claude-invoke-async');
 const {
+  buildAdvisorEvidence,
+  usd: evidenceUsd,
+  kt: evidenceKt,
+} = require('./advisor-evidence');
+const {
   isBlockedByFailureCap,
   recordFailure,
   recordSuccess,
@@ -400,6 +405,14 @@ function buildPromptTurns(entries) {
         isCommandMessage: isCommandMessagePrompt(e),
         skillName: null,
       };
+      turns.push(current);
+      continue;
+    }
+    // A prompt the user typed while the model was busy is delivered mid-turn as a
+    // `queued_command` attachment, never as a user entry of its own.
+    const queued = e && e.type === 'attachment' && e.attachment && e.attachment.type === 'queued_command' ? e.attachment : null;
+    if (queued && typeof queued.prompt === 'string' && (!queued.origin || queued.origin.kind === 'human')) {
+      current = { text: queued.prompt, isCommandMessage: false, skillName: null };
       turns.push(current);
       continue;
     }
@@ -1476,74 +1489,128 @@ function formatSessionPromptsBlock(heading, promptSample, answerReminder) {
  *   allowed `null` in either case, rendered as `'unknown'` below
  * @param {{ contextTokens: number|null, peakContextTokens: number|null, initialContextTokens: number|null }} contextUsage
  * @param {Array<{ name: string, description: string }>} skillInvocations
- * @param {Array<{ text: string, isCommandMessage: boolean, skillName: string|null }>} promptTurns
+ * @param {{ text: string, prompts: ReturnType<typeof buildPromptCosts> }} evidence
+ *   from `advisor-evidence.js`: the cost/agent/cache facts and the prompts with their cost
  * @param {number} maxBytes
  * @returns {string}
  */
-function buildAdvisorPrompt(aggregate, contextUsage, skillInvocations, promptTurns, maxBytes) {
+function buildAdvisorPrompt(aggregate, contextUsage, skillInvocations, evidence, maxBytes) {
   const skillDescriptionsByName = new Map(skillInvocations.map((s) => [s.name, s.description]));
+  const oneLine = (items) => (items.length > 0 ? items.join('; ') : '(none)');
 
+  // The advice the developer acts on is the rock-solid kind only: every item carries a number
+  // from the evidence and names the prompt / agent. Model-switch advice is excluded on purpose.
   const fixedLines = [
-    'You are analyzing a completed Claude Code coding session to give the developer a short,',
-    'actionable cost/efficiency summary. Respond ONLY with a JSON object of this exact shape',
-    '(no markdown, no explanation outside the JSON):',
+    'You review a Claude Code session for an experienced developer who already knows the usual',
+    'tips. Find where the money went and, only if the data clearly shows it, what to do differently',
+    'next time. Say nothing rather than something generic.',
+    '',
+    'Respond ONLY with a JSON object of this exact shape (no markdown, nothing outside the JSON):',
     '{ "general": string, "costFactors": string[], "harnessAdvice": string[] }',
     '',
-    'Where "general" is a 1-2 sentence plain-language summary of what drove this session\'s cost,',
-    '"costFactors" is a short bullet list of the concrete things that drove up cost/tokens, and',
-    '"harnessAdvice" is a short bullet list of actionable suggestions to reduce cost/tokens next time.',
+    '- "general": 1-2 sentences: where the money went, with the biggest numbers.',
+    '- "costFactors": up to 3 items, each a concrete driver WITH its number from the data below',
+    '  (which prompt, which agent, how many dollars).',
+    '- "harnessAdvice": 0 to 2 items. An empty array is the expected answer for a cheap or',
+    '  efficient session.',
     '',
-    'Do not claim WHEN in the session (e.g. "before any tool calls", "upfront", "early") a',
-    'token/usage figure was reached unless the prompt explicitly gives you a number for that exact',
-    'point in time — only the labeled Initial/Current/Peak context lines below are timed data',
-    'points; no other statistic below has timing information attached.',
+    'Advice is allowed ONLY of these kinds, each citing a number below and naming the prompt/agent:',
+    'A. Fresh session: the context stayed large after the work moved to a different topic. Name',
+    '   the prompt where the topic changed, the context carried across it and what the later',
+    '   prompts cost. Not when the user said to stay in this session.',
+    'B. A recurring correction: the user had to correct the same thing again, or several agents',
+    '   redid the same artefact for the same reason (visible in the prompts or agent briefs). Name',
+    '   the rule to add to the agent brief / skill / CLAUDE.md.',
+    'C. Tiny agents: many agents that each made one or two tool calls, mostly paying their startup',
+    '   context. Suggest running them as one scripted step or one agent per group.',
+    'Anything else is not advice. Never suggest a different or cheaper model for anything.',
+    'Never suggest: batching or parallelising calls, fewer calls, Grep instead of Bash, one shell,',
+    'syntax or selector checks, reusing or checking servers, head/tail on output, one Write instead',
+    'of Edits, skipping a skill, fewer screenshots, splitting an agent, reading files partially,',
+    'trimming CLAUDE.md / MCP servers / tools / skills (the System context tab covers startup',
+    'context), /compact or a new session without kind A evidence, or anything about this review.',
     '',
-    'Session usage summary:',
-    `- Turns (this session): ${aggregate.turnCount}`,
-    `- Prompts (whole session tree, incl. subagents/workflows): ${aggregate.promptCount}`,
-    `- Work time: ${aggregate.workTimeMs} ms`,
-    `- Session cost so far: ${aggregate.sessionCostUsd == null ? 'unknown' : `$${aggregate.sessionCostUsd}`}`,
-    `- Model: ${aggregate.model ?? 'unknown'}`,
-    `- Context window: ${aggregate.contextWindow ?? 'unknown'}`,
-    `- Initial context usage (first turn): ${contextUsage.initialContextTokens ?? 'unknown'} tokens`,
-    `- Current context usage: ${contextUsage.contextTokens ?? 'unknown'} tokens`,
-    `- Peak context usage: ${contextUsage.peakContextTokens ?? 'unknown'} tokens`,
+    'Do not advise against what a prompt explicitly asked for. Claim a cause only when the prompts',
+    'or agent briefs show it. A saving from a fresh session counts only the cache reads of the later',
+    'prompts, scaled by the context no longer carried; round it down. Do not judge unfinished work.',
+    'Quote dollar figures rounded and do not invent numbers that are not below. Name files by file',
+    'name or repo-relative path, never an absolute path. Write in the language of the user prompts.',
     '',
-    'Tool usage:',
-    ...(aggregate.toolUsage.length > 0
-      ? aggregate.toolUsage.map((t) => `- ${t.toolName}: ${t.calls} calls, ${t.failures} failures`)
-      : ['(none)']),
+    'Session summary:',
+    `- Turns (this session): ${aggregate.turnCount}; prompts (whole session tree): ${aggregate.promptCount}; work time ${Math.round(aggregate.workTimeMs / 60000)} min`,
+    `- Model: ${aggregate.model ?? 'unknown'}; context window: ${aggregate.contextWindow ?? 'unknown'}`,
+    `- Context now: ${contextUsage.contextTokens ?? 'unknown'} tokens; peak: ${contextUsage.peakContextTokens ?? 'unknown'} tokens`,
+    `- Tool calls (whole tree): ${oneLine(aggregate.toolUsage.map((t) => `${t.toolName} ${t.calls}${t.failures ? ` (${t.failures} failed)` : ''}`))}`,
+    `- Files touched by category: ${oneLine(aggregate.fileUsage.map((f) => `${f.categoryName} ${f.fileCount}`))}`,
+    `- Skills invoked: ${oneLine(skillInvocations.map((s) => s.name))}`,
     '',
-    'File usage:',
-    ...(aggregate.fileUsage.length > 0
-      ? aggregate.fileUsage.map(
-          (f) => `- ${f.categoryName}: ${f.fileCount} files, ${f.byteCount} bytes`,
-        )
-      : ['(none)']),
-    '',
-    'Skills invoked this session:',
-    ...(skillInvocations.length > 0
-      ? skillInvocations.map((s) => `- ${s.name}: ${s.description}`)
-      : ['(none)']),
+    evidence.text,
   ];
   const fixedText = fixedLines.join('\n');
   const fixedBytes = Buffer.byteLength(fixedText, 'utf8');
 
   // Only the free-text prompt sample below shrinks; never the fields above.
   const budgetForPrompts = Math.max(maxBytes - fixedBytes, 1024);
-  const promptLines = promptTurns.map(
-    (t, i) => `${i + 1}. ${formatPromptTurnText(t, skillDescriptionsByName)}`,
-  );
+  const promptLines = formatPromptCostLines(evidence.prompts, skillDescriptionsByName);
   const promptSample =
     promptLines.length > 0
       ? truncateMiddle(promptLines, budgetForPrompts, (n) => `…(${n} prompts omitted)…`)
       : '(none)';
 
   return `${fixedText}\n\n${formatSessionPromptsBlock(
-    'User prompts in this session (may be truncated).',
+    'User prompts of this session, numbered, each with the cost of the work it triggered in this ' +
+      'session (agents are listed above), its API calls and the context at its start and end. ' +
+      '"(auto)" lines are automatic turns, not user prompts.',
     promptSample,
     'Now respond ONLY with the JSON object { "general", "costFactors", "harnessAdvice" } described above.',
   )}`;
+}
+
+/** Longest single prompt kept in the advisor prompt list. */
+const MAX_ADVISOR_PROMPT_CHARS = 1500;
+
+/**
+ * One line per prompt for the advisor: real prompts numbered as the user counts them, automatic
+ * turns unnumbered, a prompt repeated verbatim 3+ times (a scheduled or pasted one) folded into one line.
+ * @param {ReturnType<typeof buildPromptCosts>} prompts
+ * @param {Map<string, string>} skillDescriptionsByName
+ * @returns {string[]}
+ */
+function formatPromptCostLines(prompts, skillDescriptionsByName) {
+  const flat = (s) => s.replace(/\s+/g, ' ').trim();
+  const clip = (s, max) => (s.length <= max ? s : `${s.slice(0, max - 40)} …[${s.length - max + 40} chars cut]… ${s.slice(-40)}`);
+  const stat = (p) => `${evidenceUsd(p.usd)} · ${p.calls} calls · ctx ${evidenceKt(p.ctxStart)}→${evidenceKt(p.ctxEnd)}`;
+  const repeats = new Map();
+  for (const p of prompts) if (!p.auto) repeats.set(flat(p.text), (repeats.get(flat(p.text)) || 0) + 1);
+
+  const lines = [];
+  const folded = new Map();
+  let number = 0;
+  for (const p of prompts) {
+    if (p.auto) {
+      lines.push(`   (auto) [${stat(p)}] ${clip(flat(p.text), 200)}`);
+      continue;
+    }
+    const key = flat(p.text);
+    if (repeats.get(key) >= 3) {
+      const f = folded.get(key);
+      if (f) {
+        f.n++;
+        f.usd += p.usd;
+        f.ctxEnd = p.ctxEnd;
+      } else {
+        folded.set(key, { n: 1, usd: p.usd, ctxStart: p.ctxStart, ctxEnd: p.ctxEnd, at: lines.length });
+        lines.push('');
+      }
+      continue;
+    }
+    number++;
+    lines.push(`${number}. [${stat(p)}] ${clip(formatPromptTurnText(p, skillDescriptionsByName), MAX_ADVISOR_PROMPT_CHARS)}`);
+  }
+  for (const [text, f] of folded) {
+    lines[f.at] = `   (repeated ×${f.n}) [${evidenceUsd(f.usd)} total · ctx ${evidenceKt(f.ctxStart)}→${evidenceKt(f.ctxEnd)}] ${clip(text, 300)}`;
+  }
+  return lines;
 }
 
 /**
@@ -1622,14 +1689,23 @@ async function advisorBranch(gate, ctx) {
 
   const contextUsage = computeContextUsage(entries);
   const skillInvocations = resolveSkillInvocations(ctx.transcriptPath, ctx.cwd);
-  const promptTurns = buildPromptTurns(entries);
+  // Priced with the server's model rates; a model it does not know falls back to list prices.
+  const pricing = await fetchModelPricing(ctx.serverUrl, ctx.apiKey, ctx.config.sendLogsTimeoutMs || 10000);
+  const evidence = buildAdvisorEvidence({
+    transcriptPath: ctx.transcriptPath,
+    entries,
+    pricing,
+    pickCallRates,
+    readEntries: readTranscriptEntries,
+    helpers: { isQualifyingUserEvent, getPromptText, isCommandMessagePrompt },
+  });
 
   const model = ctx.config.turnEndCostAdvisorModel || DEFAULT_ADVISOR_MODEL;
   const timeoutMs = ctx.config.turnEndCostAdvisorLlmTimeoutMs || DEFAULT_LLM_TIMEOUT_MS;
   const maxPromptBytes =
     (ctx.config.turnEndCostAdvisorMaxPromptSizeKb || DEFAULT_MAX_PROMPT_SIZE_KB) * 1024;
 
-  const prompt = buildAdvisorPrompt(aggregate, contextUsage, skillInvocations, promptTurns, maxPromptBytes);
+  const prompt = buildAdvisorPrompt(aggregate, contextUsage, skillInvocations, evidence, maxPromptBytes);
 
   const startedAt = new Date();
   const llmResult = await callLlmAsync(prompt, model, timeoutMs, ctx.claudeBin);

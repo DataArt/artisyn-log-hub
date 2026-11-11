@@ -15,7 +15,7 @@ function render(v) {
 }
 
 const key = {};
-for (const f of fs.readdirSync(outDir).filter((x) => x.endsWith('.json'))) {
+for (const f of fs.readdirSync(outDir).filter((x) => x.endsWith('.json') && x !== 'ab-key.json')) {
   const rec = JSON.parse(fs.readFileSync(path.join(outDir, f), 'utf8'));
   const flip = Math.random() < 0.5;
   key[rec.id] = flip ? { A: 'v2', B: 'v1' } : { A: 'v1', B: 'v2' };

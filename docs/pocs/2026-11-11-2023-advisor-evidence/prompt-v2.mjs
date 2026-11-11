@@ -98,7 +98,7 @@ export function buildAdvisorPromptV2(evidence, meta) {
   for (const p of evidence.prompts) {
     const stat = `${usd(p.usd)} · ${p.calls} calls · ctx ${kt(p.ctxStart)}→${kt(p.ctxEnd)}`;
     if (p.auto) {
-      lines.push(`   (auto) [${stat}] ${p.text}`);
+      lines.push(`   (auto) [${stat}] ${clip(oneLine(p.text), 200)}`);
       continue;
     }
     const key = oneLine(p.text);

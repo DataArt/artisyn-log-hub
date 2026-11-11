@@ -92,6 +92,7 @@ article itself holds the details. Keep new lines to one or two sentences.
 * [Cost Formula](algorithms/cost-formula.md) - Read before touching the per-call cost formula or its twins (`@loghub/pricing`, hook `post-turn-analysis-worker.js`)
 * [Budget Spend Math](algorithms/budget-spend-math.md) - Read before touching `budget-math.ts`: budget forecast / runs-out-in, anomaly days, costly sessions (2σ / 3σ) and which crossed threshold gets a notice vs is superseded
 * [Work Time](algorithms/work-time.md) - Read before touching session work-time (idle gaps) in `claude-extractor.ts` or its hook twin
+* [Advisor Evidence](algorithms/advisor-evidence.md) - Read before touching the hook's `advisor-evidence.js` (per-call price, cache rebuilds, cost per prompt, queued prompts) or what the Turn-End Cost Advisor is shown
 * [Upload Error Classify](algorithms/upload-error-classify.md) - Read before touching how ingest errors are classified (`upload-error.ts`)
 * [Password Policy](algorithms/password-policy.md) - Read before touching `PASSWORD_POLICY` (`any` / `mid` / `long`), its limits and where it is enforced
 * [Anthropic Pricing Page Parse](algorithms/anthropic-pricing-parse.md) - Read before touching `parseAnthropicPricing` (model table, web-search price, prompt-length tiers)
