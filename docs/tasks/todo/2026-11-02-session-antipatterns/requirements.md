@@ -125,3 +125,8 @@ polling, cache busting without idle (4 events, mostly `/model` switch).
 
 - 2026-11-02: research scripts and raw reports were kept in the session scratchpad only
   (not in the repo).
+- 2026-11-11: the catalog package `@loghub/recommendations` (`packages/recommendations/`) now
+  exists, created by `2026-11-11-sysctx-recommendations`. Its entries use the `startup.*` id
+  namespace (ids stable, never reused); this task's entries are meant to join the same package
+  under `session.*`. It is wired into the client only — this task adds the server `file:`
+  dependency if it needs one. See `docs/knowledgebase/repo-local-packages.md`.

@@ -72,6 +72,10 @@ export interface AnatomyRow {
   instrBytes?: number;
   /** MCP servers: tool names loaded later via `deferred_tools_record` (not part of the size). */
   onDemandNames?: string[];
+  /** MCP servers: startup `deferred_tools_delta` names of the server, in order (not part of the size). */
+  names?: string[];
+  /** Skills: the resolved snapshot entry's `plugin.id`, `null` when none (no size effect). */
+  pluginId?: string | null;
   /** First user prompt rows. */
   role?: FirstPromptRole;
 }
@@ -393,6 +397,8 @@ interface McpAcc {
   instrBytes: number;
   failedCode: string | null;
   onDemand: string[];
+  /** Startup deferred names, in order. */
+  names: string[];
 }
 
 interface FileAcc {
@@ -592,6 +598,7 @@ export function buildSysctxAnatomy(
         instrBytes: 0,
         failedCode: null,
         onDemand: [],
+        names: [],
       };
       servers.set(key, acc);
     }
@@ -609,6 +616,7 @@ export function buildSysctxAnatomy(
         const acc = server(mcpKey(m[1]));
         acc.tools += 1;
         acc.namesBytes += bytes;
+        acc.names.push(name);
       } else {
         builtinNames += 1;
         builtinBytes += bytes;
@@ -661,6 +669,7 @@ export function buildSysctxAnatomy(
       namesBytes: acc.namesBytes,
       instrBytes: acc.instrBytes,
       onDemandNames: acc.onDemand,
+      names: acc.names,
     })),
   );
 
@@ -712,6 +721,7 @@ export function buildSysctxAnatomy(
         path: entry ? entry.path : null,
         fileBytes: entry ? entry.bytes : null,
         git: entry ? (entry.gitStatus ?? gitFallback(entry.path)) : null,
+        pluginId: entry?.plugin?.id ?? null,
       });
     }
   }

@@ -101,7 +101,7 @@ rest of the harness did. Common patterns and what to do:
 
 | Log Hub points at… | What to change |
 |---|---|
-| Large fixed context (CLAUDE.md, rules, skills, MCP tool schemas) | Open **System context anatomy** — it shows what Claude loads at startup and how many tokens each part costs. Trim CLAUDE.md and remove stale rules. **Harness usage** lists every harness element with its usage count and token share; disable MCP servers and skills that are never used. |
+| Large fixed context (CLAUDE.md, rules, skills, MCP tool schemas) | Open **System context anatomy** — it shows what Claude loads at startup and how many tokens each part costs, and its **Recommendations** button lists the startup groups you may be able to switch off, with who controls each one and how (curated advice with links to the Claude Code docs — check this tab on a new session after the change). Trim CLAUDE.md and remove stale rules. **Harness usage** lists every harness element with its usage count and token share; disable MCP servers and skills that are never used. |
 | A knowledge base the agents do not use, or use without effect | Open the **OKF** tab — it shows which articles the agents read, which led them to the code and which change to make to the KB next to every problem. |
 | An MCP server or CLI tool that fails or is never useful | Open **Tools/MCP** — it lists the MCP calls and the calls of monitored CLI tools, with their failures. Fix or remove the server, or narrow which of its tools the agent may use. |
 | Heavy file reading / re-reading | Check the **Cache Read Ratio** report's causes. Split oversized files; point the AI at specific files instead of letting it scan. |

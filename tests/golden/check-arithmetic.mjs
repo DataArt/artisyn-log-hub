@@ -18,6 +18,11 @@
 //     at `charsPerToken`, attributed = Σ tokens, harness internals = total − attributed;
 //   - the System prompt viewer (GS-05 `systemPromptView`): parts per group, parts / tools bytes and
 //     tokens from the startup and tools `prompt_snapshot` lines;
+//   - the Startup context recommendations (GS-05 `recommendations`): the matched catalog ids in
+//     catalog order and each row's items, re-derived from the startup block and the artisyn
+//     harness snapshot with the catalog rules re-implemented here (built-in = no `mcp__` prefix,
+//     claude.ai stub names, configSource join by server key); row bytes = Σ items, tokens at
+//     `charsPerToken`, measuredTokens = Σ tokens ≤ the anatomy total;
 //   - every REPO-GOLD total in `repo-gold.expected.json`, including the merged work time per day.
 //
 // Usage: node tests/golden/check-arithmetic.mjs   (exit 0 all consistent, 1 on any mismatch)
@@ -392,6 +397,136 @@ export function systemPromptView(lines, cpt) {
   };
 }
 
+/** Built-in tool names of the startup-recommendations catalog entries (#1, #2, #13). */
+const RARE_BUILTIN_TOOLS = ['Artifact', 'Workflow', 'ScheduleWakeup', 'SendFeedback', 'ShareOnboardingGuide', 'ReportFindings'];
+const INTERACTION_TOOLS = ['AskUserQuestion', 'Agent', 'ListAgents'];
+const STUB_NAME = /__(authenticate|complete_authentication)$/;
+
+/**
+ * Startup context recommendations of a root transcript, re-derived independently of the client
+ * adapter and of `@loghub/recommendations` (docs/knowledgebase/algorithms/startup-recommendations.md):
+ *   - facts straight from the startup block (the lines before the first non-sidechain assistant line
+ *     with usage) and the artisyn `harness-snapshot`: tools via `firstRequestTools`, one MCP server
+ *     per `mcp__<server>__` prefix of the startup deferred names (name bytes + 1 each) plus its
+ *     `mcp_instructions_delta` blocks, joined to the snapshot `mcpServers` by key (configSource,
+ *     connected === false = failed); skills sliced from the initial `skill_listing` and joined to
+ *     the snapshot skills (source, plugin.id); memory bytes from `startupAnatomy`; the `instructions`
+ *     files that are not MEMORY.md (type User = user, anything else = project; repo-relative names);
+ *     agent types from `agent_listing_delta`;
+ *   - the catalog rules, in catalog order: a built-in tool is a name without the `mcp__` prefix
+ *     (the snapshot `server` field is ignored); a claude.ai server (key `claude_ai_…`) is a stub when
+ *     every startup name ends `__authenticate` / `__complete_authentication`; its names go to the
+ *     stubs or the connectors row, its instructions only to the instructions row; a non-claude.ai
+ *     server goes to the user row (configSource user, or no configSource with a snapshot and no
+ *     `plugin_` key) or the project row with names + instructions (0 when failed); the failed row
+ *     is status only (0 B); org skills win over plugin skills, plugin skills group per plugin id;
+ *   - items sorted bytes descending (ties first-seen), row bytes = Σ items, tokens = round(bytes / cpt).
+ */
+export function startupRecommendations(lines, artisyn, cpt) {
+  const utf8 = (s) => Buffer.byteLength(String(s), 'utf8');
+  const key = (name) => String(name).replace(/[^A-Za-z0-9_-]/g, '_');
+  let anchor = lines.findIndex((l) => l.type === 'assistant' && l.isSidechain !== true && l.message?.usage);
+  if (anchor < 0) anchor = lines.length;
+  const block = lines.slice(0, anchor).filter((l) => l.isSidechain !== true);
+  const atts = block.filter((l) => l.type === 'attachment' && typeof l.attachment?.type === 'string').map((l) => l.attachment);
+  const snapshot = artisyn.find((l) => l.type === 'harness-snapshot') ?? null;
+  const repoRoot = (artisyn.find((l) => l.git?.root)?.git.root ?? '').replace(/\/+$/, '');
+
+  // Facts.
+  const tools = firstRequestTools(block, lines);
+  const servers = new Map();
+  const server = (k) => {
+    if (!servers.has(k)) servers.set(k, { key: k, label: k, names: [], namesBytes: 0, instrBytes: 0, failed: false, configSource: null });
+    return servers.get(k);
+  };
+  for (const a of atts) {
+    if (a.type === 'deferred_tools_delta') {
+      (a.addedNames ?? []).forEach((name, i) => {
+        const m = /^mcp__(.+?)__/.exec(name);
+        if (!m) return;
+        const s = server(m[1]);
+        s.names.push(name);
+        s.namesBytes += utf8(a.addedLines?.[i] ?? name) + 1;
+      });
+    } else if (a.type === 'mcp_instructions_delta') {
+      (a.addedNames ?? []).forEach((name, i) => (server(key(name)).instrBytes += utf8(a.addedBlocks?.[i] ?? '')));
+    }
+  }
+  for (const sm of snapshot?.mcpServers ?? []) {
+    const k = key(sm.name);
+    if (!servers.has(k) && sm.connected !== false) continue;
+    const s = server(k);
+    s.label = sm.name;
+    s.configSource = sm.configSource === 'user' || sm.configSource === 'project' ? sm.configSource : null;
+    if (sm.connected === false) s.failed = true;
+  }
+  const listing = atts.filter((a) => a.type === 'skill_listing');
+  const initial = listing.find((a) => a.isInitial === true) ?? listing[0];
+  const content = String(initial?.content ?? '');
+  const starts = (initial?.names ?? []).map((name) => ({ name, at: content.indexOf(`- ${name}: `) }));
+  const found = starts.filter((s) => s.at >= 0).map((s) => s.at).sort((x, y) => x - y);
+  const skills = starts.map(({ name, at }) => {
+    const entry = snapshot?.skills?.find((e) => e.name === name);
+    const end = at < 0 ? at : found.find((f) => f > at) ?? content.length;
+    return { name, bytes: at < 0 ? 0 : utf8(content.slice(at, end)), source: entry?.source ?? null, pluginId: entry?.plugin?.id ?? null };
+  });
+  const memoryBytes = startupAnatomy(lines).bytes.memory;
+  const instructionFiles = atts
+    .filter((a) => a.type === 'instructions')
+    .flatMap((a) => a.files ?? [])
+    .filter((f) => !/\/MEMORY\.md$/.test(String(f.path ?? '').replace(/\\/g, '/')))
+    .map((f) => {
+      const p = String(f.path ?? '').replace(/\\/g, '/');
+      return { path: repoRoot && p.startsWith(`${repoRoot}/`) ? p.slice(repoRoot.length + 1) : p, bytes: utf8(f.content ?? ''), source: f.type === 'User' ? 'user' : 'project' };
+    });
+  const agentTypes = atts
+    .filter((a) => a.type === 'agent_listing_delta')
+    .flatMap((a) => (a.addedTypes ?? []).map((t, i) => ({ name: String(t), bytes: utf8(a.addedLines?.[i] ?? '') + 1 })));
+
+  // Catalog rules (catalog order).
+  const builtin = tools.filter((t) => !/^mcp__/.test(t.name ?? ''));
+  const named = (list) => builtin.filter((t) => list.includes(t.name)).map((t) => ({ name: t.name, bytes: t.bytes }));
+  const all = [...servers.values()];
+  const claudeAi = all.filter((s) => s.key.startsWith('claude_ai_'));
+  const isStub = (s) => s.names.length > 0 && s.names.every((n) => STUB_NAME.test(n));
+  const other = all.filter((s) => !s.key.startsWith('claude_ai_'));
+  const serverItem = (s) => ({ name: s.label, bytes: s.failed ? 0 : s.namesBytes + s.instrBytes });
+  const orgSkill = (s) => s.source === 'org-synced' || s.name.startsWith('anthropic-skills:');
+  const plugins = new Map();
+  for (const s of skills.filter((x) => x.source === 'plugin' && !orgSkill(x))) {
+    const id = s.pluginId ?? '(unknown plugin)';
+    plugins.set(id, (plugins.get(id) ?? 0) + s.bytes);
+  }
+  const hasShells = builtin.some((t) => t.name === 'Bash') && builtin.some((t) => t.name === 'PowerShell');
+  const catalog = [
+    ['startup.rare-builtin-tools', () => named(RARE_BUILTIN_TOOLS)],
+    ['startup.two-shells', () => (hasShells ? named(['Bash', 'PowerShell']) : [])],
+    ['startup.claudeai-connector-stubs', () => claudeAi.filter(isStub).map((s) => ({ name: s.label, bytes: s.namesBytes }))],
+    ['startup.claudeai-connectors', () => claudeAi.filter((s) => s.names.length > 0 && !isStub(s)).map((s) => ({ name: s.label, bytes: s.namesBytes }))],
+    ['startup.claudeai-instructions', () => claudeAi.filter((s) => s.instrBytes > 0).map((s) => ({ name: s.label, bytes: s.instrBytes }))],
+    ['startup.org-synced-skills', () => skills.filter(orgSkill).map((s) => ({ name: s.name, bytes: s.bytes }))],
+    ['startup.user-mcp-servers', () => other.filter((s) => s.configSource === 'user' || (snapshot && s.configSource === null && !s.key.startsWith('plugin_'))).map(serverItem)],
+    ['startup.auto-memory', () => (memoryBytes > 0 ? [{ name: 'MEMORY.md', bytes: memoryBytes }] : [])],
+    ['startup.project-claude-md', () => instructionFiles.filter((f) => f.source === 'project' && f.bytes > 0).map((f) => ({ name: f.path, bytes: f.bytes }))],
+    ['startup.project-mcp-servers', () => other.filter((s) => s.configSource === 'project').map(serverItem)],
+    ['startup.failed-mcp-servers', () => all.filter((s) => s.failed).map((s) => ({ name: s.label, bytes: 0 }))],
+    ['startup.plugin-skills', () => [...plugins].map(([name, bytes]) => ({ name, bytes }))],
+    ['startup.interaction-tools', () => named(INTERACTION_TOOLS)],
+    ['startup.subagent-types', () => agentTypes.map((t) => ({ name: t.name, bytes: t.bytes }))],
+  ];
+  const ids = [];
+  const rows = {};
+  for (const [id, match] of catalog) {
+    const items = match();
+    if (items.length === 0) continue;
+    const sorted = items.map((it, i) => ({ ...it, i })).sort((x, y) => y.bytes - x.bytes || x.i - y.i);
+    const bytes = sorted.reduce((s, it) => s + it.bytes, 0);
+    ids.push(id);
+    rows[id] = { items: Object.fromEntries(sorted.map((it) => [it.name, it.bytes])), bytes, tokens: Math.round(bytes / cpt) };
+  }
+  return { ids, rows, count: ids.length, measuredTokens: Object.values(rows).reduce((s, r) => s + r.tokens, 0) };
+}
+
 export function listFixtures(dir = GOLDEN_DIR) {
   return fs
     .readdirSync(dir, { withFileTypes: true })
@@ -560,6 +695,27 @@ export function check({ dir = GOLDEN_DIR } = {}) {
         const spv = exp.systemPromptView;
         const derived = systemPromptView(rootLines, spv.charsPerToken);
         for (const [k, v] of Object.entries(derived)) eq(`${at}.systemPromptView.${k}`, v, spv[k]);
+      }
+
+      // Startup context recommendations (GS-05): matched rows re-derived from the startup block and the snapshot.
+      if (exp.recommendations) {
+        const rec = exp.recommendations;
+        const derived = startupRecommendations(rootLines, artisyn, rec.charsPerToken);
+        if (exp.anatomy) {
+          eq(`${at}.recommendations.charsPerToken = anatomy`, rec.charsPerToken, exp.anatomy.charsPerToken);
+          eq(`${at}.recommendations.denominator = anatomy total`, rec.denominator, exp.anatomy.total);
+        }
+        eq(`${at}.recommendations.ids`, derived.ids, rec.ids);
+        eq(`${at}.recommendations.count = ids.length`, rec.ids.length, rec.count);
+        eq(`${at}.recommendations.rows keys`, Object.keys(rec.rows), rec.ids);
+        for (const id of rec.ids) {
+          const r = rec.rows[id];
+          eq(`${at}.recommendations.rows.${id}.items`, derived.rows[id]?.items, r?.items);
+          eq(`${at}.recommendations.rows.${id}.bytes = Σ items`, Object.values(r?.items ?? {}).reduce((s, b) => s + b, 0), r?.bytes);
+          eq(`${at}.recommendations.rows.${id}.tokens`, Math.round((r?.bytes ?? 0) / rec.charsPerToken), r?.tokens);
+        }
+        eq(`${at}.recommendations.measuredTokens = Σ tokens`, rec.ids.reduce((s, id) => s + (rec.rows[id]?.tokens ?? 0), 0), rec.measuredTokens);
+        eq(`${at}.recommendations.measuredTokens <= denominator`, rec.measuredTokens <= rec.denominator, true);
       }
 
       // Lines, tools, change surface.
