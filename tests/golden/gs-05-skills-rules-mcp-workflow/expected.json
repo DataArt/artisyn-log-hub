@@ -63,11 +63,12 @@
         "$comment": "System context anatomy of the startup block (algorithm doc sysctx-anatomy.md, row SA-GS05). Tokens = round(bytes / charsPerToken); harnessInternals = total - attributed.",
         "charsPerToken": 3.5,
         "total": 8800,
-        "attributed": 2829,
-        "harnessInternals": 5971,
+        "attributed": 3027,
+        "harnessInternals": 5773,
         "partitions": {
-          "system-prompt": { "bytes": 2800, "tokens": 800 },
+          "system-prompt": { "bytes": 3116, "tokens": 890 },
           "memory": { "bytes": 700, "tokens": 200 },
+          "tool-definitions": { "bytes": 378, "tokens": 108 },
           "environment": { "bytes": 35, "tokens": 10 },
           "deferred-tools": { "bytes": 0, "tokens": 0 },
           "mcp-server": { "bytes": 429, "tokens": 123 },
@@ -77,6 +78,20 @@
           "system-reminder": { "bytes": 350, "tokens": 100 },
           "first-prompt": { "bytes": 252, "tokens": 72 }
         }
+      },
+      "systemPromptView": {
+        "$comment": "System prompt viewer modal (algorithm doc system-prompt-view.md): parts from the startup snapshot gs05-0000p (boundary marker excluded; shared = before it, session = after it), tools from the first snapshot with tools (gs05-0003p; no api-request-shape logged), the same set as the anatomy's tool-definitions partition. Each tool's `schema` is the whole wire tool object {name, description, input_schema}, so tool bytes = name + description + JSON.stringify(schema.input_schema) (Read 299 + Bash 79 = 378), sizes from the raw (unmasked) text. Tokens = round(bytes / charsPerToken), totals rounded once from the summed bytes.",
+        "charsPerToken": 3.5,
+        "parts": 3,
+        "shared": 2,
+        "session": 1,
+        "partsBytes": 3816,
+        "partsTokens": 1090,
+        "tools": 2,
+        "toolsBytes": 378,
+        "toolsTokens": 108,
+        "totalBytes": 4194,
+        "totalTokens": 1198
       },
       "inventory": { "skills": ["adlc:review-deep", "adlc:review", "unused-skill"], "mcpServers": ["postgres", "playwright"] },
       "harnessUsage": {

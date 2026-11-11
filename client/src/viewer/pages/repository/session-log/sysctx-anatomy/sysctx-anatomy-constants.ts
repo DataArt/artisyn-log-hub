@@ -6,6 +6,7 @@
 export const ANATOMY_PARTITION_KINDS = [
   'system-prompt',
   'memory',
+  'tool-definitions',
   'environment',
   'deferred-tools',
   'mcp-server',
@@ -60,6 +61,7 @@ export type FirstPromptRole =
 export const KIND_LABELS: Record<AnatomyKind, string> = {
   'system-prompt': 'System prompt (harness core)',
   memory: 'Memory index (MEMORY.md)',
+  'tool-definitions': 'Tool definitions',
   environment: 'Environment (estimated)',
   'deferred-tools': 'Deferred tool names (built-in)',
   'mcp-server': 'MCP servers',
@@ -72,10 +74,18 @@ export const KIND_LABELS: Record<AnatomyKind, string> = {
   'harness-internals': 'Harness internals',
 };
 
+/**
+ * Label of the `harness-internals` row when the session logged its tool definitions: the
+ * remainder is then message formatting and short texts the log does not keep (plus the estimate
+ * error), not hidden tools.
+ */
+export const INTERNALS_LABEL_TOOLS_MEASURED = 'Formatting & unlogged text';
+
 /** Fixed segment colours (Tailwind 400/500 hexes), one distinct colour per kind (DD 14). */
 export const KIND_COLORS: Record<AnatomyKind, string> = {
   'system-prompt': '#6366f1', // indigo-500
   memory: '#a855f7', // purple-500
+  'tool-definitions': '#84cc16', // lime-500
   environment: '#94a3b8', // slate-400
   'deferred-tools': '#14b8a6', // teal-500
   'mcp-server': '#0ea5e9', // sky-500
@@ -121,6 +131,9 @@ export const MEMORY_DISPLAY_PATH =
 /** Prefix of a file shown outside the repository and the user's `~/.claude` (DD 10). */
 export const OUTSIDE_PATH_PREFIX = '<outside>/';
 
+/** Stands in for the real `~/.claude/projects/<slug>` segment in masked prompt text. */
+export const PROJECT_SLUG_PLACEHOLDER = '<project-slug>';
+
 /** Bar: a segment with share in (0, MIN_SHARE_FOR_NATURAL) gets MIN_SEGMENT_PX width (DD 14). */
 export const MIN_SEGMENT_PX = 6;
 export const MIN_SHARE_FOR_NATURAL = 0.005;
@@ -143,31 +156,40 @@ function fmtInt(n: number): string {
 
 /**
  * Text of the Harness internals hint (DD 13). `n` = internals tokens, `p` = its share in %
- * (shown with 1 decimal), `m` = measured total, `a` = attributed sum.
+ * (shown with 1 decimal), `m` = measured total, `a` = attributed sum, `toolsMeasured` = the
+ * session logged its tool definitions, so they have their own row and are not part of `n`.
  */
 export function HARNESS_INTERNALS_HINT(
   n: number,
   p: number,
   m: number,
   a: number,
+  toolsMeasured: boolean,
 ): HarnessInternalsHint {
+  const wrapping = {
+    term: 'Message wrapping',
+    text: 'system-reminder tags, message framing and separators, and short texts the log does not keep (the attribution reminder, the billing line).',
+  };
+  const error = {
+    term: 'Estimate error',
+    text: 'every row above is bytes / ratio, while the total is exact; their combined error lands here (it can be positive or negative). Environment is sized from its JSON and usually under-counts.',
+  };
+  const name = toolsMeasured
+    ? INTERNALS_LABEL_TOOLS_MEASURED
+    : KIND_LABELS['harness-internals'];
   return {
-    title: `Harness internals — ≈ ${fmtInt(n)} tokens (${p.toFixed(1)} % of the startup context)`,
-    body: `Tokens that Claude Code sent in the first request but did not write to the session log, so they cannot be split further. Measured total ${fmtInt(m)} minus everything attributed above (${fmtInt(a)}). Mostly:`,
-    bullets: [
-      {
-        term: 'Tool definitions',
-        text: 'the JSON schemas and descriptions of the built-in tools (Bash, Read, Edit, Grep, Agent, …) and of MCP tools loaded at start. Usually the largest part.',
-      },
-      {
-        term: 'Message wrapping',
-        text: 'system-reminder tags, message framing and separators.',
-      },
-      {
-        term: 'Estimate error',
-        text: 'every other partition is a byte-based estimate, while the total is exact; their combined error lands here (it can be positive or negative).',
-      },
-    ],
+    title: `${name} — ≈ ${fmtInt(n)} tokens (${p.toFixed(1)} % of the startup context)`,
+    body: `The exact total ${fmtInt(m)} minus everything attributed above (${fmtInt(a)}): what Claude Code sent in the first request but the session log does not let us split further.${toolsMeasured ? '' : ' Mostly:'}`,
+    bullets: toolsMeasured
+      ? [wrapping, error]
+      : [
+          {
+            term: 'Tool definitions',
+            text: 'the descriptions and input schemas of the built-in tools (Bash, Read, Edit, Grep, Agent, …) and of MCP tools loaded at start. Usually the largest part; this Claude Code version did not log them.',
+          },
+          wrapping,
+          error,
+        ],
     closing:
       'Deferred MCP tools are not here: only their names are loaded at start, shown under each MCP server.',
   };

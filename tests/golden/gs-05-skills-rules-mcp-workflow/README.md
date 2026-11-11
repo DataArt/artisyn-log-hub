@@ -8,8 +8,12 @@ W1 Thursday 10:00:00–10:03:30.
   P2 "Research the billing flow" with `Skill(adlc:review-deep)`, `Read`, `mcp__postgres__query` ×2,
   `mcp__playwright__browser_click` ×1 and `Workflow(ResearchWorkflow)`.
 - The startup block (everything before the first assistant line `msg_gs05_001`) is, in order: `mode`;
-  a `prompt_snapshot` (`gs05-0000p`) with two `systemPrompt` blocks — 2800 B starting `You are` and
-  700 B starting `# Memory` (the memory index); a `date` attachment (`gs05-0000d`, 35 B as JSON); the
+  a `prompt_snapshot` (`gs05-0000p`) with four `systemPrompt` blocks — 2800 B starting `You are`,
+  700 B starting `# Memory` (the memory index), the 34 B `__SYSTEM_PROMPT_DYNAMIC_BOUNDARY__` marker
+  and a 316 B session part `# Environment` (working directory `/work/repo-gold/src`, a
+  `~/.claude/projects/…/MEMORY.md` path and `/tmp/gs05-scratch/notes.txt`, contains
+  `GS05-SESSION-MARKER`), plus the flags `cliPrefix`, `reminderFold`, `contextRendering` and an
+  invented object flag `gs05Extra`; a `date` attachment (`gs05-0000d`, 35 B as JSON); the
   `skill_listing` (83 B = 44 + 39); the `deferred_tools_delta` (`gs05-0006`) listing the three MCP
   tools (postgres 21 + 27 = 48 B, playwright 31 B), announced before the first MCP call; an
   `mcp_instructions_delta` (`gs05-0000m`) with a 350 B `postgres` block; the `instructions`
@@ -24,9 +28,21 @@ W1 Thursday 10:00:00–10:03:30.
   (on demand, 0 at start); the skill body is 1750 B. An `isInitial: true` `skill_listing` attachment
   names `adlc:review-deep` and `adlc:review` — `unused-skill` is in the harness snapshot but never
   listed, so the anatomy skills drill-down has no row for it.
-- System context anatomy (total 800 + 8000 + 0 = 8800 tokens, cpt 3.5): system prompt 800, memory
-  200, environment 10, MCP servers 123, skills 24, instruction files 1500, system reminders 100,
-  first prompt 72 → attributed 2829, harness internals 5971 (67.9 %).
+- Right after the first assistant line (`gs05-0003`) a second, late `prompt_snapshot` (`gs05-0003p`)
+  carries the tool definitions in the real shape — each item's `schema` is the whole wire tool
+  `{name, description, input_schema}`: `Read` (a Markdown table, a `/home/dev/notes.md` path,
+  `GS05-TOOL-MARKER` and a literal `<system-reminder>` tag in its description; an input schema with
+  a `C:\Users\dev\file.txt` example) and `Bash` (`server: "gs05-mcp"`). No `api-request-shape` is
+  logged, so it is the source of the anatomy's Tool definitions row (it sits after the anchor; the
+  tool set is the one of the first request).
+- System context anatomy (total 800 + 8000 + 0 = 8800 tokens, cpt 3.5): system prompt 890
+  (2800 + 316 = 3116 B; the 34 B boundary marker is not prompt text), memory 200, tool definitions
+  108 (`Read` 299 B + `Bash` 79 B = 378 B, name + description + input-schema JSON), environment 10,
+  MCP servers 123, skills 24, instruction files 1500, system reminders 100, first prompt 72 →
+  attributed 3027, harness internals 5773 (65.6 %).
+- System prompt viewer: 3 parts (shared 2, session 1; 2800 + 700 + 316 = 3816 B ≈ 1090 tokens),
+  2 tools (`Read` 299 B + `Bash` 79 B = 378 B ≈ 108 tokens), total 4194 B ≈ 1198 tokens; every
+  absolute path is masked (`src`, `~/.claude/projects/<project-slug>/…`, `<outside>/notes.txt`).
 - The artisyn log carries the harness self-report as one fixed-id `harness-snapshot` (plus its
   `harness-snapshot-ref`): skills `adlc:review-deep` and `adlc:review` (`plugin`, `adlc@1.0.0`,
   git `outside-repo`), `unused-skill` (`project`, `untracked`) and `gold-sync` (`org-synced`, masked

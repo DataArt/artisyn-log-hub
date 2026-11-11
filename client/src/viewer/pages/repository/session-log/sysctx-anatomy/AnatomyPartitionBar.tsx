@@ -60,6 +60,7 @@ function SegmentTooltip({
         share={p.share}
         total={anatomy.total}
         attributed={anatomy.attributed}
+        toolsMeasured={anatomy.toolSource !== null}
       />
     );
   }

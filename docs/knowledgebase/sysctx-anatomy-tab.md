@@ -7,7 +7,7 @@ tags:
   - session-view
   - harness
   - hook
-timestamp: "2026-10-29T00:00:00+04:00"
+timestamp: "2026-11-11T00:00:00+04:00"
 ---
 
 # System Context Anatomy Tab
@@ -41,6 +41,13 @@ All under `client/src/viewer/pages/repository/`:
 | `session-log/sysctx-anatomy/AnatomyPartitionTable.tsx` | The partition table, expand chevrons, Harness internals hint |
 | `session-log/sysctx-anatomy/AnatomyDrilldowns.tsx` | Skills / Files / MCP / generic child tables |
 | `session-log/sysctx-anatomy/AnatomyCells.tsx` | Shared cells: number formatting, `GitBadge`, `DrillTable`, "Show all" toggle, hint content |
+| `session-log/sysctx-anatomy/system-prompt-view.ts` | Pure builder of the "View system prompt" modal: `hasPromptSnapshot`, `buildSystemPromptView`, `maskLocalPaths`, `partTitle`, `systemPromptViewToMarkdown`, `exportFileName` ([System Prompt View](algorithms/system-prompt-view.md)) |
+| `session-log/sysctx-anatomy/system-prompt-view.algo.test.ts` | Vitest table test over that algorithm doc's examples |
+| `session-log/sysctx-anatomy/tool-definitions.ts` | `findToolDefinitions`: the first request's tools (wire shape, else tools snapshot) and their sizes, shared by the Tool definitions partition and the modal |
+| `session-log/sysctx-anatomy/SystemPromptModal.tsx` | The modal: header, totals, Copy as Markdown / Download .md, the three tabs (local tab state), one expanded set per tab |
+| `session-log/sysctx-anatomy/SystemPromptSections.tsx` | `SectionToolbar`, `PromptSection` (shared / session groups), `ToolsSection`, `FlagsSection` |
+| `session-log/sysctx-anatomy/SystemPromptItems.tsx` | `PromptItemRow` (body mounted only while expanded), `MarkdownBody` (react-markdown + remark-gfm, no raw HTML), `JsonBlock` |
+| `client/src/viewer/lib/download-text-file.ts` | `downloadTextFile(name, text)`: Blob → object URL → `<a download>` |
 | `session-log/StartupContextLine.tsx` | One-line summary at the top of Logs |
 | `SessionTabContent.tsx` | Lazy import of the tab; passes `onOpenAnatomy={() => onSessionTabChange('sysctx')}` to `SessionLogView` |
 | `SessionTabBar.tsx`, `client/src/viewer/tab-ids.ts` | `sysctx` is the **last** tab, after Raw Logs |
@@ -75,8 +82,9 @@ the bar):
 
 | Kind | Label | Measured from | Drill-down |
 |---|---|---|---|
-| `system-prompt` | System prompt (harness core) | `prompt_snapshot.systemPrompt[]` blocks except the memory block | one row per block, "Block n" (no text) |
+| `system-prompt` | System prompt (harness core) | `prompt_snapshot.systemPrompt[]` blocks except the memory block, the boundary marker and blank blocks | one row per block, "Block n" (no text) |
 | `memory` | Memory index (MEMORY.md) | the `# Memory` system-prompt block, plus any `instructions` file ending `/MEMORY.md` | one masked-path row |
+| `tool-definitions` | Tool definitions | the first request's tools (`tool-definitions.ts`): the `api-request-shape` of the first main `api-request` (Claude Code 2.1.312+), else the first `prompt_snapshot` with `tools` (2.1.280+); name + description + input-schema JSON, `defer_loading` tools dropped | one row per tool (name, source `built-in` / `MCP server`) |
 | `environment` | Environment (estimated) | every other startup attachment type (e.g. `date`, `environment`, `command_permissions`), sized by `JSON.stringify` | one row per attachment type |
 | `deferred-tools` | Deferred tool names (built-in) | non-MCP lines of `deferred_tools_delta` | none (count shown) |
 | `mcp-server` | MCP servers | per server: MCP tool-name lines + `mcp_instructions_delta` instruction blocks | one row per server: status, tools, names B, instr. B, loaded on demand |
@@ -87,13 +95,42 @@ the bar):
 | `first-prompt` | First user prompt | every non-sidechain `type:user` line in the startup block | one row per line, by role (command caveat, slash command, injected skill/command body, typed prompt) |
 | `harness-internals` | Harness internals | total − attributed (only when ≥ 0) | none; info-icon hint |
 
-Harness internals is mostly the tool JSON schemas, message wrapping and the combined estimate
-error. It is hatched in the bar, and its hint text comes from `HARNESS_INTERNALS_HINT`. The words
+With the tools measured, the row is labelled **"Formatting & unlogged text"** (same kind
+`harness-internals`, same test ids) and is message wrapping, short texts the log does not keep
+(the attribution reminder, the billing line, MCP `tool_addition` parts) and the combined estimate
+error — 0.1–4.7 % of the
+total on the local-prod sessions checked on 2026-11-11 (Claude Code 2.1.312–2.1.322, 18 sessions;
+the bytes-per-token ratio of their first requests was 2.66–2.79 against the configured 2.7).
+For a session without logged tools (before 2.1.280) it still holds the tool definitions and its
+hint says so (`HARNESS_INTERNALS_HINT(…, toolsMeasured)`). It is hatched in the bar. The words
 "Unallocated" and "free" are never used.
+
+**One story across the tab and the modal.** The modal never computes its own tool set: both call
+`findToolDefinitions`, so the modal's Tool definitions total is the `tool-definitions` row, and the
+modal's System prompt is the `system-prompt` row plus the `# Memory` block of the `memory` row
+(the marker is excluded on both sides). The modal header reads
+`First request <total> tokens (exact) = System prompt ≈ P (n parts) + Tool definitions ≈ T (n tools)
++ ≈ R everything else (opening messages — see the anatomy table)`, `R = total − round((prompt
+bytes + tool bytes) / cpt)`; without a known total (or when R < 0) it shows only the sum. Until
+2026-11-11 the modal sized a tool as name + description + the JSON of the snapshot's `schema`,
+which is the whole wire tool, so every description counted twice (57.7 K instead of 33.7 K
+tokens on a 66.6 K session).
 
 **No text in the DOM.** Only names, paths, sizes, statuses, role labels and "Block n" are shown —
 never file, section or prompt text. Absolute paths outside the repo become `<outside>/<basename>`;
 the memory index is always `~/.claude/projects/<project-slug>/memory/MEMORY.md`.
+
+**Exception: the "View system prompt" modal.** The tab itself still renders no prompt text; it
+only checks `hasPromptSnapshot(main)` and, when true, shows a `View system prompt` button beside
+the header (no button without a snapshot). Prompt text appears only inside the modal, which is
+mounted only while open and builds its view (`buildSystemPromptView`) on open. It shows the
+startup snapshot's `systemPrompt` parts (split into Shared / Session-specific at the
+`__SYSTEM_PROMPT_DYNAMIC_BOUNDARY__` marker), the same tools as the Tool definitions row, and
+the snapshot's flags. Every display string — part text, tool name / server / description, every
+string inside a tool schema or an object flag — goes through `maskLocalPaths`: paths under
+`repoRoot` become repo-relative, `.claude` paths become `~/.claude/…` with the project slug
+hidden, any other absolute path becomes `<outside>/<basename>`. Sizes are measured on the raw text
+so a part's bytes equal its "Block n" row. Rules: [System Prompt View](algorithms/system-prompt-view.md).
 
 The attachment payloads the tab reads are described in
 [log-schema/attachment-types.md](log-schema/attachment-types.md) (`mcp_instructions_delta`,
@@ -171,8 +208,23 @@ The scenario steps rely on these exact names:
 | `anatomy-file-row` | `data-path`, `data-git` |
 | `anatomy-mcp-row` | `data-server` |
 | `startup-context-line` | the Logs one-liner |
+| `sysprompt-open` | the "View system prompt" button (absent without a snapshot) |
+| `sysprompt-modal` | the dialog content |
+| `sysprompt-totals` | header line `First request … = System prompt ≈ P (n parts) + Tool definitions ≈ T (n tools) + ≈ R everything else …` |
+| `sysprompt-copy`, `sysprompt-download` | Copy as Markdown (→ `Copied`), Download .md |
+| `sysprompt-tab-prompt`, `sysprompt-tab-tools`, `sysprompt-tab-flags` | tab triggers |
+| `sysprompt-panel-prompt`, `sysprompt-panel-tools`, `sysprompt-panel-flags` | tab panels |
+| `sysprompt-toolbar` | a tab's summary line (`N parts · B B · ≈ T tok`, plus ` = harness core X B + memory index Y B` when there is a `# Memory` part / `N keys`) |
+| `sysprompt-tools-summary` | the Tool definitions summary line |
+| `sysprompt-expand-all`, `sysprompt-collapse-all` | per-tab Expand all / Collapse all |
+| `sysprompt-group` | `data-group` = `shared` / `session` |
+| `sysprompt-item` | `data-section` = `shared` / `session` / `ungrouped` / `tool` / `flag`; `data-expanded` (absent on a scalar flag) |
+| `sysprompt-item-body` | an expanded item's body (mounted only while expanded) |
+| `sysprompt-empty`, `sysprompt-error` | empty / unrecognised-format lines, the build error line |
 
-Coverage: the algorithm table test (`sysctx-anatomy.algo.test.ts`), the GS-05 golden fixture's
-anatomy block, and `tests/scenarios/view/s-sess-03.spec.ts` (steps 8, 8a, 8d, 9); the hook side
+Coverage: the algorithm table tests (`sysctx-anatomy.algo.test.ts`,
+`system-prompt-view.algo.test.ts`), the GS-05 golden fixture's anatomy and `systemPromptView`
+blocks, and `tests/scenarios/view/s-sess-03.spec.ts` (steps 8, 8a, 8a2 — the system prompt modal —,
+8d — no button without a snapshot —, 9); the hook side
 is `tests/scenarios/hook/s-hook-09.spec.ts` step 4c. User doc: `user-docs/session-log.md`
 § "System context anatomy" (screen-registry row `session.sysctx`).

@@ -102,6 +102,7 @@ article itself holds the details. Keep new lines to one or two sentences.
 * [Workflow Agent Rows](algorithms/workflow-agent-rows.md) - Read before touching the "#" numbering in the workflow Agents table
 * [Session List Flags](algorithms/session-list-flags.md) - Read before touching `session_stats` `main_model` / `has_workflow` / `has_main_assistant`
 * [System Context Anatomy](algorithms/sysctx-anatomy.md) - Read before touching `sysctx-anatomy.ts` (startup block, per-partition token estimates)
+* [System Prompt View](algorithms/system-prompt-view.md) - Read before touching `system-prompt-view.ts` (prompt viewer modal: snapshot selection, boundary split, path masking)
 * [Tool-Call Sections and Permission Attribution](algorithms/tool-call-sections.md) - Read before touching `session-log/tool-calls.ts`: which section a call is listed in, which call a permission event belongs to
 * [Tool-Call Outcome](algorithms/tool-call-outcome.md) - Read before touching `classifyToolOutcome` (client or its server twin): success / failure / unresolved and the Logs status
 * [Bash Command View](algorithms/bash-command-view.md) - Read before touching `packages/bash-view/` or the client loader: command layout, FILES summary, `readAccess` kinds

@@ -1,0 +1,377 @@
+[
+  {
+    "id": "SPV-01",
+    "input": {"view": {"repoRoot": "", "cpt": 3.5, "main": [
+      {"type": "attachment", "attachment": {"type": "prompt_snapshot", "systemPrompt": ["You are a helper.", "__SYSTEM_PROMPT_DYNAMIC_BOUNDARY__", "# Environment\ncwd here"]}}
+    ]}},
+    "expected": {
+      "prompt": {"status": "ok", "grouped": true, "bytes": 39, "tokens": 11, "parts": [
+        {"index": 1, "title": "You are a helper.", "bytes": 17, "tokens": 5, "group": "shared"},
+        {"index": 3, "title": "# Environment", "bytes": 22, "tokens": 6, "group": "session"}
+      ]},
+      "tools": {"status": "none", "source": null, "items": [], "bytes": 0, "tokens": 0},
+      "flags": [],
+      "totals": {"parts": 2, "tools": 0, "bytes": 39, "tokens": 11},
+      "error": null
+    },
+    "note": "Rule 4: the marker (part 2) splits shared from session and is not a part; part 3 keeps index 3 (rule 3). Rule 5: part 1 has no heading -> its 3 words; part 3 -> '# Environment'. Rule 3: 17 B -> round(17/3.5 = 4.86) = 5; '# Environment\\ncwd here' = 13 + 1 + 8 = 22 B -> round(6.29) = 6; prompt 39 B -> round(11.14) = 11. Rule 7: only `type` and `systemPrompt` keys -> no flags. Rule 8: no tools snapshot -> status none."
+  },
+  {
+    "id": "SPV-02",
+    "input": {"view": {"repoRoot": "", "cpt": 4, "main": [
+      {"type": "attachment", "attachment": {"type": "prompt_snapshot", "systemPrompt": ["Alpha part.", "Beta part."]}}
+    ]}},
+    "expected": {
+      "prompt": {"status": "ok", "grouped": false, "bytes": 21, "tokens": 5, "parts": [
+        {"index": 1, "title": "Alpha part.", "bytes": 11, "tokens": 3, "group": null},
+        {"index": 2, "title": "Beta part.", "bytes": 10, "tokens": 3, "group": null}
+      ]},
+      "totals": {"parts": 2, "tools": 0, "bytes": 21, "tokens": 5}
+    },
+    "note": "Rule 4: no marker -> grouped false, every group null. Rule 3: 11/4 = 2.75 -> 3, 10/4 = 2.5 -> 3 (Math.round), but the section total is round(21/4 = 5.25) = 5, not 3 + 3 = 6."
+  },
+  {
+    "id": "SPV-03",
+    "input": {"view": {"repoRoot": "", "cpt": 4, "main": [
+      {"type": "attachment", "attachment": {"type": "prompt_snapshot", "systemPrompt": ["__SYSTEM_PROMPT_DYNAMIC_BOUNDARY__", "  \n ", "Sess one", " __SYSTEM_PROMPT_DYNAMIC_BOUNDARY__\n", "Sess two"]}}
+    ]}},
+    "expected": {
+      "prompt": {"status": "ok", "grouped": true, "bytes": 16, "tokens": 4, "parts": [
+        {"index": 3, "title": "Sess one", "bytes": 8, "tokens": 2, "group": "session"},
+        {"index": 5, "title": "Sess two", "bytes": 8, "tokens": 2, "group": "session"}
+      ]}
+    },
+    "note": "Rule 4: the first marker opens the session group at once, so the shared group is empty; part 2 is blank after trim and skipped; part 4 trims to the marker and is dropped, part 5 stays in session. Indices stay raw positions 3 and 5 (rule 3). 8 B each -> 2 tok; 16 B -> 4 tok."
+  },
+  {
+    "id": "SPV-04",
+    "input": {"view": {"repoRoot": "", "cpt": 1, "main": [
+      {"type": "attachment", "attachment": {"type": "prompt_snapshot", "systemPrompt": ["plain", {"type": "text", "text": "from text"}, {"kind": "x"}]}}
+    ]}},
+    "expected": {
+      "prompt": {"status": "ok", "grouped": false, "bytes": 26, "tokens": 26, "parts": [
+        {"index": 1, "title": "plain", "text": "plain", "bytes": 5, "tokens": 5, "group": null},
+        {"index": 2, "title": "from text", "text": "from text", "bytes": 9, "tokens": 9, "group": null},
+        {"index": 3, "title": "{\"kind\":\"x\"}", "text": "{\"kind\":\"x\"}", "bytes": 12, "tokens": 12, "group": null}
+      ]}
+    },
+    "note": "Rule 3 payload shapes: a string as-is (5 B), an object's `text` (9 B), any other value as compact JSON '{\"kind\":\"x\"}' (12 B). cpt 1 -> tokens = bytes; 5 + 9 + 12 = 26."
+  },
+  {
+    "id": "SPV-05",
+    "input": {"view": {"repoRoot": "", "cpt": 3.5, "main": [
+      {"type": "attachment", "attachment": {"type": "prompt_snapshot", "systemPrompt": "not an array", "cliPrefix": "c"}}
+    ]}},
+    "expected": {
+      "prompt": {"status": "unrecognised", "grouped": false, "bytes": 0, "tokens": 0, "parts": []},
+      "flags": [{"key": "cliPrefix", "value": "c", "isObject": false}],
+      "totals": {"parts": 0, "tools": 0, "bytes": 0, "tokens": 0},
+      "error": null
+    },
+    "note": "Rule 8: a non-array `systemPrompt` -> status unrecognised, no parts, 0 B. The flags are still read from the snapshot (rule 7)."
+  },
+  {
+    "id": "SPV-06",
+    "input": {"view": {"repoRoot": "", "cpt": 3.5, "main": [
+      {"type": "user", "message": {"content": "hi"}},
+      {"type": "attachment", "attachment": {"type": "skill_listing", "content": "- a: b"}}
+    ]}},
+    "expected": {
+      "prompt": {"status": "missing", "grouped": false, "bytes": 0, "tokens": 0, "parts": []},
+      "tools": {"status": "none", "source": null, "items": [], "bytes": 0, "tokens": 0},
+      "flags": [],
+      "error": null
+    },
+    "note": "Rule 8: no prompt_snapshot line at all -> prompt missing, tools none, no flags, no error."
+  },
+  {
+    "id": "SPV-07",
+    "input": {"view": {"repoRoot": "", "cpt": 1, "main": [
+      {"type": "attachment", "isSidechain": true, "attachment": {"type": "prompt_snapshot", "systemPrompt": ["Side"], "tools": [{"name": "SideTool"}]}},
+      {"type": "attachment", "attachment": {"type": "prompt_snapshot", "systemPrompt": ["Startup A"], "cliPrefix": "a"}},
+      {"type": "assistant", "message": {"id": "m1", "usage": {"input_tokens": 1}}},
+      {"type": "attachment", "attachment": {"type": "prompt_snapshot", "systemPrompt": ["Late B"], "cliPrefix": "b", "tools": [{"name": "Read", "description": "Reads.", "schema": {"type": "object"}}]}},
+      {"type": "attachment", "attachment": {"type": "prompt_snapshot", "systemPrompt": ["Later C"], "tools": [{"name": "Other"}]}}
+    ]}},
+    "expected": {
+      "prompt": {"status": "ok", "grouped": false, "bytes": 9, "tokens": 9, "parts": [
+        {"index": 1, "title": "Startup A", "text": "Startup A", "bytes": 9, "tokens": 9, "group": null}
+      ]},
+      "tools": {"status": "ok", "source": "snapshot", "bytes": 27, "tokens": 27, "items": [
+        {"index": 1, "name": "Read", "server": null, "description": "Reads.", "schemaJson": "{\n  \"type\": \"object\"\n}", "bytes": 27, "tokens": 27, "sharePct": 100}
+      ]},
+      "flags": [{"key": "cliPrefix", "value": "a", "isObject": false}],
+      "totals": {"parts": 1, "tools": 1, "bytes": 36, "tokens": 36}
+    },
+    "note": "Rule 1: the sidechain snapshot is skipped for both roles; the startup snapshot is the first one in the startup block (A, before the anchor m1); the tools snapshot is the first with non-empty tools (B, after the anchor); C is ignored. Flags come from A only. Rule 3: 'Read' 4 + 'Reads.' 6 + '{\"type\":\"object\"}' 17 = 27 B, share 100 %. Totals 9 + 27 = 36."
+  },
+  {
+    "id": "SPV-08",
+    "input": {"view": {"repoRoot": "", "cpt": 1, "main": [
+      {"type": "user", "message": {"content": "hi"}},
+      {"type": "assistant", "message": {"id": "m1", "usage": {"input_tokens": 1}}},
+      {"type": "attachment", "attachment": {"type": "prompt_snapshot", "systemPrompt": ["After"], "tools": []}}
+    ]}},
+    "expected": {
+      "prompt": {"status": "ok", "grouped": false, "bytes": 5, "tokens": 5, "parts": [
+        {"index": 1, "title": "After", "bytes": 5, "tokens": 5, "group": null}
+      ]},
+      "tools": {"status": "none", "source": null, "items": [], "bytes": 0, "tokens": 0},
+      "flags": []
+    },
+    "note": "Rule 1 fallback: the startup block (the user line) has no snapshot, so the first snapshot anywhere is the startup one. Its `tools` is an empty array -> not a tools snapshot -> status none. `tools` is not a flag (rule 7)."
+  },
+  {
+    "id": "SPV-09",
+    "input": {"view": {"repoRoot": "", "cpt": 1, "main": [
+      {"type": "attachment", "attachment": {"type": "prompt_snapshot", "systemPrompt": ["P"], "tools": [
+        "junk",
+        {"description": "No name here"},
+        {"name": "Bash", "input_schema": {"a": 1}},
+        {"name": "Q", "description": "", "server": "pg", "schema": {"b": "c"}},
+        {"name": "Z", "server": 7},
+        {"name": "Both", "schema": {"s": 1}, "input_schema": {"i": 22}}
+      ]}}
+    ]}},
+    "expected": {
+      "tools": {"status": "ok", "source": "snapshot", "bytes": 45, "tokens": 45, "items": [
+        {"index": 1, "name": "(unnamed tool #1)", "server": null, "description": null, "schemaJson": null, "bytes": 0, "tokens": 0, "sharePct": 0},
+        {"index": 2, "name": "(unnamed tool #2)", "server": null, "description": "No name here", "schemaJson": null, "bytes": 12, "tokens": 12, "sharePct": 26.7},
+        {"index": 3, "name": "Bash", "server": null, "description": null, "schemaJson": "{\n  \"a\": 1\n}", "bytes": 11, "tokens": 11, "sharePct": 24.4},
+        {"index": 4, "name": "Q", "server": "pg", "description": "", "schemaJson": "{\n  \"b\": \"c\"\n}", "bytes": 10, "tokens": 10, "sharePct": 22.2},
+        {"index": 5, "name": "Z", "server": null, "description": null, "schemaJson": null, "bytes": 1, "tokens": 1, "sharePct": 2.2},
+        {"index": 6, "name": "Both", "server": null, "description": null, "schemaJson": "{\n  \"s\": 1\n}", "bytes": 11, "tokens": 11, "sharePct": 24.4}
+      ]},
+      "totals": {"parts": 1, "tools": 6, "bytes": 46, "tokens": 46}
+    },
+    "note": "Rule 8: a non-object entry is {} -> unnamed, 0 B. Rule 5: unnamed tools are '(unnamed tool #n)' by snapshot position, the placeholder adds no bytes (12 B = 'No name here'). Rule 3: `input_schema` is used when `schema` is absent ('Bash' 4 + '{\"a\":1}' 7 = 11) and `schema` wins when both exist ('Both' 4 + '{\"s\":1}' 7 = 11). Q: server 'pg' kept but not counted: 1 + 0 + '{\"b\":\"c\"}' 9 = 10. Z: a non-string server -> null, 1 B. Total 0+12+11+10+1+11 = 45; shares 12/45 = 26.7 %, 11/45 = 24.4 %, 10/45 = 22.2 %, 1/45 = 2.2 %. Totals 1 + 45 = 46."
+  },
+  {
+    "id": "SPV-10",
+    "input": {"view": {"repoRoot": "", "cpt": 3.5, "main": [
+      {"type": "attachment", "attachment": {"type": "prompt_snapshot", "systemPrompt": ["héllo €", {"$fill": 700, "start": "# Memory\n"}]}},
+      {"type": "assistant", "message": {"id": "m1", "usage": {"input_tokens": 1}}},
+      {"type": "attachment", "attachment": {"type": "prompt_snapshot", "systemPrompt": [], "tools": [
+        {"name": "A", "description": {"$fill": 299, "start": "d"}},
+        {"name": "B", "description": {"$fill": 99, "start": "e"}}
+      ]}}
+    ]}},
+    "expected": {
+      "prompt": {"status": "ok", "grouped": false, "bytes": 710, "tokens": 203, "parts": [
+        {"index": 1, "title": "héllo €", "bytes": 10, "tokens": 3, "group": null},
+        {"index": 2, "title": "# Memory", "bytes": 700, "tokens": 200, "group": null}
+      ]},
+      "tools": {"status": "ok", "source": "snapshot", "bytes": 400, "tokens": 114, "items": [
+        {"index": 1, "name": "A", "server": null, "bytes": 300, "tokens": 86, "sharePct": 75},
+        {"index": 2, "name": "B", "server": null, "bytes": 100, "tokens": 29, "sharePct": 25}
+      ]},
+      "totals": {"parts": 2, "tools": 2, "bytes": 1110, "tokens": 317}
+    },
+    "note": "Rule 3: sizes are UTF-8 bytes: 'héllo €' = 5 ASCII + é 2 + € 3 = 10 B -> round(2.86) = 3. The memory block is a normal part here (700 B -> 200). Prompt 710 -> round(202.86) = 203. Tools: 1 + 299 = 300 -> round(85.71) = 86; 1 + 99 = 100 -> round(28.57) = 29; 400 -> round(114.29) = 114; shares 75 % / 25 %. Totals 1110 B -> round(317.14) = 317."
+  },
+  {
+    "id": "SPV-11",
+    "input": {"view": {"repoRoot": "/work/repo", "cpt": 3.5, "main": [
+      {"type": "attachment", "attachment": {"type": "prompt_snapshot", "cliPrefix": "cli", "systemPrompt": ["x"], "reminderFold": true, "count": 3, "none": null, "tools": [], "rendered": "r", "extra": {"cwd": "/work/repo", "list": ["/home/u/a.txt", 5]}, "note": "see /work/repo/src/a.ts"}}
+    ]}},
+    "expected": {
+      "flags": [
+        {"key": "cliPrefix", "value": "cli", "isObject": false},
+        {"key": "reminderFold", "value": "true", "isObject": false},
+        {"key": "count", "value": "3", "isObject": false},
+        {"key": "none", "value": "null", "isObject": false},
+        {"key": "extra", "value": "{\n  \"cwd\": \".\",\n  \"list\": [\n    \"<outside>/a.txt\",\n    5\n  ]\n}", "isObject": true},
+        {"key": "note", "value": "see src/a.ts", "isObject": false}
+      ]
+    },
+    "note": "Rule 7: every own key in object order except type, systemPrompt, tools and rendered. Scalars via String(v). The object is deep-masked (cwd = the root -> '.', '/home/u/a.txt' -> '<outside>/a.txt', the number kept) then pretty-printed. A string flag is masked: '/work/repo/src/a.ts' -> 'src/a.ts'."
+  },
+  {
+    "id": "SPV-12",
+    "input": {"view": {"repoRoot": "/work/repo", "cpt": 1, "main": [
+      {"type": "attachment", "attachment": {"type": "prompt_snapshot", "systemPrompt": ["# Env\nWorking directory: /work/repo/src"], "tools": [
+        {"name": "Read", "description": "Read /work/repo/a.md", "schema": {"properties": {"/home/u/key": {"description": "Example: C:\\Users\\dev\\file.txt"}}}}
+      ]}}
+    ]}},
+    "expected": {
+      "prompt": {"status": "ok", "grouped": false, "bytes": 39, "tokens": 39, "parts": [
+        {"index": 1, "title": "# Env", "text": "# Env\nWorking directory: src", "bytes": 39, "tokens": 39, "group": null}
+      ]},
+      "tools": {"status": "ok", "source": "snapshot", "bytes": 106, "tokens": 106, "items": [
+        {"index": 1, "name": "Read", "server": null, "description": "Read a.md", "schemaJson": "{\n  \"properties\": {\n    \"/home/u/key\": {\n      \"description\": \"Example: <outside>/file.txt\"\n    }\n  }\n}", "bytes": 106, "tokens": 106, "sharePct": 100}
+      ]}
+    },
+    "note": "Rule 6: every display string is masked, sizes come from the raw text (rule 3). Part: '# Env\\nWorking directory: /work/repo/src' = 5 + 1 + 33 = 39 B, shown as 'src'. Tool: description 'Read /work/repo/a.md' (20 B) -> 'Read a.md'; schema string 'Example: C:\\\\Users\\\\dev\\\\file.txt' -> '<outside>/file.txt' while the key '/home/u/key' stays. Bytes 'Read' 4 + 20 + compact schema '{\"properties\":{\"/home/u/key\":{\"description\":\"Example: C:\\\\\\\\Users\\\\\\\\dev\\\\\\\\file.txt\"}}}' (14 + 15 + 15 + 35 quoted value with each backslash escaped as two + 3 closing braces = 82) = 106."
+  },
+  {
+    "id": "SPV-13",
+    "input": {"view": {"repoRoot": "", "cpt": 3.5, "main": [null]}},
+    "expected": {
+      "prompt": {"status": "missing", "grouped": false, "bytes": 0, "tokens": 0, "parts": []},
+      "totals": {"parts": 0, "tools": 0, "bytes": 0, "tokens": 0},
+      "error": "Could not read the system prompt snapshot"
+    },
+    "note": "Rule 8: a line that is not an object makes the reader throw; the builder catches it and returns the empty view with the error text."
+  },
+  {
+    "id": "SPV-14",
+    "input": {"view": {"repoRoot": "", "cpt": 1, "main": [
+      {"type": "api-request-shape", "shapeHash": "h0", "shape": {"tools": [{"name": "Old", "description": "x", "input_schema": {}}]}},
+      {"type": "api-request-shape", "shapeHash": "h1", "shape": {"tools": [
+        {"name": "T", "description": "dd", "input_schema": {"x": 1}},
+        {"name": "L", "description": "zz", "input_schema": {}, "defer_loading": true}
+      ]}},
+      {"type": "api-request", "shapeHash": "h1", "querySource": "repl_main_thread"},
+      {"type": "attachment", "attachment": {"type": "prompt_snapshot", "systemPrompt": ["P"]}},
+      {"type": "assistant", "message": {"id": "m1", "usage": {"input_tokens": 100}}},
+      {"type": "attachment", "attachment": {"type": "prompt_snapshot", "systemPrompt": [], "tools": [{"name": "S", "schema": {"name": "S", "input_schema": {}}}]}}
+    ]}},
+    "expected": {
+      "tools": {"status": "ok", "source": "wire", "bytes": 10, "tokens": 10, "items": [
+        {"index": 1, "name": "T", "server": null, "description": "dd", "schemaJson": "{\n  \"x\": 1\n}", "bytes": 10, "tokens": 10, "sharePct": 100}
+      ]},
+      "totals": {"parts": 1, "tools": 1, "bytes": 11, "tokens": 11}
+    },
+    "note": "Rule 1a: the first main `api-request` of the startup block names shape h1, so its tools win over the tools snapshot and over the other shape h0. A wire tool is name + description + compact `input_schema`: 1 + 2 + '{\"x\":1}' 7 = 10 B. 'L' has `defer_loading: true` (not in the context until searched) and is dropped; positions are kept (T is 1). Totals 1 + 10 = 11."
+  },
+  {
+    "id": "SPV-15",
+    "input": {"view": {"repoRoot": "", "cpt": 1, "main": [
+      {"type": "attachment", "attachment": {"type": "prompt_snapshot", "systemPrompt": ["P"]}},
+      {"type": "assistant", "message": {"id": "m1", "usage": {"input_tokens": 100}}},
+      {"type": "attachment", "attachment": {"type": "prompt_snapshot", "systemPrompt": [], "tools": [
+        {"name": "R", "description": "dd", "schema": {"name": "R", "description": "dd", "input_schema": {"y": 2}, "eager_input_streaming": true}}
+      ]}}
+    ]}},
+    "expected": {
+      "tools": {"status": "ok", "source": "snapshot", "bytes": 10, "tokens": 10, "items": [
+        {"index": 1, "name": "R", "server": null, "description": "dd", "schemaJson": "{\n  \"y\": 2\n}", "bytes": 10, "tokens": 10, "sharePct": 100}
+      ]},
+      "totals": {"parts": 1, "tools": 1, "bytes": 11, "tokens": 11}
+    },
+    "note": "Rule 3, the real snapshot shape (Claude Code 2.1.280+): `schema` is the whole wire tool object, so its `input_schema` is the schema: 1 + 2 + '{\"y\":2}' 7 = 10 B. The old formula added the JSON of the whole object (83 B), counting name and description twice: 1 + 2 + 83 = 86. The Schema pane shows `schema.input_schema`."
+  },
+  {
+    "id": "SPV-T1",
+    "input": {"title": "# Environment\nbody"},
+    "expected": "# Environment",
+    "note": "Rule 5: the first heading line, '#' kept."
+  },
+  {
+    "id": "SPV-T2",
+    "input": {"title": "intro line\n## Sub heading  \nmore"},
+    "expected": "## Sub heading",
+    "note": "Rule 5: a heading anywhere wins over the first line; trimmed, '##' kept."
+  },
+  {
+    "id": "SPV-T3",
+    "input": {"title": "Intro\n```\n# not a heading\n```\n# Real"},
+    "expected": "# Real",
+    "note": "Rule 5: a '#' line inside a ``` fence is not a heading."
+  },
+  {
+    "id": "SPV-T4",
+    "input": {"title": "one two three four five six seven eight nine ten"},
+    "expected": "one two three four five six seven eight…",
+    "note": "Rule 5: no heading -> the first 8 words + '…' because the line has 10."
+  },
+  {
+    "id": "SPV-T5",
+    "input": {"title": "\n\n  a   b c d e f g h\nsecond"},
+    "expected": "a b c d e f g h",
+    "note": "Rule 5: the first non-empty line, words joined by one space; exactly 8 words -> no '…'."
+  },
+  {
+    "id": "SPV-T6",
+    "input": {"title": "#tag line\nmore"},
+    "expected": "#tag line",
+    "note": "Rule 5: '#tag' has no space after the hashes, so it is not a heading; the first words are used."
+  },
+  {
+    "id": "SPV-T7",
+    "input": {"title": {"$fill": 102, "start": "# "}},
+    "expected": "# xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx…",
+    "note": "Rule 5: the 102-char heading is cut to 79 chars ('# ' + 77 x) + '…' = 80 chars."
+  },
+  {
+    "id": "SPV-T8",
+    "input": {"title": "  \n "},
+    "expected": "(empty part)",
+    "note": "Rule 5: a blank text is '(empty part)'."
+  },
+  {
+    "id": "SPV-M1",
+    "input": {"mask": {"repoRoot": "C:\\Work\\My Repo", "text": "Open c:/work/my repo/src/App.tsx and C:\\WORK\\My Repo\\docs\\a.md."}},
+    "expected": "Open src/App.tsx and docs/a.md.",
+    "note": "Rule 6 pass 1: the root matches with either separator, any case and a literal space; the remainder loses its leading separator and '\\\\' becomes '/'. The trailing '.' stays in the text."
+  },
+  {
+    "id": "SPV-M2",
+    "input": {"mask": {"repoRoot": "/work/repo/", "text": "cwd: /work/repo, then /work/repo/ and (/work/repo/a.ts)"}},
+    "expected": "cwd: ., then . and (a.ts)",
+    "note": "Rule 6 pass 1: the trailing separator of repoRoot is trimmed; the root itself (before ',' or with a bare trailing '/') -> '.'; ')' ends the path."
+  },
+  {
+    "id": "SPV-M3",
+    "input": {"mask": {"repoRoot": "/work/repo", "text": "/home/x/work/repo/file.ts and /work/repo2/a.ts"}},
+    "expected": "<outside>/file.ts and /work/repo2/a.ts",
+    "note": "Rule 6: pass 1 does not match '/work/repo' inside '/home/x/work/repo' (lookbehind: preceded by 'x'), so pass 2 masks the whole path to its basename. '/work/repo2' is not the root (no separator after it) and '/work/' is not a pass-2 prefix, so it stays."
+  },
+  {
+    "id": "SPV-M4",
+    "input": {"mask": {"repoRoot": "", "text": "Memory: C:\\Users\\dev\\.claude\\projects\\C--work-repo\\memory\\MEMORY.md and /home/dev/.claude/settings.json"}},
+    "expected": "Memory: ~/.claude/projects/<project-slug>/memory/MEMORY.md and ~/.claude/settings.json",
+    "note": "Rule 6 pass 2: a path with '/.claude/' becomes '~/.claude/' + the rest, with the segment after 'projects/' replaced by '<project-slug>'."
+  },
+  {
+    "id": "SPV-M5",
+    "input": {"mask": {"repoRoot": "", "text": "See /tmp/scratch/notes.txt, /opt/tools/ and D:\\data\\file.csv! drive C:\\ root"}},
+    "expected": "See <outside>/notes.txt, <outside>/tools and <outside>/file.csv! drive <outside> root",
+    "note": "Rule 6 pass 2: other absolute paths -> '<outside>/' + basename; trailing ',' and '!' stay in the text; a trailing '/' is stripped first; a bare drive root has no basename -> '<outside>'."
+  },
+  {
+    "id": "SPV-M6",
+    "input": {"mask": {"repoRoot": "/home/user", "text": "https://example.com/home/user/x, file:///tmp/a, ~/notes/a.md and src/home/x"}},
+    "expected": "https://example.com/home/user/x, file:///tmp/a, ~/notes/a.md and src/home/x",
+    "note": "Rule 6: no path starts right after a word char, '.', '~' or a separator, so URLs, '~/' paths and relative paths are untouched."
+  },
+  {
+    "id": "SPV-H1",
+    "input": {"has": [
+      {"type": "user", "message": {"content": "hi"}},
+      {"type": "attachment", "attachment": {"type": "prompt_snapshot", "systemPrompt": []}}
+    ]},
+    "expected": true,
+    "note": "Rule 1: a non-sidechain prompt_snapshot attachment line exists."
+  },
+  {
+    "id": "SPV-H2",
+    "input": {"has": [
+      {"type": "attachment", "attachment": {"type": "skill_listing"}},
+      {"type": "user", "attachment": {"type": "prompt_snapshot"}}
+    ]},
+    "expected": false,
+    "note": "Rule 1: another attachment type, and a prompt_snapshot payload on a non-attachment line, do not count."
+  },
+  {
+    "id": "SPV-H3",
+    "input": {"has": [
+      {"type": "attachment", "isSidechain": true, "attachment": {"type": "prompt_snapshot", "systemPrompt": ["x"]}}
+    ]},
+    "expected": false,
+    "note": "Rule 1: a sidechain-only snapshot does not count."
+  },
+  {
+    "id": "SPV-MD1",
+    "input": {"markdown": {"repoRoot": "/work/repo", "cpt": 3.5, "main": [
+      {"type": "attachment", "attachment": {"type": "prompt_snapshot", "systemPrompt": ["__SYSTEM_PROMPT_DYNAMIC_BOUNDARY__", "# Env\ncwd /work/repo/src"], "cliPrefix": "p", "obj": {"k": "v"}}},
+      {"type": "assistant", "message": {"id": "m1", "usage": {"input_tokens": 1}}},
+      {"type": "attachment", "attachment": {"type": "prompt_snapshot", "systemPrompt": [], "tools": [
+        {"name": "Read", "server": "srv", "description": "Reads.", "schema": {"description": "use ```x```"}},
+        {"name": "Bare"}
+      ]}}
+    ]}},
+    "expected": "# System prompt\n\n## Session-specific\n\n### Part 2 · 24 B\n\n# Env\ncwd src\n\n# Tool definitions\n\n## Read · server srv\n\nReads.\n\n````json\n{\n  \"description\": \"use ```x```\"\n}\n````\n\n## Bare\n\n_no description_\n\n# Flags\n\n- `cliPrefix`: p\n\n- `obj`:\n\n  ```json\n  {\n    \"k\": \"v\"\n  }\n  ```\n",
+    "note": "Rule 10: blocks joined by blank lines. The empty shared group has no heading. Part 2: '# Env\\ncwd /work/repo/src' = 5 + 1 + 18 = 24 B, text masked to 'cwd src'. A tool with a server gets ' · server srv'; its schema holds a 3-backtick run, so the fence is 4 backticks. A tool without description writes '_no description_' and no schema block. Scalar flag '- `key`: value'; an object flag gets its json block indented under the bullet."
+  }
+]

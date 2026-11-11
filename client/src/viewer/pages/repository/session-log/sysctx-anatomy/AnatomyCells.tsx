@@ -154,17 +154,20 @@ export function InternalsHintContent({
   share,
   total,
   attributed,
+  toolsMeasured,
 }: {
   internals: number;
   share: number;
   total: number;
   attributed: number;
+  toolsMeasured: boolean;
 }) {
   const hint = HARNESS_INTERNALS_HINT(
     internals,
     share * 100,
     total,
     attributed,
+    toolsMeasured,
   );
   return (
     <div
