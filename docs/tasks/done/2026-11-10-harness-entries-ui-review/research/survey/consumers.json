@@ -1,0 +1,282 @@
+{
+  "agent_listing_delta": {
+    "consumers": ["anatomy: Agent types partition (sysctx-anatomy.ts)", "Raw Logs: named summary + body (attachment.tsx, attachment-system.tsx)"],
+    "producer": "Claude Code harness, every session (agent type list at start, deltas later)"
+  },
+  "auto_mode": {
+    "consumers": ["anatomy: Environment row when in the startup block"],
+    "producer": "Claude Code harness, session mode flags (CC 2.1.280+)"
+  },
+  "command_permissions": {
+    "consumers": ["anatomy: Environment row when in the startup block", "Raw Logs: named summary + body (attachment.tsx, attachment-system.tsx)"],
+    "producer": "Claude Code harness, allowed-tools rules of a slash command or skill"
+  },
+  "compact_file_reference": {
+    "consumers": ["Raw Logs: file renderer (attachment-file.tsx)"],
+    "producer": "Claude Code harness after a compaction (files re-referenced)"
+  },
+  "date_change": {
+    "consumers": ["Raw Logs: named summary + body (attachment.tsx, attachment-system.tsx)"],
+    "producer": "Claude Code harness, older versions (replaced by `date`)",
+    "kbOnly": true
+  },
+  "deferred_tools_delta": {
+    "consumers": ["client parser: summary.deferredTools (log-parser.ts)", "anatomy: Deferred tools + MCP server partitions", "Raw Logs: named summary + body (attachment.tsx, attachment-system.tsx)", "server: walkDeferredToolsDelta (turn-walk.ts) via extractHarnessUsage (claude-extractor.ts)", "DB: session_harness_usage.is_initial"],
+    "producer": "Claude Code harness, every session with deferred tools (MCP or built-in)"
+  },
+  "deferred_tools_record": {
+    "consumers": ["anatomy: MCP server on-demand names (not sized)"],
+    "producer": "Claude Code harness (CC 2.1.280+), when a deferred tool is loaded"
+  },
+  "diagnostics": {
+    "consumers": ["anatomy: Environment row when in the startup block", "Raw Logs: named summary + body (attachment.tsx, attachment-system.tsx)"],
+    "producer": "Claude Code diagnostics integration; needs a diagnostics source (IDE extension or LSP/language-server plugin); absent without one"
+  },
+  "dynamic_skill": {
+    "consumers": ["Raw Logs: named summary + body (attachment.tsx, attachment-system.tsx)"],
+    "producer": "Claude Code harness, skills discovered mid-session (older versions)",
+    "kbOnly": true
+  },
+  "edited_text_file": {
+    "consumers": ["Raw Logs: file renderer (attachment-file.tsx)"],
+    "producer": "Claude Code harness, a file changed outside the model's own edits (user or another process)"
+  },
+  "file": {
+    "consumers": ["Raw Logs: file renderer (attachment-file.tsx)"],
+    "producer": "Claude Code harness, a file @-mentioned in a prompt"
+  },
+  "hook_success": {
+    "consumers": ["anatomy: Environment row when in the startup block (SessionStart hooks)", "Raw Logs: named summary + body (attachment.tsx, attachment-system.tsx)"],
+    "producer": "Claude Code hook runner; only with hooks configured (Log Hub's own hook counts)"
+  },
+  "instructions": {
+    "consumers": ["client parser: summary.claudeMd (instruction-files.ts)", "anatomy: Instruction file partition"],
+    "producer": "Claude Code harness, CLAUDE.md / rules loaded at start (CC 2.1.280+)"
+  },
+  "invoked_skills": {
+    "consumers": ["Raw Logs: named summary + body (attachment.tsx, attachment-system.tsx)"],
+    "producer": "Claude Code harness, skills re-injected after a compaction"
+  },
+  "mcp_instructions_delta": {
+    "consumers": ["anatomy: MCP server partition (instructions part)"],
+    "producer": "Claude Code harness; only with MCP servers that send instructions"
+  },
+  "nested_memory": {
+    "consumers": ["client parser: rules injected + summary.claudeMd (log-parser.ts, instruction-files.ts)", "Harness usage tab (harness-elements.ts)", "Raw Logs: file renderer (attachment-file.tsx)", "server: extractHarnessSkillAndRuleUsage (claude-extractor.ts)", "DB: session_harness_usage (kind rule)"],
+    "producer": "Claude Code harness; only with nested CLAUDE.md or path-scoped rules files"
+  },
+  "opened_file_in_ide": {
+    "consumers": ["Raw Logs: file renderer (attachment-file.tsx)"],
+    "producer": "Claude Code IDE integration; only with a connected IDE extension",
+    "kbOnly": true
+  },
+  "plan_mode": {
+    "consumers": ["Raw Logs: named summary + body (attachment.tsx, attachment-system.tsx)"],
+    "producer": "Claude Code harness, plan mode entered",
+    "kbOnly": true
+  },
+  "plan_mode_exit": {
+    "consumers": ["Raw Logs: named summary + body (attachment.tsx, attachment-system.tsx)"],
+    "producer": "Claude Code harness, plan mode left",
+    "kbOnly": true
+  },
+  "prompt_snapshot": {
+    "consumers": ["anatomy: System prompt / Memory / Tool definitions partitions + system prompt modal"],
+    "producer": "Claude Code harness, every session (CC 2.1.280+)"
+  },
+  "queued_command": {
+    "consumers": ["Raw Logs: named summary + body (attachment.tsx, attachment-system.tsx)"],
+    "producer": "Claude Code harness, a prompt typed while the model works, or a background task notification"
+  },
+  "remote_session_change": {
+    "consumers": ["anatomy: Environment row when in the startup block"],
+    "producer": "Claude Code harness (CC 2.1.280+), remote-session commit / PR handoff settings"
+  },
+  "selected_lines_in_ide": {
+    "consumers": ["Raw Logs: file renderer (attachment-file.tsx)"],
+    "producer": "Claude Code IDE integration; only with a connected IDE extension",
+    "kbOnly": true
+  },
+  "session_context": {
+    "consumers": ["anatomy: own partition (sysctx-anatomy.ts)"],
+    "producer": "Claude Code harness, every session (CC 2.1.280+)"
+  },
+  "silent_turn_reminder": {
+    "consumers": [],
+    "producer": "Claude Code harness (CC 2.1.280+), a system reminder injected into a turn without user-visible output"
+  },
+  "skill_listing": {
+    "consumers": ["anatomy: Skills partition", "Raw Logs: named summary + body (attachment.tsx, attachment-system.tsx)"],
+    "producer": "Claude Code harness, every session with skills"
+  },
+  "task_reminder": {
+    "consumers": ["Raw Logs: named summary + body (attachment.tsx, attachment-system.tsx)"],
+    "producer": "Claude Code harness, todo/task list reminder (rare since CC 2.1.280)"
+  },
+  "total_tokens_reminder": {
+    "consumers": ["anatomy: Environment row when in the startup block"],
+    "producer": "Claude Code harness (CC 2.1.280+), context-size reminder"
+  },
+
+  "system:compact_boundary": {
+    "consumers": ["client parser: compactBoundaries, context tokens, CompactBoundaryDivider (log-parser.ts)", "Raw Logs: system renderer (system.tsx)", "server: walkTurns (turn-walk.ts)", "DB: session_cause_stats", "hook: post-turn-analysis-worker.js context tokens"],
+    "producer": "Claude Code harness, a manual or auto compaction"
+  },
+  "system:informational": {
+    "consumers": ["Raw Logs: system renderer (system.tsx)"],
+    "producer": "Claude Code harness, informational notice (e.g. a suggestion)"
+  },
+  "system:local_command": {
+    "consumers": ["Raw Logs: system renderer (system.tsx)"],
+    "producer": "Claude Code harness, a local slash command run in the REPL (not seen in claude -p)"
+  },
+  "system:model_refusal_fallback": {
+    "consumers": ["Raw Logs: system renderer (system.tsx)"],
+    "producer": "Claude Code harness, a refused request retried on a fallback model"
+  },
+  "system:scheduled_task_fire": {
+    "consumers": ["Raw Logs: system renderer (system.tsx)"],
+    "producer": "Claude Code harness; only with scheduled tasks (cron / loop)"
+  },
+  "system:stop_hook_summary": {
+    "consumers": ["Raw Logs: system renderer, named fields (system.tsx)"],
+    "producer": "Claude Code hook runner, after Stop hooks; only with Stop hooks configured; uploaded only on a later upload or the SessionEnd flush (hook >= 2.8.0)"
+  },
+  "system:turn_duration": {
+    "consumers": ["Raw Logs: system renderer, named fields (system.tsx)"],
+    "producer": "Claude Code harness, end of an interactive turn; not seen in claude -p; uploaded only on a later upload or the SessionEnd flush (hook >= 2.8.0)"
+  },
+
+  "ai-title": {
+    "consumers": ["Raw Logs: named renderer (renderers.tsx)"],
+    "producer": "Claude Code harness, generated session title (not seen in claude -p)"
+  },
+  "api-request": {
+    "consumers": ["anatomy: Tool definitions source (tool-definitions.ts)"],
+    "producer": "Claude Code harness (CC 2.1.312+), per API request record"
+  },
+  "api-request-blob": {
+    "consumers": [],
+    "producer": "Claude Code harness (CC 2.1.312+), request body blobs"
+  },
+  "api-request-shape": {
+    "consumers": ["anatomy: Tool definitions source (tool-definitions.ts)"],
+    "producer": "Claude Code harness (CC 2.1.312+), request wire shape"
+  },
+  "artifact-autoreact-ledger": {
+    "consumers": [],
+    "producer": "Claude Code harness; only with the Artifact tool in use"
+  },
+  "artifact-comment-monitor": {
+    "consumers": [],
+    "producer": "Claude Code harness; only with the Artifact tool in use"
+  },
+  "assistant": {
+    "consumers": ["client parser: turns, tokens, tool calls (log-parser.ts, tool-calls.ts)", "anatomy: startup block end + measured total", "Raw Logs: named renderer (assistant.tsx)", "server: extractClaudeStats (claude-extractor.ts), walkTurns (turn-walk.ts)", "DB: sessions token/cost columns, session_tool_stats, session_cause_stats", "hook: post-turn-analysis-worker.js"],
+    "producer": "Claude Code harness, every model reply"
+  },
+  "atis-latch": {
+    "consumers": [],
+    "producer": "Claude Code harness (CC 2.1.280+), internal state marker"
+  },
+  "bash_output_audience_note": {
+    "consumers": [],
+    "producer": "Claude Code harness (CC 2.1.280+), note attached to a Bash result"
+  },
+  "batching_reminder_sent": {
+    "consumers": [],
+    "producer": "Claude Code harness (CC 2.1.280+), tool-call batching reminder"
+  },
+  "budget_usd": {
+    "consumers": ["anatomy: Environment row when in the startup block"],
+    "producer": "Claude Code harness; only with a spend budget set (e.g. `claude -p` with a max budget)"
+  },
+  "cost-state": {
+    "consumers": [],
+    "producer": "Claude Code harness (CC 2.1.280+), running cost and duration totals"
+  },
+  "credential_org": {
+    "consumers": ["anatomy: Environment row when in the startup block"],
+    "producer": "Claude Code harness (CC 2.1.312+), credential organisation marker"
+  },
+  "date": {
+    "consumers": ["anatomy: Environment row when in the startup block"],
+    "producer": "Claude Code harness, every session (CC 2.1.280+; replaces `date_change`)"
+  },
+  "environment": {
+    "consumers": ["anatomy: Environment row when in the startup block"],
+    "producer": "Claude Code harness, every session (CC 2.1.280+), environment snapshot"
+  },
+  "file-history-delta": {
+    "consumers": [],
+    "producer": "Claude Code harness, file checkpoint delta (not seen in claude -p)"
+  },
+  "file-history-snapshot": {
+    "consumers": ["Raw Logs: named renderer (renderers.tsx)"],
+    "producer": "Claude Code harness, file checkpoint snapshot (not seen in claude -p)"
+  },
+  "hook_non_blocking_error": {
+    "consumers": ["anatomy: Environment row when in the startup block"],
+    "producer": "Claude Code hook runner; only with hooks configured, a hook that failed without blocking"
+  },
+  "hook_system_message": {
+    "consumers": ["anatomy: Environment row when in the startup block"],
+    "producer": "Claude Code hook runner; only with hooks that return a system message"
+  },
+  "language": {
+    "consumers": ["anatomy: Environment row when in the startup block"],
+    "producer": "Claude Code harness (CC 2.1.280+), reply language setting"
+  },
+  "last-prompt": {
+    "consumers": ["Raw Logs: named renderer (renderers.tsx)"],
+    "producer": "Claude Code harness, last prompt bookkeeping"
+  },
+  "mode": {
+    "consumers": ["Raw Logs: named renderer (renderers.tsx)"],
+    "producer": "Claude Code harness, REPL mode bookkeeping (not seen in claude -p)"
+  },
+  "model": {
+    "consumers": ["anatomy: Environment row when in the startup block"],
+    "producer": "Claude Code harness, every session (CC 2.1.280+), model identity"
+  },
+  "permission-mode": {
+    "consumers": ["Raw Logs: named renderer (renderers.tsx)"],
+    "producer": "Claude Code harness, permission mode change (not seen in claude -p)"
+  },
+  "pr-link": {
+    "consumers": [],
+    "producer": "Claude Code harness; only when a pull request is created or linked in the session"
+  },
+  "queue-operation": {
+    "consumers": ["client parser: background MCP task join (background-mcp.ts, tool-calls.ts)", "Raw Logs: named renderer (renderers.tsx)", "server: extractClaudeStats / mcp-call-extractor (background-mcp.ts), extractWorkflows at read time (workflow-extractor.ts)", "DB: session_tool_stats (via the join)", "hook: post-turn-analysis-worker.js"],
+    "producer": "Claude Code harness, prompt queue and task notifications"
+  },
+  "read_truncation_notice": {
+    "consumers": [],
+    "producer": "Claude Code harness, a Read result cut to its size limit"
+  },
+  "skill_mention": {
+    "consumers": ["anatomy: Environment row when in the startup block"],
+    "producer": "Claude Code harness, a skill named in a prompt"
+  },
+  "structured_output": {
+    "consumers": [],
+    "producer": "Claude Code harness; only with structured-output agents (e.g. workflow sub-agents with a schema)"
+  },
+  "task_status": {
+    "consumers": [],
+    "producer": "Claude Code harness, background task status"
+  },
+  "thinking_drop": {
+    "consumers": [],
+    "producer": "Claude Code harness, thinking blocks dropped from a request"
+  },
+  "tools-used": {
+    "consumers": [],
+    "producer": "Claude Code harness (CC 2.1.312+), tools-used bookkeeping"
+  },
+  "user": {
+    "consumers": ["client parser: prompts, turns, tool results (log-parser.ts, tool-calls.ts)", "anatomy: First prompt partition", "Raw Logs: named renderer (user.tsx)", "server: walkTurns (turn-walk.ts), extractClaudeStats (claude-extractor.ts)", "DB: session_cause_stats, session_tool_stats", "hook: post-turn-analysis-worker.js"],
+    "producer": "Claude Code harness, prompts and tool results"
+  }
+}

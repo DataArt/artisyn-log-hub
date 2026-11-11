@@ -11,7 +11,7 @@ type it reports how often the type occurs, its size and its payload field names,
 Hub reads it today. The counts are segmented by per-session facets: `entrypoint`, Claude Code
 version, OS family, IDE, diagnostics `source`, hooks seen running and session mode. It also counts
 how often the last turn of a session lacks its Stop-time entries, and which hook versions the
-repositories report. `analysis.md` cites the generated table for FR-5 and FR-6.
+repositories report. `harness-entries-analysis.md` cites the generated table for FR-5 and FR-6.
 
 ## Files
 

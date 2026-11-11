@@ -1,0 +1,117 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="13">
+  <!-- Wireframe: repo/team diagnostics report (item B3 of harness-entries-analysis.md), light theme.
+       Server-side: walkDiagnostics → session_diagnostics_stats + the session_stats facet columns of B1.
+       Rows carry raw `source` values, severities, codes, counts and repo-relative paths — never messages. -->
+  <defs>
+    <style>
+      .mono{font-family:'JetBrains Mono',Consolas,monospace}
+      .muted{fill:#6b7280}
+      .new{fill:#0369a1;font-size:11px;font-weight:600}
+      .callout{stroke:#0284c7;stroke-dasharray:4 3;fill:none}
+      .lg{fill:#334155}
+      .th{font-size:11px;font-weight:600;fill:#6b7280}
+      .flt{fill:#fff;stroke:#d1d5db}
+    </style>
+  </defs>
+  <rect width="1200" height="760" fill="#ffffff"/>
+  <text x="20" y="26" font-size="16" font-weight="700" fill="#111827">Repository Analytics — Diagnostics (proposal, B3)</text>
+  <text x="20" y="44" class="muted" font-size="12">Light theme. Only sessions with a diagnostics producer count toward the rates; the rest are a separate "none seen" bucket. Numbers are illustrative.</text>
+
+  <rect x="20" y="60" width="860" height="680" fill="#ffffff" stroke="#e5e7eb"/>
+
+  <!-- Repo tab bar (current) -->
+  <rect x="20" y="60" width="860" height="40" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="36" y="85" class="muted">Sessions</text><text x="112" y="85" font-weight="600" fill="#111827">Analytics</text><rect x="104" y="97" width="76" height="2" fill="#111827"/>
+  <text x="196" y="85" class="muted">Spend</text><text x="250" y="85" class="muted">Reports</text><text x="316" y="85" class="muted">Tools/MCP</text><text x="398" y="85" class="muted">OKF</text><text x="444" y="85" class="muted">OTEL</text><text x="494" y="85" class="muted">Settings</text>
+
+  <!-- Filters -->
+  <rect x="21" y="101" width="858" height="40" fill="#f9fafb" stroke="#e5e7eb"/>
+  <rect x="36" y="111" width="110" height="20" rx="4" class="flt"/><text x="44" y="125" font-size="11" fill="#374151">Last 30 days ▾</text>
+  <rect x="154" y="111" width="120" height="20" rx="4" class="flt"/><text x="162" y="125" font-size="11" fill="#374151">source: all (3) ▾</text>
+  <rect x="282" y="111" width="120" height="20" rx="4" class="flt"/><text x="290" y="125" font-size="11" fill="#374151">entrypoint: all ▾</text>
+  <rect x="410" y="111" width="90" height="20" rx="4" class="flt"/><text x="418" y="125" font-size="11" fill="#374151">IDE: all ▾</text>
+  <rect x="508" y="111" width="100" height="20" rx="4" class="flt"/><text x="516" y="125" font-size="11" fill="#374151">OS family: all ▾</text>
+  <rect x="616" y="111" width="130" height="20" rx="4" class="flt"/><text x="624" y="125" font-size="11" fill="#374151">session mode: all ▾</text>
+
+  <!-- KPI tiles -->
+  <g>
+    <rect x="36" y="156" width="196" height="64" rx="6" fill="#fff" stroke="#e5e7eb"/>
+    <text x="48" y="176" class="muted" font-size="11">Sessions with a producer</text>
+    <text x="48" y="204" font-size="20" font-weight="700" fill="#111827">145 <tspan font-size="12" font-weight="400" class="muted">of 291 · 146 none seen</tspan></text>
+    <rect x="244" y="156" width="196" height="64" rx="6" fill="#fff" stroke="#e5e7eb"/>
+    <text x="256" y="176" class="muted" font-size="11">Items · errors</text>
+    <text x="256" y="204" font-size="20" font-weight="700" fill="#111827">3,336 <tspan font-size="12" font-weight="400" fill="#b91c1c">2,650 errors</tspan></text>
+    <rect x="452" y="156" width="196" height="64" rx="6" fill="#fff" stroke="#e5e7eb"/>
+    <text x="464" y="176" class="muted" font-size="11">Never fixed in the session</text>
+    <text x="464" y="204" font-size="20" font-weight="700" fill="#111827">18 % <tspan font-size="12" font-weight="400" class="muted">of error items</tspan></text>
+    <rect x="660" y="156" width="204" height="64" rx="6" fill="#fff" stroke="#e5e7eb"/>
+    <text x="672" y="176" class="muted" font-size="11">On files the agent never edited</text>
+    <text x="672" y="204" font-size="20" font-weight="700" fill="#111827">41 % <tspan font-size="12" font-weight="400" class="muted">of items</tspan></text>
+  </g>
+
+  <!-- By source -->
+  <text x="36" y="248" font-weight="600" fill="#111827">By source</text>
+  <rect x="36" y="256" width="828" height="26" fill="#f9fafb" stroke="#e5e7eb"/>
+  <text x="46" y="273" class="th">SOURCE (raw)</text><text x="236" y="273" class="th">SESSIONS</text><text x="326" y="273" class="th">ERROR</text><text x="396" y="273" class="th">WARN</text><text x="466" y="273" class="th">INFO/HINT</text><text x="566" y="273" class="th">NEVER FIXED</text><text x="676" y="273" class="th">TOP CODE</text>
+  <g class="mono" font-size="12" fill="#374151">
+    <text x="46" y="302">source-a</text><text x="236" y="302">131</text><text x="326" y="302">2,512</text><text x="396" y="302">0</text><text x="466" y="302">640</text><text x="566" y="302" fill="#b91c1c">17 %</text><text x="676" y="302">code-1 ×410</text>
+    <line x1="36" y1="312" x2="864" y2="312" stroke="#f3f4f6"/>
+    <text x="46" y="332">source-b</text><text x="236" y="332">12</text><text x="326" y="332">131</text><text x="396" y="332">22</text><text x="466" y="332">31</text><text x="566" y="332" fill="#b91c1c">25 %</text><text x="676" y="332">code-7 ×40</text>
+    <line x1="36" y1="342" x2="864" y2="342" stroke="#f3f4f6"/>
+    <text x="46" y="362">other (no source)</text><text x="236" y="362">n &lt; 3</text><text x="326" y="362">7</text><text x="396" y="362">0</text><text x="466" y="362">0</text><text x="566" y="362">—</text><text x="676" y="362">—</text>
+  </g>
+
+  <!-- Top files -->
+  <text x="36" y="398" font-weight="600" fill="#111827">Top files (repo-relative)</text>
+  <rect x="36" y="406" width="828" height="26" fill="#f9fafb" stroke="#e5e7eb"/>
+  <text x="46" y="423" class="th">FILE</text><text x="426" y="423" class="th">SESSIONS</text><text x="516" y="423" class="th">ERRORS</text><text x="596" y="423" class="th">NEVER FIXED</text><text x="706" y="423" class="th">EDITED BY AGENT</text>
+  <g class="mono" font-size="12" fill="#374151">
+    <text x="46" y="452">src/parser/lexer.c</text><text x="426" y="452">9</text><text x="516" y="452">88</text><text x="596" y="452" fill="#b91c1c">12</text><text x="706" y="452">yes</text>
+    <line x1="36" y1="462" x2="864" y2="462" stroke="#f3f4f6"/>
+    <text x="46" y="482">tests/fixtures/build.cfg</text><text x="426" y="482">6</text><text x="516" y="482">40</text><text x="596" y="482" fill="#b91c1c">40</text><text x="706" y="482">no</text>
+    <line x1="36" y1="492" x2="864" y2="492" stroke="#f3f4f6"/>
+    <text x="46" y="512">scratch.c (outside the repo → basename)</text><text x="426" y="512">4</text><text x="516" y="512">22</text><text x="596" y="512">0</text><text x="706" y="512">no</text>
+  </g>
+  <text x="46" y="536" font-size="11" class="muted">Row click → sessions with that file; each opens its Logs tab on the turn, Signals "Diagnostics" group expanded.</text>
+
+  <!-- Data note -->
+  <rect x="36" y="556" width="828" height="110" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="48" y="576" font-size="11" class="lg">Source: diagnostics attachments in the transcript, extracted at ingest by walkDiagnostics into session_diagnostics_stats.</text>
+  <text x="48" y="594" font-size="11" class="lg">"Fixed" = a later Edit/Write of the same repo-relative path after which the item no longer appears (severity + file + later edit, never codes).</text>
+  <text x="48" y="612" font-size="11" class="lg">Codes are listed as data only; no rule, threshold or label depends on a code, a language or an IDE.</text>
+  <text x="48" y="630" font-size="11" class="lg">"none seen" sessions mean "no producer", never "clean code"; they are excluded from every rate.</text>
+  <text x="48" y="648" font-size="11" class="lg">Messages stay in the transcript; open a session's Raw logs to read one.</text>
+
+  <!-- Legend -->
+  <g font-size="12">
+    <rect x="900" y="60" width="280" height="680" fill="#f8fafc" stroke="#e2e8f0"/>
+    <text x="914" y="84" font-weight="700" fill="#0f172a">Elements</text>
+
+    <text x="914" y="112" class="new">1 · Filters</text>
+    <text x="914" y="128" class="lg">source = raw values seen in the period</text>
+    <text x="914" y="143" class="lg">(missing → "other"). Facets from B1.</text>
+    <path class="callout" d="M864 121 C 880 121, 885 135, 900 135"/>
+
+    <text x="914" y="173" class="new">2 · KPI tiles</text>
+    <text x="914" y="189" class="lg">Rates use producer-present sessions</text>
+    <text x="914" y="204" class="lg">only (FR-8). "Never edited by the</text>
+    <text x="914" y="219" class="lg">agent" = noise from other writers.</text>
+    <path class="callout" d="M864 188 C 880 188, 885 200, 900 200"/>
+
+    <text x="914" y="249" class="new">3 · By source</text>
+    <text x="914" y="265" class="lg">One row per raw source value. The</text>
+    <text x="914" y="280" class="lg">example uses placeholders on purpose.</text>
+    <path class="callout" d="M864 302 C 880 302, 885 270, 900 270"/>
+
+    <text x="914" y="310" class="new">4 · Top files</text>
+    <text x="914" y="326" class="lg">Repo-relative paths by the existing</text>
+    <text x="914" y="341" class="lg">setup-neutral reducers; drive letters</text>
+    <text x="914" y="356" class="lg">compared case-insensitively.</text>
+    <path class="callout" d="M864 452 C 880 452, 885 340, 900 340"/>
+
+    <text x="914" y="386" font-weight="700" fill="#0f172a">Privacy / neutrality</text>
+    <text x="914" y="404" class="lg">No message text, no absolute paths,</text>
+    <text x="914" y="419" class="lg">no email. Labels are raw source</text>
+    <text x="914" y="434" class="lg">values, never "IDE" or a language.</text>
+  </g>
+</svg>

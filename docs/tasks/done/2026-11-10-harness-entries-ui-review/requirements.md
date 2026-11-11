@@ -171,7 +171,7 @@ noise vs. signal, session-mode segmentation (`auto_mode`).
 ## Non-Functional Requirements
 
 - The research lives in this task folder (`research/` + a summary in `requirements.md` or a
-  separate `analysis.md`), in English.
+  separate `harness-entries-analysis.md`), in English.
 - Formats of these entries are undocumented Claude Code internals: every proposal must say how it
   degrades when an entry is missing or renamed (FR-7).
 - Committed research files hold only aggregates (counts, sizes, codes) and redacted examples: no
@@ -238,3 +238,4 @@ show
 - Diagnostics deep-dive of the initial survey, the VS Code / WSL samples and the local-prod facet
   matrix: `notes.md`. Setup-neutrality audit of the whole product:
   `research/setup-neutrality-audit.md`.
+- **2026-11-11:** Deliverable (the separate document named in the NFRs): [harness-entries-analysis.md](harness-entries-analysis.md).

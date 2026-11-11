@@ -2,7 +2,7 @@
 
 ## TL;DR
 
-- **This task ships no product code.** It produces an analysis document, `analysis.md`, in the task folder. The supporting material goes in `research/`: a reproducible survey with its scripts and an aggregate table. The two SVG wireframes are updated and new ones added only if needed. The task ends with a ranked follow-up list for `/adlc-lh:scratch`.
+- **This task ships no product code.** It produces an analysis document, `harness-entries-analysis.md`, in the task folder. The supporting material goes in `research/`: a reproducible survey with its scripts and an aggregate table. The two SVG wireframes are updated and new ones added only if needed. The task ends with a ranked follow-up list for `/adlc-lh:scratch`.
 - **New research scripts:** they live in `research/survey/` and use Node only.
   - `scan.mjs` runs a read-only `psql` against the local-prod DB container through `docker exec`. It writes raw rows to `tmp/harness-survey/` and the aggregated, redacted table to `research/survey-table.md`.
   - `queries.sql` holds the SQL.
@@ -29,7 +29,7 @@
 ## Design Decisions
 
 1. **Output layout.**
-   - `analysis.md` in the task folder is the single deliverable document. Its sections, in this order:
+   - `harness-entries-analysis.md` in the task folder is the single deliverable document. Its sections, in this order:
      1. Sample & facets
      2. Decision table
      3. Item details
@@ -85,7 +85,7 @@
    | session mode | `auto_mode` value, or `not recorded` |
 
    - **Hook identity:** take the first token of `hook_success.command` or of `stop_hook_summary.hookInfos[].command`, reduced to its basename without extension. If the command has no path-like token, the identity is `status-text`.
-   - This is how we read FR-6's "configured hook names": hooks seen running, not hooks configured. `analysis.md` § Sample & facets records this reading.
+   - This is how we read FR-6's "configured hook names": hooks seen running, not hooks configured. `harness-entries-analysis.md` § Sample & facets records this reading.
 5. **Table shape (FR-6).**
    - `research/survey-table.md` is generated entirely by `scan.mjs` and never edited by hand.
    - One row per entry type. The columns are the original ones (Entry | Count / sessions | Chars — here "line chars" | Payload | Read by Log Hub today) with the last column replaced by the corrected consumer column: client parser, anatomy, Raw Logs renderer, server extractor, DB table.
@@ -165,7 +165,7 @@
 
 | Path | Purpose | Note |
 |---|---|---|
-| `docs/tasks/todo/2026-11-10-harness-entries-ui-review/analysis.md` | The deliverable | Sections per Design Decision 1 |
+| `docs/tasks/todo/2026-11-10-harness-entries-ui-review/harness-entries-analysis.md` | The deliverable | Sections per Design Decision 1 |
 | `…/research/survey/scan.mjs` | Reproducible FR-6 scan | Node ESM; follow the `nodejs-script` skill; read-only DB (Design Decision 2) |
 | `…/research/survey/queries.sql` | SQL used by `scan.mjs` | Read-only transaction, `statement_timeout` |
 | `…/research/survey/consumers.json` | Static type → consumers/producer map | Shape per Design Decision 5 |
@@ -174,7 +174,7 @@
 | `…/wireframes/logs-tab-harness-markup.svg` | Corrected wireframe | Per Design Decisions 8, 9, 11 |
 | `…/wireframes/logs-turn-signals-section.svg` | Corrected wireframe if group findings change | Neutral labels per Design Decision 17 |
 | `…/wireframes/<new>.svg` | Only for a new non-trivial (b) item, e.g. a repo/team hook-health report | Optional |
-| `…/requirements.md` | One-line pointer to `analysis.md` in Notes | No other changes |
+| `…/requirements.md` | One-line pointer to `harness-entries-analysis.md` in Notes | No other changes |
 | `docs/knowledgebase/log-schema/attachment-types.md` | Rows for newly seen attachment types | Field names, sizes and producer only |
 | `docs/knowledgebase/log-schema/claude-log-message-types.md` | Enumerate `system` subtypes seen | `turn_duration`, `stop_hook_summary`, `scheduled_task_fire`, `informational`, `local_command`, compact, … |
 | `docs/knowledgebase/harness-usage-tab.md` | Correct lines 86-88 | `hook_success` exists per invocation in the transcript |
@@ -184,7 +184,7 @@
 
 - This task adds no code to the product packages, so the test policy requires no algorithm, contract or scenario tests.
 - The scan scripts are one-off research tooling under the task folder. Their check is that they are reproducible: re-running `scan.mjs` with the same `LOGHUB_SURVEY_UNTIL` produces the committed table byte for byte.
-- Each follow-up item in `analysis.md` names its own test kind and target, per Design Decision 13. This is how the policy carries into the follow-up tasks.
+- Each follow-up item in `harness-entries-analysis.md` names its own test kind and target, per Design Decision 13. This is how the policy carries into the follow-up tasks.
 
 ## Visual/UX notes
 
@@ -229,16 +229,16 @@
 - [ ] Create `research/survey/consumers.json` per Design Decision 5. It gets one entry per attachment type in `attachment-types.md` and per `system` subtype in `claude-log-message-types.md`. Its consumers cover the client parser, anatomy, Raw Logs renderer, server extractor (`claude-extractor.ts`, `turn-walk.ts`) and DB table. Confirm the server consumers with the `ce` skill.
 - [ ] Run the scan with a fixed `LOGHUB_SURVEY_UNTIL`. For every type emitted as `none — new`, add a `consumers.json` entry with its consumers and producer, then re-run.
 - [ ] Re-run with the same cutoff. Confirm that the sample has at least 30 sessions, that the output is byte-identical, and that `survey-table.md` contains no email, absolute path, session ID or text payload.
-- [ ] Write `analysis.md` § Sample & facets. It covers:
+- [ ] Write `harness-entries-analysis.md` § Sample & facets. It covers:
   - the cutoff, the sample size and the facet matrix
   - the sample's limits: one user, OS and IDE counts, `n < 3` cells
   - the reading of the hook-identity facet (Design Decision 4) and of "Usage" (Design Decision 10)
   - how the re-run differs from the 2026-11-10 survey (`requirements.md` § "Survey already done")
-- [ ] Add a Stop-time note to `analysis.md` § Sample & facets, citing the chunk 1 stats on the missing last-turn entries, `claude -p` sessions without `turn_duration`, and the repo hook-version buckets.
+- [ ] Add a Stop-time note to `harness-entries-analysis.md` § Sample & facets, citing the chunk 1 stats on the missing last-turn entries, `claude -p` sessions without `turn_duration`, and the repo hook-version buckets.
 
 ### Chunk 3 — Decision table & item cards
-- [ ] Write `analysis.md` § Decision table. It has one row per entry type: every attachment type in `attachment-types.md`, every `system` subtype, and every new type from chunk 2. Use the columns of Design Decision 6, with a one-line reason each.
-- [ ] Write `analysis.md` § Item details. Give one card per (a)/(b) decision, with the fields of Design Decision 6 and the shown content linked to its wireframe element number where it has one.
+- [ ] Write `harness-entries-analysis.md` § Decision table. It has one row per entry type: every attachment type in `attachment-types.md`, every `system` subtype, and every new type from chunk 2. Use the columns of Design Decision 6, with a one-line reason each.
+- [ ] Write `harness-entries-analysis.md` § Item details. Give one card per (a)/(b) decision, with the fields of Design Decision 6 and the shown content linked to its wireframe element number where it has one.
 - [ ] In each card, name the `artisyn`-log equivalent from `hook/HOW_HOOK_WORKS.md` and the preferred source, with the reason. The equivalents include `prompt_start`/`prompt_stop`, `PreCompact`/`PostCompact`, `hook-status` and SessionEnd flush.
 - [ ] In each card, state the degraded behaviour: the entry is absent, the entry has an unknown shape, the last turn is not yet uploaded, the session ran on hook < 2.8.0, or it is a `claude -p` session. Use the hook-to-turn rule of Design Decision 7.
 - [ ] In each card, check privacy and neutrality against Design Decisions 8 and 17 and the FR-2 rules: no email or absolute paths; text only if the Logs tab already shows it; repo/team items carry only counts, durations, codes and repo-relative paths.
@@ -246,15 +246,15 @@
 
 ### Chunk 4 — Logs tab review & wireframes
 - [ ] Walk the Logs tab on at least 3 real local-prod sessions (`use-playwright` skill, http://localhost:5003). Use "Edit email" to identify as the repo owner. The sessions must include a compaction, a hook error and a queued command. Record observations only; any screenshots go to `tmp/` and are not committed. Cover: `PromptTurnItem` sections, the metrics row, `StartupContextLine`, sub-agents and workflows.
-- [ ] Write `analysis.md` § Logs tab review (i): the per-turn additions, mapped to their chunk 3 decision lines, the placement in the section order and the Signals / Signal sources naming.
+- [ ] Write `harness-entries-analysis.md` § Logs tab review (i): the per-turn additions, mapped to their chunk 3 decision lines, the placement in the section order and the Signals / Signal sources naming.
 - [ ] Write § Logs tab review (ii): the parts that are outdated, redundant or hard to read. Compare each against Session Map, Timeline, Context Growth, Info, Summary, Harness usage, System context and "Usage" (per Design Decision 10). Give a keep/merge/drop recommendation for each.
 - [ ] Write § Logs tab review (iii): concrete UX improvements, each with an S/M/L effort and a wireframe reference for the non-trivial ones. Include the toolbar state per Design Decision 11 and sub-agent Signals per Design Decision 12.
 - [ ] Update `wireframes/logs-tab-harness-markup.svg` per the Wireframes section, covering the `queued_command` marker, the ⟳ divider, the URL-state note and the current tab-group labels. Update `wireframes/logs-turn-signals-section.svg` to the final (a) groups and neutral labels.
-- [ ] Add a new SVG under `wireframes/` for each non-trivial (b) report layout from chunk 3, such as a repo/team hook-health and diagnostics report. Reference each SVG from `analysis.md`.
+- [ ] Add a new SVG under `wireframes/` for each non-trivial (b) report layout from chunk 3, such as a repo/team hook-health and diagnostics report. Reference each SVG from `harness-entries-analysis.md`.
 
 ### Chunk 5 — Overlap map & follow-up list
-- [ ] Read the requirements of `2026-11-09-session-waiting-breakdown`, `2026-11-02-session-antipatterns`, `2026-11-10-sysctx-prompt-viewer` and `2026-11-11-sysctx-recommendations`. Write `analysis.md` § Overlap map, which maps every (a)/(b) item and Logs review finding to one of those tasks or to "new".
-- [ ] Write `analysis.md` § Follow-up list. Each entry gives: title, a 2–3 line description, value H/M/L with the survey-table number and the question it answers, producer prevalence, effort S/M/L, the linked decision lines, the task it extends, and the test kind/target, per Design Decision 13.
+- [ ] Read the requirements of `2026-11-09-session-waiting-breakdown`, `2026-11-02-session-antipatterns`, `2026-11-10-sysctx-prompt-viewer` and `2026-11-11-sysctx-recommendations`. Write `harness-entries-analysis.md` § Overlap map, which maps every (a)/(b) item and Logs review finding to one of those tasks or to "new".
+- [ ] Write `harness-entries-analysis.md` § Follow-up list. Each entry gives: title, a 2–3 line description, value H/M/L with the survey-table number and the question it answers, producer prevalence, effort S/M/L, the linked decision lines, the task it extends, and the test kind/target, per Design Decision 13.
 - [ ] Add a follow-up item for every finding in `research/setup-neutrality-audit.md` (A, B, C, D), either on its own or merged into one, per Design Decision 16. Mark the non-harness ones "outside this task's harness scope".
 - [ ] Add a follow-up item for a client-only Hooks kind in the Harness usage tab, read from per-invocation `hook_success` / `hook_non_blocking_error` records. Add another for Signals in `SubAgentDetail` (Design Decision 12).
 - [ ] Sort the follow-up list by value, then effort, then dependency. Mark which items block others, for example the shared per-turn signal derivation before its consumers.
@@ -264,11 +264,11 @@
 - [ ] Add rows to `docs/knowledgebase/log-schema/attachment-types.md` for every newly seen attachment type: field names, size range, producer and the setups that lack it. Include no payload text.
 - [ ] Add a `system` subtypes list to `docs/knowledgebase/log-schema/claude-log-message-types.md` that enumerates each subtype seen, with its key fields and when it is written. Cover `turn_duration`, `stop_hook_summary`, `scheduled_task_fire`, `informational`, `local_command` and compact.
 - [ ] Correct `docs/knowledgebase/harness-usage-tab.md:86-88`: per-invocation `hook_success` / `hook_non_blocking_error` records (command, event, exit code, `durationMs`, stderr) are in the transcript and the `/logs` payload.
-- [ ] Add the one-line Notes pointer to `analysis.md` in `requirements.md`.
-- [ ] Fill in `analysis.md` § AC checklist. For each of AC-1…AC-7 in Design Decision 15, give the section or file that satisfies it.
+- [ ] Add the one-line Notes pointer to `harness-entries-analysis.md` in `requirements.md`.
+- [ ] Fill in `harness-entries-analysis.md` § AC checklist. For each of AC-1…AC-7 in Design Decision 15, give the section or file that satisfies it.
 - [ ] Run a final privacy sweep over every new or changed file: the task folder, the three edited KB files and any `docs/product-kb/ideas/` file. This includes `consumers.json` and the SVGs. Grep for these patterns. Remove any hit that is not a redacted shape; for generated files, fix `scan.mjs` and re-run instead (Design Decision 5):
   - email: `[\w.+-]+@[\w-]+\.[\w.]+`
   - Windows path: `[A-Za-z]:\\`
   - home paths: `/Users/`, `/home/`
   - UUID: `[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}`
-- [ ] Present the ranked follow-up list to the user and record their picks in `analysis.md` § Follow-up list (AC-5).
+- [ ] Present the ranked follow-up list to the user and record their picks in `harness-entries-analysis.md` § Follow-up list (AC-5).

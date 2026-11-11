@@ -14,69 +14,75 @@
 
 | Entry | Kind | Count / sessions | Line chars | Payload | Producer | Read by Log Hub today (client parser, anatomy, Raw Logs renderer, server extractor, DB table) |
 |---|---|---|---|---|---|---|
-| `agent_listing_delta` | attachment | 593 / 276 | 6124 · 10171 · 10239 | `addedLines`, `addedTypes`, `isInitial`, `removedTypes`, `showConcurrencyNote`, `builtInPluginTypes`, `builtInTypes` | — | none — new |
-| `ai-title` | line | 5607 / 218 | 122 · 142 · 155 | `aiTitle` | — | none — new |
-| `api-request` | line | 20205 / 139 | 1650 · 1762 · 10236 | `cacheControl`, `id`, `keep`, `params`, `querySource`, `requestDigest`, `shapeHash`, `tail`, `base` | — | none — new |
-| `api-request-blob` | line | 13580 / 139 | 2392 · 38005 · 2387785 | `hash`, `message` | — | none — new |
-| `api-request-shape` | line | 1258 / 139 | 77221 · 107711 · 126130 | `shape`, `shapeHash` | — | none — new |
-| `artifact-autoreact-ledger` | line | 12 / 3 | 367 · 388 · 388 | `accountUuid`, `artifacts`, `v` | — | none — new |
-| `artifact-comment-monitor` | line | 14 / 7 | 245 · 245 · 245 | `artifacts`, `v` | — | none — new |
-| `assistant` | line | 71356 / 282 | 2620 · 6664 · 131148 | `message`, `perTurnEffort`, `apiBlockIndex`, `effort`, `advisorModel`, `wireToolInputs`, `attributionAgent`, `requestedModel`, `requestRef`, `attributionSkill`, `attributionPlugin`, `session_id`, +9 more | — | none — new |
-| `atis-latch` | line | 6941 / 278 | 87 · 87 · 87 | `atis` | — | none — new |
-| `auto_mode` | attachment | 1531 / 251 | 1171 · 1211 · 1273 | `autoModeConsentFlow`, `bashFirst`, `bashFirstSteer`, `bypass`, `steerOnly`, `finishExposedWork` | — | none — new |
-| `bash_output_audience_note` | attachment | 116 / 8 | 752 · 809 · 809 | `toolUseID` | — | none — new |
-| `batching_reminder_sent` | attachment | 167 / 9 | 674 · 700 · 714 | `clearAt`, `model`, `text` | — | none — new |
-| `budget_usd` | attachment | 8 / 1 | 649 · 685 · 685 | `remaining`, `total`, `used` | — | none — new |
-| `command_permissions` | attachment | 919 / 221 | 526 · 629 · 682 | `allowedTools` | — | none — new |
-| `compact_file_reference` | attachment | 33 / 12 | 1010 · 1070 · 1091 | `displayPath`, `filename` | — | none — new |
-| `cost-state` | line | 282 / 279 | 792 · 967 · 1273 | `hasUnknownModelCost`, `modelUsage`, `startTime`, `totalAPIDuration`, `totalAPIDurationWithoutRetries`, `totalCostUSD`, `totalDuration`, `totalLinesAdded`, `totalLinesRemoved`, `totalToolDuration` | — | none — new |
-| `credential_org` | attachment | 974 / 139 | 538 · 566 · 611 | `organizationUuid` | — | none — new |
-| `date` | attachment | 1636 / 278 | 609 · 643 · 777 | `date`, `changed` | — | none — new |
-| `deferred_tools_delta` | attachment | 2941 / 278 | 12805 · 18763 · 21602 | `addedLines`, `addedNames`, `readdedNames`, `removedNames`, `wireHiddenNames`, `failedMcpServers`, `pendingMcpServers`, `surfacedNames`, `surfacedDefinitions`, `needsAuthMcpServers` | — | none — new |
-| `deferred_tools_record` | attachment | 4434 / 250 | 615 · 3256 · 22595 | `entries`, `toolInputCopies`, `nameOnlyAnnouncements` | — | none — new |
-| `diagnostics` | attachment | 528 / 145 | 2218 · 9663 · 15401 | `files`, `isNew` | — | none — new |
+| `agent_listing_delta` | attachment | 593 / 276 | 6124 · 10171 · 10239 | `addedLines`, `addedTypes`, `isInitial`, `removedTypes`, `showConcurrencyNote`, `builtInPluginTypes`, `builtInTypes` | Claude Code harness, every session (agent type list at start, deltas later) | anatomy: Agent types partition (sysctx-anatomy.ts); Raw Logs: named summary + body (attachment.tsx, attachment-system.tsx) |
+| `ai-title` | line | 5607 / 218 | 122 · 142 · 155 | `aiTitle` | Claude Code harness, generated session title (not seen in claude -p) | Raw Logs: named renderer (renderers.tsx) |
+| `api-request` | line | 20205 / 139 | 1650 · 1762 · 10236 | `cacheControl`, `id`, `keep`, `params`, `querySource`, `requestDigest`, `shapeHash`, `tail`, `base` | Claude Code harness (CC 2.1.312+), per API request record | anatomy: Tool definitions source (tool-definitions.ts) |
+| `api-request-blob` | line | 13580 / 139 | 2392 · 38005 · 2387785 | `hash`, `message` | Claude Code harness (CC 2.1.312+), request body blobs | none |
+| `api-request-shape` | line | 1258 / 139 | 77221 · 107711 · 126130 | `shape`, `shapeHash` | Claude Code harness (CC 2.1.312+), request wire shape | anatomy: Tool definitions source (tool-definitions.ts) |
+| `artifact-autoreact-ledger` | line | 12 / 3 | 367 · 388 · 388 | `accountUuid`, `artifacts`, `v` | Claude Code harness; only with the Artifact tool in use | none |
+| `artifact-comment-monitor` | line | 14 / 7 | 245 · 245 · 245 | `artifacts`, `v` | Claude Code harness; only with the Artifact tool in use | none |
+| `assistant` | line | 71356 / 282 | 2620 · 6664 · 131148 | `message`, `perTurnEffort`, `apiBlockIndex`, `effort`, `advisorModel`, `wireToolInputs`, `attributionAgent`, `requestedModel`, `requestRef`, `attributionSkill`, `attributionPlugin`, `session_id`, +9 more | Claude Code harness, every model reply | client parser: turns, tokens, tool calls (log-parser.ts, tool-calls.ts); anatomy: startup block end + measured total; Raw Logs: named renderer (assistant.tsx); server: extractClaudeStats (claude-extractor.ts), walkTurns (turn-walk.ts); DB: sessions token/cost columns, session_tool_stats, session_cause_stats; hook: post-turn-analysis-worker.js |
+| `atis-latch` | line | 6941 / 278 | 87 · 87 · 87 | `atis` | Claude Code harness (CC 2.1.280+), internal state marker | none |
+| `auto_mode` | attachment | 1531 / 251 | 1171 · 1211 · 1273 | `autoModeConsentFlow`, `bashFirst`, `bashFirstSteer`, `bypass`, `steerOnly`, `finishExposedWork` | Claude Code harness, session mode flags (CC 2.1.280+) | anatomy: Environment row when in the startup block |
+| `bash_output_audience_note` | attachment | 116 / 8 | 752 · 809 · 809 | `toolUseID` | Claude Code harness (CC 2.1.280+), note attached to a Bash result | none |
+| `batching_reminder_sent` | attachment | 167 / 9 | 674 · 700 · 714 | `clearAt`, `model`, `text` | Claude Code harness (CC 2.1.280+), tool-call batching reminder | none |
+| `budget_usd` | attachment | 8 / 1 | 649 · 685 · 685 | `remaining`, `total`, `used` | Claude Code harness; only with a spend budget set (e.g. `claude -p` with a max budget) | anatomy: Environment row when in the startup block |
+| `command_permissions` | attachment | 919 / 221 | 526 · 629 · 682 | `allowedTools` | Claude Code harness, allowed-tools rules of a slash command or skill | anatomy: Environment row when in the startup block; Raw Logs: named summary + body (attachment.tsx, attachment-system.tsx) |
+| `compact_file_reference` | attachment | 33 / 12 | 1010 · 1070 · 1091 | `displayPath`, `filename` | Claude Code harness after a compaction (files re-referenced) | Raw Logs: file renderer (attachment-file.tsx) |
+| `cost-state` | line | 282 / 279 | 792 · 967 · 1273 | `hasUnknownModelCost`, `modelUsage`, `startTime`, `totalAPIDuration`, `totalAPIDurationWithoutRetries`, `totalCostUSD`, `totalDuration`, `totalLinesAdded`, `totalLinesRemoved`, `totalToolDuration` | Claude Code harness (CC 2.1.280+), running cost and duration totals | none |
+| `credential_org` | attachment | 974 / 139 | 538 · 566 · 611 | `organizationUuid` | Claude Code harness (CC 2.1.312+), credential organisation marker | anatomy: Environment row when in the startup block |
+| `date` | attachment | 1636 / 278 | 609 · 643 · 777 | `date`, `changed` | Claude Code harness, every session (CC 2.1.280+; replaces `date_change`) | anatomy: Environment row when in the startup block |
+| `date_change` (KB only) | attachment | rare / setup-dependent | — | — | Claude Code harness, older versions (replaced by `date`) | Raw Logs: named summary + body (attachment.tsx, attachment-system.tsx) |
+| `deferred_tools_delta` | attachment | 2941 / 278 | 12805 · 18763 · 21602 | `addedLines`, `addedNames`, `readdedNames`, `removedNames`, `wireHiddenNames`, `failedMcpServers`, `pendingMcpServers`, `surfacedNames`, `surfacedDefinitions`, `needsAuthMcpServers` | Claude Code harness, every session with deferred tools (MCP or built-in) | client parser: summary.deferredTools (log-parser.ts); anatomy: Deferred tools + MCP server partitions; Raw Logs: named summary + body (attachment.tsx, attachment-system.tsx); server: walkDeferredToolsDelta (turn-walk.ts) via extractHarnessUsage (claude-extractor.ts); DB: session_harness_usage.is_initial |
+| `deferred_tools_record` | attachment | 4434 / 250 | 615 · 3256 · 22595 | `entries`, `toolInputCopies`, `nameOnlyAnnouncements` | Claude Code harness (CC 2.1.280+), when a deferred tool is loaded | anatomy: MCP server on-demand names (not sized) |
+| `diagnostics` | attachment | 528 / 145 | 2218 · 9663 · 15401 | `files`, `isNew` | Claude Code diagnostics integration; needs a diagnostics source (IDE extension or LSP/language-server plugin); absent without one | anatomy: Environment row when in the startup block; Raw Logs: named summary + body (attachment.tsx, attachment-system.tsx) |
 | ↳ `diagnostics` · source `typescript` | attachment | 528 / 145 (3336 items) | — | — | — | — |
-| `edited_text_file` | attachment | 822 / 131 | 2263 · 18444 · 19835 | `filename`, `snippet` | — | none — new |
-| `environment` | attachment | 2926 / 278 | 1719 · 2532 · 2731 | `snapshot`, `changes` | — | none — new |
-| `file` | attachment | 28 / 12 | 7035 · 22122 · 28753 | `content`, `displayPath`, `filename` | — | none — new |
-| `file-history-delta` | line | 1351 / 203 | 449 · 528 · 645 | `backup`, `messageId`, `snapshotMessageId`, `trackingPath` | — | none — new |
-| `file-history-snapshot` | line | 1563 / 268 | 472 · 5747 · 20177 | `isSnapshotUpdate`, `messageId`, `snapshot` | — | none — new |
-| `hook_non_blocking_error` | attachment | 9 / 5 | 901 · 1812 · 1812 | `command`, `durationMs`, `exitCode`, `hookEvent`, `hookName`, `stderr`, `stdout`, `toolUseID` | — | none — new |
-| `hook_success` | attachment | 1975 / 247 | 1039 · 1376 · 151030 | `command`, `content`, `durationMs`, `exitCode`, `hookEvent`, `hookName`, `stderr`, `stdout`, `toolUseID` | — | none — new |
-| `hook_system_message` | attachment | 8 / 8 | 1086 · 1120 · 1120 | `content`, `hookEvent`, `hookName`, `toolUseID` | — | none — new |
-| `instructions` | attachment | 1563 / 276 | 44322 · 46499 · 48264 | `files` | — | none — new |
-| `invoked_skills` | attachment | 12 / 12 | 56560 · 149469 · 149469 | `skills` | — | none — new |
-| `language` | attachment | 264 / 245 | 1015 · 1046 · 1129 | `language` | — | none — new |
-| `last-prompt` | line | 6768 / 281 | 211 · 347 · 361 | `leafUuid`, `lastPrompt`, `explicit` | — | none — new |
-| `mcp_instructions_delta` | attachment | 1613 / 276 | 4681 · 4723 · 6856 | `addedBlocks`, `addedNames`, `removedNames` | — | none — new |
-| `mode` | line | 6900 / 268 | 87 · 87 · 87 | `mode` | — | none — new |
-| `model` | attachment | 1621 / 278 | 932 · 972 · 1030 | `identity`, `text` | — | none — new |
-| `nested_memory` | attachment | 495 / 110 | 16224 · 19240 · 19348 | `content`, `displayPath`, `path` | — | none — new |
-| `permission-mode` | line | 783 / 49 | 119 · 119 · 119 | `permissionMode` | — | none — new |
-| `pr-link` | line | 500 / 40 | 235 · 237 · 237 | `prNumber`, `prRepository`, `prUrl` | — | none — new |
-| `prompt_snapshot` | attachment | 3218 / 278 | 13661 · 142948 · 196757 | `systemPrompt`, `contextRendering`, `echoWireToolInputs`, `reminderFold`, `cliPrefix`, `tools`, `inlineTools`, `keptReminders`, `systemTurns`, `toolChangeHeader` | — | none — new |
-| `queue-operation` | line | 2748 / 207 | 340 · 10265 · 35618 | `operation`, `content`, `reason`, `commandUuid`, `deliveryId` | — | none — new |
-| `queued_command` | attachment | 503 / 118 | 1691 · 17503 · 119207 | `prompt`, `source_uuid`, `commandMode`, `timestamp`, `origin`, `humanTurn`, `delivery_id`, `runId`, `usage`, `imagePasteIds`, `isMeta`, `reminderId`, +1 more | — | none — new |
-| `read_truncation_notice` | attachment | 49 / 24 | 1396 · 1737 · 1762 | `banner`, `toolUseID` | — | none — new |
-| `remote_session_change` | attachment | 1605 / 276 | 1376 · 1410 · 1457 | `commit`, `managedCommit`, `managedPr`, `pr`, `sendUserFileHint`, `url` | — | none — new |
-| `session_context` | attachment | 1614 / 278 | 4551 · 7167 · 7248 | `context` | — | none — new |
-| `silent_turn_reminder` | attachment | 586 / 170 | 787 · 832 · 880 | `text` | — | none — new |
-| `skill_listing` | attachment | 1658 / 278 | 59448 · 61148 · 61216 | `content`, `isInitial`, `names`, `skillCount`, `digests` | — | none — new |
-| `skill_mention` | attachment | 1 / 1 | 804 · 804 · 804 | `skillName` | — | none — new |
-| `structured_output` | attachment | 970 / 77 | 1713 · 7163 · 9980 | `data`, `toolUseID` | — | none — new |
-| `system:compact_boundary` | system | 13 / 13 | 1488 · 1855 · 1855 | `compactMetadata`, `content`, `isMeta` | — | none — new |
-| `system:informational` | system | 15 / 14 | 622 · 681 · 681 | `content`, `isMeta`, `session_id` | — | none — new |
-| `system:local_command` | system | 230 / 221 | 559 · 577 · 22781 | `content`, `isMeta`, `commandRun` | — | none — new |
-| `system:model_refusal_fallback` | system | 1 / 1 | 1531 · 1531 · 1531 | `apiRefusalCategory`, `apiRefusalExplanation`, `content`, `direction`, `fallbackModel`, `isMeta`, `originalModel`, `refusedUserMessageUuid`, `retractedMessageUuids`, `scope`, `trigger` | — | none — new |
-| `system:scheduled_task_fire` | system | 170 / 30 | 770 · 778 · 830 | `content`, `cron`, `isMeta`, `prompt`, `taskId` | — | none — new |
-| `system:stop_hook_summary` | system | 1996 / 248 | 815 · 852 · 1202 | `hasOutput`, `hookAdditionalContext`, `hookCount`, `hookErrors`, `hookInfos`, `preventedContinuation`, `stopReason`, `toolUseID`, `session_id` | — | none — new |
-| `system:turn_duration` | system | 2033 / 252 | 490 · 537 · 597 | `durationMs`, `isMeta`, `messageCount`, `pendingWorkflowCount`, `pendingBackgroundAgentCount` | — | none — new |
-| `task_reminder` | attachment | 1 / 1 | 970 · 970 · 970 | `content`, `itemCount` | — | none — new |
-| `task_status` | attachment | 1 / 1 | 1561 · 1561 · 1561 | `deltaSummary`, `description`, `outputFilePath`, `shell`, `status`, `taskId`, `taskType` | — | none — new |
-| `thinking_drop` | attachment | 6 / 6 | 1103 · 1903 · 1903 | `blockHashes`, `clientChange`, `firstReportForThreadInProcess`, `model`, `newlyDropped`, `querySource`, `requestId`, `thinkingBlocksSent`, `thinkingTurnsSent` | — | none — new |
-| `tools-used` | line | 1367 / 135 | 165 · 496 · 714 | `tools` | — | none — new |
-| `total_tokens_reminder` | attachment | 12307 / 131 | 669 · 723 · 763 | `text` | — | none — new |
-| `user` | line | 48519 / 291 | 2301 · 30153 · 7261219 | `message`, `promptId`, `sourceToolAssistantUUID`, `permissionDecision`, `toolUseResult`, `session_id`, `sandboxed`, `turnOrigin`, `promptSource`, `permissionMode`, `origin`, `isMeta`, +19 more | — | none — new |
+| `dynamic_skill` (KB only) | attachment | rare / setup-dependent | — | — | Claude Code harness, skills discovered mid-session (older versions) | Raw Logs: named summary + body (attachment.tsx, attachment-system.tsx) |
+| `edited_text_file` | attachment | 822 / 131 | 2263 · 18444 · 19835 | `filename`, `snippet` | Claude Code harness, a file changed outside the model's own edits (user or another process) | Raw Logs: file renderer (attachment-file.tsx) |
+| `environment` | attachment | 2926 / 278 | 1719 · 2532 · 2731 | `snapshot`, `changes` | Claude Code harness, every session (CC 2.1.280+), environment snapshot | anatomy: Environment row when in the startup block |
+| `file` | attachment | 28 / 12 | 7035 · 22122 · 28753 | `content`, `displayPath`, `filename` | Claude Code harness, a file @-mentioned in a prompt | Raw Logs: file renderer (attachment-file.tsx) |
+| `file-history-delta` | line | 1351 / 203 | 449 · 528 · 645 | `backup`, `messageId`, `snapshotMessageId`, `trackingPath` | Claude Code harness, file checkpoint delta (not seen in claude -p) | none |
+| `file-history-snapshot` | line | 1563 / 268 | 472 · 5747 · 20177 | `isSnapshotUpdate`, `messageId`, `snapshot` | Claude Code harness, file checkpoint snapshot (not seen in claude -p) | Raw Logs: named renderer (renderers.tsx) |
+| `hook_non_blocking_error` | attachment | 9 / 5 | 901 · 1812 · 1812 | `command`, `durationMs`, `exitCode`, `hookEvent`, `hookName`, `stderr`, `stdout`, `toolUseID` | Claude Code hook runner; only with hooks configured, a hook that failed without blocking | anatomy: Environment row when in the startup block |
+| `hook_success` | attachment | 1975 / 247 | 1039 · 1376 · 151030 | `command`, `content`, `durationMs`, `exitCode`, `hookEvent`, `hookName`, `stderr`, `stdout`, `toolUseID` | Claude Code hook runner; only with hooks configured (Log Hub's own hook counts) | anatomy: Environment row when in the startup block (SessionStart hooks); Raw Logs: named summary + body (attachment.tsx, attachment-system.tsx) |
+| `hook_system_message` | attachment | 8 / 8 | 1086 · 1120 · 1120 | `content`, `hookEvent`, `hookName`, `toolUseID` | Claude Code hook runner; only with hooks that return a system message | anatomy: Environment row when in the startup block |
+| `instructions` | attachment | 1563 / 276 | 44322 · 46499 · 48264 | `files` | Claude Code harness, CLAUDE.md / rules loaded at start (CC 2.1.280+) | client parser: summary.claudeMd (instruction-files.ts); anatomy: Instruction file partition |
+| `invoked_skills` | attachment | 12 / 12 | 56560 · 149469 · 149469 | `skills` | Claude Code harness, skills re-injected after a compaction | Raw Logs: named summary + body (attachment.tsx, attachment-system.tsx) |
+| `language` | attachment | 264 / 245 | 1015 · 1046 · 1129 | `language` | Claude Code harness (CC 2.1.280+), reply language setting | anatomy: Environment row when in the startup block |
+| `last-prompt` | line | 6768 / 281 | 211 · 347 · 361 | `leafUuid`, `lastPrompt`, `explicit` | Claude Code harness, last prompt bookkeeping | Raw Logs: named renderer (renderers.tsx) |
+| `mcp_instructions_delta` | attachment | 1613 / 276 | 4681 · 4723 · 6856 | `addedBlocks`, `addedNames`, `removedNames` | Claude Code harness; only with MCP servers that send instructions | anatomy: MCP server partition (instructions part) |
+| `mode` | line | 6900 / 268 | 87 · 87 · 87 | `mode` | Claude Code harness, REPL mode bookkeeping (not seen in claude -p) | Raw Logs: named renderer (renderers.tsx) |
+| `model` | attachment | 1621 / 278 | 932 · 972 · 1030 | `identity`, `text` | Claude Code harness, every session (CC 2.1.280+), model identity | anatomy: Environment row when in the startup block |
+| `nested_memory` | attachment | 495 / 110 | 16224 · 19240 · 19348 | `content`, `displayPath`, `path` | Claude Code harness; only with nested CLAUDE.md or path-scoped rules files | client parser: rules injected + summary.claudeMd (log-parser.ts, instruction-files.ts); Harness usage tab (harness-elements.ts); Raw Logs: file renderer (attachment-file.tsx); server: extractHarnessSkillAndRuleUsage (claude-extractor.ts); DB: session_harness_usage (kind rule) |
+| `opened_file_in_ide` (KB only) | attachment | rare / setup-dependent | — | — | Claude Code IDE integration; only with a connected IDE extension | Raw Logs: file renderer (attachment-file.tsx) |
+| `permission-mode` | line | 783 / 49 | 119 · 119 · 119 | `permissionMode` | Claude Code harness, permission mode change (not seen in claude -p) | Raw Logs: named renderer (renderers.tsx) |
+| `plan_mode` (KB only) | attachment | rare / setup-dependent | — | — | Claude Code harness, plan mode entered | Raw Logs: named summary + body (attachment.tsx, attachment-system.tsx) |
+| `plan_mode_exit` (KB only) | attachment | rare / setup-dependent | — | — | Claude Code harness, plan mode left | Raw Logs: named summary + body (attachment.tsx, attachment-system.tsx) |
+| `pr-link` | line | 500 / 40 | 235 · 237 · 237 | `prNumber`, `prRepository`, `prUrl` | Claude Code harness; only when a pull request is created or linked in the session | none |
+| `prompt_snapshot` | attachment | 3218 / 278 | 13661 · 142948 · 196757 | `systemPrompt`, `contextRendering`, `echoWireToolInputs`, `reminderFold`, `cliPrefix`, `tools`, `inlineTools`, `keptReminders`, `systemTurns`, `toolChangeHeader` | Claude Code harness, every session (CC 2.1.280+) | anatomy: System prompt / Memory / Tool definitions partitions + system prompt modal |
+| `queue-operation` | line | 2748 / 207 | 340 · 10265 · 35618 | `operation`, `content`, `reason`, `commandUuid`, `deliveryId` | Claude Code harness, prompt queue and task notifications | client parser: background MCP task join (background-mcp.ts, tool-calls.ts); Raw Logs: named renderer (renderers.tsx); server: extractClaudeStats / mcp-call-extractor (background-mcp.ts), extractWorkflows at read time (workflow-extractor.ts); DB: session_tool_stats (via the join); hook: post-turn-analysis-worker.js |
+| `queued_command` | attachment | 503 / 118 | 1691 · 17503 · 119207 | `prompt`, `source_uuid`, `commandMode`, `timestamp`, `origin`, `humanTurn`, `delivery_id`, `runId`, `usage`, `imagePasteIds`, `isMeta`, `reminderId`, +1 more | Claude Code harness, a prompt typed while the model works, or a background task notification | Raw Logs: named summary + body (attachment.tsx, attachment-system.tsx) |
+| `read_truncation_notice` | attachment | 49 / 24 | 1396 · 1737 · 1762 | `banner`, `toolUseID` | Claude Code harness, a Read result cut to its size limit | none |
+| `remote_session_change` | attachment | 1605 / 276 | 1376 · 1410 · 1457 | `commit`, `managedCommit`, `managedPr`, `pr`, `sendUserFileHint`, `url` | Claude Code harness (CC 2.1.280+), remote-session commit / PR handoff settings | anatomy: Environment row when in the startup block |
+| `selected_lines_in_ide` (KB only) | attachment | rare / setup-dependent | — | — | Claude Code IDE integration; only with a connected IDE extension | Raw Logs: file renderer (attachment-file.tsx) |
+| `session_context` | attachment | 1614 / 278 | 4551 · 7167 · 7248 | `context` | Claude Code harness, every session (CC 2.1.280+) | anatomy: own partition (sysctx-anatomy.ts) |
+| `silent_turn_reminder` | attachment | 586 / 170 | 787 · 832 · 880 | `text` | Claude Code harness (CC 2.1.280+), a system reminder injected into a turn without user-visible output | none |
+| `skill_listing` | attachment | 1658 / 278 | 59448 · 61148 · 61216 | `content`, `isInitial`, `names`, `skillCount`, `digests` | Claude Code harness, every session with skills | anatomy: Skills partition; Raw Logs: named summary + body (attachment.tsx, attachment-system.tsx) |
+| `skill_mention` | attachment | 1 / 1 | 804 · 804 · 804 | `skillName` | Claude Code harness, a skill named in a prompt | anatomy: Environment row when in the startup block |
+| `structured_output` | attachment | 970 / 77 | 1713 · 7163 · 9980 | `data`, `toolUseID` | Claude Code harness; only with structured-output agents (e.g. workflow sub-agents with a schema) | none |
+| `system:compact_boundary` | system | 13 / 13 | 1488 · 1855 · 1855 | `compactMetadata`, `content`, `isMeta` | Claude Code harness, a manual or auto compaction | client parser: compactBoundaries, context tokens, CompactBoundaryDivider (log-parser.ts); Raw Logs: system renderer (system.tsx); server: walkTurns (turn-walk.ts); DB: session_cause_stats; hook: post-turn-analysis-worker.js context tokens |
+| `system:informational` | system | 15 / 14 | 622 · 681 · 681 | `content`, `isMeta`, `session_id` | Claude Code harness, informational notice (e.g. a suggestion) | Raw Logs: system renderer (system.tsx) |
+| `system:local_command` | system | 230 / 221 | 559 · 577 · 22781 | `content`, `isMeta`, `commandRun` | Claude Code harness, a local slash command run in the REPL (not seen in claude -p) | Raw Logs: system renderer (system.tsx) |
+| `system:model_refusal_fallback` | system | 1 / 1 | 1531 · 1531 · 1531 | `apiRefusalCategory`, `apiRefusalExplanation`, `content`, `direction`, `fallbackModel`, `isMeta`, `originalModel`, `refusedUserMessageUuid`, `retractedMessageUuids`, `scope`, `trigger` | Claude Code harness, a refused request retried on a fallback model | Raw Logs: system renderer (system.tsx) |
+| `system:scheduled_task_fire` | system | 170 / 30 | 770 · 778 · 830 | `content`, `cron`, `isMeta`, `prompt`, `taskId` | Claude Code harness; only with scheduled tasks (cron / loop) | Raw Logs: system renderer (system.tsx) |
+| `system:stop_hook_summary` | system | 1996 / 248 | 815 · 852 · 1202 | `hasOutput`, `hookAdditionalContext`, `hookCount`, `hookErrors`, `hookInfos`, `preventedContinuation`, `stopReason`, `toolUseID`, `session_id` | Claude Code hook runner, after Stop hooks; only with Stop hooks configured; uploaded only on a later upload or the SessionEnd flush (hook >= 2.8.0) | Raw Logs: system renderer, named fields (system.tsx) |
+| `system:turn_duration` | system | 2033 / 252 | 490 · 537 · 597 | `durationMs`, `isMeta`, `messageCount`, `pendingWorkflowCount`, `pendingBackgroundAgentCount` | Claude Code harness, end of an interactive turn; not seen in claude -p; uploaded only on a later upload or the SessionEnd flush (hook >= 2.8.0) | Raw Logs: system renderer, named fields (system.tsx) |
+| `task_reminder` | attachment | 1 / 1 | 970 · 970 · 970 | `content`, `itemCount` | Claude Code harness, todo/task list reminder (rare since CC 2.1.280) | Raw Logs: named summary + body (attachment.tsx, attachment-system.tsx) |
+| `task_status` | attachment | 1 / 1 | 1561 · 1561 · 1561 | `deltaSummary`, `description`, `outputFilePath`, `shell`, `status`, `taskId`, `taskType` | Claude Code harness, background task status | none |
+| `thinking_drop` | attachment | 6 / 6 | 1103 · 1903 · 1903 | `blockHashes`, `clientChange`, `firstReportForThreadInProcess`, `model`, `newlyDropped`, `querySource`, `requestId`, `thinkingBlocksSent`, `thinkingTurnsSent` | Claude Code harness, thinking blocks dropped from a request | none |
+| `tools-used` | line | 1367 / 135 | 165 · 496 · 714 | `tools` | Claude Code harness (CC 2.1.312+), tools-used bookkeeping | none |
+| `total_tokens_reminder` | attachment | 12307 / 131 | 669 · 723 · 763 | `text` | Claude Code harness (CC 2.1.280+), context-size reminder | anatomy: Environment row when in the startup block |
+| `user` | line | 48519 / 291 | 2301 · 30153 · 7261219 | `message`, `promptId`, `sourceToolAssistantUUID`, `permissionDecision`, `toolUseResult`, `session_id`, `sandboxed`, `turnOrigin`, `promptSource`, `permissionMode`, `origin`, `isMeta`, +19 more | Claude Code harness, prompts and tool results | client parser: prompts, turns, tool results (log-parser.ts, tool-calls.ts); anatomy: First prompt partition; Raw Logs: named renderer (user.tsx); server: walkTurns (turn-walk.ts), extractClaudeStats (claude-extractor.ts); DB: session_cause_stats, session_tool_stats; hook: post-turn-analysis-worker.js |
 
 ## Facet matrix (root sessions per facet value)
 
