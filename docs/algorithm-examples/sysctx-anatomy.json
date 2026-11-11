@@ -116,13 +116,13 @@
       "flags": {"noSnapshot": false, "noGitStatus": false},
       "partitions": {"skills": {"bytes": 58, "tokens": 17}},
       "rows": {"skills": [
-        {"label": "proj-skill", "source": "project", "bytes": 22, "tokens": 6, "path": ".claude/skills/proj-skill/SKILL.md", "fileBytes": 400, "git": "tracked"},
+        {"label": "proj-skill", "source": "project", "bytes": 22, "tokens": 6, "path": ".claude/skills/proj-skill/SKILL.md", "fileBytes": 400, "git": "tracked", "pluginId": null},
         {"label": "p:synced", "source": "org-synced", "bytes": 20, "tokens": 6, "path": "~/.claude/skills/synced/<org>/synced/SKILL.md", "fileBytes": 300, "git": "outside-repo"},
-        {"label": "builtin-x", "source": "built-in", "bytes": 16, "tokens": 5, "path": null, "fileBytes": null, "git": null},
+        {"label": "builtin-x", "source": "built-in", "bytes": 16, "tokens": 5, "path": null, "fileBytes": null, "git": null, "pluginId": null},
         {"label": "missing", "source": "built-in", "bytes": 0, "tokens": 0, "path": null, "fileBytes": null, "git": null}
       ]}
     },
-    "note": "Rule 15: the isInitial listing wins over the earlier non-initial one ('other' is not a row). Slices: '- proj-skill: Does A.\\n' = 2+10+2+7+1 = 22; '- p:synced: Does B.\\n' = 2+8+2+7+1 = 20; '- builtin-x: C.\\n' = 2+9+2+2+1 = 16; 'missing' not found = 0. Partition = whole content 58 B -> round(16.57) = 17. Rows: 22/3.5 = 6.29 -> 6, 20/3.5 = 5.71 -> 6, 16/3.5 = 4.57 -> 5. Sources: exact name -> project; 'p:synced' -> org-synced entry 'synced' (git from ~/ fallback = outside-repo, rule 17); others built-in. 'unused' is not listed, so no row. 100 - 17 = 83."
+    "note": "Rule 15: the isInitial listing wins over the earlier non-initial one ('other' is not a row). Slices: '- proj-skill: Does A.\\n' = 2+10+2+7+1 = 22; '- p:synced: Does B.\\n' = 2+8+2+7+1 = 20; '- builtin-x: C.\\n' = 2+9+2+2+1 = 16; 'missing' not found = 0. Partition = whole content 58 B -> round(16.57) = 17. Rows: 22/3.5 = 6.29 -> 6, 20/3.5 = 5.71 -> 6, 16/3.5 = 4.57 -> 5. Sources: exact name -> project; 'p:synced' -> org-synced entry 'synced' (git from ~/ fallback = outside-repo, rule 17); others built-in; no matched entry has a plugin, so pluginId is null. 'unused' is not listed, so no row. 100 - 17 = 83."
   },
   {
     "id": "SA-06",
@@ -162,12 +162,12 @@
       "total": 1000, "attributed": 55, "internals": 945,
       "partitions": {"deferred-tools": {"bytes": 6, "tokens": 2, "count": 1}, "mcp-server": {"bytes": 186, "tokens": 53}},
       "rows": {"mcp-server": [
-        {"key": "claude_ai_Claude_Docs", "label": "claude.ai Claude Docs", "status": "connected", "tools": 2, "namesBytes": 68, "instrBytes": 100, "bytes": 168, "tokens": 48, "onDemandNames": ["mcp__claude_ai_Claude_Docs__read"]},
-        {"key": "my_db", "label": "my.db", "status": "connected", "tools": 1, "namesBytes": 18, "instrBytes": 0, "bytes": 18, "tokens": 5, "onDemandNames": []},
-        {"key": "broken_server", "label": "broken_server", "status": "failed", "errorCode": "timeout", "tools": 0, "bytes": 0, "tokens": 0}
+        {"key": "claude_ai_Claude_Docs", "label": "claude.ai Claude Docs", "status": "connected", "tools": 2, "namesBytes": 68, "instrBytes": 100, "bytes": 168, "tokens": 48, "onDemandNames": ["mcp__claude_ai_Claude_Docs__read"], "names": ["mcp__claude_ai_Claude_Docs__create", "mcp__claude_ai_Claude_Docs__read"]},
+        {"key": "my_db", "label": "my.db", "status": "connected", "tools": 1, "namesBytes": 18, "instrBytes": 0, "bytes": 18, "tokens": 5, "onDemandNames": [], "names": ["mcp__my_db__query"]},
+        {"key": "broken_server", "label": "broken_server", "status": "failed", "errorCode": "timeout", "tools": 0, "bytes": 0, "tokens": 0, "names": []}
       ]}
     },
-    "note": "Rule 12: 'Read2' 5 + 1 = 6 B -> 2, count 1. Rule 13: 'mcp__claude_ai_Claude_Docs__create' = 5+21+2+6 = 34 (+1 = 35), '...__read' = 32 (+1 = 33): namesBytes 68; mcpKey('claude.ai Claude Docs') = 'claude_ai_Claude_Docs' joins the 100 B instructions -> 168 B -> 48. 'mcp__my_db__query' 17 + 1 = 18 -> 5; mcpKey('my.db') = 'my_db', so the label is the snapshot name. 'broken.server' -> 'broken_server', failed, 0 B, label = the key. Partition 68+100+18 = 186 -> round(53.14) = 53. The record after the anchor still counts for onDemandNames (deduplicated); 'mcp__other__x' has no server and 'Bash' is not MCP. 2 + 53 = 55; 1000 - 55 = 945. Rows sorted 168, 18, 0."
+    "note": "Rule 12: 'Read2' 5 + 1 = 6 B -> 2, count 1. Rule 13: 'mcp__claude_ai_Claude_Docs__create' = 5+21+2+6 = 34 (+1 = 35), '...__read' = 32 (+1 = 33): namesBytes 68; mcpKey('claude.ai Claude Docs') = 'claude_ai_Claude_Docs' joins the 100 B instructions -> 168 B -> 48. 'mcp__my_db__query' 17 + 1 = 18 -> 5; mcpKey('my.db') = 'my_db', so the label is the snapshot name. 'broken.server' -> 'broken_server', failed, 0 B, label = the key. Partition 68+100+18 = 186 -> round(53.14) = 53. The record after the anchor still counts for onDemandNames (deduplicated); 'mcp__other__x' has no server and 'Bash' is not MCP. 2 + 53 = 55; 1000 - 55 = 945. Rows sorted 168, 18, 0. names = each server's startup deferred names in order (the failed server has none)."
   },
   {
     "id": "SA-08",
@@ -345,7 +345,7 @@
         {"type": "attachment", "attachment": {"type": "prompt_snapshot", "systemPrompt": [{"$fill": 2800, "start": "You are"}, {"$fill": 700, "start": "# Memory\n"}, "__SYSTEM_PROMPT_DYNAMIC_BOUNDARY__", "# Environment\nWorking directory: /work/repo-gold/src\nUser memory: /home/dev/.claude/projects/-work-repo-gold/memory/MEMORY.md\nScratchpad: /tmp/gs05-scratch/notes.txt\nGS05-SESSION-MARKER xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"], "cliPrefix": "gs05", "reminderFold": true, "contextRendering": "announced", "gs05Extra": {"mode": "compact", "cwd": "/work/repo-gold"}}},
         {"type": "attachment", "attachment": {"type": "date", "date": "2026-01-08"}},
         {"type": "attachment", "attachment": {"type": "skill_listing", "isInitial": true, "skillCount": 2, "names": ["adlc:review-deep", "adlc:review"], "content": "- adlc:review-deep: Deep review of a change\n- adlc:review: Quick review of a change"}},
-        {"type": "attachment", "attachment": {"type": "deferred_tools_delta", "addedNames": ["mcp__postgres__query", "mcp__postgres__list_tables", "mcp__playwright__browser_click"], "addedLines": ["mcp__postgres__query", "mcp__postgres__list_tables", "mcp__playwright__browser_click"], "removedNames": []}},
+        {"type": "attachment", "attachment": {"type": "deferred_tools_delta", "addedNames": ["mcp__postgres__query", "mcp__postgres__list_tables", "mcp__playwright__browser_click", "mcp__claude_ai_Gmail__authenticate", "mcp__claude_ai_Gmail__complete_authentication", "mcp__context7__get_docs"], "addedLines": ["mcp__postgres__query", "mcp__postgres__list_tables", "mcp__playwright__browser_click", "mcp__claude_ai_Gmail__authenticate", "mcp__claude_ai_Gmail__complete_authentication", "mcp__context7__get_docs"], "removedNames": []}},
         {"type": "attachment", "attachment": {"type": "mcp_instructions_delta", "addedNames": ["postgres"], "addedBlocks": [{"$fill": 350, "start": "Use"}], "removedNames": []}},
         {"type": "attachment", "attachment": {"type": "instructions", "files": [
           {"path": "/home/golden/.claude/CLAUDE.md", "type": "User", "content": {"$fill": 1050, "start": "# User instructions"}},
@@ -356,16 +356,16 @@
         {"type": "user", "message": {"content": {"$fill": 130, "start": "<command-name>/clear</command-name>"}}},
         {"type": "user", "message": {"content": {"$fill": 122, "start": "<command-message>adlc:review</command-message>\n<command-name>/adlc:review</command-name>"}}},
         {"type": "assistant", "message": {"id": "msg_gs05_001", "model": "claude-sonnet-4-6", "usage": {"input_tokens": 800, "cache_creation_input_tokens": 8000, "cache_read_input_tokens": 0}}},
-        {"type": "attachment", "attachment": {"type": "prompt_snapshot", "systemPrompt": ["GS05-LATE-PART"], "tools": [{"name":"Read","description":"Reads a file.\n\n| Param | Meaning |\n|---|---|\n| file_path | absolute, e.g. /home/dev/notes.md |\n\nGS05-TOOL-MARKER <system-reminder>stays text</system-reminder>","schema":{"name":"Read","description":"Reads a file.\n\n| Param | Meaning |\n|---|---|\n| file_path | absolute, e.g. /home/dev/notes.md |\n\nGS05-TOOL-MARKER <system-reminder>stays text</system-reminder>","input_schema":{"type":"object","properties":{"file_path":{"type":"string","description":"Example: C:\\Users\\dev\\file.txt"}},"required":["file_path"]}}},{"name":"Bash","description":"Runs a command.","schema":{"name":"Bash","description":"Runs a command.","input_schema":{"type":"object","properties":{"command":{"type":"string"}}}},"server":"gs05-mcp"}]}}
+        {"type": "attachment", "attachment": {"type": "prompt_snapshot", "systemPrompt": ["GS05-LATE-PART"], "tools": [{"name":"Read","description":"Reads a file.\n\n| Param | Meaning |\n|---|---|\n| file_path | absolute, e.g. /home/dev/notes.md |\n\nGS05-TOOL-MARKER <system-reminder>stays text</system-reminder>","schema":{"name":"Read","description":"Reads a file.\n\n| Param | Meaning |\n|---|---|\n| file_path | absolute, e.g. /home/dev/notes.md |\n\nGS05-TOOL-MARKER <system-reminder>stays text</system-reminder>","input_schema":{"type":"object","properties":{"file_path":{"type":"string","description":"Example: C:\\Users\\dev\\file.txt"}},"required":["file_path"]}}},{"name":"Bash","description":"Runs a command.","schema":{"name":"Bash","description":"Runs a command.","input_schema":{"type":"object","properties":{"command":{"type":"string"}}}},"server":"gs05-mcp"},{"name":"Artifact","description":{"$fill":659,"start":"Publishes a page."},"schema":{"name":"Artifact","description":{"$fill":659,"start":"Publishes a page."},"input_schema":{"type":"object","properties":{}}}},{"name":"PowerShell","description":{"$fill":307,"start":"Runs a PowerShell command."},"schema":{"name":"PowerShell","description":{"$fill":307,"start":"Runs a PowerShell command."},"input_schema":{"type":"object","properties":{}}}}]}}
       ],
       "snapshot": {
         "skills": [
-          {"name": "adlc:review-deep", "source": "plugin", "path": "adlc@1.0.0/skills/review-deep/SKILL.md", "bytes": 1750, "gitStatus": "outside-repo"},
-          {"name": "adlc:review", "source": "plugin", "path": "adlc@1.0.0/skills/review/SKILL.md", "bytes": 1200, "gitStatus": "outside-repo"},
+          {"name": "adlc:review-deep", "source": "plugin", "path": "adlc@1.0.0/skills/review-deep/SKILL.md", "bytes": 1750, "gitStatus": "outside-repo", "plugin": {"id": "adlc@artisyn", "name": "adlc", "marketplace": "artisyn", "version": "1.0.0"}},
+          {"name": "adlc:review", "source": "plugin", "path": "adlc@1.0.0/skills/review/SKILL.md", "bytes": 1200, "gitStatus": "outside-repo", "plugin": {"id": "adlc@artisyn", "name": "adlc", "marketplace": "artisyn", "version": "1.0.0"}},
           {"name": "unused-skill", "source": "project", "path": ".claude/skills/unused-skill/SKILL.md", "bytes": 600, "gitStatus": "untracked"},
           {"name": "gold-sync", "source": "org-synced", "path": "~/.claude/skills/synced/<org>/gold-sync/SKILL.md", "bytes": 300, "gitStatus": "outside-repo"}
         ],
-        "mcpServers": [{"name": "postgres", "command": "npx", "args": ""}, {"name": "playwright", "command": "npx", "args": ""}],
+        "mcpServers": [{"name": "postgres", "command": "npx", "args": ""}, {"name": "playwright", "command": "npx", "args": ""}, {"name": "context7", "command": "npx", "args": "-y @upstash/context7-mcp", "configSource": "user", "connected": true, "tools": [{"name": "get_docs", "schemaSizeTokens": 150}]}],
         "systemContext": {"totalBytes": 6300, "files": [
           {"path": "CLAUDE.md", "bytes": 3500, "gitStatus": "tracked"},
           {"path": ".claude/rules/db.md", "bytes": 700, "gitStatus": "tracked"},
@@ -375,22 +375,22 @@
       }
     },
     "expected": {
-      "total": 8800, "attributed": 3027, "internals": 5773, "overBy": null, "denominator": 8800, "cpt": 3.5,
+      "total": 8800, "attributed": 3357, "internals": 5443, "overBy": null, "denominator": 8800, "cpt": 3.5,
       "flags": {"empty": false, "noSnapshot": false, "noGitStatus": false, "noPromptSnapshot": false, "unknownTotal": false, "overTotal": false},
       "kinds": ["system-prompt", "memory", "tool-definitions", "environment", "deferred-tools", "mcp-server", "agent-types", "skills", "instruction-file", "system-reminder", "first-prompt", "harness-internals"],
       "partitions": {
         "system-prompt": {"bytes": 3116, "tokens": 890},
         "memory": {"bytes": 700, "tokens": 200},
-        "tool-definitions": {"bytes": 378, "tokens": 108, "count": 2},
+        "tool-definitions": {"bytes": 1428, "tokens": 408, "count": 4},
         "environment": {"bytes": 35, "tokens": 10},
         "deferred-tools": {"bytes": 0, "tokens": 0, "count": 0},
-        "mcp-server": {"bytes": 429, "tokens": 123},
+        "mcp-server": {"bytes": 534, "tokens": 153},
         "agent-types": {"bytes": 0, "tokens": 0},
         "skills": {"bytes": 83, "tokens": 24},
         "instruction-file": {"bytes": 5250, "tokens": 1500, "sharePct": 17},
         "system-reminder": {"bytes": 350, "tokens": 100},
         "first-prompt": {"bytes": 252, "tokens": 72},
-        "harness-internals": {"bytes": null, "tokens": 5773, "sharePct": 65.6}
+        "harness-internals": {"bytes": null, "tokens": 5443, "sharePct": 61.9}
       },
       "rows": {
         "system-prompt": [
@@ -398,16 +398,20 @@
           {"key": "block-4", "label": "Block 4", "bytes": 316, "tokens": 90}
         ],
         "tool-definitions": [
+          {"key": "tool-3", "label": "Artifact", "source": "built-in", "bytes": 700, "tokens": 200},
+          {"key": "tool-4", "label": "PowerShell", "source": "built-in", "bytes": 350, "tokens": 100},
           {"key": "tool-1", "label": "Read", "source": "built-in", "bytes": 299, "tokens": 85},
           {"key": "tool-2", "label": "Bash", "source": "mcp-server", "bytes": 79, "tokens": 23}
         ],
         "mcp-server": [
-          {"label": "postgres", "tools": 2, "namesBytes": 48, "instrBytes": 350, "bytes": 398, "tokens": 114},
-          {"label": "playwright", "tools": 1, "namesBytes": 31, "instrBytes": 0, "bytes": 31, "tokens": 9}
+          {"label": "postgres", "tools": 2, "namesBytes": 48, "instrBytes": 350, "bytes": 398, "tokens": 114, "names": ["mcp__postgres__query", "mcp__postgres__list_tables"]},
+          {"key": "claude_ai_Gmail", "label": "claude_ai_Gmail", "tools": 2, "namesBytes": 81, "instrBytes": 0, "bytes": 81, "tokens": 23, "names": ["mcp__claude_ai_Gmail__authenticate", "mcp__claude_ai_Gmail__complete_authentication"]},
+          {"label": "playwright", "tools": 1, "namesBytes": 31, "instrBytes": 0, "bytes": 31, "tokens": 9, "names": ["mcp__playwright__browser_click"]},
+          {"label": "context7", "tools": 1, "namesBytes": 24, "instrBytes": 0, "bytes": 24, "tokens": 7, "names": ["mcp__context7__get_docs"]}
         ],
         "skills": [
-          {"label": "adlc:review-deep", "source": "plugin", "bytes": 44, "tokens": 13, "git": "outside-repo"},
-          {"label": "adlc:review", "source": "plugin", "bytes": 39, "tokens": 11, "git": "outside-repo"}
+          {"label": "adlc:review-deep", "source": "plugin", "bytes": 44, "tokens": 13, "git": "outside-repo", "pluginId": "adlc@artisyn"},
+          {"label": "adlc:review", "source": "plugin", "bytes": 39, "tokens": 11, "git": "outside-repo", "pluginId": "adlc@artisyn"}
         ],
         "instruction-file": [
           {"path": "~/.claude/CLAUDE.md", "source": "user", "bytes": 1050, "tokens": 300, "git": "outside-repo"},
@@ -422,6 +426,6 @@
         ]
       }
     },
-    "note": "Impl-plan DD 21-22 (cpt 3.5). System prompt block 1 2800 B + block 4 ('# Environment', session part) 316 B = 3116 B -> 890; block 3, the dynamic boundary marker, is not prompt text (the snapshot's flags count nowhere); block 2 starts '# Memory' -> memory 700 B -> 200. Environment: the date JSON 35 B -> 10 (the mode line is ignored). MCP: postgres names 20+1 + 26+1 = 48 plus 350 B instructions = 398 -> round(113.71) = 114; playwright 30+1 = 31 -> 9; partition 429 -> round(122.57) = 123. Skills 44 + 39 = 83 -> round(23.71) = 24; rows 44/3.5 = 12.57 -> 13, 39/3.5 = 11.14 -> 11; plugin sources from the snapshot; gold-sync is not listed, so no row. Files 1050 + 3500 + 700 = 5250 -> 1500 (17.0 %); the rules are on demand. Reminders 16 + 334 = 350 -> 100. User lines 130 + 122 = 252 -> 72 (both contain <command-name>). Tool definitions from the tools snapshot after the anchor (no wire shape logged): Read 299 B -> 85, Bash 79 B -> 23 (server gs05-mcp -> source mcp-server), partition 378 -> round(108.0) = 108; each is name + description + the compact `input_schema` inside `schema` (the whole wire tool). Attributed 890+200+108+10+0+123+0+24+1500+100+72 = 3027. Total 800 + 8000 + 0 = 8800; internals 8800 - 3027 = 5773 = 65.60 % -> 65.6."
+    "note": "Impl-plan DD 21-22 (cpt 3.5). System prompt block 1 2800 B + block 4 ('# Environment', session part) 316 B = 3116 B -> 890; block 3, the dynamic boundary marker, is not prompt text (the snapshot's flags count nowhere); block 2 starts '# Memory' -> memory 700 B -> 200. Environment: the date JSON 35 B -> 10 (the mode line is ignored). MCP: postgres names 20+1 + 26+1 = 48 plus 350 B instructions = 398 -> round(113.71) = 114; claude_ai_Gmail (two claude.ai sign-in stubs, no instructions, not in the snapshot, so the label is the key) 34+1 + 45+1 = 81 -> round(23.14) = 23; playwright 30+1 = 31 -> 9; context7 (user-level snapshot server) 23+1 = 24 -> round(6.86) = 7; partition 534 -> round(152.57) = 153; each row's names are its startup deferred names in order. Skills 44 + 39 = 83 -> round(23.71) = 24; rows 44/3.5 = 12.57 -> 13, 39/3.5 = 11.14 -> 11; plugin sources and pluginId adlc@artisyn from the snapshot; gold-sync is not listed, so no row. Files 1050 + 3500 + 700 = 5250 -> 1500 (17.0 %); the rules are on demand. Reminders 16 + 334 = 350 -> 100. User lines 130 + 122 = 252 -> 72 (both contain <command-name>). Tool definitions from the tools snapshot after the anchor (no wire shape logged): Artifact 8 + 659 + 33 = 700 B -> 200 and PowerShell 10 + 307 + 33 = 350 B -> 100 (built-in, an input_schema of type object with empty properties = 33 B), Read 299 B -> 85, Bash 79 B -> 23 (server gs05-mcp -> source mcp-server), rows sorted by bytes, partition 1428 -> 408; each is name + description + the compact `input_schema` inside `schema` (the whole wire tool). Attributed 890+200+408+10+0+153+0+24+1500+100+72 = 3357. Total 800 + 8000 + 0 = 8800; internals 8800 - 3357 = 5443 = 61.85 % -> 61.9."
   }
 ]

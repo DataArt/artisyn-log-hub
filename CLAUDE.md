@@ -258,8 +258,15 @@ ALWAYS check that you are nor overtuning paths on server or client to developer 
 
 Never try to use python for scripting.
 You can use only NodeJS or powershell
-No Python anywhere in the repo — not in scripts and not in test fixtures/sample projects either
-(a fixture repo a test session edits must be JS/TS/Java/.NET, never Python).
+No Python for utility code anywhere in the repo — not in build/dev/release scripts and not in test
+fixtures/sample projects either (a fixture repo a test session edits must be JS/TS/Java/.NET, never
+Python).
+
+**Exception — Python as part of the product.** Python code the product ships and runs on users'
+machines is allowed (e.g. the hook's Python network tap, a `sitecustomize.py` for users' Python
+processes). Keep it inside the product package it belongs to (e.g. `hook/`), never as a helper
+script, and check it with Node-driven tests (a test may spawn the user's `python` when present and
+skip otherwise) — no Python test runner, no Python tooling in the dev loop.
 
 ### Code research and code quality
 

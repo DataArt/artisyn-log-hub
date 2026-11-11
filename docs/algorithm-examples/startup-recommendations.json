@@ -1,0 +1,357 @@
+[
+  {
+    "id": "SR-01",
+    "input": {
+      "cpt": 3.5,
+      "denominator": 10000,
+      "tools": [
+        {"name": "Read", "bytes": 50},
+        {"name": "Artifact", "bytes": 700},
+        {"name": "Workflow", "bytes": 500},
+        {"name": "Bash", "bytes": 100},
+        {"name": "PowerShell", "bytes": 200},
+        {"name": "AskUserQuestion", "bytes": 300},
+        {"name": "Agent", "bytes": 400}
+      ],
+      "snapshot": true,
+      "mcpServers": [
+        {"key": "claude_ai_Gmail", "label": "claude_ai_Gmail", "names": ["mcp__claude_ai_Gmail__authenticate", "mcp__claude_ai_Gmail__complete_authentication"], "namesBytes": 81, "instrBytes": 0, "failed": false, "configSource": null},
+        {"key": "claude_ai_Claude_Docs", "label": "claude_ai_Claude_Docs", "names": ["mcp__claude_ai_Claude_Docs__create", "mcp__claude_ai_Claude_Docs__read"], "namesBytes": 60, "instrBytes": 900, "failed": false, "configSource": null},
+        {"key": "context7", "label": "context7", "names": ["mcp__context7__get_docs"], "namesBytes": 24, "instrBytes": 0, "failed": false, "configSource": "user"},
+        {"key": "postgres", "label": "postgres", "names": ["mcp__postgres__query", "mcp__postgres__list_tables"], "namesBytes": 48, "instrBytes": 350, "failed": false, "configSource": "project"},
+        {"key": "broken", "label": "broken", "names": [], "namesBytes": 0, "instrBytes": 0, "failed": true, "configSource": "project"}
+      ],
+      "skills": [
+        {"name": "anthropic-skills:docx", "bytes": 40, "source": "org-synced", "pluginId": null},
+        {"name": "adlc:review", "bytes": 39, "source": "plugin", "pluginId": "adlc@artisyn"}
+      ],
+      "memoryBytes": 700,
+      "instructionFiles": [
+        {"path": "~/.claude/CLAUDE.md", "bytes": 1050, "source": "user"},
+        {"path": "CLAUDE.md", "bytes": 3500, "source": "project"}
+      ],
+      "agentTypes": [
+        {"name": "general-purpose", "bytes": 120},
+        {"name": "Explore", "bytes": 90}
+      ]
+    },
+    "expected": {
+      "count": 14,
+      "measuredTokens": 2329,
+      "ids": [
+        "startup.rare-builtin-tools",
+        "startup.two-shells",
+        "startup.claudeai-connector-stubs",
+        "startup.claudeai-connectors",
+        "startup.claudeai-instructions",
+        "startup.org-synced-skills",
+        "startup.user-mcp-servers",
+        "startup.auto-memory",
+        "startup.project-claude-md",
+        "startup.project-mcp-servers",
+        "startup.failed-mcp-servers",
+        "startup.plugin-skills",
+        "startup.interaction-tools",
+        "startup.subagent-types"
+      ],
+      "rows": {
+        "startup.rare-builtin-tools": {"itemOrder": ["Artifact", "Workflow"], "items": {"Artifact": 700, "Workflow": 500}, "bytes": 1200, "tokens": 343, "sharePct": 3.4, "snippet": "\"permissions\": { \"deny\": [\"Artifact\", \"Workflow\"] }"},
+        "startup.two-shells": {"itemOrder": ["PowerShell", "Bash"], "items": {"PowerShell": 200, "Bash": 100}, "bytes": 300, "tokens": 86, "sharePct": 0.9},
+        "startup.claudeai-connector-stubs": {"items": {"claude_ai_Gmail": 81}, "bytes": 81, "tokens": 23, "sharePct": 0.2},
+        "startup.claudeai-connectors": {"items": {"claude_ai_Claude_Docs": 60}, "bytes": 60, "tokens": 17, "sharePct": 0.2},
+        "startup.claudeai-instructions": {"items": {"claude_ai_Claude_Docs": 900}, "bytes": 900, "tokens": 257, "sharePct": 2.6},
+        "startup.org-synced-skills": {"items": {"anthropic-skills:docx": 40}, "bytes": 40, "tokens": 11, "sharePct": 0.1},
+        "startup.user-mcp-servers": {"items": {"context7": 24}, "bytes": 24, "tokens": 7, "sharePct": 0.1},
+        "startup.auto-memory": {"items": {"MEMORY.md": 700}, "bytes": 700, "tokens": 200, "sharePct": 2},
+        "startup.project-claude-md": {"items": {"CLAUDE.md": 3500}, "bytes": 3500, "tokens": 1000, "sharePct": 10},
+        "startup.project-mcp-servers": {"itemOrder": ["postgres", "broken"], "items": {"postgres": 398, "broken": 0}, "statuses": {"broken": "failed"}, "bytes": 398, "tokens": 114, "sharePct": 1.1},
+        "startup.failed-mcp-servers": {"items": {"broken": 0}, "statuses": {"broken": "failed"}, "bytes": 0, "tokens": 0, "sharePct": 0},
+        "startup.plugin-skills": {"items": {"adlc@artisyn": 39}, "bytes": 39, "tokens": 11, "sharePct": 0.1},
+        "startup.interaction-tools": {"itemOrder": ["Agent", "AskUserQuestion"], "items": {"Agent": 400, "AskUserQuestion": 300}, "bytes": 700, "tokens": 200, "sharePct": 2, "snippet": "\"permissions\": { \"deny\": [\"Agent\", \"AskUserQuestion\"] }"},
+        "startup.subagent-types": {"itemOrder": ["general-purpose", "Explore"], "items": {"general-purpose": 120, "Explore": 90}, "bytes": 210, "tokens": 60, "sharePct": 0.6}
+      }
+    },
+    "note": "Every entry matches, in catalog order (rule 2). cpt 3.5, denominator 10,000. #1 Artifact 700 + Workflow 500 = 1,200 B, 1200/3.5 = 342.86 -> 343, 343/10000 = 3.43 % -> 3.4. #2 PowerShell 200 + Bash 100 = 300 -> 85.71 -> 86 -> 0.86 % -> 0.9. #3 Gmail (stubs only) 81 -> 23.14 -> 23 -> 0.2. #4 Claude_Docs has non-stub names: namesBytes 60 -> 17.14 -> 17 -> 0.17 % -> 0.2. #5 Claude_Docs instrBytes 900 -> 257.14 -> 257 -> 2.57 % -> 2.6. #6 org-synced docx 40 -> 11.43 -> 11 -> 0.1. #7 context7 configSource user 24 + 0 -> 6.86 -> 7 -> 0.07 % -> 0.1. #8 MEMORY.md 700 -> 200 -> 2. #9 only the project file: 3,500 -> 1,000 -> 10. #10 postgres 48 + 350 = 398, broken failed -> 0 B: 398 -> 113.71 -> 114 -> 1.14 % -> 1.1. #11 broken 0 B failed -> 0 tokens, share 0. #12 adlc@artisyn 39 -> 11.14 -> 11 -> 0.1. #13 Agent 400 + AskUserQuestion 300 = 700 -> 200 -> 2. #14 120 + 90 = 210 -> 60 -> 0.6. measuredTokens = 343+86+23+17+257+11+7+200+1000+114+0+11+200+60 = 2,329. Read 50 B and ~/.claude/CLAUDE.md are in no entry."
+  },
+  {
+    "id": "SR-02",
+    "input": {
+      "cpt": 3.5,
+      "denominator": 5000,
+      "tools": [
+        {"name": "Read", "bytes": 299},
+        {"name": "Edit", "bytes": 200}
+      ],
+      "snapshot": true,
+      "mcpServers": [],
+      "skills": [
+        {"name": "my-skill", "bytes": 50, "source": "user", "pluginId": null}
+      ],
+      "memoryBytes": 0,
+      "instructionFiles": [
+        {"path": "~/.claude/CLAUDE.md", "bytes": 1050, "source": "user"},
+        {"path": "CLAUDE.md", "bytes": 0, "source": "project"}
+      ],
+      "agentTypes": []
+    },
+    "expected": {"count": 0, "measuredTokens": 0, "ids": []},
+    "note": "Nothing matches: no listed tool name, no servers, a user-source skill (neither org nor plugin), memory 0 B, the only project file has 0 B (#9 needs bytes > 0), no agent types. 0 rows, so no Recommendations button."
+  },
+  {
+    "id": "SR-03",
+    "input": {
+      "cpt": 3.5,
+      "denominator": 5000,
+      "tools": null,
+      "snapshot": true,
+      "mcpServers": [],
+      "skills": [],
+      "memoryBytes": 700,
+      "instructionFiles": [],
+      "agentTypes": []
+    },
+    "expected": {"count": 1, "measuredTokens": 200, "ids": ["startup.auto-memory"], "rows": {"startup.auto-memory": {"items": {"MEMORY.md": 700}, "bytes": 700, "tokens": 200, "sharePct": 4}}},
+    "note": "tools = null (no tools source): #1, #2 and #13 cannot match. Only #8: 700 / 3.5 = 200 tokens, 200/5000 = 4 %."
+  },
+  {
+    "id": "SR-04",
+    "input": {
+      "cpt": 3.5,
+      "denominator": 5000,
+      "tools": [],
+      "snapshot": false,
+      "mcpServers": [
+        {"key": "context7", "label": "context7", "names": ["mcp__context7__get_docs"], "namesBytes": 24, "instrBytes": 0, "failed": false, "configSource": null},
+        {"key": "postgres", "label": "postgres", "names": ["mcp__postgres__query"], "namesBytes": 21, "instrBytes": 0, "failed": false, "configSource": null}
+      ],
+      "skills": [
+        {"name": "adlc:review", "bytes": 39, "source": null, "pluginId": null}
+      ],
+      "memoryBytes": 0,
+      "instructionFiles": [
+        {"path": "CLAUDE.md", "bytes": 350, "source": "project"}
+      ],
+      "agentTypes": []
+    },
+    "expected": {"count": 1, "measuredTokens": 100, "ids": ["startup.project-claude-md"], "rows": {"startup.project-claude-md": {"items": {"CLAUDE.md": 350}, "bytes": 350, "tokens": 100, "sharePct": 2}}},
+    "note": "No snapshot: every server has configSource null and the user/local fallback of #7 needs snapshot = true, so #7 and #10 do not match; the skill's source is null, so #12 does not match. #9 still matches: 350 / 3.5 = 100 tokens, 100/5000 = 2 %."
+  },
+  {
+    "id": "SR-05",
+    "input": {
+      "cpt": 3.5,
+      "denominator": 5000,
+      "tools": [],
+      "snapshot": true,
+      "mcpServers": [
+        {"key": "context7", "label": "context7", "names": ["mcp__context7__get_docs"], "namesBytes": 24, "instrBytes": 0, "failed": false, "configSource": null},
+        {"key": "plugin_adlc_docs", "label": "plugin_adlc_docs", "names": ["mcp__plugin_adlc_docs__search"], "namesBytes": 30, "instrBytes": 0, "failed": false, "configSource": null},
+        {"key": "claude_ai_Gmail", "label": "claude_ai_Gmail", "names": ["mcp__claude_ai_Gmail__search"], "namesBytes": 29, "instrBytes": 0, "failed": false, "configSource": null}
+      ],
+      "skills": [],
+      "memoryBytes": 0,
+      "instructionFiles": [],
+      "agentTypes": []
+    },
+    "expected": {"count": 2, "measuredTokens": 15, "ids": ["startup.claudeai-connectors", "startup.user-mcp-servers"], "rows": {"startup.user-mcp-servers": {"items": {"context7": 24}, "notes": {"context7": "user/local scope (~/.claude.json)"}, "bytes": 24, "tokens": 7, "sharePct": 0.1}, "startup.claudeai-connectors": {"items": {"claude_ai_Gmail": 29}, "bytes": 29, "tokens": 8, "sharePct": 0.2}}},
+    "note": "Snapshot present, every configSource null. context7 (no plugin_ prefix) -> #7 with the user/local note: 24 / 3.5 = 6.86 -> 7, 7/5000 = 0.14 % -> 0.1. plugin_adlc_docs is a plugin server -> no row. claude_ai_Gmail is a claude.ai server, never #7; it has a non-stub name -> #4: 29 / 3.5 = 8.29 -> 8, 0.16 % -> 0.2. measuredTokens 7 + 8 = 15."
+  },
+  {
+    "id": "SR-06",
+    "input": {
+      "cpt": 3.5,
+      "denominator": 5000,
+      "tools": [],
+      "snapshot": true,
+      "mcpServers": [
+        {"key": "claude_ai_Gmail", "label": "claude_ai_Gmail", "names": ["mcp__claude_ai_Gmail__authenticate", "mcp__claude_ai_Gmail__complete_authentication"], "namesBytes": 81, "instrBytes": 0, "failed": false, "configSource": null},
+        {"key": "claude_ai_Claude_Data", "label": "claude_ai_Claude_Data", "names": ["mcp__claude_ai_Claude_Data__authenticate", "mcp__claude_ai_Claude_Data__complete_authentication"], "namesBytes": 90, "instrBytes": 210, "failed": false, "configSource": null},
+        {"key": "claude_ai_Claude_Docs", "label": "claude_ai_Claude_Docs", "names": ["mcp__claude_ai_Claude_Docs__authenticate", "mcp__claude_ai_Claude_Docs__create"], "namesBytes": 70, "instrBytes": 700, "failed": false, "configSource": null},
+        {"key": "claude_ai_Slack", "label": "claude_ai_Slack", "names": [], "namesBytes": 0, "instrBytes": 0, "failed": false, "configSource": null}
+      ],
+      "skills": [],
+      "memoryBytes": 0,
+      "instructionFiles": [],
+      "agentTypes": []
+    },
+    "expected": {
+      "count": 3,
+      "measuredTokens": 329,
+      "ids": ["startup.claudeai-connector-stubs", "startup.claudeai-connectors", "startup.claudeai-instructions"],
+      "rows": {
+        "startup.claudeai-connector-stubs": {"itemOrder": ["claude_ai_Claude_Data", "claude_ai_Gmail"], "items": {"claude_ai_Claude_Data": 90, "claude_ai_Gmail": 81}, "notes": {}, "note": "2 connectors", "bytes": 171, "tokens": 49, "sharePct": 1, "snippet": "ENABLE_CLAUDEAI_MCP_SERVERS=false"},
+        "startup.claudeai-connectors": {"items": {"claude_ai_Claude_Docs": 70}, "bytes": 70, "tokens": 20, "sharePct": 0.4},
+        "startup.claudeai-instructions": {"itemOrder": ["claude_ai_Claude_Docs", "claude_ai_Claude_Data"], "items": {"claude_ai_Claude_Docs": 700, "claude_ai_Claude_Data": 210}, "bytes": 910, "tokens": 260, "sharePct": 5.2}
+      }
+    },
+    "note": "Byte ownership of claude.ai servers (rule 4). Stubs only (every name ends __authenticate / __complete_authentication): Gmail and Claude_Data -> #3 (row note '2 connectors', no item notes) with namesBytes 81 + 90 = 171 -> 48.86 -> 49, 49/5000 = 0.98 % -> 1. Claude_Docs has a non-stub name (create) -> #4 with namesBytes 70 -> 20 -> 0.4 %. instrBytes go only to #5: Docs 700 + Data 210 = 910 -> 260 -> 5.2 %. Slack has no names and no instructions -> no row (#3 needs names non-empty). measuredTokens 49 + 20 + 260 = 329; no byte is in two rows (81+90+70+700+210 = 1,151 B)."
+  },
+  {
+    "id": "SR-07",
+    "input": {
+      "cpt": 3.5,
+      "denominator": 5000,
+      "tools": [],
+      "snapshot": true,
+      "mcpServers": [
+        {"key": "context7", "label": "context7", "names": ["mcp__context7__get_docs"], "namesBytes": 24, "instrBytes": 0, "failed": true, "configSource": "user"}
+      ],
+      "skills": [],
+      "memoryBytes": 0,
+      "instructionFiles": [],
+      "agentTypes": []
+    },
+    "expected": {
+      "count": 2,
+      "measuredTokens": 0,
+      "ids": ["startup.user-mcp-servers", "startup.failed-mcp-servers"],
+      "rows": {
+        "startup.user-mcp-servers": {"items": {"context7": 0}, "statuses": {"context7": "failed"}, "bytes": 0, "tokens": 0, "sharePct": 0, "snippet": "claude mcp remove context7 -s user"},
+        "startup.failed-mcp-servers": {"items": {"context7": 0}, "statuses": {"context7": "failed"}, "bytes": 0, "tokens": 0, "sharePct": 0}
+      }
+    },
+    "note": "A failed user-level server: #7 lists it with 0 B and status failed (its 24 names bytes are ignored once failed), #11 lists it with 0 B and status failed. Both rows 0 tokens, share 0; measuredTokens 0."
+  },
+  {
+    "id": "SR-08",
+    "input": {
+      "cpt": 3.5,
+      "denominator": 1000,
+      "tools": [],
+      "snapshot": true,
+      "mcpServers": [],
+      "skills": [
+        {"name": "anthropic-skills:pdf", "bytes": 30, "source": "plugin", "pluginId": "anthropic-skills@claude"},
+        {"name": "anthropic-skills:docx", "bytes": 40, "source": "org-synced", "pluginId": null},
+        {"name": "adlc:review", "bytes": 39, "source": "plugin", "pluginId": "adlc@artisyn"},
+        {"name": "orphan:skill", "bytes": 20, "source": "plugin", "pluginId": null},
+        {"name": "adlc:review-deep", "bytes": 44, "source": "plugin", "pluginId": "adlc@artisyn"}
+      ],
+      "memoryBytes": 0,
+      "instructionFiles": [],
+      "agentTypes": []
+    },
+    "expected": {
+      "count": 2,
+      "measuredTokens": 49,
+      "ids": ["startup.org-synced-skills", "startup.plugin-skills"],
+      "rows": {
+        "startup.org-synced-skills": {"itemOrder": ["anthropic-skills:docx", "anthropic-skills:pdf"], "items": {"anthropic-skills:docx": 40, "anthropic-skills:pdf": 30}, "bytes": 70, "tokens": 20, "sharePct": 2},
+        "startup.plugin-skills": {"itemOrder": ["adlc@artisyn", "(unknown plugin)"], "items": {"adlc@artisyn": 83, "(unknown plugin)": 20}, "bytes": 103, "tokens": 29, "sharePct": 2.9, "snippet": "\"enabledPlugins\": { \"adlc@artisyn\": false }"}
+      }
+    },
+    "note": "#6 before #12 (rule 5). #6: docx (source org-synced) 40 and pdf (name starts anthropic-skills:) 30 = 70 -> 20 tokens -> 2 %. #12 skips pdf although its source is plugin: adlc@artisyn = 39 + 44 = 83, pluginId null -> (unknown plugin) 20; 103 -> 29.43 -> 29 -> 2.9 %. The snippet leaves out (unknown plugin). measuredTokens 20 + 29 = 49."
+  },
+  {
+    "id": "SR-09",
+    "input": {
+      "cpt": 3.5,
+      "denominator": 5000,
+      "tools": [
+        {"name": "Bash", "bytes": 79},
+        {"name": "Read", "bytes": 299}
+      ],
+      "snapshot": true,
+      "mcpServers": [],
+      "skills": [],
+      "memoryBytes": 0,
+      "instructionFiles": [],
+      "agentTypes": []
+    },
+    "expected": {"count": 0, "measuredTokens": 0, "ids": []},
+    "note": "Bash without PowerShell: #2 needs both shells, so no row."
+  },
+  {
+    "id": "SR-10",
+    "input": {
+      "cpt": 3.5,
+      "denominator": 5000,
+      "tools": [
+        {"name": "Workflow", "bytes": 300},
+        {"name": "Artifact", "bytes": 300},
+        {"name": "SendFeedback", "bytes": 500},
+        {"name": "mcp__docs__ReportFindings", "bytes": 400}
+      ],
+      "snapshot": true,
+      "mcpServers": [],
+      "skills": [],
+      "memoryBytes": 0,
+      "instructionFiles": [],
+      "agentTypes": []
+    },
+    "expected": {"count": 1, "measuredTokens": 314, "ids": ["startup.rare-builtin-tools"], "rows": {"startup.rare-builtin-tools": {"itemOrder": ["SendFeedback", "Workflow", "Artifact"], "items": {"SendFeedback": 500, "Workflow": 300, "Artifact": 300}, "bytes": 1100, "tokens": 314, "sharePct": 6.3, "snippet": "\"permissions\": { \"deny\": [\"SendFeedback\", \"Workflow\", \"Artifact\"] }"}}},
+    "note": "Item order: bytes descending, ties in first-seen order -> SendFeedback 500, then Workflow 300 before Artifact 300 (facts order). The mcp__ tool is not built-in and its name is not an exact match. 1,100 / 3.5 = 314.29 -> 314, 314/5000 = 6.28 % -> 6.3."
+  },
+  {
+    "id": "SR-11",
+    "input": {
+      "cpt": 3.5,
+      "denominator": 0,
+      "tools": [],
+      "snapshot": true,
+      "mcpServers": [],
+      "skills": [],
+      "memoryBytes": 700,
+      "instructionFiles": [],
+      "agentTypes": []
+    },
+    "expected": {"count": 1, "measuredTokens": 200, "ids": ["startup.auto-memory"], "rows": {"startup.auto-memory": {"items": {"MEMORY.md": 700}, "bytes": 700, "tokens": 200, "sharePct": 0}}},
+    "note": "Denominator 0: share is 0 (not NaN / Infinity); tokens still 700 / 3.5 = 200."
+  },
+  {
+    "id": "SR-GS05",
+    "input": {
+      "cpt": 3.5,
+      "denominator": 8800,
+      "tools": [
+        {"name": "Read", "bytes": 299},
+        {"name": "Bash", "bytes": 79},
+        {"name": "Artifact", "bytes": 700},
+        {"name": "PowerShell", "bytes": 350}
+      ],
+      "snapshot": true,
+      "mcpServers": [
+        {"key": "postgres", "label": "postgres", "names": ["mcp__postgres__query", "mcp__postgres__list_tables"], "namesBytes": 48, "instrBytes": 350, "failed": false, "configSource": "project"},
+        {"key": "claude_ai_Gmail", "label": "claude_ai_Gmail", "names": ["mcp__claude_ai_Gmail__authenticate", "mcp__claude_ai_Gmail__complete_authentication"], "namesBytes": 81, "instrBytes": 0, "failed": false, "configSource": null},
+        {"key": "playwright", "label": "playwright", "names": ["mcp__playwright__browser_click"], "namesBytes": 31, "instrBytes": 0, "failed": false, "configSource": "project"},
+        {"key": "context7", "label": "context7", "names": ["mcp__context7__get_docs"], "namesBytes": 24, "instrBytes": 0, "failed": false, "configSource": "user"}
+      ],
+      "skills": [
+        {"name": "adlc:review-deep", "bytes": 44, "source": "plugin", "pluginId": "adlc@artisyn"},
+        {"name": "adlc:review", "bytes": 39, "source": "plugin", "pluginId": "adlc@artisyn"}
+      ],
+      "memoryBytes": 700,
+      "instructionFiles": [
+        {"path": "~/.claude/CLAUDE.md", "bytes": 1050, "source": "user"},
+        {"path": "CLAUDE.md", "bytes": 3500, "source": "project"},
+        {"path": "CLAUDE.local.md", "bytes": 700, "source": "project"}
+      ],
+      "agentTypes": []
+    },
+    "expected": {
+      "count": 8,
+      "measuredTokens": 1900,
+      "ids": [
+        "startup.rare-builtin-tools",
+        "startup.two-shells",
+        "startup.claudeai-connector-stubs",
+        "startup.user-mcp-servers",
+        "startup.auto-memory",
+        "startup.project-claude-md",
+        "startup.project-mcp-servers",
+        "startup.plugin-skills"
+      ],
+      "rows": {
+        "startup.rare-builtin-tools": {"items": {"Artifact": 700}, "bytes": 700, "tokens": 200, "sharePct": 2.3},
+        "startup.two-shells": {"itemOrder": ["PowerShell", "Bash"], "items": {"PowerShell": 350, "Bash": 79}, "bytes": 429, "tokens": 123, "sharePct": 1.4},
+        "startup.claudeai-connector-stubs": {"items": {"claude_ai_Gmail": 81}, "note": "1 connector", "bytes": 81, "tokens": 23, "sharePct": 0.3},
+        "startup.user-mcp-servers": {"items": {"context7": 24}, "bytes": 24, "tokens": 7, "sharePct": 0.1},
+        "startup.auto-memory": {"items": {"MEMORY.md": 700}, "bytes": 700, "tokens": 200, "sharePct": 2.3},
+        "startup.project-claude-md": {"itemOrder": ["CLAUDE.md", "CLAUDE.local.md"], "items": {"CLAUDE.md": 3500, "CLAUDE.local.md": 700}, "bytes": 4200, "tokens": 1200, "sharePct": 13.6},
+        "startup.project-mcp-servers": {"itemOrder": ["postgres", "playwright"], "items": {"postgres": 398, "playwright": 31}, "bytes": 429, "tokens": 123, "sharePct": 1.4},
+        "startup.plugin-skills": {"items": {"adlc@artisyn": 83}, "bytes": 83, "tokens": 24, "sharePct": 0.3}
+      }
+    },
+    "note": "Mirror of the GS-05 golden recommendations block (tests/golden/gs-05-skills-rules-mcp-workflow/expected.json). Facts = the SA-GS05 anatomy: cpt 3.5, denominator 8,800; tools Read 299, Bash 79 (a snapshot server is set on it in the fixture, but its name has no mcp__ prefix, so it is built-in), Artifact 700, PowerShell 350. #1 Artifact 700 -> 200 -> 2.27 % -> 2.3. #2 PowerShell 350 + Bash 79 = 429 -> 122.57 -> 123 -> 1.40 % -> 1.4. #3 Gmail stubs 81 -> 23.14 -> 23 -> 0.26 % -> 0.3. #7 context7 (user) 24 -> 6.86 -> 7 -> 0.08 % -> 0.1. #8 700 -> 200 -> 2.3. #9 project files 3,500 + 700 = 4,200 -> 1,200 -> 13.64 % -> 13.6 (~/.claude/CLAUDE.md is user, not in #9). #10 postgres 48 + 350 = 398, playwright 31 -> 429 -> 123 -> 1.4. #12 adlc@artisyn 44 + 39 = 83 -> 23.71 -> 24 -> 0.27 % -> 0.3. No agent types, no org skills, no failed server. measuredTokens 200+123+23+7+200+1200+123+24 = 1,900 (21.6 % of 8,800)."
+  }
+]

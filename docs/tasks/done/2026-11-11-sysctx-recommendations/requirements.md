@@ -105,11 +105,12 @@ startup") — the catalog here may later feed or be fed by that one.
     `enabledPlugins: {"<plugin>@<marketplace>": false}` in `settings.json`;
   - built-in `AskUserQuestion`, `Agent`, `ListAgents` tools → what each does, `permissions.deny`;
   - the subagent types listing → where the types come from (built-in, plugins, `.claude/agents/`).
-- FR-4a. Tool presence and per-tool size come from the first `prompt_snapshot` with a non-empty
-  `tools[]` in the main transcript (the source of the View system prompt modal, reusing its
-  `toolsSnapshot()` from `system-prompt-view.ts`); `api-request-shape` is not used. A tool's size
-  follows the FR-8 rule. Without such a snapshot the tool rows and the Bash + PowerShell row are not
-  matched.
+- FR-4a. Tool presence and per-tool size come from the anatomy `tool-definitions` partition, which
+  `findToolDefinitions` (`sysctx-anatomy/tool-definitions.ts`) fills — the same source as the View
+  system prompt modal's Tool definitions tab: the `api-request-shape` of the first main request when
+  logged (Claude Code 2.1.312+), otherwise the first `prompt_snapshot` with a non-empty `tools[]`. A
+  tool's size follows the FR-8 rule. Without a tools source (`anatomy.toolSource === null`) the tool
+  rows and the Bash + PowerShell row are not matched.
 - FR-5. The token estimate of each row uses the same bytes-per-token ratio and the same
   "≈ estimated" wording as the rest of the tab. Every measured byte belongs to at most one row:
   connector rows count only deferred-name bytes, the Claude Docs / Data instructions row only
@@ -121,17 +122,13 @@ startup") — the catalog here may later feed or be fed by that one.
   catalog's `verifiedOn` version.
 - FR-7. The tab's "no text in the DOM" rule still holds: the modal shows only catalog text, names,
   counts and sizes — never content of the user's prompts, files or system prompt.
-- FR-8. Fix the tool byte rule of the View system prompt modal (`system-prompt-view.ts`,
-  `buildTools`). In real Claude Code data a `prompt_snapshot` `tools[]` item's `schema` is the whole
-  wire tool definition `{name, description, input_schema, eager_input_streaming}`, not the input JSON
-  Schema, so adding `description` to `JSON.stringify(schema)` counts the description twice
-  (`Artifact` ≈ 60 KB instead of ≈ 38 KB). The rule becomes: when `schema` has `input_schema`, the
-  tool's bytes = `JSON.stringify(schema)` and the shown schema JSON is `schema.input_schema`;
-  otherwise (bare JSON Schema, as in older fixtures) the current name + description + schema rule
-  stays. The same change updates the `system-prompt-view` algorithm doc and its rows file
-  (`docs/algorithm-examples/system-prompt-view.json`, with a wire-shape row), the `tools[]` item
-  description in `docs/knowledgebase/log-schema/attachment-types.md`, and the GS-05 fixture's tools
-  to the wire shape (its `expected.json` numbers follow).
+- FR-8. The tool byte rule (already built in `2026-11-10-sysctx-prompt-viewer`, no code change
+  here): a tool's bytes = name + description + `JSON.stringify(input_schema)`, where `input_schema`
+  is `schema.input_schema` when a snapshot `tools[]` item's `schema` is the whole wire tool
+  definition, so the description is counted once (`Artifact` ≈ 38 KB, not ≈ 60 KB). The anatomy
+  `tool-definitions` partition, the View system prompt modal's Tool definitions tab and the
+  recommendation tool rows all use this one rule through `findToolDefinitions`, so their numbers
+  are equal.
 
 ## Non-Functional Requirements
 
@@ -161,9 +158,9 @@ startup") — the catalog here may later feed or be fed by that one.
 - [ ] FR-4 (extra groups): on local prod a repo 1 session shows rows for project CLAUDE.md, project
       MCP servers (`webstorm`), the failed `comfyui` server, `adlc-lh` plugin skills,
       `AskUserQuestion` / `Agent` / `ListAgents` and the subagent types listing.
-- [ ] FR-8: on session `2f225416` the Tool definitions tab shows `Artifact` ≈ 38 KB (not ≈ 60 KB)
-      and its schema block shows the input schema only; the `system-prompt-view` rows file has a
-      wire-shape and a bare-schema row, both passing.
+- [ ] FR-8: on session `2f225416` the recommendation row for `Artifact` reports the same size as
+      the Tool definitions tab and the anatomy `tool-definitions` row (≈ 38 KB, not ≈ 60 KB); in the
+      GS-05 golden the tool rows' bytes equal the `tool-definitions` drill-down.
 - [ ] FR-5: tool rows equal the per-tool tokens of the View system prompt → Tool definitions tab;
       the other measured rows equal the anatomy partition / drill-down numbers; the shares of all
       rows sum to at most 100 %.
@@ -183,9 +180,10 @@ None.
 
 ## Common sense considerations
 
-- Tool data source: first `prompt_snapshot` with `tools[]`; `api-request-shape` not used (FR-4a).
-- Tool size per the FR-8 rule (FR-4a).
-- Hard dependency on `2026-11-10-sysctx-prompt-viewer`; reuse its `toolsSnapshot()`.
+- Tool data source: the anatomy `tool-definitions` partition (`findToolDefinitions`:
+  `api-request-shape` first, else the first `prompt_snapshot` with `tools[]`) (FR-4a).
+- Tool size per the FR-8 rule, equal to the Tool definitions tab (FR-4a, FR-5).
+- Hard dependency on `2026-11-10-sysctx-prompt-viewer`; reuse its `findToolDefinitions`.
 - "not measured" only for groups with no per-item size in the data (FR-5).
 - Description tool figures are marked illustrative.
 - Scenario coverage extends the GS-05 golden and its `expected.json` (AC).
@@ -209,3 +207,11 @@ None.
   `tool-definitions` partition with one row per tool. Re-read FR-4a / FR-5 / FR-8 against that
   before planning.
 - Evidence (FR-8 key survey, size-rule rationale): see `notes.md`.
+- 2026-11-11: FR-4a, FR-8, the FR-8 AC and the matching Common-sense lines were reworded to the
+  built behaviour (impl-plan DD 1). FR-3's per-entry `verifiedOn` became one catalog-wide
+  `VERIFIED_ON` constant exported by `@loghub/recommendations` (impl-plan DD 5), because all entries
+  are verified in one pass; FR-6's disclaimer names it.
+- 2026-11-11 (user decision, after implementation): the FR-6 disclaimer, `VERIFIED_ON` and the
+  per-entry `verify` flag ("Verify:" prefix) were removed. Instead every catalog entry carries
+  `docs` — links to the Claude Code documentation pages of its setting, shown as **Docs:** in the
+  row. FR-6, its AC and the matching Common-sense / NFR lines are superseded by this note.

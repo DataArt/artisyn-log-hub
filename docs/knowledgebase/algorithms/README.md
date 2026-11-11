@@ -60,6 +60,7 @@ format where the two differ).
 | [workflow-agent-rows](workflow-agent-rows.md) | `client/.../session-log/workflow-agent-rows.ts` | vitest |
 | [sysctx-anatomy](sysctx-anatomy.md) | `client/.../session-log/sysctx-anatomy/sysctx-anatomy.ts` | vitest |
 | [system-prompt-view](system-prompt-view.md) | `client/.../session-log/sysctx-anatomy/system-prompt-view.ts` | vitest |
+| [startup-recommendations](startup-recommendations.md) | `packages/recommendations/src/*` (`@loghub/recommendations`; `matchRecommendations`, `CATALOG`); client adapter `client/.../session-log/sysctx-anatomy/startup-facts.ts` | vitest |
 | [tool-call-sections](tool-call-sections.md) | `client/.../session-log/tool-calls.ts` | vitest |
 | [tool-call-outcome](tool-call-outcome.md) | `client/.../session-log/tool-outcome.ts`; twin `server/src/logs/tool-stats.ts` | vitest, jest |
 | [session-lens-row](session-lens-row.md) | `client/.../repository/session-lenses.ts` (`lensRow`, `lensDefaultTab`), `client/.../repository/session-tab-groups.ts` (`pickGroupTab`) | vitest |

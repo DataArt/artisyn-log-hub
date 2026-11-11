@@ -11,9 +11,16 @@
  * prompt text. The tab only checks whether a `prompt_snapshot` exists (`hasPromptSnapshot`); the
  * prompt text itself appears only inside the on-demand `SystemPromptModal`, which is mounted —
  * and parses the snapshot — only while it is open.
+ *
+ * The Recommendations button and its count come from a second memo: `buildStartupFacts` on the
+ * anatomy, then `matchRecommendations` (`@loghub/recommendations`,
+ * docs/knowledgebase/algorithms/startup-recommendations.md). The `RecommendationsModal` is
+ * mounted only while open and shows only catalog text, names, counts and sizes — never file,
+ * section or prompt text; it makes no network request.
  */
 import { useCallback, useMemo, useState } from 'react';
-import { FileText } from 'lucide-react';
+import { FileText, Lightbulb } from 'lucide-react';
+import { matchRecommendations } from '@loghub/recommendations';
 import { Button } from '@/ui/button';
 import { Skeleton } from '@/ui/skeleton';
 import type { ModelPricingMap } from '../../../../../models/pricing';
@@ -25,7 +32,9 @@ import { fmtInt } from './AnatomyCells';
 import { AnatomyPartitionBar } from './AnatomyPartitionBar';
 import { AnatomyPartitionTable } from './AnatomyPartitionTable';
 import { SystemPromptModal } from './SystemPromptModal';
+import { RecommendationsModal } from './RecommendationsModal';
 import { hasPromptSnapshot } from './system-prompt-view';
+import { buildStartupFacts } from './startup-facts';
 
 export interface SessionSysctxAnatomyTabProps {
   mainLogs: Record<string, unknown>[] | null;
@@ -165,6 +174,17 @@ export function SessionSysctxAnatomyTab({
   );
   const [promptOpen, setPromptOpen] = useState(false);
 
+  // Rows are computed here, so the button count is known without opening the modal (DD 12).
+  const reco = useMemo(() => {
+    const { facts, claudeVersion } = buildStartupFacts({
+      anatomy,
+      snapshot: harnessSnapshot ?? null,
+      main: mainLogs ?? [],
+    });
+    return { rows: matchRecommendations(facts), claudeVersion };
+  }, [anatomy, harnessSnapshot, mainLogs]);
+  const [recoOpen, setRecoOpen] = useState(false);
+
   // Selecting a kind (segment or row) also expands it when it has drill-down rows (DD 15).
   const select = useCallback(
     (kind: AnatomyPartitionKind) => {
@@ -217,7 +237,33 @@ export function SessionSysctxAnatomyTab({
               View system prompt
             </Button>
           )}
+          {reco.rows.length > 0 && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setRecoOpen(true)}
+              data-testid="sysctx-reco-open"
+            >
+              <Lightbulb />
+              Recommendations
+              <span
+                className="rounded-full bg-primary px-1.5 text-xs leading-5 text-primary-foreground tabular-nums"
+                data-testid="sysctx-reco-count"
+              >
+                {reco.rows.length}
+              </span>
+            </Button>
+          )}
         </div>
+        {recoOpen && (
+          <RecommendationsModal
+            open={recoOpen}
+            onOpenChange={setRecoOpen}
+            rows={reco.rows}
+            anatomy={anatomy}
+            claudeVersion={reco.claudeVersion}
+          />
+        )}
         {promptOpen && (
           <SystemPromptModal
             open={promptOpen}

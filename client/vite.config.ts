@@ -17,6 +17,7 @@ export default defineConfig({
       '@loghub/pricing': path.resolve(dirname, '../packages/pricing/src/index.ts'),
       '@loghub/bash-view': path.resolve(dirname, '../packages/bash-view/src/index.ts'),
       '@loghub/tool-monitor': path.resolve(dirname, '../packages/tool-monitor/src/index.ts'),
+      '@loghub/recommendations': path.resolve(dirname, '../packages/recommendations/src/index.ts'),
       // User-doc sources (nav.json drives the in-app help menu); see user-docs/.
       '@loghub/user-docs': path.resolve(dirname, '../user-docs'),
     },

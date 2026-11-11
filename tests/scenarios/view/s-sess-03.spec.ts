@@ -21,7 +21,9 @@
 // launched by scriptPath (workflow status and name). Step 8a2 opens GS-05's View system prompt
 // modal (algorithm doc system-prompt-view.md; numbers from its expected.json `systemPromptView`
 // block): parts split at the dynamic boundary, tools from the later snapshot gs05-0003p, the
-// startup flags only, masked paths, and Copy as Markdown = Download .md. Step 8d uploads one whose
+// startup flags only, masked paths, and Copy as Markdown = Download .md. Step 8a3 opens GS-05's
+// Recommendations modal (algorithm doc startup-recommendations.md; numbers from its expected.json
+// `recommendations` block) and checks that GS-07 has no Recommendations button. Step 8d uploads one whose
 // startup estimate exceeds its measured total (the over-total edge state) and has no
 // prompt_snapshot, so no View system prompt button.
 //
@@ -72,6 +74,19 @@ interface GoldenAnatomy {
   attributed: number;
   harnessInternals: number;
   partitions: Record<string, { bytes: number; tokens: number }>;
+}
+
+/**
+ * GS-05 `expected.json` → `roots[0].recommendations` (algorithm doc startup-recommendations.md;
+ * checked by tests/golden/check-arithmetic.mjs). `ids` in catalog order.
+ */
+interface GoldenRecommendations {
+  charsPerToken: number;
+  denominator: number;
+  count: number;
+  measuredTokens: number;
+  ids: string[];
+  rows: Record<string, { items: Record<string, number>; bytes: number; tokens: number }>;
 }
 
 /** GS-05 `expected.json` → `roots[0].systemPromptView` (checked by tests/golden/check-arithmetic.mjs). */
@@ -428,7 +443,7 @@ test('@S-SESS-03 Logs: what counts as a prompt, what is hidden, how a turn reads
     await expect(group('Docs').locator('tr', { hasText: 'docs/api.md' })).toHaveCount(1);
   });
 
-  await test.step('8. GS-05 System context anatomy: total 8,800, partitions (Tool definitions from the tools snapshot) and harness internals 5,773 from expected.json, the internals hint without a tools bullet, a bar segment selects its row, skills drill-down = the listing (unused-skill not shown, adlc:review-deep from a plugin)', async () => {
+  await test.step('8. GS-05 System context anatomy: total 8,800, partitions (Tool definitions from the tools snapshot: Artifact, PowerShell, Read, Bash) and harness internals 5,443 (61.9 %) from expected.json, the internals hint without a tools bullet, a bar segment selects its row, skills drill-down = the listing (unused-skill not shown, adlc:review-deep from a plugin)', async () => {
     const A5 = loadExpected('gs-05').roots[0].anatomy as GoldenAnatomy;
     await openSession(page, owner, repo.repoId, repo.rootId('gs-05'), { tab: 'sysctx' });
     const tab = page.getByTestId('sysctx-anatomy-tab');
@@ -441,6 +456,7 @@ test('@S-SESS-03 Logs: what counts as a prompt, what is hidden, how a turn reads
       await expect(row(kind).locator('td').nth(4), `${kind} tokens`).toHaveText(int(p.tokens));
     }
     const internals = row('harness-internals');
+    expect(((A5.harnessInternals / A5.total) * 100).toFixed(1), 'GS-05 internals share (DD 13)').toBe('61.9');
     await expect(internals.locator('td').nth(4)).toHaveText(int(A5.harnessInternals));
     await expect(internals.locator('td').nth(5)).toHaveText(`${((A5.harnessInternals / A5.total) * 100).toFixed(1)} %`);
 
@@ -461,10 +477,12 @@ test('@S-SESS-03 Logs: what counts as a prompt, what is hidden, how a turn reads
 
     await row('tool-definitions').click();
     const toolRows = tab.locator('[data-row-kind="tool-definitions"]');
-    await expect(toolRows, 'one row per tool of the tools snapshot').toHaveCount(2);
-    await expect(toolRows.nth(0)).toContainText('Read');
-    await expect(toolRows.nth(1)).toContainText('Bash');
-    await expect(toolRows.nth(1), 'an MCP tool').toContainText('MCP server');
+    await expect(toolRows, 'one row per tool of the tools snapshot').toHaveCount(4);
+    // Bytes descending: Artifact 700, PowerShell 350, Read 299, Bash 79.
+    for (const [i, name] of ['Artifact', 'PowerShell', 'Read', 'Bash'].entries())
+      await expect(toolRows.nth(i), `tool row ${i + 1}`).toContainText(name);
+    await expect(toolRows.nth(0), 'a built-in tool').toContainText('built-in');
+    await expect(toolRows.nth(3), 'an MCP tool').toContainText('MCP server');
 
     await row('skills').click();
     await expect(row('skills')).toHaveAttribute('aria-selected', 'true');
@@ -518,7 +536,7 @@ test('@S-SESS-03 Logs: what counts as a prompt, what is hidden, how a turn reads
     await expect(page.getByTestId('startup-context-line')).toBeVisible();
   });
 
-  await test.step('8a2. GS-05 View system prompt: totals from expected.json, Shared 2 / Session-specific 1 parts, Expand / Collapse all; Read and Bash (MCP · gs05-mcp) from the later snapshot with a table, raw <system-reminder> text and masked schema; startup flags only; Copy = Download, masked, no local path; no prompt text left in the tab', async () => {
+  await test.step('8a2. GS-05 View system prompt: totals from expected.json, Shared 2 / Session-specific 1 parts, Expand / Collapse all; Read, Bash (MCP · gs05-mcp), Artifact and PowerShell from the later snapshot with a table, raw <system-reminder> text and masked schema; startup flags only; Copy = Download, masked, no local path; no prompt text left in the tab', async () => {
     const V = loadExpected('gs-05').roots[0].systemPromptView as GoldenSystemPromptView;
     const A5 = loadExpected('gs-05').roots[0].anatomy as GoldenAnatomy;
     // The modal's figures are the anatomy's rows: prompt = system prompt + memory index, tools = Tool definitions.
@@ -568,8 +586,10 @@ test('@S-SESS-03 Logs: what counts as a prompt, what is hidden, how a turn reads
     );
     const tools = items('tools');
     await expect(tools).toHaveCount(V.tools);
-    await expect(tools.nth(0).locator('.truncate .font-mono')).toHaveText('Read');
-    await expect(tools.nth(1).locator('.truncate .font-mono')).toHaveText('Bash');
+    // The snapshot's own order: Read, Bash, then the built-in Artifact and PowerShell.
+    for (const [i, name] of ['Read', 'Bash', 'Artifact', 'PowerShell'].entries())
+      await expect(tools.nth(i).locator('.truncate .font-mono'), `tool ${i + 1}`).toHaveText(name);
+    for (const i of [2, 3]) await expect(tools.nth(i), 'a built-in tool has no server').not.toContainText('MCP ·');
     await expect(tools.nth(1).locator('.truncate'), 'the MCP server badge after the name').toContainText('MCP · gs05-mcp');
     await expect(tools.nth(0), 'Read has no server').not.toContainText('MCP ·');
     await tools.nth(0).getByRole('button').first().click();
@@ -629,6 +649,72 @@ test('@S-SESS-03 Logs: what counts as a prompt, what is hidden, how a turn reads
     await page.keyboard.press('Escape');
     await expect(modal).toHaveCount(0);
     await expect(tab, 'prompt text lives only in the modal').not.toContainText('GS05-SESSION-MARKER');
+  });
+
+  await test.step('8a3. GS-05 Recommendations: badge = count, rows in catalog order with their ≈ tokens, summary (Claude Code 2.1.99), docs links on every row, a snippet copies, no request and no file or tool text; GS-07 has no Recommendations button', async () => {
+    const R = loadExpected('gs-05').roots[0].recommendations as GoldenRecommendations;
+    const A5 = loadExpected('gs-05').roots[0].anatomy as GoldenAnatomy;
+    const share = (tokens: number) => `${(Math.round((tokens / R.denominator) * 1000) / 10).toFixed(1)} %`;
+    expect(R.count, 'count = ids').toBe(R.ids.length);
+    expect(R.denominator, 'GS-05 is not over-total: the share is of the whole total').toBe(A5.total);
+    const tab = page.getByTestId('sysctx-anatomy-tab');
+    // Still on GS-05's anatomy tab from 8a2 (clipboard stub in place).
+    const open = tab.getByTestId('sysctx-reco-open');
+    await expect(open).toBeVisible();
+    await expect(open.getByTestId('sysctx-reco-count')).toHaveText(String(R.count));
+    await expect(page.getByTestId('sysctx-reco-modal'), 'mounted only while open').toHaveCount(0);
+
+    const requests: string[] = [];
+    const onRequest = (req: { url(): string }) => requests.push(req.url());
+    page.on('request', onRequest);
+    await open.click();
+    const modal = page.getByTestId('sysctx-reco-modal');
+    await expect(modal).toBeVisible();
+
+    const rows = modal.getByTestId('sysctx-reco-row');
+    await expect(rows).toHaveCount(R.count);
+    expect(await rows.evaluateAll((trs) => trs.map((tr) => tr.getAttribute('data-reco-id'))), 'catalog order').toEqual(R.ids);
+    for (const id of R.ids) {
+      const r = R.rows[id];
+      const tokens = modal.locator(`[data-testid="sysctx-reco-row"][data-reco-id="${id}"]`).getByTestId('sysctx-reco-tokens');
+      await expect(tokens, `${id} tokens`).toContainText(`≈ ${int(r.tokens)}`);
+      await expect(tokens, `${id} share and bytes`).toContainText(`${share(r.tokens)} · ${int(r.bytes)} B`);
+    }
+    expect(R.ids.reduce((n, id) => n + R.rows[id].tokens, 0), 'measuredTokens = Σ row tokens').toBe(R.measuredTokens);
+    await expect(modal.getByTestId('sysctx-reco-summary')).toHaveText(
+      `${int(R.count)} matched · ≈ ${int(R.measuredTokens)} tokens (${share(R.measuredTokens)} of ${int(R.denominator)}) · Claude Code 2.1.99 · catalog v1`,
+    );
+    // Every row links to the Claude Code docs of its setting, opened in a new tab.
+    for (const id of R.ids) {
+      const docs = modal.locator(`[data-testid="sysctx-reco-row"][data-reco-id="${id}"]`).getByTestId('sysctx-reco-doc');
+      expect(await docs.count(), `${id} has a docs link`).toBeGreaterThan(0);
+      for (const link of await docs.all()) {
+        await expect(link).toHaveAttribute('href', /^https:\/\/code\.claude\.com\/docs\/en\/[a-z-]+$/);
+        await expect(link).toHaveAttribute('target', '_blank');
+      }
+    }
+    await expect(modal.getByTestId('sysctx-reco-row').filter({ hasText: 'Verify:' }), 'no "Verify:" marks').toHaveCount(0);
+
+    for (const marker of ['GS05-LOCAL-MARKER', 'GS05-TOOL-MARKER'])
+      await expect(modal, `no file or tool text: ${marker}`).not.toContainText(marker);
+    await expect(modal, 'no absolute path').not.toContainText(/\/home\/|\/work\/|C:\\Users/);
+
+    // One snippet copy (clipboard stubbed in 8a2): the two-shells row denies PowerShell.
+    await page.evaluate(() => { window.__copied = undefined; });
+    await modal.locator('[data-testid="sysctx-reco-row"][data-reco-id="startup.two-shells"]').getByTestId('sysctx-reco-copy').click();
+    await expect.poll(() => page.evaluate(() => window.__copied ?? '')).toBe('"permissions": { "deny": ["PowerShell"] }');
+
+    page.off('request', onRequest);
+    expect(requests, 'the modal is computed from the loaded payload: no request').toEqual([]);
+    await page.keyboard.press('Escape');
+    await expect(modal).toHaveCount(0);
+
+    // GS-07 (no harness snapshot, no tools source): nothing matches, so no button.
+    await openSession(page, owner, repo.repoId, sid7, { tab: 'sysctx' });
+    await expect(page.getByTestId('sysctx-anatomy-tab')).toBeVisible();
+    await expect(page.getByTestId('anatomy-total')).toBeVisible();
+    await expect(page.getByTestId('sysctx-reco-open'), 'GS-07: no recommendation matches').toHaveCount(0);
+
     // Back to Logs, the state 8b starts from.
     await openSession(page, owner, repo.repoId, repo.rootId('gs-05'), { tab: 'logs' });
     await expect(page.getByTestId('startup-context-line')).toBeVisible();

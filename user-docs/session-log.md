@@ -330,6 +330,22 @@ snapshot (older Claude Code versions, or logs without it) have no button. The sn
 internal, undocumented Claude Code format, so its contents may change with any Claude Code
 release.
 
+**Recommendations.** When parts of the startup context match a known group you may be able to
+switch off, a **Recommendations** button with a count sits next to **View system prompt**. It
+opens a table, one row per group, in a fixed order: rarely needed built-in tools, a second shell
+tool, claude.ai connectors (signed in or not) and their instructions, organisation skills,
+user-level and project MCP servers, auto-memory, the project CLAUDE.md and rules, MCP servers that
+failed to connect, plugin skills, agent and question tools, and subagent types. Each row shows the
+matched items, what the group is for, its ≈ tokens and share of this session's first request, who
+controls it (Claude Code built-in, claude.ai account, organisation, user profile or project) and
+how to disable it, often with a settings snippet you can copy. The header sums the matched rows
+and names the session's Claude Code version and the catalog version. No row counts the same bytes
+twice. Each row also links to the Claude Code documentation page of its setting (**Docs:**, opens in a
+new tab when you are online). The advice is a curated list and settings change between Claude
+Code releases, so after changing one, start a new session and check this tab again to see that
+the group is gone. Sessions with no
+match have no button.
+
 The skills and files tables show where each item lives and its **git status**:
 
 | Git status | Meaning |

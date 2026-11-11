@@ -1,7 +1,7 @@
 ---
 type: "Architecture Guide"
 title: "System Context Anatomy Tab"
-description: "The session view's System context anatomy tab: where its data comes from (raw main transcript + harness snapshot, no extra request), the partitions and drill-downs, the edge-state banners, the View system prompt modal, the test ids, the one-line Logs summary that replaced the System Context panel, and the hook 2.28.0 gitStatus / org-synced fields it reads."
+description: "The session view's System context anatomy tab: where its data comes from (raw main transcript + harness snapshot, no extra request), the partitions and drill-downs, the edge-state banners, the View system prompt modal, the Recommendations button and modal (@loghub/recommendations), the test ids, the one-line Logs summary that replaced the System Context panel, and the hook 2.28.0 gitStatus / org-synced fields it reads."
 tags:
   - client
   - session-view
@@ -47,6 +47,11 @@ All under `client/src/viewer/pages/repository/`:
 | `session-log/sysctx-anatomy/SystemPromptModal.tsx` | The modal: header, totals, Copy as Markdown / Download .md, the three tabs (local tab state), one expanded set per tab |
 | `session-log/sysctx-anatomy/SystemPromptSections.tsx` | `SectionToolbar`, `PromptSection` (shared / session groups), `ToolsSection`, `FlagsSection` |
 | `session-log/sysctx-anatomy/SystemPromptItems.tsx` | `PromptItemRow` (body mounted only while expanded), `MarkdownBody` (react-markdown + remark-gfm, no raw HTML), `JsonBlock` |
+| `session-log/sysctx-anatomy/startup-facts.ts` | `buildStartupFacts({ anatomy, snapshot, main })`: adapter from the anatomy + harness snapshot to the package's `StartupFacts`, plus the session's `claudeVersion` |
+| `session-log/sysctx-anatomy/RecommendationsModal.tsx` | The Recommendations modal: title, `recommendationsSummary` line, table |
+| `session-log/sysctx-anatomy/RecommendationRows.tsx` | Its table rows: items line ("… N more" toggle, `failed` tag), tokens cell, controller label, snippet with copy, docs links |
+| `session-log/sysctx-anatomy/startup-recommendations.algo.test.ts` | Vitest table test over [Startup Recommendations](algorithms/startup-recommendations.md) |
+| `packages/recommendations/` (`@loghub/recommendations`, repo root) | `CATALOG` (entries `startup.*`, each with its docs links), `CATALOG_VERSION`, `matchRecommendations` ([repo-local-packages.md](repo-local-packages.md)) |
 | `client/src/viewer/lib/download-text-file.ts` | `downloadTextFile(name, text)`: Blob → object URL → `<a download>` |
 | `session-log/StartupContextLine.tsx` | One-line summary at the top of Logs |
 | `SessionTabContent.tsx` | Lazy import of the tab; passes `onOpenAnatomy={() => onSessionTabChange('sysctx')}` to `SessionLogView` |
@@ -131,6 +136,38 @@ string inside a tool schema or an object flag — goes through `maskLocalPaths`:
 `repoRoot` become repo-relative, `.claude` paths become `~/.claude/…` with the project slug
 hidden, any other absolute path becomes `<outside>/<basename>`. Sizes are measured on the raw text
 so a part's bytes equal its "Block n" row. Rules: [System Prompt View](algorithms/system-prompt-view.md).
+
+**Exception: the Recommendations modal.** It shows catalog text (titles, explanations, disable
+advice and settings snippets from `@loghub/recommendations`) plus names, counts and sizes — never
+file, section or prompt text, and nothing that would not already be in the tab's drill-downs.
+
+## Recommendations
+
+A second memo in `SessionSysctxAnatomyTab` turns the anatomy into `StartupFacts`
+(`buildStartupFacts`, `startup-facts.ts`, with `harnessSnapshot ?? null` and `mainLogs ?? []`) and
+runs `matchRecommendations` over the catalog. The rows are known without opening anything, so the
+header shows a **Recommendations** button (`Lightbulb` icon, count badge = number of rows) after
+"View system prompt" — only when at least one entry matched. The modal (`RecommendationsModal`)
+is mounted only while open, makes no network request and is static data.
+
+- Summary line: `N matched · ≈ X tokens (Y % of T[ attributed]) · [K not measured ·] Claude Code
+  <v|unknown> · catalog v<CATALOG_VERSION>`; Y uses `anatomy.denominator`, the same as the row
+  shares (one decimal).
+- Every row ends its "How to disable" cell with **Docs:** links to the Claude Code documentation
+  pages of that setting (`CatalogEntry.docs`, catalog constants under
+  `https://code.claude.com/docs/en/`, opened in a new tab). They are an extra: the advice itself
+  is in the row, so the modal stays useful offline.
+- Columns: Group (title + items, first `RECO_ITEMS_PREVIEW` = 4 then "… N more ▾") / What it is
+  for / ≈ Tokens (`≈ N`, `share % · bytes B`, or "not measured") / Controlled by
+  (`CONTROLLER_LABELS`) / How to disable (text + optional `<pre>` snippet with a copy button via
+  `useCopyToClipboard`).
+- Rows keep catalog order; each measured byte belongs to at most one row. Matching rules, byte
+  ownership and examples: [Startup Recommendations](algorithms/startup-recommendations.md). The
+  anatomy rows carry two fields only for this adapter: `names` on `mcp-server` rows and `pluginId`
+  on `skills` rows (neither reaches the DOM).
+- Old hooks / old Claude Code: a missing source gives an empty or `null` facts field, so the entry
+  just does not match — no banner. Adding an entry means editing only
+  `packages/recommendations/src/catalog.ts` (ids are stable, never reused).
 
 The attachment payloads the tab reads are described in
 [log-schema/attachment-types.md](log-schema/attachment-types.md) (`mcp_instructions_delta`,
@@ -221,10 +258,21 @@ The scenario steps rely on these exact names:
 | `sysprompt-item` | `data-section` = `shared` / `session` / `ungrouped` / `tool` / `flag`; `data-expanded` (absent on a scalar flag) |
 | `sysprompt-item-body` | an expanded item's body (mounted only while expanded) |
 | `sysprompt-empty`, `sysprompt-error` | empty / unrecognised-format lines, the build error line |
+| `sysctx-reco-open` | the Recommendations button (absent when no entry matched) |
+| `sysctx-reco-count` | its badge: number of matched rows |
+| `sysctx-reco-modal` | the Recommendations dialog content |
+| `sysctx-reco-summary` | header line `N matched · ≈ X tokens (Y % of T) · … · Claude Code <v> · catalog v<n>` |
+| `sysctx-reco-doc` | one Claude Code docs link of a row (`href`, `target="_blank"`) |
+| `sysctx-reco-row` | `data-reco-id` = catalog entry id (`startup.*`) |
+| `sysctx-reco-item`, `sysctx-reco-failed`, `sysctx-reco-more` | one matched item, its `failed` tag, the "… N more" toggle |
+| `sysctx-reco-tokens` | a row's tokens cell (`≈ N`, `share % · B`, or "not measured") |
+| `sysctx-reco-controller` | a row's Controlled by label |
+| `sysctx-reco-copy` | a row's snippet copy button (only when the row has a snippet) |
 
 Coverage: the algorithm table tests (`sysctx-anatomy.algo.test.ts`,
-`system-prompt-view.algo.test.ts`), the GS-05 golden fixture's anatomy and `systemPromptView`
-blocks, and `tests/scenarios/view/s-sess-03.spec.ts` (steps 8, 8a, 8a2 — the system prompt modal —,
-8d — no button without a snapshot —, 9); the hook side
+`system-prompt-view.algo.test.ts`, `startup-recommendations.algo.test.ts`), the GS-05 golden
+fixture's anatomy, `systemPromptView` and `recommendations` blocks, and
+`tests/scenarios/view/s-sess-03.spec.ts` (steps 8, 8a, 8a2 — the system prompt modal —, 8a3 — the
+Recommendations modal —, 8d — no button without a snapshot —, 9); the hook side
 is `tests/scenarios/hook/s-hook-09.spec.ts` step 4c. User doc: `user-docs/session-log.md`
 § "System context anatomy" (screen-registry row `session.sysctx`).
