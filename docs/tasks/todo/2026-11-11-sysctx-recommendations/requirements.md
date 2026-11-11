@@ -34,8 +34,7 @@ account:
 | Subagent types listing | ~1.6 K | built-in agents |
 | MCP instructions | ~1 K | claude.ai Claude Data / Claude Docs |
 
-The tool figures above come from the raw `api-request-shape` line and are illustrative only. The
-modal measures tools from the `prompt_snapshot` `tools[]` (18 tools in this session).
+The tool figures above come from the raw `api-request-shape` line and are illustrative only.
 
 Across local prod (301 root sessions, 5 repos, Claude Code 2.1.211–2.1.322) the startup total ranges
 24.5 K–77.5 K tokens (median ≈ 60 K). Built-in tool schemas are the largest group (median ≈ 31 K).
@@ -202,15 +201,11 @@ None.
 
 <!-- Append timestamped notes here as work progresses -->
 
-- 2026-11-11: FR-8 and the tool source of FR-4a were done in `2026-11-10-sysctx-prompt-viewer`
-  (`consistency-fix-plan.md` there), with two differences from the text above: (1) a tool's size is
-  name + description + `JSON.stringify(schema.input_schema)`, not `JSON.stringify(schema)` — the
-  whole object's JSON counts the description's escapes (~2 % more) and pushed 10 of 18 measured
-  sessions over the exact total; (2) the tools come from `findToolDefinitions`
-  (`sysctx-anatomy/tool-definitions.ts`): the `api-request-shape` of the first main request when
-  logged (Claude Code 2.1.312+), else the first snapshot with tools. The anatomy now has a
-  `tool-definitions` partition with one row per tool. FR-4a / FR-5 / FR-8 should be re-read against
-  that before this task is planned.
-- 2026-11-11: FR-8 evidence — on local prod all 5,229 `prompt_snapshot` `tools[]` items have
-  top-level keys `description, name, schema` and `schema` keys
-  `description, eager_input_streaming, input_schema, name`, with the same description in both.
+- 2026-11-11: FR-8 and the tool source of FR-4a were already implemented in
+  `2026-11-10-sysctx-prompt-viewer`, differently from the text above: a tool's size is name +
+  description + `JSON.stringify(schema.input_schema)`, and tools come from `findToolDefinitions`
+  (`sysctx-anatomy/tool-definitions.ts`) — the `api-request-shape` of the first main request when
+  logged (Claude Code 2.1.312+), else the first snapshot with tools; the anatomy has a
+  `tool-definitions` partition with one row per tool. Re-read FR-4a / FR-5 / FR-8 against that
+  before planning.
+- Evidence (FR-8 key survey, size-rule rationale): see `notes.md`.

@@ -1,19 +1,22 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1010" viewBox="0 0 1200 1010" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="13">
-  <!-- Wireframe: Logs tab with per-turn harness markup (light theme). NEW = proposed. -->
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="1050" viewBox="0 0 1200 1050" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="13">
+  <!-- Wireframe: Logs tab with per-turn harness markup (light theme). NEW = proposed.
+       Setup-neutral example: a C project; the "Signal sources" strip states which producers
+       this session has, so a missing group reads as "not produced", not as "nothing happened". -->
   <defs>
     <style>
       .mono{font-family:'JetBrains Mono',Consolas,monospace}
       .muted{fill:#6b7280}
       .new{fill:#0369a1;font-size:11px;font-weight:600}
       .callout{stroke:#0284c7;stroke-dasharray:4 3;fill:none}
+      .lg{fill:#334155}
     </style>
   </defs>
-  <rect width="1200" height="1010" fill="#ffffff"/>
+  <rect width="1200" height="1050" fill="#ffffff"/>
   <text x="20" y="26" font-size="16" font-weight="700" fill="#111827">Logs tab — per-turn Signals markup (proposal)</text>
   <text x="20" y="44" class="muted" font-size="12">Light theme. Blue dashed callouts = new elements. Everything else is the current Logs tab.</text>
 
   <!-- Panel frame -->
-  <rect x="20" y="60" width="860" height="930" fill="#ffffff" stroke="#e5e7eb"/>
+  <rect x="20" y="60" width="860" height="970" fill="#ffffff" stroke="#e5e7eb"/>
 
   <!-- Session tab bar -->
   <rect x="20" y="60" width="860" height="40" fill="#ffffff" stroke="#e5e7eb"/>
@@ -25,169 +28,182 @@
 
   <!-- Startup context line -->
   <rect x="21" y="101" width="858" height="32" fill="#f5f3ff"/>
-  <text x="40" y="122" font-weight="600" fill="#111827">Startup context</text><text x="150" y="122" class="muted" font-size="12">· 65,382 tokens</text>
+  <text x="40" y="122" font-weight="600" fill="#111827">Startup context</text><text x="150" y="122" class="muted" font-size="12">· 41,207 tokens</text>
   <text x="250" y="122" fill="#4f46e5" font-size="12">View anatomy →</text>
 
-  <!-- NEW: harness filter toolbar -->
+  <!-- NEW: Signals filter toolbar -->
   <rect x="21" y="134" width="858" height="36" fill="#f9fafb" stroke="#e5e7eb"/>
   <text x="36" y="157" font-size="12" class="muted">Signals:</text>
   <rect x="134" y="143" width="62" height="20" rx="10" fill="#e0f2fe" stroke="#7dd3fc"/><text x="146" y="157" font-size="11" fill="#075985">Show ✓</text>
   <rect x="204" y="143" width="150" height="20" rx="10" fill="#fff" stroke="#d1d5db"/><text x="214" y="157" font-size="11" fill="#374151">Only turns with issues</text>
-  <text x="372" y="157" font-size="11" class="muted">3 interrupts · 2 hook errors · 1 compaction · 4 external edits</text>
+  <text x="372" y="157" font-size="11" class="muted">1 interrupt · 1 hook error · 1 compaction · 1 external edit</text>
+
+  <!-- NEW: Signal sources strip -->
+  <rect x="21" y="170" width="858" height="30" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="36" y="190" font-size="11" class="muted">Signal sources:</text>
+  <rect x="124" y="179" width="70" height="16" rx="8" fill="#ecfdf5" stroke="#6ee7b7"/><text x="132" y="191" font-size="10" fill="#065f46">hooks ✓ 2</text>
+  <rect x="200" y="179" width="150" height="16" rx="8" fill="#ecfdf5" stroke="#6ee7b7"/><text x="208" y="191" font-size="10" fill="#065f46">IDE ✓ (name not recorded)</text>
+  <rect x="356" y="179" width="138" height="16" rx="8" fill="#fff" stroke="#d1d5db" stroke-dasharray="3 2"/><text x="364" y="191" font-size="10" class="muted">diagnostics — none seen</text>
+  <rect x="500" y="179" width="118" height="16" rx="8" fill="#fff" stroke="#d1d5db"/><text x="508" y="191" font-size="10" fill="#374151">entrypoint: cli</text>
+  <rect x="624" y="179" width="96" height="16" rx="8" fill="#fff" stroke="#d1d5db"/><text x="632" y="191" font-size="10" fill="#374151">CC 2.1.314</text>
 
   <!-- TURN 1 -->
   <g>
-    <text x="40" y="196" fill="#3b82f6">✦</text>
-    <text x="56" y="196" class="muted">2026-10-21 00:50:26</text>
-    <text x="196" y="196" class="muted">⏱ 0:00:46</text>
-    <!-- NEW turn_duration chips -->
-    <rect x="270" y="183" width="250" height="18" rx="9" fill="#f3f4f6" stroke="#e5e7eb"/>
-    <text x="280" y="196" font-size="11" fill="#374151" class="mono">turn 0:00:52 · 14 msgs · hooks 0.9s</text>
-    <text x="40" y="222" fill="#111827" font-size="15">›  /adlc-lh:plan-deep 2026-09-26-session-anomalies-otel-port</text>
-    <text x="56" y="248" class="mono" font-size="13"><tspan fill="#2563eb">In 16</tspan>  <tspan fill="#dc2626">Out 2,661</tspan>  <tspan fill="#2563eb">cache_r 440,151</tspan>  <tspan fill="#2563eb">cache_w 38,915</tspan></text>
-    <rect x="452" y="235" width="132" height="20" rx="5" fill="#ecfdf5" stroke="#34d399"/><text x="460" y="249" class="mono" font-size="12" fill="#047857">cache_ratio 91.9%</text>
-    <text x="596" y="249" class="mono" font-size="13" fill="#7c3aed">$0.4526 <tspan fill="#ea580c">+ $8.8379</tspan><tspan fill="#111827"> = $9.2905</tspan></text>
-    <text x="56" y="272" class="mono" font-size="13" fill="#d97706">Context: 65.4K → 71.1K (Δ +5.8K) <tspan fill="#111827">| 928.9K left</tspan></text>
+    <text x="40" y="226" fill="#3b82f6">✦</text>
+    <text x="56" y="226" class="muted">2026-11-11 09:14:02</text>
+    <text x="196" y="226" class="muted">⏱ 0:00:46</text>
+    <rect x="270" y="213" width="250" height="18" rx="9" fill="#f3f4f6" stroke="#e5e7eb"/>
+    <text x="280" y="226" font-size="11" fill="#374151" class="mono">turn 0:00:52 · 14 msgs · hooks 3.9s</text>
+    <text x="40" y="252" fill="#111827" font-size="15">›  why does main.c not build with cl.exe?</text>
+    <text x="56" y="278" class="mono" font-size="13"><tspan fill="#2563eb">In 16</tspan>  <tspan fill="#dc2626">Out 2,661</tspan>  <tspan fill="#2563eb">cache_r 140,151</tspan>  <tspan fill="#2563eb">cache_w 38,915</tspan></text>
+    <rect x="452" y="265" width="132" height="20" rx="5" fill="#ecfdf5" stroke="#34d399"/><text x="460" y="279" class="mono" font-size="12" fill="#047857">cache_ratio 78.2%</text>
+    <text x="56" y="302" class="mono" font-size="13" fill="#d97706">Context: 41.2K → 47.0K (Δ +5.8K) <tspan fill="#111827">| 953.0K left</tspan></text>
     <!-- Tools -->
-    <rect x="56" y="284" width="2" height="22" fill="#fcd34d"/>
-    <text x="66" y="300" class="muted">›  ⚙</text><text x="96" y="300" font-weight="600">Tools</text><text x="140" y="300" class="mono muted" font-size="12">4 calls · ~1.3K tok</text>
-    <!-- NEW harness section, collapsed, with chips -->
-    <rect x="56" y="312" width="2" height="22" fill="#38bdf8"/>
-    <text x="66" y="328" class="muted">›  ⚑</text><text x="96" y="328" font-weight="600">Signals</text>
-    <rect x="160" y="316" width="116" height="18" rx="9" fill="#fef2f2" stroke="#fca5a5"/><text x="168" y="329" font-size="11" fill="#b91c1c">1 hook error</text>
-    <rect x="284" y="316" width="130" height="18" rx="9" fill="#fffbeb" stroke="#fcd34d"/><text x="292" y="329" font-size="11" fill="#92400e">2 edited outside</text>
-    <rect x="422" y="316" width="128" height="18" rx="9" fill="#f3f4f6" stroke="#d1d5db"/><text x="430" y="329" font-size="11" fill="#374151">3 diagnostics</text>
-    <!-- Agents -->
-    <rect x="56" y="340" width="2" height="52" fill="#fdba74"/>
-    <text x="66" y="354" font-size="10" font-weight="600" fill="#9ca3af">AGENTS</text>
-    <text x="70" y="372" font-size="12">›  Distill requirements doc</text>
-    <text x="70" y="388" font-size="12">›  Research codebase for plan</text>
-    <line x1="21" y1="404" x2="879" y2="404" stroke="#e5e7eb"/>
+    <rect x="56" y="314" width="2" height="22" fill="#fcd34d"/>
+    <text x="66" y="330" class="muted">›  ⚙</text><text x="96" y="330" font-weight="600">Tools</text><text x="140" y="330" class="mono muted" font-size="12">6 calls · ~1.3K tok</text>
+    <!-- NEW Signals section, collapsed, with chips -->
+    <rect x="56" y="342" width="2" height="22" fill="#38bdf8"/>
+    <text x="66" y="358" class="muted">›  ⚑</text><text x="96" y="358" font-weight="600">Signals</text>
+    <rect x="160" y="346" width="138" height="18" rx="9" fill="#f3f4f6" stroke="#d1d5db"/><text x="168" y="359" font-size="11" fill="#374151">opened in IDE: main.c</text>
+    <rect x="306" y="346" width="130" height="18" rx="9" fill="#fffbeb" stroke="#fcd34d"/><text x="314" y="359" font-size="11" fill="#92400e">1 edited outside</text>
+    <line x1="21" y1="380" x2="879" y2="380" stroke="#e5e7eb"/>
   </g>
 
   <!-- TURN 2 with interrupt marker -->
   <g>
-    <text x="40" y="428" fill="#3b82f6">✦</text>
-    <text x="56" y="428" class="muted">2026-10-21 00:55:13</text>
-    <text x="196" y="428" class="muted">⏱ 0:04:16</text>
-    <rect x="270" y="415" width="250" height="18" rx="9" fill="#f3f4f6" stroke="#e5e7eb"/>
-    <text x="280" y="428" font-size="11" fill="#374151" class="mono">turn 0:04:21 · 61 msgs · hooks 2.4s</text>
-    <rect x="530" y="415" width="128" height="18" rx="9" fill="#fff7ed" stroke="#fb923c"/><text x="540" y="428" font-size="11" fill="#9a3412">⏸ silent 2× nudged</text>
-    <text x="40" y="454" fill="#111827" font-size="15">›  меня вот что смущает - если посмотреть на http://localhost:5173/#/repos/...</text>
-    <text x="56" y="480" class="mono" font-size="13"><tspan fill="#2563eb">In 14</tspan>  <tspan fill="#dc2626">Out 10,983</tspan>  <tspan fill="#2563eb">cache_r 379,870</tspan>  <tspan fill="#2563eb">cache_w 20,403</tspan></text>
-    <rect x="452" y="467" width="132" height="20" rx="5" fill="#ecfdf5" stroke="#34d399"/><text x="460" y="481" class="mono" font-size="12" fill="#047857">cache_ratio 94.9%</text>
-    <text x="596" y="481" class="mono" font-size="13" fill="#7c3aed">$0.4589 <tspan fill="#ea580c">+ $1.9263</tspan><tspan fill="#111827"> = $2.3852</tspan></text>
-    <text x="56" y="504" class="mono" font-size="13" fill="#d97706">Context: 71.4K → 93.2K (Δ +21.9K) <tspan fill="#111827">| 906.8K left</tspan></text>
+    <text x="40" y="404" fill="#3b82f6">✦</text>
+    <text x="56" y="404" class="muted">2026-11-11 09:15:01</text>
+    <text x="196" y="404" class="muted">⏱ 0:04:16</text>
+    <rect x="270" y="391" width="250" height="18" rx="9" fill="#f3f4f6" stroke="#e5e7eb"/>
+    <text x="280" y="404" font-size="11" fill="#374151" class="mono">turn 0:04:21 · 61 msgs · hooks 4.6s</text>
+    <rect x="530" y="391" width="128" height="18" rx="9" fill="#fff7ed" stroke="#fb923c"/><text x="540" y="404" font-size="11" fill="#9a3412">⏸ silent 1× nudged</text>
+    <text x="40" y="430" fill="#111827" font-size="15">›  add a VS Code build task for the open .c file</text>
+    <text x="56" y="456" class="mono" font-size="13"><tspan fill="#2563eb">In 22</tspan>  <tspan fill="#dc2626">Out 10,983</tspan>  <tspan fill="#2563eb">cache_r 379,870</tspan>  <tspan fill="#2563eb">cache_w 20,403</tspan></text>
+    <rect x="452" y="443" width="132" height="20" rx="5" fill="#ecfdf5" stroke="#34d399"/><text x="460" y="457" class="mono" font-size="12" fill="#047857">cache_ratio 94.9%</text>
+    <text x="56" y="480" class="mono" font-size="13" fill="#d97706">Context: 47.3K → 69.2K (Δ +21.9K) <tspan fill="#111827">| 930.8K left</tspan></text>
 
     <!-- NEW: inline interrupt (queued_command) marker inside the turn -->
-    <rect x="56" y="516" width="640" height="46" rx="6" fill="#fff7ed" stroke="#fdba74"/>
-    <text x="68" y="534" font-size="12" font-weight="600" fill="#9a3412">↯ User interjected mid-turn · 00:57:02 (+1:49 into the turn)</text>
-    <text x="68" y="552" font-size="12" fill="#374151">"не трогай server, только client"</text>
-    <text x="560" y="552" font-size="11" fill="#9a3412">queued, not a new turn</text>
+    <rect x="56" y="492" width="640" height="46" rx="6" fill="#fff7ed" stroke="#fdba74"/>
+    <text x="68" y="510" font-size="12" font-weight="600" fill="#9a3412">↯ User interjected mid-turn · 09:16:50 (+1:49 into the turn)</text>
+    <text x="68" y="528" font-size="12" fill="#374151">"use gcc from MSYS2, not cl.exe"</text>
+    <text x="560" y="528" font-size="11" fill="#9a3412">queued, not a new turn</text>
 
-    <rect x="56" y="572" width="2" height="22" fill="#9ca3af"/>
-    <text x="66" y="588" class="muted">›  ▤</text><text x="96" y="588" font-weight="600">Docs</text><text x="138" y="588" class="mono muted" font-size="12">1 file</text>
-    <line x1="21" y1="606" x2="879" y2="606" stroke="#e5e7eb"/>
+    <rect x="56" y="548" width="2" height="22" fill="#38bdf8"/>
+    <text x="66" y="564" class="muted">›  ⚑</text><text x="96" y="564" font-weight="600">Signals</text>
+    <rect x="160" y="552" width="100" height="18" rx="9" fill="#fef2f2" stroke="#fca5a5"/><text x="168" y="565" font-size="11" fill="#b91c1c">1 hook error</text>
+    <rect x="268" y="552" width="120" height="18" rx="9" fill="#f3f4f6" stroke="#d1d5db"/><text x="276" y="565" font-size="11" fill="#374151">selected in IDE</text>
+    <line x1="21" y1="582" x2="879" y2="582" stroke="#e5e7eb"/>
   </g>
 
   <!-- NEW: compaction divider between turns -->
   <g>
-    <rect x="21" y="607" width="858" height="40" fill="#f0f9ff"/>
-    <line x1="40" y1="627" x2="250" y2="627" stroke="#0ea5e9" stroke-dasharray="6 4"/>
-    <text x="260" y="624" font-size="12" font-weight="600" fill="#0369a1">⇣ Context compacted (auto) · 01:00:31</text>
-    <text x="260" y="640" font-size="11" fill="#0c4a6e" class="mono">198.4K → 31.2K tok · 4 files re-read · skills + CLAUDE.md re-injected ~34K</text>
-    <line x1="720" y1="627" x2="860" y2="627" stroke="#0ea5e9" stroke-dasharray="6 4"/>
+    <rect x="21" y="583" width="858" height="40" fill="#f0f9ff"/>
+    <line x1="40" y1="603" x2="250" y2="603" stroke="#0ea5e9" stroke-dasharray="6 4"/>
+    <text x="260" y="600" font-size="12" font-weight="600" fill="#0369a1">⇣ Context compacted (auto) · 09:31:12</text>
+    <text x="260" y="616" font-size="11" fill="#0c4a6e" class="mono">168.4K → 29.1K tok · 3 files re-read · skills + CLAUDE.md re-injected ~22K</text>
+    <line x1="720" y1="603" x2="860" y2="603" stroke="#0ea5e9" stroke-dasharray="6 4"/>
   </g>
 
-  <!-- TURN 3 (only-issues filter example: hook error shown expanded in figure 2) -->
+  <!-- TURN 3: diagnostics only appear in sessions that have a language-server producer -->
   <g>
-    <text x="40" y="672" fill="#3b82f6">✦</text>
-    <text x="56" y="672" class="muted">2026-10-21 01:00:49</text>
-    <text x="196" y="672" class="muted">⏱ 0:11:22</text>
-    <rect x="270" y="659" width="258" height="18" rx="9" fill="#f3f4f6" stroke="#e5e7eb"/>
-    <text x="280" y="672" font-size="11" fill="#374151" class="mono">turn 0:11:30 · 212 msgs · hooks 6.1s</text>
-    <text x="40" y="698" fill="#111827" font-size="15">›  обновляй и планируй только оставшееся</text>
-    <text x="56" y="724" class="mono" font-size="13"><tspan fill="#2563eb">In 104</tspan>  <tspan fill="#dc2626">Out 55,107</tspan>  <tspan fill="#2563eb">cache_r 8,291,164</tspan>  <tspan fill="#2563eb">cache_w 142,349</tspan></text>
-    <rect x="490" y="711" width="132" height="20" rx="5" fill="#ecfdf5" stroke="#34d399"/><text x="498" y="725" class="mono" font-size="12" fill="#047857">cache_ratio 98.3%</text>
-    <text x="56" y="748" class="mono" font-size="13" fill="#7c3aed">$3.8996 <tspan fill="#ea580c">+ $2.0410</tspan><tspan fill="#111827"> = $5.9406</tspan>  <tspan fill="#d97706">Context: 93.9K → 236.3K (Δ +142.4K)</tspan><tspan fill="#111827"> | 763.7K left</tspan></text>
-    <rect x="56" y="760" width="2" height="22" fill="#a855f7"/>
-    <text x="66" y="776" class="muted">›  ϟ</text><text x="96" y="776" font-weight="600">Skills</text><text x="146" y="776" class="mono muted" font-size="12">1 skill · ~348 tok</text>
-    <rect x="56" y="788" width="2" height="22" fill="#84cc16"/>
-    <text x="66" y="804" class="muted">›  §</text><text x="96" y="804" font-weight="600">Rules</text><text x="142" y="804" class="mono muted" font-size="12">server, installer · ~2.0K tok</text>
-    <rect x="56" y="816" width="2" height="22" fill="#fcd34d"/>
-    <text x="66" y="832" class="muted">›  ⚙</text><text x="96" y="832" font-weight="600">Tools</text><text x="140" y="832" class="mono muted" font-size="12">24 calls · ~16.2K tok</text>
-    <rect x="56" y="844" width="2" height="22" fill="#38bdf8"/>
-    <text x="66" y="860" class="muted">›  ⚑</text><text x="96" y="860" font-weight="600">Signals</text>
-    <rect x="160" y="848" width="100" height="18" rx="9" fill="#fef2f2" stroke="#fca5a5"/><text x="168" y="861" font-size="11" fill="#b91c1c">1 hook error</text>
-    <rect x="268" y="848" width="120" height="18" rx="9" fill="#f3f4f6" stroke="#d1d5db"/><text x="276" y="861" font-size="11" fill="#374151">1 read truncated</text>
-    <rect x="396" y="848" width="160" height="18" rx="9" fill="#f3f4f6" stroke="#d1d5db"/><text x="404" y="861" font-size="11" fill="#374151">rules re-injected ~2.0K</text>
-    <text x="66" y="886" class="muted" font-size="12">›  ▤ Code 17 files · 76.4 KB · ~29.0K tok</text>
-    <line x1="21" y1="900" x2="879" y2="900" stroke="#e5e7eb"/>
+    <text x="40" y="648" fill="#3b82f6">✦</text>
+    <text x="56" y="648" class="muted">2026-11-11 09:31:40</text>
+    <text x="196" y="648" class="muted">⏱ 0:11:22</text>
+    <rect x="270" y="635" width="258" height="18" rx="9" fill="#f3f4f6" stroke="#e5e7eb"/>
+    <text x="280" y="648" font-size="11" fill="#374151" class="mono">turn 0:11:30 · 212 msgs · hooks 6.1s</text>
+    <text x="40" y="674" fill="#111827" font-size="15">›  now split the parser into its own file</text>
+    <text x="56" y="700" class="mono" font-size="13"><tspan fill="#2563eb">In 104</tspan>  <tspan fill="#dc2626">Out 55,107</tspan>  <tspan fill="#2563eb">cache_r 3,291,164</tspan>  <tspan fill="#2563eb">cache_w 142,349</tspan></text>
+    <rect x="532" y="687" width="132" height="20" rx="5" fill="#ecfdf5" stroke="#34d399"/><text x="540" y="701" class="mono" font-size="12" fill="#047857">cache_ratio 95.8%</text>
+    <rect x="56" y="716" width="2" height="22" fill="#84cc16"/>
+    <text x="66" y="732" class="muted">›  §</text><text x="96" y="732" font-weight="600">Rules</text><text x="142" y="732" class="mono muted" font-size="12">1 file · ~1.1K tok</text>
+    <rect x="56" y="744" width="2" height="22" fill="#fcd34d"/>
+    <text x="66" y="760" class="muted">›  ⚙</text><text x="96" y="760" font-weight="600">Tools</text><text x="140" y="760" class="mono muted" font-size="12">24 calls · ~16.2K tok</text>
+    <rect x="56" y="772" width="2" height="22" fill="#38bdf8"/>
+    <text x="66" y="788" class="muted">›  ⚑</text><text x="96" y="788" font-weight="600">Signals</text>
+    <rect x="160" y="776" width="120" height="18" rx="9" fill="#f3f4f6" stroke="#d1d5db"/><text x="168" y="789" font-size="11" fill="#374151">1 read truncated</text>
+    <rect x="288" y="776" width="160" height="18" rx="9" fill="#f3f4f6" stroke="#d1d5db"/><text x="296" y="789" font-size="11" fill="#374151">rules re-injected ~1.1K</text>
+    <text x="66" y="816" class="muted" font-size="12">›  ▤ Code 7 files · 36.4 KB · ~12.0K tok</text>
+    <text x="66" y="838" class="muted" font-size="11">(no diagnostics chip: this session has no language-server producer — see Signal sources)</text>
+    <line x1="21" y1="854" x2="879" y2="854" stroke="#e5e7eb"/>
   </g>
 
   <!-- Last turn: pending harness data -->
   <g>
-    <text x="40" y="924" fill="#3b82f6">✦</text>
-    <text x="56" y="924" class="muted">2026-10-21 01:12:02</text>
-    <text x="196" y="924" class="muted">⏱ 0:00:49</text>
-    <rect x="270" y="911" width="184" height="18" rx="9" fill="#fff" stroke="#d1d5db" stroke-dasharray="3 2"/>
-    <text x="280" y="924" font-size="11" class="muted">turn timing: not recorded</text>
-    <text x="40" y="950" fill="#111827" font-size="15">›  reply "OK"</text>
-    <text x="56" y="974" class="muted" font-size="11">Missing turn_duration / stop_hook_summary (last turn, old Claude Code, old hook): chip shows "not recorded", no error.</text>
+    <text x="40" y="878" fill="#3b82f6">✦</text>
+    <text x="56" y="878" class="muted">2026-11-11 09:44:02</text>
+    <text x="196" y="878" class="muted">⏱ 0:00:49</text>
+    <rect x="270" y="865" width="184" height="18" rx="9" fill="#fff" stroke="#d1d5db" stroke-dasharray="3 2"/>
+    <text x="280" y="878" font-size="11" class="muted">turn timing: not recorded</text>
+    <text x="40" y="904" fill="#111827" font-size="15">›  run it</text>
+    <text x="56" y="928" class="muted" font-size="11">Missing turn_duration / stop_hook_summary (last turn, old Claude Code, old hook): chip shows "not recorded", no error.</text>
   </g>
 
   <!-- Callouts / legend -->
   <g font-size="12">
-    <rect x="900" y="60" width="280" height="930" fill="#f8fafc" stroke="#e2e8f0"/>
+    <rect x="900" y="60" width="280" height="970" fill="#f8fafc" stroke="#e2e8f0"/>
     <text x="914" y="84" font-weight="700" fill="#0f172a">New elements</text>
 
     <text x="914" y="112" class="new">1 · Signals filter bar</text>
-    <text x="914" y="128" fill="#334155">Toggle Signals markup; "Only turns</text>
-    <text x="914" y="143" fill="#334155">with issues" hides clean turns. Counts</text>
-    <text x="914" y="158" fill="#334155">for the whole session.</text>
+    <text x="914" y="128" class="lg">Toggle Signals markup; "Only turns</text>
+    <text x="914" y="143" class="lg">with issues" hides clean turns. Counts</text>
+    <text x="914" y="158" class="lg">for the whole session.</text>
     <path class="callout" d="M879 152 H900"/>
 
-    <text x="914" y="190" class="new">2 · Turn timing chip</text>
-    <text x="914" y="206" fill="#334155">turn_duration: durationMs, messageCount;</text>
-    <text x="914" y="221" fill="#334155">hooks = sum of hook_success durationMs.</text>
-    <text x="914" y="236" fill="#334155">Shows "not recorded" when missing.</text>
-    <path class="callout" d="M520 192 C 700 192, 820 200, 900 200"/>
+    <text x="914" y="188" class="new">2 · Signal sources strip</text>
+    <text x="914" y="204" class="lg">Which producers this session has:</text>
+    <text x="914" y="219" class="lg">hooks (count), IDE (ideName or "name</text>
+    <text x="914" y="234" class="lg">not recorded"), diagnostics sources</text>
+    <text x="914" y="249" class="lg">(raw source values or "none seen"),</text>
+    <text x="914" y="264" class="lg">entrypoint, Claude Code version. Same</text>
+    <text x="914" y="279" class="lg">facets as the FR-6 segmentation.</text>
+    <path class="callout" d="M720 187 C 820 187, 860 230, 900 230"/>
 
-    <text x="914" y="268" class="new">3 · Signals section (per turn)</text>
-    <text x="914" y="284" fill="#334155">Same collapsible style as Tools/Rules.</text>
-    <text x="914" y="299" fill="#334155">Chips: hook errors, edited_text_file,</text>
-    <text x="914" y="314" fill="#334155">diagnostics, read_truncation_notice,</text>
-    <text x="914" y="329" fill="#334155">re-injected context. Hidden if empty.</text>
-    <text x="914" y="344" fill="#334155">Expanded view: logs-turn-signals-section.svg</text>
-    <path class="callout" d="M550 325 C 700 325, 820 300, 900 300"/>
+    <text x="914" y="310" class="new">3 · Turn timing chip</text>
+    <text x="914" y="326" class="lg">turn_duration: durationMs, messageCount;</text>
+    <text x="914" y="341" class="lg">hooks = sum of hook durationMs.</text>
+    <text x="914" y="356" class="lg">Shows "not recorded" when missing.</text>
+    <path class="callout" d="M520 222 C 700 222, 820 330, 900 330"/>
 
-    <text x="914" y="378" class="new">4 · Silent-turn chip</text>
-    <text x="914" y="394" fill="#334155">silent_turn_reminder count in the turn.</text>
-    <path class="callout" d="M658 424 C 760 424, 840 390, 900 390"/>
+    <text x="914" y="386" class="new">4 · Signals section (per turn)</text>
+    <text x="914" y="402" class="lg">Same collapsible style as Tools/Rules.</text>
+    <text x="914" y="417" class="lg">Chips: hook errors, IDE open/select,</text>
+    <text x="914" y="432" class="lg">edited_text_file, diagnostics,</text>
+    <text x="914" y="447" class="lg">read_truncation_notice, re-injected</text>
+    <text x="914" y="462" class="lg">context. Hidden if empty. Expanded:</text>
+    <text x="914" y="477" class="lg">logs-turn-signals-section.svg</text>
+    <path class="callout" d="M436 355 C 700 355, 820 430, 900 430"/>
 
-    <text x="914" y="428" class="new">5 · Mid-turn interjection</text>
-    <text x="914" y="444" fill="#334155">queued_command, placed at its time</text>
-    <text x="914" y="459" fill="#334155">offset inside the turn. Text is the</text>
-    <text x="914" y="474" fill="#334155">user's own prompt (already on Logs).</text>
-    <path class="callout" d="M696 538 C 800 538, 850 460, 900 460"/>
+    <text x="914" y="507" class="new">5 · Silent-turn chip</text>
+    <text x="914" y="523" class="lg">silent_turn_reminder count in the turn.</text>
+    <path class="callout" d="M658 400 C 760 400, 850 510, 900 515"/>
 
-    <text x="914" y="508" class="new">6 · Compaction divider</text>
-    <text x="914" y="524" fill="#334155">compact_boundary between turns:</text>
-    <text x="914" y="539" fill="#334155">trigger, pre→post tokens, files re-read</text>
-    <text x="914" y="554" fill="#334155">(compact_file_reference), re-injected</text>
-    <text x="914" y="569" fill="#334155">skill_listing / instructions size.</text>
-    <path class="callout" d="M860 627 H900"/>
+    <text x="914" y="553" class="new">6 · Mid-turn interjection</text>
+    <text x="914" y="569" class="lg">queued_command, placed at its time</text>
+    <text x="914" y="584" class="lg">offset inside the turn. Text is the</text>
+    <text x="914" y="599" class="lg">user's own prompt (already on Logs).</text>
+    <path class="callout" d="M696 514 C 800 514, 850 580, 900 580"/>
 
-    <text x="914" y="604" class="new">7 · Graceful degradation</text>
-    <text x="914" y="620" fill="#334155">Unknown / missing entry types render</text>
-    <text x="914" y="635" fill="#334155">nothing (or "not recorded" for the</text>
-    <text x="914" y="650" fill="#334155">timing chip). No hook change needed:</text>
-    <text x="914" y="665" fill="#334155">all fields come from the /logs payload.</text>
-    <path class="callout" d="M454 920 C 700 920, 820 660, 900 660"/>
+    <text x="914" y="629" class="new">7 · Compaction divider</text>
+    <text x="914" y="645" class="lg">compact_boundary between turns:</text>
+    <text x="914" y="660" class="lg">trigger, pre→post tokens, files re-read</text>
+    <text x="914" y="675" class="lg">(compact_file_reference), re-injected</text>
+    <text x="914" y="690" class="lg">skill_listing / instructions size.</text>
+    <path class="callout" d="M860 603 C 880 603, 885 660, 900 660"/>
 
-    <text x="914" y="700" font-weight="700" fill="#0f172a">Privacy</text>
-    <text x="914" y="718" fill="#334155">Paths repo-relative only; no email,</text>
-    <text x="914" y="733" fill="#334155">no gitStatus, no file snippets from</text>
-    <text x="914" y="748" fill="#334155">edited_text_file in the chips.</text>
+    <text x="914" y="720" class="new">8 · Graceful degradation</text>
+    <text x="914" y="736" class="lg">Producer absent → its chips never</text>
+    <text x="914" y="751" class="lg">appear, and the sources strip says so</text>
+    <text x="914" y="766" class="lg">("none seen" ≠ "no problems").</text>
+    <text x="914" y="781" class="lg">Unknown types render nothing; timing</text>
+    <text x="914" y="796" class="lg">chip says "not recorded". No hook</text>
+    <text x="914" y="811" class="lg">change: all from the /logs payload.</text>
+    <path class="callout" d="M454 874 C 700 874, 820 790, 900 790"/>
+
+    <text x="914" y="846" font-weight="700" fill="#0f172a">Privacy / OS neutrality</text>
+    <text x="914" y="864" class="lg">Paths repo-relative from file:// URIs,</text>
+    <text x="914" y="879" class="lg">X:\ (any drive-letter case) or / paths;</text>
+    <text x="914" y="894" class="lg">out-of-repo → basename. No email, no</text>
+    <text x="914" y="909" class="lg">gitStatus, no edited_text_file</text>
+    <text x="914" y="924" class="lg">snippets in chips.</text>
   </g>
 </svg>
