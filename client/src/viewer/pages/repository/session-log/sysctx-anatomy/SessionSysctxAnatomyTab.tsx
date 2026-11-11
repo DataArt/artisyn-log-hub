@@ -7,10 +7,14 @@
  * everything from the `/logs` payload `SessionDetailPane` already holds, through one memo
  * (`buildSysctxAnatomy`, docs/knowledgebase/algorithms/sysctx-anatomy.md).
  *
- * Only names, paths, sizes, statuses and role labels reach the DOM — never file, section or
- * prompt text.
+ * Only names, paths, sizes, statuses and role labels reach the tab's DOM — never file, section or
+ * prompt text. The tab only checks whether a `prompt_snapshot` exists (`hasPromptSnapshot`); the
+ * prompt text itself appears only inside the on-demand `SystemPromptModal`, which is mounted —
+ * and parses the snapshot — only while it is open.
  */
 import { useCallback, useMemo, useState } from 'react';
+import { FileText } from 'lucide-react';
+import { Button } from '@/ui/button';
 import { Skeleton } from '@/ui/skeleton';
 import type { ModelPricingMap } from '../../../../../models/pricing';
 import type { HarnessSnapshot } from '../../../../api';
@@ -20,6 +24,8 @@ import type { AnatomyPartitionKind } from './sysctx-anatomy-constants';
 import { fmtInt } from './AnatomyCells';
 import { AnatomyPartitionBar } from './AnatomyPartitionBar';
 import { AnatomyPartitionTable } from './AnatomyPartitionTable';
+import { SystemPromptModal } from './SystemPromptModal';
+import { hasPromptSnapshot } from './system-prompt-view';
 
 export interface SessionSysctxAnatomyTabProps {
   mainLogs: Record<string, unknown>[] | null;
@@ -152,6 +158,13 @@ export function SessionSysctxAnatomyTab({
     [mainLogs, harnessSnapshot, repoRoot, pricing, sessionModel],
   );
 
+  // Only an existence check here; the modal parses the snapshot while open (DD 15).
+  const hasSnapshot = useMemo(
+    () => hasPromptSnapshot(mainLogs ?? []),
+    [mainLogs],
+  );
+  const [promptOpen, setPromptOpen] = useState(false);
+
   // Selecting a kind (segment or row) also expands it when it has drill-down rows (DD 15).
   const select = useCallback(
     (kind: AnatomyPartitionKind) => {
@@ -191,7 +204,30 @@ export function SessionSysctxAnatomyTab({
       data-testid="sysctx-anatomy-tab"
     >
       <div className="max-w-[1200px] space-y-4 p-4">
-        <Header anatomy={anatomy} />
+        <div className="flex items-start gap-4">
+          <Header anatomy={anatomy} />
+          {hasSnapshot && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => setPromptOpen(true)}
+              data-testid="sysprompt-open"
+            >
+              <FileText />
+              View system prompt
+            </Button>
+          )}
+        </div>
+        {promptOpen && (
+          <SystemPromptModal
+            open={promptOpen}
+            onOpenChange={setPromptOpen}
+            main={mainLogs ?? []}
+            repoRoot={repoRoot}
+            cpt={anatomy.cpt}
+            firstRequestTotal={anatomy.total}
+          />
+        )}
         {banners.length > 0 && (
           <div className="space-y-2">
             {banners.map((b) => (

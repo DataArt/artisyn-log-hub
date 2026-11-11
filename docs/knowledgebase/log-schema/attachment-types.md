@@ -448,6 +448,39 @@ was **offered** (including `{"name":"Workflow", …}` in most sessions), so it m
 | `toolChangeHeader` | boolean | 1/754 (0%) | true, false |
 | `tools` | array | 375/754 (50%) | [{"name":"Workflow","schema":{…}}, {"name":"Read", …}, …] |
 
+### Shape details (dev DB re-check 2026-11-11, 275 sessions, Claude Code 2.1.280–2.1.314)
+
+- **Two snapshots per session, at least.** The first one, in the startup block before the first assistant reply,
+  never carries `tools`. A second snapshot with `tools` is written after the first assistant reply. Some sessions have
+  a third. No snapshot was seen on a sidechain line.
+- **`systemPrompt`** is an array of plain strings, about 14 parts. One part is the literal marker
+  `__SYSTEM_PROMPT_DYNAMIC_BOUNDARY__`: parts before it are shared across sessions, parts after it are per-session
+  (`# Environment`, …). The parts contain absolute local paths (working directory, memory dir, scratchpad).
+- **`tools[]` item keys:** `name`, `description` (Markdown, often with absolute paths), `schema` and the optional
+  **`server`**, a string with the MCP server name (`postgres`, `playwright`, `idea`). **`schema` is not a JSON
+  Schema: it is the whole wire tool object** `{name, description, input_schema, eager_input_streaming}` — the same
+  object the request sends (checked on 36 local-prod sessions, Claude Code 2.1.280–2.1.322, 2026-11-11; none had a
+  plain JSON Schema there). So name and description appear twice in an item, and the input schema is
+  `schema.input_schema`. `server` is present on MCP tools only (98 tool rows) and absent on built-in tools. One session
+  offers 11–132 tools, up to about 337 K chars of JSON. For a synthetic or older item the readers fall back to
+  `input_schema` (no `schema`) or `schema` itself as the input schema. Sizes: [System Context Anatomy
+  Algorithm](../algorithms/sysctx-anatomy.md) rule 10a.
+- **The boundary marker** `__SYSTEM_PROMPT_DYNAMIC_BOUNDARY__` (34 B) is a part of its own, not text inside another
+  part. The anatomy and the viewer both drop it; the viewer uses it to split Shared from Session-specific.
+- **The wire request is logged too (Claude Code 2.1.312+).** These are top-level line types, not attachments:
+  `api-request-shape` (`shapeHash`, `shape.system[]`, `shape.tools[]` — written when the shape changes),
+  `api-request` (one per request: `shapeHash`, `querySource` such as `repl_main_thread` / `sdk`, `params`, `tail` =
+  hashes of the message blobs) and `api-request-blob` (`hash`, `message`). The first main `api-request` before the
+  first assistant reply names the first request's shape; its `tools` (with `defer_loading: true` stubs that are not
+  in the context) are the source of the anatomy's Tool definitions row, ahead of the snapshot. On the sessions
+  checked, system + tool text + message text of that request divided by its exact token total gave 2.66–2.79 bytes
+  per token.
+- **Flags** are all scalars: `cliPrefix` and `contextRendering` (e.g. `"announced"`) are strings; the rest are
+  booleans. The type is not an object, despite older guesses.
+- The **System prompt viewer** ("View system prompt" on the System context anatomy tab) shows the startup snapshot's
+  parts and flags and the same tools as the anatomy's Tool definitions row, with local paths masked. Rules (snapshot
+  selection, boundary split, path masking, sizes): [System Prompt View](../algorithms/system-prompt-view.md).
+
 ---
 
 ## Attachment type: `queued_command`
@@ -735,7 +768,7 @@ Collapsed row by default (no special renderer today; generic JSON fallback). Lar
 | `contextRendering` | Monospace label row |
 | `echoWireToolInputs`, `inlineTools`, `keptReminders`, `reminderFold`, `systemTurns`, `toolChangeHeader` | Badge (green/gray) or ✓/✗ icon |
 | `systemPrompt` | Scrollable pre block (max-height), collapsed |
-| `tools` | Badge count; expand to a collapsible list of tool names ("offered", not "used") |
+| `tools` | Badge count; expand to a collapsible list of tool names ("offered", not "used"); `tools[].server` as an `MCP · <server>` badge |
 
 ### `queued_command`
 

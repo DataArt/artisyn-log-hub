@@ -1,5 +1,22 @@
 # Snyk (https://snyk.io) policy file.
 # Every ignore entry MUST carry a `reason` and an `expires` date — no permanent, unexplained ignores.
 version: v1.25.1
-ignore: {}
+ignore:
+  SNYK-JS-FFLATE-22392372:
+    - '*':
+        reason: >-
+          No fixed fflate release exists (0.8.3 is the latest). It reaches the client only through
+          @react-pdf/renderer -> pdfkit, which runs in the user's own browser to build report PDFs
+          from data the app already shows them; no untrusted archive is decompressed on the server.
+          Re-check when fflate or pdfkit ships a fix.
+        expires: 2027-02-11T00:00:00.000Z
+        created: 2026-11-11T00:00:00.000Z
+  SNYK-JS-URIJS-19963963:
+    - '*':
+        reason: >-
+          No fixed uri-js release exists (4.4.1 is the latest). Dev-only: ajv 6 inside
+          @eslint/eslintrc, used by the client lint over our own sources; nothing of it ships.
+          Re-check when eslintrc moves off ajv 6.
+        expires: 2027-02-11T00:00:00.000Z
+        created: 2026-11-11T00:00:00.000Z
 patch: {}

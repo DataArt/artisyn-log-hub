@@ -35,11 +35,19 @@ export async function loginViaUi(page: Page, email: string, password: string): P
   throw new Error(`Could not log in as ${email} through the UI (login backoff never cleared)`);
 }
 
-/** Opens the account menu (the e-mail button top right) and returns its `role=menu` panel. */
+/**
+ * Opens the account menu (the e-mail button top right) and returns its `role=menu` panel.
+ * Right after a login the new-user nudge (`useNewUserNudge`) may move a fresh account from
+ * /main to the API Keys page; that remounts the top nav and closes a menu opened a moment
+ * before. The helper clicks again while the menu is not open, as a person would.
+ */
 export async function openUserMenu(page: Page, email: string) {
-  await page.getByRole('button', { name: email }).click();
+  const button = page.getByRole('button', { name: email });
   const menu = page.getByRole('menu');
-  await expect(menu).toBeVisible();
+  await expect(async () => {
+    if (!(await menu.isVisible())) await button.click();
+    await expect(menu).toBeVisible({ timeout: 2_000 });
+  }).toPass({ timeout: 15_000 });
   return menu;
 }
 

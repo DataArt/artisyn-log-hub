@@ -47,7 +47,7 @@ function InternalsInfo({
         <button
           type="button"
           data-testid="anatomy-internals-hint"
-          aria-label="What is in Harness internals"
+          aria-label="What is in this remainder"
           className="ml-1 inline-flex align-middle text-muted-foreground hover:text-foreground"
           onClick={(e) => e.stopPropagation()}
         >
@@ -60,6 +60,7 @@ function InternalsInfo({
           share={p.share}
           total={anatomy.total}
           attributed={anatomy.attributed}
+          toolsMeasured={anatomy.toolSource !== null}
         />
       </TooltipContent>
     </Tooltip>
@@ -192,7 +193,8 @@ function PartitionRows({
             <span>{p.label}</span>
             {p.count !== undefined && (
               <span className="text-xs text-muted-foreground">
-                · {fmtInt(p.count)} names
+                · {fmtInt(p.count)}{' '}
+                {p.kind === 'tool-definitions' ? 'tools' : 'names'}
               </span>
             )}
             {internals && <InternalsInfo anatomy={anatomy} p={p} />}

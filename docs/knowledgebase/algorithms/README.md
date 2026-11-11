@@ -59,6 +59,7 @@ format where the two differ).
 | [harness-snapshot](harness-snapshot.md) | hook `skill-catalog.js`, `harness-snapshot.js` | `node --test` |
 | [workflow-agent-rows](workflow-agent-rows.md) | `client/.../session-log/workflow-agent-rows.ts` | vitest |
 | [sysctx-anatomy](sysctx-anatomy.md) | `client/.../session-log/sysctx-anatomy/sysctx-anatomy.ts` | vitest |
+| [system-prompt-view](system-prompt-view.md) | `client/.../session-log/sysctx-anatomy/system-prompt-view.ts` | vitest |
 | [tool-call-sections](tool-call-sections.md) | `client/.../session-log/tool-calls.ts` | vitest |
 | [tool-call-outcome](tool-call-outcome.md) | `client/.../session-log/tool-outcome.ts`; twin `server/src/logs/tool-stats.ts` | vitest, jest |
 | [session-lens-row](session-lens-row.md) | `client/.../repository/session-lenses.ts` (`lensRow`, `lensDefaultTab`), `client/.../repository/session-tab-groups.ts` (`pickGroupTab`) | vitest |

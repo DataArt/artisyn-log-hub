@@ -35,7 +35,7 @@ context (`rendered`). Scripts: `tmp/attach-scan.js`, `tmp/diag-scan.js`, `tmp/sn
 | `environment` | 78 / 12 | ~58 K | cwd, worktree, git flags, changes | anatomy (startup) |
 | `session_context` | 31 / 12 | ~56 K | userEmail, gitStatus (sensitive) | anatomy (startup) |
 | `nested_memory` | 10 / 5 | ~55 K | rules loaded on demand | parser (per-turn Rules) |
-| `diagnostics` | 31 / 10 | ~31 K | IDE/LSP problems: file, severity, code, message | raw logs (file list only) |
+| `diagnostics` | 31 / 10 | ~31 K | language-server problems: `source`, file, severity, code, message — the entry does not say whether an LSP plugin or an IDE integration produced it (in this sample: all `typescript-lsp` plugin) | raw logs (file list only) |
 | `prompt_snapshot` | 62 / 12 | 0 (not sent) | full system prompt parts + tool definitions (~148 K chars) | anatomy (startup, no tools) — see task `2026-11-10-sysctx-prompt-viewer` |
 | `turn_duration` (system) | 88 / 11 | 0 | `durationMs`, `messageCount` per turn | not read |
 | `stop_hook_summary` (system) | 91 / 12 | 0 | hook count, infos, errors, added context | not read |
@@ -64,7 +64,7 @@ kind=rule, `deferred_tools_delta` → `session_harness_usage.is_initial`, `compa
 
 Diagnostics signal worth keeping (mostly mid-edit noise otherwise; details in `notes.md`):
 broken-then-fixed edits, errors never followed by another edit of that file, recurring config-gap
-codes (`80001`, missing `@types/node`).
+errors (in this sample `80001`, missing `@types/node` — examples only, see FR-8).
 
 Candidate analytics found so far (to be validated by the analysis, not pre-decided):
 context tax by source over the whole session (not just startup), user mid-turn interventions
@@ -98,12 +98,16 @@ noise vs. signal, session-mode segmentation (`auto_mode`).
   diagnostics count, `read_truncation_notice`, re-injected context), (ii) what is outdated,
   redundant with newer tabs (Session Map, Timeline, Context Growth, Info, Summary, Harness usage,
   System context, Usage) or hard to read today, and (iii) concrete UX improvements, each with a
-  wireframe for any non-trivial change. Recorded finding: per-invocation hook records
-  (`hook_success`: hook name, event, exit code, duration, stderr) do exist in the transcript, so a
-  Harness usage hook follow-up can be client-only and must correct the opposite statement in
-  `docs/knowledgebase/harness-usage-tab.md`. The per-turn section that groups these entries
-  (hook results, edits made outside the agent, IDE diagnostics, context events) is named
-  **Signals**; the toolbar reads "Signals: Show · Only turns with issues".
+  wireframe for any non-trivial change. Per-invocation hook records (`hook_success`: hook name,
+  event, exit code, duration, stderr) exist in the transcript, so a Harness usage hook follow-up
+  can be client-only and must correct the opposite statement in
+  `docs/knowledgebase/harness-usage-tab.md`. The Hooks group labels rows by `command` (since
+  `hookName` equals the event) and reduces paths in `stderr` to basenames. The per-turn section that groups these entries
+  (hook results, edits made outside the agent, diagnostics, context events) is named
+  **Signals**; the toolbar reads "Signals: Show · Only turns with issues". Under it a **Signal
+  sources** strip lists the producers the session has (hooks, IDE, diagnostics `source` values or
+  "none seen", `entrypoint`, Claude Code version), so a missing group reads as "not produced", not
+  as "no problems" (FR-8).
 
   ![Logs tab with per-turn Signals markup](wireframes/logs-tab-harness-markup.svg)
 
@@ -123,10 +127,46 @@ noise vs. signal, session-mode segmentation (`auto_mode`).
   kept in `research/` so the numbers are reproducible. Every newly seen type gets a row and an
   FR-1 decision; a type absent from the sample is kept and marked "rare / setup-dependent" with
   its source (e.g. `diagnostics` ← `typescript-lsp` plugin).
+  The table is **segmented by source**: every session is tagged with setup facets read from the
+  stored transcript itself — `entrypoint` (`cli`, `sdk-cli`, `sdk-ts`, …), Claude Code `version`,
+  OS family from the `cwd` shape (`X:\…` vs. `/…`), IDE from `*_in_ide` entries — `ideName` when
+  present, "IDE, name not recorded" when only `opened_file_in_ide` (no `ideName`) is seen, "none"
+  when no `*_in_ide` entry (`entrypoint` does not tell an IDE terminal from a plain one), the set of diagnostics `source` values (`typescript`, `Java`, …), and
+  configured hook names. For each entry type the table gives counts / sessions per facet value,
+  not only a total; `diagnostics` gets one sub-row per `source`. A facet value seen in < 3
+  sessions is reported as "n < 3", not as a share. The scan script prints the facet matrix
+  (sessions per facet value) so the coverage gap of the sample is visible.
 - FR-7. Degradation: every (a)/(b) item states what the UI shows when its entry is absent or has an
   unknown shape (older/newer Claude Code, old hook). Items built on Stop-time entries
   (`turn_duration`, `stop_hook_summary`, `hook_success`) state how the last turn looks when the
   entry has not been uploaded yet and their dependency on the SessionEnd flush (hook ≥ 2.8.0).
+  `claude -p` sessions carry no `turn_duration` (only `stop_hook_summary`), so turn timing needs a
+  fallback there.
+- FR-8. Setup neutrality. The initial survey is one user, one repo, one setup (Windows, WebStorm,
+  `typescript-lsp` plugin, CLI, this repo's hooks), so it says nothing about other setups. The
+  analysis:
+  - names, per entry type, what produces it and which setups lack it: IDE integration (none /
+    VS Code-family / JetBrains — `opened_file_in_ide`, `selected_lines_in_ide`, `ideName`), LSP
+    plugins of any language (`diagnostics`), Claude Code surface (CLI, IDE extension panel,
+    desktop, web, SDK / `-p`), OS, configured hooks, `/loop` / cron, plan mode;
+  - never labels an entry by the producer we happen to use (no "IDE diagnostics" when the entry
+    does not say IDE; show the payload's own `source` / `ideName`);
+  - treats file paths as OS-neutral: `file://` URIs, `C:\…` and `/…` paths, both separators,
+    case-insensitive drive letters — reduced to repo-relative before display or aggregation;
+  - keeps language-neutral rules: "signal" heuristics (e.g. broken-then-fixed, never fixed) work
+    on `severity` + file + later edits, never on TypeScript codes such as `2304` / `80001`;
+  - in FR-5, value counts the share of sessions *where the producer is present* (the FR-6
+    segment) and states separately how common that producer is likely to be; an entry absent from
+    our setup is not "low value" by default;
+  - the setup-neutrality audit `research/setup-neutrality-audit.md` (server, client, hook; findings
+    A1–A5, B6–B13, C14–C16) is input to FR-5: each finding becomes a follow-up item or is merged
+    into one, with the same FR-5 fields; items outside harness entries (repo identity, team scope,
+    PowerShell counting, version check) are still listed there, marked "outside this task's
+    harness scope", so nothing is lost;
+  - every (a)/(b) item that shows diagnostics groups them by `source` (one sub-group per language
+    server, label = the raw `source` value, unknown / missing `source` → "other"); repo/team
+    diagnostics reports are filterable by `source`, and the same facets (`entrypoint`, IDE, OS)
+    are offered as filters wherever a repo/team report mixes setups.
 
 ## Non-Functional Requirements
 
@@ -153,13 +193,22 @@ noise vs. signal, session-mode segmentation (`auto_mode`).
       picks which ones to scratch.
 - [ ] AC-6 (FR-6): `research/` holds the re-run table (≥ 30 stored sessions) and its scan scripts,
       and FR-5 priorities cite its numbers.
+- [ ] AC-7 (FR-8): every (a)/(b) item names its producer and the setups where it is absent; no UI
+      label, heuristic or priority depends on WebStorm, Windows, TypeScript or this repo's hooks;
+      the FR-6 table is segmented by the source facets, with diagnostics split by `source`; every
+      finding of `research/setup-neutrality-audit.md` appears in the FR-5 list.
 
 ## Open Questions
 
 - Should hook-health and diagnostics analytics also cover other users' sessions (repo/team
   reports), or stay per-session first?
+
+per repo & per team
+
 - Is a session-mode segmentation (`auto_mode` bypass vs. not) a metric the product wants to show
   at all, given it hints at how a user works?
+
+show
 
 ## Common sense considerations
 
@@ -174,6 +223,7 @@ noise vs. signal, session-mode segmentation (`auto_mode`).
 - Survey re-run is FR-6 / AC-6: ≥ 30 stored sessions, results and scripts in `research/`, disagreements handled as listed.
 - Follow-up items use H/M/L value and S/M/L effort scales and a fixed field set (FR-5).
 - Committed research is aggregates and redacted examples only; raw output stays in `tmp/` (NFR).
+- The initial survey reflects one setup (Windows + WebStorm + `typescript-lsp`); labels, heuristics and priorities must not assume it (FR-8, AC-7).
 
 ## Notes
 
@@ -185,4 +235,6 @@ noise vs. signal, session-mode segmentation (`auto_mode`).
   `hook/HOW_HOOK_WORKS.md` (the `artisyn` log events). Git history of the Logs tab files starts at
   2026-10-20 in this repo, so "barely changed" is the owner's observation, not something history
   here can confirm.
-- Diagnostics deep-dive of the initial survey: `notes.md`.
+- Diagnostics deep-dive of the initial survey, the VS Code / WSL samples and the local-prod facet
+  matrix: `notes.md`. Setup-neutrality audit of the whole product:
+  `research/setup-neutrality-audit.md`.

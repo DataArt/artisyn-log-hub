@@ -1,6 +1,6 @@
 {
   "name": "artisyn-log-hub",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Self-hosted server and web viewer for Claude Code session telemetry, plus the hook and installer that collect it",
   "author": "Denis Tsyplakov",
   "license": "MIT",
