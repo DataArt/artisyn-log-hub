@@ -1,7 +1,7 @@
 {
   "schema": 1,
   "commit": "7bf1356375500c7aaee0907be277f377f62fc365",
-  "date": "2026-11-12T08:51:57.359Z",
+  "date": "2026-11-12T11:04:06.187Z",
   "ref": "main",
   "rows": [
     {
@@ -18,7 +18,7 @@
       "fixable": 0,
       "note": "2 medium",
       "version": "1.1308.3",
-      "link": "https://github.com/DataArt/artisyn-log-hub/actions/runs/43186221897"
+      "link": "https://github.com/DataArt/artisyn-log-hub/actions/runs/43205127775"
     },
     {
       "tool": "snyk-oss",
@@ -34,7 +34,7 @@
       "fixable": 0,
       "note": "5 medium",
       "version": "1.1308.3",
-      "link": "https://github.com/DataArt/artisyn-log-hub/actions/runs/43186221897"
+      "link": "https://github.com/DataArt/artisyn-log-hub/actions/runs/43205127775"
     },
     {
       "tool": "snyk-oss",
@@ -50,7 +50,7 @@
       "fixable": 0,
       "note": "no issues",
       "version": "1.1308.3",
-      "link": "https://github.com/DataArt/artisyn-log-hub/actions/runs/43186221897"
+      "link": "https://github.com/DataArt/artisyn-log-hub/actions/runs/43205127775"
     },
     {
       "tool": "config-guard",
@@ -65,7 +65,7 @@
       },
       "fixable": 0,
       "note": "",
-      "link": "https://github.com/DataArt/artisyn-log-hub/actions/runs/43186221897"
+      "link": "https://github.com/DataArt/artisyn-log-hub/actions/runs/43205127775"
     },
     {
       "tool": "lockfile-lint",
@@ -81,7 +81,7 @@
       "fixable": 0,
       "note": "ok",
       "version": "5.1.0",
-      "link": "https://github.com/DataArt/artisyn-log-hub/actions/runs/43186221897"
+      "link": "https://github.com/DataArt/artisyn-log-hub/actions/runs/43205127775"
     },
     {
       "tool": "npm-signatures",
@@ -97,7 +97,7 @@
       "fixable": 0,
       "note": "ok",
       "version": "11.20.0",
-      "link": "https://github.com/DataArt/artisyn-log-hub/actions/runs/43186221897"
+      "link": "https://github.com/DataArt/artisyn-log-hub/actions/runs/43205127775"
     },
     {
       "tool": "actionlint",
@@ -113,7 +113,7 @@
       "fixable": 0,
       "note": "ok",
       "version": "1.7.12",
-      "link": "https://github.com/DataArt/artisyn-log-hub/actions/runs/43186221897"
+      "link": "https://github.com/DataArt/artisyn-log-hub/actions/runs/43205127775"
     },
     {
       "tool": "zizmor",
@@ -129,7 +129,7 @@
       "fixable": 0,
       "note": "no issues",
       "version": "1.31.1",
-      "link": "https://github.com/DataArt/artisyn-log-hub/actions/runs/43186221897"
+      "link": "https://github.com/DataArt/artisyn-log-hub/actions/runs/43205127775"
     },
     {
       "tool": "hadolint",
@@ -145,7 +145,7 @@
       "fixable": 0,
       "note": "no issues",
       "version": "2.15.1",
-      "link": "https://github.com/DataArt/artisyn-log-hub/actions/runs/43186221897"
+      "link": "https://github.com/DataArt/artisyn-log-hub/actions/runs/43205127775"
     },
     {
       "tool": "compose",
@@ -161,7 +161,7 @@
       "fixable": 0,
       "note": "ok",
       "version": "2.38.2",
-      "link": "https://github.com/DataArt/artisyn-log-hub/actions/runs/43186221897"
+      "link": "https://github.com/DataArt/artisyn-log-hub/actions/runs/43205127775"
     },
     {
       "tool": "snyk-container",
@@ -175,9 +175,9 @@
         "low": 1
       },
       "fixable": 0,
-      "note": "as of 2026-11-11 10:53 UTC: 1 low",
+      "note": "1 low",
       "version": "1.1308.3",
-      "link": "https://github.com/DataArt/artisyn-log-hub/actions/runs/43006953925"
+      "link": "https://github.com/DataArt/artisyn-log-hub/actions/runs/43205127775"
     },
     {
       "tool": "node-runtime",
@@ -193,7 +193,7 @@
       "fixable": 0,
       "note": "26.13.0  26.13.1",
       "version": "26.13.0",
-      "link": "https://github.com/DataArt/artisyn-log-hub/actions/runs/43186221897"
+      "link": "https://github.com/DataArt/artisyn-log-hub/actions/runs/43205127775"
     },
     {
       "tool": "node-runtime",
@@ -209,7 +209,7 @@
       "fixable": 0,
       "note": "26.13.0  26.13.1",
       "version": "26.13.0",
-      "link": "https://github.com/DataArt/artisyn-log-hub/actions/runs/43186221897"
+      "link": "https://github.com/DataArt/artisyn-log-hub/actions/runs/43205127775"
     },
     {
       "tool": "virustotal",
@@ -223,8 +223,8 @@
         "low": 0
       },
       "fixable": 0,
-      "note": "as of 2026-11-11 10:53 UTC: 0/75 engines",
-      "link": "https://www.virustotal.com/gui/file/00ddde5abfbd9dc8736906fe87a5da3b913ad9835a75d8e57aa77781f6d4a9f4"
+      "note": "0/75 engines",
+      "link": "https://www.virustotal.com/gui/file/025466c2df1b9247af79ab30386b7bd913d5c1d2da51171b3eac1245be33d9bb"
     },
     {
       "tool": "virustotal",
@@ -238,8 +238,8 @@
         "low": 0
       },
       "fixable": 0,
-      "note": "as of 2026-11-11 10:53 UTC: 0/75 engines",
-      "link": "https://www.virustotal.com/gui/file/3c4c1b6ec1c48407e7854f367e88a03865938f86d701cfc25c7db22cbc8a4fab"
+      "note": "0/75 engines",
+      "link": "https://www.virustotal.com/gui/file/37b8cff17027e611d4ef70233a3396c8be62572a7e3e60ed96041f5ef0a809db"
     }
   ]
 }
