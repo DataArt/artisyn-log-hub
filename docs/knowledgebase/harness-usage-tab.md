@@ -86,9 +86,16 @@ Read/Bash/Edit/etc. as "already covered by the Logs, Statistics and Tool Heatmap
 feedback asked for exactly the opposite: a `tool` bucket showing which tools were called and how
 many times, mirroring the repo-level report's `tool` kind.
 
-**Hook invocations are the one harness element left out.** Neither the session `/logs` payload nor
-the transcript carries per-invocation hook records, so surfacing them needs new hook and server
-work. Follow-up task, not this one.
+**Hook invocations are the one harness element left out — but the data is there.** The transcript,
+and so the session `/logs` payload, does carry per-invocation hook records: one `hook_success` or
+`hook_non_blocking_error` attachment per hook run, with `command`, `hookEvent`, `exitCode`,
+`durationMs`, `stderr` / `stdout`, plus a `system` `stop_hook_summary` line after each turn's Stop
+hooks (shapes: [attachment-types.md](log-schema/attachment-types.md),
+[claude-log-message-types.md](log-schema/claude-log-message-types.md#system-subtypes)). They cover
+every configured hook, not only Log Hub's. So a `hook` kind in this tab is a client-only change
+reading the `/logs` payload — no hook or server work. It is not built yet; it is a follow-up of
+task `2026-11-10-harness-entries-ui-review` (follow-up F4). An earlier version of this article said
+these records did not exist, which was wrong.
 
 ## Usage-count summary, not a chronological list
 

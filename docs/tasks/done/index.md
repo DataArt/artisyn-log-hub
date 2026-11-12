@@ -41,3 +41,4 @@ Folders are named `<YYYY-MM-DD>-<slug>` (the day the task was created).
 - [2026-11-05-budgets-threshold-alerts] Budgets, Spend Forecasts and Cost Slices (Display-Only) — archived 2026-11-10
 - [2026-11-10-sysctx-prompt-viewer] System Prompt Viewer on the System Context Anatomy Tab — archived 2026-11-11
 - [2026-11-11-sysctx-recommendations] Startup Context Recommendations on the System Context Anatomy Tab — archived 2026-11-11
+- [2026-11-10-harness-entries-ui-review] Harness-Injected Transcript Entries — Where to Show Them, and a Logs Tab Review — archived 2026-11-12

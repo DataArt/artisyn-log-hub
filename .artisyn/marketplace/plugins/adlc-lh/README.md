@@ -10,12 +10,33 @@ thresholds, templates) lives in one directory you provide: `.claude/repo_config/
 
 ## Install
 
-> **adlc-lh** is this repo's local copy of `adlc` 1.3.0, renamed so its skills (`/adlc-lh:*`) never
-> collide with an installed `adlc`. It ships from the project-local `artisyn` marketplace
-> (`.artisyn/marketplace`, registered in `.claude/settings.json`) and is enabled as
-> `adlc-lh@artisyn`.
+> **adlc-lh** is this repo's local copy of `adlc`, renamed so its skills (`/adlc-lh:*`) never
+> collide with an installed `adlc`. In this repo it ships from the project-local `artisyn-e798dd87`
+> marketplace (`.artisyn/marketplace`, registered in `.claude/settings.json`) and is enabled as
+> `adlc-lh@artisyn-e798dd87`.
 
-Then copy the config templates into your project and edit them:
+### Install into your project with Claude Code
+
+Open Claude Code in your project's root and paste the prompt below. Replace `??` with a short
+abbreviation of your project, or leave it as is and Claude picks one. Claude follows
+[INSTALL.md](INSTALL.md): it copies this folder into `.claude/marketplace/`, renames the plugin to
+`adlc-<abbr>` (`-lh` stands for Log Hub), registers it in `.claude/settings.json`, and fills in
+`.claude/repo_config/` with your project's real build and test commands. It commits nothing. To
+update the plugin later, paste the same prompt again.
+
+```text
+Install the adlc plugin from
+https://github.com/DataArt/artisyn-log-hub/tree/main/.artisyn/marketplace/plugins/adlc-lh
+into this project as a local marketplace plugin named adlc-?? - follow its INSTALL.md.
+```
+
+Before your first `/adlc-<abbr>:implement`, review the health checks Claude wrote in
+`.claude/repo_config/repo-health-checks.json`.
+
+### Install by hand
+
+Copy this folder into a local marketplace of your project and rename it as steps 1–3 of
+[INSTALL.md](INSTALL.md) describe, then copy the config templates into your project and edit them:
 
 ```bash
 cp -r "<plugin-root>/templates/repo_config" .claude/repo_config

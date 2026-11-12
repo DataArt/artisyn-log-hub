@@ -44,6 +44,7 @@ format where the two differ).
 | [otel-status-reason](otel-status-reason.md) | hook `otel-status.js` (`resolveEffectiveOtel`, `deriveConfigWarnings`, `deriveState`, `deriveReason`, `shouldWriteStatus`) | `node --test` |
 | [cache-ratio-and-causes](cache-ratio-and-causes.md) | `server/src/logs/cache-ratio.sql.ts`, `reports/cache-read-ratio.service.ts`, `turn-walk.ts`; twin `client/.../lib/format.ts` | jest, vitest |
 | [work-time](work-time.md) | `server/src/logs/claude-extractor.ts`; twin hook `post-turn-analysis-worker.js` | jest, `node --test` |
+| [advisor-evidence](advisor-evidence.md) | hook `advisor-evidence.js` (`makePricer`, `collectCalls`, `cacheRebuilds`, `buildPromptCosts`), `post-turn-analysis-worker.js` (`buildPromptTurns`) | `node --test` |
 | [session-time-span](session-time-span.md) | `server/src/logs/artisyn-extractor.ts` | jest |
 | [session-list-flags](session-list-flags.md) | `server/src/logs/session-list-flags.ts` (`computeSessionListFlags`); twin backfill SQL `server/src/database/backfill-session-list-flags.ts` | jest |
 | [session-logs-delta](session-logs-delta.md) | `server/src/logs/session-logs-delta.ts` (`encodeDeltaCursor`, `decodeDeltaCursor`, `classifyDeltaRows`, `checkGrowth`) | jest |

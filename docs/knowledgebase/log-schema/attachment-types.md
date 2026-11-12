@@ -1,12 +1,12 @@
 ---
 type: "Log Schema Reference"
 title: "Attachment Types in Claude Logs"
-description: "Reference for all 27 attachment.type sub-types (20 auto-generated, 7 hand-maintained): field schemas, sample values, UI display strategies, and how the System context anatomy tab sizes the startup ones."
+description: "Reference for all 43 attachment.type sub-types (20 auto-generated, 7 hand-maintained, 16 from the 2026-11-11 harness-entries survey): field schemas, sample values, sizes, producers, UI display strategies, and how the System context anatomy tab sizes the startup ones."
 tags:
   - logs
   - schema
   - claude
-timestamp: "2026-10-29T00:00:00+04:00"
+timestamp: "2026-11-11T00:00:00+04:00"
 ---
 
 # Attachment Types in Claude Logs
@@ -23,6 +23,10 @@ timestamp: "2026-10-29T00:00:00+04:00"
 >
 > `mcp_instructions_delta` and `session_context` were added by hand for the System context anatomy tab
 > (2026-10-29). Only their field names and value sizes are documented — never their text.
+>
+> 16 more types were first documented from the 2026-11-11 harness-entries survey (291 root sessions, Claude Code
+> 2.1.211–2.1.319): see [Types from the 2026-11-11 survey](#types-from-the-2026-11-11-survey). Only field names,
+> sizes, producers and the setups that lack them are recorded — no payload text.
 
 ## Sizing in the System context anatomy tab
 
@@ -84,6 +88,11 @@ Added by the hand-maintained types: `addedBlocks`, `cliPrefix`, `commit`, `conte
 - [`skill_listing`](#attachment-type-skill_listing) — 200 entries
 - [`task_reminder`](#attachment-type-task_reminder) — 1015 entries
 - [`total_tokens_reminder`](#attachment-type-total_tokens_reminder) — hand-maintained (Claude Code 2.1.280+)
+
+From the 2026-11-11 survey (one row each in [Types from the 2026-11-11 survey](#types-from-the-2026-11-11-survey)):
+`bash_output_audience_note`, `batching_reminder_sent`, `budget_usd`, `credential_org`, `date`, `environment`,
+`hook_non_blocking_error`, `hook_system_message`, `instructions`, `language`, `model`, `read_truncation_notice`,
+`skill_mention`, `structured_output`, `task_status`, `thinking_drop`.
 
 ---
 
@@ -288,9 +297,9 @@ be text-matched for tool usage: a tool listed here was offered, not called.
 | `exitCode` | number | 0 |
 | `hookEvent` | string | "Stop" |
 | `hookName` | string | "Stop" |
-| `stderr` | string | "send-logs-hook: upload failed for artisyn/9a5e99bc-ba24-412e-9f80-67d73451ff97:…, "send-logs-hook: upload failed for artisyn/f6497ddf-faab-4f5d-84a5-189b8ede90da:…, "send-logs-hook: network error for artisyn/09f29a59-6894-41af-ad0f-c1b0c6a95ae6:…, "send-logs-hook: network error for artisyn/29c65f85-ea22-4013-be3c-62394bc5a95b:…, "send-logs-hook: network error for artisyn/e691fc5c-1033-4e9e-a76b-ea9013802bb2:… |
+| `stderr` | string | "send-logs-hook: upload failed for artisyn/<uuid>:…, "send-logs-hook: upload failed for artisyn/<uuid>:…, "send-logs-hook: network error for artisyn/<uuid>:…, "send-logs-hook: network error for artisyn/<uuid>:…, "send-logs-hook: network error for artisyn/<uuid>:… |
 | `stdout` | string | "" |
-| `toolUseID` | string | "d2291489-ecf2-45b4-aa42-7e8a29492091", "7850b701-6d41-402e-a5d4-8990f9ef812e", "0081ea3c-1095-4b03-9483-35d555211822", "2c8b3b79-2022-48d1-87ed-43bfc449a68b", "58d09afe-afc2-454d-ac98-b113ab8c418b" |
+| `toolUseID` | string | "<uuid>", "<uuid>", "<uuid>", "<uuid>", "<uuid>" |
 | `type` | string | "hook_success" |
 
 ---
@@ -617,6 +626,57 @@ tokens only from `assistant` `message.usage`.
 |-------|------|---------------|
 | `text` | string | reminder text with the running token total |
 | `type` | string | "total_tokens_reminder" |
+
+---
+
+## Types from the 2026-11-11 survey
+
+**Hand-maintained**, from the read-only harness-entries survey of the local-prod DB (cutoff 2026-11-11, 291 root
+sessions with their sub-agent transcripts, one Windows user, CLI and `claude -p`, no IDE integration). The generated
+table and the scan script are in the task folder
+`docs/tasks/*/2026-11-10-harness-entries-ui-review/research/` (`survey-table.md`, `survey/scan.mjs`).
+
+- **Fields** are the attachment's keys besides `type`, most frequent first.
+- **Line chars** are the characters of the whole JSON transcript line (median · p95 · max), not the characters
+  that reached the model context.
+- **Count / sessions** are entries and root sessions that have at least one.
+- None of these types feeds a metric (tokens, cost, turns, work time). In the startup block the System context
+  anatomy sizes each as an **environment-sized** row (see [Sizing](#sizing-in-the-system-context-anatomy-tab)),
+  except `instructions`, which has its own partition. Raw Logs shows them through the generic JSON fallback.
+
+| Type | Fields | Line chars | Count / sessions | Producer | Absent in setups |
+|---|---|---|---|---|---|
+| `bash_output_audience_note` | `toolUseID` | 752 · 809 · 809 | 116 / 8 | CC harness (2.1.280+), a note on one Bash result | sessions without Bash; CC < 2.1.280 |
+| `batching_reminder_sent` | `clearAt`, `model`, `text` | 674 · 700 · 714 | 167 / 9 | CC harness (2.1.280+), a reminder to batch tool calls | most sessions; CC < 2.1.280 |
+| `budget_usd` | `remaining`, `total`, `used` (numbers) | 649 · 685 · 685 | 8 / 1 | CC harness, only with a spend budget (e.g. `claude -p` with a max budget) | every session without a budget |
+| `credential_org` | `organizationUuid` | 538 · 566 · 611 | 974 / 139 | CC harness (2.1.312+), credential organisation marker | CC < 2.1.312 |
+| `date` | `date`, `changed` | 609 · 643 · 777 | 1636 / 278 | CC harness (2.1.280+), every session; replaces `date_change` | CC < 2.1.280 |
+| `environment` | `snapshot`, `changes` | 1719 · 2532 · 2731 | 2926 / 278 | CC harness (2.1.280+), environment snapshot; holds absolute paths and git state | CC < 2.1.280 |
+| `hook_non_blocking_error` | `command`, `durationMs`, `exitCode`, `hookEvent`, `hookName`, `stderr`, `stdout`, `toolUseID` | 901 · 1812 · 1812 | 9 / 5 | CC hook runner, one per hook invocation that failed without blocking; same shape as `hook_success` minus `content` | sessions without configured hooks |
+| `hook_system_message` | `content`, `hookEvent`, `hookName`, `toolUseID` | 1086 · 1120 · 1120 | 8 / 8 | CC hook runner, a hook that returned a system message for the model | sessions without such hooks |
+| `instructions` | `files` (`path`, `type`, `content` per file) | 44322 · 46499 · 48264 | 1563 / 276 | CC harness (2.1.280+), CLAUDE.md and rules loaded at start and re-injected later | CC < 2.1.280 |
+| `language` | `language` | 1015 · 1046 · 1129 | 264 / 245 | CC harness (2.1.280+), reply-language setting | CC < 2.1.280 |
+| `model` | `identity`, `text` | 932 · 972 · 1030 | 1621 / 278 | CC harness (2.1.280+), model identity | CC < 2.1.280 |
+| `read_truncation_notice` | `banner`, `toolUseID` | 1396 · 1737 · 1762 | 49 / 24 | CC harness (2.1.280+), a Read result cut to its size limit | sessions without truncated reads; CC < 2.1.280 |
+| `skill_mention` | `skillName` | 804 · 804 · 804 | 1 / 1 | CC harness, a skill named in a prompt | most sessions |
+| `structured_output` | `data`, `toolUseID` | 1713 · 7163 · 9980 | 970 / 77 | CC harness, structured-output agents (e.g. workflow sub-agents with a schema) | sessions without workflows |
+| `task_status` | `deltaSummary`, `description`, `outputFilePath`, `shell`, `status`, `taskId`, `taskType` | 1561 · 1561 · 1561 | 1 / 1 | CC harness, background task status | most sessions |
+| `thinking_drop` | `blockHashes`, `clientChange`, `firstReportForThreadInProcess`, `model`, `newlyDropped`, `querySource`, `requestId`, `thinkingBlocksSent`, `thinkingTurnsSent` | 1103 · 1903 · 1903 | 6 / 6 | CC harness, thinking blocks dropped from a request | most sessions |
+
+Shape notes from the same survey for types documented above:
+
+- `hook_success` is written **per hook invocation** (1,975 entries in 247 sessions), for every configured hook,
+  not only Log Hub's. `command` holds the command line, or the hook's status message when one is configured.
+- `auto_mode` now carries flags: `autoModeConsentFlow`, `bashFirst`, `bashFirstSteer`, `bypass`, `steerOnly`,
+  `finishExposedWork` (1,531 entries in 251 sessions).
+- `queued_command` gained `source_uuid`, `timestamp`, `origin` (sometimes an object), `humanTurn`, `delivery_id`,
+  `runId`, `usage`, `imagePasteIds`, `isMeta`, `reminderId`.
+- `deferred_tools_delta` gained `wireHiddenNames`, `failedMcpServers`, `surfacedNames`, `surfacedDefinitions`,
+  `needsAuthMcpServers`; `agent_listing_delta` gained `builtInPluginTypes`, `builtInTypes`; `skill_listing` gained
+  `digests`.
+- `date_change`, `dynamic_skill`, `opened_file_in_ide`, `selected_lines_in_ide`, `plan_mode` and `plan_mode_exit`
+  did not occur: the first two belong to older Claude Code, the IDE types need a connected IDE extension, and the
+  plan-mode types need plan mode. They are setup-dependent, not obsolete.
 
 ---
 

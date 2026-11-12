@@ -33,13 +33,17 @@ each step below and never report a failed step as done.
 This skill's steps:
 
 - `Locate requirements`
-- `Read requirements and inspect the code`
+- `Read requirements, inspect the code, do any analysis`
 - `Write the implementation plan`
 - `Self-check the plan`
 
 ## IMPORTANT
 
-Only plan. Do not update or create code.
+Only plan. Do not update or create product code.
+
+**Discovery belongs to planning, not to implementation.** Anything the task needs to *find out* — an analysis,
+measurement, data or UI check, comparison or small PoC — is done in step 2. The plan's chunks only apply
+results that are already known.
 
 ## Simplicity guard
 
@@ -124,6 +128,14 @@ knowledgebase index and read an article only if it clearly covers the touched ar
 research; if the file or key is missing, skip the knowledgebase entirely. Carry exact `path:line`
 references into the plan so it is self-contained.
 
+If the requirements ask for an analysis, or the plan would rest on an assumption you have not checked (a
+library does X, an API returns Y, the data looks like Z), find it out now: check the data, run the query, try
+the small PoC (follow the project's PoC convention if it has one, e.g. a `poc` skill). Save what you found in
+`TASK_DIR` (`research/<topic>.md`, or the deliverable named `<topic>-analysis.md` when the analysis is the
+task) and state the outcome in the plan as a Design Decision. If you cannot find it out now, stop and tell the
+user what is missing — never turn it into a chunk item. A task that needs a real survey or several PoCs is
+not simple: say so per the Simplicity guard.
+
 ### 3 — Write the plan
 
 Write the plan to `IMPL_PLAN` using the same section format as the full skill, keeping only the
@@ -136,7 +148,9 @@ sections that apply (for a simple task most are omitted):
   new deps/services/DB/API changes."
 - **Reference**: link to the requirements doc (the `REQUIREMENTS` file) at the top
 - **Design Decisions**: only if the requirements left a real choice open — one sentence each
-- **Files to create/modify**: table — path, purpose, brief note per file
+- **Files to create/modify**: table — path, purpose, brief note per file. No `.md` file whose basename
+  starts with `report`, `summary`, `findings` or `analysis` — Claude Code refuses those names to subagents;
+  use `<topic>-analysis.md` and the like
 - **Test coverage plan**: follow the project's test policy (CLAUDE.md, e.g. a "Test policy"
   section) when it has one — it overrides this default. Prefer extending existing tests over
   adding new ones; for each item name the kind of test the policy allows and the existing
@@ -160,7 +174,8 @@ sections that apply (for a simple task most are omitted):
 
 Item rules (same as the full skill): every item is a checkbox, hard cap 60 words, states the
 concrete action + file/location + any value it needs, no rationale prose, and must be
-implementable without reading requirements.md. Use a second chunk only if there is a true
+implementable without reading requirements.md, and no discovery items (investigate, analyse,
+measure, compare, observe, build a PoC) — those were done in step 2. Use a second chunk only if there is a true
 dependency ordering (e.g. code first, then tests).
 
 Keep this format exactly — `/adlc-lh:implement-deep` (full) must be able to consume this plan too.
@@ -169,7 +184,8 @@ Keep this format exactly — `/adlc-lh:implement-deep` (full) must be able to co
 
 Re-read the plan you just wrote and verify: TL;DR is the first section and its bullets match what's
 actually in the plan, every touched file appears in the Files table, every chunk item is
-self-contained and under 60 words, and tests/visual verification are accounted for. Fix anything
+self-contained and under 60 words, no item is discovery work whose outcome the plan does not already
+state, and tests/visual verification are accounted for. Fix anything
 you find directly.
 
 ### 5 — Report

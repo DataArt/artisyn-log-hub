@@ -1,0 +1,110 @@
+[
+  {
+    "id": "AE-P01",
+    "input": {"kind": "price", "model": "claude-opus-5-5", "usage": {"input_tokens": 1000, "output_tokens": 2000, "cache_read_input_tokens": 100000, "cache_creation_input_tokens": 10000, "cache_creation": {"ephemeral_5m_input_tokens": 10000, "ephemeral_1h_input_tokens": 0}}},
+    "expected": {"read": 0.05, "write": 0.0625, "output": 0.05, "input": 0.005},
+    "note": "List prices for opus: in 5, out 25, read 0.5, 5m write 6.25 $/Mtok. read 100000*0.5/1e6 = 0.05; write 10000*6.25/1e6 = 0.0625; output 2000*25/1e6 = 0.05; input 1000*5/1e6 = 0.005."
+  },
+  {
+    "id": "AE-P02",
+    "input": {"kind": "price", "model": "claude-haiku-5-5", "usage": {"cache_creation_input_tokens": 20000, "cache_creation": {"ephemeral_5m_input_tokens": 0, "ephemeral_1h_input_tokens": 20000}}},
+    "expected": {"read": 0, "write": 0.04, "output": 0, "input": 0},
+    "note": "Haiku in 1 $/Mtok, 1-hour write = 2x = 2. 20000*2/1e6 = 0.04."
+  },
+  {
+    "id": "AE-P03",
+    "input": {"kind": "price", "model": "claude-sonnet-5-5", "usage": {"cache_creation_input_tokens": 8000}},
+    "expected": {"read": 0, "write": 0.03, "output": 0, "input": 0},
+    "note": "No cache_creation split: the whole write counts as 5-minute. Sonnet in 3, 5m write 3.75. 8000*3.75/1e6 = 0.03."
+  },
+  {
+    "id": "AE-P04",
+    "input": {"kind": "price", "model": "some-other-model", "usage": {"output_tokens": 1000}},
+    "expected": {"read": 0, "write": 0, "output": 0.015, "input": 0},
+    "note": "Unknown family falls back to 3 / 15 $/Mtok. 1000*15/1e6 = 0.015."
+  },
+  {
+    "id": "AE-P05",
+    "input": {"kind": "price", "model": "claude-opus-5-5", "usage": {"input_tokens": 1000, "output_tokens": 1000, "speed": "fast"}},
+    "expected": {"read": 0, "write": 0, "output": 0.05, "input": 0.01},
+    "note": "Fast mode doubles input and output: input 1000*2*5/1e6 = 0.01; output 1000*2*25/1e6 = 0.05."
+  },
+  {
+    "id": "AE-P06",
+    "input": {"kind": "price", "model": "m1", "pricing": {"m1": {"priceIn": 2, "priceOut": 10, "priceCacheR": 0.2, "priceCacheW5m": 2.5, "priceCacheW1h": 4}}, "usage": {"cache_read_input_tokens": 1000000}},
+    "expected": {"read": 0.2, "write": 0, "output": 0, "input": 0},
+    "note": "The model is in the server pricing, so its rates win over list prices: 1e6*0.2/1e6 = 0.2."
+  },
+  {
+    "id": "AE-P07",
+    "input": {"kind": "price", "model": "m1", "pricing": {"m1": {"priceIn": 2, "priceOut": 10, "priceCacheR": 0.2, "priceCacheW5m": 2.5, "priceCacheW1h": 4, "tiers": [{"aboveTokens": 200000, "priceIn": 4, "priceOut": 20, "priceCacheR": 0.4, "priceCacheW5m": 5, "priceCacheW1h": 8}]}}, "usage": {"cache_read_input_tokens": 300000}},
+    "expected": {"read": 0.12, "write": 0, "output": 0, "input": 0},
+    "note": "Prompt size 300000 > tier aboveTokens 200000, so the tier rate 0.4 applies: 300000*0.4/1e6 = 0.12."
+  },
+  {
+    "id": "AE-R01",
+    "input": {"kind": "rebuilds", "calls": [{"t": 0, "model": "claude-opus-5-5", "write5m": 50000}, {"t": 60, "model": "claude-opus-5-5", "read": 50000, "write5m": 1000}, {"t": 600, "model": "claude-opus-5-5", "write5m": 52000}]},
+    "expected": [{"callNo": 3, "tokens": 52000, "extraUsd": 0.299, "cause": "9 min since the previous call > cache TTL 5 min"}],
+    "note": "Call 3 writes 52000 >= 20000 and >= half of call 2's context 51000. Gap 540 s > 300 s (no 1-hour write) -> idle cause, round(540/60) = 9. Extra = write cost 52000*6.25/1e6 = 0.325 times (1 - 0.1/1.25) = 0.92 -> 0.299."
+  },
+  {
+    "id": "AE-R02",
+    "input": {"kind": "rebuilds", "calls": [{"t": 0, "model": "claude-opus-5-5", "write1h": 50000}, {"t": 1200, "model": "claude-opus-5-5", "write1h": 51000}]},
+    "expected": [{"callNo": 2, "tokens": 51000, "extraUsd": 0.4845, "cause": "unknown (the cached prefix changed)"}],
+    "note": "1-hour writes, so TTL is 60 min; the 20 min gap is inside it and the model did not change -> unknown cause. Extra = 51000*10/1e6 = 0.51 times (1 - 0.1/2) = 0.95 -> 0.4845."
+  },
+  {
+    "id": "AE-R03",
+    "input": {"kind": "rebuilds", "calls": [{"t": 0, "model": "claude-opus-5-5", "write5m": 50000}, {"t": 30, "model": "claude-haiku-5-5", "write5m": 50000}]},
+    "expected": [{"callNo": 2, "tokens": 50000, "extraUsd": 0.0575, "cause": "model switched claude-opus-5-5 -> claude-haiku-5-5"}],
+    "note": "Model change is checked before the gap. Haiku write 50000*1.25/1e6 = 0.0625 times 0.92 = 0.0575."
+  },
+  {
+    "id": "AE-R04",
+    "input": {"kind": "rebuilds", "calls": [{"t": 0, "model": "claude-opus-5-5", "write5m": 50000}, {"t": 10, "model": "claude-opus-5-5", "read": 50000, "write5m": 24000}]},
+    "expected": [],
+    "note": "24000 >= 20000 but < half of the previous context 50000 (25000): ordinary growth, not a rebuild."
+  },
+  {
+    "id": "AE-R05",
+    "input": {"kind": "rebuilds", "calls": [{"t": 0, "model": "claude-opus-5-5", "write5m": 10000}, {"t": 900, "model": "claude-opus-5-5", "write5m": 15000}]},
+    "expected": [],
+    "note": "15000 is over half of 10000 and after a long gap, but below REBUILD_MIN_TOKENS 20000."
+  },
+  {
+    "id": "AE-C01",
+    "input": {"kind": "prompts", "events": [{"user": "a"}, {"call": 100000}, {"call": 120000}, {"user": "b"}, {"call": 130000}]},
+    "expected": [{"text": "a", "auto": false, "calls": 2, "usd": 0.11, "ctxStart": 100000, "ctxEnd": 120000}, {"text": "b", "auto": false, "calls": 1, "usd": 0.065, "ctxStart": 130000, "ctxEnd": 130000}],
+    "note": "Each call is an opus cache read of its context at 0.5 $/Mtok. a: (100000+120000)*0.5/1e6 = 0.11; b: 130000*0.5/1e6 = 0.065."
+  },
+  {
+    "id": "AE-C02",
+    "input": {"kind": "prompts", "events": [{"user": "a"}, {"call": 100000}, {"queued": "b"}, {"call": 110000}]},
+    "expected": [{"text": "a", "auto": false, "calls": 1, "usd": 0.05, "ctxStart": 100000, "ctxEnd": 100000}, {"text": "b (typed while the model was working)", "auto": false, "calls": 1, "usd": 0.055, "ctxStart": 110000, "ctxEnd": 110000}],
+    "note": "A human queued_command starts a user prompt of its own; the calls after it belong to it."
+  },
+  {
+    "id": "AE-C03",
+    "input": {"kind": "prompts", "events": [{"user": "a"}, {"call": 100000}, {"notification": true}, {"call": 110000}, {"compact": true}, {"call": 50000}, {"user": "b"}, {"call": 60000}]},
+    "expected": [{"text": "a", "auto": false, "calls": 1}, {"text": "(automatic turn: a background task finished)", "auto": true, "calls": 1}, {"text": "(context compacted: the session continued from a summary)", "auto": true, "calls": 1}, {"text": "b", "auto": false, "calls": 1}],
+    "note": "A task notification and a compaction summary each start an automatic turn, so b stays the user's second prompt."
+  },
+  {
+    "id": "AE-C04",
+    "input": {"kind": "prompts", "events": [{"user": "<local-command-stdout>Set model</local-command-stdout>"}, {"meta": "Caveat"}, {"call": 100000}]},
+    "expected": [],
+    "note": "A local command's output and a meta entry are not prompts; a call before any prompt belongs to none."
+  },
+  {
+    "id": "AE-C05",
+    "input": {"kind": "prompts", "events": [{"user": "a"}, {"queued": "status please", "origin": "cron"}, {"call": 100000}, {"queued": "<task-notification>x</task-notification>", "origin": "task-notification"}, {"call": 110000}]},
+    "expected": [{"text": "a", "auto": false, "calls": 0}, {"text": "(automatic turn: cron) status please", "auto": true, "calls": 1}, {"text": "(automatic turn: a background task finished)", "auto": true, "calls": 1}],
+    "note": "A non-human queued command is automatic: its origin kind is named, and one that carries a task notification reads as a finished background task."
+  },
+  {
+    "id": "AE-T01",
+    "input": {"kind": "turns", "events": [{"user": "a"}, {"queued": "b"}, {"queued": "status please", "origin": "cron"}]},
+    "expected": ["a", "b"],
+    "note": "buildPromptTurns keeps the human queued prompt b and skips the cron one."
+  }
+]
