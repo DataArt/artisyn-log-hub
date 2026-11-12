@@ -50,3 +50,6 @@ against `/etc/shadow` without PAM inherits the bug; no Log Hub image runs one to
 - **2026-11-06:** Created deferred. No musl fix published yet; OpenSSH 10.6p2 (2026-11-05) fixed
   sshd on its side. Repo has no `openssh`/`sshd` in any Dockerfile/compose/script — not exploitable
   in our images today.
+- **2026-11-12:** The runtime image moved to `node:26.13.1-alpine3.24` (Alpine 3.24.4) in task
+  `2026-11-09-after-11-11-node-image-bump`; it ships musl `1.2.6-r3`. This task stays open — the
+  musl `crypt()` fix is a separate matter.

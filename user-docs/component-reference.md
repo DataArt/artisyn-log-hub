@@ -45,7 +45,7 @@ into PostgreSQL, and users read the result through the web client.
 
 ## 3. Log Hub server
 
-A NestJS application on Node.js 26 (the image uses `node:26.13.0-alpine`). It is the only process that talks to the database.
+A NestJS application on Node.js 26 (the image uses `node:26.13.1-alpine3.24`). It is the only process that talks to the database.
 
 ### 3.1 Process model
 

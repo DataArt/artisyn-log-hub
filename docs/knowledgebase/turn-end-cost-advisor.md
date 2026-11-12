@@ -135,7 +135,8 @@ a fresh session where the context stayed large after the work changed topic (not
 said to stay), a rule for a correction that recurs, and tiny one-command agents run as one
 scripted step or one agent per group. Model-switch advice and a fixed list of stock tips
 (batching calls, trimming CLAUDE.md, /compact, fewer screenshots, ...) are forbidden; an empty
-`harnessAdvice` is the expected answer for a cheap or efficient session.
+`harnessAdvice` is the expected answer for a cheap or efficient session. The answer is always in
+English, whatever language the session prompts are in.
 
 **Isolation of the LLM call (both branches).** `callLlmAsync()` runs `claude -p` with
 `--tools= --strict-mcp-config --disable-slash-commands`: everything the model needs is in the

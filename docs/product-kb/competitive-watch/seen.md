@@ -4,7 +4,7 @@ title: "Competitive watch — seen log"
 description: "Every competitor item (release, blog post, docs change, new tool) the morning check has already seen, newest first, with its relevance and verdict for Log Hub."
 tags:
   - competitive-research
-timestamp: "2026-11-11T10:00:00+04:00"
+timestamp: "2026-11-12T10:00:00+04:00"
 ---
 
 # Seen log
@@ -19,6 +19,23 @@ Baseline: everything published before 2026-11-01 is in the parity study and is n
 
 | Seen | Source id | Published | Item | URL | Relevance | Verdict |
 |---|---|---|---|---|---|---|
+| 2026-11-12 | hn | 2026-11-12 | Show HN: Ramasite – self-contained Laravel/Filament/SQLite CMS — HN 7 / 1 | https://github.com/DaleFranks/ramasite | low | none |
+| 2026-11-12 | hn | 2026-11-12 | Show HN: Lynx – open-source customizable AI workspace — HN 2 / 0 | https://github.com/yakkomajuri/lynx | low | none |
+| 2026-11-12 | hn | 2026-11-04 | Harness: why AI coding agents lose context after the PR (delivery context + policy gates; one 12K vs 250K token query comparison, no agent-cost monitoring) — HN 1 / 0 | https://www.harness.io/blog/why-ai-coding-agents-lose-context-after-pr | low | none |
+| 2026-11-12 | hn | 2026-11-11 | Token Economy (Baeta78, AGPL, 1 star): local dashboard + Windows tray app for Claude Code / Codex — tokens per agent/model/project/session, 5h/weekly limit forecast, API-rate cost vs subscription, savings recorded by RTK / Headroom / Context Mode, 0–100 optimisation score with tips — HN 3 / 0 | https://github.com/Baeta78/token-economy | misc | none (ccusage-class local tool; Log Hub cost advisor covers tips; subscription-vs-API value is already an idea from Revenium) |
+| 2026-11-12 | hn | 2026-11-05 | Speakeasy AI Control Plane — "Track Claude Code usage": Claude Code OTEL pushed via Claude managed settings (no per-dev install), hooks API key + plugin marketplace, SCIM directory sync maps groups/attributes to roles, Costs page (active users, sessions, tokens, role and employee tables), Tool Logs / Agent Sessions / MCP Insights drill-down, "Est. cost" at list price unless `modelPricing`; Cursor/Codex spend from provider integrations; no budgets; not in the parity study — HN 2 / 0 | https://www.speakeasy.com/blog/track-claude-code-usage | medium | idea: group cost by IdP/SCIM group or attribute (department, role) instead of only Log Hub teams; idea: flag cost as "estimated at list price" for subscription users; study: new file proposed |
+| 2026-11-12 | hn | 2026-11-11 | Show HN: Bot-bottle – microVM/container runtime with credential gateway, DLP and remote control for coding agents — HN 2 / 3 | https://github.com/diderisoft/bot-bottle | low | none |
+| 2026-11-12 | hn | 2026-11-11 | Launch HN: Pomerado (YC F26) – turn any website into an MCP for agents — HN 55 / 43 | https://news.ycombinator.com/item?id=50455811 | low | none |
+| 2026-11-12 | hn | 2026-11-11 | Show HN: Klad – paint app your coding agent can drive — HN 79 / 31 | https://github.com/klad-app/klad | low | none |
+| 2026-11-12 | hn | 2026-11-11 | Show HN: Lettercamp – open-source static blog framework — HN 3 / 0 | https://github.com/lettercamp/lettercamp | low | none |
+| 2026-11-12 | hn | 2026-11-11 | Show HN: Zumungo – AI-driven home automation — HN 1 / 0 | https://zumungo.com/get-started.html | low | none |
+| 2026-11-12 | hn | 2026-11-11 | Show HN: mib – Vim-style Markdown scratchpad for Linux / Wayland — HN 4 / 0 | https://github.com/osigurdson/mib | low | none |
+| 2026-11-12 | hn | 2026-11-11 | Show HN: Connect Claude Code to earnings-call embeddings (FN2 AI) — HN 2 / 0 | https://fn2.ai/claude | low | none |
+| 2026-11-12 | ccusage | 2026-11-11 | ccusage v20.0.50: Antigravity adapter reports real model names for new model IDs | https://github.com/ccusage/ccusage/releases/tag/v20.0.50 | low | none |
+| 2026-11-12 | langfuse-changelog | 2026-11-11 | Langfuse AI Gateway serves OpenAI embeddings | https://langfuse.com/changelog/2026-11-11-ai-gateway-openai-embeddings | low | none |
+| 2026-11-12 | q-agent-observability | 2026-11-04 | AgentsView in Thoughtworks Technology Radar vol. 35 (Assess): local-first browse / search / context profiling of past Claude Code / Codex / OpenCode / Pi sessions (auto-hooks into the harnesses, imports history), prompt-cache and cost-efficiency session metrics with recommendations, team sync and collaborative session review planned; not in the parity study | https://www.thoughtworks.com/radar/tools/agentsview | medium | none (overlaps Log Hub session view, sysctx anatomy and cost advisor; Radar placement signals the category is mainstream); study: new file proposed |
+| 2026-11-12 | q-otel-observability | 2026-07-07 | Dash0 AI Coding Insights: open-source Dash0 plugin for Claude Code sends sessions as OTel traces (26 event types incl. subagents, MCP calls, permission requests); spend by session / developer / repo / model with cache savings shown separately, sort sessions by cost to find ones that "ran in circles", adoption by team, cycle time branch→merge by model, quality (attempts to useful result, review comments per PR, changes requested, merge rate) via GitHub; Cursor too; no budgets; not in the parity study | https://www.dash0.com/blog/introducing-agentic-engineering-intelligence-stop-guessing-what-your-coding-agents-deliver | medium | idea: per-session "attempts to a useful result" / retry count and cycle time next to cost — extends the known PR-attribution gap; idea: show cache savings ($ saved by cache reads) per session; study: new file proposed |
+| 2026-11-12 | reddit-claudeai | — | Meridian: open-source OTel dashboard mapping token-waste patterns in live Claude Code sessions (per-request tokens, durations, tool commands, session IDs), reported from an r/ClaudeAI post via an aggregator; no primary repo found, undated | https://aiweekly.co/node/2340 | misc | none (home-made waste tracker; Log Hub antipatterns task covers waste patterns) |
 | 2026-11-11 | hn | 2026-11-11 | Show HN: Aq – an attention queue TUI for Claude Code — HN 4 / 0 | https://github.com/nodo-labs-uk/attention-queue | low | none |
 | 2026-11-11 | hn | 2026-11-11 | Show HN: Obeya – spatial canvas for directing coding agents — HN 4 / 0 | https://github.com/sadilek/obeya | low | none |
 | 2026-11-11 | hn | 2026-11-11 | Show HN: Pots – open-source Grok Bot alternative — HN 3 / 0 | https://github.com/Crokily/pi-durable-bot | low | none |

@@ -54,16 +54,16 @@ floors; check the runtime image's musl/zlib/openssl versions; leave a note on GH
 
 ## Acceptance Criteria
 
-- [ ] Notes record the release version `<NEW>`, its date and that both image tags exist (FR-1).
-- [ ] All four `FROM` lines in `Dockerfile` name `<NEW>`, and `docker build` of the image succeeds
+- [x] Notes record the release version `<NEW>`, its date and that both image tags exist (FR-1).
+- [x] All four `FROM` lines in `Dockerfile` name `<NEW>`, and `docker build` of the image succeeds
       (FR-2).
-- [ ] The `docker-dev/Dockerfile` hash matches `SHASUMS256.txt` for the downloaded file, and the
-      dev image builds (FR-3).
-- [ ] No doc listed in FR-4/FR-5 still names the old Node version or the old floors.
+- [x] The `docker-dev/Dockerfile` hash matches `SHASUMS256.txt` for the downloaded file, and the
+      dev image builds (FR-3). (Verified up to the `fetch-node` stage: `node.tar.xz: OK`.)
+- [x] No doc listed in FR-4/FR-5 still names the old Node version or the old floors.
       `npm run build:help` has regenerated `client/public/help/*.md` (FR-4, FR-5).
-- [ ] `apk info -v` of the runtime image shows musl ≥ 1.2.6-r3, zlib ≥ 1.3.2-r1 and
+- [x] `apk info -v` of the runtime image shows musl ≥ 1.2.6-r3, zlib ≥ 1.3.2-r1 and
       libssl3/libcrypto3 ≥ 3.5.9-r0, and the versions are in Notes (FR-6).
-- [ ] The GH-107 task has a dated note with the new tag and musl version (FR-7).
+- [x] The GH-107 task has a dated note with the new tag and musl version (FR-7).
 - [ ] The final health check (`adlc-lh:check-health`, `finalRun: true`) is green.
 
 ## Notes
@@ -72,3 +72,18 @@ floors; check the runtime image's musl/zlib/openssl versions; leave a note on GH
 - **2026-11-09:** Created from chunk 4 of `2026-11-09-morning-check-followups`. The gate was not
   met: nodejs.org `dist/index.json` showed the newest 26.x as v26.13.0 (2026-10-28) and the last
   security release as v26.12.1 (2026-10-21).
+- **2026-11-12:** Gate met (FR-1). `<NEW>` = **v26.13.1** (2026-11-10, `security: true` in
+  `dist/index.json`; same release: v24.22.3 2026-11-10, v22.23.5 2026-11-11 — 7 High + 6 Medium
+  CVEs in HTTP/2 / TLS / HTTPS, https://nodejs.org/en/blog/vulnerability/november-2026-security-releases).
+  Docker Hub has `node:26.13.1-slim`, `node:26.13.1-alpine` and `node:26.13.1-alpine3.24`.
+  `docker-dev` hash from `SHASUMS256.txt` for `node-v26.13.1-linux-x64.tar.xz`:
+  `5c063e46bab0fbc1c17cc445d7ff129cbdcd0471be6ed83b6ab864f8143bc864`.
+- **2026-11-12:** FR-6 — `apk info -v` of `node:26.13.1-alpine3.24` (Alpine 3.24.4): musl
+  `1.2.6-r3`, zlib `1.3.2-r1`, libssl3 / libcrypto3 `3.5.9-r0`. FR-7 note added to the GH-107
+  task. Floors in the user docs and `hook/INSTALL_HOOK.md` raised to 22.23.5 / 24.22.3 / 26.13.1.
+  Side cleanup: deleted the gitignored local bundles `release/artisyn-log-hub-20261027-120735-*`
+  (they shipped `postgres:18.2-alpine`).
+- **2026-11-12:** Fast health-check set green (build, lints, typechecks, algorithm and script
+  tests). Product image built from the working tree and deployed to the maintainer's local
+  instance: container reports `node -v` = v26.13.1, the server started cleanly and hook uploads keep
+  arriving after the redeploy. The `finalRun: true` set (contract, scenarios, e2e) has not run yet.

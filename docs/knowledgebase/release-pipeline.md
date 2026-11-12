@@ -28,8 +28,8 @@ that pins the image tag, and Docker pulls it.
 
 Every `actions/setup-node` step in `.github/workflows/` (`checks.yml`, `release.yml`,
 `security-scans.yml`, `security-report.yml`, `virustotal.yml`) uses `node-version: 26`, the same
-major line as the `Dockerfile` (`node:26.13.0-slim` build stages, `node:26.13.0-alpine` runtime) and
-`docker-dev/Dockerfile` (`ARG NODE_VERSION=26.13.0`). Checks and builds therefore run on the major
+major line as the `Dockerfile` (`node:26.13.1-slim` build stages, `node:26.13.1-alpine3.24` runtime) and
+`docker-dev/Dockerfile` (`ARG NODE_VERSION=26.13.1`). Checks and builds therefore run on the major
 line the product runs on.
 
 - CI pins only the major line, not the patch: `setup-node` resolves it to the latest 26.x on each
