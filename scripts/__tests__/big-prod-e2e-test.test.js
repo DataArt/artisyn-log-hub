@@ -830,7 +830,21 @@ describe('scenarios', () => {
     assert.deepEqual(byId.S1.expect.bash.map((r) => ({ ...r })), [{ command: 'node --test tests/calc.test.js', status: 'ok', workDir: '.' }]);
     assert.deepEqual([...byId.S2.verifyChecks.slice(4)], ['systemContext']);
     assert.deepEqual([...byId.S5.verifyChecks.slice(4)], ['systemContext']);
-    assert.deepEqual(byId.S5.expect.sysctx.rules, ['cli-flags']);
+    const sysctx = (s) => ({
+      skills: s.skills.map((r) => ({ ...r })),
+      files: s.files.map((r) => ({ ...r })),
+      rules: s.rules.map((r) => ({ ...r })),
+    });
+    assert.deepEqual(sysctx(byId.S2.expect.sysctx), {
+      skills: [{ name: 'add-jsdoc', source: 'project' }],
+      files: [],
+      rules: [],
+    });
+    assert.deepEqual(sysctx(byId.S5.expect.sysctx), {
+      skills: [],
+      files: [{ pathSuffix: 'CLAUDE.md', kind: 'claude-md' }],
+      rules: [{ pathSuffix: '.claude/rules/cli-flags.md', kind: 'rule' }],
+    });
     assert.deepEqual([...byId.S4.verifyChecks.slice(4)], ['agentsTable']);
     assert.equal(byId.S4.expect.agents.count, 2);
   });

@@ -69,11 +69,15 @@ async function ensureImage(image) {
   return r.exitCode === 0 ? null : `pull ${image} failed: ${r.stderr.trim().slice(0, 300)}`;
 }
 
-/** Hook algorithm tests inside the container; hook/ needs scripts/algo-docs and the algorithm docs. */
+/**
+ * Hook algorithm tests inside the container. Copies ./hook, ./scripts/algo-docs,
+ * ./docs/knowledgebase/algorithms (load-examples.cjs finds the repo root by it) and
+ * ./docs/algorithm-examples (the rows files the algorithm tests read).
+ */
 async function runAlgo(image, gitRoot) {
   const sh =
     'mkdir -p /w/repo && cd /src && tar --exclude=./hook/node_modules -cf - ./hook ./scripts/algo-docs ' +
-    './docs/knowledgebase/algorithms | tar -xf - -C /w/repo && cd /w/repo/hook && node scripts/run-tests.js';
+    './docs/knowledgebase/algorithms ./docs/algorithm-examples | tar -xf - -C /w/repo && cd /w/repo/hook && node scripts/run-tests.js';
   const r = await docker(['run', '--rm', '--network', 'none', '-v', `${toDocker(gitRoot)}:/src:ro`, image, 'sh', '-c', sh]);
   const out = `${r.stdout}\n${r.stderr}`;
   const num = (k) => {
