@@ -1,6 +1,6 @@
 {
   "schemaVersion": 1,
   "label": "security scan",
-  "message": "passing",
-  "color": "brightgreen"
+  "message": "2 warnings",
+  "color": "yellow"
 }
