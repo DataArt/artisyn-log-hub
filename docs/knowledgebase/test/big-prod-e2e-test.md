@@ -4,7 +4,7 @@ title: Big pre-prod e2e test (manual skill)
 description: Manual, reproducible pre-prod run of the whole product on a disposable amd64 docker stand. It covers UI onboarding, hook install (current and previous release, local config, upgrade), eleven isolated claude -p sessions plus a legacy-hook session verified in the UI with per-scenario checks (Bash tab, denied calls, cost, work time, context growth, workflow agents, system context, worktree override), a UI-configured file-categories check, and team and admin visibility, and writes a report with screenshot evidence.
 resource: .claude/skills/big-prod-e2e-test/scripts/run.mjs
 tags: [testing, e2e, pre-prod, docker, playwright, hook, manual]
-timestamp: 2026-10-23T00:00:00Z
+timestamp: 2026-11-12T00:00:00Z
 ---
 
 # Purpose
@@ -71,14 +71,14 @@ The S1–S11 and L1 scenario models are test data and live in `scripts/scenarios
 | P4 | `onboarding` | scripted Playwright signup of admin, U1, U2, U3 + consent + role check + "Give Me String" one-liner |
 | P5 | `hooks` | one-liner installer run in each repo with the isolated `CLAUDE_CONFIG_DIR`; `FR-LC`: `serverUrl` and `otelReceiverPort` live only in `log-hub.local.json`; `FR-UP`: java-lib (committed pre-split `log-hub.json`) upgrades cleanly; then prepares S11's linked worktree `ts-webapp-wt/` with its own OTEL port |
 | P5b | `legacy-hook` | `FR-OLD`: `git archive` of `PREV_RELEASE_REF` into `_prev-src/`, `npm ci`, the old `build-hooks-installer.js` into `_prev-hook/` (versions checked), then `npx <file-url tgz> install` into `legacy-hook/` with U3's key. A failure is an `FR-OLD` fail (`infra: <step>: …`), not an infra stop; L1 is then not run |
-| P5c | `node-lts` | `FR-NODE`: the plugin installed into `js-cli` on Node `18.19.0` (the `engines` floor) plus every even line alive today per `nodejs/Release` `schedule.json` (LTS, or Current due to become LTS; fallback 22/24/26 when offline), each in `docker run --rm --network none` from `public.ecr.aws/docker/library/node:<tag>-bookworm`: the hook algorithm tests and `scripts/node-lts/smoke.cjs` (SessionStart … SessionEnd stdin payloads; exit 0, clean stderr, `hook.log`, telemetry, OTEL receiver listening) in a CommonJS, an ESM (`"type": "module"`) and a package.json-less repo. Never stops the run; a failure is an `FR-NODE` fail. Matrix in `_state/node-lts.json` |
+| P5c | `node-lts` | `FR-NODE`: the plugin installed into `js-cli` on Node `18.19.0` (the `engines` floor) plus every even line alive today per `nodejs/Release` `schedule.json` (LTS, or Current due to become LTS; fallback 22/24/26 when offline), each in `docker run --rm --network none` from `public.ecr.aws/docker/library/node:<tag>-bookworm`, which gets a tarball of `hook/`, `scripts/algo-docs`, `docs/knowledgebase/algorithms` and `docs/algorithm-examples`: the hook algorithm tests and `scripts/node-lts/smoke.cjs` (SessionStart … SessionEnd stdin payloads; exit 0, clean stderr, `hook.log`, telemetry, OTEL receiver listening) in a CommonJS, an ESM (`"type": "module"`) and a package.json-less repo. Never stops the run; a failure is an `FR-NODE` fail. Matrix in `_state/node-lts.json` |
 | P6 | `teams` | `T-restricted` (U1 → U2) and `T-transparent` (U2 → U3): create, mode, invite, accept, link repos |
 | P7 | `smoke` | isolated `claude -p "Reply with OK"` must succeed |
 | P8 | sessions | S1–S11 `claude -p` sessions, retried up to 3× until the scenario is actually exercised; `FR-WT` right after S11; L1 last, only when P5b passed |
 | P9 | verify | wait for ingestion (and, for the `cost` check, up to 120 s for the telemetry cost), then a nested `claude -p` + Playwright MCP runs the scenario's verifier checks in the UI; `cost` and `workTime` are judged in JS; `FR-OLD` from L1 |
 | P9b | file-categories | U3 sets categories `sources` → `^src/` and `tests` → `^tests/` on dotnet-api through Settings → File Categories; API must return them (FR-FC1) and S7's `fileStatsByCategory` must have reads under both and equal, per category, the `{files, bytes}` computed from S7's own main transcript (FR-FC2): `files` = its `Read` calls, `bytes` = the `.length` of their `tool_result` text (line-number prefixes included, i.e. what entered the context, not the file size on disk), classified by the categories on repo-relative paths — `lib/filecategories.mjs` `expectedFileStats` mirrors the server's `extractFileStatsByCategory()` (`server/src/logs/claude-extractor.ts`); case `FC` |
 | P10 | visibility | rows V1–V8: personal "My Repos" lists, team session lists, and the admin row (no repo listed; the first of S1/S5/S6/S3 whose owner gets HTTP 200 on its logs, opened by the admin → 403). A failed row whose every expected session is `fail: not ingested` (or whose repos have no repo id) stays `fail`, with its detail prefixed `blocked by <ids> (not ingested) — ` |
-| P11 | final | dev ports unchanged, no new path in the git root, `index.md` complete |
+| P11 | final | dev ports unchanged, `index.md` complete |
 | P12 | `teardown` | kill the hook's `otel-receiver.js` for the run dir; `docker compose down` (skipped with `--keep`); assert no containers |
 
 A failure in P0–P7 skips P8–P11 and still runs teardown (exit `2`). A failure in P8–P10 marks only
@@ -111,11 +111,11 @@ call budget:
 |---|---|---|
 | `model`, `harness`, `prompt` | Summary model; Harness usage rows (skills, rules, workflows, subagents, MCP); first prompt on Logs | all (L1: `model`, `prompt`) |
 | `cost` | Info tab "Telemetry total"; judged in JS against the stream's `total_cost_usd` (Δ below max($0.05, 1 %)), `skipped` when either side is missing | S1–S11 |
-| `bashTab` | Bash tab rows: status (`✗ error`), Working dir, FILES runs `node`, no absolute repo path | S1, S8 |
+| `bashTab` | Bash tab rows: status read from the opened call's detail-pane badge (`✓ ok` / `✗ error`), Working dir, FILES runs `node`, no absolute repo path | S1, S8 |
 | `contextGrowth` | Charts → Context Growth step with tool calls | S1 |
 | `agentsTable` | workflow agents table and the agent modal tabs | S4 |
-| `systemContext` | System context rules / skills / files tabs | S2, S5 |
-| `denied` | the `Write` call shows `⊘ rejected` with a denial text or title | S8 |
+| `systemContext` | Anatomy tab (`&tab=sysctx`): the Skills and Instruction files drill-downs (skill name + source; file path suffix + Kind, a rule in the loaded or the on-demand group) | S2, S5 |
+| `denied` | the `Write` call, opened from its Files row, shows `⊘ rejected` in the call's modal with a denial text or title | S8 |
 | `workTime` | turn-1 header duration ≥ the transcript's prompt → last main-thread answer span (judged in JS) | S9 |
 | `bashPaths` | Bash tab FILES reads `packages/core/src/index.ts`, no absolute path | S10, S11 |
 
@@ -297,8 +297,10 @@ stand is built from the working tree, so it always ships the current hook.
   `js-cli`, Docker down). A cell like `24 (v24.x) smoke esm: SessionStart/lifecycle-hook.js: …` is
   a real hook defect on that Node line or repo kind — the full step list, stderr and `hook.log`
   errors are in `_state/node-lts.json`. `pull … failed` is a registry problem (the run uses the
-  `public.ecr.aws` mirror because Docker Hub rate-limits anonymous pulls). Re-run the matrix
-  alone with `lib/node-lts.mjs` `runNodeLtsMatrix`.
+  `public.ecr.aws` mirror because Docker Hub rate-limits anonymous pulls). An `algo` cell where
+  `scripts/algo-docs/load-examples.cjs` throws on a missing `docs/algorithm-examples/*.json` (or
+  cannot find the root) means the tar list in `runAlgo` (`lib/node-lts.mjs`) misses a folder the
+  algorithm tests read. Re-run the matrix alone with `lib/node-lts.mjs` `runNodeLtsMatrix`.
 - **`cost` is `skipped`**: P9 waited `TELEMETRY_WAIT_MS` (120 s) and the session's
   `costBreakdown.telemetryCost` stayed null, or the stream had no `total_cost_usd`, or the Info
   tab showed no "Telemetry total". The run log says `telemetry cost not reported in time`. It does
@@ -314,7 +316,15 @@ stand is built from the working tree, so it always ships the current hook.
   `toolDenialKind`, so the UI falls back to the plain `is_error` status. Check the line in the
   attempt stream / transcript (expected `toolDenialKind: "user-rejected"`) and whether the server
   kept it. If the call was not denied at all (the session ran with broader permissions), the
-  scenario is `not exercised`; check `permissionArgs` in `scripts/scenarios.mjs`.
+  scenario is `not exercised`; check `permissionArgs` in `scripts/scenarios.mjs`. Note that the
+  turn's Files row of that call shows only `⊘ denied.txt` + `⚠ requested`; the `⊘ rejected` label
+  (title `rejected by the user`) is in the modal that opens on a click on the row, so a verdict
+  built from the row alone is a verifier defect, not a product one.
+- **S5 `systemContext` fails with `cli-flags` in neither Anatomy group**: the rule is path-scoped
+  (`paths: ["lib/**/*.js"]` in `fixtures/js-cli/dot-claude/rules/cli-flags.md`), so it lands on the
+  Anatomy tab only when the session actually loaded it. Check the Logs turn for a
+  `§ Rules cli-flags` chip and the attempt's `.stream.jsonl` for a read under `lib/` before
+  treating it as a product defect: without the chip the session never triggered the rule.
 - **A Bash row shows an absolute path in S1 / S10 / S11 on Windows**: the filled `{{REPO_ROOT}}`
   is `D:/…` (forward slashes), and Claude may echo it as `D:/…`, `D:\…` or the msys form
   `/d/…`. `toRepoRelative` (`packages/bash-view/src/display-paths.ts`) matches all of

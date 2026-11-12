@@ -45,8 +45,8 @@ export const CHECKS = Object.freeze(
       bashTab: check(['bash'], ['bash.png'], 5, ['bash']),
       contextGrowth: check(['contextGrowth'], ['context-growth.png'], 5, []),
       agentsTable: check(['agentsTable'], ['agents-table.png', 'agent-modal.png'], 6, ['agents']),
-      systemContext: check(['systemContext'], ['sysctx.png'], 7, ['sysctx']),
-      denied: check(['denied'], ['denied.png'], 4, ['denied']),
+      systemContext: check(['systemContext'], ['sysctx.png'], 8, ['sysctx']),
+      denied: check(['denied'], ['denied.png'], 5, ['denied']),
       // Judged by the orchestrator (judgeWorkTime) — the verifier only reports the durations.
       workTime: check(['workTime'], ['work-time.png'], 3, []),
       bashPaths: check(['bashPaths'], ['bash-paths.png'], 4, ['bashPaths']),

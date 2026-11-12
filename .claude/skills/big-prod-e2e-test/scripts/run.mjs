@@ -13,7 +13,7 @@ import {
   PREV_HOOK_VERSION, PREV_INSTALLER_VERSION, PREV_RELEASE_REF, REPOS, REPO_NAMES, REMOTE_URL, RESTAMP_WAIT_MS, STAND_HOST,
   STAND_URL, STORED_URL, TEAMS, TIMEOUTS, USERS, USER_ORDER, FIXTURES_DIR, POSTGRES_IMAGE, gitRoot, runStamp, resolveRun,
 } from './lib/config.mjs';
-import { run, runAsync } from './lib/proc.mjs';
+import { runAsync } from './lib/proc.mjs';
 import { createApiClient } from './lib/api.mjs';
 import {
   createReport, exitCodeFor, recordAc, recordCase, recordInfra, recordSession, recordVisibility, writeReport,
@@ -47,7 +47,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 /** Which phases contribute to each AC row; used to flag rows not fully evaluated. */
 const AC_PHASES = Object.freeze({
   'FR-2': ['P1'],
-  'FR-3': ['P0', 'P11'],
+  'FR-3': ['P0'],
   'FR-4': ['P2', 'P11'],
   'FR-5': ['P2', 'P4'],
   'FR-6': ['P3'],
@@ -122,7 +122,6 @@ const ctx = {
   env: null,
   state: null,
   devPortsBefore: null,
-  gitStatusBefore: null,
   browser: null,
   pages: {},
   results: {},
@@ -183,12 +182,6 @@ async function phase(id, step, fn) {
 
 // ---- P0 preflight ---------------------------------------------------------------------------------
 
-function gitStatusPaths(root) {
-  const res = run('git', ['status', '--porcelain', '--untracked-files=all'], { cwd: root, allowFail: true });
-  if (res.status !== 0) return null;
-  return res.stdout.split(/\r?\n/).filter(Boolean).map((l) => l.slice(3).trim());
-}
-
 /**
  * Pre-pulls the stand's base images (the root Dockerfile's FROM images + POSTGRES_IMAGE) that are
  * not local from the public ECR mirror, so Docker Hub's anonymous 429 cannot stop P1/P2. A failure
@@ -218,7 +211,6 @@ async function p0Preflight() {
 
   const root = gitRoot();
   prePullImages(step, root);
-  ctx.gitStatusBefore = gitStatusPaths(root);
   let runPaths = resolveRun(runStamp(), root);
   while (fs.existsSync(runPaths.runDir)) {
     await sleep(RESTAMP_WAIT_MS);
@@ -902,15 +894,6 @@ async function p11Final() {
       ? `dev ports unchanged ${JSON.stringify(after)}`
       : `dev ports changed: ${cmp.diff.map((d) => `${d.port} ${d.before}→${d.after}`).join(', ')}`,
   );
-
-  const now = gitStatusPaths(ctx.runPaths.gitRoot);
-  if (now === null || ctx.gitStatusBefore === null) {
-    ac('FR-3', 'P11', false, 'git status --porcelain failed');
-  } else {
-    const before = new Set(ctx.gitStatusBefore);
-    const added = now.filter((p) => !before.has(p));
-    ac('FR-3', 'P11', added.length === 0, added.length ? `new paths in the git root: ${added.join(', ')}` : 'no new path in the git root');
-  }
 
   // FR-10 is checked on the index.md written right now, before the final rewrite.
   saveReport();

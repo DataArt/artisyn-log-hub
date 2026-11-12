@@ -1,6 +1,6 @@
 # 2026-11-09: Node Image Bump After the 2026-11-11 Security Release
 
-**Status:** todo
+**Status:** done
 **Priority:** medium
 **Type:** feature
 **Module(s):** docker, docs
@@ -87,3 +87,8 @@ floors; check the runtime image's musl/zlib/openssl versions; leave a note on GH
   tests). Product image built from the working tree and deployed to the maintainer's local
   instance: container reports `node -v` = v26.13.1, the server started cleanly and hook uploads keep
   arriving after the redeploy. The `finalRun: true` set (contract, scenarios, e2e) has not run yet.
+- **2026-11-12:** Merged as PR #139. Archived by the maintainer's decision without the
+  `finalRun: true` set (the last acceptance criterion stays unchecked): the change is an image/doc
+  version bump, the fast set was green, all PR #139 CI checks (fast-checks, container, build-kit,
+  dockerfile-lint, db-state, security) and the post-merge runs on `main` were green, and the
+  image runs on the maintainer's local instance.
