@@ -7,5 +7,6 @@
   changed, add a rule for a correction that keeps recurring, run tiny one-command agents as one
   scripted step. Generic tips and "use a cheaper model" are no longer given, and a cheap or
   efficient session gets no advice at all.
+- The advice is always written in English, whatever language the session prompts are in.
 - Prompts typed while Claude was busy now count as prompts for the advisor and for AI Attribute
   Extraction.

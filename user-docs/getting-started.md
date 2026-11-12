@@ -4,7 +4,7 @@
 
 Before using Artisyn Log Hub, make sure you have:
 
-- **Node.js** — a current LTS line (22, 24 or 26), patched to at least 22.23.4 / 24.22.1 / 26.12.1.
+- **Node.js** — a current LTS line (22, 24 or 26), patched to at least 22.23.5 / 24.22.3 / 26.13.1.
   The hook still starts on Node.js 18.19+, but 18 and 20 are end-of-life and get no security fixes.
 - A running instance of Artisyn Log Hub — see [Install the server](install-server.md)
 - Claude Code CLI installed and configured
