@@ -30,7 +30,7 @@ export const DEV_PORTS = Object.freeze([3000, 5432, 5173]);
 
 export const IMAGE_REPO = 'artisyn-log-hub';
 export const COMPOSE_PROJECT_PREFIX = 'log-hub-big-test-';
-export const POSTGRES_IMAGE = 'postgres:18.6-alpine';
+export const POSTGRES_IMAGE = 'postgres:18.7-alpine';
 export const RUN_DIR_PREFIX = 'log_hub_big_test-';
 
 export const IMAGE_TAG = (stamp) => `big-test-${stamp}`;
