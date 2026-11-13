@@ -45,8 +45,8 @@ WORKDIR /dl
 
 FROM fetch-base AS fetch-node
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
-ARG NODE_VERSION=26.13.0
-ARG NODE_SHA256=d28a96af6c38596f6d9d97c0ee531c13d238d757742387d1928de822d959e997
+ARG NODE_VERSION=26.13.1
+ARG NODE_SHA256=5c063e46bab0fbc1c17cc445d7ff129cbdcd0471be6ed83b6ab864f8143bc864
 RUN set -eux; \
     aria2c -x16 -s16 --console-log-level=warn -o node.tar.xz \
       "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz"; \
@@ -67,8 +67,8 @@ RUN set -eux; \
 
 FROM fetch-base AS fetch-bun
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
-ARG BUN_VERSION=1.3.14
-ARG BUN_SHA256=951ee2aee855f08595aeec6225226a298d3fea83a3dcd6465c09cbccdf7e848f
+ARG BUN_VERSION=1.4.4
+ARG BUN_SHA256=bf8ccbfb2b0b80159e0f9a6d15c55317add8077534dbc6130a3edb52fccb395c
 RUN set -eux; \
     aria2c -x16 -s16 --console-log-level=warn -o bun.zip \
       "https://github.com/oven-sh/bun/releases/download/bun-v${BUN_VERSION}/bun-linux-x64.zip"; \

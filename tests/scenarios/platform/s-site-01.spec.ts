@@ -1,5 +1,6 @@
-// S-SITE-01. The static Log Hub site and the "Why Log Hub" deck: built, served under a base path,
-// navigable, responsive, dark-mode aware, with no leaked e-mails or local paths
+// S-SITE-01. The static Log Hub site, the "Why Log Hub" deck and the one-pager: built, served under
+// a base path, navigable, responsive, dark-mode aware, with no leaked e-mails or local paths; the
+// one-pager fits one 1280×720 screen and one landscape PDF page at A4 and at Letter
 // (docs/qaa-overview/scenarios/04-ingest-hook-installer-platform.md §S-SITE-01; layer UI, mode A).
 //
 // The site is not part of the stand: the scenario builds it itself with
@@ -27,7 +28,10 @@ const REPO_URL = 'https://github.com/DataArt/artisyn-log-hub';
 const RELEASES_URL = `${REPO_URL}/releases`;
 
 /** Top-nav labels in order (DD-20). */
-const TOP_NAV = ['Home', 'Features', 'Get started', 'Configuration', 'Using Log Hub', 'Data & security', 'FAQ', 'Deck', 'GitHub ↗'];
+const TOP_NAV = ['Home', 'Features', 'Get started', 'Configuration', 'Using Log Hub', 'Data & security', 'FAQ', 'Deck', 'One-pager', 'GitHub ↗'];
+
+/** The one-pager (site/log-hub-onepager/), relative to the site root. */
+const ONEPAGER = 'log-hub-onepager/index.html';
 
 /** An external request may only go to jsDelivr with an exact `name@x.y.z` version. */
 const VERSIONED_CDN = /^https:\/\/cdn\.jsdelivr\.net\/npm\/(?:@[^/]+\/)?[^/@]+@\d+\.\d+\.\d+\//;
@@ -316,6 +320,7 @@ test('@S-SITE-01 static site and deck: built, served under a base path, navigabl
         'features.html',
         'questions.html',
         'deck/index.html',
+        ONEPAGER,
         ...helpPages.map((p) => `docs/${p.slug}.html`),
       ].map((p) => `${server.base}${p}`);
       for (const url of expected) expect(result.html.has(url), `reachable: ${url}`).toBe(true);
@@ -328,10 +333,12 @@ test('@S-SITE-01 static site and deck: built, served under a base path, navigabl
     });
 
     const pages = [...site.html.keys()].filter((u) => !u.startsWith(`${server.base}deck/`));
+    // The one-pager is standalone like the deck: no site top nav.
+    const navPages = pages.filter((u) => !u.startsWith(`${server.base}log-hub-onepager/`));
 
-    await test.step('2. every non-deck page has the same top nav, and every nav target answers 200', async () => {
+    await test.step('2. every page except the deck and the one-pager has the same top nav, and every nav target answers 200', async () => {
       await page.setViewportSize({ width: 1280, height: 720 });
-      for (const url of pages) {
+      for (const url of navPages) {
         await page.goto(url);
         const links = await page.locator('nav.site-nav a').evaluateAll((as) =>
           as.map((a) => ({ text: (a.textContent ?? '').trim(), href: (a as HTMLAnchorElement).href })),
@@ -348,12 +355,12 @@ test('@S-SITE-01 static site and deck: built, served under a base path, navigabl
         await page.locator('nav.site-nav a', { hasText: label }).first().click();
         await page.waitForLoadState('load');
         expect(page.url().startsWith(server.base), label).toBe(true);
-        if (label !== 'Deck') await expect(page.locator('nav.site-nav a[aria-current="page"]'), label).toHaveText(label);
+        if (label !== 'Deck' && label !== 'One-pager') await expect(page.locator('nav.site-nav a[aria-current="page"]'), label).toHaveText(label);
         await page.goto(`${server.base}index.html`);
       }
     });
 
-    await test.step('3. Home: the hook with dataset figures, five dimension tiles, the anatomy strip, six cards and links to the deck, Features and Get started', async () => {
+    await test.step('3. Home: the hook with dataset figures, five dimension tiles, the anatomy strip, six cards and links to the deck, the one-pager, Features and Get started', async () => {
       await page.goto(`${server.base}index.html`);
       const ds = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'site', 'data', 'example-dataset.json'), 'utf8')) as {
         session: { durationMin: number; total: number; outcome: string };
@@ -379,6 +386,7 @@ test('@S-SITE-01 static site and deck: built, served under a base path, navigabl
       await expect(page.locator('.cards .card a[href="features.html#i"]')).toHaveCount(2);
       await expect(page.locator('.cards .card a[href="features.html#d"]')).toHaveCount(1);
       await expect(page.locator('main a[href="deck/index.html"]')).not.toHaveCount(0);
+      await expect(page.locator(`main a[href="${ONEPAGER}"]`)).not.toHaveCount(0);
       await expect(page.locator('main a[href^="features.html"]')).not.toHaveCount(0);
       await expect(page.locator('main a[href="docs/install-server.html"]')).not.toHaveCount(0);
     });
@@ -420,8 +428,8 @@ test('@S-SITE-01 static site and deck: built, served under a base path, navigabl
       await expect(page.locator('.docs-sidebar a[aria-current="page"]')).toHaveText('Install the server');
     });
 
-    await test.step('6. dark mode: prefers-color-scheme changes the background of the site and the deck', async () => {
-      for (const p of ['index.html', 'docs/install-server.html', 'deck/index.html']) {
+    await test.step('6. dark mode: prefers-color-scheme changes the background of the site, the deck and the one-pager', async () => {
+      for (const p of ['index.html', 'docs/install-server.html', 'deck/index.html', ONEPAGER]) {
         await page.emulateMedia({ colorScheme: 'light' });
         await page.goto(`${server.base}${p}`);
         const light = await bodyBackground(page);
@@ -455,9 +463,14 @@ test('@S-SITE-01 static site and deck: built, served under a base path, navigabl
       }
     });
 
-    const slideCount = await test.step('9. deck: 10–36 slides, every slide fits 1280×720, arrows move between slides', async () => {
+    const slideCount = await test.step('9. deck: 10–36 slides, every slide fits 1280×720, arrows move between slides, the closing slide links to the one-pager', async () => {
       await page.goto(`${server.base}deck/index.html`);
       await page.waitForFunction(() => document.querySelector('.reveal.ready') !== null);
+      const closing = await page.locator('.closing-links a').evaluateAll((as) =>
+        as.map((a) => ({ text: (a.textContent ?? '').trim(), href: a.getAttribute('href') })),
+      );
+      expect(closing.map((l) => l.text)).toEqual(['Get started', 'Home', 'Features', 'One-pager', 'GitHub ↗']);
+      expect(closing[3].href).toBe(`../${ONEPAGER}`);
       const count = await page.locator('.reveal .slides > section').count();
       expect(count).toBeGreaterThanOrEqual(10);
       expect(count).toBeLessThanOrEqual(36);
@@ -589,6 +602,7 @@ test('@S-SITE-01 static site and deck: built, served under a base path, navigabl
       const expected = builtHtml.filter((p) => p !== '404.html').map(canonical).sort();
       expect(expected.length).toBeGreaterThan(0);
       expect([...parsed.locs].sort()).toEqual(expected);
+      expect(parsed.locs, 'the one-pager is in the sitemap').toContain(`${SITE_URL}log-hub-onepager/`);
     });
 
     await test.step('16. every page has a unique description, canonical and matching og/twitter tags', async () => {
@@ -618,6 +632,7 @@ test('@S-SITE-01 static site and deck: built, served under a base path, navigabl
         expect(metaContent(html, 'name', 'twitter:card'), `${rel}: twitter:card`).toEqual(['summary_large_image']);
       }
       expect(site.html.has(`${server.base}deck/index.html`), 'the deck is among the checked pages').toBe(true);
+      expect(site.html.has(`${server.base}${ONEPAGER}`), 'the one-pager is among the checked pages').toBe(true);
     });
 
     await test.step('17. favicon and apple-touch-icon are real files, og-image is 1200×630', async () => {
@@ -627,7 +642,7 @@ test('@S-SITE-01 static site and deck: built, served under a base path, navigabl
       }
       const favicon = `${server.base}assets/favicon.svg`;
       const touchIcon = `${server.base}assets/apple-touch-icon.png`;
-      for (const p of ['index.html', 'deck/index.html']) {
+      for (const p of ['index.html', 'deck/index.html', ONEPAGER]) {
         const pageUrl = `${server.base}${p}`;
         const html = site.html.get(pageUrl) as string;
         const icons = linkHrefs(html, 'icon').map((h) => new URL(h, pageUrl).href);
@@ -803,6 +818,89 @@ test('@S-SITE-01 static site and deck: built, served under a base path, navigabl
       await expect(page.locator('.mc-counter')).toHaveText(`01 / ${nn}`);
       await expect(page.locator('.mc-strip')).toBeHidden();
       for (const sel of ['.mc-prev', '.mc-next', '.mc-pause', '.mc-counter']) await expect(page.locator(sel), sel).toBeVisible();
+    });
+
+    await test.step('20. one-pager: content, one screen at 1280×720, 360 px, no external request, light print, one-page landscape PDF at A4 and Letter', async () => {
+      const url = `${server.base}${ONEPAGER}`;
+      const firstRequest = requests.length;
+      await page.emulateMedia({ media: 'screen', colorScheme: 'light' });
+      await page.setViewportSize({ width: 1280, height: 720 });
+      await page.goto(url);
+
+      // Content: the hook from the dataset, eight groups, the screenshot, four links, the footer.
+      expect((site.html.get(url) as string).includes('{{'), 'no unfilled placeholder').toBe(false);
+      const ds = JSON.parse(fs.readFileSync(path.join(REPO_ROOT, 'site', 'data', 'example-dataset.json'), 'utf8')) as {
+        session: { durationMin: number; total: number; outcome: string };
+      };
+      const h1 = page.locator('h1');
+      await expect(h1).toContainText(`It ran alone for ${ds.session.durationMin} minutes`);
+      await expect(h1).toContainText(`$${Math.round(ds.session.total)}`);
+      await expect(h1).toContainText(ds.session.outcome);
+      await expect(h1).toContainText('All good?');
+      const groups = await page.locator('.op-groups li').evaluateAll((lis) => lis.map((li) => li.getAttribute('data-group')));
+      expect(groups).toEqual(['cost', 'speed', 'context', 'quality', 'team', 'tools', 'safety', 'trust']);
+      await expect
+        .poll(() =>
+          page.evaluate(() => {
+            const img = document.querySelector('.op-shot img') as HTMLImageElement | null;
+            return img !== null && img.getAttribute('src') === '../assets/shots/spend-budget.png' && img.complete && img.naturalWidth > 0;
+          }),
+        )
+        .toBe(true);
+      await expect(page.locator('.op-footer')).toHaveText('Open source by DataArt · MIT · not affiliated with Anthropic');
+      await expect(page.locator('a.op-back')).toHaveAttribute('href', '../index.html');
+      const links = await page.locator('.op-links a').evaluateAll((as) =>
+        as.map((a) => ({ text: (a.textContent ?? '').trim(), href: a.getAttribute('href') })),
+      );
+      expect(links).toEqual([SITE_URL, REPO_URL, RELEASES_URL, `${SITE_URL}deck/`].map((u) => ({ text: u, href: u })));
+
+      // One screen: no page scroll in either direction and the footer inside the viewport.
+      const fit = await page.evaluate(() => ({
+        scrollHeight: document.documentElement.scrollHeight,
+        clientHeight: document.documentElement.clientHeight,
+        scrollWidth: document.documentElement.scrollWidth,
+        clientWidth: document.documentElement.clientWidth,
+        footerBottom: (document.querySelector('.op-footer') as Element).getBoundingClientRect().bottom,
+      }));
+      expect(fit.scrollHeight, 'vertical scroll at 1280×720').toBeLessThanOrEqual(fit.clientHeight);
+      expect(fit.scrollWidth, 'horizontal scroll at 1280×720').toBeLessThanOrEqual(fit.clientWidth);
+      expect(fit.footerBottom, 'footer inside the 720 px viewport').toBeLessThanOrEqual(720);
+
+      await page.setViewportSize({ width: 360, height: 800 });
+      const narrow = await layoutMetrics(page);
+      expect(narrow.scrollWidth, 'horizontal scroll at 360 px').toBeLessThanOrEqual(narrow.clientWidth);
+      expect(narrow.fontSize, 'body font size at 360 px').toBeGreaterThanOrEqual(16);
+
+      // Print is light whatever the reader's color scheme, without the back link.
+      const printColors = async (colorScheme: 'light' | 'dark') => {
+        await page.emulateMedia({ media: 'print', colorScheme });
+        return page.evaluate(() => {
+          const cs = getComputedStyle(document.body);
+          return { color: cs.color, backgroundColor: cs.backgroundColor };
+        });
+      };
+      const printLight = await printColors('light');
+      expect(await printColors('dark'), 'print colors under a dark scheme').toEqual(printLight);
+      await expect(page.locator('.op-back')).toBeHidden();
+      // The printable area of a landscape A4 and Letter page at 10 mm margins.
+      for (const viewport of [{ width: 1047, height: 718 }, { width: 980, height: 740 }]) {
+        await page.setViewportSize(viewport);
+        const m = await layoutMetrics(page);
+        expect(m.scrollWidth, `horizontal scroll in print at ${viewport.width} px`).toBeLessThanOrEqual(m.clientWidth);
+      }
+
+      // "Save as PDF" gives one landscape page (dark scheme still emulated).
+      for (const format of ['A4', 'Letter'] as const) {
+        const pdf = await page.pdf({ format, landscape: true });
+        const pdfPages = pdf.toString('latin1').match(/\/Type\s*\/Page(?![a-zA-Z])/g) ?? [];
+        expect(pdfPages.length, `${format} landscape PDF pages`).toBe(1);
+      }
+
+      const foreign = requests.slice(firstRequest).filter((u) => !u.startsWith(`${origin}/`));
+      expect(foreign, 'the one-pager requests nothing outside the site').toEqual([]);
+
+      await page.emulateMedia({ media: 'screen', colorScheme: 'light' });
+      await page.setViewportSize({ width: 1280, height: 720 });
     });
   } finally {
     await server.close();

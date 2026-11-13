@@ -119,6 +119,7 @@ const HOOK_JS_FILES = [
   'skill-catalog.js',
   'post-turn-analysis-hook.js',
   'post-turn-analysis-worker.js',
+  'advisor-evidence.js',
   'session-attribution-state.js',
   // Provenance markers for, and reliable tree-kill of, every child process the hooks spawn.
   'process-marker.js',

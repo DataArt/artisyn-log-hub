@@ -11,8 +11,8 @@ editing.
   even if you installed Claude Code with the native installer (which does not need Node itself). Any
   current LTS works; you do not need a specific version.
   **Security:** keep that Node.js patched. Node.js 18 and 20 are end-of-life and get no security fixes,
-  so use 22, 24 or 26 at no less than **22.23.4 / 24.22.1 / 26.12.1** (the October 2026 security
-  releases, which fix high-severity CVEs such as CVE-2026-111497). The hook still starts on older
+  so use 22, 24 or 26 at no less than **22.23.5 / 24.22.3 / 26.13.1** (the November 2026 security
+  releases, which fix high-severity HTTP/2 and TLS CVEs). The hook still starts on older
   Node.js (technical floor `18.19`), so an old install keeps working, but it runs on an unpatched runtime.
 - Git; the project must be a git repository.
 - Claude Code with plugin support.
@@ -286,6 +286,7 @@ The installer extracts this tree, generated at build time from `hook/.claude/tel
         │   ├── harness-git-status.js
         │   ├── post-turn-analysis-hook.js
         │   ├── post-turn-analysis-worker.js
+        │   ├── advisor-evidence.js
         │   ├── session-attribution-state.js
         │   ├── process-marker.js
         │   ├── harness-state.js
@@ -410,7 +411,7 @@ guardrail was removed in `2.19.0`): `telemetry-hook.js` on `UserPromptSubmit`, `
 
 `prompt-upload-hook.js`, `otel-receiver.js`, `otel-register.js`, `otel-endpoint-check.js`, `otel-restart.js`, `otel-status.js`,
 `otel-ensure-receiver.js`, `user-state.js`, `managed-settings.js`, `session-files.js`,
-`throttle-state.js`, `claude-invoke-async.js`, `skill-catalog.js`, `harness-snapshot.js`, `harness-git-status.js`, `post-turn-analysis-worker.js`,
+`throttle-state.js`, `claude-invoke-async.js`, `skill-catalog.js`, `harness-snapshot.js`, `harness-git-status.js`, `post-turn-analysis-worker.js`, `advisor-evidence.js`,
 `session-attribution-state.js`, `process-marker.js`, `harness-state.js`, `okf-snapshot.js`, `okf-state.js`, `ndjson-sanitize.js`, `code-inventory.js`,
 `edit-result-counts.js`, `claude-config-dir.js`, `project-root-override.js`, `tool-wrap-names.js`, `tool-wrap-config.js`,
 `tool-wrap-shims.js`, `tool-wrap-tee.js` and `tool-wrap-records.js` are **not** wired to any event — they are detached child processes / shared modules

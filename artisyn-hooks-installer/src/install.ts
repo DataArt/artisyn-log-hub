@@ -943,7 +943,7 @@ async function applyHooksUpdate(
 function printNotWorking(action: string, newVersion: string, problems: string[]): void {
   console.warn(`⚠ Hooks ${action} (hooks v${newVersion}), but they are not working in this project yet:`);
   for (const p of problems) console.warn(`  - ${p}`);
-  console.warn('  See the warnings above. Claude Code runs the hooks with your own `node` from PATH; Node.js 22+ is recommended (18 and 20 are end-of-life); 18.19 is the minimum.');
+  console.warn('  See the warnings above. Claude Code runs the hooks with your own `node` from PATH; Node.js 22.23.5+ / 24.22.3+ / 26.13.1+ is recommended (18 and 20 are end-of-life); 18.19 is the minimum.');
 }
 
 export async function runInstall(flags?: CliFlags): Promise<void> {

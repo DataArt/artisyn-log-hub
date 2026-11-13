@@ -1,0 +1,124 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="760" viewBox="0 0 1200 760" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="13">
+  <!-- Wireframe: repo/team hook-health report (item B2 of harness-entries-analysis.md), light theme.
+       Server-side: walkHookRuns → session_hook_runs + the session_stats facet columns of B1.
+       Rows carry counts, durations and the hook identity only — no command lines, no stderr, no paths. -->
+  <defs>
+    <style>
+      .mono{font-family:'JetBrains Mono',Consolas,monospace}
+      .muted{fill:#6b7280}
+      .new{fill:#0369a1;font-size:11px;font-weight:600}
+      .callout{stroke:#0284c7;stroke-dasharray:4 3;fill:none}
+      .lg{fill:#334155}
+      .th{font-size:11px;font-weight:600;fill:#6b7280}
+      .flt{fill:#fff;stroke:#d1d5db}
+    </style>
+  </defs>
+  <rect width="1200" height="760" fill="#ffffff"/>
+  <text x="20" y="26" font-size="16" font-weight="700" fill="#111827">Repository Analytics — Hook health (proposal, B2)</text>
+  <text x="20" y="44" class="muted" font-size="12">Light theme. The same block appears on team analytics with a Repository column. Every hook Claude Code ran, not only Log Hub's hook. Numbers are illustrative.</text>
+
+  <rect x="20" y="60" width="860" height="680" fill="#ffffff" stroke="#e5e7eb"/>
+
+  <!-- Repo tab bar (current) -->
+  <rect x="20" y="60" width="860" height="40" fill="#ffffff" stroke="#e5e7eb"/>
+  <text x="36" y="85" class="muted">Sessions</text><text x="112" y="85" font-weight="600" fill="#111827">Analytics</text><rect x="104" y="97" width="76" height="2" fill="#111827"/>
+  <text x="196" y="85" class="muted">Spend</text><text x="250" y="85" class="muted">Reports</text><text x="316" y="85" class="muted">Tools/MCP</text><text x="398" y="85" class="muted">OKF</text><text x="444" y="85" class="muted">OTEL</text><text x="494" y="85" class="muted">Settings</text>
+
+  <!-- Shared facet filter bar (B1 columns) -->
+  <rect x="21" y="101" width="858" height="40" fill="#f9fafb" stroke="#e5e7eb"/>
+  <rect x="36" y="111" width="110" height="20" rx="4" class="flt"/><text x="44" y="125" font-size="11" fill="#374151">Last 30 days ▾</text>
+  <rect x="154" y="111" width="120" height="20" rx="4" class="flt"/><text x="162" y="125" font-size="11" fill="#374151">entrypoint: all ▾</text>
+  <rect x="282" y="111" width="90" height="20" rx="4" class="flt"/><text x="290" y="125" font-size="11" fill="#374151">IDE: all ▾</text>
+  <rect x="380" y="111" width="100" height="20" rx="4" class="flt"/><text x="388" y="125" font-size="11" fill="#374151">OS family: all ▾</text>
+  <rect x="488" y="111" width="110" height="20" rx="4" class="flt"/><text x="496" y="125" font-size="11" fill="#374151">CC version: all ▾</text>
+  <rect x="606" y="111" width="130" height="20" rx="4" class="flt"/><text x="614" y="125" font-size="11" fill="#374151">session mode: all ▾</text>
+  <rect x="744" y="111" width="120" height="20" rx="4" class="flt"/><text x="752" y="125" font-size="11" fill="#374151">hook: all ▾</text>
+
+  <!-- KPI tiles -->
+  <g>
+    <rect x="36" y="156" width="196" height="64" rx="6" fill="#fff" stroke="#e5e7eb"/>
+    <text x="48" y="176" class="muted" font-size="11">Sessions with hooks seen</text>
+    <text x="48" y="204" font-size="20" font-weight="700" fill="#111827">249 <tspan font-size="12" font-weight="400" class="muted">of 291 · 42 no hooks seen</tspan></text>
+    <rect x="244" y="156" width="196" height="64" rx="6" fill="#fff" stroke="#e5e7eb"/>
+    <text x="256" y="176" class="muted" font-size="11">Hook runs · error rate</text>
+    <text x="256" y="204" font-size="20" font-weight="700" fill="#111827">1,984 <tspan font-size="12" font-weight="400" fill="#b91c1c">0.5 % errors</tspan></text>
+    <rect x="452" y="156" width="196" height="64" rx="6" fill="#fff" stroke="#e5e7eb"/>
+    <text x="464" y="176" class="muted" font-size="11">Hook time · share of wall time</text>
+    <text x="464" y="204" font-size="20" font-weight="700" fill="#111827">2h 41m <tspan font-size="12" font-weight="400" class="muted">· 1.9 %</tspan></text>
+    <rect x="660" y="156" width="204" height="64" rx="6" fill="#fff" stroke="#e5e7eb" stroke-dasharray="3 2"/>
+    <text x="672" y="176" class="muted" font-size="11">Complete Stop-time data</text>
+    <text x="672" y="204" font-size="20" font-weight="700" fill="#111827">83 % <tspan font-size="12" font-weight="400" class="muted">of sessions</tspan></text>
+  </g>
+
+  <!-- Table -->
+  <rect x="36" y="236" width="828" height="28" fill="#f9fafb" stroke="#e5e7eb"/>
+  <text x="46" y="254" class="th">HOOK (identity)</text><text x="226" y="254" class="th">EVENT</text><text x="326" y="254" class="th">RUNS</text><text x="386" y="254" class="th">SESSIONS</text><text x="466" y="254" class="th">ERRORS</text><text x="536" y="254" class="th">BLOCKED</text><text x="606" y="254" class="th">p50</text><text x="656" y="254" class="th">p95</text><text x="716" y="254" class="th">TOTAL</text><text x="786" y="254" class="th">% WALL</text>
+
+  <g class="mono" font-size="12" fill="#374151">
+    <text x="46" y="286">status-text</text><text x="226" y="286">Stop</text><text x="326" y="286">1,812</text><text x="386" y="286">247</text><text x="466" y="286">0</text><text x="536" y="286">0</text><text x="606" y="286">3.4s</text><text x="656" y="286">6.0s</text><text x="716" y="286">2h 32m</text><text x="786" y="286">1.8 %</text>
+    <line x1="36" y1="296" x2="864" y2="296" stroke="#f3f4f6"/>
+    <text x="46" y="316">lint-check</text><text x="226" y="316">PostToolUse</text><text x="326" y="316">140</text><text x="386" y="316">12</text><text x="466" y="316" fill="#b91c1c">6</text><text x="536" y="316">0</text><text x="606" y="316">0.7s</text><text x="656" y="316">2.1s</text><text x="716" y="316">2m 3s</text><text x="786" y="316">0.0 %</text>
+    <line x1="36" y1="326" x2="864" y2="326" stroke="#f3f4f6"/>
+    <text x="46" y="346">guard</text><text x="226" y="346">PreToolUse</text><text x="326" y="346">29</text><text x="386" y="346">5</text><text x="466" y="346" fill="#b91c1c">3</text><text x="536" y="346">0</text><text x="606" y="346">0.2s</text><text x="656" y="346">0.9s</text><text x="716" y="346">9s</text><text x="786" y="346">0.0 %</text>
+    <line x1="36" y1="356" x2="864" y2="356" stroke="#f3f4f6"/>
+    <text x="46" y="376">verify</text><text x="226" y="376">Stop</text><text x="326" y="376">3</text><text x="386" y="376">n &lt; 3</text><text x="466" y="376">0</text><text x="536" y="376">1</text><text x="606" y="376">—</text><text x="656" y="376">—</text><text x="716" y="376">4s</text><text x="786" y="376">0.0 %</text>
+  </g>
+  <text x="46" y="400" font-size="11" class="muted">Row click → sessions list filtered to that hook; each session opens its Logs tab with ?signals=issues.</text>
+
+  <!-- Trend -->
+  <text x="36" y="432" font-weight="600" fill="#111827">Hook errors per week</text>
+  <rect x="36" y="442" width="828" height="150" fill="#fff" stroke="#e5e7eb"/>
+  <g fill="#fca5a5">
+    <rect x="80" y="562" width="40" height="20"/><rect x="180" y="552" width="40" height="30"/><rect x="280" y="572" width="40" height="10"/>
+    <rect x="380" y="542" width="40" height="40"/><rect x="480" y="577" width="40" height="5"/><rect x="580" y="582" width="40" height="0"/>
+    <rect x="680" y="567" width="40" height="15"/>
+  </g>
+  <rect x="780" y="572" width="40" height="10" fill="#fee2e2" stroke="#f87171" stroke-dasharray="3 2"/>
+  <line x1="60" y1="582" x2="850" y2="582" stroke="#d1d5db"/>
+  <text x="60" y="608" font-size="11" class="muted">Dashed bar = a week with &lt; 80 % complete Stop-time data (lower bound). No hooks seen ≠ healthy.</text>
+
+  <!-- Data note -->
+  <rect x="36" y="626" width="828" height="96" fill="#f8fafc" stroke="#e2e8f0"/>
+  <text x="48" y="646" font-size="11" class="lg">Source: hook_success / hook_non_blocking_error / stop_hook_summary in the transcript, extracted at ingest by walkHookRuns into session_hook_runs.</text>
+  <text x="48" y="664" font-size="11" class="lg">Log Hub's own upload health (version, hook.log tail, upload failures) stays on the Hook State page →</text>
+  <text x="48" y="682" font-size="11" class="lg">A status-message hook has no path-like command token: its label is "status-text", never the message itself.</text>
+  <text x="48" y="700" font-size="11" class="lg">Old sessions show up after a re-extraction (version column); Stop-time data of a not-yet-uploaded last turn counts as incomplete.</text>
+
+  <!-- Legend -->
+  <g font-size="12">
+    <rect x="900" y="60" width="280" height="680" fill="#f8fafc" stroke="#e2e8f0"/>
+    <text x="914" y="84" font-weight="700" fill="#0f172a">Elements</text>
+
+    <text x="914" y="112" class="new">1 · Facet filters</text>
+    <text x="914" y="128" class="lg">entrypoint, IDE, OS family, CC version</text>
+    <text x="914" y="143" class="lg">and session mode come from the B1</text>
+    <text x="914" y="158" class="lg">columns of session_stats. "hook"</text>
+    <text x="914" y="173" class="lg">replaces diagnostics' source filter.</text>
+    <path class="callout" d="M864 121 C 880 121, 885 140, 900 140"/>
+
+    <text x="914" y="203" class="new">2 · KPI tiles</text>
+    <text x="914" y="219" class="lg">"no hooks seen" is its own bucket.</text>
+    <text x="914" y="234" class="lg">The dashed tile says how complete the</text>
+    <text x="914" y="249" class="lg">Stop-time data is (last_turn_inc.).</text>
+    <path class="callout" d="M864 188 C 880 188, 885 225, 900 225"/>
+
+    <text x="914" y="279" class="new">3 · One row per identity × event</text>
+    <text x="914" y="295" class="lg">Errors = non-zero exit or non-blocking</text>
+    <text x="914" y="310" class="lg">error. Blocked = preventedContinuation.</text>
+    <text x="914" y="325" class="lg">Durations from durationMs. Cells with</text>
+    <text x="914" y="340" class="lg">fewer than 3 sessions print n &lt; 3.</text>
+    <path class="callout" d="M864 316 C 880 316, 885 310, 900 310"/>
+
+    <text x="914" y="370" class="new">4 · Trend</text>
+    <text x="914" y="386" class="lg">Errors per week, lower-bound weeks</text>
+    <text x="914" y="401" class="lg">marked.</text>
+    <path class="callout" d="M864 517 C 880 517, 885 390, 900 390"/>
+
+    <text x="914" y="431" font-weight="700" fill="#0f172a">Privacy / neutrality</text>
+    <text x="914" y="449" class="lg">Counts, durations, exit codes and the</text>
+    <text x="914" y="464" class="lg">hook identity only. No command lines,</text>
+    <text x="914" y="479" class="lg">no stderr, no paths, no status text.</text>
+    <text x="914" y="494" class="lg">No label names an IDE, an OS or a</text>
+    <text x="914" y="509" class="lg">specific hook product.</text>
+  </g>
+</svg>

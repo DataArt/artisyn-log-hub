@@ -1,0 +1,15 @@
+﻿# dependencies
+node_modules/
+# build output
+dist/
+out/
+# runtime garbage
+*.log
+.cache/
+.env
+# generated data / run artefacts
+work/
+__pycache__/
+*.pyc
+*.jsonl.tmp
+

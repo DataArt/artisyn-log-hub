@@ -41,7 +41,8 @@ trim — a skill they never use, an oversized `CLAUDE.md`, an MCP server with lo
   `partitions` in table order. Each partition has `kind`, `label`, `source`, `bytes`, `tokens`,
   `share`, `estimated`, optional `count` and its drill-down `rows` (`label`, `source`, `bytes`,
   `tokens`, `share`, plus per-kind fields: `path`, `fileBytes`, `git`, `fileKind`, `onDemand`,
-  `status`, `errorCode`, `tools`, `namesBytes`, `instrBytes`, `onDemandNames`, `role`).
+  `status`, `errorCode`, `tools`, `namesBytes`, `instrBytes`, `onDemandNames`, `names`, `pluginId`,
+  `role`).
 - No file, section or prompt text is ever in the output — only names, paths, sizes, statuses,
   role labels and "Block n".
 
@@ -120,7 +121,9 @@ trim — a skill they never use, an oversized `CLAUDE.md`, an MCP server with lo
     else the snapshot name, else the key. `status` = `failed` with `errorCode` when listed in
     `failedMcpServers`, else `connected`. `onDemandNames` = distinct `mcp__` names of
     `deferred_tools_record.entries[].name` in the **whole** transcript that map to an existing
-    server (not part of the size). Rows sorted by bytes descending, ties in first-seen order.
+    server (not part of the size). `names` = the server's startup `deferred_tools_delta` names in
+    block order (a server known only from `failedMcpServers` or instructions has `[]`; not part of
+    the size). Rows sorted by bytes descending, ties in first-seen order.
 14. **`agent-types`** (source `harness`): every `agent_listing_delta` of the block; each
     `addedTypes[i]` is a row of `addedLines[i]` + 1 bytes. A snapshot `agents[]` entry of the same
     name gives source `project`, `path`, `fileBytes` and `git`; without one the source is
@@ -132,7 +135,9 @@ trim — a skill they never use, an oversized `CLAUDE.md`, an MCP server with lo
     with a snapshot: an entry with the exact name → its `source`; else, for a name `p:x`, an entry
     with `source === 'org-synced'` and name `x` → `org-synced`; else `built-in`. Without a
     snapshot the source is `null`. A matched entry gives `path`, `fileBytes` and `git`; otherwise
-    they are `null`. Snapshot skills not in the listing are not shown. Rows sorted by bytes
+    they are `null`. `pluginId` = the matched entry's `plugin.id`, else `null` (no entry, an entry
+    without `plugin`, or no snapshot); not part of the size. Snapshot skills not in the listing are
+    not shown. Rows sorted by bytes
     descending, ties in listing order.
 16. **`instruction-file`** (source per row): rows are the union, keyed by display path with `\`
     → `/`, lowercased, of
@@ -184,7 +189,8 @@ trim — a skill they never use, an oversized `CLAUDE.md`, an MCP server with lo
 - Skills split, a non-initial listing ignored, org-synced, built-in, a name not found: SA-05.
   No snapshot (source `null`) and no anchor at all: SA-06.
 - MCP join of a display name to a slug, a failed server, on-demand names, a built-in deferred
-  name: SA-07.
+  name, per-server startup `names`: SA-07. Skill `pluginId`: `null` in SA-05, `adlc@artisyn` in
+  SA-GS05.
 - Memory block (exact `# Memory` line) and a `MEMORY.md` instructions file: SA-08.
 - Environment estimate, `deferred_tools_record` / `nested_memory` / `mode` ignored: SA-09.
 - Attributed > total (no internals, `overBy`): SA-10.
@@ -196,7 +202,8 @@ trim — a skill they never use, an oversized `CLAUDE.md`, an MCP server with lo
 - Tool definitions from the wire shape, a deferred tool dropped, an `mcp__` tool; the boundary
   marker and a blank block skipped: SA-TD1. From the tools snapshot after the anchor (the real
   `schema` shape), an MCP tool by `server`: SA-GS05. No tools logged: every other builder row.
-- The GS-05 golden session: SA-GS05.
+- The GS-05 golden session (built-in `Artifact` and `PowerShell` tools, a claude.ai sign-in stub
+  connector, a user-level `context7` server): SA-GS05.
 
 ## Examples
 
@@ -238,6 +245,9 @@ Rows (19): [`docs/algorithm-examples/sysctx-anatomy.json`](../../algorithm-examp
 - Skill slice sizes in UTF-16 characters instead of UTF-8 bytes -> SA-14 (b = 9).
 - Shares divided by a zero denominator -> SA-17 (`NaN`).
 - The boundary marker counted as prompt text -> SA-TD1 (37 B), SA-GS05 (3,150 B).
+- MCP `names` taken from `deferred_tools_record` instead of the startup delta -> SA-07 (`my_db`
+  gets no name, Claude Docs only `read`); `pluginId` read from the skill name prefix -> SA-GS05
+  (`adlc` instead of `adlc@artisyn`).
 - A tool sized as the JSON of the whole snapshot `schema` (name and description twice) ->
   SA-GS05 (Read 511 B instead of 299); `defer_loading` tools kept -> SA-TD1 (3 rows); the tools snapshot used
   although the wire shape is logged -> SA-TD1 has no snapshot, SPV-14 (tool `S`).

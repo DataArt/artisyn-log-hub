@@ -1,0 +1,291 @@
+/* Artisyn Log Hub one-pager (site/log-hub-onepager/index.html), loaded after ../assets/theme.css.
+ * One landscape sheet: one screen at 1280 x 720, one landscape PDF page at A4 and at Letter.
+ * Every size on the sheet is in em relative to .op-sheet (16px on screen, 14px in print), so print
+ * is the same layout scaled down to the paper. No overflow: hidden and no fixed height anywhere: a sheet that
+ * is too long must show as a scroll / a second page (the @S-SITE-01 scenario checks both). */
+
+@page {
+  size: landscape;
+  margin: 10mm;
+}
+
+.op-back {
+  display: block;
+  padding: 12px 16px 0;
+  font-family: var(--mono);
+  font-size: 0.8rem;
+  color: var(--text-3);
+  text-decoration: none;
+}
+
+.op-back:hover {
+  color: var(--accent);
+  text-decoration: underline;
+}
+
+.op-sheet {
+  max-width: 1280px;
+  margin: 0 auto;
+  padding: 1em;
+  font-size: 16px;
+  line-height: 1.45;
+}
+
+.op-sheet p,
+.op-sheet ul,
+.op-sheet ol {
+  margin: 0;
+  padding: 0;
+}
+
+.op-sheet ul,
+.op-sheet ol {
+  list-style: none;
+}
+
+.op-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.2em 1.2em;
+}
+
+.op-brand {
+  font-family: var(--mono);
+  font-size: 1.05em;
+  font-weight: 700;
+  color: var(--accent);
+}
+
+.op-tag,
+.op-sheet .op-label,
+.op-no {
+  font-family: var(--mono);
+  font-size: 0.75em;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.op-tag {
+  color: var(--accent-2);
+}
+
+.op-tag::before {
+  content: "// ";
+}
+
+.op-sheet .op-hook {
+  margin: 0.35em 0 0.3em;
+  font-size: 1.6em;
+  line-height: 1.2;
+}
+
+.op-thesis {
+  padding-bottom: 0.7em;
+  font-size: 0.95em;
+  color: var(--text-2);
+}
+
+.op-answers,
+.op-shot,
+.op-how,
+.op-get {
+  margin-top: 0.8em;
+}
+
+.op-answers,
+.op-how,
+.op-get {
+  border-top: 1px solid var(--border);
+  padding-top: 0.6em;
+}
+
+.op-sheet .op-label {
+  margin: 0 0 0.6em;
+  color: var(--text-3);
+}
+
+.op-groups {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.9em 1.5em;
+}
+
+.op-groups li {
+  font-size: 0.95em;
+  color: var(--text-2);
+}
+
+.op-no {
+  display: block;
+  color: var(--accent);
+}
+
+/* The screenshot is limited by height and never upscaled past its own 743 px. */
+.op-shot {
+  width: fit-content;
+  max-width: 100%;
+  padding: 0.3em;
+}
+
+.op-shot img {
+  width: auto;
+  max-width: 100%;
+  max-height: 21em;
+}
+
+.op-shot figcaption {
+  padding: 0.4em 0.1em 0;
+  font-size: 0.75em;
+}
+
+.op-runs {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.6em 1.2em;
+}
+
+.op-runs li {
+  font-size: 0.88em;
+  color: var(--text-2);
+}
+
+.op-runs b {
+  display: block;
+  color: var(--text);
+}
+
+.op-links li {
+  display: flex;
+  gap: 0 0.8em;
+  font-family: var(--mono);
+  font-size: 0.75em;
+  line-height: 1.7;
+}
+
+.op-links span {
+  flex: 0 0 5em;
+  color: var(--text-3);
+}
+
+.op-links a {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.op-sheet .op-footer {
+  margin-top: 1.2em;
+  border-top: 1px solid var(--border);
+  padding-top: 0.5em;
+  font-family: var(--mono);
+  font-size: 0.75em;
+  color: var(--text-3);
+}
+
+.op-head,
+.op-hook,
+.op-thesis,
+.op-answers,
+.op-groups li,
+.op-shot,
+.op-how,
+.op-runs li,
+.op-get,
+.op-links li,
+.op-footer {
+  break-inside: avoid;
+}
+
+/* Wide layout: the landscape sheet. Print always uses it, whatever the paper width. */
+@media print, (min-width: 1000px) {
+  .op-sheet {
+    display: grid;
+    grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+    column-gap: 1.5em;
+    grid-template-areas:
+      "head head"
+      "hook hook"
+      "thesis thesis"
+      "answers shot"
+      "how get"
+      "footer footer";
+  }
+
+  .op-head { grid-area: head; }
+  .op-hook { grid-area: hook; }
+  .op-thesis { grid-area: thesis; }
+  .op-answers { grid-area: answers; }
+  .op-shot { grid-area: shot; }
+  .op-how { grid-area: how; }
+  .op-get { grid-area: get; }
+  .op-footer { grid-area: footer; }
+
+  .op-shot {
+    align-self: start;
+    justify-self: end;
+  }
+
+  .op-groups {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .op-runs {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media screen and (min-width: 1000px) {
+  .op-back {
+    position: absolute;
+    top: 16px;
+    right: max(16px, calc(50% - 624px));
+    padding: 0;
+  }
+}
+
+/* Paper is light even when the reader's system is dark: the light tokens of ../assets/theme.css
+ * are repeated here. Blocks are separated by borders, never by a fill, so the sheet reads with
+ * background graphics off. */
+@media print {
+  :root {
+    color-scheme: light;
+    --text: #17201b;
+    --text-2: #36433c;
+    --text-3: #66726a;
+    --accent: #1f5c45;
+    --accent-2: #9a6614;
+    --link: #1f5c45;
+    --page: #f3f1ea;
+    --stage: #e8e5db;
+    --surface: #faf9f4;
+    --border: #b8b5a8;
+    --border-soft: #d9d6ca;
+    --code-bg: #e9e6dc;
+    --label-bg: transparent;
+    --label-text: #9a6614;
+    --focus: #9a6614;
+    --grid: rgba(23, 32, 27, 0.06);
+    --scan: rgba(23, 32, 27, 0.025);
+    --bar-1: #1f5c45;
+    --bar-2: #4a8068;
+    --bar-3: #9a6614;
+    --bar-4: #c4a46a;
+    --bar-5: #8d968f;
+    --frame-bg: #fff;
+  }
+
+  body {
+    background: #fff;
+  }
+
+  .op-back {
+    display: none;
+  }
+
+  .op-sheet {
+    max-width: none;
+    padding: 0;
+    font-size: 14px;
+  }
+}

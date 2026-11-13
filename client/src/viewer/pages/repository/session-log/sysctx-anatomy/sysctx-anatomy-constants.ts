@@ -2,6 +2,8 @@
 // Algorithm: docs/knowledgebase/algorithms/sysctx-anatomy.md. Plan: DD 6, 7, 13, 14, 27 of
 // docs/tasks/todo/2026-10-29-sysctx-anatomy-tab/impl-plan.md.
 
+import type { Controller } from '@loghub/recommendations';
+
 /** Partition kinds, in partition-table order (DD 6). */
 export const ANATOMY_PARTITION_KINDS = [
   'system-prompt',
@@ -108,6 +110,18 @@ export const SOURCE_LABELS: Record<AnatomySource, string> = {
   'mcp-server': 'MCP server',
   'system-reminder': 'system reminder',
 };
+
+/** "Controlled by" labels of the Recommendations modal (`@loghub/recommendations` controllers). */
+export const CONTROLLER_LABELS: Record<Controller, string> = {
+  'built-in': 'Claude Code built-in',
+  'claudeai-account': 'claude.ai account',
+  org: 'organisation',
+  user: 'user profile',
+  project: 'project',
+};
+
+/** Recommendations modal: item names shown in a row before the "… N more" toggle. */
+export const RECO_ITEMS_PREVIEW = 4;
 
 export const GIT_LABELS: Record<AnatomyGit, string> = {
   tracked: 'tracked',

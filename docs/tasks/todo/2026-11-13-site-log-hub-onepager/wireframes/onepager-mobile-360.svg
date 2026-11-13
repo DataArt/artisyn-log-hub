@@ -1,0 +1,216 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 2040" width="760" height="2040" role="img" aria-label="Wireframe: the log-hub-onepager page at 360 px width, one column, no horizontal scrolling">
+  <title>log-hub-onepager — 360 px screen</title>
+  <style>
+    .mono { font-family: ui-monospace, "Cascadia Mono", Consolas, Menlo, monospace; }
+    .sans { font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
+    .brand { font-size: 18px; font-weight: 700; fill: #1f5c45; }
+    .eyebrow { font-size: 10.5px; font-weight: 600; letter-spacing: 0.6px; fill: #9a6614; }
+    .h1 { font-size: 24px; font-weight: 600; fill: #1f5c45; }
+    .lead { font-size: 16px; fill: #36433c; }
+    .label { font-size: 12px; font-weight: 600; letter-spacing: 1px; fill: #66726a; }
+    .dimno { font-size: 10.5px; letter-spacing: 0.6px; fill: #9a6614; }
+    .tile { font-size: 13px; font-weight: 600; fill: #17201b; }
+    .cap { font-size: 11px; fill: #66726a; }
+    .cellh { font-size: 13px; font-weight: 600; fill: #1f5c45; }
+    .cellp { font-size: 13px; fill: #36433c; }
+    .lk { font-size: 12.5px; font-weight: 600; fill: #17201b; }
+    .url { font-size: 11px; fill: #1f5c45; text-decoration: underline; }
+    .foot { font-size: 11px; fill: #66726a; }
+    .note { font-size: 12px; fill: #36433c; }
+    .noteh { font-size: 11px; font-weight: 700; letter-spacing: 0.8px; fill: #9a6614; }
+    .card { fill: #faf9f4; stroke: #b8b5a8; }
+    .ph { fill: #e8e5db; }
+    .lead-line { stroke: #9a6614; stroke-width: 1; stroke-dasharray: 3 3; fill: none; }
+  </style>
+
+  <rect width="760" height="2040" fill="#e8e5db"/>
+
+  <!-- 360 px viewport (page background), 16 px gutters -->
+  <rect x="40" y="40" width="360" height="1960" fill="#f3f1ea" stroke="#b8b5a8"/>
+  <text x="220" y="30" text-anchor="middle" class="mono cap">360 px</text>
+  <line x1="40" y1="34" x2="190" y2="34" stroke="#b8b5a8"/>
+  <line x1="250" y1="34" x2="400" y2="34" stroke="#b8b5a8"/>
+
+  <!-- back link (screen only) -->
+  <rect x="56" y="56" width="124" height="28" rx="2" fill="#faf9f4" stroke="#b8b5a8" stroke-dasharray="4 3"/>
+  <text x="68" y="75" class="sans" font-size="13" fill="#17201b">← Log Hub site</text>
+
+  <!-- header -->
+  <text x="56" y="120" class="mono brand">Artisyn Log Hub</text>
+  <text x="56" y="142" class="mono eyebrow">// YOUR CLAUDE CODE HARNESS, MEASURED</text>
+  <line x1="56" y1="154" x2="384" y2="154" stroke="#d9d6ca"/>
+
+  <!-- hook -->
+  <text x="56" y="190" class="mono h1">It ran alone for 10</text>
+  <text x="56" y="220" class="mono h1">minutes, cost $8 and</text>
+  <text x="56" y="250" class="mono h1">shipped the feature.</text>
+  <text x="56" y="280" class="mono h1">All good?</text>
+
+  <!-- thesis (body font 16 px) -->
+  <text x="56" y="316" class="sans lead">The harness — CLAUDE.md, rules, skills,</text>
+  <text x="56" y="340" class="sans lead">hooks, agents, MCP servers, a knowledge</text>
+  <text x="56" y="364" class="sans lead">base — moves quality, cost, speed,</text>
+  <text x="56" y="388" class="sans lead">autonomy and safety. With the same model</text>
+  <text x="56" y="412" class="sans lead">it changes the cost per task up to five</text>
+  <text x="56" y="436" class="sans lead">times (UC Berkeley and Arena, 2026). Yet</text>
+  <text x="56" y="460" class="sans lead">it is tuned as a black box. Log Hub</text>
+  <text x="56" y="484" class="sans lead">opens it.</text>
+
+  <!-- eight groups, 2 × 4 -->
+  <text x="56" y="522" class="mono label">WHAT LOG HUB ANSWERS</text>
+  <g>
+    <rect x="56" y="534" width="159" height="76" class="card"/><rect x="56" y="534" width="159" height="3" fill="#1f5c45"/>
+    <text x="66" y="556" class="mono dimno">01 · COST</text>
+    <text x="66" y="577" class="sans tile">Was $8 a lot?</text>
+
+    <rect x="225" y="534" width="159" height="76" class="card"/><rect x="225" y="534" width="159" height="3" fill="#1f5c45"/>
+    <text x="235" y="556" class="mono dimno">02 · SPEED</text>
+    <text x="235" y="577" class="sans tile">How fast,</text>
+    <text x="235" y="594" class="sans tile">how far alone?</text>
+
+    <rect x="56" y="618" width="159" height="76" class="card"/><rect x="56" y="618" width="159" height="3" fill="#1f5c45"/>
+    <text x="66" y="640" class="mono dimno">03 · CONTEXT</text>
+    <text x="66" y="661" class="sans tile">What it loads,</text>
+    <text x="66" y="678" class="sans tile">what it uses</text>
+
+    <rect x="225" y="618" width="159" height="76" class="card"/><rect x="225" y="618" width="159" height="3" fill="#1f5c45"/>
+    <text x="235" y="640" class="mono dimno">04 · QUALITY</text>
+    <text x="235" y="661" class="sans tile">Did its checks</text>
+    <text x="235" y="678" class="sans tile">run and pass?</text>
+
+    <rect x="56" y="702" width="159" height="76" class="card"/><rect x="56" y="702" width="159" height="3" fill="#1f5c45"/>
+    <text x="66" y="724" class="mono dimno">05 · TEAM</text>
+    <text x="66" y="745" class="sans tile">Across every</text>
+    <text x="66" y="762" class="sans tile">session</text>
+
+    <rect x="225" y="702" width="159" height="76" class="card"/><rect x="225" y="702" width="159" height="3" fill="#1f5c45"/>
+    <text x="235" y="724" class="mono dimno">06 · TOOLS</text>
+    <text x="235" y="745" class="sans tile">Does this tool</text>
+    <text x="235" y="762" class="sans tile">work?</text>
+
+    <rect x="56" y="786" width="159" height="76" class="card"/><rect x="56" y="786" width="159" height="3" fill="#1f5c45"/>
+    <text x="66" y="808" class="mono dimno">07 · SAFETY</text>
+    <text x="66" y="829" class="sans tile">What the agent</text>
+    <text x="66" y="846" class="sans tile">read and sent</text>
+
+    <rect x="225" y="786" width="159" height="76" class="card"/><rect x="225" y="786" width="159" height="3" fill="#1f5c45"/>
+    <text x="235" y="808" class="mono dimno">08 · TRUST</text>
+    <text x="235" y="829" class="sans tile">Where your</text>
+    <text x="235" y="846" class="sans tile">data lives</text>
+  </g>
+
+  <!-- screenshots, stacked -->
+  <text x="56" y="898" class="mono label">IN THE APP</text>
+  <g>
+    <rect x="56" y="910" width="328" height="230" class="card"/>
+    <rect x="62" y="916" width="316" height="196" fill="#ffffff" stroke="#d9d6ca"/>
+    <rect x="76" y="930" width="110" height="9" class="ph"/>
+    <rect x="80" y="1076" width="16" height="20" fill="#4a8068"/>
+    <rect x="104" y="1062" width="16" height="34" fill="#4a8068"/>
+    <rect x="128" y="1044" width="16" height="52" fill="#4a8068"/>
+    <rect x="152" y="1024" width="16" height="72" fill="#4a8068"/>
+    <rect x="176" y="1004" width="16" height="92" fill="#4a8068"/>
+    <rect x="200" y="988" width="16" height="108" fill="#9a6614"/>
+    <rect x="224" y="974" width="16" height="122" fill="#9a6614"/>
+    <rect x="248" y="964" width="16" height="132" fill="#9a6614"/>
+    <rect x="272" y="958" width="16" height="138" fill="#9a6614"/>
+    <rect x="296" y="954" width="16" height="142" fill="#9a6614"/>
+    <rect x="320" y="952" width="16" height="144" fill="#9a6614"/>
+    <rect x="344" y="951" width="16" height="145" fill="#9a6614"/>
+    <line x1="74" y1="1096" x2="366" y2="1096" stroke="#b8b5a8"/>
+    <text x="64" y="1130" class="mono cap">Session → Charts → Context Growth</text>
+
+    <rect x="56" y="1152" width="328" height="230" class="card"/>
+    <rect x="62" y="1158" width="316" height="196" fill="#ffffff" stroke="#d9d6ca"/>
+    <rect x="76" y="1172" width="110" height="9" class="ph"/>
+    <rect x="76" y="1194" width="96" height="146" fill="#faf9f4" stroke="#d9d6ca"/>
+    <rect x="84" y="1206" width="62" height="8" class="ph"/>
+    <rect x="92" y="1226" width="68" height="8" class="ph"/>
+    <rect x="92" y="1246" width="52" height="8" class="ph"/>
+    <rect x="84" y="1266" width="66" height="8" class="ph"/>
+    <rect x="92" y="1286" width="58" height="8" class="ph"/>
+    <rect x="184" y="1194" width="180" height="20" class="ph"/>
+    <rect x="184" y="1222" width="180" height="16" fill="#faf9f4" stroke="#d9d6ca"/>
+    <rect x="184" y="1244" width="180" height="16" fill="#faf9f4" stroke="#d9d6ca"/>
+    <rect x="184" y="1266" width="180" height="16" fill="#faf9f4" stroke="#9a6614"/>
+    <rect x="184" y="1288" width="180" height="16" fill="#faf9f4" stroke="#d9d6ca"/>
+    <rect x="184" y="1310" width="180" height="16" fill="#faf9f4" stroke="#d9d6ca"/>
+    <text x="64" y="1372" class="mono cap">Repository → Tools/MCP</text>
+  </g>
+
+  <!-- how it runs, stacked -->
+  <text x="56" y="1418" class="mono label">HOW IT RUNS</text>
+  <g>
+    <rect x="56" y="1430" width="328" height="64" fill="#f3f1ea" stroke="#b8b5a8" stroke-dasharray="4 3"/>
+    <text x="68" y="1452" class="mono cellh">Self-hosted</text>
+    <text x="68" y="1474" class="sans cellp">Docker + Postgres on your host; hook via npx.</text>
+
+    <rect x="56" y="1502" width="328" height="64" fill="#f3f1ea" stroke="#b8b5a8" stroke-dasharray="4 3"/>
+    <text x="68" y="1524" class="mono cellh">Data stays on your host</text>
+    <text x="68" y="1546" class="sans cellp">No vendor telemetry, no hosted service.</text>
+
+    <rect x="56" y="1574" width="328" height="64" fill="#f3f1ea" stroke="#b8b5a8" stroke-dasharray="4 3"/>
+    <text x="68" y="1596" class="mono cellh">Network-isolated</text>
+    <text x="68" y="1618" class="sans cellp">App, in-app help and docs ship inside.</text>
+  </g>
+
+  <!-- links: label above URL, long URL wraps -->
+  <text x="56" y="1674" class="mono label">GET IT</text>
+  <rect x="56" y="1686" width="328" height="218" fill="#f3f1ea" stroke="#1f5c45"/>
+  <rect x="56" y="1686" width="4" height="218" fill="#1f5c45"/>
+  <text x="72" y="1712" class="mono lk">Site</text>
+  <text x="72" y="1729" class="mono url">https://dataart.github.io/artisyn-log-hub/</text>
+  <text x="72" y="1758" class="mono lk">GitHub</text>
+  <text x="72" y="1775" class="mono url">https://github.com/DataArt/artisyn-log-hub</text>
+  <text x="72" y="1804" class="mono lk">Releases</text>
+  <text x="72" y="1821" class="mono url">https://github.com/DataArt/artisyn-log-hub/</text>
+  <text x="72" y="1836" class="mono url">releases</text>
+  <text x="72" y="1865" class="mono lk">Deck</text>
+  <text x="72" y="1882" class="mono url">https://dataart.github.io/artisyn-log-hub/deck/</text>
+
+  <!-- footer -->
+  <line x1="56" y1="1932" x2="384" y2="1932" stroke="#d9d6ca"/>
+  <text x="56" y="1954" class="mono foot">Open source by DataArt · MIT</text>
+  <text x="56" y="1970" class="mono foot">not affiliated with Anthropic</text>
+  <text x="56" y="1986" class="mono foot">as of November 2026</text>
+
+  <!-- annotations -->
+  <g>
+    <path class="lead-line" d="M400 70 H424"/>
+    <text x="432" y="66" class="mono noteh">SCREEN ONLY</text>
+    <text x="432" y="83" class="sans note">Back link (open question).</text>
+
+    <path class="lead-line" d="M400 236 H424"/>
+    <text x="432" y="232" class="mono noteh">ONE COLUMN</text>
+    <text x="432" y="249" class="sans note">No horizontal scrolling at 360 px; the hook</text>
+    <text x="432" y="265" class="sans note">wraps, nothing is scaled down.</text>
+
+    <path class="lead-line" d="M400 400 H424"/>
+    <text x="432" y="396" class="mono noteh">BODY TEXT</text>
+    <text x="432" y="413" class="sans note">16 px on screen, as on the other site</text>
+    <text x="432" y="429" class="sans note">pages (open question: 360 or 375 px).</text>
+
+    <path class="lead-line" d="M400 700 H424"/>
+    <text x="432" y="696" class="mono noteh">EIGHT GROUPS</text>
+    <text x="432" y="713" class="sans note">4 × 2 on a wide screen becomes 2 × 4.</text>
+
+    <path class="lead-line" d="M400 1140 H424"/>
+    <text x="432" y="1136" class="mono noteh">SCREENSHOTS</text>
+    <text x="432" y="1153" class="sans note">Side by side on a wide screen, stacked</text>
+    <text x="432" y="1169" class="sans note">here; images never wider than the column.</text>
+
+    <path class="lead-line" d="M400 1534 H424"/>
+    <text x="432" y="1530" class="mono noteh">HOW IT RUNS</text>
+    <text x="432" y="1547" class="sans note">Three cells in a row become a stack.</text>
+
+    <path class="lead-line" d="M400 1826 H424"/>
+    <text x="432" y="1822" class="mono noteh">FOUR LINKS</text>
+    <text x="432" y="1839" class="sans note">Label above the full URL; a long URL</text>
+    <text x="432" y="1855" class="sans note">wraps instead of widening the page.</text>
+
+    <path class="lead-line" d="M400 1966 H424"/>
+    <text x="432" y="1962" class="mono noteh">FOOTER</text>
+    <text x="432" y="1979" class="sans note">Footer line and date stamp are open</text>
+    <text x="432" y="1995" class="sans note">questions.</text>
+  </g>
+</svg>

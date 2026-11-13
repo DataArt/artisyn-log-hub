@@ -25,7 +25,13 @@
 //   useWorktree    — run in the linked worktree of the repo instead of its main checkout (S11)
 //   rootSettings   — pass the root's project settings with `--settings` (cwd below the root, S10/S11)
 //   expect         — static per-check expected blocks copied into expected.json (bash, sysctx,
-//                    agents, bashPaths, denied)
+//                    agents, bashPaths, denied). `sysctx` (Anatomy tab) always has three lists, an
+//                    empty list asks for nothing:
+//                    { skills: [{ name, source }], files: [{ pathSuffix, kind }],
+//                      rules: [{ pathSuffix, kind: 'rule' }] }
+//                    `source` is a skill row's data-source (project / user / plugin); `kind` is a file
+//                    row's Kind cell (claude-md / local-md / user-md / rule); `rules` rows may sit in
+//                    the loaded group or under "On demand — 0 at start"
 //   verifyChecks   — verifier check ids (see verify.mjs CHECKS); default DEFAULT_VERIFY_CHECKS
 import { LEGACY_OWNER, LEGACY_REPO, MCP_SERVER_NAME, REPOS } from './lib/config.mjs';
 
@@ -91,7 +97,7 @@ export const SCENARIOS = Object.freeze([
     requires: { skills: ['add-jsdoc'] },
     verifyChecks: [...DEFAULT_VERIFY_CHECKS, 'systemContext'],
     expect: {
-      sysctx: { rules: [], skills: [{ name: 'add-jsdoc', source: 'project' }], files: [] },
+      sysctx: { skills: [{ name: 'add-jsdoc', source: 'project' }], files: [], rules: [] },
     },
   }),
   scenario({
@@ -125,7 +131,11 @@ export const SCENARIOS = Object.freeze([
     requires: { rules: ['cli-flags'] },
     verifyChecks: [...DEFAULT_VERIFY_CHECKS, 'systemContext'],
     expect: {
-      sysctx: { rules: ['cli-flags'], skills: [], files: [{ name: 'CLAUDE.md', type: 'Project' }] },
+      sysctx: {
+        skills: [],
+        files: [{ pathSuffix: 'CLAUDE.md', kind: 'claude-md' }],
+        rules: [{ pathSuffix: '.claude/rules/cli-flags.md', kind: 'rule' }],
+      },
     },
   }),
   scenario({

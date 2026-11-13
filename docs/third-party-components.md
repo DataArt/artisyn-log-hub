@@ -30,9 +30,9 @@ article (`user-docs/third-party-components.md`, also published on the site); kee
 
 | Component | Version in use | License | Role |
 |---|---|---|---|
-| **PostgreSQL** | **18.6** (Debian build `18.6-1.pgdg13+2`) | PostgreSQL License (permissive, BSD/MIT-style) | The only datastore — sessions, telemetry, users, teams, repo config. Runs as an external service: it is *not* declared in `docker-compose.yml`; the app reaches it via `DATABASE_URL`. |
+| **PostgreSQL** | **18.7** (Debian build `18.7-1.pgdg13+2`) | PostgreSQL License (permissive, BSD/MIT-style) | The only datastore — sessions, telemetry, users, teams, repo config. Runs as an external service: it is *not* declared in `docker-compose.yml`; the app reaches it via `DATABASE_URL`. |
 | `plpgsql` (PostgreSQL extension) | 1.0 | PostgreSQL License (ships with core) | Default procedural language, used by migrations. The **only** installed extension — no third-party PG extension is used. |
-| **Node.js** | 26.13.0 (`node:26.13.0-alpine`) | MIT (bundled: V8 — BSD-3-Clause, OpenSSL — Apache-2.0, ICU — Unicode-3.0) | Runtime for the server process and for the telemetry hook on the user's machine. |
+| **Node.js** | 26.13.1 (`node:26.13.1-alpine3.24`) | MIT (bundled: V8 — BSD-3-Clause, OpenSSL — Apache-2.0, ICU — Unicode-3.0) | Runtime for the server process and for the telemetry hook on the user's machine. |
 | **Alpine Linux** (`alpine` base) | 3.x | Mixed (musl libc MIT, BusyBox GPL-2.0, other packages MIT/BSD) | Base operating system inside the container. |
 | **Docker / Docker Compose** | host-provided | Apache-2.0 | Runtime platform — the product is delivered and run as a Docker image. |
 

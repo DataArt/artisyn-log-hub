@@ -1,7 +1,7 @@
 services:
   db:
     # Pinned major and libc (Debian, not -alpine): an existing cluster cannot change either.
-    image: postgres:18.6
+    image: postgres:18.7
     # Fixed name + hostname on the named network below, so Claude dev-container sandboxes
     # (docker-dev/) can reach this same Postgres as log-hub-postgres:5432.
     container_name: log-hub-postgres

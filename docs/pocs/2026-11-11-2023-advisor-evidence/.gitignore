@@ -1,0 +1,8 @@
+# dependencies
+node_modules/
+# runtime garbage
+*.log
+.cache/
+.env
+# run output: contains real session prompts, never commit
+out/

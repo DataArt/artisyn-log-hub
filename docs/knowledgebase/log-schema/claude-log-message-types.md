@@ -1,12 +1,12 @@
 ---
 type: "Log Schema Reference"
 title: "Claude Log Message Types"
-description: "Auto-generated reference for all message types in Claude telemetry logs: field schemas, types, sample values, and prevalence percentages."
+description: "Auto-generated reference for all message types in Claude telemetry logs: field schemas, types, sample values, prevalence percentages, and a hand-maintained list of every `system` subtype seen (turn_duration, stop_hook_summary, compact_boundary, local_command, scheduled_task_fire, informational, model_refusal_fallback)."
 tags:
   - logs
   - schema
   - claude
-timestamp: "2026-06-15T14:10:06+04:00"
+timestamp: "2026-11-11T00:00:00+04:00"
 ---
 
 # Claude Log Message Types
@@ -51,7 +51,7 @@ Each array element is a log entry with a `type` field that determines its shape.
 | Field | Type | Sample Values |
 |-------|------|---------------|
 | `aiTitle` | string | "Add model pricing migration for new Claude models", "Create implementation plan for analytics horizontal view", "Show grep command details in tool call logs" |
-| `sessionId` | string | "5b7c77b5-3133-482f-8420-4b74520c9e10", "a7828a67-db3a-4b3a-8e00-7b866d85b10e", "feae86fa-9846-4424-a292-1ce313606d66" |
+| `sessionId` | string | "<uuid>", "<uuid>", "<uuid>" |
 | `type` | string | "ai-title" |
 
 ---
@@ -69,12 +69,12 @@ Each array element is a log entry with a `type` field that determines its shape.
 | `gitBranch` | string | "feature/req-analytics-horisontal-view.md", "feature/req-repo-file-categories.md", "feature/raw-logs" |
 | `isSidechain` | boolean | false |
 | `message` | object | see object samples below |
-| `parentUuid` | string | "1594e816-933f-48cf-a880-05b2021a7b3f", "45b9ade0-23df-4ca7-a6ec-fedc308ea29a", "a3a1eadb-f11a-4850-87d1-6cad89d1ad93" |
-| `sessionId` | string | "5b7c77b5-3133-482f-8420-4b74520c9e10", "a7828a67-db3a-4b3a-8e00-7b866d85b10e", "feae86fa-9846-4424-a292-1ce313606d66" |
+| `parentUuid` | string | "<uuid>", "<uuid>", "<uuid>" |
+| `sessionId` | string | "<uuid>", "<uuid>", "<uuid>" |
 | `timestamp` | string | "2026-06-12T10:22:23.321Z", "2026-06-12T10:22:23.338Z", "2026-06-12T10:22:43.196Z" |
 | `type` | string | "assistant" |
 | `userType` | string | "external" |
-| `uuid` | string | "45b9ade0-23df-4ca7-a6ec-fedc308ea29a", "a83999fd-5db8-471a-8cca-83cd79d6cd9b", "110e4648-95c3-41bd-87f8-7039ddc400cf" |
+| `uuid` | string | "<uuid>", "<uuid>", "<uuid>" |
 | `version` | string | "2.1.175" |
 
 ### Optional Fields
@@ -131,7 +131,7 @@ collapsed row through the generic JSON fallback, with no special renderer.
 | Field | Type | Sample Values |
 |-------|------|---------------|
 | `atis` | string | opaque value set by Claude Code (present on 10,396/10,396 lines on the dev DB, 2026-10-21) |
-| `sessionId` | string | "5b7c77b5-3133-482f-8420-4b74520c9e10" |
+| `sessionId` | string | "<uuid>" |
 | `type` | string | "atis-latch" |
 
 ---
@@ -149,12 +149,12 @@ collapsed row through the generic JSON fallback, with no special renderer.
 | `entrypoint` | string | "cli" |
 | `gitBranch` | string | "feature/req-analytics-horisontal-view.md", "feature/req-repo-file-categories.md", "feature/raw-logs" |
 | `isSidechain` | boolean | false |
-| `parentUuid` | string | "02860673-f577-4433-ad76-57126dd067a0", "99e23f48-7b58-496e-972e-da9e27ae502f", "f6c13ef3-50c4-4650-b8b1-b2088ee2da42" |
-| `sessionId` | string | "5b7c77b5-3133-482f-8420-4b74520c9e10", "a7828a67-db3a-4b3a-8e00-7b866d85b10e", "feae86fa-9846-4424-a292-1ce313606d66" |
+| `parentUuid` | string | "<uuid>", "<uuid>", "<uuid>" |
+| `sessionId` | string | "<uuid>", "<uuid>", "<uuid>" |
 | `timestamp` | string | "2026-06-12T10:22:19.527Z", "2026-06-12T10:22:23.726Z", "2026-06-12T10:22:53.251Z" |
 | `type` | string | "attachment" |
 | `userType` | string | "external" |
-| `uuid` | string | "99e23f48-7b58-496e-972e-da9e27ae502f", "f6c13ef3-50c4-4650-b8b1-b2088ee2da42", "1594e816-933f-48cf-a880-05b2021a7b3f" |
+| `uuid` | string | "<uuid>", "<uuid>", "<uuid>" |
 | `version` | string | "2.1.175" |
 
 ### Optional Fields
@@ -256,7 +256,7 @@ collapsed row through the generic JSON fallback, with no special renderer.
 | Field | Type | Sample Values |
 |-------|------|---------------|
 | `modelUsage` | object | per-model usage counters (`{ "<model-id>": { … } }`) |
-| `sessionId` | string | "5b7c77b5-3133-482f-8420-4b74520c9e10" |
+| `sessionId` | string | "<uuid>" |
 | `startTime` | number | session start as recorded by Claude Code (epoch ms) |
 | `totalCostUSD` | number | 0.4213 |
 | `totalDuration` | number | wall-clock duration in ms |
@@ -277,7 +277,7 @@ Also present on every line seen so far (404/404 on the dev DB, 2026-10-21; same 
 | Field | Type | Sample Values |
 |-------|------|---------------|
 | `isSnapshotUpdate` | boolean | false, true |
-| `messageId` | string | "f0e4e1a3-9fd3-45b9-88ed-19b38dcc8bbb", "02860673-f577-4433-ad76-57126dd067a0", "4fac4f2b-e867-45d1-bc3e-400aa570a053" |
+| `messageId` | string | "<uuid>", "<uuid>", "<uuid>" |
 | `snapshot` | object | see object samples below |
 | `type` | string | "file-history-snapshot" |
 
@@ -286,7 +286,7 @@ Also present on every line seen so far (404/404 on the dev DB, 2026-10-21; same 
 **Sample 1:**
 ```json
 {
-  "messageId": "\"f0e4e1a3-9fd3-45b9-88ed-19b38dcc8bbb\"",
+  "messageId": "\"<uuid>\"",
   "timestamp": "\"2026-06-12T10:21:20.579Z\"",
   "trackedFileBackups": "{object}"
 }
@@ -302,8 +302,8 @@ Also present on every line seen so far (404/404 on the dev DB, 2026-10-21; same 
 
 | Field | Type | Sample Values |
 |-------|------|---------------|
-| `leafUuid` | string | "a3a1eadb-f11a-4850-87d1-6cad89d1ad93", "03c93863-50d5-4023-8b2b-b26bfbbb49cc", "d6eb7825-0bad-4350-b684-e09bd8390554" |
-| `sessionId` | string | "5b7c77b5-3133-482f-8420-4b74520c9e10", "a7828a67-db3a-4b3a-8e00-7b866d85b10e", "feae86fa-9846-4424-a292-1ce313606d66" |
+| `leafUuid` | string | "<uuid>", "<uuid>", "<uuid>" |
+| `sessionId` | string | "<uuid>", "<uuid>", "<uuid>" |
 | `type` | string | "last-prompt" |
 
 ### Optional Fields
@@ -323,7 +323,7 @@ Also present on every line seen so far (404/404 on the dev DB, 2026-10-21; same 
 | Field | Type | Sample Values |
 |-------|------|---------------|
 | `mode` | string | "normal" |
-| `sessionId` | string | "5b7c77b5-3133-482f-8420-4b74520c9e10", "a7828a67-db3a-4b3a-8e00-7b866d85b10e", "feae86fa-9846-4424-a292-1ce313606d66" |
+| `sessionId` | string | "<uuid>", "<uuid>", "<uuid>" |
 | `type` | string | "mode" |
 
 ---
@@ -337,7 +337,7 @@ Also present on every line seen so far (404/404 on the dev DB, 2026-10-21; same 
 | Field | Type | Sample Values |
 |-------|------|---------------|
 | `permissionMode` | string | "bypassPermissions" |
-| `sessionId` | string | "5b7c77b5-3133-482f-8420-4b74520c9e10", "cb3d623f-824a-4732-8a8d-60cdf9266ca4", "b13721da-28c2-445a-99ca-3ffaab39dca3" |
+| `sessionId` | string | "<uuid>", "<uuid>", "<uuid>" |
 | `type` | string | "permission-mode" |
 
 ### Optional Fields
@@ -357,7 +357,7 @@ Also present on every line seen so far (404/404 on the dev DB, 2026-10-21; same 
 | Field | Type | Sample Values |
 |-------|------|---------------|
 | `operation` | string | "enqueue", "remove", "dequeue" |
-| `sessionId` | string | "0273b885-c530-4b71-9575-f38d3782b51d", "efdf0a8c-9410-4ff6-9477-dcefff9ce868" |
+| `sessionId` | string | "<uuid>", "<uuid>" |
 | `timestamp` | string | "2026-06-15T08:33:18.612Z", "2026-06-15T08:33:23.744Z", "2026-06-12T11:11:23.090Z" |
 | `type` | string | "queue-operation" |
 
@@ -381,13 +381,13 @@ Also present on every line seen so far (404/404 on the dev DB, 2026-10-21; same 
 | `entrypoint` | string | "cli" |
 | `gitBranch` | string | "feature/req-analytics-horisontal-view.md", "feature/req-repo-file-categories.md", "feature/raw-logs" |
 | `isSidechain` | boolean | false |
-| `parentUuid` | string \| null | "990e06c1-0dec-4846-ada5-4edd0794979a", "ea9c5c74-2645-41b4-958d-d9466032b1a3", "ff281a65-977e-418e-9349-1fafb623a093" |
-| `sessionId` | string | "5b7c77b5-3133-482f-8420-4b74520c9e10", "a7828a67-db3a-4b3a-8e00-7b866d85b10e", "feae86fa-9846-4424-a292-1ce313606d66" |
+| `parentUuid` | string \| null | "<uuid>", "<uuid>", "<uuid>" |
+| `sessionId` | string | "<uuid>", "<uuid>", "<uuid>" |
 | `subtype` | string | "stop_hook_summary", "turn_duration", "local_command" |
 | `timestamp` | string | "2026-06-12T10:23:27.360Z", "2026-06-12T10:23:27.362Z", "2026-06-12T10:23:59.426Z" |
 | `type` | string | "system" |
 | `userType` | string | "external" |
-| `uuid` | string | "ea9c5c74-2645-41b4-958d-d9466032b1a3", "514d11f2-cff6-4324-8bdd-ffc55d3be5e2", "348d2ad4-166a-4eb5-ae3c-aeed6577e26f" |
+| `uuid` | string | "<uuid>", "<uuid>", "<uuid>" |
 | `version` | string | "2.1.175" |
 
 ### Optional Fields
@@ -404,13 +404,13 @@ Also present on every line seen so far (404/404 on the dev DB, 2026-10-21; same 
 | `hookInfos` | array | 97/248 (39%) |  |
 | `isMeta` | boolean | 151/248 (61%) | false |
 | `level` | string | 151/248 (61%) | "suggestion", "info" |
-| `logicalParentUuid` | string | 10/248 (4%) | "823727d6-091b-4ee8-851f-961ca2a578f4", "c0242138-e202-4d7b-94f0-54ba0d58c278", "eb01da5e-3e8a-49c6-9b46-77308b20c22b" |
+| `logicalParentUuid` | string | 10/248 (4%) | "<uuid>", "<uuid>", "<uuid>" |
 | `messageCount` | number | 97/248 (39%) | 40, 69, 56 |
 | `pendingBackgroundAgentCount` | number | 1/248 (0%) | 1 |
 | `preventedContinuation` | boolean | 97/248 (39%) | false |
 | `slug` | string | 42/248 (17%) | "linear-cooking-robin", "sequential-meandering-mitten", "enchanted-watching-teacup" |
 | `stopReason` | string | 97/248 (39%) | "" |
-| `toolUseID` | string | 97/248 (39%) | "eafbd71c-7365-488b-afaf-d457d0c1a69e", "9535b817-98ca-4f88-a1a5-d6ea335c51e1", "978005d5-1844-47d4-b58b-25a01e169714" |
+| `toolUseID` | string | 97/248 (39%) | "<uuid>", "<uuid>", "<uuid>" |
 
 #### `compactMetadata` object samples
 
@@ -426,6 +426,29 @@ Also present on every line seen so far (404/404 on the dev DB, 2026-10-21; same 
   "preCompactDiscoveredTools": "[array]"
 }
 ```
+
+### `system` subtypes
+
+**Hand-maintained** — from the read-only harness-entries survey of the local-prod DB (cutoff 2026-11-11, 291 root
+sessions with their sub-agent transcripts, Claude Code 2.1.211–2.1.319; generated table in the task folder
+`docs/tasks/*/2026-11-10-harness-entries-ui-review/research/survey-table.md`). Key fields are the line's keys outside
+the common envelope (`cwd`, `sessionId`, `timestamp`, `uuid`, …). Count / sessions are entries and root sessions
+with at least one; line chars are the whole JSON line (median · p95 · max). No payload text is recorded here.
+
+| Subtype | Key fields | When it is written | Count / sessions | Line chars |
+|---|---|---|---|---|
+| `turn_duration` | `durationMs`, `messageCount`, `pendingWorkflowCount`, `pendingBackgroundAgentCount`, `isMeta` | At the end of every interactive turn: Claude Code's own turn duration and message count. Never written in `claude -p` (0 of 18 sessions). Being a Stop-time line, the last turn's one reaches Log Hub only on a later upload or the SessionEnd flush (hook ≥ 2.8.0). | 2033 / 252 | 490 · 537 · 597 |
+| `stop_hook_summary` | `hookCount`, `hookInfos` (per hook: `command`, …), `hookErrors`, `hookAdditionalContext`, `hasOutput`, `preventedContinuation`, `stopReason`, `toolUseID` | After the Stop hooks of a turn ran; only with Stop hooks configured. Same Stop-time upload caveat as `turn_duration`. Written in `claude -p` too. | 1996 / 248 | 815 · 852 · 1202 |
+| `compact_boundary` | `compactMetadata` (`trigger` `auto` / `manual`, `preTokens`, `postTokens`, `durationMs`, `preservedSegment`, `preservedMessages`, `preCompactDiscoveredTools`), `logicalParentUuid`, `content` ("Conversation compacted"), `isMeta` | At a manual (`/compact`) or automatic compaction; the compaction summary follows as a `user` line with `isCompactSummary: true`. | 13 / 13 | 1488 · 1855 · 1855 |
+| `local_command` | `content` (the command and its stdout, wrapped in `<command-name>` / `<local-command-stdout>` tags), `commandRun`, `level`, `isMeta` | When a local slash command (e.g. `/doctor`, `/model`) runs in the REPL; the command text is also the turn's prompt. Not seen in `claude -p`. | 230 / 221 | 559 · 577 · 22781 |
+| `scheduled_task_fire` | `taskId`, `cron`, `prompt`, `content`, `isMeta` | When a scheduled task (cron or `/loop`) fires and starts a turn; only in sessions with scheduled tasks. | 170 / 30 | 770 · 778 · 830 |
+| `informational` | `content`, `level`, `isMeta` | A free-text notice from Claude Code (e.g. a suggestion). | 15 / 14 | 622 · 681 · 681 |
+| `model_refusal_fallback` | `originalModel`, `fallbackModel`, `direction`, `scope`, `trigger`, `apiRefusalCategory`, `apiRefusalExplanation`, `refusedUserMessageUuid`, `retractedMessageUuids`, `content`, `isMeta` | When a request was refused and retried on a fallback model; the retracted assistant messages are named by uuid. | 1 / 1 | 1531 · 1531 · 1531 |
+
+- Log Hub reads only `compact_boundary` today (client compaction divider and context tokens, server `walkTurns` →
+  `session_cause_stats`, the hook's post-turn analysis). The others are shown only by the Raw Logs system renderer.
+- `stop_hook_summary.hookInfos[].command`, like `hook_success.command` (see
+  [attachment-types.md](attachment-types.md)), holds the hook's command line or its status message.
 
 ---
 
@@ -468,11 +491,11 @@ Also present on every line seen so far (404/404 on the dev DB, 2026-10-21; same 
 |-------|------|---------------|
 | `isSidechain` | boolean | false |
 | `message` | object | see object samples below |
-| `parentUuid` | null \| string | null, "829cf7c2-3bdb-477e-8fd7-adcee5deb313", "f0e4e1a3-9fd3-45b9-88ed-19b38dcc8bbb" |
-| `sessionId` | string | "5b7c77b5-3133-482f-8420-4b74520c9e10", "a7828a67-db3a-4b3a-8e00-7b866d85b10e", "feae86fa-9846-4424-a292-1ce313606d66" |
+| `parentUuid` | null \| string | null, "<uuid>", "<uuid>" |
+| `sessionId` | string | "<uuid>", "<uuid>", "<uuid>" |
 | `timestamp` | string | "2026-06-12T10:21:20.578Z", "2026-06-12T10:22:19.527Z", "2026-06-12T10:22:23.727Z" |
 | `type` | string | "user" |
-| `uuid` | string | "829cf7c2-3bdb-477e-8fd7-adcee5deb313", "f0e4e1a3-9fd3-45b9-88ed-19b38dcc8bbb", "bc48037c-e0c4-426b-9ae7-f72a31b6bd2e" |
+| `uuid` | string | "<uuid>", "<uuid>", "<uuid>" |
 
 ### Optional Fields
 
@@ -487,10 +510,10 @@ Also present on every line seen so far (404/404 on the dev DB, 2026-10-21; same 
 | `isVisibleInTranscriptOnly` | boolean | 10/2587 (0%) | true |
 | `origin` | object | 1/2587 (0%) | see object samples below |
 | `permissionMode` | string | 106/2587 (4%) | "bypassPermissions" |
-| `promptId` | string | 2586/2587 (100%) | "8913838d-8f48-412a-b56b-6235b570aa48", "0ad4181f-37d2-4bba-bc39-2f10a97698f9", "c407563e-6462-4004-8295-2dd6b89f3466" |
+| `promptId` | string | 2586/2587 (100%) | "<uuid>", "<uuid>", "<uuid>" |
 | `promptSource` | string | 110/2587 (4%) | "typed", "system" |
 | `slug` | string | 669/2587 (26%) | "linear-cooking-robin", "sequential-meandering-mitten", "enchanted-watching-teacup" |
-| `sourceToolAssistantUUID` | string | 2296/2587 (89%) | "a83999fd-5db8-471a-8cca-83cd79d6cd9b", "2e3f2c52-ec8c-46cb-899c-be020c11f350", "8f093a79-6ecb-4d96-90b7-f3bb0b6d9812" |
+| `sourceToolAssistantUUID` | string | 2296/2587 (89%) | "<uuid>", "<uuid>", "<uuid>" |
 | `sourceToolUseID` | string | 38/2587 (1%) | "toolu_018eHYzKxBYvB1PcmmuUnub7", "toolu_01QNJHbqRV93CYPnssZCvRnF", "toolu_0181WYPo4VWzLdZh7rX1bogs" |
 | `toolUseResult` | object \| string \| array | 2296/2587 (89%) | see object samples below |
 | `userType` | string | 2586/2587 (100%) | "external" |

@@ -20,7 +20,7 @@ article itself holds the details. Keep new lines to one or two sentences.
 * [Session Log View](session-log-view.md) - Read before touching the session Logs tab or the `/logs` payload: the payload contract (`agent-` prefix rules, descendant loading, client-only types), the Workflow tool lifecycle (rejected-before-launch = failed), log parser, tool-call core, `ToolCallView` and the Bash tab, Context Growth steps, nested `claude -p` sessions, background MCP calls (`⧗ background`)
 * [Session Map Tab](session-map.md) - Read before touching the session Map tab (`session-log/session-map/`) or `GET …/logs/delta`: delta → merge → parse → model flow, polling and reload, `/logs` watermark suspension, tool families, file list
 * [Raw Logs Renderer Subsystem](raw-logs-renderers.md) - Read before touching `session-log/raw-logs/`: layers, dependency graph, adding a renderer
-* [System Context Anatomy Tab](sysctx-anatomy-tab.md) - Read before touching the `sysctx` session tab, its "View system prompt" modal or the Logs `StartupContextLine`: data sources, partitions, banners, the prompt viewer, test ids
+* [System Context Anatomy Tab](sysctx-anatomy-tab.md) - Read before touching the `sysctx` session tab, its "View system prompt" modal, its Recommendations modal or the Logs `StartupContextLine`: data sources, partitions, banners, the prompt viewer, recommendations, test ids
 * [Harness Usage Tab](harness-usage-tab.md) - Read before touching the session "Harness usage" tab: the five element kinds, slash-command shapes, tree assembly rules, why it bypasses `parseSessionLogs`
 * [Executive Summary Report](executive-summary-report.md) - Read before changing the Executive Summary report or its PDF (sections, cost rollup, the CSP `'wasm-unsafe-eval'`)
 * [Bytes-per-Token Ratio](token-byte-ratio.md) - Read before using or changing `BYTES_PER_TOKEN` (3.5) and what it must not be used for
@@ -37,7 +37,7 @@ article itself holds the details. Keep new lines to one or two sentences.
 * [Session Export, Import and Statistics Export](session-export-import.md) - Read before touching repository export/import or the statistics export: zip format, `export_import_jobs`, import validation and merge
 * [System Info & Cluster](system-info-and-cluster.md) - Read before touching `server/src/cluster/` (worker launch, `CLUSTER_MODE`), the System Info API/tab or the `ai-tool-versions` scheduler
 * [Static Asset Serving](static-asset-serving.md) - Read before touching how the built SPA or server static files are served: the three `static-dir.ts` runtime layouts (installer 404 trap), brotli/gzip precompression, `Accept-Encoding` negotiation, `/assets/` cache policy
-* [Repo-Local Packages](repo-local-packages.md) - Read before touching `packages/` (`@loghub/pricing`, `@loghub/bash-view`) or sharing code between server and client: linking, alias, Docker, package rules
+* [Repo-Local Packages](repo-local-packages.md) - Read before touching `packages/` (`@loghub/pricing`, `@loghub/bash-view`, `@loghub/recommendations`) or sharing code between server and client: linking, alias, Docker, package rules
 
 ## Database
 
@@ -82,7 +82,7 @@ article itself holds the details. Keep new lines to one or two sentences.
 * [CI Security Scans](ci-security-scans.md) - Read before touching `security-scans.yml`, `virustotal.yml`, `scripts/ci/` or the config-guard allowlist, or when a scan row / PR security block looks wrong
 * [Git Hooks and Secret Scanning](git-hooks.md) - Read before touching `.githooks/`, gitleaks config or when a commit/push is blocked by the scan
 * [Claude Code Dev Container (sandboxes)](docker-dev-container.md) - Read before touching `scripts/claude-docker*` or `docker-dev/`, or when a sandbox misbehaves: sandbox model, launcher rules and deletion guards, mounts, `TEST_DATABASE_URL`, provisioning, prune rules, Windows menu quirks, limitations (commands: `--help`)
-* [User Docs and Site](user-docs-and-site.md) - Read before editing `user-docs/`, the in-app help menu or the GitHub Pages site/deck: `nav.json`, link rules, the help generator, the site renderer
+* [User Docs and Site](user-docs-and-site.md) - Read before editing `user-docs/`, the in-app help menu or the GitHub Pages site/deck/one-pager: `nav.json`, link rules, the help generator, the site renderer
 
 ## Tests and algorithm docs
 
@@ -92,6 +92,7 @@ article itself holds the details. Keep new lines to one or two sentences.
 * [Cost Formula](algorithms/cost-formula.md) - Read before touching the per-call cost formula or its twins (`@loghub/pricing`, hook `post-turn-analysis-worker.js`)
 * [Budget Spend Math](algorithms/budget-spend-math.md) - Read before touching `budget-math.ts`: budget forecast / runs-out-in, anomaly days, costly sessions (2σ / 3σ) and which crossed threshold gets a notice vs is superseded
 * [Work Time](algorithms/work-time.md) - Read before touching session work-time (idle gaps) in `claude-extractor.ts` or its hook twin
+* [Advisor Evidence](algorithms/advisor-evidence.md) - Read before touching the hook's `advisor-evidence.js` (per-call price, cache rebuilds, cost per prompt, queued prompts) or what the Turn-End Cost Advisor is shown
 * [Upload Error Classify](algorithms/upload-error-classify.md) - Read before touching how ingest errors are classified (`upload-error.ts`)
 * [Password Policy](algorithms/password-policy.md) - Read before touching `PASSWORD_POLICY` (`any` / `mid` / `long`), its limits and where it is enforced
 * [Anthropic Pricing Page Parse](algorithms/anthropic-pricing-parse.md) - Read before touching `parseAnthropicPricing` (model table, web-search price, prompt-length tiers)
@@ -103,6 +104,7 @@ article itself holds the details. Keep new lines to one or two sentences.
 * [Session List Flags](algorithms/session-list-flags.md) - Read before touching `session_stats` `main_model` / `has_workflow` / `has_main_assistant`
 * [System Context Anatomy](algorithms/sysctx-anatomy.md) - Read before touching `sysctx-anatomy.ts` (startup block, per-partition token estimates)
 * [System Prompt View](algorithms/system-prompt-view.md) - Read before touching `system-prompt-view.ts` (prompt viewer modal: snapshot selection, boundary split, path masking)
+* [Startup Context Recommendations](algorithms/startup-recommendations.md) - Read before touching `packages/recommendations/` (catalog entries, `matchRecommendations`: byte ownership, precedence, rounding) or the Recommendations modal's numbers
 * [Tool-Call Sections and Permission Attribution](algorithms/tool-call-sections.md) - Read before touching `session-log/tool-calls.ts`: which section a call is listed in, which call a permission event belongs to
 * [Tool-Call Outcome](algorithms/tool-call-outcome.md) - Read before touching `classifyToolOutcome` (client or its server twin): success / failure / unresolved and the Logs status
 * [Bash Command View](algorithms/bash-command-view.md) - Read before touching `packages/bash-view/` or the client loader: command layout, FILES summary, `readAccess` kinds

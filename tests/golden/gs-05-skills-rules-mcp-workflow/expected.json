@@ -57,21 +57,21 @@
         "claudeMd": { "bytes": 3500, "tokens": 1000 },
         "rules": { ".claude/rules/db.md": { "bytes": 700, "tokens": 200 }, ".claude/rules/ui.md": { "bytes": 1400, "tokens": 400 } },
         "skills": { "adlc:review-deep": { "bytes": 1750, "tokens": 500 } },
-        "deferredTools": { "servers": 2, "tools": ["mcp__postgres__query", "mcp__postgres__list_tables", "mcp__playwright__browser_click"], "tokens": 450 }
+        "deferredTools": { "servers": 4, "tools": ["mcp__postgres__query", "mcp__postgres__list_tables", "mcp__playwright__browser_click", "mcp__claude_ai_Gmail__authenticate", "mcp__claude_ai_Gmail__complete_authentication", "mcp__context7__get_docs"], "tokens": 900 }
       },
       "anatomy": {
         "$comment": "System context anatomy of the startup block (algorithm doc sysctx-anatomy.md, row SA-GS05). Tokens = round(bytes / charsPerToken); harnessInternals = total - attributed.",
         "charsPerToken": 3.5,
         "total": 8800,
-        "attributed": 3027,
-        "harnessInternals": 5773,
+        "attributed": 3357,
+        "harnessInternals": 5443,
         "partitions": {
           "system-prompt": { "bytes": 3116, "tokens": 890 },
           "memory": { "bytes": 700, "tokens": 200 },
-          "tool-definitions": { "bytes": 378, "tokens": 108 },
+          "tool-definitions": { "bytes": 1428, "tokens": 408 },
           "environment": { "bytes": 35, "tokens": 10 },
           "deferred-tools": { "bytes": 0, "tokens": 0 },
-          "mcp-server": { "bytes": 429, "tokens": 123 },
+          "mcp-server": { "bytes": 534, "tokens": 153 },
           "agent-types": { "bytes": 0, "tokens": 0 },
           "skills": { "bytes": 83, "tokens": 24 },
           "instruction-file": { "bytes": 5250, "tokens": 1500 },
@@ -80,20 +80,47 @@
         }
       },
       "systemPromptView": {
-        "$comment": "System prompt viewer modal (algorithm doc system-prompt-view.md): parts from the startup snapshot gs05-0000p (boundary marker excluded; shared = before it, session = after it), tools from the first snapshot with tools (gs05-0003p; no api-request-shape logged), the same set as the anatomy's tool-definitions partition. Each tool's `schema` is the whole wire tool object {name, description, input_schema}, so tool bytes = name + description + JSON.stringify(schema.input_schema) (Read 299 + Bash 79 = 378), sizes from the raw (unmasked) text. Tokens = round(bytes / charsPerToken), totals rounded once from the summed bytes.",
+        "$comment": "System prompt viewer modal (algorithm doc system-prompt-view.md): parts from the startup snapshot gs05-0000p (boundary marker excluded; shared = before it, session = after it), tools from the first snapshot with tools (gs05-0003p; no api-request-shape logged), the same set as the anatomy's tool-definitions partition. Each tool's `schema` is the whole wire tool object {name, description, input_schema}, so tool bytes = name + description + JSON.stringify(schema.input_schema) (Read 299 + Bash 79 + Artifact 700 + PowerShell 350 = 1428), sizes from the raw (unmasked) text. Tokens = round(bytes / charsPerToken), totals rounded once from the summed bytes.",
         "charsPerToken": 3.5,
         "parts": 3,
         "shared": 2,
         "session": 1,
         "partsBytes": 3816,
         "partsTokens": 1090,
-        "tools": 2,
-        "toolsBytes": 378,
-        "toolsTokens": 108,
-        "totalBytes": 4194,
-        "totalTokens": 1198
+        "tools": 4,
+        "toolsBytes": 1428,
+        "toolsTokens": 408,
+        "totalBytes": 5244,
+        "totalTokens": 1498
       },
-      "inventory": { "skills": ["adlc:review-deep", "adlc:review", "unused-skill"], "mcpServers": ["postgres", "playwright"] },
+      "recommendations": {
+        "$comment": "Startup context recommendations (algorithm doc startup-recommendations.md, row SR-GS05): catalog order, each row's items in bytes-descending order, bytes = sum of its items, tokens = round(bytes / charsPerToken), share = tokens / denominator (the anatomy total). Built-in = a tool name without the mcp__ prefix (Bash counts although the fixture sets a snapshot server on it). claude_ai_Gmail has only __authenticate / __complete_authentication names, so it is a stub connector. context7 is a user-level snapshot server; postgres (names 48 + instructions 350) and playwright are project servers. ~/.claude/CLAUDE.md is user-level, so it is not in startup.project-claude-md. measuredTokens = sum of row tokens (21.6 % of 8800).",
+        "charsPerToken": 3.5,
+        "denominator": 8800,
+        "count": 8,
+        "measuredTokens": 1900,
+        "ids": [
+          "startup.rare-builtin-tools",
+          "startup.two-shells",
+          "startup.claudeai-connector-stubs",
+          "startup.user-mcp-servers",
+          "startup.auto-memory",
+          "startup.project-claude-md",
+          "startup.project-mcp-servers",
+          "startup.plugin-skills"
+        ],
+        "rows": {
+          "startup.rare-builtin-tools": { "items": { "Artifact": 700 }, "bytes": 700, "tokens": 200 },
+          "startup.two-shells": { "items": { "PowerShell": 350, "Bash": 79 }, "bytes": 429, "tokens": 123 },
+          "startup.claudeai-connector-stubs": { "items": { "claude_ai_Gmail": 81 }, "bytes": 81, "tokens": 23 },
+          "startup.user-mcp-servers": { "items": { "context7": 24 }, "bytes": 24, "tokens": 7 },
+          "startup.auto-memory": { "items": { "MEMORY.md": 700 }, "bytes": 700, "tokens": 200 },
+          "startup.project-claude-md": { "items": { "CLAUDE.md": 3500, "CLAUDE.local.md": 700 }, "bytes": 4200, "tokens": 1200 },
+          "startup.project-mcp-servers": { "items": { "postgres": 398, "playwright": 31 }, "bytes": 429, "tokens": 123 },
+          "startup.plugin-skills": { "items": { "adlc@artisyn": 83 }, "bytes": 83, "tokens": 24 }
+        }
+      },
+      "inventory": { "skills": ["adlc:review-deep", "adlc:review", "unused-skill"], "mcpServers": ["postgres", "playwright", "context7"] },
       "harnessUsage": {
         "rootOnly": [
           { "kind": "skill", "element": "adlc:review", "count": 1 },

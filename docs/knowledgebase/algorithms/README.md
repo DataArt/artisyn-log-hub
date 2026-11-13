@@ -44,6 +44,7 @@ format where the two differ).
 | [otel-status-reason](otel-status-reason.md) | hook `otel-status.js` (`resolveEffectiveOtel`, `deriveConfigWarnings`, `deriveState`, `deriveReason`, `shouldWriteStatus`) | `node --test` |
 | [cache-ratio-and-causes](cache-ratio-and-causes.md) | `server/src/logs/cache-ratio.sql.ts`, `reports/cache-read-ratio.service.ts`, `turn-walk.ts`; twin `client/.../lib/format.ts` | jest, vitest |
 | [work-time](work-time.md) | `server/src/logs/claude-extractor.ts`; twin hook `post-turn-analysis-worker.js` | jest, `node --test` |
+| [advisor-evidence](advisor-evidence.md) | hook `advisor-evidence.js` (`makePricer`, `collectCalls`, `cacheRebuilds`, `buildPromptCosts`), `post-turn-analysis-worker.js` (`buildPromptTurns`) | `node --test` |
 | [session-time-span](session-time-span.md) | `server/src/logs/artisyn-extractor.ts` | jest |
 | [session-list-flags](session-list-flags.md) | `server/src/logs/session-list-flags.ts` (`computeSessionListFlags`); twin backfill SQL `server/src/database/backfill-session-list-flags.ts` | jest |
 | [session-logs-delta](session-logs-delta.md) | `server/src/logs/session-logs-delta.ts` (`encodeDeltaCursor`, `decodeDeltaCursor`, `classifyDeltaRows`, `checkGrowth`) | jest |
@@ -60,6 +61,7 @@ format where the two differ).
 | [workflow-agent-rows](workflow-agent-rows.md) | `client/.../session-log/workflow-agent-rows.ts` | vitest |
 | [sysctx-anatomy](sysctx-anatomy.md) | `client/.../session-log/sysctx-anatomy/sysctx-anatomy.ts` | vitest |
 | [system-prompt-view](system-prompt-view.md) | `client/.../session-log/sysctx-anatomy/system-prompt-view.ts` | vitest |
+| [startup-recommendations](startup-recommendations.md) | `packages/recommendations/src/*` (`@loghub/recommendations`; `matchRecommendations`, `CATALOG`); client adapter `client/.../session-log/sysctx-anatomy/startup-facts.ts` | vitest |
 | [tool-call-sections](tool-call-sections.md) | `client/.../session-log/tool-calls.ts` | vitest |
 | [tool-call-outcome](tool-call-outcome.md) | `client/.../session-log/tool-outcome.ts`; twin `server/src/logs/tool-stats.ts` | vitest, jest |
 | [session-lens-row](session-lens-row.md) | `client/.../repository/session-lenses.ts` (`lensRow`, `lensDefaultTab`), `client/.../repository/session-tab-groups.ts` (`pickGroupTab`) | vitest |

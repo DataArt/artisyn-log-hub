@@ -34,6 +34,7 @@ This skill's steps:
 - `Distill check`
 - `Research the codebase (subagent)`
 - `Archive research findings`
+- `Do the analysis and PoCs`
 - `Write the implementation plan`
 - `Review the plan and fix gaps`
 
@@ -42,7 +43,12 @@ second pass — so the extra pass is visible, not hidden inside the first.
 
 ## IMPORTANT
 
-Only do plan. Do not update or create code.
+Only do plan. Do not update or create product code. The one exception is step 2.5: research scripts and PoCs
+that find something out are written now, outside product code.
+
+**Discovery belongs to planning, not to implementation.** Anything the task needs to *find out* — an analysis,
+survey, measurement, data scan, UI walk-through, comparison or PoC — is done by this skill (step 2.5). The plan's
+chunks only apply results that are already known.
 
 ## Steps
 
@@ -175,6 +181,33 @@ After the report arrives, Write it verbatim to `research/findings-<N>.md` inside
 is an audit archive only — it preserves the research trail for re-planning and "why did the plan choose X"
 questions across sessions; nothing downstream reads it, and the plan must not depend on it.
 
+### 2.5 — Do the analysis and PoCs now
+
+Everything the task needs to find out is done here, before the plan is written — never left to an
+implementation chunk. That covers:
+
+- an analysis, survey, measurement, data scan or comparison the requirements ask for — also when that analysis
+  is itself the task's deliverable (a review, an audit, a decision table, a follow-up list);
+- a PoC or spike that checks an assumption the plan relies on (a library does X, an API returns Y, a query is
+  fast enough) — follow the project's PoC convention if it has one (e.g. a `poc` skill);
+- observing the running app or real data (walk a UI, read a DB, replay a session) to decide what to build;
+- any open gap in the research report that only an experiment can settle.
+
+How:
+
+- Do it yourself in this session, or hand self-contained pieces to subagents (in parallel when independent).
+  Subagents return results as text and you write the files: Claude Code refuses subagent Writes of `.md` files
+  named `report*`, `summary*`, `findings*` or `analysis*`; the main session is not subject to that.
+- Save results in `TASK_DIR`: the deliverable document when the analysis is the task (named
+  `<topic>-analysis.md` and the like), otherwise `research/<topic>.md`, plus any scripts under `research/`.
+  Raw data, screenshots and anything with personal data go to the project's tmp dir, never the task folder.
+- Carry the outcome into the plan: conclusions become Design Decisions, numbers are cited where they are used.
+- If something cannot be found out now (it needs the user's input, an environment you cannot reach, data that
+  does not exist yet), stop and tell the user what is missing — do not write a chunk that does it instead.
+
+Skip this step (with a step line saying so) when the requirements ask for no analysis and the research report
+left no question that needs an experiment.
+
 ### 3 — Generate the implementation plan
 
 Use the research report as your starting context. Carry the `path:line` references the plan needs into the plan
@@ -198,7 +231,11 @@ Write the plan to `IMPL_PLAN` with these sections:
 - **Design Decisions**: the concrete choices the requirements left open — one sentence per decision, rationale
   only where a future reader would otherwise re-litigate the choice — plus any implementation contract shared by
   multiple chunks (a key/default table, an API shape, a regex), stated once here and referenced from chunk items
-- **Files to create/modify**: table — path, purpose, brief note per file
+- **Files to create/modify**: table — path, purpose, brief note per file. Never name a `.md` file the plan
+  creates so that its basename starts with `report`, `summary`, `findings` or `analysis` (any case): Claude
+  Code's Write tool refuses such names to every subagent ("Subagents should return findings as text, not write
+  report files"), so an `implement-deep` chunk cannot create it. Put the topic first — `<topic>-analysis.md`,
+  `<topic>-report.md`, `review.md`
 - **API changes**: endpoint, HTTP method, request params, response shape
 - **Database changes**: table/collection, columns/fields, types, constraints, migration steps
 - **Dependencies**: any new npm packages to add (if none, omit this section)
@@ -230,6 +267,9 @@ Every action item lives here and ONLY here — items are never listed in another
   Decisions, never in a checkbox.
 - Each item must be implementable without reading requirements.md — if it isn't, the missing fact belongs in the
   item (within the cap), in Design Decisions, or in the plan section the item references.
+- **No discovery items.** An item never asks to investigate, analyse, survey, measure, compare, decide, observe
+  the app or data, or build a PoC — step 2.5 did that. Applying known results (code, KB rows from the analysis)
+  and verification (run tests, a visual check of the change) are fine.
 
 **Chunking rules:**
 
@@ -302,6 +342,9 @@ Check for:
 10. TL;DR section is present, is the first section in the file, and its bullets match what the rest of
     the plan actually contains (no new lib/service/DB change mentioned later that's missing from TL;DR,
     and no TL;DR bullet unsupported by the plan body)
+11. Any chunk item that is discovery rather than applying a known result — an analysis, survey, measurement,
+    comparison, UI/data walk-through or PoC whose outcome the plan does not already state. That work belongs to
+    planning, not to a chunk
 
 Report issues as a numbered list. If no meaningful issues, say "No gaps found."
 Do NOT modify the plan file.

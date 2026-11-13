@@ -1,0 +1,12 @@
+{
+  "name": "@loghub/recommendations",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Startup context recommendations for Log Hub: a static catalog of what loads into a Claude Code session at start, who controls it and how to disable it, plus the matcher that turns a session's startup facts into rows",
+  "license": "MIT",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "types": "./src/index.ts"
+}

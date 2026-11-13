@@ -25,6 +25,8 @@ Backlog ideas that are not tasks yet. One article per idea; when an idea becomes
 task folder from the article.
 
 * [Code → session reverse lookup](ideas/code-to-session-lookup.md) - Read before planning provenance / blame-style features (file, line or commit → the session that wrote it): what `session_changed_paths` already gives, what is missing, slicing
+* [Hook-run health across a team](ideas/hook-run-health.md) - Read before planning hook monitoring: per-invocation hook runs, errors and durations from the transcript, why no competitor has it
+* [Code-quality signal from editor diagnostics](ideas/diagnostics-quality-report.md) - Read before planning code-quality analytics: never-fixed diagnostics per `source`, setup-dependence limits
 
 ## Competitive research
 

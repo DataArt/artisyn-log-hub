@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 800" width="1280" height="800" role="img" aria-label="Wireframe: the three places that link to the one-pager — site top nav, Home hero actions, the deck's closing slide">
+  <title>Links to log-hub-onepager — top nav, Home, deck closing slide (FR-5)</title>
+  <style>
+    .mono { font-family: ui-monospace, "Cascadia Mono", Consolas, Menlo, monospace; }
+    .sans { font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
+    .panel { font-size: 12px; font-weight: 700; letter-spacing: 1px; fill: #66726a; }
+    .brand { font-size: 17px; font-weight: 700; fill: #1f5c45; }
+    .nav { font-size: 14px; fill: #36433c; }
+    .navnew { font-size: 14px; fill: #1f5c45; font-weight: 600; }
+    .btn { font-size: 13px; font-weight: 600; letter-spacing: 0.6px; fill: #1f5c45; }
+    .btnp { font-size: 13px; font-weight: 600; letter-spacing: 0.6px; fill: #f3f1ea; }
+    .dbtn { font-size: 20px; font-weight: 600; fill: #1f5c45; }
+    .dbtnp { font-size: 20px; font-weight: 600; fill: #f3f1ea; }
+    .note { font-size: 12px; fill: #36433c; }
+    .noteh { font-size: 11px; font-weight: 700; letter-spacing: 0.8px; fill: #9a6614; }
+    .new { fill: none; stroke: #9a6614; stroke-width: 1.5; stroke-dasharray: 5 3; }
+    .lead-line { stroke: #9a6614; stroke-width: 1; stroke-dasharray: 3 3; fill: none; }
+  </style>
+
+  <rect width="1280" height="800" fill="#f3f1ea"/>
+
+  <!-- A · top nav -->
+  <text x="24" y="30" class="mono panel">A · SITE TOP NAV (scripts/site/layout.mjs)</text>
+  <rect x="24" y="42" width="1232" height="54" fill="#f3f1ea" stroke="#d9d6ca"/>
+  <text x="48" y="75" class="mono brand">Artisyn Log Hub</text>
+  <text x="228" y="74" class="mono navnew">Home</text>
+  <text x="280" y="74" class="mono nav">Features</text>
+  <text x="366" y="74" class="mono nav">Get started</text>
+  <text x="478" y="74" class="mono nav">Configuration</text>
+  <text x="606" y="74" class="mono nav">Using Log Hub</text>
+  <text x="734" y="74" class="mono nav">Data &amp; security</text>
+  <text x="880" y="74" class="mono nav">FAQ</text>
+  <text x="924" y="74" class="mono nav">Deck</text>
+  <rect x="968" y="56" width="92" height="28" class="new"/>
+  <text x="977" y="74" class="mono nav">One-pager</text>
+  <text x="1074" y="74" class="mono nav">GitHub ↗</text>
+  <path class="lead-line" d="M1014 84 V112"/>
+  <text x="1014" y="126" text-anchor="middle" class="mono noteh">NEW</text>
+  <text x="1014" y="143" text-anchor="middle" class="sans note">after “Deck”; opens log-hub-onepager/</text>
+
+  <!-- B · Home hero actions -->
+  <text x="24" y="196" class="mono panel">B · HOME — HERO ACTIONS (site/pages/home.html)</text>
+  <rect x="24" y="208" width="1232" height="112" fill="#f3f1ea" stroke="#d9d6ca"/>
+  <rect x="48" y="242" width="138" height="44" rx="2" fill="#1f5c45"/>
+  <text x="117" y="269" text-anchor="middle" class="mono btnp">GET STARTED</text>
+  <rect x="198" y="242" width="300" height="44" rx="2" fill="#faf9f4" stroke="#1f5c45"/>
+  <text x="348" y="269" text-anchor="middle" class="mono btn">YOUR HARNESS, MEASURED (DECK)</text>
+  <rect x="510" y="242" width="124" height="44" rx="2" fill="#faf9f4" stroke="#1f5c45"/>
+  <text x="572" y="269" text-anchor="middle" class="mono btn">ONE-PAGER</text>
+  <rect x="504" y="236" width="136" height="56" class="new"/>
+  <rect x="652" y="242" width="112" height="44" rx="2" fill="#faf9f4" stroke="#1f5c45"/>
+  <text x="708" y="269" text-anchor="middle" class="mono btn">GITHUB ↗</text>
+  <path class="lead-line" d="M572 236 V226 H800"/>
+  <text x="808" y="230" class="mono noteh">NEW</text>
+  <text x="808" y="247" class="sans note">Same .button style, next to the deck button,</text>
+  <text x="808" y="263" class="sans note">where the deck is linked on Home.</text>
+
+  <!-- C · deck closing slide -->
+  <text x="24" y="368" class="mono panel">C · DECK — CLOSING SLIDE (site/deck/index.html, .closing-links)</text>
+  <rect x="24" y="380" width="1232" height="396" fill="#e8e5db" stroke="#d9d6ca"/>
+  <rect x="64" y="400" width="820" height="356" fill="#faf9f4" stroke="#b8b5a8"/>
+  <rect x="64" y="400" width="10" height="356" fill="#1f5c45"/>
+  <text x="112" y="500" class="sans" font-size="19" fill="#36433c">$8 and 10 minutes: now you know whether that was good, and why.</text>
+  <text x="112" y="544" class="mono" font-size="30" font-weight="700" fill="#17201b">Start with one session.</text>
+  <text x="112" y="572" class="mono" font-size="13" fill="#9a6614">Open source by DataArt · MIT · install on one of your hosts, hook one repository</text>
+  <rect x="112" y="596" width="144" height="46" rx="2" fill="#1f5c45"/>
+  <text x="184" y="626" text-anchor="middle" class="sans dbtnp">Get started</text>
+  <rect x="268" y="596" width="92" height="46" rx="2" fill="#faf9f4" stroke="#1f5c45"/>
+  <text x="314" y="626" text-anchor="middle" class="sans dbtn">Home</text>
+  <rect x="372" y="596" width="116" height="46" rx="2" fill="#faf9f4" stroke="#1f5c45"/>
+  <text x="430" y="626" text-anchor="middle" class="sans dbtn">Features</text>
+  <rect x="500" y="596" width="132" height="46" rx="2" fill="#faf9f4" stroke="#1f5c45"/>
+  <text x="566" y="626" text-anchor="middle" class="sans dbtn">One-pager</text>
+  <rect x="494" y="590" width="144" height="58" class="new"/>
+  <rect x="644" y="596" width="124" height="46" rx="2" fill="#faf9f4" stroke="#1f5c45"/>
+  <text x="706" y="626" text-anchor="middle" class="sans dbtn">GitHub ↗</text>
+  <line x1="112" y1="716" x2="852" y2="716" stroke="#d9d6ca"/>
+  <text x="112" y="738" class="sans" font-size="12" fill="#66726a">https://dataart.github.io/artisyn-log-hub/</text>
+  <path class="lead-line" d="M566 648 V676 H908"/>
+  <text x="916" y="664" class="mono noteh">NEW</text>
+  <text x="916" y="681" class="sans note">Fifth .closing-links item after “Features”</text>
+  <text x="916" y="697" class="sans note">(label and position are an open question).</text>
+  <text x="916" y="713" class="sans note">The slide is also rendered into the deck's</text>
+  <text x="916" y="729" class="sans note">own PDF, so the row must still fit one line.</text>
+</svg>

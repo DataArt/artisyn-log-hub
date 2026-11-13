@@ -40,3 +40,7 @@ Folders are named `<YYYY-MM-DD>-<slug>` (the day the task was created).
 - [2026-10-22-jetbrains-raw-mode-menu] Claude-Docker Full-Screen Menu Kills the JetBrains Terminal — archived 2026-11-10
 - [2026-11-05-budgets-threshold-alerts] Budgets, Spend Forecasts and Cost Slices (Display-Only) — archived 2026-11-10
 - [2026-11-10-sysctx-prompt-viewer] System Prompt Viewer on the System Context Anatomy Tab — archived 2026-11-11
+- [2026-11-11-sysctx-recommendations] Startup Context Recommendations on the System Context Anatomy Tab — archived 2026-11-11
+- [2026-11-10-harness-entries-ui-review] Harness-Injected Transcript Entries — Where to Show Them, and a Logs Tab Review — archived 2026-11-12
+- [2026-11-09-after-11-11-node-image-bump] Node Image Bump After the 2026-11-11 Security Release — archived 2026-11-12
+- [2026-11-12-big-test-stale-checks] Fix Stale Checks in the Big Pre-Prod E2E Test — archived 2026-11-12

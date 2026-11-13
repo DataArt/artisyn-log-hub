@@ -7,7 +7,7 @@ tags:
   - server
   - analytics
   - llm
-timestamp: "2026-10-14T00:00:00+04:00"
+timestamp: "2026-11-11T00:00:00+04:00"
 ---
 
 # Turn-End Cost Advisor and Session Attributes
@@ -28,6 +28,7 @@ Both run hook-side through the user's own `claude -p`, never on the server.
 | `Stop` trigger | `hook/.claude/telemetry_tool/post-turn-analysis-hook.js` |
 | Detached worker | `hook/.claude/telemetry_tool/post-turn-analysis-worker.js` |
 | LLM call helper | `hook/.claude/telemetry_tool/claude-invoke-async.js` (`callLlmAsync`) |
+| Advisor evidence | `hook/.claude/telemetry_tool/advisor-evidence.js` (`buildAdvisorEvidence`) |
 | Attribute failure-cap state | `hook/.claude/telemetry_tool/session-attribution-state.js` |
 | Combined config | `GET /api/v2/post-turn-analysis/config` — `server/src/logs/post-turn-analysis/post-turn-analysis.controller.ts` |
 | Advisor runs | `POST /api/v2/turn-end-cost-advisor` — `server/src/logs/turn-end-cost-advisor/turn-end-cost-advisor.service.ts` |
@@ -108,18 +109,34 @@ turn is still analysed:
 
 ## Advisor prompt inputs
 
-`buildAdvisorPrompt()` asks for JSON `{ general, costFactors[], harnessAdvice[] }` and gives the
-model:
+`buildAdvisorPrompt()` asks for JSON `{ general, costFactors[], harnessAdvice[] }` (the shape the
+server and the Advisor tab have always used) and gives the model:
 
-- turns, prompts (whole tree), work time, session cost so far, model and context window;
-- three timed context figures from `computeContextUsage()`: **initial** (the first assistant event
-  with usage), **current** (the last assistant event, overridden by a later `compact_boundary`'s
-  `preTokens`) and **peak** (the maximum over all assistant events and compact boundaries);
-- tool usage, file usage by category, and the skills invoked;
-- the (possibly truncated) list of user prompts.
+- a summary: turns, prompts (whole tree), work time, model, context window, context now and peak
+  (`computeContextUsage()`), tool calls and files by category on one line each, skills invoked;
+- the **evidence** from `advisor-evidence.js` (`buildAdvisorEvidence`), read from the session's
+  own transcript and every `agent-*.jsonl` under `<session>/subagents/` (workflow agents included,
+  with their `.meta.json`), priced with the server's `GET /api/v1/model-pricing` rates (list prices
+  for a model it does not know): cost split session vs agents and by token kind, context per call,
+  one line per agent (cost, startup write, context, tool mix, failed calls, images, cache rebuilds,
+  start of its brief), a group line for tiny agents (3 or fewer tool calls), cache rebuilds with
+  their cause, the largest tool results kept in context, files read repeatedly, failed tool calls;
+- the prompts, each with its cost in this session, API calls and context at start and end.
+  Automatic turns (a finished background task, a compaction, a non-human queued command) are
+  unnumbered `(auto)` lines; a prompt repeated verbatim 3+ times is folded into one line. Prompts
+  typed while the model was busy (`queued_command` attachments) count as user prompts here and in
+  `buildPromptTurns()`.
 
-The prompt tells the model not to claim *when* a figure was reached ("upfront", "early") unless that
-point's number is given — only the initial, current and peak context lines carry timing.
+The rules: [algorithms/advisor-evidence.md](algorithms/advisor-evidence.md). How the shape was
+chosen and checked on real sessions: `docs/pocs/2026-11-11-2023-advisor-evidence/`.
+
+**Advice policy.** Only three kinds of advice are allowed, each citing a number from the evidence:
+a fresh session where the context stayed large after the work changed topic (not when the user
+said to stay), a rule for a correction that recurs, and tiny one-command agents run as one
+scripted step or one agent per group. Model-switch advice and a fixed list of stock tips
+(batching calls, trimming CLAUDE.md, /compact, fewer screenshots, ...) are forbidden; an empty
+`harnessAdvice` is the expected answer for a cheap or efficient session. The answer is always in
+English, whatever language the session prompts are in.
 
 **Isolation of the LLM call (both branches).** `callLlmAsync()` runs `claude -p` with
 `--tools= --strict-mcp-config --disable-slash-commands`: everything the model needs is in the
