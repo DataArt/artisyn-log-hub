@@ -11,7 +11,7 @@ runners and type definitions are not part of the product.
 
 | Component | Version | License | Role |
 |---|---|---|---|
-| PostgreSQL | 18.6 | PostgreSQL License | The only datastore — holds all sessions, telemetry, users, teams and repository config. Runs as a separate service, not bundled into the application image. |
+| PostgreSQL | 18.7 | PostgreSQL License | The only datastore — holds all sessions, telemetry, users, teams and repository config. Runs as a separate service, not bundled into the application image. |
 | `plpgsql` | 1.0 | PostgreSQL License | PostgreSQL's built-in procedural language, used by migrations. The only installed database extension. |
 | Node.js | 26.13.1 | MIT (bundled: V8 — BSD-3-Clause, OpenSSL — Apache-2.0, ICU — Unicode-3.0) | Runtime for the server process and for the telemetry hook on your own machine. |
 | Alpine Linux (`node:26.13.1-alpine3.24` base) | 3.24 | Mixed (musl libc MIT, BusyBox GPL-2.0, other packages MIT/BSD) | Base operating system inside the container. |

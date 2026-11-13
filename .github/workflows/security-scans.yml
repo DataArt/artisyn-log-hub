@@ -146,7 +146,7 @@ jobs:
     env:
       SNYK_VERSION: 1.1308.3
       SNYK_SHA256: 5f323f45885341ea1473639859271925912ece82a2f77bc146bb4468f9838840
-      BUN_VERSION: 1.3.14
+      BUN_VERSION: 1.4.4
       SNYK_COMMON_FLAGS: >-
         --all-projects --detection-depth=4
         --exclude=node_modules,dist,fixtures,pocs,marketplace,tmp

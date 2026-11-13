@@ -4,5 +4,5 @@
 # The stock Node 22 Debian image already ships bash, coreutils, findutils and procps; this file pins
 # the image and fails the build if any of them is missing. The repo and this project are mounted at
 # run time (/repo read-only, /work read-write), nothing is copied in.
-FROM node:22-bookworm
+FROM node:22.23.5-bookworm
 RUN bash --version >/dev/null && tee --version >/dev/null && find --version >/dev/null && ps --version >/dev/null

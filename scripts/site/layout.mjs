@@ -102,6 +102,7 @@ function topNav(prefix, nav, activeSection) {
   }
   items.push(navLink(`${prefix}questions.html`, 'FAQ', activeSection === 'questions'));
   items.push(navLink(`${prefix}deck/index.html`, 'Deck', activeSection === 'deck'));
+  items.push(navLink(`${prefix}log-hub-onepager/index.html`, 'One-pager', false));
   items.push(navLink(REPO_URL, 'GitHub ↗', false, ' rel="noopener noreferrer"'));
   return `<header class="site-header">
   <a class="site-brand" href="${prefix}index.html">${escapeHtml(SITE_NAME)}</a>

@@ -53,3 +53,6 @@ against `/etc/shadow` without PAM inherits the bug; no Log Hub image runs one to
 - **2026-11-12:** The runtime image moved to `node:26.13.1-alpine3.24` (Alpine 3.24.4) in task
   `2026-11-09-after-11-11-node-image-bump`; it ships musl `1.2.6-r3`. This task stays open — the
   musl `crypt()` fix is a separate matter.
+- **2026-11-13:** `release-template/docker-compose.yml` moved to `postgres:18.7-alpine` (Alpine
+  3.24.4, Postgres 18.7 bug-fix release) after the morning check — a minor-version bump, not the
+  musl fix. Task stays open.

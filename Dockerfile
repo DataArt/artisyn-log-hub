@@ -3,7 +3,7 @@
 
 # Stage 1 — client-build
 FROM --platform=$BUILDPLATFORM node:26.13.1-slim AS client-build
-RUN npm install -g bun@1.3.14
+RUN npm install -g bun@1.4.4
 WORKDIR /app/client
 # client/vite.config.ts aliases @loghub/pricing to the repo-local package sources.
 COPY packages/ /app/packages/

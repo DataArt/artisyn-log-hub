@@ -6,7 +6,8 @@ artisyn-log-hub server. Installation, configuration and the full list of setting
 [HOW_HOOK_WORKS.md](./HOW_HOOK_WORKS.md).
 
 Requirements on each developer machine: Claude Code and `node` on PATH (the hooks run with it).
-**Node.js:** 22+ recommended (18 and 20 are end-of-life); 18.19 minimum.
+**Node.js:** 22, 24 or 26 recommended, patched to at least 22.23.5 / 24.22.3 / 26.13.1 (the November
+2026 security releases; 18 and 20 are end-of-life and get no fixes); 18.19 minimum.
 
 > **Disclaimer.** This project is not affiliated with or endorsed by Anthropic, Cursor or GitHub.
 > "Claude" and "Claude Code" are trademarks of Anthropic.

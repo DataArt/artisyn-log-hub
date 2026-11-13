@@ -67,8 +67,8 @@ RUN set -eux; \
 
 FROM fetch-base AS fetch-bun
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
-ARG BUN_VERSION=1.3.14
-ARG BUN_SHA256=951ee2aee855f08595aeec6225226a298d3fea83a3dcd6465c09cbccdf7e848f
+ARG BUN_VERSION=1.4.4
+ARG BUN_SHA256=bf8ccbfb2b0b80159e0f9a6d15c55317add8077534dbc6130a3edb52fccb395c
 RUN set -eux; \
     aria2c -x16 -s16 --console-log-level=warn -o bun.zip \
       "https://github.com/oven-sh/bun/releases/download/bun-v${BUN_VERSION}/bun-linux-x64.zip"; \

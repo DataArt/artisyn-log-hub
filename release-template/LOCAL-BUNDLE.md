@@ -42,7 +42,8 @@ docker compose version
 ```
 
 The hooks on developer machines (not this server) run with the developer's own `node` from PATH.
-**Node.js:** 22+ recommended (18 and 20 are end-of-life); 18.19 minimum.
+**Node.js:** 22, 24 or 26 recommended, patched to at least 22.23.5 / 24.22.3 / 26.13.1 (the November
+2026 security releases; 18 and 20 are end-of-life and get no fixes); 18.19 minimum.
 
 ## Install on a clean machine (no source code needed)
 

@@ -16,7 +16,7 @@ anything. The rows and their expected results are documented in the repo's
 | `bin/` | Fixture tools: `zz` (20 000 lines, exit code from `$ZZ_EXIT`, `zz args …`), `zzbin` (bytes 0–255), `zzin` (stdin to stdout and stderr), `zzsleep` (sleeps), `zzc.cmd` (Windows) |
 | `run-check.mjs` | The runner (below) |
 | `check.config.json` | Paths of the Log Hub repo, its hook and the Claude profile for the live run |
-| `linux/Dockerfile` | Linux image for `check:linux` (`node:22-bookworm`) |
+| `linux/Dockerfile` | Linux image for `check:linux` (`node:22.23.5-bookworm`) |
 | `linux/live-settings.json` | Hook registrations for the live session (`claude --settings`) |
 | `runs/<timestamp>-<kind>/` | One folder per run: shims, records, `fidelity-results.json`, `live.json` |
 | `.loghub-tool-wrap-check` | Marker: the generator only writes into a folder that has it (or an empty one) |
@@ -25,7 +25,7 @@ anything. The rows and their expected results are documented in the repo's
 
 ```sh
 npm run check                                   # this machine: Git Bash, PowerShell 5.1, PowerShell 7 (when installed)
-npm run check:linux                             # Linux container, node:22-bookworm (GNU tools)
+npm run check:linux                             # Linux container, node:22.23.5-bookworm (GNU tools)
 npm run check:linux -- --image node:22-alpine   # Linux container, busybox tools
 npm run check:linux-live                        # live `claude -p` session in log-hub-dev:latest
 ```

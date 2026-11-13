@@ -82,7 +82,7 @@ article itself holds the details. Keep new lines to one or two sentences.
 * [CI Security Scans](ci-security-scans.md) - Read before touching `security-scans.yml`, `virustotal.yml`, `scripts/ci/` or the config-guard allowlist, or when a scan row / PR security block looks wrong
 * [Git Hooks and Secret Scanning](git-hooks.md) - Read before touching `.githooks/`, gitleaks config or when a commit/push is blocked by the scan
 * [Claude Code Dev Container (sandboxes)](docker-dev-container.md) - Read before touching `scripts/claude-docker*` or `docker-dev/`, or when a sandbox misbehaves: sandbox model, launcher rules and deletion guards, mounts, `TEST_DATABASE_URL`, provisioning, prune rules, Windows menu quirks, limitations (commands: `--help`)
-* [User Docs and Site](user-docs-and-site.md) - Read before editing `user-docs/`, the in-app help menu or the GitHub Pages site/deck: `nav.json`, link rules, the help generator, the site renderer
+* [User Docs and Site](user-docs-and-site.md) - Read before editing `user-docs/`, the in-app help menu or the GitHub Pages site/deck/one-pager: `nav.json`, link rules, the help generator, the site renderer
 
 ## Tests and algorithm docs
 
