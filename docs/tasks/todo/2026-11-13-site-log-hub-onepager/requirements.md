@@ -161,3 +161,4 @@ None.
 ## Notes
 
 <!-- Append timestamped notes here as work progresses -->
+2026-11-13 — implemented via adlc-lh:implement; checks green. Print uses a 14 px sheet font (the plan said 12 px): the sheet fills about 80 % of the page instead of two thirds and is still one page at A4 and Letter.

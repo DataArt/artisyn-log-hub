@@ -6,7 +6,8 @@
 //   docs/<slug>.html              every user-docs/nav.json page (markdown → HTML, heading ids, TOC)
 //   docs/images/                  the user-docs/images/ files those pages link to
 //   deck/                         copy of site/deck/ with placeholders filled in every .html
-//   assets/                       copy of site/assets/
+//   log-hub-onepager/             copy of site/log-hub-onepager/, placeholders filled the same way
+//   assets/                      copy of site/assets/
 //   404.html                      site/pages/404.html (noindex, absolute SITE_URL links; GitHub Pages
 //                                 serves it for a miss at any depth)
 //   sitemap.xml                   canonical URL of every .html page except 404.html
@@ -18,10 +19,12 @@
 // Validation (all errors are collected and printed, then exit 1, nothing is written):
 //   - every relative link in every page resolves to a nav page (scripts/user-docs/links.js);
 //   - site/data/example-dataset.json is consistent (dataset.mjs checkDataset);
-//   - every {{ds:…}} / {{site:…}} placeholder in Home, Features, Questions, 404 and the deck is known;
+//   - every {{ds:…}} / {{site:…}} placeholder in Home, Features, Questions, 404, the deck and the
+//     one-pager is known;
 //   - site/assets/favicon.svg exists (committed copy of client/public/favicon.svg);
-//   - every indexable page (docs, Home, Features, Questions, deck) has a description of 50–160
-//     chars, unique across the site (docs: nav.json `description`; deck: its <meta name="description">);
+//   - every indexable page (docs, Home, Features, Questions, deck, one-pager) has a description of
+//     50–160 chars, unique across the site (docs: nav.json `description`; deck and one-pager: their
+//     <meta name="description">);
 //   - every sitemap URL is under SITE_URL.
 // Docs pages get {{RETENTION_DAYS}} replaced by a generic phrase (DD-16).
 //
@@ -367,8 +370,12 @@ function main() {
       }
     }
 
-    // Deck (standalone pages; placeholders filled in every .html) and assets (copied as is).
-    for (const [dir, target, fill] of [[path.join(SITE_DIR, 'deck'), 'deck', true], [path.join(SITE_DIR, 'assets'), 'assets', false]]) {
+    // Deck and one-pager (standalone pages; placeholders filled in every .html) and assets (copied as is).
+    for (const [dir, target, fill] of [
+      [path.join(SITE_DIR, 'deck'), 'deck', true],
+      [path.join(SITE_DIR, 'log-hub-onepager'), 'log-hub-onepager', true],
+      [path.join(SITE_DIR, 'assets'), 'assets', false],
+    ]) {
       if (!fs.existsSync(dir)) {
         if (fill) errors.push(`${rel(dir)}: missing`);
         continue;

@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Artisyn Log Hub one-pager — your Claude Code harness, measured</title>
+  <meta name="description" content="Artisyn Log Hub on one page: what it measures in Claude Code sessions, the eight questions it answers, how it is deployed and where to get it.">
+  <!-- Head tags hand-copied from scripts/site/layout.mjs page() (og:image values = OG_IMAGE_*);
+       og:title must stay equal to the page title, og:description to the description above. -->
+  <link rel="canonical" href="{{site:url}}log-hub-onepager/">
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="Artisyn Log Hub">
+  <meta property="og:title" content="Artisyn Log Hub one-pager — your Claude Code harness, measured">
+  <meta property="og:description" content="Artisyn Log Hub on one page: what it measures in Claude Code sessions, the eight questions it answers, how it is deployed and where to get it.">
+  <meta property="og:url" content="{{site:url}}log-hub-onepager/">
+  <meta property="og:image" content="{{site:url}}assets/og-image.png">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="Artisyn Log Hub: It ran alone for 10 minutes, cost $8 and shipped the feature. All good? Quality, cost, speed, autonomy, safety">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="icon" href="../assets/favicon.svg" type="image/svg+xml">
+  <link rel="apple-touch-icon" href="../assets/apple-touch-icon.png">
+  <link rel="stylesheet" href="../assets/theme.css">
+  <link rel="stylesheet" href="onepager.css">
+</head>
+<body>
+<a class="op-back" href="../index.html">← Log Hub site</a>
+<main class="op-sheet">
+  <header class="op-head">
+    <p class="op-brand">Artisyn Log Hub</p>
+    <p class="op-tag">Your Claude Code harness, measured</p>
+  </header>
+
+  <h1 class="op-hook">It ran alone for {{ds:session.durationMin}} minutes, cost {{ds:session.total|usd0}} and {{ds:session.outcome}}. All good?</h1>
+
+  <p class="op-thesis">A harness — CLAUDE.md, rules, skills, hooks, agents, MCP servers, a knowledge base — decides what a Claude Code session costs and delivers, yet it is tuned as a black box. Log Hub shows what each part does.
+    <span class="op-study">With the same model, the harness alone changes the cost per task up to five times at similar success rates (UC Berkeley and Arena, 2026).</span></p>
+
+  <section class="op-answers" aria-labelledby="op-answers-title">
+    <h2 class="op-label" id="op-answers-title">What Log Hub answers</h2>
+    <ol class="op-groups">
+      <li data-group="cost"><span class="op-no">01 · cost</span>Where the money goes: per session, branch, skill and tool, with budgets and a forecast.</li>
+      <li data-group="speed"><span class="op-no">02 · speed</span>How long the agent worked alone, and where the time went.</li>
+      <li data-group="context"><span class="op-no">03 · context</span>What your harness loads into every session, and what the agent actually uses.</li>
+      <li data-group="quality"><span class="op-no">04 · quality</span>Which of your checks ran in a session, and with what result.</li>
+      <li data-group="team"><span class="op-no">05 · team</span>Trends, reports and anomalies across every session and developer.</li>
+      <li data-group="tools"><span class="op-no">06 · tools</span>Which MCP servers and CLI tools work, fail or are never called.</li>
+      <li data-group="safety"><span class="op-no">07 · safety</span>What the agent read, ran and sent — traceable afterwards.</li>
+      <li data-group="trust"><span class="op-no">08 · trust</span>Log Hub's own data: what is collected, who can see it, how long it is kept.</li>
+    </ol>
+  </section>
+
+  <figure class="shot op-shot"><img src="../assets/shots/spend-budget.png" width="743" height="570" alt="Repository Spend tab: a monthly budget bar at 27 percent with threshold ticks, burn rate, forecast, days until it runs out, the previous period, and daily spend against the dashed budget pace"><figcaption>Repository → Spend</figcaption></figure>
+
+  <section class="op-how" aria-labelledby="op-how-title">
+    <h2 class="op-label" id="op-how-title">How it runs</h2>
+    <ul class="op-runs">
+      <li><b>Self-hosted</b>Runs on your own server with Docker and PostgreSQL.</li>
+      <li><b>Data stays on your host</b>Session data is stored in your own database; there is no hosted service.</li>
+      <li><b>Network-isolated</b>Works with no internet access: the app, its help and its docs ship together.</li>
+    </ul>
+  </section>
+
+  <section class="op-get" aria-labelledby="op-get-title">
+    <h2 class="op-label" id="op-get-title">Get it</h2>
+    <ul class="op-links">
+      <li><span>Site</span><a href="{{site:url}}">{{site:url}}</a></li>
+      <li><span>GitHub</span><a href="{{site:repo}}" rel="noopener noreferrer">{{site:repo}}</a></li>
+      <li><span>Releases</span><a href="{{site:releases}}" rel="noopener noreferrer">{{site:releases}}</a></li>
+      <li><span>Deck</span><a href="{{site:url}}deck/">{{site:url}}deck/</a></li>
+    </ul>
+  </section>
+
+  <p class="op-footer">Open source by DataArt · MIT · not affiliated with Anthropic</p>
+</main>
+</body>
+</html>
