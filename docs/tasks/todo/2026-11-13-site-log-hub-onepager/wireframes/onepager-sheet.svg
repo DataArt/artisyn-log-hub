@@ -1,0 +1,232 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1180 1260" width="1180" height="1260" role="img" aria-label="Wireframe: the log-hub-onepager page on a desktop screen and on paper (one A4 sheet)">
+  <title>log-hub-onepager — one sheet (desktop screen and A4 / Letter print)</title>
+  <style>
+    .mono { font-family: ui-monospace, "Cascadia Mono", Consolas, Menlo, monospace; }
+    .sans { font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif; }
+    .brand { font-size: 20px; font-weight: 700; fill: #1f5c45; }
+    .eyebrow { font-size: 12px; font-weight: 600; letter-spacing: 1px; fill: #9a6614; }
+    .h1 { font-size: 30px; font-weight: 600; fill: #1f5c45; }
+    .lead { font-size: 15px; fill: #36433c; }
+    .label { font-size: 12px; font-weight: 600; letter-spacing: 1px; fill: #66726a; }
+    .dimno { font-size: 10.5px; letter-spacing: 0.6px; fill: #9a6614; }
+    .tile { font-size: 13px; font-weight: 600; fill: #17201b; }
+    .cap { font-size: 11px; fill: #66726a; }
+    .cellh { font-size: 13px; font-weight: 600; fill: #1f5c45; }
+    .cellp { font-size: 12.5px; fill: #36433c; }
+    .lk { font-size: 12.5px; font-weight: 600; fill: #17201b; }
+    .url { font-size: 12.5px; fill: #1f5c45; text-decoration: underline; }
+    .foot { font-size: 11.5px; fill: #66726a; }
+    .note { font-size: 12px; fill: #36433c; }
+    .noteh { font-size: 11px; font-weight: 700; letter-spacing: 0.8px; fill: #9a6614; }
+    .card { fill: #faf9f4; stroke: #b8b5a8; }
+    .ph { fill: #e8e5db; }
+    .lead-line { stroke: #9a6614; stroke-width: 1; stroke-dasharray: 3 3; fill: none; }
+  </style>
+
+  <!-- page background (theme page token) -->
+  <rect width="1180" height="1260" fill="#f3f1ea"/>
+
+  <!-- screen-only back link (like the deck's "← Log Hub site") -->
+  <rect x="40" y="18" width="124" height="28" rx="2" fill="#faf9f4" stroke="#b8b5a8" stroke-dasharray="4 3"/>
+  <text x="52" y="37" class="sans" font-size="13" fill="#17201b">← Log Hub site</text>
+
+  <!-- the sheet: A4 proportions (1 : 1.414) -->
+  <rect x="40" y="60" width="820" height="1160" fill="#faf9f4" stroke="#b8b5a8"/>
+
+  <!-- header -->
+  <text x="80" y="104" class="mono brand">Artisyn Log Hub</text>
+  <text x="820" y="103" text-anchor="end" class="mono eyebrow">// YOUR CLAUDE CODE HARNESS, MEASURED</text>
+  <line x1="80" y1="120" x2="820" y2="120" stroke="#d9d6ca"/>
+
+  <!-- hook -->
+  <text x="80" y="168" class="mono h1">It ran alone for 10 minutes, cost $8 and</text>
+  <text x="80" y="206" class="mono h1">shipped the feature. All good?</text>
+
+  <!-- thesis, one attributed study figure -->
+  <text x="80" y="244" class="sans lead">The harness — CLAUDE.md, rules, skills, hooks, agents, MCP servers, a knowledge base — moves</text>
+  <text x="80" y="266" class="sans lead">quality, cost, speed, autonomy and safety. With the same model it changes the cost per task up to</text>
+  <text x="80" y="288" class="sans lead">five times (UC Berkeley and Arena, 2026). Yet it is tuned as a black box. Log Hub opens it.</text>
+
+  <!-- eight groups -->
+  <text x="80" y="326" class="mono label">WHAT LOG HUB ANSWERS</text>
+  <g>
+    <rect x="80" y="338" width="177" height="80" class="card"/><rect x="80" y="338" width="177" height="3" fill="#1f5c45"/>
+    <text x="92" y="361" class="mono dimno">01 · COST</text>
+    <text x="92" y="383" class="sans tile">Was $8 a lot?</text>
+
+    <rect x="268" y="338" width="177" height="80" class="card"/><rect x="268" y="338" width="177" height="3" fill="#1f5c45"/>
+    <text x="280" y="361" class="mono dimno">02 · SPEED</text>
+    <text x="280" y="383" class="sans tile">How fast,</text>
+    <text x="280" y="400" class="sans tile">how far alone?</text>
+
+    <rect x="456" y="338" width="177" height="80" class="card"/><rect x="456" y="338" width="177" height="3" fill="#1f5c45"/>
+    <text x="468" y="361" class="mono dimno">03 · CONTEXT</text>
+    <text x="468" y="383" class="sans tile">What it loads,</text>
+    <text x="468" y="400" class="sans tile">what it uses</text>
+
+    <rect x="643" y="338" width="177" height="80" class="card"/><rect x="643" y="338" width="177" height="3" fill="#1f5c45"/>
+    <text x="655" y="361" class="mono dimno">04 · QUALITY</text>
+    <text x="655" y="383" class="sans tile">Did its checks</text>
+    <text x="655" y="400" class="sans tile">run and pass?</text>
+
+    <rect x="80" y="428" width="177" height="80" class="card"/><rect x="80" y="428" width="177" height="3" fill="#1f5c45"/>
+    <text x="92" y="451" class="mono dimno">05 · TEAM</text>
+    <text x="92" y="473" class="sans tile">Across every session</text>
+
+    <rect x="268" y="428" width="177" height="80" class="card"/><rect x="268" y="428" width="177" height="3" fill="#1f5c45"/>
+    <text x="280" y="451" class="mono dimno">06 · TOOLS</text>
+    <text x="280" y="473" class="sans tile">Does this tool work?</text>
+
+    <rect x="456" y="428" width="177" height="80" class="card"/><rect x="456" y="428" width="177" height="3" fill="#1f5c45"/>
+    <text x="468" y="451" class="mono dimno">07 · SAFETY</text>
+    <text x="468" y="473" class="sans tile">What the agent</text>
+    <text x="468" y="490" class="sans tile">read and sent</text>
+
+    <rect x="643" y="428" width="177" height="80" class="card"/><rect x="643" y="428" width="177" height="3" fill="#1f5c45"/>
+    <text x="655" y="451" class="mono dimno">08 · TRUST</text>
+    <text x="655" y="473" class="sans tile">Where your</text>
+    <text x="655" y="490" class="sans tile">data lives</text>
+  </g>
+
+  <!-- screenshots -->
+  <text x="80" y="546" class="mono label">IN THE APP</text>
+  <g>
+    <rect x="80" y="558" width="365" height="280" class="card"/>
+    <rect x="86" y="564" width="353" height="246" fill="#ffffff" stroke="#d9d6ca"/>
+    <!-- placeholder: Context Growth bars -->
+    <rect x="102" y="580" width="120" height="10" class="ph"/>
+    <rect x="102" y="772" width="18" height="22" fill="#4a8068"/>
+    <rect x="128" y="756" width="18" height="38" fill="#4a8068"/>
+    <rect x="154" y="736" width="18" height="58" fill="#4a8068"/>
+    <rect x="180" y="712" width="18" height="82" fill="#4a8068"/>
+    <rect x="206" y="690" width="18" height="104" fill="#4a8068"/>
+    <rect x="232" y="668" width="18" height="126" fill="#4a8068"/>
+    <rect x="258" y="648" width="18" height="146" fill="#9a6614"/>
+    <rect x="284" y="632" width="18" height="162" fill="#9a6614"/>
+    <rect x="310" y="620" width="18" height="174" fill="#9a6614"/>
+    <rect x="336" y="612" width="18" height="182" fill="#9a6614"/>
+    <rect x="362" y="608" width="18" height="186" fill="#9a6614"/>
+    <rect x="388" y="606" width="18" height="188" fill="#9a6614"/>
+    <line x1="98" y1="794" x2="426" y2="794" stroke="#b8b5a8"/>
+    <text x="88" y="828" class="mono cap">Session → Charts → Context Growth</text>
+
+    <rect x="455" y="558" width="365" height="280" class="card"/>
+    <rect x="461" y="564" width="353" height="246" fill="#ffffff" stroke="#d9d6ca"/>
+    <!-- placeholder: Tools/MCP tree + call list -->
+    <rect x="477" y="580" width="120" height="10" class="ph"/>
+    <rect x="477" y="606" width="110" height="188" fill="#faf9f4" stroke="#d9d6ca"/>
+    <rect x="487" y="620" width="70" height="8" class="ph"/>
+    <rect x="497" y="640" width="78" height="8" class="ph"/>
+    <rect x="497" y="660" width="60" height="8" class="ph"/>
+    <rect x="487" y="680" width="74" height="8" class="ph"/>
+    <rect x="497" y="700" width="66" height="8" class="ph"/>
+    <rect x="497" y="720" width="80" height="8" class="ph"/>
+    <rect x="600" y="606" width="200" height="22" class="ph"/>
+    <rect x="600" y="636" width="200" height="16" fill="#faf9f4" stroke="#d9d6ca"/>
+    <rect x="600" y="658" width="200" height="16" fill="#faf9f4" stroke="#d9d6ca"/>
+    <rect x="600" y="680" width="200" height="16" fill="#faf9f4" stroke="#9a6614"/>
+    <rect x="600" y="702" width="200" height="16" fill="#faf9f4" stroke="#d9d6ca"/>
+    <rect x="600" y="724" width="200" height="16" fill="#faf9f4" stroke="#d9d6ca"/>
+    <rect x="600" y="746" width="200" height="16" fill="#faf9f4" stroke="#9a6614"/>
+    <rect x="600" y="768" width="200" height="16" fill="#faf9f4" stroke="#d9d6ca"/>
+    <text x="463" y="828" class="mono cap">Repository → Tools/MCP</text>
+  </g>
+
+  <!-- how it runs -->
+  <text x="80" y="874" class="mono label">HOW IT RUNS</text>
+  <g>
+    <rect x="80" y="886" width="240" height="78" fill="#f3f1ea" stroke="#b8b5a8" stroke-dasharray="4 3"/>
+    <text x="92" y="908" class="mono cellh">Self-hosted</text>
+    <text x="92" y="930" class="sans cellp">Docker + Postgres on your host;</text>
+    <text x="92" y="948" class="sans cellp">the hook installs via npx.</text>
+
+    <rect x="330" y="886" width="240" height="78" fill="#f3f1ea" stroke="#b8b5a8" stroke-dasharray="4 3"/>
+    <text x="342" y="908" class="mono cellh">Data stays on your host</text>
+    <text x="342" y="930" class="sans cellp">No vendor telemetry,</text>
+    <text x="342" y="948" class="sans cellp">no hosted service.</text>
+
+    <rect x="580" y="886" width="240" height="78" fill="#f3f1ea" stroke="#b8b5a8" stroke-dasharray="4 3"/>
+    <text x="592" y="908" class="mono cellh">Network-isolated</text>
+    <text x="592" y="930" class="sans cellp">App, in-app help and docs ship</text>
+    <text x="592" y="948" class="sans cellp">inside; works with no internet.</text>
+  </g>
+
+  <!-- links -->
+  <text x="80" y="1000" class="mono label">GET IT</text>
+  <rect x="80" y="1012" width="740" height="116" fill="#f3f1ea" stroke="#1f5c45"/>
+  <rect x="80" y="1012" width="4" height="116" fill="#1f5c45"/>
+  <text x="102" y="1038" class="mono lk">Site</text>
+  <text x="210" y="1038" class="mono url">https://dataart.github.io/artisyn-log-hub/</text>
+  <text x="102" y="1062" class="mono lk">GitHub</text>
+  <text x="210" y="1062" class="mono url">https://github.com/DataArt/artisyn-log-hub</text>
+  <text x="102" y="1086" class="mono lk">Releases</text>
+  <text x="210" y="1086" class="mono url">https://github.com/DataArt/artisyn-log-hub/releases</text>
+  <text x="102" y="1110" class="mono lk">Deck</text>
+  <text x="210" y="1110" class="mono url">https://dataart.github.io/artisyn-log-hub/deck/</text>
+
+  <!-- footer -->
+  <line x1="80" y1="1172" x2="820" y2="1172" stroke="#d9d6ca"/>
+  <text x="80" y="1194" class="mono foot">Open source by DataArt · MIT · not affiliated with Anthropic</text>
+  <text x="820" y="1194" text-anchor="end" class="mono foot">as of November 2026</text>
+
+  <!-- annotations -->
+  <g>
+    <path class="lead-line" d="M164 32 H884"/>
+    <text x="892" y="28" class="mono noteh">SCREEN ONLY</text>
+    <text x="892" y="45" class="sans note">Back link, hidden in print (open question).</text>
+
+    <path class="lead-line" d="M860 100 H884"/>
+    <text x="892" y="96" class="mono noteh">FR-1 · STANDALONE</text>
+    <text x="892" y="113" class="sans note">No site top nav, no sidebar; theme.css</text>
+    <text x="892" y="129" class="sans note">tokens, no external fonts or scripts.</text>
+
+    <path class="lead-line" d="M860 184 H884"/>
+    <text x="892" y="180" class="mono noteh">FR-2 · HOOK</text>
+    <text x="892" y="197" class="sans note">Figures are {{ds:…}} keys of</text>
+    <text x="892" y="213" class="sans note">example-dataset.json.</text>
+
+    <path class="lead-line" d="M860 266 H884"/>
+    <text x="892" y="262" class="mono noteh">THESIS</text>
+    <text x="892" y="279" class="sans note">One or two sentences, at most one study</text>
+    <text x="892" y="295" class="sans note">figure, attributed (institution, year).</text>
+
+    <path class="lead-line" d="M860 422 H884"/>
+    <text x="892" y="418" class="mono noteh">EIGHT GROUPS</text>
+    <text x="892" y="435" class="sans note">The deck map: cost, speed, context,</text>
+    <text x="892" y="451" class="sans note">quality, team, tools, safety, trust —</text>
+    <text x="892" y="467" class="sans note">one line each. 4 × 2 on a wide screen</text>
+    <text x="892" y="483" class="sans note">and on paper.</text>
+
+    <path class="lead-line" d="M860 698 H884"/>
+    <text x="892" y="694" class="mono noteh">SCREENSHOTS</text>
+    <text x="892" y="711" class="sans note">One or two real files from</text>
+    <text x="892" y="727" class="sans note">site/assets/shots/; caption says only</text>
+    <text x="892" y="743" class="sans note">where in the app. If the sheet does not</text>
+    <text x="892" y="759" class="sans note">fit one page, the second one goes first</text>
+    <text x="892" y="775" class="sans note">(open question).</text>
+
+    <path class="lead-line" d="M860 924 H884"/>
+    <text x="892" y="920" class="mono noteh">HOW IT RUNS</text>
+    <text x="892" y="937" class="sans note">Self-hosted, data on your host,</text>
+    <text x="892" y="953" class="sans note">network-isolated installation.</text>
+
+    <path class="lead-line" d="M860 1070 H884"/>
+    <text x="892" y="1066" class="mono noteh">FOUR LINKS</text>
+    <text x="892" y="1083" class="sans note">Full URL as visible text so it reads</text>
+    <text x="892" y="1099" class="sans note">from paper; absolute hrefs so they work</text>
+    <text x="892" y="1115" class="sans note">in a saved PDF (open question).</text>
+
+    <path class="lead-line" d="M860 1190 H884"/>
+    <text x="892" y="1186" class="mono noteh">FOOTER</text>
+    <text x="892" y="1203" class="sans note">Footer line and date stamp are open</text>
+    <text x="892" y="1219" class="sans note">questions.</text>
+
+    <text x="892" y="560" class="mono noteh">FR-3 · PRINT</text>
+    <text x="892" y="577" class="sans note">The sheet is one A4 page and one US</text>
+    <text x="892" y="593" class="sans note">Letter page; light palette on paper;</text>
+    <text x="892" y="609" class="sans note">no block is clipped or split.</text>
+  </g>
+
+  <!-- sheet size marker -->
+  <text x="450" y="1244" text-anchor="middle" class="mono cap">one sheet — A4 210 × 297 mm (also fits US Letter 215.9 × 279.4 mm)</text>
+</svg>
