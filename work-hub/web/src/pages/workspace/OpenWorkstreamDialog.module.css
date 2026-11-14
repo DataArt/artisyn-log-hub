@@ -1,0 +1,47 @@
+.preparing {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding-top: 1.5rem;
+  padding-bottom: 1.5rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: var(--color-muted-foreground);
+}
+
+.preparingIcon {
+  width: 1.25rem;
+  height: 1.25rem;
+  animation: spin 1s linear infinite;
+  color: var(--color-primary);
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.errorText {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: var(--color-destructive);
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.label {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  font-weight: 500;
+}

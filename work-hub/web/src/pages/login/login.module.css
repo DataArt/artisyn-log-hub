@@ -1,0 +1,142 @@
+/* Shared by the login-page components (LoginPage, IdentifyForm, PasswordLoginForm,
+ * AzureSignInButton). */
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.card {
+  width: 100%;
+  max-width: 24rem;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.footer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.fullWidth {
+  width: 100%;
+}
+
+.buttonIcon {
+  margin-right: 0.5rem;
+  width: 1rem;
+  height: 1rem;
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+.pageSpinner {
+  width: 1.5rem;
+  height: 1.5rem;
+  animation: spin 1s linear infinite;
+}
+
+.errorText {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: var(--color-destructive);
+}
+
+.mutedText {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: var(--color-muted-foreground);
+}
+
+.oauthError {
+  width: 100%;
+  max-width: 24rem;
+  text-align: center;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: var(--color-destructive);
+}
+
+.oauthErrorTitle {
+  font-weight: 600;
+}
+
+.forgotLink {
+  align-self: flex-end;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: var(--color-muted-foreground);
+  text-decoration-line: underline;
+}
+
+.forgotLink:hover {
+  color: var(--color-foreground);
+}
+
+.forgotDisabledGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.forgotLinkDisabled {
+  cursor: not-allowed;
+  align-self: flex-end;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: var(--color-muted-foreground);
+  text-decoration-line: none;
+  opacity: 0.6;
+}
+
+.forgotHint {
+  align-self: flex-end;
+  font-size: 0.75rem;
+  line-height: 1rem;
+  color: var(--color-muted-foreground);
+}
+
+.delayAlert {
+  border-radius: var(--radius-md);
+  border-width: 1px;
+  /* Tailwind amber-300 (no token). */
+  border-color: oklch(87.9% 0.169 91.605);
+  background-color: var(--color-warning-bg);
+  padding: 0.5rem 0.75rem;
+}
+
+.delayTitle {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  font-weight: 500;
+  /* Tailwind amber-900 (no token). */
+  color: oklch(41.4% 0.112 45.904);
+}
+
+.delayText {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: var(--color-warning-text);
+}
+
+.inlineLink {
+  text-decoration-line: underline;
+}
+
+.inlineLink:hover {
+  color: var(--color-foreground);
+}

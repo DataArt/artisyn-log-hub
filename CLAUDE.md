@@ -153,6 +153,32 @@ skills and workflows); this table is human documentation and must be kept in syn
   e2e suites and the scenario stand. `npm run test:scenarios` also runs it as its `contract` step. See
   `server/test/contract/README.md`.
 
+## Work Hub
+
+`work-hub/` is a separate product (Rust server, React SPA, own Postgres schema) that only lives in
+this repo: it is not part of `npm run build`, `dist/` or Log Hub's checks, and Log Hub's commands
+above never cover it. Read `docs/knowledgebase/work-hub.md` before touching it. Its own commands,
+all run **from `work-hub/`**:
+
+| Purpose | Command |
+|---|---|
+| Lint (`cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, web eslint, agent-names check, licence check) | `npm run lint` |
+| Typecheck (`tsc --noEmit` over `web/` and `tests/`) | `npm run typecheck` |
+| Algorithm tests (Rust table tests + web `*.algo.test.ts`) | `npm run test:algo` |
+| Build (web, then `cargo build --release`) | `npm run build` |
+| API contract tests (needs Postgres and Docker) | `npm run test:contract` |
+| Scenarios on an isolated stand (needs Postgres, Docker; Mailpit for mode b) | `npm run test:scenarios -- --mode a\|b\|c` |
+
+Test policy for Work Hub — the same three kinds, in its own places:
+
+- **Algorithm** — rows in `docs/algorithm-examples/<name>.json` for a `workhub-*` (or shared auth)
+  doc; the table tests are `work-hub/server/tests/algo.rs` and `work-hub/web/**/*.algo.test.ts`.
+- **API contract** — a new or changed route gets its row in
+  `work-hub/server/tests/contract/registry.rs` (the meta-test fails without it).
+- **Scenario** — a step in an existing scenario in `work-hub/tests/scenarios/`.
+- Scenario coverage is **not measured** for Work Hub yet (no Rust coverage tool in the alpha), so
+  the ≥ 80 % target does not apply to it until that follow-up lands.
+
 ## Background processes cleanup
 
 When you launch a long-running command in the background (build, e2e run, any backgrounded

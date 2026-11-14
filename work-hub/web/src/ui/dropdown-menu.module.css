@@ -1,0 +1,61 @@
+/* Dropdown menu parts. Every selector is wrapped in :where() so a caller's class always wins. */
+
+:where(.content) {
+  z-index: 50;
+  min-width: 10rem;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  border-width: 1px;
+  border-color: var(--color-border);
+  background-color: var(--color-popover);
+  padding: 0.25rem;
+  color: var(--color-popover-foreground);
+  box-shadow: var(--shadow-md);
+}
+
+:where(.item) {
+  position: relative;
+  display: flex;
+  cursor: default;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: var(--radius-sm);
+  padding: 0.375rem 0.5rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  outline: none;
+  user-select: none;
+}
+
+:where(.item[data-disabled]) {
+  pointer-events: none;
+  opacity: 0.5;
+}
+
+:where(.item[data-highlighted]) {
+  background-color: var(--color-accent);
+  color: var(--color-accent-foreground);
+}
+
+:where(.item svg) {
+  pointer-events: none;
+  flex-shrink: 0;
+  width: 0.875rem;
+  height: 0.875rem;
+}
+
+:where(.itemDestructive) {
+  color: var(--color-destructive);
+}
+
+:where(.label) {
+  padding: 0.375rem 0.5rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+:where(.separator) {
+  margin: 0.25rem -0.25rem;
+  height: 1px;
+  background-color: var(--color-border);
+}

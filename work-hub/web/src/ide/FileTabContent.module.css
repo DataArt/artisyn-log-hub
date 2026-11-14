@@ -1,0 +1,47 @@
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.root {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.body {
+  min-height: 0;
+  flex: 1 1 0%;
+}
+
+.center {
+  display: flex;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+}
+
+.loader {
+  width: 1.25rem;
+  height: 1.25rem;
+  color: var(--color-muted-foreground);
+  animation: spin 1s linear infinite;
+}
+
+.error {
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  padding: 1.5rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+.errorText {
+  color: var(--color-destructive);
+}

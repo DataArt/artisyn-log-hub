@@ -1,0 +1,74 @@
+[
+  {
+    "id": "TR-01",
+    "input": {"totalBytes": 100, "initial": {"cols": 80, "rows": 24}, "resizes": []},
+    "expected": {"segments": [{"start": 0, "end": 100, "cols": 80, "rows": 24}]},
+    "note": "Rule 4: no resizes -> one segment over all bytes at the initial size."
+  },
+  {
+    "id": "TR-02",
+    "input": {"totalBytes": 100, "initial": {"cols": 80, "rows": 24}, "resizes": [{"offset": 30, "cols": 100, "rows": 30}, {"offset": 70, "cols": 120, "rows": 40}]},
+    "expected": {"segments": [{"start": 0, "end": 30, "cols": 80, "rows": 24}, {"start": 30, "end": 70, "cols": 100, "rows": 30}, {"start": 70, "end": 100, "cols": 120, "rows": 40}]},
+    "note": "Rule 3: each resize closes the open segment at its offset; the last segment runs to totalBytes."
+  },
+  {
+    "id": "TR-03",
+    "input": {"totalBytes": 100, "initial": {"cols": 80, "rows": 24}, "resizes": [{"offset": 30, "cols": 100, "rows": 30}, {"offset": 30, "cols": 90, "rows": 20}]},
+    "expected": {"segments": [{"start": 0, "end": 30, "cols": 80, "rows": 24}, {"start": 30, "end": 100, "cols": 90, "rows": 20}]},
+    "note": "Rule 3: the second resize at offset 30 would open an empty segment, so it only replaces the size: the last one at an offset wins."
+  },
+  {
+    "id": "TR-04",
+    "input": {"totalBytes": 100, "initial": {"cols": 80, "rows": 24}, "resizes": [{"offset": 0, "cols": 100, "rows": 30}]},
+    "expected": {"segments": [{"start": 0, "end": 100, "cols": 100, "rows": 30}]},
+    "note": "Rule 3: a resize at offset 0 would close an empty segment; it sets the size of the first one instead."
+  },
+  {
+    "id": "TR-05",
+    "input": {"totalBytes": 100, "initial": {"cols": 80, "rows": 24}, "resizes": [{"offset": 0, "cols": 100, "rows": 30}, {"offset": 50, "cols": 90, "rows": 20}]},
+    "expected": {"segments": [{"start": 0, "end": 50, "cols": 100, "rows": 30}, {"start": 50, "end": 100, "cols": 90, "rows": 20}]},
+    "note": "Rule 3: offset 0 sets the first size (100x30); the resize at 50 closes [0,50) and opens [50,100) at 90x20."
+  },
+  {
+    "id": "TR-06",
+    "input": {"totalBytes": 100, "initial": {"cols": 80, "rows": 24}, "resizes": [{"offset": 150, "cols": 100, "rows": 30}]},
+    "expected": {"segments": [{"start": 0, "end": 100, "cols": 80, "rows": 24}]},
+    "note": "Rule 2: offset 150 > 100 is dropped; nothing was written at that size."
+  },
+  {
+    "id": "TR-07",
+    "input": {"totalBytes": 100, "initial": {"cols": 80, "rows": 24}, "resizes": [{"offset": 40, "cols": 100, "rows": 30}, {"offset": 100, "cols": 90, "rows": 20}]},
+    "expected": {"segments": [{"start": 0, "end": 40, "cols": 80, "rows": 24}, {"start": 40, "end": 100, "cols": 100, "rows": 30}]},
+    "note": "Rule 2: a resize exactly at totalBytes is dropped too (it would open an empty segment); the one at 40 stays."
+  },
+  {
+    "id": "TR-08",
+    "input": {"totalBytes": 100, "initial": {"cols": 80, "rows": 24}, "resizes": [{"offset": 99, "cols": 100, "rows": 30}]},
+    "expected": {"segments": [{"start": 0, "end": 99, "cols": 80, "rows": 24}, {"start": 99, "end": 100, "cols": 100, "rows": 30}]},
+    "note": "Rule 2: 99 < 100 is kept; its segment holds the last single byte."
+  },
+  {
+    "id": "TR-09",
+    "input": {"totalBytes": 0, "initial": {"cols": 80, "rows": 24}, "resizes": []},
+    "expected": {"segments": []},
+    "note": "Rule 1: zero bytes -> no segments (never an empty one)."
+  },
+  {
+    "id": "TR-10",
+    "input": {"totalBytes": 0, "initial": {"cols": 80, "rows": 24}, "resizes": [{"offset": 0, "cols": 100, "rows": 30}]},
+    "expected": {"segments": []},
+    "note": "Rule 1: zero bytes -> no segments, whatever the resizes."
+  },
+  {
+    "id": "TR-11",
+    "input": {"totalBytes": 100, "initial": {"cols": 80, "rows": 24}, "resizes": [{"offset": 70, "cols": 120, "rows": 40}, {"offset": 30, "cols": 100, "rows": 30}]},
+    "expected": {"segments": [{"start": 0, "end": 30, "cols": 80, "rows": 24}, {"start": 30, "end": 70, "cols": 100, "rows": 30}, {"start": 70, "end": 100, "cols": 120, "rows": 40}]},
+    "note": "Rule 2: resizes are sorted by offset first, so the result equals TR-02."
+  },
+  {
+    "id": "TR-12",
+    "input": {"totalBytes": 100, "initial": {"cols": 80, "rows": 24}, "resizes": [{"offset": 50, "cols": 80, "rows": 24}]},
+    "expected": {"segments": [{"start": 0, "end": 50, "cols": 80, "rows": 24}, {"start": 50, "end": 100, "cols": 80, "rows": 24}]},
+    "note": "Rule 3: a resize to the same size still closes a segment; segments are cut by offset, never merged by size."
+  }
+]

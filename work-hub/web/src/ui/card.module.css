@@ -1,0 +1,55 @@
+/* Card parts. Every selector is wrapped in :where() so a caller's class always wins. */
+
+:where(.card) {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  min-width: 0;
+  background-color: var(--color-card);
+  padding-block: 1.5rem;
+  color: var(--color-card-foreground);
+}
+
+:where(.header) {
+  container-type: inline-size;
+  container-name: card-header;
+  display: grid;
+  grid-auto-rows: min-content;
+  grid-template-rows: auto auto;
+  align-items: start;
+  gap: 0.5rem;
+  padding-inline: 1.5rem;
+}
+
+:where(.header:has([data-slot="card-action"])) {
+  grid-template-columns: 1fr auto;
+}
+
+:where(.title) {
+  line-height: 1;
+  font-weight: 600;
+}
+
+:where(.description) {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: var(--color-muted-foreground);
+}
+
+:where(.action) {
+  grid-column-start: 2;
+  grid-row: span 2 / span 2;
+  grid-row-start: 1;
+  align-self: start;
+  justify-self: end;
+}
+
+:where(.content) {
+  padding-inline: 1.5rem;
+}
+
+:where(.footer) {
+  display: flex;
+  align-items: center;
+  padding-inline: 1.5rem;
+}

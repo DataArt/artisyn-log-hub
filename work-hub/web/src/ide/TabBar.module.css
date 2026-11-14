@@ -1,0 +1,122 @@
+.iconSm {
+  width: 0.875rem;
+  height: 0.875rem;
+}
+
+.fileIcon {
+  width: 0.875rem;
+  height: 0.875rem;
+  flex-shrink: 0;
+}
+
+.tab {
+  display: flex;
+  height: 2.25rem;
+  max-width: 14rem;
+  flex-shrink: 0;
+  cursor: pointer;
+  align-items: center;
+  gap: 0.375rem;
+  border-right-width: 1px;
+  border-color: var(--color-border);
+  padding-left: 0.75rem;
+  padding-right: 0.75rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  user-select: none;
+}
+
+.tabActive {
+  background-color: var(--color-background);
+  color: var(--color-foreground);
+  box-shadow: inset 0 -2px 0 0 var(--color-primary);
+}
+
+.tabInactive {
+  background-color: color-mix(in srgb, var(--color-muted) 40%, transparent);
+  color: var(--color-muted-foreground);
+}
+
+.tabInactive:hover {
+  background-color: var(--color-muted);
+}
+
+.tabPinned {
+  font-weight: 500;
+}
+
+.label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.dirtyDot {
+  width: 0.5rem;
+  height: 0.5rem;
+  flex-shrink: 0;
+  border-radius: 9999px;
+  background-color: color-mix(in srgb, var(--color-foreground) 70%, transparent);
+}
+
+.tab:hover .dirtyDot {
+  display: none;
+}
+
+.close {
+  margin-right: -0.25rem;
+  border-radius: 0.25rem;
+  padding: 0.125rem;
+}
+
+.close:hover {
+  background-color: var(--color-accent);
+}
+
+/* Dirty file tab: the close control replaces the dot on hover. */
+.closeDirty {
+  display: none;
+}
+
+.tab:hover .closeDirty {
+  display: block;
+}
+
+.closeVisible {
+  visibility: visible;
+}
+
+.closeOnHover {
+  visibility: hidden;
+}
+
+.tab:hover .closeOnHover {
+  visibility: visible;
+}
+
+.bar {
+  display: flex;
+  height: 2.25rem;
+  flex-shrink: 0;
+  align-items: stretch;
+  border-bottom-width: 1px;
+  border-color: var(--color-border);
+  background-color: color-mix(in srgb, var(--color-muted) 40%, transparent);
+}
+
+.tablist {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 0%;
+  align-items: stretch;
+  overflow-x: auto;
+}
+
+.actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.5rem;
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+}

@@ -1,0 +1,27 @@
+.tab {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  border-bottom-width: 1px;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+.barText {
+  min-width: 0;
+  flex: 1 1 0%;
+  color: var(--color-muted-foreground);
+}
+
+.body {
+  min-height: 0;
+  flex: 1 1 0%;
+}

@@ -28,3 +28,15 @@ regexes = ['''^glob/categories$''']
 description = "Fake OTEL collector header value used by the installer scenario to prove it never leaks (tests/scenarios/installer/s-inst-04.spec.ts)"
 paths = ['''^tests/scenarios/installer/s-inst-04\.spec\.ts$''']
 regexes = ['''^scn-collector-secret-7f3a91$''']
+
+[[allowlists]]
+description = "Fixed password of the throwaway users the Work Hub scenarios create on their own stand (work-hub/tests/scenarios/fixtures.ts)"
+condition = "AND"
+paths = ['''^work-hub/tests/scenarios/fixtures\.ts$''']
+regexes = ['''^Scenario-Pass-2026x$''']
+
+[[allowlists]]
+description = "Made-up API key a PoC passes to the hook installer to prove it is not written anywhere (docs/pocs/2026-11-14-1426-workhub-hook-installer-noninteractive/run.mjs)"
+condition = "AND"
+paths = ['''^docs/pocs/2026-11-14-1426-workhub-hook-installer-noninteractive/run\.mjs$''']
+regexes = ['''^pocKEY-7f3a9c1e5b$''']

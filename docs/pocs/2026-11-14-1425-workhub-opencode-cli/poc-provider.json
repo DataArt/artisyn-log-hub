@@ -1,0 +1,12 @@
+{
+  "provider": {
+    "poc": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "PoC",
+      "options": { "baseURL": "http://127.0.0.1:4010/v1", "apiKey": "x" },
+      "models": { "m": { "name": "PoC model" } }
+    }
+  },
+  "model": "poc/m",
+  "small_model": "poc/m"
+}

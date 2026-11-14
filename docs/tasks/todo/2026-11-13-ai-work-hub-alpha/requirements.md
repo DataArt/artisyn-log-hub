@@ -76,9 +76,14 @@ git-related happens behind plain buttons.
   (Rust), its own frontend (React), its own Postgres storage, its own tests inside that folder and,
   later, its own release; it starts and runs independently of Log Hub.
 - FR-1a. The Work Hub server is configured by environment variables, the way Log Hub is: its port,
-  the Postgres connection, the Docker Engine endpoint, a data directory (terminal recordings,
-  FR-32) and the auth mode with its mode-specific settings, mirroring Log Hub's. Exact names are
+  the Postgres connection, the Docker Engine endpoint, a data directory (the file area of FR-5g
+  plus terminal recordings, FR-32) and the auth mode with its mode-specific settings, mirroring Log Hub's. Exact names are
   set in the plan.
+- FR-1b. Work Hub runs two ways: **dockerized** — its own Docker image plus a compose file (Work
+  Hub, its Postgres, the host's Docker Engine socket mounted) that can be deployed locally to try
+  it out; and **inline** without Docker for the server itself — started from `work-hub/` against a
+  local Postgres, the way the local Log Hub dev server is. Either way the workspace and workstream
+  containers run on the host's Docker Engine.
 - FR-2. The server is agent-agnostic: the agent a workstream chat talks to is behind an adapter,
   and nothing outside the adapter depends on a concrete agent. The alpha ships and is tested with
   one agent: Claude Code.
@@ -98,9 +103,10 @@ Verified by PoC [`docs/pocs/2026-11-13-1906-workhub-container-branching/`](../..
 (FR-5b) is not covered by it.
 
 - FR-5a. The container's own filesystem holds only tools and configuration. The frequently
-  changing data lives outside it, in volumes Work Hub owns and mounts into the container: the
-  **repository volume** (the git tree) and the **profile volume** (the container user's home with
-  the agent state, such as `~/.claude`). Every container has its own pair of volumes — the
+  changing data lives outside it, in host folders of the file area (FR-5g) that Work Hub
+  bind-mounts into the container — called volumes below: the **repository volume** (the git tree)
+  and the **profile volume** (the container user's home with the agent state, such as
+  `~/.claude`). Every container has its own pair of volumes — the
   workspace container its own, every workstream container its own; a volume is never shared
   between two containers (FR-4).
 - FR-5b. Opening a workstream starts the workstream container from the workspace's latest
@@ -117,8 +123,27 @@ Verified by PoC [`docs/pocs/2026-11-13-1906-workhub-container-branching/`](../..
   API; the official devcontainer CLI is not used. The default container image (FR-10) is Work
   Hub's own, built locally (no internet pull at runtime), with git, tmux and the Claude CLI.
   The host prerequisite is a Docker Engine reachable by the Work Hub server. All file and git work
-  in volumes goes through the Docker Engine API (exec for git and listings, archive endpoints for
-  upload and download); the server never touches volume paths on the host (NFR-3).
+  inside the volumes goes through the Docker Engine API (exec for git and listings, archive
+  endpoints for upload and download), so it runs as the container user; the server itself only
+  creates and removes the volume folders of FR-5g.
+- FR-5g. File area. Every volume is an ordinary folder under the data directory (FR-1a) on the
+  host, so a user's files stay readable with ordinary tools when the Work Hub server or the Docker
+  Engine is down. The layout is readable without the database:
+  `<data dir>/users/<user email>/<workspace slug>-<short id>/{workspace,home}` for a workspace and
+  `…/<workspace folder>/workstreams/<workstream slug>-<short id>/{workspace,home}` for a
+  workstream (`workspace/` is what the container sees as `/workspace`),
+  plus a `workspace.json` / `workstream.json` beside them (name, owner, branches, dates). `workspace/repo/`
+  of a workspace is a normal git repository with every commit, the branches of closed workstreams
+  included. A profile folder (`home/`, which holds the agent login) is readable only by its
+  owner. Docker objects (containers, checkpoint images) are disposable environment and are not
+  needed to recover files. Unix hosts are the main platform; on Docker Desktop (Windows, macOS)
+  it works with slower file access.
+- FR-5h. Disk use of workstreams (owner, 2026-11-14). The agent does not update itself inside
+  containers (the image pins its version), so a workstream does not download its own copy of
+  the agent. When a workstream is closed ("Bring into main", "Close for now"), what the agent can
+  download or rebuild again is deleted from its home (which paths is the adapter's business,
+  FR-2); its files, branch, login and chat transcripts stay, so reopening works as before.
+  History shows how much disk each workstream takes.
 - FR-5e. Container lifecycle: an open workstream's container runs; "Bring into main" and "Close for now" stop it
   and keeps it with its volumes; reopening starts it again; *discard* removes the container and
   its volumes. The workspace container is started on demand, when an action needs it (file
@@ -229,6 +254,10 @@ Wanted very much; support it as far as browsers allow.
   in their own files, and only workspaces with the same agent are offered for copying. Each copy
   refreshes its token on its own; if a login stops working, the workspace shows the login question
   of FR-24 again, and a workstream whose agent asks to log in is logged in in its own terminal.
+- FR-24b. Logout (owner, 2026-11-14). The workspace Settings show whether the workspace is logged
+  in to its agent and offer "Log out of <agent>" with a confirmation. It logs the workspace out
+  (the adapter's logout command) and the workspace shows the login question again; open
+  workstreams keep their own copy until they are closed, new workstreams ask for a login.
 - FR-25. A user with no other authorized workspace is offered only the new login. If the step is
   skipped or fails, the workspace still opens for viewing and editing files, the same question
   stays available in it, and opening a workstream leads back to it.
@@ -279,12 +308,13 @@ Wanted very much; support it as far as browsers allow.
   them from there (the "Download" action or dragging out). In the alpha the result is only the
   files of the workstream — the code and whatever files the run produced (no live preview,
   NFR-1).
-- FR-29. **Closing** is a button; Work Hub never commits for the user — committing is asked of
-  the agent in the chat, like any other work. Every close first checks the worktree: if it has
-  uncommitted changes outside `.gitignore`, it lists those files (worded without git terms) and
-  offers "Back to chat" or "Close anyway" (the files are left out of the merge and stay in the
-  container's volume until it is removed). Closing while the agent is still working asks for a
-  confirmation first. The close dialog offers:
+- FR-29. **Closing** is a button. **"Bring into main" takes everything** (owner, 2026-11-14, for
+  users who do not know git): before merging, Work Hub saves (commits) every change in the
+  worktree outside `.gitignore` itself, so nothing the agent left unsaved is lost and no git step
+  is asked of the user. "Already merged elsewhere", which deletes the workstream's files, lists
+  the changed files that would be lost (worded without git terms) and offers "Back to chat" or
+  "Close anyway"; "Close for now" keeps every file. Closing while the agent is still working asks
+  for a confirmation first. The close dialog offers:
   - **Bring into main** (the main path, local, no remote needed): Work Hub brings the workstream
     branch into the workspace repository (bundle, FR-5c), merges it into the workstream's base
     branch (FR-11) and stops the container, keeping it (FR-5e). If the merge conflicts, the base
@@ -332,7 +362,8 @@ Wanted very much; support it as far as browsers allow.
 - NFR-2. Offline first, like the rest of the product: no runtime fetches from the internet by the
   Work Hub app itself (the agent's own network use and git remotes are the user's business).
 - NFR-3. Not tuned to the developer's machine/OS: paths shown and processed are repository-relative
-  or container paths, never host-specific.
+  or container paths, never host-specific. The only host path is the configured data directory
+  (FR-5g), never a hard-coded one.
 - NFR-4. Existing Log Hub behaviour and its backward compatibility are untouched — Work Hub is an
   addition.
 - NFR-5. Work Hub's build, lint and test commands are its own and live in `work-hub/`. The
@@ -341,11 +372,16 @@ Wanted very much; support it as far as browsers allow.
   Hub's. Work Hub follows the same three test kinds (algorithm, API contract, scenario); its
   checks are added to `.claude/repo_config/repo-health-checks.json` as Work Hub's own entries; the
   Rust toolchain is stable, pinned by `rust-toolchain.toml` in `work-hub/`.
+- NFR-6. Work Hub's own dependencies use only free, permissive licences — nothing paid and nothing
+  under the GPL family; the file editor is Monaco (MIT). File preview stays plain text in the alpha.
 
 ## Acceptance Criteria
 
 - [ ] AC-1 (FR-1). `work-hub/` builds, tests and starts with its own commands; the service works
       with the Log Hub server stopped.
+- [ ] AC-1a (FR-1b). `docker compose up` of Work Hub's compose file serves a working Work Hub
+      (login, workspace, workstream) on the host; and the inline start from `work-hub/` against a
+      local Postgres does the same.
 - [ ] AC-2 (FR-2). The workstream/chat code has no reference to a concrete agent outside its
       adapter; the Claude Code adapter is the one implemented and tested.
 - [ ] AC-3 (FR-3). After opening a workstream there is a separate workstream container for it,
@@ -355,6 +391,10 @@ Wanted very much; support it as far as browsers allow.
 - [ ] AC-3a (FR-5f). When opening a workstream fails midway, no workstream, branch, volume or
       container of that attempt is left, and the user sees a plain message with "Try again"; a
       workstream whose container cannot start is shown as "Unavailable" with its history viewable.
+- [ ] AC-3b (FR-5g). After creating a workspace and opening a workstream, their folders exist
+      under `<data dir>/users/<email>/` with the documented names; with the Work Hub server and
+      the containers stopped, `git log` in the workspace's `workspace/repo/` shows its commits
+      and the workstream's `workspace/worktree/` holds its files; deleting the workspace removes its folder.
 - [ ] AC-4 (FR-4). With two workstreams open, a file written and a process started in one are
       absent in the other and in the working-branch view; closing one leaves the other's agent
       and chat working.
@@ -421,6 +461,12 @@ Wanted very much; support it as far as browsers allow.
       (a `docker commit` of the workspace container holds neither); a workstream container has its
       own copies, and a file written in a workstream's repository is absent in the workspace's.
       When the workspace's login no longer works, the workspace shows the login question again.
+- [ ] AC-20e (FR-24b). In Settings of a logged-in workspace, "Log out of <agent>" → confirm logs
+      the workspace out: Settings say "Not logged in", the workspace shows the login banner, and
+      opening a workstream asks for a login. Cancel changes nothing.
+- [ ] AC-20f (FR-5h). After a workstream ran the agent and was closed, its home holds no copy of
+      the agent CLI and none of the adapter's disposable paths; reopening it resumes the chat; its
+      size is shown in History.
 - [ ] AC-20d (FR-25a, FR-25b, FR-25c). "Configure" opens a terminal with the agent in the
       workspace container; a tool installed there through it is present in a workstream opened
       afterwards and absent in a workstream that was already open. The checkpoint is taken on
@@ -570,7 +616,10 @@ History of workstreams, with reopen:
 - Every FR behaviour without an AC got one (AC-3a, AC-12b, AC-16a, AC-21a, AC-22c, AC-22d, the
   AC-20a/AC-20d/AC-24 additions); AC-8a lists everything workspace deletion removes.
 - The workspace container starts on demand when an action needs it and stays running.
-- File and git work in volumes goes only through the Docker Engine API, never host volume paths.
+- File and git work in volumes goes only through the Docker Engine API; the server only creates
+  and removes the volume folders.
+- Volumes are host folders (bind mounts) under the data directory, laid out by user email and
+  workspace/workstream name, so files survive a dead server or Docker (owner, 2026-11-13).
 - A workstream starts from the latest checkpoint image; there is no `docker commit` at opening.
 - A Configure session ends with "Finish configuration" or agent exit; one per workspace; other
   actions keep working meanwhile.
@@ -586,8 +635,9 @@ History of workstreams, with reopen:
   their offsets.
 - An open tab reloads on agent changes when clean and asks "Keep mine / Take theirs" when dirty.
 - A failed Docker step rolls back its attempt and offers "Try again".
-- Work Hub never commits for the user; every close lists uncommitted files outside `.gitignore`
-  first. The default repository ships a `.gitignore`.
+- "Bring into main" commits the agent's unsaved changes (outside `.gitignore`) itself before the
+  merge (owner, 2026-11-14; replaces "Work Hub never commits for the user"); only "Already merged
+  elsewhere" lists files that would be lost. The default repository ships a `.gitignore`.
 - Close options: "Bring into main" (local merge via bundle), "Already merged elsewhere" (remove,
   state *done*), "Close for now", plus *discard*. A merge conflict is combined by the agent in the
   chat after Work Hub brings the current working branch into the workstream.
@@ -603,3 +653,11 @@ None open. Kept in `open_questions_ru.md` next to this file (Russian copy).
 - 2026-11-13 — owner's answers (rounds 1–10) and PoC results: see [notes.md](notes.md).
 - 2026-11-13 — whether copies of `~/.claude/.credentials.json` survive refresh-token rotation
   (FR-24a) is checked by the owner during implementation; FR-24a is adjusted then if needed.
+- 2026-11-13 — owner (during planning): after implementation Work Hub must be deployable locally
+  as a dockerized server, or started inline without Docker like the local Log Hub → FR-1b, AC-1a.
+- 2026-11-13 — owner (during planning): preview is plain text for now; editor Monaco or similar;
+  licences neither paid nor GPL → NFR-6, impl-plan D19/D20, research/editor-choice.md.
+- 2026-11-13 — planning PoC
+  [`docs/pocs/2026-11-13-2008-workhub-volume-copy/`](../../../pocs/2026-11-13-2008-workhub-volume-copy/README.md)
+  covers FR-5b's volume copy: 14/14 — a checkpoint holds neither repo nor login, a root helper
+  container's tar pipe keeps owner, mode and symlinks (about 2 s with 20 000 extra files).

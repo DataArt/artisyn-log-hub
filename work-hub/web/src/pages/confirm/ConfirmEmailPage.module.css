@@ -1,0 +1,57 @@
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.card {
+  width: 100%;
+  max-width: 24rem;
+}
+
+.content {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.footer {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.fullWidth {
+  width: 100%;
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+.statusMuted {
+  color: var(--color-muted-foreground);
+}
+
+.spinner {
+  width: 1rem;
+  height: 1rem;
+  animation: spin 1s linear infinite;
+}
+
+.successIcon {
+  width: 1rem;
+  height: 1rem;
+  /* Tailwind emerald-600 (no token). */
+  color: oklch(59.6% 0.145 163.225);
+}
+
+.errorText {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: var(--color-destructive);
+}

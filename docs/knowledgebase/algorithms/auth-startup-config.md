@@ -18,7 +18,13 @@ It also fills in the two documented defaults (`AUTH_MODE`, `PASSWORD_POLICY`).
   (`validateAuthStartupConfig`), with `parseAllowedEmailDomains`
   (`server/src/auth/config/allowed-email-domains.ts`), `isAbsoluteHttpUrl`
   (`server/src/common/public-base-url.ts`) and `isProduction` (`server/src/common/runtime-env.ts`).
-- Twins: none.
+- Twins: Work Hub's Rust port `work-hub/server/src/auth/startup.rs`
+  (`validate_auth_startup_config`). Work Hub reads `WORK_HUB_ENV` where Log Hub reads `NODE_ENV`:
+  the table test maps the rows' `NODE_ENV` (default `test`) to it, and only the exact value
+  `production` means production. A real Work Hub refuses any `WORK_HUB_ENV` other than
+  `production`, `development` or `test` before this validation runs. It runs every row in
+  `work-hub/server/tests/algo.rs` (`cargo test --test algo`, i.e. `npm run test:algo` from
+  `work-hub/`).
 - Test: `server/src/auth/config/auth-startup-validation.algo.spec.ts`.
 
 ## Rules

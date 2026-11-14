@@ -20,7 +20,11 @@ gateway, never from loopback).
   - `server/src/auth/utils/container-gateway.util.ts` (`resolveTrustedGateway`,
     `isContainerized`, `parseDefaultGatewayIpv4`, `isTrustablePrivateIpv4`; `getTrustedGateway`
     memoizes `resolveTrustedGateway` for the process).
-- Twins: none.
+- Twins: Work Hub's Rust port `work-hub/server/src/auth/local_request.rs` (`is_local_address`
+  takes the peer address and the trusted gateway directly, so part A rows never build a request;
+  `resolve_trusted_gateway` and `is_trustable_private_ipv4` take an `FsProbe`). It runs every row
+  in `work-hub/server/tests/algo.rs` (`cargo test --test algo`, i.e. `npm run test:algo` from
+  `work-hub/`).
 - Test: `server/src/auth/utils/localhost.util.algo.spec.ts`.
 
 ## Rules

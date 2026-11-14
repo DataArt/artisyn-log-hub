@@ -1,0 +1,52 @@
+# Artisyn AI Work Hub — dockerized run mode (plan D15).
+#   cp deploy/.env.example deploy/.env        # then edit it (at least SESSION_SECRET, POSTGRES_PASSWORD)
+#   docker compose -f deploy/docker-compose.yml up -d --build
+# Open http://localhost:5010 (WORK_HUB_PORT). Stop: docker compose -f deploy/docker-compose.yml down
+#
+# The app drives the HOST's Docker Engine through the mounted socket: workspace and workstream
+# containers, volumes and images are created next to this stack, not inside it. Access to that
+# socket is equivalent to root on the host.
+#
+# Files (FR-5g): every workspace's repository and home are plain folders under WORK_HUB_FILES on
+# the host (default /srv/workhub): users/<email>/<workspace>/{repo,home}. They stay readable when
+# Work Hub or Docker is down; back up that folder.
+name: artisyn-work-hub
+
+services:
+  db:
+    image: postgres:18.7
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: workhub
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in deploy/.env}
+      POSTGRES_DB: workhub
+    volumes:
+      - workhub-pg:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U workhub -d workhub"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  app:
+    build: ..
+    image: artisyn-work-hub:local
+    restart: unless-stopped
+    ports:
+      - "${WORK_HUB_PORT:-5010}:3100"
+    env_file: .env
+    environment:
+      # Inside the stack the database is the `db` service; PORT, HOST and WORK_HUB_DATA_DIR are
+      # fixed by the image (3100, 0.0.0.0, /data).
+      DATABASE_URL: postgresql://workhub:${POSTGRES_PASSWORD}@db:5432/workhub
+      # The same folder as the host's Docker Engine sees it: workspace volumes bind to it.
+      WORK_HUB_DOCKER_DATA_DIR: ${WORK_HUB_FILES_ENGINE:-${WORK_HUB_FILES:-/srv/workhub}}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${WORK_HUB_FILES:-/srv/workhub}:/data
+    depends_on:
+      db:
+        condition: service_healthy
+
+volumes:
+  workhub-pg:

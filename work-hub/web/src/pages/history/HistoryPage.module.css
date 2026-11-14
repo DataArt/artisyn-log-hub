@@ -1,0 +1,222 @@
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+.chip {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 9999px;
+  border-width: 1px;
+  padding: 0.125rem 0.5rem;
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+
+.chipState {
+  font-weight: 500;
+}
+
+.chipOpen {
+  border-color: var(--color-info-border);
+  background-color: var(--color-info-bg);
+  color: var(--color-info-text);
+}
+
+.chipClosed {
+  border-color: var(--color-border);
+  background-color: var(--color-muted);
+  color: var(--color-muted-foreground);
+}
+
+.chipSuccess {
+  border-color: var(--color-success-border);
+  background-color: var(--color-success-bg);
+  color: var(--color-success-text);
+}
+
+.chipDiscarded {
+  border-color: var(--color-danger-border);
+  background-color: var(--color-danger-bg);
+  color: var(--color-danger-text);
+}
+
+.bar {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  border-bottom-width: 1px;
+  border-color: var(--color-border);
+  padding: 0.5rem 1rem;
+}
+
+.actionsBar {
+  gap: 0.5rem;
+}
+
+.headerBar {
+  gap: 0.75rem;
+}
+
+.selectedName {
+  min-width: 0;
+  flex: 1 1 0%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  font-weight: 500;
+}
+
+.discard,
+.discard:hover {
+  color: var(--color-destructive);
+}
+
+.discard:hover {
+  background-color: var(--color-danger-bg);
+}
+
+.page {
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+}
+
+.title {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  font-weight: 600;
+}
+
+.centerFill {
+  display: flex;
+  flex: 1 1 0%;
+  align-items: center;
+  justify-content: center;
+}
+
+.loader {
+  width: 1.5rem;
+  height: 1.5rem;
+  color: var(--color-muted-foreground);
+  animation: spin 1s linear infinite;
+}
+
+.errorBox {
+  display: flex;
+  flex: 1 1 0%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+.errorText {
+  color: var(--color-destructive);
+}
+
+.emptyBox {
+  display: flex;
+  flex: 1 1 0%;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: var(--color-muted-foreground);
+}
+
+.column {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 0%;
+  flex-direction: column;
+}
+
+.tableWrap {
+  max-height: 40%;
+  flex-shrink: 0;
+  overflow: auto;
+  border-bottom-width: 1px;
+  border-color: var(--color-border);
+}
+
+.table {
+  width: 100%;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+.thead {
+  position: sticky;
+  top: 0;
+  background-color: var(--color-card);
+  text-align: left;
+  font-size: 0.75rem;
+  line-height: 1rem;
+  color: var(--color-muted-foreground);
+}
+
+.th {
+  padding: 0.5rem 1rem;
+  font-weight: 500;
+}
+
+.row {
+  cursor: pointer;
+  border-top-width: 1px;
+  border-color: var(--color-border);
+}
+
+.row:hover {
+  background-color: var(--color-accent);
+}
+
+.rowSelected,
+.rowSelected:hover {
+  background-color: color-mix(in srgb, var(--color-primary) 10%, transparent);
+}
+
+.td {
+  padding: 0.5rem 1rem;
+}
+
+.tdName {
+  max-width: 20rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 500;
+}
+
+.tdDate {
+  white-space: nowrap;
+  color: var(--color-muted-foreground);
+}
+
+.chips {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.replay {
+  min-height: 0;
+  flex: 1 1 0%;
+}
+
+.thSize,
+.tdSize {
+  text-align: right;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}

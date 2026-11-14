@@ -1,0 +1,206 @@
+[
+  {
+    "id": "WN-01",
+    "input": {"op": "validate", "raw": "Fix login"},
+    "expected": {"ok": true, "name": "Fix login"},
+    "note": "Rule 1: nothing to trim; not empty, 9 chars <= 100, no control chars: accepted as is."
+  },
+  {
+    "id": "WN-02",
+    "input": {"op": "validate", "raw": "  Fix login \t"},
+    "expected": {"ok": true, "name": "Fix login"},
+    "note": "Rule 1: leading spaces and the trailing space + tab are trimmed; the tab never reaches rule 4."
+  },
+  {
+    "id": "WN-03",
+    "input": {"op": "validate", "raw": " Fix login　"},
+    "expected": {"ok": true, "name": "Fix login"},
+    "note": "Rule 1: the no-break space U+00A0 and the ideographic space U+3000 are Unicode whitespace and are trimmed too."
+  },
+  {
+    "id": "WN-04",
+    "input": {"op": "validate", "raw": ""},
+    "expected": {"ok": false, "message": "Enter a name."},
+    "note": "Rule 2: empty after trimming."
+  },
+  {
+    "id": "WN-05",
+    "input": {"op": "validate", "raw": "   \n\t "},
+    "expected": {"ok": false, "message": "Enter a name."},
+    "note": "Rule 1 trims everything (line break and tab included), so rule 2 fires before rule 4 could see the control chars."
+  },
+  {
+    "id": "WN-06",
+    "input": {"op": "validate", "raw": {"repeat": "я", "times": 100}},
+    "expected": {"ok": true},
+    "note": "Rule 3: 100 Cyrillic letters are 100 chars (200 UTF-8 bytes); 100 <= 100, accepted."
+  },
+  {
+    "id": "WN-07",
+    "input": {"op": "validate", "raw": {"repeat": "a", "times": 101}},
+    "expected": {"ok": false, "message": "Use at most 100 characters."},
+    "note": "Rule 3: 101 > 100."
+  },
+  {
+    "id": "WN-08",
+    "input": {"op": "validate", "raw": {"before": "  ", "repeat": "a", "times": 100, "after": "  "}},
+    "expected": {"ok": true},
+    "note": "Rule 1 then rule 3: 104 chars raw, 100 after trimming; the length is counted after the trim."
+  },
+  {
+    "id": "WN-09",
+    "input": {"op": "validate", "raw": "Fix\nlogin"},
+    "expected": {"ok": false, "message": "A name cannot contain line breaks or control characters."},
+    "note": "Rule 4: a line feed (U+000A, a control char) inside the name."
+  },
+  {
+    "id": "WN-10",
+    "input": {"op": "validate", "raw": "Fix\tlogin"},
+    "expected": {"ok": false, "message": "A name cannot contain line breaks or control characters."},
+    "note": "Rule 4: a tab inside the name is a control char even though it is whitespace at the ends."
+  },
+  {
+    "id": "WN-11",
+    "input": {"op": "validate", "raw": "Fix\u0007login"},
+    "expected": {"ok": false, "message": "A name cannot contain line breaks or control characters."},
+    "note": "Rule 4: BEL U+0007 is a C0 control char."
+  },
+  {
+    "id": "WN-12",
+    "input": {"op": "validate", "raw": "Fix\u0085login"},
+    "expected": {"ok": false, "message": "A name cannot contain line breaks or control characters."},
+    "note": "Rule 4: NEL U+0085 is a C1 control char."
+  },
+  {
+    "id": "WN-13",
+    "input": {"op": "validate", "raw": "Fix login"},
+    "expected": {"ok": false, "message": "A name cannot contain line breaks or control characters."},
+    "note": "Rule 4: the Unicode line separator U+2028 is a line break (not a control char by category, listed explicitly)."
+  },
+  {
+    "id": "WN-14",
+    "input": {"op": "validate", "raw": "\nFix login\r\n"},
+    "expected": {"ok": true, "name": "Fix login"},
+    "note": "Rule 1: line breaks at the ends are whitespace and are trimmed before rule 4 runs."
+  },
+  {
+    "id": "WN-15",
+    "input": {"op": "validate", "raw": "Fix​login"},
+    "expected": {"ok": true, "name": "Fix​login"},
+    "note": "Rule 4: the zero-width space U+200B is a format char, not a control char or a line break; it is kept."
+  },
+  {
+    "id": "WN-16",
+    "input": {"op": "validate", "raw": {"repeat": "a\u0007", "times": 51}},
+    "expected": {"ok": false, "message": "Use at most 100 characters."},
+    "note": "Order: 102 chars with control chars; rule 3 runs before rule 4, so the length message wins."
+  },
+  {
+    "id": "WN-17",
+    "input": {"op": "key", "raw": "Fix Login"},
+    "expected": {"key": "fix login"},
+    "note": "Rule 5: lowercase of the trimmed name."
+  },
+  {
+    "id": "WN-18",
+    "input": {"op": "key", "raw": "  FIX login  "},
+    "expected": {"key": "fix login"},
+    "note": "Rule 5: trimmed, then lowercased; equal to WN-17's key, so the two names clash."
+  },
+  {
+    "id": "WN-19",
+    "input": {"op": "key", "raw": "Исправить Логин"},
+    "expected": {"key": "исправить логин"},
+    "note": "Rule 5: lowercasing is Unicode-aware (И -> и, Л -> л)."
+  },
+  {
+    "id": "WN-20",
+    "input": {"op": "branch", "raw": "Fix login", "taken": []},
+    "expected": {"branch": "ws/fix-login"},
+    "note": "Rules 6-9: lowercase 'fix login'; the space run -> '-'; nothing taken."
+  },
+  {
+    "id": "WN-21",
+    "input": {"op": "branch", "raw": "Fix   login!!!", "taken": []},
+    "expected": {"branch": "ws/fix-login"},
+    "note": "Rule 7: the run of three spaces is one '-', the trailing '!!!' run is one '-', trimmed by rule 8."
+  },
+  {
+    "id": "WN-22",
+    "input": {"op": "branch", "raw": "--Fix_login--", "taken": []},
+    "expected": {"branch": "ws/fix-login"},
+    "note": "Rule 7: '_' is outside [a-z0-9] -> '-'; rule 8 trims the leading and trailing '-'."
+  },
+  {
+    "id": "WN-23",
+    "input": {"op": "branch", "raw": "Release 2.0", "taken": []},
+    "expected": {"branch": "ws/release-2-0"},
+    "note": "Rule 7: digits are kept; ' ' and '.' are single runs -> '-'."
+  },
+  {
+    "id": "WN-24",
+    "input": {"op": "branch", "raw": "Исправить логин", "taken": []},
+    "expected": {"branch": "ws/ispravit-login"},
+    "note": "Rule 6: transliteration gives \"Ispravit' login\" (the soft sign becomes an apostrophe); lowercase; the run \"' \" -> one '-'."
+  },
+  {
+    "id": "WN-25",
+    "input": {"op": "branch", "raw": "Café crème", "taken": []},
+    "expected": {"branch": "ws/cafe-creme"},
+    "note": "Rule 6: é -> e, è -> e; then 'cafe creme' -> 'cafe-creme'."
+  },
+  {
+    "id": "WN-26",
+    "input": {"op": "branch", "raw": "!!! ???", "taken": []},
+    "expected": {"branch": "ws/work"},
+    "note": "Rule 7 turns the whole name into one '-'; rule 8 trims it to empty; rule 9: empty -> 'work'."
+  },
+  {
+    "id": "WN-27",
+    "input": {"op": "branch", "raw": "abcdefghijabcdefghijabcdefghijabcdefghijabcdefghijklm", "taken": []},
+    "expected": {"branch": "ws/abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij"},
+    "note": "Rule 8: 53 chars with no separator; cut to the first 50 ('abcdefghij' x 5)."
+  },
+  {
+    "id": "WN-28",
+    "input": {"op": "branch", "raw": "0123456789012345678901234567890123456789abcdefghi zz", "taken": []},
+    "expected": {"branch": "ws/0123456789012345678901234567890123456789abcdefghi"},
+    "note": "Rule 8: the slug is 49 chars + '-zz' (52); the 50-char cut ends on the '-', which is trimmed again: 49 chars remain."
+  },
+  {
+    "id": "WN-29",
+    "input": {"op": "branch", "raw": "Fix login", "taken": ["ws/fix-login"]},
+    "expected": {"branch": "ws/fix-login-2"},
+    "note": "Rule 10: the base is taken; '-2' is the first suffix tried and is free."
+  },
+  {
+    "id": "WN-30",
+    "input": {"op": "branch", "raw": "Fix login", "taken": ["ws/fix-login", "ws/fix-login-2"]},
+    "expected": {"branch": "ws/fix-login-3"},
+    "note": "Rule 10: base and '-2' taken, '-3' free."
+  },
+  {
+    "id": "WN-31",
+    "input": {"op": "branch", "raw": "Fix login", "taken": ["ws/fix-login-2"]},
+    "expected": {"branch": "ws/fix-login"},
+    "note": "Rule 10: only a suffixed branch is taken; the base itself is free and is used."
+  },
+  {
+    "id": "WN-32",
+    "input": {"op": "branch", "raw": "Fix login", "taken": ["ws/fix-login", "ws/fix-login-3"]},
+    "expected": {"branch": "ws/fix-login-2"},
+    "note": "Rule 10: the first free suffix wins, counting from 2; '-3' being taken does not matter."
+  },
+  {
+    "id": "WN-33",
+    "input": {"op": "branch", "raw": "abcdefghijabcdefghijabcdefghijabcdefghijabcdefghijklm", "taken": ["ws/abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij"]},
+    "expected": {"branch": "ws/abcdefghijabcdefghijabcdefghijabcdefghijabcdefghij-2"},
+    "note": "Rules 8 and 10: the suffix is appended after the 50-char cut, so the slug part may reach 52 chars."
+  },
+  {
+    "id": "WN-34",
+    "input": {"op": "branch", "raw": "Fix login", "taken": ["ws/fix-login-x", "fix-login"]},
+    "expected": {"branch": "ws/fix-login"},
+    "note": "Rule 10: the taken set holds full branch names; neither entry equals 'ws/fix-login', so the base is free."
+  }
+]

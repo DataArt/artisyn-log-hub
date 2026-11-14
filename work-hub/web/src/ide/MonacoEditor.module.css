@@ -1,0 +1,12 @@
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.loader {
+  width: 1.25rem;
+  height: 1.25rem;
+  color: var(--color-muted-foreground);
+  animation: spin 1s linear infinite;
+}

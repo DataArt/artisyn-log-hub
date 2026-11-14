@@ -1,0 +1,15 @@
+# downloaded release assets and extracted binaries
+dl/
+*.tar.gz
+*.zip
+opencode
+opencode-*/
+# cloned upstream source used for reading
+src-ref/
+# dependencies
+node_modules/
+# runtime garbage
+*.log
+out/
+.cache/
+.env

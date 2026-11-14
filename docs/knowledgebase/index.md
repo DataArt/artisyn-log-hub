@@ -120,6 +120,10 @@ article itself holds the details. Keep new lines to one or two sentences.
 * [Executable-Config Guard](algorithms/executable-config-guard.md) - Read before touching `checkConfigGuard` (`scripts/ci/config-guard.js`) or its allowlist
 * [Security Scan Summary](algorithms/security-scan-summary.md) - Read before touching `scripts/ci/security-summary.js`: row validation, PR block, badge
 
+## Work Hub (separate product in `work-hub/`)
+
+* [Artisyn AI Work Hub](work-hub.md) - Read before touching anything under `work-hub/` (Rust server, web, image, scripts, tests): container model, Docker names / labels and cleanup rules, env vars, run modes, its own commands, licence and agent-name checks, test stand and fake agent, the checkpoint layer limit
+
 ## Product (separate KB) and history
 
 Product, competitors, product ideas and UX research live in the separate product / PDLC KB:

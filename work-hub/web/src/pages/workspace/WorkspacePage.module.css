@@ -1,0 +1,142 @@
+.page {
+  display: flex;
+  height: 100%;
+  flex-direction: column;
+}
+
+.loading {
+  display: flex;
+  flex: 1 1 0%;
+  align-items: center;
+  justify-content: center;
+}
+
+.spinner {
+  width: 1.5rem;
+  height: 1.5rem;
+  animation: spin 1s linear infinite;
+  color: var(--color-muted-foreground);
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.error {
+  display: flex;
+  flex: 1 1 0%;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+.errorText {
+  color: var(--color-destructive);
+}
+
+.errorActions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+/* amber-300 / amber-50 / amber-900 banner, mapped to the warning tints. */
+.loginBanner {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0.75rem;
+  border-bottom-width: 1px;
+  border-color: var(--color-warning-border);
+  background: var(--color-warning-bg);
+  padding: 0.5rem 1rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: var(--color-warning-text);
+}
+
+.loginBannerIcon {
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+}
+
+.loginBannerText {
+  min-width: 0;
+  flex: 1 1 0%;
+}
+
+.ide {
+  display: flex;
+  min-height: 0;
+  flex: 1 1 0%;
+}
+
+.sidebar {
+  display: flex;
+  width: 16rem;
+  flex-shrink: 0;
+  flex-direction: column;
+  border-right-width: 1px;
+  border-color: var(--color-border);
+  background: var(--color-card);
+}
+
+.sidebarHeader {
+  display: flex;
+  height: 2.25rem;
+  flex-shrink: 0;
+  align-items: center;
+  border-bottom-width: 1px;
+  border-color: var(--color-border);
+  padding-left: 0.75rem;
+  padding-right: 0.75rem;
+  font-size: 0.75rem;
+  line-height: 1rem;
+  font-weight: 600;
+  letter-spacing: 0.025em;
+  color: var(--color-muted-foreground);
+  text-transform: uppercase;
+}
+
+.sidebarTree {
+  min-height: 0;
+  flex: 1 1 0%;
+}
+
+.tabsArea {
+  display: flex;
+  min-width: 0;
+  flex: 1 1 0%;
+  flex-direction: column;
+}
+
+.tabPanels {
+  position: relative;
+  min-height: 0;
+  flex: 1 1 0%;
+}
+
+.tabPanel {
+  position: absolute;
+  inset: 0;
+}
+
+.hidden {
+  display: none;
+}
+
+.noTab {
+  display: flex;
+  height: 100%;
+  align-items: center;
+  justify-content: center;
+  padding: 1.5rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: var(--color-muted-foreground);
+}

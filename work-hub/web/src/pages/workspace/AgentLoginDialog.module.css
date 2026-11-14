@@ -1,0 +1,71 @@
+.terminalDialog {
+  display: flex;
+  height: 70vh;
+  max-width: 56rem;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 1rem;
+}
+
+.terminalFrame {
+  min-height: 0;
+  flex: 1 1 0%;
+  overflow: hidden;
+  border-radius: var(--radius-md);
+  border-width: 1px;
+}
+
+.choices {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.startButton {
+  justify-content: flex-start;
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.sources {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.sourcesLabel {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  font-weight: 500;
+}
+
+.sourceList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.sourceButton {
+  width: 100%;
+  justify-content: flex-start;
+}
+
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.errorText {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: var(--color-destructive);
+}

@@ -7,7 +7,8 @@
 # Required check: the job `fast-checks` — the status-check name in the `protect-main-release`
 # ruleset next to `scan`.
 #
-# The second job, `db-state`, is the one exception to "no DB": see its own comment below.
+# The job `db-state` is the one exception to "no DB": see its own comment below. The job
+# `work-hub-fast` checks the separate Work Hub product (work-hub/): see its own comment below.
 #
 # fast-checks: no secrets, no DB, no dev app: the same `static` checks as .claude/repo_config/repo-health-checks.json
 # (minus lint). A called workflow does not inherit the caller's `env`, hence its own BUN_VERSION.
@@ -90,6 +91,62 @@ jobs:
       - name: Hook algorithm tests
         working-directory: hook
         run: npm test
+
+  # Work Hub (work-hub/, NFR-4/NFR-5): its own product with its own toolchain, so its own job — it
+  # is never part of fast-checks, the root build or Log Hub's dist/. The same `static` checks as the
+  # work-hub-* entries of .claude/repo_config/repo-health-checks.json except the release build: lint
+  # (rustfmt, clippy, eslint, agent-name and licence checks), typecheck and the algorithm tests. No
+  # DB, no Docker: the Rust build embeds the SPA with allow_missing, so web/dist is not needed.
+  # Rust comes from work-hub/rust-toolchain.toml (1.92.0 + rustfmt + clippy) through the rustup
+  # preinstalled on the runner — `rustup toolchain install` with no argument reads that file.
+  work-hub-fast:
+    name: work-hub-fast
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: work-hub
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 26
+          package-manager-cache: false
+
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2.2.0
+        with:
+          bun-version: ${{ env.BUN_VERSION }}
+          no-cache: true
+
+      - name: Rust toolchain (rust-toolchain.toml)
+        run: |
+          set -eu
+          rustup toolchain install
+          rustc --version
+          cargo --version
+
+      # The web eslint cache is written to ../../tmp (the repo's tmp/).
+      - name: Create tmp/
+        working-directory: .
+        run: mkdir -p tmp
+
+      - name: Install dependencies
+        run: |
+          set -eu
+          npm ci --ignore-scripts
+          (cd web && bun install --frozen-lockfile --ignore-scripts)
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Algorithm tests
+        run: npm run test:algo
 
   # docs/knowledgebase/db_state.sql must match the migrations: a new migration without a regenerated
   # file (or a hand edit of it) fails here. Its own job, because fast-checks runs without a DB. The
