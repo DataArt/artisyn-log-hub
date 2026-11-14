@@ -128,6 +128,7 @@ pub static REGISTRY: &[Contract] = &[
     row("POST", "/api/v1/workspaces/{id}/login/start", S, true),
     row("POST", "/api/v1/workspaces/{id}/login/cancel", S, true),
     row("POST", "/api/v1/workspaces/{id}/login/logout", S, true),
+    row("GET", "/api/v1/workspaces/{id}/login/link", S, true),
     row("POST", "/api/v1/workspaces/{id}/configure", S, true),
     row("POST", "/api/v1/workspaces/{id}/configure/finish", S, true),
     row("GET", "/api/v1/workspaces/{id}/workstreams", S, true),

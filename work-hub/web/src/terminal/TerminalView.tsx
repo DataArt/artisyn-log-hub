@@ -26,11 +26,9 @@ export interface TerminalViewProps {
   onEnded?: (info: { loggedIn?: boolean }) => void;
   /** Overlay text on `taken_over`. */
   takenOverText?: string;
-  /**
-   * Draws one `*` per pasted character at the cursor. For a prompt that echoes nothing (the
-   * agent's login code): the pasted text itself goes to the program unchanged.
-   */
-  maskPastes?: boolean;
+  /** Called with the number of characters pasted into the terminal (paste feedback for a
+   * prompt that echoes nothing, e.g. the agent's login code). */
+  onPaste?: (length: number) => void;
   className?: string;
 }
 
@@ -55,7 +53,7 @@ export function TerminalView({
   replayFrom,
   onEnded,
   takenOverText = "This chat was opened in another tab",
-  maskPastes = false,
+  onPaste,
   className,
 }: TerminalViewProps) {
   const hostRef = useRef<HTMLDivElement>(null);
@@ -64,9 +62,15 @@ export function TerminalView({
   const [phase, setPhase] = useState<Phase>("loading");
   const [error, setError] = useState<string | null>(null);
 
+  const onPasteRef = useRef(onPaste);
+
   useEffect(() => {
     onEndedRef.current = onEnded;
   }, [onEnded]);
+
+  useEffect(() => {
+    onPasteRef.current = onPaste;
+  }, [onPaste]);
 
   useEffect(() => {
     const host = hostRef.current;
@@ -91,16 +95,22 @@ export function TerminalView({
     // Ctrl+V (and Ctrl+Shift+V) is the browser's paste: xterm would turn it into ^V, which the
     // agent reads as "paste an image" and the clipboard text never arrives. Let the browser
     // fire its paste event instead; xterm sends the pasted text from it.
-    term.attachCustomKeyEventHandler(
-      (e) =>
-        !(
-          e.type === "keydown" &&
-          e.ctrlKey &&
-          !e.altKey &&
-          !e.metaKey &&
-          e.code === "KeyV"
-        ),
-    );
+    // Ctrl+C with text selected copies it (without a selection it stays the interrupt key);
+    // Ctrl+Shift+C always copies the selection.
+    term.attachCustomKeyEventHandler((e) => {
+      if (e.type !== "keydown" || !e.ctrlKey || e.altKey || e.metaKey)
+        return true;
+      if (e.code === "KeyV") return false;
+      if (e.code === "KeyC" && (e.shiftKey || term.hasSelection())) {
+        const selected = term.getSelection();
+        if (selected)
+          void navigator.clipboard?.writeText(selected).catch(() => {});
+        term.clearSelection();
+        e.preventDefault();
+        return false;
+      }
+      return true;
+    });
 
     // tmux switches to the alternate screen, which has no scrollback: the stored recording
     // written first (D17) would be out of reach while the chat is live. Keep tmux on the normal
@@ -141,13 +151,13 @@ export function TerminalView({
       socket.resize(cols, rows),
     );
 
-    // A prompt that echoes nothing still shows that the paste arrived (D11, login tab).
-    const onPaste = (e: ClipboardEvent) => {
+    // Paste feedback for the parent (the login code prompt echoes nothing).
+    const handlePaste = (e: ClipboardEvent) => {
       const text = e.clipboardData?.getData("text/plain") ?? "";
       const visible = text.replace(/[\r\n]/g, "");
-      if (visible.length > 0) term.write("*".repeat(visible.length));
+      if (visible.length > 0) onPasteRef.current?.(visible.length);
     };
-    if (maskPastes) host.addEventListener("paste", onPaste);
+    host.addEventListener("paste", handlePaste);
 
     let live = false;
     const refit = () => {
@@ -196,7 +206,7 @@ export function TerminalView({
     return () => {
       disposed = true;
       observer.disconnect();
-      host.removeEventListener("paste", onPaste);
+      host.removeEventListener("paste", handlePaste);
       dataSub.dispose();
       binarySub.dispose();
       resizeSub.dispose();
@@ -206,7 +216,7 @@ export function TerminalView({
       if (socketRef.current === socket) socketRef.current = null;
       term.dispose();
     };
-  }, [wsPath, replayFrom, maskPastes]);
+  }, [wsPath, replayFrom]);
 
   const takeBack = () => {
     setPhase("connecting");

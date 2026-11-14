@@ -78,6 +78,7 @@ routes! {
     POST "/api/v1/workspaces/{id}/login/start" => workspaces::login_start,
     POST "/api/v1/workspaces/{id}/login/cancel" => workspaces::login_cancel,
     POST "/api/v1/workspaces/{id}/login/logout" => workspaces::login_logout,
+    GET "/api/v1/workspaces/{id}/login/link" => workspaces::login_link,
     POST "/api/v1/workspaces/{id}/configure" => workspaces::configure,
     POST "/api/v1/workspaces/{id}/configure/finish" => workspaces::configure_finish,
     GET "/api/v1/workspaces/{id}/workstreams" => workspaces::list_workstreams,

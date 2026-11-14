@@ -237,27 +237,29 @@ Wanted very much; support it as far as browsers allow.
 - FR-23. The Claude login is per workspace, i.e. per git repository. Everything inside the
   workspace inherits it transparently: every workstream opened in the workspace — its container
   and its agent — is already authorized, and the user is not asked again inside a workspace while the login works (FR-24a).
-- FR-24. The question comes right when the user creates a workspace: "this workspace needs a
-  Claude login" with two ways to get one —
-  - **a new login**: Claude's own login (`claude auth login`) runs in a terminal tab attached to
-    the workspace container, and the user goes through Claude's scenario right there — choose
-    the method with the arrows, open the link, paste the code back into the terminal — until
-    Claude reports it is logged in (PoC
-    [`docs/pocs/2026-11-13-1906-workhub-terminal-bridge/`](../../../pocs/2026-11-13-1906-workhub-terminal-bridge/README.md));
-  - **copy from one of my workspaces**: the user's other workspaces that already have a Claude
-    login are listed, and the login is copied from the one they pick, with no new sign-in.
-- FR-24a. Where the login is kept (alpha — simple first, hardened later, NFR-1): the login is the
-  agent's own login files in the workspace's profile volume — for Claude,
-  `~/.claude/.credentials.json`. A workstream gets its copy with the profile volume when it is
-  opened (FR-5b); "copy from one of my workspaces" copies these files. Which files make up a login
-  is the agent adapter's business (FR-2): other agents (e.g. Codex, OpenCode) keep their logins
-  in their own files, and only workspaces with the same agent are offered for copying. Each copy
-  refreshes its token on its own; if a login stops working, the workspace shows the login question
-  of FR-24 again, and a workstream whose agent asks to log in is logged in in its own terminal.
-- FR-24b. Logout (owner, 2026-11-14). The workspace Settings show whether the workspace is logged
-  in to its agent and offer "Log out of <agent>" with a confirmation. It logs the workspace out
-  (the adapter's logout command) and the workspace shows the login question again; open
-  workstreams keep their own copy until they are closed, new workstreams ask for a login.
+- FR-24. **One agent login per user** (owner, 2026-11-14 — replaces per-workspace logins and
+  "copy from one of my workspaces", which broke each other: Claude's refresh token rotates, so
+  every copy invalidated the others). A user without a login is asked for it when they create a
+  workspace or open a workstream. The login runs the agent's long-lived token flow in a terminal
+  tab attached to the workspace container (for Claude `claude setup-token`: open the sign-in
+  page, paste the code back, Enter). Above the terminal Work Hub shows the sign-in link whole,
+  with "Open sign-in page" and "Copy link"; a paste into the terminal is confirmed ("Pasted N
+  characters"); Ctrl+C with text selected copies it. Work Hub takes the token the CLI prints and
+  from then on every workspace and workstream of the user is logged in, with no copying.
+- FR-24a. **Secrets are not readable on disk** (owner, 2026-11-14). Everything a user works on
+  stays readable on disk (FR-5g); secrets do not. The agent's token — and later secrets — live
+  in Work Hub's secret store: one AES-256-GCM encrypted file per secret under
+  `<data dir>/secrets/`, the key in Work Hub's database (generated on first start), so a copy of
+  the data directory alone or of the database alone gives nothing away. A secret is decrypted
+  only in the server's memory and passed to the agent process as an env variable when it starts
+  (chat, configure); it is never written into a container, a workspace folder or a recording.
+  Old login files in the homes are removed when the agent starts with the token. Which env
+  variable and which login command is the agent adapter's business (FR-2). Limits (documented):
+  whoever has the whole host or the Docker socket can still get it.
+- FR-24b. Logout (owner, 2026-11-14). The workspace Settings show whether the user is logged in
+  to the agent and offer "Log out of <agent>" with a confirmation. It deletes the user's token, so
+  all of the user's workspaces show the login question again; running chats keep working until
+  they are restarted, new workstreams ask for a login.
 - FR-25. A user with no other authorized workspace is offered only the new login. If the step is
   skipped or fails, the workspace still opens for viewing and editing files, the same question
   stays available in it, and opening a workstream leads back to it.
@@ -444,13 +446,14 @@ Wanted very much; support it as far as browsers allow.
       archive.
 - [ ] AC-18 (FR-21). Dragging a file onto another folder in the tree moves it, and an open tab of
       that file follows the new path.
-- [ ] AC-19 (FR-22, FR-24). Creating a workspace asks for the Claude login; "new login" runs
-      Claude's login (`claude auth login`) in a terminal tab attached to the workspace container,
-      and after the user completes Claude's scenario there
-      the workspace is authorized and stays so after reload and server restart.
-- [ ] AC-20 (FR-24, FR-25). With one authorized workspace, creating a second one offers to copy
-      the login from it, and after copying the agent answers there without a sign-in. A user's
-      first workspace offers only the new login. Another user's workspaces are never listed.
+- [ ] AC-19 (FR-22, FR-24). A user without a login creating a workspace is asked for it; "new
+      login" runs `claude setup-token` in a terminal tab attached to the workspace container,
+      shows the sign-in link with Open / Copy, and after the user pastes the code the workspace is
+      logged in and stays so after reload and server restart.
+- [ ] AC-20 (FR-24, FR-24a). After one login, a second workspace of the same user is logged in
+      without any step and its agent answers. No file under the data directory other than
+      `secrets/*.enc` contains the token; the token is not in any container's files or in the
+      chat recording. Another user's login is never used.
 - [ ] AC-20a (FR-23). Every workstream opened in an authorized workspace answers its first chat
       message without any authorization step, including workstreams opened later and reopened ones.
       A workstream whose agent asks to log in again is logged in in its own terminal.

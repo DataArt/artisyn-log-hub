@@ -36,9 +36,18 @@ Task and design: `docs/tasks/*/2026-11-13-ai-work-hub-alpha/` (`requirements.md`
 - **Agent adapter** — `server/src/agent/` (`AgentAdapter` trait, `claude.rs`). Only these two files
   may name the agent; everything else uses the adapter, and the web shows the API's `agentName`
   (AC-2, enforced by `scripts/agent-names-check.mjs` in `npm run lint`).
-- **Login** — the agent's credentials live in the workspace's home volume and are copied into each
-  workstream with the volumes. `login_state` on the workspace row is a cache refreshed by the
-  adapter's status command. A login can be copied from another of the user's workspaces.
+- **Login** — one per user and agent (2026-11-14): the login tab runs the adapter's token flow
+  (`claude setup-token`); its output is collected in the container's tmpfs `/tmp/wh-login.raw`,
+  the watcher takes the token (`token_from_login_output`) into the **secret store** and marks all
+  of the user's workspaces with that agent logged in (`login_state` is a cache of "the token
+  exists"). The token reaches the agent only as an env var (`token_env`) through
+  `tmux::SessionOpts.secret` (exec stdin → `-e NAME=…`); old login files are removed before the
+  agent starts. "Copy login" is a no-op kept for old clients. Rotating refresh tokens made
+  per-workspace copies invalidate each other — the reason for this design.
+- **Secret store** (`server/src/secrets.rs`) — AES-256-GCM files
+  `<data dir>/secrets/<user id>/<name>.enc`, key in table `secret_key` (generated on first use).
+  Everything else on disk stays readable; secrets never go into containers, workspace folders or
+  recordings. Use it for every future secret.
 - **Configure** — an agent session in the workspace container that installs tools; on finish the
   container is `docker commit`ed into a **checkpoint image** that new workstreams start from.
 

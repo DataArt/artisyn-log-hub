@@ -1024,6 +1024,7 @@ impl AccountCleanup for WorkspaceAccountCleanup {
         for ws in repo::list_all_for_user(&self.st.db, user_id).await? {
             delete(&self.st, &ws).await?;
         }
+        crate::secrets::delete_all(&self.st, user_id)?;
         Ok(())
     }
 }

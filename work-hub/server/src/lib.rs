@@ -14,6 +14,7 @@ pub mod git;
 pub mod locks;
 pub mod names;
 pub mod repo_path;
+pub mod secrets;
 pub mod state;
 pub mod terminal;
 pub mod timing;

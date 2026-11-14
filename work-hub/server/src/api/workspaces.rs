@@ -223,6 +223,17 @@ pub async fn login_cancel(
     Ok(StatusCode::NO_CONTENT)
 }
 
+/// `GET …/login/link` → `{url}` (`null` until the login terminal shows a link).
+pub async fn login_link(
+    State(st): State<AppState>,
+    user: CurrentUser,
+    IdPath(id): IdPath,
+) -> ApiResult<Json<serde_json::Value>> {
+    let ws = owned(&st, &user, id).await?;
+    let url = login::login_link(&st, &ws).await?;
+    Ok(Json(json!({ "url": url })))
+}
+
 /// `POST …/login/logout` → `{loggedIn}` (false after a successful logout).
 pub async fn login_logout(
     State(st): State<AppState>,

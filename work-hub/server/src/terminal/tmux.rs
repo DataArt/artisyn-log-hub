@@ -135,6 +135,13 @@ async fn run_script_with(
 /// Docker records, and never written to a file.
 pub type SecretEnv<'a> = Option<(&'a str, &'a str)>;
 
+/// Options of [`ensure_session`] / [`respawn`]: the pane log to record to and the agent secret.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct SessionOpts<'a> {
+    pub record_to: Option<&'a str>,
+    pub secret: SecretEnv<'a>,
+}
+
 /// The script prefix and the `-e` option for a secret; empty when there is none.
 fn secret_parts(secret: SecretEnv<'_>) -> (String, String, Option<bytes::Bytes>) {
     match secret {
@@ -148,7 +155,10 @@ fn secret_parts(secret: SecretEnv<'_>) -> (String, String, Option<bytes::Bytes>)
 }
 
 fn is_env_name(name: &str) -> bool {
-    !name.is_empty() && name.chars().all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_')
+    !name.is_empty()
+        && name
+            .chars()
+            .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_')
 }
 
 /// Creates the session unless it exists (D11): for a recorded session first `mkdir -p` of the
@@ -163,9 +173,9 @@ pub async fn ensure_session(
     session: Session,
     cwd: &str,
     argv: &[String],
-    record_to: Option<&str>,
-    secret: SecretEnv<'_>,
+    opts: SessionOpts<'_>,
 ) -> DockerResult<bool> {
+    let SessionOpts { record_to, secret } = opts;
     let s = session.as_str();
     let target = shell_quote(&session.target());
     let (read_secret, env_opt, stdin) = secret_parts(secret);
@@ -248,9 +258,9 @@ pub async fn respawn(
     user: &str,
     session: Session,
     argv: &[String],
-    record_to: Option<&str>,
-    secret: SecretEnv<'_>,
+    opts: SessionOpts<'_>,
 ) -> DockerResult<()> {
+    let SessionOpts { record_to, secret } = opts;
     let s = session.as_str();
     let (read_secret, env_opt, stdin) = secret_parts(secret);
     let mut script = read_secret;

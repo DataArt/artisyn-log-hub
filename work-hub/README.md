@@ -42,6 +42,12 @@ dockerized mode):
         home/  workstream.json
 ```
 
+Secrets are the exception: your agent login (one per user, e.g. Claude's long-lived token) is
+kept encrypted in `<data dir>/secrets/` with the key in Work Hub's database, so neither a copy of
+the data directory nor a database dump alone reveals it. It is passed to the agent only in
+memory and never written into a container or a workspace folder. (Whoever controls the whole
+host or the Docker socket can still reach it.)
+
 The containers only mount these folders, so your files stay readable with ordinary tools (e.g.
 `git log` in `workspace/repo/`) when Work Hub or Docker is down. Back up the data directory. On Linux the
 files belong to the container user (uid 1000 in the default image). Deleting a workspace or

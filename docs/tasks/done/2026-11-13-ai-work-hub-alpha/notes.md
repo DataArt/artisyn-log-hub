@@ -202,8 +202,36 @@ Then, on the owner's request:
   credentials back to the workspace (and other workstreams) after each refresh; or keep one
   credential per user outside the containers and mount/sync it (the "hardened storage" of NFR-1).
 
-Still open: **2** (scenarios a/b/c and contract after all of the above), **6** (inline run mode),
-**login copies vs refresh-token rotation** (above).
+- **One login per user, outside the containers (owner's decision; fixes the rotation problem).**
+  Verified live first: `claude setup-token` in a workspace container printed a 108-char
+  `sk-ant-oat01-…` token; with `CLAUDE_CODE_OAUTH_TOKEN` and no `.credentials.json`,
+  `claude auth status` → `authMethod: oauth_token`, `claude -p` answered and the interactive chat
+  started (tmux `new-session -e`). Built:
+  - `src/secrets.rs` + migration `0004_secret_key.sql`: AES-256-GCM files
+    `<data dir>/secrets/<user id>/<name>.enc` (`WHS1 || nonce || ciphertext`, AAD
+    `<user id>/<name>`), key in table `secret_key` generated on first use; `aes-gcm` 0.10.3
+    (MIT/Apache). Generic for later secrets. Account deletion removes the user's secrets.
+  - Adapter: `login_command` = `claude setup-token`, `token_env` = `CLAUDE_CODE_OAUTH_TOKEN`,
+    `token_from_login_output`; secret name `<agent>-token`.
+  - Login: output collected in the container's `/tmp/wh-login.raw` (tmpfs, not the host disk);
+    the watcher takes the token, stores it, deletes the file, marks every workspace of the user
+    with that agent logged in. `check_login` = the token exists. `copy`/`sources` routes kept for
+    old clients (no-op / empty list). Logout deletes the token for the user.
+  - Token to the agent: `tmux::SessionOpts { record_to, secret }`; the value goes through the
+    exec's stdin (`read` → `new-session/respawn-pane -e NAME="$WH_SECRET"`), never in a command
+    line Docker records; old `.credentials.json` removed before the agent starts.
+  - UI: login link bar ("Open sign-in page" / "Copy link", `GET …/login/link` = first `https://`
+    link of `capture-pane -J`), paste feedback "Pasted N characters … Press Enter" (the `*`
+    local echo garbled `setup-token`'s redrawing screen and is gone), Ctrl+C copies a selection
+    (Ctrl+Shift+C always).
+  - Fake agent: `setup-token` (link, silent code prompt, fake 108-char token); `auth status` sees
+    the env token.
+  - Requirements FR-24/24a/24b, AC-19/20 rewritten. **Scenario impact:** every scenario using
+    `fakeLoginInUi`, `fakeLoginInContainer` or "Copy from my workspace" (`@S-WH-02`, `@S-WH-04`,
+    `@S-WH-05`, contract `workspaces.rs` login copy) must be updated — not done (owner: no tests).
+  - The owner logs in once more after the deploy (the old per-workspace logins are not migrated).
+
+Still open: **2** (scenarios a/b/c and contract after all of the above), **6** (inline run mode).
 
 ## 2026-11-14 — open items for the next session (recorded, not fixed yet)
 

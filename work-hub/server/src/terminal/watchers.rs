@@ -60,11 +60,19 @@ async fn check_login_session(st: &AppState, ws_id: Uuid) -> Result<Next, DockerE
         None => Ok(Next::Stop),
         Some(false) => Ok(Next::Continue),
         Some(true) => {
-            let logged_in =
-                login::live_status(&st.docker, &container, user, agent.as_ref()).await?;
-            repo::set_login_state(&st.db, ws.id, logged_in)
-                .await
-                .map_err(|e| DockerError::Failed(e.to_string()))?;
+            let logged_in = if agent.token_env().is_some() {
+                // The login printed a token: store it for the user (secret store).
+                login::take_login_token(st, &ws, &container)
+                    .await
+                    .map_err(|e| DockerError::Failed(e.message))?
+            } else {
+                let logged_in =
+                    login::live_status(&st.docker, &container, user, agent.as_ref()).await?;
+                repo::set_login_state(&st.db, ws.id, logged_in)
+                    .await
+                    .map_err(|e| DockerError::Failed(e.to_string()))?;
+                logged_in
+            };
             tmux::kill(&st.docker, &container, user, Session::Login).await?;
             tracing::info!(
                 "workspace {}: login session ended, logged in: {logged_in}",

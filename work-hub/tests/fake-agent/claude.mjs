@@ -54,7 +54,11 @@ const C = {
 const out = (text) => process.stdout.write(text);
 const line = (text = '') => out(`${text}\r\n`);
 
+/** The fake long-lived token `setup-token` prints (same shape as the real one). */
+const FAKE_TOKEN = `sk-ant-oat01-${'Fake_Work-Hub-token_'.repeat(5)}abcdefghijklmnop`.slice(0, 108);
+
 function isLoggedIn() {
+  if ((process.env.CLAUDE_CODE_OAUTH_TOKEN ?? '').startsWith('sk-ant-oat01-')) return true;
   try {
     return fs.readFileSync(CREDENTIALS, 'utf8').includes('"fake":"ok"');
   } catch {
@@ -223,6 +227,29 @@ function authLogin() {
     };
     ask();
   });
+}
+
+/** `claude setup-token`: the sign-in link, a code prompt that echoes nothing, then the token. */
+function authSetupToken() {
+  startInput();
+  line(`${C.bold}Fake long-lived token setup${C.reset}`);
+  line('Browser didn\'t open? Use the url below to sign in:');
+  line(`${C.blue}https://example.invalid/oauth/authorize?code=true&scope=user%3Ainference&state=${'x'.repeat(150)}${C.reset}`);
+  const ask = () => {
+    readLine('Paste code here if prompted > ', (code) => {
+      if (code.trim() === GOOD_CODE) {
+        line(`${C.green}Long-lived authentication token created successfully!${C.reset}`);
+        line('Your OAuth token (valid for 1 year):');
+        line(FAKE_TOKEN);
+        line('Store this token securely.');
+        finish(0);
+      } else {
+        line(`${C.red}Invalid code. Try again.${C.reset}`);
+        ask();
+      }
+    }, { onEof: () => finish(1), echo: false });
+  };
+  ask();
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -414,6 +441,8 @@ try {
     authStatus();
   } else if (argv[0] === 'auth' && argv[1] === 'login') {
     authLogin();
+  } else if (argv[0] === 'setup-token') {
+    authSetupToken();
   } else if (argv[0] === 'auth' && argv[1] === 'logout') {
     fs.rmSync(CREDENTIALS, { force: true });
     process.exit(0);

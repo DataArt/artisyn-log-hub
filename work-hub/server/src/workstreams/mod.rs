@@ -582,7 +582,10 @@ async fn open_steps(
         .await
         .map_err(|e| DockerError::Failed(format!("profile patch: {e}")))?;
 
-    // 9. The chat.
+    // 9. The chat (with the user's agent token, when the agent uses one).
+    let token = login::agent_env(st, ws, &container)
+        .await
+        .map_err(|e| DockerError::Failed(e.message))?;
     tmux::ensure_session(
         &st.docker,
         &container,
@@ -590,7 +593,10 @@ async fn open_steps(
         Session::Chat,
         WORKSTREAM_WORKTREE_DIR,
         &agent.start_command(&s.agent_session_id.to_string()),
-        Some(&recording::chat_log_path(&user.home)),
+        tmux::SessionOpts {
+            record_to: Some(&recording::chat_log_path(&user.home)),
+            secret: token.as_ref().map(|(n, v)| (*n, v.as_str())),
+        },
     )
     .await?;
 
@@ -695,7 +701,16 @@ async fn ensure_inner(
 
     let resume = agent.resume_command(&s.agent_session_id.to_string());
     let log = recording::chat_log_path(&user.home);
-    match tmux::pane_dead(&st.docker, &name, &user.user, Session::Chat).await? {
+    let pane = tmux::pane_dead(&st.docker, &name, &user.user, Session::Chat).await?;
+    let token = if pane == Some(false) {
+        None
+    } else {
+        login::agent_env(st, ws, &name)
+            .await
+            .map_err(|e| DockerError::Failed(e.message))?
+    };
+    let secret = token.as_ref().map(|(n, v)| (*n, v.as_str()));
+    match pane {
         Some(false) => {}
         Some(true) => {
             tracing::info!("workstream {}: chat pane is dead, resuming it", s.id);
@@ -705,7 +720,10 @@ async fn ensure_inner(
                 &user.user,
                 Session::Chat,
                 &resume,
-                Some(&log),
+                tmux::SessionOpts {
+                    record_to: Some(&log),
+                    secret,
+                },
             )
             .await?;
         }
@@ -717,7 +735,10 @@ async fn ensure_inner(
                 Session::Chat,
                 WORKSTREAM_WORKTREE_DIR,
                 &resume,
-                Some(&log),
+                tmux::SessionOpts {
+                    record_to: Some(&log),
+                    secret,
+                },
             )
             .await?;
         }

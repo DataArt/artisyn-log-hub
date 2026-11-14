@@ -2,7 +2,7 @@
 //! cache, copying a login from another workspace, the list of copy sources, and starting /
 //! cancelling the interactive `login` tmux session (D11; its watcher is `terminal::watchers`).
 //!
-//! An agent with a token (`AgentAdapter::token_env`, Claude) has one login per user: the
+//! An agent with a token (`AgentAdapter::token_env`) has one login per user: the
 //! long-lived token printed by its login command is kept in the secret store (`secrets`) and
 //! passed to every agent process as an env variable; nothing of it is written into a container.
 //! Copying a login is then unnecessary (every workspace of the user sees the token).
@@ -270,8 +270,10 @@ pub async fn start_login(st: &AppState, ws: &WorkspaceRow) -> Result<(), ApiErro
         Session::Login,
         WORKSPACE_REPO_DIR,
         &agent.login_command(),
-        collect,
-        None,
+        tmux::SessionOpts {
+            record_to: collect,
+            secret: None,
+        },
     )
     .await?;
     watchers::spawn_login_watcher(st.clone(), ws.id);
@@ -311,6 +313,30 @@ pub async fn take_login_token(
     let has = crate::secrets::exists(st, ws.user_id, &name).await?;
     repo::set_login_state(&st.db, ws.id, has).await?;
     Ok(has)
+}
+
+/// `GET …/login/link`: the first `https://` link on the login terminal's screen, with lines the
+/// terminal wrapped joined again (`capture-pane -J`), so the UI can offer "Open sign-in page" /
+/// "Copy link" for a link that is hard to select in the terminal. `None` while there is none.
+pub async fn login_link(st: &AppState, ws: &WorkspaceRow) -> Result<Option<String>, ApiError> {
+    let container = super::container_name(ws);
+    let Some(screen) =
+        tmux::capture_screen(&st.docker, &container, exec_user(ws)?, Session::Login).await?
+    else {
+        return Ok(None);
+    };
+    Ok(first_https_link(&screen))
+}
+
+fn first_https_link(text: &str) -> Option<String> {
+    let start = text.find("https://")?;
+    let link: String = text[start..]
+        .chars()
+        .take_while(|c| {
+            !c.is_whitespace() && !c.is_control() && *c != '"' && *c != '<' && *c != '>'
+        })
+        .collect();
+    (link.len() > "https://".len()).then_some(link)
 }
 
 /// `POST …/login/cancel`: kills the `login` session (its watcher then stops).

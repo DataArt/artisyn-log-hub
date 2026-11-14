@@ -111,6 +111,13 @@ export async function cancelLogin(id: string): Promise<void> {
   await apiVoid(`${one(id)}/login/cancel`, { method: "POST" });
 }
 
+/** The sign-in link on the login terminal (wrapped lines joined), or `null` while there is none. */
+export async function getLoginLink(
+  id: string,
+): Promise<{ url: string | null }> {
+  return apiJson<{ url: string | null }>(`${one(id)}/login/link`);
+}
+
 /** Logs the workspace out of its agent; open workstreams keep their own copy until closed. */
 export async function logoutAgent(id: string): Promise<{ loggedIn: boolean }> {
   return apiJson<{ loggedIn: boolean }>(`${one(id)}/login/logout`, {
