@@ -118,7 +118,7 @@ export function GroupColumn({
         data-testid={`session-map-group-${column.key}-header`}
         aria-pressed={headerSelected}
         onClick={() => onSelect(groupId)}
-        className={`rounded-md bg-slate-50 p-2 text-left text-xs ${headerSelected ? 'border-2 border-blue-600' : 'border border-slate-200'}`}
+        className={`sticky top-0 z-10 rounded-md bg-slate-50 p-2 text-left text-xs ${headerSelected ? 'border-2 border-blue-600' : 'border border-slate-200'}`}
       >
         <div className="truncate font-semibold" title={column.label}>
           {column.label}

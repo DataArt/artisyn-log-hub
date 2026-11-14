@@ -247,6 +247,19 @@ test('@S-SESS-04 delegator three levels deep: nesting and the cost of the tree @
     for (const k of ['a', 'b']) await expect(card(k), `${k} has no description`).not.toContainText('deep-research');
   });
 
+  await test.step('14b. Session Map: a mouse drag over the cards pans the canvas and selects no card', async () => {
+    const canvas = page.getByTestId('session-map-canvas');
+    const main = (await page.getByTestId('session-map-main').boundingBox())!;
+    const x = main.x + main.width / 2;
+    const y = main.y + main.height - 10;
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x, y - 40, { steps: 4 });
+    await page.mouse.up();
+    await expect.poll(() => canvas.evaluate((el) => el.scrollTop)).toBeGreaterThan(0);
+    await expect(page).not.toHaveURL(/smSel=/);
+  });
+
   await test.step('15. Session Map: a card opens the panel; chips filter; a call row moves the marker; ⤢ opens the call modal', async () => {
     await card('a').click();
     const panel = page.getByTestId('session-map-panel');

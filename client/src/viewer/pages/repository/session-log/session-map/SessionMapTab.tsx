@@ -4,6 +4,9 @@
  * side panel and timeline, and registers the Map's own poll as the session header's Refresh
  * action (DD-10 "Header refresh").
  *
+ * - Layout: the header and the timeline stay in view; the cards between them are a canvas that
+ *   scrolls both ways and pans with a mouse drag (`useDragScroll`). The main card stays in view
+ *   while the columns pan sideways.
  * - The selected card lives in the `smSel` URL param (DD-20): `main`, `group:<key>` or an agent
  *   id. An unknown id is ignored; the param is dropped when the session changes and when the tab
  *   unmounts.
@@ -16,6 +19,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { ModelPricingMap } from '../../../../../models/pricing';
 import type { RepoConfig } from '../../../../../models/repositories';
 import { LazyFallback } from '../../../../components/LazyFallback';
+import { useDragScroll } from '../../../../hooks/useDragScroll';
 import { getSessionLogsErrorMessage } from '../session-logs-error';
 import { GroupColumn, MainCard, runningMinutes } from './SessionMapCards';
 import { type SessionMapBadgeKind, SessionMapHeader } from './SessionMapHeader';
@@ -122,6 +126,9 @@ export function SessionMapTab({
     [model, highlight],
   );
 
+  // --- canvas: scrolls both ways, mouse drag pans it ---------------------------
+  const pan = useDragScroll<HTMLDivElement>();
+
   // --- render --------------------------------------------------------------------
   if (data.isLoading) return <LazyFallback />;
   if (data.fatal || state === null || model === null) {
@@ -152,7 +159,10 @@ export function SessionMapTab({
         : 'live-paused';
 
   return (
-    <div data-testid="session-map" className="flex flex-col gap-3 p-3 text-sm">
+    <div
+      data-testid="session-map"
+      className="flex h-full flex-col gap-3 p-3 text-sm"
+    >
       <SessionMapHeader
         badge={badge}
         pausedAtLabel={playback.t !== null ? formatClock(playback.t) : null}
@@ -164,53 +174,71 @@ export function SessionMapTab({
         order={order}
         onOrderChange={setOrder}
       />
-      <div className="flex min-w-0 items-start gap-3">
-        <div className="flex min-w-0 flex-1 flex-col gap-3">
-          <MainCard
-            node={model.main}
-            state={mainState}
-            runningMin={runningMinutes(mainState, model.main.f, t)}
-            selected={selectedId === 'main'}
-            treeCost={model.treeCost}
-            onSelect={onSelect}
-          />
-          {model.columns.length === 0 ? (
-            <div className="py-6 text-center text-muted-foreground">
-              No groups
+      <div className="flex min-h-[280px] min-w-0 flex-1 gap-3">
+        {/* biome-ignore lint/a11y/noStaticElementInteractions: drag-to-pan is an optional mouse enhancement over the canvas's native keyboard/wheel scrolling — no new behavior is gated behind the handlers */}
+        <div
+          ref={pan.ref}
+          data-testid="session-map-canvas"
+          onMouseDown={pan.onMouseDown}
+          onClickCapture={pan.onClickCapture}
+          className={`min-w-0 flex-1 select-none overflow-auto [container-type:inline-size] ${
+            pan.isDragging
+              ? 'cursor-grabbing [&_*]:cursor-grabbing'
+              : 'cursor-grab'
+          }`}
+        >
+          <div className="flex w-max min-w-full flex-col gap-3">
+            {/* Stays in view while the columns pan sideways. */}
+            <div className="sticky left-0 w-[100cqw]">
+              <MainCard
+                node={model.main}
+                state={mainState}
+                runningMin={runningMinutes(mainState, model.main.f, t)}
+                selected={selectedId === 'main'}
+                treeCost={model.treeCost}
+                onSelect={onSelect}
+              />
             </div>
-          ) : (
-            <div
-              className="flex items-start overflow-x-auto pb-2"
-              style={{ gap: COLUMN_GAP }}
-            >
-              {model.columns.map((column) => (
-                <GroupColumn
-                  key={column.key}
-                  column={column}
-                  order={order}
-                  t={t}
-                  live={live}
-                  atNow={atNow}
-                  highlight={highlighted}
-                  selectedId={selectedId}
-                  maxAgentCost={model.maxAgentCost}
-                  onSelect={onSelect}
-                />
-              ))}
-            </div>
-          )}
+            {model.columns.length === 0 ? (
+              <div className="sticky left-0 w-[100cqw] py-6 text-center text-muted-foreground">
+                No groups
+              </div>
+            ) : (
+              <div
+                className="flex items-start pb-2"
+                style={{ gap: COLUMN_GAP }}
+              >
+                {model.columns.map((column) => (
+                  <GroupColumn
+                    key={column.key}
+                    column={column}
+                    order={order}
+                    t={t}
+                    live={live}
+                    atNow={atNow}
+                    highlight={highlighted}
+                    selectedId={selectedId}
+                    maxAgentCost={model.maxAgentCost}
+                    onSelect={onSelect}
+                  />
+                ))}
+              </div>
+            )}
+          </div>
         </div>
         {selectedId !== null && (
-          <SessionMapSidePanel
-            key={selectedId}
-            model={model}
-            selectedId={selectedId}
-            t={t}
-            parsed={data.parsed}
-            pricing={pricing}
-            onSetT={playback.setT}
-            onClose={clear}
-          />
+          <div className="shrink-0 overflow-y-auto">
+            <SessionMapSidePanel
+              key={selectedId}
+              model={model}
+              selectedId={selectedId}
+              t={t}
+              parsed={data.parsed}
+              pricing={pricing}
+              onSetT={playback.setT}
+              onClose={clear}
+            />
+          </div>
         )}
       </div>
       {model.timeline !== null && playback.t !== null ? (
