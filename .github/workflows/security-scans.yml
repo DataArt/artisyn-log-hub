@@ -225,9 +225,13 @@ jobs:
           SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         run: |
           read -r -a flags <<< "$SNYK_COMMON_FLAGS"
+          # The console log is kept for scan-rows.js: it tells an exhausted Snyk test limit
+          # (a `skipped` row) from a real tool error.
           "$RUNNER_TEMP/snyk" test "${flags[@]}" \
             --json-file-output="$RUNNER_TEMP/raw/snyk-prod.json" \
-            --sarif-file-output="$RUNNER_TEMP/raw/snyk-prod.sarif"
+            --sarif-file-output="$RUNNER_TEMP/raw/snyk-prod.sarif" 2>&1 \
+            | tee "$RUNNER_TEMP/raw/snyk-prod.log"
+          exit "${PIPESTATUS[0]}"
 
       - name: Snyk test (dev)
         id: snyk_dev
@@ -238,7 +242,9 @@ jobs:
         run: |
           read -r -a flags <<< "$SNYK_COMMON_FLAGS"
           "$RUNNER_TEMP/snyk" test "${flags[@]}" --dev \
-            --json-file-output="$RUNNER_TEMP/raw/snyk-dev.json"
+            --json-file-output="$RUNNER_TEMP/raw/snyk-dev.json" 2>&1 \
+            | tee "$RUNNER_TEMP/raw/snyk-dev.log"
+          exit "${PIPESTATUS[0]}"
 
       # Exit code 3 = no supported manifest in the tarballs; the row is then `pass`.
       - name: Snyk test (installer tarballs)
@@ -254,10 +260,12 @@ jobs:
           tar -xzf "$RUNNER_TEMP/kit/artisyn-hooks-installer.tgz" -C "$src/installer"
           tar -xzf "$RUNNER_TEMP/kit/hooks.tar.gz" -C "$src/hooks"
           cd "$src"
-          rc=0
+          # No pipefail here, so the pipeline never trips `set -e`; rc is Snyk's own exit code.
           "$RUNNER_TEMP/snyk" test --all-projects --detection-depth=8 \
             --policy-path="$GITHUB_WORKSPACE/.snyk" \
-            --json-file-output="$RUNNER_TEMP/raw/snyk-kit.json" || rc=$?
+            --json-file-output="$RUNNER_TEMP/raw/snyk-kit.json" 2>&1 \
+            | tee "$RUNNER_TEMP/raw/snyk-kit.log"
+          rc="${PIPESTATUS[0]}"
           echo "rc=$rc" >> "$GITHUB_OUTPUT"
           exit "$rc"
 
@@ -272,7 +280,7 @@ jobs:
           for scope in prod dev; do
             node scripts/ci/scan-rows.js snyk-oss --tool snyk-oss --scope "$scope" \
               --version "$SNYK_VERSION" --link "$RUN_URL" --out "$RUNNER_TEMP/rows" \
-              --json "$raw/snyk-$scope.json"
+              --json "$raw/snyk-$scope.json" --log "$raw/snyk-$scope.log"
           done
           if [ "$KIT_RC" = "3" ]; then
             node scripts/ci/scan-rows.js outcome --tool snyk-oss --scope kit \
@@ -281,7 +289,7 @@ jobs:
           else
             node scripts/ci/scan-rows.js snyk-oss --tool snyk-oss --scope kit \
               --version "$SNYK_VERSION" --link "$RUN_URL" --out "$RUNNER_TEMP/rows" \
-              --json "$raw/snyk-kit.json"
+              --json "$raw/snyk-kit.json" --log "$raw/snyk-kit.log"
           fi
           if [ -s "$raw/snyk-prod.sarif" ]; then
             echo "sarif=true" >> "$GITHUB_OUTPUT"
@@ -1207,7 +1215,9 @@ jobs:
           "$RUNNER_TEMP/snyk" container test "$IMAGE" --file=Dockerfile \
             --policy-path=.snyk \
             --json-file-output="$RUNNER_TEMP/raw/snyk-container.json" \
-            --sarif-file-output="$RUNNER_TEMP/raw/snyk-container.sarif"
+            --sarif-file-output="$RUNNER_TEMP/raw/snyk-container.sarif" 2>&1 \
+            | tee "$RUNNER_TEMP/raw/snyk-container.log"
+          exit "${PIPESTATUS[0]}"
 
       - name: Write row
         id: rows
@@ -1223,7 +1233,8 @@ jobs:
           else
             node scripts/ci/scan-rows.js snyk-container --tool snyk-container --scope image \
               --version "$SNYK_VERSION" --link "$RUN_URL" --out "$RUNNER_TEMP/rows" \
-              --json "$RUNNER_TEMP/raw/snyk-container.json"
+              --json "$RUNNER_TEMP/raw/snyk-container.json" \
+              --log "$RUNNER_TEMP/raw/snyk-container.log"
           fi
           if [ -s "$RUNNER_TEMP/raw/snyk-container.sarif" ]; then
             echo "sarif=true" >> "$GITHUB_OUTPUT"

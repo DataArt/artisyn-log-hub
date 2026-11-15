@@ -13,9 +13,12 @@
 //        [--version <v>] [--link <url>] <subcommand arguments>
 //
 //   Subcommand        Input                                   Status rule
-//   snyk-oss          --json <file> (snyk test --json-file-output)
+//   snyk-oss          --json <file> (snyk test --json-file-output) [--log <file>]
 //                                                             findings when fixable high/critical > 0
-//   snyk-container    --json <file> (snyk container test)     findings when critical+high > 0
+//   snyk-container    --json <file> (snyk container test) [--log <file>]
+//                                                             findings when critical+high > 0
+//                     Both Snyk subcommands: when the JSON or the console log (--log) says the
+//                     monthly free-plan test limit is used up, the row is `skipped`, not `error`.
 //   dependency-review env DR_VULNERABLE_CHANGES, DR_INVALID_LICENSE_CHANGES
 //                                                             findings when high+critical > 0 or a denied licence
 //                                                             (changes in docs/pocs/ manifests are ignored)
@@ -89,6 +92,16 @@ function readJson(file) {
   }
 }
 
+/** Reads a text file; returns '' when missing or unreadable. */
+function readText(file) {
+  if (!file) return '';
+  try {
+    return fs.readFileSync(file, 'utf8');
+  } catch {
+    return '';
+  }
+}
+
 function countsNote(counts) {
   const parts = SEVERITIES.filter((s) => counts[s] > 0).map((s) => `${counts[s]} ${s}`);
   return parts.length > 0 ? parts.join(', ') : 'no issues';
@@ -143,7 +156,20 @@ function snykIssues(json) {
   return { counts, fixable, errors, projects: snykProjects(json).length };
 }
 
-function snykOssRow(base, json) {
+// Snyk's free plan has a monthly test limit; a run that hits it is not a tool error and not a
+// finding, so the row is `skipped`. The note is ASCII: security-summary.js strips anything else.
+const SNYK_QUOTA = /tests? (limit|allowance|quota)|monthly (test )?(limit|allowance|quota)/i;
+const SNYK_QUOTA_NOTE = 'Snyk asks open source for money (monthly free test limit reached), skipping';
+const SNYK_QUOTA_NOTICE = 'Snyk просит денег у open source, к сожалению скипаем (месячный лимит бесплатных тестов исчерпан)';
+
+/** True when a Snyk project error or the console log reports the exhausted test limit. */
+function snykQuotaHit(json, log) {
+  if (SNYK_QUOTA.test(String(log || ''))) return true;
+  return snykProjects(json).some((p) => p.error && SNYK_QUOTA.test(String(p.message || p.error)));
+}
+
+function snykOssRow(base, json, log) {
+  if (snykQuotaHit(json, log)) return skippedRow(base, SNYK_QUOTA_NOTE);
   if (json === undefined) return noOutput(base);
   const { counts, fixable, errors, projects } = snykIssues(json);
   if (errors.length === projects) {
@@ -158,7 +184,8 @@ function snykOssRow(base, json) {
   return makeRow({ ...base, status, counts, fixable, note });
 }
 
-function snykContainerRow(base, json) {
+function snykContainerRow(base, json, log) {
+  if (snykQuotaHit(json, log)) return skippedRow(base, SNYK_QUOTA_NOTE);
   if (json === undefined) return noOutput(base);
   const { counts, errors, projects } = snykIssues(json);
   if (errors.length === projects) {
@@ -316,8 +343,8 @@ function warningRow(base, note) {
 // ------------------------------------------------------------------ CLI ----
 
 const SUBCOMMANDS = {
-  'snyk-oss': ['json'],
-  'snyk-container': ['json'],
+  'snyk-oss': ['json', 'log'],
+  'snyk-container': ['json', 'log'],
   'dependency-review': [],
   outcome: ['outcome', 'failed', 'note'],
   zizmor: ['sarif'],
@@ -353,8 +380,8 @@ function parseArgs(argv) {
 function buildRowFor(args, env) {
   const base = { tool: args.tool, scope: args.scope, version: args.version, link: args.link };
   switch (args.sub) {
-    case 'snyk-oss': return snykOssRow(base, readJson(args.json));
-    case 'snyk-container': return snykContainerRow(base, readJson(args.json));
+    case 'snyk-oss': return snykOssRow(base, readJson(args.json), readText(args.log));
+    case 'snyk-container': return snykContainerRow(base, readJson(args.json), readText(args.log));
     case 'dependency-review':
       return dependencyReviewRow(base, env.DR_VULNERABLE_CHANGES, env.DR_INVALID_LICENSE_CHANGES);
     case 'outcome': return outcomeRow(base, args.outcome, args.failed, args.note);
@@ -385,6 +412,9 @@ function main() {
   }
   const file = writeRow(args.out, row);
   process.stdout.write(`scan-rows: ${row.tool}/${row.scope} ${row.status} -> ${file}\n`);
+  if (row.note === SNYK_QUOTA_NOTE) {
+    process.stdout.write(`::notice::${row.tool}/${row.scope}: ${SNYK_QUOTA_NOTICE}\n`);
+  }
   process.exit(0);
 }
 

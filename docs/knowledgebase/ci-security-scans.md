@@ -67,11 +67,23 @@ download must use the same flags (`curl`, never `wget`).
 
 | Secret | Used by | Note |
 |---|---|---|
-| `SNYK_TOKEN` | `snyk-oss`, `container` | Snyk tests of a public repository do not use the free-plan quota. Projects carry `--remote-repo-url=https://github.com/DataArt/artisyn-log-hub`. |
+| `SNYK_TOKEN` | `snyk-oss`, `container` | Snyk tests of a public repository should not use the free-plan quota, but see "Snyk free-plan test limit" below. Projects carry `--remote-repo-url=https://github.com/DataArt/artisyn-log-hub`. |
 | `VIRUS_TOTAL_KEY` | `virustotal` `vt-scan` job; `release` `vt-scan` job | Public API key: 4 requests/min, 500/day, roughly 10 PRs/day. Passed to `curl` on stdin, never in arguments or logs. Without it the release `vt-scan` writes `skipped` rows and the release is still published. |
 
 Only jobs that download the `installer-kit` artifact hold a secret; the build itself runs
 secret-free. `security-report` uses only `GITHUB_TOKEN`.
+
+### Snyk free-plan test limit
+
+In practice Snyk does count some of the CI tests as private ones against the monthly free-plan
+limit of the organization that owns `SNYK_TOKEN` (Snyk mails a warning when few are left). When the
+limit is used up, the scan is **skipped, not failed**: every Snyk step tees its console output to
+`raw/snyk-<scope>.log`, and `scan-rows.js` (`snyk-oss`, `snyk-container`, argument `--log`) writes a
+`skipped` row with the note `Snyk asks open source for money (monthly free test limit reached),
+skipping` plus a `::notice::` when that log or a project error in the JSON reports the limit
+(pattern `SNYK_QUOTA`). Skipped rows do not count for the badge. The exact Snyk wording is matched
+by a broad pattern; if a real limit hit ever shows up as `💥 tool error`, add its text to
+`SNYK_QUOTA`.
 
 ## Fork PRs
 
