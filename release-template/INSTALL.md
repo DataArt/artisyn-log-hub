@@ -203,6 +203,28 @@ trusts — so a non-loopback `ports:` mapping gives every client that can reach 
 password-less, auto-identified access. Change `AUTH_MODE` to `password` (or another mode) in the
 same edit.
 
+The five values of `AUTH_MODE` (set in `.env`, then `docker compose up -d`):
+
+| `AUTH_MODE` | Who can get in | Settings it needs |
+|---|---|---|
+| `none` | Local callers only, identified by email, no password (Mode 1, the default) | none |
+| `password` | Anyone who can reach the app signs up with email + password (Mode 2) | `PUBLIC_BASE_URL`; SMTP optional |
+| `password-confirm` | Self sign-up, the account works after the emailed confirmation link (Mode 3) | `PUBLIC_BASE_URL`, `ADMIN_CONTACT_EMAIL`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM` |
+| `azure-oauth` | Sign-in with Azure Entra ID (Mode 4) | `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_REDIRECT_URI` |
+| `strict-managed` | Email + password, **no self sign-up**: only an admin creates accounts, each person gets an emailed set-password link | `PUBLIC_BASE_URL`, `ADMIN_CONTACT_EMAIL`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM` (the relay must be reachable at startup) |
+
+**`strict-managed` in short.** On the first start the app creates the admin account for
+`ADMIN_CONTACT_EMAIL` and emails it a set-password link (valid 24 hours, works once). If that
+email cannot be sent, the app does not start — fix SMTP and start it again. Later starts send no
+email; if an account with that address already exists it is made an admin. The admin then opens
+**Admin Panel → Users → + Create user** (email, role, optional team); the new person gets a
+set-password link valid 24 hours, and the admin can **Resend link** while the person has no
+password yet. "Forgot password?" on the login page works for every account (its link is valid
+1 hour). Sign-up and team "invite anyway" for unknown emails are off. Each client IP can trigger
+at most 20 emails per hour. `ALLOWED_EMAIL_DOMAINS`, when set, limits which addresses the admin
+can create (not the `ADMIN_CONTACT_EMAIL` account). `PUBLIC_BASE_URL` must be the URL people open,
+because every link in those emails is built from it.
+
 ## Data
 
 Postgres data, the upload queue, and logs are bind-mounted from `$LOG_HUB_DATA_DIR` on the
@@ -246,6 +268,11 @@ setup token, so do this straight away:
 
 Do the same check whenever you switch `AUTH_MODE` on a fresh database.
 
+In `AUTH_MODE=strict-managed` nobody can sign up, so this race does not exist: the admin is the
+`ADMIN_CONTACT_EMAIL` account, which gets a set-password email on the first start (see
+[Access and authentication](#access-and-authentication)). Open that link, set your password,
+sign in and do step 2.
+
 ## Settings
 
 The generated `.env` sets `NODE_ENV=production`, which turns on the production checks below. Each
@@ -257,17 +284,17 @@ that file on every upgrade. A setting that is not in `.env` keeps the app's buil
 | Setting | When you need it |
 |---|---|
 | `SESSION_SECRET` | Optional. The generated `.env` carries a random one. If you leave it empty, the app generates a secret on first start and keeps it in the database. |
-| `PUBLIC_BASE_URL` | **Required for `AUTH_MODE=password` and `password-confirm`.** The externally reachable URL of the app, e.g. `https://log-hub.example.com`. Confirmation and password-reset links are built only from it. In production the app refuses to start in those modes without it. The installers also print it as the app URL. |
-| `ALLOWED_EMAIL_DOMAINS` | Recommended when `password-confirm` is reachable from the internet: comma-separated domains allowed to sign up, e.g. `example.com,example.org`. A malformed value stops the app at startup. |
-| `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM` | Outgoing mail for confirmation and password-reset emails. **Required for `AUTH_MODE=password-confirm`:** the relay must also be reachable at startup, otherwise the app does not start. **Optional for `AUTH_MODE=password`:** when `SMTP_HOST` is set, `SMTP_PORT` and `SMTP_FROM` are required too and an unreachable relay only logs a warning; when it is unset, password reset is unavailable and "Forgot password?" is disabled. Not used by `none` and `azure-oauth`. |
+| `PUBLIC_BASE_URL` | **Required for `AUTH_MODE=password`, `password-confirm` and `strict-managed`.** The externally reachable URL of the app, e.g. `https://log-hub.example.com`. Confirmation, password-reset and set-password links are built only from it. In production the app refuses to start in those modes without it; `strict-managed` refuses to start without it in any environment. The installers also print it as the app URL. |
+| `ALLOWED_EMAIL_DOMAINS` | Recommended when `password-confirm` is reachable from the internet: comma-separated domains allowed to sign up, e.g. `example.com,example.org`. In `strict-managed` it limits the addresses an admin can create accounts for. A malformed value stops the app at startup. |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM` | Outgoing mail for confirmation, password-reset and set-password emails. **Required for `AUTH_MODE=password-confirm` and `strict-managed`:** the relay must also be reachable at startup, otherwise the app does not start. **Optional for `AUTH_MODE=password`:** when `SMTP_HOST` is set, `SMTP_PORT` and `SMTP_FROM` are required too and an unreachable relay only logs a warning; when it is unset, password reset is unavailable and "Forgot password?" is disabled. Not used by `none` and `azure-oauth`. |
 | `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_SECURE` | Optional relay credentials and TLS flag (`SMTP_SECURE` unset = `false`). Only read when `SMTP_HOST` is set. |
-| `ADMIN_CONTACT_EMAIL` | **Required for `AUTH_MODE=password-confirm`**, optional for `password`. Shown to users in the "email could not be sent" messages. |
+| `ADMIN_CONTACT_EMAIL` | **Required for `AUTH_MODE=password-confirm` and `strict-managed`**, optional for `password`. Shown to users in the "email could not be sent" messages. In `strict-managed` it is also the first admin: that account is created on the first start and gets a set-password email. |
 | `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_REDIRECT_URI` | **Required for `AUTH_MODE=azure-oauth`** (sign-in with Azure Entra ID), from your Azure App Registration. The tenant must be a single tenant GUID. `AZURE_REDIRECT_URI` is `<the URL users open>/api/auth/callback` (with the default port mapping `http://localhost:5003/api/auth/callback`) and must be registered on the App Registration under the *Web* platform. The first user who signs in becomes the admin, as in the other modes. |
 | `AZURE_SCOPES`, `AZURE_AUTHORITY` | Optional for `azure-oauth`: scopes (default `openid profile email`) and a custom authority URL for the same tenant (default `https://login.microsoftonline.com/<tenant>/v2.0`). |
-| `AUTH_RATE_LIMIT_POINTS`, `AUTH_RATE_LIMIT_WINDOW_SEC` | Rate limit on sign-up, forgot password, resend confirmation and reset password, per client IP and per email. Defaults: 5 requests per 900 seconds; `0` points turns it off. |
+| `AUTH_RATE_LIMIT_POINTS`, `AUTH_RATE_LIMIT_WINDOW_SEC` | Rate limit on sign-up, forgot password, resend confirmation and reset password, per client IP and per email. Defaults: 5 requests per 900 seconds; `0` points turns it off. In `strict-managed` there is a fixed extra limit of 20 emails per client IP per hour (forgot password, create user, resend link), not configurable. |
 | `IMPORT_MAX_UPLOAD_BYTES`, `IMPORT_MAX_ENTRIES`, `IMPORT_MAX_UNCOMPRESSED_BYTES`, `IMPORT_MAX_ENTRY_BYTES` | Limits for repository zip imports. Defaults: 5 GiB upload, 20000 entries, 20 GiB uncompressed, 400 MiB per entry. An import over a limit is rejected with a message naming the setting to raise. |
 | `SESSION_RETENTION_DAYS` | How long session data is kept. Root sessions whose first log is older than this many days are deleted for good. Default: 30. `SESSION_RETENTION_CHECK_INTERVAL_MS` and `SESSION_RETENTION_PURGE_BATCH_SIZE` tune how often the job runs (30 min) and how many sessions one run deletes (200). |
-| `PASSWORD_POLICY` | Password strength for `password` / `password-confirm`: `any`, `mid` or `long` (default). |
+| `PASSWORD_POLICY` | Password strength for `password` / `password-confirm` / `strict-managed`: `any`, `mid` or `long` (default). |
 | `LOGS_MAX_BODY_MB`, `UPLOAD_QUEUE_MAX_ATTEMPTS` | Largest hook upload in MiB (default 2500) and retries of a queued upload (default 5). |
 
 The app also makes three outbound requests a day: the public npm registry, for the latest Claude Code

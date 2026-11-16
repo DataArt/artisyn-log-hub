@@ -19,7 +19,7 @@ before(async () => {
 describe('parseArgs', () => {
   test('defaults: every mode, scenarios, corpus and contract steps, build on', () => {
     assert.deepEqual(run.parseArgs([]), {
-      modes: ['a', 'b', 'c'],
+      modes: ['a', 'b', 'c', 'd'],
       grep: null,
       skipBuild: false,
       only: ['scenarios', 'corpus', 'contract'],
@@ -43,7 +43,8 @@ describe('parseArgs', () => {
   });
 
   test('rejects unknown modes, flags and missing values', () => {
-    assert.throws(() => run.parseArgs(['--mode', 'd']), /Unknown stand mode/);
+    assert.deepEqual(run.parseArgs(['--mode', 'd']).modes, ['d']);
+    assert.throws(() => run.parseArgs(['--mode', 'e']), /Unknown stand mode/);
     assert.throws(() => run.parseArgs(['--verbose']), /Unknown argument/);
     assert.throws(() => run.parseArgs(['--grep']), /requires a value/);
   });
@@ -74,6 +75,10 @@ describe('modePasses', () => {
     assert.deepEqual(main.args, ['--grep-invert', '@backoff\\b']);
     assert.deepEqual(backoff.args, ['--grep', '@backoff\\b']);
     assert.equal(backoff.skipWhenEmpty, true);
+  });
+
+  test('mode d: one pass, no @backoff split', () => {
+    assert.deepEqual(run.modePasses('d', '@S-AUTH-11'), [{ label: 'd', projects: ['mode-d'], args: ['--grep', '@S-AUTH-11'] }]);
   });
 
   test('mode b with --grep: the backoff pass must match both the user grep and the tag', () => {

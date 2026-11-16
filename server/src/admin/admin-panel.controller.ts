@@ -18,6 +18,10 @@ import {
 } from '@nestjs/common';
 import * as fs from 'fs';
 import type { Request, Response } from 'express';
+import {
+  AllowedAuthModes,
+  AuthModeGuard,
+} from '../auth/guards/auth-mode.guard';
 import { SessionAuthGuard } from '../auth/guards/session-auth.guard';
 import { AdminGuard } from '../common/guards/admin.guard';
 import { ErrorLogsService } from '../error-logs/error-logs.service';
@@ -172,19 +176,27 @@ export class AdminPanelController {
     return this.adminService.getAuthConfig();
   }
 
+  // Pending-registration routes: 404 in strict-managed (no self sign-up there;
+  // a resend would mail confirm links to password-less admin-created users).
   @Get('auth/pending-registrations')
+  @AllowedAuthModes('none', 'password', 'password-confirm', 'azure-oauth')
+  @UseGuards(AuthModeGuard)
   getPendingRegistrations() {
     return this.adminService.getPendingRegistrations();
   }
 
   @Post('auth/pending-registrations/:id/resend')
   @HttpCode(200)
+  @AllowedAuthModes('none', 'password', 'password-confirm', 'azure-oauth')
+  @UseGuards(AuthModeGuard)
   resendPendingRegistration(@Param('id', ParseIntPipe) id: number) {
     return this.adminService.resendPendingRegistration(id);
   }
 
   @Delete('auth/pending-registrations/:id')
   @HttpCode(204)
+  @AllowedAuthModes('none', 'password', 'password-confirm', 'azure-oauth')
+  @UseGuards(AuthModeGuard)
   async revokePendingRegistration(@Param('id', ParseIntPipe) id: number) {
     await this.adminService.revokePendingRegistration(id);
   }

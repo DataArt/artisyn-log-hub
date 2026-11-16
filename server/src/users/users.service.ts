@@ -22,8 +22,10 @@ export class UsersService {
     email: string,
     passwordHash: string | null,
     role: 'admin' | 'user' = 'user',
+    /** Run inside a caller's drizzle transaction (default: the shared pool). */
+    tx: NodePgDatabase<typeof schema> = this.db,
   ) {
-    const rows = await this.db
+    const rows = await tx
       .insert(schema.users)
       .values({ email: email.toLowerCase(), passwordHash, role })
       .returning();

@@ -1,10 +1,10 @@
 ---
 type: Test Suite
 title: Scenario suite (isolated stand, Playwright)
-description: npm run test:scenarios — builds an isolated stand into tmp/scenarios/stand, runs it per auth mode (A none, B password-confirm, C password) on its own port and scn_* schema, drives it with Playwright through shared fixtures and helpers, and proves the dev DB and server/src/public/static stayed untouched.
+description: npm run test:scenarios — builds an isolated stand into tmp/scenarios/stand, runs it per auth mode (A none, B password-confirm, C password, D strict-managed) on its own port and scn_* schema, drives it with Playwright through shared fixtures and helpers, and proves the dev DB and server/src/public/static stayed untouched.
 resource: scripts/scenarios/run.mjs
 tags: [testing, scenarios, playwright, stand, e2e, fixtures]
-timestamp: 2026-11-03T00:00:00Z
+timestamp: 2026-11-16T00:00:00Z
 ---
 
 The scenario suite replaces the dev-server e2e suite ([e2e-tests.md](./e2e-tests.md)) step by
@@ -21,7 +21,7 @@ npm run test:scenarios                                       # all modes
 npm run test:scenarios -- --mode b --grep S-AUTH-01 --skip-build
 ```
 
-Flags (`scripts/scenarios/run.mjs` `parseArgs`): `--mode a,b,c`, `--grep <re>`, `--skip-build`,
+Flags (`scripts/scenarios/run.mjs` `parseArgs`): `--mode a,b,c,d`, `--grep <re>`, `--skip-build`,
 `--only <steps>`. Steps: `AVAILABLE_STEPS` in `run.mjs` — `scenarios`, `corpus` and `contract`
 (all by default; `corpus` is described below). `contract` runs `npm run test:contract` in `server/` after
 the modes with the runner's `DATABASE_URL` ([contract-tests.md](./contract-tests.md)); `--only
@@ -39,7 +39,7 @@ fingerprint never sees the live sandbox backend's hook uploads and stale-schema 
 sandbox never touches another ([docker-dev-container.md](../docker-dev-container.md)). On the host
 neither variable is usually set.
 
-Health checks: `scenarios-a`, `scenarios-b`, `scenarios-c` in
+Health checks: `scenarios-a`, `scenarios-b`, `scenarios-c`, `scenarios-d` in
 `.claude/repo_config/repo-health-checks.json` (`npm run test:scenarios -- --mode <x> --only
 scenarios`, for mode A `--only scenarios,corpus`, group `app`, `finalOnly`; each check's timeout
 is its `timeoutSeconds` in that file). The `corpus`
@@ -54,10 +54,10 @@ server, but because the stand build rewrites `artisyn-hooks-installer/` in place
 
 | Step | Code | What happens |
 |---|---|---|
-| Preflight | `scripts/scenarios/preflight.mjs` | `DATABASE_URL` reachable; Mailpit answers (mode B only); Playwright Chromium installed; no `tmp/scenarios/.env.local`. Any failure → readable message, exit 2 |
+| Preflight | `scripts/scenarios/preflight.mjs` | `DATABASE_URL` reachable; Mailpit answers (modes B and D only); Playwright Chromium installed; no `tmp/scenarios/.env.local`. Any failure → readable message, exit 2 |
 | Fingerprint | `run.mjs` `dbFingerprint` / `dirFingerprint` | tables + `count(*)` of the `public` schema in `DATABASE_URL`; content hash + mtimes of `server/src/public/static` |
 | Build | `scripts/scenarios/build-stand.mjs` | skipped when the input hash is unchanged or with `--skip-build` |
-| Per mode | `stand.mjs` `startStand` → Playwright `--project mode-<x>` → `stopStand` | mode B runs twice on two fresh stands: `--grep-invert @backoff`, then `--grep @backoff` (skipped when empty) |
+| Per mode | `stand.mjs` `startStand` → Playwright `--project mode-<x>` → `stopStand` | mode B runs twice on two fresh stands: `--grep-invert @backoff`, then `--grep @backoff` (skipped when empty); mode D runs once, on a stand that was restarted once before Playwright starts |
 | Fingerprint again | `run.mjs` `diffFingerprints` | any difference fails the run |
 
 ## Stand layout (`build-stand.mjs`)
@@ -83,7 +83,9 @@ The input hash covers every file `git ls-files -co --exclude-standard` lists und
 - `pg_namespace` has no creation time, so labels go to `tmp/scenarios/schemas.json`; schemas
   labelled more than 6 hours ago are dropped on the next start (orphans of a killed run).
 - Free port from `net.createServer().listen(0)`; `STAND_URL = http://127.0.0.1:<port>`; ready when
-  `GET /health` answers.
+  `GET /health` answers. A `restartOnce` mode (D) is stopped after that first health check and
+  spawned again on the same schema; `startStand` returns only after the second health check, so
+  the restart is over before Playwright starts.
 - Environment: only OS essentials are inherited; everything app-related comes from
   `standEnv()` in `tests/scenarios/modes.ts`. No `.env` file is ever read (the bundle would load
   `.env.local` from `tmp/scenarios/`, hence the preflight check). `CLUSTER_MODE` is never set.
@@ -117,13 +119,16 @@ imports nothing, because the `.mjs` scripts load it through Node 24 type strippi
 | A | `none` | `test` | — |
 | B | `password-confirm` | `production` | `PASSWORD_POLICY=long`, per-run `SESSION_SECRET`, SMTP → Mailpit, `SMTP_FROM=noreply@arrakis.test`, `ADMIN_CONTACT_EMAIL` |
 | C | `password` | `test` | — |
+| D | `strict-managed` | `production` | env as mode B (`PASSWORD_POLICY=long`, per-run `SESSION_SECRET`, SMTP → Mailpit) plus a per-run `ADMIN_CONTACT_EMAIL = admin-d-<runId>@arrakis.test` (passed to Playwright as `STAND_ADMIN_EMAIL`, fixture `stand.adminEmail`); `restartOnce: true` — the stand starts, stops and starts again on the same schema, so the bootstrap's "second start sends no email" is observable; one pass |
 
 All modes: fast-tick env (`FAST_TICK_ENV`),
 `AUTH_RATE_LIMIT_POINTS=1000`, `LOGS_MAX_BODY_MB=2`, `COOKIE_SECURE=false`,
 `PUBLIC_BASE_URL=<STAND_URL>`. With `NODE_ENV=test` (A, C) startup validation and login backoff
-are off, so those behaviours are only observable in mode B.
+are off, so those behaviours are only observable in modes B and D. Mode D keeps
+`AUTH_RATE_LIMIT_POINTS=1000` too, so the strict-managed 20 emails / IP / hour limit — not the
+forgot-password limiter — is what answers 429 there.
 
-A scenario declares its modes with title tags `@mode-a` / `@mode-b` / `@mode-c`; the Playwright
+A scenario declares its modes with title tags `@mode-a` / `@mode-b` / `@mode-c` / `@mode-d`; the Playwright
 projects `mode-*` in `playwright.scenarios.config.ts` grep for them (`workers: 1`, no `webServer`,
 reports in `tmp/scenarios/report/<pass>/`). The scenario id (`@S-AUTH-01`) is the first word of the
 title. Tests that enter wrong passwords carry `@backoff` so mode B runs them on their own stand.
@@ -138,10 +143,10 @@ Every spec imports `test`/`expect` from here.
 
 | Fixture | Scope | Value |
 |---|---|---|
-| `stand` | worker | `{ url, mode, authMode, schema, runDir }` from `STAND_URL` / `STAND_MODE` / `STAND_SCHEMA` / `STAND_RUN_DIR` (the stand's working dir) |
+| `stand` | worker | `{ url, mode, authMode, schema, runDir, adminEmail }` from `STAND_URL` / `STAND_MODE` / `STAND_SCHEMA` / `STAND_RUN_DIR` (the stand's working dir) / `STAND_ADMIN_EMAIL` (mode D bootstrap admin, empty elsewhere) |
 | `db` | worker | `pg.Pool` on `DATABASE_URL` with `search_path` = the stand schema |
 | `api` | test | anonymous `APIRequestContext` on the stand |
-| `users` | test | `users.user(role, { label, email, acceptNotice })` → a fresh `<role>-<runId>@arrakis.test` user (`email` registers an exact address instead, e.g. one invited before its first login) with its own logged-in `api` context and `signIn(page)`. A: identify; B: signup + Mailpit confirmation + login; C: signup + login. The role is aligned with a direct `UPDATE` (the first user of a schema is admin); the data-collection notice is accepted by default. The fixture module also exports `loginPastBackoff(ctx, email, password)` |
+| `users` | test | `users.user(role, { label, email, acceptNotice })` → a fresh `<role>-<runId>@arrakis.test` user (`email` registers an exact address instead, e.g. one invited before its first login) with its own logged-in `api` context and `signIn(page)`. A: identify; B: signup + Mailpit confirmation + login; C: signup + login; D (no signup): insert a password-less user, seed a `password_reset_tokens` row, redeem it through `POST /api/v1/auth/reset-password`, then `loginPastBackoff` — no email, so the 20/h limit is untouched. The role is aligned with a direct `UPDATE` (the first user of a schema is admin); the data-collection notice is accepted by default. The fixture module also exports `loginPastBackoff(ctx, email, password)` |
 
 # Helpers (`tests/scenarios/helpers/`)
 

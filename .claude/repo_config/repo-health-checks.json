@@ -6,7 +6,7 @@
       "finalOnly": true
     }
   ],
-  "environmentNotes": "Server and client are NOT kept running — start them yourself in the background when a check needs them (server: npm run start:dev from server/, client: bun run dev from client/, http://localhost:5173). This applies on the host; inside a Claude sandbox container (scripts/claude-docker, see docs/knowledgebase/docker-dev-container.md) they are already running — do not start them again. Temp files go in tmp/ (gitignored), never in the project root. The scenarios-* checks (npm run test:scenarios) build and start their own isolated stand (own port, own scn_* schema in DATABASE_URL, needs Postgres and — for mode b — Mailpit, e.g. docker compose -f tests/scenarios/docker-compose.yml up -d); they do not depend on the dev server and never touch it. Iterative runs (finalRun false) are the FAST SET: every `static` check plus `build` — no DB, no stand, no dev app. contract, scenarios-a/b/c, e2e-fast and e2e-full are finalOnly and run only in the final verification. While iterating on behaviour, run just the touched scenario: npm run test:scenarios -- --mode <a|b|c> --only scenarios --grep \"<@S-TAG>\".",
+  "environmentNotes": "Server and client are NOT kept running — start them yourself in the background when a check needs them (server: npm run start:dev from server/, client: bun run dev from client/, http://localhost:5173). This applies on the host; inside a Claude sandbox container (scripts/claude-docker, see docs/knowledgebase/docker-dev-container.md) they are already running — do not start them again. Temp files go in tmp/ (gitignored), never in the project root. The scenarios-* checks (npm run test:scenarios) build and start their own isolated stand (own port, own scn_* schema in DATABASE_URL, needs Postgres and — for modes b and d — Mailpit, e.g. docker compose -f tests/scenarios/docker-compose.yml up -d); they do not depend on the dev server and never touch it. Iterative runs (finalRun false) are the FAST SET: every `static` check plus `build` — no DB, no stand, no dev app. contract, scenarios-a/b/c/d, e2e-fast and e2e-full are finalOnly and run only in the final verification. While iterating on behaviour, run just the touched scenario: npm run test:scenarios -- --mode <a|b|c|d> --only scenarios --grep \"<@S-TAG>\".",
   "checks": [
     {
       "name": "build",
@@ -65,6 +65,16 @@
       "group": "app",
       "timeoutSeconds": 600,
       "instructions": "Isolated stand in auth mode password: run.mjs builds tmp/scenarios/stand/, starts its own server on a free port in a fresh scn_* schema and drops it afterwards — it does not use or touch the dev server, the dev DB's public schema or server/src/public/static (the run fails if either changed). Exit 2 = preflight (Postgres/Mailpit/Chromium/stray tmp/scenarios/.env.local) — fix the environment, not the tests. The stand build rewrites the installer in place like npm run build, hence the `app` group. Each mode is ONE integrated run on purpose: if it outgrows its budget, raise timeoutSeconds rather than splitting it by --grep, which could silently drop a scenario whose tag no split covers.",
+      "finalOnly": true
+    },
+    {
+      "name": "scenarios-d",
+      "dir": ".",
+      "module": "Scenarios, auth mode strict-managed",
+      "command": "npm run test:scenarios -- --mode d --only scenarios",
+      "group": "app",
+      "timeoutSeconds": 600,
+      "instructions": "Isolated stand in auth mode strict-managed: run.mjs builds tmp/scenarios/stand/, starts its own server on a free port in a fresh scn_* schema (restarted once on the same schema before Playwright runs, to prove the second start sends no bootstrap email) and drops it afterwards — it does not use or touch the dev server, the dev DB's public schema or server/src/public/static (the run fails if either changed). Exit 2 = preflight (Postgres/Mailpit/Chromium/stray tmp/scenarios/.env.local) — fix the environment, not the tests. The stand build rewrites the installer in place like npm run build, hence the `app` group. Each mode is ONE integrated run on purpose: if it outgrows its budget, raise timeoutSeconds rather than splitting it by --grep, which could silently drop a scenario whose tag no split covers.",
       "finalOnly": true
     },
     {

@@ -20,6 +20,7 @@ import { TooManyRequestsException } from './exceptions/too-many-requests.excepti
 import { parseAllowedEmailDomains } from './config/allowed-email-domains';
 import { getEmailLinkBaseUrl } from '../common/public-base-url';
 import { maskEmail } from '../common/mask-email';
+import { buildResetUrl } from './password-link-url';
 
 /** 'skipped' = SMTP not configured for this mode (MailService.isConfigured() is false). */
 export type NotificationDelivery = 'sent' | 'failed' | 'skipped';
@@ -50,7 +51,7 @@ export class AuthService {
       });
     }
 
-    this.assertEmailDomainAllowed(email);
+    this.assertEmailDomainAllowed(email, 'signup');
 
     const existing = await this.usersService.findByEmail(email);
     if (existing) {
@@ -268,6 +269,15 @@ export class AuthService {
       result.userId,
       passwordHash,
     );
+    // strict-managed: admin-created and bootstrap accounts start unconfirmed;
+    // the emailed link proves the mailbox, so a later switch to
+    // password-confirm does not lock them out.
+    if (this.configService.get<string>('AUTH_MODE') === 'strict-managed') {
+      const full = await this.usersService.findById(user.id);
+      if (full && full.emailConfirmedAt === null) {
+        await this.usersService.markEmailConfirmed(user.id);
+      }
+    }
     this.logger.log(
       `Password reset succeeded: email=${maskEmail(user.email)} userId=${user.id}`,
     );
@@ -359,12 +369,17 @@ export class AuthService {
   }
 
   /**
-   * Mode 3 sign-up domain allow-list. Exact match on the
-   * part after the last `@`; an unset or empty `ALLOWED_EMAIL_DOMAINS` allows
-   * every domain. Other modes ignore the setting.
+   * Email domain allow-list for `password-confirm` sign-up and
+   * `strict-managed` admin-created accounts. Exact match on the part after
+   * the last `@`; an unset or empty `ALLOWED_EMAIL_DOMAINS` allows every
+   * domain. Other modes ignore the setting.
    */
-  private assertEmailDomainAllowed(email: string): void {
-    if (this.configService.get<string>('AUTH_MODE') !== 'password-confirm') {
+  assertEmailDomainAllowed(
+    email: string,
+    context: 'signup' | 'admin-create',
+  ): void {
+    const mode = this.configService.get<string>('AUTH_MODE');
+    if (mode !== 'password-confirm' && mode !== 'strict-managed') {
       return;
     }
     const allowed = parseAllowedEmailDomains(
@@ -378,15 +393,17 @@ export class AuthService {
     if (!allowed.includes(domain)) {
       throw new BadRequestException({
         error: 'email_domain_not_allowed',
-        message: `Sign-up is limited to these email domains: ${allowed.join(', ')}`,
+        message:
+          context === 'admin-create'
+            ? `This server only accepts these email domains: ${allowed.join(', ')}`
+            : `Sign-up is limited to these email domains: ${allowed.join(', ')}`,
       });
     }
   }
 
   /** Emailed link; `null` when `PUBLIC_BASE_URL` is missing (email skipped). */
   private buildResetUrl(token: string): string | null {
-    const base = getEmailLinkBaseUrl(this.logger);
-    return base === null ? null : `${base}/#/reset-password?token=${token}`;
+    return buildResetUrl(token, this.logger);
   }
 
   /** Emailed link; `null` when `PUBLIC_BASE_URL` is missing (email skipped). */

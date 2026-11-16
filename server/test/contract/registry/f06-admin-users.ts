@@ -64,7 +64,9 @@ export const f06AdminUsers: ContractFamily = {
       read: {
         sql: `SELECT u.id, u.email, u.role::text AS role, u.created_at,
                      (SELECT count(*) FROM team_members tm WHERE tm.user_id = u.id) AS team_count,
-                     (SELECT max(l.end_time) FROM logs l WHERE l.user_id = u.id) AS last_activity
+                     (SELECT max(l.end_time) FROM logs l WHERE l.user_id = u.id) AS last_activity,
+                     (u.password_hash IS NOT NULL
+                      AND u.password_hash <> '!placeholder-import-user') AS password_set
                 FROM users u
                ORDER BY u.email`,
         shape: 'array',
@@ -75,6 +77,7 @@ export const f06AdminUsers: ContractFamily = {
           createdAt: { col: 'created_at', as: 'iso' },
           teamCount: { col: 'team_count', as: 'number' },
           lastActivity: { col: 'last_activity', as: 'iso?' },
+          passwordSet: 'password_set',
         },
         strict: true,
       },

@@ -4,7 +4,7 @@ Date: 2026-10-13, branch `dev`. Design only; no tests were run or written. Sourc
 
 ## 0. Group scope
 
-The group covers: sign-up, login, logout, the session, the auth modes (`none` / `password` / `password-confirm` / `azure-oauth`), e-mail confirmation, password reset and change, account deletion, the password policy, the brute-force delay, API keys, teams (creation, members, invitations, access modes `restricted` / `transparent`, disclosure, roles), privacy of other people's sessions and raw logs, the admin panel (9 tabs: System Info, Repos, Teams, Users, Error Logs, Upload Queue, Data Retention, Auth, Model Pricing), the logs archive, the data-collection consent screen, and "notifications".
+The group covers: sign-up, login, logout, the session, the auth modes (`none` / `password` / `password-confirm` / `azure-oauth` / `strict-managed`), e-mail confirmation, password reset and change, account deletion, the password policy, the brute-force delay, API keys, teams (creation, members, invitations, access modes `restricted` / `transparent`, disclosure, roles), privacy of other people's sessions and raw logs, the admin panel (9 tabs: System Info, Repos, Teams, Users, Error Logs, Upload Queue, Data Retention, Auth, Model Pricing), the logs archive, the data-collection consent screen, and "notifications".
 
 What I found about "notifications": there is no separate feature. The bell in the top bar (`NotificationBell`) shows only incoming team invitations (`GET /api/v1/invitations`). The server has no `/api/v1/notifications` route (the mention in a comment in `api-keys.spec.ts` is stale). The bell is covered by scenario S-TEAM-01. The Model Pricing tab belongs to the cost group; here only its presence is checked.
 
@@ -17,6 +17,7 @@ Today Playwright runs against the dev server in `none` mode (see `tests/e2e/help
 | **A** (main, dev) | `AUTH_MODE=none` | sessions via `POST /api/v1/auth/identify` from localhost | every scenario marked "any mode" (teams, admin, keys, access, consent), plus S-AUTH-07, S-AUTH-08 |
 | **B** | `AUTH_MODE=password-confirm`, `PASSWORD_POLICY=long`, Mailpit on `:8025`, `NODE_ENV` not `test` | real e-mails, real policy, real backoff | S-AUTH-01, 03, 04, 05, 06, 07, 09 (part), S-ADM-03 |
 | **C** (optional) | `AUTH_MODE=azure-oauth` | needs a real Azure | no scenario, see the "Not covered" section |
+| **D** | `AUTH_MODE=strict-managed`, `NODE_ENV=production`, `PASSWORD_POLICY=long`, Mailpit on `:8025`, a per-run `ADMIN_CONTACT_EMAIL` (`admin-d-<runId>@arrakis.test`, given to Playwright as `STAND_ADMIN_EMAIL`); the stand starts, stops and starts again on the same schema before the tests (restarts once) | no self sign-up, the bootstrap admin's set-password e-mail, admin-created users, the 20 e-mails / IP / hour limit | S-AUTH-07, S-AUTH-11 |
 
 All "any mode" scenarios create users through the shared helper `establishSession` (identify in `none`, signup+confirm through the DB in `password*`), so the same test code works in A and B. Users and repositories are unique per run (prefix `e2e-<runId>`), cleaned up in `afterAll`.
 
@@ -35,6 +36,7 @@ Shared personas: ADMIN (the first registered user, role `admin`), OWNER, M1, M2,
 | S-AUTH-07 | Mode matrix: what exists in this mode and what answers 404 | API | P0 | 12 |
 | S-AUTH-08 | Passwordless mode: local login, auto-provisioning, the first user becomes admin | UI+API | P1 | 12 |
 | S-AUTH-09 | A person deletes their account: all of theirs goes, other people's data stays | UI+API | P0 | 20 |
+| S-AUTH-11 | Strict-managed: bootstrap admin, admin-created users, set-password links, e-mail limit | UI+API | P0 | — (new feature) |
 | S-KEY-01 | API key life: create, see once, upload logs, revoke, expired | UI+API | P0 | 28 |
 | S-KEY-02 | Newcomer without keys: install, "Give Me String", left menu | UI | P1 | 27 |
 | S-TEAM-01 | The owner creates a team and invites a colleague, the colleague accepts through the bell | UI+API | P0 | 50 |
@@ -53,7 +55,7 @@ Shared personas: ADMIN (the first registered user, role `admin`), OWNER, M1, M2,
 | S-ADM-06 | Data Retention: the retention period matches the consent text, a chart with an empty day | UI+API | P1 | 6 |
 | S-ADM-07 | Upload queue: broken file, Reprocess, Clear, counters | UI+API | P1 | 62 |
 
-Total 26 scenarios: P0 = 16, P1 = 10, P2 = 0 (S-ADM-08, releases, was dropped: the release download feature was removed by 2026-10-20-github-release-pipeline). They replace ≈ 650-700 existing tests (counted by whole files; some unit tests are only partly replaced, which the "Replaces" lines note; `team-access-mode` and `repository-view` may be double-counted).
+Total 27 scenarios: P0 = 17, P1 = 10, P2 = 0 (S-AUTH-11 was added by the task 2026-11-05-auth-mode-admin-invite and replaces no old test) (S-ADM-08, releases, was dropped: the release download feature was removed by 2026-10-20-github-release-pipeline). They replace ≈ 650-700 existing tests (counted by whole files; some unit tests are only partly replaced, which the "Replaces" lines note; `team-access-mode` and `repository-view` may be double-counted).
 
 Convention for the text below: a "UI step" is what a person clicks by hand; an "API step" is the Playwright `request` fixture with the right user's cookie (or `X-API-Key`).
 
@@ -222,7 +224,7 @@ Convention for the text below: a "UI step" is what a person clicks by hand; an "
 - **What we lose:** precision about "TTL 900 s", "process memory", `req.ip` behind a proxy (`TRUST_PROXY`), and multi-process mode. None of this is reproducible in reasonable time. I suggest keeping the unit `login-backoff.service.spec.ts` as it is **or** accepting the scenario as the only protection (owner's decision). It is the only brute-force protection and it is off with `NODE_ENV=test`, so the scenario must run on a server without `NODE_ENV=test`.
 
 ### S-AUTH-07. Mode matrix: what exists in this mode and what answers 404
-- **Layer:** API (runs in **every** run: A, B, C)
+- **Layer:** API (runs in **every** stand mode: A, B, C, D; in D `signup` / `confirm-email` / `resend-confirmation` give 404, the password routes are live, and the admin provisioning routes `POST /api/v1/admin/users` and `POST /api/v1/admin/users/:id/password-link` exist only there — every other mode answers 404 to every caller)
 - **Priority:** P0
 - **Data/roles:** any user; reading the values of `SMTP_PASSWORD` and `AZURE_CLIENT_SECRET` from the stand environment (if set) for comparison.
 - **Steps:**
@@ -294,6 +296,23 @@ Convention for the text below: a "UI step" is what a person clicks by hand; an "
   - DB data (through the DB helper): no `logs`, `logs_otel`, `repo_config`, `upload_queue`, `user_favorite_sessions` rows for D's id, and no "orphaned" `sessions` without `logs`; the sessions that K's logs reference remain.
 - **Replaces:** `server/test/account-deletion.e2e-spec.ts` (11), `client/.../components/delete-account-dialog.test.tsx` (9, exact input, an error keeps the dialog), the `MainNav.test.tsx` "Delete account" item (1).
 - **What we lose:** "a server error keeps the dialog open" (needs a faked response, not reproducible on a live server); atomicity and `FOR UPDATE` against a race of two deletions/role changes (unit/race, invisible to a person). The rest is covered.
+
+### S-AUTH-11. Strict-managed: bootstrap admin, admin-created users, set-password links, e-mail limit
+- **Layer:** UI+API (run D only, `@mode-d`, Mailpit; `tests/scenarios/auth/s-auth-11.spec.ts`)
+- **Priority:** P0
+- **Purpose:** in `AUTH_MODE=strict-managed` nobody signs up: the first admin comes from `ADMIN_CONTACT_EMAIL` (a set-password e-mail on the first start), every other account is created by an admin and gets an e-mailed set-password link (24 h, single-use, `purpose=set`). The scenario proves the whole path a person walks plus the refusals around it.
+- **Data/roles:** the bootstrap admin `stand.adminEmail` (no password yet); a team created by the admin; users created during the run (`created-one`, `created-two`, `passwordless`, `almost-expired`, `expired`); three loopback source addresses Z, X, Y (`helpers/loopback-client.ts`), so failed logins and the e-mail limit get IP counters of their own. Mailpit messages are always filtered by recipient (`listEmailsTo`), never counted in total.
+- **Steps:**
+  1. Bootstrap: Mailpit holds exactly **one** message to the admin after the stand's restart (subject `Set your Log Hub administrator password`, text names the stand URL); its link contains `purpose=set`. UI: the link shows "Set your password", the admin sets a password and logs in as `role: 'admin'`. `GET /auth/config` → `mode: 'strict-managed'`, `passwordResetAvailable: true`, `adminContactEmail`.
+  2. No signup: the login page has "Forgot password?" and no "Sign up" / "Don't have an account?"; `/#/signup` lands on `/#/login`; `signup`, `confirm-email`, `resend-confirmation` → 404 and no message is sent.
+  3. Create user in the UI: Admin → Users → "+ Create user", e-mail, role User, the team, "Create & send" → 201 `email_delivery: 'sent'`, the notice `Set-password link sent to <email>`, the row shows "Not set" and "Resend link"; the user opens the e-mailed link in another browser, sets a password, logs in, is a member of the team; after a reload the row shows "Set" and no "Resend link".
+  4. Resend and refusals (API): resend within 60 s → 429 + `Retry-After`, no second message; after the cooldown → 200, the old link → 409, the new link works; resend for a user with a password → 409 `password_already_set`; create with the same e-mail in upper case → 409 `email_already_registered`, no message; a plain user calling both routes → 403; the legacy `POST /api/v1/users/:id/reset-password-link` as admin → 404.
+  5. Forgot password: for an existing user, an unknown e-mail and a password-less admin-created user — identical 200 bodies; messages only to the two real accounts; the forgot link has no `purpose`, and it sets the password-less user's password.
+  6. Lifetimes: a set-password link shifted back 23 h works, a used one → 409; one shifted back 24 h → 410 and in the UI `This link is invalid or has expired. Request a new one with "Forgot password?" on the login page.`; a forgot link shifted back 1 h → 410.
+  7. No password, no key: a password-less user's login with any password → 401; `POST /api/v1/api-keys` without a session → 401; after the user sets a password via "Forgot password?" and logs in, the key is created (201).
+  8. E-mail limit: 20 forgot-password calls from address X → 200 each; the 21st (for a real account past its cooldown) → 429 + `Retry-After` and no message; a call from address Y → 200.
+- **ACs covered (requirements of 2026-11-05-auth-mode-admin-invite):** AC1 and AC4 (step 1), AC5 (step 2), AC6 (steps 3-4), AC7 and AC11 (step 7), AC8 (step 5), AC9 (step 6), AC10 (step 8). AC2/AC3 (configuration errors at startup) are algorithm rows AS-108..AS-117 of `docs/algorithm-examples/auth-startup-config.json`; an unreachable relay and a failed bootstrap send at startup cannot be staged on the stand and are a manual check.
+- **Replaces:** nothing (new feature).
 
 ---
 

@@ -1,0 +1,12 @@
+sequenceDiagram
+  participant A as Admin
+  participant L as Log Hub
+  participant S as SMTP relay
+  participant T as Teammate
+  A->>L: create user (email, role, team)
+  L->>L: check ALLOWED_EMAIL_DOMAINS, create account without a password
+  L->>S: set-password email
+  S-->>T: link = PUBLIC_BASE_URL/… (24 h, once)
+  T->>L: open the link, set password
+  L-->>T: password set
+  T->>L: sign in

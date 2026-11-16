@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   ConflictException,
   Inject,
   Injectable,
@@ -19,9 +20,17 @@ import {
   sql,
 } from 'drizzle-orm';
 import { MailService } from '../mail/mail.service';
+import type { EmailDelivery } from '../mail/mail.service';
 import { getEmailLinkBaseUrl } from '../common/public-base-url';
+import { maskEmail } from '../common/mask-email';
+import { AuthService } from '../auth/auth.service';
 import { EmailConfirmationTokensService } from '../auth/email-confirmation-tokens.service';
+import { EmailSendRateLimitService } from '../auth/email-send-rate-limit.service';
 import { TooManyRequestsException } from '../auth/exceptions/too-many-requests.exception';
+import { SET_PASSWORD_LINK_TTL_MS } from '../auth/password-link-ttl';
+import { buildResetUrl } from '../auth/password-link-url';
+import { PasswordResetTokensService } from '../auth/password-reset-tokens.service';
+import { PLACEHOLDER_IMPORT_USER_PASSWORD_HASH } from '../logs/logs.service';
 import { UsersService } from '../users/users.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { TeamsService } from '../teams/teams.service';
@@ -104,6 +113,38 @@ export interface UserRow {
   createdAt: Date;
   teamCount: number;
   lastActivity: Date | null;
+  /** A real password is stored (NULL and the import placeholder count as not set). */
+  passwordSet: boolean;
+}
+
+/** `POST /api/v1/admin/users` response (auth mode `strict-managed`). */
+export interface CreateAdminUserResponse {
+  id: number;
+  email: string;
+  role: 'admin' | 'user';
+  teamId: number | null;
+  email_delivery: EmailDelivery;
+}
+
+export interface CreateProvisionedUserInput {
+  email: string;
+  role?: 'admin' | 'user';
+  teamId?: number | null;
+}
+
+function isUniqueViolation(err: unknown): boolean {
+  return (
+    typeof err === 'object' &&
+    err !== null &&
+    (err as { code?: string }).code === '23505'
+  );
+}
+
+function hasRealPassword(passwordHash: string | null): boolean {
+  return (
+    passwordHash !== null &&
+    passwordHash !== PLACEHOLDER_IMPORT_USER_PASSWORD_HASH
+  );
 }
 
 @Injectable()
@@ -118,7 +159,137 @@ export class AdminService {
     private readonly mailService: MailService,
     private readonly sessionsService: SessionsService,
     private readonly teamsService: TeamsService,
+    private readonly authService: AuthService,
+    private readonly emailSendRateLimitService: EmailSendRateLimitService,
+    private readonly passwordResetTokensService: PasswordResetTokensService,
   ) {}
+
+  /**
+   * Strict-managed "Create user": the account is created with no password and
+   * gets an emailed 24 h set-password link. Order: domain check → per-IP email
+   * limit → duplicate check (409, nothing sent) → team check → insert user
+   * (+ membership) in one transaction → issue token → send. A failed send
+   * keeps the account (`email_delivery: 'failed'`, resend later).
+   */
+  async createProvisionedUser(
+    dto: CreateProvisionedUserInput,
+    ip: string,
+  ): Promise<CreateAdminUserResponse> {
+    const email = dto.email.trim().toLowerCase();
+    const role = dto.role ?? 'user';
+    const teamId = dto.teamId ?? null;
+
+    this.authService.assertEmailDomainAllowed(email, 'admin-create');
+    await this.emailSendRateLimitService.consumeIp(ip);
+
+    if (await this.usersService.findByEmail(email)) {
+      throw new ConflictException({
+        error: 'email_already_registered',
+        message: 'An account with this email already exists',
+      });
+    }
+
+    if (teamId !== null) {
+      const [team] = await this.db
+        .select({ id: teams.id })
+        .from(teams)
+        .where(eq(teams.id, teamId));
+      if (!team) {
+        throw new BadRequestException({
+          error: 'team_not_found',
+          message: 'Team not found',
+        });
+      }
+    }
+
+    let userId: number;
+    try {
+      userId = await this.db.transaction(async (tx) => {
+        const user = await this.usersService.create(email, null, role, tx);
+        if (teamId !== null) {
+          // Disclosure left unset, as the force-invite path: the user
+          // acknowledges the access-mode disclosure at first login.
+          await tx.insert(teamMembers).values({
+            teamId,
+            userId: user.id,
+            canInvite: false,
+          });
+        }
+        return user.id;
+      });
+    } catch (err) {
+      if (isUniqueViolation(err)) {
+        throw new ConflictException({
+          error: 'email_already_registered',
+          message: 'An account with this email already exists',
+        });
+      }
+      throw err;
+    }
+
+    const email_delivery = await this.issueAndSendSetPasswordLink(
+      userId,
+      email,
+    );
+    this.logger.log(
+      `Admin created user ${maskEmail(email)} (role ${role}${
+        teamId !== null ? `, team ${teamId}` : ''
+      }), set-password email ${email_delivery}`,
+    );
+    return { id: userId, email, role, teamId, email_delivery };
+  }
+
+  /**
+   * Strict-managed "Resend link": a fresh 24 h set-password link for an
+   * account that has no password yet; earlier links stop working.
+   * 404 unknown user, 409 password already set, 429 within the cooldown.
+   */
+  async sendPasswordLink(
+    userId: number,
+    ip: string,
+  ): Promise<{ email_delivery: EmailDelivery }> {
+    await this.emailSendRateLimitService.consumeIp(ip);
+
+    const user = await this.usersService.findById(userId);
+    if (!user) {
+      throw new NotFoundException({
+        error: 'user_not_found',
+        message: 'User not found',
+      });
+    }
+    if (hasRealPassword(user.passwordHash)) {
+      throw new ConflictException({
+        error: 'password_already_set',
+        message: 'This user has already set a password',
+      });
+    }
+
+    const email_delivery = await this.issueAndSendSetPasswordLink(
+      user.id,
+      user.email,
+    );
+    this.logger.log(
+      `Admin resent set-password link to ${maskEmail(user.email)}: ${email_delivery}`,
+    );
+    return { email_delivery };
+  }
+
+  /** Issues a 24 h token (429 within the cooldown) and emails the set link. */
+  private async issueAndSendSetPasswordLink(
+    userId: number,
+    email: string,
+  ): Promise<EmailDelivery> {
+    const result = await this.passwordResetTokensService.issueWithCooldown(
+      userId,
+      SET_PASSWORD_LINK_TTL_MS,
+    );
+    if (result.status === 'cooldown') {
+      throw new TooManyRequestsException(result.retryAfterSeconds);
+    }
+    const url = buildResetUrl(result.token, this.logger, 'set');
+    if (url === null) return 'failed';
+    return this.mailService.sendSetPasswordEmail(email, url);
+  }
 
   getAuthConfig(): AdminAuthConfig {
     const mode = this.configService.get<string>('AUTH_MODE');
@@ -487,6 +658,7 @@ export class AdminService {
         createdAt: users.createdAt,
         teamCount: countDistinct(teamMembers.teamId),
         lastActivity: max(logs.endTime),
+        passwordSet: sql<boolean>`(${users.passwordHash} IS NOT NULL AND ${users.passwordHash} <> ${PLACEHOLDER_IMPORT_USER_PASSWORD_HASH})`,
       })
       .from(users)
       .leftJoin(teamMembers, eq(teamMembers.userId, users.id))
@@ -502,6 +674,7 @@ export class AdminService {
       createdAt: r.createdAt,
       teamCount: Number(r.teamCount),
       lastActivity: r.lastActivity,
+      passwordSet: r.passwordSet === true,
     }));
   }
 }

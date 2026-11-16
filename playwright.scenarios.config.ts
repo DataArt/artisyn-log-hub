@@ -3,10 +3,11 @@
 // and passes STAND_URL / STAND_MODE / STAND_SCHEMA. There is no webServer: the stand is the
 // runner's job, and the dev server is never touched.
 //
-// Modes are declared by tags in the test title (`@mode-a`, `@mode-b`, `@mode-c`); each `mode-*`
-// project greps its tag. The `corpus` project always runs on the mode-A stand.
+// Modes are declared by tags in the test title (`@mode-a`, `@mode-b`, `@mode-c`, `@mode-d`); each
+// `mode-*` project greps its tag. The `corpus` project always runs on the mode-A stand.
 import { defineConfig, devices } from '@playwright/test';
 import * as path from 'path';
+import type { StandMode } from './tests/scenarios/modes';
 import { scaled } from './tests/timeout-scale';
 
 const ROOT = __dirname;
@@ -15,7 +16,7 @@ const SCENARIOS_TMP = path.join(ROOT, 'tmp', 'scenarios');
 /** run.mjs names each pass (`a`, `b-main`, `b-backoff`, `c`) so passes do not overwrite each other's report. */
 const reportLabel = process.env.STAND_REPORT_LABEL || 'local';
 
-const modeProject = (mode: 'a' | 'b' | 'c') => ({
+const modeProject = (mode: StandMode) => ({
   name: `mode-${mode}`,
   grep: new RegExp(`@mode-${mode}\\b`),
   testIgnore: 'corpus/**',
@@ -46,6 +47,7 @@ export default defineConfig({
     modeProject('a'),
     modeProject('b'),
     modeProject('c'),
+    modeProject('d'),
     { name: 'corpus', testDir: path.join(ROOT, 'tests', 'scenarios', 'corpus') },
   ],
 });

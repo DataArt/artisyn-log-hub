@@ -11,6 +11,7 @@ import { UsersModule } from '../users/users.module';
 import { AdminController } from './admin.controller';
 import { AdminPanelController } from './admin-panel.controller';
 import { AdminService } from './admin.service';
+import { AdminUserProvisioningController } from './admin-user-provisioning.controller';
 import { UploadQueueAdminService } from './upload-queue-admin.service';
 import { UploadQueueStatsService } from './upload-queue-stats.service';
 
@@ -25,7 +26,11 @@ import { UploadQueueStatsService } from './upload-queue-stats.service';
     SessionsModule,
     TeamsModule,
   ],
-  controllers: [AdminController, AdminPanelController],
+  controllers: [
+    AdminController,
+    AdminPanelController,
+    AdminUserProvisioningController,
+  ],
   providers: [
     AdminGuard,
     AdminService,

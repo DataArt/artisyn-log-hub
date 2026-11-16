@@ -7,7 +7,11 @@
 //   3. picks a free port, prepares tmp/scenarios/run-<runId>/<mode>/ (no .env there);
 //   4. spawns `node tmp/scenarios/stand/index.js` with the mode env from tests/scenarios/modes.ts —
 //      the stand migrates its own schema via initializeDatabase + E2E_DB_SCHEMA;
-//   5. waits for GET /health.
+//   5. waits for GET /health;
+//   6. for a `restartOnce` mode (D, impl-plan 2026-11-05 DD 22): stops the process and spawns it
+//      again on the same schema and port, then waits for /health again — so the scenarios see a
+//      stand that has already started twice (the second strict-managed start must send no email).
+// Mode D also gets a per-run bootstrap admin address, returned as `adminEmail`.
 // stopStand(stand): killTree, then DROP SCHEMA ... CASCADE and the label is removed.
 //
 // coverage (SCENARIOS_COVERAGE=1, DD L1): the stand runs with NODE_V8_COVERAGE=
@@ -26,6 +30,7 @@ import {
   DEFAULT_DATABASE_URL,
   DEFAULT_MAILPIT_SMTP,
   MODES,
+  SCENARIO_EMAIL_DOMAIN,
   standEnv,
   standUrl,
 } from '../../tests/scenarios/modes.ts';
@@ -38,7 +43,7 @@ export const COVERAGE_ROOT = path.join(ROOT, 'tmp', 'coverage');
 export const COVERAGE_FLUSH_TIMEOUT_MS = 15_000;
 const COVERAGE_PRELOAD = path.join(path.dirname(fileURLToPath(import.meta.url)), 'coverage-flush.cjs');
 
-const SCHEMA_NAME_RE = /^scn_[abc]_[0-9a-f]{8}$/;
+const SCHEMA_NAME_RE = /^scn_[abcd]_[0-9a-f]{8}$/;
 
 /** OS variables the stand process inherits; everything app-related comes from standEnv(). */
 const PASSTHROUGH_ENV = [
@@ -173,8 +178,36 @@ async function waitForHealth(url, child, logFile, timeoutMs) {
   throw new Error(`Stand did not answer ${url}/health within ${timeoutMs} ms (${lastError}).\n${tail(logFile)}`);
 }
 
+/** The per-run strict-managed bootstrap admin of a mode-D stand (ADMIN_CONTACT_EMAIL). */
+export function modeDAdminEmail(runId) {
+  return `admin-d-${String(runId).toLowerCase()}@${SCENARIO_EMAIL_DOMAIN}`;
+}
+
+/** Spawns the stand entry with its log appended to `logFile` (`flags` 'w' for the first start). */
+async function spawnStand(nodeArgs, { runDir, env, logFile, flags }) {
+  const log = fs.openSync(logFile, flags);
+  let child;
+  try {
+    child = spawn(process.execPath, nodeArgs, {
+      cwd: runDir,
+      env,
+      detached: process.platform !== 'win32',
+      windowsHide: true,
+      stdio: ['ignore', log, log],
+    });
+  } finally {
+    fs.closeSync(log);
+  }
+  await new Promise((resolve, reject) => {
+    child.once('spawn', resolve);
+    child.once('error', reject);
+  });
+  return child;
+}
+
 /**
- * Starts a stand for `mode`. Returns { mode, url, port, schema, runId, runDir, logFile, pid, child }.
+ * Starts a stand for `mode`. Returns { mode, url, port, schema, runId, runDir, logFile, pid, child,
+ * adminEmail } (`adminEmail` is null outside mode D).
  * On any failure after CREATE SCHEMA the process is killed and the schema dropped before rethrowing.
  */
 export async function startStand({
@@ -207,6 +240,7 @@ export async function startStand({
     const url = standUrl(port);
     const runDir = path.join(SCENARIOS_TMP, `run-${runId}`, mode);
     fs.mkdirSync(runDir, { recursive: true });
+    const adminEmail = mode === 'd' ? modeDAdminEmail(runId) : null;
     const env = {
       ...passthroughEnv(),
       ...standEnv({
@@ -216,8 +250,9 @@ export async function startStand({
         schema,
         runDir,
         joinPath: path.join,
-        sessionSecret: mode === 'b' ? crypto.randomBytes(48).toString('hex') : undefined,
+        sessionSecret: mode === 'b' || mode === 'd' ? crypto.randomBytes(48).toString('hex') : undefined,
         mailpitSmtp,
+        adminContactEmail: adminEmail ?? undefined,
       }),
     };
     let coverageDir = null;
@@ -231,24 +266,23 @@ export async function startStand({
     const nodeArgs = coverage ? ['--require', COVERAGE_PRELOAD, entry] : [entry];
 
     const logFile = path.join(runDir, 'stand.log');
-    const log = fs.openSync(logFile, 'w');
-    try {
-      child = spawn(process.execPath, nodeArgs, {
-        cwd: runDir,
-        env,
-        detached: process.platform !== 'win32',
-        windowsHide: true,
-        stdio: ['ignore', log, log],
-      });
-    } finally {
-      fs.closeSync(log);
-    }
-    await new Promise((resolve, reject) => {
-      child.once('spawn', resolve);
-      child.once('error', reject);
-    });
+    child = await spawnStand(nodeArgs, { runDir, env, logFile, flags: 'w' });
     await waitForHealth(url, child, logFile, healthTimeoutMs);
-    return { mode, url, port, schema, runId, runDir, logFile, pid: child.pid, child, databaseUrl, labelsFile, coverageDir };
+    if (MODES[mode].restartOnce) {
+      // Keep the first process's coverage, then clear the flush handshake for the second one.
+      if (coverageDir) {
+        await flushStandCoverage({ child, coverageDir });
+        fs.rmSync(path.join(coverageDir, 'flush'), { force: true });
+        fs.rmSync(path.join(coverageDir, 'flush.done'), { force: true });
+      }
+      await stopProcess(child);
+      fs.appendFileSync(logFile, `\n[stand] restartOnce: restarting mode ${mode} on schema ${schema}\n`, 'utf8');
+      child = await spawnStand(nodeArgs, { runDir, env, logFile, flags: 'a' });
+      await waitForHealth(url, child, logFile, healthTimeoutMs);
+    }
+    return {
+      mode, url, port, schema, runId, runDir, logFile, pid: child.pid, child, databaseUrl, labelsFile, coverageDir, adminEmail,
+    };
   } catch (err) {
     if (child) await stopProcess(child);
     await dropSchema(databaseUrl, schema, labelsFile).catch(() => {});

@@ -10,6 +10,7 @@ const MODE_LABELS: Record<string, string> = {
   password: 'Email + password (Mode 2)',
   'password-confirm': 'Email + password with confirmation (Mode 3)',
   'azure-oauth': 'Azure Entra ID / OAuth (Mode 4)',
+  'strict-managed': 'Strict managed (admin-provisioned users)',
 };
 
 // Field *names* only, for the inactive-modes reference list — secrets are
@@ -19,6 +20,7 @@ const MODE_FIELD_NAMES: Record<string, string[]> = {
   password: [],
   'password-confirm': ['SMTP host', 'SMTP port', 'SMTP from address'],
   'azure-oauth': ['Tenant ID', 'Client ID', 'Redirect URI', 'Authority'],
+  'strict-managed': ['SMTP host', 'SMTP port', 'SMTP from address'],
 };
 
 function Card({ label, children }: { label: string; children: ReactNode }) {

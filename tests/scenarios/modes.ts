@@ -5,24 +5,30 @@
 // scripts/__tests__/scenarios-stand.test.js, so this file uses erasable syntax only
 // (no enum, no namespace, no parameter properties) and imports nothing.
 
-export type StandMode = 'a' | 'b' | 'c';
+export type StandMode = 'a' | 'b' | 'c' | 'd';
 
-export type AuthMode = 'none' | 'password' | 'password-confirm';
+export type AuthMode = 'none' | 'password' | 'password-confirm' | 'strict-managed';
 
 export interface ModeSpec {
   mode: StandMode;
   authMode: AuthMode;
   nodeEnv: 'test' | 'production';
-  /** True when the mode needs Mailpit (signup confirmation emails). */
+  /** True when the mode needs Mailpit (signup confirmation / set-password emails). */
   needsMailpit: boolean;
+  /**
+   * True when startStand stops the stand once after its first health check and starts it again on
+   * the same schema (mode D: proves the second start of strict-managed sends no bootstrap email).
+   */
+  restartOnce?: boolean;
 }
 
-export const STAND_MODES: readonly StandMode[] = ['a', 'b', 'c'];
+export const STAND_MODES: readonly StandMode[] = ['a', 'b', 'c', 'd'];
 
 export const MODES: Readonly<Record<StandMode, ModeSpec>> = {
   a: { mode: 'a', authMode: 'none', nodeEnv: 'test', needsMailpit: false },
   b: { mode: 'b', authMode: 'password-confirm', nodeEnv: 'production', needsMailpit: true },
   c: { mode: 'c', authMode: 'password', nodeEnv: 'test', needsMailpit: false },
+  d: { mode: 'd', authMode: 'strict-managed', nodeEnv: 'production', needsMailpit: true, restartOnce: true },
 };
 
 /** Fast-tick env (DD C4): schedulers tick in milliseconds, nothing reaches the network. */
@@ -58,10 +64,10 @@ export const DEFAULT_MAILPIT_URL = 'http://localhost:8025';
 export const DEFAULT_MAILPIT_SMTP = 'localhost:1025';
 
 export function isStandMode(value: string): value is StandMode {
-  return value === 'a' || value === 'b' || value === 'c';
+  return value === 'a' || value === 'b' || value === 'c' || value === 'd';
 }
 
-/** Parses `--mode a,b,c` style lists; throws on an unknown mode. Order and duplicates normalised. */
+/** Parses `--mode a,b,c,d` style lists; throws on an unknown mode. Order and duplicates normalised. */
 export function parseModes(list: string): StandMode[] {
   const wanted = new Set(
     list
@@ -70,7 +76,7 @@ export function parseModes(list: string): StandMode[] {
       .filter(Boolean),
   );
   for (const m of wanted) {
-    if (!isStandMode(m)) throw new Error(`Unknown stand mode "${m}" (expected a, b or c)`);
+    if (!isStandMode(m)) throw new Error(`Unknown stand mode "${m}" (expected a, b, c or d)`);
   }
   return STAND_MODES.filter((m) => wanted.has(m));
 }
@@ -96,9 +102,14 @@ export interface StandEnvInput {
   runDir: string;
   /** Path joiner of the caller (node:path join); keeps this module import-free. */
   joinPath: (...parts: string[]) => string;
-  /** Required in mode B: random 48 bytes hex, fresh per run. */
+  /** Required in modes B and D: random 48 bytes hex, fresh per run. */
   sessionSecret?: string;
   mailpitSmtp?: string;
+  /**
+   * ADMIN_CONTACT_EMAIL of modes B and D (default admin@arrakis.test). Mode D passes a per-run
+   * address (admin-d-<runId>@arrakis.test): the strict-managed bootstrap admin, so Mailpit holds
+   * exactly one bootstrap email for it.
+   */
   adminContactEmail?: string;
   /** Defaults to the stand URL. */
   publicBaseUrl?: string;
@@ -137,9 +148,11 @@ export function standEnv(input: StandEnvInput): Record<string, string> {
     UPLOAD_QUEUE_DIR: input.joinPath(input.runDir, 'upload-queue'),
     EXPORT_IMPORT_DIR: input.joinPath(input.runDir, 'export-import'),
   };
-  if (input.mode === 'b') {
+  // Mode D (strict-managed) shares mode B's production + SMTP env; its ADMIN_CONTACT_EMAIL is the
+  // bootstrap admin the stand creates and emails on its first start.
+  if (input.mode === 'b' || input.mode === 'd') {
     if (!input.sessionSecret || !/^[0-9a-f]{96}$/.test(input.sessionSecret)) {
-      throw new Error('Mode b needs sessionSecret: 48 random bytes as hex');
+      throw new Error(`Mode ${input.mode} needs sessionSecret: 48 random bytes as hex`);
     }
     const smtp = parseHostPort(input.mailpitSmtp || DEFAULT_MAILPIT_SMTP);
     env.PASSWORD_POLICY = 'long';

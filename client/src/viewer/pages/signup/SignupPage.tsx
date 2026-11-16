@@ -4,7 +4,8 @@ import { signup, resendConfirmation, ApiError } from '../../api';
 import { useAuth } from '../../context/AuthContext';
 import { useAuthConfig } from '../../hooks/useAuthConfig';
 import { useCooldown } from '../../hooks/useCooldown';
-import { useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
+import { routes } from '../../hooks/useHashRoute';
 import { Button } from '../../ui/button';
 import { Input } from '../../ui/input';
 import {
@@ -98,6 +99,11 @@ export function SignupPage() {
         );
       }
     }
+  }
+
+  // strict-managed: no self sign-up — only an administrator creates accounts.
+  if (config?.mode === 'strict-managed') {
+    return <Navigate to={routes.login} replace />;
   }
 
   if (pending === 'check-email' || pending === 'delivery-failed') {

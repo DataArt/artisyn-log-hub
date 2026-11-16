@@ -120,8 +120,11 @@ function retryDelaySeconds(err: ApiError): number {
 
 function PasswordLoginForm({
   forgotPassword,
+  showSignupLink = true,
 }: {
   forgotPassword: ForgotPasswordLinkState;
+  /** False in strict-managed: only an administrator creates accounts. */
+  showSignupLink?: boolean;
 }) {
   const { user, setUser } = useAuth();
   const navigate = useNavigate();
@@ -257,16 +260,18 @@ function PasswordLoginForm({
             )}
             Log in
           </Button>
-          <p className="text-sm text-muted-foreground">
-            Don&apos;t have an account?{' '}
-            <button
-              type="button"
-              className="underline hover:text-foreground"
-              onClick={() => navigate('/signup')}
-            >
-              Sign up
-            </button>
-          </p>
+          {showSignupLink && (
+            <p className="text-sm text-muted-foreground">
+              Don&apos;t have an account?{' '}
+              <button
+                type="button"
+                className="underline hover:text-foreground"
+                onClick={() => navigate('/signup')}
+              >
+                Sign up
+              </button>
+            </p>
+          )}
         </CardFooter>
       </form>
     </Card>
@@ -313,6 +318,12 @@ export function LoginPage() {
       )}
       {!isLoading && !isError && config?.mode === 'password-confirm' && (
         <PasswordLoginForm forgotPassword={forgotPasswordLinkState(config)} />
+      )}
+      {!isLoading && !isError && config?.mode === 'strict-managed' && (
+        <PasswordLoginForm
+          forgotPassword={forgotPasswordLinkState(config)}
+          showSignupLink={false}
+        />
       )}
       {!isLoading && !isError && config?.mode === 'azure-oauth' && (
         <Card className="w-full max-w-sm">

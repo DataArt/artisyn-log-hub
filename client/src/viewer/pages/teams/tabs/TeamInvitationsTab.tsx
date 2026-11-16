@@ -7,6 +7,7 @@ import {
   fetchMyInvitations,
   sendInvitation,
 } from '../../../api';
+import { useAuthConfig } from '../../../hooks/useAuthConfig';
 import {
   ACCESS_MODE_BADGE_CLASS,
   ACCESS_MODE_LABEL,
@@ -30,6 +31,8 @@ export function TeamInvitationsTab({
   const [pendingForceEmail, setPendingForceEmail] = useState<string | null>(
     null,
   );
+  const { data: authConfig } = useAuthConfig();
+  const isStrictManaged = authConfig?.mode === 'strict-managed';
 
   const { data: allInvitations = [] } = useQuery({
     queryKey: ['invitations'],
@@ -50,6 +53,14 @@ export function TeamInvitationsTab({
     },
     onError: (err: unknown) => {
       if (err instanceof ApiError && err.code === 'user_not_registered') {
+        // strict-managed: only an administrator creates accounts, so the
+        // "add them anyway" offer is not shown (the server refuses it too).
+        if (isStrictManaged) {
+          setInviteError(
+            'This user has no account yet — ask an administrator to create it first.',
+          );
+          return;
+        }
         setPendingForceEmail(inviteEmail.trim());
         return;
       }
@@ -131,7 +142,7 @@ export function TeamInvitationsTab({
       </div>
 
       <ConfirmDialog
-        open={pendingForceEmail !== null}
+        open={pendingForceEmail !== null && !isStrictManaged}
         header="Not registered yet"
         message="This user is not registered yet — add them anyway? They will see this team and its repository as soon as they first log in."
         confirmLabel="Add anyway"

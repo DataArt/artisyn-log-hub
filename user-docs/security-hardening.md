@@ -27,18 +27,18 @@ Use this list before exposing an installation to anyone other than the local use
 
 | # | Item | Setting |
 |---|---|---|
-| 1 | Choose an authentication mode other than `none` | `AUTH_MODE=password`, `password-confirm` or `azure-oauth` |
+| 1 | Choose an authentication mode other than `none` | `AUTH_MODE=password`, `password-confirm`, `azure-oauth` or `strict-managed` |
 | 2 | Use strong, unique secrets | `POSTGRES_PASSWORD`; `SESSION_SECRET` is generated and stored in the database when unset (§3.5) — if you set it, use ≥ 32 random bytes |
 | 3 | Put a TLS-terminating reverse proxy in front of the app | `TRUST_PROXY=1` (or the proxy's IP) |
-| 4 | Set the public URL used in emailed links (Modes 2/3) | `PUBLIC_BASE_URL=https://<your-host>` — required in production |
+| 4 | Set the public URL used in emailed links (Modes 2/3, `strict-managed`) | `PUBLIC_BASE_URL=https://<your-host>` — required in production (`strict-managed`: always) |
 | 5 | Limit self-registration to your domains (Mode 3) | `ALLOWED_EMAIL_DOMAINS=example.org,example.net` |
 | 6 | Make session cookies HTTPS-only | Automatic with `TRUST_PROXY`; otherwise `COOKIE_SECURE=true` |
 | 7 | Bind the published port narrowly | `ports:` in `docker-compose.yml` — loopback or the proxy's interface only |
 | 8 | Keep the database private | Do not publish the `db` service port |
-| 9 | Enforce a password policy (Modes 2/3) | `PASSWORD_POLICY=long` (default) |
+| 9 | Enforce a password policy (Modes 2/3, `strict-managed`) | `PASSWORD_POLICY=long` (default) |
 | 10 | Set data retention to your policy | `SESSION_RETENTION_DAYS` |
 | 11 | Restrict filesystem access to `$LOG_HUB_DATA_DIR` | Host permissions; include in backups |
-| 12 | Review admin accounts — the first registered user becomes admin | Admin panel → Users |
+| 12 | Review admin accounts — the first registered user becomes admin (in `strict-managed`: the `ADMIN_CONTACT_EMAIL` account) | Admin panel → Users |
 | 13 | Keep the image up to date | Re-run `install.sh` / `install.ps1` to pull the new release image; migrations run on startup |
 | 14 | Read the accepted risks | §11 Known limitations and accepted risks |
 
@@ -46,9 +46,9 @@ Use this list before exposing an installation to anyone other than the local use
 
 ### 3.1 Authentication modes (`AUTH_MODE`)
 
-The four modes (`none`, `password`, `password-confirm`, `azure-oauth`), what each is for, the
-default when `AUTH_MODE` is unset and why Mode 1 must stay on a loopback-only port are described
-in [Authentication modes](authentication-modes.md). The settings each mode needs are in §3.2–§3.4
+The five modes (`none`, `password`, `password-confirm`, `azure-oauth`, `strict-managed`), what
+each is for, the default when `AUTH_MODE` is unset and why Mode 1 must stay on a loopback-only
+port are described in [Authentication modes](authentication-modes.md). The settings each mode needs are in §3.2–§3.4
 below.
 
 ### 3.2 Azure Entra ID (Mode 4)
@@ -69,7 +69,7 @@ Required settings: `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`,
 - Access control (who may sign in) is managed in Entra ID — e.g. by requiring user assignment for
   the enterprise application.
 
-### 3.3 Passwords (Modes 2 and 3)
+### 3.3 Passwords (Modes 2 and 3, `strict-managed`)
 
 - Hashing: Argon2id.
 - Strength policy `PASSWORD_POLICY`:
@@ -87,9 +87,12 @@ Required settings: `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`,
   counter is in memory per worker process — it is a speed bump, not an account lockout. Behind a
   proxy, set `TRUST_PROXY` so the real client IP is used.
 - **Password change** signs out all of the user's other sessions and sends a notification email
-  when SMTP is configured — always in Mode 3, and in Mode 2 only when `SMTP_HOST` is set.
+  when SMTP is configured — always in Mode 3 and `strict-managed`, and in Mode 2 only when
+  `SMTP_HOST` is set.
 - **Password reset** tokens are valid for 1 hour; email confirmation tokens for 24 hours; both are
-  single-use with a 60-second re-issue cooldown.
+  single-use with a 60-second re-issue cooldown. In `strict-managed` the set-password links that
+  the first admin and admin-created accounts get are valid for 24 hours, single-use, with the same
+  cooldown ([Strict managed](authentication-modes.md#strict-managed-admin-provisioned-users)).
 - **Rate limits on account endpoints**: sign-up, forgot-password, resend-confirmation and
   reset-password allow `AUTH_RATE_LIMIT_POINTS` requests (default `5`) per
   `AUTH_RATE_LIMIT_WINDOW_SEC` (default `900`, i.e. 15 minutes), counted per source IP and — for
@@ -100,13 +103,18 @@ Required settings: `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`,
   - `AUTH_RATE_LIMIT_POINTS=0` disables the limits (development only).
   - The counters are in memory per worker process, so with N workers the effective limit is about
     N × the configured value (§11).
+- **Email limit (`strict-managed` only)**: on top of the limits above, each source IP can trigger
+  at most 20 emails per hour through forgot-password, the admin's create-user and resend-link.
+  Over it the request is answered with `429` and `Retry-After`. The limit is fixed, in memory per
+  worker process, and Modes 1–4 do not have it.
 - **Sign-up domain allow-list (Mode 3)**: on an internet-facing Mode 3 server anyone who can
   reach the sign-up page can create an account, so limit sign-up to your domains.
   `ALLOWED_EMAIL_DOMAINS` is a comma-separated list of
   domains (for example `example.org,example.net`). When set, sign-up is accepted only for emails
   whose domain matches an entry exactly — subdomains are not included. Unset or empty means no
   restriction. A malformed value (an entry with `@`, spaces or no dot) stops the server at
-  startup. Existing accounts are not affected.
+  startup. Existing accounts are not affected. In `strict-managed` there is no sign-up; the same
+  list limits the addresses an admin can create accounts for.
 
 ### 3.4 Email (SMTP)
 
@@ -125,18 +133,23 @@ Settings: `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM`, `SMTP_USER`, `SMTP_PASSWORD`, `
   - `ADMIN_CONTACT_EMAIL` is optional.
 - **Mode 3** (`password-confirm`): `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM` and `ADMIN_CONTACT_EMAIL`
   are required, and the relay must be reachable at startup — otherwise the server does not start.
+- **`strict-managed`**: the same as Mode 3, plus `PUBLIC_BASE_URL` in every environment. On the
+  first start the server emails a set-password link to `ADMIN_CONTACT_EMAIL`; if that email
+  cannot be sent, the server does not start
+  ([Strict managed](authentication-modes.md#strict-managed-admin-provisioned-users)).
 - `SMTP_USER`/`SMTP_PASSWORD` are optional (anonymous relay); `SMTP_SECURE` is optional
   (unset = `false`).
 
 Use `SMTP_SECURE=true` (implicit TLS, usually port 465) or a relay that enforces STARTTLS.
 
 Links in emails (sign-up confirmation, resend, password reset, an admin's resend of a pending
-registration) are built only from `PUBLIC_BASE_URL` — never from the request's `Host` header,
+registration, set-password links in `strict-managed`) are built only from `PUBLIC_BASE_URL` — never from the request's `Host` header,
 which a caller controls. Set it to the canonical HTTPS address users open, for example
 `PUBLIC_BASE_URL=https://loghub.example.org`.
 
 - In production (`NODE_ENV=production`, which the Docker image and install kit set), Modes 2
-  and 3 refuse to start without an absolute `http(s)` `PUBLIC_BASE_URL`.
+  and 3 refuse to start without an absolute `http(s)` `PUBLIC_BASE_URL`; `strict-managed` refuses
+  in every environment.
 - Outside production it defaults to `http://localhost:5173` (the development client).
 - If it is missing anyway, the email is not sent and the server logs
   `mail: PUBLIC_BASE_URL not set — email link not sent` once per process.
@@ -274,7 +287,7 @@ The web client loads no external resources (fonts, CDNs, analytics).
 | Destination | When | How to control |
 |---|---|---|
 | Azure Entra ID | `AUTH_MODE=azure-oauth` | Mode setting |
-| SMTP relay | Mode 3 always (checked at startup); Mode 2 only when `SMTP_HOST` is set | SMTP settings (§3.4) |
+| SMTP relay | Mode 3 and `strict-managed` always (checked at startup); Mode 2 only when `SMTP_HOST` is set | SMTP settings (§3.4) |
 | `registry.npmjs.org` (HTTPS) | Periodic AI tool version check | `AI_TOOL_VERSION_CHECK_ENABLED=false` disables it |
 | `platform.claude.com` (HTTPS) | Daily model pricing fetch: reads Anthropic's public pricing page, at most once per 24 h cluster-wide | `MODEL_PRICING_FETCH_ENABLED=false` disables it |
 | `openrouter.ai` (HTTPS) | Only when an admin clicks **Import from OpenRouter** on the Model Pricing tab | Not scheduled; don't click the button |
@@ -410,8 +423,8 @@ Protect backups with the same controls as the live data (§6.1) and apply the sa
 |---|---|---|
 | `AUTH_MODE` | `password` (install kit ships `none`) | Authentication mode (§3.1). |
 | `SESSION_SECRET` | generated per install; when unset, generated and stored in the database | Signs session cookies (§3.5). Optional. |
-| `PUBLIC_BASE_URL` | unset (`http://localhost:5173` outside production) | Base of emailed links. Required in production for Modes 2/3 (§3.4). |
-| `ALLOWED_EMAIL_DOMAINS` | unset (no restriction) | Mode 3 sign-up domain allow-list (§3.3). |
+| `PUBLIC_BASE_URL` | unset (`http://localhost:5173` outside production) | Base of emailed links. Required in production for Modes 2/3, always for `strict-managed` (§3.4). |
+| `ALLOWED_EMAIL_DOMAINS` | unset (no restriction) | Mode 3 sign-up domain allow-list; in `strict-managed`, the domains an admin can create accounts for (§3.3). |
 | `AUTH_RATE_LIMIT_POINTS` | `5` (`0` disables) | Requests per window on sign-up, forgot, resend and reset (§3.3). |
 | `AUTH_RATE_LIMIT_WINDOW_SEC` | `900` | Rate-limit window (§3.3). |
 | `NODE_ENV` | `production` in the image and install kit | Enables the production startup checks. |
@@ -421,7 +434,7 @@ Protect backups with the same controls as the live data (§6.1) and apply the sa
 | `TRUST_PROXY` | `false` | Reverse-proxy trust (§4.1). |
 | `PASSWORD_POLICY` | `long` | Password strength (§3.3). |
 | `AZURE_*` | — | Mode 4 settings (§3.2). |
-| `SMTP_*`, `ADMIN_CONTACT_EMAIL` | — | Email settings (§3.4): required in Mode 3, optional in Mode 2 (no password reset without `SMTP_HOST`), unused in Modes 1/4. |
+| `SMTP_*`, `ADMIN_CONTACT_EMAIL` | — | Email settings (§3.4): required in Mode 3 and `strict-managed` (where `ADMIN_CONTACT_EMAIL` is also the first admin), optional in Mode 2 (no password reset without `SMTP_HOST`), unused in Modes 1/4. |
 | `SESSION_RETENTION_DAYS` | `30` | Data retention (§6.2). |
 | `LOGS_MAX_BODY_MB` | `2500` | Maximum log upload request size (`POST /api/v2/logs`). |
 | `IMPORT_MAX_UPLOAD_BYTES`, `IMPORT_MAX_ENTRIES`, `IMPORT_MAX_UNCOMPRESSED_BYTES`, `IMPORT_MAX_ENTRY_BYTES` | 5 GiB, 20,000, 20 GiB, 400 MiB | Repository import limits (§6.4). |
@@ -442,9 +455,9 @@ what an administrator can do about it.
 | Risk | When it applies | What an admin can do |
 |---|---|---|
 | **Azure accounts are matched by email.** A user is identified by the token's `email` / `preferred_username` within your tenant. An Entra admin who sets another user's `mail` attribute, a guest account with an unverified email, or a re-used UPN can sign in as an existing Log Hub user. | Mode 4 | Restrict who may sign in (user assignment on the enterprise application); do not re-use UPNs; review guest accounts; restrict who can edit user attributes in Entra ID. |
-| **The first registered user becomes admin.** | Modes 2 and 3 on a fresh database (and the first identify in Mode 1) | Register your own admin account before exposing the server; review **Admin panel → Users** afterwards. |
+| **The first registered user becomes admin.** | Modes 2 and 3 on a fresh database (and the first identify in Mode 1); not `strict-managed`, where the admin is `ADMIN_CONTACT_EMAIL` | Register your own admin account before exposing the server; review **Admin panel → Users** afterwards. |
 | **CSRF protection is `SameSite=Lax` only** (§3.7). A sibling subdomain, or a browser without `SameSite` support, can make cross-site requests that carry the session cookie. | All modes with a browser session | Host Log Hub where every sibling subdomain is trusted (or on its own domain); require current browsers. |
-| **No rate limits on log ingestion and the hook API-key routes**; the auth rate limits (§3.3) and login delay are counted per worker process, so the effective limit is about N × the setting with N workers. | All modes; multi-worker servers | Rate-limit at the reverse proxy; revoke abused API keys; lower `AUTH_RATE_LIMIT_POINTS` to compensate for the worker count. |
+| **No rate limits on log ingestion and the hook API-key routes**; the auth rate limits (§3.3), the `strict-managed` limit of 20 emails per IP per hour and the login delay are counted per worker process, so the effective limit is about N × the setting with N workers. | All modes; multi-worker servers | Rate-limit at the reverse proxy; revoke abused API keys; lower `AUTH_RATE_LIMIT_POINTS` to compensate for the worker count. |
 | **Known insecure secrets only produce a warning.** The server starts with a well-known `SESSION_SECRET` or database password and logs `security: known insecure … in use`. | Modes 2, 3 and 4 | Check the startup log; set unique values (or leave `SESSION_SECRET` unset so one is generated). |
 | **Account enumeration.** The responses of sign-up, forgot-password and resend-confirmation can reveal whether an email has an account. | Modes 2 and 3 | Keep the auth rate limits on; monitor the security log for bursts; prefer Mode 4 for public-facing servers. |
 | **Account deletion needs no password.** A signed-in user deletes their account by typing the confirmation word `delete`; anyone with access to an unlocked session can do it. | All modes | Keep the session lifetime short; back up the database (§9) so a deleted account can be restored manually. |

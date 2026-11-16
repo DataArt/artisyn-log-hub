@@ -19,14 +19,19 @@ export interface ChangePasswordResult extends Omit<
   email_delivery: 'sent' | 'failed' | 'skipped';
 }
 
-export type AuthMode = 'none' | 'password' | 'password-confirm' | 'azure-oauth';
+export type AuthMode =
+  | 'none'
+  | 'password'
+  | 'password-confirm'
+  | 'azure-oauth'
+  | 'strict-managed';
 
 export interface AuthConfig {
   mode: AuthMode;
   azure?: { authority: string; clientId: string; redirectUri: string };
   adminContactEmail?: string;
   /**
-   * Present only in `password` / `password-confirm`: whether the server can
+   * Present only in `password` / `password-confirm` / `strict-managed`: whether the server can
    * send password-reset email (SMTP configured). Absent from older servers.
    */
   passwordResetAvailable?: boolean;

@@ -12,6 +12,10 @@ import {
 } from '@nestjs/common';
 import type { Request } from 'express';
 import { AuthService } from '../auth/auth.service';
+import {
+  AllowedAuthModes,
+  AuthModeGuard,
+} from '../auth/guards/auth-mode.guard';
 import { SessionAuthGuard } from '../auth/guards/session-auth.guard';
 import { AdminGuard } from '../common/guards/admin.guard';
 import { getRequestBaseUrl } from '../common/request-base-url';
@@ -50,8 +54,11 @@ export class AdminController {
     return this.usersService.updateRole(userId, dto.role);
   }
 
+  /** Not in strict-managed: there an admin sends an emailed link instead (404). */
   @Post(':userId/reset-password-link')
   @HttpCode(200)
+  @AllowedAuthModes('none', 'password', 'password-confirm', 'azure-oauth')
+  @UseGuards(AuthModeGuard)
   async generateResetPasswordLink(
     @Req() req: Request,
     @Param('userId', ParseIntPipe) userId: number,

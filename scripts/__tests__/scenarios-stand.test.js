@@ -38,14 +38,14 @@ function envFor(mode, extra = {}) {
     schema: `scn_${mode}_0123abcd`,
     runDir: path.join('R', mode),
     joinPath: path.join,
-    sessionSecret: mode === 'b' ? SECRET : undefined,
+    sessionSecret: mode === 'b' || mode === 'd' ? SECRET : undefined,
     ...extra,
   });
 }
 
 describe('schema name', () => {
   test('is scn_<mode>_<8 hex>', () => {
-    for (const mode of ['a', 'b', 'c']) {
+    for (const mode of ['a', 'b', 'c', 'd']) {
       assert.match(stand.schemaName(mode), new RegExp(`^scn_${mode}_[0-9a-f]{8}$`));
     }
   });
@@ -56,7 +56,7 @@ describe('schema name', () => {
   });
 
   test('rejects an unknown mode and a non-hex suffix', () => {
-    assert.throws(() => stand.schemaName('d'), /Unknown stand mode/);
+    assert.throws(() => stand.schemaName('e'), /Unknown stand mode/);
     assert.throws(() => stand.schemaName('a', () => 'XYZ; DROP'), /unexpected schema name/);
     assert.throws(() => stand.assertSchemaName('public'), /unexpected schema name/);
   });
@@ -65,17 +65,19 @@ describe('schema name', () => {
 describe('mode env', () => {
   test('mode table matches DD C2', () => {
     assert.deepEqual(
-      Object.values(modes.MODES).map((m) => [m.mode, m.authMode, m.nodeEnv]),
+      Object.values(modes.MODES).map((m) => [m.mode, m.authMode, m.nodeEnv, m.needsMailpit, m.restartOnce === true]),
       [
-        ['a', 'none', 'test'],
-        ['b', 'password-confirm', 'production'],
-        ['c', 'password', 'test'],
+        ['a', 'none', 'test', false, false],
+        ['b', 'password-confirm', 'production', true, false],
+        ['c', 'password', 'test', false, false],
+        ['d', 'strict-managed', 'production', true, true],
       ],
     );
+    assert.deepEqual([...modes.STAND_MODES], ['a', 'b', 'c', 'd']);
   });
 
   test('every mode gets the fast tick, port, DB, schema, base URL, body limit and run-dir paths', () => {
-    for (const mode of ['a', 'b', 'c']) {
+    for (const mode of ['a', 'b', 'c', 'd']) {
       const env = envFor(mode);
       for (const [k, v] of Object.entries(modes.FAST_TICK_ENV)) assert.equal(env[k], v, `${mode} ${k}`);
       assert.equal(env.PORT, '41234');
@@ -112,14 +114,34 @@ describe('mode env', () => {
     assert.equal(envFor('b').SMTP_PORT, '1025', 'MAILPIT_SMTP default localhost:1025');
   });
 
-  test('mode b refuses a missing or short session secret', () => {
-    assert.throws(() => envFor('b', { sessionSecret: undefined }), /sessionSecret/);
-    assert.throws(() => envFor('b', { sessionSecret: 'ab'.repeat(8) }), /sessionSecret/);
+  test('mode d: strict-managed in production with Mailpit SMTP and the per-run bootstrap admin', () => {
+    const adminEmail = stand.modeDAdminEmail('20261116120000-ab12');
+    assert.equal(adminEmail, 'admin-d-20261116120000-ab12@arrakis.test');
+    const env = envFor('d', { mailpitSmtp: 'mail.local:2525', adminContactEmail: adminEmail });
+    assert.equal(env.AUTH_MODE, 'strict-managed');
+    assert.equal(env.NODE_ENV, 'production');
+    assert.equal(env.PASSWORD_POLICY, 'long');
+    assert.equal(env.SESSION_SECRET, SECRET);
+    assert.equal(env.COOKIE_SECURE, 'false');
+    assert.equal(env.SMTP_HOST, 'mail.local');
+    assert.equal(env.SMTP_PORT, '2525');
+    assert.equal(env.SMTP_FROM, 'noreply@arrakis.test');
+    assert.equal(env.ADMIN_CONTACT_EMAIL, adminEmail);
+    assert.equal(env.PUBLIC_BASE_URL, 'http://127.0.0.1:41234');
+    assert.equal(env.AUTH_RATE_LIMIT_POINTS, '1000', 'suite limits apply to mode d too');
+  });
+
+  test('modes b and d refuse a missing or short session secret', () => {
+    for (const mode of ['b', 'd']) {
+      assert.throws(() => envFor(mode, { sessionSecret: undefined }), /sessionSecret/);
+      assert.throws(() => envFor(mode, { sessionSecret: 'ab'.repeat(8) }), /sessionSecret/);
+    }
   });
 
   test('parseModes normalises order and rejects unknown modes', () => {
     assert.deepEqual(modes.parseModes('c, a,a'), ['a', 'c']);
-    assert.throws(() => modes.parseModes('a,x'), /Unknown stand mode "x"/);
+    assert.deepEqual(modes.parseModes('d,b'), ['b', 'd']);
+    assert.throws(() => modes.parseModes('a,x'), /Unknown stand mode "x" \(expected a, b, c or d\)/);
   });
 
   test('passthroughEnv keeps only OS essentials', () => {
@@ -251,8 +273,8 @@ describe('build-hooks-installer --static-dir', () => {
 });
 
 describe('stand env shared by every mode', () => {
-  test('plain-http cookies and raised auth rate limits in a, b and c', () => {
-    for (const mode of ['a', 'b', 'c']) {
+  test('plain-http cookies and raised auth rate limits in a, b, c and d', () => {
+    for (const mode of ['a', 'b', 'c', 'd']) {
       const env = envFor(mode);
       assert.equal(env.COOKIE_SECURE, 'false', `${mode} COOKIE_SECURE`);
       assert.equal(env.AUTH_RATE_LIMIT_POINTS, '1000', `${mode} AUTH_RATE_LIMIT_POINTS`);

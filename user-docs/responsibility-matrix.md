@@ -44,7 +44,7 @@ supply the software and documentation, and the operator runs it on its own infra
 | Initial installation from the GitHub Release (`install.sh` / `install.ps1`) | C | **A/R** | I | I | – | – |
 | Choosing and configuring `AUTH_MODE` | C | R | **A** | C | – | – |
 | Azure Entra ID app registration (Mode 4) | C | R | **A** | I | – | – |
-| SMTP relay configuration (Modes 2/3) | – | **A/R** | C | I | – | – |
+| SMTP relay configuration (Modes 2/3, `strict-managed`) | – | **A/R** | C | I | – | – |
 | TLS certificates and reverse proxy, `TRUST_PROXY` | C | **A/R** | C | – | – | – |
 | Network exposure, port binding, firewall rules | – | **A/R** | C | – | – | – |
 | Secret management (`.env`: session secret, DB password, Azure secret) | – | **A/R** | C | – | – | – |
@@ -69,6 +69,7 @@ supply the software and documentation, and the operator runs it on its own infra
 |---|:-:|:-:|:-:|:-:|:-:|:-:|
 | Access policy (who may use the system) | – | C | **A** | R | – | I |
 | Granting sign-in access in Entra ID (Mode 4) | – | R | **A** | I | – | I |
+| Creating accounts and resending set-password links ([`strict-managed`](authentication-modes.md#strict-managed-admin-provisioned-users)) | – | – | **A** | R | – | I |
 | Assigning and reviewing the `admin` role | – | – | **A** | R | – | – |
 | Periodic user access review | – | – | **A** | R | C | – |
 | Off-boarding: deleting users / revoking access | – | R | **A** | R | I | – |

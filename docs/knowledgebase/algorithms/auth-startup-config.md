@@ -1,5 +1,5 @@
 ---
-reviewed: 2026-10-15
+reviewed: 2026-11-16
 reviewer: ai
 ---
 
@@ -33,9 +33,9 @@ given below (`<v>` is the offending value as it was read, untrimmed, except for
 
 1. `AUTH_MODE` empty: it becomes `password` and is written back (installs that predate
    `AUTH_MODE`). Otherwise it must be exactly one of `none`, `password`, `password-confirm`,
-   `azure-oauth` (case matters, no trimming), else
+   `azure-oauth`, `strict-managed` (case matters, no trimming), else
    `AUTH_MODE environment variable has an unrecognized value "<v>"; must be one of none, password,
-   password-confirm, azure-oauth`.
+   password-confirm, azure-oauth, strict-managed`.
 2. Per mode:
    - `none`: nothing to check.
    - `password`, in order:
@@ -61,6 +61,19 @@ given below (`<v>` is the offending value as it was read, untrimmed, except for
      5. `Number(SMTP_PORT)` (which ignores surrounding spaces and also reads hex `0x19`, binary
         `0b11001`, octal `0o31` and exponents `1e3`; `Infinity` is not an integer) is an integer from 1 to 65535,
         else `SMTP_PORT environment variable must be an integer between 1 and 65535, got: <v>`.
+   - `strict-managed` (`validateModeStrictManaged`, also called by the admin bootstrap in
+     `initializeDatabase()`), in order:
+     1. `PUBLIC_BASE_URL` required **whatever `NODE_ENV` is** (every way in is an emailed link):
+        empty -> `PUBLIC_BASE_URL environment variable is required for AUTH_MODE=strict-managed
+        (every way in is an emailed link)`; set, trimmed, it must be an absolute `http:` or
+        `https:` URL, else `PUBLIC_BASE_URL environment variable must be an absolute http(s) URL,
+        got: <v>`;
+     2. `ALLOWED_EMAIL_DOMAINS` exactly as `password-confirm` step 2;
+     3. `ADMIN_CONTACT_EMAIL` as `password-confirm` step 3, except the "required" message is
+        `ADMIN_CONTACT_EMAIL environment variable is required for AUTH_MODE=strict-managed`. The
+        domain list does not apply to this address;
+     4. and 5. the SMTP block, as `password-confirm` steps 4 and 5 (always required, as in
+        `password-confirm`).
    - `azure-oauth`, in order:
      1. `AZURE_TENANT_ID` must be set; trimmed, it must be a GUID (`8-4-4-4-12` hex digits, any
         case), else `AZURE_TENANT_ID must be a tenant GUID; multi-tenant values
@@ -79,9 +92,10 @@ given below (`<v>` is the offending value as it was read, untrimmed, except for
         default list is used; spaces are passed on as they are).
    - The `PUBLIC_BASE_URL` rule (modes `password` and `password-confirm` only): if empty, it
      fails only when `NODE_ENV` is exactly `production`, with `PUBLIC_BASE_URL environment
-     variable is required in production for AUTH_MODE=password and password-confirm (emailed links
-     are built from it)`; if set, trimmed, it must be an absolute `http:` or `https:` URL, else
+     variable is required in production for AUTH_MODE=<mode> (emailed links are built from it)`,
+     where `<mode>` is the resolved mode (`password` or `password-confirm`); if set, trimmed, it must be an absolute `http:` or `https:` URL, else
      `PUBLIC_BASE_URL environment variable must be an absolute http(s) URL, got: <v>`.
+     Mode `strict-managed` has its own, stricter rule (its step 1: required in every `NODE_ENV`).
 3. `PASSWORD_POLICY` empty: it becomes `long` and is written back. Otherwise it must be exactly
    one of `any`, `mid`, `long` (no trimming), else
    `PASSWORD_POLICY environment variable must be one of any, mid, long, got: <v>`.
@@ -98,6 +112,11 @@ given below (`<v>` is the offending value as it was read, untrimmed, except for
 - Mode `password` SMTP block: checked when `SMTP_HOST` is set (missing `SMTP_FROM`, missing
   `SMTP_PORT`, port 0, full block): AS-102..AS-105; ignored when `SMTP_HOST` is unset or
   spaces only: AS-106, AS-107.
+- Mode `strict-managed`: full valid config AS-108; admin e-mail missing / invalid AS-109, AS-110;
+  `SMTP_HOST` / `SMTP_FROM` missing, bad port AS-111, AS-112, AS-113; `PUBLIC_BASE_URL` missing
+  outside production AS-114, relative AS-115; domain list before the admin e-mail AS-116; a valid
+  domain list that does not cover the admin e-mail AS-117. The mode list in the unknown-mode
+  message: AS-04.
 - Admin e-mail missing, spaces, no `@`, no top-level domain, leading space: AS-10, AS-50,
   AS-11, AS-49, AS-58.
 - Spaces-only values: `AUTH_MODE` (AS-02), policy (AS-20), `SMTP_HOST` (AS-59), domain list
@@ -129,7 +148,7 @@ Shared values in the rows: SMTP block `SMTP_HOST=smtp.arrakis.test`, `SMTP_PORT=
 `11111111-2222-3333-4444-555555555555`, or `aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee` where a row
 needs hex letters (AS-32, AS-33, AS-57, AS-62, AS-66, AS-67).
 
-Rows (107): [`docs/algorithm-examples/auth-startup-config.json`](../../algorithm-examples/auth-startup-config.json) — test data for the table test; the rules above are enough to understand the algorithm.
+Rows (117): [`docs/algorithm-examples/auth-startup-config.json`](../../algorithm-examples/auth-startup-config.json) — test data for the table test; the rules above are enough to understand the algorithm.
 
 ## Mutations
 
@@ -181,6 +200,10 @@ Rows (107): [`docs/algorithm-examples/auth-startup-config.json`](../../algorithm
 - Mode `password` SMTP block checked when `SMTP_HOST` is unset -> AS-106, AS-107 (a spaces-only
   host taken as set -> AS-107).
 - Mode `password` SMTP block not checked when `SMTP_HOST` is set -> AS-102..AS-104.
+- `strict-managed` missing from the valid modes -> AS-04, AS-108; `strict-managed` routed to the
+  Mode 3 checks (production-only base URL, Mode 3 message) -> AS-114, AS-109; SMTP block optional
+  in strict-managed -> AS-111..AS-113; domain list applied to the admin e-mail -> AS-117; domain
+  list checked after the admin e-mail -> AS-116; base URL not checked for http(s) -> AS-115.
 
 ## Where the result is visible
 

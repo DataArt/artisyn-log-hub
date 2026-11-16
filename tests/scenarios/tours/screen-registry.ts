@@ -25,8 +25,11 @@
  *   - The settings sub-tab id is `session-attribution` (06: «Session Attributes»).
  */
 
-/** Stand mode, as in `tests/scenarios/modes.ts` (repeated here to keep the module import-free). */
-export type RegistryMode = 'a' | 'b' | 'c';
+/**
+ * Stand mode, as in `tests/scenarios/modes.ts` (repeated here to keep the module import-free).
+ * No row lists `d` (strict-managed): the tours do not run on the mode-D stand.
+ */
+export type RegistryMode = 'a' | 'b' | 'c' | 'd';
 
 /** Who looks at the screen (06 §2.5). */
 export type TourRole =

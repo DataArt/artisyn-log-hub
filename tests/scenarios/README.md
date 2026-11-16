@@ -18,7 +18,7 @@ suites are described in [`tests/README.md`](../README.md).
 | Node.js 24 | the runner imports `tests/scenarios/modes.ts` directly through Node's built-in type stripping |
 | [`bun`](https://bun.sh) | installs `client/` dependencies; the stand build runs that `vite` with Node |
 | PostgreSQL | every stand gets its own schema in `DATABASE_URL` |
-| Mailpit (SMTP + HTTP API) | mode B (`password-confirm`) confirms signups through real emails |
+| Mailpit (SMTP + HTTP API) | mode B (`password-confirm`) confirms signups through real emails; mode D (`strict-managed`) sends set-password links through it |
 | Playwright Chromium | `npx playwright install chromium` once |
 | Docker (optional) | the easiest way to get Postgres and Mailpit: `docker compose -f tests/scenarios/docker-compose.yml up` |
 
@@ -40,7 +40,7 @@ to be set. Stop it with `docker compose -f tests/scenarios/docker-compose.yml do
 
 The runner checks everything first (preflight) and exits with code **2** and a readable message
 when something is missing: the database is unreachable, Mailpit does not answer (only when mode B
-is selected), the Chromium browser is not installed, or a stray `tmp/scenarios/.env.local` exists
+or D is selected), the Chromium browser is not installed, or a stray `tmp/scenarios/.env.local` exists
 (the stand bundle would load it as overrides).
 
 ### Environment variables
@@ -48,15 +48,16 @@ is selected), the Chromium browser is not installed, or a stray `tmp/scenarios/.
 | Variable | Set by | Default | Purpose |
 |---|---|---|---|
 | `DATABASE_URL` | you | `postgresql://postgres:pw@localhost:5432/postgres` | Postgres that holds the stand schemas |
-| `MAILPIT_URL` | you | `http://localhost:8025` | Mailpit HTTP API (mode B) |
+| `MAILPIT_URL` | you | `http://localhost:8025` | Mailpit HTTP API (modes B and D) |
 | `MAILPIT_SMTP` | you | `localhost:1025` | Mailpit SMTP, becomes the stand's `SMTP_HOST`/`SMTP_PORT` |
 | `STAND_URL` | runner → Playwright | — | `baseURL` of the stand (`http://127.0.0.1:<port>`) |
-| `STAND_MODE` | runner → Playwright | — | `a`, `b` or `c` |
+| `STAND_MODE` | runner → Playwright | — | `a`, `b`, `c` or `d` |
 | `STAND_SCHEMA` | runner → Playwright | — | the stand's schema, used by the `db` fixture |
 | `STAND_RUN_DIR` | runner → Playwright | — | the stand's working dir; its `upload-queue/` and `export-import/` sub-dirs are the stand's `UPLOAD_QUEUE_DIR` and `EXPORT_IMPORT_DIR` |
+| `STAND_ADMIN_EMAIL` | runner → Playwright | empty | mode D only: the stand's `ADMIN_CONTACT_EMAIL`, the strict-managed bootstrap admin (`admin-d-<runId>@arrakis.test`); the fixture exposes it as `stand.adminEmail` |
 | `SCENARIOS_COVERAGE` | you | not set | `1` starts the stand with `NODE_V8_COVERAGE`; after each stand the runner writes a c8 report to `tmp/coverage/scenarios-<runId>/<mode>/report/` |
-| `PUBLIC_BASE_URL` | runner → stand | `STAND_URL` | base URL of links in emails; required in mode B |
-| `ADMIN_CONTACT_EMAIL` | runner → stand | `admin@arrakis.test` | required in mode B |
+| `PUBLIC_BASE_URL` | runner → stand | `STAND_URL` | base URL of links in emails; required in modes B and D |
+| `ADMIN_CONTACT_EMAIL` | runner → stand | `admin@arrakis.test` (mode D: `admin-d-<runId>@arrakis.test`, fresh per run) | required in modes B and D |
 
 The `runner → …` variables are set by `scripts/scenarios/run.mjs`; you never set them yourself.
 The stand gets no `.env` file: its whole environment comes from `tests/scenarios/modes.ts`.
@@ -68,13 +69,14 @@ The stand gets no `.env` file: its whole environment comes from `tests/scenarios
 | A | `none` | `test` | identify-only login |
 | B | `password-confirm` | `production` | `PASSWORD_POLICY=long`, SMTP to Mailpit; runs in two passes on two fresh stands (`@backoff` tests last), because login backoff counts per IP |
 | C | `password` | `test` | signup + login |
+| D | `strict-managed` | `production` | env as mode B (`PASSWORD_POLICY=long`, SMTP to Mailpit) plus a per-run `ADMIN_CONTACT_EMAIL`; the stand starts, stops and starts again on the same schema before Playwright runs (the second start must send no bootstrap email); one pass. No signup: the `users` fixture inserts a password-less user, seeds a set-password token and redeems it |
 
-A scenario declares its modes with tags in its title: `@mode-a`, `@mode-b`, `@mode-c`.
+A scenario declares its modes with tags in its title: `@mode-a`, `@mode-b`, `@mode-c`, `@mode-d`.
 
 ### Runner options
 
 ```sh
-npm run test:scenarios -- --mode a          # one mode (a, b, c or a list: a,c)
+npm run test:scenarios -- --mode a          # one mode (a, b, c, d or a list: a,c — all: a,b,c,d)
 npm run test:scenarios -- --grep S-AUTH-01  # only matching titles
 npm run test:scenarios -- --mode a --grep @TOUR-  # only the screen tours (tests/scenarios/tours/)
 npm run test:scenarios -- --skip-build      # reuse tmp/scenarios/stand/ as is

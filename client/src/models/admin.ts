@@ -41,6 +41,23 @@ export interface AdminUser {
   createdAt: string;
   teamCount: number;
   lastActivity: string | null;
+  /** Whether the account has a usable password (false: password-less, e.g. admin-created in strict-managed). */
+  passwordSet: boolean;
+}
+
+/** `POST /api/v1/admin/users` (strict-managed only). */
+export interface CreateAdminUserRequest {
+  email: string;
+  role?: 'admin' | 'user';
+  teamId?: number | null;
+}
+
+export interface CreateAdminUserResponse {
+  id: number;
+  email: string;
+  role: 'admin' | 'user';
+  teamId: number | null;
+  email_delivery: 'sent' | 'failed';
 }
 
 export interface AdminAuthConfig {

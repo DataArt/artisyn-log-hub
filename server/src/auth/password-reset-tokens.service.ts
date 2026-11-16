@@ -4,9 +4,14 @@ import { and, desc, eq, isNull, sql } from 'drizzle-orm';
 import { NodePgDatabase } from 'drizzle-orm/node-postgres';
 import { DRIZZLE } from '../database/database.constants';
 import * as schema from '../database/schema';
+import { RESET_LINK_TTL_MS } from './password-link-ttl';
 
-const TOKEN_TTL_MS = 60 * 60 * 1000; // 1h — shorter than email-confirmation's 24h
 const RESEND_COOLDOWN_MS = 60 * 1000;
+
+/** A fresh random reset token (the plain value stored in `password_reset_tokens.token`). */
+export function generateResetToken(): string {
+  return randomBytes(32).toString('base64url');
+}
 
 export type ConsumeResult =
   | { status: 'ok'; userId: number }
@@ -20,9 +25,9 @@ export class PasswordResetTokensService {
     @Inject(DRIZZLE) private readonly db: NodePgDatabase<typeof schema>,
   ) {}
 
-  async create(userId: number) {
-    const token = randomBytes(32).toString('base64url');
-    const expiresAt = new Date(Date.now() + TOKEN_TTL_MS);
+  async create(userId: number, ttlMs: number = RESET_LINK_TTL_MS) {
+    const token = generateResetToken();
+    const expiresAt = new Date(Date.now() + ttlMs);
 
     const rows = await this.db
       .insert(schema.passwordResetTokens)
@@ -36,9 +41,11 @@ export class PasswordResetTokensService {
    * two concurrent requests for the same account can't both pass the cooldown
    * check and each invalidate/reissue a token. Returns the new token's plain
    * value, or the remaining cooldown seconds if a prior token is too recent.
+   * `ttlMs`: 1 h for "Forgot password?", 24 h for admin-issued links.
    */
   async issueWithCooldown(
     userId: number,
+    ttlMs: number = RESET_LINK_TTL_MS,
   ): Promise<
     | { status: 'issued'; token: string }
     | { status: 'cooldown'; retryAfterSeconds: number }
@@ -83,8 +90,8 @@ export class PasswordResetTokensService {
           ),
         );
 
-      const token = randomBytes(32).toString('base64url');
-      const expiresAt = new Date(Date.now() + TOKEN_TTL_MS);
+      const token = generateResetToken();
+      const expiresAt = new Date(Date.now() + ttlMs);
       await tx
         .insert(schema.passwordResetTokens)
         .values({ userId, token, expiresAt });

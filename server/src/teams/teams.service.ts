@@ -20,6 +20,7 @@ import {
   sql,
 } from 'drizzle-orm';
 import { alias } from 'drizzle-orm/pg-core';
+import { ConfigService } from '@nestjs/config';
 import { DRIZZLE } from '../database/database.constants';
 import type { DrizzleDb } from '../database/database.module';
 import * as schema from '../database/schema';
@@ -55,6 +56,7 @@ export class TeamsService {
     @Inject(DRIZZLE) private readonly db: DrizzleDb,
     private readonly usersService: UsersService,
     private readonly teamRepoRecompute: TeamRepoRecomputeService,
+    private readonly configService: ConfigService,
   ) {}
 
   async createTeam(ownerId: number, name: string) {
@@ -678,6 +680,11 @@ export class TeamsService {
     inviteeEmail: string,
     force = false,
   ) {
+    // strict-managed: only admins create accounts, so an unknown email is
+    // never auto-provisioned by a force-invite.
+    if (this.configService.get<string>('AUTH_MODE') === 'strict-managed') {
+      force = false;
+    }
     const team = await this.getTeam(teamId);
 
     // Check invite permission — the team owner, or a member with `canInvite`

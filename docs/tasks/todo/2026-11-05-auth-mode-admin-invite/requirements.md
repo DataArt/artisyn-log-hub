@@ -66,12 +66,11 @@ password yet (`users.password_hash` is `NULL`, already supported), so "set the f
 - FR11 — No API key without a password: an account that has not set a password yet cannot get an API
   key by any path (it cannot log in to create one, and no admin path issues one for it), so its hook
   cannot send sessions until the user has set a password.
-- FR10 — Rate limits on sending email: besides the existing per-account cooldown, a per-IP limit on
-  every endpoint that triggers an email (forgot-password, admin "create user" / "resend link"). Over the
+- FR10 — Rate limits on sending email: besides the existing per-account cooldown, one per-IP counter
+  shared by every endpoint that triggers an email (forgot-password, admin "create user" / "resend link"). Over the
   limit the request is refused with HTTP 429 and nothing is sent. The limit is a relaxed safety net
   against an outright flood, not a tight control — a normal user or an admin onboarding a team never hits
   it: **20 emails per IP per hour**, a fixed constant in code (no env var).
-  - One counter per IP, shared by forgot-password, admin "create user" and admin "resend link".
   - It applies on top of the existing `AuthRateLimitService` limits, which stay unchanged.
   - Every accepted request to these endpoints counts, before the account lookup (unknown emails,
     cooldown hits and send failures included), so a 429 never reveals whether an account exists.
@@ -150,17 +149,40 @@ password yet (`users.password_hash` is `NULL`, already supported), so "set the f
 
 - Name of the `AUTH_MODE` value (e.g. `admin-invite`) and of the admin-email env var — reuse
   `ADMIN_CONTACT_EMAIL` (Mode 3) or a new variable?
+  - **Answer (2026-11-16):** the `AUTH_MODE` value is `strict-managed`.
+  - **Answer (2026-11-16):** reuse the existing variable names — the admin email is
+    `ADMIN_CONTACT_EMAIL` (as in Mode 3); no new variable.
 - Bootstrap when the configured admin email already exists as an account (e.g. switching an existing
   Mode 2 install to Mode 5): leave it as is, or make sure it has the admin role? What if the bootstrap
   email cannot be delivered — fail startup, or log it and rely on "Forgot password?"?
+  - **Answer (2026-11-16):** if an account with the configured admin email already exists, this is not
+    a first start — bootstrap does nothing (no account created, no email sent). If that account
+    already has the admin role, everything is fine.
+  - **Answer (2026-11-16):** if the existing account does NOT have the admin role, grant it the admin
+    role at startup.
+  - **Answer (2026-11-16):** if the bootstrap email cannot be delivered — fail fast: the server
+    refuses to start.
 - What happens to existing self-registered accounts when an install switches to Mode 5 — they keep
   working, or does the admin have to approve them?
+  - **Answer (2026-11-16):** they keep working; no approval step. The admin removes them by hand if
+    needed.
 - Does creating a user also allow choosing role/team in the same form?
+  - **Answer (2026-11-16):** yes — in strict-managed mode the create-user form lets the admin set role
+    and team.
 - Is `ALLOWED_EMAIL_DOMAINS` applied to admin-created users?
+  - **Answer (2026-11-16):** yes — in this mode, if `ALLOWED_EMAIL_DOMAINS` is set, it applies to
+    admin-created users too.
 - Accounts auto-created in Mode 1 (none) or Mode 4 (azure-oauth) have no password but often already
   hold API keys their hooks use. After an install switches to Mode 5, should those existing keys keep
   working, or be refused until the user sets a password? And do such users get in through
   "Forgot password?"?
+  - **Answer (2026-11-16):** API keys already issued keep working. This is a known loophole, accepted
+    on purpose: the admin handles such accounts themselves.
+  - **Answer (2026-11-16):** no — password-less users cannot use "Forgot password?" themselves; the
+    admin must reset the password for them (send them a set-password link from the admin panel).
+  - **Answer (2026-11-16, supersedes the line above — decided during planning):** "Forgot password?"
+    works for every existing account, password-less included (1 h link), exactly as FR8/AC8/AC9 say —
+    otherwise a first admin who lost the bootstrap email would have no way in.
 
 ## Notes
 

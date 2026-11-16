@@ -1,13 +1,13 @@
 ---
 type: "Reference"
 title: "User Account Flows (invite, password reset, consent, admin account actions)"
-description: "Account flows outside login itself: inviting someone before they sign up (force invite and auto-provisioning), self-service password reset (tokens, TTL, cooldown, enumeration safety), the admin-generated reset link, the admin email rename, and the onboarding data-collection consent and new-user nudge."
+description: "Account flows outside login itself: inviting someone before they sign up (force invite and auto-provisioning), self-service password reset (tokens, TTL, cooldown, enumeration safety), strict-managed set-password links (bootstrap admin, admin create user, resend link), the admin-generated reset link, the admin email rename, and the onboarding data-collection consent and new-user nudge."
 tags:
   - auth
   - server
   - client
   - users
-timestamp: "2026-11-03T00:00:00+04:00"
+timestamp: "2026-11-16T00:00:00+04:00"
 ---
 
 # User Account Flows
@@ -23,6 +23,9 @@ After `POST /api/v1/auth/signup` a session exists only in the `password` mode. I
 signup only creates the unconfirmed account and sends the confirmation email; the flow is signup →
 confirm the email → log in. Details are in
 [authorization-and-authentificaiton.md](authorization-and-authentificaiton.md#signup-and-the-session).
+In `strict-managed` there is no signup at all (`signup` / `confirm-email` / `resend-confirmation` →
+404, `#/signup` redirects to `#/login`); accounts come only from an admin — see
+[Set-password links](#set-password-links-strict-managed).
 
 ## Invite before signup
 
@@ -41,10 +44,13 @@ invites by email through `POST /api/v1/teams/:teamId/invitations`
   have never read the access-mode disclosure. Until they acknowledge it at login, their sessions are
   invisible to the team owner and trainers in a `restricted` team.
 - The person later signs in (or signs up) to the existing account; no second account is created.
+- **Not in `strict-managed`.** There `sendInvitation()` ignores `force`, so an unknown email always
+  answers `404 user_not_registered` and nothing is provisioned; the UI does not offer "invite
+  anyway". Only an admin creates accounts in that mode.
 
 ## Password reset
 
-Self-service reset exists in the password modes (`password`, `password-confirm`):
+Self-service reset exists in the password modes (`password`, `password-confirm`, `strict-managed`):
 `POST /api/v1/auth/forgot-password` and `POST /api/v1/auth/reset-password` in
 `server/src/auth/auth.controller.ts`, tokens in
 `server/src/auth/password-reset-tokens.service.ts`.
@@ -52,7 +58,13 @@ Self-service reset exists in the password modes (`password`, `password-confirm`)
 - **No account enumeration.** An unknown email gets the same `200 { email_delivery: 'sent' }` as a
   known one; the attempt is only logged (with the email masked). Requests over the per-email rate
   limit get that same answer without issuing a token.
-- **Tokens** are 32 random bytes, base64url, valid for 1 hour, single-use.
+- **Tokens** are 32 random bytes, base64url (`generateResetToken()`), single-use. The lifetime is
+  stored per row (`expires_at`): `RESET_LINK_TTL_MS` = 1 hour for forgot-password and the
+  admin-generated link, `SET_PASSWORD_LINK_TTL_MS` = 24 hours for strict-managed set-password links
+  (`server/src/auth/password-link-ttl.ts`; `create()` / `issueWithCooldown()` take `ttlMs`).
+- In `strict-managed` forgot-password also counts against the 20 emails / IP / hour limit
+  (`EmailSendRateLimitService`), and works for every account, password-less ones included (it is
+  not gated on `password_hash`).
 - **Cooldown and re-issue.** `issueWithCooldown()` runs in one transaction that locks the user row.
   A request within 60 s of the previous token is refused with `429` and a retry-after value.
   Otherwise the user's earlier unused tokens are retired and a new one is issued, so only the newest
@@ -66,14 +78,49 @@ Self-service reset exists in the password modes (`password`, `password-confirm`)
 - The emailed link is built only from `PUBLIC_BASE_URL`, never from the request `Host` header (see
   [authorization-and-authentificaiton.md](authorization-and-authentificaiton.md) § "Email flows").
 
+## Set-password links (strict-managed)
+
+In `AUTH_MODE=strict-managed` every account is created without a password and gets an emailed
+**set-password link**: the normal reset URL plus `&purpose=set`
+(`<PUBLIC_BASE_URL>/#/reset-password?token=…&purpose=set`, built by
+`buildResetUrl(token, logger, 'set')` in `server/src/auth/password-link-url.ts`), valid **24 hours**,
+single-use, consumed by the same `POST /api/v1/auth/reset-password`. The forgot-password link keeps
+no `purpose` and 1 hour. `ResetPasswordPage.tsx` reads `purpose`: `set` → title "Set your password",
+button "Set password"; an invalid or expired link (either variant) shows `This link is invalid or
+has expired. Request a new one with "Forgot password?" on the login page.` Email texts are pure
+builders in `server/src/mail/password-link-emails.ts` (`bootstrapAdminEmail`, `setPasswordEmail`).
+The first successful set stamps `email_confirmed_at`.
+
+Three ways a link is issued:
+
+- **Bootstrap admin** — on server start, `bootstrapStrictManagedAdmin()` creates the account for
+  `ADMIN_CONTACT_EMAIL` and emails the link in one transaction; a failed send rolls back and aborts
+  startup. If the account already exists it is only promoted to admin, no email. Details:
+  [authorization-and-authentificaiton.md](authorization-and-authentificaiton.md#strict-managed-mode-admin-provisioned-accounts).
+- **Admin create user** — `POST /api/v1/admin/users` `{ email, role?: 'admin' | 'user' (default
+  'user'), teamId?: number | null }` (`AdminService.createProvisionedUser()`). Order: domain
+  allow-list (400 `email_domain_not_allowed`) → email limiter (429) → existing email, any case (409
+  `email_already_registered`, nothing sent) → team exists (400 `team_not_found`) → user + optional
+  team membership in one transaction → token → email. `201 { id, email, role, teamId,
+  email_delivery }`; a failed send keeps the account (`'failed'`, the admin resends). UI:
+  `CreateUserModal.tsx` from the Admin Users tab.
+- **Resend link** — `POST /api/v1/admin/users/:id/password-link`
+  (`AdminService.sendPasswordLink()`): email limiter → 404 `user_not_found` → 409
+  `password_already_set` → `issueWithCooldown(id, 24 h)` (429 + `Retry-After` within 60 s; the
+  previous link stops working) → email → `200 { email_delivery }`. UI:
+  `SendPasswordLinkButton.tsx`, shown only on rows whose Password column says "Not set"
+  (`passwordSet === false` on `GET /api/v1/admin/users`; placeholder-imported users count as not
+  set).
+
 ## Admin-generated reset link
 
+Not available in `strict-managed` (the route 404s there; the admin uses "Resend link" instead).
 An admin can create a reset link for a user without email: route `POST :userId/reset-password-link`
 on the admin-only `api/v1/users` controller (`server/src/admin/admin.controller.ts`,
 `AuthService.adminGenerateResetLink()`), opened from the Admin Panel Users tab
 (`client/src/viewer/pages/admin/tabs/ResetPasswordLinkModal.tsx`), where the admin copies it.
 
-- The link uses the same token table and TTL as the self-service flow.
+- The link uses the same token table and TTL (1 hour) as the self-service flow.
 - It is built from the **request origin** (`getRequestBaseUrl(req)`), not `PUBLIC_BASE_URL`: it is
   returned in the response body to an authenticated admin and never leaves that admin's browser, so
   the origin they are using is the right one.
