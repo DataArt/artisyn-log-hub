@@ -14,7 +14,10 @@ user must choose another one. Existing password hashes are never re-checked.
 ## Code
 
 - Implementation: `server/src/auth/utils/password-policy.ts` (`applyPasswordPolicy`).
-- Twins: none. The client only shows the policy text; the server decides.
+- Twins: Work Hub's Rust port `work-hub/server/src/auth/password_policy.rs`
+  (`apply_password_policy`; the policy is passed in rather than read from the environment). It
+  runs every row in `work-hub/server/tests/algo.rs` (`cargo test --test algo`, i.e.
+  `npm run test:algo` from `work-hub/`). The client only shows the policy text; the server decides.
 - Test: `server/src/auth/utils/password-policy.algo.spec.ts`.
 
 ## Rules

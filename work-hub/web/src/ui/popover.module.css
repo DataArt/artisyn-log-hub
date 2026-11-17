@@ -1,0 +1,31 @@
+/* Popover parts. Every selector is wrapped in :where() so a caller's class always wins. */
+
+:where(.content) {
+  z-index: 50;
+  width: 18rem;
+  transform-origin: var(--radix-popover-content-transform-origin);
+  border-radius: var(--radius-md);
+  border-width: 1px;
+  background-color: var(--color-popover);
+  padding: 1rem;
+  color: var(--color-popover-foreground);
+  box-shadow: var(--shadow-md);
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+}
+
+:where(.header) {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+:where(.title) {
+  font-weight: 500;
+}
+
+:where(.description) {
+  color: var(--color-muted-foreground);
+}

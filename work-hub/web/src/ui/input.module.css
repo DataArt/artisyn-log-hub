@@ -1,0 +1,64 @@
+/* Text input. Every selector is wrapped in :where() so a caller's class always wins. */
+
+:where(.input) {
+  height: 2.25rem;
+  width: 100%;
+  min-width: 0;
+  border-radius: var(--radius-md);
+  border-width: 1px;
+  border-color: var(--color-input);
+  background-color: transparent;
+  padding: 0.25rem 0.75rem;
+  font-size: 1rem;
+  line-height: 1.5rem;
+  box-shadow: var(--shadow-xs);
+  transition-property: color, box-shadow;
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+  transition-duration: 150ms;
+  outline: none;
+}
+
+:where(.input)::selection {
+  background-color: var(--color-primary);
+  color: var(--color-primary-foreground);
+}
+
+:where(.input)::file-selector-button {
+  display: inline-flex;
+  height: 1.75rem;
+  border-width: 0;
+  background-color: transparent;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  font-weight: 500;
+  color: var(--color-foreground);
+}
+
+:where(.input)::placeholder {
+  color: var(--color-muted-foreground);
+}
+
+:where(.input:disabled) {
+  pointer-events: none;
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+@media (min-width: 48rem) {
+  :where(.input) {
+    font-size: 0.875rem;
+    line-height: 1.25rem;
+  }
+}
+
+:where(.input:focus-visible) {
+  border-color: var(--color-ring);
+  box-shadow: var(--focus-ring), var(--shadow-xs);
+}
+
+:where(.input[aria-invalid="true"]) {
+  border-color: var(--color-destructive);
+  box-shadow:
+    0 0 0 3px color-mix(in srgb, var(--color-destructive) 20%, transparent),
+    var(--shadow-xs);
+}

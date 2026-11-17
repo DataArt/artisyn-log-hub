@@ -1,0 +1,6 @@
+# sqlx checksums each migration file as embedded at build time: keep them LF on every checkout.
+server/migrations/*.sql text eol=lf
+# Files baked into the container image (embedded by the server, used inside Linux): LF only.
+image/** text eol=lf
+# The fake agent is baked into a Linux image: LF only.
+tests/fake-agent/** text eol=lf

@@ -1,0 +1,85 @@
+/* Dialog parts. Every selector is wrapped in :where() so a caller's class always wins. */
+
+:where(.overlay) {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  background-color: rgb(0 0 0 / 0.5);
+}
+
+:where(.content) {
+  position: fixed;
+  left: 50%;
+  top: 50%;
+  z-index: 50;
+  display: grid;
+  width: 100%;
+  max-width: 32rem;
+  translate: -50% -50%;
+  gap: 1rem;
+  border-radius: var(--radius-lg);
+  border-width: 1px;
+  background-color: var(--color-background);
+  padding: 1.5rem;
+  box-shadow: var(--shadow-lg);
+}
+
+:where(.close) {
+  position: absolute;
+  right: 1rem;
+  top: 1rem;
+  border-radius: var(--radius-sm);
+  opacity: 0.7;
+  transition: opacity 150ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+:where(.close:hover) {
+  opacity: 1;
+}
+
+:where(.close:focus) {
+  outline: none;
+  box-shadow:
+    0 0 0 2px var(--color-background),
+    0 0 0 4px var(--color-ring);
+}
+
+:where(.close:disabled) {
+  pointer-events: none;
+}
+
+:where(.closeIcon) {
+  width: 1rem;
+  height: 1rem;
+}
+
+:where(.header) {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+:where(.footer) {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 0.5rem;
+}
+
+@media (min-width: 40rem) {
+  :where(.footer) {
+    flex-direction: row;
+    justify-content: flex-end;
+  }
+}
+
+:where(.title) {
+  font-size: 1.125rem;
+  font-weight: 600;
+  line-height: 1;
+}
+
+:where(.description) {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: var(--color-muted-foreground);
+}

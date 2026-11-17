@@ -44,3 +44,4 @@ Folders are named `<YYYY-MM-DD>-<slug>` (the day the task was created).
 - [2026-11-10-harness-entries-ui-review] Harness-Injected Transcript Entries — Where to Show Them, and a Logs Tab Review — archived 2026-11-12
 - [2026-11-09-after-11-11-node-image-bump] Node Image Bump After the 2026-11-11 Security Release — archived 2026-11-12
 - [2026-11-12-big-test-stale-checks] Fix Stale Checks in the Big Pre-Prod E2E Test — archived 2026-11-12
+- [2026-11-13-ai-work-hub-alpha] Artisyn AI Work Hub — Alpha — archived 2026-11-14

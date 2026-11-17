@@ -6,7 +6,7 @@
       "finalOnly": true
     }
   ],
-  "environmentNotes": "Server and client are NOT kept running — start them yourself in the background when a check needs them (server: npm run start:dev from server/, client: bun run dev from client/, http://localhost:5173). This applies on the host; inside a Claude sandbox container (scripts/claude-docker, see docs/knowledgebase/docker-dev-container.md) they are already running — do not start them again. Temp files go in tmp/ (gitignored), never in the project root. The scenarios-* checks (npm run test:scenarios) build and start their own isolated stand (own port, own scn_* schema in DATABASE_URL, needs Postgres and — for mode b — Mailpit, e.g. docker compose -f tests/scenarios/docker-compose.yml up -d); they do not depend on the dev server and never touch it. Iterative runs (finalRun false) are the FAST SET: every `static` check plus `build` — no DB, no stand, no dev app. contract, scenarios-a/b/c, e2e-fast and e2e-full are finalOnly and run only in the final verification. While iterating on behaviour, run just the touched scenario: npm run test:scenarios -- --mode <a|b|c> --only scenarios --grep \"<@S-TAG>\".",
+  "environmentNotes": "Server and client are NOT kept running — start them yourself in the background when a check needs them (server: npm run start:dev from server/, client: bun run dev from client/, http://localhost:5173). This applies on the host; inside a Claude sandbox container (scripts/claude-docker, see docs/knowledgebase/docker-dev-container.md) they are already running — do not start them again. Temp files go in tmp/ (gitignored), never in the project root. The scenarios-* checks (npm run test:scenarios) build and start their own isolated stand (own port, own scn_* schema in DATABASE_URL, needs Postgres and — for mode b — Mailpit, e.g. docker compose -f tests/scenarios/docker-compose.yml up -d); they do not depend on the dev server and never touch it. Iterative runs (finalRun false) are the FAST SET: every `static` check plus `build` — no DB, no stand, no dev app. contract, scenarios-a/b/c, e2e-fast and e2e-full are finalOnly and run only in the final verification. While iterating on behaviour, run just the touched scenario: npm run test:scenarios -- --mode <a|b|c> --only scenarios --grep \"<@S-TAG>\". Work Hub (work-hub/, a separate Rust + bun product) has its own work-hub-* checks: they need Rust 1.92 (work-hub/rust-toolchain.toml), bun 1.4.4 and `npm ci` in work-hub/ plus `bun install` in work-hub/web/. work-hub-contract and work-hub-scenarios-a/b/c also need Docker running (they create containers, volumes and images labelled with their own instance and remove them afterwards), Postgres and — for mode b — Mailpit from the same tests/scenarios/docker-compose.yml; the first run builds the default container image artisyn-work-hub-default (npm run image in work-hub/, needs the network once) and the fake-agent test image, later runs reuse them.",
   "checks": [
     {
       "name": "build",
@@ -157,6 +157,82 @@
       "group": "static",
       "timeoutSeconds": 300,
       "instructions": "Only doc-driven algorithm tests (*.algo.test.js) remain in hook/.claude/telemetry_tool/__tests__ (rows owned by the server side are skipped by design) — hook behaviour is covered by tests/scenarios/hook. The file list is collected by hook/scripts/run-tests.js. Needs neither the dev server nor the DB."
+    },
+    {
+      "name": "work-hub-lint",
+      "dir": "work-hub",
+      "module": "Work Hub lint (rustfmt, clippy, eslint, agent-name and licence checks)",
+      "command": "npm run lint",
+      "group": "static",
+      "timeoutSeconds": 1200,
+      "instructions": "Fix all errors: cargo fmt --check, cargo clippy --all-targets -D warnings, the web eslint, scripts/agent-names-check.mjs (AC-2: the agent's name only in server/src/agent/claude.rs and agent/mod.rs, never in web/src) and scripts/license-check.mjs. Never silence clippy with allow attributes to pass — fix the root cause. Work Hub's own check (NFR-5): never part of Log Hub's build, dist/ or its checks. Needs no DB, no Docker and no running app — Rust-only builds compile without web/dist (rust-embed allow_missing). The first run compiles the Cargo workspace into work-hub/target, hence the long budget; later runs are incremental."
+    },
+    {
+      "name": "work-hub-typecheck",
+      "dir": "work-hub",
+      "module": "Work Hub typecheck (tsc over web/ and tests/)",
+      "command": "npm run typecheck",
+      "group": "static",
+      "timeoutSeconds": 1200,
+      "instructions": "Zero type errors. Vite and Playwright strip types without checking them, so this is the only check that typechecks the Work Hub web UI and its browser suites (Rust is typechecked by clippy in work-hub-lint). Never weaken a type or add `any`/`as` to silence it. Work Hub's own check (NFR-5): never part of Log Hub's build, dist/ or its checks. Needs no DB, no Docker and no running app — Rust-only builds compile without web/dist (rust-embed allow_missing). The first run compiles the Cargo workspace into work-hub/target, hence the long budget; later runs are incremental."
+    },
+    {
+      "name": "work-hub-algo",
+      "dir": "work-hub",
+      "module": "Work Hub algorithm tests (cargo test algo + vitest)",
+      "command": "npm run test:algo",
+      "group": "static",
+      "timeoutSeconds": 1200,
+      "instructions": "Doc-driven table tests only: server/tests/algo.rs reads docs/algorithm-examples/{workhub-*,password-policy,login-backoff,auth-startup-config,local-request-detection}.json and web/src/terminal/replay.algo.test.ts reads workhub-terminal-replay.json. Change rows in the rows files, never inline tables; never add other unit tests. Work Hub's own check (NFR-5): never part of Log Hub's build, dist/ or its checks. Needs no DB, no Docker and no running app — Rust-only builds compile without web/dist (rust-embed allow_missing). The first run compiles the Cargo workspace into work-hub/target, hence the long budget; later runs are incremental."
+    },
+    {
+      "name": "work-hub-build",
+      "dir": "work-hub",
+      "module": "Work Hub build (web + release binary)",
+      "command": "npm run build",
+      "group": "static",
+      "timeoutSeconds": 1200,
+      "instructions": "Zero compilation errors. Builds work-hub/web/dist and the release binary into work-hub/target only — it never touches Log Hub's dist/ or server/src/public/static, so it is safe in the `static` group. The first release build is long; later ones are incremental."
+    },
+    {
+      "name": "work-hub-contract",
+      "dir": "work-hub",
+      "module": "Work Hub API contract tests",
+      "command": "npm run test:contract",
+      "group": "app",
+      "timeoutSeconds": 900,
+      "finalOnly": true,
+      "instructions": "scripts/contract.mjs builds the default and fake-agent images when missing, then runs cargo test --test contract -- --test-threads=1 against its own schema in WORK_HUB_TEST_DATABASE_URL (default postgresql://postgres:pw@localhost:5432/postgres). Needs Postgres and Docker. A route without a row in server/tests/contract/registry.rs fails the meta-test — add the row, never loosen the meta-test. It shares Postgres and Docker with the scenario stands, hence the `app` group."
+    },
+    {
+      "name": "work-hub-scenarios-a",
+      "dir": "work-hub",
+      "module": "Work Hub scenarios, auth mode none",
+      "command": "npm run test:scenarios -- --mode a",
+      "group": "app",
+      "timeoutSeconds": 1200,
+      "finalOnly": true,
+      "instructions": "scripts/scenarios.mjs builds the web and the release binary, the fake-agent image (and the default image when missing), starts its own server on a free port in a fresh whs_a_* schema with its own WORK_HUB_INSTANCE, runs Playwright (tests/playwright.config.ts, project mode-a) and then drops the schema and removes only the Docker objects labelled with its instance. Needs Docker, Postgres (tests/scenarios/docker-compose.yml) and Chromium. It never touches Log Hub's dev server, DB schema or dist/. One integrated run per mode on purpose: if it outgrows its budget, raise timeoutSeconds rather than splitting it by --grep."
+    },
+    {
+      "name": "work-hub-scenarios-b",
+      "dir": "work-hub",
+      "module": "Work Hub scenarios, auth mode password-confirm",
+      "command": "npm run test:scenarios -- --mode b",
+      "group": "app",
+      "timeoutSeconds": 900,
+      "finalOnly": true,
+      "instructions": "scripts/scenarios.mjs builds the web and the release binary, the fake-agent image (and the default image when missing), starts its own server on a free port in a fresh whs_b_* schema with its own WORK_HUB_INSTANCE, runs Playwright (tests/playwright.config.ts, project mode-b) and then drops the schema and removes only the Docker objects labelled with its instance. Needs Docker, Postgres and Mailpit (tests/scenarios/docker-compose.yml) and Chromium. It never touches Log Hub's dev server, DB schema or dist/. One integrated run per mode on purpose: if it outgrows its budget, raise timeoutSeconds rather than splitting it by --grep."
+    },
+    {
+      "name": "work-hub-scenarios-c",
+      "dir": "work-hub",
+      "module": "Work Hub scenarios, auth mode password",
+      "command": "npm run test:scenarios -- --mode c",
+      "group": "app",
+      "timeoutSeconds": 900,
+      "finalOnly": true,
+      "instructions": "scripts/scenarios.mjs builds the web and the release binary, the fake-agent image (and the default image when missing), starts its own server on a free port in a fresh whs_c_* schema with its own WORK_HUB_INSTANCE, runs Playwright (tests/playwright.config.ts, project mode-c) and then drops the schema and removes only the Docker objects labelled with its instance. Needs Docker, Postgres (tests/scenarios/docker-compose.yml) and Chromium. It never touches Log Hub's dev server, DB schema or dist/. One integrated run per mode on purpose: if it outgrows its budget, raise timeoutSeconds rather than splitting it by --grep."
     }
   ]
 }
