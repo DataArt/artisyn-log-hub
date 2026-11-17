@@ -54,3 +54,13 @@ mode + `--allowedTools Bash`; record the result in `docs/knowledgebase/tool-moni
 ## Notes
 
 <!-- Append timestamped notes here as work progresses -->
+
+**2026-11-18:** Closed as won't do — the Linux sandbox run (FR-1 … FR-5) was NOT performed and no
+acceptance criterion is met. The maintainer decided the Linux sandbox case is not worth the
+interactive `/login` container setup for now. The only check made was a wrapped `ce --help` call
+through the Bash tool on the Windows host (Claude Code 2.1.311, sandbox off): the shim was on
+`PATH`, `preflight.json` was `ok`, and the `tool_call` record landed (`ok`, exit 0) with no breaker
+and no faults — the same as the Windows result already recorded under GH-149. Whether the Bash shim
+works inside a Linux sandbox stays unknown; the "Sandbox" bullet in
+`docs/knowledgebase/tool-monitoring.md` was not changed. Reopen as a new task if a Linux sandbox
+user reports missing tool calls.

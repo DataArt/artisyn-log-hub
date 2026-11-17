@@ -46,3 +46,4 @@ Folders are named `<YYYY-MM-DD>-<slug>` (the day the task was created).
 - [2026-11-12-big-test-stale-checks] Fix Stale Checks in the Big Pre-Prod E2E Test — archived 2026-11-12
 - [2026-11-13-ai-work-hub-alpha] Artisyn AI Work Hub — Alpha — archived 2026-11-14
 - [2026-11-17-cc-2-1-326-powershell-wrap] Claude Code 2.1.326 Compatibility of the PowerShell Tool Wrapper and Morning-Check Security Fixes — archived 2026-11-17
+- [2026-11-17-linux-sandbox-tool-wrap] Linux Sandbox Run of the Tool Wrapper on Claude Code 2.1.326 (GH-149 FR-4 Remainder) — closed as won't do (not performed) — archived 2026-11-18
