@@ -53,7 +53,7 @@ const { readManagedOtel, SIGNAL_ENDPOINT_KEYS, GENERIC_ENDPOINT_KEY } = require(
 const { loadOtelScopes } = require('./otel-endpoint-check');
 const { readOtelStatusMark, writeOtelStatusMark } = require('./throttle-state');
 const { writeTelemetry } = require('./write-telemetry');
-const { uploadFile, uploadFileChunked, uploadFileMaybeCompressed, CHUNK_SIZE_BYTES, acquireUploadLockWithWait, releaseUploadLock, formatServerOrigin } = require('./upload-logs');
+const { uploadFile, uploadFileChunked, uploadFileMaybeCompressed, CHUNK_SIZE_BYTES, acquireUploadLockWithWait, releaseUploadLock, describeUploadLockHolder, formatServerOrigin } = require('./upload-logs');
 const { collectScopedFiles, findProjectSlugDirs, transcriptBelongsToRepo } = require('./session-files');
 const { sanitizeNdjson, formatDroppedLines } = require('./ndjson-sanitize');
 const { buildProcessMarkerEnv, killProcessTree } = require('./process-marker');
@@ -75,6 +75,12 @@ require('./hook-log').exitIfSelfCheck(HOOK_FILE);
 const LOCK_WAIT_STOP_MS = 2000;
 const LOCK_WAIT_SESSION_END_MS = 20000;
 const LOCK_POLL_INTERVAL_MS = 250;
+
+/** `, holder pid=… age=…s` for a `skipped: upload lock held` line, or '' when the lock is gone. */
+function lockHolderSuffix(telemetryDir) {
+  const holder = describeUploadLockHolder(telemetryDir);
+  return holder ? `, ${holder}` : '';
+}
 
 // Static, coarse schema-size estimate for the MCP `tools/list` probe.
 // Deliberately a separate, fixed constant from the per-model `BYTES_PER_TOKEN` ratios
@@ -715,7 +721,8 @@ async function runOtelSweep(cwd) {
     telemetryDir, 2 * config.sendLogsOnPromptTimeoutMs, LOCK_WAIT_STOP_MS, LOCK_POLL_INTERVAL_MS);
   if (!lockResult.acquired) {
     hookLog(HOOK_FILE, null, 'result',
-      `otel-sweep: skipped, upload lock held (waited ${lockResult.waitedMs}ms)`, cwd);
+      `otel-sweep: skipped, upload lock held (waited ${lockResult.waitedMs}ms`
+      + `${lockHolderSuffix(telemetryDir)})`, cwd);
     process.exit(0);
   }
 
@@ -935,12 +942,16 @@ async function main() {
     telemetryDir, 2 * config.sendLogsOnPromptTimeoutMs, lockWaitMs, LOCK_POLL_INTERVAL_MS);
   if (!lockResult.acquired) {
     hookLog(HOOK_FILE, hookSessionId, 'result',
-      `skipped: upload lock held (waited ${lockResult.waitedMs}ms)`, cwd);
+      `skipped: upload lock held (waited ${lockResult.waitedMs}ms${lockHolderSuffix(telemetryDir)})`, cwd);
     process.exit(0);
   }
 
   try {
     if (isSessionEnd) {
+      // Claude Code may kill a SessionEnd hook before it logs anything else; this line makes such a
+      // killed holder visible next to the `skipped: upload lock held (… holder pid=…)` it causes.
+      hookLog(HOOK_FILE, hookSessionId, 'result',
+        `session-end flush: upload lock taken (pid=${process.pid}, waited ${lockResult.waitedMs}ms)`, cwd);
       await runSessionEndFlush(cwd, hookSessionId, serverUrl, apiKey, timeoutMs, telemetryDir);
     } else {
       await runUpload(cwd, hookSessionId, serverUrl, apiKey, timeoutMs, telemetryDir, config);

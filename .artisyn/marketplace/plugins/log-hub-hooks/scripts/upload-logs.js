@@ -40,6 +40,7 @@
  * by `isEncodingRejection()` and cleared only by `resetGzipSupport()` (used by tests).
  */
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const https = require('https');
 const http = require('http');
@@ -1009,7 +1010,42 @@ const LOCK_FILE_NAME = '.upload.lock';
 const UPLOAD_LOCK_UNREADABLE_GRACE_MS = 2000;
 
 /**
- * Exclusive-create the lock file and write a fresh `{startedAt}` record into it.
+ * Whether process `pid` is still alive on this machine. `process.kill(pid, 0)` sends no signal; it
+ * throws ESRCH for a dead pid and EPERM for a live process we may not signal.
+ * @param {number} pid
+ * @returns {boolean}
+ */
+function isPidAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return !(err && err.code === 'ESRCH');
+  }
+}
+
+/**
+ * Read the lock file's record. Hooks before 2.32.3 write only `{startedAt}`; `pid` and `host` are
+ * null for them.
+ * @param {string} lockPath
+ * @returns {{startedAt: string|null, pid: number|null, host: string|null}|null} null when unreadable
+ */
+function readUploadLockRecord(lockPath) {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(lockPath, 'utf8'));
+    if (!parsed || typeof parsed !== 'object') return null;
+    return {
+      startedAt: typeof parsed.startedAt === 'string' ? parsed.startedAt : null,
+      pid: Number.isInteger(parsed.pid) && parsed.pid > 0 ? parsed.pid : null,
+      host: typeof parsed.host === 'string' ? parsed.host : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Exclusive-create the lock file and write a fresh `{startedAt, pid, host}` record into it.
  * @param {string} lockPath
  * @returns {'acquired'|'exists'|'error'} `exists` when another process holds the file (EEXIST,
  *   or EPERM/EBUSY, which Windows reports while a previous holder's unlink is still pending)
@@ -1023,7 +1059,7 @@ function tryCreateUploadLock(lockPath) {
     return code === 'EEXIST' || code === 'EPERM' || code === 'EBUSY' ? 'exists' : 'error';
   }
   try {
-    fs.writeSync(fd, JSON.stringify({ startedAt: new Date().toISOString() }));
+    fs.writeSync(fd, JSON.stringify({ startedAt: new Date().toISOString(), pid: process.pid, host: os.hostname() }));
   } catch {
     // the file itself is the lock; an unwritten record only makes it look unreadable for a moment
   } finally {
@@ -1033,20 +1069,25 @@ function tryCreateUploadLock(lockPath) {
 }
 
 /**
- * Whether an existing lock file is abandoned: its `startedAt` is at least `staleWindowMs` old, or
- * the record is unreadable and the file is older than `UPLOAD_LOCK_UNREADABLE_GRACE_MS`.
+ * Whether an existing lock file is abandoned: its holder (`pid` on this `host`) is no longer
+ * running, its `startedAt` is at least `staleWindowMs` old, or the record is unreadable and the
+ * file is older than `UPLOAD_LOCK_UNREADABLE_GRACE_MS`.
+ *
+ * The dead-holder check matters because Claude Code kills a `SessionEnd` hook when the session
+ * exits (always so for short `claude -p` runs such as the post-turn-analysis calls): its `finally`
+ * never releases the lock, and without this check every upload of the project was skipped for the
+ * whole `staleWindowMs`. A holder on another host (a container sharing the folder) has its own
+ * pid namespace, so only the time window applies to it.
  * @param {string} lockPath
  * @param {number} staleWindowMs
  * @returns {boolean}
  */
 function isUploadLockStale(lockPath, staleWindowMs) {
-  try {
-    const parsed = JSON.parse(fs.readFileSync(lockPath, 'utf8'));
-    const startedAt = parsed && typeof parsed.startedAt === 'string' ? parsed.startedAt : null;
-    const age = startedAt ? Date.now() - Date.parse(startedAt) : NaN;
+  const record = readUploadLockRecord(lockPath);
+  if (record) {
+    if (record.pid && record.host === os.hostname() && !isPidAlive(record.pid)) return true;
+    const age = record.startedAt ? Date.now() - Date.parse(record.startedAt) : NaN;
     if (!isNaN(age)) return age >= staleWindowMs;
-  } catch {
-    // unreadable or corrupt record — fall through to the mtime check
   }
   try {
     return Date.now() - fs.statSync(lockPath).mtimeMs >= UPLOAD_LOCK_UNREADABLE_GRACE_MS;
@@ -1128,6 +1169,25 @@ async function acquireUploadLockWithWait(telemetryDir, staleWindowMs, maxWaitMs,
 }
 
 /**
+ * Who holds `<telemetryDir>/.upload.lock`, for the `skipped: upload lock held` log line — so a
+ * blocked upload names its blocker instead of leaving it to be guessed from timestamps.
+ * @param {string} telemetryDir
+ * @returns {string} e.g. `holder pid=1234 age=37s`, `holder unknown (record unreadable)`,
+ *   or '' when the lock is already gone
+ */
+function describeUploadLockHolder(telemetryDir) {
+  const lockPath = path.join(telemetryDir, LOCK_FILE_NAME);
+  if (!fs.existsSync(lockPath)) return '';
+  const record = readUploadLockRecord(lockPath);
+  if (!record) return 'holder unknown (record unreadable)';
+  const parts = [`pid=${record.pid || '?'}`];
+  if (record.host && record.host !== os.hostname()) parts.push(`host=${record.host}`);
+  const age = record.startedAt ? Date.now() - Date.parse(record.startedAt) : NaN;
+  parts.push(isNaN(age) ? 'age=?' : `age=${Math.round(age / 1000)}s`);
+  return `holder ${parts.join(' ')}`;
+}
+
+/**
  * Best-effort release of `<telemetryDir>/.upload.lock`.
  * @param {string} telemetryDir
  */
@@ -1168,5 +1228,6 @@ module.exports = {
   writePendingUploads,
   acquireUploadLock,
   acquireUploadLockWithWait,
+  describeUploadLockHolder,
   releaseUploadLock,
 };
