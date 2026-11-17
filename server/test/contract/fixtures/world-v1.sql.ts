@@ -2305,7 +2305,7 @@ function buildStatements(): WorldStatement[] {
     sql: `UPDATE repositories SET tool_wrap_status = $1 WHERE id = $2`,
     params: [
       JSON.stringify({
-        hookVersion: '2.21.0',
+        hookVersion: '2.32.2',
         os: 'win32',
         preflight: {
           ok: true,

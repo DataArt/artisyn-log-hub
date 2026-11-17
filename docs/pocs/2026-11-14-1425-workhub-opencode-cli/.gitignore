@@ -6,6 +6,7 @@ opencode
 opencode-*/
 # cloned upstream source used for reading
 src-ref/
+src-ref-v2/
 # dependencies
 node_modules/
 # runtime garbage

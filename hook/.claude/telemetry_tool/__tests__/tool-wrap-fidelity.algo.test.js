@@ -159,9 +159,16 @@ function defineRows() {
         tool_input: { command: input.command },
         cwd: projectDir,
         session_id: sessionId,
+        permission_mode: input.permissionMode || 'bypassPermissions',
       });
-      assert.ok(plan, 'the PreToolUse hook did not wrap the command');
-      wrappedCommand = plan.updatedInput.command;
+      entry.plan = plan ? { wrapped: Boolean(plan.updatedInput), skipReason: plan.skipReason, tools: plan.tools } : null;
+      if (expected.wrapped === false) {
+        // DD-8: the hook must leave the command as typed; the "wrapped" run is the same command.
+        assert.ok(!plan || plan.updatedInput === null, 'the PreToolUse hook wrapped a command it must leave as typed');
+      } else {
+        assert.ok(plan && plan.updatedInput, `the PreToolUse hook did not wrap the command${plan && plan.skipReason ? ` (${plan.skipReason})` : ''}`);
+        wrappedCommand = plan.updatedInput.command;
+      }
     }
 
     const exe = shells[input.shell];
@@ -196,6 +203,9 @@ function defineRows() {
     if (expected.outMatchesStdout) assertSameBytes(calls[0] && calls[0].out, unwrapped.stdout, '.out capture');
     if (expected.stdin !== undefined) {
       assert.equal(calls[0] && calls[0].in ? calls[0].in.toString('utf8') : null, expected.stdin, '.in capture');
+    }
+    if (expected.errCapture !== undefined) {
+      assert.equal(calls[0] && calls[0].err ? calls[0].err.toString('utf8') : null, expected.errCapture, '.err capture');
     }
     if (expected.breaker) assert.deepEqual(shims.readBreakerState(sessionDir).tools.sort(), expected.breaker);
 
@@ -267,6 +277,7 @@ function defineRows() {
       }
       call.out = readOptional(path.join(callsDir, `${callId}.out`));
       call.in = readOptional(path.join(callsDir, `${callId}.in`));
+      call.err = readOptional(path.join(callsDir, `${callId}.err`));
       return call;
     });
   }

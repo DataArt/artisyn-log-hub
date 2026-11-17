@@ -434,9 +434,14 @@ the Bash shims `lifecycle-hook.js` puts on `PATH` at `SessionStart` do not reach
 monitored tool as a command word, the hook answers with `hookSpecificOutput.updatedInput` — the same input with a
 one-line prefix that defines a PowerShell function per mentioned tool; the function runs the real tool, records the
 call under `.artisyn/ai_work_dir/tool-wrap/<session-id>/calls/` and re-emits its output and exit code unchanged
-(text-level). In every other case — no monitored tool mentioned, `LOGHUB_TOOL_WRAP=0`, `toolWrap: false`, monitoring
-paused in the UI, no cached config, a tripped breaker, or any error — it exits 0 with no output and the call runs
-untouched. It never returns a permission decision, so the normal permission flow applies to every call. The recorded
+(text-level). From hook `2.32.2` it wraps **only in `bypassPermissions` mode**: the command is rewritten only when the
+`PreToolUse` input has `permission_mode` exactly `bypassPermissions`. On Claude Code 2.1.311 / 2.1.326 any prefix
+statement turns an allow-rule PowerShell command into a prompt or a denial, so in every other permission mode — or
+when the field is missing (older Claude Code) — the command is left exactly as typed and that PowerShell call is not
+recorded; such a skip is noted in `hook.log` once per session per reason. In every other case — no monitored tool
+mentioned, `LOGHUB_TOOL_WRAP=0`, `toolWrap: false`, monitoring paused in the UI, no cached config, a tripped breaker, or
+any error — it exits 0 with no output and the call runs untouched. It never returns a permission decision, so the
+normal permission flow (including deny rules) applies to every call. The recorded
 calls are uploaded by `send-logs-hook.js` as log kind `tool-calls` (assembled by `tool-wrap-records.js`); a server
 older than this feature stores that upload as an inert log.
 

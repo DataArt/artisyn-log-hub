@@ -2,7 +2,17 @@
 # repo's scripts/tool-wrap-check/create-check-project.mjs).
 #
 # The stock Node 22 Debian image already ships bash, coreutils, findutils and procps; this file pins
-# the image and fails the build if any of them is missing. The repo and this project are mounted at
-# run time (/repo read-only, /work read-write), nothing is copied in.
+# the image and fails the build if any of them is missing. PowerShell 7.4.6 (pwsh) is installed from
+# the pinned release tarball, so the `pwsh` fidelity rows run here too (GH-149). The repo and this
+# project are mounted at run time (/repo read-only, /work read-write), nothing is copied in.
 FROM node:22.23.5-bookworm
-RUN bash --version >/dev/null && tee --version >/dev/null && find --version >/dev/null && ps --version >/dev/null
+ARG PWSH_VERSION=7.4.6
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends libicu72 \
+ && rm -rf /var/lib/apt/lists/* \
+ && mkdir -p /opt/microsoft/powershell/7 \
+ && curl -fsSL "https://github.com/PowerShell/PowerShell/releases/download/v${PWSH_VERSION}/powershell-${PWSH_VERSION}-linux-x64.tar.gz" \
+    | tar -xz -C /opt/microsoft/powershell/7 \
+ && chmod +x /opt/microsoft/powershell/7/pwsh \
+ && ln -s /opt/microsoft/powershell/7/pwsh /usr/local/bin/pwsh
+RUN bash --version >/dev/null && tee --version >/dev/null && find --version >/dev/null && ps --version >/dev/null && pwsh -v >/dev/null
