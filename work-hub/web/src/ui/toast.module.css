@@ -1,0 +1,74 @@
+/* Toast stack. Every selector is wrapped in :where() so a caller's class always wins. */
+
+:where(.stack) {
+  pointer-events: none;
+  position: fixed;
+  right: 1rem;
+  bottom: 1rem;
+  z-index: 60;
+  display: flex;
+  width: 20rem;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+:where(.toast) {
+  pointer-events: auto;
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  border-radius: var(--radius-md);
+  border-width: 1px;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  box-shadow: var(--shadow-md);
+}
+
+:where(.toneInfo) {
+  border-color: var(--color-border);
+  background-color: var(--color-card);
+  color: var(--color-foreground);
+}
+
+:where(.toneSuccess) {
+  border-color: var(--color-success-border);
+  background-color: var(--color-success-bg);
+  color: var(--color-success-text);
+}
+
+:where(.toneError) {
+  border-color: var(--color-danger-border);
+  background-color: var(--color-danger-bg);
+  color: var(--color-danger-text);
+}
+
+:where(.icon) {
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+}
+
+:where(.iconInfo) {
+  color: var(--color-primary);
+}
+
+:where(.text) {
+  min-width: 0;
+  flex: 1 1 0%;
+  overflow-wrap: break-word;
+}
+
+:where(.dismiss) {
+  flex-shrink: 0;
+  opacity: 0.6;
+}
+
+:where(.dismiss:hover) {
+  opacity: 1;
+}
+
+:where(.dismissIcon) {
+  width: 0.875rem;
+  height: 0.875rem;
+}

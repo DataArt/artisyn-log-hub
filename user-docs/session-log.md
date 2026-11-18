@@ -246,6 +246,9 @@ of the total.
 - A card for an agent that has not started yet at the chosen moment is faded with a dashed border;
   a running agent has a **running** label and a growing duration; a finished one looks normal.
 - **No groups** means the session started no agents.
+- When the cards do not fit, scroll the map or **drag it with the mouse** in any direction, as in a
+  diagram tool. The header and the timeline stay in place, the main card stays in view while you
+  move sideways, and each column keeps its heading at the top.
 
 **Side panel.** Click a card to open a panel with its model, cost and share, calls, failed calls,
 peak context (against the model's context window, `n/a` when unknown), duration and start time.

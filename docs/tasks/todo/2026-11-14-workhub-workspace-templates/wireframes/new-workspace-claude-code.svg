@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="760" viewBox="0 0 1280 760" font-family="Segoe UI, Inter, Arial, sans-serif">
+  <title>New workspace dialog: Claude Code template selected, Log Hub connection fields shown</title>
+  <!-- page background -->
+  <rect width="1280" height="760" fill="#ffffff"/>
+  <!-- top nav -->
+  <line x1="0" y1="47.5" x2="1280" y2="47.5" stroke="#e5e5e5"/>
+  <text x="16" y="29" font-size="14" font-weight="600" fill="#111">Artisyn AI Work Hub</text>
+  <text x="157" y="29" font-size="13" fill="#888">›</text>
+  <text x="175" y="29" font-size="14" fill="#6b6b6b">Workspaces</text>
+  <rect x="1126.5" y="10.5" width="137" height="28" rx="6" fill="#fff" stroke="#e0e0e0"/>
+  <text x="1135" y="29" font-size="14" fill="#444">dt@dataart.com ⌄</text>
+  <!-- page content (behind the dialog) -->
+  <text x="152" y="97" font-size="18" font-weight="600" fill="#111">Workspaces</text>
+  <rect x="980" y="72" width="148" height="36" rx="6" fill="#2f4bd0"/>
+  <text x="1054" y="95" font-size="14" font-weight="600" fill="#fff" text-anchor="middle">+  New workspace</text>
+  <rect x="152.5" y="124.5" width="316" height="120" rx="8" fill="#f8f8f8" stroke="#e3e3e3"/>
+  <text x="193" y="159" font-size="16" font-weight="600" fill="#111">Real Claude check</text>
+  <text x="193" y="180" font-size="13" fill="#6b6b6b">main · 1 open workstream</text>
+  <rect x="169" y="197" width="59" height="32" rx="5" fill="#2f4bd0"/>
+  <text x="198.5" y="218" font-size="13" font-weight="600" fill="#fff" text-anchor="middle">Open</text>
+  <rect x="481.5" y="124.5" width="316" height="120" rx="8" fill="#f8f8f8" stroke="#e3e3e3"/>
+  <text x="522" y="159" font-size="16" font-weight="600" fill="#111">Claude login</text>
+  <text x="522" y="180" font-size="13" fill="#6b6b6b">main · 0 open workstreams</text>
+  <rect x="498" y="197" width="59" height="32" rx="5" fill="#2f4bd0"/>
+  <text x="527.5" y="218" font-size="13" font-weight="600" fill="#fff" text-anchor="middle">Open</text>
+  <!-- overlay -->
+  <rect width="1280" height="760" fill="#000" opacity="0.5"/>
+
+  <!-- dialog (same width and padding as the current one) -->
+  <rect x="384" y="100" width="512" height="616" rx="8" fill="#ffffff" stroke="#e5e5e5"/>
+  <text x="409" y="134" font-size="18" fill="#111">New workspace</text>
+  <text x="871" y="134" font-size="15" fill="#555" text-anchor="middle">✕</text>
+  <text x="409" y="158" font-size="13" fill="#6b6b6b">The template sets the workspace's container, tools and starting files.</text>
+
+  <!-- Name -->
+  <text x="409" y="194" font-size="14" font-weight="600" fill="#111">Name</text>
+  <rect x="409.5" y="206.5" width="461" height="36" rx="6" fill="#fff" stroke="#6d83e8" stroke-width="2"/>
+  <text x="421" y="230" font-size="14" fill="#111">payments-service</text>
+
+  <!-- Template (radio cards, listed from embedded descriptors, ordered by `order`) -->
+  <text x="409" y="276" font-size="14" font-weight="600" fill="#111">Template</text>
+  <!-- card: Claude Code (selected, preselected by default) -->
+  <rect x="409.5" y="288.5" width="224" height="80" rx="8" fill="#f2f4fd" stroke="#2f4bd0" stroke-width="2"/>
+  <circle cx="429" cy="310" r="7" fill="#fff" stroke="#2f4bd0" stroke-width="2"/>
+  <circle cx="429" cy="310" r="3.5" fill="#2f4bd0"/>
+  <text x="444" y="315" font-size="14" font-weight="600" fill="#111">Claude Code</text>
+  <text x="423" y="338" font-size="12" fill="#6b6b6b">Claude Code agent and tools.</text>
+  <text x="423" y="355" font-size="12" fill="#6b6b6b">Can report sessions to Log Hub.</text>
+  <!-- card: OpenCode -->
+  <rect x="646.5" y="288.5" width="224" height="80" rx="8" fill="#fff" stroke="#d4d4d4"/>
+  <circle cx="666" cy="310" r="7" fill="#fff" stroke="#9a9a9a" stroke-width="1.5"/>
+  <text x="681" y="315" font-size="14" font-weight="600" fill="#111">OpenCode</text>
+  <text x="660" y="338" font-size="12" fill="#6b6b6b">OpenCode agent and tools.</text>
+
+  <!-- Log Hub connection: shown only for templates with logHubConnection = true -->
+  <line x1="409" y1="392.5" x2="871" y2="392.5" stroke="#ececec"/>
+  <text x="409" y="418" font-size="14" font-weight="600" fill="#111">Log Hub connection <tspan font-weight="400" fill="#6b6b6b">(optional)</tspan></text>
+  <text x="409" y="437" font-size="12" fill="#6b6b6b">Fill both fields to send agent sessions to Log Hub, or leave both empty.</text>
+
+  <text x="409" y="468" font-size="13" fill="#111">Log Hub server URL</text>
+  <rect x="409.5" y="478.5" width="461" height="36" rx="6" fill="#fff" stroke="#d4d4d4"/>
+  <text x="421" y="502" font-size="14" fill="#111">http://host.docker.internal:5003</text>
+  <text x="409" y="532" font-size="12" fill="#6b6b6b">Must be reachable from the container: host.docker.internal, not localhost.</text>
+
+  <text x="409" y="562" font-size="13" fill="#111">API key</text>
+  <rect x="409.5" y="572.5" width="461" height="36" rx="6" fill="#fff" stroke="#d4d4d4"/>
+  <text x="421" y="596" font-size="14" fill="#111" letter-spacing="2">••••••••••••••••••••</text>
+  <g fill="none" stroke="#888" stroke-width="1.5"><path d="M838 591 q10 -9 20 0 q-10 9 -20 0 z"/><circle cx="848" cy="591" r="2.5"/></g>
+  <text x="409" y="626" font-size="12" fill="#6b6b6b">Not stored by Work Hub. Written to a gitignored file in the workspace repo.</text>
+
+  <!-- footer -->
+  <rect x="714.5" y="656.5" width="75" height="36" rx="6" fill="#fff" stroke="#d4d4d4"/>
+  <text x="752" y="680" font-size="14" font-weight="600" fill="#111" text-anchor="middle">Cancel</text>
+  <rect x="798" y="656" width="73" height="37" rx="6" fill="#2f4bd0"/>
+  <text x="834.5" y="680" font-size="14" font-weight="600" fill="#ffffff" text-anchor="middle">Create</text>
+
+  <!-- annotations -->
+  <g font-size="12" fill="#92400e">
+    <rect x="916" y="288" width="344" height="82" rx="6" fill="#fffbeb" stroke="#f59e0b"/>
+    <line x1="896" y1="328" x2="916" y2="328" stroke="#d97706" stroke-dasharray="3 3"/>
+    <text x="928" y="308">FR-3 / FR-4: listed from GET /api/v1/templates</text>
+    <text x="928" y="324">(embedded descriptors). Read-only: no add / edit /</text>
+    <text x="928" y="340">delete control. Claude Code is preselected (FR-3a);</text>
+    <text x="928" y="356">the template cannot be changed after creation.</text>
+
+    <rect x="916" y="410" width="344" height="98" rx="6" fill="#fffbeb" stroke="#f59e0b"/>
+    <line x1="896" y1="460" x2="916" y2="460" stroke="#d97706" stroke-dasharray="3 3"/>
+    <text x="928" y="430">FR-5: section shown only when the template has</text>
+    <text x="928" y="446">logHubConnection. Optional as a pair (FR-5a):</text>
+    <text x="928" y="462">both empty = no Log Hub; one without the other is</text>
+    <text x="928" y="478">a validation error. URL must be http/https and is</text>
+    <text x="928" y="494">not rewritten by Work Hub (FR-5b).</text>
+
+    <rect x="916" y="556" width="344" height="82" rx="6" fill="#fffbeb" stroke="#f59e0b"/>
+    <line x1="896" y1="590" x2="916" y2="590" stroke="#d97706" stroke-dasharray="3 3"/>
+    <text x="928" y="576">FR-5c/e: masked input. Key goes only to</text>
+    <text x="928" y="592">.artisyn/config/log-hub.local.json; never in the DB,</text>
+    <text x="928" y="608">API responses or git. Unreachable Log Hub or failed</text>
+    <text x="928" y="624">hook install fails the create (FR-5d).</text>
+  </g>
+  <text x="16" y="748" font-size="11" fill="#bbbbbb">Wireframe — 2026-11-14-workhub-workspace-templates — FR-3, FR-4, FR-5</text>
+</svg>

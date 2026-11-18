@@ -79,6 +79,19 @@ known differences between copies.
 All hook paths are under `hook/.claude/telemetry_tool/`; installer paths under
 `artisyn-hooks-installer/src/`.
 
+### Log Hub server ↔ Work Hub (Rust ports)
+
+Work Hub ([work-hub.md](work-hub.md)) shares no code with Log Hub; its auth rules are hand-ports
+in Rust that must pass the Log Hub doc's rows unchanged. The rows' `NODE_ENV` is Work Hub's
+`WORK_HUB_ENV`. A rule change in either copy changes the doc rows, so both tests go red together.
+
+| Logic / value | Copies | Test that pins them |
+|---|---|---|
+| Password policy | `server/src/auth/utils/password-policy.ts`; `work-hub/server/src/auth/password_policy.rs` | Doc [password-policy](algorithms/password-policy.md); jest and `cargo test --test algo` (`npm run test:algo` from `work-hub/`) |
+| Login backoff | `server/src/auth/login-backoff.service.ts`; `work-hub/server/src/auth/backoff.rs` | Doc [login-backoff](algorithms/login-backoff.md); both |
+| Auth startup validation | `server/src/auth/config/auth-startup-validation.ts`; `work-hub/server/src/auth/startup.rs` | Doc [auth-startup-config](algorithms/auth-startup-config.md); both |
+| Local-request detection, container gateway | `server/src/auth/utils/localhost.util.ts`, `container-gateway.util.ts`; `work-hub/server/src/auth/local_request.rs` | Doc [local-request-detection](algorithms/local-request-detection.md); both |
+
 ## Cross-cutting rules
 
 - **New server env var** → add a commented line to `release-template/.env.example`; the release

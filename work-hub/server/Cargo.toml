@@ -1,0 +1,65 @@
+[package]
+name = "work-hub-server"
+version = "0.1.0-alpha.1"
+edition = "2024"
+rust-version = "1.92"
+description = "Artisyn AI Work Hub server"
+license = "MIT"
+publish = false
+
+[lib]
+name = "work_hub_server"
+path = "src/lib.rs"
+
+[[bin]]
+name = "work-hub-server"
+path = "src/main.rs"
+
+[dependencies]
+axum = { version = "0.8.9", features = ["ws", "multipart"] }
+tokio = { version = "1.54.1", features = ["full"] }
+tokio-util = { version = "0.7.20", features = ["io"] }
+bollard = "0.21.1"
+sqlx = { version = "0.8.6", default-features = false, features = ["runtime-tokio", "postgres", "uuid", "time", "migrate", "macros"] }
+tower-sessions = { version = "0.15.0", features = ["signed"] }
+tower-sessions-sqlx-store = { version = "0.15.1", features = ["postgres"] }
+tower-http = { version = "0.7.1", features = ["trace", "set-header", "compression-br", "compression-gzip"] }
+argon2 = "0.6.0"
+lettre = { version = "0.11.23", default-features = false, features = ["tokio1-rustls-tls", "builder", "smtp-transport"] }
+openidconnect = { version = "4.1.0", default-features = false, features = ["reqwest", "rustls-tls"] }
+jsonc-parser = { version = "0.34.0", features = ["serde"] }
+deunicode = "1.6.2"
+tar = "0.4.46"
+# Only Deflate is written (folder downloads); the default codecs (bzip2, lzma, xz, zstd, ppmd,
+# aes) are not needed, and bzip2's licence is outside the D20 allowlist.
+zip = { version = "9.5.1", default-features = false, features = ["deflate-flate2-zlib-rs", "time"] }
+sha1 = "0.11.0"
+sha2 = "0.11.1"
+rust-embed = "8.14.0"
+dotenvy = "0.15.7"
+uuid = { version = "1.29.2", features = ["v4", "serde"] }
+time = { version = "0.3.55", features = ["serde", "formatting", "parsing"] }
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+futures-util = "0.3.34"
+bytes = "1.12.1"
+thiserror = "2.0.21"
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter"] }
+mime_guess = "2.0.5"
+rand = "0.10.3"
+async-trait = "0.1.92"
+url = "2.5.8"
+aes-gcm = "0.10.3"
+
+[dev-dependencies]
+# HTTP client of the contract tests (plain http to the in-process app; no TLS, cookies by hand).
+reqwest = { version = "0.12.28", default-features = false }
+
+# API contract tests (D13, D14): `npm run test:contract` (scripts/contract.mjs). Its own runner
+# (harness = false) so one shared stand serves every case and its schema and Docker objects are
+# always cleaned up after the last one, even when a case fails.
+[[test]]
+name = "contract"
+path = "tests/contract/main.rs"
+harness = false

@@ -1,0 +1,10 @@
+# Build context of work-hub/Dockerfile: only sources go in.
+target
+**/node_modules
+data
+web/dist
+tests
+test-results
+.env
+deploy/.env
+**/*.log

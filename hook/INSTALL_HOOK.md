@@ -434,9 +434,14 @@ the Bash shims `lifecycle-hook.js` puts on `PATH` at `SessionStart` do not reach
 monitored tool as a command word, the hook answers with `hookSpecificOutput.updatedInput` — the same input with a
 one-line prefix that defines a PowerShell function per mentioned tool; the function runs the real tool, records the
 call under `.artisyn/ai_work_dir/tool-wrap/<session-id>/calls/` and re-emits its output and exit code unchanged
-(text-level). In every other case — no monitored tool mentioned, `LOGHUB_TOOL_WRAP=0`, `toolWrap: false`, monitoring
-paused in the UI, no cached config, a tripped breaker, or any error — it exits 0 with no output and the call runs
-untouched. It never returns a permission decision, so the normal permission flow applies to every call. The recorded
+(text-level). From hook `2.32.2` it wraps **only in `bypassPermissions` mode**: the command is rewritten only when the
+`PreToolUse` input has `permission_mode` exactly `bypassPermissions`. On Claude Code 2.1.311 / 2.1.326 any prefix
+statement turns an allow-rule PowerShell command into a prompt or a denial, so in every other permission mode — or
+when the field is missing (older Claude Code) — the command is left exactly as typed and that PowerShell call is not
+recorded; such a skip is noted in `hook.log` once per session per reason. In every other case — no monitored tool
+mentioned, `LOGHUB_TOOL_WRAP=0`, `toolWrap: false`, monitoring paused in the UI, no cached config, a tripped breaker, or
+any error — it exits 0 with no output and the call runs untouched. It never returns a permission decision, so the
+normal permission flow (including deny rules) applies to every call. The recorded
 calls are uploaded by `send-logs-hook.js` as log kind `tool-calls` (assembled by `tool-wrap-records.js`); a server
 older than this feature stores that upload as an inert log.
 
@@ -516,7 +521,7 @@ It is read from the hook process's environment (inherited from Claude Code), not
 | `context` | `[]` | array of `{key, value}` | Arbitrary metadata attached to every event, e.g. `[{"key":"project","value":"my-project"}]` → `"context": {"project": "my-project"}`. Keys are lowercased; last entry wins on duplicates; absent/empty → no `context` field emitted. |
 | `sendLogsTimeoutMs` | `10000` | number | HTTP timeout for log upload requests. |
 | `sendLogsOnPromptEnabled` | `true` | boolean | Gates whether each `UserPromptSubmit` also spawns a detached, prompt-triggered background upload of the current session's files (in addition to the normal `Stop`-triggered upload). |
-| `sendLogsOnPromptTimeoutMs` | `60000` | number | Watchdog timeout for the prompt-triggered background upload; also drives the shared upload lock's staleness window (`2x` this value) shared with the `Stop`-triggered upload. |
+| `sendLogsOnPromptTimeoutMs` | `60000` | number | Watchdog timeout for the prompt-triggered background upload; also drives the shared upload lock's staleness window (`2x` this value) shared with the `Stop`-triggered upload. A lock whose holder process has died on this machine is freed at once, without waiting for that window. |
 | `otelEnabled` | `true` | boolean | Runtime switch for OTEL capture: gates the receiver spawn, the register handshake, and the `claude-otel` upload + prune pass. See the caveat under OTEL settings below. |
 | `otelReceiverPort` | `0` | number | Loopback port of the OTEL receiver. Hook `2.30.0`+ reads the port from `~/.artisyn/otel/port.json` and uses this key only when that file is missing (the per-project fallback); older hooks always read it. The installer always overwrites it with the shared port, so re-install with `--otel-port` instead of editing it. `0` means "not yet allocated". |
 | `otelReceiverIdleTimeoutMs` | `600000` | number | No request of any kind for this long and the receiver exits (10 min). `0` means "use the default". Applies only to the per-project fallback receiver: the shared receiver always uses 10 min, because no single repo owns it. |

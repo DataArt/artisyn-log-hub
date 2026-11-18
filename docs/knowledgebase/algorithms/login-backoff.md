@@ -17,7 +17,10 @@ escapes it. It is a speed bump, not a lockout.
 - Implementation: `server/src/auth/login-backoff.service.ts` (`LoginBackoffService`:
   `recordFailure`, `assertNotDelayed`, `recordSuccess`), called from
   `server/src/auth/local.strategy.ts`.
-- Twins: none.
+- Twins: Work Hub's Rust port `work-hub/server/src/auth/backoff.rs` (`LoginBackoff`: `record_failure`,
+  `check`, `record_success`), in memory like the original (a hand-kept map instead of
+  `rate-limiter-flexible`). It runs every row on a `ManualClock` in `work-hub/server/tests/algo.rs`
+  (`cargo test --test algo`, i.e. `npm run test:algo` from `work-hub/`).
 - Test: `server/src/auth/login-backoff.service.algo.spec.ts`. The service is off under
   `NODE_ENV=test` (the shared e2e server would otherwise `429` unrelated specs), so the test
   subclasses it with `enabled = true`, and it runs on a fake clock so waits are exact.

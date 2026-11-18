@@ -17,12 +17,20 @@ import { getImportLimits, ImportLimitError } from './import-limits';
 const IMPORT_FILE_FIELD = 'file';
 
 /**
+ * Cap on non-file multipart fields. The routes read none (the client sends only the
+ * file); a few are tolerated so a script that adds one is not refused, while a body
+ * of thousands of parts is cut off instead of being parsed to the end.
+ */
+const IMPORT_MAX_FIELDS = 8;
+
+/**
  * Multer upload for the two import-zip routes. A hand-rolled
  * interceptor instead of `FileInterceptor(...)`, whose options are fixed when the
  * decorator is evaluated: the limits here are read from env per request.
  *
  * - The file is staged as `<uuid>.zip` — that name becomes the `uploadToken`.
  * - `limits.fileSize = IMPORT_MAX_UPLOAD_BYTES`; multer removes the partial file.
+ * - One file, `IMPORT_MAX_FIELDS` other fields: a request with more parts is refused.
  * - `fileFilter` rejects anything without a `.zip` extension before it is written.
  * - Every rejection is a 400 with a descriptive message.
  */
@@ -49,7 +57,12 @@ export class ImportZipUploadInterceptor implements NestInterceptor {
           cb(null, `${randomUUID()}.zip`);
         },
       }),
-      limits: { fileSize: maxUploadBytes },
+      limits: {
+        fileSize: maxUploadBytes,
+        files: 1,
+        fields: IMPORT_MAX_FIELDS,
+        parts: IMPORT_MAX_FIELDS + 1,
+      },
       fileFilter: (_req, file, cb) => {
         if (path.extname(file.originalname).toLowerCase() !== '.zip') {
           cb(ImportLimitError.notZip());

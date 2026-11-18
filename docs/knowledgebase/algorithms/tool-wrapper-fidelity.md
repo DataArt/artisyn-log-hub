@@ -43,14 +43,25 @@ fidelity check runs and what it additionally expects from the wrapper's own reco
      exactly as Claude Code sources `CLAUDE_ENV_FILE` inside the started shell;
      PowerShell — the command is rewritten by the PreToolUse hook itself (`planPowerShellWrap`
      with a cached config and a passed pre-flight, which prefixes `buildPowerShellPrefix(tools)`).
+     The hook wraps a PowerShell call only when its `permission_mode` is exactly
+     `bypassPermissions` (GH-149): outside bypass, Claude Code's permission check prompts or
+     denies any command with a prefix statement. The row's optional `permissionMode` (default
+     `bypassPermissions`) is passed as `permission_mode`; in any other mode the plan has no
+     `updatedInput`, so the "wrapped" run is the command as typed and nothing is recorded.
 2. **Fidelity.** Both runs must give the same exit code and the same stdout and stderr. Bash
    rows compare raw bytes. PowerShell rows compare the text PowerShell prints (DD-14: PowerShell
    decodes native output to strings on both paths, so fidelity there is text-level).
 3. **Records.** The wrapped run's `calls/<callId>.jsonl` files are merged per call
    (`start` + `stream_end` + `exit`). `expected.records` is the number of calls;
    `expected.record` is a subset of the first call's merged record (`tool`, `args`, `exitCode`,
-   `stdoutBytes`, `capturedBytes`, `consumerClosed`, `truncated`); `expected.exitRecord` says
-   whether that call has an `exit` record (a call without one is shown as `killed`).
+   `stdoutBytes`, `capturedBytes`, `stderrBytes`, `consumerClosed`, `truncated`);
+   `expected.exitRecord` says whether that call has an `exit` record (a call without one is shown
+   as `killed`). `expected.errCapture` is the first call's `.err` capture decoded as UTF-8 (`null`
+   when there is no `.err` file). In the PowerShell wrapper the text of a native stderr line (a
+   `RemoteException` error record) is its `Exception.Message`, so an empty line stays empty; any
+   other error record keeps `ToString()` (GH-149 FR-7). `.NET` `AppendLine` ends each line with
+   CRLF on Windows and LF on Linux, which `stderrBytes` counts. `expected.wrapped: false` says the
+   PreToolUse hook must leave the command unwrapped (rule 1); by default (`true`) it must wrap it.
 4. **Capture limits.** stdout is captured up to `CAPTURE_LIMIT_BYTES` = 102400 bytes;
    `truncated` is true when the tool wrote more. When the consumer closes early (`| head -1`),
    the tee stops forwarding but keeps reading until 102400 bytes (`consumerClosed: true`), then
@@ -84,6 +95,8 @@ fidelity check runs and what it additionally expects from the wrapper's own reco
 - `zzsleep [S]`: sleeps S seconds (default 30).
 - `zzc.cmd` (Windows): prints `zzc line 1`, `zzc line 2`, the arguments, writes
   `zzc: stderr line` to stderr and exits 3.
+- `zze` (Bash) and `zze.cmd` (Windows): print `zze out`, then write an empty line and
+  `zze: after empty` (16 bytes) to stderr and exit 0.
 
 ## Edge cases
 
@@ -93,6 +106,9 @@ fidelity check runs and what it additionally expects from the wrapper's own reco
   measurement: FW-07.
 - PowerShell `.cmd` tool, 5.1 and 7: FW-08, FW-09.
 - `| head -1`: FW-10. Under the capture limit: FW-11.
+- An empty native stderr line in the PowerShell `.err` capture: FW-12 (Windows PowerShell 5.1,
+  CRLF), FW-13 (pwsh on Linux, LF).
+- A PowerShell call outside `bypassPermissions` is left as typed: FW-14.
 - Fail-open: unusable log dir FO-01, no `node` FO-02, corrupt config cache FO-03, nesting FO-04.
 
 ## Examples
@@ -103,12 +119,16 @@ both runs), optional `setup` (`calls-is-file`: a file named `calls` in the sessi
 shim cannot create its log dir; `no-node`: every `PATH` dir holding `node` is removed for both
 runs; `corrupt-cache`: the row runs `setupSessionToolWrap` against a project whose
 `config-cache.json` is not JSON and no server is configured; `shim-active`:
-`LOGHUB_SHIM_ACTIVE=1` in the wrapped run's environment), optional `measure`.
+`LOGHUB_SHIM_ACTIVE=1` in the wrapped run's environment), optional `measure`, optional
+`permissionMode` (PowerShell rows: the `permission_mode` passed to `planPowerShellWrap`, default
+`bypassPermissions`).
 `expected`: `exitCode` and, when given, `stdout` (text) are checked on both runs (they are also
 equal by rule 2); `records`, `record`, `exitRecord`, `outMatchesStdout` (the `.out` capture equals
-stdout), `stdin` (the `.in` capture), `generated`, `breaker` and `setup` check the wrapper's side.
+stdout), `stdin` (the `.in` capture), `errCapture` (the `.err` capture as UTF-8, `null` when
+missing), `wrapped` (PowerShell rows: `false` = the hook must not wrap; default `true`),
+`generated`, `breaker` and `setup` check the wrapper's side.
 
-Rows (15): [`docs/algorithm-examples/tool-wrapper-fidelity.json`](../../algorithm-examples/tool-wrapper-fidelity.json) — test data for the table test; the rules above are enough to understand the algorithm.
+Rows (18): [`docs/algorithm-examples/tool-wrapper-fidelity.json`](../../algorithm-examples/tool-wrapper-fidelity.json) — test data for the table test; the rules above are enough to understand the algorithm.
 
 ## Mutations
 
@@ -124,6 +144,9 @@ Rows (15): [`docs/algorithm-examples/tool-wrapper-fidelity.json`](../../algorith
   instead of `Interrupt` on stderr).
 - A failed `mkdir` aborting the call instead of passing through -> FO-01.
 - `LOGHUB_SHIM_ACTIVE` ignored -> FO-04 (a record is written).
+- The PowerShell wrapper using `ToString()` for a native stderr line -> FW-12 (the empty line
+  becomes the type name `System.Management.Automation.RemoteException` in `.err`).
+- The permission-mode gate removed -> FW-14 (the call is wrapped and one record is written).
 
 ## Where the result is visible
 

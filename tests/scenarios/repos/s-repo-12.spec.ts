@@ -119,6 +119,14 @@ test('@S-REPO-12 export and import are refused to anyone but the owner @mode-a @
     expect(((await ok.json()) as unknown[]).length).toBe(2);
   });
 
+  await test.step('7. OWNER: an upload with more form fields than the route allows → 400', async () => {
+    const fields = Object.fromEntries(Array.from({ length: 50 }, (_, i) => [`f${i}`, 'x']));
+    const flooded = await owner.api.post(`${baseA}/import/upload`, {
+      multipart: { ...fields, file: { name: 'export.zip', mimeType: 'application/zip', buffer: archive } },
+    });
+    expect(flooded.status()).toBe(400);
+  });
+
   await test.step('after all attempts: A still has two sessions; REGULAR and NONOWNER own no export/import job', async () => {
     expect(await sessionCountOfA()).toBe(2);
     expect(await jobRowsOf(regular)).toBe(0);

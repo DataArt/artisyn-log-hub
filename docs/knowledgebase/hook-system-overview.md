@@ -150,6 +150,11 @@ rules you would not guess:
   dir and `ai_work_dir` hang off it.
 - The **worktree root** (`--show-toplevel`) is resolved too and uploaded as `git.worktreeRoot`
   next to `git.root`; without it, every path in a worktree session would classify as out-of-repo.
+- **Checked 2026-11-17 on Claude Code 2.1.326 (GH-149 FR-5):** in a `git worktree add` worktree
+  (and in Claude Code's own `--worktree`) the plugin loads from the main checkout's marketplace path,
+  every hook fires and writes to the main checkout's `.artisyn/ai_work_dir`, and OTEL export works
+  as in the main checkout (the installer's OTEL keys are user-scope settings, which a worktree
+  cannot skip). No fix needed.
 - **`ARTISYN_PROJECT_ROOT` override** (`project-root-override.js`): when set to a non-blank
   directory **and** the hook's `cwd` is inside it, that directory replaces the `--git-common-dir`
   root everywhere (config, `ai_work_dir`, transcript slug, OTEL owner, code inventory, `git.root`).

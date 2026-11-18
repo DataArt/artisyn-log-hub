@@ -49,7 +49,7 @@ is selected), the Chromium browser is not installed, or a stray `tmp/scenarios/.
 |---|---|---|---|
 | `DATABASE_URL` | you | `postgresql://postgres:pw@localhost:5432/postgres` | Postgres that holds the stand schemas |
 | `MAILPIT_URL` | you | `http://localhost:8025` | Mailpit HTTP API (mode B) |
-| `MAILPIT_SMTP` | you | `localhost:1025` | Mailpit SMTP, becomes the stand's `SMTP_HOST`/`SMTP_PORT` |
+| `MAILPIT_SMTP` | you | `127.0.0.1:1025` | Mailpit SMTP, becomes the stand's `SMTP_HOST`/`SMTP_PORT` |
 | `STAND_URL` | runner → Playwright | — | `baseURL` of the stand (`http://127.0.0.1:<port>`) |
 | `STAND_MODE` | runner → Playwright | — | `a`, `b` or `c` |
 | `STAND_SCHEMA` | runner → Playwright | — | the stand's schema, used by the `db` fixture |

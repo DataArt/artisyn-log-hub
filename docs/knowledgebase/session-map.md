@@ -150,6 +150,19 @@ One table, `FAMILIES` in `session-map.constants.ts`, matched by tool name in thi
   session is live and the agent not finished), done.
 - Full rules and examples: [`algorithms/session-map-model.md`](algorithms/session-map-model.md).
 
+## Layout and panning
+
+- The tab fills the height of the session pane (`h-full`): the header and the timeline stay in
+  view, the cards between them are the **canvas** (`data-testid="session-map-canvas"`), which
+  takes the remaining height (at least 280 px; on a shorter pane the pane itself scrolls).
+- The canvas scrolls both ways (scrollbars, wheel, keyboard) and pans with a mouse drag — the
+  shared `useDragScroll` hook (`viewer/hooks/useDragScroll.ts`, also used by Agent Tree). A drag
+  starts after 4 px, so a plain click still selects a card; the click that ends a drag is swallowed
+  by the hook's `onClickCapture`; a press on a native scrollbar is left to the scrollbar.
+- The main card is `sticky left-0` with the canvas width (`100cqw`; the canvas is a size
+  container), so it stays in view while the columns pan sideways. Column headers are `sticky top-0`.
+- The side panel scrolls on its own next to the canvas.
+
 ## URL state and playback
 
 - Selected card → `smSel` URL param (`main`, `group:<key>` or the agent id), `replace: true`;
@@ -173,7 +186,7 @@ Client, `client/src/viewer/pages/repository/session-log/session-map/`:
 | `useSessionMapData.ts` | Delta poll, merge, reload, parse and model (DD-10, DD-12) |
 | `useSessionMapPlayback.ts` | `t`, following, play / pause, speed, End, Live (DD-18) |
 | `useSessionMapSelection.ts` | `smSel` URL param |
-| `SessionMapTab.tsx` | Container: layout, highlight / order, `registerRefresh`, error states, render mark |
+| `SessionMapTab.tsx` | Container: layout, the pannable canvas, highlight / order, `registerRefresh`, error states, render mark |
 | `SessionMapHeader.tsx` | Badge, first prompt, five counters, Highlight / Order selects, `ZoneLegend` |
 | `SessionMapCards.tsx`, `SessionMapAgentCard.tsx` | Main card, group columns, agent cards (cost bar, `MixBar`, top tools, failed badge, context bar) |
 | `SessionMapSidePanel.tsx` | Metrics, family / failed chips, call log, `ToolCallDetailModal` |
