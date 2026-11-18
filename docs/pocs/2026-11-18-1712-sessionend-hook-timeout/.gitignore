@@ -1,0 +1,13 @@
+# dependencies
+node_modules/
+# build output
+dist/
+build/
+out/
+*.tsbuildinfo
+# runtime garbage (run output: generated settings, tick logs, claude stdout/stderr)
+runs/
+*.log
+.cache/
+coverage/
+.env

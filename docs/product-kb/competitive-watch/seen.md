@@ -4,7 +4,7 @@ title: "Competitive watch — seen log"
 description: "Every competitor item (release, blog post, docs change, new tool) the morning check has already seen, newest first, with its relevance and verdict for Log Hub."
 tags:
   - competitive-research
-timestamp: "2026-11-17T09:00:00+04:00"
+timestamp: "2026-11-18T09:00:00+04:00"
 ---
 
 # Seen log
@@ -19,6 +19,48 @@ Baseline: everything published before 2026-11-01 is in the parity study and is n
 
 | Seen | Source id | Published | Item | URL | Relevance | Verdict |
 |---|---|---|---|---|---|---|
+| 2026-11-18 | hn | 2026-11-17 | Show HN: Faros Desktop (Faros AI) — free macOS app, no login: reads local Claude Code / Codex / Copilot / Cursor session history, timeline of messages and tool calls, on-device model summarises sessions by project and task, usage patterns plus "Power Ups" recommendations to make subscription spend go further; lead-gen for Faros' enterprise "Token Engineering Platform" — HN 4 / 2 | https://news.ycombinator.com/item?id=50535157 | medium | none (Log Hub session view + cost advisor cover it; new competitor: Faros AI, sources row added) |
+| 2026-11-18 | superbased-observer | 2026-11-17 | SuperBased Observer v1.39.0: budget run-out projection (`observer predict`, under each budget on the Budgets page), per-organization attribution of captured sessions, agent-run security assessments, "Fix with an agent" for code-security findings, one-step sign-in / pairing codes, self-hosted org server tenancy | https://github.com/superbasedapp/observer/releases/tag/v1.39.0 | medium | none (Log Hub budgets already forecast period-end spend, see budget-spend-math) |
+| 2026-11-18 | hn | 2026-11-17 | Show HN: Wake (piradoiv/wake, MIT, macOS, Xojo) — replays Claude Code transcripts as a timeline with per-step tokens and context added, cost per day, tool calls grouped by intent with "send less" suggestions exportable as a Markdown checklist; author found clearing context before the commit step cut $0.50 to $0.02 — HN 2 / 1 | https://rcruz.dev/wake/ | misc | none (home-made local tracker; per-step context growth is in Log Hub session view) |
+| 2026-11-18 | hn | 2026-11-17 | Show HN: Even Keel (MIT) — local task queue running Claude Code / Codex / OpenCode / Copilot one task per worktree, waits out usage limits, hands long sessions to fresh ones; one page with usage stats for all accounts, subscriptions and API keys — HN 1 / 0 | https://github.com/NamerekT/even-keel | misc | none (orchestrator; usage-limit waiting) |
+| 2026-11-18 | hn | 2026-11-17 | "Why your Claude Code usage can charge you 2x up to 10x normal" (title only, no text) — HN 2 / 0 | https://news.ycombinator.com/item?id=50530028 | misc | none (spend complaint) |
+| 2026-11-18 | langfuse-changelog | 2026-11-17 | Langfuse: read-access audit logs (Enterprise) — reads of traces / sessions / scores recorded as audit events | https://langfuse.com/changelog/2026-11-17-read-access-audit-logs | low | none (enterprise compliance, not a monitoring feature) |
+| 2026-11-18 | revenium-cc | — | Revenium Claude Code dashboard page also shows a "What changed" period summary (spend, active people, sessions per person, cost per merged PR vs prior period) and a cache-rebuilds finding; undated, small delta to the 2026-11-11 row | https://docs.revenium.io/claude-code-dashboard (What changed / cache rebuilds) | low | none |
+| 2026-11-18 | jellyfish-blog | 2026-10-07 | Jellyfish AI Impact Week day 2: AI spend dashboard (Claude / Cursor / Copilot by tool, model, team), Total R&D Cost, R&D cost per merged PR (human vs AI); coming: spend allocation to work categories, SDLC-phase classification (before baseline) | https://jellyfish.co/blog/ai-impact-week-day-2/ | low | study: jellyfish.md edit proposed |
+| 2026-11-18 | jellyfish-blog | 2026-10-08 | Jellyfish AI Impact Week day 3: Token Usage and Spend reconciles API-reported with telemetry cost, spend-to-work attribution to initiatives, AI cost benchmarks vs peers (before baseline) | https://jellyfish.co/blog/ai-impact-week-day-3/ | low | study: jellyfish.md edit proposed |
+| 2026-11-18 | hn | 2026-11-17 | Launch HN: StarSling (YC P25) — self-improving CI runners for agent-volume repos (CI bill, not AI spend) — HN 66 / 37 | https://starsling.dev | low | none |
+| 2026-11-18 | hn | 2026-11-18 | "How are large companies not ripshit about the frontier labs?" (general AI rant) — HN 5 / 1 | https://news.ycombinator.com/item?id=50541857 | low | none |
+| 2026-11-18 | hn | 2026-11-17 | Show HN: Eso-box — spare laptop as an always-on Claude Code server — HN 1 / 0 | https://github.com/blumalex/eso-box | low | none |
+| 2026-11-18 | hn | 2026-11-17 | Show HN: Taster — plain-English rules for AI agents — HN 3 / 0 | https://github.com/rinkesh2010rpp/taster-ai | low | none |
+| 2026-11-18 | hn | 2026-11-17 | Show HN: Crosshead — working memory for agents — HN 2 / 0 | https://crosshead.sh/ | low | none |
+| 2026-11-18 | hn | 2026-11-17 | Show HN: TrnRT — LLM inference engine for AWS Trainium — HN 49 / 7 | https://github.com/RunanywhereAI/trnrt | low | none |
+| 2026-11-18 | hn | 2026-11-17 | Show HN: AI Spar — structured debate of AI answers — HN 1 / 0 | https://aispar.app | low | none |
+| 2026-11-18 | hn | 2026-11-17 | Show HN: Codemany — GitHub Actions on your own machine — HN 3 / 0 | https://news.ycombinator.com/item?id=50532610 | low | none |
+| 2026-11-18 | hn | — | Faros AI blog "Claude Code analytics: what the data can and can't tell you" (found by follow-up search on Faros Desktop, undated) | https://www.faros.ai/blog/claude-code-analytics | low | none |
+| 2026-11-18 | hn | 2026-09-29 | Trove (Intevity, MIT, 7 stars): detects 17 AI harnesses and patches their telemetry config to emit OTLP (follow-up search; last push before baseline) | https://github.com/Intevity/trove | low | none |
+| 2026-11-18 | hn | 2026-08-06 | lujuma/observer: local control plane for coding agents, files / tokens / cost across 20+ agents (follow-up search; before baseline) | https://github.com/lujuma/observer | low | none |
+| 2026-11-18 | hn | — | Agent Desk + Session Intelligence (Product Hunt): local macOS app for past Claude Code / Cursor / Codex / Copilot / Kiro sessions (follow-up search, undated) | https://www.producthunt.com/p/agent-desk-and-session-intelligence/agent-desk-session-intelligence | low | none |
+| 2026-11-18 | hn | — | trace-28 (Product Hunt, follow-up search, undated) | https://www.producthunt.com/p/trace-28 | low | none |
+| 2026-11-18 | hn | — | Traces: "Introducing Traces" (follow-up search, undated) | https://traces.com/blog/introducing-traces | low | none |
+| 2026-11-18 | hn | — | claude-tap (everydev.ai listing, follow-up search, undated) | https://www.everydev.ai/tools/claude-tap | low | none |
+| 2026-11-18 | hn | — | traceanalytics.vercel.app (follow-up search, undated) | https://traceanalytics.vercel.app/ | low | none |
+| 2026-11-18 | hn | — | graycodeai/trace (follow-up search, repo 404) | https://awesome.ecosyste.ms/projects/github.com%2Fgraycodeai%2Ftrace | low | none |
+| 2026-11-18 | hn | — | PostHog Desktop positioning page (runs Claude Code / Codex harnesses, usage-based pricing; follow-up search, undated) | https://posthog.com/handbook/marketing/positioning/desktop | low | none |
+| 2026-11-18 | q-cost-optimization | — | DEV: "Claude Code token optimization 2026: 5 strategies that cut your API bill by 60-90%" (undated) | https://dev.to/owen_fox/claude-code-token-optimization-2026-5-strategies-that-cut-your-api-bill-by-60-90-47j0 | low | none |
+| 2026-11-18 | q-team-usage | 2025 | SD Times: Claude Code gets analytics dashboard (before baseline) | https://sdtimes.com/ai/anthropics-claude-code-gets-new-analytics-dashboard-to-provide-insights-into-how-teams-are-using-ai-tooling/ | low | none |
+| 2026-11-18 | q-team-usage | 2025 | VentureBeat: Anthropic adds usage tracking to Claude Code (before baseline) | https://venturebeat.com/ai/anthropic-adds-usage-tracking-to-claude-code-as-enterprise-ai-spending-surges/ | low | none |
+| 2026-11-18 | reddit-claudeai | — | aiweekly mirror of "Claude Code user burns $18K on $400 plan" (already seen under another URL) | https://aiweekly.co/node/1897 | low | none |
+| 2026-11-18 | reddit-claudeai | — | UC Strategies: why you keep hitting Claude's limits, 10 habits (undated) | https://ucstrategies.com/news/why-you-keep-hitting-claudes-limits-and-10-habits-that-fix-it-for-good/ | low | none |
+| 2026-11-18 | reddit-claudeai | — | Towards AI: burning through my Claude subscription by 11 am (undated) | https://pub.towardsai.net/i-was-burning-through-my-claude-subscription-by-11-am-heres-exactly-how-i-fixed-it-01a27d9e069c | low | none |
+| 2026-11-18 | reddit-claudeai | — | feedbagel: Claude Usage Tracker across dev tools (undated) | https://feedbagel.com/post/claude-usage-tracker-monitor-ai-spending-across-multiple-development-tools | low | none |
+| 2026-11-18 | reddit-claudeai | — | Hashnode: practical guide to monitoring Claude agents in production (undated) | https://hashnode.com/posts/a-practical-guide-to-monitoring-claude-agents-in-production/69e751ec0520dc8c4a0e889f | low | none |
+| 2026-11-18 | reddit-claudeai | — | DEV: monitoring Claude agents in production (undated) | https://dev.to/chiefwebofficer/monitoring-claude-agents-in-production-the-silent-killer-nobody-talks-about-42pp | low | none |
+| 2026-11-18 | reddit-claudeai | — | shakiz: Claude token optimization guide (undated) | https://shakiz.github.io/guides/claude-token-optimization.html | low | none |
+| 2026-11-18 | reddit-claudeai | — | ai-radar.it: high token consumption with Claude (undated) | https://ai-radar.it/article/consumo-token-elevato-con-claude-un-problema | low | none |
+| 2026-11-18 | reddit-claudeai | — | christopheralarcon.com: "AI usage data" tag page (undated) | https://christopheralarcon.com/tags/ai-usage-data | low | none |
+| 2026-11-18 | reddit-claudeai | 2026-06-05 | The Daily Claude newsletter 2026-06-05 (before baseline) | https://buttondown.com/thedailyclaude/archive/the-daily-claude-2026-06-05/ | low | none |
+| 2026-11-18 | reddit-claudeai | — | Nanonets: AI token limits and Claude context window explained (undated) | https://nanonets.com/blog/ai-token-limits-explained-claude-context-window/ | low | none |
+| 2026-11-18 | reddit-claudeai | — | PCWorld: 4 habits to avoid hitting Claude usage caps (undated) | https://www.pcworld.com/article/3099983/switching-to-claude-these-4-habits-help-you-avoid-hitting-usage-caps.html | low | none |
 | 2026-11-17 | hn | 2026-11-16 | Ask HN: Who's really winning with AI-Coding? (productivity debate, no cost or monitoring angle) — HN 4 / 4 | https://news.ycombinator.com/item?id=50525329 | low | none |
 | 2026-11-17 | hn | 2026-11-16 | Show HN: My OSS Claude Meetings alternative that works with any agent or call (vibeconf) — HN 3 / 1 | https://github.com/wanderingstan/vibeconf-app/ | low | none |
 | 2026-11-17 | hn | 2026-11-16 | Show HN: One cloud computer for all your agents (Simular box) — HN 5 / 5 | https://box.simular.ai/ | low | none |
