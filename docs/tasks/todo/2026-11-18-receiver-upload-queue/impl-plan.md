@@ -52,7 +52,9 @@ Services → API → Frontend → Tests" applies inside each phase.
 
 Timing bounds in scenarios: the ~200 ms target (AC-5) is the PoC measurement (p95 63 ms). On a
 shared CI runner the scenarios assert `elapsedMs <= 500` in the `queued` line and a wall time
-< 1000 ms per hook run.
+< 1000 ms per hand-off hook run. A `SessionEnd` fallback on a busy lock is bounded by its logged
+lock wait (`waited Nms` < 1000) and a wall time < 2500 ms: about 130 ms of re-arm checks, the
+800 ms wait and Node start-up give ~1150 ms (measured; accepted by the user on 2026-11-18).
 
 ### DD-2 Per-user state layout (`~/.artisyn/upload/`)
 
@@ -477,6 +479,8 @@ Under the CLAUDE.md test policy (algorithm rows, contract rows, scenario steps o
 | 13 | Phase 3 — algorithm and hook scenario tests | 6 | |
 | 14 | Phase 3 — compat and installer tests | 4 | needs the packaged 3.0.0 hook |
 | 15 | Phase 3 — docs, diagrams, help, changelog | 8 | last; ends with the full check set |
+| 16 | Follow-up — receiver re-queues `failed/` jobs | 5 | user decision 2026-11-18, [followup-failed-requeue.md](followup-failed-requeue.md) |
+| 17 | Follow-up — S-HOOK-10 offline laptop, power-off, recovery (Docker) | 6 | user request 2026-11-18; needs chunk 16 |
 
 ### Chunk 1 — Phase 1 — hook queue library
 
@@ -574,7 +578,7 @@ Under the CLAUDE.md test policy (algorithm rows, contract rows, scenario steps o
       doc, and `__tests__/upload-job-queue.algo.test.js` (pattern of `otel-shared-routing.algo.test.js`).
       Twin rows run against both `upload-queue.js` and `otel-receiver.js` exports.
 - [ ] `tests/scenarios/hook/s-hook-01.spec.ts` step 10 (rewrite, new title): `Stop` part unchanged;
-      `SessionEnd` with a busy lock exits in < 1000 ms with no upload and leaves one job in the fake
+      `SessionEnd` with a busy lock logs a lock wait < 1000 ms (wall time < 2500 ms, DD-1) with no upload and leaves one job in the fake
       home's `~/.artisyn/upload/queue/`. A `SessionEnd` with a fresh fake heartbeat writes one job
       (DD-3 name, no `apiKey`) and a `queued … elapsedMs=` line (DD-1 bounds).
 - [ ] `s-hook-01` new step: `send-logs-hook.js --run-job <job>` (via `runNodeScript` with `argv`)
@@ -783,4 +787,67 @@ Under the CLAUDE.md test policy (algorithm rows, contract rows, scenario steps o
       `docs/knowledgebase/hook-system-overview.md`, `otel-receiver.md`, `hook-installation.md` and
       `user-docs/*.md`, replace any `SessionEnd` 20000 ms / 20 s wait text and `otelEnabled`
       receiver-start text with the DD-7 / DD-8 behaviour. Then run `adlc-lh:check-health` with
+      `finalRun: true`.
+
+### Chunk 16 — Follow-up — receiver re-queues `failed/` jobs
+
+Design: [followup-failed-requeue.md](followup-failed-requeue.md) (triggers, eligible reasons, one
+`stop` job per `telemetryDir`, no cap).
+
+- [x] `otel-receiver.js`: `FAILED_REQUEUE_MIN_GAP_MS` (60000), `FAILED_REQUEUE_INTERVAL_MS`
+      (1800000), `isRequeueableFailure(reason)` (`over-age`, `max-attempts`, `uploader-crash` only),
+      a twin `buildJobName` (DD-3), `requeueFailedJobs(now)` per the design note, triggered after a
+      `done` job (debounced) and by an unref'd periodic timer while the uploader role is held. Log
+      `job-requeued`. Export the new functions.
+- [x] Rows in `docs/algorithm-examples/upload-job-queue.json` for `isRequeueableFailure` and the
+      `buildJobName` twin (run against both `upload-queue.js` and `otel-receiver.js`), plus a
+      section in `docs/knowledgebase/algorithms/upload-job-queue.md`.
+- [x] `s-hook-07` new step: `failed/` holds a `max-attempts` job of repo X and an `upload-rejected`
+      job of repo Z; a queued job of repo Y runs `done`; X is re-queued as one `stop` job and
+      uploaded, X's `failed/` record is gone, and Z stays.
+- [x] Docs: `upload-job-queue.md` (re-queue rules), `otel-receiver.md`, `hook/README.md`
+      troubleshooting, the twins row in `twins-and-cross-cutting-rules.md`.
+- [x] Refresh the dogfooded plugin copy and run `npm run build:hooks-installer`; run hook lint and
+      `npm test`, then `--mode a --only scenarios --grep "@S-HOOK-07"`.
+
+### Chunk 17 — Follow-up — S-HOOK-10: offline laptop, power-off, recovery (Docker)
+
+User story: there is no VPN, the user works, sessions are created but not uploaded; the laptop is
+switched off (all processes die); it is switched on, and the first session the user runs uploads
+everything. The "laptop" is a Docker container; the Log Hub is the scenario stand (the server
+listens on all interfaces, so the container reaches it at `host.docker.internal:<stand port>`).
+
+- [x] New scenario `tests/scenarios/hook/s-hook-10.spec.ts` (`@S-HOOK-10 @mode-a`) with a helper
+      `tests/scenarios/helpers/docker-laptop.ts`:
+      - one long-lived container per run (`scn-laptop-<run>`), from a local Node LTS image that has
+        `git` (reuse what `.claude/skills/big-prod-e2e-test/scripts/lib/node-lts.mjs` uses:
+        `public.ecr.aws/docker/library/node:<lts>-bookworm`; pull once if missing), started with
+        `--add-host host.docker.internal:host-gateway`, labelled with the run id and removed at the
+        end (`docker rm -f` of its own container only);
+      - the hook goes in as the **built, installed plugin** (as S-HOOK-09 / S-INST-01 install it),
+        in two git repos X and Y inside the container with a real API key from the stand, and
+        shared mode set up (`~/.artisyn/otel/port.json`, `token`, receiver `bin/`);
+      - Claude transcripts are written into the container's `~/.claude/projects/<slug>/` as
+        S-HOOK-09 fixtures do; hook events are fed with `docker exec -i … node <hook> < event.json`.
+- [x] Step "no VPN": cut the network (`docker network disconnect` of the container, or point the
+      repo `serverUrl` at a blackholed address — pick what yields a real `unreachable` code). Run
+      `SessionStart` + three `Stop` / `SessionEnd` cycles for sessions X1, X2, X3 in repo X. Assert:
+      each hook run returns in < 1000 ms wall time, the stand has none of X1–X3, jobs are in
+      `~/.artisyn/upload/queue/`, `hook.log` has `aborted: server unreachable` or `queued` lines.
+- [x] Step "a job already gave up": backdate one X job's `createdAt` by 25 h so its next run moves
+      it to `failed/` with `over-age` (asserts the chunk 16 path, not only the queue path).
+- [x] Step "power off": `docker kill` the container (SIGKILL of every process, like a power cut);
+      the filesystem survives. Then `docker start` it, reconnect the network. Assert the stale
+      `uploader.lock` / `heartbeat.json` / `.claim` are still on disk before the next hook run
+      (realistic leftovers, pids reused from 1).
+- [x] Step "power on, first session": run `SessionStart` + one `Stop` of a new session Y1 in repo
+      **Y** (not X). Within a bounded wait (≤ 120 s, polling the stand API), all of X1, X2, X3 and
+      Y1 are on the stand with their full transcripts; `queue/` and `failed/` end empty; X's
+      `upload-jobs-failed` recommendation is gone after the next X run. A second variant in the
+      same scenario: a new session in repo X itself also uploads everything (in-process path).
+- [x] Docker availability: if `docker info` fails, the test fails with a clear preflight message
+      (not a silent skip); add the Docker requirement to `tests/scenarios/README.md` and the
+      preflight notes. Describe S-HOOK-10 in
+      `docs/qaa-overview/scenarios/04-ingest-hook-installer-platform.md` (table row + section) and
+      run `--mode a --only scenarios --grep "@S-HOOK-10"`, then `adlc-lh:check-health` with
       `finalRun: true`.

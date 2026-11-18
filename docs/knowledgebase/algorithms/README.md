@@ -41,6 +41,8 @@ format where the two differ).
 | [otel-delta-merge](otel-delta-merge.md) | `client/.../repository/otel/otel-merge.ts` | vitest |
 | [otel-realtime-backoff](otel-realtime-backoff.md) | hook `otel-receiver.js` (`nextRealtimeDelay`) | `node --test` |
 | [otel-shared-routing](otel-shared-routing.md) | hook `otel-receiver.js` (`routeRecord`, pending spool, `validateRegisterPayload`, `forwardHeaders`, `forwardHealth`, `forwardBackoffMs`) | `node --test` |
+| [upload-job-queue](upload-job-queue.md) | hook `upload-queue.js` (`buildJobName`, `parseJobName`, `listJobs`, `isHeartbeatFresh`, `decideHandOff`, `isClaimStale`, `isJobStuck`, `classifyRunOutcome`, `backoffMs`), `upload-logs.js` (`isUnreachableError`); twin `otel-receiver.js` | `node --test` |
+| [node-version-check](node-version-check.md) | hook `node-version-check.js` (`classifyNodeVersion`, `nodeWarningText`, `shouldShowNodeWarning`, `effectiveNodeVersion`); twin `artisyn-hooks-installer/src/node-version.ts` (not table-tested) | `node --test` |
 | [otel-status-reason](otel-status-reason.md) | hook `otel-status.js` (`resolveEffectiveOtel`, `deriveConfigWarnings`, `deriveState`, `deriveReason`, `shouldWriteStatus`) | `node --test` |
 | [cache-ratio-and-causes](cache-ratio-and-causes.md) | `server/src/logs/cache-ratio.sql.ts`, `reports/cache-read-ratio.service.ts`, `turn-walk.ts`; twin `client/.../lib/format.ts` | jest, vitest |
 | [work-time](work-time.md) | `server/src/logs/claude-extractor.ts`; twin hook `post-turn-analysis-worker.js` | jest, `node --test` |

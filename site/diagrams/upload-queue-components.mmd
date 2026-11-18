@@ -1,0 +1,26 @@
+flowchart TB
+  subgraph machine["Developer machine (one OS user)"]
+    direction TB
+    subgraph hooks["Hooks at end of turn / session end"]
+      direction LR
+      h1["repo A hook"]
+      h2["repo B hook"]
+      h3["repo C hook"]
+    end
+    hb["~/.artisyn/upload/heartbeat.json<br/>refreshed every 5 s"]
+    q["~/.artisyn/upload/queue/<br/>job files (no API key)"]
+    rcv["Shared receiver · one process per OS user<br/>uploader + OTEL listener 127.0.0.1:&lt;port&gt;"]
+    lock["One upload per repository at a time"]
+    h1 -.->|"1. uploader up?"| hb
+    h2 -.-> hb
+    h3 -.-> hb
+    h1 -->|"2. yes: write a job"| q
+    h2 --> q
+    h3 --> q
+    rcv -->|"heartbeat"| hb
+    q -->|"picked up within a second"| rcv
+    rcv -->|"runs the job with that repo's own hook"| lock
+    h1 -.->|"3. no uploader: upload itself, as before"| lock
+  end
+  hub["Log Hub server"]
+  lock ==>|"that repo's server URL and API key"| hub

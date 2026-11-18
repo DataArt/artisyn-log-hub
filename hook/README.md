@@ -7,7 +7,12 @@ artisyn-log-hub server. Installation, configuration and the full list of setting
 
 Requirements on each developer machine: Claude Code and `node` on PATH (the hooks run with it).
 **Node.js:** 22, 24 or 26 recommended, patched to at least 22.23.5 / 24.22.3 / 26.13.1 (the November
-2026 security releases; 18 and 20 are end-of-life and get no fixes); 18.19 minimum.
+2026 security releases; 18 and 20 are end-of-life and get no fixes); 18.19 minimum. Since hook
+`3.0.0` the hook warns about an end-of-life or unpatched Node.js at session start (at most once a day
+per Node.js version, `~/.artisyn/node-check.json`), and the installer prints the same warning:
+`Log Hub: Node.js <v> is end-of-life — upgrade to Node.js 22.23.5, 24.22.3 or 26.13.1 or newer. Log
+Hub hooks keep working.` It never blocks anything; install a patched Node.js LTS, make sure it is the
+`node` on `PATH` and restart Claude Code to clear it.
 
 > **Disclaimer.** This project is not affiliated with or endorsed by Anthropic, Cursor or GitHub.
 > "Claude" and "Claude Code" are trademarks of Anthropic.
@@ -21,7 +26,7 @@ what has been collected.
 | Claude Code event | Script | What it does |
 |---|---|---|
 | `UserPromptSubmit` | `telemetry-hook.js` | Writes a `prompt_start` record: the prompt text, git context (remote, repo root, branch, `user.name`) and configured `context` values. At most once a minute, starts a background upload (`prompt-upload-hook.js`) and re-arms the OTEL receiver. |
-| `SessionStart` | `lifecycle-hook.js` | Writes a record with the git context (remote, repo root, branch, `user.name`); starts the loopback OTEL receiver when OTEL is enabled and checks that Claude Code's exporter points at it. |
+| `SessionStart` | `lifecycle-hook.js` | Writes a record with the git context (remote, repo root, branch, `user.name`); starts the shared loopback receiver if none is running — since hook `3.0.0` whether OTEL is enabled or not, because it is also the background log uploader — and, when OTEL is enabled, checks that Claude Code's exporter points at it. Warns about an outdated Node.js. |
 | `PostToolUse` | `lifecycle-hook.js` | Writes the tool name, tool input, tool-use id, agent id/type and, for edit tools, added/removed line counts. The tool's output is not copied into this record. |
 | `PostToolUseFailure` | `lifecycle-hook.js` | Writes the tool name, tool input, error text and (since `2.24.0`) tool-use id. |
 | `PermissionRequest` | `lifecycle-hook.js` | Writes the tool name and tool input. |
@@ -29,9 +34,41 @@ what has been collected.
 | `SubagentStart`, `SubagentStop` | `lifecycle-hook.js` | Writes the subagent id (and type on start). |
 | `PreCompact`, `PostCompact` | `lifecycle-hook.js` | Writes a compaction record with the transcript path. |
 | `PostToolBatch`, `StopFailure`, `SessionEnd` | `lifecycle-hook.js` | Writes a base record (event name, session id, timestamp). |
-| `Stop` | `send-logs-hook.js` | Uploads the session's transcripts, local records, OTEL files and project context (see below) to the server. |
+| `Stop` | `send-logs-hook.js` | Uploads the session's transcripts, local records, OTEL files and project context (see below) to the server. Since hook `3.0.0` it hands the upload to the background uploader (below) and returns at once when that is running; otherwise it uploads itself. |
 | `Stop` | `post-turn-analysis-hook.js` | Starts a detached worker that asks the server whether this turn should be analysed; if so, the worker calls a local `claude -p` and posts the result. |
-| `SessionEnd` | `send-logs-hook.js` | Final upload of anything not yet sent. |
+| `SessionEnd` | `send-logs-hook.js` | Final upload of the session's files not yet sent — handed to the background uploader when it runs; otherwise uploaded in process after waiting at most 800 ms for a busy upload (20 s before `3.0.0`), or queued for the uploader. |
+
+### Background uploader (hook `3.0.0`+)
+
+The uploads run in a hidden background `node` process: the shared receiver, one per OS user, started
+by the hooks and stopped after 10 idle minutes (never while an upload is pending). `Stop` and
+`SessionEnd` write a small job file to `~/.artisyn/upload/queue/` and return in about 0.2 s; the
+receiver uploads it with that repository's own hook copy, server URL and API key (the job file holds
+no key). Files that live there:
+
+- `~/.artisyn/upload/queue/` — pending jobs; a job that stays shows `attempts` and `lastError`
+  (retries back off from 30 s to 15 min, up to 10 tries within 24 h);
+- `~/.artisyn/upload/failed/` — jobs that gave up; the data is not lost, the next successful upload
+  of that repository sends it and empties the folder (`job failed:` lines in `hook.log`, an
+  "upload jobs failed" recommendation on the Hook State page). Jobs that only ran out of time,
+  tries or uploader runs (`failedReason` `over-age`, `max-attempts`, `uploader-crash`, e.g. no VPN
+  for a while) retry automatically once the server is reachable: the uploader moves them back to the
+  queue after its next successful upload and every 30 minutes (`job-requeued` in
+  `~/.artisyn/otel/receiver.log`), even when you now work in another repository. Jobs the server
+  refused (`upload-rejected`) or that are invalid stay until the next successful upload of their
+  repository;
+- `~/.artisyn/upload/heartbeat.json` — rewritten every 5 s while the uploader runs; older than 15 s
+  means it is not running, and the hooks then upload in process as before.
+
+**Troubleshooting:** check the folders above and `~/.artisyn/otel/receiver.log`; the repository's
+`.artisyn/ai_work_dir/hook.log` says per run whether it was `queued`, ran as `run-job`, or uploaded in
+process. Run `/status` in Claude Code (`2.1.327`+) to see broken agent / skill / command files and
+hook matchers that never match. Details: [INSTALL_HOOK.md](./INSTALL_HOOK.md#background-uploader-upload-queue).
+
+**Release checklist (maintainers):** update `NODE_PATCHED_MINIMUMS` and `node-version.ts` on each
+Node security release (`node-version-check.js`, `artisyn-hooks-installer/src/node-version.ts`, the
+rows in `docs/algorithm-examples/node-version-check.json` and the versions named in this file and
+`INSTALL_HOOK.md`).
 
 ## What is collected
 

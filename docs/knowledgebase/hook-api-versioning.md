@@ -228,7 +228,8 @@ There are two modes, chosen by the hook alone (`resolveOtelPort`): **shared** wh
   `send-logs-hook.js` under `gitRoot` or `~/.claude/plugins/` (else
   `400 reason:'uploader-not-allowed'`). A future contract adds fields and bumps `contract` only for
   a change an old receiver would misread.
-- **Capabilities** = `['shared','auth-v1','spans','realtime','forward','session-status']`. A hook
+- **Capabilities** = `['shared','auth-v1','spans','realtime','forward','session-status']`, plus
+  `'upload-queue-v1'` since `3.0.0` (below). A hook
   compares them with what the session needs (`session-status` always, `spans` with traces,
   `realtime` when on). Anything missing → **one `warn` per session and nothing else**: the older
   receiver keeps running and serving, and the newer code takes over after its idle-exit. A shared
@@ -290,6 +291,31 @@ upload (write rule: algorithm [otel-status-reason](algorithms/otel-status-reason
 | Hook `< 2.30.0` → any server | No event; `session_stats.otel_*` stay `NULL`, shown as `no-status` (generic "no OTEL" message) |
 | Hook `2.30.0` → server older than this change | The line is stored with the artisyn log and otherwise ignored; no route or status changes |
 | Hook `2.30.0` → server with this change | `extractOtelStatus` → `upsertSessionOtelStatus`: the latest `timestamp` wins, an unknown `state` / `reason` is stored as `unknown`; `otel-status` is in `NON_ACTIVITY_LINE_TYPES`, so it never moves the session's end time ([otel-tabs.md](otel-tabs.md) § "OTEL coverage and status") |
+
+### Upload jobs: capability `upload-queue-v1` and `send-logs-hook.js --run-job` (hook `3.0.0`+)
+
+A `3.0.0` receiver adds `upload-queue-v1` to `capabilities` (hello, register and `heartbeat.json`):
+it can hold the uploader role over `~/.artisyn/upload/` and run upload jobs. Two local contracts
+come with it ([upload-job-queue.md](upload-job-queue.md)):
+
+- **Hook → receiver: the job file** (`schema: 1`, `uploaderContract: 1`). A hook hands off only
+  when `heartbeat.json` is fresh (≤ 15 s), lists `upload-queue-v1` and has `uploadContract` ≥ the
+  contract it writes; otherwise it uploads in process as before. A job never carries the API key.
+- **Receiver → uploader: `node <job.uploader> --run-job <jobPath>`.** No stdin, argv parsed before
+  the stdin read (like `--otel-sweep`). The uploader is the **job's own repo's**
+  `send-logs-hook.js` (re-checked with `isAllowedUploader`), so each repo uploads with its own hook
+  version. Exit codes: `0` done, `10` retryable, `11` permanent (job in `failed/`), `12` busy, `13`
+  dropped; anything else is a crash.
+
+| Combination | Behaviour |
+|---|---|
+| Hook `< 3.0.0`, any receiver | Never reads the queue or the heartbeat: uploads in process as before. Its `Stop` / `SessionEnd` and a `3.0.0` job of the same repo never upload at once — both take the per-repo `.upload.lock` |
+| Hook `3.0.0`, receiver `< 3.0.0` (no heartbeat) | In-process fallback (`Stop` as before; `SessionEnd` waits 800 ms for the lock and otherwise leaves a job). The hook also spawns its own `3.0.0` receiver (no hello, throttled to once a minute): it takes the uploader role, finds the port busy and stays up queue-only, so the next hook run hands off |
+| Hook `3.0.0`, receiver `3.0.0` | Hand-off: `Stop` / `SessionEnd` write a job and exit; the receiver runs it |
+| Newer job contract, older receiver | The receiver leaves the job in the queue untouched (never moves it to `failed/`) and it never blocks the idle exit, so a newer receiver takes over |
+
+New uploader behaviour is announced by a new `uploaderContract` / capability, never by changing
+what an exit code or an existing job field means.
 
 Practical consequence for future changes: a new field in a register payload, a new response field
 or a new capability is always safe, as long as `ok` / `receiverVersion` / `error` / `capabilities`
@@ -793,3 +819,4 @@ user's machine. Only facts not already covered by the sections above; current be
 | `2.27.0` | `PreToolUse` entry again, but only the PowerShell tool wrapper (`tool-wrap-powershell.js`), never a permission decision | No CLI tool capture |
 | `2.31.0` | Sub-agent `.meta.json` `description` / `workflowPhase` sent as `agentDescription` / `workflowPhase` on `claude-subagent` uploads (`readAgentMeta`) | Sends neither; the sub-agent is labelled by its prompt or agent id and the Agents table has no Phase column |
 | `2.32.2` | PowerShell tool wrapper rewrites a command only when `PreToolUse` `permission_mode === 'bypassPermissions'` (missing field = no wrap); skipped calls logged once per session; native stderr text from `Exception.Message` (an empty native stderr line stays empty) — GH-149 | Wraps in every mode: on Claude Code ≥ 2.1.311, outside bypass a PowerShell call of a monitored tool prompts or is denied even under a matching allow rule; on Windows the server shows `hook_too_old` for it. An empty native stderr line is captured as the type name |
+| `3.0.0` | `Stop` and `SessionEnd` hand their upload to the shared receiver as a job (`~/.artisyn/upload/queue/`) when its heartbeat is fresh; the receiver is the single uploader per OS user, runs each job with the job's own repo's `send-logs-hook.js --run-job`, retries with backoff and parks given-up jobs in `failed/` (`upload-jobs-failed` recommendation); `LOCK_WAIT_SESSION_END_MS` 20 s → 800 ms with a job on a busy lock; a fallback `Stop` takes over stuck jobs; the shared receiver starts regardless of `otelEnabled` and stays up queue-only on a port conflict; 3 s connect timeout and one `aborted: server unreachable` stop per run; `SessionStart` Node.js warning (`node-version-check.js`, merged `systemMessage`); `hook-status` gains `nodeVersion` and `uploadQueue` ([upload-job-queue.md](upload-job-queue.md)). Log Hub `1.5.0` ships it; no server API change | Uploads in process on every `Stop` / `SessionEnd`; a `SessionEnd` waits up to 20 s for a busy lock; with no connection every file pays its own timeout; no receiver when `otelEnabled: false`; never touches the queue, but shares `.upload.lock` with `3.0.0` jobs, so the two never upload one repo at once |

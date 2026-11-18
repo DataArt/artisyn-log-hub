@@ -47,12 +47,14 @@ import type { ScenarioUser } from '../fixtures';
 import { createApiKey } from '../helpers/api-key';
 import {
   claudeProjectDir,
+  freeLoopbackPort,
   installBuiltPlugin,
   isRecord,
   makeFakeGitRepo,
   makeFakeHome,
   pathWith,
   pluginHookCommands,
+  QUIET_HOOK_CONFIG,
   readHookLog,
   readRecommendations,
   runPluginEvent,
@@ -62,6 +64,7 @@ import {
   telemetryDir,
   tempDirs,
   writeFakeClaude,
+  writeConfig,
   writeFakeMcpServer,
   writeStandConfig,
   type HookInput,
@@ -524,6 +527,56 @@ test('@S-HOOK-09 the installed hook reaches the real server and the session show
       const body: unknown = await res.json();
       const size = Array.isArray(body) ? body.length : isRecord(body) ? Object.keys(body).length : 0;
       expect(size).toBeGreaterThan(0);
+    });
+
+    await test.step('13. Node.js advisory (hook 3.0.0, DD-15/DD-16): SessionStart on Node 20.11.0 with otelEnabled and no OTEL exporter env prints ONE JSON object whose systemMessage holds the OTEL warning and the Node warning; a second SessionStart shows no Node warning (24 h throttle); 26.13.1 shows none', async () => {
+      // Its own repo and home, so the throttle file and step 1's SessionStart do not interfere. No
+      // port.json in the home → the legacy per-project receiver, on a free port with a 2 s idle
+      // timeout, so the receiver the announce spawns exits by itself.
+      const nRepo = makeFakeGitRepo(dirs, { remote: `git@git.arrakis.test:e2e/${run}/node-check.git` });
+      const nHome = makeFakeHome(dirs);
+      const nPlugin = await installBuiltPlugin(stand.url, nRepo);
+      writeConfig(nRepo, {
+        base: { ...QUIET_HOOK_CONFIG, otelEnabled: true, otelReceiverPort: await freeLoopbackPort(), otelReceiverIdleTimeoutMs: 2000 },
+      });
+      // Blank (= not set) whatever OTEL exporter env the runner itself carries.
+      const noOtelEnv: Record<string, string> = {};
+      for (const name of Object.keys(process.env)) if (name.startsWith('OTEL_')) noOtelEnv[name] = '';
+      for (const name of ['OTEL_EXPORTER_OTLP_LOGS_ENDPOINT', 'OTEL_EXPORTER_OTLP_METRICS_ENDPOINT', 'CLAUDE_CODE_ENABLE_TELEMETRY']) noOtelEnv[name] = '';
+      const sessionStart = async (sessionId: string, nodeVersion: string) => {
+        const runs = await runPluginEvent(
+          nPlugin,
+          { hook_event_name: 'SessionStart', source: 'startup', session_id: sessionId, cwd: nRepo },
+          { home: nHome, env: { ...env, ...noOtelEnv, ARTISYN_NODE_VERSION_OVERRIDE: nodeVersion } },
+        );
+        for (const r of runs) expect(r.code, r.stderr).toBe(0);
+        const printed = runs.map((r) => r.stdout.trim()).filter(Boolean);
+        expect(printed.length, `at most one hook prints: ${printed.join(' | ')}`).toBeLessThanOrEqual(1);
+        if (printed.length === 0) return null;
+        // The whole stdout is one JSON object (Claude Code parses it as such).
+        const parsed: unknown = JSON.parse(printed[0]);
+        if (!isRecord(parsed)) throw new Error(`SessionStart stdout is not a JSON object: ${printed[0]}`);
+        expect(Object.keys(parsed)).toEqual(['systemMessage']);
+        return String(parsed.systemMessage);
+      };
+      const nodeWarning = /Log Hub: Node\.js \S+ (is end-of-life|misses the .+ security fixes)/;
+
+      const first = await sessionStart(`h09n1-${run}`, '20.11.0');
+      expect(first, 'the first SessionStart warns').not.toBeNull();
+      const parts = String(first).split('\n\n');
+      expect(parts, String(first)).toHaveLength(2);
+      expect(parts[0]).toMatch(/^Artisyn log-hub: OTEL telemetry of this session will be lost/);
+      expect(parts[1]).toBe('Log Hub: Node.js 20.11.0 is end-of-life — upgrade to Node.js 22.23.5, 24.22.3 or 26.13.1 or newer. Log Hub hooks keep working.');
+      const state: unknown = JSON.parse(fs.readFileSync(path.join(nHome, '.artisyn', 'node-check.json'), 'utf8'));
+      expect(state).toMatchObject({ nodeVersion: '20.11.0' });
+
+      const second = await sessionStart(`h09n2-${run}`, '20.11.0');
+      expect(second ?? '', 'throttled: no Node warning within 24 h').not.toMatch(nodeWarning);
+      expect(second ?? '', 'the OTEL warning is not throttled').toMatch(/OTEL telemetry of this session will be lost/);
+
+      const patched = await sessionStart(`h09n3-${run}`, '26.13.1');
+      expect(patched ?? '', 'a patched Node gets no warning').not.toMatch(nodeWarning);
+      expect(readHookLog(nRepo, 'lifecycle-hook.js').filter((l) => l.includes('node-version warning shown'))).toHaveLength(1);
     });
 
     await test.step('no visible window: no .vbs in the plugin, windowsHide in its launcher, no hidden-launch files in TEMP', async () => {

@@ -42,6 +42,13 @@
 // wrong-typed user file (AC-B3) and the SessionStart `project-only` warning with the Claude Code
 // version line in hook.log (AC-E1).
 //
+// Step 18 (2026-11-18 receiver upload queue, hook 3.0.0, AC-10b / FR-16): the Node.js version
+// warning through `ARTISYN_NODE_VERSION_OVERRIDE` (artisyn-hooks-installer/src/node-version.ts),
+// and repo atomicity. The installer already writes the shared OTEL keys into the user file on a
+// user's first install (AC-B1, unchanged); what 3.0.0 must not do is add anything more there — so a
+// second repo's install leaves `~/.claude/settings.json` byte for byte as the first one left it,
+// and installing then uninstalling a third repo changes no file of the second one.
+//
 // Replaces:
 //   - artisyn-hooks-installer/src/__tests__/install.test.ts — `happy path`, `guardrail defaults`,
 //     `settings.json merge`, early `exits 1` (4), `CLI flags` summary messages (8),
@@ -79,6 +86,7 @@ import {
   patchedPluginArchive,
   readJson,
   runInstaller,
+  treeHashes,
   unpackInstaller,
   USER_SETTINGS,
   writeClaudeSettings,
@@ -165,6 +173,17 @@ async function shutdownSharedReceiver(home: string): Promise<void> {
   }
 }
 
+/** Best effort: kill the receiver holding `<home>/.artisyn/upload/uploader.lock` (one a hook run spawned). */
+function killUploaderOf(home: string | undefined): void {
+  if (!home) return;
+  try {
+    const lock: unknown = JSON.parse(fs.readFileSync(path.join(home, '.artisyn', 'upload', 'uploader.lock'), 'utf8'));
+    if (typeof lock === 'object' && lock !== null && 'pid' in lock && typeof lock.pid === 'number' && lock.pid !== process.pid) process.kill(lock.pid);
+  } catch {
+    // no lock, or the process is already gone
+  }
+}
+
 /** The installer's OTEL env keys present in a settings file's `env` (absent `env` → none). */
 const otelKeysIn = (env: unknown): string[] => {
   const keys = new Set(Object.keys(OTEL_ENV(0)));
@@ -172,12 +191,14 @@ const otelKeysIn = (env: unknown): string[] => {
 };
 
 test('@S-INST-01 a clean install keeps the user settings, writes exactly its own files and the installed hook works @mode-a', async ({ stand }) => {
-  test.setTimeout(240_000);
+  test.setTimeout(330_000);
   const dirs = tempDirs();
   let hub: FakeLogHub | undefined;
+  let mainHome: string | undefined;
   try {
     const cli = await unpackInstaller(stand.url, dirs);
     const home = makeFakeHome(dirs);
+    mainHome = home;
     const userSettingsFile = writeClaudeSettings(home, USER_SCOPE_SETTINGS);
     const userSettingsSeed = fs.readFileSync(userSettingsFile, 'utf8');
     const fakeClaude = writeFakeClaude(dirs, 'ok');
@@ -415,6 +436,15 @@ test('@S-INST-01 a clean install keeps the user settings, writes exactly its own
       const uploads = hub!.requests.filter((r) => r.path === '/api/v2/logs');
       expect(uploads.map((r) => `${r.type}/${r.sessionId}`)).toContain('artisyn/s1');
       for (const r of uploads) expect(r.headers['x-api-key']).toBe(API_KEY);
+
+      // Hook 3.0.0 (DD-7): a Stop that finds no live uploader also spawns the shared receiver for the
+      // upload queue, OTEL on or off. Stop it, so the later steps find the shared port free again.
+      if (readHookLog(repo, 'send-logs-hook.js').some((l) => l.includes('receiver: spawned for upload queue'))) {
+        const heartbeat = path.join(home, '.artisyn', 'upload', 'heartbeat.json');
+        await expect.poll(() => fs.existsSync(heartbeat), { timeout: 15_000 }).toBe(true);
+        await shutdownSharedReceiver(home);
+        await expect.poll(() => fs.existsSync(heartbeat), { timeout: 15_000 }).toBe(false);
+      }
     });
 
     await test.step('10b, AC-7. a session with traces: the installed receiver writes the spans of a /v1/traces request to chunk files, and the installed hook’s --otel-sweep uploads them as claude-otel', async () => {
@@ -689,7 +719,56 @@ test('@S-INST-01 a clean install keeps the user settings, writes exactly its own
       expect(fs.existsSync(pluginRoot(target)), 'nothing is installed').toBe(false);
       expect(fs.existsSync(stateFile(badHome, 'port.json'))).toBe(false);
     });
+
+    await test.step('18, AC-10b / FR-16 (hook 3.0.0). ARTISYN_NODE_VERSION_OVERRIDE=22.23.4 → the installer warns the Node.js line misses the security fixes and still installs; a second repo\'s install leaves ~/.claude/settings.json byte for byte as the first install left it (no user-level hook, no new key); install then uninstall in a third repo leaves the second repo\'s install unchanged', async () => {
+      const qHome = makeFakeHome(dirs);
+      writeClaudeSettings(qHome, USER_SCOPE_SETTINGS);
+      const qUserFile = path.join(qHome, '.claude', 'settings.json');
+      const repoFor = (name: string) => {
+        const r = makeFakeGitRepo(dirs, { remote: `git@git.arrakis.test:scn/inst01/${name}.git` });
+        writeClaudeSettings(r, USER_SETTINGS);
+        return r;
+      };
+      const installIn = (r: string, env: Record<string, string> = {}) =>
+        runInstaller(cli, r, ['install', '--server-url', hub!.url, '--api-key', API_KEY], { home: qHome, fakeClaudeDir: fakeClaude.dir, env });
+      try {
+        // The first repo of this user: the shared OTEL keys go into the user file (AC-B1, step 6d).
+        const first = repoFor('first');
+        const firstRes = await installIn(first);
+        expect(firstRes.code, firstRes.output).toBe(0);
+        const userAfterFirst = fs.readFileSync(qUserFile);
+        expect(readJson(qUserFile)).not.toHaveProperty('hooks');
+
+        // A second repo, with an unpatched Node.js reported by the override.
+        const second = repoFor('second');
+        const secondRes = await installIn(second, { ARTISYN_NODE_VERSION_OVERRIDE: '22.23.4' });
+        expect(secondRes.code, secondRes.output).toBe(0);
+        expect(secondRes.stderr).toContain('Warning: Log Hub: Node.js 22.23.4 misses the November 2026 security fixes — upgrade to Node.js 22.23.5, 24.22.3 or 26.13.1 or newer. Log Hub hooks keep working.');
+        expect(secondRes.stdout, 'the install still completes').toContain('Hooks are fully configured and ready to use.');
+        expect(fs.readFileSync(qUserFile).equals(userAfterFirst), 'the second install changes nothing in ~/.claude/settings.json').toBe(true);
+
+        // A third repo installed and removed again: the second repo's install is untouched.
+        const secondTree = treeHashes(second);
+        const secondEntry = () => readJson<{ repos: Array<Record<string, unknown>> }>(stateFile(qHome, 'repos.json')).repos.find((r) => r.repoKey === repoKeyOf(second));
+        const secondEntryBefore = secondEntry();
+        expect(secondEntryBefore, 'the second repo is registered').toBeTruthy();
+        const third = repoFor('third');
+        const thirdRes = await installIn(third);
+        expect(thirdRes.code, thirdRes.output).toBe(0);
+        const removed = await runInstaller(cli, third, ['uninstall'], { home: qHome, fakeClaudeDir: fakeClaude.dir });
+        expect(removed.code, removed.output).toBe(0);
+        expect(fs.existsSync(pluginRoot(third)), 'the third repo is uninstalled').toBe(false);
+        expect(treeHashes(second), 'every file of the second repo byte for byte').toEqual(secondTree);
+        expect(secondEntry(), 'its repos.json entry is kept').toEqual(secondEntryBefore);
+        expect(fs.readFileSync(qUserFile).equals(userAfterFirst), 'install + uninstall elsewhere leave ~/.claude/settings.json as it was').toBe(true);
+      } finally {
+        await shutdownSharedReceiver(qHome);
+      }
+    });
   } finally {
+    // Hook 3.0.0: an installed Stop that finds no live uploader spawns the shared receiver (DD-7),
+    // detached with a 10-min idle timeout — stop it so nothing outlives the scenario.
+    killUploaderOf(mainHome);
     await hub?.close();
     dirs.cleanup();
   }
