@@ -100,11 +100,12 @@ jobs:
   # DB, no Docker: the Rust build embeds the SPA with allow_missing, so web/dist is not needed.
   # Rust comes from work-hub/rust-toolchain.toml (1.92.0 + rustfmt + clippy) through the rustup
   # preinstalled on the runner — `rustup toolchain install` with no argument reads that file.
-  # Disabled for now (`if: false`): it fails in CI and Work Hub is an alpha outside Log Hub's merge
-  # gate. Remove the `if` to turn it back on.
+  # Disabled for now: it fails in CI and Work Hub is an alpha outside Log Hub's merge gate. It runs
+  # only when the repository variable WORK_HUB_CI is `true` (Settings → Variables → Actions); a
+  # literal `if: false` would fail actionlint's [if-cond] rule in security-scans.
   work-hub-fast:
     name: work-hub-fast
-    if: false
+    if: vars.WORK_HUB_CI == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     defaults:
