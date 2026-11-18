@@ -58,3 +58,10 @@ export const CALLS_PAGE_SIZE_MAX = 200;
 
 /** Max length of the calls route's `q` search parameter (API changes). */
 export const SEARCH_MAX_CHARS = 200;
+
+/**
+ * First hook version whose PowerShell wrapper runs only in `bypassPermissions` mode (GH-149,
+ * Claude Code 2.1.326). A Windows `tool_wrap_status` from an older hook gets the
+ * `hook_too_old` hint in the Monitored Tools panel (impl-plan DD-6).
+ */
+export const POWERSHELL_WRAP_FIX_HOOK_VERSION = '2.32.2';

@@ -143,6 +143,10 @@ deletes expired job rows and files (`EXPORT_IMPORT_JOB_TTL_MS`, default 30 min).
 Import is two steps: upload (the zip is staged and its `meta.json` summary returned), then confirm
 (the job starts).
 
+The upload is a multipart body with one `file` part (`ImportZipUploadInterceptor`, the two
+`…/import/upload` routes). Besides `IMPORT_MAX_UPLOAD_BYTES` the parser accepts one file and at most
+8 other form fields; a body with more parts is refused with 400 instead of being parsed to the end.
+
 ### Import validation
 
 The import job aborts with an error status on the first problem:

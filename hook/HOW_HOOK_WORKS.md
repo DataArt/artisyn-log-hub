@@ -668,13 +668,18 @@ graceful failure.
 
 **Shared upload lock (`<telemetryDir>/.upload.lock`, from `upload-logs.js`):** mutually excludes the
 `Stop`-triggered `send-logs-hook.js` and the prompt-triggered `prompt-upload-hook.js` from ever uploading for the
-same project at the same time. The lock file holds `{ startedAt: <ISO timestamp> }`; on acquire, if an existing
-lock is younger than the staleness window (`2 * sendLogsOnPromptTimeoutMs`, computed dynamically — this is why
-that one config value moves both the watchdog and the lock-exclusion window together), the acquiring script logs
-`skipped: upload lock held` and exits `0` immediately, before any file scanning or network I/O. Otherwise it
-writes a fresh lock and proceeds, deleting the lock file in a `finally` on normal completion. A force-killed
-process (crash, OS kill) never runs that `finally` and leaves the lock in place — the staleness check above is
-what recovers from that on the next run, not any kind of PID-liveness check.
+same project at the same time. The lock file holds `{ startedAt: <ISO timestamp>, pid, host }` (hooks before
+2.32.3 write only `startedAt`; both shapes are read). On acquire, an existing lock is abandoned when its holder
+`pid` is no longer running on this `host` (`process.kill(pid, 0)` → `ESRCH`), or when it is older than the
+staleness window (`2 * sendLogsOnPromptTimeoutMs`, computed dynamically — this is why that one config value moves
+both the watchdog and the lock-exclusion window together). A holder on another host (a container sharing the
+folder) has its own pid namespace, so only the time window applies to it. When the lock is held, the acquiring
+script logs `skipped: upload lock held (…, holder pid=<pid> age=<s>s)` and exits `0`, before any file scanning or
+network I/O. Otherwise it writes a fresh lock and proceeds, deleting the lock file in a `finally` on normal
+completion. A force-killed process never runs that `finally` — the usual case is Claude Code killing the
+`SessionEnd` hook when a short `claude -p` session (the post-turn-analysis calls) exits; that run logs
+`session-end flush: upload lock taken (pid=…)` first, so the holder named in a later `skipped` line can be traced.
+The dead-pid check frees such a lock on the very next run instead of after the whole staleness window.
 
 ---
 

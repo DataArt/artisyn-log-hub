@@ -36,7 +36,7 @@ use work_hub_server::auth::AuthSettings;
 use work_hub_server::config::{AuthEnv, Config, RunEnv};
 use work_hub_server::docker::{self, Docker, containers, exec, images, names, volumes};
 use work_hub_server::state::{AppState, ImageStatus};
-use work_hub_server::{api, auth, db, terminal, workspaces, workstreams};
+use work_hub_server::{agent, api, auth, db, secrets, terminal, workspaces, workstreams};
 
 pub const DEFAULT_DATABASE_URL: &str = "postgresql://postgres:pw@localhost:5432/postgres";
 /// The fake-agent image (D14), used as `WORK_HUB_DEFAULT_IMAGE`.
@@ -594,18 +594,20 @@ impl Ctx {
         );
     }
 
-    /// The fake agent's login (D14): its credentials file in the workspace container, then the
-    /// live check of `GET …/{id}` caches `loginState:"ok"`.
+    /// The fake agent's login (D14): the user's long-lived token in the secret store, as
+    /// `claude setup-token` with `good-code` leaves it (one login per user), then the live check
+    /// of `GET …/{id}` caches `loginState:"ok"`.
     pub async fn fake_login(&self, client: &Client, workspace: Uuid) {
-        let (_, home) = self.container_user(workspace).await;
-        let dir = format!("{}/.claude", home.trim_end_matches('/'));
-        self.sh(
-            workspace,
-            &names::workspace_container(workspace),
-            &format!("mkdir -p '{dir}' && cat > '{dir}/.credentials.json'"),
-            Some(Bytes::from_static(b"{\"fake\":\"ok\"}\n")),
-        )
-        .await;
+        let row = workspaces::repo::get_by_id(self.db(), workspace)
+            .await
+            .expect("workspace row")
+            .expect("workspace exists");
+        let st = &self.app.state;
+        let adapter = workspaces::adapter(st, &row).expect("workspace agent adapter");
+        let token = format!("sk-ant-oat01-{}", "Fake_Work-Hub-token_".repeat(5));
+        secrets::put(st, row.user_id, &agent::token_secret(adapter.as_ref()), token.as_bytes())
+            .await
+            .expect("store the fake agent token");
         let detail = client
             .get(&format!("/api/v1/workspaces/{workspace}"))
             .await

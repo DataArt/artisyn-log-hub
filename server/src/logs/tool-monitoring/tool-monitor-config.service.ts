@@ -13,6 +13,7 @@ import {
   normalizeToolName,
   validateToolName,
 } from '@loghub/tool-monitor';
+import { compareVersions, parseVersion } from '../../common/semver';
 import { DRIZZLE } from '../../database/database.constants';
 import type { DrizzleDb } from '../../database/database.module';
 import {
@@ -41,6 +42,7 @@ import type {
   ToolMonitorLevel,
   ToolWrapStatusView,
 } from './tool-monitoring.types';
+import { POWERSHELL_WRAP_FIX_HOOK_VERSION } from './tool-usage.constants';
 
 /** The config of a level that has never been saved. */
 export const EMPTY_TOOL_MONITOR_CONFIG: ToolMonitorConfigJson = {
@@ -208,6 +210,11 @@ export function newlyEnabledToolNames(
 /**
  * The panel hint of one configured tool (DD-20). Precedence:
  * `preflight_failed` > `breaker` > `hook_too_old` > `no_data_yet`.
+ *
+ * `hook_too_old` is returned when the hook never reported a wrapper status, and also (GH-149,
+ * impl-plan DD-6) when a Windows status comes from a parseable hook version older than
+ * `POWERSHELL_WRAP_FIX_HOOK_VERSION`: such hooks wrap PowerShell calls outside
+ * `bypassPermissions`, where Claude Code 2.1.326+ prompts or denies them.
  */
 export function resolveToolHint(
   toolName: string,
@@ -224,6 +231,14 @@ export function resolveToolHint(
       breaker.tools.some((t) => normalizeToolName(t) === key))
   ) {
     return 'breaker';
+  }
+  if (
+    status.os === 'win32' &&
+    typeof status.hookVersion === 'string' &&
+    parseVersion(status.hookVersion) !== null &&
+    compareVersions(status.hookVersion, POWERSHELL_WRAP_FIX_HOOK_VERSION) < 0
+  ) {
+    return 'hook_too_old';
   }
   return lastWrapperAt === null ? 'no_data_yet' : null;
 }

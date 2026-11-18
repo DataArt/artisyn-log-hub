@@ -41,7 +41,7 @@ const { loadConfig, resolveTelemetryDir } = require('./env-context');
 const { getWorkDirPath } = require('./git-context');
 const { collectScopedFiles } = require('./session-files');
 const { hookLog } = require('./hook-log');
-const { uploadFileMaybeCompressed, uploadFileChunked, CHUNK_SIZE_BYTES, acquireUploadLock, releaseUploadLock, formatServerOrigin } = require('./upload-logs');
+const { uploadFileMaybeCompressed, uploadFileChunked, CHUNK_SIZE_BYTES, acquireUploadLock, releaseUploadLock, describeUploadLockHolder, formatServerOrigin } = require('./upload-logs');
 const { sanitizeNdjson, formatDroppedLines } = require('./ndjson-sanitize');
 const { readSessionSnapshot, forgetSnapshot } = require('./harness-state');
 
@@ -227,7 +227,8 @@ async function main() {
 
   const lockResult = acquireUploadLock(telemetryDir, 2 * config.sendLogsOnPromptTimeoutMs);
   if (!lockResult.acquired) {
-    hookLog(HOOK_FILE, sessionId, 'result', 'skipped: upload lock held', cwd);
+    const holder = describeUploadLockHolder(telemetryDir);
+    hookLog(HOOK_FILE, sessionId, 'result', `skipped: upload lock held${holder ? ` (${holder})` : ''}`, cwd);
     process.exit(0);
   }
 

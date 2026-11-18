@@ -55,7 +55,10 @@ export const DEFAULT_SMTP_FROM = `noreply@${SCENARIO_EMAIL_DOMAIN}`;
 
 export const DEFAULT_DATABASE_URL = 'postgresql://postgres:pw@localhost:5432/postgres';
 export const DEFAULT_MAILPIT_URL = 'http://localhost:8025';
-export const DEFAULT_MAILPIT_SMTP = 'localhost:1025';
+// An IP literal, not localhost: nodemailer resolves SMTP_HOST with real DNS queries
+// (resolve4/resolve6) under a 5 s deadline, and on some hosts that query for
+// "localhost" times out, aborting the mode-b stand at startup.
+export const DEFAULT_MAILPIT_SMTP = '127.0.0.1:1025';
 
 export function isStandMode(value: string): value is StandMode {
   return value === 'a' || value === 'b' || value === 'c';

@@ -1,0 +1,12 @@
+{
+  "hooks": {
+    "SessionStart": [{ "hooks": [{ "type": "command", "command": "node \"__POC_DIR__/dump-hook.cjs\"" }] }],
+    "UserPromptSubmit": [{ "hooks": [{ "type": "command", "command": "node \"__POC_DIR__/dump-hook.cjs\"" }] }],
+    "PreToolUse": [{ "matcher": "*", "hooks": [{ "type": "command", "command": "node \"__POC_DIR__/dump-hook.cjs\"" }] }],
+    "PostToolUse": [{ "matcher": "*", "hooks": [{ "type": "command", "command": "node \"__POC_DIR__/dump-hook.cjs\"" }] }],
+    "Notification": [{ "hooks": [{ "type": "command", "command": "node \"__POC_DIR__/dump-hook.cjs\"" }] }],
+    "SubagentStop": [{ "hooks": [{ "type": "command", "command": "node \"__POC_DIR__/dump-hook.cjs\"" }] }],
+    "Stop": [{ "hooks": [{ "type": "command", "command": "node \"__POC_DIR__/dump-hook.cjs\"" }] }],
+    "SessionEnd": [{ "hooks": [{ "type": "command", "command": "node \"__POC_DIR__/dump-hook.cjs\"" }] }]
+  }
+}
