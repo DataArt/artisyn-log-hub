@@ -1,6 +1,7 @@
-// @S-WH-02 — workspaces: create, name rules, agent login (new, copied, "Not now"), what a container
-// commit leaks, settings (working branch), isolation between users and delete (AC-5, AC-8–AC-10,
-// AC-19, AC-20–AC-20c, AC-30, AC-31) and the file area on the host (AC-3b).
+// @S-WH-02 — workspaces: create, name rules, agent login (one per user: new, inherited by a second
+// workspace, logout from Settings, "Not now"), where the token is kept, what a container commit
+// leaks, settings (working branch), isolation between users and delete (AC-5, AC-8–AC-10, AC-19,
+// AC-20–AC-20c, AC-20e, AC-30, AC-31) and the file area on the host (AC-3b).
 import { spawnSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -28,9 +29,9 @@ import {
   TERMINAL,
   treeRow,
   uniqueEmail,
-  waitForTerminalText,
   WhApi,
   workspaceContainer,
+  workstreamContainer,
 } from './fixtures';
 
 test.describe.configure({ timeout: 1_800_000 });
@@ -79,6 +80,28 @@ function hostGit(dir: string, args: string[]) {
 
 const WHITE = 'rgb(255, 255, 255)';
 
+/** A part of the fake agent's token (tests/fake-agent/claude.mjs `FAKE_TOKEN`). */
+const FAKE_TOKEN_MARK = 'Fake_Work-Hub-token_';
+
+/**
+ * Files under `root` (paths relative to it) whose bytes contain `needle`, except those `skip`
+ * accepts. Only regular files are read; symbolic links are not followed.
+ */
+function filesContaining(root: string, needle: string, skip: (rel: string) => boolean): string[] {
+  const found: string[] = [];
+  const mark = Buffer.from(needle, 'utf8');
+  const walk = (dir: string) => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+      const abs = path.join(dir, entry.name);
+      const rel = path.relative(root, abs);
+      if (entry.isDirectory()) walk(abs);
+      else if (entry.isFile() && !skip(rel) && fs.readFileSync(abs).includes(mark)) found.push(rel);
+    }
+  };
+  walk(root);
+  return found;
+}
+
 async function backgroundOf(page: Page, selector: string): Promise<string> {
   return page.locator(selector).first().evaluate((el) => getComputedStyle(el).backgroundColor);
 }
@@ -91,17 +114,18 @@ test('@S-WH-02 @mode-a workspaces, agent login, settings and delete', async ({ b
   let betaId = '';
   let gammaId = '';
 
-  await test.step('3a. the first workspace offers no login to copy; a fake login works', async () => {
+  await test.step('3a. a user without a login is asked for it; nothing to copy; a fake login works (AC-19)', async () => {
     await startCreate(page, 'Alpha');
     await expect(page.getByTestId('agent-login-dialog')).toBeVisible({ timeout: 180_000 });
     await expect(page.getByTestId('agent-login-new')).toBeEnabled();
     await expect(page.getByText('Copy from my workspace')).toHaveCount(0);
     await expect(page.getByTestId('agent-login-sources')).toHaveCount(0);
     await fakeLoginInUi(page);
-    await waitForTerminalText(page, 'Login successful.');
+    await expect(page.getByTestId('toast').filter({ hasText: /^Logged in to / })).toBeVisible({ timeout: 60_000 });
     alphaId = await workspaceIdFromUrl(page);
-    await expect(page.getByTestId('toast').filter({ hasText: /^Logged in to / })).toBeVisible();
+    await expect(page.getByTestId('agent-login-dialog')).toHaveCount(0);
     await expect(page.getByTestId('login-banner')).toHaveCount(0);
+    expect((await getWorkspace(api, alphaId)).loginState).toBe('ok');
   });
 
   await test.step('1. a new workspace starts empty on main with one commit (AC-8, AC-9)', async () => {
@@ -181,20 +205,71 @@ test('@S-WH-02 @mode-a workspaces, agent login, settings and delete', async ({ b
     expect((await getWorkspace(api, alphaId)).loginState).toBe('ok');
   });
 
-  await test.step('4. a second workspace copies the login of the first (AC-20)', async () => {
+  await test.step('4. a second workspace is logged in without any step (AC-20)', async () => {
     await startCreate(page, 'Beta');
-    await expect(page.getByTestId('agent-login-dialog')).toBeVisible({ timeout: 180_000 });
-    const sources = page.getByTestId('agent-login-sources');
-    await expect(sources).toBeVisible();
-    await sources.getByRole('button', { name: 'Alpha' }).click();
-    await expect(page.getByTestId('toast').filter({ hasText: 'Copied the' })).toBeVisible();
     betaId = await workspaceIdFromUrl(page);
+    await expect(treeRow(page, '.gitignore')).toBeVisible({ timeout: 180_000 });
+    await expect(page.getByTestId('agent-login-dialog')).toHaveCount(0);
     await expect(page.getByTestId('login-banner')).toHaveCount(0);
-    const status = dockerExec(workspaceContainer(betaId), ['claude', 'auth', 'status']);
-    expect(status.status, status.stdout + status.stderr).toBe(0);
+    expect((await getWorkspace(api, betaId)).loginState).toBe('ok');
   });
 
-  await test.step('5. "Not now": files still open and save; a workstream asks for the login (AC-20b)', async () => {
+  let alphaStreamId = '';
+  await test.step('5. the agent answers; the token is only in the secret store (AC-20, AC-20a, AC-31)', async () => {
+    await gotoWorkspace(page, alphaId);
+    const stream = await openWorkstreamInUi(page, api, alphaId, 'Sign out');
+    alphaStreamId = stream.id;
+    await say(page, 'hello', 'You said: hello');
+
+    // AC-31: the page and the terminal are white.
+    expect(await backgroundOf(page, 'body')).toBe(WHITE);
+    expect(await paintedBackground(page, `${TERMINAL} .xterm`)).toBe(WHITE);
+
+    // AC-20: no file of the data directory but secrets/*.enc holds the token (homes, repos,
+    // recordings included), and no container file does either.
+    const leaks = filesContaining(stand.dataDir, FAKE_TOKEN_MARK, (rel) => /^secrets[\\/].*\.enc$/.test(rel));
+    expect(leaks).toEqual([]);
+    for (const container of [workspaceContainer(alphaId), workspaceContainer(betaId), workstreamContainer(alphaStreamId)]) {
+      const probe = dockerExec(container, [
+        'sh', '-c',
+        `grep -rlsI -D skip ${FAKE_TOKEN_MARK} "$HOME" /workspace /tmp; test -e /tmp/wh-login.raw && echo raw; echo checked`,
+      ]);
+      expect(probe.stdout.trim(), container).toBe('checked');
+    }
+  });
+
+  await test.step('6. Settings: "Log out of" — Cancel keeps it, Log out logs every workspace out (AC-20e)', async () => {
+    await page.goto(`/#/w/${alphaId}/settings`);
+    await expect(page.getByTestId('settings-login-state')).toHaveText('Logged in');
+    const confirm = page.getByRole('dialog').filter({ hasText: 'Log out of' });
+
+    await page.getByTestId('settings-logout').click();
+    await expect(confirm).toBeVisible();
+    await confirm.getByRole('button', { name: 'Cancel' }).click();
+    await expect(confirm).toHaveCount(0);
+    await expect(page.getByTestId('settings-login-state')).toHaveText('Logged in');
+    expect((await getWorkspace(api, alphaId)).loginState).toBe('ok');
+
+    await page.getByTestId('settings-logout').click();
+    await confirm.getByRole('button', { name: 'Log out', exact: true }).click();
+    await expect(page.getByTestId('toast').filter({ hasText: /^Logged out of / })).toBeVisible();
+    await expect(page.getByTestId('settings-login-state')).toHaveText('Not logged in');
+    await expect(page.getByTestId('settings-logout')).toHaveCount(0);
+    expect((await getWorkspace(api, alphaId)).loginState).toBe('missing');
+    // One login per user: the other workspace is logged out too.
+    expect((await getWorkspace(api, betaId)).loginState).toBe('missing');
+
+    // Reopen the workspace from the list: the login question is back.
+    await page.goto('/#/');
+    await page
+      .locator(`[data-testid="workspace-card"][data-workspace-id="${alphaId}"]`)
+      .getByRole('link', { name: 'Open' })
+      .click();
+    await expect(page.getByTestId('login-banner')).toBeVisible();
+    await expect(page.getByTestId('login-banner')).toContainText('This workspace needs a');
+  });
+
+  await test.step('7. "Not now": files still open and save; a workstream asks for the login (AC-20b)', async () => {
     await startCreate(page, 'Gamma');
     await expect(page.getByTestId('agent-login-dialog')).toBeVisible({ timeout: 180_000 });
     await page.getByTestId('agent-login-not-now').click();
@@ -223,7 +298,7 @@ test('@S-WH-02 @mode-a workspaces, agent login, settings and delete', async ({ b
     expect(streams).toEqual([]);
   });
 
-  await test.step('6. a commit of the workspace container holds no project files and no login (AC-20c)', async () => {
+  await test.step('7b. a commit of the workspace container holds no project files and no login (AC-20c)', async () => {
     const tag = `whs-scenario-commit:${crypto.randomBytes(4).toString('hex')}`;
     docker(['commit', workspaceContainer(alphaId), tag]);
     try {
@@ -236,31 +311,6 @@ test('@S-WH-02 @mode-a workspaces, agent login, settings and delete', async ({ b
     } finally {
       dockerTry(['image', 'rm', '-f', tag]);
     }
-  });
-
-  let alphaStreamId = '';
-  await test.step('7. logged out in a workstream and in the workspace → the banner is back (AC-20c)', async () => {
-    await gotoWorkspace(page, alphaId);
-    const stream = await openWorkstreamInUi(page, api, alphaId, 'Sign out');
-    alphaStreamId = stream.id;
-    await say(page, 'hello', 'You said: hello');
-
-    // AC-31: the page and the terminal are white.
-    expect(await backgroundOf(page, 'body')).toBe(WHITE);
-    expect(await paintedBackground(page, `${TERMINAL} .xterm`)).toBe(WHITE);
-
-    await say(page, 'logout', 'Logged out.');
-    const rm = dockerExec(workspaceContainer(alphaId), ['sh', '-c', 'rm -f "$HOME/.claude/.credentials.json"']);
-    expect(rm.status).toBe(0);
-
-    // Reopen the workspace from the list.
-    await page.goto('/#/');
-    await page
-      .locator(`[data-testid="workspace-card"][data-workspace-id="${alphaId}"]`)
-      .getByRole('link', { name: 'Open' })
-      .click();
-    await expect(page.getByTestId('login-banner')).toBeVisible();
-    await expect(page.getByTestId('login-banner')).toContainText('This workspace needs a');
   });
 
   await test.step('8. settings switch the working branch (AC-10)', async () => {
