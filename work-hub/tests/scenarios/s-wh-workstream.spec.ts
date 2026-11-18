@@ -73,12 +73,16 @@ async function openStreamApi(api: WhApi, workspaceId: string, name: string): Pro
   return api.expectStatus<WorkstreamSummary>('POST', `/api/v1/workspaces/${workspaceId}/workstreams`, 201, { name });
 }
 
-/** Selects the History row of `streamId` and returns its replay's visible text once loaded. */
-async function replayText(page: Page, streamId: string): Promise<string> {
+/**
+ * Selects the History row of `streamId` and expects its replay to show `text` once loaded. The
+ * text is awaited (not read once): xterm paints the replayed bytes on a later animation frame
+ * than the one `data-status="ready"` is set in.
+ */
+async function expectReplayText(page: Page, streamId: string, text: string): Promise<void> {
   await page.locator(`[data-testid="history-row"][data-stream-id="${streamId}"]`).click();
   const replay = page.getByTestId('replay-view');
   await expect(replay).toHaveAttribute('data-status', 'ready', { timeout: 30_000 });
-  return replay.locator('.xterm-rows').innerText();
+  await expect(replay.locator('.xterm-rows')).toContainText(text, { timeout: 30_000 });
 }
 
 test('@S-WH-04 @mode-a workstreams and the chat', async ({ browser, stand, api }) => {
@@ -367,7 +371,7 @@ test('@S-WH-04 @mode-a workstreams and the chat', async ({ browser, stand, api }
     expect((await listWorkstreams(api, ws.id)).find((s) => s.id === cyrillic.id)?.available).toBe(false);
 
     await page.getByTestId('topbar-history').click();
-    expect(await replayText(page, cyrillic.id)).toContain('hello from cyrillic');
+    await expectReplayText(page, cyrillic.id, 'hello from cyrillic');
   });
 
   await test.step('13. after a restart History replays open, closed and discarded chats with colours (AC-27, AC-28)', async () => {
@@ -383,11 +387,11 @@ test('@S-WH-04 @mode-a workstreams and the chat', async ({ browser, stand, api }
       'discarded',
     );
 
-    expect(await replayText(page, a.id)).toContain('Run finished: exit 0');
+    await expectReplayText(page, a.id, 'Run finished: exit 0');
     await expect(page.getByTestId('replay-view').locator('span[class*="xterm-fg-"]').first()).toBeVisible();
-    expect(await replayText(page, b.id)).toContain('You said: first in B');
+    await expectReplayText(page, b.id, 'You said: first in B');
     await expect(page.getByTestId('replay-view').locator('span[class*="xterm-fg-"]').first()).toBeVisible();
-    expect(await replayText(page, discarded.id)).toContain('Fake agent');
+    await expectReplayText(page, discarded.id, 'Fake agent');
     await expect(page.getByTestId('replay-view').locator('span[class*="xterm-fg-"]').first()).toBeVisible();
   });
 

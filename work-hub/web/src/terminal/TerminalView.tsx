@@ -151,13 +151,15 @@ export function TerminalView({
       socket.resize(cols, rows),
     );
 
-    // Paste feedback for the parent (the login code prompt echoes nothing).
+    // Paste feedback for the parent (the login code prompt echoes nothing). Listened to in the
+    // capture phase: xterm's own paste handler on its textarea stops the event's propagation,
+    // so a bubbling listener on the host never sees a paste.
     const handlePaste = (e: ClipboardEvent) => {
       const text = e.clipboardData?.getData("text/plain") ?? "";
       const visible = text.replace(/[\r\n]/g, "");
       if (visible.length > 0) onPasteRef.current?.(visible.length);
     };
-    host.addEventListener("paste", handlePaste);
+    host.addEventListener("paste", handlePaste, true);
 
     let live = false;
     const refit = () => {
@@ -206,7 +208,7 @@ export function TerminalView({
     return () => {
       disposed = true;
       observer.disconnect();
-      host.removeEventListener("paste", handlePaste);
+      host.removeEventListener("paste", handlePaste, true);
       dataSub.dispose();
       binarySub.dispose();
       resizeSub.dispose();

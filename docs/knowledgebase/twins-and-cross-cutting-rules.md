@@ -75,6 +75,9 @@ known differences between copies.
 | Receiver shutdown sequence | hook `otel-restart.js`; installer `otel-restart.ts` | **none** |
 | Managed-settings read, `OS_POLICY_TIMEOUT_MS` | hook `managed-settings.js`; installer `managed-settings.ts` | **none** |
 | OTEL keys the installer writes | installer `otel-env.ts` (`OTEL_ENV_KEYS`, `OTEL_TRACE_ENV_KEYS`); hook `otel-status.js` (`ARTISYN_OTEL_KEYS`, `PER_REPO_KEYS`) | Doc [otel-status-reason](algorithms/otel-status-reason.md) (hook side only) |
+| Upload-queue rules: `buildJobName` (the receiver builds the name of a re-queued `failed/` job), `parseJobName`, `JOB_EXIT`, `isHeartbeatFresh`, `backoffMs`, `isClaimStale` and the shared constants (dir / file names, `UPLOAD_QUEUE_CAPABILITY`, `UPLOAD_CONTRACT`, `JOB_SCHEMA`, `HEARTBEAT_STALE_MS`, `JOB_RUN_TIMEOUT_MS`) — hook `3.0.0`+ | hook `upload-queue.js`; standalone copy in `otel-receiver.js` (the receiver never `require`s a hook module) | Doc [upload-job-queue](algorithms/upload-job-queue.md); `__tests__/upload-job-queue.algo.test.js` runs the rows on both exports |
+| Job listing order (DD-3), the receiver's pre-spawn validation (a subset of `validateJob`), the `failed/` record (`moveJobToFailed`: the job plus `failedAt` ISO and `failedReason`, atomic, `0o600`) | hook `upload-queue.js`; `otel-receiver.js` | end to end only (`@S-HOOK-07`) |
+| Node.js version check: `NODE_PATCHED_MINIMUMS`, `NODE_ADVISORY`, `classifyNodeVersion`, the warning text, `ARTISYN_NODE_VERSION_OVERRIDE` | hook `node-version-check.js` (plus the per-day throttle); installer `node-version.ts` (no throttle) | Doc [node-version-check](algorithms/node-version-check.md) names both; rows run on the hook copy only (the TS copy is not pinned). Update both on each Node.js security release |
 
 All hook paths are under `hook/.claude/telemetry_tool/`; installer paths under
 `artisyn-hooks-installer/src/`.

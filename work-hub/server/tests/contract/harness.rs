@@ -605,9 +605,14 @@ impl Ctx {
         let st = &self.app.state;
         let adapter = workspaces::adapter(st, &row).expect("workspace agent adapter");
         let token = format!("sk-ant-oat01-{}", "Fake_Work-Hub-token_".repeat(5));
-        secrets::put(st, row.user_id, &agent::token_secret(adapter.as_ref()), token.as_bytes())
-            .await
-            .expect("store the fake agent token");
+        secrets::put(
+            st,
+            row.user_id,
+            &agent::token_secret(adapter.as_ref()),
+            token.as_bytes(),
+        )
+        .await
+        .expect("store the fake agent token");
         let detail = client
             .get(&format!("/api/v1/workspaces/{workspace}"))
             .await

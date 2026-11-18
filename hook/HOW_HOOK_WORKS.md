@@ -439,7 +439,9 @@ lines and the params.
 
 `send-logs-hook.js` runs in two modes. On `Stop` (end of each assistant turn) it does the **full run**
 described in this section. On `SessionEnd` (hook `2.8.0`+) it instead does a short **scoped flush** of only the
-ending session's own `artisyn` + `claude` files — see "SessionEnd flush" below.
+ending session's own `artisyn` + `claude` files — see "SessionEnd flush" below. Since hook `3.0.0` both may run
+outside the hook process: while the shared receiver is up, the hook only queues the work and the receiver runs the
+same full run or flush a moment later — see "Upload hand-off to the shared receiver" below.
 
 The full run uploads three namespaces:
 
@@ -476,11 +478,68 @@ Two changes close that gap:
   the ending session's `artisyn` + `claude` files only, via `session-files.js`'s `collectScopedFiles()`. No
   multi-session scan, no manifest write, no context prepends, no `hook-status`, no otel prune.
 - **The lock is now waited on**, via `upload-logs.js`'s `acquireUploadLockWithWait()`: 2s on `Stop` (it blocks the
-  interactive turn and another trigger will follow), 20s on `SessionEnd` (it blocks nothing and is the session's last
-  chance), polling every 250ms.
+  interactive turn and another trigger will follow) and 800ms on `SessionEnd` (hook `3.0.0`+; it was 20s before),
+  polling every 250ms. A `SessionEnd` that still meets a busy lock does not wait it out any more: it leaves an
+  upload job (see below) and exits, so the session's own files are uploaded by the next uploader run instead of
+  being stranded.
 
 Like the prompt-triggered path, the flush writes no `.claude-logs.sent` entry, so the next full run still processes
 the file normally.
+
+### Upload hand-off to the shared receiver (hook `3.0.0`+)
+
+The shared OTEL receiver (one per OS user, `~/.artisyn/otel/`) is also the user's **single log uploader**. While it
+runs it writes `~/.artisyn/upload/heartbeat.json` every 5 s. A `Stop` or `SessionEnd` that finds a fresh heartbeat
+(≤ 15 s old) does not upload at all: it writes one small job file into `~/.artisyn/upload/queue/`
+(`<session>_<UTC time>_<stop|session-end>_<pid>-<rand>.json` — paths, session id and the repo's non-secret env;
+**never the API key**), logs `queued: job=<name> elapsedMs=<ms>` and exits in a fraction of a second, so Claude Code
+no longer shows "Uploading logs…" for the upload. The receiver then runs
+`node <that repo's send-logs-hook.js> --run-job <job>` — the job's own repo's hook version — which reads the repo
+config, takes the per-repo upload lock and writes the session's `otel-status` line:
+
+- a `session-end` job uploads the session's `artisyn` + `claude` files (the scoped flush);
+- a `stop` job does the full run of this section. Every other `stop` job of the same repo that is waiting in the
+  queue is taken along (`run-job coalesced <n> stop jobs: …`), so ten quick turns cost one scan, not ten.
+
+**Retries.** A run that hits a network error, a `5xx` or a `429` (or no connection at all) leaves the job in the
+queue with `attempts` + 1 and a `nextAttemptAt` 30 s, 1, 2, 4, 8, then 15 minutes later; the receiver stays up while
+such a job waits. A job older than 24 h, a job tried 10 times, or one the server rejected with another `4xx` moves
+to `~/.artisyn/upload/failed/` (`job failed: <name> reason=<reason>` in `hook.log`) and the hook raises the
+`upload-jobs-failed` recommendation. **No data is lost:** those files stay unsent until the next successful full
+run of the repo uploads them; that run also empties the repo's `failed/` jobs and clears the recommendation. A
+receiver that is killed mid-job leaves the job behind, and the next receiver runs it again.
+
+Without a fresh heartbeat (no receiver, or an older one) the hook falls back to the in-process path — the full run
+on `Stop`, the flush above on `SessionEnd` — and, when the installer's `~/.artisyn/otel/port.json` exists, starts its
+own receiver in the background (at most once a minute) so later jobs have an uploader. If an older receiver still
+holds the OTLP port, that new receiver takes the uploader role anyway and runs the queue without a listener
+("queue-only", `listening: false` in the heartbeat) until the queue is empty. The receiver is started for every repo
+— `SessionStart` and the later re-arms start it whether `otelEnabled` is `true` or `false` (a repo with OTEL off
+registers with no signals, so its OTEL records are still dropped) — so the uploader is there for every repo. The
+idle exit after 10 minutes waits while a job runs or waits for a retry. An in-process `Stop` also
+**takes over stuck jobs** of its repo — jobs queued more than 5 minutes ago that no live uploader holds — since its
+full run uploads every session of the repo anyway (`stuck jobs taken over: <n>`). Each full run reports the queue in
+its `hook-status` event as `uploadQueue: {mode, stuckTakenOver, failedJobs}`. Protocol details:
+`docs/knowledgebase/upload-job-queue.md` in the Log Hub repository.
+
+**Why an upload did not happen now** — the `send-logs-hook.js` line in `hook.log` says which case it was:
+
+| `hook.log` line | Meaning | What uploads the files |
+|---|---|---|
+| `queued: job=<name> elapsedMs=<ms>` | handed off to the shared receiver | the receiver's `--run-job` run, seconds later |
+| `queued (fallback): lock busy job=<name> …` | `SessionEnd` met a busy upload lock for 800 ms | the next uploader run of the queue |
+| `skipped: upload lock held (…)` | another upload of this repo is running (`Stop` waited 2 s) | the running upload or the next trigger |
+| `exit: serverUrl or apiKey not configured` | uploading is not set up for this repo | nothing until it is configured |
+| `aborted: server unreachable (<code>) — <n> files left for the next run` | no connection to the server | the next run (a job is retried with backoff) |
+| `run-job busy: …` | the job is being run elsewhere, or the repo lock is busy | the receiver retries in 5 s |
+| `job failed: <name> reason=<reason>` | the job was given up (`over-age`, `max-attempts`, `upload-rejected`, invalid) | the next successful full run of the repo |
+
+### No connection: fail fast (hook `3.0.0`+)
+
+Every upload request has a 3 s connect timeout. When the server cannot be reached at all (`ECONNREFUSED`,
+`ENOTFOUND`, `EAI_AGAIN`, `EHOSTUNREACH`, `ENETUNREACH` or the connect timeout), the run stops after that first
+request and logs `aborted: server unreachable (<code>) — <n> files left for the next run`, instead of paying one
+timeout per file. The files stay on disk for the next run.
 
 **Upload endpoints:**
 - Artisyn + Claude: `POST <SERVER_URL>/api/v2/logs?type=<namespace>&sessionId=<id>`

@@ -1,0 +1,4 @@
+# run artefacts (queue / running / heartbeat files the driver creates)
+work/
+# runtime garbage
+*.log

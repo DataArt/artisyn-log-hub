@@ -588,6 +588,11 @@ pub async fn create(
             return Err(create_error(e));
         }
     }
+    // FR-24: one login per user. A user who already has the agent's token starts logged in, so
+    // the new workspace asks for nothing. On a failure the live check of `GET workspace` fixes it.
+    if let Err(e) = adopt_user_login(st, id, user.id, agent.as_ref()).await {
+        tracing::warn!("workspace {id}: cannot take over the user's login: {e}");
+    }
     match repo::get_by_id(&st.db, id).await {
         Ok(Some(row)) => {
             files::write_workspace_meta(&st.config, &row, &user.email);
@@ -607,6 +612,23 @@ pub async fn create(
             Err(ApiError::internal(e))
         }
     }
+}
+
+/// Marks the new workspace `id` logged in when its agent uses a per-user token and the user
+/// already has one stored.
+async fn adopt_user_login(
+    st: &AppState,
+    id: Uuid,
+    user_id: i64,
+    agent: &dyn AgentAdapter,
+) -> Result<(), ApiError> {
+    if agent.token_env().is_none() {
+        return Ok(());
+    }
+    if crate::secrets::exists(st, user_id, &crate::agent::token_secret(agent)).await? {
+        repo::set_login_state(&st.db, id, true).await?;
+    }
+    Ok(())
 }
 
 async fn create_steps(

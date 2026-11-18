@@ -128,6 +128,34 @@ the last report.
   any backlog from other sessions of the project.
 - **When a session ends** — a final quick upload ships the session's last changes.
 
+Since hook 3.0.0 the turn-end and session-end uploads run **in the background**, so Claude Code no
+longer waits for them ("Uploading logs…"). The hook drops a small job file into a queue in your home
+folder and returns at once; a background process — the shared receiver, one per OS user on your
+machine, the same one that collects OTEL — picks the job up a moment later and uploads it with that
+repository's own server address and API key. The job file itself never holds the API key.
+
+```text diagram=upload-queue-overview
+ Developer machine (one OS user)
+  repo A, repo B, … ── end of turn / session end ──► ~/.artisyn/upload/queue/  (job files)
+                                                              │
+                                                              ▼
+                                        shared receiver (background, one per user)
+                                         runs each job with that repo's own hook
+                                                              │
+        no receiver running? the hook uploads itself, ──┐     │  one upload per repo at a time
+        as before, and starts one for next time         ▼     ▼
+                                                each repo's server address + API key ══► Log Hub server
+```
+
+- **When it leaves the machine:** a few seconds after the end of the turn or session, while the
+  receiver runs; immediately (inside the hook, as before) when it does not.
+- **No connection:** the upload gives up after 3 seconds and is retried later — after 30 s, then 1,
+  2, 4, 8 and then every 15 minutes, up to 10 tries within 24 hours. Nothing is deleted; the files
+  stay on your machine until an upload succeeds.
+- **Uploads that give up** are moved to `~/.artisyn/upload/failed/` and shown as a recommendation
+  on the repository's Installed Hooks panel. The data is not lost: the next successful upload of
+  that repository sends it. Details: [OTEL collection architecture](otel-architecture.md#background-log-uploads).
+
 ### How uploads work
 
 - Data goes to the server address configured during hook installation, authenticated with your

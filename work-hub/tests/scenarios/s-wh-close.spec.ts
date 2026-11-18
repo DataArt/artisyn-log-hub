@@ -73,13 +73,23 @@ test('@S-WH-05 @mode-a closing workstreams and the AC-7 walk', async ({ browser,
   const report = await openWorkstreamInUi(page, api, ws.id, 'Report');
   const reportBranch = await workstreamBranch(stand, report.id);
 
-  await test.step('1. files the agent has not saved are listed first (AC-24)', async () => {
+  await test.step('1. files the agent has not saved are listed with the options (AC-24, FR-29)', async () => {
     await say(page, 'make x.txt first draft', 'Wrote x.txt');
+    // Unsaved files do not stop the close: they are listed above the options, and "Bring into
+    // main" takes them along.
     const phase = await startClose(page);
-    expect(phase).toBe('uncommitted');
-    await expect(dialog(page)).toContainText('The agent has not saved these files yet:');
-    await expect(page.getByTestId('close-uncommitted-list')).toHaveText('x.txt');
+    expect(phase).toBe('options');
+    const unsaved = page.getByTestId('close-unsaved');
+    await expect(unsaved).toContainText('1 file is not saved (committed) yet:');
+    await expect(unsaved).toContainText('x.txt');
+    await expect(unsaved).toContainText('"Bring into main" saves them too, so nothing is lost.');
     await expect(dialog(page)).not.toContainText(/\b(commit|merge|rebase|branch)\b/i);
+
+    // "Already merged elsewhere" would delete them: it lists them again before anything happens.
+    await page.getByTestId('close-merged-elsewhere').click();
+    await expect(dialog(page)).toHaveAttribute('data-phase', 'uncommitted', { timeout: 30_000 });
+    await expect(dialog(page)).toContainText('These changed files are not in main and will be lost:');
+    await expect(page.getByTestId('close-uncommitted-list')).toHaveText('x.txt');
     await page.getByTestId('close-back-to-chat').click();
     await expect(dialog(page)).toHaveCount(0);
     expect((await listWorkstreams(api, ws.id)).find((s) => s.id === report.id)?.state).toBe('open');
@@ -106,7 +116,7 @@ test('@S-WH-05 @mode-a closing workstreams and the AC-7 walk', async ({ browser,
   await test.step('3. Bring into main adds the work to main and closes (AC-24)', async () => {
     await say(page, 'commit draft', 'Commit finished: exit 0');
     expect(await startClose(page)).toBe('options');
-    await expect(page.getByTestId('close-bring-into-main')).toContainText('Add this work to main');
+    await expect(page.getByTestId('close-bring-into-main')).toContainText('Add all of this work to main');
     await page.getByTestId('close-bring-into-main').click();
     await expect(toast(page, 'Report was brought into main.')).toBeVisible({ timeout: 120_000 });
     await expect(page).toHaveURL(new RegExp(`#/w/${ws.id}$`));
@@ -237,12 +247,15 @@ test('@S-WH-05 @mode-a closing workstreams and the AC-7 walk', async ({ browser,
   });
 
   await test.step('8. AC-7: from a new workspace to a result in main with buttons and plain chat only', async () => {
+    // The walk starts as a user without a login (the login is per user, FR-24).
+    const out = await api.expectStatus<{ loggedIn: boolean }>('POST', `/api/v1/workspaces/${ws.id}/login/logout`, 200);
+    expect(out.loggedIn).toBe(false);
     await page.goto('/#/');
     await page.getByTestId('new-workspace').click();
     await page.getByTestId('new-workspace-name').fill('Dashboards');
     await page.getByTestId('new-workspace-create').click();
     await expect(page.getByTestId('agent-login-dialog')).toBeVisible({ timeout: 180_000 });
-    // New login → Enter on the method menu → the code, all typed in the login terminal.
+    // New login → the code pasted into the login terminal → Enter.
     await fakeLoginInUi(page);
     await expect(toast(page, /^Logged in to /)).toBeVisible({ timeout: 60_000 });
     await expect(page.getByTestId('login-banner')).toHaveCount(0);

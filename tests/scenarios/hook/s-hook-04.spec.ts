@@ -134,7 +134,7 @@ test('@S-HOOK-04 the hook never blocks Claude: server down, hanging, 500 or 401 
   try {
     const toolDir = copyToolDir(dirs);
 
-    await test.step('1. server closed: Stop exits 0 in < 3 s with ECONNREFUSED in hook.log; files untouched; hook-status arrives on the next good run', async () => {
+    await test.step('1. server closed: Stop exits 0 in < 3 s after one ECONNREFUSED request and an «aborted: server unreachable» line; files untouched; hook-status arrives on the next good run', async () => {
       const port = await freeLoopbackPort();
       const p = project(dirs, `http://127.0.0.1:${port}`);
       const before = fs.readdirSync(p.telemetry).map((n) => [n, fs.readFileSync(path.join(p.telemetry, n), 'utf8')]);
@@ -142,7 +142,10 @@ test('@S-HOOK-04 the hook never blocks Claude: server down, hanging, 500 or 401 
       expect(res.code, res.stderr).toBe(0);
       expect(res.elapsedMs).toBeLessThan(3000);
       const log = readHookLog(p.repo, 'send-logs-hook.js');
-      expect(log.some((l) => /\[(error|fail)\].*ECONNREFUSED/.test(l)), log.join('\n')).toBe(true);
+      // DD-13 (hook 3.0.0): the first unreachable result ends the run — one request, not one per
+      // file — and the files left over are named in an `aborted:` line (backlog a, b and cur artisyn).
+      expect(log.filter((l) => /\[(error|fail)\].*ECONNREFUSED/.test(l)), log.join('\n')).toHaveLength(1);
+      expect(log.filter((l) => /\[result\] aborted: server unreachable \(ECONNREFUSED\) — 3 files left for the next run/.test(l)), log.join('\n')).toHaveLength(1);
       for (const [name, content] of before) {
         expect(fs.readFileSync(path.join(p.telemetry, name), 'utf8'), name).toBe(content);
       }
