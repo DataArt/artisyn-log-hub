@@ -363,3 +363,7 @@ Git status and file sizes on disk come from the hook. Git status needs **hook 2.
 with an older hook the tab says so and shows `unknown` (or `outside repo` for files clearly outside
 the repository). Sessions recorded with a hook older than 2.22.0 have no file sizes on disk either.
 A skill synced to you by your organisation is shown with the source **org-synced**.
+
+Right after a session starts, the tab may say **Session data is still arriving**: the hook uploads
+the first prompt at once and the transcript with Claude's first reply a minute or two later. Press
+Refresh after a moment to see the anatomy.

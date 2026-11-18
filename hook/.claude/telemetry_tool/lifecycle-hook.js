@@ -16,10 +16,11 @@ const {loadConfig, resolveTelemetryDir, resolveOtelPort} = require('./env-contex
 const {getGitContext} = require('./git-context');
 const {writeTelemetry} = require('./write-telemetry');
 const {hookLog} = require('./hook-log');
-const {announceOtelSession, maybeReArmOtelSession} = require('./otel-register');
+const {announceOtelSession, isReceiverWanted, maybeReArmOtelSession} = require('./otel-register');
 const {deriveEditResultCounts} = require('./edit-result-counts');
 const {checkOtelEndpoints} = require('./otel-endpoint-check');
 const {resolveClaudeVersion} = require('./otel-status');
+const {checkNodeVersion} = require('./node-version-check');
 
 const HOOK_FILE = 'lifecycle-hook.js';
 
@@ -230,19 +231,26 @@ async function setupToolWrap(cwd, sessionId, config) {
     // longer only when a restart actually fires. Still wrapped by the same try/catch as before
     // (announceOtelSession/maybeReArmOtelSession never throw themselves, but the await keeps this
     // hook's own failure handling identical either way).
-    if (eventName === 'SessionStart' && config.otelEnabled) {
+    // Phase 3 (DD-8): the shared receiver is also the per-user upload-queue runner, so in shared
+    // launch mode every repo announces — with `otelEnabled: false` it registers with no signals
+    // (buildRegistrationPayload). A legacy-mode repo with `otelEnabled: false` starts no receiver.
+    /** @type {string[]} SessionStart `systemMessage` parts (DD-16). */
+    const sessionStartWarnings = [];
+    if (eventName === 'SessionStart' && isReceiverWanted(config, cwd, sessionId)) {
       // DD-13 / FR-E1: which Claude Code runs this session decides whether project-scope telemetry
       // keys count (2.1.282 cutoff). Transcript tail first, then the user-level cache, then at most
-      // once per 24 h `claude --version`. Never fails the hook.
+      // once per 24 h `claude --version`. Never fails the hook. Only needed for the endpoint check.
       let claudeVersion = null;
-      try {
-        const resolved = resolveClaudeVersion({transcriptPath: input.transcript_path || null});
-        claudeVersion = resolved.version;
-        hookLog(HOOK_FILE, sessionId, 'result',
-          `claude-version=${resolved.version || 'unknown'} source=${resolved.source}`, cwd);
-      } catch (err) {
-        hookLog(HOOK_FILE, sessionId, 'result', 'claude-version=unknown source=none', cwd);
-        hookLog(HOOK_FILE, sessionId, 'error', `claude version lookup failed: ${err && err.message}`, cwd);
+      if (config.otelEnabled) {
+        try {
+          const resolved = resolveClaudeVersion({transcriptPath: input.transcript_path || null});
+          claudeVersion = resolved.version;
+          hookLog(HOOK_FILE, sessionId, 'result',
+            `claude-version=${resolved.version || 'unknown'} source=${resolved.source}`, cwd);
+        } catch (err) {
+          hookLog(HOOK_FILE, sessionId, 'result', 'claude-version=unknown source=none', cwd);
+          hookLog(HOOK_FILE, sessionId, 'error', `claude version lookup failed: ${err && err.message}`, cwd);
+        }
       }
 
       const announced = await announceOtelSession(config, sessionId, cwd, git, HOOK_FILE, 'announced');
@@ -252,12 +260,29 @@ async function setupToolWrap(cwd, sessionId, config) {
       // the user via SessionStart's `systemMessage`; see otel-endpoint-check.js.
       // The traces endpoint is part of the check only when the project opted in (`otelTraces`).
       // The port and mode the announce resolved; re-resolved silently if the announce itself failed.
-      const receiver = announced || resolveOtelPort(config, process.env, cwd, {sessionId, warn: false});
-      const warning = checkOtelEndpoints(receiver.port, cwd, sessionId,
-        {otelTraces: config.otelTraces, claudeVersion, mode: receiver.mode});
-      if (warning) fs.writeSync(1, JSON.stringify({systemMessage: warning}));
+      // Skipped when OTEL is off for this repo: its receiver only runs the upload queue.
+      if (config.otelEnabled) {
+        const receiver = announced || resolveOtelPort(config, process.env, cwd, {sessionId, warn: false});
+        const warning = checkOtelEndpoints(receiver.port, cwd, sessionId,
+          {otelTraces: config.otelTraces, claudeVersion, mode: receiver.mode});
+        if (warning) sessionStartWarnings.push(warning);
+      }
     } else if (eventName !== 'SessionStart') {
       await maybeReArmOtelSession(config, sessionId, cwd, git, HOOK_FILE);
+    }
+
+    // DD-16: one merged `systemMessage` on SessionStart — the OTEL endpoint warning (above, only
+    // when `otelEnabled`) and the Node.js version advisory (always; throttled to once per 24 h per
+    // Node version in ~/.artisyn/node-check.json, never throws).
+    if (eventName === 'SessionStart') {
+      const nodeWarning = checkNodeVersion();
+      if (nodeWarning) {
+        sessionStartWarnings.push(nodeWarning);
+        hookLog(HOOK_FILE, sessionId, 'result', 'node-version warning shown', cwd);
+      }
+      if (sessionStartWarnings.length > 0) {
+        fs.writeSync(1, JSON.stringify({systemMessage: sessionStartWarnings.join('\n\n')}));
+      }
     }
 
     if (toolWrapSetup) await toolWrapSetup;

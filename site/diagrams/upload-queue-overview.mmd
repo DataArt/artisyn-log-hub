@@ -1,0 +1,14 @@
+flowchart TB
+  subgraph machine["Developer machine (one OS user)"]
+    direction TB
+    repos["repo A, repo B, …<br/>end of turn / session end"]
+    q["~/.artisyn/upload/queue/<br/>job files"]
+    rcv["Shared receiver<br/>background, one per user<br/>runs each job with that repo's own hook"]
+    lock["One upload per repository at a time"]
+    repos -->|"job"| q
+    q --> rcv
+    rcv --> lock
+    repos -.->|"no receiver running: upload itself,<br/>as before, and start one for next time"| lock
+  end
+  hub["Log Hub server"]
+  lock ==>|"each repo's server address + API key"| hub

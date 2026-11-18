@@ -9,6 +9,7 @@ import * as path from 'path';
 import * as readline from 'readline';
 import * as zlib from 'zlib';
 import { extractTarGz, readTarEntry } from './tar';
+import { effectiveNodeVersion, nodeWarningText, targetVersionsText } from './node-version';
 import {
   OTEL_ENV_KEYS,
   OTEL_ENDPOINT_KEYS,
@@ -943,7 +944,7 @@ async function applyHooksUpdate(
 function printNotWorking(action: string, newVersion: string, problems: string[]): void {
   console.warn(`⚠ Hooks ${action} (hooks v${newVersion}), but they are not working in this project yet:`);
   for (const p of problems) console.warn(`  - ${p}`);
-  console.warn('  See the warnings above. Claude Code runs the hooks with your own `node` from PATH; Node.js 22.23.5+ / 24.22.3+ / 26.13.1+ is recommended (18 and 20 are end-of-life); 18.19 is the minimum.');
+  console.warn(`  See the warnings above. Claude Code runs the hooks with your own \`node\` from PATH; Node.js ${targetVersionsText()} or newer is recommended (18 and 20 are end-of-life); 18.19 is the minimum.`);
 }
 
 export async function runInstall(flags?: CliFlags): Promise<void> {
@@ -2280,6 +2281,28 @@ export async function verifyInstalledReceiver(port: number): Promise<boolean> {
         // Already gone (it exited on EADDRINUSE or its idle timeout).
       }
     }
+    if (child) removeUploaderStateOf(child.pid, home);
+  }
+}
+
+// A 3.0.0+ receiver takes the upload-queue uploader role on start (`~/.artisyn/upload/
+// uploader.lock` + `heartbeat.json`) and deletes both on a clean exit. The verify receiver above is
+// killed, which on Windows runs no exit handler: its heartbeat would look fresh for up to 15 s and
+// a hook run in that window would hand its upload to a queue nobody drains until the next receiver
+// starts. Remove the two files when they are this verify receiver's own (same pid); never touch
+// another process's.
+function removeUploaderStateOf(pid: number | undefined, home: string): void {
+  if (!pid) return;
+  for (const name of ['heartbeat.json', 'uploader.lock']) {
+    const file = path.join(home, '.artisyn', 'upload', name);
+    try {
+      const parsed: unknown = JSON.parse(fs.readFileSync(file, 'utf8'));
+      if (typeof parsed === 'object' && parsed !== null && 'pid' in parsed && parsed.pid === pid) {
+        fs.rmSync(file, { force: true });
+      }
+    } catch {
+      // Absent (an older receiver, or it exited cleanly) or unreadable — leave it.
+    }
   }
 }
 
@@ -2405,19 +2428,14 @@ function checkUserLevelMarketplaceCollision(cwd: string, marketplaceName: string
   );
 }
 
-// Advisory only: Node.js 18 and 20 are end-of-life. The hooks still run on them (engines
-// stays >=18.19), so this prints one stderr line and never blocks the run or changes the exit
-// code. Runtime hook scripts print nothing — only the installer warns.
+// Advisory only (FR-16, DD-15): an end-of-life Node.js (18, 20, odd lines) or one that misses the
+// latest security release (see node-version.ts). The hooks still run on it (engines stays
+// >=18.19), so this prints one stderr line and never blocks the run or changes the exit code. The
+// hook itself shows the same text on SessionStart, throttled to once a day (node-version-check.js).
 function warnIfNodeEol(): void {
   try {
-    const nodeVersion = process.versions.node;
-    const major = Number.parseInt(nodeVersion.split('.')[0] ?? '', 10);
-    if (Number.isFinite(major) && major < 22) {
-      console.warn(
-        `Warning: Node.js ${nodeVersion} is end-of-life and gets no security fixes. ` +
-        'Log Hub hooks still work, but please upgrade to Node.js 22 or newer.',
-      );
-    }
+    const warning = nodeWarningText(effectiveNodeVersion());
+    if (warning) console.warn(`Warning: ${warning}`);
   } catch {
     // Best-effort only — never fail the run because the version check itself failed.
   }

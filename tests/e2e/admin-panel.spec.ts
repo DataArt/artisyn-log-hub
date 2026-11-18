@@ -1,11 +1,40 @@
-import { test, expect } from '@playwright/test';
-import { storageStatePath } from './helpers/credentials';
+import { test, expect, request as pwRequest, type APIRequestContext } from '@playwright/test';
+import { BASE_URL, storageStatePath } from './helpers/credentials';
+import { seedRepoWithSessions, type SeededRepo } from './helpers/seed';
 
 // ────────────────────────────────────────────────────────────
 // Admin user — authenticated via the `admin` storageState.
 // ────────────────────────────────────────────────────────────
 test.describe('Admin Panel — admin user', () => {
   test.use({ storageState: storageStatePath('admin') });
+
+  // The Repos-tab tests need at least one repo in the table: with no rows TanStack picks
+  // `desc` as a string column's first sort direction, so the asc→desc→none cycle the sort
+  // test checks does not happen. Seed one instead of relying on whatever the dev DB holds.
+  let ownerCtx: APIRequestContext;
+  let seeded: SeededRepo | undefined;
+  test.beforeAll(async () => {
+    ownerCtx = await pwRequest.newContext({ baseURL: BASE_URL });
+    seeded = await seedRepoWithSessions(ownerCtx, {
+      role: 'primary',
+      specSlug: 'admin-panel',
+      sessions: [
+        {
+          firstPrompt: 'Admin panel e2e session',
+          branch: 'main',
+          daysAgo: 0,
+          toolCalls: [{ name: 'Read', filePath: 'src/index.ts' }],
+        },
+      ],
+    });
+  });
+  test.afterAll(async () => {
+    try {
+      await seeded?.cleanup();
+    } finally {
+      await ownerCtx?.dispose();
+    }
+  });
 
   test('@core System Info tab renders real, non-corrupted system metrics', async ({ page }) => {
     const jsErrors: string[] = [];

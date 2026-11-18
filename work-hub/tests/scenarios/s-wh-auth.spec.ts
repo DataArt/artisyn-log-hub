@@ -68,7 +68,11 @@ test('@S-WH-01 @mode-a @mode-b @mode-c sign-in per auth mode', async ({ browser,
     await test.step('3. sign up, then sign in', async () => {
       await page.getByRole('button', { name: 'Sign up' }).click();
       await expect(page).toHaveURL(/#\/signup/);
+      // The hash changes before React swaps the login form for the signup form: wait for the
+      // signup form itself, or the email lands in the login form's field that is still mounted.
+      await expect(page.getByPlaceholder('Confirm password')).toBeVisible();
       await page.getByPlaceholder('Email').fill(email);
+      await expect(page.getByPlaceholder('Email')).toHaveValue(email);
       await page.getByPlaceholder('Password', { exact: true }).fill(TEST_PASSWORD);
       await page.getByPlaceholder('Confirm password').fill(TEST_PASSWORD);
       await page.getByRole('button', { name: 'Sign up' }).click();

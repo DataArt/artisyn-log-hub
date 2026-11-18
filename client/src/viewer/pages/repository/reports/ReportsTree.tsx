@@ -88,6 +88,9 @@ export function ReportsTree({ selectedReportId, onSelectReport }: Props) {
                   <button
                     key={report.id}
                     onClick={() => onSelectReport(report.id)}
+                    aria-current={
+                      report.id === selectedReportId ? 'true' : undefined
+                    }
                     className={cn(
                       'flex items-center gap-2 rounded border-l-2 px-2 py-1.5 text-left text-sm',
                       report.id === selectedReportId

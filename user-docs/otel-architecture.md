@@ -62,6 +62,10 @@ same port, and one receiver serves them all.
   Data for a repository that no longer exists is dropped with one log line; the others carry on.
 - **Older hooks keep working.** A hook before 2.30.0 still runs its own receiver per project on its
   own port, side by side with the shared one.
+- **It runs even with OTEL off (hook 3.0.0).** The receiver is also the background uploader of your
+  session logs (see [Background log uploads](#background-log-uploads)), so every repository starts
+  it, including one with `otelEnabled: false` — that repository's OTEL records are still dropped.
+  It does not idle-exit while an upload is running or waiting for a retry.
 
 ## Only your own hooks can talk to it
 
@@ -160,6 +164,60 @@ The session tab names the reason and how to fix it, and the repository and team 
 sessions that sent nothing. Every reason is explained in
 [Troubleshooting: OTEL tab is empty](otel-tab.md#troubleshooting-otel-tab-is-empty).
 
+## Background log uploads
+
+Since hook 3.0.0 the same receiver is also the **single uploader of your session logs** (the
+transcripts and the hook's own records, not only OTEL). At the end of a turn and at the end of a
+session the hook does not upload by itself any more: it writes a small job file and returns at once,
+so Claude Code no longer waits for "Uploading logs…".
+
+```text diagram=upload-queue-components
+ Developer machine (one OS user)
+
+  repo A hook ─┐  end of turn / session end
+  repo B hook ─┼── 1. uploader up? (heartbeat.json, refreshed every 5 s)
+  repo C hook ─┘   2. yes: write a job ──► ~/.artisyn/upload/queue/
+        │                                               │ picked up within a second
+        │                                               ▼
+        │                         Shared receiver (one process per OS user)
+        │                          ├─ uploader ─► runs the job with THAT repo's own hook copy
+        │                          └─ OTEL listener 127.0.0.1:<port>
+        │                                               │
+        │ 3. no uploader: upload itself, as before      ▼
+        └────────────────────────────────► one upload per repository at a time
+                                                        │
+                                                        ▼ that repo's server URL and API key
+                                                 Log Hub server
+```
+
+- **When data leaves the machine:** a moment after the turn or session ends, when the receiver
+  picks up the job. The job file holds paths and the session id, never the API key; the upload
+  reads the key from the repository's own config, like every hook run.
+- **Fallback:** when no uploader is running (first session after an install, or an older receiver
+  still holding the port), the hook uploads in process exactly as before and starts a new receiver
+  for next time. If an older receiver still has the OTEL port, the new one only runs uploads
+  ("queue-only") until the older one exits. Older hooks in other repositories keep uploading
+  themselves; one upload per repository at a time is guaranteed either way.
+- **No connection:** an upload stops after a 3 s connect timeout and is retried later with backoff
+  (30 s up to 15 min, 10 tries within 24 hours). Nothing is deleted from your machine.
+- **Given up:** a job the server rejects, or that runs out of tries, moves to
+  `~/.artisyn/upload/failed/`. The repository's Installed Hooks panel shows an "upload jobs failed"
+  recommendation. The data is not lost — the next successful upload of that repository sends it and
+  empties the folder.
+
+### When uploads seem stuck
+
+- `~/.artisyn/upload/heartbeat.json` with a time from the last few seconds means the uploader is
+  running. No file, or an old one, means it is not — the next end of turn uploads in process and
+  starts it again.
+- Jobs that stay in `~/.artisyn/upload/queue/` show their `attempts` and `lastError`.
+- The repository's `.artisyn/ai_work_dir/hook.log` says what each run did: `queued` (handed to the
+  uploader), `run-job …` (the background upload), `job failed …`, or
+  `aborted: server unreachable`. `~/.artisyn/otel/receiver.log` has the receiver's side (`job-start`,
+  `job-done`, `job-retry`, `job-failed`, `queue-only`).
+- Run `/status` in Claude Code (2.1.327 and later) to see whether the plugin's hooks load at all: it
+  lists broken agent, skill and command files and hook matchers that never match.
+
 ## Where things live on your machine
 
 | Path | What it is |
@@ -171,6 +229,10 @@ sessions that sent nothing. Every reason is explained in
 | `~/.artisyn/otel/forward.json` | your own collector's settings, for proxy mode and the uninstall restore |
 | `~/.artisyn/otel/receiver.log` | the receiver's log (each line is also mirrored into the repository's own log) |
 | `~/.artisyn/otel/bin/` | a copy of the receiver used by the proxy-mode user hook |
+| `~/.artisyn/upload/queue/` | upload jobs waiting for the background uploader (hook 3.0.0) |
+| `~/.artisyn/upload/failed/` | upload jobs that gave up; their data is sent by the next successful upload |
+| `~/.artisyn/upload/heartbeat.json` | refreshed every 5 s while the uploader runs |
+| `~/.artisyn/node-check.json` | when the "update Node.js" warning was last shown (at most once a day) |
 
 `--restart-otel-receiver` stops the receiver; the next Claude Code session starts it again with the
 installed code.

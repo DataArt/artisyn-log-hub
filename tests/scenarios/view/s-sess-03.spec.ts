@@ -905,6 +905,39 @@ test('@S-SESS-03 Logs: what counts as a prompt, what is hidden, how a turn reads
     await expect(tab.getByTestId('sysprompt-open'), 'no prompt_snapshot: no View system prompt button').toHaveCount(0);
   });
 
+  await test.step('8e. a recent session whose first assistant reply has not been uploaded yet (transcript ends at the prompt): a "still arriving" message instead of the anatomy and its old-hook banners', async () => {
+    const runId = randomBytes(4).toString('hex');
+    const at = new Date(Date.now() - 2 * 60 * 1000);
+    const s: PromptSession = {
+      sessionId: `ss03-pending-${runId}`,
+      prompt: `ss03 pending ${runId}`,
+      repoUrl: `https://git.arrakis.test/scn/${runId}/ss03-pending`,
+      at,
+    };
+    const userLine = {
+      type: 'user', uuid: `${s.sessionId}-u1`, parentUuid: null, sessionId: s.sessionId, timestamp: at.toISOString(), isSidechain: false,
+      message: { role: 'user', content: s.prompt },
+    };
+    const key = await createApiKey(owner.api);
+    const bodies = { artisyn: promptSessionBodies(s).artisyn, claude: JSON.stringify(userLine) + '\n' };
+    for (const type of ['artisyn', 'claude'] as const) {
+      const res = await api.post('/api/v2/logs', {
+        params: { sessionId: s.sessionId, type },
+        headers: { 'Content-Type': 'application/x-ndjson', 'X-API-Key': key.key },
+        data: bodies[type],
+      });
+      expect(res.status(), `upload ${type}`).toBe(201);
+    }
+    await waitForQueueIdle(db, owner.id);
+    const repoId = await ownRepoId(owner.api, s.repoUrl);
+
+    await openSession(page, owner, repoId, s.sessionId, { tab: 'sysctx' });
+    const tab = page.getByTestId('sysctx-anatomy-tab');
+    await expect(tab).toContainText('Session data is still arriving');
+    await expect(tab.getByTestId('anatomy-banner'), 'no old-hook / no-prompt-snapshot banner while waiting').toHaveCount(0);
+    await expect(tab.getByTestId('anatomy-total')).toHaveCount(0);
+  });
+
   await test.step('9. GS-01 (no harness snapshot): the anatomy tab shows the old-hook banner, git status only unknown or outside repo, and no page error', async () => {
     await openSession(page, owner, repo.repoId, repo.rootId('gs-01'), { tab: 'sysctx' });
     const tab = page.getByTestId('sysctx-anatomy-tab');

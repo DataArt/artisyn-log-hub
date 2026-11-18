@@ -308,26 +308,54 @@ export async function getWorkspace(api: WhApi, id: string): Promise<WorkspaceDet
   return api.expectStatus<WorkspaceDetail>('GET', `/api/v1/workspaces/${encodeURIComponent(id)}`, 200);
 }
 
-/** The fake agent's credentials file, as `claude auth login` with `good-code` writes it. */
-const FAKE_CREDENTIALS_SCRIPT =
-  'mkdir -p "$HOME/.claude" && printf \'{"fake":"ok"}\\n\' > "$HOME/.claude/.credentials.json" ' +
-  '&& chmod 600 "$HOME/.claude/.credentials.json"';
+/** The code the fake agent's `setup-token` accepts. */
+export const FAKE_LOGIN_CODE = 'good-code';
 
-/**
- * Logs the workspace's agent in without the UI: writes the fake credentials into the workspace
- * container (as its default user), then waits until `GET workspace` (the live login check)
- * reports `loginState: "ok"`. The UI path is covered by {@link fakeLoginInUi}.
- */
-export async function fakeLoginInContainer(api: WhApi, workspaceId: string): Promise<WorkspaceDetail> {
-  const r = dockerExec(workspaceContainer(workspaceId), ['sh', '-c', FAKE_CREDENTIALS_SCRIPT]);
-  if (r.status !== 0) throw new Error(`writing the fake credentials failed: ${r.stderr.trim()}`);
-  const deadline = Date.now() + 30_000;
+/** Polls `GET workspace` until its `loginState` is `want`. */
+export async function waitForLoginState(
+  api: WhApi,
+  workspaceId: string,
+  want: 'ok' | 'missing',
+  timeoutMs = 60_000,
+): Promise<WorkspaceDetail> {
+  const deadline = Date.now() + timeoutMs;
   for (;;) {
     const ws = await getWorkspace(api, workspaceId);
-    if (ws.loginState === 'ok') return ws;
+    if (ws.loginState === want) return ws;
     if (Date.now() > deadline) throw new Error(`workspace ${workspaceId} still reports loginState=${ws.loginState}`);
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
+}
+
+/** The screen of the workspace container's `login` tmux session ('' while there is none). */
+function loginScreen(workspaceId: string): string {
+  const r = dockerExec(workspaceContainer(workspaceId), ['tmux', 'capture-pane', '-p', '-J', '-t', '=login:']);
+  return r.status === 0 ? r.stdout : '';
+}
+
+/**
+ * Logs the user's agent in without the browser, through the real login flow (FR-24): `POST
+ * …/login/start` runs the fake `claude setup-token` in the workspace container's `login` tmux
+ * session, the code is typed into that session (`tmux send-keys`, as the container's default
+ * user, who owns the tmux server), and the server's login watcher takes the printed token into
+ * the user's secret store. Waits until `GET workspace` reports `loginState: "ok"`. The login is
+ * per user, so a user who is already logged in is returned at once. The UI path is covered by
+ * {@link fakeLoginInUi}.
+ */
+export async function fakeLoginInContainer(api: WhApi, workspaceId: string): Promise<WorkspaceDetail> {
+  const current = await getWorkspace(api, workspaceId);
+  if (current.loginState === 'ok') return current;
+  await api.expectStatus('POST', `/api/v1/workspaces/${encodeURIComponent(workspaceId)}/login/start`, 204);
+  const deadline = Date.now() + 60_000;
+  while (!loginScreen(workspaceId).includes('Paste code here')) {
+    if (Date.now() > deadline) {
+      throw new Error(`the login session of ${workspaceId} never asked for the code:\n${loginScreen(workspaceId)}`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, 300));
+  }
+  const keys = dockerExec(workspaceContainer(workspaceId), ['tmux', 'send-keys', '-t', '=login:', FAKE_LOGIN_CODE, 'Enter']);
+  if (keys.status !== 0) throw new Error(`typing the login code failed: ${keys.stderr.trim()}`);
+  return waitForLoginState(api, workspaceId, 'ok');
 }
 
 /** A new workspace (through the API) whose agent is logged in. */
@@ -359,25 +387,30 @@ export async function typeInTerminal(page: Page, text: string, scope = 'body'): 
 }
 
 /**
- * The "fake login" of the test plan, on an open AgentLoginDialog: New login → Enter on the
- * method menu → `good-code` + Enter → "Login successful.".
+ * The "fake login" of the test plan, on an open AgentLoginDialog (AC-19): New login → the fake
+ * `claude setup-token` shows its sign-in link (also offered whole above the terminal, with Open /
+ * Copy) and a silent code prompt → `good-code` is pasted → the tab confirms "Pasted 9
+ * characters" → Enter. The CLI prints the token and ends; the dialog then closes with the
+ * "Logged in to …" toast, which the caller checks.
  */
 export async function fakeLoginInUi(page: Page): Promise<void> {
   await page.getByTestId('agent-login-new').click();
-  await waitForTerminalText(page, 'Select login method');
-  await typeInTerminal(page, '');
-  await waitForTerminalText(page, 'Paste code here');
-  // The code is pasted into the terminal: the prompt echoes nothing, the tab draws one * per
-  // pasted character (headless Chromium has no native Ctrl+V, so the paste event is dispatched).
+  await waitForTerminalText(page, 'Paste code here if prompted');
+  const linkBar = page.getByTestId('login-link-bar');
+  await expect(linkBar).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId('login-link-open')).toBeVisible();
+  await expect(page.getByTestId('login-link-copy')).toBeVisible();
+  // The code is pasted into the terminal: the prompt echoes nothing, the tab confirms the paste
+  // (headless Chromium has no native Ctrl+V, so the paste event is dispatched).
   await page
     .locator('[data-testid="login-tab"] textarea.xterm-helper-textarea')
-    .evaluate((el) => {
+    .evaluate((el, code) => {
       (el as HTMLTextAreaElement).focus();
       const dt = new DataTransfer();
-      dt.setData('text/plain', 'good-code');
+      dt.setData('text/plain', code);
       el.dispatchEvent(new ClipboardEvent('paste', { clipboardData: dt, bubbles: true, cancelable: true }));
-    });
-  await waitForTerminalText(page, 'Paste code here: *********');
+    }, FAKE_LOGIN_CODE);
+  await expect(page.getByTestId('login-tab')).toContainText(`Pasted ${FAKE_LOGIN_CODE.length} characters`);
   await page.keyboard.press('Enter');
 }
 

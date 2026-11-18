@@ -101,6 +101,29 @@ function buildBanners(a: SysctxAnatomy): Banner[] {
   return out;
 }
 
+/** How long after its last logged line a session without a first reply still counts as uploading. */
+const AWAITING_REPLY_WINDOW_MS = 30 * 60 * 1000;
+
+/**
+ * True while the first assistant reply of a recent session has not been uploaded yet: the hook
+ * sends `SessionStart` and the first prompt right away, the transcript with the reply's usage a
+ * minute or two later. The edge-state banners would blame an old hook or Claude Code version then.
+ */
+function isAwaitingFirstReply(
+  a: SysctxAnatomy,
+  main: Record<string, unknown>[],
+  nowMs: number,
+): boolean {
+  if (a.total !== null) return false;
+  let last = -Infinity;
+  for (const line of main) {
+    if (typeof line.timestamp !== 'string') continue;
+    const t = Date.parse(line.timestamp);
+    if (t > last) last = t;
+  }
+  return nowMs - last < AWAITING_REPLY_WINDOW_MS;
+}
+
 function LoadingSkeleton() {
   return (
     <div className="space-y-3 p-4" data-testid="sysctx-anatomy-loading">
@@ -184,6 +207,8 @@ export function SessionSysctxAnatomyTab({
     return { rows: matchRecommendations(facts), claudeVersion };
   }, [anatomy, harnessSnapshot, mainLogs]);
   const [recoOpen, setRecoOpen] = useState(false);
+  // Fixed at mount: a later Refresh only makes the session look more recent, never less.
+  const [mountedAt] = useState(() => Date.now());
 
   // Selecting a kind (segment or row) also expands it when it has drill-down rows (DD 15).
   const select = useCallback(
@@ -214,6 +239,11 @@ export function SessionSysctxAnatomyTab({
   if (error) return <Message text={getSessionLogsErrorMessage(error)} />;
   if (anatomy.flags.empty) {
     return <Message text="No startup context recorded for this session." />;
+  }
+  if (isAwaitingFirstReply(anatomy, mainLogs ?? [], mountedAt)) {
+    return (
+      <Message text="Session data is still arriving — the startup context appears once the first assistant reply is uploaded, usually within a minute or two. Use Refresh to check again." />
+    );
   }
 
   const banners = buildBanners(anatomy);
