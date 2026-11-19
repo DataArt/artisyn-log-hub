@@ -1,4 +1,9 @@
 ---
+type: "Algorithm"
+title: "Tool output format: shape detection, table re-alignment and agent-seen lines"
+description: "The details pane of the Tools/MCP tab shows a CLI tool's full captured output next to what the agent actually received."
+tags: [algorithm]
+generated: { by: "human:denistsyplakov", at: "2026-11-03T17:31:26+04:00" }
 reviewed: no
 reviewer: none
 ---

@@ -1,4 +1,9 @@
 ---
+type: "Algorithm"
+title: "System context anatomy"
+description: "Before the user types anything, Claude Code already sends a large startup context in the first request: system prompt, tool names, skills listing, instruction files, reminders."
+tags: [algorithm]
+generated: { by: "human:denistsyplakov", at: "2026-11-11T20:07:38+04:00" }
 reviewed: no
 reviewer: none
 ---

@@ -1,0 +1,15 @@
+sequenceDiagram
+  participant A as Server start
+  participant D as Database
+  participant S as SMTP relay
+  participant Y as You
+  A->>A: AUTH_MODE=strict-managed: check PUBLIC_BASE_URL, ADMIN_CONTACT_EMAIL, SMTP
+  A->>D: an admin with that address already?
+  alt yes
+    D-->>A: done, no email
+  else no
+    A->>D: create the admin account (or clear an existing non-admin one), no password
+    A->>S: set-password email
+    S-->>Y: link = PUBLIC_BASE_URL/… (24 h, once)
+    Note over A,D: email failed → undo, refuse to start
+  end

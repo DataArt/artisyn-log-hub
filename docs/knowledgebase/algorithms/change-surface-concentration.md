@@ -1,4 +1,9 @@
 ---
+type: "Algorithm"
+title: "Concentration: how focused a change is"
+description: "One number from 0 to 100 answers \"how close together are the files this session changed\". 100 means every file sits in one folder; low values mean the change is spread over unrelated folders and modules (more merge conflicts, harder review)."
+tags: [algorithm]
+generated: { by: "human:denistsyplakov", at: "2026-11-03T17:31:26+04:00" }
 reviewed: 2026-10-15
 reviewer: ai
 ---

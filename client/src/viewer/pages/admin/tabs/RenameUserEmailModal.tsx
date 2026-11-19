@@ -2,6 +2,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import type { AdminUser } from '../../../../models/admin';
 import { renameAdminUserEmail } from '../../../api';
+import { useAuthConfig } from '../../../hooks/useAuthConfig';
 import {
   Dialog,
   DialogContent,
@@ -14,17 +15,22 @@ import { Button } from '../../../ui/button';
 interface Props {
   user: AdminUser;
   onClose: () => void;
+  /** Called with the new address after a successful rename. */
+  onRenamed?: (email: string) => void;
 }
 
-export function RenameUserEmailModal({ user, onClose }: Props) {
+export function RenameUserEmailModal({ user, onClose, onRenamed }: Props) {
   const queryClient = useQueryClient();
   const [newEmail, setNewEmail] = useState('');
   const [error, setError] = useState('');
+  const { data: authConfig } = useAuthConfig();
+  const isStrictManaged = authConfig?.mode === 'strict-managed';
 
   const rename = useMutation({
     mutationFn: (email: string) => renameAdminUserEmail(user.id, email),
-    onSuccess: () => {
+    onSuccess: (_result, email) => {
       void queryClient.invalidateQueries({ queryKey: ['admin-users'] });
+      onRenamed?.(email.toLowerCase());
       onClose();
     },
     onError: (err: unknown) => {
@@ -72,6 +78,13 @@ export function RenameUserEmailModal({ user, onClose }: Props) {
               autoFocus
             />
           </div>
+          {isStrictManaged && (
+            <p className="text-xs text-muted-foreground">
+              Links already sent to the current email stop working, and the
+              password is cleared: send the person a new link with{' '}
+              <span className="font-medium">Resend link</span> after the rename.
+            </p>
+          )}
           {error && <p className="text-xs text-destructive">{error}</p>}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={onClose}>

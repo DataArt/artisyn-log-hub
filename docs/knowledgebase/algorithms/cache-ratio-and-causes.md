@@ -1,4 +1,9 @@
 ---
+type: "Algorithm"
+title: "Cache read ratio and the causes of cache writes"
+description: "Prompt caching is cheap to read and expensive to write. The cache read ratio says what share of a scope's cache traffic was a cheap read; a low ratio means the session kept re-writing its cache."
+tags: [algorithm]
+generated: { by: "human:denistsyplakov", at: "2026-11-03T17:31:26+04:00" }
 reviewed: 2026-10-15
 reviewer: ai
 ---

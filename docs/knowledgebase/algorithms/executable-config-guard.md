@@ -1,4 +1,9 @@
 ---
+type: "Algorithm"
+title: "Executable-config guard: which repo config may make a developer's machine run code"
+description: "Flags the repo files that make a developer's machine run code or send data to a server as soon as the repo is opened in Claude Code (`.artisyn/config/log-hub.json`, `.claude/settings.json`, `.mcp.json`), and a tracked personal `log-hub.local.json`."
+tags: [algorithm]
+generated: { by: "human:denistsyplakov", at: "2026-11-03T17:31:26+04:00" }
 reviewed: no
 reviewer: none
 ---

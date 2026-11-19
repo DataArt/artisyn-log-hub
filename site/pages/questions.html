@@ -53,13 +53,14 @@
       <a href="docs/data-collection-notice.html">Data collection notice</a></dd>
 
     <dt>Which sign-in methods are there? SSO?</dt>
-    <dd>Identify by email, email and password (optionally with email confirmation), or Microsoft
+    <dd>Identify by email, email and password (optionally with email confirmation, or accounts
+      created only by the admin, who get an emailed set-password link), or Microsoft
       Entra ID, single tenant. Other identity providers are not supported today.
       <a href="docs/authentication-modes.html">Authentication modes</a></dd>
 
     <dt>Is there an audit trail?</dt>
     <dd>Security events — sign-ins and their failures, sign-up, email confirmation, password reset
-      and change, account deletion — are logged as structured lines with email and user ID only.
+      and change, account deletion, admin-created accounts and set-password links — are logged as structured lines with email and user ID only.
       There is no log of who opened which session.
       <a href="docs/security-hardening.html">Security hardening</a></dd>
   </dl>

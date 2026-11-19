@@ -1,4 +1,9 @@
 ---
+type: "Algorithm"
+title: "Session Map delta merge"
+description: "The Session Map tab keeps its own copy of a session's logs and grows it from the `GET …/sessions/:sessionId/logs/delta` responses (see [session-logs-delta](session-logs-delta.md)) instead of re-downloading the whole session every poll."
+tags: [algorithm]
+generated: { by: "human:denistsyplakov", at: "2026-11-04T13:54:49+04:00" }
 reviewed: no
 reviewer: none
 ---

@@ -1,6 +1,11 @@
 import { useState, type FormEvent } from 'react';
 import { Check, Loader2 } from 'lucide-react';
 import { ApiError, changePassword } from '../../api';
+import { useAuthConfig } from '../../hooks/useAuthConfig';
+import {
+  passwordRequirementSentence,
+  weakPasswordMessage,
+} from '../../lib/password-requirement';
 import { Button } from '../../ui/button';
 import { Input } from '../../ui/input';
 import {
@@ -28,13 +33,19 @@ export function ChangePasswordModal({ email, onClose }: Props) {
   const [confirm, setConfirm] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [policyError, setPolicyError] = useState<string | null>(null);
   const [delivery, setDelivery] = useState<'sent' | 'failed' | 'skipped'>();
+  const { data: authConfig } = useAuthConfig();
+  const requirement = passwordRequirementSentence(
+    authConfig?.passwordRequirement,
+  );
 
   const isDone = delivery !== undefined;
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setError(null);
+    setPolicyError(null);
 
     if (password !== confirm) {
       setError('New passwords do not match.');
@@ -46,7 +57,12 @@ export function ChangePasswordModal({ email, onClose }: Props) {
       const result = await changePassword(currentPassword, password, confirm);
       setDelivery(result.email_delivery);
     } catch (err) {
-      setError(mapChangePasswordError(err));
+      // A policy refusal takes the place of the rule under "New password".
+      if (err instanceof ApiError && err.code === 'weak_password') {
+        setPolicyError(weakPasswordMessage(err.message));
+      } else {
+        setError(mapChangePasswordError(err));
+      }
     } finally {
       setIsLoading(false);
     }
@@ -123,6 +139,13 @@ export function ChangePasswordModal({ email, onClose }: Props) {
                 required
                 autoComplete="new-password"
               />
+              {policyError ? (
+                <p className="text-xs text-destructive">{policyError}</p>
+              ) : (
+                requirement && (
+                  <p className="text-xs text-muted-foreground">{requirement}</p>
+                )
+              )}
             </div>
             <div className="flex flex-col gap-1">
               <label
@@ -165,7 +188,7 @@ function mapChangePasswordError(err: unknown): string {
       return 'Current password is incorrect.';
     }
     if (err.code === 'weak_password') {
-      return err.message || 'Password does not meet the strength requirements.';
+      return weakPasswordMessage(err.message);
     }
     if (err.code === 'password_mismatch') {
       return 'New passwords do not match.';

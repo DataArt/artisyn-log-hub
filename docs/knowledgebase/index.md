@@ -73,8 +73,8 @@ article itself holds the details. Keep new lines to one or two sentences.
 
 ## Auth and accounts
 
-* [Authorization and Authentication](authorization-and-authentificaiton.md) - Read before touching auth or any data-access check: the admin role grants no session-data access, the four `AUTH_MODE`s, startup validation, rate limits, route gating, Mode 1's local-caller gate, team access modes and roles
-* [User Account Flows](user-account-flows.md) - Read before touching invites, signup, password reset, admin reset link / email rename, the data-collection consent or the new-user nudge
+* [Authorization and Authentication](authorization-and-authentificaiton.md) - Read before touching auth or any data-access check: the admin role grants no session-data access, the five `AUTH_MODE`s (incl. strict-managed admin-provisioned accounts, bootstrap admin, email limiter), startup validation, rate limits, route gating, Mode 1's local-caller gate, team access modes and roles
+* [User Account Flows](user-account-flows.md) - Read before touching invites, signup, password reset, strict-managed set-password links (admin create / resend, bootstrap), admin reset link / email rename, the data-collection consent or the new-user nudge
 * [Deployment Auth Mode](deployment-auth-mode.md) - Read before changing a deployed instance's auth: why Mode 4 never falls back, how `AZURE_*` and other env vars reach the container, verifying the live mode
 
 ## Build, CI, release and dev environment

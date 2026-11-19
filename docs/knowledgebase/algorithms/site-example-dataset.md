@@ -1,4 +1,9 @@
 ---
+type: "Algorithm"
+title: "Site example dataset"
+description: "The site (Home, Features) and the deck show one worked example — an average $8 session, $144 a day, $2,880 a month for a team of six."
+tags: [algorithm]
+generated: { by: "human:denistsyplakov", at: "2026-11-06T23:26:50+04:00" }
 reviewed: no
 reviewer: none
 ---

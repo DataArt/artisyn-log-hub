@@ -1,4 +1,9 @@
 ---
+type: "Algorithm"
+title: "Tool-call outcome and status"
+description: "Every tool call in a session ends in one of four ways: it worked, it failed, it never ran because the user or a rule said no (or the user interrupted it), or its result was never recorded."
+tags: [algorithm]
+generated: { by: "human:denistsyplakov", at: "2026-11-09T20:06:49+04:00" }
 reviewed: 2026-10-23
 reviewer: ai
 ---

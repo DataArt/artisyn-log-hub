@@ -6,7 +6,7 @@ tags:
   - server
   - api
   - auth
-generated: { by: "human:denistsyplakov", at: "2026-11-05T00:00:00+04:00" }
+generated: { by: "human:denistsyplakov", at: "2026-11-19T00:00:00+04:00" }
 ---
 
 # Server HTTP API map
@@ -178,7 +178,7 @@ Compatibility matrix and per-feature history: [hook-api-versioning.md](hook-api-
 
 ### Auth flows (summary)
 
-`AUTH_MODE` = `none` | `password` | `password-confirm` | `azure-oauth`
+`AUTH_MODE` = `none` | `password` | `password-confirm` | `azure-oauth` | `strict-managed`
 ([authorization-and-authentificaiton.md](authorization-and-authentificaiton.md),
 [deployment-auth-mode.md](deployment-auth-mode.md), [user-account-flows.md](user-account-flows.md)).
 The client reads `GET /api/v1/auth/config` first and renders the matching login UI.
@@ -190,6 +190,10 @@ The client reads `GET /api/v1/auth/config` first and renders the matching login 
   cooldown shared with the admin "Resend"). Password strength is `PASSWORD_POLICY`
   ([algorithms/password-policy.md](algorithms/password-policy.md)). `change-password` signs out every
   other session.
+- `strict-managed`: `login`, `forgot-password` → `reset-password`, `change-password`; **no**
+  `signup` / `confirm-email` / `resend-confirmation` (404). Accounts come from the startup admin
+  bootstrap (`ADMIN_CONTACT_EMAIL`) and the admin provisioning routes; links carry `purpose=set`
+  and live 24 h. Email-sending routes share a 20 / IP / hour limit (`EmailSendRateLimitService`).
 - `azure-oauth`: `GET /api/v1/auth/azure` → Microsoft → `GET /api/auth/callback` (outside
   `/api/v1` on purpose: it is the redirect URI registered in Azure). Failures redirect to
   `/#/login?oauthError=1`.
@@ -237,7 +241,8 @@ controller itself. Several controllers share the `api/v1/repositories` prefix �
 | `teams/teams.controller.ts` | `/api/v1/teams` | Teams, members, disclosure, team repos, invitations sent | `teams/dto/`, client `models/teams.ts` · `f10`–`f12` |
 | `logs/otel/otel-team-facts.controller.ts` | `/api/v1/teams` | Team OTEL tab | `otel-facts.types.ts` · `f25` |
 | `teams/invitations.controller.ts` | `/api/v1/invitations` | Invitations sent and received, respond | `teams/dto/` · `f13` |
-| `admin/admin.controller.ts` | `/api/v1/users` | Role change, reset-password link | `admin/dto/` · `f06` |
+| `admin/admin.controller.ts` | `/api/v1/users` | Role change, reset-password link (404 in `strict-managed`) | `admin/dto/` · `f06` |
+| `admin/admin-user-provisioning.controller.ts` | `/api/v1/admin/users` | `mode:strict-managed` + `admin`: create user, resend set-password link | `admin/dto/create-admin-user.dto.ts`, `CreateAdminUserResponse` in `admin/admin.service.ts`, client `models/admin.ts` · `f03`, `f06` |
 | `admin/admin-panel.controller.ts` | `/api/v1/admin` | Users, auth settings, pending registrations, repos, teams, system info, error logs, upload queue | `admin/*.service.ts`, client `models/admin.ts` · `f06`–`f09` |
 | `model-pricing/model-pricing-admin.controller.ts` | `/api/v1/admin/model-pricing` | Admin price table, overrides, fetch/import | `model-pricing/model-pricing.types.ts`, `dto/` · `f22` |
 | `log-hub-release/log-hub-release.controller.ts` | `/api/v1/admin/log-hub-release` | `admin`: new Log Hub release badge state (read-only; GitHub fetch runs in the scheduler) | `log-hub-release/log-hub-release.types.ts`, client `models/admin.ts` · `f01` |
@@ -311,7 +316,8 @@ grep the controller.
 
 - `PATCH /api/v1/teams/:teamId` → 409 when switching to `transparent` with members.
 - `POST /api/v1/teams/:teamId/leave` is only `session`-guarded; an owner gets 400 (transfer first).
-- `POST /api/v1/teams/:teamId/invitations` → 404 `user_not_registered` unless `force: true`;
+- `POST /api/v1/teams/:teamId/invitations` → 404 `user_not_registered` unless `force: true`
+  (in `strict-managed` `force` is ignored, so an unknown email is always 404);
   accepting (`PATCH /api/v1/invitations/:invId`) requires `acknowledgedAccessMode` = the live mode.
 - `DELETE …/repositories/:repoId/link` unlinks only (config goes by FK cascade);
   `DELETE …/repositories/:repoId` also removes the repo row when no other team references it.
@@ -348,6 +354,32 @@ grep the controller.
 **Admin** (rows are metadata only and link to no session data)
 
 - `POST /api/v1/admin/users/:id/delete` is a POST because it carries a body (`confirmEmail`).
+- **Admin user provisioning** (`admin/admin-user-provisioning.controller.ts`, `strict-managed`
+  only): `POST /api/v1/admin/users` (create a password-less user + email a 24 h set-password
+  link; 201, 400 `email_domain_not_allowed` / `team_not_found`, 409 `email_already_registered`,
+  429) and `POST /api/v1/admin/users/:id/password-link` (resend; 200 `{ email_delivery }`, 404
+  `user_not_found`, 409 `password_already_set` / `not_a_provisioned_account`, 429 +
+  `Retry-After`). Guard order: class
+  `@UseGuards(AuthModeGuard, SessionAuthGuard, AdminGuard)` with method
+  `@AllowedAuthModes('strict-managed')`, so `AuthModeGuard` runs **first** and in every other mode
+  each caller — anonymous, user or admin — gets **404**, never 401/403. It is a separate
+  controller so `admin-panel.controller.ts` keeps its own guards. Both count against the
+  calling admin's 100 emails / hour (keyed by admin user id, not IP). Flows: [user-account-flows.md](user-account-flows.md#set-password-links-strict-managed).
+- `GET /api/v1/admin/users` rows carry `passwordSet`, `imported` and `passwordLinkSentAt` in
+  every mode (additive fields).
+- `PATCH /api/v1/admin/users/:id/email` (`AdminService.renameUserEmail()`) retires the user's
+  outstanding reset and confirmation links in every mode; in `strict-managed` it also applies the
+  domain allow-list and clears `email_confirmed_at`.
+- `GET /api/v1/auth/config` carries `passwordRequirement` (the active `PASSWORD_POLICY` rule) in
+  the password modes (additive field). `POST /api/v1/auth/forgot-password` answers 200
+  `{ email_delivery: 'sent' }` also during the per-account cooldown (no 429 that would reveal
+  the account); only the per-IP limits still answer 429.
+- `POST /api/v1/users/:userId/reset-password-link` (legacy admin-generated link) has method-level
+  `@AllowedAuthModes('none', 'password', 'password-confirm', 'azure-oauth')` +
+  `@UseGuards(AuthModeGuard)`. Class guards run first, so in `strict-managed` an admin gets 404
+  while a non-admin still gets 401/403. The admin pending-registration routes
+  (`GET admin/auth/pending-registrations`, `POST …/:id/resend`, `DELETE …/:id`) are gated the same
+  way (404 in `strict-managed`).
 - `GET /api/v1/admin/retention` is `admin-or-team-owner`, not `admin`.
 - Model pricing: model ids contain `/`, so `PUT …/model-pricing/price` and `…/override` carry the
   id in the body; `fetch-anthropic` never answers an HTTP error (`{ result }`), while

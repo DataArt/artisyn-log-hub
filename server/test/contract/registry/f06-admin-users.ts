@@ -64,7 +64,12 @@ export const f06AdminUsers: ContractFamily = {
       read: {
         sql: `SELECT u.id, u.email, u.role::text AS role, u.created_at,
                      (SELECT count(*) FROM team_members tm WHERE tm.user_id = u.id) AS team_count,
-                     (SELECT max(l.end_time) FROM logs l WHERE l.user_id = u.id) AS last_activity
+                     (SELECT max(l.end_time) FROM logs l WHERE l.user_id = u.id) AS last_activity,
+                     (u.password_hash IS NOT NULL
+                      AND u.password_hash <> '!placeholder-import-user') AS password_set,
+                     (u.password_hash IS NOT DISTINCT FROM '!placeholder-import-user') AS imported,
+                     (SELECT max(t.created_at) FROM password_reset_tokens t
+                       WHERE t.user_id = u.id AND t.purpose = 'set' AND t.used_at IS NULL) AS password_link_sent_at
                 FROM users u
                ORDER BY u.email`,
         shape: 'array',
@@ -75,6 +80,9 @@ export const f06AdminUsers: ContractFamily = {
           createdAt: { col: 'created_at', as: 'iso' },
           teamCount: { col: 'team_count', as: 'number' },
           lastActivity: { col: 'last_activity', as: 'iso?' },
+          passwordSet: 'password_set',
+          imported: 'imported',
+          passwordLinkSentAt: { col: 'password_link_sent_at', as: 'iso?' },
         },
         strict: true,
       },
@@ -173,8 +181,10 @@ export const f06AdminUsers: ContractFamily = {
       params: { id: '@author.id' },
       body: { email: 'Author.Renamed@Arrakis.test' },
       expect: { status: 200 },
+      // A link already mailed to the old address stops working (the world gives the author an
+      // unused reset token).
       write: {
-        watch: ['users'],
+        watch: ['users', 'password_reset_tokens'],
         delta: {
           updated: [
             {
@@ -182,8 +192,17 @@ export const f06AdminUsers: ContractFamily = {
               where: 'id = @author.id',
               changed: { email: 'author.renamed@arrakis.test' },
             },
+            {
+              table: 'password_reset_tokens',
+              where: 'token = @authorResetTokenHash',
+              changed: {},
+              anyChange: ['used_at'],
+            },
           ],
         },
+        after: [
+          '(SELECT used_at IS NOT NULL FROM password_reset_tokens WHERE token = @authorResetTokenHash)',
+        ],
       },
     },
     {
@@ -252,7 +271,9 @@ export const f06AdminUsers: ContractFamily = {
               check: [
                 'used_at IS NULL',
                 'expires_at > now()',
-                `$resetUrl LIKE '%/#/reset-password?token=' || token`,
+                // The row keeps only sha256 of the token the link carries.
+                `$resetUrl LIKE '%/#/reset-password?token=%'`,
+                `token = encode(sha256(convert_to(substring($resetUrl from 'token=(.*)$'), 'UTF8')), 'hex')`,
               ],
             },
           ],

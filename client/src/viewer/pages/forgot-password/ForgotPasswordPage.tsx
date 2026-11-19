@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { Loader2, Mail } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { forgotPassword } from '../../api';
+import { ApiError, forgotPassword } from '../../api';
 import { useAuthConfig } from '../../hooks/useAuthConfig';
 import { routes } from '../../hooks/useHashRoute';
 import { SMTP_NOT_CONFIGURED_HINT } from '../login/forgot-password-link';
@@ -15,11 +15,20 @@ import {
   CardTitle,
 } from '../../ui/card';
 
+/** "12 minutes" / "40 seconds" from a 429's Retry-After (a minute if absent). */
+function retryAfterText(err: ApiError): string {
+  const seconds = err.retryAfterSeconds ?? 60;
+  if (seconds < 60) return `${seconds} seconds`;
+  const minutes = Math.ceil(seconds / 60);
+  return minutes === 1 ? 'a minute' : `${minutes} minutes`;
+}
+
 export function ForgotPasswordPage() {
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   // While the config is loading or errored the form stays enabled.
   const { data: config } = useAuthConfig();
   const resetUnavailable = config?.passwordResetAvailable === false;
@@ -27,11 +36,21 @@ export function ForgotPasswordPage() {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
     setIsLoading(true);
+    setError(null);
     try {
       await forgotPassword(email);
+      setSubmitted(true);
+    } catch (err) {
+      // The server answers every email the same way; only a refusal that
+      // has nothing to do with the email (too many requests from this
+      // network, server down) ends up here — say so instead of "sent".
+      setError(
+        err instanceof ApiError && err.statusCode === 429
+          ? `Too many requests from your network — try again in ${retryAfterText(err)}.`
+          : 'Something went wrong. Please try again.',
+      );
     } finally {
       setIsLoading(false);
-      setSubmitted(true);
     }
   }
 
@@ -68,6 +87,7 @@ export function ForgotPasswordPage() {
                 autoComplete="email"
                 disabled={resetUnavailable}
               />
+              {error && <p className="text-sm text-destructive">{error}</p>}
             </CardContent>
             <CardFooter className="flex flex-col gap-3">
               <Button

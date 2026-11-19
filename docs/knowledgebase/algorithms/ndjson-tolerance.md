@@ -1,4 +1,9 @@
 ---
+type: "Algorithm"
+title: "NDJSON tolerance: how torn log lines are handled"
+description: "A session's `.jsonl` log is appended by several hook processes without a lock, so a killed or interleaved write can leave a broken line in it. One broken line must not lose the whole session."
+tags: [algorithm]
+generated: { by: "human:denistsyplakov", at: "2026-11-03T17:31:26+04:00" }
 reviewed: 2026-10-15
 reviewer: ai
 ---

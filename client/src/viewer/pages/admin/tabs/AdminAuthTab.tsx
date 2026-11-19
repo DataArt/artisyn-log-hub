@@ -10,6 +10,7 @@ const MODE_LABELS: Record<string, string> = {
   password: 'Email + password (Mode 2)',
   'password-confirm': 'Email + password with confirmation (Mode 3)',
   'azure-oauth': 'Azure Entra ID / OAuth (Mode 4)',
+  'strict-managed': 'Strict managed — admin-created accounts only (Mode 5)',
 };
 
 // Field *names* only, for the inactive-modes reference list — secrets are
@@ -17,8 +18,21 @@ const MODE_LABELS: Record<string, string> = {
 const MODE_FIELD_NAMES: Record<string, string[]> = {
   none: [],
   password: [],
-  'password-confirm': ['SMTP host', 'SMTP port', 'SMTP from address'],
+  'password-confirm': [
+    'Public base URL',
+    'Admin contact email',
+    'SMTP host',
+    'SMTP port',
+    'SMTP from address',
+  ],
   'azure-oauth': ['Tenant ID', 'Client ID', 'Redirect URI', 'Authority'],
+  'strict-managed': [
+    'Public base URL',
+    'Admin contact email (first admin)',
+    'SMTP host',
+    'SMTP port',
+    'SMTP from address',
+  ],
 };
 
 function Card({ label, children }: { label: string; children: ReactNode }) {
@@ -53,6 +67,11 @@ export function AdminAuthTab() {
           <div className="mt-2 text-lg font-bold text-foreground">
             {MODE_LABELS[data.mode] ?? data.mode}
           </div>
+          {(MODE_FIELD_NAMES[data.mode] ?? []).length > 0 && (
+            <p className="mt-1 text-xs text-muted-foreground">
+              Requires: {MODE_FIELD_NAMES[data.mode].join(', ')}
+            </p>
+          )}
         </Card>
 
         {data.smtp && (

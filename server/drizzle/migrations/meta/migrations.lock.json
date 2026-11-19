@@ -950,6 +950,26 @@
         "1617a65d8b151381a039bedfe0f543d02ad0e83f84d052a4766797118d34363f",
         "9f0104baaf2a23751762be09831abaec341dfeeaf8b1c3089d947e327fa8bfb7"
       ]
+    },
+    {
+      "idx": 94,
+      "tag": "0094_password_link_hardening",
+      "when": 1792627200000,
+      "sha256": "0d0ed0ed7880dea3ab6beb6f2aef68c056ef49dfd92356c93db3671d1d59d99e",
+      "acceptedHashes": [
+        "0d0ed0ed7880dea3ab6beb6f2aef68c056ef49dfd92356c93db3671d1d59d99e",
+        "0f76a32e55491e26cb5a644a9a3ceac41baaadc4d9a6f17e18bb04ef2cc8e34b"
+      ]
+    },
+    {
+      "idx": 95,
+      "tag": "0095_email_send_counters_comment",
+      "when": 1792627260000,
+      "sha256": "38fc51869ac16386b6d35c7b127856487833513e5e7b50c58d42fb66d72ddfb6",
+      "acceptedHashes": [
+        "38fc51869ac16386b6d35c7b127856487833513e5e7b50c58d42fb66d72ddfb6",
+        "7f3dbe80a4dec24906f248414164775b949a97f2523cea421fb36c392e2dfeef"
+      ]
     }
   ]
 }

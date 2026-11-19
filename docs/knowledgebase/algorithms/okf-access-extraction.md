@@ -1,4 +1,9 @@
 ---
+type: "Algorithm"
+title: "OKF access extraction: which KB paths a tree node read, searched, listed or wrote"
+description: "The OKF tabs (session and repo) answer \"which knowledge-base articles did the agents actually read, how much of them went into the context, and did they find them through the index or by searching\"."
+tags: [algorithm]
+generated: { by: "human:denistsyplakov", at: "2026-11-06T13:11:03+04:00" }
 reviewed: no
 reviewer: none
 ---

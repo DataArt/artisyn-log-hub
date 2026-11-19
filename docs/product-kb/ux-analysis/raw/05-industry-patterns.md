@@ -1,3 +1,11 @@
+---
+type: "Research"
+title: "Raw report 5 — Patterns from observability and LLM-ops products"
+description: "Raw report 5: UI patterns from observability and LLM-ops products that fit Log Hub (lenses, command palette, saved views)."
+tags: [ux-research, product]
+generated: { by: "human:denistsyplakov", at: "2026-11-06T15:26:59+04:00" }
+---
+
 # Raw report 5 — Patterns from observability and LLM-ops products
 
 Basis: competitor KB and study (`docs/product-kb/competitive-research/`), `client-routing-and-layout.md`,

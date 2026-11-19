@@ -83,15 +83,30 @@ export const passwordResetTokens = pgTable(
     userId: integer('user_id')
       .notNull()
       .references(() => users.id, { onDelete: 'cascade' }),
+    /** sha256 of the link token (64 hex chars); the token itself is never stored. */
     token: varchar('token').notNull().unique(),
     createdAt: timestamp('created_at', { withTimezone: true })
       .notNull()
       .defaultNow(),
     expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
     usedAt: timestamp('used_at', { withTimezone: true }),
+    /** 'set' = admin-issued set-password link, 'reset' = "Forgot password?". */
+    purpose: varchar('purpose', { length: 16 })
+      .$type<PasswordLinkPurpose>()
+      .notNull()
+      .default('reset'),
   },
   (table) => [index('idx_password_reset_tokens_user_id').on(table.userId)],
 );
+
+export type PasswordLinkPurpose = 'set' | 'reset';
+
+/** strict-managed email limit: one fixed one-hour window per key, shared by all workers. */
+export const emailSendCounters = pgTable('email_send_counters', {
+  key: varchar('key', { length: 320 }).primaryKey(),
+  windowStart: timestamp('window_start', { withTimezone: true }).notNull(),
+  count: integer('count').notNull(),
+});
 
 export const emailConfirmationTokens = pgTable(
   'email_confirmation_tokens',

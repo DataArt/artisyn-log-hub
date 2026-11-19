@@ -1,3 +1,11 @@
+---
+type: "Research"
+title: "Raw report 2 — Information architecture"
+description: "Raw report 2: the current information architecture — about 60 clickable views over 4 levels — and where it gets crowded."
+tags: [ux-research, product]
+generated: { by: "human:denistsyplakov", at: "2026-11-06T15:26:59+04:00" }
+---
+
 # Raw report 2 — Information architecture
 
 Basis: `client/src/viewer/tab-ids.ts`, tab components, KB. Read-only study, 2026-11-01.

@@ -60,25 +60,6 @@ function getPool(): Pool {
   return pool;
 }
 
-/** Fetches the most recently issued password-reset token for the given email. */
-export async function getLatestResetTokenForEmail(
-  email: string,
-): Promise<string> {
-  const result = await getPool().query<{ token: string }>(
-    `SELECT prt.token
-     FROM password_reset_tokens prt
-     JOIN users u ON u.id = prt.user_id
-     WHERE u.email = $1
-     ORDER BY prt.created_at DESC
-     LIMIT 1`,
-    [email.toLowerCase()],
-  );
-  if (result.rows.length === 0) {
-    throw new Error(`No password reset token found for ${email}`);
-  }
-  return result.rows[0].token;
-}
-
 /**
  * Fetches the most recently issued email-confirmation token for the given
  * email, or null if none exists (Mode other than password-confirm, or the

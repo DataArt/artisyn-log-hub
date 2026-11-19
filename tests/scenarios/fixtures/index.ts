@@ -2,12 +2,13 @@
  * Scenario-suite fixtures (impl-plan DD C2, DD 2). Every spec under tests/scenarios imports
  * `test` / `expect` from here instead of from @playwright/test.
  *
- *  - `stand`  (worker) — the stand run.mjs started: { url, mode, authMode, schema }, from
- *                        STAND_URL / STAND_MODE / STAND_SCHEMA.
+ *  - `stand`  (worker) — the stand run.mjs started: { url, mode, authMode, schema, runDir, adminEmail },
+ *                        from STAND_URL / STAND_MODE / STAND_SCHEMA / STAND_RUN_DIR / STAND_ADMIN_EMAIL.
  *  - `db`     (worker) — a pg.Pool on DATABASE_URL whose search_path is the stand's schema.
  *  - `api`    (test)   — an anonymous APIRequestContext on the stand.
  *  - `users`  (test)   — `users.user(role)` creates a fresh user the way the mode allows:
- *                        A identify, B signup + Mailpit confirmation + login, C signup + login.
+ *                        A identify, B signup + Mailpit confirmation + login, C signup + login,
+ *                        D password-less insert + seeded set-password token + reset + login.
  *                        Users are `<role>-<runId>@arrakis.test`; the data-collection notice is
  *                        accepted for them unless `acceptNotice: false`.
  */
@@ -24,6 +25,7 @@ import {
 import { timeoutScale } from '../../timeout-scale';
 import { standMode } from '../helpers/auth-mode';
 import { extractTokenFromEmailBody, findLatestMessageTo } from '../helpers/mailpit';
+import { seedResetToken } from '../helpers/reset-tokens';
 import { DATA_COLLECTION_NOTICE_SETTING, consentSettingValue } from '../helpers/notice-hash';
 
 export interface Stand {
@@ -36,6 +38,11 @@ export interface Stand {
    * EXPORT_IMPORT_DIR live under it. Empty when the runner did not pass it.
    */
   runDir: string;
+  /**
+   * Mode D: the strict-managed bootstrap admin the stand created and emailed on its first start
+   * (STAND_ADMIN_EMAIL = the stand's ADMIN_CONTACT_EMAIL). Empty in the other modes.
+   */
+  adminEmail: string;
 }
 
 export type UserRole = 'admin' | 'user';
@@ -80,7 +87,7 @@ interface TestFixtures {
   scaleTimeouts: void;
 }
 
-const SCHEMA_RE = /^scn_[abc]_[0-9a-f]{8}$/;
+const SCHEMA_RE = /^scn_[abcd]_[0-9a-f]{8}$/;
 
 function readStand(): Stand {
   const url = process.env.STAND_URL;
@@ -98,6 +105,7 @@ function readStand(): Stand {
     authMode: MODES[mode].authMode,
     schema,
     runDir: process.env.STAND_RUN_DIR ?? '',
+    adminEmail: process.env.STAND_ADMIN_EMAIL ?? '',
   };
 }
 
@@ -116,9 +124,34 @@ interface PublicProfile {
   role: UserRole;
 }
 
-async function openSession(stand: Stand, ctx: APIRequestContext, email: string, password: string) {
+/**
+ * Mode D (strict-managed) has no signup: the account is inserted password-less (as an admin-created
+ * one), a reset token is seeded straight into password_reset_tokens (as s-auth-04.spec.ts does) and
+ * redeemed through POST /auth/reset-password. No email is sent, so the per-IP email limit of
+ * strict-managed stays untouched.
+ */
+async function provisionStrictManagedUser(db: Pool, ctx: APIRequestContext, email: string, password: string) {
+  const inserted = await db.query<{ id: number }>(
+    `INSERT INTO users (email, password_hash, role) VALUES ($1, NULL, 'user') RETURNING id`,
+    [email],
+  );
+  const userId = inserted.rows[0].id;
+  const token = await seedResetToken(db, userId, '1 hour', 'set');
+  await expectOk(
+    await ctx.post('/api/v1/auth/reset-password', { data: { token, password, passwordConfirm: password } }),
+    `reset-password (set) ${email}`,
+  );
+}
+
+async function openSession(stand: Stand, db: Pool, ctx: APIRequestContext, email: string, password: string) {
   if (stand.authMode === 'none') {
     await expectOk(await ctx.post('/api/v1/auth/identify', { data: { email } }), `identify ${email}`);
+    return;
+  }
+
+  if (stand.authMode === 'strict-managed') {
+    await provisionStrictManagedUser(db, ctx, email, password);
+    await expectOk(await loginPastBackoff(ctx, email, password), `login ${email}`);
     return;
   }
 
@@ -217,7 +250,7 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
         const ctx = await pwRequest.newContext({ baseURL: stand.url });
         contexts.push(ctx);
 
-        await openSession(stand, ctx, email, password);
+        await openSession(stand, db, ctx, email, password);
         const me = await ctx.get('/api/v1/auth/me');
         await expectOk(me, `GET /auth/me as ${email}`);
         const profile = (await me.json()) as PublicProfile;

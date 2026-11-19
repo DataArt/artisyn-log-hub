@@ -28,6 +28,7 @@ server/perf-tests/*.js
 /Claude.local.md
 /.playwright-work-folder/
 .playwright-work-folder/
+/.playwright-mcp/
 /artisyn-hooks-installer/node_modules/
 artisyn-hooks-installer/node_modules/
 artisyn-hooks-installer/dist/

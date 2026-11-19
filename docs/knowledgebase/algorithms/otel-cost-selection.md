@@ -1,4 +1,9 @@
 ---
+type: "Algorithm"
+title: "Session cost: the shown total, the unpriced models, and when to warn"
+description: "A session can have two costs: the calculated cost (tokens times Log Hub's `model_pricing`, see [cost-formula.md](cost-formula.md), for the root session, its sub-agents and its utility calls) and the OTEL cost the Claude Code exporter reported."
+tags: [algorithm]
+generated: { by: "human:denistsyplakov", at: "2026-11-10T20:02:38+04:00" }
 reviewed: no
 reviewer: none
 ---

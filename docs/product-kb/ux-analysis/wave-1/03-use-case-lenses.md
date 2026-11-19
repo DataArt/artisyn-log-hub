@@ -1,3 +1,11 @@
+---
+type: "Research"
+title: "3. Use-case lenses"
+description: "Wave 1 idea 3: use-case lenses that show each kind of user the 3–5 session tabs they need first."
+tags: [ux-research, product]
+generated: { by: "human:denistsyplakov", at: "2026-11-06T15:26:59+04:00" }
+---
+
 # 3. Use-case lenses
 
 Wave 1 · Effort M · Impact high · Proposed by all 5 agents

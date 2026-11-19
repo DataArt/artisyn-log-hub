@@ -1,4 +1,9 @@
 ---
+type: "Algorithm"
+title: "OTEL shared receiver routing"
+description: "Since hook `2.30.0` one OTEL receiver per OS user serves every repo of that user. Each record Claude Code exports must land in the right repo's OTEL directory — otherwise one repo's telemetry would be uploaded under another repo's API key — and records of a session that has not registered yet must…"
+tags: [algorithm]
+generated: { by: "human:denistsyplakov", at: "2026-11-03T17:31:26+04:00" }
 reviewed: no
 reviewer: none
 ---

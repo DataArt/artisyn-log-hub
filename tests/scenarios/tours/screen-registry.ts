@@ -25,8 +25,11 @@
  *   - The settings sub-tab id is `session-attribution` (06: «Session Attributes»).
  */
 
-/** Stand mode, as in `tests/scenarios/modes.ts` (repeated here to keep the module import-free). */
-export type RegistryMode = 'a' | 'b' | 'c';
+/**
+ * Stand mode, as in `tests/scenarios/modes.ts` (repeated here to keep the module import-free).
+ * No row lists `d` (strict-managed): the tours do not run on the mode-D stand.
+ */
+export type RegistryMode = 'a' | 'b' | 'c' | 'd';
 
 /** Who looks at the screen (06 §2.5). */
 export type TourRole =
@@ -164,7 +167,7 @@ const ANON_ROWS: ScreenRow[] = [
     expectSelector: 'input[placeholder="Password"]',
     docRef: {
       file: `${HELP}/security-hardening.md`,
-      heading: '3.3 Passwords (Modes 2 and 3)',
+      heading: '3.3 Passwords (Modes 2 and 3, `strict-managed`)',
     },
     screenshot: true,
   },
@@ -178,7 +181,7 @@ const ANON_ROWS: ScreenRow[] = [
     expectText: 'Create account',
     docRef: {
       file: `${HELP}/security-hardening.md`,
-      heading: '3.3 Passwords (Modes 2 and 3)',
+      heading: '3.3 Passwords (Modes 2 and 3, `strict-managed`)',
     },
   },
   {
@@ -209,7 +212,7 @@ const ANON_ROWS: ScreenRow[] = [
     modes: PASSWORD_MODES,
     title: 'Reset password (garbage link): a readable error, no crash',
     negative: true,
-    expectText: 'Invalid or unknown token',
+    expectText: 'This link is invalid or has expired.',
     expectedNetwork: [{ url: '/api/v1/auth/reset-password$', status: 400 }],
   },
   {
@@ -1080,6 +1083,7 @@ const NON_MEMBER_ROWS: ScreenRow[] = (
 const HELP_ARTICLES: Array<[string, string]> = [
   ['install-server', 'Install the server'],
   ['small-team-setup', 'Quick setup for a small team'],
+  ['admin-managed-setup', 'Setup where only the admin creates accounts'],
   ['install-hook', 'Install Telemetry Hook'],
   ['getting-started', 'Your first session'],
   ['authentication-modes', 'Authentication modes'],

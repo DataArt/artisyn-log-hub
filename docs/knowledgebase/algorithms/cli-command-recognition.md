@@ -1,4 +1,9 @@
 ---
+type: "Algorithm"
+title: "CLI command recognition: which monitored tools an agent's shell command runs"
+description: "The Tools/MCP tab lists every call of a monitored CLI tool. When the hook's wrapper recorded the call, the wrapper record is the source; when it did not (old hook, wrapper off, PowerShell pre-flight failed, a tool added mid-session) the call is still recognised from the agent's Bash / PowerShell…"
+tags: [algorithm]
+generated: { by: "human:denistsyplakov", at: "2026-11-03T17:31:26+04:00" }
 reviewed: no
 reviewer: none
 ---

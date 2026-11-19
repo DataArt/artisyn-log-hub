@@ -14,6 +14,7 @@ import {
 import { Badge } from '../../../ui/badge';
 import { Button } from '../../../ui/button';
 import { ConfirmDialog } from '../../../ui/confirm-dialog';
+import { useNoAccountInvite } from './useNoAccountInvite';
 
 interface TeamInvitationsTabProps {
   teamId: number;
@@ -30,6 +31,7 @@ export function TeamInvitationsTab({
   const [pendingForceEmail, setPendingForceEmail] = useState<string | null>(
     null,
   );
+  const { refusal } = useNoAccountInvite();
 
   const { data: allInvitations = [] } = useQuery({
     queryKey: ['invitations'],
@@ -50,6 +52,10 @@ export function TeamInvitationsTab({
     },
     onError: (err: unknown) => {
       if (err instanceof ApiError && err.code === 'user_not_registered') {
+        if (refusal !== null) {
+          setInviteError(refusal);
+          return;
+        }
         setPendingForceEmail(inviteEmail.trim());
         return;
       }
@@ -131,7 +137,7 @@ export function TeamInvitationsTab({
       </div>
 
       <ConfirmDialog
-        open={pendingForceEmail !== null}
+        open={pendingForceEmail !== null && refusal === null}
         header="Not registered yet"
         message="This user is not registered yet — add them anyway? They will see this team and its repository as soon as they first log in."
         confirmLabel="Add anyway"

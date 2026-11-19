@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Loader2, CheckCircle2 } from 'lucide-react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
 import { confirmEmail, ApiError } from '../../api';
+import { useAuthConfig } from '../../hooks/useAuthConfig';
 import { routes } from '../../hooks/useHashRoute';
 import { Button } from '../../ui/button';
 import {
@@ -20,6 +21,22 @@ type Status =
   | 'already-confirmed';
 
 export function ConfirmEmailPage() {
+  const { data: config, isLoading } = useAuthConfig();
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-background">
+        <Loader2 className="animate-spin size-6" />
+      </div>
+    );
+  }
+  // strict-managed: no sign-up, so no confirmation links — like #/signup.
+  if (config?.mode === 'strict-managed') {
+    return <Navigate to={routes.login} replace />;
+  }
+  return <ConfirmEmailFlow />;
+}
+
+function ConfirmEmailFlow() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const token = searchParams.get('token') ?? '';

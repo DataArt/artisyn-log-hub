@@ -43,15 +43,17 @@ services:
       # false (default) | true | hop count (e.g. 1) | IP/CIDR list — when enabled it overrides
       # COOKIE_SECURE (cookie secure flag follows X-Forwarded-Proto) and fixes the client IP.
       TRUST_PROXY: ${TRUST_PROXY:-false}
-      # none | password | password-confirm | azure-oauth — the modes are described in
-      # https://github.com/DataArt/artisyn-log-hub/blob/main/docs/knowledgebase/authorization-and-authentificaiton.md
-      # The installer's .env sets `none`. `password` applies only when .env has no AUTH_MODE line
-      # (older hand-made installs), so they keep the mode they always had.
+      # none | password | password-confirm | azure-oauth | strict-managed — the modes and the
+      # settings each one needs are described in INSTALL.md ("Access and authentication") and
+      # .env.example, both shipped next to this file. The installer's .env sets `none`.
+      # `password` applies only when .env has no AUTH_MODE line (older hand-made installs), so
+      # they keep the mode they always had.
       AUTH_MODE: ${AUTH_MODE:-password}
       # Optional settings — empty means the app's built-in default (see .env.example).
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-}
       ALLOWED_EMAIL_DOMAINS: ${ALLOWED_EMAIL_DOMAINS:-}
-      # Outgoing mail — required for password-confirm, optional for password (see .env.example).
+      # Outgoing mail — required for password-confirm and strict-managed, optional for password
+      # (see .env.example).
       ADMIN_CONTACT_EMAIL: ${ADMIN_CONTACT_EMAIL:-}
       SMTP_HOST: ${SMTP_HOST:-}
       SMTP_PORT: ${SMTP_PORT:-}

@@ -22,8 +22,10 @@ export class UsersService {
     email: string,
     passwordHash: string | null,
     role: 'admin' | 'user' = 'user',
+    /** Run inside a caller's drizzle transaction (default: the shared pool). */
+    tx: NodePgDatabase<typeof schema> = this.db,
   ) {
-    const rows = await this.db
+    const rows = await tx
       .insert(schema.users)
       .values({ email: email.toLowerCase(), passwordHash, role })
       .returning();
@@ -121,22 +123,6 @@ export class UsersService {
     const rows = await this.db
       .update(schema.users)
       .set({ role })
-      .where(eq(schema.users.id, userId))
-      .returning({
-        id: schema.users.id,
-        email: schema.users.email,
-        role: schema.users.role,
-        createdAt: schema.users.createdAt,
-      });
-    return rows[0];
-  }
-
-  async renameEmail(userId: number, email: string) {
-    // Explicit column list — a bare .returning() would expose passwordHash to
-    // the controllers, which return this row in the response body.
-    const rows = await this.db
-      .update(schema.users)
-      .set({ email: email.toLowerCase() })
       .where(eq(schema.users.id, userId))
       .returning({
         id: schema.users.id,

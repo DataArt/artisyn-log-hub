@@ -65,9 +65,23 @@ export class AuthSessionsService {
             where (sess -> 'passport' ->> 'user') = ${String(userId)}`,
       );
     } catch (err) {
+      // connect-pg-simple creates the table on first use: before anyone has
+      // logged in there is simply no session to delete.
+      if (isUndefinedTable(err)) return;
       this.logger.warn(
         `Failed to invalidate all sessions for user id=${userId}: ${String(err)}`,
       );
     }
   }
+}
+
+/** Postgres 42P01 (undefined_table), raw or wrapped by drizzle in `cause`. */
+function isUndefinedTable(err: unknown): boolean {
+  const codeOf = (e: unknown): unknown =>
+    typeof e === 'object' && e !== null && 'code' in e ? e.code : undefined;
+  const cause =
+    typeof err === 'object' && err !== null && 'cause' in err
+      ? err.cause
+      : undefined;
+  return codeOf(err) === '42P01' || codeOf(cause) === '42P01';
 }
