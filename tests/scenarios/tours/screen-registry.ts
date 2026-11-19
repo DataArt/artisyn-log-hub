@@ -167,7 +167,7 @@ const ANON_ROWS: ScreenRow[] = [
     expectSelector: 'input[placeholder="Password"]',
     docRef: {
       file: `${HELP}/security-hardening.md`,
-      heading: '3.3 Passwords (Modes 2 and 3)',
+      heading: '3.3 Passwords (Modes 2 and 3, `strict-managed`)',
     },
     screenshot: true,
   },
@@ -181,7 +181,7 @@ const ANON_ROWS: ScreenRow[] = [
     expectText: 'Create account',
     docRef: {
       file: `${HELP}/security-hardening.md`,
-      heading: '3.3 Passwords (Modes 2 and 3)',
+      heading: '3.3 Passwords (Modes 2 and 3, `strict-managed`)',
     },
   },
   {
@@ -212,7 +212,7 @@ const ANON_ROWS: ScreenRow[] = [
     modes: PASSWORD_MODES,
     title: 'Reset password (garbage link): a readable error, no crash',
     negative: true,
-    expectText: 'Invalid or unknown token',
+    expectText: 'This link is invalid or has expired.',
     expectedNetwork: [{ url: '/api/v1/auth/reset-password$', status: 400 }],
   },
   {

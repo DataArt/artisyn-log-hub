@@ -179,82 +179,82 @@ The wireframes stay as reference. Where they differ, the plan wins (no SVG edits
 | 10 | User docs and site | 6 | after chunk 9 |
 
 ### Chunk 1 — Server config, mail and token foundations
-- [ ] In `server/src/auth/config/auth-startup-validation.ts` add `'strict-managed'` to `VALID_AUTH_MODES`, add `validateModeStrictManaged()` per Design Decision 3 and a `case 'strict-managed'` in `validateAuthStartupConfig`; reword the `validatePublicBaseUrl` production error to not claim "password and password-confirm only".
-- [ ] Create `server/src/mail/smtp-transport.ts` exporting `createSmtpTransport(env)` per Design Decision 4; make the `MailService` constructor use it.
-- [ ] In `server/src/mail/mail.service.ts` add `'strict-managed'` to `SMTP_AUTH_MODES`, extend the `onModuleInit` fail-fast to strict-managed (Design Decision 4), add `sendSetPasswordEmail(email, url)`; create `server/src/mail/password-link-emails.ts` with both builders per Design Decision 5.
-- [ ] Create `server/src/auth/password-link-ttl.ts` (Design Decision 7); in `password-reset-tokens.service.ts` add the `ttlMs` param to `create` and `issueWithCooldown`, export `generateResetToken()`, remove `TOKEN_TTL_MS`.
-- [ ] Create `server/src/auth/password-link-url.ts` with `buildResetUrl` per Design Decision 6; make `AuthService.buildResetUrl` (auth.service.ts:387) delegate to it.
-- [ ] Create `server/src/auth/client-ip.ts` with `clientIp(req)` moved from `auth.controller.ts:45` (Design Decision 12); import it in `auth.controller.ts`.
-- [ ] Create `server/src/auth/email-send-rate-limit.service.ts` (`EmailSendRateLimitService`, Design Decision 11); provide and export it from `server/src/auth/auth.module.ts`.
+- [x] In `server/src/auth/config/auth-startup-validation.ts` add `'strict-managed'` to `VALID_AUTH_MODES`, add `validateModeStrictManaged()` per Design Decision 3 and a `case 'strict-managed'` in `validateAuthStartupConfig`; reword the `validatePublicBaseUrl` production error to not claim "password and password-confirm only".
+- [x] Create `server/src/mail/smtp-transport.ts` exporting `createSmtpTransport(env)` per Design Decision 4; make the `MailService` constructor use it.
+- [x] In `server/src/mail/mail.service.ts` add `'strict-managed'` to `SMTP_AUTH_MODES`, extend the `onModuleInit` fail-fast to strict-managed (Design Decision 4), add `sendSetPasswordEmail(email, url)`; create `server/src/mail/password-link-emails.ts` with both builders per Design Decision 5.
+- [x] Create `server/src/auth/password-link-ttl.ts` (Design Decision 7); in `password-reset-tokens.service.ts` add the `ttlMs` param to `create` and `issueWithCooldown`, export `generateResetToken()`, remove `TOKEN_TTL_MS`.
+- [x] Create `server/src/auth/password-link-url.ts` with `buildResetUrl` per Design Decision 6; make `AuthService.buildResetUrl` (auth.service.ts:387) delegate to it.
+- [x] Create `server/src/auth/client-ip.ts` with `clientIp(req)` moved from `auth.controller.ts:45` (Design Decision 12); import it in `auth.controller.ts`.
+- [x] Create `server/src/auth/email-send-rate-limit.service.ts` (`EmailSendRateLimitService`, Design Decision 11); provide and export it from `server/src/auth/auth.module.ts`.
 
 ### Chunk 2 — Admin bootstrap in DB init
-- [ ] Create `server/src/database/bootstrap-strict-managed-admin.ts` exporting `bootstrapStrictManagedAdmin(client: PoolClient, logger)` with Design Decision 10 steps 1–3 (env read and checks, `BEGIN`, lookup, promote to admin, `COMMIT`), masked emails via `maskEmail`.
-- [ ] Add Design Decision 10 steps 4–5 to it (insert user + token, `buildResetUrl(token, logger, 'set')`, `bootstrapAdminEmail`, `createSmtpTransport` send, `COMMIT` or `ROLLBACK` + throw); never log the token or URL.
-- [ ] In `server/src/database/database-init.ts` add option `bootstrapAdmin?: boolean` (default false) and call `bootstrapStrictManagedAdmin` as step 5 after `resolveSessionSecret`, inside the lock, only when the option is true and `AUTH_MODE === 'strict-managed'`.
-- [ ] In `server/src/main.ts:56` pass `bootstrapAdmin: true` to `initializeDatabase`; leave `migrate.ts` and contract `global-setup.ts` unchanged. A bootstrap throw already ends the process through `bootstrap().catch` → `logFatalError` (main.ts:152) — no change there.
+- [x] Create `server/src/database/bootstrap-strict-managed-admin.ts` exporting `bootstrapStrictManagedAdmin(client: PoolClient, logger)` with Design Decision 10 steps 1–3 (env read and checks, `BEGIN`, lookup, promote to admin, `COMMIT`), masked emails via `maskEmail`.
+- [x] Add Design Decision 10 steps 4–5 to it (insert user + token, `buildResetUrl(token, logger, 'set')`, `bootstrapAdminEmail`, `createSmtpTransport` send, `COMMIT` or `ROLLBACK` + throw); never log the token or URL.
+- [x] In `server/src/database/database-init.ts` add option `bootstrapAdmin?: boolean` (default false) and call `bootstrapStrictManagedAdmin` as step 5 after `resolveSessionSecret`, inside the lock, only when the option is true and `AUTH_MODE === 'strict-managed'`.
+- [x] In `server/src/main.ts:56` pass `bootstrapAdmin: true` to `initializeDatabase`; leave `migrate.ts` and contract `global-setup.ts` unchanged. A bootstrap throw already ends the process through `bootstrap().catch` → `logFatalError` (main.ts:152) — no change there.
 
 ### Chunk 3 — Auth API gating and email limiter use
-- [ ] In `server/src/auth/auth.controller.ts` add `'strict-managed'` to `@AllowedAuthModes` of login, forgot-password, reset-password, change-password (Design Decision 2); leave signup, confirm-email and resend-confirmation unchanged.
-- [ ] In `AuthController.config()` (L60) return `passwordResetAvailable: true` and `adminContactEmail` for strict-managed, like `password-confirm`.
-- [ ] In the forgot-password handler call `EmailSendRateLimitService.consumeIp(clientIp(req))` after the existing `consumeIp` / `consumeEmail` checks and before `authService.forgotPassword` (Design Decision 11).
-- [ ] In `server/src/auth/auth.service.ts` make `assertEmailDomainAllowed(email, context)` public, applied in `password-confirm` and `strict-managed`, messages per Design Decision 15; signup passes `'signup'`.
-- [ ] In `AuthService.resetPassword` (~L229) set `email_confirmed_at = now()` when NULL after a successful consume, strict-managed only (Design Decision 27).
-- [ ] In `server/src/teams/teams.service.ts` `sendInvitation` (L675) treat `force` as false when `AUTH_MODE === 'strict-managed'` (Design Decision 19), via `ConfigService` (inject if missing).
+- [x] In `server/src/auth/auth.controller.ts` add `'strict-managed'` to `@AllowedAuthModes` of login, forgot-password, reset-password, change-password (Design Decision 2); leave signup, confirm-email and resend-confirmation unchanged.
+- [x] In `AuthController.config()` (L60) return `passwordResetAvailable: true` and `adminContactEmail` for strict-managed, like `password-confirm`.
+- [x] In the forgot-password handler call `EmailSendRateLimitService.consumeIp(clientIp(req))` after the existing `consumeIp` / `consumeEmail` checks and before `authService.forgotPassword` (Design Decision 11).
+- [x] In `server/src/auth/auth.service.ts` make `assertEmailDomainAllowed(email, context)` public, applied in `password-confirm` and `strict-managed`, messages per Design Decision 15; signup passes `'signup'`.
+- [x] In `AuthService.resetPassword` (~L229) set `email_confirmed_at = now()` when NULL after a successful consume, strict-managed only (Design Decision 27).
+- [x] In `server/src/teams/teams.service.ts` `sendInvitation` (L675) treat `force` as false when `AUTH_MODE === 'strict-managed'` (Design Decision 19), via `ConfigService` (inject if missing).
 
 ### Chunk 4 — Admin API: create user, resend link, list
-- [ ] Create `server/src/admin/dto/create-admin-user.dto.ts` (`CreateAdminUserDto` per Design Decision 14, class-validator); add `tx?` (drizzle transaction, default `this.db`) as the last parameter of `UsersService.create` (`server/src/users/users.service.ts:21`).
-- [ ] In `server/src/admin/admin.service.ts` add `passwordSet` to `UserRow` (~L83) and to the `getUsers()` (~L481) select per Design Decision 13; add the `CreateAdminUserResponse` interface (API changes).
-- [ ] Add `AdminService.createProvisionedUser(dto, ip)` per Design Decision 14 (with `assertEmailDomainAllowed(email, 'admin-create')`, `EmailSendRateLimitService`, `UsersService.create(…, tx)`, `issueWithCooldown(id, SET_PASSWORD_LINK_TTL_MS)`, `buildResetUrl(token, logger, 'set')`, `sendSetPasswordEmail`).
-- [ ] Add `AdminService.sendPasswordLink(userId, ip)` returning `{ email_delivery }` per Design Decision 16.
-- [ ] Create `server/src/admin/admin-user-provisioning.controller.ts` with `POST /api/v1/admin/users` (201) and `POST /api/v1/admin/users/:id/password-link` (200), guards and metadata per Design Decision 17, IP via `clientIp`.
-- [ ] Register the controller in `server/src/admin/admin.module.ts`; import the modules exporting `AuthService`, `EmailSendRateLimitService`, `MailService`, `PasswordResetTokensService`, `UsersService` where not yet imported.
-- [ ] In `server/src/admin/admin.controller.ts:53` add `@AllowedAuthModes('none', 'password', 'password-confirm', 'azure-oauth')` and method `@UseGuards(AuthModeGuard)` (Design Decision 18); do the same on the three pending-registration routes of `admin-panel.controller.ts` (Design Decision 28).
+- [x] Create `server/src/admin/dto/create-admin-user.dto.ts` (`CreateAdminUserDto` per Design Decision 14, class-validator); add `tx?` (drizzle transaction, default `this.db`) as the last parameter of `UsersService.create` (`server/src/users/users.service.ts:21`).
+- [x] In `server/src/admin/admin.service.ts` add `passwordSet` to `UserRow` (~L83) and to the `getUsers()` (~L481) select per Design Decision 13; add the `CreateAdminUserResponse` interface (API changes).
+- [x] Add `AdminService.createProvisionedUser(dto, ip)` per Design Decision 14 (with `assertEmailDomainAllowed(email, 'admin-create')`, `EmailSendRateLimitService`, `UsersService.create(…, tx)`, `issueWithCooldown(id, SET_PASSWORD_LINK_TTL_MS)`, `buildResetUrl(token, logger, 'set')`, `sendSetPasswordEmail`).
+- [x] Add `AdminService.sendPasswordLink(userId, ip)` returning `{ email_delivery }` per Design Decision 16.
+- [x] Create `server/src/admin/admin-user-provisioning.controller.ts` with `POST /api/v1/admin/users` (201) and `POST /api/v1/admin/users/:id/password-link` (200), guards and metadata per Design Decision 17, IP via `clientIp`.
+- [x] Register the controller in `server/src/admin/admin.module.ts`; import the modules exporting `AuthService`, `EmailSendRateLimitService`, `MailService`, `PasswordResetTokensService`, `UsersService` where not yet imported.
+- [x] In `server/src/admin/admin.controller.ts:53` add `@AllowedAuthModes('none', 'password', 'password-confirm', 'azure-oauth')` and method `@UseGuards(AuthModeGuard)` (Design Decision 18); do the same on the three pending-registration routes of `admin-panel.controller.ts` (Design Decision 28).
 
 ### Chunk 5 — Client: auth pages and mode plumbing
-- [ ] In `client/src/models/auth.ts:22` add `'strict-managed'` to `AuthMode`; in `AdminAuthTab.tsx` add `MODE_LABELS` / `MODE_FIELD_NAMES` entries (label per Design Decision 1, fields as `password-confirm`); fill any other `Record<AuthMode, …>` client typecheck reports; leave L124 as is (Design Decision 24).
-- [ ] In `client/src/viewer/pages/login/LoginPage.tsx` render `PasswordLoginForm` for strict-managed (L311–316) and add a `showSignupLink` prop (L121, hides L260–268), false for strict-managed.
-- [ ] Redirect `#/signup` to `#/login` in `SignupPage.tsx` when `useAuthConfig` reports strict-managed.
-- [ ] In `client/src/viewer/pages/reset-password/ResetPasswordPage.tsx` implement the `purpose=set` variant and the invalid/expired text per Design Decision 21.
-- [ ] In `client/src/viewer/components/top-nav/UserMenu.tsx:38` allow "Change password" in strict-managed.
-- [ ] In `client/src/viewer/pages/teams/tabs/TeamInvitationsTab.tsx` hide the force-invite offer (L140 flow) in strict-managed (Design Decision 19).
+- [x] In `client/src/models/auth.ts:22` add `'strict-managed'` to `AuthMode`; in `AdminAuthTab.tsx` add `MODE_LABELS` / `MODE_FIELD_NAMES` entries (label per Design Decision 1, fields as `password-confirm`); fill any other `Record<AuthMode, …>` client typecheck reports; leave L124 as is (Design Decision 24).
+- [x] In `client/src/viewer/pages/login/LoginPage.tsx` render `PasswordLoginForm` for strict-managed (L311–316) and add a `showSignupLink` prop (L121, hides L260–268), false for strict-managed.
+- [x] Redirect `#/signup` to `#/login` in `SignupPage.tsx` when `useAuthConfig` reports strict-managed.
+- [x] In `client/src/viewer/pages/reset-password/ResetPasswordPage.tsx` implement the `purpose=set` variant and the invalid/expired text per Design Decision 21.
+- [x] In `client/src/viewer/components/top-nav/UserMenu.tsx:38` allow "Change password" in strict-managed.
+- [x] In `client/src/viewer/pages/teams/tabs/TeamInvitationsTab.tsx` hide the force-invite offer (L140 flow) in strict-managed (Design Decision 19).
 
 ### Chunk 6 — Client: admin Users tab
-- [ ] In `client/src/models/admin.ts` add `AdminUser.passwordSet: boolean`, `CreateAdminUserRequest`, `CreateAdminUserResponse` (shapes per API changes).
-- [ ] In `client/src/viewer/api.ts` add `createAdminUser(req)` (POST `/api/v1/admin/users`) and `sendPasswordLink(userId)` (POST `/api/v1/admin/users/:id/password-link`), following `resendPendingRegistration` (L2724) incl. `ApiError.retryAfterSeconds`.
-- [ ] Create `client/src/viewer/pages/admin/tabs/CreateUserModal.tsx` per Visual/UX notes (Dialog pattern of `RenameUserEmailModal.tsx`; teams via `fetchAdminTeams()` (`api.ts:2425`), query key `['admin-teams']`); on success invalidate `['admin-users']`.
-- [ ] Create `client/src/viewer/pages/admin/tabs/SendPasswordLinkButton.tsx` (Resend link, 60 s countdown, 429 handling as `PendingRegistrationsTable.tsx:42–88`).
-- [ ] In `AdminUsersTab.tsx`, strict-managed only (mode from `useAuthConfig`, `client/src/viewer/hooks/useAuthConfig.ts`): Password column, "+ Create user" button, Resend link for `passwordSet === false`, hide "Reset Password" (~L208); other modes unchanged; visual check per the `use-playwright` skill.
+- [x] In `client/src/models/admin.ts` add `AdminUser.passwordSet: boolean`, `CreateAdminUserRequest`, `CreateAdminUserResponse` (shapes per API changes).
+- [x] In `client/src/viewer/api.ts` add `createAdminUser(req)` (POST `/api/v1/admin/users`) and `sendPasswordLink(userId)` (POST `/api/v1/admin/users/:id/password-link`), following `resendPendingRegistration` (L2724) incl. `ApiError.retryAfterSeconds`.
+- [x] Create `client/src/viewer/pages/admin/tabs/CreateUserModal.tsx` per Visual/UX notes (Dialog pattern of `RenameUserEmailModal.tsx`; teams via `fetchAdminTeams()` (`api.ts:2425`), query key `['admin-teams']`); on success invalidate `['admin-users']`.
+- [x] Create `client/src/viewer/pages/admin/tabs/SendPasswordLinkButton.tsx` (Resend link, 60 s countdown, 429 handling as `PendingRegistrationsTable.tsx:42–88`).
+- [x] In `AdminUsersTab.tsx`, strict-managed only (mode from `useAuthConfig`, `client/src/viewer/hooks/useAuthConfig.ts`): Password column, "+ Create user" button, Resend link for `passwordSet === false`, hide "Reset Password" (~L208); other modes unchanged; visual check per the `use-playwright` skill.
 
 ### Chunk 7 — Scenario stand mode D
-- [ ] In `tests/scenarios/modes.ts` add mode `d` per Design Decision 22 (`StandMode`, `AuthMode`, `ModeSpec.restartOnce`, `STAND_MODES`, `MODES`, `isStandMode`, `parseModes` error text, `standEnv` branch with per-run `adminContactEmail`).
-- [ ] In `scripts/scenarios/stand.mjs` `startStand`: `sessionSecret` for modes b and d (L219); for mode d generate `admin-d-<runId>@arrakis.test`, pass it to `standEnv`, return it as `adminEmail`; for `restartOnce` modes stop and respawn once on the same schema after the first health check (Design Decision 22).
-- [ ] In `scripts/scenarios/run.mjs` pass `STAND_ADMIN_EMAIL` to Playwright (env block ~L261) and update usage strings to `a,b,c,d`.
-- [ ] In `playwright.scenarios.config.ts` add `modeProject('d')` and widen its mode type.
-- [ ] In `tests/scenarios/fixtures/index.ts` expose `stand.adminEmail` from `STAND_ADMIN_EMAIL` and add the mode-D `openSession` path per Design Decision 23.
-- [ ] Update `scripts/__tests__/scenarios-stand.test.js` (L48–80) for the mode-d row, its env and `restartOnce`; update `tests/scenarios/README.md` (mode D, `STAND_ADMIN_EMAIL`, Mailpit for B and D, `--mode a,b,c,d`).
-- [ ] Add check `scenarios-d` (`npm run test:scenarios -- --mode d --only scenarios`, group `app`, 600 s, `finalOnly`, instructions as `scenarios-b`) to `.claude/repo_config/repo-health-checks.json`; list it in `CLAUDE.md` (fast vs full set list and the scenarios notes).
+- [x] In `tests/scenarios/modes.ts` add mode `d` per Design Decision 22 (`StandMode`, `AuthMode`, `ModeSpec.restartOnce`, `STAND_MODES`, `MODES`, `isStandMode`, `parseModes` error text, `standEnv` branch with per-run `adminContactEmail`).
+- [x] In `scripts/scenarios/stand.mjs` `startStand`: `sessionSecret` for modes b and d (L219); for mode d generate `admin-d-<runId>@arrakis.test`, pass it to `standEnv`, return it as `adminEmail`; for `restartOnce` modes stop and respawn once on the same schema after the first health check (Design Decision 22).
+- [x] In `scripts/scenarios/run.mjs` pass `STAND_ADMIN_EMAIL` to Playwright (env block ~L261) and update usage strings to `a,b,c,d`.
+- [x] In `playwright.scenarios.config.ts` add `modeProject('d')` and widen its mode type.
+- [x] In `tests/scenarios/fixtures/index.ts` expose `stand.adminEmail` from `STAND_ADMIN_EMAIL` and add the mode-D `openSession` path per Design Decision 23.
+- [x] Update `scripts/__tests__/scenarios-stand.test.js` (L48–80) for the mode-d row, its env and `restartOnce`; update `tests/scenarios/README.md` (mode D, `STAND_ADMIN_EMAIL`, Mailpit for B and D, `--mode a,b,c,d`).
+- [x] Add check `scenarios-d` (`npm run test:scenarios -- --mode d --only scenarios`, group `app`, 600 s, `finalOnly`, instructions as `scenarios-b`) to `.claude/repo_config/repo-health-checks.json`; list it in `CLAUDE.md` (fast vs full set list and the scenarios notes).
 
 ### Chunk 8 — Tests: rows, contract, scenarios
-- [ ] Add rows AS-108+ to `docs/algorithm-examples/auth-startup-config.json` per Test coverage plan (Algorithm); update the existing row pinning the mode list / `PUBLIC_BASE_URL` wording; run server `npm run test`.
-- [ ] Add the four F03 cases named in Test coverage plan (API contract) to `server/test/contract/registry/f03-auth-modes.ts` and `passwordSet` to `F06-list` SQL/fields in `f06-admin-users.ts`.
-- [ ] In `tests/scenarios/auth/s-auth-07.spec.ts` add `EXISTS['strict-managed'] = ['login', 'forgot-password', 'reset-password', 'change-password']`, tag `@mode-d`, and assert both new admin routes answer 404 in modes a–c.
-- [ ] Create `tests/scenarios/auth/s-auth-11.spec.ts` with steps 1–4 of Test coverage plan → "S-AUTH-11 steps", email budget per Design Decision 26.
-- [ ] Add steps 5–8 of "S-AUTH-11 steps" to `s-auth-11.spec.ts`.
-- [ ] Manual check: start the server with `AUTH_MODE=strict-managed`, valid config, a fresh `E2E_DB_SCHEMA`, `SMTP_PORT` at a closed port → startup aborts with the Design Decision 10 step 5 error and no `users` row for `ADMIN_CONTACT_EMAIL`; with the admin already present → aborts with the `MailService` relay error; no `CLUSTER_MODE`; drop the schema afterwards (`DROP SCHEMA <name> CASCADE`); report both.
-- [ ] Run `npm run test:scenarios -- --mode d --only scenarios,contract --grep "@S-AUTH-11|@S-AUTH-07"` and fix failures.
+- [x] Add rows AS-108+ to `docs/algorithm-examples/auth-startup-config.json` per Test coverage plan (Algorithm); update the existing row pinning the mode list / `PUBLIC_BASE_URL` wording; run server `npm run test`.
+- [x] Add the four F03 cases named in Test coverage plan (API contract) to `server/test/contract/registry/f03-auth-modes.ts` and `passwordSet` to `F06-list` SQL/fields in `f06-admin-users.ts`.
+- [x] In `tests/scenarios/auth/s-auth-07.spec.ts` add `EXISTS['strict-managed'] = ['login', 'forgot-password', 'reset-password', 'change-password']`, tag `@mode-d`, and assert both new admin routes answer 404 in modes a–c.
+- [x] Create `tests/scenarios/auth/s-auth-11.spec.ts` with steps 1–4 of Test coverage plan → "S-AUTH-11 steps", email budget per Design Decision 26.
+- [x] Add steps 5–8 of "S-AUTH-11 steps" to `s-auth-11.spec.ts`.
+- [x] Manual check: start the server with `AUTH_MODE=strict-managed`, valid config, a fresh `E2E_DB_SCHEMA`, `SMTP_PORT` at a closed port → startup aborts with the Design Decision 10 step 5 error and no `users` row for `ADMIN_CONTACT_EMAIL`; with the admin already present → aborts with the `MailService` relay error; no `CLUSTER_MODE`; drop the schema afterwards (`DROP SCHEMA <name> CASCADE`); report both.
+- [x] Run `npm run test:scenarios -- --mode d --only scenarios,contract --grep "@S-AUTH-11|@S-AUTH-07"` and fix failures.
 
 ### Chunk 9 — Knowledgebase and release kit
-- [ ] `docs/knowledgebase/authorization-and-authentificaiton.md`: strict-managed in the mode table, startup validation, SMTP per mode, email limiter, bootstrap step, force-invite rule.
-- [ ] `docs/knowledgebase/user-account-flows.md`: set-password links (24 h, `purpose=set`), admin create / resend, bootstrap; `docs/knowledgebase/deployment-auth-mode.md`: five modes.
-- [ ] `docs/knowledgebase/server-endpoint-map.md`: new controller, both routes and guard order (Design Decision 17), legacy reset-link 404 in strict-managed.
-- [ ] `docs/knowledgebase/algorithms/auth-startup-config.md`: strict-managed branch and the `PUBLIC_BASE_URL` rule; `docs/knowledgebase/test/scenarios.md` modes table (D = `strict-managed`, production, Mailpit, restarts once).
-- [ ] `docs/qaa-overview/scenarios/01-auth-access-admin.md`: mode D row in the modes table and the S-AUTH-11 entry (purpose, steps, ACs covered).
-- [ ] Release kit: `release-template/.env.example` (L31–58), `release-template/docker-compose.yml:46` mode comment, `release-template/INSTALL.md`, `server/.env.example` — list `strict-managed` and its required vars, self-contained (offline first).
+- [x] `docs/knowledgebase/authorization-and-authentificaiton.md`: strict-managed in the mode table, startup validation, SMTP per mode, email limiter, bootstrap step, force-invite rule.
+- [x] `docs/knowledgebase/user-account-flows.md`: set-password links (24 h, `purpose=set`), admin create / resend, bootstrap; `docs/knowledgebase/deployment-auth-mode.md`: five modes.
+- [x] `docs/knowledgebase/server-endpoint-map.md`: new controller, both routes and guard order (Design Decision 17), legacy reset-link 404 in strict-managed.
+- [x] `docs/knowledgebase/algorithms/auth-startup-config.md`: strict-managed branch and the `PUBLIC_BASE_URL` rule; `docs/knowledgebase/test/scenarios.md` modes table (D = `strict-managed`, production, Mailpit, restarts once).
+- [x] `docs/qaa-overview/scenarios/01-auth-access-admin.md`: mode D row in the modes table and the S-AUTH-11 entry (purpose, steps, ACs covered).
+- [x] Release kit: `release-template/.env.example` (L31–58), `release-template/docker-compose.yml:46` mode comment, `release-template/INSTALL.md`, `server/.env.example` — list `strict-managed` and its required vars, self-contained (offline first).
 
 ### Chunk 10 — User docs and site
-- [ ] `user-docs/authentication-modes.md`: five modes; strict-managed section (required vars, first admin via `ADMIN_CONTACT_EMAIL` email, admin creates users, 24 h / 1 h links, Forgot password works for everyone, 20 emails/IP/h).
-- [ ] `user-docs/security-hardening.md` (§3.3, §3.4, §11 rate limit), `server-configuration.md`, `install-server.md` ("Check that you are the admin" for strict-managed), `responsibility-matrix.md`, `component-reference.md`: mention strict-managed where modes are listed, linking to `authentication-modes.md` instead of repeating it.
-- [ ] `user-docs/small-team-setup.md`: decision-tree ASCII block + `site/diagrams/small-team-choose-env.mmd`, the strict-managed `.env` example and §6 text per Design Decision 25.
-- [ ] Create `site/diagrams/small-team-admin-provisioned.mmd` and its ASCII block in `small-team-setup.md` §6 per Design Decision 25.
-- [ ] `site/pages/questions.html` Access answers per Design Decision 25.
-- [ ] Run `npm run build:help` and `npm run build:site`; open `tmp/site/docs/small-team-setup.html` and `authentication-modes.html` and check both diagrams render (per the `use-playwright` skill).
+- [x] `user-docs/authentication-modes.md`: five modes; strict-managed section (required vars, first admin via `ADMIN_CONTACT_EMAIL` email, admin creates users, 24 h / 1 h links, Forgot password works for everyone, 20 emails/IP/h).
+- [x] `user-docs/security-hardening.md` (§3.3, §3.4, §11 rate limit), `server-configuration.md`, `install-server.md` ("Check that you are the admin" for strict-managed), `responsibility-matrix.md`, `component-reference.md`: mention strict-managed where modes are listed, linking to `authentication-modes.md` instead of repeating it.
+- [x] `user-docs/small-team-setup.md`: decision-tree ASCII block + `site/diagrams/small-team-choose-env.mmd`, the strict-managed `.env` example and §6 text per Design Decision 25.
+- [x] Create `site/diagrams/small-team-admin-provisioned.mmd` and its ASCII block in `small-team-setup.md` §6 per Design Decision 25.
+- [x] `site/pages/questions.html` Access answers per Design Decision 25.
+- [x] Run `npm run build:help` and `npm run build:site`; open `tmp/site/docs/small-team-setup.html` and `authentication-modes.html` and check both diagrams render (per the `use-playwright` skill).

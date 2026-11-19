@@ -40,3 +40,13 @@ Impl-plan Chunk 8 manual check. The server was started with `nest start` (`serve
    stopped startup with `SMTP relay 127.0.0.1:<port> is unreachable; AUTH_MODE=strict-managed
    requires a working relay: Error: connect ECONNREFUSED 127.0.0.1:<port>`. The admin row was
    still there (1 row).
+
+## 2026-11-19 — Final verification after merging main
+
+`main` merged into the branch (conflicts only in KB front matter, `repo-health-checks.json`,
+`preflight.mjs` and `tests/scenarios/README.md`). Fast set green; `contract` 606/606,
+`e2e-fast` 27/27, `e2e-full` 82/82, `scenarios-a`/`-b`/`-c`/`-d` green. The 2026-11-16
+`admin-panel.spec.ts:172` failure did not reproduce (spec repeated 3× green) — it was the
+laptop's environment, so `docs/BLOCKED.md` was removed. Tours needed two registry updates for this
+branch's own changes: the reset-password page's new invalid-link text and the renamed
+`security-hardening.md` §3.3 heading.
