@@ -4,7 +4,7 @@ title: Scenario suite (isolated stand, Playwright)
 description: npm run test:scenarios — builds an isolated stand into tmp/scenarios/stand, runs it per auth mode (A none, B password-confirm, C password, D strict-managed) on its own port and scn_* schema, drives it with Playwright through shared fixtures and helpers, and proves the dev DB and server/src/public/static stayed untouched.
 resource: scripts/scenarios/run.mjs
 tags: [testing, scenarios, playwright, stand, e2e, fixtures]
-timestamp: 2026-11-16T00:00:00Z
+generated: { by: "human:denistsyplakov", at: "2026-11-16T00:00:00Z" }
 ---
 
 The scenario suite replaces the dev-server e2e suite ([e2e-tests.md](./e2e-tests.md)) step by

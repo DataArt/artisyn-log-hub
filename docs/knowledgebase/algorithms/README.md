@@ -4,7 +4,7 @@ title: Algorithm docs (doc-driven table tests)
 description: Format of the per-algorithm docs in docs/knowledgebase/algorithms/, how their rows file docs/algorithm-examples/<name>.json becomes a table-driven unit test through scripts/algo-docs/load-examples.cjs in jest, vitest and node --test, and the AI-plus-owner review recorded in front-matter.
 resource: scripts/algo-docs/load-examples.cjs
 tags: [testing, algorithms, unit-tests, docs, review]
-timestamp: 2026-11-03T00:00:00Z
+generated: { by: "human:denistsyplakov", at: "2026-11-03T00:00:00Z" }
 ---
 
 # Algorithm docs
@@ -41,6 +41,8 @@ format where the two differ).
 | [otel-delta-merge](otel-delta-merge.md) | `client/.../repository/otel/otel-merge.ts` | vitest |
 | [otel-realtime-backoff](otel-realtime-backoff.md) | hook `otel-receiver.js` (`nextRealtimeDelay`) | `node --test` |
 | [otel-shared-routing](otel-shared-routing.md) | hook `otel-receiver.js` (`routeRecord`, pending spool, `validateRegisterPayload`, `forwardHeaders`, `forwardHealth`, `forwardBackoffMs`) | `node --test` |
+| [upload-job-queue](upload-job-queue.md) | hook `upload-queue.js` (`buildJobName`, `parseJobName`, `listJobs`, `isHeartbeatFresh`, `decideHandOff`, `isClaimStale`, `isJobStuck`, `classifyRunOutcome`, `backoffMs`), `upload-logs.js` (`isUnreachableError`); twin `otel-receiver.js` | `node --test` |
+| [node-version-check](node-version-check.md) | hook `node-version-check.js` (`classifyNodeVersion`, `nodeWarningText`, `shouldShowNodeWarning`, `effectiveNodeVersion`); twin `artisyn-hooks-installer/src/node-version.ts` (not table-tested) | `node --test` |
 | [otel-status-reason](otel-status-reason.md) | hook `otel-status.js` (`resolveEffectiveOtel`, `deriveConfigWarnings`, `deriveState`, `deriveReason`, `shouldWriteStatus`) | `node --test` |
 | [cache-ratio-and-causes](cache-ratio-and-causes.md) | `server/src/logs/cache-ratio.sql.ts`, `reports/cache-read-ratio.service.ts`, `turn-walk.ts`; twin `client/.../lib/format.ts` | jest, vitest |
 | [work-time](work-time.md) | `server/src/logs/claude-extractor.ts`; twin hook `post-turn-analysis-worker.js` | jest, `node --test` |
@@ -53,10 +55,14 @@ format where the two differ).
 | [ndjson-tolerance](ndjson-tolerance.md) | hook `ndjson-sanitize.js`, `server/src/logs/ndjson-parser.ts` | `node --test`, jest |
 | [upload-error-classify](upload-error-classify.md) | `server/src/logs/upload-error.ts` | jest |
 | [log-retention](log-retention.md) | `server/src/log-retention/log-retention-plan.ts` | jest |
-| [login-backoff](login-backoff.md) | `server/src/auth/login-backoff.service.ts` | jest |
-| [password-policy](password-policy.md) | `server/src/auth/utils/password-policy.ts` | jest |
-| [auth-startup-config](auth-startup-config.md) | `server/src/auth/config/auth-startup-validation.ts` | jest |
-| [local-request-detection](local-request-detection.md) | `server/src/auth/utils/localhost.util.ts`, `container-gateway.util.ts` | jest |
+| [login-backoff](login-backoff.md) | `server/src/auth/login-backoff.service.ts`; Work Hub twin `work-hub/server/src/auth/backoff.rs` | jest, `cargo test` |
+| [password-policy](password-policy.md) | `server/src/auth/utils/password-policy.ts`; Work Hub twin `work-hub/server/src/auth/password_policy.rs` | jest, `cargo test` |
+| [auth-startup-config](auth-startup-config.md) | `server/src/auth/config/auth-startup-validation.ts`; Work Hub twin `work-hub/server/src/auth/startup.rs` | jest, `cargo test` |
+| [local-request-detection](local-request-detection.md) | `server/src/auth/utils/localhost.util.ts`, `container-gateway.util.ts`; Work Hub twin `work-hub/server/src/auth/local_request.rs` | jest, `cargo test` |
+| [workhub-names](workhub-names.md) | `work-hub/server/src/names.rs` (`validate_display_name`, `name_key`, `derive_branch`) | `cargo test` (`work-hub/server/tests/algo.rs`) |
+| [workhub-repo-path](workhub-repo-path.md) | `work-hub/server/src/repo_path.rs` (`normalize`) | `cargo test` (`work-hub/server/tests/algo.rs`) |
+| [workhub-devcontainer-subset](workhub-devcontainer-subset.md) | `work-hub/server/src/devcontainer.rs` (`parse`) | `cargo test` (`work-hub/server/tests/algo.rs`) |
+| [workhub-terminal-replay](workhub-terminal-replay.md) | `work-hub/web/src/terminal/replay.ts` (`replaySegments`) | vitest (`work-hub/web`) |
 | [harness-snapshot](harness-snapshot.md) | hook `skill-catalog.js`, `harness-snapshot.js` | `node --test` |
 | [workflow-agent-rows](workflow-agent-rows.md) | `client/.../session-log/workflow-agent-rows.ts` | vitest |
 | [sysctx-anatomy](sysctx-anatomy.md) | `client/.../session-log/sysctx-anatomy/sysctx-anatomy.ts` | vitest |
@@ -97,7 +103,12 @@ format where the two differ).
 - Test: next to the code it tests.
   - server (jest): `<module>.algo.spec.ts` beside the module in `server/src/...`;
   - client (vitest): `<module>.algo.test.ts` under `client/src/...`;
-  - hook (`node --test`): `hook/.claude/telemetry_tool/__tests__/<name>.algo.test.js`.
+  - hook (`node --test`): `hook/.claude/telemetry_tool/__tests__/<name>.algo.test.js`;
+  - Work Hub server (Rust): one `#[test]` per doc in `work-hub/server/tests/algo.rs`, which reads
+    the rows file from `CARGO_MANIFEST_DIR/../../docs/algorithm-examples` with `serde_json`;
+  - Work Hub web (vitest): `<module>.algo.test.ts` under `work-hub/web/src/`, importing the rows
+    file as JSON (that package has no Node types for the shared loader).
+  Both Work Hub runners are `npm run test:algo` from `work-hub/`.
 - Loader: `scripts/algo-docs/load-examples.cjs` (types: `load-examples.d.cts`), tested by
   `scripts/__tests__/algo-docs.test.js` (`npm run test:scripts`). That test also loads the rows of
   every doc in this directory except this README, checks that every rows file has its doc, and

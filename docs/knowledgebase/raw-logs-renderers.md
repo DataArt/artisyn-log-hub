@@ -5,7 +5,7 @@ description: "Architectural guide to the raw-logs/ subsystem: layers, dependency
 tags:
   - client
   - logs
-timestamp: "2026-10-29T00:00:00+04:00"
+generated: { by: "human:denistsyplakov", at: "2026-10-29T00:00:00+04:00" }
 ---
 
 ---

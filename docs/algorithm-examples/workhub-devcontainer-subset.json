@@ -1,0 +1,158 @@
+[
+  {
+    "id": "DC-01",
+    "input": {"json": "{\"name\": \"Work Hub default\", \"image\": \"artisyn-work-hub-default\"}"},
+    "expected": {"ok": true, "source": {"kind": "default"}, "containerEnv": {}, "postCreate": null},
+    "note": "Rule 3: the sentinel image means Work Hub's default image; 'name' is ignored (rule 7); no env, no postCreate."
+  },
+  {
+    "id": "DC-02",
+    "input": {"json": "{\"image\": \"node:22-bookworm\"}"},
+    "expected": {"ok": true, "source": {"kind": "image", "image": "node:22-bookworm"}, "containerEnv": {}, "postCreate": null},
+    "note": "Rule 3: any other image is used by name."
+  },
+  {
+    "id": "DC-03",
+    "input": {"json": "{\"image\": \"  node:22  \"}"},
+    "expected": {"ok": true, "source": {"kind": "image", "image": "node:22"}, "containerEnv": {}, "postCreate": null},
+    "note": "Rule 3: the image name is trimmed."
+  },
+  {
+    "id": "DC-04",
+    "input": {"json": "{\"image\": \" artisyn-work-hub-default \"}"},
+    "expected": {"ok": true, "source": {"kind": "default"}, "containerEnv": {}, "postCreate": null},
+    "note": "Rule 3: trimmed first, then compared with the sentinel."
+  },
+  {
+    "id": "DC-05",
+    "input": {"json": "{\"build\": {\"dockerfile\": \"Dockerfile\"}}"},
+    "expected": {"ok": true, "source": {"kind": "build", "dockerfile": "Dockerfile", "context": "."}, "containerEnv": {}, "postCreate": null},
+    "note": "Rule 4: no context given -> '.' (the .devcontainer folder)."
+  },
+  {
+    "id": "DC-06",
+    "input": {"json": "{\"build\": {\"dockerfile\": \"Dockerfile.dev\", \"context\": \"..\"}}"},
+    "expected": {"ok": true, "source": {"kind": "build", "dockerfile": "Dockerfile.dev", "context": ".."}, "containerEnv": {}, "postCreate": null},
+    "note": "Rule 4: both paths are kept as given (relative to .devcontainer/)."
+  },
+  {
+    "id": "DC-07",
+    "input": {"json": "{\"build\": {\"context\": \"..\"}}"},
+    "expected": {"ok": false, "error": "\"build.dockerfile\" must be a non-empty string"},
+    "note": "Rule 4: a build without a dockerfile is an error."
+  },
+  {
+    "id": "DC-08",
+    "input": {"json": "{\"build\": \"Dockerfile\"}"},
+    "expected": {"ok": false, "error": "\"build\" must be an object"},
+    "note": "Rule 4: 'build' must be an object."
+  },
+  {
+    "id": "DC-09",
+    "input": {"json": "{\"image\": \"node:22\", \"build\": {\"dockerfile\": \"Dockerfile\"}}"},
+    "expected": {"ok": false, "error": "use either \"image\" or \"build\", not both"},
+    "note": "Rule 5: image and build together are refused, not one preferred."
+  },
+  {
+    "id": "DC-10",
+    "input": {"json": "{\"name\": \"x\"}"},
+    "expected": {"ok": false, "error": "needs an \"image\" or a \"build.dockerfile\""},
+    "note": "Rule 5: neither image nor build."
+  },
+  {
+    "id": "DC-11",
+    "input": {"json": "{\"image\": \"   \"}"},
+    "expected": {"ok": false, "error": "\"image\" must be a non-empty string"},
+    "note": "Rule 3: a blank image is an error, not 'no image'."
+  },
+  {
+    "id": "DC-12",
+    "input": {"json": "{\"image\": \"node:22\", \"containerEnv\": {\"NODE_ENV\": \"development\", \"GREETING\": \"hello world\"}}"},
+    "expected": {"ok": true, "source": {"kind": "image", "image": "node:22"}, "containerEnv": {"GREETING": "hello world", "NODE_ENV": "development"}, "postCreate": null},
+    "note": "Rule 6: every string entry is kept with its value untouched."
+  },
+  {
+    "id": "DC-13",
+    "input": {"json": "{\"image\": \"node:22\", \"containerEnv\": {\"PORT\": 3000}}"},
+    "expected": {"ok": false, "error": "\"containerEnv.PORT\" must be a string"},
+    "note": "Rule 6: a number value is refused (no coercion)."
+  },
+  {
+    "id": "DC-14",
+    "input": {"json": "{\"image\": \"node:22\", \"containerEnv\": {\"A=B\": \"1\"}}"},
+    "expected": {"ok": false, "error": "has an invalid variable \"A=B\""},
+    "note": "Rule 6: a name with '=' cannot be passed as NAME=value."
+  },
+  {
+    "id": "DC-15",
+    "input": {"json": "{\"image\": \"node:22\", \"containerEnv\": [\"A=1\"]}"},
+    "expected": {"ok": false, "error": "\"containerEnv\" must be an object of strings"},
+    "note": "Rule 6: the docker-style list form is not supported."
+  },
+  {
+    "id": "DC-16",
+    "input": {"json": "{\"image\": \"node:22\", \"postCreateCommand\": \"npm ci && npm run build\"}"},
+    "expected": {"ok": true, "source": {"kind": "image", "image": "node:22"}, "containerEnv": {}, "postCreate": ["sh", "-c", "npm ci && npm run build"]},
+    "note": "Rule 7: a string runs through sh -c, untrimmed and unsplit."
+  },
+  {
+    "id": "DC-17",
+    "input": {"json": "{\"image\": \"node:22\", \"postCreateCommand\": [\"npm\", \"ci\"]}"},
+    "expected": {"ok": true, "source": {"kind": "image", "image": "node:22"}, "containerEnv": {}, "postCreate": ["npm", "ci"]},
+    "note": "Rule 7: an array is the argv, no shell."
+  },
+  {
+    "id": "DC-18",
+    "input": {"json": "{\"image\": \"node:22\", \"postCreateCommand\": \"  \"}"},
+    "expected": {"ok": true, "source": {"kind": "image", "image": "node:22"}, "containerEnv": {}, "postCreate": null},
+    "note": "Rule 7: a blank string means no command."
+  },
+  {
+    "id": "DC-19",
+    "input": {"json": "{\"image\": \"node:22\", \"postCreateCommand\": []}"},
+    "expected": {"ok": true, "source": {"kind": "image", "image": "node:22"}, "containerEnv": {}, "postCreate": null},
+    "note": "Rule 7: an empty array means no command."
+  },
+  {
+    "id": "DC-20",
+    "input": {"json": "{\"image\": \"node:22\", \"postCreateCommand\": [\"npm\", 1]}"},
+    "expected": {"ok": false, "error": "\"postCreateCommand\" must be a string or an array of strings"},
+    "note": "Rule 7: every array item must be a string."
+  },
+  {
+    "id": "DC-21",
+    "input": {"json": "{\"image\": \"node:22\", \"postCreateCommand\": {\"a\": \"npm ci\"}}"},
+    "expected": {"ok": false, "error": "\"postCreateCommand\" must be a string or an array of strings"},
+    "note": "Rule 7: the object (parallel commands) form is not in the subset."
+  },
+  {
+    "id": "DC-22",
+    "input": {"json": "// Work Hub\n{\n  /* the image */\n  \"image\": \"node:22\", // pinned\n  \"containerEnv\": {\"A\": \"1\",},\n}\n"},
+    "expected": {"ok": true, "source": {"kind": "image", "image": "node:22"}, "containerEnv": {"A": "1"}, "postCreate": null},
+    "note": "Rule 1: line and block comments and trailing commas (in both objects) are JSONC and accepted."
+  },
+  {
+    "id": "DC-23",
+    "input": {"json": "{\"image\": \"node:22\""},
+    "expected": {"ok": false, "error": "devcontainer.json is not valid JSON"},
+    "note": "Rule 1: an unclosed object."
+  },
+  {
+    "id": "DC-24",
+    "input": {"json": "{image: 'node:22'}"},
+    "expected": {"ok": false, "error": "devcontainer.json is not valid JSON"},
+    "note": "Rule 1: JSONC is JSON plus comments and trailing commas only; unquoted keys and single quotes are refused."
+  },
+  {
+    "id": "DC-25",
+    "input": {"json": "[\"node:22\"]"},
+    "expected": {"ok": false, "error": "must contain a JSON object"},
+    "note": "Rule 2: the top level must be an object."
+  },
+  {
+    "id": "DC-26",
+    "input": {"json": "{\"image\": \"node:22\", \"features\": {\"ghcr.io/devcontainers/features/node:1\": {}}, \"forwardPorts\": [3000], \"remoteUser\": \"root\", \"customizations\": {\"vscode\": {}}}"},
+    "expected": {"ok": true, "source": {"kind": "image", "image": "node:22"}, "containerEnv": {}, "postCreate": null},
+    "note": "Rule 8: keys outside the subset (features, forwardPorts, remoteUser, customizations) are ignored, not refused."
+  }
+]

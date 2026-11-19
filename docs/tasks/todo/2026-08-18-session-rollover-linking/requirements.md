@@ -1,3 +1,9 @@
+---
+type: "Task"
+title: "Session Rollover Linking"
+description: "Claude Code can roll a continuous run over into a new top-level session id mid-run (observed: one session id continuing another mid-run), which today shows as two unrelated sessions with a confusing first-prompt. Chosen approach (Option A): a layered detection mechanism (hook-recorded `SessionStart`/`SessionEnd` fields first, transcript-uuid containment second, the CLI-internal snake_case `session_id` field as a last resort) resolves the predecessor and persists a breadcrumb link between the two session rows, with the misleading first-prompt display fixed in the same task so neither session looks broken; a fuller merged timeline/cost view was scoped and explicitly deferred (~3% continuation rate doesn't yet justify chain-aware reports)."
+---
+
 # T-102: Session Rollover Linking
 
 **Status:** todo

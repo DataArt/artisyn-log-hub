@@ -1,12 +1,12 @@
 ---
-okf_version: 1
+okf_version: "0.3"
 type: "Index"
 title: "Competitive watch"
 description: "Running log of what competitors of Log Hub publish about Claude Code monitoring and cost optimisation: which sources are watched, when each was last checked, and every item already seen. Maintained by the morning-check skill."
 tags:
   - competitive-research
   - product
-timestamp: "2026-11-05T00:00:00+04:00"
+generated: { by: "human:denistsyplakov", at: "2026-11-05T00:00:00+04:00" }
 ---
 
 # Competitive watch

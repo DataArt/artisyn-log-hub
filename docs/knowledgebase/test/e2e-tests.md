@@ -4,7 +4,7 @@ title: Legacy E2E Tests (Playwright, tests/e2e)
 description: The remaining Playwright specs in tests/e2e that drive the running dev app (UI + API + dev DB) and are not yet replaced by scenarios; storageState auth reuse, self-owned seed data, @core/extended split. New browser tests go to the scenario suite instead.
 resource: playwright.config.ts
 tags: [testing, e2e, playwright, browser, integration, legacy]
-timestamp: 2026-11-03T00:00:00Z
+generated: { by: "human:denistsyplakov", at: "2026-11-03T00:00:00Z" }
 ---
 
 **This is the legacy browser suite.** User flows now live in the scenario suite

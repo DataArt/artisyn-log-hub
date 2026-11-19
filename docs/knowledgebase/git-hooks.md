@@ -3,7 +3,7 @@ type: reference
 title: Git Hooks and Secret Scanning
 description: The versioned git hooks in .githooks/ (migration guard, gitleaks secret scan on pre-commit and pre-push), the .gitleaks.toml allowlist, the CI scan (gated on GITLEAKS_ENABLED) and the main/release branch ruleset that requires it and the fast-checks job
 tags: [git, hooks, security, gitleaks, ci]
-timestamp: 2026-10-25
+generated: { by: "human:denistsyplakov", at: "2026-10-25" }
 ---
 
 # Git Hooks and Secret Scanning

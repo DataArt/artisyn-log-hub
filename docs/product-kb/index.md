@@ -1,5 +1,5 @@
 ---
-okf_version: "0.1"
+okf_version: "0.3"
 ---
 
 # Product Knowledgebase Index
@@ -26,6 +26,7 @@ task folder from the article.
 
 * [Code → session reverse lookup](ideas/code-to-session-lookup.md) - Read before planning provenance / blame-style features (file, line or commit → the session that wrote it): what `session_changed_paths` already gives, what is missing, slicing
 * [Hook-run health across a team](ideas/hook-run-health.md) - Read before planning hook monitoring: per-invocation hook runs, errors and durations from the transcript, why no competitor has it
+* [Support Claude Code Code Mode sessions](ideas/code-mode-support.md) - Read before planning Code Mode (`REPL` tool) support or when asked why Code Mode does not start with Log Hub installed: parked because it excludes OTEL export; knowns, unknowns, the capture PoC
 * [Code-quality signal from editor diagnostics](ideas/diagnostics-quality-report.md) - Read before planning code-quality analytics: never-fixed diagnostics per `source`, setup-dependence limits
 
 ## Competitive research

@@ -1,5 +1,5 @@
 ---
-okf_version: "0.1"
+okf_version: "0.3"
 ---
 
 # Knowledgebase Index
@@ -61,7 +61,8 @@ article itself holds the details. Keep new lines to one or two sentences.
 * [Hook System Overview](hook-system-overview.md) - Read first for any hook change: where the source lives (`hook/.claude/telemetry_tool/`) vs the installed and dogfooded copies, event wiring, non-obvious scripts, path resolution, upload pipeline (namespaces, manifest, lock, gzip/chunks, injected lines), design rules (fail-open, transparent code, every Node.js LTS, CommonJS), `denyInsteadOfPrompting` and post-interrupt PostToolUse behaviour
 * [Hook Installation Guide](hook-installation.md) - Read before touching install / upgrade / uninstall or the hook config: gotchas (marketplace dedup by folder path, `npx` caches by name+version), `log-hub.json` keys (OTEL, `okf`, `toolWrap`), per-user OTEL state, the user-scope and project `settings*.json` env blocks
 * [Hook API Versioning](hook-api-versioning.md) - Read before changing any hook-facing route or payload: `/api/v2/logs` (v1 removed), the hook-version × route compatibility matrix, body limits, receiver contracts, additive fields by hook version, and the hook-side behaviour history by version
-* [OTEL Receiver](otel-receiver.md) - Read before touching `otel-receiver.js`, `otel-register.js`, `user-state.js` or the receiver install steps: the per-user shared receiver (2.30.0), register / hello / routing, legacy per-project mode, restarts, chunk layout, realtime sender, Claude apps gateway sessions
+* [OTEL Receiver](otel-receiver.md) - Read before touching `otel-receiver.js`, `otel-register.js`, `user-state.js` or the receiver install steps: the per-user shared receiver (2.30.0), register / hello / routing, legacy per-project mode, restarts, chunk layout, realtime sender, Claude apps gateway sessions, the uploader role, queue-only mode and the idle rule (3.0.0)
+* [Upload Job Queue](upload-job-queue.md) - Read before touching `upload-queue.js`, the `Stop` / `SessionEnd` hand-off in `send-logs-hook.js`, `--run-job` or the receiver's uploader role: `~/.artisyn/upload/` layout, job name and schema, exit codes, heartbeat, hand-off decision and 800 ms `SessionEnd` fallback, claims, retries and `failed/`, queue-only receiver, no-connection fast fail, component / hand-off / fallback diagrams (hook 3.0.0)
 * [Log Schema Reference](log-schema/index.md) - Read when you need the shape of a Claude Code transcript line: message types, assistant/user structure, attachment sub-types
 
 ## Feature subsystems (OTEL, OKF, Tools/MCP)
@@ -99,6 +100,8 @@ article itself holds the details. Keep new lines to one or two sentences.
 * [Harness Snapshot](algorithms/harness-snapshot.md) - Read before touching the hook's harness catalog build or its `snapshotId` hash
 * [OTEL Shared Routing](algorithms/otel-shared-routing.md) - Read before touching the shared receiver's `routeRecord`, pending spool, register validation or forwarding
 * [OTEL Status Reason](algorithms/otel-status-reason.md) - Read before touching `otel-status.js` (effective scope, config warnings, ok / partial / none, reasons)
+* [Upload Job Queue rules](algorithms/upload-job-queue.md) - Read before touching the table-tested queue rules in `upload-queue.js` or their `otel-receiver.js` twins: job name grammar, heartbeat freshness, `decideHandOff`, claims and stuck jobs, `classifyRunOutcome`, `backoffMs`, unreachable codes
+* [Node Version Check](algorithms/node-version-check.md) - Read before touching `node-version-check.js` or the installer's `node-version.ts`: `NODE_PATCHED_MINIMUMS`, eol / unpatched / unknown classification, the warning text and its per-day throttle
 * [OTEL Live Tree](algorithms/otel-live-tree.md) - Read before touching the Live view's node-key grammar or `buildOtelLiveTree` (placement under teams / No team, retention, DISTINCT-root totals, agent liveness)
 * [Workflow Agent Rows](algorithms/workflow-agent-rows.md) - Read before touching the "#" numbering in the workflow Agents table
 * [Session List Flags](algorithms/session-list-flags.md) - Read before touching `session_stats` `main_model` / `has_workflow` / `has_main_assistant`
@@ -119,6 +122,10 @@ article itself holds the details. Keep new lines to one or two sentences.
 * [Log Retention](algorithms/log-retention.md) - Read before touching `planLogCleanup` / `LogRetentionService`: which `logs/app-*` / `sql-*` files are deleted by age and size cap
 * [Executable-Config Guard](algorithms/executable-config-guard.md) - Read before touching `checkConfigGuard` (`scripts/ci/config-guard.js`) or its allowlist
 * [Security Scan Summary](algorithms/security-scan-summary.md) - Read before touching `scripts/ci/security-summary.js`: row validation, PR block, badge
+
+## Work Hub (separate product in `work-hub/`)
+
+* [Artisyn AI Work Hub](work-hub.md) - Read before touching anything under `work-hub/` (Rust server, web, image, scripts, tests): container model, Docker names / labels and cleanup rules, env vars, run modes, its own commands, licence and agent-name checks, test stand and fake agent, the checkpoint layer limit
 
 ## Product (separate KB) and history
 

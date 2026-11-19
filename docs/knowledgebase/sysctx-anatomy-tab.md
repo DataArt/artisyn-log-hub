@@ -7,7 +7,7 @@ tags:
   - session-view
   - harness
   - hook
-timestamp: "2026-11-11T00:00:00+04:00"
+generated: { by: "human:denistsyplakov", at: "2026-11-11T00:00:00+04:00" }
 ---
 
 # System Context Anatomy Tab
@@ -209,6 +209,12 @@ usage is unchanged.
 | `over-total` | attributed > total ("Attributed estimate exceeds measured total by N tokens"); no Harness internals partition, the bar is scaled to attributed | warning |
 
 An empty transcript shows "No startup context recorded for this session." instead of the tab body.
+While the first assistant reply is not uploaded yet — no line with usage and the latest logged line
+is under 30 minutes older than the tab's mount time (`isAwaitingFirstReply` in
+`SessionSysctxAnatomyTab.tsx`) — the tab shows "Session data is still arriving …" instead of the
+body and its banners: the hook sends `SessionStart` and the first prompt at once, the transcript a
+minute or two later, and the `old-hook` / `no-prompt-snapshot` banners would blame the wrong cause.
+An older session without a reply still gets the body with the banners.
 
 ## Interaction
 

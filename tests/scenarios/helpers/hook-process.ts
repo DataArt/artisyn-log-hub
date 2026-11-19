@@ -862,9 +862,12 @@ export interface SharedReceiverParams {
  * Spawns `otel-receiver.js` of `toolDir` in shared mode with the DD-7 argv
  * (`--shared --owner-home --state-dir --port --idle-timeout-ms --max-body-bytes`). The legacy
  * `ARTISYN_OTEL_*` env twins are removed, so nothing inherited turns it into a `--dir` conflict.
+ * It runs as the fake user ({@link fakeHomeEnv} of `params.home`), like a receiver a hook spawned:
+ * the `--run-job` / `--otel-sweep` uploaders it starts inherit that env and resolve `~` to the
+ * same home (hook 3.0.0 upload queue).
  */
 export function spawnSharedReceiver(toolDir: string, params: SharedReceiverParams): ReceiverProcess {
-  const env: Record<string, string | undefined> = { ...process.env };
+  const env: Record<string, string | undefined> = { ...process.env, ...fakeHomeEnv(params.home) };
   for (const name of Object.keys(env)) if (name.startsWith('ARTISYN_OTEL_')) delete env[name];
   const argv = [
     ...(params.clock ? ['--require', params.clock.preload] : []),

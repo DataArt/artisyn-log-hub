@@ -5,7 +5,7 @@ description: "Native node:cluster launch (server/src/cluster/), the System Info 
 tags:
   - server
   - cluster
-timestamp: "2026-11-03T00:00:00+04:00"
+generated: { by: "human:denistsyplakov", at: "2026-11-03T00:00:00+04:00" }
 ---
 
 # System Info & Cluster Parallel Launch

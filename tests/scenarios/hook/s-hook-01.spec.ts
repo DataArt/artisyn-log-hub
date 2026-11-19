@@ -38,6 +38,20 @@
 // `ok`; a session with no record gets one `none` line at SessionEnd. The fake hub stands for an
 // old Log Hub: it stores the line untouched and the upload succeeds.
 //
+// Steps 10–10b (2026-11-18 receiver upload queue, hook 3.0.0): a SessionEnd no longer waits a
+// busy upload lock out (20 s before); after LOCK_WAIT_SESSION_END_MS = 800 it leaves a job in
+// `~/.artisyn/upload/queue/`. With a fresh uploader heartbeat it only writes the job and returns
+// (DD-1: `elapsedMs <= 500` in the `queued` line, < 1 s wall); `--run-job <job>` is what the shared
+// receiver then spawns. A busy-lock SessionEnd is asserted on its logged wait (< 1 s) — its wall
+// time adds the Node start-up, measured ≈ 1.1 s. Steps 18–19 wait for the shared receiver to run
+// their SessionEnd job, since that receiver now holds the uploader role.
+//
+// Steps 11b–11d (same task, phase 2): a `Stop` under a fresh fake heartbeat only writes a `stop`
+// job; two such jobs coalesce into one `--run-job` full scan with the same harness snapshot id as an
+// in-process `Stop`. A 25 h old job goes to `failed/`, is reported in the next in-process `Stop`'s
+// `hook-status` (`uploadQueue.failedJobs`, the `upload-jobs-failed` recommendation) and cleared by
+// that run. With a stale heartbeat a `Stop` takes over a stuck job (DD-11).
+//
 // Steps 12–15 cover the ARTISYN_PROJECT_ROOT override (git-context.js / project-root-override.js):
 // in a linked worktree it makes the worktree the project root, and it is ignored when unset or
 // when it does not contain the cwd.
@@ -98,7 +112,7 @@ function bodyTypes(req: FakeRequest): string[] {
 }
 
 test('@S-HOOK-01 a Stop run uploads the right files in the right order and never twice @mode-a', async () => {
-  test.setTimeout(120_000);
+  test.setTimeout(180_000);
   const dirs = tempDirs();
   let hub: FakeLogHub | undefined;
   let oldHub: FakeLogHub | undefined;
@@ -342,7 +356,16 @@ test('@S-HOOK-01 a Stop run uploads the right files in the right order and never
       expect(fs.existsSync(lock)).toBe(false);
     });
 
-    await test.step('10. Stop waits for a busy lock only ~2 s; SessionEnd waits it out (lock freed after 1.5 s → upload happens)', async () => {
+    // Steps 10–10b (2026-11-18 receiver upload queue, hook 3.0.0): the per-user upload queue
+    // `~/.artisyn/upload/queue/` of the fake home. No receiver runs here; a fresh uploader heartbeat
+    // is faked by writing `heartbeat.json` (DD-6), and step 10b runs the job the way the receiver does.
+    const uploadState = path.join(home, '.artisyn', 'upload');
+    const queueDir = path.join(uploadState, 'queue');
+    const queuedJobs = () => (fs.existsSync(queueDir) ? fs.readdirSync(queueDir).filter((n) => n.endsWith('.json')).sort() : []);
+    const SESSION_END_JOB = /^cur_\d{8}T\d{9}Z_session-end_\d+-[0-9a-f]{4}\.json$/;
+    let handOffJob = '';
+
+    await test.step('10. Stop waits for a busy lock only ~2 s; SessionEnd on a busy lock gives up after 0.8 s and leaves a job; with a fresh uploader heartbeat SessionEnd only writes a job (DD-3 name, no API key) and returns at once', async () => {
       const lock = path.join(telemetry, '.upload.lock');
       fs.writeFileSync(lock, JSON.stringify({ startedAt: new Date().toISOString() }));
       hub!.requests.length = 0;
@@ -351,23 +374,221 @@ test('@S-HOOK-01 a Stop run uploads the right files in the right order and never
       expect(stop.elapsedMs, 'Stop gives up on a busy lock quickly').toBeLessThan(4000);
       expect(hub!.requests).toHaveLength(0);
 
+      // SessionEnd fallback (no heartbeat): LOCK_WAIT_SESSION_END_MS = 800, then a job instead of an upload.
       fs.writeFileSync(lock, JSON.stringify({ startedAt: new Date().toISOString() }));
-      const ending = run('SessionEnd');
-      await new Promise((resolve) => setTimeout(resolve, 1500));
+      const end = await run('SessionEnd');
+      expect(end.code, end.stderr).toBe(0);
+      // The wait itself is < 1 s; the wall time adds the Node start-up (≈ 0.3 s, more on a loaded runner).
+      expect(end.elapsedMs, 'SessionEnd no longer waits a busy lock out').toBeLessThan(2500);
+      expect(hub!.requests).toHaveLength(0);
+      const fallbackLine = readHookLog(repo, 'send-logs-hook.js').at(-1) ?? '';
+      const fallback = /\[result\] queued \(fallback\): lock busy job=(\S+) \(waited (\d+)ms/.exec(fallbackLine);
+      expect(fallback, fallbackLine).not.toBeNull();
+      expect(Number(fallback![2])).toBeLessThan(1000);
+      expect(queuedJobs()).toEqual([fallback![1]]);
+      expect(fallback![1]).toMatch(SESSION_END_JOB);
       fs.rmSync(lock);
-      const end = await ending;
-      expect(end.code).toBe(0);
-      expect(end.elapsedMs).toBeGreaterThanOrEqual(1500);
-      expect(hub!.uploads().sort()).toEqual(['artisyn/cur', 'claude/cur']);
+      // Not run here: step 10b runs the hand-off job below.
+      fs.rmSync(path.join(queueDir, fallback![1]));
+
+      // A fresh heartbeat of an uploader-role receiver → the hand-off path: one job, no upload.
+      fs.mkdirSync(uploadState, { recursive: true });
+      const heartbeat = path.join(uploadState, 'heartbeat.json');
+      fs.writeFileSync(heartbeat, JSON.stringify({
+        schema: 1, pid: process.pid, version: '3.0.0', capabilities: ['shared', 'upload-queue-v1'],
+        uploadContract: 1, listening: true, startedAt: new Date().toISOString(), ts: Date.now(),
+      }));
+      const handOff = await run('SessionEnd');
+      fs.rmSync(heartbeat);
+      expect(handOff.code, handOff.stderr).toBe(0);
+      expect(handOff.elapsedMs, 'DD-1: the hand-off returns in well under a second').toBeLessThan(1000);
+      expect(hub!.requests).toHaveLength(0);
+      const jobs = queuedJobs();
+      expect(jobs).toHaveLength(1);
+      handOffJob = jobs[0];
+      expect(handOffJob).toMatch(SESSION_END_JOB);
+      const queuedLine = readHookLog(repo, 'send-logs-hook.js').at(-1) ?? '';
+      const queued = /\[result\] queued: job=(\S+) elapsedMs=(\d+)/.exec(queuedLine);
+      expect(queued, queuedLine).not.toBeNull();
+      expect(queued![1]).toBe(handOffJob);
+      expect(Number(queued![2]), 'DD-1 elapsedMs bound').toBeLessThanOrEqual(500);
+
+      const raw = fs.readFileSync(path.join(queueDir, handOffJob), 'utf8');
+      expect(raw, 'the job never carries the API key').not.toContain(API_KEY);
+      const job: unknown = JSON.parse(raw);
+      if (!isRecord(job)) throw new Error(`job is not an object: ${raw}`);
+      expect(job).not.toHaveProperty('apiKey');
+      expect(job).toMatchObject({
+        schema: 1, sessionId: 'cur', trigger: 'session-end', uploaderContract: 1, hookEvent: 'SessionEnd',
+        attempts: 0, nextAttemptAt: null, lastError: null,
+      });
+      expect(normalizePath(String(job.cwd))).toBe(normalizePath(repo));
+      expect(normalizePath(String(job.telemetryDir))).toBe(normalizePath(telemetry));
+      expect(normalizePath(String(job.uploader))).toBe(normalizePath(path.join(toolDir, 'send-logs-hook.js')));
+    });
+
+    await test.step('10b. send-logs-hook.js --run-job <job> (what the receiver spawns): uploads cur artisyn and claude, exits 0, deletes the job and its claim; a copy of the same job run again uploads the same files', async () => {
+      const jobPath = path.join(queueDir, handOffJob);
+      const copy = fs.readFileSync(jobPath);
+      const jobCwd = dirs.make('run-job-cwd');
+      const runJob = () => runNodeScript(path.join(toolDir, 'send-logs-hook.js'), jobCwd, null, { home, argv: ['--run-job', jobPath] });
+      for (const attempt of ['first', 'copy']) {
+        if (attempt === 'copy') fs.writeFileSync(jobPath, copy);
+        hub!.requests.length = 0;
+        const res = await runJob();
+        expect(res.code, `${attempt}: ${res.stderr}`).toBe(0);
+        expect(hub!.uploads().sort(), attempt).toEqual(['artisyn/cur', 'claude/cur']);
+        expect(hub!.requests.every((r) => r.headers['x-api-key'] === API_KEY), 'the key comes from the repo config').toBe(true);
+        expect(fs.existsSync(jobPath), `${attempt}: job deleted`).toBe(false);
+        expect(fs.existsSync(`${jobPath}.claim`), `${attempt}: claim deleted`).toBe(false);
+        expect(fs.existsSync(path.join(telemetry, '.upload.lock')), `${attempt}: lock released`).toBe(false);
+      }
+      const lines = readHookLog(repo, 'send-logs-hook.js');
+      expect(lines.filter((l) => l.includes(`run-job start: ${handOffJob}`))).toHaveLength(2);
+      expect(lines.filter((l) => l.includes(`run-job done: ${handOffJob}`))).toHaveLength(2);
     });
 
     await test.step('11. hook.log: an activate line per run and a closing line with the counters', async () => {
       const lines = readHookLog(repo, 'send-logs-hook.js');
-      // Runs above: steps 1, 5, 5b (×2), 6, 7, 8, 9 (×2), 10 (×2) = 11.
-      expect(lines.filter((l) => /\[activate\] (Stop|SessionEnd) event received/.test(l))).toHaveLength(11);
+      // Hook runs above: steps 1, 5, 5b (×2), 6, 7, 8, 9 (×2), 10 (×3) = 12; the two --run-job runs
+      // of step 10b log «run-job start», not an event line.
+      expect(lines.filter((l) => /\[activate\] (Stop|SessionEnd) event received/.test(l))).toHaveLength(12);
       expect(lines.filter((l) => /\[result\] done: uploaded=\d+ skipped=\d+ failed=0 total=\d+ target=http:\/\/127\.0\.0\.1:\d+/.test(l)).length).toBe(7);
       expect(lines.some((l) => /claude\/cur\.jsonl: uploaded \d+ KB uncompressed in 1 request$/.test(l))).toBe(true);
-      expect(lines.some((l) => /session-end flush done: uploaded=2 failed=0 total=2/.test(l))).toBe(true);
+      // Step 7's in-process SessionEnd and step 10b's two job runs; step 10's SessionEnds flush nothing.
+      expect(lines.filter((l) => /session-end flush done: uploaded=2 failed=0 total=2/.test(l))).toHaveLength(3);
+    });
+
+    // Steps 11b–11d (2026-11-18 receiver upload queue, phase 2): `stop` jobs, coalescing, `failed/`
+    // and the stuck-job takeover, still on the main repo and the fake home of steps 10–10b.
+    const heartbeatFile = path.join(uploadState, 'heartbeat.json');
+    const failedDir = path.join(uploadState, 'failed');
+    const STOP_JOB = /^cur_(\d{8}T\d{9}Z)_stop_\d+-[0-9a-f]{4}\.json$/;
+    const fakeHeartbeat = () => {
+      fs.mkdirSync(uploadState, { recursive: true });
+      fs.writeFileSync(heartbeatFile, JSON.stringify({
+        schema: 1, pid: process.pid, version: '3.0.0', capabilities: ['shared', 'upload-queue-v1'],
+        uploadContract: 1, listening: true, startedAt: new Date().toISOString(), ts: Date.now(),
+      }));
+    };
+    /** One Stop under a fresh fake heartbeat: it only writes a `stop` job (DD-7) and returns its name. */
+    const handOffStop = async (): Promise<string> => {
+      const before = new Set(queuedJobs());
+      fakeHeartbeat();
+      const res = await run('Stop').finally(() => fs.rmSync(heartbeatFile, { force: true }));
+      expect(res.code, res.stderr).toBe(0);
+      expect(res.elapsedMs, 'DD-1: the hand-off returns in well under a second').toBeLessThan(1000);
+      const added = queuedJobs().filter((n) => !before.has(n));
+      expect(added).toHaveLength(1);
+      expect(added[0]).toMatch(STOP_JOB);
+      const queuedLine = readHookLog(repo, 'send-logs-hook.js').at(-1) ?? '';
+      const queued = /\[result\] queued: job=(\S+) elapsedMs=(\d+)/.exec(queuedLine);
+      expect(queued, queuedLine).not.toBeNull();
+      expect(queued![1]).toBe(added[0]);
+      expect(Number(queued![2]), 'DD-1 elapsedMs bound').toBeLessThanOrEqual(500);
+      return added[0];
+    };
+    const runJobFile = (name: string) =>
+      runNodeScript(path.join(toolDir, 'send-logs-hook.js'), dirs.make('run-job-cwd'), null, { home, argv: ['--run-job', path.join(queueDir, name)] });
+    /** The `hook-status` line of the latest cur artisyn upload. */
+    const lastHookStatus = (): Record<string, unknown> => {
+      const uploads = hub!.requests.filter((r) => r.type === 'artisyn' && r.sessionId === 'cur');
+      expect(uploads.length, 'artisyn/cur uploaded').toBeGreaterThan(0);
+      const status = ndjsonLines(uploads[uploads.length - 1].body.toString('utf8')).find((e) => e.type === 'hook-status');
+      if (!status) throw new Error('no hook-status line in the cur artisyn upload');
+      return status;
+    };
+    const recommendationRules = (status: Record<string, unknown>) =>
+      (Array.isArray(status.recommendations) ? status.recommendations : []).map((r) => (isRecord(r) ? r.rule : null));
+    const doneLines = () => readHookLog(repo, 'send-logs-hook.js').filter((l) => /\[result\] done: uploaded=\d+ /.test(l));
+
+    await test.step('11b. Stop with a fresh uploader heartbeat writes a stop job and sends nothing; two stop jobs of the repo coalesce into one --run-job run (both deleted, one done: line) whose artisyn upload carries the same harness snapshot id as an in-process Stop', async () => {
+      hub!.requests.length = 0;
+      const first = await handOffStop();
+      const second = await handOffStop();
+      expect(hub!.requests, 'a hand-off Stop makes no HTTP request').toHaveLength(0);
+      for (const name of [first, second]) {
+        const raw = fs.readFileSync(path.join(queueDir, name), 'utf8');
+        expect(raw).not.toContain(API_KEY);
+        expect(JSON.parse(raw)).toMatchObject({ schema: 1, sessionId: 'cur', trigger: 'stop', hookEvent: 'Stop', attempts: 0 });
+      }
+
+      const doneBefore = doneLines().length;
+      const res = await runJobFile(first);
+      expect(res.code, res.stderr).toBe(0);
+      expect(queuedJobs(), 'both stop jobs deleted').toEqual([]);
+      expect(fs.readdirSync(queueDir).filter((n) => n.endsWith('.claim')), 'no claim left').toEqual([]);
+      expect(hub!.uploads().filter((u) => u === 'artisyn/cur'), 'one full scan for both jobs').toHaveLength(1);
+      const lines = readHookLog(repo, 'send-logs-hook.js');
+      expect(lines.some((l) => l.includes(`run-job coalesced 2 stop jobs: ${first}, ${second}`)), lines.join('\n')).toBe(true);
+      expect(lines.some((l) => l.includes(`run-job done: ${first}`))).toBe(true);
+      expect(lines.some((l) => l.includes(`run-job start: ${second}`)), 'the coalesced job is not run on its own').toBe(false);
+      expect(doneLines().length - doneBefore, 'one done: line').toBe(1);
+      const jobStatus = lastHookStatus();
+      expect(jobStatus.uploadQueue).toEqual({ mode: 'job', stuckTakenOver: 0, failedJobs: 0 });
+      const jobCur = hub!.requests.find((r) => r.type === 'artisyn' && r.sessionId === 'cur')!;
+      expect(jobCur.query.get('snapshotId')).toBe(snapshotId);
+
+      // The same repo state uploaded by an in-process Stop (no heartbeat) carries the same id.
+      hub!.requests.length = 0;
+      expect((await run('Stop')).code).toBe(0);
+      const inProcessCur = hub!.requests.find((r) => r.type === 'artisyn' && r.sessionId === 'cur')!;
+      expect(inProcessCur.query.get('snapshotId')).toBe(jobCur.query.get('snapshotId'));
+      expect(lastHookStatus().uploadQueue).toEqual({ mode: 'in-process', stuckTakenOver: 0, failedJobs: 0 });
+    });
+
+    await test.step('11c. a job created 25 h ago goes to failed/ without an upload; the next in-process Stop reports failedJobs 1 and the upload-jobs-failed recommendation, then clears failed/; the Stop after that has neither', async () => {
+      const name = await handOffStop();
+      const jobPath = path.join(queueDir, name);
+      const job: unknown = JSON.parse(fs.readFileSync(jobPath, 'utf8'));
+      if (!isRecord(job)) throw new Error('job is not an object');
+      fs.writeFileSync(jobPath, JSON.stringify({ ...job, createdAt: new Date(Date.now() - 25 * 3_600_000).toISOString() }));
+      hub!.requests.length = 0;
+      const res = await runJobFile(name);
+      expect(res.code, 'DD-5 permanent').toBe(11);
+      expect(hub!.requests).toHaveLength(0);
+      expect(queuedJobs()).toEqual([]);
+      const failed: unknown = JSON.parse(fs.readFileSync(path.join(failedDir, name), 'utf8'));
+      expect(failed).toMatchObject({ sessionId: 'cur', trigger: 'stop', failedReason: 'over-age' });
+      expect(readHookLog(repo, 'send-logs-hook.js').some((l) => l.includes(`job failed: ${name} reason=over-age`))).toBe(true);
+
+      expect((await run('Stop')).code).toBe(0);
+      const status = lastHookStatus();
+      expect(status.uploadQueue).toEqual({ mode: 'in-process', stuckTakenOver: 0, failedJobs: 1 });
+      expect(recommendationRules(status)).toContain('upload-jobs-failed');
+      expect(fs.readdirSync(failedDir).filter((n) => n.endsWith('.json')), 'a done full scan clears failed/').toEqual([]);
+      expect(readHookLog(repo, 'send-logs-hook.js').some((l) => l.includes('failed jobs cleared: 1'))).toBe(true);
+
+      hub!.requests.length = 0;
+      expect((await run('Stop')).code).toBe(0);
+      const after = lastHookStatus();
+      expect(after.uploadQueue).toEqual({ mode: 'in-process', stuckTakenOver: 0, failedJobs: 0 });
+      expect(recommendationRules(after)).not.toContain('upload-jobs-failed');
+    });
+
+    await test.step('11d. with a stale heartbeat, a Stop takes over a stuck job (name backdated past JOB_STUCK_MS) under the upload lock: «stuck jobs taken over: 1», the job is gone and hook-status says stuckTakenOver 1', async () => {
+      const name = await handOffStop();
+      // Ten minutes old by its name (JOB_STUCK_MS = 5 min), no claim.
+      const backdatedTs = new Date(Date.now() - 10 * 60_000).toISOString().replace(/[-:.]/g, '');
+      const backdated = name.replace(STOP_JOB.exec(name)![1], backdatedTs);
+      fs.renameSync(path.join(queueDir, name), path.join(queueDir, backdated));
+      // A stale heartbeat: a dead uploader's last write.
+      fs.writeFileSync(heartbeatFile, JSON.stringify({
+        schema: 1, pid: process.pid, version: '3.0.0', capabilities: ['shared', 'upload-queue-v1'],
+        uploadContract: 1, listening: true, startedAt: new Date().toISOString(), ts: Date.now() - 60_000,
+      }));
+      hub!.requests.length = 0;
+      try {
+        expect((await run('Stop')).code).toBe(0);
+      } finally {
+        fs.rmSync(heartbeatFile, { force: true });
+      }
+      const lines = readHookLog(repo, 'send-logs-hook.js');
+      expect(lines.some((l) => l.includes(`stuck jobs taken over: 1 (${backdated})`)), lines.join('\n')).toBe(true);
+      expect(queuedJobs()).toEqual([]);
+      expect(fs.readdirSync(queueDir).filter((n) => n.endsWith('.claim'))).toEqual([]);
+      expect(lastHookStatus().uploadQueue).toEqual({ mode: 'in-process', stuckTakenOver: 1, failedJobs: 0 });
+      expect(fs.existsSync(path.join(telemetry, '.upload.lock')), 'lock released').toBe(false);
     });
 
     // Steps 12–15: the ARTISYN_PROJECT_ROOT override (a dev sandbox mounts one linked worktree and
@@ -502,10 +723,19 @@ test('@S-HOOK-01 a Stop run uploads the right files in the right order and never
       expect(uploads.length, `artisyn/${sid} uploaded`).toBeGreaterThan(0);
       return ndjsonLines(bodyText(uploads[uploads.length - 1])).filter((e) => e.type === 'otel-status');
     };
+    // Hook 3.0.0: the shared receiver holds the uploader role of shHome, so a Stop or a SessionEnd
+    // hands its upload off as a job (DD-7) and the receiver runs it with `--run-job` — wait until it
+    // is done.
+    const shQueue = path.join(shHome, '.artisyn', 'upload', 'queue');
+    const shQueueDrained = async () => {
+      await expect
+        .poll(() => (fs.existsSync(shQueue) ? fs.readdirSync(shQueue).filter((n) => n.endsWith('.json') || n.endsWith('.claim')) : []), { timeout: 20_000 })
+        .toEqual([]);
+    };
     const resource = { attributes: [{ key: 'service.name', value: { stringValue: 'claude-code' } }] };
     const sessionAttr = (sid: string) => [{ key: 'session.id', value: { stringValue: sid } }];
 
-    await test.step('17. otel-status at the first Stop with records: records arrived before the register, the Stop re-arm registers the session, the line says partial (logs only) and rides on the artisyn upload an old hub accepts', async () => {
+    await test.step('17. otel-status at the first Stop with records: records arrived before the register, a lifecycle re-arm registers the session (a Stop handed off to the uploader re-arms nothing, DD-7), the line says partial (logs only) and rides on the artisyn upload an old hub accepts', async () => {
       writeConfig(shRepo, {
         base: { ...QUIET_HOOK_CONFIG, otelEnabled: true, otelRealtime: false, serverUrl: hub!.url, sendLogsTimeoutMs: 5000 },
         local: { apiKey: API_KEY },
@@ -515,9 +745,14 @@ test('@S-HOOK-01 a Stop run uploads the right files in the right order and never
         resourceLogs: [{ resource, scopeLogs: [{ scope: { name: 'com.anthropic.claude_code.events' }, logRecords: [{ timeUnixNano: '1735689600000000001', body: { stringValue: 'claude_code.user_prompt' }, attributes: sessionAttr('os-1') }] }] }],
       });
       expect(logs.status).toBe(200);
+      // Hook 3.0.0: with an uploader up, the Stop only writes a job, so the session is registered by
+      // the lifecycle hook's re-arm, as on any tool event of a real turn.
+      const rearm = await runScript(shTool, 'lifecycle-hook.js', { hook_event_name: 'PostToolUse', session_id: 'os-1', cwd: shRepo }, { home: shHome, env: shEnv });
+      expect(rearm.code, rearm.stderr).toBe(0);
       hub!.requests.length = 0;
       const stop = await shRun('Stop', 'os-1');
       expect(stop.code, stop.stderr).toBe(0);
+      await shQueueDrained();
       expect(statusLog('os-1'), readHookLog(shRepo).join('\n')).toHaveLength(1);
       expect(statusLog('os-1')[0]).toMatch(/otel-status state=partial reason=not-configured detail=null received=1\/0\/0 phase=stop/);
       const [line] = uploadedStatus('os-1');
@@ -530,6 +765,7 @@ test('@S-HOOK-01 a Stop run uploads the right files in the right order and never
       expect(readHookLog(shRepo, 'send-logs-hook.js').filter((l) => /\[result\] done: uploaded=\d+ skipped=\d+ failed=0 /.test(l))).toHaveLength(1);
 
       expect((await shRun('Stop', 'os-1')).code).toBe(0);
+      await shQueueDrained();
       expect(statusLog('os-1'), 'the same state is not written twice').toHaveLength(1);
     });
 
@@ -540,18 +776,22 @@ test('@S-HOOK-01 a Stop run uploads the right files in the right order and never
       expect(metrics.status).toBe(200);
       hub!.requests.length = 0;
       expect((await shRun('Stop', 'os-1')).code).toBe(0);
+      await shQueueDrained();
       expect(statusLog('os-1')).toHaveLength(2);
       expect(statusLog('os-1')[1]).toMatch(/otel-status state=ok reason=null detail=null received=1\/1\/0 phase=stop/);
       expect(uploadedStatus('os-1').map((l) => [l.state, l.reason])).toEqual([['partial', 'not-configured'], ['ok', null]]);
       expect((await shRun('SessionEnd', 'os-1')).code).toBe(0);
+      await shQueueDrained();
       expect(statusLog('os-1')).toHaveLength(2);
     });
 
     await test.step('19. a session that never gets a record: nothing at Stop, one state=none line at SessionEnd, uploaded with zero counts', async () => {
       hub!.requests.length = 0;
       expect((await shRun('Stop', 'os-2')).code).toBe(0);
+      await shQueueDrained();
       expect(statusLog('os-2')).toHaveLength(0);
       expect((await shRun('SessionEnd', 'os-2')).code).toBe(0);
+      await shQueueDrained();
       expect(statusLog('os-2')).toHaveLength(1);
       expect(statusLog('os-2')[0]).toMatch(/otel-status state=none reason=not-configured detail=null received=0\/0\/0 phase=session-end/);
       expect(uploadedStatus('os-2')).toEqual([

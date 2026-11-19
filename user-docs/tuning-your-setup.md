@@ -59,6 +59,15 @@ keeping the list. A monitored tool is always recorded in full. The personal view
 list, the team view the team's list (team owner only). The **Monitored tools** button on the
 Tools/MCP tab opens this tab. Shells, the agent's own tools and shell builtins cannot be monitored.
 
+- Calls through Claude Code's **Bash** tool are always recorded. Calls through its **PowerShell**
+  tool (Windows) are recorded only when the session runs in **bypass-permissions** mode; in any
+  other mode the hook leaves the command exactly as typed, so your permission prompts and allow /
+  deny rules behave as without Log Hub.
+- In Windows PowerShell 5.1 a bare `curl` is the built-in alias of `Invoke-WebRequest`, not the
+  `curl` program, so it is not recorded — write `curl.exe` instead.
+- A row that says **hook too old — update the hook** means the hook on that machine needs an
+  update (on Windows, hooks before 2.32.2).
+
 ### Session Attribution
 
 Team-only. Define up to 12 attributes the AI fills in for every session — the defaults are

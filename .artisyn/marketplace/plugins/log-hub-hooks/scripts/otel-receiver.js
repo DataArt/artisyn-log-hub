@@ -149,7 +149,56 @@ const SHARED_IDLE_TIMEOUT_MS = 600000;
 // The register contract version (DD-10). Twin: `REGISTER_CONTRACT` in otel-register.js.
 const REGISTER_CONTRACT = 1;
 // What a shared receiver can do, answered by hello and register (DD-10).
-const CAPABILITIES = ['shared', 'auth-v1', 'spans', 'realtime', 'forward', 'session-status'];
+// `upload-queue-v1` (hook 3.0.0+): this receiver can take the uploader role over `~/.artisyn/upload/`.
+const CAPABILITIES = ['shared', 'auth-v1', 'spans', 'realtime', 'forward', 'session-status', 'upload-queue-v1'];
+
+// ---- upload job queue (hook 3.0.0+, DD-19). Twins: the same names in upload-queue.js — this file
+// must not `require` any hook module, so the values are repeated; keep them identical.
+const UPLOAD_DIR = 'upload';
+const QUEUE_DIR = 'queue';
+const FAILED_DIR = 'failed';
+const HEARTBEAT_FILE = 'heartbeat.json';
+const UPLOADER_LOCK_FILE = 'uploader.lock';
+const UPLOAD_QUEUE_CAPABILITY = 'upload-queue-v1';
+const UPLOAD_CONTRACT = 1;
+const JOB_SCHEMA = 1;
+const HEARTBEAT_STALE_MS = 15000;
+const JOB_RUN_TIMEOUT_MS = 900000;
+const BACKOFF_BASE_MS = 30000;
+const BACKOFF_MAX_MS = 900000;
+// Receiver-only queue constants (DD-19).
+const SUPPORTED_UPLOAD_CONTRACTS = Object.freeze([1]);
+const HEARTBEAT_INTERVAL_MS = 5000;
+const QUEUE_POLL_MS = 10000;
+const JOB_MAX_CRASHES = 3;
+const BUSY_RETRY_MS = 5000;
+const MAX_PARALLEL_JOBS = 2;
+// The first hook major whose `send-logs-hook.js` has `--run-job` (DD-5, DD-10): an uploader whose
+// sibling `version.json` is older (a repo downgraded after it queued a job) is never spawned.
+const MIN_UPLOADER_MAJOR = 3;
+// An `uploader.lock` is stale once the heartbeat is this old (DD-8).
+const UPLOADER_LOCK_STALE_MS = HEARTBEAT_STALE_MS * 4;
+/** `--run-job` exit codes (DD-5). Twin: `JOB_EXIT` in upload-queue.js. */
+const JOB_EXIT = Object.freeze({
+  done: 0,
+  retryable: 10,
+  permanent: 11,
+  busy: 12,
+  dropped: 13,
+});
+// Twin: `JOB_NAME_RE` in upload-queue.js (DD-3).
+const JOB_NAME_RE = /^([A-Za-z0-9-]{1,64})_(\d{8}T\d{9}Z)_(stop|session-end)_(\d+)-([0-9a-f]{4})\.json$/;
+// Twin: `JOB_TRIGGERS` in upload-queue.js (DD-3).
+const JOB_TRIGGERS = Object.freeze(['stop', 'session-end']);
+const JOB_CLAIM_SUFFIX = '.claim';
+// Re-queue of `failed/` jobs (hook 3.0.0+, receiver only): after a `done` job at most once per
+// `FAILED_REQUEUE_MIN_GAP_MS`, and every `FAILED_REQUEUE_INTERVAL_MS` while the uploader role is held.
+const FAILED_REQUEUE_MIN_GAP_MS = 60000;
+const FAILED_REQUEUE_INTERVAL_MS = 1800000;
+// The `failedReason`s a re-queue may retry: the data was never refused by the server, the job only
+// ran out of time, attempts or uploader runs. Every other reason (invalid job, 4xx, a refused or too
+// old uploader) would fail the same way again, so it stays in `failed/`.
+const REQUEUEABLE_FAILURES = Object.freeze(['over-age', 'max-attempts', 'uploader-crash']);
 // Hello server nonces: single-use, this long, at most this many outstanding (oldest evicted).
 const NONCE_TTL_MS = 30000;
 const NONCE_MAX = 256;
@@ -883,6 +932,9 @@ const runtime = {
   ownerHash: null,
   stateDir: null,
   token: null,
+  // Shared mode, DD-8: the OTLP port was busy but this process holds the uploader role, so it runs
+  // only the upload queue — no listener, no sweep, no registry writes (the listener owns those).
+  queueOnly: false,
 };
 
 let idleTimer = null;
@@ -1033,6 +1085,18 @@ function exitStartupFailure(message) {
 function armIdleTimer() {
   if (idleTimer) clearTimeout(idleTimer);
   idleTimer = setTimeout(() => {
+    // Uploader role (DD-10): a running job, or a queued job this receiver would run, keeps it alive.
+    if (uploaderRole.held && (runningJobs.size > 0 || hasBlockingQueueJob())) {
+      armIdleTimer();
+      return;
+    }
+    // Queue-only (DD-8): there is no listener state to flush or sweep — the process bound to the
+    // port owns the registry, the spool and the tail sweep.
+    if (runtime.queueOnly) {
+      receiverLog('idle-exit', `queue-only: no queued or running job for ${runtime.idleTimeoutMs}ms — exiting`);
+      process.exit(0);
+      return;
+    }
     // Shared mode: persist the session registry before anything else (a no-op in legacy mode).
     flushRegistry();
     // One last tail upload, so chunks written after the session's final hook event do not wait for
@@ -1246,6 +1310,899 @@ function startSweepTimer() {
   if (sweepTimer) clearInterval(sweepTimer);
   sweepTimer = setInterval(sweepTick, SWEEP_INTERVAL_MS);
   if (typeof sweepTimer.unref === 'function') sweepTimer.unref();
+}
+
+// ---------------------------------------------------------------------------
+// upload job queue — the uploader role (hook 3.0.0+, DD-6, DD-8, DD-10)
+//
+// Shared mode only. The receiver that holds `<ownerHome>/.artisyn/upload/uploader.lock` is the single
+// log uploader of this OS user: hooks drop `Stop` / `SessionEnd` jobs into `queue/`, and this process
+// runs each one as `node <job.uploader> --run-job <jobPath>`. While it holds the role it writes
+// `heartbeat.json` every `HEARTBEAT_INTERVAL_MS`; a hook hands off only on a fresh heartbeat.
+// ---------------------------------------------------------------------------
+
+/**
+ * Epoch ms of a `YYYYMMDDTHHmmssSSSZ` job timestamp; `NaN` when it is not a real instant. Twin of
+ * `parseJobTs` in upload-queue.js.
+ * @param {string} ts
+ * @returns {number}
+ */
+function parseJobTs(ts) {
+  const m = /^(\d{4})(\d{2})(\d{2})T(\d{2})(\d{2})(\d{2})(\d{3})Z$/.exec(String(ts));
+  if (!m) return NaN;
+  const ms = Date.parse(`${m[1]}-${m[2]}-${m[3]}T${m[4]}:${m[5]}:${m[6]}.${m[7]}Z`);
+  // Reject rollovers such as month 13 or Feb 30 — the round trip must reproduce the input.
+  if (!Number.isFinite(ms) || new Date(ms).toISOString().replace(/[-:.]/g, '') !== ts) return NaN;
+  return ms;
+}
+
+/**
+ * Parse a job file name (DD-3); `null` when it is not a job. Twin of `parseJobName` in
+ * upload-queue.js — keep identical.
+ * @param {string} name
+ * @returns {{ name: string, sid: string, ts: string, tsMs: number, trigger: string, pid: number,
+ *   rand: string }|null}
+ */
+function parseJobName(name) {
+  const m = JOB_NAME_RE.exec(String(name));
+  if (!m) return null;
+  const tsMs = parseJobTs(m[2]);
+  if (!Number.isFinite(tsMs)) return null;
+  return { name: m[0], sid: m[1], ts: m[2], tsMs, trigger: m[3], pid: Number(m[4]), rand: m[5] };
+}
+
+/**
+ * Build a job file name (DD-3): `<sid>_<ts>_<trigger>_<pid>-<rand>.json`. `sid` keeps only
+ * `[A-Za-z0-9-]`, cut to 64 chars, `nosession` when empty; `ts` is UTC `YYYYMMDDTHHmmssSSSZ`; an
+ * unknown trigger throws. Twin of `buildJobName` in upload-queue.js — keep identical.
+ * @param {{ sessionId?: string, trigger: string, now?: number, pid?: number, rand?: string }} input
+ * @returns {string}
+ */
+function buildJobName({ sessionId, trigger, now, pid, rand }) {
+  if (!JOB_TRIGGERS.includes(trigger)) throw new TypeError(`unknown job trigger: ${trigger}`);
+  const ms = Number.isFinite(now) ? now : Date.now();
+  const p = Number.isInteger(pid) && pid >= 0 ? pid : process.pid;
+  const r = typeof rand === 'string' && /^[0-9a-f]{4}$/.test(rand)
+    ? rand
+    : crypto.randomBytes(2).toString('hex');
+  const sid = String(sessionId == null ? '' : sessionId).replace(/[^A-Za-z0-9-]/g, '').slice(0, 64) || 'nosession';
+  return `${sid}_${new Date(ms).toISOString().replace(/[-:.]/g, '')}_${trigger}_${p}-${r}.json`;
+}
+
+/**
+ * Whether a `failed/` record with this `failedReason` may be re-queued: only `over-age`,
+ * `max-attempts` and `uploader-crash`. Receiver only.
+ * @param {*} reason
+ * @returns {boolean}
+ */
+function isRequeueableFailure(reason) {
+  return typeof reason === 'string' && REQUEUEABLE_FAILURES.includes(reason);
+}
+
+/**
+ * Fresh heartbeat (DD-6): written within `HEARTBEAT_STALE_MS`, lists `upload-queue-v1`, and speaks at
+ * least `UPLOAD_CONTRACT`. Twin of `isHeartbeatFresh` in upload-queue.js — keep identical.
+ * @param {*} hb
+ * @param {number} now
+ * @returns {boolean}
+ */
+function isHeartbeatFresh(hb, now) {
+  if (!hb || typeof hb !== 'object') return false;
+  if (typeof hb.ts !== 'number' || !Number.isFinite(hb.ts)) return false;
+  if (now - hb.ts > HEARTBEAT_STALE_MS) return false;
+  if (!Array.isArray(hb.capabilities) || !hb.capabilities.includes(UPLOAD_QUEUE_CAPABILITY)) return false;
+  return typeof hb.uploadContract === 'number' && hb.uploadContract >= UPLOAD_CONTRACT;
+}
+
+/**
+ * A job claim is stale when null / unparsable, its pid is dead, or it is older than
+ * `JOB_RUN_TIMEOUT_MS` (DD-11). Twin of `isClaimStale` in upload-queue.js — keep identical.
+ * @param {*} claim
+ * @param {number} now
+ * @param {(pid: number) => boolean} isAlive
+ * @returns {boolean}
+ */
+function isClaimStale(claim, now, isAlive) {
+  if (!claim || typeof claim !== 'object' || !Number.isInteger(claim.pid)) return true;
+  const started = Date.parse(claim.startedAt);
+  if (!Number.isFinite(started)) return true;
+  if (!isAlive(claim.pid)) return true;
+  return now - started > JOB_RUN_TIMEOUT_MS;
+}
+
+/**
+ * `min(30000 × 2^(n−1), 900000)`; `n` below 1 counts as 1 (DD-12). Twin of `backoffMs` in
+ * upload-queue.js — keep identical.
+ * @param {number} n
+ * @returns {number}
+ */
+function backoffMs(n) {
+  const k = Number.isFinite(n) && n >= 1 ? Math.floor(n) : 1;
+  if (k > 30) return BACKOFF_MAX_MS;
+  return Math.min(BACKOFF_BASE_MS * 2 ** (k - 1), BACKOFF_MAX_MS);
+}
+
+/**
+ * `process.kill(pid, 0)` probe: `false` only on `ESRCH` (or a non-positive pid).
+ * @param {number} pid
+ * @returns {boolean}
+ */
+function isPidAlive(pid) {
+  if (!Number.isInteger(pid) || pid <= 0) return false;
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return !(err && err.code === 'ESRCH');
+  }
+}
+
+/**
+ * Parse a JSON object file; `null` when missing, unreadable, not JSON or not a plain object.
+ * @param {string} file
+ * @returns {Record<string, *>|null}
+ */
+function readJsonObjectFile(file) {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(file, 'utf8'));
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Write `text` to `file` atomically (tmp + rename, mode 0o600, parent dir 0o700). Never throws.
+ * @param {string} file
+ * @param {string} text
+ * @returns {boolean}
+ */
+function writeFileAtomic(file, text) {
+  const tmp = path.join(path.dirname(file), `.${path.basename(file)}.${process.pid}.tmp`);
+  try {
+    fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+    fs.writeFileSync(tmp, text, { encoding: 'utf8', mode: 0o600 });
+    fs.renameSync(tmp, file);
+    return true;
+  } catch {
+    try { fs.unlinkSync(tmp); } catch { /* never created */ }
+    return false;
+  }
+}
+
+/** `<ownerHome>/.artisyn/upload`. @returns {string} */
+function uploadStateDir() {
+  return path.join(runtime.ownerHome, '.artisyn', UPLOAD_DIR);
+}
+
+/** @returns {string} */
+function uploadQueueDir() {
+  return path.join(uploadStateDir(), QUEUE_DIR);
+}
+
+/**
+ * The uploader-role state of this process.
+ * @type {{ held: boolean, startedAt: string|null, listening: boolean, exitHooked: boolean,
+ *   heartbeatTimer: NodeJS.Timeout|null, pollTimer: NodeJS.Timeout|null, watcher: fs.FSWatcher|null,
+ *   scanPending: boolean, requeueTimer: NodeJS.Timeout|null, lastRequeueAt: number,
+ *   requeuePending: boolean }}
+ */
+const uploaderRole = {
+  held: false,
+  startedAt: null,
+  listening: false,
+  exitHooked: false,
+  heartbeatTimer: null,
+  pollTimer: null,
+  watcher: null,
+  scanPending: false,
+  // The periodic `failed/` re-queue timer, the time of the last re-queue pass, and whether a pass
+  // triggered by a `done` job is already scheduled.
+  requeueTimer: null,
+  lastRequeueAt: 0,
+  requeuePending: false,
+};
+
+/**
+ * Jobs this receiver is running, by job file name.
+ * @type {Map<string, { child: import('child_process').ChildProcess, dirKey: string, timer: NodeJS.Timeout|null, timedOut: boolean }>}
+ */
+const runningJobs = new Map();
+// In-memory retry state per job file name: the earliest next run after a busy exit (12) or a crash,
+// and the crash counter `n` (DD-10). A retryable exit (10) is scheduled by the job's own
+// `nextAttemptAt`, which the uploader rewrites under its claim (DD-9).
+/** @type {Map<string, number>} */
+const jobRetryAt = new Map();
+/** @type {Map<string, number>} */
+const jobCrashCount = new Map();
+// The one unref'd timer that re-scans when the earliest due time (`nextAttemptAt` or an in-memory
+// retry) arrives, and the time it fires at.
+/** @type {{ timer: NodeJS.Timeout|null, at: number }} */
+const dueScan = { timer: null, at: 0 };
+
+/**
+ * Whether the current `uploader.lock` is stale (DD-8): its pid is dead, or `heartbeat.json` (else, when
+ * there is none, the lock file itself) is older than `HEARTBEAT_STALE_MS × 4`.
+ * @param {Record<string, *>|null} lock
+ * @param {string} lockPath
+ * @param {number} now
+ * @returns {boolean}
+ */
+function isUploaderLockStale(lock, lockPath, now) {
+  if (lock && Number.isInteger(lock.pid) && !isPidAlive(lock.pid)) return true;
+  const hb = readJsonObjectFile(path.join(uploadStateDir(), HEARTBEAT_FILE));
+  if (hb && typeof hb.ts === 'number' && Number.isFinite(hb.ts)) return now - hb.ts > UPLOADER_LOCK_STALE_MS;
+  try {
+    return now - fs.statSync(lockPath).mtimeMs > UPLOADER_LOCK_STALE_MS;
+  } catch {
+    // The lock vanished between the read and the stat: free to take.
+    return true;
+  }
+}
+
+/**
+ * Try to take the uploader role (DD-8): create `uploader.lock` with `'wx'`; a stale lock is removed
+ * and the create retried once. On success the heartbeat is written, the queue is watched and a drain
+ * scan runs. Shared mode only. Never throws.
+ * @returns {boolean} whether this process holds the role now
+ */
+function acquireUploaderRole() {
+  if (uploaderRole.held) return true;
+  if (!runtime.shared || !runtime.ownerHome) return false;
+  const dir = uploadStateDir();
+  const lockPath = path.join(dir, UPLOADER_LOCK_FILE);
+  try {
+    fs.mkdirSync(path.join(dir, QUEUE_DIR), { recursive: true, mode: 0o700 });
+  } catch (err) {
+    receiverLog('uploader-error', `cannot create the upload queue dir: ${err && err.message ? err.message : String(err)}`);
+    return false;
+  }
+  const startedAt = new Date().toISOString();
+  const body = JSON.stringify({ pid: process.pid, startedAt, version: getReceiverVersion() }) + '\n';
+  for (let attempt = 0; attempt < 2; attempt++) {
+    try {
+      fs.writeFileSync(lockPath, body, { encoding: 'utf8', flag: 'wx', mode: 0o600 });
+      uploaderRole.held = true;
+      uploaderRole.startedAt = startedAt;
+      break;
+    } catch (err) {
+      if (!err || err.code !== 'EEXIST' || attempt > 0) return false;
+      const lock = readJsonObjectFile(lockPath);
+      if (lock && lock.pid === process.pid) {
+        uploaderRole.held = true;
+        uploaderRole.startedAt = typeof lock.startedAt === 'string' ? lock.startedAt : startedAt;
+        break;
+      }
+      if (!isUploaderLockStale(lock, lockPath, Date.now())) return false;
+      // Re-read right before removing it, so a lock another receiver just retook is left alone.
+      const again = readJsonObjectFile(lockPath);
+      if (JSON.stringify(again) !== JSON.stringify(lock)) return false;
+      receiverLog('uploader-lock-stale', `removed a stale ${UPLOADER_LOCK_FILE} of pid=${lock && lock.pid !== undefined ? lock.pid : 'unknown'}`);
+      try {
+        fs.unlinkSync(lockPath);
+      } catch (e) {
+        if (!e || e.code !== 'ENOENT') return false;
+      }
+    }
+  }
+  if (!uploaderRole.held) return false;
+  if (!uploaderRole.exitHooked) {
+    uploaderRole.exitHooked = true;
+    process.on('exit', releaseUploaderRole);
+  }
+  writeHeartbeat();
+  receiverLog('uploader-role', `acquired pid=${process.pid} receiverVersion=${getReceiverVersion() || 'unknown'}`);
+  startQueueWatch();
+  // Drain on start (DD-10): whatever was queued while no uploader ran.
+  scheduleQueueScan();
+  return true;
+}
+
+/**
+ * Give the uploader role up: stop watching the queue and delete `heartbeat.json` and
+ * `uploader.lock` — each only while it still names this pid. Synchronous, so it can run in
+ * `process.on('exit')`. Never throws.
+ */
+function releaseUploaderRole() {
+  if (!uploaderRole.held) return;
+  uploaderRole.held = false;
+  stopQueueWatch();
+  const dir = uploadStateDir();
+  for (const name of [HEARTBEAT_FILE, UPLOADER_LOCK_FILE]) {
+    const file = path.join(dir, name);
+    const content = readJsonObjectFile(file);
+    if (content && content.pid !== process.pid) continue;
+    try { fs.unlinkSync(file); } catch { /* already gone */ }
+  }
+}
+
+/**
+ * Write `heartbeat.json` (DD-6) atomically. Only while the role is held. Never throws.
+ */
+function writeHeartbeat() {
+  if (!uploaderRole.held) return;
+  const hb = {
+    schema: 1,
+    pid: process.pid,
+    version: getReceiverVersion(),
+    capabilities: CAPABILITIES,
+    uploadContract: UPLOAD_CONTRACT,
+    listening: uploaderRole.listening,
+    startedAt: uploaderRole.startedAt,
+    ts: Date.now(),
+  };
+  if (!writeFileAtomic(path.join(uploadStateDir(), HEARTBEAT_FILE), JSON.stringify(hb) + '\n')) {
+    receiverLog('uploader-error', `cannot write ${HEARTBEAT_FILE}`);
+  }
+}
+
+/**
+ * One heartbeat tick: while the role is held, check the lock still names this pid (else the role was
+ * lost and is retried) and rewrite the heartbeat; without the role, retry taking it (DD-8).
+ */
+function heartbeatTick() {
+  if (uploaderRole.held) {
+    const lock = readJsonObjectFile(path.join(uploadStateDir(), UPLOADER_LOCK_FILE));
+    if (lock && lock.pid === process.pid) {
+      writeHeartbeat();
+      return;
+    }
+    receiverLog('uploader-role', `lost — ${UPLOADER_LOCK_FILE} no longer names pid=${process.pid}`);
+    uploaderRole.held = false;
+    stopQueueWatch();
+  }
+  acquireUploaderRole();
+}
+
+/**
+ * Start the heartbeat interval. `unref()`'d: the idle timer decides how long the receiver lives.
+ */
+function startHeartbeatTimer() {
+  if (uploaderRole.heartbeatTimer) clearInterval(uploaderRole.heartbeatTimer);
+  uploaderRole.heartbeatTimer = setInterval(heartbeatTick, HEARTBEAT_INTERVAL_MS);
+  if (typeof uploaderRole.heartbeatTimer.unref === 'function') uploaderRole.heartbeatTimer.unref();
+}
+
+/**
+ * Watch `queue/` (`fs.watch`, best effort) plus the `QUEUE_POLL_MS` poll backstop (DD-10).
+ */
+function startQueueWatch() {
+  stopQueueWatch();
+  try {
+    const watcher = fs.watch(uploadQueueDir(), () => scheduleQueueScan());
+    watcher.on('error', () => {
+      try { watcher.close(); } catch { /* already closed */ }
+      if (uploaderRole.watcher === watcher) uploaderRole.watcher = null;
+    });
+    if (typeof watcher.unref === 'function') watcher.unref();
+    uploaderRole.watcher = watcher;
+  } catch (err) {
+    // The poll below still picks every job up.
+    receiverLog('uploader-error', `cannot watch the upload queue: ${err && err.message ? err.message : String(err)}`);
+  }
+  uploaderRole.pollTimer = setInterval(scheduleQueueScan, QUEUE_POLL_MS);
+  if (typeof uploaderRole.pollTimer.unref === 'function') uploaderRole.pollTimer.unref();
+  // The periodic `failed/` re-queue while the role is held; unref'd like every other role timer.
+  uploaderRole.requeueTimer = setInterval(() => runRequeuePass('periodic'), FAILED_REQUEUE_INTERVAL_MS);
+  if (typeof uploaderRole.requeueTimer.unref === 'function') uploaderRole.requeueTimer.unref();
+}
+
+function stopQueueWatch() {
+  if (uploaderRole.watcher) {
+    try { uploaderRole.watcher.close(); } catch { /* already closed */ }
+    uploaderRole.watcher = null;
+  }
+  if (uploaderRole.pollTimer) {
+    clearInterval(uploaderRole.pollTimer);
+    uploaderRole.pollTimer = null;
+  }
+  if (uploaderRole.requeueTimer) {
+    clearInterval(uploaderRole.requeueTimer);
+    uploaderRole.requeueTimer = null;
+  }
+}
+
+/**
+ * Coalesce scan requests (a burst of watch events) into one scan on the next tick. A delayed scan
+ * goes through `armDueScan`.
+ */
+function scheduleQueueScan() {
+  if (uploaderRole.scanPending) return;
+  uploaderRole.scanPending = true;
+  setImmediate(() => {
+    uploaderRole.scanPending = false;
+    try {
+      scanQueue();
+    } catch (err) {
+      receiverLog('uploader-error', `queue scan failed: ${err && err.message ? err.message : String(err)}`);
+    }
+  });
+}
+
+/**
+ * The jobs in `queue/`, parsed and ordered (DD-3): by `ts`, then by the full name. Temp files, claims
+ * and non-matching names are skipped. Twin of `listJobs` in upload-queue.js.
+ * @returns {Array<ReturnType<typeof parseJobName> & { path: string }>}
+ */
+function listQueueJobs() {
+  const dir = uploadQueueDir();
+  let names;
+  try {
+    names = fs.readdirSync(dir);
+  } catch {
+    return [];
+  }
+  const jobs = [];
+  for (const name of names) {
+    if (name.endsWith('.tmp') || name.endsWith(JOB_CLAIM_SUFFIX)) continue;
+    const parsed = parseJobName(name);
+    if (parsed) jobs.push({ ...parsed, path: path.join(dir, name) });
+  }
+  return jobs.sort((a, b) => {
+    if (a.ts !== b.ts) return a.ts < b.ts ? -1 : 1;
+    if (a.name === b.name) return 0;
+    return a.name < b.name ? -1 : 1;
+  });
+}
+
+/**
+ * The claim of a job, or `null` when missing / malformed.
+ * @param {string} jobPath
+ * @returns {{ pid: number, startedAt: string }|null}
+ */
+function readJobClaim(jobPath) {
+  const parsed = readJsonObjectFile(jobPath + JOB_CLAIM_SUFFIX);
+  if (!parsed || !Number.isInteger(parsed.pid) || typeof parsed.startedAt !== 'string') return null;
+  return { pid: parsed.pid, startedAt: parsed.startedAt };
+}
+
+/**
+ * Whether a job's `uploaderContract` is one this receiver runs (DD-5). Any other job stays in the
+ * queue untouched, for a newer receiver.
+ * @param {Record<string, *>|null} job
+ * @returns {boolean}
+ */
+function isSupportedJob(job) {
+  return !!job && SUPPORTED_UPLOAD_CONTRACTS.includes(job.uploaderContract);
+}
+
+/**
+ * The key one-job-per-repo is enforced on: the job's `telemetryDir`, normalised.
+ * @param {Record<string, *>} job
+ * @returns {string}
+ */
+function jobDirKey(job) {
+  return normalizeGitRoot(typeof job.telemetryDir === 'string' ? job.telemetryDir : '');
+}
+
+/**
+ * One scheduler pass (DD-10): start due jobs in DD-3 order, at most `MAX_PARALLEL_JOBS` at a time and
+ * one per `telemetryDir`. Skipped: running jobs, jobs whose `nextAttemptAt` (or in-memory busy /
+ * crash retry) is still ahead, jobs with a live claim, jobs that vanished, and jobs of a contract this
+ * receiver does not speak (left untouched for a newer receiver). A job that fails the pre-spawn
+ * validation (`validateQueueJob`) is moved to `failed/`. When something is waiting for its due time,
+ * one unref'd timer re-scans at the earliest one.
+ */
+function scanQueue() {
+  if (!uploaderRole.held) return;
+  const now = Date.now();
+  const jobs = listQueueJobs();
+  // Forget the retry state of jobs that left the queue.
+  const present = new Set(jobs.map((j) => j.name));
+  for (const name of [...jobRetryAt.keys()]) if (!present.has(name)) jobRetryAt.delete(name);
+  for (const name of [...jobCrashCount.keys()]) if (!present.has(name)) jobCrashCount.delete(name);
+
+  let earliestDue = Infinity;
+  const busyDirs = new Set([...runningJobs.values()].map((r) => r.dirKey));
+  for (const entry of jobs) {
+    // A finishing run triggers the next scan, so nothing past the cap needs a due timer.
+    if (runningJobs.size >= MAX_PARALLEL_JOBS) break;
+    if (runningJobs.has(entry.name)) continue;
+    const retryAt = jobRetryAt.get(entry.name);
+    if (retryAt !== undefined && retryAt > now) {
+      earliestDue = Math.min(earliestDue, retryAt);
+      continue;
+    }
+    if (!isClaimStale(readJobClaim(entry.path), now, isPidAlive)) continue;
+    const read = readQueueJobFile(entry.path);
+    if (read.state === 'missing') continue;
+    // DD-5: an unsupported contract stays in the queue untouched, whatever else it holds.
+    if (read.state === 'ok' && !isSupportedJob(read.job)) continue;
+    const verdict = read.state === 'ok' ? validateQueueJob(read.job) : { ok: false, reason: 'invalid-json' };
+    if (!verdict.ok) {
+      failQueueJob(entry.path, read.job, verdict.reason);
+      continue;
+    }
+    const job = read.job;
+    const nextAttemptAt = job.nextAttemptAt;
+    if (typeof nextAttemptAt === 'number' && Number.isFinite(nextAttemptAt) && nextAttemptAt > now) {
+      earliestDue = Math.min(earliestDue, nextAttemptAt);
+      continue;
+    }
+    const dirKey = jobDirKey(job);
+    if (busyDirs.has(dirKey)) continue;
+    if (runJobProcess(job, entry.path)) busyDirs.add(dirKey);
+    else {
+      // A spawn that failed at once has just set its crash retry.
+      const crashRetryAt = jobRetryAt.get(entry.name);
+      if (crashRetryAt !== undefined && crashRetryAt > now) earliestDue = Math.min(earliestDue, crashRetryAt);
+    }
+  }
+  armDueScan(earliestDue);
+}
+
+/**
+ * Keep the one due-time re-scan timer pointed at `at` (epoch ms): re-armed only when `at` is earlier
+ * than the armed time or the armed timer has fired; `Infinity` leaves an armed timer alone (the poll
+ * backstop and job exits re-scan anyway). `unref()`'d: the idle timer decides how long we live.
+ * @param {number} at
+ */
+function armDueScan(at) {
+  if (!Number.isFinite(at)) return;
+  if (dueScan.timer && dueScan.at <= at) return;
+  if (dueScan.timer) clearTimeout(dueScan.timer);
+  dueScan.at = at;
+  dueScan.timer = setTimeout(() => {
+    dueScan.timer = null;
+    dueScan.at = 0;
+    scheduleQueueScan();
+  }, Math.max(0, at - Date.now()) + 1);
+  if (typeof dueScan.timer.unref === 'function') dueScan.timer.unref();
+}
+
+/**
+ * Read a queue job file: `missing` when it is gone (or unreadable), `invalid-json` when it does not
+ * parse to a plain object (`raw` holds the text), else `ok`.
+ * @param {string} jobPath
+ * @returns {{ state: 'missing'|'invalid-json'|'ok', job: Record<string, *>|null }}
+ */
+function readQueueJobFile(jobPath) {
+  let raw;
+  try {
+    raw = fs.readFileSync(jobPath, 'utf8');
+  } catch {
+    return { state: 'missing', job: null };
+  }
+  try {
+    const parsed = JSON.parse(raw);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return { state: 'ok', job: parsed };
+  } catch { /* not JSON */ }
+  return { state: 'invalid-json', job: null };
+}
+
+/**
+ * The major of the `version.json` beside a (real) uploader path; `NaN` when missing or unreadable.
+ * @param {string} uploader
+ * @returns {number}
+ */
+function uploaderMajorVersion(uploader) {
+  const real = realpathOrNull(uploader);
+  if (!real) return NaN;
+  const info = readJsonObjectFile(path.join(path.dirname(real), 'version.json'));
+  if (!info || typeof info.version !== 'string') return NaN;
+  const m = /^(\d+)\./.exec(info.version.trim());
+  return m ? Number(m[1]) : NaN;
+}
+
+/**
+ * The receiver's pre-spawn validation (DD-10; a subset of `validateJob` in upload-queue.js):
+ * `schema === 1`, `isAllowedUploader`, and the uploader's sibling `version.json` major ≥ 3. The JSON
+ * parse is checked by the caller. `reason` names the first failed check (the `failedReason`).
+ * @param {Record<string, *>} job
+ * @returns {{ ok: true, reason: null } | { ok: false, reason: string }}
+ */
+function validateQueueJob(job) {
+  if (job.schema !== JOB_SCHEMA) return { ok: false, reason: 'unknown-schema' };
+  const gitRoot = typeof job.gitRoot === 'string' ? job.gitRoot : '';
+  if (!isAllowedUploader(job.uploader, gitRoot, runtime.ownerHome)) return { ok: false, reason: 'uploader-not-allowed' };
+  const major = uploaderMajorVersion(job.uploader);
+  if (!Number.isFinite(major)) return { ok: false, reason: 'uploader-version-unknown' };
+  if (major < MIN_UPLOADER_MAJOR) return { ok: false, reason: 'uploader-too-old' };
+  return { ok: true, reason: null };
+}
+
+/**
+ * Move a job to `failed/` with `reason` and log `job-failed`. When the move fails, the job is retried
+ * after `BUSY_RETRY_MS` instead of being re-checked on every scan.
+ * @param {string} jobPath
+ * @param {Record<string, *>|null} job
+ * @param {string} reason
+ */
+function failQueueJob(jobPath, job, reason) {
+  const name = path.basename(jobPath);
+  const moved = moveQueueJobToFailed(jobPath, job, reason);
+  receiverLog('job-failed', `job=${name} reason=${reason}${moved ? ` — moved to ${FAILED_DIR}/` : ` (could not move to ${FAILED_DIR}/)`}`);
+  if (moved) {
+    jobRetryAt.delete(name);
+    jobCrashCount.delete(name);
+  } else {
+    jobRetryAt.set(name, Date.now() + BUSY_RETRY_MS);
+    armDueScan(Date.now() + BUSY_RETRY_MS);
+  }
+}
+
+/**
+ * Move a job the receiver refuses to run to `failed/` (DD-2): the job plus `failedAt` (ISO) and
+ * `failedReason`, atomic, 0o600; then delete it from the queue. When `job` is null (unparsable), the
+ * raw file is kept under `job: null`. Twin of `moveJobToFailed` in upload-queue.js. Never throws.
+ * @param {string} jobPath
+ * @param {Record<string, *>|null} job
+ * @param {string} reason
+ * @returns {boolean}
+ */
+function moveQueueJobToFailed(jobPath, job, reason) {
+  let base;
+  if (job && typeof job === 'object' && !Array.isArray(job)) {
+    base = { ...job };
+  } else {
+    let raw = null;
+    try { raw = fs.readFileSync(jobPath, 'utf8'); } catch { /* gone */ }
+    base = { job: null, raw };
+  }
+  const record = { ...base, failedAt: new Date().toISOString(), failedReason: String(reason) };
+  const target = path.join(uploadStateDir(), FAILED_DIR, path.basename(jobPath));
+  if (!writeFileAtomic(target, JSON.stringify(record, null, 2) + '\n')) return false;
+  try { fs.unlinkSync(jobPath); } catch { /* already gone */ }
+  try { fs.unlinkSync(jobPath + JOB_CLAIM_SUFFIX); } catch { /* none */ }
+  return true;
+}
+
+/**
+ * Run one job as `node <job.uploader> --run-job <jobPath>` (DD-10). The caller has validated it
+ * (`validateQueueJob`, incl. `isAllowedUploader`). The child is not detached, hidden, with a neutral
+ * cwd, and killed after `JOB_RUN_TIMEOUT_MS`. Its exit code is mapped per DD-5 by `onJobExit`.
+ * Never throws.
+ * @param {Record<string, *>} job
+ * @param {string} jobPath
+ * @returns {boolean} whether the job was started
+ */
+function runJobProcess(job, jobPath) {
+  const name = path.basename(jobPath);
+  let child;
+  try {
+    child = childProcess.spawn(process.execPath, [job.uploader, '--run-job', jobPath], {
+      stdio: 'ignore',
+      windowsHide: true,
+      cwd: os.tmpdir(),
+    });
+  } catch (err) {
+    onJobExit(jobPath, null, `spawn failed: ${err && err.message ? err.message : String(err)}`, false);
+    return false;
+  }
+  const run = { child, dirKey: jobDirKey(job), timer: null, timedOut: false };
+  runningJobs.set(name, run);
+  let finished = false;
+  const finish = (code, detail) => {
+    if (finished) return;
+    finished = true;
+    if (run.timer) clearTimeout(run.timer);
+    runningJobs.delete(name);
+    onJobExit(jobPath, code, detail, run.timedOut);
+    scheduleQueueScan();
+  };
+  run.timer = setTimeout(() => {
+    run.timedOut = true;
+    try { child.kill(); } catch { /* already gone */ }
+  }, JOB_RUN_TIMEOUT_MS);
+  if (typeof run.timer.unref === 'function') run.timer.unref();
+  child.on('error', (err) => finish(null, `spawn failed: ${err && err.message ? err.message : String(err)}`));
+  child.on('exit', (code, signal) => finish(code, signal ? `signal=${signal}` : ''));
+  receiverLog('job-start', `job=${name} trigger=${job.trigger || 'unknown'} pid=${child.pid}`);
+  return true;
+}
+
+/**
+ * Map a finished job run to the DD-5 action and log it (DD-10):
+ * - 0 / 11 / 13: the uploader already removed the job; its in-memory state is forgotten.
+ * - 10: the uploader rewrote `nextAttemptAt`; the scheduler waits for it (no in-memory delay).
+ * - 12: retry after `BUSY_RETRY_MS` (in memory).
+ * - anything else, a spawn failure or a timeout kill is a crash: the per-job crash counter `n` grows
+ *   and the job is retried after `backoffMs(n)`; at `JOB_MAX_CRASHES` it goes to `failed/` with
+ *   `failedReason: 'uploader-crash'`.
+ * No result re-arms the idle timer: the idle check alone looks at running and *blocking* jobs, so a
+ * finished (0), failed (11) or dropped (13) job never keeps the receiver alive.
+ * @param {string} jobPath
+ * @param {number|null} code
+ * @param {string} detail
+ * @param {boolean} timedOut
+ */
+function onJobExit(jobPath, code, detail, timedOut) {
+  const name = path.basename(jobPath);
+  const suffix = detail ? ` ${detail}` : '';
+  const forget = () => {
+    jobRetryAt.delete(name);
+    jobCrashCount.delete(name);
+  };
+  const crash = (what) => {
+    const n = (jobCrashCount.get(name) || 0) + 1;
+    jobCrashCount.set(name, n);
+    const read = readQueueJobFile(jobPath);
+    if (read.state === 'missing') {
+      forget();
+      receiverLog('job-crash', `job=${name} exit=${what} — crash ${n}, job no longer queued${suffix}`);
+      return;
+    }
+    if (n >= JOB_MAX_CRASHES) {
+      receiverLog('job-crash', `job=${name} exit=${what} — crash ${n} of ${JOB_MAX_CRASHES}${suffix}`);
+      failQueueJob(jobPath, read.job, 'uploader-crash');
+      return;
+    }
+    const delay = backoffMs(n);
+    jobRetryAt.set(name, Date.now() + delay);
+    armDueScan(Date.now() + delay);
+    receiverLog('job-crash', `job=${name} exit=${what} — crash ${n} of ${JOB_MAX_CRASHES}, retry in ${delay}ms${suffix}`);
+  };
+  if (timedOut) {
+    crash(`timeout after ${JOB_RUN_TIMEOUT_MS}ms`);
+    return;
+  }
+  switch (code) {
+    case JOB_EXIT.done:
+      forget();
+      receiverLog('job-done', `job=${name} exit=${code}`);
+      // The server is reachable again: give `failed/` jobs another run (debounced).
+      scheduleRequeueAfterDone();
+      return;
+    case JOB_EXIT.retryable: {
+      jobRetryAt.delete(name);
+      const job = readQueueJobFile(jobPath).job;
+      const at = job && typeof job.nextAttemptAt === 'number' && Number.isFinite(job.nextAttemptAt) ? job.nextAttemptAt : null;
+      receiverLog('job-retry', `job=${name} exit=${code} retryable — attempts=${job && Number.isInteger(job.attempts) ? job.attempts : 'unknown'} ` +
+        `nextAttemptAt=${at === null ? 'none' : new Date(at).toISOString()}`);
+      return;
+    }
+    case JOB_EXIT.permanent:
+      forget();
+      receiverLog('job-failed', `job=${name} exit=${code} — moved to ${FAILED_DIR}/ by the uploader`);
+      return;
+    case JOB_EXIT.busy:
+      jobRetryAt.set(name, Date.now() + BUSY_RETRY_MS);
+      armDueScan(Date.now() + BUSY_RETRY_MS);
+      receiverLog('job-retry', `job=${name} exit=${code} busy — retry in ${BUSY_RETRY_MS}ms`);
+      return;
+    case JOB_EXIT.dropped:
+      forget();
+      receiverLog('job-dropped', `job=${name} exit=${code} — repo or telemetry dir gone`);
+      return;
+    default:
+      crash(code === null ? 'none' : String(code));
+  }
+}
+
+/**
+ * Whether the queue holds a *blocking* job (DD-10): a parseable name, a supported `uploaderContract`
+ * and no live claim. A job of an unsupported contract never blocks idle-exit, so a newer receiver can
+ * take over.
+ * @returns {boolean}
+ */
+function hasBlockingQueueJob() {
+  const now = Date.now();
+  for (const entry of listQueueJobs()) {
+    if (!isClaimStale(readJobClaim(entry.path), now, isPidAlive)) continue;
+    if (isSupportedJob(readJsonObjectFile(entry.path))) return true;
+  }
+  return false;
+}
+
+/**
+ * After a `done` job: run one `failed/` re-queue pass on the next tick, unless one ran within
+ * `FAILED_REQUEUE_MIN_GAP_MS` or one is already scheduled.
+ */
+function scheduleRequeueAfterDone() {
+  if (uploaderRole.requeuePending) return;
+  if (Date.now() - uploaderRole.lastRequeueAt < FAILED_REQUEUE_MIN_GAP_MS) return;
+  uploaderRole.requeuePending = true;
+  setImmediate(() => {
+    uploaderRole.requeuePending = false;
+    runRequeuePass('after-done');
+  });
+}
+
+/**
+ * One guarded re-queue pass: only while the uploader role is held; never throws.
+ * @param {string} trigger for the error log line
+ */
+function runRequeuePass(trigger) {
+  if (!uploaderRole.held) return;
+  try {
+    requeueFailedJobs(Date.now());
+  } catch (err) {
+    receiverLog('uploader-error', `${trigger} re-queue of ${FAILED_DIR}/ failed: ${err && err.message ? err.message : String(err)}`);
+  }
+}
+
+/**
+ * Move eligible `failed/` jobs back to the queue (hook 3.0.0+, receiver only). A record is eligible
+ * when its `failedReason` passes `isRequeueableFailure`. Eligible records are grouped by
+ * `telemetryDir`; per group:
+ * - the queue already holds a job of that `telemetryDir` → skipped (that job's `done` full scan cleans
+ *   `failed/` anyway, DD-9);
+ * - otherwise one new `stop` job is built from the newest record (DD-3 order): a fresh name and
+ *   `createdAt`, `attempts: 0`, `nextAttemptAt` / `lastError` null, `requeuedFrom` (the grouped
+ *   names) and `requeueCount` (the group's highest + 1; no cap). A `stop` job runs a full scan, so it
+ *   covers every session of the repo even when the records were `session-end` jobs;
+ * - the job must pass the pre-spawn validation (`validateQueueJob`) and speak a supported contract,
+ *   else the records stay in `failed/`;
+ * - it is written atomically (0o600), then the grouped records are deleted, and `job-requeued` is
+ *   logged.
+ * Only while the uploader role is held. Never throws on a single bad record.
+ * @param {number} now epoch ms
+ * @returns {number} how many jobs were written to the queue
+ */
+function requeueFailedJobs(now) {
+  if (!uploaderRole.held) return 0;
+  uploaderRole.lastRequeueAt = now;
+  const failedDir = path.join(uploadStateDir(), FAILED_DIR);
+  let names;
+  try {
+    names = fs.readdirSync(failedDir);
+  } catch {
+    return 0;
+  }
+  /** @type {Map<string, Array<{ parsed: NonNullable<ReturnType<typeof parseJobName>>, file: string, record: Record<string, *> }>>} */
+  const groups = new Map();
+  for (const name of names) {
+    const parsed = parseJobName(name);
+    if (!parsed) continue;
+    const file = path.join(failedDir, name);
+    const record = readJsonObjectFile(file);
+    if (!record || !isRequeueableFailure(record.failedReason)) continue;
+    if (typeof record.telemetryDir !== 'string' || record.telemetryDir === '') continue;
+    const key = jobDirKey(record);
+    const group = groups.get(key) || [];
+    group.push({ parsed, file, record });
+    groups.set(key, group);
+  }
+  if (groups.size === 0) return 0;
+
+  const queuedDirs = new Set();
+  for (const entry of listQueueJobs()) {
+    const job = readJsonObjectFile(entry.path);
+    if (job) queuedDirs.add(jobDirKey(job));
+  }
+
+  let written = 0;
+  for (const [key, group] of groups) {
+    if (queuedDirs.has(key)) continue;
+    group.sort((a, b) => {
+      if (a.parsed.ts !== b.parsed.ts) return a.parsed.ts < b.parsed.ts ? -1 : 1;
+      if (a.parsed.name === b.parsed.name) return 0;
+      return a.parsed.name < b.parsed.name ? -1 : 1;
+    });
+    const newest = group[group.length - 1].record;
+    const requeueCount = Math.max(...group.map((g) => (Number.isInteger(g.record.requeueCount) && g.record.requeueCount > 0 ? g.record.requeueCount : 0))) + 1;
+    const job = { ...newest };
+    delete job.failedAt;
+    delete job.failedReason;
+    Object.assign(job, {
+      trigger: 'stop',
+      hookEvent: 'Stop',
+      createdAt: new Date(now).toISOString(),
+      attempts: 0,
+      nextAttemptAt: null,
+      lastError: null,
+      requeuedFrom: group.map((g) => g.parsed.name),
+      requeueCount,
+    });
+    const reasons = [...new Set(group.map((g) => g.record.failedReason))].join(',');
+    const verdict = isSupportedJob(job) ? validateQueueJob(job) : { ok: false, reason: 'unsupported-contract' };
+    if (!verdict.ok) {
+      receiverLog('job-requeue-skip', `${group.length} ${FAILED_DIR}/ job(s) of ${job.telemetryDir} stay: ${verdict.reason}`);
+      continue;
+    }
+    const name = buildJobName({ sessionId: typeof job.sessionId === 'string' ? job.sessionId : '', trigger: 'stop', now });
+    if (!writeFileAtomic(path.join(uploadQueueDir(), name), JSON.stringify(job, null, 2) + '\n')) {
+      receiverLog('uploader-error', `cannot write the re-queued job ${name}`);
+      continue;
+    }
+    for (const g of group) {
+      try { fs.unlinkSync(g.file); } catch { /* already gone */ }
+    }
+    written++;
+    receiverLog('job-requeued', `${name} from ${group.length} failed (${reasons}) requeueCount=${requeueCount}`);
+  }
+  if (written > 0) scheduleQueueScan();
+  return written;
 }
 
 // ---------------------------------------------------------------------------
@@ -3820,7 +4777,14 @@ function startShared(args) {
   loadRegistry();
   refreshForwardConfig();
 
+  // The uploader role (DD-8) is taken before the port: it does not depend on the OTLP listener. A
+  // receiver without it retries on every heartbeat tick.
+  acquireUploaderRole();
+  startHeartbeatTimer();
+
   listen(() => {
+    uploaderRole.listening = true;
+    writeHeartbeat();
     receiverLog('start',
       `listening on 127.0.0.1:${runtime.port} mode=shared ownerHash=${runtime.ownerHash.slice(0, 12)} ` +
       `receiverVersion=${getReceiverVersion() || 'unknown'} sessions=${registry.size} ` +
@@ -3858,6 +4822,19 @@ function listen(onListening) {
   });
 
   server.on('error', (err) => {
+    if (err && err.code === 'EADDRINUSE' && runtime.shared && uploaderRole.held) {
+      // DD-8: the port belongs to another receiver (e.g. an older one without the uploader role),
+      // but this process holds `uploader.lock` — keep running the upload queue without a listener.
+      // The idle timer retires it once no job is queued or running.
+      runtime.queueOnly = true;
+      uploaderRole.listening = false;
+      writeHeartbeat();
+      receiverLog('queue-only',
+        `queue-only: port ${runtime.port} busy — running the upload queue without a listener ` +
+        `receiverVersion=${getReceiverVersion() || 'unknown'} pid=${process.pid}`);
+      armIdleTimer();
+      return;
+    }
     if (err && err.code === 'EADDRINUSE') {
       // The normal path when a second session of the same project starts: one receiver already
       // serves every session of its project. Logged once per run of such exits: a repeat right
@@ -3964,4 +4941,32 @@ module.exports = {
   forwardHealth,
   parseForwardConfig,
   forwardBackoffMs,
+  // upload job queue (hook 3.0.0+); twins of upload-queue.js, pinned by upload-job-queue.algo.test.js
+  parseJobName,
+  buildJobName,
+  isHeartbeatFresh,
+  isClaimStale,
+  backoffMs,
+  JOB_EXIT,
+  // failed/ re-queue (hook 3.0.0+, receiver only)
+  isRequeueableFailure,
+  requeueFailedJobs,
+  FAILED_REQUEUE_MIN_GAP_MS,
+  FAILED_REQUEUE_INTERVAL_MS,
+  UPLOAD_DIR,
+  QUEUE_DIR,
+  FAILED_DIR,
+  HEARTBEAT_FILE,
+  UPLOADER_LOCK_FILE,
+  UPLOAD_QUEUE_CAPABILITY,
+  UPLOAD_CONTRACT,
+  JOB_SCHEMA,
+  HEARTBEAT_STALE_MS,
+  JOB_RUN_TIMEOUT_MS,
+  SUPPORTED_UPLOAD_CONTRACTS,
+  HEARTBEAT_INTERVAL_MS,
+  QUEUE_POLL_MS,
+  JOB_MAX_CRASHES,
+  BUSY_RETRY_MS,
+  MAX_PARALLEL_JOBS,
 };

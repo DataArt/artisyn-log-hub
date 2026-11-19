@@ -5,7 +5,7 @@ description: "Popular MIT local CLI that reports token/cost usage from local age
 tags:
   - competitive-research
   - local-cli
-timestamp: "2026-11-01T00:00:00+04:00"
+generated: { by: "human:denistsyplakov", at: "2026-11-01T00:00:00+04:00" }
 ---
 
 # ccusage

@@ -1,0 +1,49 @@
+.tab {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+}
+
+.bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  border-bottom-width: 1px;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+.barText {
+  min-width: 0;
+  flex: 1 1 0%;
+  color: var(--color-muted-foreground);
+}
+
+.body {
+  min-height: 0;
+  flex: 1 1 0%;
+}
+
+.linkBar {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-bottom-width: 1px;
+  background: var(--color-info-bg);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+.linkText {
+  min-width: 0;
+  flex: 1 1 0%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color-info-text);
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+}

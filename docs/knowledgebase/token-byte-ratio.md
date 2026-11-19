@@ -4,7 +4,7 @@ title: "Bytes-per-Token Ratio"
 description: "The BYTES_PER_TOKEN constant: rationale, usage locations in the UI, and change procedures."
 tags:
   - tokens
-timestamp: "2026-11-03T00:00:00+04:00"
+generated: { by: "human:denistsyplakov", at: "2026-11-03T00:00:00+04:00" }
 ---
 
 # Bytes-per-Token Ratio

@@ -1,3 +1,9 @@
+---
+type: "Task"
+title: "Read-Only Demo User"
+description: "demo user that sees everything like a normal user but cannot change anything (no keys, no writes): enforced in endpoints and by a read-only DB connection; simple password allowed"
+---
+
 # 2026-11-05: Read-Only Demo User
 
 **Status:** todo

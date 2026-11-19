@@ -5,7 +5,7 @@ description: "Dynatrace Hub integration that ingests Claude Code's native OTel i
 tags:
   - competitive-research
   - apm-vendor
-timestamp: "2026-11-01T00:00:00+04:00"
+generated: { by: "human:denistsyplakov", at: "2026-11-01T00:00:00+04:00" }
 ---
 
 # Dynatrace Claude Code Agent Monitoring

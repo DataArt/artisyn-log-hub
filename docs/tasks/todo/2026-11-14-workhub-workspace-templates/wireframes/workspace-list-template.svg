@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="440" viewBox="0 0 1280 440" font-family="Segoe UI, Inter, Arial, sans-serif">
+  <title>Workspace list: each card shows the template the workspace was created from</title>
+  <rect width="1280" height="440" fill="#ffffff"/>
+  <!-- top nav -->
+  <line x1="0" y1="47.5" x2="1280" y2="47.5" stroke="#e5e5e5"/>
+  <text x="16" y="29" font-size="14" font-weight="600" fill="#111">Artisyn AI Work Hub</text>
+  <text x="157" y="29" font-size="13" fill="#888">›</text>
+  <text x="175" y="29" font-size="14" fill="#6b6b6b">Workspaces</text>
+  <rect x="1126.5" y="10.5" width="137" height="28" rx="6" fill="#fff" stroke="#e0e0e0"/>
+  <text x="1135" y="29" font-size="14" fill="#444">dt@dataart.com ⌄</text>
+
+  <!-- header -->
+  <text x="152" y="97" font-size="18" font-weight="600" fill="#111">Workspaces</text>
+  <rect x="980" y="72" width="148" height="36" rx="6" fill="#2f4bd0"/>
+  <text x="1054" y="95" font-size="14" font-weight="600" fill="#fff" text-anchor="middle">+  New workspace</text>
+
+  <!-- card 1: pre-migration workspace, shown as Claude Code -->
+  <rect x="152.5" y="124.5" width="316" height="120" rx="8" fill="#f8f8f8" stroke="#e3e3e3"/>
+  <g fill="none" stroke="#2f4bd0" stroke-width="1.4"><path d="M170 146 h5 l2 2 h7 v10 h-14 z"/></g>
+  <text x="193" y="159" font-size="16" font-weight="600" fill="#111">Real Claude check</text>
+  <rect x="193.5" y="167.5" width="82" height="20" rx="10" fill="#eef1fc" stroke="#c9d2f5"/>
+  <text x="234.5" y="182" font-size="12" fill="#2f4bd0" text-anchor="middle">Claude Code</text>
+  <text x="285" y="182" font-size="13" fill="#6b6b6b">main · 1 open workstream</text>
+  <rect x="169" y="203" width="59" height="32" rx="5" fill="#2f4bd0"/>
+  <text x="198.5" y="224" font-size="13" font-weight="600" fill="#fff" text-anchor="middle">Open</text>
+  <g fill="none" stroke="#6b6b6b" stroke-width="1.3"><path d="M248 213 h12 M251 213 v-2 h6 v2 M250 213 l1 12 h6 l1 -12"/></g>
+  <text x="268" y="224" font-size="13" font-weight="600" fill="#6b6b6b">Delete…</text>
+
+  <!-- card 2 -->
+  <rect x="481.5" y="124.5" width="316" height="120" rx="8" fill="#f8f8f8" stroke="#e3e3e3"/>
+  <g fill="none" stroke="#2f4bd0" stroke-width="1.4"><path d="M499 146 h5 l2 2 h7 v10 h-14 z"/></g>
+  <text x="522" y="159" font-size="16" font-weight="600" fill="#111">Claude login</text>
+  <rect x="522.5" y="167.5" width="82" height="20" rx="10" fill="#eef1fc" stroke="#c9d2f5"/>
+  <text x="563.5" y="182" font-size="12" fill="#2f4bd0" text-anchor="middle">Claude Code</text>
+  <text x="614" y="182" font-size="13" fill="#6b6b6b">main · 0 open workstreams</text>
+  <rect x="498" y="203" width="59" height="32" rx="5" fill="#2f4bd0"/>
+  <text x="527.5" y="224" font-size="13" font-weight="600" fill="#fff" text-anchor="middle">Open</text>
+  <g fill="none" stroke="#6b6b6b" stroke-width="1.3"><path d="M577 213 h12 M580 213 v-2 h6 v2 M579 213 l1 12 h6 l1 -12"/></g>
+  <text x="597" y="224" font-size="13" font-weight="600" fill="#6b6b6b">Delete…</text>
+
+  <!-- card 3: new OpenCode workspace -->
+  <rect x="810.5" y="124.5" width="316" height="120" rx="8" fill="#f8f8f8" stroke="#e3e3e3"/>
+  <g fill="none" stroke="#2f4bd0" stroke-width="1.4"><path d="M828 146 h5 l2 2 h7 v10 h-14 z"/></g>
+  <text x="851" y="159" font-size="16" font-weight="600" fill="#111">payments-service</text>
+  <rect x="851.5" y="167.5" width="72" height="20" rx="10" fill="#f1f1f1" stroke="#d9d9d9"/>
+  <text x="887.5" y="182" font-size="12" fill="#444" text-anchor="middle">OpenCode</text>
+  <text x="933" y="182" font-size="13" fill="#6b6b6b">main · 0 open workstreams</text>
+  <rect x="827" y="203" width="59" height="32" rx="5" fill="#2f4bd0"/>
+  <text x="856.5" y="224" font-size="13" font-weight="600" fill="#fff" text-anchor="middle">Open</text>
+  <g fill="none" stroke="#6b6b6b" stroke-width="1.3"><path d="M906 213 h12 M909 213 v-2 h6 v2 M908 213 l1 12 h6 l1 -12"/></g>
+  <text x="926" y="224" font-size="13" font-weight="600" fill="#6b6b6b">Delete…</text>
+
+  <!-- annotations -->
+  <g font-size="12" fill="#92400e">
+    <line x1="238" y1="188" x2="238" y2="290" stroke="#d97706" stroke-dasharray="3 3"/>
+    <rect x="152" y="290" width="400" height="66" rx="6" fill="#fffbeb" stroke="#f59e0b"/>
+    <text x="164" y="310">FR-3c: template badge from the workspace's template id</text>
+    <text x="164" y="326">(template name). Workspaces created before the migration</text>
+    <text x="164" y="342">are backfilled to claude-code and show Claude Code (FR-6c).</text>
+
+    <line x1="896" y1="188" x2="896" y2="290" stroke="#d97706" stroke-dasharray="3 3"/>
+    <rect x="726" y="290" width="400" height="66" rx="6" fill="#fffbeb" stroke="#f59e0b"/>
+    <text x="738" y="310">Badge is read-only: the template cannot be changed after</text>
+    <text x="738" y="326">creation (FR-3a). No template management on this page</text>
+    <text x="738" y="342">(FR-4).</text>
+  </g>
+  <text x="16" y="428" font-size="11" fill="#bbbbbb">Wireframe — 2026-11-14-workhub-workspace-templates — FR-3c, FR-6c</text>
+</svg>

@@ -8,6 +8,10 @@
 //   - tmp/scenarios/.env.local does NOT exist: the stand bundle loads `.env.local` from
 //     `__dirname/..` (app.module.ts), i.e. from tmp/scenarios/, which would leak overrides.
 //
+// Docker is deliberately not checked here: only S-HOOK-10 needs it, and that spec runs its own
+// `docker info` preflight (tests/scenarios/helpers/docker-laptop.ts `assertDockerAvailable`) and
+// fails with a readable message when Docker is missing.
+//
 // Usage: node scripts/scenarios/preflight.mjs [--mode a,b,c,d]
 import fs from 'node:fs';
 import path from 'node:path';

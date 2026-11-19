@@ -1,0 +1,6 @@
+This is a tool-behaviour test. Use the PowerShell tool (not Bash) to run each of the following commands, one tool call per command, exactly as written, without changing or combining them. Do not retry a command that fails or is refused.
+
+1. curl.exe --version
+2. hostname
+
+Then reply with a table: command, ran / refused / asked for permission, first line of output or the exact refusal text.

@@ -20,7 +20,7 @@ suites are described in [`tests/README.md`](../README.md).
 | PostgreSQL | every stand gets its own schema in `DATABASE_URL` |
 | Mailpit (SMTP + HTTP API) | mode B (`password-confirm`) confirms signups through real emails; mode D (`strict-managed`) sends set-password links through it |
 | Playwright Chromium | `npx playwright install chromium` once |
-| Docker (optional) | the easiest way to get Postgres and Mailpit: `docker compose -f tests/scenarios/docker-compose.yml up` |
+| Docker | the easiest way to get Postgres and Mailpit (`docker compose -f tests/scenarios/docker-compose.yml up`); **required by S-HOOK-10** (mode A), which runs the hook on a "laptop" container from `public.ecr.aws/docker/library/node:24-bookworm` (pulled once when missing) that reaches the stand at `host.docker.internal:<stand port>` |
 
 `npm install` in the repo root, `server/` and `artisyn-hooks-installer/`, and `bun install` in
 `client/`, are assumed — the stand is built from the working tree.
@@ -43,13 +43,19 @@ when something is missing: the database is unreachable, Mailpit does not answer 
 or D is selected), the Chromium browser is not installed, or a stray `tmp/scenarios/.env.local` exists
 (the stand bundle would load it as overrides).
 
+Docker is not part of the runner's preflight (only S-HOOK-10 needs it): S-HOOK-10 checks
+`docker info` itself as its first step and fails with a readable "S-HOOK-10 preflight: Docker is
+not available" message — never a silent skip. It creates exactly one container, `scn-laptop-<run>`
+(labels `artisyn.scenario=S-HOOK-10`, `artisyn.scenario.run=<run>`), and removes it at the end;
+`docker ps -a --filter label=artisyn.scenario=S-HOOK-10` lists any left over by an aborted run.
+
 ### Environment variables
 
 | Variable | Set by | Default | Purpose |
 |---|---|---|---|
 | `DATABASE_URL` | you | `postgresql://postgres:pw@localhost:5432/postgres` | Postgres that holds the stand schemas |
 | `MAILPIT_URL` | you | `http://localhost:8025` | Mailpit HTTP API (modes B and D) |
-| `MAILPIT_SMTP` | you | `localhost:1025` | Mailpit SMTP, becomes the stand's `SMTP_HOST`/`SMTP_PORT` |
+| `MAILPIT_SMTP` | you | `127.0.0.1:1025` | Mailpit SMTP, becomes the stand's `SMTP_HOST`/`SMTP_PORT` |
 | `STAND_URL` | runner → Playwright | — | `baseURL` of the stand (`http://127.0.0.1:<port>`) |
 | `STAND_MODE` | runner → Playwright | — | `a`, `b`, `c` or `d` |
 | `STAND_SCHEMA` | runner → Playwright | — | the stand's schema, used by the `db` fixture |

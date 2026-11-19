@@ -1,3 +1,9 @@
+---
+type: "Task"
+title: "Copilot Session Upload"
+description: "Hook uploads Copilot events.jsonl on Stop; server parses and stores session metadata and cost; UI shows Copilot sessions in the existing list with cost per row."
+---
+
 # T-77: Copilot Session Upload
 
 **Status:** todo

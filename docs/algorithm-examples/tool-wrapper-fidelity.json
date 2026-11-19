@@ -66,6 +66,24 @@
     "note": "Fixture: 4000 lines = 90893 bytes < 102400 -> captured whole, not truncated (rule 4)."
   },
   {
+    "id": "FW-12",
+    "input": {"os": "windows", "shell": "powershell", "tools": ["zze"], "command": "zze"},
+    "expected": {"exitCode": 0, "records": 1, "record": {"tool": "zze", "exitCode": 0, "stderrBytes": 20}, "errCapture": "\r\nzze: after empty\r\n"},
+    "note": "Rule 3 (stderr text, GH-149 FR-7): the empty native stderr line is a RemoteException record whose Exception.Message is empty, not its ToString() type name. .NET AppendLine writes CRLF on Windows: 2 + 16 + 2 = 20 bytes."
+  },
+  {
+    "id": "FW-13",
+    "input": {"os": "linux", "shell": "pwsh", "tools": ["zze"], "command": "zze"},
+    "expected": {"exitCode": 0, "records": 1, "record": {"tool": "zze", "exitCode": 0, "stderrBytes": 18}, "errCapture": "\nzze: after empty\n"},
+    "note": "Rule 3 (stderr text, GH-149 FR-7) under pwsh on Linux: the empty stderr line stays empty in .err; AppendLine writes LF there: 1 + 16 + 1 = 18 bytes."
+  },
+  {
+    "id": "FW-14",
+    "input": {"os": "windows", "shell": "powershell", "tools": ["zzc"], "command": "zzc one two; \"exit=$LASTEXITCODE\"", "permissionMode": "default"},
+    "expected": {"exitCode": 0, "wrapped": false, "records": 0},
+    "note": "Rule 1 (permission-mode gate, GH-149 DD-1): outside bypassPermissions the PreToolUse hook leaves the command as typed, so nothing is recorded and both runs print exit=3."
+  },
+  {
     "id": "FO-01",
     "input": {"os": "any", "shell": "bash", "tools": ["zz"], "command": "zz args x", "setup": "calls-is-file"},
     "expected": {"exitCode": 0, "stdout": "[x]\n", "records": 0, "breaker": ["zz"]},

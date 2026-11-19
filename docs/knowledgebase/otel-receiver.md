@@ -1,11 +1,11 @@
 ---
 type: "Architecture Guide"
 title: "OTEL Receiver (per-user shared loopback OTLP listener)"
-description: "Why the hook runs its own loopback OTLP/JSON receiver, why it is one receiver per OS user since hook 2.30.0 (the ~/.artisyn/otel state dir, repoKey, shared launch, HMAC hello/auth, register contract 1, session-status, per-record routing with the pending spool, per-repo uploads and realtime, forwarding to a foreign collector, the user-level SessionStart hook, legacy callers), the legacy per-project mode with its 409 owner-mismatch guard and stale-receiver restart, receiver behaviour, the on-disk chunk layout, traces and the hookVersion line field, the realtime sender, and how chunks are collected, uploaded and pruned."
+description: "Why the hook runs its own loopback OTLP/JSON receiver, why it is one receiver per OS user since hook 2.30.0 (the ~/.artisyn/otel state dir, repoKey, shared launch, HMAC hello/auth, register contract 1, session-status, per-record routing with the pending spool, per-repo uploads and realtime, forwarding to a foreign collector, the user-level SessionStart hook, legacy callers, the 3.0.0 uploader role with queue-only mode and the idle rule — the receiver is no longer optional), the legacy per-project mode with its 409 owner-mismatch guard and stale-receiver restart, receiver behaviour, the on-disk chunk layout, traces and the hookVersion line field, the realtime sender, and how chunks are collected, uploaded and pruned."
 tags:
   - hooks
   - otel
-timestamp: "2026-11-09T00:00:00+04:00"
+generated: { by: "human:denistsyplakov", at: "2026-11-18T23:00:00+04:00" }
 ---
 
 # OTEL Receiver
@@ -114,7 +114,13 @@ node otel-receiver.js --shared --owner-home <home> --state-dir <dir> --port <n>
 - **A newer hook meets an older running receiver:** the hook uses it as is. It writes only the
   one-time capability `warn` (below) and **never restarts** a shared receiver; the newer code takes
   over after the old receiver's idle-exit.
-- Cwd is `os.tmpdir()`; `EADDRINUSE` → exit 0 (both unchanged).
+- Cwd is `os.tmpdir()`; `EADDRINUSE` → exit 0, unless the process already holds the uploader role
+  (hook `3.0.0`+): then it stays up **queue-only** (see "Uploader role" below).
+- **Not optional since hook `3.0.0`:** the hook starts a shared receiver for every repo, whether
+  `otelEnabled` is `true` or not (`isReceiverWanted` in `otel-register.js`, used by the
+  `SessionStart` announce in `lifecycle-hook.js` and by every re-arm). A repo with `otelEnabled:
+  false` registers with no signals, so its OTLP records are dropped as before; the receiver serves
+  it only as its log uploader.
 
 ### Auth handshake (DD-9)
 
@@ -300,6 +306,77 @@ shared port (for example through a stale `otelReceiverPort`):
 `s-compat-01` pins this with the frozen `2.28.0` fixture. Cross-version rules:
 [hook-api-versioning.md](hook-api-versioning.md) § "Hook ↔ OTEL receiver".
 
+### Uploader role (hook `3.0.0`+)
+
+Besides listening, a shared receiver is the **single log uploader** of its OS user: `Stop` /
+`SessionEnd` hooks drop upload jobs into `~/.artisyn/upload/queue/` and this process runs each one
+as `node <job.uploader> --run-job <jobPath>`. The protocol, the job format and the hook's fallback:
+[upload-job-queue.md](upload-job-queue.md).
+
+```text diagram=upload-queue-components
+ Developer machine (one OS user)
+
+  repo A hook ─┐  Stop / SessionEnd
+  repo B hook ─┼── 1. read heartbeat.json
+  repo C hook ─┘   2. fresh? write a job ──► ~/.artisyn/upload/
+        │                                     ├─ queue/<name>.json   ── fs.watch + 10 s poll ──┐
+        │                                     ├─ failed/<name>.json  ◄─ jobs that gave up ─────┤
+        │                                     ├─ heartbeat.json      ◄─ rewritten every 5 s ───┤
+        │                                     └─ uploader.lock       ◄─ one holder ────────────┤
+        │                                                                                       │
+        │                                  Shared receiver (one process per OS user) ◄──────────┘
+        │                                   ├─ uploader role ─► node <job.uploader> --run-job <job>
+        │                                   │                   (≤ 2 at once, one per repo,
+        │                                   │                    the job's OWN repo's hook copy)
+        │                                   └─ OTLP listener 127.0.0.1:<port>  (absent when queue-only)
+        │                                                  │
+        │ fallback: in-process upload                      ▼
+        └──────────────────────────────► <repo>/.upload.lock  (per repo: one upload at a time)
+                                                           │
+                                                           ▼ that repo's server URL and API key
+                                                    Log Hub server
+```
+
+The process therefore has **two independent roles** — **listener** (it bound the OTLP port) and
+**uploader** (it holds `uploader.lock`). Either can exist without the other:
+
+| Listener | Uploader | When |
+|---|---|---|
+| yes | yes | the normal shared receiver `3.0.0`+ |
+| yes | no | another live process holds `uploader.lock`; this one retries it on every heartbeat tick |
+| no | yes | **queue-only**: the port is busy (an older receiver, or a foreign program) — it runs jobs only, heartbeat `listening: false`, log `queue-only: port <p> busy …` |
+| no | no | exits 0 at `EADDRINUSE`, as before `3.0.0` |
+
+- The role is a second, independent one next to the OTLP listener: whoever holds
+  `<ownerHome>/.artisyn/upload/uploader.lock` (`'wx'`, `{pid, startedAt, version}`) is the uploader.
+  `startShared` takes it **before** `listen()`; a receiver without it retries on every heartbeat tick;
+  a lock whose pid is dead or whose heartbeat is older than 60 s is stale and retaken.
+- While it holds the role it writes `heartbeat.json` every 5 s (`listening` tells whether it also has
+  the port); hooks hand off only on a fresh heartbeat. `CAPABILITIES` gains `upload-queue-v1`.
+- Scheduler: `fs.watch` on the queue plus a 10 s poll and a drain scan when the role is taken; jobs
+  in name order, one per `telemetryDir`, at most two at a time; the uploader path is re-checked with
+  `isAllowedUploader` before spawn; a run is killed after 15 min.
+- **Idle rule**: on expiry a process that holds the role and has a running job, or a *blocking*
+  queued job (a parseable name, a supported `uploaderContract`, no live claim — a job waiting for
+  its `nextAttemptAt` counts), re-arms the timer instead of exiting. A job of an unsupported contract
+  never blocks, so a newer receiver can take over. A queue-only process arms the timer at start and
+  on every job event and, when it fires with nothing to do, exits with
+  `idle-exit queue-only: no queued or running job …` — it has no registry, spool or sweep to flush.
+- On exit the receiver deletes `heartbeat.json` and `uploader.lock`.
+- **`failed/` re-queue** (`requeueFailedJobs`): after a job exits `done` (the server is reachable
+  again; at most once per `FAILED_REQUEUE_MIN_GAP_MS` = 60 s) and every
+  `FAILED_REQUEUE_INTERVAL_MS` = 30 min (unref'd timer, only while the role is held), records with
+  `failedReason` `over-age`, `max-attempts` or `uploader-crash` (`isRequeueableFailure`) go back to
+  the queue as **one `stop` job per `telemetryDir`** — built from the newest record with a fresh
+  name and `createdAt`, `attempts: 0`, `requeuedFrom` and `requeueCount` — unless that repo already
+  has a queued job. The job must pass the pre-spawn validation; the grouped records are deleted after
+  the atomic write. Logged `job-requeued <name> from <n> failed (<reasons>) requeueCount=<k>` (or
+  `job-requeue-skip` when the validation refuses it). No cap: an offline cycle costs 3 s per try.
+  Rules: [algorithms/upload-job-queue.md](algorithms/upload-job-queue.md) rule 13.
+- The rules shared with the hook (`buildJobName`, `parseJobName`, `isHeartbeatFresh`, `isClaimStale`, `backoffMs`,
+  `JOB_EXIT`, the constants) are standalone twins here — the receiver never `require`s a hook module
+  — pinned by [algorithms/upload-job-queue.md](algorithms/upload-job-queue.md).
+
 ## Legacy per-project mode (hooks `≤ 2.29.0`, or no `port.json`)
 
 Before `2.30.0` **the project directory was the unit**: every project had its own OTEL directory,
@@ -316,8 +393,11 @@ rules below apply only to it.
 
 ### Spawn and register handshake (legacy)
 
-Two call sites, both gated on `config.otelEnabled` (the same call sites announce a shared-mode
-session — hello, spawn when nothing answers, authenticated register — see "Register contract 1"):
+Two call sites, both gated on `isReceiverWanted` (`otel-register.js`): `config.otelEnabled`, or —
+since hook `3.0.0` — a launch that resolves to shared mode. The same call sites announce a
+shared-mode session (hello, spawn when nothing answers, authenticated register — see "Register
+contract 1"). So in legacy mode `otelEnabled: false` still starts no receiver, while in shared mode
+every repo starts one, because the shared receiver is also the upload-queue runner:
 
 | Call site | Event | When |
 |---|---|---|
@@ -441,12 +521,12 @@ answers `200` and exits only once the response has been flushed.
 
 | Aspect | Behaviour |
 |---|---|
-| Bind | `127.0.0.1` only — loopback, so no firewall prompt. `EADDRINUSE` ⇒ one log line and `exit 0` (the normal second-session path); any other listen error ⇒ `exit 1`. |
+| Bind | `127.0.0.1` only — loopback, so no firewall prompt. `EADDRINUSE` ⇒ one log line and `exit 0` (the normal second-session path), except for a shared receiver that holds the uploader role, which stays up queue-only (hook `3.0.0`+); any other listen error ⇒ `exit 1`. |
 | Routes | `POST /v1/logs`, `POST /v1/metrics`, `POST /v1/traces` (hook `2.29.0`+), `POST /artisyn/register`, `POST /artisyn/shutdown`; shared mode adds `POST /artisyn/hello` and `POST /artisyn/session-status`, and `register` / `session-status` / `shutdown` need `x-artisyn-auth` there. Anything else ⇒ `404`; non-`POST` on a known path ⇒ `405`. |
 | Browser-origin defence | Any request carrying `Origin` or `Referer` ⇒ `403`; `Content-Type` other than `application/json` ⇒ `415`. |
 | Body cap | Wire bytes (pre-decompression) over `otelReceiverMaxBodyKb` ⇒ `413` + `req.destroy()`, nothing written. |
 | Compression | `gzip`/`deflate` decompressed before parsing; any other non-empty `Content-Encoding` ⇒ `415`. A decompression or JSON failure ⇒ `400`. |
-| Idle timer | One timer, re-armed at the **start** of every request including rejected ones; firing ⇒ one last tail sweep (below), then `exit 0` after `otelReceiverIdleTimeoutMs` (10 min default; shared mode: the fixed `SHARED_IDLE_TIMEOUT_MS`, and the registry is flushed first). Apart from an authenticated shutdown it is the only exit path; any active session's exports keep re-arming it. |
+| Idle timer | One timer, re-armed at the **start** of every request including rejected ones; firing ⇒ one last tail sweep (below), then `exit 0` after `otelReceiverIdleTimeoutMs` (10 min default; shared mode: the fixed `SHARED_IDLE_TIMEOUT_MS`, and the registry is flushed first). Apart from an authenticated shutdown it is the only exit path; any active session's exports keep re-arming it. Hook `3.0.0`+: a receiver with the uploader role re-arms instead of exiting while a job runs or a blocking job is queued (see "Uploader role"). |
 | Tail sweep | Every `SWEEP_INTERVAL_MS` (60 s, `unref()`'d interval) — see "Telemetry tail sweep" below. |
 | Working directory | `os.tmpdir()` (see "Neutral working directory" above). |
 | Missing otel dir | `dir-gone` — see "On-disk chunk layout". |
@@ -645,6 +725,7 @@ they buy.
 - [hook-installation.md](hook-installation.md) — OTEL settings, port allocation and the
   `.claude/settings.local.json` `env` block (ownership, per-key merge, stale-endpoint rewrite)
 - [hook-api-versioning.md](hook-api-versioning.md) — hook ↔ receiver cross-version contract
+- [upload-job-queue.md](upload-job-queue.md) — the uploader role: upload jobs, heartbeat, `--run-job`
 - [algorithms/otel-shared-routing.md](algorithms/otel-shared-routing.md) — per-record routing,
   register validation and forwarding rules
 - [algorithms/otel-status-reason.md](algorithms/otel-status-reason.md) — effective config, state,

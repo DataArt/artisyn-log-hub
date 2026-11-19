@@ -1,3 +1,9 @@
+---
+type: "Task"
+title: "Subdirectory Sessions Show Absolute Paths"
+description: "the viewer's display root falls back to the session cwd, so paths outside a subdirectory session stay absolute (found by /big-prod-e2e-test 20261023-192004, S10/S11)"
+---
+
 # 2026-10-23: Subdirectory Sessions Show Absolute Paths
 
 **Status:** todo

@@ -4,7 +4,7 @@ title: "Authorization and Authentication"
 description: "The five configurable auth modes (incl. strict-managed admin-provisioned accounts), their env vars, per-mode route gating, the auth security hardening (TRUST_PROXY, brute-force login delay, self-service password change and account deletion), how Mode 1's localhost gate works inside a container, and the per-team access modes that decide whose sessions and prompts a caller may read."
 tags:
   - auth
-timestamp: "2026-11-16T00:00:00+04:00"
+generated: { by: "human:denistsyplakov", at: "2026-11-16T00:00:00+04:00" }
 ---
 
 # Authorization and Authentication

@@ -5,7 +5,7 @@ description: "Current behaviour of the Claude Code hook: where its source lives 
 tags:
   - hooks
   - otel
-timestamp: "2026-11-09T00:00:00+04:00"
+generated: { by: "human:denistsyplakov", at: "2026-11-09T00:00:00+04:00" }
 ---
 
 # Hook System Overview
@@ -47,8 +47,8 @@ The authoritative wiring is `HOOKS_JSON` in `scripts/build-hooks-installer.js` (
 |---|---|---|
 | `UserPromptSubmit` | `telemetry-hook.js` | Writes `prompt_start`; throttled spawn of the background upload; re-arms the OTEL receiver |
 | `PreToolUse` (matcher `PowerShell`) | `tool-wrap-powershell.js` | Prefixes a PowerShell command that mentions a monitored CLI tool with a logging wrapper (`updatedInput`). Not a guardrail: no permission decision, exits 0 with no output on any failure. See [tool-monitoring.md](tool-monitoring.md) |
-| Lifecycle events (`SessionStart`, `SessionEnd`, tool, permission, sub-agent, compaction, `PostToolBatch`, `StopFailure`) | `lifecycle-hook.js` | Writes `type: 'artisyn'` events; at `SessionStart` also spawns the OTEL receiver, generates the tool-wrap Bash shims and runs the OTEL config checks |
-| `Stop` | `send-logs-hook.js`, then `post-turn-analysis-hook.js` | Full upload run; post-turn advisor / attribution ([turn-end-cost-advisor.md](turn-end-cost-advisor.md)) |
+| Lifecycle events (`SessionStart`, `SessionEnd`, tool, permission, sub-agent, compaction, `PostToolBatch`, `StopFailure`) | `lifecycle-hook.js` | Writes `type: 'artisyn'` events; at `SessionStart` also spawns the OTEL receiver (since hook `3.0.0` in shared mode regardless of `otelEnabled`, because it is also the upload-queue runner — [upload-job-queue.md](upload-job-queue.md)), shows the merged `systemMessage` (OTEL endpoint warning + Node.js version warning), generates the tool-wrap Bash shims and runs the OTEL config checks |
+| `Stop` | `send-logs-hook.js`, then `post-turn-analysis-hook.js` | Upload hand-off to the shared receiver (a `stop` job) or an in-process full upload run; post-turn advisor / attribution ([turn-end-cost-advisor.md](turn-end-cost-advisor.md)) |
 | `SessionEnd` | `lifecycle-hook.js` + `send-logs-hook.js` | Event, then a scoped flush of the ending session |
 
 Detached processes that are **not** hook entry points: `prompt-upload-hook.js` (background
@@ -150,6 +150,11 @@ rules you would not guess:
   dir and `ai_work_dir` hang off it.
 - The **worktree root** (`--show-toplevel`) is resolved too and uploaded as `git.worktreeRoot`
   next to `git.root`; without it, every path in a worktree session would classify as out-of-repo.
+- **Checked 2026-11-17 on Claude Code 2.1.326 (GH-149 FR-5):** in a `git worktree add` worktree
+  (and in Claude Code's own `--worktree`) the plugin loads from the main checkout's marketplace path,
+  every hook fires and writes to the main checkout's `.artisyn/ai_work_dir`, and OTEL export works
+  as in the main checkout (the installer's OTEL keys are user-scope settings, which a worktree
+  cannot skip). No fix needed.
 - **`ARTISYN_PROJECT_ROOT` override** (`project-root-override.js`): when set to a non-blank
   directory **and** the hook's `cwd` is inside it, that directory replaces the `--git-common-dir`
   root everywhere (config, `ai_work_dir`, transcript slug, OTEL owner, code inventory, `git.root`).
@@ -178,14 +183,35 @@ fail.
 | `claude-otel` | `<telemetryDir>/otel/<session_id>/<epochMs>-<seq>.jsonl` | One immutable chunk per inbound OTLP request; gated on `otelEnabled`; collected unfiltered |
 | `tool-calls` | `<workDir>/tool-wrap/upload/<session_id>.jsonl` | Assembled by `tool-wrap-records.js` just before upload; the whole cumulative set is re-sent each time (the server keeps one per session) |
 
-### Order within a `Stop` run
+### The `Stop` pipeline (hook `3.0.0`+)
 
-1. The current session's own `claude` / `claude-subagent` files first — the post-turn analysis
-   needs the server to have this transcript already, so it must not wait behind a backlog.
+`send-logs-hook.js` on `Stop` first decides where the upload runs (`decideHandOff`,
+[upload-job-queue.md](upload-job-queue.md)):
+
+- **Hand-off** (the shared receiver's `heartbeat.json` is fresh and the queue dir usable): write one
+  `stop` job into `~/.artisyn/upload/queue/`, log `queued: job=… elapsedMs=…` and exit — no re-arm,
+  no `otel-status`, no upload, no HTTP request. The receiver runs it as `--run-job`; every queued
+  `stop` job of the same repo is coalesced into that one full scan (`hook-status.uploadQueue.mode:
+  'job'`).
+- **In process** (otherwise): (re)spawn the shared receiver when allowed (DD-7 throttle), re-arm the
+  OTEL session, write `otel-status`, take the upload lock (2 s budget), **take over stuck jobs** of
+  this repo (older than 5 min, no live claim — logged `stuck jobs taken over: N`), run the full
+  scan, delete the taken-over jobs, and after a `done` outcome clear this repo's `failed/` jobs and
+  the `upload-jobs-failed` recommendation (`hook-status.uploadQueue.mode: 'in-process'`).
+
+`post-turn-analysis-hook.js` runs in parallel with it either way (both are `Stop` entries).
+
+### Order within a full scan
+
+1. The current session's own `claude` / `claude-subagent` files first — a **best effort** for the
+   post-turn analysis: it races the upload (both `Stop` entries run in parallel, and a handed-off
+   `Stop` uploads later from the receiver), so the advisor never relies on it and falls back to a
+   local aggregate ([turn-end-cost-advisor.md](turn-end-cost-advisor.md) § "Sessions not yet
+   ingested").
 2. Everything else in original relative order (backlog sessions, all `claude-otel` chunks — their
    global write order must be preserved).
 3. The current session's own `artisyn` file **last**, because its `hook-status` line reports this
-   run's own outcomes.
+   run's own outcomes. In a coalesced `stop` job the current session is the newest job's.
 
 ### Manifest (`.claude-logs.sent`) — dedup by byte size
 
@@ -209,9 +235,26 @@ fail.
 ### Concurrency and triggers
 
 - **Shared lock** `<telemetryDir>/.upload.lock` (`acquireUploadLockWithWait()` in `upload-logs.js`)
-  keeps `Stop`, `SessionEnd` and the background upload mutually exclusive. Wait budgets differ on
-  purpose: `LOCK_WAIT_STOP_MS` is short (it blocks the interactive turn, and another trigger will
-  follow); `LOCK_WAIT_SESSION_END_MS` is long (it blocks nothing and is the session's last chance).
+  keeps `Stop`, `SessionEnd`, the background upload and `--run-job` runs mutually exclusive. A lock
+  whose holder pid is dead (same host) or that is older than `2 × sendLogsOnPromptTimeoutMs` is
+  stale and taken over. Lock wait budgets:
+
+  | Run | Budget | On a busy lock |
+  |---|---|---|
+  | in-process `Stop` | `LOCK_WAIT_STOP_MS` 2 s | `skipped: upload lock held …` — the next trigger uploads |
+  | `SessionEnd` fallback | `LOCK_WAIT_SESSION_END_MS` 800 ms (hook `3.0.0`+; 20 s before) | writes a `session-end` job (`queued (fallback): lock busy …`), else `skipped` |
+  | `--run-job` (either trigger) | `LOCK_WAIT_STOP_MS` 2 s | exit 12 `busy`; the receiver retries after 5 s |
+  | background upload (`UserPromptSubmit`) | none | skips |
+
+- **Hand-off to the shared receiver** (hook `3.0.0`+): when the receiver's `heartbeat.json` is
+  fresh, `Stop` and `SessionEnd` write one upload job each and return at once
+  (`queued: job=… elapsedMs=…`); the receiver runs it as `send-logs-hook.js --run-job <job>`,
+  retries a failed run with backoff and moves a hopeless one to `~/.artisyn/upload/failed/`.
+  Without a fresh heartbeat they fall back to the in-process path. Details:
+  [upload-job-queue.md](upload-job-queue.md).
+- **No connection fails fast** (hook `3.0.0`+): a 3 s connect timeout per request, and every upload
+  run stops at the first unreachable result with `aborted: server unreachable (…) — N files left
+  for the next run`.
 - **Background upload on `UserPromptSubmit`** (`sendLogsOnPromptEnabled`): throttled by
   `PROMPT_UPLOAD_THROTTLE_MS` via `<workDir>/prompt-upload-throttle.json`, whose timestamp is
   written **before** spawning so a burst of prompts cannot all pass. The child gets `--cwd` /

@@ -1,0 +1,36 @@
+/* Tooltip content. Every selector is wrapped in :where() so a caller's class always wins. */
+
+:where(.content) {
+  z-index: 50;
+  width: fit-content;
+  transform-origin: var(--radix-tooltip-content-transform-origin);
+  border-radius: var(--radius-md);
+  padding: 0.375rem 0.75rem;
+  font-size: 0.75rem;
+  line-height: 1rem;
+  text-wrap: balance;
+}
+
+:where(.dark) {
+  background-color: var(--color-foreground);
+  color: var(--color-background);
+}
+
+:where(.light) {
+  background-color: var(--color-popover);
+  color: var(--color-popover-foreground);
+  border-width: 1px;
+  border-color: var(--color-border);
+  box-shadow: var(--shadow-md);
+}
+
+:where(.arrow) {
+  z-index: 50;
+  width: 0.625rem;
+  height: 0.625rem;
+  translate: 0 calc(-50% - 2px);
+  rotate: 45deg;
+  border-radius: 2px;
+  background-color: var(--color-foreground);
+  fill: var(--color-foreground);
+}

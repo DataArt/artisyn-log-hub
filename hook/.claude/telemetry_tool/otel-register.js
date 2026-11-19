@@ -44,6 +44,7 @@
  */
 
 const crypto = require('crypto');
+const fs = require('fs');
 const http = require('http');
 const os = require('os');
 const path = require('path');
@@ -59,7 +60,7 @@ const {
   OTEL_RESPAWN_THROTTLE_MS,
   OTEL_SPAWN_STATE_FILE,
 } = require('./throttle-state');
-const { otelStateDir, readOrCreateToken, repoKey, ownerHash } = require('./user-state');
+const { otelStateDir, readOrCreateToken, repoKey, ownerHash, stateFilePath } = require('./user-state');
 
 const HOOK_FILE = 'otel-register.js';
 
@@ -983,6 +984,26 @@ async function announceOtelSession(config, sessionId, cwd, gitContext, hookFile,
 }
 
 /**
+ * Whether this session should announce to (and so start) a receiver (Phase 3, DD-8): always when
+ * `otelEnabled`; otherwise only when the launch resolves to shared mode, because the shared receiver
+ * is also the per-user upload-queue runner. Such a repo registers with no signals
+ * (`buildRegistrationPayload` turns logs and metrics off for `otelEnabled: false`). A legacy-mode
+ * repo with `otelEnabled: false` starts no receiver, as before. Never throws.
+ * @param {Record<string, *>} config
+ * @param {string|null} cwd
+ * @param {string|null} sessionId
+ * @returns {boolean}
+ */
+function isReceiverWanted(config, cwd, sessionId) {
+  if (config && config.otelEnabled) return true;
+  try {
+    return buildReceiverLaunch(config, cwd, null, { sessionId, warn: false }).mode === 'shared';
+  } catch {
+    return false;
+  }
+}
+
+/**
  * Throttled re-arm — the shape every call site except `SessionStart` uses.
  *
  * Why so many call sites: the receiver self-exits after its idle timeout, and until this existed
@@ -997,8 +1018,9 @@ async function announceOtelSession(config, sessionId, cwd, gitContext, hookFile,
  * route. Pinging it at least once per throttle window therefore stops the idle timeout from ever
  * firing mid-session — it prevents the death rather than only recovering from it.
  *
- * Safe to call from anywhere and on any event: it is gated on `otelEnabled`, throttled on the
- * shared state file, and cannot fail the caller — `announceOtelSession`'s own `try/catch` absorbs
+ * Safe to call from anywhere and on any event: it is gated on `isReceiverWanted` (`otelEnabled`, or
+ * the shared launch mode — the receiver is also the upload-queue runner), throttled on the shared
+ * state file, and cannot fail the caller — `announceOtelSession`'s own `try/catch` absorbs
  * everything, so awaiting it here never turns an OTEL failure into a hook failure.
  * @param {Record<string, *>} config
  * @param {string|null} sessionId
@@ -1008,13 +1030,49 @@ async function announceOtelSession(config, sessionId, cwd, gitContext, hookFile,
  * @returns {Promise<boolean>} whether an announce was dispatched (false = disabled or throttled)
  */
 async function maybeReArmOtelSession(config, sessionId, cwd, gitContext, hookFile) {
-  if (!config.otelEnabled) return false;
+  if (!isReceiverWanted(config, cwd, sessionId)) return false;
   if (!claimThrottleSlot(cwd, OTEL_SPAWN_STATE_FILE, OTEL_RESPAWN_THROTTLE_MS)) {
     hookLog(hookFile, sessionId, 'result', 'skipped: otel receiver re-arm throttled', cwd);
     return false;
   }
   await announceOtelSession(config, sessionId, cwd, gitContext, hookFile, 're-armed');
   return true;
+}
+
+/**
+ * Upload-queue receiver spawn (DD-7): launch this plugin's own `otel-receiver.js` in shared mode with
+ * no hello and no register, so a receiver that died (or never started) comes back to drain
+ * `~/.artisyn/upload/queue/`. An already-bound port makes the new process keep running queue-only or
+ * exit 0 (DD-8), so a redundant spawn is harmless. Legacy mode (no `~/.artisyn/otel/port.json`) has
+ * no uploader role, so nothing is spawned. Never throws.
+ * @param {Record<string, *>} config
+ * @param {string|null} cwd
+ * @param {string} hookFile - calling script filename, for hook.log attribution
+ * @param {string|null} sessionId
+ * @returns {boolean} whether a spawn was dispatched
+ */
+function spawnSharedReceiverNoHello(config, cwd, hookFile, sessionId) {
+  try {
+    const launch = buildReceiverLaunch(config, cwd, null, { sessionId, warn: false });
+    if (launch.mode !== 'shared') return false;
+    if (!fs.existsSync(stateFilePath('port'))) return false;
+    spawnDetachedHidden(
+      path.join(__dirname, RECEIVER_SCRIPT),
+      launch.argv,
+      {
+        env: launch.env,
+        // Neutral cwd — see announceOtelSession.
+        cwd: os.tmpdir(),
+        onError: (err) => hookLog(hookFile, sessionId, 'error',
+          `spawn of ${RECEIVER_SCRIPT} failed (${err.message}) — the receiver was not launched`,
+          cwd),
+      },
+    );
+    return true;
+  } catch (err) {
+    hookLog(hookFile, sessionId, 'error', `upload-queue receiver spawn failed: ${err.message}`, cwd);
+    return false;
+  }
 }
 
 module.exports = {
@@ -1029,6 +1087,7 @@ module.exports = {
   handleRegisterResponse,
   helloProofValid,
   isOlderVersion,
+  isReceiverWanted,
   legacyRegistrationPayload,
   maybeReArmOtelSession,
   neededCapabilities,
@@ -1036,6 +1095,7 @@ module.exports = {
   sharedAuthedPost,
   sharedHandshake,
   sharedRequest,
+  spawnSharedReceiverNoHello,
   AUTH_HEADER,
   HELLO_PATH,
   HELLO_TIMEOUT_MS,

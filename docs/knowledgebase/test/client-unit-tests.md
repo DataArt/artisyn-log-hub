@@ -4,7 +4,7 @@ title: Client Unit Tests (Vitest)
 description: What is left of the client vitest suite after the 2026-10-16 cut — only the doc-driven algorithm tests (*.algo.test.ts); runner config and the shared setup files.
 resource: client/vite.config.ts
 tags: [testing, client, vitest, algorithms]
-timestamp: 2026-10-28T00:00:00Z
+generated: { by: "human:denistsyplakov", at: "2026-10-28T00:00:00Z" }
 ---
 
 **Policy (2026-10-16): the client has no component or logic unit tests any more** — everything in

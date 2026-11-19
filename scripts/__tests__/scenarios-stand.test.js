@@ -111,7 +111,7 @@ describe('mode env', () => {
     assert.equal(env.SMTP_PORT, '2525');
     assert.equal(env.SMTP_FROM, 'noreply@arrakis.test');
     assert.equal(env.ADMIN_CONTACT_EMAIL, 'admin@arrakis.test');
-    assert.equal(envFor('b').SMTP_PORT, '1025', 'MAILPIT_SMTP default localhost:1025');
+    assert.equal(envFor('b').SMTP_PORT, '1025', 'MAILPIT_SMTP default 127.0.0.1:1025');
   });
 
   test('mode d: strict-managed in production with Mailpit SMTP and the per-run bootstrap admin', () => {

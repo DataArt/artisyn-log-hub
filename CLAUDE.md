@@ -26,6 +26,12 @@ the full `/adlc-lh:*` skill family (review/plan/implement, deep-track variants, 
 skill for the unified workflow. `adlc-lh` is this repo's local copy of the shared `adlc` plugin, in
 `.artisyn/marketplace/plugins/adlc-lh/` (enabled as `adlc-lh@artisyn` in `.claude/settings.json`).
 
+Every task's `requirements.md` starts with OKF front matter — `type: "Task"`, `title`, `description`
+(the one-line summary; template `.claude/repo_config/requirements-template.md`). The todo index
+`docs/tasks/todo/index.md` is generated from it: run `npm run tasks:index` after `adlc-lh:scratch`
+and after `adlc-lh:archive` (also via `adlc-lh:tracker` create / close), and fix the front matter,
+not the index line, when a summary is wrong. The done index stays append-only (written by archive).
+
 # Hook API
 
 when changing hook API mind that some users will not update hook for a long time so you need to keep backward compatibility
@@ -154,6 +160,32 @@ skills and workflows); this table is human documentation and must be kept in syn
   e2e suites and the scenario stand. `npm run test:scenarios` also runs it as its `contract` step. See
   `server/test/contract/README.md`.
 
+## Work Hub
+
+`work-hub/` is a separate product (Rust server, React SPA, own Postgres schema) that only lives in
+this repo: it is not part of `npm run build`, `dist/` or Log Hub's checks, and Log Hub's commands
+above never cover it. Read `docs/knowledgebase/work-hub.md` before touching it. Its own commands,
+all run **from `work-hub/`**:
+
+| Purpose | Command |
+|---|---|
+| Lint (`cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, web eslint, agent-names check, licence check) | `npm run lint` |
+| Typecheck (`tsc --noEmit` over `web/` and `tests/`) | `npm run typecheck` |
+| Algorithm tests (Rust table tests + web `*.algo.test.ts`) | `npm run test:algo` |
+| Build (web, then `cargo build --release`) | `npm run build` |
+| API contract tests (needs Postgres and Docker) | `npm run test:contract` |
+| Scenarios on an isolated stand (needs Postgres, Docker; Mailpit for mode b) | `npm run test:scenarios -- --mode a\|b\|c` |
+
+Test policy for Work Hub — the same three kinds, in its own places:
+
+- **Algorithm** — rows in `docs/algorithm-examples/<name>.json` for a `workhub-*` (or shared auth)
+  doc; the table tests are `work-hub/server/tests/algo.rs` and `work-hub/web/**/*.algo.test.ts`.
+- **API contract** — a new or changed route gets its row in
+  `work-hub/server/tests/contract/registry.rs` (the meta-test fails without it).
+- **Scenario** — a step in an existing scenario in `work-hub/tests/scenarios/`.
+- Scenario coverage is **not measured** for Work Hub yet (no Rust coverage tool in the alpha), so
+  the ≥ 80 % target does not apply to it until that follow-up lands.
+
 ## Background processes cleanup
 
 When you launch a long-running command in the background (build, e2e run, any backgrounded
@@ -233,6 +265,10 @@ KB files live in `docs/knowledgebase/`.
 - Once you or user need to find or change something in code base - start you reserch from reading relevant KB articles  
 - To find a KB file: read `docs/knowledgebase/index.md` first — do NOT glob the directory.
 - After adding, removing, or renaming a KB file: update `docs/knowledgebase/index.md`.
+- KB articles follow OKF v0.3 (`okf_version: "0.3"` in the bundle-root `index.md`): front matter
+  `type`, `title`, `description`, `tags`, `generated: { by: "<actor>", at: "<RFC 3339>" }` —
+  never the v0.1 `timestamp` key. Set `generated.at` on a meaningful content change, not on a
+  format-only edit. Algorithm docs keep their own `reviewed` / `reviewer` front matter.
 
 (Path matches `project-env.json → kbIndexPath`; keep in sync with it.)
 

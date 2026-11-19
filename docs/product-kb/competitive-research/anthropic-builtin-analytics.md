@@ -5,7 +5,7 @@ description: "Anthropic's own analytics dashboards, Analytics Admin API and in-C
 tags:
   - competitive-research
   - vendor-builtin
-timestamp: "2026-11-01T00:00:00+04:00"
+generated: { by: "human:denistsyplakov", at: "2026-11-01T00:00:00+04:00" }
 ---
 
 # Anthropic built-in Claude Code analytics

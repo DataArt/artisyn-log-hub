@@ -5,7 +5,7 @@ description: "Why the snake_case session_id field seen in some raw Claude Code t
 tags:
   - telemetry
   - logs
-timestamp: "2026-08-11T00:00:00+04:00"
+generated: { by: "human:denistsyplakov", at: "2026-08-11T00:00:00+04:00" }
 ---
 
 # session_id vs sessionId

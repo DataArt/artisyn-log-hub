@@ -28,6 +28,7 @@ import {
   waitForToolUsage,
   type ToolSessionTree,
   type ToolUsageSummary,
+  type WrapperCallSpec,
 } from '../helpers/tool-monitoring';
 
 interface ConfigView {
@@ -189,6 +190,32 @@ test('@S-REPO-17 Tools/MCP tab: configured tools, MCP and wrapped CLI calls, cal
     expect((await hookConfig(outsiderKey)).tools, 'an outsider gets nothing').toEqual([]);
   });
 
+  /** Session `s1`'s two wrapper records (`ce`, `find`), started 200 ms after their Bash tool_use. */
+  const wrapperCalls = (t: ToolSessionTree): WrapperCallSpec[] => {
+    const at = (step: number) => new Date(t.steps[step].toolUseAt.getTime() + 200);
+    return [
+      {
+        callId: `${run}-ce`,
+        sessionId: sid('s1'),
+        tool: 'ce',
+        args: ['list', '--all'],
+        startedAt: at(3),
+        exitCode: 141,
+        stdout: 'row-1\nrow-2\nrow-3\n',
+        consumerClosed: true,
+      },
+      {
+        callId: `${run}-find`,
+        sessionId: sid('s1'),
+        tool: 'find',
+        args: ['/nonexistent'],
+        startedAt: at(4),
+        exitCode: 1,
+        stderr: "find: '/nonexistent': No such file or directory\n",
+      },
+    ];
+  };
+
   const tree: ToolSessionTree = await test.step('3. upload a session tree with MCP calls and two Bash calls, plus its `tool-calls` log of wrapper records', async () => {
     const uploaded = await uploadToolSessionTree(
       api,
@@ -207,31 +234,7 @@ test('@S-REPO-17 Tools/MCP tab: configured tools, MCP and wrapped CLI calls, cal
       },
       { db, userId: owner.id },
     );
-    const at = (step: number) => new Date(uploaded.steps[step].toolUseAt.getTime() + 200);
-    const body = buildToolCallsLog(
-      [
-        {
-          callId: `${run}-ce`,
-          sessionId: sid('s1'),
-          tool: 'ce',
-          args: ['list', '--all'],
-          startedAt: at(3),
-          exitCode: 141,
-          stdout: 'row-1\nrow-2\nrow-3\n',
-          consumerClosed: true,
-        },
-        {
-          callId: `${run}-find`,
-          sessionId: sid('s1'),
-          tool: 'find',
-          args: ['/nonexistent'],
-          startedAt: at(4),
-          exitCode: 1,
-          stderr: "find: '/nonexistent': No such file or directory\n",
-        },
-      ],
-      { hookVersion: '2.27.0', os: 'linux', at: new Date() },
-    );
+    const body = buildToolCallsLog(wrapperCalls(uploaded), { hookVersion: '2.27.0', os: 'linux', at: new Date() });
     await uploadToolCallsLog(api, ownerKey, sid('s1'), body, { db, userId: owner.id });
     return uploaded;
   });
@@ -425,5 +428,39 @@ test('@S-REPO-17 Tools/MCP tab: configured tools, MCP and wrapped CLI calls, cal
       `/api/v1/repositories/${outsiderRepo}/tool-monitoring/calls/${items[0].usageId}/${encodeURIComponent(items[0].callId)}`,
     );
     expect(foreign.status(), 'another user’s call is not found through one’s own row').toBe(404);
+  });
+
+  await test.step('8. GH-149: an outdated Windows hook gets the update hint', async () => {
+    // The server keeps one `tool-calls` log per session, so a re-upload replaces it; the status
+    // merge keeps the newest `reportedAt`, so every re-upload carries a fresh `at`.
+    const reupload = async (hookVersion: string) => {
+      const body = buildToolCallsLog(wrapperCalls(tree), { hookVersion, os: 'win32', at: new Date() });
+      await uploadToolCallsLog(api, ownerKey, sid('s1'), body, { db, userId: owner.id });
+      await expect
+        .poll(async () => (await getConfig(owner)).wrapStatus?.hookVersion ?? null, { timeout: 30_000 })
+        .toBe(hookVersion);
+    };
+
+    await reupload('2.32.1');
+    const outdated = await getConfig(owner);
+    expect(outdated.wrapStatus).toMatchObject({ hookVersion: '2.32.1', os: 'win32' });
+    expect(outdated.tools[0].name).toBe('ce');
+    expect(outdated.tools[0].hint, 'Windows hook older than 2.32.2').toBe('hook_too_old');
+
+    const { context, page } = await browserAs(browser, stand.url, owner, `/#/repos/${repoId}?mtab=tools`);
+    try {
+      await page.getByTestId('tools-monitored-button').click();
+      await expect(page).toHaveURL(/mtab=settings&stab=monitored-tools/);
+      const panel = page.getByTestId('tools-monitored-settings');
+      const rows = panel.getByTestId('tools-config-row');
+      await expect(rows, 'the personal list: `ce` only').toHaveCount(1);
+      await expect(rows.first().getByTestId('tools-config-name')).toHaveValue('ce');
+      await expect(rows.first().getByTestId('tools-config-status')).toHaveText('hook too old — update the hook');
+    } finally {
+      await context.close();
+    }
+
+    await reupload('2.32.2');
+    expect((await getConfig(owner)).tools[0].hint, 'the fixed hook: no hint').toBeNull();
   });
 });

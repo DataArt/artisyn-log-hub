@@ -1,11 +1,11 @@
 ---
 type: "Installation Guide"
 title: "Hook Installation Guide"
-description: "Install, upgrade, or uninstall the hook as a Claude Code plugin via npx, the JSON config reference, the per-user OTEL port and state (~/.artisyn/otel), the user-scope OTEL keys in ~/.claude/settings.json with validation and backup, the .claude/settings.local.json mirror and resource attributes, the foreign-collector proxy/keep/replace flow, managed settings, migration from the pre-plugin install, and verification steps."
+description: "Install, upgrade, or uninstall the hook as a Claude Code plugin via npx, the JSON config reference, the per-user OTEL port and state (~/.artisyn/otel, ~/.artisyn/upload, node-check.json, ARTISYN_NODE_VERSION_OVERRIDE), the user-scope OTEL keys in ~/.claude/settings.json with validation and backup, the .claude/settings.local.json mirror and resource attributes, the foreign-collector proxy/keep/replace flow, managed settings, migration from the pre-plugin install, and verification steps."
 tags:
   - hooks
   - otel
-timestamp: "2026-11-03T00:00:00+04:00"
+generated: { by: "human:denistsyplakov", at: "2026-11-03T00:00:00+04:00" }
 ---
 
 # Hook Installation Guide
@@ -398,7 +398,7 @@ See `docs/knowledgebase/otel-receiver.md` for what they gate.
 
 | Key | Default | Description |
 |---|---|---|
-| `otelEnabled` | `true` | Runtime switch. Gates the receiver spawn, the register handshake, and the `claude-otel` upload + prune pass. See the caveat below — this does **not** stop Claude Code from exporting. |
+| `otelEnabled` | `true` | Runtime switch. Gates the OTLP signals the repo registers for and the `claude-otel` upload + prune pass. Since hook `3.0.0` it no longer gates the receiver start in shared mode: the shared receiver is also the per-user log uploader, so every repo starts it (with `otelEnabled: false` the repo registers with no signals and its OTLP records are dropped). In legacy per-project mode it still gates the receiver spawn and the register handshake. See the caveat below — this does **not** stop Claude Code from exporting. |
 | `otelReceiverPort` | `0` | The receiver port, written by the installer from `~/.artisyn/otel/port.json` on every run (hook `2.30.0`+: the shared per-user port; before: this project's own port). A `2.30.0` hook reads it only in the legacy fallback when `port.json` is missing; hooks `≤ 2.29.0` always read it. `0` means "not yet allocated"; hand-editing is pointless (re-install with `--otel-port` instead). If it somehow never got a value, `OTEL_FALLBACK_PORT` (`25317`) applies. |
 | `otelReceiverIdleTimeoutMs` | `600000` | No request of any kind for this long ⇒ the receiver exits (10 min). `0` means "use the default". Legacy per-project receiver only: the shared receiver always uses the fixed `SHARED_IDLE_TIMEOUT_MS` (600000), because no single repo owns it. |
 | `otelReceiverMaxBodyKb` | `8192` | Request bodies above this are rejected (`413`) without writing. **KiB**, converted to bytes by the spawning hook (`8192` → `8388608`). Applies to wire bytes, before decompression. `0` means "use the default". |
@@ -407,8 +407,10 @@ See `docs/knowledgebase/otel-receiver.md` for what they gate.
 | `otelRealtimeIntervalMs` | `5000` | Hook `2.29.0`+. Smallest gap between two realtime POSTs of one session; clamped to at least `5000`. The server's `minIntervalMs` answer can only raise it. |
 | `otelTraces` | absent | Hook `2.29.0`+. The installer's stored answer to the trace question (`true` / `false`); absent on installs that predate it. `otel-endpoint-check.js` checks `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT` only when it is `true`. Change it by re-running `install --otel-traces=yes\|no` (editing it by hand does not add or remove the `env` keys). |
 
-**`otelEnabled: false` is runtime-only.** It stops the hook from spawning the receiver, registering, uploading and
-pruning — but it does **not** retract the `env` block from `.claude/settings.local.json`, so Claude Code keeps
+**`otelEnabled: false` is runtime-only.** It stops the hook from collecting OTEL for the repo — no signals
+registered, no `claude-otel` upload or prune (and, in legacy mode only, no receiver spawn); since hook `3.0.0` the
+shared receiver still starts, because it runs the repo's log uploads ([upload-job-queue.md](upload-job-queue.md)) —
+but it does **not** retract the `env` block from `.claude/settings.local.json`, so Claude Code keeps
 exporting to a port nothing listens on. That is harmless by design: the port is a random high one (below), so there
 is no realistic chance of it later colliding with a collector of your own on `4317`/`4318`. To disable OTEL fully,
 set `otelEnabled: false` **and** remove the nine (twelve with traces) `env` keys, or just run `uninstall`. Since
@@ -447,6 +449,24 @@ The rest of the per-user state dir (`token`, `repos.json`, `registry.json`, `for
 `repos.json` gets one entry per installed repo: `{repoKey, gitRoot, otelDir, uploader, traces, installedAt,
 hookVersion}` (`upsertRepoEntry` in `user-state.ts`); the receiver uses it to route records that carry an
 `artisyn.repo` tag before their session registered.
+
+#### Per-user state: `~/.artisyn/` (hook `3.0.0`)
+
+| Path | Written by | What |
+|---|---|---|
+| `~/.artisyn/otel/` | installer, hook, receiver | the shared receiver: `port.json`, `token`, `repos.json`, `registry.json`, `forward.json`, `receiver.log`, `claude-version.json`, `bin/` ([otel-receiver.md](otel-receiver.md) § "User-level state"). Stays OTEL-only |
+| `~/.artisyn/upload/` | hook, receiver | the upload job queue (hook `3.0.0`+): `queue/` (jobs, their `.claim` files), `failed/` (jobs that gave up — no data lost), `heartbeat.json` (the uploader's 5 s heartbeat), `uploader.lock`, `spawn.mark` ([upload-job-queue.md](upload-job-queue.md)) |
+| `~/.artisyn/node-check.json` | hook | `{nodeVersion, shownAt}` — the once-per-24-h throttle of the `SessionStart` Node.js warning ([algorithms/node-version-check.md](algorithms/node-version-check.md)) |
+
+The installer creates `port.json`, `token` and `bin/` on every install, whatever `otelEnabled` says; `upload/`
+and `node-check.json` are created by the hook on first use. The hook (`lifecycle-hook.js` `SessionStart`, and every
+re-arm) starts the shared receiver regardless of `otelEnabled` (`isReceiverWanted`), so jobs of a repo with
+`otelEnabled: false` still have an uploader.
+
+**`ARTISYN_NODE_VERSION_OVERRIDE`** (test-only) replaces `process.versions.node` in both the hook's
+`node-version-check.js` and the installer's `node-version.ts`, so scenarios can show the "end-of-life" / "misses the
+security fixes" warning on any Node. The installer prints the same warning (no throttle) from `warnIfNodeEol` on install, upgrade and
+uninstall; it never blocks the install.
 
 A port held by another program or another OS user is detected, not repaired: the hook's hello fails the HMAC proof
 and it writes one `otel port-conflict port=<n>` warning (the session's OTEL status then says `receiver-down`), and
@@ -695,6 +715,11 @@ is not exporting to it (OTEL env not in `~/.claude/settings.json`, or Claude Cod
 upgrade (installer 1.0.91+) writes an `[installer]` line to `hook.log` (`upgrade: hooks v<old> → v<new> (server …)`),
 as a `warn` with `DOWNGRADE` when the bundled hook is older than the installed one. An `owner-mismatch` line means another
 project allocated the same port; re-install with `--otel-port <n>`.
+
+For the upload queue (hook `3.0.0`+): `~/.artisyn/upload/heartbeat.json` with a recent `ts` means an uploader is up;
+jobs that stay in `~/.artisyn/upload/queue/` (their `attempts` / `lastError`) or sit in `failed/` are stalled uploads,
+and `hook.log` lines `queued: …` / `run-job …` / `job failed: …` tell which path each run took. See
+[upload-job-queue.md](upload-job-queue.md) § "Troubleshooting".
 
 ---
 
