@@ -1,6 +1,6 @@
 # Security scan report
 
-_Commit [`a7843c2`](https://github.com/DataArt/artisyn-log-hub/commit/a7843c2849825d22000adb3061c98ea63627fcab) on `main` · updated 2026-11-19 09:31 UTC · [workflow run](https://github.com/DataArt/artisyn-log-hub/actions/runs/44496823277)_
+_Commit [`a7843c2`](https://github.com/DataArt/artisyn-log-hub/commit/a7843c2849825d22000adb3061c98ea63627fcab) on `main` · updated 2026-11-19 11:35 UTC · [workflow run](https://github.com/DataArt/artisyn-log-hub/actions/runs/44515721042)_
 
 The README badge counts every row below except Snyk Open Source (dev) — devDependencies do not
 ship — and skipped rows. How the scans work: [ci-security-scans.md](https://github.com/DataArt/artisyn-log-hub/blob/main/docs/knowledgebase/ci-security-scans.md).
@@ -9,21 +9,21 @@ ship — and skipped rows. How the scans work: [ci-security-scans.md](https://gi
 
 | Tool | Status | Critical | High | Medium | Low | Details |
 |---|---|---|---|---|---|---|
-| Snyk Open Source (prod) | ✅ pass | 0 | 0 | 2 | 0 | [link](https://github.com/DataArt/artisyn-log-hub/actions/runs/44496823277) 2 medium |
-| Snyk Open Source (dev) | ✅ pass | 0 | 0 | 5 | 0 | [link](https://github.com/DataArt/artisyn-log-hub/actions/runs/44496823277) 5 medium |
-| Snyk — installer tarballs | ✅ pass | 0 | 0 | 0 | 0 | [link](https://github.com/DataArt/artisyn-log-hub/actions/runs/44496823277) no issues |
-| Executable-config guard | ✅ pass | 0 | 0 | 0 | 0 | [link](https://github.com/DataArt/artisyn-log-hub/actions/runs/44496823277) |
-| Lock-file registry | ✅ pass | 0 | 0 | 0 | 0 | [link](https://github.com/DataArt/artisyn-log-hub/actions/runs/44496823277) ok |
-| npm registry signatures | ✅ pass | 0 | 0 | 0 | 0 | [link](https://github.com/DataArt/artisyn-log-hub/actions/runs/44496823277) ok |
-| actionlint | ✅ pass | 0 | 0 | 0 | 0 | [link](https://github.com/DataArt/artisyn-log-hub/actions/runs/44496823277) ok |
-| zizmor | ✅ pass | 0 | 0 | 0 | 0 | [link](https://github.com/DataArt/artisyn-log-hub/actions/runs/44496823277) no issues |
-| hadolint | ✅ pass | 0 | 0 | 0 | 0 | [link](https://github.com/DataArt/artisyn-log-hub/actions/runs/44496823277) no issues |
-| docker compose config | ✅ pass | 0 | 0 | 0 | 0 | [link](https://github.com/DataArt/artisyn-log-hub/actions/runs/44496823277) ok |
-| Snyk Container | ✅ pass | 0 | 0 | 0 | 1 | [link](https://github.com/DataArt/artisyn-log-hub/actions/runs/44295846539) as of 2026-11-18 11:36 UTC: 1 low |
-| Node runtime (Dockerfile) | ✅ pass | 0 | 0 | 0 | 0 | [link](https://github.com/DataArt/artisyn-log-hub/actions/runs/44496823277) 26.13.1 is the latest patch |
-| Node runtime (docker-dev) | ✅ pass | 0 | 0 | 0 | 0 | [link](https://github.com/DataArt/artisyn-log-hub/actions/runs/44496823277) 26.13.1 is the latest patch |
-| VirusTotal — artisyn-hooks-installer.tgz | ✅ pass | 0 | 0 | 0 | 0 | [link](https://www.virustotal.com/gui/file/bb2b58a8882444265bf812ba9cf3383b98afffe89b4f9f654720f1d2e8c5688e) as of 2026-11-18 11:36 UTC: 0/74 engines |
-| VirusTotal — hooks.tar.gz | ✅ pass | 0 | 0 | 0 | 0 | [link](https://www.virustotal.com/gui/file/681f58ab92ca05a783257675ddd0dffc98d1dfed21a6db78f2008d6878b5433b) as of 2026-11-18 11:36 UTC: 0/74 engines |
+| Snyk Open Source (prod) | ✅ pass | 0 | 0 | 2 | 0 | [link](https://github.com/DataArt/artisyn-log-hub/actions/runs/44515721042) 2 medium |
+| Snyk Open Source (dev) | ✅ pass | 0 | 0 | 5 | 0 | [link](https://github.com/DataArt/artisyn-log-hub/actions/runs/44515721042) 5 medium |
+| Snyk — installer tarballs | ✅ pass | 0 | 0 | 0 | 0 | [link](https://github.com/DataArt/artisyn-log-hub/actions/runs/44515721042) no issues |
+| Executable-config guard | ✅ pass | 0 | 0 | 0 | 0 | [link](https://github.com/DataArt/artisyn-log-hub/actions/runs/44515721042) |
+| Lock-file registry | ✅ pass | 0 | 0 | 0 | 0 | [link](https://github.com/DataArt/artisyn-log-hub/actions/runs/44515721042) ok |
+| npm registry signatures | ✅ pass | 0 | 0 | 0 | 0 | [link](https://github.com/DataArt/artisyn-log-hub/actions/runs/44515721042) ok |
+| actionlint | ✅ pass | 0 | 0 | 0 | 0 | [link](https://github.com/DataArt/artisyn-log-hub/actions/runs/44515721042) ok |
+| zizmor | ✅ pass | 0 | 0 | 0 | 0 | [link](https://github.com/DataArt/artisyn-log-hub/actions/runs/44515721042) no issues |
+| hadolint | ✅ pass | 0 | 0 | 0 | 0 | [link](https://github.com/DataArt/artisyn-log-hub/actions/runs/44515721042) no issues |
+| docker compose config | ✅ pass | 0 | 0 | 0 | 0 | [link](https://github.com/DataArt/artisyn-log-hub/actions/runs/44515721042) ok |
+| Snyk Container | ✅ pass | 0 | 0 | 0 | 6 | [link](https://github.com/DataArt/artisyn-log-hub/actions/runs/44515721042) 6 low |
+| Node runtime (Dockerfile) | ✅ pass | 0 | 0 | 0 | 0 | [link](https://github.com/DataArt/artisyn-log-hub/actions/runs/44515721042) 26.13.1 is the latest patch |
+| Node runtime (docker-dev) | ✅ pass | 0 | 0 | 0 | 0 | [link](https://github.com/DataArt/artisyn-log-hub/actions/runs/44515721042) 26.13.1 is the latest patch |
+| VirusTotal — artisyn-hooks-installer.tgz | ✅ pass | 0 | 0 | 0 | 0 | [link](https://www.virustotal.com/gui/file/a75ff9538e9b417021dcb60ca3123880ca22fc2e5b60b38dbd4e2c6e727cc342) 0/74 engines |
+| VirusTotal — hooks.tar.gz | ✅ pass | 0 | 0 | 0 | 0 | [link](https://www.virustotal.com/gui/file/6edb4f13ccf7f8a7cc9b1cecef531b4705e91795a7485b343f554a69e0474115) 0/74 engines |
 
 ## Snyk — critical and high issues
 
@@ -45,8 +45,8 @@ _No critical or high issues._
 
 ## VirusTotal
 
-- VirusTotal — artisyn-hooks-installer.tgz: ✅ pass · as of 2026-11-18 11:36 UTC: 0/74 engines · [report](https://www.virustotal.com/gui/file/bb2b58a8882444265bf812ba9cf3383b98afffe89b4f9f654720f1d2e8c5688e)
-- VirusTotal — hooks.tar.gz: ✅ pass · as of 2026-11-18 11:36 UTC: 0/74 engines · [report](https://www.virustotal.com/gui/file/681f58ab92ca05a783257675ddd0dffc98d1dfed21a6db78f2008d6878b5433b)
+- VirusTotal — artisyn-hooks-installer.tgz: ✅ pass · 0/74 engines · [report](https://www.virustotal.com/gui/file/a75ff9538e9b417021dcb60ca3123880ca22fc2e5b60b38dbd4e2c6e727cc342)
+- VirusTotal — hooks.tar.gz: ✅ pass · 0/74 engines · [report](https://www.virustotal.com/gui/file/6edb4f13ccf7f8a7cc9b1cecef531b4705e91795a7485b343f554a69e0474115)
 
 ## More
 
