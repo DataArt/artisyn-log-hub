@@ -1,3 +1,9 @@
+---
+type: "Task"
+title: "Header View Mode Switch"
+description: "Add a Simple Dev / Full Dev / Manager view-mode switch to the header, defaulting to Full Dev (current behavior); Simple Dev and Manager are TBD placeholders that only need to be wired into the session list and session details areas."
+---
+
 # T-91: Header View Mode Switch
 
 **Status:** todo

@@ -4,7 +4,7 @@ title: Algorithm docs (doc-driven table tests)
 description: Format of the per-algorithm docs in docs/knowledgebase/algorithms/, how their rows file docs/algorithm-examples/<name>.json becomes a table-driven unit test through scripts/algo-docs/load-examples.cjs in jest, vitest and node --test, and the AI-plus-owner review recorded in front-matter.
 resource: scripts/algo-docs/load-examples.cjs
 tags: [testing, algorithms, unit-tests, docs, review]
-timestamp: 2026-11-03T00:00:00Z
+generated: { by: "human:denistsyplakov", at: "2026-11-03T00:00:00Z" }
 ---
 
 # Algorithm docs

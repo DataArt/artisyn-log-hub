@@ -69,7 +69,7 @@ All of these must be true:
 Output:
 1. One sentence describing the pattern found.
 2. A draft KB article in the project's style:
-   - YAML frontmatter: `type`, `title`, `description`, `tags` (array), `timestamp` (ISO 8601, use today's date)
+   - YAML frontmatter: `type`, `title`, `description`, `tags` (array), `generated: { by: "agent:claude-code", at: "<now, RFC 3339 with offset>" }` (OKF v0.3; never the old `timestamp` key)
    - Body: concise, factual — no narrative filler. Include: subsystem overview (2–3 sentences), a table of key files with their roles, and "Where to start" guidance (the entry point and why).
 3. Suggested filename in `kebab-case.md`.
 4. Ask the user: **"Should I create this KB article?"**

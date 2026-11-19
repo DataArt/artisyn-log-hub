@@ -8,7 +8,7 @@ tags:
   - hook
   - reports
   - session-view
-timestamp: "2026-11-09T00:00:00+04:00"
+generated: { by: "human:denistsyplakov", at: "2026-11-09T00:00:00+04:00" }
 ---
 
 # Tool Monitoring (Tools/MCP tab)

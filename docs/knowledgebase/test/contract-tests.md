@@ -4,7 +4,7 @@ title: API vs DB contract suite (jest, world-v1)
 description: npm run test:contract (server/) — a separate jest project that boots its own app in a fresh contract_<uuid> schema loaded with the deterministic world-v1 fixture, checks every route's answer against independent raw SQL via a data registry of 26 families (F01-F26) and one shared runCase, and a meta-test that fails when a router route has no registry row.
 resource: server/test/contract/README.md
 tags: [testing, server, jest, contract, database, registry]
-timestamp: 2026-10-28T00:00:00Z
+generated: { by: "human:denistsyplakov", at: "2026-10-28T00:00:00Z" }
 ---
 
 The contract suite proves "the API answer equals what is in the database" for every HTTP route,

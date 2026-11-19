@@ -1,3 +1,9 @@
+---
+type: "Task"
+title: "Nightly AI Quality Review of main by Google Jules"
+description: "one free-plan Jules Scheduled Task runs a repo skill over main (route auth vs docs, DB index suspects, test slop vs the test policy, KB/Hook API/local-path invariants) and its report-only PR is moved to the ci-reports branch by a GitHub Action"
+---
+
 # 2026-10-25: Nightly AI Quality Review of main by Google Jules
 
 **Status:** todo

@@ -5,7 +5,7 @@ description: "Install, upgrade, or uninstall the hook as a Claude Code plugin vi
 tags:
   - hooks
   - otel
-timestamp: "2026-11-03T00:00:00+04:00"
+generated: { by: "human:denistsyplakov", at: "2026-11-03T00:00:00+04:00" }
 ---
 
 # Hook Installation Guide

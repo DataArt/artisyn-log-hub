@@ -1,3 +1,9 @@
+---
+type: "Task"
+title: "Session Antipattern Detector (Detected Patterns)"
+description: "deterministic catalog of named session antipatterns (cache expired after idle, context bloat, huge nested CLAUDE.md, oversized startup, commit without check, unused MCP, …) with evidence, est. waste and fixes; research over real sessions + competitors (gap-closing-plan P3)"
+---
+
 # 2026-11-02: Session Antipattern Detector (Detected Patterns)
 
 **Status:** todo

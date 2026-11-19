@@ -1,3 +1,9 @@
+---
+type: "Task"
+title: "Session User Filtering — Personal & Team Views"
+description: "Personal repo view shows only the current user's sessions; team repo view adds \"Only mine\" toggle + user picker below the session view-type selector."
+---
+
 # T-15: Session User Filtering — Personal & Team Views
 
 **Status:** todo

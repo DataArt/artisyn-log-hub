@@ -1,3 +1,9 @@
+---
+type: "Task"
+title: "Pin Cross-Package Twins and Prose-Only Rules With Tests"
+description: "algorithm docs + rows run on both sides for hook twins (REJECTION_MARKERS, KNOWN_TOP_LEVEL_DIRS/file categories, countPatchLines), SemVer server/client, stale builtin-tools twin comment, orphan patch-line fixture, build-script test for the lazy-chunk budget"
+---
+
 # 2026-11-03: Pin Cross-Package Twins and Prose-Only Rules With Tests
 
 **Status:** todo

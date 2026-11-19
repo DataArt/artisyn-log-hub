@@ -7,7 +7,7 @@ tags:
   - server
   - session-view
   - realtime
-timestamp: "2026-11-03T00:00:00+04:00"
+generated: { by: "human:denistsyplakov", at: "2026-11-03T00:00:00+04:00" }
 ---
 
 # Session Map Tab

@@ -1,3 +1,9 @@
+---
+type: "Task"
+title: "Revise Change-Surface Scattered Classification Rule"
+description: "A 3-file change across `docs/` and `client/` is classified/flagged as \"scattered\" despite being a focused change; the rule needs to weigh number of top-level folders touched and total files changed against a reasonable threshold. **Scope extended 2026-08-28:** that threshold stops being a hardcoded constant and becomes a per-repository setting — \"Merge surface threshold\", in number of changed files, configurable separately for a private repo (personal value) and for a team, resolved user → team → default, default **10** (was a hardcoded 5); any change set at or below it is merge-safe/focused regardless of spread. Stored in the existing `repo_config.config` jsonb (no migration), edited in Repository Settings → Analysis, threaded into every `computeChangeSurface()` caller. `impl-plan.md` is stale — it plans a server-constant-only change with no config/API/UI work."
+---
+
 # T-120: Revise Change-Surface Scattered Classification Rule
 
 **Status:** todo

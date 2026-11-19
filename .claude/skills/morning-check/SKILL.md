@@ -81,7 +81,7 @@ format given, max ~40 lines". Pass `effort: "lower"` to `nightly` and `github`.
 > 3. Update the KB yourself: insert one row per new item at the top of the `seen.md` table
 >    (low items too, so they are not reported again), set `Last checked` to today for every
 >    source and query you actually read (leave it unchanged on fetch failure and say so), add a
->    `sources.md` row for any new competitor, bump `timestamp` in the front matter of changed
+>    `sources.md` row for any new competitor, set `generated.at` to now in the front matter of changed
 >    files. Do not edit `docs/product-kb/competitive-research/` — propose those edits instead.
 > 4. Output: **High** and **Medium** items (tool · what · URL · verdict); **Misc — may be
 >    interesting** (source · title · URL · one line why, plus points/comments for HN / Reddit);

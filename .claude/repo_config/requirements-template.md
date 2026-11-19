@@ -1,3 +1,9 @@
+---
+type: "Task"
+title: "<Title>"
+description: "<one-line summary — the same text as the task's line in the todo index>"
+---
+
 # T-<num>: <Title>
 
 **Status:** todo

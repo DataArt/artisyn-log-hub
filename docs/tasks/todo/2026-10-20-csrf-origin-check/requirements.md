@@ -1,3 +1,9 @@
+---
+type: "Task"
+title: "CSRF Origin Check for Cookie-Session Routes"
+description: "low priority hardening: reject cookie-authenticated POST/PUT/PATCH/DELETE whose `Sec-Fetch-Site`/`Origin` is not the app's own origin (hook `X-API-Key` requests untouched), and drop the global `urlencoded` parser; closes the same-site-subdomain and simple-form gaps that `SameSite=Lax` leaves"
+---
+
 # 2026-10-20: CSRF Origin Check for Cookie-Session Routes
 
 **Status:** todo

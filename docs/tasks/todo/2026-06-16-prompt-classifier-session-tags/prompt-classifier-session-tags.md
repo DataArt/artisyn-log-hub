@@ -1,3 +1,9 @@
+---
+type: "Task"
+title: "Prompt Classifier — Auto-tag Sessions via `claude -p`"
+description: "UserPromptSubmit hook classifies each prompt with `claude -p` and assigns a user-configured tag to the session; server stores tags on sessions; client supports filter and group-by-tag in session list."
+---
+
 # T-17: Prompt Classifier — Auto-tag Sessions via `claude -p`
 
 **Status:** todo

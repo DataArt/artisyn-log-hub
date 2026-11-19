@@ -1,3 +1,9 @@
+---
+type: "Task"
+title: "Session Waiting-Time Breakdown by Cause"
+description: "split session time into working vs waiting, waiting by cause (permission prompt, plan approval, AskUserQuestion, next prompt/away, rate-limit), per session + Analytics per user/repo/team; decide whether work time excludes in-turn waits (Beezi parity)"
+---
+
 # 2026-11-09: Session Waiting-Time Breakdown by Cause
 
 **Status:** todo

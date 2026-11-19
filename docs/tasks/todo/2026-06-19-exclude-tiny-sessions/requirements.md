@@ -1,3 +1,9 @@
+---
+type: "Task"
+title: "Exclude Tiny Sessions from Analytics"
+description: "Add a toggle in the Productivity analytics tab to exclude very short sessions from metrics and charts, with a visible threshold and excluded-count indicator."
+---
+
 # T-28: Exclude Tiny Sessions from Analytics
 
 **Status:** todo

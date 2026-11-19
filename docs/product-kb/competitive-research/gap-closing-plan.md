@@ -5,7 +5,7 @@ description: "Product plan derived from the 14-tool parity study: corrected matr
 tags:
   - competitive-research
   - product
-timestamp: "2026-11-01T00:00:00+04:00"
+generated: { by: "human:denistsyplakov", at: "2026-11-01T00:00:00+04:00" }
 ---
 
 # Gap-closing plan

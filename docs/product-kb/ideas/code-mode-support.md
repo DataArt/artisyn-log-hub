@@ -7,7 +7,7 @@ tags:
   - idea
   - claude-code
   - code-mode
-timestamp: "2026-11-15T00:00:00+04:00"
+generated: { by: "human:denistsyplakov", at: "2026-11-15T00:00:00+04:00" }
 ---
 
 # Product idea: support Claude Code Code Mode sessions

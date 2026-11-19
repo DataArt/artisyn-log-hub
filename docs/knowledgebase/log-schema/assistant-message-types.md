@@ -6,7 +6,7 @@ tags:
   - logs
   - schema
   - claude
-timestamp: "2026-06-15T14:10:06+04:00"
+generated: { by: "human:denistsyplakov", at: "2026-06-15T14:10:06+04:00" }
 ---
 
 # Assistant Message Structure in Claude Logs

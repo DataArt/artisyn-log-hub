@@ -5,7 +5,7 @@ description: "Folder-level index of client/src: what each folder holds, its entr
 tags:
   - client
   - ui
-timestamp: "2026-11-10T00:00:00+04:00"
+generated: { by: "human:denistsyplakov", at: "2026-11-10T00:00:00+04:00" }
 ---
 
 # Client Components Structure

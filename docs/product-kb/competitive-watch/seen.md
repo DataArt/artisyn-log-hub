@@ -4,7 +4,7 @@ title: "Competitive watch — seen log"
 description: "Every competitor item (release, blog post, docs change, new tool) the morning check has already seen, newest first, with its relevance and verdict for Log Hub."
 tags:
   - competitive-research
-timestamp: "2026-11-18T09:00:00+04:00"
+generated: { by: "human:denistsyplakov", at: "2026-11-19T09:00:00+04:00" }
 ---
 
 # Seen log
@@ -19,6 +19,51 @@ Baseline: everything published before 2026-11-01 is in the parity study and is n
 
 | Seen | Source id | Published | Item | URL | Relevance | Verdict |
 |---|---|---|---|---|---|---|
+| 2026-11-19 | superbased-observer | 2026-11-19 | SuperBased Observer v1.41.0: org Budgets page detects a budget a developer machine does not enforce and publishes the enforcement pins in one click; an org machine's unidentified spend is attributed when it is the only machine; budget coverage names who can fix an unenforced cap; hosted sandboxes take plain folders / public repos | https://github.com/superbasedapp/observer/releases/tag/v1.41.0 | medium | none (Log Hub budgets are deliberately non-blocking, see budgets.md) |
+| 2026-11-19 | superbased-observer | 2026-11-18 | SuperBased Observer v1.40.0: local dashboard first run / launchpad, "live ribbon" in the top bar with the running agent's tool, project, tokens and cost so far, cost "receipt" for the first prompt | https://github.com/superbasedapp/observer/releases/tag/v1.40.0 | medium | none (Log Hub OTEL Live view shows running sessions with tokens / cost) |
+| 2026-11-19 | faros-blog | 2026-11-02 | Faros AI: "How to charge back AI spend to engineering teams" — AI cost allocation joins coding-tool usage with source control / tickets / team data, attributes each session to the owning team, splits human vs agentic usage, per-team statements by tool / model / repo, showback-then-chargeback path | https://www.faros.ai/blog/ai-chargebacks-for-engineering-teams | medium | none (Log Hub team / repo cost views and statistics export cover showback; no ticket join) |
+| 2026-11-19 | faros-blog | 2026-11-04 | Faros AI: "How to use AI session logs to improve coding agent workflows" — intent / execution / reaction in session logs, daily-weekly-monthly retrospectives; pitches Faros Desktop, Observe (token spend, outcomes) and Control Plane | https://www.faros.ai/blog/how-to-use-ai-session-logs-to-improve-agent-workflows | misc | none |
+| 2026-11-19 | faros-blog | 2026-11-06 | Faros AI: "OpenAI Codex pricing explained" | https://www.faros.ai/blog/openai-codex-pricing | misc | none |
+| 2026-11-19 | faros-blog | 2026-11-04 | Faros AI: "Beyond SEIPs: how to control AI spend and prove AI ROI" | https://www.faros.ai/blog/software-engineering-intelligence-platform-alternative | low | none |
+| 2026-11-19 | faros-blog | 2026-11-17 | Faros AI: "Introducing Faros Desktop" blog post (same launch as the 2026-11-18 HN row; adds spend vs daily / monthly limits at API list price, plan discount shown on subscriptions, Power Ups with optional Autopilot apply, opt-in field-level sharing to the paid Token Engineering Platform; macOS only) | https://www.faros.ai/blog/introducing-faros-desktop-get-more-from-the-ai-you-already-pay-for | low | none (already seen via HN) |
+| 2026-11-19 | faros-blog | 2026-11-17 | Faros AI: "Why we built Faros Desktop" | https://www.faros.ai/blog/why-we-built-faros-desktop | low | none |
+| 2026-11-19 | faros-blog | 2026-11-17 | Faros AI: "Best AI gateways for enterprise software development" | https://www.faros.ai/blog/best-ai-gateway-for-enterprise-software-development | low | none |
+| 2026-11-19 | faros-blog | 2026-11-10 | Faros AI: "What is an AI gateway?" | https://www.faros.ai/blog/what-is-an-ai-gateway | low | none |
+| 2026-11-19 | langfuse-changelog | 2026-11-18 | Langfuse: IAM role auth for Amazon Bedrock connections (title only) | https://langfuse.com/changelog/2026-11-18-bedrock-iam-role-auth | low | none |
+| 2026-11-19 | jellyfish-blog | 2026-11-18 | Jellyfish: "How we built Shipmate" (own Claude coding plugin; impact measured with Custom Metrics / Cohorts / Dashboards, no token spend shown) | https://jellyfish.co/blog/how-we-built-an-ai-coding-agent/ | low | none |
+| 2026-11-19 | jellyfish-blog | 2026-11-18 | Jellyfish: "26 engineering KPIs and metrics to track" | https://jellyfish.co/blog/engineering-kpis/ | low | none |
+| 2026-11-19 | jellyfish-blog | 2026-11-18 | Jellyfish: "10 best developer experience tools heading into 2027" | https://jellyfish.co/blog/best-developer-experience-tools/ | low | none |
+| 2026-11-19 | jellyfish-blog | 2026-11-18 | Jellyfish: "11 best GetDX alternatives" | https://jellyfish.co/blog/getdx-alternatives-competitors/ | low | none |
+| 2026-11-19 | dash0-coding | 2026-11-17 | Dash0: "Moving fast with AI, without losing control" — AutoMerge PR-risk policy; says cost and CI are the next bottlenecks (no cost feature yet) | https://www.dash0.com/blog/moving-fast-with-ai-without-losing-control | low | none |
+| 2026-11-19 | hn | 2026-11-19 | Tell HN: /tmp is hogging your RAM on Ubuntu 26 (coding agents use /tmp; set CLAUDE_CODE_TMPDIR) — HN 4 / 2 | https://news.ycombinator.com/item?id=50554756 | low | none |
+| 2026-11-19 | hn | 2026-11-19 | Show HN: What is localhost? interactive guide — HN 2 / 2 | https://whatislocalhost.com/ | low | none |
+| 2026-11-19 | hn | 2026-11-18 | Launch HN: Maritime (YC F26) — managed cloud for production AI agents — HN 52 / 48 | https://news.ycombinator.com/item?id=50549188 | low | none |
+| 2026-11-19 | hn | 2026-11-18 | Show HN: Mastra Factory — open-source agentic kanban "software factory" (238 agent PRs a week) — HN 92 / 32 | https://news.ycombinator.com/item?id=50548660 | low | none |
+| 2026-11-19 | hn | 2026-11-18 | Show HN: Terminess — terminal harness running the official Claude Code / Codex CLIs on own subscriptions — HN 3 / 0 | https://github.com/Terminess/terminess | low | none |
+| 2026-11-19 | hn | 2026-11-18 | Show HN: RockDesk — remote desktop control for AI agents — HN 2 / 1 | https://rockdesk.io/ | low | none |
+| 2026-11-19 | hn | 2026-11-18 | Show HN: Klistra — spec-driven AI motion design — HN 2 / 0 | https://klistra.ai/ | low | none |
+| 2026-11-19 | hn | 2026-11-18 | Show HN: Kanban job application tracker — HN 1 / 0 | https://github.com/dmreedy/job-board | low | none |
+| 2026-11-19 | hn | 2026-11-18 | Show HN: Indexed_bzip2 2.0 — HN 2 / 0 | https://github.com/mxmlnkn/librapidarchive/releases/tag/v2.0.0 | low | none |
+| 2026-11-19 | q-new-github | 2026-11-04 | juliantanx/aiusage (143 stars, created 2026-05): tokens / cost / sessions across Claude Code, Codex and others; v1.5.27-28 in November | https://github.com/juliantanx/aiusage | low | none |
+| 2026-11-19 | q-cost-monitoring | 2026-06-18 | DEV: Claudestat live terminal dashboard, quota guard and MCP server (before baseline) | https://dev.to/gentic_news/monitor-claude-code-spend-in-real-time-with-claudestats-live-dashboard-m1e | low | none |
+| 2026-11-19 | q-team-usage | — | Worklytics Claude Code analytics integration (Admin API + Enterprise Analytics; undated) | https://www.worklytics.co/integrations/claude-code-analytics | low | none |
+| 2026-11-19 | q-agent-observability | — | PyPI superbased-observer 1.27.0 / 1.28.0 (old versions) | https://pypi.org/project/superbased-observer/1.27.0/ | low | none |
+| 2026-11-19 | q-new-github | — | toolradar listing: claude-usage-tracker (undated) | https://toolradar.com/tools/claude-usage-tracker | low | none |
+| 2026-11-19 | q-new-github | — | sharedcontext.ai listing: hamed-elfayome claude-usage-tracker (undated) | https://sharedcontext.ai/plugins/external/hamed-elfayome/claude-usage-tracker | low | none |
+| 2026-11-19 | q-cost-optimization | — | thenote.app mirror of KDnuggets "7 practical ways to reduce Claude Code token usage" | https://thenote.app/post/en/7-practical-ways-to-reduce-claude-code-token-usage-noxivatj9q | low | none |
+| 2026-11-19 | reddit-claudeai | 2025 | r/ClaudeAI "The Claude Code is super expensive" (redlib mirror, 2025) | https://redlib.hackliberty.org/r/ClaudeAI/comments/1kp0gff/the_claude_code_is_super_expensive | low | none |
+| 2026-11-19 | reddit-claudeai | 2025 | r/ClaudeAI "Claude Code is insanely expensive" (redlib mirror, 2025) | https://redlib.ssps.io/r/ClaudeAI/comments/1j4x5v1/claude_code_is_insanely_expensive/mgd2puf/?context=3 | low | none |
+| 2026-11-19 | reddit-claudeai | 2025 | r/ClaudeAI "How much does Claude cost" (redlib mirror, 2025) | https://redlib.ssps.io/r/ClaudeAI/comments/1l6lri5/how_much_does_claude_cost_cost | low | none |
+| 2026-11-19 | reddit-claudeai | 2025 | r/ClaudeAI Claude performance megathread (mirror, 2025) | https://reddit.birdcat.cafe/r/ClaudeAI/comments/1kpdoia/megathread_for_claude_performance_discussion | low | none |
+| 2026-11-19 | reddit-claudeai | — | Firefox add-on "Claude Usage Tracker" by Bombadillo (claude.ai session / weekly limits; undated) | https://addons.mozilla.org/firefox/addon/track-claude-usage/ | low | none |
+| 2026-11-19 | reddit-claudeai | — | hunted.space: claude-usage-tracker Product Hunt stats (undated) | https://hunted.space/product/claude-usage-tracker | low | none |
+| 2026-11-19 | reddit-claudeai | — | extscope listing of the lugia19 Claude Usage Tracker extension | https://extscope.org/extension/knemcdpkggnbhpoaaagmjiigenifejfo | low | none |
+| 2026-11-19 | reddit-claudeai | — | sourcepulse listing of lugia19/Claude-Usage-Extension | https://www.sourcepulse.org/projects/27633024 | low | none |
+| 2026-11-19 | reddit-claudeai | — | Medium: how to use Claude AI without hitting your usage limit (undated) | https://medium.com/write-a-catalyst/this-is-how-to-use-claude-ai-without-hitting-your-usage-limit-42b5d723cbf0 | low | none |
+| 2026-11-19 | reddit-claudeai | — | DEV: automated Reddit monitoring with the Claude API (off topic) | https://dev.to/henryknight_dev/how-i-automated-reddit-monitoring-with-the-claude-api-full-code-1g7g | low | none |
+| 2026-11-19 | reddit-claudeai | — | use-apify: Reddit brand monitoring with Claude Cowork (off topic) | https://use-apify.com/blog/reddit-brand-monitoring-claude-cowork | low | none |
+| 2026-11-19 | reddit-claudeai | — | claudemarketplaces: ebenova Reddit monitor MCP (off topic) | https://claudemarketplaces.com/mcp/io.github.dgtalquantumleap-ai/ebenova-reddit-monitor | low | none |
+| 2026-11-19 | reddit-claudeai | — | thehiveindex: about r/ClaudeAI (off topic) | https://thehiveindex.com/communities/r-claudeai/ | low | none |
 | 2026-11-18 | hn | 2026-11-17 | Show HN: Faros Desktop (Faros AI) — free macOS app, no login: reads local Claude Code / Codex / Copilot / Cursor session history, timeline of messages and tool calls, on-device model summarises sessions by project and task, usage patterns plus "Power Ups" recommendations to make subscription spend go further; lead-gen for Faros' enterprise "Token Engineering Platform" — HN 4 / 2 | https://news.ycombinator.com/item?id=50535157 | medium | none (Log Hub session view + cost advisor cover it; new competitor: Faros AI, sources row added) |
 | 2026-11-18 | superbased-observer | 2026-11-17 | SuperBased Observer v1.39.0: budget run-out projection (`observer predict`, under each budget on the Budgets page), per-organization attribution of captured sessions, agent-run security assessments, "Fix with an agent" for code-security findings, one-step sign-in / pairing codes, self-hosted org server tenancy | https://github.com/superbasedapp/observer/releases/tag/v1.39.0 | medium | none (Log Hub budgets already forecast period-end spend, see budget-spend-math) |
 | 2026-11-18 | hn | 2026-11-17 | Show HN: Wake (piradoiv/wake, MIT, macOS, Xojo) — replays Claude Code transcripts as a timeline with per-step tokens and context added, cost per day, tool calls grouped by intent with "send less" suggestions exportable as a Markdown checklist; author found clearing context before the commit step cut $0.50 to $0.02 — HN 2 / 1 | https://rcruz.dev/wake/ | misc | none (home-made local tracker; per-step context growth is in Log Hub session view) |

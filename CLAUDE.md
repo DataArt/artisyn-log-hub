@@ -26,6 +26,12 @@ the full `/adlc-lh:*` skill family (review/plan/implement, deep-track variants, 
 skill for the unified workflow. `adlc-lh` is this repo's local copy of the shared `adlc` plugin, in
 `.artisyn/marketplace/plugins/adlc-lh/` (enabled as `adlc-lh@artisyn` in `.claude/settings.json`).
 
+Every task's `requirements.md` starts with OKF front matter — `type: "Task"`, `title`, `description`
+(the one-line summary; template `.claude/repo_config/requirements-template.md`). The todo index
+`docs/tasks/todo/index.md` is generated from it: run `npm run tasks:index` after `adlc-lh:scratch`
+and after `adlc-lh:archive` (also via `adlc-lh:tracker` create / close), and fix the front matter,
+not the index line, when a summary is wrong. The done index stays append-only (written by archive).
+
 # Hook API
 
 when changing hook API mind that some users will not update hook for a long time so you need to keep backward compatibility
@@ -258,6 +264,10 @@ KB files live in `docs/knowledgebase/`.
 - Once you or user need to find or change something in code base - start you reserch from reading relevant KB articles  
 - To find a KB file: read `docs/knowledgebase/index.md` first — do NOT glob the directory.
 - After adding, removing, or renaming a KB file: update `docs/knowledgebase/index.md`.
+- KB articles follow OKF v0.3 (`okf_version: "0.3"` in the bundle-root `index.md`): front matter
+  `type`, `title`, `description`, `tags`, `generated: { by: "<actor>", at: "<RFC 3339>" }` —
+  never the v0.1 `timestamp` key. Set `generated.at` on a meaningful content change, not on a
+  format-only edit. Algorithm docs keep their own `reviewed` / `reviewer` front matter.
 
 (Path matches `project-env.json → kbIndexPath`; keep in sync with it.)
 
