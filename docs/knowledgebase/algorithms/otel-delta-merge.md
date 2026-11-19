@@ -1,4 +1,9 @@
 ---
+type: "Algorithm"
+title: "OTEL delta merge: what a poll changes and what it highlights"
+description: "The OTEL tabs poll the server while a session runs. The session tab sends `since=<cursor>` and gets only the changed rows; the repository and team tabs re-read a snapshot."
+tags: [algorithm]
+generated: { by: "human:denistsyplakov", at: "2026-11-04T22:43:28+04:00" }
 reviewed: no
 reviewer: none
 ---

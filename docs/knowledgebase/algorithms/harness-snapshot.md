@@ -1,4 +1,9 @@
 ---
+type: "Algorithm"
+title: "Harness snapshot: skill/workflow/command catalog and its id"
+description: "System Context (Skills, Agents, MCP, Files, Rules) is built from one `harness-snapshot` line the hook uploads, never from older per-tab events; the Files and Rules tabs additionally merge the Claude log's own `instructions` / `nested_memory` attachments (log wins per path — see…"
+tags: [algorithm]
+generated: { by: "human:denistsyplakov", at: "2026-11-03T17:31:26+04:00" }
 reviewed: no
 reviewer: none
 ---

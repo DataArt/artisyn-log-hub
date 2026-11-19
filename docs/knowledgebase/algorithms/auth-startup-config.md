@@ -1,4 +1,9 @@
 ---
+type: "Algorithm"
+title: "Auth startup config: when the server refuses to start"
+description: "Checks the authentication environment once, at startup, before anything is served. A missing or malformed setting for the chosen `AUTH_MODE` stops the server with a message naming the variable, instead of starting a server whose sign-up, e-mail links or SSO break later in front of users."
+tags: [algorithm]
+generated: { by: "human:denistsyplakov", at: "2026-11-19T13:35:32+04:00" }
 reviewed: 2026-11-16
 reviewer: ai
 ---

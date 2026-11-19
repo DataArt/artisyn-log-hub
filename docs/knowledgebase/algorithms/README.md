@@ -122,6 +122,11 @@ Docs are written in English.
 
 ````markdown
 ---
+type: "Algorithm"
+title: "<Algorithm name>"
+description: "<one line: what the algorithm computes and why>"
+tags: [algorithm]
+generated: { by: "<actor>", at: "<RFC 3339>" }
 reviewed: no
 reviewer: none
 ---
@@ -198,6 +203,7 @@ Screen and field, or API field, or "safe behaviour: ...".
 
 | Key | Values |
 |---|---|
+| `type`, `title`, `description`, `tags`, `generated` | OKF v0.3 keys, as for every KB article (`type: "Algorithm"`). |
 | `reviewed` | `no` until reviewed, then the review date `YYYY-MM-DD`. |
 | `reviewer` | `none`; `ai` once the AI review passed and the owner sign-off is pending; `ai+owner` once the owner signed. |
 

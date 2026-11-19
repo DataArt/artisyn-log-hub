@@ -1,4 +1,9 @@
 ---
+type: "Algorithm"
+title: "Tool usefulness signals: did a tool call help the agent?"
+description: "Call counts and error rates say how often a tool is used, not whether it helped. The Tools/MCP tab marks each call with up to three heuristic signals read from what the same agent did right after it: the output was empty, the agent repeated the same call, or it opened a file the output pointed to."
+tags: [algorithm]
+generated: { by: "human:denistsyplakov", at: "2026-11-03T17:31:26+04:00" }
 reviewed: no
 reviewer: none
 ---

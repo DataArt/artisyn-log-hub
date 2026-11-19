@@ -1,4 +1,9 @@
 ---
+type: "Algorithm"
+title: "Advisor evidence: per-call price, cache rebuilds, cost per prompt"
+description: "The Turn-End Cost Advisor's LLM gives advice only from the figures it is shown. These rules turn the session's transcripts into those figures: what each API call cost, which calls re-wrote the cache and why, and what each user prompt cost."
+tags: [algorithm]
+generated: { by: "human:denistsyplakov", at: "2026-11-11T22:03:59+04:00" }
 reviewed: no
 reviewer: none
 ---

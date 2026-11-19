@@ -1,4 +1,9 @@
 ---
+type: "Algorithm"
+title: "OKF snapshot: KB bundle detection, ignored flags and the snapshot id"
+description: "The OKF tabs judge KB use \"as of session start\": which bundles (knowledge bases) the repository had, which files each held, how big they were and which were gitignored (private, never shown in a team view). The hook builds that picture — the `okf-snapshot` line — at upload time."
+tags: [algorithm]
+generated: { by: "human:denistsyplakov", at: "2026-11-03T17:31:26+04:00" }
 reviewed: no
 reviewer: none
 ---

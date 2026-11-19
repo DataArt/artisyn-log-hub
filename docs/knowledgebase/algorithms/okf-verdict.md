@@ -1,4 +1,9 @@
 ---
+type: "Algorithm"
+title: "OKF verdict: session and repository KB-use rules"
+description: "The OKF tabs open with a one-line verdict — OK, Something to fix, Mess, KB not used, Not enough data — and the \"Why\" lines behind it."
+tags: [algorithm]
+generated: { by: "human:denistsyplakov", at: "2026-11-06T13:11:03+04:00" }
 reviewed: no
 reviewer: none
 ---

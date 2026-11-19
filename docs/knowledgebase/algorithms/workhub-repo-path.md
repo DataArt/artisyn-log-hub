@@ -1,4 +1,9 @@
 ---
+type: "Algorithm"
+title: "Work Hub repo path: relative file paths inside a view"
+description: "Every file request (tree, open, save, upload, rename, delete, download) names a file by a path relative to the view root (`/workspace/repo` or a workstream's `/workspace/worktree`). This rule keeps such a path inside the view and away from git's own data, before any command runs in the container."
+tags: [algorithm]
+generated: { by: "human:denistsyplakov", at: "2026-11-14T14:41:14+04:00" }
 reviewed: no
 reviewer: none
 ---

@@ -1,4 +1,9 @@
 ---
+type: "Algorithm"
+title: "Release assets: install kit, checksums, release notes and VirusTotal scopes"
+description: "Decides what a GitHub Release ships and what its page says: which install-kit files are filled with the version and which are copied byte for byte, the `SHA256SUMS` file people verify their download with, and the release notes with the change list and the per-file VirusTotal verdict."
+tags: [algorithm]
+generated: { by: "human:denistsyplakov", at: "2026-11-03T17:31:26+04:00" }
 reviewed: no
 reviewer: none
 ---

@@ -1,4 +1,9 @@
 ---
+type: "Algorithm"
+title: "Upload job queue"
+description: "Since hook `3.0.0` a `Stop` / `SessionEnd` hook hands its log upload to the shared OTEL receiver (the single uploader of the OS user) by writing a job file into `~/.artisyn/upload/queue/`, instead of uploading in process and making the user wait."
+tags: [algorithm]
+generated: { by: "human:denistsyplakov", at: "2026-11-19T01:29:04+04:00" }
 reviewed: no
 reviewer: none
 ---

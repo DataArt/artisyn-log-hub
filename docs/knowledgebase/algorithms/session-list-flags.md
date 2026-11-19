@@ -1,4 +1,9 @@
 ---
+type: "Algorithm"
+title: "Session list flags: main model, main assistant, workflow"
+description: "The repository session list (`GET /api/v1/repositories/:repoId/sessions`) shows each session's model-based cost and a workflow marker."
+tags: [algorithm]
+generated: { by: "human:denistsyplakov", at: "2026-11-03T17:31:26+04:00" }
 reviewed: no
 reviewer: none
 ---

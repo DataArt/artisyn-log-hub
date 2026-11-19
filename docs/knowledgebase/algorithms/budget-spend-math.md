@@ -1,4 +1,9 @@
 ---
+type: "Algorithm"
+title: "Budget spend math: forecast, anomaly days, costly sessions, threshold notices"
+description: "A budget caps what a repository, a team repository or a team spends per day, week or month (task `2026-11-05-budgets-threshold-alerts`)."
+tags: [algorithm]
+generated: { by: "human:denistsyplakov", at: "2026-11-10T20:02:38+04:00" }
 reviewed: no
 reviewer: none
 ---

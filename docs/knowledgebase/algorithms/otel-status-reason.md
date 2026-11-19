@@ -1,4 +1,9 @@
 ---
+type: "Algorithm"
+title: "OTEL status: effective config, state, reason and write rule"
+description: "A session's OTEL tab can be empty for reasons the user cannot see: Claude Code `2.1.282`+ ignores telemetry keys in the project settings, an admin pins or disables OTEL through managed settings, the receiver is down."
+tags: [algorithm]
+generated: { by: "human:denistsyplakov", at: "2026-11-03T17:31:26+04:00" }
 reviewed: no
 reviewer: none
 ---

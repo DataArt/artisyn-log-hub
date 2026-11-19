@@ -1,4 +1,9 @@
 ---
+type: "Algorithm"
+title: "Tool wrapper matching: joining wrapper records to the transcript `tool_use` that ran them"
+description: "A monitored CLI call can be seen twice: the hook's wrapper records what the tool really printed and how it exited, and the transcript records the Bash / PowerShell `tool_use` the agent issued and what the agent saw back."
+tags: [algorithm]
+generated: { by: "human:denistsyplakov", at: "2026-11-03T17:31:26+04:00" }
 reviewed: no
 reviewer: none
 ---

@@ -1,3 +1,11 @@
+---
+type: "Research"
+title: "5. Command palette (Ctrl/Cmd+K)"
+description: "Wave 2 idea 5: a Ctrl/Cmd+K command palette to jump to repos, sessions and tabs."
+tags: [ux-research, product]
+generated: { by: "human:denistsyplakov", at: "2026-11-06T15:26:59+04:00" }
+---
+
 # 5. Command palette (Ctrl/Cmd+K)
 
 Wave 2 · Effort S–M · Impact high · Proposed by 4 of 5 agents · Depends on [01](../wave-1/01-tab-registry.md)

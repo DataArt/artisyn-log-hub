@@ -1,3 +1,11 @@
+---
+type: "Research"
+title: "6. Home page instead of the placeholder"
+description: "Wave 2 idea 6: replace the empty /main placeholder with a home page that deep-links into recent and relevant views."
+tags: [ux-research, product]
+generated: { by: "human:denistsyplakov", at: "2026-11-06T15:26:59+04:00" }
+---
+
 # 6. Home page instead of the placeholder
 
 Wave 2 · Effort M · Impact high · Proposed by all 5 agents · Builds on [03](../wave-1/03-use-case-lenses.md)

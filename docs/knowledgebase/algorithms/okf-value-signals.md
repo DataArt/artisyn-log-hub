@@ -1,4 +1,9 @@
 ---
+type: "Algorithm"
+title: "OKF value signals: did an article lead the agent to code, and where it failed to"
+description: "The access numbers and the verdict ([okf-verdict](okf-verdict.md)) say how much of the KB the agents read. They do not say whether an article was worth reading."
+tags: [algorithm]
+generated: { by: "human:denistsyplakov", at: "2026-11-06T02:28:23+04:00" }
 reviewed: no
 reviewer: none
 ---

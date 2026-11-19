@@ -1,3 +1,11 @@
+---
+type: "Research"
+title: "Wireframes: the whole picture"
+description: "Wireframes W1–W6 showing how the wave 1 and wave 2 UX ideas fit together (session pane, command palette, home page)."
+tags: [ux-research, product]
+generated: { by: "human:denistsyplakov", at: "2026-11-06T15:26:59+04:00" }
+---
+
 # Wireframes: the whole picture
 
 How waves 1 and 2 look together. Wireframes, not pixel layouts; names and figures are examples.

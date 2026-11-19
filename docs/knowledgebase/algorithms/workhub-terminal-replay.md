@@ -1,4 +1,9 @@
 ---
+type: "Algorithm"
+title: "Work Hub terminal replay segments"
+description: "A workstream's chat recording is the raw byte stream of its terminal, which changed size while it ran. To replay it faithfully (chat-tab scrollback and the history replay), the bytes are cut into segments, each written after resizing the terminal to the size it had when those bytes were produced."
+tags: [algorithm]
+generated: { by: "human:denistsyplakov", at: "2026-11-14T14:41:14+04:00" }
 reviewed: no
 reviewer: none
 ---

@@ -1,4 +1,9 @@
 ---
+type: "Algorithm"
+title: "OTEL trace assembly: turns, turn header, time split, turn order"
+description: "The session OTEL tab shows each turn of a session as a waterfall of trace spans with a header (start, duration, cost, hidden cost, LLM calls, depth, spans, waiting, output tokens), a \"Time\" bar that splits the turn into waiting / model / tool / other, and a navigator that orders turns."
+tags: [algorithm]
+generated: { by: "human:denistsyplakov", at: "2026-11-03T17:31:26+04:00" }
 reviewed: no
 reviewer: none
 ---

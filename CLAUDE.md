@@ -268,7 +268,9 @@ KB files live in `docs/knowledgebase/`.
 - KB articles follow OKF v0.3 (`okf_version: "0.3"` in the bundle-root `index.md`): front matter
   `type`, `title`, `description`, `tags`, `generated: { by: "<actor>", at: "<RFC 3339>" }` —
   never the v0.1 `timestamp` key. Set `generated.at` on a meaningful content change, not on a
-  format-only edit. Algorithm docs keep their own `reviewed` / `reviewer` front matter.
+  format-only edit. Algorithm docs have the same keys (`type: "Algorithm"`) plus their own
+  `reviewed` / `reviewer`. Every `.md` in a bundle (except `index.md` / `log.md`) has front matter
+  with a `type`, including research notes and samples.
 
 (Path matches `project-env.json → kbIndexPath`; keep in sync with it.)
 
