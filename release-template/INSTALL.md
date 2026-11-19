@@ -216,12 +216,17 @@ The five values of `AUTH_MODE` (set in `.env`, then `docker compose up -d`):
 **`strict-managed` in short.** On the first start the app creates the admin account for
 `ADMIN_CONTACT_EMAIL` and emails it a set-password link (valid 24 hours, works once). If that
 email cannot be sent, the app does not start — fix SMTP and start it again. Later starts send no
-email; if an account with that address already exists it is made an admin. The admin then opens
+email. If that address already has an admin account nothing happens; if it has a non-admin account
+(e.g. from an earlier mode), its password, sessions and API keys are cleared and it gets the same
+set-password email, so only the mailbox owner becomes the admin. The admin then opens
 **Admin Panel → Users → + Create user** (email, role, optional team); the new person gets a
 set-password link valid 24 hours, and the admin can **Resend link** while the person has no
 password yet. "Forgot password?" on the login page works for every account (its link is valid
-1 hour). Sign-up and team "invite anyway" for unknown emails are off. Each client IP can trigger
-at most 20 emails per hour. `ALLOWED_EMAIL_DOMAINS`, when set, limits which addresses the admin
+1 hour). Sign-up and team "invite anyway" for unknown emails are off. Every account must prove
+its email before it can sign in: accounts from an earlier mode that never used a mailed link
+(e.g. Mode 2 users) sign in again after "Forgot password?" — tell your users before switching.
+"Forgot password?" accepts at most 20 requests per client IP per hour, and each admin can send at
+most 100 emails per hour. `ALLOWED_EMAIL_DOMAINS`, when set, limits which addresses the admin
 can create (not the `ADMIN_CONTACT_EMAIL` account). `PUBLIC_BASE_URL` must be the URL people open,
 because every link in those emails is built from it.
 
@@ -291,7 +296,7 @@ that file on every upgrade. A setting that is not in `.env` keeps the app's buil
 | `ADMIN_CONTACT_EMAIL` | **Required for `AUTH_MODE=password-confirm` and `strict-managed`**, optional for `password`. Shown to users in the "email could not be sent" messages. In `strict-managed` it is also the first admin: that account is created on the first start and gets a set-password email. |
 | `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_REDIRECT_URI` | **Required for `AUTH_MODE=azure-oauth`** (sign-in with Azure Entra ID), from your Azure App Registration. The tenant must be a single tenant GUID. `AZURE_REDIRECT_URI` is `<the URL users open>/api/auth/callback` (with the default port mapping `http://localhost:5003/api/auth/callback`) and must be registered on the App Registration under the *Web* platform. The first user who signs in becomes the admin, as in the other modes. |
 | `AZURE_SCOPES`, `AZURE_AUTHORITY` | Optional for `azure-oauth`: scopes (default `openid profile email`) and a custom authority URL for the same tenant (default `https://login.microsoftonline.com/<tenant>/v2.0`). |
-| `AUTH_RATE_LIMIT_POINTS`, `AUTH_RATE_LIMIT_WINDOW_SEC` | Rate limit on sign-up, forgot password, resend confirmation and reset password, per client IP and per email. Defaults: 5 requests per 900 seconds; `0` points turns it off. In `strict-managed` there is a fixed extra limit of 20 emails per client IP per hour (forgot password, create user, resend link), not configurable. |
+| `AUTH_RATE_LIMIT_POINTS`, `AUTH_RATE_LIMIT_WINDOW_SEC` | Rate limit on sign-up, forgot password, resend confirmation and reset password, per client IP and per email. Defaults: 5 requests per 900 seconds; `0` points turns it off. In `strict-managed` there are fixed extra limits, not configurable: 20 "Forgot password?" requests per client IP per hour and 100 create-user / resend-link emails per admin per hour, shared by all worker processes. |
 | `IMPORT_MAX_UPLOAD_BYTES`, `IMPORT_MAX_ENTRIES`, `IMPORT_MAX_UNCOMPRESSED_BYTES`, `IMPORT_MAX_ENTRY_BYTES` | Limits for repository zip imports. Defaults: 5 GiB upload, 20000 entries, 20 GiB uncompressed, 400 MiB per entry. An import over a limit is rejected with a message naming the setting to raise. |
 | `SESSION_RETENTION_DAYS` | How long session data is kept. Root sessions whose first log is older than this many days are deleted for good. Default: 30. `SESSION_RETENTION_CHECK_INTERVAL_MS` and `SESSION_RETENTION_PURGE_BATCH_SIZE` tune how often the job runs (30 min) and how many sessions one run deletes (200). |
 | `PASSWORD_POLICY` | Password strength for `password` / `password-confirm` / `strict-managed`: `any`, `mid` or `long` (default). |
