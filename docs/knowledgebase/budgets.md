@@ -8,7 +8,7 @@ tags:
   - teams
   - notifications
   - reports
-timestamp: "2026-11-10T00:00:00+04:00"
+generated: { by: "human:denistsyplakov", at: "2026-11-10T00:00:00+04:00" }
 ---
 
 # Budgets, Spend tab and threshold notices

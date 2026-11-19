@@ -1,3 +1,9 @@
+---
+type: "Task"
+title: "Session List — Filter by Skill or Rule"
+description: "Add multi-select Skill and Rule filter controls to the session list panel; sessions are narrowed to those that invoked a given skill or loaded a given rule file."
+---
+
 # T-12: Session List — Filter by Skill or Rule
 
 **Status:** todo

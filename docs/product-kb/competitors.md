@@ -5,7 +5,7 @@ description: "Who Log Hub competes with, grouped by category, how Log Hub is pos
 tags:
   - product
   - competitive-research
-timestamp: "2026-11-01T00:00:00+04:00"
+generated: { by: "human:denistsyplakov", at: "2026-11-01T00:00:00+04:00" }
 ---
 
 # Competitors

@@ -8,7 +8,7 @@ tags:
   - session-view
   - reports
   - hook
-timestamp: "2026-11-05T00:00:00+04:00"
+generated: { by: "human:denistsyplakov", at: "2026-11-05T00:00:00+04:00" }
 ---
 
 # OKF Usage

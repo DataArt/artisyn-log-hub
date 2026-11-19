@@ -1,3 +1,9 @@
+---
+type: "Task"
+title: "Top Used Analytics Table"
+description: "New \"Top Used\" analytics view: collapsible ranked tables for File Categories, MCP Servers, and Vision sessions with per-row hourly micro bar charts and a Top N selector."
+---
+
 # T-4: Top Used Analytics Table
 
 **Status:** todo

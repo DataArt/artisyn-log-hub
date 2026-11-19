@@ -1,3 +1,9 @@
+---
+type: "Task"
+title: "Session Log Parsing Indicator"
+description: "Show a parsing indicator in the client once session logs are loaded from the server and client-side parsing begins."
+---
+
 # T-35: Session Log Parsing Indicator
 
 **Status:** todo

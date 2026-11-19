@@ -1,3 +1,9 @@
+---
+type: "Task"
+title: "Perf Harness Reports Failed Scenarios As Passing, Making The 20% Gate Unenforceable"
+description: "`npm run perf` computes mean/p95 over failed requests, prints `✓` for scenarios failing 500/500, discards status codes, and gates on an absolute +10ms instead of the 20% required by `.claude/rules/server.md`; `auth:login` also 404s under `AUTH_MODE=none` yet still reports as passing. Makes the mandated 20% regression gate unenforceable."
+---
+
 # T-96: Perf Harness Reports Failed Scenarios As Passing, Making The 20% Gate Unenforceable
 
 **Status:** todo

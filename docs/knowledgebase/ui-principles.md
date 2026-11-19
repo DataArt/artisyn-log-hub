@@ -5,7 +5,7 @@ description: "Access control messaging, error handling, color scheme (light-only
 tags:
   - client
   - ui
-timestamp: "2026-11-03T00:00:00+04:00"
+generated: { by: "human:denistsyplakov", at: "2026-11-03T00:00:00+04:00" }
 ---
 
 if user tryies to access to something that he does not have acceess to - show "No access"

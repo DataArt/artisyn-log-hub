@@ -7,7 +7,7 @@ tags:
   - session-view
   - harness
   - hook
-timestamp: "2026-11-11T00:00:00+04:00"
+generated: { by: "human:denistsyplakov", at: "2026-11-11T00:00:00+04:00" }
 ---
 
 # System Context Anatomy Tab

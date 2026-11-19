@@ -1,3 +1,9 @@
+---
+type: "Task"
+title: "Session Cost Diagnosis Report (\"Why Was This Session Expensive\")"
+description: "one-click per-session report: ranked cost drivers (context growth, compactions, large tool results, retries, subagents, cache rebuilds) with links to the exact turns, from existing data only (AgentsView `session diagnose` parity)"
+---
+
 # 2026-11-13: Session Cost Diagnosis Report ("Why Was This Session Expensive")
 
 **Status:** todo

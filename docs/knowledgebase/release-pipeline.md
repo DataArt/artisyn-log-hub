@@ -3,7 +3,7 @@ type: reference
 title: Release Pipeline
 description: How a release is published - push to the release branch runs .github/workflows/release.yml, which computes the version from the root package.json line and the git tags, builds the multi-arch GHCR image, builds and scans the install kit, attests everything and publishes the GitHub Release; plus the install scripts, verification commands, the local test bundle and the owner rollout checklist
 tags: [ci, release, github-actions, docker, ghcr, install]
-timestamp: 2026-10-28
+generated: { by: "human:denistsyplakov", at: "2026-10-28" }
 ---
 
 # Release Pipeline

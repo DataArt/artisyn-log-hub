@@ -5,7 +5,7 @@ description: "Session log view (Logs tab): the /logs payload contract (agent- pr
 tags:
   - client
   - logs
-timestamp: "2026-11-09T00:00:00+04:00"
+generated: { by: "human:denistsyplakov", at: "2026-11-09T00:00:00+04:00" }
 ---
 
 # Session Log View

@@ -1,3 +1,9 @@
+---
+type: "Task"
+title: "Bash-View Algorithm Doc — Close Round-6 Review Findings"
+description: "add rows for the four holes left by the 6th AI review of bash-command-view.md, document five missing behaviours, run one fresh review and set reviewer: ai (follow-up to 2026-10-22-context-growth-item-modal)"
+---
+
 # 2026-10-23: Bash-View Algorithm Doc — Close Round-6 Review Findings
 
 **Status:** todo

@@ -4,7 +4,7 @@ title: "Server Conventions"
 description: "Backend implementation patterns: DB query optimization, Argon2id password hashing, performance testing, and pino logging."
 tags:
   - server
-timestamp: "2026-11-03T00:00:00+04:00"
+generated: { by: "human:denistsyplakov", at: "2026-11-03T00:00:00+04:00" }
 ---
 
 ## Gotchas

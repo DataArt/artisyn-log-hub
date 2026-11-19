@@ -1,3 +1,9 @@
+---
+type: "Task"
+title: "Auth Mode 5 — Admin-Provisioned Users, Set-Password Links by Email"
+description: "strictly manual access: no signup, admin creates users, no password ever emailed, only set/reset links (admin bootstrap from config, new users, forgot password), per-IP send rate limit"
+---
+
 # 2026-11-05: Auth Mode 5 — Admin-Provisioned Users, Set-Password Links by Email
 
 **Status:** todo

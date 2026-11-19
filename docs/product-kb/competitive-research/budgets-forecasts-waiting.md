@@ -6,7 +6,7 @@ tags:
   - competitive-research
   - budgets
   - work-time
-timestamp: "2026-11-09T00:00:00+04:00"
+generated: { by: "human:denistsyplakov", at: "2026-11-09T00:00:00+04:00" }
 ---
 
 # Budgets, forecasts and waiting time — what competitors show

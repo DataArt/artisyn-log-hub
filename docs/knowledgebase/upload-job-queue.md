@@ -6,7 +6,7 @@ tags:
   - hooks
   - otel
   - upload
-timestamp: "2026-11-18T23:00:00+04:00"
+generated: { by: "human:denistsyplakov", at: "2026-11-18T23:00:00+04:00" }
 ---
 
 # Upload Job Queue

@@ -1,3 +1,9 @@
+---
+type: "Task"
+title: "Work Hub Workspace Templates"
+description: "choose a template (Claude Code / OpenCode: descriptor + devcontainer) when creating a workspace; Claude Code asks for Log Hub connection params"
+---
+
 # 2026-11-14: Work Hub Workspace Templates
 
 **Status:** todo
