@@ -35,4 +35,9 @@ export interface AuthConfig {
    * send password-reset email (SMTP configured). Absent from older servers.
    */
   passwordResetAvailable?: boolean;
+  /**
+   * Password modes: the server's password policy rule, worded "must be at least …" (the same
+   * text as a `weak_password` error). Absent from older servers.
+   */
+  passwordRequirement?: string;
 }

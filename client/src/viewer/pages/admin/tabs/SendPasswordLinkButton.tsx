@@ -45,6 +45,7 @@ export function usePasswordLinkSender(
     setSending(user.id, true);
     try {
       const result = await sendPasswordLink(user.id);
+      void queryClient.invalidateQueries({ queryKey: ['admin-users'] });
       if (result.email_delivery === 'sent') {
         startCooldown(user.id, RESEND_COOLDOWN_SECONDS);
         onNotice({
@@ -63,7 +64,7 @@ export function usePasswordLinkSender(
         startCooldown(user.id, seconds);
         onNotice({
           tone: 'warning',
-          text: `Too many requests, try again in ${seconds}s`,
+          text: 'Too many requests — try again when the countdown on the button ends',
         });
       } else {
         // 404/409 (user deleted, or the password was set meanwhile) — refetch to reconcile.
@@ -76,7 +77,19 @@ export function usePasswordLinkSender(
 
   return {
     send,
-    cooldownUntil: (userId: number) => cooldownUntil[userId] ?? 0,
+    /**
+     * The later of the local cooldown (after a 429) and the server's: 60 s
+     * from the last link the server issued (create or resend), so a reload
+     * or a link issued just now by "+ Create user" keeps the button waiting.
+     */
+    cooldownUntil: (user: AdminUser) =>
+      Math.max(
+        cooldownUntil[user.id] ?? 0,
+        user.passwordLinkSentAt === null
+          ? 0
+          : new Date(user.passwordLinkSentAt).getTime() +
+              RESEND_COOLDOWN_SECONDS * 1000,
+      ),
     isSending: (userId: number) => sendingIds.has(userId),
   };
 }

@@ -20,6 +20,17 @@ export function bootstrapAdminEmail(
   };
 }
 
+/**
+ * "Forgot password?" for an account that has no password yet (created by an
+ * administrator, never set): same 1 h link as a reset, but "set" wording.
+ */
+export function setPasswordOnRequestEmail(url: string): EmailContent {
+  return {
+    subject: 'Set your Log Hub password',
+    text: `You asked for a link to set your Log Hub password. Use the link below to choose one (it works once and is valid for 1 hour):\n\n${url}\n\nIf you did not request this, you can ignore this email.`,
+  };
+}
+
 /** Email to an account an administrator created (or a resent link); valid once, for 24 hours. */
 export function setPasswordEmail(email: string, url: string): EmailContent {
   return {

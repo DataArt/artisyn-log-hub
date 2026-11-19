@@ -2,7 +2,7 @@ import { IsEmail, IsIn, IsInt, IsOptional } from 'class-validator';
 
 /** `POST /api/v1/admin/users` (auth mode `strict-managed` only). */
 export class CreateAdminUserDto {
-  @IsEmail()
+  @IsEmail({}, { message: 'Enter a valid email address' })
   email: string;
 
   @IsOptional()

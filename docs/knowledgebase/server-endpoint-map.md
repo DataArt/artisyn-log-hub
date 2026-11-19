@@ -6,7 +6,7 @@ tags:
   - server
   - api
   - auth
-generated: { by: "human:denistsyplakov", at: "2026-11-16T00:00:00+04:00" }
+generated: { by: "human:denistsyplakov", at: "2026-11-19T00:00:00+04:00" }
 ---
 
 # Server HTTP API map
@@ -358,13 +358,22 @@ grep the controller.
   only): `POST /api/v1/admin/users` (create a password-less user + email a 24 h set-password
   link; 201, 400 `email_domain_not_allowed` / `team_not_found`, 409 `email_already_registered`,
   429) and `POST /api/v1/admin/users/:id/password-link` (resend; 200 `{ email_delivery }`, 404
-  `user_not_found`, 409 `password_already_set`, 429 + `Retry-After`). Guard order: class
+  `user_not_found`, 409 `password_already_set` / `not_a_provisioned_account`, 429 +
+  `Retry-After`). Guard order: class
   `@UseGuards(AuthModeGuard, SessionAuthGuard, AdminGuard)` with method
   `@AllowedAuthModes('strict-managed')`, so `AuthModeGuard` runs **first** and in every other mode
   each caller — anonymous, user or admin — gets **404**, never 401/403. It is a separate
   controller so `admin-panel.controller.ts` keeps its own guards. Both count against the
-  20 emails / IP / hour limit. Flows: [user-account-flows.md](user-account-flows.md#set-password-links-strict-managed).
-- `GET /api/v1/admin/users` rows carry `passwordSet` in every mode (additive field).
+  calling admin's 100 emails / hour (keyed by admin user id, not IP). Flows: [user-account-flows.md](user-account-flows.md#set-password-links-strict-managed).
+- `GET /api/v1/admin/users` rows carry `passwordSet`, `imported` and `passwordLinkSentAt` in
+  every mode (additive fields).
+- `PATCH /api/v1/admin/users/:id/email` (`AdminService.renameUserEmail()`) retires the user's
+  outstanding reset and confirmation links in every mode; in `strict-managed` it also applies the
+  domain allow-list and clears `email_confirmed_at`.
+- `GET /api/v1/auth/config` carries `passwordRequirement` (the active `PASSWORD_POLICY` rule) in
+  the password modes (additive field). `POST /api/v1/auth/forgot-password` answers 200
+  `{ email_delivery: 'sent' }` also during the per-account cooldown (no 429 that would reveal
+  the account); only the per-IP limits still answer 429.
 - `POST /api/v1/users/:userId/reset-password-link` (legacy admin-generated link) has method-level
   `@AllowedAuthModes('none', 'password', 'password-confirm', 'azure-oauth')` +
   `@UseGuards(AuthModeGuard)`. Class guards run first, so in `strict-managed` an admin gets 404

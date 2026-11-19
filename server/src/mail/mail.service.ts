@@ -4,7 +4,10 @@ import * as nodemailer from 'nodemailer';
 import { maskEmail } from '../common/mask-email';
 import { budgetMailSubject } from '../logs/budgets/budget.constants';
 import { formatUsdMicros } from '../logs/budgets/budget-scope';
-import { setPasswordEmail } from './password-link-emails';
+import {
+  setPasswordEmail,
+  setPasswordOnRequestEmail,
+} from './password-link-emails';
 import { createSmtpTransport } from './smtp-transport';
 
 export type EmailDelivery = 'sent' | 'failed';
@@ -121,8 +124,17 @@ export class MailService implements OnModuleInit {
     return this.send(
       email,
       'Reset your password',
-      `You requested a password reset. Use the link below to set a new password (valid for 1 hour):\n\n${resetUrl}\n\nIf you did not request this, you can ignore this email.`,
+      `You requested a password reset. Use the link below to set a new password (it works once and is valid for 1 hour):\n\n${resetUrl}\n\nIf you did not request this, you can ignore this email.`,
     );
+  }
+
+  /** "Forgot password?" link for an account that has no password yet. */
+  async sendSetPasswordOnRequestEmail(
+    email: string,
+    url: string,
+  ): Promise<EmailDelivery> {
+    const { subject, text } = setPasswordOnRequestEmail(url);
+    return this.send(email, subject, text);
   }
 
   /** Admin-issued set-password link (strict-managed: create user, resend link). */

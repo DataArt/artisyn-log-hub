@@ -37,6 +37,7 @@ import { LocalAuthGuard } from './guards/local-auth.guard';
 import { SessionAuthGuard } from './guards/session-auth.guard';
 import { TooManyRequestsException } from './exceptions/too-many-requests.exception';
 import { isLocalhostRequest } from './utils/localhost.util';
+import { passwordRequirement } from './utils/password-policy';
 import { clientIp } from './client-ip';
 import { EmailSendRateLimitService } from './email-send-rate-limit.service';
 
@@ -60,7 +61,17 @@ export class AuthController {
       azure?: { authority: string; clientId: string; redirectUri: string };
       adminContactEmail?: string;
       passwordResetAvailable?: boolean;
+      /** Password modes: the policy rule ("must be …"), shown before submit. */
+      passwordRequirement?: string;
     } = { mode };
+    if (
+      mode === 'password' ||
+      mode === 'password-confirm' ||
+      mode === 'strict-managed'
+    ) {
+      const requirement = passwordRequirement();
+      if (requirement !== null) response.passwordRequirement = requirement;
+    }
 
     if (mode === 'azure-oauth') {
       response.azure = {

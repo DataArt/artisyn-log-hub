@@ -4,7 +4,7 @@ title: "Authorization and Authentication"
 description: "The five configurable auth modes (incl. strict-managed admin-provisioned accounts), their env vars, per-mode route gating, the auth security hardening (TRUST_PROXY, brute-force login delay, self-service password change and account deletion), how Mode 1's localhost gate works inside a container, and the per-team access modes that decide whose sessions and prompts a caller may read."
 tags:
   - auth
-generated: { by: "human:denistsyplakov", at: "2026-11-16T00:00:00+04:00" }
+generated: { by: "human:denistsyplakov", at: "2026-11-19T00:00:00+04:00" }
 ---
 
 # Authorization and Authentication
@@ -30,7 +30,7 @@ table), unchanged across all five modes — `SessionAuthGuard`/`SessionSerialize
 | `azure-oauth`      | Mode 4 — Azure Entra ID (OAuth/OIDC)     | `GET /api/v1/auth/azure` → Microsoft → `GET /api/auth/callback`, via `@azure/msal-node`                    |
 | `strict-managed`   | Strict managed (admin-provisioned users) | Email + password login, **no self sign-up**: only an admin creates accounts, each gets an emailed set-password link; the first admin is bootstrapped from `ADMIN_CONTACT_EMAIL` (see [Strict-managed mode](#strict-managed-mode-admin-provisioned-accounts)) |
 
-The UI label for `strict-managed` is "Strict managed (admin-provisioned users)"; it has no "Mode N" number in the UI.
+The admin Auth tab labels `strict-managed` "Strict managed — admin-created accounts only (Mode 5)".
 
 Validated fail-fast at startup (`server/src/auth/config/auth-startup-validation.ts`, called from
 `app.module.ts`) — the server refuses to start with an unrecognized `AUTH_MODE` (the error lists all five values), or
@@ -96,44 +96,79 @@ whenever the response carries `email_delivery`. Covered by the mode-B auth scena
 
 - **Routes.** `login`, `forgot-password`, `reset-password`, `change-password` list `'strict-managed'` in
   `@AllowedAuthModes`; `signup`, `confirm-email`, `resend-confirmation` do not (404). `GET /api/v1/auth/config` returns
-  `mode: 'strict-managed'`, `passwordResetAvailable: true` and `adminContactEmail`. The admin pending-registration
-  routes and the legacy `POST /api/v1/users/:userId/reset-password-link` 404 in this mode; the two admin provisioning
-  routes exist **only** in this mode (see `server-endpoint-map.md` § Admin user provisioning).
+  `mode: 'strict-managed'`, `passwordResetAvailable: true`, `adminContactEmail` and (all password modes)
+  `passwordRequirement` — the active policy rule, worded like the `weak_password` message
+  (`passwordRequirement()`, `server/src/auth/utils/password-policy.ts`). The admin pending-registration routes and the
+  legacy `POST /api/v1/users/:userId/reset-password-link` 404 in this mode; the two admin provisioning routes exist
+  **only** in this mode (see `server-endpoint-map.md` § Admin user provisioning).
 - **First admin — bootstrap at startup.** `initializeDatabase({ bootstrapAdmin: true })` (only `main.ts` passes it;
   `migrate.ts` and the contract global setup do not) runs `bootstrapStrictManagedAdmin()`
   (`server/src/database/bootstrap-strict-managed-admin.ts`) as its last step, under the migration advisory lock, when
   `AUTH_MODE === 'strict-managed'`. It runs before `AppModule`'s own validation, so it calls
-  `validateModeStrictManaged()` itself. In one transaction on the lock's connection: an existing account with
-  `ADMIN_CONTACT_EMAIL` (case-insensitive) is promoted to `admin` if needed and **no email is sent**; otherwise a
-  password-less admin plus a 24 h `password_reset_tokens` row are inserted and the set-password email
-  (`bootstrapAdminEmail`, `server/src/mail/password-link-emails.ts`) is sent through `createSmtpTransport()`. A failed
-  send (or no `PUBLIC_BASE_URL`) rolls the insert back and throws
+  `validateModeStrictManaged()` itself. In one transaction on the lock's connection, by the account with
+  `ADMIN_CONTACT_EMAIL` (case-insensitive):
+  - already `admin` → nothing, **no email**;
+  - a non-admin account (e.g. a sign-up from an earlier mode — anyone could have registered that address) → it
+    becomes the admin **only through the mailbox**: `role = admin`, `password_hash` and `email_confirmed_at` set
+    NULL, outstanding `password_reset_tokens` retired, its `auth_sessions` rows deleted (when the table exists), its
+    `api_keys` deleted (a key acts as the account on the hook routes; nothing caches keys yet at this point), a
+    warning logged;
+  - no account → a password-less admin is inserted.
+  The last two then insert a 24 h `set` token and send the set-password email (`bootstrapAdminEmail`,
+  `server/src/mail/password-link-emails.ts`) through `createSmtpTransport()`. A failed send (or no `PUBLIC_BASE_URL`)
+  rolls everything back and throws
   `Strict-managed bootstrap: the set-password email to <masked> could not be sent (<reason>); AUTH_MODE=strict-managed refuses to start. Fix SMTP and restart.`
   — the next start retries from scratch. So a second start never sends a second email. In cluster mode every worker
-  runs it; only the first one under the lock creates and sends. `ALLOWED_EMAIL_DOMAINS` does not apply to this
-  address; the token and link are never logged (email masked).
+  runs it; only the first one under the lock changes anything and sends. `ALLOWED_EMAIL_DOMAINS` does not apply to
+  this address; the token and link are never logged (email masked).
+- **Password links.** `password_reset_tokens.token` stores `sha256(token)` hex (`hashResetToken()`, migration 0094
+  hashed older rows in place), never the link token. `purpose` is `set` (admin-issued: bootstrap, create, resend —
+  24 h) or `reset` ("Forgot password?" — 1 h). `PasswordResetTokensService.issueWithCooldown(userId, purpose, ttl)`:
+  a `set` link's 60 s cooldown counts only earlier still-working `set` links (not ones a rename retired) and retires every outstanding link; a `reset` link's
+  cooldown counts any link and retires only earlier `reset` links, so an anonymous request can neither cancel nor
+  hold up an admin-issued link. `AuthService.resetPassword()` runs `check()` (no consume) → mismatch / policy →
+  `consume()` (which retires the user's other links), so a typo never burns a link; on success it deletes all the
+  user's sessions (`AuthSessionsService.deleteAllSessionsForUser`), in every mode.
+- **Forgot-password never reveals an account.** Unknown email, cooldown and success all answer 200
+  `{ email_delivery: 'sent' }`, and the email is sent without awaiting it (no SMTP round-trip in the response time).
+  A password-less account gets the "set" wording (`setPasswordOnRequestEmail`, link with `purpose=set`, 1 h). In
+  strict-managed an import placeholder (`PLACEHOLDER_IMPORT_USER_PASSWORD_HASH`) gets nothing — its address came
+  from an uploaded archive, not from an admin.
 - **Admin create / resend.** `AdminService.createProvisionedUser()` inserts a password-less user (+ optional
-  `team_members` row, `canInvite: false`) in one transaction, then issues a 24 h token and emails
+  `team_members` row, `canInvite: false`) in one transaction, then issues a 24 h `set` token and emails
   `setPasswordEmail`; a failed send keeps the account (`email_delivery: 'failed'`). `sendPasswordLink()` re-issues
-  for an account with no real password (409 `password_already_set` otherwise); `issueWithCooldown` retires the
-  previous link and enforces the shared 60 s cooldown (429 + `Retry-After`). "Password set" =
+  for an account with no real password (409 `password_already_set` otherwise; 409 `not_a_provisioned_account` for an
+  import placeholder or a stored address that fails `isEmail`). "Password set" =
   `password_hash IS NOT NULL AND password_hash <> PLACEHOLDER_IMPORT_USER_PASSWORD_HASH`, exposed as `passwordSet` on
-  every `GET /api/v1/admin/users` row (all modes). Details: `user-account-flows.md`.
-- **Email confirmed on first password set.** Admin-created and bootstrap accounts start with `email_confirmed_at`
-  NULL; in strict-managed `AuthService.resetPassword()` stamps it after a successful token consume (the link proves
-  the mailbox), so a later switch to `password-confirm` does not lock them out.
+  every `GET /api/v1/admin/users` row (all modes), with `imported` (placeholder) and `passwordLinkSentAt` (newest still-working `set`
+  link — the Users tab counts the resend cooldown down from it, across reloads). Details: `user-account-flows.md`.
+- **A proven mailbox is required.** Admin-created and bootstrap accounts start with `email_confirmed_at` NULL; in
+  strict-managed `AuthService.resetPassword()` stamps it after a successful consume (the link proves the mailbox), so a
+  later switch to `password-confirm` does not lock them out. In strict-managed `LocalStrategy` refuses a correct
+  password of an account with `email_confirmed_at` NULL (403 `email_not_verified`) and `SessionSerializer` drops such
+  a session — this covers sign-ups left unconfirmed by Mode 3 and accounts from Mode 2. "Forgot password?" verifies
+  them. Renaming an account's email (`AdminService.renameUserEmail()`, one transaction holding the user row lock that
+  `issueWithCooldown` also takes, and a no-op when the address is unchanged) retires its outstanding reset and
+  confirmation links in every mode; in strict-managed it also applies the domain allow-list, clears
+  `email_confirmed_at` and `password_hash` (the person sets a password through a link), and refuses a self-rename
+  (400 `cannot_rename_self`). `issueWithCooldown(…, expectedEmail)` re-reads the email under the lock and issues
+  nothing (`stale`) when a rename got there first, so no link is ever mailed to the old address.
 - **No password, no session, no key.** A password-less account cannot log in (`validateUser()` returns early on a
   NULL hash), so it can never reach `SessionAuthGuard`-protected routes such as API-key creation. "Forgot password?"
   works for every account, password-less ones included.
 - **Email limiter.** `EmailSendRateLimitService` (`server/src/auth/email-send-rate-limit.service.ts`, provided and
-  exported by `AuthModule`): `RateLimiterMemory`, `EMAIL_SEND_LIMIT_PER_IP_PER_HOUR = 20` per source IP per hour, keyed
-  by `clientIp(req)` (`server/src/auth/client-ip.ts`). `consumeIp()` is a **no-op unless `AUTH_MODE` is
-  strict-managed**; over the limit it throws 429 + `Retry-After`. Called by forgot-password, admin create user and
-  admin resend link — after the `AuthRateLimitService` checks and DTO validation, before any account lookup, so an
-  unknown email costs the same as a known one. Per process, in memory (each cluster worker counts on its own).
+  exported by `AuthModule`): fixed one-hour windows in `email_send_counters`, one upsert per call, so every cluster
+  worker shares the budget. `consumeIp(clientIp(req))` (forgot-password, `EMAIL_SEND_LIMIT_PER_IP_PER_HOUR = 20`,
+  keyed by `sha256(ip)` — behind `TRUST_PROXY=true` the IP comes from a client header of any length) and
+  `consumeAdmin(adminUserId)` (create user / resend link, `EMAIL_SEND_LIMIT_PER_ADMIN_PER_HOUR = 100`) are **no-ops
+  unless `AUTH_MODE` is strict-managed**; over the limit they throw 429 + `Retry-After`. Keying admin calls by user id
+  keeps an anonymous flood from behind one proxy IP from blocking the admin. Called after the `AuthRateLimitService`
+  checks and DTO validation, before any account lookup, so an unknown email costs the same as a known one; about 5 %
+  of calls also delete expired windows.
 - **Team force-invite.** `TeamsService.sendInvitation()` forces `force = false` in strict-managed, so an invite for an
   unknown email returns the existing 404 `user_not_registered` instead of auto-provisioning an account — only admins
-  create accounts. `TeamInvitationsTab.tsx` hides the "invite anyway" offer in this mode.
+  create accounts. Both `TeamMembersTab.tsx` and `TeamInvitationsTab.tsx` show a refusal instead of the "add them
+  anyway" offer (`useNoAccountInvite()`, worded for an admin or a plain member).
 
 ## `TRUST_PROXY` — running behind a reverse proxy
 

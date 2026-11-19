@@ -28,13 +28,14 @@ import {
   usePasswordLinkSender,
 } from './SendPasswordLinkButton';
 
-/** Strict-managed "Password" column chip: whether the account has a password yet. */
-function PasswordSetChip({ passwordSet }: { passwordSet: boolean }) {
-  return passwordSet ? (
-    <Badge variant="secondary">Set</Badge>
-  ) : (
-    <Badge variant="warning">Not set</Badge>
-  );
+/**
+ * Strict-managed "Password" column chip: whether the account has a password
+ * yet. "Imported" = a placeholder a repository import created, not an account.
+ */
+function PasswordSetChip({ user }: { user: AdminUser }) {
+  if (user.passwordSet) return <Badge variant="secondary">Set</Badge>;
+  if (user.imported) return <Badge variant="outline">Imported</Badge>;
+  return <Badge variant="warning">Not set</Badge>;
 }
 
 function RoleActionCell({
@@ -198,9 +199,7 @@ export function AdminUsersTab() {
             accessorKey: 'passwordSet',
             header: 'Password',
             enableGlobalFilter: false,
-            cell: ({ row }) => (
-              <PasswordSetChip passwordSet={row.original.passwordSet} />
-            ),
+            cell: ({ row }) => <PasswordSetChip user={row.original} />,
           } satisfies ColumnDef<AdminUser, unknown>,
         ]
       : []),
@@ -238,9 +237,10 @@ export function AdminUsersTab() {
             isPending={roleMutation.isPending}
           />
           {isStrictManaged ? (
-            !row.original.passwordSet && (
+            !row.original.passwordSet &&
+            !row.original.imported && (
               <SendPasswordLinkButton
-                cooldownUntil={linkSender.cooldownUntil(row.original.id)}
+                cooldownUntil={linkSender.cooldownUntil(row.original)}
                 isSending={linkSender.isSending(row.original.id)}
                 onClick={() => void linkSender.send(row.original)}
               />
@@ -371,6 +371,14 @@ export function AdminUsersTab() {
         <RenameUserEmailModal
           user={renameUser}
           onClose={() => setRenameUser(null)}
+          onRenamed={(email) =>
+            setNotice({
+              tone: 'success',
+              text: isStrictManaged
+                ? `Email changed to ${email}. Send a new link with «Resend link» so the person can set a password.`
+                : `Email changed to ${email}.`,
+            })
+          }
         />
       )}
     </div>

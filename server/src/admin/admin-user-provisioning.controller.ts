@@ -9,7 +9,6 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import type { Request } from 'express';
-import { clientIp } from '../auth/client-ip';
 import {
   AllowedAuthModes,
   AuthModeGuard,
@@ -20,9 +19,12 @@ import { AdminService } from './admin.service';
 import type { CreateAdminUserResponse } from './admin.service';
 import { CreateAdminUserDto } from './dto/create-admin-user.dto';
 
+type AuthUser = { id: number; role: 'admin' | 'user' };
+
 /**
  * Admin-provisioned accounts — auth mode `strict-managed` only. `AuthModeGuard`
  * runs first, so every caller (anonymous, user, admin) gets 404 in other modes.
+ * The email limit is counted per calling admin, not per IP.
  */
 @Controller('api/v1/admin/users')
 @UseGuards(AuthModeGuard, SessionAuthGuard, AdminGuard)
@@ -36,13 +38,15 @@ export class AdminUserProvisioningController {
     @Req() req: Request,
     @Body() dto: CreateAdminUserDto,
   ): Promise<CreateAdminUserResponse> {
-    return this.adminService.createProvisionedUser(dto, clientIp(req));
+    const caller = req.user as AuthUser;
+    return this.adminService.createProvisionedUser(dto, caller.id);
   }
 
   @Post(':id/password-link')
   @HttpCode(200)
   @AllowedAuthModes('strict-managed')
   sendPasswordLink(@Req() req: Request, @Param('id', ParseIntPipe) id: number) {
-    return this.adminService.sendPasswordLink(id, clientIp(req));
+    const caller = req.user as AuthUser;
+    return this.adminService.sendPasswordLink(id, caller.id);
   }
 }

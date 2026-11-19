@@ -133,22 +133,6 @@ export class UsersService {
     return rows[0];
   }
 
-  async renameEmail(userId: number, email: string) {
-    // Explicit column list — a bare .returning() would expose passwordHash to
-    // the controllers, which return this row in the response body.
-    const rows = await this.db
-      .update(schema.users)
-      .set({ email: email.toLowerCase() })
-      .where(eq(schema.users.id, userId))
-      .returning({
-        id: schema.users.id,
-        email: schema.users.email,
-        role: schema.users.role,
-        createdAt: schema.users.createdAt,
-      });
-    return rows[0];
-  }
-
   async findAll() {
     return this.db.select().from(schema.users);
   }

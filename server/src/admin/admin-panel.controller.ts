@@ -1,7 +1,6 @@
 import {
   BadRequestException,
   Body,
-  ConflictException,
   Controller,
   Delete,
   Get,
@@ -241,23 +240,12 @@ export class AdminPanelController {
 
   @Patch('users/:id/email')
   async renameUserEmail(
+    @Req() req: Request,
     @Param('id', ParseIntPipe) userId: number,
     @Body() dto: RenameUserEmailDto,
   ) {
-    const email = dto.email.toLowerCase();
-    const existing = await this.usersService.findByEmail(email);
-
-    if (existing && existing.id !== userId) {
-      throw new ConflictException('Email already in use');
-    }
-
-    const updated = await this.usersService.renameEmail(userId, email);
-
-    if (updated == null) {
-      throw new NotFoundException('User not found');
-    }
-
-    return updated;
+    const caller = req.user as AuthUser;
+    return this.adminService.renameUserEmail(caller.id, userId, dto.email);
   }
 
   /**

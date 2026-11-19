@@ -121,10 +121,13 @@ function retryDelaySeconds(err: ApiError): number {
 function PasswordLoginForm({
   forgotPassword,
   showSignupLink = true,
+  adminContactEmail,
 }: {
   forgotPassword: ForgotPasswordLinkState;
   /** False in strict-managed: only an administrator creates accounts. */
   showSignupLink?: boolean;
+  /** strict-managed: who creates accounts, named instead of the sign-up link. */
+  adminContactEmail?: string;
 }) {
   const { user, setUser } = useAuth();
   const navigate = useNavigate();
@@ -167,6 +170,14 @@ function PasswordLoginForm({
       ) {
         setError(
           'Please confirm your email address first — check your inbox for the confirmation link.',
+        );
+      } else if (
+        err instanceof ApiError &&
+        err.statusCode === 403 &&
+        err.code === 'email_not_verified'
+      ) {
+        setError(
+          'This account has to verify its email first — use "Forgot password?" below to get a link and set a new password.',
         );
       } else if (err instanceof ApiError && err.statusCode === 429) {
         // The server refused to even check the credentials this time, so no
@@ -272,6 +283,13 @@ function PasswordLoginForm({
               </button>
             </p>
           )}
+          {!showSignupLink && (
+            <p className="text-sm text-muted-foreground">
+              Accounts are created by your administrator
+              {adminContactEmail ? ` (${adminContactEmail})` : ''}. Got an email
+              with a link? Open it to set your password.
+            </p>
+          )}
         </CardFooter>
       </form>
     </Card>
@@ -323,6 +341,7 @@ export function LoginPage() {
         <PasswordLoginForm
           forgotPassword={forgotPasswordLinkState(config)}
           showSignupLink={false}
+          adminContactEmail={config.adminContactEmail}
         />
       )}
       {!isLoading && !isError && config?.mode === 'azure-oauth' && (

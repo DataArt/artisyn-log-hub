@@ -6,11 +6,12 @@
 // The stand (mode D) starts twice on the same schema before Playwright runs, so the one bootstrap
 // email Mailpit holds for `stand.adminEmail` proves that the second start sent none.
 //
-// Email budget (impl-plan DD 26): strict-managed allows 20 emails per source IP per hour, and every
-// call of create user / resend link / forgot password counts — even one answered 409 or 429. The
-// admin calls of steps 3–7 come from 127.0.0.1 and stay under 10; the anonymous forgot-password
-// calls of steps 5–7 come from a loopback address of their own (Z), and step 8 uses two more fresh
-// addresses (X, Y). Mailpit messages are always looked up by recipient, never counted in total.
+// Email budget: strict-managed allows 20 anonymous "Forgot password?" calls per source IP per hour
+// and 100 create user / resend link calls per administrator per hour, counted in the DB for all
+// cluster workers — every call counts, even one answered 409 or 429. The anonymous forgot-password
+// calls of steps 5–7 and 9 come from a loopback address of their own (Z), and step 8 uses two more
+// fresh addresses (X, Y). Mailpit messages are always looked up by recipient, never counted in
+// total. The DB keeps only sha256(token), so a step that edits a token row looks it up by hash.
 //
 // The scenario sets the bootstrap admin's password, so it can run once per stand (retries: 0).
 import { request as pwRequest, type APIRequestContext, type Page } from '@playwright/test';
@@ -30,6 +31,7 @@ import {
   retryAfterSeconds,
   type LoopbackClient,
 } from '../helpers/loopback-client';
+import { hashResetToken } from '../helpers/reset-tokens';
 import { skipNewUserNudge } from '../helpers/teams';
 import { loginViaUi } from '../helpers/ui-auth';
 import { DATA_COLLECTION_NOTICE_SETTING, consentSettingValue } from '../helpers/notice-hash';
@@ -99,6 +101,15 @@ async function setPasswordViaApi(api: APIRequestContext, token: string, password
   return api.post('/api/v1/auth/reset-password', { data: { token, password, passwordConfirm: password } });
 }
 
+/** Shifts the expiry of the token whose link carries `token` (the DB row holds its hash). */
+async function ageToken(db: Pool, token: string, interval: string): Promise<void> {
+  const res = await db.query(
+    `UPDATE password_reset_tokens SET expires_at = expires_at - $2::interval WHERE token = $1`,
+    [hashResetToken(token), interval],
+  );
+  expect(res.rowCount, 'the token row').toBe(1);
+}
+
 /** Fills the reset page `page` is on and submits it with `buttonName`. */
 async function submitPasswordForm(page: Page, password: string, buttonName: string) {
   await page.getByPlaceholder('New password', { exact: true }).fill(password);
@@ -106,6 +117,13 @@ async function submitPasswordForm(page: Page, password: string, buttonName: stri
   const response = page.waitForResponse((res) => res.url().includes('/api/v1/auth/reset-password'));
   await page.getByRole('button', { name: buttonName, exact: true }).click();
   return response;
+}
+
+/** After a successful set: the page says so and its button leads to the login page. */
+async function expectPasswordSetThenLogin(page: Page): Promise<void> {
+  await expect(page.getByRole('status')).toContainText('Your password is set.');
+  await page.getByRole('button', { name: 'Go to log in' }).click();
+  await expect(page).toHaveURL(/#\/login/);
 }
 
 /** A request context logged in as `email` with the data-collection notice accepted. */
@@ -152,7 +170,7 @@ test('@S-AUTH-11 strict-managed: bootstrap admin, admin-created users, set-passw
   const userRow = (email: string) => page.getByRole('row').filter({ hasText: email });
 
   try {
-    const adminApi = await test.step('1. bootstrap: one email after the restart, «Set your password», log in, /auth/config', async () => {
+    const adminApi = await test.step('1. bootstrap: one email after the restart, «Set your password», a weak password keeps the link, log in, /auth/config', async () => {
       const mails = await listEmailsTo(adminEmail, { atLeast: 1 });
       expect(mails, 'the second start of the stand sent no second bootstrap email').toHaveLength(1);
       expect(mails[0].subject).toBe(BOOTSTRAP_SUBJECT);
@@ -163,8 +181,14 @@ test('@S-AUTH-11 strict-managed: bootstrap admin, admin-created users, set-passw
 
       await page.goto(link);
       await expect(page.getByText('Set your password', { exact: true })).toBeVisible({ timeout: 15_000 });
+      // The policy is shown before the first submit, and a too-weak password does not use the
+      // one-time link up: the same link then takes a good password.
+      await expect(page.getByText(/^Password must be at least/)).toBeVisible();
+      expect((await submitPasswordForm(page, 'x', 'Set password')).status()).toBe(400);
+      await expect(page.getByText(/^Password must be at least/).last()).toBeVisible();
       expect((await submitPasswordForm(page, adminPassword, 'Set password')).status()).toBe(200);
-      await expect(page).toHaveURL(/#\/login/);
+      await expectPasswordSetThenLogin(page);
+      await expect(page.getByText(`Accounts are created by your administrator (${adminEmail})`)).toBeVisible();
 
       const ctx = track(await sessionOf(stand.url, adminEmail, adminPassword));
       const me = (await (await ctx.get('/api/v1/auth/me')).json()) as { email: string; role: string };
@@ -176,6 +200,7 @@ test('@S-AUTH-11 strict-managed: bootstrap admin, admin-created users, set-passw
         passwordResetAvailable: true,
         adminContactEmail: adminEmail,
       });
+      expect(config.passwordRequirement).toMatch(/^must be at least/);
       return ctx;
     });
 
@@ -231,7 +256,12 @@ test('@S-AUTH-11 strict-managed: bootstrap admin, admin-created users, set-passw
       });
       await expect(page.getByTestId('admin-users-notice')).toContainText(`Set-password link sent to ${u1Email}`);
       await expect(userRow(u1Email).getByText('Not set', { exact: true })).toBeVisible();
-      await expect(userRow(u1Email).getByRole('button', { name: /Resend link/ })).toBeVisible();
+      // The link just went out, so «Resend link» waits out the 60 s cooldown — also after a reload.
+      await expect(userRow(u1Email).getByRole('button', { name: /Resend link \(\d+s\)/ })).toBeDisabled();
+      await page.reload();
+      await expect(userRow(u1Email).getByRole('button', { name: /Resend link \(\d+s\)/ })).toBeDisabled({
+        timeout: 15_000,
+      });
 
       const { url } = await latestLink(u1Email, SET_PASSWORD_SUBJECT, 1);
       expect(url).toContain('purpose=set');
@@ -241,7 +271,7 @@ test('@S-AUTH-11 strict-managed: bootstrap admin, admin-created users, set-passw
         await otherPage.goto(url);
         await expect(otherPage.getByText('Set your password', { exact: true })).toBeVisible({ timeout: 15_000 });
         expect((await submitPasswordForm(otherPage, u1Password, 'Set password')).status()).toBe(200);
-        await expect(otherPage).toHaveURL(/#\/login/);
+        await expectPasswordSetThenLogin(otherPage);
       } finally {
         await other.close();
       }
@@ -300,30 +330,38 @@ test('@S-AUTH-11 strict-managed: bootstrap admin, admin-created users, set-passw
     });
 
     const u3Email = addr('passwordless');
-    await test.step('5. forgot: same 200 for a user, an unknown email and a password-less user; mails only to the two', async () => {
+    await test.step('5. forgot: same 200 for a user, an unknown email, a password-less user and a cooldown; the admin link survives', async () => {
       const create = await adminApi.post('/api/v1/admin/users', { data: { email: u3Email } });
       expect(create.status()).toBe(201);
       const u3Id = ((await create.json()) as CreateResult).id;
-      await latestLink(u3Email, SET_PASSWORD_SUBJECT, 1);
+      const adminLink = await latestLink(u3Email, SET_PASSWORD_SUBJECT, 1);
       await endCooldown(db, u2Id);
       await endCooldown(db, u3Id);
 
       const unknown = addr('nobody');
       const bodies: unknown[] = [];
-      for (const email of [u2Email, unknown, u3Email]) {
+      // The second u2 call falls in u2's 60 s cooldown: it must answer exactly like the others,
+      // or the status would tell that the account exists.
+      for (const email of [u2Email, unknown, u3Email, u2Email]) {
         const res = await anonZ.post('/api/v1/auth/forgot-password', { email });
         expect(res.status, `forgot ${email}`).toBe(200);
         bodies.push(res.body);
       }
-      expect(bodies[1]).toEqual(bodies[0]);
-      expect(bodies[2]).toEqual(bodies[0]);
+      for (const body of bodies.slice(1)) expect(body).toEqual(bodies[0]);
 
       expect(await emailsWithSubject(u2Email, RESET_SUBJECT, 1)).toHaveLength(1);
       expect(await listEmailsTo(unknown)).toHaveLength(0);
-      const { token, url } = await latestLink(u3Email, RESET_SUBJECT, 1);
-      expect(url).not.toContain('purpose=');
+      // A password-less account gets the «set» wording, with the 1 h lifetime of a forgot link.
+      const forgot = await latestLink(u3Email, SET_PASSWORD_SUBJECT, 2);
+      expect(forgot.token).not.toBe(adminLink.token);
+      expect(forgot.url).toContain('purpose=set');
+      const [forgotMail] = await emailsWithSubject(u3Email, SET_PASSWORD_SUBJECT, 2);
+      expect(forgotMail.text).toContain('valid for 1 hour');
+
+      // The anonymous request did not cancel the administrator's 24 h link; using it retires the rest.
       const password = newPassword();
-      expect((await setPasswordViaApi(api, token, password)).status()).toBe(200);
+      expect((await setPasswordViaApi(api, adminLink.token, password)).status(), 'the admin link').toBe(200);
+      expect((await setPasswordViaApi(api, forgot.token, newPassword())).status(), 'the forgot link').toBe(409);
       track(await sessionOf(stand.url, u3Email, password));
     });
 
@@ -334,10 +372,7 @@ test('@S-AUTH-11 strict-managed: bootstrap admin, admin-created users, set-passw
       expect(c4.status()).toBe(201);
       const u4Id = ((await c4.json()) as CreateResult).id;
       const l4 = await latestLink(u4Email, SET_PASSWORD_SUBJECT, 1);
-      await db.query(
-        `UPDATE password_reset_tokens SET expires_at = expires_at - interval '23 hours' WHERE token = $1`,
-        [l4.token],
-      );
+      await ageToken(db, l4.token, '23 hours');
       const u4Password = newPassword();
       expect((await setPasswordViaApi(api, l4.token, u4Password)).status(), 'a set-password link lives 24 h').toBe(200);
       expect((await setPasswordViaApi(api, l4.token, newPassword())).status(), 'a used link').toBe(409);
@@ -346,10 +381,7 @@ test('@S-AUTH-11 strict-managed: bootstrap admin, admin-created users, set-passw
       expect(c5.status()).toBe(201);
       const id5 = ((await c5.json()) as CreateResult).id;
       const l5 = await latestLink(u5Email, SET_PASSWORD_SUBJECT, 1);
-      await db.query(
-        `UPDATE password_reset_tokens SET expires_at = expires_at - interval '24 hours' WHERE token = $1`,
-        [l5.token],
-      );
+      await ageToken(db, l5.token, '24 hours');
       const other = await browser.newContext({ baseURL: stand.url });
       try {
         const otherPage = await other.newPage();
@@ -366,10 +398,7 @@ test('@S-AUTH-11 strict-managed: bootstrap admin, admin-created users, set-passw
       await endCooldown(db, u4Id);
       expect((await anonZ.post('/api/v1/auth/forgot-password', { email: u4Email })).status).toBe(200);
       const forgot = await latestLink(u4Email, RESET_SUBJECT, 1);
-      await db.query(
-        `UPDATE password_reset_tokens SET expires_at = expires_at - interval '1 hour' WHERE token = $1`,
-        [forgot.token],
-      );
+      await ageToken(db, forgot.token, '1 hour');
       expect((await setPasswordViaApi(api, forgot.token, newPassword())).status(), 'a forgot link lives 1 h').toBe(410);
       return id5;
     });
@@ -382,9 +411,14 @@ test('@S-AUTH-11 strict-managed: bootstrap admin, admin-created users, set-passw
       }
       expect((await anonZ.post('/api/v1/api-keys', { name: `no-session-${runId}` })).status).toBe(401);
 
+      // An anonymous forgot request does not hold up the administrator: «Resend link» right after
+      // it is answered 200, not 429 (the cooldown counts only admin-issued links).
       await endCooldown(db, u5Id);
       expect((await anonZ.post('/api/v1/auth/forgot-password', { email: u5Email })).status).toBe(200);
-      const { token } = await latestLink(u5Email, RESET_SUBJECT, 1);
+      await latestLink(u5Email, SET_PASSWORD_SUBJECT, 2);
+      const resend = await adminApi.post(`/api/v1/admin/users/${u5Id}/password-link`);
+      expect(resend.status(), 'resend right after a forgot request').toBe(200);
+      const { token } = await latestLink(u5Email, SET_PASSWORD_SUBJECT, 3);
       const password = newPassword();
       expect((await setPasswordViaApi(api, token, password)).status()).toBe(200);
       const ctx = track(await sessionOf(stand.url, u5Email, password));
@@ -409,6 +443,50 @@ test('@S-AUTH-11 strict-managed: bootstrap admin, admin-created users, set-passw
 
       const clientY = loopbackClient(stand.url, addrY);
       expect((await clientY.post('/api/v1/auth/forgot-password', { email: addr('limit-y') })).status).toBe(200);
+    });
+
+    await test.step('9. a mailbox that is not proven: session refused, login 403, forgot proves it; Members tab refuses an email with no account', async () => {
+      // An account left unconfirmed (e.g. a sign-up from an earlier auth mode) counts for nothing
+      // until a link mailed to it is used — neither an old session nor the right password lets it in.
+      const u1Id = await userIdOf(db, u1Email);
+      await db.query('UPDATE users SET email_confirmed_at = NULL WHERE id = $1', [u1Id]);
+      expect((await u1Api.get('/api/v1/auth/me')).status(), 'the old session').toBe(401);
+      const login = await anonZ.post('/api/v1/auth/login', { email: u1Email, password: u1Password });
+      expect(login.status).toBe(403);
+      expect(login.body).toMatchObject({ error: 'email_not_verified' });
+
+      await endCooldown(db, u1Id);
+      expect((await anonZ.post('/api/v1/auth/forgot-password', { email: u1Email })).status).toBe(200);
+      const { token } = await latestLink(u1Email, RESET_SUBJECT, 1);
+      const password = newPassword();
+      expect((await setPasswordViaApi(api, token, password)).status()).toBe(200);
+      track(await sessionOf(stand.url, u1Email, password));
+
+      // Rename: an admin cannot rename themselves here (a typo would lock them out); renaming u3
+      // clears its password and confirmation, so the new mailbox has to prove itself.
+      const adminId = await userIdOf(db, adminEmail);
+      const self = await adminApi.patch(`/api/v1/admin/users/${adminId}/email`, {
+        data: { email: addr('admin-typo') },
+      });
+      expect(self.status()).toBe(400);
+      expect(await self.json()).toMatchObject({ error: 'cannot_rename_self' });
+      const u3Id = await userIdOf(db, u3Email);
+      const renamedEmail = addr('renamed');
+      const rename = await adminApi.patch(`/api/v1/admin/users/${u3Id}/email`, { data: { email: renamedEmail } });
+      expect(rename.status()).toBe(200);
+      const { rows: renamedRows } = await db.query<{ no_password: boolean; unverified: boolean }>(
+        'SELECT password_hash IS NULL AS no_password, email_confirmed_at IS NULL AS unverified FROM users WHERE id = $1',
+        [u3Id],
+      );
+      expect(renamedRows[0]).toEqual({ no_password: true, unverified: true });
+
+      // The team owner (the admin) tries to add an email that has no account: a refusal that says
+      // where accounts are made, and no "add them anyway" dialog (the server would refuse it).
+      await page.goto(`/#/teams/${teamId}`);
+      await page.getByPlaceholder('Email address').fill(addr('no-account'));
+      await page.getByRole('button', { name: 'Invite', exact: true }).click();
+      await expect(page.getByText(/no account yet — create it in Admin Panel → Users first/)).toBeVisible();
+      await expect(page.getByRole('dialog')).toHaveCount(0);
     });
   } finally {
     await Promise.all(contexts.map((c) => c.dispose()));

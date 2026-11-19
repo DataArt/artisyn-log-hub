@@ -50,3 +50,63 @@ Impl-plan Chunk 8 manual check. The server was started with `nest start` (`serve
 laptop's environment, so `docs/BLOCKED.md` was removed. Tours needed two registry updates for this
 branch's own changes: the reset-password page's new invalid-link text and the renamed
 `security-hardening.md` §3.3 heading.
+
+## 2026-11-19 — Review on a Docker stand: security review + exploratory UI test
+
+The branch image ran as a throw-away compose stand (`tmp/strict-managed-stand/`, port 5021,
+Mailpit SMTP). One agent reviewed the related API code for security holes, another walked every
+journey in the browser. All findings were accepted for fixing (impl-plan Chunk 11).
+
+Security:
+
+- S1 (High) — bootstrap promoted an existing non-admin account with `ADMIN_CONTACT_EMAIL` to admin
+  silently, keeping its password and sessions: whoever had signed up with that address in an
+  earlier mode became admin.
+- S2 — unconfirmed sign-ups from Mode 3 could log in after the switch; the pending-registrations
+  list that would show them 404s in strict-managed.
+- S3 — any user could create placeholder accounts through a repository import and then claim them
+  with "Forgot password?"; "Resend link" mailed placeholder / unvalidated addresses.
+- S4 — renaming a user's email kept the links already sent to the old address valid.
+- S5 — forgot-password revealed accounts: 429 on cooldown only for known emails, and the SMTP
+  round-trip in the response time.
+- S6 — the per-IP email budget was shared between anonymous forgot requests and admin actions
+  (one proxy IP → anonymous flood blocks the admin); `TRUST_PROXY=true` lets clients spoof IPs.
+- S7 — reset/set tokens stored in plaintext (now 24 h for set links).
+- S8 — a successful reset did not sign out other sessions.
+- S9 — anyone could cancel an admin's 24 h link via forgot-password. S10 — a failed policy check
+  burned the link (same as U1).
+
+UX / logic (U1–U16): a weak password burned the one-time link (U1); forgot-password enumeration
+(U2, = S5); the Members tab offered "Add anyway" and looped on the server's 404 (U3); forgot
+cancelled the admin link (U4, = S9); the email limit counted per worker (~80 instead of 20) (U5);
+"Resend link" 429 right after create, cooldown lost on reload (U6, U11); forgot page said "sent"
+on 429 and logged an uncaught error (U7); no confirmation after setting a password (U8); no login
+hint about who creates accounts (U9); policy shown only after a failed submit (U10); confirm-email
+page reachable (U12); raw "email must be an email" (U13); Auth tab label / fields (U14);
+"Reset" wording for password-less accounts and admin-facing "ask an administrator" (U15); the
+previous user's team queries refetched after switching identity (U16).
+
+## 2026-11-19 — Second review round after the fixes
+
+The stand was rebuilt from the fixed tree and both agents ran again. Security: S1–S10 closed;
+follow-ups fixed — the bootstrap reset also deletes the account's API keys; the email rename runs
+in one transaction under the user row lock and link issuance re-checks the email under the same
+lock (no link to the old address in a race); renaming to the same address is a no-op; an admin
+cannot rename themselves in strict-managed and a rename there also clears the password (so
+"Resend link" works for the corrected address); the IP key of the email limiter is a sha256
+(migration 0095 fixes the table comment); the dead `getLatestResetTokenForEmail` e2e helper is
+gone. UX: every U-finding confirmed fixed; follow-ups fixed — rename dialog warning and success
+notice, the Auth tab lists the active mode's required settings, the password rule in Change
+password, a token-less reset link says it is invalid up front, the weak-password error replaces
+the rule instead of repeating it, "works once" in the reset email, no WARN when `auth_sessions`
+does not exist yet, the resend cooldown ignores links a rename retired. Not changed: the
+data-collection notice text (it is hashed for consent, a wording change would ask every user to
+accept it again). Verified by hand on a second throw-away stand: an attacker's pre-registered
+`ADMIN_CONTACT_EMAIL` account loses its session and password on the switch, and an unverified
+Mode 2 admin gets 403 `email_not_verified` until "Forgot password?".
+
+Final run: fast set and build green; contract 607/607; e2e-fast 27/27; e2e-full 82/82;
+scenarios a/b/c/d green. `S-HOOK-07` step 29 failed twice while a Docker image build ran in
+parallel and passed alone: the test reads `receiver.log` right after the job file is rewritten,
+before the receiver logs `job-retry` — a timing race in the test from hook 3.0.0 (main), not in
+this branch.

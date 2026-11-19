@@ -21,6 +21,7 @@ import {
   type MemberRoleFlags,
 } from './members/TeamMemberRow';
 import { TeamRoleHelpTable } from './members/TeamRoleHelpTable';
+import { useNoAccountInvite } from './useNoAccountInvite';
 
 interface TeamMembersTabProps {
   teamId: number;
@@ -52,6 +53,7 @@ export function TeamMembersTab({
   const [pendingForceEmail, setPendingForceEmail] = useState<string | null>(
     null,
   );
+  const { refusal } = useNoAccountInvite();
 
   const inviteMut = useMutation({
     mutationFn: (vars: { email: string; force?: boolean }) =>
@@ -65,6 +67,10 @@ export function TeamMembersTab({
     },
     onError: (err: unknown) => {
       if (err instanceof ApiError && err.code === 'user_not_registered') {
+        if (refusal !== null) {
+          setInviteError(refusal);
+          return;
+        }
         setPendingForceEmail(inviteEmail.trim());
         return;
       }
@@ -287,7 +293,7 @@ export function TeamMembersTab({
       />
 
       <ConfirmDialog
-        open={pendingForceEmail !== null}
+        open={pendingForceEmail !== null && refusal === null}
         header="Not registered yet"
         message="This user is not registered yet — add them anyway? They will see this team and its repository as soon as they first log in."
         confirmLabel="Add anyway"

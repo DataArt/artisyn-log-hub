@@ -43,6 +43,10 @@ export interface AdminUser {
   lastActivity: string | null;
   /** Whether the account has a usable password (false: password-less, e.g. admin-created in strict-managed). */
   passwordSet: boolean;
+  /** Created by a repository import (placeholder, not a real account): no set link can be sent. */
+  imported: boolean;
+  /** When the latest still-working admin-issued set-password link was created (resend cooldown), or null. */
+  passwordLinkSentAt: string | null;
 }
 
 /** `POST /api/v1/admin/users` (strict-managed only). */

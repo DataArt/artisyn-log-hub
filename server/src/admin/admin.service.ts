@@ -7,6 +7,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { isEmail } from 'class-validator';
 import {
   and,
   asc,
@@ -45,6 +46,7 @@ import {
   emailConfirmationTokens,
   logRepositories,
   logs,
+  passwordResetTokens,
   repositories,
   teamMembers,
   teamRepositories,
@@ -115,6 +117,10 @@ export interface UserRow {
   lastActivity: Date | null;
   /** A real password is stored (NULL and the import placeholder count as not set). */
   passwordSet: boolean;
+  /** Created by a repository import (placeholder), not a real account — no set link. */
+  imported: boolean;
+  /** When the latest still-working admin-issued set-password link was created (resend cooldown), or null. */
+  passwordLinkSentAt: Date | null;
 }
 
 /** `POST /api/v1/admin/users` response (auth mode `strict-managed`). */
@@ -173,14 +179,14 @@ export class AdminService {
    */
   async createProvisionedUser(
     dto: CreateProvisionedUserInput,
-    ip: string,
+    adminUserId: number,
   ): Promise<CreateAdminUserResponse> {
     const email = dto.email.trim().toLowerCase();
     const role = dto.role ?? 'user';
     const teamId = dto.teamId ?? null;
 
     this.authService.assertEmailDomainAllowed(email, 'admin-create');
-    await this.emailSendRateLimitService.consumeIp(ip);
+    await this.emailSendRateLimitService.consumeAdmin(adminUserId);
 
     if (await this.usersService.findByEmail(email)) {
       throw new ConflictException({
@@ -242,13 +248,14 @@ export class AdminService {
   /**
    * Strict-managed "Resend link": a fresh 24 h set-password link for an
    * account that has no password yet; earlier links stop working.
-   * 404 unknown user, 409 password already set, 429 within the cooldown.
+   * 404 unknown user, 409 password already set / import placeholder /
+   * malformed stored email, 429 within the cooldown.
    */
   async sendPasswordLink(
     userId: number,
-    ip: string,
+    adminUserId: number,
   ): Promise<{ email_delivery: EmailDelivery }> {
-    await this.emailSendRateLimitService.consumeIp(ip);
+    await this.emailSendRateLimitService.consumeAdmin(adminUserId);
 
     const user = await this.usersService.findById(userId);
     if (!user) {
@@ -263,6 +270,18 @@ export class AdminService {
         message: 'This user has already set a password',
       });
     }
+    // An import placeholder was never given to anyone, and its address came
+    // from an uploaded archive, not from an admin — never mail a link to it.
+    if (
+      user.passwordHash === PLACEHOLDER_IMPORT_USER_PASSWORD_HASH ||
+      !isEmail(user.email)
+    ) {
+      throw new ConflictException({
+        error: 'not_a_provisioned_account',
+        message:
+          'This user was created by a repository import; create a real account for this email instead',
+      });
+    }
 
     const email_delivery = await this.issueAndSendSetPasswordLink(
       user.id,
@@ -274,6 +293,106 @@ export class AdminService {
     return { email_delivery };
   }
 
+  /**
+   * Admin "Rename email". Links already mailed to the old address stop
+   * working (every mode): whoever reads that mailbox — e.g. a typo'd domain
+   * — must not set the password of the corrected account. strict-managed
+   * also applies the domain allow-list and makes the new mailbox prove
+   * itself: the password and confirmation are cleared, so the person sets a
+   * password through a link (the admin's "Resend link" or "Forgot
+   * password?"). An admin cannot rename themselves there — a typo would lock
+   * them out. Renaming to the same address changes nothing.
+   *
+   * One transaction holding the user row lock, the same lock link issuance
+   * takes (`issueWithCooldown`), so a "Forgot password?" racing the rename
+   * cannot mail a fresh link to the old address.
+   */
+  async renameUserEmail(callerId: number, userId: number, rawEmail: string) {
+    const email = rawEmail.trim().toLowerCase();
+    const strict =
+      this.configService.get<string>('AUTH_MODE') === 'strict-managed';
+    if (strict) {
+      if (callerId === userId) {
+        throw new BadRequestException({
+          error: 'cannot_rename_self',
+          message:
+            'In this mode you cannot change your own email — ask another administrator',
+        });
+      }
+      this.authService.assertEmailDomainAllowed(email, 'admin-create');
+    }
+
+    const existing = await this.usersService.findByEmail(email);
+    if (existing && existing.id !== userId) {
+      throw new ConflictException('Email already in use');
+    }
+
+    const renamed = await this.db
+      .transaction(async (tx) => {
+        const [current] = await tx
+          .select({ email: users.email })
+          .from(users)
+          .where(eq(users.id, userId))
+          .for('update');
+        if (!current) throw new NotFoundException('User not found');
+
+        const changed = current.email.toLowerCase() !== email;
+        if (changed) {
+          await tx
+            .update(users)
+            .set({
+              email,
+              ...(strict ? { emailConfirmedAt: null, passwordHash: null } : {}),
+            })
+            .where(eq(users.id, userId));
+          await tx
+            .update(passwordResetTokens)
+            .set({ usedAt: new Date() })
+            .where(
+              and(
+                eq(passwordResetTokens.userId, userId),
+                isNull(passwordResetTokens.usedAt),
+              ),
+            );
+          await tx
+            .update(emailConfirmationTokens)
+            .set({ consumedAt: new Date() })
+            .where(
+              and(
+                eq(emailConfirmationTokens.userId, userId),
+                isNull(emailConfirmationTokens.consumedAt),
+              ),
+            );
+        }
+        // Explicit column list — the row goes back in the response body.
+        const [row] = await tx
+          .select({
+            id: users.id,
+            email: users.email,
+            role: users.role,
+            createdAt: users.createdAt,
+          })
+          .from(users)
+          .where(eq(users.id, userId));
+        return { row, changed };
+      })
+      .catch((err: unknown) => {
+        if (isUniqueViolation(err)) {
+          throw new ConflictException('Email already in use');
+        }
+        throw err;
+      });
+
+    if (renamed.changed) {
+      this.logger.log(
+        `Admin renamed user id=${userId} to ${maskEmail(email)}; outstanding links retired${
+          strict ? ', password and confirmation cleared' : ''
+        }`,
+      );
+    }
+    return renamed.row;
+  }
+
   /** Issues a 24 h token (429 within the cooldown) and emails the set link. */
   private async issueAndSendSetPasswordLink(
     userId: number,
@@ -281,10 +400,18 @@ export class AdminService {
   ): Promise<EmailDelivery> {
     const result = await this.passwordResetTokensService.issueWithCooldown(
       userId,
+      'set',
       SET_PASSWORD_LINK_TTL_MS,
+      email,
     );
     if (result.status === 'cooldown') {
       throw new TooManyRequestsException(result.retryAfterSeconds);
+    }
+    if (result.status === 'stale') {
+      throw new ConflictException({
+        error: 'email_changed',
+        message: "The user's email changed meanwhile — reload and try again",
+      });
     }
     const url = buildResetUrl(result.token, this.logger, 'set');
     if (url === null) return 'failed';
@@ -659,6 +786,11 @@ export class AdminService {
         teamCount: countDistinct(teamMembers.teamId),
         lastActivity: max(logs.endTime),
         passwordSet: sql<boolean>`(${users.passwordHash} IS NOT NULL AND ${users.passwordHash} <> ${PLACEHOLDER_IMPORT_USER_PASSWORD_HASH})`,
+        imported: sql<boolean>`(${users.passwordHash} IS NOT DISTINCT FROM ${PLACEHOLDER_IMPORT_USER_PASSWORD_HASH})`,
+        passwordLinkSentAt:
+          sql<Date | null>`(SELECT max(prt.created_at) FROM password_reset_tokens prt WHERE prt.user_id = ${users.id} AND prt.purpose = 'set' AND prt.used_at IS NULL)`.mapWith(
+            (v: string | null) => (v === null ? null : new Date(v)),
+          ),
       })
       .from(users)
       .leftJoin(teamMembers, eq(teamMembers.userId, users.id))
@@ -675,6 +807,8 @@ export class AdminService {
       teamCount: Number(r.teamCount),
       lastActivity: r.lastActivity,
       passwordSet: r.passwordSet === true,
+      imported: r.imported === true,
+      passwordLinkSentAt: r.passwordLinkSentAt,
     }));
   }
 }

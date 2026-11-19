@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { Loader2, UserPlus, Mail } from 'lucide-react';
 import { signup, resendConfirmation, ApiError } from '../../api';
+import { weakPasswordMessage } from '../../lib/password-requirement';
 import { useAuth } from '../../context/AuthContext';
 import { useAuthConfig } from '../../hooks/useAuthConfig';
 import { useCooldown } from '../../hooks/useCooldown';
@@ -59,9 +60,7 @@ export function SignupPage() {
       }
     } catch (err) {
       if (err instanceof ApiError && err.code === 'weak_password') {
-        setConfirmError(
-          err.message || 'Password does not meet the strength requirements.',
-        );
+        setConfirmError(weakPasswordMessage(err.message));
       } else if (
         err instanceof ApiError &&
         err.code === 'email_domain_not_allowed'

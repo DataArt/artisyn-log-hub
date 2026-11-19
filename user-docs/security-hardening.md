@@ -93,6 +93,12 @@ Required settings: `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`,
   single-use with a 60-second re-issue cooldown. In `strict-managed` the set-password links that
   the first admin and admin-created accounts get are valid for 24 hours, single-use, with the same
   cooldown ([Strict managed](authentication-modes.md#strict-managed-admin-provisioned-users)).
+  The database stores only a SHA-256 hash of each password link, so a database copy holds no
+  usable link. A new password that breaks the policy is refused without using the link up. A
+  successful reset signs the account out of every session. "Forgot password?" answers the same
+  way for every address, also during the cooldown, and sends the email in the background, so
+  neither the answer nor its timing tells whether an account exists. Renaming an account's email
+  makes the links sent to the old address stop working.
 - **Rate limits on account endpoints**: sign-up, forgot-password, resend-confirmation and
   reset-password allow `AUTH_RATE_LIMIT_POINTS` requests (default `5`) per
   `AUTH_RATE_LIMIT_WINDOW_SEC` (default `900`, i.e. 15 minutes), counted per source IP and — for
@@ -103,10 +109,12 @@ Required settings: `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`,
   - `AUTH_RATE_LIMIT_POINTS=0` disables the limits (development only).
   - The counters are in memory per worker process, so with N workers the effective limit is about
     N × the configured value (§11).
-- **Email limit (`strict-managed` only)**: on top of the limits above, each source IP can trigger
-  at most 20 emails per hour through forgot-password, the admin's create-user and resend-link.
-  Over it the request is answered with `429` and `Retry-After`. The limit is fixed, in memory per
-  worker process, and Modes 1–4 do not have it.
+- **Email limits (`strict-managed` only)**: on top of the limits above, forgot-password accepts at
+  most 20 requests per source IP per hour, and each admin can send at most 100 emails per hour
+  through create-user and resend-link (counted per admin, so anonymous requests behind the same
+  proxy cannot use up the admin's budget). Over a limit the request is answered with `429` and
+  `Retry-After`. The limits are fixed, counted in the database (shared by all worker processes),
+  and Modes 1–4 do not have them.
 - **Sign-up domain allow-list (Mode 3)**: on an internet-facing Mode 3 server anyone who can
   reach the sign-up page can create an account, so limit sign-up to your domains.
   `ALLOWED_EMAIL_DOMAINS` is a comma-separated list of
@@ -457,7 +465,7 @@ what an administrator can do about it.
 | **Azure accounts are matched by email.** A user is identified by the token's `email` / `preferred_username` within your tenant. An Entra admin who sets another user's `mail` attribute, a guest account with an unverified email, or a re-used UPN can sign in as an existing Log Hub user. | Mode 4 | Restrict who may sign in (user assignment on the enterprise application); do not re-use UPNs; review guest accounts; restrict who can edit user attributes in Entra ID. |
 | **The first registered user becomes admin.** | Modes 2 and 3 on a fresh database (and the first identify in Mode 1); not `strict-managed`, where the admin is `ADMIN_CONTACT_EMAIL` | Register your own admin account before exposing the server; review **Admin panel → Users** afterwards. |
 | **CSRF protection is `SameSite=Lax` only** (§3.7). A sibling subdomain, or a browser without `SameSite` support, can make cross-site requests that carry the session cookie. | All modes with a browser session | Host Log Hub where every sibling subdomain is trusted (or on its own domain); require current browsers. |
-| **No rate limits on log ingestion and the hook API-key routes**; the auth rate limits (§3.3), the `strict-managed` limit of 20 emails per IP per hour and the login delay are counted per worker process, so the effective limit is about N × the setting with N workers. | All modes; multi-worker servers | Rate-limit at the reverse proxy; revoke abused API keys; lower `AUTH_RATE_LIMIT_POINTS` to compensate for the worker count. |
+| **No rate limits on log ingestion and the hook API-key routes**; the auth rate limits (§3.3) and the login delay are counted per worker process (the `strict-managed` email limits are not: they are counted in the database), so the effective limit is about N × the setting with N workers. | All modes; multi-worker servers | Rate-limit at the reverse proxy; revoke abused API keys; lower `AUTH_RATE_LIMIT_POINTS` to compensate for the worker count. |
 | **Known insecure secrets only produce a warning.** The server starts with a well-known `SESSION_SECRET` or database password and logs `security: known insecure … in use`. | Modes 2, 3 and 4 | Check the startup log; set unique values (or leave `SESSION_SECRET` unset so one is generated). |
 | **Account enumeration.** The responses of sign-up, forgot-password and resend-confirmation can reveal whether an email has an account. | Modes 2 and 3 | Keep the auth rate limits on; monitor the security log for bursts; prefer Mode 4 for public-facing servers. |
 | **Account deletion needs no password.** A signed-in user deletes their account by typing the confirmation word `delete`; anyone with access to an unlocked session can do it. | All modes | Keep the session lifetime short; back up the database (§9) so a deleted account can be restored manually. |

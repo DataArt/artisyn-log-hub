@@ -33,65 +33,86 @@ and the sign-up domain allow-list (§3.3) and email (§3.4). The variables are l
 ## Strict managed (admin-provisioned users)
 
 `AUTH_MODE=strict-managed` is email and password sign-in in which nobody can create their own
-account. The admin page shows it as "Strict managed (admin-provisioned users)".
+account. The admin page shows it as "Strict managed — admin-created accounts only (Mode 5)".
 
 **Required settings** — the server does not start without them:
 
 | Variable | Value |
 |---|---|
 | `PUBLIC_BASE_URL` | The address people open, for example `https://loghub.internal`. Every way in is an emailed link built from it, so it is required in every environment, not only in production. |
-| `ADMIN_CONTACT_EMAIL` | The email address of the first admin. |
+| `ADMIN_CONTACT_EMAIL` | The email address of the first admin. The login page names it as the person who creates accounts. |
 | `SMTP_HOST`, `SMTP_PORT`, `SMTP_FROM` | The mail relay. It must be reachable when the app starts. `SMTP_USER`, `SMTP_PASSWORD` and `SMTP_SECURE` are optional, as in Mode 3. |
 
-`ALLOWED_EMAIL_DOMAINS` is optional: when set, the admin can create accounts only for those
-domains (the `ADMIN_CONTACT_EMAIL` account itself is not checked).
+`ALLOWED_EMAIL_DOMAINS` is optional: when set, the admin can create accounts, and rename an
+account's email, only for those domains (the `ADMIN_CONTACT_EMAIL` account itself is not checked).
 
 **The first admin.** On the first start the app creates an account for `ADMIN_CONTACT_EMAIL`
 with the `admin` role and no password, and emails it a set-password link. If that email cannot be
-sent, the app does not start and creates nothing — fix the SMTP settings and start it again.
-Later starts send no email. If an account with that address already exists (for example after a
-switch from another mode), it gets the `admin` role and no email is sent.
+sent, the app does not start and changes nothing — fix the SMTP settings and start it again.
+Later starts send no email. If that address already has an **admin** account, nothing happens.
+If it has a non-admin account (for example a sign-up from another mode, which anyone could have
+made with that address), the account becomes the admin only through the mailbox: its password,
+sessions and API keys are cleared and the same set-password email is sent.
 
 **The admin creates every other account.** In **Admin Panel → Users → + Create user** the admin
 enters an email, a role (User or Admin) and optionally a team. The person gets an email with a
-set-password link and sets a password on a page titled "Set your password". Until then the
-**Password** column shows `Not set` and the admin can **Resend link**, which makes the earlier
-link stop working. A second resend for the same person is possible after 60 seconds.
+set-password link and sets a password on a page titled "Set your password"; the page shows the
+password rules before the first try, and a password that breaks them does not use the link up.
+Until the password is set the **Password** column shows `Not set` and the admin can
+**Resend link**, which makes the earlier links stop working. **Resend link** becomes available 60
+seconds after the previous link (from **+ Create user** or a resend); the button counts down, also
+after a page reload. Users created by a repository import show `Imported`: they are placeholders,
+not accounts, and get no link — create a real account for that email instead.
 
 **Links:**
 
 | Link | Valid for |
 |---|---|
 | Set-password link (first admin, created account, resend) | 24 hours, works once |
-| "Forgot password?" reset link | 1 hour, works once |
+| "Forgot password?" link | 1 hour, works once |
 
 A used or expired link shows "This link is invalid or has expired". The page then points to
-"Forgot password?".
+"Forgot password?". Using any link makes the account's other outstanding links stop working and
+signs the account out everywhere. Renaming an account's email (**Admin Panel → Users**) makes the
+links already sent to the old address stop working and clears the password: the person sets a new
+one through **Resend link** or "Forgot password?" at the new address. An admin cannot change
+their own email in this mode — another admin does it.
 
 **"Forgot password?" works for every account**, including one whose owner has not set a password
-yet — so a person whose set-password link expired can get a new one without the admin.
+yet (that person gets a "Set your Log Hub password" email) — so a person whose set-password link
+expired can get a new one without the admin. It answers the same for every address and never
+cancels a link the admin sent. Within 60 seconds of the previous link for the same account (from
+"Forgot password?" or from the admin) it sends nothing new — the earlier email is the one to use.
+
+**Every account must prove its email.** An account signs in only after it has used a link mailed
+to it. An account that never did — for example a sign-up left unconfirmed in Mode 3, or one from
+Mode 2 — is refused with "This account has to verify its email first" (its old sessions end
+too); "Forgot password?" sends it a link that verifies it.
 
 **What is off in this mode:**
 
-- the sign-up page and its link on the login page (`#/signup` opens the login page);
+- the sign-up page and its link on the login page (`#/signup` and confirmation links open the
+  login page);
 - email confirmation and "resend confirmation";
 - the admin's "Reset Password" link that the admin copies and sends by hand — use **Resend link**
   or "Forgot password?" instead;
-- inviting an unknown email to a team ("invite anyway"): only the admin creates accounts, a team
-  invitation goes to an existing account only.
+- adding an email without an account to a team ("add them anyway"), on both the **Members** and
+  the **Invitations** tab: only the admin creates accounts, a team invitation goes to an existing
+  account only.
 
 An account without a password cannot sign in and so cannot create an API key for the hook.
 
-**Email limit.** Each client IP can trigger at most **20 emails per hour** in total through
-"Forgot password?", **+ Create user** and **Resend link**; above that the server answers `429`
-with `Retry-After`. The limit is fixed (not configurable), counted in memory per worker process
-and applies only in this mode. Behind a reverse proxy set `TRUST_PROXY` so the real client IP is
-counted.
+**Email limits.** "Forgot password?" accepts at most **20 requests per client IP per hour**; each
+admin can send at most **100 emails per hour** through **+ Create user** and **Resend link**. Above
+that the server answers `429` with `Retry-After`. The limits are fixed (not configurable), shared
+by all worker processes and apply only in this mode. Behind a reverse proxy set `TRUST_PROXY` to
+the number of proxies (for example `1`) or to their addresses, so the real client IP is counted —
+`true` trusts any `X-Forwarded-For` value a client sends.
 
 **Switching.** The email is the identity, so you can switch from another mode to
-`strict-managed` and back without a data migration. Users who already have a password keep
-signing in with it; new people get an account only from the admin. Accounts without a password (for
-example those created by Entra ID sign-in in Mode 4) set one through "Forgot password?" or a
-**Resend link** from the admin. Accounts that set
-their password through a link count as confirmed, so a later switch to Mode 3 does not lock them
-out.
+`strict-managed` and back without a data migration. Users who already have a password and a
+confirmed email keep signing in with it; others first verify their email through "Forgot
+password?" (see above). New people get an account only from the admin. Accounts without a
+password (for example those created by Entra ID sign-in in Mode 4) set one through "Forgot
+password?" or a **Resend link** from the admin. Accounts that set their password through a link
+count as confirmed, so a later switch to Mode 3 does not lock them out.

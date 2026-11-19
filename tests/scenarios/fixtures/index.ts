@@ -25,6 +25,7 @@ import {
 import { timeoutScale } from '../../timeout-scale';
 import { standMode } from '../helpers/auth-mode';
 import { extractTokenFromEmailBody, findLatestMessageTo } from '../helpers/mailpit';
+import { seedResetToken } from '../helpers/reset-tokens';
 import { DATA_COLLECTION_NOTICE_SETTING, consentSettingValue } from '../helpers/notice-hash';
 
 export interface Stand {
@@ -135,11 +136,7 @@ async function provisionStrictManagedUser(db: Pool, ctx: APIRequestContext, emai
     [email],
   );
   const userId = inserted.rows[0].id;
-  const token = `scn-${randomBytes(24).toString('hex')}`;
-  await db.query(
-    `INSERT INTO password_reset_tokens (user_id, token, expires_at) VALUES ($1, $2, now() + interval '1 hour')`,
-    [userId, token],
-  );
+  const token = await seedResetToken(db, userId, '1 hour', 'set');
   await expectOk(
     await ctx.post('/api/v1/auth/reset-password', { data: { token, password, passwordConfirm: password } }),
     `reset-password (set) ${email}`,

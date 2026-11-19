@@ -258,3 +258,19 @@ The wireframes stay as reference. Where they differ, the plan wins (no SVG edits
 - [x] Create `site/diagrams/small-team-admin-provisioned.mmd` and its ASCII block in `small-team-setup.md` §6 per Design Decision 25.
 - [x] `site/pages/questions.html` Access answers per Design Decision 25.
 - [x] Run `npm run build:help` and `npm run build:site`; open `tmp/site/docs/small-team-setup.html` and `authentication-modes.html` and check both diagrams render (per the `use-playwright` skill).
+
+### Chunk 11 — Review fixes (2026-11-19 security review + exploratory test on a Docker stand)
+
+Findings S1–S10 (security) and U1–U16 (UX/logic) are listed in `notes.md` (2026-11-19). Fixes:
+
+- [x] Migration `0094`: `password_reset_tokens.token` stores `sha256(token)` hex (existing rows hashed in place, so outstanding links keep working); new column `purpose` (`'reset'` | `'set'`, default `'reset'`); new table `email_send_counters` (shared fixed-window counter). `PasswordResetTokensService` hashes on write and lookup (S7).
+- [x] `resetPassword`: check the token without consuming it, validate mismatch / policy, then consume (U1); on success revoke all the user's sessions (S8).
+- [x] Token purposes: forgot-password issues `reset` tokens and retires only earlier `reset` tokens (an admin-issued `set` link survives, U4/S9); admin create / resend issues `set` tokens, cooldown counted against the last `set` token only.
+- [x] `forgotPassword`: cooldown answers the same 200 as success, the email is sent without awaiting it (S5/U2); a password-less account gets the set-password wording (U15a); placeholder (import) accounts get nothing in strict-managed (S3).
+- [x] Bootstrap: an existing non-admin account with `ADMIN_CONTACT_EMAIL` is promoted only after its password, confirmation and sessions are cleared and a set link is emailed — same rollback-and-refuse rule on send failure (S1).
+- [x] strict-managed requires a verified mailbox: login and session deserialisation refuse accounts with `email_confirmed_at IS NULL` (403 `email_not_verified`; "Forgot password?" verifies it) (S2).
+- [x] Rename email: retire outstanding reset / confirmation tokens in every mode; in strict-managed also apply the domain allow-list and clear `email_confirmed_at` (S4).
+- [x] Email limiter: shared across cluster workers (DB counter); anonymous requests keyed by IP (20 / h), admin create / resend keyed by admin id (100 / h) (S6, U5). Resend link refuses placeholder accounts and malformed stored emails (S3). Docs recommend a hop count / CIDR for `TRUST_PROXY`.
+- [x] Admin users list: `passwordLinkSentAt` (last `set` link) and `imported` flag; the Resend button counts down from it, so the cooldown survives a reload and starts at create (U6/U11); imported accounts show "Imported", no Resend.
+- [x] Client: TeamMembersTab has the strict-managed refusal (U3); ForgotPasswordPage handles 429 (U7); set/reset success notice on the reset page (U8); login hint naming the administrator (U9); policy hint shown before submit (U10); confirm-email redirects to login (U12); readable create-user email error (U13); Auth tab label and required fields (U14); admin-facing invitation wording (U15b); team state reset on identity change (U16).
+- [x] Tests: contract rows (forgot cooldown 200, reset with weak password keeps the token, rename retires tokens, list fields); S-AUTH-11 steps (weak password keeps the link, forgot keeps the admin link, members tab refusal, unverified login refused); docs and KB.

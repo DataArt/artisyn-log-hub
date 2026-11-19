@@ -7,7 +7,7 @@ tags:
   - server
   - client
   - users
-generated: { by: "human:denistsyplakov", at: "2026-11-16T00:00:00+04:00" }
+generated: { by: "human:denistsyplakov", at: "2026-11-19T00:00:00+04:00" }
 ---
 
 # User Account Flows
@@ -55,26 +55,34 @@ Self-service reset exists in the password modes (`password`, `password-confirm`,
 `server/src/auth/auth.controller.ts`, tokens in
 `server/src/auth/password-reset-tokens.service.ts`.
 
-- **No account enumeration.** An unknown email gets the same `200 { email_delivery: 'sent' }` as a
-  known one; the attempt is only logged (with the email masked). Requests over the per-email rate
-  limit get that same answer without issuing a token.
-- **Tokens** are 32 random bytes, base64url (`generateResetToken()`), single-use. The lifetime is
-  stored per row (`expires_at`): `RESET_LINK_TTL_MS` = 1 hour for forgot-password and the
-  admin-generated link, `SET_PASSWORD_LINK_TTL_MS` = 24 hours for strict-managed set-password links
-  (`server/src/auth/password-link-ttl.ts`; `create()` / `issueWithCooldown()` take `ttlMs`).
-- In `strict-managed` forgot-password also counts against the 20 emails / IP / hour limit
+- **No account enumeration.** An unknown email, a known one, one in its 60 s cooldown and one over
+  the per-email rate limit all get the same `200 { email_delivery: 'sent' }`; the email is sent
+  without awaiting it, so the response time does not tell either. Attempts are only logged (with
+  the email masked).
+- **Tokens** are 32 random bytes, base64url (`generateResetToken()`), single-use. The DB stores
+  only `sha256(token)` hex (`hashResetToken()`; migration 0094 hashed older rows in place). The
+  lifetime is stored per row (`expires_at`): `RESET_LINK_TTL_MS` = 1 hour for forgot-password and
+  the admin-generated link, `SET_PASSWORD_LINK_TTL_MS` = 24 hours for strict-managed set-password
+  links (`server/src/auth/password-link-ttl.ts`). `purpose` is `reset` (forgot) or `set`
+  (admin-issued, strict-managed).
+- A **password-less account** (admin-created, never set) gets "Set your Log Hub password" wording
+  and a `purpose=set` link (`setPasswordOnRequestEmail`), still 1 hour.
+- In `strict-managed` forgot-password also counts against the 20 requests / IP / hour limit
   (`EmailSendRateLimitService`), and works for every account, password-less ones included (it is
-  not gated on `password_hash`).
-- **Cooldown and re-issue.** `issueWithCooldown()` runs in one transaction that locks the user row.
-  A request within 60 s of the previous token is refused with `429` and a retry-after value.
-  Otherwise the user's earlier unused tokens are retired and a new one is issued, so only the newest
-  link works.
-- **Consume** is atomic: the token is marked used with a conditional update, so two concurrent
-  resets cannot both succeed. Unknown → `400`, expired → `410`, already used → `409`. After a
-  successful reset every other outstanding token of the user is retired too.
-- The new password must match its confirmation and pass `PASSWORD_POLICY` (see
-  [algorithms/password-policy.md](algorithms/password-policy.md)).
-- There is **no auto-login** after a reset: the user signs in with the new password.
+  not gated on `password_hash`) — except an import placeholder, which gets nothing.
+- **Cooldown and re-issue.** `issueWithCooldown(userId, 'reset', ttl)` runs in one transaction that
+  locks the user row. A request within 60 s of the user's previous link (any purpose) issues
+  nothing (the caller still answers 200). Otherwise the user's earlier unused `reset` links are
+  retired — an admin-issued `set` link survives — and a new one is issued.
+- **Check, validate, consume.** `resetPassword()` first checks the token without using it
+  (`check()`), then the confirmation match and `PASSWORD_POLICY` (see
+  [algorithms/password-policy.md](algorithms/password-policy.md)), and only then consumes it, so a
+  typo or a weak password never burns the link. Consume is atomic: the token is marked used with a
+  conditional update, so two concurrent resets cannot both succeed. Unknown → `400`, expired →
+  `410`, already used → `409`. After a successful reset every other outstanding token of the user
+  is retired and **all the user's sessions are deleted**.
+- There is **no auto-login** after a reset: the page says the password is set/changed and offers
+  "Go to log in".
 - The emailed link is built only from `PUBLIC_BASE_URL`, never from the request `Host` header (see
   [authorization-and-authentificaiton.md](authorization-and-authentificaiton.md) § "Email flows").
 
@@ -95,22 +103,27 @@ Three ways a link is issued:
 
 - **Bootstrap admin** — on server start, `bootstrapStrictManagedAdmin()` creates the account for
   `ADMIN_CONTACT_EMAIL` and emails the link in one transaction; a failed send rolls back and aborts
-  startup. If the account already exists it is only promoted to admin, no email. Details:
+  startup. An existing admin account is left alone (no email); an existing non-admin account
+  has its password, confirmation, links and sessions cleared and is then promoted and emailed the
+  link, so only the mailbox owner becomes the admin. Details:
   [authorization-and-authentificaiton.md](authorization-and-authentificaiton.md#strict-managed-mode-admin-provisioned-accounts).
 - **Admin create user** — `POST /api/v1/admin/users` `{ email, role?: 'admin' | 'user' (default
   'user'), teamId?: number | null }` (`AdminService.createProvisionedUser()`). Order: domain
-  allow-list (400 `email_domain_not_allowed`) → email limiter (429) → existing email, any case (409
+  allow-list (400 `email_domain_not_allowed`) → email limiter per admin (429) → existing email, any case (409
   `email_already_registered`, nothing sent) → team exists (400 `team_not_found`) → user + optional
   team membership in one transaction → token → email. `201 { id, email, role, teamId,
   email_delivery }`; a failed send keeps the account (`'failed'`, the admin resends). UI:
   `CreateUserModal.tsx` from the Admin Users tab.
 - **Resend link** — `POST /api/v1/admin/users/:id/password-link`
-  (`AdminService.sendPasswordLink()`): email limiter → 404 `user_not_found` → 409
-  `password_already_set` → `issueWithCooldown(id, 24 h)` (429 + `Retry-After` within 60 s; the
-  previous link stops working) → email → `200 { email_delivery }`. UI:
-  `SendPasswordLinkButton.tsx`, shown only on rows whose Password column says "Not set"
-  (`passwordSet === false` on `GET /api/v1/admin/users`; placeholder-imported users count as not
-  set).
+  (`AdminService.sendPasswordLink()`): email limiter per admin → 404 `user_not_found` → 409
+  `password_already_set` → 409 `not_a_provisioned_account` (import placeholder, or a stored
+  address that is not a valid email) → `issueWithCooldown(id, 'set', 24 h)` (429 + `Retry-After`
+  within 60 s of the previous `set` link; every earlier link stops working) → email →
+  `200 { email_delivery }`. UI: `SendPasswordLinkButton.tsx`, shown only on rows whose Password
+  column says "Not set" (`passwordSet === false && imported === false` on
+  `GET /api/v1/admin/users`; placeholders show "Imported"). The button counts down from
+  `passwordLinkSentAt` (newest still-working `set` link) + 60 s, so the cooldown starts at create and survives
+  a reload.
 
 ## Admin-generated reset link
 
@@ -129,10 +142,18 @@ on the admin-only `api/v1/users` controller (`server/src/admin/admin.controller.
 ## Admin email rename
 
 Route `PATCH users/:id/email` on the `api/v1/admin` controller
-(`server/src/admin/admin-panel.controller.ts`,
+(`server/src/admin/admin-panel.controller.ts` → `AdminService.renameUserEmail()` →
 `UsersService.renameEmail()`), opened from
 `client/src/viewer/pages/admin/tabs/RenameUserEmailModal.tsx`.
 
+- Links already mailed to the old address stop working: the user's unused password-reset and
+  email-confirmation tokens are retired (every mode), so whoever reads the old mailbox — e.g. a
+  typo'd domain — cannot set the password of the corrected account. A "Forgot password?" racing
+  the rename issues nothing: both take the user row lock, and issuance re-checks the email. In
+  `strict-managed` the new address must also pass `ALLOWED_EMAIL_DOMAINS`, `email_confirmed_at`
+  and `password_hash` are cleared (the person sets a password through "Resend link" or "Forgot
+  password?"), and an admin cannot rename themselves (400 `cannot_rename_self`). Renaming to
+  the same address changes nothing.
 - The rename is a **same-row update** of `users.email`. Everything the user owns — sessions, repos,
   teams, API keys — hangs off the unchanged `users.id`, so nothing is reassigned.
 - The new email is lower-cased. An email already used by another user is a `409`; an unknown user
