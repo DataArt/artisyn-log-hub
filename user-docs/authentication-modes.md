@@ -34,6 +34,8 @@ and the sign-up domain allow-list (§3.3) and email (§3.4). The variables are l
 
 `AUTH_MODE=strict-managed` is email and password sign-in in which nobody can create their own
 account. The admin page shows it as "Strict managed — admin-created accounts only (Mode 5)".
+To install a server in this mode step by step, see
+[Setup where only the admin creates accounts](admin-managed-setup.md).
 
 **Required settings** — the server does not start without them:
 

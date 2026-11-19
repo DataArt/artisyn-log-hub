@@ -21,6 +21,8 @@ You will pick one of two sign-in modes:
 
 With a mail relay there is a third option, `strict-managed`: nobody signs up, you as the admin
 create each teammate's account and they get an emailed link to set their password (section 6).
+Its own step-by-step page, including switching an existing server to it:
+[Setup where only the admin creates accounts](admin-managed-setup.md).
 
 If you are not sure, start with Mode 2. Switching later is one line in `.env` — the email is the
 identity in every mode, so no data migration is needed

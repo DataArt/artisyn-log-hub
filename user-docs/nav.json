@@ -13,6 +13,11 @@
         "description": "Set up Log Hub for a small team on a VM in your company network: password sign-in modes, ready-to-paste .env files, http or https, and connecting the hook."
       },
       {
+        "slug": "admin-managed-setup",
+        "title": "Setup where only the admin creates accounts",
+        "description": "Install Log Hub in strict-managed mode: no sign-up, the admin creates every account and each person sets a password from an emailed one-time link."
+      },
+      {
         "slug": "install-hook",
         "title": "Install the hook",
         "downloadable": true,
