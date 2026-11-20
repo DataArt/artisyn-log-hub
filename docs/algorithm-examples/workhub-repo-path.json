@@ -1,0 +1,176 @@
+[
+  {
+    "id": "RP-01",
+    "input": {"path": ""},
+    "expected": {"ok": true, "path": ""},
+    "note": "Rule 6: the empty path is the view root."
+  },
+  {
+    "id": "RP-02",
+    "input": {"path": "./"},
+    "expected": {"ok": true, "path": ""},
+    "note": "Rule 2 strips './', leaving '' -> the root (rule 6)."
+  },
+  {
+    "id": "RP-03",
+    "input": {"path": "a"},
+    "expected": {"ok": true, "path": "a"},
+    "note": "One plain segment, returned as is."
+  },
+  {
+    "id": "RP-04",
+    "input": {"path": "./a"},
+    "expected": {"ok": true, "path": "a"},
+    "note": "Rule 2: one leading './' is stripped."
+  },
+  {
+    "id": "RP-05",
+    "input": {"path": "././a"},
+    "expected": {"ok": false, "error": "invalid_path"},
+    "note": "Rule 2 strips only one './'; the rest './a' has a '.' segment (rule 5)."
+  },
+  {
+    "id": "RP-06",
+    "input": {"path": "src/lib/main.rs"},
+    "expected": {"ok": true, "path": "src/lib/main.rs"},
+    "note": "Nested path: every segment is a plain name."
+  },
+  {
+    "id": "RP-07",
+    "input": {"path": "src/lib/"},
+    "expected": {"ok": true, "path": "src/lib"},
+    "note": "Rule 4: one trailing '/' is dropped."
+  },
+  {
+    "id": "RP-08",
+    "input": {"path": "src/lib//"},
+    "expected": {"ok": false, "error": "invalid_path"},
+    "note": "Rule 4 drops one '/', leaving 'src/lib/' whose last segment is empty (rule 5)."
+  },
+  {
+    "id": "RP-09",
+    "input": {"path": "/etc/passwd"},
+    "expected": {"ok": false, "error": "invalid_path"},
+    "note": "Rule 3: absolute path."
+  },
+  {
+    "id": "RP-10",
+    "input": {"path": "/"},
+    "expected": {"ok": false, "error": "invalid_path"},
+    "note": "Rule 3: '/' alone is absolute too; it is not the root."
+  },
+  {
+    "id": "RP-11",
+    "input": {"path": ".."},
+    "expected": {"ok": false, "error": "invalid_path"},
+    "note": "Rule 5: a '..' segment."
+  },
+  {
+    "id": "RP-12",
+    "input": {"path": "src/../../etc"},
+    "expected": {"ok": false, "error": "invalid_path"},
+    "note": "Rule 5: '..' in the middle is rejected, not resolved."
+  },
+  {
+    "id": "RP-13",
+    "input": {"path": "src/./main.rs"},
+    "expected": {"ok": false, "error": "invalid_path"},
+    "note": "Rule 5: a '.' segment in the middle."
+  },
+  {
+    "id": "RP-14",
+    "input": {"path": "..notes/a..b"},
+    "expected": {"ok": true, "path": "..notes/a..b"},
+    "note": "Rule 5 compares whole segments: '..notes' and 'a..b' are plain names."
+  },
+  {
+    "id": "RP-15",
+    "input": {"path": ".git"},
+    "expected": {"ok": false, "error": "invalid_path"},
+    "note": "Rule 5: a '.git' segment at the top."
+  },
+  {
+    "id": "RP-16",
+    "input": {"path": "vendor/lib/.git/config"},
+    "expected": {"ok": false, "error": "invalid_path"},
+    "note": "Rule 5: '.git' anywhere in the path, not only at the top."
+  },
+  {
+    "id": "RP-17",
+    "input": {"path": "src/.git"},
+    "expected": {"ok": false, "error": "invalid_path"},
+    "note": "Rule 5: '.git' as the last segment."
+  },
+  {
+    "id": "RP-18",
+    "input": {"path": ".github/workflows/ci.yml"},
+    "expected": {"ok": true, "path": ".github/workflows/ci.yml"},
+    "note": "Rule 5 compares whole segments: '.github' is not '.git'."
+  },
+  {
+    "id": "RP-19",
+    "input": {"path": ".gitignore"},
+    "expected": {"ok": true, "path": ".gitignore"},
+    "note": "Rule 5: '.gitignore' is not '.git'."
+  },
+  {
+    "id": "RP-20",
+    "input": {"path": ".GIT"},
+    "expected": {"ok": true, "path": ".GIT"},
+    "note": "Rule 5 is case-sensitive: the container filesystem is Linux, where '.GIT' is a different folder."
+  },
+  {
+    "id": "RP-21",
+    "input": {"path": "src\\main.rs"},
+    "expected": {"ok": false, "error": "invalid_path"},
+    "note": "Rule 3: a backslash anywhere."
+  },
+  {
+    "id": "RP-22",
+    "input": {"path": "src/ma\u0000in.rs"},
+    "expected": {"ok": false, "error": "invalid_path"},
+    "note": "Rule 3: a NUL byte."
+  },
+  {
+    "id": "RP-23",
+    "input": {"path": "a//b"},
+    "expected": {"ok": false, "error": "invalid_path"},
+    "note": "Rule 5: an empty segment in the middle."
+  },
+  {
+    "id": "RP-24",
+    "input": {"path": " my notes .md"},
+    "expected": {"ok": true, "path": " my notes .md"},
+    "note": "Nothing is trimmed: spaces are part of the name."
+  },
+  {
+    "id": "RP-25",
+    "input": {"path": "docs/Заметки.md"},
+    "expected": {"ok": true, "path": "docs/Заметки.md"},
+    "note": "Non-ASCII names are allowed."
+  },
+  {
+    "id": "RP-26",
+    "input": {"path": {"repeat": "a", "times": 4096}},
+    "expected": {"ok": true},
+    "note": "Rule 1: 4096 bytes <= 4096."
+  },
+  {
+    "id": "RP-27",
+    "input": {"path": {"repeat": "a", "times": 4097}},
+    "expected": {"ok": false, "error": "invalid_path"},
+    "note": "Rule 1: 4097 bytes > 4096."
+  },
+  {
+    "id": "RP-28",
+    "input": {"path": {"repeat": "я", "times": 2049}},
+    "expected": {"ok": false, "error": "invalid_path"},
+    "note": "Rule 1 counts bytes: 2049 chars x 2 bytes = 4098 > 4096 although only 2049 chars."
+  },
+  {
+    "id": "RP-29",
+    "input": {"path": {"before": "./", "repeat": "a", "times": 4095}},
+    "expected": {"ok": false, "error": "invalid_path"},
+    "note": "Rule 1 runs before rule 2: the raw input is 2 + 4095 = 4097 bytes, rejected even though 4095 bytes remain after stripping './'."
+  }
+]

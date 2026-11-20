@@ -3,12 +3,16 @@
 // wrong and how to fix it; the process then exits with 2 (distinct from a test failure's 1).
 //
 //   - DATABASE_URL is reachable (default postgresql://postgres:pw@localhost:5432/postgres);
-//   - mode b only: MAILPIT_URL answers (default http://localhost:8025);
+//   - modes b and d only (MODES[m].needsMailpit): MAILPIT_URL answers (default http://localhost:8025);
 //   - the Playwright chromium browser is installed;
 //   - tmp/scenarios/.env.local does NOT exist: the stand bundle loads `.env.local` from
 //     `__dirname/..` (app.module.ts), i.e. from tmp/scenarios/, which would leak overrides.
 //
-// Usage: node scripts/scenarios/preflight.mjs [--mode a,b,c]
+// Docker is deliberately not checked here: only S-HOOK-10 needs it, and that spec runs its own
+// `docker info` preflight (tests/scenarios/helpers/docker-laptop.ts `assertDockerAvailable`) and
+// fails with a readable message when Docker is missing.
+//
+// Usage: node scripts/scenarios/preflight.mjs [--mode a,b,c,d]
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -58,10 +62,10 @@ async function checkMailpit(mailpitUrl) {
   try {
     const res = await fetch(target, { signal: AbortSignal.timeout(CHECK_TIMEOUT_MS) });
     if (res.ok) return null;
-    return `Mailpit at MAILPIT_URL=${mailpitUrl} answered ${target} with HTTP ${res.status}; mode b needs a working Mailpit API.`;
+    return `Mailpit at MAILPIT_URL=${mailpitUrl} answered ${target} with HTTP ${res.status}; modes b and d need a working Mailpit API.`;
   } catch (err) {
     return (
-      `Mailpit is not reachable at MAILPIT_URL=${mailpitUrl} (${err.message}); mode b needs it for confirmation emails.\n` +
+      `Mailpit is not reachable at MAILPIT_URL=${mailpitUrl} (${err.message}); modes b and d need it for confirmation / set-password emails.\n` +
       '  Start one with: docker compose -f tests/scenarios/docker-compose.yml up -d\n' +
       '  or set MAILPIT_URL (HTTP API) and MAILPIT_SMTP (host:port).'
     );

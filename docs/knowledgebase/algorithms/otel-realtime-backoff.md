@@ -1,4 +1,9 @@
 ---
+type: "Algorithm"
+title: "OTEL realtime backoff"
+description: "The hook's OTEL receiver sends the session's telemetry to Log Hub in realtime batches (about one POST every 5 s)."
+tags: [algorithm]
+generated: { by: "human:denistsyplakov", at: "2026-11-03T17:31:26+04:00" }
 reviewed: no
 reviewer: none
 ---

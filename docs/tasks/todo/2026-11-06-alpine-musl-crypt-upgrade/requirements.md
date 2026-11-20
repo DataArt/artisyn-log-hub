@@ -1,3 +1,9 @@
+---
+type: "Task"
+title: "Upgrade Alpine Base Images Once musl crypt() Fix Ships"
+description: "DEFERRED, check later: bump node/postgres -alpine tags when musl fixes crypt() on 257+ byte passwords (sshole CVE-2026-123158 root cause); not exploitable today (no sshd)"
+---
+
 # 2026-11-06: Upgrade Alpine Base Images Once musl crypt() Fix Ships
 
 **Status:** todo — deferred, CHECK LATER (blocked on an upstream musl fix)

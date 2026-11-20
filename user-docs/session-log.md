@@ -246,6 +246,9 @@ of the total.
 - A card for an agent that has not started yet at the chosen moment is faded with a dashed border;
   a running agent has a **running** label and a growing duration; a finished one looks normal.
 - **No groups** means the session started no agents.
+- When the cards do not fit, scroll the map or **drag it with the mouse** in any direction, as in a
+  diagram tool. The header and the timeline stay in place, the main card stays in view while you
+  move sideways, and each column keeps its heading at the top.
 
 **Side panel.** Click a card to open a panel with its model, cost and share, calls, failed calls,
 peak context (against the model's context window, `n/a` when unknown), duration and start time.
@@ -360,3 +363,7 @@ Git status and file sizes on disk come from the hook. Git status needs **hook 2.
 with an older hook the tab says so and shows `unknown` (or `outside repo` for files clearly outside
 the repository). Sessions recorded with a hook older than 2.22.0 have no file sizes on disk either.
 A skill synced to you by your organisation is shown with the source **org-synced**.
+
+Right after a session starts, the tab may say **Session data is still arriving**: the hook uploads
+the first prompt at once and the transcript with Claude's first reply a minute or two later. Press
+Refresh after a moment to see the anatomy.

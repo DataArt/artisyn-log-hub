@@ -112,6 +112,11 @@ const HOOK_JS_FILES = [
   'otel-endpoint-check.js',
   'otel-restart.js',
   'throttle-state.js',
+  // Per-user upload job queue (`~/.artisyn/upload/`) shared by the hooks and the receiver's
+  // uploader role.
+  'upload-queue.js',
+  // Node.js version advisory shown on `SessionStart` (FR-16).
+  'node-version-check.js',
   // Shared async LLM-invocation helper, skill catalog, the combined worker,
   // its own failure-cap state, and the `Stop` trigger that spawns it (wired
   // into `HOOKS_JSON`'s `Stop:` below).

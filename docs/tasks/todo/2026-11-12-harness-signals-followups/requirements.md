@@ -1,3 +1,9 @@
+---
+type: "Task"
+title: "Harness Signals in the Logs Tab, Hook and Diagnostics Reports, Setup-Neutral Counts"
+description: "implement the picked follow-ups F1–F14, F16–F24, F26–F31 of the harness-entries review: per-turn Signals and chips in Logs, Hooks kind / anatomy / Info additions, repo/team hook-health and diagnostics reports, setup-neutral count fixes; no hook code changes"
+---
+
 # 2026-11-12: Harness Signals in the Logs Tab, Hook and Diagnostics Reports, Setup-Neutral Counts
 
 **Status:** todo

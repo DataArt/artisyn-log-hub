@@ -26,6 +26,12 @@ the full `/adlc-lh:*` skill family (review/plan/implement, deep-track variants, 
 skill for the unified workflow. `adlc-lh` is this repo's local copy of the shared `adlc` plugin, in
 `.artisyn/marketplace/plugins/adlc-lh/` (enabled as `adlc-lh@artisyn` in `.claude/settings.json`).
 
+Every task's `requirements.md` starts with OKF front matter — `type: "Task"`, `title`, `description`
+(the one-line summary; template `.claude/repo_config/requirements-template.md`). The todo index
+`docs/tasks/todo/index.md` is generated from it: run `npm run tasks:index` after `adlc-lh:scratch`
+and after `adlc-lh:archive` (also via `adlc-lh:tracker` create / close), and fix the front matter,
+not the index line, when a summary is wrong. The done index stays append-only (written by archive).
+
 # Hook API
 
 when changing hook API mind that some users will not update hook for a long time so you need to keep backward compatibility
@@ -77,10 +83,10 @@ scenario is missing (add a step) or the code is not needed (delete it) — not a
   tests of server / client / hook, the build-script tests) plus `build`. No DB, no stand, no dev
   app — a few minutes.
 - To see the behaviour you are changing while iterating, run **only the touched scenario**:
-  `npm run test:scenarios -- --mode <a|b|c> --only scenarios --grep "<@S-TAG>"` (a mode the
+  `npm run test:scenarios -- --mode <a|b|c|d> --only scenarios --grep "<@S-TAG>"` (a mode the
   scenario declares; add `,contract` to `--only` if you changed a route).
 - **Before declaring the work done** (`finalRun: true`) the full set runs: the fast set plus the
-  `finalOnly` checks — `contract`, `scenarios-a`/`-b`/`-c`, `e2e-fast`, `e2e-full`.
+  `finalOnly` checks — `contract`, `scenarios-a`/`-b`/`-c`/`-d`, `e2e-fast`, `e2e-full`.
 
 ## Test & build commands (canonical — use these everywhere)
 
@@ -100,12 +106,12 @@ skills and workflows); this table is human documentation and must be kept in syn
 | Server typecheck (tsc) | `npm run typecheck` | `server/` |
 | Server algorithm tests (jest, `*.algo.spec.ts` only, no DB) | `npm run test` | `server/` |
 | Build-script tests (`node --test`) | `npm run test:scripts` | repo root |
-| One scenario while iterating (not a health check) | `npm run test:scenarios -- --mode <a\|b\|c> --only scenarios --grep "<@S-TAG>"` | repo root |
+| One scenario while iterating (not a health check) | `npm run test:scenarios -- --mode <a\|b\|c\|d> --only scenarios --grep "<@S-TAG>"` | repo root |
 | Tests typecheck (tsc over `tests/`) | `npm run typecheck:tests` | repo root |
 | Hook algorithm tests (`node --test`, `__tests__/*.algo.test.js`) | `npm test` | `hook/` |
 | E2E — fast `@core` loop (< 3 min; legacy `tests/e2e/` specs not yet replaced by scenarios) | `npm run test:e2e` | repo root |
 | E2E — full suite (legacy `tests/e2e/`) | `npm run test:e2e:full` | repo root |
-| Scenarios — isolated stand, auth modes A/B/C (`--mode a --only scenarios,corpus`, `--mode b\|c --only scenarios` per check) | `npm run test:scenarios` | repo root |
+| Scenarios — isolated stand, auth modes A/B/C/D (`--mode a --only scenarios,corpus`, `--mode b\|c\|d --only scenarios` per check) | `npm run test:scenarios` | repo root |
 | API vs DB contracts (jest, own `contract_*` schema, real DB) | `npm run test:contract` | `server/` |
 
 - Do NOT use `npx vitest`, `npx playwright test`, bare `jest`/`npx jest`, `ng lint`, or a
@@ -142,9 +148,10 @@ skills and workflows); this table is human documentation and must be kept in syn
   e2e run drops the backend mid-suite. This is encoded as the `app` group in
   `repo-health-checks.json`; the lint/typecheck and unit (algorithm) checks — including the server
   `npm run test`, which needs no DB — are the `static` group and safe to run alongside them.
-- `npm run test:scenarios` (checks `scenarios-a` 900 s, `scenarios-b`/`-c` 600 s each, `finalOnly` — final verification only; mode A stays one integrated run on purpose) builds and
+- `npm run test:scenarios` (checks `scenarios-a` 900 s, `scenarios-b`/`-c`/`-d` 600 s each, `finalOnly` — final verification only; mode A stays one integrated run on purpose) builds and
   starts its own isolated stand (own port, own `scn_*` schema) and never touches the dev server;
-  it needs Postgres and, for mode B, Mailpit — `docker compose -f tests/scenarios/docker-compose.yml up -d`.
+  it needs Postgres and, for modes B and D, Mailpit — `docker compose -f tests/scenarios/docker-compose.yml up -d`.
+  Mode D (`strict-managed`) restarts its stand once on the same schema before the scenarios run.
   It is still in the `app` group because its stand build rewrites the installer in place like
   `npm run build`. See `tests/scenarios/README.md`.
 - `npm run test:contract` (from `server/`, check `contract`, 600 s, `finalOnly` — final verification only) is the API vs DB
@@ -152,6 +159,32 @@ skills and workflows); this table is human documentation and must be kept in syn
   fixture, needs only Postgres. It is in the `app` group because it shares Postgres with the
   e2e suites and the scenario stand. `npm run test:scenarios` also runs it as its `contract` step. See
   `server/test/contract/README.md`.
+
+## Work Hub
+
+`work-hub/` is a separate product (Rust server, React SPA, own Postgres schema) that only lives in
+this repo: it is not part of `npm run build`, `dist/` or Log Hub's checks, and Log Hub's commands
+above never cover it. Read `docs/knowledgebase/work-hub.md` before touching it. Its own commands,
+all run **from `work-hub/`**:
+
+| Purpose | Command |
+|---|---|
+| Lint (`cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, web eslint, agent-names check, licence check) | `npm run lint` |
+| Typecheck (`tsc --noEmit` over `web/` and `tests/`) | `npm run typecheck` |
+| Algorithm tests (Rust table tests + web `*.algo.test.ts`) | `npm run test:algo` |
+| Build (web, then `cargo build --release`) | `npm run build` |
+| API contract tests (needs Postgres and Docker) | `npm run test:contract` |
+| Scenarios on an isolated stand (needs Postgres, Docker; Mailpit for mode b) | `npm run test:scenarios -- --mode a\|b\|c` |
+
+Test policy for Work Hub — the same three kinds, in its own places:
+
+- **Algorithm** — rows in `docs/algorithm-examples/<name>.json` for a `workhub-*` (or shared auth)
+  doc; the table tests are `work-hub/server/tests/algo.rs` and `work-hub/web/**/*.algo.test.ts`.
+- **API contract** — a new or changed route gets its row in
+  `work-hub/server/tests/contract/registry.rs` (the meta-test fails without it).
+- **Scenario** — a step in an existing scenario in `work-hub/tests/scenarios/`.
+- Scenario coverage is **not measured** for Work Hub yet (no Rust coverage tool in the alpha), so
+  the ≥ 80 % target does not apply to it until that follow-up lands.
 
 ## Background processes cleanup
 
@@ -232,6 +265,12 @@ KB files live in `docs/knowledgebase/`.
 - Once you or user need to find or change something in code base - start you reserch from reading relevant KB articles  
 - To find a KB file: read `docs/knowledgebase/index.md` first — do NOT glob the directory.
 - After adding, removing, or renaming a KB file: update `docs/knowledgebase/index.md`.
+- KB articles follow OKF v0.3 (`okf_version: "0.3"` in the bundle-root `index.md`): front matter
+  `type`, `title`, `description`, `tags`, `generated: { by: "<actor>", at: "<RFC 3339>" }` —
+  never the v0.1 `timestamp` key. Set `generated.at` on a meaningful content change, not on a
+  format-only edit. Algorithm docs have the same keys (`type: "Algorithm"`) plus their own
+  `reviewed` / `reviewer`. Every `.md` in a bundle (except `index.md` / `log.md`) has front matter
+  with a `type`, including research notes and samples.
 
 (Path matches `project-env.json → kbIndexPath`; keep in sync with it.)
 

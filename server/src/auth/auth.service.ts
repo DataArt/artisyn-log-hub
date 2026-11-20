@@ -13,13 +13,19 @@ import { UsersService } from '../users/users.service';
 import { MailService } from '../mail/mail.service';
 import { AuthSessionsService } from './auth-sessions.service';
 import { ChangePasswordDto } from './dto/change-password.dto';
-import { PasswordResetTokensService } from './password-reset-tokens.service';
+import {
+  ConsumeResult,
+  PasswordResetTokensService,
+} from './password-reset-tokens.service';
+import { RESET_LINK_TTL_MS } from './password-link-ttl';
+import { PLACEHOLDER_IMPORT_USER_PASSWORD_HASH } from '../logs/logs.service';
 import { EmailConfirmationTokensService } from './email-confirmation-tokens.service';
 import { applyPasswordPolicy } from './utils/password-policy';
 import { TooManyRequestsException } from './exceptions/too-many-requests.exception';
 import { parseAllowedEmailDomains } from './config/allowed-email-domains';
 import { getEmailLinkBaseUrl } from '../common/public-base-url';
 import { maskEmail } from '../common/mask-email';
+import { buildResetUrl } from './password-link-url';
 
 /** 'skipped' = SMTP not configured for this mode (MailService.isConfigured() is false). */
 export type NotificationDelivery = 'sent' | 'failed' | 'skipped';
@@ -50,7 +56,7 @@ export class AuthService {
       });
     }
 
-    this.assertEmailDomainAllowed(email);
+    this.assertEmailDomainAllowed(email, 'signup');
 
     const existing = await this.usersService.findByEmail(email);
     if (existing) {
@@ -189,26 +195,55 @@ export class AuthService {
       return { email_delivery: 'sent' };
     }
 
+    // strict-managed: an import placeholder is not an account anyone was
+    // given — its mailbox owner must not be able to claim it.
+    if (
+      this.configService.get<string>('AUTH_MODE') === 'strict-managed' &&
+      user.passwordHash === PLACEHOLDER_IMPORT_USER_PASSWORD_HASH
+    ) {
+      this.logger.warn(
+        `Password reset refused for an import placeholder: email=${maskEmail(user.email)} userId=${user.id}`,
+      );
+      return { email_delivery: 'sent' };
+    }
+
+    // From here on every answer is the same 200 'sent' as for an unknown
+    // email, and the email goes out without being awaited: a status code or
+    // an SMTP round-trip must not tell a caller that the account exists.
     const result = await this.passwordResetTokensService.issueWithCooldown(
       user.id,
+      'reset',
+      RESET_LINK_TTL_MS,
+      user.email,
     );
+    if (result.status === 'stale') {
+      this.logger.warn(
+        `Password reset skipped, the account's email changed meanwhile: email=${maskEmail(user.email)} userId=${user.id}`,
+      );
+      return { email_delivery: 'sent' };
+    }
     if (result.status === 'cooldown') {
       this.logger.warn(
         `Password reset blocked by cooldown: email=${maskEmail(user.email)} userId=${user.id} retryAfterSeconds=${result.retryAfterSeconds}`,
       );
-      throw new TooManyRequestsException(result.retryAfterSeconds);
+      return { email_delivery: 'sent' };
     }
     this.logger.log(
       `Password reset token issued: email=${maskEmail(user.email)} userId=${user.id}`,
     );
 
-    const resetUrl = this.buildResetUrl(result.token);
-    if (resetUrl === null) return { email_delivery: 'failed' };
-    const email_delivery = await this.mailService.sendPasswordResetEmail(
-      user.email,
-      resetUrl,
+    // A password-less account (admin-created, never set) gets "set" wording.
+    const noPassword = user.passwordHash === null;
+    const resetUrl = buildResetUrl(
+      result.token,
+      this.logger,
+      noPassword ? 'set' : undefined,
     );
-    return { email_delivery };
+    if (resetUrl === null) return { email_delivery: 'sent' };
+    void (noPassword
+      ? this.mailService.sendSetPasswordOnRequestEmail(user.email, resetUrl)
+      : this.mailService.sendPasswordResetEmail(user.email, resetUrl));
+    return { email_delivery: 'sent' };
   }
 
   async adminGenerateResetLink(
@@ -231,23 +266,15 @@ export class AuthService {
     password: string,
     passwordConfirm: string,
   ) {
-    const result = await this.passwordResetTokensService.consume(token);
-    if (result.status !== 'ok') {
-      this.logger.warn(`Password reset failed: reason=${result.status}`);
-    }
-    if (result.status === 'unknown') {
-      throw new BadRequestException('Invalid or unknown token');
-    }
-    if (result.status === 'expired') {
-      throw new GoneException('Token has expired');
-    }
-    if (result.status === 'already_used') {
-      throw new ConflictException('Token already used');
-    }
+    // Check the link, validate the new password, and only then use the link
+    // up: a typo or a too-weak password must not burn a one-time link.
+    const checked = this.assertTokenUsable(
+      await this.passwordResetTokensService.check(token),
+    );
 
     if (password !== passwordConfirm) {
       this.logger.warn(
-        `Password reset failed: reason=password_mismatch userId=${result.userId}`,
+        `Password reset failed: reason=password_mismatch userId=${checked.userId}`,
       );
       throw new BadRequestException({
         error: 'password_mismatch',
@@ -258,20 +285,48 @@ export class AuthService {
       applyPasswordPolicy(password);
     } catch (err) {
       this.logger.warn(
-        `Password reset failed: reason=weak_password userId=${result.userId}`,
+        `Password reset failed: reason=weak_password userId=${checked.userId}`,
       );
       throw err;
     }
 
+    const result = this.assertTokenUsable(
+      await this.passwordResetTokensService.consume(token),
+    );
     const passwordHash = await hashPassword(password);
     const user = await this.usersService.updatePassword(
       result.userId,
       passwordHash,
     );
+    // strict-managed: admin-created and bootstrap accounts start unconfirmed;
+    // the emailed link proves the mailbox, so a later switch to
+    // password-confirm does not lock them out.
+    if (this.configService.get<string>('AUTH_MODE') === 'strict-managed') {
+      const full = await this.usersService.findById(user.id);
+      if (full && full.emailConfirmedAt === null) {
+        await this.usersService.markEmailConfirmed(user.id);
+      }
+    }
+    // Whoever held a session for this account (a stolen one, or one from an
+    // earlier auth mode) is signed out by the reset, as by a password change.
+    await this.authSessionsService.deleteAllSessionsForUser(user.id);
     this.logger.log(
       `Password reset succeeded: email=${maskEmail(user.email)} userId=${user.id}`,
     );
     return this.generatePublicProfile(user);
+  }
+
+  /** Maps a non-`ok` token status to its HTTP error (400 / 410 / 409). */
+  private assertTokenUsable(result: ConsumeResult): { userId: number } {
+    if (result.status === 'ok') return result;
+    this.logger.warn(`Password reset failed: reason=${result.status}`);
+    if (result.status === 'unknown') {
+      throw new BadRequestException('Invalid or unknown token');
+    }
+    if (result.status === 'expired') {
+      throw new GoneException('Token has expired');
+    }
+    throw new ConflictException('Token already used');
   }
 
   /**
@@ -359,12 +414,17 @@ export class AuthService {
   }
 
   /**
-   * Mode 3 sign-up domain allow-list. Exact match on the
-   * part after the last `@`; an unset or empty `ALLOWED_EMAIL_DOMAINS` allows
-   * every domain. Other modes ignore the setting.
+   * Email domain allow-list for `password-confirm` sign-up and
+   * `strict-managed` admin-created accounts. Exact match on the part after
+   * the last `@`; an unset or empty `ALLOWED_EMAIL_DOMAINS` allows every
+   * domain. Other modes ignore the setting.
    */
-  private assertEmailDomainAllowed(email: string): void {
-    if (this.configService.get<string>('AUTH_MODE') !== 'password-confirm') {
+  assertEmailDomainAllowed(
+    email: string,
+    context: 'signup' | 'admin-create',
+  ): void {
+    const mode = this.configService.get<string>('AUTH_MODE');
+    if (mode !== 'password-confirm' && mode !== 'strict-managed') {
       return;
     }
     const allowed = parseAllowedEmailDomains(
@@ -378,15 +438,12 @@ export class AuthService {
     if (!allowed.includes(domain)) {
       throw new BadRequestException({
         error: 'email_domain_not_allowed',
-        message: `Sign-up is limited to these email domains: ${allowed.join(', ')}`,
+        message:
+          context === 'admin-create'
+            ? `This server only accepts these email domains: ${allowed.join(', ')}`
+            : `Sign-up is limited to these email domains: ${allowed.join(', ')}`,
       });
     }
-  }
-
-  /** Emailed link; `null` when `PUBLIC_BASE_URL` is missing (email skipped). */
-  private buildResetUrl(token: string): string | null {
-    const base = getEmailLinkBaseUrl(this.logger);
-    return base === null ? null : `${base}/#/reset-password?token=${token}`;
   }
 
   /** Emailed link; `null` when `PUBLIC_BASE_URL` is missing (email skipped). */

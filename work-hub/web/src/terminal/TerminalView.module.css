@@ -1,0 +1,111 @@
+/* The root takes a caller's `className`, so its own rule has zero specificity. */
+:where(.root) {
+  position: relative;
+  height: 100%;
+  min-height: 0;
+  width: 100%;
+  background-color: #fff;
+}
+
+.host {
+  position: absolute;
+  inset: 0;
+  padding: 0.25rem;
+}
+
+.alert {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  left: 0.5rem;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: var(--radius-md);
+  border-width: 1px;
+  border-color: var(--color-danger-border);
+  background-color: var(--color-danger-bg);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: var(--color-danger-text);
+  box-shadow: var(--shadow-sm);
+}
+
+.alertIcon {
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+}
+
+.alertText {
+  min-width: 0;
+  flex: 1 1 0%;
+}
+
+.status {
+  position: absolute;
+  right: 0.5rem;
+  bottom: 0.5rem;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  border-radius: var(--radius-md);
+  border-width: 1px;
+  background-color: var(--color-card);
+  padding: 0.375rem 0.75rem;
+  font-size: 0.75rem;
+  line-height: 1rem;
+  color: var(--color-muted-foreground);
+  box-shadow: var(--shadow-sm);
+}
+
+.statusSpinner {
+  width: 0.875rem;
+  height: 0.875rem;
+  animation: spin 1s linear infinite;
+}
+
+.takenOver {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: rgb(255 255 255 / 0.85);
+  backdrop-filter: blur(1px);
+}
+
+.takenOverPanel {
+  display: flex;
+  max-width: 24rem;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.75rem;
+  border-radius: var(--radius-lg);
+  border-width: 1px;
+  background-color: var(--color-card);
+  padding: 1.5rem;
+  text-align: center;
+  box-shadow: var(--shadow-md);
+}
+
+.takenOverIcon {
+  width: 1.5rem;
+  height: 1.5rem;
+  color: var(--color-muted-foreground);
+}
+
+.takenOverText {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

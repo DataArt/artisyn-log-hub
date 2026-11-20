@@ -5,7 +5,7 @@ description: "Feature-parity study of 14 Claude Code telemetry/observability too
 tags:
   - competitive-research
   - product
-timestamp: "2026-11-01T00:00:00+04:00"
+generated: { by: "human:denistsyplakov", at: "2026-11-01T00:00:00+04:00" }
 ---
 
 # Competitive Research — Claude Code telemetry tools

@@ -6,7 +6,7 @@ tags:
   - twins
   - invariants
   - backward-compatibility
-timestamp: "2026-11-09T00:00:00+04:00"
+generated: { by: "human:denistsyplakov", at: "2026-11-09T00:00:00+04:00" }
 ---
 
 # Twins Registry and Cross-Cutting Rules
@@ -75,9 +75,25 @@ known differences between copies.
 | Receiver shutdown sequence | hook `otel-restart.js`; installer `otel-restart.ts` | **none** |
 | Managed-settings read, `OS_POLICY_TIMEOUT_MS` | hook `managed-settings.js`; installer `managed-settings.ts` | **none** |
 | OTEL keys the installer writes | installer `otel-env.ts` (`OTEL_ENV_KEYS`, `OTEL_TRACE_ENV_KEYS`); hook `otel-status.js` (`ARTISYN_OTEL_KEYS`, `PER_REPO_KEYS`) | Doc [otel-status-reason](algorithms/otel-status-reason.md) (hook side only) |
+| Upload-queue rules: `buildJobName` (the receiver builds the name of a re-queued `failed/` job), `parseJobName`, `JOB_EXIT`, `isHeartbeatFresh`, `backoffMs`, `isClaimStale` and the shared constants (dir / file names, `UPLOAD_QUEUE_CAPABILITY`, `UPLOAD_CONTRACT`, `JOB_SCHEMA`, `HEARTBEAT_STALE_MS`, `JOB_RUN_TIMEOUT_MS`) — hook `3.0.0`+ | hook `upload-queue.js`; standalone copy in `otel-receiver.js` (the receiver never `require`s a hook module) | Doc [upload-job-queue](algorithms/upload-job-queue.md); `__tests__/upload-job-queue.algo.test.js` runs the rows on both exports |
+| Job listing order (DD-3), the receiver's pre-spawn validation (a subset of `validateJob`), the `failed/` record (`moveJobToFailed`: the job plus `failedAt` ISO and `failedReason`, atomic, `0o600`) | hook `upload-queue.js`; `otel-receiver.js` | end to end only (`@S-HOOK-07`) |
+| Node.js version check: `NODE_PATCHED_MINIMUMS`, `NODE_ADVISORY`, `classifyNodeVersion`, the warning text, `ARTISYN_NODE_VERSION_OVERRIDE` | hook `node-version-check.js` (plus the per-day throttle); installer `node-version.ts` (no throttle) | Doc [node-version-check](algorithms/node-version-check.md) names both; rows run on the hook copy only (the TS copy is not pinned). Update both on each Node.js security release |
 
 All hook paths are under `hook/.claude/telemetry_tool/`; installer paths under
 `artisyn-hooks-installer/src/`.
+
+### Log Hub server ↔ Work Hub (Rust ports)
+
+Work Hub ([work-hub.md](work-hub.md)) shares no code with Log Hub; its auth rules are hand-ports
+in Rust that must pass the Log Hub doc's rows unchanged. The rows' `NODE_ENV` is Work Hub's
+`WORK_HUB_ENV`. A rule change in either copy changes the doc rows, so both tests go red together.
+
+| Logic / value | Copies | Test that pins them |
+|---|---|---|
+| Password policy | `server/src/auth/utils/password-policy.ts`; `work-hub/server/src/auth/password_policy.rs` | Doc [password-policy](algorithms/password-policy.md); jest and `cargo test --test algo` (`npm run test:algo` from `work-hub/`) |
+| Login backoff | `server/src/auth/login-backoff.service.ts`; `work-hub/server/src/auth/backoff.rs` | Doc [login-backoff](algorithms/login-backoff.md); both |
+| Auth startup validation | `server/src/auth/config/auth-startup-validation.ts`; `work-hub/server/src/auth/startup.rs` | Doc [auth-startup-config](algorithms/auth-startup-config.md); both |
+| Local-request detection, container gateway | `server/src/auth/utils/localhost.util.ts`, `container-gateway.util.ts`; `work-hub/server/src/auth/local_request.rs` | Doc [local-request-detection](algorithms/local-request-detection.md); both |
 
 ## Cross-cutting rules
 

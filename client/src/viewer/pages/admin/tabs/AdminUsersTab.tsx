@@ -9,15 +9,34 @@ import {
   updateAdminUserRole,
 } from '../../../api';
 import { useDebounce } from '../../../hooks/useDebounce';
+import { useAuthConfig } from '../../../hooks/useAuthConfig';
 import { useAuth } from '../../../context/AuthContext';
 import { PageState } from '../../../components/PageState';
 import { DateTime } from '../../../components/DateTime';
 import { AdminDataTable } from '../AdminDataTable';
+import { Badge } from '../../../ui/badge';
 import { Button } from '../../../ui/button';
 import { ConfirmDialog } from '../../../ui/confirm-dialog';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../../ui/tooltip';
+import { AdminUsersNotice } from './AdminUsersNotice';
+import type { AdminUsersNoticeValue } from './AdminUsersNotice';
+import { CreateUserModal } from './CreateUserModal';
 import { RenameUserEmailModal } from './RenameUserEmailModal';
 import { ResetPasswordLinkModal } from './ResetPasswordLinkModal';
+import {
+  SendPasswordLinkButton,
+  usePasswordLinkSender,
+} from './SendPasswordLinkButton';
+
+/**
+ * Strict-managed "Password" column chip: whether the account has a password
+ * yet. "Imported" = a placeholder a repository import created, not an account.
+ */
+function PasswordSetChip({ user }: { user: AdminUser }) {
+  if (user.passwordSet) return <Badge variant="secondary">Set</Badge>;
+  if (user.imported) return <Badge variant="outline">Imported</Badge>;
+  return <Badge variant="warning">Not set</Badge>;
+}
 
 function RoleActionCell({
   row,
@@ -119,7 +138,14 @@ export function AdminUsersTab() {
   } | null>(null);
   const [renameUser, setRenameUser] = useState<AdminUser | null>(null);
   const [deleteUser, setDeleteUser] = useState<AdminUser | null>(null);
+  const [isCreateOpen, setIsCreateOpen] = useState(false);
+  const [notice, setNotice] = useState<AdminUsersNoticeValue | null>(null);
   const { user: currentUser } = useAuth();
+  const { data: authConfig } = useAuthConfig();
+  // Strict-managed: only admins create accounts and every password is set via an
+  // emailed link, so the copyable reset link is replaced by "Resend link".
+  const isStrictManaged = authConfig?.mode === 'strict-managed';
+  const linkSender = usePasswordLinkSender(setNotice);
   const queryClient = useQueryClient();
 
   const {
@@ -166,6 +192,17 @@ export function AdminUsersTab() {
       header: 'Role',
       enableGlobalFilter: false,
     },
+    ...(isStrictManaged
+      ? [
+          {
+            id: 'passwordSet',
+            accessorKey: 'passwordSet',
+            header: 'Password',
+            enableGlobalFilter: false,
+            cell: ({ row }) => <PasswordSetChip user={row.original} />,
+          } satisfies ColumnDef<AdminUser, unknown>,
+        ]
+      : []),
     {
       id: 'createdAt',
       accessorKey: 'createdAt',
@@ -192,21 +229,32 @@ export function AdminUsersTab() {
       enableSorting: false,
       enableGlobalFilter: false,
       cell: ({ row }) => (
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2">
           <RoleActionCell
             row={row}
             currentUserId={currentUser?.id ?? -1}
             onToggle={(user) => setConfirmUser(user)}
             isPending={roleMutation.isPending}
           />
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={resetLinkMutation.isPending}
-            onClick={() => resetLinkMutation.mutate(row.original)}
-          >
-            Reset Password
-          </Button>
+          {isStrictManaged ? (
+            !row.original.passwordSet &&
+            !row.original.imported && (
+              <SendPasswordLinkButton
+                cooldownUntil={linkSender.cooldownUntil(row.original)}
+                isSending={linkSender.isSending(row.original.id)}
+                onClick={() => void linkSender.send(row.original)}
+              />
+            )
+          ) : (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={resetLinkMutation.isPending}
+              onClick={() => resetLinkMutation.mutate(row.original)}
+            >
+              Reset Password
+            </Button>
+          )}
           <Button
             variant="outline"
             size="sm"
@@ -231,12 +279,22 @@ export function AdminUsersTab() {
 
   return (
     <div className="flex flex-col gap-4 p-4">
-      <input
-        className="w-64 border border-border rounded px-3 py-1.5 text-sm bg-background focus:outline-none focus:ring-1 focus:ring-ring"
-        placeholder="Filter by email…"
-        value={filterText}
-        onChange={(e) => setFilterText(e.target.value)}
-      />
+      <div className="flex items-center gap-3">
+        <input
+          className="w-64 border border-border rounded px-3 py-1.5 text-sm bg-background focus:outline-none focus:ring-1 focus:ring-ring"
+          placeholder="Filter by email…"
+          value={filterText}
+          onChange={(e) => setFilterText(e.target.value)}
+        />
+        {isStrictManaged && (
+          <Button size="sm" onClick={() => setIsCreateOpen(true)}>
+            + Create user
+          </Button>
+        )}
+      </div>
+      {notice && (
+        <AdminUsersNotice notice={notice} onDismiss={() => setNotice(null)} />
+      )}
       <AdminDataTable
         columns={columns}
         data={users ?? []}
@@ -291,10 +349,36 @@ export function AdminUsersTab() {
           onClose={() => setResetLink(null)}
         />
       )}
+      {isCreateOpen && (
+        <CreateUserModal
+          onClose={() => setIsCreateOpen(false)}
+          onCreated={(result) =>
+            setNotice(
+              result.email_delivery === 'sent'
+                ? {
+                    tone: 'success',
+                    text: `Set-password link sent to ${result.email}`,
+                  }
+                : {
+                    tone: 'warning',
+                    text: 'Account created, but the link was not sent — use Resend link',
+                  },
+            )
+          }
+        />
+      )}
       {renameUser && (
         <RenameUserEmailModal
           user={renameUser}
           onClose={() => setRenameUser(null)}
+          onRenamed={(email) =>
+            setNotice({
+              tone: 'success',
+              text: isStrictManaged
+                ? `Email changed to ${email}. Send a new link with «Resend link» so the person can set a password.`
+                : `Email changed to ${email}.`,
+            })
+          }
         />
       )}
     </div>

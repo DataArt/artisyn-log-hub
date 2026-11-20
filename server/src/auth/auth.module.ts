@@ -9,6 +9,7 @@ import { AuthSessionsService } from './auth-sessions.service';
 import { AzureAuthService } from './azure/azure-auth.service';
 import { AzureCallbackController } from './azure/azure-callback.controller';
 import { EmailConfirmationTokensService } from './email-confirmation-tokens.service';
+import { EmailSendRateLimitService } from './email-send-rate-limit.service';
 import { AuthModeGuard } from './guards/auth-mode.guard';
 import { AutoIdentifyGuard } from './guards/auto-identify.guard';
 import { LocalAuthGuard } from './guards/local-auth.guard';
@@ -29,6 +30,7 @@ import { SessionSerializer } from './session.serializer';
   providers: [
     AuthService,
     AuthRateLimitService,
+    EmailSendRateLimitService,
     AuthSessionsService,
     PasswordResetTokensService,
     EmailConfirmationTokensService,
@@ -47,6 +49,7 @@ import { SessionSerializer } from './session.serializer';
     SessionAuthGuard,
     EmailConfirmationTokensService,
     PasswordResetTokensService,
+    EmailSendRateLimitService,
   ],
 })
 export class AuthModule {}

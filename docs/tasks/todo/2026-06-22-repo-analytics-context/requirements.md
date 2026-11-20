@@ -1,3 +1,9 @@
+---
+type: "Task"
+title: "Repo Analytics Context Metrics"
+description: "Add \"Context\" display type to repo analytics showing max context window size and number of context window compactions."
+---
+
 # T-39: Repo Analytics Context Metrics
 
 **Status:** todo

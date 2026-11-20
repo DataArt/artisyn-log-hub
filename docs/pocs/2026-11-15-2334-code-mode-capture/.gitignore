@@ -1,0 +1,5 @@
+# captured hook payloads, transcript copy and the report (run artefacts)
+capture/
+# runtime garbage
+*.log
+.env

@@ -1,4 +1,9 @@
 ---
+type: "Algorithm"
+title: "OTEL Live tree: node keys, placement, retention and totals"
+description: "The header Live view shows what is running right now as a tree: Home → each team (and No team) → repository → session → agent, every node with its cost, tokens, calls, live counts and running time."
+tags: [algorithm]
+generated: { by: "human:denistsyplakov", at: "2026-11-05T11:57:20+04:00" }
 reviewed: no
 reviewer: none
 ---

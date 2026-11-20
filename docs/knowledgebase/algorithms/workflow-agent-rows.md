@@ -1,4 +1,9 @@
 ---
+type: "Algorithm"
+title: "Workflow agent rows: order, numbers and label"
+description: "A workflow run can spawn 45+ agents. The \"Agents (N)\" table of a workflow node lists them in the order they started, numbers them (`1`, `2`, `2.1`) so a nested agent is placed under its parent, and names each row by its prompt instead of its bare id, so the user can find an agent without opening…"
+tags: [algorithm]
+generated: { by: "human:denistsyplakov", at: "2026-11-04T13:54:49+04:00" }
 reviewed: 2026-10-21
 reviewer: ai+owner
 ---

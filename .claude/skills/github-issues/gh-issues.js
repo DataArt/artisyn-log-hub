@@ -180,7 +180,10 @@ function findIssueNumber(folder, req) {
 function buildBlock(folder, req, repo, event, taskDir) {
   const rel = path.relative(gitRoot(taskDir), path.join(taskDir, 'requirements.md')).split(path.sep).join('/');
   const link = `${repo.url}/blob/${repo.branch}/${rel.split('/').map(encodeURIComponent).join('/')}`;
+  // The OKF front matter (`type` / `title` / `description`, read by scripts/tasks-index.js) is file
+  // metadata, not issue text.
   let content = req.text
+    .replace(/^---\n[\s\S]*?\n---\n+/, '')
     .replace(/^#\s+.+\n+/, '')
     .replace(/^\*\*Tracker:\*\*.*\n/mi, '')
     .trim();

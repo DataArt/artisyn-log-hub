@@ -211,7 +211,7 @@ export const f02Account: ContractFamily = {
       route: 'POST /api/v1/auth/forgot-password',
       actor: 'anon',
       body: { email: '@owner.email' },
-      expect: { status: 200 },
+      expect: { status: 200, bodyMatches: { email_delivery: 'sent' } },
       write: {
         watch: ['password_reset_tokens'],
         delta: {
@@ -219,7 +219,13 @@ export const f02Account: ContractFamily = {
             {
               table: 'password_reset_tokens',
               where: 'user_id = @owner.id',
-              check: ['used_at IS NULL', 'expires_at > now()'],
+              // Only the sha256 of the token is stored; "Forgot password?" links are 'reset'.
+              check: [
+                'used_at IS NULL',
+                'expires_at > now()',
+                "token ~ '^[0-9a-f]{64}$'",
+                "purpose = 'reset'",
+              ],
             },
           ],
         },
@@ -233,6 +239,20 @@ export const f02Account: ContractFamily = {
       body: { email: 'nobody@arrakis.test' },
       expect: { status: 200, bodyMatches: { email_delivery: 'sent' } },
       noDb: true,
+    },
+    {
+      // The new password is checked before the link is used up: a mismatch
+      // (or a weak password) is a 400 and the token stays usable — the
+      // negative-row check proves nothing in the schema changed.
+      id: 'F02-reset-password-mismatch-keeps-link',
+      route: 'POST /api/v1/auth/reset-password',
+      actor: 'anon',
+      body: {
+        token: '@authorResetToken',
+        password: NEW_PASSWORD,
+        passwordConfirm: `${NEW_PASSWORD}-typo`,
+      },
+      expect: { status: 400, bodyMatches: { error: 'password_mismatch' } },
     },
     {
       id: 'F02-reset-password',
@@ -256,7 +276,7 @@ export const f02Account: ContractFamily = {
             },
             {
               table: 'password_reset_tokens',
-              where: 'token = @authorResetToken',
+              where: 'token = @authorResetTokenHash',
               changed: {},
               anyChange: ['used_at'],
             },
@@ -264,7 +284,7 @@ export const f02Account: ContractFamily = {
         },
         after: [
           `(SELECT password_hash <> @worldPasswordHash AND password_hash LIKE '_argon2id_%' FROM users WHERE id = @author.id)`,
-          '(SELECT used_at IS NOT NULL FROM password_reset_tokens WHERE token = @authorResetToken)',
+          '(SELECT used_at IS NOT NULL FROM password_reset_tokens WHERE token = @authorResetTokenHash)',
         ],
       },
     },

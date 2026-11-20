@@ -64,10 +64,12 @@ test('@S-AUTH-05 changing the password in one browser throws the other one out @
     });
 
     await test.step('3. UI in A: a weak new password → the server policy error', async () => {
+      // The rule is shown before submit; after the 400 the same spot turns into the error.
+      await expect(dialog.getByText(/^Password must be at least 14 characters/)).toBeVisible();
       await fill(c.password, 'short1234', 'short1234');
       await submit();
-      await expect(dialog.getByText(/at least 14 characters/)).toBeVisible();
-      expect(changeCalls).toEqual([403, 400]);
+      await expect.poll(() => changeCalls).toEqual([403, 400]);
+      await expect(dialog.locator('p.text-destructive', { hasText: /at least 14 characters/ })).toBeVisible();
     });
 
     await test.step('4. UI in A: new and confirmation differ → «New passwords do not match.», nothing sent', async () => {

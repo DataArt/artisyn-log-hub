@@ -60,8 +60,8 @@ A NestJS application on Node.js 26 (the image uses `node:26.13.1-alpine3.24`). I
 
 | Module | Responsibility |
 |---|---|
-| **Auth** | Establishes user sessions in one of four modes (`AUTH_MODE`): none, password, password with email confirmation, Azure Entra ID (OAuth/OIDC). Login back-off, password change, account deletion. |
-| **Users / Admin** | User management, roles (`admin`, `user`), admin panel APIs. |
+| **Auth** | Establishes user sessions in one of five modes (`AUTH_MODE`): none, password, password with email confirmation, Azure Entra ID (OAuth/OIDC), strict managed (admin-provisioned accounts with emailed set-password links, see [Authentication modes](authentication-modes.md)). Login back-off, password change, account deletion. |
+| **Users / Admin** | User management, roles (`admin`, `user`), admin panel APIs. In `strict-managed`: creating accounts and resending set-password links. |
 | **API keys** | Per-user keys used by the hook. Keys are shown once and stored only as an Argon2id hash. |
 | **Logs ingestion** | `POST /api/v2/logs` accepts uploads from the hook, with chunked and gzip-compressed transfer and deduplication. It is the only upload route for logs: the legacy `POST /api/v1/logs` was removed and returns `404`, so hooks older than 1.7.0 must be upgraded. Hooks 2.29.0 and newer also post OTEL records to `POST /api/v2/otel-realtime` while a session runs (best effort; the regular upload stays the durable copy). |
 | **Upload queue** | Uploaded payloads are written to a disk-backed queue (`upload-queue/`) and processed by background workers with leases, retries and statistics (Admin → Upload Queue). |
@@ -74,7 +74,7 @@ A NestJS application on Node.js 26 (the image uses `node:26.13.1-alpine3.24`). I
 | **Installer distribution** | Serves the hook installer package and plugin tarball under `/static/` so projects install directly from their own server. |
 | **System info / health** | `GET /health`, build information, cluster and worker status, AI tool version tracking. |
 | **Server logs** | Structured pino logs with daily rotation under `logs/`, old files deleted hourly (5 days of app logs, 3 days of SQL logs, 100 MB in total by default); error log viewer and archive download in the admin panel. |
-| **Mail** | SMTP delivery for confirmation, password reset and password-changed notifications, and for budget threshold notices ([Budgets](budgets.md)). Mode 3 (`password-confirm`) requires `SMTP_HOST`/`SMTP_PORT`/`SMTP_FROM` and a relay reachable at startup, or the server does not start. Mode 2 (`password`): optional — with `SMTP_HOST` set, `SMTP_PORT`/`SMTP_FROM` are required and an unreachable relay only logs a warning; without it, password reset is unavailable and "Forgot password?" is disabled. Modes 1/4 never use SMTP. |
+| **Mail** | SMTP delivery for confirmation, password reset, set-password and password-changed notifications, and for budget threshold notices ([Budgets](budgets.md)). Mode 3 (`password-confirm`) and `strict-managed` require `SMTP_HOST`/`SMTP_PORT`/`SMTP_FROM` and a relay reachable at startup, or the server does not start. Mode 2 (`password`): optional — with `SMTP_HOST` set, `SMTP_PORT`/`SMTP_FROM` are required and an unreachable relay only logs a warning; without it, password reset is unavailable and "Forgot password?" is disabled. Modes 1/4 never use SMTP. |
 
 ### 3.3 Server-side persistent storage
 

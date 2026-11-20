@@ -1,3 +1,11 @@
+---
+type: "Research"
+title: "Raw report 3 — Search and wayfinding"
+description: "Raw report 3: search and wayfinding — no global search or keyboard navigation today; what URL state covers and the gaps."
+tags: [ux-research, product]
+generated: { by: "human:denistsyplakov", at: "2026-11-06T15:26:59+04:00" }
+---
+
 # Raw report 3 — Search and wayfinding
 
 Read-only study, 2026-11-01. No global search and no keyboard navigation anywhere in the app; URL

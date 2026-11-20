@@ -1,4 +1,9 @@
 ---
+type: "Algorithm"
+title: "System prompt view"
+description: "The System context anatomy tab says how many bytes the system prompt and the tool definitions take, but not what they say. The \"View system prompt\" modal shows the text Claude Code captured in its `prompt_snapshot` attachments — the prompt parts (shared vs."
+tags: [algorithm]
+generated: { by: "human:denistsyplakov", at: "2026-11-11T17:48:35+04:00" }
 reviewed: no
 reviewer: none
 ---

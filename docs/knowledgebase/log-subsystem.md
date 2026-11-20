@@ -5,7 +5,7 @@ description: "The server's own operational logging (not telemetry/session logs):
 tags:
   - server
   - logging
-timestamp: "2026-11-04T00:00:00+04:00"
+generated: { by: "human:denistsyplakov", at: "2026-11-04T00:00:00+04:00" }
 ---
 
 # Server Log Subsystem

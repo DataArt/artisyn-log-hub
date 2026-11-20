@@ -63,6 +63,11 @@ export async function sweepE2eRepos(): Promise<number> {
       : await ctx.post('/api/v1/auth/login', {
           data: { email: ROLES.admin.email, password: ROLES.admin.password },
         });
+    // On a fresh DB the admin identity does not exist until the `setup`
+    // project signs it up (after globalSetup) — a 401 then means nothing was
+    // ever created under it, so there is nothing to sweep (same as
+    // sweepE2eApiKeys). Any other failure stays loud.
+    if (!noAuth && sessionResp.status() === 401) return 0;
     if (!sessionResp.ok()) {
       throw new Error(
         `Sweep: admin ${noAuth ? 'identify' : 'login'} failed (${sessionResp.status()}): ${await sessionResp.text()}`,

@@ -62,7 +62,7 @@ function hintText(
     case 'breaker':
       return 'breaker tripped';
     case 'hook_too_old':
-      return 'hook too old';
+      return 'hook too old — update the hook';
     case 'no_data_yet':
       return 'no wrapper data yet';
     default:

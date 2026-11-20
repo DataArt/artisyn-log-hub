@@ -8,7 +8,7 @@ tags:
   - hook
   - reports
   - session-view
-timestamp: "2026-11-09T00:00:00+04:00"
+generated: { by: "human:denistsyplakov", at: "2026-11-09T00:00:00+04:00" }
 ---
 
 # Tool Monitoring (Tools/MCP tab)
@@ -104,7 +104,10 @@ code from `PIPESTATUS[0]` and exits with it — or, when the tool died of SIGHUP
 SIGPIPE / SIGTERM (129–143), kills itself with the same signal after writing the `exit` record, so
 the parent sees the same signal death. Limitation: Claude Code's Bash tool defines `find` and
 `grep` as shell functions (its embedded bfs / ugrep, seen in 2.1.304); a function always wins over
-a PATH shim, so those two are only seen through the transcript (`no_wrapper`). `tool-wrap-tee.js` forwards stdout bytes unchanged,
+a PATH shim, so those two are only seen through the transcript (`no_wrapper`). The same kind of
+known limit exists in Windows PowerShell 5.1: a bare `curl` there is the built-in alias of
+`Invoke-WebRequest`, and an alias wins over the wrapper function, so it is never wrapped (exactly as
+without the wrapper; GH-149 FR-6). `curl.exe` is wrapped. `tool-wrap-tee.js` forwards stdout bytes unchanged,
 captures the first 100 KB and, when the consumer closes the pipe (`| head -1`), keeps draining up to
 the cap (`consumerClosed`) and then exits so the tool gets SIGPIPE as it would without the wrapper.
 Piped stdin is teed to `.in`.
@@ -116,6 +119,25 @@ and one function per mentioned tool (only when the tool resolves as an applicati
 runs `& $real @args 2>&1`, writes the records and the UTF-8 text, re-emits stdout and stderr in order
 and restores `$LASTEXITCODE`. It never returns a permission decision. Fidelity in PowerShell is
 **text-level** (PowerShell decodes native output to strings in both paths), not byte-level.
+
+- **Only in `bypassPermissions` (hook ≥ `2.32.2`, GH-149).** The hook rewrites the command only when
+  the `PreToolUse` input has `permission_mode === 'bypassPermissions'` (exact, case-sensitive). Any
+  other mode, or no field (older Claude Code), leaves the command exactly as typed, so the user's
+  permission flow is untouched; Bash shims are not affected. Why: on Claude Code 2.1.311 and
+  2.1.326 any prefix statement (even a read-only `Get-Command … | Out-Null;` or `$x = 1;`) makes a
+  command that matches an allow rule prompt or be denied, and the 2.1.326 PowerShell analyzer's
+  "ask" for script blocks, .NET methods, splatting and `$()` beats a matching allow rule. In bypass
+  mode records land and deny rules still apply (a wrapped `curl.exe` under
+  `--disallowedTools "PowerShell(curl.exe:*)"` was denied). Not wrapping in `default` mode under a
+  tool-wide `PowerShell` allow is a deliberate loss: the hook cannot see CLI rules. PoC:
+  [docs/pocs/2026-11-17-1558-ps-wrap-static-form/](../pocs/2026-11-17-1558-ps-wrap-static-form/README.md).
+  `planPowerShellWrap` returns `null` (nothing to do) or `{ updatedInput, tools, skipReason }`;
+  `skipReason` is `permission-mode:<mode|none>`, `breaker:__global` or `breaker:<tool>`.
+- **stderr text (FR-7).** For an `ErrorRecord` whose exception is a `RemoteException` (a native
+  stderr line) the wrapper uses `Exception.Message`, else `ToString()`, both for the `.err` capture
+  (and `stderrBytes`) and for the re-emitted stderr. So an empty native stderr line stays empty
+  instead of becoming the type name. The redirected-stderr path (`Write-Error -ErrorRecord`) is
+  unchanged.
 
 **Per-call files (DD-5).** Each wrapped call writes only its own files under
 `<sessionId>/calls/`: `<callId>.jsonl` (`start` → `stream_end` → `exit`) and `.out` / `.err` / `.in`
@@ -152,6 +174,20 @@ sees and to switch itself off rather than fail:
   session's pre-flight reported `shells.powershell: true`.
 - **Circuit breaker** — `breaker/<tool>` stops one tool, `breaker/__global` (after 3 faults in
   `breaker/faults`) stops all; shims check them like the `off/` markers.
+- **Permission-mode gate** — the PowerShell hook wraps only in `bypassPermissions` (above), so it
+  never adds a prompt or a denial to the user's permission flow.
+- **Once-per-session skip lines** — a PowerShell call of a monitored tool left unwrapped is logged
+  to `hook.log` once per session per reason, through `claimSessionWarning` (`throttle-state.js`,
+  key `tool-wrap-ps:<skipReason>`, 24 h TTL): `tool-wrap: PowerShell call of <tools> left unwrapped:
+  <reason>`, where the reason is `permission mode <mode> (PowerShell calls are wrapped only in
+  bypassPermissions)`, `breaker tripped for <tool>` or `breaker tripped for all tools`. A planning
+  failure's `error` line is throttled the same way (`tool-wrap-ps:error`). A wrapped call still
+  writes its per-call `result` line.
+- **Sandbox** — host run of 2026-11-17 on Claude Code 2.1.326, Windows: `sandbox.enabled: true`
+  prints "Sandbox disabled: … the Windows sandbox is not active on this session (feature gate off)"
+  and runs unsandboxed; records landed for a Bash shim call (`default` + `--allowedTools Bash`) and a
+  bypass PowerShell call, with no breaker and no faults. A Linux sandbox run is still open (it needs
+  an interactive `/login` in a container) and is a follow-up task (GH-150).
 - **Kill switches** — env `LOGHUB_TOOL_WRAP=0`, config key `toolWrap: false`
   ([hook-installation.md](hook-installation.md)), and "Pause all wrapping" in the UI.
 - **Pruning** — session dirs older than 7 days are deleted at `SessionStart`: only directories
@@ -299,8 +335,12 @@ and neither `from` nor `to` the range is the whole session.
   `ILIKE` over `inputPreview`, args and the outputs of rows in range and scope.
 - **Aggregates (DD-11)**: `error %` = (errors + killed) / calls, `retried %` = retried / calls.
 - **Config hints (DD-20)**, precedence `preflight_failed` > `breaker` > `hook_too_old` >
-  `no_data_yet`: `hook_too_old` when the visible owners' `tool_wrap_status` is `NULL`, `no_data_yet`
-  when it has no `lastWrapperAt` for the tool.
+  `no_data_yet`: `hook_too_old` when the visible owners' `tool_wrap_status` is `NULL`, **or** when
+  the status has `os === 'win32'` and a parseable `hookVersion` below
+  `POWERSHELL_WRAP_FIX_HOOK_VERSION` (`2.32.2`, `tool-usage.constants.ts`; GH-149 — older Windows
+  hooks wrap PowerShell outside bypass mode). A null or unparseable `hookVersion` gives no version
+  hint. `no_data_yet` when it has no `lastWrapperAt` for the tool. The client shows `hook_too_old`
+  as "hook too old — update the hook".
 
 Types: `server/src/logs/tool-monitoring/tool-monitoring.types.ts`, mirrored in
 `client/src/models/tool-monitoring.ts`.
@@ -350,6 +390,8 @@ no Monitored tools button (the config is edited in the repository settings); its
 | Combination | Behaviour |
 |---|---|
 | Old hook (`< 2.27.0`) → new server | No wrapper, no `tool-calls` log, no config fetch. MCP calls and transcript-only CLI calls (`no_wrapper`) still appear; a configured tool shows `hook_too_old` |
+| Hook `2.27.0`–`2.32.1` on Windows → new server | Works as before (it still wraps PowerShell in every mode); a configured tool shows `hook_too_old` ("hook too old — update the hook") |
+| New hook (`≥ 2.32.2`), Claude Code without `permission_mode` in `PreToolUse` | No PowerShell wrap (missing field = "do not wrap"); Bash shims unchanged |
 | New hook → old server | The config route answers 404 → "no config" (cache if any, else nothing wrapped); a `tool-calls` upload is stored as an inert generic `logs` row |
 | Old server upgraded later | Migration `0076` leaves every session pending, so the drain rebuilds all trees, including inert `tool-calls` rows stored before |
 | Config answer with an unknown `schemaVersion` | Read as "no config" by the hook; the server adds fields without bumping the version |

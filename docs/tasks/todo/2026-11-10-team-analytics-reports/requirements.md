@@ -1,3 +1,9 @@
+---
+type: "Task"
+title: "Team Analytics and Reports Tabs"
+description: "Analytics and Reports tabs on the team page aggregated over the team's linked repositories, incl. team Budget burn view and Budget report (follow-up to 2026-11-05-budgets-threshold-alerts)"
+---
+
 # 2026-11-10: Team Analytics and Reports Tabs
 
 **Status:** todo

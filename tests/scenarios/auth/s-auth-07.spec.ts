@@ -1,5 +1,5 @@
 // S-AUTH-07. The mode matrix: what exists in this auth mode and what answers 404
-// (docs/qaa-overview/scenarios/01-auth-access-admin.md §S-AUTH-07; every mode: A, B, C).
+// (docs/qaa-overview/scenarios/01-auth-access-admin.md §S-AUTH-07; every mode: A, B, C, D).
 //
 // «Exists» means the route got past AuthModeGuard: any status but 404 (an empty body then
 // answers 400/401, which is enough — no account is created or logged into). A route the mode does
@@ -50,6 +50,7 @@ const EXISTS: Record<AuthMode, readonly string[]> = {
     'reset-password',
     'change-password',
   ],
+  'strict-managed': ['login', 'forgot-password', 'reset-password', 'change-password'],
 };
 
 /** Routes without `@AllowedAuthModes`: alive in every mode. */
@@ -78,7 +79,13 @@ function knownSecrets(): string[] {
   return values;
 }
 
-test('@S-AUTH-07 mode matrix: what exists in this mode and what answers 404 @mode-a @mode-b @mode-c', async ({
+/** Admin user provisioning (admin-user-provisioning.controller.ts): strict-managed only. */
+const PROVISIONING_ROUTES = (anyUserId: number): Array<{ name: string; path: string }> => [
+  { name: 'admin create user', path: '/api/v1/admin/users' },
+  { name: 'admin password link', path: `/api/v1/admin/users/${anyUserId}/password-link` },
+];
+
+test('@S-AUTH-07 mode matrix: what exists in this mode and what answers 404 @mode-a @mode-b @mode-c @mode-d', async ({
   stand,
   api,
   db,
@@ -99,18 +106,23 @@ test('@S-AUTH-07 mode matrix: what exists in this mode and what answers 404 @mod
     expect(body.mode).toBe(stand.authMode);
     expect(body).not.toHaveProperty('azure');
     // adminContactEmail belongs to the password modes only, and is present when configured:
-    // the runner sets ADMIN_CONTACT_EMAIL in mode B (required there), not in C.
+    // the runner sets ADMIN_CONTACT_EMAIL in mode B (required there), not in C; mode D uses the
+    // per-run bootstrap admin address.
     if (stand.authMode === 'none') {
       expect(body).not.toHaveProperty('adminContactEmail');
     } else if (stand.authMode === 'password-confirm') {
       expect(body.adminContactEmail).toBe(DEFAULT_ADMIN_CONTACT_EMAIL);
+    } else if (stand.authMode === 'strict-managed') {
+      expect(body.adminContactEmail).toBe(stand.adminEmail);
     }
-    // passwordResetAvailable belongs to the password modes only: B runs with Mailpit as its
-    // relay (true), C runs without SMTP_HOST (false, reset unavailable).
+    // passwordResetAvailable belongs to the password modes only: B and D run with Mailpit as
+    // their relay (true), C runs without SMTP_HOST (false, reset unavailable).
     if (stand.authMode === 'none') {
       expect(body).not.toHaveProperty('passwordResetAvailable');
     } else {
-      expect(body.passwordResetAvailable).toBe(stand.authMode === 'password-confirm');
+      expect(body.passwordResetAvailable).toBe(
+        stand.authMode === 'password-confirm' || stand.authMode === 'strict-managed',
+      );
     }
     expectNoSecrets(text, 'GET /api/v1/auth/config');
   });
@@ -143,6 +155,32 @@ test('@S-AUTH-07 mode matrix: what exists in this mode and what answers 404 @mod
     }
   });
 
+  await test.step('2b. admin user provisioning: 404 for every caller outside strict-managed', async () => {
+    // Empty bodies only: in strict-managed the anonymous call stops at 401 and the member's at 403,
+    // before the per-IP email limiter, so this step sends no email in mode D.
+    for (const route of PROVISIONING_ROUTES(member.id)) {
+      const anonymous = await pwRequest.newContext({ baseURL: stand.url });
+      try {
+        const callers = [
+          ['anonymous', anonymous],
+          ['member', member.api],
+          ['admin', admin.api],
+        ] as const;
+        for (const [who, ctx] of callers) {
+          if (stand.authMode === 'strict-managed' && who === 'admin') continue;
+          const status = (await ctx.post(route.path, { data: {}, maxRedirects: 0 })).status();
+          if (stand.authMode === 'strict-managed') {
+            expect(status, `${route.name} (${who}) in strict-managed`).toBe(who === 'anonymous' ? 401 : 403);
+          } else {
+            expect(status, `${route.name} (${who}) must be 404 in ${stand.authMode}`).toBe(404);
+          }
+        }
+      } finally {
+        await anonymous.dispose();
+      }
+    }
+  });
+
   if (stand.authMode === 'none') {
     await test.step('2. mode none: identify from localhost with a new e-mail → 200', async () => {
       const ctx = await pwRequest.newContext({ baseURL: stand.url });
@@ -165,7 +203,7 @@ test('@S-AUTH-07 mode matrix: what exists in this mode and what answers 404 @mod
     expect(body.mode).toBe(stand.authMode);
     expect(body.azure).toBeUndefined();
     // No SMTP card without a relay: mode A never uses SMTP, mode C runs without SMTP_HOST.
-    if (stand.authMode !== 'password-confirm') {
+    if (stand.authMode !== 'password-confirm' && stand.authMode !== 'strict-managed') {
       expect(body.smtp).toBeUndefined();
     } else {
       expect(Object.keys(body.smtp ?? {}).sort()).toEqual(['from', 'host', 'port']);

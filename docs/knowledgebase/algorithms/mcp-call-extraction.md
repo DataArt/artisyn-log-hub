@@ -1,4 +1,9 @@
 ---
+type: "Algorithm"
+title: "MCP call extraction: one transcript node's `mcp__*` calls as Tools/MCP call records"
+description: "The Tools/MCP tab shows every MCP call an agent made — which server, which operation, whether it failed or never got an answer, how long it took and exactly what the agent saw back. MCP calls need no wrapper: everything is in the Claude Code transcript."
+tags: [algorithm]
+generated: { by: "human:denistsyplakov", at: "2026-11-03T17:31:26+04:00" }
 reviewed: no
 reviewer: none
 ---

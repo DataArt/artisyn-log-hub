@@ -301,10 +301,12 @@ test.describe('Reports tab — usage reports + Change Surface', () => {
       page,
     }) => {
       await navigateToReports(page);
-      await page
+      const reportItem = page
         .getByRole('navigation', { name: 'Reports' })
-        .getByText(title, { exact: true })
-        .click();
+        .getByText(title, { exact: true });
+      await reportItem.click();
+      // Generate reads the selected report from the URL; wait for the selection to land first.
+      await expect(reportItem).toHaveAttribute('aria-current', 'true');
       await page.getByRole('button', { name: 'Generate' }).click();
 
       // The document header and at least one section render. `.first()` because a KPI label
@@ -338,10 +340,11 @@ test.describe('Reports tab — usage reports + Change Surface', () => {
     page,
   }) => {
     await navigateToReports(page);
-    await page
+    const reportItem = page
       .getByRole('navigation', { name: 'Reports' })
-      .getByText('Productivity Counters', { exact: true })
-      .click();
+      .getByText('Productivity Counters', { exact: true });
+    await reportItem.click();
+    await expect(reportItem).toHaveAttribute('aria-current', 'true');
     await page.getByRole('button', { name: 'Generate' }).click();
     await expect(page.getByText('Lines added (diff-based)').first()).toBeVisible(
       { timeout: 15_000 },

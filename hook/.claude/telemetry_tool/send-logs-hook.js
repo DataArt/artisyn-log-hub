@@ -47,13 +47,13 @@ const { loadConfig, resolveTelemetryDir, resolveOtelDir, resolveOtelNumber, reso
 const { getGitRoot, getWorkDirPath } = require('./git-context');
 const { hookLog, getHookVersion, readLogTail } = require('./hook-log');
 const { readRecommendations, upsertRecommendation, removeRecommendation } = require('./recommendations');
-const { maybeReArmOtelSession, queryOtelSessionStatus } = require('./otel-register');
+const { maybeReArmOtelSession, queryOtelSessionStatus, spawnSharedReceiverNoHello } = require('./otel-register');
 const { buildOtelStatusEvent, deriveState, shouldWriteStatus, resolveEffectiveOtel, resolveClaudeVersion, isArtisynEndpoint } = require('./otel-status');
 const { readManagedOtel, SIGNAL_ENDPOINT_KEYS, GENERIC_ENDPOINT_KEY } = require('./managed-settings');
 const { loadOtelScopes } = require('./otel-endpoint-check');
 const { readOtelStatusMark, writeOtelStatusMark } = require('./throttle-state');
 const { writeTelemetry } = require('./write-telemetry');
-const { uploadFile, uploadFileChunked, uploadFileMaybeCompressed, CHUNK_SIZE_BYTES, acquireUploadLockWithWait, releaseUploadLock, formatServerOrigin } = require('./upload-logs');
+const { uploadFile, uploadFileChunked, uploadFileMaybeCompressed, CHUNK_SIZE_BYTES, acquireUploadLockWithWait, releaseUploadLock, describeUploadLockHolder, formatServerOrigin } = require('./upload-logs');
 const { collectScopedFiles, findProjectSlugDirs, transcriptBelongsToRepo } = require('./session-files');
 const { sanitizeNdjson, formatDroppedLines } = require('./ndjson-sanitize');
 const { buildProcessMarkerEnv, killProcessTree } = require('./process-marker');
@@ -63,6 +63,13 @@ const { buildCodeInventory } = require('./code-inventory');
 const { buildOkfSnapshot, buildOkfSnapshotRef } = require('./okf-snapshot');
 const { readKnownOkfSnapshots, rememberOkfSnapshot, forgetOkfSnapshot } = require('./okf-state');
 const { claudeConfigDir } = require('./claude-config-dir');
+const {
+  validateJob, claimJob, releaseClaim, applyJobEnv, moveJobToFailed, classifyRunOutcome, JOB_EXIT,
+  buildJob, buildJobName, writeJobAtomic, queueDir, readHeartbeat, isHeartbeatFresh, isQueueDirUsable,
+  decideHandOff, shouldSpawnReceiver, markReceiverSpawn, backoffMs, listJobsForRepo, listStuckJobs,
+  listFailedJobsForRepo, countFailedJobs, jobLimitReason, UPLOAD_CONTRACT,
+} = require('./upload-queue');
+const { effectiveNodeVersion } = require('./node-version-check');
 
 const HOOK_FILE = 'send-logs-hook.js';
 
@@ -70,11 +77,17 @@ const HOOK_FILE = 'send-logs-hook.js';
 require('./hook-log').exitIfSelfCheck(HOOK_FILE);
 
 // Upload-lock wait budgets (see `acquireUploadLockWithWait`). `Stop` blocks the interactive turn,
-// so it only rides out a lock that is about to be released; `SessionEnd` is the session's last
-// trigger and waits long enough to outlast a contending catch-up run.
+// so it only rides out a lock that is about to be released. The `SessionEnd` fallback (DD-7) waits
+// a little longer and, when the lock stays busy, queues a job for the shared receiver instead.
 const LOCK_WAIT_STOP_MS = 2000;
-const LOCK_WAIT_SESSION_END_MS = 20000;
+const LOCK_WAIT_SESSION_END_MS = 800;
 const LOCK_POLL_INTERVAL_MS = 250;
+
+/** `, holder pid=… age=…s` for a `skipped: upload lock held` line, or '' when the lock is gone. */
+function lockHolderSuffix(telemetryDir) {
+  const holder = describeUploadLockHolder(telemetryDir);
+  return holder ? `, ${holder}` : '';
+}
 
 // Static, coarse schema-size estimate for the MCP `tools/list` probe.
 // Deliberately a separate, fixed constant from the per-model `BYTES_PER_TOKEN` ratios
@@ -635,6 +648,22 @@ function parseOtelSweepArgs(argv) {
 }
 
 /**
+ * Parse the `--run-job <jobPath>` invocation the shared receiver uses to run one queued upload job
+ * (DD-5). Returns null for every other invocation; `jobPath` is null when the flag has no value.
+ *
+ * @param {string[]} argv - `process.argv`
+ * @returns {{ jobPath: string|null }|null}
+ */
+function parseRunJobArgs(argv) {
+  const args = argv.slice(2);
+  const idx = args.indexOf('--run-job');
+  if (idx < 0) return null;
+  const value = args[idx + 1];
+  const jobPath = typeof value === 'string' && value && !value.startsWith('--') ? value : null;
+  return { jobPath };
+}
+
+/**
  * Upload one OTEL chunk and delete it on success — the same read → sanitize → upload → unlink path
  * `runUpload()` applies to a `claude-otel` entry, minus everything manifest-related.
  *
@@ -649,7 +678,7 @@ async function uploadOtelChunkNoManifest(chunk, serverUrl, apiKey, timeoutMs, cw
     body = fs.readFileSync(filePath);
   } catch (err) {
     hookLog(HOOK_FILE, null, 'fail', `${manifestKey}: cannot read file: ${err.message}`, cwd);
-    return { success: false, reason: `cannot read file: ${err.message}` };
+    return { success: false, reason: `cannot read file: ${err.message}`, retryable: true };
   }
 
   const sanitized = sanitizeNdjson(body);
@@ -670,7 +699,13 @@ async function uploadOtelChunkNoManifest(chunk, serverUrl, apiKey, timeoutMs, cw
 
   if (!result.success) {
     hookLog(HOOK_FILE, null, 'fail', `${manifestKey}: ${result.reason}`, cwd);
-    return { success: false, reason: result.reason };
+    return {
+      success: false,
+      reason: result.reason,
+      statusCode: result.statusCode,
+      unreachable: result.unreachable === true,
+      errorCode: result.errorCode,
+    };
   }
 
   try {
@@ -696,18 +731,21 @@ async function uploadOtelChunkNoManifest(chunk, serverUrl, apiKey, timeoutMs, cw
  * the receiver retries on its next quiet tick anyway.
  *
  * @param {string|null} cwd - the project's git root, passed by the receiver as `--cwd`
+ * @returns {Promise<{ uploaded: number, retryableFailures: number, permanentFailures: number,
+ *   aborted: boolean }>} the DD-9 run result; the `--otel-sweep` branch of `main()` ignores it
  */
 async function runOtelSweep(cwd) {
+  const out = { uploaded: 0, retryableFailures: 0, permanentFailures: 0, aborted: false };
   if (!cwd) {
     hookLog(HOOK_FILE, null, 'result', 'otel-sweep: exit, no --cwd given', null);
-    process.exit(0);
+    return out;
   }
 
   const config = loadConfig(cwd);
   const serverUrl = (config.serverUrl || '').trim().replace(/\/$/, '');
   const apiKey = (config.apiKey || '').trim();
   if (!serverUrl || !apiKey) {
-    process.exit(0); // quiet: an unconfigured project is not an error for a background sweep
+    return out; // quiet: an unconfigured project is not an error for a background sweep
   }
 
   const telemetryDir = resolveTelemetryDir(cwd, config);
@@ -715,11 +753,11 @@ async function runOtelSweep(cwd) {
     telemetryDir, 2 * config.sendLogsOnPromptTimeoutMs, LOCK_WAIT_STOP_MS, LOCK_POLL_INTERVAL_MS);
   if (!lockResult.acquired) {
     hookLog(HOOK_FILE, null, 'result',
-      `otel-sweep: skipped, upload lock held (waited ${lockResult.waitedMs}ms)`, cwd);
-    process.exit(0);
+      `otel-sweep: skipped, upload lock held (waited ${lockResult.waitedMs}ms`
+      + `${lockHolderSuffix(telemetryDir)})`, cwd);
+    return out;
   }
 
-  let uploaded = 0;
   let failed = 0;
   let total = 0;
   try {
@@ -727,20 +765,31 @@ async function runOtelSweep(cwd) {
     // Write order, exactly as the Stop path ships them (see `listOtelChunks`).
     const chunks = listOtelChunks(otelDir);
     total = chunks.length;
-    for (const chunk of chunks) {
-      const { success } = await uploadOtelChunkNoManifest(
-        chunk, serverUrl, apiKey, config.sendLogsTimeoutMs, cwd, telemetryDir);
-      if (success) uploaded++;
-      else failed++;
+    for (let i = 0; i < chunks.length; i++) {
+      const result = await uploadOtelChunkNoManifest(
+        chunks[i], serverUrl, apiKey, config.sendLogsTimeoutMs, cwd, telemetryDir);
+      if (result.success) {
+        out.uploaded++;
+        continue;
+      }
+      failed++;
+      if (isRetryableUploadFailure(result)) out.retryableFailures++;
+      else out.permanentFailures++;
+      if (result.unreachable) {
+        // DD-13: stop at the first unreachable result; the chunks stay on disk for the next run.
+        out.aborted = true;
+        hookLog(HOOK_FILE, null, 'result', formatAbortedLine(result, chunks.length - i), cwd);
+        break;
+      }
     }
   } finally {
     releaseUploadLock(telemetryDir);
   }
 
   hookLog(HOOK_FILE, null, 'result',
-    `otel-sweep done: uploaded=${uploaded} failed=${failed} total=${total}`
+    `otel-sweep done: uploaded=${out.uploaded} failed=${failed} total=${total}`
     + ` target=${formatServerOrigin(serverUrl)}`, cwd);
-  process.exit(0);
+  return out;
 }
 
 // The endpoint keys whose value tells whether a settings scope points Claude Code's exporter at an
@@ -850,13 +899,368 @@ async function maybeWriteOtelStatus(phase, config, sessionId, cwd, transcriptPat
   }
 }
 
+/** Set once `main()` takes the `--run-job` branch, so an unhandled error exits as a crash. */
+let runJobMode = false;
+
+/** The `JOB_EXIT` name of an exit code, for `hook.log` lines. */
+function jobExitName(code) {
+  return Object.keys(JOB_EXIT).find((k) => JOB_EXIT[k] === code) || String(code);
+}
+
+/** Delete a finished / dropped job and its claim (both may already be gone). */
+function deleteJob(jobPath) {
+  try { fs.unlinkSync(jobPath); } catch { /* already gone */ }
+  releaseClaim(jobPath);
+}
+
+/** The `cwd` of a (possibly invalid) job, or null. */
+function jobCwdOf(job) {
+  return job && typeof job.cwd === 'string' && job.cwd ? job.cwd : null;
+}
+
+/** The `sessionId` of a (possibly invalid) job, or null. */
+function jobSidOf(job) {
+  return job && typeof job.sessionId === 'string' && job.sessionId ? job.sessionId : null;
+}
+
+/** The `maybeWriteOtelStatus` phase of a job's run. */
+function jobOtelPhase(job) {
+  return job && job.trigger === 'stop' ? 'stop' : 'session-end';
+}
+
+/**
+ * Move a job to `failed/` (DD-9): the `failed/` record, a `job failed:` `hook.log` line and the
+ * `upload-jobs-failed` recommendation naming how many jobs of this repo are in `failed/`. The
+ * recommendation needs the job's repo, so an unparsable job only gets the record and the line.
+ * Never throws.
+ * @param {string} jobPath
+ * @param {Record<string, *>|null} job
+ * @param {string} reason
+ */
+function failJob(jobPath, job, reason) {
+  const cwd = jobCwdOf(job);
+  try {
+    moveJobToFailed(jobPath, job, reason);
+    hookLog(HOOK_FILE, jobSidOf(job), 'error', `job failed: ${path.basename(jobPath)} reason=${reason}`, cwd);
+    if (!cwd || !fs.existsSync(cwd)) return;
+    const count = Math.max(1,
+      typeof job.telemetryDir === 'string' && job.telemetryDir ? countFailedJobs(job.telemetryDir) : 0);
+    upsertRecommendation(cwd, {
+      rule: 'upload-jobs-failed',
+      message: `${count} upload job${count === 1 ? '' : 's'} of this repo failed and ${count === 1 ? 'is' : 'are'}`
+        + ' kept in ~/.artisyn/upload/failed/ — the files stay unsent until the next successful full upload'
+        + ' (see the "job failed:" lines in hook.log)',
+      detectedAt: new Date().toISOString(),
+    });
+  } catch (err) {
+    hookLog(HOOK_FILE, jobSidOf(job), 'error', `job failed: ${path.basename(jobPath)} could not be recorded: ${err.message}`, cwd);
+  }
+}
+
+/**
+ * DD-9 `failed/` cleanup after a full scan whose outcome is `done`: that scan just uploaded every
+ * file the `failed/` jobs of this repo stood for, so drop them and the `upload-jobs-failed`
+ * recommendation. Never throws.
+ * @param {string|null} cwd
+ * @param {string} telemetryDir
+ * @param {string|null} sessionId
+ */
+function clearFailedJobs(cwd, telemetryDir, sessionId) {
+  try {
+    let cleared = 0;
+    for (const entry of listFailedJobsForRepo(telemetryDir)) {
+      try {
+        fs.unlinkSync(entry.path);
+        cleared++;
+      } catch { /* already gone */ }
+    }
+    if (cleared > 0) {
+      hookLog(HOOK_FILE, sessionId, 'result', `failed jobs cleared: ${cleared} (re-uploaded by this full scan)`, cwd);
+    }
+    removeRecommendation(cwd, 'upload-jobs-failed');
+  } catch (err) {
+    hookLog(HOOK_FILE, sessionId, 'error', `failed jobs cleanup failed: ${err.message}`, cwd);
+  }
+}
+
+/**
+ * DD-9 step 10 `retryable`: rewrite a claimed job atomically with `attempts+1`,
+ * `nextAttemptAt = now + backoffMs(attempts+1)` and `lastError`, then release its claim.
+ * @param {string} jobPath
+ * @param {Record<string, *>} job
+ * @param {string} lastError
+ * @param {number} now
+ * @returns {number} the job's `nextAttemptAt`
+ */
+function rescheduleJob(jobPath, job, lastError, now) {
+  const attempts = (Number.isInteger(job.attempts) ? job.attempts : 0) + 1;
+  const nextAttemptAt = now + backoffMs(attempts);
+  writeJobAtomic(path.dirname(jobPath), path.basename(jobPath), { ...job, attempts, nextAttemptAt, lastError });
+  releaseClaim(jobPath);
+  return nextAttemptAt;
+}
+
+/**
+ * DD-9 step 9: `'wx'`-claim every other runnable `stop` job of the same `telemetryDir`, so one full
+ * scan serves them all. A job that is invalid, of a newer contract or over its limits is left for
+ * its own run.
+ * @param {string} jobPath - the job this run already claimed
+ * @param {Record<string, *>} job
+ * @param {number} now
+ * @returns {Array<{ path: string, name: string, job: Record<string, *> }>}
+ */
+function claimCoalescedStopJobs(jobPath, job, now) {
+  const ownName = path.basename(jobPath);
+  const claimed = [];
+  for (const entry of listJobsForRepo(job.telemetryDir)) {
+    if (entry.trigger !== 'stop' || entry.name === ownName) continue;
+    if (!validateJob(entry.job).ok || entry.job.trigger !== 'stop') continue;
+    if (entry.job.uploaderContract > UPLOAD_CONTRACT || jobLimitReason(entry.job, now)) continue;
+    if (claimJob(entry.path, { now })) claimed.push({ path: entry.path, name: entry.name, job: entry.job });
+  }
+  return claimed;
+}
+
+/**
+ * DD-11 stuck-job takeover for an in-process `Stop` that holds the per-repo lock: claim every stuck
+ * job of this repo (a newer contract's jobs are left alone). Never throws.
+ * @param {string} telemetryDir
+ * @returns {Array<{ path: string, name: string, job: Record<string, *> }>}
+ */
+function claimStuckJobs(telemetryDir) {
+  const claimed = [];
+  try {
+    const now = Date.now();
+    for (const entry of listStuckJobs(telemetryDir, now)) {
+      if (!validateJob(entry.job).ok || entry.job.uploaderContract > UPLOAD_CONTRACT) continue;
+      if (claimJob(entry.path, { now })) claimed.push({ path: entry.path, name: entry.name, job: entry.job });
+    }
+  } catch { /* a takeover is best-effort */ }
+  return claimed;
+}
+
+/**
+ * `--run-job <jobPath>` (DD-5, DD-9): run one queued upload job as the shared receiver's uploader and
+ * return its DD-5 exit code. Never throws for an expected condition.
+ *
+ * A `session-end` job runs the scoped flush of its session; a `stop` job coalesces every other
+ * runnable `stop` job of the same repo into one full scan (`runUpload`). The outcome applies to every
+ * claimed job: `done` deletes them (and, after a full scan, clears this repo's `failed/` jobs),
+ * `retryable` rewrites them with the next backoff, `permanent` moves them to `failed/`.
+ *
+ * @param {string|null} jobPath
+ * @returns {Promise<number>} a `JOB_EXIT` code
+ */
+async function runJob(jobPath) {
+  const name = jobPath ? path.basename(jobPath) : '<none>';
+  /** @type {Record<string, *>|null} */
+  let job = null;
+  const logCwd = () => (job && typeof job.cwd === 'string' ? job.cwd : null);
+  const logSid = () => (job && typeof job.sessionId === 'string' && job.sessionId ? job.sessionId : null);
+  const finish = (code, detail) => {
+    hookLog(HOOK_FILE, logSid(), code === JOB_EXIT.done ? 'result' : 'warn',
+      `run-job ${jobExitName(code)}: ${name} (${detail})`, logCwd());
+    return code;
+  };
+
+  if (!jobPath) return finish(JOB_EXIT.permanent, 'no job path given');
+
+  // Step 1 — read and validate. A job that is already gone was finished by another run.
+  let raw;
+  try {
+    raw = fs.readFileSync(jobPath, 'utf8');
+  } catch (err) {
+    if (err && err.code === 'ENOENT') return finish(JOB_EXIT.done, 'job file is gone, nothing to do');
+    return finish(JOB_EXIT.busy, `cannot read job: ${err.message}`);
+  }
+  let parsed = null;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    parsed = null;
+  }
+  const validation = validateJob(parsed);
+  if (!validation.ok) {
+    const reason = parsed === null ? 'invalid-json' : validation.reason;
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) job = parsed;
+    failJob(jobPath, job, reason);
+    return finish(JOB_EXIT.permanent, `invalid job: ${reason}`);
+  }
+  job = parsed;
+  hookLog(HOOK_FILE, logSid(), 'activate', `run-job start: ${name}`, logCwd());
+
+  // Step 2 — the repo or its telemetry dir is gone: nothing left to upload from.
+  if (!fs.existsSync(job.cwd) || !fs.existsSync(job.telemetryDir)) {
+    deleteJob(jobPath);
+    return finish(JOB_EXIT.dropped, `repo or telemetry dir is gone: cwd=${job.cwd} telemetryDir=${job.telemetryDir}`);
+  }
+
+  // Step 3 — over age or out of attempts: give up on the job (its files stay unmanifested, DD-12).
+  const limitReason = jobLimitReason(job, Date.now());
+  if (limitReason) {
+    failJob(jobPath, job, limitReason);
+    return finish(JOB_EXIT.permanent, `${limitReason}: attempts=${job.attempts} createdAt=${job.createdAt}`);
+  }
+
+  // Step 4 — claim.
+  if (!claimJob(jobPath)) return finish(JOB_EXIT.busy, 'claimed by a live run');
+
+  /** Every job this run holds a claim on (this one, plus the coalesced `stop` jobs). */
+  let claimed = [{ path: jobPath, name, job }];
+  let lockHeld = false;
+  let telemetryDir = null;
+  try {
+    // Step 5 — the job's env, then the repo config (the API key is never in the job).
+    applyJobEnv(job.env);
+    const config = loadConfig(job.cwd);
+    const serverUrl = (config.serverUrl || '').trim().replace(/\/$/, '');
+    const apiKey = (config.apiKey || '').trim();
+    if (!serverUrl || !apiKey) {
+      deleteJob(jobPath);
+      return finish(JOB_EXIT.done, 'serverUrl or apiKey not configured');
+    }
+    telemetryDir = job.telemetryDir;
+
+    // Step 6 — the per-repo upload lock, with the short `Stop` budget.
+    const lockResult = await acquireUploadLockWithWait(
+      telemetryDir, 2 * config.sendLogsOnPromptTimeoutMs, LOCK_WAIT_STOP_MS, LOCK_POLL_INTERVAL_MS);
+    if (!lockResult.acquired) {
+      releaseClaim(jobPath);
+      return finish(JOB_EXIT.busy,
+        `upload lock held (waited ${lockResult.waitedMs}ms${lockHolderSuffix(telemetryDir)})`);
+    }
+    lockHeld = true;
+
+    // Step 9 (claim part) — a `stop` job takes every other runnable `stop` job of this repo along.
+    const isStop = job.trigger === 'stop';
+    if (isStop) {
+      claimed = claimed.concat(claimCoalescedStopJobs(jobPath, job, Date.now()));
+      claimed.sort((a, b) => (Date.parse(a.job.createdAt) - Date.parse(b.job.createdAt))
+        || (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
+      if (claimed.length > 1) {
+        hookLog(HOOK_FILE, logSid(), 'result',
+          `run-job coalesced ${claimed.length} stop jobs: ${claimed.map((c) => c.name).join(', ')}`, logCwd());
+      }
+    }
+
+    // Step 7 — each claimed job's `otel-status` line, before the upload picks the artisyn file up.
+    for (const c of claimed) {
+      await maybeWriteOtelStatus(jobOtelPhase(c.job), config, jobSidOf(c.job), c.job.cwd, c.job.transcriptPath);
+    }
+
+    // Step 8 — the scoped `SessionEnd` flush; step 9 — one full scan with the newest job's session
+    // as the current one.
+    const result = isStop
+      ? await runUpload(job.cwd, jobSidOf(claimed[claimed.length - 1].job), serverUrl, apiKey,
+        config.sendLogsTimeoutMs, telemetryDir, config, 'job', 0)
+      : await runSessionEndFlush(
+        job.cwd, job.sessionId || null, serverUrl, apiKey, config.sendLogsTimeoutMs, telemetryDir);
+
+    // Step 10 — classify (DD-12) and apply the outcome to every claimed job.
+    const outcome = classifyRunOutcome(result);
+    const detail = `uploaded=${result.uploaded} retryable=${result.retryableFailures}`
+      + ` permanent=${result.permanentFailures} aborted=${result.aborted}`
+      + (claimed.length > 1 ? ` jobs=${claimed.length}` : '');
+    if (outcome === 'done') {
+      for (const c of claimed) deleteJob(c.path);
+      if (isStop) clearFailedJobs(job.cwd, telemetryDir, logSid());
+      return finish(JOB_EXIT.done, detail);
+    }
+    if (outcome === 'retryable') {
+      const now = Date.now();
+      let nextAttemptAt = null;
+      for (const c of claimed) {
+        const next = rescheduleJob(c.path, c.job, `retryable: ${detail}`, now);
+        if (c.path === jobPath) nextAttemptAt = next;
+      }
+      return finish(JOB_EXIT.retryable, `${detail} nextAttemptAt=${new Date(nextAttemptAt).toISOString()}`);
+    }
+    for (const c of claimed) failJob(c.path, c.job, 'upload-rejected');
+    return finish(JOB_EXIT.permanent, detail);
+  } finally {
+    // Step 11.
+    if (lockHeld && telemetryDir) releaseUploadLock(telemetryDir);
+  }
+}
+
+/** Milliseconds since this process started — the `elapsedMs` of a DD-7 `queued` line. */
+function elapsedSinceStartMs() {
+  return Math.round(process.uptime() * 1000);
+}
+
+/**
+ * Write one upload job (DD-3, DD-4) for the shared receiver into `~/.artisyn/upload/queue/`.
+ * Never throws.
+ * @param {{ trigger: string, sessionId: string|null, cwd: string|null, config: Record<string, *>,
+ *   transcriptPath: string|null, hookEvent: string }} input
+ * @returns {string|null} the job file name, or null when it could not be written
+ */
+function enqueueUploadJob({ trigger, sessionId, cwd, config, transcriptPath, hookEvent }) {
+  try {
+    const now = Date.now();
+    const jobCwd = cwd || process.cwd();
+    const job = buildJob({
+      sessionId: sessionId || '',
+      trigger,
+      now,
+      hookVersion: getHookVersion() || undefined,
+      uploader: path.resolve(__filename),
+      cwd: jobCwd,
+      gitRoot: getGitRoot(jobCwd),
+      telemetryDir: resolveTelemetryDir(cwd, config),
+      transcriptPath,
+      hookEvent,
+      serverUrl: (config.serverUrl || '').trim().replace(/\/$/, '') || null,
+      env: process.env,
+    });
+    const name = buildJobName({ sessionId: sessionId || '', trigger, now });
+    return writeJobAtomic(queueDir(), name, job) ? name : null;
+  } catch (err) {
+    hookLog(HOOK_FILE, sessionId, 'error', `upload job could not be written: ${err.message}`, cwd);
+    return null;
+  }
+}
+
+/**
+ * DD-7 receiver spawn on a non-`queue` hand-off decision: when the heartbeat is not fresh and no
+ * such spawn happened within `RECEIVER_SPAWN_THROTTLE_MS`, launch this plugin's shared receiver (no
+ * hello) so later jobs have an uploader again. Shared mode only (`spawnSharedReceiverNoHello`).
+ * Never throws and never waits for the receiver.
+ * @param {Record<string, *>} config
+ * @param {string|null} cwd
+ * @param {string|null} sessionId
+ * @returns {boolean} whether a spawn was dispatched
+ */
+function maybeSpawnUploadReceiver(config, cwd, sessionId) {
+  try {
+    const now = Date.now();
+    if (isHeartbeatFresh(readHeartbeat(), now)) return false;
+    if (!shouldSpawnReceiver(now)) return false;
+    if (!spawnSharedReceiverNoHello(config, cwd, HOOK_FILE, sessionId)) return false;
+    markReceiverSpawn(now);
+    hookLog(HOOK_FILE, sessionId, 'result', 'receiver: spawned for upload queue', cwd);
+    return true;
+  } catch (err) {
+    hookLog(HOOK_FILE, sessionId, 'error', `receiver spawn for upload queue failed: ${err.message}`, cwd);
+    return false;
+  }
+}
+
 async function main() {
   // `--otel-sweep` is a receiver-spawned background run with no hook payload on stdin — branch
   // before the stdin read so it never blocks on, or misparses, an absent payload.
   const sweepArgs = parseOtelSweepArgs(process.argv);
   if (sweepArgs) {
     await runOtelSweep(sweepArgs.cwd);
-    return;
+    process.exit(0);
+  }
+
+  // `--run-job <jobPath>` (DD-5): the shared receiver runs one queued upload job. No stdin either.
+  const runJobArgs = parseRunJobArgs(process.argv);
+  if (runJobArgs) {
+    runJobMode = true;
+    const code = await runJob(runJobArgs.jobPath);
+    process.exit(code);
   }
 
   // Read stdin
@@ -895,6 +1299,40 @@ async function main() {
   hookLog(HOOK_FILE, hookSessionId, 'activate', `${hookEvent} event received (logDir=${logDir})`, cwd);
 
   const config = loadConfig(cwd);
+  const serverUrl = (config.serverUrl || '').trim().replace(/\/$/, '');
+  const apiKey = (config.apiKey || '').trim();
+  const timeoutMs = config.sendLogsTimeoutMs;
+  const isSessionEnd = hookEvent === 'SessionEnd';
+  const transcriptPath = input.transcript_path || null;
+
+  // DD-7: a `Stop` or `SessionEnd` with uploading configured hands its upload to the shared
+  // receiver when its heartbeat is fresh — write one job (`stop` / `session-end`) and exit, with no
+  // re-arm, no `otel-status` (the job run writes it) and no upload. Otherwise it falls back to the
+  // in-process path below (`in-process-stop`: today's full scan plus the DD-11 takeover;
+  // `session-end-fallback`: the bounded scoped flush), after (re)spawning the receiver so later
+  // jobs have an uploader again.
+  if (serverUrl && apiKey) {
+    const decision = decideHandOff({
+      event: hookEvent,
+      heartbeat: readHeartbeat(),
+      queueDirUsable: isQueueDirUsable(),
+      now: Date.now(),
+    });
+    if (decision === 'queue') {
+      const name = enqueueUploadJob({
+        trigger: isSessionEnd ? 'session-end' : 'stop',
+        sessionId: hookSessionId, cwd, config, transcriptPath, hookEvent,
+      });
+      if (name) {
+        hookLog(HOOK_FILE, hookSessionId, 'result',
+          `queued: job=${name} elapsedMs=${elapsedSinceStartMs()}`, cwd);
+        process.exit(0);
+      }
+      // The job write failed although the dir looked usable — fall back to the in-process run.
+    } else {
+      maybeSpawnUploadReceiver(config, cwd, hookSessionId);
+    }
+  }
 
   // Re-arm the OTEL receiver at the END of a prompt turn — deliberately before the serverUrl/apiKey
   // check and the upload lock below, so a project that has telemetry enabled but uploading
@@ -909,12 +1347,8 @@ async function main() {
 
   // DD-15/DD-16: the per-session `otel-status` line, appended to this session's artisyn log before
   // this Stop's / SessionEnd's upload below picks the file up. Never fails the hook.
-  await maybeWriteOtelStatus(hookEvent === 'SessionEnd' ? 'session-end' : 'stop',
-    config, hookSessionId, cwd, input.transcript_path || null);
-
-  const serverUrl = (config.serverUrl || '').trim().replace(/\/$/, '');
-  const apiKey = (config.apiKey || '').trim();
-  const timeoutMs = config.sendLogsTimeoutMs;
+  await maybeWriteOtelStatus(isSessionEnd ? 'session-end' : 'stop',
+    config, hookSessionId, cwd, transcriptPath);
 
   if (!serverUrl || !apiKey) {
     hookLog(HOOK_FILE, hookSessionId, 'result',
@@ -925,25 +1359,59 @@ async function main() {
   const telemetryDir = resolveTelemetryDir(cwd, config);
 
   // A `Stop` run blocks the interactive turn ("Uploading logs..."), so it waits only briefly for a
-  // contending run and otherwise defers to the next trigger. `SessionEnd` is this session's last
-  // trigger — nothing downstream will retry it — so it waits long enough to outlast a typical
-  // contending `Stop` catch-up run rather than stranding the session's own files.
-  const isSessionEnd = hookEvent === 'SessionEnd';
+  // contending run and otherwise defers to the next trigger. The `SessionEnd` fallback waits a little
+  // longer (`LOCK_WAIT_SESSION_END_MS`, DD-7) and, when the lock stays busy, leaves a job in the
+  // upload queue for the shared receiver instead of stranding the session's own files.
   const lockWaitMs = isSessionEnd ? LOCK_WAIT_SESSION_END_MS : LOCK_WAIT_STOP_MS;
 
   const lockResult = await acquireUploadLockWithWait(
     telemetryDir, 2 * config.sendLogsOnPromptTimeoutMs, lockWaitMs, LOCK_POLL_INTERVAL_MS);
   if (!lockResult.acquired) {
+    if (isSessionEnd && isQueueDirUsable()) {
+      const name = enqueueUploadJob({
+        trigger: 'session-end', sessionId: hookSessionId, cwd, config, transcriptPath, hookEvent,
+      });
+      if (name) {
+        hookLog(HOOK_FILE, hookSessionId, 'result',
+          `queued (fallback): lock busy job=${name} (waited ${lockResult.waitedMs}ms${lockHolderSuffix(telemetryDir)})`, cwd);
+        process.exit(0);
+      }
+    }
     hookLog(HOOK_FILE, hookSessionId, 'result',
-      `skipped: upload lock held (waited ${lockResult.waitedMs}ms)`, cwd);
+      `skipped: upload lock held (waited ${lockResult.waitedMs}ms${lockHolderSuffix(telemetryDir)})`, cwd);
     process.exit(0);
   }
 
   try {
     if (isSessionEnd) {
+      // Claude Code may kill a SessionEnd hook before it logs anything else; this line makes such a
+      // killed holder visible next to the `skipped: upload lock held (… holder pid=…)` it causes.
+      hookLog(HOOK_FILE, hookSessionId, 'result',
+        `session-end flush: upload lock taken (pid=${process.pid}, waited ${lockResult.waitedMs}ms)`, cwd);
       await runSessionEndFlush(cwd, hookSessionId, serverUrl, apiKey, timeoutMs, telemetryDir);
     } else {
-      await runUpload(cwd, hookSessionId, serverUrl, apiKey, timeoutMs, telemetryDir, config);
+      // DD-11: with the lock held, take over this repo's stuck jobs — the full scan below covers
+      // every session of the repo, so their uploads happen here.
+      const takenOver = claimStuckJobs(telemetryDir);
+      for (const t of takenOver) {
+        await maybeWriteOtelStatus(jobOtelPhase(t.job), config, jobSidOf(t.job), t.job.cwd, t.job.transcriptPath);
+      }
+      if (takenOver.length > 0) {
+        hookLog(HOOK_FILE, hookSessionId, 'result',
+          `stuck jobs taken over: ${takenOver.length} (${takenOver.map((t) => t.name).join(', ')})`, cwd);
+      }
+      let result = null;
+      try {
+        result = await runUpload(cwd, hookSessionId, serverUrl, apiKey, timeoutMs, telemetryDir, config,
+          'in-process', takenOver.length);
+      } finally {
+        // A run that never finished (threw or aborted) leaves the jobs for the receiver or the next Stop.
+        for (const t of takenOver) {
+          if (result && !result.aborted) deleteJob(t.path);
+          else releaseClaim(t.path);
+        }
+      }
+      if (classifyRunOutcome(result) === 'done') clearFailedJobs(cwd, telemetryDir, hookSessionId);
     }
   } finally {
     releaseUploadLock(telemetryDir);
@@ -977,6 +1445,32 @@ function formatUploadResultLine(manifestKey, result) {
 }
 
 /**
+ * DD-12: a failed file is retryable when its `statusCode` is null (network error or timeout), ≥ 500
+ * or 429, or when the caller marked it `retryable` (a local read error); any other failure (another
+ * 4xx, a config error without a status) is permanent.
+ * @param {{ statusCode?: number|null, retryable?: boolean }} result
+ * @returns {boolean}
+ */
+function isRetryableUploadFailure(result) {
+  if (!result) return false;
+  if (result.retryable === true) return true;
+  const code = result.statusCode;
+  if (code === null) return true;
+  return typeof code === 'number' && (code >= 500 || code === 429);
+}
+
+/**
+ * DD-13: the `aborted:` line a run logs when it stops at the first unreachable result.
+ * @param {{ errorCode?: string, reason?: string|null }} result - the unreachable upload result
+ * @param {number} left - files not uploaded because of the abort (the failed one included)
+ * @returns {string}
+ */
+function formatAbortedLine(result, left) {
+  const why = (result && (result.errorCode || result.reason)) || 'unknown';
+  return `aborted: server unreachable (${why}) — ${left} files left for the next run`;
+}
+
+/**
  * The `SessionEnd` flush — upload just this session's own `artisyn` and `claude` files, plus its
  * `tool-calls` upload when the CLI tool wrapper recorded anything (`collectScopedFiles`).
  *
@@ -995,18 +1489,21 @@ function formatUploadResultLine(manifestKey, result) {
  * @param {string} apiKey
  * @param {number} timeoutMs
  * @param {string} telemetryDir
+ * @returns {Promise<{ uploaded: number, retryableFailures: number, permanentFailures: number,
+ *   aborted: boolean }>} the DD-9 run result (`main()` ignores it; `runJob` classifies it)
  */
 async function runSessionEndFlush(cwd, sessionId, serverUrl, apiKey, timeoutMs, telemetryDir) {
+  const out = { uploaded: 0, retryableFailures: 0, permanentFailures: 0, aborted: false };
   if (!sessionId) {
     hookLog(HOOK_FILE, null, 'result', 'session-end flush: skipped, no session_id in payload', cwd);
-    return;
+    return out;
   }
 
   const files = collectScopedFiles(cwd, sessionId, telemetryDir);
-  let uploaded = 0;
   let failed = 0;
 
-  for (const { namespace, filePath } of files) {
+  for (let i = 0; i < files.length; i++) {
+    const { namespace, filePath } = files[i];
     const manifestKey = `${namespace}/${path.basename(filePath)}`;
 
     let body;
@@ -1014,27 +1511,37 @@ async function runSessionEndFlush(cwd, sessionId, serverUrl, apiKey, timeoutMs, 
       body = fs.readFileSync(filePath);
     } catch (err) {
       failed++;
+      out.retryableFailures++;
       hookLog(HOOK_FILE, sessionId, 'fail', `${manifestKey}: cannot read file: ${err.message}`, cwd);
       continue;
     }
 
     const bodyBytes = Buffer.byteLength(body);
-    const { success, reason } = bodyBytes > CHUNK_SIZE_BYTES
+    const result = bodyBytes > CHUNK_SIZE_BYTES
       ? await uploadFileChunked(serverUrl, apiKey, namespace, sessionId, body, timeoutMs, sessionId, cwd, null, null, telemetryDir, manifestKey)
       : await uploadFile(serverUrl, apiKey, namespace, sessionId, body, timeoutMs, sessionId, cwd, null, null);
 
-    if (success) {
-      uploaded++;
+    if (result.success) {
+      out.uploaded++;
       hookLog(HOOK_FILE, sessionId, 'result', `${manifestKey}: uploaded ${(bodyBytes / 1024).toFixed(0)} KB`, cwd);
     } else {
       failed++;
-      hookLog(HOOK_FILE, sessionId, 'fail', `${manifestKey}: ${reason}`, cwd);
+      if (isRetryableUploadFailure(result)) out.retryableFailures++;
+      else out.permanentFailures++;
+      hookLog(HOOK_FILE, sessionId, 'fail', `${manifestKey}: ${result.reason}`, cwd);
+      if (result.unreachable === true) {
+        // DD-13: no connection — every remaining file would only pay its own connect timeout.
+        out.aborted = true;
+        hookLog(HOOK_FILE, sessionId, 'result', formatAbortedLine(result, files.length - i), cwd);
+        break;
+      }
     }
   }
 
   hookLog(HOOK_FILE, sessionId, 'result',
-    `session-end flush done: uploaded=${uploaded} failed=${failed} total=${files.length}`
+    `session-end flush done: uploaded=${out.uploaded} failed=${failed} total=${files.length}`
     + ` target=${formatServerOrigin(serverUrl)}`, cwd);
+  return out;
 }
 
 /**
@@ -1045,8 +1552,16 @@ async function runSessionEndFlush(cwd, sessionId, serverUrl, apiKey, timeoutMs, 
  *
  * `config` is the loaded project config (trailing parameter — older call sites that omit it
  * simply get no otel collection and no otel prune, which is the correct fail-open behaviour).
+ *
+ * Stops at the first unreachable result (DD-13) and returns the DD-9 run result
+ * `{ uploaded, retryableFailures, permanentFailures, aborted }` (classified by `runJob` and by
+ * `main()` for the `failed/` cleanup).
+ *
+ * `mode` (`'in-process'` for a hook-run scan, `'job'` for a `--run-job` run) and `stuckTakenOver`
+ * (DD-11) are reported in the `hook-status` event's `uploadQueue` field (DD-16).
  */
-async function runUpload(cwd, hookSessionId, serverUrl, apiKey, timeoutMs, telemetryDir, config) {
+async function runUpload(cwd, hookSessionId, serverUrl, apiKey, timeoutMs, telemetryDir, config,
+  mode = 'in-process', stuckTakenOver = 0) {
   const manifestPath = path.join(telemetryDir, '.claude-logs.sent');
 
   // Load manifest
@@ -1685,7 +2200,7 @@ async function runUpload(cwd, hookSessionId, serverUrl, apiKey, timeoutMs, telem
       process.stderr.write(`send-logs-hook: cannot read ${filePath}: ${err.message}\n`);
       hookLog(HOOK_FILE, hookSessionId, 'fail', `${manifestKey}: cannot read file: ${err.message}`, cwd);
       failedCount++;
-      return { success: false, reason: `cannot read file: ${err.message}` };
+      return { success: false, reason: `cannot read file: ${err.message}`, retryable: true };
     }
 
     // No trailing-partial-line trim for otel any more: the receiver writes each chunk to a .tmp
@@ -1806,8 +2321,26 @@ async function runUpload(cwd, hookSessionId, serverUrl, apiKey, timeoutMs, telem
       failedCount++;
     }
 
-    return { success, reason, warnings, unknownSnapshotId, unknownOkfSnapshotId };
+    return {
+      success,
+      reason,
+      warnings,
+      unknownSnapshotId,
+      unknownOkfSnapshotId,
+      statusCode: result.statusCode,
+      unreachable: result.unreachable === true,
+      errorCode: result.errorCode,
+    };
   }
+
+  /** DD-9 run result: per-file failures classified per DD-12, `aborted` per DD-13. */
+  const runResult = { uploaded: 0, retryableFailures: 0, permanentFailures: 0, aborted: false };
+  /** @param {{ success: boolean }} fileResult */
+  const countFailure = (fileResult) => {
+    if (fileResult.success) return;
+    if (isRetryableUploadFailure(fileResult)) runResult.retryableFailures++;
+    else runResult.permanentFailures++;
+  };
 
   // The current session's own artisyn file is processed last, once every other
   // file's outcome is known, so the hook-status event it carries can report
@@ -1818,7 +2351,11 @@ async function runUpload(cwd, hookSessionId, serverUrl, apiKey, timeoutMs, telem
   const otherEntries = filesToProcess.filter((f) => !(f.namespace === 'artisyn' && f.isCurrentSession));
 
   // Upload the current session's own claude/claude-subagent transcripts first so a session
-  // being actively worked on shows up promptly, without disturbing claude-otel's global
+  // being actively worked on shows up promptly. For post-turn analysis this order is a best effort
+  // only (DD-17): its worker runs in parallel with this upload (and, once `Stop` hands off to the
+  // shared receiver's job queue, ahead of it), falling back to a local aggregate when the session is
+  // not ingested yet — nothing relies on the transcript being uploaded first. This happens without
+  // disturbing claude-otel's global
   // lexicographic write-order invariant: claude-otel entries are never pulled out of
   // `remainder`, so their relative order to each other never changes.
   const priorityEntries = otherEntries.filter(
@@ -1837,10 +2374,26 @@ async function runUpload(cwd, hookSessionId, serverUrl, apiKey, timeoutMs, telem
   /** @type {string[]} */
   const allWarnings = [];
 
-  for (const entry of [...priorityEntries, ...remainder]) {
-    const { success, reason, warnings } = await processFile(entry, []);
+  const mainPass = [...priorityEntries, ...remainder];
+  for (let i = 0; i < mainPass.length; i++) {
+    const entry = mainPass[i];
+    const fileResult = await processFile(entry, []);
+    const { success, reason, warnings } = fileResult;
+    countFailure(fileResult);
     if (warnings && warnings.length > 0) {
       allWarnings.push(...warnings);
+    }
+    if (!success && fileResult.unreachable) {
+      // DD-13: no connection — stop here instead of paying a connect timeout per remaining file.
+      // The rest stays unmanifested for the next run; unsent otel chunks are shielded from the prune.
+      runResult.aborted = true;
+      for (const left of mainPass.slice(i)) {
+        if (left.namespace === 'claude-otel') failedOtelPaths.add(left.filePath);
+      }
+      nonUploadableLogs.push({ file: entry.filePath, reason });
+      hookLog(HOOK_FILE, hookSessionId, 'result',
+        formatAbortedLine(fileResult, mainPass.length - i + currentArtisynEntries.length), cwd);
+      break;
     }
     if (!success) {
       if (entry.namespace === 'claude-otel') failedOtelPaths.add(entry.filePath);
@@ -1882,14 +2435,23 @@ async function runUpload(cwd, hookSessionId, serverUrl, apiKey, timeoutMs, telem
   const hookStatusEvent = {
     type: 'hook-status',
     hookVersion: getHookVersion(),
+    // DD-16 (additive; older servers drop it): the Node.js the hooks run on.
+    nodeVersion: effectiveNodeVersion(),
     timestamp: new Date().toISOString(),
     logTail: readLogTail(cwd, 50),
     nonUploadableLogs,
     recommendations: readRecommendations(cwd).recommendations,
+    // DD-16 (additive; older servers drop it). `failedJobs` is counted before the DD-9 cleanup a
+    // `done` outcome of this run triggers.
+    uploadQueue: { mode, stuckTakenOver, failedJobs: countFailedJobs(telemetryDir) },
   };
 
-  for (const entry of currentArtisynEntries) {
-    const { success, warnings, unknownSnapshotId, unknownOkfSnapshotId } = await processFile(entry, [hookStatusEvent]);
+  // After a DD-13 abort the server is unreachable: the deferred pass would only fail too.
+  for (const entry of runResult.aborted ? [] : currentArtisynEntries) {
+    const fileResult = await processFile(entry, [hookStatusEvent]);
+    const { success, warnings, unknownSnapshotId, unknownOkfSnapshotId } = fileResult;
+    countFailure(fileResult);
+    if (!success && fileResult.unreachable) runResult.aborted = true;
     if (warnings && warnings.length > 0) {
       allWarnings.push(...warnings);
     }
@@ -1914,7 +2476,8 @@ async function runUpload(cwd, hookSessionId, serverUrl, apiKey, timeoutMs, telem
       message: uniqueWarnings.join('; '),
       detectedAt: new Date().toISOString(),
     });
-  } else {
+  } else if (!runResult.aborted) {
+    // An aborted run never heard back from the server, so it cannot say the condition is gone.
     removeRecommendation(cwd, 'broken-upload-file');
   }
 
@@ -1937,6 +2500,8 @@ async function runUpload(cwd, hookSessionId, serverUrl, apiKey, timeoutMs, telem
     `done: uploaded=${uploadedCount} skipped=${skippedCount} failed=${failedCount} total=${filesToProcess.length}`
     + ` target=${formatServerOrigin(serverUrl)}`,
     cwd);
+  runResult.uploaded = uploadedCount;
+  return runResult;
 }
 
 main().catch((err) => {
@@ -1944,5 +2509,6 @@ main().catch((err) => {
   // early exit from a crash without knowing which line came from which branch.
   hookLog(HOOK_FILE, null, 'error', `exit: unhandled error: ${err.message}`, null);
   process.stderr.write(`send-logs-hook error: ${err.message}\n`);
-  process.exit(0);
+  // A `--run-job` crash must not read as `done` (0): any non-DD-5 code is a crash to the receiver.
+  process.exit(runJobMode ? 1 : 0);
 });

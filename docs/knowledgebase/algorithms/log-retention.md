@@ -1,4 +1,9 @@
 ---
+type: "Algorithm"
+title: "Log retention: which old server log files are deleted"
+description: "Keeps the server's own operational logs (`logs/app-*.log`, `logs/sql-*.log`, see [../log-subsystem.md](../log-subsystem.md)) from filling the disk: a few days of each, under a total size cap. Session telemetry in the DB is not affected."
+tags: [algorithm]
+generated: { by: "human:denistsyplakov", at: "2026-11-04T16:43:06+04:00" }
 reviewed: 2026-11-04
 reviewer: ai
 ---

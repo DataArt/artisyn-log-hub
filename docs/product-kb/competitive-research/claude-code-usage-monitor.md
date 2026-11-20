@@ -5,7 +5,7 @@ description: "Local Python terminal monitor of Claude Code token usage with burn
 tags:
   - competitive-research
   - local-cli
-timestamp: "2026-11-01T00:00:00+04:00"
+generated: { by: "human:denistsyplakov", at: "2026-11-01T00:00:00+04:00" }
 ---
 
 # Claude Code Usage Monitor

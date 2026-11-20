@@ -1,4 +1,9 @@
 ---
+type: "Algorithm"
+title: "OKF task context: the user's task text out of transcript traffic"
+description: "The OKF Agents panel shows each agent's task head, and the facts route hands the local KB-completeness skill the user's prompts so it can judge KB reads against the task."
+tags: [algorithm]
+generated: { by: "human:denistsyplakov", at: "2026-11-06T02:28:23+04:00" }
 reviewed: no
 reviewer: none
 ---

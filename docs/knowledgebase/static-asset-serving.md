@@ -7,7 +7,7 @@ tags:
   - server
   - build
   - performance
-timestamp: "2026-11-03T00:00:00+04:00"
+generated: { by: "human:denistsyplakov", at: "2026-11-03T00:00:00+04:00" }
 ---
 
 # Static Asset Serving

@@ -1,4 +1,9 @@
 ---
+type: "Algorithm"
+title: "Tool-call sections and permission attribution"
+description: "A prompt turn in the Logs view splits its tool calls into Files, Skills, Agents and Tools, and marks the calls that needed a permission prompt (\"⚠ requested\") or were denied (\"⚠ denied\")."
+tags: [algorithm]
+generated: { by: "human:denistsyplakov", at: "2026-11-03T17:31:26+04:00" }
 reviewed: 2026-10-23
 reviewer: ai
 ---

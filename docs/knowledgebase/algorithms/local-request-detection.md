@@ -1,4 +1,9 @@
 ---
+type: "Algorithm"
+title: "Local request detection: who may use passwordless mode"
+description: "In `AUTH_MODE=none` anyone can identify as any e-mail without a password, so that mode is limited to requests from the same machine. This rule decides whether a request is \"local\"."
+tags: [algorithm]
+generated: { by: "human:denistsyplakov", at: "2026-11-14T14:41:14+04:00" }
 reviewed: 2026-10-15
 reviewer: ai
 ---
@@ -20,7 +25,11 @@ gateway, never from loopback).
   - `server/src/auth/utils/container-gateway.util.ts` (`resolveTrustedGateway`,
     `isContainerized`, `parseDefaultGatewayIpv4`, `isTrustablePrivateIpv4`; `getTrustedGateway`
     memoizes `resolveTrustedGateway` for the process).
-- Twins: none.
+- Twins: Work Hub's Rust port `work-hub/server/src/auth/local_request.rs` (`is_local_address`
+  takes the peer address and the trusted gateway directly, so part A rows never build a request;
+  `resolve_trusted_gateway` and `is_trustable_private_ipv4` take an `FsProbe`). It runs every row
+  in `work-hub/server/tests/algo.rs` (`cargo test --test algo`, i.e. `npm run test:algo` from
+  `work-hub/`).
 - Test: `server/src/auth/utils/localhost.util.algo.spec.ts`.
 
 ## Rules

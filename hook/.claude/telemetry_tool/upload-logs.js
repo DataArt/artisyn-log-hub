@@ -40,6 +40,7 @@
  * by `isEncodingRejection()` and cleared only by `resetGzipSupport()` (used by tests).
  */
 const fs = require('fs');
+const os = require('os');
 const path = require('path');
 const https = require('https');
 const http = require('http');
@@ -83,6 +84,33 @@ const GZIP_STAT_FILE = 'gzip-stat.json';
 const GZIP_MIN_WIRE_BUDGET = 128 * 1024;
 /** Max 413-driven re-plans per `uploadFileChunked()` call. */
 const GZIP_MAX_BUDGET_RETRIES = 2;
+
+/**
+ * DD-13 (plan `2026-11-18-receiver-upload-queue`): how long one request may take to *connect*
+ * (DNS + TCP, plus the TLS handshake for https) before it is destroyed with `ECONNTIMEOUT`. A
+ * response timeout after connecting stays the per-request `sendLogsTimeoutMs`.
+ */
+const UPLOAD_CONNECT_TIMEOUT_MS = 3000;
+
+/** Network error codes that mean "the server cannot be reached at all" (DD-13). */
+const UNREACHABLE_ERROR_CODES = Object.freeze([
+  'ECONNREFUSED',
+  'ENOTFOUND',
+  'EAI_AGAIN',
+  'EHOSTUNREACH',
+  'ENETUNREACH',
+  'ECONNTIMEOUT',
+]);
+
+/**
+ * `true` when a request error code means the server is unreachable, so a caller should stop
+ * processing more files in this run instead of paying one timeout per file.
+ * @param {string|null|undefined} code
+ * @returns {boolean}
+ */
+function isUnreachableError(code) {
+  return typeof code === 'string' && UNREACHABLE_ERROR_CODES.includes(code);
+}
 
 /**
  * Reduce a configured `serverUrl` to its origin (`protocol//host:port`) for logging.
@@ -422,7 +450,10 @@ function planIdentitySlices(body, sliceSize) {
  *   exactly like an old hook; an old server ignores both params.
  * @returns {Promise<{ success: boolean, reason: string|null, warnings?: string[], complete?: boolean,
  *   unknownSnapshotId?: string, unknownOkfSnapshotId?: string, statusCode?: number|null, snippet?: string,
- *   sentEncoding?: 'gzip'|null }>}
+ *   sentEncoding?: 'gzip'|null, unreachable?: boolean, errorCode?: string }>}
+ *   `unreachable: true` (with `statusCode: null` and the `errorCode`) marks a DD-13 "server cannot
+ *   be reached" error — see `isUnreachableError()`; it also covers the `UPLOAD_CONNECT_TIMEOUT_MS`
+ *   connect timer (`ECONNTIMEOUT`).
  *   on failure, `statusCode` / `snippet` / `sentEncoding` describe the rejection precisely enough
  *   for `isEncodingRejection()` to classify it; `reason` keeps its historical text verbatim.
  *   `unknownSnapshotId`, when the server's 201 JSON carries one, is DD-8's answer to the
@@ -505,7 +536,19 @@ function uploadFile(serverUrl, apiKey, namespace, sessionId, body, timeoutMs, ho
       options.headers['Content-Encoding'] = 'gzip';
     }
 
+    // DD-13 connect timer: started with the request, cleared once the socket is connected (`connect`
+    // for http, `secureConnect` for https), at once for an already-connected (keep-alive) socket,
+    // and on any response or error.
+    let connectTimer = null;
+    const clearConnectTimer = () => {
+      if (connectTimer) {
+        clearTimeout(connectTimer);
+        connectTimer = null;
+      }
+    };
+
     const req = transport.request(options, (res) => {
+      clearConnectTimer();
       if (res.statusCode === 201) {
         // Buffer the response body (same 2000-byte cap as the non-201 branch below)
         // so we can pick up any `{ warnings: string[], complete?: boolean }` the server returned.
@@ -585,6 +628,7 @@ function uploadFile(serverUrl, apiKey, namespace, sessionId, body, timeoutMs, ho
     });
 
     req.setTimeout(timeoutMs, () => {
+      clearConnectTimer();
       const msg = `upload timeout for ${namespace}/${sessionId} (${reqCtx})`
         + ' — the file did not finish uploading before sendLogsTimeoutMs elapsed;'
         + ' for large sessions raise sendLogsTimeoutMs in .artisyn/config/log-hub.local.json';
@@ -600,20 +644,41 @@ function uploadFile(serverUrl, apiKey, namespace, sessionId, body, timeoutMs, ho
       });
     });
 
+    connectTimer = setTimeout(() => {
+      connectTimer = null;
+      const err = new Error(`connect timeout after ${UPLOAD_CONNECT_TIMEOUT_MS}ms`);
+      err.code = 'ECONNTIMEOUT';
+      req.destroy(err);
+    }, UPLOAD_CONNECT_TIMEOUT_MS);
+    req.on('socket', (socket) => {
+      if (!socket.connecting) {
+        clearConnectTimer();
+        return;
+      }
+      socket.once(urlObj.protocol === 'https:' ? 'secureConnect' : 'connect', clearConnectTimer);
+    });
+
     req.on('error', (err) => {
-      const largePayloadHint = bodyBytes > CHUNK_SIZE_BYTES / 2
+      clearConnectTimer();
+      const unreachable = isUnreachableError(err && err.code);
+      const largePayloadHint = !unreachable && bodyBytes > CHUNK_SIZE_BYTES / 2
         ? ' — connection was interrupted mid-upload of a large payload; may indicate a server/proxy body-size or timeout limit'
         : '';
       const msg = `network error for ${namespace}/${sessionId}: ${err.message} (code=${err.code || 'unknown'}, ${reqCtx})${largePayloadHint}`;
       process.stderr.write(`upload-logs: ${msg}\n`);
       hookLog(HOOK_FILE, hookSessionId, 'error', msg, cwd);
-      resolve({
+      const result = {
         success: false,
         reason: `network error: ${err.message}${largePayloadHint}`,
         statusCode: null,
         snippet: '',
         sentEncoding,
-      });
+      };
+      if (unreachable) {
+        result.unreachable = true;
+        result.errorCode = err.code;
+      }
+      resolve(result);
     });
 
     req.write(body);
@@ -886,7 +951,22 @@ async function uploadFileChunked(serverUrl, apiKey, namespace, sessionId, body, 
         }
       }
 
-      return { success: false, reason: result.reason, wireBytes, plainBytes: totalSize, requests, fallback };
+      const failed = {
+        success: false,
+        reason: result.reason,
+        wireBytes,
+        plainBytes: totalSize,
+        requests,
+        fallback,
+      };
+      // DD-12 classifies a failed file by its status code (null = network error / timeout).
+      if (result.statusCode !== undefined) failed.statusCode = result.statusCode;
+      // DD-13: an unreachable server stops the caller's whole run, not just this file.
+      if (result.unreachable === true) {
+        failed.unreachable = true;
+        failed.errorCode = result.errorCode;
+      }
+      return failed;
     }
 
     if (result.complete) {
@@ -1009,7 +1089,42 @@ const LOCK_FILE_NAME = '.upload.lock';
 const UPLOAD_LOCK_UNREADABLE_GRACE_MS = 2000;
 
 /**
- * Exclusive-create the lock file and write a fresh `{startedAt}` record into it.
+ * Whether process `pid` is still alive on this machine. `process.kill(pid, 0)` sends no signal; it
+ * throws ESRCH for a dead pid and EPERM for a live process we may not signal.
+ * @param {number} pid
+ * @returns {boolean}
+ */
+function isPidAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (err) {
+    return !(err && err.code === 'ESRCH');
+  }
+}
+
+/**
+ * Read the lock file's record. Hooks before 2.32.3 write only `{startedAt}`; `pid` and `host` are
+ * null for them.
+ * @param {string} lockPath
+ * @returns {{startedAt: string|null, pid: number|null, host: string|null}|null} null when unreadable
+ */
+function readUploadLockRecord(lockPath) {
+  try {
+    const parsed = JSON.parse(fs.readFileSync(lockPath, 'utf8'));
+    if (!parsed || typeof parsed !== 'object') return null;
+    return {
+      startedAt: typeof parsed.startedAt === 'string' ? parsed.startedAt : null,
+      pid: Number.isInteger(parsed.pid) && parsed.pid > 0 ? parsed.pid : null,
+      host: typeof parsed.host === 'string' ? parsed.host : null,
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Exclusive-create the lock file and write a fresh `{startedAt, pid, host}` record into it.
  * @param {string} lockPath
  * @returns {'acquired'|'exists'|'error'} `exists` when another process holds the file (EEXIST,
  *   or EPERM/EBUSY, which Windows reports while a previous holder's unlink is still pending)
@@ -1023,7 +1138,7 @@ function tryCreateUploadLock(lockPath) {
     return code === 'EEXIST' || code === 'EPERM' || code === 'EBUSY' ? 'exists' : 'error';
   }
   try {
-    fs.writeSync(fd, JSON.stringify({ startedAt: new Date().toISOString() }));
+    fs.writeSync(fd, JSON.stringify({ startedAt: new Date().toISOString(), pid: process.pid, host: os.hostname() }));
   } catch {
     // the file itself is the lock; an unwritten record only makes it look unreadable for a moment
   } finally {
@@ -1033,20 +1148,25 @@ function tryCreateUploadLock(lockPath) {
 }
 
 /**
- * Whether an existing lock file is abandoned: its `startedAt` is at least `staleWindowMs` old, or
- * the record is unreadable and the file is older than `UPLOAD_LOCK_UNREADABLE_GRACE_MS`.
+ * Whether an existing lock file is abandoned: its holder (`pid` on this `host`) is no longer
+ * running, its `startedAt` is at least `staleWindowMs` old, or the record is unreadable and the
+ * file is older than `UPLOAD_LOCK_UNREADABLE_GRACE_MS`.
+ *
+ * The dead-holder check matters because Claude Code kills a `SessionEnd` hook when the session
+ * exits (always so for short `claude -p` runs such as the post-turn-analysis calls): its `finally`
+ * never releases the lock, and without this check every upload of the project was skipped for the
+ * whole `staleWindowMs`. A holder on another host (a container sharing the folder) has its own
+ * pid namespace, so only the time window applies to it.
  * @param {string} lockPath
  * @param {number} staleWindowMs
  * @returns {boolean}
  */
 function isUploadLockStale(lockPath, staleWindowMs) {
-  try {
-    const parsed = JSON.parse(fs.readFileSync(lockPath, 'utf8'));
-    const startedAt = parsed && typeof parsed.startedAt === 'string' ? parsed.startedAt : null;
-    const age = startedAt ? Date.now() - Date.parse(startedAt) : NaN;
+  const record = readUploadLockRecord(lockPath);
+  if (record) {
+    if (record.pid && record.host === os.hostname() && !isPidAlive(record.pid)) return true;
+    const age = record.startedAt ? Date.now() - Date.parse(record.startedAt) : NaN;
     if (!isNaN(age)) return age >= staleWindowMs;
-  } catch {
-    // unreadable or corrupt record — fall through to the mtime check
   }
   try {
     return Date.now() - fs.statSync(lockPath).mtimeMs >= UPLOAD_LOCK_UNREADABLE_GRACE_MS;
@@ -1128,6 +1248,25 @@ async function acquireUploadLockWithWait(telemetryDir, staleWindowMs, maxWaitMs,
 }
 
 /**
+ * Who holds `<telemetryDir>/.upload.lock`, for the `skipped: upload lock held` log line — so a
+ * blocked upload names its blocker instead of leaving it to be guessed from timestamps.
+ * @param {string} telemetryDir
+ * @returns {string} e.g. `holder pid=1234 age=37s`, `holder unknown (record unreadable)`,
+ *   or '' when the lock is already gone
+ */
+function describeUploadLockHolder(telemetryDir) {
+  const lockPath = path.join(telemetryDir, LOCK_FILE_NAME);
+  if (!fs.existsSync(lockPath)) return '';
+  const record = readUploadLockRecord(lockPath);
+  if (!record) return 'holder unknown (record unreadable)';
+  const parts = [`pid=${record.pid || '?'}`];
+  if (record.host && record.host !== os.hostname()) parts.push(`host=${record.host}`);
+  const age = record.startedAt ? Date.now() - Date.parse(record.startedAt) : NaN;
+  parts.push(isNaN(age) ? 'age=?' : `age=${Math.round(age / 1000)}s`);
+  return `holder ${parts.join(' ')}`;
+}
+
+/**
  * Best-effort release of `<telemetryDir>/.upload.lock`.
  * @param {string} telemetryDir
  */
@@ -1152,6 +1291,9 @@ module.exports = {
   GZIP_STAT_FILE,
   GZIP_MIN_WIRE_BUDGET,
   GZIP_MAX_BUDGET_RETRIES,
+  UPLOAD_CONNECT_TIMEOUT_MS,
+  UNREACHABLE_ERROR_CODES,
+  isUnreachableError,
   formatServerOrigin,
   isLoopbackServerUrl,
   alignSliceBoundary,
@@ -1168,5 +1310,6 @@ module.exports = {
   writePendingUploads,
   acquireUploadLock,
   acquireUploadLockWithWait,
+  describeUploadLockHolder,
   releaseUploadLock,
 };

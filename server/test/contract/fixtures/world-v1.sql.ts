@@ -12,8 +12,14 @@
 // from the very turns that make up the session's `claude` log body below.
 //
 // No imports from src/**: the world must not depend on the code it is checking.
+import { createHash } from 'node:crypto';
 import type { Queryable } from '../oracle';
 import { ident } from '../oracle';
+
+/** How `password_reset_tokens.token` stores a link token: sha256, 64 lowercase hex chars. */
+function sha256Hex(value: string): string {
+  return createHash('sha256').update(value, 'utf8').digest('hex');
+}
 
 /** Plain password of every world user (the policy is irrelevant: it is only ever verified). */
 export const WORLD_V1_PASSWORD = 'contract-world-v1-password';
@@ -273,6 +279,7 @@ export const WORLD_V1_REFS: Readonly<Record<string, string | number>> = (() => {
   }
   refs['pendingConfirmationToken'] = WORLD_V1.pendingConfirmationToken;
   refs['authorResetToken'] = WORLD_V1.authorResetToken;
+  refs['authorResetTokenHash'] = sha256Hex(WORLD_V1.authorResetToken);
   refs['harnessSnapshotId'] = WORLD_V1.harnessSnapshotId;
   refs['harnessSnapshotIdOrphan'] = WORLD_V1.harnessSnapshotIdOrphan;
   refs['okfSnapshotId'] = WORLD_V1.okfSnapshotId;
@@ -921,7 +928,8 @@ function buildStatements(): WorldStatement[] {
         [
           1,
           U.author.id,
-          WORLD_V1.authorResetToken,
+          // The table stores sha256(token) as hex (migration 0094), never the token.
+          sha256Hex(WORLD_V1.authorResetToken),
           '2026-01-09T13:00:00.000Z',
           '2099-01-01T00:00:00.000Z',
           null,
@@ -2305,7 +2313,7 @@ function buildStatements(): WorldStatement[] {
     sql: `UPDATE repositories SET tool_wrap_status = $1 WHERE id = $2`,
     params: [
       JSON.stringify({
-        hookVersion: '2.21.0',
+        hookVersion: '2.32.2',
         os: 'win32',
         preflight: {
           ok: true,

@@ -1,3 +1,9 @@
+---
+type: "Task"
+title: "Session Network Tab — Where the Agent Went on the Network"
+description: "capture network accesses (transcript classifier for WebSearch/WebFetch/MCP/curl/ssh/iwr/git…, wrapper \"network\" preset, opt-in Node and Python runtime taps) and a session Network tab with table, topology graph and HAR-like waterfall"
+---
+
 # 2026-11-11: Session Network Tab — Where the Agent Went on the Network
 
 **Status:** todo

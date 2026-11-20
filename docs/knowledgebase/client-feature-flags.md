@@ -5,7 +5,7 @@ description: "How to hide an unfinished client-only feature behind a VITE_* buil
 tags:
   - client
   - config
-timestamp: "2026-10-14T12:00:00+04:00"
+generated: { by: "human:denistsyplakov", at: "2026-10-14T12:00:00+04:00" }
 ---
 
 # Client Feature Flags (`VITE_*` build flags)

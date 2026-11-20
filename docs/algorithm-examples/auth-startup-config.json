@@ -20,8 +20,8 @@
   {
     "id": "AS-04",
     "input": {"env": {"AUTH_MODE": "sso", "PASSWORD_POLICY": "strict"}},
-    "expected": {"ok": false, "error": "AUTH_MODE environment variable has an unrecognized value \"sso\""},
-    "note": "Order: rule 1 fails before rule 3 is reached, so the mode is reported, not the policy."
+    "expected": {"ok": false, "error": "AUTH_MODE environment variable has an unrecognized value \"sso\"; must be one of none, password, password-confirm, azure-oauth, strict-managed"},
+    "note": "Order: rule 1 fails before rule 3 is reached, so the mode is reported, not the policy. The message lists every valid mode, strict-managed included."
   },
   {
     "id": "AS-05",
@@ -640,5 +640,65 @@
     "input": {"env":{"AUTH_MODE":"password","SMTP_HOST":"   ","SMTP_PORT":"abc"}},
     "expected": {"ok":true,"AUTH_MODE":"password","PASSWORD_POLICY":"long"},
     "note": "Mode password, step 2: a spaces-only SMTP_HOST counts as unset, so the bad SMTP_PORT is ignored."
+  },
+  {
+    "id": "AS-108",
+    "input": {"env":{"AUTH_MODE":"strict-managed","PUBLIC_BASE_URL":"https://hub.arrakis.test","ADMIN_CONTACT_EMAIL":"admin@arrakis.test","SMTP_HOST":"smtp.arrakis.test","SMTP_PORT":"587","SMTP_FROM":"hub@arrakis.test"}},
+    "expected": {"ok":true,"AUTH_MODE":"strict-managed","PASSWORD_POLICY":"long"},
+    "note": "Mode strict-managed: base URL, admin email and SMTP block set, no domain list; every step passes."
+  },
+  {
+    "id": "AS-109",
+    "input": {"env":{"AUTH_MODE":"strict-managed","PUBLIC_BASE_URL":"https://hub.arrakis.test","SMTP_HOST":"smtp.arrakis.test","SMTP_PORT":"587","SMTP_FROM":"hub@arrakis.test"}},
+    "expected": {"ok":false,"error":"ADMIN_CONTACT_EMAIL environment variable is required for AUTH_MODE=strict-managed"},
+    "note": "Mode strict-managed: ADMIN_CONTACT_EMAIL is the bootstrap admin, so it is required; the message names this mode."
+  },
+  {
+    "id": "AS-110",
+    "input": {"env":{"AUTH_MODE":"strict-managed","PUBLIC_BASE_URL":"https://hub.arrakis.test","ADMIN_CONTACT_EMAIL":"admin-at-arrakis","SMTP_HOST":"smtp.arrakis.test","SMTP_PORT":"587","SMTP_FROM":"hub@arrakis.test"}},
+    "expected": {"ok":false,"error":"ADMIN_CONTACT_EMAIL environment variable must be a valid email address, got: admin-at-arrakis"},
+    "note": "Mode strict-managed: an ADMIN_CONTACT_EMAIL that is not an address is refused."
+  },
+  {
+    "id": "AS-111",
+    "input": {"env":{"AUTH_MODE":"strict-managed","PUBLIC_BASE_URL":"https://hub.arrakis.test","ADMIN_CONTACT_EMAIL":"admin@arrakis.test","SMTP_PORT":"587","SMTP_FROM":"hub@arrakis.test"}},
+    "expected": {"ok":false,"error":"SMTP_HOST environment variable is required"},
+    "note": "Mode strict-managed: the SMTP block is required (unlike mode password); a missing SMTP_HOST is reported."
+  },
+  {
+    "id": "AS-112",
+    "input": {"env":{"AUTH_MODE":"strict-managed","PUBLIC_BASE_URL":"https://hub.arrakis.test","ADMIN_CONTACT_EMAIL":"admin@arrakis.test","SMTP_HOST":"smtp.arrakis.test","SMTP_PORT":"587"}},
+    "expected": {"ok":false,"error":"SMTP_FROM environment variable is required"},
+    "note": "Mode strict-managed: a missing SMTP_FROM is reported."
+  },
+  {
+    "id": "AS-113",
+    "input": {"env":{"AUTH_MODE":"strict-managed","PUBLIC_BASE_URL":"https://hub.arrakis.test","ADMIN_CONTACT_EMAIL":"admin@arrakis.test","SMTP_HOST":"smtp.arrakis.test","SMTP_PORT":"70000","SMTP_FROM":"hub@arrakis.test"}},
+    "expected": {"ok":false,"error":"SMTP_PORT environment variable must be an integer between 1 and 65535, got: 70000"},
+    "note": "Mode strict-managed: the port range check applies."
+  },
+  {
+    "id": "AS-114",
+    "input": {"env":{"AUTH_MODE":"strict-managed","NODE_ENV":"development","ADMIN_CONTACT_EMAIL":"admin@arrakis.test","SMTP_HOST":"smtp.arrakis.test","SMTP_PORT":"587","SMTP_FROM":"hub@arrakis.test"}},
+    "expected": {"ok":false,"error":"PUBLIC_BASE_URL environment variable is required for AUTH_MODE=strict-managed (every way in is an emailed link)"},
+    "note": "Mode strict-managed: PUBLIC_BASE_URL is required even outside production (unlike modes password and password-confirm)."
+  },
+  {
+    "id": "AS-115",
+    "input": {"env":{"AUTH_MODE":"strict-managed","PUBLIC_BASE_URL":"hub.arrakis.test","ADMIN_CONTACT_EMAIL":"admin@arrakis.test","SMTP_HOST":"smtp.arrakis.test","SMTP_PORT":"587","SMTP_FROM":"hub@arrakis.test"}},
+    "expected": {"ok":false,"error":"PUBLIC_BASE_URL environment variable must be an absolute http(s) URL, got: hub.arrakis.test"},
+    "note": "Mode strict-managed: a set PUBLIC_BASE_URL must be absolute http(s)."
+  },
+  {
+    "id": "AS-116",
+    "input": {"env":{"AUTH_MODE":"strict-managed","PUBLIC_BASE_URL":"https://hub.arrakis.test","ALLOWED_EMAIL_DOMAINS":"arrakis.test,@caladan.test","SMTP_HOST":"smtp.arrakis.test","SMTP_PORT":"587","SMTP_FROM":"hub@arrakis.test"}},
+    "expected": {"ok":false,"error":"ALLOWED_EMAIL_DOMAINS entries must be domains without \"@\""},
+    "note": "Mode strict-managed: the domain list is checked before ADMIN_CONTACT_EMAIL, so the '@' entry is reported although the admin email is also missing."
+  },
+  {
+    "id": "AS-117",
+    "input": {"env":{"AUTH_MODE":"strict-managed","PUBLIC_BASE_URL":"https://hub.arrakis.test","ALLOWED_EMAIL_DOMAINS":"arrakis.test, Caladan.Test","ADMIN_CONTACT_EMAIL":"admin@giedi.test","SMTP_HOST":"smtp.arrakis.test","SMTP_PORT":"587","SMTP_FROM":"hub@arrakis.test"}},
+    "expected": {"ok":true,"AUTH_MODE":"strict-managed","PASSWORD_POLICY":"long"},
+    "note": "Mode strict-managed: a valid domain list passes and does not apply to ADMIN_CONTACT_EMAIL."
   }
 ]

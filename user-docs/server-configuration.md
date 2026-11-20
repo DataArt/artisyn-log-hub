@@ -11,10 +11,10 @@ The main settings are below. The full list, with the security relevance of each 
 | `DATABASE_URL` | — | **Required.** PostgreSQL connection string. |
 | `PORT` | `3000` | HTTP listen port. |
 | `AUTH_MODE` | `password` | See [Authentication modes](authentication-modes.md). The release install sets `none`; the example configuration of a source checkout sets `password-confirm`. |
-| `PASSWORD_POLICY` | `long` | Password strength in Modes 2/3: `any`, `mid` or `long`. |
+| `PASSWORD_POLICY` | `long` | Password strength in Modes 2/3 and `strict-managed`: `any`, `mid` or `long`. |
 | `SESSION_SECRET` | generated | Optional. Generated and stored in the database when unset. |
-| `PUBLIC_BASE_URL` | — | Externally reachable URL, used for the links in emails. Required in production for Modes 2/3. |
-| `ALLOWED_EMAIL_DOMAINS` | any | Mode 3 sign-up allow-list, comma-separated domains. |
+| `PUBLIC_BASE_URL` | — | Externally reachable URL, used for the links in emails. Required in production for Modes 2/3, and always for `strict-managed`. |
+| `ALLOWED_EMAIL_DOMAINS` | any | Mode 3 sign-up allow-list, comma-separated domains. In `strict-managed`, the domains an admin can create accounts for. |
 | `COOKIE_SECURE` | `true` | Set `false` when served over plain HTTP. |
 | `TRUST_PROXY` | `false` | Set when running behind a reverse proxy. When enabled it overrides `COOKIE_SECURE`. |
 | `SESSION_RETENTION_DAYS` | `30` | Sessions older than this are deleted. |
@@ -27,8 +27,10 @@ The main settings are below. The full list, with the security relevance of each 
 | `BUDGET_CHECK_INTERVAL_MS` | `300000` | How often the budget threshold job runs, in milliseconds (5 minutes). |
 | `BUDGET_CHECK_ENABLED` | on | `false` turns off the budget threshold job: no new budget notices or emails. |
 
-Mode-specific settings (SMTP for Modes 2/3, `AZURE_*` for Mode 4) are described in
-[Security Hardening & Configuration](security-hardening.md) §3.2–§3.4.
+Mode-specific settings (SMTP for Modes 2/3 and `strict-managed`, `AZURE_*` for Mode 4) are
+described in [Security Hardening & Configuration](security-hardening.md) §3.2–§3.4. What
+`strict-managed` needs (`ADMIN_CONTACT_EMAIL` is also its first admin) is in
+[Authentication modes](authentication-modes.md#strict-managed-admin-provisioned-users).
 
 ## Budget threshold job
 
@@ -41,8 +43,8 @@ and emailed only once.
 Notices always appear in the app (the bell and the banner). **Emails** are sent only when the
 mail service is configured — the same SMTP settings that Modes 2/3 use for sign-up and password
 reset (`SMTP_HOST` and the rest, see the link above); there is no separate mail setup for
-budgets. The mail service is used only in Modes 2/3 (`AUTH_MODE` `password` or
-`password-confirm`) with `SMTP_HOST` set. In Mode 1 (`none`), Mode 4 (Entra ID) and Mode 2
+budgets. The mail service is used only in Modes 2/3 and `strict-managed` (`AUTH_MODE`
+`password`, `password-confirm` or `strict-managed`) with `SMTP_HOST` set. In Mode 1 (`none`), Mode 4 (Entra ID) and Mode 2
 without SMTP, notices are in-app only and the budget event log records *Email skipped*. The link in the email is built from
 `PUBLIC_BASE_URL`; without it the email is sent without a link.
 

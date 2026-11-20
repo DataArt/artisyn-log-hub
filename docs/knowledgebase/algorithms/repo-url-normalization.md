@@ -1,4 +1,9 @@
 ---
+type: "Algorithm"
+title: "Repository URL normalization: one project, one repository row"
+description: "The hook reports each session's git remote as the developer typed it: SSH or HTTPS, with or without `.git`, with credentials, in any host case. The server folds every spelling of the same project into one canonical URL, so one project is one row in the repository list."
+tags: [algorithm]
+generated: { by: "human:denistsyplakov", at: "2026-11-03T17:31:26+04:00" }
 reviewed: 2026-10-15
 reviewer: ai
 ---

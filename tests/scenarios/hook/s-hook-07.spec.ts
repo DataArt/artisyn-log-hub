@@ -32,9 +32,33 @@
 // clock-shift preload (helpers/hook-process.ts `clockShift`), not by waiting; the forward drop
 // waits out the real retry backoff (1+2+4+8+16 s).
 //
+// Step 28 (2026-11-18 receiver upload queue, hook 3.0.0): the shared receiver's uploader role —
+// `uploader.lock` and `heartbeat.json` under the fake home's `~/.artisyn/upload/`, a queued
+// `session-end` job run with `send-logs-hook.js --run-job` right after start (drain), and no idle
+// exit while that job runs. Shared receivers run with the fake home as HOME/USERPROFILE, so the
+// uploaders they spawn resolve `~` the same way.
+//
+// Steps 29–30 (same task, phase 2): a 503 makes the uploader rewrite the job (`attempts`,
+// `nextAttemptAt`) and the job keeps the receiver from idling out; a 400 moves it to `failed/` and
+// the empty queue lets the receiver exit. A receiver and its uploader killed mid-job leave a dead
+// claim and a stale `uploader.lock`; the next receiver takes both over and re-runs the job (AC-2).
+//
+// Phase 3 (same task, hook 3.0.0, mandatory receiver): step 27's receiver on a foreign-held port
+// keeps the uploader role queue-only (heartbeat `listening: false`) and runs a queued job, a second
+// one exits 0; step 31 has one receiver serve an `otelEnabled: false` repo (jobs yes, OTLP records
+// no) next to an `otelEnabled: true` one; step 32 checks that each job's `hook-status` carries the
+// version of the hook copy that queued it, plus `nodeVersion`. Receivers a hook run spawned
+// detached are killed through their `uploader.lock` pid at the end of the step.
+//
+// Step 33 (follow-up, failed/ re-queue): after a power-off (stale lock, heartbeat and claim of a dead
+// pid) the receiver takes the role, runs the queued job of repo Y (done), and that `done` triggers
+// the re-queue: repo X's `max-attempts` record comes back as one `stop` job and uploads, while repo
+// Z's `upload-rejected` record stays in `failed/`.
+//
 // Replaces:
 //   - hook/.claude/telemetry_tool/__tests__/otel-receiver.test.js (45; one representative per class)
 //   - hook/.claude/telemetry_tool/__tests__/otel-register.test.js — receiver side of register (≈ 6)
+import { spawnSync } from 'child_process';
 import * as fs from 'fs';
 import * as os from 'os';
 import * as path from 'path';
@@ -42,10 +66,12 @@ import * as zlib from 'zlib';
 import { test, expect } from '../fixtures';
 import {
   authedRequest,
+  claudeProjectDir,
   clockShift,
   copyToolDir,
   copyToolDirTo,
   freeLoopbackPort,
+  HOOK_SOURCE_DIR,
   makeFakeGitRepo,
   makeFakeHome,
   normalizePath,
@@ -56,6 +82,7 @@ import {
   repoKeyOf,
   rmrf,
   runHook,
+  runScript,
   sharedHello,
   spawnSharedReceiver,
   startFakeCollector,
@@ -145,8 +172,8 @@ function tracesBody(spans: Array<{ spanId: string; sessionId: string }>, resourc
   };
 }
 
-/** What a shared receiver answers in `capabilities` (DD-10). */
-const CAPABILITIES = ['shared', 'auth-v1', 'spans', 'realtime', 'forward', 'session-status'];
+/** What a shared receiver answers in `capabilities` (DD-10); `upload-queue-v1` since hook 3.0.0. */
+const CAPABILITIES = ['shared', 'auth-v1', 'spans', 'realtime', 'forward', 'session-status', 'upload-queue-v1'];
 
 interface SharedRepo {
   root: string;
@@ -210,8 +237,22 @@ function externalIPv4(): string | null {
   return null;
 }
 
+/**
+ * Best effort: kill the receiver that holds `<home>/.artisyn/upload/uploader.lock` — one a hook run
+ * spawned detached (DD-7) rather than the scenario, so `receivers` does not know it.
+ */
+function killUploaderOf(home: string | undefined): void {
+  if (!home) return;
+  try {
+    const lock: unknown = JSON.parse(fs.readFileSync(path.join(home, '.artisyn', 'upload', 'uploader.lock'), 'utf8'));
+    if (isRecord(lock) && typeof lock.pid === 'number' && lock.pid !== process.pid) process.kill(lock.pid);
+  } catch {
+    // no lock, or the process is already gone
+  }
+}
+
 test('@S-HOOK-07 the OTEL receiver refuses browsers, foreign projects, path tricks and huge bodies @mode-a', async () => {
-  test.setTimeout(300_000);
+  test.setTimeout(420_000);
   const dirs = tempDirs();
   const receivers: ReceiverProcess[] = [];
   let hub: FakeLogHub | undefined;
@@ -738,17 +779,89 @@ test('@S-HOOK-07 the OTEL receiver refuses browsers, foreign projects, path tric
       expect(normalizePath(String(calls.at(-1)?.[2]))).toBe(normalizePath(repoB.root));
     });
 
-    await test.step('27. port conflict: a foreign server on the shared port → a shared receiver exits 0 (EADDRINUSE); the hook warns «otel port-conflict» once and its SessionEnd otel-status says receiver-down / port-conflict', async () => {
+    // Steps 27, 29 and 30 (2026-11-18 receiver upload queue): the port conflict, retries,
+    // `failed/`, the idle rule and a receiver killed mid-job. Each step gets its own fake home with
+    // one queued `session-end` job, written like step 28's by a SessionEnd under a faked heartbeat.
+    const queueSetup = async (hubUrl: string, sid: string, apiKey: string, port?: number) => {
+      const qHome = makeFakeHome(dirs);
+      const qState = await writeSharedState(qHome, port);
+      const qTool = copyToolDirTo(path.join(qHome, '.claude', 'plugins', 'log-hub-hooks', 'scripts'));
+      const qRepo = makeFakeGitRepo(dirs, { remote: `git@git.arrakis.test:scn/hook07/${sid}.git` });
+      writeConfig(qRepo, { base: { ...QUIET_HOOK_CONFIG, serverUrl: hubUrl, sendLogsTimeoutMs: 10_000 }, local: { apiKey } });
+      fs.writeFileSync(path.join(telemetryDir(qRepo), `${sid}.jsonl`), `{"event":"prompt_start","session_id":"${sid}"}\n`);
+      fs.writeFileSync(path.join(claudeProjectDir(qHome, qRepo), `${sid}.jsonl`), `{"type":"user","sessionId":"${sid}"}\n`);
+      const uploadState = path.join(qHome, '.artisyn', 'upload');
+      const queueDir = path.join(uploadState, 'queue');
+      const failedDir = path.join(uploadState, 'failed');
+      const heartbeatFile = path.join(uploadState, 'heartbeat.json');
+      fs.mkdirSync(uploadState, { recursive: true });
+      fs.writeFileSync(heartbeatFile, JSON.stringify({ schema: 1, pid: process.pid, capabilities: ['upload-queue-v1'], uploadContract: 1, ts: Date.now() }));
+      const end = await runHook(qTool, { hook_event_name: 'SessionEnd', session_id: sid, cwd: qRepo }, { home: qHome });
+      expect(end.code, end.stderr).toBe(0);
+      fs.rmSync(heartbeatFile);
+      const queued = () => (fs.existsSync(queueDir) ? fs.readdirSync(queueDir).filter((n) => n.endsWith('.json') || n.endsWith('.claim')).sort() : []);
+      const [job] = queued();
+      expect(job).toMatch(new RegExp(`^${sid}_\\d{8}T\\d{9}Z_session-end_\\d+-[0-9a-f]{4}\\.json$`));
+      const readJob = (): Record<string, unknown> | null => {
+        try {
+          const parsed: unknown = JSON.parse(fs.readFileSync(path.join(queueDir, job), 'utf8'));
+          return isRecord(parsed) ? parsed : null;
+        } catch {
+          return null;
+        }
+      };
+      const receiverLog = () => fs.readFileSync(path.join(qState.stateDir, 'receiver.log'), 'utf8');
+      return { qHome, qState, qTool, qRepo, queueDir, failedDir, job, queued, readJob, receiverLog };
+    };
+
+    await test.step('27. port conflict: a foreign server on the shared port → the shared receiver that takes the uploader role stays up queue-only (heartbeat listening:false) and runs a queued job, a second receiver exits 0 (EADDRINUSE, no role); the hook warns «otel port-conflict» once and its SessionEnd otel-status says receiver-down / port-conflict', async () => {
       const foreign = await startFakeLogHub();
+      // Each upload is answered after 1 s, so the job outlives the second receiver's start.
+      const jobHub = await startFakeLogHub(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+        return { status: 201, body: '{"warnings":[]}' };
+      });
+      let hookHome: string | undefined;
       try {
-        const loser = spawnSharedReceiver(toolDir, { home, stateDir, port: foreign.port });
-        receivers.push(loser);
-        expect(await waitForExit(loser)).toBe(0);
+        // DD-8 phase 3: the uploader role does not need the OTLP port.
+        const q = await queueSetup(jobHub.url, 'pq-1', 'k-hook07-queue-only', foreign.port);
+        const heartbeatFile = path.join(q.qHome, '.artisyn', 'upload', 'heartbeat.json');
+        const params = { home: q.qHome, stateDir: q.qState.stateDir, port: foreign.port, idleTimeoutMs: 2000 };
+        const queueOnly = spawnSharedReceiver(q.qTool, params);
+        receivers.push(queueOnly);
+        await expect
+          .poll(() => {
+            try {
+              const hb: unknown = JSON.parse(fs.readFileSync(heartbeatFile, 'utf8'));
+              return isRecord(hb) && hb.pid === queueOnly.child.pid ? hb.listening : undefined;
+            } catch {
+              return undefined;
+            }
+          }, { timeout: 10_000 })
+          .toBe(false);
+        expect(queueOnly.exitCode(), 'queue-only: alive without the port').toBeUndefined();
+        expect(q.receiverLog()).toContain(`queue-only: port ${foreign.port} busy`);
+
+        // A second receiver finds the port busy and the uploader lock held by a live pid → exit 0.
+        const second = spawnSharedReceiver(q.qTool, params);
+        receivers.push(second);
+        expect(await waitForExit(second, 10_000)).toBe(0);
+        expect(queueOnly.exitCode(), 'the queue-only receiver keeps running').toBeUndefined();
+
+        // The queued job runs under the queue-only receiver, then the empty queue lets it idle out.
+        await expect.poll(() => jobHub.uploads().sort(), { timeout: 30_000 }).toEqual(['artisyn/pq-1', 'claude/pq-1']);
+        await expect.poll(q.queued, { timeout: 20_000 }).toEqual([]);
+        expect(jobHub.requests.every((r) => r.headers['x-api-key'] === 'k-hook07-queue-only')).toBe(true);
+        expect(await waitForExit(queueOnly, 20_000)).toBe(0);
+        const queueLog = q.receiverLog();
+        expect(queueLog).toMatch(new RegExp(` job-done job=${q.job}`));
+        expect(queueLog).toMatch(/idle-exit .*queue-only: no queued or running job/);
+        expect(foreign.requests, 'the queue-only receiver never talks to the foreign listener').toHaveLength(0);
         const hello = await sharedHello(foreign.port, auth);
         expect(hello.proofValid).toBe(false);
 
         const repo = makeFakeGitRepo(dirs);
-        const hookHome = makeFakeHome(dirs);
+        hookHome = makeFakeHome(dirs);
         await writeSharedState(hookHome, foreign.port);
         writeConfig(repo, { base: { ...QUIET_HOOK_CONFIG, otelEnabled: true } });
         const env = { ARTISYN_MANAGED_SETTINGS_DIR: dirs.make('no-managed'), ...pathWith(writeFakeClaude(dirs, 'fail').dir) };
@@ -764,7 +877,373 @@ test('@S-HOOK-07 the OTEL receiver refuses browsers, foreign projects, path tric
         ]);
         expect(foreign.requests.every((r) => r.path === '/artisyn/hello'), 'nothing but hello reaches a foreign listener').toBe(true);
       } finally {
+        // The hook's fallback may have spawned its own queue-only receiver for hookHome (DD-7,
+        // 10-min idle timeout): stop it, so nothing outlives the scenario.
+        killUploaderOf(hookHome);
         await foreign.close();
+        await jobHub.close();
+      }
+    });
+
+    await test.step('28. upload queue (hook 3.0.0): a shared receiver takes the uploader role, writes heartbeat.json (DD-6), runs a queued session-end job against the fake Log Hub with --run-job and deletes it; it does not idle-exit while the job runs', async () => {
+      // Each upload is answered after 2.5 s, so the job (two files) outlives the 1.5 s idle timeout.
+      const slowHub = await startFakeLogHub(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 2500));
+        return { status: 201, body: '{"warnings":[]}' };
+      });
+      try {
+        const qHome = makeFakeHome(dirs);
+        const qState = await writeSharedState(qHome);
+        // The hook as a plugin under the fake home, so the receiver accepts its send-logs-hook.js.
+        const qTool = copyToolDirTo(path.join(qHome, '.claude', 'plugins', 'log-hub-hooks', 'scripts'));
+        const qRepo = makeFakeGitRepo(dirs, { remote: 'git@git.arrakis.test:scn/hook07/queue.git' });
+        writeConfig(qRepo, { base: { ...QUIET_HOOK_CONFIG, serverUrl: slowHub.url, sendLogsTimeoutMs: 10_000 }, local: { apiKey: 'k-hook07-queue' } });
+        fs.writeFileSync(path.join(telemetryDir(qRepo), 'q-1.jsonl'), '{"event":"prompt_start","session_id":"q-1"}\n');
+        fs.writeFileSync(path.join(claudeProjectDir(qHome, qRepo), 'q-1.jsonl'), '{"type":"user","sessionId":"q-1"}\n');
+        const uploadState = path.join(qHome, '.artisyn', 'upload');
+        const queueDir = path.join(uploadState, 'queue');
+        const heartbeatFile = path.join(uploadState, 'heartbeat.json');
+        const queued = () => (fs.existsSync(queueDir) ? fs.readdirSync(queueDir).filter((n) => n.endsWith('.json') || n.endsWith('.claim')) : []);
+
+        // The job a SessionEnd leaves while an uploader is up (faked heartbeat), queued before any receiver runs.
+        fs.mkdirSync(uploadState, { recursive: true });
+        fs.writeFileSync(heartbeatFile, JSON.stringify({ schema: 1, pid: process.pid, capabilities: ['upload-queue-v1'], uploadContract: 1, ts: Date.now() }));
+        const end = await runHook(qTool, { hook_event_name: 'SessionEnd', session_id: 'q-1', cwd: qRepo }, { home: qHome });
+        expect(end.code, end.stderr).toBe(0);
+        fs.rmSync(heartbeatFile);
+        const [job] = queued();
+        expect(job).toMatch(/^q-1_\d{8}T\d{9}Z_session-end_\d+-[0-9a-f]{4}\.json$/);
+        expect(slowHub.requests).toHaveLength(0);
+
+        const receiver = await startSharedReceiver(qTool, { home: qHome, stateDir: qState.stateDir, port: qState.port, idleTimeoutMs: 1500 });
+        receivers.push(receiver);
+        await expect
+          .poll(() => {
+            try {
+              const hb: unknown = JSON.parse(fs.readFileSync(heartbeatFile, 'utf8'));
+              return isRecord(hb) && hb.listening === true;
+            } catch {
+              return false;
+            }
+          }, { timeout: 10_000 })
+          .toBe(true);
+        const hb: unknown = JSON.parse(fs.readFileSync(heartbeatFile, 'utf8'));
+        if (!isRecord(hb)) throw new Error('heartbeat.json is not an object');
+        expect(hb).toMatchObject({ schema: 1, pid: receiver.child.pid, version, capabilities: CAPABILITIES, uploadContract: 1, listening: true });
+        expect(Number.isFinite(Date.parse(String(hb.startedAt))), 'startedAt is an ISO time').toBe(true);
+        expect(Math.abs(Date.now() - Number(hb.ts)), 'ts is fresh').toBeLessThan(15_000);
+        const lock: unknown = JSON.parse(fs.readFileSync(path.join(uploadState, 'uploader.lock'), 'utf8'));
+        expect(lock).toMatchObject({ pid: receiver.child.pid, version });
+
+        // Drained on start: the job runs as `--run-job`, uploads the session's two files and is deleted.
+        await expect.poll(() => slowHub.uploads().sort(), { timeout: 30_000 }).toEqual(['artisyn/q-1', 'claude/q-1']);
+        await expect.poll(queued, { timeout: 20_000 }).toEqual([]);
+        expect(slowHub.requests.every((r) => r.headers['x-api-key'] === 'k-hook07-queue')).toBe(true);
+        expect(readHookLog(qRepo, 'send-logs-hook.js').some((l) => l.includes(`run-job done: ${job}`))).toBe(true);
+
+        // The job ran for ≥ 5 s against a 1.5 s idle timeout: the receiver logged its end before idling out.
+        expect(await waitForExit(receiver, 15_000)).toBe(0);
+        const log = fs.readFileSync(path.join(qState.stateDir, 'receiver.log'), 'utf8').split('\n');
+        const at = (event: string) => log.findIndex((l) => l.includes(` ${event} `) && (event === 'idle-exit' || l.includes(`job=${job}`)));
+        expect(at('job-start'), log.join('\n')).toBeGreaterThan(-1);
+        expect(at('job-done'), 'the job finished under this receiver').toBeGreaterThan(at('job-start'));
+        expect(at('idle-exit'), 'no idle exit while the job ran').toBeGreaterThan(at('job-done'));
+        expect(fs.existsSync(heartbeatFile), 'the heartbeat is removed on exit').toBe(false);
+        expect(fs.existsSync(path.join(uploadState, 'uploader.lock')), 'the uploader lock is released on exit').toBe(false);
+      } finally {
+        await slowHub.close();
+      }
+    });
+
+    await test.step('29. retries and failed/: a 503 makes the uploader reschedule the job (attempts 1, a future nextAttemptAt) and the receiver does not idle-exit while it waits; once due, a 400 sends it to failed/; the empty queue then lets the receiver idle-exit', async () => {
+      const retryHub = await startFakeLogHub(() => ({ status: 503, body: '{"message":"maintenance"}' }));
+      try {
+        const q = await queueSetup(retryHub.url, 'rt-1', 'k-hook07-retry');
+        const receiver = await startSharedReceiver(q.qTool, { home: q.qHome, stateDir: q.qState.stateDir, port: q.qState.port, idleTimeoutMs: 1500 });
+        receivers.push(receiver);
+
+        // Drain on start → --run-job → 503 → exit 10 with the job rewritten under its claim (DD-9).
+        await expect.poll(() => (q.queued().length === 1 ? q.readJob()?.attempts : undefined), { timeout: 30_000 }).toBe(1);
+        expect(q.queued(), 'the claim is released').toEqual([q.job]);
+        const rescheduled = q.readJob();
+        expect(rescheduled).toMatchObject({ attempts: 1 });
+        expect(Number(rescheduled?.nextAttemptAt), 'backoffMs(1) = 30 s ahead').toBeGreaterThan(Date.now() + 10_000);
+        expect(String(rescheduled?.lastError)).toMatch(/^retryable: /);
+        expect(retryHub.requests.length).toBeGreaterThan(0);
+        expect(q.receiverLog()).toMatch(new RegExp(` job-retry job=${q.job} exit=10 retryable — attempts=1 `));
+
+        // A retryable job is a blocking job: three idle periods pass and the receiver keeps running.
+        await new Promise((resolve) => setTimeout(resolve, 4500));
+        expect(receiver.exitCode(), 'no idle-exit while a retryable job waits').toBeUndefined();
+        expect(q.receiverLog()).not.toMatch(/idle-exit/);
+
+        // The job comes due (nextAttemptAt rewritten atomically, like the uploader does) and now meets a 400.
+        retryHub.respond(() => ({ status: 400, body: '{"message":"bad request"}' }));
+        const tmp = path.join(q.queueDir, `.${q.job}.scn.tmp`);
+        fs.writeFileSync(tmp, JSON.stringify({ ...rescheduled, nextAttemptAt: null }));
+        // On Windows a rename over a file the receiver is reading at that moment fails with EPERM:
+        // retry briefly, like a writer racing a reader would.
+        await expect.poll(() => {
+          try {
+            fs.renameSync(tmp, path.join(q.queueDir, q.job));
+            return true;
+          } catch (err) {
+            if (isRecord(err) && (err.code === 'EPERM' || err.code === 'EBUSY' || err.code === 'EACCES')) return false;
+            throw err;
+          }
+        }, { timeout: 5000, intervals: [50] }).toBe(true);
+        await expect.poll(() => fs.existsSync(path.join(q.failedDir, q.job)), { timeout: 30_000 }).toBe(true);
+        expect(q.queued()).toEqual([]);
+        const failed: unknown = JSON.parse(fs.readFileSync(path.join(q.failedDir, q.job), 'utf8'));
+        expect(failed).toMatchObject({ sessionId: 'rt-1', trigger: 'session-end', attempts: 1, failedReason: 'upload-rejected' });
+        expect(isRecord(failed) && Number.isFinite(Date.parse(String(failed.failedAt))), 'failedAt is an ISO time').toBe(true);
+        expect(readHookLog(q.qRepo, 'send-logs-hook.js').some((l) => l.includes(`job failed: ${q.job} reason=upload-rejected`))).toBe(true);
+
+        // Nothing blocks any more: the receiver idles out after the job went to failed/.
+        expect(await waitForExit(receiver, 15_000)).toBe(0);
+        const log = q.receiverLog().split('\n');
+        const failedAt = log.findIndex((l) => l.includes(` job-failed job=${q.job} exit=11`));
+        expect(failedAt, log.join('\n')).toBeGreaterThan(-1);
+        expect(log.findIndex((l) => l.includes(' idle-exit ')), 'idle-exit after the job left the queue').toBeGreaterThan(failedAt);
+      } finally {
+        await retryHub.close();
+      }
+    });
+
+    await test.step('30. AC-2: the receiver (and its uploader) is killed while the job uploads; a new receiver takes the stale uploader lock, re-runs the job past its dead claim and the server gets the same uploads', async () => {
+      const slowHub = await startFakeLogHub(async () => {
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+        return { status: 201, body: '{"warnings":[]}' };
+      });
+      try {
+        const q = await queueSetup(slowHub.url, 'kj-1', 'k-hook07-kill');
+        const first = await startSharedReceiver(q.qTool, { home: q.qHome, stateDir: q.qState.stateDir, port: q.qState.port });
+        receivers.push(first);
+        const claimFile = path.join(q.queueDir, `${q.job}.claim`);
+        await expect.poll(() => fs.existsSync(claimFile) && slowHub.requests.length > 0, { timeout: 30_000, intervals: [100] }).toBe(true);
+        const claim: unknown = JSON.parse(fs.readFileSync(claimFile, 'utf8'));
+        if (!isRecord(claim) || typeof claim.pid !== 'number') throw new Error(`claim has no pid: ${JSON.stringify(claim)}`);
+        const uploaderPid = claim.pid;
+        expect(uploaderPid).not.toBe(first.child.pid);
+
+        // A hard kill: no exit handler runs, so heartbeat.json, uploader.lock and the claim stay behind.
+        first.child.kill('SIGKILL');
+        await waitForExit(first, 5000);
+        try {
+          process.kill(uploaderPid, 'SIGKILL');
+        } catch {
+          // already gone
+        }
+        const alive = (pid: number) => {
+          try {
+            process.kill(pid, 0);
+            return true;
+          } catch {
+            return false;
+          }
+        };
+        await expect.poll(() => alive(uploaderPid), { timeout: 10_000 }).toBe(false);
+        expect(q.queued(), 'the job and its dead claim are left').toEqual([q.job, `${q.job}.claim`]);
+        expect(fs.existsSync(path.join(q.qHome, '.artisyn', 'upload', 'uploader.lock'))).toBe(true);
+        expect(slowHub.uploads().filter((u) => u === 'claude/kj-1' || u === 'artisyn/kj-1').length, 'the killed run did not finish').toBeLessThan(2);
+
+        const second = await startSharedReceiver(q.qTool, { home: q.qHome, stateDir: q.qState.stateDir, port: q.qState.port });
+        receivers.push(second);
+        await expect.poll(q.queued, { timeout: 40_000 }).toEqual([]);
+        const lock: unknown = JSON.parse(fs.readFileSync(path.join(q.qHome, '.artisyn', 'upload', 'uploader.lock'), 'utf8'));
+        expect(lock, 'the stale uploader lock was retaken').toMatchObject({ pid: second.child.pid });
+        expect(new Set(slowHub.uploads()), 'the same uploads as an uninterrupted run').toEqual(new Set(['artisyn/kj-1', 'claude/kj-1']));
+        expect(slowHub.requests.every((r) => r.headers['x-api-key'] === 'k-hook07-kill')).toBe(true);
+        expect(readHookLog(q.qRepo, 'send-logs-hook.js').some((l) => l.includes(`run-job done: ${q.job}`))).toBe(true);
+        expect(fs.existsSync(path.join(telemetryDir(q.qRepo), '.upload.lock')), 'the dead uploader’s repo lock is freed').toBe(false);
+        await stopReceiver(second);
+      } finally {
+        await slowHub.close();
+      }
+    });
+
+    await test.step('31. phase 3: one receiver serves repo A (otelEnabled:true) and repo B (otelEnabled:false); the lifecycle re-arm registers both, the session-end jobs of both upload, and OTLP records are stored only for A — no chunk under B’s otel dir', async () => {
+      const mixHub = await startFakeLogHub();
+      const mHome = makeFakeHome(dirs);
+      try {
+        const mState = await writeSharedState(mHome);
+        const mTool = copyToolDirTo(path.join(mHome, '.claude', 'plugins', 'log-hub-hooks', 'scripts'));
+        const mEnv = { ARTISYN_MANAGED_SETTINGS_DIR: dirs.make('no-managed'), ...pathWith(writeFakeClaude(dirs, 'fail').dir) };
+        const repos = [
+          { sid: 'mx-a', otelEnabled: true, apiKey: 'k-hook07-mix-a' },
+          { sid: 'mx-b', otelEnabled: false, apiKey: 'k-hook07-mix-b' },
+        ].map((r) => {
+          const root = makeFakeGitRepo(dirs, { remote: `git@git.arrakis.test:scn/hook07/${r.sid}.git` });
+          writeConfig(root, {
+            base: { ...QUIET_HOOK_CONFIG, otelEnabled: r.otelEnabled, otelRealtime: false, serverUrl: mixHub.url, sendLogsTimeoutMs: 10_000 },
+            local: { apiKey: r.apiKey },
+          });
+          fs.writeFileSync(path.join(telemetryDir(root), `${r.sid}.jsonl`), `{"event":"prompt_start","session_id":"${r.sid}"}\n`);
+          fs.writeFileSync(path.join(claudeProjectDir(mHome, root), `${r.sid}.jsonl`), `{"type":"user","sessionId":"${r.sid}"}\n`);
+          return { ...r, root, otelDir: path.join(telemetryDir(root), 'otel') };
+        });
+        const [a, b] = repos;
+        const receiver = await startSharedReceiver(mTool, { home: mHome, stateDir: mState.stateDir, port: mState.port });
+        receivers.push(receiver);
+        const mAuth = { token: mState.token, home: mHome };
+
+        // The lifecycle re-arm of a tool event registers each session — B's with every signal off.
+        for (const r of repos) {
+          const rearm = await runScript(mTool, 'lifecycle-hook.js', { hook_event_name: 'PostToolUse', session_id: r.sid, cwd: r.root }, { home: mHome, env: mEnv });
+          expect(rearm.code, rearm.stderr).toBe(0);
+          const st = await authedRequest(mState.port, '/artisyn/session-status', { sessionId: r.sid }, mAuth);
+          expect(st.json, `${r.sid} registered by the re-arm`).toMatchObject({ registered: true });
+        }
+        const otlp = await rawRequest(mState.port, '/v1/logs', logsBody([{ sessionId: 'mx-a', nano: '1735689600000031001' }, { sessionId: 'mx-b', nano: '1735689600000031002' }]));
+        expect(otlp.status, otlp.body).toBe(200);
+        expect(sessionLines(a.otelDir, 'mx-a').map((l) => l.signal)).toEqual(['logs']);
+        const chunksUnder = (dir: string): string[] => {
+          if (!fs.existsSync(dir)) return [];
+          return fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+            e.isDirectory() ? chunksUnder(path.join(dir, e.name)) : e.name.endsWith('.jsonl') ? [path.join(dir, e.name)] : []);
+        };
+        expect(chunksUnder(b.otelDir), 'otelEnabled:false stores no OTLP record').toEqual([]);
+
+        // Both SessionEnds hand off to the one uploader; each job uploads with its own repo's key.
+        for (const r of repos) {
+          const end = await runHook(mTool, { hook_event_name: 'SessionEnd', session_id: r.sid, cwd: r.root }, { home: mHome, env: mEnv });
+          expect(end.code, end.stderr).toBe(0);
+          expect(readHookLog(r.root, 'send-logs-hook.js').some((l) => l.includes(`queued: job=${r.sid}_`)), `${r.sid} handed off`).toBe(true);
+        }
+        const mQueue = path.join(mHome, '.artisyn', 'upload', 'queue');
+        await expect.poll(() => (fs.existsSync(mQueue) ? fs.readdirSync(mQueue).filter((n) => n.endsWith('.json') || n.endsWith('.claim')) : []), { timeout: 30_000 }).toEqual([]);
+        const uploads = mixHub.uploads();
+        expect(uploads).toEqual(expect.arrayContaining(['artisyn/mx-a', 'claude/mx-a', 'artisyn/mx-b', 'claude/mx-b']));
+        for (const req of mixHub.requests) {
+          const repo = repos.find((r) => r.sid === req.sessionId);
+          if (repo) expect(req.headers['x-api-key'], `${req.type}/${req.sessionId}`).toBe(repo.apiKey);
+        }
+        expect(chunksUnder(b.otelDir)).toEqual([]);
+        await stopReceiver(receiver);
+      } finally {
+        killUploaderOf(mHome);
+        await mixHub.close();
+      }
+    });
+
+    await test.step('32. two repos whose hook copies differ (3.0.0 and a copy set to 3.0.1) each queue a stop job: each uploaded hook-status carries the hookVersion of its own repo’s copy and a nodeVersion', async () => {
+      const verHub = await startFakeLogHub();
+      const vHome = makeFakeHome(dirs);
+      try {
+        const vState = await writeSharedState(vHome);
+        const baseVersion: string = JSON.parse(fs.readFileSync(path.join(HOOK_SOURCE_DIR, 'version.json'), 'utf8')).version;
+        const copies = [
+          { sid: 'vv-1', version: baseVersion, plugin: 'log-hub-hooks' },
+          { sid: 'vv-2', version: '3.0.1', plugin: 'log-hub-hooks-next' },
+        ].map((c) => {
+          const tool = copyToolDirTo(path.join(vHome, '.claude', 'plugins', c.plugin, 'scripts'));
+          fs.writeFileSync(path.join(tool, 'version.json'), JSON.stringify({ version: c.version }, null, 2));
+          const root = makeFakeGitRepo(dirs, { remote: `git@git.arrakis.test:scn/hook07/${c.sid}.git` });
+          writeConfig(root, { base: { ...QUIET_HOOK_CONFIG, serverUrl: verHub.url, sendLogsTimeoutMs: 10_000 }, local: { apiKey: `k-hook07-${c.sid}` } });
+          fs.writeFileSync(path.join(telemetryDir(root), `${c.sid}.jsonl`), `{"event":"prompt_start","session_id":"${c.sid}"}\n`);
+          fs.writeFileSync(path.join(claudeProjectDir(vHome, root), `${c.sid}.jsonl`), `{"type":"user","sessionId":"${c.sid}"}\n`);
+          return { ...c, tool, root };
+        });
+        // One receiver (from the first copy) runs both jobs, each with the uploader that queued it.
+        // `stop` jobs: their full scan is the run that carries hook-status (a session-end job only
+        // flushes the session's files).
+        const receiver = await startSharedReceiver(copies[0].tool, { home: vHome, stateDir: vState.stateDir, port: vState.port });
+        receivers.push(receiver);
+        for (const c of copies) {
+          const stop = await runHook(c.tool, { hook_event_name: 'Stop', session_id: c.sid, cwd: c.root }, { home: vHome });
+          expect(stop.code, stop.stderr).toBe(0);
+          expect(readHookLog(c.root, 'send-logs-hook.js').some((l) => l.includes(`queued: job=${c.sid}_`)), `${c.sid} handed off`).toBe(true);
+        }
+        const vQueue = path.join(vHome, '.artisyn', 'upload', 'queue');
+        await expect.poll(() => (fs.existsSync(vQueue) ? fs.readdirSync(vQueue).filter((n) => n.endsWith('.json') || n.endsWith('.claim')) : []), { timeout: 30_000 }).toEqual([]);
+        for (const c of copies) {
+          const artisyn = verHub.requests.filter((r) => r.type === 'artisyn' && r.sessionId === c.sid);
+          expect(artisyn.length, `artisyn/${c.sid} uploaded`).toBeGreaterThan(0);
+          const body = (artisyn[0].headers['content-encoding'] === 'gzip' ? zlib.gunzipSync(artisyn[0].body) : artisyn[0].body).toString('utf8');
+          const statuses = body.split('\n').filter(Boolean).map((l) => JSON.parse(l) as Record<string, unknown>).filter((e) => e.type === 'hook-status');
+          expect(statuses, `${c.sid}: one hook-status`).toHaveLength(1);
+          expect(statuses[0]).toMatchObject({ hookVersion: c.version, nodeVersion: expect.stringMatching(/^\d+\.\d+\.\d+/) });
+          expect(statuses[0]).toMatchObject({ uploadQueue: expect.objectContaining({ mode: 'job' }) });
+        }
+        await stopReceiver(receiver);
+      } finally {
+        killUploaderOf(vHome);
+        await verHub.close();
+      }
+    });
+
+    await test.step('33. after reboot: a stale uploader.lock, heartbeat.json and claim of a dead pid; failed/ holds a max-attempts job of repo X and an upload-rejected job of repo Z, the queue a job of repo Y. The receiver takes the role, runs Y (done), then re-queues X as one stop job that uploads; X’s failed/ record is gone, Z’s stays', async () => {
+      const rqHub = await startFakeLogHub();
+      let rqHome: string | undefined;
+      try {
+        // Repo Y: its session-end job is queued (queueSetup fakes a fresh heartbeat for the hand-off).
+        const q = await queueSetup(rqHub.url, 'rq-y', 'k-hook07-rq-y');
+        rqHome = q.qHome;
+        const uploadState = path.join(q.qHome, '.artisyn', 'upload');
+        const heartbeatFile = path.join(uploadState, 'heartbeat.json');
+        // Repos X and Z of the same user: each hands a session-end job off, which is then turned
+        // into its failed/ record — X ran out of attempts (no connection), Z was refused with a 4xx.
+        const failedOf = async (sid: string, reason: string, extra: Record<string, unknown>) => {
+          const root = makeFakeGitRepo(dirs, { remote: `git@git.arrakis.test:scn/hook07/${sid}.git` });
+          writeConfig(root, { base: { ...QUIET_HOOK_CONFIG, serverUrl: rqHub.url, sendLogsTimeoutMs: 10_000 }, local: { apiKey: `k-hook07-${sid}` } });
+          fs.writeFileSync(path.join(telemetryDir(root), `${sid}.jsonl`), `{"event":"prompt_start","session_id":"${sid}"}\n`);
+          fs.writeFileSync(path.join(claudeProjectDir(q.qHome, root), `${sid}.jsonl`), `{"type":"user","sessionId":"${sid}"}\n`);
+          fs.writeFileSync(heartbeatFile, JSON.stringify({ schema: 1, pid: process.pid, capabilities: ['upload-queue-v1'], uploadContract: 1, ts: Date.now() }));
+          const end = await runHook(q.qTool, { hook_event_name: 'SessionEnd', session_id: sid, cwd: root }, { home: q.qHome });
+          expect(end.code, end.stderr).toBe(0);
+          fs.rmSync(heartbeatFile);
+          const name = q.queued().find((n) => n.startsWith(`${sid}_`));
+          if (!name) throw new Error(`no queued job of ${sid}: ${JSON.stringify(q.queued())}`);
+          const job: unknown = JSON.parse(fs.readFileSync(path.join(q.queueDir, name), 'utf8'));
+          if (!isRecord(job)) throw new Error(`${name} is not an object`);
+          fs.mkdirSync(q.failedDir, { recursive: true });
+          fs.writeFileSync(path.join(q.failedDir, name), JSON.stringify({ ...job, ...extra, failedAt: new Date().toISOString(), failedReason: reason }, null, 2));
+          fs.rmSync(path.join(q.queueDir, name));
+          return { sid, root, name };
+        };
+        const x = await failedOf('rq-x', 'max-attempts', { attempts: 10, lastError: 'retryable: server unreachable' });
+        const z = await failedOf('rq-z', 'upload-rejected', { attempts: 1, lastError: 'permanent: HTTP 400' });
+        expect(q.queued()).toEqual([q.job]);
+
+        // The state a power-off leaves: lock, heartbeat and Y's claim all name a pid that is gone.
+        const deadPid = spawnSync(process.execPath, ['-e', '']).pid;
+        const deadAt = new Date(Date.now() - 600_000).toISOString();
+        fs.writeFileSync(path.join(uploadState, 'uploader.lock'), JSON.stringify({ pid: deadPid, startedAt: deadAt, version: '3.0.0' }));
+        fs.writeFileSync(heartbeatFile, JSON.stringify({ schema: 1, pid: deadPid, capabilities: ['upload-queue-v1'], uploadContract: 1, listening: true, startedAt: deadAt, ts: Date.now() - 600_000 }));
+        fs.writeFileSync(path.join(q.queueDir, `${q.job}.claim`), JSON.stringify({ pid: deadPid, startedAt: deadAt }));
+
+        const receiver = await startSharedReceiver(q.qTool, { home: q.qHome, stateDir: q.qState.stateDir, port: q.qState.port });
+        receivers.push(receiver);
+
+        // Y runs first (drain), then X comes back from failed/ as one stop job and uploads too.
+        await expect.poll(() => rqHub.uploads(), { timeout: 40_000 }).toEqual(expect.arrayContaining(['artisyn/rq-y', 'claude/rq-y', 'artisyn/rq-x', 'claude/rq-x']));
+        await expect.poll(q.queued, { timeout: 30_000 }).toEqual([]);
+        const lock: unknown = JSON.parse(fs.readFileSync(path.join(uploadState, 'uploader.lock'), 'utf8'));
+        expect(lock, 'the stale uploader lock was retaken').toMatchObject({ pid: receiver.child.pid });
+        expect(fs.existsSync(path.join(q.failedDir, x.name)), 'X’s failed/ record is gone').toBe(false);
+        expect(fs.existsSync(path.join(q.failedDir, z.name)), 'Z’s upload-rejected record stays').toBe(true);
+        expect(rqHub.uploads().some((u) => u.endsWith('/rq-z')), 'Z is never retried').toBe(false);
+        for (const req of rqHub.requests) {
+          if (req.sessionId === 'rq-x') expect(req.headers['x-api-key'], `${req.type}/rq-x`).toBe('k-hook07-rq-x');
+        }
+
+        const log = q.receiverLog().split('\n');
+        const yDone = log.findIndex((l) => l.includes(` job-done job=${q.job} exit=0`));
+        const requeued = log.findIndex((l) => l.includes(' job-requeued '));
+        expect(yDone, log.join('\n')).toBeGreaterThan(-1);
+        expect(requeued, 'X is re-queued after Y is done').toBeGreaterThan(yDone);
+        const requeuedLine = log[requeued];
+        const m = /job-requeued (rq-x_\d{8}T\d{9}Z_stop_\d+-[0-9a-f]{4}\.json) from 1 failed \(max-attempts\) requeueCount=1/.exec(requeuedLine);
+        expect(m, requeuedLine).not.toBeNull();
+        const newJob = m ? m[1] : '';
+        expect(log.filter((l) => l.includes(' job-requeued ')), 'one re-queued job, none for Z').toHaveLength(1);
+        // The uploader deletes the job before it exits, so the receiver's job-done line may trail the empty queue.
+        await expect.poll(() => q.receiverLog().includes(` job-done job=${newJob} exit=0`), { timeout: 10_000, message: 'the re-queued stop job finished done' }).toBe(true);
+        expect(readHookLog(x.root, 'send-logs-hook.js').some((l) => l.includes(`run-job done: ${newJob}`))).toBe(true);
+        await stopReceiver(receiver);
+      } finally {
+        killUploaderOf(rqHome);
+        await rqHub.close();
       }
     });
   } finally {

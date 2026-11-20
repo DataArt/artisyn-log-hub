@@ -5,6 +5,8 @@
 } from '../models/auth';
 import type {
   AdminAuthConfig,
+  CreateAdminUserRequest,
+  CreateAdminUserResponse,
   LogHubReleaseState,
   PendingRegistration,
 } from '../models/admin';
@@ -2728,6 +2730,30 @@ export async function resendPendingRegistration(
     `/api/v1/admin/auth/pending-registrations/${id}/resend`,
     { method: 'POST' },
   );
+  if (!res.ok) throw await readApiError(res);
+  return res.json() as Promise<{ email_delivery: 'sent' | 'failed' }>;
+}
+
+/** Strict-managed only: create a password-less account and email it a set-password link. */
+export async function createAdminUser(
+  req: CreateAdminUserRequest,
+): Promise<CreateAdminUserResponse> {
+  const res = await apiFetch('/api/v1/admin/users', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(req),
+  });
+  if (!res.ok) throw await readApiError(res);
+  return res.json() as Promise<CreateAdminUserResponse>;
+}
+
+/** Strict-managed only: email a fresh set-password link to a password-less account. */
+export async function sendPasswordLink(
+  userId: number,
+): Promise<{ email_delivery: 'sent' | 'failed' }> {
+  const res = await apiFetch(`/api/v1/admin/users/${userId}/password-link`, {
+    method: 'POST',
+  });
   if (!res.ok) throw await readApiError(res);
   return res.json() as Promise<{ email_delivery: 'sent' | 'failed' }>;
 }

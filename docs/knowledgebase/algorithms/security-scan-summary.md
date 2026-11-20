@@ -1,4 +1,9 @@
 ---
+type: "Algorithm"
+title: "Security scan summary: row validation, PR block, results file and badge"
+description: "Turns the scan rows of the CI security scans into what people see: the security block in a pull request description (FR-23), the `security-scan-results.json` file and the README badge on the `ci-reports` branch (FR-24)."
+tags: [algorithm]
+generated: { by: "human:denistsyplakov", at: "2026-11-03T17:31:26+04:00" }
 reviewed: no
 reviewer: none
 ---

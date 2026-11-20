@@ -14,6 +14,7 @@ import {
   verifyMigrationFilesAgainstLock,
 } from './migration-lock-check';
 import { backfillSessionListFlags } from './backfill-session-list-flags';
+import { bootstrapStrictManagedAdmin } from './bootstrap-strict-managed-admin';
 import { validateMigrationFiles } from './migration-validator';
 import { resolveSessionSecret } from './server-secrets';
 import { resolveSearchPathOption } from './test-schema';
@@ -32,6 +33,13 @@ export interface DatabaseInitOptions {
   reset?: boolean;
   /** Defaults to a fresh `AppLogger`; pass the app's own so output interleaves. */
   logger?: LoggerService;
+  /**
+   * Create (or promote) the strict-managed first admin and email its
+   * set-password link (step 5). Only the server start (`main.ts`) sets it;
+   * `npm run migrate` and the contract setup never send email. No-op unless
+   * AUTH_MODE=strict-managed. Defaults to false.
+   */
+  bootstrapAdmin?: boolean;
 }
 
 /**
@@ -187,6 +195,17 @@ export async function initializeDatabase(
       //    server_secrets. See src/database/server-secrets.ts.
       const secretSource = await resolveSessionSecret(drizzle(client));
       logger.log(`SESSION_SECRET source: ${secretSource}`, CONTEXT);
+
+      // 5. Strict-managed first admin (create + email, or promote), still under
+      //    the lock so only one cluster worker creates it and sends the email.
+      //    A failed send rolls the insert back and throws, which aborts
+      //    startup. See src/database/bootstrap-strict-managed-admin.ts.
+      if (
+        options.bootstrapAdmin === true &&
+        process.env.AUTH_MODE === 'strict-managed'
+      ) {
+        await bootstrapStrictManagedAdmin(client, logger);
+      }
     } finally {
       try {
         await client.query('SELECT pg_advisory_unlock($1)', [
@@ -212,7 +231,7 @@ export async function initializeDatabase(
     );
     throw err;
   } finally {
-    // 5. Always hand the connections back — the app builds its own pool.
+    // 6. Always hand the connections back — the app builds its own pool.
     await pool.end();
   }
 }

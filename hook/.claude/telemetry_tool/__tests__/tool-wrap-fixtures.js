@@ -8,7 +8,7 @@
  *   - `scripts/tool-wrap-check/create-check-project.mjs` writes them into
  *     `<repo>/../loghub-tool-wrap-check/bin/`.
  *
- * Every script is plain Bash with LF line endings (`zzc.cmd` is a Windows batch file with CRLF).
+ * Every script is plain Bash with LF line endings (`zzc.cmd` and `zze.cmd` are Windows batch files with CRLF).
  * Not a test file (no `.test.js` suffix), so `hook/scripts/run-tests.js` does not run it.
  */
 
@@ -76,6 +76,28 @@ const FIXTURE_TOOLS = {
       'sleep "${1:-30}"',
       '',
     ].join('\n'),
+  },
+  zze: {
+    executable: true,
+    content: [
+      '#!/usr/bin/env bash',
+      HEADER,
+      '# zze: one stdout line, then an empty stderr line and one more stderr line; exit 0.',
+      'printf \'zze out\\n\'; printf \'\\nzze: after empty\\n\' >&2; exit 0',
+      '',
+    ].join('\n'),
+  },
+  'zze.cmd': {
+    executable: false,
+    windowsOnly: true,
+    content: [
+      '@echo off',
+      'echo zze out',
+      '>&2 echo(',
+      '>&2 echo zze: after empty',
+      'exit /b 0',
+      '',
+    ].join('\r\n'),
   },
   'zzc.cmd': {
     executable: false,

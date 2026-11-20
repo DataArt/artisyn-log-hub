@@ -69,7 +69,7 @@ const TEAM_TOOLS_SQL = `
 
 /** R1's `tool_wrap_status` as the config GET shows it (no `shells`, no per-tool map). */
 const R1_WRAP_STATUS = {
-  hookVersion: '2.21.0',
+  hookVersion: '2.32.2',
   os: 'win32',
   preflight: { ok: true, reason: null },
   breaker: { global: false, tools: [] },

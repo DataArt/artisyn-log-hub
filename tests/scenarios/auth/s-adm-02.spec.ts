@@ -26,6 +26,7 @@ import { test, expect, loginPastBackoff } from '../fixtures';
 import { SCENARIO_EMAIL_DOMAIN } from '../modes';
 import { createApiKey } from '../helpers/api-key';
 import { postSessionLog } from '../helpers/prompt-session';
+import { hashResetToken } from '../helpers/reset-tokens';
 
 const NEW_PASSWORD = 'Reset!Passw0rd#2468';
 
@@ -119,7 +120,8 @@ test('@S-ADM-02 admin manages users: role, reset link, e-mail change, deletion @
       'SELECT token FROM password_reset_tokens WHERE user_id = $1 ORDER BY id DESC LIMIT 1',
       [u2.id],
     );
-    expect(rows[0].token).toBe(token);
+    // The DB keeps only the token's sha256.
+    expect(rows[0].token).toBe(hashResetToken(token));
     await dialog.getByRole('button', { name: 'Close', exact: true }).first().click();
     await expect(dialog).toHaveCount(0);
     return token;

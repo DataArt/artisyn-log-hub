@@ -1,3 +1,11 @@
+---
+type: "Research"
+title: "Raw report 1 — Personas and use cases (agent on Fable)"
+description: "Raw report 1: the Log Hub personas and their use cases, mapped onto the existing pages, tabs and reports."
+tags: [ux-research, product]
+generated: { by: "human:denistsyplakov", at: "2026-11-06T15:26:59+04:00" }
+---
+
 # Raw report 1 — Personas and use cases (agent on Fable)
 
 Basis: `tab-ids.ts`, `report-catalog.ts`, `analytics-state.ts`, routes. Read-only study, 2026-11-01.

@@ -1,4 +1,9 @@
 ---
+type: "Algorithm"
+title: "Password policy: which passwords are accepted"
+description: "Decides whether a new password is strong enough under the install's `PASSWORD_POLICY`. It runs on sign-up, password change and password reset; a rejected password gets `400 weak_password` and the user must choose another one. Existing password hashes are never re-checked."
+tags: [algorithm]
+generated: { by: "human:denistsyplakov", at: "2026-11-14T14:41:14+04:00" }
 reviewed: 2026-10-15
 reviewer: ai
 ---
@@ -14,7 +19,10 @@ user must choose another one. Existing password hashes are never re-checked.
 ## Code
 
 - Implementation: `server/src/auth/utils/password-policy.ts` (`applyPasswordPolicy`).
-- Twins: none. The client only shows the policy text; the server decides.
+- Twins: Work Hub's Rust port `work-hub/server/src/auth/password_policy.rs`
+  (`apply_password_policy`; the policy is passed in rather than read from the environment). It
+  runs every row in `work-hub/server/tests/algo.rs` (`cargo test --test algo`, i.e.
+  `npm run test:algo` from `work-hub/`). The client only shows the policy text; the server decides.
 - Test: `server/src/auth/utils/password-policy.algo.spec.ts`.
 
 ## Rules

@@ -1,4 +1,9 @@
 ---
+type: "Algorithm"
+title: "User-docs link resolution"
+description: "The user documentation is one page set (`user-docs/` plus two hook files, listed in `user-docs/nav.json`) shown in two places: the in-app help and the GitHub Pages site. Links between pages are written as real relative file paths so they also work when the files are read on GitHub."
+tags: [algorithm]
+generated: { by: "human:denistsyplakov", at: "2026-11-03T17:31:26+04:00" }
 reviewed: no
 reviewer: none
 ---

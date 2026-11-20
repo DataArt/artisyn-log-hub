@@ -1,3 +1,9 @@
+---
+type: "Task"
+title: "Codex Hook Parity"
+description: "Add Codex equivalents for the Claude telemetry, guardrail, and upload hooks using `.codex/hooks.json` and provider-aware telemetry."
+---
+
 # T-32: Codex Hook Parity
 
 **Status:** todo

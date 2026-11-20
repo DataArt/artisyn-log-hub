@@ -1,0 +1,139 @@
+.uncommittedList {
+  max-height: 12rem;
+  overflow: auto;
+  border-radius: var(--radius-md);
+  border-width: 1px;
+  background: color-mix(in oklab, var(--color-muted) 40%, transparent);
+  padding: 0.5rem 0.75rem;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.option {
+  height: auto;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.125rem;
+  padding: 0.625rem 1rem;
+  text-align: left;
+  white-space: normal;
+}
+
+.optionDescription {
+  font-size: 0.75rem;
+  line-height: 1rem;
+  font-weight: 400;
+  color: var(--color-muted-foreground);
+}
+
+.optionDescriptionPrimary {
+  font-size: 0.75rem;
+  line-height: 1rem;
+  font-weight: 400;
+  color: color-mix(in oklab, var(--color-primary-foreground) 80%, transparent);
+}
+
+.spinnerRow {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding-top: 1.5rem;
+  padding-bottom: 1.5rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: var(--color-muted-foreground);
+}
+
+.spinnerIcon {
+  width: 1.25rem;
+  height: 1.25rem;
+  animation: spin 1s linear infinite;
+  color: var(--color-primary);
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.text {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+.mutedText {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: var(--color-muted-foreground);
+}
+
+.errorText {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: var(--color-destructive);
+}
+
+.options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.optionsFooter {
+  align-items: center;
+}
+
+@media (min-width: 40rem) {
+  .optionsFooter {
+    justify-content: space-between;
+  }
+}
+
+.discardButton {
+  color: var(--color-destructive);
+}
+
+.discardButton:hover {
+  background: var(--color-danger-bg);
+  color: var(--color-destructive);
+}
+
+/* amber-300 / amber-50 / amber-900 alert, mapped to the warning tints. */
+.conflict {
+  display: flex;
+  gap: 0.5rem;
+  border-radius: var(--radius-md);
+  border-width: 1px;
+  border-color: var(--color-warning-border);
+  background: var(--color-warning-bg);
+  padding: 0.5rem 0.75rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: var(--color-warning-text);
+}
+
+.conflictIcon {
+  margin-top: 0.125rem;
+  width: 1rem;
+  height: 1rem;
+  flex-shrink: 0;
+}
+
+.unsavedNotice {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 0.75rem;
+  padding: 0.75rem;
+  border: 1px solid var(--color-warning-border);
+  border-radius: var(--radius-md);
+  background: var(--color-warning-bg);
+}

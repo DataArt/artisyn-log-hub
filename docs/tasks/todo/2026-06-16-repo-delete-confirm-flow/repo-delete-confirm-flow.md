@@ -1,3 +1,9 @@
+---
+type: "Task"
+title: "Delete Repo — Personal Cleanup & Team Confirmation Dialogs"
+description: "Personal view: delete repo + user's logs (purge completely if no other users reference the URL); Teams view: confirmation modals for both add and remove repo actions."
+---
+
 # T-16: Delete Repo — Personal Cleanup & Team Confirmation Dialogs
 
 **Status:** todo

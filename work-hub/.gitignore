@@ -1,0 +1,6 @@
+target/
+node_modules/
+web/dist/
+data/
+.env
+test-results/

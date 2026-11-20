@@ -7,7 +7,7 @@ tags:
   - server
   - analytics
   - llm
-timestamp: "2026-11-11T00:00:00+04:00"
+generated: { by: "human:denistsyplakov", at: "2026-11-11T00:00:00+04:00" }
 ---
 
 # Turn-End Cost Advisor and Session Attributes
@@ -88,13 +88,18 @@ The advisor has **no cost gate**. While it is enabled, every turn of every sessi
   (the Executive Summary has its own "advisor spend" tile — see
   [executive-summary-report.md](executive-summary-report.md)).
 
-The hook uploads the current session's transcripts before its backlog so the server usually knows
-the turn that just ended — see [upload-queue.md](upload-queue.md) § "Upload priority".
+The hook uploads the current session's transcripts before its backlog so the server often knows
+the turn that just ended — see [upload-queue.md](upload-queue.md) § "Upload priority". This is a
+best effort, not an ordering guarantee: see the next section.
 
 ## Sessions not yet ingested
 
-A short or single-turn session may reach the worker before its upload has been ingested. Such a
-turn is still analysed:
+There is no upload-before-analysis ordering. `send-logs-hook.js` and `post-turn-analysis-hook.js`
+are two `Stop` entries that Claude Code runs in parallel, so the worker always races the upload;
+and since hook `3.0.0` a `Stop` with a running shared receiver only writes an upload job
+([upload-job-queue.md](upload-job-queue.md)), so the turn's transcript reaches the server later,
+from the receiver. The worker therefore never waits for the upload, and any session — not only a
+short one — may reach it before it has been ingested. Such a turn is still analysed:
 
 - For an unknown session (or one owned by another user) the server answers `aggregate: null`. The
   worker builds a placeholder aggregate and falls through to local derivation.

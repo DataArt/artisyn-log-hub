@@ -1,3 +1,11 @@
+---
+type: "Research"
+title: "2. Grouped session tab bar with overflow"
+description: "Wave 1 idea 2: group the 14 session tabs (Overview / Transcript / Effects) with overflow handling."
+tags: [ux-research, product]
+generated: { by: "human:denistsyplakov", at: "2026-11-06T15:26:59+04:00" }
+---
+
 # 2. Grouped session tab bar with overflow
 
 Wave 1 · Effort S–M · Impact high · Proposed by 4 of 5 agents

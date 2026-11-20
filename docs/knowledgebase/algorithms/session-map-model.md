@@ -1,4 +1,9 @@
 ---
+type: "Algorithm"
+title: "Session Map model: families, per-call cost, grouping, time position"
+description: "The Session Map tab draws a session tree as cards (the main session, one column per workflow run, one column for agents the main session spawned directly) over a timeline the user can scrub or replay."
+tags: [algorithm]
+generated: { by: "human:denistsyplakov", at: "2026-11-04T13:54:49+04:00" }
 reviewed: no
 reviewer: none
 ---

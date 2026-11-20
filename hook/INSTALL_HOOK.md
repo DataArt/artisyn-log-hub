@@ -14,6 +14,13 @@ editing.
   so use 22, 24 or 26 at no less than **22.23.5 / 24.22.3 / 26.13.1** (the November 2026 security
   releases, which fix high-severity HTTP/2 and TLS CVEs). The hook still starts on older
   Node.js (technical floor `18.19`), so an old install keeps working, but it runs on an unpatched runtime.
+  **Node.js warning (since hook `3.0.0`):** when the `node` the hooks run with is end-of-life or misses those
+  security fixes, Claude Code shows at session start, at most once a day per Node.js version (state in
+  `~/.artisyn/node-check.json`): `Log Hub: Node.js <v> is end-of-life — upgrade to Node.js 22.23.5, 24.22.3 or
+  26.13.1 or newer. Log Hub hooks keep working.` (or `… misses the November 2026 security fixes …`). The installer
+  prints the same line. It never blocks anything; to clear it, install a patched Node.js LTS from nodejs.org (or with
+  your version manager), make sure it is the `node` on `PATH`, and restart Claude Code. A Node.js line newer than the
+  hook knows gets no warning.
 - Git; the project must be a git repository.
 - Claude Code with plugin support.
 
@@ -263,6 +270,8 @@ The installer extracts this tree, generated at build time from `hook/.claude/tel
         │   ├── lifecycle-hook.js
         │   ├── send-logs-hook.js
         │   ├── upload-logs.js
+        │   ├── upload-queue.js
+        │   ├── node-version-check.js
         │   ├── prompt-upload-hook.js
         │   ├── session-files.js
         │   ├── otel-receiver.js
@@ -338,7 +347,7 @@ As shipped in the tarball; the installer replaces `"name"` with this repo's `art
 {
   "name": "log-hub-hooks",
   "displayName": "Log Hub Hooks",
-  "version": "2.31.2",
+  "version": "3.0.0",
   "description": "Records Claude Code session telemetry and uploads it to artisyn-log-hub.",
   "author": { "name": "Artisyn" }
 }
@@ -414,7 +423,7 @@ guardrail was removed in `2.19.0`): `telemetry-hook.js` on `UserPromptSubmit`, `
 `throttle-state.js`, `claude-invoke-async.js`, `skill-catalog.js`, `harness-snapshot.js`, `harness-git-status.js`, `post-turn-analysis-worker.js`, `advisor-evidence.js`,
 `session-attribution-state.js`, `process-marker.js`, `harness-state.js`, `okf-snapshot.js`, `okf-state.js`, `ndjson-sanitize.js`, `code-inventory.js`,
 `edit-result-counts.js`, `claude-config-dir.js`, `project-root-override.js`, `tool-wrap-names.js`, `tool-wrap-config.js`,
-`tool-wrap-shims.js`, `tool-wrap-tee.js` and `tool-wrap-records.js` are **not** wired to any event — they are detached child processes / shared modules
+`tool-wrap-shims.js`, `tool-wrap-tee.js`, `tool-wrap-records.js`, `upload-queue.js` and `node-version-check.js` are **not** wired to any event — they are detached child processes / shared modules
 launched by the hooks above, so they never appear in `hooks.json`. The one exception is `otel-ensure-receiver.js`:
 after a `proxy` choice (see [An existing OTEL collector](#an-existing-otel-collector)) the installer wires its
 `~/.artisyn/otel/bin/` copy as a **user-level** `SessionStart` hook in `~/.claude/settings.json`, so the receiver
@@ -425,8 +434,8 @@ and always exits 0.
 
 | Event | Behaviour |
 |---|---|
-| `Stop` | The full run — scans every namespace across all sessions, honours `.claude-logs.sent`, injects context events, reports `hook-status`, prunes otel. Waits up to 2s for the shared upload lock, since it blocks the interactive turn. |
-| `SessionEnd` | A short, scoped flush of just the ending session's own `artisyn` + `claude` files (plus its `tool-calls` upload when the CLI tool wrapper recorded anything). Waits up to 20s for the lock — it is the session's last trigger, so giving up strands those files until some other session happens to run a full scan. Writes no `.claude-logs.sent` entry. |
+| `Stop` | The full run — scans every namespace across all sessions, honours `.claude-logs.sent`, injects context events, reports `hook-status`, prunes otel. Since hook `3.0.0`, when the background uploader is up (a fresh `~/.artisyn/upload/heartbeat.json`) the hook only writes a `stop` job to the upload queue and returns in about 0.2 s; the receiver runs the full run in the background. Otherwise it runs in process as before and waits up to 2s for the shared upload lock, since it blocks the interactive turn. |
+| `SessionEnd` | A short, scoped flush of just the ending session's own `artisyn` + `claude` files (plus its `tool-calls` upload when the CLI tool wrapper recorded anything). Since hook `3.0.0` it hands this flush to the background uploader as a `session-end` job when that is up. Otherwise it runs in process and waits at most 800 ms for the lock (20 s before `3.0.0`); on a busy lock it writes a job for the uploader instead of waiting, so the session's files are not stranded. Writes no `.claude-logs.sent` entry. |
 
 `tool-wrap-powershell.js` (hook `2.27.0`+) is the only `PreToolUse` entry, and only for the `PowerShell` tool. It is
 the PowerShell side of the CLI tool wrapper (Tools/MCP tab): the PowerShell tool does not read `$CLAUDE_ENV_FILE`, so
@@ -434,9 +443,14 @@ the Bash shims `lifecycle-hook.js` puts on `PATH` at `SessionStart` do not reach
 monitored tool as a command word, the hook answers with `hookSpecificOutput.updatedInput` — the same input with a
 one-line prefix that defines a PowerShell function per mentioned tool; the function runs the real tool, records the
 call under `.artisyn/ai_work_dir/tool-wrap/<session-id>/calls/` and re-emits its output and exit code unchanged
-(text-level). In every other case — no monitored tool mentioned, `LOGHUB_TOOL_WRAP=0`, `toolWrap: false`, monitoring
-paused in the UI, no cached config, a tripped breaker, or any error — it exits 0 with no output and the call runs
-untouched. It never returns a permission decision, so the normal permission flow applies to every call. The recorded
+(text-level). From hook `2.32.2` it wraps **only in `bypassPermissions` mode**: the command is rewritten only when the
+`PreToolUse` input has `permission_mode` exactly `bypassPermissions`. On Claude Code 2.1.311 / 2.1.326 any prefix
+statement turns an allow-rule PowerShell command into a prompt or a denial, so in every other permission mode — or
+when the field is missing (older Claude Code) — the command is left exactly as typed and that PowerShell call is not
+recorded; such a skip is noted in `hook.log` once per session per reason. In every other case — no monitored tool
+mentioned, `LOGHUB_TOOL_WRAP=0`, `toolWrap: false`, monitoring paused in the UI, no cached config, a tripped breaker, or
+any error — it exits 0 with no output and the call runs untouched. It never returns a permission decision, so the
+normal permission flow (including deny rules) applies to every call. The recorded
 calls are uploaded by `send-logs-hook.js` as log kind `tool-calls` (assembled by `tool-wrap-records.js`); a server
 older than this feature stores that upload as an inert log.
 
@@ -516,8 +530,8 @@ It is read from the hook process's environment (inherited from Claude Code), not
 | `context` | `[]` | array of `{key, value}` | Arbitrary metadata attached to every event, e.g. `[{"key":"project","value":"my-project"}]` → `"context": {"project": "my-project"}`. Keys are lowercased; last entry wins on duplicates; absent/empty → no `context` field emitted. |
 | `sendLogsTimeoutMs` | `10000` | number | HTTP timeout for log upload requests. |
 | `sendLogsOnPromptEnabled` | `true` | boolean | Gates whether each `UserPromptSubmit` also spawns a detached, prompt-triggered background upload of the current session's files (in addition to the normal `Stop`-triggered upload). |
-| `sendLogsOnPromptTimeoutMs` | `60000` | number | Watchdog timeout for the prompt-triggered background upload; also drives the shared upload lock's staleness window (`2x` this value) shared with the `Stop`-triggered upload. |
-| `otelEnabled` | `true` | boolean | Runtime switch for OTEL capture: gates the receiver spawn, the register handshake, and the `claude-otel` upload + prune pass. See the caveat under OTEL settings below. |
+| `sendLogsOnPromptTimeoutMs` | `60000` | number | Watchdog timeout for the prompt-triggered background upload; also drives the shared upload lock's staleness window (`2x` this value) shared with the `Stop`-triggered upload. A lock whose holder process has died on this machine is freed at once, without waiting for that window. |
+| `otelEnabled` | `true` | boolean | Runtime switch for OTEL capture: gates which OTEL signals the repo registers for and the `claude-otel` upload + prune pass. Since hook `3.0.0` the shared receiver is started regardless of it, because it is also the background log uploader (with `false` the repo's OTEL records are still dropped); only the per-project fallback receiver is still not spawned when `false`. See the caveat under OTEL settings below. |
 | `otelReceiverPort` | `0` | number | Loopback port of the OTEL receiver. Hook `2.30.0`+ reads the port from `~/.artisyn/otel/port.json` and uses this key only when that file is missing (the per-project fallback); older hooks always read it. The installer always overwrites it with the shared port, so re-install with `--otel-port` instead of editing it. `0` means "not yet allocated". |
 | `otelReceiverIdleTimeoutMs` | `600000` | number | No request of any kind for this long and the receiver exits (10 min). `0` means "use the default". Applies only to the per-project fallback receiver: the shared receiver always uses 10 min, because no single repo owns it. |
 | `otelReceiverMaxBodyKb` | `8192` | number | Request bodies larger than this are rejected (`413`) without writing anything. **KiB**, converted to bytes by the spawning hook. Measured on wire bytes, before decompression. `0` means "use the default". |
@@ -776,10 +790,12 @@ the Artisyn trace env keys (…).`); a trace key you set yourself is kept. The a
 
 ### Disabling OTEL
 
-`otelEnabled: false` is **runtime-only** — it stops the hook spawning the receiver, registering, uploading and
-pruning, but does not retract the `env` block, so Claude Code keeps exporting to a port nothing listens on. That is
-harmless (the port is a random high one, not `4317`/`4318`). The shared receiver is still started by other repos of
-the same user. To disable it fully, run `uninstall` in every repo: removing the last one also removes the user-scope
+`otelEnabled: false` is **runtime-only** — it stops the hook collecting OTEL for the repo (no signals registered, no
+`claude-otel` upload or prune), but does not retract the `env` block, so Claude Code keeps exporting. Since hook
+`3.0.0` the shared receiver still starts for such a repo, because it runs the repo's log uploads in the background
+(see [Background uploader](#background-uploader-upload-queue)); it drops that repo's OTEL records. Only the per-project
+fallback receiver (no `port.json`) is not spawned at all, and then Claude Code exports to a port nothing listens on —
+harmless (the port is a random high one, not `4317`/`4318`). To disable it fully, run `uninstall` in every repo: removing the last one also removes the user-scope
 keys. Deleting the nine `env` keys (twelve with traces) by hand works too — from both `~/.claude/settings.json` and
 `.claude/settings.local.json`.
 
@@ -854,6 +870,75 @@ Up to hook `2.29.0`, `install` and `upgrade` stopped the project's receiver befo
 the new plugin tree. Since hook `2.30.0` they stop nothing: the shared receiver keeps serving the other repos and
 already holds its code in memory, and an old per-project receiver is left to its idle exit. Only uninstalling the
 last repo stops the shared receiver.
+
+---
+
+## Background uploader (upload queue)
+
+Since hook `3.0.0` the shared receiver is also the **single log uploader of your OS user**. `Stop` and `SessionEnd`
+no longer make Claude Code wait for the upload ("Uploading logs…"): the hook writes a small job file and returns in
+about 0.2 s, and the receiver — a hidden background `node` process, one per OS user, started by the hooks — uploads
+it with **that repository's own** hook copy, server URL and API key. The job never contains the API key.
+
+```text
+ repo hooks (Stop / SessionEnd) ── job ──► ~/.artisyn/upload/queue/ ──► shared receiver (uploader)
+        │                                                                   │ node <repo hook> --run-job
+        └── no uploader up: upload in process, as before ──► <repo>/.upload.lock ◄┘ (one upload per repo)
+                                                                   │
+                                                                   ▼ that repo's server URL and API key
+                                                              Log Hub server
+```
+
+- **Started regardless of `otelEnabled`.** Every repo's `SessionStart` (and the re-arms on later events) starts the
+  shared receiver when none is running, so the uploader is there for repos with OTEL off too. It exits by itself
+  after 10 idle minutes, but never while a job is running or waiting for a retry.
+- **When it is not up** (first run after an install, a receiver older than `3.0.0` still holding the port, or no
+  `port.json`), the hook uploads in process exactly as before, and starts a `3.0.0` receiver for the next time (at
+  most once a minute). If an older receiver still holds the port, the new one runs the queue without listening for
+  OTEL ("queue-only") until the queue is empty.
+- **No connection:** an upload gives up after a 3 s connect timeout with one `aborted: server unreachable` line;
+  the job is retried later with backoff (30 s, 1, 2, 4, 8, then every 15 min, at most 10 tries within 24 h).
+- **Older hooks** in other repositories keep uploading in process; they never touch the queue. The per-repo upload
+  lock makes sure an old hook and a job never upload the same repository at once.
+
+Where things live (per OS user):
+
+| Path | What |
+|---|---|
+| `~/.artisyn/upload/queue/` | pending jobs (`<session>_<time>_<stop\|session-end>_<pid>-<rand>.json`); a `.claim` file next to a job means it is being uploaded right now |
+| `~/.artisyn/upload/failed/` | jobs that gave up (server rejected the upload, too many tries, too old, crashed 3 times). **No data is lost**: the files stay unsent, and the next successful upload of that repository sends them and empties this folder |
+| `~/.artisyn/upload/heartbeat.json` | written every 5 s by the receiver that holds the uploader role; a `ts` older than 15 s means no uploader is up |
+| `~/.artisyn/upload/uploader.lock` | which receiver process is the uploader |
+| `~/.artisyn/otel/receiver.log` | the receiver's log, including `uploader-role`, `job-start`, `job-done`, `job-retry`, `job-failed`, `job-requeued`, `queue-only` |
+| `~/.artisyn/node-check.json` | when the Node.js warning was last shown |
+
+### Troubleshooting
+
+- **Are uploads stalled?** Look at `~/.artisyn/upload/queue/`: a job that stays there shows its `attempts`,
+  `nextAttemptAt` and `lastError`. Check `heartbeat.json`: a `ts` from the last few seconds means the uploader is
+  up (`"listening": false` = queue-only). No heartbeat: start a Claude Code session in any repository, or wait —
+  the next `Stop` uploads in process and starts it.
+- **Something in `failed/`?** The repository's `.artisyn/ai_work_dir/hook.log` has a `job failed: <name>
+  reason=<…>` line, and the Hook State page shows the "upload jobs failed" recommendation. Fix the cause (API key,
+  server URL, server error); the next successful `Stop` upload re-sends the data and clears the folder. Jobs that
+  only ran out of time, tries or uploader runs (`failedReason` `over-age`, `max-attempts`, `uploader-crash`)
+  retry automatically once the server is reachable: the uploader puts them back in the queue after its next
+  successful upload and every 30 minutes (`job-requeued` in `receiver.log`).
+- **Which path did a run take?** `hook.log` lines: `queued: job=… elapsedMs=…` (handed off), `queued (fallback): lock
+  busy`, `run-job start` / `run-job done|retryable|permanent|busy|dropped` (the background run), `stuck jobs taken
+  over: <n>` (an in-process `Stop` uploaded jobs no uploader ran for 5 min), `aborted: server unreachable`.
+- **Claude Code itself:** run `/status` in Claude Code. Since Claude Code `2.1.327` it lists broken agent, skill,
+  command and output-style files and hook matchers that never match — a quick check that the plugin's hooks are
+  loaded at all.
+- **Node.js warning at session start:** see the Node.js requirement at the top. It is advice only; the hooks keep
+  working.
+
+### Release checklist (maintainers)
+
+- On each Node.js security release: update `NODE_PATCHED_MINIMUMS` (and `NODE_ADVISORY`) in
+  `hook/.claude/telemetry_tool/node-version-check.js` and the twin `artisyn-hooks-installer/src/node-version.ts`,
+  their rows in `docs/algorithm-examples/node-version-check.json`, and the Node.js versions named in this file and in
+  `README.md`.
 
 ---
 

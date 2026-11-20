@@ -1,4 +1,9 @@
 ---
+type: "Algorithm"
+title: "All views map filter match"
+description: "The \"All views\" map lists every screen, tab, Analytics view, report, setting and help article of Log Hub as one tree."
+tags: [algorithm]
+generated: { by: "human:denistsyplakov", at: "2026-11-03T17:31:26+04:00" }
 reviewed: no
 reviewer: none
 ---

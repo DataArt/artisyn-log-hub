@@ -50,6 +50,17 @@
 // port by a stale config, its unauthenticated register and shutdown get 401, the shared receiver
 // stays up, and its own receiver launched there exits 0 on EADDRINUSE.
 //
+// Steps 16–17 (2026-11-18 receiver upload queue, hook 3.0.0): 2.32.3 — the last hook before the
+// upload job queue — on the same repo and the same user as a 3.0.0 hook:
+//   - 16: the frozen 2.32.3 `Stop`, the 3.0.0 `prompt-upload-hook.js` and a 3.0.0 `--run-job`
+//     started together share the per-repo `.upload.lock`: a recording proxy that holds each log
+//     upload 500 ms never sees two in flight, the losers skip (or exit 12, busy), and a retry gets
+//     every session onto the server;
+//   - 17: the frozen 2.32.3 `otel-receiver.js` holds the shared port and writes no heartbeat. A
+//     3.0.0 `Stop` therefore uploads in-process and spawns its own 3.0.0 receiver, which takes the
+//     uploader role queue-only (port busy); the next `Stop` hands off a job and that receiver runs
+//     it. The detached 3.0.0 receiver is killed through its `uploader.lock` pid at the end.
+//
 // Replaces:
 //   - server/test/upload-queue.e2e-spec.ts — «v1 unmodified» (1)
 //   - server/test/logs.e2e-spec.ts — empty-response checks (2)
@@ -63,6 +74,7 @@ import {
   authedRequest,
   claudeProjectDir,
   copyToolDir,
+  copyToolDirTo,
   freeLoopbackPort,
   isRecord,
   makeFakeGitRepo,
@@ -71,6 +83,7 @@ import {
   readHookLog,
   REPO_ROOT,
   runNodeScript,
+  runPromptUpload,
   runScript,
   runToken,
   sharedHello,
@@ -159,6 +172,10 @@ interface StandProxy {
   calls: ProxiedCall[];
   /** When set, a chunk with this `chunkIndex` is answered 500 without reaching the stand. */
   failChunk: string | null;
+  /** Each log upload (`…/logs`) is held this long before it is forwarded (default 0). */
+  delayMs: number;
+  /** The most log uploads that were in flight at the same time (step 16: the upload lock). */
+  maxInFlight: number;
   close(): Promise<void>;
 }
 
@@ -166,11 +183,19 @@ interface StandProxy {
 async function startStandProxy(standUrl: string): Promise<StandProxy> {
   const target = new URL(standUrl);
   const calls: ProxiedCall[] = [];
-  const proxy: StandProxy = { url: '', calls, failChunk: null, close: async () => undefined };
+  const proxy: StandProxy = { url: '', calls, failChunk: null, delayMs: 0, maxInFlight: 0, close: async () => undefined };
+  let inFlight = 0;
   const server = http.createServer((req, res) => {
     const chunks: Buffer[] = [];
-    req.on('data', (c: Buffer) => chunks.push(c));
-    req.on('end', () => {
+    const isUpload = new URL(req.url ?? '/', 'http://127.0.0.1').pathname.endsWith('/logs');
+    if (isUpload) {
+      inFlight += 1;
+      proxy.maxInFlight = Math.max(proxy.maxInFlight, inFlight);
+      res.on('close', () => {
+        inFlight -= 1;
+      });
+    }
+    const forward = () => {
       const query = new URL(req.url ?? '/', 'http://127.0.0.1').searchParams;
       if (proxy.failChunk !== null && query.get('chunkIndex') === proxy.failChunk) {
         calls.push({ query, status: 500, contentType: 'application/json', body: '{"message":"injected"}' });
@@ -198,6 +223,11 @@ async function startStandProxy(standUrl: string): Promise<StandProxy> {
         res.end();
       });
       upstream.end(body);
+    };
+    req.on('data', (c: Buffer) => chunks.push(c));
+    req.on('end', () => {
+      if (isUpload && proxy.delayMs > 0) setTimeout(forward, proxy.delayMs);
+      else forward();
     });
   });
   await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', () => resolve()));
@@ -212,13 +242,62 @@ function expectRunOk(run: HookRun, what: string): void {
   expect(run.code, `${what}: ${run.stderr}`).toBe(0);
 }
 
+/** `<home>/.artisyn/upload` — the per-user upload queue state of hook 3.0.0 (DD-2). */
+function uploadStateDir(home: string): string {
+  return path.join(home, '.artisyn', 'upload');
+}
+
+/** Job files (no claims, no temp files) in `<home>/.artisyn/upload/queue/`. */
+function queuedJobs(home: string): string[] {
+  const dir = path.join(uploadStateDir(home), 'queue');
+  return fs.existsSync(dir) ? fs.readdirSync(dir).filter((n) => !n.startsWith('.') && (n.endsWith('.json') || n.endsWith('.claim'))).sort() : [];
+}
+
+function readJsonOrNull(file: string): Record<string, unknown> | null {
+  try {
+    const parsed: unknown = JSON.parse(fs.readFileSync(file, 'utf8'));
+    return isRecord(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+/** A fresh uploader heartbeat (DD-6), as if a 3.0.0 receiver held the uploader role. */
+function writeFakeHeartbeat(home: string): string {
+  const file = path.join(uploadStateDir(home), 'heartbeat.json');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, JSON.stringify({
+    schema: 1, pid: process.pid, version: '3.0.0', capabilities: ['shared', 'upload-queue-v1'],
+    uploadContract: 1, listening: true, startedAt: new Date().toISOString(), ts: Date.now(),
+  }));
+  return file;
+}
+
+/**
+ * Best effort: kill the receiver that holds `<home>/.artisyn/upload/uploader.lock` — one a hook run
+ * spawned detached (DD-7), so the scenario has no handle on it.
+ */
+function killUploaderOf(home: string | undefined): void {
+  if (!home) return;
+  const lock = readJsonOrNull(path.join(uploadStateDir(home), 'uploader.lock'));
+  if (!lock || typeof lock.pid !== 'number' || lock.pid === process.pid) return;
+  try {
+    process.kill(lock.pid);
+  } catch {
+    // already gone
+  }
+}
+
 test('@S-COMPAT-01 frozen 1.6.2, 2.6.1 and 2.28.0 hooks against the current server @mode-a @mode-c', async ({ api, db, users, stand, page }) => {
-  test.setTimeout(240_000);
+  test.setTimeout(360_000);
   const run = runToken();
   const dirs = tempDirs();
   let proxy: StandProxy | undefined;
+  let lockProxy: StandProxy | undefined;
   let shared: ReceiverProcess | undefined;
   let legacyReceiver: ReceiverProcess | undefined;
+  let legacyShared: ReceiverProcess | undefined;
+  let queueHome: string | undefined;
   try {
     const owner = await users.user('user', { label: 'compat-owner' });
     const key = await createApiKey(owner.api);
@@ -623,10 +702,140 @@ test('@S-COMPAT-01 frozen 1.6.2, 2.6.1 and 2.28.0 hooks against the current serv
       expect(hello.proofValid).toBe(true);
       expect((await authedRequest(shState.port, '/artisyn/session-status', { sessionId: 'stale-1' }, shAuth)).json).toMatchObject({ registered: false });
     });
+
+    // Steps 16–17 (2026-11-18 receiver upload queue): frozen 2.32.3 next to hook 3.0.0.
+    const legacy232 = copyFrozenHook(dirs, '2.32.3');
+    const hook3Version = (dir: string) => String(readJsonOrNull(path.join(dir, 'version.json'))?.version);
+
+    await test.step('16. one repo, one user: the frozen 2.32.3 Stop, the 3.0.0 prompt-upload-hook.js and a 3.0.0 --run-job started together never upload at the same time (the shared .upload.lock); the losers skip or exit 12 (busy), and after a retry every session reaches the server', async () => {
+      expect(legacy232.frozen.version).toBe('2.32.3');
+      const hook3 = copyToolDir(dirs);
+      expect(hook3Version(hook3)).toMatch(/^3\./);
+      lockProxy = await startStandProxy(stand.url);
+      lockProxy.delayMs = 500;
+      const repo = makeFakeGitRepo(dirs, { remote: `git@git.arrakis.test:compat/${run}/v232-lock.git` });
+      const home = makeFakeHome(dirs);
+      writeStandConfig(repo, lockProxy.url, key.key, { sendLogsTimeoutMs: 15_000 });
+      const telemetry = path.join(repo, '.artisyn', 'ai_work_dir', 'telemetry');
+      fs.mkdirSync(telemetry, { recursive: true });
+      const sids = { legacy: `c232s-${run}`, prompt: `c30p-${run}`, job: `c30j-${run}` };
+      for (const sid of Object.values(sids)) {
+        fs.writeFileSync(path.join(claudeProjectDir(home, repo), `${sid}.jsonl`), ndjson(transcriptLines(sid, 'main', repo, 1)));
+        fs.writeFileSync(path.join(telemetry, `${sid}.jsonl`), ndjson([{ event: 'prompt_start', session_id: sid, prompt: PROMPT }]));
+      }
+
+      // The 3.0.0 job: a Stop under a fresh (faked) uploader heartbeat only queues it (DD-7).
+      const heartbeat = writeFakeHeartbeat(home);
+      const handOff = await runScript(hook3, 'send-logs-hook.js', { hook_event_name: 'Stop', session_id: sids.job, cwd: repo }, { home }).finally(() => fs.rmSync(heartbeat, { force: true }));
+      expectRunOk(handOff, '3.0.0 hand-off Stop');
+      const [job] = queuedJobs(home);
+      expect(job).toMatch(new RegExp(`^${sids.job}_\\d{8}T\\d{9}Z_stop_\\d+-[0-9a-f]{4}\\.json$`));
+      expect(lockProxy.calls, 'a hand-off Stop uploads nothing').toHaveLength(0);
+      const jobPath = path.join(uploadStateDir(home), 'queue', job);
+      const runJob = () => runNodeScript(path.join(hook3, 'send-logs-hook.js'), dirs.make('run-job-cwd'), null, { home, argv: ['--run-job', jobPath], timeoutMs: 90_000 });
+
+      const [legacyStop, prompt, jobRun] = await Promise.all([
+        runScript(legacy232.toolDir, 'send-logs-hook.js', { hook_event_name: 'Stop', session_id: sids.legacy, cwd: repo }, { home, timeoutMs: 90_000 }),
+        runPromptUpload(hook3, { cwd: repo, sessionId: sids.prompt }, { home, timeoutMs: 90_000 }),
+        runJob(),
+      ]);
+      expectRunOk(legacyStop, '2.32.3 Stop');
+      expectRunOk(prompt, '3.0.0 prompt-upload-hook.js');
+      expect([0, 12], `--run-job exit: ${jobRun.stderr}`).toContain(jobRun.code);
+      expect(lockProxy.calls.length, 'the runs uploaded something').toBeGreaterThan(0);
+      expect(lockProxy.maxInFlight, 'never two uploads at once: the lock is honoured across 2.32.3 and 3.0.0').toBe(1);
+      const log = readHookLog(repo);
+      const skipped = log.filter((l) => l.includes('skipped: upload lock held')).length;
+      expect(skipped + (jobRun.code === 12 ? 1 : 0), `someone lost the race:\n${log.join('\n')}`).toBeGreaterThan(0);
+
+      // Retry what lost: a busy job is left untouched for the receiver's retry, and the next 2.32.3
+      // Stop's full scan picks up whatever the skipped runs left.
+      if (jobRun.code === 12) {
+        expect(queuedJobs(home), 'exit 12 leaves the job and no claim').toEqual([job]);
+        expectRunOk(await runJob(), '--run-job retry');
+      }
+      expect(queuedJobs(home), 'the job is done and deleted').toEqual([]);
+      expectRunOk(await runScript(legacy232.toolDir, 'send-logs-hook.js', { hook_event_name: 'Stop', session_id: sids.legacy, cwd: repo }, { home, timeoutMs: 90_000 }), '2.32.3 Stop retry');
+      expect(lockProxy.maxInFlight).toBe(1);
+      expect(lockProxy.calls.every((c) => c.status === 201), lockProxy.calls.map((c) => `${c.status} ${c.body}`).join('\n')).toBe(true);
+      expect(fs.existsSync(path.join(telemetry, '.upload.lock')), 'the lock is released').toBe(false);
+      expect(readHookLog(repo, 'send-logs-hook.js').some((l) => l.includes(`run-job done: ${job}`))).toBe(true);
+
+      await waitForQueueIdle(db, owner.id);
+      for (const sid of Object.values(sids)) {
+        expect(await sessionRowCount(db, sid), `${sid} reached the server`).toBe(1);
+        expect(await storedBody(db, sid, 'claude'), `${sid} transcript stored`).toHaveLength(2);
+      }
+    });
+
+    await test.step('17. the frozen 2.32.3 otel-receiver.js is the shared receiver (no heartbeat): a 3.0.0 Stop uploads in-process and spawns a 3.0.0 receiver that goes queue-only (port busy, uploader role); the next 3.0.0 Stop queues a job and that receiver uploads it', async () => {
+      const home = makeFakeHome(dirs);
+      queueHome = home;
+      const state = await writeSharedState(home);
+      // The 3.0.0 hook as a plugin under the fake home, so its receiver accepts its send-logs-hook.js as a job's uploader.
+      const hook3 = copyToolDirTo(path.join(home, '.claude', 'plugins', 'log-hub-hooks', 'scripts'));
+      expect(hook3Version(hook3)).toMatch(/^3\./);
+      legacyShared = await startSharedReceiver(legacy232.toolDir, { home, stateDir: state.stateDir, port: state.port });
+      const heartbeatFile = path.join(uploadStateDir(home), 'heartbeat.json');
+      const legacyHello = await sharedHello(state.port, { token: state.token, home });
+      expect(legacyHello.proofValid, 'the 2.32.3 receiver serves the shared port').toBe(true);
+      expect(fs.existsSync(heartbeatFile), '2.32.3 writes no uploader heartbeat').toBe(false);
+
+      const repo = makeFakeGitRepo(dirs, { remote: `git@git.arrakis.test:compat/${run}/v232-queue.git` });
+      writeStandConfig(repo, stand.url, key.key, { sendLogsTimeoutMs: 15_000 });
+      const sid = `c232q-${run}`;
+      const transcript = path.join(claudeProjectDir(home, repo), `${sid}.jsonl`);
+      fs.writeFileSync(transcript, ndjson(transcriptLines(sid, 'main', repo, 1)));
+      const stop = () => runScript(hook3, 'send-logs-hook.js', { hook_event_name: 'Stop', session_id: sid, cwd: repo }, { home, timeoutMs: 60_000 });
+
+      // No fresh heartbeat → in-process Stop (DD-7), plus a receiver spawn for the queue.
+      expectRunOk(await stop(), '3.0.0 Stop without an uploader');
+      const firstLog = readHookLog(repo, 'send-logs-hook.js');
+      expect(firstLog.some((l) => /\[result\] done: uploaded=\d+ skipped=\d+ failed=0/.test(l)), firstLog.join('\n')).toBe(true);
+      expect(firstLog.some((l) => l.includes('receiver: spawned for upload queue')), firstLog.join('\n')).toBe(true);
+      expect(firstLog.some((l) => l.includes('queued:')), 'nothing queued yet').toBe(false);
+      await waitForQueueIdle(db, owner.id);
+      expect(await storedBody(db, sid, 'claude')).toHaveLength(2);
+
+      // The spawned 3.0.0 receiver finds the port held by 2.32.3 and keeps the uploader role queue-only (DD-8).
+      await expect
+        .poll(() => {
+          const hb = readJsonOrNull(heartbeatFile);
+          return hb && hb.pid !== legacyShared!.child.pid ? hb.listening : undefined;
+        }, { timeout: 15_000 })
+        .toBe(false);
+      const hb = readJsonOrNull(heartbeatFile)!;
+      expect(hb).toMatchObject({ schema: 1, version: hook3Version(hook3), uploadContract: 1, listening: false });
+      expect(hb.capabilities).toContain('upload-queue-v1');
+      expect(readJsonOrNull(path.join(uploadStateDir(home), 'uploader.lock'))).toMatchObject({ pid: hb.pid });
+      expect(fs.readFileSync(path.join(state.stateDir, 'receiver.log'), 'utf8')).toContain(`queue-only: port ${state.port} busy`);
+      expect(legacyShared.exitCode(), 'the 2.32.3 receiver keeps the port').toBeUndefined();
+
+      // A second turn; the next Stop sees the fresh heartbeat and only queues a job.
+      fs.writeFileSync(transcript, ndjson(transcriptLines(sid, 'main', repo, 2)));
+      const handOff = await stop();
+      expectRunOk(handOff, '3.0.0 hand-off Stop');
+      const queuedLine = readHookLog(repo, 'send-logs-hook.js').find((l) => l.includes('[result] queued: job='));
+      const job = /queued: job=(\S+)/.exec(queuedLine ?? '')?.[1];
+      expect(job, readHookLog(repo).join('\n')).toMatch(new RegExp(`^${sid}_\\d{8}T\\d{9}Z_stop_\\d+-[0-9a-f]{4}\\.json$`));
+
+      // The queue-only receiver runs it: the job is deleted and the second turn is on the server.
+      await expect.poll(() => queuedJobs(home), { timeout: 30_000 }).toEqual([]);
+      await expect
+        .poll(() => readHookLog(repo, 'send-logs-hook.js').some((l) => l.includes(`run-job done: ${job}`)), { timeout: 15_000 })
+        .toBe(true);
+      expect(fs.readFileSync(path.join(state.stateDir, 'receiver.log'), 'utf8')).toContain(`job-done job=${job}`);
+      await waitForQueueIdle(db, owner.id);
+      expect(await storedBody(db, sid, 'claude'), 'the queued upload reached the server').toHaveLength(4);
+      expect(legacyShared.exitCode(), 'the 2.32.3 receiver is still up').toBeUndefined();
+    });
   } finally {
+    killUploaderOf(queueHome);
     await stopReceiver(shared);
     await stopReceiver(legacyReceiver);
+    await stopReceiver(legacyShared);
     await proxy?.close();
+    await lockProxy?.close();
     dirs.cleanup();
   }
 });

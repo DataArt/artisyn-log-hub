@@ -37,14 +37,9 @@ import { LocalAuthGuard } from './guards/local-auth.guard';
 import { SessionAuthGuard } from './guards/session-auth.guard';
 import { TooManyRequestsException } from './exceptions/too-many-requests.exception';
 import { isLocalhostRequest } from './utils/localhost.util';
-
-/**
- * Source IP for the auth rate limits. `req.ip` honours TRUST_PROXY (see
- * common/trust-proxy.ts); without it Express reports the socket peer.
- */
-function clientIp(req: Request): string {
-  return req.ip ?? req.socket.remoteAddress ?? 'unknown';
-}
+import { passwordRequirement } from './utils/password-policy';
+import { clientIp } from './client-ip';
+import { EmailSendRateLimitService } from './email-send-rate-limit.service';
 
 @Controller('api/v1/auth')
 export class AuthController {
@@ -55,6 +50,7 @@ export class AuthController {
     private readonly accountDeletionService: AccountDeletionService,
     private readonly authRateLimit: AuthRateLimitService,
     private readonly mailService: MailService,
+    private readonly emailSendRateLimit: EmailSendRateLimitService,
   ) {}
 
   @Get('config')
@@ -65,7 +61,17 @@ export class AuthController {
       azure?: { authority: string; clientId: string; redirectUri: string };
       adminContactEmail?: string;
       passwordResetAvailable?: boolean;
+      /** Password modes: the policy rule ("must be …"), shown before submit. */
+      passwordRequirement?: string;
     } = { mode };
+    if (
+      mode === 'password' ||
+      mode === 'password-confirm' ||
+      mode === 'strict-managed'
+    ) {
+      const requirement = passwordRequirement();
+      if (requirement !== null) response.passwordRequirement = requirement;
+    }
 
     if (mode === 'azure-oauth') {
       response.azure = {
@@ -73,6 +79,13 @@ export class AuthController {
         clientId: this.configService.get<string>('AZURE_CLIENT_ID', ''),
         redirectUri: this.configService.get<string>('AZURE_REDIRECT_URI', ''),
       };
+    }
+    if (mode === 'strict-managed') {
+      response.adminContactEmail = this.configService.get<string>(
+        'ADMIN_CONTACT_EMAIL',
+      );
+      // SMTP is mandatory in strict-managed (startup validation + fail-fast).
+      response.passwordResetAvailable = true;
     }
     if (mode === 'password' || mode === 'password-confirm') {
       response.adminContactEmail = this.configService.get<string>(
@@ -141,7 +154,7 @@ export class AuthController {
 
   @Post('login')
   @HttpCode(200)
-  @AllowedAuthModes('password', 'password-confirm')
+  @AllowedAuthModes('password', 'password-confirm', 'strict-managed')
   @UseGuards(AuthModeGuard, LocalAuthGuard)
   async login(@Req() req: Request, @Body() _dto: LoginDto) {
     const user = req.user as {
@@ -213,7 +226,7 @@ export class AuthController {
 
   @Post('forgot-password')
   @HttpCode(200)
-  @AllowedAuthModes('password', 'password-confirm')
+  @AllowedAuthModes('password', 'password-confirm', 'strict-managed')
   @UseGuards(AuthModeGuard)
   async forgotPassword(@Req() req: Request, @Body() dto: ForgotPasswordDto) {
     // Same split as resend-confirmation.
@@ -222,12 +235,15 @@ export class AuthController {
     if (!(await this.authRateLimit.consumeEmail(route, dto.email))) {
       return { email_delivery: 'sent' as const };
     }
+    // strict-managed: 20 emails / IP / hour (no-op in other modes). Counted
+    // before the account lookup, so an unknown email costs the same.
+    await this.emailSendRateLimit.consumeIp(clientIp(req));
     return this.authService.forgotPassword(dto.email);
   }
 
   @Post('reset-password')
   @HttpCode(200)
-  @AllowedAuthModes('password', 'password-confirm')
+  @AllowedAuthModes('password', 'password-confirm', 'strict-managed')
   @UseGuards(AuthModeGuard)
   async resetPassword(@Req() req: Request, @Body() dto: ResetPasswordDto) {
     // IP limit only — the request carries a token, not an email.
@@ -244,7 +260,7 @@ export class AuthController {
 
   @Post('change-password')
   @HttpCode(200)
-  @AllowedAuthModes('password', 'password-confirm')
+  @AllowedAuthModes('password', 'password-confirm', 'strict-managed')
   @UseGuards(AuthModeGuard, SessionAuthGuard)
   async changePassword(@Req() req: Request, @Body() dto: ChangePasswordDto) {
     const user = req.user as { id: number };

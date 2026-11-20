@@ -62,15 +62,27 @@ export function HelpModal({
 
   useEffect(() => {
     if (!activeSlug) return;
+    // A superseded fetch (the modal mounts on the default article and switches to
+    // `initialSlug` right after) must not overwrite the article that is now active.
+    let stale = false;
     setLoading(true);
     setContent(null);
     fetch(`/help/${activeSlug}.md`)
       .then((res) =>
         res.ok ? res.text() : Promise.reject(new Error('not found')),
       )
-      .then((text) => setContent(text))
-      .catch(() => setContent(null))
-      .finally(() => setLoading(false));
+      .then((text) => {
+        if (!stale) setContent(text);
+      })
+      .catch(() => {
+        if (!stale) setContent(null);
+      })
+      .finally(() => {
+        if (!stale) setLoading(false);
+      });
+    return () => {
+      stale = true;
+    };
   }, [activeSlug]);
 
   // After an article renders: jump to the requested heading, or to the top

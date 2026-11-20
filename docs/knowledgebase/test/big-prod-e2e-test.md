@@ -4,7 +4,7 @@ title: Big pre-prod e2e test (manual skill)
 description: Manual, reproducible pre-prod run of the whole product on a disposable amd64 docker stand. It covers UI onboarding, hook install (current and previous release, local config, upgrade), eleven isolated claude -p sessions plus a legacy-hook session verified in the UI with per-scenario checks (Bash tab, denied calls, cost, work time, context growth, workflow agents, system context, worktree override), a UI-configured file-categories check, and team and admin visibility, and writes a report with screenshot evidence.
 resource: .claude/skills/big-prod-e2e-test/scripts/run.mjs
 tags: [testing, e2e, pre-prod, docker, playwright, hook, manual]
-timestamp: 2026-11-12T00:00:00Z
+generated: { by: "human:denistsyplakov", at: "2026-11-12T00:00:00Z" }
 ---
 
 # Purpose

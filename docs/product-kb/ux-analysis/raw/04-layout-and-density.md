@@ -1,3 +1,11 @@
+---
+type: "Research"
+title: "Raw report 4 — Layout, density and personalisation"
+description: "Raw report 4: the densest pages (session pane first), layout and density problems, and personalisation options."
+tags: [ux-research, product]
+generated: { by: "human:denistsyplakov", at: "2026-11-06T15:26:59+04:00" }
+---
+
 # Raw report 4 — Layout, density and personalisation
 
 Read-only study, 2026-11-01.

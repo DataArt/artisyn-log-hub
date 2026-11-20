@@ -19,6 +19,11 @@ You will pick one of two sign-in modes:
 | Needs an SMTP relay | no (without it there is no "Forgot password?") | **yes**, reachable from the VM at startup |
 | Good for | a few people who trust each other, no mail relay at hand | a team with an internal mail relay, or a server more people can reach |
 
+With a mail relay there is a third option, `strict-managed`: nobody signs up, you as the admin
+create each teammate's account and they get an emailed link to set their password (section 6).
+Its own step-by-step page, including switching an existing server to it:
+[Setup where only the admin creates accounts](admin-managed-setup.md).
+
 If you are not sure, start with Mode 2. Switching later is one line in `.env` — the email is the
 identity in every mode, so no data migration is needed
 ([Authentication modes](authentication-modes.md)).
@@ -98,7 +103,8 @@ and `COOKIE_SECURE`.
 | `ports:` in `docker-compose.yml` | `"10.0.0.15:5003:3000"` | keep `"127.0.0.1:5003:3000"` when the proxy runs on the same VM |
 
 `PUBLIC_BASE_URL` must be exactly the address your teammates type in the browser: it is used in
-emailed links, and in production Modes 2 and 3 refuse to start without it.
+emailed links, and in production Modes 2 and 3 refuse to start without it (`strict-managed`
+refuses in any environment).
 
 ## 3. Write the `.env`
 
@@ -111,16 +117,24 @@ Open `.env` in the install directory, keep your generated `POSTGRES_PASSWORD` an
                  no                                 yes
                  │                                   │
                  ▼                                   ▼
-          Mode 2 (password)              Should sign-up be limited to
-                 │                       your mail domain, with emailed
-                 │                       confirmation?
-                 │                        │                    │
-                 │                        no                  yes
-                 │                        │                    │
-                 │                        ▼                    ▼
-                 │              Mode 2 + SMTP          Mode 3 (password-confirm)
-                 │              (password reset works)         │
-                 ▼                        │                    ▼
+          Mode 2 (password)              Should only the admin create
+                 │                       accounts (no self sign-up)?
+                 │                         │                      │
+                 │                        yes                     no
+                 │                         │                      │
+                 │                         ▼                      ▼
+                 │                  strict-managed     Should sign-up be limited to
+                 │                         │           your mail domain, with
+                 │                         │           emailed confirmation?
+                 │                         │            │                │
+                 │                         │            no              yes
+                 │                         │            │                │
+                 │                         │            ▼                ▼
+                 │                         │      Mode 2 + SMTP    Mode 3 (password-
+                 │                         │      (password        confirm)
+                 │                         │      reset works)
+                 │                         │            │                │
+                 ▼                         ▼            ▼                ▼
         Can you get a TLS certificate for the server name (internal CA)?
                  │                                   │
                  no                                 yes
@@ -221,6 +235,39 @@ SMTP_FROM=loghub@example.com
 ADMIN_CONTACT_EMAIL=you@example.com
 ```
 
+### strict-managed, `https://` behind a reverse proxy
+
+```dotenv
+LOG_HUB_DATA_DIR=./loghub-db
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=<keep the generated value>
+POSTGRES_DB=a-log
+SESSION_SECRET=<keep the generated value>
+NODE_ENV=production
+
+AUTH_MODE=strict-managed
+PUBLIC_BASE_URL=https://loghub.internal
+TRUST_PROXY=1
+PASSWORD_POLICY=long
+# Optional: the admin can create accounts only for these domains.
+ALLOWED_EMAIL_DOMAINS=example.com
+
+# Required: the relay must be reachable when the app starts, and the
+# first start emails the admin a set-password link.
+SMTP_HOST=smtp.internal
+SMTP_PORT=587
+SMTP_FROM=loghub@example.com
+#SMTP_USER=
+#SMTP_PASSWORD=
+#SMTP_SECURE=false
+# Required: this address becomes the admin.
+ADMIN_CONTACT_EMAIL=you@example.com
+```
+
+For plain `http://` use the `PUBLIC_BASE_URL`, `COOKIE_SECURE` and `TRUST_PROXY` lines of the
+"Mode 3, plain `http://`" example. `PUBLIC_BASE_URL` is required in this mode in any case: every
+way in is an emailed link built from it.
+
 Notes on the values:
 
 - `ALLOWED_EMAIL_DOMAINS` is your company's mail domain(s), comma-separated, without `@`.
@@ -254,7 +301,8 @@ docker compose logs -f app
 ```
 
 If it stops at startup, the log names the missing or wrong setting (for example no
-`PUBLIC_BASE_URL`, or an SMTP relay it cannot reach in Mode 3).
+`PUBLIC_BASE_URL`, or an SMTP relay it cannot reach in Mode 3 or `strict-managed`). In
+`strict-managed` the first start also stops if the admin's set-password email cannot be sent.
 
 ## 5. Add HTTPS (recommended)
 
@@ -299,10 +347,14 @@ More on the proxy (HSTS, body limits, `TRUST_PROXY` values): [Security Hardening
 
 1. **Before you tell anyone the address**, open it yourself and sign up. The first account
    becomes the admin; there is no setup token. In Mode 3, confirm the email first, then sign in.
+   In `strict-managed` there is no sign-up: the first admin is `ADMIN_CONTACT_EMAIL`, which gets
+   a set-password email when the app first starts. Open its link (valid 24 hours), set your
+   password and sign in.
 2. Open **Admin Panel → Users** and check that your account has the `admin` role. If someone
    was faster, see [Check that you are the admin](install-server.md#check-that-you-are-the-admin).
 3. Send the address to your teammates. Each one signs up with their work email (Mode 3: and
-   confirms it).
+   confirms it). In `strict-managed` you create the accounts instead: **Admin Panel → Users →
+   + Create user** (email, role, optional team); each teammate gets a set-password email.
 4. Optional: create a team and add your repositories to it — see
    [Team repositories](session-list.md#team-repositories). Repositories are private to their
    owner until shared through a team.
@@ -329,9 +381,33 @@ How a teammate gets an account in Mode 3:
 
 In Mode 2 the same teammate signs up and is signed in at once — no email, no domain check.
 
+How a teammate gets an account in `strict-managed`:
+
+```text diagram=small-team-admin-provisioned
+ Admin              Log Hub                  SMTP relay             Teammate
+   │ create user       │                         │                     │
+   │ (email, role,     │                         │                     │
+   │ team)             │                         │                     │
+   ├──────────────────►│ check ALLOWED_EMAIL_DOMAINS                   │
+   │                   │ create account, no password                   │
+   │                   ├────────────────────────►│ set-password email  │
+   │                   │                         ├────────────────────►│
+   │                   │                         │ link = PUBLIC_BASE_URL/…
+   │                   │                         │ (24 h, works once)  │
+   │                   │◄──────────────────────────────────────────────┤ open the link,
+   │                   │                         │                     │ set password
+   │                   │◄──────────────────────────────────────────────┤ sign in
+```
+
+Until the teammate sets a password, **Admin Panel → Users** shows `Not set` in the **Password**
+column and offers **Resend link**. Details:
+[Strict managed](authentication-modes.md#strict-managed-admin-provisioned-users).
+
 Forgotten passwords:
 
-- **Mode 3, or Mode 2 with SMTP** — "Forgot password?" on the login page sends a reset link.
+- **Mode 3, `strict-managed`, or Mode 2 with SMTP** — "Forgot password?" on the login page sends
+  a reset link (valid 1 hour). In `strict-managed` it also works for a teammate who has not set a
+  password yet.
 - **Mode 2 without SMTP** — the button is disabled. You, as admin, open **Admin Panel → Users**,
   generate a password reset link for that user and send it to them yourself.
 
@@ -404,7 +480,8 @@ at the proxy, and review **Admin Panel → Users** from time to time.
 
 ## Checklist
 
-- [ ] `AUTH_MODE` is `password` or `password-confirm` — never `none` on a shared server.
+- [ ] `AUTH_MODE` is `password`, `password-confirm` or `strict-managed` — never `none` on a
+  shared server.
 - [ ] `PUBLIC_BASE_URL` is the exact address the team opens.
 - [ ] `http://`: `COOKIE_SECURE=false`, port published on the VM's internal address.
 - [ ] `https://`: `TRUST_PROXY=1`, app port stays on `127.0.0.1`.

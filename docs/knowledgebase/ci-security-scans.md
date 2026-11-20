@@ -3,7 +3,7 @@ type: reference
 title: CI Security Scans
 description: The report-only security workflows (security-scans, virustotal, security-report), their triggers, the SNYK_TOKEN/VIRUS_TOTAL_KEY secrets, fork behaviour, the unified row format and label table, the PR-description block, the ci-reports branch and badge, the .snyk policy, the config-guard allowlist, the FR-27 repository settings and the owner rollout; also lists checks.yml / release.yml and the release VirusTotal scopes
 tags: [ci, security, github-actions, snyk, virustotal, supply-chain]
-timestamp: 2026-11-09
+generated: { by: "human:denistsyplakov", at: "2026-11-09" }
 ---
 
 # CI Security Scans

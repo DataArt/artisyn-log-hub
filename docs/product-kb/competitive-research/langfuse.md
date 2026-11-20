@@ -5,7 +5,7 @@ description: "Open-source general LLM observability platform fed by a Stop-hook 
 tags:
   - competitive-research
   - llm-observability
-timestamp: "2026-11-01T00:00:00+04:00"
+generated: { by: "human:denistsyplakov", at: "2026-11-01T00:00:00+04:00" }
 ---
 
 # Langfuse + Claude Code Observability Plugin
