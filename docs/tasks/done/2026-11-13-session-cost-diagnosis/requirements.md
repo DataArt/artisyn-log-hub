@@ -67,3 +67,6 @@ turns/messages.
 - **2026-11-13:** Related existing ideas: `docs/product-kb/ideas/code-to-session-lookup.md` (the
   AgentsView `why file:line` part — out of scope here). The AgentsView "Friction Log" (daily
   corrections / tool errors) is a separate, larger idea, not part of this task.
+- **2026-11-21:** Not implemented on its own — merged into `2026-11-02-session-antipatterns`
+  (GH-81) and closed as a duplicate. The cost split, the cost drivers and the open questions above
+  are covered there (FR-A*, FR-B1 #1/#2/#10, FR-B3).

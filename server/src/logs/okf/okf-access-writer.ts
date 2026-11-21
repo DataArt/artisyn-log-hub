@@ -9,7 +9,7 @@
  * (`RepositoriesService.recomputeAllSessionStats()` → `recomputeOkfAccess`). It is NOT called from
  * the per-file-category-scope recompute: OKF rows have no scope, one row set per node. Each caller
  * passes its own db / tx handle, which also reads the root's bound snapshot
- * (`loadSnapshotFilesForNode`), so an import sees the snapshot its own transaction bound.
+ * (`loadSnapshotForNode`), so an import sees the snapshot its own transaction bound.
  *
  * Writer contract: per node, `DELETE` its rows, then insert the new set. The insert keeps
  * `ON CONFLICT … DO UPDATE` on each table's unique key, because the heal touches descendant
@@ -58,16 +58,24 @@ function lastPerKey<T>(rows: readonly T[], keyOf: (r: T) => string): T[] {
   return [...byKey.values()];
 }
 
+/** What the extractor needs from the node's bound snapshot (DD-P6). */
+export interface OkfNodeSnapshot {
+  /** Files keyed by repo-relative path → `{ size, hash }`. */
+  files: ReadonlyMap<string, OkfSnapshotFileInfo>;
+  /** `root` of every bundle (pointer resolution against the article's bundle root). */
+  bundleRoots: string[];
+}
+
 /**
- * Files of the snapshot bound to the node's tree ROOT (DD-21 of the OKF tab), keyed by
- * repo-relative path → `{ size, hash }`. The body is the one stored for the root's uploader.
- * `undefined` when the root has no bound or stored snapshot — the extractor then uses the even
- * byte split and treats every `.md` file as a KB article (DD-5, DD-7).
+ * Files and bundle roots of the snapshot bound to the node's tree ROOT (DD-21 of the OKF tab;
+ * DD-P6). The body is the one stored for the root's uploader. `undefined` when the root has no
+ * bound or stored snapshot — the extractor then uses the even byte split, treats every `.md`
+ * file as a KB article and resolves rooted pointers against the repo root (DD-5, DD-7, DD-P4).
  */
-export async function loadSnapshotFilesForNode(
+export async function loadSnapshotForNode(
   db: DrizzleDb,
   sessionDbId: number,
-): Promise<ReadonlyMap<string, OkfSnapshotFileInfo> | undefined> {
+): Promise<OkfNodeSnapshot | undefined> {
   const result = await db.execute(sql`
     WITH RECURSIVE ${topAncestorIdsSql(sql`${`{${sessionDbId}}`}::bigint[]`)}
     SELECT os.body
@@ -91,7 +99,7 @@ export async function loadSnapshotFilesForNode(
       });
     }
   }
-  return files;
+  return { files, bundleRoots: body.bundles.map((b) => b.root) };
 }
 
 /** Replaces the `session_okf_access` rows of one tree node with `rows`. */
@@ -273,12 +281,16 @@ export async function rebuildSessionOkfAccess(
   repoRoots: readonly string[],
   isSubagentLog: boolean,
 ): Promise<void> {
-  const snapshotFiles = await loadSnapshotFilesForNode(db, sessionDbId);
+  const snapshot = await loadSnapshotForNode(db, sessionDbId);
   const detail = extractOkfDetail(
     lines,
     repoRoots,
     await getServerBashParser(),
-    { isSubagentLog, snapshotFiles },
+    {
+      isSubagentLog,
+      snapshotFiles: snapshot?.files,
+      bundleRoots: snapshot?.bundleRoots,
+    },
   );
   await writeSessionOkfAccess(db, sessionDbId, detail.access);
   await writeSessionOkfEvents(db, sessionDbId, detail.events);

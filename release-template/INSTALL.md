@@ -232,11 +232,16 @@ because every link in those emails is built from it.
 
 ## Data
 
-Postgres data, the upload queue, and logs are bind-mounted from `$LOG_HUB_DATA_DIR` on the
-host (default `./loghub-db`, next to `docker-compose.yml`) into `pgdata/`, `upload-queue/`, and
-`logs/` subdirectories. Unlike named volumes, this data lives at a predictable host path outside
-of Docker's storage area, so it survives `docker compose down` *and* `docker compose down -v`, and
+Postgres data, the upload queue, short-lived repository export/import staging zips, and logs are
+bind-mounted from `$LOG_HUB_DATA_DIR` on the host (default `./loghub-db`, next to
+`docker-compose.yml`) into `pgdata/`, `upload-queue/`, `export-import/`, and `logs/`
+subdirectories. Unlike named volumes, this data lives at a predictable host path outside of
+Docker's storage area, so it survives `docker compose down` *and* `docker compose down -v`, and
 it's easy to back up or inspect directly.
+
+If you run the app container as a non-root user (`user:` in an override), create `upload-queue/`,
+`logs/` and `export-import/` under `LOG_HUB_DATA_DIR` before the first start and `chown` them to
+that UID — Docker creates missing bind-mount sources as root.
 
 `docker-compose.yml` also pins `PGDATA` to a fixed subdirectory (`/var/lib/postgresql/data/pgdata`)
 inside that bind mount, rather than relying on the postgres image's own default data path. The
@@ -257,7 +262,11 @@ image declares that path as a volume, so Docker always adds an anonymous one the
 pinned `PGDATA` it stays empty. Data is in the wrong place only when the bind mount is missing or
 its `pgdata/` is empty while the app shows data — stop and move it before recreating the
 container. Back up `$LOG_HUB_DATA_DIR` before an upgrade: migrations only go forward, and the only
-way back to an older version is that version plus a backup made on it.
+way back to an older version is that version plus a backup made on it. `loghub-db/` backups also
+include short-lived export/import staging zips (`export-import/`, deleted by the app after
+`EXPORT_IMPORT_JOB_TTL_MS`). If an older install has an override volume on
+`/app/dist/export-import` (an old workaround for a read-only or non-root container), it can be
+removed after this upgrade: the compose file now mounts that directory itself.
 
 ## Right after install: check that you are the admin
 

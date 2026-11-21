@@ -87,11 +87,16 @@ trusts — so a non-loopback `ports:` mapping gives every client that can reach 
 password-less, auto-identified access. Change `AUTH_MODE` to `password` (or another mode) in the
 same edit.
 
-Postgres data, the upload queue, and logs are bind-mounted from `$LOG_HUB_DATA_DIR` on the
-host (see `.env.example`) into `pgdata/`, `upload-queue/`, and `logs/` subdirectories. Unlike
-named volumes, this data lives at a predictable host path outside of Docker's storage area, so
-it survives `docker compose down` *and* `docker compose down -v`, and it's easy to back up or
-inspect directly.
+Postgres data, the upload queue, short-lived repository export/import staging zips, and logs are
+bind-mounted from `$LOG_HUB_DATA_DIR` on the host (see `.env.example`) into `pgdata/`,
+`upload-queue/`, `export-import/`, and `logs/` subdirectories. Unlike named volumes, this data
+lives at a predictable host path outside of Docker's storage area, so it survives
+`docker compose down` *and* `docker compose down -v`, and it's easy to back up or inspect
+directly.
+
+If you run the app container as a non-root user (`user:` in an override), create `upload-queue/`,
+`logs/` and `export-import/` under `LOG_HUB_DATA_DIR` before the first start and `chown` them to
+that UID — Docker creates missing bind-mount sources as root.
 
 `docker-compose.yml` also pins `PGDATA` to a fixed subdirectory (`/var/lib/postgresql/data/pgdata`)
 inside that bind mount, rather than relying on the postgres image's own default data path. The

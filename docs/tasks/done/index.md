@@ -50,3 +50,6 @@ Folders are named `<YYYY-MM-DD>-<slug>` (the day the task was created).
 - [2026-11-11-advisor-evidence-advice] Evidence-Backed Turn-End Cost Advisor — Rock-Solid Advice Only — archived 2026-11-19
 - [2026-11-13-site-log-hub-onepager] Site One-Pager (log-hub-onepager) — archived 2026-11-19
 - [2026-11-18-receiver-upload-queue] Shared Receiver as the Single Log Uploader (Job Queue + Heartbeat) — archived 2026-11-19
+- [2026-11-19-export-import-staging-mount] Mount the Export/Import Staging Dir in the Release Compose — archived 2026-11-20
+- [2026-11-19-okf-v03-support] OKF Tab Support for v0.3 and Any-Version Bundles — archived 2026-11-21
+- [2026-11-13-session-cost-diagnosis] Session Cost Diagnosis Report ("Why Was This Session Expensive") — not implemented, merged into 2026-11-02-session-antipatterns — archived 2026-11-21

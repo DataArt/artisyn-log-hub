@@ -6,7 +6,7 @@ tags:
   - metrics
   - sub-agents
   - aggregation
-generated: { by: "human:denistsyplakov", at: "2026-10-22T00:00:00+04:00" }
+generated: { by: "human:denistsyplakov", at: "2026-11-21T12:45:00+04:00" }
 ---
 
 # Session Metric Scope (root vs tree)
@@ -292,6 +292,11 @@ the post-rollup world.
   and rejected calls still show as uncovered, and a surface must keep publishing coverage rather
   than render a confident `+0 / −0`. **Historical rows keep their old values until recomputed** —
   the fix is at ingest.
+- **Bash file diffs are never read.** Only Edit / Write calls feed the diff-based counters
+  (`isEditWriteTool` in `claude-extractor.ts`). Files a Bash command changes are not counted. So
+  Claude Code 2.1.330's change on self-hosted runners (Bash skips the file diff unless something
+  needs it, and the managed setting `bashEditDiffEnabled: true` brings every diff back) has no
+  effect on Log Hub's numbers, and the file-change views do not depend on a Bash diff.
 - **A new-file `Write` counts as covered.** `countPatchLines` (`tool-stats.ts`) treats a `Write`
   result with `type === 'create'` as `+<content lines> / −0`: a new file's `structuredPatch` is
   always empty (measured: all 215 `create` results), but with no prior content its diff is exactly

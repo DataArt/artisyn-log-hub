@@ -364,6 +364,7 @@ export class OkfFactsService {
       const detail = extractOkfDetail(node.lines, roots, parser, {
         isSubagentLog: node.isSubagent,
         snapshotFiles,
+        bundleRoots: bundles?.map((b) => b.root),
       });
       const access: OkfAccessRow[] = detail.access;
       const fileFacts = collectNodeFileFacts(

@@ -5,7 +5,10 @@
  */
 import { ChevronDown, ChevronRight, Circle } from 'lucide-react';
 import { formatBytes } from '@/lib/format';
-import type { OkfTreeNode } from '../../../../../models/repositories';
+import type {
+  OkfBundleSummary,
+  OkfTreeNode,
+} from '../../../../../models/repositories';
 import {
   countFiles,
   heatValue,
@@ -22,6 +25,7 @@ import {
   OkfSignalCells,
   OkfSignalHeaderCells,
 } from './okf-tree-columns';
+import { OkfBundleHintChips, OkfFileMetaChips } from './okf-tree-meta-chips';
 
 /** Uniform row height, in px (same as the change-surface tree). */
 export const ROW_HEIGHT = OKF_ROW_HEIGHT;
@@ -123,6 +127,8 @@ export function OkfTreeRow({
   variant,
   bundleLabel,
   bundleIgnored,
+  bundleInfo,
+  isKnownFile,
   folderScans,
   highlighted,
   onToggle,
@@ -135,6 +141,10 @@ export function OkfTreeRow({
   /** Display label of a top-level node (bundle root or the synthetic group). */
   bundleLabel: string;
   bundleIgnored: boolean;
+  /** Summary of the row's bundle: front-matter title and format hints (newer servers only). */
+  bundleInfo?: OkfBundleSummary;
+  /** True when a path is a file node of this tree (the supersededBy link opens only those). */
+  isKnownFile?: (path: string) => boolean;
   /** Grep / ls calls on this folder itself (`folderScanCounts`), children excluded. */
   folderScans: number;
   highlighted: boolean;
@@ -155,6 +165,7 @@ export function OkfTreeRow({
     folderScans,
   );
   const label = isTop ? bundleLabel : entry.label;
+  const bundleTitle = isTop ? bundleInfo?.title : undefined;
   const markerText =
     idle && node.kind === 'file' && markers.length === 0
       ? 'not read'
@@ -195,6 +206,13 @@ export function OkfTreeRow({
         >
           {label}
         </button>
+      ) : bundleTitle ? (
+        <span className={`${NAME_COL} truncate font-medium`}>
+          {bundleTitle}{' '}
+          <span className="font-mono font-normal text-muted-foreground">
+            {label}
+          </span>
+        </span>
       ) : (
         <span
           className={`${NAME_COL} truncate font-mono ${
@@ -211,12 +229,20 @@ export function OkfTreeRow({
           aria-expanded={pointerToggle.open}
           onClick={pointerToggle.onToggle}
           title={`Code paths shown in this article · ${pointerToggle.agents} ${pointerToggle.agents === 1 ? 'agent' : 'agents'}`}
-          className="min-w-10 shrink truncate rounded border border-border px-1 text-[10px] text-muted-foreground hover:text-foreground"
+          className="shrink-0 rounded border border-border px-1 text-[10px] text-muted-foreground hover:text-foreground"
         >
           {pointerToggle.open ? '▾' : '▸'} code paths shown ·{' '}
           {pointerToggle.agents}{' '}
           {pointerToggle.agents === 1 ? 'agent' : 'agents'}
         </button>
+      ) : null}
+      {isTop ? <OkfBundleHintChips info={bundleInfo} /> : null}
+      {node.kind === 'file' ? (
+        <OkfFileMetaChips
+          node={node}
+          isKnownFile={isKnownFile}
+          onOpenArticle={onOpenArticle}
+        />
       ) : null}
       {isTop && bundleIgnored ? (
         <span className="shrink-0 rounded border border-border px-1 text-[10px] text-muted-foreground">

@@ -79,4 +79,5 @@ services:
       - "127.0.0.1:5003:3000"
     volumes:
       - ${LOG_HUB_DATA_DIR:?set LOG_HUB_DATA_DIR in .env}/upload-queue:/app/dist/upload-queue
+      - ${LOG_HUB_DATA_DIR:?set LOG_HUB_DATA_DIR in .env}/export-import:/app/dist/export-import
       - ${LOG_HUB_DATA_DIR:?set LOG_HUB_DATA_DIR in .env}/logs:/app/dist/logs

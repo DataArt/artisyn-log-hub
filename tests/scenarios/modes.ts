@@ -41,6 +41,8 @@ export const FAST_TICK_ENV: Readonly<Record<string, string>> = {
   // Budget threshold job (server/src/logs/budgets/budget-threshold.scheduler.ts): a scenario
   // sees a crossed threshold's notice / email shortly after it creates or lowers a budget.
   BUDGET_CHECK_INTERVAL_MS: '200',
+  // s-repo-11 step 20 waits for several export/import cleanup sweeps (default 5 min).
+  EXPORT_IMPORT_CLEANUP_INTERVAL_MS: '2000',
   AI_TOOL_VERSION_CHECK_ENABLED: 'false',
   MODEL_PRICING_FETCH_ENABLED: 'false',
   LOG_HUB_RELEASE_CHECK_ENABLED: 'false',

@@ -106,9 +106,11 @@ export function OkfKpiTiles({
         label="Median file share / session"
         value={tiles.medianShare === null ? 'n/a' : pct(tiles.medianShare)}
         subLine={
-          tiles.maxShare === null
-            ? 'no snapshot-bound session'
-            : `max ${pct(tiles.maxShare)}`
+          tiles.maxShare !== null
+            ? `max ${pct(tiles.maxShare)}`
+            : tiles.shareNaReason === 'small-folders'
+              ? `KB folders under ${tiles.shareMinBundleFiles ?? 10} articles are not measured`
+              : 'no snapshot-bound session'
         }
         accent="bg-teal-500"
       />

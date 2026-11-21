@@ -7,7 +7,7 @@
  * defaults); `input.latestFiles` and a session's `files` feed the FR-10 hash maps.
  */
 import { loadExamples } from '../../../../scripts/algo-docs/load-examples.cjs';
-import type { OkfSnapshotBundle } from './okf-snapshot';
+import type { OkfSnapshotBundle, OkfSnapshotFileMeta } from './okf-snapshot';
 import { resolveOkfThresholds } from './okf-thresholds';
 import type {
   OkfAgentEntry,
@@ -30,11 +30,17 @@ interface FileSpec {
   path: string;
   size: number;
   ignored?: boolean;
+  /** Front-matter metadata (FR-4 rows), passed through as is. */
+  meta?: OkfSnapshotFileMeta;
 }
 
 interface BundleSpec {
   root: string;
   files: number | FileSpec[];
+  /** Bundle front-matter fields (FR-4 rows), passed through when given. */
+  okfVersion?: string;
+  title?: string;
+  description?: string;
 }
 
 interface RowSpec {
@@ -114,8 +120,19 @@ function toSnapshotBundles(specs: BundleSpec[]): OkfSnapshotBundle[] {
             size: f.size,
             ignored: f.ignored === true,
             hash: '',
+            ...(f.meta !== undefined ? { meta: f.meta } : {}),
           }));
-    return { root: spec.root, index, ignored: false, files };
+    return {
+      root: spec.root,
+      index,
+      ignored: false,
+      files,
+      ...(spec.okfVersion !== undefined ? { okfVersion: spec.okfVersion } : {}),
+      ...(spec.title !== undefined ? { title: spec.title } : {}),
+      ...(spec.description !== undefined
+        ? { description: spec.description }
+        : {}),
+    };
   });
 }
 

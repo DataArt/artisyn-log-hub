@@ -28,6 +28,10 @@
 // routing-miss finding listed under section B, not A.
 // Package 3 (agent trail): step 12 follows a missing agent's «Agent trail» link from the article
 // drill-down to its session's OKF tab (`okfAgent` in the URL) and checks the trail.
+// OKF v0.3 support (2026-11-19): KB files / not-read count articles only (no index.md / log.md,
+// no dot-paths — FR-2). Step 17 uploads a hook 3.1.0 tree (bundle `docs/v03-<run>` with a title,
+// version 0.1 and per-file front-matter `meta`): the repo tree's bundle-row hints and file chips,
+// the not-read list without reserved files, and a recompute after the extract-version bump (4).
 //
 // Replaces: none (2026-10-16-team-vs-personal-config).
 import { randomBytes } from 'crypto';
@@ -287,13 +291,14 @@ test('@S-REPO-16 team-view analytics follow the team config for every member’s
   await test.step('8. FR-17 repo OKF tab: the personal view shows both bundles and the ignored article; the team view drops every ignored path', async () => {
     const personal = await repoOkf(owner, {});
     expect(personal.bundles.map((b) => b.root).sort()).toEqual([kb, priv].sort());
-    expect(personal.tiles.kbFiles).toBe(6);
+    // OKF v0.3 FR-2: KB files are articles — the bundles' index.md files are not counted.
+    expect(personal.tiles.kbFiles, 'a.md, b.md, secret.md, notes.md').toBe(4);
     expect(JSON.stringify(personal)).toContain(secret);
     expect(JSON.stringify(personal)).toContain(`${priv}/notes.md`);
 
     const team = await repoOkf(member, { teamId: String(teamId) });
     expect(team.bundles.map((b) => b.root)).toEqual([kb]);
-    expect(team.tiles.kbFiles, 'index.md, a.md, b.md — not secret.md').toBe(3);
+    expect(team.tiles.kbFiles, 'a.md, b.md — not secret.md, not the index').toBe(2);
     expect(team.tiles.kbSessions, 'both members’ trees read a visible article').toBe(2);
     expect(JSON.stringify(team)).not.toContain(secret);
     expect(JSON.stringify(team)).not.toContain(priv);
@@ -302,7 +307,7 @@ test('@S-REPO-16 team-view analytics follow the team config for every member’s
     try {
       await expect(page.getByTestId('tab-repo-okf')).toHaveAttribute('data-state', 'active');
       await expect(page.getByTestId('okf-tree')).toContainText(kb);
-      await expect(kbFilesTile(page)).toHaveText('3');
+      await expect(kbFilesTile(page)).toHaveText('2');
       await expect(page.getByTestId('repo-okf-tab')).not.toContainText('secret.md');
       await expect(page.getByTestId('repo-okf-tab')).not.toContainText(priv);
 
@@ -384,17 +389,17 @@ test('@S-REPO-16 team-view analytics follow the team config for every member’s
   await test.step('11. bundle filter (personal view): one bundle narrows the tiles and the tree; the URL keeps it', async () => {
     const one = await repoOkf(owner, { bundle: kb });
     expect(one.bundles.map((b) => b.root)).toEqual([kb]);
-    expect(one.tiles.kbFiles).toBe(4);
+    expect(one.tiles.kbFiles, 'a.md, b.md, secret.md').toBe(3);
     expect(JSON.stringify(one.tree)).not.toContain(priv);
 
     const { context, page } = await browserAs(browser, stand.url, owner, `/#/repos/${repoOf(owner)}?mtab=okf`);
     try {
-      await expect(kbFilesTile(page)).toHaveText('6');
+      await expect(kbFilesTile(page)).toHaveText('4');
       await expect(page.getByTestId('okf-tree')).toContainText(priv);
       await page.getByTestId('okf-bundle-select').click();
       await page.getByRole('option', { name: kb, exact: true }).click();
       await expect(page).toHaveURL(new RegExp(`okfBundle=${encodeURIComponent(kb).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
-      await expect(kbFilesTile(page)).toHaveText('4');
+      await expect(kbFilesTile(page)).toHaveText('3');
       await expect(page.getByTestId('okf-tree')).toContainText(kb);
       await expect(page.getByTestId('okf-tree')).not.toContainText(priv);
     } finally {
@@ -698,5 +703,89 @@ test('@S-REPO-16 team-view analytics follow the team config for every member’s
     } finally {
       await context.close();
     }
+  });
+
+  await test.step('17. OKF v0.3 front matter (2026-11-19): repo tree bundle-row hints and file chips, not-read without reserved files, recompute after the extract-version bump', async () => {
+    const v03 = `docs/v03-${run}`;
+    const fm = { frontMatter: true, hasGenerated: true, hasTimestamp: false };
+    const sid = okfSid('v03');
+    const key = await createApiKey(owner.api);
+    await uploadOkfSessionTree(
+      api,
+      key.key,
+      {
+        sessionId: sid,
+        repoUrl,
+        prompt: `okf v03 ${run}`,
+        snapshot: {
+          bundles: [
+            {
+              root: v03,
+              okfVersion: '0.1',
+              title: 'Release notes',
+              files: [
+                { path: `${v03}/index.md`, meta: { ...fm, type: 'Index' } },
+                { path: `${v03}/legacy.md`, meta: { ...fm, type: 'Article', status: 'deprecated', superseded_by: '/current.md' } },
+                { path: `${v03}/current.md`, meta: { ...fm, type: 'Article', stale_after: '2000-01-01T00:00:00Z' } },
+                // v0.1 `timestamp` instead of `generated`, and no `type`.
+                { path: `${v03}/v01.md`, meta: { frontMatter: true, hasGenerated: false, hasTimestamp: true } },
+                { path: `${v03}/log.md`, meta: { frontMatter: false, hasGenerated: false, hasTimestamp: false } },
+                { path: `${v03}/nested/index.md`, meta: { frontMatter: false, hasGenerated: false, hasTimestamp: false } },
+                { path: `${v03}/.drafts/wip.md`, meta: { frontMatter: false, hasGenerated: false, hasTimestamp: false } },
+              ],
+            },
+          ],
+        },
+        actions: [{ read: `${v03}/index.md` }, { read: `${v03}/legacy.md` }],
+      },
+      { db, userId: owner.id },
+    );
+
+    // The repo route takes the latest snapshot: this tree's bundle.
+    const usage = (await repoOkf(owner, {})) as OkfRepoUsage & {
+      bundles: Array<{ root: string; title?: string; okfVersion?: string; newerFormatHint?: boolean; articlesWithHints?: number; hintReasons?: string[] }>;
+      notRead: Array<{ path: string }>;
+    };
+    expect(usage.bundles.find((b) => b.root === v03)).toMatchObject({
+      title: 'Release notes',
+      okfVersion: '0.1',
+      newerFormatHint: true,
+      articlesWithHints: 1,
+      hintReasons: ['no_type', 'v01_timestamp'],
+    });
+    expect(usage.tiles.kbFiles, 'legacy.md, current.md, v01.md — no index.md / log.md, no dot-path').toBe(3);
+    expect(usage.notRead.map((f) => f.path).sort(), 'not-read lists articles only').toEqual([`${v03}/current.md`, `${v03}/v01.md`]);
+
+    const { context, page } = await browserAs(browser, stand.url, owner, `/#/repos/${repoOf(owner)}?mtab=okf`);
+    try {
+      const rows = page.getByTestId('okf-tree-row');
+      const bundleRow = rows.filter({ hasText: 'Release notes' }).first();
+      await expect(bundleRow.getByTestId('okf-tree-bundle-newer-format')).toHaveText('ⓘ newer format (0.3)');
+      await expect(bundleRow.getByTestId('okf-tree-bundle-can-improve')).toHaveText('ⓘ 1 can improve');
+      await expect(bundleRow.getByTestId('okf-tree-bundle-can-improve')).toHaveAttribute('title', 'no type, v0.1 timestamp');
+      const legacy = rows.filter({ hasText: 'legacy.md' });
+      await expect(legacy.getByTestId('okf-deprecated-chip')).toHaveText('deprecated');
+      // `/current.md` is relative to the bundle root.
+      await expect(legacy.getByTestId('okf-superseded-by')).toHaveText('→ current.md');
+      await expect(legacy.getByTestId('okf-superseded-by')).toHaveAttribute('title', `${v03}/current.md`);
+      await expect(rows.filter({ hasText: 'current.md' }).filter({ hasNotText: 'legacy.md' }).getByTestId('okf-past-stale-after')).toHaveText(
+        'past stale_after',
+      );
+      await expect(rows.filter({ hasText: 'v01.md' }).getByTestId('okf-can-improve')).toHaveAttribute('title', 'no type, v0.1 timestamp');
+      await expect(page.getByTestId('okf-tree')).not.toContainText('wip.md');
+      await expectOkfTreeFits(page);
+    } finally {
+      await context.close();
+    }
+
+    // Recompute after the extract-version bump: a session stamped by the previous extractor (3)
+    // counts as "no OKF analysis yet" until recomputed, then carries version 4.
+    await db.query('UPDATE sessions SET okf_extract_version = 3 WHERE session_id = $1', [sid]);
+    const before = (await repoOkf(owner, {})).tiles.sessionsWithoutAnalysis ?? 0;
+    expect(before, 'version 3 is older than the current extractor').toBeGreaterThan(0);
+    expect((await owner.api.post(`/api/v1/repositories/${repoOf(owner)}/recompute-all-sessions`)).status()).toBe(201);
+    const after = await db.query<{ v: number | null }>('SELECT okf_extract_version AS v FROM sessions WHERE session_id = $1', [sid]);
+    expect(after.rows[0].v).toBe(4);
+    expect((await repoOkf(owner, {})).tiles.sessionsWithoutAnalysis ?? 0).toBeLessThan(before);
   });
 });

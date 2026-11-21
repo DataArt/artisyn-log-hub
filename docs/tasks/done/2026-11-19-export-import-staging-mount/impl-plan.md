@@ -75,32 +75,32 @@ Requirements: [requirements.md](requirements.md)
 
 ### Chunk 1 — Compose mount, log de-duplication, docs
 
-- [ ] `release-template/docker-compose.yml`: after the `upload-queue` volume line (`:81`) add
+- [x] `release-template/docker-compose.yml`: after the `upload-queue` volume line (`:81`) add
   `      - ${LOG_HUB_DATA_DIR:?set LOG_HUB_DATA_DIR in .env}/export-import:/app/dist/export-import`.
   In `.claude/skills/big-prod-e2e-test/scripts/lib/stand.mjs` add the same line (with `\${`
   escaping) after `:127`, and add `'export-import'` to the subdir array at `:161`.
-- [ ] Create `server/src/common/repeated-failure-log.ts`: exported class `RepeatedFailureLog`,
+- [x] Create `server/src/common/repeated-failure-log.ts`: exported class `RepeatedFailureLog`,
   constructor `(logger: Logger, label: string)`, fields `lastKey: string | null = null`,
   `failedCount = 0`. `failed(err: unknown)`: key = `err.message` or `String(err)`; `failedCount++`;
   if key ≠ `lastKey` → `logger.error(\`${label} failed: ${key} (repeats suppressed until the sweep recovers)\`, err.stack)`,
   set `lastKey`; else `logger.debug(\`${label} failed again: ${key}\`)`.
-- [ ] Same file, `succeeded()`: if `failedCount > 0` → `logger.log(\`${label} recovered after ${failedCount} failed sweeps\`)`;
+- [x] Same file, `succeeded()`: if `failedCount > 0` → `logger.log(\`${label} recovered after ${failedCount} failed sweeps\`)`;
   reset `lastKey = null`, `failedCount = 0`. Add a short JSDoc on the class (per-worker in-memory
   state, previous-failure-only key, restart logs the first failure again).
-- [ ] `ExportImportJobCleanupScheduler` (`server/src/logs/export-import-job-cleanup.scheduler.ts`):
+- [x] `ExportImportJobCleanupScheduler` (`server/src/logs/export-import-job-cleanup.scheduler.ts`):
   add `private readonly sweepFailures = new RepeatedFailureLog(this.logger, 'Export/import job cleanup sweep')`;
   in `tick()` call `this.sweepFailures.succeeded()` after `sweepOrphanFiles()` and replace the
   catch body (`:96-101`) with `this.sweepFailures.failed(err)`. Same change in
   `TurnEndAdvisorOrphanCleanupScheduler.tick()` (`:86-93`) with label
   `'Turn-end advisor orphan cleanup sweep'`.
-- [ ] Docs: `INSTALL.md` `## Data` (`:229-233`) and `LOCAL-BUNDLE.md` data paragraph (`:90-94`) —
+- [x] Docs: `INSTALL.md` `## Data` (`:229-233`) and `LOCAL-BUNDLE.md` data paragraph (`:90-94`) —
   list `export-import/` ("short-lived repository export/import staging zips") and add the FR3
   non-root note verbatim from requirements: create `upload-queue/`, `logs/`, `export-import/`
   under `LOG_HUB_DATA_DIR` and `chown` them to the `user:` UID before first start.
-- [ ] `INSTALL.md` after `:255` (backup/upgrade text): add "`loghub-db/` backups also include
+- [x] `INSTALL.md` after `:255` (backup/upgrade text): add "`loghub-db/` backups also include
   short-lived export/import staging zips" and "an override volume on `/app/dist/export-import`
   (an old workaround) can be removed after this upgrade".
-- [ ] `user-docs/component-reference.md` §3.3: row `` `/app/dist/export-import` `` |
+- [x] `user-docs/component-reference.md` §3.3: row `` `/app/dist/export-import` `` |
   `` `$LOG_HUB_DATA_DIR/export-import` `` | short-lived repository export/import staging zips (deleted
   after `EXPORT_IMPORT_JOB_TTL_MS`); run `npm run build:help`. KB `system-info-and-cluster.md`
   `:198-213`: `export-import` (`EXPORT_IMPORT_DIR`) is mounted at `$LOG_HUB_DATA_DIR/export-import`;
@@ -108,13 +108,13 @@ Requirements: [requirements.md](requirements.md)
 
 ### Chunk 2 — Scenario step
 
-- [ ] `tests/scenarios/modes.ts` `FAST_TICK_ENV`: add `EXPORT_IMPORT_CLEANUP_INTERVAL_MS: '2000'`
+- [x] `tests/scenarios/modes.ts` `FAST_TICK_ENV`: add `EXPORT_IMPORT_CLEANUP_INTERVAL_MS: '2000'`
   with a one-line comment (s-repo-11 step 20 waits for several export/import cleanup sweeps).
-- [ ] `s-repo-11.spec.ts` step 20 (a), after step 19: `const admin = await users.user('admin', { label: 'r11-admin' })`;
+- [x] `s-repo-11.spec.ts` step 20 (a), after step 19: `const admin = await users.user('admin', { label: 'r11-admin' })`;
   record `t0`; rename `<stand.runDir>/export-import` to `export-import.bak` and write a regular
   file at the old path; wait 7 s; assert exactly one `GET /api/v1/admin/error-logs` entry (as
   admin) with `timestamp ≥ t0` containing `Export/import job cleanup sweep failed`.
-- [ ] Step 20 (b): in a `finally`, delete that file and rename `export-import.bak` back; then
+- [x] Step 20 (b): in a `finally`, delete that file and rename `export-import.bak` back; then
   `exportRepo(owner.api, repoA)` succeeds, wait 4 s, assert the count of such ERROR entries is
   still one and some `<stand.runDir>/logs/app-*.log` file contains
   `Export/import job cleanup sweep recovered after`.

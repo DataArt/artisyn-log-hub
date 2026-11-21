@@ -3,7 +3,7 @@ type: "Algorithm"
 title: "OKF value signals: did an article lead the agent to code, and where it failed to"
 description: "The access numbers and the verdict ([okf-verdict](okf-verdict.md)) say how much of the KB the agents read. They do not say whether an article was worth reading."
 tags: [algorithm]
-generated: { by: "human:denistsyplakov", at: "2026-11-06T02:28:23+04:00" }
+generated: { by: "human:denistsyplakov", at: "2026-11-20T22:23:16+04:00" }
 reviewed: no
 reviewer: none
 ---
@@ -147,6 +147,14 @@ probe in `docs/tasks/todo/2026-11-03-okf-view-kb-value/notes.md`, under `done/` 
       later item whose path (without a trailing `/`) equals the pointer or lies under it — the
       extraction's "followed" test; absent for a pointer never touched, and absent when none
       was. Computed over the whole sequence.
+    - `deprecated` / `supersededBy` of a `kb_read` item (OKF v0.3, FR-6): the optional input
+      `deprecated` maps a deprecated article's path (front-matter `status: deprecated`, see
+      [okf-metadata](okf-metadata.md)) to its resolved `superseded_by` or `null`. A `kb_read`
+      item whose path is a key gets `deprecated: true`, plus `supersededBy` when the value is not
+      `null`; every read of the article is flagged, ranged ones included. `kb_search` /
+      `kb_write` and code items never get them; without the map (no hook metadata) nothing is
+      flagged. The route builds the map from the bundles after the team filter and drops a
+      `supersededBy` target the viewer cannot see.
     - The other fields are copied (`ord`, `op`, `path`, `offset`, `limit`, `pattern`,
       `newPointers`, `hit`). The first `cap` items are kept (`OKF_TRAIL_MAX_ITEMS` = 2000);
       `truncated` says more existed.
@@ -168,7 +176,10 @@ probe in `docs/tasks/todo/2026-11-03-okf-view-kb-value/notes.md`, under `done/` 
 - Folder searches never make a routing miss: VS-12.
 - Trail: a search before the read, a folder search, a too-wide folder, an area read, an upkeep
   article, an unread article's area, `followedAt` first-later-touch: VS-13; the cap and a
-  folder pointer followed through a path under it: VS-14.
+  folder pointer followed through a path under it: VS-14; deprecated reads with and without a
+  `supersededBy`, a re-read, search / write / non-deprecated items unflagged: VS-15.
+- Dead pointers on OKF v0.3 resolved pointers (`./b.md`, a bundle-rooted path): `notFound`
+  judged on the stored pointer as before: VS-16.
 
 ## Examples
 
@@ -183,9 +194,10 @@ yield}` with the two maps turned into objects keyed by path / node id.
 
 Rows with `"kind": "trail"` run `buildOkfTrail` (rule 11) instead: `input.seq` is the sequence,
 `input.areas` an object `{article: areaFiles[]}` (default none), `input.cap` the cap (default
-`OKF_TRAIL_MAX_ITEMS`); `expected` is the exact `{items, truncated}`.
+`OKF_TRAIL_MAX_ITEMS`), `input.deprecated` an object `{article: supersededBy | null}` passed as
+the `deprecated` map (default none); `expected` is the exact `{items, truncated}`.
 
-Rows (14): [`docs/algorithm-examples/okf-value-signals.json`](../../algorithm-examples/okf-value-signals.json) — test data for the table test; the rules above are enough to understand the algorithm.
+Rows (16): [`docs/algorithm-examples/okf-value-signals.json`](../../algorithm-examples/okf-value-signals.json) — test data for the table test; the rules above are enough to understand the algorithm.
 
 ## Mutations
 
@@ -213,6 +225,10 @@ Rows (14): [`docs/algorithm-examples/okf-value-signals.json`](../../algorithm-ex
   (#4 unmarked); upkeep or unread articles marked -> VS-13 (#9, #10); `followedAt` taking an
   earlier touch or only exact paths -> VS-13 (1), VS-14 (`server/b/` absent); `followedAt`
   computed after the cap -> VS-14 (`server/a.ts` absent).
+- Trail deprecated flag on every item of the path, or only on the first read -> VS-15 (#2 / #4
+  flagged, or #6 unflagged); `supersededBy: null` emitted -> VS-15 (#3).
+- `notFound` judged on the raw span instead of the stored pointer -> VS-16 (`docs/kb/sub/b.md`
+  not found).
 
 ## Where the result is visible
 

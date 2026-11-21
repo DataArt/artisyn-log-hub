@@ -149,3 +149,4 @@ Who is affected by the change:
 ## Notes
 
 <!-- Append timestamped notes here as work progresses -->
+2026-11-20 — implemented via adlc-lh:implement; checks green.

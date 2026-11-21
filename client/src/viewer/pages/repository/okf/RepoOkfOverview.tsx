@@ -96,6 +96,10 @@ export function RepoOkfOverview({
     () => new Set(data.bundles.filter((b) => b.ignored).map((b) => b.root)),
     [data],
   );
+  const bundleInfo = useMemo(
+    () => new Map(data.bundles.map((b) => [b.root, b])),
+    [data],
+  );
   const minBundleFiles = useShareMinBundleFiles(
     repoId,
     teamId,
@@ -163,6 +167,7 @@ export function RepoOkfOverview({
             metric={metric}
             variant="repo"
             ignoredBundles={ignoredBundles}
+            bundleInfo={bundleInfo}
             nullGroupLabel={
               data.snapshot
                 ? 'No longer in KB'

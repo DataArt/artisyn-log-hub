@@ -7,7 +7,10 @@
  * heat metric with "not read" rows last, narrow it to one agent's files, flatten it to the visible
  * rows, and find the ancestors of a node for "scroll to node".
  */
-import type { OkfTreeNode } from '../../../../../models/repositories';
+import type {
+  OkfArticleHint,
+  OkfTreeNode,
+} from '../../../../../models/repositories';
 
 /** Uniform row height of the OKF tree, in px (same as the change-surface tree). */
 export const OKF_ROW_HEIGHT = 28;
@@ -321,4 +324,17 @@ export function formatOkfSearchedAfter(
 /** ROUTE MISS cell: "X / Y" (missing agents of all area agents), empty without a miss. */
 export function formatOkfRoutingMiss(r: OkfTreeNode['routingMiss']): string {
   return r && r.agents > 0 ? `${r.agents} / ${r.areaAgents}` : '';
+}
+
+/** Display labels of the OKF v0.3 per-article format hints (advice, sky — never a warning). */
+export const OKF_HINT_LABELS: Record<OkfArticleHint, string> = {
+  no_front_matter: 'no front matter',
+  no_type: 'no type',
+  v01_timestamp: 'v0.1 timestamp',
+};
+
+/** Basename of a repo-relative path (the supersededBy "→ name" label). */
+export function okfBaseName(path: string): string {
+  const i = path.lastIndexOf('/');
+  return i >= 0 ? path.slice(i + 1) : path;
 }

@@ -43,6 +43,11 @@
 // Package 3 (agent trail): step 12 opens an agent's trail in section B (`okfAgent` in the URL) —
 // call order, the new code paths of a read and where they were opened, in-area searches with
 // `found` / `nothing found`.
+// OKF v0.3 support (2026-11-19): steps 7–12 stand for an older hook (no front-matter metadata, so
+// no title, chips or advice lines — step 8 checks the card stays as before); step 13 uploads a
+// hook 3.1.0 snapshot (bundle title / version / description, per-file `meta`) and checks the
+// card, the tree and trail chips, a `../x` pointer resolved against the article folder, and that
+// nested index.md / log.md and a dot-path file are not articles.
 //
 // Replaces:
 //   - server/test/change-surface.e2e-spec.ts (24, part ≈ 10)
@@ -300,6 +305,11 @@ test('@S-SESS-09 Windows change surface: scattered change, a file outside the re
     await expect(page.getByTestId('okf-upkeep-line')).toContainText('1 read');
     await expect(page.getByTestId('okf-agent-row')).toHaveCount(2);
     await expect(page.getByTestId('okf-bundle-card')).toContainText('docs/kb');
+    // Older hook (no front-matter metadata, FR-9): today's card, no title / version / advice.
+    await expect(page.getByTestId('okf-bundle-title')).toHaveCount(0);
+    await expect(page.getByTestId('okf-bundle-version')).toHaveCount(0);
+    await expect(page.getByTestId('okf-bundle-can-improve')).toHaveCount(0);
+    await expect(page.getByTestId('okf-bundle-newer-format')).toHaveCount(0);
 
     // Package 2 (2026-11-05): the tab is split into A (structure, verified) and B (value
     // signals, heuristic); A's verdict card lists one Checks line per structure rule with the
@@ -552,5 +562,149 @@ test('@S-SESS-09 Windows change surface: scattered change, a file outside the re
     await page.getByTestId('okf-trail-close').click();
     await expect(page).not.toHaveURL(/[?&]okfAgent=/);
     await expect(page.getByTestId('okf-agent-trail')).toHaveCount(0);
+  });
+
+  await test.step('13. OKF v0.3 front matter (2026-11-19): a hook 3.1.0 snapshot — card title / version chip / advice lines, deprecated + past-stale_after + can-improve chips in the tree, deprecated chip in the trail, a `../x` pointer followed, nested index.md / log.md and a dot-path not counted as articles', async () => {
+    const sid3 = `ss09okf3-${run}`;
+    const fm = { frontMatter: true, hasGenerated: true, hasTimestamp: false };
+    const key = await createApiKey(owner.api);
+    await uploadOkfSessionTree(
+      api,
+      key.key,
+      {
+        sessionId: sid3,
+        repoUrl: okfRepoUrl,
+        prompt: 'set up the dev environment',
+        snapshot: {
+          bundles: [
+            {
+              root: 'docs/guide',
+              okfVersion: '0.2',
+              title: 'Team guide',
+              description: 'How the team sets up, builds and ships the shop',
+              files: [
+                { path: 'docs/guide/index.md', size: 500, meta: { ...fm, type: 'Index' } },
+                {
+                  path: 'docs/guide/setup.md',
+                  meta: { ...fm, type: 'Article', status: 'Deprecated', superseded_by: 'install.md' },
+                },
+                { path: 'docs/guide/install.md', meta: { ...fm, type: 'Article', stale_after: '2020-01-01' } },
+                { path: 'docs/guide/old.md', meta: { frontMatter: false, hasGenerated: false, hasTimestamp: false } },
+                { path: 'docs/guide/api/routes.md', meta: { ...fm, type: 'Article' } },
+                // FR-2: reserved names at any depth are never articles (reads still are KB access).
+                { path: 'docs/guide/log.md', meta: { frontMatter: false, hasGenerated: false, hasTimestamp: false } },
+                { path: 'docs/guide/sub/index.md', meta: { frontMatter: false, hasGenerated: false, hasTimestamp: false } },
+                // FR-2: a dot-path is not part of the bundle at all.
+                { path: 'docs/guide/.hidden/notes.md', meta: { frontMatter: false, hasGenerated: false, hasTimestamp: false } },
+              ],
+            },
+          ],
+        },
+        actions: [
+          { read: 'docs/guide/index.md', bytes: 500 },
+          { read: 'docs/guide/setup.md', bytes: 400 },
+          { read: 'docs/guide/sub/index.md', bytes: 200 },
+          { read: 'docs/guide/log.md', bytes: 200 },
+          { read: 'docs/guide/.hidden/notes.md', bytes: 300 },
+          // FR-1 (OKF v0.3 §6): `../install.md` is relative to the article's folder (docs/guide/api).
+          { read: 'docs/guide/api/routes.md', result: 'Routes need a running stack — see `../install.md` first.\n' },
+          { read: 'docs/guide/install.md', bytes: 700 },
+        ],
+      },
+      { db, userId: owner.id },
+    );
+
+    // API: the bundle summary and the stored pointer (extract version 4).
+    const res = await owner.api.get(`/api/v1/repositories/${okfRepoId}/sessions/${encodeURIComponent(sid3)}/okf-usage`);
+    expect(res.status()).toBe(200);
+    const usage = (await res.json()) as {
+      bundles: Array<{
+        root: string;
+        files: number | null;
+        filesRead: number;
+        title?: string;
+        okfVersion?: string;
+        newerFormatHint?: boolean;
+        articlesWithHints?: number;
+        hintReasons?: string[];
+      }>;
+    };
+    expect(usage.bundles).toHaveLength(1);
+    expect(usage.bundles[0], 'setup, install, old and api/routes are the only articles; three were read').toMatchObject({
+      root: 'docs/guide',
+      files: 4,
+      filesRead: 3,
+      title: 'Team guide',
+      okfVersion: '0.2',
+      newerFormatHint: true,
+      articlesWithHints: 1,
+      hintReasons: ['no_front_matter'],
+    });
+    const ptr = await db.query<{ pointer: string; followed: boolean }>(
+      `SELECT p.pointer, p.followed FROM session_okf_pointer p JOIN sessions s ON s.id = p.session_id
+        WHERE s.session_id = $1 AND p.article_path = 'docs/guide/api/routes.md'`,
+      [sid3],
+    );
+    expect(ptr.rows, 'the `../install.md` pointer resolves against the article folder and was followed').toEqual([
+      { pointer: 'docs/guide/install.md', followed: true },
+    ]);
+    // A dot-path file is not part of the bundle: the extractor treats its read as a code read.
+    const hidden = await db.query<{ n: string }>(
+      `SELECT count(*) AS n FROM session_okf_event e JOIN sessions s ON s.id = e.session_id
+        WHERE s.session_id = $1 AND e.op = 'read' AND e.path = 'docs/guide/.hidden/notes.md'`,
+      [sid3],
+    );
+    expect(Number(hidden.rows[0].n), 'a dot-path read is a code-side event, not a KB read').toBe(1);
+    const version = await db.query<{ v: number | null }>(
+      'SELECT okf_extract_version AS v FROM sessions WHERE session_id = $1',
+      [sid3],
+    );
+    expect(version.rows[0]?.v).toBe(4);
+
+    // UI: the bundle card.
+    await openSession(page, owner, okfRepoId, sid3, { tab: 'okf' });
+    await page.reload();
+    await expect(page.getByTestId('session-okf-tab')).toBeVisible();
+    const card = page.getByTestId('okf-bundle-card');
+    await expect(card).toHaveCount(1);
+    await expect(card.getByTestId('okf-bundle-title')).toHaveText('Team guide');
+    await expect(card).toContainText('docs/guide');
+    await expect(card.getByTestId('okf-bundle-version')).toHaveText('OKF 0.2');
+    await expect(card.getByTestId('okf-bundle-description')).toHaveText('How the team sets up, builds and ships the shop');
+    await expect(card.getByTestId('okf-bundle-articles')).toHaveText('3 of 4 articles read');
+    await expect(card.getByTestId('okf-bundle-can-improve')).toContainText('1 article can be improved');
+    await expect(card.getByTestId('okf-bundle-can-improve')).toContainText('no front matter');
+    await expect(card.getByTestId('okf-bundle-newer-format')).toContainText('Newer format available (0.3)');
+    await expect(card.getByTestId('okf-bundle-newer-format')).toContainText('Advice — this bundle still works as is.');
+
+    // Tree: the bundle row's hint chips, the file chips (amber warnings, sky hints).
+    const rows = page.getByTestId('okf-tree-row');
+    await expect(rows.first()).toContainText('Team guide');
+    await expect(rows.first().getByTestId('okf-tree-bundle-newer-format')).toHaveText('ⓘ newer format (0.3)');
+    await expect(rows.first().getByTestId('okf-tree-bundle-can-improve')).toHaveText('ⓘ 1 can improve');
+    const setup = rows.filter({ hasText: 'setup.md' });
+    await expect(setup.getByTestId('okf-deprecated-chip')).toHaveText('deprecated');
+    await expect(setup.getByTestId('okf-superseded-by')).toHaveText('→ install.md');
+    await expect(rows.filter({ hasText: 'install.md' }).filter({ hasNotText: 'setup.md' }).getByTestId('okf-past-stale-after')).toHaveText(
+      'past stale_after',
+    );
+    await expect(rows.filter({ hasText: 'notes.md' }), 'the dot-path is not in the tree').toHaveCount(0);
+    // old.md was not read: it sits in the folded unread group until shown.
+    const unread = page.getByTestId('okf-tree-unread-group');
+    await expect(unread).toHaveText('1 article not read in this session · show');
+    await unread.click();
+    await expect(rows.filter({ hasText: 'old.md' }).getByTestId('okf-can-improve')).toHaveText('ⓘ can improve');
+    await expect(rows.filter({ hasText: 'old.md' }).getByTestId('okf-can-improve')).toHaveAttribute('title', 'no front matter');
+    await expectOkfTreeFits(page);
+
+    // Trail: the KB read of the deprecated setup.md carries the amber chip and its replacement.
+    await page.getByTestId('okf-agent-row').click();
+    await expect(page).toHaveURL(new RegExp(`[?&]okfAgent=${sid3}(&|$)`));
+    const items = page.getByTestId('okf-section-b').getByTestId('okf-agent-trail').getByTestId('okf-trail-item');
+    const setupRead = items.filter({ hasText: 'docs/guide/setup.md' });
+    await expect(setupRead).toHaveAttribute('data-op', 'kb_read');
+    await expect(setupRead.getByTestId('okf-deprecated-chip')).toHaveText('deprecated');
+    await expect(setupRead.getByTestId('okf-superseded-by')).toHaveText('→ install.md');
+    await expect(items.filter({ hasText: 'docs/guide/install.md' }).getByTestId('okf-deprecated-chip')).toHaveCount(0);
   });
 });

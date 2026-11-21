@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="430" viewBox="0 0 980 430" font-family="Segoe UI, Arial, sans-serif">
+  <rect width="980" height="430" fill="#ffffff"/>
+  <text x="20" y="30" font-size="15" font-weight="600" fill="#111827">OKF tab — bundle cards (FR-6 title/description, FR-7 "can be improved", FR-8 "newer format available")</text>
+  <text x="20" y="50" font-size="11" fill="#6b7280">Session OKF tab · OkfBundleCards · light theme · w-72 cards, same layout as today with the new lines added</text>
+
+  <!-- Card 1: v0.3 bundle with title + description -->
+  <g transform="translate(20,70)">
+    <rect width="288" height="250" rx="6" fill="#ffffff" stroke="#e5e7eb"/>
+    <text x="12" y="24" font-size="13" font-weight="600" fill="#111827">Log Hub development KB</text>
+    <text x="12" y="42" font-size="11" fill="#6b7280">How the code works: server, hook, client,</text>
+    <text x="12" y="56" font-size="11" fill="#6b7280">algorithms and tests.</text>
+    <text x="12" y="78" font-size="11" font-family="Consolas, monospace" fill="#374151">docs/knowledgebase</text>
+    <rect x="136" y="67" width="44" height="15" rx="3" fill="none" stroke="#e5e7eb"/>
+    <text x="142" y="78" font-size="10" fill="#6b7280">tracked</text>
+    <rect x="186" y="67" width="54" height="15" rx="3" fill="none" stroke="#e5e7eb"/>
+    <text x="192" y="78" font-size="10" font-family="Consolas, monospace" fill="#6b7280">OKF 0.3</text>
+    <text x="12" y="102" font-size="11" fill="#15803d">✓ started from index.md</text>
+    <text x="12" y="126" font-size="13" fill="#111827">12 of 116 articles read</text>
+    <text x="12" y="150" font-size="10" fill="#6b7280" letter-spacing="0.5">BYTES INTO CONTEXT</text>
+    <text x="12" y="166" font-size="13" font-family="Consolas, monospace" fill="#111827">184.2 KB</text>
+    <line x1="12" y1="182" x2="276" y2="182" stroke="#f3f4f6"/>
+    <circle cx="19" cy="200" r="4" fill="#0ea5e9"/>
+    <text x="30" y="204" font-size="11" fill="#0369a1">4 articles can be improved</text>
+    <text x="30" y="220" font-size="10" fill="#6b7280">no type · no front matter · v0.1 timestamp</text>
+    <text x="12" y="240" font-size="10" fill="#9ca3af">(no format hint — bundle is OKF 0.3)</text>
+  </g>
+
+  <!-- Card 2: pre-0.3 bundle, no title -->
+  <g transform="translate(330,70)">
+    <rect width="288" height="250" rx="6" fill="#ffffff" stroke="#e5e7eb"/>
+    <text x="12" y="24" font-size="11" font-family="Consolas, monospace" font-weight="600" fill="#111827">docs/product-kb</text>
+    <rect x="118" y="13" width="44" height="15" rx="3" fill="none" stroke="#e5e7eb"/>
+    <text x="124" y="24" font-size="10" fill="#6b7280">tracked</text>
+    <rect x="168" y="13" width="54" height="15" rx="3" fill="none" stroke="#e5e7eb"/>
+    <text x="174" y="24" font-size="10" font-family="Consolas, monospace" fill="#6b7280">OKF 0.1</text>
+    <text x="12" y="44" font-size="10" fill="#9ca3af">(no title in index.md → folder name, as today)</text>
+    <text x="12" y="68" font-size="13" fill="#111827">3 of 41 articles read</text>
+    <text x="12" y="92" font-size="10" fill="#6b7280" letter-spacing="0.5">BYTES INTO CONTEXT</text>
+    <text x="12" y="108" font-size="13" font-family="Consolas, monospace" fill="#111827">22.7 KB</text>
+    <line x1="12" y1="124" x2="276" y2="124" stroke="#f3f4f6"/>
+    <rect x="12" y="134" width="264" height="44" rx="4" fill="#f0f9ff" stroke="#bae6fd"/>
+    <text x="22" y="152" font-size="11" fill="#0369a1">ⓘ Newer format available (0.3)</text>
+    <text x="22" y="168" font-size="10" fill="#0c4a6e">Advice — this bundle still works as is.</text>
+    <circle cx="19" cy="196" r="4" fill="#0ea5e9"/>
+    <text x="30" y="200" font-size="11" fill="#0369a1">17 articles can be improved</text>
+    <text x="30" y="216" font-size="10" fill="#6b7280">counted in shares / not-read / hot files</text>
+  </g>
+
+  <!-- Card 3: old hook -->
+  <g transform="translate(640,70)">
+    <rect width="288" height="250" rx="6" fill="#ffffff" stroke="#e5e7eb"/>
+    <text x="12" y="24" font-size="11" font-family="Consolas, monospace" font-weight="600" fill="#111827">kb</text>
+    <rect x="30" y="13" width="44" height="15" rx="3" fill="none" stroke="#e5e7eb"/>
+    <text x="36" y="24" font-size="10" fill="#6b7280">tracked</text>
+    <text x="12" y="48" font-size="11" fill="#15803d">✓ started from index.md</text>
+    <text x="12" y="72" font-size="13" fill="#111827">5 of 20 articles read</text>
+    <text x="12" y="96" font-size="10" fill="#6b7280" letter-spacing="0.5">BYTES INTO CONTEXT</text>
+    <text x="12" y="112" font-size="13" font-family="Consolas, monospace" fill="#111827">31.0 KB</text>
+    <text x="12" y="150" font-size="10" fill="#9ca3af">Session uploaded by an old hook (FR-9):</text>
+    <text x="12" y="164" font-size="10" fill="#9ca3af">no version chip, no title, no hints —</text>
+    <text x="12" y="178" font-size="10" fill="#9ca3af">card looks exactly as today.</text>
+  </g>
+
+  <text x="20" y="350" font-size="11" fill="#6b7280">Idle bundles keep today's muted line:</text>
+  <text x="20" y="368" font-size="12" fill="#6b7280">1 other KB folder not opened: <tspan font-family="Consolas, monospace" text-decoration="underline">work-hub/docs</tspan></text>
+  <text x="20" y="400" font-size="10" fill="#9ca3af">Hints use the sky (info) palette, never red/amber: they are advice, not errors. "OKF x.y" chip shows the raw okfVersion when present; open questions decide the exact API fields.</text>
+</svg>

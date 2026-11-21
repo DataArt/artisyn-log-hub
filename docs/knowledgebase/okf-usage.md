@@ -8,7 +8,7 @@ tags:
   - session-view
   - reports
   - hook
-generated: { by: "human:denistsyplakov", at: "2026-11-05T00:00:00+04:00" }
+generated: { by: "human:denistsyplakov", at: "2026-11-20T22:15:00+04:00" }
 ---
 
 # OKF Usage
@@ -32,7 +32,9 @@ from `2026-11-03-okf-view-kb-value` (GH-88); its decisions are quoted as "value-
    builds the KB snapshot (`okf-snapshot.js` → `okf-snapshot` line) and always prepends an
    `okf-snapshot-ref` line; the full line only when `okf-state.json` does not list the id yet.
    Query params `okfSnapshotId` (+ `okfSnapshotFull=1` with the full line). Detection, ids and
-   ignored flags: [algorithms/okf-snapshot.md](algorithms/okf-snapshot.md).
+   ignored flags: [algorithms/okf-snapshot.md](algorithms/okf-snapshot.md). Hook `3.1.0`+ also
+   sends the OKF v0.3 front-matter metadata (bundle `okfVersion` / `title` / `description`, file
+   `meta`) — see "OKF v0.3 metadata and article rules" below.
 2. **Ingest** (`logs.service.ts` Step 5d2, `okf/okf-snapshot.ts` `storeAndBindOkfSnapshot`): a
    full line is stored in `okf_snapshots` (per owner, `ON CONFLICT DO NOTHING`); the root
    `sessions` row is bound with `okf_snapshot_id = $id WHERE okf_snapshot_id IS NULL` — first
@@ -44,9 +46,11 @@ from `2026-11-03-okf-view-kb-value` (GH-88); its decisions are quoted as "value-
    delete-then-insert per node, and the node's extraction marker is set — rules in
    [algorithms/okf-access-extraction.md](algorithms/okf-access-extraction.md). Bash commands go
    through `analyzeBash` from `@loghub/bash-view` with the server's tree-sitter parser
-   (`okf/server-bash-parser.ts`). The root's bound snapshot (`loadSnapshotFilesForNode`) gives
-   the file sizes for the byte split and the article hashes of the pointer rows. No thresholds
-   are applied here: the rows are stored raw.
+   (`okf/server-bash-parser.ts`). The root's bound snapshot (`loadSnapshotForNode`: its files and
+   its bundle roots) gives the file sizes for the byte split, the article hashes of the pointer
+   rows and the bundle roots that OKF v0.3 pointer resolution needs (`./x` / `../x` against the
+   article's folder, `/x` against the bundle root, a bare path article-relative first — rules 14
+   and 15 of the extraction doc). No thresholds are applied here: the rows are stored raw.
 4. **Read side** (`okf/okf-usage.service.ts`): loads the rows of the tree / the scoped trees and
    the snapshot bodies, applies the team filter, then the verdict
    ([algorithms/okf-verdict.md](algorithms/okf-verdict.md)), the value signals
@@ -63,7 +67,7 @@ from `2026-11-03-okf-view-kb-value` (GH-88); its decisions are quoted as "value-
 | `session_okf_access` | One row per tree node × `(path_key, op, after_own_edit)`: `bytes`, `calls`, `seq` (first-access rank in the node). `op` ∈ `read`, `grep`, `list`, `write`; a folder key ends in `/` (repo root `/`). Since 0091 also `ranged_calls` / `ranged_bytes` (section reads, included in `calls` / `bytes`) and `search_hits` (grep / list calls with a non-empty result). Cascades with its `sessions` row. |
 | `session_okf_event` | 0091. One row per tree node × `(ord, op, path)`: the node's **code-side** accesses (`op` ∈ `read`, `search`, `write`; `path` repo-relative, folders end in `/`), `range_from` / `range_to`, `pattern` (≤ 200 characters). `.md` files of the snapshot are not events (they are access rows). At most 3000 per node. |
 | `session_okf_pointer` | 0091. One row per tree node × `(read_ord, article_path, pointer)`: a back-ticked repo path in the result of a single-article KB read, with `article_hash` (from the bound snapshot), `is_new`, `followed`, `partial`. A partial read with no pointers stores one row with `pointer = ''`. At most 5000 per node. |
-| `sessions.okf_extract_version`, `sessions.okf_events_truncated` | 0091. The **marker**: the writer sets `OKF_EXTRACT_VERSION` (3) on every node it rebuilds, even with zero rows, and `okf_events_truncated` when a cap was hit. `NULL` or `< 3` on a root = "no OKF analysis yet" (FR-11 banner). Version 2 nodes keep their rows and `search_hits` (read while `okf_extract_version >= OKF_SEARCH_HITS_MIN_VERSION`, 2); 3 only tightened the pointer rule (no identifiers / versions / `(`, see okf-access-extraction rule 14), so their stored pointers may still hold such spans until `recompute-all-sessions`. The session trail re-extracts per request and always uses the current rule. |
+| `sessions.okf_extract_version`, `sessions.okf_events_truncated` | 0091. The **marker**: the writer sets `OKF_EXTRACT_VERSION` (4) on every node it rebuilds, even with zero rows, and `okf_events_truncated` when a cap was hit. `NULL` or `< 4` on a root = "no OKF analysis yet" (FR-11 banner; after a version bump every older-version root counts there until recompute). Version 2 nodes keep their rows and `search_hits` (read while `okf_extract_version >= OKF_SEARCH_HITS_MIN_VERSION`, 2); 3 only tightened the pointer rule (no identifiers / versions / `(`, see okf-access-extraction rule 14); 4 resolves pointers per OKF v0.3 §6 (`./`, `../`, bundle-rooted `/x`, bare paths article-relative first, the candidate chosen in a final pass). Rows of version 2 / 3 stay valid, but their stored pointers may hold spans the newer rule drops or resolves to another path until `recompute-all-sessions`. The session trail re-extracts per request and always uses the current rule. |
 
 Migrations `server/drizzle/migrations/0075_okf_usage.sql` and `0091_okf_value_signals.sql`
 (both additive, no backfill; `initializeDatabase()` re-queues nothing — old sessions get the new
@@ -119,7 +123,7 @@ Response types: `server/src/logs/okf/okf-usage.types.ts`, mirrored in
 - **Agent trail** (package 3, `SessionOkfTrailResponse`): `agent` `{id, label}` (label masked
   like `agents[].label`), `truncated`, `items[]` = one node's `seq` rebuilt from its transcript
   per request (transcript loader `loadOkfNodeTranscripts` shared with the facts route, the
-  writer's `loadSnapshotFilesForNode` for the snapshot files), capped at `OKF_TRAIL_MAX_ITEMS`
+  writer's `loadSnapshotForNode` for the snapshot files and bundle roots), capped at `OKF_TRAIL_MAX_ITEMS`
   (2000). Each item may carry `hit` (search found something — the extraction's DD-6 test of the
   call's result, read per request, never stored), `inArea` (articles read earlier whose DD-12
   area the code read / search falls in) and `followedAt` (a KB read's new pointer → first later
@@ -138,7 +142,56 @@ Response types: `server/src/logs/okf/okf-usage.types.ts`, mirrored in
   `routingMiss` (with `missing[]` agents and masked `taskHead`), `searchedAfter` (since package 3
   with optional `pairs[]` `{sessionId, agentId, label, searches}` — the root session, the agent and
   its masked description), `findings` and `sameFindingElsewhere` (top 5). Patterns are never masked; task heads follow the
-  `team-no-prompts` masking of `okf-usage`.
+  `team-no-prompts` masking of `okf-usage`. It carries none of the OKF v0.3 metadata fields (the
+  chips live on the tree rows).
+
+## OKF v0.3 metadata and article rules
+
+Task `2026-11-19-okf-v03-support`. Algorithm doc of the derivation:
+[algorithms/okf-metadata.md](algorithms/okf-metadata.md) (`okf/okf-metadata.ts`, pure, no DB).
+
+**Snapshot fields (hook `3.1.0`+, additive, `schemaVersion` stays 1).** The hook reads the first
+8192 bytes of every bundle file (was 512 for detection only) and parses its front matter:
+
+- per bundle, from the bundle-root `index.md`: `okfVersion`, `title`, `description` — each only
+  when the value is present (quotes stripped, inline `#` comments cut, `''` / `null` / `~` / block
+  scalars absent, capped at 200 characters);
+- per file (`index.md` included): `meta` = `{frontMatter, hasGenerated, hasTimestamp}` always, plus
+  `type`, `status`, `superseded_by`, `stale_after` when present.
+
+The body is stored verbatim; `normaliseSnapshot` (`okf/okf-snapshot.ts`) copies the strings
+(truncated to 200), maps `superseded_by` / `stale_after` to `supersededBy` / `staleAfter`, ignores
+wrong types and never drops a bundle or file for bad metadata (FR-4). Hook side (snapshot id,
+cache entry, size guard): [hook-api-versioning.md](hook-api-versioning.md) "OKF snapshot metadata".
+
+**Derived API fields** (all optional; absent for a bundle without hook metadata —
+`hasHookMeta(bundle)` = some file has `meta` — so old-hook data renders exactly as before, FR-9):
+
+| Field | Where | Rule |
+|---|---|---|
+| `title`, `description`, `okfVersion` | `OkfBundleSummary` (session and repo routes) | copied from the bundle |
+| `newerFormatHint` | `OkfBundleSummary` | `okfVersionHint`: absent / not `major.minor[.patch]` / below `0.3` → `true` (`0.3`, `0.3.1`, `0.10`, `1.0` → `false`) |
+| `articlesWithHints`, `hintReasons` | `OkfBundleSummary` | articles (`bundleArticles`) with ≥ 1 format hint, and the distinct hints in the order `no_front_matter`, `no_type`, `v01_timestamp` |
+| `deprecated`, `supersededBy` | file `OkfTreeNode`, `kb_read` `OkfTrailItem` | `status` is `deprecated` (any case); `superseded_by` resolved repo-relative (`/x` → bundle root, else the article's folder; `..` collapsed; escaping the repo → raw value), only for a deprecated article |
+| `pastStaleAfter` | file `OkfTreeNode` | `stale_after` before the reference time, or unparseable (`YYYY-MM-DD` = 00:00 UTC; date-time needs `Z` or an offset). Reference time: the root session's start on the session route and the trail, now on the repo route. Distinct from the value-signals `stale` marker |
+| `formatHints` | file `OkfTreeNode` | `no_front_matter`, `no_type` (front matter without `type`), `v01_timestamp` (`timestamp` without `generated`) — advice only, never a finding |
+
+Each tree-node / trail key is set only when true / non-empty. Team view (DD-S8): everything is
+derived after `applyOkfTeamFilter`, and a `supersededBy` whose target is not a visible article
+becomes `null`, so a hidden path never leaks. The verdict, checks and value signals do not use
+the metadata.
+
+**Article rules (FR-2, every hook version).** `bundleArticles` (`okf/okf-verdict.ts`) excludes the
+bundle's own `index.md`, **any** `index.md` / `log.md` at any depth (`isReservedOkfName`) and
+dot-paths. Reserved files still count as KB access (an `index.md` / `log.md` read is a KB read;
+`agentEntry` = `index` only for the bundle's own `index.md`), but they are never hot files,
+not-read entries or part of a share. A file whose path below its bundle root has a segment
+starting with `.` (e.g. `kb/.drafts/a.md`) is dropped by `normaliseSnapshot` and `bundleOfPath`
+returns `null` for it: it is not KB at all (no verdict, entry point, tree row or bytes) and the
+extractor treats it as code. **Effect:** for every bundle with nested `index.md` / `log.md` or
+dot-path files the article counts ("N of M articles read", KB files tile), shares, the histogram,
+hot files and the per-file verdict rules change on the next view — computed on read, no recompute
+needed.
 
 ## Session OKF tab
 
@@ -184,7 +237,11 @@ between "Harness usage" and "Raw Logs"):
   itself"), "How agents reached the KB" chips (`via index.md` / `via search` / `path given in its task`);
 - KB folder cards (`OkfBundleCards.tsx`, session only): one card per bundle with a file read —
   tracked / gitignored, "started from index.md", "N of M articles read", BYTES INTO CONTEXT; the
-  untouched bundles are one line "N other KB folders not opened: …" (`okf-bundle-idle`);
+  untouched bundles are one line "N other KB folders not opened: …" (`okf-bundle-idle`). With
+  hook metadata the heading is the bundle `title` (root as a muted mono sub-line), the
+  `description` is clamped to two lines, an "OKF x.y" chip follows the tracked chip, and sky
+  advice lines say "N articles can be improved" (+ the hint reasons) and "ⓘ Newer format available
+  (0.3)";
 - tree (`OkfTree.tsx`, `okf-tree.ts`, `okf-tree-rows.tsx`, `okf-tree-columns.tsx`): header
   "KB folder → file", READ heat (Bytes / Calls toggle), WRITE bar on the repo variant only, a
   flexible markers cell (shrinks and truncates first; the name keeps `min-w-32`), a column legend
@@ -198,7 +255,12 @@ between "Harness usage" and "Raw Logs"):
   folder's own rows (`folderScanCounts` in `okf-tree.ts`: node minus children, taken before the
   agent filter drops children). Files not
   read are grey ("not read") and sorted last (repo variant; folded on the session variant); accessed files absent from the snapshot carry the
-  "not in KB at start" chip, paths outside every bundle form a "Not in the KB snapshot" group;
+  "not in KB at start" chip, paths outside every bundle form a "Not in the KB snapshot" group. OKF v0.3 chips
+  (`okf-tree-meta-chips.tsx`, both variants; `OkfTree` gets `bundleInfo` from `data.bundles`): the
+  bundle row shows the `title` and sky "ⓘ newer format (0.3)" / "ⓘ N can improve"; a file row shows
+  amber "deprecated" with "→ <replacement>" (a button when the replacement is a file of the tree),
+  amber "past stale_after" and sky "ⓘ can improve" (reasons in its tooltip). The trail
+  (`OkfTrailRow.tsx`) shows the amber "deprecated" chip on a `kb_read` of a deprecated article;
 - Agents panel (`OkfAgentsPanel.tsx`, header "Agents · N"): one row per tree node with its label,
   entry, task head (200 characters; not repeated when it is the label) and KB reads; clicking
   narrows the tree to that agent and opens its trail (`okfAgent`).
@@ -243,8 +305,10 @@ Settings, shown where `canSeeTeamWideTabs` allows):
   (`OkfShareHistogram.tsx`, four CSS bars), hot files top 10 (`OkfHotFiles.tsx`), not-read list
   (`OkfNotReadList.tsx`, neutral, inline "Show all"), and the tree with markers `hot` / `coarse`
   and the "No longer in KB" group (paths absent from the latest snapshot).
-- A bundle's `index.md` is never analysed as an article: it is no hot file, and every share
-  (histogram, bundle cards, verdict rules) counts articles only — see "Articles" in
+- A bundle's `index.md` — and since OKF v0.3 support any nested `index.md` / `log.md` and every
+  dot-path file — is never analysed as an article: it is no hot file and not in the not-read
+  list, and every share (histogram, bundle cards, verdict rules) counts articles only — see
+  "OKF v0.3 metadata and article rules" above and "Articles" in
   [algorithms/okf-verdict.md](algorithms/okf-verdict.md).
 - The latest snapshot = the bound snapshot of the newest root session in the filtered set
   (DD-29); its bundles define the tree, the KB files and the not-read list.
@@ -340,7 +404,10 @@ in [algorithms/okf-verdict.md](algorithms/okf-verdict.md)). They are applied at 
 | Old client → new server | Every new response field is optional (incl. package 3's `hit`, `agents[].searchedAfter`, `searchedAfter.pairs`; the trail route is simply not called); unknown rule ids (`routing_miss`, `searched_after`, `dead_pointers`, `catalog`) and the `info` severity render raw; the article route is simply not called. |
 | New client → old server | The new fields are absent, so the value-signal columns and tiles show no data ("—"), the Checks block is hidden and section B shows no count; the article route does not exist (404) and the drill-down shows its error state; the trail route answers 404 → the trail shows its error line, the drill-down shows no searched-after agents. |
 | Old settings rows / older clients saving settings | A row without `okf` resolves to the defaults; a client that does not know `okf` keeps it through the read-modify-write save; an invalid stored field falls back to its default on read. |
-| Hook | No change: the value signals come from the transcripts and the existing snapshot. |
+| Sessions extracted at version 3 → server with version 4 (OKF v0.3) | Rows stay valid and are read; only their stored pointers keep the old resolution (`./x`, `../x` and article-relative bare paths unresolved or resolved repo-relative), so yield / dead pointers may differ until `recompute-all-sessions`; they count in the FR-11 banner meanwhile. No migration. |
+| Server v4 (OKF v0.3) + old hook (< 3.1.0) | No bundle `okfVersion` / `title` / `description` and no file `meta`: `hasHookMeta` is false, so no title, version chip, hints or deprecated / stale_after chips — the tab looks as before. The FR-2 article rules and v0.3 pointer resolution apply anyway (they need no hook change): article counts / shares change for bundles with nested `index.md` / `log.md` or dot-path files. Bundles whose `okf_version:` sits past byte 512 of `index.md` stay undetected until the hook is updated. |
+| Hook 3.1.0 + old server | The extra snapshot fields are unknown to it and stored verbatim in `okf_snapshots.body` (its `normaliseSnapshot` ignores them); nothing is shown until the server is upgraded, then the stored metadata appears on the next view (no re-upload). The snapshot id changes once per repo (new fields in the id), costing one full resend. |
+| Hook | Value signals: no change — they come from the transcripts and the existing snapshot. OKF v0.3 metadata needs hook `3.1.0`+ (see above). |
 
-Hook side: [hook-api-versioning.md](hook-api-versioning.md) (2.26.0) and the `okf` config key in
+Hook side: [hook-api-versioning.md](hook-api-versioning.md) (2.26.0, 3.1.0) and the `okf` config key in
 [hook-installation.md](hook-installation.md).

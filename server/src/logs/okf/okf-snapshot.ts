@@ -16,6 +16,7 @@ import {
 } from '../../database/schema/index';
 import { PENDING_QUEUE_STATUSES, SNAPSHOT_ID_RE } from '../harness-snapshot';
 import { topAncestorIdsSql } from '../session-tree.sql';
+import { isDotPathUnderRoot } from './okf-verdict';
 
 const logger = new Logger('OkfSnapshot');
 
@@ -27,12 +28,33 @@ export const OKF_SNAPSHOT_ID_RE = SNAPSHOT_ID_RE;
 /** DD-18: an `okf-snapshot` line whose serialized body exceeds this is ignored (id stays unknown). */
 export const OKF_SNAPSHOT_MAX_BYTES = 10 * 1024 * 1024;
 
+/** Max chars kept of any front-matter string value (DD-S1; the hook caps at the same 200). */
+export const OKF_META_VALUE_MAX_CHARS = 200;
+
+/**
+ * Per-file front-matter metadata (hook 3.1.0+, DD-H3 / DD-S1). The three booleans are always
+ * set; each scalar only when the file's front matter has it. Absent on files from older hooks.
+ */
+export interface OkfSnapshotFileMeta {
+  frontMatter: boolean;
+  hasGenerated: boolean;
+  hasTimestamp: boolean;
+  type?: string;
+  status?: string;
+  /** Front-matter `superseded_by`, raw (resolved by `okf-metadata.ts`). */
+  supersededBy?: string;
+  /** Front-matter `stale_after`, raw. */
+  staleAfter?: string;
+}
+
 /** One `.md` file of a bundle (DD-13). `size` is UTF-8 bytes on disk, `hash` its sha256 hex. */
 export interface OkfSnapshotFile {
   path: string;
   ignored: boolean;
   size: number;
   hash: string;
+  /** Front-matter metadata (hook 3.1.0+); absent from older hooks. */
+  meta?: OkfSnapshotFileMeta;
 }
 
 /** One OKF bundle (DD-13): rooted by an `index.md` with an `okf_version:` front-matter key. */
@@ -42,6 +64,48 @@ export interface OkfSnapshotBundle {
   /** The bundle's `index.md` ignored flag. */
   ignored: boolean;
   files: OkfSnapshotFile[];
+  /** Bundle-root `index.md` front-matter `okf_version` (hook 3.1.0+), raw. */
+  okfVersion?: string;
+  /** Bundle-root `index.md` front-matter `title` (hook 3.1.0+). */
+  title?: string;
+  /** Bundle-root `index.md` front-matter `description` (hook 3.1.0+). */
+  description?: string;
+}
+
+/** A string value capped at {@link OKF_META_VALUE_MAX_CHARS}; `undefined` for a non-string. */
+function metaString(v: unknown): string | undefined {
+  return typeof v === 'string'
+    ? v.slice(0, OKF_META_VALUE_MAX_CHARS)
+    : undefined;
+}
+
+/**
+ * DD-S1: a file's hook `meta` (snake_case scalar keys on the wire) → {@link OkfSnapshotFileMeta},
+ * or `undefined` when it is not a non-array object. Never throws (FR-4).
+ */
+function normaliseFileMeta(raw: unknown): OkfSnapshotFileMeta | undefined {
+  if (raw === null || typeof raw !== 'object' || Array.isArray(raw)) {
+    return undefined;
+  }
+  const m = raw as AnyRecord;
+  const out: OkfSnapshotFileMeta = {
+    frontMatter: m['frontMatter'] === true,
+    hasGenerated: m['hasGenerated'] === true,
+    hasTimestamp: m['hasTimestamp'] === true,
+  };
+  const type = metaString(m['type']);
+  if (type !== undefined) out.type = type;
+  const status = metaString(m['status']);
+  if (status !== undefined) out.status = status;
+  // Wire keys are snake_case; the camelCase spelling is accepted too so normalising an already
+  // normalised body is idempotent.
+  const supersededBy =
+    metaString(m['superseded_by']) ?? metaString(m['supersededBy']);
+  if (supersededBy !== undefined) out.supersededBy = supersededBy;
+  const staleAfter =
+    metaString(m['stale_after']) ?? metaString(m['staleAfter']);
+  if (staleAfter !== undefined) out.staleAfter = staleAfter;
+  return out;
 }
 
 /**
@@ -56,8 +120,13 @@ export interface OkfSnapshotBody {
 
 /**
  * Defensive shape check of a stored body (it is the hook's JSON, stored verbatim). Used by the
- * OKF read side and by the access writer (`loadSnapshotFilesForNode`). A file with no numeric
+ * OKF read side and by the access writer (`loadSnapshotForNode`). A file with no numeric
  * `size` gets 0, one with no string `hash` gets `''`.
+ *
+ * OKF v0.3 (DD-S1, DD-S4): the optional bundle strings `okfVersion` / `title` / `description`
+ * and the per-file `meta` are copied (strings capped at {@link OKF_META_VALUE_MAX_CHARS}, wrong
+ * types ignored — bad metadata never drops a bundle or file, FR-4); a file whose path relative
+ * to its bundle root has a segment starting with `.` is dropped (not part of the bundle, FR-2).
  */
 export function normaliseSnapshot(body: unknown): OkfSnapshotBody | null {
   if (body === null || typeof body !== 'object') return null;
@@ -73,22 +142,40 @@ export function normaliseSnapshot(body: unknown): OkfSnapshotBody | null {
         typeof b.root === 'string' &&
         typeof b.index === 'string',
     )
-    .map((b) => ({
-      root: b.root,
-      index: b.index,
-      ignored: b.ignored === true,
-      files: (Array.isArray(b.files) ? b.files : [])
-        .filter(
-          (f) =>
-            f !== null && typeof f === 'object' && typeof f.path === 'string',
-        )
-        .map((f) => ({
-          path: f.path,
-          ignored: f.ignored === true,
-          size: typeof f.size === 'number' ? f.size : 0,
-          hash: typeof f.hash === 'string' ? f.hash : '',
-        })),
-    }));
+    .map((b) => {
+      const out: OkfSnapshotBundle = {
+        root: b.root,
+        index: b.index,
+        ignored: b.ignored === true,
+        files: (Array.isArray(b.files) ? b.files : [])
+          .filter(
+            (f) =>
+              f !== null &&
+              typeof f === 'object' &&
+              typeof f.path === 'string' &&
+              !isDotPathUnderRoot(f.path, b.root),
+          )
+          .map((f) => {
+            const file: OkfSnapshotFile = {
+              path: f.path,
+              ignored: f.ignored === true,
+              size: typeof f.size === 'number' ? f.size : 0,
+              hash: typeof f.hash === 'string' ? f.hash : '',
+            };
+            const meta = normaliseFileMeta((f as { meta?: unknown }).meta);
+            if (meta !== undefined) file.meta = meta;
+            return file;
+          }),
+      };
+      const raw = b as unknown as AnyRecord;
+      const okfVersion = metaString(raw['okfVersion']);
+      if (okfVersion !== undefined) out.okfVersion = okfVersion;
+      const title = metaString(raw['title']);
+      if (title !== undefined) out.title = title;
+      const description = metaString(raw['description']);
+      if (description !== undefined) out.description = description;
+      return out;
+    });
   return {
     okfSnapshotId: rec.okfSnapshotId,
     schemaVersion:
@@ -309,20 +396,20 @@ export async function resolveRootOkfSnapshotId(
  * The ingest/import OKF step (DD-21): stores a full `okf-snapshot` line of this artisyn upload
  * (if any) for `userId`, then binds the tree's ROOT session to the ref id — or the full line's
  * own id when there is no separate ref — only while the root is still unbound. A no-op when the
- * upload carries neither line (old hooks, old zips).
+ * upload carries neither line (old hooks, old zips). Returns `true` when this call bound the root.
  */
 export async function storeAndBindOkfSnapshot(
   tx: DrizzleDb,
   userId: number,
   sessionRowId: number,
   lines: object[],
-): Promise<void> {
+): Promise<boolean> {
   const full = extractOkfSnapshot(lines);
   if (full !== null) {
     await storeOkfSnapshot(tx, userId, full);
   }
   const ref = extractOkfSnapshotRef(lines) ?? full?.okfSnapshotId ?? null;
-  if (ref === null) return;
+  if (ref === null) return false;
   const rootId = await resolveRootSessionDbId(tx, sessionRowId);
-  await bindSessionOkfSnapshot(tx, rootId, ref);
+  return bindSessionOkfSnapshot(tx, rootId, ref);
 }

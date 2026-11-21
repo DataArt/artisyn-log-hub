@@ -40,6 +40,22 @@ export interface OkfSnapshotFileSpec {
   size?: number;
   /** Gitignored. Default false. */
   ignored?: boolean;
+  /**
+   * OKF v0.3 (hook 3.1.0+): the file's front-matter metadata exactly as the hook sends it
+   * (snake_case keys). Omitted = an older hook (no `meta` on the wire).
+   */
+  meta?: OkfFileMetaSpec;
+}
+
+/** Hook 3.1.0 per-file front-matter metadata (okf-snapshot.md, DD-H3). */
+export interface OkfFileMetaSpec {
+  frontMatter: boolean;
+  hasGenerated: boolean;
+  hasTimestamp: boolean;
+  type?: string;
+  status?: string;
+  superseded_by?: string;
+  stale_after?: string;
 }
 
 /** One bundle: its root folder and its files (its `index.md` is added when missing). */
@@ -47,6 +63,10 @@ export interface OkfBundleSpec {
   root: string;
   /** Gitignored `index.md` → the whole bundle is ignored. Default false. */
   ignored?: boolean;
+  /** OKF v0.3 (hook 3.1.0+): the bundle index's `okf_version` / `title` / `description`. */
+  okfVersion?: string;
+  title?: string;
+  description?: string;
   files: Array<string | OkfSnapshotFileSpec>;
 }
 
@@ -134,7 +154,10 @@ export interface OkfSnapshotBody {
     root: string;
     index: string;
     ignored: boolean;
-    files: Array<{ path: string; ignored: boolean; size: number; hash: string }>;
+    files: Array<{ path: string; ignored: boolean; size: number; hash: string; meta?: OkfFileMetaSpec }>;
+    okfVersion?: string;
+    title?: string;
+    description?: string;
   }>;
 }
 
@@ -143,8 +166,9 @@ export function okfSnapshotBody(spec: OkfSnapshotSpec): OkfSnapshotBody {
   const bundles = spec.bundles
     .map((b) => {
       const index = `${b.root}/index.md`;
-      const files = b.files.map((f) => (typeof f === 'string' ? { path: f } : f));
+      const files: OkfSnapshotFileSpec[] = b.files.map((f) => (typeof f === 'string' ? { path: f } : f));
       if (!files.some((f) => f.path === index)) files.push({ path: index });
+      // The new fields are added only when given, so an old-hook spec keeps its old id.
       return {
         root: b.root,
         index,
@@ -155,8 +179,12 @@ export function okfSnapshotBody(spec: OkfSnapshotSpec): OkfSnapshotBody {
             ignored: f.path === index ? (b.ignored ?? f.ignored ?? false) : (f.ignored ?? false),
             size: f.size ?? 1000,
             hash: createHash('sha256').update(`okf-scenario:${f.path}:${f.size ?? 1000}`).digest('hex'),
+            ...(f.meta === undefined ? {} : { meta: f.meta }),
           }))
           .sort((x, y) => (x.path < y.path ? -1 : x.path > y.path ? 1 : 0)),
+        ...(b.okfVersion === undefined ? {} : { okfVersion: b.okfVersion }),
+        ...(b.title === undefined ? {} : { title: b.title }),
+        ...(b.description === undefined ? {} : { description: b.description }),
       };
     })
     .sort((x, y) => (x.root < y.root ? -1 : x.root > y.root ? 1 : 0));

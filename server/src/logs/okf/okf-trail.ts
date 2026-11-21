@@ -14,6 +14,9 @@
  *   later item whose path (without a trailing `/`) is the pointer or lies under it — the DD-9
  *   "followed" test, so a pointer shown here as never followed is exactly an unfollowed pointer.
  *   Computed over the whole sequence, before the cap.
+ * - `deprecated` / `supersededBy` of a `kb_read` item (OKF v0.3, FR-6, impl-plan DD-S7): the
+ *   item's path is a key of the optional `deprecated` map → `deprecated: true`, plus the
+ *   resolved `supersededBy` when the map value is non-null.
  * - The first `cap` items are kept; `truncated` says more existed.
  */
 import type { OkfSeqItem } from './okf-access-extractor';
@@ -28,6 +31,8 @@ export interface OkfTrailInput {
   areas: ReadonlyMap<string, readonly string[]>;
   /** Item cap; default `OKF_TRAIL_MAX_ITEMS`. */
   cap?: number;
+  /** Deprecated article path → its resolved `superseded_by` (or null), FR-6 / DD-S7. */
+  deprecated?: ReadonlyMap<string, string | null>;
 }
 
 export interface OkfTrailResult {
@@ -97,6 +102,11 @@ export function buildOkfTrail(input: OkfTrailInput): OkfTrailResult {
         if (at !== null) followedAt[pointer] = at;
       }
       if (Object.keys(followedAt).length > 0) out.followedAt = followedAt;
+    }
+    if (item.op === 'kb_read' && input.deprecated?.has(item.path) === true) {
+      out.deprecated = true;
+      const target = input.deprecated.get(item.path);
+      if (target !== undefined && target !== null) out.supersededBy = target;
     }
     if (item.op === 'search' || item.op === 'read') {
       const inArea = [

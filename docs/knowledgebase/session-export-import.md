@@ -6,7 +6,7 @@ tags:
   - server
   - client
   - export
-generated: { by: "human:denistsyplakov", at: "2026-10-14T00:00:00+04:00" }
+generated: { by: "human:denistsyplakov", at: "2026-11-20T00:00:00+04:00" }
 ---
 
 # Session Export, Import and Statistics Export
@@ -137,8 +137,10 @@ The OKF snapshot ([okf-usage.md](okf-usage.md)) travels the same way as the harn
 Export and import run as background jobs. A job row in `export_import_jobs` (kind `export`,
 `import` or `staged_upload`; status `staged`, `running`, `done` or `error`) carries progress, so any
 cluster worker can answer the status poll, not only the one running the job. Files are staged in
-`EXPORT_IMPORT_DIR` (default `export-import`, relative to the process CWD). A cleanup scheduler
-deletes expired job rows and files (`EXPORT_IMPORT_JOB_TTL_MS`, default 30 min).
+`EXPORT_IMPORT_DIR` (default `export-import`, relative to the process CWD); the release compose
+bind-mounts it from `$LOG_HUB_DATA_DIR/export-import` (`/app/dist/export-import`). A cleanup scheduler
+deletes expired job rows and files (`EXPORT_IMPORT_JOB_TTL_MS`, default 30 min); a failing sweep is
+logged once per distinct error (`common/repeated-failure-log.ts`), with one INFO on recovery.
 
 Import is two steps: upload (the zip is staged and its `meta.json` summary returned), then confirm
 (the job starts).

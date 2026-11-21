@@ -9,6 +9,7 @@ import { SchedulerRegistry } from '@nestjs/schedule';
 import { and, inArray, isNotNull, lt } from 'drizzle-orm';
 import * as fs from 'fs';
 import * as path from 'path';
+import { RepeatedFailureLog } from '../common/repeated-failure-log';
 import { DRIZZLE } from '../database/database.constants';
 import type { DrizzleDb } from '../database/database.module';
 import { exportImportJobs } from '../database/schema/index';
@@ -44,6 +45,10 @@ export class ExportImportJobCleanupScheduler
   implements OnApplicationBootstrap, OnModuleDestroy
 {
   private readonly logger = new Logger(ExportImportJobCleanupScheduler.name);
+  private readonly sweepFailures = new RepeatedFailureLog(
+    this.logger,
+    'Export/import job cleanup sweep',
+  );
   private isTickRunning = false;
   // Tracks whichever `tick()` call is currently in flight (if any), so
   // `onModuleDestroy()` can await it before shutdown proceeds to
@@ -92,13 +97,9 @@ export class ExportImportJobCleanupScheduler
     try {
       await this.sweep();
       await this.sweepOrphanFiles();
+      this.sweepFailures.succeeded();
     } catch (err) {
-      this.logger.error(
-        `Export/import job cleanup sweep failed: ${
-          err instanceof Error ? err.message : String(err)
-        }`,
-        err instanceof Error ? err.stack : undefined,
-      );
+      this.sweepFailures.failed(err);
     } finally {
       this.isTickRunning = false;
     }

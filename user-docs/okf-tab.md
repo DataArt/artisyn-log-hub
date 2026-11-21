@@ -64,7 +64,9 @@ Open a repository and pick **OKF** (between **Tools/MCP** and **OTEL**). From to
   [Thresholds](#thresholds)).
 - **KPI tiles** (section A) — KB files, files not read in the period, sessions that touched the
   KB (plus the number of **upkeep-only** sessions, not counted), sessions that started from
-  `index.md` and the median file share per session.
+  `index.md` and the median file share per session. The share is **n/a** when no session has a KB
+  snapshot, or when every KB folder the sessions read has fewer articles than the
+  `shareMinBundleFiles` threshold (10 by default) — the tile says which.
 - **Section B** — the **Pointer yield** and **Articles with routing misses** tiles and the
   value-signal findings (routing miss, searched after reading, dead pointers, catalog), each with
   its **→** action line.
@@ -81,11 +83,17 @@ Open a repository and pick **OKF** (between **Tools/MCP** and **OTEL**). From to
     `catalog N`, `N dead` (pointers nobody follows), `upkeep ×N`, `stale · now X KB` (the article
     changed since most of the counted sessions), `not read`, plus the older `hot`, `coarse` and
     `folder scan`. A legend under the tree explains them.
+  - front-matter chips (hook 3.1.0 or newer): the KB folder row shows the folder's `title` and
+    **ⓘ newer format (0.3)** / **ⓘ N can improve**; an article row shows **deprecated** (with
+    **→** the replacement article), **past stale_after** and **ⓘ can improve** — see
+    [Front-matter chips and hints](#front-matter-chips-and-hints).
 - **File share histogram** — how much of a KB folder each session read, only for KB folders of
   at least the configured number of files (the caption says "KB folders of ≥ N files").
 - **Hot files** — the most read articles, with their **Yield**.
 - **Upkeep** — articles read by an agent that also edited them; see [Upkeep](#upkeep).
-- **Not read** — KB files no session of the period read (information only).
+- **Not read** — KB articles no session of the period read (information only). A folder's
+  `index.md`, any `index.md` / `log.md` in a subfolder and files in folders whose name starts with
+  `.` are not articles and are never listed.
 
 On a wide screen the histogram, hot files, upkeep and not-read lists sit in a column beside the
 tree; on a narrower one they move below it, so the tree's columns never need sideways scrolling.
@@ -130,7 +138,10 @@ description its parent gave it, else by the start of its task, else by a short i
   (`via index.md`, `via search`, `path given in its task`).
 - **KB folder cards** (section A) — one per KB folder the session opened, with "N of M articles
   read" and the bytes that went into context; the KB folders nobody opened are listed on one line
-  under them.
+  under them. With hook 3.1.0 or newer a card is headed by the folder's `title` (its path below
+  it), shows its `description` (two lines; hover for the full text) and an **OKF x.y** chip, and
+  may add the advice lines **N articles can be improved** and **ⓘ Newer format available (0.3)** —
+  see [Front-matter chips and hints](#front-matter-chips-and-hints).
 - **Section B** — the **Value signals (heuristic)** tile — **Code paths followed**, **Searched
   without reading**, **Searched after reading** (counted per agent and article, e.g. "2 agents
   kept searching after reading") and **Dead pointers** of the whole session tree, each with a
@@ -146,7 +157,8 @@ description its parent gave it, else by the start of its task, else by a short i
   `package.json`); back-ticked names such as `Logger.error`, `process.env`, `upsert()` or a
   version like `2.31.0` do not count. Each search shows its
   full pattern and whether it **found** something or **nothing found**; a read or search in the
-  code area of an article the agent read earlier is highlighted ("in area of …"). The agent is
+  code area of an article the agent read earlier is highlighted ("in area of …"). A read of a
+  deprecated article carries the amber **deprecated** chip (and **→** its replacement). The agent is
   in the page address, so a trail can be bookmarked or shared; **×** closes it.
 - **KB tree** — KB folder → file with the read heat and the columns **Code paths followed**
   (k / n) and **Searched after reading**; edits to the KB show as the `upkeep` / `own edit`
@@ -155,7 +167,8 @@ description its parent gave it, else by the start of its task, else by a short i
   session · show" row. **code paths shown · N agents** on an article opens one row per agent with
   the new code paths the article showed it, ✓ for the ones it opened, and how many paths its own
   task already named (those do not count as new). An article the agent never opened but whose
-  code it searched shows a "searched without reading · N searches" row with the action.
+  code it searched shows a "searched without reading · N searches" row with the action. The same
+  front-matter chips as on the repository tab show on the folder and article rows.
 - **Agents** panel (beside the tree on a wide screen, below it otherwise) — per agent: its name,
   how it reached the KB, its task, KB reads, and **paths followed**, **searched w/o reading**,
   **edited KB** and **code searches**. Click an agent to show only its reads in the tree (articles
@@ -164,6 +177,31 @@ description its parent gave it, else by the start of its task, else by a short i
   may be incomplete.
 - At the bottom, the command for a deeper analysis that runs locally in Claude Code:
   `/log-hub-hooks:kb-analysis <session id>`.
+
+## Front-matter chips and hints
+
+KB articles can describe themselves in their front matter (the `---` block at the top of the
+file, OKF format 0.3). Log Hub shows that metadata when the session was recorded by hook **3.1.0
+or newer**; sessions from an older hook show none of it, and the tab looks as before. None of
+these chips changes the verdict or a finding.
+
+| What you see | Where | Comes from | How to clear it |
+|---|---|---|---|
+| Folder **title** and **description** | KB folder card (session), folder row of the tree | `title:` / `description:` in the folder's `index.md` | — (shown as written; without them the card shows the folder path) |
+| **OKF x.y** chip | KB folder card | `okf_version:` in the folder's `index.md` | — |
+| **ⓘ Newer format available (0.3)** / **ⓘ newer format (0.3)** (sky) | KB folder card, folder row | `okf_version:` is older than `0.3`, or not a version number | Set `okf_version: "0.3"` in the folder's `index.md`. Advice only — the KB still works as is |
+| **deprecated** (amber), **→ name** | article row, trail | `status: deprecated` in the article; **→** is its `superseded_by:` (relative to the article's folder, or to the KB folder when it starts with `/`); click it to open the replacement when it is in the tree | Remove the `status: deprecated` line, or delete the article and point readers to the replacement in `index.md` |
+| **past stale_after** (amber) | article row | the article's `stale_after:` date is before the session start (session tab) or today (repository tab), or is not a valid date (`YYYY-MM-DD`, or a date-time with `Z` or an offset) | Review the article, then move `stale_after:` to a future date (or remove it) |
+| **ⓘ can improve** (sky; hover for the reasons) | article row | the article has no front matter, has front matter without `type:`, or uses the old `timestamp:` key without `generated:` | Add a front matter with a `type:` line; replace `timestamp:` with `generated: { by: "…", at: "…" }` |
+| **N articles can be improved** / **ⓘ N can improve** (sky) | KB folder card, folder row | count of the folder's articles with at least one of the reasons above; the card lists the reasons | Fix those articles as in the row above |
+
+The KB snapshot is taken when the session is uploaded, so a fix shows on sessions recorded after
+it; the repository tab reads the snapshot of the newest session in the period.
+
+A folder's `index.md`, any `index.md` / `log.md` in a subfolder and any file in a folder whose
+name starts with `.` (e.g. `.drafts/`) are not articles: they are never counted in "N of M
+articles read", the shares, hot files or the not-read list. Reading an `index.md` or `log.md`
+still counts as using the KB; a file under a `.` folder is treated as code.
 
 ## Actions
 

@@ -11,6 +11,15 @@ import { treeCostSql, treeCostWithOtelSubagentsSql } from './oracle-sql';
  */
 const OKF_PERIOD_ROOTS = 3;
 
+/**
+ * SQL: bundle file `f` of bundle `b` is an article (OKF v0.3 FR-2, DD-S5): not the bundle's
+ * index, no reserved name (`index.md` / `log.md`, any depth, any case) and no dot segment below
+ * the bundle root (dot-path files are dropped from the bundle, DD-S4).
+ */
+const OKF_ARTICLE = `f->>'path' <> b->>'index'
+                     AND lower(regexp_replace(f->>'path', '^.*/', '')) NOT IN ('index.md', 'log.md')
+                     AND substr(f->>'path', length(b->>'root') + 2) !~ '(^|/)[.]'`;
+
 export const f21Reports: ContractFamily = {
   id: 'F21',
   name: 'reports',
@@ -386,7 +395,7 @@ export const f21Reports: ContractFamily = {
       query: MONTH,
       //
       // 2026-11-03 value signals: FR-11 counts the period roots whose `okf_extract_version` is
-      // NULL or older than the extractor (3) — every root but s02. Pointer yield (FR-1) over the
+      // NULL or older than the extractor (4, OKF v0.3) — every root but s02. Pointer yield (FR-1) over the
       // tree's non-partial reads that showed a new pointer: s02's index.md read (scheduler.md,
       // not followed) and s03's first scheduler.md read (scheduler.ts followed) → 1 of 2. No
       // write rows, so no upkeep; no node searched an area 3 times, so no routing miss. The
@@ -421,14 +430,16 @@ export const f21Reports: ContractFamily = {
               SELECT (SELECT count(*) FROM roots) AS total_sessions,
                      (SELECT count(DISTINCT root_id) FROM acc) AS kb_sessions,
                      (SELECT count(*) FROM latest, jsonb_array_elements(latest.body->'bundles') b,
-                                      jsonb_array_elements(b->'files') f) AS kb_files,
+                                      jsonb_array_elements(b->'files') f
+                       WHERE ${OKF_ARTICLE}) AS kb_files,
                      (SELECT count(*) FROM latest, jsonb_array_elements(latest.body->'bundles') b,
                                       jsonb_array_elements(b->'files') f
-                       WHERE f->>'path' NOT IN (SELECT path_key FROM acc)) AS not_read,
+                       WHERE ${OKF_ARTICLE}
+                         AND f->>'path' NOT IN (SELECT path_key FROM acc)) AS not_read,
                      (SELECT count(*) FROM roots) AS in_period,
                      (SELECT count(*) FROM roots r JOIN sessions s ON s.id = r.id
                        WHERE s.okf_extract_version IS NULL
-                          OR s.okf_extract_version < 3) AS without_analysis,
+                          OR s.okf_extract_version < 4) AS without_analysis,
                      (SELECT jsonb_build_object('k', count(*) FILTER (WHERE followed),
                                                 'n', count(*))
                         FROM shown) AS pointer_yield,
@@ -579,6 +590,48 @@ export const f21Reports: ContractFamily = {
           yield: { col: 'yield', as: 'json' },
         },
         strict: true,
+      },
+    },
+    {
+      // OKF v0.3 (2026-11-19): the latest snapshot's bundle carries hook 3.1.0 metadata — its
+      // title / description / declared version come straight from the stored body. The derived
+      // hints are an algorithm (okf-metadata.md) and golden here: version `0.2` < 0.3 → newer
+      // format hint; of the two articles (the index, the reserved sub/log.md and the dot-path
+      // .drafts/wip.md never count) only private.md lacks front matter.
+      id: 'F21-okf-usage-bundles',
+      route: 'GET /api/v1/repositories/:repoId/reports/okf-usage',
+      actor: 'owner',
+      params: { repoId: '@R1.id' },
+      query: MONTH,
+      expect: { status: 200, minRows: 1 },
+      read: {
+        sql: `${ROOTS_AND_TREES},
+              latest AS (SELECT o.body FROM roots r
+                           JOIN sessions s ON s.id = r.id
+                           JOIN okf_snapshots o ON o.snapshot_id = s.okf_snapshot_id
+                                               AND o.user_id = r.user_id
+                          ORDER BY r.start_time DESC LIMIT 1)
+              SELECT b->>'root' AS root, b->>'title' AS title,
+                     b->>'description' AS description, b->>'okfVersion' AS okf_version,
+                     (SELECT count(*) FROM jsonb_array_elements(b->'files') f
+                       WHERE ${OKF_ARTICLE}) AS files,
+                     true AS newer_format_hint, 1 AS articles_with_hints,
+                     '["no_front_matter"]'::jsonb AS hint_reasons
+                FROM latest, jsonb_array_elements(latest.body->'bundles') b
+               ORDER BY root`,
+        args: ['@R1.id'],
+        shape: 'array',
+        path: 'bundles',
+        fields: {
+          root: 'root',
+          files: { col: 'files', as: 'number' },
+          title: 'title',
+          description: 'description',
+          okfVersion: 'okf_version',
+          newerFormatHint: 'newer_format_hint',
+          articlesWithHints: { col: 'articles_with_hints', as: 'number' },
+          hintReasons: { col: 'hint_reasons', as: 'json' },
+        },
       },
     },
     {

@@ -80,6 +80,7 @@ format where the two differ).
 | [okf-verdict](okf-verdict.md) | `server/src/logs/okf/okf-verdict.ts` (+ team filter `okf-usage-tree.ts`, thresholds `okf-thresholds.ts`) | jest |
 | [okf-value-signals](okf-value-signals.md) | `server/src/logs/okf/okf-value-signals.ts` | jest |
 | [okf-snapshot](okf-snapshot.md) | hook `okf-snapshot.js` | `node --test` |
+| [okf-metadata](okf-metadata.md) | `server/src/logs/okf/okf-metadata.ts` | jest |
 | [tool-monitor-name-validation](tool-monitor-name-validation.md) | `packages/tool-monitor/src/index.ts` (`@loghub/tool-monitor`; server and client); twin hook `tool-wrap-names.js` | jest, `node --test` |
 | [mcp-call-extraction](mcp-call-extraction.md) | `server/src/logs/tool-monitoring/mcp-call-extractor.ts` | jest |
 | [cli-command-recognition](cli-command-recognition.md) | `server/src/logs/tool-monitoring/cli-command-recognition.ts` | jest |

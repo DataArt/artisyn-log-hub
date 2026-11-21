@@ -125,6 +125,7 @@ export function renderCompose(imageTag) {
       - "${STAND_HOST}:${APP_PORT}:3000"
     volumes:
       - \${LOG_HUB_DATA_DIR:?set LOG_HUB_DATA_DIR in .env}/upload-queue:/app/dist/upload-queue
+      - \${LOG_HUB_DATA_DIR:?set LOG_HUB_DATA_DIR in .env}/export-import:/app/dist/export-import
       - \${LOG_HUB_DATA_DIR:?set LOG_HUB_DATA_DIR in .env}/logs:/app/dist/logs
 `;
 }
@@ -158,7 +159,7 @@ export function downCommand(runPaths) {
 /** Writes docker-compose.yml, .env and the data dirs under `_log_hub/`. */
 export function writeStandFiles(runPaths) {
   fs.mkdirSync(runPaths.logHubDir, { recursive: true });
-  for (const sub of ['pgdata', 'upload-queue', 'logs']) {
+  for (const sub of ['pgdata', 'upload-queue', 'export-import', 'logs']) {
     fs.mkdirSync(path.join(runPaths.dataDir, sub), { recursive: true });
   }
   fs.writeFileSync(runPaths.composeFile, renderCompose(runPaths.imageRef));

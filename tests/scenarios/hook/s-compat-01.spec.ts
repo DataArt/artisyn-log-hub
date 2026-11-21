@@ -33,6 +33,8 @@
 // agent read cannot be made repo-relative — the OKF tab is the empty state. A hook between the
 // two (root sent, no snapshot; no frozen copy exists) is uploaded inline with helpers/okf.ts: its
 // read counts with «partial data», and the OKF tab shows the «update the hook» banner.
+// Step 11b (2026-11-19 OKF v0.3): the previous released hook (3.0.0) sends a snapshot without
+// front-matter metadata — the OKF tab renders as before, with no metadata chips or hints.
 //
 // Steps 12–13 (2026-10-30 OTEL tabs, AC-10 / AC-11):
 //   - 2.28.0 — the last hook without OTEL traces and the realtime channel. Its real Stop uploads
@@ -509,6 +511,58 @@ test('@S-COMPAT-01 frozen 1.6.2, 2.6.1 and 2.28.0 hooks against the current serv
       await expect(page.getByTestId('okf-tree-row').filter({ hasText: 'guide.md' })).toHaveCount(1);
       await banner.getByRole('button', { name: 'How to update' }).click();
       await expect(page).toHaveURL(/#\/api-keys/);
+    });
+
+    await test.step('11b. OKF v0.3 (2026-11-19): the previous released hook (3.0.0) sends a snapshot without front-matter metadata — the OKF tab works as before, with no title, version chip, advice line or chip (FR-9)', async () => {
+      // 3.0.0's okf-snapshot is the current shape minus the optional bundle fields and the
+      // per-file `meta`, which is exactly helpers/okf.ts without them.
+      const sid = `c30-${run}`;
+      const repoUrl = `https://git.arrakis.test/compat/${run}/okf-30`;
+      await uploadOkfSessionTree(
+        api,
+        key.key,
+        {
+          sessionId: sid,
+          repoUrl,
+          snapshot: { bundles: [{ root: 'docs/kb', files: ['docs/kb/guide.md', 'docs/kb/old.md'] }] },
+          actions: [{ read: 'docs/kb/index.md', bytes: 300 }, { read: 'docs/kb/guide.md', bytes: 400 }],
+        },
+        { db, userId: owner.id },
+      );
+      const repoId = await ownRepoId(owner.api, repoUrl);
+      const res = await owner.api.get(`/api/v1/repositories/${repoId}/sessions/${encodeURIComponent(sid)}/okf-usage`);
+      expect(res.status()).toBe(200);
+      const usage = (await res.json()) as {
+        hasSnapshot: boolean;
+        bundles: Array<Record<string, unknown>>;
+        tree: Array<{ children?: Array<Record<string, unknown>> }>;
+      };
+      expect(usage.hasSnapshot).toBe(true);
+      expect(usage.bundles).toHaveLength(1);
+      for (const k of ['title', 'description', 'okfVersion', 'newerFormatHint', 'articlesWithHints', 'hintReasons']) {
+        expect(usage.bundles[0], `no ${k} without hook metadata`).not.toHaveProperty(k);
+      }
+      for (const node of usage.tree.flatMap((n) => n.children ?? [])) {
+        for (const k of ['deprecated', 'supersededBy', 'pastStaleAfter', 'formatHints']) expect(node).not.toHaveProperty(k);
+      }
+
+      await openSession(page, owner, repoId, sid, { tab: 'okf' });
+      await expect(page.getByTestId('session-okf-tab')).toBeVisible();
+      await expect(page.getByTestId('okf-bundle-card')).toContainText('docs/kb');
+      await expect(page.getByTestId('okf-tree-row').filter({ hasText: 'guide.md' })).toHaveCount(1);
+      for (const id of [
+        'okf-bundle-title',
+        'okf-bundle-version',
+        'okf-bundle-can-improve',
+        'okf-bundle-newer-format',
+        'okf-tree-bundle-newer-format',
+        'okf-tree-bundle-can-improve',
+        'okf-deprecated-chip',
+        'okf-past-stale-after',
+        'okf-can-improve',
+      ]) {
+        await expect(page.getByTestId(id), id).toHaveCount(0);
+      }
     });
 
     const v228 = await test.step('12. AC-10: frozen 2.28.0 — Stop uploads the transcript, its --otel-sweep ships the OTEL logs chunk; the OTEL tabs show chart and hidden breakdown, «No traces — upgrade the hook» instead of the waterfall, no error', async () => {

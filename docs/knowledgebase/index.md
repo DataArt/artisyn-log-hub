@@ -115,7 +115,8 @@ article itself holds the details. Keep new lines to one or two sentences.
 * [OKF Task Context](algorithms/okf-task-context.md) - Read before touching `okf-task-context.ts`: which user entries count as the task
 * [OKF Verdict](algorithms/okf-verdict.md) - Read before touching `okf-verdict.ts` or `okf-thresholds.ts`: the thresholds, upkeep, session share, agent entry, repo rules, stale files, levels
 * [OKF Value Signals](algorithms/okf-value-signals.md) - Read before touching `okf-value-signals.ts`: article area, yield, searched after, routing miss, dead pointers, catalog
-* [OKF Snapshot](algorithms/okf-snapshot.md) - Read before touching the hook's `okf-snapshot.js`: bundle detection, `git check-ignore` flags, `okfSnapshotId`
+* [OKF Snapshot](algorithms/okf-snapshot.md) - Read before touching the hook's `okf-snapshot.js`: bundle detection, `git check-ignore` flags, front-matter metadata, `okfSnapshotId`
+* [OKF Metadata](algorithms/okf-metadata.md) - Read before touching `okf-metadata.ts`: newer-format hint, `stale_after`, deprecated / `superseded_by`, can-improve hints, bundle summary
 * [Tool Output Format](algorithms/tool-output-format.md) - Read before touching Tools/MCP `output-format.ts`: JSON / table / plain detection and re-alignment
 * [Tool Wrapper Fidelity](algorithms/tool-wrapper-fidelity.md) - Read before changing the hook's CLI tool wrapper: fidelity and fail-open rows, the env-gated check project
 * [Sandbox Prune Classification](algorithms/sandbox-prune-classification.md) - Read before touching `classifyPruneCandidate` in `scripts/claude-docker/prune.mjs`

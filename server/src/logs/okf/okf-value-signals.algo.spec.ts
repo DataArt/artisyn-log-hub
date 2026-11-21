@@ -60,6 +60,8 @@ interface TrailInput {
   seq: OkfSeqItem[];
   areas?: Record<string, string[]>;
   cap?: number;
+  /** Deprecated article path → its resolved `supersededBy` (or null), passed as a `Map`. */
+  deprecated?: Record<string, string | null>;
 }
 
 const trailRows = loadExamples<TrailInput, OkfTrailResult>(
@@ -71,6 +73,9 @@ it.each(trailRows)('$id', ({ input, expected }) => {
     seq: input.seq,
     areas: new Map(Object.entries(input.areas ?? {})),
     ...(input.cap !== undefined ? { cap: input.cap } : {}),
+    ...(input.deprecated !== undefined
+      ? { deprecated: new Map(Object.entries(input.deprecated)) }
+      : {}),
   });
   expect(result).toEqual(expected);
 });

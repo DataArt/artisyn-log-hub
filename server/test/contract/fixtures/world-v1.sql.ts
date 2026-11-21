@@ -490,6 +490,13 @@ const HARNESS_SNAPSHOT_BODY = {
  * The OKF snapshot (impl-plan DD-13) s02 is bound to: one bundle `docs/kb` with its index, a
  * scheduler article and a gitignored private article. A team view drops the ignored file
  * (DD-30); the personal view keeps it.
+ *
+ * OKF v0.3 (2026-11-19, hook 3.1.0 front-matter metadata): the bundle declares a title and an
+ * older format (`0.2` → newer-format hint); private.md has no front matter (one "can improve"
+ * article, hidden in a team view), scheduler.md is deprecated in favour of `scheduler-v2.md` (not
+ * in the KB, so a team view drops the link). FR-2: the nested reserved `sub/log.md` (no front
+ * matter either) is listed but never an article, and the dot-path `.drafts/wip.md` is dropped
+ * from the bundle on read — so the article count stays 2.
  */
 const OKF_SNAPSHOT_BODY = {
   type: 'okf-snapshot',
@@ -500,24 +507,68 @@ const OKF_SNAPSHOT_BODY = {
       root: 'docs/kb',
       index: 'docs/kb/index.md',
       ignored: false,
+      okfVersion: '0.2',
+      title: 'Contract KB',
+      description: 'Scheduler notes of the contract world',
       files: [
+        {
+          path: 'docs/kb/.drafts/wip.md',
+          ignored: false,
+          size: 100,
+          hash: '4'.repeat(64),
+          meta: {
+            frontMatter: false,
+            hasGenerated: false,
+            hasTimestamp: false,
+          },
+        },
         {
           path: 'docs/kb/index.md',
           ignored: false,
           size: 400,
           hash: '1'.repeat(64),
+          meta: {
+            frontMatter: true,
+            hasGenerated: true,
+            hasTimestamp: false,
+            type: 'Index',
+          },
         },
         {
           path: 'docs/kb/private.md',
           ignored: true,
           size: 800,
           hash: '2'.repeat(64),
+          meta: {
+            frontMatter: false,
+            hasGenerated: false,
+            hasTimestamp: false,
+          },
         },
         {
           path: 'docs/kb/scheduler.md',
           ignored: false,
           size: 2000,
           hash: '3'.repeat(64),
+          meta: {
+            frontMatter: true,
+            hasGenerated: true,
+            hasTimestamp: false,
+            type: 'Article',
+            status: 'deprecated',
+            superseded_by: 'scheduler-v2.md',
+          },
+        },
+        {
+          path: 'docs/kb/sub/log.md',
+          ignored: false,
+          size: 50,
+          hash: '5'.repeat(64),
+          meta: {
+            frontMatter: false,
+            hasGenerated: false,
+            hasTimestamp: false,
+          },
         },
       ],
     },
@@ -1278,7 +1329,8 @@ function buildStatements(): WorldStatement[] {
   // chunk 13); every other session predates the snapshot feature and stays NULL.
   // agent_description / workflow_phase (sub-agent .meta.json labels): only s03 carries them.
   // okf_extract_version (2026-11-03 OKF value signals, DD-11): only the OKF tree s02 -> s03 was
-  // extracted by the current extractor (3); every other session is "no OKF analysis yet".
+  // extracted by the current extractor (4, OKF v0.3 pointer resolution); every other session
+  // is "no OKF analysis yet".
   const S = WORLD_V1.sessions;
   out.push(
     insert(
@@ -1318,7 +1370,7 @@ function buildStatements(): WorldStatement[] {
           WORLD_V1.okfSnapshotId,
           null,
           null,
-          3,
+          4,
         ],
         [
           S.s03.id,
@@ -1330,7 +1382,7 @@ function buildStatements(): WorldStatement[] {
           null,
           'contract-desc',
           'Implement',
-          3,
+          4,
         ],
         [
           S.s04.id,

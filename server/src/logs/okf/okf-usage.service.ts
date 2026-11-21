@@ -33,12 +33,18 @@ import { loadArtisynRootsBySessionIds } from '../change-surface/changed-paths.sq
 import { descendantSessionsCte } from '../session-tree.sql';
 import { maskFirstPrompt, type TeamScope } from '../team-scope';
 import { extractOkfDetail, type OkfSeqItem } from './okf-access-extractor';
-import { loadSnapshotFilesForNode } from './okf-access-writer';
+import { loadSnapshotForNode } from './okf-access-writer';
 import {
   OKF_EXTRACT_VERSION,
   OKF_SEARCH_HITS_MIN_VERSION,
 } from './okf-constants';
 import { loadOkfNodeTranscripts } from './okf-facts.service';
+import {
+  articleMetaFlags,
+  bundleMetaSummary,
+  hasHookMeta,
+  type OkfArticleMetaFlags,
+} from './okf-metadata';
 import { buildOkfTrail } from './okf-trail';
 import { getServerBashParser } from './server-bash-parser';
 import {
@@ -100,6 +106,7 @@ import {
   agentEntry,
   bundleArticles,
   bundleOfPath,
+  isReservedOkfName,
   computeRepoVerdict,
   computeSessionVerdict,
   fileShare,
@@ -361,6 +368,60 @@ function visibleArticleSet(
   return new Set((bundles ?? []).flatMap((b) => b.files.map((f) => f.path)));
 }
 
+/**
+ * OKF v0.3 front-matter flags (FR-6, FR-7) of every article (`bundleArticles`) of the bundles
+ * whose hook sent metadata (`hasHookMeta`, FR-9), at reference time `refMs` (DD-S6). `bundles`
+ * are the team-filtered ones (DD-S8); with `visible` (team view) a `supersededBy` whose target is
+ * not a visible file is dropped so a hidden path never leaks.
+ */
+function articleMetaOf(
+  bundles: readonly OkfSnapshotBundle[] | null,
+  refMs: number,
+  visible: ReadonlySet<string> | null,
+): Map<string, OkfArticleMetaFlags> {
+  const out = new Map<string, OkfArticleMetaFlags>();
+  for (const b of bundles ?? []) {
+    if (!hasHookMeta(b)) continue;
+    for (const f of bundleArticles(b)) {
+      const flags = articleMetaFlags(f, b, refMs);
+      if (
+        visible !== null &&
+        flags.supersededBy !== null &&
+        !visible.has(flags.supersededBy)
+      ) {
+        flags.supersededBy = null;
+      }
+      out.set(f.path, flags);
+    }
+  }
+  return out;
+}
+
+/** The tree file flags (new keys only, true / non-empty) of {@link articleMetaOf}. */
+function metaFileFlags(
+  meta: ReadonlyMap<string, OkfArticleMetaFlags>,
+): Map<string, OkfTreeFileFlags> {
+  const out = new Map<string, OkfTreeFileFlags>();
+  for (const [path, m] of meta) {
+    const flags: OkfTreeFileFlags = {};
+    if (m.deprecated) flags.deprecated = true;
+    if (m.supersededBy !== null) flags.supersededBy = m.supersededBy;
+    if (m.pastStaleAfter) flags.pastStaleAfter = true;
+    if (m.formatHints.length > 0) flags.formatHints = [...m.formatHints];
+    if (Object.keys(flags).length > 0) out.set(path, flags);
+  }
+  return out;
+}
+
+/** The bundle summary fields of `bundleMetaSummary` (FR-7, FR-8); `{}` without hook metadata. */
+function bundleMetaFields(
+  bundle: OkfSnapshotBundle,
+  refMs: number,
+): Partial<OkfBundleSummary> {
+  const m = bundleMetaSummary(bundle, refMs);
+  return m === null ? {} : { ...m };
+}
+
 /** A KB article path of the view (DD-10): a `.md` file under a visible bundle, or any `.md`. */
 function isViewArticle(
   path: string,
@@ -535,6 +596,15 @@ function fileFlagsOf(
     out.set(path, flags);
   }
   return out;
+}
+
+/** The FR-10 flags of {@link fileFlagsOf} with the front-matter flags of {@link metaFileFlags}. */
+function withMetaFileFlags(
+  base: Map<string, OkfTreeFileFlags>,
+  meta: ReadonlyMap<string, OkfTreeFileFlags>,
+): Map<string, OkfTreeFileFlags> {
+  for (const [path, m] of meta) base.set(path, { ...base.get(path), ...m });
+  return base;
 }
 
 /** One filtered root tree on the repo route. */
@@ -797,6 +867,9 @@ export class OkfUsageService {
       rows: withoutUpkeep(n.rows),
     }));
     const entryPoints = new Set<string>();
+    // DD-S6: front-matter flags at the root session's start time (fallback now).
+    const refMs =
+      nodes.find((n) => n.id === sessionDbId)?.startTime ?? Date.now();
     const summaries: OkfBundleSummary[] = (bundles ?? []).map((b) => {
       const allRows = usedNodes.flatMap((n) =>
         n.rows.filter((r) => bundleOfPath(r.pathKey, bundles) === b),
@@ -814,6 +887,7 @@ export class OkfUsageService {
         readBytes: readBytesOf(allRows),
         startedFromIndex: fromIndex,
         sessionsStartedFromIndex: null,
+        ...bundleMetaFields(b, refMs),
       };
     });
 
@@ -832,9 +906,16 @@ export class OkfUsageService {
         });
       }
     }
+    // FR-6 / FR-7 per-article flags from the (team-filtered) bundles (DD-S8).
+    const articleMeta = articleMetaOf(
+      bundles,
+      refMs,
+      options.teamFilter ? visibleArticleSet(bundles) : null,
+    );
     const tree = buildOkfTree(groups, contributions, {
       entryPoints,
       articleSignals: treeArticleSignals(signals),
+      fileFlags: metaFileFlags(articleMeta),
     }).filter((n) => n.bundle !== null || (n.children?.length ?? 0) > 0);
 
     // Read top.
@@ -992,13 +1073,14 @@ export class OkfUsageService {
     if (node === null) return null;
     const thresholds = options.thresholds ?? defaultThresholds();
 
-    const [snapshot, transcripts, rootsById, snapshotFiles, parser] =
+    const [snapshot, transcripts, rootsById, nodeSnapshot, parser, startMs] =
       await Promise.all([
         this.loadRootSnapshot(sessionDbId),
         loadOkfNodeTranscripts(this.db, [node.id]),
         loadArtisynRootsBySessionIds(this.db, [node.id, sessionDbId]),
-        loadSnapshotFilesForNode(this.db, node.id),
+        loadSnapshotForNode(this.db, node.id),
         getServerBashParser(),
+        this.loadSessionStartMs(sessionDbId),
       ]);
     const transcript = transcripts[0];
     const roots = rootsById.get(node.id) ?? rootsById.get(sessionDbId) ?? [];
@@ -1007,7 +1089,8 @@ export class OkfUsageService {
         ? []
         : extractOkfDetail(transcript.lines, roots, parser, {
             isSubagentLog: transcript.isSubagent,
-            snapshotFiles,
+            snapshotFiles: nodeSnapshot?.files,
+            bundleRoots: nodeSnapshot?.bundleRoots,
           }).seq;
 
     let bundles: OkfSnapshotBundle[] | null = snapshot?.bundles ?? null;
@@ -1042,7 +1125,17 @@ export class OkfUsageService {
     )) {
       areas.set(path, area.files);
     }
-    const trail = buildOkfTrail({ seq, areas });
+    // FR-6 (DD-S7): deprecated articles of the (team-filtered, DD-S8) bundles at the root
+    // session's start time (DD-S6).
+    const deprecated = new Map<string, string | null>();
+    for (const [path, m] of articleMetaOf(
+      bundles,
+      startMs ?? Date.now(),
+      options.teamFilter ? visibleArticleSet(bundles) : null,
+    )) {
+      if (m.deprecated) deprecated.set(path, m.supersededBy);
+    }
+    const trail = buildOkfTrail({ seq, areas, deprecated });
 
     const label = options.promptMask
       ? maskFirstPrompt(
@@ -1057,6 +1150,19 @@ export class OkfUsageService {
       truncated: trail.truncated,
       items: trail.items,
     };
+  }
+
+  /** DD-S6: the session's start time (earliest `logs.start_time`), as in `loadTreeNodes`. */
+  private async loadSessionStartMs(
+    sessionDbId: number,
+  ): Promise<number | null> {
+    const result = await this.db.execute(sql`
+      SELECT MIN(l.start_time) AS start_time FROM logs l WHERE l.session_id = ${sessionDbId}
+    `);
+    const row = result.rows[0] as
+      | { start_time: string | Date | null }
+      | undefined;
+    return toMs(row?.start_time);
   }
 
   /** The tree node `agentId` (`sessions.session_id`) under `sessionDbId` (itself included). */
@@ -1349,8 +1455,10 @@ export class OkfUsageService {
 
     // Per-session share (DD-39), snapshot-bound KB sessions only; FR-6 skips small bundles.
     const shares: number[] = [];
+    let boundKbSessions = 0;
     for (const c of kb) {
       if (c.tree.snapshot === null || bundles === null) continue;
+      boundKbSessions += 1;
       let best: number | null = null;
       for (const b of bundles) {
         if (articleCount(b) < thresholds.values.shareMinBundleFiles) continue;
@@ -1371,13 +1479,8 @@ export class OkfUsageService {
     }
 
     // Hot files: read + grep bytes per file over KB sessions (gone files included), upkeep
-    // reads excluded (FR-5). A bundle's `index.md` is read by design (it is the entry point), so
-    // it is never a hot file; without a snapshot any `index.md` counts as one.
-    const indexPaths = new Set((allBundles ?? []).map((b) => b.index));
-    const isIndexPath = (path: string): boolean =>
-      indexPaths.has(path) ||
-      (allBundles === null &&
-        (path === 'index.md' || path.endsWith('/index.md')));
+    // reads excluded (FR-5). A reserved name (`index.md` / `log.md` at any depth, FR-2, DD-S5)
+    // is never a hot file — with or without a snapshot.
     const hot = new Map<
       string,
       { bundle: string | null; readBytes: number; sessions: Set<number> }
@@ -1393,7 +1496,7 @@ export class OkfUsageService {
         const target =
           contrib.upkeep === true ? upkeepPanel : c.isKb ? hot : null;
         if (target === null) continue;
-        if (target === hot && isIndexPath(row.pathKey)) continue;
+        if (target === hot && isReservedOkfName(row.pathKey)) continue;
         const entry = target.get(row.pathKey) ?? {
           bundle: contrib.groupKey === NULL_GROUP_KEY ? null : contrib.groupKey,
           readBytes: 0,
@@ -1428,18 +1531,25 @@ export class OkfUsageService {
         readBytes: e.readBytes,
       }));
 
-    // Not read: snapshot files with no non-upkeep read/grep row in any KB session.
+    // Not read: bundle articles (FR-2, DD-S5) with no non-upkeep read/grep row in any KB session.
     const readPaths = new Set<string>();
     for (const c of kb) {
       for (const r of c.usedRows)
         if (isReadLike(r.op)) readPaths.add(r.pathKey);
     }
     const kbFiles = (bundles ?? []).flatMap((b) =>
-      b.files.map((f) => ({ bundle: b.root, path: f.path, size: f.size })),
+      bundleArticles(b).map((f) => ({
+        bundle: b.root,
+        path: f.path,
+        size: f.size,
+      })),
     );
     const notRead = kbFiles
       .filter((f) => !readPaths.has(f.path))
       .sort((a, b) => a.path.localeCompare(b.path));
+
+    // DD-S6: the repo route judges `stale_after` against now.
+    const refMs = Date.now();
 
     // Started from index (tile + per bundle).
     let startedFromIndexTile = 0;
@@ -1472,6 +1582,7 @@ export class OkfUsageService {
         readBytes: readBytesOf(rowsInB),
         startedFromIndex: null,
         sessionsStartedFromIndex: fromIndex,
+        ...bundleMetaFields(b, refMs),
       };
     });
 
@@ -1494,7 +1605,16 @@ export class OkfUsageService {
         coarse,
         hotRank,
         articleSignals: treeArticleSignals(signals),
-        fileFlags: fileFlagsOf(verdict.findings, latestFiles),
+        fileFlags: withMetaFileFlags(
+          fileFlagsOf(verdict.findings, latestFiles),
+          metaFileFlags(
+            articleMetaOf(
+              bundles,
+              refMs,
+              scope.teamId !== undefined ? visibleArticleSet(allBundles) : null,
+            ),
+          ),
+        ),
         notRead: true,
       },
     ).filter((n) => n.bundle !== null || (n.children?.length ?? 0) > 0);
@@ -1530,6 +1650,13 @@ export class OkfUsageService {
         startedFromIndex: startedFromIndexTile,
         medianShare: median(shares),
         maxShare: shares.length === 0 ? null : Math.max(...shares),
+        ...(shares.length > 0
+          ? {}
+          : {
+              shareNaReason:
+                boundKbSessions > 0 ? 'small-folders' : 'no-bound-session',
+              shareMinBundleFiles: thresholds.values.shareMinBundleFiles,
+            }),
         upkeepOnlySessions: upkeepOnlySessions ?? 0,
         pointerYield: signals.yield,
         routingMissArticles: signals.summary.routingMissArticles,

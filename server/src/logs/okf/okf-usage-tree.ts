@@ -22,7 +22,12 @@
  *   `stale` / `removed` flags sit on file nodes only, with the DD-18 markers.
  */
 import type { OkfSnapshotBody, OkfSnapshotBundle } from './okf-snapshot';
-import type { OkfTreeMarker, OkfTreeNode, OkfYield } from './okf-usage.types';
+import type {
+  OkfArticleHint,
+  OkfTreeMarker,
+  OkfTreeNode,
+  OkfYield,
+} from './okf-usage.types';
 import type { OkfVerdictRow } from './okf-verdict';
 
 // ── Path helpers ───────────────────────────────────────────────────────────────────────────────
@@ -211,10 +216,22 @@ export interface OkfTreeArticleSignals {
   catalogFiles: number | null;
 }
 
-/** FR-10 per-file flags taken from the verdict findings (DD-17). */
+/**
+ * Per-file flags: FR-10 stale / removed taken from the verdict findings (DD-17), plus the
+ * 2026-11-20 OKF v0.3 front-matter flags (`okf-metadata.ts` `articleMetaFlags`). Each
+ * front-matter key reaches the node only when true / non-empty.
+ */
 export interface OkfTreeFileFlags {
   stale?: { size: number | null; oldSize: number | null };
   removed?: boolean;
+  /** FR-6: `status: deprecated`. */
+  deprecated?: boolean;
+  /** FR-6: resolved `superseded_by` of a deprecated article (DD-S3, DD-S8). */
+  supersededBy?: string;
+  /** FR-6: `stale_after` before the reference time (DD-S6). */
+  pastStaleAfter?: boolean;
+  /** FR-7: format hints of the article. */
+  formatHints?: OkfArticleHint[];
 }
 
 export interface OkfTreeMarkerInput {
@@ -417,6 +434,14 @@ function finalize(
       nodeMarkers.push('stale');
     }
     if (flags?.removed === true) fileExtras.removed = true;
+    if (flags?.deprecated === true) fileExtras.deprecated = true;
+    if (flags?.supersededBy !== undefined && flags.supersededBy !== '') {
+      fileExtras.supersededBy = flags.supersededBy;
+    }
+    if (flags?.pastStaleAfter === true) fileExtras.pastStaleAfter = true;
+    if (flags?.formatHints !== undefined && flags.formatHints.length > 0) {
+      fileExtras.formatHints = [...flags.formatHints];
+    }
     if (markers.notRead === true && acc.inSnapshot && stats.readCalls === 0) {
       nodeMarkers.push('not_read');
     }

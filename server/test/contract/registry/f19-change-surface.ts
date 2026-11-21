@@ -12,6 +12,13 @@
 // (okf-verdict.md); here the bundle summary and the per-agent read totals are proven against
 // `session_okf_access` and the stored snapshot body, in the personal view and in a team view,
 // where the DD-30 filter drops the gitignored file.
+//
+// OKF v0.3 (2026-11-19): the snapshot also lists a nested reserved `sub/log.md` (never an
+// article) and a dot-path `.drafts/wip.md` (dropped from the bundle), and carries hook 3.1.0
+// front-matter metadata — the bundle's title / version and per-file `meta` (scheduler.md
+// deprecated, private.md without front matter). The trail rows carry the `deprecated` item flag
+// only on `kb_read` items; the world's transcripts have no tool calls, so the trail rows below
+// stay empty (the flag is an algorithm: okf-value-signals.md rule 11, scenario s-sess-09).
 import type { ContractFamily, ReadSpec } from '../types';
 import { listedRootsSql } from './oracle-sql';
 
@@ -26,14 +33,52 @@ const TREE_NODES = `
   )`;
 
 /**
+ * SQL: `true` when the path expression `p`, relative to the bundle root of `b`, has a segment
+ * starting with `.` (OKF v0.3 FR-2: dot-paths are not part of a bundle, DD-S4).
+ */
+function dotPathSql(p: string): string {
+  return `(CASE WHEN coalesce(b->>'root', '') IN ('', '.') THEN ${p}
+                ELSE substr(${p}, length(b->>'root') + 2) END) ~ '(^|/)[.]'`;
+}
+
+/**
+ * SQL: a bundle file `f` of bundle `b` that is an article (OKF v0.3 FR-2, DD-S5): not the
+ * bundle's index, no reserved name (`index.md` / `log.md`, any depth, any case), no dot-path.
+ */
+function articleSql(visible: string): string {
+  return `${visible} AND f->>'path' <> b->>'index'
+          AND lower(regexp_replace(f->>'path', '^.*/', '')) NOT IN ('index.md', 'log.md')
+          AND NOT ${dotPathSql(`(f->>'path')`)}`;
+}
+
+/** SQL: article `f` has at least one OKF v0.3 format hint (FR-7; only with hook `meta`). */
+const HINT_NO_FRONT_MATTER = `NOT coalesce((f->'meta'->>'frontMatter')::boolean, false)`;
+const HINT_NO_TYPE = `coalesce((f->'meta'->>'frontMatter')::boolean, false)
+                      AND f->'meta'->>'type' IS NULL`;
+const HINT_V01_TIMESTAMP = `coalesce((f->'meta'->>'hasTimestamp')::boolean, false)
+                            AND NOT coalesce((f->'meta'->>'hasGenerated')::boolean, false)`;
+
+/**
  * One row per bundle of the snapshot the tree root `$1` is bound to: article count (listed files
- * without the bundle's index.md, which no analysis counts), distinct articles read (read/grep),
- * read bytes under the bundle root. `team`: the files the snapshot marks `ignored` count nowhere
- * (DD-30).
+ * without the bundle's index.md, reserved names and dot-paths, which no analysis counts —
+ * FR-2), distinct articles read (read/grep), read bytes under the bundle root (dot-path reads are
+ * not KB access). `team`: the files the snapshot marks `ignored` count nowhere (DD-30).
+ *
+ * OKF v0.3 (FR-6..FR-9): the bundle's `title` / `description` / `okfVersion` as sent by the hook;
+ * when some visible, non-dot file carries `meta` (hook 3.1.0+) also the newer-format hint (version
+ * below 0.3 or not `major.minor[.patch]`) and the articles with format hints and their distinct
+ * reasons — otherwise all three are absent (null here).
  */
 function okfBundlesSql(team: boolean): string {
   const visible = team ? `NOT (f->>'ignored')::boolean` : 'true';
-  const article = `${visible} AND f->>'path' <> b->>'index'`;
+  const article = articleSql(visible);
+  const hasMeta = `EXISTS (SELECT 1 FROM jsonb_array_elements(b->'files') f
+                            WHERE ${visible} AND f ? 'meta'
+                              AND NOT ${dotPathSql(`(f->>'path')`)})`;
+  const hinted = (cond: string): string =>
+    `EXISTS (SELECT 1 FROM jsonb_array_elements(b->'files') f
+              WHERE ${article} AND f ? 'meta' AND (${cond}))`;
+  const version = `btrim(b->>'okfVersion', '"''')`;
   return `${TREE_NODES},
     acc AS (SELECT a.* FROM tree t JOIN session_okf_access a ON a.session_id = t.id
              WHERE a.op IN ('read', 'grep'))
@@ -44,8 +89,28 @@ function okfBundlesSql(team: boolean): string {
                                      WHERE ${article})) AS files_read,
            (SELECT coalesce(sum(acc.bytes), 0) FROM acc
              WHERE acc.path_key LIKE (b->>'root') || '/%'
+               AND NOT ${dotPathSql('acc.path_key')}
                AND acc.path_key NOT IN (SELECT f->>'path' FROM jsonb_array_elements(b->'files') f
-                                         WHERE NOT (${visible}))) AS read_bytes
+                                         WHERE NOT (${visible}))) AS read_bytes,
+           b->>'title' AS title, b->>'description' AS description,
+           b->>'okfVersion' AS okf_version,
+           CASE WHEN NOT ${hasMeta} THEN NULL
+                WHEN ${version} ~ '^[0-9]+[.][0-9]+([.][0-9]+)?$'
+                  THEN (split_part(${version}, '.', 1)::int, split_part(${version}, '.', 2)::int)
+                       < (0, 3)
+                ELSE true END AS newer_format_hint,
+           CASE WHEN NOT ${hasMeta} THEN NULL
+                ELSE (SELECT count(*) FROM jsonb_array_elements(b->'files') f
+                       WHERE ${article} AND f ? 'meta'
+                         AND ((${HINT_NO_FRONT_MATTER}) OR (${HINT_NO_TYPE})
+                              OR (${HINT_V01_TIMESTAMP}))) END AS articles_with_hints,
+           CASE WHEN NOT ${hasMeta} THEN NULL
+                ELSE (SELECT coalesce(jsonb_agg(h.reason ORDER BY h.ord), '[]'::jsonb)
+                        FROM (VALUES (1, 'no_front_matter', ${hinted(HINT_NO_FRONT_MATTER)}),
+                                     (2, 'no_type', ${hinted(HINT_NO_TYPE)}),
+                                     (3, 'v01_timestamp', ${hinted(HINT_V01_TIMESTAMP)}))
+                             h(ord, reason, present)
+                       WHERE h.present) END AS hint_reasons
       FROM okf_snapshots o, jsonb_array_elements(o.body->'bundles') b
      WHERE o.snapshot_id = (SELECT okf_snapshot_id FROM sessions WHERE id = $1)
        AND o.user_id = (SELECT min(user_id) FROM logs WHERE session_id = $1)
@@ -59,6 +124,76 @@ const OKF_BUNDLE_FIELDS = {
   files: { col: 'files', as: 'number' },
   filesRead: { col: 'files_read', as: 'number' },
   readBytes: { col: 'read_bytes', as: 'number' },
+  // OKF v0.3 (2026-11-19): optional, absent for a bundle without hook metadata (FR-9).
+  title: { col: 'title', undefinedIsNull: true },
+  description: { col: 'description', undefinedIsNull: true },
+  okfVersion: { col: 'okf_version', undefinedIsNull: true },
+  newerFormatHint: { col: 'newer_format_hint', undefinedIsNull: true },
+  articlesWithHints: {
+    col: 'articles_with_hints',
+    as: 'number',
+    undefinedIsNull: true,
+  },
+  hintReasons: { col: 'hint_reasons', as: 'json', undefinedIsNull: true },
+} as const;
+
+/**
+ * OKF v0.3 file flags (FR-6, FR-7) of the files directly under the bundle node of the tree of
+ * root `$1` (the world's one bundle, `docs/kb/`), sorted by path: `deprecated` (`status`, any
+ * case) with its `superseded_by` joined onto the article's folder (the world only has a relative
+ * one), and the format hints in their fixed order — articles only (FR-2), each key absent when
+ * false / empty. `team`: ignored files are not in the tree, and a `supersededBy` target that is
+ * not a visible file is dropped (DD-S8). `pastStaleAfter` stays absent (no `stale_after` in the
+ * world). Folder nodes (`sub/`) carry no flags.
+ */
+function okfTreeFlagsSql(team: boolean): string {
+  const visible = team ? `NOT (f->>'ignored')::boolean` : 'true';
+  const article = articleSql(visible);
+  const deprecated = `lower(f->'meta'->>'status') = 'deprecated'`;
+  const target = `regexp_replace(f->>'path', '[^/]*$', '') || (f->'meta'->>'superseded_by')`;
+  return `WITH snap AS (
+      SELECT o.body FROM okf_snapshots o
+       WHERE o.snapshot_id = (SELECT okf_snapshot_id FROM sessions WHERE id = $1)
+         AND o.user_id = (SELECT min(user_id) FROM logs WHERE session_id = $1)),
+    bs AS (SELECT b FROM snap, jsonb_array_elements(snap.body->'bundles') b),
+    files AS (
+      SELECT f->>'path' AS path,
+             CASE WHEN ${article} AND f ? 'meta' AND ${deprecated} THEN true END AS deprecated,
+             CASE WHEN ${article} AND f ? 'meta' AND ${deprecated}
+                       AND f->'meta'->>'superseded_by' IS NOT NULL
+                       AND (${team ? 'false' : 'true'}
+                            OR ${target} IN (SELECT g->>'path'
+                                               FROM jsonb_array_elements(b->'files') g
+                                              WHERE NOT (g->>'ignored')::boolean))
+                  THEN ${target} END AS superseded_by,
+             CASE WHEN ${article} AND f ? 'meta' THEN
+               (SELECT CASE WHEN count(*) = 0 THEN NULL
+                            ELSE jsonb_agg(h.reason ORDER BY h.ord) END
+                  FROM (VALUES (1, 'no_front_matter', ${HINT_NO_FRONT_MATTER}),
+                               (2, 'no_type', ${HINT_NO_TYPE}),
+                               (3, 'v01_timestamp', ${HINT_V01_TIMESTAMP}))
+                       h(ord, reason, present)
+                 WHERE h.present) END AS format_hints
+        FROM bs, jsonb_array_elements(bs.b->'files') f
+       WHERE ${visible} AND NOT ${dotPathSql(`(f->>'path')`)}
+         AND position('/' IN substr(f->>'path', length(b->>'root') + 2)) = 0
+      UNION ALL
+      SELECT DISTINCT (b->>'root') || '/'
+               || split_part(substr(f->>'path', length(b->>'root') + 2), '/', 1) || '/',
+             NULL::boolean, NULL::text, NULL::jsonb
+        FROM bs, jsonb_array_elements(bs.b->'files') f
+       WHERE ${visible} AND NOT ${dotPathSql(`(f->>'path')`)}
+         AND position('/' IN substr(f->>'path', length(b->>'root') + 2)) > 0)
+    SELECT path, deprecated, superseded_by, NULL::boolean AS past_stale_after, format_hints
+      FROM files ORDER BY path`;
+}
+
+const OKF_TREE_FLAG_FIELDS = {
+  path: 'path',
+  deprecated: { col: 'deprecated', undefinedIsNull: true },
+  supersededBy: { col: 'superseded_by', undefinedIsNull: true },
+  pastStaleAfter: { col: 'past_stale_after', undefinedIsNull: true },
+  formatHints: { col: 'format_hints', as: 'json', undefinedIsNull: true },
 } as const;
 
 const OKF_ROUTE =
@@ -398,6 +533,43 @@ export const f19ChangeSurface: ContractFamily = {
         shape: 'array',
         path: 'bundles',
         fields: OKF_BUNDLE_FIELDS,
+      },
+    },
+    {
+      // OKF v0.3 file flags (2026-11-19, FR-6/FR-7) on the files under the bundle node: the
+      // deprecated scheduler.md links to its successor, private.md has no front matter, the
+      // index and the nested reserved sub/log.md are no articles (no flags), the dot-path
+      // .drafts/wip.md is not in the tree at all.
+      id: 'F19-okf-session-meta-tree',
+      route: OKF_ROUTE,
+      actor: 'owner',
+      params: { repoId: '@R1.id', sessionId: '@s02.sessionId' },
+      expect: { status: 200, minRows: 4 },
+      read: {
+        sql: okfTreeFlagsSql(false),
+        args: ['@s02.id'],
+        shape: 'array',
+        path: 'tree.0.children',
+        sortBy: 'path',
+        fields: OKF_TREE_FLAG_FIELDS,
+      },
+    },
+    {
+      // Team view: private.md is gone, and scheduler.md's successor (not a visible file) is not
+      // linked (DD-S8) — the deprecated flag stays.
+      id: 'F19-okf-session-meta-tree-team',
+      route: OKF_ROUTE,
+      actor: 'owner',
+      params: { repoId: '@R1.id', sessionId: '@s02.sessionId' },
+      query: { teamId: '@T1.id' },
+      expect: { status: 200, minRows: 3 },
+      read: {
+        sql: okfTreeFlagsSql(true),
+        args: ['@s02.id'],
+        shape: 'array',
+        path: 'tree.0.children',
+        sortBy: 'path',
+        fields: OKF_TREE_FLAG_FIELDS,
       },
     },
     {

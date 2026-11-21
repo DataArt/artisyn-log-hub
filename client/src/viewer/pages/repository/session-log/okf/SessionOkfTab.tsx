@@ -127,6 +127,10 @@ export function SessionOkfTab({
       ),
     [data],
   );
+  const bundleInfo = useMemo(
+    () => new Map((data?.bundles ?? []).map((b) => [b.root, b])),
+    [data],
+  );
 
   const scrollToNode = (bundle: string | null, path?: string) => {
     // The target may be outside the selected agent's reads — show the whole tree.
@@ -244,6 +248,7 @@ export function SessionOkfTab({
             metric={metric}
             variant="session"
             ignoredBundles={ignoredBundles}
+            bundleInfo={bundleInfo}
             nullGroupLabel={
               data.hasSnapshot
                 ? 'Not in the KB snapshot'

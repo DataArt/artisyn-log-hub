@@ -387,9 +387,12 @@ body.
 ## OKF snapshot — knowledge-base lines injected at upload time
 
 Since hook `2.26.0`, the same current-session `artisyn` upload (same gate as the harness lines
-above: the session's own artisyn file, current run only, never a backlog re-upload, never the
-prompt-triggered background upload) also carries one or two OKF lines built by `okf-snapshot.js`,
-appended after the harness and `code-inventory` lines. Like those, they are **never written to the
+above: the session's own artisyn file, never the prompt-triggered background upload) also carries
+one or two OKF lines built by `okf-snapshot.js`, appended after the harness and `code-inventory`
+lines. Since hook `3.1.0` a backlog session's re-uploaded artisyn file (one whose own upload never
+landed) carries them too, ahead of its body: the snapshot is pinned per session and the server
+binds it only while the session has none. Once one upload delivered the full line, the rest of the
+run sends the ref only. Like those, they are **never written to the
 local JSONL file**. Detection runs only here, at upload — never at `SessionStart`.
 
 **What is detected.** Starting from the git root, every `index.md` whose front matter (first 512

@@ -3,7 +3,7 @@ type: "Algorithm"
 title: "OKF verdict: session and repository KB-use rules"
 description: "The OKF tabs open with a one-line verdict — OK, Something to fix, Mess, KB not used, Not enough data — and the \"Why\" lines behind it."
 tags: [algorithm]
-generated: { by: "human:denistsyplakov", at: "2026-11-06T13:11:03+04:00" }
+generated: { by: "human:denistsyplakov", at: "2026-11-20T22:23:16+04:00" }
 reviewed: no
 reviewer: none
 ---
@@ -23,7 +23,8 @@ reader can recompute every verdict by hand.
 ## Code
 
 - Implementation: `server/src/logs/okf/okf-verdict.ts` — `computeSessionVerdict`,
-  `computeRepoVerdict`, `agentEntry`, `startedFromIndex`, `bundleOfPath`, `shareBin`, `median`,
+  `computeRepoVerdict`, `agentEntry`, `startedFromIndex`, `bundleOfPath`, `bundleArticles`,
+  `isReservedOkfName`, `isDotPathUnderRoot`, `shareBin`, `median`,
   `withoutUpkeep` / `upkeepPredicate`, and the fixed list sizes.
 - Thresholds: `server/src/logs/okf/okf-thresholds.ts` — `DEFAULT_OKF_THRESHOLDS`,
   `resolveOkfThresholds` (read-side merge), `validateOkfThresholds` (settings PUT check); resolved
@@ -98,11 +99,28 @@ Both verdicts drop upkeep rows first; `write` and `list` rows stay. So an upkeep
 writes is no KB session but counts in `upkeepOnlySessions` (rule 6). Upkeep is computed at read
 time from the stored rows.
 
-**Articles** (`bundleArticles`): a bundle's snapshot-listed files without its `index.md`. The index
-is the entry point and read by design, so **no analysis counts it**: the share rules (4, 8), the
-per-file rules (7, 9), the repo tab's share histogram, the bundle cards' "files read" and the hot
-files all work on articles only. It still counts as KB access (rules 1, 6), names the `index`
-entry and shows up in plain read lists ("Read · top 5", the tree).
+**Articles** (`bundleArticles`, OKF v0.3 §3): a bundle's snapshot-listed files without its
+`index.md` and without any **reserved name** — a file whose basename, lower-cased, is `index.md`
+or `log.md` at any depth (`isReservedOkfName`: `kb/log.md`, `kb/sub/index.md`, `kb/sub/LOG.md`).
+Index and log files are navigation and history, read by design, so **no analysis counts them**:
+the share rules (4, 8), the per-file rules (7, 9), the repo tab's share histogram, the bundle
+cards' "files read", the hot files (which skip a reserved name even without a snapshot) and the
+repo not-read list all work on articles only. They still count as KB access (rules 1, 6) and show
+up in plain read lists ("Read · top 5", the tree); only the bundle's own `index.md` names the
+`index` entry — a nested `index.md` read first gives `given` / `search` as for any other file.
+
+**Dot paths** (OKF v0.3 §3, `isDotPathUnderRoot`): a path that, relative to the root of the
+deepest bundle containing it, has a segment starting with `.` (`kb/.hidden/a.md`,
+`kb/.obsidian/`) is not part of the bundle. `normaliseSnapshot` drops such files from the
+snapshot, `bundleArticles` leaves them out (defensively) and `bundleOfPath` returns `null` for
+them, so reading them is no KB access anywhere (rules 1, 6, entry, tree, summaries). The root's
+own segments do not count: a bundle rooted at `.claude/kb` still owns `.claude/kb/a.md`.
+
+**Metadata** (FR-4): the front-matter fields of a bundle and its files (`okfVersion`, `title`,
+`description`, file `meta`; see [okf-metadata](okf-metadata.md)) never change a verdict. A bundle
+with malformed or missing metadata — an unparseable `okf_version`, files without front matter, an
+unparseable `stale_after`, a `superseded_by` escaping the repo, or none of it (an old hook) — is
+judged exactly like one with well-formed metadata.
 
 **Session verdict** (`computeSessionVerdict`, DD-24), over the tree's nodes (agents):
 
@@ -247,6 +265,11 @@ nothing; ignored bundles are dropped and ignored files leave the bundle file lis
   applies: RV-19.
 - Personal vs team view of an ignored file: RV-12, RV-13.
 - Nested bundles — the finding names the deepest: RV-14.
+- FR-2 reserved names and dot paths: nested `index.md` / `log.md` (any case) and `.hidden/x.md`
+  are no articles, their reads are KB access, a nested `index.md` read first is `given`: OV-22;
+  only dot-path reads (a file and a `.obsidian/` folder) → `kb_not_used`, entry `null`: OV-23;
+  repo `always_read` over articles only, a dot-path-only session is no KB session: RV-23.
+- FR-4: a bundle with malformed metadata and one without any are judged alike: OV-24.
 - Checks: session `finding` OV-01, OV-15 (highest agent named), `ok` with the nearest share
   OV-03, OV-20 (several agents, upkeep, an agent without KB reads), `na` OV-06, OV-14, OV-17
   (`kb_used` finding); repo `kb_not_used` RV-01, `not_enough_data` RV-02, `ok` nearest
@@ -260,7 +283,8 @@ nothing; ignored bundles are dropped and ignored files leave the bundle file lis
 - **Bundles** (`input.bundles`, `null` = no snapshot): `{root, files}` with `index` =
   `<root>/index.md`. `files` is either a number N of articles — then the files are
   `<root>/index.md` plus `<root>/a1.md` … `<root>/a<N>.md`, each of size 1000 — or a list of
-  `{path, size, ignored?}`.
+  `{path, size, ignored?, meta?}` (`meta` = a file's `OkfSnapshotFileMeta`, passed through). A
+  bundle may also give `okfVersion`, `title`, `description` (passed through).
   Every file is `ignored: false` unless listed so; bundles are never ignored here.
 - **Rows** are `{pathKey, op}` plus optional `bytes` (default 0), `calls` (default 1),
   `afterOwnEdit` (default false), `seq` (default: the row's 1-based position in its list), and
@@ -285,7 +309,7 @@ nothing; ignored bundles are dropped and ignored files leave the bundle file lis
   listed `params` compared (non-integer numbers within 1e-9, `null` exact). Every non-null
   verdict must carry `checks`.
 
-Rows (43): [`docs/algorithm-examples/okf-verdict.json`](../../algorithm-examples/okf-verdict.json) — test data for the table test; the rules above are enough to understand the algorithm.
+Rows (47): [`docs/algorithm-examples/okf-verdict.json`](../../algorithm-examples/okf-verdict.json) — test data for the table test; the rules above are enough to understand the algorithm.
 
 ## Mutations
 
@@ -316,6 +340,13 @@ Rows (43): [`docs/algorithm-examples/okf-verdict.json`](../../algorithm-examples
 - Stale sessions not used when the current ones are too few -> RV-20 (no finding); a removed file
   counted in the level -> RV-21 (`fix`).
 - The stored `okf` section applied whole, or an invalid field taken as is -> RV-19.
+- Reserved names counted as articles -> OV-22 (6/14 -> `fix`), RV-23 (`always_read` for
+  `log.md` / `sub/index.md`); only the top-level `log.md` or a case-sensitive match excluded ->
+  OV-22 (`sub/LOG.md`); a nested `index.md` taken as the entry -> OV-22 (`index`).
+- Dot paths kept in a bundle -> OV-23 (`ok` instead of `kb_not_used`), RV-23 (`kbSessions` 6),
+  OV-22 (`.hidden/x.md` an article).
+- Metadata changing the verdict (e.g. a deprecated article or a bad `okf_version` leaving the
+  share) -> OV-24.
 - Checks: the first agent kept instead of the highest share -> OV-15 (`aaaa1111`); upkeep reads
   kept in the share -> OV-20 (main 2/9); `kb_used` listing every snapshot folder instead of the
   read ones -> OV-21 (`docs/kb, docs/kb-local, docs/watch`); `kb_used` counting upkeep reads -> OV-17 (`ok`); an

@@ -183,7 +183,36 @@ function isUnderRoot(pathKey: string, root: string): boolean {
   return p === r || p.startsWith(`${r}/`);
 }
 
-/** The deepest bundle whose root contains the path key, or `null`. */
+/**
+ * FR-2 (DD-S4): true when the path key, taken relative to the bundle root, has a segment starting
+ * with `.` (`kb/.hidden/a.md`, `kb/.obsidian/`). The root's own segments do not count, so a bundle
+ * rooted at `.claude/kb` still owns `.claude/kb/a.md`. A path outside the root is checked whole.
+ */
+export function isDotPathUnderRoot(pathKey: string, root: string): boolean {
+  const r = normaliseRoot(root);
+  const p = pathKey === '/' ? '' : pathKey.replace(/\/+$/, '');
+  const rel =
+    r === ''
+      ? p
+      : p.startsWith(`${r}/`)
+        ? p.slice(r.length + 1)
+        : p === r
+          ? ''
+          : p;
+  return rel.split('/').some((seg) => seg.startsWith('.'));
+}
+
+/** FR-2 (DD-S5): `index.md` / `log.md` (any depth, any case) are reserved names, never articles. */
+export function isReservedOkfName(path: string): boolean {
+  const base = path.slice(path.lastIndexOf('/') + 1).toLowerCase();
+  return base === 'index.md' || base === 'log.md';
+}
+
+/**
+ * The deepest bundle whose root contains the path key, or `null`. Also `null` when the path,
+ * relative to that deepest root, has a dot segment (FR-2, DD-S4): dot-path files are not part of
+ * a bundle, so reading them is not KB access.
+ */
 export function bundleOfPath<B extends { root: string }>(
   pathKey: string,
   bundles: readonly B[] | null,
@@ -198,6 +227,7 @@ export function bundleOfPath<B extends { root: string }>(
       bestLen = len;
     }
   }
+  if (best !== null && isDotPathUnderRoot(pathKey, best.root)) return null;
   return best;
 }
 
@@ -353,15 +383,24 @@ function worstLevel(findings: readonly OkfFinding[]): 'ok' | 'fix' | 'mess' {
 }
 
 /**
- * The bundle's articles: its snapshot-listed files without its `index.md`. The index is the entry
- * point and read by design, so no analysis counts it — not in shares, floods, hot files or the
- * per-file rules.
+ * The bundle's articles (FR-2, DD-S5): its snapshot-listed files without its `index.md`, without
+ * any reserved name (`index.md` / `log.md` at any depth, {@link isReservedOkfName}) and —
+ * defensively, `normaliseSnapshot` already drops them — without dot-path files. The index and the
+ * logs are navigation / history, read by design, so no analysis counts them — not in shares,
+ * floods, hot files or the per-file rules. Reading them still counts as KB access.
  */
 export function bundleArticles<F extends { path: string }>(bundle: {
+  root?: string;
   index: string;
   files: readonly F[];
 }): F[] {
-  return bundle.files.filter((f) => f.path !== bundle.index);
+  const root = bundle.root;
+  return bundle.files.filter(
+    (f) =>
+      f.path !== bundle.index &&
+      !isReservedOkfName(f.path) &&
+      (root === undefined || !isDotPathUnderRoot(f.path, root)),
+  );
 }
 
 /** Distinct articles of the bundle (`bundleArticles`) with a read/grep row, minus `exclude`. */

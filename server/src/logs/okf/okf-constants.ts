@@ -8,9 +8,11 @@
 /**
  * Version of the OKF extraction; a node with a lower `sessions.okf_extract_version` needs recompute (DD-11).
  * 2: events, pointers and `search_hits`; 3: the stricter pointer rule (no `(`/`)`, no bare
- * version numbers, a span without `/` only with a {@link OKF_POINTER_FILE_EXTENSIONS} extension).
+ * version numbers, a span without `/` only with a {@link OKF_POINTER_FILE_EXTENSIONS} extension);
+ * 4: OKF v0.3 pointer resolution (`./` / `../` against the article folder, `/x` against the
+ * bundle root, bare paths article-relative first).
  */
-export const OKF_EXTRACT_VERSION = 3;
+export const OKF_EXTRACT_VERSION = 4;
 
 /**
  * Lowest `okf_extract_version` whose `session_okf_access.search_hits` is filled (DD-6). Separate

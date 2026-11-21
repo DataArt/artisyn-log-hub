@@ -17,7 +17,10 @@ import {
   useState,
   type Ref,
 } from 'react';
-import type { OkfTreeNode } from '../../../../../models/repositories';
+import type {
+  OkfBundleSummary,
+  OkfTreeNode,
+} from '../../../../../models/repositories';
 import {
   filterOkfTreeByFiles,
   findOkfNodePath,
@@ -58,6 +61,8 @@ export interface OkfTreeProps {
   variant?: OkfTreeVariant;
   /** Bundle roots that are gitignored (chip on the bundle row). */
   ignoredBundles?: ReadonlySet<string>;
+  /** Bundle summaries by root: front-matter title and format hints on the bundle row. */
+  bundleInfo?: ReadonlyMap<string, OkfBundleSummary>;
   /** Label of the synthetic `bundle: null` group. */
   nullGroupLabel: string;
   /** When set, only these file paths (one agent's reads) are shown. */
@@ -76,6 +81,7 @@ export function OkfTree({
   metric,
   variant = 'session',
   ignoredBundles,
+  bundleInfo,
   nullGroupLabel,
   fileFilter = null,
   filterNote,
@@ -86,13 +92,14 @@ export function OkfTree({
   const [openPointers, setOpenPointers] = useState<ReadonlySet<string>>(
     new Set(),
   );
+  const filePaths = useMemo(() => okfTreeFilePaths(tree), [tree]);
+  const isKnownFile = (p: string): boolean => filePaths.has(p);
   const orphanMisses = useMemo(() => {
     if (!details) return [];
-    const inTree = okfTreeFilePaths(tree);
     return [...details.misses]
-      .filter(([path]) => !inTree.has(path))
+      .filter(([path]) => !filePaths.has(path))
       .flatMap(([, list]) => list);
-  }, [details, tree]);
+  }, [details, filePaths]);
   const togglePointers = (path: string) => {
     setOpenPointers((prev) => {
       const next = new Set(prev);
@@ -226,6 +233,12 @@ export function OkfTree({
                       entry.top.bundle !== null &&
                       (ignoredBundles?.has(entry.top.bundle) ?? false)
                     }
+                    bundleInfo={
+                      entry.top.bundle !== null
+                        ? bundleInfo?.get(entry.top.bundle)
+                        : undefined
+                    }
+                    isKnownFile={isKnownFile}
                     folderScans={folderScans.get(entry.key) ?? 0}
                     highlighted={highlight === entry.key}
                     onToggle={toggle}

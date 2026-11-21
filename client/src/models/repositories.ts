@@ -1005,7 +1005,27 @@ export interface OkfBundleSummary {
   startedFromIndex: boolean | null;
   /** Repo route: KB sessions whose first access to this bundle was its index.md; session route: null. */
   sessionsStartedFromIndex: number | null;
+  // 2026-11-20 OKF v0.3 front-matter metadata — all optional (older servers and old-hook data omit them).
+  /** Bundle-root `index.md` front-matter `title`. */
+  title?: string;
+  /** Bundle-root `index.md` front-matter `description`. */
+  description?: string;
+  /** Raw bundle-root `okf_version` value, for the "OKF x.y" chip. */
+  okfVersion?: string;
+  /** The bundle declares an older OKF format (or none). */
+  newerFormatHint?: boolean;
+  /** Articles with at least one format hint. */
+  articlesWithHints?: number;
+  /** Distinct hint reasons over the bundle's articles. */
+  hintReasons?: OkfArticleHint[];
 }
+
+/**
+ * Per-article format hints (advice, never a warning): `no_front_matter` — no front-matter block;
+ * `no_type` — front matter without a `type` key; `v01_timestamp` — OKF v0.1 `timestamp` key and
+ * no `generated` key.
+ */
+export type OkfArticleHint = 'no_front_matter' | 'no_type' | 'v01_timestamp';
 
 export type OkfTreeMarker =
   | 'folder_scan'
@@ -1082,6 +1102,15 @@ export interface OkfTreeNode {
   stale?: { size: number | null; oldSize: number | null };
   /** Missing from the latest snapshot. */
   removed?: boolean;
+  // 2026-11-20 OKF v0.3 front-matter metadata — file nodes only, each key only when true / non-empty.
+  /** The article's front matter has `status: deprecated`. */
+  deprecated?: true;
+  /** Repo-relative replacement article of a deprecated article (`superseded_by`). */
+  supersededBy?: string;
+  /** The article's `stale_after` date has passed (or is unparseable). */
+  pastStaleAfter?: true;
+  /** Format hints of the article. */
+  formatHints?: OkfArticleHint[];
 }
 
 export type OkfAgentEntry = 'index' | 'search' | 'given';
@@ -1175,6 +1204,10 @@ export interface OkfTrailItem {
   inArea?: string[];
   /** KB reads: new code path → call number that first touched it afterwards. */
   followedAt?: Record<string, number>;
+  /** `kb_read` items: the article was deprecated in the session's snapshot (newer servers only). */
+  deprecated?: true;
+  /** `kb_read` items of a deprecated article: its resolved `superseded_by`. */
+  supersededBy?: string;
 }
 
 /** `GET /api/v1/repositories/:repoId/sessions/:sessionId/okf-usage/trail?agent=`. */
@@ -1206,6 +1239,10 @@ export interface RepoOkfUsageResponse {
     /** Fractions 0-1; null when no snapshot-bound KB session. */
     medianShare: number | null;
     maxShare: number | null;
+    /** Why `medianShare` is null; absent when measured and from older servers. */
+    shareNaReason?: 'no-bound-session' | 'small-folders';
+    /** The `shareMinBundleFiles` used, sent with `shareNaReason`. */
+    shareMinBundleFiles?: number;
     // 2026-11-03 OKF value signals — all optional (older servers omit them).
     /** Root trees whose only KB rows are upkeep (not KB sessions). */
     upkeepOnlySessions?: number;

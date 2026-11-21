@@ -1,12 +1,13 @@
 /**
  * One row of the agent trail (package 3): `#N`, the op, the path, then what a reader needs to
  * judge it — the full search pattern, `found` / `nothing found`, the line range, the "in area of"
- * mark of an article read earlier, and under a KB read the new code paths it showed
- * (`OkfTrailPointers`).
+ * mark of an article read earlier, the amber "deprecated → replacement" chip of a KB read of a
+ * deprecated article, and under a KB read the new code paths it showed (`OkfTrailPointers`).
  */
 import type { OkfTrailItem } from '../../../../../models/repositories';
 import { isIndexPath, isKbItem, opWord, rangeText } from './okf-trail';
 import { OkfTrailPointers } from './OkfTrailPointers';
+import { OkfDeprecatedChips } from './okf-tree-meta-chips';
 
 function baseName(path: string): string {
   const trimmed = path.replace(/\/+$/, '');
@@ -57,6 +58,9 @@ export function OkfTrailRow({
               ? 'KB index'
               : 'KB'}
           </span>
+        ) : null}
+        {item.op === 'kb_read' && item.deprecated ? (
+          <OkfDeprecatedChips supersededBy={item.supersededBy} />
         ) : null}
         {item.pattern !== undefined ? (
           <span
