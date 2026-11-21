@@ -41,7 +41,17 @@ lead to actions, versions and wrong format say nothing on this repo, the session
 a copy of the repo tab.
 
 **FR-0 numbers (reads and searches, one bundle per file).** KB read in 233 of 306 sessions,
-≈ 3.77M tokens, ≈ $16.42 at the input rate; 154 of 175 snapshot files opened, 21 never opened; 19
+≈ 3.77M tokens, ≈ $52.61 with the cache-inclusive estimate of FR-5a (≈ 1.7 % of the $3,017 spend;
+$16.42 when each read was priced once at the input rate — of the $3,017 only $0.44 is plain input,
+$1,235 is cache read and $1,123 cache write); 6 index files are ≈ 452K tokens, ≈ $6.57; 154 of 175 snapshot files opened, 21 never opened; 19
 read files are not in the snapshot; folder-level searches are ≈ 65K tokens; `index.md` — 166
 sessions, 408 reads, ≈ 398K tokens. Session `5f6ab2f1`: 7 of 39 agents, 20 files, ≈ 55.0K tokens,
-≈ $0.22.
+≈ $0.79 of $45.58 (≈ 1.7 %).
+
+**Planning PoC (2026-11-21).** `docs/pocs/2026-11-21-2004-okf-kb-cost-sql/` runs the FR-0 rules and
+the FR-5a cost as one read-only query on real data. It reproduces the numbers above (233 sessions
+with a read, ≈ 3.79M tokens, ≈ $52.72, 154 of 175 files opened; per-file costs add up to the total)
+and settles three plan decisions: T is the sum of `session_costs.cost` over every node of the M
+trees ($3,020 — the basis of the quoted $3,017), stored access rows still hold glob paths that must
+be dropped at read time (429 rows in the period), and the root's `git_branch` matched against
+`main` / `master` is enough to pick the reference snapshot. The whole query takes 1.8 s.

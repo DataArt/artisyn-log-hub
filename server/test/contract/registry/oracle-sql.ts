@@ -98,3 +98,117 @@ export function listedRootsSql(repoParam: string): string {
                            WHERE c.session_id = s.id AND c.log_type = 'claude'
                              AND lc.repo_id = ${repoParam}))`;
 }
+
+// ---------------------------------------------------------------------------------------------
+// OKF usage (2026-11-21 OKF tab minimal) — shared by F19 (session route) and F21 (repo route).
+// Written from docs/knowledgebase/algorithms/okf-usage-counting.md, one metric at a time.
+// ---------------------------------------------------------------------------------------------
+
+/**
+ * CTEs of the KB read rows of a `tree` CTE (its `id` = `sessions.id`; `unitCol` = the column
+ * that is the counting unit — the root on the repo route, the node on the session route).
+ *
+ * - `okf_acc`: a read row is a `read` / `grep` row under the world's one bundle root `docs/kb`
+ *   that passes `keep` (the team filter); `tokens` = `bytes` / 4. The world has no glob path and
+ *   no dot-path read, so neither needs a rule here.
+ * - `okf_node`: per tree node its KB tokens, the tokens it put into its context
+ *   (`input_tokens + cache_write_tokens`) and what that context cost (input + both cache writes
+ *   + cache read; NULL when the node has no computed cost).
+ * - `okf_reads`: every read row with its cost — the node's KB cost
+ *   (`min(1, kbTokens / ctxTokens) × ctxCost`) spread over its rows by tokens; NULL = no cost.
+ */
+export function okfReadsCtes(unitCol: string, keep = 'true'): string {
+  return `
+    okf_acc AS (SELECT t.${unitCol} AS unit, t.id AS node_id, a.path_key, a.calls,
+                       a.bytes / 4.0 AS tokens
+                  FROM tree t JOIN session_okf_access a ON a.session_id = t.id
+                 WHERE a.op IN ('read', 'grep') AND a.path_key LIKE 'docs/kb/%'
+                   AND (${keep})),
+    okf_node AS (SELECT n.node_id, sum(n.tokens) AS kb_tokens,
+                        (SELECT ss.input_tokens + ss.cache_write_tokens FROM session_stats ss
+                          WHERE ss.session_id = n.node_id) AS ctx_tokens,
+                        (SELECT CASE WHEN sc.cost IS NOT NULL
+                                     THEN coalesce(sc.cost_input, 0)
+                                        + coalesce(sc.cost_cache_write_5m, 0)
+                                        + coalesce(sc.cost_cache_write_1h, 0)
+                                        + coalesce(sc.cost_cache_read, 0) END
+                           FROM session_costs sc WHERE sc.session_id = n.node_id) AS ctx_cost
+                   FROM okf_acc n GROUP BY n.node_id),
+    okf_reads AS (SELECT a.*,
+                         CASE WHEN n.ctx_cost IS NOT NULL AND n.ctx_tokens > 0
+                                   AND n.kb_tokens > 0
+                              THEN least(1, n.kb_tokens / n.ctx_tokens) * n.ctx_cost
+                                   * a.tokens / n.kb_tokens END AS cost
+                    FROM okf_acc a JOIN okf_node n ON n.node_id = a.node_id)`;
+}
+
+/** SQL: the cost of a set of `okf_reads` rows — NULL only when it has rows and none is priced. */
+const OKF_COST_OF_ROWS = `CASE WHEN count(*) > 0 AND count(cost) = 0 THEN NULL
+                               ELSE coalesce(sum(cost), 0) END`;
+
+/**
+ * The `summary` of an OKF usage response over `okf_reads` and `tree`: units with a read row,
+ * `unitsTotalSql` (M), calls, tokens, cost, the calls of rows without a cost, and the spend —
+ * Σ `session_costs.cost` over every node of the trees (NULL when none has one).
+ */
+export function okfSummarySelectSql(unitsTotalSql: string): string {
+  return `SELECT (SELECT count(DISTINCT unit) FROM okf_reads) AS units_read,
+                 ${unitsTotalSql} AS units_total,
+                 (SELECT coalesce(sum(calls), 0) FROM okf_reads) AS reads,
+                 (SELECT coalesce(sum(tokens), 0) FROM okf_reads) AS tokens,
+                 (SELECT ${OKF_COST_OF_ROWS} FROM okf_reads) AS cost,
+                 (SELECT coalesce(sum(calls), 0) FROM okf_reads
+                   WHERE cost IS NULL) AS reads_without_cost,
+                 (SELECT sum(sc.cost) FROM tree t
+                    JOIN session_costs sc ON sc.session_id = t.id) AS spend`;
+}
+
+export const OKF_SUMMARY_FIELDS = {
+  unitsRead: { col: 'units_read', as: 'number' },
+  unitsTotal: { col: 'units_total', as: 'number' },
+  reads: { col: 'reads', as: 'number' },
+  tokens: { col: 'tokens', as: 'numeric' },
+  cost: { col: 'cost', as: 'numeric' },
+  readsWithoutCost: { col: 'reads_without_cost', as: 'number' },
+  spend: { col: 'spend', as: 'numeric' },
+} as const;
+
+/**
+ * SQL: bundle file `f` of bundle `b` is listed — it passes `visible` (the team filter) and has no
+ * dot segment below the bundle root (a dot-path is not part of a bundle).
+ */
+export function okfListedFileSql(visible = 'true'): string {
+  return `(${visible}) AND substr(f->>'path', length(b->>'root') + 2) !~ '(^|/)[.]'`;
+}
+
+/**
+ * The `files` of an OKF usage response: one row per listed file of the snapshot in the `okf_snap`
+ * CTE (column `body`), by path, with what `okf_reads` holds for it — a never opened file has
+ * zero units, reads, tokens and cost. `index` = a reserved name (`index.md` / `log.md`, any
+ * depth, any case). In the world every read row is on a listed file, so nothing is "not in the
+ * snapshot".
+ */
+export function okfFilesSelectSql(visible = 'true'): string {
+  const mine = `FROM okf_reads r WHERE r.path_key = f->>'path'`;
+  return `SELECT b->>'root' AS bundle, f->>'path' AS path, true AS in_snapshot,
+                 lower(regexp_replace(f->>'path', '^.*/', '')) IN ('index.md', 'log.md') AS is_index,
+                 (SELECT count(DISTINCT r.unit) ${mine}) AS units,
+                 (SELECT coalesce(sum(r.calls), 0) ${mine}) AS reads,
+                 (SELECT coalesce(sum(r.tokens), 0) ${mine}) AS tokens,
+                 (SELECT ${OKF_COST_OF_ROWS} ${mine}) AS cost
+            FROM okf_snap s, jsonb_array_elements(s.body->'bundles') b,
+                 jsonb_array_elements(b->'files') f
+           WHERE ${okfListedFileSql(visible)}
+           ORDER BY (f->>'path') COLLATE "C"`;
+}
+
+export const OKF_FILE_FIELDS = {
+  bundle: 'bundle',
+  path: 'path',
+  inSnapshot: 'in_snapshot',
+  index: 'is_index',
+  units: { col: 'units', as: 'number' },
+  reads: { col: 'reads', as: 'number' },
+  tokens: { col: 'tokens', as: 'numeric' },
+  cost: { col: 'cost', as: 'numeric' },
+} as const;

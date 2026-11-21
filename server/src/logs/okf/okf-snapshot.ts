@@ -16,7 +16,7 @@ import {
 } from '../../database/schema/index';
 import { PENDING_QUEUE_STATUSES, SNAPSHOT_ID_RE } from '../harness-snapshot';
 import { topAncestorIdsSql } from '../session-tree.sql';
-import { isDotPathUnderRoot } from './okf-verdict';
+import { isDotPathUnderRoot } from './okf-paths';
 
 const logger = new Logger('OkfSnapshot');
 

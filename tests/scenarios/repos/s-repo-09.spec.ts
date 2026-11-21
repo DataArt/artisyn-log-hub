@@ -21,8 +21,10 @@
 // session tree (helpers/okf.ts) bound to a KB snapshot whose bundle root carries the run id, so
 // no other session of the stand shares the snapshot. The export carries `okfSnapshotId` in
 // session.json and the `okf-snapshot` line in artisyn.jsonl (step 2); after the import the
-// session keeps its binding and its OKF rows, `session_okf_event` / `session_okf_pointer` included
-// (step 5a); deleting it removes its `session_okf_access`, event and pointer rows and sweeps the now-orphan `okf_snapshots` row (step 9).
+// session keeps its binding and its `session_okf_access` rows, and B's session OKF route counts
+// them against the snapshot (step 5a); deleting it removes its `session_okf_access` rows and
+// sweeps the now-orphan `okf_snapshots` row (step 9). Since 2026-11-21 nothing writes
+// `session_okf_event` / `session_okf_pointer` rows, so they are not asserted.
 //
 // Replaces:
 //   - tests/e2e/repo-export-import.spec.ts (4: round trip and three «visibility» tests)
@@ -69,21 +71,8 @@ test('@S-REPO-09 owner exports a repository to zip and imports it into another o
   const okfKb = `docs/kb-${run}`;
   const okfSnapshot = { bundles: [{ root: okfKb, files: [`${okfKb}/db.md`, `${okfKb}/api.md`] }] };
   const okfSnapshotId = okfSnapshotBody(okfSnapshot).okfSnapshotId;
-  /** db.md's text: names `server/db/pool.ts` (a pointer, 2026-11-03 DD-8), 2000 bytes long. */
+  /** db.md's text, 2000 bytes long; it names a code file the agent then opens. */
   const DB_MD = 'The pool lives in `server/db/pool.ts`.\n'.padEnd(2000, '.');
-  /** `session_okf_event` / `session_okf_pointer` rows of a session (2026-11-03 OKF value signals). */
-  const okfSignalRows = async (sessionId: string) => {
-    const count = async (table: 'session_okf_event' | 'session_okf_pointer') =>
-      Number(
-        (
-          await db.query<{ n: string }>(
-            `SELECT count(*) AS n FROM ${table} t JOIN sessions s ON s.id = t.session_id WHERE s.session_id = $1`,
-            [sessionId],
-          )
-        ).rows[0].n,
-      );
-    return { events: await count('session_okf_event'), pointers: await count('session_okf_pointer') };
-  };
   /** `session_okf_access` rows of a session (its root node). */
   const okfRows = async (sessionId: string) =>
     Number(
@@ -145,7 +134,7 @@ test('@S-REPO-09 owner exports a repository to zip and imports it into another o
         repoUrl: urlA,
         branch: 'main',
         snapshot: okfSnapshot,
-        // db.md names a code path the agent then opens: one pointer row and one code event.
+        // Two KB reads and one code read; the code file is not a KB file and counts nowhere.
         actions: [{ read: `${okfKb}/index.md` }, { read: `${okfKb}/db.md`, result: DB_MD }, { read: 'server/db/pool.ts' }],
       },
       queue,
@@ -246,16 +235,23 @@ test('@S-REPO-09 owner exports a repository to zip and imports it into another o
   await test.step('5a. OKF: the imported «refactor» session keeps its snapshot binding and its OKF rows; B’s OKF tab reads its KB', async () => {
     expect(await boundOkfSnapshot(sid('refactor'))).toBe(okfSnapshotId);
     expect(await okfRows(sid('refactor'))).toBe(2);
-    expect(await okfSignalRows(sid('refactor')), 'the read of server/db/pool.ts and the pointer db.md gave to it').toEqual({
-      events: 1,
-      pointers: 1,
-    });
     const res = await owner.api.get(`/api/v1/repositories/${repoB}/sessions/${sid('refactor')}/okf-usage`);
     expect(res.status()).toBe(200);
-    const usage = (await res.json()) as { hasSnapshot: boolean; bundles: Array<{ root: string; filesRead: number }> };
-    expect(usage.hasSnapshot).toBe(true);
-    // db.md only: the bundle's index.md is the entry point and never counts as an article read.
-    expect(usage.bundles).toEqual([expect.objectContaining({ root: okfKb, filesRead: 1 })]);
+    const usage = (await res.json()) as {
+      snapshot: { branch: string | null; hasMeta: boolean } | null;
+      bundleRoots: string[];
+      summary: { unitsRead: number; unitsTotal: number; reads: number; tokens: number };
+      files: Array<{ path: string; inSnapshot: boolean; index: boolean; units: number; reads: number; tokens: number }>;
+    };
+    expect(usage.snapshot, 'the imported session is counted against its own snapshot').toMatchObject({ branch: 'main', hasMeta: false });
+    expect(usage.bundleRoots).toEqual([okfKb]);
+    // index.md (1000 B) and db.md (2000 B) were read, api.md never; the code file is not listed.
+    expect(usage.summary).toMatchObject({ unitsRead: 1, unitsTotal: 1, reads: 2, tokens: 750 });
+    expect(usage.files.map(({ path, inSnapshot, index, units, reads, tokens }) => ({ path, inSnapshot, index, units, reads, tokens }))).toEqual([
+      { path: `${okfKb}/api.md`, inSnapshot: true, index: false, units: 0, reads: 0, tokens: 0 },
+      { path: `${okfKb}/db.md`, inSnapshot: true, index: false, units: 1, reads: 1, tokens: 500 },
+      { path: `${okfKb}/index.md`, inSnapshot: true, index: true, units: 1, reads: 1, tokens: 250 },
+    ]);
   });
 
   await test.step('6. The session with a sub-agent costs the same in B as in A (the tree is the same row)', async () => {
@@ -292,11 +288,10 @@ test('@S-REPO-09 owner exports a repository to zip and imports it into another o
     }
   });
 
-  await test.step('9. OKF: deleting the «refactor» session removes its session_okf_access / _event / _pointer rows and sweeps the orphan okf_snapshots row', async () => {
+  await test.step('9. OKF: deleting the «refactor» session removes its session_okf_access rows and sweeps the orphan okf_snapshots row', async () => {
     expect(await okfSnapshotRows(), 'the owner’s stored snapshot').toBe(1);
     expect((await owner.api.delete(`/api/v1/sessions/${sid('refactor')}`)).status()).toBe(204);
     expect(await okfRows(sid('refactor'))).toBe(0);
-    expect(await okfSignalRows(sid('refactor'))).toEqual({ events: 0, pointers: 0 });
     expect(await boundOkfSnapshot(sid('refactor'))).toBeNull();
     expect(await okfSnapshotRows(), 'no session references the snapshot any more').toBe(0);
   });

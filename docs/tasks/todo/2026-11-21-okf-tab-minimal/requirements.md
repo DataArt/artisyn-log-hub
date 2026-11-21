@@ -40,9 +40,13 @@ session tab shows the same views, built by the same components, for one session 
   - A **read** is a `session_okf_access` row with `op = 'read'` or `op = 'grep'` under a bundle
     root, `after_own_edit` included: a search returns article text into the context just as a read
     does. A file is "opened" when it has at least one such row. A `grep` row on a folder belongs to
-    no file: it counts in the totals and in N, and its tokens show on that folder's row in the
-    explorer. `list` and `write` rows, paths with glob characters and `.md` paths outside every
-    bundle root are not counted anywhere.
+    no file: it counts in the totals and in N and is shown in the explorer as a "searches across
+    this folder" row inside that folder, with its sessions and tokens (tooltip: not included in
+    any file's numbers). `list` and `write` rows, paths with glob characters and `.md` paths
+    outside every bundle root are not counted anywhere. Bundle roots come from the reference
+    snapshot (FR-5); a snapshot from a hook older than 3.1.0 has them too. In the team view the
+    existing team filter removes a gitignored bundle before anything is counted, so its reads are
+    in no number on the page.
   - **Reads** = the `calls` of those rows (tooltip: reads and searches). **≈ tokens** = their
     `bytes` / 4 (bytes returned by the calls, not the file size — said in a tooltip). Tokens are
     the only size unit on the page; bytes are not shown.
@@ -56,8 +60,10 @@ session tab shows the same views, built by the same components, for one session 
   - Hot files and the explorer are built from one `files[]` list of the response, so per-file
     values are equal by construction; the explorer's roots (files plus folder-level searches) add
     up to the summary totals.
-  - `index.md` / `log.md` are files like any other in FR-3 and FR-4; they stay exempt from the
-    format checks of FR-2.
+  - `index.md` / `log.md` are index files: they are meant to be read often, so they are not
+    listed in hot files (FR-3), but their reads count in N, in the tokens and in the cost, and
+    they are listed in the explorer (FR-4) like any file. They stay exempt from the format checks
+    of FR-2.
 - **FR-1 Versions.** One row per KB bundle (folder with `okf_version` in its `index.md`): path,
   file count, declared `okf_version` (or "not declared"), and a plain "older than the current
   format 0.3" marker (existing `okfVersionHint`). When every bundle is on the current format the
@@ -67,38 +73,50 @@ session tab shows the same views, built by the same components, for one session 
 - **FR-2 Wrong format.** List of KB articles with format problems, grouped by problem, each group
   with a plain-language title and count: no front matter, no `type`, old v0.1 `timestamp` key,
   deprecated (with its replacement), past its `stale_after` date (existing `articleMetaFlags` /
-  `formatHints`). Empty state is one line ("All N articles are well-formed"). Same old-hook line as
-  FR-1.
+  `formatHints`). N articles = the snapshot's files without the index files; the empty state is
+  one line that says so ("All 169 articles are well-formed · 6 index files are not checked"). Same
+  old-hook line as FR-1.
 - **FR-3 Hot files.** Top KB files by ≈ tokens read, columns: file, sessions, reads, ≈ tokens,
   ≈ $. Top 10 with "show all". Sorted by ≈ tokens, descending; every numeric column is sortable
   and the arrow marks the active one. No hidden subsets (no upkeep exclusion, no "current version
-  only"). Rows are not clickable.
-- **FR-4 Explorer.** A tree with one top-level root per KB bundle of the snapshot, folders collapsed
-  by default. A file row shows sessions and ≈ tokens, or is greyed when never opened. A folder row
-  shows "X of Y files opened", the sessions that read anything in it and the ≈ tokens of its files;
-  the header shows the same for the whole KB. A filter — All / Opened / Never opened (with the
-  count) — narrows the tree; an expanded folder lists all its files, nothing is cut to "N more".
-  Files under a bundle root that were read in the period but are not in the snapshot appear under
-  one more root, "Not in this snapshot" (tooltip: deleted, renamed, or on another branch); their
-  reads count in the totals, in N and in hot files. A gitignored bundle is shown to its owner and
-  stays hidden in the team view (existing team filter).
+  only"). Rows are not clickable. Index files are left out; one line under the table says how
+  many and what they add ("6 index files are not listed: ≈ 452K tokens, ≈ $6.57 — see the
+  explorer"), so the table plus that line plus the folder-level searches add up to the summary.
+- **FR-4 Explorer.** A tree with one top-level root per KB bundle of the snapshot; every root and
+  folder is collapsed by default. A file row shows sessions and ≈ tokens, or is greyed when never
+  opened. A folder row shows "X of Y files opened", the sessions that read anything in it and the
+  ≈ tokens read in it; the header shows "X of Y files opened" for the whole KB. An expanded folder
+  lists its "searches across this folder" row, its sub-folders and then all its own files —
+  nothing is cut to "N more". A filter — All (default on both tabs) / Opened / Never opened, each
+  with its count — narrows the tree; under "Never opened" the folder rows show only "K never
+  opened". Files under a bundle root that were read in the period but are not in the snapshot
+  appear under one more root, "Not in this snapshot" (tooltip: deleted, renamed, or on another
+  branch), shown under All and Opened; they are outside "X of Y", and their reads count in the
+  totals, in N and in hot files. A gitignored bundle is shown to its owner only.
 - **FR-5 One summary line.** At the top: "KB read in **N of M** sessions ·
-  **≈ X tokens** of context · **≈ $Y** · snapshot from `<branch>`, `<date>`" (session tab: "N of M
-  agents"). It is the only ratio of sessions (or agents) on the page; the explorer's "X of Y files"
+  **≈ X tokens** of context · **≈ $Y** (≈ P % of $T spend) · snapshot from `<branch>`, `<date>`"
+  (session tab: "N of M agents"). It is the only ratio of sessions (or agents) on the page; the explorer's "X of Y files"
   counts files, not sessions. The repository tab takes the newest snapshot among the filtered root
   sessions on the repository's default branch, or the newest of all when there is none (how the
   default branch is known is decided in the plan); the session tab takes the snapshot bound to the
-  tree's root. With no snapshot at all, versions, wrong format and the explorer show one line ("No
-  KB snapshot — update the hook"), hot files keep today's no-snapshot path list and the summary
-  omits the snapshot part.
-- **FR-5a KB cost.** An estimated dollar cost of the KB reads: each read once, its ≈ tokens priced
-  at the input-token rate of the model of the node that read it — the model and pricing row the
-  Spend tab uses for that node (`session_costs`), base rate only (no prompt-length tier, no
-  fast-mode surcharge, no cache rates). The server computes it and returns it as optional fields
+  tree's root. The tooltip of "snapshot" says it is the list of KB files as of that branch and
+  date. With no snapshot at all the bundle roots are unknown, so the whole tab is one line ("No KB
+  snapshot — update the hook") and shows no numbers.
+- **FR-5a KB cost.** An estimated dollar cost of the KB in the context, cache included. For each
+  agent (node): KB share = its KB ≈ tokens / the tokens it put into the context (`input_tokens` +
+  `cache_write_tokens` of `session_stats`), capped at 1; KB cost = that share × the agent's
+  context-side cost (`cost_input` + `cost_cache_write_5m` + `cost_cache_write_1h` +
+  `cost_cache_read` of `session_costs`; output is not included). A file's cost is the same formula
+  with the file's tokens, so the per-file values add up to the total. The estimate assumes KB text
+  is carried and re-read from the cache like the rest of the context. An agent without a computed
+  cost adds its tokens and no dollars. The server computes it and returns it as optional fields
   (per file and a total) in both `okf-usage` responses. Shown as the total in the summary line and
-  as the "≈ $" column of hot files, with two decimals and "< $0.01" below that. Always labelled "≈"
-  with a tooltip that states the formula, that it is a lower bound (the same text carried in the
-  context of later turns is not included), and how many reads by models without a price add $0.
+  as the "≈ $" column of hot files, with two decimals and "< $0.01" below that, always labelled
+  "≈" with a tooltip that states the formula and how many reads have no cost. Next to the total
+  the summary shows the KB share of the spend: P = KB cost / T, where T is the total cost of the
+  same session set — all M root sessions with their sub-agents on the repository tab (the Spend
+  tab's total under the same filters), the whole tree on the session tab. Shown as "≈ P %" with
+  one decimal below 10 %, "< 0.1 %" below that, and omitted when T is unknown or zero.
 
 ![Repository OKF tab wireframe](wireframes/repo-okf-tab.svg)
 
@@ -166,16 +184,20 @@ What goes:
       explorer roots add up to the header's.
 - [ ] FR-1: with every bundle on the current format the block is one line and expands to the rows.
 - [ ] FR-3: hot files are sorted by ≈ tokens and the arrow is on that column; no bytes column; for
-      any file, sessions, reads, ≈ tokens in hot files equal those of the same file in the explorer;
-      `index.md` is listed.
+      any file, sessions and ≈ tokens in hot files equal those of the same file in the explorer;
+      `index.md` / `log.md` are not in the table, the line under it gives their count, ≈ tokens and
+      ≈ $, and they are listed in the explorer with the same values.
 - [ ] FR-4: the explorer lists every snapshot file; never-opened files are greyed; "Never opened"
       shows exactly the files with no read and its count equals Y − X of the header; a file read in
       the period but absent from the snapshot is under "Not in this snapshot".
 - [ ] FR-5: the summary line shows N of M, ≈ tokens and the snapshot branch/date; M equals the
       session count of the Sessions tab under the same filters; no other session ratio is on the page.
 - [ ] FR-5a: the summary shows "≈ $" total; hot files has a sortable "≈ $" column; the per-file
-      ≈ tokens and ≈ $ of "show all" plus the folder-level searches add up to the summary totals;
-      the tooltip states the formula.
+      ≈ tokens and ≈ $ of "show all" plus the index-files line plus the folder-level searches add
+      up to the summary totals;
+      the tooltip states the formula; the summary shows "≈ P % of $T spend", where $T equals the
+      Spend tab's total under the same filters and P = KB cost / T; with T unknown the share is
+      not shown.
 - [ ] Session tab: the same views with "Agents" as the unit everywhere (summary, hot files,
       explorer); no column is labelled "Sessions".
 - [ ] FR-6: none of the removed blocks (verdict, checks, anomalies, KPI tiles, section B, upkeep,
@@ -208,8 +230,16 @@ None.
   sessions (10 of 306 on local prod) are in M and there is no Recompute.
 - `.md` paths outside every bundle root are dropped (72 % of the read bytes on local prod are
   task plans, not KB).
-- The cost uses the plain input rate: the cache-write variant differs by ≈ $3 in 30 days on local
-  prod and is harder to explain.
+- The cost includes the cache (owner, 2026-11-21): KB share of what an agent put into the context
+  × that agent's input + cache-write + cache-read cost. On local prod ≈ $52.61 of $3,017 (≈ 1.7 %);
+  pricing each read once at the input rate gave $16.42, because almost nothing is billed as plain
+  input.
+- With no snapshot the tab is one line; a gitignored bundle is in no number of the team view.
+- The explorer is collapsed by default with the "All" filter on both tabs.
+- Index files are not hot files — an index is supposed to be read often — but they count in the
+  cost and totals (owner, 2026-11-21); on local prod 6 index files are ≈ 452K of ≈ 3.77M tokens.
+- The summary shows the KB cost as a share of the total spend of the same sessions (owner,
+  2026-11-21).
 - The reference snapshot is the newest on the default branch among the filtered sessions.
 - Versions collapses to one line when every bundle is current; wrong format already has a one-line
   empty state.

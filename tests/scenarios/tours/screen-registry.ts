@@ -620,7 +620,7 @@ const REPORT_ROWS: ScreenRow[] = REPORTS.map(([report, title, extra]): ScreenRow
 
 /**
  * The repo OKF tab over the golden two weeks. No golden session has an OKF snapshot, so the tab
- * shows its snapshot-less state (or «KB not used in this period»); S-REPO-16 and S-REPT-01 walk
+ * is the one-line «No KB snapshot — update the hook.» state; S-REPO-16 and S-REPT-01 walk
  * the filled tab.
  */
 const OKF_REPO_ROW: ScreenRow = {
@@ -756,7 +756,7 @@ const SESSION_TAB_ROWS: Array<Omit<ScreenRow, 'story' | 'role' | 'modes' | 'rout
     expectTestId: 'harness-tree-row',
   },
   {
-    // The golden tour session has no OKF bundle and reads no KB article: the tab's empty state
+    // The golden tour session has no KB snapshot: the tab's one-line «No KB snapshot» state
     // is the meaningful screen there; S-SESS-09 walks the filled tab.
     id: 'session.okf',
     query: `${SESSION_QUERY}&tab=okf`,
@@ -765,7 +765,7 @@ const SESSION_TAB_ROWS: Array<Omit<ScreenRow, 'story' | 'role' | 'modes' | 'rout
     expectTestId: 'session-okf-tab',
     docRef: { file: `${HELP}/okf-tab.md`, heading: 'Session OKF tab' },
     dataOptional: true,
-    emptyText: 'No OKF knowledge base',
+    emptyText: 'No KB snapshot',
   },
   {
     // The repo Tools/MCP tab narrowed to this session. Its frame is the anchor; whether the

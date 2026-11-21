@@ -1,9 +1,9 @@
 ---
 type: "Algorithm"
 title: "OKF access extraction: which KB paths a tree node read, searched, listed or wrote"
-description: "The OKF tabs (session and repo) answer \"which knowledge-base articles did the agents actually read, how much of them went into the context, and did they find them through the index or by searching\"."
+description: "How one transcript (a root session or a sub-agent) becomes session_okf_access rows — per repo path and operation, with result bytes and call counts — and the ordered access sequence of the facts route."
 tags: [algorithm]
-generated: { by: "human:denistsyplakov", at: "2026-11-20T22:23:16+04:00" }
+generated: { by: "ai:claude", at: "2026-11-21T22:36:45+04:00" }
 reviewed: no
 reviewer: none
 ---
@@ -12,16 +12,19 @@ reviewer: none
 
 ## Purpose
 
-The OKF tabs (session and repo) answer "which knowledge-base articles did the agents actually
-read, how much of them went into the context, and did they find them through the index or by
-searching". Agents mostly read the KB through Bash in fragments (`sed -n`, `grep -n`, `cat`), not
-through the Read tool, so a Read-only count misses most of the use. This algorithm turns one
-transcript (one tree node: the root session or one sub-agent) into `session_okf_access` rows —
-per repo path, per operation — with the result bytes, the call count, whether the read followed
-the node's own edit, and the order of first access. For the value signals (whether an article
-pointed the agent at code it then used, see [okf-value-signals](okf-value-signals.md)) the same
-walk also yields the node's code events (`session_okf_event`), the pointers its KB reads handed
-out (`session_okf_pointer`) and the ordered access sequence of the facts route.
+The OKF tabs (session and repo) answer "which knowledge-base files did the agents actually read
+and how much of them went into the context". Agents mostly read the KB through Bash in fragments
+(`sed -n`, `grep -n`, `cat`), not through the Read tool, so a Read-only count misses most of the
+use. This algorithm turns one transcript (one tree node: the root session or one sub-agent) into
+`session_okf_access` rows — per repo path, per operation — with the result bytes, the call count,
+whether the read followed the node's own edit, and the order of first access. How the tabs count
+those rows is a separate doc: [okf-usage-counting](okf-usage-counting.md).
+
+The same walk also yields the node's code events, the pointers its KB reads handed out and the
+ordered access sequence (rules 12–18). Since the 2026-11-21 cut of the OKF tabs the events and
+pointer rows are **not stored** any more (`session_okf_event` / `session_okf_pointer` are no
+longer written) and no tab reads them: rules 13–16 now feed only the sequence of the facts route
+(`accessSeq` with its `newPointers`) and the `truncated` flag.
 
 ## Code
 
@@ -236,7 +239,7 @@ resolution uses them, rule 14). It returns
     new spans, rule 15, de-duplicated — also for spans past the pointer cap); a search
     item (`kb_search` / `search`) carries `hit`, the rule-11 hit test of its call's result (an error,
     empty, `No files found` or `No matches found` result is `false`). `hit` is derived per request
-    from the transcript (the trail and facts routes), never stored.
+    from the transcript (the facts route), never stored.
 18. **Caps.** At most `OKF_EVENT_CAP_PER_NODE` (3000) events and `OKF_POINTER_CAP_PER_NODE` (5000)
     pointer rows per node. Anything beyond is dropped and `truncated = true`, which the writer
     stores as `sessions.okf_events_truncated`. Access rows and the sequence are not capped.
@@ -360,21 +363,15 @@ Rows (38): [`docs/algorithm-examples/okf-access-extraction.json`](../../algorith
 
 ## Where the result is visible
 
-- Session pane → **OKF** tab: bundle cards (FILES READ, BYTES INTO CONTEXT), the tree's READ /
-  WRITE columns and `own_edit` / `folder_scan` markers, the Agents panel's "how agents reached the
-  KB" (via `seq`).
-- Repository → **OKF** tab: every tile, the histogram, hot files, not-read list and the tree.
+- Session pane → **OKF** tab and Repository → **OKF** tab: every number of the summary line, Hot
+  files and the Explorer comes from the `read` / `grep` access rows (`bytes`, `calls`), counted
+  by [okf-usage-counting](okf-usage-counting.md). `list` / `write` rows, `afterOwnEdit`, `seq`,
+  `rangedCalls` / `rangedBytes` and `searchHits` are stored but not shown by the tabs.
 - API: `GET /api/v1/repositories/:repoId/sessions/:sessionId/okf-usage`,
   `GET /api/v1/repositories/:repoId/reports/okf-usage`, `GET /api/v2/okf-usage/facts` (`kbReads`,
   `kbSeq`).
-- Section reads (`§ section ×N`) and the whole-only `coarse_article` ratio (from `rangedCalls` /
-  `rangedBytes`); the `entry: search` marker (from `searchHits`).
-- Value signals (yield, searched after, routing miss, dead pointers, catalog) on both OKF tabs
-  and the article drill-down — computed from the events and pointer rows by
-  [okf-value-signals](okf-value-signals.md).
-- `GET /api/v2/okf-usage/facts` per-agent `accessSeq` (the sequence, built on demand).
-- `GET …/sessions/:sessionId/okf-usage/trail` (the session OKF tab's agent trail: the sequence
-  with `hit`, capped, plus in-area marks — see [okf-value-signals](okf-value-signals.md) rule 11).
-- Storage: `session_okf_access`, `session_okf_event`, `session_okf_pointer`, and the
-  `sessions.okf_extract_version` / `okf_events_truncated` marker (see
-  [../okf-usage.md](../okf-usage.md)).
+- `GET /api/v2/okf-usage/facts` per-agent `accessSeq` (the sequence with `hit` and `newPointers`,
+  built on demand) — the only consumer of rules 13–17.
+- Storage: `session_okf_access` and the `sessions.okf_extract_version` / `okf_events_truncated`
+  marker (see [../okf-usage.md](../okf-usage.md)). The events and pointer rows of rules 13–15 are
+  not written anywhere since 2026-11-21.

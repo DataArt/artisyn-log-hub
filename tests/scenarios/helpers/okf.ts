@@ -10,8 +10,8 @@
  *     `git.root`;
  *   - a `claude` body for the main agent and one `claude-subagent` body per sub-agent, whose
  *     tool calls (Read, Grep, Bash, Edit) are what the server's OKF extraction turns into
- *     `session_okf_access` rows and, since 2026-11-03 (OKF value signals), `session_okf_event`
- *     (code reads / searches) and `session_okf_pointer` (code paths an article read names) rows.
+ *     `session_okf_access` rows — the only rows the OKF tab counts (since 2026-11-21 nothing
+ *     writes `session_okf_event` / `session_okf_pointer` rows any more).
  *     Each Read's `tool_result` is `bytes` long unless the action gives its `result` text, so the
  *     read bytes are exactly what the scenario says.
  *
@@ -435,6 +435,32 @@ export async function expectOkfTreeFits(page: Page): Promise<void> {
         })
         .toBeLessThanOrEqual(0);
     }
+  } finally {
+    if (before) await page.setViewportSize(before);
+  }
+}
+
+/**
+ * The OKF view on the open page shows its top without scrolling at 1600×1000: the summary line,
+ * Versions (or the old-hook line that replaces Versions and Wrong format), Wrong format and the
+ * first hot-files row are inside the viewport. The viewport is restored afterwards.
+ */
+export async function expectOkfViewFits(page: Page): Promise<void> {
+  const before = page.viewportSize();
+  try {
+    await page.setViewportSize({ width: 1600, height: 1000 });
+    const at = 'at 1600×1000';
+    await expect(page.getByTestId('okf-summary'), `the summary line is above the fold ${at}`).toBeInViewport({ ratio: 0.9 });
+    const oldHook = (await page.getByTestId('okf-old-hook-line').count()) > 0;
+    if (oldHook) {
+      await expect(page.getByTestId('okf-old-hook-line'), `the old-hook line is above the fold ${at}`).toBeInViewport({ ratio: 0.9 });
+    } else {
+      await expect(page.getByTestId('okf-versions'), `Versions is above the fold ${at}`).toBeInViewport({ ratio: 0.9 });
+      await expect(page.getByTestId('okf-format'), `Wrong format is above the fold ${at}`).toBeInViewport({ ratio: 0.9 });
+    }
+    await expect(page.getByTestId('okf-hot-row').first(), `the first hot-files row is above the fold ${at}`).toBeInViewport({
+      ratio: 0.9,
+    });
   } finally {
     if (before) await page.setViewportSize(before);
   }

@@ -77,10 +77,9 @@ format where the two differ).
 | [bash-command-view](bash-command-view.md) | `packages/bash-view/src/*` (`@loghub/bash-view`; client loader `client/src/viewer/lib/bash-view/`) | vitest |
 | [okf-access-extraction](okf-access-extraction.md) | `server/src/logs/okf/okf-access-extractor.ts` | jest |
 | [okf-task-context](okf-task-context.md) | `server/src/logs/okf/okf-task-context.ts` | jest |
-| [okf-verdict](okf-verdict.md) | `server/src/logs/okf/okf-verdict.ts` (+ team filter `okf-usage-tree.ts`, thresholds `okf-thresholds.ts`) | jest |
-| [okf-value-signals](okf-value-signals.md) | `server/src/logs/okf/okf-value-signals.ts` | jest |
 | [okf-snapshot](okf-snapshot.md) | hook `okf-snapshot.js` | `node --test` |
 | [okf-metadata](okf-metadata.md) | `server/src/logs/okf/okf-metadata.ts` | jest |
+| [okf-usage-counting](okf-usage-counting.md) | `server/src/logs/okf/okf-usage-counting.ts` (`buildOkfUsageView`, `pickReferenceRoot`), `okf-paths.ts`, `okf-team-filter.ts`; display formats `client/.../lib/okf/okf-format.ts` | jest, vitest |
 | [tool-monitor-name-validation](tool-monitor-name-validation.md) | `packages/tool-monitor/src/index.ts` (`@loghub/tool-monitor`; server and client); twin hook `tool-wrap-names.js` | jest, `node --test` |
 | [mcp-call-extraction](mcp-call-extraction.md) | `server/src/logs/tool-monitoring/mcp-call-extractor.ts` | jest |
 | [cli-command-recognition](cli-command-recognition.md) | `server/src/logs/tool-monitoring/cli-command-recognition.ts` | jest |

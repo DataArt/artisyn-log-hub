@@ -8,87 +8,124 @@
 // `docs/guide.md` and `src/app.ts`). `db` counts stats rows, and deletes the team-scoped rows once
 // to stand for the stale pre-migration state no endpoint produces (`db-seed.ts` rule).
 //
-// Steps 7–11 — the OKF usage tab (2026-10-27-okf-usage-tab, FR-5, FR-17): owner and member each
-// upload an OKF session tree (helpers/okf.ts, DD-36) whose snapshot has a tracked bundle
-// `docs/kb-<run>` with one gitignored article (`secret.md`) and a gitignored bundle
-// `docs/private-<run>`. The personal view shows both bundles and the ignored article; the team
-// view (the repo tab and a session's OKF tab) drops every ignored path fail-closed (DD-30).
+// Steps 7–11 — the OKF tab, team vs personal (2026-10-27-okf-usage-tab FR-5 / FR-17, response
+// and view of 2026-11-21-okf-tab-minimal): owner and member each upload an OKF session tree
+// (helpers/okf.ts, DD-36) whose snapshot has a tracked bundle `docs/kb-<run>` with one gitignored
+// article (`secret.md`) and a gitignored bundle `docs/private-<run>`. The personal view counts
+// both bundles and the ignored article; the team view (the repo tab and a session's OKF tab)
+// drops every ignored path from the summary, the files and the bundle roots (fail-closed).
 // «Recompute all sessions» refills `session_okf_access` after its rows are deleted; the bundle
-// filter narrows the tiles and the tree.
+// filter narrows the files and the read numbers and keeps `unitsTotal`. None of the blocks removed
+// on 2026-11-21 (verdict card, KPI tiles, value signals, upkeep, thresholds) renders any more.
 //
-// Steps 12–16 — OKF value signals (2026-11-03-okf-view-kb-value): the owner uploads three more
-// trees against a snapshot that adds `route.md`, `yield.md` and `upkeep.md` to the bundle. Their
-// article reads name code paths in back-ticks (pointers, DD-8) and their agents read / grep those
-// paths (code events, DD-5): a routing miss (FR-3), a followed vs a prompt-named pointer and a
-// dead one (FR-1, FR-13), an upkeep read (FR-5); then the team view of a `team-no-prompts`
-// manager (patterns shown, task heads masked) and a personal `routingMinSearches` override that
-// changes the list at read time, plus the FR-11 «no OKF analysis yet» banner.
-// Package 2 (2026-11-05): step 8 checks the repo Checks lines (not enough data, too-small
-// folder, the most-read article below 80 %, no big article) and an empty section B; step 12 the
-// routing-miss finding listed under section B, not A.
-// Package 3 (agent trail): step 12 follows a missing agent's «Agent trail» link from the article
-// drill-down to its session's OKF tab (`okfAgent` in the URL) and checks the trail.
-// OKF v0.3 support (2026-11-19): KB files / not-read count articles only (no index.md / log.md,
-// no dot-paths — FR-2). Step 17 uploads a hook 3.1.0 tree (bundle `docs/v03-<run>` with a title,
-// version 0.1 and per-file front-matter `meta`): the repo tree's bundle-row hints and file chips,
-// the not-read list without reserved files, and a recompute after the extract-version bump (4).
+// Steps 12–13 — counting rules (2026-11-21-okf-tab-minimal FR-0): the owner uploads two trees
+// against a new, well-formed bundle `docs/clean-<run>` (format 0.3) with a nested bundle: one on
+// `main` with a file grep, a folder grep and a read of a `.md` outside every bundle, one on a
+// feature branch whose own snapshot adds `gone.md` and reads it. Step 12 checks the response sums
+// and the explorer (search row, nested root, «Not in this snapshot», never-opened files), then
+// Versions / Wrong format of a clean bundle; step 13 the hot-files table (sort, index line, the
+// same numbers as the explorer, the ≈ $ tooltip).
+//
+// Step 14 — OKF v0.3 front matter (2026-11-19): a hook 3.1.0 tree (bundle `docs/v03-<run>`,
+// version 0.1, per-file `meta`): the Versions row, the five Wrong-format groups, no dot-path
+// file, the 1600×1000 fit, and a recompute after the extract-version bump (4).
 //
 // Replaces: none (2026-10-16-team-vs-personal-config).
 import { randomBytes } from 'crypto';
-import type { Page } from '@playwright/test';
+import type { Locator, Page } from '@playwright/test';
 import { test, expect } from '../fixtures';
 import type { ScenarioUser } from '../fixtures';
 import { createApiKey } from '../helpers/api-key';
-import { expectOkfTreeFits, uploadOkfSessionTree, type OkfAction, type OkfSubAgentSpec } from '../helpers/okf';
+import { expectOkfTreeFits, expectOkfViewFits, uploadOkfSessionTree, type OkfAction } from '../helpers/okf';
 import { ownRepoId, rangeAround, uploadPromptSession } from '../helpers/prompt-session';
-import { addTeamRepo, browserAs, createTeam, inviteAndAccept, setMemberRoles } from '../helpers/teams';
+import { addTeamRepo, browserAs, createTeam, inviteAndAccept } from '../helpers/teams';
 
 interface RepoConfig {
   fileCategories: Array<{ name: string; patterns: string[] }>;
   highCacheCreationThreshold?: number;
 }
 
-interface OkfRepoUsage {
-  tiles: {
-    kbFiles: number;
-    kbSessions: number;
-    upkeepOnlySessions?: number;
-    pointerYield?: { k: number; n: number } | null;
-    routingMissArticles?: number;
-    routingMissPairs?: number;
-    sessionsWithoutAnalysis?: number;
+/** One file of `OkfUsageResponse.files` (2026-11-21-okf-tab-minimal, "API changes"). */
+interface OkfUsageFile {
+  bundle: string;
+  path: string;
+  inSnapshot: boolean;
+  index: boolean;
+  units: number;
+  reads: number;
+  tokens: number;
+  cost: number | null;
+}
+
+interface OkfUsageFolder {
+  bundle: string;
+  path: string;
+  units: number;
+  search: { units: number; reads: number; tokens: number; cost: number | null } | null;
+}
+
+/** `GET …/reports/okf-usage` and `GET …/sessions/:id/okf-usage` — one shape for both. */
+interface OkfUsage {
+  unit: 'sessions' | 'agents';
+  snapshot: { branch: string | null; takenAt: string; hasMeta: boolean } | null;
+  bundleRoots: string[];
+  currentFormat: string;
+  summary: {
+    unitsRead: number;
+    unitsTotal: number;
+    reads: number;
+    tokens: number;
+    cost: number | null;
+    readsWithoutCost: number;
+    spend: number | null;
   };
-  bundles: Array<{ root: string }>;
-  tree: unknown[];
-  hotFiles: Array<{ path: string }>;
-  upkeep?: Array<{ path: string; sessions: number; readBytes: number }>;
-  thresholds?: { custom: string[] };
-  canRecompute?: boolean;
-}
-
-interface OkfSessionUsage {
-  bundles: Array<{ root: string }>;
-  agents: Array<{ id: string; promptNamedPaths?: number; yield?: { k: number; n: number } | null }>;
-}
-
-/** `GET …/reports/okf-usage/article` (2026-11-03 OKF value signals, DD-23). */
-interface OkfArticle {
-  found: boolean;
-  reads: { whole: number; section: number; upkeep: number; partial: number };
-  yield: { k: number; n: number } | null;
-  pointers: Array<{ pointer: string; shown: number; followed: number; dead: boolean; notFound: boolean }>;
-  area: string[];
-  routingMiss: {
-    agents: number;
-    areaAgents: number;
-    patterns: Array<{ pattern: string; count: number }>;
-    missing: Array<{ sessionId: string; agentId: string; taskHead: string; searches: number }>;
+  versions: Array<{ root: string; files: number; okfVersion: string | null; older: boolean; ignored: boolean }>;
+  format: {
+    articles: number;
+    indexFiles: number;
+    withProblems: number;
+    groups: Array<{ problem: string; files: Array<{ path: string; supersededBy?: string }> }>;
   } | null;
-  findings: Array<{ rule: string }>;
+  files: OkfUsageFile[];
+  folders: OkfUsageFolder[];
+  notInSnapshotUnits: number;
 }
 
-/** The big number of the repo OKF tab's «KB files» tile. */
-const kbFilesTile = (page: Page) => page.getByTestId('okf-tile-kb-files').locator('p').first();
+/** Ids of the OKF blocks removed on 2026-11-21: none of them may render on the repo tab. */
+const REMOVED_OKF_IDS = [
+  'okf-verdict-card',
+  'okf-kpi-tiles',
+  'okf-section-b',
+  'okf-upkeep-row',
+  'okf-analysis-banner',
+  'okf-thresholds-chip',
+];
+
+/** The ≈ $ tooltip's first paragraph (DD-20, exact). */
+const OKF_COST_TIP =
+  'For each agent: the KB share of what it put into its context × what that context cost (input + cache write + cache read; output is not included). Assumes KB text is carried and re-read from the cache like the rest of the context. Spend = total cost of the same sessions.';
+
+const escapeRe = (s: string): string => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+const sum = (values: number[]): number => values.reduce((a, b) => a + b, 0);
+
+/**
+ * The invariants of the response ("API changes"): the files and the folder searches add up to
+ * the summary, and the snapshot's files are the versions' files = articles + index files.
+ */
+function expectOkfSums(u: OkfUsage, label: string): void {
+  const searches = u.folders.flatMap((f) => (f.search === null ? [] : [f.search]));
+  expect(sum(u.files.map((f) => f.tokens)) + sum(searches.map((s) => s.tokens)), `${label}: tokens add up`).toBeCloseTo(u.summary.tokens, 6);
+  expect(sum(u.files.map((f) => f.reads)) + sum(searches.map((s) => s.reads)), `${label}: reads add up`).toBe(u.summary.reads);
+  expect(sum(u.files.map((f) => f.cost ?? 0)) + sum(searches.map((s) => s.cost ?? 0)), `${label}: costs add up`).toBeCloseTo(
+    u.summary.cost ?? 0,
+    9,
+  );
+  const inSnapshot = u.files.filter((f) => f.inSnapshot).length;
+  if (u.snapshot?.hasMeta) {
+    expect(sum(u.versions.map((v) => v.files)), `${label}: versions list every snapshot file`).toBe(inSnapshot);
+    expect((u.format?.articles ?? 0) + (u.format?.indexFiles ?? 0), `${label}: articles + index files`).toBe(inSnapshot);
+  }
+}
 
 interface TimelineRow {
   sessionId: string;
@@ -255,12 +292,12 @@ test('@S-REPO-16 team-view analytics follow the team config for every member’s
   const repoOkf = async (user: ScenarioUser, query: Record<string, string>) => {
     const res = await user.api.get(`/api/v1/repositories/${repoOf(user)}/reports/okf-usage?${rangeAround()}`, { params: query });
     expect(res.status(), `okf-usage ${JSON.stringify(query)}`).toBe(200);
-    return (await res.json()) as OkfRepoUsage;
+    return (await res.json()) as OkfUsage;
   };
   const sessionOkf = async (user: ScenarioUser, query: Record<string, string>) => {
     const res = await user.api.get(`/api/v1/repositories/${repoOf(user)}/sessions/${okfSid('owner')}/okf-usage`, { params: query });
     expect(res.status(), `session okf-usage ${JSON.stringify(query)}`).toBe(200);
-    return (await res.json()) as OkfSessionUsage;
+    return (await res.json()) as OkfUsage;
   };
   const okfRowCount = async () =>
     Number(
@@ -288,67 +325,89 @@ test('@S-REPO-16 team-view analytics follow the team config for every member’s
     expect(await okfRowCount(), 'every read of both trees is stored, ignored paths too (filtered at read time)').toBe(6);
   });
 
-  await test.step('8. FR-17 repo OKF tab: the personal view shows both bundles and the ignored article; the team view drops every ignored path', async () => {
+  /** One explorer row by its kind and `data-path` (a folder key ends in `/`, a bundle is its root). */
+  const treeRow = (page: Page, kind: 'bundle' | 'folder' | 'file' | 'search', path: string) =>
+    page.locator(`[data-testid="okf-tree-row"][data-kind="${kind}"][data-path="${path}"]`);
+  /** Opens (or closes) an expandable explorer row. */
+  const toggleRow = (row: Locator) => row.getByRole('button').first().click();
+  const hotRow = (page: Page, path: string) => page.locator(`[data-testid="okf-hot-row"][data-path="${path}"]`);
+  const paths = (u: OkfUsage) => u.files.map((f) => f.path);
+
+  await test.step('8. FR-17 repo OKF tab: the personal view counts both bundles and the ignored article; the team view drops every ignored path; no removed block renders', async () => {
     const personal = await repoOkf(owner, {});
-    expect(personal.bundles.map((b) => b.root).sort()).toEqual([kb, priv].sort());
-    // OKF v0.3 FR-2: KB files are articles — the bundles' index.md files are not counted.
-    expect(personal.tiles.kbFiles, 'a.md, b.md, secret.md, notes.md').toBe(4);
-    expect(JSON.stringify(personal)).toContain(secret);
-    expect(JSON.stringify(personal)).toContain(`${priv}/notes.md`);
+    expect(personal.unit).toBe('sessions');
+    expect(personal.snapshot, 'an old-hook snapshot: no metadata').toMatchObject({ branch: 'main', hasMeta: false });
+    expect(personal.bundleRoots).toEqual([kb, priv].sort());
+    expect(paths(personal), 'every snapshot file, the index files too').toEqual(
+      [`${kb}/a.md`, `${kb}/b.md`, `${kb}/index.md`, secret, `${priv}/index.md`, `${priv}/notes.md`].sort(),
+    );
+    expect(personal.files.every((f) => f.inSnapshot)).toBe(true);
+    // The owner's own sessions: the setup prompt session and the OKF tree; the tree read the
+    // index, a.md, secret.md (5000 B) and the private notes (7000 B) — bytes / 4.
+    expect(personal.summary).toMatchObject({ unitsRead: 1, unitsTotal: 2, reads: 4, tokens: 3500 });
+    expect(personal.files.find((f) => f.path === secret)).toMatchObject({ units: 1, reads: 1, tokens: 1250 });
+    expect(personal.files.find((f) => f.path === `${kb}/b.md`), 'the member’s read is not in the owner’s view').toMatchObject({ units: 0 });
+    expect({ versions: personal.versions, format: personal.format }, 'no metadata: no versions, no format').toEqual({
+      versions: [],
+      format: null,
+    });
+    expectOkfSums(personal, 'personal');
 
     const team = await repoOkf(member, { teamId: String(teamId) });
-    expect(team.bundles.map((b) => b.root)).toEqual([kb]);
-    expect(team.tiles.kbFiles, 'a.md, b.md — not secret.md, not the index').toBe(2);
-    expect(team.tiles.kbSessions, 'both members’ trees read a visible article').toBe(2);
+    expect(team.bundleRoots).toEqual([kb]);
+    expect(paths(team), 'a.md, b.md and the index — not secret.md, not the private bundle').toEqual([`${kb}/a.md`, `${kb}/b.md`, `${kb}/index.md`]);
+    expect(team.summary, 'both members’ trees read a visible file; 4 sessions of the two members').toMatchObject({
+      unitsRead: 2,
+      unitsTotal: 4,
+      reads: 3,
+      tokens: 750,
+    });
+    expect(team.notInSnapshotUnits, 'a hidden path is not a "not in this snapshot" file either').toBe(0);
     expect(JSON.stringify(team)).not.toContain(secret);
     expect(JSON.stringify(team)).not.toContain(priv);
+    expectOkfSums(team, 'team');
 
     const { context, page } = await browserAs(browser, stand.url, member, `/#/teams/${teamId}/repos/${repoOf(member)}?mtab=okf`);
     try {
       await expect(page.getByTestId('tab-repo-okf')).toHaveAttribute('data-state', 'active');
-      await expect(page.getByTestId('okf-tree')).toContainText(kb);
-      await expect(kbFilesTile(page)).toHaveText('2');
-      await expect(page.getByTestId('repo-okf-tab')).not.toContainText('secret.md');
-      await expect(page.getByTestId('repo-okf-tab')).not.toContainText(priv);
+      const tab = page.getByTestId('repo-okf-tab');
+      await expect(page.getByTestId('okf-summary-ratio')).toHaveText('KB read in 2 of 4 sessions');
+      await expect(page.getByTestId('okf-summary-tokens')).toHaveText('≈ 0.8K tokens of context');
+      await expect(page.getByTestId('okf-summary-snapshot')).toContainText('snapshot from main, ');
+      await expect(page.getByTestId('okf-old-hook-line')).toHaveText('Update the hook to see versions and format problems.');
+      await expect(page.getByTestId('okf-tree-header')).toHaveText('3 of 3 files opened');
+      await expect(treeRow(page, 'bundle', kb)).toHaveCount(1);
+      await expect(page.getByTestId('okf-tree-row')).toHaveCount(1);
+      await expect(hotRow(page, `${kb}/a.md`)).toHaveCount(1);
+      await expect(hotRow(page, `${kb}/b.md`)).toHaveCount(1);
+      await toggleRow(treeRow(page, 'bundle', kb));
+      await expect(treeRow(page, 'file', `${kb}/a.md`)).toHaveAttribute('data-opened', 'true');
+      await expect(tab).not.toContainText('secret.md');
+      await expect(tab).not.toContainText(priv);
+      for (const id of REMOVED_OKF_IDS) await expect(page.getByTestId(id), `${id} is gone`).toHaveCount(0);
+      await expectOkfViewFits(page);
 
-      // Package 2 (2026-11-05): section A's verdict card lists the four repo checks with the
-      // counted value and the threshold; section B (value signals) has nothing to check here.
-      const sectionA = page.getByTestId('okf-section-a');
-      await expect(sectionA.getByTestId('okf-section-title')).toHaveText('A · How the KB was navigated (verified)');
-      await expect(sectionA.getByTestId('okf-kpi-tiles')).toHaveCount(1);
-      const check = (rule: string) => sectionA.getByTestId('okf-check-line').and(page.locator(`[data-rule="${rule}"]`));
-      await expect(sectionA.getByTestId('okf-check-line')).toHaveCount(4);
-      await expect(sectionA.getByTestId('okf-checks-repo-note'), 'the repo-level note is the session variant’s').toHaveCount(0);
-      await expect(check('kb_sessions')).toHaveAttribute('data-status', 'na');
-      await expect(check('kb_sessions').getByTestId('okf-check-text')).toHaveText(
-        /^Only 2 of \d+ sessions read the KB — the repository checks need 5, so the level is "Not enough data"$/,
-      );
-      await expect(check('kb_flood')).toHaveAttribute('data-status', 'na');
-      await expect(check('kb_flood').getByTestId('okf-check-text')).toHaveText(
-        'No KB folder has 10+ articles — flooding is not judged on small folders',
-      );
-      // a.md and b.md are each read in 1 of the 2 KB sessions; the first is named.
-      await expect(check('always_read')).toHaveAttribute('data-status', 'ok');
-      await expect(check('always_read').getByTestId('okf-check-text')).toHaveText(
-        `Most-read article: ${kb}/a.md is read in 1 of 2 KB sessions (50 %); finding at ≥ 80 % — an article nearly every session needs belongs in CLAUDE.md`,
-      );
-      await expect(check('coarse_article')).toHaveAttribute('data-status', 'na');
-      await expect(check('coarse_article').getByTestId('okf-check-text')).toHaveText('No article reaches 50 KB — nothing to split');
-      const sectionB = page.getByTestId('okf-section-b');
-      await expect(sectionB.getByTestId('okf-section-title')).toHaveText('B · Did the articles help? (heuristic — check by hand)');
-      await expect(sectionB.getByTestId('okf-section-b-count')).toHaveText('nothing to check');
-      await expect(sectionB.getByTestId('okf-signal-findings')).toContainText('No value signal fired in this period.');
+      // The thresholds section left Settings → Analysis with the blocks that used it.
+      await page.goto(`/#/teams/${teamId}/repos/${repoOf(member)}?mtab=settings&stab=analysis`);
+      await expect(page.getByTestId('cache-creation-threshold-setting')).toBeVisible();
+      await expect(page.getByTestId('okf-thresholds-setting')).toHaveCount(0);
     } finally {
       await context.close();
     }
   });
 
   await test.step('9. FR-17 session OKF tab: the team URL hides the ignored article and bundle; the personal view keeps them', async () => {
-    const personal = JSON.stringify(await sessionOkf(owner, {}));
-    expect(personal).toContain(secret);
-    expect(personal).toContain(`${priv}/notes.md`);
+    const personal = await sessionOkf(owner, {});
+    expect(personal.unit).toBe('agents');
+    expect(paths(personal)).toContain(secret);
+    expect(paths(personal)).toContain(`${priv}/notes.md`);
+    expect(personal.summary, 'one agent, four reads').toMatchObject({ unitsRead: 1, unitsTotal: 1, reads: 4, tokens: 3500 });
+    expectOkfSums(personal, 'session personal');
+
     const team = await sessionOkf(member, { teamId: String(teamId) });
-    expect(team.bundles.map((b) => b.root)).toEqual([kb]);
+    expect(team.bundleRoots).toEqual([kb]);
+    expect(paths(team)).toEqual([`${kb}/a.md`, `${kb}/b.md`, `${kb}/index.md`]);
+    expect(team.summary, 'the index and a.md only').toMatchObject({ unitsRead: 1, unitsTotal: 1, reads: 2, tokens: 500 });
     expect(JSON.stringify(team)).not.toContain(secret);
     expect(JSON.stringify(team)).not.toContain(priv);
 
@@ -359,10 +418,15 @@ test('@S-REPO-16 team-view analytics follow the team config for every member’s
       `/#/teams/${teamId}/repos/${repoOf(member)}?session=${encodeURIComponent(okfSid('owner'))}&tab=okf`,
     );
     try {
-      await expect(page.getByTestId('session-okf-tab')).toBeVisible();
-      await expect(page.getByTestId('okf-tree-row').filter({ hasText: 'a.md' })).toHaveCount(1);
-      await expect(page.getByTestId('session-okf-tab')).not.toContainText('secret.md');
-      await expect(page.getByTestId('session-okf-tab')).not.toContainText('notes.md');
+      const tab = page.getByTestId('session-okf-tab');
+      await expect(tab).toBeVisible();
+      await expect(tab.getByTestId('okf-summary-ratio')).toHaveText('KB read by 1 of 1 agents');
+      await expect(tab.getByTestId('okf-tree-header')).toHaveText('2 of 3 files opened in this session');
+      await toggleRow(treeRow(page, 'bundle', kb));
+      await expect(treeRow(page, 'file', `${kb}/a.md`)).toHaveAttribute('data-opened', 'true');
+      await expect(treeRow(page, 'file', `${kb}/b.md`)).toHaveAttribute('data-opened', 'false');
+      await expect(tab).not.toContainText('secret.md');
+      await expect(tab).not.toContainText('notes.md');
     } finally {
       await context.close();
     }
@@ -373,341 +437,287 @@ test('@S-REPO-16 team-view analytics follow the team config for every member’s
       [okfSid('owner'), okfSid('member')],
     ]);
     expect(await okfRowCount()).toBe(0);
-    expect((await repoOkf(owner, {})).tiles.kbSessions).toBe(0);
+    expect((await repoOkf(owner, {})).summary).toMatchObject({ unitsRead: 0, reads: 0, tokens: 0 });
     // A repository row is per user: the owner's recompute covers the sessions linked to the
     // owner's row (4 reads), the member's own recompute the member's (2 reads).
     const recompute = async (user: ScenarioUser) =>
       expect((await user.api.post(`/api/v1/repositories/${repoOf(user)}/recompute-all-sessions`)).status()).toBe(201);
     await recompute(owner);
     expect(await okfRowCount()).toBe(4);
-    expect((await repoOkf(owner, {})).tiles.kbSessions).toBe(1);
+    expect((await repoOkf(owner, {})).summary.unitsRead).toBe(1);
     await recompute(member);
     expect(await okfRowCount()).toBe(6);
-    expect((await repoOkf(member, { teamId: String(teamId) })).tiles.kbSessions).toBe(2);
+    expect((await repoOkf(member, { teamId: String(teamId) })).summary.unitsRead).toBe(2);
   });
 
-  await test.step('11. bundle filter (personal view): one bundle narrows the tiles and the tree; the URL keeps it', async () => {
+  await test.step('11. bundle filter (personal view): one bundle narrows the files and the read numbers, keeps the session total and the bundle list; the URL keeps it', async () => {
+    const all = await repoOkf(owner, {});
     const one = await repoOkf(owner, { bundle: kb });
-    expect(one.bundles.map((b) => b.root)).toEqual([kb]);
-    expect(one.tiles.kbFiles, 'a.md, b.md, secret.md').toBe(3);
-    expect(JSON.stringify(one.tree)).not.toContain(priv);
+    expect(one.bundleRoots, 'the select keeps every bundle').toEqual([kb, priv].sort());
+    expect(paths(one), 'the kb bundle’s files only').toEqual([`${kb}/a.md`, `${kb}/b.md`, `${kb}/index.md`, secret]);
+    expect(JSON.stringify({ files: one.files, folders: one.folders })).not.toContain(priv);
+    expect(one.summary, 'the private notes’ read (7000 B) is out').toMatchObject({ unitsRead: 1, reads: 3, tokens: 1750 });
+    expect({ unitsTotal: one.summary.unitsTotal, spend: one.summary.spend }, 'the scope’s totals do not follow the bundle').toEqual({
+      unitsTotal: all.summary.unitsTotal,
+      spend: all.summary.spend,
+    });
+    expectOkfSums(one, 'one bundle');
 
     const { context, page } = await browserAs(browser, stand.url, owner, `/#/repos/${repoOf(owner)}?mtab=okf`);
     try {
-      await expect(kbFilesTile(page)).toHaveText('4');
+      await expect(page.getByTestId('okf-tree-header')).toHaveText('4 of 6 files opened');
+      await expect(page.getByTestId('okf-summary-ratio')).toHaveText('KB read in 1 of 2 sessions');
       await expect(page.getByTestId('okf-tree')).toContainText(priv);
       await page.getByTestId('okf-bundle-select').click();
       await page.getByRole('option', { name: kb, exact: true }).click();
-      await expect(page).toHaveURL(new RegExp(`okfBundle=${encodeURIComponent(kb).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
-      await expect(kbFilesTile(page)).toHaveText('3');
+      await expect(page).toHaveURL(new RegExp(`okfBundle=${escapeRe(encodeURIComponent(kb))}`));
+      await expect(page.getByTestId('okf-tree-header')).toHaveText('3 of 4 files opened');
+      await expect(page.getByTestId('okf-summary-ratio'), 'the session total stays').toHaveText('KB read in 1 of 2 sessions');
       await expect(page.getByTestId('okf-tree')).toContainText(kb);
       await expect(page.getByTestId('okf-tree')).not.toContainText(priv);
+      await expect(page.getByTestId('okf-hot-files')).not.toContainText('notes.md');
     } finally {
       await context.close();
     }
   });
 
-  // ── OKF value signals (2026-11-03): routing miss, yield, dead pointers, upkeep, thresholds ──
-  const route = `${kb}/route.md`;
-  const yieldArticle = `${kb}/yield.md`;
-  const upkeepArticle = `${kb}/upkeep.md`;
-  // The step-7 snapshot plus three articles; every other file keeps its hash (no stale marker).
-  const valueSnapshot = {
-    bundles: [
-      { root: kb, files: [`${kb}/a.md`, `${kb}/b.md`, { path: secret, ignored: true }, route, yieldArticle, upkeepArticle] },
-      okfSnapshot.bundles[1],
+  // ── Counting rules (2026-11-21 FR-0): a clean 0.3 bundle with a nested bundle ──────────────
+  const clean = `docs/clean-${run}`;
+  const nested = `${clean}/deep`;
+  const article = { frontMatter: true, hasGenerated: true, hasTimestamp: false, type: 'Article' };
+  const indexMeta = { ...article, type: 'Index' };
+  const cleanFiles = [
+    { path: `${clean}/index.md`, meta: indexMeta },
+    { path: `${clean}/grepped.md`, meta: article },
+    { path: `${clean}/read.md`, meta: article },
+    { path: `${clean}/never.md`, meta: article },
+    { path: `${clean}/sub/topic.md`, meta: article },
+  ];
+  const nestedBundle = {
+    root: nested,
+    okfVersion: '0.3',
+    files: [
+      { path: `${nested}/index.md`, meta: indexMeta },
+      { path: `${nested}/inner.md`, meta: article },
     ],
   };
-  const ROUTER = 'server/route/router.ts';
-  const TABLE = 'server/route/table.ts';
-  const ROUTE_TEXT = `# Routing\nRouting lives in \`${ROUTER}\`; the table is \`${TABLE}\`.\n`;
-  const HIT = 'server/yield/hit.ts';
-  const DEAD = 'server/yield/dead.ts';
-  const YIELD_TEXT = `# Yield\nStart at \`${HIT}\`; the old flow was in \`${DEAD}\`.\n`;
-  const UPKEEP_TEXT = 'Keep `server/upkeep/job.ts` in sync.\n';
-  const agent = (name: string) => `agent-${run}-${name}`;
-  const greps = (path: string, patterns: string[]): OkfAction[] => patterns.map((pattern) => ({ grep: path, pattern }));
-  let ownerKey: string | undefined;
-  const uploadValueTree = async (who: string, prompt: string, actions: OkfAction[], subAgents: OkfSubAgentSpec[]) => {
-    ownerKey ??= (await createApiKey(owner.api)).key;
+  const cleanSnapshot = { bundles: [{ root: clean, okfVersion: '0.3', files: cleanFiles }, nestedBundle] };
+  // The feature branch added one article the `main` snapshot does not list.
+  const goneSnapshot = {
+    bundles: [{ root: clean, okfVersion: '0.3', files: [...cleanFiles, { path: `${clean}/gone.md`, meta: article }] }, nestedBundle],
+  };
+  const gone = `${clean}/gone.md`;
+  const readMd = `${clean}/read.md`;
+
+  await test.step('12. FR-0 counting: a file grep opens the file, a folder grep is a search row, a .md outside the bundle counts nowhere, a nested bundle is its own root, a file of another branch is «Not in this snapshot»; the sums hold', async () => {
+    const key = (await createApiKey(owner.api)).key;
+    // Older than the `main` tree and on a feature branch: its snapshot is never the reference.
     await uploadOkfSessionTree(
       api,
-      ownerKey,
-      { sessionId: okfSid(who), repoUrl, prompt, snapshot: valueSnapshot, actions, subAgents },
+      key,
+      {
+        sessionId: okfSid('gone'),
+        repoUrl,
+        branch: `feat/gone-${run}`,
+        prompt: `okf gone ${run}`,
+        snapshot: goneSnapshot,
+        actions: [{ read: gone, bytes: 2400 }, { read: readMd, bytes: 1200 }],
+      },
       { db, userId: owner.id },
     );
-  };
-  const article = async (user: ScenarioUser, path: string, query: Record<string, string> = {}) => {
-    const res = await user.api.get(`/api/v1/repositories/${repoOf(user)}/reports/okf-usage/article?${rangeAround()}`, {
-      params: { path, ...query },
-    });
-    expect(res.status(), `okf article ${path} ${JSON.stringify(query)}`).toBe(200);
-    const body = (await res.json()) as OkfArticle;
-    expect(body.found, path).toBe(true);
-    return body;
-  };
-  const articleUrl = (path: string) => `okfArticle=${encodeURIComponent(path)}`;
-  const routeNodes = [okfSid('route'), agent('reader'), agent('s1'), agent('s2'), agent('s3')];
-  /** The routing tree's main agent's task head in a drill-down's missing-agents list. */
-  const mainHead = (a: OkfArticle) => a.routingMiss?.missing.find((m) => m.agentId === okfSid('route'))?.taskHead;
-
-  await test.step('12. FR-3 routing miss: 3 agents grep route.md’s area 3× without opening it, one greps 2× → «3 of 4», top patterns; a sub-agent read does not clear the main agent', async () => {
-    await uploadValueTree(
-      'route',
-      `okf route ${run}`,
-      greps(ROUTER, ['routeTable', 'routeTable', 'matchPath']),
-      [
-        { agentId: agent('reader'), task: 'read the routing article', actions: [{ read: route, result: ROUTE_TEXT }] },
-        { agentId: agent('s1'), task: 'grep the router for the table', actions: greps(ROUTER, ['routeTable', 'resolveRoute', 'routeTable']) },
-        { agentId: agent('s2'), task: 'grep the route table', actions: greps(TABLE, ['routeTable', 'matchPath', 'resolveRoute']) },
-        // Two searches only (one through Bash): in the area, but under routingMinSearches (3).
-        {
-          agentId: agent('s3'),
-          task: 'look for the alias',
-          actions: [{ grep: ROUTER, pattern: 'routeAlias' }, { bash: `grep -n routeAlias ${ROUTER}`, result: '12:routeAlias' }],
-        },
-      ],
-    );
-    const a = await article(owner, route);
-    expect(a.area).toEqual([ROUTER, TABLE]);
-    expect(a.routingMiss).not.toBeNull();
-    expect({ agents: a.routingMiss!.agents, areaAgents: a.routingMiss!.areaAgents }).toEqual({ agents: 3, areaAgents: 4 });
-    expect(a.routingMiss!.patterns).toEqual([
-      { pattern: 'routeTable', count: 5 },
-      { pattern: 'matchPath', count: 2 },
-      { pattern: 'resolveRoute', count: 2 },
-    ]);
-    expect(a.routingMiss!.missing.map((m) => m.agentId).sort(), 'the main agent stays a miss although its sub-agent read route.md').toEqual(
-      [okfSid('route'), agent('s1'), agent('s2')].sort(),
-    );
-    expect(a.routingMiss!.missing.every((m) => m.sessionId === okfSid('route') && m.searches === 3)).toBe(true);
-    expect(a.findings.map((f) => f.rule)).toContain('routing_miss');
-    const usage = await repoOkf(owner, {});
-    expect({ articles: usage.tiles.routingMissArticles, pairs: usage.tiles.routingMissPairs }).toEqual({ articles: 1, pairs: 3 });
-
-    const { context, page } = await browserAs(browser, stand.url, owner, `/#/repos/${repoOf(owner)}?mtab=okf`);
-    try {
-      const row = page.getByTestId('okf-tree-row').filter({ hasText: 'route.md' });
-      await expect(row.getByTestId('okf-tree-route-miss')).toHaveText('3 / 4');
-      // Package 2: the routing-miss finding counts for the level but is listed under section B
-      // (heuristic), never among section A's structure findings.
-      const sectionB = page.getByTestId('okf-section-b');
-      await expect(sectionB.getByTestId('okf-section-b-count')).toHaveText(/^[1-9]\d* signals? to check$/);
-      await expect(sectionB.getByTestId('okf-why-line').filter({ hasText: 'routing miss: 3 of 4 agents' })).toHaveCount(1);
-      await expect(page.getByTestId('okf-section-a').getByTestId('okf-why-line').filter({ hasText: 'routing miss' })).toHaveCount(0);
-      await expect(sectionB.getByTestId('okf-tile-routing-miss')).toContainText('3 misses, counted per agent and article');
-      // OKF tab quick wins: the repo tree fits beside its side column without sideways scroll.
-      await expectOkfTreeFits(page);
-      // A real click: at the stand's 1280 px viewport the name cell keeps its minimum width.
-      await row.getByTestId('okf-tree-file-link').click();
-      await expect(page).toHaveURL(new RegExp(articleUrl(route).replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
-      await expect(page.getByTestId('okf-article-signal-routing-miss')).toHaveText('3 of 4 agents');
-      const block = page.getByTestId('okf-article-routing-miss');
-      await expect(block.getByTestId('okf-article-patterns')).toContainText('routeTable×5');
-      await expect(block.getByTestId('okf-article-missing-agent')).toHaveCount(3);
-      await expect(block.getByTestId('okf-article-action')).toContainText('without opening');
-      await page.getByTestId('okf-article-back').click();
-      await expect(page.getByTestId('okf-article-drilldown')).toHaveCount(0);
-
-      // Package 3: a missing agent's «Agent trail» link opens its session on the OKF tab with
-      // `okfAgent` set; the trail lists its three searches of the router in order, before any
-      // KB read and so with no in-area mark (it never opened route.md).
-      await row.getByTestId('okf-tree-file-link').click();
-      const link = page
-        .getByTestId('okf-article-missing-agent')
-        .getByTestId('okf-article-trail-link')
-        .and(page.locator(`[href*="okfAgent=${encodeURIComponent(agent('s1'))}"]`));
-      await expect(link).toHaveCount(1);
-      await link.click();
-      await expect(page).toHaveURL(new RegExp(`[?&]session=${okfSid('route')}(&|$)`));
-      await expect(page).toHaveURL(/[?&]tab=okf(&|$)/);
-      await expect(page).toHaveURL(new RegExp(`[?&]okfAgent=${agent('s1')}(&|$)`));
-      await expect(page).not.toHaveURL(/[?&]mtab=/);
-      const trail = page.getByTestId('okf-agent-trail');
-      await expect(trail).toHaveAttribute('data-agent', agent('s1'));
-      const items = trail.getByTestId('okf-trail-item');
-      await expect(items).toHaveCount(3);
-      await expect(items.getByTestId('okf-trail-pattern')).toHaveText(['"routeTable"', '"resolveRoute"', '"routeTable"']);
-      await expect(items.getByTestId('okf-trail-path').first()).toHaveText(ROUTER);
-      await expect(trail.locator('[data-in-area="true"]')).toHaveCount(0);
-      await expect(trail).toContainText('Before any KB article was read');
-    } finally {
-      await context.close();
-    }
-  });
-
-  await test.step('13. FR-1 / FR-13: a followed pointer is a hit, the same path named in a sub-agent’s task is not; a pointer shown in 4 reads and never followed is dead', async () => {
-    await uploadValueTree('yield', `okf yield ${run}`, [{ read: yieldArticle, result: YIELD_TEXT }, { read: HIT }], [
+    await uploadOkfSessionTree(
+      api,
+      key,
       {
-        agentId: agent('named'),
-        task: `fix the bug in \`${HIT}\``,
-        actions: [{ read: yieldArticle, result: YIELD_TEXT }, { read: HIT }],
+        sessionId: okfSid('fr0'),
+        repoUrl,
+        prompt: `okf fr0 ${run}`,
+        snapshot: cleanSnapshot,
+        actions: [
+          { grep: `${clean}/grepped.md`, bytes: 400 },
+          { grep: clean, bytes: 800 },
+          { read: 'docs/other.md', bytes: 4000 },
+          { read: readMd, bytes: 2000 },
+          { read: `${clean}/index.md`, bytes: 1200 },
+          { read: `${nested}/inner.md`, bytes: 1600 },
+        ],
       },
-      { agentId: agent('d1'), task: 'skim the yield article', actions: [{ read: yieldArticle, result: YIELD_TEXT }] },
-      { agentId: agent('d2'), task: 'skim the yield article again', actions: [{ read: yieldArticle, result: YIELD_TEXT }] },
-    ]);
-    const a = await article(owner, yieldArticle);
-    expect(a.yield, 'only the main agent’s read had a new pointer that was followed').toEqual({ k: 1, n: 4 });
-    expect(a.pointers).toEqual([
-      { pointer: DEAD, shown: 4, followed: 0, dead: true, notFound: true },
-      { pointer: HIT, shown: 3, followed: 1, dead: false, notFound: false },
-    ]);
-    expect(a.findings.map((f) => f.rule)).toContain('dead_pointers');
+      { db, userId: owner.id },
+    );
 
-    const res = await owner.api.get(`/api/v1/repositories/${repoOf(owner)}/sessions/${okfSid('yield')}/okf-usage`);
-    expect(res.status()).toBe(200);
-    const agents = ((await res.json()) as OkfSessionUsage).agents;
-    const named = agents.find((x) => x.id === agent('named'));
-    expect(named?.yield, 'its hit.ts was named in its task, so its read shows only dead.ts as new').toEqual({ k: 0, n: 1 });
-    expect(named?.promptNamedPaths).toBe(1);
-    expect(agents.find((x) => x.id === okfSid('yield'))?.yield).toEqual({ k: 1, n: 1 });
-    expect((await repoOkf(owner, {})).tiles.pointerYield, 'reader of route.md (0 of 1) + yield.md (1 of 4)').toEqual({ k: 1, n: 5 });
-
-    const { context, page } = await browserAs(browser, stand.url, owner, `/#/repos/${repoOf(owner)}?mtab=okf&${articleUrl(yieldArticle)}`);
-    try {
-      await expect(page.getByTestId('okf-article-signal-yield')).toHaveText('1 / 4 reads');
-      await expect(page.getByTestId('okf-article-signal-dead')).toHaveText('1 dead of 2 shown');
-      const first = page.getByTestId('okf-article-pointer').first();
-      await expect(first).toHaveAttribute('data-dead', 'true');
-      await expect(first).toContainText(DEAD);
-      await expect(first.getByTestId('okf-article-pointer-not-found')).toHaveText('path not found in any session');
-      await expect(page.getByTestId('okf-article-pointer').nth(1)).toContainText('followed ×1 · shown ×3');
-      await expect(page.getByTestId('okf-article-dead').getByTestId('okf-article-action')).toContainText(`remove ${DEAD}`);
-    } finally {
-      await context.close();
-    }
-  });
-
-  await test.step('14. FR-5 upkeep: the reads of an agent that edits the article go to the Upkeep panel, not hot files or the yield', async () => {
-    await uploadValueTree('upkeep', `okf upkeep ${run}`, [{ edit: upkeepArticle }, { read: upkeepArticle, result: UPKEEP_TEXT }], []);
     const usage = await repoOkf(owner, {});
-    expect(usage.upkeep).toEqual([expect.objectContaining({ path: upkeepArticle, sessions: 1, readBytes: UPKEEP_TEXT.length })]);
-    expect(usage.hotFiles.map((h) => h.path)).not.toContain(upkeepArticle);
-    expect(usage.tiles.upkeepOnlySessions, 'the tree only re-read its own edit').toBe(1);
-    expect(usage.tiles.pointerYield, 'the upkeep read’s new pointer is not counted').toEqual({ k: 1, n: 5 });
-    const a = await article(owner, upkeepArticle);
-    expect(a.reads).toEqual({ whole: 0, section: 0, upkeep: 1, partial: 0 });
-    expect(a.yield).toBeNull();
+    expect(usage.snapshot, 'the newest tree on main, not the feature branch’s').toMatchObject({ branch: 'main', hasMeta: true });
+    expect(usage.bundleRoots).toEqual([clean, nested]);
+    expectOkfSums(usage, 'fr0');
+    // Four own sessions (setup, the step-7 tree, the two trees here); the step-7 tree's reads
+    // are outside the reference snapshot's bundles, so only the two new trees read this KB.
+    expect(usage.summary, '7 reads: 100 + 200 + 500 + 300 + 400 (main) + 600 + 300 (branch) tokens').toMatchObject({
+      unitsRead: 2,
+      unitsTotal: 4,
+      reads: 7,
+      tokens: 2400,
+    });
+    const file = (path: string) => usage.files.find((f) => f.path === path);
+    expect(file(`${clean}/grepped.md`), 'a file touched only by grep is opened').toMatchObject({ units: 1, reads: 1, tokens: 100, inSnapshot: true });
+    expect(file(readMd), 'read by both trees').toMatchObject({ units: 2, reads: 2, tokens: 800 });
+    expect(file(`${clean}/never.md`)).toMatchObject({ units: 0, reads: 0, tokens: 0, cost: 0 });
+    expect(file(`${clean}/index.md`)).toMatchObject({ index: true, units: 1, tokens: 300 });
+    expect(file(`${nested}/inner.md`), 'a nested bundle’s file belongs to the deepest root').toMatchObject({ bundle: nested, units: 1, tokens: 400 });
+    expect(file(gone), 'read, but not in the reference snapshot').toMatchObject({ bundle: clean, inSnapshot: false, units: 1, tokens: 600 });
+    expect(usage.notInSnapshotUnits).toBe(1);
+    expect(JSON.stringify(usage), 'a .md outside every bundle counts nowhere').not.toContain('docs/other.md');
+    const folder = (path: string) => usage.folders.find((f) => f.path === path);
+    expect(usage.folders.map((f) => f.path)).toEqual([`${clean}/`, `${nested}/`, `${clean}/sub/`]);
+    expect(folder(`${clean}/`), 'the folder grep is in no file; both trees opened a file of the folder').toMatchObject({
+      bundle: clean,
+      units: 2,
+      search: { units: 1, reads: 1, tokens: 200 },
+    });
+    expect(folder(`${nested}/`)).toMatchObject({ bundle: nested, units: 1, search: null });
+    expect(folder(`${clean}/sub/`)).toMatchObject({ units: 0, search: null });
+    expect(usage.versions).toEqual([
+      { root: clean, files: 5, okfVersion: '0.3', older: false, ignored: false },
+      { root: nested, files: 2, okfVersion: '0.3', older: false, ignored: false },
+    ]);
+    expect(usage.format).toEqual({ articles: 5, indexFiles: 2, withProblems: 0, groups: [] });
 
     const { context, page } = await browserAs(browser, stand.url, owner, `/#/repos/${repoOf(owner)}?mtab=okf`);
     try {
-      await expect(page.getByTestId('okf-upkeep-row').filter({ hasText: 'upkeep.md' })).toHaveCount(1);
-      await expect(page.getByTestId('okf-hot-files')).not.toContainText('upkeep.md');
-      const row = page.getByTestId('okf-tree-row').filter({ hasText: 'upkeep.md' });
-      await expect(row).toContainText('upkeep ×1');
-      await expect(row.getByTestId('okf-tree-yield')).toHaveText('—');
-    } finally {
-      await context.close();
-    }
-  });
+      // X = opened snapshot files (grepped, index, read, inner), Y = snapshot files.
+      const opened = usage.files.filter((f) => f.inSnapshot && f.units > 0).length;
+      const total = usage.files.filter((f) => f.inSnapshot).length;
+      expect({ opened, total }).toEqual({ opened: 4, total: 7 });
+      await expect(page.getByTestId('okf-summary-ratio')).toHaveText('KB read in 2 of 4 sessions');
+      await expect(page.getByTestId('okf-summary-tokens')).toHaveText('≈ 2.4K tokens of context');
+      await expect(page.getByTestId('okf-tree-header')).toHaveText(`${opened} of ${total} files opened`);
+      await expect(page.getByTestId('okf-tree-filter-opened')).toHaveText(`Opened (${opened})`);
+      await expect(page.getByTestId('okf-tree-filter-never')).toHaveText(`Never opened (${total - opened})`);
 
-  await test.step('15. team-no-prompts (restricted team, manager): the drill-down shows the search patterns but masks the missing agents’ task heads; transparent restored', async () => {
-    expect((await owner.api.patch(`/api/v1/teams/${teamId}`, { data: { accessMode: 'restricted' } })).status()).toBe(200);
-    await setMemberRoles(owner, teamId, member.id, { isManager: true });
-    try {
-      const personal = await article(owner, route);
-      const team = await article(member, route, { teamId: String(teamId) });
-      expect(team.routingMiss?.patterns, 'patterns are never masked').toEqual(personal.routingMiss?.patterns);
-      expect(team.routingMiss?.missing.map((m) => m.taskHead)).toEqual(['', '', '']);
-      // Only the main agent has a first prompt here (the helper's sub-agent logs carry none).
-      expect(mainHead(personal)).toBe(`okf route ${run}`);
+      // Collapsed at first: the two bundle roots (the nested one is its own root) and the
+      // «Not in this snapshot» root.
+      const rows = page.getByTestId('okf-tree-row');
+      await expect(rows).toHaveCount(3);
+      const cleanRoot = treeRow(page, 'bundle', clean);
+      await expect(cleanRoot).toContainText('3 of 5');
+      await expect(cleanRoot).toContainText('1.4K');
+      await expect(treeRow(page, 'bundle', nested)).toContainText('1 of 2');
+      const missingRoot = page.locator('[data-testid="okf-tree-row"][data-kind="missing-root"]');
+      await expect(missingRoot).toContainText('Not in this snapshot');
+      await expect(missingRoot).toContainText('1 file');
 
-      const { context, page } = await browserAs(
-        browser,
-        stand.url,
-        member,
-        `/#/teams/${teamId}/repos/${repoOf(member)}?mtab=okf&${articleUrl(route)}`,
+      await toggleRow(cleanRoot);
+      const search = treeRow(page, 'search', `${clean}/`);
+      await expect(search).toContainText('searches across this folder');
+      await expect(search).toContainText('0.2K');
+      await expect(treeRow(page, 'folder', `${clean}/sub/`)).toContainText('0 of 1');
+      await expect(treeRow(page, 'file', `${clean}/grepped.md`)).toHaveAttribute('data-opened', 'true');
+      await expect(treeRow(page, 'file', `${clean}/never.md`)).toHaveAttribute('data-opened', 'false');
+      await expect(treeRow(page, 'file', `${nested}/inner.md`), 'the nested bundle’s file is not under the outer root').toHaveCount(0);
+      await toggleRow(treeRow(page, 'bundle', nested));
+      await expect(treeRow(page, 'file', `${nested}/inner.md`)).toHaveAttribute('data-opened', 'true');
+      await expect(treeRow(page, 'file', gone)).toHaveCount(0);
+      await toggleRow(missingRoot);
+      await expect(treeRow(page, 'file', gone)).toHaveText(new RegExp(escapeRe(gone)));
+      await expect(page.getByTestId('repo-okf-tab')).not.toContainText('other.md');
+      await expectOkfTreeFits(page);
+
+      // «Never opened»: only the never-opened files, no search row, no «Not in this snapshot».
+      await page.getByTestId('okf-tree-filter-never').click();
+      await expect(missingRoot).toHaveCount(0);
+      await expect(search).toHaveCount(0);
+      await expect(page.locator('[data-testid="okf-tree-row"][data-kind="file"][data-opened="true"]')).toHaveCount(0);
+      await expect(treeRow(page, 'file', `${clean}/never.md`)).toHaveCount(1);
+      await toggleRow(treeRow(page, 'folder', `${clean}/sub/`));
+      await expect(page.locator('[data-testid="okf-tree-row"][data-kind="file"]')).toHaveCount(total - opened);
+
+      // One clean bundle: Versions is one collapsed line, Wrong format one line.
+      await page.getByTestId('okf-bundle-select').click();
+      await page.getByRole('option', { name: clean, exact: true }).click();
+      await expect(page).toHaveURL(new RegExp(`okfBundle=${escapeRe(encodeURIComponent(clean))}`));
+      const versions = page.getByTestId('okf-versions');
+      await expect(versions).toHaveAttribute('data-collapsed', 'true');
+      await expect(versions).toContainText('1 KB folder, on format 0.3');
+      await expect(page.getByTestId('okf-version-row')).toHaveCount(0);
+      await page.getByTestId('okf-versions-toggle').click();
+      await expect(versions).toHaveAttribute('data-collapsed', 'false');
+      const versionRow = page.locator(`[data-testid="okf-version-row"][data-root="${clean}"]`);
+      await expect(versionRow).toContainText('5 files');
+      await expect(versionRow).toContainText('0.3');
+      await expect(versionRow.getByTestId('okf-version-older')).toHaveCount(0);
+      await expect(page.getByTestId('okf-format-ok')).toHaveText('✓ All 4 articles are well-formed · 1 index file is not checked');
+      await expect(page.getByTestId('okf-format-group')).toHaveCount(0);
+      await expect(page.getByTestId('okf-summary-ratio'), 'the nested bundle’s read is out, the total stays').toHaveText(
+        'KB read in 2 of 4 sessions',
       );
-      try {
-        const block = page.getByTestId('okf-article-routing-miss');
-        await expect(block.getByTestId('okf-article-patterns')).toContainText('routeTable');
-        await expect(block.getByTestId('okf-article-missing-agent')).toHaveCount(3);
-        await expect(block.getByTestId('okf-article-missing')).not.toContainText(`okf route ${run}`);
-      } finally {
-        await context.close();
-      }
-    } finally {
-      // A team with members cannot switch back to transparent (409, S-TEAM-03), so the member
-      // leaves, the team switches, and the member joins again acknowledging transparent.
-      expect((await owner.api.delete(`/api/v1/teams/${teamId}/members/${member.id}`)).status()).toBe(204);
-      expect((await owner.api.patch(`/api/v1/teams/${teamId}`, { data: { accessMode: 'transparent' } })).status()).toBe(200);
-      await inviteAndAccept(owner, member, teamId, 'transparent');
-    }
-    const again = await article(member, route, { teamId: String(teamId) });
-    expect(mainHead(again), 'transparent again: the task head is visible').toBe(`okf route ${run}`);
-  });
-
-  await test.step('16. FR-17 / FR-11: routingMinSearches 2 in Settings → OKF thresholds grows the routing-miss list without recompute; the chip says custom; the banner’s recompute link follows authority', async () => {
-    const eventIds = async () =>
-      (
-        await db.query<{ id: number }>(
-          `SELECT e.id FROM session_okf_event e JOIN sessions s ON s.id = e.session_id WHERE s.session_id = ANY($1) ORDER BY e.id`,
-          [routeNodes],
-        )
-      ).rows.map((r) => r.id);
-    const before = await eventIds();
-    expect(before.length, 'the routing tree’s searches are stored').toBe(11);
-
-    const { context, page } = await browserAs(browser, stand.url, owner, `/#/repos/${repoOf(owner)}?mtab=okf`);
-    try {
-      const chip = page.getByTestId('okf-thresholds-chip');
-      await expect(chip).toHaveAttribute('data-custom', 'false');
-      await chip.click();
-      const section = page.getByTestId('okf-thresholds-setting');
-      await expect(section).toBeVisible();
-      await section.getByRole('textbox', { name: 'routingMinSearches', exact: true }).fill('2');
-      const saved = page.waitForResponse((r) => /\/settings\/user$/.test(r.url()) && r.request().method() === 'PUT');
-      await section.getByRole('button', { name: 'Save for this repo' }).click();
-      expect((await saved).status()).toBe(200);
-
-      const a = await article(owner, route);
-      expect({ agents: a.routingMiss?.agents, areaAgents: a.routingMiss?.areaAgents }).toEqual({ agents: 4, areaAgents: 4 });
-      expect(a.routingMiss?.patterns).toContainEqual({ pattern: 'routeAlias', count: 2 });
-      const usage = await repoOkf(owner, {});
-      expect(usage.thresholds?.custom).toEqual(['routingMinSearches']);
-      expect(usage.tiles.routingMissPairs).toBe(4);
-      expect(await eventIds(), 'thresholds apply at read time: no OKF row was rebuilt').toEqual(before);
-      const team = await article(member, route, { teamId: String(teamId) });
-      expect(team.routingMiss?.agents, 'the team view keeps the team’s (default) thresholds').toBe(3);
-
-      await page.goto(`/#/repos/${repoOf(owner)}?mtab=okf`);
-      await page.reload();
-      await expect(page.getByTestId('okf-thresholds-chip')).toHaveAttribute('data-custom', 'true');
-      await expect(page.getByTestId('okf-thresholds-chip')).toContainText('custom thresholds · 1');
-      await expect(page.getByTestId('okf-tree-row').filter({ hasText: 'route.md' }).getByTestId('okf-tree-route-miss')).toHaveText('4 / 4');
-
-      // FR-11: the routing tree's root stands for a session extracted before this version.
-      const baseline = (await repoOkf(owner, {})).tiles.sessionsWithoutAnalysis ?? 0;
-      await db.query('UPDATE sessions SET okf_extract_version = NULL WHERE session_id = $1', [okfSid('route')]);
-      expect((await repoOkf(owner, {})).tiles.sessionsWithoutAnalysis).toBe(baseline + 1);
-      const memberView = await repoOkf(member, { teamId: String(teamId) });
-      expect(memberView.canRecompute, 'a member is not the team owner').toBe(false);
-      expect(memberView.tiles.sessionsWithoutAnalysis ?? 0).toBeGreaterThan(0);
-
-      const memberUi = await browserAs(browser, stand.url, member, `/#/teams/${teamId}/repos/${repoOf(member)}?mtab=okf`);
-      try {
-        await expect(memberUi.page.getByTestId('okf-analysis-banner')).toBeVisible();
-        await expect(memberUi.page.getByTestId('okf-analysis-recompute')).toHaveCount(0);
-      } finally {
-        await memberUi.context.close();
-      }
-
-      await page.reload();
-      await expect(page.getByTestId('okf-analysis-banner')).toContainText('have no OKF analysis yet');
-      await page.getByTestId('okf-analysis-recompute').click();
-      await expect(page.getByTestId('okf-analysis-recompute-result')).toContainText('Recomputed');
-      const marker = await db.query<{ v: number | null }>('SELECT okf_extract_version AS v FROM sessions WHERE session_id = $1', [
-        okfSid('route'),
-      ]);
-      expect(marker.rows[0].v, 'the recompute re-extracted the routing tree').not.toBeNull();
+      await expect(page.getByTestId('okf-tree-header')).toHaveText('3 of 5 files opened');
     } finally {
       await context.close();
     }
   });
 
-  await test.step('17. OKF v0.3 front matter (2026-11-19): repo tree bundle-row hints and file chips, not-read without reserved files, recompute after the extract-version bump', async () => {
+  await test.step('13. hot files: sorted by ≈ Tokens at first, a click sorts by ≈ $; index files are one line below the table; a file has the same numbers as in the explorer; the ≈ $ tooltip', async () => {
+    const usage = await repoOkf(owner, {});
+    const hot = usage.files.filter((f) => f.units > 0 && !f.index);
+    /** Descending by `value`, ties by path — the table's order. */
+    const order = (value: (f: OkfUsageFile) => number) =>
+      [...hot].sort((a, b) => value(b) - value(a) || (a.path < b.path ? -1 : 1)).map((f) => f.path);
+    const byTokens = order((f) => f.tokens);
+    expect(byTokens, 'read.md 800, gone.md 600, inner.md 400, grepped.md 100').toEqual([
+      readMd,
+      gone,
+      `${nested}/inner.md`,
+      `${clean}/grepped.md`,
+    ]);
+
+    const { context, page } = await browserAs(browser, stand.url, owner, `/#/repos/${repoOf(owner)}?mtab=okf`);
+    try {
+      const table = page.getByTestId('okf-hot-files');
+      const header = (key: string) => table.locator('th', { has: page.getByTestId(`okf-hot-sort-${key}`) });
+      const shownPaths = () => table.getByTestId('okf-hot-row').evaluateAll((rows) => rows.map((r) => r.getAttribute('data-path')));
+      await expect(header('tokens')).toHaveAttribute('aria-sort', 'descending');
+      await expect(header('cost')).toHaveAttribute('aria-sort', 'none');
+      await expect(header('units')).toContainText('Sessions');
+      await expect.poll(shownPaths).toEqual(byTokens);
+      expect(byTokens.some((p) => p.endsWith('/index.md')), 'no index file among the hot files').toBe(false);
+      await expect(table.getByTestId('okf-hot-show-all'), 'four files: nothing to show more of').toHaveCount(0);
+      await expect(table.getByTestId('okf-hot-index-line')).toHaveText(
+        /^1 index file is not listed: ≈ 0\.3K tokens, ≈ (\$\d+\.\d\d|< \$0\.01|—) — see the explorer$/,
+      );
+
+      // A file's sessions and ≈ tokens are the same in the table and in the explorer.
+      const cells = hotRow(page, readMd).locator('td');
+      await expect(cells.nth(1)).toHaveText('2');
+      await expect(cells.nth(2)).toHaveText('2');
+      await expect(cells.nth(3)).toHaveText('0.8K');
+      await toggleRow(treeRow(page, 'bundle', clean));
+      const explorerCells = treeRow(page, 'file', readMd).locator('> span');
+      await expect(explorerCells.nth(2), 'sessions').toHaveText('2');
+      await expect(explorerCells.nth(3), '≈ tokens').toHaveText('0.8K');
+
+      await page.getByTestId('okf-hot-sort-cost').click();
+      await expect(header('cost')).toHaveAttribute('aria-sort', 'descending');
+      await expect(header('tokens')).toHaveAttribute('aria-sort', 'none');
+      await expect.poll(shownPaths).toEqual(order((f) => f.cost ?? -1));
+      await page.getByTestId('okf-hot-sort-cost').click();
+      await expect(header('cost'), 'a second click flips the direction').toHaveAttribute('aria-sort', 'ascending');
+
+      await table.getByTestId('okf-tip-cost').hover();
+      const tip = page.getByRole('tooltip').first();
+      await expect(tip).toContainText(OKF_COST_TIP);
+      await expect(tip).toContainText(
+        usage.summary.readsWithoutCost > 0
+          ? `${usage.summary.readsWithoutCost} reads have no cost (their agent has no computed cost).`
+          : 'All reads in this period have a cost.',
+      );
+    } finally {
+      await context.close();
+    }
+  });
+
+  await test.step('14. OKF v0.3 front matter (2026-11-19): the Versions row of an older bundle, the five Wrong-format groups, no dot-path file, the 1600×1000 fit; recompute after the extract-version bump', async () => {
     const v03 = `docs/v03-${run}`;
     const fm = { frontMatter: true, hasGenerated: true, hasTimestamp: false };
+    const noFm = { frontMatter: false, hasGenerated: false, hasTimestamp: false };
     const sid = okfSid('v03');
     const key = await createApiKey(owner.api);
     await uploadOkfSessionTree(
@@ -729,9 +739,10 @@ test('@S-REPO-16 team-view analytics follow the team config for every member’s
                 { path: `${v03}/current.md`, meta: { ...fm, type: 'Article', stale_after: '2000-01-01T00:00:00Z' } },
                 // v0.1 `timestamp` instead of `generated`, and no `type`.
                 { path: `${v03}/v01.md`, meta: { frontMatter: true, hasGenerated: false, hasTimestamp: true } },
-                { path: `${v03}/log.md`, meta: { frontMatter: false, hasGenerated: false, hasTimestamp: false } },
-                { path: `${v03}/nested/index.md`, meta: { frontMatter: false, hasGenerated: false, hasTimestamp: false } },
-                { path: `${v03}/.drafts/wip.md`, meta: { frontMatter: false, hasGenerated: false, hasTimestamp: false } },
+                { path: `${v03}/plain.md`, meta: noFm },
+                { path: `${v03}/log.md`, meta: noFm },
+                { path: `${v03}/nested/index.md`, meta: noFm },
+                { path: `${v03}/.drafts/wip.md`, meta: noFm },
               ],
             },
           ],
@@ -741,51 +752,83 @@ test('@S-REPO-16 team-view analytics follow the team config for every member’s
       { db, userId: owner.id },
     );
 
-    // The repo route takes the latest snapshot: this tree's bundle.
-    const usage = (await repoOkf(owner, {})) as OkfRepoUsage & {
-      bundles: Array<{ root: string; title?: string; okfVersion?: string; newerFormatHint?: boolean; articlesWithHints?: number; hintReasons?: string[] }>;
-      notRead: Array<{ path: string }>;
-    };
-    expect(usage.bundles.find((b) => b.root === v03)).toMatchObject({
-      title: 'Release notes',
-      okfVersion: '0.1',
-      newerFormatHint: true,
-      articlesWithHints: 1,
-      hintReasons: ['no_type', 'v01_timestamp'],
+    // The repo route takes the newest snapshot on main: this tree's bundle.
+    const usage = await repoOkf(owner, {});
+    expect(usage.bundleRoots).toEqual([v03]);
+    expect(usage.currentFormat).toBe('0.3');
+    expect(usage.versions, 'seven files — the dot-path file is not part of the KB').toEqual([
+      { root: v03, files: 7, okfVersion: '0.1', older: true, ignored: false },
+    ]);
+    // `/current.md` is relative to the bundle root. index.md, log.md and nested/index.md are
+    // index files: not checked.
+    expect(usage.format).toEqual({
+      articles: 4,
+      indexFiles: 3,
+      withProblems: 4,
+      groups: [
+        { problem: 'no_front_matter', files: [{ path: `${v03}/plain.md` }] },
+        { problem: 'no_type', files: [{ path: `${v03}/v01.md` }] },
+        { problem: 'v01_timestamp', files: [{ path: `${v03}/v01.md` }] },
+        { problem: 'deprecated', files: [{ path: `${v03}/legacy.md`, supersededBy: `${v03}/current.md` }] },
+        { problem: 'past_stale_after', files: [{ path: `${v03}/current.md` }] },
+      ],
     });
-    expect(usage.tiles.kbFiles, 'legacy.md, current.md, v01.md — no index.md / log.md, no dot-path').toBe(3);
-    expect(usage.notRead.map((f) => f.path).sort(), 'not-read lists articles only').toEqual([`${v03}/current.md`, `${v03}/v01.md`]);
+    expect(JSON.stringify(usage)).not.toContain('wip.md');
+    expect(usage.summary, 'only this tree read the reference snapshot’s bundle').toMatchObject({ unitsRead: 1, unitsTotal: 5, reads: 2 });
+    expectOkfSums(usage, 'v03');
 
     const { context, page } = await browserAs(browser, stand.url, owner, `/#/repos/${repoOf(owner)}?mtab=okf`);
     try {
-      const rows = page.getByTestId('okf-tree-row');
-      const bundleRow = rows.filter({ hasText: 'Release notes' }).first();
-      await expect(bundleRow.getByTestId('okf-tree-bundle-newer-format')).toHaveText('ⓘ newer format (0.3)');
-      await expect(bundleRow.getByTestId('okf-tree-bundle-can-improve')).toHaveText('ⓘ 1 can improve');
-      await expect(bundleRow.getByTestId('okf-tree-bundle-can-improve')).toHaveAttribute('title', 'no type, v0.1 timestamp');
-      const legacy = rows.filter({ hasText: 'legacy.md' });
-      await expect(legacy.getByTestId('okf-deprecated-chip')).toHaveText('deprecated');
-      // `/current.md` is relative to the bundle root.
-      await expect(legacy.getByTestId('okf-superseded-by')).toHaveText('→ current.md');
-      await expect(legacy.getByTestId('okf-superseded-by')).toHaveAttribute('title', `${v03}/current.md`);
-      await expect(rows.filter({ hasText: 'current.md' }).filter({ hasNotText: 'legacy.md' }).getByTestId('okf-past-stale-after')).toHaveText(
-        'past stale_after',
-      );
-      await expect(rows.filter({ hasText: 'v01.md' }).getByTestId('okf-can-improve')).toHaveAttribute('title', 'no type, v0.1 timestamp');
-      await expect(page.getByTestId('okf-tree')).not.toContainText('wip.md');
+      // A bundle behind the current format: Versions starts expanded.
+      const versions = page.getByTestId('okf-versions');
+      await expect(versions).toHaveAttribute('data-collapsed', 'false');
+      await expect(versions).toContainText('1 KB folder, 1 older than the current format 0.3');
+      const versionRow = page.locator(`[data-testid="okf-version-row"][data-root="${v03}"]`);
+      await expect(versionRow).toContainText('7 files');
+      await expect(versionRow).toContainText('0.1');
+      await expect(versionRow.getByTestId('okf-version-older')).toHaveText('older than the current format 0.3');
+
+      const format = page.getByTestId('okf-format');
+      await expect(format).toContainText('Wrong format — 4 of 4 articles');
+      await expect(format.getByTestId('okf-format-ok')).toHaveCount(0);
+      const group = (problem: string) => format.locator(`[data-testid="okf-format-group"][data-problem="${problem}"]`);
+      for (const [problem, title] of [
+        ['no_front_matter', 'No front matter'],
+        ['no_type', 'No "type" in the front matter'],
+        ['v01_timestamp', 'Old "timestamp" key (format 0.1)'],
+        ['deprecated', 'Deprecated'],
+        ['past_stale_after', 'Past its "stale after" date'],
+      ]) {
+        const spans = group(problem).locator('button > span');
+        await expect(spans.first(), problem).toHaveText(title);
+        await expect(spans.last(), `${problem}: one article`).toHaveText('1');
+      }
+      await expect(format.getByTestId('okf-format-group')).toHaveCount(5);
+      await group('deprecated').getByRole('button').click();
+      await expect(group('deprecated').getByTestId('okf-format-file')).toHaveText(`${v03}/legacy.md → replaced by ${v03}/current.md`);
+      await group('deprecated').getByRole('button').click();
+
+      // Index files are in the explorer, never among the hot files.
+      await expect(page.getByTestId('okf-hot-row')).toHaveCount(1);
+      await expect(hotRow(page, `${v03}/legacy.md`)).toHaveCount(1);
+      await expect(page.getByTestId('okf-hot-index-line')).toContainText('1 index file is not listed');
+      await toggleRow(treeRow(page, 'bundle', v03));
+      await expect(treeRow(page, 'file', `${v03}/log.md`)).toHaveAttribute('data-opened', 'false');
+      await expect(treeRow(page, 'folder', `${v03}/nested/`)).toContainText('0 of 1');
+      await expect(page.getByTestId('repo-okf-tab')).not.toContainText('wip.md');
+      for (const id of REMOVED_OKF_IDS) await expect(page.getByTestId(id), `${id} is gone`).toHaveCount(0);
       await expectOkfTreeFits(page);
+      await expectOkfViewFits(page);
     } finally {
       await context.close();
     }
 
     // Recompute after the extract-version bump: a session stamped by the previous extractor (3)
-    // counts as "no OKF analysis yet" until recomputed, then carries version 4.
+    // carries version 4 once recomputed.
     await db.query('UPDATE sessions SET okf_extract_version = 3 WHERE session_id = $1', [sid]);
-    const before = (await repoOkf(owner, {})).tiles.sessionsWithoutAnalysis ?? 0;
-    expect(before, 'version 3 is older than the current extractor').toBeGreaterThan(0);
     expect((await owner.api.post(`/api/v1/repositories/${repoOf(owner)}/recompute-all-sessions`)).status()).toBe(201);
     const after = await db.query<{ v: number | null }>('SELECT okf_extract_version AS v FROM sessions WHERE session_id = $1', [sid]);
     expect(after.rows[0].v).toBe(4);
-    expect((await repoOkf(owner, {})).tiles.sessionsWithoutAnalysis ?? 0).toBeLessThan(before);
+    expect((await repoOkf(owner, {})).summary, 'the recompute keeps the reads').toMatchObject({ unitsRead: 1, reads: 2 });
   });
 });

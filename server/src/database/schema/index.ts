@@ -1586,23 +1586,17 @@ export interface RepoConfigJson {
   };
 
   /**
-   * OKF View thresholds (verdict rules and value signals). Dual-scope like `fileCategories`,
-   * but resolved per section, not as part of the whole-object `resolveEffectiveConfig()`:
-   * `RepositoriesService.resolveOkfThresholds()` takes, in the team view, the team row's `okf`
-   * -> defaults; in the personal view, the personal row's `okf` if present -> the `okf` of the
-   * lowest-id team linking the URL -> defaults. Within the chosen section every field is
-   * optional and merged field by field over `DEFAULT_OKF_THRESHOLDS`; an invalid stored field
-   * falls back to its default. Absent means "all defaults". Saving only this section does not
-   * trigger a recompute — the thresholds are applied at read time.
+   * Former OKF View thresholds. No longer used since 2026-11-21 (task
+   * 2026-11-21-okf-tab-minimal): the section is not read, not validated and not returned as
+   * defaults. A stored value stays in the row as it is — the settings save paths copy it over
+   * whatever a client sends — until a follow-up task removes it.
    */
   okf?: OkfThresholds;
 }
 
 /**
- * OKF View thresholds, as stored in `RepoConfigJson.okf`. Every field is optional; an absent
- * field uses its `DEFAULT_OKF_THRESHOLDS` value. Shares are numbers in (0, 1]; every other
- * numeric field is an integer >= 1; `codeRoots` is a non-empty list (at most 50) of
- * repo-relative folders ending in `/`.
+ * Shape of the stored, now unused `RepoConfigJson.okf` section (the former OKF View thresholds;
+ * the per-field notes below describe what the fields meant). Nothing reads it any more.
  */
 export interface OkfThresholds {
   /** Bundles with fewer files are skipped by the share rules and the histogram (default 10). */

@@ -110,7 +110,7 @@ test('@TOUR-04 owner: analytics & reports tour @mode-a', async ({ stand, api, db
   await walker.screen(page, 'repo.okf', {
     check: async () => {
       await expect(page).toHaveURL(/mtab=okf(&|$)/);
-      await expect(page.getByTestId('okf-verdict-card').or(page.getByTestId('okf-empty'))).toBeVisible({ timeout: 20_000 });
+      await expect(page.getByTestId('okf-summary').or(page.getByTestId('okf-no-snapshot'))).toBeVisible({ timeout: 20_000 });
       await expect(page.getByTestId('okf-filter-strip')).toBeVisible();
     },
   });

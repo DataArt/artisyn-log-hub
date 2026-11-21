@@ -16,7 +16,7 @@
 import { collapseRepoRelative } from '../change-surface/path-normalise';
 import type { OkfSnapshotBundle, OkfSnapshotFile } from './okf-snapshot';
 import type { OkfArticleHint } from './okf-usage.types';
-import { bundleArticles } from './okf-verdict';
+import { bundleArticles } from './okf-paths';
 
 /** The newest OKF format version Log Hub knows (FR-8). */
 export const OKF_CURRENT_FORMAT_VERSION = '0.3';

@@ -1,9 +1,9 @@
 ---
 type: "Algorithm"
 title: "OKF metadata: version hint, stale_after, deprecated and format hints"
-description: "How the server turns the front-matter metadata the hook sends (bundle okfVersion / title / description, per-file meta) into the OKF tabs' newer-format hint, deprecated / superseded-by and past-stale_after chips and can-improve hints."
+description: "How the server turns the front-matter metadata the hook sends (bundle okfVersion / title / description, per-file meta) into the OKF tabs' older-format marker (Versions) and the wrong-format problems: no front matter, no type, old timestamp key, deprecated / superseded-by and past stale_after."
 tags: [algorithm, okf]
-generated: { by: "human:denistsyplakov", at: "2026-11-20T22:18:32+04:00" }
+generated: { by: "ai:claude", at: "2026-11-21T22:36:45+04:00" }
 reviewed: no
 reviewer: none
 ---
@@ -13,11 +13,12 @@ reviewer: none
 ## Purpose
 
 Hook 3.1.0+ sends each KB bundle's `okf_version` / `title` / `description` and each file's
-front-matter facts ([okf-snapshot](okf-snapshot.md) rules 3a-3b). The OKF tabs use them to warn
-that an article is deprecated (and where its replacement is), that it is past its `stale_after`
-re-check date, that its front matter could be improved, and that the bundle declares an OKF
-format older than the current one. A wrong rule either nags a well-kept KB or hides a stale one;
-a missing "old hook" guard would show every article of an old-hook session as "no front matter".
+front-matter facts ([okf-snapshot](okf-snapshot.md) rules 3a-3b). The OKF tabs use them in two
+views: **Versions** marks a bundle that declares an OKF format older than the current one, and
+**Wrong format** lists the articles that have no front matter, no `type`, the old `timestamp`
+key, a `deprecated` status (and where the replacement is) or a passed `stale_after` date. A wrong
+rule either nags a well-kept KB or hides a stale one; a missing "old hook" guard would show every
+article of an old-hook session as "no front matter".
 
 ## Code
 
@@ -26,9 +27,13 @@ a missing "old hook" guard would show every article of an old-hook session as "n
   `bundleMetaSummary`.
 - Inputs come from `normaliseSnapshot` (`okf-snapshot.ts`: `superseded_by` → `supersededBy`,
   `stale_after` → `staleAfter`, strings capped at 200); articles from `bundleArticles`
-  (`okf-verdict.ts`, see [okf-verdict](okf-verdict.md)); path collapsing from
+  (`okf-paths.ts`, see [okf-usage-counting](okf-usage-counting.md) rule 4); path collapsing from
   `collapseRepoRelative` (`server/src/logs/change-surface/path-normalise.ts`).
-- Callers: `okf-usage.service.ts` (session and repo OKF routes, trail).
+- Callers: `okf-usage-counting.ts` (`buildOkfUsageView`: `hasHookMeta`, `okfVersionHint`,
+  `articleMetaFlags` for the `versions` and `format` parts of both OKF routes —
+  [okf-usage-counting](okf-usage-counting.md) rules 21–23). `bundleMetaSummary` has had no
+  caller since the 2026-11-21 cut of the OKF tabs (the bundle cards it fed are gone); it is kept
+  with its rows.
 - Twins: none (the client only renders the flags).
 - Test: `server/src/logs/okf/okf-metadata.algo.spec.ts` (jest).
 
@@ -49,8 +54,8 @@ a missing "old hook" guard would show every article of an old-hook session as "n
    `deprecated`; `supersededBy` = rule 6 applied to `meta.supersededBy` **only when deprecated**
    and the key is present, else `null`.
 4. `pastStaleAfter` = `staleAfter` present and (rule 2 gives `null` **or** a time `< refMs`). The
-   reference time `refMs` is the root session's start (fallback now) on the session route and the
-   trail, and now on the repo route.
+   reference time `refMs` is the opened session's start (fallback now) on the session route, and
+   now on the repo route.
 5. `formatHints`, in this order: `no_front_matter` when `!frontMatter`; `no_type` when
    `frontMatter` and `type` absent; `v01_timestamp` when `hasTimestamp && !hasGenerated`.
 6. **`superseded_by` resolution** (`resolveSupersededBy(value, articlePath, bundleRoot)`): a value
@@ -113,9 +118,11 @@ Rows (33): [`docs/algorithm-examples/okf-metadata.json`](../../algorithm-example
 
 ## Where the result is visible
 
-- Session pane → **OKF** tab and Repository → **OKF** tab: bundle card title / description /
-  "OKF x.y" chip and the "newer OKF format" and "can improve" lines; tree chips "deprecated"
-  (with the superseded-by target), "past stale_after", "can improve"; the deprecated chip in the
-  trail.
-- API: the session / repo okf-usage routes' bundle summary and per-file flags, the trail items'
-  `deprecated` / `supersededBy`.
+- Session pane → **OKF** tab and Repository → **OKF** tab: **Versions** (the declared version or
+  "not declared", and "older than the current format 0.3" from rule 1) and **Wrong format** (the
+  groups No front matter / No "type" in the front matter / Old "timestamp" key (format 0.1) /
+  Deprecated — with "→ replaced by …" — / Past its "stale after" date, from rules 3–6). A
+  snapshot without hook metadata shows one line "Update the hook to see versions and format
+  problems." instead of both.
+- API: `versions[]` and `format` of the session / repo okf-usage routes (`OkfUsageResponse`).
+  The bundle summary of rule 7 is not part of any response.

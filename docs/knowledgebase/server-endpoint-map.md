@@ -6,7 +6,7 @@ tags:
   - server
   - api
   - auth
-generated: { by: "human:denistsyplakov", at: "2026-11-19T00:00:00+04:00" }
+generated: { by: "ai:claude", at: "2026-11-21T22:36:45+04:00" }
 ---
 
 # Server HTTP API map
@@ -77,8 +77,7 @@ Most repository routes are only `session`-guarded; the real check is in the hand
   - list/aggregate routes **row-filter** (a plain member sees only own rows, not a 403);
   - per-session `:sessionId` routes **403** when the owner is not visible
     (`assertSessionVisible`); the change-surface, OKF and OTEL session routes answer an
-    empty / `computed: false` payload for a session outside the scope instead of a 404 (the
-    OKF agent trail is the exception: 404, since it names one agent of the tree);
+    empty / `computed: false` payload for a session outside the scope instead of a 404;
   - `analytics/*`, `reports/*`, `otel/facts` and team OTEL **403** when `analyticsAllowed` is
     false; the session-list support routes (`sessions/branches`, `session-attribution/values`,
     `sessions/:sessionId/contexts`) are deliberately not analytics-gated;
@@ -228,7 +227,7 @@ controller itself. Several controllers share the `api/v1/repositories` prefix �
 | `logs/otel/otel-realtime.controller.ts` | `/api/v2/otel-realtime` | Realtime OTEL batch from the receiver | `OtelRealtimeDto` in the controller · `f25` |
 | `logs/repositories.controller.ts` | `/api/v1/repositories` | Repos, settings, hook state, sessions, session logs (+ delta), change surface, session OKF, timeline / work-time analytics | `logs/repositories.service.ts`, `logs/dto/`, client `models/repositories.ts` · `f14`, `f17`, `f19`, `f20` |
 | `logs/analytics/usage-analytics.controller.ts` | `/api/v1/repositories` | `analytics/{tools,tokens,productivity,active-sessions,claude-versions,budget-burn}` | `usage-analytics.types.ts`, `logs/budgets/budgets.types.ts` · `f20`, `f26` |
-| `logs/reports/reports.controller.ts` | `/api/v1/repositories` | `reports/*` (incl. repo `okf-usage` and `okf-usage/article`, `budget`) | `logs/reports/*.service.ts`, `logs/budgets/budgets.types.ts` · `f21`, `f26` |
+| `logs/reports/reports.controller.ts` | `/api/v1/repositories` | `reports/*` (incl. repo `okf-usage`, `budget`) | `logs/reports/*.service.ts`, `logs/budgets/budgets.types.ts` · `f21`, `f26` |
 | `logs/budgets/budgets.controller.ts` (`RepositoryBudgetsController`) | `/api/v1/repositories` | `:repoId/budgets*` (CRUD, `events`) and `:repoId/spend*` (Spend tab, `spend/sessions`), personal or `?teamId` | `logs/budgets/budgets.types.ts`, client `viewer/api.ts` · `f26` |
 | `logs/budgets/budgets.controller.ts` (`TeamBudgetsController`) | `/api/v1/teams` | `:teamId/budgets*` and `:teamId/spend*` (whole-team scope) | `logs/budgets/budgets.types.ts` · `f26` |
 | `logs/budgets/budget-notices.controller.ts` | `/api/v1/budget-notices` | Caller's budget threshold notices (bell tray, banner) and read marking | `logs/budgets/budgets.types.ts` · `f26` |
@@ -293,21 +292,19 @@ grep the controller.
 - `GET …/sessions/export-scope` (statistics export) is repo owner or team owner and bypasses the
   team access mode.
 - `PUT …/settings/team` is team owner only; both settings PUTs trigger a recompute, except when
-  the stored and new config differ only in the `okf` thresholds section (read-time settings). An
-  invalid `okf` → 400 `okf.<field> …`; every settings response carries `okfDefaults` and
-  `okfFixedLimits`.
+  the stored and new config differ only in the `okf` section. That section (the former OKF
+  thresholds) is no longer used since 2026-11-21: a PUT body's `config.okf` is never validated
+  and never stored — the save keeps the `okf` the stored row already has (or none), and answers
+  200 either way. The settings responses no longer carry `okfDefaults` / `okfFixedLimits`.
 - `GET …/hook-state` answers 404 when the repo never reported hook state.
-- `GET …/sessions/:sessionId/okf-usage/trail?agent=` (the session OKF tab's agent trail) resolves
-  the same scope, 403 and team rules as `…/okf-usage` (`resolveChangeSurfaceSessionScope`), but
-  answers **404**, not the empty payload, when the session has no visible row in the scope or
-  `agent` is not a node of its tree; missing `agent` → 400. It reparses the node's stored
-  transcript per request (like the facts route) and writes nothing ([okf-usage.md](okf-usage.md)).
 - Each `reports/X` that mirrors an `analytics/X` returns a byte-identical body (same service).
-- `GET …/reports/okf-usage` and `GET …/reports/okf-usage/article?path=` (the per-article
-  drill-down) share the scope and the 403 of `harness-usage` (`resolveUsageScope`) and the OKF
-  team filter. The article route answers 400 without `path`, and 200 with `found: false` (never
-  404) for a `path` that is not a stored KB article in the scope. Both are read-only and resolve
-  the OKF thresholds per section ([okf-usage.md](okf-usage.md)).
+- `GET …/reports/okf-usage` (repo OKF tab) shares the scope and the 403 of `harness-usage`
+  (`resolveUsageScope`); `GET …/sessions/:sessionId/okf-usage` (session OKF tab) the scope and
+  403 of the change-surface session routes, and answers the empty response for a session outside
+  the scope. Both return the same `OkfUsageResponse`, apply the OKF team filter under `?teamId`
+  and are read-only ([okf-usage.md](okf-usage.md)).
+- **Removed 2026-11-21** (answer 404 now): `GET …/reports/okf-usage/article` (per-article
+  drill-down) and `GET …/sessions/:sessionId/okf-usage/trail` (agent trail).
 - Export/import: jobs answer `202 { jobId }` and are polled; uploads are `multipart/form-data`
   field `file`; 422 invalid archive, 409 `{ conflicts[] }`; the download leaves the job in place
   (no GET mutates). `bootstrap-import/*` has no target repo and is scoped by user.

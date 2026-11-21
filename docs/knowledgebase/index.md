@@ -68,7 +68,7 @@ article itself holds the details. Keep new lines to one or two sentences.
 ## Feature subsystems (OTEL, OKF, Tools/MCP)
 
 * [OTEL Tabs](otel-tabs.md) - Read before touching `server/src/logs/otel/`, the repository / session / team OTEL tabs or `POST /api/v2/otel-realtime`: channels, `otel_*` tables, classification, states, access, per-session OTEL status, compatibility matrix
-* [OKF Usage](okf-usage.md) - Read before touching the session or repository OKF tab (incl. the article drill-down and the OKF thresholds settings), `server/src/logs/okf/`, `session_okf_access` / `session_okf_event` / `session_okf_pointer` / `okf_snapshots` or the hook's OKF snapshot upload
+* [OKF Usage](okf-usage.md) - Read before touching the session or repository OKF tab (summary line, Versions, Wrong format, Hot files, Explorer), `server/src/logs/okf/`, `OkfUsageResponse`, `session_okf_access` / `okf_snapshots`, the reference snapshot, the OKF team filter or the hook's OKF snapshot upload; also lists what the 2026-11-21 cut removed
 * [Tool Monitoring (Tools/MCP tab)](tool-monitoring.md) - Read before touching the Tools/MCP tab, `server/src/logs/tool-monitoring/`, `packages/tool-monitor/` or the hook's CLI tool wrapper: channels, config merge, shims, safety, routes, background MCP calls (CC ≥ 2.1.212)
 
 ## Auth and accounts
@@ -111,12 +111,11 @@ article itself holds the details. Keep new lines to one or two sentences.
 * [Tool-Call Sections and Permission Attribution](algorithms/tool-call-sections.md) - Read before touching `session-log/tool-calls.ts`: which section a call is listed in, which call a permission event belongs to
 * [Tool-Call Outcome](algorithms/tool-call-outcome.md) - Read before touching `classifyToolOutcome` (client or its server twin): success / failure / unresolved and the Logs status
 * [Bash Command View](algorithms/bash-command-view.md) - Read before touching `packages/bash-view/` or the client loader: command layout, FILES summary, `readAccess` kinds
-* [OKF Access Extraction](algorithms/okf-access-extraction.md) - Read before touching `okf-access-extractor.ts` or `okf-pointers.ts`: how a transcript becomes `session_okf_access` rows, code events and article pointers
+* [OKF Access Extraction](algorithms/okf-access-extraction.md) - Read before touching `okf-access-extractor.ts` or `okf-pointers.ts`: how a transcript becomes `session_okf_access` rows and the facts route's access sequence
 * [OKF Task Context](algorithms/okf-task-context.md) - Read before touching `okf-task-context.ts`: which user entries count as the task
-* [OKF Verdict](algorithms/okf-verdict.md) - Read before touching `okf-verdict.ts` or `okf-thresholds.ts`: the thresholds, upkeep, session share, agent entry, repo rules, stale files, levels
-* [OKF Value Signals](algorithms/okf-value-signals.md) - Read before touching `okf-value-signals.ts`: article area, yield, searched after, routing miss, dead pointers, catalog
 * [OKF Snapshot](algorithms/okf-snapshot.md) - Read before touching the hook's `okf-snapshot.js`: bundle detection, `git check-ignore` flags, front-matter metadata, `okfSnapshotId`
-* [OKF Metadata](algorithms/okf-metadata.md) - Read before touching `okf-metadata.ts`: newer-format hint, `stale_after`, deprecated / `superseded_by`, can-improve hints, bundle summary
+* [OKF Metadata](algorithms/okf-metadata.md) - Read before touching `okf-metadata.ts`: newer-format hint, `stale_after`, deprecated / `superseded_by`, format hints, bundle summary
+* [OKF Usage Counting](algorithms/okf-usage-counting.md) - Read before touching `okf-usage-counting.ts`, `okf-paths.ts`, `okf-team-filter.ts` or the client's `okf-format.ts`: what counts as a KB read, N of M, tokens, the KB cost estimate, files / folders, reference snapshot, team filter, versions / wrong format, display formats
 * [Tool Output Format](algorithms/tool-output-format.md) - Read before touching Tools/MCP `output-format.ts`: JSON / table / plain detection and re-alignment
 * [Tool Wrapper Fidelity](algorithms/tool-wrapper-fidelity.md) - Read before changing the hook's CLI tool wrapper: fidelity and fail-open rows, the env-gated check project
 * [Sandbox Prune Classification](algorithms/sandbox-prune-classification.md) - Read before touching `classifyPruneCandidate` in `scripts/claude-docker/prune.mjs`

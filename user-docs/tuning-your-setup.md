@@ -40,15 +40,6 @@ see at a glance whether a session burned its budget reading documentation or act
   report's "Why was cache creation high?" section. Default 25,000.
 - **Turn-End Cost Advisor** — the checkbox that turns automatic per-turn cost advice on, plus a
   **Minimum session cost (USD)** field (default $0.10).
-- **OKF thresholds** — the levels behind the [OKF tab](okf-tab.md)'s verdict and value signals,
-  as a table of each setting with its default, its value and what it affects, in two groups
-  (verdict, value signals). **codeRoots** lists the folders that hold this repository's code
-  (default `server/`, `client/`, `hook/`, `scripts/`, `packages/`, `tests/`); an article's code
-  area is built from the paths under them, so set it to your repository's own folders — type a
-  folder and press Enter or **Add**. **Save for this repo** writes only the values that differ
-  from the defaults, **Reset to defaults** removes them, and in your personal view **Copy from
-  team settings** fills the form from the team's values. Changes apply at once, with no
-  recompute. See [OKF tab → Thresholds](okf-tab.md#thresholds).
 
 ### Monitored Tools
 
@@ -111,7 +102,7 @@ rest of the harness did. Common patterns and what to do:
 | Log Hub points at… | What to change |
 |---|---|
 | Large fixed context (CLAUDE.md, rules, skills, MCP tool schemas) | Open **System context anatomy** — it shows what Claude loads at startup and how many tokens each part costs, and its **Recommendations** button lists the startup groups you may be able to switch off, with who controls each one and how (curated advice with links to the Claude Code docs — check this tab on a new session after the change). Trim CLAUDE.md and remove stale rules. **Harness usage** lists every harness element with its usage count and token share; disable MCP servers and skills that are never used. |
-| A knowledge base the agents do not use, or use without effect | Open the **OKF** tab — it shows which articles the agents read, which led them to the code and which change to make to the KB next to every problem. |
+| A knowledge base the agents do not use, or use without effect | Open the [**OKF** tab](okf-tab.md) — it shows in how many sessions the KB was read and what that cost, which articles are read most, which were never opened, and which have a wrong format. |
 | An MCP server or CLI tool that fails or is never useful | Open **Tools/MCP** — it lists the MCP calls and the calls of monitored CLI tools, with their failures. Fix or remove the server, or narrow which of its tools the agent may use. |
 | Heavy file reading / re-reading | Check the **Cache Read Ratio** report's causes. Split oversized files; point the AI at specific files instead of letting it scan. |
 | Frequent compactions / peak context near the window | Prefer smaller, focused tasks and fresh sessions over one marathon session. |

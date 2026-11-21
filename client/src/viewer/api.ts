@@ -32,7 +32,7 @@ import type {
   ChangeSurfaceTimeline,
   ChangeSurfaceTimelineBucket,
   ExecutiveSummaryReportData,
-  OkfThresholds,
+  OkfUsageResponse,
   OtelReasonKey,
   RepoConfig,
   RepositoryContext,
@@ -48,12 +48,8 @@ import type {
   WorkTimeBucket,
   ActiveSessionsResponse,
   ProductivityAnalyticsResponse,
-  RepoOkfArticleResponse,
-  RepoOkfUsageResponse,
   RepoOtelFactsParams,
   RepoOtelFactsResponse,
-  SessionOkfTrailResponse,
-  SessionOkfUsageResponse,
   SessionOtelParams,
   SessionOtelResponse,
   TokenAnalyticsResponse,
@@ -854,27 +850,11 @@ export async function fetchSessionOkfUsage(
   repoId: number,
   sessionId: string,
   teamId?: number,
-): Promise<SessionOkfUsageResponse> {
+): Promise<OkfUsageResponse> {
   const base = `/api/v1/repositories/${repoId}/sessions/${encodeURIComponent(sessionId)}/okf-usage`;
   const res = await apiFetch(teamId ? `${base}?teamId=${teamId}` : base);
   if (!res.ok) throw new ApiError(res.status);
-  return res.json() as Promise<SessionOkfUsageResponse>;
-}
-
-/** One agent's trail on the session OKF tab (`agent` = a node id of the session's tree). */
-export async function fetchSessionOkfTrail(
-  repoId: number,
-  sessionId: string,
-  agentId: string,
-  teamId?: number,
-): Promise<SessionOkfTrailResponse> {
-  const q = new URLSearchParams({ agent: agentId });
-  if (teamId) q.set('teamId', String(teamId));
-  const res = await apiFetch(
-    `/api/v1/repositories/${repoId}/sessions/${encodeURIComponent(sessionId)}/okf-usage/trail?${q.toString()}`,
-  );
-  if (!res.ok) throw new ApiError(res.status);
-  return res.json() as Promise<SessionOkfTrailResponse>;
+  return res.json() as Promise<OkfUsageResponse>;
 }
 
 export interface RepoOkfUsageQueryParams {
@@ -889,7 +869,7 @@ export interface RepoOkfUsageQueryParams {
   bundle?: string;
 }
 
-/** Scope/period query shared by the repo OKF usage and article routes. */
+/** Scope/period query of the repo OKF usage route. */
 function repoOkfScopeQuery(
   params: Omit<RepoOkfUsageQueryParams, 'bundle'>,
 ): URLSearchParams {
@@ -914,33 +894,14 @@ function repoOkfScopeQuery(
 export async function fetchRepoOkfUsage(
   repoId: number,
   params: RepoOkfUsageQueryParams,
-): Promise<RepoOkfUsageResponse> {
+): Promise<OkfUsageResponse> {
   const url = repoOkfScopeQuery(params);
   if (params.bundle) url.set('bundle', params.bundle);
   const res = await apiFetch(
     `/api/v1/repositories/${repoId}/reports/okf-usage?${url.toString()}`,
   );
   if (!res.ok) throw new ApiError(res.status);
-  return res.json() as Promise<RepoOkfUsageResponse>;
-}
-
-/**
- * Per-article drill-down of the repo OKF tab: the same scope and filters as
- * {@link fetchRepoOkfUsage} (the `bundle` narrowing does not apply). A `path` that is not a
- * stored KB article in scope comes back with `found: false`.
- */
-export async function getOkfArticle(
-  repoId: number,
-  path: string,
-  filters: Omit<RepoOkfUsageQueryParams, 'bundle'>,
-): Promise<RepoOkfArticleResponse> {
-  const url = repoOkfScopeQuery(filters);
-  url.set('path', path);
-  const res = await apiFetch(
-    `/api/v1/repositories/${repoId}/reports/okf-usage/article?${url.toString()}`,
-  );
-  if (!res.ok) throw new ApiError(res.status);
-  return res.json() as Promise<RepoOkfArticleResponse>;
+  return res.json() as Promise<OkfUsageResponse>;
 }
 
 // --- OTEL tabs (2026-10-30 otel-tabs-traces) ------------------------------------
@@ -1396,19 +1357,6 @@ export interface RepoSettingsResponse {
   userConfig: RepoConfig | null;
   teamId: number | null;
   canEditTeamConfig: boolean;
-  /** Server defaults of every OKF View threshold, so the client keeps no twin of them. */
-  okfDefaults: OkfThresholds;
-  /** Fixed OKF View limits that are not settings (Settings "Not settings" footer). */
-  okfFixedLimits: OkfFixedLimits;
-}
-
-/** OKF View limits fixed in server code, reported read-only by the settings routes. */
-export interface OkfFixedLimits {
-  readTopN: number;
-  hotFilesTopN: number;
-  taskHeadMaxChars: number;
-  patternMaxChars: number;
-  eventCapPerNode: number;
 }
 
 /** `teamId` lets a team member read a teammate's repo through the team's access (D4.8). */

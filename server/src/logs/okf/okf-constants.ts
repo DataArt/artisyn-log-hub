@@ -1,8 +1,7 @@
 /**
  * OKF usage — shared fixed limits (impl-plan DD-0 of 2026-11-03-okf-view-kb-value).
  *
- * These are not settings: the extractor, the writer, the read side and the value-signals module
- * import them from here, and the settings response reports some of them as `okfFixedLimits`.
+ * These are not settings: the extractor, the writer and the read side import them from here.
  */
 
 /**
@@ -13,12 +12,6 @@
  * bundle root, bare paths article-relative first).
  */
 export const OKF_EXTRACT_VERSION = 4;
-
-/**
- * Lowest `okf_extract_version` whose `session_okf_access.search_hits` is filled (DD-6). Separate
- * from {@link OKF_EXTRACT_VERSION} so a later bump does not discard the hit data of older nodes.
- */
-export const OKF_SEARCH_HITS_MIN_VERSION = 2;
 
 /**
  * A back-ticked span without `/` is a pointer only when its extension (lower-cased, after the last
@@ -60,24 +53,18 @@ export const OKF_EVENT_CAP_PER_NODE = 3000;
 /** At most this many pointer rows per node; beyond it the node is marked truncated (DD-9). */
 export const OKF_POINTER_CAP_PER_NODE = 5000;
 
-/**
- * A folder search counts towards FR-2 "searched after" of an article when the folder holds one of
- * the article's area files and has at least this many path segments (`server/src/logs`), so a
- * repo-wide grep (`server/`, `server/src/`) never does (DD-13).
- */
-export const OKF_SEARCH_FOLDER_MIN_DEPTH = 3;
-
-/** Top search patterns shown per finding (FR-14). */
-export const OKF_TOP_PATTERNS = 5;
-
 /** Longest back-ticked span taken as a pointer (DD-8); also the `pointer` column width. */
 export const OKF_POINTER_MAX_CHARS = 512;
-
-/** Most `codeRoots` entries a threshold section may hold (DD-19). */
-export const OKF_CODE_ROOTS_MAX = 50;
 
 /** An event path or article path longer than this is dropped, not truncated. */
 export const OKF_PATH_MAX_CHARS = 1024;
 
-/** Items one agent trail returns (`GET …/okf-usage/trail`); beyond it the response says `truncated`. */
-export const OKF_TRAIL_MAX_ITEMS = 2000;
+/**
+ * Branch names taken as the repository's default branch when the reference snapshot of the repo
+ * OKF view is chosen (`pickReferenceRoot`). No "default branch" is stored anywhere in the
+ * product; this name list is the rule.
+ */
+export const OKF_DEFAULT_BRANCH_NAMES: readonly string[] = ['main', 'master'];
+
+/** Bytes returned by a KB read per one token of context (`tokens = bytes / 4`). */
+export const OKF_BYTES_PER_TOKEN = 4;
