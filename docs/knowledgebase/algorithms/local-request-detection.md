@@ -1,4 +1,9 @@
 ---
+type: "Algorithm"
+title: "Local request detection: who may use passwordless mode"
+description: "In `AUTH_MODE=none` anyone can identify as any e-mail without a password, so that mode is limited to requests from the same machine. This rule decides whether a request is \"local\"."
+tags: [algorithm]
+generated: { by: "human:denistsyplakov", at: "2026-11-14T14:41:14+04:00" }
 reviewed: 2026-10-15
 reviewer: ai
 ---

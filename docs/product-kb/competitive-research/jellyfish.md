@@ -5,7 +5,7 @@ description: "Commercial SaaS engineering-intelligence platform that ties Claude
 tags:
   - competitive-research
   - eng-analytics
-timestamp: "2026-11-01T00:00:00+04:00"
+generated: { by: "human:denistsyplakov", at: "2026-11-01T00:00:00+04:00" }
 ---
 
 # Jellyfish AI Impact

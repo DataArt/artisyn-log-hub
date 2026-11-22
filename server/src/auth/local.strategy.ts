@@ -68,6 +68,18 @@ export class LocalStrategy extends PassportStrategy(Strategy) {
       );
       throw new ForbiddenException({ error: 'email_not_confirmed' });
     }
+    // strict-managed: an account counts only once its mailbox is proven (a
+    // set/reset link was used). Catches sign-ups and unconfirmed accounts
+    // left over from an earlier auth mode; "Forgot password?" verifies them.
+    if (
+      this.configService.get<string>('AUTH_MODE') === 'strict-managed' &&
+      !user.emailConfirmedAt
+    ) {
+      this.logger.warn(
+        `Login rejected, email not verified: email=${maskEmail(email)} ip=${ip} userId=${user.id}`,
+      );
+      throw new ForbiddenException({ error: 'email_not_verified' });
+    }
     this.logger.log(
       `Login succeeded: email=${maskEmail(email)} ip=${ip} userId=${user.id}`,
     );

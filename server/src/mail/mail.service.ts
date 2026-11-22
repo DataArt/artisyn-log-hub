@@ -4,11 +4,19 @@ import * as nodemailer from 'nodemailer';
 import { maskEmail } from '../common/mask-email';
 import { budgetMailSubject } from '../logs/budgets/budget.constants';
 import { formatUsdMicros } from '../logs/budgets/budget-scope';
+import {
+  setPasswordEmail,
+  setPasswordOnRequestEmail,
+} from './password-link-emails';
+import { createSmtpTransport } from './smtp-transport';
 
 export type EmailDelivery = 'sent' | 'failed';
 
-/** Auth modes that send email at all (Mode 2 optionally, Mode 3 always). */
-const SMTP_AUTH_MODES = ['password', 'password-confirm'];
+/** Auth modes that send email at all (Mode 2 optionally, Mode 3 and strict-managed always). */
+const SMTP_AUTH_MODES = ['password', 'password-confirm', 'strict-managed'];
+
+/** Auth modes that cannot work without email: an unreachable relay aborts startup. */
+const SMTP_REQUIRED_AUTH_MODES = ['password-confirm', 'strict-managed'];
 
 @Injectable()
 export class MailService implements OnModuleInit {
@@ -33,18 +41,14 @@ export class MailService implements OnModuleInit {
       return;
     }
 
-    const user = this.configService.get<string>('SMTP_USER');
-    const password = this.configService.get<string>('SMTP_PASSWORD');
-    this.transporter = nodemailer.createTransport({
-      host: this.configService.get<string>('SMTP_HOST'),
+    // createSmtpTransport sets short timeouts: an unreachable relay fails fast
+    // and send() then reports 'failed' to its caller.
+    this.transporter = createSmtpTransport({
+      host: this.configService.get<string>('SMTP_HOST') ?? '',
       port: Number(this.configService.get<string>('SMTP_PORT')),
       secure: this.configService.get<string>('SMTP_SECURE', 'false') === 'true',
-      auth: user && password ? { user, pass: password } : undefined,
-      // Fail fast rather than hanging startup or a request when the relay is
-      // unreachable: send() then reports 'failed' to its caller.
-      connectionTimeout: 5_000,
-      greetingTimeout: 5_000,
-      socketTimeout: 5_000,
+      user: this.configService.get<string>('SMTP_USER'),
+      password: this.configService.get<string>('SMTP_PASSWORD'),
     });
   }
 
@@ -61,25 +65,27 @@ export class MailService implements OnModuleInit {
    *
    * - No transporter (SMTP does not apply to this mode, or is not set up in
    *   Mode 2): returns without touching the network or logging anything.
-   * - Mode 3 (password-confirm) outside NODE_ENV=test: an unreachable relay
-   *   throws, so startup aborts — the mode cannot work without email.
-   * - Mode 2, or Mode 3 under NODE_ENV=test (the contract suite runs Mode 3
-   *   without a relay): a failure is logged as a warning and the next send
-   *   retries the connection.
+   * - Mode 3 (password-confirm) or strict-managed outside NODE_ENV=test: an
+   *   unreachable relay throws, so startup aborts — the mode cannot work
+   *   without email.
+   * - Mode 2, or those modes under NODE_ENV=test (the contract suite runs
+   *   Mode 3 without a relay): a failure is logged as a warning and the next
+   *   send retries the connection.
    */
   async onModuleInit(): Promise<void> {
     if (!this.transporter) return;
     try {
       await this.transporter.verify();
     } catch (err) {
+      const mode = this.configService.get<string>('AUTH_MODE') ?? '';
       if (
-        this.configService.get<string>('AUTH_MODE') === 'password-confirm' &&
+        SMTP_REQUIRED_AUTH_MODES.includes(mode) &&
         process.env.NODE_ENV !== 'test'
       ) {
         const host = this.configService.get<string>('SMTP_HOST');
         const port = this.configService.get<string>('SMTP_PORT');
         throw new Error(
-          `SMTP relay ${host}:${port} is unreachable; AUTH_MODE=password-confirm requires a working relay: ${String(err)}`,
+          `SMTP relay ${host}:${port} is unreachable; AUTH_MODE=${mode} requires a working relay: ${String(err)}`,
         );
       }
       this.logger.warn(
@@ -90,10 +96,10 @@ export class MailService implements OnModuleInit {
 
   /**
    * Whether outbound mail is set up for the active auth mode: true iff
-   * AUTH_MODE is `password` or `password-confirm` and SMTP_HOST is non-empty.
-   * Modes 1/4 never use SMTP, so this is always false there. In Mode 3 the
-   * startup validator requires SMTP_HOST, so outside NODE_ENV=test it is always
-   * true. This is the single gate for every send path and for the warm-up:
+   * AUTH_MODE is `password`, `password-confirm` or `strict-managed` and
+   * SMTP_HOST is non-empty. Modes 1/4 never use SMTP, so this is always false
+   * there. In Mode 3 and strict-managed the startup validator requires
+   * SMTP_HOST, so outside NODE_ENV=test it is always true. This is the single gate for every send path and for the warm-up:
    * callers skip a notification entirely (reporting 'skipped') instead of
    * firing a send that cannot be delivered.
    */
@@ -118,8 +124,26 @@ export class MailService implements OnModuleInit {
     return this.send(
       email,
       'Reset your password',
-      `You requested a password reset. Use the link below to set a new password (valid for 1 hour):\n\n${resetUrl}\n\nIf you did not request this, you can ignore this email.`,
+      `You requested a password reset. Use the link below to set a new password (it works once and is valid for 1 hour):\n\n${resetUrl}\n\nIf you did not request this, you can ignore this email.`,
     );
+  }
+
+  /** "Forgot password?" link for an account that has no password yet. */
+  async sendSetPasswordOnRequestEmail(
+    email: string,
+    url: string,
+  ): Promise<EmailDelivery> {
+    const { subject, text } = setPasswordOnRequestEmail(url);
+    return this.send(email, subject, text);
+  }
+
+  /** Admin-issued set-password link (strict-managed: create user, resend link). */
+  async sendSetPasswordEmail(
+    email: string,
+    url: string,
+  ): Promise<EmailDelivery> {
+    const { subject, text } = setPasswordEmail(email, url);
+    return this.send(email, subject, text);
   }
 
   async sendConfirmationEmail(

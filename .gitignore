@@ -28,6 +28,7 @@ server/perf-tests/*.js
 /Claude.local.md
 /.playwright-work-folder/
 .playwright-work-folder/
+/.playwright-mcp/
 /artisyn-hooks-installer/node_modules/
 artisyn-hooks-installer/node_modules/
 artisyn-hooks-installer/dist/
@@ -73,3 +74,5 @@ server/src/public/static/installer-version.json
 /vt.key
 # In-app help pages: generated from user-docs/ by scripts/user-docs/generate-help.js.
 /client/public/help/
+# Third-party screenshots kept in a task folder for local reference only (copyrighted, not ours to publish)
+/docs/tasks/**/screenshots/

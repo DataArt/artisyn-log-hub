@@ -1,4 +1,9 @@
 ---
+type: "Algorithm"
+title: "Release version and run state"
+description: "Decides, for one run of the release workflow, which version is released and whether the run builds a new release (`full`), finishes an interrupted one (`resume`) or stops (`fail`)."
+tags: [algorithm]
+generated: { by: "human:denistsyplakov", at: "2026-11-03T17:31:26+04:00" }
 reviewed: no
 reviewer: none
 ---

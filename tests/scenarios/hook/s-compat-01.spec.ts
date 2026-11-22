@@ -28,11 +28,14 @@
 //     201 + JSON `{warnings: []}` for a single request, `{complete: false}` then
 //     `{complete: true, warnings: [...]}` for chunks.
 //
-// Steps 10–11 (2026-10-27 OKF usage tab, FR-2, FR-14): 2.6.1 predates the OKF snapshot AND the
-// `git.root` field, so its session is never bound (`okf_snapshot_id` null) and the KB article its
-// agent read cannot be made repo-relative — the OKF tab is the empty state. A hook between the
-// two (root sent, no snapshot; no frozen copy exists) is uploaded inline with helpers/okf.ts: its
-// read counts with «partial data», and the OKF tab shows the «update the hook» banner.
+// Steps 10–11 (OKF tab, 2026-11-21): 2.6.1 predates the OKF snapshot AND the `git.root` field, so
+// its session is never bound (`okf_snapshot_id` null); a hook between the two (root sent, no
+// snapshot; no frozen copy exists) is uploaded inline with helpers/okf.ts. Without a snapshot the
+// KB folders are unknown: both get `snapshot: null`, no numbers, and the one-line «No KB snapshot
+// — update the hook.» state.
+// Step 11b: a hook from 2.26.0 to 3.0.x sends a snapshot without front-matter metadata — reads
+// are counted (hot files, explorer) and one «Update the hook…» line replaces Versions and Wrong
+// format.
 //
 // Steps 12–13 (2026-10-30 OTEL tabs, AC-10 / AC-11):
 //   - 2.28.0 — the last hook without OTEL traces and the realtime channel. Its real Stop uploads
@@ -288,6 +291,26 @@ function killUploaderOf(home: string | undefined): void {
   }
 }
 
+/** `GET …/sessions/:id/okf-usage` — the fields this scenario reads. */
+interface OkfUsage {
+  snapshot: { branch: string | null; takenAt: string; hasMeta: boolean } | null;
+  summary: { unitsRead: number; unitsTotal: number; reads: number; tokens: number; cost: number | null; spend: number | null };
+  versions: unknown[];
+  format: unknown;
+  files: Array<{ path: string; units: number }>;
+  folders: unknown[];
+}
+
+/** The response without a KB snapshot: every array empty, every number zero. */
+const NO_OKF_SNAPSHOT = {
+  snapshot: null,
+  summary: { unitsRead: 0, reads: 0, tokens: 0, cost: null, spend: null },
+  versions: [],
+  format: null,
+  files: [],
+  folders: [],
+};
+
 test('@S-COMPAT-01 frozen 1.6.2, 2.6.1 and 2.28.0 hooks against the current server @mode-a @mode-c', async ({ api, db, users, stand, page }) => {
   test.setTimeout(360_000);
   const run = runToken();
@@ -465,7 +488,7 @@ test('@S-COMPAT-01 frozen 1.6.2, 2.6.1 and 2.28.0 hooks against the current serv
       expect(hooks.find((r) => r.id === repoId)?.outdated).toBe(true);
     });
 
-    await test.step('10. 2.6.1 sends no OKF snapshot and no repo root: okf_snapshot_id stays null, its KB read is not counted (FR-2), the OKF tab is the empty state', async () => {
+    await test.step('10. 2.6.1 sends no OKF snapshot and no repo root: okf_snapshot_id stays null, the response has `snapshot: null` and no numbers, the OKF tab is the one-line «No KB snapshot» state', async () => {
       const bound = await db.query<{ okf_snapshot_id: string | null }>(
         'SELECT okf_snapshot_id FROM sessions WHERE session_id = $1',
         [v26.sid],
@@ -474,13 +497,13 @@ test('@S-COMPAT-01 frozen 1.6.2, 2.6.1 and 2.28.0 hooks against the current serv
       const repoId = await ownRepoId(owner.api, `https://git.arrakis.test/compat/${run}/v26`);
       const res = await owner.api.get(`/api/v1/repositories/${repoId}/sessions/${encodeURIComponent(v26.sid)}/okf-usage`);
       expect(res.status()).toBe(200);
-      const usage = (await res.json()) as { hasSnapshot: boolean; verdict: unknown; readTop: unknown[] };
-      expect(usage).toMatchObject({ hasSnapshot: false, verdict: null, readTop: [] });
+      expect((await res.json()) as OkfUsage).toMatchObject(NO_OKF_SNAPSHOT);
       await openSession(page, owner, repoId, v26.sid, { tab: 'okf' });
-      await expect(page.getByTestId('okf-empty')).toContainText('No OKF knowledge base');
+      await expect(page.getByTestId('okf-no-snapshot')).toContainText('No KB snapshot — update the hook.');
+      await expect(page.getByTestId('okf-summary')).toHaveCount(0);
     });
 
-    await test.step('11. a pre-OKF hook that does send the repo root (2.8 … 2.25): unbound session, the KB read counts, «partial data» and the «update the hook» banner (FR-14)', async () => {
+    await test.step('11. a pre-OKF hook that does send the repo root (2.8 … 2.25): unbound session — without a snapshot the KB folders are unknown, so `snapshot: null`, no numbers, and the one-line state with «How to update»', async () => {
       // No frozen hook of that range exists; its upload shape is the current one minus the OKF
       // lines and query params, which is exactly helpers/okf.ts with `snapshot: null`.
       const sid = `c25-${run}`;
@@ -496,19 +519,64 @@ test('@S-COMPAT-01 frozen 1.6.2, 2.6.1 and 2.28.0 hooks against the current serv
       const repoId = await ownRepoId(owner.api, repoUrl);
       const res = await owner.api.get(`/api/v1/repositories/${repoId}/sessions/${encodeURIComponent(sid)}/okf-usage`);
       expect(res.status()).toBe(200);
-      const usage = (await res.json()) as { hasSnapshot: boolean; verdict: { level: string; qualifiers: string[] } | null; readTop: Array<{ path: string }> };
-      expect(usage.hasSnapshot).toBe(false);
-      expect(usage.verdict).toMatchObject({ level: 'ok', qualifiers: ['partial_data'] });
-      expect(usage.readTop.map((r) => r.path)).toEqual(['docs/kb/guide.md']);
+      expect((await res.json()) as OkfUsage).toMatchObject(NO_OKF_SNAPSHOT);
 
       await openSession(page, owner, repoId, sid, { tab: 'okf' });
-      const banner = page.getByTestId('okf-no-snapshot');
-      await expect(banner).toBeVisible();
-      await expect(banner).toContainText('Update the Log Hub hook');
-      await expect(page.getByTestId('okf-verdict-card')).toContainText('partial data — no KB snapshot');
-      await expect(page.getByTestId('okf-tree-row').filter({ hasText: 'guide.md' })).toHaveCount(1);
-      await banner.getByRole('button', { name: 'How to update' }).click();
+      const line = page.getByTestId('okf-no-snapshot');
+      await expect(line).toContainText('No KB snapshot — update the hook.');
+      await expect(page.getByTestId('okf-summary')).toHaveCount(0);
+      await expect(page.getByTestId('okf-hot-row')).toHaveCount(0);
+      await expect(page.getByTestId('okf-tree-row')).toHaveCount(0);
+      await line.getByRole('button', { name: 'How to update' }).click();
       await expect(page).toHaveURL(/#\/api-keys/);
+    });
+
+    await test.step('11b. a hook from 2.26.0 to 3.0.x sends a snapshot without front-matter metadata: `versions: []`, `format: null`, the «Update the hook…» line in place of Versions and Wrong format; hot files and the explorer are populated', async () => {
+      // 3.0.0's okf-snapshot is the current shape minus the optional bundle fields and the
+      // per-file `meta`, which is exactly helpers/okf.ts without them.
+      const sid = `c30-${run}`;
+      const repoUrl = `https://git.arrakis.test/compat/${run}/okf-30`;
+      await uploadOkfSessionTree(
+        api,
+        key.key,
+        {
+          sessionId: sid,
+          repoUrl,
+          snapshot: { bundles: [{ root: 'docs/kb', files: ['docs/kb/guide.md', 'docs/kb/old.md'] }] },
+          actions: [{ read: 'docs/kb/index.md', bytes: 300 }, { read: 'docs/kb/guide.md', bytes: 400 }],
+        },
+        { db, userId: owner.id },
+      );
+      const repoId = await ownRepoId(owner.api, repoUrl);
+      const res = await owner.api.get(`/api/v1/repositories/${repoId}/sessions/${encodeURIComponent(sid)}/okf-usage`);
+      expect(res.status()).toBe(200);
+      const usage = (await res.json()) as OkfUsage;
+      expect(usage.snapshot).toMatchObject({ branch: 'main', hasMeta: false });
+      expect({ versions: usage.versions, format: usage.format }, 'no metadata: no versions, no format').toEqual({ versions: [], format: null });
+      expect(usage.summary, 'index.md 300 B + guide.md 400 B, / 4').toMatchObject({ unitsRead: 1, unitsTotal: 1, reads: 2, tokens: 175 });
+      expect(usage.files.map((f) => [f.path, f.units])).toEqual([
+        ['docs/kb/guide.md', 1],
+        ['docs/kb/index.md', 1],
+        ['docs/kb/old.md', 0],
+      ]);
+
+      await openSession(page, owner, repoId, sid, { tab: 'okf' });
+      const tab = page.getByTestId('session-okf-tab');
+      await expect(tab).toBeVisible();
+      await expect(tab.getByTestId('okf-no-snapshot')).toHaveCount(0);
+      await expect(tab.getByTestId('okf-summary-ratio')).toHaveText('KB read by 1 of 1 agents');
+      await expect(tab.getByTestId('okf-old-hook-line')).toHaveText('Update the hook to see versions and format problems.');
+      await expect(tab.getByTestId('okf-versions')).toHaveCount(0);
+      await expect(tab.getByTestId('okf-format')).toHaveCount(0);
+      const hot = tab.getByTestId('okf-hot-row');
+      await expect(hot).toHaveCount(1);
+      await expect(hot).toHaveAttribute('data-path', 'docs/kb/guide.md');
+      await expect(tab.getByTestId('okf-tree-header')).toHaveText('2 of 3 files opened in this session');
+      const root = tab.locator('[data-testid="okf-tree-row"][data-kind="bundle"][data-path="docs/kb"]');
+      await expect(root).toContainText('2 of 3');
+      await root.getByRole('button').first().click();
+      await expect(tab.locator('[data-testid="okf-tree-row"][data-path="docs/kb/guide.md"]')).toHaveAttribute('data-opened', 'true');
+      await expect(tab.locator('[data-testid="okf-tree-row"][data-path="docs/kb/old.md"]')).toHaveAttribute('data-opened', 'false');
     });
 
     const v228 = await test.step('12. AC-10: frozen 2.28.0 — Stop uploads the transcript, its --otel-sweep ships the OTEL logs chunk; the OTEL tabs show chart and hidden breakdown, «No traces — upgrade the hook» instead of the waterfall, no error', async () => {

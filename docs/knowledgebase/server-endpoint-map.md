@@ -6,7 +6,7 @@ tags:
   - server
   - api
   - auth
-timestamp: "2026-11-05T00:00:00+04:00"
+generated: { by: "ai:claude", at: "2026-11-21T22:36:45+04:00" }
 ---
 
 # Server HTTP API map
@@ -77,8 +77,7 @@ Most repository routes are only `session`-guarded; the real check is in the hand
   - list/aggregate routes **row-filter** (a plain member sees only own rows, not a 403);
   - per-session `:sessionId` routes **403** when the owner is not visible
     (`assertSessionVisible`); the change-surface, OKF and OTEL session routes answer an
-    empty / `computed: false` payload for a session outside the scope instead of a 404 (the
-    OKF agent trail is the exception: 404, since it names one agent of the tree);
+    empty / `computed: false` payload for a session outside the scope instead of a 404;
   - `analytics/*`, `reports/*`, `otel/facts` and team OTEL **403** when `analyticsAllowed` is
     false; the session-list support routes (`sessions/branches`, `session-attribution/values`,
     `sessions/:sessionId/contexts`) are deliberately not analytics-gated;
@@ -178,7 +177,7 @@ Compatibility matrix and per-feature history: [hook-api-versioning.md](hook-api-
 
 ### Auth flows (summary)
 
-`AUTH_MODE` = `none` | `password` | `password-confirm` | `azure-oauth`
+`AUTH_MODE` = `none` | `password` | `password-confirm` | `azure-oauth` | `strict-managed`
 ([authorization-and-authentificaiton.md](authorization-and-authentificaiton.md),
 [deployment-auth-mode.md](deployment-auth-mode.md), [user-account-flows.md](user-account-flows.md)).
 The client reads `GET /api/v1/auth/config` first and renders the matching login UI.
@@ -190,6 +189,10 @@ The client reads `GET /api/v1/auth/config` first and renders the matching login 
   cooldown shared with the admin "Resend"). Password strength is `PASSWORD_POLICY`
   ([algorithms/password-policy.md](algorithms/password-policy.md)). `change-password` signs out every
   other session.
+- `strict-managed`: `login`, `forgot-password` → `reset-password`, `change-password`; **no**
+  `signup` / `confirm-email` / `resend-confirmation` (404). Accounts come from the startup admin
+  bootstrap (`ADMIN_CONTACT_EMAIL`) and the admin provisioning routes; links carry `purpose=set`
+  and live 24 h. Email-sending routes share a 20 / IP / hour limit (`EmailSendRateLimitService`).
 - `azure-oauth`: `GET /api/v1/auth/azure` → Microsoft → `GET /api/auth/callback` (outside
   `/api/v1` on purpose: it is the redirect URI registered in Azure). Failures redirect to
   `/#/login?oauthError=1`.
@@ -224,7 +227,7 @@ controller itself. Several controllers share the `api/v1/repositories` prefix �
 | `logs/otel/otel-realtime.controller.ts` | `/api/v2/otel-realtime` | Realtime OTEL batch from the receiver | `OtelRealtimeDto` in the controller · `f25` |
 | `logs/repositories.controller.ts` | `/api/v1/repositories` | Repos, settings, hook state, sessions, session logs (+ delta), change surface, session OKF, timeline / work-time analytics | `logs/repositories.service.ts`, `logs/dto/`, client `models/repositories.ts` · `f14`, `f17`, `f19`, `f20` |
 | `logs/analytics/usage-analytics.controller.ts` | `/api/v1/repositories` | `analytics/{tools,tokens,productivity,active-sessions,claude-versions,budget-burn}` | `usage-analytics.types.ts`, `logs/budgets/budgets.types.ts` · `f20`, `f26` |
-| `logs/reports/reports.controller.ts` | `/api/v1/repositories` | `reports/*` (incl. repo `okf-usage` and `okf-usage/article`, `budget`) | `logs/reports/*.service.ts`, `logs/budgets/budgets.types.ts` · `f21`, `f26` |
+| `logs/reports/reports.controller.ts` | `/api/v1/repositories` | `reports/*` (incl. repo `okf-usage`, `budget`) | `logs/reports/*.service.ts`, `logs/budgets/budgets.types.ts` · `f21`, `f26` |
 | `logs/budgets/budgets.controller.ts` (`RepositoryBudgetsController`) | `/api/v1/repositories` | `:repoId/budgets*` (CRUD, `events`) and `:repoId/spend*` (Spend tab, `spend/sessions`), personal or `?teamId` | `logs/budgets/budgets.types.ts`, client `viewer/api.ts` · `f26` |
 | `logs/budgets/budgets.controller.ts` (`TeamBudgetsController`) | `/api/v1/teams` | `:teamId/budgets*` and `:teamId/spend*` (whole-team scope) | `logs/budgets/budgets.types.ts` · `f26` |
 | `logs/budgets/budget-notices.controller.ts` | `/api/v1/budget-notices` | Caller's budget threshold notices (bell tray, banner) and read marking | `logs/budgets/budgets.types.ts` · `f26` |
@@ -237,7 +240,8 @@ controller itself. Several controllers share the `api/v1/repositories` prefix �
 | `teams/teams.controller.ts` | `/api/v1/teams` | Teams, members, disclosure, team repos, invitations sent | `teams/dto/`, client `models/teams.ts` · `f10`–`f12` |
 | `logs/otel/otel-team-facts.controller.ts` | `/api/v1/teams` | Team OTEL tab | `otel-facts.types.ts` · `f25` |
 | `teams/invitations.controller.ts` | `/api/v1/invitations` | Invitations sent and received, respond | `teams/dto/` · `f13` |
-| `admin/admin.controller.ts` | `/api/v1/users` | Role change, reset-password link | `admin/dto/` · `f06` |
+| `admin/admin.controller.ts` | `/api/v1/users` | Role change, reset-password link (404 in `strict-managed`) | `admin/dto/` · `f06` |
+| `admin/admin-user-provisioning.controller.ts` | `/api/v1/admin/users` | `mode:strict-managed` + `admin`: create user, resend set-password link | `admin/dto/create-admin-user.dto.ts`, `CreateAdminUserResponse` in `admin/admin.service.ts`, client `models/admin.ts` · `f03`, `f06` |
 | `admin/admin-panel.controller.ts` | `/api/v1/admin` | Users, auth settings, pending registrations, repos, teams, system info, error logs, upload queue | `admin/*.service.ts`, client `models/admin.ts` · `f06`–`f09` |
 | `model-pricing/model-pricing-admin.controller.ts` | `/api/v1/admin/model-pricing` | Admin price table, overrides, fetch/import | `model-pricing/model-pricing.types.ts`, `dto/` · `f22` |
 | `log-hub-release/log-hub-release.controller.ts` | `/api/v1/admin/log-hub-release` | `admin`: new Log Hub release badge state (read-only; GitHub fetch runs in the scheduler) | `log-hub-release/log-hub-release.types.ts`, client `models/admin.ts` · `f01` |
@@ -288,21 +292,19 @@ grep the controller.
 - `GET …/sessions/export-scope` (statistics export) is repo owner or team owner and bypasses the
   team access mode.
 - `PUT …/settings/team` is team owner only; both settings PUTs trigger a recompute, except when
-  the stored and new config differ only in the `okf` thresholds section (read-time settings). An
-  invalid `okf` → 400 `okf.<field> …`; every settings response carries `okfDefaults` and
-  `okfFixedLimits`.
+  the stored and new config differ only in the `okf` section. That section (the former OKF
+  thresholds) is no longer used since 2026-11-21: a PUT body's `config.okf` is never validated
+  and never stored — the save keeps the `okf` the stored row already has (or none), and answers
+  200 either way. The settings responses no longer carry `okfDefaults` / `okfFixedLimits`.
 - `GET …/hook-state` answers 404 when the repo never reported hook state.
-- `GET …/sessions/:sessionId/okf-usage/trail?agent=` (the session OKF tab's agent trail) resolves
-  the same scope, 403 and team rules as `…/okf-usage` (`resolveChangeSurfaceSessionScope`), but
-  answers **404**, not the empty payload, when the session has no visible row in the scope or
-  `agent` is not a node of its tree; missing `agent` → 400. It reparses the node's stored
-  transcript per request (like the facts route) and writes nothing ([okf-usage.md](okf-usage.md)).
 - Each `reports/X` that mirrors an `analytics/X` returns a byte-identical body (same service).
-- `GET …/reports/okf-usage` and `GET …/reports/okf-usage/article?path=` (the per-article
-  drill-down) share the scope and the 403 of `harness-usage` (`resolveUsageScope`) and the OKF
-  team filter. The article route answers 400 without `path`, and 200 with `found: false` (never
-  404) for a `path` that is not a stored KB article in the scope. Both are read-only and resolve
-  the OKF thresholds per section ([okf-usage.md](okf-usage.md)).
+- `GET …/reports/okf-usage` (repo OKF tab) shares the scope and the 403 of `harness-usage`
+  (`resolveUsageScope`); `GET …/sessions/:sessionId/okf-usage` (session OKF tab) the scope and
+  403 of the change-surface session routes, and answers the empty response for a session outside
+  the scope. Both return the same `OkfUsageResponse`, apply the OKF team filter under `?teamId`
+  and are read-only ([okf-usage.md](okf-usage.md)).
+- **Removed 2026-11-21** (answer 404 now): `GET …/reports/okf-usage/article` (per-article
+  drill-down) and `GET …/sessions/:sessionId/okf-usage/trail` (agent trail).
 - Export/import: jobs answer `202 { jobId }` and are polled; uploads are `multipart/form-data`
   field `file`; 422 invalid archive, 409 `{ conflicts[] }`; the download leaves the job in place
   (no GET mutates). `bootstrap-import/*` has no target repo and is scoped by user.
@@ -311,7 +313,8 @@ grep the controller.
 
 - `PATCH /api/v1/teams/:teamId` → 409 when switching to `transparent` with members.
 - `POST /api/v1/teams/:teamId/leave` is only `session`-guarded; an owner gets 400 (transfer first).
-- `POST /api/v1/teams/:teamId/invitations` → 404 `user_not_registered` unless `force: true`;
+- `POST /api/v1/teams/:teamId/invitations` → 404 `user_not_registered` unless `force: true`
+  (in `strict-managed` `force` is ignored, so an unknown email is always 404);
   accepting (`PATCH /api/v1/invitations/:invId`) requires `acknowledgedAccessMode` = the live mode.
 - `DELETE …/repositories/:repoId/link` unlinks only (config goes by FK cascade);
   `DELETE …/repositories/:repoId` also removes the repo row when no other team references it.
@@ -348,6 +351,32 @@ grep the controller.
 **Admin** (rows are metadata only and link to no session data)
 
 - `POST /api/v1/admin/users/:id/delete` is a POST because it carries a body (`confirmEmail`).
+- **Admin user provisioning** (`admin/admin-user-provisioning.controller.ts`, `strict-managed`
+  only): `POST /api/v1/admin/users` (create a password-less user + email a 24 h set-password
+  link; 201, 400 `email_domain_not_allowed` / `team_not_found`, 409 `email_already_registered`,
+  429) and `POST /api/v1/admin/users/:id/password-link` (resend; 200 `{ email_delivery }`, 404
+  `user_not_found`, 409 `password_already_set` / `not_a_provisioned_account`, 429 +
+  `Retry-After`). Guard order: class
+  `@UseGuards(AuthModeGuard, SessionAuthGuard, AdminGuard)` with method
+  `@AllowedAuthModes('strict-managed')`, so `AuthModeGuard` runs **first** and in every other mode
+  each caller — anonymous, user or admin — gets **404**, never 401/403. It is a separate
+  controller so `admin-panel.controller.ts` keeps its own guards. Both count against the
+  calling admin's 100 emails / hour (keyed by admin user id, not IP). Flows: [user-account-flows.md](user-account-flows.md#set-password-links-strict-managed).
+- `GET /api/v1/admin/users` rows carry `passwordSet`, `imported` and `passwordLinkSentAt` in
+  every mode (additive fields).
+- `PATCH /api/v1/admin/users/:id/email` (`AdminService.renameUserEmail()`) retires the user's
+  outstanding reset and confirmation links in every mode; in `strict-managed` it also applies the
+  domain allow-list and clears `email_confirmed_at`.
+- `GET /api/v1/auth/config` carries `passwordRequirement` (the active `PASSWORD_POLICY` rule) in
+  the password modes (additive field). `POST /api/v1/auth/forgot-password` answers 200
+  `{ email_delivery: 'sent' }` also during the per-account cooldown (no 429 that would reveal
+  the account); only the per-IP limits still answer 429.
+- `POST /api/v1/users/:userId/reset-password-link` (legacy admin-generated link) has method-level
+  `@AllowedAuthModes('none', 'password', 'password-confirm', 'azure-oauth')` +
+  `@UseGuards(AuthModeGuard)`. Class guards run first, so in `strict-managed` an admin gets 404
+  while a non-admin still gets 401/403. The admin pending-registration routes
+  (`GET admin/auth/pending-registrations`, `POST …/:id/resend`, `DELETE …/:id`) are gated the same
+  way (404 in `strict-managed`).
 - `GET /api/v1/admin/retention` is `admin-or-team-owner`, not `admin`.
 - Model pricing: model ids contain `/`, so `PUT …/model-pricing/price` and `…/override` carry the
   id in the body; `fetch-anthropic` never answers an HTTP error (`{ result }`), while

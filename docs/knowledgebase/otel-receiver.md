@@ -5,7 +5,7 @@ description: "Why the hook runs its own loopback OTLP/JSON receiver, why it is o
 tags:
   - hooks
   - otel
-timestamp: "2026-11-18T23:00:00+04:00"
+generated: { by: "human:denistsyplakov", at: "2026-11-18T23:00:00+04:00" }
 ---
 
 # OTEL Receiver

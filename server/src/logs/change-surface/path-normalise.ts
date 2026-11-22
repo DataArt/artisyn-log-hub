@@ -234,6 +234,26 @@ function collapseDots(posixPath: string): string {
 }
 
 /**
+ * Collapse a **repo-relative** path (OKF v0.3 pointer resolution, DD-P1): split on `/`, drop
+ * empty and `.` segments, `..` pops the previous segment. Returns `null` when a `..` would climb
+ * above the repo root, `''` for the repo root itself, and the joined path otherwise (no leading or
+ * trailing slash, original case).
+ */
+export function collapseRepoRelative(p: string): string | null {
+  const out: string[] = [];
+  for (const seg of p.split('/')) {
+    if (seg === '' || seg === '.') continue;
+    if (seg === '..') {
+      if (out.length === 0) return null;
+      out.pop();
+      continue;
+    }
+    out.push(seg);
+  }
+  return out.join('/');
+}
+
+/**
  * Repo-relative path of an **absolute** path, in its original case, or `null` (OKF usage, FR-2).
  *
  * Backslashes become `/`, `.` / `..` segments are resolved, then the longest matching candidate

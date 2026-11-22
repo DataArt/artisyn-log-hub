@@ -1,10 +1,12 @@
 import { useState, type FormEvent } from 'react';
 import { Loader2, UserPlus, Mail } from 'lucide-react';
 import { signup, resendConfirmation, ApiError } from '../../api';
+import { weakPasswordMessage } from '../../lib/password-requirement';
 import { useAuth } from '../../context/AuthContext';
 import { useAuthConfig } from '../../hooks/useAuthConfig';
 import { useCooldown } from '../../hooks/useCooldown';
-import { useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
+import { routes } from '../../hooks/useHashRoute';
 import { Button } from '../../ui/button';
 import { Input } from '../../ui/input';
 import {
@@ -58,9 +60,7 @@ export function SignupPage() {
       }
     } catch (err) {
       if (err instanceof ApiError && err.code === 'weak_password') {
-        setConfirmError(
-          err.message || 'Password does not meet the strength requirements.',
-        );
+        setConfirmError(weakPasswordMessage(err.message));
       } else if (
         err instanceof ApiError &&
         err.code === 'email_domain_not_allowed'
@@ -98,6 +98,11 @@ export function SignupPage() {
         );
       }
     }
+  }
+
+  // strict-managed: no self sign-up — only an administrator creates accounts.
+  if (config?.mode === 'strict-managed') {
+    return <Navigate to={routes.login} replace />;
   }
 
   if (pending === 'check-email' || pending === 'delivery-failed') {

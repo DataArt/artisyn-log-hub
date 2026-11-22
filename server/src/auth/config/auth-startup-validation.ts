@@ -16,6 +16,7 @@ const VALID_AUTH_MODES = [
   'password',
   'password-confirm',
   'azure-oauth',
+  'strict-managed',
 ] as const;
 type AuthMode = (typeof VALID_AUTH_MODES)[number];
 
@@ -48,7 +49,7 @@ function validatePublicBaseUrl(): void {
   if (!raw) {
     if (isProduction()) {
       throw new Error(
-        'PUBLIC_BASE_URL environment variable is required in production for AUTH_MODE=password and password-confirm (emailed links are built from it)',
+        `PUBLIC_BASE_URL environment variable is required in production for AUTH_MODE=${process.env.AUTH_MODE ?? 'password'} (emailed links are built from it)`,
       );
     }
     return;
@@ -168,6 +169,44 @@ function validateMode3(): void {
   validateSmtpBlock();
 }
 
+/**
+ * Strict-managed mode: every way in is an emailed link (bootstrap admin,
+ * admin-created users, forgot password), so PUBLIC_BASE_URL is required and
+ * absolute regardless of NODE_ENV. Otherwise the same order as Mode 3.
+ * Exported for the strict-managed admin bootstrap, which runs in
+ * `initializeDatabase()` before the app's own validation.
+ */
+export function validateModeStrictManaged(): void {
+  const baseUrl = process.env.PUBLIC_BASE_URL?.trim();
+  if (!baseUrl) {
+    throw new Error(
+      'PUBLIC_BASE_URL environment variable is required for AUTH_MODE=strict-managed (every way in is an emailed link)',
+    );
+  }
+  if (!isAbsoluteHttpUrl(baseUrl)) {
+    throw new Error(
+      `PUBLIC_BASE_URL environment variable must be an absolute http(s) URL, got: ${baseUrl}`,
+    );
+  }
+
+  // Throws on a malformed list; the parsed value is re-read where a domain is checked.
+  parseAllowedEmailDomains(process.env.ALLOWED_EMAIL_DOMAINS);
+
+  const adminEmail = process.env.ADMIN_CONTACT_EMAIL;
+  if (!adminEmail || adminEmail.trim() === '') {
+    throw new Error(
+      'ADMIN_CONTACT_EMAIL environment variable is required for AUTH_MODE=strict-managed',
+    );
+  }
+  if (!isEmail(adminEmail)) {
+    throw new Error(
+      `ADMIN_CONTACT_EMAIL environment variable must be a valid email address, got: ${adminEmail}`,
+    );
+  }
+
+  validateSmtpBlock();
+}
+
 function validatePasswordPolicy(): void {
   const policy = process.env.PASSWORD_POLICY;
   if (!policy || policy.trim() === '') {
@@ -216,6 +255,9 @@ export function validateAuthStartupConfig(): void {
       break;
     case 'password-confirm':
       validateMode3();
+      break;
+    case 'strict-managed':
+      validateModeStrictManaged();
       break;
   }
 

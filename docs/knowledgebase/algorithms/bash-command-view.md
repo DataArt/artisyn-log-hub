@@ -1,4 +1,9 @@
 ---
+type: "Algorithm"
+title: "Bash command view: layout, file summary, repo-relative paths, highlighting"
+description: "Claude Code's Bash tool commands are long one-liners (`cd <abs>; a && b; for …; done | tail`), often with heredocs and inline `node -e` scripts."
+tags: [algorithm]
+generated: { by: "human:denistsyplakov", at: "2026-11-05T22:03:37+04:00" }
 reviewed: no
 reviewer: none
 ---

@@ -1,4 +1,9 @@
 ---
+type: "Algorithm"
+title: "Work time: how long Claude worked in a session"
+description: "\"Autonomous work time\" is the time Claude spent answering prompts, without the time the session sat idle waiting for the user."
+tags: [algorithm]
+generated: { by: "human:denistsyplakov", at: "2026-11-03T17:31:26+04:00" }
 reviewed: 2026-10-15
 reviewer: ai
 ---

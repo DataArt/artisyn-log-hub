@@ -47,3 +47,9 @@ Folders are named `<YYYY-MM-DD>-<slug>` (the day the task was created).
 - [2026-11-13-ai-work-hub-alpha] Artisyn AI Work Hub — Alpha — archived 2026-11-14
 - [2026-11-17-cc-2-1-326-powershell-wrap] Claude Code 2.1.326 Compatibility of the PowerShell Tool Wrapper and Morning-Check Security Fixes — archived 2026-11-17
 - [2026-11-17-linux-sandbox-tool-wrap] Linux Sandbox Run of the Tool Wrapper on Claude Code 2.1.326 (GH-149 FR-4 Remainder) — closed as won't do (not performed) — archived 2026-11-18
+- [2026-11-11-advisor-evidence-advice] Evidence-Backed Turn-End Cost Advisor — Rock-Solid Advice Only — archived 2026-11-19
+- [2026-11-13-site-log-hub-onepager] Site One-Pager (log-hub-onepager) — archived 2026-11-19
+- [2026-11-18-receiver-upload-queue] Shared Receiver as the Single Log Uploader (Job Queue + Heartbeat) — archived 2026-11-19
+- [2026-11-19-export-import-staging-mount] Mount the Export/Import Staging Dir in the Release Compose — archived 2026-11-20
+- [2026-11-19-okf-v03-support] OKF Tab Support for v0.3 and Any-Version Bundles — archived 2026-11-21
+- [2026-11-13-session-cost-diagnosis] Session Cost Diagnosis Report ("Why Was This Session Expensive") — not implemented, merged into 2026-11-02-session-antipatterns — archived 2026-11-21

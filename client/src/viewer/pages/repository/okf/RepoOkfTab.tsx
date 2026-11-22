@@ -1,55 +1,32 @@
 /**
  * The repository view's "OKF" main tab: how the repo's OKF knowledge bases were read over a
- * period. Filter strip on top; below it either the overview (`RepoOkfOverview`: banner, verdict
- * card, KPI tiles, tree and side lists) or — when `okfArticle` is set — the per-article
- * drill-down (`OkfArticleDrillDown`).
+ * period. Filter strip on top; below it the shared view (`OkfUsageView`: summary line, Versions,
+ * Wrong format, Hot files, Explorer). The tab only fetches and passes `data`.
  *
  * Personal vs team view follows the route (`teamId`), not a toggle (DD-32). Every filter lives
  * in an `okf*` URL param (DD-44) and is applied at once; the query is keyed by the filter state.
- * `okfArticle` is not a filter, so a filter change keeps the drill-down open.
  */
 import { useQuery } from '@tanstack/react-query';
-import { useMemo, useState } from 'react';
+import { useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { Skeleton } from '@/ui/skeleton';
-import { ApiError, fetchRepoOkfUsage } from '../../../api';
+import { fetchRepoOkfUsage } from '../../../api';
 import { toIsoDateBounds } from '../reports/report-url';
-import { OkfArticleDrillDown } from './article/OkfArticleDrillDown';
-import { OkfAnalysisCoverageBanner } from './OkfAnalysisCoverageBanner';
+import { LoadingSkeleton } from '../session-log/okf/SessionOkfStates';
 import { OkfFilterStrip } from './OkfFilterStrip';
-import { RepoOkfOverview } from './RepoOkfOverview';
 import {
-  okfArticleFromParams,
   okfFiltersFromParams,
-  okfThresholdsSettingsParams,
-  writeOkfArticle,
   writeOkfFilters,
   type RepoOkfFilters,
 } from './okf-url-state';
+import { OkfLoadError } from './view/OkfLoadError';
+import { OkfUsageView } from './view/OkfUsageView';
 
 export interface RepoOkfTabProps {
   repoId: number;
   teamId?: number;
 }
 
-function LoadingSkeleton() {
-  return (
-    <div className="space-y-3 p-4" data-testid="okf-loading">
-      <Skeleton className="h-28 w-full" />
-      <div className="grid grid-cols-5 gap-3">
-        {Array.from({ length: 5 }, (_, i) => (
-          <Skeleton key={i} className="h-20" />
-        ))}
-      </div>
-      <Skeleton className="h-64 w-full" />
-    </div>
-  );
-}
-
-function errorMessage(error: Error): string {
-  if (error instanceof ApiError && error.statusCode === 403) return 'No access';
-  return 'Error — KB usage could not be loaded.';
-}
+const NO_BUNDLE_ROOTS: readonly string[] = [];
 
 export function RepoOkfTab({ repoId, teamId }: RepoOkfTabProps) {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -57,23 +34,11 @@ export function RepoOkfTab({ repoId, teamId }: RepoOkfTabProps) {
     () => okfFiltersFromParams(searchParams),
     [searchParams],
   );
-  const article = okfArticleFromParams(searchParams);
-  // The response lists only the selected bundle when one is chosen, so the bundle select keeps
-  // the last full list it saw.
-  const [knownBundles, setKnownBundles] = useState<string[]>([]);
 
   const onChange = (patch: Partial<RepoOkfFilters>) => {
     setSearchParams((prev) => writeOkfFilters(prev, { ...filters, ...patch }), {
       replace: true,
     });
-  };
-  const openArticle = (path: string | null) => {
-    setSearchParams((prev) => writeOkfArticle(prev, path), { replace: true });
-  };
-  // Settings → Analysis, scrolled to the OKF thresholds card. Leaving the tab drops every
-  // `okf*` param, as `setMainTab` does.
-  const openSettings = () => {
-    setSearchParams(okfThresholdsSettingsParams, { replace: true });
   };
 
   const { startDate, endDate } = toIsoDateBounds(
@@ -105,83 +70,23 @@ export function RepoOkfTab({ repoId, teamId }: RepoOkfTabProps) {
   });
   const data = query.data;
 
-  const responseRoots = useMemo(
-    () => (data?.bundles ?? []).map((b) => b.root),
-    [data],
-  );
-  if (
-    filters.bundle === null &&
-    data &&
-    responseRoots.join('\n') !== knownBundles.join('\n')
-  ) {
-    setKnownBundles(responseRoots);
-  }
-  const bundleRoots = filters.bundle === null ? responseRoots : knownBundles;
-
   let body;
-  if (article !== null) {
-    body = (
-      <OkfArticleDrillDown
-        repoId={repoId}
-        teamId={teamId}
-        path={article}
-        filters={filters}
-        onBack={() => openArticle(null)}
-        onOpenArticle={openArticle}
-      />
-    );
-  } else if (query.isLoading) {
+  if (query.isLoading) {
     body = <LoadingSkeleton />;
   } else if (query.error) {
     body = (
-      <div
-        data-testid="okf-error"
-        className="m-4 rounded-md border border-border bg-card p-6 text-center text-sm text-muted-foreground"
-      >
-        {errorMessage(query.error)}
+      <div className="p-4">
+        <OkfLoadError error={query.error} />
       </div>
     );
-  } else if (!data) {
-    body = null;
-  } else if (data.tiles.kbSessions === 0 && data.bundles.length === 0) {
-    const without = data.tiles.sessionsWithoutAnalysis ?? 0;
+  } else if (data) {
     body = (
-      <>
-        <OkfAnalysisCoverageBanner
-          className="mx-4 mt-4"
-          repoId={repoId}
-          teamId={teamId}
-          sessionsWithoutAnalysis={without}
-          sessionsInPeriod={
-            data.tiles.sessionsInPeriod ?? data.tiles.totalSessions
-          }
-          canRecompute={data.canRecompute === true}
-        />
-        <div
-          data-testid="okf-empty"
-          className="p-8 text-center text-sm text-muted-foreground"
-        >
-          <div className="font-medium text-foreground">
-            KB not used in this period
-          </div>
-          <div className="mt-1">
-            No session in the filter read an OKF knowledge base, and no KB
-            snapshot was uploaded.
-          </div>
-        </div>
-      </>
+      <div className="p-4">
+        <OkfUsageView data={data} />
+      </div>
     );
   } else {
-    body = (
-      <RepoOkfOverview
-        repoId={repoId}
-        teamId={teamId}
-        data={data}
-        metric={filters.heat}
-        onOpenArticle={openArticle}
-        onOpenSettings={openSettings}
-      />
-    );
+    body = null;
   }
 
   return (
@@ -191,7 +96,7 @@ export function RepoOkfTab({ repoId, teamId }: RepoOkfTabProps) {
         teamId={teamId}
         filters={filters}
         onChange={onChange}
-        bundleRoots={bundleRoots}
+        bundleRoots={data?.bundleRoots ?? NO_BUNDLE_ROOTS}
       />
       <div className="min-h-0 flex-1 overflow-y-auto">{body}</div>
     </div>

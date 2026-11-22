@@ -5,7 +5,7 @@ description: "Native node:cluster launch (server/src/cluster/), the System Info 
 tags:
   - server
   - cluster
-timestamp: "2026-11-03T00:00:00+04:00"
+generated: { by: "human:denistsyplakov", at: "2026-11-20T00:00:00+04:00" }
 ---
 
 # System Info & Cluster Parallel Launch
@@ -210,7 +210,9 @@ The full set of CWD-relative resolvers `WORKDIR /app/dist` governs: `resolveStag
 (`UPLOAD_QUEUE_DIR` || `upload-queue` → `upload_queue_data`), `SystemInfoService.getLogsDir()`,
 `app-logger.ts`'s `new DailyRotateStream('logs')`, `sql-logger.ts`'s `new DailyRotateSqlStream('logs')`
 and `error-logs.service.ts` (all `logs` → `logs_data`), plus `logs/export-import-zip.ts`
-(`EXPORT_IMPORT_DIR` || `export-import`, deliberately ephemeral with no volume).
+(`EXPORT_IMPORT_DIR` || `export-import`; the release compose mounts it from
+`$LOG_HUB_DATA_DIR/export-import`, so staged export/import zips survive a container recreate until their
+TTL and the dir is writable under a `read_only: true` override).
 
 **A second, code-level cause of the same `ENOENT` symptom (fixed, see below).** Even with the volume
 correctly mounted, `UploadQueueService.reassembleChunks()` used to delete a chunked upload's `.chunkN`

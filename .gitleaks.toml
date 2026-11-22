@@ -40,3 +40,9 @@ description = "Made-up API key a PoC passes to the hook installer to prove it is
 condition = "AND"
 paths = ['''^docs/pocs/2026-11-14-1426-workhub-hook-installer-noninteractive/run\.mjs$''']
 regexes = ['''^pocKEY-7f3a9c1e5b$''']
+
+[[allowlists]]
+description = "Folder path in an algorithm row, read as a generic API key because the field is named pathKey (docs/algorithm-examples/okf-usage-counting.json)"
+condition = "AND"
+paths = ['''^docs/algorithm-examples/okf-usage-counting\.json$''']
+regexes = ['''^docs/private/$''']

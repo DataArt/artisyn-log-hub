@@ -1,4 +1,9 @@
 ---
+type: "Algorithm"
+title: "Session time span: from the first prompt to the last activity"
+description: "A session's start and end time (`logs.start_time` / `logs.end_time` of its `artisyn` log) give the span the user sees in the sessions list and the session header, and they place the session in date filters and analytics."
+tags: [algorithm]
+generated: { by: "human:denistsyplakov", at: "2026-11-03T17:31:26+04:00" }
 reviewed: 2026-10-21
 reviewer: ai
 ---

@@ -6,7 +6,9 @@
 //      server/src/public/static (content hash + mtimes) — DD C14;
 //   3. build the stand (skipped when its input hash is current, or with --skip-build);
 //   4. for each selected mode: startStand → playwright -c playwright.scenarios.config.ts
-//      --project mode-<x> [--project corpus on the mode-A stand] (STAND_URL / STAND_MODE / STAND_SCHEMA / STAND_RUN_DIR in env) → stopStand.
+//      --project mode-<x> [--project corpus on the mode-A stand] (STAND_URL / STAND_MODE / STAND_SCHEMA / STAND_RUN_DIR /
+//      STAND_ADMIN_EMAIL in env) → stopStand. Mode D (strict-managed) runs in one pass; its stand has
+//      already restarted once when Playwright starts.
 //      Mode B runs in two passes on two fresh stands, because login backoff counts per IP and
 //      every scenario comes from 127.0.0.1 (DD C2): `--grep-invert @backoff`, then `--grep @backoff`
 //      (the second pass is skipped when no test carries the tag);
@@ -19,7 +21,7 @@
 // tests/corpus/, impl-plan DD I1–I3) always runs on the mode-A stand: in the same pass as `mode-a`
 // when both are selected, otherwise in a pass of its own. `--only contract` skips the stand build.
 //
-// Usage: node scripts/scenarios/run.mjs [--mode a,b,c] [--grep <re>] [--skip-build] [--only scenarios,corpus,contract]
+// Usage: node scripts/scenarios/run.mjs [--mode a,b,c,d] [--grep <re>] [--skip-build] [--only scenarios,corpus,contract]
 // Exit codes: 0 all green, 1 a step failed or the dev DB/static changed, 2 usage/preflight error.
 import { spawn, spawnSync } from 'node:child_process';
 import crypto from 'node:crypto';
@@ -261,6 +263,8 @@ function runPlaywright(pass, stand, env) {
         STAND_MODE: stand.mode,
         STAND_SCHEMA: stand.schema,
         STAND_RUN_DIR: stand.runDir,
+        // Mode D: the strict-managed bootstrap admin (ADMIN_CONTACT_EMAIL of the stand); empty elsewhere.
+        STAND_ADMIN_EMAIL: stand.adminEmail ?? '',
         STAND_REPORT_LABEL: pass.label,
       },
     });
@@ -376,7 +380,7 @@ export async function main(argv = process.argv.slice(2)) {
     opts = parseArgs(argv);
   } catch (err) {
     process.stderr.write(`test:scenarios: ${err.message}\n` +
-      'Usage: npm run test:scenarios -- [--mode a,b,c] [--grep <re>] [--skip-build] [--only scenarios,corpus,contract]\n');
+      'Usage: npm run test:scenarios -- [--mode a,b,c,d] [--grep <re>] [--skip-build] [--only scenarios,corpus,contract]\n');
     return USAGE_EXIT_CODE;
   }
 

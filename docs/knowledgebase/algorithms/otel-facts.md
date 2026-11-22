@@ -1,4 +1,9 @@
 ---
+type: "Algorithm"
+title: "OTEL facts: call structure, event time, call key, buckets, intervals, spans, query sources, account"
+description: "The OTEL tabs (repository, session, team) show what Claude Code's telemetry reports: every API call with its cost, where it came from (main thread, sub-agent, or a hidden call no transcript records), when it happened, and the trace spans of each turn."
+tags: [algorithm]
+generated: { by: "human:denistsyplakov", at: "2026-11-04T22:43:28+04:00" }
 reviewed: no
 reviewer: none
 ---

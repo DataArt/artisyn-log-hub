@@ -5,7 +5,7 @@ description: "Local hook-event stream (Bun/SQLite/Vue) with a live multi-agent t
 tags:
   - competitive-research
   - hook-dashboard
-timestamp: "2026-11-01T00:00:00+04:00"
+generated: { by: "human:denistsyplakov", at: "2026-11-01T00:00:00+04:00" }
 ---
 
 # Multi-Agent Observability (claude-code-hooks-multi-agent-observability)

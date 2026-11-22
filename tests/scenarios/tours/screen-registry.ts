@@ -25,8 +25,11 @@
  *   - The settings sub-tab id is `session-attribution` (06: «Session Attributes»).
  */
 
-/** Stand mode, as in `tests/scenarios/modes.ts` (repeated here to keep the module import-free). */
-export type RegistryMode = 'a' | 'b' | 'c';
+/**
+ * Stand mode, as in `tests/scenarios/modes.ts` (repeated here to keep the module import-free).
+ * No row lists `d` (strict-managed): the tours do not run on the mode-D stand.
+ */
+export type RegistryMode = 'a' | 'b' | 'c' | 'd';
 
 /** Who looks at the screen (06 §2.5). */
 export type TourRole =
@@ -164,7 +167,7 @@ const ANON_ROWS: ScreenRow[] = [
     expectSelector: 'input[placeholder="Password"]',
     docRef: {
       file: `${HELP}/security-hardening.md`,
-      heading: '3.3 Passwords (Modes 2 and 3)',
+      heading: '3.3 Passwords (Modes 2 and 3, `strict-managed`)',
     },
     screenshot: true,
   },
@@ -178,7 +181,7 @@ const ANON_ROWS: ScreenRow[] = [
     expectText: 'Create account',
     docRef: {
       file: `${HELP}/security-hardening.md`,
-      heading: '3.3 Passwords (Modes 2 and 3)',
+      heading: '3.3 Passwords (Modes 2 and 3, `strict-managed`)',
     },
   },
   {
@@ -209,7 +212,7 @@ const ANON_ROWS: ScreenRow[] = [
     modes: PASSWORD_MODES,
     title: 'Reset password (garbage link): a readable error, no crash',
     negative: true,
-    expectText: 'Invalid or unknown token',
+    expectText: 'This link is invalid or has expired.',
     expectedNetwork: [{ url: '/api/v1/auth/reset-password$', status: 400 }],
   },
   {
@@ -617,7 +620,7 @@ const REPORT_ROWS: ScreenRow[] = REPORTS.map(([report, title, extra]): ScreenRow
 
 /**
  * The repo OKF tab over the golden two weeks. No golden session has an OKF snapshot, so the tab
- * shows its snapshot-less state (or «KB not used in this period»); S-REPO-16 and S-REPT-01 walk
+ * is the one-line «No KB snapshot — update the hook.» state; S-REPO-16 and S-REPT-01 walk
  * the filled tab.
  */
 const OKF_REPO_ROW: ScreenRow = {
@@ -753,7 +756,7 @@ const SESSION_TAB_ROWS: Array<Omit<ScreenRow, 'story' | 'role' | 'modes' | 'rout
     expectTestId: 'harness-tree-row',
   },
   {
-    // The golden tour session has no OKF bundle and reads no KB article: the tab's empty state
+    // The golden tour session has no KB snapshot: the tab's one-line «No KB snapshot» state
     // is the meaningful screen there; S-SESS-09 walks the filled tab.
     id: 'session.okf',
     query: `${SESSION_QUERY}&tab=okf`,
@@ -762,7 +765,7 @@ const SESSION_TAB_ROWS: Array<Omit<ScreenRow, 'story' | 'role' | 'modes' | 'rout
     expectTestId: 'session-okf-tab',
     docRef: { file: `${HELP}/okf-tab.md`, heading: 'Session OKF tab' },
     dataOptional: true,
-    emptyText: 'No OKF knowledge base',
+    emptyText: 'No KB snapshot',
   },
   {
     // The repo Tools/MCP tab narrowed to this session. Its frame is the anchor; whether the
@@ -1080,6 +1083,7 @@ const NON_MEMBER_ROWS: ScreenRow[] = (
 const HELP_ARTICLES: Array<[string, string]> = [
   ['install-server', 'Install the server'],
   ['small-team-setup', 'Quick setup for a small team'],
+  ['admin-managed-setup', 'Setup where only the admin creates accounts'],
   ['install-hook', 'Install Telemetry Hook'],
   ['getting-started', 'Your first session'],
   ['authentication-modes', 'Authentication modes'],

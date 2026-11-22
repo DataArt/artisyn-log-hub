@@ -131,7 +131,11 @@ function forgetOkfSnapshot(workDir, okfSnapshotId) {
 /**
  * @typedef {Object} OkfHashCache
  * @property {string} treeKey - sha256 of the sorted `(path, mtimeMs, size)` list it was built from
- * @property {Record<string, [number, number, string]>} files - path → `[mtimeMs, size, sha256]`
+ * @property {Record<string, [number, number, string, Object]>} files - path →
+ *   `[mtimeMs, size, sha256, meta]` (hook 3.1.0+, OKF v0.3 DD-H6; `meta` is the file's front-matter
+ *   metadata, see `OkfFileMeta` in `okf-snapshot.js`). Hooks before 3.1.0 wrote 3-element entries
+ *   and read only the first three elements, so both shapes share `OKF_STATE_VERSION` 1: a newer
+ *   hook treats a 3-element entry as a miss and re-reads that file once.
  */
 
 /**

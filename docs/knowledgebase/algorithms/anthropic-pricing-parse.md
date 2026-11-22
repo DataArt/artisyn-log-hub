@@ -1,4 +1,9 @@
 ---
+type: "Algorithm"
+title: "Anthropic pricing page parse"
+description: "Turns the markdown rendering of Anthropic's official pricing page into one rate row per Claude model, so the hourly fetch can keep `model_pricing` current."
+tags: [algorithm]
+generated: { by: "human:denistsyplakov", at: "2026-11-03T17:31:26+04:00" }
 reviewed: no
 reviewer: none
 ---

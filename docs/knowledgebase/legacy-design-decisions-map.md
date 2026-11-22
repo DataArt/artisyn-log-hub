@@ -6,7 +6,7 @@ tags:
   - legacy
   - task-ids
   - reference
-timestamp: "2026-11-03T00:00:00+04:00"
+generated: { by: "human:denistsyplakov", at: "2026-11-03T00:00:00+04:00" }
 ---
 
 # Legacy Design Decisions Map

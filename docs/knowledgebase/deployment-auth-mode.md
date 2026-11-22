@@ -6,7 +6,7 @@ tags:
   - auth
   - azure
   - deployment
-timestamp: "2026-10-14T18:00:00+04:00"
+generated: { by: "human:denistsyplakov", at: "2026-10-14T18:00:00+04:00" }
 ---
 
 # Deployment Auth Mode — running a shared instance on `azure-oauth`
@@ -32,6 +32,11 @@ mode is not a smaller fix — it is a different product, and it does not actuall
   and also when the relay cannot be reached at startup (`MailService.onModuleInit()` throws
   `SMTP relay <host>:<port> is unreachable; ...`, the process exits and the cluster crash budget
   stops the instance).
+- **`strict-managed` can't let existing users in either.** Its login is the same email + password
+  check, so password-less Azure accounts still cannot sign in until each one gets a link. It also
+  refuses to start without `PUBLIC_BASE_URL`/`ADMIN_CONTACT_EMAIL`/`SMTP_HOST`/`SMTP_PORT`/
+  `SMTP_FROM` or with an unreachable relay, and on first start it emails a set-password link to
+  `ADMIN_CONTACT_EMAIL` (or aborts startup when that send fails).
 - **Mode 1 (`none`) is unusable on any remote host.** `POST /api/v1/auth/identify` is gated to
   `127.0.0.1`/`::1` via `isLocalhostRequest()` (`server/src/auth/utils/localhost.util.ts`) and 403s
   every non-local caller — and if it *weren't* gated, it would mean anyone could sign in as anyone.
@@ -121,5 +126,5 @@ Fix it in Azure or in the deploy config — never by changing the mode. Two fiel
   platform for this app's confidential-client exchange (`@azure/msal-node` + `client_secret`) and a
   plausible source of that intermittency.
 
-See `authorization-and-authentificaiton.md` for what the four `AUTH_MODE` values are and how per-mode
-route gating works.
+See `authorization-and-authentificaiton.md` for what the five `AUTH_MODE` values are (`none`,
+`password`, `password-confirm`, `azure-oauth`, `strict-managed`) and how per-mode route gating works.

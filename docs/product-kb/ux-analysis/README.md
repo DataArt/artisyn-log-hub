@@ -1,3 +1,11 @@
+---
+type: "Research"
+title: "UX analysis: making the UI digestible"
+description: "How to make the Log Hub UI easier to digest without removing panels: five agent studies (personas, IA, wayfinding, density, industry patterns) and the resulting wave 1–2 ideas, 2026-11-01."
+tags: [ux-research, product]
+generated: { by: "human:denistsyplakov", at: "2026-11-06T15:26:59+04:00" }
+---
+
 # UX analysis: making the UI digestible
 
 Date: 2026-11-01. Status: ideas, not yet tasks.

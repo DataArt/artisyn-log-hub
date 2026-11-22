@@ -1,4 +1,9 @@
 ---
+type: "Algorithm"
+title: "Work Hub devcontainer subset"
+description: "A workspace's container is described by `.devcontainer/devcontainer.json` in its repo. Work Hub understands a small subset of that format: which image (or Dockerfile) to use, extra environment variables and a command to run once after the container is created."
+tags: [algorithm]
+generated: { by: "human:denistsyplakov", at: "2026-11-14T14:41:14+04:00" }
 reviewed: no
 reviewer: none
 ---

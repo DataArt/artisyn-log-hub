@@ -1,3 +1,9 @@
+---
+type: "Task"
+title: "KB Analysis Skill — On-Demand Opus Analysis of Past Sessions"
+description: "skill shipped with the hooks: picks sessions, analyses them with parallel specialised Opus passes against the KB as of each session, leaves a local ranked report of KB and entry fixes; nothing uploaded"
+---
+
 # 2026-10-27: KB Analysis Skill — On-Demand Opus Analysis of Past Sessions
 
 **Status:** todo

@@ -7,7 +7,7 @@ tags:
   - client
   - build
   - pricing
-timestamp: "2026-10-28T00:00:00+04:00"
+generated: { by: "human:denistsyplakov", at: "2026-10-28T00:00:00+04:00" }
 ---
 
 # Repo-Local Packages (`packages/`)

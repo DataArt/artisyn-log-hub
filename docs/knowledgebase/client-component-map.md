@@ -5,7 +5,7 @@ description: "Folder-level index of client/src: what each folder holds, its entr
 tags:
   - client
   - ui
-timestamp: "2026-11-10T00:00:00+04:00"
+generated: { by: "ai:claude", at: "2026-11-21T22:36:45+04:00" }
 ---
 
 # Client Components Structure
@@ -84,9 +84,9 @@ preferences, and `RepositoryTeamWideTabs.tsx` renders every main tab but Session
 | Spend | `../spend/SpendTab.tsx`, mounted outside `RepositoryTeamWideTabs` so every member reaches it — [`budgets.md`](budgets.md) |
 | Reports | `reports/` (`ReportsPanel.tsx`, `report-catalog.ts` = the report tree; every report has an on-page document and a react-pdf export, shared PDF primitives in `reports/pdf/`, the Executive Summary in `reports/executive-summary/`, the Budget report in `BudgetReport.tsx`) — [`executive-summary-report.md`](executive-summary-report.md) |
 | Tools/MCP | `tools/` (`RepoToolsTab.tsx`, also the session Tools/MCP tab) — [`tool-monitoring.md`](tool-monitoring.md) |
-| OKF | `okf/` (`RepoOkfTab.tsx`, `RepoOkfOverview.tsx`, tiles, hot files, histogram, `OkfUpkeepPanel.tsx`, `OkfAnalysisCoverageBanner.tsx`; URL state `okf-url-state.ts`; the tree and cards are shared from `session-log/okf/`); `okf/article/` = the per-article drill-down (`OkfArticleDrillDown.tsx`, `OkfPointerTable.tsx`, `OkfSignalBlocks.tsx`, URL param `okfArticle`) — [`okf-usage.md`](okf-usage.md) |
+| OKF | `okf/` (`RepoOkfTab.tsx` — fetch only, `OkfFilterStrip.tsx`, URL state `okf-url-state.ts`); `okf/view/` = the view shared with the session OKF tab (`OkfUsageView.tsx`: `OkfSummaryLine.tsx`, `OkfVersionsBlock.tsx`, `OkfWrongFormatBlock.tsx`, `OkfHotFilesTable.tsx`, `OkfExplorer.tsx` + `OkfExplorerRow.tsx` over the pure `okf-explorer-tree.ts`, the one-line states `OkfNoSnapshotLine.tsx` / `OkfLoadError.tsx`, `OkfTip.tsx`, texts and constants `okf-view-text.ts`) — [`okf-usage.md`](okf-usage.md) |
 | OTEL | `otel/` (`RepoOtelTab.tsx` and the OTEL data layer shared with the session and team tabs) — [`otel-tabs.md`](otel-tabs.md) |
-| Settings | `RepositorySettings.tsx` + its sub-tab bodies in the same folder (the OKF thresholds card: `OkfThresholdsSection.tsx`, `OkfCodeRootsInput.tsx`, `okf-thresholds-form.ts`); Import/Export in `export-import/` — [`session-export-import.md`](session-export-import.md) |
+| Settings | `RepositorySettings.tsx` + its sub-tab bodies in the same folder; Import/Export in `export-import/` — [`session-export-import.md`](session-export-import.md) |
 
 The **session detail pane** and its tab bar live in this folder, not in `session-log/`:
 
@@ -121,7 +121,7 @@ One folder per session tab; flat files are the Logs tab and the shared parsing. 
 | `change-surface/` | Change surface tab | [`change-surface.md`](change-surface.md) |
 | `harness-usage/` | Harness usage tab | [`harness-usage-tab.md`](harness-usage-tab.md) |
 | `sysctx-anatomy/` | System context anatomy tab (`sysctx`) | [`sysctx-anatomy-tab.md`](sysctx-anatomy-tab.md) |
-| `okf/` | Session OKF tab; verdict card (with `OkfFindingLine.tsx`, `OkfThresholdsChip.tsx`), KB folder (bundle) cards, value-signals tile, Read top 5 and tree shared with the repo tab (the article drill-down is in `repository/okf/article/`) | [`okf-usage.md`](okf-usage.md) |
+| `okf/` | Session OKF tab: `SessionOkfTab.tsx` (fetch only) and `SessionOkfStates.tsx` (`LoadingSkeleton`, also used by the repo tab); everything it shows is the shared view in `repository/okf/view/` | [`okf-usage.md`](okf-usage.md) |
 | `otel/` | Session OTEL tab (traces, waterfall) | [`otel-tabs.md`](otel-tabs.md) |
 
 ---
@@ -165,7 +165,7 @@ pages; a page-only helper stays next to its page.
 | `chart-colors.ts`, `cache-ratio-ui.ts`, `change-surface-ui.ts` | Shared chart colours and band legends |
 | `semver.ts`, `release-versions.ts` | Version comparison for the Claude Code version checks — [`claude-version-check.md`](claude-version-check.md) |
 | `bash-view/` | Loader of the tree-sitter Bash parser (logic is `packages/bash-view`) |
-| `okf/`, `tools/` | Strings shared by the OKF tabs (`okf-verdict-text.ts`, the verdict Checks lines and the A/B rule split `okf-check-text.ts`, the FR-16 action lines `okf-action-text.ts`, agent names `okf-agent-label.ts`); string truncation |
+| `okf/`, `tools/` | Display formats of the OKF tabs (`okf-format.ts`: ≈ tokens, ≈ $, spend, KB share — rules in [`algorithms/okf-usage-counting.md`](algorithms/okf-usage-counting.md)); string truncation |
 
 ---
 

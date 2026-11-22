@@ -8,6 +8,9 @@
  *     `OKF_FRONT_MATTER_READ_BYTES` bytes, between `---` lines) carries an `okf_version:` key. Every
  *     `.md` file under a bundle root belongs to the deepest bundle root containing it. Links inside
  *     an index are never followed.
+ *   - OKF v0.3 (hook 3.1.0, plan `2026-11-19-okf-v03-support` DD-H1..H6): the root `index.md`'s
+ *     `okf_version` / `title` / `description` become bundle fields and every bundle file carries its
+ *     front-matter `meta`; all optional, so the server accepts snapshots with and without them.
  *   - The walk starts at the project (git) root and skips `.git`, `node_modules`, symlinked
  *     directories, the built-in `OKF_DEFAULT_EXCLUDE` and every `config.okf.exclude` glob.
  *   - Each file's `ignored` flag comes from ONE `git check-ignore --stdin -z` call; exit 1 means
@@ -23,12 +26,34 @@
  * @property {boolean} ignored
  * @property {number} size - bytes on disk
  * @property {string} hash - sha256 hex of the file content
+ * @property {OkfFileMeta} [meta] - OKF v0.3 DD-H3 (hook 3.1.0+); absent from older hooks and when
+ *   the DD-H5 size guard dropped it
+ *
+ * @typedef {Object} OkfFileMeta - front matter of the file's first `OKF_FRONT_MATTER_READ_BYTES`
+ * @property {boolean} frontMatter - a closed `---` block opens the file
+ * @property {boolean} hasGenerated - a top-level `generated:` key (OKF v0.3)
+ * @property {boolean} hasTimestamp - a top-level `timestamp:` key (OKF v0.1)
+ * @property {string} [type]
+ * @property {string} [status]
+ * @property {string} [superseded_by]
+ * @property {string} [stale_after]
  *
  * @typedef {Object} OkfSnapshotBundle
  * @property {string} root - repo-relative folder of the bundle's `index.md` (`''` for the repo root)
  * @property {string} index - repo-relative path of the bundle's `index.md`
  * @property {boolean} ignored - the `index.md`'s own flag
  * @property {OkfSnapshotFile[]} files
+ * @property {string} [okfVersion] - OKF v0.3 DD-H1: the root `index.md`'s `okf_version` value
+ * @property {string} [title] - OKF v0.3 DD-H1: the root `index.md`'s `title`
+ * @property {string} [description] - OKF v0.3 DD-H1: the root `index.md`'s `description`
+ *
+ * @typedef {Object} DetectedOkfBundle
+ * @property {string} root
+ * @property {string} index
+ * @property {string[]} files
+ * @property {string} [okfVersion]
+ * @property {string} [title]
+ * @property {string} [description]
  *
  * @typedef {Object} OkfSnapshot
  * @property {'okf-snapshot'} type
@@ -48,8 +73,41 @@ const OKF_SNAPSHOT_SCHEMA_VERSION = 1;
 /** DD-18: more bundle files than this → no snapshot is sent (logged). */
 const OKF_SNAPSHOT_MAX_FILES = 20000;
 
-/** DD-18: how much of an `index.md` is read to look for the `okf_version:` front-matter key. */
-const OKF_FRONT_MATTER_READ_BYTES = 512;
+/**
+ * DD-18 / OKF v0.3 DD-H1: how much of a file's head is read for its front matter — the
+ * `okf_version:` detection key of an `index.md` and the metadata of every bundle file.
+ */
+const OKF_FRONT_MATTER_READ_BYTES = 8192;
+
+/** OKF v0.3 DD-H2: a front-matter scalar longer than this is cut to this many characters. */
+const OKF_META_VALUE_MAX_CHARS = 200;
+
+/**
+ * OKF v0.3 DD-H5: a snapshot body with metadata larger than this is sent without the metadata
+ * (bundle `okfVersion` / `title` / `description` and file `meta`), below the server's cap.
+ */
+const OKF_SNAPSHOT_META_BUDGET_BYTES = 8 * 1024 * 1024;
+
+/** OKF v0.3 DD-H2: the front-matter keys whose scalar value is kept. */
+const OKF_META_SCALAR_KEYS = new Set([
+  'okf_version',
+  'title',
+  'description',
+  'type',
+  'status',
+  'superseded_by',
+  'stale_after',
+]);
+
+/** OKF v0.3 DD-H3: the scalar keys a file's `meta` carries, in the snapshot-id order (DD-H4). */
+const OKF_FILE_META_SCALAR_KEYS = ['type', 'status', 'superseded_by', 'stale_after'];
+
+/** OKF v0.3 DD-H1: the bundle-root `index.md` keys that become bundle fields, in id order (DD-H4). */
+const OKF_BUNDLE_META_FIELDS = [
+  ['okf_version', 'okfVersion'],
+  ['title', 'title'],
+  ['description', 'description'],
+];
 
 /** DD-18: budget of the single `git check-ignore` call. */
 const OKF_CHECK_IGNORE_TIMEOUT_MS = 5000;
@@ -180,6 +238,126 @@ function hasOkfFrontMatter(head) {
   return false;
 }
 
+/** Unquoted scalar values that mean "no value" (null / empty / a block scalar marker). */
+const OKF_EMPTY_SCALARS = new Set(['', 'null', '~', '|', '|-', '>', '>-']);
+
+/**
+ * OKF v0.3 DD-H2: normalise the raw text after `key:` to a single scalar, or `undefined`.
+ * @param {string} raw
+ * @returns {string|undefined}
+ */
+function normaliseOkfScalar(raw) {
+  const trimmed = raw.trim();
+  let value;
+  const q = trimmed[0];
+  const close = q === '"' || q === "'" ? trimmed.indexOf(q, 1) : -1;
+  if (close > 0) {
+    value = trimmed.slice(1, close).trim();
+    if (value === '') return undefined;
+  } else {
+    // A quote that never closes, or a flow sequence / mapping, is not a scalar: absent, not garbage.
+    if (q === '"' || q === "'" || q === '[' || q === '{') return undefined;
+    const hash = raw.search(/\s#/);
+    value = (hash >= 0 ? raw.slice(0, hash) : raw).trim();
+    if (OKF_EMPTY_SCALARS.has(value)) return undefined;
+  }
+  return value.length > OKF_META_VALUE_MAX_CHARS ? value.slice(0, OKF_META_VALUE_MAX_CHARS) : value;
+}
+
+/**
+ * OKF v0.3 DD-H2: parse the YAML front matter at the start of a file head with a line scanner (no
+ * YAML library). Only top-level keys count (no leading whitespace); the first occurrence of a key
+ * wins. An unclosed block (no closing `---` inside the head) yields nothing — metadata ignored.
+ *
+ * @param {string} head - the file head, decoded as UTF-8
+ * @returns {{ frontMatter: boolean, hasGenerated: boolean, hasTimestamp: boolean, fields: Record<string, string> }}
+ */
+function parseOkfFrontMatter(head) {
+  const none = { frontMatter: false, hasGenerated: false, hasTimestamp: false, fields: {} };
+  if (typeof head !== 'string' || head === '') return none;
+  const text = head.charCodeAt(0) === 0xfeff ? head.slice(1) : head;
+  const lines = text.split('\n').map((l) => (l.endsWith('\r') ? l.slice(0, -1) : l));
+  if (lines[0].trim() !== '---') return none;
+  let hasGenerated = false;
+  let hasTimestamp = false;
+  /** @type {Record<string, string>} */
+  const fields = {};
+  const seen = new Set();
+  for (let i = 1; i < lines.length; i++) {
+    const line = lines[i];
+    if (line.trim() === '---') return { frontMatter: true, hasGenerated, hasTimestamp, fields };
+    const m = /^([A-Za-z_][A-Za-z0-9_-]*)\s*:(.*)$/.exec(line);
+    if (!m) continue;
+    const key = m[1];
+    if (seen.has(key)) continue;
+    seen.add(key);
+    if (key === 'generated') hasGenerated = true;
+    else if (key === 'timestamp') hasTimestamp = true;
+    if (!OKF_META_SCALAR_KEYS.has(key)) continue;
+    const value = normaliseOkfScalar(m[2]);
+    if (value !== undefined) fields[key] = value;
+  }
+  return none;
+}
+
+/**
+ * OKF v0.3 DD-H3: a bundle file's `meta` from its head — the three booleans always, each scalar
+ * key only when present.
+ * @param {string} head
+ * @returns {OkfFileMeta}
+ */
+function fileMetaOf(head) {
+  const parsed = parseOkfFrontMatter(head);
+  /** @type {OkfFileMeta} */
+  const meta = {
+    frontMatter: parsed.frontMatter,
+    hasGenerated: parsed.hasGenerated,
+    hasTimestamp: parsed.hasTimestamp,
+  };
+  for (const key of OKF_FILE_META_SCALAR_KEYS) {
+    if (typeof parsed.fields[key] === 'string') meta[key] = parsed.fields[key];
+  }
+  return meta;
+}
+
+/** OKF v0.3 DD-H3: the boolean keys of a file's `meta`, in the snapshot-id order (DD-H4). */
+const OKF_FILE_META_BOOLEAN_KEYS = ['frontMatter', 'hasGenerated', 'hasTimestamp'];
+
+/** @param {*} v @returns {boolean} a plain (non-array, non-null) object */
+function isPlainObject(v) {
+  return !!v && typeof v === 'object' && !Array.isArray(v);
+}
+
+/**
+ * OKF v0.3 DD-H4: `meta` projected to its known keys in the fixed order
+ * `frontMatter, hasGenerated, hasTimestamp, type, status, superseded_by, stale_after`, absent (or
+ * wrongly typed) keys omitted; `undefined` when it is not an object.
+ * @param {*} meta
+ * @returns {Record<string, boolean|string>|undefined}
+ */
+function projectFileMeta(meta) {
+  if (!isPlainObject(meta)) return undefined;
+  /** @type {Record<string, boolean|string>} */
+  const out = {};
+  for (const key of OKF_FILE_META_BOOLEAN_KEYS) {
+    if (typeof meta[key] === 'boolean') out[key] = meta[key];
+  }
+  for (const key of OKF_FILE_META_SCALAR_KEYS) {
+    if (typeof meta[key] === 'string') out[key] = meta[key];
+  }
+  return out;
+}
+
+/**
+ * OKF v0.3 DD-H6: whether a cached `meta` (4th cache-entry element) is usable as is — an object
+ * with the three booleans; anything else is a cache miss (re-read once).
+ * @param {*} meta
+ * @returns {boolean}
+ */
+function isCachedFileMeta(meta) {
+  return isPlainObject(meta) && OKF_FILE_META_BOOLEAN_KEYS.every((k) => typeof meta[k] === 'boolean');
+}
+
 /** @param {string} absFile @returns {string} the file head, or '' when unreadable */
 function readHead(absFile) {
   let fd;
@@ -213,13 +391,14 @@ function isMarkdownName(name) {
  * @param {string} projectRoot
  * @param {string[]} [exclude] - globs applied in addition to nothing else (the caller adds
  *   `OKF_DEFAULT_EXCLUDE`; see {@link buildOkfSnapshot})
- * @returns {Array<{ root: string, index: string, files: string[] }>} sorted by `root`, files sorted
+ * @returns {DetectedOkfBundle[]} sorted by `root`, files sorted; `okfVersion` / `title` /
+ *   `description` (OKF v0.3 DD-H1) only when the root `index.md` front matter carries them
  */
 function detectOkfBundles(projectRoot, exclude = []) {
   const isExcluded = compileExclude(Array.isArray(exclude) ? exclude : []);
   /** @type {string[]} */
   const mdFiles = [];
-  /** @type {Map<string, string>} bundle root folder ('' = repo root) → its index.md path */
+  /** @type {Map<string, { index: string, fields: Record<string, string> }>} bundle root folder ('' = repo root) → its index.md path + front-matter fields */
   const roots = new Map();
 
   /** @param {string} absDir @param {string} relDir */
@@ -253,8 +432,9 @@ function detectOkfBundles(projectRoot, exclude = []) {
       if (!isFile || !isMarkdownName(e.name)) continue;
       if (isExcluded(rel)) continue;
       mdFiles.push(rel);
-      if (e.name.toLowerCase() === 'index.md' && hasOkfFrontMatter(readHead(path.join(absDir, e.name)))) {
-        roots.set(relDir, rel);
+      if (e.name.toLowerCase() === 'index.md') {
+        const head = readHead(path.join(absDir, e.name));
+        if (hasOkfFrontMatter(head)) roots.set(relDir, { index: rel, fields: parseOkfFrontMatter(head).fields });
       }
     }
   }
@@ -264,9 +444,16 @@ function detectOkfBundles(projectRoot, exclude = []) {
 
   // Deepest root first, so the first match below is the deepest root containing the file.
   const byDepth = [...roots.keys()].sort((a, b) => b.length - a.length);
-  /** @type {Map<string, { root: string, index: string, files: string[] }>} */
+  /** @type {Map<string, DetectedOkfBundle>} */
   const bundles = new Map();
-  for (const [root, index] of roots) bundles.set(root, { root, index, files: [] });
+  for (const [root, { index, fields }] of roots) {
+    /** @type {DetectedOkfBundle} */
+    const bundle = { root, index, files: [] };
+    for (const [key, field] of OKF_BUNDLE_META_FIELDS) {
+      if (typeof fields[key] === 'string') bundle[field] = fields[key];
+    }
+    bundles.set(root, bundle);
+  }
   for (const file of mdFiles) {
     const owner = byDepth.find((root) => root === '' || file.startsWith(`${root}/`));
     if (owner === undefined) continue;
@@ -316,6 +503,11 @@ function checkIgnored(projectRoot, relPaths, log) {
  * by `path`, projected to `{root, index, ignored, files:[{path, ignored, size, hash}]}`. Input
  * order and any extra field (e.g. an mtime) never change the id.
  *
+ * OKF v0.3 DD-H4: a bundle's `okfVersion`, `title`, `description` are appended (in that order)
+ * only when they are strings, and a file's `meta` only when it is an object, its keys projected in
+ * a fixed order — so a snapshot without them (an older hook, or the DD-H5 size guard) keeps
+ * exactly the id it had before 3.1.0.
+ *
  * @param {OkfSnapshotBundle[]} bundles
  * @returns {string} 64-char lowercase hex
  */
@@ -323,14 +515,27 @@ function computeOkfSnapshotId(bundles) {
   const list = Array.isArray(bundles) ? bundles : [];
   const canon = [...list]
     .sort((a, b) => cmpStr(a.root, b.root))
-    .map((b) => ({
-      root: b.root,
-      index: b.index,
-      ignored: b.ignored === true,
-      files: [...(Array.isArray(b.files) ? b.files : [])]
-        .sort((x, y) => cmpStr(x.path, y.path))
-        .map((f) => ({ path: f.path, ignored: f.ignored === true, size: f.size, hash: f.hash })),
-    }));
+    .map((b) => {
+      /** @type {Record<string, *>} */
+      const cb = {
+        root: b.root,
+        index: b.index,
+        ignored: b.ignored === true,
+        files: [...(Array.isArray(b.files) ? b.files : [])]
+          .sort((x, y) => cmpStr(x.path, y.path))
+          .map((f) => {
+            /** @type {Record<string, *>} */
+            const cf = { path: f.path, ignored: f.ignored === true, size: f.size, hash: f.hash };
+            const meta = projectFileMeta(f.meta);
+            if (meta) cf.meta = meta;
+            return cf;
+          }),
+      };
+      for (const [, field] of OKF_BUNDLE_META_FIELDS) {
+        if (typeof b[field] === 'string') cb[field] = b[field];
+      }
+      return cb;
+    });
   return sha256Hex(JSON.stringify(canon));
 }
 
@@ -346,19 +551,26 @@ function computeOkfSnapshotId(bundles) {
  * ignored flags — `git check-ignore` runs on every build, since `.gitignore` can change without
  * any KB file changing.
  *
+ * OKF v0.3 DD-H3/DD-H6: each file's front-matter `meta` comes from the first
+ * `OKF_FRONT_MATTER_READ_BYTES` of the same read, and is cached as the 4th element of the entry
+ * (`[mtimeMs, size, sha256, meta]`). A hit needs the 4th element; a legacy 3-element entry is a
+ * miss (the file is re-read once) and forces a cache rewrite. Hooks before 3.1.0 read only the
+ * first three elements, so a 4-element entry is still a hit for them.
+ *
  * @param {string} projectRoot
  * @param {string[]} relPaths
  * @param {string|undefined} workDir
- * @returns {Map<string, { size: number, hash: string }>} files that vanished or are unreadable are absent
+ * @returns {Map<string, { size: number, hash: string, meta: OkfFileMeta }>} files that vanished or are unreadable are absent
  */
 function hashFiles(projectRoot, relPaths, workDir) {
-  /** @type {Map<string, { size: number, hash: string }>} */
+  /** @type {Map<string, { size: number, hash: string, meta: OkfFileMeta }>} */
   const out = new Map();
   const abs = (rel) => path.join(projectRoot, ...rel.split('/'));
   const readAndHash = (rel) => {
     try {
       const content = fs.readFileSync(abs(rel));
-      return { size: content.length, hash: sha256Hex(content) };
+      const head = content.subarray(0, OKF_FRONT_MATTER_READ_BYTES).toString('utf8');
+      return { size: content.length, hash: sha256Hex(content), meta: fileMetaOf(head) };
     } catch {
       return null; // vanished or unreadable between the walk and now
     }
@@ -386,21 +598,32 @@ function hashFiles(projectRoot, relPaths, workDir) {
   const cache = readOkfHashCache(workDir);
   const cached = cache ? cache.files : {};
   const now = Date.now();
-  /** @type {Record<string, [number, number, string]>} */
+  /** @type {Record<string, [number, number, string, OkfFileMeta]>} */
   const nextFiles = {};
+  let upgraded = false;
   for (const [rel, mtimeMs, size] of stats) {
     const hit = cached[rel];
-    if (Array.isArray(hit) && hit[0] === mtimeMs && hit[1] === size && typeof hit[2] === 'string') {
-      out.set(rel, { size, hash: hit[2] });
-      nextFiles[rel] = hit;
+    const sameFile = Array.isArray(hit) && hit[0] === mtimeMs && hit[1] === size && typeof hit[2] === 'string';
+    if (sameFile && isCachedFileMeta(hit[3])) {
+      const meta = /** @type {OkfFileMeta} */ (projectFileMeta(hit[3]));
+      out.set(rel, { size, hash: hit[2], meta });
+      nextFiles[rel] = [mtimeMs, size, hit[2], meta];
       continue;
     }
     const r = readAndHash(rel);
     if (!r) continue;
     out.set(rel, r);
-    if (r.size === size && now - mtimeMs >= OKF_HASH_CACHE_MIN_AGE_MS) nextFiles[rel] = [mtimeMs, size, r.hash];
+    if (r.size === size && now - mtimeMs >= OKF_HASH_CACHE_MIN_AGE_MS) {
+      nextFiles[rel] = [mtimeMs, size, r.hash, r.meta];
+      if (sameFile) upgraded = true; // a legacy (pre-3.1.0) entry refilled with its meta
+    }
   }
-  if (!cache || cache.treeKey !== treeKey || Object.keys(cache.files).length !== Object.keys(nextFiles).length) {
+  if (
+    upgraded ||
+    !cache ||
+    cache.treeKey !== treeKey ||
+    Object.keys(cache.files).length !== Object.keys(nextFiles).length
+  ) {
     writeOkfHashCache(workDir, { treeKey, files: nextFiles });
   }
   return out;
@@ -454,17 +677,43 @@ function buildOkfSnapshot({ projectRoot, config, log, workDir } = {}) {
       for (const rel of b.files) {
         const h = hashes.get(rel);
         if (!h) continue;
-        files.push({ path: rel, ignored: isIgnored(rel), size: h.size, hash: h.hash });
+        files.push({ path: rel, ignored: isIgnored(rel), size: h.size, hash: h.hash, meta: h.meta });
       }
-      bundles.push({ root: b.root, index: b.index, ignored: isIgnored(b.index), files });
+      /** @type {OkfSnapshotBundle} */
+      const bundle = { root: b.root, index: b.index, ignored: isIgnored(b.index), files };
+      for (const [, field] of OKF_BUNDLE_META_FIELDS) {
+        if (typeof b[field] === 'string') bundle[field] = b[field];
+      }
+      bundles.push(bundle);
     }
 
-    const okfSnapshotId = computeOkfSnapshotId(bundles);
+    /** @type {OkfSnapshot} */
+    let snapshot = {
+      type: 'okf-snapshot',
+      okfSnapshotId: computeOkfSnapshotId(bundles),
+      schemaVersion: OKF_SNAPSHOT_SCHEMA_VERSION,
+      bundles,
+    };
+    const bodyBytes = Buffer.byteLength(JSON.stringify(snapshot));
+    if (bodyBytes > OKF_SNAPSHOT_META_BUDGET_BYTES) {
+      // OKF v0.3 DD-H5: send the snapshot as a pre-3.1.0 hook would, rather than one the server's
+      // body cap would reject on every upload.
+      const plain = bundles.map((b) => ({
+        root: b.root,
+        index: b.index,
+        ignored: b.ignored,
+        files: b.files.map((f) => ({ path: f.path, ignored: f.ignored, size: f.size, hash: f.hash })),
+      }));
+      snapshot = { ...snapshot, okfSnapshotId: computeOkfSnapshotId(plain), bundles: plain };
+      say(
+        `okf-snapshot: body with metadata is ${bodyBytes} bytes, over the ${OKF_SNAPSHOT_META_BUDGET_BYTES} budget — metadata dropped`,
+      );
+    }
     const elapsed = Date.now() - started;
     if (elapsed > OKF_DETECTION_BUDGET_MS) {
       say(`okf-snapshot: detection took ${elapsed} ms (budget ${OKF_DETECTION_BUDGET_MS} ms, ${fileCount} files)`);
     }
-    return { type: 'okf-snapshot', okfSnapshotId, schemaVersion: OKF_SNAPSHOT_SCHEMA_VERSION, bundles };
+    return snapshot;
   } catch (err) {
     say(`okf-snapshot: failed (${err && err.message ? err.message : String(err)}) — no snapshot sent`);
     return null;
@@ -484,11 +733,14 @@ module.exports = {
   OKF_SNAPSHOT_SCHEMA_VERSION,
   OKF_SNAPSHOT_MAX_FILES,
   OKF_FRONT_MATTER_READ_BYTES,
+  OKF_META_VALUE_MAX_CHARS,
+  OKF_SNAPSHOT_META_BUDGET_BYTES,
   OKF_CHECK_IGNORE_TIMEOUT_MS,
   OKF_DETECTION_BUDGET_MS,
   OKF_DEFAULT_EXCLUDE,
   globToRegExp,
   hasOkfFrontMatter,
+  parseOkfFrontMatter,
   detectOkfBundles,
   computeOkfSnapshotId,
   buildOkfSnapshot,

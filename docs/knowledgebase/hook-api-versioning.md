@@ -6,7 +6,7 @@ tags:
   - hooks
   - api
   - otel
-timestamp: "2026-11-03T00:00:00+04:00"
+generated: { by: "human:denistsyplakov", at: "2026-11-20T22:15:00+04:00" }
 ---
 
 # Hook API Versioning (v2 logs upload, v1 removed)
@@ -74,6 +74,7 @@ mechanism feeds).
 | `>= 2.29.0` | unchanged uploads (chunk lines gain `hookVersion`, `spans` lines from `/v1/traces` when traces are on); plus `POST /api/v2/otel-realtime` | `200`, `{ accepted, cursor, minIntervalMs, ignored? }` | Realtime is best-effort: a `404` (older server), `401` or `403` disables it for 1 h, a `409` (foreign session) stops it for that session, a `413` halves the batch once; chunks still upload as before — see the OTEL realtime section below |
 | `>= 2.30.0` | unchanged — the root `artisyn` upload gains `otel-status` lines at `Stop` / `SessionEnd`; chunk lines gain `receiverVersion` | unchanged | As `>= 1.7.0`; an older server stores `otel-status` as an inert artisyn line (it is not an activity type, so session times are not moved on a new server) — see "Hook ↔ OTEL receiver" below |
 | `>= 2.31.0` | `POST /api/v2/logs` + optional `agentDescription` / `workflowPhase` on `claude-subagent` uploads (plain and chunked) | unchanged | As `>= 1.7.0`; an invalid, empty or repeated value is ignored, never a `400`; an older server ignores both params — see the sub-agent meta section below |
+| `>= 3.1.0` | unchanged — the root `artisyn` upload's `okf-snapshot` line gains optional bundle `okfVersion` / `title` / `description` and file `meta` | unchanged | As `>= 1.7.0`; any server stores the body verbatim and an older one ignores the fields; the snapshot id changes once (one full resend) — see "OKF snapshot metadata" below |
 
 The route requires `ApiKeyAuthGuard` (the `X-API-Key` header) and accepts this body encoding
 (`express.text()`, `Content-Type: application/x-ndjson`/`application/json`/`text/plain`, 2500MB
@@ -634,7 +635,11 @@ DD-13–DD-22) add a second, independent snapshot loop beside the harness one, w
 
 - **Body.** On the current root session's own `artisyn` upload (the `getHarnessPrefix` gate;
   `send-logs-hook.js` `getOkfPrefix()`), the hook prepends an `okf-snapshot-ref` line always and a
-  full `okf-snapshot` line when the id is not in `okf-state.json`. Never on
+  full `okf-snapshot` line when the id is not in `okf-state.json`. Since hook `3.1.0` a backlog
+  session's re-uploaded `artisyn` body (e.g. a session whose own upload failed, picked up by a later
+  run's full scan) carries the same lines and only the `okfSnapshotId` / `okfSnapshotFull` query
+  pair — the server binds it only while that session's `okf_snapshot_id` is NULL; after the first
+  upload that delivers the full line, the rest of the run sends the ref only. Never on
   `prompt-upload-hook.js`, never on sub-agent or `claude` uploads. Detection runs only here, at
   upload time. Shape and id: [algorithms/okf-snapshot.md](algorithms/okf-snapshot.md). Neither line
   carries a `timestamp`; `artisyn-extractor.ts` lists both as non-activity lines.
@@ -668,6 +673,50 @@ a session decides, never rebound.
 | Hook `2.26.0` → server without OKF support | Unknown query params are ignored and the two line types are skipped like any unknown artisyn event; the upload returns `201` without `unknownOkfSnapshotId`, so the hook simply remembers the id after its full upload and sends refs from then on (no effect on such a server) |
 | Hook `2.26.0` → server with OKF support | Full loop as above |
 | OKF detection fails or exceeds `OKF_SNAPSHOT_MAX_FILES` on the hook | The upload goes out without OKF lines; an OKF failure never fails an upload |
+
+## OKF snapshot metadata (hook `3.1.0`+)
+
+Task `2026-11-19-okf-v03-support` (impl-plan DD-H1–DD-H7). Hook `3.1.0` adds OKF v0.3
+front-matter metadata to the existing `okf-snapshot` line. It is not a route, query-param or
+response change; `schemaVersion` stays `1` and `OKF_STATE_VERSION` (of `okf-state.json`) stays `1`.
+Server side and the UI it feeds: [okf-usage.md](okf-usage.md) "OKF v0.3 metadata and article
+rules"; hook rules and rows: [algorithms/okf-snapshot.md](algorithms/okf-snapshot.md).
+
+- **Window.** `OKF_FRONT_MATTER_READ_BYTES` 512 → 8192: bundle detection (`okf_version:` before
+  the closing `---`) and the metadata both read the first 8 KB, so an `index.md` with a long
+  `description` before `okf_version` is now detected.
+- **Bundle fields.** From the bundle-root `index.md`: `okfVersion`, `title`, `description`
+  (strings, each only when present). `parseOkfFrontMatter(head)` takes top-level scalar keys only,
+  strips one pair of quotes or an inline `# comment`, treats `''`, `null`, `~` and block scalars
+  (`|`, `>`, …) as absent, caps values at 200 characters (`OKF_META_VALUE_MAX_CHARS`), first
+  occurrence wins; an unclosed front-matter block yields no metadata.
+- **File `meta`.** Every file of a bundle (its `index.md` included) gets
+  `meta: { frontMatter, hasGenerated, hasTimestamp, type?, status?, superseded_by?, stale_after? }`
+  — the three booleans always, a scalar key only when present — parsed from the same read that
+  hashes the file.
+- **Snapshot id.** `computeOkfSnapshotId` appends `okfVersion`, `title`, `description` to a
+  bundle's canon and `meta` (keys in the fixed order `frontMatter, hasGenerated, hasTimestamp,
+  type, status, superseded_by, stale_after`) to a file's canon **only when present**, so a
+  snapshot without metadata keeps the id an older hook computes. Since `3.1.0` always sends file
+  `meta`, the first run after the upgrade changes the id of every repo with a KB once, which costs
+  **one full-snapshot resend** per user and repo; refs follow as before.
+- **Hash cache.** `okf-state.json` entries become `[mtimeMs, size, sha256, meta]`. A hit needs
+  matching mtime / size, a string hash and an object 4th element; a legacy 3-element entry is a
+  miss (the file is re-read once) and its refill forces the cache rewrite. An older hook reads only
+  elements 0–2, so a 4-element entry stays a hit for it after a downgrade.
+- **Size guard.** If the snapshot with metadata serialises to more than
+  `OKF_SNAPSHOT_META_BUDGET_BYTES` (8 MiB, below the server's 10 MB `OKF_SNAPSHOT_MAX_BYTES`), the
+  hook strips every bundle field and file `meta`, recomputes the id and logs once
+  `okf-snapshot: body with metadata is <n> bytes, over the <budget> budget — metadata dropped`.
+  The upload then looks like an older hook's (no hints, no chips) instead of being rejected and
+  resent forever.
+
+| Combination | Behaviour |
+|---|---|
+| Hook `< 3.1.0` → any server | No metadata: the OKF tabs show no title, version chip, hints or deprecated / stale_after chips. Bundles whose `okf_version:` sits past byte 512 stay undetected |
+| Hook `3.1.0` → server older than this change | The body is stored verbatim with the new fields; that server's `normaliseSnapshot` ignores them, so nothing changes in its UI. After a server upgrade the stored metadata shows on the next view, no re-upload |
+| Hook `3.1.0` → server with this change | Metadata normalised (`normaliseSnapshot`, wrong types ignored, never a rejection) and shown per [okf-usage.md](okf-usage.md) |
+| Snapshot over the 8 MiB metadata budget | Uploaded without metadata (logged once); same as an older hook |
 
 ## `GET /api/v2/tool-monitoring/config` and the `tool-calls` log kind — CLI tool wrapper (hook `2.27.0`+)
 
@@ -820,3 +869,4 @@ user's machine. Only facts not already covered by the sections above; current be
 | `2.31.0` | Sub-agent `.meta.json` `description` / `workflowPhase` sent as `agentDescription` / `workflowPhase` on `claude-subagent` uploads (`readAgentMeta`) | Sends neither; the sub-agent is labelled by its prompt or agent id and the Agents table has no Phase column |
 | `2.32.2` | PowerShell tool wrapper rewrites a command only when `PreToolUse` `permission_mode === 'bypassPermissions'` (missing field = no wrap); skipped calls logged once per session; native stderr text from `Exception.Message` (an empty native stderr line stays empty) — GH-149 | Wraps in every mode: on Claude Code ≥ 2.1.311, outside bypass a PowerShell call of a monitored tool prompts or is denied even under a matching allow rule; on Windows the server shows `hook_too_old` for it. An empty native stderr line is captured as the type name |
 | `3.0.0` | `Stop` and `SessionEnd` hand their upload to the shared receiver as a job (`~/.artisyn/upload/queue/`) when its heartbeat is fresh; the receiver is the single uploader per OS user, runs each job with the job's own repo's `send-logs-hook.js --run-job`, retries with backoff and parks given-up jobs in `failed/` (`upload-jobs-failed` recommendation); `LOCK_WAIT_SESSION_END_MS` 20 s → 800 ms with a job on a busy lock; a fallback `Stop` takes over stuck jobs; the shared receiver starts regardless of `otelEnabled` and stays up queue-only on a port conflict; 3 s connect timeout and one `aborted: server unreachable` stop per run; `SessionStart` Node.js warning (`node-version-check.js`, merged `systemMessage`); `hook-status` gains `nodeVersion` and `uploadQueue` ([upload-job-queue.md](upload-job-queue.md)). Log Hub `1.5.0` ships it; no server API change | Uploads in process on every `Stop` / `SessionEnd`; a `SessionEnd` waits up to 20 s for a busy lock; with no connection every file pays its own timeout; no receiver when `otelEnabled: false`; never touches the queue, but shares `.upload.lock` with `3.0.0` jobs, so the two never upload one repo at once |
+| `3.1.0` | OKF front-matter window 512 → 8192 bytes; `okf-snapshot` gains bundle `okfVersion` / `title` / `description` and file `meta`; `okf-state.json` hash-cache entries gain a 4th element (`meta`); 8 MiB metadata size guard (see "OKF snapshot metadata"); a backlog session's `artisyn` re-upload carries the OKF lines too | A backlog session re-uploaded by a later run stays without an OKF snapshot; an `index.md` with `okf_version:` past byte 512 is not detected as a bundle; no metadata, so the OKF tabs show no titles, hints or deprecated / stale_after chips; reads only elements 0–2 of a 4-element cache entry, so a downgrade keeps its cache hits |

@@ -17,11 +17,12 @@
 //   - Weekly buckets and the model mix are charts; their numbers are asserted on the API, the page
 //     is checked for the four model names in the model-mix legend.
 //
-// Steps 8–10 — the repo OKF tab's verdict card (2026-10-27-okf-usage-tab, DD-38): five OKF
-// session trees (helpers/okf.ts, DD-36) in a repository of their own read `core.md` and 4 KB of
-// the 100 KB `big.md` → «Something to fix» with two «always read» lines and one «coarse
-// article» line; a branch filter down to three KB sessions shows «Not enough data» with the
-// findings still listed.
+// Steps 8–10 — the repo OKF tab's summary line and hot files (2026-11-21, OKF tab cut down to
+// four views): five OKF session trees (helpers/okf.ts) in a repository of their own — the three
+// newest on `feat/okf`, two on `main` — each read index.md, `core.md` and 4 KB of the 100 KB
+// `big.md`. Unfiltered: «KB read in 5 of 5 sessions», the snapshot of `main` (the reference
+// snapshot is the newest one on main / master), both files with 5 sessions. A branch filter on
+// `feat/okf`: «3 of 3» and that branch's snapshot.
 //
 // Replaces:
 //   - tests/e2e/executive-summary-report.spec.ts (42)
@@ -57,8 +58,10 @@ interface ExecutiveSummary {
 }
 
 interface OkfRepoUsage {
-  verdict: { level: string; findings: Array<{ rule: string; node: { bundle: string | null; path?: string } }> };
-  tiles: { kbSessions: number };
+  unit: 'sessions' | 'agents';
+  snapshot: { branch: string | null; takenAt: string; hasMeta: boolean } | null;
+  summary: { unitsRead: number; unitsTotal: number; reads: number; tokens: number };
+  files: Array<{ path: string; index: boolean; units: number; reads: number; tokens: number }>;
 }
 
 const BILLING = 'feature/billing';
@@ -207,15 +210,16 @@ test('@S-REPT-01 executive summary: totals, filters, period, PDF @mode-a @mode-c
     await expect(page.locator('body')).not.toContainText('NaN');
   });
 
-  // ── Repo OKF tab verdict (2026-10-27-okf-usage-tab, FR-14a, FR-17a, DD-38) ────────────────
+  // ── Repo OKF tab: summary line and hot files (2026-11-21) ─────────────────────────────────
   const run = randomBytes(4).toString('hex');
   const okfRepoUrl = `https://git.arrakis.test/scn/rept01-okf-${run}`;
   const KB = 'docs/kb';
   const BIG_SIZE = 100_000;
   const FEAT = 'feat/okf';
-  const okfRepoId = await test.step('8. upload 5 OKF session trees into their own repository: 2 on main, 3 on feat/okf, each reads index.md, core.md and 4 KB of the 100 KB big.md', async () => {
+  const okfRepoId = await test.step('8. upload 5 OKF session trees into their own repository: the 3 newest on feat/okf, 2 on main, each reads index.md, core.md and 4 KB of the 100 KB big.md', async () => {
     const key = await createApiKey(owner.api);
-    const branches = ['main', 'main', FEAT, FEAT, FEAT];
+    // Session i starts i hours before session 0: the feature-branch sessions are the newest.
+    const branches = [FEAT, FEAT, FEAT, 'main', 'main'];
     for (const [i, branch] of branches.entries()) {
       await uploadOkfSessionTree(
         api,
@@ -243,33 +247,55 @@ test('@S-REPT-01 executive summary: totals, filters, period, PDF @mode-a @mode-c
   });
   const okfUsage = (query: Record<string, string> = {}) =>
     repoGet<OkfRepoUsage>(owner, okfRepoId, '/reports/okf-usage', { ...Object.fromEntries(new URLSearchParams(rangeAround())), ...query });
+  const hotCells = (path: string) => page.locator(`[data-testid="okf-hot-row"][data-path="${path}"]`).locator('td');
+  const hotFile = (r: OkfRepoUsage, path: string) => r.files.find((f) => f.path === path);
 
-  await test.step('9. 5 KB sessions: «Something to fix» — core.md and big.md always read, big.md a coarse article; the anomaly lines say so', async () => {
+  await test.step('9. 5 sessions, all read the KB: «KB read in 5 of 5 sessions»; the snapshot is the one of `main` although the newest sessions are on feat/okf; hot files list core.md and big.md with 5 sessions', async () => {
     const r = await okfUsage();
-    expect(r.tiles.kbSessions).toBe(5);
-    expect(r.verdict.level).toBe('fix');
-    const rules = r.verdict.findings.map((f) => `${f.rule}:${f.node.path ?? ''}`).sort();
-    expect(rules).toEqual([`always_read:${KB}/big.md`, `always_read:${KB}/core.md`, `coarse_article:${KB}/big.md`].sort());
+    expect(r.unit).toBe('sessions');
+    // index.md 500 B + core.md 1000 B + big.md 4000 B per session, / 4.
+    expect(r.summary).toMatchObject({ unitsRead: 5, unitsTotal: 5, reads: 15, tokens: 6875 });
+    expect(r.snapshot, 'the newest root on main, not the newer roots on the feature branch').toMatchObject({ branch: 'main' });
+    expect(hotFile(r, `${KB}/core.md`)).toMatchObject({ units: 5, reads: 5, tokens: 1250, index: false });
+    expect(hotFile(r, `${KB}/big.md`), '4 KB of the 100 KB file per session: what was returned, not the file size').toMatchObject({
+      units: 5,
+      reads: 5,
+      tokens: 5000,
+    });
+    expect(hotFile(r, `${KB}/other1.md`)).toMatchObject({ units: 0, reads: 0 });
 
     await page.goto(`/#/repos/${okfRepoId}?mtab=okf`);
     await expect(page.getByTestId('tab-repo-okf')).toHaveAttribute('data-state', 'active');
-    await expect(page.getByTestId('okf-verdict-level')).toHaveText('Something to fix');
-    const lines = page.getByTestId('okf-why-line');
-    await expect(lines).toHaveCount(3);
-    await expect(lines.filter({ hasText: `${KB}/core.md is read in 5 of 5 KB sessions (100%)` })).toHaveCount(1);
-    await expect(lines.filter({ hasText: `${KB}/big.md (` }).filter({ hasText: 'is read in 5 sessions, ~' })).toContainText('(4%)');
-    await expect(page.getByTestId('okf-tile-sessions').locator('p').first()).toHaveText('5 / 5');
+    await expect(page.getByTestId('okf-summary-ratio')).toHaveText('KB read in 5 of 5 sessions');
+    await expect(page.getByTestId('okf-summary-tokens')).toHaveText('≈ 6.9K tokens of context');
+    await expect(page.getByTestId('okf-summary-snapshot')).toContainText('snapshot from main, ');
+    // By ≈ Tokens: big.md (5.0K) before core.md (1.3K); index.md is one line below the table.
+    await expect
+      .poll(() => page.getByTestId('okf-hot-row').evaluateAll((rows) => rows.map((x) => x.getAttribute('data-path'))))
+      .toEqual([`${KB}/big.md`, `${KB}/core.md`]);
+    for (const [path, tokens] of [
+      [`${KB}/big.md`, '5.0K'],
+      [`${KB}/core.md`, '1.3K'],
+    ]) {
+      await expect(hotCells(path).nth(1), `${path}: sessions`).toHaveText('5');
+      await expect(hotCells(path).nth(2), `${path}: reads`).toHaveText('5');
+      await expect(hotCells(path).nth(3), `${path}: ≈ tokens`).toHaveText(tokens);
+    }
+    await expect(page.getByTestId('okf-hot-index-line')).toContainText('1 index file is not listed');
+    await expect(page.getByTestId('okf-tree-header')).toHaveText('3 of 6 files opened');
+    await expect(page.getByTestId('okf-verdict-card'), 'the verdict card is gone').toHaveCount(0);
   });
 
-  await test.step(`10. branch filter ${FEAT}: 3 KB sessions → «Not enough data», the findings still listed`, async () => {
+  await test.step(`10. branch filter ${FEAT}: «KB read in 3 of 3 sessions», the snapshot of that branch, 3 sessions per hot file`, async () => {
     const r = await okfUsage({ branches: FEAT });
-    expect(r.tiles.kbSessions).toBe(3);
-    expect(r.verdict.level).toBe('not_enough_data');
-    expect(r.verdict.findings.map((f) => f.rule)).toContain('always_read');
+    expect(r.summary).toMatchObject({ unitsRead: 3, unitsTotal: 3, reads: 9, tokens: 4125 });
+    expect(r.snapshot, 'no main session is in the filter: the newest of all').toMatchObject({ branch: FEAT });
+    expect(hotFile(r, `${KB}/core.md`)).toMatchObject({ units: 3, reads: 3 });
 
     await page.goto(`/#/repos/${okfRepoId}?mtab=okf&okfBranches=${encodeURIComponent(encodeURIComponent(FEAT))}`);
-    await expect(page.getByTestId('okf-verdict-level')).toHaveText('Not enough data');
-    await expect(page.getByTestId('okf-why-line').filter({ hasText: `${KB}/core.md is read in 3 of 3 KB sessions` })).toHaveCount(1);
-    await expect(page.getByTestId('okf-tile-sessions').locator('p').first()).toHaveText('3 / 3');
+    await expect(page.getByTestId('okf-summary-ratio')).toHaveText('KB read in 3 of 3 sessions');
+    await expect(page.getByTestId('okf-summary-snapshot')).toContainText(`snapshot from ${FEAT}, `);
+    await expect(hotCells(`${KB}/core.md`).nth(1)).toHaveText('3');
+    await expect(hotCells(`${KB}/big.md`).nth(1)).toHaveText('3');
   });
 });

@@ -1,4 +1,9 @@
 ---
+type: "Algorithm"
+title: "Sandbox prune classification: what `--prune` may remove"
+description: "Decides, per Claude Code dev-container sandbox, whether `claude-docker --prune` removes it, keeps it because it still holds work, or leaves it alone."
+tags: [algorithm]
+generated: { by: "human:denistsyplakov", at: "2026-11-03T17:31:26+04:00" }
 reviewed: no
 reviewer: none
 ---

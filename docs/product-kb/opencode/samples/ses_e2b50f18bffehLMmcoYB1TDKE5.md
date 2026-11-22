@@ -1,3 +1,11 @@
+---
+type: "Sample"
+title: "OpenCode session sample — Context size question"
+description: "Exported OpenCode session \"Context size question\" (2026-11-13): session metadata, messages and tool calls, used as a reference for OpenCode session storage; raw JSON next to it."
+tags: [opencode, sample]
+generated: { by: "human:denistsyplakov", at: "2026-11-13T19:03:54+04:00" }
+---
+
 # OpenCode session sample — Context size question
 
 - Session: `ses_e2b50f18bffehLMmcoYB1TDKE5`

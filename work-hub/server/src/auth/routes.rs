@@ -234,7 +234,8 @@ pub async fn config(State(st): State<AppState>) -> Json<Value> {
             // false in `password` without SMTP_HOST: the client disables "Forgot password?".
             body["passwordResetAvailable"] = json!(st.mailer.is_configured());
         }
-        AuthMode::None => {}
+        // StrictManaged never reaches a running server: AuthSettings::from_env refuses it.
+        AuthMode::None | AuthMode::StrictManaged => {}
     }
     Json(body)
 }

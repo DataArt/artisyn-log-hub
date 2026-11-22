@@ -4,7 +4,7 @@ title: Algorithm docs (doc-driven table tests)
 description: Format of the per-algorithm docs in docs/knowledgebase/algorithms/, how their rows file docs/algorithm-examples/<name>.json becomes a table-driven unit test through scripts/algo-docs/load-examples.cjs in jest, vitest and node --test, and the AI-plus-owner review recorded in front-matter.
 resource: scripts/algo-docs/load-examples.cjs
 tags: [testing, algorithms, unit-tests, docs, review]
-timestamp: 2026-11-03T00:00:00Z
+generated: { by: "human:denistsyplakov", at: "2026-11-03T00:00:00Z" }
 ---
 
 # Algorithm docs
@@ -77,9 +77,9 @@ format where the two differ).
 | [bash-command-view](bash-command-view.md) | `packages/bash-view/src/*` (`@loghub/bash-view`; client loader `client/src/viewer/lib/bash-view/`) | vitest |
 | [okf-access-extraction](okf-access-extraction.md) | `server/src/logs/okf/okf-access-extractor.ts` | jest |
 | [okf-task-context](okf-task-context.md) | `server/src/logs/okf/okf-task-context.ts` | jest |
-| [okf-verdict](okf-verdict.md) | `server/src/logs/okf/okf-verdict.ts` (+ team filter `okf-usage-tree.ts`, thresholds `okf-thresholds.ts`) | jest |
-| [okf-value-signals](okf-value-signals.md) | `server/src/logs/okf/okf-value-signals.ts` | jest |
 | [okf-snapshot](okf-snapshot.md) | hook `okf-snapshot.js` | `node --test` |
+| [okf-metadata](okf-metadata.md) | `server/src/logs/okf/okf-metadata.ts` | jest |
+| [okf-usage-counting](okf-usage-counting.md) | `server/src/logs/okf/okf-usage-counting.ts` (`buildOkfUsageView`, `pickReferenceRoot`), `okf-paths.ts`, `okf-team-filter.ts`; display formats `client/.../lib/okf/okf-format.ts` | jest, vitest |
 | [tool-monitor-name-validation](tool-monitor-name-validation.md) | `packages/tool-monitor/src/index.ts` (`@loghub/tool-monitor`; server and client); twin hook `tool-wrap-names.js` | jest, `node --test` |
 | [mcp-call-extraction](mcp-call-extraction.md) | `server/src/logs/tool-monitoring/mcp-call-extractor.ts` | jest |
 | [cli-command-recognition](cli-command-recognition.md) | `server/src/logs/tool-monitoring/cli-command-recognition.ts` | jest |
@@ -122,6 +122,11 @@ Docs are written in English.
 
 ````markdown
 ---
+type: "Algorithm"
+title: "<Algorithm name>"
+description: "<one line: what the algorithm computes and why>"
+tags: [algorithm]
+generated: { by: "<actor>", at: "<RFC 3339>" }
 reviewed: no
 reviewer: none
 ---
@@ -198,6 +203,7 @@ Screen and field, or API field, or "safe behaviour: ...".
 
 | Key | Values |
 |---|---|
+| `type`, `title`, `description`, `tags`, `generated` | OKF v0.3 keys, as for every KB article (`type: "Algorithm"`). |
 | `reviewed` | `no` until reviewed, then the review date `YYYY-MM-DD`. |
 | `reviewer` | `none`; `ai` once the AI review passed and the owner sign-off is pending; `ai+owner` once the owner signed. |
 

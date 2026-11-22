@@ -1,3 +1,9 @@
+---
+type: "Task"
+title: "KB Tag Search — Synonym Tags and a Generated Tag Index"
+description: "synonym tags in article front matter plus a generated tags.md per OKF bundle so a grep finds the article; tag fixes proposed by the KB-analysis skill"
+---
+
 # 2026-10-28: KB Tag Search — Synonym Tags and a Generated Tag Index
 
 **Status:** todo

@@ -1,7 +1,6 @@
 import {
   BadRequestException,
   Body,
-  ConflictException,
   Controller,
   Delete,
   Get,
@@ -18,6 +17,10 @@ import {
 } from '@nestjs/common';
 import * as fs from 'fs';
 import type { Request, Response } from 'express';
+import {
+  AllowedAuthModes,
+  AuthModeGuard,
+} from '../auth/guards/auth-mode.guard';
 import { SessionAuthGuard } from '../auth/guards/session-auth.guard';
 import { AdminGuard } from '../common/guards/admin.guard';
 import { ErrorLogsService } from '../error-logs/error-logs.service';
@@ -172,19 +175,27 @@ export class AdminPanelController {
     return this.adminService.getAuthConfig();
   }
 
+  // Pending-registration routes: 404 in strict-managed (no self sign-up there;
+  // a resend would mail confirm links to password-less admin-created users).
   @Get('auth/pending-registrations')
+  @AllowedAuthModes('none', 'password', 'password-confirm', 'azure-oauth')
+  @UseGuards(AuthModeGuard)
   getPendingRegistrations() {
     return this.adminService.getPendingRegistrations();
   }
 
   @Post('auth/pending-registrations/:id/resend')
   @HttpCode(200)
+  @AllowedAuthModes('none', 'password', 'password-confirm', 'azure-oauth')
+  @UseGuards(AuthModeGuard)
   resendPendingRegistration(@Param('id', ParseIntPipe) id: number) {
     return this.adminService.resendPendingRegistration(id);
   }
 
   @Delete('auth/pending-registrations/:id')
   @HttpCode(204)
+  @AllowedAuthModes('none', 'password', 'password-confirm', 'azure-oauth')
+  @UseGuards(AuthModeGuard)
   async revokePendingRegistration(@Param('id', ParseIntPipe) id: number) {
     await this.adminService.revokePendingRegistration(id);
   }
@@ -229,23 +240,12 @@ export class AdminPanelController {
 
   @Patch('users/:id/email')
   async renameUserEmail(
+    @Req() req: Request,
     @Param('id', ParseIntPipe) userId: number,
     @Body() dto: RenameUserEmailDto,
   ) {
-    const email = dto.email.toLowerCase();
-    const existing = await this.usersService.findByEmail(email);
-
-    if (existing && existing.id !== userId) {
-      throw new ConflictException('Email already in use');
-    }
-
-    const updated = await this.usersService.renameEmail(userId, email);
-
-    if (updated == null) {
-      throw new NotFoundException('User not found');
-    }
-
-    return updated;
+    const caller = req.user as AuthUser;
+    return this.adminService.renameUserEmail(caller.id, userId, dto.email);
   }
 
   /**

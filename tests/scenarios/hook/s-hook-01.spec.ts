@@ -152,7 +152,7 @@ test('@S-HOOK-01 a Stop run uploads the right files in the right order and never
       );
       fs.writeFileSync(path.join(wfDir, 'journal.jsonl'), line({ type: 'result' }));
       fs.writeFileSync(path.join(repo, 'CLAUDE.md'), '# rules\n');
-      // An OKF bundle (2026-10-27 OKF usage tab): the hook sends its snapshot with the cur artisyn.
+      // An OKF bundle (2026-10-27 OKF usage tab): the hook sends its snapshot with the artisyn uploads.
       fs.mkdirSync(path.join(repo, 'docs', 'kb'), { recursive: true });
       fs.writeFileSync(path.join(repo, 'docs', 'kb', 'index.md'), '---\nokf_version: 1\n---\n# KB\n');
       fs.writeFileSync(path.join(repo, 'docs', 'kb', 'setup.md'), '# Setup\n');
@@ -243,22 +243,29 @@ test('@S-HOOK-01 a Stop run uploads the right files in the right order and never
       expect(cur.query.get('snapshotFull')).toBe('1');
     });
 
-    await test.step('4b. new hook → old server: the OKF snapshot rides on cur artisyn, the hub ignores okfSnapshotId (no unknownOkfSnapshotId), the upload still succeeds', async () => {
+    await test.step('4b. new hook → old server: the OKF snapshot rides on the artisyn uploads (full line once, then the ref), the hub ignores okfSnapshotId (no unknownOkfSnapshotId), the upload still succeeds', async () => {
       // The fake hub answers every upload with a bare `{warnings: []}` — exactly an old Log Hub,
       // which knows neither the OKF query params nor the OKF lines.
-      const cur = hub!.requests.find((r) => r.type === 'artisyn' && r.sessionId === 'cur')!;
-      const lines = ndjsonLines(cur.body.toString('utf8'));
-      const full = lines.find((e) => e.type === 'okf-snapshot');
-      expect(full, 'full okf-snapshot line on the first run').toBeDefined();
+      // Since hook 3.1.0 a backlog session's artisyn body carries the OKF lines too. `artisyn/old`
+      // goes out before `artisyn/cur` (step 3), so it delivers the full line and cur sends the ref.
+      const old = hub!.requests.find((r) => r.type === 'artisyn' && r.sessionId === 'old')!;
+      const oldLines = ndjsonLines(old.body.toString('utf8'));
+      const full = oldLines.find((e) => e.type === 'okf-snapshot');
+      expect(full, 'full okf-snapshot line on the first artisyn upload of the run').toBeDefined();
       okfSnapshotId = String(full!.okfSnapshotId);
       expect(okfSnapshotId).toMatch(/^[0-9a-f]{64}$/);
-      expect(lines.find((e) => e.type === 'okf-snapshot-ref')?.okfSnapshotId).toBe(okfSnapshotId);
+      expect(oldLines.find((e) => e.type === 'okf-snapshot-ref')?.okfSnapshotId).toBe(okfSnapshotId);
       expect(Array.isArray(full!.bundles) && (full!.bundles as Array<{ root: string }>).map((b) => b.root)).toEqual(['docs/kb']);
+      expect(old.query.get('okfSnapshotId')).toBe(okfSnapshotId);
+      expect(old.query.get('okfSnapshotFull')).toBe('1');
+      // The harness pair never rides on a backlog upload.
+      expect(old.query.get('snapshotId')).toBeNull();
+      const cur = hub!.requests.find((r) => r.type === 'artisyn' && r.sessionId === 'cur')!;
+      const curLines = ndjsonLines(cur.body.toString('utf8'));
+      expect(curLines.find((e) => e.type === 'okf-snapshot-ref')?.okfSnapshotId).toBe(okfSnapshotId);
+      expect(curLines.some((e) => e.type === 'okf-snapshot'), 'the full line goes out once per run').toBe(false);
       expect(cur.query.get('okfSnapshotId')).toBe(okfSnapshotId);
-      expect(cur.query.get('okfSnapshotFull')).toBe('1');
-      const old = hub!.requests.find((r) => r.type === 'artisyn' && r.sessionId === 'old')!;
-      expect(bodyTypes(old)).not.toContain('okf-snapshot-ref');
-      expect(old.query.get('okfSnapshotId')).toBeNull();
+      expect(cur.query.get('okfSnapshotFull')).toBeNull();
       const log = readHookLog(repo, 'send-logs-hook.js');
       expect(log.some((l) => l.includes(`okf: snapshot ${okfSnapshotId.slice(0, 12)} sent`)), log.join('\n')).toBe(true);
       expect(log.filter((l) => /\[result\] done: uploaded=\d+ skipped=\d+ failed=0 /.test(l))).toHaveLength(1);

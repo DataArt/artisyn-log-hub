@@ -5,7 +5,7 @@ description: "The /adlc-lh:* task lifecycle in short (scratch, review, plan, imp
 tags:
   - workflow
   - adlc
-timestamp: "2026-10-14T00:00:00+04:00"
+generated: { by: "human:denistsyplakov", at: "2026-10-14T00:00:00+04:00" }
 ---
 
 # Task Workflow and Post-Implementation Checks

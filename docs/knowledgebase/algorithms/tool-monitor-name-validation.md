@@ -1,4 +1,9 @@
 ---
+type: "Algorithm"
+title: "Tool monitor name validation: which CLI tool names may be monitored"
+description: "The Tools/MCP tab lets a user name CLI tools that the hook wraps (a shim on the agent's `PATH`)."
+tags: [algorithm]
+generated: { by: "human:denistsyplakov", at: "2026-11-03T17:31:26+04:00" }
 reviewed: no
 reviewer: none
 ---

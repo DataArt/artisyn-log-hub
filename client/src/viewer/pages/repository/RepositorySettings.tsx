@@ -1,7 +1,7 @@
 import { useRef, useState, useMemo } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Loader2 } from 'lucide-react';
-import type { OkfThresholds, RepoConfig } from '../../../models/repositories';
+import type { RepoConfig } from '../../../models/repositories';
 import { getRepoSettings, putTeamConfig, putUserConfig } from '../../api';
 import { DEFAULT_REPO_CONFIG } from './session-log/log-parser';
 import {
@@ -22,11 +22,6 @@ import {
   CacheCreationThresholdSetting,
   TurnEndCostAdvisorSetting,
 } from './AnalysisSettings';
-import {
-  OkfThresholdsSection,
-  okfSectionForView,
-} from './OkfThresholdsSection';
-import { withOkfSection } from './okf-thresholds-form';
 import { PageTabs, PageTabsContent } from '../../ui/page-tabs';
 import { DEFAULT_HIGH_CACHE_CREATION_THRESHOLD } from '../../lib/cache-ratio-ui';
 import { DEFAULT_SESSION_ATTRIBUTION_ATTRIBUTES } from '../../lib/session-attribution-ui';
@@ -158,17 +153,7 @@ export function RepositorySettings({
     if (savedTurnEndCostAdvisor !== undefined) {
       result = { ...result, turnEndCostAdvisor: savedTurnEndCostAdvisor };
     }
-    if (savedScopeConfig?.okf !== undefined) {
-      result = { ...result, okf: savedScopeConfig.okf };
-    }
     return result;
-  }
-
-  /** Read-modify-write: keep the whole current config, replace only the OKF thresholds. */
-  function saveOkf(okf: OkfThresholds | undefined) {
-    const base: RepoConfig =
-      savedScopeConfig ?? data?.effectiveConfig ?? DEFAULT_REPO_CONFIG;
-    return mutation.mutateAsync(withOkfSection(base, okf));
   }
 
   /** Read-modify-write: keep the whole current config, replace only the threshold. */
@@ -354,16 +339,6 @@ export function RepositorySettings({
                     readOnly={readOnly}
                     isSaving={mutation.isPending}
                     onSave={saveTurnEndCostAdvisor}
-                  />
-                </div>
-                <div className="border-t border-border pt-8">
-                  <OkfThresholdsSection
-                    key={JSON.stringify(okfSectionForView(data, isTeamView))}
-                    data={data}
-                    isTeamView={isTeamView}
-                    readOnly={readOnly}
-                    isSaving={mutation.isPending}
-                    save={saveOkf}
                   />
                 </div>
               </div>

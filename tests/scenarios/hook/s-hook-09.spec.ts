@@ -26,6 +26,12 @@
 //   - the «no visible window» check is the design's single grep step: no `.vbs` in the plugin,
 //     `windowsHide: true` in its launcher, and no `artisyn-hidden-launch-*` file in TEMP.
 //
+// OKF v0.3 support (hook 3.1.0, 2026-11-19): the KB index starts with a 1 KB `description` before
+// `okf_version` (detected only with the 8 KB front-matter window); step 4b checks the stored bundle
+// fields (`okfVersion` / `title` / `description` capped at 200 chars) and per-file `meta`, and the
+// 4-element `[mtimeMs, size, sha256, meta]` entries of `okf-state.json`; step 5 that an unchanged
+// run leaves `okf-state.json` untouched; step 5b that a legacy 3-element entry is refilled once.
+//
 // Replaces:
 //   - server/test/hook-state.e2e-spec.ts (11)
 //   - tests/e2e/hook-state.spec.ts (2)
@@ -63,6 +69,7 @@ import {
   subagentsDir,
   telemetryDir,
   tempDirs,
+  workDir,
   writeFakeClaude,
   writeConfig,
   writeFakeMcpServer,
@@ -78,6 +85,8 @@ import { skipNewUserNudge } from '../helpers/teams';
 const PROMPT = 'fix the login bug';
 /** Body text of the org-synced `greet` skill — never sent (metadata only). */
 const GREET_BODY = 'H09-GREET-BODY-MARKER: say hello to the whole team.';
+/** A 1 KB bundle description (OKF v0.3): stored capped at 200 chars. */
+const KB_DESCRIPTION = 'Chain KB: '.padEnd(1024, 'd');
 
 interface SnapshotGitEntry {
   name?: string;
@@ -109,6 +118,31 @@ interface HarnessRow {
   name: string;
   mcpServer: string | null;
   mcpConnected: boolean | null;
+}
+
+/** Hook 3.1.0 per-file front-matter metadata, as sent in the okf-snapshot (DD-H3). */
+interface OkfFileMeta {
+  frontMatter: boolean;
+  hasGenerated: boolean;
+  hasTimestamp: boolean;
+  type?: string;
+  status?: string;
+  superseded_by?: string;
+  stale_after?: string;
+}
+
+/** `<workDir>/okf-state.json`: the hook's OKF known-ids list and content-hash cache. */
+interface OkfStateFile {
+  knownSnapshotIds: string[];
+  hashCache?: { treeKey: string; files: Record<string, unknown[]> };
+}
+
+function okfStatePath(repoDir: string): string {
+  return path.join(workDir(repoDir), 'okf-state.json');
+}
+
+function readOkfState(repoDir: string): OkfStateFile {
+  return JSON.parse(fs.readFileSync(okfStatePath(repoDir), 'utf8')) as OkfStateFile;
 }
 
 function readVersion(file: string): string {
@@ -160,14 +194,22 @@ test('@S-HOOK-09 the installed hook reaches the real server and the session show
       const root = await installBuiltPlugin(stand.url, repo);
       // OKF (FR-9): `notes/**` is excluded, so of the two bundles below only docs/kb is sent.
       writeStandConfig(repo, stand.url, key.key, { okf: { exclude: ['notes/**'] } });
+      // OKF v0.3 (hook 3.1.0): a 1 KB `description` comes before `okf_version` — past the old 512 B
+      // window, inside the 8 KB one — and the article carries v0.3 front matter.
       for (const [rel, text] of [
-        ['docs/kb/index.md', '---\nokf_version: 1\n---\n# Chain KB\n'],
-        ['docs/kb/login-flow.md', '# Login flow\n'],
+        ['docs/kb/index.md', `---\ntitle: Chain KB\ndescription: ${KB_DESCRIPTION}\nokf_version: "0.3"\n---\n# Chain KB\n`],
+        [
+          'docs/kb/login-flow.md',
+          '---\ntype: Article\nstatus: deprecated\nsuperseded_by: login-v2.md # replaced\ngenerated:\n  by: h09\n  at: 2026-11-19T00:00:00Z\n---\n# Login flow\n',
+        ],
         ['notes/kb/index.md', '---\nokf_version: 1\n---\n# Private notes\n'],
         ['notes/kb/draft.md', '# Draft\n'],
       ] as const) {
         fs.mkdirSync(path.dirname(path.join(repo, rel)), { recursive: true });
         fs.writeFileSync(path.join(repo, rel), text);
+        // Older than the hook's 2 s "racy file" guard, so the content-hash cache keeps them.
+        const old = new Date(Date.now() - 60 * 60_000);
+        fs.utimesSync(path.join(repo, rel), old, old);
       }
       fs.writeFileSync(path.join(repo, 'CLAUDE.md'), '# chain project rules\n');
       // Git status per harness file (hook 2.28.0, step 4c): CLAUDE.md is tracked, CLAUDE.local.md
@@ -320,16 +362,50 @@ test('@S-HOOK-09 the installed hook reaches the real server and the session show
     });
 
     const okfSnapshotId = await test.step('4b. OKF: the first upload stored the full okf-snapshot — docs/kb only, notes/** excluded — and bound the session to it', async () => {
-      const snap = await db.query<{ snapshot_id: string; body: { bundles: Array<{ root: string; index: string; files: Array<{ path: string }> }> } }>(
-        'SELECT snapshot_id, body FROM okf_snapshots WHERE user_id = $1',
-        [owner.id],
-      );
+      const snap = await db.query<{
+        snapshot_id: string;
+        body: {
+          bundles: Array<{
+            root: string;
+            index: string;
+            okfVersion?: string;
+            title?: string;
+            description?: string;
+            files: Array<{ path: string; hash: string; size: number; meta?: OkfFileMeta }>;
+          }>;
+        };
+      }>('SELECT snapshot_id, body FROM okf_snapshots WHERE user_id = $1', [owner.id]);
       expect(snap.rows, 'one okf_snapshots row for the owner').toHaveLength(1);
       const { snapshot_id: id, body } = snap.rows[0];
       expect(id).toMatch(/^[0-9a-f]{64}$/);
       expect(body.bundles.map((b) => b.root), 'okf.exclude drops the notes bundle (FR-9)').toEqual(['docs/kb']);
       expect(body.bundles[0].index).toBe('docs/kb/index.md');
       expect(body.bundles[0].files.map((f) => f.path).sort()).toEqual(['docs/kb/index.md', 'docs/kb/login-flow.md']);
+      // OKF v0.3 (hook 3.1.0): detected despite the 1 KB description first; the bundle fields
+      // (quotes stripped, 200-char cap) and every file's front-matter `meta` are stored.
+      expect(body.bundles[0].okfVersion).toBe('0.3');
+      expect(body.bundles[0].title).toBe('Chain KB');
+      expect(body.bundles[0].description).toBe(KB_DESCRIPTION.slice(0, 200));
+      const metaOf = (p: string) => body.bundles[0].files.find((f) => f.path === p)?.meta;
+      expect(metaOf('docs/kb/index.md')).toEqual({ frontMatter: true, hasGenerated: false, hasTimestamp: false });
+      expect(metaOf('docs/kb/login-flow.md'), 'nested `generated.by` is not a top-level key; the # comment is cut').toEqual({
+        frontMatter: true,
+        hasGenerated: true,
+        hasTimestamp: false,
+        type: 'Article',
+        status: 'deprecated',
+        superseded_by: 'login-v2.md',
+      });
+      // okf-state.json: the content-hash cache entries are [mtimeMs, size, sha256, meta].
+      const cache = readOkfState(repo).hashCache;
+      expect(cache, 'the hook keeps a content-hash cache').toBeDefined();
+      for (const f of body.bundles[0].files) {
+        const entry = cache?.files[f.path];
+        expect(entry, f.path).toHaveLength(4);
+        expect(entry?.[1], f.path).toBe(f.size);
+        expect(entry?.[2], f.path).toBe(f.hash);
+        expect(entry?.[3], f.path).toEqual(f.meta);
+      }
       const bound = await db.query<{ okf_snapshot_id: string | null }>('SELECT okf_snapshot_id FROM sessions WHERE session_id = $1', [sid]);
       expect(bound.rows[0]?.okf_snapshot_id, 'the root session is bound to that snapshot').toBe(id);
       const log = readHookLog(repo, 'send-logs-hook.js');
@@ -370,7 +446,11 @@ test('@S-HOOK-09 the installed hook reaches the real server and the session show
     await test.step('5. a second Stop without changes: no harness duplicates, no new claude upload', async () => {
       const claudeBefore = await claudeQueueRows(db, sid);
       const elements = await db.query<{ n: string }>('SELECT count(*) AS n FROM harness_elements WHERE repo_id = $1', [repoId]);
+      const okfStateBefore = fs.readFileSync(okfStatePath(repo), 'utf8');
       await fire({ hook_event_name: 'Stop', transcript_path: transcript });
+      // OKF v0.3 DD-H6: every cache entry was a hit (no KB file re-read), so okf-state.json is
+      // not rewritten at all — not even its `updatedAt`.
+      expect(fs.readFileSync(okfStatePath(repo), 'utf8'), 'an unchanged run leaves okf-state.json as it was').toBe(okfStateBefore);
       await waitForQueueIdle(db, owner.id, { timeoutMs: 10_000 });
       expect(await claudeQueueRows(db, sid), 'unchanged transcript is not re-sent').toBe(claudeBefore);
       const after = await db.query<{ n: string }>('SELECT count(*) AS n FROM harness_elements WHERE repo_id = $1', [repoId]);
@@ -394,6 +474,37 @@ test('@S-HOOK-09 the installed hook reaches the real server and the session show
       expect(Number(okfCount.rows[0].n)).toBe(1);
       const okfBound = await db.query<{ okf_snapshot_id: string | null }>('SELECT okf_snapshot_id FROM sessions WHERE session_id = $1', [sid]);
       expect(okfBound.rows[0]?.okf_snapshot_id).toBe(okfSnapshotId);
+    });
+
+    await test.step('5b. OKF v0.3 DD-H6: a legacy 3-element cache entry (hook < 3.1.0) is a miss — the file is re-read once and the entry gets its meta back; the snapshot id is unchanged', async () => {
+      const state = readOkfState(repo);
+      const files = state.hashCache?.files ?? {};
+      const before = JSON.stringify(files);
+      for (const k of Object.keys(files)) files[k] = files[k].slice(0, 3);
+      fs.writeFileSync(okfStatePath(repo), JSON.stringify({ ...state, version: 1 }));
+      await fire({ hook_event_name: 'Stop', transcript_path: transcript });
+      await waitForQueueIdle(db, owner.id, { timeoutMs: 10_000 });
+      const after = readOkfState(repo).hashCache?.files ?? {};
+      for (const entry of Object.values(after)) expect(entry).toHaveLength(4);
+      expect(JSON.stringify(after), 'the refilled entries equal the 3.1.0 ones').toBe(before);
+      const okfLog = readHookLog(repo, 'send-logs-hook.js');
+      expect(okfLog.filter((l) => l.includes(`okf: snapshot ${okfSnapshotId.slice(0, 12)} sent`)), 'same id: still one full send').toHaveLength(1);
+      const okfCount = await db.query<{ n: string }>('SELECT count(*) AS n FROM okf_snapshots WHERE user_id = $1', [owner.id]);
+      expect(Number(okfCount.rows[0].n)).toBe(1);
+    });
+
+    await test.step('5c. a backlog session (its own upload never landed) re-uploaded by a later Stop is bound to the OKF snapshot too, via the ref only', async () => {
+      const backlogSid = `${sid}-b`;
+      const ownFirst = fs.readFileSync(path.join(telemetryDir(repo), `${sid}.jsonl`), 'utf8').split('\n')[0];
+      fs.writeFileSync(path.join(telemetryDir(repo), `${backlogSid}.jsonl`), `${ownFirst.split(sid).join(backlogSid)}\n`);
+      await fire({ hook_event_name: 'Stop', transcript_path: transcript });
+      await waitForQueueIdle(db, owner.id, { timeoutMs: 10_000 });
+      const bound = await db.query<{ okf_snapshot_id: string | null }>('SELECT okf_snapshot_id FROM sessions WHERE session_id = $1', [backlogSid]);
+      expect(bound.rows[0]?.okf_snapshot_id, 'the backlog session is bound to the current snapshot').toBe(okfSnapshotId);
+      const okfLog = readHookLog(repo, 'send-logs-hook.js');
+      expect(okfLog.filter((l) => l.includes(`okf: snapshot ${okfSnapshotId.slice(0, 12)} sent`)), 'known id: still one full send').toHaveLength(1);
+      const okfCount = await db.query<{ n: string }>('SELECT count(*) AS n FROM okf_snapshots WHERE user_id = $1', [owner.id]);
+      expect(Number(okfCount.rows[0].n)).toBe(1);
     });
 
     await test.step('6. Installed Hooks page: version = plugin version.json, up to date, no issue badge', async () => {

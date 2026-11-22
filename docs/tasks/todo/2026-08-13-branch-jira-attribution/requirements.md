@@ -1,3 +1,9 @@
+---
+type: "Task"
+title: "Branch Attribution to JIRA Task/Epic"
+description: "Attribute a branch to a JIRA task (one task → many branches) and a JIRA epic (one epic → many tasks/branches); scratched high-level, more detail to follow."
+---
+
 # T-97: Branch Attribution to JIRA Task/Epic
 
 **Status:** todo

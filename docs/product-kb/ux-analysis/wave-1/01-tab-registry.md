@@ -1,3 +1,11 @@
+---
+type: "Research"
+title: "1. Tab registry with metadata"
+description: "Wave 1 idea 1: one tab registry with metadata (label, order, group, visibility) instead of hand-written tab bars."
+tags: [ux-research, product]
+generated: { by: "human:denistsyplakov", at: "2026-11-06T15:26:59+04:00" }
+---
+
 # 1. Tab registry with metadata
 
 Wave 1 · Effort S–M · Impact high (enabler for 2, 3, 5 and the ⓘ help hints)

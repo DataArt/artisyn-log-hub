@@ -10,8 +10,8 @@
  *     `git.root`;
  *   - a `claude` body for the main agent and one `claude-subagent` body per sub-agent, whose
  *     tool calls (Read, Grep, Bash, Edit) are what the server's OKF extraction turns into
- *     `session_okf_access` rows and, since 2026-11-03 (OKF value signals), `session_okf_event`
- *     (code reads / searches) and `session_okf_pointer` (code paths an article read names) rows.
+ *     `session_okf_access` rows — the only rows the OKF tab counts (since 2026-11-21 nothing
+ *     writes `session_okf_event` / `session_okf_pointer` rows any more).
  *     Each Read's `tool_result` is `bytes` long unless the action gives its `result` text, so the
  *     read bytes are exactly what the scenario says.
  *
@@ -40,6 +40,22 @@ export interface OkfSnapshotFileSpec {
   size?: number;
   /** Gitignored. Default false. */
   ignored?: boolean;
+  /**
+   * OKF v0.3 (hook 3.1.0+): the file's front-matter metadata exactly as the hook sends it
+   * (snake_case keys). Omitted = an older hook (no `meta` on the wire).
+   */
+  meta?: OkfFileMetaSpec;
+}
+
+/** Hook 3.1.0 per-file front-matter metadata (okf-snapshot.md, DD-H3). */
+export interface OkfFileMetaSpec {
+  frontMatter: boolean;
+  hasGenerated: boolean;
+  hasTimestamp: boolean;
+  type?: string;
+  status?: string;
+  superseded_by?: string;
+  stale_after?: string;
 }
 
 /** One bundle: its root folder and its files (its `index.md` is added when missing). */
@@ -47,6 +63,10 @@ export interface OkfBundleSpec {
   root: string;
   /** Gitignored `index.md` → the whole bundle is ignored. Default false. */
   ignored?: boolean;
+  /** OKF v0.3 (hook 3.1.0+): the bundle index's `okf_version` / `title` / `description`. */
+  okfVersion?: string;
+  title?: string;
+  description?: string;
   files: Array<string | OkfSnapshotFileSpec>;
 }
 
@@ -134,7 +154,10 @@ export interface OkfSnapshotBody {
     root: string;
     index: string;
     ignored: boolean;
-    files: Array<{ path: string; ignored: boolean; size: number; hash: string }>;
+    files: Array<{ path: string; ignored: boolean; size: number; hash: string; meta?: OkfFileMetaSpec }>;
+    okfVersion?: string;
+    title?: string;
+    description?: string;
   }>;
 }
 
@@ -143,8 +166,9 @@ export function okfSnapshotBody(spec: OkfSnapshotSpec): OkfSnapshotBody {
   const bundles = spec.bundles
     .map((b) => {
       const index = `${b.root}/index.md`;
-      const files = b.files.map((f) => (typeof f === 'string' ? { path: f } : f));
+      const files: OkfSnapshotFileSpec[] = b.files.map((f) => (typeof f === 'string' ? { path: f } : f));
       if (!files.some((f) => f.path === index)) files.push({ path: index });
+      // The new fields are added only when given, so an old-hook spec keeps its old id.
       return {
         root: b.root,
         index,
@@ -155,8 +179,12 @@ export function okfSnapshotBody(spec: OkfSnapshotSpec): OkfSnapshotBody {
             ignored: f.path === index ? (b.ignored ?? f.ignored ?? false) : (f.ignored ?? false),
             size: f.size ?? 1000,
             hash: createHash('sha256').update(`okf-scenario:${f.path}:${f.size ?? 1000}`).digest('hex'),
+            ...(f.meta === undefined ? {} : { meta: f.meta }),
           }))
           .sort((x, y) => (x.path < y.path ? -1 : x.path > y.path ? 1 : 0)),
+        ...(b.okfVersion === undefined ? {} : { okfVersion: b.okfVersion }),
+        ...(b.title === undefined ? {} : { title: b.title }),
+        ...(b.description === undefined ? {} : { description: b.description }),
       };
     })
     .sort((x, y) => (x.root < y.root ? -1 : x.root > y.root ? 1 : 0));
@@ -407,6 +435,32 @@ export async function expectOkfTreeFits(page: Page): Promise<void> {
         })
         .toBeLessThanOrEqual(0);
     }
+  } finally {
+    if (before) await page.setViewportSize(before);
+  }
+}
+
+/**
+ * The OKF view on the open page shows its top without scrolling at 1600×1000: the summary line,
+ * Versions (or the old-hook line that replaces Versions and Wrong format), Wrong format and the
+ * first hot-files row are inside the viewport. The viewport is restored afterwards.
+ */
+export async function expectOkfViewFits(page: Page): Promise<void> {
+  const before = page.viewportSize();
+  try {
+    await page.setViewportSize({ width: 1600, height: 1000 });
+    const at = 'at 1600×1000';
+    await expect(page.getByTestId('okf-summary'), `the summary line is above the fold ${at}`).toBeInViewport({ ratio: 0.9 });
+    const oldHook = (await page.getByTestId('okf-old-hook-line').count()) > 0;
+    if (oldHook) {
+      await expect(page.getByTestId('okf-old-hook-line'), `the old-hook line is above the fold ${at}`).toBeInViewport({ ratio: 0.9 });
+    } else {
+      await expect(page.getByTestId('okf-versions'), `Versions is above the fold ${at}`).toBeInViewport({ ratio: 0.9 });
+      await expect(page.getByTestId('okf-format'), `Wrong format is above the fold ${at}`).toBeInViewport({ ratio: 0.9 });
+    }
+    await expect(page.getByTestId('okf-hot-row').first(), `the first hot-files row is above the fold ${at}`).toBeInViewport({
+      ratio: 0.9,
+    });
   } finally {
     if (before) await page.setViewportSize(before);
   }

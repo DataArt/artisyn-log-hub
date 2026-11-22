@@ -8,7 +8,7 @@ tags:
   - session-view
   - reports
   - teams
-timestamp: "2026-11-05T00:00:00+04:00"
+generated: { by: "human:denistsyplakov", at: "2026-11-21T12:45:00+04:00" }
 ---
 
 # OTEL Tabs
@@ -597,6 +597,7 @@ only, any hook that sends OTEL):
 | no attribution attributes (old CC, default values, no `OTEL_LOG_TOOL_DETAILS`) | every attribution `stackBy` returns one `''` "not reported" group equal to the total | `s-compat-01` frozen 2.28.0 OTEL |
 | `< 2.1.307` | sub-agent transcripts can miss API calls → sub-agent cost = `GREATEST(transcript, OTEL)` (FR-6), `subagentCostFromOtel`, "from OTEL" | `s-cost-01` GS-02 old-CC sub-agent |
 | `< 2.1.317` | no `anthropic.plan` / account attributes → `plan: null`, no Account row, no chip, counted as "not reported" in `planMix` | `s-compat-01` frozen 2.28.0 OTEL |
+| `≥ 2.1.329`, Code Mode on | Code Mode now runs with OTEL logs and metrics on, but tracing still keeps it off, so an install with the trace keys (`otelTraces: true`) never runs Code Mode. Without traces, every tool call a script makes sends its own `tool_result` / `tool_decision` events. The OTEL tabs read only `claude_code.api_request` logs (cost) and spans (Live tool list), so script calls change no cost figure and are not dropped by mistake. They are just not shown, and neither is any other tool event. A Code Mode session has no spans, so its Live view has no tool list | none needed (checked 2026-11-21) |
 
 The trace keys are opt-in at install (`--otel-traces`, stored `otelTraces`), see
 [hook-installation.md](hook-installation.md).

@@ -1,4 +1,9 @@
 ---
+type: "Algorithm"
+title: "Cost formula: what a session's tokens cost"
+description: "Turns a session's token counts and one `model_pricing` row into US dollars. Every computed session cost in the product (sessions list, session Info, Summary, Executive Summary, Analytics, the delete-time audit row) comes from this one formula, so the same tokens must always cost the same, and \"we…"
+tags: [algorithm]
+generated: { by: "human:denistsyplakov", at: "2026-11-03T17:31:26+04:00" }
 reviewed: no
 reviewer: none
 ---

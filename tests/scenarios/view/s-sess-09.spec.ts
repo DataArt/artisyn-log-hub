@@ -22,27 +22,22 @@
 //   - the tree shows a file's lines and change kind, not its call count; the two calls on Cart.tsx
 //     are checked in the API (`editCalls` 2) and as one tree node.
 //
-// Steps 7–10 — the session OKF tab (2026-10-27 OKF usage tab, FR-4, FR-11..FR-13): a session
-// tree built by helpers/okf.ts (DD-36) in a repository whose snapshot has one 12-file bundle
-// `docs/kb`. The main agent edits a01.md and reads it back (own edit), reads index.md, greps the
-// bundle folder (folder scan), reads a02.md three times, a03.md and a05.md once and greps a03.md
-// (a file grep, not counted in the folder-scan marker); its sub-agent
-// reads a04.md (8 KB). Shares count articles only (index.md is the entry point): main agent 3 of
-// the 10 articles it did not write (30 % > 25 %) → «Something to fix» with one Why line; the
-// sub-agent's 1 of 11 is fine. Since 2026-11-03 (OKF value signals, DD-15) the a01.md read back
-// after the own edit is upkeep: it leaves Read top 5 for the Upkeep line and its tree row shows
-// `upkeep ×1` next to `own edit`. Step 11 uploads a second tree in the same repository for the
-// value-signal UI (section reads, pointers, searches after reading, the agents panel columns).
-// OKF tab quick wins: agents are named `main` / `1.N · <description or task head>`, a folder's
-// unread articles fold into one «N articles not read in this session» row (hidden while the
-// tree is filtered to one agent), and a `<pasted_content>` wrapper is stripped from task heads.
-// Package 2 (2026-11-05): the tab is split into section A (structure, verified) and B (value
-// signals, heuristic, with a «N signals to check» count); the verdict card lists one Checks line
-// per structure rule (step 8: the session_share finding, step 11: an OK share line) and links to
-// the repository OKF tab.
-// Package 3 (agent trail): step 12 opens an agent's trail in section B (`okfAgent` in the URL) —
-// call order, the new code paths of a read and where they were opened, in-area searches with
-// `found` / `nothing found`.
+// Steps 7–11 — the session OKF tab (2026-11-21: the tab is a summary line and four views —
+// Versions, Wrong format, Hot files, Explorer — counted in agents). Session trees are built by
+// helpers/okf.ts in a repository whose snapshot has one 12-file bundle `docs/kb`. Step 7's main
+// agent edits a01.md and reads it back (a read after an own edit still counts), reads index.md,
+// greps the bundle folder (a folder search: its own explorer row, in no file's numbers), reads
+// a02.md three times, a03.md and a05.md once and greps a03.md (a file grep counts on the file);
+// its sub-agent reads a04.md (8 KB). Steps 7–10 stand for an older hook (a snapshot without
+// front-matter metadata): the old-hook line replaces Versions and Wrong format.
+//   - step 8: the summary line («KB read by 2 of 2 agents»), «Agents» in every count column,
+//     hot files (index.md is one line below the table), none of the removed blocks;
+//   - step 9: the explorer — the folder-search row, opened and never-opened files, the filters;
+//   - step 10: a second tree whose agents also read and grep code files: only KB files are
+//     listed, with one agent each;
+//   - step 11: a hook 3.1.0 snapshot (bundle `docs/guide`, `okf_version` 0.2, per-file `meta`):
+//     the Versions row of an older bundle, the Wrong-format groups, nested index.md / log.md in
+//     the explorer but not in hot files, a dot-path file nowhere.
 //
 // Replaces:
 //   - server/test/change-surface.e2e-spec.ts (24, part ≈ 10)
@@ -55,6 +50,7 @@
 //     normalization: ≈ 10)
 //   - client/src/viewer/__tests__/components/change-surface-tab.test.tsx (18, part)
 import { randomBytes } from 'crypto';
+import type { Locator } from '@playwright/test';
 import { test, expect } from '../fixtures';
 import { createApiKey } from '../helpers/api-key';
 import { loadExpected } from '../helpers/golden';
@@ -97,6 +93,45 @@ function need<T>(value: T | undefined, field: string): T {
   if (value === undefined) throw new Error(`gs-08 expected.json changeSurface has no ${field}`);
   return value;
 }
+
+/** `GET …/sessions/:id/okf-usage` — the fields this scenario reads. */
+interface OkfUsage {
+  unit: 'sessions' | 'agents';
+  snapshot: { branch: string | null; takenAt: string; hasMeta: boolean } | null;
+  currentFormat: string;
+  summary: { unitsRead: number; unitsTotal: number; reads: number; tokens: number };
+  versions: Array<{ root: string; files: number; okfVersion: string | null; older: boolean; ignored: boolean }>;
+  format: {
+    articles: number;
+    indexFiles: number;
+    withProblems: number;
+    groups: Array<{ problem: string; files: Array<{ path: string; supersededBy?: string }> }>;
+  } | null;
+  files: Array<{ path: string; inSnapshot: boolean; index: boolean; units: number; reads: number; tokens: number }>;
+  folders: Array<{
+    bundle: string;
+    path: string;
+    units: number;
+    search: { units: number; reads: number; tokens: number; cost: number | null } | null;
+  }>;
+}
+
+/** Ids of the session OKF blocks removed on 2026-11-21: none of them may render. */
+const REMOVED_OKF_IDS = [
+  'okf-verdict-card',
+  'okf-section-a',
+  'okf-section-b',
+  'okf-checks',
+  'okf-read-top',
+  'okf-upkeep-line',
+  'okf-agent-row',
+  'okf-bundle-card',
+  'okf-value-signals-tile',
+  'okf-agent-trail',
+  'okf-metric-toggle',
+  'okf-tree-unread-group',
+  'okf-thresholds-chip',
+];
 
 interface Edit {
   path: string;
@@ -281,107 +316,109 @@ test('@S-SESS-09 Windows change surface: scattered change, a file outside the re
     return id;
   });
 
-  await test.step('8. verdict card: «Something to fix», one Why line for the main agent (3 of 10, 30 %), read top 5 without the upkeep a01.md (on the Upkeep line), two agents', async () => {
+  /** One explorer row by its kind and `data-path` (a folder key ends in `/`, a bundle is its root). */
+  const treeRow = (kind: 'bundle' | 'folder' | 'file' | 'search', path: string) =>
+    page.locator(`[data-testid="okf-tree-row"][data-kind="${kind}"][data-path="${path}"]`);
+  /** Opens (or closes) an expandable explorer row. */
+  const toggleRow = (row: Locator) => row.getByRole('button').first().click();
+  const hotRow = (path: string) => page.locator(`[data-testid="okf-hot-row"][data-path="${path}"]`);
+  const hotPaths = () =>
+    page.getByTestId('okf-hot-row').evaluateAll((rows) => rows.map((r) => r.getAttribute('data-path')));
+  const sessionOkf = async (s: string): Promise<OkfUsage> => {
+    const res = await owner.api.get(`/api/v1/repositories/${okfRepoId}/sessions/${encodeURIComponent(s)}/okf-usage`);
+    expect(res.status(), `okf-usage of ${s}`).toBe(200);
+    return (await res.json()) as OkfUsage;
+  };
+  const opened = (u: OkfUsage) => u.files.filter((f) => f.units > 0).map((f) => f.path);
+
+  await test.step('8. session OKF tab: «KB read by 2 of 2 agents», «Agents» in every count column and no «Sessions» label, the old-hook line, hot files without index.md, none of the removed blocks', async () => {
+    const usage = await sessionOkf(okfSid);
+    expect(usage.unit).toBe('agents');
+    expect(usage.snapshot, 'an older hook: a snapshot without metadata').toMatchObject({ branch: 'main', hasMeta: false });
+    // main: a01.md read back after its own edit (3000 B), index.md (600), the folder grep (200),
+    // a02.md ×3 (300), a03.md (1000) and its file grep (50), a05.md (100); sub-agent: a04.md
+    // (8000). The Edit is no read. 13 250 B / 4.
+    expect(usage.summary).toMatchObject({ unitsRead: 2, unitsTotal: 2, reads: 10, tokens: 3312.5 });
+    expect({ versions: usage.versions, format: usage.format }).toEqual({ versions: [], format: null });
+
     await openSession(page, owner, okfRepoId, okfSid, { tab: 'okf' });
-    await expect(page.getByTestId('session-okf-tab')).toBeVisible();
-    await expect(page.getByTestId('okf-no-snapshot')).toHaveCount(0);
-    await expect(page.getByTestId('okf-verdict-level')).toHaveText('Something to fix');
-    const why = page.getByTestId('okf-why-line');
-    await expect(why).toHaveCount(1);
-    // The root agent is named `main` (OKF tab quick wins: agent labels).
-    await expect(why).toContainText('agent main read 30% of docs/kb files (3 of 10)');
-    const readTop = page.getByTestId('okf-read-top');
-    await expect(readTop).toHaveCount(5);
-    await expect(readTop.first()).toContainText('docs/kb/a04.md');
-    // FR-5 (2026-11-03 DD-15): a01.md, read back after the agent's own edit, is upkeep — it
-    // leaves Read top 5 for the muted Upkeep line.
-    await expect(readTop.filter({ hasText: 'docs/kb/a01.md' })).toHaveCount(0);
-    await expect(page.getByTestId('okf-upkeep-line')).toContainText('docs/kb/a01.md');
-    await expect(page.getByTestId('okf-upkeep-line')).toContainText('1 read');
-    await expect(page.getByTestId('okf-agent-row')).toHaveCount(2);
-    await expect(page.getByTestId('okf-bundle-card')).toContainText('docs/kb');
+    const tab = page.getByTestId('session-okf-tab');
+    await expect(tab).toBeVisible();
+    await expect(tab.getByTestId('okf-no-snapshot')).toHaveCount(0);
+    await expect(tab.getByTestId('okf-summary-ratio')).toHaveText('KB read by 2 of 2 agents');
+    await expect(tab.getByTestId('okf-summary-tokens')).toHaveText('≈ 3.3K tokens of context');
+    await expect(tab.getByTestId('okf-summary-snapshot')).toContainText('snapshot from main, ');
+    await expect(tab.getByTestId('okf-old-hook-line')).toHaveText('Update the hook to see versions and format problems.');
+    await expect(tab.getByTestId('okf-versions')).toHaveCount(0);
+    await expect(tab.getByTestId('okf-format')).toHaveCount(0);
 
-    // Package 2 (2026-11-05): the tab is split into A (structure, verified) and B (value
-    // signals, heuristic); A's verdict card lists one Checks line per structure rule with the
-    // counted value and its threshold, also when the rule found nothing.
-    await expect(page.getByTestId('okf-section-a').getByTestId('okf-section-title')).toHaveText('A · How the KB was navigated (verified)');
-    await expect(page.getByTestId('okf-section-a').getByTestId('okf-verdict-card')).toHaveCount(1);
-    await expect(page.getByTestId('okf-section-a').getByTestId('okf-bundle-card')).toHaveCount(1);
-    await expect(page.getByTestId('okf-section-b').getByTestId('okf-section-title')).toHaveText('B · Did the articles help? (heuristic — check by hand)');
-    await expect(page.getByTestId('okf-section-b').getByTestId('okf-value-signals-tile')).toHaveCount(1);
-    await expect(page.getByTestId('okf-section-b-intro')).toContainText('they cannot know what a search was about');
-    await expect(page.getByTestId('okf-section-b-count')).toHaveText('nothing to check');
-    const checks = page.getByTestId('okf-checks');
-    await expect(checks).toContainText('How the agents navigated the KB — counted from tool calls');
-    const lines = checks.getByTestId('okf-check-line');
-    await expect(lines).toHaveCount(4);
-    const kbUsed = lines.and(page.locator('[data-rule="kb_used"]'));
-    await expect(kbUsed).toHaveAttribute('data-status', 'ok');
-    await expect(kbUsed.getByTestId('okf-check-text')).toHaveText('2 of 2 agents read the KB (docs/kb)');
-    const share = lines.and(page.locator('[data-rule="session_share"]'));
-    await expect(share).toHaveAttribute('data-status', 'finding');
-    // main wrote a01.md, so 10 articles are left; it read a02, a03 and a05 (upkeep excluded).
-    await expect(share.getByTestId('okf-check-text')).toHaveText(
-      'main read 3 of 10 articles of docs/kb (30 %) — wholesale reading (finding at > 25 %, mess at > 50 %)',
-    );
-    await expect(share.getByTestId('okf-check-action')).toHaveText(
-      '→ sharpen the one-line descriptions in docs/kb/index.md so the agent can pick one article',
-    );
-    const upkeep = lines.and(page.locator('[data-rule="upkeep"]'));
-    await expect(upkeep).toHaveAttribute('data-status', 'ok');
-    await expect(upkeep.getByTestId('okf-check-text')).toHaveText(
-      'main edited docs/kb/a01.md — reads of an article the same agent edits are upkeep and excluded above',
-    );
-    await expect(lines.and(page.locator('[data-rule="entry"]'))).toHaveAttribute('data-status', 'ok');
-    await expect(page.getByTestId('okf-checks-repo-note')).toContainText(
-      'Repo-level checks (always read, KB flood, coarse article) run over many sessions on the repository OKF tab',
-    );
+    // The unit is the agent everywhere: the hot-files column, the explorer column, the header.
+    const table = tab.getByTestId('okf-hot-files');
+    await expect(table.locator('th', { has: page.getByTestId('okf-hot-sort-units') })).toContainText('Agents');
+    await expect(tab.getByTestId('okf-tree')).toContainText('Agents');
+    await expect(tab, 'no «Sessions» label on the session tab').not.toContainText('Sessions');
+
+    // Hot files, by ≈ Tokens: the sub-agent's a04.md first; a01.md (read after the own edit) is
+    // a hot file like any other; index.md is one line below the table.
+    await expect
+      .poll(hotPaths)
+      .toEqual(['docs/kb/a04.md', 'docs/kb/a01.md', 'docs/kb/a03.md', 'docs/kb/a02.md', 'docs/kb/a05.md']);
+    const a04 = hotRow('docs/kb/a04.md').locator('td');
+    await expect(a04.nth(1), 'agents').toHaveText('1');
+    await expect(a04.nth(2), 'reads').toHaveText('1');
+    await expect(a04.nth(3), '≈ tokens').toHaveText('2.0K');
+    await expect(hotRow('docs/kb/a02.md').locator('td').nth(2), 'three reads of a02.md').toHaveText('3');
+    await expect(hotRow('docs/kb/a03.md').locator('td').nth(2), 'the read and the file grep of a03.md').toHaveText('2');
+    await expect(table.getByTestId('okf-hot-index-line')).toContainText('1 index file is not listed');
+
+    for (const id of REMOVED_OKF_IDS) await expect(page.getByTestId(id), `${id} is gone`).toHaveCount(0);
   });
 
-  await test.step('9. tree: heat by bytes puts the sub-agent’s a04.md first, by calls a02.md; own-edit and folder-scan markers', async () => {
+  await test.step('9. explorer: 6 of 12 files opened in this session; the folder grep is a search row; a03.md (read + file grep) and the sub-agent’s a04.md are opened, a06.md is not; «Never opened» lists the other six', async () => {
+    const usage = await sessionOkf(okfSid);
+    expect(opened(usage)).toEqual(['a01', 'a02', 'a03', 'a04', 'a05', 'index'].map((n) => `docs/kb/${n}.md`));
+    expect(usage.folders, 'both agents opened a file of the folder; the folder grep is in no file').toEqual([
+      { bundle: 'docs/kb', path: 'docs/kb/', units: 2, search: expect.objectContaining({ units: 1, reads: 1, tokens: 50 }) },
+    ]);
+
+    await expect(page.getByTestId('okf-tree-header')).toHaveText('6 of 12 files opened in this session');
+    await expect(page.getByTestId('okf-tree-filter-opened')).toHaveText('Opened (6)');
+    await expect(page.getByTestId('okf-tree-filter-never')).toHaveText('Never opened (6)');
+    // Collapsed at first: the bundle root only.
     const rows = page.getByTestId('okf-tree-row');
-    await expect(rows.first()).toContainText('docs/kb');
-    await expect(rows.nth(1)).toContainText('a04.md');
-    await expect(rows.filter({ hasText: 'a01.md' })).toContainText('own edit');
-    await expect(rows.filter({ hasText: 'a01.md' })).toContainText('upkeep ×1');
-    // The bundle's grepCalls (2) include the file grep on a03.md; the marker counts the folder's own grep only.
-    await expect(rows.first()).toContainText('grep / ls over folder ×1');
-    // Session tree: the six unread articles fold into one row; «show» lists them.
-    const unread = page.getByTestId('okf-tree-unread-group');
-    await expect(unread).toHaveText('6 articles not read in this session · show');
-    await expect(rows.filter({ hasText: 'a11.md' })).toHaveCount(0);
-    await unread.click();
-    await expect(rows.filter({ hasText: 'a11.md' })).toContainText('not read');
-    await expect(unread).toContainText('hide');
-    await expect(page.getByTestId('okf-tree-legend')).toContainText('Code paths followed');
+    await expect(rows).toHaveCount(1);
+    const root = treeRow('bundle', 'docs/kb');
+    await expect(root).toContainText('6 of 12');
+    await toggleRow(root);
+    await expect(rows).toHaveCount(14);
+    const search = treeRow('search', 'docs/kb/');
+    await expect(search).toContainText('searches across this folder');
+    const a03 = treeRow('file', 'docs/kb/a03.md');
+    await expect(a03).toHaveAttribute('data-opened', 'true');
+    await expect(a03.locator('> span').nth(2), 'agents').toHaveText('1');
+    await expect(a03.locator('> span').nth(3), '≈ tokens of the read and the file grep').toHaveText('0.3K');
+    const a04 = treeRow('file', 'docs/kb/a04.md');
+    await expect(a04, 'opened by the sub-agent').toHaveAttribute('data-opened', 'true');
+    await expect(a04.locator('> span').nth(3)).toHaveText('2.0K');
+    const a06 = treeRow('file', 'docs/kb/a06.md');
+    await expect(a06).toHaveAttribute('data-opened', 'false');
+    await expect(a06.locator('> span').nth(2), 'a never-opened file has no numbers').toHaveText('—');
     await expectOkfTreeFits(page);
-    await page.getByTestId('okf-metric-toggle').getByText('Calls', { exact: true }).click();
-    await expect(rows.nth(1)).toContainText('a02.md');
-    await page.getByTestId('okf-metric-toggle').getByText('Bytes', { exact: true }).click();
-    await expect(rows.nth(1)).toContainText('a04.md');
+
+    await page.getByTestId('okf-tree-filter-never').click();
+    await expect(search).toHaveCount(0);
+    await expect(a04).toHaveCount(0);
+    await expect(page.locator('[data-testid="okf-tree-row"][data-kind="file"]')).toHaveCount(6);
+    await expect(page.locator('[data-testid="okf-tree-row"][data-kind="file"][data-opened="true"]')).toHaveCount(0);
+    await page.getByTestId('okf-tree-filter-opened').click();
+    await expect(page.locator('[data-testid="okf-tree-row"][data-kind="file"]')).toHaveCount(6);
+    await expect(a06).toHaveCount(0);
+    await expect(search, 'the search row stays under «Opened»').toHaveCount(1);
   });
 
-  await test.step('10. the sub-agent row narrows the tree to its read (FR-4); a Why line scrolls to and highlights the bundle', async () => {
-    const rows = page.getByTestId('okf-tree-row');
-    // Neither a description nor a task head (the helper's sub-agent log has no first prompt):
-    // the sub-agent is named by its short id, the 8 characters after `agent-`.
-    const subLabel = page.getByTestId('okf-agent-label').filter({ hasText: `1.1 · ${run}` });
-    await expect(subLabel).toHaveCount(1);
-    await subLabel.click();
-    await expect(page.getByTestId('okf-tree')).toContainText(`only agent 1.1 · ${run}`);
-    await expect(page.getByTestId('okf-tree-unread-group'), 'unread rows are hidden while filtered to one agent').toHaveCount(0);
-    await expect(rows.filter({ hasText: 'a04.md' })).toHaveCount(1);
-    await expect(rows.filter({ hasText: 'a02.md' })).toHaveCount(0);
-    await page.getByTestId('okf-why-line').click();
-    await expect(rows.filter({ hasText: 'a02.md' }), 'the Why click clears the agent filter').toHaveCount(1);
-    await expect(rows.first()).toHaveClass(/\bbg-accent\b/);
-    await expect(rows.first()).toBeInViewport();
-  });
-
-  await test.step('11. value signals (2026-11-03): § section chip, POINTERS USED / EXPL. AFTER columns, per-agent pointers with the prompt-named count, agents panel yield / misses / upkeep / searches', async () => {
-    // Main agent: reads lines 10–29 of a06.md (a section read), which names two payment files;
-    // it opens charge.ts (a followed pointer) and greps both files twice after reading. The
-    // sub-agent's task already names refund.ts, so only ledger.ts is new in its read of a07.md.
+  await test.step('10. a second tree whose agents also read and grep code files: hot files list a06.md and a07.md with one agent each and no code path; «KB read by 2 of 2 agents»', async () => {
+    // Main agent: a ranged read of a06.md, then a read and two greps of payment code files.
+    // Sub-agent: one read of a07.md. Code files are not KB files: they count nowhere.
     const sid2 = `ss09okf2-${run}`;
     const sub2 = `agent-${run}ptr`;
     const key = await createApiKey(owner.api);
@@ -391,7 +428,6 @@ test('@S-SESS-09 Windows change surface: scattered change, a file outside the re
       {
         sessionId: sid2,
         repoUrl: okfRepoUrl,
-        // The pasted-content wrapper is stripped from the task head, its text kept (OKF quick wins).
         prompt: 'trace the card charge flow <pasted_content id="1">TypeError: amount is undefined</pasted_content>',
         snapshot: { bundles: [{ root: 'docs/kb', files: [{ path: 'docs/kb/index.md', size: 600 }, ...articles] }] },
         actions: [
@@ -403,7 +439,6 @@ test('@S-SESS-09 Windows change surface: scattered change, a file outside the re
           },
           { read: 'server/pay/charge.ts' },
           { grep: 'server/pay/charge.ts', pattern: 'chargeCard' },
-          // Package 3: this search found nothing (the trail's `nothing found`).
           { grep: 'server/pay/refund.ts', pattern: 'refundAll', result: 'No matches found' },
         ],
         subAgents: [
@@ -411,7 +446,6 @@ test('@S-SESS-09 Windows change surface: scattered change, a file outside the re
             agentId: sub2,
             description: 'Check refunds vs ledger',
             task: 'check `server/pay/refund.ts` against the ledger',
-            // The back-ticked identifiers, call and version are not code paths (extract version 3).
             actions: [
               {
                 read: 'docs/kb/a07.md',
@@ -425,132 +459,151 @@ test('@S-SESS-09 Windows change surface: scattered change, a file outside the re
       { db, userId: owner.id },
     );
 
+    const usage = await sessionOkf(sid2);
+    expect(usage.summary).toMatchObject({ unitsRead: 2, unitsTotal: 2, reads: 2 });
+    expect(opened(usage)).toEqual(['docs/kb/a06.md', 'docs/kb/a07.md']);
+    expect(usage.files.every((f) => f.inSnapshot), 'a code file is not a «not in this snapshot» file either').toBe(true);
+    expect(JSON.stringify(usage)).not.toContain('server/pay');
+
     await openSession(page, owner, okfRepoId, sid2, { tab: 'okf' });
     // Same page, hash-only navigation: reload so the session list sees the new tree.
     await page.reload();
-    await expect(page.getByTestId('session-okf-tab')).toBeVisible();
-    await expect(page.getByTestId('okf-read-top').filter({ hasText: 'docs/kb/a06.md' }).getByTestId('okf-section-chip')).toHaveText(
-      '1 partial read (line range)',
-    );
-    const tile = page.getByTestId('okf-value-signals-tile');
-    await expect(tile.getByTestId('okf-signal-pointers-used')).toContainText('1 / 2 reads');
-    await expect(tile.getByTestId('okf-signal-searched-after')).toContainText('1 agent kept searching after reading');
-    await expect(tile.getByTestId('okf-signal-searched-after').getByTestId('okf-signal-caption')).toContainText('Counted per agent and article');
-    // Section B counts the non-zero signals: the one search after reading.
-    await expect(page.getByTestId('okf-section-b-count')).toHaveText('1 signal to check');
-    // Section A: every agent read 1 of the 11 articles — an OK share line with the number and
-    // the threshold (the first of the equal shares, main, is named).
-    const share = page.getByTestId('okf-check-line').and(page.locator('[data-rule="session_share"]'));
-    await expect(share).toHaveAttribute('data-status', 'ok');
-    await expect(share.getByTestId('okf-check-text')).toHaveText(
-      'Targeted reads — at most 1 of 11 articles (9 %) per agent (main, docs/kb). More than 25 % means an agent read the KB wholesale instead of finding one article',
-    );
-    await expect(page.getByTestId('okf-check-line').and(page.locator('[data-rule="upkeep"]')).getByTestId('okf-check-text')).toHaveText(
-      'No agent edited an article it read',
-    );
-
-    const rows = page.getByTestId('okf-tree-row');
-    const a06 = rows.filter({ hasText: 'a06.md' });
-    await expect(a06).toContainText('1 partial read (line range)');
-    await expect(a06.getByTestId('okf-tree-pointers-used')).toHaveText('1 / 1');
-    await expect(a06.getByTestId('okf-tree-searched-after')).toHaveText('1 · 2');
-    const a07 = rows.filter({ hasText: 'a07.md' });
-    await expect(a07.getByTestId('okf-tree-pointers-used')).toHaveText('0 / 1');
-    await a07.getByTestId('okf-pointers-toggle').click();
-    const sub = page.getByTestId('okf-agent-pointers').filter({ hasText: '1.1 · Check refunds vs ledger' });
-    await expect(sub.getByTestId('okf-agent-pointer')).toHaveText(['· server/pay/ledger.ts']);
-    await expect(sub.getByTestId('okf-prompt-named')).toContainText('1 path already named in its prompt');
-    // Long marker texts and the opened code-path rows still fit without sideways scroll.
+    const tab = page.getByTestId('session-okf-tab');
+    await expect(tab).toBeVisible();
+    await expect(tab.getByTestId('okf-summary-ratio')).toHaveText('KB read by 2 of 2 agents');
+    await expect.poll(async () => [...(await hotPaths())].sort()).toEqual(['docs/kb/a06.md', 'docs/kb/a07.md']);
+    for (const path of ['docs/kb/a06.md', 'docs/kb/a07.md']) {
+      await expect(hotRow(path).locator('td').nth(1), `${path}: one agent`).toHaveText('1');
+      await expect(hotRow(path).locator('td').nth(2), `${path}: one read`).toHaveText('1');
+    }
+    await expect(tab.getByTestId('okf-hot-index-line'), 'no index file was read').toHaveCount(0);
+    await expect(tab).not.toContainText('server/pay');
+    await expect(tab.getByTestId('okf-tree-header')).toHaveText('2 of 12 files opened in this session');
     await expectOkfTreeFits(page);
-
-    const mainRow = page.getByTestId('okf-agent-row').filter({ hasText: 'trace the card charge flow' });
-    await expect(mainRow.getByTestId('okf-agent-label')).toHaveText('main');
-    await expect(mainRow).toContainText('trace the card charge flow TypeError: amount is undefined');
-    await expect(mainRow).not.toContainText('pasted_content');
-    await expect(mainRow.getByTestId('okf-agent-yield')).toContainText('1 / 1');
-    await expect(mainRow.getByTestId('okf-agent-misses')).toContainText('0');
-    await expect(mainRow.getByTestId('okf-agent-upkeep')).toContainText('0');
-    await expect(mainRow.getByTestId('okf-agent-searches')).toContainText('2');
-    const subRow = page.getByTestId('okf-agent-row').filter({ hasNotText: 'trace the card charge flow' });
-    await expect(subRow).toHaveCount(1);
-    await expect(subRow.getByTestId('okf-agent-label')).toHaveText('1.1 · Check refunds vs ledger');
-    await expect(subRow.getByTestId('okf-agent-yield')).toContainText('0 / 1');
-    await expect(subRow.getByTestId('okf-agent-searches')).toContainText('0');
-
-    // The Checks block's link opens the repository OKF tab, where the repo-level rules run.
-    await page.getByTestId('okf-checks-open-repo').click();
-    await expect(page).toHaveURL(/[?&]mtab=okf\b/);
-    await expect(page).not.toHaveURL(/[?&]session=/);
-    await expect(page.getByTestId('session-okf-tab')).toHaveCount(0);
-    await expect(page.getByTestId('okf-checks').getByTestId('okf-check-line').and(page.locator('[data-rule="kb_sessions"]'))).toHaveCount(1);
   });
 
-  await test.step('12. agent trail (package 3): the searched-after tile link opens main’s trail (`okfAgent`): the a06.md read, its two code paths and what became of them, the in-area searches with their result; the sub-agent’s trail from the Agents panel', async () => {
-    const sid2 = `ss09okf2-${run}`;
-    const sub2 = `agent-${run}ptr`;
-    await openSession(page, owner, okfRepoId, sid2, { tab: 'okf' });
-    await expect(page.getByTestId('session-okf-tab')).toBeVisible();
-    await expect(page.getByTestId('okf-agent-trail')).toHaveCount(0);
-    await expect(page.getByTestId('okf-trail-prompt')).toBeVisible();
+  await test.step('11. OKF v0.3 front matter (2026-11-19): a hook 3.1.0 snapshot — the Versions row «0.2, older than the current format», Wrong format: deprecated (with its replacement), past «stale after», no front matter; nested index.md / log.md are in the explorer, not in hot files; a dot-path file is nowhere', async () => {
+    const sid3 = `ss09okf3-${run}`;
+    const fm = { frontMatter: true, hasGenerated: true, hasTimestamp: false };
+    const key = await createApiKey(owner.api);
+    await uploadOkfSessionTree(
+      api,
+      key.key,
+      {
+        sessionId: sid3,
+        repoUrl: okfRepoUrl,
+        prompt: 'set up the dev environment',
+        snapshot: {
+          bundles: [
+            {
+              root: 'docs/guide',
+              okfVersion: '0.2',
+              title: 'Team guide',
+              description: 'How the team sets up, builds and ships the shop',
+              files: [
+                { path: 'docs/guide/index.md', size: 500, meta: { ...fm, type: 'Index' } },
+                {
+                  path: 'docs/guide/setup.md',
+                  meta: { ...fm, type: 'Article', status: 'Deprecated', superseded_by: 'install.md' },
+                },
+                { path: 'docs/guide/install.md', meta: { ...fm, type: 'Article', stale_after: '2020-01-01' } },
+                { path: 'docs/guide/old.md', meta: { frontMatter: false, hasGenerated: false, hasTimestamp: false } },
+                { path: 'docs/guide/api/routes.md', meta: { ...fm, type: 'Article' } },
+                // Reserved names at any depth are index files: read like any KB file, never checked.
+                { path: 'docs/guide/log.md', meta: { frontMatter: false, hasGenerated: false, hasTimestamp: false } },
+                { path: 'docs/guide/sub/index.md', meta: { frontMatter: false, hasGenerated: false, hasTimestamp: false } },
+                // A dot-path is not part of the bundle at all.
+                { path: 'docs/guide/.hidden/notes.md', meta: { frontMatter: false, hasGenerated: false, hasTimestamp: false } },
+              ],
+            },
+          ],
+        },
+        actions: [
+          { read: 'docs/guide/index.md', bytes: 500 },
+          { read: 'docs/guide/setup.md', bytes: 400 },
+          { read: 'docs/guide/sub/index.md', bytes: 200 },
+          { read: 'docs/guide/log.md', bytes: 200 },
+          { read: 'docs/guide/.hidden/notes.md', bytes: 300 },
+          { read: 'docs/guide/api/routes.md', result: 'Routes need a running stack — see `../install.md` first.\n' },
+          { read: 'docs/guide/install.md', bytes: 700 },
+        ],
+      },
+      { db, userId: owner.id },
+    );
 
-    // Section B's «searched after reading» number links to the trail of the agent behind it.
-    await page.getByTestId('okf-signal-searched-after').getByTestId('okf-signal-trail-link').click();
-    await expect(page).toHaveURL(new RegExp(`[?&]okfAgent=${sid2}(&|$)`));
-    const trail = page.getByTestId('okf-section-b').getByTestId('okf-agent-trail');
-    await expect(trail.getByTestId('okf-trail-title')).toHaveText('Agent trail · main · 4 calls');
-    // One episode, opened by the KB read; the call numbers in order.
-    await expect(trail.getByTestId('okf-trail-episode')).toHaveCount(1);
-    await expect(trail.getByTestId('okf-trail-episode')).toHaveAttribute('data-article', 'docs/kb/a06.md');
-    const items = trail.getByTestId('okf-trail-item');
-    await expect(items).toHaveCount(4);
-    for (const [i, op] of ['kb_read', 'read', 'search', 'search'].entries()) {
-      await expect(items.nth(i)).toHaveAttribute('data-ord', String(i + 1));
-      await expect(items.nth(i)).toHaveAttribute('data-op', op);
-    }
-    await expect(items.nth(0)).toContainText('docs/kb/a06.md');
-    await expect(items.nth(0)).toContainText('lines 10–29');
-    // The read showed two new code paths: charge.ts was opened at #2, refund.ts only searched at #4.
-    await expect(items.nth(0).getByTestId('okf-trail-pointer')).toHaveText([
-      '✓ server/pay/charge.ts (opened at #2)',
-      '✓ server/pay/refund.ts (searched at #4)',
+    const usage = await sessionOkf(sid3);
+    expect(usage.snapshot).toMatchObject({ branch: 'main', hasMeta: true });
+    expect(usage.currentFormat).toBe('0.3');
+    expect(usage.versions, 'seven files — the dot-path file is not part of the KB').toEqual([
+      { root: 'docs/guide', files: 7, okfVersion: '0.2', older: true, ignored: false },
     ]);
-    // Every path was used, so nothing is folded.
-    await expect(items.nth(0).getByTestId('okf-trail-pointers-toggle')).toHaveCount(0);
-    await expect(trail.getByTestId('okf-trail-after')).toHaveText('── after reading: 2 searches in its area, 1 file opened ──');
-    // The searches: full pattern, the result, and the mark of the article whose area they hit.
-    await expect(items.nth(2).getByTestId('okf-trail-pattern')).toHaveText('"chargeCard"');
-    await expect(items.nth(2).getByTestId('okf-trail-hit')).toHaveText('found');
-    await expect(items.nth(2).getByTestId('okf-trail-in-area')).toHaveText('in area of a06.md');
-    await expect(items.nth(3).getByTestId('okf-trail-pattern')).toHaveText('"refundAll"');
-    await expect(items.nth(3).getByTestId('okf-trail-hit')).toHaveText('nothing found');
-    await expect(items.nth(3)).toHaveAttribute('data-in-area', 'true');
-    await expect(items.nth(1)).toHaveAttribute('data-in-area', 'true');
-    await expect(trail.getByTestId('okf-trail-hint')).toContainText('a search for something the article names is a gap in the article');
+    // setup, install, old and api/routes are the articles; index.md, log.md and sub/index.md are
+    // index files. `install.md` is relative to the deprecated article's folder.
+    expect(usage.format).toEqual({
+      articles: 4,
+      indexFiles: 3,
+      withProblems: 3,
+      groups: [
+        { problem: 'no_front_matter', files: [{ path: 'docs/guide/old.md' }] },
+        { problem: 'deprecated', files: [{ path: 'docs/guide/setup.md', supersededBy: 'docs/guide/install.md' }] },
+        { problem: 'past_stale_after', files: [{ path: 'docs/guide/install.md' }] },
+      ],
+    });
+    expect(usage.summary, 'six reads; the dot-path read is not a KB read').toMatchObject({ unitsRead: 1, unitsTotal: 1, reads: 6 });
+    expect(opened(usage)).toEqual(
+      ['api/routes.md', 'index.md', 'install.md', 'log.md', 'setup.md', 'sub/index.md'].map((p) => `docs/guide/${p}`),
+    );
+    expect(JSON.stringify(usage)).not.toContain('.hidden');
+    const version = await db.query<{ v: number | null }>(
+      'SELECT okf_extract_version AS v FROM sessions WHERE session_id = $1',
+      [sid3],
+    );
+    expect(version.rows[0]?.v).toBe(4);
 
-    // The Agents panel selects another agent: the sub-agent's read showed ledger.ts (refund.ts
-    // was named in its task), which it never opened.
-    await page.getByTestId('okf-agent-row').filter({ hasNotText: 'trace the card charge flow' }).click();
-    await expect(page).toHaveURL(new RegExp(`[?&]okfAgent=${sub2}(&|$)`));
-    await expect(trail).toHaveAttribute('data-agent', sub2);
-    await expect(trail.getByTestId('okf-trail-title')).toHaveText('Agent trail · 1.1 · Check refunds vs ledger · 1 call');
-    // No path was used: only the folded toggle shows until it is expanded; the identifiers,
-    // the call and the version of a07.md are not counted as code paths.
-    const ptrs = trail.getByTestId('okf-trail-pointers');
-    await expect(ptrs).toContainText('showed 1 new code path:');
-    await expect(trail.getByTestId('okf-trail-pointer')).toHaveCount(0);
-    const fold = trail.getByTestId('okf-trail-pointers-toggle');
-    await expect(fold).toHaveText('1 code path, none opened · show');
-    await expect(fold).toHaveAttribute('aria-expanded', 'false');
-    await fold.click();
-    await expect(fold).toHaveText('1 code path, none opened · hide');
-    await expect(trail.getByTestId('okf-trail-pointer')).toHaveText(['· server/pay/ledger.ts (never opened)']);
-    await expect(trail.getByTestId('okf-trail-after')).toHaveCount(0);
-
-    // The selection survives a reload (URL state); closing the trail clears it.
+    await openSession(page, owner, okfRepoId, sid3, { tab: 'okf' });
     await page.reload();
-    await expect(page.getByTestId('okf-agent-trail')).toHaveAttribute('data-agent', sub2);
-    await page.getByTestId('okf-trail-close').click();
-    await expect(page).not.toHaveURL(/[?&]okfAgent=/);
-    await expect(page.getByTestId('okf-agent-trail')).toHaveCount(0);
+    const tab = page.getByTestId('session-okf-tab');
+    await expect(tab).toBeVisible();
+    await expect(tab.getByTestId('okf-summary-ratio')).toHaveText('KB read by 1 of 1 agents');
+    await expect(tab.getByTestId('okf-old-hook-line')).toHaveCount(0);
+
+    // A bundle behind the current format: Versions starts expanded.
+    const versions = tab.getByTestId('okf-versions');
+    await expect(versions).toHaveAttribute('data-collapsed', 'false');
+    const versionRow = page.locator('[data-testid="okf-version-row"][data-root="docs/guide"]');
+    await expect(versionRow).toContainText('7 files');
+    await expect(versionRow).toContainText('0.2');
+    await expect(versionRow.getByTestId('okf-version-older')).toHaveText('older than the current format 0.3');
+
+    const format = tab.getByTestId('okf-format');
+    await expect(format).toContainText('Wrong format — 3 of 4 articles');
+    await expect(format.getByTestId('okf-format-group')).toHaveCount(3);
+    const group = (problem: string) => format.locator(`[data-testid="okf-format-group"][data-problem="${problem}"]`);
+    for (const [problem, file] of [
+      ['deprecated', 'docs/guide/setup.md → replaced by docs/guide/install.md'],
+      ['past_stale_after', 'docs/guide/install.md'],
+      ['no_front_matter', 'docs/guide/old.md'],
+    ]) {
+      await group(problem).getByRole('button').click();
+      await expect(group(problem).getByTestId('okf-format-file'), problem).toHaveText(file);
+      await group(problem).getByRole('button').click();
+    }
+
+    // Index files are in the explorer, never among the hot files.
+    await expect
+      .poll(async () => [...(await hotPaths())].sort())
+      .toEqual(['docs/guide/api/routes.md', 'docs/guide/install.md', 'docs/guide/setup.md']);
+    await expect(tab.getByTestId('okf-hot-index-line')).toContainText('3 index files are not listed');
+    await expect(tab.getByTestId('okf-tree-header')).toHaveText('6 of 7 files opened in this session');
+    await toggleRow(treeRow('bundle', 'docs/guide'));
+    await expect(treeRow('file', 'docs/guide/log.md')).toHaveAttribute('data-opened', 'true');
+    await expect(treeRow('file', 'docs/guide/old.md')).toHaveAttribute('data-opened', 'false');
+    const sub = treeRow('folder', 'docs/guide/sub/');
+    await expect(sub).toContainText('1 of 1');
+    await toggleRow(sub);
+    await expect(treeRow('file', 'docs/guide/sub/index.md')).toHaveAttribute('data-opened', 'true');
+    await expect(tab, 'the dot-path file is nowhere').not.toContainText('notes.md');
+    for (const id of REMOVED_OKF_IDS) await expect(page.getByTestId(id), `${id} is gone`).toHaveCount(0);
+    await expectOkfTreeFits(page);
   });
 });

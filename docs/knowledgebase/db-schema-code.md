@@ -5,7 +5,7 @@ description: "Drizzle schema location, DI wiring, how to add a table (hand-writt
 tags:
   - database
   - drizzle
-timestamp: "2026-11-03T00:00:00+04:00"
+generated: { by: "human:denistsyplakov", at: "2026-11-03T00:00:00+04:00" }
 ---
 
 # DB Schema — Code Location and Structure

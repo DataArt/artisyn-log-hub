@@ -36,7 +36,9 @@ export function UserMenu() {
   // Only the local-password modes have a password to change; mode `none` never
   // renders this menu, and `azure-oauth` credentials live in the IdP.
   const canChangePassword =
-    authConfig?.mode === 'password' || authConfig?.mode === 'password-confirm';
+    authConfig?.mode === 'password' ||
+    authConfig?.mode === 'password-confirm' ||
+    authConfig?.mode === 'strict-managed';
 
   useEffect(() => {
     if (!open) return;

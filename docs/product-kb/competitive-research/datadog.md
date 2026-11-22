@@ -5,7 +5,7 @@ description: "Datadog's SaaS console for coding-agent spend, adoption and DORA-s
 tags:
   - competitive-research
   - apm-vendor
-timestamp: "2026-11-01T00:00:00+04:00"
+generated: { by: "human:denistsyplakov", at: "2026-11-01T00:00:00+04:00" }
 ---
 
 # Datadog Agent Console (AI Agents Console)

@@ -3,7 +3,7 @@ type: Test Strategy
 title: Test Strategy Overview
 description: The test suites of this repo — scenarios on an isolated stand, API vs DB contracts, doc-driven algorithm units (the only unit tests left, since 2026-10-16), the legacy tests/e2e remainder — the canonical commands and health checks, the shared-DB rule, the 80 % scenario-coverage target and where a new test belongs.
 tags: [testing, strategy, overview]
-timestamp: 2026-11-03T00:00:00Z
+generated: { by: "human:denistsyplakov", at: "2026-11-03T00:00:00Z" }
 ---
 
 The repo's tests are organised around **user scenarios on an isolated stand**. The scenario suite

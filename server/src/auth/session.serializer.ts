@@ -28,6 +28,19 @@ export class SessionSerializer extends PassportSerializer {
           `Session references deleted user id=${id} — session will be invalidated`,
         );
       }
+      // strict-managed: same rule as login — a session (e.g. one from an
+      // earlier auth mode) counts only for an account whose mailbox is proven.
+      if (
+        user &&
+        process.env.AUTH_MODE === 'strict-managed' &&
+        !user.emailConfirmedAt
+      ) {
+        this.logger.warn(
+          `Session of user id=${id} refused: email not verified (strict-managed)`,
+        );
+        done(null, null);
+        return;
+      }
       done(null, user);
     } catch (err) {
       this.logger.error(

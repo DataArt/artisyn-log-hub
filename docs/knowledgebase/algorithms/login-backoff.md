@@ -1,4 +1,9 @@
 ---
+type: "Algorithm"
+title: "Login backoff: the growing delay after failed logins"
+description: "Slows down password guessing. After repeated failed logins the server answers `429` with a `Retry-After` header for a growing number of seconds, counted separately per account and per source IP, so neither one account attacked from many IPs nor one IP walking through many accounts escapes it."
+tags: [algorithm]
+generated: { by: "human:denistsyplakov", at: "2026-11-14T14:41:14+04:00" }
 reviewed: 2026-10-15
 reviewer: ai
 ---

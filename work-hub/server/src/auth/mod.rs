@@ -49,16 +49,20 @@ pub enum AuthMode {
     Password,
     PasswordConfirm,
     AzureOauth,
+    /// Accepted by the startup rule shared with Log Hub, but not served by Work Hub yet:
+    /// `AuthSettings::from_env` refuses it.
+    StrictManaged,
 }
 
 impl AuthMode {
-    /// Exact, case-sensitive match of one of the four names.
+    /// Exact, case-sensitive match of one of the five names.
     pub fn parse(s: &str) -> Option<Self> {
         match s {
             "none" => Some(AuthMode::None),
             "password" => Some(AuthMode::Password),
             "password-confirm" => Some(AuthMode::PasswordConfirm),
             "azure-oauth" => Some(AuthMode::AzureOauth),
+            "strict-managed" => Some(AuthMode::StrictManaged),
             _ => None,
         }
     }
@@ -69,6 +73,7 @@ impl AuthMode {
             AuthMode::Password => "password",
             AuthMode::PasswordConfirm => "password-confirm",
             AuthMode::AzureOauth => "azure-oauth",
+            AuthMode::StrictManaged => "strict-managed",
         }
     }
 }

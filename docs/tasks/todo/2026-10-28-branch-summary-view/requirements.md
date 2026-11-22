@@ -1,3 +1,9 @@
+---
+type: "Task"
+title: "Branch Summary View"
+description: "click a branch in the branch-grouped session list to see aggregated Summary/Info/OKF etc. over its sessions (client-only)"
+---
+
 # 2026-10-28: Branch Summary View
 
 **Status:** todo

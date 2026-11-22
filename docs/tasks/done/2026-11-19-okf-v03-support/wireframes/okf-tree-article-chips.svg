@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="980" height="380" viewBox="0 0 980 380" font-family="Segoe UI, Arial, sans-serif">
+  <rect width="980" height="380" fill="#ffffff"/>
+  <text x="20" y="30" font-size="15" font-weight="600" fill="#111827">OKF tree — article chips (FR-6 deprecated / stale_after, FR-7 hint flag)</text>
+  <text x="20" y="50" font-size="11" fill="#6b7280">OkfTreeRow · repo and session variants · light theme · rows stay ROW_HEIGHT tall; chips sit after the name like "not in KB at start"</text>
+
+  <g transform="translate(20,68)">
+    <rect width="940" height="232" rx="6" fill="#ffffff" stroke="#e5e7eb"/>
+    <!-- header -->
+    <text x="10" y="20" font-size="10" fill="#6b7280" letter-spacing="0.5">KB FOLDER → FILE</text>
+    <text x="420" y="20" font-size="10" fill="#6b7280" letter-spacing="0.5">MARKERS</text>
+    <text x="700" y="20" font-size="10" fill="#6b7280" letter-spacing="0.5">READ (BYTES)</text>
+    <text x="840" y="20" font-size="10" fill="#6b7280" letter-spacing="0.5">SESSIONS</text>
+    <line x1="0" y1="28" x2="940" y2="28" stroke="#e5e7eb"/>
+
+    <!-- bundle row -->
+    <text x="10" y="48" font-size="11" fill="#6b7280">▾</text>
+    <text x="24" y="48" font-size="12" font-family="Consolas, monospace" font-weight="600" fill="#111827">Log Hub development KB</text>
+    <text x="200" y="48" font-size="10" font-family="Consolas, monospace" fill="#9ca3af">docs/knowledgebase</text>
+    <text x="420" y="48" font-size="11" fill="#6b7280">entry point</text>
+    <rect x="700" y="42" width="64" height="6" rx="3" fill="#f3f4f6"/><rect x="700" y="42" width="64" height="6" rx="3" fill="#0ea5e9"/>
+    <text x="772" y="48" font-size="11" font-family="Consolas, monospace" fill="#111827">184 KB</text>
+    <text x="860" y="48" font-size="11" font-family="Consolas, monospace" fill="#6b7280">9</text>
+
+    <!-- deprecated -->
+    <circle cx="38" cy="80" r="2" fill="#9ca3af"/>
+    <text x="48" y="84" font-size="12" font-family="Consolas, monospace" fill="#111827" text-decoration="underline">okf-usage-v1.md</text>
+    <rect x="168" y="72" width="70" height="16" rx="3" fill="#fffbeb" stroke="#fcd34d"/>
+    <text x="175" y="84" font-size="10" fill="#92400e">deprecated</text>
+    <text x="244" y="84" font-size="10" fill="#2563eb" text-decoration="underline">→ okf-usage.md</text>
+    <text x="420" y="84" font-size="11" fill="#b45309">⚠ read while deprecated ×2</text>
+    <rect x="700" y="78" width="64" height="6" rx="3" fill="#f3f4f6"/><rect x="700" y="78" width="20" height="6" rx="3" fill="#0ea5e9"/>
+    <text x="772" y="84" font-size="11" font-family="Consolas, monospace" fill="#111827">14 KB</text>
+    <text x="860" y="84" font-size="11" font-family="Consolas, monospace" fill="#6b7280">2</text>
+
+    <!-- stale_after -->
+    <circle cx="38" cy="116" r="2" fill="#9ca3af"/>
+    <text x="48" y="120" font-size="12" font-family="Consolas, monospace" fill="#111827" text-decoration="underline">pricing.md</text>
+    <rect x="128" y="108" width="104" height="16" rx="3" fill="#fffbeb" stroke="#fcd34d"/>
+    <text x="135" y="120" font-size="10" fill="#92400e">past stale_after</text>
+    <text x="420" y="120" font-size="11" fill="#6b7280">🔥 hot #1</text>
+    <rect x="700" y="114" width="64" height="6" rx="3" fill="#f3f4f6"/><rect x="700" y="114" width="44" height="6" rx="3" fill="#0ea5e9"/>
+    <text x="772" y="120" font-size="11" font-family="Consolas, monospace" fill="#111827">52 KB</text>
+    <text x="860" y="120" font-size="11" font-family="Consolas, monospace" fill="#6b7280">7</text>
+
+    <!-- hint: no type -->
+    <circle cx="38" cy="152" r="2" fill="#9ca3af"/>
+    <text x="48" y="156" font-size="12" font-family="Consolas, monospace" fill="#111827" text-decoration="underline">auth-flow.md</text>
+    <rect x="140" y="144" width="92" height="16" rx="3" fill="#f0f9ff" stroke="#bae6fd"/>
+    <text x="147" y="156" font-size="10" fill="#0369a1">ⓘ can improve</text>
+    <text x="420" y="156" font-size="11" fill="#6b7280">section ×3</text>
+    <rect x="700" y="150" width="64" height="6" rx="3" fill="#f3f4f6"/><rect x="700" y="150" width="12" height="6" rx="3" fill="#0ea5e9"/>
+    <text x="772" y="156" font-size="11" font-family="Consolas, monospace" fill="#111827">6 KB</text>
+    <text x="860" y="156" font-size="11" font-family="Consolas, monospace" fill="#6b7280">1</text>
+
+    <!-- hint: no front matter, not read -->
+    <circle cx="38" cy="188" r="2" fill="#d1d5db"/>
+    <text x="48" y="192" font-size="12" font-family="Consolas, monospace" fill="#9ca3af" text-decoration="underline">notes-old.md</text>
+    <rect x="140" y="180" width="92" height="16" rx="3" fill="#f0f9ff" stroke="#bae6fd"/>
+    <text x="147" y="192" font-size="10" fill="#0369a1">ⓘ can improve</text>
+    <text x="420" y="192" font-size="11" fill="#9ca3af">not read</text>
+    <rect x="700" y="186" width="64" height="6" rx="3" fill="#f3f4f6"/>
+
+    <!-- tooltip -->
+    <g transform="translate(250,196)">
+      <rect width="300" height="30" rx="4" fill="#111827"/>
+      <text x="10" y="13" font-size="10" fill="#f9fafb">Can be improved: no front matter (add --- block</text>
+      <text x="10" y="25" font-size="10" fill="#f9fafb">with type, title, description). Still counted.</text>
+    </g>
+  </g>
+
+  <text x="20" y="324" font-size="10" fill="#6b7280">• deprecated / past stale_after: amber chip (warning about content). • can improve: sky chip (advice about format); title lists the reasons — no front matter or unclosed,</text>
+  <text x="20" y="340" font-size="10" fill="#6b7280">  no type, v0.1 timestamp without generated. • All flagged files stay in shares, not-read list and hot files. • "read while deprecated" placement is an open question.</text>
+  <text x="20" y="360" font-size="10" fill="#6b7280">• Old-hook sessions (FR-9): no chips at all; the tree looks as today. The existing value-signal "stale" marker is unchanged.</text>
+</svg>

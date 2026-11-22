@@ -5,35 +5,22 @@
 // (helpers/loopback-client.ts), so it does not feed the per-IP backoff of 127.0.0.1 that every
 // other mode-B scenario logs in from.
 //
-// KNOWN DEVIATION from the design (recorded in the task Notes): the design says a weak or
-// mismatched new password must NOT burn the reset token. The code consumes the token before it
-// checks the passwords (AuthService.resetPassword → PasswordResetTokensService.consume), so the
-// token is spent and a retry answers 409. Step 8 pins the current behaviour; if the owner decides
-// the token must survive, flip those two expectations together with the fix.
+// A weak or mismatched new password does NOT burn the reset token: the server checks the token,
+// then the passwords, and only then uses the token up (step 8).
 //
 // Replaces:
 //   - tests/e2e/password-reset.spec.ts (1)
 //   - tests/e2e/password-reset-mailpit.spec.ts (1)
 //   - server/test/password-reset.e2e-spec.ts (14)
 import { randomBytes } from 'crypto';
-import type { Pool } from 'pg';
 import { test, expect } from '../fixtures';
 import { SCENARIO_EMAIL_DOMAIN } from '../modes';
 import { extractLinkFromEmailBody, extractTokenFromEmailBody, listEmailsTo } from '../helpers/mailpit';
 import { loopbackClient } from '../helpers/loopback-client';
+import { seedResetToken } from '../helpers/reset-tokens';
 
 const NEW_PASSWORD = 'New!Passw0rd#5678';
 const FORGOT_INTRO = /send you a link to reset your password/;
-
-/** A reset token written straight into password_reset_tokens (no endpoint issues one without a letter and a cooldown). */
-async function seedResetToken(db: Pool, userId: number, expiresIn: string): Promise<string> {
-  const token = `scn-${randomBytes(24).toString('hex')}`;
-  await db.query(
-    `INSERT INTO password_reset_tokens (user_id, token, expires_at) VALUES ($1, $2, now() + $3::interval)`,
-    [userId, token, expiresIn],
-  );
-  return token;
-}
 
 test('@S-AUTH-04 forgot password: the letter, a new password, reused and expired links @mode-b', async ({
   stand,
@@ -62,7 +49,7 @@ test('@S-AUTH-04 forgot password: the letter, a new password, reused and expired
     expect(await resetLetters({ atLeast: 1 })).toHaveLength(1);
   });
 
-  await test.step('2. UI: asking again at once → 429 with Retry-After, the same message, no second letter', async () => {
+  await test.step('2. UI: asking again at once → the same 200 as for any email (the cooldown is not revealed), the same message, no second letter', async () => {
     await page.goto('/#/login');
     await page.goto('/#/forgot-password');
     await expect(page.getByText(FORGOT_INTRO)).toBeVisible();
@@ -70,8 +57,8 @@ test('@S-AUTH-04 forgot password: the letter, a new password, reused and expired
     const response = page.waitForResponse((res) => res.url().includes('/api/v1/auth/forgot-password'));
     await page.getByRole('button', { name: 'Send reset link' }).click();
     const res = await response;
-    expect(res.status()).toBe(429);
-    expect(Number(res.headers()['retry-after'])).toBeGreaterThanOrEqual(1);
+    expect(res.status()).toBe(200);
+    expect(await res.json()).toEqual({ email_delivery: 'sent' });
     await expect(page.getByText('If that email is registered, a reset link has been sent.')).toBeVisible();
     expect(await resetLetters()).toHaveLength(1);
   });
@@ -91,7 +78,7 @@ test('@S-AUTH-04 forgot password: the letter, a new password, reused and expired
     return { link: url, token: extractTokenFromEmailBody(letter.text) };
   });
 
-  await test.step('5. UI: a mismatched confirmation is refused, the right one resets and opens /#/login', async () => {
+  await test.step('5. UI: a mismatched confirmation is refused, the right one resets, says so and leads to /#/login', async () => {
     await page.goto(link);
     await page.getByPlaceholder('New password', { exact: true }).fill(NEW_PASSWORD);
     await page.getByPlaceholder('Confirm new password', { exact: true }).fill(`${NEW_PASSWORD}x`);
@@ -102,6 +89,8 @@ test('@S-AUTH-04 forgot password: the letter, a new password, reused and expired
     const response = page.waitForResponse((res) => res.url().includes('/api/v1/auth/reset-password'));
     await page.getByRole('button', { name: 'Reset password' }).click();
     expect((await response).status()).toBe(200);
+    await expect(page.getByRole('status')).toContainText('Your password was changed.');
+    await page.getByRole('button', { name: 'Go to log in' }).click();
     await expect(page).toHaveURL(/#\/login/);
   });
 
@@ -141,13 +130,14 @@ test('@S-AUTH-04 forgot password: the letter, a new password, reused and expired
     expect(mismatch.status()).toBe(400);
     expect(await mismatch.json()).toMatchObject({ error: 'password_mismatch' });
 
-    // KNOWN DEVIATION (see the header): both tokens are spent by the failed attempts.
-    for (const spent of [weakToken, mismatchToken]) {
-      const retry = await api.post('/api/v1/auth/reset-password', {
-        data: { token: spent, password: NEW_PASSWORD, passwordConfirm: NEW_PASSWORD },
+    // The failed attempts did not use the links up: the first retry succeeds, and its success
+    // retires every other outstanding link of the account, so the second one answers 409.
+    const retry = (token: string) =>
+      api.post('/api/v1/auth/reset-password', {
+        data: { token, password: NEW_PASSWORD, passwordConfirm: NEW_PASSWORD },
       });
-      expect(retry.status()).toBe(409);
-    }
+    expect((await retry(weakToken)).status()).toBe(200);
+    expect((await retry(mismatchToken)).status()).toBe(409);
   });
 
   await test.step('8. UI: a reset link with an unknown token shows an error and stays on the page', async () => {

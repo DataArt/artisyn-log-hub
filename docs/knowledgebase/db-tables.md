@@ -5,7 +5,7 @@ description: "Core ER diagram and the cross-table rules the DDL cannot show: ses
 tags:
   - database
   - schema
-timestamp: "2026-11-03T00:00:00+04:00"
+generated: { by: "ai:claude", at: "2026-11-21T22:36:45+04:00" }
 ---
 
 # Database Structure — current state
@@ -89,9 +89,10 @@ table stores the integer `sessions.id`.
   current extractor version on start.
 - `okf_extract_version` (`smallint`, nullable) / `okf_events_truncated` (`boolean`, default
   `false`), migration 0091: the OKF extraction marker. The OKF writer sets `OKF_EXTRACT_VERSION`
-  (3) on every node it rebuilds, even with zero rows, and the truncated flag when the per-node
-  event / pointer cap was hit. `NULL` or a lower value on a root = "no OKF analysis yet" (the repo
-  OKF tab's recompute banner). Unlike `tool_usage_version`, nothing is re-queued on start; only
+  (4) on every node it rebuilds, even with zero rows, and the truncated flag when the extractor's
+  per-node event / pointer cap was hit. Since 2026-11-21 nothing reads the marker (the repo OKF
+  tab's "no OKF analysis yet" banner is gone); it only records which extractor version built the
+  node's rows. Unlike `tool_usage_version`, nothing is re-queued on start; only
   `recompute-all-sessions` rebuilds.
 - Repos and sessions are **private to their owner**; the owner is the `user_id` of the session's
   logs. Team visibility comes from `team_repositories` (by URL) and `teams.access_mode`.
@@ -328,9 +329,8 @@ These tables are not written inline by ingest:
 - `session_tool_usage` is rebuilt per session tree by `ToolUsageRebuildService` whenever
   `sessions.tool_usage_version IS NULL`. Its `aggregates`, `calls` and `outputs` columns are
   TOASTed separately, so the summary never detoasts the call lists.
-- `session_okf_access`, `session_okf_event` and `session_okf_pointer` are rebuilt per node on
-  ingest, import, heal and recompute; `sessions.okf_extract_version` records the extractor version
-  they were built with
+- `session_okf_access` is rebuilt per node on ingest, import, heal and recompute;
+  `sessions.okf_extract_version` records the extractor version it was built with
   ([okf-usage.md](okf-usage.md)).
 
 ### session_okf_access, session_okf_event, session_okf_pointer
@@ -344,15 +344,17 @@ These tables are not written inline by ingest:
                              article_hash, is_new, followed, partial; pointer '' = partial read
 ```
 
-- One row set per **tree node** (root or sub-agent), keyed by the node's own `sessions.id`; no
-  team / user scope columns.
-- `ord` / `read_ord` = the node's 1-based tool-call ordinal, shared by events and pointers, so
-  the read side can tell whether a search came after a read.
-- `session_okf_event` holds code-side accesses only (KB `.md` files of the snapshot stay in
-  `session_okf_access`); folders end in `/`. At most 3000 rows per node, 5000 pointer rows.
+- **`session_okf_event` and `session_okf_pointer` are no longer written or read since
+  2026-11-21** (the OKF tabs were cut down to the summary line and four views). Rows written
+  before stay; the session purge and the `sessions` cascade still delete them. A follow-up task
+  drops both tables — do not build on them.
+- `session_okf_access`: one row set per **tree node** (root or sub-agent), keyed by the node's
+  own `sessions.id`; no team / user scope columns. The OKF tabs read `path_key`, `op`, `bytes`
+  and `calls`; the other columns are written but not read.
 - The unique keys lead with `session_id`, which serves the per-node delete and the scoped reads;
-  there is no path index — all-time queries select the in-scope node ids first.
-- Rules: [algorithms/okf-access-extraction.md](algorithms/okf-access-extraction.md).
+  there is no path index — the read side selects the in-scope node ids first.
+- Extraction rules: [algorithms/okf-access-extraction.md](algorithms/okf-access-extraction.md);
+  counting rules: [algorithms/okf-usage-counting.md](algorithms/okf-usage-counting.md).
 
 ## Snapshots
 
@@ -381,9 +383,10 @@ exist under several owners (export/import: [session-export-import.md](session-ex
 - **Team view:** that team → defaults.
 
 Personal config is found **by URL** (`findPersonalRepoConfig`, lowest `repo_id` wins).
-`sessionAttribution` lives only in the team config. The `okf` section (OKF thresholds, no
-migration — it lives in the jsonb) is the one exception to whole-object resolution: it is resolved
-per section (personal `okf` → team `okf` → defaults), see [okf-usage.md](okf-usage.md). Adding a repository to a team seeds the link's
+`sessionAttribution` lives only in the team config. The `okf` section of the jsonb (the former
+OKF thresholds) is **no longer read or written since 2026-11-21**: rows that have it keep it, a
+settings save carries the stored section over unchanged whatever the request body holds, and
+nothing resolves it; a follow-up task removes it ([okf-usage.md](okf-usage.md)). Adding a repository to a team seeds the link's
 config from the owner's personal config and enqueues `team_repo_recompute_queue`, which
 `TeamRepoRecomputeService` drains with `FOR UPDATE SKIP LOCKED`.
 

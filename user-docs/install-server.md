@@ -49,6 +49,12 @@ after that is a regular user. There is no setup token.
    Stop the app, delete the database (for a release install: `docker compose down` in the install
    directory, then delete `$LOG_HUB_DATA_DIR/pgdata`), install again and sign in first.
 
+In `AUTH_MODE=strict-managed` nobody can sign up, so nobody can be faster than you: the admin is
+the `ADMIN_CONTACT_EMAIL` account, which gets a set-password email on the first start. Open the
+link in that email, set your password, sign in and do step 2. If that account already existed, it
+was made an admin and no email was sent — sign in with its password, or use "Forgot password?".
+See [Authentication modes](authentication-modes.md#strict-managed-admin-provisioned-users).
+
 ## Next steps
 
 - Install the hook into a project: [Install the hook](../hook/INSTALL_HOOK.md).

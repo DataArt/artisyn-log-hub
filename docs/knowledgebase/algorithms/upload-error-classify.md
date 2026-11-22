@@ -1,4 +1,9 @@
 ---
+type: "Algorithm"
+title: "Upload error classification: retry, store, warn"
+description: "When the upload queue fails to ingest a staged file, three things depend on *why*: whether the row is worth another attempt, what short message is stored and shown, and whether the uploader is told \"your hook sent a broken file\" or \"Log Hub could not process it\"."
+tags: [algorithm]
+generated: { by: "human:denistsyplakov", at: "2026-11-03T17:31:26+04:00" }
 reviewed: 2026-11-02
 reviewer: ai
 ---

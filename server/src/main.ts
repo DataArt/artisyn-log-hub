@@ -53,7 +53,7 @@ async function bootstrap() {
   // Everything the database needs, done and finished before the DI container
   // exists — no provider, scheduler or background timer can observe a
   // half-migrated schema. See src/database/database-init.ts.
-  await initializeDatabase({ logger: appLogger });
+  await initializeDatabase({ logger: appLogger, bootstrapAdmin: true });
 
   // SESSION_SECRET is resolved by now; flag publicly known secrets / DB
   // passwords (warning only, silent in Mode 1). Once per worker process.

@@ -38,57 +38,6 @@ export interface RepoConfig {
     enabled: boolean;
     attributes: SessionAttributionAttributeDef[];
   };
-  /**
-   * OKF View thresholds (verdict rules and value signals). Resolved per section on the server:
-   * team view = team row -> defaults; personal view = personal row -> lowest-id linked team ->
-   * defaults. Absent means "all defaults"; saving only this section does not recompute.
-   */
-  okf?: OkfThresholds;
-}
-
-/**
- * OKF View thresholds, as stored in `RepoConfig.okf`. Every field is optional; an absent field
- * uses its default (`RepoSettingsResponse.okfDefaults`). Shares are numbers in (0, 1]; every
- * other numeric field is an integer >= 1; `codeRoots` is a non-empty list (at most 50) of
- * repo-relative folders ending in `/`.
- */
-export interface OkfThresholds {
-  /** Bundles with fewer files are skipped by the share rules and the histogram. */
-  shareMinBundleFiles?: number;
-  /** Session verdict "fix" share level. */
-  sessionShareFix?: number;
-  /** Session verdict "mess" share level. */
-  sessionShareMess?: number;
-  /** Minimum KB sessions before repo rules apply. */
-  repoMinKbSessions?: number;
-  /** always_read share. */
-  alwaysReadShare?: number;
-  /** kb_flood bundle share. */
-  floodShare?: number;
-  /** kb_flood session share for the "mess" level. */
-  floodMessSessionShare?: number;
-  /** Flooded sessions needed before kb_flood changes the verdict. */
-  floodMinSessions?: number;
-  /** coarse_article minimum article size in bytes. */
-  coarseMinSizeBytes?: number;
-  /** coarse_article minimum sessions. */
-  coarseMinSessions?: number;
-  /** coarse_article maximum read ratio. */
-  coarseMaxReadRatio?: number;
-  /** "Searched after reading" minimum in-area searches. */
-  exploredMinSearches?: number;
-  /** Routing miss: minimum in-area searches per agent. */
-  routingMinSearches?: number;
-  /** Routing miss: minimum agents. */
-  routingMinAgents?: number;
-  /** Article area: pointers shared by more articles than this are dropped. */
-  pointerMaxArticles?: number;
-  /** catalog: an article area with more files than this. */
-  areaMaxFiles?: number;
-  /** Dead pointers: minimum distinct nodes the pointer was shown to. */
-  deadPointerMinShown?: number;
-  /** Article area code folders, repo-relative, ending in `/`. */
-  codeRoots?: string[];
 }
 
 export interface RepositoryDetail {
@@ -915,392 +864,117 @@ export interface ChangeSurfaceReportData {
   truncated: boolean;
 }
 
-// --- OKF usage -----------------------------------------------------------------------
+// ── OKF tab: summary line and four views (2026-11-21 okf-tab-minimal) ──────────────────
 //
-// Mirrors `server/src/logs/okf/okf-usage.types.ts` (the session and repo OKF tab routes). The
-// API-key facts route (`/api/v2/okf-usage/facts`) is not called by the client, so its shape is
-// not mirrored here. Units: shares are fractions 0-1, bytes are UTF-8 bytes, `agents[].id` is
-// the `sessions.session_id` string.
+// Mirrors the tab types of `server/src/logs/okf/okf-usage.types.ts`: one `OkfUsageResponse` for
+// both `GET /api/v1/repositories/:repoId/reports/okf-usage` and
+// `GET /api/v1/repositories/:repoId/sessions/:sessionId/okf-usage`. Tokens are bytes / 4 (done
+// by the server, not rounded); costs are USD.
 
-/** Kind of access stored per path: read / grep / list / write. */
-export type OkfOp = 'read' | 'grep' | 'list' | 'write';
+export type OkfUsageUnit = 'sessions' | 'agents';
 
-export type OkfVerdictLevel =
-  | 'ok'
-  | 'fix'
-  | 'mess'
-  | 'kb_not_used'
-  | 'not_enough_data';
+export type OkfFormatProblem =
+  | 'no_front_matter'
+  | 'no_type'
+  | 'v01_timestamp'
+  | 'deprecated'
+  | 'past_stale_after';
 
-/** Known rule ids; the client renders an unknown id as id + raw params (forward compat). */
-export type OkfFindingRule =
-  | 'session_share'
-  | 'always_read'
-  | 'kb_flood'
-  | 'coarse_article'
-  // 2026-11-03 OKF value signals: value-signal rules.
-  | 'routing_miss'
-  | 'searched_after'
-  | 'dead_pointers'
-  | 'catalog';
-
-/** `info` is listed but never changes the verdict level. */
-export type OkfFindingSeverity = 'fix' | 'mess' | 'info';
-
-export interface OkfFinding {
-  rule: OkfFindingRule;
-  severity: OkfFindingSeverity;
-  /** Rule parameters; the client renders the text from rule id + params. */
-  params: Record<string, string | number>;
-  /** `bundle: null` = the "No longer in KB" group. */
-  node: { bundle: string | null; path?: string };
-  /**
-   * Too few sessions read the file's current version, so the finding was computed over all
-   * sessions. `sessions` = sessions on the current version, `total` = all, `oldSize` = the
-   * file's size in the older version (null when unknown).
-   */
-  stale?: { sessions: number; total: number; oldSize: number | null };
-  /** The file is missing from the latest snapshot; it never changes the level. */
-  removed?: boolean;
-}
-
-export type OkfQualifier = 'partial_data';
-
-export interface OkfVerdict {
-  level: OkfVerdictLevel;
-  qualifiers: OkfQualifier[];
-  /** Repo route only: how many KB sessions had no snapshot. */
-  partialData?: { withoutSnapshot: number; total: number };
-  /** Worst first. */
-  findings: OkfFinding[];
-  /**
-   * One entry per structure (group A) rule of the level, also when it found nothing, with the
-   * nearest actual value and its threshold. Absent on older servers (the Checks block hides).
-   */
-  checks?: OkfVerdictCheck[];
-}
-
-/** `ok` = the rule did not fire; `finding` = it did; `na` = it could not run (`params.reason`). */
-export type OkfVerdictCheckStatus = 'ok' | 'finding' | 'na';
-
-/** One structure rule's outcome (`okf-verdict.md` → "Checks"). */
-export interface OkfVerdictCheck {
-  rule: string;
-  status: OkfVerdictCheckStatus;
-  params: Record<string, number | string | null>;
-}
-
-export interface OkfBundleSummary {
-  root: string;
-  index: string;
-  ignored: boolean;
-  /** Null without a snapshot. */
-  files: number | null;
-  filesRead: number;
-  /** Fraction 0-1; null when `files` is null. */
-  share: number | null;
-  /** KB read bytes (read + grep, own-edit included). */
-  readBytes: number;
-  /** Session route: started from the bundle's index.md; repo route: null. */
-  startedFromIndex: boolean | null;
-  /** Repo route: KB sessions whose first access to this bundle was its index.md; session route: null. */
-  sessionsStartedFromIndex: number | null;
-}
-
-export type OkfTreeMarker =
-  | 'folder_scan'
-  | 'entry_point'
-  | 'own_edit'
-  | 'coarse'
-  | 'hot'
-  // 2026-11-03 OKF value signals.
-  | 'routing_miss'
-  | 'catalog'
-  | 'dead'
-  | 'upkeep'
-  | 'stale'
-  | 'section'
-  | 'not_read';
-
-/** Pointer yield: `k` of `n` non-partial reads with a new pointer had one followed. */
-export interface OkfYield {
-  k: number;
-  n: number;
-}
-
-/** Value-signal totals of the session route. */
-export interface OkfSignalSummary {
-  readsWithNewPointers: number;
-  readsFollowed: number;
-  routingMissArticles: number;
-  searchedAfterPairs: number;
-  deadPointers: number;
-}
-
-/** Which OKF thresholds the view used differ from the defaults. */
-export interface OkfThresholdsInfo {
-  custom: string[];
-}
-
-export interface OkfTreeNode {
-  /** Null = "no longer in KB" / unknown bundle (no snapshot). */
-  bundle: string | null;
-  /** File path, or folder path ending in `/`. */
+export interface OkfUsageFile {
+  /** Deepest bundle root above the file. */
+  bundle: string;
+  /** Repo-relative path. */
   path: string;
-  kind: 'bundle' | 'folder' | 'file';
-  /** False = "not in the KB at session start" / gone. */
   inSnapshot: boolean;
-  size: number | null;
-  readBytes: number;
-  readCalls: number;
-  ownEditReadBytes: number;
-  grepCalls: number;
-  listCalls: number;
-  writeCalls: number;
-  /** Distinct agents (session route) / distinct sessions (repo route). */
-  agents: number;
-  markers: OkfTreeMarker[];
-  /** Repo route: rank in `hotFiles` (1-based) when the `hot` marker is set. */
-  hotRank?: number;
-  children?: OkfTreeNode[];
-  // 2026-11-03 OKF value signals — all optional (older servers omit them).
-  /** Read calls with a line range (also counted in `readCalls`). */
-  rangedCalls?: number;
-  /** Read calls of upkeep pairs (excluded from `readCalls`). */
-  upkeepReadCalls?: number;
-  /** Pointer yield; null when no read showed a new pointer. */
-  yield?: OkfYield | null;
-  /** Agents that searched the article's area after reading it, and their searches. */
-  searchedAfter?: { agents: number; searches: number };
-  /** Agents that searched the area without reading the article, of all area agents. */
-  routingMiss?: { agents: number; areaAgents: number };
-  /** Dead pointers of the article. */
-  deadPointers?: number;
-  /** Area file count when the article is a catalog. */
-  catalogFiles?: number;
-  /** The current size and the size read by older sessions. */
-  stale?: { size: number | null; oldSize: number | null };
-  /** Missing from the latest snapshot. */
-  removed?: boolean;
+  /** `index.md` / `log.md`: left out of hot files and of the format checks. */
+  index: boolean;
+  /** Distinct sessions (repo route) / agents (session route) with a read; 0 = never opened. */
+  units: number;
+  reads: number;
+  /** Bytes returned / 4, not rounded. */
+  tokens: number;
+  /** USD; null = it has reads and none has a cost. */
+  cost: number | null;
 }
 
-export type OkfAgentEntry = 'index' | 'search' | 'given';
-
-/** One element of the session route's `agents[]`. */
-export interface OkfAgent {
-  /** `sessions.session_id` string. */
-  id: string;
-  taskHead: string;
-  /** Sub-agent description (Agent tool `description`); null / absent for the root or older servers. */
-  label?: string | null;
-  entry: OkfAgentEntry | null;
-  /** This agent's `read` + `grep` calls on bundle files. */
-  kbReads: number;
-  /** Their bytes. */
-  kbReadBytes: number;
-  /** Those bundle file paths, sorted by read bytes desc, then path. */
-  files: string[];
-  // 2026-11-03 OKF value signals — all optional (older servers omit them).
-  /** New pointers this agent was shown. */
-  pointers?: { article: string; pointer: string; followed: boolean }[];
-  /** Paths the agent's prompt already named. */
-  promptNamedPaths?: number;
-  /** Routing misses of this agent. */
-  routingMisses?: { article: string; searches: number; patterns: string[] }[];
-  /** Articles this agent kept searching after reading (newer servers only). */
-  searchedAfter?: { article: string; searches: number }[];
-  /** Articles this agent edited (upkeep pairs). */
-  upkeepArticles?: string[];
-  /** Code search events of this agent. */
-  searches?: number;
-  /** Pointer yield of this agent. */
-  yield?: OkfYield | null;
+/** Folder-level searches on exactly one folder. */
+export interface OkfUsageFolderSearch {
+  units: number;
+  reads: number;
+  tokens: number;
+  cost: number | null;
 }
 
-/** Upkeep line of the session route. */
-export interface OkfSessionUpkeepItem {
+export interface OkfUsageFolder {
+  bundle: string;
+  /** Folder key ending in `/`; a bundle root is listed too. */
   path: string;
-  bundle: string | null;
-  readBytes: number;
-  readCalls: number;
+  units: number;
+  /** Folder-level searches on exactly this folder. */
+  search: OkfUsageFolderSearch | null;
 }
 
-/** Upkeep panel row of the repo route. */
-export interface OkfRepoUpkeepItem {
+export interface OkfUsageVersionRow {
+  root: string;
+  files: number;
+  /** Declared `okf_version`; null = not declared. */
+  okfVersion: string | null;
+  older: boolean;
+  /** Gitignored bundle (owner-only; never present in a team view). */
+  ignored: boolean;
+}
+
+export interface OkfUsageFormatFile {
   path: string;
-  bundle: string | null;
-  sessions: number;
-  readBytes: number;
+  supersededBy?: string;
 }
 
-export interface OkfReadTopItem {
-  bundle: string | null;
-  path: string;
-  readBytes: number;
-  ownEdit: boolean;
-}
-
-/** `GET /api/v1/repositories/:repoId/sessions/:sessionId/okf-usage`. */
-export interface SessionOkfUsageResponse {
-  /** Null = no bundle and no KB access in this session. */
-  verdict: OkfVerdict | null;
-  hasSnapshot: boolean;
-  readTop: OkfReadTopItem[];
-  bundles: OkfBundleSummary[];
-  tree: OkfTreeNode[];
-  agents: OkfAgent[];
-  // 2026-11-03 OKF value signals — all optional (older servers omit them).
-  thresholds?: OkfThresholdsInfo;
-  upkeep?: OkfSessionUpkeepItem[];
-  signals?: OkfSignalSummary;
-  /** A node hit the per-node event / pointer cap. */
-  eventsTruncated?: boolean;
-}
-
-/** One ordered KB or code access of an agent's trail. */
-export interface OkfTrailItem {
-  /** Call number within the agent; one call can give several items. */
-  ord: number;
-  op: 'kb_read' | 'kb_search' | 'kb_write' | 'read' | 'search' | 'write';
-  /** Repo-relative; folders end in `/`. */
-  path: string;
-  offset?: number;
-  limit?: number;
-  pattern?: string;
-  /** New code paths a KB article read showed. */
-  newPointers?: string[];
-  /** Searches: the call found something. */
-  hit?: boolean;
-  /** Code reads / searches: articles read earlier whose code area this path is in. */
-  inArea?: string[];
-  /** KB reads: new code path → call number that first touched it afterwards. */
-  followedAt?: Record<string, number>;
-}
-
-/** `GET /api/v1/repositories/:repoId/sessions/:sessionId/okf-usage/trail?agent=`. */
-export interface SessionOkfTrailResponse {
-  agent: { id: string; label: string | null };
-  /** Only the first accesses are listed. */
-  truncated: boolean;
-  items: OkfTrailItem[];
-}
-
-export type OkfShareBin = '0-10' | '10-25' | '25-50' | '50+';
-
-/** `GET /api/v1/repositories/:repoId/reports/okf-usage`. */
-export interface RepoOkfUsageResponse {
-  verdict: OkfVerdict;
-  snapshot: {
-    okfSnapshotId: string;
-    /** ISO timestamp of the snapshot. */
-    takenAt: string;
-    branch: string | null;
-  } | null;
-  tiles: {
-    kbFiles: number;
-    notRead: number;
-    kbSessions: number;
-    totalSessions: number;
-    /** Count of KB sessions. */
-    startedFromIndex: number;
-    /** Fractions 0-1; null when no snapshot-bound KB session. */
-    medianShare: number | null;
-    maxShare: number | null;
-    // 2026-11-03 OKF value signals — all optional (older servers omit them).
-    /** Root trees whose only KB rows are upkeep (not KB sessions). */
-    upkeepOnlySessions?: number;
-    /** Pointer yield over the period. */
-    pointerYield?: OkfYield | null;
-    /** Articles with a routing-miss finding, and their (node, article) misses. */
-    routingMissArticles?: number;
-    routingMissPairs?: number;
-    /** Root sessions of the period with no current OKF analysis, of all of them. */
-    sessionsWithoutAnalysis?: number;
-    sessionsInPeriod?: number;
-  };
-  /** Bundles with fewer than `shareMinBundleFiles` files are skipped. */
-  shareBins: { bin: OkfShareBin; sessions: number }[];
-  hotFiles: {
-    bundle: string | null;
-    path: string;
-    readBytes: number;
-    sessions: number;
-    /** Pointer yield of the file. */
-    yield?: OkfYield | null;
+export interface OkfUsageFormat {
+  articles: number;
+  indexFiles: number;
+  /** Distinct articles with at least one problem. */
+  withProblems: number;
+  groups: {
+    problem: OkfFormatProblem;
+    files: OkfUsageFormatFile[];
   }[];
-  notRead: { bundle: string; path: string; size: number }[];
-  bundles: OkfBundleSummary[];
-  tree: OkfTreeNode[];
-  // 2026-11-03 OKF value signals — all optional (older servers omit them).
-  thresholds?: OkfThresholdsInfo;
-  upkeep?: OkfRepoUpkeepItem[];
-  /** Same authority as `recompute-all-sessions` (the "no analysis" banner's link). */
-  canRecompute?: boolean;
 }
 
-/** A pattern with its count. */
-export interface OkfPatternCountItem {
-  pattern: string;
-  count: number;
+export interface OkfUsageSnapshot {
+  branch: string | null;
+  /** ISO timestamp of the snapshot. */
+  takenAt: string;
+  /** False for a snapshot from a hook that sends no article metadata. */
+  hasMeta: boolean;
 }
 
-export type OkfArticleHashStatus = 'current' | 'stale' | 'removed' | 'unknown';
+export interface OkfUsageSummary {
+  unitsRead: number;
+  unitsTotal: number;
+  reads: number;
+  tokens: number;
+  cost: number | null;
+  readsWithoutCost: number;
+  /** Total cost of the same sessions; null = unknown. */
+  spend: number | null;
+}
 
-/** `GET /api/v1/repositories/:repoId/reports/okf-usage/article` (per-article drill-down). */
-export interface RepoOkfArticleResponse {
-  /** False when `path` is not a stored KB article in scope; every other field is then empty. */
-  found: boolean;
-  path: string;
-  bundle: string | null;
-  /** Size in the latest snapshot; null when unknown. */
-  size: number | null;
-  /** The size older sessions read, when the article changed since. */
-  oldSize: number | null;
-  hashStatus: OkfArticleHashStatus;
-  /** The area was built from an older version's pointers. */
-  areaFromOlderVersion: boolean;
-  /** Read calls in the period: whole-file, ranged, upkeep and partial reads. */
-  reads: { whole: number; section: number; upkeep: number; partial: number };
-  yield: OkfYield | null;
-  /** Dead first, then `shown` desc. */
-  pointers: {
-    pointer: string;
-    shown: number;
-    followed: number;
-    dead: boolean;
-    notFound: boolean;
-  }[];
-  /** Article area files. */
-  area: string[];
-  catalog: { files: number } | null;
-  routingMiss: {
-    agents: number;
-    areaAgents: number;
-    patterns: OkfPatternCountItem[];
-    /** `taskHead` masked like `okf-usage` for a `team-no-prompts` caller. */
-    missing: {
-      sessionId: string;
-      agentId: string;
-      taskHead: string;
-      searches: number;
-    }[];
-  } | null;
-  searchedAfter: {
-    agents: number;
-    searches: number;
-    patterns: OkfPatternCountItem[];
-    /** The agents behind the counts (newer servers only): root session, agent id, description. */
-    pairs?: {
-      sessionId: string;
-      agentId: string;
-      label: string | null;
-      searches: number;
-    }[];
-  } | null;
-  /** This article's findings, value-signal rules included. */
-  findings: OkfFinding[];
-  /** Top 5 other files with a finding of the same rule. */
-  sameFindingElsewhere: { path: string; rule: OkfFindingRule; value: number }[];
+export interface OkfUsageResponse {
+  unit: OkfUsageUnit;
+  /** null = no KB snapshot: the tab is one line and every other field is empty / zero. */
+  snapshot: OkfUsageSnapshot | null;
+  /** Every visible bundle root, also with a `bundle` filter. */
+  bundleRoots: string[];
+  /** The current OKF format version. */
+  currentFormat: string;
+  summary: OkfUsageSummary;
+  /** [] when `snapshot.hasMeta` is false. */
+  versions: OkfUsageVersionRow[];
+  /** null when `snapshot.hasMeta` is false. */
+  format: OkfUsageFormat | null;
+  files: OkfUsageFile[];
+  folders: OkfUsageFolder[];
+  notInSnapshotUnits: number;
 }
 
 // --- OTEL tabs (2026-10-30 otel-tabs-traces) ----------------------------------------

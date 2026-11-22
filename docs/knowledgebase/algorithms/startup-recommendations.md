@@ -1,4 +1,9 @@
 ---
+type: "Algorithm"
+title: "Startup context recommendations"
+description: "The System context anatomy tab says how many tokens each startup block takes, but not which of them the user can switch off."
+tags: [algorithm]
+generated: { by: "human:denistsyplakov", at: "2026-11-11T20:07:38+04:00" }
 reviewed: no
 reviewer: none
 ---

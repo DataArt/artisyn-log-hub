@@ -1,4 +1,9 @@
 ---
+type: "Algorithm"
+title: "Tool wrapper fidelity: a wrapped CLI call behaves exactly like the unwrapped one"
+description: "When a user monitors a CLI tool, the hook puts a wrapper in front of it in the agent's shell (a Bash shim on `PATH`, a PowerShell function prefix)."
+tags: [algorithm]
+generated: { by: "human:denistsyplakov", at: "2026-11-17T23:16:37+04:00" }
 reviewed: no
 reviewer: none
 ---

@@ -1,4 +1,9 @@
 ---
+type: "Algorithm"
+title: "Node.js version check"
+description: "Claude Code runs the Log Hub hooks with the user's own `node` from `PATH`. Node 18 and 20 and every odd line are end-of-life, and the supported lines 22 / 24 / 26 have a security release (November 2026) whose fixes an older patch level lacks."
+tags: [algorithm]
+generated: { by: "human:denistsyplakov", at: "2026-11-19T01:29:04+04:00" }
 reviewed: no
 reviewer: none
 ---

@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { SchedulerRegistry } from '@nestjs/schedule';
 import { sql } from 'drizzle-orm';
+import { RepeatedFailureLog } from '../../common/repeated-failure-log';
 import { DRIZZLE } from '../../database/database.constants';
 import type { DrizzleDb } from '../../database/database.module';
 
@@ -33,6 +34,10 @@ export class TurnEndAdvisorOrphanCleanupScheduler
 {
   private readonly logger = new Logger(
     TurnEndAdvisorOrphanCleanupScheduler.name,
+  );
+  private readonly sweepFailures = new RepeatedFailureLog(
+    this.logger,
+    'Turn-end advisor orphan cleanup sweep',
   );
   private isTickRunning = false;
   // Tracks whichever `tick()` call is currently in flight (if any), so
@@ -84,13 +89,9 @@ export class TurnEndAdvisorOrphanCleanupScheduler
     this.isTickRunning = true;
     try {
       await this.sweep();
+      this.sweepFailures.succeeded();
     } catch (err) {
-      this.logger.error(
-        `Turn-end advisor orphan cleanup sweep failed: ${
-          err instanceof Error ? err.message : String(err)
-        }`,
-        err instanceof Error ? err.stack : undefined,
-      );
+      this.sweepFailures.failed(err);
     } finally {
       this.isTickRunning = false;
     }

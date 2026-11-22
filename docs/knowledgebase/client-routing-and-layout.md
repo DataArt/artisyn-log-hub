@@ -5,7 +5,7 @@ description: "React SPA routing, layout, provider hierarchy, major page componen
 tags:
   - client
   - routing
-timestamp: "2026-11-10T00:00:00+04:00"
+generated: { by: "human:denistsyplakov", at: "2026-11-10T00:00:00+04:00" }
 ---
 
 # Client Component Hierarchy

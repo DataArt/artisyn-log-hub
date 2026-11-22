@@ -1,4 +1,9 @@
 ---
+type: "Algorithm"
+title: "Work Hub names: display names, uniqueness key and branch"
+description: "Decides whether a workspace or workstream name is acceptable, when two names count as the same, and which git branch a new workstream gets. A rejected name shows its message under the name field; the branch is what the agent works on and what the user later merges."
+tags: [algorithm]
+generated: { by: "human:denistsyplakov", at: "2026-11-14T14:41:14+04:00" }
 reviewed: no
 reviewer: none
 ---

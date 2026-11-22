@@ -1,6 +1,6 @@
 /**
  * Filter strip of the repo OKF tab: date range, branches, users (team view), attribute filter,
- * bundle and the Bytes/Calls read-heat toggle. Unlike the Reports strip there is no Generate
+ * and bundle. Unlike the Reports strip there is no Generate
  * button — every change is applied at once (the tab mirrors it to the `okf*` URL params).
  */
 import { useMemo, useState, type ReactNode } from 'react';
@@ -9,7 +9,6 @@ import { Select } from 'radix-ui';
 import { ChevronDown } from 'lucide-react';
 import type { DateRange } from 'react-day-picker';
 import { Popover, PopoverContent, PopoverTrigger } from '@/ui/popover';
-import { ToggleGroup, ToggleGroupItem } from '@/ui/toggle-group';
 import {
   fetchRepositoryBranches,
   fetchTeamMembers,
@@ -18,7 +17,6 @@ import {
 import { resolveSessionAttributionDefinitions } from '../../../lib/session-attribution-ui';
 import { DateRangePicker } from '../analytics/DateRangePicker';
 import { AttributeFilterPopover } from '../session-list/AttributeFilterPopover';
-import type { OkfHeatMetric } from '../session-log/okf/okf-tree';
 import {
   attrParamsToSelection,
   attrSelectionToParams,
@@ -268,25 +266,6 @@ export function OkfFilterStrip({
             </Select.Content>
           </Select.Portal>
         </Select.Root>
-      </Field>
-
-      <Field label="Read heat">
-        <ToggleGroup
-          type="single"
-          size="sm"
-          variant="outline"
-          value={filters.heat}
-          onValueChange={(v) => v && onChange({ heat: v as OkfHeatMetric })}
-          data-testid="okf-metric-toggle"
-          className="h-9"
-        >
-          <ToggleGroupItem value="bytes" className="px-2 text-[11px]">
-            Bytes
-          </ToggleGroupItem>
-          <ToggleGroupItem value="calls" className="px-2 text-[11px]">
-            Calls
-          </ToggleGroupItem>
-        </ToggleGroup>
       </Field>
 
       <DateRangePicker

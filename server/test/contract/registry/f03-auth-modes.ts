@@ -28,6 +28,36 @@ export const f03AuthModes: ContractFamily = {
       query: { code: 'fake', state: 'fake' },
       expect: { status: 404 },
     },
+    // Strict-managed admin provisioning: the routes exist only in AUTH_MODE=strict-managed, so
+    // AuthModeGuard answers 404 to every caller, an admin included, before any user is touched.
+    {
+      id: 'F03-admin-create-user-404-anon',
+      route: 'POST /api/v1/admin/users',
+      actor: 'anon',
+      body: { email: 'new-user@arrakis.test' },
+      expect: { status: 404 },
+    },
+    {
+      id: 'F03-admin-create-user-404-admin',
+      route: 'POST /api/v1/admin/users',
+      actor: 'admin',
+      body: { email: 'new-user@arrakis.test' },
+      expect: { status: 404 },
+    },
+    {
+      id: 'F03-admin-password-link-404-anon',
+      route: 'POST /api/v1/admin/users/:id/password-link',
+      actor: 'anon',
+      params: { id: '@owner.id' },
+      expect: { status: 404 },
+    },
+    {
+      id: 'F03-admin-password-link-404-admin',
+      route: 'POST /api/v1/admin/users/:id/password-link',
+      actor: 'admin',
+      params: { id: '@owner.id' },
+      expect: { status: 404 },
+    },
     {
       id: 'F03-azure-callback-positive',
       route: 'GET /api/auth/callback',

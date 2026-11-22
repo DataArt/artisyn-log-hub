@@ -1,3 +1,11 @@
+---
+type: "Research"
+title: "4. Summary as a hub"
+description: "Wave 1 idea 4: turn the session Summary into a hub with one mini-card per tab, so users stop opening tabs blindly."
+tags: [ux-research, product]
+generated: { by: "human:denistsyplakov", at: "2026-11-06T15:26:59+04:00" }
+---
+
 # 4. Summary as a hub
 
 Wave 1 · Effort M · Impact high · Proposed by 4 of 5 agents

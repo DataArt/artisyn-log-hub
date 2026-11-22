@@ -1,4 +1,9 @@
 ---
+type: "Algorithm"
+title: "Session logs delta: cursor, row classification, growth check"
+description: "The Session Map tab polls `GET /api/v1/repositories/:repoId/sessions/:sessionId/logs/delta` every few seconds while a session is live. Each poll must return only the transcript lines the client does not hold yet, and a poll where nothing moved must not read any `logs.body`."
+tags: [algorithm]
+generated: { by: "human:denistsyplakov", at: "2026-11-03T17:31:26+04:00" }
 reviewed: no
 reviewer: none
 ---

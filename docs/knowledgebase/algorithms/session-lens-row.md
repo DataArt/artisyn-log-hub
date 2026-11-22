@@ -1,4 +1,9 @@
 ---
+type: "Algorithm"
+title: "Session lens row and lens default tab"
+description: "A session has 21 tabs (the seven charts are plain tabs). The tab bar has one level of tabs: a \"View\" select (the lens: \"Cost\", \"What happened\", ...) puts the few tabs that answer one question into the single tab row and moves every other tab into \"More ▾\", under its session group header, so the…"
+tags: [algorithm]
+generated: { by: "human:denistsyplakov", at: "2026-11-03T17:31:26+04:00" }
 reviewed: no
 reviewer: none
 ---
