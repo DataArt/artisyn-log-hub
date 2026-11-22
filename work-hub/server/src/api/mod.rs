@@ -5,7 +5,10 @@
 //! Everything that is not a declared route is the web UI ([`static_files`]); unknown `/api/*`
 //! paths answer the JSON 404.
 
+pub mod admin;
+pub mod connections;
 pub mod fs;
+pub mod remotes;
 pub mod security_headers;
 pub mod static_files;
 pub mod system;
@@ -99,6 +102,27 @@ routes! {
     POST "/api/v1/workstreams/{id}/retry" => workstreams::retry,
     GET "/api/v1/workstreams/{id}/recording" => workstreams::recording,
     GET "/api/v1/workstreams/{id}/recording/meta" => workstreams::recording_meta,
+
+    GET "/api/v1/connection-providers" => connections::providers_list,
+    GET "/api/v1/connections" => connections::list,
+    POST "/api/v1/connections" => connections::create,
+    GET "/api/v1/connections/{id}" => connections::get,
+    PATCH "/api/v1/connections/{id}" => connections::update,
+    DELETE "/api/v1/connections/{id}" => connections::delete,
+    POST "/api/v1/connections/{id}/test" => connections::test,
+    POST "/api/v1/connections/{id}/regenerate-key" => connections::regenerate_key,
+    PUT "/api/v1/connections/{id}/grants" => connections::set_grants,
+    POST "/api/v1/connections/{id}/branches" => connections::branches,
+
+    GET "/api/v1/workspaces/{id}/remotes" => remotes::list,
+    POST "/api/v1/workspaces/{id}/remotes" => remotes::attach,
+    PATCH "/api/v1/remotes/{id}" => remotes::update,
+    DELETE "/api/v1/remotes/{id}" => remotes::delete,
+    POST "/api/v1/remotes/{id}/test" => remotes::test,
+    GET "/api/v1/clone-ops/{id}" => remotes::clone_op,
+    POST "/api/v1/clone-ops/{id}/cancel" => remotes::clone_cancel,
+
+    GET "/api/v1/admin/overview" => admin::overview,
 
     GET "/api/v1/workstreams/{id}/chat/ws" => terminals::chat,
     GET "/api/v1/workspaces/{id}/login/ws" => terminals::login,

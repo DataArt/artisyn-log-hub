@@ -1,0 +1,203 @@
+/* Shared by the Connections dialogs and their steps. */
+
+.dialog {
+  max-width: 35rem;
+  max-height: calc(100vh - 2rem);
+  overflow-y: auto;
+}
+
+.form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.label {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  font-weight: 500;
+}
+
+.hint {
+  font-size: 0.75rem;
+  line-height: 1rem;
+  color: var(--color-muted-foreground);
+}
+
+.errorText {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  color: var(--color-destructive);
+  overflow-wrap: anywhere;
+}
+
+.tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(7rem, 1fr));
+  gap: 0.5rem;
+}
+
+.tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  padding: 0.75rem 0.5rem;
+  font-size: 0.75rem;
+  line-height: 1rem;
+  text-align: center;
+  cursor: pointer;
+}
+
+.tile:hover {
+  background-color: var(--color-accent);
+}
+
+.tile[data-selected="true"] {
+  border-color: var(--color-primary);
+  box-shadow: 0 0 0 1px var(--color-primary);
+}
+
+.tileLabel {
+  font-weight: 700;
+  font-size: 0.875rem;
+  color: var(--color-primary);
+}
+
+.choice {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  cursor: pointer;
+}
+
+.choice input {
+  margin-top: 0.25rem;
+}
+
+.choice[data-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.star {
+  color: var(--color-warning-text);
+  font-size: 0.75rem;
+}
+
+.textarea {
+  min-height: 6rem;
+  width: 100%;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-input);
+  background-color: transparent;
+  padding: 0.5rem 0.75rem;
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.75rem;
+  line-height: 1rem;
+  resize: vertical;
+  outline: none;
+}
+
+.textarea:focus-visible {
+  border-color: var(--color-ring);
+  box-shadow: var(--focus-ring);
+}
+
+.textarea[readonly] {
+  background-color: var(--color-muted);
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.link {
+  color: var(--color-primary);
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  text-decoration: underline;
+}
+
+.box {
+  border-radius: var(--radius-md);
+  border: 1px solid var(--color-border);
+  padding: 0.75rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+.boxOk {
+  border-color: var(--color-success-border);
+  background-color: var(--color-success-bg);
+  color: var(--color-success-text);
+}
+
+.boxBad {
+  border-color: var(--color-danger-border);
+  background-color: var(--color-danger-bg);
+  color: var(--color-danger-text);
+}
+
+.boxWarn {
+  border-color: var(--color-warning-border);
+  background-color: var(--color-warning-bg);
+  color: var(--color-warning-text);
+}
+
+.mono {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.75rem;
+  line-height: 1rem;
+  overflow-wrap: anywhere;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding-left: 1.25rem;
+  list-style: disc;
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  border-top: 1px solid var(--color-border);
+  padding-top: 1rem;
+}
+
+.sectionTitle {
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+  font-weight: 600;
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

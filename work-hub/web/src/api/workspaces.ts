@@ -39,6 +39,8 @@ export interface LoginSource {
 export interface SystemStatus {
   docker: "ok" | "unreachable";
   defaultImage: "ok" | "building" | "failed";
+  /** The git proxy sidecar; optional because an older server does not report it. */
+  gitProxy?: "ok" | "building" | "failed";
 }
 
 /** react-query keys of this module. */
@@ -62,9 +64,30 @@ export async function listWorkspaces(): Promise<Workspace[]> {
   return apiJson<Workspace[]>(WS);
 }
 
-/** 201 · 400 `invalid_name`/`duplicate_name` · 503 · 500 `create_failed`. */
-export async function createWorkspace(name: string): Promise<Workspace> {
-  return apiJson<Workspace>(WS, { method: "POST", json: { name } });
+/** Where a new workspace's repository comes from when it is cloned (FR-4). */
+export interface WorkspaceSource {
+  connectionId: string;
+  url: string;
+  /** `null`/absent: the remote's default branch. */
+  branch?: string | null;
+}
+
+/**
+ * 201 · 400 `invalid_name`/`duplicate_name` · 503 · 500 `create_failed`. With a `source` also
+ * 400 `clone_failed`/`credential_rejected`/`invalid_remote_url` · 409 `clone_cancelled` ·
+ * 503 `git_proxy_not_ready`; `opId` (a client uuid) lets the page poll `getCloneOp(opId)`.
+ */
+export async function createWorkspace(
+  name: string,
+  source?: WorkspaceSource,
+  opId?: string,
+): Promise<Workspace> {
+  const json: { name: string; source?: WorkspaceSource; opId?: string } = {
+    name,
+  };
+  if (source !== undefined) json.source = source;
+  if (opId !== undefined) json.opId = opId;
+  return apiJson<Workspace>(WS, { method: "POST", json });
 }
 
 /** Runs the live login check. */

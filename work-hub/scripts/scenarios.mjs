@@ -9,9 +9,14 @@
 //      WORK_HUB_DEFAULT_IMAGE=artisyn-work-hub-fake-agent:test, WORK_HUB_INSTANCE=whs-<8 hex> and
 //      the mode env (a: none/test · b: password-confirm/production + Mailpit · c: password/test);
 //   5. waits for GET /health;
-//   6. runs Playwright (tests/playwright.config.ts, project mode-<x>, plus --grep);
-//   7. cleans up: drops its own schema and removes only the Docker containers, volumes and images
-//      labelled with its own instance, then checks that none is left.
+//   6. waits for the git proxy network wh-net-<instance> and runs the fake git host
+//      (tests/fake-git-host/, image artisyn-work-hub-fake-git-host:test) there as
+//      whs-fakegit-<8 hex> with alias git.test and the stand's instance label, then waits until
+//      GET /api/v1/system/status says gitProxy "ok";
+//   7. runs Playwright (tests/playwright.config.ts, project mode-<x>, plus --grep) with
+//      WH_FAKE_GIT_HOST=git.test;
+//   8. cleans up: drops its own schema and removes only the Docker containers, volumes, images
+//      and networks labelled with its own instance, then checks that none is left.
 //
 // While Playwright runs, a control endpoint on 127.0.0.1 (WH_STAND_CONTROL_URL) answers
 // `POST /restart-server`: the server process is stopped and started again on the same port with
@@ -53,7 +58,11 @@ const DEFAULT_MAILPIT_URL = 'http://localhost:8025';
 const DEFAULT_MAILPIT_SMTP = 'localhost:1025';
 const FAKE_AGENT_IMAGE = 'artisyn-work-hub-fake-agent:test';
 const DEFAULT_IMAGE_NAME = 'artisyn-work-hub-default';
+const FAKE_GIT_HOST_IMAGE = 'artisyn-work-hub-fake-git-host:test';
+const FAKE_GIT_HOST_ALIAS = 'git.test';
 const HEALTH_TIMEOUT_MS = 120_000;
+/** The first run builds the git proxy sidecar image, hence the long budget. */
+const GIT_PROXY_TIMEOUT_MS = 600_000;
 const STOP_TIMEOUT_MS = 15_000;
 const MODES = ['a', 'b', 'c'];
 const SCHEMA_RE = /^whs_[abc]_[0-9a-f]{8}$/;
@@ -209,25 +218,36 @@ function ensureImages(version) {
     'build', '--build-arg', `BASE_IMAGE=${defaultTag}`, '-t', FAKE_AGENT_IMAGE,
     path.join(WORK_HUB, 'tests', 'fake-agent'),
   ]);
+  run('docker', ['build', '-t', FAKE_GIT_HOST_IMAGE, path.join(WORK_HUB, 'tests', 'fake-git-host')]);
 }
 
 // ---------------------------------------------------------------------------------------------
 // Cleanup of one stand's objects (also used for stands left behind by a crashed run)
 
-/** Removes every container, volume and image labelled with `instance`; returns what was left. */
+function instanceFilters(instance) {
+  return ['--filter', 'label=artisyn.workhub=1', '--filter', `label=artisyn.workhub.instance=${instance}`];
+}
+
+/**
+ * Removes every container, volume, image and network labelled with `instance`; returns what was
+ * left. Containers go first: a network cannot be removed while one is connected to it.
+ */
 function removeInstanceObjects(instance) {
   if (!INSTANCE_RE.test(instance)) throw new Error(`refusing to clean up unexpected instance "${instance}"`);
-  const filters = ['--filter', 'label=artisyn.workhub=1', '--filter', `label=artisyn.workhub.instance=${instance}`];
+  const filters = instanceFilters(instance);
   const containers = lines(docker(['ps', '-aq', ...filters]).stdout);
   if (containers.length > 0) docker(['rm', '-f', '-v', ...containers], { allowFail: true });
   const volumes = lines(docker(['volume', 'ls', '-q', ...filters]).stdout);
   if (volumes.length > 0) docker(['volume', 'rm', '-f', ...volumes], { allowFail: true });
   const images = [...new Set(lines(docker(['image', 'ls', '-q', ...filters]).stdout))];
   if (images.length > 0) docker(['rmi', '-f', ...images], { allowFail: true });
+  const networks = lines(docker(['network', 'ls', '-q', ...filters]).stdout);
+  if (networks.length > 0) docker(['network', 'rm', ...networks], { allowFail: true });
   return {
     containers: lines(docker(['ps', '-aq', ...filters]).stdout).length,
     volumes: lines(docker(['volume', 'ls', '-q', ...filters]).stdout).length,
     images: lines(docker(['image', 'ls', '-q', ...filters]).stdout).length,
+    networks: lines(docker(['network', 'ls', '-q', ...filters]).stdout).length,
   };
 }
 
@@ -294,7 +314,15 @@ function modeEnv(mode, { port, mailpitSmtp }) {
     ADMIN_CONTACT_EMAIL: `admin@${EMAIL_DOMAIN}`,
     SESSION_SECRET: crypto.randomBytes(32).toString('hex'),
   };
-  if (mode === 'a') return { ...common, AUTH_MODE: 'none', WORK_HUB_ENV: 'test' };
+  // Mode a also has an admin (FR-12): tests/scenarios/fixtures.ts ADMIN_EMAIL.
+  if (mode === 'a') {
+    return {
+      ...common,
+      AUTH_MODE: 'none',
+      WORK_HUB_ENV: 'test',
+      WORK_HUB_ADMIN_EMAILS: `scn-admin@${EMAIL_DOMAIN}`,
+    };
+  }
   if (mode === 'c') return { ...common, AUTH_MODE: 'password', WORK_HUB_ENV: 'test' };
   const smtp = parseHostPort(mailpitSmtp);
   return {
@@ -378,6 +406,64 @@ async function waitHealth(stand) {
   throw new Error(`GET /health did not answer within ${HEALTH_TIMEOUT_MS / 1000}s; see ${stand.logFile}`);
 }
 
+/** Polls `check` every second until it returns a truthy value or `timeoutMs` passes. */
+async function pollUntil(stand, timeoutMs, check) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (stand.server.exitCode !== null) {
+      throw new Error(`the server exited with code ${stand.server.exitCode}; see ${stand.logFile}`);
+    }
+    const value = await check();
+    if (value) return value;
+    await new Promise((resolve) => setTimeout(resolve, 1000));
+  }
+  return null;
+}
+
+/**
+ * Runs the fake git host on the git proxy network `wh-net-<instance>` (created by the server's
+ * git proxy start) with alias git.test and the stand's instance label, so cleanup removes it.
+ */
+async function startFakeGitHost(stand) {
+  const network = `wh-net-${stand.instance}`;
+  const found = await pollUntil(stand, GIT_PROXY_TIMEOUT_MS, () =>
+    docker(['network', 'inspect', network], { allowFail: true }).ok,
+  );
+  if (!found) {
+    throw new Error(`network ${network} did not appear within ${GIT_PROXY_TIMEOUT_MS / 1000}s; see ${stand.logFile}`);
+  }
+  const name = `whs-fakegit-${stand.hex}`;
+  docker([
+    'run', '-d', '--name', name,
+    '--label', 'artisyn.workhub=1', '--label', `artisyn.workhub.instance=${stand.instance}`,
+    '--network', network, '--network-alias', FAKE_GIT_HOST_ALIAS,
+    FAKE_GIT_HOST_IMAGE,
+  ]);
+  log(`fake git host ${name} is up on ${network} as ${FAKE_GIT_HOST_ALIAS}`);
+}
+
+/** Waits until GET /api/v1/system/status reports gitProxy "ok"; fails with the last status. */
+async function waitGitProxy(stand) {
+  let last = 'no answer';
+  const ok = await pollUntil(stand, GIT_PROXY_TIMEOUT_MS, async () => {
+    try {
+      const res = await fetch(`${stand.url}/api/v1/system/status`, { signal: AbortSignal.timeout(5000) });
+      const body = await res.json();
+      last = JSON.stringify(body);
+      return body.gitProxy === 'ok';
+    } catch (err) {
+      last = err.message;
+      return false;
+    }
+  });
+  if (!ok) {
+    throw new Error(
+      `the git proxy is not ready after ${GIT_PROXY_TIMEOUT_MS / 1000}s; last status: ${last}; see ${stand.logFile}`,
+    );
+  }
+  log('the git proxy is ready');
+}
+
 function writeStandInfo(stand) {
   const info = {
     runnerPid: process.pid,
@@ -450,6 +536,7 @@ function runPlaywright(stand, opts, mailpitUrl) {
       WH_STAND_DATABASE_URL: stand.databaseUrl,
       WH_STAND_DATA_DIR: path.resolve(stand.dataDir),
       MAILPIT_URL: mailpitUrl,
+      WH_FAKE_GIT_HOST: FAKE_GIT_HOST_ALIAS,
     },
   });
   stand.playwright = child;
@@ -483,6 +570,7 @@ async function main() {
   const port = await freePort();
   const dir = path.join(STAND_TMP, `run-${hex}`);
   const stand = {
+    hex,
     mode: opts.mode,
     schema: `whs_${opts.mode}_${hex}`,
     instance: `whs-${hex}`,
@@ -511,10 +599,11 @@ async function main() {
     await stopServer(stand);
     const left = removeInstanceObjects(stand.instance);
     const schemaLeft = await dropSchema(databaseUrl, stand.schema);
-    const clean = left.containers + left.volumes + left.images + schemaLeft === 0;
+    const clean = left.containers + left.volumes + left.images + left.networks + schemaLeft === 0;
     log(
       `cleanup: schema ${stand.schema} ${schemaLeft ? 'STILL EXISTS' : 'dropped'}; ` +
-        `left with instance ${stand.instance}: ${left.containers} containers, ${left.volumes} volumes, ${left.images} images`,
+        `left with instance ${stand.instance}: ${left.containers} containers, ${left.volumes} volumes, ` +
+        `${left.images} images, ${left.networks} networks`,
     );
     fs.rmSync(stand.dataDir, { recursive: true, force: true });
     fs.rmSync(path.join(stand.dir, 'stand.json'), { force: true });
@@ -536,6 +625,8 @@ async function main() {
     startServer(stand);
     await waitHealth(stand);
     log(`the stand is up at ${stand.url}`);
+    await startFakeGitHost(stand);
+    await waitGitProxy(stand);
     if (opts.standOnly) {
       exitCode = 0;
     } else {

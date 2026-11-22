@@ -92,6 +92,12 @@ export function WorkspacePage() {
   const [diskVersions, setDiskVersions] = useState<PollResult["files"]>({});
   const [loginDialogOpen, setLoginDialogOpen] = useState(false);
   const [closeDialogOpen, setCloseDialogOpen] = useState(false);
+  /**
+   * The workstream the Close dialog was opened for. A close removes it from the open workstreams
+   * at once, but the dialog stays to show what a push did (D12), so it keeps this copy.
+   */
+  const [closingStream, setClosingStream] = useState<typeof stream>(undefined);
+  const dialogStream = stream ?? (closeDialogOpen ? closingStream : undefined);
   const [closeConfirm, setCloseConfirm] = useState<FileTab | null>(null);
 
   // A different workspace or view starts with a fresh tree and no tabs.
@@ -178,9 +184,9 @@ export function WorkspacePage() {
 
   const onStreamClosed = (outcome: CloseOutcome) => {
     setCloseDialogOpen(false);
-    if (stream) {
+    if (dialogStream) {
       toast.show(
-        closedText(outcome, stream.name, stream.baseBranch),
+        closedText(outcome, dialogStream.name, dialogStream.baseBranch),
         "success",
       );
     }
@@ -320,7 +326,10 @@ export function WorkspacePage() {
                       <Button
                         variant="outline"
                         size="xs"
-                        onClick={() => setCloseDialogOpen(true)}
+                        onClick={() => {
+                          setClosingStream(stream);
+                          setCloseDialogOpen(true);
+                        }}
                         data-testid="close-workstream"
                       >
                         <LogOut />
@@ -397,10 +406,10 @@ export function WorkspacePage() {
             onLoginStarted={() => tabs.pin(LOGIN_TAB)}
           />
 
-          {stream && (
+          {dialogStream && (
             <CloseWorkstreamDialog
               open={closeDialogOpen}
-              stream={stream}
+              stream={dialogStream}
               onClose={() => setCloseDialogOpen(false)}
               onDone={onStreamClosed}
             />

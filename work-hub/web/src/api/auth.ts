@@ -15,11 +15,14 @@ export interface AuthConfig {
 
 export type EmailDelivery = "sent" | "failed";
 
-/** The public profile `{id, email, role, createdAt}`; `role` is always `"user"` in Work Hub. */
+/**
+ * The public profile `{id, email, role, createdAt}`; `role` is `"admin"` for the e-mails in
+ * `WORK_HUB_ADMIN_EMAILS` (FR-12), else `"user"`.
+ */
 export interface UserProfile {
   id: number;
   email: string;
-  role: "user";
+  role: "user" | "admin";
   createdAt: string;
   /** Sign-up in `password-confirm`: whether the confirmation email went out. */
   email_delivery?: EmailDelivery;

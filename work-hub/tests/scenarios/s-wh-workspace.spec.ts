@@ -1,7 +1,9 @@
 // @S-WH-02 — workspaces: create, name rules, agent login (one per user: new, inherited by a second
 // workspace, logout from Settings, "Not now"), where the token is kept, what a container commit
 // leaks, settings (working branch), isolation between users and delete (AC-5, AC-8–AC-10, AC-19,
-// AC-20–AC-20c, AC-20e, AC-30, AC-31) and the file area on the host (AC-3b).
+// AC-20–AC-20c, AC-20e, AC-30, AC-31) and the file area on the host (AC-3b); then remote
+// repositories through the git proxy: clone, no secret anywhere, attach, grants and another user's
+// container (FR-3–FR-6).
 import { spawnSync } from 'node:child_process';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -9,13 +11,19 @@ import path from 'node:path';
 import type { Page } from '@playwright/test';
 import {
   appendInEditor,
+  attachRemote,
+  createPatConnection,
+  createWorkspace,
   docker,
   dockerExec,
   dockerTry,
   EDITOR,
   expect,
+  FAKE_GIT_HTTP,
+  FAKE_PAT,
   fakeLoginInUi,
   getWorkspace,
+  gitIn,
   gitMain,
   gotoWorkspace,
   openFromTree,
@@ -23,6 +31,7 @@ import {
   paintedBackground,
   restartServer,
   say,
+  setGrants,
   signedInPage,
   signIn,
   test,
@@ -32,6 +41,8 @@ import {
   WhApi,
   workspaceContainer,
   workstreamContainer,
+  type Connection,
+  type Remote,
 } from './fixtures';
 
 test.describe.configure({ timeout: 1_800_000 });
@@ -139,12 +150,13 @@ test('@S-WH-02 @mode-a workspaces, agent login, settings and delete', async ({ b
     const files = gitMain(alphaId, ['show', '--name-only', '--format=', 'HEAD']).stdout.trim().split('\n');
     expect(files).toContain('.gitignore');
 
-    // The dialog offers no clone or repository option.
+    // The dialog starts on "Empty repository": a name is all it asks for (cloning is step 12).
     await page.goto('/#/');
     await page.getByTestId('new-workspace').click();
     const dialog = page.getByTestId('new-workspace-dialog');
     await expect(dialog).toBeVisible();
-    await expect(dialog.getByText(/clone|repository url|git url/i)).toHaveCount(0);
+    await expect(page.getByTestId('new-workspace-start-empty')).toHaveAttribute('aria-checked', 'true');
+    await expect(dialog.getByTestId('clone-source')).toHaveCount(0);
     await expect(dialog.locator('input')).toHaveCount(1);
   });
 
@@ -410,7 +422,167 @@ test('@S-WH-02 @mode-a workspaces, agent login, settings and delete', async ({ b
     expect(dockerTry(['inspect', `wh-st-${alphaStreamId}`]).status).not.toBe(0);
   });
 
-  await test.step('11. every request stayed on the stand origin (AC-30)', async () => {
+  // Steps 12–17: remote repositories through the git proxy and the stand's fake git host (FR-3–FR-6).
+  const conn = await createPatConnection(api, 'Fake host');
+  let clonedId = '';
+
+  await test.step('12. clone from a token connection on branch dev (FR-4)', async () => {
+    await page.goto('/#/');
+    await page.getByTestId('new-workspace').click();
+    await page.getByTestId('new-workspace-name').fill('Cloned');
+    await page.getByTestId('new-workspace-start-clone').click();
+    await page.getByTestId('clone-connection').click();
+    await page.getByRole('option', { name: /^Fake host · / }).click();
+    await page.getByTestId('clone-url').fill(FAKE_GIT_HTTP);
+    await page.getByTestId('clone-url').blur();
+    await expect(page.getByTestId('clone-branch')).toContainText('main', { timeout: 120_000 });
+    await page.getByTestId('clone-branch').click();
+    await page.getByRole('option', { name: 'dev', exact: true }).click();
+    await page.getByTestId('new-workspace-create').click();
+    // The user logged out in step 6: the login question follows the clone.
+    await expect(page.getByTestId('agent-login-dialog')).toBeVisible({ timeout: 300_000 });
+    await page.getByTestId('agent-login-not-now').click();
+    clonedId = await workspaceIdFromUrl(page);
+    await expect(treeRow(page, 'DEV.md')).toBeVisible({ timeout: 60_000 });
+
+    expect((await getWorkspace(api, clonedId)).workingBranch).toBe('dev');
+    expect(gitMain(clonedId, ['rev-parse', '--abbrev-ref', 'HEAD']).stdout.trim()).toBe('dev');
+    expect(gitMain(clonedId, ['log', '-1', '--format=%s']).stdout.trim()).toBe('Dev branch');
+    const remotes = await api.expectStatus<Remote[]>('GET', `/api/v1/workspaces/${clonedId}/remotes`, 200);
+    expect(remotes).toEqual([
+      expect.objectContaining({ name: 'origin', connectionId: conn.id, url: FAKE_GIT_HTTP, defaultBranch: 'main' }),
+    ]);
+    expect(gitMain(clonedId, ['remote', 'get-url', 'origin']).stdout.trim()).toBe(`http://wh-git/git/${remotes[0].id}.git`);
+    const granted = await api.expectStatus<Connection>('GET', `/api/v1/connections/${conn.id}`, 200);
+    expect(granted.grants.map((g) => g.workspaceId)).toEqual([clonedId]);
+  });
+
+  await test.step('13. no secret in the container, its commit or the host folders; the capability only in /tmp (FR-3, FR-4)', async () => {
+    const container = workspaceContainer(clonedId);
+    const env = dockerExec(container, ['env']).stdout;
+    expect(env).not.toContain(FAKE_PAT);
+    const config = gitMain(clonedId, ['config', '-l']).stdout;
+    expect(config).not.toContain(FAKE_PAT);
+    expect(config).toContain('credential.http://wh-git.helper=');
+    const probe = dockerExec(container, ['sh', '-c', `grep -rlsI -D skip ${FAKE_PAT} "$HOME" /workspace /tmp; echo checked`]);
+    expect(probe.stdout.trim()).toBe('checked');
+    // Host folders of the workspace, the homes and the recordings.
+    expect(filesContaining(stand.dataDir, FAKE_PAT, (rel) => /^secrets[\\/].*\.enc$/.test(rel))).toEqual([]);
+
+    // The capability: mode 0600 in the container's /tmp, and nowhere else.
+    expect(dockerExec(container, ['stat', '-c', '%a', '/tmp/wh-git-capability']).stdout.trim()).toBe('600');
+    const capability = dockerExec(container, ['cat', '/tmp/wh-git-capability']).stdout.trim();
+    expect(capability.length).toBeGreaterThan(20);
+    expect(env).not.toContain(capability);
+    expect(config).not.toContain(capability);
+    const capProbe = dockerExec(container, ['sh', '-c', `grep -rlsF -D skip ${capability} "$HOME" /workspace; echo checked`]);
+    expect(capProbe.stdout.trim()).toBe('checked');
+    expect(filesContaining(stand.dataDir, capability, () => false)).toEqual([]);
+
+    // A commit of the container (what a checkpoint image would hold) has neither.
+    const tag = `whs-scenario-commit:${crypto.randomBytes(4).toString('hex')}`;
+    docker(['commit', container, tag]);
+    try {
+      const inImage = dockerTry([
+        'run', '--rm', '--entrypoint', 'sh', tag, '-c',
+        `grep -rlsI -D skip -e ${FAKE_PAT} -e ${capability} /home /root /workspace /tmp /etc; test -e /tmp/wh-git-capability && echo capability; echo checked`,
+      ]);
+      expect(inImage.status, inImage.stderr).toBe(0);
+      expect(inImage.stdout.trim()).toBe('checked');
+    } finally {
+      dockerTry(['image', 'rm', '-f', tag]);
+    }
+  });
+
+  await test.step('14. a wrong URL creates no workspace (FR-4)', async () => {
+    const before = await api.expectStatus<{ id: string }[]>('GET', '/api/v1/workspaces', 200);
+    await page.goto('/#/');
+    await page.getByTestId('new-workspace').click();
+    await page.getByTestId('new-workspace-name').fill('Wrong');
+    await page.getByTestId('new-workspace-start-clone').click();
+    await page.getByTestId('clone-connection').click();
+    await page.getByRole('option', { name: /^Fake host · / }).click();
+    await page.getByTestId('clone-url').fill('http://other.test/git/app.git');
+    await page.getByTestId('new-workspace-create').click();
+    await expect(page.getByTestId('clone-source-error')).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByTestId('new-workspace-name')).toHaveValue('Wrong');
+    await page.getByTestId('new-workspace-dialog').getByRole('button', { name: 'Cancel' }).click();
+
+    const missing = await api.post('/api/v1/workspaces', {
+      name: 'Missing',
+      source: { connectionId: conn.id, url: 'http://git.test/git/missing.git', branch: null },
+    });
+    expect(missing.status).toBeGreaterThanOrEqual(400);
+    expect(missing.status).toBeLessThan(500);
+    const after = await api.expectStatus<{ id: string }[]>('GET', '/api/v1/workspaces', 200);
+    expect(after.map((w) => w.id).sort()).toEqual(before.map((w) => w.id).sort());
+    const folders = fs.readdirSync(path.join(stand.dataDir, 'users', me.email.toLowerCase()));
+    expect(folders.filter((f) => f.startsWith('wrong-') || f.startsWith('missing-'))).toEqual([]);
+  });
+
+  let second: Connection | null = null;
+  await test.step('15. attach a remote to an empty workspace, then fetch; a connection not granted here is not offered (FR-5)', async () => {
+    second = await createPatConnection(api, 'Fake host 2');
+    await gotoWorkspace(page, betaId);
+    await expect(treeRow(page, '.gitignore')).toBeVisible({ timeout: 120_000 });
+    await page.goto(`/#/w/${betaId}/settings`);
+    await expect(page.getByTestId('remotes-empty')).toBeVisible();
+    await page.getByTestId('remote-attach').click();
+    const attach = page.getByTestId('attach-remote-dialog');
+    await expect(attach.getByTestId('attach-remote-name')).toHaveValue('origin');
+    const radio = (id: string) => attach.locator(`[data-testid="attach-remote-connection"][data-connection-id="${id}"]`);
+    // Neither connection is granted to this workspace yet.
+    await expect(radio(conn.id)).toBeDisabled();
+    await expect(radio(second.id)).toBeDisabled();
+    await radio(conn.id).locator('xpath=ancestor::div[1]').getByTestId('attach-remote-grant').click();
+    await expect(radio(conn.id)).toBeEnabled();
+    await expect(radio(second.id)).toBeDisabled();
+    await radio(conn.id).check();
+    await attach.getByTestId('attach-remote-url').fill(FAKE_GIT_HTTP);
+    await attach.getByTestId('attach-remote-submit').click();
+    await expect(attach).toHaveCount(0);
+    await expect(page.getByTestId('remote-card').filter({ hasText: 'origin' })).toBeVisible();
+
+    const fetch = gitMain(betaId, ['fetch', 'origin']);
+    expect(fetch.status, fetch.stderr).toBe(0);
+    expect(gitMain(betaId, ['rev-parse', '--verify', 'refs/remotes/origin/dev']).status).toBe(0);
+  });
+
+  await test.step('16. a remote whose connection is no longer granted cannot fetch: "no grant" (FR-5)', async () => {
+    if (!second) throw new Error('step 15 did not create the second connection');
+    await setGrants(api, second.id, [betaId]);
+    await attachRemote(api, betaId, second.id, { name: 'second' });
+    expect(gitMain(betaId, ['fetch', 'second']).status).toBe(0);
+    await setGrants(api, second.id, []);
+    const fetch = gitMain(betaId, ['fetch', 'second']);
+    expect(fetch.status).not.toBe(0);
+    expect(fetch.stderr).toContain('Work Hub: this workspace has no grant for the connection of this remote');
+    // The remote of the granted connection still works.
+    expect(gitMain(betaId, ['fetch', 'origin']).status).toBe(0);
+  });
+
+  await test.step("17. another user's container cannot use this user's remote (FR-6)", async () => {
+    const [origin] = await api.expectStatus<Remote[]>('GET', `/api/v1/workspaces/${clonedId}/remotes`, 200);
+    const other = await WhApi.create(stand.url);
+    try {
+      await signIn(stand, other, uniqueEmail('intruder'));
+      const theirs = await createWorkspace(other, 'Intruder');
+      const container = workspaceContainer(theirs.id);
+      // Their repo has no remote yet, hence no helper: give git the one Work Hub installs, which
+      // sends their container's own capability.
+      const helper = `credential.http://wh-git.helper=!f() { test "$1" = get && printf 'username=wh\\npassword=%s\\n' "$(cat /tmp/wh-git-capability)"; }; f`;
+      const viaOwnCapability = gitIn(container, '/workspace/repo', ['-c', helper, 'ls-remote', `http://wh-git/git/${origin.id}.git`]);
+      expect(viaOwnCapability.status).not.toBe(0);
+      expect(viaOwnCapability.stderr).toContain('Work Hub: this workspace has no grant for the connection of this remote');
+      const forged = gitIn(container, '/workspace/repo', ['ls-remote', `http://wh:forged@wh-git/git/${origin.id}.git`]);
+      expect(forged.status).not.toBe(0);
+      expect(forged.stderr).toContain('Work Hub: unknown or revoked capability');
+    } finally {
+      await other.dispose();
+    }
+  });
+
+  await test.step('18. every request stayed on the stand origin (AC-30)', async () => {
     expect(await backgroundOf(page, 'body')).toBe(WHITE);
     expect(offOrigin).toEqual([]);
   });

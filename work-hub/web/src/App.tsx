@@ -11,8 +11,10 @@ import {
 import styles from "./App.module.css";
 import { AuthProvider, useAuth } from "./auth/AuthContext";
 import { DockerStatusGate } from "./layout/DockerStatusGate";
+import { AdminPage } from "./pages/admin/AdminPage";
 import { HistoryPage } from "./pages/history/HistoryPage";
 import { ConfirmEmailPage } from "./pages/confirm/ConfirmEmailPage";
+import { ConnectionsPage } from "./pages/connections/ConnectionsPage";
 import { LoginPage } from "./pages/login/LoginPage";
 import { ForgotPasswordPage } from "./pages/password/ForgotPasswordPage";
 import { ResetPasswordPage } from "./pages/password/ResetPasswordPage";
@@ -123,6 +125,14 @@ const router = createHashRouter([
               {
                 path: ROUTE.settings,
                 element: <SettingsPage />,
+              },
+              {
+                path: ROUTE.connections,
+                element: <ConnectionsPage />,
+              },
+              {
+                path: ROUTE.admin,
+                element: <AdminPage />,
               },
               {
                 path: "*",

@@ -2,17 +2,24 @@
 //! login sources and copy, `login_required`, patch, delete.
 
 use futures_util::future::BoxFuture;
-use serde_json::json;
+use serde_json::{Value, json};
 
 use work_hub_server::docker::names;
 
-use crate::harness::{Case, Ctx, assert_keys, assert_workspace, assert_workstream, uuid_of};
+use crate::harness::{
+    ADMIN_LOCAL, Case, Ctx, EMAIL_DOMAIN, assert_date, assert_keys, assert_workspace,
+    assert_workstream, uuid_of,
+};
 
 pub fn cases() -> Vec<Case> {
     vec![
         Case {
             name: "workspaces::list_and_get",
             run: list_and_get,
+        },
+        Case {
+            name: "workspaces::admin_overview",
+            run: admin_overview,
         },
         Case {
             name: "workspaces::create_name_errors",
@@ -77,6 +84,137 @@ fn list_and_get(ctx: &Ctx) -> BoxFuture<'_, ()> {
         w.a.get(&format!("/api/v1/workspaces/{}", uuid::Uuid::new_v4()))
             .await
             .expect_error(404, "not_found", "unknown id");
+    })
+}
+
+/// Nullable byte count: a non-negative integer or `null`.
+#[track_caller]
+fn assert_bytes_or_null(v: &Value, context: &str) {
+    assert!(
+        v.is_null() || v.as_u64().is_some(),
+        "{context}: not a byte count or null: {v}"
+    );
+}
+
+/// `GET /api/v1/admin/overview` (FR-12, D15): the admin (`WORK_HUB_ADMIN_EMAILS`) gets every
+/// user with their workspaces, workstream counts and sizes, and their profile says
+/// `role:"admin"`; a plain user gets 403 `forbidden`. No connection data in the answer.
+fn admin_overview(ctx: &Ctx) -> BoxFuture<'_, ()> {
+    Box::pin(async move {
+        let w = ctx.world().await;
+        let admin = ctx.identify(ADMIN_LOCAL).await;
+        let me = admin
+            .get("/api/v1/auth/me")
+            .await
+            .expect_status(200, "admin me")
+            .json();
+        assert_eq!(me["role"], "admin", "admin profile: {me}");
+        let me_a =
+            w.a.get("/api/v1/auth/me")
+                .await
+                .expect_status(200, "A's me")
+                .json();
+        assert_eq!(me_a["role"], "user", "plain user profile: {me_a}");
+
+        w.a.get("/api/v1/admin/overview").await.expect_error(
+            403,
+            "forbidden",
+            "plain user on the overview",
+        );
+
+        let ov = admin
+            .get("/api/v1/admin/overview")
+            .await
+            .expect_status(200, "admin overview")
+            .json();
+        assert_keys(
+            &ov,
+            &["generatedAt", "instance", "users", "totalBytes"],
+            "overview",
+        );
+        assert_date(&ov["generatedAt"], "generatedAt");
+        assert_keys(&ov["instance"], &["gitCacheBytes"], "overview instance");
+        assert_bytes_or_null(&ov["instance"]["gitCacheBytes"], "gitCacheBytes");
+        assert!(ov["totalBytes"].as_u64().is_some(), "totalBytes: {ov}");
+        let users = ov["users"].as_array().expect("users");
+        for u in users {
+            assert_keys(
+                u,
+                &["id", "email", "createdAt", "workspaces", "totalBytes"],
+                "overview user",
+            );
+            for ws in u["workspaces"].as_array().expect("user workspaces") {
+                assert_keys(
+                    ws,
+                    &[
+                        "id",
+                        "name",
+                        "workingBranch",
+                        "createdAt",
+                        "workstreamsOpen",
+                        "workstreamsTotal",
+                        "disk",
+                    ],
+                    "overview workspace",
+                );
+                assert_keys(
+                    &ws["disk"],
+                    &[
+                        "filesBytes",
+                        "containersBytes",
+                        "volumesBytes",
+                        "imagesBytes",
+                        "totalBytes",
+                    ],
+                    "overview disk",
+                );
+                for k in [
+                    "filesBytes",
+                    "containersBytes",
+                    "volumesBytes",
+                    "imagesBytes",
+                ] {
+                    assert_bytes_or_null(&ws["disk"][k], k);
+                }
+            }
+        }
+        let a = users
+            .iter()
+            .find(|u| u["email"] == format!("contract-a@{EMAIL_DOMAIN}"))
+            .unwrap_or_else(|| panic!("user A is listed: {ov}"));
+        assert!(
+            users
+                .iter()
+                .any(|u| u["email"] == format!("contract-b@{EMAIL_DOMAIN}")),
+            "user B is listed: {ov}"
+        );
+        let ws = a["workspaces"]
+            .as_array()
+            .expect("A's workspaces")
+            .iter()
+            .find(|v| v["id"] == w.workspace.to_string())
+            .unwrap_or_else(|| panic!("A's workspace is listed: {a}"));
+        assert_eq!(ws["name"], "Contract A");
+        assert!(ws["workstreamsOpen"].as_i64().unwrap_or(0) >= 1, "{ws}");
+        assert!(
+            ws["workstreamsTotal"].as_i64().unwrap_or(0)
+                >= ws["workstreamsOpen"].as_i64().unwrap_or(0),
+            "{ws}"
+        );
+        // Docker is up on the stand: the folder and the containers are measured.
+        assert!(ws["disk"]["filesBytes"].as_u64().unwrap_or(0) > 0, "{ws}");
+        for k in ["containersBytes", "volumesBytes", "imagesBytes"] {
+            assert!(ws["disk"][k].as_u64().is_some(), "{k} measured: {ws}");
+        }
+        assert!(ov["instance"]["gitCacheBytes"].as_u64().is_some(), "{ov}");
+        assert!(ws["disk"]["totalBytes"].as_u64().unwrap_or(0) > 0, "{ws}");
+        // NFR Security: nothing about A's connection.
+        let text = ov.to_string();
+        assert!(
+            !text.contains(&w.connection.to_string()) && !text.contains("contract-dummy-pat"),
+            "connection data in the overview"
+        );
+        eprintln!("contract: admin overview of A's workspace: {}", ws["disk"]);
     })
 }
 

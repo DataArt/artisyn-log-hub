@@ -127,6 +127,7 @@ article itself holds the details. Keep new lines to one or two sentences.
 ## Work Hub (separate product in `work-hub/`)
 
 * [Artisyn AI Work Hub](work-hub.md) - Read before touching anything under `work-hub/` (Rust server, web, image, scripts, tests): container model, Docker names / labels and cleanup rules, env vars, run modes, its own commands, licence and agent-name checks, test stand and fake agent, the checkpoint layer limit
+* [Work Hub git proxy and connections](workhub-git-proxy.md) - Read before touching Work Hub remotes, connections, clone-from-a-connection, close + push or `work-hub/sidecar/`: the git proxy sidecar (`wh-gitproxy-<instance>`, `wh-net-<instance>`, `wh-gitcache-<instance>`), vault and capabilities, `wh-git-ctl` commands, push policy, exact error messages, provider-name lint guard, and how to debug the sidecar with `docker exec`
 
 ## Product (separate KB) and history
 

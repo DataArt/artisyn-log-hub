@@ -151,6 +151,18 @@ Generic, provider-agnostic per-user **connections** (FR-1, FR-2) hold their secr
   `containerEnv`), never silently dropped.
 - **FR-11 Test connection.** "Test" checks the credential against the provider (descriptor's test
   endpoint or `git ls-remote` through the proxy) and shows success / a readable error.
+- **FR-12 Admin resource overview** (added 2026-11-23 by the owner: "добавь админку, сделай меня
+  админом - показывает список пользователей, их work spaces и кол-во стримов и размер на диске -
+  чисто обзор ресурсов").
+  - Admins are the e-mails listed in `WORK_HUB_ADMIN_EMAILS` (comma-separated, case-insensitive).
+    Their public profile says `role: "admin"`; everyone else stays `"user"`. No DB change.
+  - An admin sees an "Admin" item in the account menu and a read-only page listing every user,
+    each user's workspaces, the number of open and total workstreams per workspace, and the disk
+    space each workspace uses (its files on the host, its containers' writable layers, its volumes
+    and its checkpoint / built images), with per-user and grand totals and the instance's git
+    cache volume. Sizes are measured when the page loads or on "Refresh".
+  - The overview never shows connections, secrets or file contents (NFR Security: no admin read
+    of connections). A non-admin gets 403 from the API and sees no menu item.
 
 ## Non-Functional Requirements
 
@@ -208,6 +220,10 @@ Generic, provider-agnostic per-user **connections** (FR-1, FR-2) hold their secr
 - [ ] FR-10: with "expose to agent" on, the env var is present in the agent session and the UI marks
       the connection as visible to the agent; with it off (default), it is absent.
 - [ ] FR-11: "Test" on a valid and an invalid credential shows success and a readable error.
+- [ ] FR-12: with `WORK_HUB_ADMIN_EMAILS` naming a user, that user's profile has `role: "admin"`, the
+      account menu shows "Admin", and the page lists every user with their workspaces, open / total
+      workstreams and non-zero disk sizes; another user gets 403 and has no menu item; the
+      response contains no connection data.
 
 ## Out of Scope
 

@@ -1,0 +1,356 @@
+[
+  {
+    "id": "CF-01",
+    "input": {"field": "env", "method": "pat", "value": "GIT_TOKEN"},
+    "expected": {"ok": true},
+    "note": "Env name: upper case, digits and '_' are fine."
+  },
+  {
+    "id": "CF-02",
+    "input": {"field": "env", "method": "pat", "value": "_TOKEN2"},
+    "expected": {"ok": true},
+    "note": "Env name may start with '_'."
+  },
+  {
+    "id": "CF-03",
+    "input": {"field": "env", "method": "pat", "value": "1TOKEN"},
+    "expected": {"ok": false, "error": "env_name", "code": "invalid_env_name"},
+    "note": "Env name: a leading digit is rejected."
+  },
+  {
+    "id": "CF-04",
+    "input": {"field": "env", "method": "pat", "value": "git_token"},
+    "expected": {"ok": false, "error": "env_name", "code": "invalid_env_name"},
+    "note": "Env name: lower case is rejected."
+  },
+  {
+    "id": "CF-05",
+    "input": {"field": "env", "method": "pat", "value": "GIT-TOKEN"},
+    "expected": {"ok": false, "error": "env_name"},
+    "note": "Env name: '-' is not allowed."
+  },
+  {
+    "id": "CF-06",
+    "input": {"field": "env", "method": "pat", "value": ""},
+    "expected": {"ok": false, "error": "env_name"},
+    "note": "Env name: empty is rejected."
+  },
+  {
+    "id": "CF-07",
+    "input": {"field": "env", "method": "pat", "value": "PATH"},
+    "expected": {"ok": false, "error": "env_name"},
+    "note": "Env name: a reserved system name."
+  },
+  {
+    "id": "CF-08",
+    "input": {"field": "env", "method": "pat", "value": "HOSTNAME"},
+    "expected": {"ok": false, "error": "env_name"},
+    "note": "Env name: the last of the reserved names."
+  },
+  {
+    "id": "CF-09",
+    "input": {"field": "env", "method": "pat", "value": "PATH2"},
+    "expected": {"ok": true},
+    "note": "Env name: only the exact reserved names are refused, not names that start with one."
+  },
+  {
+    "id": "CF-10",
+    "input": {"field": "env", "method": "pat", "value": "WH_TOKEN"},
+    "expected": {"ok": false, "error": "env_name"},
+    "note": "Env name: the WH_ prefix belongs to Work Hub."
+  },
+  {
+    "id": "CF-11",
+    "input": {"field": "env", "method": "pat", "value": "WHTOKEN"},
+    "expected": {"ok": true},
+    "note": "Env name: 'WH' without the '_' is not the Work Hub prefix."
+  },
+  {
+    "id": "CF-12",
+    "input": {"field": "env", "method": "pat", "value": "CLAUDE_CODE_OAUTH_TOKEN"},
+    "expected": {"ok": false, "error": "env_name"},
+    "note": "Env name: a registered agent's token variable (its adapter's token_env) is refused."
+  },
+  {
+    "id": "CF-13",
+    "input": {"field": "env", "method": "ssh_generated", "value": "GIT_TOKEN"},
+    "expected": {"ok": false, "error": "expose_not_allowed", "code": "expose_not_allowed"},
+    "note": "Only a PAT connection can expose a variable."
+  },
+  {
+    "id": "CF-14",
+    "input": {"field": "env", "method": "ssh_uploaded", "value": "1bad"},
+    "expected": {"ok": false, "error": "expose_not_allowed"},
+    "note": "The auth method is checked before the name."
+  },
+  {
+    "id": "CF-15",
+    "input": {"field": "env", "method": "pat", "value": {"repeat": "A", "times": 64}},
+    "expected": {"ok": true},
+    "note": "Env name: 64 characters is the maximum."
+  },
+  {
+    "id": "CF-16",
+    "input": {"field": "env", "method": "pat", "value": {"repeat": "A", "times": 65}},
+    "expected": {"ok": false, "error": "env_name"},
+    "note": "Env name: 65 characters is too long."
+  },
+  {
+    "id": "CF-17",
+    "input": {"field": "remote", "value": "origin"},
+    "expected": {"ok": true},
+    "note": "Remote name: a plain name."
+  },
+  {
+    "id": "CF-18",
+    "input": {"field": "remote", "value": "my.fork_1-b"},
+    "expected": {"ok": true},
+    "note": "Remote name: '.', '_' and '-' are allowed after the first character."
+  },
+  {
+    "id": "CF-19",
+    "input": {"field": "remote", "value": "2nd"},
+    "expected": {"ok": true},
+    "note": "Remote name may start with a digit."
+  },
+  {
+    "id": "CF-20",
+    "input": {"field": "remote", "value": ".hidden"},
+    "expected": {"ok": false, "error": "remote_name", "code": "invalid_remote_name"},
+    "note": "Remote name: must start with a letter or digit."
+  },
+  {
+    "id": "CF-21",
+    "input": {"field": "remote", "value": "-x"},
+    "expected": {"ok": false, "error": "remote_name"},
+    "note": "Remote name: a leading '-' (would read as an option) is rejected."
+  },
+  {
+    "id": "CF-22",
+    "input": {"field": "remote", "value": "a/b"},
+    "expected": {"ok": false, "error": "remote_name"},
+    "note": "Remote name: '/' is not allowed."
+  },
+  {
+    "id": "CF-23",
+    "input": {"field": "remote", "value": "my remote"},
+    "expected": {"ok": false, "error": "remote_name"},
+    "note": "Remote name: a space is not allowed."
+  },
+  {
+    "id": "CF-24",
+    "input": {"field": "remote", "value": ""},
+    "expected": {"ok": false, "error": "remote_name"},
+    "note": "Remote name: empty is rejected."
+  },
+  {
+    "id": "CF-25",
+    "input": {"field": "remote", "value": "main.lock"},
+    "expected": {"ok": false, "error": "remote_name"},
+    "note": "Remote name: ending in '.lock' is rejected (git's lock files)."
+  },
+  {
+    "id": "CF-26",
+    "input": {"field": "remote", "value": "main.locked"},
+    "expected": {"ok": true},
+    "note": "Remote name: '.lock' only matters at the very end."
+  },
+  {
+    "id": "CF-27",
+    "input": {"field": "remote", "value": "orígin"},
+    "expected": {"ok": false, "error": "remote_name"},
+    "note": "Remote name: ASCII only."
+  },
+  {
+    "id": "CF-28",
+    "input": {"field": "remote", "value": {"repeat": "r", "times": 64}},
+    "expected": {"ok": true},
+    "note": "Remote name: 64 characters is the maximum."
+  },
+  {
+    "id": "CF-29",
+    "input": {"field": "remote", "value": {"repeat": "r", "times": 65}},
+    "expected": {"ok": false, "error": "remote_name"},
+    "note": "Remote name: 65 characters is too long."
+  },
+  {
+    "id": "CF-30",
+    "input": {"field": "base", "provider": "github", "value": ""},
+    "expected": {"ok": true, "value": "https://github.com"},
+    "note": "Base URL: a fixed-base provider takes its fixed URL when none is given."
+  },
+  {
+    "id": "CF-31",
+    "input": {"field": "base", "provider": "github", "value": "HTTPS://GitHub.com/"},
+    "expected": {"ok": true, "value": "https://github.com"},
+    "note": "Base URL: the fixed URL in any case, with a trailing '/', is the fixed URL."
+  },
+  {
+    "id": "CF-32",
+    "input": {"field": "base", "provider": "github", "value": "https://github.example.com"},
+    "expected": {"ok": false, "error": "base_url_form", "code": "invalid_connection"},
+    "note": "Base URL: a fixed-base provider accepts nothing else."
+  },
+  {
+    "id": "CF-33",
+    "input": {"field": "base", "provider": "gitlab", "value": "https://gitlab.example.com/"},
+    "expected": {"ok": true, "value": "https://gitlab.example.com"},
+    "note": "Base URL: the trailing '/' is stripped."
+  },
+  {
+    "id": "CF-34",
+    "input": {"field": "base", "provider": "gitlab", "value": "https://example.com/gitlab/"},
+    "expected": {"ok": true, "value": "https://example.com/gitlab"},
+    "note": "Base URL: a sub-path is kept."
+  },
+  {
+    "id": "CF-35",
+    "input": {"field": "base", "provider": "gitlab", "value": "gitlab.example.com"},
+    "expected": {"ok": false, "error": "base_url_not_url"},
+    "note": "Base URL: must be absolute (with a scheme)."
+  },
+  {
+    "id": "CF-36",
+    "input": {"field": "base", "provider": "gitlab", "value": "http://gitlab.example.com"},
+    "expected": {"ok": false, "error": "base_url_scheme"},
+    "note": "Base URL: http:// only where the provider allows it."
+  },
+  {
+    "id": "CF-37",
+    "input": {"field": "base", "provider": "gitlab", "value": "ftp://gitlab.example.com"},
+    "expected": {"ok": false, "error": "base_url_scheme"},
+    "note": "Base URL: only https (or http) schemes."
+  },
+  {
+    "id": "CF-38",
+    "input": {"field": "base", "provider": "gitlab", "value": "https://gitlab.example.com/?tab=1"},
+    "expected": {"ok": false, "error": "base_url_extra"},
+    "note": "Base URL: no query."
+  },
+  {
+    "id": "CF-39",
+    "input": {"field": "base", "provider": "gitlab", "value": "https://gitlab.example.com/#top"},
+    "expected": {"ok": false, "error": "base_url_extra"},
+    "note": "Base URL: no fragment."
+  },
+  {
+    "id": "CF-40",
+    "input": {"field": "base", "provider": "gitlab", "value": "https://me@gitlab.example.com"},
+    "expected": {"ok": false, "error": "base_url_extra"},
+    "note": "Base URL: no userinfo."
+  },
+  {
+    "id": "CF-41",
+    "input": {"field": "base", "provider": "generic", "value": "http://git.test"},
+    "expected": {"ok": true, "value": "http://git.test"},
+    "note": "Base URL: generic allows http://."
+  },
+  {
+    "id": "CF-42",
+    "input": {"field": "base", "provider": "generic", "value": "https://GIT.Example.com:8443/scm/"},
+    "expected": {"ok": true, "value": "https://git.example.com:8443/scm"},
+    "note": "Base URL: the host is lowercased, a non-default port kept."
+  },
+  {
+    "id": "CF-43",
+    "input": {"field": "base", "provider": "generic", "value": "https://git.example.com:443"},
+    "expected": {"ok": true, "value": "https://git.example.com"},
+    "note": "Base URL: the scheme's default port is dropped."
+  },
+  {
+    "id": "CF-44",
+    "input": {"field": "base", "provider": "azure-devops", "value": "https://dev.azure.com/contoso"},
+    "expected": {"ok": true, "value": "https://dev.azure.com/contoso"},
+    "note": "Base URL: Azure needs the organization URL."
+  },
+  {
+    "id": "CF-45",
+    "input": {"field": "base", "provider": "azure-devops", "value": "https://dev.azure.com"},
+    "expected": {"ok": false, "error": "base_url_form"},
+    "note": "Base URL: Azure without the organization does not match the provider's form."
+  },
+  {
+    "id": "CF-46",
+    "input": {"field": "base", "provider": "azure-devops", "value": "https://dev.azure.com/contoso/Web"},
+    "expected": {"ok": false, "error": "base_url_form"},
+    "note": "Base URL: Azure with a project after the organization does not match either."
+  },
+  {
+    "id": "CF-47",
+    "input": {"field": "pat", "value": "ghp_abc123"},
+    "expected": {"ok": true},
+    "note": "PAT: a plain token."
+  },
+  {
+    "id": "CF-48",
+    "input": {"field": "pat", "value": ""},
+    "expected": {"ok": false, "error": "pat", "code": "invalid_connection"},
+    "note": "PAT: empty is rejected."
+  },
+  {
+    "id": "CF-49",
+    "input": {"field": "pat", "value": "abc def"},
+    "expected": {"ok": false, "error": "pat"},
+    "note": "PAT: no whitespace."
+  },
+  {
+    "id": "CF-50",
+    "input": {"field": "pat", "value": "abc\n"},
+    "expected": {"ok": false, "error": "pat"},
+    "note": "PAT: a pasted line break is rejected, not trimmed."
+  },
+  {
+    "id": "CF-51",
+    "input": {"field": "pat", "value": {"repeat": "x", "times": 4096}},
+    "expected": {"ok": true},
+    "note": "PAT: 4096 characters is the maximum."
+  },
+  {
+    "id": "CF-52",
+    "input": {"field": "pat", "value": {"repeat": "x", "times": 4097}},
+    "expected": {"ok": false, "error": "pat"},
+    "note": "PAT: 4097 characters is too long."
+  },
+  {
+    "id": "CF-53",
+    "input": {"field": "pat", "value": {"repeat": "é", "times": 4096}},
+    "expected": {"ok": true},
+    "note": "PAT: the limit counts characters, not bytes."
+  },
+  {
+    "id": "CF-54",
+    "input": {"field": "key", "value": "-----BEGIN TEST PLACEHOLDER-----\nb3BlbnNzaA==\n-----END TEST PLACEHOLDER-----\n"},
+    "expected": {"ok": true},
+    "note": "Key: begins with -----BEGIN (only the marker is checked; placeholder text so secret scanners stay quiet)."
+  },
+  {
+    "id": "CF-55",
+    "input": {"field": "key", "value": "\n  -----BEGIN TEST PLACEHOLDER-----\nAAAA\n-----END TEST PLACEHOLDER-----"},
+    "expected": {"ok": true},
+    "note": "Key: leading whitespace before -----BEGIN is fine."
+  },
+  {
+    "id": "CF-56",
+    "input": {"field": "key", "value": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI me@host"},
+    "expected": {"ok": false, "error": "private_key", "code": "invalid_connection"},
+    "note": "Key: a public key is not a private key."
+  },
+  {
+    "id": "CF-57",
+    "input": {"field": "key", "value": ""},
+    "expected": {"ok": false, "error": "private_key"},
+    "note": "Key: empty is rejected."
+  },
+  {
+    "id": "CF-58",
+    "input": {"field": "key", "value": {"before": "-----BEGIN", "repeat": "A", "times": 16374}},
+    "expected": {"ok": true},
+    "note": "Key: 16384 bytes (16 KiB) is the maximum."
+  },
+  {
+    "id": "CF-59",
+    "input": {"field": "key", "value": {"before": "-----BEGIN", "repeat": "A", "times": 16375}},
+    "expected": {"ok": false, "error": "private_key"},
+    "note": "Key: 16385 bytes is too long."
+  }
+]

@@ -32,8 +32,7 @@ pub async fn start_configure(st: &AppState, ws: &WorkspaceRow) -> Result<(), Api
     }
     let user = exec_user(ws)?;
     let argv = agent.configure_command();
-    let token = login::agent_env(st, ws, &container).await?;
-    let secret = token.as_ref().map(|(n, v)| (*n, v.as_str()));
+    let secrets = login::agent_env(st, ws, &container).await?;
     let started = async {
         let created = tmux::ensure_session(
             &st.docker,
@@ -44,7 +43,7 @@ pub async fn start_configure(st: &AppState, ws: &WorkspaceRow) -> Result<(), Api
             &argv,
             tmux::SessionOpts {
                 record_to: None,
-                secret,
+                secrets: &secrets,
             },
         )
         .await?;
@@ -61,7 +60,7 @@ pub async fn start_configure(st: &AppState, ws: &WorkspaceRow) -> Result<(), Api
                 &argv,
                 tmux::SessionOpts {
                     record_to: None,
-                    secret,
+                    secrets: &secrets,
                 },
             )
             .await?;

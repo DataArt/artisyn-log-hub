@@ -1,0 +1,49 @@
+#!/bin/sh
+# System pre-receive hook of every mirror (core.hooksPath): push policy, then push-through. The
+# push reaches the real host before the mirror accepts it, so the mirror never runs ahead of it.
+# Runs in the mirror's git dir with WH_REMOTE_ID set by wh-git-cgi.
+set -u
+STATE=/run/wh
+TAB=$(printf '\t')
+rid=${WH_REMOTE_ID:-}
+[ -n "$rid" ] && [ -f "$STATE/remotes/$rid" ] || { echo "Work Hub: unknown remote"; exit 1; }
+
+# Remote record (D4): one tab-separated line, read as data and never sourced.
+r_id='' r_conn='' r_name='' r_up='' r_block='' r_only=''
+IFS="$TAB" read -r r_id r_conn r_name r_up r_block r_only < "$STATE/remotes/$rid" || true
+[ "$r_id" = "$rid" ] || { echo "Work Hub: unknown remote"; exit 1; }
+
+zero=0000000000000000000000000000000000000000
+default=$(git symbolic-ref --short HEAD 2>/dev/null || echo main)
+set --
+while read -r old new ref; do
+  case "$ref" in
+    refs/heads/*|refs/tags/*) ;;
+    *) echo "Work Hub push policy: only branches and tags can be pushed ($ref)"; exit 1 ;;
+  esac
+  if [ "$ref" = "refs/heads/$default" ] && [ "$r_block" = 1 ]; then
+    if [ "$new" = "$zero" ]; then
+      echo "Work Hub push policy: deleting the default branch $default is not allowed"; exit 1
+    fi
+    if [ "$old" != "$zero" ] && ! git merge-base --is-ancestor "$old" "$new" 2>/dev/null; then
+      echo "Work Hub push policy: force push to the default branch $default is not allowed"; exit 1
+    fi
+  fi
+  if [ "$r_only" = 1 ]; then
+    case "$ref" in
+      refs/heads/ws/*|refs/tags/*) ;;
+      *) echo "Work Hub push policy: only ws/* branches may be pushed ($ref)"; exit 1 ;;
+    esac
+  fi
+  if [ "$old" = "$zero" ]; then lease="--force-with-lease=$ref:"; else lease="--force-with-lease=$ref:$old"; fi
+  if [ "$new" = "$zero" ]; then spec=":$ref"; else spec="$new:$ref"; fi
+  set -- "$@" "$lease" "$spec"
+done
+[ "$#" -gt 0 ] || exit 0
+
+if ! out=$(/usr/local/bin/wh-git-ctl push-upstream "$rid" "$@" 2>&1); then
+  echo "Work Hub: the git host rejected the push:"
+  printf '%s\n' "$out" | grep -E '^(!|error|remote:|fatal)' | head -n 10
+  exit 1
+fi
+exit 0

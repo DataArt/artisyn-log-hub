@@ -34,7 +34,7 @@ use uuid::Uuid;
 
 use work_hub_server::auth::AuthSettings;
 use work_hub_server::config::{AuthEnv, Config, RunEnv};
-use work_hub_server::docker::{self, Docker, containers, exec, images, names, volumes};
+use work_hub_server::docker::{self, Docker, containers, exec, images, names, networks, volumes};
 use work_hub_server::state::{AppState, ImageStatus};
 use work_hub_server::{agent, api, auth, db, secrets, terminal, workspaces, workstreams};
 
@@ -43,6 +43,8 @@ pub const DEFAULT_DATABASE_URL: &str = "postgresql://postgres:pw@localhost:5432/
 pub const FAKE_AGENT_IMAGE: &str = "artisyn-work-hub-fake-agent:test";
 /// The e-mail domain of the stand's users.
 pub const EMAIL_DOMAIN: &str = "arrakis.test";
+/// The local part of the stand's only admin (`WORK_HUB_ADMIN_EMAILS`, FR-12).
+pub const ADMIN_LOCAL: &str = "contract-admin";
 /// Longest time one case may take.
 const CASE_TIMEOUT: Duration = Duration::from_secs(600);
 
@@ -256,6 +258,11 @@ impl Stand {
                 }
             }
         }
+        // The git proxy's network (its containers are gone by now).
+        let network = names::git_network(&self.instance);
+        if let Err(e) = networks::remove(&self.docker, &network).await {
+            eprintln!("contract cleanup: network {network}: {e}");
+        }
         let left = containers::list_by_labels(&self.docker, &filter)
             .await
             .map(|l| l.len())
@@ -267,7 +274,8 @@ impl Stand {
             + images::list_by_labels(&self.docker, &filter)
                 .await
                 .map(|l| l.len())
-                .unwrap_or(1);
+                .unwrap_or(1)
+            + usize::from(self.docker.inspect_network(&network, None).await.is_ok());
         if left > 0 {
             eprintln!(
                 "contract cleanup: {left} Docker objects of {} are left",
@@ -403,11 +411,13 @@ async fn start_app(stand: &Stand, mode: &str, background: bool) -> Result<App, S
         engine_data_dir: work_hub_server::config::default_engine_path(&stand.data_dir),
         docker_host: None,
         default_image: FAKE_AGENT_IMAGE.into(),
+        git_proxy_image: work_hub_server::config::default_git_proxy_image(),
         instance: stand.instance.clone(),
         static_dir: None,
         session_secret: Some(stand.session_secret.clone()),
         auth_env,
         auth,
+        admin_emails: vec![format!("{ADMIN_LOCAL}@{EMAIL_DOMAIN}")],
     };
     let pool = db::init(&config).await.map_err(|e| e.to_string())?;
     let sessions = auth::sessions::init(&config, &pool)
@@ -446,13 +456,17 @@ async fn start_app(stand: &Stand, mode: &str, background: bool) -> Result<App, S
 // Context shared by the cases
 // ---------------------------------------------------------------------------------------------
 
-/// User A's world: a logged-in workspace with one open workstream, and user B with no
-/// workspaces (AC-5).
+/// User A's world: a logged-in workspace with one open workstream, a connection granted to it
+/// and a remote attached to it, and user B with no workspaces (AC-5).
 pub struct World {
     pub a: Client,
     pub b: Client,
     pub workspace: Uuid,
     pub workstream: Uuid,
+    /// A's generic PAT connection (no ready git proxy needed, D1 item 10).
+    pub connection: Uuid,
+    /// A's remote `origin` on the workspace, through [`World::connection`].
+    pub remote: Uuid,
 }
 
 pub struct Ctx {
@@ -550,11 +564,49 @@ impl Ctx {
                     .await
                     .expect_status(201, "open user A's workstream")
                     .json();
+                let conn = a
+                    .post(
+                        "/api/v1/connections",
+                        json!({
+                            "name": "Contract git",
+                            "provider": "generic",
+                            "baseUrl": "http://git.test",
+                            "authMethod": "pat",
+                            "username": "scenario",
+                            "secret": "contract-dummy-pat",
+                        }),
+                    )
+                    .await
+                    .expect_status(201, "create user A's connection")
+                    .json();
+                let connection = uuid_of(&conn["id"]);
+                a.send(
+                    Method::PUT,
+                    &format!("/api/v1/connections/{connection}/grants"),
+                    Body::Json(json!({ "workspaceIds": [workspace] })),
+                    &[],
+                )
+                .await
+                .expect_status(200, "grant user A's connection");
+                let remote = a
+                    .post(
+                        &format!("/api/v1/workspaces/{workspace}/remotes"),
+                        json!({
+                            "name": "origin",
+                            "connectionId": connection,
+                            "url": "http://git.test/git/app.git",
+                        }),
+                    )
+                    .await
+                    .expect_status(201, "attach user A's remote")
+                    .json();
                 World {
                     a,
                     b,
                     workspace,
                     workstream: uuid_of(&s["id"]),
+                    connection,
+                    remote: uuid_of(&remote["id"]),
                 }
             })
             .await

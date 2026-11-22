@@ -1,9 +1,11 @@
 //! Artisyn AI Work Hub server library.
 
+pub mod admin;
 pub mod agent;
 pub mod api;
 pub mod auth;
 pub mod config;
+pub mod connections;
 pub mod db;
 pub mod devcontainer;
 pub mod docker;
@@ -11,6 +13,7 @@ pub mod error;
 pub mod files;
 pub mod fs;
 pub mod git;
+pub mod gitproxy;
 pub mod locks;
 pub mod names;
 pub mod repo_path;
@@ -83,6 +86,10 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
             .await;
         });
     }
+    // D5: the git proxy sidecar is brought up in the background; until its state is pushed
+    // `/api/v1/system/status` reports `gitProxy:"building"` and git-host operations answer
+    // `git_proxy_not_ready`.
+    gitproxy::spawn(state.clone());
     // Terminal background work: the periodic recording sync and the resumed configure watchers.
     terminal::spawn_background(&state);
     // D10: open workstreams running with their chat, stale creating/opening rows cleaned up.

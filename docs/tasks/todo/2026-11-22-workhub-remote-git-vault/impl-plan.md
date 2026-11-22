@@ -950,6 +950,39 @@ What scenarios cannot cover:
 | 15 | Tests — algorithm docs and rows | 6 | |
 | 16 | Tests — contract registry and stand | 7 | |
 | 17 | Tests — scenarios and final verification | 7 | last |
+| 18 | Admin resource overview (FR-12) | 7 | added 2026-11-23 after chunks 1–17; D15 |
+
+### D15 — Admin resource overview (FR-12)
+
+- **Admins.** `config.admin_emails: Vec<String>` from `WORK_HUB_ADMIN_EMAILS`: split on `,`, trim,
+  drop empty entries, lowercase (compared with `users.email_key`). An entry that is not an e-mail
+  fails startup with `ConfigError::Invalid`. Unset = no admins. `UserRow::public_profile` takes the
+  admin list and answers `role: "admin"` for a listed user, else `"user"` — same JSON shape, so old
+  clients keep working. `auth::is_admin(cfg, user)` is the one check.
+- **Route.** `GET /api/v1/admin/overview` (`Auth::Session`); non-admin → 403 `forbidden`
+  (reuse the existing code if there is one, else add it to `error.rs`). Response (camelCase):
+  `{ generatedAt, instance: { gitCacheBytes: number | null },
+     users: [{ id, email, createdAt, workspaces: [{ id, name, workingBranch, createdAt,
+       workstreamsOpen, workstreamsTotal, disk: { filesBytes, containersBytes, volumesBytes,
+       imagesBytes, totalBytes } }], totalBytes }], totalBytes }`.
+  A size that cannot be measured is `null` and counts as 0 in totals; the request never fails
+  because Docker is unreachable.
+- **Measuring.** One call per request, no caching:
+  - files — walk the workspace's host folder (the helper the file API already uses for the
+    workspace / workstream folders), in `spawn_blocking`, symlinks not followed;
+  - containers — Docker container list with `size=true` filtered by the instance label, `SizeRw`
+    summed per `artisyn.workhub.workspace` label;
+  - volumes and images — Docker `system df` (`/system/df`), `UsageData.Size` of volumes and
+    `Size` of images, summed per workspace label; the git cache volume `wh-gitcache-<instance>`
+    goes to `instance.gitCacheBytes`.
+  - Only objects labelled with this instance are counted.
+- **Web.** `ROUTE.admin = "/admin"`, page `pages/admin/AdminPage.tsx` (+ CSS module): a table with
+  one group per user (e-mail, workspace count, total) and one row per workspace (name, branch,
+  workstreams `open / total`, files, containers, volumes, images, total, human-readable sizes),
+  grand total and git cache in a summary line, a "Refresh" button. `TopBar` shows "Admin" in the
+  account menu only when `me.role === "admin"`; a non-admin opening `#/admin` sees "Not allowed".
+  `api/auth.ts` `role: "user" | "admin"`.
+- **No connection data** in the response or the page (NFR Security).
 
 ### Chunk 1 — DB schema and SQL repos
 - [ ] Create `work-hub/server/migrations/0005_connections.sql` exactly per Database changes, with a `COMMENT ON` for every table and column. Declare the modules: in `lib.rs` add `pub mod connections; pub mod gitproxy;`; create `connections/mod.rs` and `gitproxy/mod.rs`, each with `pub mod repo;`.
@@ -1135,3 +1168,12 @@ What scenarios cannot cover:
   - `onlyWsBranches` + bring into main with push → "Push rejected", workstream closed.
 - [ ] Run `npm run test:scenarios -- --mode a --grep "@S-WH-06|@S-WH-02|@S-WH-05"` from `work-hub/` until green, then `npm run test:scenarios -- --mode b` and `--mode c`.
 - [ ] Run the full Work Hub set from `work-hub/`: `npm run lint`, `npm run typecheck`, `npm run test:algo`, `npm run build`, `npm run test:contract`; then do the visual check of the Connections page, the add dialog and the Settings Remotes card against the wireframes.
+
+### Chunk 18 — Admin resource overview (FR-12, D15)
+- [x] `config.rs`: `admin_emails` from `WORK_HUB_ADMIN_EMAILS` per D15 (invalid entry fails startup); add it to every `Config` literal (contract harness, scenario stand). `auth/users.rs`: `public_profile` answers `role: "admin"` for a listed user; update all callers; add `auth::is_admin`.
+- [x] Server: `admin/` module with `overview(st)` per D15 (files walk, container `SizeRw`, `system df` volumes and images, git cache volume; unmeasurable → `null`). `api/admin.rs` handler `GET /api/v1/admin/overview` (403 for non-admins); register it in `routes!`.
+- [x] Web: `api/admin.ts` (types + `getAdminOverview`), `api/auth.ts` role `"user" | "admin"`, `ROUTE.admin`, `pages/admin/AdminPage.tsx` + CSS module per D15, "Admin" menu item in `TopBar.tsx` only for admins. Component files under 10 KB, `web/src/ui/` primitives only.
+- [x] Contract: registry row(s) for `GET /api/v1/admin/overview` — admin answers 200 with the D15 shape and the world's users / workspaces; a plain user answers 403. Make the contract world's admin via the harness `Config.admin_emails`.
+- [x] Scenario: a step in an existing mode-a scenario (stand env `WORK_HUB_ADMIN_EMAILS` = the scenario's admin e-mail): the admin sees "Admin", the page lists the users with their workspaces, workstream counts and a non-zero total; another user sees no menu item and gets 403.
+- [x] Docs: `WORK_HUB_ADMIN_EMAILS` in `docs/knowledgebase/work-hub.md` (config table, API list), `work-hub/README.md` (how to make someone an admin), `work-hub/.env.example`, `deploy/` env example if it lists variables; bump `generated.at`.
+- [x] Run `npm run lint`, `npm run typecheck`, `npm run test:algo`, `npm run build`, `npm run test:contract` (only the known `create_login_patch_delete` may fail) and the touched scenario from `work-hub/` until green.

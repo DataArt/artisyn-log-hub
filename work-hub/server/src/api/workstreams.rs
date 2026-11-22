@@ -5,7 +5,7 @@ use axum::body::{Body, Bytes};
 use axum::extract::State;
 use axum::http::{HeaderMap, HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use super::IdPath;
 use crate::auth::CurrentUser;
@@ -13,7 +13,7 @@ use crate::error::{ApiError, ApiResult};
 use crate::state::AppState;
 use crate::terminal::recording::{self, RecordingMeta, TermSize};
 use crate::terminal::tmux::{INITIAL_COLS, INITIAL_ROWS};
-use crate::workstreams::close::{self, CloseCheck, CloseMode};
+use crate::workstreams::close::{self, CloseCheck, CloseMode, PushResult};
 use crate::workstreams::{self, WorkstreamSummary};
 
 #[derive(Debug, Deserialize)]
@@ -25,6 +25,18 @@ struct CloseBody {
     /// 2026-11-14). Optional: older clients do not send it.
     #[serde(default)]
     commit: bool,
+    /// Push the closed work to the workspace's push remote (D12). Optional: older clients do
+    /// not send it.
+    #[serde(default)]
+    push: bool,
+}
+
+/// `POST …/close` response: the summary with the push result (`null` without a push).
+#[derive(Debug, Serialize)]
+pub struct CloseResponse {
+    #[serde(flatten)]
+    pub summary: WorkstreamSummary,
+    pub push: Option<PushResult>,
 }
 
 /// `POST …/close/check` → `{uncommitted, agentBusy}`.
@@ -37,24 +49,28 @@ pub async fn close_check(
     Ok(Json(close::close_check(&st, &ws, &s).await?))
 }
 
-/// `POST …/close` `{mode, force, commit?}` → `WorkstreamSummary` · 409 `uncommitted {paths}` /
+/// `POST …/close` `{mode, force, commit?, push?}` → `WorkstreamSummary & {push}` · 409 `uncommitted {paths}` /
 /// `merge_conflict`.
 pub async fn close(
     State(st): State<AppState>,
     user: CurrentUser,
     IdPath(id): IdPath,
     body: Bytes,
-) -> ApiResult<Json<WorkstreamSummary>> {
+) -> ApiResult<Json<CloseResponse>> {
     let (ws, s) = workstreams::load_owned(&st, user.id(), id).await?;
     let CloseBody {
         mode,
         force,
         commit,
+        push,
     } = serde_json::from_slice(&body).map_err(|e| {
         ApiError::bad_request("invalid_body", format!("The request is not valid: {e}."))
     })?;
-    let row = close::close(&st, &ws, &s, mode, force, commit).await?;
-    Ok(Json(workstreams::summary(&st, &row)))
+    let (row, push) = close::close(&st, &ws, &s, mode, force, commit, push).await?;
+    Ok(Json(CloseResponse {
+        summary: workstreams::summary(&st, &row),
+        push,
+    }))
 }
 
 /// `POST …/discard` → `WorkstreamSummary`.

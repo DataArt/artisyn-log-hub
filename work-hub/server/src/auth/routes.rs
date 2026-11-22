@@ -261,7 +261,10 @@ pub async fn identify(
     }
     let user = users::find_or_create(&st.db, &b.email).await?;
     sessions::log_in(&session, &user).await?;
-    Ok(ok_json(StatusCode::OK, user.public_profile()))
+    Ok(ok_json(
+        StatusCode::OK,
+        user.public_profile(&st.config.admin_emails),
+    ))
 }
 
 /// `POST /api/v1/auth/signup` (modes `password`, `password-confirm`) → 201 profile. In
@@ -318,13 +321,16 @@ pub async fn signup(
         return Ok(ok_json(
             StatusCode::CREATED,
             ProfileWithDelivery {
-                profile: user.public_profile(),
+                profile: user.public_profile(&st.config.admin_emails),
                 email_delivery,
             },
         ));
     }
     sessions::log_in(&session, &user).await?;
-    Ok(ok_json(StatusCode::CREATED, user.public_profile()))
+    Ok(ok_json(
+        StatusCode::CREATED,
+        user.public_profile(&st.config.admin_emails),
+    ))
 }
 
 fn email_taken() -> ApiError {
@@ -400,7 +406,10 @@ pub async fn login(
         mask_email(email),
         user.id
     );
-    Ok(ok_json(StatusCode::OK, user.public_profile()))
+    Ok(ok_json(
+        StatusCode::OK,
+        user.public_profile(&st.config.admin_emails),
+    ))
 }
 
 /// The user when the password matches; users without a password never match.
@@ -457,7 +466,10 @@ pub async fn confirm_email(State(st): State<AppState>, body: Bytes) -> AuthResul
         mask_email(&user.email),
         user.id
     );
-    Ok(ok_json(StatusCode::OK, user.public_profile()))
+    Ok(ok_json(
+        StatusCode::OK,
+        user.public_profile(&st.config.admin_emails),
+    ))
 }
 
 /// `POST /api/v1/auth/resend-confirmation` (mode `password-confirm`): enumeration-safe; an
@@ -592,7 +604,10 @@ pub async fn reset_password(
         mask_email(&user.email),
         user.id
     );
-    Ok(ok_json(StatusCode::OK, user.public_profile()))
+    Ok(ok_json(
+        StatusCode::OK,
+        user.public_profile(&st.config.admin_emails),
+    ))
 }
 
 /// `POST /api/v1/auth/change-password` (modes `password`, `password-confirm`, session) → 200
@@ -665,7 +680,7 @@ pub async fn change_password(
     Ok(ok_json(
         StatusCode::OK,
         ProfileWithDelivery {
-            profile: updated.public_profile(),
+            profile: updated.public_profile(&st.config.admin_emails),
             email_delivery,
         },
     ))
@@ -698,6 +713,6 @@ pub async fn delete_account(
 }
 
 /// `GET /api/v1/auth/me` (session; in mode `none` a local request is signed in automatically).
-pub async fn me(MeUser(current): MeUser) -> Json<PublicProfile> {
-    Json(current.user.public_profile())
+pub async fn me(State(st): State<AppState>, MeUser(current): MeUser) -> Json<PublicProfile> {
+    Json(current.user.public_profile(&st.config.admin_emails))
 }
