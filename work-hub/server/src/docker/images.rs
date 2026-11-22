@@ -24,6 +24,12 @@ use crate::state::ImageStatus;
 #[folder = "../image/"]
 struct DefaultImageContext;
 
+/// The build context of the git proxy sidecar image: `work-hub/sidecar/` (Dockerfile, lighttpd
+/// config, CGI, hook and control scripts).
+#[derive(RustEmbed)]
+#[folder = "../sidecar/"]
+struct GitProxyImageContext;
+
 /// How long [`ensure_default_image`] waits between attempts while Docker is unreachable.
 const DOCKER_RETRY: Duration = Duration::from_secs(5);
 /// Build output lines kept for the error message of a failed build.
@@ -129,9 +135,15 @@ where
 
 /// The embedded `work-hub/image/` as an uncompressed tar.
 fn default_image_context_tar() -> DockerResult<Vec<u8>> {
+    embedded_context_tar::<DefaultImageContext>()
+}
+
+/// An embedded build context as an uncompressed tar (every file mode 0644; a Dockerfile that
+/// needs executables `chmod`s them itself).
+fn embedded_context_tar<E: RustEmbed>() -> DockerResult<Vec<u8>> {
     let mut builder = tar::Builder::new(Vec::new());
-    for name in DefaultImageContext::iter() {
-        let Some(file) = DefaultImageContext::get(&name) else {
+    for name in E::iter() {
+        let Some(file) = E::get(&name) else {
             continue;
         };
         let mut header = tar::Header::new_gnu();
@@ -188,6 +200,21 @@ pub async fn ensure_default_image(docker: &Docker, tag: &str, status: &RwLock<Im
             *status.write().await = ImageStatus::Failed(e.to_string());
         }
     }
+}
+
+/// Makes sure the git proxy sidecar image `tag` (`WORK_HUB_GIT_PROXY_IMAGE`) exists, building it
+/// from the embedded `work-hub/sidecar/` when it is missing. Unlike [`ensure_default_image`] it
+/// does not wait for Docker: the caller (the git proxy startup task) owns retries and status.
+pub async fn ensure_git_proxy_image(docker: &Docker, tag: &str) -> DockerResult<()> {
+    if exists(docker, tag).await? {
+        return Ok(());
+    }
+    tracing::info!("building the git proxy image {tag}");
+    let tar = embedded_context_tar::<GitProxyImageContext>()?;
+    let body = futures_util::stream::once(async move { Ok(Bytes::from(tar)) });
+    build_from_tar(docker, body, "Dockerfile", tag, HashMap::new()).await?;
+    tracing::info!("git proxy image {tag} built");
+    Ok(())
 }
 
 /// `repo:tag` references (or ids, for untagged images) of the images matching a label filter.

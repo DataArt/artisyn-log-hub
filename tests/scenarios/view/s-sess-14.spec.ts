@@ -7,31 +7,39 @@
 //   a1  Bash `cd <root> && npm test 2>&1 | tail -5; rm -rf <root>/dist` (70 000 chars of output)
 //       and Agent A (Explore, with its sub-agent transcript);
 //   a2  Read, Grep, a failing Edit of src/app.ts and Agent B (code-reviewer, with its transcript);
-//   a3  Bash `npm run build` (interrupted), PowerShell `Get-ChildItem` and an unparseable Bash
-//       `for x in; do`, each result 1.5 s after its tool_use; the artisyn log carries one
-//       PermissionRequest with the third call's exact input, 300 ms after it;
+//   a3  Bash `npm run build` (interrupted), PowerShell `Set-Location <root>; Get-Content a.json |
+//       ConvertFrom-Json | Set-Content -Path out\b.json; Remove-Item tmp\x; git commit -m "x";
+//       gh pr create --fill` (with a description) and an unparseable Bash `for x in; do`, each
+//       result 1.5 s after its tool_use; the artisyn log carries one PermissionRequest with the
+//       third call's exact input, 300 ms after it;
 //   a4  an Agent call ("lint") rejected with "Concurrent subagent limit reached", plus text;
 //   a5  text only, end_turn.
-// Sub-agents A and B each run one Bash call. A second, minimal session has no Bash call at all.
-// Steps: the chart and its step modal, then Logs (Files / Agents statuses), then the Bash tab
-// (5 rows of the whole session tree, the `bashCall` URL param, the empty state).
+// Sub-agents A and B each run one Bash call. A second, minimal session has no shell call at all.
+// Steps: the chart and its step modal, then Logs (Files / Agents statuses, the PowerShell view),
+// then the Shell tab (6 rows of the whole session tree — 5 Bash + 1 PowerShell — the `bashCall`
+// URL param, the `shell` filter, the empty state), then the session's commit / PR counters and
+// their backfill (docs/tasks/todo/2026-11-22-bash-tab-powershell, FR-12, FR-15).
 //
 // Code facts that differ from the design text:
 //   - a step row's label is the signed delta to the NEXT step (step-bars.ts, DD-8), so a3 and a4
 //     read `+1k` for a 500-token growth (Math.round(0.5) = 1) and the last step reads `—`.
-//   - the tree-sitter WASM is fetched by the browser only when the first Bash view renders; the
-//     request URL carries the hashed asset name (`tree-sitter-bash-<hash>.wasm`).
+//   - each tree-sitter grammar WASM is fetched by the browser only when the first view of its
+//     shell renders; the request URL carries the hashed asset name (`tree-sitter-bash-<hash>.wasm`,
+//     `tree-sitter-powershell-<hash>.wasm`).
+//   - the Shell tab keeps its tab id `bash` (URL `tab=bash`, test ids `session-bash-*`).
 //   - "show all (N chars)" prints N with the browser's locale grouping, so the scenario accepts a
 //     comma, a dot or a (narrow) no-break space as the thousands separator.
 //
 // Replaces: nothing — Context Growth had no scenario (S-CHART-02 has no spec) and the Bash view
 // and Bash tab are new.
 import { randomBytes } from 'node:crypto';
+import type { Locator } from '@playwright/test';
 import { test, expect } from '../fixtures';
 import { createApiKey } from '../helpers/api-key';
+import { sessionRowId } from '../helpers/db-seed';
 import { ownRepoId, promptSessionBodies, uploadPromptSession, type PromptSession } from '../helpers/prompt-session';
 import { waitForQueueIdle } from '../helpers/queue';
-import { logTurns, openSession } from '../helpers/session-view';
+import { logTurns, openSession, revealSessionTab, usageCounter } from '../helpers/session-view';
 
 const MODEL = 'claude-sonnet-4-6';
 const BASH_OUTPUT_CHARS = 70_000;
@@ -47,13 +55,38 @@ function toNdjson(rows: object[]): string {
   return rows.map((r) => JSON.stringify(r)).join('\n') + '\n';
 }
 
-test('@S-SESS-14 Tool calls in detail: Context Growth step modal, Bash view, call statuses @mode-a @mode-c', async ({
+const PS_DESCRIPTION = 'Convert the config, commit and open a PR';
+const PS_WASM = /tree-sitter-powershell[^/]*\.wasm/;
+
+/**
+ * The a3 PowerShell call's view inside `call` (a `tool-call-view`), wherever it is shown: the
+ * caption, `⏱`, WORKING DIR = the repo root (`.`), FILES (a.json read; out/b.json and the removed
+ * tmp/x changed), the formatted script with its Formatted | Raw toggle, no absolute repo path.
+ */
+async function expectPowerShellView(call: Locator): Promise<void> {
+  await expect(call).toContainText('⏱');
+  const view = call.getByTestId('bash-command-view');
+  await expect(view.getByTestId('bash-caption')).toHaveText(PS_DESCRIPTION);
+  await expect(view.getByTestId('bash-workdir').locator('div').nth(1), 'Set-Location <root> is lifted').toHaveText('.');
+  await expect(view.getByTestId('bash-files-reads').locator('li')).toHaveText(['a.json']);
+  await expect(view.getByTestId('bash-files-changes').locator('li')).toHaveText(['out/b.json', 'tmp/x (deleted)']);
+  await expect(view.getByTestId('bash-files-deleted')).toHaveCount(1);
+  const script = view.getByTestId('bash-highlighted-script');
+  await expect(script).toContainText('Set-Content -Path out\\b.json');
+  await expect(script).toContainText('Remove-Item tmp\\x');
+  await expect(script).toContainText('gh pr create --fill');
+  await expect(script, 'the lifted Set-Location is not in the script').not.toContainText('Set-Location');
+  await expect(view.locator('button[aria-pressed]'), 'Formatted | Raw toggle').toHaveCount(2);
+  await expect(view).not.toContainText('/work/ss14-');
+}
+
+test('@S-SESS-14 Tool calls in detail: Context Growth step modal, Bash / PowerShell view, Shell tab, call statuses @mode-a @mode-c', async ({
   api,
   db,
   users,
   page,
 }) => {
-  test.setTimeout(180_000);
+  test.setTimeout(240_000);
   const owner = await users.user('user', { label: 'ss14-owner' });
   const pageErrors: string[] = [];
   page.on('pageerror', (err) => pageErrors.push(err.message));
@@ -66,6 +99,10 @@ test('@S-SESS-14 Tool calls in detail: Context Growth step modal, Bash view, cal
   const agentA = `ss14a-${runId}`;
   const agentB = `ss14b-${runId}`;
   const unparseable = { command: 'for x in; do' };
+  const powershell = {
+    command: `Set-Location ${root}; Get-Content a.json | ConvertFrom-Json | Set-Content -Path out\\b.json; Remove-Item tmp\\x; git commit -m "x"; gh pr create --fill`,
+    description: PS_DESCRIPTION,
+  };
 
   const { repoId } = await test.step('setup: upload the S-SESS-14 session, its two sub-agents, the PermissionRequest line and an empty session', async () => {
     const at = new Date(Date.now() - 24 * 60 * 60 * 1000);
@@ -117,7 +154,7 @@ test('@S-SESS-14 Tool calls in detail: Context Growth step modal, Bash view, cal
       // a3 — ctx 31 000: interrupted Bash, PowerShell, unparseable Bash (results 1.5 s later).
       assistant('a3', 'r6', 20_000, 31_000, [
         { type: 'tool_use', id: id('b2'), name: 'Bash', input: { command: 'npm run build' } },
-        { type: 'tool_use', id: id('ps'), name: 'PowerShell', input: { command: 'Get-ChildItem' } },
+        { type: 'tool_use', id: id('ps'), name: 'PowerShell', input: powershell },
         { type: 'tool_use', id: id('b3'), name: 'Bash', input: unparseable },
       ], 'tool_use'),
       result('r7', 'a3', 21_500, id('b2'), `${output(2_000 - INTERRUPTED.length, 'build')}${INTERRUPTED}`, {
@@ -207,6 +244,7 @@ test('@S-SESS-14 Tool calls in detail: Context Growth step modal, Bash view, cal
     await expect(view.getByTestId('tool-output-block').getByRole('button', { name: /show all \(70[,.  ]?000 chars\)/ })).toBeVisible();
     await expect(script.locator('pre span.text-purple-700').first(), 'a keyword / operator token').toBeVisible();
     expect(wasmRequests.some((url) => /tree-sitter-bash[^/]*\.wasm/.test(url)), wasmRequests.join('\n')).toBe(true);
+    expect(wasmRequests.some((url) => PS_WASM.test(url)), 'no PowerShell view yet → no PowerShell grammar').toBe(false);
   });
 
   await test.step('paths and close: no absolute repo path anywhere in the modal, Changes lists dist; Escape keeps the turn expanded and the scroll position (AC-7, AC-8)', async () => {
@@ -227,7 +265,7 @@ test('@S-SESS-14 Tool calls in detail: Context Growth step modal, Bash view, cal
     expect(await scrollTop()).toBe(before);
   });
 
-  await test.step('multi-call: the a3 row shows three calls (Bash, PowerShell, Bash), the first expanded with ⏸ interrupted and ⏱; PowerShell and the unparseable command are raw text with no toggle; ⚠ requested only on the third (AC-3, AC-6, AC-12, AC-15)', async () => {
+  await test.step('multi-call: the a3 row shows three calls (Bash, PowerShell, Bash), the first expanded with ⏸ interrupted and ⏱; PowerShell is formatted with WORKING DIR, FILES and the Formatted | Raw toggle, and its grammar WASM is fetched only now; the unparseable command is raw text with no toggle; ⚠ requested only on the third (AC-3, AC-6, AC-12, AC-15)', async () => {
     await stepRows.nth(2).click();
     await expect(modal).toBeVisible();
     const blocks = modal.getByTestId('step-call-block');
@@ -246,14 +284,16 @@ test('@S-SESS-14 Tool calls in detail: Context Growth step modal, Bash view, cal
     // in their final (fallback) state, not merely still loading.
     await expect(blocks.nth(0).getByRole('button', { name: 'formatted' })).toBeVisible();
 
-    for (const [i, text] of [[1, 'Get-ChildItem'], [2, unparseable.command]] as const) {
-      await toggle(i).click();
-      const raw = blocks.nth(i).getByTestId('bash-raw-command');
-      await expect(raw).toHaveText(text);
-      await expect(raw, 'fallback: wrapped raw text').toHaveClass(/whitespace-pre-wrap/);
-      await expect(blocks.nth(i).locator('button[aria-pressed]'), 'no Formatted | Raw toggle').toHaveCount(0);
-      await expect(blocks.nth(i).getByTestId('bash-highlighted-script')).toHaveCount(0);
-    }
+    await toggle(1).click();
+    await expectPowerShellView(blocks.nth(1).getByTestId('tool-call-view'));
+    expect(wasmRequests.some((url) => PS_WASM.test(url)), wasmRequests.join('\n')).toBe(true);
+
+    await toggle(2).click();
+    const raw = blocks.nth(2).getByTestId('bash-raw-command');
+    await expect(raw).toHaveText(unparseable.command);
+    await expect(raw, 'fallback: wrapped raw text').toHaveClass(/whitespace-pre-wrap/);
+    await expect(blocks.nth(2).locator('button[aria-pressed]'), 'no Formatted | Raw toggle').toHaveCount(0);
+    await expect(blocks.nth(2).getByTestId('bash-highlighted-script')).toHaveCount(0);
 
     await expect(toggle(2).getByTestId('tool-status-badge')).toContainText('⚠ requested');
     await expect(toggle(0)).not.toContainText('⚠ requested');
@@ -297,58 +337,180 @@ test('@S-SESS-14 Tool calls in detail: Context Growth step modal, Bash view, cal
     await expect(b1Preview.locator('span').first()).toHaveText('Run the tests and drop dist');
     await expect(b1Preview).toContainText('command=');
     await expect(b1Preview, 'the description is not repeated in the tail').not.toContainText('description=');
+
+    // The PowerShell call opens the same formatted view as in the step modal (FR-10).
+    const psPreview = tools.getByTestId('tool-call-row-preview').filter({ hasText: PS_DESCRIPTION });
+    await expect(psPreview).toHaveCount(1);
+    await psPreview.click();
+    await expect(dialog).toBeVisible();
+    const psCall = dialog.locator(`[data-testid="tool-call-view"][data-call-id="${main.sessionId}-ps"]`);
+    await expect(psCall).toHaveCount(1);
+    await expectPowerShellView(psCall);
+    await page.keyboard.press('Escape');
+    await expect(dialog).toHaveCount(0);
   });
 
-  const bashRows = page.getByTestId('bash-call-row');
-  const bashIds = [
+  const shellRows = page.getByTestId('bash-call-row');
+  // Start order: b1 (5 s), the two sub-agent calls (7.5 s, 14.5 s), then a3's three calls, which
+  // share one start time and keep their transcript order (stable sort).
+  const shellIds = [
     `${main.sessionId}-b1`,
     `${agentA}-bash`,
     `${agentB}-bash`,
     `${main.sessionId}-b2`,
+    `${main.sessionId}-ps`,
     `${main.sessionId}-b3`,
   ];
-  const bashCallParam = () => new URLSearchParams(new URL(page.url()).hash.split('?')[1] ?? '').get('bashCall');
+  const psId = shellIds[4];
+  const bashOnly = [0, 1, 2, 3, 5];
+  const urlParam = (name: string) => () => new URLSearchParams(new URL(page.url()).hash.split('?')[1] ?? '').get(name);
+  const bashCallParam = urlParam('bashCall');
+  const shellParam = urlParam('shell');
   const selectedRow = () => page.locator('[data-testid="bash-call-row"][aria-selected="true"]');
+  const chip = (value: 'all' | 'bash' | 'powershell') => page.getByTestId(`shell-filter-${value}`);
+  /** The current URL with `params` set (or deleted when null) in its hash query. */
+  const urlWith = (params: Record<string, string | null>) => {
+    const url = new URL(page.url());
+    const [route, query] = url.hash.split('?');
+    const search = new URLSearchParams(query);
+    for (const [k, v] of Object.entries(params)) {
+      if (v === null) search.delete(k);
+      else search.set(k, v);
+    }
+    return `${url.origin}${url.pathname}${route}?${search.toString()}`;
+  };
 
-  await test.step('bash tab list: five Bash commands of the whole tree in time order, the two sub-agent rows badged Agent · <type> (AC-10, AC-10a)', async () => {
+  await test.step('shell tab list: the tab reads «Shell 6»; six commands of the whole tree (5 Bash + 1 PowerShell) in start order, numbered #1–#6, badged bash / pwsh, the two sub-agent rows badged Agent · <type>; the filter reads All 6 / Bash 5 / PowerShell 1 (FR-1–FR-3, FR-11, AC-10, AC-10a)', async () => {
     await openSession(page, owner, repoId, main.sessionId, { tab: 'bash' });
     await expect(page.getByTestId('session-bash-tab')).toBeVisible();
-    await expect(page.getByTestId('session-bash-count')).toHaveText('5');
-    await expect(bashRows).toHaveCount(5);
-    for (const [i, callId] of bashIds.entries()) await expect(bashRows.nth(i)).toHaveAttribute('data-call-id', callId);
-    for (const [i, n] of [1, 2, 3, 4, 5].entries()) await expect(bashRows.nth(i)).toContainText(`#${n}`);
-    await expect(bashRows.nth(1).getByTestId('bash-call-agent-badge')).toHaveText('Agent · Explore');
-    await expect(bashRows.nth(2).getByTestId('bash-call-agent-badge')).toHaveText('Agent · code-reviewer');
-    for (const i of [0, 3, 4]) await expect(bashRows.nth(i).getByTestId('bash-call-agent-badge')).toHaveCount(0);
+    const trigger = await revealSessionTab(page, 'bash');
+    await expect(trigger).toContainText('Shell');
+    await expect(trigger).not.toContainText('Bash');
+    await expect(page.getByTestId('session-bash-count')).toHaveText('6');
+    await expect(page.getByRole('listbox', { name: 'Shell commands' })).toBeVisible();
+    await expect(shellRows).toHaveCount(6);
+    for (const [i, callId] of shellIds.entries()) await expect(shellRows.nth(i)).toHaveAttribute('data-call-id', callId);
+    for (const i of shellIds.keys()) await expect(shellRows.nth(i)).toContainText(`#${i + 1}`);
+    await expect(shellRows.getByTestId('shell-badge')).toHaveText(['bash', 'bash', 'bash', 'bash', 'pwsh', 'bash']);
+    await expect(shellRows.nth(1).getByTestId('bash-call-agent-badge')).toHaveText('Agent · Explore');
+    await expect(shellRows.nth(2).getByTestId('bash-call-agent-badge')).toHaveText('Agent · code-reviewer');
+    for (const i of [0, 3, 4, 5]) await expect(shellRows.nth(i).getByTestId('bash-call-agent-badge')).toHaveCount(0);
+    // The PowerShell row: its description as the preview, "changes 2" once its parser is loaded.
+    await expect(shellRows.nth(4)).toContainText(PS_DESCRIPTION);
+    await expect(shellRows.nth(4)).toContainText('changes 2');
+    await expect(chip('all')).toHaveText(/All\s*6/);
+    await expect(chip('bash')).toHaveText(/Bash\s*5/);
+    await expect(chip('powershell')).toHaveText(/PowerShell\s*1/);
     // No bashCall in the URL → row 1 is shown.
-    await expect(selectedRow()).toHaveAttribute('data-call-id', bashIds[0]);
+    await expect(selectedRow()).toHaveAttribute('data-call-id', shellIds[0]);
     await expect(page.getByTestId('bash-call-details').getByTestId('tool-call-view')).toBeVisible();
   });
 
-  await test.step('bash tab URL: ↓ moves the selection into bashCall; a reload keeps it; an unknown bashCall shows row 1; a session without Bash shows the empty state (AC-11)', async () => {
+  await test.step('shell tab URL: ↓ moves the selection into bashCall; a reload keeps it; an unknown bashCall shows row 1 (AC-11)', async () => {
     expect(bashCallParam()).toBeNull();
     await page.getByTestId('bash-call-list').focus();
     await page.keyboard.press('ArrowDown');
-    await expect(selectedRow()).toHaveAttribute('data-call-id', bashIds[1]);
-    await expect.poll(bashCallParam).toBe(bashIds[1]);
+    await expect(selectedRow()).toHaveAttribute('data-call-id', shellIds[1]);
+    await expect.poll(bashCallParam).toBe(shellIds[1]);
     await expect(page.getByTestId('bash-details-agent-badge')).toHaveText('Agent · Explore');
 
     await page.reload();
-    await expect(bashRows).toHaveCount(5);
-    await expect(selectedRow()).toHaveAttribute('data-call-id', bashIds[1]);
+    await expect(shellRows).toHaveCount(6);
+    await expect(selectedRow()).toHaveAttribute('data-call-id', shellIds[1]);
 
-    const url = new URL(page.url());
-    const [route, query] = url.hash.split('?');
-    const params = new URLSearchParams(query);
-    params.set('bashCall', 'no-such-call');
-    await page.goto(`${url.origin}${url.pathname}${route}?${params.toString()}`);
-    await expect(bashRows).toHaveCount(5);
-    await expect(selectedRow()).toHaveAttribute('data-call-id', bashIds[0]);
+    await page.goto(urlWith({ bashCall: 'no-such-call' }));
+    await expect(shellRows).toHaveCount(6);
+    await expect(selectedRow()).toHaveAttribute('data-call-id', shellIds[0]);
     expect(bashCallParam(), 'an unknown id is not rewritten').toBe('no-such-call');
+  });
 
+  await test.step('shell filter: PowerShell shows only #5 and selects it; Bash shows #1–#4 and #6 with their original numbers and selects #1; a reload keeps shell=bash; All shows the six again (FR-4, DD-24)', async () => {
+    await page.goto(urlWith({ bashCall: null, shell: null }));
+    await expect(shellRows).toHaveCount(6);
+
+    await chip('powershell').click();
+    await expect(shellRows).toHaveCount(1);
+    await expect(shellRows.first()).toHaveAttribute('data-call-id', psId);
+    await expect(shellRows.first()).toContainText('#5');
+    await expect.poll(shellParam).toBe('powershell');
+    // The selected #1 is hidden by the filter → the first visible row is selected.
+    await expect(selectedRow()).toHaveAttribute('data-call-id', psId);
+    await expect.poll(bashCallParam).toBe(psId);
+
+    await chip('bash').click();
+    await expect(shellRows).toHaveCount(5);
+    for (const [i, row] of bashOnly.entries()) {
+      await expect(shellRows.nth(i)).toHaveAttribute('data-call-id', shellIds[row]);
+      await expect(shellRows.nth(i)).toContainText(`#${row + 1}`);
+    }
+    await expect.poll(shellParam).toBe('bash');
+    await expect(selectedRow()).toHaveAttribute('data-call-id', shellIds[0]);
+    await expect.poll(bashCallParam).toBe(shellIds[0]);
+
+    await page.reload();
+    await expect(shellRows).toHaveCount(5);
+    await expect(chip('bash')).toHaveAttribute('data-state', 'on');
+    expect(shellParam()).toBe('bash');
+
+    await chip('all').click();
+    await expect(shellRows).toHaveCount(6);
+    await expect.poll(shellParam).toBeNull();
+    await expect(selectedRow(), 'All keeps the selected row').toHaveAttribute('data-call-id', shellIds[0]);
+  });
+
+  await test.step('shell URL precedence and the PowerShell view: a bashCall hidden by shell=bash drops the filter and selects the PowerShell row; its view has WORKING DIR ., FILES a.json / out/b.json / tmp/x (deleted) and ⏱ (DD-24, FR-5–FR-9)', async () => {
+    await page.goto(urlWith({ shell: 'bash', bashCall: psId }));
+    await expect(shellRows).toHaveCount(6);
+    await expect(selectedRow()).toHaveAttribute('data-call-id', psId);
+    await expect.poll(shellParam, 'the filter that would hide the selected row is dropped').toBeNull();
+    expect(bashCallParam()).toBe(psId);
+    await expect(chip('all')).toHaveAttribute('data-state', 'on');
+    await expect(page.getByTestId('bash-call-details')).toContainText('#5');
+    await expectPowerShellView(page.getByTestId('bash-call-details').getByTestId('tool-call-view'));
+    await expect(selectedRow()).toContainText('changes 2');
+  });
+
+  await test.step('counters: the session counts one commit and one pull request from the PowerShell call — Usage tab and /analytics/productivity totals (FR-12)', async () => {
+    await openSession(page, owner, repoId, main.sessionId, { tab: 'usage' });
+    await expect(page.getByTestId('session-usage-tab')).toBeVisible();
+    await expect(usageCounter(page, 'Commits')).toHaveText('1');
+    await expect(usageCounter(page, 'Pull requests')).toHaveText('1');
+
+    // The session started a day ago: a two-day range around it, as golden-load passes its range.
+    const range = {
+      startDate: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString(),
+      endDate: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+    };
+    const productivity = async () => {
+      const res = await owner.api.get(`/api/v1/repositories/${repoId}/analytics/productivity`, { params: range });
+      expect(res.status(), `GET /analytics/productivity: ${res.status()}`).toBe(200);
+      const { totals } = (await res.json()) as { totals: { commits: number; pullRequests: number } };
+      return { commits: totals.commits, pullRequests: totals.pullRequests };
+    };
+    await expect.poll(productivity).toEqual({ commits: 1, pullRequests: 1 });
+  });
+
+  await test.step('backfill: a PowerShell node left by an older extractor (okf_extract_version 4, zero commit / PR counts) is re-counted by the running server within 45 s and stamped version 5 (FR-15)', async () => {
+    const nodeId = await sessionRowId(db, main.sessionId);
+    await db.query('UPDATE sessions SET okf_extract_version = 4 WHERE id = $1', [nodeId]);
+    await db.query('UPDATE session_stats SET commit_count = 0, pr_count = 0 WHERE session_id = $1', [nodeId]);
+    const state = async () => {
+      const { rows } = await db.query<{ version: number | null; commits: number; prs: number }>(
+        `SELECT s.okf_extract_version AS version, ss.commit_count AS commits, ss.pr_count AS prs
+           FROM sessions s JOIN session_stats ss ON ss.session_id = s.id
+          WHERE s.id = $1`,
+        [nodeId],
+      );
+      return rows[0];
+    };
+    expect(await state(), 'the node is stale now').toEqual({ version: 4, commits: 0, prs: 0 });
+    await expect.poll(state, { timeout: 45_000, intervals: [1_000] }).toEqual({ version: 5, commits: 1, prs: 1 });
+  });
+
+  await test.step('empty state: a session without shell calls shows «No shell commands in this session»; no page errors in the whole scenario', async () => {
     await openSession(page, owner, repoId, empty.sessionId, { tab: 'bash' });
-    await expect(page.getByTestId('session-bash-tab')).toHaveText('No Bash commands in this session');
-    await expect(bashRows).toHaveCount(0);
+    await expect(page.getByTestId('session-bash-tab')).toHaveText('No shell commands in this session');
+    await expect(shellRows).toHaveCount(0);
     expect(pageErrors, pageErrors.join('\n')).toEqual([]);
   });
 });

@@ -29,7 +29,7 @@ import {
 } from './okf-access-extractor';
 import { OKF_EXTRACT_VERSION } from './okf-constants';
 import { normaliseSnapshot } from './okf-snapshot';
-import { getServerBashParser } from './server-bash-parser';
+import { getServerShellParsers } from './server-shell-parsers';
 
 /** Rows per INSERT statement (at most 10 parameters each, far below the Postgres parameter cap). */
 const INSERT_CHUNK = 1000;
@@ -156,7 +156,7 @@ export async function rebuildSessionOkfAccess(
   const detail = extractOkfDetail(
     lines,
     repoRoots,
-    await getServerBashParser(),
+    await getServerShellParsers(),
     {
       isSubagentLog,
       snapshotFiles: snapshot?.files,

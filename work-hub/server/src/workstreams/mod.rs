@@ -27,6 +27,7 @@ use crate::docker::{DockerError, volumes};
 use crate::error::ApiError;
 use crate::files;
 use crate::git;
+use crate::gitproxy;
 use crate::names as display_names;
 use crate::state::AppState;
 use crate::terminal::recording::{self, RecordingSource};
@@ -257,6 +258,7 @@ pub(crate) async fn remove_objects(
         .filter(|c| seen.insert(c.clone()))
     {
         containers::remove(&st.docker, &c).await?;
+        gitproxy::containers::drop_container(st, &c).await;
     }
     let mut volume_names = vec![
         names::workstream_repo_volume(s),
@@ -577,13 +579,23 @@ async fn open_steps(
     )
     .await?;
 
+    // The container joins the git proxy (D6): network, capability, the worktree's proxy remotes.
+    gitproxy::containers::container_started(
+        st,
+        ws,
+        &container,
+        WORKSTREAM_WORKTREE_DIR,
+        Some(s.id),
+    )
+    .await;
+
     // 8. The agent starts without first-run dialogs in the worktree (D7).
     workspaces::apply_profile_patch(st, &container, ws, &[WORKSTREAM_WORKTREE_DIR])
         .await
         .map_err(|e| DockerError::Failed(format!("profile patch: {e}")))?;
 
     // 9. The chat (with the user's agent token, when the agent uses one).
-    let token = login::agent_env(st, ws, &container)
+    let secrets = login::agent_env(st, ws, &container)
         .await
         .map_err(|e| DockerError::Failed(e.message))?;
     tmux::ensure_session(
@@ -595,7 +607,7 @@ async fn open_steps(
         &agent.start_command(&s.agent_session_id.to_string()),
         tmux::SessionOpts {
             record_to: Some(&recording::chat_log_path(&user.home)),
-            secret: token.as_ref().map(|(n, v)| (*n, v.as_str())),
+            secrets: &secrets,
         },
     )
     .await?;
@@ -664,9 +676,12 @@ async fn ensure_inner(
     // Not the git-write lock: callers may hold that one while they call this.
     let _guard = st.locks.lock(&format!("ensure:{name}")).await;
 
-    match containers::inspect(&st.docker, &name).await? {
-        Some(info) if info.running => {}
-        Some(_) => containers::start(&st.docker, &name).await?,
+    let started = match containers::inspect(&st.docker, &name).await? {
+        Some(info) if info.running => false,
+        Some(_) => {
+            containers::start(&st.docker, &name).await?;
+            true
+        }
         None => {
             // Removed outside Work Hub: the volumes hold everything, recreate the container.
             let filter = names::workstream_filter(&st.config.instance, s.id);
@@ -696,20 +711,25 @@ async fn ensure_inner(
                 &run_spec(st, ws.id, s.id, &image, &env, &user.home),
             )
             .await?;
+            true
         }
+    };
+    if started {
+        // The container joins the git proxy (D6) with a fresh capability (its /tmp was reset).
+        gitproxy::containers::container_started(st, ws, &name, WORKSTREAM_WORKTREE_DIR, Some(s.id))
+            .await;
     }
 
     let resume = agent.resume_command(&s.agent_session_id.to_string());
     let log = recording::chat_log_path(&user.home);
     let pane = tmux::pane_dead(&st.docker, &name, &user.user, Session::Chat).await?;
-    let token = if pane == Some(false) {
-        None
+    let secrets = if pane == Some(false) {
+        Vec::new()
     } else {
         login::agent_env(st, ws, &name)
             .await
             .map_err(|e| DockerError::Failed(e.message))?
     };
-    let secret = token.as_ref().map(|(n, v)| (*n, v.as_str()));
     match pane {
         Some(false) => {}
         Some(true) => {
@@ -722,7 +742,7 @@ async fn ensure_inner(
                 &resume,
                 tmux::SessionOpts {
                     record_to: Some(&log),
-                    secret,
+                    secrets: &secrets,
                 },
             )
             .await?;
@@ -737,7 +757,7 @@ async fn ensure_inner(
                 &resume,
                 tmux::SessionOpts {
                     record_to: Some(&log),
-                    secret,
+                    secrets: &secrets,
                 },
             )
             .await?;

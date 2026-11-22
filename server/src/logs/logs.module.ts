@@ -68,6 +68,7 @@ import { ToolMonitorConfigService } from './tool-monitoring/tool-monitor-config.
 import { ToolMonitoringHookController } from './tool-monitoring/tool-monitoring-hook.controller';
 import { ToolMonitoringController } from './tool-monitoring/tool-monitoring.controller';
 import { ToolUsageRebuildService } from './tool-monitoring/tool-usage-rebuild.service';
+import { ShellFiguresBackfillService } from './okf/shell-figures-backfill.service';
 import { UploadQueueSchedulerService } from './upload-queue-scheduler.service';
 import { UploadQueueService } from './upload-queue.service';
 
@@ -155,6 +156,9 @@ import { UploadQueueService } from './upload-queue.service';
     // Background drain that rebuilds stale session_tool_usage trees (DD-7); LogsService nudges
     // it after each ingest commit.
     ToolUsageRebuildService,
+    // Re-extracts commit / PR counts and OKF accesses of nodes with PowerShell calls stored
+    // under an older OKF extractor (DD-19 of 2026-11-22-bash-tab-powershell).
+    ShellFiguresBackfillService,
     // OTEL tabs: synchronous realtime ingest behind OtelRealtimeController (DD-17).
     OtelRealtimeService,
     // OTEL tabs: background drain projecting logs_otel chunks into the OTEL facts, draining the

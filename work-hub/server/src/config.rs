@@ -83,12 +83,18 @@ pub struct Config {
     /// `DOCKER_HOST`; `None` = bollard's platform default.
     pub docker_host: Option<String>,
     pub default_image: String,
+    /// The git proxy sidecar image: `WORK_HUB_GIT_PROXY_IMAGE`, else
+    /// [`default_git_proxy_image`].
+    pub git_proxy_image: String,
     pub instance: String,
     pub static_dir: Option<PathBuf>,
     pub session_secret: Option<String>,
     pub auth_env: AuthEnv,
     /// The validated auth settings (`auth::startup`).
     pub auth: AuthSettings,
+    /// `WORK_HUB_ADMIN_EMAILS` (FR-12): lowercased e-mails, compared with `users.email_key`.
+    /// Empty = no admins.
+    pub admin_emails: Vec<String>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -112,6 +118,36 @@ fn var(name: &str) -> Option<String> {
         Ok(v) if !v.trim().is_empty() => Some(v.trim().to_string()),
         _ => None,
     }
+}
+
+/// The git proxy sidecar image when `WORK_HUB_GIT_PROXY_IMAGE` is unset:
+/// `artisyn-work-hub-git-proxy:<server crate version>` (D2).
+pub fn default_git_proxy_image() -> String {
+    format!("artisyn-work-hub-git-proxy:{}", crate::VERSION)
+}
+
+/// `WORK_HUB_ADMIN_EMAILS` (plan D15): split on `,`, trimmed, empty entries dropped, lowercased.
+/// An entry that is not an e-mail fails startup. `None` (unset) = no admins.
+pub fn parse_admin_emails(raw: Option<&str>) -> Result<Vec<String>, ConfigError> {
+    let mut out: Vec<String> = Vec::new();
+    for entry in raw.unwrap_or("").split(',') {
+        let entry = entry.trim();
+        if entry.is_empty() {
+            continue;
+        }
+        if !crate::auth::startup::is_email(entry) {
+            return Err(ConfigError::Invalid {
+                name: "WORK_HUB_ADMIN_EMAILS",
+                value: entry.to_string(),
+                reason: "expected comma-separated e-mail addresses",
+            });
+        }
+        let key = entry.to_lowercase();
+        if !out.contains(&key) {
+            out.push(key);
+        }
+    }
+    Ok(out)
 }
 
 /// A schema name we can safely put into `search_path` and `CREATE SCHEMA` unquoted.
@@ -175,6 +211,8 @@ impl Config {
             .unwrap_or_else(|| default_engine_path(&data_dir));
         let default_image = var("WORK_HUB_DEFAULT_IMAGE")
             .unwrap_or_else(|| format!("artisyn-work-hub-default:{}", crate::VERSION));
+        let git_proxy_image =
+            var("WORK_HUB_GIT_PROXY_IMAGE").unwrap_or_else(default_git_proxy_image);
         let instance = var("WORK_HUB_INSTANCE").unwrap_or_else(|| "default".to_string());
         let auth_env = AuthEnv {
             vars: AuthEnv::NAMES
@@ -183,6 +221,7 @@ impl Config {
                 .collect(),
         };
         let auth = AuthSettings::from_env(&auth_env, env).map_err(ConfigError::Auth)?;
+        let admin_emails = parse_admin_emails(var("WORK_HUB_ADMIN_EMAILS").as_deref())?;
         Ok(Config {
             port,
             host,
@@ -193,11 +232,13 @@ impl Config {
             engine_data_dir,
             docker_host: var("DOCKER_HOST"),
             default_image,
+            git_proxy_image,
             instance,
             static_dir: var("WORK_HUB_STATIC_DIR").map(PathBuf::from),
             session_secret: var("SESSION_SECRET"),
             auth_env,
             auth,
+            admin_emails,
         })
     }
 

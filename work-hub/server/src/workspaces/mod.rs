@@ -1,8 +1,10 @@
 //! Workspace service (D9): create with an undo list, ensure the container, working branch,
 //! branches, delete, and the account-deletion hook (D3).
 
+pub mod clone;
 pub mod configure;
 pub mod login;
+pub mod remotes;
 pub mod repo;
 
 use std::collections::{BTreeMap, HashSet};
@@ -25,8 +27,9 @@ use crate::docker::{DockerError, images, volumes};
 use crate::error::ApiError;
 use crate::files;
 use crate::git;
+use crate::gitproxy;
 use crate::names as display_names;
-use crate::state::{AppState, ImageStatus};
+use crate::state::{AppState, CloneState, ImageStatus};
 
 pub use repo::{ContainerUser, WorkspaceRow, WorkspaceWithCount};
 
@@ -54,6 +57,8 @@ enum StepError {
     Docker(DockerError),
     /// The devcontainer definition cannot be applied; a sentence for the user.
     Definition(String),
+    /// A clone step failed with an error meant for the user as it is (D11).
+    Clone(ApiError),
 }
 
 impl From<DockerError> for StepError {
@@ -73,6 +78,7 @@ impl std::fmt::Display for StepError {
         match self {
             StepError::Docker(e) => write!(f, "{e}"),
             StepError::Definition(m) => write!(f, "{m}"),
+            StepError::Clone(e) => write!(f, "{e}"),
         }
     }
 }
@@ -88,6 +94,7 @@ fn ensure_error(ws: Uuid, e: StepError) -> ApiError {
                 format!("The workspace container couldn't be created: {reason}"),
             )
         }
+        StepError::Clone(e) => e,
         StepError::Docker(e) => {
             tracing::warn!("workspace {ws}: container not available: {e}");
             ApiError::docker_unavailable()
@@ -106,6 +113,10 @@ fn create_error(e: StepError) -> ApiError {
             let mut err = ApiError::create_failed();
             err.message = format!("The workspace couldn't be created: {reason} Nothing was kept.");
             err
+        }
+        StepError::Clone(e) => {
+            tracing::info!("workspace create: clone failed: {e}");
+            e
         }
         StepError::Docker(e) => {
             tracing::error!("workspace create failed: {e}");
@@ -505,6 +516,9 @@ enum UndoStep {
     Volume(String),
     Container(String),
     Image(String),
+    /// Push the git proxy routes and prune its mirrors (D11). Runs after every other step, once
+    /// the workspace row (and with it the grant, remote and capability rows) is gone.
+    GitRoutes,
 }
 
 /// What a failed create removes, in reverse order.
@@ -519,8 +533,10 @@ impl Undo {
     }
 
     async fn run(self, st: &AppState) {
+        let git_routes = self.0.contains(&UndoStep::GitRoutes);
         for step in self.0.into_iter().rev() {
             let result = match &step {
+                UndoStep::GitRoutes => continue,
                 UndoStep::Row(id) => repo::delete(&st.db, *id).await.map_err(|e| e.to_string()),
                 UndoStep::Folder(rel) => files::remove(st, helper_labels(st), rel)
                     .await
@@ -539,6 +555,14 @@ impl Undo {
                 tracing::warn!("undo {step:?} failed: {e}");
             }
         }
+        if git_routes {
+            if let Err(e) = gitproxy::sync_routes(st).await {
+                tracing::info!("undo: git proxy routes not synced: {}", e.message);
+            }
+            if let Err(e) = gitproxy::prune_mirrors(st).await {
+                tracing::info!("undo: git proxy mirrors not pruned: {}", e.message);
+            }
+        }
     }
 }
 
@@ -549,10 +573,39 @@ impl Undo {
 /// other image, `containerEnv`, `postCreateCommand` and its checkpoint), apply the agent profile
 /// patch and set `ready`. On failure every step is undone and the user gets `create_failed`
 /// (`docker_unavailable` when Docker is unreachable).
+///
+/// With a `source` the repo is cloned through the git proxy instead of the initial commit (D11):
+/// the pre-checks run before the row is inserted and the clone's errors reach the user as they
+/// are. `op_id` (from the client) registers a clone op at the start of the request, so its
+/// progress can be read and the clone cancelled; it ends with the request.
 pub async fn create(
     st: &AppState,
     user: &UserRow,
     raw_name: &str,
+    source: Option<clone::CloneSource>,
+    op_id: Option<Uuid>,
+) -> Result<WorkspaceRow, ApiError> {
+    if let Some(op) = op_id {
+        clone::register(st, op, user.id)?;
+    }
+    let res = create_inner(st, user, raw_name, source.as_ref(), op_id).await;
+    if let Some(op) = op_id {
+        let state = match &res {
+            Ok(_) => CloneState::Done,
+            Err(e) if e.code == "clone_cancelled" => CloneState::Cancelled,
+            Err(_) => CloneState::Failed,
+        };
+        clone::finish(st, op, state);
+    }
+    res
+}
+
+async fn create_inner(
+    st: &AppState,
+    user: &UserRow,
+    raw_name: &str,
+    source: Option<&clone::CloneSource>,
+    op_id: Option<Uuid>,
 ) -> Result<WorkspaceRow, ApiError> {
     let name = display_names::validate_display_name(raw_name).map_err(ApiError::invalid_name)?;
     let key = display_names::name_key(&name);
@@ -566,6 +619,10 @@ pub async fn create(
         .get(DEFAULT_AGENT)
         .ok_or_else(|| ApiError::internal("the default agent is not registered"))?;
     require_default_image(st).await?;
+    let prepared = match source {
+        Some(s) => Some(clone::precheck(st, user, s).await?),
+        None => None,
+    };
 
     let id = Uuid::new_v4();
     let files_dir = files::workspace_dir(&user.email, &name, id);
@@ -581,7 +638,16 @@ pub async fn create(
     let mut undo = Undo::default();
     undo.push(UndoStep::Row(id));
 
-    match create_steps(st, id, user, agent.as_ref(), &files_dir, &mut undo).await {
+    let steps = create_steps(
+        st,
+        id,
+        user,
+        agent.as_ref(),
+        &files_dir,
+        prepared.as_ref().map(|p| (p, op_id)),
+        &mut undo,
+    );
+    match steps.await {
         Ok(()) => {}
         Err(e) => {
             undo.run(st).await;
@@ -606,6 +672,7 @@ pub async fn create(
                 UndoStep::Volume(names::workspace_repo_volume(id)),
                 UndoStep::Volume(names::workspace_home_volume(id)),
                 UndoStep::Container(names::workspace_container(id)),
+                UndoStep::GitRoutes,
             ])
             .run(st)
             .await;
@@ -631,12 +698,63 @@ async fn adopt_user_login(
     Ok(())
 }
 
+/// Writes the default `.gitignore` and devcontainer definition into the repo and commits them
+/// on the current branch (the repo and its git identity exist).
+async fn initial_commit(
+    st: &AppState,
+    container: &str,
+    user: &ContainerUser,
+) -> Result<(), StepError> {
+    archive::put_files(
+        &st.docker,
+        &st.config.tmp_dir(),
+        container,
+        WORKSPACE_REPO_DIR,
+        vec![
+            PutEntry {
+                path: ".gitignore".into(),
+                source: PutSource::Bytes(Bytes::from_static(DEFAULT_GITIGNORE.as_bytes())),
+            },
+            PutEntry {
+                path: DEVCONTAINER_FILE.into(),
+                source: PutSource::Bytes(Bytes::from_static(DEFAULT_DEVCONTAINER.as_bytes())),
+            },
+        ],
+        FileOwner {
+            uid: user.uid as u32,
+            gid: user.gid as u32,
+            mode: 0o644,
+        },
+    )
+    .await?;
+    run_checked(
+        st,
+        container,
+        &user.user,
+        &git::git(WORKSPACE_REPO_DIR, &["add", "-A"]),
+    )
+    .await?;
+    run_checked(
+        st,
+        container,
+        &user.user,
+        &git::git(
+            WORKSPACE_REPO_DIR,
+            &["commit", "-q", "-m", INITIAL_COMMIT_MESSAGE],
+        ),
+    )
+    .await?;
+    Ok(())
+}
+
+/// `source` is the prepared clone source with the clone op id (D11); `None` makes a new repo.
 async fn create_steps(
     st: &AppState,
     id: Uuid,
     owner: &UserRow,
     agent: &dyn AgentAdapter,
     files_dir: &str,
+    source: Option<(&clone::PreparedClone, Option<Uuid>)>,
     undo: &mut Undo,
 ) -> Result<(), StepError> {
     let default_image = st.config.default_image.clone();
@@ -670,63 +788,41 @@ async fn create_steps(
     )
     .await?;
     prepare_dirs(st, &container, &user, false).await?;
-
-    // 5. The initial commit.
-    run_checked(
+    // The container joins the git proxy (D6) before the repo is made; a failed create pushes
+    // the routes again once its capability row is gone.
+    undo.push(UndoStep::GitRoutes);
+    gitproxy::containers::container_started_as(
         st,
+        id,
         &container,
         &user.user,
-        &argv(&["git", "init", "-b", "main", WORKSPACE_REPO_DIR]),
+        WORKSPACE_REPO_DIR,
+        None,
     )
-    .await?;
-    for (key, value) in [("user.name", &owner.email), ("user.email", &owner.email)] {
+    .await;
+
+    // 5. The initial commit, or the clone of the source (D11).
+    if let Some((source, op_id)) = source {
+        clone::clone_steps(st, id, owner, &user, source, op_id, undo).await?;
+    } else {
         run_checked(
             st,
             &container,
             &user.user,
-            &git::git(WORKSPACE_REPO_DIR, &["config", key, value]),
+            &argv(&["git", "init", "-b", "main", WORKSPACE_REPO_DIR]),
         )
         .await?;
+        for (key, value) in [("user.name", &owner.email), ("user.email", &owner.email)] {
+            run_checked(
+                st,
+                &container,
+                &user.user,
+                &git::git(WORKSPACE_REPO_DIR, &["config", key, value]),
+            )
+            .await?;
+        }
+        initial_commit(st, &container, &user).await?;
     }
-    archive::put_files(
-        &st.docker,
-        &st.config.tmp_dir(),
-        &container,
-        WORKSPACE_REPO_DIR,
-        vec![
-            PutEntry {
-                path: ".gitignore".into(),
-                source: PutSource::Bytes(Bytes::from_static(DEFAULT_GITIGNORE.as_bytes())),
-            },
-            PutEntry {
-                path: DEVCONTAINER_FILE.into(),
-                source: PutSource::Bytes(Bytes::from_static(DEFAULT_DEVCONTAINER.as_bytes())),
-            },
-        ],
-        FileOwner {
-            uid: user.uid as u32,
-            gid: user.gid as u32,
-            mode: 0o644,
-        },
-    )
-    .await?;
-    run_checked(
-        st,
-        &container,
-        &user.user,
-        &git::git(WORKSPACE_REPO_DIR, &["add", "-A"]),
-    )
-    .await?;
-    run_checked(
-        st,
-        &container,
-        &user.user,
-        &git::git(
-            WORKSPACE_REPO_DIR,
-            &["commit", "-q", "-m", INITIAL_COMMIT_MESSAGE],
-        ),
-    )
-    .await?;
 
     // 6. Apply the devcontainer.
     let spec = read_definition(st, &container).await?;
@@ -763,6 +859,16 @@ async fn create_steps(
             )
             .await?;
         }
+        // The recreated container joins the git proxy again (D6).
+        gitproxy::containers::container_started_as(
+            st,
+            id,
+            &container,
+            &user.user,
+            WORKSPACE_REPO_DIR,
+            None,
+        )
+        .await;
     }
     if let Some(cmd) = &spec.post_create {
         run_post_create(st, &container, &user.user, cmd).await?;
@@ -801,6 +907,7 @@ pub async fn ensure_workspace_container(
             containers::start(&st.docker, &name)
                 .await
                 .map_err(|e| ensure_error(ws.id, e.into()))?;
+            gitproxy::containers::container_started(st, ws, &name, WORKSPACE_REPO_DIR, None).await;
             Ok(name)
         }
         None => {
@@ -811,6 +918,10 @@ pub async fn ensure_workspace_container(
                 }
                 return Err(ensure_error(ws.id, e));
             }
+            // The row may predate a new container user (recreate on another image).
+            let fresh = repo::get_by_id(&st.db, ws.id).await.ok().flatten();
+            let row = fresh.as_ref().unwrap_or(ws);
+            gitproxy::containers::container_started(st, row, &name, WORKSPACE_REPO_DIR, None).await;
             Ok(name)
         }
     }
@@ -1025,6 +1136,22 @@ pub async fn delete(st: &AppState, ws: &WorkspaceRow) -> Result<(), ApiError> {
 
     repo::delete(&st.db, ws.id).await?;
     tracing::info!("workspace {} deleted", ws.id);
+
+    // The git proxy forgets its remotes and capabilities (the rows went by cascade).
+    if let Err(e) = gitproxy::sync_routes(st).await {
+        tracing::info!(
+            "git proxy routes not synced after deleting workspace {}: {}",
+            ws.id,
+            e.message
+        );
+    }
+    if let Err(e) = gitproxy::prune_mirrors(st).await {
+        tracing::info!(
+            "git proxy mirrors not pruned after deleting workspace {}: {}",
+            ws.id,
+            e.message
+        );
+    }
     Ok(())
 }
 
@@ -1046,6 +1173,7 @@ impl AccountCleanup for WorkspaceAccountCleanup {
         for ws in repo::list_all_for_user(&self.st.db, user_id).await? {
             delete(&self.st, &ws).await?;
         }
+        crate::connections::delete_all_for_user(&self.st, user_id).await?;
         crate::secrets::delete_all(&self.st, user_id)?;
         Ok(())
     }

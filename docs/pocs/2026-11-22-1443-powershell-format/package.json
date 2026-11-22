@@ -1,0 +1,17 @@
+{
+  "name": "2026-11-22-1443-powershell-format",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "module",
+  "dependencies": {
+    "tree-sitter-powershell": "0.26.6",
+    "web-tree-sitter": "0.27.1"
+  }
+}

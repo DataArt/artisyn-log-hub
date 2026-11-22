@@ -1,18 +1,20 @@
 /**
- * Static mirror of `client/src/viewer/lib/tools/registry.ts`'s `TOOLS` array.
+ * Claude Code's built-in tool names — the single list on the server.
  *
- * `harness_elements` seeds one read-only `tool`-kind row per name here for every repo, once:
- * built-in tools always exist and were never "added" by a specific repo's self-report, so they carry
- * no `first_seen`/`last_seen` (both `NULL`) and are never `removed`.
+ * `harness_elements` seeds one read-only `tool`-kind row per name here for every repo
+ * (`harness-elements-writer.ts`, `onConflictDoNothing`, so a name added here reaches existing
+ * repos on their next harness sync): built-in tools always exist and were never "added" by a
+ * specific repo's self-report, so they carry no `first_seen`/`last_seen` (both `NULL`) and are
+ * never `removed`.
  *
- * `client/` and `server/` are isolated packages (see `client.md`), so this list is kept in
- * sync with `registry.ts`'s `TOOLS` by convention + a drift-check test, not by a shared import. Update both together.
+ * No client copy or drift test exists any more; this list is the only source.
  */
 export const BUILTIN_TOOL_NAMES: readonly string[] = [
   'Read',
   'Write',
   'Edit',
   'Bash',
+  'PowerShell',
   'Glob',
   'Grep',
   'Agent',

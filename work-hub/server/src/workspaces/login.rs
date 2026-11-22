@@ -80,24 +80,28 @@ pub async fn agent_token(
     Ok(value.map(|v| (env, v.trim().to_string())))
 }
 
-/// What an agent process in `container` (running as the workspace's user) starts with: the
-/// user's token for its env, and — when there is one — the old login files removed from the
-/// home, since a stale one would win over the token.
+/// What an agent process in `container` (running as the workspace's user) starts with (D10):
+/// the user's token for its env (and — when there is one — the old login files removed from the
+/// home, since a stale one would win over the token), followed by the exposed connection
+/// variables granted to the workspace.
 pub async fn agent_env(
     st: &AppState,
     ws: &WorkspaceRow,
     container: &str,
-) -> Result<Option<(&'static str, String)>, ApiError> {
+) -> Result<Vec<(String, String)>, ApiError> {
     let token = agent_token(st, ws).await?;
-    if token.is_some() {
+    let mut env = Vec::new();
+    if let Some((name, value)) = token {
         let agent = adapter(st, ws)?;
         let home = user_of(ws)?.home;
         for file in agent.login_files() {
             let path = format!("{home}/{file}");
             crate::workstreams::remove_file_via_exec(st, container, exec_user(ws)?, &path).await;
         }
+        env.push((name.to_string(), value));
     }
-    Ok(token)
+    env.extend(crate::connections::exposed_env(st, ws).await?);
+    Ok(env)
 }
 
 /// The live login check (D7): ensures the container, runs the status command and updates the
@@ -272,7 +276,7 @@ pub async fn start_login(st: &AppState, ws: &WorkspaceRow) -> Result<(), ApiErro
         &agent.login_command(),
         tmux::SessionOpts {
             record_to: collect,
-            secret: None,
+            secrets: &[],
         },
     )
     .await?;

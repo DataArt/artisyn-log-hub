@@ -1,0 +1,85 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="760" viewBox="0 0 1280 760" font-family="Segoe UI, -apple-system, Roboto, sans-serif">
+  <style>
+    .t { fill:#0a0a0b; font-size:14px; }
+    .m { fill:#71717a; font-size:14px; }
+    .s { fill:#71717a; font-size:12px; }
+    .b { font-weight:600; }
+    .h1 { fill:#0a0a0b; font-size:18px; font-weight:600; }
+    .note { fill:#1e40af; font-size:12px; font-style:italic; }
+  </style>
+  <rect width="1280" height="760" fill="#ffffff"/>
+  <line x1="0" y1="47.5" x2="1280" y2="47.5" stroke="#e4e4e7"/>
+  <text x="16" y="29" class="t b">Artisyn AI Work Hub</text>
+  <text x="158" y="29" class="s">›</text>
+  <text x="175" y="29" class="m">Token probe › Settings</text>
+  <rect x="1126" y="10" width="138" height="28" rx="6" fill="#fff" stroke="#e4e4e7"/>
+  <text x="1135" y="29" class="s" style="font-size:13px">dt@dataart.com  ⌄</text>
+
+  <text x="336" y="94" class="t">←</text>
+  <text x="368" y="94" class="h1">Settings</text>
+
+  <text x="328" y="148" class="t b">Name</text>
+  <rect x="504" y="124" width="448" height="36" rx="6" fill="#f7f7f7" stroke="#e4e4e7"/>
+  <text x="517" y="148" class="t">Token probe</text>
+
+  <text x="328" y="204" class="t b">Working branch</text>
+  <rect x="504" y="180" width="448" height="36" rx="6" fill="#fff" stroke="#e4e4e7"/>
+  <text x="517" y="204" class="t">main</text><text x="926" y="204" class="m">⌄</text>
+
+  <!-- Remotes (replaces "Repository: none — started empty") -->
+  <text x="328" y="252" class="t b">Remotes</text>
+  <rect x="504" y="232" width="448" height="118" rx="8" fill="#fafafa" stroke="#e4e4e7"/>
+  <text x="520" y="256" class="t b">origin</text>
+  <rect x="572" y="242" width="22" height="18" rx="4" fill="#0a0a0b"/><text x="575" y="255" fill="#fff" font-size="9" font-weight="700">GH</text>
+  <text x="602" y="256" class="t">github-dataart</text>
+  <rect x="852" y="242" width="86" height="20" rx="10" fill="#f0fdf4" stroke="#bbf7d0"/><text x="862" y="257" fill="#166534" font-size="11">● Connected</text>
+  <text x="520" y="280" class="s">git@github.com:DataArt/artisyn-log-hub.git · SSH key</text>
+  <text x="520" y="300" class="s">Push policy: any branch · no force push / delete of main (default)</text>
+  <text x="520" y="334" fill="#3352cc" font-size="13">Test   Push policy…   Detach…</text>
+
+  <rect x="504" y="360" width="160" height="32" rx="6" fill="#fff" stroke="#e4e4e7"/>
+  <text x="584" y="381" class="t b" text-anchor="middle">＋ Attach remote</text>
+  <text x="676" y="381" class="s">A workspace without a remote works as before.</text>
+
+  <text x="328" y="430" class="t b">Container</text>
+  <text x="504" y="430" class="m">Work Hub default</text>
+
+  <text x="328" y="476" class="t b">Claude login</text>
+  <text x="504" y="476" class="m">Logged in</text>
+  <rect x="578" y="456" width="139" height="32" rx="6" fill="#fff" stroke="#e4e4e7"/>
+  <text x="647" y="477" class="t b" text-anchor="middle">Log out of Claude</text>
+
+  <rect x="891" y="510" width="61" height="36" rx="6" fill="#a3b1e8"/>
+  <text x="921" y="533" fill="#fff" font-size="14" font-weight="600" text-anchor="middle">Save</text>
+
+  <!-- Attach remote dialog -->
+  <rect x="980" y="90" width="284" height="380" rx="10" fill="#fff" stroke="#e4e4e7"/>
+  <text x="996" y="118" fill="#0a0a0b" font-size="16" font-weight="500">Attach remote</text>
+  <text x="996" y="150" class="t b" style="font-size:13px">Remote name</text>
+  <rect x="996" y="158" width="252" height="30" rx="6" fill="#fff" stroke="#e4e4e7"/>
+  <text x="1006" y="178" class="t" style="font-size:13px">origin</text>
+  <text x="996" y="210" class="t b" style="font-size:13px">Connection</text>
+  <rect x="996" y="218" width="252" height="30" rx="6" fill="#fff" stroke="#e4e4e7"/>
+  <text x="1006" y="238" class="t" style="font-size:13px">github-dataart</text><text x="1232" y="238" class="s">⌄</text>
+  <text x="996" y="262" class="s" style="font-size:11px">gitlab-corp — not granted here · Grant…</text>
+  <text x="996" y="286" class="t b" style="font-size:13px">Repository URL</text>
+  <rect x="996" y="294" width="252" height="30" rx="6" fill="#fff" stroke="#e4e4e7"/>
+  <text x="1006" y="314" class="t" style="font-size:12px">git@github.com:DataArt/…git</text>
+  <text x="996" y="346" class="t b" style="font-size:13px">Push policy</text>
+  <rect x="996" y="356" width="14" height="14" rx="3" fill="#3352cc"/><text x="999" y="368" fill="#fff" font-size="11">✓</text>
+  <text x="1016" y="368" class="t" style="font-size:12px">Block force push to default branch</text>
+  <rect x="996" y="378" width="14" height="14" rx="3" fill="#fff" stroke="#a1a1aa"/>
+  <text x="1016" y="390" class="t" style="font-size:12px">Allow push only to ws/* branches</text>
+  <rect x="1094" y="420" width="70" height="32" rx="6" fill="#fff" stroke="#e4e4e7"/>
+  <text x="1129" y="441" class="t b" text-anchor="middle" style="font-size:13px">Cancel</text>
+  <rect x="1172" y="420" width="76" height="32" rx="6" fill="#3352cc"/>
+  <text x="1210" y="441" fill="#fff" font-size="13" font-weight="600" text-anchor="middle">Attach</text>
+  <line x1="952" y1="376" x2="980" y2="300" stroke="#bfdbfe" stroke-dasharray="4 3"/>
+
+  <rect x="328" y="590" width="624" height="110" rx="8" fill="#eff6ff" stroke="#bfdbfe"/>
+  <text x="344" y="614" fill="#1e40af" font-size="13" font-weight="600">Wireframe notes</text>
+  <text x="344" y="636" class="note">• "Repository: none — started empty" becomes a "Remotes" row; one card per remote bound to a connection (FR-5).</text>
+  <text x="344" y="656" class="note">• Push policy per remote (FR-7); the proxy enforces it for the terminal and the agent alike.</text>
+  <text x="344" y="676" class="note">• Only connections granted to this workspace can be picked; others show "Grant…" (FR-5).</text>
+  <text x="344" y="694" class="note">• Inside the container: git remote -v shows only the WH sidecar URL — never a key or token.</text>
+</svg>

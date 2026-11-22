@@ -7,7 +7,7 @@ tags:
   - docker
   - rust
   - architecture
-generated: { by: "human:denistsyplakov", at: "2026-11-13T00:00:00+04:00" }
+generated: { by: "claude-code", at: "2026-11-23T00:40:00+04:00" }
 ---
 
 # Artisyn AI Work Hub
@@ -41,7 +41,8 @@ Task and design: `docs/tasks/*/2026-11-13-ai-work-hub-alpha/` (`requirements.md`
   the watcher takes the token (`token_from_login_output`) into the **secret store** and marks all
   of the user's workspaces with that agent logged in (`login_state` is a cache of "the token
   exists"). The token reaches the agent only as an env var (`token_env`) through
-  `tmux::SessionOpts.secret` (exec stdin → `-e NAME=…`); old login files are removed before the
+  `tmux::SessionOpts.secrets` (a list of env pairs, exec stdin → `-e NAME=…`; also carries
+  connections exposed to the agent); old login files are removed before the
   agent starts. "Copy login" is a no-op kept for old clients. Rotating refresh tokens made
   per-workspace copies invalidate each other — the reason for this design.
 - **Secret store** (`server/src/secrets.rs`) — AES-256-GCM files
@@ -50,6 +51,21 @@ Task and design: `docs/tasks/*/2026-11-13-ai-work-hub-alpha/` (`requirements.md`
   recordings. Use it for every future secret.
 - **Configure** — an agent session in the workspace container that installs tools; on finish the
   container is `docker commit`ed into a **checkpoint image** that new workstreams start from.
+- **Connections and remotes** (2026-11-22) — a user's credentials for git hosts (SSH key or token,
+  in the secret store as `conn-<uuid>`), granted per workspace; a workspace's **remotes** point at
+  the per-instance **git proxy** sidecar, the only container that talks to git hosts. Workspaces
+  can be created as a clone, and closing a workstream can push. Details:
+  [Work Hub git proxy and connections](workhub-git-proxy.md).
+- **Admin overview** (FR-12, 2026-11-23) — `GET /api/v1/admin/overview` (`api/admin.rs`, data in
+  `server/src/admin/`): users listed in `WORK_HUB_ADMIN_EMAILS` (`auth::is_admin`) get every user,
+  their ready workspaces, open / total workstreams (total = not `opening`) and disk per workspace:
+  `filesBytes` (walk of the workspace folder, its workstreams included), `containersBytes`
+  (`SizeRw` of containers with the workspace label), `volumesBytes` and `imagesBytes` (`/system/df`
+  verbose: volume `UsageData.Size`, image `Size − SharedSize`; bind volumes report `-1` = 0, their
+  data is the files), plus `instance.gitCacheBytes` (`wh-gitcache-<instance>`). Unmeasurable =
+  `null`, 0 in totals; the grand total adds the git cache. Non-admins get 403 `forbidden`. Measured
+  per request, no cache, no connection data. Web: `#/admin` (`pages/admin/AdminPage.tsx`), "Admin"
+  in the account menu for `role === "admin"` only.
 
 ## Layout
 
@@ -59,7 +75,9 @@ Task and design: `docs/tasks/*/2026-11-13-ai-work-hub-alpha/` (`requirements.md`
 | `work-hub/server/src/config.rs`, `db.rs`, `state.rs`, `error.rs`, `locks.rs`, `timing.rs` | config (D2), pool + schema + migrations, `AppState`, `ApiError` (D4), per-container locks, timing constants |
 | `work-hub/server/migrations/` | sqlx migrations (schema `WORK_HUB_DB_SCHEMA`) |
 | `server/src/auth/` | auth port of Log Hub's modes (`none`, `password`, `password-confirm`, `azure-oauth`), sessions (`tower-sessions`, cookie `workhub.sid`) |
-| `server/src/docker/` | Engine API layer over bollard: names and labels, containers, exec, archive, volumes, images |
+| `server/src/docker/` | Engine API layer over bollard: names and labels, containers, exec, archive, volumes, images, networks |
+| `server/src/connections/`, `server/src/gitproxy/` | connections (provider descriptors, URL and field rules, service, SQL) and the git proxy sidecar (lifecycle, `wh-git-ctl` wrapper, state push, container hook) — see [workhub-git-proxy.md](workhub-git-proxy.md) |
+| `work-hub/sidecar/` | git proxy sidecar image (`Dockerfile`, `lighttpd.conf`, `wh-git-cgi`, `pre-receive`, `wh-git-ctl`), embedded in the server |
 | `server/src/devcontainer.rs` | `.devcontainer/devcontainer.json` subset parser (D6) |
 | `server/src/names.rs`, `repo_path.rs`, `git.rs` | display names and branch slugs, repo-relative path validation, git helpers |
 | `server/src/workspaces/` | workspace lifecycle, login copy, configure session |
@@ -69,7 +87,7 @@ Task and design: `docs/tasks/*/2026-11-13-ai-work-hub-alpha/` (`requirements.md`
 | `server/src/api/` | HTTP routes (`routes!` macro also fills `ROUTE_TABLE`), security headers / CSP, embedded SPA |
 | `work-hub/web/` | React SPA (bun, Vite, hash router, react-query, radix, Monaco, xterm); plain CSS: tokens in `src/app.css`, a `<Component>.module.css` per component, no CSS framework |
 | `work-hub/image/` | default devcontainer image (`Dockerfile`, `tmux.conf`), embedded in the server |
-| `work-hub/scripts/` | `dev.mjs`, `image.mjs`, `scenarios.mjs`, `contract.mjs`, `typecheck.mjs`, `agent-names-check.mjs`, `license-check.mjs` |
+| `work-hub/scripts/` | `dev.mjs`, `image.mjs`, `scenarios.mjs`, `contract.mjs`, `typecheck.mjs`, `agent-names-check.mjs`, `license-check.mjs`, `provider-names-check.mjs` |
 | `work-hub/tests/` | Playwright scenarios and the fake agent (test infrastructure, never shipped) |
 | `work-hub/Dockerfile`, `deploy/` | dockerized run mode |
 
@@ -84,6 +102,9 @@ Task and design: `docs/tasks/*/2026-11-13-ai-work-hub-alpha/` (`requirements.md`
 | built devcontainer image | `wh-img-<workspace uuid>:1` | `built` |
 | checkpoint image | `wh-ckpt-<workspace uuid>:<seq>` | `checkpoint` |
 | helper container | `wh-helper-<random uuid>` (auto-remove) | `helper` |
+| git proxy sidecar (one per instance) | `wh-gitproxy-<instance>`, image `artisyn-work-hub-git-proxy:<crate version>` | `git-proxy` |
+| internal network (`internal: true`; sidecar alias `wh-git`) | `wh-net-<instance>` | `git-proxy` |
+| git mirror volume (plain local volume, no bind folder) | `wh-gitcache-<instance>` (→ sidecar `/srv/git`) | `git-proxy` |
 
 - **File area (FR-5g, `server/src/files.rs`).** Every volume is a `local`-driver named volume with
   `type=none,o=bind,device=<folder>`, so its data is a plain host folder under
@@ -103,6 +124,12 @@ Task and design: `docs/tasks/*/2026-11-13-ai-work-hub-alpha/` (`requirements.md`
   bundles never enter a checkpoint), env from `containerEnv` plus `TERM`/`LANG`, the default bridge
   network, **no published ports**, restart policy `no`. Every exec runs as the workspace's
   container user (discovered with a helper `docker run` at creation and stored on the row).
+- **Extra network.** After every start or create, workspace and workstream containers are also
+  connected to the instance's internal network `wh-net-<instance>`, where they reach only the git
+  proxy (`http://wh-git/…`), and get a fresh git capability in `/tmp/wh-git-capability`
+  (`gitproxy::container_started`; [workhub-git-proxy.md](workhub-git-proxy.md)). The network and
+  the sidecar carry only the instance and role labels (no workspace label), so they survive
+  workspace deletes and are removed only by test cleanup of their own instance.
 - **Image choice.** A container starts from `checkpoint_image` when set, else `base_image`: the
   default image `artisyn-work-hub-default:<crate version>`, a built `wh-img-<uuid>:1`, or a named
   local image (never pulled). The default image is built from the embedded `image/` at server start
@@ -176,7 +203,9 @@ documents every variable.
 | `WORK_HUB_DOCKER_DATA_DIR` | the absolute data dir (Windows drive → `/run/desktop/mnt/host/<drive>/…`) | the data dir as the Docker Engine sees it; bind source of every volume |
 | `DOCKER_HOST` | bollard default (unix socket / Windows named pipe) | Docker Engine endpoint |
 | `WORK_HUB_DEFAULT_IMAGE` | `artisyn-work-hub-default:<crate version>` | image for new workspaces and helper containers |
+| `WORK_HUB_GIT_PROXY_IMAGE` | `artisyn-work-hub-git-proxy:<crate version>` | image of the git proxy sidecar; built from the embedded `sidecar/` at start when missing |
 | `WORK_HUB_INSTANCE` | `default` | value of `artisyn.workhub.instance`; scopes every Docker object |
+| `WORK_HUB_ADMIN_EMAILS` | unset (no admins) | comma-separated admin e-mails (trimmed, lowercased, compared with `users.email_key`); a non-e-mail entry fails startup. Admins' profile says `role:"admin"` (everyone else `"user"`, same JSON shape) and they get the admin overview |
 | `WORK_HUB_STATIC_DIR` | unset | serve the SPA from disk instead of the embedded copy (dev) |
 | `SESSION_SECRET` | required in production | signs the session cookie (SHA-512 → 64-byte key); random per start otherwise |
 | auth / SMTP / Azure vars | as in Log Hub | `AUTH_MODE`, `PASSWORD_POLICY`, `ADMIN_CONTACT_EMAIL`, `AUTH_RATE_LIMIT_*`, `ALLOWED_EMAIL_DOMAINS`, `PUBLIC_BASE_URL`, `COOKIE_SECURE`, `TRUST_PROXY`, `SMTP_*`, `AZURE_*` |
@@ -197,8 +226,11 @@ Startup validation follows `algorithms/auth-startup-config.md` with `NODE_ENV` r
   on host port `${WORK_HUB_PORT:-5010}`), with `/var/run/docker.sock` mounted. The app runs as root
   — access to the Docker socket is host root anyway (README security note).
 - **Offline.** The first start needs the network (it builds the default image: Ubuntu packages,
-  Node, the agent CLI); afterwards Work Hub itself needs none — the accepted install-time exception
-  to offline-first. The default image is not a dependency of the binary: it contains separately
+  Node, the agent CLI) and the git proxy image (`alpine:3.20` + apk packages) — each build needs
+  the network once; afterwards Work Hub itself needs none — the accepted install-time exception
+  to offline-first. For a machine with no network at all, build both with `npm run image` and
+  `npm run image -- --git-proxy` elsewhere and move them with `docker save` / `docker load`
+  (`work-hub/README.md`). Remote repositories, of course, need their git host reachable. The default image is not a dependency of the binary: it contains separately
   licensed programs (git under GPL-2.0, the agent CLI under its vendor's terms) that Work Hub runs
   but does not link.
 
@@ -208,13 +240,13 @@ All from `work-hub/`. They are Work Hub's own and are listed in `CLAUDE.md` ("Wo
 
 | Command | What it does |
 |---|---|
-| `npm run lint` | `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, web eslint (cache `tmp/.eslintcache-work-hub` at the repo root), `scripts/agent-names-check.mjs` (AC-2), `scripts/license-check.mjs` (D20) |
+| `npm run lint` | `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, web eslint (cache `tmp/.eslintcache-work-hub` at the repo root), `scripts/agent-names-check.mjs` (AC-2), `scripts/license-check.mjs` (D20), `scripts/provider-names-check.mjs` (git provider names only in `server/src/connections/providers.rs`) |
 | `npm run typecheck` | `tsc --noEmit` over `web/` and `tests/` (`scripts/typecheck.mjs`) |
 | `npm run test:algo` | Rust algorithm table tests and web `*.algo.test.ts` |
 | `npm run build` | web build, then `cargo build --release` |
 | `npm run test:contract` | contract tests (`scripts/contract.mjs` → `cargo test --test contract`) |
 | `npm run test:scenarios -- --mode a\|b\|c [--grep <tag>]` | Playwright scenarios on an isolated stand |
-| `npm run dev` / `npm run start` / `npm run image` | run modes; build the default image by hand |
+| `npm run dev` / `npm run start` / `npm run image [-- --git-proxy]` | run modes; build the default (or git proxy) image by hand |
 
 **Licence check** (`scripts/license-check.mjs`, D20): every crate from `cargo metadata` and every
 installed `package.json` under `web/node_modules` and `node_modules` must have a licence on the

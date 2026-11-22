@@ -1,14 +1,16 @@
 // @S-WH-03 — the IDE's files: tabs, save as one commit, images, changes on disk, the workstream
-// view, drop from the computer, drag out and download, move inside the tree (AC-11, AC-12–AC-12b,
-// AC-15–AC-18).
+// view, drop from the computer, drag out and download, move inside the tree, and the admin resource
+// overview of these files (AC-11, AC-12–AC-12b, AC-15–AC-18, FR-12).
 import fs from 'node:fs';
 import type { Page } from '@playwright/test';
 import {
+  ADMIN_EMAIL,
   appendInEditor,
   dockerExec,
   EDITOR,
   editorText,
   expect,
+  getWorkspace,
   gitMain,
   gotoWorkspace,
   openFromTree,
@@ -19,6 +21,7 @@ import {
   test,
   treeRow,
   workspaceContainer,
+  WhApi,
   workspaceWithFakeLogin,
 } from './fixtures';
 
@@ -106,7 +109,7 @@ async function dropFromComputer(page: Page, targetPath: string, entries: (FakeFi
 }
 
 test('@S-WH-03 @mode-a files in the IDE', async ({ browser, stand, api }) => {
-  await signIn(stand, api);
+  const me = await signIn(stand, api);
   const ws = await workspaceWithFakeLogin(api, 'Files');
   const { context, page, offOrigin } = await signedInPage(browser, stand, api);
   await gotoWorkspace(page, ws.id);
@@ -265,6 +268,56 @@ test('@S-WH-03 @mode-a files in the IDE', async ({ browser, stand, api }) => {
     await expect(fileTab(page, 'docs/drop-a.txt')).toHaveCount(0);
     expect(commitCount(ws.id)).toBe(before + 1);
     expect(gitMain(ws.id, ['log', '-1', '--format=%s']).stdout.trim()).toBe('Move docs/drop-a.txt to .devcontainer/drop-a.txt');
+  });
+
+  await test.step('9. the admin overview: this user, the workspace, its workstreams and sizes; a plain user gets 403 (FR-12)', async () => {
+    // A plain user: role "user", no menu item, 403 from the API, "Not allowed" on the page.
+    expect(me.role).toBe('user');
+    await page.goto('/#/');
+    await page.getByTestId('user-menu').click();
+    await expect(page.getByTestId('menu-connections')).toBeVisible();
+    await expect(page.getByTestId('menu-admin')).toHaveCount(0);
+    await page.keyboard.press('Escape');
+    const denied = await api.get('/api/v1/admin/overview');
+    expect(denied.status).toBe(403);
+    expect(denied.body).toMatchObject({ error: 'forbidden' });
+    await page.goto('/#/admin');
+    await expect(page.getByTestId('admin-forbidden')).toBeVisible();
+
+    // The admin of the stand (WORK_HUB_ADMIN_EMAILS).
+    const open = (await getWorkspace(api, ws.id)).workstreams.length;
+    const adminApi = await WhApi.create(stand.url);
+    try {
+      const admin = await signIn(stand, adminApi, ADMIN_EMAIL);
+      expect(admin.role).toBe('admin');
+      const overview = await adminApi.expectStatus<{ users: { email: string }[] }>('GET', '/api/v1/admin/overview', 200);
+      expect(overview.users.some((u) => u.email === me.email)).toBe(true);
+      expect(JSON.stringify(overview)).not.toMatch(/connection|secret/i);
+
+      const view = await signedInPage(browser, stand, adminApi);
+      try {
+        const p = view.page;
+        await p.goto('/#/');
+        await p.getByTestId('user-menu').click();
+        await p.getByTestId('menu-admin').click();
+        await expect(p).toHaveURL(/#\/admin$/);
+        const group = p.locator(`[data-testid="admin-user"][data-email="${me.email}"]`);
+        await expect(group).toContainText('1 workspace', { timeout: 120_000 });
+        const row = p.locator(`[data-testid="admin-workspace"][data-workspace-id="${ws.id}"]`);
+        await expect(row).toContainText('Files');
+        await expect(row.getByTestId('admin-streams')).toHaveText(new RegExp(`^${open} / [1-9]\\d*$`));
+        const total = Number(await row.getByTestId('admin-workspace-total').getAttribute('data-bytes'));
+        expect(total).toBeGreaterThan(0);
+        await expect(p.getByTestId('admin-summary')).toContainText('git cache');
+        await p.getByTestId('admin-refresh').click();
+        await expect(row).toBeVisible();
+        expect(view.offOrigin).toEqual([]);
+      } finally {
+        await view.context.close();
+      }
+    } finally {
+      await adminApi.dispose();
+    }
   });
 
   expect(offOrigin).toEqual([]);

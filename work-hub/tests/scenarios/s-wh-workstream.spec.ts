@@ -255,6 +255,30 @@ test('@S-WH-04 @mode-a workstreams and the chat', async ({ browser, stand, api }
     await page.evaluate(() => document.execCommand('copy'));
     const copied = await page.evaluate(() => navigator.clipboard.readText());
     expect(copied).toContain('You picked: No');
+    // The fake agent turns mouse reporting on, as the real CLI does: a plain drag still selects,
+    // and the selection is copied by the copy event, a right-click and Ctrl+Shift+C.
+    const said = page.locator(TERMINAL).locator('.xterm-rows > div').filter({ hasText: 'You said: typed text' }).last();
+    const dragSelect = async () => {
+      const box = await said.boundingBox();
+      if (!box) throw new Error('row "You said: typed text" has no box');
+      await page.mouse.move(box.x + 2, box.y + box.height / 2);
+      await page.mouse.down();
+      await page.mouse.move(box.x + box.width - 2, box.y + box.height / 2, { steps: 8 });
+      await page.mouse.up();
+    };
+    const clipboard = () => page.evaluate(() => navigator.clipboard.readText());
+    const resetClipboard = () => page.evaluate(() => navigator.clipboard.writeText('-'));
+    await dragSelect();
+    await page.evaluate(() => document.execCommand('copy'));
+    expect(await clipboard()).toContain('You said: typed text');
+    await resetClipboard();
+    await dragSelect();
+    await said.click({ button: 'right', force: true });
+    await expect.poll(clipboard).toContain('You said: typed text');
+    await resetClipboard();
+    await dragSelect();
+    await page.keyboard.press('Control+Shift+C');
+    await expect.poll(clipboard).toContain('You said: typed text');
     // Ctrl+V is left to the browser (xterm must not turn it into ^V, which the agent ignores).
     const ctrlVConsumed = await page
       .locator(TERMINAL)

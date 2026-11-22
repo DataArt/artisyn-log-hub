@@ -28,6 +28,7 @@ import {
 } from '../background-mcp';
 import { isEditWriteTool, type EditWriteToolName } from '../edit-tools';
 import { classifyToolOutcome, MAX_RESULT_TEXT_SCAN } from '../tool-outcome';
+import { type ShellKind, shellOfTool } from '@loghub/bash-view';
 
 type AnyRecord = Record<string, unknown>;
 
@@ -111,22 +112,59 @@ export function resolveToolDuration(inputs: {
   return null;
 }
 
+/** Skips git's global flags; a flag may carry a separate value token (`-c user.name=bot`). */
+const GIT_GLOBAL_FLAGS = String.raw`(?:-{1,2}\S+(?:\s+[^-\s]\S*)?\s+)*`;
+
+/** Bash start-of-invocation anchor: start, or after a newline / `;` / `&&` / `||` / `|`. */
+const INVOCATION_START = String.raw`(?:^|[\n;&|])\s*`;
+
 /**
- * `git commit` invocations in one Bash command, per invocation.
+ * PowerShell start-of-invocation anchor (DD-15): also after `{` and `(`, with an optional `&`
+ * call operator and an optional opening quote, so `{ git commit }`, `(git commit)` and
+ * `& "git.exe" commit` count.
+ */
+const PS_INVOCATION_START = String.raw`(?:^|[\n;&|{(])\s*(?:&\s*)?['"]?`;
+
+/** After the tool word in PowerShell: an optional `.exe` and an optional closing quote. */
+const PS_TOOL_SUFFIX = String.raw`(?:\.exe)?['"]?`;
+
+function invocationParts(shell: ShellKind): { start: string; suffix: string } {
+  return shell === 'powershell'
+    ? { start: PS_INVOCATION_START, suffix: PS_TOOL_SUFFIX }
+    : { start: INVOCATION_START, suffix: '' };
+}
+
+/**
+ * `git commit` invocations in one Bash / PowerShell command, per invocation. Twin of
+ * `countCommits` in `server/src/logs/tool-stats.ts`.
  *
  * The flag-skip allows a value token (`-c user.name=bot` is two tokens), and the trailing
- * `(?![-\w])` is a hyphen-aware boundary so `git commit-tree` does not count.
+ * `(?![-\w])` is a hyphen-aware boundary so `git commit-tree` does not count. `shell` picks the
+ * start anchor; `'bash'` (the default) keeps the original pattern.
  */
-export function countCommits(command: string): number {
+export function countCommits(
+  command: string,
+  shell: ShellKind = 'bash',
+): number {
   if (command === '') return 0;
-  const pattern =
-    /(?:^|[\n;&|])\s*git\s+(?:-{1,2}\S+(?:\s+[^-\s]\S*)?\s+)*commit(?![-\w])/g;
+  const { start, suffix } = invocationParts(shell);
+  const pattern = new RegExp(
+    `${start}git${suffix}\\s+${GIT_GLOBAL_FLAGS}commit(?![-\\w])`,
+    'g',
+  );
   return (command.match(pattern) ?? []).length;
 }
 
-export function countPullRequests(command: string): number {
+export function countPullRequests(
+  command: string,
+  shell: ShellKind = 'bash',
+): number {
   if (command === '') return 0;
-  const pattern = /(?:^|[\n;&|])\s*gh\s+pr\s+create(?![-\w])/g;
+  const { start, suffix } = invocationParts(shell);
+  const pattern = new RegExp(
+    `${start}gh${suffix}\\s+pr\\s+create(?![-\\w])`,
+    'g',
+  );
   return (command.match(pattern) ?? []).length;
 }
 
@@ -478,11 +516,15 @@ function walkTranscript(
             );
           }
 
-          if (name === 'Bash') {
+          const shell = shellOfTool(name);
+          if (shell !== null) {
             const command = asString(asRecord(b['input'])?.['command']);
             if (command !== null) {
-              shared.productivity.commits += countCommits(command);
-              shared.productivity.pullRequests += countPullRequests(command);
+              shared.productivity.commits += countCommits(command, shell);
+              shared.productivity.pullRequests += countPullRequests(
+                command,
+                shell,
+              );
             }
           }
         }

@@ -13,6 +13,13 @@ import { fetchRecording, fetchRecordingMeta } from "../api/workstreams";
 import { cn } from "../lib/cn";
 import { Button } from "../ui/button";
 import { playRecording } from "./replay";
+import {
+  ALT_SCREEN_MODES,
+  blockPrivateModes,
+  handleCopyKey,
+  installCopyHandlers,
+  MOUSE_MODES,
+} from "./selection";
 import { binaryStringToBytes, TerminalSocket } from "./terminal-socket";
 import styles from "./TerminalView.module.css";
 import { openTerminalLink, XTERM_BASE_OPTIONS } from "./xterm-theme";
@@ -31,9 +38,6 @@ export interface TerminalViewProps {
   onPaste?: (length: number) => void;
   className?: string;
 }
-
-/** DEC private modes that switch to the alternate screen (47, 1047, 1049). */
-const ALT_SCREEN_MODES = new Set([47, 1047, 1049]);
 
 type Phase =
   | "loading"
@@ -95,36 +99,29 @@ export function TerminalView({
     // Ctrl+V (and Ctrl+Shift+V) is the browser's paste: xterm would turn it into ^V, which the
     // agent reads as "paste an image" and the clipboard text never arrives. Let the browser
     // fire its paste event instead; xterm sends the pasted text from it.
-    // Ctrl+C with text selected copies it (without a selection it stays the interrupt key);
-    // Ctrl+Shift+C always copies the selection.
+    // Copy keys: see handleCopyKey (Ctrl+C / ⌘C with a selection, Ctrl+Shift+C, Ctrl+Insert).
     term.attachCustomKeyEventHandler((e) => {
-      if (e.type !== "keydown" || !e.ctrlKey || e.altKey || e.metaKey)
-        return true;
-      if (e.code === "KeyV") return false;
-      if (e.code === "KeyC" && (e.shiftKey || term.hasSelection())) {
-        const selected = term.getSelection();
-        if (selected)
-          void navigator.clipboard?.writeText(selected).catch(() => {});
-        term.clearSelection();
-        e.preventDefault();
+      const copy = handleCopyKey(term, e);
+      if (copy !== undefined) return copy;
+      if (
+        e.type === "keydown" &&
+        e.ctrlKey &&
+        !e.altKey &&
+        !e.metaKey &&
+        e.code === "KeyV"
+      )
         return false;
-      }
       return true;
     });
+    const removeCopyHandlers = installCopyHandlers(term, host);
 
     // tmux switches to the alternate screen, which has no scrollback: the stored recording
     // written first (D17) would be out of reach while the chat is live. Keep tmux on the normal
-    // screen so the earlier output stays in scrollback (AC-26).
-    const isAltScreen = (params: (number | number[])[]) =>
-      params.length > 0 &&
-      params.every((p) => typeof p === "number" && ALT_SCREEN_MODES.has(p));
-    const altOn = term.parser.registerCsiHandler(
-      { prefix: "?", final: "h" },
-      isAltScreen,
-    );
-    const altOff = term.parser.registerCsiHandler(
-      { prefix: "?", final: "l" },
-      isAltScreen,
+    // screen so the earlier output stays in scrollback (AC-26). Mouse reporting is blocked too,
+    // so a plain drag always selects text.
+    const blockedModes = blockPrivateModes(
+      term,
+      new Set([...ALT_SCREEN_MODES, ...MOUSE_MODES]),
     );
 
     const socket = new TerminalSocket(wsPath, {
@@ -212,8 +209,8 @@ export function TerminalView({
       dataSub.dispose();
       binarySub.dispose();
       resizeSub.dispose();
-      altOn.dispose();
-      altOff.dispose();
+      blockedModes.dispose();
+      removeCopyHandlers();
       socket.close();
       if (socketRef.current === socket) socketRef.current = null;
       term.dispose();

@@ -17,7 +17,7 @@ article itself holds the details. Keep new lines to one or two sentences.
 * [Client Component Hierarchy](client-routing-and-layout.md) - Read before touching SPA routing, the provider tree / consent gate, lazy chunks (~8, never more than 10), URL state (`lens=`, `session=`, tab params), per-user browser storage keys, window events or `location.state` tab seeding
 * [UI Principles](ui-principles.md) - Read before implementing any UI behaviour: access messaging, error handling, light-only colour scheme, chart patterns
 * [Client Feature Flags](client-feature-flags.md) - Read before hiding an unfinished client feature behind a `VITE_*` build flag (`lib/feature-flags.ts`)
-* [Session Log View](session-log-view.md) - Read before touching the session Logs tab or the `/logs` payload: the payload contract (`agent-` prefix rules, descendant loading, client-only types), the Workflow tool lifecycle (rejected-before-launch = failed), log parser, tool-call core, `ToolCallView` and the Bash tab, Context Growth steps, nested `claude -p` sessions, background MCP calls (`⧗ background`)
+* [Session Log View](session-log-view.md) - Read before touching the session Logs tab or the `/logs` payload: the payload contract (`agent-` prefix rules, descendant loading, client-only types), the Workflow tool lifecycle (rejected-before-launch = failed), log parser, tool-call core, `ToolCallView` and the Shell tab (Bash + PowerShell calls, `shell` filter), Context Growth steps, nested `claude -p` sessions, background MCP calls (`⧗ background`)
 * [Session Map Tab](session-map.md) - Read before touching the session Map tab (`session-log/session-map/`) or `GET …/logs/delta`: delta → merge → parse → model flow, polling and reload, `/logs` watermark suspension, tool families, file list
 * [Raw Logs Renderer Subsystem](raw-logs-renderers.md) - Read before touching `session-log/raw-logs/`: layers, dependency graph, adding a renderer
 * [System Context Anatomy Tab](sysctx-anatomy-tab.md) - Read before touching the `sysctx` session tab, its "View system prompt" modal, its Recommendations modal or the Logs `StartupContextLine`: data sources, partitions, banners, the prompt viewer, recommendations, test ids
@@ -111,6 +111,7 @@ article itself holds the details. Keep new lines to one or two sentences.
 * [Tool-Call Sections and Permission Attribution](algorithms/tool-call-sections.md) - Read before touching `session-log/tool-calls.ts`: which section a call is listed in, which call a permission event belongs to
 * [Tool-Call Outcome](algorithms/tool-call-outcome.md) - Read before touching `classifyToolOutcome` (client or its server twin): success / failure / unresolved and the Logs status
 * [Bash Command View](algorithms/bash-command-view.md) - Read before touching `packages/bash-view/` or the client loader: command layout, FILES summary, `readAccess` kinds
+* [PowerShell Command View](algorithms/powershell-command-view.md) - Read before touching the `ps-*.ts` modules or `shell.ts` of `packages/bash-view/`: PowerShell parse masks and `;`-split fallback, layout, working dir, here-string fold, wrapper prefix, FILES analysis (cmdlet table, aliases), highlighting
 * [OKF Access Extraction](algorithms/okf-access-extraction.md) - Read before touching `okf-access-extractor.ts` or `okf-pointers.ts`: how a transcript becomes `session_okf_access` rows and the facts route's access sequence
 * [OKF Task Context](algorithms/okf-task-context.md) - Read before touching `okf-task-context.ts`: which user entries count as the task
 * [OKF Snapshot](algorithms/okf-snapshot.md) - Read before touching the hook's `okf-snapshot.js`: bundle detection, `git check-ignore` flags, front-matter metadata, `okfSnapshotId`
@@ -126,6 +127,7 @@ article itself holds the details. Keep new lines to one or two sentences.
 ## Work Hub (separate product in `work-hub/`)
 
 * [Artisyn AI Work Hub](work-hub.md) - Read before touching anything under `work-hub/` (Rust server, web, image, scripts, tests): container model, Docker names / labels and cleanup rules, env vars, run modes, its own commands, licence and agent-name checks, test stand and fake agent, the checkpoint layer limit
+* [Work Hub git proxy and connections](workhub-git-proxy.md) - Read before touching Work Hub remotes, connections, clone-from-a-connection, close + push or `work-hub/sidecar/`: the git proxy sidecar (`wh-gitproxy-<instance>`, `wh-net-<instance>`, `wh-gitcache-<instance>`), vault and capabilities, `wh-git-ctl` commands, push policy, exact error messages, provider-name lint guard, and how to debug the sidecar with `docker exec`
 
 ## Product (separate KB) and history
 

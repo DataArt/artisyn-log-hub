@@ -302,6 +302,9 @@ function chat(argv) {
   const history = readUserMessages(file);
 
   startInput();
+  // Mouse tracking on, as the real CLI's chat turns it on: the browser terminal must still select
+  // text with a plain drag.
+  out('\x1b[?1000h\x1b[?1002h\x1b[?1003h\x1b[?1006h');
   line(`${C.magenta}${C.bold}* Fake agent${C.reset} ${C.dim}${VERSION}${C.reset}`);
   line(`${C.dim}cwd: ${process.cwd()} · session: ${sessionId}${C.reset}`);
   if (opts.resume) line(`${C.dim}Resumed conversation (${history.length} earlier messages).${C.reset}`);

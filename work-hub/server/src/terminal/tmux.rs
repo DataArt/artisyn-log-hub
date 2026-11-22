@@ -8,6 +8,7 @@
 //! tmux config keeps `remain-on-exit on`, so a finished command leaves a dead pane behind
 //! (`#{pane_dead}=1`) instead of the session disappearing.
 
+use crate::connections::fields::is_env_name;
 use crate::docker::exec::{self, EXEC_TIMEOUT_STATUS, sh};
 use crate::docker::{Docker, DockerResult};
 
@@ -130,35 +131,38 @@ async fn run_script_with(
     .await
 }
 
-/// A secret for the agent process: `(env name, value)`. It goes to tmux through the exec's stdin
-/// (`read` into a shell variable, then `-e NAME=…`), so it is never part of a command line that
+/// Secrets for the agent process: `(env name, value)` pairs (the agent token, then the exposed
+/// connection variables, D10). They go to tmux through the exec's stdin (one `read` per pair
+/// into a shell variable, then `-e NAME=…`), so they are never part of a command line that
 /// Docker records, and never written to a file.
-pub type SecretEnv<'a> = Option<(&'a str, &'a str)>;
+pub type SecretEnv<'a> = &'a [(String, String)];
 
-/// Options of [`ensure_session`] / [`respawn`]: the pane log to record to and the agent secret.
+/// Options of [`ensure_session`] / [`respawn`]: the pane log to record to and the agent secrets.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct SessionOpts<'a> {
     pub record_to: Option<&'a str>,
-    pub secret: SecretEnv<'a>,
+    pub secrets: SecretEnv<'a>,
 }
 
-/// The script prefix and the `-e` option for a secret; empty when there is none.
-fn secret_parts(secret: SecretEnv<'_>) -> (String, String, Option<bytes::Bytes>) {
-    match secret {
-        Some((name, value)) if is_env_name(name) => (
-            "IFS= read -r WH_SECRET; ".to_string(),
-            format!("-e \"{name}=$WH_SECRET\" "),
-            Some(bytes::Bytes::from(format!("{value}\n"))),
-        ),
-        _ => (String::new(), String::new(), None),
+/// The script prefix (one `read` per pair), the `-e` options and the stdin for the secrets; all
+/// empty when there are none. A pair with an invalid env name or a value containing a newline is
+/// skipped.
+fn secret_parts(secrets: SecretEnv<'_>) -> (String, String, Option<bytes::Bytes>) {
+    let mut reads = String::new();
+    let mut opts = String::new();
+    let mut stdin = String::new();
+    for (i, (name, value)) in secrets
+        .iter()
+        .filter(|(name, value)| is_env_name(name) && !value.contains('\n'))
+        .enumerate()
+    {
+        reads.push_str(&format!("IFS= read -r WH_SECRET_{i}; "));
+        opts.push_str(&format!("-e \"{name}=$WH_SECRET_{i}\" "));
+        stdin.push_str(value);
+        stdin.push('\n');
     }
-}
-
-fn is_env_name(name: &str) -> bool {
-    !name.is_empty()
-        && name
-            .chars()
-            .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit() || c == '_')
+    let stdin = (!stdin.is_empty()).then(|| bytes::Bytes::from(stdin));
+    (reads, opts, stdin)
 }
 
 /// Creates the session unless it exists (D11): for a recorded session first `mkdir -p` of the
@@ -175,10 +179,10 @@ pub async fn ensure_session(
     argv: &[String],
     opts: SessionOpts<'_>,
 ) -> DockerResult<bool> {
-    let SessionOpts { record_to, secret } = opts;
+    let SessionOpts { record_to, secrets } = opts;
     let s = session.as_str();
     let target = shell_quote(&session.target());
-    let (read_secret, env_opt, stdin) = secret_parts(secret);
+    let (read_secret, env_opt, stdin) = secret_parts(secrets);
     let mut script = format!(
         "{read_secret}tmux has-session -t {target} 2>/dev/null && {{ echo exists; exit 0; }}; "
     );
@@ -260,9 +264,9 @@ pub async fn respawn(
     argv: &[String],
     opts: SessionOpts<'_>,
 ) -> DockerResult<()> {
-    let SessionOpts { record_to, secret } = opts;
+    let SessionOpts { record_to, secrets } = opts;
     let s = session.as_str();
-    let (read_secret, env_opt, stdin) = secret_parts(secret);
+    let (read_secret, env_opt, stdin) = secret_parts(secrets);
     let mut script = read_secret;
     if let Some(log) = record_to {
         script.push_str(&mkdir_script(log));

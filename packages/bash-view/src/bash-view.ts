@@ -23,7 +23,19 @@ export interface BashFiles {
   /** `inline <cmd> script, N lines — not analysed` notes. */
   inline: string[];
   unresolved: number;
+  /** Paths of `changes` the command removed (shown as `<path> (deleted)`), repo-relative. */
+  deleted: string[];
 }
+
+/** The FILES block of a command that could not be analysed. */
+export const emptyBashFiles = (): BashFiles => ({
+  changes: [],
+  reads: [],
+  runs: [],
+  inline: [],
+  unresolved: 0,
+  deleted: [],
+});
 
 export interface BashView {
   /** false → unparseable: show `rawDisplay` as is, no toggle, no FILES, no highlighting. */
@@ -64,7 +76,7 @@ export function buildBashView(
       folded: [],
       lineCount: rawLineCount,
       rawLineCount,
-      files: { changes: [], reads: [], runs: [], inline: [], unresolved: 0 },
+      files: emptyBashFiles(),
       firstStatement: null,
     };
   }
@@ -86,6 +98,7 @@ export function buildBashView(
       runs: analysis.runs,
       inline: analysis.inline,
       unresolved: analysis.unresolved,
+      deleted: analysis.deleted.map(rel),
     },
     firstStatement: first === undefined ? null : rel(first.trim()),
   };

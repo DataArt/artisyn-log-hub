@@ -10,10 +10,13 @@
 //   restartServer()  POST <control>/restart-server; returns when /health answers again
 //   workspaceWithFakeLogin()  a workspace whose container holds the fake agent's credentials
 //   fakeLoginInUi()           the same login through AgentLoginDialog and the login terminal
+//   fakeGit() / setFakePat() / addAuthorizedKey()  the fake git host (git.test) of the stand
+//   createPatConnection() / setGrants() / attachRemote()  connections and remotes through the API
 import { test as base, expect, request as pwRequest } from '@playwright/test';
 import type { APIRequestContext, Browser, BrowserContext, Page } from '@playwright/test';
 import { spawnSync } from 'node:child_process';
 import crypto from 'node:crypto';
+import path from 'node:path';
 import pg from 'pg';
 
 // ---------------------------------------------------------------------------------------------
@@ -179,6 +182,8 @@ export class WhApi {
 // Users per mode
 
 export const EMAIL_DOMAIN = 'arrakis.test';
+/** The mode-a stand's admin: `WORK_HUB_ADMIN_EMAILS` in scripts/scenarios.mjs (FR-12). */
+export const ADMIN_EMAIL = `scn-admin@${EMAIL_DOMAIN}`;
 /** Passes the default `long` password policy. */
 export const TEST_PASSWORD = 'Scenario-Pass-2026x';
 
@@ -607,6 +612,123 @@ export function containerState(name: string): string {
 /** Polls `fn` until it returns true. */
 export async function eventually(fn: () => boolean | Promise<boolean>, message: string, timeout = 30_000): Promise<void> {
   await expect.poll(fn, { message, timeout, intervals: [250, 500, 1000] }).toBe(true);
+}
+
+// ---------------------------------------------------------------------------------------------
+// The fake git host (tests/fake-git-host/, started by scripts/scenarios.mjs as
+// `whs-fakegit-<hex of the instance>` on the git proxy network with alias git.test)
+
+/** Smart HTTP URL of the fake host's `app.git` (branches `main` and `dev`). */
+export const FAKE_GIT_HTTP = 'http://git.test/git/app.git';
+/** SSH URL of the same repository. */
+export const FAKE_GIT_SSH = 'ssh://git@git.test/srv/git/app.git';
+/** Smart HTTP URL of the fake host's empty repository. */
+export const FAKE_GIT_EMPTY = 'http://git.test/git/empty.git';
+/** The base URL a connection to the fake host uses. */
+export const FAKE_GIT_BASE = 'http://git.test';
+/** The HTTP Basic user and the PAT the fake host starts with (tests/fake-git-host/Dockerfile). */
+export const FAKE_PAT_USER = 'scenario';
+export const FAKE_PAT = 'scenario-pat-1';
+
+/** The fake git host's container of this stand. */
+export function fakeGitContainer(stand: Stand): string {
+  return `whs-fakegit-${stand.instance.replace(/^whs-/, '')}`;
+}
+
+/** `sh -c <cmd>` in the fake git host as root (never throws on exit). */
+export function fakeGit(stand: Stand, cmd: string, input?: string): DockerResult {
+  return dockerExec(fakeGitContainer(stand), ['sh', '-c', cmd], { input });
+}
+
+/** `fakeGit` that must succeed; returns its trimmed stdout. */
+function fakeGitOk(stand: Stand, cmd: string, input?: string): string {
+  const r = fakeGit(stand, cmd, input);
+  if (r.status !== 0) throw new Error(`fake git host: "${cmd}" → exit ${r.status}: ${r.stderr.trim()}`);
+  return r.stdout.trim();
+}
+
+/** Lets an SSH public key log in to the fake host as `git`. */
+export function addAuthorizedKey(stand: Stand, publicKey: string): void {
+  fakeGitOk(stand, 'cat >> /home/git/.ssh/authorized_keys', `${publicKey.trim()}\n`);
+}
+
+/** Replaces the PAT the fake host accepts (read on every request, so it applies at once). */
+export function setFakePat(stand: Stand, value: string): void {
+  fakeGitOk(stand, 'cat > /etc/pat', `${value}\n`);
+}
+
+/** A git command in the fake host's bare repository `<repo>.git`; returns its trimmed stdout. */
+export function fakeRepoGit(stand: Stand, repo: string, args: string): string {
+  return fakeGitOk(stand, `git -C /srv/git/${repo}.git ${args}`);
+}
+
+/** Minimal shape of a connection (the full one is in web/src/api/connections.ts). */
+export interface Connection {
+  id: string;
+  name: string;
+  provider: string;
+  authMethod: 'ssh_generated' | 'ssh_uploaded' | 'pat';
+  username: string | null;
+  secretSet: boolean;
+  secretHint: string | null;
+  publicKey: string | null;
+  keyFingerprint: string | null;
+  hostKeyFingerprint: string | null;
+  exposeEnv: string | null;
+  status: string;
+  statusDetail: string | null;
+  grants: { workspaceId: string; workspaceName: string }[];
+  usedBy: { workspaceId: string; workspaceName: string; remoteName: string }[];
+}
+
+/** Minimal shape of a workspace remote (web/src/api/remotes.ts). */
+export interface Remote {
+  id: string;
+  workspaceId: string;
+  name: string;
+  url: string;
+  connectionId: string | null;
+  defaultBranch: string | null;
+  blockDefaultRewrite: boolean;
+  onlyWsBranches: boolean;
+}
+
+/** A `generic` PAT connection to the fake host with its current PAT (`pat`, default the initial one). */
+export async function createPatConnection(api: WhApi, name: string, pat = FAKE_PAT): Promise<Connection> {
+  return api.expectStatus<Connection>('POST', '/api/v1/connections', 201, {
+    name,
+    provider: 'generic',
+    baseUrl: FAKE_GIT_BASE,
+    authMethod: 'pat',
+    username: FAKE_PAT_USER,
+    secret: pat,
+  });
+}
+
+/** Replaces the workspaces a connection is granted to. */
+export async function setGrants(api: WhApi, connectionId: string, workspaceIds: string[]): Promise<Connection> {
+  return api.expectStatus<Connection>('PUT', `/api/v1/connections/${connectionId}/grants`, 200, { workspaceIds });
+}
+
+/** Attaches a remote (default `origin` → the fake host's app.git over HTTP). */
+export async function attachRemote(
+  api: WhApi,
+  workspaceId: string,
+  connectionId: string,
+  opts: { name?: string; url?: string; blockDefaultRewrite?: boolean; onlyWsBranches?: boolean } = {},
+): Promise<Remote> {
+  return api.expectStatus<Remote>('POST', `/api/v1/workspaces/${workspaceId}/remotes`, 201, {
+    name: opts.name ?? 'origin',
+    connectionId,
+    url: opts.url ?? FAKE_GIT_HTTP,
+    ...(opts.blockDefaultRewrite === undefined ? {} : { blockDefaultRewrite: opts.blockDefaultRewrite }),
+    ...(opts.onlyWsBranches === undefined ? {} : { onlyWsBranches: opts.onlyWsBranches }),
+  });
+}
+
+/** The vault file of a connection's secret: `<data dir>/secrets/<user id>/conn-<id>.enc`. */
+export function connectionSecretFile(stand: Stand, userId: number, connectionId: string): string {
+  return path.join(stand.dataDir, 'secrets', String(userId), `conn-${connectionId}.enc`);
 }
 
 // ---------------------------------------------------------------------------------------------

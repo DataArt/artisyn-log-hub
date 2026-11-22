@@ -33,8 +33,8 @@
 //   - step 8: the summary line («KB read by 2 of 2 agents»), «Agents» in every count column,
 //     hot files (index.md is one line below the table), none of the removed blocks;
 //   - step 9: the explorer — the folder-search row, opened and never-opened files, the filters;
-//   - step 10: a second tree whose agents also read and grep code files: only KB files are
-//     listed, with one agent each;
+//   - step 10: a second tree whose agents also read and grep code files and read a KB file through
+//     PowerShell `Get-Content`: only KB files are listed, with one agent each;
 //   - step 11: a hook 3.1.0 snapshot (bundle `docs/guide`, `okf_version` 0.2, per-file `meta`):
 //     the Versions row of an older bundle, the Wrong-format groups, nested index.md / log.md in
 //     the explorer but not in hot files, a dot-path file nowhere.
@@ -416,8 +416,9 @@ test('@S-SESS-09 Windows change surface: scattered change, a file outside the re
     await expect(search, 'the search row stays under «Opened»').toHaveCount(1);
   });
 
-  await test.step('10. a second tree whose agents also read and grep code files: hot files list a06.md and a07.md with one agent each and no code path; «KB read by 2 of 2 agents»', async () => {
+  await test.step('10. a second tree whose agents also read and grep code files, and a08.md read through PowerShell Get-Content: hot files list a06.md, a07.md and a08.md with one agent each and no code path; «KB read by 2 of 2 agents»', async () => {
     // Main agent: a ranged read of a06.md, then a read and two greps of payment code files.
+    // Then a PowerShell `Get-Content` of a08.md — a KB read like the Read tool (FR-13).
     // Sub-agent: one read of a07.md. Code files are not KB files: they count nowhere.
     const sid2 = `ss09okf2-${run}`;
     const sub2 = `agent-${run}ptr`;
@@ -440,6 +441,7 @@ test('@S-SESS-09 Windows change surface: scattered change, a file outside the re
           { read: 'server/pay/charge.ts' },
           { grep: 'server/pay/charge.ts', pattern: 'chargeCard' },
           { grep: 'server/pay/refund.ts', pattern: 'refundAll', result: 'No matches found' },
+          { psRead: 'docs/kb/a08.md' },
         ],
         subAgents: [
           {
@@ -460,8 +462,8 @@ test('@S-SESS-09 Windows change surface: scattered change, a file outside the re
     );
 
     const usage = await sessionOkf(sid2);
-    expect(usage.summary).toMatchObject({ unitsRead: 2, unitsTotal: 2, reads: 2 });
-    expect(opened(usage)).toEqual(['docs/kb/a06.md', 'docs/kb/a07.md']);
+    expect(usage.summary).toMatchObject({ unitsRead: 2, unitsTotal: 2, reads: 3 });
+    expect(opened(usage)).toEqual(['docs/kb/a06.md', 'docs/kb/a07.md', 'docs/kb/a08.md']);
     expect(usage.files.every((f) => f.inSnapshot), 'a code file is not a «not in this snapshot» file either').toBe(true);
     expect(JSON.stringify(usage)).not.toContain('server/pay');
 
@@ -471,14 +473,15 @@ test('@S-SESS-09 Windows change surface: scattered change, a file outside the re
     const tab = page.getByTestId('session-okf-tab');
     await expect(tab).toBeVisible();
     await expect(tab.getByTestId('okf-summary-ratio')).toHaveText('KB read by 2 of 2 agents');
-    await expect.poll(async () => [...(await hotPaths())].sort()).toEqual(['docs/kb/a06.md', 'docs/kb/a07.md']);
-    for (const path of ['docs/kb/a06.md', 'docs/kb/a07.md']) {
+    const hot = ['docs/kb/a06.md', 'docs/kb/a07.md', 'docs/kb/a08.md'];
+    await expect.poll(async () => [...(await hotPaths())].sort()).toEqual(hot);
+    for (const path of hot) {
       await expect(hotRow(path).locator('td').nth(1), `${path}: one agent`).toHaveText('1');
       await expect(hotRow(path).locator('td').nth(2), `${path}: one read`).toHaveText('1');
     }
     await expect(tab.getByTestId('okf-hot-index-line'), 'no index file was read').toHaveCount(0);
     await expect(tab).not.toContainText('server/pay');
-    await expect(tab.getByTestId('okf-tree-header')).toHaveText('2 of 12 files opened in this session');
+    await expect(tab.getByTestId('okf-tree-header')).toHaveText('3 of 12 files opened in this session');
     await expectOkfTreeFits(page);
   });
 
@@ -558,7 +561,7 @@ test('@S-SESS-09 Windows change surface: scattered change, a file outside the re
       'SELECT okf_extract_version AS v FROM sessions WHERE session_id = $1',
       [sid3],
     );
-    expect(version.rows[0]?.v).toBe(4);
+    expect(version.rows[0]?.v, 'stamped by the current extractor').toBe(5);
 
     await openSession(page, owner, okfRepoId, sid3, { tab: 'okf' });
     await page.reload();

@@ -81,7 +81,7 @@ export interface SessionSummaryTabProps {
    * (component tests) need no QueryClient; absent means "no reference versions".
    */
   claudeReleaseHistory?: AiToolVersionHistoryEntry[];
-  /** Bash calls of the session tree, counted once by `SessionDetailPane` (Bash card, DD-20). */
+  /** Shell commands of the session tree, counted once by `SessionDetailPane` (Shell card, DD-20). */
   bashCount?: number;
   /** The pane's lens switch (`useSessionLens`); absent hides the Explore chips. */
   onLensSwitch?: (lens: LensId) => void;

@@ -20,6 +20,7 @@ use futures_util::StreamExt;
 
 use super::exec::{ExecOutput, STOP_TIMEOUT};
 use super::names::{self, REPO_MOUNT};
+use super::networks;
 use super::{Docker, DockerError, DockerResult};
 
 /// What [`create_and_start`] runs.
@@ -107,6 +108,79 @@ pub async fn create_and_start(docker: &Docker, spec: &RunSpec) -> DockerResult<S
         return Err(e);
     }
     Ok(created.id)
+}
+
+/// The sidecar's alias on the internal network: containers reach it as `http://wh-git/…` (D2).
+pub const GIT_PROXY_ALIAS: &str = "wh-git";
+/// Where the sidecar keeps its connection files, routes and capabilities (tmpfs, mode 0700).
+pub const GIT_PROXY_STATE_DIR: &str = "/run/wh";
+/// Where the sidecar's mirror volume is mounted.
+pub const GIT_PROXY_MIRROR_DIR: &str = "/srv/git";
+
+/// What [`create_git_proxy`] runs (D2).
+#[derive(Debug, Clone)]
+pub struct GitProxySpec {
+    /// `wh-gitproxy-<instance>`.
+    pub name: String,
+    pub image: String,
+    pub labels: HashMap<String, String>,
+    /// `wh-gitcache-<instance>`, mounted at [`GIT_PROXY_MIRROR_DIR`].
+    pub cache_volume: String,
+    /// `wh-net-<instance>`; the sidecar joins it with the alias [`GIT_PROXY_ALIAS`].
+    pub network: String,
+    /// `HTTP_PROXY` / `HTTPS_PROXY` / `NO_PROXY` copied from the server env when set.
+    pub env: BTreeMap<String, String>,
+}
+
+/// Creates the git proxy sidecar per D2 and starts it: the image's own command, `Init: true`,
+/// restart policy `no`, the default `bridge` network (its egress to git hosts), a tmpfs
+/// [`GIT_PROXY_STATE_DIR`] (mode 0700), the mirror volume at [`GIT_PROXY_MIRROR_DIR`] and no
+/// published ports. Before the start it is connected to `spec.network` with the alias
+/// [`GIT_PROXY_ALIAS`]. When any step fails the created container is removed again.
+pub async fn create_git_proxy(docker: &Docker, spec: &GitProxySpec) -> DockerResult<()> {
+    let body = ContainerCreateBody {
+        image: Some(spec.image.clone()),
+        env: Some(spec.env.iter().map(|(k, v)| format!("{k}={v}")).collect()),
+        labels: Some(spec.labels.clone()),
+        host_config: Some(HostConfig {
+            init: Some(true),
+            tmpfs: Some(HashMap::from([(
+                GIT_PROXY_STATE_DIR.to_string(),
+                "mode=0700".to_string(),
+            )])),
+            mounts: Some(vec![volume_mount(
+                &spec.cache_volume,
+                GIT_PROXY_MIRROR_DIR,
+                false,
+            )]),
+            network_mode: Some("bridge".into()),
+            restart_policy: Some(RestartPolicy {
+                name: Some(RestartPolicyNameEnum::NO),
+                maximum_retry_count: None,
+            }),
+            ..Default::default()
+        }),
+        ..Default::default()
+    };
+    let options = CreateContainerOptionsBuilder::default()
+        .name(&spec.name)
+        .build();
+    docker.create_container(Some(options), body).await?;
+    let started = async {
+        networks::connect(docker, &spec.network, &spec.name, Some(GIT_PROXY_ALIAS)).await?;
+        docker.start_container(&spec.name, None).await?;
+        Ok::<(), DockerError>(())
+    };
+    if let Err(e) = started.await {
+        if let Err(cleanup) = remove(docker, &spec.name).await {
+            tracing::warn!(
+                "removing {} after a failed start failed: {cleanup}",
+                spec.name
+            );
+        }
+        return Err(e);
+    }
+    Ok(())
 }
 
 /// What [`inspect`] reports.

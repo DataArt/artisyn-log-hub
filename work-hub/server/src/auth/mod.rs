@@ -42,6 +42,11 @@ use serde_json::json;
 pub use extract::{CurrentUser, MeUser, Peer, require_mode};
 pub use startup::AuthSettings;
 
+/// The one admin check (FR-12): the user's e-mail is listed in `WORK_HUB_ADMIN_EMAILS`.
+pub fn is_admin(cfg: &crate::config::Config, user: &users::UserRow) -> bool {
+    user.is_admin(&cfg.admin_emails)
+}
+
 /// `AUTH_MODE`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AuthMode {

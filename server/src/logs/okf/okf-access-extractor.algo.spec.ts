@@ -1,12 +1,14 @@
 /**
  * Table test for docs/knowledgebase/algorithms/okf-access-extraction.md: `extractOkfDetail`
  * against each row's `expected.rows` (the `access` list), with the real server `tree-sitter-bash`
- * parser (DD-37), so the Bash rows also cover `analyzeBash`'s `readAccess` on the server. A row
+ * and `tree-sitter-powershell` parsers (`ShellParsers`), so the Bash and PowerShell rows also cover
+ * `analyzeBash` / `analyzePowerShell`'s `readAccess` on the server. `noParser: true` passes no parser
+ * at all, `noPowerShellParser: true` only the Bash one. A row
  * that also gives `expected.events` / `expected.pointers` / `expected.eventCount` /
  * `expected.pointerCount` / `expected.truncated` / `expected.seq` has those compared too.
  * `input.bundleRoots` is passed as the `bundleRoots` option (pointer resolution, DD-P4).
  */
-import type { BashParser } from '@loghub/bash-view';
+import type { ShellParsers } from '@loghub/bash-view';
 import { loadExamples } from '../../../../scripts/algo-docs/load-examples.cjs';
 import {
   extractOkfAccess,
@@ -17,7 +19,7 @@ import {
   type OkfSeqItem,
   type OkfSnapshotFileInfo,
 } from './okf-access-extractor';
-import { getServerBashParser } from './server-bash-parser';
+import { getServerShellParsers } from './server-shell-parsers';
 
 interface CallInput {
   id?: string;
@@ -109,16 +111,23 @@ function toEntries(input: RowInput): object[] {
   return entries;
 }
 
-let parser: BashParser | null = null;
+let loaded: ShellParsers = { bash: null, powershell: null };
 
 beforeAll(async () => {
-  parser = await getServerBashParser();
-  if (!parser) throw new Error('server bash parser failed to load');
+  loaded = await getServerShellParsers();
+  if (!loaded.bash) throw new Error('server bash parser failed to load');
+  if (!loaded.powershell)
+    throw new Error('server powershell parser failed to load');
 });
 
 it.each(rows)('$id', (row) => {
   const { input, expected } = row;
-  const noParser = row.noParser === true;
+  const parsers: ShellParsers =
+    row.noParser === true
+      ? { bash: null, powershell: null }
+      : row.noPowerShellParser === true
+        ? { bash: loaded.bash, powershell: null }
+        : loaded;
   const options = {
     isSubagentLog: input.subagent === true,
     ...(input.snapshotFiles !== undefined
@@ -130,17 +139,12 @@ it.each(rows)('$id', (row) => {
   };
   const entries = toEntries(input);
   const roots = input.roots ?? DEFAULT_ROOTS;
-  const detail = extractOkfDetail(
-    entries,
-    roots,
-    noParser ? null : parser,
-    options,
-  );
+  const detail = extractOkfDetail(entries, roots, parsers, options);
   expect(detail.access).toEqual(expected.rows);
   // `extractOkfAccess` is the `access` part of the same walk.
-  expect(
-    extractOkfAccess(entries, roots, noParser ? null : parser, options),
-  ).toEqual(expected.rows);
+  expect(extractOkfAccess(entries, roots, parsers, options)).toEqual(
+    expected.rows,
+  );
   if (expected.events !== undefined) {
     expect(detail.events).toEqual(expected.events);
   }

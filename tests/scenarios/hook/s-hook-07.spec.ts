@@ -970,7 +970,9 @@ test('@S-HOOK-07 the OTEL receiver refuses browsers, foreign projects, path tric
         expect(Number(rescheduled?.nextAttemptAt), 'backoffMs(1) = 30 s ahead').toBeGreaterThan(Date.now() + 10_000);
         expect(String(rescheduled?.lastError)).toMatch(/^retryable: /);
         expect(retryHub.requests.length).toBeGreaterThan(0);
-        expect(q.receiverLog()).toMatch(new RegExp(` job-retry job=${q.job} exit=10 retryable — attempts=1 `));
+        // The child rewrites the job before it exits; the receiver logs job-retry only on that exit,
+        // so the line can land a moment after the rescheduled job is visible.
+        await expect.poll(q.receiverLog, { timeout: 10_000 }).toMatch(new RegExp(` job-retry job=${q.job} exit=10 retryable — attempts=1 `));
 
         // A retryable job is a blocking job: three idle periods pass and the receiver keeps running.
         await new Promise((resolve) => setTimeout(resolve, 4500));

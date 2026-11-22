@@ -4,7 +4,8 @@
 //! (format: `docs/knowledgebase/algorithms/README.md`), runs every row against the real code and
 //! reports every failing row at once. The tests hold no numbers of their own.
 //!
-//! - Work Hub's own docs: `workhub-names`, `workhub-repo-path`, `workhub-devcontainer-subset`.
+//! - Work Hub's own docs: `workhub-names`, `workhub-repo-path`, `workhub-devcontainer-subset`,
+//!   `workhub-remote-url`, `workhub-git-providers`, `workhub-connection-fields`.
 //! - Log Hub's auth docs, run unchanged against the Rust ports: `password-policy`,
 //!   `login-backoff`, `auth-startup-config`, `local-request-detection`. The rows' `NODE_ENV` is
 //!   Work Hub's `WORK_HUB_ENV`.
@@ -15,12 +16,16 @@ use std::sync::Arc;
 
 use serde_json::{Map, Value, json};
 
+use work_hub_server::agent::AgentRegistry;
 use work_hub_server::auth::backoff::{LoginBackoff, ManualClock};
 use work_hub_server::auth::local_request::{
     FsProbe, is_local_address, is_trustable_private_ipv4, resolve_trusted_gateway,
 };
 use work_hub_server::auth::password_policy::apply_password_policy;
 use work_hub_server::auth::startup::validate_auth_startup_config;
+use work_hub_server::connections::fields;
+use work_hub_server::connections::providers::{self, AuthMethod, Provider};
+use work_hub_server::connections::remote_url::{self, Scheme};
 use work_hub_server::devcontainer::{self, ImageSource};
 use work_hub_server::{names, repo_path};
 
@@ -230,6 +235,170 @@ fn workhub_devcontainer_subset() {
                 }
             }
         }
+    });
+}
+
+/// The descriptor named by `input.provider`.
+fn provider_of(input: &Value) -> Result<&'static Provider, String> {
+    let id = str_field(input, "provider")?;
+    providers::get(id).ok_or_else(|| format!("unknown provider {id}"))
+}
+
+/// The auth method named by `input.<key>`.
+fn method_of(input: &Value, key: &str) -> Result<AuthMethod, String> {
+    let raw = str_field(input, key)?;
+    AuthMethod::parse(raw).ok_or_else(|| format!("unknown auth method {raw}"))
+}
+
+fn scheme_name(scheme: Scheme) -> &'static str {
+    match scheme {
+        Scheme::Https => "https",
+        Scheme::Http => "http",
+        Scheme::Ssh => "ssh",
+    }
+}
+
+/// `docs/knowledgebase/algorithms/workhub-remote-url.md`: `parse`, `parse` + `resolve`, and
+/// `pr_url` on the resolved variables.
+#[test]
+fn workhub_remote_url() {
+    run_table("workhub-remote-url", |row| {
+        let input = &row.input;
+        let url = str_field(input, "url")?;
+        let actual = match str_field(input, "op")? {
+            "parse" => match remote_url::parse(url) {
+                Ok(p) => json!({
+                    "ok": true,
+                    "scheme": scheme_name(p.scheme),
+                    "user": p.user,
+                    "host": p.host,
+                    "port": p.port,
+                    "path": p.path,
+                }),
+                Err(e) => json!({"ok": false, "error": e.code()}),
+            },
+            op @ ("resolve" | "pr") => {
+                let p = provider_of(input)?;
+                let base = str_field(input, "baseUrl")?;
+                let method = method_of(input, "auth")?;
+                let resolved = remote_url::parse(url)
+                    .and_then(|parsed| remote_url::resolve(p, base, method, &parsed));
+                match resolved {
+                    Err(e) => json!({"ok": false, "error": e.code()}),
+                    Ok(r) if op == "resolve" => json!({
+                        "ok": true,
+                        "upstream": r.upstream_url,
+                        "web": r.web_repo_url,
+                        "vars": r.vars,
+                    }),
+                    Ok(r) => {
+                        let target = str_field(input, "target")?;
+                        let branch = str_field(input, "branch")?;
+                        json!({
+                            "ok": true,
+                            "pr": remote_url::pr_url(p, base, &r.vars, target, branch),
+                        })
+                    }
+                }
+            }
+            other => return Err(format!("unknown op {other}")),
+        };
+        expect_subset(&row.expected, &actual)
+    });
+}
+
+/// `docs/knowledgebase/algorithms/workhub-git-providers.md`: the descriptor table and the values
+/// derived from it.
+#[test]
+fn workhub_git_providers() {
+    run_table("workhub-git-providers", |row| {
+        let input = &row.input;
+        let actual = match str_field(input, "op")? {
+            "list" => {
+                let ids: Vec<&str> = providers::all().iter().map(|p| p.id).collect();
+                json!({"ids": ids})
+            }
+            "base64" => {
+                json!({"encoded": providers::base64_encode(str_field(input, "text")?.as_bytes())})
+            }
+            op => {
+                let id = str_field(input, "provider")?;
+                let Some(p) = providers::get(id) else {
+                    return expect_subset(&row.expected, &json!({"known": false}));
+                };
+                match op {
+                    "describe" => {
+                        let methods: Vec<&str> =
+                            p.auth_methods.iter().map(|m| m.as_str()).collect();
+                        json!({
+                            "known": true,
+                            "authMethods": methods,
+                            "needsUsername": p.needs_username(),
+                            "allowHttp": p.allow_http,
+                            "testNeedsUrl": p.test_needs_url,
+                            "baseUrlFixed": p.base_fixed,
+                            "prLabel": p.pr_label,
+                        })
+                    }
+                    "header" => {
+                        let username = input.get("username").and_then(Value::as_str);
+                        let pat = str_field(input, "pat")?;
+                        json!({"header": providers::git_header(p, username, pat)})
+                    }
+                    "api" => {
+                        let base = str_field(input, "base")?;
+                        let pat = str_field(input, "pat")?;
+                        let request = providers::api_request(p, base, pat)
+                            .map(|(url, header)| json!({"url": url, "header": header}));
+                        json!({"request": request})
+                    }
+                    "pages" => {
+                        let base = str_field(input, "base")?;
+                        json!({
+                            "tokenPage": providers::token_page_url(p, base),
+                            "sshKeysPage": providers::ssh_keys_page_url(p, base),
+                        })
+                    }
+                    "greeting" => {
+                        json!({"user": providers::greeting_user(p, str_field(input, "text")?)})
+                    }
+                    other => return Err(format!("unknown op {other}")),
+                }
+            }
+        };
+        expect_subset(&row.expected, &actual)
+    });
+}
+
+/// `docs/knowledgebase/algorithms/workhub-connection-fields.md`. The agent token variables are
+/// those of the real agent registry.
+#[test]
+fn workhub_connection_fields() {
+    let registry = AgentRegistry::new();
+    let agent_envs: Vec<&str> = registry
+        .ids()
+        .into_iter()
+        .filter_map(|id| registry.get(id).and_then(|a| a.token_env()))
+        .collect();
+    run_table("workhub-connection-fields", |row| {
+        let input = &row.input;
+        let value = text(input.get("value").ok_or("input.value missing")?)?;
+        let result = match str_field(input, "field")? {
+            "env" => {
+                let method = method_of(input, "method")?;
+                fields::validate_expose_env(&value, method, &agent_envs).map(|()| Value::Null)
+            }
+            "remote" => fields::validate_remote_name(&value).map(|()| Value::Null),
+            "base" => fields::validate_base_url(provider_of(input)?, &value).map(Value::String),
+            "pat" => fields::validate_pat(&value).map(|()| Value::Null),
+            "key" => fields::validate_private_key(&value).map(|()| Value::Null),
+            other => return Err(format!("unknown field {other}")),
+        };
+        let actual = match result {
+            Ok(v) => json!({"ok": true, "value": v}),
+            Err(e) => json!({"ok": false, "error": e.rule(), "code": e.code()}),
+        };
+        expect_subset(&row.expected, &actual)
     });
 }
 

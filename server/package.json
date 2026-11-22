@@ -58,6 +58,7 @@
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "tree-sitter-bash": "0.25.1",
+    "tree-sitter-powershell": "0.26.6",
     "web-tree-sitter": "0.27.1",
     "yauzl": "^3.4.0"
   },

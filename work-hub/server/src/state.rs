@@ -1,7 +1,8 @@
 //! Shared application state (D16 "AppState final fields"). Fields are added as their modules land.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
+use std::time::Instant;
 
 use sqlx::PgPool;
 use tokio::sync::RwLock;
@@ -39,6 +40,88 @@ impl ImageStatus {
     }
 }
 
+/// State of the git proxy sidecar (plan D5). API (`system/status` `gitProxy`):
+/// `"building" | "ok" | "failed"`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ProxyStatus {
+    /// At startup and while the sidecar is being (re)created or its state re-pushed.
+    Building,
+    /// The sidecar runs and holds the current connections, routes and capabilities.
+    Ok,
+    /// The image build or the container start failed; the startup task retries.
+    Failed(String),
+}
+
+impl ProxyStatus {
+    pub fn as_api_str(&self) -> &'static str {
+        match self {
+            ProxyStatus::Building => "building",
+            ProxyStatus::Ok => "ok",
+            ProxyStatus::Failed(_) => "failed",
+        }
+    }
+}
+
+/// Where a clone of workspace create is. API (`CloneOp.state`):
+/// `"running" | "done" | "failed" | "cancelled"`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CloneState {
+    Running,
+    Done,
+    Failed,
+    Cancelled,
+}
+
+impl CloneState {
+    pub fn as_api_str(self) -> &'static str {
+        match self {
+            CloneState::Running => "running",
+            CloneState::Done => "done",
+            CloneState::Failed => "failed",
+            CloneState::Cancelled => "cancelled",
+        }
+    }
+}
+
+/// The progress of one clone (plan D11 "Clone ops"), keyed by the client's `opId`.
+#[derive(Debug, Clone)]
+pub struct CloneOp {
+    /// The user who started the clone; only they can read or cancel it.
+    pub user_id: i64,
+    pub state: CloneState,
+    /// The last progress line git printed (or `Fetching from <host>…` before the first one).
+    pub line: String,
+    /// The last `(\d+)%` of the last progress line.
+    pub percent: Option<u8>,
+    pub cancelled: bool,
+    /// When the clone ended; the entry is removed 10 minutes later.
+    pub ended_at: Option<Instant>,
+    /// The workspace container the clone runs in, once known (cancel kills the clone there).
+    pub container: Option<String>,
+}
+
+/// The git proxy sidecar's status and the running clone operations.
+#[derive(Debug)]
+pub struct GitProxyState {
+    pub status: RwLock<ProxyStatus>,
+    pub clone_ops: Mutex<HashMap<Uuid, CloneOp>>,
+}
+
+impl GitProxyState {
+    pub fn new() -> Self {
+        GitProxyState {
+            status: RwLock::new(ProxyStatus::Building),
+            clone_ops: Mutex::new(HashMap::new()),
+        }
+    }
+}
+
+impl Default for GitProxyState {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[derive(Clone)]
 pub struct AppState {
     pub config: Arc<Config>,
@@ -52,6 +135,8 @@ pub struct AppState {
     /// Workstreams whose container could not be started (`available:false` until a retry works).
     pub unavailable: Arc<Mutex<HashSet<Uuid>>>,
     pub image_status: Arc<RwLock<ImageStatus>>,
+    /// The git proxy sidecar (status, clone operations).
+    pub git_proxy: Arc<GitProxyState>,
     /// Login backoff (off under `WORK_HUB_ENV=test`, as Log Hub's is under `NODE_ENV=test`).
     pub backoff: Arc<LoginBackoff>,
     /// Rate limit of signup / forgot / resend / reset.
@@ -85,6 +170,7 @@ impl AppState {
             terminals: Arc::new(TerminalHub::new()),
             unavailable: Arc::new(Mutex::new(HashSet::new())),
             image_status: Arc::new(RwLock::new(ImageStatus::Building)),
+            git_proxy: Arc::new(GitProxyState::new()),
             backoff,
             rate_limit,
             mailer,

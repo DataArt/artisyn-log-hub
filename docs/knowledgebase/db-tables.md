@@ -89,11 +89,13 @@ table stores the integer `sessions.id`.
   current extractor version on start.
 - `okf_extract_version` (`smallint`, nullable) / `okf_events_truncated` (`boolean`, default
   `false`), migration 0091: the OKF extraction marker. The OKF writer sets `OKF_EXTRACT_VERSION`
-  (4) on every node it rebuilds, even with zero rows, and the truncated flag when the extractor's
-  per-node event / pointer cap was hit. Since 2026-11-21 nothing reads the marker (the repo OKF
-  tab's "no OKF analysis yet" banner is gone); it only records which extractor version built the
-  node's rows. Unlike `tool_usage_version`, nothing is re-queued on start; only
-  `recompute-all-sessions` rebuilds.
+  (5) on every node it rebuilds, even with zero rows, and the truncated flag when the extractor's
+  per-node event / pointer cap was hit. `NULL` = no OKF analysis yet; a non-null version below the
+  current one = rows of an older extractor, re-extracted only where that version's change
+  applies. No tab reads it; its only reader is the background `ShellFiguresBackfillService`,
+  which re-extracts (OKF rows and `session_stats` commit / PR counts) only the nodes below 5 that
+  have a `session_tool_stats` row for `PowerShell` — see [okf-usage.md](okf-usage.md)
+  § "Shell-figures backfill". Every other node is rebuilt only by `recompute-all-sessions`.
 - Repos and sessions are **private to their owner**; the owner is the `user_id` of the session's
   logs. Team visibility comes from `team_repositories` (by URL) and `teams.access_mode`.
 

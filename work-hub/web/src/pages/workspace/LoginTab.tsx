@@ -13,6 +13,7 @@ import {
   loginSocketPath,
   workspaceKeys,
 } from "../../api/workspaces";
+import { copyText } from "../../lib/clipboard";
 import { TerminalView } from "../../terminal/TerminalView";
 import { Button } from "../../ui/button";
 import { useToast } from "../../ui/toast";
@@ -46,12 +47,8 @@ export function LoginTab({ workspaceId, agentName, onClose }: LoginTabProps) {
 
   const copyLink = async () => {
     if (!url) return;
-    try {
-      await navigator.clipboard.writeText(url);
-      toast.show("Link copied", "success");
-    } catch {
-      toast.show("Couldn't copy the link. Use Open instead.", "error");
-    }
+    if (await copyText(url)) toast.show("Link copied", "success");
+    else toast.show("Couldn't copy the link. Use Open instead.", "error");
   };
 
   const refresh = useCallback(() => {

@@ -1,0 +1,188 @@
+[
+  {
+    "id": "GP-01",
+    "input": {"op": "list"},
+    "expected": {"ids": ["github", "gitlab", "azure-devops", "generic"]},
+    "note": "Every provider, in the order the UI shows the tiles."
+  },
+  {
+    "id": "GP-02",
+    "input": {"op": "describe", "provider": "github"},
+    "expected": {"known": true, "authMethods": ["ssh_generated", "ssh_uploaded", "pat"], "needsUsername": false, "allowHttp": false, "testNeedsUrl": false, "baseUrlFixed": "https://github.com", "prLabel": "pull request"},
+    "note": "GitHub: all three auth methods, fixed base URL, fixed PAT user."
+  },
+  {
+    "id": "GP-03",
+    "input": {"op": "describe", "provider": "gitlab"},
+    "expected": {"known": true, "authMethods": ["ssh_generated", "ssh_uploaded", "pat"], "needsUsername": false, "allowHttp": false, "testNeedsUrl": false, "baseUrlFixed": null, "prLabel": "merge request"},
+    "note": "GitLab: any https base URL, label 'merge request'."
+  },
+  {
+    "id": "GP-04",
+    "input": {"op": "describe", "provider": "azure-devops"},
+    "expected": {"known": true, "authMethods": ["ssh_generated", "ssh_uploaded", "pat"], "needsUsername": false, "allowHttp": false, "testNeedsUrl": false, "baseUrlFixed": null, "prLabel": "pull request"},
+    "note": "Azure DevOps: base URL per organization, fixed PAT user."
+  },
+  {
+    "id": "GP-05",
+    "input": {"op": "describe", "provider": "generic"},
+    "expected": {"known": true, "authMethods": ["ssh_generated", "ssh_uploaded", "pat"], "needsUsername": true, "allowHttp": true, "testNeedsUrl": true, "baseUrlFixed": null, "prLabel": null},
+    "note": "Generic: the PAT user comes from the connection, http allowed, Test needs a repository URL, no PR page."
+  },
+  {
+    "id": "GP-06",
+    "input": {"op": "describe", "provider": "bitbucket"},
+    "expected": {"known": false},
+    "note": "An unknown provider id has no descriptor."
+  },
+  {
+    "id": "GP-07",
+    "input": {"op": "header", "provider": "github", "pat": "ghp_abc"},
+    "expected": {"header": "Authorization: Basic eC1hY2Nlc3MtdG9rZW46Z2hwX2FiYw=="},
+    "note": "Git header = Basic base64('x-access-token:ghp_abc')."
+  },
+  {
+    "id": "GP-08",
+    "input": {"op": "header", "provider": "gitlab", "pat": "glpat-xyz"},
+    "expected": {"header": "Authorization: Basic b2F1dGgyOmdscGF0LXh5eg=="},
+    "note": "Git header = Basic base64('oauth2:glpat-xyz')."
+  },
+  {
+    "id": "GP-09",
+    "input": {"op": "header", "provider": "azure-devops", "pat": "azpat"},
+    "expected": {"header": "Authorization: Basic cGF0OmF6cGF0"},
+    "note": "Git header = Basic base64('pat:azpat')."
+  },
+  {
+    "id": "GP-10",
+    "input": {"op": "header", "provider": "generic", "username": "scenario", "pat": "s3cret"},
+    "expected": {"header": "Authorization: Basic c2NlbmFyaW86czNjcmV0"},
+    "note": "Generic: the PAT user is the connection's username."
+  },
+  {
+    "id": "GP-11",
+    "input": {"op": "header", "provider": "github", "username": "someone", "pat": "ghp_abc"},
+    "expected": {"header": "Authorization: Basic eC1hY2Nlc3MtdG9rZW46Z2hwX2FiYw=="},
+    "note": "A fixed PAT user ignores the connection's username."
+  },
+  {
+    "id": "GP-12",
+    "input": {"op": "api", "provider": "github", "base": "https://github.com", "pat": "ghp_abc"},
+    "expected": {"request": {"url": "https://api.github.com/user", "header": "Authorization: Bearer ghp_abc"}},
+    "note": "GitHub API test: fixed API host, Bearer token."
+  },
+  {
+    "id": "GP-13",
+    "input": {"op": "api", "provider": "gitlab", "base": "https://gitlab.example.com/", "pat": "glpat-xyz"},
+    "expected": {"request": {"url": "https://gitlab.example.com/api/v4/user", "header": "PRIVATE-TOKEN: glpat-xyz"}},
+    "note": "GitLab API test: {web} is the base URL without its trailing '/'."
+  },
+  {
+    "id": "GP-14",
+    "input": {"op": "api", "provider": "azure-devops", "base": "https://dev.azure.com/contoso", "pat": "azpat"},
+    "expected": {"request": {"url": "https://dev.azure.com/contoso/_apis/connectionData", "header": "Authorization: Basic cGF0OmF6cGF0"}},
+    "note": "Azure API test: {basic} = base64('pat:<pat>')."
+  },
+  {
+    "id": "GP-15",
+    "input": {"op": "api", "provider": "generic", "base": "https://git.example.com", "pat": "s3cret"},
+    "expected": {"request": null},
+    "note": "Generic has no API test (Test uses git ls-remote instead)."
+  },
+  {
+    "id": "GP-16",
+    "input": {"op": "pages", "provider": "github", "base": "https://github.com"},
+    "expected": {"tokenPage": "https://github.com/settings/tokens/new?scopes=repo&description=Work%20Hub", "sshKeysPage": "https://github.com/settings/ssh/new"},
+    "note": "GitHub pages are fixed URLs."
+  },
+  {
+    "id": "GP-17",
+    "input": {"op": "pages", "provider": "gitlab", "base": "https://gitlab.example.com/sub/"},
+    "expected": {"tokenPage": "https://gitlab.example.com/sub/-/user_settings/personal_access_tokens?name=Work%20Hub&scopes=read_repository,write_repository,read_user", "sshKeysPage": "https://gitlab.example.com/sub/-/user_settings/ssh_keys"},
+    "note": "GitLab pages are under the base URL, sub-path included."
+  },
+  {
+    "id": "GP-18",
+    "input": {"op": "pages", "provider": "azure-devops", "base": "https://dev.azure.com/contoso"},
+    "expected": {"tokenPage": "https://dev.azure.com/contoso/_usersSettings/tokens", "sshKeysPage": "https://dev.azure.com/contoso/_usersSettings/keys"},
+    "note": "Azure pages are under the organization URL."
+  },
+  {
+    "id": "GP-19",
+    "input": {"op": "pages", "provider": "generic", "base": "https://git.example.com"},
+    "expected": {"tokenPage": null, "sshKeysPage": null},
+    "note": "Generic has no pages."
+  },
+  {
+    "id": "GP-20",
+    "input": {"op": "greeting", "provider": "github", "text": "Hi octocat! You've successfully authenticated, but GitHub does not provide shell access."},
+    "expected": {"user": "octocat"},
+    "note": "GitHub greeting: {user} stops at the first '!' that lets the rest match."
+  },
+  {
+    "id": "GP-21",
+    "input": {"op": "greeting", "provider": "github", "text": "Warning: Permanently added 'github.com' (ED25519) to the list of known hosts.\r\nHi octo-cat! You've successfully authenticated, but GitHub does not provide shell access.\r\n"},
+    "expected": {"user": "octo-cat"},
+    "note": "The greeting may be on any line; CRLF line ends are fine."
+  },
+  {
+    "id": "GP-22",
+    "input": {"op": "greeting", "provider": "github", "text": "git@github.com: Permission denied (publickey)."},
+    "expected": {"user": null},
+    "note": "No greeting line -> no user."
+  },
+  {
+    "id": "GP-23",
+    "input": {"op": "greeting", "provider": "gitlab", "text": "Welcome to GitLab, @jdoe!"},
+    "expected": {"user": "jdoe"},
+    "note": "GitLab greeting: the user after '@'."
+  },
+  {
+    "id": "GP-24",
+    "input": {"op": "greeting", "provider": "azure-devops", "text": "remote: Shell access is not supported."},
+    "expected": {"user": null},
+    "note": "Azure has no greeting template (an SSH test passes on any exit without 'Permission denied')."
+  },
+  {
+    "id": "GP-25",
+    "input": {"op": "greeting", "provider": "generic", "text": "Hi someone! You've successfully authenticated"},
+    "expected": {"user": null},
+    "note": "Generic has no greeting template, even for a text that looks like one."
+  },
+  {
+    "id": "GP-26",
+    "input": {"op": "base64", "text": ""},
+    "expected": {"encoded": ""},
+    "note": "base64 of 0 bytes is empty (RFC 4648 test vector)."
+  },
+  {
+    "id": "GP-27",
+    "input": {"op": "base64", "text": "f"},
+    "expected": {"encoded": "Zg=="},
+    "note": "1 byte (1 mod 3): two '=' of padding."
+  },
+  {
+    "id": "GP-28",
+    "input": {"op": "base64", "text": "fo"},
+    "expected": {"encoded": "Zm8="},
+    "note": "2 bytes (2 mod 3): one '=' of padding."
+  },
+  {
+    "id": "GP-29",
+    "input": {"op": "base64", "text": "foo"},
+    "expected": {"encoded": "Zm9v"},
+    "note": "3 bytes (0 mod 3): no padding."
+  },
+  {
+    "id": "GP-30",
+    "input": {"op": "base64", "text": "foobar"},
+    "expected": {"encoded": "Zm9vYmFy"},
+    "note": "6 bytes: two full groups."
+  },
+  {
+    "id": "GP-31",
+    "input": {"op": "base64", "text": "foob"},
+    "expected": {"encoded": "Zm9vYg=="},
+    "note": "4 bytes: one full group, then a padded group."
+  }
+]

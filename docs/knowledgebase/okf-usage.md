@@ -8,7 +8,7 @@ tags:
   - session-view
   - reports
   - hook
-generated: { by: "ai:claude", at: "2026-11-21T22:36:45+04:00" }
+generated: { by: "ai:claude", at: "2026-11-22T00:00:00+04:00" }
 ---
 
 # OKF Usage
@@ -80,7 +80,7 @@ Server modules in `server/src/logs/okf/`:
 | `sessions.okf_snapshot_id` | Bound snapshot of a **root** session (indexed, no FK — an orphan sweep may remove the row under it). Sub-agents resolve their root via `topAncestorIdsSql`. |
 | `upload_queue.okf_snapshot_id` | Id of a queued full-body upload, so the known check sees snapshots still in flight. |
 | `session_okf_access` | One row per tree node × `(path_key, op, after_own_edit)`: `bytes`, `calls`, `seq` (first-access rank in the node). `op` ∈ `read`, `grep`, `list`, `write`; a folder key ends in `/` (repo root `/`). Also `ranged_calls` / `ranged_bytes` and `search_hits` (written, not read by the tabs). Cascades with its `sessions` row. The tabs read `path_key`, `op`, `bytes`, `calls` only. |
-| `sessions.okf_extract_version`, `sessions.okf_events_truncated` | The **marker**: the writer sets `OKF_EXTRACT_VERSION` (4) on every node it rebuilds, even with zero rows, and `okf_events_truncated` when the extractor hit a cap. Nothing reads the marker any more (the "no OKF analysis yet" banner is gone); it stays as the record of which extractor version built the rows. |
+| `sessions.okf_extract_version`, `sessions.okf_events_truncated` | The **marker**: the writer sets `OKF_EXTRACT_VERSION` (5) on every node it rebuilds, even with zero rows, and `okf_events_truncated` when the extractor hit a cap. Reading: `NULL` = no OKF analysis yet; a non-null version below the current one = rows of an older extractor, re-extracted only where that version's change applies. No tab reads it (the "no OKF analysis yet" banner is gone); its only reader is the [shell-figures backfill](#shell-figures-backfill-okf_extract_version-5). Version 5 (2026-11-22): PowerShell calls count — OKF accesses and the commit / PR counts; v4 rows of a node without PowerShell calls equal v5 output. |
 | `session_okf_event`, `session_okf_pointer` | **No longer written since 2026-11-21** (DD-15). Rows written before stay until a follow-up task drops the tables; the session delete still removes them. Nothing reads them. |
 
 Migrations `server/drizzle/migrations/0075_okf_usage.sql` and `0091_okf_value_signals.sql`; the
@@ -100,7 +100,36 @@ written, with the same repo roots:
   roots later rebuilds the tree's rows);
 - recompute — `repositories.service.ts` `recomputeOkfAccess`, once per tree from
   `POST /api/v1/repositories/:repoId/recompute-all-sessions` (the only way to fill rows for
-  sessions ingested before the feature).
+  sessions ingested before the feature);
+- shell-figures backfill — `okf/shell-figures-backfill.service.ts`, below.
+
+The writers get both shell parsers (`getServerShellParsers()` → `{ bash, powershell }`), so Bash
+and PowerShell calls both produce accesses; a parser that fails to load skips only its shell's
+calls ([algorithms/okf-access-extraction.md](algorithms/okf-access-extraction.md) rule 5).
+
+### Shell-figures backfill (`okf_extract_version` 5)
+
+`ShellFiguresBackfillService` (registered in `logs.module.ts` next to `ToolUsageRebuildService`,
+no migration) brings stored sessions that ran PowerShell up to extractor v5 without a manual
+recompute. A pass runs on module init and then every `SHELL_FIGURES_BACKFILL_INTERVAL_MS`
+(15 s, interval `SHELL_FIGURES_BACKFILL_TICK` in the `SchedulerRegistry`, cleared on module
+destroy) for the process lifetime; constants in `okf-constants.ts`, not env-overridable. Each pass
+is one transaction:
+
+1. claim up to `SHELL_FIGURES_BACKFILL_BATCH` (20) sessions: not deleted,
+   `COALESCE(okf_extract_version, 0) < 5`, with a `session_tool_stats` row `tool_name =
+   'PowerShell'` — `FOR UPDATE OF s SKIP LOCKED`, so cluster nodes never share a claim;
+2. per node (each in its own savepoint): reload its `claude` / `claude-subagent` log bodies,
+   recount commits / PRs with `countShellInvocations` (`claude-extractor.ts`, the same filter as
+   ingest) into `session_stats.commit_count` / `pr_count`, and rebuild its OKF access rows with
+   `rebuildOkfAccessForNodes` (roots: the node's own, else its tree root's —
+   `topAncestorIdsSql` + `loadArtisynRootsBySessionIds`);
+3. stamp every claimed session with version 5 — also a node whose processing threw (logged), so
+   a poison node cannot loop; a crash mid-pass rolls the whole claim back.
+
+Nodes without PowerShell calls are never touched (their v4 rows already equal v5). A pass that
+finds nothing costs one query over `sessions`. Sessions stored before `session_tool_stats`
+existed are reached only by the manual recompute.
 
 A tree node with no usable repo root gets no rows.
 
@@ -324,7 +353,7 @@ The marketing site (`site/`) still shows the old tab until a follow-up task refr
 | Hook 2.26.0 … 3.0.x → new server | A snapshot without metadata: `snapshot.hasMeta` is false, one line replaces Versions and Wrong format; summary, hot files and explorer work as usual. Bundles whose `okf_version:` sits past byte 512 of `index.md` stay undetected until the hook is updated. |
 | New hook → old server | Unknown query params and NDJSON line types are ignored; the upload succeeds. Hook 3.1.0's extra snapshot fields are stored verbatim and appear once the server is upgraded (no re-upload). |
 | Old zip → new server / new zip → old server | Imports with no snapshot / `okfSnapshotId` and OKF lines are ignored. |
-| Sessions extracted at an older `okf_extract_version` | Their access rows are read as they are; no recompute is needed. Rows of older extractor versions may hold glob paths as `path_key` — the read side drops them (counting rule 1). |
+| Sessions extracted at an older `okf_extract_version` | Their access rows are read as they are; no recompute is needed. Nodes with PowerShell calls below version 5 are re-extracted by the background shell-figures backfill. Rows of older extractor versions may hold glob paths as `path_key` — the read side drops them (counting rule 1). |
 | Rows in `session_okf_event` / `session_okf_pointer` | Left as they are, never read, no longer written (DD-15); deleted with their session. No migration. |
 | Stored `config.okf` (thresholds saved before the cut) | Stays in `repo_config` / `team_repo_config`, never read. A settings PUT keeps the stored section whatever the body carries (DD-16): a body with an `okf` section — valid or not — answers 200 and does not change it, so an older client's read-modify-write save still works. |
 | Older client → new server | Client and server ship in one build, so the removed response fields have no shim (DD-23): a browser tab opened before a redeploy shows the OKF tab's error state until reload. The removed routes answer 404. Settings responses no longer carry `okfDefaults` / `okfFixedLimits`. |

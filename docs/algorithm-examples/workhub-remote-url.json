@@ -1,0 +1,296 @@
+[
+  {
+    "id": "RU-01",
+    "input": {"op": "parse", "url": "https://User@GitHub.com:8443/Acme/App.git/"},
+    "expected": {"ok": true, "scheme": "https", "user": "User", "host": "github.com", "port": 8443, "path": "Acme/App"},
+    "note": "Parse: the host is lowercased, the path keeps its case and loses the leading '/', the trailing '/' and one '.git'."
+  },
+  {
+    "id": "RU-02",
+    "input": {"op": "parse", "url": "git@git.test:/srv/git/app.git"},
+    "expected": {"ok": true, "scheme": "ssh", "user": "git", "host": "git.test", "port": null, "path": "srv/git/app"},
+    "note": "Parse: the scp form is SSH with no port; a leading '/' of its path is dropped like any other."
+  },
+  {
+    "id": "RU-03",
+    "input": {"op": "parse", "url": "ssh://git@[::1]:2222/r.git"},
+    "expected": {"ok": true, "scheme": "ssh", "user": "git", "host": "[::1]", "port": 2222, "path": "r"},
+    "note": "Parse: an IPv6 host keeps its brackets and the port after them is read."
+  },
+  {
+    "id": "RU-04",
+    "input": {"op": "parse", "url": "https://user:secret@dev.azure.com/contoso/Web/_git/app"},
+    "expected": {"ok": true, "user": "user", "host": "dev.azure.com", "path": "contoso/Web/_git/app"},
+    "note": "Parse: a password in the userinfo is dropped, only the user name is kept."
+  },
+  {
+    "id": "RU-05",
+    "input": {"op": "parse", "url": "github.com/acme/app"},
+    "expected": {"ok": false, "error": "not_a_git_url"},
+    "note": "Parse: no scheme and no 'user@host:' -> not a git URL."
+  },
+  {
+    "id": "RU-06",
+    "input": {"op": "parse", "url": "ftp://github.com/acme/app"},
+    "expected": {"ok": false, "error": "not_a_git_url"},
+    "note": "Parse: only https, http and ssh schemes are accepted."
+  },
+  {
+    "id": "RU-07",
+    "input": {"op": "parse", "url": "https://github.com/"},
+    "expected": {"ok": false, "error": "not_a_git_url"},
+    "note": "Parse: an empty repository path is rejected."
+  },
+  {
+    "id": "RU-08",
+    "input": {"op": "parse", "url": "https://git.test/a/../b.git"},
+    "expected": {"ok": false, "error": "not_a_git_url"},
+    "note": "Parse: '.' and '..' segments are rejected, not resolved."
+  },
+  {
+    "id": "RU-09",
+    "input": {"op": "parse", "url": "https://git.test/a.git?ref=main"},
+    "expected": {"ok": false, "error": "not_a_git_url"},
+    "note": "Parse: a query or a fragment is rejected."
+  },
+  {
+    "id": "RU-10",
+    "input": {"op": "parse", "url": "https://git.test/my repo.git"},
+    "expected": {"ok": false, "error": "not_a_git_url"},
+    "note": "Parse: whitespace inside the URL is rejected."
+  },
+  {
+    "id": "RU-11",
+    "input": {"op": "resolve", "provider": "github", "baseUrl": "https://github.com", "auth": "pat", "url": "https://github.com/acme/app.git"},
+    "expected": {"ok": true, "upstream": "https://github.com/acme/app.git", "web": "https://github.com/acme/app", "vars": {"owner": "acme", "repo": "app"}},
+    "note": "GitHub, HTTPS URL, PAT: upstream is <base>/<https path>.git; the web page has no '.git'."
+  },
+  {
+    "id": "RU-12",
+    "input": {"op": "resolve", "provider": "github", "baseUrl": "https://github.com", "auth": "ssh_generated", "url": "https://github.com/acme/app"},
+    "expected": {"ok": true, "upstream": "ssh://git@github.com:22/acme/app.git"},
+    "note": "GitHub, HTTPS URL, SSH auth: the upstream is the descriptor's SSH endpoint, whatever transport was pasted."
+  },
+  {
+    "id": "RU-13",
+    "input": {"op": "resolve", "provider": "github", "baseUrl": "https://github.com", "auth": "ssh_uploaded", "url": "git@github.com:acme/app.git"},
+    "expected": {"ok": true, "upstream": "ssh://git@github.com:22/acme/app.git", "web": "https://github.com/acme/app"},
+    "note": "GitHub, scp URL, SSH auth: the path is matched against the SSH path template."
+  },
+  {
+    "id": "RU-14",
+    "input": {"op": "resolve", "provider": "github", "baseUrl": "https://github.com", "auth": "pat", "url": "ssh://git@github.com/acme/app"},
+    "expected": {"ok": true, "upstream": "https://github.com/acme/app.git"},
+    "note": "GitHub, ssh:// URL, PAT: the upstream is built over HTTPS from the matched owner and repo."
+  },
+  {
+    "id": "RU-15",
+    "input": {"op": "resolve", "provider": "github", "baseUrl": "https://github.com", "auth": "ssh_generated", "url": "ssh://git@github.com:2222/acme/app.git"},
+    "expected": {"ok": true, "upstream": "ssh://git@github.com:2222/acme/app.git"},
+    "note": "SSH auth with an ssh:// URL that names a port: that port is kept."
+  },
+  {
+    "id": "RU-16",
+    "input": {"op": "resolve", "provider": "github", "baseUrl": "https://github.com", "auth": "pat", "url": "https://gitlab.com/acme/app.git"},
+    "expected": {"ok": false, "error": "wrong_host"},
+    "note": "HTTPS host differs from the base host -> wrong_host."
+  },
+  {
+    "id": "RU-17",
+    "input": {"op": "resolve", "provider": "github", "baseUrl": "https://github.com", "auth": "pat", "url": "https://github.com:8443/acme/app.git"},
+    "expected": {"ok": false, "error": "wrong_host"},
+    "note": "Same host on another port than the base URL's -> wrong_host."
+  },
+  {
+    "id": "RU-18",
+    "input": {"op": "resolve", "provider": "github", "baseUrl": "https://github.com", "auth": "ssh_generated", "url": "git@gitlab.com:acme/app.git"},
+    "expected": {"ok": false, "error": "wrong_host"},
+    "note": "SSH host differs from the descriptor's SSH host -> wrong_host."
+  },
+  {
+    "id": "RU-19",
+    "input": {"op": "resolve", "provider": "github", "baseUrl": "https://github.com", "auth": "pat", "url": "https://github.com/acme/app/tree/main"},
+    "expected": {"ok": false, "error": "wrong_path"},
+    "note": "A browser page URL has more segments than {owner}/{repo} -> wrong_path."
+  },
+  {
+    "id": "RU-20",
+    "input": {"op": "resolve", "provider": "github", "baseUrl": "https://github.com", "auth": "pat", "url": "http://github.com/acme/app.git"},
+    "expected": {"ok": false, "error": "http_not_allowed"},
+    "note": "http:// for a provider without allow_http -> http_not_allowed (checked before the host)."
+  },
+  {
+    "id": "RU-21",
+    "input": {"op": "resolve", "provider": "github", "baseUrl": "https://github.com", "auth": "pat", "url": "not a url"},
+    "expected": {"ok": false, "error": "not_a_git_url"},
+    "note": "A parse failure answers not_a_git_url."
+  },
+  {
+    "id": "RU-22",
+    "input": {"op": "resolve", "provider": "gitlab", "baseUrl": "https://gitlab.com", "auth": "pat", "url": "https://gitlab.com/group/sub/app.git"},
+    "expected": {"ok": true, "upstream": "https://gitlab.com/group/sub/app.git", "web": "https://gitlab.com/group/sub/app", "vars": {"base": "https://gitlab.com", "path": "group/sub/app"}},
+    "note": "GitLab nested groups: {path} takes every segment after the base path."
+  },
+  {
+    "id": "RU-23",
+    "input": {"op": "resolve", "provider": "gitlab", "baseUrl": "https://gitlab.com", "auth": "ssh_generated", "url": "https://GitLab.com/group/sub/app"},
+    "expected": {"ok": true, "upstream": "ssh://git@gitlab.com:22/group/sub/app.git"},
+    "note": "GitLab, HTTPS URL, SSH auth: the SSH host is the base host; the pasted host is compared lowercased."
+  },
+  {
+    "id": "RU-24",
+    "input": {"op": "resolve", "provider": "gitlab", "baseUrl": "https://gitlab.com", "auth": "pat", "url": "git@gitlab.com:group/app.git"},
+    "expected": {"ok": true, "upstream": "https://gitlab.com/group/app.git"},
+    "note": "GitLab, scp URL, PAT: the upstream is built over HTTPS."
+  },
+  {
+    "id": "RU-25",
+    "input": {"op": "resolve", "provider": "gitlab", "baseUrl": "https://example.com/gitlab", "auth": "pat", "url": "https://example.com/gitlab/team/sub/app.git"},
+    "expected": {"ok": true, "upstream": "https://example.com/gitlab/team/sub/app.git", "vars": {"base": "https://example.com/gitlab", "path": "team/sub/app"}},
+    "note": "GitLab base URL with a sub-path: the path must start with it and the rest is the repository path."
+  },
+  {
+    "id": "RU-26",
+    "input": {"op": "resolve", "provider": "gitlab", "baseUrl": "https://example.com/gitlab", "auth": "ssh_generated", "url": "git@example.com:team/sub/app.git"},
+    "expected": {"ok": true, "upstream": "ssh://git@example.com:22/team/sub/app.git"},
+    "note": "GitLab with a sub-path over SSH: the SSH path has no sub-path, so it is matched as is."
+  },
+  {
+    "id": "RU-27",
+    "input": {"op": "resolve", "provider": "gitlab", "baseUrl": "https://example.com/gitlab", "auth": "pat", "url": "https://example.com/other/team/app.git"},
+    "expected": {"ok": false, "error": "wrong_path"},
+    "note": "The URL path does not start with the base path -> wrong_path."
+  },
+  {
+    "id": "RU-28",
+    "input": {"op": "resolve", "provider": "gitlab", "baseUrl": "https://example.com/gitlab", "auth": "pat", "url": "https://example.com/gitlab.git"},
+    "expected": {"ok": false, "error": "wrong_path"},
+    "note": "The URL is the base path itself, with no repository after it -> wrong_path."
+  },
+  {
+    "id": "RU-29",
+    "input": {"op": "resolve", "provider": "gitlab", "baseUrl": "https://gitlab.com", "auth": "pat", "url": "http://gitlab.com/group/app.git"},
+    "expected": {"ok": false, "error": "http_not_allowed"},
+    "note": "GitLab never accepts http://."
+  },
+  {
+    "id": "RU-30",
+    "input": {"op": "resolve", "provider": "azure-devops", "baseUrl": "https://dev.azure.com/contoso", "auth": "pat", "url": "https://contoso@dev.azure.com/contoso/Web/_git/app"},
+    "expected": {"ok": true, "upstream": "https://dev.azure.com/contoso/Web/_git/app", "web": "https://dev.azure.com/contoso/Web/_git/app", "vars": {"org": "contoso", "project": "Web", "repo": "app"}},
+    "note": "Azure URL with userinfo (as copied from the Clone dialog): the user is ignored; no '.git' suffix."
+  },
+  {
+    "id": "RU-31",
+    "input": {"op": "resolve", "provider": "azure-devops", "baseUrl": "https://dev.azure.com/contoso", "auth": "ssh_generated", "url": "https://dev.azure.com/contoso/Web/_git/app"},
+    "expected": {"ok": true, "upstream": "ssh://git@ssh.dev.azure.com:22/v3/contoso/Web/app"},
+    "note": "Azure, HTTPS URL, SSH auth: the SSH path is v3/{org}/{project}/{repo} on the fixed SSH host."
+  },
+  {
+    "id": "RU-32",
+    "input": {"op": "resolve", "provider": "azure-devops", "baseUrl": "https://dev.azure.com/contoso", "auth": "pat", "url": "git@ssh.dev.azure.com:v3/contoso/Web/app"},
+    "expected": {"ok": true, "upstream": "https://dev.azure.com/contoso/Web/_git/app"},
+    "note": "Azure, scp URL, PAT: {org} from the SSH path agrees with the base URL's {org}."
+  },
+  {
+    "id": "RU-33",
+    "input": {"op": "resolve", "provider": "azure-devops", "baseUrl": "https://dev.azure.com/contoso", "auth": "pat", "url": "git@ssh.dev.azure.com:v3/fabrikam/Web/app"},
+    "expected": {"ok": false, "error": "wrong_path"},
+    "note": "Azure SSH URL of another organization: {org} disagrees with the base URL -> wrong_path."
+  },
+  {
+    "id": "RU-34",
+    "input": {"op": "resolve", "provider": "azure-devops", "baseUrl": "https://dev.azure.com/contoso", "auth": "ssh_generated", "url": "git@dev.azure.com:v3/contoso/Web/app"},
+    "expected": {"ok": false, "error": "wrong_host"},
+    "note": "Azure SSH URL on the web host instead of the SSH host -> wrong_host."
+  },
+  {
+    "id": "RU-35",
+    "input": {"op": "resolve", "provider": "generic", "baseUrl": "http://git.test", "auth": "pat", "url": "http://git.test/git/app.git"},
+    "expected": {"ok": true, "upstream": "http://git.test/git/app.git", "web": null, "vars": {"base": "http://git.test", "path": "git/app"}},
+    "note": "Generic, http allowed, PAT: the pasted URL is the upstream as is; no web page."
+  },
+  {
+    "id": "RU-36",
+    "input": {"op": "resolve", "provider": "generic", "baseUrl": "http://git.test", "auth": "ssh_generated", "url": "git@git.test:srv/git/app.git"},
+    "expected": {"ok": true, "upstream": "git@git.test:srv/git/app.git"},
+    "note": "Generic, scp URL, SSH auth: the upstream is the pasted scp URL."
+  },
+  {
+    "id": "RU-37",
+    "input": {"op": "resolve", "provider": "generic", "baseUrl": "https://git.example.com", "auth": "ssh_uploaded", "url": "ssh://git@git.example.com:2222/srv/git/app.git"},
+    "expected": {"ok": true, "upstream": "ssh://git@git.example.com:2222/srv/git/app.git"},
+    "note": "Generic, ssh:// URL with a port, SSH auth: pasted as is, port and '.git' kept."
+  },
+  {
+    "id": "RU-38",
+    "input": {"op": "resolve", "provider": "generic", "baseUrl": "https://git.example.com:8443", "auth": "pat", "url": "https://git.example.com:8443/team/app.git"},
+    "expected": {"ok": true, "upstream": "https://git.example.com:8443/team/app.git"},
+    "note": "Generic HTTPS on a non-default port that matches the base URL's port."
+  },
+  {
+    "id": "RU-39",
+    "input": {"op": "resolve", "provider": "generic", "baseUrl": "http://git.test", "auth": "pat", "url": "git@git.test:srv/git/app.git"},
+    "expected": {"ok": false, "error": "transport_mismatch"},
+    "note": "Generic: a PAT connection needs an http(s) URL -> transport_mismatch."
+  },
+  {
+    "id": "RU-40",
+    "input": {"op": "resolve", "provider": "generic", "baseUrl": "http://git.test", "auth": "ssh_generated", "url": "http://git.test/git/app.git"},
+    "expected": {"ok": false, "error": "transport_mismatch"},
+    "note": "Generic: an SSH key connection needs an SSH URL -> transport_mismatch."
+  },
+  {
+    "id": "RU-41",
+    "input": {"op": "resolve", "provider": "generic", "baseUrl": "http://git.test", "auth": "ssh_generated", "url": "git@other.test:app.git"},
+    "expected": {"ok": false, "error": "wrong_host"},
+    "note": "Generic SSH URL on another host than the base URL -> wrong_host."
+  },
+  {
+    "id": "RU-42",
+    "input": {"op": "pr", "provider": "github", "baseUrl": "https://github.com", "auth": "pat", "url": "https://github.com/acme/app.git", "target": "main", "branch": "feat/a b#1"},
+    "expected": {"ok": true, "pr": "https://github.com/acme/app/compare/main...feat/a%20b%231?expand=1"},
+    "note": "GitHub PR page: the branch is percent-encoded except '/'."
+  },
+  {
+    "id": "RU-43",
+    "input": {"op": "pr", "provider": "gitlab", "baseUrl": "https://gitlab.com", "auth": "ssh_generated", "url": "git@gitlab.com:group/sub/app.git", "target": "main", "branch": "wh/fix #2"},
+    "expected": {"ok": true, "pr": "https://gitlab.com/group/sub/app/-/merge_requests/new?merge_request%5Bsource_branch%5D=wh/fix%20%232&merge_request%5Btarget_branch%5D=main"},
+    "note": "GitLab merge request page with nested groups and an encoded branch."
+  },
+  {
+    "id": "RU-44",
+    "input": {"op": "pr", "provider": "azure-devops", "baseUrl": "https://dev.azure.com/contoso", "auth": "pat", "url": "https://dev.azure.com/contoso/Web/_git/app", "target": "main", "branch": "feat/é"},
+    "expected": {"ok": true, "pr": "https://dev.azure.com/contoso/Web/_git/app/pullrequestcreate?sourceRef=feat/%C3%A9&targetRef=main"},
+    "note": "Azure pull request page: a non-ASCII branch is encoded byte by byte in UTF-8."
+  },
+  {
+    "id": "RU-45",
+    "input": {"op": "pr", "provider": "generic", "baseUrl": "http://git.test", "auth": "pat", "url": "http://git.test/git/app.git", "target": "main", "branch": "feat/x"},
+    "expected": {"ok": true, "pr": null},
+    "note": "Generic has no PR page."
+  },
+  {
+    "id": "RU-46",
+    "input": {"op": "resolve", "provider": "gitlab", "baseUrl": "https://gitlab.com", "auth": "pat", "url": "ssh://git@gitlab.com/group/sub/app.git"},
+    "expected": {"ok": true, "upstream": "https://gitlab.com/group/sub/app.git", "web": "https://gitlab.com/group/sub/app"},
+    "note": "GitLab, ssh:// URL, PAT: the upstream is built over HTTPS from the nested path."
+  },
+  {
+    "id": "RU-47",
+    "input": {"op": "resolve", "provider": "gitlab", "baseUrl": "https://gitlab.com", "auth": "ssh_generated", "url": "ssh://git@gitlab.com:2222/group/app.git"},
+    "expected": {"ok": true, "upstream": "ssh://git@gitlab.com:2222/group/app.git"},
+    "note": "GitLab, ssh:// URL with a port, SSH auth: the port is kept."
+  },
+  {
+    "id": "RU-48",
+    "input": {"op": "resolve", "provider": "azure-devops", "baseUrl": "https://dev.azure.com/contoso", "auth": "pat", "url": "ssh://git@ssh.dev.azure.com/v3/contoso/Web/app"},
+    "expected": {"ok": true, "upstream": "https://dev.azure.com/contoso/Web/_git/app"},
+    "note": "Azure, ssh:// URL, PAT: {org} {project} {repo} come from the v3 SSH path."
+  },
+  {
+    "id": "RU-49",
+    "input": {"op": "resolve", "provider": "azure-devops", "baseUrl": "https://dev.azure.com/contoso", "auth": "ssh_uploaded", "url": "ssh://git@ssh.dev.azure.com:22/v3/contoso/Web/app"},
+    "expected": {"ok": true, "upstream": "ssh://git@ssh.dev.azure.com:22/v3/contoso/Web/app"},
+    "note": "Azure, ssh:// URL, SSH auth: the SSH endpoint keeps no '.git'."
+  }
+]

@@ -2,7 +2,7 @@
  * Table test for docs/knowledgebase/algorithms/bash-command-view.md.
  *
  * - View rows run `buildBashView(parser, command, root)` and compare only the keys the row lists
- *   (`changes` / `reads` / `runs` / `inline` / `unresolved` from `view.files`; `changeGroups` /
+ *   (`changes` / `reads` / `runs` / `inline` / `unresolved` / `deleted` from `view.files`; `changeGroups` /
  *   `readGroups` / `runGroups` / `inlineGroups` from `displayGroups`, the same helper the FILES
  *   block uses; `readAccess` from `analyzeBash`); every `ok` row also
  *   checks the token invariant (rule 2.7) on `formatBash(parser, command).script`.
@@ -53,6 +53,7 @@ interface BashViewExpected {
   runs?: string[];
   inline?: string[];
   unresolved?: number;
+  deleted?: string[];
   changeGroups?: unknown[] | null;
   readGroups?: unknown[] | null;
   runGroups?: unknown[] | null;
@@ -128,6 +129,7 @@ describe('bash-command-view: view rows', () => {
       runs: view.files.runs,
       inline: view.files.inline,
       unresolved: view.files.unresolved,
+      deleted: view.files.deleted,
       changeGroups: displayGroups('changes', view.files.changes),
       readGroups: displayGroups('reads', view.files.reads),
       runGroups: displayGroups('runs', view.files.runs),

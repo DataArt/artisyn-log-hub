@@ -393,3 +393,190 @@ pub async fn delete(db: &PgPool, id: Uuid) -> Result<(), sqlx::Error> {
         .await?;
     Ok(())
 }
+
+/// One `workspace_remotes` row plus the provider of its connection (`None` once the connection
+/// was deleted).
+#[derive(Debug, Clone, sqlx::FromRow)]
+pub struct RemoteRow {
+    pub id: Uuid,
+    pub workspace_id: Uuid,
+    pub name: String,
+    pub connection_id: Option<Uuid>,
+    pub connection_name: String,
+    pub url: String,
+    pub upstream_url: String,
+    pub default_branch: Option<String>,
+    pub block_default_rewrite: bool,
+    pub only_ws_branches: bool,
+    pub status: String,
+    pub status_detail: Option<String>,
+    pub created_at: OffsetDateTime,
+    pub provider: Option<String>,
+}
+
+/// The values of a new remote.
+#[derive(Debug, Clone)]
+pub struct NewRemote<'a> {
+    pub id: Uuid,
+    pub workspace_id: Uuid,
+    pub name: &'a str,
+    pub connection_id: Uuid,
+    pub connection_name: &'a str,
+    pub url: &'a str,
+    pub upstream_url: &'a str,
+    pub default_branch: Option<&'a str>,
+    pub block_default_rewrite: bool,
+    pub only_ws_branches: bool,
+}
+
+/// A rebind to another connection: its id and name and the upstream URL resolved for it.
+#[derive(Debug, Clone)]
+pub struct RemoteRebind<'a> {
+    pub connection_id: Uuid,
+    pub connection_name: &'a str,
+    pub upstream_url: &'a str,
+}
+
+/// The editable fields of a remote; `None` keeps a field.
+#[derive(Debug, Clone, Default)]
+pub struct RemoteUpdate<'a> {
+    pub connection: Option<RemoteRebind<'a>>,
+    pub block_default_rewrite: Option<bool>,
+    pub only_ws_branches: Option<bool>,
+}
+
+const REMOTE_COLUMNS: &str = "r.id, r.workspace_id, r.name, r.connection_id, r.connection_name, \
+    r.url, r.upstream_url, r.default_branch, r.block_default_rewrite, r.only_ws_branches, \
+    r.status, r.status_detail, r.created_at, c.provider";
+
+/// Inserts a remote with status `untested`. A duplicate name in the workspace is a unique
+/// violation, see [`is_unique_violation`].
+pub async fn insert_remote(db: &PgPool, r: &NewRemote<'_>) -> Result<RemoteRow, sqlx::Error> {
+    sqlx::query_as::<_, RemoteRow>(&format!(
+        "WITH r AS (INSERT INTO workspace_remotes (id, workspace_id, name, connection_id, \
+           connection_name, url, upstream_url, default_branch, block_default_rewrite, \
+           only_ws_branches) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) RETURNING *) \
+         SELECT {REMOTE_COLUMNS} FROM r LEFT JOIN connections c ON c.id = r.connection_id"
+    ))
+    .bind(r.id)
+    .bind(r.workspace_id)
+    .bind(r.name)
+    .bind(r.connection_id)
+    .bind(r.connection_name)
+    .bind(r.url)
+    .bind(r.upstream_url)
+    .bind(r.default_branch)
+    .bind(r.block_default_rewrite)
+    .bind(r.only_ws_branches)
+    .fetch_one(db)
+    .await
+}
+
+/// The remotes of a workspace, oldest first (the caller checked the owner).
+pub async fn list_remotes(db: &PgPool, workspace_id: Uuid) -> Result<Vec<RemoteRow>, sqlx::Error> {
+    sqlx::query_as::<_, RemoteRow>(&format!(
+        "SELECT {REMOTE_COLUMNS} FROM workspace_remotes r \
+         LEFT JOIN connections c ON c.id = r.connection_id \
+         WHERE r.workspace_id = $1 ORDER BY r.created_at, r.id"
+    ))
+    .bind(workspace_id)
+    .fetch_all(db)
+    .await
+}
+
+/// A remote of a ready workspace of `user_id`; `None` for a missing or foreign one.
+pub async fn get_remote_owned(
+    db: &PgPool,
+    user_id: i64,
+    id: Uuid,
+) -> Result<Option<RemoteRow>, sqlx::Error> {
+    sqlx::query_as::<_, RemoteRow>(&format!(
+        "SELECT {REMOTE_COLUMNS} FROM workspace_remotes r \
+         JOIN workspaces w ON w.id = r.workspace_id \
+         LEFT JOIN connections c ON c.id = r.connection_id \
+         WHERE r.id = $1 AND w.user_id = $2 AND w.state = '{STATE_READY}'"
+    ))
+    .bind(id)
+    .bind(user_id)
+    .fetch_optional(db)
+    .await
+}
+
+/// A remote of the workspace by its git name.
+pub async fn remote_by_name(
+    db: &PgPool,
+    workspace_id: Uuid,
+    name: &str,
+) -> Result<Option<RemoteRow>, sqlx::Error> {
+    sqlx::query_as::<_, RemoteRow>(&format!(
+        "SELECT {REMOTE_COLUMNS} FROM workspace_remotes r \
+         LEFT JOIN connections c ON c.id = r.connection_id \
+         WHERE r.workspace_id = $1 AND r.name = $2"
+    ))
+    .bind(workspace_id)
+    .bind(name)
+    .fetch_optional(db)
+    .await
+}
+
+/// Updates a remote (the caller resolved it with [`get_remote_owned`]). A rebind also resets the
+/// status to `untested`. `None` when the row is gone.
+pub async fn update_remote(
+    db: &PgPool,
+    id: Uuid,
+    u: &RemoteUpdate<'_>,
+) -> Result<Option<RemoteRow>, sqlx::Error> {
+    let rebind = u.connection.as_ref();
+    sqlx::query_as::<_, RemoteRow>(&format!(
+        "WITH r AS (UPDATE workspace_remotes AS x SET \
+           connection_id = CASE WHEN $2 THEN $3 ELSE x.connection_id END, \
+           connection_name = COALESCE($4, x.connection_name), \
+           upstream_url = COALESCE($5, x.upstream_url), \
+           status = CASE WHEN $2 THEN 'untested' ELSE x.status END, \
+           status_detail = CASE WHEN $2 THEN NULL ELSE x.status_detail END, \
+           block_default_rewrite = COALESCE($6, x.block_default_rewrite), \
+           only_ws_branches = COALESCE($7, x.only_ws_branches) \
+         WHERE x.id = $1 RETURNING x.*) \
+         SELECT {REMOTE_COLUMNS} FROM r LEFT JOIN connections c ON c.id = r.connection_id"
+    ))
+    .bind(id)
+    .bind(rebind.is_some())
+    .bind(rebind.map(|b| b.connection_id))
+    .bind(rebind.map(|b| b.connection_name))
+    .bind(rebind.map(|b| b.upstream_url))
+    .bind(u.block_default_rewrite)
+    .bind(u.only_ws_branches)
+    .fetch_optional(db)
+    .await
+}
+
+/// Deletes a remote; `false` when it was already gone.
+pub async fn delete_remote(db: &PgPool, id: Uuid) -> Result<bool, sqlx::Error> {
+    let done = sqlx::query("DELETE FROM workspace_remotes WHERE id = $1")
+        .bind(id)
+        .execute(db)
+        .await?;
+    Ok(done.rows_affected() == 1)
+}
+
+/// Stores the outcome of an operation on a remote (D1 item 9). `default_branch` is stored when
+/// `Some` (learned by `ls-remote`) and kept otherwise.
+pub async fn set_remote_status(
+    db: &PgPool,
+    id: Uuid,
+    status: &str,
+    detail: Option<&str>,
+    default_branch: Option<&str>,
+) -> Result<(), sqlx::Error> {
+    sqlx::query(
+        "UPDATE workspace_remotes SET status = $2, status_detail = $3, \
+           default_branch = COALESCE($4, default_branch) WHERE id = $1",
+    )
+    .bind(id)
+    .bind(status)
+    .bind(detail)
+    .bind(default_branch)
+    .execute(db)
+    .await?;
+    Ok(())
+}

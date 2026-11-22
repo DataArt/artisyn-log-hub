@@ -179,8 +179,10 @@ export const sessions = pgTable(
     toolUsageVersion: smallint('tool_usage_version'),
     // Migration 0091: OKF extraction marker (DD-11). The `OKF_EXTRACT_VERSION` the node's
     // OKF rows (session_okf_access / _event / _pointer) were built with; NULL = never built or
-    // built before the marker existed. NULL or below the current version reads as
-    // "no OKF analysis yet". Set by the OKF writer on every node it rebuilds, even with 0 rows.
+    // built before the marker existed — "no OKF analysis yet". A non-null version below the
+    // current one = rows of an older extractor, re-extracted only where that version's change
+    // applies (v5: only nodes with PowerShell calls, by the shell-figures backfill). Set by the
+    // OKF writer on every node it rebuilds, even with 0 rows.
     okfExtractVersion: smallint('okf_extract_version'),
     // Migration 0091: the per-node event or pointer cap was hit during OKF extraction.
     okfEventsTruncated: boolean('okf_events_truncated')

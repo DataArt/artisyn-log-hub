@@ -93,6 +93,27 @@ struct NameBody {
     name: String,
 }
 
+/// `POST /workspaces` body (D11): `source` clones a repository through a connection; `opId`
+/// lets the client poll the clone progress. Both optional: older clients send only `name`.
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CreateBody {
+    name: String,
+    #[serde(default)]
+    source: Option<SourceBody>,
+    #[serde(default)]
+    op_id: Option<Uuid>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct SourceBody {
+    connection_id: Uuid,
+    url: String,
+    #[serde(default)]
+    branch: Option<String>,
+}
+
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct BranchBody {
@@ -118,14 +139,24 @@ pub async fn list(
     ))
 }
 
-/// `POST /api/v1/workspaces` `{name}` → 201 `Workspace`.
+/// `POST /api/v1/workspaces` `{name, source?: {connectionId, url, branch?}, opId?}` → 201
+/// `Workspace`.
 pub async fn create(
     State(st): State<AppState>,
     user: CurrentUser,
     body: axum::body::Bytes,
 ) -> ApiResult<Response> {
-    let NameBody { name } = parse_body(&body)?;
-    let row = workspaces::create(&st, &user.user, &name).await?;
+    let CreateBody {
+        name,
+        source,
+        op_id,
+    } = parse_body(&body)?;
+    let source = source.map(|s| workspaces::clone::CloneSource {
+        connection_id: s.connection_id,
+        url: s.url,
+        branch: s.branch.filter(|b| !b.trim().is_empty()),
+    });
+    let row = workspaces::create(&st, &user.user, &name, source, op_id).await?;
     Ok((StatusCode::CREATED, Json(workspace(&st, &row, 0))).into_response())
 }
 

@@ -7,7 +7,7 @@ import type { OverflowPlacement } from '../../ui/overflow-row';
 
 /** Per-id decorations of session tab triggers, from data the pane has already loaded (FR-B3). */
 export interface SessionTabDecorations {
-  /** Bash commands in the session tree, shown muted after the Bash label; absent → no count. */
+  /** Shell commands in the session tree, shown muted after the Shell label; absent → no count. */
   bashCount?: number;
   /** Transcript-derived MCP failures exist → a red dot on Tools/MCP (DD-9). */
   toolsFailure?: boolean;

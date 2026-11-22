@@ -1,0 +1,235 @@
+#!/bin/sh
+# Control commands of the Work Hub git proxy. The server runs them as user `lighttpd` with
+# `docker exec` (there is no network channel between the sidecar and the server); the CGI and the
+# pre-receive hook run `sync` / `push-upstream`. Every command's arguments, stdin and stdout are
+# fixed (plan D3); secrets only ever arrive on stdin, never as arguments.
+set -eu
+umask 077
+STATE=/run/wh
+MIRRORS=/srv/git
+export HOME=$STATE/home
+TAB=$(printf '\t')
+NL='
+'
+
+die() { echo "wh-git-ctl: $*" >&2; exit 2; }
+
+# is_id <value>: a connection / remote uuid.
+is_id() {
+  case "$1" in *"$NL"*) return 1 ;; esac
+  printf '%s' "$1" | grep -Eqx '[0-9a-f-]{36}'
+}
+need_id() { is_id "$1" || die "invalid id"; }
+# no_opt <value>: refuse anything a tool could take for an option.
+no_opt() {
+  case "$1" in -*|"") die "invalid argument" ;; *"$NL"*) die "invalid argument" ;; esac
+}
+
+# read_remote <rid>: loads the D4 record into r_* (read as data, never sourced).
+read_remote() {
+  need_id "$1"
+  f=$STATE/remotes/$1
+  [ -f "$f" ] || die "unknown remote $1"
+  r_id='' r_conn='' r_name='' r_up='' r_block='' r_only=''
+  IFS="$TAB" read -r r_id r_conn r_name r_up r_block r_only < "$f" || true
+  [ "$r_id" = "$1" ] || die "bad remote record $1"
+}
+
+# ssh_opts <conn dir>: the pinned, non-interactive ssh options of a connection.
+ssh_opts() {
+  printf '%s' "-i $1/key -o IdentitiesOnly=yes -o UserKnownHostsFile=$1/known_hosts -o StrictHostKeyChecking=yes -o BatchMode=yes"
+}
+
+# conn_env <conn id>: credential environment for any git call to the real host.
+conn_env() {
+  export GIT_TERMINAL_PROMPT=0
+  [ "$1" != "-" ] || return 0
+  need_id "$1"
+  d=$STATE/conns/$1
+  if [ -f "$d/key" ]; then
+    GIT_SSH_COMMAND="ssh $(ssh_opts "$d")"
+    export GIT_SSH_COMMAND
+  fi
+  if [ -f "$d/header" ]; then
+    GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.extraHeader GIT_CONFIG_VALUE_0="$(cat "$d/header")"
+    export GIT_CONFIG_COUNT GIT_CONFIG_KEY_0 GIT_CONFIG_VALUE_0
+  fi
+}
+
+# key_report <private key file>: the 3-part keygen / import-key output.
+key_report() {
+  cat "$1"
+  printf 'PUBLIC %s\n' "$(ssh-keygen -y -f "$1")"
+  printf 'FINGERPRINT %s\n' "$(ssh-keygen -l -f "$1" | cut -d' ' -f2)"
+}
+
+# swap_dir <tmp dir> <target dir>: replaces a state dir by a freshly built one.
+swap_dir() {
+  chmod 700 "$1"
+  if [ -d "$2" ]; then
+    mv "$2" "$2.old.$$"
+    mv "$1" "$2"
+    rm -rf "$2.old.$$"
+  else
+    mv "$1" "$2"
+  fi
+}
+
+[ "$#" -ge 1 ] || die "missing command"
+cmd=$1; shift
+case "$cmd" in
+  put) # <rel>; file content on stdin -> /run/wh/<rel>, mode 0600, written atomically
+    [ "$#" -eq 1 ] || die "usage: put <rel>"
+    rel=$1
+    case "$rel" in *"$NL"*) die "invalid path" ;; esac
+    printf '%s' "$rel" | grep -Eqx 'conns/[0-9a-f-]{36}/(key|known_hosts|header|api_header)' \
+      || die "invalid path"
+    dir=$STATE/${rel%/*}
+    mkdir -p "$dir"; chmod 700 "$dir"
+    tmp=$(mktemp "$dir/.put.XXXXXX")
+    if ! cat > "$tmp"; then rm -f "$tmp"; die "write failed"; fi
+    chmod 600 "$tmp"
+    mv -f "$tmp" "$STATE/$rel" ;;
+
+  drop-conn) # <conn id>
+    [ "$#" -eq 1 ] || die "usage: drop-conn <id>"
+    need_id "$1"
+    rm -rf "$STATE/conns/$1" ;;
+
+  prune-conns) # live connection ids on stdin -> removes every other conns/* dir
+    live=$(cat)
+    for d in "$STATE"/conns/*; do
+      [ -d "$d" ] || continue
+      id=${d##*/}
+      printf '%s\n' "$live" | grep -qxF -- "$id" || rm -rf "$d"
+    done ;;
+
+  replace-remotes) # D4 remote records on stdin -> rebuilds remotes/
+    new=$(mktemp -d "$STATE/.remotes.XXXXXX")
+    while IFS= read -r line || [ -n "$line" ]; do
+      [ -n "$line" ] || continue
+      rid=${line%%"$TAB"*}
+      is_id "$rid" || { rm -rf "$new"; die "invalid remote record"; }
+      printf '%s\n' "$line" > "$new/$rid"
+      chmod 600 "$new/$rid"
+    done
+    swap_dir "$new" "$STATE/remotes" ;;
+
+  replace-caps) # lines "<sha256>\t<rid> <rid> ..." on stdin -> rebuilds caps/
+    new=$(mktemp -d "$STATE/.caps.XXXXXX")
+    while IFS= read -r line || [ -n "$line" ]; do
+      [ -n "$line" ] || continue
+      h=${line%%"$TAB"*}
+      ids=''
+      [ "$h" = "$line" ] || ids=${line#*"$TAB"}
+      printf '%s' "$h" | grep -Eqx '[0-9a-f]{64}' || { rm -rf "$new"; die "invalid capability line"; }
+      : > "$new/$h"
+      for rid in $ids; do
+        is_id "$rid" || { rm -rf "$new"; die "invalid capability line"; }
+        printf '%s\n' "$rid" >> "$new/$h"
+      done
+      chmod 600 "$new/$h"
+    done
+    swap_dir "$new" "$STATE/caps" ;;
+
+  prune-mirrors) # live remote ids on stdin -> removes every other /srv/git/*.git
+    live=$(cat)
+    for m in "$MIRRORS"/*.git; do
+      [ -e "$m" ] || continue
+      id=${m##*/}; id=${id%.git}
+      if ! printf '%s\n' "$live" | grep -qxF -- "$id"; then
+        rm -rf "$m" "$m.lock"
+      fi
+    done ;;
+
+  ready) touch "$STATE/ready" ;;
+  is-ready) [ -f "$STATE/ready" ] ;;
+
+  keygen) # <comment> -> private key, PUBLIC <pubkey line>, FINGERPRINT <SHA256:...>
+    [ "$#" -eq 1 ] || die "usage: keygen <comment>"
+    case "$1" in *"$NL"*) die "invalid comment" ;; esac
+    t=$(mktemp -d)
+    trap 'rm -rf "$t"' EXIT
+    ssh-keygen -q -t ed25519 -N '' -C "$1" -f "$t/k" >/dev/null
+    key_report "$t/k" ;;
+
+  import-key) # stdin: passphrase line (may be empty), then the private key -> same as keygen
+    t=$(mktemp -d)
+    trap 'rm -rf "$t"' EXIT
+    IFS= read -r pass || true
+    pass=${pass%"$(printf '\r')"}
+    cat > "$t/k"
+    chmod 600 "$t/k"
+    if ! ssh-keygen -q -p -P "$pass" -N '' -f "$t/k" >/dev/null 2>"$t/err"; then
+      # An unencrypted key with an empty passphrase needs no rewrite; anything else is an error.
+      ssh-keygen -y -P '' -f "$t/k" >/dev/null 2>&1 && [ -z "$pass" ] \
+        || { echo "the private key could not be read (wrong passphrase or not a private key)" >&2; exit 1; }
+    fi
+    key_report "$t/k" ;;
+
+  scan) # <host> <port> -> known_hosts lines, then FINGERPRINT <type> <SHA256:...> per line
+    [ "$#" -eq 2 ] || die "usage: scan <host> <port>"
+    no_opt "$1"
+    printf '%s' "$2" | grep -Eqx '[0-9]{1,5}' || die "invalid port"
+    t=$(mktemp -d)
+    trap 'rm -rf "$t"' EXIT
+    ssh-keyscan -T 15 -p "$2" -t ed25519,ecdsa,rsa "$1" 2>/dev/null | grep -v '^#' > "$t/scan" || true
+    [ -s "$t/scan" ] || { echo "no host key received from $1:$2" >&2; exit 1; }
+    cat "$t/scan"
+    while IFS= read -r line; do
+      [ -n "$line" ] || continue
+      printf '%s\n' "$line" > "$t/one"
+      ktype=$(printf '%s\n' "$line" | cut -d' ' -f2)
+      fp=$(ssh-keygen -l -f "$t/one" | cut -d' ' -f2)
+      printf 'FINGERPRINT %s %s\n' "$ktype" "$fp"
+    done < "$t/scan" ;;
+
+  ls-remote) # <conn id> <upstream url> -> git ls-remote --symref output; exit code of git
+    [ "$#" -eq 2 ] || die "usage: ls-remote <conn id> <url>"
+    need_id "$1"; no_opt "$2"
+    conn_env "$1"
+    exec git ls-remote --symref "$2" ;;
+
+  test-ssh) # <conn id> <user> <host> <port> -> ssh -T combined output, last line EXIT <code>
+    [ "$#" -eq 4 ] || die "usage: test-ssh <conn id> <user> <host> <port>"
+    need_id "$1"; no_opt "$2"; no_opt "$3"
+    printf '%s' "$4" | grep -Eqx '[0-9]{1,5}' || die "invalid port"
+    d=$STATE/conns/$1
+    [ -f "$d/key" ] || die "connection $1 has no key"
+    set +e
+    # shellcheck disable=SC2046 # ssh_opts is a fixed list of words without user data
+    ssh -T -p "$4" $(ssh_opts "$d") -o ConnectTimeout=30 "$2@$3" < /dev/null 2>&1
+    code=$?
+    set -e
+    printf 'EXIT %s\n' "$code" ;;
+
+  test-http) # <conn id> <url> -> response body, then a line HTTP <code>
+    [ "$#" -eq 2 ] || die "usage: test-http <conn id> <url>"
+    need_id "$1"
+    case "$2" in https://*|http://*) ;; *) die "invalid url" ;; esac
+    case "$2" in *"$NL"*) die "invalid url" ;; esac
+    h=$STATE/conns/$1/api_header
+    [ -f "$h" ] || die "connection $1 has no API header"
+    exec curl -sS --max-time 60 -H "@$h" -w '\nHTTP %{http_code}' "$2" ;;
+
+  sync) # <remote id>: fetch the real host into the bare mirror (CGI, on info/refs)
+    [ "$#" -eq 1 ] || die "usage: sync <remote id>"
+    read_remote "$1"
+    conn_env "$r_conn"
+    m=$MIRRORS/$1.git
+    exec 9>"$m.lock"
+    flock 9
+    [ -d "$m" ] || git init -q --bare "$m"
+    git -C "$m" config remote.upstream.url "$r_up"
+    head=$(git -C "$m" ls-remote --symref upstream HEAD | sed -n 's#^ref: refs/heads/\(.*\)\tHEAD$#\1#p')
+    git -C "$m" fetch -q --prune --no-tags upstream '+refs/heads/*:refs/heads/*' '+refs/tags/*:refs/tags/*'
+    if [ -n "$head" ]; then git -C "$m" symbolic-ref HEAD "refs/heads/$head"; fi ;;
+
+  push-upstream) # <remote id> <push args...>; cwd = the mirror (pre-receive hook)
+    [ "$#" -ge 1 ] || die "usage: push-upstream <remote id> <args...>"
+    read_remote "$1"; shift
+    conn_env "$r_conn"
+    exec git push --porcelain upstream "$@" ;;
+
+  *) die "unknown command $cmd" ;;
+esac

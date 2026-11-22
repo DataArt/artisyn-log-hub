@@ -39,6 +39,12 @@ export default defineConfig({
     // Set (e.g. to 0.0.0.0) inside the dev container so the published port reaches Vite;
     // unset on the host, where Vite keeps its default.
     host: process.env.LOG_HUB_VITE_HOST || undefined,
+    // Pre-transform the lazy-tab barrels at startup. Each one pulls a large module graph, and on a
+    // cold dev server parallel first requests for it (e2e workers) can fail with "Failed to fetch
+    // dynamically imported module".
+    warmup: {
+      clientFiles: ['./src/viewer/pages/repository/*-lazy-group.ts'],
+    },
     proxy: {
       '/api': 'http://localhost:3000',
       '/static': 'http://localhost:3000',

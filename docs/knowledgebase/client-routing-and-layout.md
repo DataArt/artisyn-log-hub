@@ -5,7 +5,7 @@ description: "React SPA routing, layout, provider hierarchy, major page componen
 tags:
   - client
   - routing
-generated: { by: "human:denistsyplakov", at: "2026-11-10T00:00:00+04:00" }
+generated: { by: "claude-code", at: "2026-11-22T00:00:00+04:00" }
 ---
 
 # Client Component Hierarchy
@@ -74,9 +74,10 @@ The client bundle is split into a small, fixed set of lazily loaded chunks, each
 placed where its code is first needed. The budget is about 8 dynamically loaded chunks and never more than 10:
 related small pages are grouped into one chunk instead of lazy-loading each file.
 
-There are 9 distinct `import()` targets: 3 route chunks (Auth, Workspace, Admin), the Help chunk, the
-repository-tabs chunk, the Reports chunk, the session-tabs chunk, and the two Bash parser chunks
-(`browser-parser` and the `web-tree-sitter` runtime it loads). A new page or tab joins an existing barrel instead of adding an
+There are 10 distinct `import()` targets: 3 route chunks (Auth, Workspace, Admin), the Help chunk, the
+repository-tabs chunk, the Reports chunk, the session-tabs chunk, and the three shell parser chunks
+(`browser-parser` for Bash, `powershell-browser-parser` for PowerShell, and the `web-tree-sitter`
+runtime both load). A new page or tab joins an existing barrel instead of adding an
 `import()`.
 
 **Route chunks** (`client/src/main.tsx`). Every route in the table above except `RepositoryView` is
@@ -105,12 +106,19 @@ into two barrels:
 The code is fetched when the first tab of a group opens; the other tabs of that group then open with no
 further request. Shared heavy dependencies (recharts and the like) are split out by Rollup on its own.
 
-**Bash parser chunk.** The Bash command view's tree-sitter parser (`web-tree-sitter` runtime ~210 KB WASM and
-the `tree-sitter-bash` grammar ~1.36 MB WASM, `client/src/viewer/lib/bash-view/browser-parser.ts`) is reached
-only through `import()` from `useBashView`, so it loads the first time a Bash call is shown (Logs modal,
-Context Growth step modal or Bash tab), never with the main bundle. The `.wasm` files are Vite `?url` assets;
-`vite.config.ts` excludes `web-tree-sitter` from `optimizeDeps`. The Bash tab's count in the tab bar needs no
-WASM (`collectBashCalls` is pure).
+**Shell parser chunks.** The shell command view's tree-sitter parsers are loaded per shell, each through its
+own `import()` from `useBashView`, never with the main bundle:
+
+| Entry | Loads | When |
+|---|---|---|
+| `client/src/viewer/lib/bash-view/browser-parser.ts` | `tree-sitter-bash` grammar ~1.36 MB WASM | the first time a Bash call is shown |
+| `client/src/viewer/lib/bash-view/powershell-browser-parser.ts` | `tree-sitter-powershell` grammar ~1.1 MB WASM (+ its `highlights.scm` as `?raw`) | the first time a PowerShell call is shown |
+| `web-tree-sitter` runtime (`bash-parser.ts` `loadTreeSitterParser`) | runtime ~210 KB WASM, `Parser.init` once per page | with the first of the two above |
+
+"Shown" means the Logs modal, the Context Growth step modal or the Shell tab; the Shell tab loads only the
+parsers of the shells its rows use, so a Bash-only session never requests `tree-sitter-powershell-<hash>.wasm`.
+The `.wasm` files are Vite `?url` assets; `vite.config.ts` excludes `web-tree-sitter` from `optimizeDeps`. The
+Shell tab's count in the tab bar needs no WASM (`collectBashCalls` is pure).
 
 **Help chunk.** `HelpModal` (with `react-markdown` and `remark-gfm`) is lazy in `MainNav.tsx`, but it is
 mounted only after `helpLoaded` flips true on the first click. `helpOpen` and `helpLoaded` are separate flags so

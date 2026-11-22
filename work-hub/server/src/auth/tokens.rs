@@ -64,7 +64,7 @@ impl Consume {
 }
 
 /// A fresh random token: 32 random bytes as 64 lowercase hex digits.
-fn new_token() -> String {
+pub(crate) fn new_token() -> String {
     let mut bytes = [0u8; 32];
     rand::fill(&mut bytes[..]);
     hex(&bytes)

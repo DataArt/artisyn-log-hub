@@ -708,9 +708,9 @@ const SESSION_TAB_ROWS: Array<Omit<ScreenRow, 'story' | 'role' | 'modes' | 'rout
     id: 'session.bash',
     query: `${SESSION_QUERY}&tab=bash`,
     tab: { group: 'session', id: 'bash' },
-    title: 'Session: Bash',
+    title: 'Session: Shell',
     expectTestId: 'session-bash-tab',
-    docRef: { file: SESSION_DOC, heading: 'Bash' },
+    docRef: { file: SESSION_DOC, heading: 'Shell' },
   },
   {
     // The charts used to be sub-tabs of one Charts tab; an old `tab=charts` link opens the chart

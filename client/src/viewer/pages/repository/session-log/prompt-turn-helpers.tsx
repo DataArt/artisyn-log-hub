@@ -64,7 +64,7 @@ export function FileBadge({ tool }: { tool: FileAccess['tool'] }) {
 }
 
 export function getOtherToolStyle(name: string): string {
-  if (name === 'Bash')
+  if (name === 'Bash' || name === 'PowerShell')
     return 'bg-amber-500/20 text-amber-700 dark:text-amber-300';
   if (name.startsWith('mcp__'))
     return 'bg-violet-500/20 text-violet-700 dark:text-violet-300';
@@ -83,6 +83,7 @@ export function formatOtherToolName(name: string): string {
 
 export const TOOL_DESCRIPTIONS: Record<string, string> = {
   Bash: 'Execute shell commands',
+  PowerShell: 'Execute PowerShell commands',
   WebFetch: 'Fetch content from a URL',
   WebSearch: 'Search the web',
   Agent: 'Spawn a sub-agent',

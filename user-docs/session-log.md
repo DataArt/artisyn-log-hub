@@ -9,10 +9,10 @@ answer one question and shows them in the row:
 
 | View | Tabs in the row | Opens on |
 |---|---|---|
-| What happened | Summary, Logs, Bash, Timeline, Agent Tree, Session Map, Change surface | Summary |
+| What happened | Summary, Logs, Shell, Timeline, Agent Tree, Session Map, Change surface | Summary |
 | Cost | Summary, Statistics, Call Tree, Context Growth, Dashboard, Advisor, OTEL | Statistics |
 | Harness & context | System context anatomy, Context Usage, Harness usage, [OKF](okf-tab.md#session-okf-tab), Info | System context anatomy |
-| Failed tool call | Tools/MCP, Logs, Bash, Tool Heatmap, OTEL | Tools/MCP |
+| Failed tool call | Tools/MCP, Logs, Shell, Tool Heatmap, OTEL | Tools/MCP |
 | All tabs | every tab | Summary |
 
 - **Cost** is the view you start with. Log Hub remembers the last view you picked, per user, in
@@ -36,7 +36,7 @@ The headings in **More ▾** group the tabs like this:
 | Heading | Tabs |
 |---|---|
 | Overview | Summary, Info, Statistics, Advisor, Session Map |
-| Transcript | Logs, Bash, Raw Logs |
+| Transcript | Logs, Shell, Raw Logs |
 | Cost & context | Dashboard, Context Growth, Context Usage, Agent Tree, Timeline, Tool Heatmap, Call Tree, System context anatomy, Harness usage, OTEL |
 | Effects | Change surface, Tools/MCP, [OKF](okf-tab.md#session-okf-tab) |
 
@@ -95,8 +95,8 @@ assistant's reply and the turn's sections: **Files**, **Skills**, **Rules**, **T
 
 Every tool call is listed once, in the section it belongs to: **Files** (Read, Edit, Write,
 MultiEdit, Glob), **Skills**, **Agents** or **Tools** (everything else). Click a row in Files,
-Skills, Agents or Tools to open the call's details: its input, its full output and, for Bash, the
-readable command view described under [Bash](#bash). Agent calls that never started a sub-agent
+Skills, Agents or Tools to open the call's details: its input, its full output and, for Bash and
+PowerShell, the readable command view described under [Shell](#shell). Agent calls that never started a sub-agent
 (for example "Concurrent subagent limit reached") are listed under Agents as compact rows. A Tools
 row starts with the call's own one-line description when the agent gave one (Bash and PowerShell
 calls usually do), followed by the rest of its input in grey.
@@ -131,32 +131,45 @@ A sub-agent is labelled by the description its parent gave it (sessions recorded
 the start of its task, else by its agent id. The same label is used in the Logs tab, the charts,
 the Call Tree and the Session Map.
 
-### Bash
+### Shell
 
-Every Bash command of the session — the main session and all its sub-agents — in the order they
-ran. The tab label shows how many there are.
+Every shell command of the session — Bash and PowerShell, from the main session and all its
+sub-agents — in the order they ran. The tab label shows how many there are (both shells together;
+the Summary card and the All views map count the same way).
 
 - **Left list:** one row per command with its number, start time, duration, status, a "changes N"
   chip when the command changed files, and a preview (the command's description, else its first
   statement). Commands run by a sub-agent carry the sub-agent's badge. Use ↑ / ↓ to move through
   the list; the selected command is kept in the page URL, so the link opens the same command.
+- **Sessions with both shells:** a filter above the list — **All**, **Bash** and **PowerShell**,
+  each with its count — and a small `bash` / `pwsh` badge on every row. The filter is kept in the
+  page URL (`&shell=bash` or `&shell=powershell`), so a reload or a copied link keeps it. Row
+  numbers stay the same under the filter. If a link names a command that the filter would hide,
+  the command wins and the filter goes back to All. A session that ran only one shell shows no
+  filter and no badges.
 - **Right pane:** the selected command, top to bottom:
   - the description, with `timeout` / background chips;
-  - **WORKING DIR** — the directory of a leading `cd`, shown relative to the repository;
+  - **WORKING DIR** — the directory of a leading `cd` (PowerShell: `Set-Location`, `cd`, `sl`,
+    `Push-Location`, …), shown relative to the repository;
   - **FILES** — what the command touched: Changes, Reads, Runs (`npm run build`, `git status`, …)
     and inline scripts (`node -e`, heredocs into an interpreter), which are only noted, never
-    analysed. Long lists are grouped by folder. This is a best-effort reading of the command, not
-    a record of what happened on disk;
-  - **COMMAND** — the command laid out as a short script: one statement per line, loop and `if`
-    bodies indented, long `&&` / `|` chains broken after the operator, long heredocs folded
-    behind a "▸ block n" toggle, with line numbers and syntax colours. **Formatted | Raw**
-    switches to the original layout, and **Copy original** copies the command exactly as Claude
-    ran it;
+    analysed. A file the command removed (`rm`, `Remove-Item`, `del`, …) is listed under Changes
+    with "(deleted)". Long lists are grouped by folder. For PowerShell the common file cmdlets
+    and their aliases are read (`Get-Content`, `Set-Content`, `Out-File`, `Copy-Item`,
+    `Move-Item`, `Select-String`, `Get-ChildItem`, …), and native programs (`git`, `npm`, `grep`)
+    the same way as in Bash. This is a best-effort reading of the command, not a record of what
+    happened on disk;
+  - **COMMAND** — the command laid out as a short script: one statement per line, loop, `if` and
+    script-block (`{ … }`, `try` / `catch`) bodies indented, long `&&` / `||` / `|` chains broken
+    after the operator, long heredocs and PowerShell here-strings (`@' … '@`) folded behind a
+    "▸ block n" toggle, with line numbers and syntax colours. **Formatted | Raw** switches to the
+    original layout, and **Copy original** copies the command exactly as Claude ran it;
   - **OUTPUT** — the command's output, scrollable, with its size and token estimate.
 - "Open sub-agent →" opens the sub-agent's own log for a sub-agent's command.
 
-Paths under the repository root are shown relative to it. Commands that cannot be parsed (and
-PowerShell commands) are shown as plain text.
+Paths under the repository root are shown relative to it. A command that cannot be parsed is shown
+as plain text. The same command view opens from the Logs tab and from a Context Growth step. The
+PowerShell part of the view is loaded only when a session has a PowerShell command.
 
 ### Charts
 

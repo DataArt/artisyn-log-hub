@@ -206,7 +206,7 @@ Rows (31): [`docs/algorithm-examples/tool-call-outcome.json`](../../algorithm-ex
 ## Where the result is visible
 
 - Session pane → Logs tab: the status badge of every tool row, the ✗ / ⊘ marks of Files and Skills
-  rows, the header of the tool-call modal, the Context Growth step modal and the Bash tab list and
+  rows, the header of the tool-call modal, the Context Growth step modal and the Shell tab list and
   details ("✗ error", "⊘ rejected", "⏸ interrupted", "output not captured").
 - Session pane → Statistics tab: tool failure counts and rates (rejected and missing calls are not
   failures).
