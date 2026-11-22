@@ -1,6 +1,6 @@
 #!/usr/bin/env node
-// Copies the two tree-sitter WASM files the server's Bash analysis loads (OKF access extraction,
-// server/src/logs/okf/server-bash-parser.ts) to <target>/wasm (default dist/wasm), next to the ncc
+// Copies the tree-sitter WASM files the server's shell analysis loads (runtime + Bash and
+// PowerShell grammars; OKF access extraction, server/src/logs/okf/server-bash-parser.ts) to <target>/wasm (default dist/wasm), next to the ncc
 // bundle. The target is a parameter so the isolated scenario stand
 // (scripts/scenarios/build-stand.mjs) can place them next to its own bundle; the Dockerfile's
 // server-build stage does the same copy with `cp`.
@@ -14,9 +14,10 @@ const DEFAULT_TARGET = path.join(__dirname, '../dist');
 const WASM_FILES = [
   'web-tree-sitter/web-tree-sitter.wasm',
   'tree-sitter-bash/tree-sitter-bash.wasm',
+  'tree-sitter-powershell/tree-sitter-powershell.wasm',
 ];
 
-/** Copies both `.wasm` files into `<targetDir>/wasm`, skipping a file locked by a running server. */
+/** Copies every `.wasm` file into `<targetDir>/wasm`, skipping a file locked by a running server. */
 function copyWasm(targetDir = DEFAULT_TARGET) {
   const outDir = path.join(path.resolve(targetDir), 'wasm');
   fs.mkdirSync(outDir, { recursive: true });

@@ -1,0 +1,34 @@
+#!/bin/sh
+# Push policy + push-through: the push reaches the real host before the mirror accepts it.
+set -u
+. "/run/wh/remotes/$WH_REMOTE_ID"
+zero=0000000000000000000000000000000000000000
+default=$(git symbolic-ref --short HEAD 2>/dev/null || echo main)
+set --
+while read -r old new ref; do
+  case "$ref" in
+    refs/heads/*|refs/tags/*) ;;
+    *) echo "Work Hub push policy: only branches and tags can be pushed ($ref)"; exit 1 ;;
+  esac
+  if [ "$ref" = "refs/heads/$default" ]; then
+    if [ "$new" = "$zero" ]; then
+      echo "Work Hub push policy: deleting the default branch $default is not allowed"; exit 1
+    fi
+    if [ "$old" != "$zero" ] && ! git merge-base --is-ancestor "$old" "$new"; then
+      echo "Work Hub push policy: force push to the default branch $default is not allowed"; exit 1
+    fi
+  elif [ "${ONLY_WS:-0}" = 1 ]; then
+    case "$ref" in
+      refs/heads/ws/*) ;;
+      *) echo "Work Hub push policy: only ws/* branches may be pushed ($ref)"; exit 1 ;;
+    esac
+  fi
+  if [ "$old" = "$zero" ]; then lease="--force-with-lease=$ref:"; else lease="--force-with-lease=$ref:$old"; fi
+  if [ "$new" = "$zero" ]; then spec=":$ref"; else spec="$new:$ref"; fi
+  set -- "$@" "$lease" "$spec"
+done
+if ! out=$(/usr/local/bin/wh-git-ctl push-upstream "$WH_REMOTE_ID" "$@" 2>&1); then
+  echo "Work Hub: the git host rejected the push:"
+  printf '%s\n' "$out" | grep -E '^(!|error|remote:|fatal)' | head -n 10
+  exit 1
+fi

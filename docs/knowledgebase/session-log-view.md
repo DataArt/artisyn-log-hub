@@ -1,11 +1,11 @@
 ---
 type: "Architecture Guide"
 title: "Session Log View"
-description: "Session log view (Logs tab): the /logs payload contract (agent- prefix rules, descendant loading, client-only types), the Workflow tool lifecycle in transcripts, log parser, tool-call core (sections, status, permission attribution), the shared tool view, Context Growth steps, the Bash tab, text extraction, and MCP handling."
+description: "Session log view (Logs tab): the /logs payload contract (agent- prefix rules, descendant loading, client-only types), the Workflow tool lifecycle in transcripts, log parser, tool-call core (sections, status, permission attribution), the shared tool view, Context Growth steps, the Shell tab (Bash and PowerShell calls), text extraction, and MCP handling."
 tags:
   - client
   - logs
-generated: { by: "human:denistsyplakov", at: "2026-11-09T00:00:00+04:00" }
+generated: { by: "claude-code", at: "2026-11-22T00:00:00+04:00" }
 ---
 
 # Session Log View
@@ -30,11 +30,11 @@ Key files live in `client/src/viewer/pages/repository/session-log/`:
 | `PromptTurnItem.tsx` | Single turn row (header + metrics + skills + rules + tools + files + images + agent activations + sub-agents + workflows); clicking a tool, file, skill or orphan Agent-call row opens `ToolCallDetailModal` |
 | `tool-calls.ts` | Tool-call core: `TOOL_SECTION` / `toolSection`, `FILE_TOOL_NAMES`, `buildToolResultIndex`, `extractRawToolCalls`, `buildAllToolCalls`, `extractPermissionEvents`, `attributePermissionEvents`, `deepEqual` / `deepSubset` — see [Tool calls](#tool-calls-tool-callsts-tool-outcomets) and `algorithms/tool-call-sections.md` |
 | `tool-outcome.ts` | `classifyToolOutcome` / `outcomeToStatus` / `REJECTION_MARKERS` — shared by the parser and the Statistics walker; see `algorithms/tool-call-outcome.md` |
-| `tool-call-view/` | The shared tool view (`ToolCallView`, `ToolViewProvider` / `useToolView`, `StatusBadge` / `StatusMark`, `ToolOutputBlock`, `BashCommandView`, `tool-bodies.tsx`, `useBashView`) used by the Logs modal, `SubAgentDetail`, the Context Growth step modal and the Bash tab |
+| `tool-call-view/` | The shared tool view (`ToolCallView`, `ToolViewProvider` / `useToolView`, `StatusBadge` / `StatusMark`, `ToolOutputBlock`, `BashCommandView`, `tool-bodies.tsx`, `useBashView`) used by the Logs modal, `SubAgentDetail`, the Context Growth step modal and the Shell tab |
 | `ToolCallDetailModal.tsx` | Modal shell for one tool call: `Dialog` + `ToolCallView` (header with badges, a body per tool, the output block) |
 | `prompt-turn-helpers.tsx` | Extracted helper components: `ToolCallRow`, `FileRow` (status mark, clickable when it has a call), `ImageRow`, `SectionHeader`, summary builders |
 | `session-map/` | The Session Map tab (`session-map`): its own delta poll (`GET …/logs/delta`), merge, `parseSessionLogs` + map model, cards, side panel and timeline — see [Session Map Tab](session-map.md) |
-| `bash-tab/` | The session Bash tab: `collectBashCalls`, `SessionBashTab`, `BashCallList`, `useBashCallParam` — see [Bash tab](#bash-tab) |
+| `bash-tab/` | The session Shell tab (id `bash`): `collectBashCalls`, `SessionBashTab`, `BashCallList`, `useBashCallParam`, `useShellFilterParam` — see [Shell tab](#shell-tab) |
 | `SubAgentNode.tsx` | Collapsible sub-agent node for the turn-level Sub-agents section (supports arbitrary nesting depth); trigger + `children` recursion, the body is `SubAgentDetail` |
 | `SubAgentDetail.tsx` | Sub-agent detail body of `SubAgentNode` — prompt (200-char collapse), model, tokens + cost tooltip, duration, Skills, Rules, Tools (`ToolCallDetailModal`), Files |
 | `WorkflowNode.tsx` | Collapsible workflow run node; shows name pill + status badge + duration; expands to show args (captioned "Args"), stats strip, summary, the "Agents (N)" table (`WorkflowAgentsTable`, not collapsible), and findings |
@@ -411,7 +411,7 @@ permission event belongs to. Nothing else in the client hard-codes tool names fo
   isBinary, isError, timestamp, interrupted, bytes, uuid, denialKind}`; the first result for an id
   wins. `denialKind` is the result line's top-level `toolDenialKind` (`user-rejected`,
   `permission-rule`, `automode-blocked`, `interrupted`). It replaced four per-call linear scans
-  and is also used by the Bash tab.
+  and is also used by the Shell tab.
 - **Status** (`outcomeToStatus` over `classifyToolOutcome`): no result → `'missing'` ("output not
   captured"); `interrupted`, a `denialKind`, or a rejection marker on an `is_error` result →
   `'rejected'` ("⊘ rejected", "⏸ interrupted" when `interrupted`, tooltip from `denialKind`);
@@ -489,24 +489,37 @@ numbers until re-ingest or `recompute-all-sessions`. Re-capture with the PoC
 ### Shared tool view (`tool-call-view/`)
 
 - **`ToolViewProvider`** is mounted by `SessionDetailPane` around the whole tab content, so every
-  tool view of every tab (Logs, all three `ContextGrowthChart` mounts, Bash) gets
+  tool view of every tab (Logs, all three `ContextGrowthChart` mounts, Shell) gets
   `{repoRoot, openSubAgent}`. It owns one `WorkflowAgentModal` that `openSubAgent(agentId,
   label?)` opens with the agent's transcript from `subagentLogsMap` (a no-op without one).
   Outside a provider `useToolView()` returns `{repoRoot: ''}`.
 - **`ToolCallView`** `{call, charsPerToken, turnFiles?, subAgents?, defaultOpen?}`: header =
   tool badge, `StatusBadge` (status and permission badges), `≈N tok`, and `⏱` duration for
-  Bash. Body by tool: `Bash` → `BashCommandView`; `PowerShell` → `BashCommandView` with
-  `forceFallback`; section `'file'` → `FileToolBody` (repo-relative path, range, size from
+  Bash / PowerShell. Body by tool: any name with `shellOfTool(name) !== null` (`Bash` → `'bash'`,
+  `PowerShell` → `'powershell'`, `@loghub/bash-view` `shell.ts`) → `BashCommandView` with that
+  `shell` — PowerShell calls get the same formatted view as Bash, there is no `forceFallback`
+  any more; section `'file'` → `FileToolBody` (repo-relative path, range, size from
   `turnFiles`, input JSON, "File content is not stored" for Read); `Agent` → `AgentToolBody`
   (description, prompt, "Open sub-agent →"); anything else → `GenericToolBody` (JSON). Output
   always goes through `ToolOutputBlock` (`TRUNCATE_AT` = 20 000 chars, show all / less, copy of
   the full output, `N lines · X KB · ≈Yk tok`).
 - **`BashCommandView`**: caption (`description`, `timeout` / background chips) → WORKING DIR →
   FILES (`BashFileSummary`) → COMMAND (Formatted | Raw toggle, "N lines (was M)", "⧉ Copy
-  original" = `input.command`, `HighlightedScript` with line numbers, heredoc folds and a colour
-  legend) → OUTPUT. `useBashView` lazy-loads the tree-sitter parser (`lib/bash-view/`,
-  `import()` + WASM `?url` assets, never in the main bundle) and shows the raw text while loading
-  and for unparseable / PowerShell commands. Rules and examples: `algorithms/bash-command-view.md`.
+  original" = `input.command` — for PowerShell the `stripLhWrap` text, i.e. without a defensive
+  `__lhWrap` wrapper prefix —, `HighlightedScript` with line numbers, heredoc / here-string folds
+  and a colour legend) → OUTPUT. FILES lists removed paths (`files.deleted`: Bash `rm` / `rmdir`,
+  PowerShell `Remove-Item` and its aliases) in Changes with a muted `(deleted)` suffix.
+  `useBashView(command, shell)` builds with `buildShellView` and highlights with `highlightBash` /
+  `highlightPowerShell`; `useBashViews(rows)` loads only the parsers of the shells present in the
+  rows.
+- **Per-shell WASM loading:** each shell has its own browser entry, reachable only through
+  `import()` — `lib/bash-view/browser-parser.ts` (`getBrowserBashParser`, `HIGHLIGHT_QUERY`) and
+  `lib/bash-view/powershell-browser-parser.ts` (`getBrowserPowerShellParser`,
+  `PS_HIGHLIGHT_QUERY`); both call `loadTreeSitterParser(key, assets)` in `bash-parser.ts` (one
+  cached promise per shell, a failure is not cached, `Parser.init` once per page). So a Bash-only
+  session never requests `tree-sitter-powershell-<hash>.wasm` (~1.1 MB), and neither grammar is in
+  the main bundle. The raw text shows while loading and when a command cannot be parsed. Rules and
+  examples: `algorithms/bash-command-view.md` and `algorithms/powershell-command-view.md`.
 
 ---
 
@@ -779,32 +792,47 @@ dashboard and the Summary tab's extended details) composes `TurnBreakdownDialog`
 
 ---
 
-## Bash tab
+## Shell tab
 
-Session tab `bash` (after Logs, always shown; label `Bash` plus a muted count). Files in
-`session-log/bash-tab/`; the tab bar is `SessionTabBar.tsx`.
+Session tab `bash` (after Logs, always shown; label `Shell` plus a muted count; the id, the
+`bashCall` URL param and the `bash-*` test ids keep their old names). It lists every shell command
+of the session tree — Bash and PowerShell calls together. Tooltip: "Bash / PowerShell — every
+shell command the session tree ran, with exit status."; search synonyms include `bash`,
+`powershell`, `pwsh`. Files in `session-log/bash-tab/`; the tab bar is `SessionTabBar.tsx`.
 
 - **Collection** (`collectBashCalls(mainLogs, subagentLogsMap)`): per log — the main transcript,
   then each sub-agent's — `buildAllToolCalls(extractRawToolCalls(events, {skipSidechain}),
   buildToolResultIndex(events))`, where `skipSidechain` is true only for the main transcript (every
   line of a sub-agent transcript is `isSidechain: true`, as in the parser and the server), with the same per-log permission attribution as Logs, filtered to
-  `name === 'Bash'`. Rows are deduped by id, stably sorted by `startedAt` (missing last) and
-  numbered `n` after sorting. Sub-agent rows carry `agentId` and `agentLabel` (`Agent · <type>`
+  `shellOfTool(name) !== null` (`Bash` and `PowerShell`); each row carries `shell: ShellKind`
+  (`'bash' | 'powershell'`). Rows are deduped by id, stably sorted by `startedAt` (missing last) and
+  numbered `n` after sorting, across both shells. Sub-agent rows carry `agentId` and `agentLabel` (`Agent · <type>`
   from `collectAgentTypes` / `collectSpawnedAgentTypes` in `harness-session-tree.ts`, else
   `Agent <8 chars>`). Pure and WASM-free: `SessionDetailPane` memoises the length for the tab
-  count.
+  count, so the tab count, the Summary card and the map nav tree count both shells.
 - **UI** (`SessionBashTab`, `data-testid="session-bash-tab"`, lazy-loaded): a 340 px `listbox`
-  (`BashCallList`, rows `bash-call-row` with `data-call-id`) — `#n`, time, duration, status mark,
-  "changes N", a preview (`description`, else the first formatted statement, else the first raw
-  line) and a sub-agent badge; ↑ / ↓ move the selection. `useBashViews(rows)` loads the parser
-  once; until then there are no chips and previews are raw. The right pane shows the sub-agent
-  badge, "Open sub-agent →" (`openSubAgent`) and `ToolCallView`. Empty state: "No Bash commands
-  in this session". The list sits beside the details only when the tab is at least 42rem wide
+  (`BashCallList`, `aria-label="Shell commands"`, rows `bash-call-row` with `data-call-id` and
+  `data-shell`) — `#n`, time, duration, status mark, "changes N", a preview (`description`, else
+  the first formatted statement, else the first raw line) and a sub-agent badge; ↑ / ↓ move the
+  selection. `useBashViews(rows)` loads each present shell's parser once (a Bash-only session never
+  loads the PowerShell grammar); until then there are no chips and previews are raw. The right pane
+  shows the sub-agent badge, "Open sub-agent →" (`openSubAgent`) and `ToolCallView`. Empty state:
+  "No shell commands in this session".
+- **Mixed sessions** (both shells have calls): a filter row above the list — chips `All <n>` /
+  `Bash <n>` / `PowerShell <n>` (`data-testid="shell-filter-<all|bash|powershell>"`, counts over
+  the whole session) — and a `bash` / `pwsh` badge (`data-testid="shell-badge"`) on every row,
+  after the sub-agent badge and before the preview. A single-shell session shows neither. Row
+  numbers `n` never change under the filter. The list sits beside the details only when the tab is at least 42rem wide
   (container query `@container/bash` + `@2xl/bash:`); below that, e.g. at 1024 px with the sidebar
   and the session list open, it stacks above them at up to 40 % of the height.
 - **URL:** the selected call is the `bashCall` search param (`useBashCallParam`,
-  `setSearchParams(next, {replace: true})`); a missing or unknown id selects row 1 without
-  rewriting the URL.
+  `setSearchParams(next, {replace: true})`); a missing or unknown id selects the first visible row
+  without rewriting the URL. The filter is the `shell` search param (`useShellFilterParam`, values
+  `bash` | `powershell`, same `replace: true` pattern; it can rewrite `bashCall` in the same
+  update). An unknown value, or a filter on a single-shell session, reads as All. Precedence on
+  load: when `bashCall` names a row that `shell` would hide, `shell` is dropped from the URL and
+  that row stays selected. Picking a filter that hides the selected row selects the first visible
+  row and rewrites `bashCall`.
 
 ---
 

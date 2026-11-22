@@ -1329,7 +1329,7 @@ function buildStatements(): WorldStatement[] {
   // chunk 13); every other session predates the snapshot feature and stays NULL.
   // agent_description / workflow_phase (sub-agent .meta.json labels): only s03 carries them.
   // okf_extract_version (2026-11-03 OKF value signals, DD-11): only the OKF tree s02 -> s03 was
-  // extracted by the current extractor (4, OKF v0.3 pointer resolution); every other session
+  // extracted by the current extractor (5, PowerShell calls); every other session
   // is "no OKF analysis yet".
   const S = WORLD_V1.sessions;
   out.push(
@@ -1370,7 +1370,7 @@ function buildStatements(): WorldStatement[] {
           WORLD_V1.okfSnapshotId,
           null,
           null,
-          4,
+          5,
         ],
         [
           S.s03.id,
@@ -1382,7 +1382,7 @@ function buildStatements(): WorldStatement[] {
           null,
           'contract-desc',
           'Implement',
-          4,
+          5,
         ],
         [
           S.s04.id,

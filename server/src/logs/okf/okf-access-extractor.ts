@@ -4,27 +4,28 @@
  * Walks one `claude` / `claude-subagent` transcript (one tree node) and turns its tool calls into
  * `session_okf_access` rows: which repo paths the node read, searched, listed or wrote, how many
  * result bytes each got and in which order it first touched them. Pure: no DB, no filesystem; the
- * Bash parser is handed in (`getServerBashParser()`), and a `null` parser skips Bash calls only.
+ * shell parsers are handed in (`getServerShellParsers()`), and a `null` parser skips that shell's
+ * calls only (Bash or PowerShell).
  *
  * Rules (pinned by `docs/knowledgebase/algorithms/okf-access-extraction.md`):
  * - Bytes = UTF-8 bytes of the call's `tool_result` text (string content, or the concatenated
  *   `text` blocks; images count 0) — DD-1.
  * - Op per tool (DD-3): Read → `read` (file); Edit / MultiEdit / Write / NotebookEdit → `write`
  *   (bytes 0); Grep → `grep` (file when its `path` names a file, else the folder, cwd when absent);
- *   Glob → `list` (folder = `path` or cwd plus the static prefix of `pattern`); Bash → its
- *   `analyzeBash` `readAccess` kinds plus `write` for `changes`.
+ *   Glob → `list` (folder = `path` or cwd plus the static prefix of `pattern`); Bash and
+ *   PowerShell → their `analyzeShellCommand` `readAccess` kinds plus `write` for `changes`.
  * - A call's bytes are split over its resolved read/grep/list paths in proportion to each file's
  *   size in `options.snapshotFiles` (`Math.floor` per path, the remainder to the first); when
  *   there is no snapshot map, a target has no known size (folders never have one) or the sizes
  *   sum to 0, the split is even, the remainder to the first (DD-2, value-view DD-7). Every path
  *   gets `calls += 1`; write paths get 0 bytes.
- * - Ranges (value-view DD-3/DD-4): a Read with `offset` / `limit`, or a Bash read with a known
+ * - Ranges (value-view DD-3/DD-4): a Read with `offset` / `limit`, or a shell read with a known
  *   `range` (`sed -n 'a,bp'`, `head -n N`, `tail -n N`), is a ranged read; its row gets
  *   `rangedCalls += 1` and `rangedBytes += <its bytes>`, both also counted in `calls` / `bytes`.
  * - Search hits (value-view DD-6): a `grep` / `list` access whose call result is not an error
  *   and, trimmed, is neither empty nor `No files found` / `No matches found` adds 1 to the row's
  *   `searchHits`.
- * - A Bash `list` of a path with an extension (`ls a.md`) yields no access at all (FR-8).
+ * - A shell `list` of a path with an extension (`ls a.md`) yields no access at all (FR-8).
  * - Paths resolve to repo-relative keys through `resolveRepoPath` (DD-5, DD-6); a path outside
  *   every root, or any path when the node has no root, yields nothing. File rows are kept only for
  *   `.md` files; folder rows (`<rel>/`, repo root `/`) for any folder (DD-3, DD-4).
@@ -58,7 +59,7 @@
  *   like events), with range, pattern and the new pointers of a single-article KB read, and `hit`
  *   (the DD-6 search-hit test of the call's result) on search items; uncapped.
  */
-import { analyzeBash, type BashParser } from '@loghub/bash-view';
+import { analyzeShellCommand, type ShellParsers } from '@loghub/bash-view';
 import {
   collapseRepoRelative,
   resolveRepoPath,
@@ -281,7 +282,7 @@ function accessesOfCall(
   input: AnyRecord,
   cwd: string | null,
   roots: readonly string[],
-  parser: BashParser | null,
+  parsers: ShellParsers,
 ): CallAccess[] {
   const resolve = (
     p: string | null,
@@ -361,16 +362,12 @@ function accessesOfCall(
       const prefix = globStaticPrefix(pattern);
       return folder(resolve(prefix, base, cwd), 'list');
     }
-    case 'Bash': {
-      if (parser === null) return [];
+    case 'Bash':
+    case 'PowerShell': {
       const command = asString(input['command']);
-      if (command === null || command.trim() === '') return [];
-      let analysis: ReturnType<typeof analyzeBash>;
-      try {
-        analysis = analyzeBash(parser, command);
-      } catch {
-        return [];
-      }
+      if (command === null) return [];
+      const analysis = analyzeShellCommand(parsers, name, command);
+      if (analysis === null) return [];
       const out: CallAccess[] = [];
       for (const access of analysis.readAccess) {
         const named = !access.path.endsWith('/') && hasExtension(access.path);
@@ -614,12 +611,13 @@ interface PendingPointer {
  * code events, the pointer rows of its KB reads and the ordered access sequence.
  *
  * `roots` are the session's candidate repo roots (as `writeSessionFileStats` receives them);
- * with none, nothing is extracted (FR-2). `parser` `null` skips Bash calls only (DD-10).
+ * with none, nothing is extracted (FR-2). A `null` parser in `parsers` skips that shell's calls
+ * only (DD-10, DD-16).
  */
 export function extractOkfDetail(
   entries: readonly object[],
   roots: readonly (string | null | undefined)[],
-  parser: BashParser | null,
+  parsers: ShellParsers,
   options: ExtractOkfAccessOptions = {},
 ): OkfDetail {
   const usableRoots = roots.filter(
@@ -706,7 +704,7 @@ export function extractOkfDetail(
       if (name === null || input === null) continue;
 
       const accesses = dedupeWithinCall(
-        accessesOfCall(name, input, cwd, usableRoots, parser),
+        accessesOfCall(name, input, cwd, usableRoots, parsers),
       );
       if (accesses.length === 0) continue;
 
@@ -945,8 +943,8 @@ export function extractOkfDetail(
 export function extractOkfAccess(
   entries: readonly object[],
   roots: readonly (string | null | undefined)[],
-  parser: BashParser | null,
+  parsers: ShellParsers,
   options: ExtractOkfAccessOptions = {},
 ): OkfAccessRow[] {
-  return extractOkfDetail(entries, roots, parser, options).access;
+  return extractOkfDetail(entries, roots, parsers, options).access;
 }

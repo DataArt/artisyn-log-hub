@@ -6,7 +6,7 @@ tags:
   - metrics
   - sub-agents
   - aggregation
-generated: { by: "human:denistsyplakov", at: "2026-11-21T12:45:00+04:00" }
+generated: { by: "claude-code", at: "2026-11-22T00:00:00+04:00" }
 ---
 
 # Session Metric Scope (root vs tree)
@@ -297,6 +297,17 @@ the post-rollup world.
   Claude Code 2.1.330's change on self-hosted runners (Bash skips the file diff unless something
   needs it, and the managed setting `bashEditDiffEnabled: true` brings every diff back) has no
   effect on Log Hub's numbers, and the file-change views do not depend on a Bash diff.
+- **Commits and PRs count Bash and PowerShell calls.** `session_stats.commit_count` / `pr_count`
+  (server: `shellInvocationsOf` / `countShellInvocations` in `claude-extractor.ts` over
+  `countCommits` / `countPullRequests` in `tool-stats.ts`) and the session Usage tab's Commits /
+  Pull requests (client twin in `usage/session-usage-derive.ts`) count every `tool_use` whose
+  `shellOfTool(name)` is set — `Bash` or `PowerShell` — passing that shell. Bash keeps its original
+  start anchor, so Bash figures did not change; PowerShell uses its own anchor (also after `{` /
+  `(`, an optional `&` call operator, quotes and `git.exe` / `gh.exe`), see
+  [twins-and-cross-cutting-rules.md](twins-and-cross-cutting-rules.md). Like every additive figure
+  they roll up over the tree (`SUM`). Sessions stored before 2026-11-22 with PowerShell calls get
+  corrected counts from the background shell-figures backfill
+  ([okf-usage.md](okf-usage.md) § "Shell-figures backfill"), not at read time.
 - **A new-file `Write` counts as covered.** `countPatchLines` (`tool-stats.ts`) treats a `Write`
   result with `type === 'create'` as `+<content lines> / −0`: a new file's `structuredPatch` is
   always empty (measured: all 215 `create` results), but with no prior content its diff is exactly

@@ -1,0 +1,11 @@
+#!/bin/sh
+# Probe: how does a git client show each way of returning an error message?
+case "${PATH_INFO:-}" in
+  /401/*) printf 'Status: 401 Unauthorized\r\nWWW-Authenticate: Basic realm="x"\r\nContent-Type: text/plain\r\n\r\nMSG-401 readable text\n' ;;
+  /403/*) printf 'Status: 403 Forbidden\r\nContent-Type: text/plain\r\n\r\nMSG-403 readable text\n' ;;
+  /err/*)
+    head='# service=git-upload-pack'; msg='ERR MSG-ERR readable text'
+    printf 'Content-Type: application/x-git-upload-pack-advertisement\r\n\r\n'
+    printf '%04x%s\n0000' $((${#head} + 5)) "$head"
+    printf '%04x%s\n' $((${#msg} + 5)) "$msg" ;;
+esac

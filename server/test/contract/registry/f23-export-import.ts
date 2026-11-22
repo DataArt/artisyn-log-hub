@@ -285,7 +285,7 @@ export const f23ExportImport: ContractFamily = {
               FROM session_stats WHERE session_id = @s01.id)`,
           `(SELECT input_tokens = 500000 AND cache_write_1h_tokens = 50000
               FROM session_stats WHERE session_id = @s02.id)`,
-          `(SELECT okf_extract_version = 4 FROM sessions WHERE id = @s01.id)`,
+          `(SELECT okf_extract_version = 5 FROM sessions WHERE id = @s01.id)`,
         ],
       },
     },

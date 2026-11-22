@@ -1,0 +1,48 @@
+#!/bin/sh
+# Control commands. The WH server runs them with `docker exec` (no network channel to the
+# server); the CGI and the pre-receive hook run sync / push-upstream.
+set -eu
+STATE=/run/wh
+export HOME=$STATE/home
+
+# Credential environment of connection $1 for any git call to the real host.
+conn_env() {
+  d=$STATE/conns/$1
+  if [ -f "$d/key" ]; then
+    export GIT_SSH_COMMAND="ssh -i $d/key -o IdentitiesOnly=yes -o UserKnownHostsFile=$d/known_hosts -o StrictHostKeyChecking=yes -o BatchMode=yes"
+  fi
+  if [ -f "$d/header" ]; then
+    export GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=http.extraHeader GIT_CONFIG_VALUE_0="$(cat "$d/header")"
+  fi
+  export GIT_TERMINAL_PROMPT=0
+}
+
+cmd=$1; shift
+case "$cmd" in
+  keygen) # <comment> -> private key, then public key on stdout
+    t=$(mktemp -d); ssh-keygen -q -t ed25519 -N '' -C "$1" -f "$t/k"
+    cat "$t/k"; cat "$t/k.pub"; rm -rf "$t" ;;
+  strip-passphrase) # <passphrase>; private key on stdin -> unencrypted key + public key on stdout
+    t=$(mktemp -d); cat > "$t/k"; chmod 600 "$t/k"
+    ssh-keygen -q -p -P "$1" -N '' -f "$t/k" >/dev/null
+    cat "$t/k"; ssh-keygen -y -f "$t/k"; rm -rf "$t" ;;
+  scan) # <host> [port] -> known_hosts lines + fingerprints
+    ssh-keyscan -p "${2:-22}" -t ed25519 "$1" 2>/dev/null > "$STATE/home/scan"
+    cat "$STATE/home/scan"; ssh-keygen -lf "$STATE/home/scan" ;;
+  ls-remote) # <conn> <url>
+    conn_env "$1"; git ls-remote --symref "$2" ;;
+  sync) # <remote id>
+    . "$STATE/remotes/$1"; conn_env "$CONN"
+    m=/srv/git/$1.git
+    exec 9>"$m.lock"; flock 9
+    [ -d "$m" ] || git init -q --bare "$m"
+    git -C "$m" config remote.upstream.url "$UPSTREAM"
+    head=$(git -C "$m" ls-remote --symref upstream HEAD | sed -n 's#^ref: refs/heads/\(.*\)\tHEAD$#\1#p')
+    git -C "$m" fetch -q --prune --no-tags upstream '+refs/heads/*:refs/heads/*' '+refs/tags/*:refs/tags/*'
+    [ -n "$head" ] && git -C "$m" symbolic-ref HEAD "refs/heads/$head"
+    true ;;
+  push-upstream) # <remote id> <push args...>; cwd = the mirror
+    . "$STATE/remotes/$1"; shift; conn_env "$CONN"
+    git push --porcelain upstream "$@" ;;
+  *) echo "unknown command $cmd" >&2; exit 2 ;;
+esac

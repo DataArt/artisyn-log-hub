@@ -53,3 +53,4 @@ Folders are named `<YYYY-MM-DD>-<slug>` (the day the task was created).
 - [2026-11-19-export-import-staging-mount] Mount the Export/Import Staging Dir in the Release Compose — archived 2026-11-20
 - [2026-11-19-okf-v03-support] OKF Tab Support for v0.3 and Any-Version Bundles — archived 2026-11-21
 - [2026-11-13-session-cost-diagnosis] Session Cost Diagnosis Report ("Why Was This Session Expensive") — not implemented, merged into 2026-11-02-session-antipatterns — archived 2026-11-21
+- [2026-11-22-bash-tab-powershell] Shell Tab: PowerShell Calls Next to Bash, Fully Formatted — archived 2026-11-22

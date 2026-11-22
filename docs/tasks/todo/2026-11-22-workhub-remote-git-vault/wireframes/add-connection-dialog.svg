@@ -1,0 +1,140 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1320" height="800" viewBox="0 0 1320 800" font-family="Segoe UI, -apple-system, Roboto, sans-serif">
+  <style>
+    .t { fill:#0a0a0b; font-size:14px; }
+    .m { fill:#71717a; font-size:13px; }
+    .s { fill:#71717a; font-size:12px; }
+    .b { font-weight:600; }
+    .h { fill:#0a0a0b; font-size:18px; font-weight:500; }
+    .cap { fill:#3352cc; font-size:13px; font-weight:600; }
+    .note { fill:#1e40af; font-size:12px; font-style:italic; }
+    .mono { fill:#0a0a0b; font-size:11px; font-family:Consolas, monospace; }
+  </style>
+  <rect width="1320" height="800" fill="#ffffff"/>
+  <text x="20" y="30" fill="#0a0a0b" font-size="16" font-weight="600">Add connection dialog (opened from Connections → "＋ Add connection"): SSH key first, PAT as the alternative</text>
+
+  <!-- ============ State 1: provider + SSH key ============ -->
+  <text x="20" y="66" class="cap">1 · Provider and SSH key (default method)</text>
+  <rect x="20" y="78" width="420" height="660" rx="10" fill="#fff" stroke="#e4e4e7"/>
+  <text x="44" y="114" class="h">Add connection</text>
+  <text x="44" y="136" class="m">Work Hub keeps the key; containers never get it.</text>
+  <text x="414" y="112" class="m">✕</text>
+
+  <text x="44" y="170" class="t b">Provider</text>
+  <rect x="44" y="182" width="118" height="64" rx="8" fill="#fff" stroke="#e4e4e7"/>
+  <rect x="88" y="192" width="28" height="24" rx="5" fill="#0a0a0b"/><text x="94" y="209" fill="#fff" font-size="11" font-weight="700">GH</text>
+  <text x="103" y="236" class="t" text-anchor="middle">GitHub</text>
+  <rect x="172" y="182" width="118" height="64" rx="8" fill="#eff6ff" stroke="#3352cc" stroke-width="2"/>
+  <rect x="216" y="192" width="28" height="24" rx="5" fill="#e24329"/><text x="222" y="209" fill="#fff" font-size="11" font-weight="700">GL</text>
+  <text x="231" y="236" class="t b" text-anchor="middle">GitLab</text>
+  <rect x="300" y="182" width="118" height="64" rx="8" fill="#fff" stroke="#e4e4e7"/>
+  <rect x="345" y="192" width="28" height="24" rx="5" fill="#0078d4"/><text x="350" y="209" fill="#fff" font-size="11" font-weight="700">AZ</text>
+  <text x="359" y="236" class="t" text-anchor="middle">Azure DevOps</text>
+  <rect x="44" y="254" width="374" height="34" rx="8" fill="#fff" stroke="#e4e4e7"/>
+  <text x="60" y="276" class="t">Other git server</text>
+
+  <text x="44" y="320" class="t b">Server</text>
+  <circle cx="52" cy="340" r="6" fill="#fff" stroke="#a1a1aa"/><text x="66" y="345" class="t">gitlab.com</text>
+  <circle cx="160" cy="340" r="6" fill="#fff" stroke="#3352cc" stroke-width="2"/><circle cx="160" cy="340" r="3" fill="#3352cc"/><text x="174" y="345" class="t">Self-managed</text>
+  <rect x="44" y="356" width="374" height="36" rx="6" fill="#fff" stroke="#e4e4e7"/>
+  <text x="56" y="379" class="t">https://gitlab.corp.example</text>
+
+  <text x="44" y="424" class="t b">Name</text>
+  <rect x="44" y="434" width="374" height="36" rx="6" fill="#fff" stroke="#e4e4e7"/>
+  <text x="56" y="457" class="t">gitlab-corp</text>
+
+  <text x="44" y="502" class="t b">Auth method</text>
+  <rect x="44" y="512" width="374" height="36" rx="6" fill="#f4f4f5" stroke="#e4e4e7"/>
+  <rect x="47" y="515" width="184" height="30" rx="5" fill="#fff" stroke="#e4e4e7"/>
+  <text x="139" y="535" class="t b" text-anchor="middle">SSH key</text>
+  <text x="324" y="535" class="m" text-anchor="middle">Access token (PAT)</text>
+
+  <rect x="44" y="562" width="374" height="58" rx="8" fill="#eff6ff" stroke="#3352cc" stroke-width="2"/>
+  <circle cx="62" cy="582" r="6" fill="#fff" stroke="#3352cc" stroke-width="2"/><circle cx="62" cy="582" r="3" fill="#3352cc"/>
+  <text x="76" y="587" class="t b">Generate a key in Work Hub</text>
+  <rect x="290" y="572" width="112" height="20" rx="10" fill="#f0fdf4" stroke="#bbf7d0"/><text x="346" y="586" fill="#166534" font-size="11" text-anchor="middle">★ Recommended</text>
+  <text x="76" y="607" class="s">Private key never leaves Work Hub</text>
+  <rect x="44" y="628" width="374" height="58" rx="8" fill="#fff" stroke="#e4e4e7"/>
+  <circle cx="62" cy="648" r="6" fill="#fff" stroke="#a1a1aa"/>
+  <text x="76" y="653" class="t">Upload my private key</text>
+  <text x="76" y="673" class="s">id_ed25519 / id_rsa, passphrase if it has one</text>
+
+  <rect x="318" y="696" width="100" height="32" rx="6" fill="#3352cc"/>
+  <text x="368" y="717" fill="#fff" font-size="14" font-weight="600" text-anchor="middle">Next</text>
+
+  <!-- ============ State 2: generated key + host key pin ============ -->
+  <text x="460" y="66" class="cap">2 · Add the public key on the host, then Test</text>
+  <rect x="460" y="78" width="420" height="500" rx="10" fill="#fff" stroke="#e4e4e7"/>
+  <text x="484" y="114" class="h">Add connection · gitlab-corp</text>
+  <text x="854" y="112" class="m">✕</text>
+
+  <text x="484" y="152" class="t">1. Copy the public key:</text>
+  <rect x="484" y="164" width="372" height="56" rx="6" fill="#fafafa" stroke="#e4e4e7"/>
+  <text x="496" y="186" class="mono">ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIM0q…</text>
+  <text x="496" y="206" class="mono">workhub-gitlab-corp</text>
+  <text x="820" y="196" fill="#3352cc" font-size="12">Copy</text>
+
+  <text x="484" y="252" class="t">2. Add it on GitLab:</text>
+  <text x="484" y="274" fill="#3352cc" font-size="13">Open GitLab → Preferences → SSH Keys  ↗</text>
+  <text x="484" y="294" class="s">Only the public key is ever shown; the private key stays in WH.</text>
+
+  <text x="484" y="330" class="t">3. Test the connection:</text>
+  <rect x="484" y="342" width="72" height="32" rx="6" fill="#fff" stroke="#e4e4e7"/>
+  <text x="520" y="363" class="t b" text-anchor="middle">Test</text>
+
+  <rect x="484" y="388" width="372" height="96" rx="6" fill="#fffbeb" stroke="#fde68a"/>
+  <text x="496" y="410" fill="#92400e" font-size="13" font-weight="600">First connection to gitlab.corp.example</text>
+  <text x="496" y="430" fill="#92400e" font-size="12">Host key fingerprint:</text>
+  <text x="496" y="448" fill="#92400e" font-size="11" font-family="Consolas, monospace">ED25519 SHA256:p2QAMXNIC1TJYWeIOttrVc98/R1BUFWu3…</text>
+  <text x="496" y="470" fill="#3352cc" font-size="13" font-weight="600">Trust and pin</text>
+
+  <rect x="484" y="496" width="372" height="40" rx="6" fill="#f0fdf4" stroke="#bbf7d0"/>
+  <text x="496" y="521" fill="#166534" font-size="13" font-weight="600">✓ Test passed · authenticated as dtsyplakov</text>
+  <rect x="736" y="544" width="120" height="26" rx="6" fill="#3352cc"/>
+  <text x="796" y="562" fill="#fff" font-size="13" font-weight="600" text-anchor="middle">Save</text>
+
+  <!-- ============ State 3: PAT ============ -->
+  <text x="900" y="66" class="cap">3 · Alternative: access token (PAT)</text>
+  <rect x="900" y="78" width="400" height="660" rx="10" fill="#fff" stroke="#e4e4e7"/>
+  <text x="924" y="114" class="h">Add connection</text>
+  <text x="1274" y="112" class="m">✕</text>
+  <text x="924" y="136" class="m">Provider: GitHub · github.com</text>
+
+  <text x="924" y="172" class="t b">Name</text>
+  <rect x="924" y="182" width="352" height="36" rx="6" fill="#fff" stroke="#e4e4e7"/>
+  <text x="936" y="205" class="t">github-dataart</text>
+
+  <text x="924" y="250" class="t b">Auth method</text>
+  <rect x="924" y="260" width="352" height="36" rx="6" fill="#f4f4f5" stroke="#e4e4e7"/>
+  <text x="1012" y="283" class="m" text-anchor="middle">SSH key</text>
+  <rect x="1104" y="263" width="169" height="30" rx="5" fill="#fff" stroke="#e4e4e7"/>
+  <text x="1188" y="283" class="t b" text-anchor="middle">Access token (PAT)</text>
+
+  <rect x="924" y="312" width="352" height="56" rx="6" fill="#eff6ff" stroke="#bfdbfe"/>
+  <text x="936" y="334" fill="#3352cc" font-size="13" font-weight="600">Create token on GitHub  ↗</text>
+  <text x="936" y="354" fill="#1e40af" font-size="12">Opens the token page with scope "repo" pre-filled.</text>
+
+  <text x="924" y="400" class="t b">Username</text>
+  <rect x="924" y="410" width="352" height="36" rx="6" fill="#fff" stroke="#e4e4e7"/>
+  <text x="936" y="433" class="m">not needed for GitHub</text>
+  <text x="924" y="462" class="s">Shown only when the host needs one.</text>
+
+  <text x="924" y="494" class="t b">Token</text>
+  <rect x="924" y="504" width="352" height="36" rx="6" fill="#fff" stroke="#3352cc" stroke-width="2"/>
+  <text x="936" y="527" class="t">••••••••••••••••••••</text>
+  <text x="924" y="558" class="s">Write-only: after saving it is never shown again.</text>
+
+  <rect x="924" y="576" width="16" height="16" rx="3" fill="#fff" stroke="#a1a1aa"/>
+  <text x="948" y="589" class="t">Expose to agent as env var</text>
+  <text x="948" y="608" class="s">Off by default. The agent can then read it.</text>
+
+  <line x1="901" y1="640" x2="1299" y2="640" stroke="#e4e4e7"/>
+  <rect x="924" y="660" width="72" height="36" rx="6" fill="#fff" stroke="#e4e4e7"/>
+  <text x="960" y="683" class="t b" text-anchor="middle">Test</text>
+  <rect x="1104" y="660" width="80" height="36" rx="6" fill="#fff" stroke="#e4e4e7"/>
+  <text x="1144" y="683" class="t b" text-anchor="middle">Cancel</text>
+  <rect x="1194" y="660" width="82" height="36" rx="6" fill="#3352cc"/>
+  <text x="1235" y="683" fill="#fff" font-size="14" font-weight="600" text-anchor="middle">Save</text>
+
+  <text x="20" y="770" class="note">Provider tiles, auth methods, "SSH keys" / "Create token" links and the username rule come from the provider descriptor (FR-2). No browser / OAuth sign-in (out of scope).</text>
+  <text x="20" y="788" class="note">The private key, its passphrase and the PAT go to the vault only; the WH sidecar uses them, the container never sees them (FR-3, FR-6).</text>
+</svg>

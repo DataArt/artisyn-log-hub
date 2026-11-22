@@ -9,6 +9,8 @@
  * see the notes on the individual functions.
  */
 
+import type { ShellKind } from '@loghub/bash-view';
+
 type AnyRecord = Record<string, unknown>;
 
 function asRecord(v: unknown): AnyRecord | null {
@@ -554,7 +556,25 @@ const GIT_GLOBAL_FLAGS = String.raw`(?:-{1,2}\S+(?:\s+[^-\s]\S*)?\s+)*`;
 const INVOCATION_START = String.raw`(?:^|[\n;&|])\s*`;
 
 /**
- * Counts `git commit` invocations inside one `Bash` command string.
+ * PowerShell start-of-invocation anchor (impl-plan DD-15 of 2026-11-22-bash-tab-powershell):
+ * also after `{` (script block) and `(` (sub-expression / grouping), with an optional call
+ * operator `&` and an optional opening quote, so `{ git commit }`, `(git commit)` and
+ * `& "git.exe" commit` count.
+ */
+const PS_INVOCATION_START = String.raw`(?:^|[\n;&|{(])\s*(?:&\s*)?['"]?`;
+
+/** After the tool word in PowerShell: an optional `.exe` and an optional closing quote. */
+const PS_TOOL_SUFFIX = String.raw`(?:\.exe)?['"]?`;
+
+/** The anchor and tool-word suffix of one shell; Bash keeps its original pattern. */
+function invocationParts(shell: ShellKind): { start: string; suffix: string } {
+  return shell === 'powershell'
+    ? { start: PS_INVOCATION_START, suffix: PS_TOOL_SUFFIX }
+    : { start: INVOCATION_START, suffix: '' };
+}
+
+/**
+ * Counts `git commit` invocations inside one `Bash` / `PowerShell` command string.
  *
  * Counted per invocation, so `git add . && git commit -m x` is one commit and
  * `git commit -m a && git commit -m b` is two.
@@ -562,22 +582,36 @@ const INVOCATION_START = String.raw`(?:^|[\n;&|])\s*`;
  * The trailing `(?![-\w])` is a hyphen-aware word boundary: a plain `\b` treats the `-` in
  * `git commit-tree` as a boundary and would count that plumbing command as a commit.
  *
+ * `shell` selects the start anchor: `'powershell'` also tolerates `{`, `(`, the `&` call
+ * operator, quotes and `git.exe` (DD-15); `'bash'` (the default) is unchanged.
+ *
  * A fresh RegExp per call — a shared `/g` literal carries `lastIndex` between calls.
  */
-export function countCommits(command: string): number {
+export function countCommits(
+  command: string,
+  shell: ShellKind = 'bash',
+): number {
   if (command === '') return 0;
+  const { start, suffix } = invocationParts(shell);
   const pattern = new RegExp(
-    `${INVOCATION_START}git\\s+${GIT_GLOBAL_FLAGS}commit(?![-\\w])`,
+    `${start}git${suffix}\\s+${GIT_GLOBAL_FLAGS}commit(?![-\\w])`,
     'g',
   );
   return (command.match(pattern) ?? []).length;
 }
 
-/** Counts `gh pr create` invocations inside one `Bash` command string. See `countCommits`. */
-export function countPullRequests(command: string): number {
+/**
+ * Counts `gh pr create` invocations inside one `Bash` / `PowerShell` command string. See
+ * `countCommits`.
+ */
+export function countPullRequests(
+  command: string,
+  shell: ShellKind = 'bash',
+): number {
   if (command === '') return 0;
+  const { start, suffix } = invocationParts(shell);
   const pattern = new RegExp(
-    `${INVOCATION_START}gh\\s+pr\\s+create(?![-\\w])`,
+    `${start}gh${suffix}\\s+pr\\s+create(?![-\\w])`,
     'g',
   );
   return (command.match(pattern) ?? []).length;

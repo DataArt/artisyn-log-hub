@@ -286,7 +286,7 @@ Events: `/clear` (the `<command-name>` line comes first, it does **not** qualify
 | S-SESS-11 | Change surface on 400 files: filter, collapsing, sorting | UI+API | P1 | 35 |
 | S-SESS-12 | Only the owner sees Raw Logs; the API answers 403 to a stranger | UI+API | P0 | 55 |
 | S-SESS-13 | Advisor: the hook result appears as a tab and as spend | UI+API | P1 | 35 |
-| S-SESS-14 | Tool calls in detail: the Context Growth step modal, the Bash view and tab, call statuses | UI+API | P1 | 0 |
+| S-SESS-14 | Tool calls in detail: the Context Growth step modal, the shell view and the Shell tab (Bash + PowerShell), call statuses, shell counters | UI+API | P1 | 0 |
 | S-CHART-01 | Charts: Dashboard, Agent Tree, Timeline, Tool Heatmap, Call Tree on an agent tree | UI | P1 | 40 |
 | S-CHART-02 | Charts: Context Usage and Context Growth count the same tokens | UI | P1 | 20 |
 | S-COST-01 | One session, one cost everywhere | UI+API | P0 | 55 |
@@ -602,27 +602,35 @@ Common setup for every scenario unless stated otherwise: user U1 is logged in (s
 - **Replaces:** `CC/AdvisorTab.test.tsx` (9), `CC/SessionDetailHeader.test.tsx` (16, the part about advisor/attribution labels, the rest in S-REPT-07), `SRV/logs/turn-end-cost-advisor/turn-end-cost-advisor.service.spec.ts` (14, part), `CC/session-item-advisor-badge.test.tsx` (part). Closes gaps F.1 #7 and F.3 #28 (HTTP and UI). ≈ 35.
 - **What we lose:** the unit logic "is an evaluation needed" (`enabled && watermark > evaluated`), orphan cleanup (`orphan-cleanup.scheduler`, 9 tests on a real DB: keep as a server test), the advisor being off by default (settings, the SETTINGS group).
 
-### S-SESS-14. Tool calls in detail: the Context Growth step modal, the Bash view and tab, call statuses
+### S-SESS-14. Tool calls in detail: the Context Growth step modal, the shell view and the Shell tab (Bash + PowerShell), call statuses, shell counters
 - **Layer:** UI+API
 - **Priority:** P1
 - **Modes:** A, C
-- **Data/roles:** an own session uploaded through `POST /api/v2/logs` (spec `tests/scenarios/view/s-sess-14.spec.ts`, task 2026-10-22-context-growth-item-modal): one prompt, `cwd: /work/ss14-<runId>`, five assistant steps with context 10 000 / 30 000 / 31 000 / 31 500 / 32 000; a Bash with 70 000 chars of output and Agent A (Explore); Read, Grep, a failing Edit of `src/app.ts` and Agent B (code-reviewer); an interrupted Bash, a PowerShell call and an unparseable Bash with a PermissionRequest for it; an Agent call ("lint") refused with "Concurrent subagent limit reached". Sub-agents A and B each run one Bash. A second session has no Bash. Owner U1.
+- **Data/roles:** an own session uploaded through `POST /api/v2/logs` (spec `tests/scenarios/view/s-sess-14.spec.ts`, tasks 2026-10-22-context-growth-item-modal and 2026-11-22-bash-tab-powershell): one prompt, `cwd: /work/ss14-<runId>`, five assistant steps with context 10 000 / 30 000 / 31 000 / 31 500 / 32 000; a Bash with 70 000 chars of output and Agent A (Explore); Read, Grep, a failing Edit of `src/app.ts` and Agent B (code-reviewer); an interrupted Bash, a PowerShell call with a description — `Set-Location <root>; Get-Content a.json | ConvertFrom-Json | Set-Content -Path out\b.json; Remove-Item tmp\x; git commit -m "x"; gh pr create --fill` — and an unparseable Bash with a PermissionRequest for it; an Agent call ("lint") refused with "Concurrent subagent limit reached". Sub-agents A and B each run one Bash. A second session has no shell command. Owner U1. The scenario DB pool is used for the backfill step.
 - **Steps:**
   1. Charts → Context Growth: expand the turn.
   2. Click the `+20k` step row: the step modal.
   3. Read the modal's paths and FILES; press Escape.
   4. Open the a3 step row (three calls).
-  5. Logs: open the Code files group and click the `src/app.ts` Edit row; read the Agents section.
-  6. Open `tab=bash`.
-  7. Press ↓ in the list, reload, then open an unknown `bashCall`; open the session without Bash.
+  5. Logs: open the Code files group and click the `src/app.ts` Edit row; read the Agents section; open the PowerShell call.
+  6. Open `tab=bash` (the Shell tab).
+  7. Press ↓ in the list, reload, then open an unknown `bashCall`; open the session without shell commands.
+  8. Pick the PowerShell filter, then Bash, then All; reload with `shell=powershell`; open a URL with `shell=powershell` and a `bashCall` of a Bash row; open `shell=bogus`.
+  9. Select the PowerShell row and read its view.
+  10. Usage tab: read Commits and Pull requests; read the `/analytics/productivity` totals (as `golden-load.spec.ts` does).
+  11. Backfill: through the scenario `Pool` set the main node's `okf_extract_version = 4` and `session_stats.commit_count = pr_count = 0`; poll (≤ 45 s).
 - **Checks:**
-  - Step rows read `+20k`, `+1k`, `+1k`, `+1k`, `—` with a pointer cursor; no `.wasm` request before the first Bash view.
+  - Step rows read `+20k`, `+1k`, `+1k`, `+1k`, `—` with a pointer cursor; no `.wasm` request before the first shell view.
   - The modal shows the formatted, highlighted command, "show all (70,000 chars)", and the `tree-sitter-bash` WASM is fetched; no `/work/ss14-` text; Changes lists `dist`; Escape keeps the turn expanded and the scroll position.
-  - The a3 modal has three call blocks (Bash, PowerShell, Bash), the first expanded with `⏸ interrupted` and `⏱`; PowerShell and the unparseable command are raw text with no toggle; `⚠ requested` is on the third call only.
-  - Logs: the Edit row has `✗` and opens the modal with "String to replace not found"; the Read row has no mark; the Agents section has one orphan row, "lint", with `✗ error`.
-  - Bash tab: count 5; five rows in time order (main, sub-agent A, sub-agent B, main, main), the sub-agent rows badged `Agent · Explore` / `Agent · code-reviewer`; row 1 selected when the URL has no `bashCall`.
-  - ↓ selects row 2 and writes it to `bashCall`; a reload keeps it; an unknown `bashCall` selects row 1 and is not rewritten; the empty session shows "No Bash commands in this session".
-- **Replaces:** nothing — Context Growth had no spec (S-CHART-02 has none) and the Bash view and tab are new.
+  - The a3 modal has three call blocks (Bash, PowerShell, Bash), the first expanded with `⏸ interrupted` and `⏱`; the PowerShell call is formatted with a Formatted | Raw toggle; the unparseable command is raw text with no toggle; `⚠ requested` is on the third call only. The `tree-sitter-powershell` WASM is requested on this session and not before the first PowerShell view.
+  - Logs: the Edit row has `✗` and opens the modal with "String to replace not found"; the Read row has no mark; the Agents section has one orphan row, "lint", with `✗ error`; the PowerShell call opens the same view as the Shell tab, with `⏱`.
+  - Shell tab: label `Shell`, count 6 (5 Bash + 1 PowerShell); six rows in start order (main, sub-agent A, sub-agent B, main, main PowerShell, main), the sub-agent rows badged `Agent · Explore` / `Agent · code-reviewer`; every row has a `bash` / `pwsh` badge (row 5 `pwsh`); row 1 selected when the URL has no `bashCall`.
+  - ↓ selects row 2 and writes it to `bashCall`; a reload keeps it; an unknown `bashCall` selects the first visible row and is not rewritten; the empty session shows "No shell commands in this session" with no filter.
+  - Filter chips read All 6 / Bash 5 / PowerShell 1; under a filter the rows keep their numbers (`#5` alone, then `#1 #2 #3 #4 #6`); picking a filter that hides the selected row selects the first visible one and rewrites `bashCall`; a reload keeps `shell`; a `bashCall` hidden by `shell` wins and `shell` is dropped from the URL; an unknown `shell` value reads as All.
+  - PowerShell view: WORKING DIR is the repo root; FILES reads `a.json` and changes `out/b.json` and `tmp/x (deleted)`; the row shows "changes 2".
+  - Usage: Commits 1 and Pull requests 1 (client twin); the `/analytics/productivity` totals include them (server).
+  - Backfill: the running shell-figures backfill restores commit / PR counts 1 / 1 and `okf_extract_version` 5.
+- **Replaces:** nothing — Context Growth had no spec (S-CHART-02 has none) and the shell view and tab are new.
 - **What we lose:** real Claude Code payloads (checked manually on the local production instance); the Raw toggle and "Copy original" are covered by S-SESS-03 step 6.
 
 ### S-CHART-01. Charts: Dashboard, Agent Tree, Timeline, Tool Heatmap, Call Tree on an agent tree

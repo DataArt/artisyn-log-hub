@@ -5,13 +5,31 @@
  */
 
 /**
- * Version of the OKF extraction; a node with a lower `sessions.okf_extract_version` needs recompute (DD-11).
+ * Version of the OKF extraction stamped into `sessions.okf_extract_version` (DD-11). NULL = no
+ * OKF analysis yet; a non-null version below the current one = rows of an older extractor,
+ * re-extracted only where that version's change applies.
  * 2: events, pointers and `search_hits`; 3: the stricter pointer rule (no `(`/`)`, no bare
  * version numbers, a span without `/` only with a {@link OKF_POINTER_FILE_EXTENSIONS} extension);
  * 4: OKF v0.3 pointer resolution (`./` / `../` against the article folder, `/x` against the
- * bundle root, bare paths article-relative first).
+ * bundle root, bare paths article-relative first);
+ * 5: PowerShell calls — commit / PR counts and OKF accesses; v4 rows of a node without
+ * PowerShell calls equal v5 output, so only PowerShell nodes are re-extracted (by the
+ * shell-figures backfill, `shell-figures-backfill.service.ts`).
  */
-export const OKF_EXTRACT_VERSION = 4;
+export const OKF_EXTRACT_VERSION = 5;
+
+/**
+ * Shell-figures backfill (impl-plan DD-19 of 2026-11-22-bash-tab-powershell): one pass every
+ * this many ms for the process lifetime — the same cadence as the tool-usage drain. Fixed, not
+ * env-overridable.
+ */
+export const SHELL_FIGURES_BACKFILL_INTERVAL_MS = 15_000;
+
+/** Shell-figures backfill: at most this many sessions claimed per pass. */
+export const SHELL_FIGURES_BACKFILL_BATCH = 20;
+
+/** Shell-figures backfill: the `SchedulerRegistry` interval name. */
+export const SHELL_FIGURES_BACKFILL_TICK = 'shell-figures-backfill-tick';
 
 /**
  * A back-ticked span without `/` is a pointer only when its extension (lower-cased, after the last

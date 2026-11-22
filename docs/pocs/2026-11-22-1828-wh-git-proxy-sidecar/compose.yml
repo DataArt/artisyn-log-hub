@@ -1,0 +1,20 @@
+# PoC stand: a fake git host, the WH git proxy sidecar and a "workspace" client container,
+# all on one user-defined network where the sidecar answers as `wh-git`.
+name: wh-git-poc
+networks:
+  whgit: {}
+services:
+  upstream:
+    build: ./upstream
+    networks: [whgit]
+  sidecar:
+    build: ./sidecar
+    networks:
+      whgit:
+        aliases: [wh-git]
+    tmpfs: [/run/wh]
+  client:
+    build: ./client
+    networks: [whgit]
+    tmpfs: [/tmp]
+    command: ["sleep", "infinity"]

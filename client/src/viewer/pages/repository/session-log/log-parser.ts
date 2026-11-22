@@ -157,9 +157,12 @@ function summarizeToolCall(
       const p = s(input.file_path);
       return p.length > 60 ? '…' + p.slice(-57) : p;
     }
-    case 'Bash': {
-      const cmd = s(input.command).split('\n')[0];
-      return cmd.length > 50 ? cmd.slice(0, 50) + '…' : cmd;
+    case 'Bash':
+    case 'PowerShell': {
+      // Description first (the model's own one-line label), else the first command line.
+      const desc = s(input.description).trim();
+      const line = desc !== '' ? desc : s(input.command).split('\n')[0];
+      return line.length > 50 ? line.slice(0, 50) + '…' : line;
     }
     case 'Glob':
       return s(input.pattern);

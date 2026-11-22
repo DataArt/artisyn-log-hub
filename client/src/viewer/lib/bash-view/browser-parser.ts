@@ -9,11 +9,11 @@ import { type BashParser, bashHighlightQuery } from '@loghub/bash-view';
 import highlightsScm from 'tree-sitter-bash/queries/highlights.scm?raw';
 import languageWasm from 'tree-sitter-bash/tree-sitter-bash.wasm?url';
 import runtimeWasm from 'web-tree-sitter/web-tree-sitter.wasm?url';
-import { loadBashParser } from './bash-parser';
+import { loadTreeSitterParser } from './bash-parser';
 
 /** `tree-sitter-bash/queries/highlights.scm` plus `(file_redirect) @redirect` (`bashHighlightQuery`). */
 export const HIGHLIGHT_QUERY = bashHighlightQuery(highlightsScm);
 
 export function getBrowserBashParser(): Promise<BashParser> {
-  return loadBashParser({ runtimeWasm, languageWasm });
+  return loadTreeSitterParser('bash', { runtimeWasm, languageWasm });
 }

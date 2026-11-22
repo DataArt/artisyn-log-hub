@@ -4,6 +4,7 @@ import { useCopyToClipboard } from '../../../../hooks/useCopyToClipboard';
 import {
   type FoldedHeredoc,
   type HighlightSegment,
+  type ShellKind,
   toRepoRelative,
 } from '@loghub/bash-view';
 import type { ToolCallDetail } from '../types';
@@ -59,26 +60,28 @@ function Chip({ children }: { children: ReactNode }) {
 }
 
 /**
- * The Bash body of a tool call (DD-13): caption and chips, WORKING DIR (lifted `cd`), FILES,
- * COMMAND (Formatted | Raw, line counts, "Copy original", highlighted script with heredoc fold
- * toggles) and the output. While the parser loads the raw text shows; in fallback (unparseable,
- * PowerShell, load failure) the raw text wraps, with no toggle, FILES or highlighting.
+ * The body of a shell tool call (DD-13, FR-10) — Bash or PowerShell: caption and chips, WORKING
+ * DIR (lifted `cd` / `Set-Location`), FILES, COMMAND (Formatted | Raw, line counts, "Copy
+ * original", highlighted script with heredoc / here-string fold toggles) and the output. While the
+ * parser loads the raw text shows; in fallback (unparseable, load failure) the raw text wraps, with
+ * no toggle, FILES or highlighting. For PowerShell "Copy original" copies the command without the
+ * hook's wrap prefix (DD-11).
  */
 export function BashCommandView({
   call,
   charsPerToken,
-  forceFallback = false,
+  shell,
 }: {
   call: ToolCallDetail;
   charsPerToken: number;
-  forceFallback?: boolean;
+  shell: ShellKind;
 }) {
   const { repoRoot } = useToolView();
   const command = commandOf(call.input);
-  const bash = useBashView(command, forceFallback);
+  const bash = useBashView(command, shell);
   const [mode, setMode] = useState<'formatted' | 'raw'>('formatted');
   const [expanded, setExpanded] = useState<ReadonlySet<number>>(new Set());
-  const { copied, copy } = useCopyToClipboard(command, 2000);
+  const { copied, copy } = useCopyToClipboard(bash.original, 2000);
 
   const description =
     typeof call.input.description === 'string' ? call.input.description : '';

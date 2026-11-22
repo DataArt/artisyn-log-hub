@@ -75,6 +75,7 @@ format where the two differ).
 | [session-map-model](session-map-model.md) | `client/.../session-log/session-map/session-map-model.ts` | vitest |
 | [nav-filter-match](nav-filter-match.md) | `client/.../pages/map/nav-tree.ts` (`matchNavFilter`) | vitest |
 | [bash-command-view](bash-command-view.md) | `packages/bash-view/src/*` (`@loghub/bash-view`; client loader `client/src/viewer/lib/bash-view/`) | vitest |
+| [powershell-command-view](powershell-command-view.md) | `packages/bash-view/src/ps-*.ts`, `shell.ts` (`@loghub/bash-view`; client loader `client/src/viewer/lib/bash-view/powershell-browser-parser.ts`, server `server/src/logs/okf/server-powershell-parser.ts`) | vitest |
 | [okf-access-extraction](okf-access-extraction.md) | `server/src/logs/okf/okf-access-extractor.ts` | jest |
 | [okf-task-context](okf-task-context.md) | `server/src/logs/okf/okf-task-context.ts` | jest |
 | [okf-snapshot](okf-snapshot.md) | hook `okf-snapshot.js` | `node --test` |

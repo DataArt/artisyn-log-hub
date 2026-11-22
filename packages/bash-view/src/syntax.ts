@@ -50,6 +50,13 @@ export interface BashParser {
 }
 
 /**
+ * Grammar-agnostic names for the same structural interfaces: the PowerShell modules read a
+ * `tree-sitter-powershell` tree through exactly these types.
+ */
+export type ShellParser = BashParser;
+export type ShellSyntaxNode = BashSyntaxNode;
+
+/**
  * Parses `src`, hands the root node to `fn` and frees the tree afterwards (trees live in WASM
  * memory). `fn` must not keep nodes beyond its own return.
  */
