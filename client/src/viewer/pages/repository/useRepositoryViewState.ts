@@ -10,7 +10,6 @@ import { type AnalyticsState } from './analytics/RepositoryAnalytics';
 import { applyAnalyticsToParams } from './analytics/analytics-url';
 import { TOOLS_PARAM_KEYS } from './tools/tools-url-state';
 import { OTEL_PARAM_KEYS } from './otel/otel-url-state';
-import { OKF_AGENT_PARAM } from './okf/okf-url-state';
 import { parseOtelReasonKey } from './otel/otel.constants';
 import {
   REPO_MAIN_TABS,
@@ -160,8 +159,6 @@ export function useRepositoryViewState({
       next.delete('tab');
       next.delete('lens');
       next.delete('tu');
-      // The session OKF tab's agent goes with the session (also when the repo OKF tab opens).
-      next.delete(OKF_AGENT_PARAM);
     } else {
       next.delete('mtab');
     }
@@ -195,8 +192,6 @@ export function useRepositoryViewState({
     if (tab !== 'tools') {
       for (const key of TOOLS_PARAM_KEYS) next.delete(key);
     }
-    // The session OKF tab's selected agent (`okfAgent`) is dropped when leaving the tab.
-    if (tab !== 'okf') next.delete(OKF_AGENT_PARAM);
     setSearchParams(next, { replace: true });
   }
 
@@ -213,7 +208,6 @@ export function useRepositoryViewState({
     if (defaultTab !== 'tools') {
       for (const key of TOOLS_PARAM_KEYS) next.delete(key);
     }
-    if (defaultTab !== 'okf') next.delete(OKF_AGENT_PARAM);
     setSearchParams(next, { replace: true });
   }
 
@@ -260,10 +254,8 @@ export function useRepositoryViewState({
     next.set('session', session.sessionId);
     next.delete('mtab');
     next.delete('tu');
-    // A selected call or scope of the previous session's Tools/MCP tab means nothing here,
-    // nor does its OKF tab's selected agent.
+    // A selected call or scope of the previous session's Tools/MCP tab means nothing here.
     for (const key of TOOLS_PARAM_KEYS) next.delete(key);
-    next.delete(OKF_AGENT_PARAM);
     // Only a direct click on the Advisor lightbulb badge jumps straight to the
     // Advisor tab. A normal row click just selects the session and leaves the
     // tab alone, same as any other session without advice.

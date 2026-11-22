@@ -4,6 +4,7 @@
  * parser (DD-37), so the Bash rows also cover `analyzeBash`'s `readAccess` on the server. A row
  * that also gives `expected.events` / `expected.pointers` / `expected.eventCount` /
  * `expected.pointerCount` / `expected.truncated` / `expected.seq` has those compared too.
+ * `input.bundleRoots` is passed as the `bundleRoots` option (pointer resolution, DD-P4).
  */
 import type { BashParser } from '@loghub/bash-view';
 import { loadExamples } from '../../../../scripts/algo-docs/load-examples.cjs';
@@ -40,6 +41,8 @@ interface RowInput {
   prompt?: string;
   /** `snapshotFiles` of the extraction, as `{ path: { size, hash } }`. */
   snapshotFiles?: Record<string, OkfSnapshotFileInfo>;
+  /** `bundleRoots` of the extraction: repo-relative bundle root folders (`''` = repo root). */
+  bundleRoots?: string[];
 }
 
 interface RowExpected {
@@ -120,6 +123,9 @@ it.each(rows)('$id', (row) => {
     isSubagentLog: input.subagent === true,
     ...(input.snapshotFiles !== undefined
       ? { snapshotFiles: new Map(Object.entries(input.snapshotFiles)) }
+      : {}),
+    ...(input.bundleRoots !== undefined
+      ? { bundleRoots: input.bundleRoots }
       : {}),
   };
   const entries = toEntries(input);

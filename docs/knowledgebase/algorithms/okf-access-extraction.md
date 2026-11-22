@@ -1,9 +1,9 @@
 ---
 type: "Algorithm"
 title: "OKF access extraction: which KB paths a tree node read, searched, listed or wrote"
-description: "The OKF tabs (session and repo) answer \"which knowledge-base articles did the agents actually read, how much of them went into the context, and did they find them through the index or by searching\"."
+description: "How one transcript (a root session or a sub-agent) becomes session_okf_access rows — per repo path and operation, with result bytes and call counts — and the ordered access sequence of the facts route."
 tags: [algorithm]
-generated: { by: "human:denistsyplakov", at: "2026-11-06T13:11:03+04:00" }
+generated: { by: "ai:claude", at: "2026-11-21T22:36:45+04:00" }
 reviewed: no
 reviewer: none
 ---
@@ -12,29 +12,32 @@ reviewer: none
 
 ## Purpose
 
-The OKF tabs (session and repo) answer "which knowledge-base articles did the agents actually
-read, how much of them went into the context, and did they find them through the index or by
-searching". Agents mostly read the KB through Bash in fragments (`sed -n`, `grep -n`, `cat`), not
-through the Read tool, so a Read-only count misses most of the use. This algorithm turns one
-transcript (one tree node: the root session or one sub-agent) into `session_okf_access` rows —
-per repo path, per operation — with the result bytes, the call count, whether the read followed
-the node's own edit, and the order of first access. For the value signals (whether an article
-pointed the agent at code it then used, see [okf-value-signals](okf-value-signals.md)) the same
-walk also yields the node's code events (`session_okf_event`), the pointers its KB reads handed
-out (`session_okf_pointer`) and the ordered access sequence of the facts route.
+The OKF tabs (session and repo) answer "which knowledge-base files did the agents actually read
+and how much of them went into the context". Agents mostly read the KB through Bash in fragments
+(`sed -n`, `grep -n`, `cat`), not through the Read tool, so a Read-only count misses most of the
+use. This algorithm turns one transcript (one tree node: the root session or one sub-agent) into
+`session_okf_access` rows — per repo path, per operation — with the result bytes, the call count,
+whether the read followed the node's own edit, and the order of first access. How the tabs count
+those rows is a separate doc: [okf-usage-counting](okf-usage-counting.md).
+
+The same walk also yields the node's code events, the pointers its KB reads handed out and the
+ordered access sequence (rules 12–18). Since the 2026-11-21 cut of the OKF tabs the events and
+pointer rows are **not stored** any more (`session_okf_event` / `session_okf_pointer` are no
+longer written) and no tab reads them: rules 13–16 now feed only the sequence of the facts route
+(`accessSeq` with its `newPointers`) and the `truncated` flag.
 
 ## Code
 
 - Implementation: `server/src/logs/okf/okf-access-extractor.ts` (`extractOkfDetail`,
   `extractOkfAccess` = its `.access`, `toolResultBytes`, `toAbsolute`, `globStaticPrefix`).
-- Pointers: `server/src/logs/okf/okf-pointers.ts` (`extractPointers`, `isNewPointer`,
-  `isPartialResult`).
+- Pointers: `server/src/logs/okf/okf-pointers.ts` (`extractPointerSpans`, `pointerCandidates`,
+  `isNewPointer`, `isPartialResult`).
 - Fixed limits: `server/src/logs/okf/okf-constants.ts` (`OKF_EXTRACT_VERSION`,
   `OKF_EVENT_SKIP_SEGMENTS`, `OKF_PATTERN_MAX_CHARS`, `OKF_EVENT_CAP_PER_NODE`,
   `OKF_POINTER_CAP_PER_NODE`, `OKF_POINTER_MAX_CHARS`, `OKF_PATH_MAX_CHARS`).
 - Helpers it relies on:
-  - `server/src/logs/change-surface/path-normalise.ts` — `resolveRepoPath(absPath, roots)` (rule 3)
-    and `truncateChangedPath` (`CHANGED_PATH_MAX_LENGTH` = 1024);
+  - `server/src/logs/change-surface/path-normalise.ts` — `resolveRepoPath(absPath, roots)` (rule 3),
+    `collapseRepoRelative(p)` (rules 3, 14) and `truncateChangedPath` (`CHANGED_PATH_MAX_LENGTH` = 1024);
   - `packages/bash-view/src/bash-analyze.ts` — `analyzeBash` and its `readAccess` field (rule 5,
     documented in [bash-command-view](bash-command-view.md) rule 5.9);
   - `server/src/logs/okf/server-bash-parser.ts` — `getServerBashParser()`, the server's
@@ -48,10 +51,12 @@ out (`session_okf_pointer`) and the ordered access sequence of the facts route.
 
 ## Input and output
 
-`extractOkfDetail(entries, roots, parser, { isSubagentLog, snapshotFiles })` takes the parsed
-NDJSON lines of one `claude` / `claude-subagent` log, the session's candidate repo roots, the Bash
-parser (`null` skips Bash calls only) and, optionally, `snapshotFiles` — the files of the root's
-bound OKF snapshot as `repoRelPath → { size, hash }`. It returns
+`extractOkfDetail(entries, roots, parser, { isSubagentLog, snapshotFiles, bundleRoots })` takes
+the parsed NDJSON lines of one `claude` / `claude-subagent` log, the session's candidate repo
+roots, the Bash parser (`null` skips Bash calls only) and, optionally, `snapshotFiles` — the files
+of the root's bound OKF snapshot as `repoRelPath → { size, hash }` — and `bundleRoots` — the
+repo-relative root folders of that snapshot's bundles (`''` = the repo root; only pointer
+resolution uses them, rule 14). It returns
 `{ access, events, pointers, seq, truncated }`:
 
 - `access`: `{pathKey, op, afterOwnEdit, bytes, calls, seq, rangedCalls, rangedBytes, searchHits}[]`
@@ -78,6 +83,10 @@ bound OKF snapshot as `repoRelPath → { size, hash }`. It returns
    `resolveRepoPath(abs, roots)` strips the longest matching root (case-insensitive, on a `/`
    boundary, the rest keeps its case; msys `/d/…` also tried as `D:/…`). The root itself resolves
    to `''`. No match, or no usable root at all, drops the path (FR-2).
+   Repo-relative paths built by joining (pointers, rule 14) are collapsed by
+   `collapseRepoRelative`: split on `/`, drop empty and `.` segments, `..` pops the previous
+   segment; a `..` with nothing left to pop (an escape above the repo root) gives `null`, which
+   drops the path; an empty result is the repo root `''`.
 4. **Op per tool (DD-3).**
 
    | Tool call | op | key |
@@ -160,13 +169,16 @@ bound OKF snapshot as `repoRelPath → { size, hash }`. It returns
       (1024) — dropped, not truncated.
     - **Fields:** `rangeFrom` / `rangeTo` from the access range (rule 4), else `null`; `pattern`
       from the access pattern cut to `OKF_PATTERN_MAX_CHARS` (200), else `null`.
-14. **Pointers (DD-8).** `extractPointers(text, roots)` takes every back-ticked span
-    `` `([^`\n]{1,512})` `` (`OKF_POINTER_MAX_CHARS`) of a KB read's result text and normalises it:
+14. **Pointers (DD-8; OKF v0.3 §6, DD-P2..P4).** `extractPointerSpans(text)` takes every
+    back-ticked span `` `([^`\n]{1,512})` `` (`OKF_POINTER_MAX_CHARS`) of a KB read's result text
+    and normalises it:
     1. trim; drop it when empty, when it contains whitespace, `(` or `)` (a call such as
        `LogsService.upsert()`, even with a `/`), or when it starts with `http`, `-`, `$`, `<` or `@`;
-    2. `\` → `/`; strip a trailing `:\d+(-\d+)?`, then a `#…` anchor, then any leading `./`;
+    2. `\` → `/`; strip a trailing `:\d+(-\d+)?`, then a `#…` anchor. A leading `./` / `../` is
+       **kept** (since `OKF_EXTRACT_VERSION` 4; it used to be stripped);
     3. a glob (`* ? [ ] { }`) is reduced to its static prefix (rule 4); a trailing `/` is dropped;
-    4. drop it when it is empty, starts with `~`, or is a bare version / number
+    4. the filters below judge the text without its leading `./` segments. Drop it when it is
+       empty, starts with `~`, or is a bare version / number
        (`^v?\d+(\.\d+)*$`: `2.31.0`, `v1.2`). A span with `/` is kept. A span without `/` is kept
        only when its extension — the text after the last `.`, which must not be the first
        character, compared lower-case — is in `OKF_POINTER_FILE_EXTENSIONS` (source, script,
@@ -176,22 +188,41 @@ bound OKF snapshot as `repoRelPath → { size, hash }`. It returns
        `console.log` are not; a dotfile (`.env`, `.claude-logs.sent`) has no extension and is
        dropped. Extensions that are common member names (`env`, `log`, `patch`, `properties`) are
        deliberately not in the list. Since `OKF_EXTRACT_VERSION` 3 (version 2 kept any span with an
-       extension);
-    5. an absolute path goes through `resolveRepoPath` (rule 3) and is dropped when it does not
-       resolve or resolves to the repo root.
-    Pointers are de-duplicated within one text, first occurrence order kept.
-15. **Pointer rows (DD-9, DD-10).** Only a call whose stored `read` accesses are exactly one `.md`
-    article key yields pointer rows for that article, with `readOrd` = the call's `ord` and
+       extension).
+    The span keeps its normalised `text` and a **kind**: `dot` (starts with `./` or `../`),
+    `absolute` (a drive letter, `X:/…`), `rooted` (starts with `/`), `bare` (anything else).
+    Spans are de-duplicated on `text` within one text, first occurrence order kept.
+
+    `pointerCandidates(span, { articleDir, bundleRoot, roots })` then lists the repo-relative paths
+    the span may name, most likely first. `articleDir` is the folder of the article key (`''` at
+    the repo root); `bundleRoot` is the longest entry `r` of `bundleRoots` with
+    `article.startsWith(r + '/')`, else the repo root `''` (also when `bundleRoots` is not given).
+    Every join is collapsed by `collapseRepoRelative` (rule 3):
+    - `dot` → `[articleDir/text]`;
+    - `absolute` → `[resolveRepoPath(text, roots)]`;
+    - `rooted` → `resolveRepoPath(text, roots)` when it resolves inside the session repo (as
+      before), else `[bundleRoot/rest]` (the text after the leading `/`);
+    - `bare` → `[articleDir/p, p, bundleRoot/p]`.
+
+    Candidates that are `null` (outside the repo, an escape above it) or `''` (the repo root) are
+    dropped and the list is de-duplicated; a span left with no candidate is dropped (no row).
+15. **Pointer rows (DD-9, DD-10, DD-P5).** Only a call whose stored `read` accesses are exactly one
+    `.md` article key yields pointer rows for that article, with `readOrd` = the call's `ord` and
     `articleHash = snapshotFiles.get(path)?.hash ?? null`:
     - **Partial:** the result is `is_error: true`, empty after trimming, or starts with
       `<persisted-output>` (`isPartialResult`). An error result yields no pointers at all.
-    - **One row per pointer** of the result text, every row carrying the read's `partial` flag.
-    - **New:** the pointer string is not a substring of the node's earlier text — every earlier
-      user line (string content, `text` blocks including the sub-agent prompt and
-      `system-reminder` text, `tool_result` texts) and every earlier assistant `text` block,
-      accumulated in transcript order.
-    - **Followed:** some later call of the node (`ord > readOrd`, any op, KB or code) touched the
-      pointer path or a path under `pointer + '/'`.
+    - **One row per span** of the result text, every row carrying the read's `partial` flag.
+    - **Stored pointer (final pass):** once the whole node is walked, the first candidate that is
+      a file of `snapshotFiles` or was touched by any call of the node (the path itself or a path
+      under it, rule 15 *Followed*); with none, the `p` candidate of a `bare` span (repo-relative,
+      as before v0.3), else the first candidate. Two spans of one read that end on the same
+      pointer keep one row (the first; `isNew` / `followed` OR-ed).
+    - **New:** the raw span `text` (not the resolved pointer) is not a substring of the node's
+      earlier text — every earlier user line (string content, `text` blocks including the
+      sub-agent prompt and `system-reminder` text, `tool_result` texts) and every earlier
+      assistant `text` block, accumulated in transcript order.
+    - **Followed:** some later call of the node (`ord > readOrd`, any op, KB or code) touched
+      **any candidate** of the span, or a path under `candidate + '/'`.
     - **No pointers but partial:** one row with `pointer = ''`, `isNew = false`, `partial = true`,
       so a cut or failed read is still counted.
     - **Multi-file read:** a call that reads more than one `.md` article stores no pointers; each
@@ -204,10 +235,11 @@ bound OKF snapshot as `repoRelPath → { size, hash }`. It returns
     (an `.md` file of `snapshotFiles`, or any `.md` file when there is none) as `kb_read` /
     `kb_search` / `kb_write`, a code path kept by rule 13 as `read` / `search` / `write`. A ranged
     item carries `offset = from` and, when `to` is known, `limit = to - from + 1`; a pattern item
-    carries `pattern`; a single-article KB read carries `newPointers` (its new pointers); a search
+    carries `pattern`; a single-article KB read carries `newPointers` (the stored pointers of its
+    new spans, rule 15, de-duplicated — also for spans past the pointer cap); a search
     item (`kb_search` / `search`) carries `hit`, the rule-11 hit test of its call's result (an error,
     empty, `No files found` or `No matches found` result is `false`). `hit` is derived per request
-    from the transcript (the trail and facts routes), never stored.
+    from the transcript (the facts route), never stored.
 18. **Caps.** At most `OKF_EVENT_CAP_PER_NODE` (3000) events and `OKF_POINTER_CAP_PER_NODE` (5000)
     pointer rows per node. Anything beyond is dropped and `truncated = true`, which the writer
     stores as `sessions.okf_events_truncated`. Access rows and the sequence are not capped.
@@ -248,9 +280,17 @@ bound OKF snapshot as `repoRelPath → { size, hash }`. It returns
   folder target: OA-28.
 - Code events: ranges, patterns (cut to 200), Glob without pattern, skipped segments, snapshot
   `.md` files left out: OA-27, OA-28, OA-29; the event cap: OA-30.
-- Pointer normalisation (`:12-20`, `#anchor`, `./`, glob, `http…`, spaces, `-flag`, absolute
-  paths), a pointer named in the prompt is not new, followed by a later read or a search under it:
-  OA-31.
+- Pointer normalisation (`:12-20`, `#anchor`, `./` resolved against the article folder, glob,
+  `http…`, spaces, `-flag`, absolute paths, a `/…` path outside the repo taken as bundle-rooted), a
+  pointer named in the prompt is not new, followed by a later read or a search under it: OA-31.
+- OKF v0.3 pointers: `./x`, `../x`, `../../x` against the article folder, a `..` escaping the repo
+  dropped, `isNew` on the raw span text, `seq.newPointers` with the resolved paths: OA-36;
+  `bundleRoots` — `/x` → bundle root, bare `p` with the bundle-root candidate in the snapshot
+  (`kb/a/x.md` → `tables/y.md` = `kb/tables/y.md`), with the article-folder candidate in the
+  snapshot, with only the repo-relative `p` read (stored `p`, followed), with nothing known
+  (stored `p`), `/abs` and drive-letter paths inside the session repo, a drive path outside it
+  dropped: OA-37; no `bundleRoots` (the repo root is the bundle root, the article-relative
+  candidate wins over the repo-relative one): OA-38.
 - Non-path spans dropped (identifiers without a known extension, bare versions, `(` / `)`,
   dotfiles), known extensions kept case-insensitively, the read's `newPointers` in `seq`: OA-35.
 - Partial reads (`<persisted-output>`, empty, error): OA-32; a multi-file KB read stores only
@@ -268,12 +308,13 @@ Each row is one transcript. `input.calls` are tool calls in order; for call *k* 
 parser). `input.prompt` (optional) is the string content of a first `user` line before any call; a
 call with `isError: true` gets `is_error: true` on its `tool_result`; a call with `repeat: N` is
 emitted N times (ids keep counting `t<k>`). `expected.rows` is the exact `access` result, in order. A row may also give
-`input.snapshotFiles` (`{ path: { size, hash } }`, passed as the `snapshotFiles` map) and
+`input.snapshotFiles` (`{ path: { size, hash } }`, passed as the `snapshotFiles` map),
+`input.bundleRoots` (passed as the `bundleRoots` option) and
 `expected.events` / `expected.pointers`, which are then compared with `extractOkfDetail`'s lists,
 and `expected.eventCount` / `expected.pointerCount` (list lengths), `expected.truncated` and
 `expected.seq` (the exact sequence).
 
-Rows (35): [`docs/algorithm-examples/okf-access-extraction.json`](../../algorithm-examples/okf-access-extraction.json) — test data for the table test; the rules above are enough to understand the algorithm.
+Rows (38): [`docs/algorithm-examples/okf-access-extraction.json`](../../algorithm-examples/okf-access-extraction.json) — test data for the table test; the rules above are enough to understand the algorithm.
 
 ## Mutations
 
@@ -311,24 +352,26 @@ Rows (35): [`docs/algorithm-examples/okf-access-extraction.json`](../../algorith
   already implies today; OA-35 pins `2.31.0` / `v1.2` as dropped either way.)
 - Pointers taken from an error result, or no `''` row for an empty read -> OA-32; pointers stored
   for a multi-file read -> OA-27.
+- A leading `./` stripped instead of resolved against the article folder -> OA-31
+  (`client/src/b.tsx`), OA-36 (`b.md`); `..` not popped, or an escape above the repo kept ->
+  OA-36 (`docs/README.md`, a fourth row).
+- `isNew` judged on the resolved pointer -> OA-36 (`docs/kb/sub/b.md` not new).
+- `bundleRoots` ignored -> OA-37 (`tables/q.md`, `tables/y.md`); candidates tried repo-first ->
+  OA-38 (`b.md`); `followed` checked only on the stored pointer, or the stored pointer not taken
+  from a touched candidate -> OA-37 (`kb/a/src/q.ts`, followed false).
+- `seq.newPointers` keeping the raw span text -> OA-36, OA-37.
 
 ## Where the result is visible
 
-- Session pane → **OKF** tab: bundle cards (FILES READ, BYTES INTO CONTEXT), the tree's READ /
-  WRITE columns and `own_edit` / `folder_scan` markers, the Agents panel's "how agents reached the
-  KB" (via `seq`).
-- Repository → **OKF** tab: every tile, the histogram, hot files, not-read list and the tree.
+- Session pane → **OKF** tab and Repository → **OKF** tab: every number of the summary line, Hot
+  files and the Explorer comes from the `read` / `grep` access rows (`bytes`, `calls`), counted
+  by [okf-usage-counting](okf-usage-counting.md). `list` / `write` rows, `afterOwnEdit`, `seq`,
+  `rangedCalls` / `rangedBytes` and `searchHits` are stored but not shown by the tabs.
 - API: `GET /api/v1/repositories/:repoId/sessions/:sessionId/okf-usage`,
   `GET /api/v1/repositories/:repoId/reports/okf-usage`, `GET /api/v2/okf-usage/facts` (`kbReads`,
   `kbSeq`).
-- Section reads (`§ section ×N`) and the whole-only `coarse_article` ratio (from `rangedCalls` /
-  `rangedBytes`); the `entry: search` marker (from `searchHits`).
-- Value signals (yield, searched after, routing miss, dead pointers, catalog) on both OKF tabs
-  and the article drill-down — computed from the events and pointer rows by
-  [okf-value-signals](okf-value-signals.md).
-- `GET /api/v2/okf-usage/facts` per-agent `accessSeq` (the sequence, built on demand).
-- `GET …/sessions/:sessionId/okf-usage/trail` (the session OKF tab's agent trail: the sequence
-  with `hit`, capped, plus in-area marks — see [okf-value-signals](okf-value-signals.md) rule 11).
-- Storage: `session_okf_access`, `session_okf_event`, `session_okf_pointer`, and the
-  `sessions.okf_extract_version` / `okf_events_truncated` marker (see
-  [../okf-usage.md](../okf-usage.md)).
+- `GET /api/v2/okf-usage/facts` per-agent `accessSeq` (the sequence with `hit` and `newPointers`,
+  built on demand) — the only consumer of rules 13–17.
+- Storage: `session_okf_access` and the `sessions.okf_extract_version` / `okf_events_truncated`
+  marker (see [../okf-usage.md](../okf-usage.md)). The events and pointer rows of rules 13–15 are
+  not written anywhere since 2026-11-21.

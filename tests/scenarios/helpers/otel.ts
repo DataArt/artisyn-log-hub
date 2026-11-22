@@ -95,23 +95,49 @@ export async function sendRealtime(
 /**
  * Waits until every `logs_otel` chunk of the session is projected (the drain ticks every 5 s)
  * and no reclassification of the session is queued.
+ *
+ * The drain stamps a chunk with the projection version in its own committed statement BEFORE the
+ * transaction that writes the facts (otel-projection.service.ts, step 1 / step 2), so "no chunk
+ * with a NULL version" alone is true for a few tens of ms while the facts are not there yet.
+ * `uncommitted` closes that window: a stamped chunk counts as projected only once the root's
+ * `otel_session_state` row was written after the stamp (the projecting transaction always
+ * updates it) or its `chunk_last_at` has reached the chunk's upload time. A deleted root is
+ * skipped by the drain and never gets facts, so its chunks do not count.
  */
 export async function waitForOtelProjected(db: Pool, sessionId: string, timeoutMs = 30_000): Promise<void> {
   await expect
     .poll(
       async () => {
-        const { rows } = await db.query<{ pending: string; queued: string }>(
-          `SELECT (SELECT count(*) FROM logs_otel lo WHERE lo.session_id = s.id AND lo.otel_projection_version IS NULL) AS pending,
-                  (SELECT count(*) FROM otel_reclass_queue q WHERE q.session_id = s.id) AS queued
-             FROM sessions s WHERE s.session_id = $1`,
+        const { rows } = await db.query<{ pending: string; queued: string; uncommitted: string }>(
+          `WITH RECURSIVE walk AS (
+             SELECT s.id AS cur_id, s.parent_session_id, s.deleted, 0 AS depth
+               FROM sessions s WHERE s.session_id = $1
+             UNION ALL
+             SELECT p.id, p.parent_session_id, p.deleted, w.depth + 1
+               FROM walk w JOIN sessions p ON p.session_id = w.parent_session_id
+              WHERE w.depth < 50
+           ),
+           root AS (SELECT cur_id AS id, deleted FROM walk ORDER BY depth DESC, cur_id LIMIT 1)
+           SELECT (SELECT count(*) FROM logs_otel lo WHERE lo.session_id = s.id AND lo.otel_projection_version IS NULL) AS pending,
+                  (SELECT count(*) FROM otel_reclass_queue q WHERE q.session_id = s.id) AS queued,
+                  (SELECT count(*) FROM logs_otel lo
+                    WHERE lo.session_id = s.id AND lo.otel_projection_version > 0
+                      AND NOT r.deleted
+                      AND NOT EXISTS (
+                        SELECT 1 FROM otel_session_state st
+                         WHERE st.session_id = r.id
+                           AND (st.xmin::text::bigint >= lo.xmin::text::bigint
+                                OR st.chunk_last_at >= lo.created_at)
+                      )) AS uncommitted
+             FROM sessions s CROSS JOIN root r WHERE s.session_id = $1`,
           [sessionId],
         );
         if (rows.length === 0) return 'no session';
-        return `${rows[0].pending}/${rows[0].queued}`;
+        return `${rows[0].pending}/${rows[0].queued}/${rows[0].uncommitted}`;
       },
       { timeout: timeoutMs, message: `OTEL projection of ${sessionId}` },
     )
-    .toBe('0/0');
+    .toBe('0/0/0');
 }
 
 /**

@@ -290,7 +290,8 @@ Details and their server contract: `hook/HOW_HOOK_WORKS.md` § "Upload mechanics
 
 ### Lines injected into the current session's `artisyn` upload
 
-Backlog sessions get none of these.
+Backlog sessions get none of these, except the OKF snapshot lines (hook `3.1.0`+): the OKF
+snapshot is pinned per session, so a backlog session without one would otherwise never get it.
 
 - **`hook-status`** — hook version, `hook.log` tail, this run's non-uploadable files and the
   recommendations from `.artisyn/ai_work_dir/hook-recommendations.json` (upsert-by-`rule`, e.g.

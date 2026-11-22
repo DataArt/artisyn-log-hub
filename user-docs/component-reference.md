@@ -82,6 +82,7 @@ A NestJS application on Node.js 26 (the image uses `node:26.13.1-alpine3.24`). I
 |---|---|---|
 | PostgreSQL | `$LOG_HUB_DATA_DIR/pgdata` | All application data. |
 | `/app/dist/upload-queue` | `$LOG_HUB_DATA_DIR/upload-queue` | Uploads awaiting ingestion. |
+| `/app/dist/export-import` | `$LOG_HUB_DATA_DIR/export-import` | Short-lived repository export/import staging zips (deleted after `EXPORT_IMPORT_JOB_TTL_MS`). |
 | `/app/dist/logs` | `$LOG_HUB_DATA_DIR/logs` | Server application and SQL logs. |
 
 ## 4. Web client

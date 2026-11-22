@@ -790,7 +790,12 @@ export class LogsService {
       // verbatim for the uploading owner; the tree's ROOT session is then bound to the ref id
       // (or the full line's own id) only while its `okf_snapshot_id` is still NULL — never
       // rebound. Uploads without either line (old hooks) skip this entirely.
-      await storeAndBindOkfSnapshot(tx, userId, sessionRowId, lines);
+      const okfBound = await storeAndBindOkfSnapshot(
+        tx,
+        userId,
+        sessionRowId,
+        lines,
+      );
 
       // Step 5e — change surface. Two independent pieces, both artisyn-only:
       //
@@ -821,14 +826,21 @@ export class LogsService {
       // repo root and only the uploader-default scope. Rebuild them from the stored bodies —
       // but only when this upload can have changed the outcome (new log, newly linked repo,
       // or a newly learned root): artisyn chunks re-upload often, and reparsing every body on
-      // every chunk would be wasted work. Must run before Step 6's new-insert-only exit.
+      // every chunk would be wasted work. A root bound to its OKF snapshot only now (a backlog
+      // re-upload of a session whose transcripts were already extracted without one) also
+      // needs it: the OKF rows depend on the snapshot. Must run before Step 6's new-insert-only exit.
       const effectiveRoot = gitRoots.root ?? priorRoots.root;
       const effectiveWorktreeRoot =
         gitRoots.worktreeRoot ?? priorRoots.worktreeRoot;
       const rootsChanged =
         effectiveRoot !== priorRoots.root ||
         effectiveWorktreeRoot !== priorRoots.worktreeRoot;
-      if (logResult.isNewInsert || linksInserted > 0 || rootsChanged) {
+      if (
+        logResult.isNewInsert ||
+        linksInserted > 0 ||
+        rootsChanged ||
+        okfBound
+      ) {
         await rewriteSessionTreeFileStats(tx, sessionRowId, userId);
       }
 

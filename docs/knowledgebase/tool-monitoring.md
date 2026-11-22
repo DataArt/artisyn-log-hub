@@ -8,7 +8,7 @@ tags:
   - hook
   - reports
   - session-view
-generated: { by: "human:denistsyplakov", at: "2026-11-09T00:00:00+04:00" }
+generated: { by: "human:denistsyplakov", at: "2026-11-21T12:45:00+04:00" }
 ---
 
 # Tool Monitoring (Tools/MCP tab)
@@ -98,7 +98,10 @@ wrapped from the next session (no shim exists yet).
 **Bash (DD-13).** At `SessionStart` `tool-wrap-shims.js` writes one Bash shim per monitored tool
 that resolves on the PATH into `<sessionId>/shims/`, runs the pre-flight and appends
 `export PATH="<shim dir>:$PATH"` to `$CLAUDE_ENV_FILE` (Git-Bash form `/c/…` on Windows), which
-Claude Code sources before every Bash tool command. A shim runs
+Claude Code sources before every Bash tool command. Before Claude Code 2.1.330, `claude -p --continue`
+dropped what a SessionStart hook wrote to `$CLAUDE_ENV_FILE`, so a continued `-p` session ran with no
+shims and its Bash calls show up only through the transcript (`no_wrapper`). Missing tool-call
+records in such older sessions are expected. Nothing changed in the hook for this. A shim runs
 `LOGHUB_SHIM_ACTIVE=1 "$real" "$@" 2> >(tee …err >&2) | node tool-wrap-tee.js …`, takes the exit
 code from `PIPESTATUS[0]` and exits with it — or, when the tool died of SIGHUP / SIGINT / SIGQUIT /
 SIGPIPE / SIGTERM (129–143), kills itself with the same signal after writing the `exit` record, so
@@ -392,6 +395,7 @@ no Monitored tools button (the config is edited in the repository settings); its
 | Old hook (`< 2.27.0`) → new server | No wrapper, no `tool-calls` log, no config fetch. MCP calls and transcript-only CLI calls (`no_wrapper`) still appear; a configured tool shows `hook_too_old` |
 | Hook `2.27.0`–`2.32.1` on Windows → new server | Works as before (it still wraps PowerShell in every mode); a configured tool shows `hook_too_old` ("hook too old — update the hook") |
 | New hook (`≥ 2.32.2`), Claude Code without `permission_mode` in `PreToolUse` | No PowerShell wrap (missing field = "do not wrap"); Bash shims unchanged |
+| Any hook with Bash shims, Claude Code `< 2.1.330`, `claude -p --continue` | No shims in the continued session (Claude Code lost the SessionStart `$CLAUDE_ENV_FILE` exports); its Bash calls appear as `no_wrapper` from the transcript. Fixed on Claude Code's side in 2.1.330 |
 | New hook → old server | The config route answers 404 → "no config" (cache if any, else nothing wrapped); a `tool-calls` upload is stored as an inert generic `logs` row |
 | Old server upgraded later | Migration `0076` leaves every session pending, so the drain rebuilds all trees, including inert `tool-calls` rows stored before |
 | Config answer with an unknown `schemaVersion` | Read as "no config" by the hook; the server adds fields without bumping the version |

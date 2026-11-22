@@ -24,40 +24,6 @@ const R1_TEAM_CONFIG = {
   },
 };
 
-/**
- * OKF View threshold defaults (2026-11-03 value signals, DD-19), carried by every settings
- * response as `okfDefaults` so the client keeps no twin of them. Golden: okf-verdict.md's table.
- */
-const OKF_DEFAULTS = {
-  shareMinBundleFiles: 10,
-  sessionShareFix: 0.25,
-  sessionShareMess: 0.5,
-  repoMinKbSessions: 5,
-  alwaysReadShare: 0.8,
-  floodShare: 0.25,
-  floodMessSessionShare: 0.2,
-  floodMinSessions: 3,
-  coarseMinSizeBytes: 51200,
-  coarseMinSessions: 5,
-  coarseMaxReadRatio: 0.1,
-  exploredMinSearches: 2,
-  routingMinSearches: 3,
-  routingMinAgents: 3,
-  pointerMaxArticles: 3,
-  areaMaxFiles: 30,
-  deadPointerMinShown: 4,
-  codeRoots: ['server/', 'client/', 'hook/', 'scripts/', 'packages/', 'tests/'],
-};
-
-/** The fixed OKF limits of the Settings block's "Not settings" footer (DD-0). */
-const OKF_FIXED_LIMITS = {
-  readTopN: 5,
-  hotFilesTopN: 10,
-  taskHeadMaxChars: 200,
-  patternMaxChars: 200,
-  eventCapPerNode: 3000,
-};
-
 /** The owner's personal layer of R1 in world-v1 (repo_config). */
 const R1_OWNER_CONFIG = {
   fileCategories: [{ name: 'Docs', patterns: ['^docs/'] }],
@@ -227,8 +193,6 @@ export const f14Repositories: ContractFamily = {
             fileCategories: [{ name: 'Docs', patterns: ['^docs/'] }],
             sessionAttribution: R1_TEAM_CONFIG.sessionAttribution,
           },
-          okfDefaults: OKF_DEFAULTS,
-          okfFixedLimits: OKF_FIXED_LIMITS,
         },
       },
       read: {
@@ -416,9 +380,10 @@ export const f14Repositories: ContractFamily = {
       },
     },
     {
-      // 2026-11-03 value signals (DD-19, DD-21): an `okf` section round-trips through the
-      // personal layer with `codeRoots` normalised to a trailing `/`. The rest of the config is
-      // unchanged, so the save skips the recompute: no derived table may change.
+      // OKF tab minimal (2026-11-21, DD-16): `okf` is no longer a setting. A PUT body that
+      // carries one is accepted, and the stored row keeps the `okf` it had — R1's owner layer
+      // has none, so the key is dropped. The rest of the config is unchanged, so the save skips
+      // the recompute: no derived table may change.
       id: 'F14-put-user-settings-okf',
       route: 'PUT /api/v1/repositories/:repoId/settings/user',
       actor: 'owner',
@@ -431,13 +396,7 @@ export const f14Repositories: ContractFamily = {
       },
       expect: {
         status: 200,
-        bodyMatches: {
-          userConfig: {
-            ...R1_OWNER_CONFIG,
-            okf: { routingMinSearches: 4, codeRoots: ['src/', 'lib/'] },
-          },
-          okfDefaults: OKF_DEFAULTS,
-        },
+        bodyMatches: { userConfig: R1_OWNER_CONFIG },
       },
       write: {
         watch: ['repo_config'],
@@ -447,12 +406,7 @@ export const f14Repositories: ContractFamily = {
             {
               table: 'repo_config',
               where: 'repo_id = @R1.id AND user_id = @owner.id',
-              changed: {
-                config: {
-                  ...R1_OWNER_CONFIG,
-                  okf: { routingMinSearches: 4, codeRoots: ['src/', 'lib/'] },
-                },
-              },
+              changed: { config: R1_OWNER_CONFIG },
               anyChange: ['updated_at'],
             },
           ],
@@ -460,8 +414,8 @@ export const f14Repositories: ContractFamily = {
       },
     },
     {
-      // Team view: T1's owner adds an `okf` section to T1's config; an okf-only change skips
-      // the recompute (DD-21), so no derived table may change.
+      // Team view: T1's owner sends an `okf` section with T1's config; the stored team layer
+      // has none and keeps none (DD-16), and nothing is recomputed.
       id: 'F14-put-team-settings-okf',
       route: 'PUT /api/v1/repositories/:repoId/settings/team',
       actor: 'owner',
@@ -472,10 +426,7 @@ export const f14Repositories: ContractFamily = {
       },
       expect: {
         status: 200,
-        bodyMatches: {
-          teamConfig: { ...R1_TEAM_CONFIG, okf: { routingMinAgents: 2 } },
-          okfDefaults: OKF_DEFAULTS,
-        },
+        bodyMatches: { teamConfig: R1_TEAM_CONFIG },
       },
       write: {
         watch: ['team_repo_config'],
@@ -484,9 +435,7 @@ export const f14Repositories: ContractFamily = {
             {
               table: 'team_repo_config',
               where: 'team_repository_id = 1',
-              changed: {
-                config: { ...R1_TEAM_CONFIG, okf: { routingMinAgents: 2 } },
-              },
+              changed: { config: R1_TEAM_CONFIG },
               anyChange: ['updated_at'],
             },
           ],
@@ -494,7 +443,8 @@ export const f14Repositories: ContractFamily = {
       },
     },
     {
-      // DD-19: count thresholds are integers >= 1; an invalid section is a 400, nothing saved.
+      // DD-16: the section is not validated any more — a value that used to be a 400 (a count
+      // threshold below 1) is accepted and, like any `okf`, not stored.
       id: 'F14-put-user-settings-okf-invalid',
       route: 'PUT /api/v1/repositories/:repoId/settings/user',
       actor: 'owner',
@@ -502,7 +452,24 @@ export const f14Repositories: ContractFamily = {
       body: {
         config: { ...R1_OWNER_CONFIG, okf: { routingMinSearches: 0 } },
       },
-      expect: { status: 400 },
+      expect: {
+        status: 200,
+        bodyMatches: { userConfig: R1_OWNER_CONFIG },
+      },
+      write: {
+        watch: ['repo_config'],
+        keys: { repo_config: ['repo_id', 'user_id'] },
+        delta: {
+          updated: [
+            {
+              table: 'repo_config',
+              where: 'repo_id = @R1.id AND user_id = @owner.id',
+              changed: { config: R1_OWNER_CONFIG },
+              anyChange: ['updated_at'],
+            },
+          ],
+        },
+      },
     },
     {
       id: 'F14-put-team-settings-outsider',

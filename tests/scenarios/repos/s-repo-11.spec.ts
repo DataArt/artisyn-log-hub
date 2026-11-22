@@ -36,12 +36,17 @@
 // session (recompute-all then fills its OKF rows from the now-known roots); a third archive with a
 // different snapshot never rebinds it.
 //
+// Step 20 (2026-11-19-export-import-staging-mount, FR4): with the staging dir replaced by a file,
+// repeated identical cleanup-sweep failures write one ERROR; the first good sweep logs one INFO.
+//
 // Replaces:
 //   - server/test/repository-export-import.spec.ts (7 of 8: «overwrites when longer», «leaves
 //     untouched when shorter or equal», «bootstrap import», «retries numbered suffix», «404 other
 //     user status»)
 //   - server/src/logs/repository-export-import.service.spec.ts (merge part)
 import { randomBytes } from 'crypto';
+import fs from 'fs';
+import path from 'path';
 import { test, expect } from '../fixtures';
 import type { ScenarioUser } from '../fixtures';
 import { createApiKey } from '../helpers/api-key';
@@ -79,6 +84,8 @@ test('@S-REPO-11 import conflicts: the longer log wins; bootstrap import creates
   users,
 }) => {
   test.setTimeout(180_000);
+  // Step 20 alone waits ~11 s for cleanup sweeps.
+  test.setTimeout(120_000);
   /** Mode A (AUTH_MODE=none): no ownership checks, imported sessions are reassigned to the importer. */
   const singleUser = stand.authMode === 'none';
   const run = randomBytes(4).toString('hex');
@@ -529,5 +536,40 @@ test('@S-REPO-11 import conflicts: the longer log wins; bootstrap import creates
     expect(other.okfSnapshotId).not.toBe(first.okfSnapshotId);
     await importZip(owner.api, repoA, other.zip);
     expect(await okfBinding()).toBe(first.okfSnapshotId);
+  });
+
+  await test.step('20. a broken staging dir logs one cleanup-sweep ERROR, not one per sweep; recovery logs one INFO and export works again', async () => {
+    // The stand ticks the cleanup every 2 s (FAST_TICK_ENV) and is one process, so 7 s is ≥ 3
+    // failed sweeps of one worker. A regular file at the dir path breaks mkdirSync on every OS.
+    const admin = await users.user('admin', { label: 'r11-admin' });
+    const stagingDir = path.join(stand.runDir, 'export-import');
+    const backupDir = `${stagingDir}.bak`;
+    const sweepErrors = async (since: number) => {
+      const res = await admin.api.get('/api/v1/admin/error-logs');
+      expect(res.status(), 'admin error logs').toBe(200);
+      const { entries } = (await res.json()) as { entries: Array<{ timestamp: string; message: string }> };
+      return entries.filter(
+        (e) => Date.parse(e.timestamp) >= since && e.message.includes('Export/import job cleanup sweep failed'),
+      ).length;
+    };
+    const t0 = Date.now();
+    fs.renameSync(stagingDir, backupDir);
+    try {
+      fs.writeFileSync(stagingDir, 'not a directory');
+      await new Promise((resolve) => setTimeout(resolve, 7000));
+      expect(await sweepErrors(t0), 'one ERROR for repeated identical sweep failures').toBe(1);
+    } finally {
+      fs.rmSync(stagingDir, { force: true });
+      fs.renameSync(backupDir, stagingDir);
+    }
+    await exportRepo(owner.api, repoA);
+    await new Promise((resolve) => setTimeout(resolve, 4000));
+    expect(await sweepErrors(t0), 'no new ERROR after the dir is restored').toBe(1);
+    const logsDir = path.join(stand.runDir, 'logs');
+    const recovered = fs
+      .readdirSync(logsDir)
+      .filter((name) => /^app-.*\.log$/.test(name))
+      .some((name) => fs.readFileSync(path.join(logsDir, name), 'utf8').includes('Export/import job cleanup sweep recovered after'));
+    expect(recovered, 'a recovered INFO in the server log').toBe(true);
   });
 });

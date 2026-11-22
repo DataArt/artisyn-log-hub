@@ -347,7 +347,7 @@ As shipped in the tarball; the installer replaces `"name"` with this repo's `art
 {
   "name": "log-hub-hooks",
   "displayName": "Log Hub Hooks",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "description": "Records Claude Code session telemetry and uploads it to artisyn-log-hub.",
   "author": { "name": "Artisyn" }
 }
@@ -546,7 +546,7 @@ It is read from the hook process's environment (inherited from Claude Code), not
 | `sessionAttributionMaxPromptSizeKb` | `60` | number | Cap on the AI Session Attribution prompt's free-text "user prompts" sample; attribute definitions and the changed-file list are never truncated. |
 | `sessionAttributionLlmModel` | `"haiku"` | string | Claude model used for the AI Session Attribution branch's `claude -p` call. |
 | `sessionAttributionLlmTimeoutMs` | `600000` | number | Timeout for the attribution branch's LLM call (10 min — same rationale as the advisor branch's timeout above); on timeout the run is recorded as `failed` and counts toward the 3-consecutive-failure cap. |
-| `okf` | `{"exclude": []}` | object | OKF knowledge-base snapshot settings (hook `2.26.0`+). `okf.exclude` is an array of repo-relative globs (`**`, `*`, `?`) whose files and folders are never scanned for OKF bundles (folders whose `index.md` front matter has an `okf_version:` key); `tmp/**` is always excluded on top of it. Like every top-level key, `log-hub.local.json`'s `okf` replaces `log-hub.json`'s whole object — the two `exclude` lists are not merged. A non-array `exclude` is ignored with one `[warn]` line. An older hook ignores the key. Example: `{"okf": {"exclude": ["vendor/**", "docs/archive/**"]}}`. |
+| `okf` | `{"exclude": []}` | object | OKF knowledge-base snapshot settings (hook `2.26.0`+). `okf.exclude` is an array of repo-relative globs (`**`, `*`, `?`) whose files and folders are never scanned for OKF bundles (folders whose `index.md` front matter — read from the file's first 8 KB since hook `3.1.0`, 512 bytes before — has an `okf_version:` key); since hook `3.1.0` the snapshot also carries each bundle's `okf_version` / `title` / `description` and each KB file's front-matter metadata (`type`, `status`, `superseded_by`, `stale_after`, whether it has front matter / `generated` / `timestamp`), dropped when the snapshot would exceed 8 MiB; `tmp/**` is always excluded on top of it. Like every top-level key, `log-hub.local.json`'s `okf` replaces `log-hub.json`'s whole object — the two `exclude` lists are not merged. A non-array `exclude` is ignored with one `[warn]` line. An older hook ignores the key. Example: `{"okf": {"exclude": ["vendor/**", "docs/archive/**"]}}`. |
 | `toolWrap` | `true` | boolean | CLI tool wrapper local kill switch (hook `2.27.0`+). `false` (or the environment variable `LOGHUB_TOOL_WRAP=0`) turns the wrapper off for this checkout: no shims are put on `PATH` at `SessionStart`, the `PreToolUse` PowerShell entry never rewrites a command and no `tool-calls` log is uploaded. The list of monitored tools itself is configured on the server, not here. An older hook ignores the key. |
 | `toolWrapConfigTimeoutMs` | `2000` | number | HTTP timeout for fetching the monitored-tools config from the server (hook `2.27.0`+); the once-a-minute refresh on each prompt caps it at 1000 ms. On timeout or any error the hook keeps its cached config (fail open — it never blocks a session). |
 

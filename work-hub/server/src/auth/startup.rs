@@ -12,7 +12,16 @@ use crate::auth::AuthMode;
 use crate::auth::js;
 use crate::config::{AuthEnv, RunEnv};
 
-pub const VALID_AUTH_MODES: [&str; 4] = ["none", "password", "password-confirm", "azure-oauth"];
+pub const VALID_AUTH_MODES: [&str; 5] = [
+    "none",
+    "password",
+    "password-confirm",
+    "azure-oauth",
+    "strict-managed",
+];
+/// The modes Work Hub runs in: `VALID_AUTH_MODES` minus strict-managed, which the shared rule
+/// accepts but `AuthSettings::from_env` refuses.
+pub const SERVED_AUTH_MODES: [&str; 4] = ["none", "password", "password-confirm", "azure-oauth"];
 pub const VALID_PASSWORD_POLICIES: [&str; 3] = ["any", "mid", "long"];
 
 /// The effective values after a passing validation (defaults applied).
@@ -145,6 +154,37 @@ fn validate_mode3(env: EnvLookup, is_production: bool) -> Result<(), String> {
     validate_smtp_block(env)
 }
 
+/// Mode `strict-managed` (Log Hub's `validateModeStrictManaged`): `PUBLIC_BASE_URL` required in
+/// every environment, then the domain list, the admin e-mail and the SMTP block.
+fn validate_mode_strict_managed(env: EnvLookup) -> Result<(), String> {
+    let raw = env("PUBLIC_BASE_URL").unwrap_or_default();
+    let base = js::trim(&raw);
+    if base.is_empty() {
+        return Err("PUBLIC_BASE_URL environment variable is required for AUTH_MODE=strict-managed (every way in is an emailed link)".into());
+    }
+    if !is_absolute_http_url(base) {
+        return Err(format!(
+            "PUBLIC_BASE_URL environment variable must be an absolute http(s) URL, got: {base}"
+        ));
+    }
+    parse_allowed_email_domains(env("ALLOWED_EMAIL_DOMAINS").as_deref())?;
+    let admin = match env("ADMIN_CONTACT_EMAIL") {
+        Some(a) if !js::trim(&a).is_empty() => a,
+        _ => {
+            return Err(
+                "ADMIN_CONTACT_EMAIL environment variable is required for AUTH_MODE=strict-managed"
+                    .into(),
+            );
+        }
+    };
+    if !is_email(&admin) {
+        return Err(format!(
+            "ADMIN_CONTACT_EMAIL environment variable must be a valid email address, got: {admin}"
+        ));
+    }
+    validate_smtp_block(env)
+}
+
 /// Runs the rules; returns the effective mode and policy or the first failure's message.
 pub fn validate_auth_startup_config(
     env: EnvLookup,
@@ -167,6 +207,7 @@ pub fn validate_auth_startup_config(
         AuthMode::Password => validate_mode2(env, is_production)?,
         AuthMode::AzureOauth => validate_mode4(env)?,
         AuthMode::PasswordConfirm => validate_mode3(env, is_production)?,
+        AuthMode::StrictManaged => validate_mode_strict_managed(env)?,
     }
     let policy_raw = env("PASSWORD_POLICY");
     let password_policy = if js::is_blank(policy_raw.as_deref()) {
@@ -439,6 +480,25 @@ impl AuthSettings {
     /// under `NODE_ENV=test`; the mode must still be a known one) and builds the settings.
     pub fn from_env(auth_env: &AuthEnv, run_env: RunEnv) -> Result<Self, String> {
         let lookup = |name: &str| auth_env.get(name).map(str::to_string);
+        // Checked before the shared rules: their message lists strict-managed, which Work Hub
+        // does not serve yet, so an unknown or unserved mode gets Work Hub's own message.
+        if let Some(m) = lookup("AUTH_MODE").filter(|m| !js::is_blank(Some(m))) {
+            match AuthMode::parse(&m) {
+                None => {
+                    return Err(format!(
+                        "AUTH_MODE environment variable has an unrecognized value \"{m}\"; must be one of {}",
+                        SERVED_AUTH_MODES.join(", ")
+                    ));
+                }
+                Some(AuthMode::StrictManaged) => {
+                    return Err(format!(
+                        "AUTH_MODE=strict-managed is not supported by Work Hub yet; use one of {}",
+                        SERVED_AUTH_MODES.join(", ")
+                    ));
+                }
+                Some(_) => {}
+            }
+        }
         let outcome = if run_env == RunEnv::Test {
             let mode_raw = lookup("AUTH_MODE");
             let mode = if js::is_blank(mode_raw.as_deref()) {

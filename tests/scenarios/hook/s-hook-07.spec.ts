@@ -997,7 +997,11 @@ test('@S-HOOK-07 the OTEL receiver refuses browsers, foreign projects, path tric
         const failed: unknown = JSON.parse(fs.readFileSync(path.join(q.failedDir, q.job), 'utf8'));
         expect(failed).toMatchObject({ sessionId: 'rt-1', trigger: 'session-end', attempts: 1, failedReason: 'upload-rejected' });
         expect(isRecord(failed) && Number.isFinite(Date.parse(String(failed.failedAt))), 'failedAt is an ISO time').toBe(true);
-        expect(readHookLog(q.qRepo, 'send-logs-hook.js').some((l) => l.includes(`job failed: ${q.job} reason=upload-rejected`))).toBe(true);
+        // failJob() writes the failed/ record first and the hook.log line right after it, in another
+        // process: wait for the line instead of reading the log the instant the record appears.
+        await expect
+          .poll(() => readHookLog(q.qRepo, 'send-logs-hook.js').some((l) => l.includes(`job failed: ${q.job} reason=upload-rejected`)), { timeout: 10_000 })
+          .toBe(true);
 
         // Nothing blocks any more: the receiver idles out after the job went to failed/.
         expect(await waitForExit(receiver, 15_000)).toBe(0);

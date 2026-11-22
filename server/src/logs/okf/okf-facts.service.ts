@@ -40,7 +40,7 @@ import {
 } from './okf-snapshot';
 import { filterUserPrompts } from './okf-task-context';
 import type { OkfFactsResponse, OkfFactsSeqItem } from './okf-usage.types';
-import { bundleOfPath } from './okf-verdict';
+import { bundleOfPath } from './okf-paths';
 import { getServerBashParser } from './server-bash-parser';
 
 /** DD-18: top non-KB reads per agent. */
@@ -364,6 +364,7 @@ export class OkfFactsService {
       const detail = extractOkfDetail(node.lines, roots, parser, {
         isSubagentLog: node.isSubagent,
         snapshotFiles,
+        bundleRoots: bundles?.map((b) => b.root),
       });
       const access: OkfAccessRow[] = detail.access;
       const fileFacts = collectNodeFileFacts(

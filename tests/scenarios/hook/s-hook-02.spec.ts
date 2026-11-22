@@ -114,7 +114,12 @@ test('@S-HOOK-02 the hook repairs torn NDJSON byte-for-byte and keeps secrets ou
       expect(res.code, res.stderr).toBe(0);
       const sent = hub!.requests.find((r) => r.type === 'artisyn' && r.sessionId === art);
       expect(sent, 'artisyn upload of the torn file').toBeTruthy();
-      expect(sent!.body.equals(artKept), `sent:\n${sent!.body.toString('utf8')}`).toBe(true);
+      // Since hook 3.1.0 a backlog session's artisyn body is preceded by the OKF snapshot lines
+      // (never written to the local file); the file's own bytes follow them untouched.
+      const prefix = sent!.body.subarray(0, sent!.body.length - artKept.length);
+      expect(sent!.body.subarray(prefix.length).equals(artKept), `sent:\n${sent!.body.toString('utf8')}`).toBe(true);
+      expect(ndjsonLines(prefix.toString('utf8')).map((e) => e.type)).toEqual(['okf-snapshot-ref', 'okf-snapshot']);
+      expect(prefix.toString('utf8').endsWith('\n')).toBe(true);
       const curBody = hub!.requests.find((r) => r.type === 'artisyn' && r.sessionId === cur)!.body.toString('utf8');
       expect(ndjsonLines(curBody)[0].type).toBe('hook-status');
       expect(curBody.endsWith(fs.readFileSync(path.join(telemetry, `${cur}.jsonl`), 'utf8'))).toBe(true);
@@ -276,7 +281,10 @@ test('@S-HOOK-02 the hook repairs torn NDJSON byte-for-byte and keeps secrets ou
       await waitForQueueIdle(db, owner.id);
       const stored = await storedBody(db, art, 'artisyn');
       expect(stored, 'artisyn log of the repaired session').not.toBeNull();
-      expect(stored!.map((e) => (isRecord(e) ? e.event : null))).toEqual(['session_start', 'prompt_start', 'prompt_stop']);
+      // The stored log is the uploaded body: the OKF ref line the hook put ahead of this backlog
+      // session's file (hook 3.1.0; plus the full line when the hook sent it), then the kept lines.
+      const storedKinds = stored!.map((e) => (isRecord(e) ? (e.event ?? e.type) : null));
+      expect(storedKinds.filter((k) => k !== 'okf-snapshot')).toEqual(['okf-snapshot-ref', 'session_start', 'prompt_start', 'prompt_stop']);
       expect(await storedBody(db, bl, 'claude')).toHaveLength(1);
       const repos = await (await owner.api.get('/api/v1/repositories')).json();
       expect(JSON.stringify(repos)).toContain(repoUrl);

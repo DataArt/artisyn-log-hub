@@ -224,7 +224,7 @@ wireframes).
 
   | Shot | Shows | Used on |
   |---|---|---|
-  | `change-surface.png`, `analytics.png`, `okf-usage.png`, `tool-analytics.png` | Features blocks C, D, G, H | Features (`change-surface.png` also on deck slide 23, Team) |
+  | `change-surface.png`, `analytics.png`, `okf-usage.png`, `tool-analytics.png` | Features blocks C, D, G, H. **`okf-usage.png` is outdated until refreshed:** it shows the OKF tab as it was before the 2026-11-21 cut (see the note under this table) | Features (`change-surface.png` also on deck slide 23, Team) |
   | `context-usage.png` | Session → Charts → Context Usage | no longer shown (replaced by `system-context-anatomy.png` in deck v2); kept for reuse |
   | `agent-tree.png`, `call-tree.png`, `context-growth-start.png`, `context-growth-later.png`, `cost-by-branch.png`, `harness-usage.png`, `lines-per-hour.png`, `metric-list.png`, `sessions-by-cost.png`, `timeline.png`, `tool-heatmap.png`, `tools-mcp.png` | session charts, reports, analytics | deck |
   | `system-context-anatomy.png` (2026-11-06) | Session → System context anatomy: startup context by source (bar + table), demo repository, `/adlc-demo:implement` session | deck slide 16, Features B |
@@ -232,7 +232,7 @@ wireframes).
   | `session-map.png` (2026-11-06) | Session → Session Map, replay of a finished workflow session, demo repository | deck slide 13, Features I |
   | `trace-waterfall.png` (2026-11-06) | Session → OTEL → Traces, one turn's waterfall (the demo repository has no traces, so a Log Hub repository session with English skill names) | deck slide 13, Features I |
   | `live-view.png` (2026-11-06) | Top bar → Live: tree, tiles and "Tokens over time" (chart 2 / 7), paused; the user e-mail was replaced by "Developer A" and the team name by "Team A" in the DOM before the shot (as for `og-image.png`), the crop stops above a Cyrillic session title | deck slide 14, Features I |
-  | `okf-kb-value.png`, `okf-kb-value-heuristic.png` (2026-11-06) | Repository → OKF, KB folder `docs/knowledgebase`: section A (verified) and section B (heuristic, check by hand), Log Hub repository (the demo repository has no KB) | deck slide 18, Features G |
+  | `okf-kb-value.png`, `okf-kb-value-heuristic.png` (2026-11-06) | Repository → OKF, KB folder `docs/knowledgebase`: section A (verified) and section B (heuristic, check by hand), Log Hub repository (the demo repository has no KB). **Outdated until refreshed:** sections A / B no longer exist in the product since 2026-11-21 (see the note under this table) | deck slide 18, Features G |
   | `spend-budget.png` (2026-11-10) | Repository → Spend: the monthly budget card (bar, ticks, four tiles) and the daily chart with the budget-pace legend, Log Hub repository, 1100 px viewport; the slice table and costly-sessions list (which carry e-mails) were removed from the DOM before the shot | deck slide 11, Features → A, one-pager |
   | `nav-lenses.png` | one row of session tabs: the View select on Cost, its row and "More" open | Features → Navigation |
   | `nav-chart-tabs.png` | View: All tabs, Call Tree open as a session tab of its own | Features → Navigation |
@@ -243,6 +243,16 @@ wireframes).
   | `demo/clip-*.gif` (10 clips, 960×600, 5–8 s) + first frame `demo/clip-*.png` | short interactions (map replay, tab switching, analytics range/group/metric, call-tree drill-down, …); the first frame is the `prefers-reduced-motion` still | Home carousel |
   | `demo/thumbs/<id>.jpg` (256×160) | one thumbnail per item | Home carousel strip |
   | `demo/items.json` | manifest in carousel order: `{ id, kind, src, still?, thumb, duration?, caption, where, alt }` | read by `carousel.js` and `@S-SITE-01` |
+
+  **OKF shots are outdated until refreshed.** Task `2026-11-21-okf-tab-minimal` cut the OKF tabs
+  down to a summary line and four views (Versions, Wrong format, Hot files, Explorer) and left
+  the marketing site out of scope: `okf-usage.png`, `okf-kb-value.png` and
+  `okf-kb-value-heuristic.png` in `site/assets/shots/`, the Features block G text
+  (`site/pages/features.html`), the Home page (`site/pages/home.html`) and deck slide 18
+  (`site/deck/index.html`) still show and describe the old tab (verdict, verified / heuristic
+  sections). They use their own image copies, so nothing breaks; a follow-up task re-shoots them
+  and rewrites the texts. The in-app help is current: `user-docs/okf-tab.md` with its own
+  `user-docs/images/okf-tab.png` (the former `user-docs/images/okf-kb-value*.png` are deleted).
 
   The deck v2 shots were taken from local prod with Playwright MCP (identify-only login), clipped
   to the content pane; none shows an e-mail, a person's name or a local path. Not captured: an
@@ -349,7 +359,7 @@ Log Hub's own data (where it lives, outbound calls, who reads it, retention) —
 | 15 | Divider · Part 3 of 8 · context | deck map |
 | 16 | Context · harness tax | `system-context-anatomy.png` |
 | 17 | Context · what the agent uses | `harness-usage.png` |
-| 18 | Context · knowledge base, verified vs heuristic | `okf-kb-value*.png` |
+| 18 | Context · knowledge base, verified vs heuristic — **outdated until refreshed** (the OKF tab was cut down on 2026-11-21, see "OKF shots are outdated" above) | `okf-kb-value*.png` |
 | 19 | Divider · Part 4 of 8 · quality | deck map |
 | 20 | Quality · you build the checks, Log Hub shows which ran and with what result | checks table (`.visual-slot.checks-table`) |
 | 21 | Divider · Part 5 of 8 · team | deck map |

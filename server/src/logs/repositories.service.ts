@@ -22,7 +22,6 @@ import {
 import { DRIZZLE } from '../database/database.constants';
 import type { DrizzleDb } from '../database/database.module';
 import type {
-  OkfThresholds,
   RepoConfigJson,
   SessionAttributionAttributeDef,
 } from '../database/schema/index';
@@ -74,22 +73,6 @@ import { upsertSessionToolStatsRows } from './session-tool-stats-writer';
 import { recomputeSessionCosts } from './session-cost/session-cost-writer';
 import { upsertSessionHarnessUsageRows } from './session-harness-usage-writer';
 import { rebuildOkfAccessForNodes } from './okf/okf-access-writer';
-import {
-  OKF_EVENT_CAP_PER_NODE,
-  OKF_PATTERN_MAX_CHARS,
-} from './okf/okf-constants';
-import {
-  customOkfThresholdFields,
-  DEFAULT_OKF_THRESHOLDS,
-  resolveOkfThresholds,
-  validateOkfThresholds,
-  type ResolvedOkfThresholds,
-} from './okf/okf-thresholds';
-import {
-  HOT_FILES_TOP_N,
-  READ_TOP_N,
-  TASK_HEAD_MAX_CHARS,
-} from './okf/okf-verdict';
 import type { TeamScope } from './team-scope';
 import {
   DEFAULT_TEAM_VIEW_CONFIG,
@@ -109,38 +92,11 @@ export interface RepoSettingsResponse {
   userConfig: RepoConfigJson | null;
   teamId: number | null;
   canEditTeamConfig: boolean;
-  /** `DEFAULT_OKF_THRESHOLDS`, so the client keeps no twin of the defaults (DD-21). */
-  okfDefaults: OkfThresholds;
-  /** Fixed OKF limits that are not settings, for the Settings "Not settings" footer (DD-0). */
-  okfFixedLimits: OkfFixedLimits;
 }
-
-/** OKF View limits that are fixed in code, reported read-only by the settings routes. */
-export interface OkfFixedLimits {
-  readTopN: number;
-  hotFilesTopN: number;
-  taskHeadMaxChars: number;
-  patternMaxChars: number;
-  eventCapPerNode: number;
-}
-
-/** Thresholds in force for one OKF View request, plus the fields that differ from the defaults. */
-export interface ResolvedOkfThresholdsResult {
-  values: ResolvedOkfThresholds;
-  custom: string[];
-}
-
-const OKF_FIXED_LIMITS: OkfFixedLimits = {
-  readTopN: READ_TOP_N,
-  hotFilesTopN: HOT_FILES_TOP_N,
-  taskHeadMaxChars: TASK_HEAD_MAX_CHARS,
-  patternMaxChars: OKF_PATTERN_MAX_CHARS,
-  eventCapPerNode: OKF_EVENT_CAP_PER_NODE,
-};
 
 /**
- * Deep equality of two config rows ignoring their `okf` section (DD-21): JSON values only, so
- * object key order does not matter. `null` (no row) equals only `null`.
+ * Deep equality of two config rows ignoring their `okf` section: JSON values only, so object
+ * key order does not matter. `null` (no row) equals only `null`.
  */
 function sameConfigIgnoringOkf(
   a: RepoConfigJson | null,
@@ -148,6 +104,23 @@ function sameConfigIgnoringOkf(
 ): boolean {
   if (a === null || b === null) return a === b;
   return jsonDeepEqual({ ...a, okf: undefined }, { ...b, okf: undefined });
+}
+
+/**
+ * The `okf` section is no longer a setting: it is neither validated nor read, and a save never
+ * changes it. Puts the stored row's `okf` into the incoming `config` (removes the key when the
+ * stored row has none), so whatever a client sends there is ignored and the stored section
+ * survives until the follow-up task drops it.
+ */
+function keepStoredOkf(
+  config: RepoConfigJson,
+  stored: RepoConfigJson | null,
+): void {
+  if (stored?.okf !== undefined) {
+    config.okf = stored.okf;
+  } else {
+    delete config.okf;
+  }
 }
 
 function isJsonRecord(value: unknown): value is Record<string, unknown> {
@@ -701,76 +674,7 @@ export class RepositoriesService {
       userConfig,
       teamId: resolvedTeamId,
       canEditTeamConfig,
-      okfDefaults: {
-        ...DEFAULT_OKF_THRESHOLDS,
-        codeRoots: [...DEFAULT_OKF_THRESHOLDS.codeRoots],
-      },
-      okfFixedLimits: { ...OKF_FIXED_LIMITS },
     };
-  }
-
-  /**
-   * The OKF View thresholds in force for one request (DD-20), resolved per section rather than
-   * through the whole-object {@link resolveEffectiveConfig}:
-   *
-   * - Team view (`teamId` given): team `teamId`'s `okf` → defaults.
-   * - Personal view: the caller's personal `okf` if present → the `okf` of the caller's
-   *   lowest-id team linking the URL → defaults.
-   *
-   * The chosen section is merged field by field over `DEFAULT_OKF_THRESHOLDS`; `custom` lists
-   * the fields whose value differs from the default. Read-only — never writes.
-   */
-  async resolveOkfThresholds(
-    userId: number,
-    repoUrl: string,
-    teamId?: number,
-  ): Promise<ResolvedOkfThresholdsResult> {
-    let section: OkfThresholds | undefined;
-
-    if (teamId !== undefined) {
-      section = (await findTeamRepoConfig(this.db, teamId, repoUrl))?.config
-        .okf;
-    } else {
-      section = (await findPersonalRepoConfig(this.db, userId, repoUrl))?.okf;
-      if (section === undefined) {
-        const fallbackTeamId = await resolveUserTeamForUrl(
-          this.db,
-          userId,
-          repoUrl,
-        );
-        if (fallbackTeamId !== null) {
-          section = (await findTeamRepoConfig(this.db, fallbackTeamId, repoUrl))
-            ?.config.okf;
-        }
-      }
-    }
-
-    const values = resolveOkfThresholds(section);
-    return { values, custom: customOkfThresholdFields(values) };
-  }
-
-  /**
-   * Whether `user` may trigger the OKF recompute for this view — the same authority as
-   * `POST :repoId/recompute-all-sessions`: the team owner in the team view, the repository
-   * owner in the personal view. Never throws and never writes.
-   */
-  async okfCanRecompute(
-    user: AuthUser,
-    repoId: number,
-    teamId?: number,
-  ): Promise<boolean> {
-    const [repo] = await this.db
-      .select({ userId: repositories.userId, repoUrl: repositories.repoUrl })
-      .from(repositories)
-      .where(eq(repositories.id, repoId));
-    if (!repo) return false;
-    if (teamId !== undefined) {
-      return (
-        (await this.isTeamOwner(user.id, teamId)) &&
-        (await this.teamLinksUrl(teamId, repo.repoUrl))
-      );
-    }
-    return repo.userId === user.id;
   }
 
   /**
@@ -1054,12 +958,6 @@ export class RepositoriesService {
         }
       }
     }
-
-    // Optional OKF View thresholds (DD-19); dual-scope, resolved per section at read time.
-    // The validator normalises `codeRoots` (trailing `/`), so the stored row is canonical.
-    if (config.okf !== undefined) {
-      config.okf = validateOkfThresholds(config.okf);
-    }
   }
 
   /**
@@ -1155,8 +1053,8 @@ export class RepositoriesService {
       throw new ForbiddenException('Only the team owner can edit team config');
     }
 
-    // DD-21: the OKF thresholds are applied at read time, so a change that touches only
-    // `okf` (stored and new rows deep-equal otherwise) skips the recompute.
+    // The stored `okf` section is kept as it is (`keepStoredOkf`), and the comparison below
+    // ignores it, so a body that differs only there skips the recompute.
     const stored =
       (await findTeamRepoConfig(this.db, targetTeamId, repo.repoUrl))?.config ??
       null;
@@ -1165,6 +1063,7 @@ export class RepositoriesService {
       await deleteTeamRepoConfig(this.db, targetTeamId, repo.repoUrl);
     } else {
       this.validateConfig(config);
+      keepStoredOkf(config, stored);
       await upsertTeamRepoConfig(this.db, targetTeamId, repo.repoUrl, config);
     }
 
@@ -1205,8 +1104,8 @@ export class RepositoriesService {
       throw new NotFoundException('Repository not found');
     }
 
-    // DD-21: an `okf`-only change (stored and new rows deep-equal otherwise) skips the
-    // recompute — the OKF thresholds are applied at read time.
+    // The stored `okf` section is kept as it is (`keepStoredOkf`), and the comparison below
+    // ignores it, so a body that differs only there skips the recompute.
     const [storedRow] = await this.db
       .select({ config: repoConfig.config })
       .from(repoConfig)
@@ -1221,6 +1120,7 @@ export class RepositoriesService {
         );
     } else {
       this.validateConfig(config);
+      keepStoredOkf(config, stored);
       await this.db.execute(
         sql`INSERT INTO repo_config (repo_id, user_id, config, updated_at)
             VALUES (${repoId}, ${userId}, ${JSON.stringify(config)}::jsonb, now())

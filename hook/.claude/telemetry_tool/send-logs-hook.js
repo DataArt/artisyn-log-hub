@@ -1910,6 +1910,23 @@ async function runUpload(cwd, hookSessionId, serverUrl, apiKey, timeoutMs, telem
   let sentFullOkfSnapshot = false;
   /** @type {Buffer|null} */
   let okfPrefix = null;
+  /** The `okf-snapshot-ref` line and the full `okf-snapshot` line `getOkfPrefix()` built. */
+  /** @type {Buffer|null} */
+  let okfRefLine = null;
+  /** @type {Buffer|null} */
+  let okfFullLine = null;
+
+  /**
+   * Switch the memoised OKF prefix between "ref only" and "ref + full body", keeping the upload
+   * query in step. Lets a later upload of the same run drop the body once one upload delivered it,
+   * or carry it again after the server said it does not know the id.
+   * @param {boolean} full
+   */
+  function setOkfFull(full) {
+    sentFullOkfSnapshot = full;
+    snapshotQuery = { ...(snapshotQuery || {}), okfSnapshotId: resolvedOkfSnapshotId, okfSnapshotFull: full };
+    okfPrefix = full ? Buffer.concat([okfRefLine, okfFullLine]) : okfRefLine;
+  }
 
   // The code-inventory prepend — its own throttle, its own state file, its own commit point.
   /** @type {Buffer|null} */
@@ -1949,7 +1966,7 @@ async function runUpload(cwd, hookSessionId, serverUrl, apiKey, timeoutMs, telem
 
     if (readKnownSnapshots(workDir).includes(snapshot.snapshotId)) {
       // DD-7 step 2: already known — ship only the cheap ref, never probe.
-      snapshotQuery = { snapshotId: snapshot.snapshotId, snapshotFull: false };
+      snapshotQuery = { ...(snapshotQuery || {}), snapshotId: snapshot.snapshotId, snapshotFull: false };
       harnessPrefix = Buffer.concat(parts);
       return harnessPrefix;
     }
@@ -1985,7 +2002,7 @@ async function runUpload(cwd, hookSessionId, serverUrl, apiKey, timeoutMs, telem
     }) + '\n', 'utf8'));
 
     sentFullSnapshot = true;
-    snapshotQuery = { snapshotId: snapshot.snapshotId, snapshotFull: true };
+    snapshotQuery = { ...(snapshotQuery || {}), snapshotId: snapshot.snapshotId, snapshotFull: true };
     harnessPrefix = Buffer.concat(parts);
     return harnessPrefix;
   }
@@ -2040,14 +2057,10 @@ async function runUpload(cwd, hookSessionId, serverUrl, apiKey, timeoutMs, telem
       if (!snapshot) return okfPrefix;
 
       const id = snapshot.okfSnapshotId;
-      const parts = [Buffer.from(JSON.stringify(buildOkfSnapshotRef(id)) + '\n', 'utf8')];
-      const known = readKnownOkfSnapshots(workDir).includes(id);
-      if (!known) parts.push(Buffer.from(JSON.stringify(snapshot) + '\n', 'utf8'));
-
+      okfRefLine = Buffer.from(JSON.stringify(buildOkfSnapshotRef(id)) + '\n', 'utf8');
+      okfFullLine = Buffer.from(JSON.stringify(snapshot) + '\n', 'utf8');
       resolvedOkfSnapshotId = id;
-      sentFullOkfSnapshot = !known;
-      snapshotQuery = { ...(snapshotQuery || {}), okfSnapshotId: id, okfSnapshotFull: !known };
-      okfPrefix = Buffer.concat(parts);
+      setOkfFull(!readKnownOkfSnapshots(workDir).includes(id));
     } catch (err) {
       hookLog(HOOK_FILE, hookSessionId, 'warn',
         `okf: snapshot skipped (${err && err.message ? err.message : String(err)})`, cwd);
@@ -2070,9 +2083,11 @@ async function runUpload(cwd, hookSessionId, serverUrl, apiKey, timeoutMs, telem
       const id12 = resolvedOkfSnapshotId.slice(0, 12);
       if (unknownOkfSnapshotId === resolvedOkfSnapshotId) {
         forgetOkfSnapshot(workDir, resolvedOkfSnapshotId);
+        setOkfFull(true);
         hookLog(HOOK_FILE, hookSessionId, 'result', `okf: snapshot ${id12} unknown on server — will resend`, cwd);
       } else if (sentFullOkfSnapshot) {
         rememberOkfSnapshot(workDir, resolvedOkfSnapshotId);
+        setOkfFull(false);
         hookLog(HOOK_FILE, hookSessionId, 'result', `okf: snapshot ${id12} sent`, cwd);
       } else {
         hookLog(HOOK_FILE, hookSessionId, 'result', `okf: snapshot ${id12} known`, cwd);
@@ -2165,6 +2180,8 @@ async function runUpload(cwd, hookSessionId, serverUrl, apiKey, timeoutMs, telem
     const { namespace, sessionId, filePath, size, isCurrentSession, manifestKey: mkOverride, parentSessionId, workflowRunId, agentDescription, workflowPhase } = entry;
     const agentMeta = agentDescription || workflowPhase ? { agentDescription, workflowPhase } : null;
     const manifestKey = mkOverride ?? `${namespace}/${path.basename(filePath)}`;
+    /** True when this upload is a backlog session's artisyn body carrying the OKF lines. */
+    let carriedBacklogOkf = false;
 
     // Skip logic. Applies to the current session's own files too — only the current-session
     // artisyn entry is exempt (see the matching guard on the manifest write below).
@@ -2255,6 +2272,16 @@ async function runUpload(cwd, hookSessionId, serverUrl, apiKey, timeoutMs, telem
         // OKF snapshot lines (DD-20): same gate as the harness prefix; pushed last so every
         // pre-existing event keeps its byte order. Empty when OKF detection failed.
         parts.push(getOkfPrefix());
+      } else {
+        // A backlog session (e.g. one whose own upload failed and a later session's full scan
+        // re-uploads it) gets the OKF lines too: unlike the harness, the OKF snapshot is pinned per
+        // session, and without it that session never gets one. The server sets it only while the
+        // session's `okf_snapshot_id` is NULL, so a session that already has one keeps it.
+        const okf = getOkfPrefix();
+        if (okf.length > 0) {
+          parts.push(okf);
+          carriedBacklogOkf = true;
+        }
       }
       parts.push(body);
       body = Buffer.concat(parts);
@@ -2268,12 +2295,22 @@ async function runUpload(cwd, hookSessionId, serverUrl, apiKey, timeoutMs, telem
       hookLog(HOOK_FILE, hookSessionId, 'warn', `payload size=${mb} MB exceeds 40 MB warning threshold`, cwd);
     }
 
+    // Upload query: the current session's artisyn body carries the harness + OKF pair; a backlog
+    // artisyn body only the OKF pair it actually carries; every other file none.
+    const fileQuery = isCurrentSession && namespace === 'artisyn'
+      ? snapshotQuery
+      : carriedBacklogOkf
+        ? { okfSnapshotId: snapshotQuery.okfSnapshotId, okfSnapshotFull: snapshotQuery.okfSnapshotFull }
+        : null;
+
     // The routing test stays the *uncompressed* size: `uploadFileMaybeCompressed()` decides for
     // itself whether the single request it sends is gzipped.
     const result = bodyBytes > CHUNK_SIZE_BYTES
-      ? await uploadFileChunked(serverUrl, apiKey, namespace, sessionId, body, timeoutMs, hookSessionId, cwd, parentSessionId || null, workflowRunId || null, telemetryDir, manifestKey, snapshotQuery, agentMeta)
-      : await uploadFileMaybeCompressed(serverUrl, apiKey, namespace, sessionId, body, timeoutMs, hookSessionId, cwd, parentSessionId || null, workflowRunId || null, snapshotQuery, agentMeta);
+      ? await uploadFileChunked(serverUrl, apiKey, namespace, sessionId, body, timeoutMs, hookSessionId, cwd, parentSessionId || null, workflowRunId || null, telemetryDir, manifestKey, fileQuery, agentMeta)
+      : await uploadFileMaybeCompressed(serverUrl, apiKey, namespace, sessionId, body, timeoutMs, hookSessionId, cwd, parentSessionId || null, workflowRunId || null, fileQuery, agentMeta);
     const { success, reason, warnings, unknownSnapshotId, unknownOkfSnapshotId } = result;
+    // Committed right away, so the next backlog file carries only the ref once the body landed.
+    if (success && carriedBacklogOkf) commitOkfReport(unknownOkfSnapshotId);
 
     if (success) {
       // `claude-otel` chunks are DELETED once uploaded, not fingerprinted. Unlike a session

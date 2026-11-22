@@ -4,7 +4,7 @@
  * Table test for docs/knowledgebase/algorithms/okf-snapshot.md against the hook's OKF snapshot
  * builder (`buildOkfSnapshot`) and snapshot id (`computeOkfSnapshotId`).
  *
- * Each row's `kind` ("detect" | "compare" | "order") picks one of the three input shapes the doc
+ * Each row's `kind` ("detect" | "compare" | "order" | "meta" | "id") picks one of the input shapes the doc
  * describes (see its "Examples" prose). This file only materialises the virtual file tree under a
  * fresh `<tmp>/repo` (a `../` key lands beside it, outside the repository), runs `git init` there
  * unless the row says `"git": false`, and dispatches; the doc is the only place the numbers live.
@@ -17,7 +17,7 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { loadExamples } = require('../../../../scripts/algo-docs/load-examples.cjs');
-const { buildOkfSnapshot, computeOkfSnapshotId } = require('../okf-snapshot');
+const { buildOkfSnapshot, computeOkfSnapshotId, parseOkfFrontMatter } = require('../okf-snapshot');
 
 let dirCounter = 0;
 
@@ -85,6 +85,50 @@ function runDetectRow(input, expected) {
     snapshot.bundles.filter((b) => b.ignored).map((b) => b.root),
     expected.ignoredBundles,
   );
+  // OKF v0.3 DD-H1: the three bundle fields of each listed root, exactly (a key missing from the
+  // expectation must be missing from the bundle).
+  for (const [root, fields] of Object.entries(expected.bundleFields || {})) {
+    const bundle = snapshot.bundles.find((b) => b.root === root);
+    assert.ok(bundle, `bundle ${root} not detected`);
+    const actual = {};
+    for (const key of BUNDLE_FIELD_KEYS) {
+      if (bundle[key] !== undefined) actual[key] = bundle[key];
+    }
+    assert.deepEqual(actual, fields, `bundle fields of ${root}`);
+  }
+  // OKF v0.3 DD-H3: each listed file's `meta` as a subset; a `null` value means "key absent".
+  const filesByPath = new Map(snapshot.bundles.flatMap((b) => b.files.map((f) => [f.path, f])));
+  for (const [filePath, meta] of Object.entries(expected.fileMeta || {})) {
+    const file = filesByPath.get(filePath);
+    assert.ok(file, `file ${filePath} not in the snapshot`);
+    assert.ok(file.meta && typeof file.meta === 'object', `file ${filePath} has no meta`);
+    for (const [key, value] of Object.entries(meta)) {
+      if (value === null) assert.ok(!(key in file.meta), `meta.${key} of ${filePath} should be absent`);
+      else assert.deepEqual(file.meta[key], value, `meta.${key} of ${filePath}`);
+    }
+  }
+}
+
+/** The bundle fields a `detect` row's `expected.bundleFields` compares (DD-H1). */
+const BUNDLE_FIELD_KEYS = ['okfVersion', 'title', 'description'];
+
+/**
+ * `meta` row (DD-H2): `parseOkfFrontMatter(input.head)`; every key of `expected` is compared, so a
+ * row pins `fields` exactly and the booleans it lists.
+ */
+function runMetaRow(input, expected) {
+  const parsed = parseOkfFrontMatter(input.head);
+  for (const [key, value] of Object.entries(expected)) {
+    assert.deepEqual(parsed[key], value, `parseOkfFrontMatter().${key}`);
+  }
+}
+
+/** `id` row (DD-H4): `computeOkfSnapshotId(input.bundles)` equals `expected.id` / differs from `expected.differsFrom`. */
+function runIdRow(input, expected) {
+  const id = computeOkfSnapshotId(input.bundles);
+  assert.match(id, /^[0-9a-f]{64}$/);
+  if (expected.id !== undefined) assert.equal(id, expected.id);
+  if (expected.differsFrom !== undefined) assert.notEqual(id, expected.differsFrom);
 }
 
 function runCompareRow(input, expected) {
@@ -108,6 +152,10 @@ for (const row of loadExamples('okf-snapshot')) {
       runCompareRow(row.input, row.expected);
     } else if (row.kind === 'order') {
       runOrderRow(row.input, row.expected);
+    } else if (row.kind === 'meta') {
+      runMetaRow(row.input, row.expected);
+    } else if (row.kind === 'id') {
+      runIdRow(row.input, row.expected);
     } else {
       assert.equal(row.kind, 'detect', `unknown kind ${row.kind}`);
       runDetectRow(row.input, row.expected);

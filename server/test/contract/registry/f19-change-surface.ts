@@ -6,14 +6,25 @@
 // World: w1-s01 changed src/app.ts (+10 -2, modified) and docs/readme.md (+5, added);
 // w1-s02 changed nothing itself, its child w1-s03 added src/health.ts (+20).
 //
-// OKF usage (session route, 2026-10-27 OKF usage tab): the s02 -> s03 tree is bound to the world's
-// OKF snapshot (bundle `docs/kb`: index.md, a gitignored private.md, scheduler.md). s02 read
-// index.md and private.md, s03 read scheduler.md twice. The verdict and the tree are an algorithm
-// (okf-verdict.md); here the bundle summary and the per-agent read totals are proven against
-// `session_okf_access` and the stored snapshot body, in the personal view and in a team view,
-// where the DD-30 filter drops the gitignored file.
-import type { ContractFamily, ReadSpec } from '../types';
-import { listedRootsSql } from './oracle-sql';
+// OKF usage (session route, 2026-11-21 OKF tab minimal): the s02 -> s03 tree is bound to the
+// world's OKF snapshot (bundle `docs/kb`: index.md, a gitignored private.md, scheduler.md, a
+// nested reserved `sub/log.md`, and a dot-path `.drafts/wip.md` that is not part of the bundle).
+// s02 read index.md and private.md, s03 read scheduler.md twice. The unit is the tree node (an
+// agent). The counting rules are an algorithm (okf-usage-counting.md); here the summary and the
+// per-file numbers are proven against `session_okf_access`, `session_stats`, `session_costs` and
+// the stored snapshot body, in the personal view and in a team view, where the fail-closed
+// filter drops the gitignored file and its read row. The snapshot carries hook 3.1.0
+// front-matter metadata (scheduler.md deprecated, private.md without front matter), so the
+// response has `versions` and `format` — golden, their rules are okf-metadata.md's.
+import type { ContractFamily } from '../types';
+import {
+  listedRootsSql,
+  OKF_FILE_FIELDS,
+  OKF_SUMMARY_FIELDS,
+  okfFilesSelectSql,
+  okfReadsCtes,
+  okfSummarySelectSql,
+} from './oracle-sql';
 
 const MONTH = { startDate: '2026-01-01', endDate: '2026-01-31' };
 
@@ -25,76 +36,70 @@ const TREE_NODES = `
     SELECT c.id, c.session_id FROM sessions c JOIN tree t ON c.parent_session_id = t.session_id
   )`;
 
+/** SQL: bundle file `f` is gitignored — a team view shows neither it nor a read of it. */
+const OKF_IGNORED = `(f->>'ignored')::boolean`;
+
 /**
- * One row per bundle of the snapshot the tree root `$1` is bound to: article count (listed files
- * without the bundle's index.md, which no analysis counts), distinct articles read (read/grep),
- * read bytes under the bundle root. `team`: the files the snapshot marks `ignored` count nowhere
- * (DD-30).
+ * The tree of root `$1`, the snapshot it is bound to (`okf_snap`) and its KB read rows, the unit
+ * being the tree node. `team`: a read row of a file the snapshot marks `ignored` is dropped.
  */
-function okfBundlesSql(team: boolean): string {
-  const visible = team ? `NOT (f->>'ignored')::boolean` : 'true';
-  const article = `${visible} AND f->>'path' <> b->>'index'`;
+function okfSessionCtes(team: boolean): string {
+  const keep = team
+    ? `a.path_key NOT IN (SELECT f->>'path'
+                            FROM okf_snap s, jsonb_array_elements(s.body->'bundles') b,
+                                 jsonb_array_elements(b->'files') f
+                           WHERE ${OKF_IGNORED})`
+    : 'true';
   return `${TREE_NODES},
-    acc AS (SELECT a.* FROM tree t JOIN session_okf_access a ON a.session_id = t.id
-             WHERE a.op IN ('read', 'grep'))
-    SELECT b->>'root' AS root, b->>'index' AS idx, (b->>'ignored')::boolean AS ignored,
-           (SELECT count(*) FROM jsonb_array_elements(b->'files') f WHERE ${article}) AS files,
-           (SELECT count(DISTINCT acc.path_key) FROM acc
-             WHERE acc.path_key IN (SELECT f->>'path' FROM jsonb_array_elements(b->'files') f
-                                     WHERE ${article})) AS files_read,
-           (SELECT coalesce(sum(acc.bytes), 0) FROM acc
-             WHERE acc.path_key LIKE (b->>'root') || '/%'
-               AND acc.path_key NOT IN (SELECT f->>'path' FROM jsonb_array_elements(b->'files') f
-                                         WHERE NOT (${visible}))) AS read_bytes
-      FROM okf_snapshots o, jsonb_array_elements(o.body->'bundles') b
-     WHERE o.snapshot_id = (SELECT okf_snapshot_id FROM sessions WHERE id = $1)
-       AND o.user_id = (SELECT min(user_id) FROM logs WHERE session_id = $1)
-     ORDER BY root`;
+    okf_snap AS (SELECT o.body FROM okf_snapshots o
+                  WHERE o.snapshot_id = (SELECT okf_snapshot_id FROM sessions WHERE id = $1)
+                    AND o.user_id = (SELECT min(user_id) FROM logs WHERE session_id = $1)),${okfReadsCtes('id', keep)}`;
 }
 
-const OKF_BUNDLE_FIELDS = {
-  root: 'root',
-  index: 'idx',
-  ignored: 'ignored',
-  files: { col: 'files', as: 'number' },
-  filesRead: { col: 'files_read', as: 'number' },
-  readBytes: { col: 'read_bytes', as: 'number' },
-} as const;
+/**
+ * `summary` of the tree of root `$1`. M = the opened node plus its descendants that have a
+ * `claude` / `claude-subagent` log.
+ */
+function okfSessionSummarySql(team: boolean): string {
+  return `${okfSessionCtes(team)}
+    ${okfSummarySelectSql(`(SELECT count(*) FROM tree t
+                             WHERE t.id = $1
+                                OR EXISTS (SELECT 1 FROM logs l
+                                            WHERE l.session_id = t.id
+                                              AND l.log_type IN ('claude', 'claude-subagent')))`)}`;
+}
+
+/** `files` of the tree of root `$1`; `team`: without the gitignored files. */
+function okfSessionFilesSql(team: boolean): string {
+  return `${okfSessionCtes(team)}
+    ${okfFilesSelectSql(team ? `NOT ${OKF_IGNORED}` : 'true')}`;
+}
+
+/** Golden: what both views of the s02 tree share. `takenAt` = `okf_snapshots.created_at`. */
+const OKF_SESSION_GOLDEN = {
+  unit: 'agents',
+  snapshot: {
+    branch: 'main',
+    takenAt: '2026-01-11T09:00:00.000Z',
+    hasMeta: true,
+  },
+  bundleRoots: ['docs/kb'],
+  currentFormat: '0.3',
+  notInSnapshotUnits: 0,
+};
+
+/**
+ * Golden: the folders of the bundle — `agents` = the tree nodes that read a file under the bundle
+ * root (s02 and s03 in both views: a team view still has s02's index.md read); `sub/` only holds
+ * the never opened `sub/log.md`. No folder-level search.
+ */
+const OKF_SESSION_FOLDERS = [
+  { bundle: 'docs/kb', path: 'docs/kb/', units: 2, search: null },
+  { bundle: 'docs/kb', path: 'docs/kb/sub/', units: 0, search: null },
+];
 
 const OKF_ROUTE =
   'GET /api/v1/repositories/:repoId/sessions/:sessionId/okf-usage' as const;
-const OKF_TRAIL_ROUTE =
-  'GET /api/v1/repositories/:repoId/sessions/:sessionId/okf-usage/trail' as const;
-
-/**
- * The trail of tree node `$1` (package 3): its id and description, never truncated here, and one
- * item per `tool_use` block of its stored claude transcript — the trail is rebuilt from the
- * transcript, not from the stored OKF rows, and the world's bodies carry no tool calls.
- */
-function trailRead(nodeRef: string): ReadSpec {
-  return {
-    sql: `SELECT jsonb_build_object('id', s.session_id, 'label', s.agent_description) AS agent,
-                 false AS truncated,
-                 (SELECT coalesce(jsonb_agg(b), '[]'::jsonb)
-                    FROM logs l, jsonb_array_elements(l.body) line,
-                         jsonb_array_elements(
-                           CASE jsonb_typeof(line->'message'->'content')
-                             WHEN 'array' THEN line->'message'->'content'
-                             ELSE '[]'::jsonb END) b
-                   WHERE l.session_id = s.id
-                     AND l.log_type IN ('claude', 'claude-subagent')
-                     AND b->>'type' = 'tool_use') AS items
-            FROM sessions s WHERE s.id = $1`,
-    args: [nodeRef],
-    shape: 'object',
-    fields: {
-      agent: { col: 'agent', as: 'json' },
-      truncated: 'truncated',
-      items: { col: 'items', as: 'json' },
-    },
-    strict: true,
-  };
-}
 
 /** `session_changed_paths` rows of the tree rooted at session pk `$1`. */
 const TREE_PATHS = `
@@ -224,185 +229,151 @@ export const f19ChangeSurface: ContractFamily = {
       expect: { status: 403 },
     },
     {
-      // Personal view: the bound snapshot's one bundle, all three files counted (private.md too).
-      // A 3-file bundle is below SHARE_MIN_BUNDLE_FILES, so the verdict is a plain `ok`.
+      // Personal view: both agents of the tree read the KB (2 of 2). `summary` against the
+      // stored rows — reads = Σ calls, tokens = Σ bytes / 4, cost = per agent the KB share of
+      // its context × the context cost, spend = Σ cost of both nodes. With
+      // F19-okf-session-meta-tree (the same sums per file) this is the invariant
+      // Σ files = summary; the world has no folder-level search.
       id: 'F19-okf-session',
       route: OKF_ROUTE,
       actor: 'owner',
       params: { repoId: '@R1.id', sessionId: '@s02.sessionId' },
       expect: {
         status: 200,
-        minRows: 1,
+        bodyMatches: { ...OKF_SESSION_GOLDEN, folders: OKF_SESSION_FOLDERS },
+      },
+      read: {
+        sql: okfSessionSummarySql(false),
+        args: ['@s02.id'],
+        shape: 'object',
+        path: 'summary',
+        fields: OKF_SUMMARY_FIELDS,
+        strict: true,
+      },
+    },
+    {
+      // Team view (T1): the gitignored private.md and s02's read of it are gone from every
+      // number (fail closed) — s02 still counts as an agent that read the KB (index.md), with a
+      // smaller KB share and so a smaller cost. M and the spend are those of the whole tree.
+      id: 'F19-okf-session-team',
+      route: OKF_ROUTE,
+      actor: 'owner',
+      params: { repoId: '@R1.id', sessionId: '@s02.sessionId' },
+      query: { teamId: '@T1.id' },
+      expect: {
+        status: 200,
+        bodyMatches: { ...OKF_SESSION_GOLDEN, folders: OKF_SESSION_FOLDERS },
+      },
+      read: {
+        sql: okfSessionSummarySql(true),
+        args: ['@s02.id'],
+        shape: 'object',
+        path: 'summary',
+        fields: OKF_SUMMARY_FIELDS,
+        strict: true,
+      },
+    },
+    {
+      // Files, versions and format of the personal view. `files`: every listed file of the bound
+      // snapshot by path (the dot-path `.drafts/wip.md` is not in the bundle) with the agents
+      // that read it; `sub/log.md` was never opened. `versions` and `format` are golden
+      // (okf-metadata.md): the bundle declares `0.2` (older than 0.3) and lists four files — two
+      // index files (index.md, the nested reserved sub/log.md) and two articles: private.md has
+      // no front matter, the deprecated scheduler.md links to its successor.
+      id: 'F19-okf-session-meta-tree',
+      route: OKF_ROUTE,
+      actor: 'owner',
+      params: { repoId: '@R1.id', sessionId: '@s02.sessionId' },
+      expect: {
+        status: 200,
+        minRows: 4,
         bodyMatches: {
-          hasSnapshot: true,
-          // Checks (2026-11-05, okf-verdict.md rule 13): both tree nodes read the bundle; s02
-          // started at index.md, s03 at scheduler.md (no search first → given); the 2-article
-          // bundle cannot be judged by share; no node wrote an article it read.
-          verdict: {
-            level: 'ok',
-            qualifiers: [],
-            findings: [],
-            checks: [
+          versions: [
+            {
+              root: 'docs/kb',
+              files: 4,
+              okfVersion: '0.2',
+              older: true,
+              ignored: false,
+            },
+          ],
+          format: {
+            articles: 2,
+            indexFiles: 2,
+            withProblems: 2,
+            groups: [
               {
-                rule: 'kb_used',
-                status: 'ok',
-                params: {
-                  agentsWithKb: 2,
-                  agents: 2,
-                  folders: 'docs/kb',
-                  articles: 2,
-                },
+                problem: 'no_front_matter',
+                files: [{ path: 'docs/kb/private.md' }],
               },
               {
-                rule: 'entry',
-                status: 'ok',
-                params: { index: 1, search: 0, given: 1, agents: 2 },
-              },
-              {
-                rule: 'session_share',
-                status: 'na',
-                params: {
-                  reason: 'small_bundles',
-                  fix: 0.25,
-                  mess: 0.5,
-                  minFiles: 10,
-                },
-              },
-              {
-                rule: 'upkeep',
-                status: 'ok',
-                params: { agents: 0, articles: 0, agentId: null, path: null },
+                problem: 'deprecated',
+                files: [
+                  {
+                    path: 'docs/kb/scheduler.md',
+                    supersededBy: 'docs/kb/scheduler-v2.md',
+                  },
+                ],
               },
             ],
           },
         },
       },
       read: {
-        sql: okfBundlesSql(false),
+        sql: okfSessionFilesSql(false),
         args: ['@s02.id'],
         shape: 'array',
-        path: 'bundles',
-        fields: OKF_BUNDLE_FIELDS,
-      },
-    },
-    {
-      // Per agent (tree node, `sessions.session_id`): read/grep calls and bytes on KB files —
-      // the sub-agent s03's reads are its own (FR-4).
-      id: 'F19-okf-session-agents',
-      route: OKF_ROUTE,
-      actor: 'owner',
-      params: { repoId: '@R1.id', sessionId: '@s02.sessionId' },
-      expect: { status: 200, minRows: 2 },
-      read: {
-        sql: `${TREE_NODES}
-              SELECT t.session_id AS id,
-                     (SELECT s.agent_description FROM sessions s WHERE s.id = t.id) AS label,
-                     (SELECT coalesce(sum(a.calls), 0) FROM session_okf_access a
-                       WHERE a.session_id = t.id AND a.op IN ('read', 'grep')
-                         AND a.path_key NOT LIKE '%/') AS kb_reads,
-                     (SELECT coalesce(sum(a.bytes), 0) FROM session_okf_access a
-                       WHERE a.session_id = t.id AND a.op IN ('read', 'grep')
-                         AND a.path_key NOT LIKE '%/') AS kb_read_bytes,
-                     (SELECT count(*) FROM session_okf_event e
-                       WHERE e.session_id = t.id AND e.op = 'search') AS searches,
-                     (SELECT CASE WHEN count(*) = 0 THEN NULL
-                                  ELSE jsonb_build_object('k', count(*) FILTER (WHERE r.followed),
-                                                          'n', count(*)) END
-                        FROM (SELECT p.read_ord, bool_or(p.followed) AS followed
-                                FROM session_okf_pointer p
-                               WHERE p.session_id = t.id AND p.is_new AND NOT p.partial
-                               GROUP BY p.read_ord) r) AS yield
-                FROM tree t`,
-        args: ['@s02.id'],
-        shape: 'array',
-        path: 'agents',
-        sortBy: 'id',
-        fields: {
-          id: 'id',
-          // Optional since the OKF tab quick wins: the sub-agent's description, null for the root.
-          label: 'label',
-          kbReads: { col: 'kb_reads', as: 'number' },
-          kbReadBytes: { col: 'kb_read_bytes', as: 'number' },
-          // 2026-11-03 value signals: code search events and pointer yield (FR-1) per node.
-          searches: { col: 'searches', as: 'number' },
-          yield: { col: 'yield', as: 'json' },
-        },
-      },
-    },
-    {
-      // 2026-11-03 value signals: the whole tree's signal totals. Reads that showed a new
-      // pointer: s02's index.md read and s03's first scheduler.md read; only s03 followed one.
-      // s03 grepped scheduler.ts twice after reading scheduler.md (= exploredMinSearches) → one
-      // searched-after pair; no node searched an area instead of reading, no dead pointer, no
-      // upkeep, no cap hit, default thresholds.
-      id: 'F19-okf-session-signals',
-      route: OKF_ROUTE,
-      actor: 'owner',
-      params: { repoId: '@R1.id', sessionId: '@s02.sessionId' },
-      expect: {
-        status: 200,
-        bodyMatches: {
-          thresholds: { custom: [] },
-          upkeep: [],
-          eventsTruncated: false,
-        },
-      },
-      read: {
-        sql: `${TREE_NODES},
-              shown AS (SELECT p.session_id, p.read_ord, bool_or(p.followed) AS followed
-                          FROM tree t JOIN session_okf_pointer p ON p.session_id = t.id
-                         WHERE p.is_new AND NOT p.partial
-                         GROUP BY p.session_id, p.read_ord)
-              SELECT (SELECT count(*) FROM shown) AS with_new,
-                     (SELECT count(*) FROM shown WHERE followed) AS followed,
-                     0 AS routing,
-                     -- searched-after pairs (FR-2): in-area searches after the first read,
-                     -- per (node, article) with ≥ 2 (the area is scheduler.md's two pointers)
-                     (SELECT count(*) FROM (
-                        SELECT p.session_id, p.article_path
-                          FROM tree t JOIN session_okf_pointer p ON p.session_id = t.id
-                         WHERE NOT p.partial
-                         GROUP BY p.session_id, p.article_path
-                        HAVING (SELECT count(*) FROM session_okf_event e
-                                 WHERE e.session_id = p.session_id AND e.op = 'search'
-                                   AND e.ord > min(p.read_ord)
-                                   AND e.path IN ('server/src/scheduler.ts',
-                                                  'server/src/legacy-cron.ts')) >= 2
-                      ) x) AS searched_after,
-                     0 AS dead`,
-        args: ['@s02.id'],
-        shape: 'object',
-        path: 'signals',
-        fields: {
-          readsWithNewPointers: { col: 'with_new', as: 'number' },
-          readsFollowed: { col: 'followed', as: 'number' },
-          routingMissArticles: { col: 'routing', as: 'number' },
-          searchedAfterPairs: { col: 'searched_after', as: 'number' },
-          deadPointers: { col: 'dead', as: 'number' },
-        },
+        path: 'files',
+        fields: OKF_FILE_FIELDS,
         strict: true,
       },
     },
     {
-      // Team view (T1): the gitignored private.md is gone from the file count, the files read
-      // and the read bytes (DD-30 fail closed).
-      id: 'F19-okf-session-team',
+      // Team view: private.md is in neither `files`, `versions` nor `format`, and scheduler.md's
+      // successor (not a visible file) is not linked — the deprecated flag stays.
+      id: 'F19-okf-session-meta-tree-team',
       route: OKF_ROUTE,
       actor: 'owner',
       params: { repoId: '@R1.id', sessionId: '@s02.sessionId' },
       query: { teamId: '@T1.id' },
-      expect: { status: 200, minRows: 1, bodyMatches: { hasSnapshot: true } },
+      expect: {
+        status: 200,
+        minRows: 3,
+        bodyMatches: {
+          versions: [
+            {
+              root: 'docs/kb',
+              files: 3,
+              okfVersion: '0.2',
+              older: true,
+              ignored: false,
+            },
+          ],
+          format: {
+            articles: 1,
+            indexFiles: 2,
+            withProblems: 1,
+            groups: [
+              {
+                problem: 'deprecated',
+                files: [{ path: 'docs/kb/scheduler.md' }],
+              },
+            ],
+          },
+        },
+      },
       read: {
-        sql: okfBundlesSql(true),
+        sql: okfSessionFilesSql(true),
         args: ['@s02.id'],
         shape: 'array',
-        path: 'bundles',
-        fields: OKF_BUNDLE_FIELDS,
+        path: 'files',
+        fields: OKF_FILE_FIELDS,
+        strict: true,
       },
     },
     {
-      // A session with neither OKF rows nor a snapshot: no KB at all, `verdict: null`. The
-      // opened node is always listed as an agent, with nothing read.
+      // A session with neither OKF rows nor a snapshot: the one-line state — `snapshot: null`,
+      // every array empty, every number zero, cost and spend unknown.
       id: 'F19-okf-session-none',
       route: OKF_ROUTE,
       actor: 'owner',
@@ -410,37 +381,30 @@ export const f19ChangeSurface: ContractFamily = {
       expect: {
         status: 200,
         bodyMatches: {
-          verdict: null,
-          hasSnapshot: false,
-          bundles: [],
-          tree: [],
-          agents: [
-            {
-              id: '@s01.sessionId',
-              taskHead: 'Add a spice-yield endpoint',
-              label: null,
-              entry: null,
-              kbReads: 0,
-              kbReadBytes: 0,
-              files: [],
-              // 2026-11-03 value signals: empty, not absent, on a node with no OKF rows.
-              pointers: [],
-              promptNamedPaths: 0,
-              routingMisses: [],
-              // Package 3: the articles it searched after reading (trail links).
-              searchedAfter: [],
-              upkeepArticles: [],
-              searches: 0,
-              yield: null,
-            },
-          ],
+          unit: 'agents',
+          snapshot: null,
+          bundleRoots: [],
+          currentFormat: '0.3',
+          summary: {
+            unitsRead: 0,
+            unitsTotal: 0,
+            reads: 0,
+            tokens: 0,
+            cost: null,
+            readsWithoutCost: 0,
+            spend: null,
+          },
+          versions: [],
+          format: null,
+          folders: [],
+          notInSnapshotUnits: 0,
         },
       },
       read: {
         sql: `SELECT path_key FROM session_okf_access WHERE session_id = $1 ORDER BY path_key`,
         args: ['@s01.id'],
         shape: 'array',
-        path: 'readTop',
+        path: 'files',
         fields: { path: 'path_key' },
       },
     },
@@ -450,53 +414,6 @@ export const f19ChangeSurface: ContractFamily = {
       actor: 'outsider',
       params: { repoId: '@R1.id', sessionId: '@s02.sessionId' },
       expect: { status: 403 },
-    },
-    {
-      // Package 3 agent trail: the sub-agent s03 of the opened tree s02. The trail is rebuilt
-      // from the node's stored transcript (like the facts route), never from the stored OKF rows:
-      // one item per tool_use access — the world's bodies carry no tool calls, so none. The label
-      // is s03's own description; nothing is capped.
-      id: 'F19-okf-trail',
-      route: OKF_TRAIL_ROUTE,
-      actor: 'owner',
-      params: { repoId: '@R1.id', sessionId: '@s02.sessionId' },
-      query: { agent: '@s03.sessionId' },
-      expect: { status: 200 },
-      read: trailRead('@s03.id'),
-    },
-    {
-      // The opened node itself: the root has no description.
-      id: 'F19-okf-trail-root',
-      route: OKF_TRAIL_ROUTE,
-      actor: 'owner',
-      params: { repoId: '@R1.id', sessionId: '@s02.sessionId' },
-      query: { agent: '@s02.sessionId' },
-      expect: { status: 200 },
-      read: trailRead('@s02.id'),
-    },
-    {
-      id: 'F19-okf-trail-outsider',
-      route: OKF_TRAIL_ROUTE,
-      actor: 'outsider',
-      params: { repoId: '@R1.id', sessionId: '@s02.sessionId' },
-      query: { agent: '@s03.sessionId' },
-      expect: { status: 403 },
-    },
-    {
-      id: 'F19-okf-trail-no-agent',
-      route: OKF_TRAIL_ROUTE,
-      actor: 'owner',
-      params: { repoId: '@R1.id', sessionId: '@s02.sessionId' },
-      expect: { status: 400 },
-    },
-    {
-      // s01 is a session of the same repository but not a node of s02's tree.
-      id: 'F19-okf-trail-foreign-node',
-      route: OKF_TRAIL_ROUTE,
-      actor: 'owner',
-      params: { repoId: '@R1.id', sessionId: '@s02.sessionId' },
-      query: { agent: '@s01.sessionId' },
-      expect: { status: 404 },
     },
     {
       // One bucket per UTC day with at least one listed session that changed something; the

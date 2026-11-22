@@ -1,0 +1,685 @@
+[
+  {"id": "UC-01", "kind": "view",
+   "input": {
+     "unit": "sessions",
+     "bundles": [{"root": "docs/kb", "files": ["docs/kb/index.md", "docs/kb/a.md", "docs/kb/b.md", "docs/kb/sub/c.md"]}],
+     "snapshot": {"branch": "main", "takenAt": "2026-11-01T00:00:00.000Z"},
+     "nodes": [{"unit": 1, "rows": [
+       {"pathKey": "docs/kb/a.md", "op": "read", "bytes": 400, "calls": 2},
+       {"pathKey": "docs/kb/b.md", "op": "grep", "bytes": 200, "calls": 1},
+       {"pathKey": "docs/kb/", "op": "list", "bytes": 800, "calls": 3},
+       {"pathKey": "docs/kb/sub/c.md", "op": "write", "bytes": 1000, "calls": 1}
+     ]}],
+     "unitsTotal": 3, "spend": 10, "refMs": 0
+   },
+   "expected": {
+     "summary": {"unitsRead": 1, "unitsTotal": 3, "reads": 3, "tokens": 150, "cost": null, "readsWithoutCost": 3, "spend": 10},
+     "files": [
+       {"path": "docs/kb/a.md", "inSnapshot": true, "index": false, "units": 1, "reads": 2, "tokens": 100},
+       {"path": "docs/kb/b.md", "inSnapshot": true, "index": false, "units": 1, "reads": 1, "tokens": 50},
+       {"path": "docs/kb/index.md", "inSnapshot": true, "index": true, "units": 0, "reads": 0, "tokens": 0, "cost": 0},
+       {"path": "docs/kb/sub/c.md", "inSnapshot": true, "index": false, "units": 0, "reads": 0, "tokens": 0, "cost": 0}
+     ],
+     "folders": [
+       {"path": "docs/kb/", "bundle": "docs/kb", "units": 1, "search": null},
+       {"path": "docs/kb/sub/", "bundle": "docs/kb", "units": 0, "search": null}
+     ]
+   },
+   "note": "Rules 5, 6: the read (2 calls, 400 B) and the grep (1 call, 200 B) count -> reads 3, tokens 600 / 4 = 150; the list of docs/kb/ and the write of c.md count nowhere, so c.md is never opened and docs/kb/ has no search. Rule 7: one unit read, unitsTotal 3 and spend 10 pass through. Rule 9/10: the node has no ctxCost -> readsWithoutCost 3 and cost null (reads, none priced); files without reads have cost 0."},
+
+  {"id": "UC-02", "kind": "view",
+   "input": {
+     "unit": "sessions",
+     "bundles": [{"root": "docs/kb", "files": ["docs/kb/index.md", "docs/kb/a.md", "docs/kb/b.md", "docs/kb/sub/c.md"]}],
+     "snapshot": {"branch": "main", "takenAt": "2026-11-01T00:00:00.000Z"},
+     "nodes": [{"unit": 1, "rows": [
+       {"pathKey": "docs/kb/b.md", "op": "grep", "bytes": 1200, "calls": 3}
+     ]}],
+     "unitsTotal": 1, "spend": null, "refMs": 0
+   },
+   "expected": {
+     "summary": {"unitsRead": 1, "reads": 3, "tokens": 300},
+     "files": [
+       {"path": "docs/kb/a.md", "units": 0, "reads": 0},
+       {"path": "docs/kb/b.md", "inSnapshot": true, "units": 1, "reads": 3, "tokens": 300},
+       {"path": "docs/kb/index.md", "units": 0, "reads": 0},
+       {"path": "docs/kb/sub/c.md", "units": 0, "reads": 0}
+     ]
+   },
+   "note": "Rule 5: a grep on a file is a read row like a read. b.md was only grepped: 3 calls, 1200 B / 4 = 300 tokens, 1 unit -> it is opened."},
+
+  {"id": "UC-03", "kind": "view",
+   "input": {
+     "unit": "sessions",
+     "bundles": [{"root": "docs/kb", "files": ["docs/kb/index.md", "docs/kb/a.md", "docs/kb/b.md", "docs/kb/sub/c.md"]}],
+     "snapshot": {"branch": "main", "takenAt": "2026-11-01T00:00:00.000Z"},
+     "nodes": [
+       {"unit": 1, "rows": [{"pathKey": "docs/kb/sub/", "op": "grep", "bytes": 800, "calls": 2}]},
+       {"unit": 2, "rows": [{"pathKey": "docs/kb/", "op": "grep", "bytes": 400, "calls": 1}]}
+     ],
+     "unitsTotal": 2, "spend": null, "refMs": 0
+   },
+   "expected": {
+     "summary": {"unitsRead": 2, "reads": 3, "tokens": 300},
+     "files": [
+       {"path": "docs/kb/a.md", "units": 0, "reads": 0, "tokens": 0},
+       {"path": "docs/kb/b.md", "units": 0, "reads": 0, "tokens": 0},
+       {"path": "docs/kb/index.md", "units": 0, "reads": 0, "tokens": 0},
+       {"path": "docs/kb/sub/c.md", "units": 0, "reads": 0, "tokens": 0}
+     ],
+     "folders": [
+       {"path": "docs/kb/", "units": 2, "search": {"units": 1, "reads": 1, "tokens": 100, "cost": null}},
+       {"path": "docs/kb/sub/", "units": 1, "search": {"units": 1, "reads": 2, "tokens": 200, "cost": null}}
+     ]
+   },
+   "note": "Rules 5, 12: a folder-level grep is a read row. Unit 1 searched docs/kb/sub/ (2 calls, 200 tokens), unit 2 searched docs/kb/ (1 call, 100 tokens): both units read -> unitsRead 2, reads 3, tokens 300. Each search sits on exactly its folder; docs/kb/ units = unit 2 on it + unit 1 below it = 2. No file gets a number. Unpriced nodes -> search cost null."},
+
+  {"id": "UC-04", "kind": "view",
+   "input": {
+     "unit": "sessions",
+     "bundles": [{"root": "docs/kb", "files": ["docs/kb/index.md", "docs/kb/a.md", "docs/kb/b.md", "docs/kb/sub/c.md"]}],
+     "snapshot": {"branch": "main", "takenAt": "2026-11-01T00:00:00.000Z"},
+     "nodes": [{"unit": 1, "rows": [
+       {"pathKey": "README.md", "op": "read", "bytes": 400, "calls": 1},
+       {"pathKey": "docs/other/x.md", "op": "read", "bytes": 400, "calls": 1},
+       {"pathKey": "docs/kb/*.md", "op": "grep", "bytes": 400, "calls": 1},
+       {"pathKey": "docs/", "op": "grep", "bytes": 400, "calls": 1}
+     ]}],
+     "unitsTotal": 1, "spend": 3, "refMs": 0
+   },
+   "expected": {
+     "summary": {"unitsRead": 0, "unitsTotal": 1, "reads": 0, "tokens": 0, "cost": 0, "readsWithoutCost": 0, "spend": 3},
+     "files": [
+       {"path": "docs/kb/a.md", "reads": 0},
+       {"path": "docs/kb/b.md", "reads": 0},
+       {"path": "docs/kb/index.md", "reads": 0},
+       {"path": "docs/kb/sub/c.md", "reads": 0}
+     ],
+     "folders": [
+       {"path": "docs/kb/", "units": 0, "search": null},
+       {"path": "docs/kb/sub/", "units": 0, "search": null}
+     ],
+     "notInSnapshotUnits": 0
+   },
+   "note": "Rule 5: README.md and docs/other/x.md lie in no bundle; docs/kb/*.md has a glob character; docs/ is a folder above the only bundle root. None is a read row -> every number 0, the file list is just the snapshot's, cost 0 (no read rows), no file appears as not-in-snapshot."},
+
+  {"id": "UC-05", "kind": "view",
+   "input": {
+     "unit": "sessions",
+     "bundles": [
+       {"root": "docs/kb", "okfVersion": "0.3", "files": [
+         {"path": "docs/kb/index.md", "meta": {"frontMatter": true, "hasGenerated": true, "hasTimestamp": false, "type": "Index"}},
+         "docs/kb/a.md"
+       ]},
+       {"root": "docs/kb/api", "okfVersion": "0.3", "files": [
+         {"path": "docs/kb/api/index.md", "meta": {"frontMatter": true, "hasGenerated": true, "hasTimestamp": false, "type": "Index"}},
+         "docs/kb/api/x.md"
+       ]}
+     ],
+     "snapshot": {"branch": "main", "takenAt": "2026-11-01T00:00:00.000Z"},
+     "nodes": [{"unit": 1, "rows": [
+       {"pathKey": "docs/kb/api/x.md", "op": "read", "bytes": 400, "calls": 1},
+       {"pathKey": "docs/kb/a.md", "op": "read", "bytes": 800, "calls": 1},
+       {"pathKey": "docs/kb/api/", "op": "grep", "bytes": 400, "calls": 1}
+     ]}],
+     "unitsTotal": 1, "spend": null, "refMs": 0
+   },
+   "expected": {
+     "bundleRoots": ["docs/kb", "docs/kb/api"],
+     "summary": {"unitsRead": 1, "reads": 3, "tokens": 400},
+     "versions": [
+       {"root": "docs/kb", "files": 2, "okfVersion": "0.3", "older": false, "ignored": false},
+       {"root": "docs/kb/api", "files": 2, "okfVersion": "0.3", "older": false, "ignored": false}
+     ],
+     "files": [
+       {"path": "docs/kb/a.md", "bundle": "docs/kb", "inSnapshot": true, "reads": 1, "tokens": 200},
+       {"path": "docs/kb/api/index.md", "bundle": "docs/kb/api", "inSnapshot": true, "reads": 0},
+       {"path": "docs/kb/api/x.md", "bundle": "docs/kb/api", "inSnapshot": true, "reads": 1, "tokens": 100},
+       {"path": "docs/kb/index.md", "bundle": "docs/kb", "inSnapshot": true, "reads": 0}
+     ],
+     "folders": [
+       {"path": "docs/kb/", "bundle": "docs/kb", "units": 1, "search": null},
+       {"path": "docs/kb/api/", "bundle": "docs/kb/api", "units": 1, "search": {"units": 1, "reads": 1, "tokens": 100}}
+     ]
+   },
+   "note": "Rule 1: docs/kb/api/x.md and the folder docs/kb/api/ lie under both roots; the longer root docs/kb/api wins, so they belong to that bundle only. Rule 22: versions list 2 + 2 files = the 4 in-snapshot files of rule 11, each counted once. Tokens: 100 + 200 + 100 = 400."},
+
+  {"id": "UC-06", "kind": "view",
+   "input": {
+     "unit": "sessions",
+     "bundles": [{"root": "docs/kb", "okfVersion": "0.3", "files": [
+       {"path": "docs/kb/index.md", "meta": {"frontMatter": true, "hasGenerated": true, "hasTimestamp": false, "type": "Index"}},
+       "docs/kb/log.md",
+       {"path": "docs/kb/a.md", "meta": {"frontMatter": true, "hasGenerated": true, "hasTimestamp": false, "type": "Reference"}},
+       "docs/kb/sub/index.md",
+       {"path": "docs/kb/sub/c.md", "meta": {"frontMatter": true, "hasGenerated": true, "hasTimestamp": false, "type": "Reference"}}
+     ]}],
+     "snapshot": {"branch": "main", "takenAt": "2026-11-01T00:00:00.000Z"},
+     "nodes": [{"unit": 1, "rows": [
+       {"pathKey": "docs/kb/index.md", "op": "read", "bytes": 400, "calls": 2},
+       {"pathKey": "docs/kb/log.md", "op": "read", "bytes": 200, "calls": 1},
+       {"pathKey": "docs/kb/sub/index.md", "op": "read", "bytes": 100, "calls": 1},
+       {"pathKey": "docs/kb/a.md", "op": "read", "bytes": 400, "calls": 1}
+     ]}],
+     "unitsTotal": 1, "spend": null, "refMs": 0
+   },
+   "expected": {
+     "summary": {"unitsRead": 1, "reads": 5, "tokens": 275},
+     "files": [
+       {"path": "docs/kb/a.md", "index": false, "reads": 1, "tokens": 100},
+       {"path": "docs/kb/index.md", "index": true, "reads": 2, "tokens": 100},
+       {"path": "docs/kb/log.md", "index": true, "reads": 1, "tokens": 50},
+       {"path": "docs/kb/sub/c.md", "index": false, "reads": 0, "tokens": 0},
+       {"path": "docs/kb/sub/index.md", "index": true, "reads": 1, "tokens": 25}
+     ],
+     "format": {"articles": 2, "indexFiles": 3, "withProblems": 0, "groups": []}
+   },
+   "note": "Rule 3: index.md, log.md and the nested sub/index.md are index files -> index: true. Rule 5 counts their reads like any other: reads 2 + 1 + 1 + 1 = 5, tokens (400 + 200 + 100 + 400) / 4 = 275. Rules 4, 23: the articles are a.md and sub/c.md -> articles 2, indexFiles 5 - 2 = 3; both articles are well formed -> no group."},
+
+  {"id": "UC-07", "kind": "view",
+   "input": {
+     "unit": "sessions",
+     "bundles": [
+       {"root": "docs/kb", "files": ["docs/kb/index.md", "docs/kb/a.md"]},
+       {"root": ".claude/kb", "files": [".claude/kb/index.md", ".claude/kb/a.md"]}
+     ],
+     "snapshot": {"branch": "main", "takenAt": "2026-11-01T00:00:00.000Z"},
+     "nodes": [{"unit": 1, "rows": [
+       {"pathKey": "docs/kb/.drafts/x.md", "op": "read", "bytes": 400, "calls": 1},
+       {"pathKey": "docs/kb/.obsidian/", "op": "grep", "bytes": 400, "calls": 1},
+       {"pathKey": ".claude/kb/a.md", "op": "read", "bytes": 400, "calls": 1}
+     ]}],
+     "unitsTotal": 1, "spend": null, "refMs": 0
+   },
+   "expected": {
+     "summary": {"unitsRead": 1, "reads": 1, "tokens": 100},
+     "files": [
+       {"path": ".claude/kb/a.md", "bundle": ".claude/kb", "inSnapshot": true, "reads": 1, "tokens": 100},
+       {"path": ".claude/kb/index.md", "reads": 0},
+       {"path": "docs/kb/a.md", "reads": 0},
+       {"path": "docs/kb/index.md", "reads": 0}
+     ],
+     "folders": [
+       {"path": ".claude/kb/", "units": 1, "search": null},
+       {"path": "docs/kb/", "units": 0, "search": null}
+     ],
+     "notInSnapshotUnits": 0
+   },
+   "note": "Rules 1, 2: docs/kb/.drafts/x.md and docs/kb/.obsidian/ have a dot segment below the root docs/kb -> not KB, counted nowhere (not even as a file missing from the snapshot). .claude/kb/a.md has its dot segment in the root itself, below it there is none -> it counts: 1 read, 100 tokens."},
+
+  {"id": "UC-08", "kind": "view",
+   "input": {
+     "unit": "sessions",
+     "bundles": [{"root": "docs/kb", "files": ["docs/kb/index.md", "docs/kb/a.md", "docs/kb/b.md", "docs/kb/sub/c.md"]}],
+     "snapshot": {"branch": "main", "takenAt": "2026-11-01T00:00:00.000Z"},
+     "nodes": [
+       {"unit": 1, "rows": [{"pathKey": "docs/kb/new.md", "op": "read", "bytes": 400, "calls": 2}]},
+       {"unit": 2, "rows": [
+         {"pathKey": "docs/kb/sub/gone.md", "op": "read", "bytes": 200, "calls": 1},
+         {"pathKey": "docs/kb/a.md", "op": "read", "bytes": 400, "calls": 1}
+       ]},
+       {"unit": 3, "rows": [{"pathKey": "docs/kb/a.md", "op": "read", "bytes": 400, "calls": 1}]}
+     ],
+     "unitsTotal": 3, "spend": null, "refMs": 0
+   },
+   "expected": {
+     "summary": {"unitsRead": 3, "reads": 5, "tokens": 350},
+     "files": [
+       {"path": "docs/kb/a.md", "inSnapshot": true, "units": 2, "reads": 2, "tokens": 200},
+       {"path": "docs/kb/b.md", "inSnapshot": true, "units": 0},
+       {"path": "docs/kb/index.md", "inSnapshot": true, "units": 0},
+       {"path": "docs/kb/new.md", "bundle": "docs/kb", "inSnapshot": false, "units": 1, "reads": 2, "tokens": 100},
+       {"path": "docs/kb/sub/c.md", "inSnapshot": true, "units": 0},
+       {"path": "docs/kb/sub/gone.md", "bundle": "docs/kb", "inSnapshot": false, "units": 1, "reads": 1, "tokens": 50}
+     ],
+     "folders": [
+       {"path": "docs/kb/", "units": 2},
+       {"path": "docs/kb/sub/", "units": 0}
+     ],
+     "notInSnapshotUnits": 2
+   },
+   "note": "Rule 11: new.md and sub/gone.md were read but are not in the snapshot -> listed with inSnapshot: false under their deepest root docs/kb. Rule 12: their reads add to no folder, so docs/kb/ has only units 2 and 3 (a.md) and docs/kb/sub/ has 0; notInSnapshotUnits = units 1 and 2 = 2. The summary still counts every read: 2 + 1 + 1 + 1 = 5, tokens (400 + 200 + 400 + 400) / 4 = 350."},
+
+  {"id": "UC-09", "kind": "view",
+   "input": {
+     "unit": "sessions",
+     "bundles": [{"root": "docs/kb", "files": ["docs/kb/index.md", "docs/kb/a.md", "docs/kb/b.md", "docs/kb/sub/c.md"]}],
+     "snapshot": {"branch": "main", "takenAt": "2026-11-01T00:00:00.000Z"},
+     "nodes": [
+       {"unit": 1, "rows": [
+         {"pathKey": "docs/kb/a.md", "op": "read", "bytes": 400, "calls": 1},
+         {"pathKey": "docs/kb/b.md", "op": "read", "bytes": 400, "calls": 1},
+         {"pathKey": "docs/kb/sub/c.md", "op": "read", "bytes": 400, "calls": 1}
+       ]},
+       {"unit": 2, "rows": [
+         {"pathKey": "docs/kb/a.md", "op": "read", "bytes": 400, "calls": 1},
+         {"pathKey": "docs/kb/sub/c.md", "op": "read", "bytes": 400, "calls": 1}
+       ]}
+     ],
+     "unitsTotal": 2, "spend": null, "refMs": 0
+   },
+   "expected": {
+     "summary": {"unitsRead": 2, "reads": 5, "tokens": 500},
+     "files": [
+       {"path": "docs/kb/a.md", "units": 2},
+       {"path": "docs/kb/b.md", "units": 1},
+       {"path": "docs/kb/index.md", "units": 0},
+       {"path": "docs/kb/sub/c.md", "units": 2}
+     ],
+     "folders": [
+       {"path": "docs/kb/", "units": 2},
+       {"path": "docs/kb/sub/", "units": 2}
+     ]
+   },
+   "note": "Rule 12: a folder's units is the set of units that read anything under it. The files under docs/kb/ have 2 + 1 + 2 = 5 unit-reads, but only units 1 and 2 exist -> 2, not 5."},
+
+  {"id": "UC-10", "kind": "view", "tol": 1e-9,
+   "input": {
+     "unit": "sessions",
+     "bundles": [{"root": "docs/kb", "files": ["docs/kb/index.md", "docs/kb/a.md", "docs/kb/b.md", "docs/kb/sub/c.md"]}],
+     "snapshot": {"branch": "main", "takenAt": "2026-11-01T00:00:00.000Z"},
+     "nodes": [
+       {"unit": 1, "ctxTokens": 40000, "ctxCost": 2, "rows": [
+         {"pathKey": "docs/kb/a.md", "op": "read", "bytes": 4000, "calls": 2},
+         {"pathKey": "docs/kb/b.md", "op": "grep", "bytes": 12000, "calls": 1}
+       ]},
+       {"unit": 2, "ctxTokens": 8000, "ctxCost": 1.2, "rows": [
+         {"pathKey": "docs/kb/a.md", "op": "read", "bytes": 2000, "calls": 1},
+         {"pathKey": "docs/kb/sub/", "op": "grep", "bytes": 6000, "calls": 3}
+       ]}
+     ],
+     "unitsTotal": 2, "spend": 25, "refMs": 0
+   },
+   "expected": {
+     "summary": {"unitsRead": 2, "reads": 7, "tokens": 6000, "cost": 0.5, "readsWithoutCost": 0, "spend": 25},
+     "files": [
+       {"path": "docs/kb/a.md", "reads": 3, "tokens": 1500, "cost": 0.125},
+       {"path": "docs/kb/b.md", "reads": 1, "tokens": 3000, "cost": 0.15},
+       {"path": "docs/kb/index.md", "reads": 0, "cost": 0},
+       {"path": "docs/kb/sub/c.md", "reads": 0, "cost": 0}
+     ],
+     "folders": [
+       {"path": "docs/kb/", "search": null},
+       {"path": "docs/kb/sub/", "search": {"units": 1, "reads": 3, "tokens": 1500, "cost": 0.225}}
+     ]
+   },
+   "note": "Rule 8. Node 1: kbTokens = 4000/4 + 12000/4 = 4000, share 4000 / 40000 = 0.1, node cost 0.1 x 2 = 0.2. Node 2: kbTokens = 500 + 1500 = 2000, share 2000 / 8000 = 0.25, node cost 0.25 x 1.2 = 0.3. Rule 9, by tokens (not by calls): node 1 a.md 0.2 x 1000/4000 = 0.05, b.md 0.2 x 3000/4000 = 0.15; node 2 a.md 0.3 x 500/2000 = 0.075, the docs/kb/sub/ search 0.3 x 1500/2000 = 0.225. Rule 10: a.md 0.05 + 0.075 = 0.125; files 0.125 + 0.15 plus the search 0.225 = 0.5 = summary.cost."},
+
+  {"id": "UC-11", "kind": "view", "tol": 1e-9,
+   "input": {
+     "unit": "sessions",
+     "bundles": [{"root": "docs/kb", "files": ["docs/kb/index.md", "docs/kb/a.md", "docs/kb/b.md", "docs/kb/sub/c.md"]}],
+     "snapshot": {"branch": "main", "takenAt": "2026-11-01T00:00:00.000Z"},
+     "nodes": [{"unit": 1, "ctxTokens": 5000, "ctxCost": 0.8, "rows": [
+       {"pathKey": "docs/kb/a.md", "op": "read", "bytes": 40000, "calls": 1},
+       {"pathKey": "docs/kb/b.md", "op": "read", "bytes": 40000, "calls": 1}
+     ]}],
+     "unitsTotal": 1, "spend": 1, "refMs": 0
+   },
+   "expected": {
+     "summary": {"reads": 2, "tokens": 20000, "cost": 0.8, "readsWithoutCost": 0},
+     "files": [
+       {"path": "docs/kb/a.md", "tokens": 10000, "cost": 0.4},
+       {"path": "docs/kb/b.md", "tokens": 10000, "cost": 0.4},
+       {"path": "docs/kb/index.md", "cost": 0},
+       {"path": "docs/kb/sub/c.md", "cost": 0}
+     ]
+   },
+   "note": "Rule 8: kbTokens = 10000 + 10000 = 20000 against ctxTokens 5000 -> share min(1, 4) = 1, node cost 1 x 0.8 = 0.8 (not 3.2). Rule 9: each file has half of the tokens -> 0.4."},
+
+  {"id": "UC-12", "kind": "view", "tol": 1e-9,
+   "input": {
+     "unit": "sessions",
+     "bundles": [{"root": "docs/kb", "files": ["docs/kb/index.md", "docs/kb/a.md", "docs/kb/b.md", "docs/kb/sub/c.md"]}],
+     "snapshot": {"branch": "main", "takenAt": "2026-11-01T00:00:00.000Z"},
+     "nodes": [
+       {"unit": 1, "ctxTokens": 10000, "ctxCost": 1, "rows": [
+         {"pathKey": "docs/kb/a.md", "op": "read", "bytes": 4000, "calls": 1}
+       ]},
+       {"unit": 2, "ctxTokens": 5000, "ctxCost": null, "rows": [
+         {"pathKey": "docs/kb/a.md", "op": "read", "bytes": 2000, "calls": 2},
+         {"pathKey": "docs/kb/b.md", "op": "read", "bytes": 4000, "calls": 3}
+       ]}
+     ],
+     "unitsTotal": 2, "spend": 1, "refMs": 0
+   },
+   "expected": {
+     "summary": {"unitsRead": 2, "reads": 6, "tokens": 2500, "cost": 0.1, "readsWithoutCost": 5},
+     "files": [
+       {"path": "docs/kb/a.md", "units": 2, "reads": 3, "tokens": 1500, "cost": 0.1},
+       {"path": "docs/kb/b.md", "units": 1, "reads": 3, "tokens": 1000, "cost": null},
+       {"path": "docs/kb/index.md", "reads": 0, "cost": 0},
+       {"path": "docs/kb/sub/c.md", "reads": 0, "cost": 0}
+     ]
+   },
+   "note": "Rule 8: node 1 is priced: 1000 / 10000 x 1 = 0.1, all on a.md. Node 2 has ctxCost null -> unpriced: its 2 + 3 = 5 reads go to readsWithoutCost, its tokens (500 + 1000) are still counted -> tokens 1000 + 1500 = 2500. Rule 10: a.md has one priced row -> 0.1; b.md has reads and none priced -> null; never-read files -> 0."},
+
+  {"id": "UC-13", "kind": "view",
+   "input": {
+     "unit": "sessions",
+     "bundles": [{"root": "docs/kb", "files": ["docs/kb/index.md", "docs/kb/a.md", "docs/kb/b.md", "docs/kb/sub/c.md"]}],
+     "snapshot": {"branch": "main", "takenAt": "2026-11-01T00:00:00.000Z"},
+     "nodes": [{"unit": 1, "ctxTokens": 0, "ctxCost": 1.5, "rows": [
+       {"pathKey": "docs/kb/a.md", "op": "read", "bytes": 4000, "calls": 2}
+     ]}],
+     "unitsTotal": 1, "spend": 1.5, "refMs": 0
+   },
+   "expected": {
+     "summary": {"unitsRead": 1, "reads": 2, "tokens": 1000, "cost": null, "readsWithoutCost": 2, "spend": 1.5},
+     "files": [
+       {"path": "docs/kb/a.md", "reads": 2, "tokens": 1000, "cost": null},
+       {"path": "docs/kb/b.md", "cost": 0},
+       {"path": "docs/kb/index.md", "cost": 0},
+       {"path": "docs/kb/sub/c.md", "cost": 0}
+     ]
+   },
+   "note": "Rule 8: a node is priced only with ctxCost not null AND ctxTokens > 0. ctxTokens is 0 -> unpriced, no division: the 2 reads go to readsWithoutCost and every cost with reads is null."},
+
+  {"id": "UC-14", "kind": "view", "tol": 1e-9,
+   "input": {
+     "unit": "sessions",
+     "bundles": [
+       {"root": "docs/kb", "okfVersion": "0.3", "files": [
+         {"path": "docs/kb/index.md", "meta": {"frontMatter": true, "hasGenerated": true, "hasTimestamp": false, "type": "Index"}},
+         "docs/kb/a.md"
+       ]},
+       {"root": "docs/guide", "okfVersion": "0.3", "files": [
+         {"path": "docs/guide/index.md", "meta": {"frontMatter": true, "hasGenerated": true, "hasTimestamp": false, "type": "Index"}},
+         "docs/guide/g.md"
+       ]}
+     ],
+     "snapshot": {"branch": "main", "takenAt": "2026-11-01T00:00:00.000Z"},
+     "bundle": "docs/guide",
+     "nodes": [
+       {"unit": 1, "ctxTokens": 40000, "ctxCost": 2, "rows": [
+         {"pathKey": "docs/kb/a.md", "op": "read", "bytes": 12000, "calls": 1},
+         {"pathKey": "docs/guide/g.md", "op": "read", "bytes": 4000, "calls": 2}
+       ]},
+       {"unit": 2, "rows": [{"pathKey": "docs/kb/a.md", "op": "read", "bytes": 4000, "calls": 1}]},
+       {"unit": 3, "rows": [{"pathKey": "docs/guide/old.md", "op": "read", "bytes": 400, "calls": 1}]}
+     ],
+     "unitsTotal": 5, "spend": 12.5, "refMs": 0
+   },
+   "expected": {
+     "bundleRoots": ["docs/guide", "docs/kb"],
+     "summary": {"unitsRead": 2, "unitsTotal": 5, "reads": 3, "tokens": 1100, "cost": 0.05, "readsWithoutCost": 1, "spend": 12.5},
+     "versions": [{"root": "docs/guide", "files": 2}],
+     "format": {"articles": 1, "indexFiles": 1},
+     "files": [
+       {"path": "docs/guide/g.md", "bundle": "docs/guide", "units": 1, "reads": 2, "tokens": 1000, "cost": 0.05},
+       {"path": "docs/guide/index.md", "bundle": "docs/guide", "reads": 0},
+       {"path": "docs/guide/old.md", "bundle": "docs/guide", "inSnapshot": false, "reads": 1, "tokens": 100, "cost": null}
+     ],
+     "folders": [{"path": "docs/guide/", "bundle": "docs/guide", "units": 1, "search": null}],
+     "notInSnapshotUnits": 1
+   },
+   "note": "Rule 19: with bundle = docs/guide only its rows and files are shown: g.md (unit 1, 2 calls, 1000 tokens) and old.md (unit 3, 1 call, 100 tokens) -> unitsRead 2, reads 3, tokens 1100; unit 2 read only docs/kb. unitsTotal 5, spend 12.5 and both bundleRoots stay. Rule 8: node 1's share is taken over every bundle: kbTokens 3000 + 1000 = 4000, 4000 / 40000 x 2 = 0.2, g.md gets 0.2 x 1000 / 4000 = 0.05 - the same value as without the filter. Unit 3 is unpriced -> readsWithoutCost 1, old.md cost null."},
+
+  {"id": "UC-15", "kind": "view",
+   "input": {
+     "unit": "sessions",
+     "bundles": null,
+     "snapshot": null,
+     "nodes": [{"unit": 1, "ctxTokens": 1000, "ctxCost": 1, "rows": [
+       {"pathKey": "docs/kb/a.md", "op": "read", "bytes": 400, "calls": 1}
+     ]}],
+     "unitsTotal": 4, "spend": 9, "refMs": 0
+   },
+   "expected": {
+     "unit": "sessions",
+     "snapshot": null,
+     "bundleRoots": [],
+     "currentFormat": "0.3",
+     "summary": {"unitsRead": 0, "unitsTotal": 0, "reads": 0, "tokens": 0, "cost": null, "readsWithoutCost": 0, "spend": null},
+     "versions": [],
+     "format": null,
+     "files": [],
+     "folders": [],
+     "notInSnapshotUnits": 0
+   },
+   "note": "Rule 17: no snapshot -> snapshot null, every array empty, every number 0 (unitsTotal too, although 4 came in), cost and spend null, format null; unit and currentFormat (0.3) are still set."},
+
+  {"id": "UC-16", "kind": "view",
+   "input": {
+     "unit": "agents",
+     "bundles": [{"root": "docs/kb", "files": ["docs/kb/index.md", "docs/kb/a.md", "docs/kb/b.md", "docs/kb/sub/c.md"]}],
+     "snapshot": {"branch": null, "takenAt": "2026-11-01T00:00:00.000Z"},
+     "nodes": [
+       {"unit": 11, "rows": [{"pathKey": "docs/kb/a.md", "op": "read", "bytes": 400, "calls": 1}]},
+       {"unit": 12, "rows": [
+         {"pathKey": "docs/kb/a.md", "op": "read", "bytes": 400, "calls": 1},
+         {"pathKey": "docs/kb/b.md", "op": "read", "bytes": 400, "calls": 1}
+       ]},
+       {"unit": 13, "rows": []}
+     ],
+     "unitsTotal": 3, "spend": null, "refMs": 0
+   },
+   "expected": {
+     "unit": "agents",
+     "snapshot": {"branch": null},
+     "summary": {"unitsRead": 2, "unitsTotal": 3, "reads": 3, "tokens": 300},
+     "files": [
+       {"path": "docs/kb/a.md", "units": 2},
+       {"path": "docs/kb/b.md", "units": 1},
+       {"path": "docs/kb/index.md", "units": 0},
+       {"path": "docs/kb/sub/c.md", "units": 0}
+     ],
+     "folders": [
+       {"path": "docs/kb/", "units": 2},
+       {"path": "docs/kb/sub/", "units": 0}
+     ]
+   },
+   "note": "Terms + rule 7: on the session route a unit is a tree node. Nodes 11 and 12 of one tree read the KB, node 13 did not -> 2 of 3 agents (not 1 of 1 tree); a.md was read by 2 agents."},
+
+  {"id": "UC-17", "kind": "view",
+   "input": {
+     "unit": "sessions",
+     "bundles": [{"root": "docs/kb", "okfVersion": "0.3", "files": [
+       {"path": "docs/kb/index.md", "meta": {"frontMatter": true, "hasGenerated": true, "hasTimestamp": false, "type": "Index"}},
+       {"path": "docs/kb/log.md", "meta": {"frontMatter": false, "hasGenerated": false, "hasTimestamp": false}},
+       {"path": "docs/kb/g.md", "meta": {"frontMatter": true, "hasGenerated": true, "hasTimestamp": false, "type": "Reference"}},
+       {"path": "docs/kb/f.md", "meta": {"frontMatter": true, "hasGenerated": true, "hasTimestamp": false, "type": "Reference", "status": "deprecated", "staleAfter": "soon"}},
+       {"path": "docs/kb/e.md", "meta": {"frontMatter": true, "hasGenerated": true, "hasTimestamp": false, "type": "Reference", "staleAfter": "2026-06-02"}},
+       {"path": "docs/kb/d.md", "meta": {"frontMatter": true, "hasGenerated": true, "hasTimestamp": false, "type": "Reference", "staleAfter": "2026-05-31"}},
+       {"path": "docs/kb/c.md", "meta": {"frontMatter": true, "hasGenerated": true, "hasTimestamp": false, "type": "Reference", "status": "Deprecated", "supersededBy": "d.md"}},
+       {"path": "docs/kb/b.md", "meta": {"frontMatter": true, "hasGenerated": false, "hasTimestamp": true}},
+       {"path": "docs/kb/a.md", "meta": {"frontMatter": false, "hasGenerated": false, "hasTimestamp": false}}
+     ]}],
+     "snapshot": {"branch": "main", "takenAt": "2026-11-01T00:00:00.000Z"},
+     "nodes": [],
+     "unitsTotal": 0, "spend": null, "refMs": 1780272000000
+   },
+   "expected": {
+     "snapshot": {"hasMeta": true},
+     "format": {
+       "articles": 7, "indexFiles": 2, "withProblems": 5,
+       "groups": [
+         {"problem": "no_front_matter", "files": [{"path": "docs/kb/a.md"}]},
+         {"problem": "no_type", "files": [{"path": "docs/kb/b.md"}]},
+         {"problem": "v01_timestamp", "files": [{"path": "docs/kb/b.md"}]},
+         {"problem": "deprecated", "files": [{"path": "docs/kb/c.md", "supersededBy": "docs/kb/d.md"}, {"path": "docs/kb/f.md"}]},
+         {"problem": "past_stale_after", "files": [{"path": "docs/kb/d.md"}, {"path": "docs/kb/f.md"}]}
+       ]
+     }
+   },
+   "note": "Rule 23, refMs = 2026-06-01T00:00:00Z. Articles: a..g = 7; index.md and log.md are index files (2) and are not checked although log.md has no front matter. a: no front matter. b: front matter without type, and timestamp without generated -> two groups. c: deprecated, superseded_by d.md resolved against its folder -> docs/kb/d.md. d: stale_after 2026-05-31 < refMs -> past. e: 2026-06-02 > refMs -> fine. f: deprecated (no superseded_by) and an unparseable stale_after -> past. g: fine. Distinct articles with a problem: a, b, c, d, f = 5 (group entries would be 7). Groups in the fixed order, files by path."},
+
+  {"id": "UC-18", "kind": "view",
+   "input": {
+     "unit": "sessions",
+     "bundles": [{"root": "docs/kb", "files": ["docs/kb/index.md", "docs/kb/a.md", "docs/kb/b.md", "docs/kb/sub/c.md"]}],
+     "snapshot": {"branch": "main", "takenAt": "2026-11-01T00:00:00.000Z"},
+     "nodes": [{"unit": 1, "rows": [{"pathKey": "docs/kb/a.md", "op": "read", "bytes": 400, "calls": 1}]}],
+     "unitsTotal": 1, "spend": null, "refMs": 0
+   },
+   "expected": {
+     "snapshot": {"branch": "main", "takenAt": "2026-11-01T00:00:00.000Z", "hasMeta": false},
+     "bundleRoots": ["docs/kb"],
+     "summary": {"unitsRead": 1, "reads": 1, "tokens": 100},
+     "versions": [],
+     "format": null,
+     "files": [
+       {"path": "docs/kb/a.md", "inSnapshot": true, "units": 1, "reads": 1, "tokens": 100},
+       {"path": "docs/kb/b.md", "inSnapshot": true, "units": 0},
+       {"path": "docs/kb/index.md", "inSnapshot": true, "units": 0},
+       {"path": "docs/kb/sub/c.md", "inSnapshot": true, "units": 0}
+     ],
+     "folders": [
+       {"path": "docs/kb/", "units": 1},
+       {"path": "docs/kb/sub/", "units": 0}
+     ]
+   },
+   "note": "Rule 21: no file of the snapshot carries meta (an old hook) -> hasMeta false, versions [] and format null. Files, folders and the summary are counted as usual: a.md 1 read, 100 tokens."},
+
+  {"id": "UC-19", "kind": "view",
+   "input": {
+     "unit": "sessions",
+     "bundles": [
+       {"root": "docs/c", "okfVersion": "0.3", "ignored": true, "files": [
+         {"path": "docs/c/index.md", "meta": {"frontMatter": true, "hasGenerated": true, "hasTimestamp": false, "type": "Index"}}
+       ]},
+       {"root": "docs/b", "files": [
+         {"path": "docs/b/index.md", "meta": {"frontMatter": true, "hasGenerated": true, "hasTimestamp": false, "type": "Index"}},
+         "docs/b/x.md"
+       ]},
+       {"root": "docs/a", "okfVersion": "0.1", "files": [
+         {"path": "docs/a/index.md", "meta": {"frontMatter": true, "hasGenerated": false, "hasTimestamp": true, "type": "Index"}}
+       ]}
+     ],
+     "snapshot": {"branch": "main", "takenAt": "2026-11-01T00:00:00.000Z"},
+     "nodes": [],
+     "unitsTotal": 0, "spend": null, "refMs": 0
+   },
+   "expected": {
+     "currentFormat": "0.3",
+     "bundleRoots": ["docs/a", "docs/b", "docs/c"],
+     "versions": [
+       {"root": "docs/a", "files": 1, "okfVersion": "0.1", "older": true, "ignored": false},
+       {"root": "docs/b", "files": 2, "okfVersion": null, "older": true, "ignored": false},
+       {"root": "docs/c", "files": 1, "okfVersion": "0.3", "older": false, "ignored": true}
+     ]
+   },
+   "note": "Rule 22: one row per bundle by root ascending. 0.1 < 0.3 -> older; docs/b declares no version -> okfVersion null and older true; 0.3 is current -> not older. files = the length of the file list, index included. Personal view (rule 18, last paragraph): the ignored bundle is listed with ignored: true."},
+
+  {"id": "UC-20", "kind": "teamFilter",
+   "input": {
+     "unit": "sessions",
+     "bundles": [
+       {"root": "docs/kb", "files": ["docs/kb/index.md", "docs/kb/a.md", "docs/kb/b.md", {"path": "docs/kb/secret.md", "ignored": true}]},
+       {"root": "docs/private", "ignored": true, "files": ["docs/private/index.md", "docs/private/p.md"]}
+     ],
+     "snapshot": {"branch": "main", "takenAt": "2026-11-01T00:00:00.000Z"},
+     "trees": [
+       {"rootId": 1,
+        "snapshot": {"bundles": [
+          {"root": "docs/kb", "files": ["docs/kb/index.md", "docs/kb/a.md", "docs/kb/b.md", {"path": "docs/kb/secret.md", "ignored": true}]},
+          {"root": "docs/private", "ignored": true, "files": ["docs/private/index.md", "docs/private/p.md"]}
+        ]},
+        "nodes": [{"rows": [
+          {"pathKey": "docs/kb/a.md", "op": "read", "bytes": 400, "calls": 1},
+          {"pathKey": "docs/kb/secret.md", "op": "read", "bytes": 400, "calls": 1},
+          {"pathKey": "docs/private/p.md", "op": "read", "bytes": 400, "calls": 1},
+          {"pathKey": "docs/private/", "op": "grep", "bytes": 400, "calls": 1},
+          {"pathKey": "docs/kb/", "op": "grep", "bytes": 400, "calls": 1}
+        ]}]},
+       {"rootId": 2,
+        "snapshot": {"bundles": [
+          {"root": "docs/kb", "files": ["docs/kb/index.md", "docs/kb/a.md", {"path": "docs/kb/b.md", "ignored": true}]}
+        ]},
+        "nodes": [{"rows": [
+          {"pathKey": "docs/kb/b.md", "op": "read", "bytes": 400, "calls": 1},
+          {"pathKey": "docs/kb/a.md", "op": "read", "bytes": 800, "calls": 1}
+        ]}]}
+     ],
+     "unitsTotal": 2, "spend": null, "refMs": 0
+   },
+   "expected": {
+     "bundleRoots": ["docs/kb"],
+     "summary": {"unitsRead": 2, "unitsTotal": 2, "reads": 3, "tokens": 400},
+     "files": [
+       {"path": "docs/kb/a.md", "inSnapshot": true, "units": 2, "reads": 2, "tokens": 300},
+       {"path": "docs/kb/index.md", "inSnapshot": true, "units": 0, "reads": 0}
+     ],
+     "folders": [
+       {"path": "docs/kb/", "units": 2, "search": {"units": 1, "reads": 1, "tokens": 100}}
+     ],
+     "notInSnapshotUnits": 0
+   },
+   "note": "Rule 18. Ignored anywhere: secret.md (file flag), docs/private/index.md and p.md (bundle flag), b.md (ignored in tree 2's snapshot). Tree 1 keeps a.md and the docs/kb/ search (a visible file lies under it); secret.md, p.md and the docs/private/ search go. Tree 2 keeps a.md only. Reference bundles: docs/private is dropped, secret.md and b.md leave docs/kb -> files index.md and a.md. Counting: a.md 2 units, 2 reads, (400 + 800) / 4 = 300 tokens; search 100 tokens; total reads 3, tokens 400. No ignored path is listed, not even with zero reads or as missing from the snapshot."},
+
+  {"id": "UC-21", "kind": "teamFilter",
+   "input": {
+     "unit": "sessions",
+     "bundles": [{"root": "docs/kb", "files": ["docs/kb/index.md", "docs/kb/a.md", "docs/kb/b.md", "docs/kb/sub/c.md"]}],
+     "snapshot": {"branch": "main", "takenAt": "2026-11-01T00:00:00.000Z"},
+     "trees": [
+       {"rootId": 1,
+        "snapshot": {"bundles": [{"root": "docs/kb", "files": ["docs/kb/index.md", "docs/kb/a.md", "docs/kb/b.md", "docs/kb/sub/c.md"]}]},
+        "nodes": [{"rows": [{"pathKey": "docs/kb/a.md", "op": "read", "bytes": 400, "calls": 1}]}]},
+       {"rootId": 2,
+        "snapshot": null,
+        "nodes": [{"rows": [
+          {"pathKey": "docs/kb/a.md", "op": "read", "bytes": 400, "calls": 1},
+          {"pathKey": "docs/kb/b.md", "op": "read", "bytes": 400, "calls": 2}
+        ]}]}
+     ],
+     "unitsTotal": 2, "spend": null, "refMs": 0
+   },
+   "expected": {
+     "summary": {"unitsRead": 1, "unitsTotal": 2, "reads": 1, "tokens": 100},
+     "files": [
+       {"path": "docs/kb/a.md", "units": 1, "reads": 1, "tokens": 100},
+       {"path": "docs/kb/b.md", "units": 0, "reads": 0, "tokens": 0},
+       {"path": "docs/kb/index.md", "units": 0},
+       {"path": "docs/kb/sub/c.md", "units": 0}
+     ]
+   },
+   "note": "Rule 18, first bullet: tree 2 has no snapshot of its own, so in a team view none of its rows is kept, although the paths are in the reference snapshot. Only tree 1's read of a.md counts -> 1 of 2 (the tree still counts in M)."},
+
+  {"id":"UC-21b","kind":"teamFilter","input":{"unit":"sessions","bundles":[{"root":"docs/kb","okfVersion":"0.3","files":[{"path":"docs/kb/index.md","meta":{"frontMatter":true,"hasGenerated":true,"hasTimestamp":false,"type":"Index"}},{"path":"docs/kb/a.md","meta":{"frontMatter":true,"hasGenerated":true,"hasTimestamp":false,"type":"Reference","status":"deprecated","supersededBy":"secret.md"}},{"path":"docs/kb/b.md","meta":{"frontMatter":true,"hasGenerated":true,"hasTimestamp":false,"type":"Reference","status":"deprecated","supersededBy":"c.md"}},{"path":"docs/kb/c.md","meta":{"frontMatter":true,"hasGenerated":true,"hasTimestamp":false,"type":"Reference"}},{"path":"docs/kb/d.md","meta":{"frontMatter":true,"hasGenerated":true,"hasTimestamp":false,"type":"Reference","status":"deprecated","supersededBy":"gone.md"}},{"path":"docs/kb/secret.md","ignored":true,"meta":{"frontMatter":true,"hasGenerated":true,"hasTimestamp":false,"type":"Reference"}}]}],"snapshot":{"branch":"main","takenAt":"2026-11-01T00:00:00.000Z"},"trees":[{"rootId":1,"snapshot":{"bundles":[{"root":"docs/kb","okfVersion":"0.3","files":[{"path":"docs/kb/index.md","meta":{"frontMatter":true,"hasGenerated":true,"hasTimestamp":false,"type":"Index"}},{"path":"docs/kb/a.md","meta":{"frontMatter":true,"hasGenerated":true,"hasTimestamp":false,"type":"Reference","status":"deprecated","supersededBy":"secret.md"}},{"path":"docs/kb/b.md","meta":{"frontMatter":true,"hasGenerated":true,"hasTimestamp":false,"type":"Reference","status":"deprecated","supersededBy":"c.md"}},{"path":"docs/kb/c.md","meta":{"frontMatter":true,"hasGenerated":true,"hasTimestamp":false,"type":"Reference"}},{"path":"docs/kb/d.md","meta":{"frontMatter":true,"hasGenerated":true,"hasTimestamp":false,"type":"Reference","status":"deprecated","supersededBy":"gone.md"}},{"path":"docs/kb/secret.md","ignored":true,"meta":{"frontMatter":true,"hasGenerated":true,"hasTimestamp":false,"type":"Reference"}}]}]},"nodes":[{"rows":[]}]}],"unitsTotal":1,"spend":null,"refMs":0},"expected":{"versions":[{"root":"docs/kb","files":5}],"format":{"articles":4,"indexFiles":1,"withProblems":3,"groups":[{"problem":"deprecated","files":[{"path":"docs/kb/a.md","supersededBy":null},{"path":"docs/kb/b.md","supersededBy":"docs/kb/c.md"},{"path":"docs/kb/d.md","supersededBy":null}]}]}},"note":"Rules 18 and 23, team view. secret.md is gitignored and leaves the snapshot (5 files: index.md + 4 articles). a.md is deprecated in favour of secret.md: the target is hidden, so no supersededBy (a hidden path never leaks). b.md -> c.md, a visible file: listed. d.md -> gone.md, a file the snapshot does not list: left out as well. All three stay in the deprecated group."},
+
+  {"id": "UC-22", "kind": "reference",
+   "input": {"roots": [
+     {"id": 1, "startTime": "2026-11-01T10:00:00.000Z", "branch": "main"},
+     {"id": 2, "startTime": "2026-11-05T10:00:00.000Z", "branch": "main"},
+     {"id": 3, "startTime": "2026-11-09T10:00:00.000Z", "branch": "feat/okf"},
+     {"id": 4, "startTime": "2026-11-03T10:00:00.000Z", "branch": "master"}
+   ]},
+   "expected": {"id": 2},
+   "note": "Rule 16: roots on main / master are 1, 2 and 4; the newest of them is 2 (5 Nov). Root 3 is newer (9 Nov) but on a feature branch."},
+
+  {"id": "UC-23", "kind": "reference",
+   "input": {"roots": [
+     {"id": 1, "startTime": "not a date", "branch": "feat/a"},
+     {"id": 2, "startTime": "2026-11-02T10:00:00.000Z", "branch": "feat/b"},
+     {"id": 3, "startTime": "2026-11-02T10:00:00.000Z", "branch": null},
+     {"id": 4, "startTime": "2026-11-01T10:00:00.000Z", "branch": "develop"}
+   ]},
+   "expected": {"id": 2},
+   "note": "Rule 16: no root on main / master -> the newest of all. Root 1's start time does not parse -> older than any date. Roots 2 and 3 tie on 2 Nov -> the earlier list item, 2."},
+
+  {"id": "UC-23b", "kind": "reference",
+   "input": {"roots": []},
+   "expected": {"id": null},
+   "note": "Rule 16: an empty list -> null."},
+
+  {"id": "UC-24", "kind": "format",
+   "input": {"fn": "formatApproxTokens", "calls": [[0], [-5], [600], [55000], [99999], [100000], [270000], [999999], [1000000], [3771600]]},
+   "expected": {"results": ["0", "0", "0.6K", "55.0K", "100.0K", "100K", "270K", "1000K", "1.00M", "3.77M"]},
+   "note": "Rule 24: n <= 0 -> 0. Below 100,000: n / 1000 with one decimal (0.6, 55.0; 99.999 rounds to 100.0). From 100,000: n / 1000 as an integer (100, 270; 999.999 rounds to 1000). From 1,000,000: n / 1,000,000 with two decimals (1.00, 3.7716 -> 3.77)."},
+
+  {"id": "UC-25", "kind": "format",
+   "input": {"fn": "formatApproxCost", "calls": [[null, false], [null, true], [0, false], [0, true], [0.004, false], [0.004, true], [0.006, false], [1.239, false], [52.61, true]]},
+   "expected": {"results": ["—", "—", "0.00", "$0.00", "< 0.01", "< $0.01", "0.01", "1.24", "$52.61"]},
+   "note": "Rule 25: null -> the dash, with or without the sign. 0 -> 0.00. 0.004 is above 0 and below 0.005 -> '< 0.01', the sign goes before the number. 0.006 is not below 0.005 -> two decimals, 0.01. 1.239 -> 1.24."},
+
+  {"id": "UC-26", "kind": "format",
+   "input": {"fn": "formatSpend", "calls": [[0], [45.58], [999.99], [1000], [3017.4], [1234567.5]]},
+   "expected": {"results": ["$0.00", "$45.58", "$999.99", "$1,000", "$3,017", "$1,234,568"]},
+   "note": "Rule 26: below 1000 two decimals; from 1000 a rounded integer with ',' every three digits (3017.4 -> 3,017; 1234567.5 -> 1,234,568); always with $."},
+
+  {"id": "UC-27", "kind": "format",
+   "input": {"fn": "formatKbShare", "calls": [[null, 100], [5, null], [5, 0], [0, 100], [0.05, 100], [0.5, 100], [5, 100], [10, 100], [12.6, 100], [52.61, 3017]]},
+   "expected": {"results": [null, null, null, "0 %", "< 0.1 %", "0.5 %", "5.0 %", "10 %", "13 %", "1.7 %"]},
+   "note": "Rule 27: an unknown cost or spend, or spend 0 -> null. p = cost / spend x 100: 0 -> '0 %'; 0.05 < 0.1 -> '< 0.1 %'; 0.5 and 5 -> one decimal; 10 and 12.6 are >= 10 -> rounded integers 10 and 13; 52.61 / 3017 = 1.74 % -> 1.7 %."}
+]

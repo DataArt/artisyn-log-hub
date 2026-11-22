@@ -41,11 +41,17 @@
  *   segment in `OKF_EVENT_SKIP_SEGMENTS` or longer than `OKF_PATH_MAX_CHARS` is dropped; the
  *   pattern is cut to `OKF_PATTERN_MAX_CHARS` (Glob keeps none); at most `OKF_EVENT_CAP_PER_NODE`
  *   events, beyond it `truncated` (DD-5).
- * - Pointer rows: a call that reads exactly one stored `.md` key yields one row per pointer of its
- *   result text (`extractPointers`; none from an error result). `isNew` = not named in the node's
- *   earlier text (user text incl. prompt and system reminders, assistant text, tool_result text,
- *   in transcript order); `partial` per `isPartialResult`; `followed` = a later call of the node
- *   touched the pointer path or a path under it. A partial read with no pointers stores one row
+ * - Pointer rows: a call that reads exactly one stored `.md` key yields one row per pointer span of
+ *   its result text (`extractPointerSpans`; none from an error result), each with its candidate
+ *   paths (`pointerCandidates`, against the article's folder and the longest `bundleRoots` entry
+ *   containing it). `isNew` = the span text is not named in the node's earlier text (user text
+ *   incl. prompt and system reminders, assistant text, tool_result text, in transcript order);
+ *   `partial` per `isPartialResult`. After the walk the stored `pointer` is the first candidate
+ *   that is a snapshot file or was touched by the node, else (bare span) the repo-relative
+ *   candidate, else the first; `followed` = a later call of the node touched some candidate or a
+ *   path under it; rows of one read naming the same pointer merge (first kept, `isNew` /
+ *   `followed` OR-ed); `seq` `newPointers` carry the stored pointers (DD-P5). A partial read with
+ *   no pointers stores one row
  *   with `pointer: ''`; a call reading several `.md` keys stores only such a `''` partial row per
  *   article. At most `OKF_POINTER_CAP_PER_NODE` rows, beyond it `truncated` (DD-8..DD-10).
  * - `seq`: every access of every call in order (`kb_*` ops for KB articles, code paths filtered
@@ -54,6 +60,7 @@
  */
 import { analyzeBash, type BashParser } from '@loghub/bash-view';
 import {
+  collapseRepoRelative,
   resolveRepoPath,
   truncateChangedPath,
 } from '../change-surface/path-normalise';
@@ -64,7 +71,12 @@ import {
   OKF_PATTERN_MAX_CHARS,
   OKF_POINTER_CAP_PER_NODE,
 } from './okf-constants';
-import { extractPointers, isNewPointer, isPartialResult } from './okf-pointers';
+import {
+  extractPointerSpans,
+  isNewPointer,
+  isPartialResult,
+  pointerCandidates,
+} from './okf-pointers';
 
 export type OkfAccessOp = 'read' | 'grep' | 'list' | 'write';
 
@@ -102,6 +114,12 @@ export interface ExtractOkfAccessOptions {
    * byte split (DD-7); absent → the even split.
    */
   snapshotFiles?: ReadonlyMap<string, OkfSnapshotFileInfo>;
+  /**
+   * Repo-relative root folders of the snapshot's bundles (`''` = repo root). A rooted pointer
+   * (`/x`) that is not an absolute repo path, and the last candidate of a bare one, resolve
+   * against the article's bundle root (DD-P4); absent → the repo root.
+   */
+  bundleRoots?: readonly string[];
 }
 
 /** Result of one `tool_use` id (first result wins, DD-8). */
@@ -555,6 +573,42 @@ function pathAndAncestors(path: string): string[] {
   return out;
 }
 
+/** Repo-relative folder of a file key (`''` at the repo root). */
+function folderOf(key: string): string {
+  const slash = key.lastIndexOf('/');
+  return slash < 0 ? '' : key.slice(0, slash);
+}
+
+/** A bundle root as a repo-relative folder: no trailing `/`, `.` → `''`. */
+function normaliseBundleRoot(root: string): string {
+  const r = toPosix(root.trim()).replace(/\/+$/, '').replace(/^\.\//, '');
+  return r === '.' ? '' : r;
+}
+
+/** DD-P4: the longest bundle root containing `articleKey`; none → the repo root `''`. */
+function articleBundleRoot(
+  articleKey: string,
+  bundleRoots: readonly string[],
+): string {
+  let best = '';
+  for (const r of bundleRoots) {
+    if (r.length > best.length && articleKey.startsWith(`${r}/`)) best = r;
+  }
+  return best;
+}
+
+/** A pointer span of a single-article read, resolved in the final pass (DD-P5). */
+interface PendingPointer {
+  /** The stored row, or null when the per-node cap was already hit. */
+  row: OkfPointerRow | null;
+  readOrd: number;
+  candidates: string[];
+  /** Stored when no candidate is known: the repo-relative one for a bare span, else the first. */
+  fallback: string;
+  /** Pointer chosen in the final pass. */
+  chosen: string;
+}
+
 /**
  * Extracts everything OKF needs from one tree node's transcript lines (DD-1): the access rows, the
  * code events, the pointer rows of its KB reads and the ordered access sequence.
@@ -576,6 +630,7 @@ export function extractOkfDetail(
   }
   const isSubagentLog = options.isSubagentLog === true;
   const snapshotFiles = options.snapshotFiles;
+  const bundleRoots = (options.bundleRoots ?? []).map(normaliseBundleRoot);
 
   const visible = entries.filter((line) => {
     const rec = line as AnyRecord;
@@ -612,6 +667,10 @@ export function extractOkfDetail(
   const seq: OkfSeqItem[] = [];
   /** Path (and every folder above it) → ordinal of the last call that touched it (DD-9 followed). */
   const lastTouch = new Map<string, number>();
+  /** Every resolved pointer span of the node, stored or beyond the cap (DD-P5). */
+  const pending: PendingPointer[] = [];
+  /** `seq` items of single-article KB reads → their new pointer spans, rewritten at the end. */
+  const seqNewPointers = new Map<OkfSeqItem, PendingPointer[]>();
   let truncated = false;
   let prior = '';
   let ord = 0;
@@ -708,10 +767,14 @@ export function extractOkfDetail(
       const kbReads = accesses.filter(
         (a) => a.op === 'read' && !a.isFolder && isStoredKey(a),
       );
-      let newPointers: string[] | null = null;
-      const pushPointer = (row: OkfPointerRow): void => {
-        if (pointers.length >= OKF_POINTER_CAP_PER_NODE) truncated = true;
-        else pointers.push(row);
+      let newPointers: PendingPointer[] | null = null;
+      const pushPointer = (row: OkfPointerRow): OkfPointerRow | null => {
+        if (pointers.length >= OKF_POINTER_CAP_PER_NODE) {
+          truncated = true;
+          return null;
+        }
+        pointers.push(row);
+        return row;
       };
       if (kbReads.length === 1) {
         const articleKey = kbReads[0].key;
@@ -720,22 +783,44 @@ export function extractOkfDetail(
         const text = result?.text ?? '';
         const isError = result?.isError ?? false;
         const partial = isPartialResult(text, isError);
-        const found = isError ? [] : extractPointers(text, usableRoots);
+        const ctx = {
+          articleDir: folderOf(articleKey),
+          bundleRoot: articleBundleRoot(articleKey, bundleRoots),
+          roots: usableRoots,
+        };
         newPointers = [];
-        for (const pointer of found) {
-          const isNew = isNewPointer(pointer, prior);
-          if (isNew) newPointers.push(pointer);
-          pushPointer({
+        let found = 0;
+        for (const span of isError ? [] : extractPointerSpans(text)) {
+          const candidates = pointerCandidates(span, ctx);
+          if (candidates.length === 0) continue;
+          found += 1;
+          const repoRelative =
+            span.kind === 'bare' ? collapseRepoRelative(span.path) : null;
+          const fallback =
+            repoRelative !== null && repoRelative !== ''
+              ? repoRelative
+              : candidates[0];
+          const isNew = isNewPointer(span.text, prior);
+          const row = pushPointer({
             articlePath,
             articleHash,
             readOrd: ord,
-            pointer,
+            pointer: fallback,
             isNew,
             followed: false,
             partial,
           });
+          const p: PendingPointer = {
+            row,
+            readOrd: ord,
+            candidates,
+            fallback,
+            chosen: fallback,
+          };
+          pending.push(p);
+          if (isNew) newPointers.push(p);
         }
-        if (found.length === 0 && partial) {
+        if (found === 0 && partial) {
           pushPointer({
             articlePath,
             articleHash,
@@ -800,7 +885,8 @@ export function extractOkfDetail(
           }
           if (pattern !== null) item.pattern = pattern;
           if (kb && access.op === 'read' && newPointers !== null) {
-            item.newPointers = newPointers;
+            item.newPointers = [];
+            seqNewPointers.set(item, newPointers);
           }
           if (op === 'search') item.hit = hit;
           seq.push(item);
@@ -814,13 +900,42 @@ export function extractOkfDetail(
     }
   }
 
+  // DD-P5: choose each span's pointer and its followed flag now that every touch is known.
+  const isKnown = (c: string): boolean =>
+    snapshotFiles?.has(c) === true || lastTouch.has(c);
+  for (const p of pending) {
+    p.chosen = p.candidates.find(isKnown) ?? p.fallback;
+    if (p.row === null) continue;
+    p.row.pointer = p.chosen;
+    p.row.followed = p.candidates.some(
+      (c) => (lastTouch.get(c) ?? -1) > p.readOrd,
+    );
+  }
+  // Two spans of one read can resolve to the same pointer: keep the first row (unique key).
+  const byKey = new Map<string, OkfPointerRow>();
+  const storedPointers: OkfPointerRow[] = [];
   for (const row of pointers) {
-    if (row.pointer === '') continue;
-    const last = lastTouch.get(row.pointer);
-    row.followed = last !== undefined && last > row.readOrd;
+    const key = `${row.readOrd}\0${row.articlePath}\0${row.pointer}`;
+    const first = byKey.get(key);
+    if (first === undefined) {
+      byKey.set(key, row);
+      storedPointers.push(row);
+      continue;
+    }
+    first.isNew = first.isNew || row.isNew;
+    first.followed = first.followed || row.followed;
+  }
+  for (const [item, spans] of seqNewPointers) {
+    item.newPointers = [...new Set(spans.map((p) => p.chosen))];
   }
 
-  return { access: [...rows.values()], events, pointers, seq, truncated };
+  return {
+    access: [...rows.values()],
+    events,
+    pointers: storedPointers,
+    seq,
+    truncated,
+  };
 }
 
 /**
