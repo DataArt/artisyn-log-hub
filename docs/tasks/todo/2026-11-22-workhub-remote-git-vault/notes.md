@@ -10,5 +10,6 @@ description: "evidence and background for the requirements of the remote git / c
 
 Common ways developers authenticate to git hosts: HTTPS with a credential manager / OS keyring, a
 PAT, a CLI login (`gh`, `glab`, `az`), SSH keys. The owner chose SSH key (preferred) and HTTPS + PAT
-for this task (FR-1a); browser / OAuth sign-in was excluded because corporate GitLab does not allow
-registering OAuth applications and the WH server is not reachable from outside.
+for this task (FR-1a); browser / OAuth sign-in was excluded because it needs an OAuth application
+registered on each git host, which self-managed instances often do not allow, and a WH install is
+usually not reachable from outside.

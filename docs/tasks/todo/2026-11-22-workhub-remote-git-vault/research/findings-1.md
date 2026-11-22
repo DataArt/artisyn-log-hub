@@ -102,7 +102,7 @@ All files are in `docs/tasks/todo/2026-11-22-workhub-remote-git-vault/wireframes
 **API and DB**
 - `work-hub/server/src/api/mod.rs:29-106` — the `routes!` macro fills `ROUTE_TABLE`; `; unlimited` turns off the body limit. `IdPath` (110-132) maps a bad uuid to 404.
 - `api/workspaces.rs:19-125` — the `Workspace` / `WorkspaceDetail` shapes (adding fields is backward compatible), `owned()` (404 for a foreign id), and `parse_body` (400 `invalid_body`). `create` currently takes only `NameBody {name}`; FR-4 needs optional fields.
-- `work-hub/server/src/auth/extract.rs:17-27` — the `CurrentUser` extractor. **Work Hub has no admin role** (only `admin_contact_email`), so "no admin read" holds automatically with owner-only queries.
+- `work-hub/server/src/auth/extract.rs:17-27` — the `CurrentUser` extractor. **Work Hub has no admin role** (only `admin_contact_email`), so "no admin read" holds automatically with owner-only queries. (Research-time state; FR-12 later added admins via `WORK_HUB_ADMIN_EMAILS`, whose overview still never reads connections.)
 - `work-hub/server/src/error.rs:9-245` — `ApiError::new(status, code, message)` with `with_detail`. New codes go here.
 - `work-hub/server/src/workspaces/repo.rs:9` — runtime `sqlx::query`/`query_as` with `FromRow`, no compile-time macros (0 found). Every query is filtered by owner.
 - `work-hub/server/migrations/` — 0001–0004, `IF NOT EXISTS`, a `COMMENT ON` for every table and column (see `0004_secret_key.sql`). The next migration is **0005**.

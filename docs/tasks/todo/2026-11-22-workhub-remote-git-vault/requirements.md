@@ -241,7 +241,8 @@ _None — all review questions are answered (2026-11-22)._
 - Proxy reachability: a sidecar next to the containers; the WH server needs no published port (FR-6).
 - Connections are granted to workspaces explicitly (FR-5).
 - Default push policy: any branch; force push / delete of the remote default branch rejected (FR-7).
-- No OAuth sign-in: corporate GitLab forbids OAuth apps and WH is not reachable from outside (FR-1a).
+- No OAuth sign-in: it needs an OAuth application registered on each git host, which self-managed
+  instances often do not allow, and a WH install is usually not reachable from outside (FR-1a).
 - Clone by pasted URL only, no repository picker (FR-4).
 - "Upload my own certificate" means an SSH private key; SSH is the preferred auth method (FR-1a).
 - A WH-generated SSH key is the recommended method; its private key never leaves WH (FR-1a).

@@ -8,7 +8,7 @@ tags:
   - docker
   - security
   - architecture
-generated: { by: "claude-code", at: "2026-11-22T20:00:00+04:00" }
+generated: { by: "claude-code", at: "2026-11-23T01:10:00+04:00" }
 ---
 
 # Work Hub git proxy and connections
@@ -171,6 +171,11 @@ State in the tmpfs `/run/wh` (lost on every sidecar restart; the server re-pushe
   it answers `host_key_unknown` with the fingerprint, with it the fingerprint must match the scan
   (else 400 `host_key_mismatch`) and is pinned. Then an API test (token + descriptor API test),
   `test-ssh` with the greeting template, or `ls-remote` of a given URL.
+- Reachability: the sidecar has egress (`bridge`), and the `generic` provider accepts any http(s)
+  or SSH host the user types, so Test, branches and clone reach whatever that host is, LAN
+  addresses included — by design, for self-hosted git. `wh-git-ctl` refuses arguments that start
+  with `-` (no URL or host can become a `git` / `ssh` option) and takes only `http(s)://` for
+  `test-http`; it never runs anything else on the user's behalf.
 
 ## Error messages and their transport (D1 items 5–7)
 
