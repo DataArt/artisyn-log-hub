@@ -12,11 +12,7 @@ import type {
 } from './session-map-model';
 import { formatElapsed, formatMapUsd } from './session-map-format';
 
-export type SessionMapBadgeKind =
-  | 'live'
-  | 'live-paused'
-  | 'live-idle'
-  | 'replay';
+export type SessionMapBadgeKind = 'live' | 'live-paused' | 'replay';
 
 export interface SessionMapHeaderProps {
   badge: SessionMapBadgeKind;
@@ -24,7 +20,7 @@ export interface SessionMapHeaderProps {
   pausedAtLabel: string | null;
   firstPrompt: string | null;
   counters: MapCounters;
-  /** A poll failed while a state is on screen ("update failed", polling continues). */
+  /** A refresh failed while a state is on screen ("update failed", the live poll continues). */
   updateFailed: boolean;
   highlight: HighlightMode;
   onHighlightChange: (mode: HighlightMode) => void;
@@ -38,8 +34,6 @@ function badgeText(kind: SessionMapBadgeKind, pausedAt: string | null): string {
       return 'LIVE · following now';
     case 'live-paused':
       return `LIVE · paused at ${pausedAt ?? '–'}`;
-    case 'live-idle':
-      return 'LIVE · updates paused';
     case 'replay':
       return 'Replay · finished session';
   }
@@ -51,8 +45,6 @@ function badgeClass(kind: SessionMapBadgeKind): string {
       return 'border-green-300 bg-green-50 text-green-700';
     case 'live-paused':
       return 'border-amber-300 bg-amber-50 text-amber-700';
-    case 'live-idle':
-      return 'border-slate-300 bg-slate-50 text-slate-600';
     case 'replay':
       return 'border-blue-300 bg-blue-50 text-blue-700';
   }

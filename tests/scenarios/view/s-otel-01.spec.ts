@@ -959,7 +959,7 @@ test('@S-OTEL-01 live session tab: realtime batches, highlight, delta polls, pau
     await fresh.close();
   });
 
-  // --- Session Map (2026-11-01 session-map-tab): the logs delta route and the LIVE / Replay tab ---
+  // --- Session Map (2026-11-01 session-map-tab): the legacy logs delta route, and the LIVE / Replay tab (built from the log parts) ---
   const mapSid = `otel01-${run}-map`;
   const mapSpec = (requestIds: string[]): TranscriptSpec => ({ sessionId: mapSid, prompt: `map session ${run}`, repoUrls: [repoUrl], branch: 'main', at: base, requestIds });
   const uploadClaude = async (sessionId: string, body: string): Promise<void> => {
@@ -1035,7 +1035,7 @@ test('@S-OTEL-01 live session tab: realtime batches, highlight, delta polls, pau
       },
     ];
     await uploadClaude(live, transcriptBodies(liveSpec).claude + extra.map((l) => JSON.stringify(l)).join('\n') + '\n');
-    // SESSION_MAP_POLL_MS is 10 s: the next poll brings the call in, no reload.
+    // SESSION_MAP_POLL_MS is 10 s: the next manifest poll sees the new claude part rev and refetches it, no reload.
     await expect(page.getByTestId('session-map-counter-calls').locator('span').nth(1)).toHaveText('1', { timeout: 25_000 });
     await expect(page.getByTestId('session-map-badge')).toContainText('LIVE');
   });
@@ -1048,6 +1048,12 @@ test('@S-OTEL-01 live session tab: realtime batches, highlight, delta polls, pau
       [live],
     );
     expect(await delta(live)).toMatchObject({ reload: false, liveness: { hasOtel: true, live: false } });
+    // The Map reads liveness from the parts manifest (2026-11-23 session-logs-streaming).
+    const manifestRes = await owner.api.get(`/api/v1/repositories/${repoId}/sessions/${encodeURIComponent(live)}/logs/parts`);
+    expect(manifestRes.status()).toBe(200);
+    const manifest = (await manifestRes.json()) as { liveness: { hasOtel: boolean; live: boolean }; serverTime: string };
+    expect(manifest.liveness).toMatchObject({ hasOtel: true, live: false });
+    expect(Number.isNaN(Date.parse(manifest.serverTime)), 'manifest serverTime is an ISO time').toBe(false);
     await expect(page.getByTestId('session-map-badge')).toContainText('Replay', { timeout: 25_000 });
     await expect(page.getByTestId('session-map-live')).toHaveCount(0);
   });

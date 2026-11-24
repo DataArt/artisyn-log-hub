@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { SchedulerRegistry } from '@nestjs/schedule';
 import { and, asc, eq, inArray, sql } from 'drizzle-orm';
+import { RebuildGovernor } from '../../common/load-governor/rebuild-governor';
 import { DRIZZLE } from '../../database/database.constants';
 import type { DrizzleDb } from '../../database/database.module';
 import { logs, sessionStats } from '../../database/schema/index';
@@ -48,6 +49,7 @@ export class ShellFiguresBackfillService
   constructor(
     @Inject(DRIZZLE) private readonly db: DrizzleDb,
     private readonly schedulerRegistry: SchedulerRegistry,
+    private readonly governor: RebuildGovernor,
   ) {}
 
   onModuleInit(): void {
@@ -92,6 +94,16 @@ export class ShellFiguresBackfillService
 
   /** One pass (see the class comment). Returns the number of claimed sessions. */
   async runPass(): Promise<number> {
+    // One pass (one claimed batch) is the unit of work paced by the governor (DD-15 of
+    // 2026-11-23-session-logs-streaming); it admits before the claim transaction opens.
+    await this.governor.admit();
+    if (this.stopped) return 0;
+    const processed = await this.claimAndProcess();
+    if (processed === 0) this.governor.reportIdle();
+    return processed;
+  }
+
+  private async claimAndProcess(): Promise<number> {
     return this.db.transaction(async (tx) => {
       const claimed = (
         await tx.execute(sql`

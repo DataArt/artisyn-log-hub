@@ -1,12 +1,12 @@
 ---
 type: "Architecture Guide"
 title: "Upload Queue (async log ingest, chunked upload, worker stats)"
-description: "How POST /api/v2/logs stages uploads and a cluster-safe scheduler ingests them: queue lifecycle and statuses, chunked upload and reassembly, malformed-line tolerance, the admin Upload Queue tab and its worker statistics, and the hook-side upload order and unchanged-file skip."
+description: "How POST /api/v2/logs stages uploads and a cluster-safe scheduler ingests them: queue lifecycle and statuses, chunked upload and reassembly, malformed-line tolerance, coalescing, hash skip, ordering guard, content hash, failure feedback and transcript re-extraction, the admin Upload Queue tab and its worker statistics, and the hook-side upload order and unchanged-file skip."
 tags:
   - server
   - hooks
   - upload
-generated: { by: "human:denistsyplakov", at: "2026-11-03T00:00:00+04:00" }
+generated: { by: "claude-code", at: "2026-11-23T18:00:00+04:00" }
 ---
 
 # Upload Queue
@@ -45,8 +45,9 @@ parsed on the request path. Column-level detail lives in
    (`getPendingWarnings`). The hook turns a non-empty list into its `broken-upload-file`
    recommendation.
 3. **Claim.** Every `UPLOAD_QUEUE_INTERVAL_MS` (default 1s) each cluster worker runs `tick()`. It
-   claims the oldest `pending` row with `UPDATE … WHERE id = (SELECT … FOR UPDATE SKIP LOCKED)`,
-   which is cluster-safe without any instance-index gating. A tick keeps claiming rows until the
+   claims the oldest `pending` row with `SELECT … FOR UPDATE SKIP LOCKED` and an `UPDATE` in one
+   transaction, which is cluster-safe without any instance-index gating (whole-file types claim
+   the newest row of the same key instead — see "Skip, ordering, coalescing and integrity"). A tick keeps claiming rows until the
    queue is empty or `UPLOAD_QUEUE_TICK_BUDGET_MS` (default 500ms, `0` allowed) has passed, and
    always processes at least one row, so a burst of small `claude-otel` chunks drains in one tick.
    An in-process flag stops two ticks of the same process from overlapping.
@@ -185,11 +186,63 @@ delays or fails an upload.
 - a 7-day average speed (the retention window);
 - latency avg / p95 / min / max and a drain ETA.
 
-Only `success` rows feed throughput; failures count toward utilisation. Measurements older than
+A measurement's `outcome` is `success`, `failure`, `skipped` (hash skip) or `superseded`
+(coalesced away, or older than the stored body) — see the next section. Only `success` rows feed
+throughput; failures count toward utilisation; `skipped` and `superseded` rows feed neither. Measurements older than
 `UPLOAD_QUEUE_MEASUREMENT_RETENTION_MS` (default 7 days) are pruned at most once per
 `UPLOAD_QUEUE_MEASUREMENT_PRUNE_INTERVAL_MS` (default 5 min) per process. All three values are
 read from `process.env` on every call, so e2e overrides apply after bootstrap. The Upload Queue tab
 polls the stats while it is open.
+
+## Skip, ordering, coalescing and integrity
+
+Whole-file uploads (`claude`, `claude-subagent`, `tool-calls`) are re-sent whenever the file grew,
+so the queue sees many copies of one file. These rules (impl-plan
+`docs/tasks/todo/2026-11-23-session-logs-streaming`, DD-16 to DD-25) keep that cheap and correct.
+`artisyn` and `claude-otel` are never coalesced or hash-skipped.
+
+**Coalescing (DD-16).** When the claim picks a row of a coalesced type (`COALESCED_LOG_TYPES` in
+`upload-queue.service.ts`), it claims instead the newest eligible `pending` row of the same
+`(user_id, session_id, log_type)` — in one transaction, both `FOR UPDATE SKIP LOCKED`; the first
+pick stays `pending`, untouched. After that newest row completes (processed, skipped or
+superseded), `deleteSupersededRows()` deletes the older `pending` rows of the key, unlinks their
+files and records one `superseded` measurement per row. If the newest row fails, the older rows
+are processed normally.
+
+**Content integrity (DD-24).** A new hook sends `contentSha256` (64 lowercase hex, anything else
+is ignored) on a single upload or chunk 0; it is stored in `upload_queue.content_sha256`. The worker
+computes the sha256 of the staged body first: on a mismatch the row fails at once (no retry) with
+`error_kind = 'server'` and `error_message = 'content-hash-mismatch'`.
+
+**Hash skip (DD-20).** Before parsing, `LogsService.checkUnchanged()` takes the owner and tree
+locks, upserts the `sessions` row and compares the stored `logs` row with the upload using the
+pure `decideIngestSkip` ([algorithms/ingest-hash-skip.md](algorithms/ingest-hash-skip.md)): same
+`body_sha256`, same `INGEST_VERSION`, same user and — for transcripts — the same tree edit
+revision (`stats_edit_sha256` vs the nearest `artisyn` `edit_records_sha256`). Then the row is
+deleted without parsing, with a `skipped` measurement.
+
+**Ordering guard (DD-19).** `upsert` writes the body only when the upload is not older than the
+stored one (`body_received_at` = `upload_queue.received_at`, chunk-0 time). A transcript or
+`tool-calls` upload that loses writes nothing and completes as `superseded`; an `artisyn` one
+keeps the stored body and hook status but still runs the idempotent repo-link, harness / OKF,
+code-inventory and OTEL-status steps.
+
+**Failure feedback (DD-25).** With `uploadFeedback=1`, the upload answer carries `failedUploads`:
+`takeFailedUploadsForFeedback()` returns up to `FAILED_UPLOADS_MAX` (20) of the caller's `failed`
+rows with `error_kind = 'server'` not reported yet, as `{sessionId, type}`, and flags them
+`failure_delivered` in the same `UPDATE … RETURNING`, so each is reported once. The hook re-sends
+those files. The `warnings` list is unchanged.
+
+**Re-extract on edit-record change (DD-22).** Transcript stats depend on the tree's `artisyn`
+edit records. When an `artisyn` upload changes them (`edit_records_sha256`), `upsert` queues the
+tree root in `session_reextract_queue` and nudges `SessionReextractService`
+(`session-reextract.service.ts`) after the commit. The drain (first pass on module init, then every
+`SESSION_REEXTRACT_INTERVAL_MS`, default 15000; governed, one tree per unit) takes the tree's
+ingest lock before locking the queue row (ingest upserts that row under the tree lock, so the
+reverse order could deadlock), re-runs `writeClaudeDerived` for each `claude` / `claude-subagent`
+row of the tree one body at a time, sets its `stats_edit_sha256`, marks the tree stale for the
+Tools/MCP rebuild and deletes the queue row. A queued row older than 30 s makes the parts manifest
+report `derivedLagging`.
 
 ## Upload priority
 
@@ -217,6 +270,51 @@ recorded size is skipped; only the current session's `artisyn` file is never ski
   [otel-receiver.md](otel-receiver.md)).
 
 More on the manifest and namespaces: [hook-system-overview.md](hook-system-overview.md).
+
+## Background rebuilds under load
+
+Ingest and every background rebuild share one per-worker pacer, `RebuildGovernor`
+(`server/src/common/load-governor/rebuild-governor.ts`, global `LoadGovernorModule`). A drain
+calls `admit()` before each unit of work and `reportIdle()` when it found nothing to do. Work is
+never dropped: a paused caller simply has not run yet. The pacing rules are the pure
+`decideRebuildPace` (algorithm doc
+[rebuild-load-governor.md](algorithms/rebuild-load-governor.md)); the load is the system CPU busy %
+from `CpuLoadSampler` (the max with the cgroup v2 quota share inside a limited container), averaged
+over the last 3 samples.
+
+- Below `REBUILD_SLOWDOWN_CPU_PERCENT` (default 60) `admit()` resolves at once, so an idle
+  instance ingests and rebuilds right after an upload.
+- Between that and `REBUILD_PAUSE_CPU_PERCENT` (default 99) it waits, up to
+  `REBUILD_MAX_DELAY_MS` (default 10000) just below the pause threshold.
+- At the pause threshold and above it pauses, re-checking after every load sample
+  (`REBUILD_LOAD_SAMPLE_MS`, default 2000), until `REBUILD_HARD_CAP_MS` (default 300000) has
+  passed. After that work runs anyway (drain mode) until a drain reports idle, so deferred work
+  always converges.
+
+Drains it covers and their unit of work:
+
+| Drain | Unit of work (admit before it) |
+|---|---|
+| Upload-queue tick (`UploadQueueSchedulerService`) | each row claim; `reportIdle()` when nothing is pending. The wait counts against `UPLOAD_QUEUE_TICK_BUDGET_MS` |
+| `ToolUsageRebuildService` | each claimed batch of stale trees |
+| `OtelProjectionService` | the chunk claim, each reclassification-queue claim, the idle-root finalising, each deleted-root cleanup |
+| `SessionCostRecomputeService` | each stale-cost batch claim (not under `SESSION_COST_RECOMPUTE_INLINE=true`, where a pricing write awaits the drain) |
+| `ShellFiguresBackfillService` | each pass (one claimed batch) |
+| `WorkflowsBackfillService` | each `session_stats` row |
+| `LogBodyGzService` | each `logs` row whose gzip copy is missing or stale |
+| `SessionReextractService` | each queued tree in `session_reextract_queue` |
+
+Admission always happens before a claim, never between a claim and its work, so a paused drain
+never holds rows it has already stamped as done.
+
+`LogBodyGzService` (`server/src/logs/log-body-gz.service.ts`) builds `logs.body_gz`, the gzip
+(level `LOG_BODY_GZIP_LEVEL` = 6) of `body::text` for `artisyn`, `claude` and `claude-subagent`
+rows. It runs a first pass on module init, then every `LOG_BODY_GZ_INTERVAL_MS` (default 15000),
+and `LogsService.upsert` / `importSession` nudge it after their commit. Per row, in one
+transaction: claim one row of the `idx_logs_body_gz_pending` predicate (newest first,
+`FOR UPDATE SKIP LOCKED`), read the body and `body_rev`, gzip it, and store the copy with its
+revision (assigning one from `logs_body_rev_seq` to a row written before migration 0096), guarded
+by the `body_rev` it read. A row whose build fails is skipped for the rest of the pass.
 
 ## Rejected alternatives
 

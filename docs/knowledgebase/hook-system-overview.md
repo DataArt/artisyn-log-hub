@@ -5,7 +5,7 @@ description: "Current behaviour of the Claude Code hook: where its source lives 
 tags:
   - hooks
   - otel
-generated: { by: "human:denistsyplakov", at: "2026-11-09T00:00:00+04:00" }
+generated: { by: "claude-code", at: "2026-11-23T22:00:00+04:00" }
 ---
 
 # Hook System Overview
@@ -213,15 +213,42 @@ fail.
 3. The current session's own `artisyn` file **last**, because its `hook-status` line reports this
    run's own outcomes. In a coalesced `stop` job the current session is the newest job's.
 
-### Manifest (`.claude-logs.sent`) — dedup by byte size
+### Manifests (`.claude-logs.sent` and `.claude-logs.sent.v2`) — dedup
 
-- Files whose size equals the manifest entry are skipped. The entry is written only **after** a
-  successful upload (worst case after a kill: a redundant re-upload, never a skipped one).
+- **Two manifests** (hook `3.2.0`+, DD-26 of task `2026-11-23-session-logs-streaming`):
+  - `.claude-logs.sent` — unchanged `<manifestKey> <size>` lines; older hooks read and write only
+    this one, so it keeps its format and keeps being written.
+  - `.claude-logs.sent.v2` — JSON `{"version":2,"entries":{"<manifestKey>":{"size","mtimeMs",
+    "paramsSha256","fp"?}}}` (`upload-skip.js` `readManifestV2` / `writeManifestV2`, temp +
+    rename). `size` is the byte length **read**, `mtimeMs` the stat taken **before** the read,
+    `paramsSha256` the sha256 of `[type, sessionId, parentSessionId, workflowRunId,
+    agentDescription, workflowPhase]` (absent = `''`). For `tool-calls`, `size` is Σ(size+1) of its
+    source files (`toolCallsSourceSize`, also the old manifest's number), `mtimeMs` 0 and `fp` the
+    sha256 of their sorted `name\tsize\tmtimeMs` lines (`toolCallsFingerprint`).
+  - Both are written in the same flush, under `.upload.lock`, and pruned by the same rule.
+- **Skip rule** (`decideUploadSkip`, algorithm doc
+  [algorithms/hook-upload-skip.md](algorithms/hook-upload-skip.md)): a file is skipped only when
+  the old size, the v2 size and a fresh stat size are all equal and the mtime, the params hash and
+  (for `tool-calls`) `fp` match the v2 entry. With no v2 entry yet (first run after the upgrade) an
+  old-size match is skipped and the v2 entry **adopted** from the current stat. Anything else is
+  sent — so a same-length rewrite, a late `<agent>.meta.json` (changes the params) and a same-size
+  `tool-calls` change are re-sent, which the size-only rule of `3.1.0` and older missed. A
+  `tool-calls` session is assembled only when it is not skipped.
+- An entry is written only **after** a successful upload (worst case after a kill: a redundant
+  re-upload, never a skipped one).
+- **Scoped-path recording**: the `UserPromptSubmit` background upload (`prompt-upload-hook.js`)
+  and the `SessionEnd` flush record exactly one entry, in both manifests: the current session's own
+  `claude` transcript (`claude/<sessionId>.jsonl`, read size, pre-read mtime, params of
+  `['claude', sessionId]`), after a 201 and only when `sanitizeNdjson` dropped no line (the
+  `SessionEnd` flush still sends the raw body and sanitizes only to detect drops). So the next
+  `Stop` does not re-send an unchanged transcript. They never record `artisyn` or anything else
+  (`upload-skip.js` `recordScopedClaudeUpload`).
 - The **current session's `artisyn` file is never manifested**: its uploaded body carries
   injected lines that the on-disk size does not reflect. The skip check and the write share one
   guard so they cannot drift. Other current-session files are manifested — Claude Code appends
   `turn_duration` after `Stop`, so a real change still re-uploads.
-- **`claude-otel` chunks are deleted once uploaded**, never fingerprinted (a chunk is immutable,
+- **`claude-otel` chunks are deleted once uploaded**, never fingerprinted and never given a v2
+  entry — they keep the size-only check against the old manifest (a chunk is immutable,
   so the local copy is dead weight) — both after a successful upload and when a manifest entry
   already proves an earlier upload (that reclaims chunks left by older hooks). `pruneOtelDir()`
   stays as the safety net for zero-byte chunks and abandoned `.tmp` files.
@@ -260,10 +287,11 @@ fail.
   written **before** spawning so a burst of prompts cannot all pass. The child gets `--cwd` /
   `--sessionId` on argv (a detached child has no stdin). It uploads only the current session's
   `artisyn` + `claude` files (`session-files.js`), has a watchdog
-  (`sendLogsOnPromptTimeoutMs`, deliberately not `unref`'d), skips if the lock is held, and writes
-  **no** manifest entries.
+  (`sendLogsOnPromptTimeoutMs`, deliberately not `unref`'d), skips if the lock is held, reads no
+  manifest and writes only the scoped-path entry of its own `claude` transcript (above).
 - **`SessionEnd` scoped flush** (`runSessionEndFlush()`): uploads only the ending session's own
-  files, no sweep, no manifest, no injected lines except `otel-status`. Why it exists: a `Stop`
+  files, no sweep, no manifest read, only the scoped-path entry of its own `claude` transcript,
+  no injected lines except `otel-status`. Why it exists: a `Stop`
   in another session can hold the lock for tens of seconds; a session ending inside that window
   used to strand its final delta. A session whose artisyn body lacks `prompt_start` gets
   `logs.first_prompt = NULL` and is **invisible** in the session list — not just stale.
@@ -331,7 +359,8 @@ costs work, never correctness):
 
 | File | Owner | Purpose |
 |---|---|---|
-| `.claude-logs.sent` | `send-logs-hook.js` | Upload manifest |
+| `.claude-logs.sent` | `send-logs-hook.js` | Upload manifest (size only; read by every hook version) |
+| `.claude-logs.sent.v2` | `send-logs-hook.js`, `upload-skip.js` | Upload manifest v2 (size, pre-read mtime, params hash, `tool-calls` fingerprint; hook `3.2.0`+) |
 | `.claude-logs.pending` | `upload-logs.js` | In-progress chunked uploads (v2 JSON; an old positional file is ignored) |
 | `gzip-stat.json` | `upload-logs.js` | Last compression ratio, seeds the next slice-size prediction |
 | `.upload.lock` | `upload-logs.js` | Upload mutual exclusion |

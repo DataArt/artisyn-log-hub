@@ -4,6 +4,7 @@ import { maxVersion } from '../../common/semver';
 import { DRIZZLE } from '../../database/database.constants';
 import type { DrizzleDb } from '../../database/database.module';
 import { findSessionOwnerId } from '../logs.service';
+import { SessionTombstoneService } from '../../sessions/session-tombstone.service';
 import { topAncestorIdsSql } from '../session-tree.sql';
 import {
   OTEL_CURSOR_PREFIX,
@@ -65,7 +66,9 @@ export function realtimeBatchGap(
  *    owner is a foreign session (409);
  * 2. inserts the `sessions` row if missing (by `session_id` only);
  * 3. resolves the root and takes the OTEL state lock (`create: true`, `user_id` on create) plus
- *    the deleted check — a deleted session answers `ignored: 'deleted'` and writes nothing;
+ *    the deleted check — a deleted session answers `ignored: 'deleted'` and writes nothing
+ *    (a tombstoned one — deleted ancestor, hard-purged row — already after step 1, DD-27 of
+ *    2026-11-23-session-logs-streaming);
  * 4. applies the gap / replay rule (DD-14), the lines (`source: 'realtime'`) and the `rt_*`
  *    fields;
  * 5. answers `{ accepted, cursor, minIntervalMs }`.
@@ -74,13 +77,25 @@ export function realtimeBatchGap(
 export class OtelRealtimeService {
   private readonly logger = new Logger(OtelRealtimeService.name);
 
-  constructor(@Inject(DRIZZLE) private readonly db: DrizzleDb) {}
+  constructor(
+    @Inject(DRIZZLE) private readonly db: DrizzleDb,
+    private readonly tombstones: SessionTombstoneService,
+  ) {}
 
   async ingest(
     userId: number,
     body: OtelRealtimeRequest,
   ): Promise<OtelRealtimeIngestResult> {
     const minIntervalMs = OTEL_REALTIME_MIN_INTERVAL_MS;
+    const ignoredDeleted: OtelRealtimeIngestResult = {
+      status: 'ok',
+      response: {
+        accepted: { calls: 0, spans: 0 },
+        cursor: `${OTEL_CURSOR_PREFIX}0`,
+        minIntervalMs,
+        ignored: 'deleted',
+      },
+    };
     try {
       return await this.db.transaction(async (tx) => {
         // Step 1 — ownership, under the same advisory lock as the upload path.
@@ -93,6 +108,12 @@ export class OtelRealtimeService {
             `otel-realtime rejected: foreign session sessionId=${body.sessionId} userId=${userId} ownerId=${ownerId}`,
           );
           return { status: 'foreign-session' as const };
+        }
+
+        // Step 1b — tombstone (DD-27): a deleted session, one under a deleted ancestor, or a
+        // hard-purged one takes nothing — checked before Step 2 so a purged row is not re-created.
+        if (await this.tombstones.isTombstoned(tx, body.sessionId)) {
+          return ignoredDeleted;
         }
 
         // Step 2 — the sessions row, insert-if-missing (DD-2 lock order: no row lock).
@@ -175,15 +196,7 @@ export class OtelRealtimeService {
       });
     } catch (err) {
       if (err instanceof OtelSessionDeletedError) {
-        return {
-          status: 'ok',
-          response: {
-            accepted: { calls: 0, spans: 0 },
-            cursor: `${OTEL_CURSOR_PREFIX}0`,
-            minIntervalMs,
-            ignored: 'deleted',
-          },
-        };
+        return ignoredDeleted;
       }
       throw err;
     }

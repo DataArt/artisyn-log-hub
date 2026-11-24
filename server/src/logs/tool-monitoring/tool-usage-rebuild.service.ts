@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { SchedulerRegistry } from '@nestjs/schedule';
 import { sql } from 'drizzle-orm';
+import { RebuildGovernor } from '../../common/load-governor/rebuild-governor';
 import { DRIZZLE } from '../../database/database.constants';
 import type { DrizzleDb } from '../../database/database.module';
 import { descendantSessionsCte, topAncestorIdsSql } from '../session-tree.sql';
@@ -39,6 +40,8 @@ const TICK_INTERVAL_NAME = 'tool-usage-rebuild-tick';
  *    that fails is logged and keeps its version, so a poison tree cannot loop forever.
  *
  * Safe across a cluster: the claim uses `SKIP LOCKED` and the rebuild the per-tree lock.
+ * Paced by `RebuildGovernor` (DD-15 of 2026-11-23-session-logs-streaming): each pass admits
+ * before its claim.
  */
 @Injectable()
 export class ToolUsageRebuildService implements OnModuleInit, OnModuleDestroy {
@@ -51,6 +54,7 @@ export class ToolUsageRebuildService implements OnModuleInit, OnModuleDestroy {
     @Inject(DRIZZLE) private readonly db: DrizzleDb,
     private readonly schedulerRegistry: SchedulerRegistry,
     private readonly configService: ToolMonitorConfigService,
+    private readonly governor: RebuildGovernor,
   ) {}
 
   onModuleInit(): void {
@@ -101,9 +105,19 @@ export class ToolUsageRebuildService implements OnModuleInit, OnModuleDestroy {
     } while (this.rerunRequested && !this.stopped);
   }
 
-  /** One pass (steps above). Returns the number of trees rebuilt. */
+  /**
+   * One pass (steps above). Returns the number of trees rebuilt. `RebuildGovernor.admit()` runs
+   * before the claim (one claimed batch is the unit of work), never between the claim and the
+   * rebuild, so a paused drain never holds stamped-but-unbuilt trees.
+   */
   async drainOnce(): Promise<number> {
+    await this.governor.admit();
+    if (this.stopped) return 0;
     const roots = await this.claimTrees(resolveToolUsageRebuildBatch());
+    if (roots.length === 0) {
+      this.governor.reportIdle();
+      return 0;
+    }
     let rebuilt = 0;
     for (const rootId of roots) {
       if (this.stopped) break;

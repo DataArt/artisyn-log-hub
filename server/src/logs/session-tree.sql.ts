@@ -32,8 +32,17 @@ import type { DrizzleDb } from '../database/database.module';
  *
  * `rootIdsArray` must be a `sql` fragment producing a Postgres array of `sessions.id`
  * values (e.g. `sql\`${'{1,2,3}'}::bigint[]\``).
+ *
+ * Descendants are live only (`deleted = false`, DD-28 of 2026-11-23-session-logs-streaming):
+ * a deleted sub-agent and everything under it drop out of the tree, while the root rows are
+ * returned as given. `opts.includeDeleted` walks deleted descendants too — for the hard-delete
+ * paths (retention purge, repository removal) that must remove every row of a family.
  */
-export function descendantSessionsCte(rootIdsArray: SQL): SQL {
+export function descendantSessionsCte(
+  rootIdsArray: SQL,
+  opts: { includeDeleted?: boolean } = {},
+): SQL {
+  const liveOnly = opts.includeDeleted ? sql`` : sql` AND s.deleted = false`;
   return sql`descendant_sessions AS (
     SELECT id, session_id, parent_session_id, id AS root_id, 0 AS depth
     FROM sessions
@@ -42,7 +51,7 @@ export function descendantSessionsCte(rootIdsArray: SQL): SQL {
     SELECT s.id, s.session_id, s.parent_session_id, d.root_id, d.depth + 1
     FROM sessions s
     JOIN descendant_sessions d ON s.parent_session_id = d.session_id
-    WHERE d.depth < 50
+    WHERE d.depth < 50${liveOnly}
   )`;
 }
 
@@ -101,6 +110,7 @@ interface DescendantRow {
 export async function getDescendantSessionIds(
   db: DrizzleDb,
   rootIds: number[],
+  opts: { includeDeleted?: boolean } = {},
 ): Promise<Map<number, number[]>> {
   const map = new Map<number, number[]>();
   if (rootIds.length === 0) {
@@ -111,7 +121,7 @@ export async function getDescendantSessionIds(
   const idsArray = sql`${idsLiteral}::bigint[]`;
 
   const result = await db.execute(sql`
-    WITH RECURSIVE ${descendantSessionsCte(idsArray)}
+    WITH RECURSIVE ${descendantSessionsCte(idsArray, opts)}
     SELECT id, root_id FROM descendant_sessions WHERE depth > 0
   `);
 

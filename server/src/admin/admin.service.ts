@@ -36,6 +36,7 @@ import { UsersService } from '../users/users.service';
 import { SessionsService } from '../sessions/sessions.service';
 import { TeamsService } from '../teams/teams.service';
 import { getDescendantSessionIds } from '../logs/session-tree.sql';
+import { clearSessionTombstones } from '../sessions/session-tombstone.service';
 import {
   deletePersonalRepo,
   deleteTeamRepo,
@@ -656,7 +657,10 @@ export class AdminService {
           // family — its claude / claude-otel logs, stats and sub-agent sessions
           // would otherwise stay behind as unreachable rows.
           if (sessionIds.length > 0) {
-            const descendants = await getDescendantSessionIds(tx, sessionIds);
+            // includeDeleted: a soft-deleted sub-agent of the family is hard-deleted too.
+            const descendants = await getDescendantSessionIds(tx, sessionIds, {
+              includeDeleted: true,
+            });
             const familyIds = [
               ...new Set([...sessionIds, ...[...descendants.values()].flat()]),
             ];
@@ -666,6 +670,10 @@ export class AdminService {
 
         await tx.delete(repositories).where(eq(repositories.repoUrl, repoUrl));
       }
+
+      // Fresh start (DD-29 of 2026-11-23-session-logs-streaming): the repository's deleted
+      // sessions and their tombstones go too.
+      await clearSessionTombstones(tx, { repositoryUrl: repoUrl });
 
       // Budgets are stored by URL with no FK (DD-13): every owner's personal budgets go too.
       await deletePersonalRepo(tx, repoUrl);

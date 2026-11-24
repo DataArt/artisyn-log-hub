@@ -121,6 +121,9 @@ article itself holds the details. Keep new lines to one or two sentences.
 * [Tool Wrapper Fidelity](algorithms/tool-wrapper-fidelity.md) - Read before changing the hook's CLI tool wrapper: fidelity and fail-open rows, the env-gated check project
 * [Sandbox Prune Classification](algorithms/sandbox-prune-classification.md) - Read before touching `classifyPruneCandidate` in `scripts/claude-docker/prune.mjs`
 * [Log Retention](algorithms/log-retention.md) - Read before touching `planLogCleanup` / `LogRetentionService`: which `logs/app-*` / `sql-*` files are deleted by age and size cap
+* [Rebuild Load Governor](algorithms/rebuild-load-governor.md) - Read before touching `decideRebuildPace`, `RebuildGovernor.admit()` or `CpuLoadSampler`: run / slope / pause / drain-mode pacing of background rebuilds by CPU load (`REBUILD_*` env vars)
+* [Ingest Hash Skip](algorithms/ingest-hash-skip.md) - Read before touching `decideIngestSkip`, `INGEST_VERSION`, `LogsService.checkUnchanged` or the `body_sha256` / `stats_edit_sha256` columns: when an identical upload is dropped unparsed
+* [Hook Upload Skip](algorithms/hook-upload-skip.md) - Read before touching `decideUploadSkip`, `.claude-logs.sent` / `.claude-logs.sent.v2`, `toolCallsFingerprint` or pending-upload resume: when the hook skips re-sending a collected file
 * [Executable-Config Guard](algorithms/executable-config-guard.md) - Read before touching `checkConfigGuard` (`scripts/ci/config-guard.js`) or its allowlist
 * [Security Scan Summary](algorithms/security-scan-summary.md) - Read before touching `scripts/ci/security-summary.js`: row validation, PR block, badge
 

@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720" font-family="Segoe UI, Inter, Arial, sans-serif">
+  <title>Close workstream dialog — closed is final, honest about loss (FR-13, FR-14, FR-15)</title>
+  <rect width="1280" height="720" fill="#ffffff"/>
+  <line x1="0" y1="48" x2="1280" y2="48" stroke="#e5e7eb"/>
+  <text x="16" y="29" font-size="14" font-weight="600" fill="#111827">Artisyn AI Work Hub</text>
+  <text x="160" y="29" font-size="14" fill="#9ca3af">›</text>
+  <text x="176" y="29" font-size="14" fill="#6b7280">research</text>
+  <rect x="0" y="48" width="1280" height="44" fill="#f9fafb"/>
+  <rect width="1280" height="720" fill="#000" opacity="0.5"/>
+
+  <!-- dialog -->
+  <rect x="384" y="96" width="512" height="560" rx="8" fill="#ffffff"/>
+  <text x="409" y="131" font-size="18" fill="#111827">Close test-pw</text>
+  <text x="866" y="132" font-size="16" fill="#6b7280">×</text>
+
+  <!-- uncommitted warning (FR-14) -->
+  <rect x="400" y="146" width="480" height="132" rx="6" fill="none" stroke="#f59e0b" stroke-dasharray="5 3"/>
+  <rect x="409" y="152" width="462" height="120" rx="6" fill="#fffbeb" stroke="#fde68a"/>
+  <text x="421" y="174" font-size="14" fill="#92400e">⚠ 2 files are not saved (committed) yet:</text>
+  <text x="437" y="194" font-size="13" fill="#374151">• tests/login.spec.ts</text>
+  <text x="437" y="212" font-size="13" fill="#374151">• playwright.config.ts</text>
+  <text x="421" y="234" font-size="13" fill="#92400e">Closing removes the workstream completely; only commits are kept.</text>
+  <rect x="421" y="242" width="160" height="26" rx="6" fill="#fff" stroke="#d1d5db"/>
+  <text x="433" y="260" font-size="13" font-weight="600" fill="#111827">Commit them first</text>
+  <text x="594" y="260" font-size="12" fill="#6b7280">"Bring into main" commits them too.</text>
+
+  <!-- options -->
+  <rect x="409" y="290" width="462" height="62" rx="6" fill="#3b4fd8"/>
+  <text x="425" y="314" font-size="14" font-weight="600" fill="#ffffff">Bring into main</text>
+  <text x="425" y="336" font-size="12" fill="#dbe0fb">Add all of this work to main, unsaved files included, and close the workstream.</text>
+
+  <rect x="409" y="362" width="462" height="62" rx="6" fill="#fff" stroke="#d1d5db"/>
+  <text x="425" y="386" font-size="14" font-weight="600" fill="#111827">Already merged elsewhere</text>
+  <text x="425" y="408" font-size="12" fill="#6b7280">This work already reached its destination. Close the workstream and free its space.</text>
+
+  <rect x="409" y="434" width="462" height="62" rx="6" fill="#fff" stroke="#d1d5db"/>
+  <text x="425" y="458" font-size="14" font-weight="600" fill="#111827">Close</text>
+  <text x="425" y="480" font-size="12" fill="#6b7280">Keep its commits on branch ws/test-pw, remove everything else. Cannot be reopened.</text>
+
+  <!-- removed option -->
+  <rect x="409" y="506" width="462" height="40" rx="6" fill="#fff" stroke="#ef4444" stroke-dasharray="4 3"/>
+  <line x1="420" y1="526" x2="860" y2="526" stroke="#ef4444"/>
+  <text x="425" y="531" font-size="13" fill="#9ca3af">Close for now — Stop the workstream. You can reopen it from History.</text>
+
+  <text x="409" y="572" font-size="12" fill="#6b7280">Container, volumes, files, chat and recording are removed in every case.</text>
+
+  <text x="417" y="623" font-size="14" font-weight="600" fill="#dc2626">🗑 Discard…</text>
+  <rect x="768" y="602" width="103" height="34" rx="6" fill="#fff" stroke="#d1d5db"/>
+  <text x="782" y="624" font-size="14" font-weight="600" fill="#111827">Back to chat</text>
+
+  <!-- notes -->
+  <rect x="916" y="146" width="340" height="250" rx="6" fill="#fffbeb" stroke="#f59e0b"/>
+  <g font-size="12" fill="#b45309">
+    <text x="930" y="168" font-weight="600">Notes</text>
+    <text x="930" y="190">FR-14: warning shown for every close</text>
+    <text x="930" y="206">mode, says the files are lost, offers</text>
+    <text x="930" y="222">"Commit them first" (dashed box).</text>
+    <text x="930" y="246">FR-15: "Close for now" removed (red,</text>
+    <text x="930" y="262">struck through); no Reopen anywhere.</text>
+    <text x="930" y="286">ws/&lt;slug&gt; kept for close, into main and</text>
+    <text x="930" y="302">merged elsewhere; deleted on Discard.</text>
+    <text x="930" y="326">FR-13: every close removes container,</text>
+    <text x="930" y="342">volumes and file-area folder after the</text>
+    <text x="930" y="358">branch commits are secured.</text>
+    <text x="930" y="382">Push option (existing) unchanged.</text>
+  </g>
+</svg>

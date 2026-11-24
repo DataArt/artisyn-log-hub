@@ -16,8 +16,9 @@
  * Scope is deliberately narrow — only the current session's own files:
  *   artisyn — <telemetryDir>/<sessionId>.jsonl
  *   claude  — ~/.claude/projects/<slug>/<sessionId>.jsonl
- * (No subagent/workflow scan, no manifest read/write — that full-scan behavior stays in
- * send-logs-hook.js, triggered on Stop.)
+ * (No subagent/workflow scan — that full-scan behavior stays in send-logs-hook.js, triggered on
+ * Stop. The one manifest write here is DD-26's scoped-path recording of the session's own `claude`
+ * transcript, see `runUploads`.)
  *
  * Safety mechanisms:
  *   - Watchdog: force-exits (code 1) after `sendLogsOnPromptTimeoutMs` so a hung/slow upload
@@ -44,6 +45,7 @@ const { hookLog } = require('./hook-log');
 const { uploadFileMaybeCompressed, uploadFileChunked, CHUNK_SIZE_BYTES, acquireUploadLock, releaseUploadLock, describeUploadLockHolder, formatServerOrigin } = require('./upload-logs');
 const { sanitizeNdjson, formatDroppedLines } = require('./ndjson-sanitize');
 const { readSessionSnapshot, forgetSnapshot } = require('./harness-state');
+const { recordScopedClaudeUpload, forgetFailedUploads } = require('./upload-skip');
 
 const HOOK_FILE = 'prompt-upload-hook.js';
 
@@ -105,9 +107,15 @@ function formatUploadResultLine(manifestKey, result) {
 }
 
 /**
- * Upload the scoped current-session files. No manifest read/write — every
- * invocation re-uploads whatever is currently on disk; the server's idempotent upsert absorbs
- * the resulting repeat uploads.
+ * Upload the scoped current-session files. No manifest read — every invocation re-uploads whatever
+ * is currently on disk; the server's idempotent upsert absorbs the resulting repeat uploads.
+ *
+ * DD-26 scoped-path recording: after a 201 for the session's own `claude` transcript, and only
+ * when `sanitizeNdjson` dropped no line (so the bytes sent are the file's bytes), its entry goes
+ * into both manifests (`.claude-logs.sent` and `.claude-logs.sent.v2`) with the read size and the
+ * pre-read mtime, so the next `Stop` does not re-send an unchanged transcript. The `artisyn` file
+ * is never recorded here (the full scan's body carries prepends this path does not). The caller
+ * holds `.upload.lock`, which is what makes the manifest read-modify-write safe.
  * @param {string|null} cwd
  * @param {string} sessionId
  * @param {string} serverUrl
@@ -131,6 +139,17 @@ async function runUploads(cwd, sessionId, serverUrl, apiKey, timeoutMs, telemetr
 
   for (const { namespace, filePath } of files) {
     const manifestKey = `${namespace}/${path.basename(filePath)}`;
+    const isOwnTranscript = namespace === 'claude' && path.basename(filePath) === `${sessionId}.jsonl`;
+
+    // DD-26: the pre-read mtime for the scoped-path recording.
+    let preReadMtimeMs = null;
+    if (isOwnTranscript) {
+      try {
+        preReadMtimeMs = fs.statSync(filePath).mtimeMs;
+      } catch {
+        preReadMtimeMs = null;
+      }
+    }
 
     let body;
     try {
@@ -144,6 +163,7 @@ async function runUploads(cwd, sessionId, serverUrl, apiKey, timeoutMs, telemetr
     // Drop torn/interleaved records so one broken line cannot make this session permanently
     // un-ingestable — the server rejects the whole body on the first malformed line, and this
     // hook re-uploads the same file on every prompt.
+    const readSize = body.length;
     const sanitized = sanitizeNdjson(body);
     for (const msg of formatDroppedLines(manifestKey, sanitized)) {
       hookLog(HOOK_FILE, sessionId, 'warn', msg, cwd);
@@ -176,9 +196,33 @@ async function runUploads(cwd, sessionId, serverUrl, apiKey, timeoutMs, telemetr
       : await uploadFileMaybeCompressed(serverUrl, apiKey, namespace, sessionId, body, timeoutMs, sessionId, cwd, null, null, snapshotQuery);
     const { success, reason, unknownSnapshotId } = result;
 
+    // DD-25 upload feedback: the server flags the failures it reports as delivered, so this path
+    // acts on them too — forget their keys in both manifests (we hold `.upload.lock`) so the next
+    // `Stop` re-sends them; `sessionDeleted` is logged and never retried.
+    if (Array.isArray(result.failedUploads) && result.failedUploads.length > 0) {
+      try {
+        const removed = forgetFailedUploads(telemetryDir, result.failedUploads, manifestKey);
+        if (removed.length > 0) {
+          hookLog(HOOK_FILE, sessionId, 'result', `server reported failed uploads — will re-send: ${removed.join(', ')}`, cwd);
+        }
+      } catch (err) {
+        hookLog(HOOK_FILE, sessionId, 'warn', `failed uploads not forgotten in the manifest: ${err.message}`, cwd);
+      }
+    }
+    if (result.sessionDeleted === true) {
+      hookLog(HOOK_FILE, sessionId, 'result', `${manifestKey}: session deleted on the server — upload ignored, not retried`, cwd);
+    }
+
     if (success) {
       uploadedCount++;
       hookLog(HOOK_FILE, sessionId, 'result', formatUploadResultLine(manifestKey, result), cwd);
+      if (isOwnTranscript && preReadMtimeMs !== null && sanitized.dropped.length === 0) {
+        try {
+          recordScopedClaudeUpload(telemetryDir, sessionId, readSize, preReadMtimeMs);
+        } catch (err) {
+          hookLog(HOOK_FILE, sessionId, 'warn', `${manifestKey}: manifest not recorded: ${err.message}`, cwd);
+        }
+      }
       // DD-21's self-heal: the server told us a purge dropped the row this ref pointed at —
       // forget it so the next `Stop` (or the next prompt, once a `Stop` re-records a fresh id)
       // resends the full body instead of the ref again.

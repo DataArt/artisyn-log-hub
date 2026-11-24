@@ -6,7 +6,7 @@ tags:
   - hooks
   - api
   - otel
-generated: { by: "human:denistsyplakov", at: "2026-11-20T22:15:00+04:00" }
+generated: { by: "human:denistsyplakov", at: "2026-11-23T12:00:00+04:00" }
 ---
 
 # Hook API Versioning (v2 logs upload, v1 removed)
@@ -75,6 +75,7 @@ mechanism feeds).
 | `>= 2.30.0` | unchanged — the root `artisyn` upload gains `otel-status` lines at `Stop` / `SessionEnd`; chunk lines gain `receiverVersion` | unchanged | As `>= 1.7.0`; an older server stores `otel-status` as an inert artisyn line (it is not an activity type, so session times are not moved on a new server) — see "Hook ↔ OTEL receiver" below |
 | `>= 2.31.0` | `POST /api/v2/logs` + optional `agentDescription` / `workflowPhase` on `claude-subagent` uploads (plain and chunked) | unchanged | As `>= 1.7.0`; an invalid, empty or repeated value is ignored, never a `400`; an older server ignores both params — see the sub-agent meta section below |
 | `>= 3.1.0` | unchanged — the root `artisyn` upload's `okf-snapshot` line gains optional bundle `okfVersion` / `title` / `description` and file `meta` | unchanged | As `>= 1.7.0`; any server stores the body verbatim and an older one ignores the fields; the snapshot id changes once (one full resend) — see "OKF snapshot metadata" below |
+| `>= 3.2.0` | `POST /api/v2/logs` + optional `contentSha256` (single upload and chunk 0) and `uploadFeedback=1` (every request) | `201`, `{ …, failedUploads?, sessionDeleted? }` (only when `uploadFeedback=1` was sent) | As `>= 1.7.0`, plus: a body that does not match its `contentSha256` fails server-side (`content-hash-mismatch`), and that failure and any other server-side failure of the caller's uploads come back in `failedUploads`, which makes the hook re-send those files; a deleted session answers `sessionDeleted: true`. An older server ignores both params and sends neither field — see "`contentSha256` / `uploadFeedback`" below |
 
 The route requires `ApiKeyAuthGuard` (the `X-API-Key` header) and accepts this body encoding
 (`express.text()`, `Content-Type: application/x-ndjson`/`application/json`/`text/plain`, 2500MB
@@ -718,6 +719,68 @@ rules"; hook rules and rows: [algorithms/okf-snapshot.md](algorithms/okf-snapsho
 | Hook `3.1.0` → server with this change | Metadata normalised (`normaliseSnapshot`, wrong types ignored, never a rejection) and shown per [okf-usage.md](okf-usage.md) |
 | Snapshot over the 8 MiB metadata budget | Uploaded without metadata (logged once); same as an older hook |
 
+## `contentSha256` — upload content integrity (hook `3.2.0`+)
+
+Task `2026-11-23-session-logs-streaming` (impl-plan DD-24, DD-26). An optional query param on
+`POST /api/v2/logs`.
+
+- **Value.** sha256 hex (64 lowercase characters) of the WHOLE uncompressed body, hashed the way
+  the server hashes the staged body: decoded as UTF-8 and re-encoded (`bodyContentSha256()` in
+  `upload-logs.js`), so a stray invalid byte cannot make every upload of a file a mismatch.
+- **Where.** On a single upload (plain or gzipped — the hash is of the uncompressed body) and on
+  chunk 0 of a chunked upload; later chunks never send it. The server stores it in
+  `upload_queue.content_sha256` and ignores a malformed value (never a `400`).
+- **Server check.** When the reassembled / staged body's sha256 differs, the queue worker marks
+  the row `failed` with `error_kind='server'`, `error_message='content-hash-mismatch'` and does not
+  retry it; the hook learns about it through `failedUploads` below and re-sends the file.
+- **Pending file.** Each `.claude-logs.pending` entry gains `sha256` (the same hash). A chunked
+  upload resumes only via `canResumePending()`: same `sha256`, same `totalSize`, a chunk left to
+  send; otherwise it restarts from chunk 0 under a new `uploadId`. A `3.1.x` entry has no `sha256`
+  and is restarted once; an older hook ignores the extra field.
+
+| Combination | Behaviour |
+|---|---|
+| Hook `< 3.2.0` → any server | No hash: a torn or changed body is ingested as received. A pending chunked upload resumes on equal size alone |
+| Hook `3.2.0` → older server | The param is ignored; uploads behave as with an older hook |
+| Hook `3.2.0` → server with this change | Mismatching bodies fail server-side and are re-sent via `failedUploads` |
+
+## `uploadFeedback` / `failedUploads` / `sessionDeleted` — upload feedback (hook `3.2.0`+)
+
+Task `2026-11-23-session-logs-streaming` (impl-plan DD-25, DD-26, DD-27). Hook `3.2.0` sends
+`uploadFeedback=1` on every `POST /api/v2/logs` request (every chunk included). Only then does the
+server add two optional fields to the single-upload and chunk-complete `201` answers (and to the
+deleted-session answer):
+
+- `failedUploads: {sessionId: string, type: string}[]` — at most `FAILED_UPLOADS_MAX` (20) of the
+  caller's `failed` uploads with `error_kind='server'` that were not reported yet; the server flags
+  them delivered in the same statement, so each failure is reported once.
+- `sessionDeleted: true` — the session (or an ancestor) is deleted on the server; the answer is
+  `201 {complete: true}` with nothing staged.
+
+Hook side:
+
+- `uploadFile()` reads up to `UPLOAD_RESPONSE_READ_CAP` (64 KiB, was 2000 bytes) of a `201` body and
+  parses both fields fail-open (`parseUploadFeedback()`: a malformed entry is dropped on its own).
+  `uploadFileChunked()` collects `failedUploads` from every chunk response it got, on success and on
+  failure, and takes `sessionDeleted` from the completing response.
+- Each `failedUploads` entry maps to every manifest key whose namespace equals `type` and whose last
+  segment without `.jsonl` equals `sessionId` (`tool-calls/<sessionId>` for `tool-calls`;
+  `failedUploadManifestKeys()` in `upload-skip.js`). Those keys are deleted from BOTH manifests
+  (`.claude-logs.sent`, `.claude-logs.sent.v2`), so the file is re-sent — later in the same `Stop`
+  scan when it is still ahead, otherwise on the next one. The key of the upload that carried the
+  feedback is kept: it just went through with the current bytes. The `Stop` scan edits its
+  in-memory manifests; the prompt upload, the `SessionEnd` flush and the OTEL sweep rewrite the
+  files under `.upload.lock`. A `server reported failed uploads — will re-send: <keys>` line goes to
+  `hook.log`.
+- `sessionDeleted` is logged as `<manifestKey>: session deleted on the server — upload ignored, not
+  retried`; the upload counts as successful, so an unchanged file is not sent again.
+
+| Combination | Behaviour |
+|---|---|
+| Hook `< 3.2.0` → any server | No feedback: a server-side failure shows only as the next upload's `warnings` (`broken-upload-file`); the file is re-sent only when it changes. Uploads for a deleted session get the same `201` and are dropped server-side |
+| Hook `3.2.0` → older server | The param is ignored and the fields are absent; nothing changes |
+| Hook `3.2.0` → server with this change | Failed uploads are re-sent automatically; deleted sessions are logged once per upload |
+
 ## `GET /api/v2/tool-monitoring/config` and the `tool-calls` log kind — CLI tool wrapper (hook `2.27.0`+)
 
 The Tools/MCP tab ([tool-monitoring.md](tool-monitoring.md); plan
@@ -870,3 +933,4 @@ user's machine. Only facts not already covered by the sections above; current be
 | `2.32.2` | PowerShell tool wrapper rewrites a command only when `PreToolUse` `permission_mode === 'bypassPermissions'` (missing field = no wrap); skipped calls logged once per session; native stderr text from `Exception.Message` (an empty native stderr line stays empty) — GH-149 | Wraps in every mode: on Claude Code ≥ 2.1.311, outside bypass a PowerShell call of a monitored tool prompts or is denied even under a matching allow rule; on Windows the server shows `hook_too_old` for it. An empty native stderr line is captured as the type name |
 | `3.0.0` | `Stop` and `SessionEnd` hand their upload to the shared receiver as a job (`~/.artisyn/upload/queue/`) when its heartbeat is fresh; the receiver is the single uploader per OS user, runs each job with the job's own repo's `send-logs-hook.js --run-job`, retries with backoff and parks given-up jobs in `failed/` (`upload-jobs-failed` recommendation); `LOCK_WAIT_SESSION_END_MS` 20 s → 800 ms with a job on a busy lock; a fallback `Stop` takes over stuck jobs; the shared receiver starts regardless of `otelEnabled` and stays up queue-only on a port conflict; 3 s connect timeout and one `aborted: server unreachable` stop per run; `SessionStart` Node.js warning (`node-version-check.js`, merged `systemMessage`); `hook-status` gains `nodeVersion` and `uploadQueue` ([upload-job-queue.md](upload-job-queue.md)). Log Hub `1.5.0` ships it; no server API change | Uploads in process on every `Stop` / `SessionEnd`; a `SessionEnd` waits up to 20 s for a busy lock; with no connection every file pays its own timeout; no receiver when `otelEnabled: false`; never touches the queue, but shares `.upload.lock` with `3.0.0` jobs, so the two never upload one repo at once |
 | `3.1.0` | OKF front-matter window 512 → 8192 bytes; `okf-snapshot` gains bundle `okfVersion` / `title` / `description` and file `meta`; `okf-state.json` hash-cache entries gain a 4th element (`meta`); 8 MiB metadata size guard (see "OKF snapshot metadata"); a backlog session's `artisyn` re-upload carries the OKF lines too | A backlog session re-uploaded by a later run stays without an OKF snapshot; an `index.md` with `okf_version:` past byte 512 is not detected as a bundle; no metadata, so the OKF tabs show no titles, hints or deprecated / stale_after chips; reads only elements 0–2 of a 4-element cache entry, so a downgrade keeps its cache hits |
+| `3.2.0` | Manifest v2 `.claude-logs.sent.v2` (size, pre-read mtime, params hash, `tool-calls` fingerprint) next to the unchanged `.claude-logs.sent`, skip rule `decideUploadSkip` ([algorithms/hook-upload-skip.md](algorithms/hook-upload-skip.md)); the prompt upload and the `SessionEnd` flush record the current session's own `claude` transcript; `contentSha256` on single uploads / chunk 0 and `sha256` in `.claude-logs.pending` (resume only on an equal hash); `uploadFeedback=1` on every request, `failedUploads` re-sent, `sessionDeleted` logged (see the two sections above); 201 read cap 2000 bytes → 64 KiB | Skips a file on equal size alone, so a same-length rewrite or a late `.meta.json` change is never re-sent; the next `Stop` re-sends the transcript the prompt upload already sent; resumes a pending chunked upload on equal size; a server-side ingest failure is re-sent only when the file changes; reads only `.claude-logs.sent` and writes it as before, so it coexists with `3.2.0` (the v2 entries it does not refresh are re-adopted or re-sent once) |

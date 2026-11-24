@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="820" viewBox="0 0 1280 820" font-family="Segoe UI, Inter, Arial, sans-serif">
+  <title>Finish configuration dialog — step progress (FR-16), leak check (FR-6), definition apply (FR-18)</title>
+  <rect width="1280" height="820" fill="#ffffff"/>
+
+  <!-- dimmed workspace page behind -->
+  <line x1="0" y1="48" x2="1280" y2="48" stroke="#e5e7eb"/>
+  <text x="16" y="29" font-size="14" font-weight="600" fill="#111827">Artisyn AI Work Hub</text>
+  <text x="160" y="29" font-size="14" fill="#9ca3af">›</text>
+  <text x="176" y="29" font-size="14" fill="#6b7280">research</text>
+  <rect x="0" y="48" width="1280" height="44" fill="#f9fafb"/>
+  <rect x="0" y="92" width="256" height="728" fill="#fafafa"/>
+  <rect x="256" y="92" width="1024" height="36" fill="#f9fafb"/>
+  <text x="272" y="115" font-size="13" font-weight="600" fill="#111827">⚒ Configure  ×</text>
+  <rect x="256" y="192" width="1024" height="628" fill="#f8fafc"/>
+  <rect width="1280" height="820" fill="#000" opacity="0.5"/>
+
+  <!-- ===== State A: in progress ===== -->
+  <text x="80" y="76" font-size="12" font-weight="600" fill="#ffffff">A · Finish in progress</text>
+  <rect x="80" y="88" width="540" height="440" rx="8" fill="#ffffff"/>
+  <text x="105" y="123" font-size="18" fill="#111827">Finishing configuration</text>
+  <text x="590" y="124" font-size="16" fill="#6b7280">×</text>
+  <text x="105" y="147" font-size="13" fill="#6b7280">Saving the setup for new workstreams. This can take a few minutes.</text>
+
+  <!-- overall bar -->
+  <rect x="105" y="162" width="490" height="8" rx="4" fill="#e5e7eb"/>
+  <rect x="105" y="162" width="300" height="8" rx="4" fill="#3b4fd8"/>
+  <text x="105" y="188" font-size="12" fill="#6b7280">Step 5 of 7</text>
+
+  <g font-size="14">
+    <text x="105" y="222" fill="#047857">✓</text><text x="129" y="222" fill="#111827">Check changed files for vault secrets</text>
+    <text x="105" y="252" fill="#047857">✓</text><text x="129" y="252" fill="#111827">Stop the agent and close the session</text>
+    <text x="105" y="282" fill="#047857">✓</text><text x="129" y="282" fill="#111827">Erase chat transcript, shell history, temp files</text>
+    <text x="105" y="312" fill="#047857">✓</text><text x="129" y="312" fill="#111827">Save the container (checkpoint)</text>
+    <text x="105" y="342" fill="#3b4fd8">◐</text><text x="129" y="342" font-weight="600" fill="#111827">Apply changed devcontainer.json</text>
+    <text x="129" y="360" font-size="12" fill="#6b7280">postCreateCommand changed · running it…</text>
+    <rect x="129" y="368" width="466" height="6" rx="3" fill="#e5e7eb"/>
+    <rect x="129" y="368" width="180" height="6" rx="3" fill="#3b4fd8"/>
+    <text x="105" y="400" fill="#9ca3af">○</text><text x="129" y="400" fill="#6b7280">Flatten the checkpoint image</text>
+    <text x="105" y="430" fill="#9ca3af">○</text><text x="129" y="430" fill="#6b7280">Remove the previous checkpoint</text>
+  </g>
+
+  <text x="105" y="470" font-size="12" fill="#6b7280">Closing this dialog does not stop Finish. The Configure tab shows the current step.</text>
+  <rect x="534" y="480" width="61" height="34" rx="6" fill="#fff" stroke="#d1d5db"/>
+  <text x="548" y="502" font-size="14" font-weight="600" fill="#111827">Hide</text>
+
+  <!-- ===== State B: leak check refused ===== -->
+  <text x="660" y="76" font-size="12" font-weight="600" fill="#ffffff">B · Refused by the secret leak check</text>
+  <rect x="660" y="88" width="540" height="300" rx="8" fill="#ffffff"/>
+  <text x="685" y="123" font-size="18" fill="#111827">Finish configuration</text>
+  <text x="1170" y="124" font-size="16" fill="#6b7280">×</text>
+  <rect x="685" y="140" width="490" height="128" rx="6" fill="#fef2f2" stroke="#fecaca"/>
+  <text x="699" y="164" font-size="14" font-weight="600" fill="#b91c1c">✕ A vault secret is written in a file</text>
+  <text x="699" y="186" font-size="13" fill="#374151">The value of <tspan font-family="Consolas, monospace">NPM_TOKEN</tspan> was found in:</text>
+  <text x="715" y="206" font-size="13" font-family="Consolas, monospace" fill="#111827">• ~/.npmrc</text>
+  <text x="699" y="230" font-size="13" fill="#374151">Nothing was saved. The session is still running and the agent</text>
+  <text x="699" y="248" font-size="13" fill="#374151">sees this message — ask it to use <tspan font-family="Consolas, monospace">${NPM_TOKEN}</tspan> instead.</text>
+  <rect x="1043" y="336" width="132" height="34" rx="6" fill="#3b4fd8"/>
+  <text x="1057" y="358" font-size="14" font-weight="600" fill="#ffffff">Back to session</text>
+
+  <!-- ===== State C: apply failed, checkpoint kept ===== -->
+  <text x="660" y="416" font-size="12" font-weight="600" fill="#ffffff">C · Definition apply failed (checkpoint still taken)</text>
+  <rect x="660" y="428" width="540" height="232" rx="8" fill="#ffffff"/>
+  <text x="685" y="463" font-size="18" fill="#111827">Configuration saved with a warning</text>
+  <rect x="685" y="478" width="490" height="116" rx="6" fill="#fffbeb" stroke="#fde68a"/>
+  <text x="699" y="500" font-size="13" fill="#92400e">⚠ devcontainer.json was not applied: postCreateCommand exited 1</text>
+  <rect x="699" y="510" width="462" height="48" rx="4" fill="#f8fafc" stroke="#e5e7eb"/>
+  <text x="709" y="528" font-size="12" font-family="Consolas, monospace" fill="#374151">npm ERR! 404 Not Found - @acme/clii</text>
+  <text x="709" y="546" font-size="12" font-family="Consolas, monospace" fill="#374151">postCreateCommand failed (exit 1)</text>
+  <text x="699" y="580" font-size="12" fill="#92400e">Direct installs from this session are saved. The next Finish tries again.</text>
+  <rect x="1125" y="610" width="50" height="34" rx="6" fill="#3b4fd8"/>
+  <text x="1139" y="632" font-size="14" font-weight="600" fill="#ffffff">OK</text>
+
+  <!-- notes -->
+  <rect x="80" y="560" width="540" height="240" rx="6" fill="#fffbeb" stroke="#f59e0b"/>
+  <g font-size="12" fill="#b45309">
+    <text x="94" y="582" font-weight="600">Notes</text>
+    <text x="94" y="604">FR-16: new dialog opened by "Finish configuration"; one row per step, overall bar +</text>
+    <text x="94" y="620">per-step bar for long steps. Steps follow FR-16: leak check → stop agent → scrub →</text>
+    <text x="94" y="636">commit → apply definition → flatten → remove superseded image.</text>
+    <text x="94" y="658">"Apply" row is shown only when the committed definition differs from the one last</text>
+    <text x="94" y="674">applied (FR-18); otherwise it reads "No definition change" and is skipped.</text>
+    <text x="94" y="696">B (FR-6): refusal happens before the agent is stopped; files are listed; the same</text>
+    <text x="94" y="712">text is written into the configure terminal for the agent.</text>
+    <text x="94" y="734">C (FR-18): checkpoint taken, definition not marked applied, no watcher retry.</text>
+    <text x="94" y="756">A scrub/commit error shows as a red row with the message; no checkpoint (FR-6).</text>
+    <text x="94" y="778">Where each error is also shown (tab / terminal) is an open question.</text>
+  </g>
+</svg>

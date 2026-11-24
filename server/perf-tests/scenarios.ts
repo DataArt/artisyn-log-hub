@@ -204,6 +204,18 @@ function sessionReadScenarios(
       'GET /api/v1/repositories/:repoId/sessions/:sid/logs',
       `${p}/logs`,
     ],
+    // 2026-11-23 session-logs-streaming (DD-11/DD-12): what the viewer loads instead of
+    // `/logs` — the manifest, then the root claude part (gzip copy once the builder ran).
+    [
+      'repos:session-log-parts',
+      'GET /api/v1/repositories/:repoId/sessions/:sid/logs/parts',
+      `${p}/logs/parts`,
+    ],
+    [
+      'repos:session-log-part-claude',
+      'GET /api/v1/repositories/:repoId/sessions/:sid/logs/parts/:sid/claude',
+      `${p}/logs/parts/${sessionId}/claude`,
+    ],
     [
       'repos:session-contexts',
       'GET /api/v1/repositories/:repoId/sessions/:sid/contexts',

@@ -75,6 +75,46 @@ export async function storedBody(db: Pool, sessionId: string, logType: string): 
 }
 
 /**
+ * Holds the ingest lock of the session tree rooted at `rootSessionId` until the returned
+ * function is called: the same transaction-scoped advisory lock `lockSessionTreeForIngest`
+ * (`server/src/logs/session-tree.sql.ts`) takes, on a connection of its own. While it is held,
+ * every ingest of that tree (the queue's `checkUnchanged` / `upsert`) and the re-extract drain
+ * block on it — a scenario uses that to keep work queued deterministically. The release commits
+ * the transaction and returns the connection; call it in a `finally`.
+ */
+export async function holdSessionTreeLock(db: Pool, rootSessionId: string): Promise<() => Promise<void>> {
+  const client = await db.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query("SELECT pg_advisory_xact_lock(hashtextextended('session-tree:' || $1::varchar, 0))", [
+      rootSessionId,
+    ]);
+  } catch (err) {
+    client.release();
+    throw err;
+  }
+  let released = false;
+  return async () => {
+    if (released) return;
+    released = true;
+    try {
+      await client.query('COMMIT');
+    } finally {
+      client.release();
+    }
+  };
+}
+
+/** Outcomes of the session's upload-queue measurements (`success`, `skipped`, `superseded`, …), oldest first. */
+export async function measurementOutcomes(db: Pool, sessionId: string): Promise<string[]> {
+  const { rows } = await db.query<{ outcome: string }>(
+    'SELECT outcome FROM upload_queue_measurements WHERE session_id = $1 ORDER BY id',
+    [sessionId],
+  );
+  return rows.map((r) => r.outcome);
+}
+
+/**
  * `size_bytes` of the successful processing measurements of the session — the queue row's size,
  * i.e. what the server counted for the staged (decompressed) body.
  *

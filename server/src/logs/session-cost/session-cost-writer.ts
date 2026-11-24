@@ -224,11 +224,18 @@ export async function recomputeSessionCosts(
  * double-process each other. Loops until a batch finds nothing to claim — which also picks up
  * descendants that the batch itself flagged.
  *
+ * @param admit awaited before each batch claim — the background sweeper passes
+ *   `RebuildGovernor.admit()` (DD-15 of 2026-11-23-session-logs-streaming); omitted, batches
+ *   run back to back.
  * @returns the number of rows recomputed.
  */
-export async function drainStaleSessionCosts(db: DrizzleDb): Promise<number> {
+export async function drainStaleSessionCosts(
+  db: DrizzleDb,
+  admit?: () => Promise<void>,
+): Promise<number> {
   let total = 0;
   for (;;) {
+    if (admit) await admit();
     const claimed = await db.transaction(async (tx) => {
       const result = await tx.execute(sql`
         SELECT session_id FROM session_costs

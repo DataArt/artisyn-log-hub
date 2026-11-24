@@ -48,9 +48,25 @@ import type {
   HookStateDetail,
 } from './hook-state.service';
 import { SetSessionFavoriteDto } from './dto/set-session-favorite.dto';
-import { extractWorkflows } from './workflow-extractor';
+import { extractWorkflows, type WorkflowRun } from './workflow-extractor';
 import { resolveWorkflowAgentLinkage } from './workflow-linkage';
 import { resolveSessionLogsAccess } from './session-logs-access';
+import { SessionLogsStreamService } from './session-logs-stream.service';
+import {
+  readTreeLogsMeta,
+  type TreeLogRowMeta,
+} from './session-tree-logs-meta';
+import {
+  partNotModified,
+  SessionLogPartsService,
+  setPartHeaders,
+} from './session-log-parts.service';
+import type {
+  SessionLogPartsManifest,
+  SessionRootStats,
+  SubagentStats,
+} from './dto/session-log-parts.dto';
+import { readStoredWorkflows } from './stored-workflows';
 import {
   SessionLogsDeltaService,
   selectSubagentStats,
@@ -393,6 +409,8 @@ export class RepositoriesController {
     private readonly changeSurfaceAggregateService: ChangeSurfaceAggregateService,
     private readonly okfUsageService: OkfUsageService,
     private readonly sessionLogsDeltaService: SessionLogsDeltaService,
+    private readonly sessionLogsStreamService: SessionLogsStreamService,
+    private readonly sessionLogPartsService: SessionLogPartsService,
   ) {}
 
   @Get()
@@ -1699,15 +1717,21 @@ export class RepositoriesController {
    * the opaque `cursor` (absent, invalid or oversized = full snapshot), or `{reload:true}` when
    * the stored logs no longer extend what the client holds. Same access chain and errors as
    * `/logs` (`resolveSessionLogsAccess`).
+   *
+   * 2026-11-23 session-logs-streaming DD-7: every decision (404, stale/growth checks, stats,
+   * workflows, cursor) is made from metadata before the first byte; a `reload` answer is plain
+   * JSON, any other answer is streamed under a `LogStreamLimiter` permit, one row's new lines at
+   * a time. The shape (`SessionLogsDeltaResponse`) is unchanged.
    */
   @Get(':repoId/sessions/:sessionId/logs/delta')
   async getSessionLogsDelta(
     @Req() req: Request,
+    @Res() res: Response,
     @Param('repoId', ParseIntPipe) repoId: number,
     @Param('sessionId') sessionId: string,
     @Query('cursor') cursor?: string,
     @Query('teamId', new ParseIntPipe({ optional: true })) teamId?: number,
-  ): Promise<SessionLogsDeltaResponse> {
+  ): Promise<void> {
     const user = req.user as AuthUser;
     const access = await resolveSessionLogsAccess(
       this.db,
@@ -1718,13 +1742,32 @@ export class RepositoriesController {
       teamId,
     );
     // A repeated `?cursor=` arrives as an array — treat anything but one string as no cursor.
-    return this.sessionLogsDeltaService.getDelta(
+    const prepared = await this.sessionLogsDeltaService.prepareDelta(
       access.sessionRowId,
       typeof cursor === 'string' ? cursor : undefined,
       new Date(),
     );
+    if (prepared.reload) {
+      const reload: SessionLogsDeltaResponse = prepared.response;
+      res.json(reload);
+      return;
+    }
+    const { plan } = prepared;
+    await this.sessionLogsStreamService.runLimited(res, async () => {
+      res.setHeader('Content-Type', 'application/json; charset=utf-8');
+      await this.sessionLogsDeltaService.writeDelta(res, plan);
+    });
   }
 
+  /**
+   * The whole session tree's logs in one JSON document (the legacy shape the parts API
+   * replaces in the viewer; kept for older clients and exports).
+   *
+   * 2026-11-23 session-logs-streaming FR-3: every access check and every small figure (stats,
+   * workflows, advisor, attribution, harness) is resolved from metadata first, 404 / 422 are
+   * answered before any byte, and the bodies are then streamed one row at a time under a
+   * `LogStreamLimiter` permit (DD-1..DD-5), byte-identical to the former single-string answer.
+   */
   @Get(':repoId/sessions/:sessionId/logs')
   async getSessionLogs(
     @Req() req: Request,
@@ -1734,6 +1777,132 @@ export class RepositoriesController {
     @Query('teamId', new ParseIntPipe({ optional: true })) teamId?: number,
   ) {
     const user = req.user as AuthUser;
+    const { treeRows, extras } = await this.gatherSessionLogsMeta(
+      user,
+      repoId,
+      sessionId,
+      teamId,
+    );
+
+    // `rootStats` (the root session's own counters, `null` when it has no
+    // `session_stats` row or the OTEL-only-row guard excludes it) plus the `subagentStats`
+    // entries of all descendants equals the tree rollup computed server-side by
+    // `session-tree-metrics.sql.ts` — both selects use the same rows and the same
+    // transcript guard, so the client's tree-scoped code-impact figure cannot
+    // drift from the analytics pages.
+    const tailJson = `"subagentStats":${JSON.stringify(extras.subagentStats)},"rootStats":${JSON.stringify(extras.rootStats)},"workflows":${JSON.stringify(extras.workflows)},"turnEndAdvisor":${JSON.stringify(extras.turnEndAdvisor)},"sessionAttribution":${JSON.stringify(extras.sessionAttribution)},"harnessSnapshot":${JSON.stringify(extras.harnessSnapshot)}`;
+
+    await this.sessionLogsStreamService.runLimited(res, async () => {
+      res.setHeader('Content-Type', 'application/json');
+      await this.sessionLogsStreamService.writeLegacyLogs(
+        res,
+        treeRows,
+        tailJson,
+      );
+    });
+  }
+
+  /**
+   * The manifest of a session tree's stored log blobs (2026-11-23 session-logs-streaming
+   * DD-11): one entry per log row with a body, each with its revision (DD-8), plus every small
+   * figure `/logs` carries and the `derivedLagging` flag (DD-14). Same access chain and errors
+   * as `/logs` (403/404, 422 when the root claude body is NULL). No body is read here.
+   */
+  @Get(':repoId/sessions/:sessionId/logs/parts')
+  async getSessionLogParts(
+    @Req() req: Request,
+    @Param('repoId', ParseIntPipe) repoId: number,
+    @Param('sessionId') sessionId: string,
+    @Query('teamId', new ParseIntPipe({ optional: true })) teamId?: number,
+  ): Promise<SessionLogPartsManifest> {
+    const user = req.user as AuthUser;
+    const { sessionRowId, treeRows, extras } = await this.gatherSessionLogsMeta(
+      user,
+      repoId,
+      sessionId,
+      teamId,
+    );
+    return this.sessionLogPartsService.buildManifest(
+      sessionRowId,
+      treeRows,
+      extras,
+    );
+  }
+
+  /**
+   * One part's body — a JSON array of log lines (DD-12). Served from the stored gzip copy when
+   * it is valid and the client accepts gzip, decompressed on the fly when it does not, and from
+   * `body::text` while the copy is not built yet. `ETag` is the part's revision; a matching
+   * `If-None-Match` answers 304 without reading the body or taking a stream permit. `?rev=` is
+   * only a cache-buster. A part outside the tree, or a `logType` not stored for that node, is
+   * 404 `Session log part not found`; a `logType` outside the three part types is 400.
+   */
+  @Get(':repoId/sessions/:sessionId/logs/parts/:partSessionId/:logType')
+  async getSessionLogPart(
+    @Req() req: Request,
+    @Res() res: Response,
+    @Param('repoId', ParseIntPipe) repoId: number,
+    @Param('sessionId') sessionId: string,
+    @Param('partSessionId') partSessionId: string,
+    @Param('logType') logType: string,
+    @Query('teamId', new ParseIntPipe({ optional: true })) teamId?: number,
+  ): Promise<void> {
+    const user = req.user as AuthUser;
+    const { sessionRowId } = await resolveSessionLogsAccess(
+      this.db,
+      this.repositoriesService,
+      user,
+      repoId,
+      sessionId,
+      teamId,
+    );
+    if (
+      logType !== 'claude' &&
+      logType !== 'artisyn' &&
+      logType !== 'claude-subagent'
+    ) {
+      throw new BadRequestException(
+        'logType must be one of claude, artisyn, claude-subagent',
+      );
+    }
+    const treeRows = await readTreeLogsMeta(this.db, sessionRowId);
+    const part = treeRows.find(
+      (r) =>
+        r.sessionId === partSessionId && r.logType === logType && !r.bodyIsNull,
+    );
+    if (!part) throw new NotFoundException('Session log part not found');
+
+    if (partNotModified(req, part)) {
+      setPartHeaders(res, part);
+      res.status(304).end();
+      return;
+    }
+
+    await this.sessionLogsStreamService.runLimited(res, () =>
+      this.sessionLogPartsService.streamPart(req, res, part),
+    );
+  }
+
+  /**
+   * Everything `/logs` and the parts manifest share, resolved from metadata only (no body,
+   * except the root claude body of a session whose workflows the backfill has not stored yet):
+   * the access chain, the tree's log rows (DD-5) with 404 / 422 for the root claude row, and the
+   * small figures — sub-agent and root stats, workflows (DD-6), the advisor result, the
+   * attribution state and the harness snapshot.
+   */
+  private async gatherSessionLogsMeta(
+    user: AuthUser,
+    repoId: number,
+    sessionId: string,
+    teamId: number | undefined,
+  ): Promise<{
+    sessionRowId: number;
+    treeRows: TreeLogRowMeta[];
+    extras: Omit<
+      SessionLogPartsManifest,
+      'parts' | 'derivedLagging' | 'liveness' | 'serverTime'
+    >;
+  }> {
     const { repo, sessionRowId, harnessSnapshotId, ownerUserId } =
       await resolveSessionLogsAccess(
         this.db,
@@ -1751,124 +1920,86 @@ export class RepositoriesController {
         ? await loadHarnessSnapshot(this.db, ownerUserId, harnessSnapshotId)
         : null;
 
-    // Step 2: fetch the artisyn and claude log bodies for this session.
-    // The artisyn log carries metadata events (skill-definitions, mcp-config, etc.)
-    // that are absent from the raw claude log; prepend them so the client parser
-    // has the full context in a single stream.
-    const logs = await this.db
-      .select({
-        logType: schema.logs.logType,
-        bodyText: sql<string>`${schema.logs.body}::text`,
-      })
-      .from(schema.logs)
-      .where(
-        and(
-          eq(schema.logs.sessionId, sessionRowId),
-          inArray(schema.logs.logType, ['artisyn', 'claude']),
-        ),
-      );
-
-    const artisynLog = logs.find((l) => l.logType === 'artisyn');
-    const claudeLog = logs.find((l) => l.logType === 'claude');
-
-    if (!claudeLog) throw new NotFoundException('Session logs not found');
-    if (claudeLog.bodyText === null)
-      throw new UnprocessableEntityException('Log body is null');
-
-    // Merge artisyn events (metadata) before claude events without double-parsing.
-    // Both bodies are JSON arrays: "[e1,e2,...]"; concatenate by stripping the
-    // closing "]" from artisyn and the opening "[" from claude.
-    let mainText = claudeLog.bodyText.trim();
-    if (artisynLog?.bodyText) {
-      const a = artisynLog.bodyText.trim();
-      const c = mainText;
-      if (a === '[]') {
-        // nothing to prepend
-      } else if (c === '[]') {
-        mainText = a;
-      } else {
-        mainText = a.slice(0, -1) + ',' + c.slice(1);
-      }
-    }
-
-    // Step 3: fetch sub-agent sessions (any nesting depth) — their logs and
-    // session_stats for cost attribution. `parent_session_id` may now point at an
-    // intermediate agent rather than always this root session, so we must walk the
-    // full descendant tree instead of a one-level equality match.
+    // Sub-agent sessions at any nesting depth: `parent_session_id` may point at an intermediate
+    // agent rather than always this root session, so the full descendant tree is walked.
     const descendantsMap = await getDescendantSessionIds(this.db, [
       sessionRowId,
     ]);
     const descendantIds = descendantsMap.get(sessionRowId) ?? [];
 
-    const [subagentRows, subagentStatsRows, rootStatsRows] = await Promise.all([
-      this.db
+    // The tree's log rows without bodies (DD-5): the root's claude + artisyn rows, then each
+    // descendant's claude-subagent row in `sessions.session_id` order.
+    const treeRows = await readTreeLogsMeta(
+      this.db,
+      sessionRowId,
+      descendantIds,
+    );
+    const rootClaude = treeRows.find((r) => r.isRoot && r.logType === 'claude');
+    if (!rootClaude) throw new NotFoundException('Session logs not found');
+    if (rootClaude.bodyIsNull)
+      throw new UnprocessableEntityException('Log body is null');
+
+    const [subagentStatsRows, rootStatsRows, storedWorkflows] =
+      await Promise.all([
+        selectSubagentStats(this.db, descendantIds, sessionRowId),
+        // The root session's own productivity counters (`rootStats`), read from the
+        // same `session_stats` row the server-side tree rollup sums for the root node,
+        // with the same transcript guard as the descendant select above.
+        this.db
+          .select({
+            linesChanged: schema.sessionStats.linesChanged,
+            filesEditedWritten: schema.sessionStats.filesEditedWritten,
+            linesAdded: schema.sessionStats.linesAdded,
+            linesRemoved: schema.sessionStats.linesRemoved,
+            diffLinesCoveredCalls: schema.sessionStats.diffLinesCoveredCalls,
+            diffLinesTotalCalls: schema.sessionStats.diffLinesTotalCalls,
+          })
+          .from(schema.sessionStats)
+          .where(
+            and(
+              eq(schema.sessionStats.sessionId, sessionRowId),
+              sql`EXISTS (
+                SELECT 1 FROM logs tl
+                WHERE tl.session_id = ${schema.sessionStats.sessionId}
+                  AND tl.log_type IN ('claude', 'claude-subagent')
+              )`,
+            ),
+          )
+          .limit(1),
+        readStoredWorkflows(this.db, sessionRowId),
+      ]);
+
+    // Workflow runs: stored at ingest (DD-6); until the backfill reaches an older session they
+    // are parsed from the root claude body, as before — that one row only.
+    let workflows: WorkflowRun[] = storedWorkflows ?? [];
+    if (storedWorkflows === null) {
+      const rootClaudeText = await this.sessionLogsStreamService.readBodyText(
+        rootClaude.logId,
+      );
+      try {
+        workflows =
+          rootClaudeText === null
+            ? []
+            : extractWorkflows(JSON.parse(rootClaudeText) as unknown[]);
+      } catch {
+        // malformed body — return empty workflows
+      }
+    }
+
+    // Each WorkflowRun's full multi-level agent linkage, from every descendant session (with or
+    // without a log row) — scoped to `descendantIds`, so no cross-session leakage is possible.
+    if (workflows.length > 0 && descendantIds.length > 0) {
+      const linkageRows = await this.db
         .select({
           subSessionId: schema.sessions.sessionId,
           parentSessionId: schema.sessions.parentSessionId,
           workflowRunId: schema.sessions.workflowRunId,
-          agentDescription: schema.sessions.agentDescription,
-          workflowPhase: schema.sessions.workflowPhase,
-          bodyText: sql<string | null>`${schema.logs.body}::text`,
         })
         .from(schema.sessions)
-        .leftJoin(
-          schema.logs,
-          and(
-            eq(schema.logs.sessionId, schema.sessions.id),
-            eq(schema.logs.logType, 'claude-subagent'),
-          ),
-        )
         .where(inArray(schema.sessions.id, descendantIds))
-        .orderBy(asc(schema.sessions.sessionId)),
-      selectSubagentStats(this.db, descendantIds, sessionRowId),
-      // The root session's own productivity counters (`rootStats`), read from the
-      // same `session_stats` row the server-side tree rollup sums for the root node,
-      // with the same transcript guard as the descendant select above.
-      this.db
-        .select({
-          linesChanged: schema.sessionStats.linesChanged,
-          filesEditedWritten: schema.sessionStats.filesEditedWritten,
-          linesAdded: schema.sessionStats.linesAdded,
-          linesRemoved: schema.sessionStats.linesRemoved,
-          diffLinesCoveredCalls: schema.sessionStats.diffLinesCoveredCalls,
-          diffLinesTotalCalls: schema.sessionStats.diffLinesTotalCalls,
-        })
-        .from(schema.sessionStats)
-        .where(
-          and(
-            eq(schema.sessionStats.sessionId, sessionRowId),
-            sql`EXISTS (
-              SELECT 1 FROM logs tl
-              WHERE tl.session_id = ${schema.sessionStats.sessionId}
-                AND tl.log_type IN ('claude', 'claude-subagent')
-            )`,
-          ),
-        )
-        .limit(1),
-    ]);
-
-    const subagents = subagentRows
-      .filter((r) => r.bodyText !== null)
-      .map((r) => ({
-        sessionId: r.subSessionId,
-        parentSessionId: r.parentSessionId,
-        agentDescription: r.agentDescription ?? null,
-        workflowPhase: r.workflowPhase ?? null,
-        logsText: r.bodyText!,
-      }));
-
-    // Extract workflow runs from the claude log events
-    let workflows: ReturnType<typeof extractWorkflows> = [];
-    try {
-      const claudeEvents = JSON.parse(claudeLog.bodyText) as unknown[];
-      workflows = extractWorkflows(claudeEvents);
-    } catch {
-      // malformed body — return empty workflows
+        .orderBy(asc(schema.sessions.sessionId));
+      resolveWorkflowAgentLinkage(workflows, linkageRows);
     }
-
-    // Each WorkflowRun's full multi-level agent linkage, from `subagentRows` — already
-    // scoped to `descendantIds`, so no cross-session leakage is possible.
-    resolveWorkflowAgentLinkage(workflows, subagentRows);
 
     // Latest submitted Turn-End Cost Advisor result for the session
     // detail Advisor tab (no separate session-detail cost/advisor
@@ -1988,68 +2119,59 @@ export class RepositoriesController {
         : null,
     };
 
-    // Build JSON response without double-parsing large blobs.
-    // `parentSessionId` is the true immediate parent session/agent — a sub-agent
-    // spawned in the background by another sub-agent (not the root) may never write a
-    // completion event with its own agentId back into its parent's transcript once the parent
-    // session ends, so this DB-authoritative value is the only reliable way for the client to
-    // reconstruct the real nesting tree for cost rollup; it must not be derived from transcript
-    // content (agent_progress / tool_use+toolUseResult), which is unreliable for grandchildren+.
-    res.setHeader('Content-Type', 'application/json');
-    const subagentJson = subagents
-      .map(
-        (s) =>
-          `{"sessionId":${JSON.stringify(s.sessionId)},"parentSessionId":${JSON.stringify(s.parentSessionId)},"agentDescription":${JSON.stringify(s.agentDescription)},"workflowPhase":${JSON.stringify(s.workflowPhase)},"logs":${s.logsText}}`,
-      )
-      .join(',');
-    // `rootStats` (the root session's own counters, `null` when it has no
-    // `session_stats` row or the OTEL-only-row guard excludes it) plus the `subagentStats`
-    // entries of all descendants equals the tree rollup computed server-side by
-    // `session-tree-metrics.sql.ts` — both selects use the same rows and the same
-    // transcript guard, so the client's tree-scoped code-impact figure cannot
-    // drift from the analytics pages.
-    const subagentStatsJson = JSON.stringify(
-      Object.fromEntries(
-        subagentStatsRows.map((r) => [
-          r.sessionId,
-          {
-            model: r.model,
-            inputTokens: r.inputTokens,
-            outputTokens: r.outputTokens,
-            cacheReadTokens: r.cacheReadTokens,
-            cacheWriteTokens: r.cacheWriteTokens,
-            webSearchRequests: r.webSearchRequests,
-            inputTokensFast: r.inputTokensFast,
-            outputTokensFast: r.outputTokensFast,
-            // Productivity counters (see the select above).
-            linesChanged: r.linesChanged,
-            filesEditedWritten: r.filesEditedWritten,
-            linesAdded: r.linesAdded,
-            linesRemoved: r.linesRemoved,
-            diffLinesCoveredCalls: r.diffLinesCoveredCalls,
-            diffLinesTotalCalls: r.diffLinesTotalCalls,
-            // FR-6: OTEL cost of an old-CC sub-agent when above its transcript cost.
-            otelCostUsd: r.otelCostUsd,
-          },
-        ]),
-      ),
+    const subagentStats: Record<string, SubagentStats> = Object.fromEntries(
+      subagentStatsRows.map((r) => [
+        r.sessionId,
+        {
+          model: r.model,
+          inputTokens: r.inputTokens,
+          outputTokens: r.outputTokens,
+          cacheReadTokens: r.cacheReadTokens,
+          cacheWriteTokens: r.cacheWriteTokens,
+          webSearchRequests: r.webSearchRequests,
+          inputTokensFast: r.inputTokensFast,
+          outputTokensFast: r.outputTokensFast,
+          // Productivity counters (see the select above).
+          linesChanged: r.linesChanged,
+          filesEditedWritten: r.filesEditedWritten,
+          linesAdded: r.linesAdded,
+          linesRemoved: r.linesRemoved,
+          diffLinesCoveredCalls: r.diffLinesCoveredCalls,
+          diffLinesTotalCalls: r.diffLinesTotalCalls,
+          // FR-6: OTEL cost of an old-CC sub-agent when above its transcript cost.
+          otelCostUsd: r.otelCostUsd,
+          // The TTL split of cacheWriteTokens (2026-11-23 session-logs-streaming); last,
+          // so every earlier key keeps its position.
+          cacheWrite5mTokens: r.cacheWrite5mTokens,
+          cacheWrite1hTokens: r.cacheWrite1hTokens,
+        },
+      ]),
     );
     const rootStatsRow = rootStatsRows[0];
-    const rootStatsJson = JSON.stringify(
-      rootStatsRow
-        ? {
-            linesChanged: rootStatsRow.linesChanged,
-            filesEditedWritten: rootStatsRow.filesEditedWritten,
-            linesAdded: rootStatsRow.linesAdded,
-            linesRemoved: rootStatsRow.linesRemoved,
-            diffLinesCoveredCalls: rootStatsRow.diffLinesCoveredCalls,
-            diffLinesTotalCalls: rootStatsRow.diffLinesTotalCalls,
-          }
-        : null,
-    );
-    res.end(
-      `{"main":${mainText},"subagents":[${subagentJson}],"subagentStats":${subagentStatsJson},"rootStats":${rootStatsJson},"workflows":${JSON.stringify(workflows)},"turnEndAdvisor":${JSON.stringify(turnEndAdvisor)},"sessionAttribution":${JSON.stringify(sessionAttribution)},"harnessSnapshot":${JSON.stringify(harnessSnapshot ?? null)}}`,
-    );
+    const rootStats: SessionRootStats | null = rootStatsRow
+      ? {
+          linesChanged: rootStatsRow.linesChanged,
+          filesEditedWritten: rootStatsRow.filesEditedWritten,
+          linesAdded: rootStatsRow.linesAdded,
+          linesRemoved: rootStatsRow.linesRemoved,
+          diffLinesCoveredCalls: rootStatsRow.diffLinesCoveredCalls,
+          diffLinesTotalCalls: rootStatsRow.diffLinesTotalCalls,
+        }
+      : null;
+
+    return {
+      sessionRowId,
+      treeRows,
+      // Key order is the `/logs` tail order — `getSessionLogs` serialises these one by one.
+      extras: {
+        subagentStats,
+        rootStats,
+        workflows,
+        turnEndAdvisor,
+        sessionAttribution,
+        harnessSnapshot: harnessSnapshot ?? null,
+      },
+    };
   }
 
   // Lists sessions in scope for the "Session Statistics Export" feature.

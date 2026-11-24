@@ -19,7 +19,7 @@ import {
   emptyMapState,
   toParseInputs,
   type SessionMapSubagent,
-} from './session-map-delta-merge';
+} from './session-map-state';
 import {
   buildSessionMapModel,
   buildTimeline,
@@ -301,10 +301,9 @@ it.each(rows)('$id', ({ input, expected }) => {
       const pricing = pricingOf(input.pricing);
       const derived = toParseInputs({
         ...emptyMapState,
-        rootClaudeLines: input.main,
+        main: input.main,
         subagents: input.subagents,
         subagentStats: statsOf(input.stats),
-        cursor: 'k',
       });
       const inputs = {
         ...derived,

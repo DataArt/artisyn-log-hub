@@ -26,6 +26,11 @@
 //   - the «no visible window» check is the design's single grep step: no `.vbs` in the plugin,
 //     `windowsHide: true` in its launcher, and no `artisyn-hidden-launch-*` file in TEMP.
 //
+// Upload skip (hook 3.2.0, 2026-11-23-session-logs-streaming DD-26): step 5 also checks the current
+// session's artisyn goes out on every Stop while the unchanged transcript does not; step 5d that a
+// transcript SessionEnd sent is recorded in both manifests, so the next Stop skips it. Sent uploads
+// are counted by `upload_queue_measurements` rows — a processed queue row is deleted.
+//
 // OKF v0.3 support (hook 3.1.0, 2026-11-19): the KB index starts with a 1 KB `description` before
 // `okf_version` (detected only with the 8 KB front-matter window); step 4b checks the stored bundle
 // fields (`okfVersion` / `title` / `description` capped at 200 chars) and per-file `meta`, and the
@@ -156,10 +161,15 @@ async function hookState(user: ScenarioUser, repoId: number): Promise<HookState>
   return (await res.json()) as HookState;
 }
 
-async function claudeQueueRows(db: Pool, sessionId: string): Promise<number> {
+/**
+ * Uploads of one log of the session the server has finished with (any outcome): one
+ * `upload_queue_measurements` row each. The queue row itself is deleted once processed, so the
+ * measurement is the durable trace of a sent upload (written right after that delete — poll it).
+ */
+async function uploadsMeasured(db: Pool, sessionId: string, logType = 'claude'): Promise<number> {
   const { rows } = await db.query<{ n: string }>(
-    "SELECT count(*) AS n FROM upload_queue WHERE session_id = $1 AND log_type = 'claude'",
-    [sessionId],
+    'SELECT count(*) AS n FROM upload_queue_measurements WHERE session_id = $1 AND log_type = $2',
+    [sessionId, logType],
   );
   return Number(rows[0].n);
 }
@@ -444,7 +454,8 @@ test('@S-HOOK-09 the installed hook reaches the real server and the session show
     });
 
     await test.step('5. a second Stop without changes: no harness duplicates, no new claude upload', async () => {
-      const claudeBefore = await claudeQueueRows(db, sid);
+      const claudeBefore = await uploadsMeasured(db, sid);
+      const artisynBefore = await uploadsMeasured(db, sid, 'artisyn');
       const elements = await db.query<{ n: string }>('SELECT count(*) AS n FROM harness_elements WHERE repo_id = $1', [repoId]);
       const okfStateBefore = fs.readFileSync(okfStatePath(repo), 'utf8');
       await fire({ hook_event_name: 'Stop', transcript_path: transcript });
@@ -452,7 +463,9 @@ test('@S-HOOK-09 the installed hook reaches the real server and the session show
       // not rewritten at all — not even its `updatedAt`.
       expect(fs.readFileSync(okfStatePath(repo), 'utf8'), 'an unchanged run leaves okf-state.json as it was').toBe(okfStateBefore);
       await waitForQueueIdle(db, owner.id, { timeoutMs: 10_000 });
-      expect(await claudeQueueRows(db, sid), 'unchanged transcript is not re-sent').toBe(claudeBefore);
+      // The current artisyn goes last in a run, so once it is measured the run's transcripts are too.
+      await expect.poll(() => uploadsMeasured(db, sid, 'artisyn'), { message: 'the current artisyn is sent on every Stop' }).toBe(artisynBefore + 1);
+      expect(await uploadsMeasured(db, sid), 'unchanged transcript is not re-sent').toBe(claudeBefore);
       const after = await db.query<{ n: string }>('SELECT count(*) AS n FROM harness_elements WHERE repo_id = $1', [repoId]);
       expect(after.rows[0].n).toBe(elements.rows[0].n);
       const artisyn = (await storedBody(db, sid, 'artisyn')) ?? [];
@@ -505,6 +518,28 @@ test('@S-HOOK-09 the installed hook reaches the real server and the session show
       expect(okfLog.filter((l) => l.includes(`okf: snapshot ${okfSnapshotId.slice(0, 12)} sent`)), 'known id: still one full send').toHaveLength(1);
       const okfCount = await db.query<{ n: string }>('SELECT count(*) AS n FROM okf_snapshots WHERE user_id = $1', [owner.id]);
       expect(Number(okfCount.rows[0].n)).toBe(1);
+    });
+
+    await test.step('5d. DD-26: the transcript grows, SessionEnd sends it and records it in both manifests; the next Stop does not send it again', async () => {
+      // Claude Code appends `turn_duration` after the Stop hook fires — no tokens, no cost.
+      fs.appendFileSync(transcript, `${JSON.stringify({ type: 'system', subtype: 'turn_duration', sessionId: sid, timestamp: new Date().toISOString(), durationMs: 1000 })}\n`);
+      const before = await uploadsMeasured(db, sid);
+      await fire({ hook_event_name: 'SessionEnd', reason: 'other' });
+      await expect.poll(() => uploadsMeasured(db, sid), { message: 'SessionEnd sent the grown transcript' }).toBe(before + 1);
+      const key = `claude/${sid}.jsonl`;
+      const v2 = JSON.parse(fs.readFileSync(path.join(telemetryDir(repo), '.claude-logs.sent.v2'), 'utf8')) as {
+        entries: Record<string, { size: number; mtimeMs: number }>;
+      };
+      expect(v2.entries[key], 'SessionEnd recorded the transcript in the v2 manifest').toEqual(
+        expect.objectContaining({ size: fs.statSync(transcript).size, mtimeMs: fs.statSync(transcript).mtimeMs }),
+      );
+      const v1 = fs.readFileSync(path.join(telemetryDir(repo), '.claude-logs.sent'), 'utf8');
+      expect(v1.split(/\r?\n/), 'and in the old manifest').toContain(`${key} ${fs.statSync(transcript).size}`);
+
+      const artisynBefore = await uploadsMeasured(db, sid, 'artisyn');
+      await fire({ hook_event_name: 'Stop', transcript_path: transcript });
+      await expect.poll(() => uploadsMeasured(db, sid, 'artisyn')).toBe(artisynBefore + 1);
+      expect(await uploadsMeasured(db, sid), 'the SessionEnd-recorded transcript is not re-sent').toBe(before + 1);
     });
 
     await test.step('6. Installed Hooks page: version = plugin version.json, up to date, no issue badge', async () => {

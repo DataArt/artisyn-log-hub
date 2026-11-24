@@ -1,0 +1,130 @@
+[
+  {
+    "id": "SMS-01",
+    "input": {
+      "build": {
+        "manifest": {
+          "parts": [
+            {"sessionId": "root", "logType": "claude"},
+            {"sessionId": "root", "logType": "artisyn"},
+            {"sessionId": "agent-p", "logType": "claude-subagent", "workflowRunId": "wf-1"},
+            {"sessionId": "agent-q", "logType": "claude-subagent", "parentSessionId": "agent-p"},
+            {"sessionId": "agent-r", "logType": "claude-subagent", "workflowRunId": "wf-2"}
+          ],
+          "stats": {"agent-p": 10, "agent-q": 20},
+          "workflows": ["tu-1"],
+          "liveness": {"hasOtel": true, "live": true, "lastActivityAt": "2026-11-24T10:00:00.000Z"},
+          "serverTime": "2026-11-24T10:00:05.000Z"
+        },
+        "logs": {
+          "main": [{"uuid": "a1"}, {"uuid": "c1"}],
+          "subagents": [
+            {"sessionId": "agent-p", "parentSessionId": null, "agentDescription": "Review billing", "workflowPhase": "Implement", "logs": [{"uuid": "p1"}]},
+            {"sessionId": "agent-q", "parentSessionId": "agent-p", "agentDescription": null, "workflowPhase": null, "logs": [{"uuid": "q1"}]}
+          ]
+        },
+        "receivedAt": 1000
+      }
+    },
+    "expected": {
+      "main": [{"uuid": "a1"}, {"uuid": "c1"}],
+      "subagents": [
+        {"sessionId": "agent-p", "parentSessionId": null, "workflowRunId": "wf-1", "agentDescription": "Review billing", "workflowPhase": "Implement", "logs": [{"uuid": "p1"}]},
+        {"sessionId": "agent-q", "parentSessionId": "agent-p", "workflowRunId": null, "agentDescription": null, "workflowPhase": null, "logs": [{"uuid": "q1"}]}
+      ],
+      "stats": {"agent-p": 10, "agent-q": 20},
+      "workflows": ["tu-1"],
+      "liveness": {"hasOtel": true, "live": true, "lastActivityAt": "2026-11-24T10:00:00.000Z"},
+      "serverTime": "2026-11-24T10:00:05.000Z",
+      "receivedAt": 1000
+    },
+    "note": "Build rules 1-5: main is the assembled main as-is; only the loaded sub-agents p and q are held (r is in the manifest but not loaded), in assembled order; p takes wf-1 from its manifest part, q has none → null; stats, workflows, liveness and server time come from the manifest; receivedAt is passed through. Holding unloaded r would add an agent with no lines."
+  },
+  {
+    "id": "SMS-02",
+    "input": {
+      "build": {
+        "manifest": {
+          "parts": [{"sessionId": "root", "logType": "claude"}],
+          "omitLiveness": true
+        },
+        "logs": {"main": [{"uuid": "c1"}], "subagents": []},
+        "receivedAt": 0
+      }
+    },
+    "expected": {
+      "liveness": {"hasOtel": false, "live": false, "lastActivityAt": null},
+      "serverTime": ""
+    },
+    "note": "Build rule 4: an older server's manifest has neither liveness nor serverTime → not live (Replay) and ''. Taking undefined would crash the LIVE badge on liveness.live."
+  },
+  {
+    "id": "SMS-03",
+    "input": {
+      "build": {
+        "manifest": {
+          "parts": [
+            {"sessionId": "root", "logType": "claude"},
+            {"sessionId": "agent-p", "logType": "claude", "workflowRunId": "wf-x"}
+          ]
+        },
+        "logs": {
+          "main": [],
+          "subagents": [
+            {"sessionId": "agent-p", "parentSessionId": null, "agentDescription": null, "workflowPhase": null, "logs": []},
+            {"sessionId": "agent-z", "parentSessionId": null, "agentDescription": null, "workflowPhase": null, "logs": []}
+          ]
+        },
+        "receivedAt": 0
+      }
+    },
+    "expected": {
+      "subagents": [
+        {"sessionId": "agent-p", "parentSessionId": null, "workflowRunId": null, "agentDescription": null, "workflowPhase": null, "logs": []},
+        {"sessionId": "agent-z", "parentSessionId": null, "workflowRunId": null, "agentDescription": null, "workflowPhase": null, "logs": []}
+      ]
+    },
+    "note": "Build rule 3: workflowRunId comes only from a claude-subagent part of the same sessionId. agent-p's only matching part has logType claude, agent-z has no part at all → both null. Matching by sessionId alone would give agent-p wf-x."
+  },
+  {
+    "id": "SMS-04",
+    "input": {
+      "parse": {
+        "main": [{"uuid": "a1"}, {"uuid": "c1"}, {"uuid": "c2"}],
+        "subagents": [
+          {"sessionId": "agent-p", "parentSessionId": null, "workflowRunId": "wf-1", "agentDescription": null, "workflowPhase": null, "logs": [{"uuid": "p1"}]},
+          {"sessionId": "agent-q", "parentSessionId": "agent-p", "workflowRunId": null, "agentDescription": null, "workflowPhase": null, "logs": [{"uuid": "q1"}]},
+          {"sessionId": "agent-r", "parentSessionId": null, "workflowRunId": null, "agentDescription": null, "workflowPhase": null, "logs": []}
+        ]
+      }
+    },
+    "expected": {
+      "main": [{"uuid": "a1"}, {"uuid": "c1"}, {"uuid": "c2"}],
+      "subagentLogs": {"p": [{"uuid": "p1"}], "q": [{"uuid": "q1"}], "r": []},
+      "agentParentMap": {"p": null, "q": "p", "r": null},
+      "workflowRunIds": {"p": "wf-1"},
+      "agentDescriptions": {}
+    },
+    "note": "Parse rules 1-4: main is the state's main as-is; every key and parent loses the agent- prefix; q's parent agent-p → p; only p has a workflowRunId. Parse rule 5: no sub-agent has a description, so agentDescriptions is empty."
+  },
+  {
+    "id": "SMS-05",
+    "input": {
+      "parse": {
+        "subagents": [
+          {"sessionId": "agent-p", "parentSessionId": null, "workflowRunId": null, "agentDescription": "  Review billing  ", "workflowPhase": "Implement", "logs": []},
+          {"sessionId": "agent-q", "parentSessionId": null, "workflowRunId": null, "agentDescription": "   ", "workflowPhase": null, "logs": []},
+          {"sessionId": "agent-r", "parentSessionId": null, "workflowRunId": null, "agentDescription": null, "workflowPhase": null, "logs": []}
+        ]
+      }
+    },
+    "expected": {
+      "main": [],
+      "subagentLogs": {"p": [], "q": [], "r": []},
+      "agentParentMap": {"p": null, "q": null, "r": null},
+      "workflowRunIds": {},
+      "agentDescriptions": {"p": "Review billing"}
+    },
+    "note": "Parse rule 5: only p has a non-blank description, stored trimmed under the unprefixed key: 'Review billing'. q's whitespace-only description and r's null give no entry. Keeping blank descriptions would add q: '' (or '   ')."
+  }
+]

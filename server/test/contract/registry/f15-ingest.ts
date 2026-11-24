@@ -4,10 +4,14 @@
 // parks the worker (setup/global-setup.ts), so the row is observed exactly as the request left
 // it. What the worker then writes (sessions, logs, stats) is proven by the ingest scenarios
 // (tests/scenarios/ingest/*) and the golden sessions (tests/golden/*).
+import { createHash } from 'node:crypto';
 import type { ContractFamily } from '../types';
 
 const NDJSON =
   '{"type":"user","sessionId":"w1-new-upload","message":{"role":"user","content":"hello"}}\n';
+
+/** sha256 hex of NDJSON as the hook declares it (2026-11-23 session-logs-streaming DD-24). */
+const NDJSON_SHA256 = createHash('sha256').update(NDJSON, 'utf8').digest('hex');
 
 /** One hook `otel-status` line (2026-10-30 otel-shared-receiver, DD-16). */
 function otelStatusLine(
@@ -522,6 +526,126 @@ export const f15Ingest: ContractFamily = {
       body: NDJSON,
       expect: { status: 201 },
       noDb: true,
+    },
+    {
+      // 2026-11-23 session-logs-streaming DD-27/DD-25: s05 was deleted (sessions.deleted and its
+      // deleted_session_log row), so its owner's upload is answered `complete: true` with
+      // nothing staged; with `uploadFeedback=1` the answer says `sessionDeleted: true` and
+      // carries `failedUploads` (none: the owner's one failed row is no server failure).
+      id: 'F15-upload-deleted-session-feedback',
+      route: 'POST /api/v2/logs',
+      actor: 'ownerKey',
+      query: {
+        sessionId: '@s05.sessionId',
+        type: 'claude',
+        uploadFeedback: '1',
+      },
+      headers: { 'Content-Type': 'application/x-ndjson' },
+      body: NDJSON,
+      expect: {
+        status: 201,
+        bodyMatches: {
+          complete: true,
+          sessionDeleted: true,
+          failedUploads: [],
+        },
+      },
+      noDb: true,
+    },
+    {
+      // Without `uploadFeedback=1` (every hook before 3.2.0) the same answer carries neither
+      // new field — the response stays what an old hook already parses.
+      id: 'F15-upload-deleted-session-no-feedback',
+      route: 'POST /api/v2/logs',
+      actor: 'ownerKey',
+      query: { sessionId: '@s05.sessionId', type: 'claude' },
+      headers: { 'Content-Type': 'application/x-ndjson' },
+      body: NDJSON,
+      expect: {
+        status: 201,
+        bodyMatches: {
+          complete: true,
+          sessionDeleted: undefined,
+          failedUploads: undefined,
+        },
+      },
+      noDb: true,
+    },
+    {
+      // A sub-agent of a deleted root is refused through its parent (DD-27's upward walk).
+      id: 'F15-upload-deleted-parent',
+      route: 'POST /api/v2/logs',
+      actor: 'ownerKey',
+      query: {
+        sessionId: 'agent-w1-late-child',
+        type: 'claude-subagent',
+        parentSessionId: '@s05.sessionId',
+        uploadFeedback: '1',
+      },
+      headers: { 'Content-Type': 'application/x-ndjson' },
+      body: NDJSON,
+      expect: {
+        status: 201,
+        bodyMatches: { complete: true, sessionDeleted: true },
+      },
+      noDb: true,
+    },
+    {
+      // DD-24: a well-formed `contentSha256` (64 lowercase hex) is stored on the queue row; the
+      // worker later compares it with the staged body.
+      id: 'F15-upload-content-sha256',
+      route: 'POST /api/v2/logs',
+      actor: 'authorKey',
+      query: {
+        sessionId: 'w1-new-upload-sha',
+        type: 'claude',
+        contentSha256: NDJSON_SHA256,
+      },
+      headers: { 'Content-Type': 'application/x-ndjson' },
+      body: NDJSON,
+      expect: { status: 201, bodyMatches: { warnings: [] } },
+      write: {
+        watch: ['upload_queue'],
+        delta: {
+          inserted: [
+            {
+              table: 'upload_queue',
+              where: `session_id = 'w1-new-upload-sha'`,
+              check: [
+                `status = 'pending'`,
+                `content_sha256 = '${NDJSON_SHA256}'`,
+                'failure_delivered = false',
+              ],
+            },
+          ],
+        },
+      },
+    },
+    {
+      // Anything else (here upper-case hex) is ignored, never a 400: the row is staged without it.
+      id: 'F15-upload-content-sha256-malformed',
+      route: 'POST /api/v2/logs',
+      actor: 'authorKey',
+      query: {
+        sessionId: 'w1-new-upload-sha-bad',
+        type: 'claude',
+        contentSha256: NDJSON_SHA256.toUpperCase(),
+      },
+      headers: { 'Content-Type': 'application/x-ndjson' },
+      body: NDJSON,
+      expect: { status: 201 },
+      write: {
+        watch: ['upload_queue'],
+        delta: {
+          inserted: [
+            {
+              table: 'upload_queue',
+              where: `session_id = 'w1-new-upload-sha-bad'`,
+              check: [`status = 'pending'`, 'content_sha256 IS NULL'],
+            },
+          ],
+        },
+      },
     },
     {
       id: 'F15-upload-no-session-id',

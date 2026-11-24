@@ -32,6 +32,7 @@ import {
   isBackgroundCandidate,
   matchBackgroundAckInContent,
 } from './background-mcp';
+import { extractWorkflows, type WorkflowRun } from './workflow-extractor';
 
 export type { FileCategory };
 
@@ -350,6 +351,12 @@ export interface ClaudeStats {
    * session's flags.
    */
   listFlags: SessionListFlags | null;
+  /**
+   * Workflow runs of the transcript (`extractWorkflows`), stored in `session_stats.workflows`
+   * with `workflows_version` (impl-plan DD-6 of 2026-11-23-session-logs-streaming) so readers
+   * never parse the body. `null` for sub-agent logs, which never write the column.
+   */
+  workflows: WorkflowRun[] | null;
 }
 
 /** A `tool_use` block awaiting its matching `tool_result`, collected during the walk. */
@@ -1410,6 +1417,7 @@ export function extractClaudeStats(
     requestIds: [...requestIds],
     callTokens,
     listFlags: isSubagentLog ? null : computeSessionListFlags(lines),
+    workflows: isSubagentLog ? null : extractWorkflows(lines),
   };
 }
 

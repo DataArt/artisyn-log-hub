@@ -1,13 +1,13 @@
 ---
 type: "Architecture Guide"
 title: "Session Map Tab"
-description: "The session view's Session Map tab (realtime and replay): the logs delta route and its cursor, the client data flow delta → merge → parse → model, polling and reload, the suspended /logs watermark refetch, tool families and colours, grouping, time-position states, and the file list."
+description: "The session view's Session Map tab (realtime and replay): the client data flow parts → state → parse → model, the live manifest poll, the legacy logs delta route kept for older clients, tool families and colours, grouping, time-position states, and the file list."
 tags:
   - client
   - server
   - session-view
   - realtime
-generated: { by: "human:denistsyplakov", at: "2026-11-03T00:00:00+04:00" }
+generated: { by: "claude-code", at: "2026-11-24T12:00:00+04:00" }
 ---
 
 # Session Map Tab
@@ -18,28 +18,48 @@ workflow run, one column "Agents spawned by the main session", and a nested card
 of a sub-agent. A bottom timeline (tool-family bins, failures, cumulative cost) sets the **time
 position** `t`; every card, counter and the side panel show the session as it was at `t`.
 
-- **Realtime:** while the session is live the tab polls a delta route every 10 s and, by default,
-  follows "now".
+- **Realtime:** while the session is live the tab re-reads the parts manifest every 10 s and, by
+  default, follows "now".
 - **Replay:** a finished session is loaded once; Play / speeds / scrubbing move `t` over it.
 
 Task: `docs/tasks/done/2026-11-01-session-map-tab/` (impl-plan Design Decisions are cited as DD-n).
+Since 2026-11-24 (task `2026-11-23-session-logs-streaming`) the tab reads the session's log parts
+instead of `/logs/delta`: the delta's first answer was one uncompressed document of the whole tree
+(55 MB, ~40 s on a Raspberry Pi for a 6-hour session), the parts are pre-compressed and cached.
 
 ## Data flow
 
 ```
-GET …/logs/delta?cursor=  →  mergeSessionMapDelta  →  toParseInputs  →  parseSessionLogs  →  buildSessionMapModel
-   (server, per poll)          (SessionMapState)       (main, subagentLogs,   (ParsedSession)     (nodes, columns,
-                                                         agentParentMap, …)                         timeline bins)
-                                                                                                        ↓
-                                                                    stateAt / countersAt / highlightSet at time t
+manifest + every part  →  assembleSessionLogs  →  buildSessionMapState  →  toParseInputs  →  parseSessionLogs  →  buildSessionMapModel
+ (useSessionLogParts,      (SessionLogsData)       (SessionMapState)        (main, subagentLogs,  (ParsedSession)     (nodes, columns,
+  shared with all tabs)                                                      agentParentMap, …)                       timeline bins)
+                                                                                                                         ↓
+                                                                                     stateAt / countersAt / highlightSet at time t
 ```
 
-The tab does **not** use the `/logs` payload of `useRepositoryData`; it keeps its own state.
+- `SessionTabContent` renders the tab behind `AllSessionPartsGate` with `keepOnceLoaded` (keyed by
+  session): it asks for every part, shows "Loading session logs n of m" until all are in, and then
+  keeps the Map on screen while the parts a live session adds later load, so a new agent never
+  unmounts the tab and its playback position.
+- `useSessionMapData` gets the assembled logs (`logsQuery.data`) as a prop and observes the
+  manifest query itself (same key `['session-logs', repoId, sessionId, teamId]` and fetcher as
+  `useSessionLogParts`) for `liveness`, `serverTime` and the live interval.
+- Algorithm and examples: [`algorithms/session-map-state.md`](algorithms/session-map-state.md).
 
-### Server: `GET /api/v1/repositories/:repoId/sessions/:sessionId/logs/delta`
+### Liveness in the parts manifest
 
-Route row and response shape: [`server-endpoint-map.md`](server-endpoint-map.md). Algorithm and
-examples: [`algorithms/session-logs-delta.md`](algorithms/session-logs-delta.md).
+`GET …/logs/parts` carries `liveness` (`computeOtelLiveness(otel_session_state, now)` from
+`server/src/logs/otel/otel-facts.reader.ts`, the same rule as the OTEL tab's `live`, see
+[`otel-tabs.md`](otel-tabs.md#realtime-states-dd-14-dd-15)) and `serverTime` (ISO, when the
+manifest was built), set in `SessionLogPartsService.buildManifest`. Without OTEL data
+(`hasOtel: false`) a session is never live, so the tab shows it as replay. A manifest from an older
+server has neither field: the client treats it as not live.
+
+### Legacy: `GET /api/v1/repositories/:repoId/sessions/:sessionId/logs/delta`
+
+No current client calls it; the route stays, unchanged, for an SPA bundle cached from an older
+release. Route row and response shape: [`server-endpoint-map.md`](server-endpoint-map.md).
+Algorithm and examples: [`algorithms/session-logs-delta.md`](algorithms/session-logs-delta.md).
 
 - **Access** is the same chain as `/logs` (`resolveSessionLogsAccess`,
   `server/src/logs/session-logs-access.ts`), so both routes answer 403 / 404 identically.
@@ -51,7 +71,20 @@ examples: [`algorithms/session-logs-delta.md`](algorithms/session-logs-delta.md)
   and new rows have their body read, so an empty poll never reads `logs.body`. A changed row is
   checked with `checkGrowth` (line count must not shrink, the fingerprint of the last known line must
   match); otherwise the answer is `200 {reload: true}`.
-- **Workflows** are re-extracted (`resolveWorkflowAgentLinkage`, `server/src/logs/workflow-linkage.ts`)
+- **Streaming.** `SessionLogsDeltaService.prepareDelta` decides everything from metadata before the
+  first byte: `readSliceMeta` gives per row the length and the fingerprints computed in SQL, with no
+  lines; the stale and growth checks, stats, workflows and the next cursor follow. A `reload` answer
+  is plain JSON. Any other answer is streamed by `writeDelta` under the same per-worker
+  `LogStreamLimiter` as `/logs`, in the former key order (`reload, rootArtisynLines,
+  rootClaudeLines, subagentAppends, newSubagents, subagentStats, workflows, liveness, serverTime,
+  cursor`). Each `lines` / `logs` value is one row's raw `jsonb_agg(…)::text` slice
+  (`readSliceText`, lines `(prevN, len]` bounded by the metadata's length so the cursor stays
+  exact), never parsed by the server. A row rewritten between the two reads aborts the response;
+  the next poll recovers.
+- **`subagentStats`** entries carry the same keys as `/logs`, ending with `cacheWrite5mTokens` /
+  `cacheWrite1hTokens`.
+- **Workflows** are re-read — stored `session_stats.workflows` (`readStoredWorkflows`), else parsed from
+  the root claude body — and re-linked (`resolveWorkflowAgentLinkage`, `server/src/logs/workflow-linkage.ts`)
   only when the root `claude` row or the agent set changed; otherwise `workflows: null` (keep the old
   list).
 - **Liveness** is `computeOtelLiveness(otel_session_state, now)` from
@@ -59,22 +92,14 @@ examples: [`algorithms/session-logs-delta.md`](algorithms/session-logs-delta.md)
   ([`otel-tabs.md`](otel-tabs.md#realtime-states-dd-14-dd-15)). Without OTEL data (`hasOtel: false`)
   a session is never live, so the tab shows it as replay.
 
-### Client: merge, parse, model
+### Client: state, parse, model
 
-- `mergeSessionMapDelta(prev, delta)` (`session-map-delta-merge.ts`) appends root artisyn / claude
-  lines and sub-agent lines, adds new sub-agents with their linkage (`sessionId`,
-  `parentSessionId`, `workflowRunId`) and meta (`agentDescription`, `workflowPhase`: `string | null`,
-  from `newSubagents[]`; `null` from an older server), replaces stats, keeps the old `workflows` on
-  `null`, and stores `cursor`, `liveness`, `serverTime` and `receivedAt`. A poll sent with an empty
-  cursor replaces the state. The initial load is itself a delta from cursor 0, so `mergeSubagents`
-  is the single place the meta enters, for the first load and for live arrivals. Examples:
-  [`algorithms/session-map-delta-merge.md`](algorithms/session-map-delta-merge.md).
-- **Live meta for known agents (DD-15).** `subagentAppends[]` entries also carry `agentDescription` /
-  `workflowPhase`. The server pushes an append with `lines: []` when a changed sub-agent has no new
-  lines but non-null meta (a meta-only re-upload still bumps `logs.updated_at`). `mergeSubagents`
-  copies a non-null append value onto the known `SessionMapSubagent` and never clears a stored value
-  with `null`; an empty-lines entry changes only the meta. An older client already skips
-  empty-line appends.
+- `buildSessionMapState(manifest, logs, receivedAt)` (`session-map-state.ts`) holds `main` (root
+  artisyn ++ claude), the loaded sub-agents with their linkage (`parentSessionId`, `workflowRunId`
+  from the agent's manifest part) and meta (`agentDescription`, `workflowPhase`), the stats and
+  workflows of the manifest, `liveness`, `serverTime` and `receivedAt` (the manifest's
+  `dataUpdatedAt`). It is rebuilt whenever the manifest or a part body changes. Examples:
+  [`algorithms/session-map-state.md`](algorithms/session-map-state.md).
 - `toParseInputs(state)` gives `parseSessionLogs` the same inputs `/logs` would: `main` =
   `artisyn ++ claude`, `subagentLogs` keyed **without** the `agent-` prefix, `agentParentMap`,
   `subagentStats`, `workflows`, plus a `workflowRunId` map for grouping and `agentDescriptions`
@@ -82,38 +107,23 @@ examples: [`algorithms/session-logs-delta.md`](algorithms/session-logs-delta.md)
 - `buildSessionMapModel(parsed, inputs, pricing, {live, serverTimeMs})` (`session-map-model.ts`)
   builds the nodes (cost, share, family counts, top tools, calls, failures, peak context, first /
   last activity, finished flag, per-call events), the columns (`groupAgents`) and the timeline bins.
-  It is memoised on the merged state, so a scrub never rebuilds it. Examples:
+  It is memoised on the state, so a scrub never rebuilds it. Examples:
   [`algorithms/session-map-model.md`](algorithms/session-map-model.md).
 - Per `t`: `stateAt` (future / running / done), `countersAt` (elapsed, failed, calls, agents
   started / total, cost so far / total), `highlightSet` (top 5 by cost, or agents with failures),
   `orderAgents` (by start or by cost).
 
-## Polling and reload
+## Live poll and refresh
 
-`useSessionMapData` drives the poll through the shared `useOtelLivePoll`
-(`pages/repository/otel/useOtelLivePoll.ts`, unchanged): interval `SESSION_MAP_POLL_MS` (10 s),
-`isLive = state.liveness.live`, `resetKey = repoId|sessionId|teamId|reloadGen`. The hook brings the
-visible-page / idle-stop rules, catch-up on return, `refresh()` and the `hidden` / `idle` indicator
-("LIVE · updates paused" in the header).
-
-- **Reload** (`{reload: true}`): `reloadGen` is bumped (new `resetKey` → one empty-cursor snapshot)
-  and the `['session-logs', repoId, sessionId, teamId]` query is invalidated. The last good state
-  stays on screen until the snapshot arrives; "following now" is kept, otherwise `t` is clamped to
-  the new end.
-- **Errors:** a failed poll keeps the last good state and shows "update failed" in the header. With
-  no state yet the session-logs error panel is shown. A 403 / 404 drops the state and stops polling
-  until the session or team changes.
-- **Refresh button:** `SessionMapTab` registers its `refresh` with `SessionDetailPane`
-  (`registerRefresh`); while the Map tab is open the pane's refresh button polls the delta instead of
-  invalidating `/logs`.
-
-## Watermark suspension
-
-`useRepositoryData` normally refetches `/logs` silently whenever the selected session's end-time
-watermark moves (each hook upload). With `suspendSilentLogsRefetch` — passed by `RepositoryView` as
-`sessionTab === 'session-map'` — both watermark effects skip, so `seenEndTimeRef` keeps the old
-value. Leaving the tab re-runs the effect (the flag is in its dependency list) and `/logs` is fetched
-once. This keeps a realtime Map from downloading the whole payload on every upload.
+- **Live poll.** While `liveness.live`, `useSessionMapData`'s manifest observer has
+  `refetchInterval: SESSION_MAP_POLL_MS` (10 s). A part whose revision changed is re-fetched by
+  `useSessionLogParts` (gzip, one part); unchanged parts are not. TanStack does not refetch on an
+  interval while the page is hidden, and the poll stops once the session is no longer live.
+- **Watermark.** The silent refetch of `useRepositoryData` (the session's end-time watermark moved)
+  runs on this tab as on every other: it re-reads only the manifest.
+- **Errors:** a failed refetch keeps the last good state and shows "update failed" in the header.
+  With no state yet the session-logs error panel is shown.
+- **Refresh button:** the pane's Refresh invalidates the manifest, as on every tab.
 
 ## Tool families
 
@@ -180,13 +190,13 @@ Client, `client/src/viewer/pages/repository/session-log/session-map/`:
 | File | Role |
 |---|---|
 | `session-map.constants.ts` | Poll interval, bins, ticks, speeds, highlight size, `FAMILIES`, colours, layout sizes |
-| `session-map-delta-merge.ts` | Pure: `SessionMapState`, `emptyMapState`, `mergeSessionMapDelta`, `toParseInputs` |
+| `session-map-state.ts` | Pure: `SessionMapState`, `emptyMapState`, `NOT_LIVE`, `buildSessionMapState`, `toParseInputs` |
 | `session-map-model.ts` | Pure: `toolFamily`, `perCallCosts`, `groupAgents`, `buildTimeline`, `buildSessionMapModel`, `stateAt`, `countersAt`, `highlightSet`, `orderAgents`, `columnRows` |
 | `session-map-format.ts` | Cost, elapsed, clock and share formatting |
-| `useSessionMapData.ts` | Delta poll, merge, reload, parse and model (DD-10, DD-12) |
+| `useSessionMapData.ts` | Manifest observer with the live interval, state, parse and model |
 | `useSessionMapPlayback.ts` | `t`, following, play / pause, speed, End, Live (DD-18) |
 | `useSessionMapSelection.ts` | `smSel` URL param |
-| `SessionMapTab.tsx` | Container: layout, the pannable canvas, highlight / order, `registerRefresh`, error states, render mark |
+| `SessionMapTab.tsx` | Container: layout, the pannable canvas, highlight / order, error states, render mark |
 | `SessionMapHeader.tsx` | Badge, first prompt, five counters, Highlight / Order selects, `ZoneLegend` |
 | `SessionMapCards.tsx`, `SessionMapAgentCard.tsx` | Main card, group columns, agent cards (cost bar, `MixBar`, top tools, failed badge, context bar) |
 | `SessionMapSidePanel.tsx` | Metrics, family / failed chips, call log, `ToolCallDetailModal` |
@@ -194,10 +204,11 @@ Client, `client/src/viewer/pages/repository/session-log/session-map/`:
 
 Wiring outside the folder: `viewer/tab-ids.ts` (tab row), `session-lenses.ts` (lens promotion),
 `session-lazy-tabs.ts` / `session-tabs-lazy-group.ts` (shared lazy chunk), `SessionTabContent.tsx`
-(renders the tab), `SessionDetailPane.tsx` (refresh routing), `useRepositoryData.ts` / `RepositoryView.tsx` (watermark
-suspension), `viewer/api.ts` (`SessionLogsDeltaData`, `fetchSessionLogsDelta`).
+(renders the tab behind `AllSessionPartsGate`), `session-parts/useSessionLogParts.ts` (the parts),
+`viewer/api.ts` (`SessionLogPartsManifest.liveness` / `serverTime`, `SessionLiveness`).
 
-Server, `server/src/logs/`: `session-logs-delta.ts` (pure cursor codec, `classifyDeltaRows`,
+Server, `server/src/logs/`: `session-log-parts.service.ts` (`buildManifest`: `liveness`,
+`serverTime`). Legacy delta route: `session-logs-delta.ts` (pure cursor codec, `classifyDeltaRows`,
 `checkGrowth`), `session-logs-delta.service.ts` (`SessionLogsDeltaService.getDelta`, shared
 `selectSubagentStats`), `dto/session-logs-delta.dto.ts`, `session-logs-access.ts`,
 `workflow-linkage.ts`, `otel/otel-facts.reader.ts` (`computeOtelLiveness`), route

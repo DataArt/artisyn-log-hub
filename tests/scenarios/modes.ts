@@ -147,6 +147,21 @@ export function standEnv(input: StandEnvInput): Record<string, string> {
     // The Tools/MCP rebuild drain (DD-7) runs every second, so a scenario sees the derived
     // `session_tool_usage` rows shortly after its upload instead of after the 15 s default.
     TOOL_USAGE_REBUILD_INTERVAL_MS: '1000',
+    // 2026-11-23 session-logs-streaming: the gzip-copy builder, the workflows backfill and the
+    // transcript re-extract drain tick every second (default 15 s), so S-INGEST-02 / S-SESS-03
+    // see them converge within a step.
+    LOG_BODY_GZ_INTERVAL_MS: '1000',
+    WORKFLOWS_BACKFILL_INTERVAL_MS: '1000',
+    SESSION_REEXTRACT_INTERVAL_MS: '1000',
+    // The deleted-session cleanup drain (DD-28) runs every second (default 60 s), so S-SLIFE-07
+    // sees a live child of a deleted root soft-deleted within a step.
+    DELETED_SESSION_CLEANUP_INTERVAL_MS: '1000',
+    // The rebuild governor (DD-15) paces every drain and the upload queue by CPU load. A
+    // parallel suite on a busy host would otherwise pause them for up to 5 min; on the stand the
+    // pause is capped at 2 s and the slowdown at 200 ms, so scenarios never wait on it.
+    REBUILD_HARD_CAP_MS: '2000',
+    REBUILD_MAX_DELAY_MS: '200',
+    REBUILD_LOAD_SAMPLE_MS: '500',
     // The stand is plain http on 127.0.0.1; the server defaults to Secure cookies, which the
     // browser and request contexts would then never send back. .env.defaults is not copied.
     COOKIE_SECURE: 'false',

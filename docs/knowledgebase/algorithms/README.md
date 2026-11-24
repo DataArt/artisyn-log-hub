@@ -54,7 +54,10 @@ format where the two differ).
 | [repo-url-normalization](repo-url-normalization.md) | `server/src/logs/repo-url-normalizer.ts` | jest |
 | [ndjson-tolerance](ndjson-tolerance.md) | hook `ndjson-sanitize.js`, `server/src/logs/ndjson-parser.ts` | `node --test`, jest |
 | [upload-error-classify](upload-error-classify.md) | `server/src/logs/upload-error.ts` | jest |
+| [ingest-hash-skip](ingest-hash-skip.md) | `server/src/logs/ingest-skip.ts` (`decideIngestSkip`), `ingest-version.ts` (`INGEST_VERSION`); caller `LogsService.checkUnchanged` | jest |
+| [hook-upload-skip](hook-upload-skip.md) | hook `upload-skip.js` (`decideUploadSkip`, `canResumePending`, `paramsSha256`); callers `send-logs-hook.js`, `prompt-upload-hook.js`, `upload-logs.js` | `node --test` |
 | [log-retention](log-retention.md) | `server/src/log-retention/log-retention-plan.ts` | jest |
+| [rebuild-load-governor](rebuild-load-governor.md) | `server/src/common/load-governor/rebuild-pace.ts` (`decideRebuildPace`), driven by `rebuild-governor.ts` | jest |
 | [login-backoff](login-backoff.md) | `server/src/auth/login-backoff.service.ts`; Work Hub twin `work-hub/server/src/auth/backoff.rs` | jest, `cargo test` |
 | [password-policy](password-policy.md) | `server/src/auth/utils/password-policy.ts`; Work Hub twin `work-hub/server/src/auth/password_policy.rs` | jest, `cargo test` |
 | [auth-startup-config](auth-startup-config.md) | `server/src/auth/config/auth-startup-validation.ts`; Work Hub twin `work-hub/server/src/auth/startup.rs` | jest, `cargo test` |
@@ -74,7 +77,7 @@ format where the two differ).
 | [tool-call-sections](tool-call-sections.md) | `client/.../session-log/tool-calls.ts` | vitest |
 | [tool-call-outcome](tool-call-outcome.md) | `client/.../session-log/tool-outcome.ts`; twin `server/src/logs/tool-stats.ts` | vitest, jest |
 | [session-lens-row](session-lens-row.md) | `client/.../repository/session-lenses.ts` (`lensRow`, `lensDefaultTab`), `client/.../repository/session-tab-groups.ts` (`pickGroupTab`) | vitest |
-| [session-map-delta-merge](session-map-delta-merge.md) | `client/.../session-log/session-map/session-map-delta-merge.ts` (`mergeSessionMapDelta`, `toParseInputs`) | vitest |
+| [session-map-state](session-map-state.md) | `client/.../session-log/session-map/session-map-state.ts` (`buildSessionMapState`, `toParseInputs`) | vitest |
 | [session-map-model](session-map-model.md) | `client/.../session-log/session-map/session-map-model.ts` | vitest |
 | [nav-filter-match](nav-filter-match.md) | `client/.../pages/map/nav-tree.ts` (`matchNavFilter`) | vitest |
 | [bash-command-view](bash-command-view.md) | `packages/bash-view/src/*` (`@loghub/bash-view`; client loader `client/src/viewer/lib/bash-view/`) | vitest |

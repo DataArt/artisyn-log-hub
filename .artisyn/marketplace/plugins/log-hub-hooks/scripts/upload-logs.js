@@ -48,6 +48,7 @@ const crypto = require('crypto');
 const zlib = require('zlib');
 
 const { hookLog } = require('./hook-log');
+const { canResumePending } = require('./upload-skip');
 
 const HOOK_FILE = 'upload-logs.js';
 
@@ -56,6 +57,46 @@ const HOOK_FILE = 'upload-logs.js';
 // app — a limit this hook cannot detect or negotiate. 900KB leaves ~124KB of headroom under that
 // 1,048,576-byte default. See docs/knowledgebase/hook-api-versioning.md for the full writeup.
 const CHUNK_SIZE_BYTES = 900 * 1024;
+
+/**
+ * How many bytes of a 201 response body `uploadFile()` keeps for parsing. The old 2000-byte cap
+ * could cut a response carrying `failedUploads` (DD-25, up to 20 `{sessionId, type}` entries) or a
+ * long `warnings` list mid-JSON, which the fail-open parse then silently dropped.
+ */
+const UPLOAD_RESPONSE_READ_CAP = 65536;
+
+/**
+ * sha256 hex of an upload body as the server hashes it (DD-24 `contentSha256`): the server reads
+ * the staged body as a UTF-8 string and hashes its UTF-8 encoding, so the body is round-tripped
+ * through a string here too. For valid UTF-8 that is the bytes themselves; a stray invalid byte
+ * becomes U+FFFD on both sides instead of making every upload of the file a hash mismatch.
+ * @param {Buffer|string} body - the uncompressed body
+ * @returns {string}
+ */
+function bodyContentSha256(body) {
+  const text = Buffer.isBuffer(body) ? body.toString('utf8') : String(body);
+  return crypto.createHash('sha256').update(text, 'utf8').digest('hex');
+}
+
+/**
+ * Pull the DD-25 upload feedback out of a parsed 201 body, fail-open: a missing or malformed field
+ * is simply absent, a malformed `failedUploads` entry is dropped on its own.
+ * @param {unknown} parsed
+ * @returns {{ failedUploads?: Array<{sessionId: string, type: string}>, sessionDeleted?: true }}
+ */
+function parseUploadFeedback(parsed) {
+  const out = {};
+  if (!parsed || typeof parsed !== 'object') return out;
+  if (Array.isArray(parsed.failedUploads)) {
+    const list = parsed.failedUploads
+      .filter((f) => f && typeof f === 'object' && typeof f.sessionId === 'string' && f.sessionId
+        && typeof f.type === 'string' && f.type)
+      .map((f) => ({ sessionId: f.sessionId, type: f.type }));
+    if (list.length > 0) out.failedUploads = list;
+  }
+  if (parsed.sessionDeleted === true) out.sessionDeleted = true;
+  return out;
+}
 
 // --- gzip transport tuning -------------------------------------------------
 // A compressed request carries far more than 900KB of NDJSON, but how much more is only knowable
@@ -448,9 +489,16 @@ function planIdentitySlices(body, sliceSize) {
  *   labels read from the agent's `.meta.json` (plan `2026-10-21-workflow-agent-meta-labels`, DD-5):
  *   appends `&agentDescription=…` / `&workflowPhase=…`, each only when truthy. Omitted sends neither,
  *   exactly like an old hook; an old server ignores both params.
+ * @param {string|null} [contentSha256] - DD-24 of plan `2026-11-23-session-logs-streaming`: sha256
+ *   hex of the WHOLE uncompressed body (`bodyContentSha256()`), sent as `&contentSha256=…`. Callers
+ *   pass it on a single upload and on chunk 0, `null` on later chunks. Left `undefined` on a plain
+ *   (not gzipped) single upload, it is computed here from `body`. An old server ignores the param.
+ *   Every request also sends `&uploadFeedback=1` (DD-25), which an old server ignores too.
  * @returns {Promise<{ success: boolean, reason: string|null, warnings?: string[], complete?: boolean,
  *   unknownSnapshotId?: string, unknownOkfSnapshotId?: string, statusCode?: number|null, snippet?: string,
- *   sentEncoding?: 'gzip'|null, unreachable?: boolean, errorCode?: string }>}
+ *   sentEncoding?: 'gzip'|null, unreachable?: boolean, errorCode?: string,
+ *   failedUploads?: Array<{sessionId: string, type: string}>, sessionDeleted?: true }>}
+ *   `failedUploads` / `sessionDeleted` (DD-25) come from a 201 body, parsed fail-open.
  *   `unreachable: true` (with `statusCode: null` and the `errorCode`) marks a DD-13 "server cannot
  *   be reached" error — see `isUnreachableError()`; it also covers the `UPLOAD_CONNECT_TIMEOUT_MS`
  *   connect timer (`ECONNTIMEOUT`).
@@ -459,8 +507,11 @@ function planIdentitySlices(body, sliceSize) {
  *   `unknownSnapshotId`, when the server's 201 JSON carries one, is DD-8's answer to the
  *   `snapshotQuery` this request sent; `unknownOkfSnapshotId` is the same answer for its OKF id.
  */
-function uploadFile(serverUrl, apiKey, namespace, sessionId, body, timeoutMs, hookSessionId, cwd, parentSessionId, workflowRunId, chunkMeta, bodyEncoding, snapshotQuery, agentMeta) {
+function uploadFile(serverUrl, apiKey, namespace, sessionId, body, timeoutMs, hookSessionId, cwd, parentSessionId, workflowRunId, chunkMeta, bodyEncoding, snapshotQuery, agentMeta, contentSha256) {
   const sentEncoding = bodyEncoding === 'gzip' ? 'gzip' : null;
+  const declaredSha256 = contentSha256 === undefined && !chunkMeta && sentEncoding === null
+    ? bodyContentSha256(body)
+    : contentSha256;
   return new Promise((resolve) => {
     let urlStr = `${serverUrl}/api/v2/logs?type=${encodeURIComponent(namespace)}&sessionId=${encodeURIComponent(sessionId)}`;
     if (parentSessionId) {
@@ -501,6 +552,10 @@ function uploadFile(serverUrl, apiKey, namespace, sessionId, body, timeoutMs, ho
     if (agentMeta && agentMeta.workflowPhase) {
       urlStr += `&workflowPhase=${encodeURIComponent(agentMeta.workflowPhase)}`;
     }
+    if (typeof declaredSha256 === 'string' && declaredSha256) {
+      urlStr += `&contentSha256=${encodeURIComponent(declaredSha256)}`;
+    }
+    urlStr += '&uploadFeedback=1';
     let urlObj;
     try {
       urlObj = new URL(urlStr);
@@ -550,12 +605,12 @@ function uploadFile(serverUrl, apiKey, namespace, sessionId, body, timeoutMs, ho
     const req = transport.request(options, (res) => {
       clearConnectTimer();
       if (res.statusCode === 201) {
-        // Buffer the response body (same 2000-byte cap as the non-201 branch below)
-        // so we can pick up any `{ warnings: string[], complete?: boolean }` the server returned.
+        // Buffer the response body (up to UPLOAD_RESPONSE_READ_CAP) so we can pick up any
+        // `{ warnings, complete, failedUploads, sessionDeleted, … }` the server returned.
         const okChunks = [];
         let okReceived = 0;
         res.on('data', (chunk) => {
-          if (okReceived < 2000) {
+          if (okReceived < UPLOAD_RESPONSE_READ_CAP) {
             okChunks.push(chunk);
             okReceived += chunk.length;
           }
@@ -565,8 +620,10 @@ function uploadFile(serverUrl, apiKey, namespace, sessionId, body, timeoutMs, ho
           let complete;
           let unknownSnapshotId;
           let unknownOkfSnapshotId;
+          let feedback = {};
           try {
             const parsed = JSON.parse(Buffer.concat(okChunks).toString('utf8'));
+            feedback = parseUploadFeedback(parsed);
             warnings = parsed && Array.isArray(parsed.warnings) ? parsed.warnings : [];
             if (parsed && typeof parsed.complete === 'boolean') {
               complete = parsed.complete;
@@ -585,6 +642,8 @@ function uploadFile(serverUrl, apiKey, namespace, sessionId, body, timeoutMs, ho
           if (complete !== undefined) result.complete = complete;
           if (unknownSnapshotId !== undefined) result.unknownSnapshotId = unknownSnapshotId;
           if (unknownOkfSnapshotId !== undefined) result.unknownOkfSnapshotId = unknownOkfSnapshotId;
+          if (feedback.failedUploads) result.failedUploads = feedback.failedUploads;
+          if (feedback.sessionDeleted) result.sessionDeleted = true;
           resolve(result);
         });
         return;
@@ -707,7 +766,7 @@ function isNonNegativeInt(value) {
  * { "version": 2,
  *   "entries": {
  *     "<manifestKey>": { "uploadId": "…", "totalSize": 6291456, "totalChunks": 7,
- *                        "nextChunkIndex": 3,
+ *                        "nextChunkIndex": 3, "sha256": "<hex>",
  *                        "slices": [{ "s": 0, "e": 912345, "enc": "gzip" }] } } }
  * ```
  *
@@ -720,6 +779,11 @@ function isNonNegativeInt(value) {
  * cost is one restarted upload, against a wrong-offset upload that would corrupt a session's logs.
  * Every entry is validated the same way and dropped individually — a plan whose slices do not tile
  * `[0, totalSize)` exactly cannot be resumed safely.
+ *
+ * `sha256` (DD-26 of plan `2026-11-23-session-logs-streaming`) is `bodyContentSha256()` of the body
+ * the plan was made for; `canResumePending()` resumes only when it matches the current body, so a
+ * same-size rewrite never continues an upload with the old bytes. An entry written by an older hook
+ * has none and is never resumed (one restarted upload); older hooks ignore the extra field.
  *
  * @param {string} pendingPath
  * @returns {Map<string, {uploadId: string, totalSize: number, totalChunks: number,
@@ -739,7 +803,7 @@ function readPendingUploads(pendingPath) {
 
   for (const [key, entry] of Object.entries(parsed.entries)) {
     if (!key || !isPlainObject(entry)) continue;
-    const { uploadId, totalSize, totalChunks, nextChunkIndex, slices } = entry;
+    const { uploadId, totalSize, totalChunks, nextChunkIndex, slices, sha256 } = entry;
     if (typeof uploadId !== 'string' || !uploadId) continue;
     if (!isNonNegativeInt(totalSize) || !isNonNegativeInt(totalChunks) || !isNonNegativeInt(nextChunkIndex)) continue;
     if (!Array.isArray(slices) || slices.length === 0 || slices.length !== totalChunks) continue;
@@ -760,6 +824,7 @@ function readPendingUploads(pendingPath) {
       totalChunks,
       nextChunkIndex,
       slices: slices.map((sl) => ({ s: sl.s, e: sl.e, enc: sl.enc === 'gzip' ? 'gzip' : 'identity' })),
+      ...(typeof sha256 === 'string' && sha256 ? { sha256 } : {}),
     });
   }
   return map;
@@ -785,6 +850,7 @@ function writePendingUploads(telemetryDir, pendingPath, map, sessionId, cwd) {
         totalSize: rec.totalSize,
         totalChunks: rec.totalChunks,
         nextChunkIndex: rec.nextChunkIndex,
+        ...(typeof rec.sha256 === 'string' && rec.sha256 ? { sha256: rec.sha256 } : {}),
         slices: (Array.isArray(rec.slices) ? rec.slices : []).map((sl) => ({
           s: sl.s,
           e: sl.e,
@@ -843,15 +909,31 @@ function writePendingUploads(telemetryDir, pendingPath, map, sessionId, cwd) {
  *   `workflowRunId`) by forwarding to each `uploadFile()` call below.
  * @returns {Promise<{ success: boolean, reason: string|null, warnings?: string[], wireBytes: number,
  *   plainBytes: number, requests: number, fallback: boolean, unknownSnapshotId?: string,
- *   unknownOkfSnapshotId?: string }>}
+ *   unknownOkfSnapshotId?: string, failedUploads?: Array<{sessionId: string, type: string}>,
+ *   sessionDeleted?: true }>}
  *   `wireBytes` sums every request body actually put on the wire (so a restart's re-sent chunks
  *   are counted, which is the honest transfer cost); `plainBytes` is the file's uncompressed size;
  *   `requests` counts the requests this call made; `fallback` is true when the peer rejected a
  *   gzipped body and the run had to fall back to sending it uncompressed. `unknownSnapshotId`
  *   (DD-8) is set only on a completing result, taken from the final chunk's response.
+ *   `failedUploads` (DD-25) collects the entries of every chunk response this call got — the server
+ *   flags them delivered as it answers, so none may be dropped — on success and failure alike;
+ *   `sessionDeleted` is taken from the completing response (the server answers a deleted session's
+ *   chunk 0 with `complete: true`).
+ *
+ * Chunk 0 carries `contentSha256` of the whole uncompressed body (DD-24); the same hash goes into
+ * the pending record, and a stored record is resumed only via `canResumePending()`.
  */
 async function uploadFileChunked(serverUrl, apiKey, namespace, sessionId, body, timeoutMs, hookSessionId, cwd, parentSessionId, workflowRunId, telemetryDir, manifestKey, snapshotQuery, agentMeta) {
   const totalSize = Buffer.byteLength(body);
+  const bodySha256 = bodyContentSha256(body);
+  /** DD-25 feedback from every chunk response of this call. */
+  const failedUploads = [];
+  /** @param {object} out - a result about to be returned; gets the collected feedback */
+  const withFeedback = (out) => {
+    if (failedUploads.length > 0) out.failedUploads = failedUploads;
+    return out;
+  };
   const pendingPath = path.join(telemetryDir, '.claude-logs.pending');
   const pending = readPendingUploads(pendingPath);
   const loopback = isLoopbackServerUrl(serverUrl);
@@ -879,11 +961,12 @@ async function uploadFileChunked(serverUrl, apiKey, namespace, sessionId, body, 
     return planned;
   };
 
-  // A pending record only applies to the same file and only if it still has a chunk
-  // left to send; a resumed run replays its stored plan verbatim, so it can never announce a
-  // different `totalChunks` for an uploadId the server already knows.
+  // A pending record only applies to the same bytes (sha256 and size) and only if it still has a
+  // chunk left to send (`canResumePending`); a resumed run replays its stored plan verbatim, so it
+  // can never announce a different `totalChunks` for an uploadId the server already knows. Anything
+  // else restarts from chunk 0 under a new uploadId.
   const existing = pending.get(manifestKey);
-  const resumed = !!(existing && existing.totalSize === totalSize && existing.nextChunkIndex < existing.totalChunks);
+  const resumed = canResumePending(existing, totalSize, bodySha256);
 
   let slices = resumed ? existing.slices : makePlan();
   let totalChunks = resumed ? existing.totalChunks : slices.length;
@@ -912,9 +995,11 @@ async function uploadFileChunked(serverUrl, apiKey, namespace, sessionId, body, 
     const result = await uploadFile(
       serverUrl, apiKey, namespace, sessionId, chunkBody, timeoutMs, hookSessionId, cwd,
       parentSessionId, workflowRunId, chunkMeta, useGzip ? 'gzip' : null, snapshotQuery, agentMeta,
+      chunkIndex === 0 ? bodySha256 : null,
     );
     requests++;
     wireBytes += chunkBody.length;
+    if (Array.isArray(result.failedUploads)) failedUploads.push(...result.failedUploads);
 
     if (!result.success) {
       // (1) A resumed chunk request (reusing a stored uploadId) that comes back 400 — e.g. the
@@ -966,7 +1051,7 @@ async function uploadFileChunked(serverUrl, apiKey, namespace, sessionId, body, 
         failed.unreachable = true;
         failed.errorCode = result.errorCode;
       }
-      return failed;
+      return withFeedback(failed);
     }
 
     if (result.complete) {
@@ -983,11 +1068,14 @@ async function uploadFileChunked(serverUrl, apiKey, namespace, sessionId, body, 
       };
       if (result.unknownSnapshotId !== undefined) final.unknownSnapshotId = result.unknownSnapshotId;
       if (result.unknownOkfSnapshotId !== undefined) final.unknownOkfSnapshotId = result.unknownOkfSnapshotId;
-      return final;
+      if (result.sessionDeleted === true) final.sessionDeleted = true;
+      return withFeedback(final);
     }
 
     // Record the plan and the next chunk to send, so a later run can resume from here.
-    pending.set(manifestKey, { uploadId, totalSize, totalChunks, nextChunkIndex: chunkIndex + 1, slices });
+    pending.set(manifestKey, {
+      uploadId, totalSize, totalChunks, nextChunkIndex: chunkIndex + 1, slices, sha256: bodySha256,
+    });
     writePendingUploads(telemetryDir, pendingPath, pending, hookSessionId, cwd);
 
     chunkIndex++;
@@ -996,14 +1084,14 @@ async function uploadFileChunked(serverUrl, apiKey, namespace, sessionId, body, 
   // Defensive fallback: the loop only exits normally via the `complete: true` branch
   // above. Reaching here means the server never reported completion on the final
   // chunk — treat it as a failure rather than silently reporting success.
-  return {
+  return withFeedback({
     success: false,
     reason: 'chunked upload did not receive a final completion response',
     wireBytes,
     plainBytes: totalSize,
     requests,
     fallback,
-  };
+  });
 }
 
 /**
@@ -1044,6 +1132,8 @@ async function uploadFileMaybeCompressed(serverUrl, apiKey, namespace, sessionId
   const plainBytes = Buffer.byteLength(body);
   const loopback = isLoopbackServerUrl(serverUrl);
   let fallback = gzipUnsupported && !loopback;
+  // DD-24: the hash of the uncompressed body, the same on the gzipped attempt and the plain retry.
+  const contentSha256 = bodyContentSha256(body);
 
   let wireBody = body;
   let encoding = null;
@@ -1057,7 +1147,7 @@ async function uploadFileMaybeCompressed(serverUrl, apiKey, namespace, sessionId
 
   const result = await uploadFile(
     serverUrl, apiKey, namespace, sessionId, wireBody, timeoutMs, hookSessionId, cwd,
-    parentSessionId, workflowRunId, null, encoding, snapshotQuery, agentMeta,
+    parentSessionId, workflowRunId, null, encoding, snapshotQuery, agentMeta, contentSha256,
   );
   let requests = 1;
   let wireBytes = Buffer.byteLength(wireBody);
@@ -1066,7 +1156,7 @@ async function uploadFileMaybeCompressed(serverUrl, apiKey, namespace, sessionId
     // Same body, same URL, same query params — only the encoding changes.
     const retry = await uploadFile(
       serverUrl, apiKey, namespace, sessionId, body, timeoutMs, hookSessionId, cwd,
-      parentSessionId, workflowRunId, null, null, snapshotQuery, agentMeta,
+      parentSessionId, workflowRunId, null, null, snapshotQuery, agentMeta, contentSha256,
     );
     requests++;
     wireBytes += plainBytes;
@@ -1280,6 +1370,9 @@ function releaseUploadLock(telemetryDir) {
 
 module.exports = {
   CHUNK_SIZE_BYTES,
+  UPLOAD_RESPONSE_READ_CAP,
+  bodyContentSha256,
+  parseUploadFeedback,
   GZIP_DEFAULT_RATIO,
   GZIP_SAFETY_MARGIN,
   GZIP_SHRINK_FACTOR,

@@ -1461,6 +1461,14 @@ export interface SubagentStats {
   cacheReadTokens: number;
   cacheWriteTokens: number;
   /**
+   * The 5-minute-TTL share of `cacheWriteTokens` (`session_stats.cache_write_5m_tokens`).
+   * Absent from servers before 2026-11-23-session-logs-streaming: price the whole
+   * `cacheWriteTokens` as 5m then.
+   */
+  cacheWrite5mTokens?: number;
+  /** The 1-hour-TTL share of `cacheWriteTokens`; absent from older servers (treat as 0). */
+  cacheWrite1hTokens?: number;
+  /**
    * Billed web-search requests of this child session — priced **per request**, so
    * never divided by a million and never added into a token total.
    */
@@ -1695,96 +1703,94 @@ export interface SessionLogsData {
   harnessSnapshot?: HarnessSnapshot | null;
 }
 
-export async function fetchSessionLogs(
-  repoId: number,
-  sessionId: string,
-  teamId?: number,
-): Promise<SessionLogsData> {
-  const url = teamId
-    ? `/api/v1/repositories/${repoId}/sessions/${encodeURIComponent(sessionId)}/logs?teamId=${teamId}`
-    : `/api/v1/repositories/${repoId}/sessions/${encodeURIComponent(sessionId)}/logs`;
-  const res = await apiFetch(url);
-  if (!res.ok) throw new ApiError(res.status);
-  return (await res.json()) as SessionLogsData;
-}
-
 /** One JSONL line of a stored log body. */
 export type SessionLogLine = Record<string, unknown>;
 
-/** OTEL liveness of the root session (session-map DD-9). */
-export interface SessionLogsDeltaLiveness {
+/** The stored log kind of one part: the root's two logs, or one sub-agent's log. */
+export type SessionLogPartType = 'claude' | 'artisyn' | 'claude-subagent';
+
+/**
+ * One stored log blob of a session tree (one `logs` row with a body). Mirrors the server's
+ * `SessionLogPart` (`server/src/logs/dto/session-log-parts.dto.ts`), kept in sync by convention.
+ */
+export interface SessionLogPart {
+  /** Root session id, or `agent-<id>` for a sub-agent. */
+  sessionId: string;
+  logType: SessionLogPartType;
+  /** The body revision — compared for equality only; changes whenever the body changes. */
+  rev: string;
+  parentSessionId: string | null;
+  agentDescription: string | null;
+  workflowPhase: string | null;
+  workflowRunId: string | null;
+}
+
+/**
+ * Response of `GET …/sessions/:sessionId/logs/parts`: everything `/logs` returns except the log
+ * bodies, which load one part at a time with {@link fetchSessionLogPart}.
+ */
+export interface SessionLogPartsManifest {
+  /** Root claude, root artisyn, then sub-agents by session id; parts without a body omitted. */
+  parts: SessionLogPart[];
+  subagentStats: Record<string, SubagentStats>;
+  rootStats: SessionRootStats | null;
+  workflows: WorkflowRun[];
+  turnEndAdvisor: NonNullable<SessionLogsData['turnEndAdvisor']> | null;
+  sessionAttribution: NonNullable<SessionLogsData['sessionAttribution']>;
+  harnessSnapshot: HarnessSnapshot | null;
+  /** The server has a backlog older than 30 s, so derived figures may lag behind the upload. */
+  derivedLagging: boolean;
+  /** The root session's OTEL liveness (the Session Map's LIVE / Replay); absent from an older server. */
+  liveness?: SessionLiveness;
+  /** Server clock (ISO) when the manifest was built; absent from an older server. */
+  serverTime?: string;
+}
+
+function sessionLogsBase(repoId: number, sessionId: string): string {
+  return `/api/v1/repositories/${repoId}/sessions/${encodeURIComponent(sessionId)}/logs`;
+}
+
+/** The parts manifest of one session tree (no log bodies). */
+export async function fetchSessionLogParts(
+  repoId: number,
+  sessionId: string,
+  teamId?: number,
+): Promise<SessionLogPartsManifest> {
+  const q = new URLSearchParams();
+  if (teamId != null) q.set('teamId', String(teamId));
+  const qs = q.toString();
+  const base = `${sessionLogsBase(repoId, sessionId)}/parts`;
+  const res = await apiFetch(qs ? `${base}?${qs}` : base);
+  if (!res.ok) throw await readApiError(res);
+  return res.json() as Promise<SessionLogPartsManifest>;
+}
+
+/**
+ * One part's log lines. `rev` goes into the URL as a cache-buster; the server also answers
+ * `If-None-Match` with 304, which the browser cache turns back into the stored body.
+ */
+export async function fetchSessionLogPart(
+  repoId: number,
+  sessionId: string,
+  part: Pick<SessionLogPart, 'sessionId' | 'logType' | 'rev'>,
+  teamId?: number,
+): Promise<SessionLogLine[]> {
+  const q = new URLSearchParams();
+  if (teamId != null) q.set('teamId', String(teamId));
+  q.set('rev', part.rev);
+  const url = `${sessionLogsBase(repoId, sessionId)}/parts/${encodeURIComponent(
+    part.sessionId,
+  )}/${encodeURIComponent(part.logType)}?${q.toString()}`;
+  const res = await apiFetch(url);
+  if (!res.ok) throw await readApiError(res);
+  return res.json() as Promise<SessionLogLine[]>;
+}
+
+/** OTEL liveness of the root session, as the parts manifest reports it (the Session Map's LIVE / Replay). */
+export interface SessionLiveness {
   hasOtel: boolean;
   live: boolean;
   lastActivityAt: string | null;
-}
-
-/** A sub-agent first seen by a delta: full lines plus its DB linkage. */
-export interface SessionLogsDeltaNewSubagent {
-  sessionId: string;
-  parentSessionId: string | null;
-  /** `sessions.workflow_run_id` — set for an agent spawned by a Workflow run. */
-  workflowRunId: string | null;
-  /** `description` from the agent's `.meta.json`; absent for an old server. */
-  agentDescription?: string | null;
-  /** `workflowPhase` from the agent's `.meta.json`; absent for an old server. */
-  workflowPhase?: string | null;
-  logs: SessionLogLine[];
-}
-
-/**
- * Response of `GET …/sessions/:sessionId/logs/delta` (session-map DD-8). Mirrors the server's
- * `SessionLogsDeltaResponse` (`server/src/logs/dto/session-logs-delta.dto.ts`), kept in sync by
- * convention. `reload: true` = the cursor no longer matches what is stored; poll again without one.
- */
-export type SessionLogsDeltaData =
-  | { reload: true; serverTime: string }
-  | {
-      reload: false;
-      /** Root session's new artisyn lines (body[n:]) — full body when the row is new. */
-      rootArtisynLines: SessionLogLine[];
-      /** Root session's new claude lines. */
-      rootClaudeLines: SessionLogLine[];
-      /**
-       * Sub-agent logs that grew: new lines only. `lines` may be empty when only the agent's
-       * `.meta.json` labels changed; the two label fields are absent for an old server.
-       */
-      subagentAppends: {
-        sessionId: string;
-        lines: SessionLogLine[];
-        agentDescription?: string | null;
-        workflowPhase?: string | null;
-      }[];
-      /** Sub-agent sessions/logs not in the cursor: full lines plus linkage. */
-      newSubagents: SessionLogsDeltaNewSubagent[];
-      /** Full stats rows of every new/changed sub-agent, keyed by sessionId. */
-      subagentStats: Record<string, SubagentStats>;
-      /** Full recomputed list, or `null` = unchanged since the cursor. */
-      workflows: WorkflowRun[] | null;
-      liveness: SessionLogsDeltaLiveness;
-      serverTime: string;
-      /** Next cursor; `''` = too large to issue, the next poll is a full snapshot. */
-      cursor: string;
-    };
-
-/**
- * What changed in a session's logs since `cursor` (the previous delta's cursor). A `null` or
- * `''` cursor is omitted from the request and yields a full snapshot (session-map DD-10).
- */
-export async function fetchSessionLogsDelta(
-  repoId: number,
-  sessionId: string,
-  cursor: string | null,
-  teamId?: number,
-  signal?: AbortSignal,
-): Promise<SessionLogsDeltaData> {
-  const q = new URLSearchParams();
-  if (cursor) q.set('cursor', cursor);
-  if (teamId != null) q.set('teamId', String(teamId));
-  const qs = q.toString();
-  const base = `/api/v1/repositories/${repoId}/sessions/${encodeURIComponent(sessionId)}/logs/delta`;
-  const res = await apiFetch(qs ? `${base}?${qs}` : base, { signal });
-  if (!res.ok) throw await readApiError(res);
-  return res.json() as Promise<SessionLogsDeltaData>;
 }
 
 export interface ExportScopeFilters {

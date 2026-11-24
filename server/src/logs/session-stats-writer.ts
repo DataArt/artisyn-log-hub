@@ -11,6 +11,7 @@ import type { OtelStatusEvent } from './artisyn-extractor';
 import type { ClaudeStats } from './claude-extractor';
 import type { SessionCallTokens } from './cost.sql';
 import { SESSION_LIST_FLAGS_VERSION } from './session-list-flags';
+import { WORKFLOWS_VERSION } from './workflow-extractor';
 
 /**
  * Upserts a `session_stats` row for one session from a `ClaudeStats` result.
@@ -42,6 +43,11 @@ import { SESSION_LIST_FLAGS_VERSION } from './session-list-flags';
  * `claude-subagent` upload or recompute passes `listFlags: null` and leaves them untouched,
  * so a sub-agent never overwrites its root session's flags. Rows written before 0080 keep
  * `list_flags_version` NULL until the startup backfill fills them.
+ *
+ * `workflows` / `workflows_version` (migration 0096, impl-plan DD-6 of
+ * 2026-11-23-session-logs-streaming) follow the same rule: written only when `stats.workflows`
+ * is non-null (a root transcript). Rows written before 0096 keep `workflows_version` NULL until
+ * `WorkflowsBackfillService` fills them.
  */
 export async function upsertSessionStatsRow(
   db: DrizzleDb,
@@ -57,6 +63,10 @@ export async function upsertSessionStatsRow(
         listFlagsVersion: SESSION_LIST_FLAGS_VERSION,
       }
     : {};
+  const workflowCols =
+    stats.workflows !== null
+      ? { workflows: stats.workflows, workflowsVersion: WORKFLOWS_VERSION }
+      : {};
   await db
     .insert(sessionStats)
     .values({
@@ -88,6 +98,7 @@ export async function upsertSessionStatsRow(
       tokenByServiceTier: stats.tokenByServiceTier,
       claudeVersion: stats.claudeVersion,
       ...listFlagCols,
+      ...workflowCols,
       updatedAt: new Date(),
     })
     .onConflictDoUpdate({
@@ -123,6 +134,7 @@ export async function upsertSessionStatsRow(
         tokenByServiceTier: stats.tokenByServiceTier,
         claudeVersion: stats.claudeVersion,
         ...listFlagCols,
+        ...workflowCols,
         updatedAt: new Date(),
       },
     });

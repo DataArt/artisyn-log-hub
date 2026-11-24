@@ -26,6 +26,13 @@
 //     SessionEnd ×4, upload lock ×4, hook-status, one-line-per-run logging ×4 (≈ 35)
 //   - hook/.claude/telemetry_tool/__tests__/manifest-bounded.test.js (5)
 //
+// Steps 6b–6e (2026-11-23-session-logs-streaming, hook 3.2.0, DD-24/25/26): `.claude-logs.sent.v2`
+// is written next to the old manifest with the read size, the pre-read mtime and the upload-params
+// hash; a same-bytes mtime change and a late `.meta.json` re-send the file; a `failedUploads` entry
+// in the hub's answer drops that key from both manifests, so the next Stop re-sends it. Step 7's
+// SessionEnd records the session's own transcript in both manifests — at the size already there,
+// so the old manifest's bytes stay the same.
+//
 // Step 16 (2026-10-30 OTEL tabs, AC-13, old-server half): the 2.29.0 OTEL receiver against a Log
 // Hub that predates `POST /api/v2/otel-realtime` (the fake hub answers it 404). One realtime
 // batch is tried, the 404 switches the channel off (`rt-disable` in receiver.log) and nothing more
@@ -56,6 +63,7 @@
 // in a linked worktree it makes the worktree the project root, and it is ignored when unset or
 // when it does not contain the cwd.
 import { spawnSync } from 'child_process';
+import { createHash } from 'crypto';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as zlib from 'zlib';
@@ -97,6 +105,19 @@ import { callLines, otelTurn, spanLines } from '../fixtures/otel/otel-lines';
 
 const API_KEY = 'k-test-123456';
 const HARNESS_TYPES = ['harness-snapshot-ref', 'harness-snapshot'];
+
+/** One `.claude-logs.sent.v2` entry (DD-26). */
+interface V2Entry {
+  size: number;
+  mtimeMs: number;
+  paramsSha256: string;
+  fp?: string;
+}
+
+/** DD-26 `paramsSha256`: sha256 of the JSON list [type, sessionId, parent, workflowRunId, description, phase]. */
+function paramsHash(list: string[]): string {
+  return createHash('sha256').update(JSON.stringify(list), 'utf8').digest('hex');
+}
 
 function line(obj: object): string {
   return `${JSON.stringify(obj)}\n`;
@@ -326,6 +347,76 @@ test('@S-HOOK-01 a Stop run uploads the right files in the right order and never
       expect(hub!.uploads().sort()).toEqual(['artisyn/cur', 'claude/old']);
     });
 
+    // Steps 6b–6e (2026-11-23-session-logs-streaming, DD-25/DD-26): the v2 manifest next to the old one.
+    const v2Path = path.join(telemetry, '.claude-logs.sent.v2');
+    const readV2 = () => (JSON.parse(fs.readFileSync(v2Path, 'utf8')) as { version: number; entries: Record<string, V2Entry> });
+    const oldTranscript = path.join(project, 'old.jsonl');
+
+    await test.step('6b. the v2 manifest holds every key of the old one with the same size, the pre-read mtime and the params hash; every upload asks for feedback and carries the body hash', async () => {
+      const v1 = readManifest(telemetry);
+      const v2 = readV2();
+      expect(v2.version).toBe(2);
+      expect(Object.keys(v2.entries).sort()).toEqual([...v1.keys()].sort());
+      for (const [k, size] of v1) expect(v2.entries[k].size, k).toBe(size);
+      expect(v2.entries['claude/old.jsonl']).toEqual({
+        size: fs.statSync(oldTranscript).size,
+        mtimeMs: fs.statSync(oldTranscript).mtimeMs,
+        paramsSha256: paramsHash(['claude', 'old', '', '', '', '']),
+      });
+      for (const e of Object.values(v2.entries)) expect(e.paramsSha256).toMatch(/^[0-9a-f]{64}$/);
+      // The last run's requests (step 6): DD-25 / DD-24 query params.
+      expect(hub!.requests.find((r) => r.sessionId === 'old')?.query.get('contentSha256')).toMatch(/^[0-9a-f]{64}$/);
+      for (const r of hub!.requests) {
+        expect(r.query.get('uploadFeedback'), `${r.type}/${r.sessionId}`).toBe('1');
+        const declared = r.query.get('contentSha256');
+        if (declared !== null) expect(declared, `${r.type}/${r.sessionId}`).toBe(createHash('sha256').update(bodyText(r), 'utf8').digest('hex'));
+      }
+    });
+
+    await test.step('6c. only the mtime of the old transcript changes (same bytes) → exactly that file is sent again, then skipped', async () => {
+      const later = new Date(Date.now() + 60_000);
+      fs.utimesSync(oldTranscript, later, later);
+      hub!.requests.length = 0;
+      expect((await run('Stop')).code).toBe(0);
+      expect(hub!.uploads().sort()).toEqual(['artisyn/cur', 'claude/old']);
+      expect(readV2().entries['claude/old.jsonl'].mtimeMs).toBe(fs.statSync(oldTranscript).mtimeMs);
+      hub!.requests.length = 0;
+      expect((await run('Stop')).code).toBe(0);
+      expect(hub!.uploads()).toEqual(['artisyn/cur']);
+    });
+
+    await test.step('6d. a .meta.json written after the sub-agent was sent changes its upload params → sent again with the label', async () => {
+      fs.writeFileSync(path.join(agents, 'agent-b2.meta.json'), JSON.stringify({ description: 'late label' }));
+      hub!.requests.length = 0;
+      expect((await run('Stop')).code).toBe(0);
+      expect(hub!.uploads().sort()).toEqual(['artisyn/cur', 'claude-subagent/agent-b2']);
+      const b2 = hub!.requests.find((r) => r.sessionId === 'agent-b2')!;
+      expect(b2.query.get('agentDescription')).toBe('late label');
+      expect(b2.query.get('parentSessionId')).toBe('cur');
+    });
+
+    await test.step('6e. the hub reports a failed upload (`failedUploads`) → its entry leaves both manifests and the next Stop sends it again', async () => {
+      hub!.respond((req) =>
+        req.type === 'artisyn' && req.sessionId === 'cur'
+          ? { status: 201, body: JSON.stringify({ warnings: [], failedUploads: [{ sessionId: 'old', type: 'claude' }] }) }
+          : { status: 201, body: JSON.stringify({ warnings: [] }) },
+      );
+      hub!.requests.length = 0;
+      expect((await run('Stop')).code).toBe(0);
+      expect(hub!.uploads()).toEqual(['artisyn/cur']);
+      expect(readManifest(telemetry).has('claude/old.jsonl'), readHookLog(repo, 'send-logs-hook.js').slice(-12).join('\n')).toBe(false);
+      expect(readV2().entries['claude/old.jsonl']).toBeUndefined();
+      expect(readManifest(telemetry).has('artisyn/old.jsonl'), 'only the reported type is forgotten').toBe(true);
+      expect(readHookLog(repo, 'send-logs-hook.js').some((l) => l.includes('server reported failed uploads — will re-send: claude/old.jsonl'))).toBe(true);
+
+      hub!.respond(() => ({ status: 201, body: JSON.stringify({ warnings: [] }) }));
+      hub!.requests.length = 0;
+      expect((await run('Stop')).code).toBe(0);
+      expect(hub!.uploads().sort()).toEqual(['artisyn/cur', 'claude/old']);
+      expect(readManifest(telemetry).get('claude/old.jsonl')).toBe(fs.statSync(oldTranscript).size);
+      expect(readV2().entries['claude/old.jsonl']?.size).toBe(fs.statSync(oldTranscript).size);
+    });
+
     await test.step('7. SessionEnd for cur → only its artisyn and claude files; manifest untouched; lock released', async () => {
       const manifestBefore = fs.readFileSync(path.join(telemetry, '.claude-logs.sent'), 'utf8');
       hub!.requests.length = 0;
@@ -457,10 +548,11 @@ test('@S-HOOK-01 a Stop run uploads the right files in the right order and never
 
     await test.step('11. hook.log: an activate line per run and a closing line with the counters', async () => {
       const lines = readHookLog(repo, 'send-logs-hook.js');
-      // Hook runs above: steps 1, 5, 5b (×2), 6, 7, 8, 9 (×2), 10 (×3) = 12; the two --run-job runs
-      // of step 10b log «run-job start», not an event line.
-      expect(lines.filter((l) => /\[activate\] (Stop|SessionEnd) event received/.test(l))).toHaveLength(12);
-      expect(lines.filter((l) => /\[result\] done: uploaded=\d+ skipped=\d+ failed=0 total=\d+ target=http:\/\/127\.0\.0\.1:\d+/.test(l)).length).toBe(7);
+      // Hook runs above: steps 1, 5, 5b (×2), 6, 6c (×2), 6d, 6e (×2), 7, 8, 9 (×2), 10 (×3) = 17;
+      // the two --run-job runs of step 10b log «run-job start», not an event line. A closing
+      // `done:` line comes from every full Stop scan: 1, 5, 5b ×2, 6, 6c ×2, 6d, 6e ×2, 8, 9 = 12.
+      expect(lines.filter((l) => /\[activate\] (Stop|SessionEnd) event received/.test(l))).toHaveLength(17);
+      expect(lines.filter((l) => /\[result\] done: uploaded=\d+ skipped=\d+ failed=0 total=\d+ target=http:\/\/127\.0\.0\.1:\d+/.test(l)).length).toBe(12);
       expect(lines.some((l) => /claude\/cur\.jsonl: uploaded \d+ KB uncompressed in 1 request$/.test(l))).toBe(true);
       // Step 7's in-process SessionEnd and step 10b's two job runs; step 10's SessionEnds flush nothing.
       expect(lines.filter((l) => /session-end flush done: uploaded=2 failed=0 total=2/.test(l))).toHaveLength(3);

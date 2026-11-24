@@ -1,9 +1,8 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { Loader2, RefreshCw, Star, Trash2 } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { RefreshCw, Star, Trash2 } from 'lucide-react';
+import { useEffect, useMemo } from 'react';
 import type { RepositorySession } from '../../../models/repositories';
 import type { ModelPricingMap } from '../../../models/pricing';
-import type { UseQueryResult } from '@tanstack/react-query';
 import { ConfirmDialog } from '../../ui/confirm-dialog';
 import { cn } from '../../lib/cn';
 import { useAuth } from '../../context/AuthContext';
@@ -11,11 +10,17 @@ import { SessionDetailHeader } from './SessionDetailHeader';
 import { deriveSessionUsage } from './session-log/usage/session-usage-derive';
 import { computeTreeCodeImpact } from './session-log/tree-code-impact';
 import type { ParsedSession } from './session-log/types';
-import type { SessionLogsData } from '../../api';
+import type { SubagentMetaMap } from './session-log/log-parser';
+import type { SessionLogsQueryView } from './session-parts/useSessionLogParts';
 import type { RepoConfig } from '../../../models/repositories';
 import { ToolViewProvider } from './session-log/tool-call-view/ToolViewContext';
 import { SessionTabBar } from './SessionTabBar';
 import { SessionTabContent } from './SessionTabContent';
+import { SessionLoadBanners } from './SessionLoadBanners';
+import {
+  SessionPartsProvider,
+  type SessionPartsValue,
+} from './session-parts/SessionPartsContext';
 import { isChartTab, type TabVisibilityContext } from '../../tab-ids';
 import { collectBashCalls } from './session-log/bash-tab/collect-bash-calls';
 import { readChartTab, rememberChartTab } from './session-log/charts/chart-tab';
@@ -42,10 +47,14 @@ export interface SessionDetailPaneProps {
   onDeleteConfirm: () => void;
   onDeleteCancel: () => void;
   deleteLoading: boolean;
-  logsQuery: UseQueryResult<SessionLogsData>;
+  logsQuery: SessionLogsQueryView;
   parsedLogs: ParsedSession | null;
   subagentLogsMap: Map<string, Record<string, unknown>[]>;
   agentParentMap: Map<string, string | null>;
+  /** Every manifest sub-agent's `.meta.json` labels, loaded or not. */
+  subagentMeta: SubagentMetaMap;
+  /** Bare ids of every sub-agent in the manifest, loaded or not (DD-31). */
+  knownAgentIds: ReadonlySet<string>;
   pricing: ModelPricingMap | null | undefined;
   repoConfig: RepoConfig | null;
   topN: number | null;
@@ -53,6 +62,10 @@ export interface SessionDetailPaneProps {
   repoUrl: string | undefined;
   sessionCost: number | null;
   isReloadingUpdatedSession: boolean;
+  /** On-demand loading of this session's log parts, provided to the tabs (DD-30a). */
+  sessionParts: SessionPartsValue;
+  /** The parts manifest's `derivedLagging` flag (DD-14). */
+  derivedLagging: boolean;
   /** `tool_use` id of a Tools/MCP "Open in session" link (`tu` param, DD-19). */
   targetToolUseId?: string | null;
   /** Clears the `tu` param once the Logs tab has acted on it. */
@@ -79,6 +92,8 @@ export function SessionDetailPane({
   parsedLogs,
   subagentLogsMap,
   agentParentMap,
+  subagentMeta,
+  knownAgentIds,
   pricing,
   repoConfig,
   topN,
@@ -86,6 +101,8 @@ export function SessionDetailPane({
   repoUrl,
   sessionCost,
   isReloadingUpdatedSession,
+  sessionParts,
+  derivedLagging,
   targetToolUseId,
   onTargetToolUseConsumed,
 }: SessionDetailPaneProps) {
@@ -100,17 +117,8 @@ export function SessionDetailPane({
     (user?.id === selectedSession.userId ||
       (teamId !== undefined && logsQuery.isSuccess));
 
-  // session-map DD-10: on the Map tab, Refresh runs the Map's own poll, not a `/logs` refetch.
-  const mapRefreshRef = useRef<(() => void) | null>(null);
-  const registerMapRefresh = useCallback((fn: (() => void) | null) => {
-    mapRefreshRef.current = fn;
-  }, []);
+  // Every tab, the Session Map included, reads the parts: Refresh re-reads the manifest.
   const handleRefresh = () => {
-    const mapRefresh = mapRefreshRef.current;
-    if (sessionTab === 'session-map' && mapRefresh !== null) {
-      mapRefresh();
-      return;
-    }
     void queryClient.invalidateQueries({
       queryKey: ['session-logs', repoId, selectedSession.sessionId, teamId],
     });
@@ -131,20 +139,25 @@ export function SessionDetailPane({
   const mainLogs = logsQuery.data?.main ?? null;
   const subagentStats = logsQuery.data?.subagentStats ?? null;
   const rootStats = logsQuery.data?.rootStats ?? null;
-  const usage = useMemo(
-    () => deriveSessionUsage(mainLogs, [...subagentLogsMap.values()]),
-    [mainLogs, subagentLogsMap],
-  );
+  // Root transcript only (DD-33): sub-agent parts load on demand, so a tree walk here would
+  // shift as they arrive. The tree figures come from `subagentStats` (`computeTreeCodeImpact`).
+  const usage = useMemo(() => deriveSessionUsage(mainLogs), [mainLogs]);
   const codeImpact = useMemo(
     () => computeTreeCodeImpact({ usage, subagentStats, rootStats }),
     [usage, subagentStats, rootStats],
   );
 
-  // Tools/MCP failure dot (DD-9): any transcript-derived MCP failure, from the memo above — no
-  // extra request and no early load of the lazy Tools tab (FR-B3).
+  // Tools/MCP failure dot (DD-9): any transcript-derived MCP failure across the tree — no
+  // extra request and no early load of the lazy Tools tab (FR-B3). Hidden until every part is
+  // loaded (DD-33), so it never flips as sub-agent parts arrive.
+  const { allLoaded } = sessionParts;
   const toolsFailure = useMemo(
-    () => usage.mcpServers.some((s) => s.failures > 0),
-    [usage],
+    () =>
+      allLoaded &&
+      deriveSessionUsage(mainLogs, [
+        ...subagentLogsMap.values(),
+      ]).mcpServers.some((s) => s.failures > 0),
+    [allLoaded, mainLogs, subagentLogsMap],
   );
 
   // The chart last opened is what a legacy `tab=charts` link reopens (see below).
@@ -154,9 +167,13 @@ export function SessionDetailPane({
   }, [sessionTab]);
 
   // Bash command count for the tab bar (DD-20) — the same collector the Bash tab lists, no WASM.
+  // Undefined (no badge) until every part is loaded (DD-33).
   const bashCount = useMemo(
-    () => collectBashCalls(mainLogs, subagentLogsMap).length,
-    [mainLogs, subagentLogsMap],
+    () =>
+      allLoaded && logsQuery.data
+        ? collectBashCalls(mainLogs, subagentLogsMap).length
+        : undefined,
+    [allLoaded, logsQuery.data, mainLogs, subagentLogsMap],
   );
 
   // A stale/bookmarked `tab=charts` deep link — the charts used to be sub-tabs of one Charts tab
@@ -225,6 +242,7 @@ export function SessionDetailPane({
         <button
           onClick={handleRefresh}
           title="Refresh"
+          data-testid="session-refresh"
           className="mr-2 flex items-center justify-center rounded border border-border p-1 text-muted-foreground transition-colors hover:bg-accent/50 hover:text-foreground"
         >
           <RefreshCw
@@ -237,7 +255,7 @@ export function SessionDetailPane({
           lens={lens}
           onLensChange={handleLensChange}
           ctx={tabVisibility}
-          bashCount={logsQuery.data ? bashCount : undefined}
+          bashCount={bashCount}
           toolsFailure={toolsFailure}
         />
         {user?.id === selectedSession.userId && (
@@ -265,46 +283,47 @@ export function SessionDetailPane({
         onCancel={onDeleteCancel}
       />
 
-      {isReloadingUpdatedSession && (
-        <div className="flex shrink-0 items-center gap-2 border-b border-indigo-200 bg-indigo-50 px-3 py-1.5 text-xs text-indigo-700">
-          <Loader2 className="h-3 w-3 animate-spin" />
-          <span>Loading updated session…</span>
-        </div>
-      )}
+      <SessionLoadBanners
+        isReloadingUpdatedSession={isReloadingUpdatedSession}
+        derivedLagging={derivedLagging}
+      />
 
       <div className="flex-1 min-h-0 overflow-auto">
-        <ToolViewProvider
-          repoRoot={parsedLogs?.repoRoot ?? ''}
-          parsedLogs={parsedLogs}
-          subagentLogsMap={subagentLogsMap}
-          pricing={pricing ?? undefined}
-          sessionModel={parsedLogs?.summary.model}
-        >
-          <SessionTabContent
-            selectedSession={selectedSession}
-            sessionTab={sessionTab}
-            onSessionTabChange={onSessionTabChange}
-            onLensSwitch={handleLensChange}
-            repoId={repoId}
-            teamId={teamId}
-            logsQuery={logsQuery}
+        <SessionPartsProvider value={sessionParts}>
+          <ToolViewProvider
+            repoRoot={parsedLogs?.repoRoot ?? ''}
             parsedLogs={parsedLogs}
             subagentLogsMap={subagentLogsMap}
-            agentParentMap={agentParentMap}
-            pricing={pricing}
-            repoConfig={repoConfig}
-            topN={topN}
-            onTopNChange={onTopNChange}
-            repoUrl={repoUrl}
-            sessionCost={sessionCost}
-            usage={usage}
-            codeImpact={codeImpact}
-            bashCount={logsQuery.data ? bashCount : undefined}
-            registerMapRefresh={registerMapRefresh}
-            targetToolUseId={targetToolUseId}
-            onTargetToolUseConsumed={onTargetToolUseConsumed}
-          />
-        </ToolViewProvider>
+            pricing={pricing ?? undefined}
+            sessionModel={parsedLogs?.summary.model}
+          >
+            <SessionTabContent
+              selectedSession={selectedSession}
+              sessionTab={sessionTab}
+              onSessionTabChange={onSessionTabChange}
+              onLensSwitch={handleLensChange}
+              repoId={repoId}
+              teamId={teamId}
+              logsQuery={logsQuery}
+              parsedLogs={parsedLogs}
+              subagentLogsMap={subagentLogsMap}
+              agentParentMap={agentParentMap}
+              subagentMeta={subagentMeta}
+              knownAgentIds={knownAgentIds}
+              pricing={pricing}
+              repoConfig={repoConfig}
+              topN={topN}
+              onTopNChange={onTopNChange}
+              repoUrl={repoUrl}
+              sessionCost={sessionCost}
+              usage={usage}
+              codeImpact={codeImpact}
+              bashCount={bashCount}
+              targetToolUseId={targetToolUseId}
+              onTargetToolUseConsumed={onTargetToolUseConsumed}
+            />
+          </ToolViewProvider>
+        </SessionPartsProvider>
       </div>
     </>
   );

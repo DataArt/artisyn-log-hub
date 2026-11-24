@@ -1,0 +1,78 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="520" viewBox="0 0 1280 520" font-family="Segoe UI, Inter, Arial, sans-serif">
+  <title>Workstream history — record only, no reopen (FR-15)</title>
+  <rect width="1280" height="520" fill="#ffffff"/>
+  <line x1="0" y1="48" x2="1280" y2="48" stroke="#e5e7eb"/>
+  <text x="16" y="29" font-size="14" font-weight="600" fill="#111827">Artisyn AI Work Hub</text>
+  <text x="160" y="29" font-size="14" fill="#9ca3af">›</text>
+  <text x="176" y="29" font-size="14" fill="#6b7280">research › History</text>
+  <rect x="1126" y="10" width="138" height="28" rx="6" fill="#fff" stroke="#e5e7eb"/>
+  <text x="1136" y="29" font-size="13" fill="#6b7280">dt@dataart.com ⌄</text>
+
+  <text x="26" y="77" font-size="14" font-weight="600" fill="#111827">← Back to the workspace</text>
+  <text x="212" y="77" font-size="14" font-weight="600" fill="#111827">Workstream history</text>
+  <line x1="0" y1="96" x2="1280" y2="96" stroke="#e5e7eb"/>
+
+  <rect x="0" y="96" width="1280" height="34" fill="#f9fafb"/>
+  <line x1="0" y1="130" x2="1280" y2="130" stroke="#e5e7eb"/>
+  <g font-size="12" font-weight="600" fill="#6b7280">
+    <text x="16" y="118">Name</text>
+    <text x="220" y="118">Branch</text>
+    <text x="440" y="118">How it ended</text>
+    <text x="680" y="118">Opened</text>
+    <text x="900" y="118">Closed</text>
+  </g>
+
+  <!-- rows -->
+  <g font-size="14">
+    <text x="16" y="154" font-weight="600" fill="#111827">test-pw</text>
+    <text x="220" y="154" fill="#374151" font-family="Consolas, monospace" font-size="13">ws/test-pw</text>
+    <rect x="440" y="139" width="108" height="22" rx="11" fill="#ecfdf5" stroke="#a7f3d0"/>
+    <text x="450" y="155" font-size="12" fill="#047857">brought into main</text>
+    <text x="680" y="154" fill="#6b7280">11/23/2026, 2:48 PM</text>
+    <text x="900" y="154" fill="#6b7280">11/23/2026, 3:40 PM</text>
+    <line x1="0" y1="169" x2="1280" y2="169" stroke="#e5e7eb"/>
+
+    <text x="16" y="193" font-weight="600" fill="#111827">spike-auth</text>
+    <text x="220" y="193" fill="#374151" font-family="Consolas, monospace" font-size="13">ws/spike-auth</text>
+    <rect x="440" y="178" width="56" height="22" rx="11" fill="#f3f4f6" stroke="#e5e7eb"/>
+    <text x="451" y="194" font-size="12" fill="#374151">closed</text>
+    <text x="680" y="193" fill="#6b7280">11/22/2026, 10:02 AM</text>
+    <text x="900" y="193" fill="#6b7280">11/22/2026, 6:15 PM</text>
+    <line x1="0" y1="208" x2="1280" y2="208" stroke="#e5e7eb"/>
+
+    <text x="16" y="232" font-weight="600" fill="#111827">fix</text>
+    <text x="220" y="232" fill="#374151" font-family="Consolas, monospace" font-size="13">ws/fix</text>
+    <rect x="440" y="217" width="114" height="22" rx="11" fill="#eef0fb" stroke="#c7cdf5"/>
+    <text x="450" y="233" font-size="12" fill="#3b4fd8">merged elsewhere</text>
+    <text x="680" y="232" fill="#6b7280">11/14/2026, 2:00 PM</text>
+    <text x="900" y="232" fill="#6b7280">11/14/2026, 3:03 PM</text>
+    <line x1="0" y1="247" x2="1280" y2="247" stroke="#e5e7eb"/>
+
+    <text x="16" y="271" font-weight="600" fill="#111827">tmp-try</text>
+    <text x="220" y="271" fill="#9ca3af" font-family="Consolas, monospace" font-size="13" text-decoration="line-through">ws/tmp-try</text>
+    <text x="320" y="271" fill="#9ca3af" font-size="12">deleted</text>
+    <rect x="440" y="256" width="72" height="22" rx="11" fill="#fef2f2" stroke="#fecaca"/>
+    <text x="450" y="272" font-size="12" fill="#b91c1c">discarded</text>
+    <text x="680" y="271" fill="#6b7280">11/14/2026, 1:44 AM</text>
+    <text x="900" y="271" fill="#6b7280">11/14/2026, 1:47 AM</text>
+    <line x1="0" y1="286" x2="1280" y2="286" stroke="#e5e7eb"/>
+  </g>
+
+  <!-- removed: On disk column, chat replay, reopen -->
+  <rect x="1100" y="100" width="164" height="190" rx="4" fill="none" stroke="#ef4444" stroke-dasharray="4 3"/>
+  <text x="1112" y="118" font-size="12" fill="#9ca3af" text-decoration="line-through">On disk</text>
+  <text x="1112" y="154" font-size="12" fill="#9ca3af" text-decoration="line-through">Reopen</text>
+  <text x="1112" y="280" font-size="11" fill="#ef4444">removed: nothing on disk</text>
+
+  <text x="640" y="350" font-size="14" fill="#6b7280" text-anchor="middle">Closed workstreams keep only this record. To continue, open a new workstream</text>
+  <text x="640" y="370" font-size="14" fill="#6b7280" text-anchor="middle">(from the working branch, or from its ws/… branch if it still exists).</text>
+  <text x="640" y="392" font-size="12" fill="#ef4444" text-anchor="middle">Replaces "Select a workstream to see its chat." — transcript and recording are deleted (FR-15).</text>
+
+  <rect x="16" y="420" width="560" height="86" rx="6" fill="#fffbeb" stroke="#f59e0b"/>
+  <g font-size="12" fill="#b45309">
+    <text x="30" y="442" font-weight="600">Notes (FR-15)</text>
+    <text x="30" y="462">Columns: name, branch, created / closed dates, outcome. Rows are not clickable.</text>
+    <text x="30" y="480">Outcome values: brought into main · merged elsewhere · discarded · closed.</text>
+    <text x="30" y="498">Branch kept except for discarded (FR-13). Outcome derived vs stored: plan decision.</text>
+  </g>
+</svg>

@@ -36,6 +36,11 @@
 // session (recompute-all then fills its OKF rows from the now-known roots); a third archive with a
 // different snapshot never rebinds it.
 //
+// Step 19b (2026-11-23-session-logs-streaming, DD-19/DD-23): an imported body goes through the
+// same transcript extraction as an upload — a root and its sub-agent (an archive session with a
+// `parentSessionId`) get their `session_stats` re-derived — and is stored without a body hash
+// (`body_sha256` NULL), so the next hook upload of the same body is processed, not skipped.
+//
 // Step 20 (2026-11-19-export-import-staging-mount, FR4): with the staging dir replaced by a file,
 // repeated identical cleanup-sweep failures write one ERROR; the first good sweep logs one INFO.
 //
@@ -536,6 +541,46 @@ test('@S-REPO-11 import conflicts: the longer log wins; bootstrap import creates
     expect(other.okfSnapshotId).not.toBe(first.okfSnapshotId);
     await importZip(owner.api, repoA, other.zip);
     expect(await okfBinding()).toBe(first.okfSnapshotId);
+  });
+
+  await test.step('19b. DD-19/DD-23: zip import re-extracts the stats of a root and its sub-agent from the imported bodies and leaves body_sha256 NULL, so the next hook upload is processed', async () => {
+    const root = (turns: number): PromptSession => ({ sessionId: `r11-${run}-xroot`, prompt: `extract ${run}`, repoUrl, turns });
+    const agent = (turns: number) => ({ sessionId: `r11-${run}-xagent`, prompt: `extract agent ${run}`, repoUrl, turns, userEmail: owner.email, parentSessionId: root(1).sessionId });
+    const archive = (rootTurns: number, agentTurns: number) =>
+      buildExportZip({ sourceRepoUrl: repoUrl, sessions: [{ ...root(rootTurns), userEmail: owner.email }, agent(agentTurns)] });
+    /** Tokens of the session's `session_stats` row and the hash / receive time of its claude log. */
+    const extracted = async (sessionId: string) => {
+      const { rows } = await db.query<{ input_tokens: string; output_tokens: string; body_sha256: string | null; body_received_at: Date | null; parent_session_id: string | null }>(
+        `SELECT st.input_tokens, st.output_tokens, l.body_sha256, l.body_received_at, s.parent_session_id
+           FROM sessions s
+           JOIN logs l ON l.session_id = s.id AND l.log_type = 'claude'
+           LEFT JOIN session_stats st ON st.session_id = s.id
+          WHERE s.session_id = $1`,
+        [sessionId],
+      );
+      expect(rows, sessionId).toHaveLength(1);
+      const r = rows[0];
+      return { input: Number(r.input_tokens), output: Number(r.output_tokens), sha: r.body_sha256, receivedAt: r.body_received_at, parent: r.parent_session_id };
+    };
+
+    // The hook uploads the 1-turn root first: its claude log carries a body hash.
+    await uploadPromptSession(api, ownerKey.key, root(1), queue);
+    expect((await extracted(root(1).sessionId)).sha).toMatch(/^[0-9a-f]{64}$/);
+
+    // Import: the 3-turn root and a 1-turn sub-agent, then a longer archive with a 2-turn sub-agent.
+    expect(await importZip(owner.api, repoA, archive(3, 1))).toMatchObject({ status: 'done', processed: 2, total: 2 });
+    expect(await extracted(root(1).sessionId)).toMatchObject({ input: 30, output: 15, sha: null, parent: null });
+    expect(await extracted(agent(1).sessionId)).toMatchObject({ input: 10, output: 5, sha: null, parent: root(1).sessionId });
+    await importZip(owner.api, repoA, archive(3, 2));
+    const agentAfter = await extracted(agent(1).sessionId);
+    expect(agentAfter, 'the longer sub-agent body was re-extracted').toMatchObject({ input: 20, output: 10, sha: null });
+    expect(agentAfter.receivedAt, 'import stamps body_received_at').not.toBeNull();
+
+    // The same 3-turn body from the hook: the stored hash is NULL, so it is processed (not skipped) and hashed.
+    await uploadPromptSession(api, ownerKey.key, root(3), queue);
+    const rootAfter = await extracted(root(1).sessionId);
+    expect(rootAfter.sha).toMatch(/^[0-9a-f]{64}$/);
+    expect(rootAfter).toMatchObject({ input: 30, output: 15 });
   });
 
   await test.step('20. a broken staging dir logs one cleanup-sweep ERROR, not one per sweep; recovery logs one INFO and export works again', async () => {

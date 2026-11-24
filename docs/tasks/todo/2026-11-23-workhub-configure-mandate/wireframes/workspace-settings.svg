@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="760" viewBox="0 0 1280 760" font-family="Segoe UI, Inter, Arial, sans-serif">
+  <title>Workspace Settings — default agent model (FR-10) and vault secrets (FR-3)</title>
+  <rect width="1280" height="760" fill="#ffffff"/>
+  <line x1="0" y1="48" x2="1280" y2="48" stroke="#e5e7eb"/>
+  <text x="16" y="29" font-size="14" font-weight="600" fill="#111827">Artisyn AI Work Hub</text>
+  <text x="160" y="29" font-size="14" fill="#9ca3af">›</text>
+  <text x="176" y="29" font-size="14" fill="#6b7280">research › Settings</text>
+  <rect x="1126" y="10" width="138" height="28" rx="6" fill="#fff" stroke="#e5e7eb"/>
+  <text x="1136" y="29" font-size="13" fill="#6b7280">dt@dataart.com ⌄</text>
+
+  <text x="336" y="94" font-size="16" fill="#111827">←</text>
+  <text x="368" y="95" font-size="18" font-weight="600" fill="#111827">Settings</text>
+
+  <text x="328" y="147" font-size="14" font-weight="600" fill="#111827">Name</text>
+  <rect x="504" y="124" width="448" height="36" rx="6" fill="#f5f5f5" stroke="#e5e7eb"/>
+  <text x="517" y="148" font-size="14" fill="#111827">research</text>
+
+  <text x="328" y="203" font-size="14" font-weight="600" fill="#111827">Working branch</text>
+  <rect x="504" y="180" width="448" height="36" rx="6" fill="#fff" stroke="#e5e7eb"/>
+  <text x="517" y="203" font-size="14" fill="#111827">main</text>
+  <text x="926" y="203" font-size="14" fill="#6b7280">⌄</text>
+
+  <text x="328" y="251" font-size="14" font-weight="600" fill="#111827">Repository</text>
+  <text x="504" y="251" font-size="14" fill="#6b7280">none — started empty</text>
+  <text x="328" y="291" font-size="14" font-weight="600" fill="#111827">Container</text>
+  <text x="504" y="291" font-size="14" fill="#6b7280">Work Hub default</text>
+
+  <!-- NEW row: default model (FR-10) -->
+  <rect x="318" y="306" width="644" height="74" rx="6" fill="none" stroke="#f59e0b" stroke-dasharray="5 3"/>
+  <text x="328" y="337" font-size="14" font-weight="600" fill="#111827">Default model</text>
+  <rect x="504" y="314" width="448" height="36" rx="6" fill="#fff" stroke="#e5e7eb"/>
+  <text x="517" y="337" font-size="14" fill="#111827">Opus</text>
+  <text x="926" y="337" font-size="14" fill="#6b7280">⌄</text>
+  <text x="504" y="370" font-size="12" fill="#6b7280">New chats use it. Set by you or by the Configure agent. "Agent default" = no override.</text>
+
+  <text x="328" y="417" font-size="14" font-weight="600" fill="#111827">Claude login</text>
+  <text x="504" y="417" font-size="14" fill="#6b7280">Logged in</text>
+  <rect x="578" y="398" width="139" height="30" rx="6" fill="#fff" stroke="#d1d5db"/>
+  <text x="591" y="418" font-size="14" font-weight="600" fill="#111827">Log out of Claude</text>
+
+  <!-- NEW section: vault secrets (FR-3) -->
+  <rect x="318" y="444" width="644" height="226" rx="6" fill="none" stroke="#f59e0b" stroke-dasharray="5 3"/>
+  <text x="328" y="472" font-size="14" font-weight="600" fill="#111827">Vault secrets</text>
+  <text x="504" y="472" font-size="12" fill="#6b7280">Sessions get each one as an env var. Values are never shown.</text>
+  <rect x="504" y="484" width="448" height="30" fill="#f9fafb" stroke="#e5e7eb"/>
+  <g font-size="12" font-weight="600" fill="#6b7280">
+    <text x="516" y="504">Env var</text>
+    <text x="680" y="504">Added</text>
+    <text x="800" y="504">Updated</text>
+  </g>
+  <g font-size="13">
+    <rect x="504" y="514" width="448" height="34" fill="#fff" stroke="#e5e7eb"/>
+    <text x="516" y="536" font-family="Consolas, monospace" fill="#111827">GH_TOKEN</text>
+    <text x="680" y="536" fill="#6b7280">11/23/2026</text>
+    <text x="800" y="536" fill="#6b7280">11/23/2026</text>
+    <text x="920" y="536" fill="#dc2626">🗑</text>
+    <rect x="504" y="548" width="448" height="34" fill="#fff" stroke="#e5e7eb"/>
+    <text x="516" y="570" font-family="Consolas, monospace" fill="#111827">NPM_TOKEN</text>
+    <text x="680" y="570" fill="#6b7280">11/20/2026</text>
+    <text x="800" y="570" fill="#6b7280">11/22/2026</text>
+    <text x="920" y="570" fill="#dc2626">🗑</text>
+    <rect x="504" y="582" width="448" height="34" fill="#fff" stroke="#e5e7eb"/>
+    <text x="516" y="604" font-family="Consolas, monospace" fill="#111827">OPENAI_API_KEY</text>
+    <text x="680" y="604" fill="#6b7280">11/20/2026</text>
+    <text x="800" y="604" fill="#6b7280">11/20/2026</text>
+    <text x="920" y="604" fill="#dc2626">🗑</text>
+  </g>
+  <text x="504" y="640" font-size="12" fill="#6b7280">To add or change a secret, ask the Configure agent ("add my token … as secret NAME").</text>
+  <text x="504" y="658" font-size="12" fill="#6b7280">Deleting one removes it from sessions started afterwards.</text>
+
+  <rect x="891" y="694" width="61" height="36" rx="6" fill="#3b4fd8"/>
+  <text x="907" y="717" font-size="14" font-weight="600" fill="#ffffff">Save</text>
+
+  <!-- notes -->
+  <g font-size="12" fill="#b45309">
+    <text x="980" y="337">FR-10: new row (dashed);</text>
+    <text x="980" y="353">existing workspaces show</text>
+    <text x="980" y="369">"Agent default".</text>
+    <rect x="976" y="444" width="288" height="148" rx="6" fill="#fffbeb" stroke="#f59e0b"/>
+    <text x="990" y="466" font-weight="600">FR-3: vault secrets (new, dashed)</text>
+    <text x="990" y="486">GET …/workspaces/{id}/secrets lists env</text>
+    <text x="990" y="502">name + dates, never the value.</text>
+    <text x="990" y="522">🗑 = DELETE …/secrets/{name}, after a</text>
+    <text x="990" y="538">confirm; applies immediately (not on Save).</text>
+    <text x="990" y="558">Empty vault: "No secrets yet" + the hint.</text>
+    <text x="990" y="578">No add form here: the vault CLI adds them.</text>
+  </g>
+</svg>

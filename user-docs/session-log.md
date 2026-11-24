@@ -229,9 +229,8 @@ watch it unfold over time, live or as a replay.
 
 | Badge | Meaning |
 |---|---|
-| LIVE · following now | The session is running. The map checks for new activity every 10 seconds and shows the current moment. |
+| LIVE · following now | The session is running. The map checks for new activity every 10 seconds (not while the browser tab is hidden) and shows the current moment. |
 | LIVE · paused at HH:MM | The session is running, but you moved back in time. Click **Live** to follow it again. |
-| LIVE · updates paused | The page is hidden or you have been idle; checking resumes when you come back. |
 | Replay · finished session | The session has ended. Use **Play** or the timeline to move through it. |
 
 A session counts as running only when its **OTEL data** is arriving (realtime OTEL or a recent

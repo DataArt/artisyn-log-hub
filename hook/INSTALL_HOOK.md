@@ -270,6 +270,7 @@ The installer extracts this tree, generated at build time from `hook/.claude/tel
         │   ├── lifecycle-hook.js
         │   ├── send-logs-hook.js
         │   ├── upload-logs.js
+        │   ├── upload-skip.js
         │   ├── upload-queue.js
         │   ├── node-version-check.js
         │   ├── prompt-upload-hook.js
@@ -347,7 +348,7 @@ As shipped in the tarball; the installer replaces `"name"` with this repo's `art
 {
   "name": "log-hub-hooks",
   "displayName": "Log Hub Hooks",
-  "version": "3.1.0",
+  "version": "3.2.0",
   "description": "Records Claude Code session telemetry and uploads it to artisyn-log-hub.",
   "author": { "name": "Artisyn" }
 }
@@ -423,7 +424,7 @@ guardrail was removed in `2.19.0`): `telemetry-hook.js` on `UserPromptSubmit`, `
 `throttle-state.js`, `claude-invoke-async.js`, `skill-catalog.js`, `harness-snapshot.js`, `harness-git-status.js`, `post-turn-analysis-worker.js`, `advisor-evidence.js`,
 `session-attribution-state.js`, `process-marker.js`, `harness-state.js`, `okf-snapshot.js`, `okf-state.js`, `ndjson-sanitize.js`, `code-inventory.js`,
 `edit-result-counts.js`, `claude-config-dir.js`, `project-root-override.js`, `tool-wrap-names.js`, `tool-wrap-config.js`,
-`tool-wrap-shims.js`, `tool-wrap-tee.js`, `tool-wrap-records.js`, `upload-queue.js` and `node-version-check.js` are **not** wired to any event — they are detached child processes / shared modules
+`tool-wrap-shims.js`, `tool-wrap-tee.js`, `tool-wrap-records.js`, `upload-skip.js`, `upload-queue.js` and `node-version-check.js` are **not** wired to any event — they are detached child processes / shared modules
 launched by the hooks above, so they never appear in `hooks.json`. The one exception is `otel-ensure-receiver.js`:
 after a `proxy` choice (see [An existing OTEL collector](#an-existing-otel-collector)) the installer wires its
 `~/.artisyn/otel/bin/` copy as a **user-level** `SessionStart` hook in `~/.claude/settings.json`, so the receiver
@@ -434,8 +435,8 @@ and always exits 0.
 
 | Event | Behaviour |
 |---|---|
-| `Stop` | The full run — scans every namespace across all sessions, honours `.claude-logs.sent`, injects context events, reports `hook-status`, prunes otel. Since hook `3.0.0`, when the background uploader is up (a fresh `~/.artisyn/upload/heartbeat.json`) the hook only writes a `stop` job to the upload queue and returns in about 0.2 s; the receiver runs the full run in the background. Otherwise it runs in process as before and waits up to 2s for the shared upload lock, since it blocks the interactive turn. |
-| `SessionEnd` | A short, scoped flush of just the ending session's own `artisyn` + `claude` files (plus its `tool-calls` upload when the CLI tool wrapper recorded anything). Since hook `3.0.0` it hands this flush to the background uploader as a `session-end` job when that is up. Otherwise it runs in process and waits at most 800 ms for the lock (20 s before `3.0.0`); on a busy lock it writes a job for the uploader instead of waiting, so the session's files are not stranded. Writes no `.claude-logs.sent` entry. |
+| `Stop` | The full run — scans every namespace across all sessions, honours `.claude-logs.sent` and (hook `3.2.0`+) `.claude-logs.sent.v2` (size, mtime, upload params, `tool-calls` fingerprint), re-sends uploads the server reports as failed (`failedUploads`), injects context events, reports `hook-status`, prunes otel. Since hook `3.0.0`, when the background uploader is up (a fresh `~/.artisyn/upload/heartbeat.json`) the hook only writes a `stop` job to the upload queue and returns in about 0.2 s; the receiver runs the full run in the background. Otherwise it runs in process as before and waits up to 2s for the shared upload lock, since it blocks the interactive turn. |
+| `SessionEnd` | A short, scoped flush of just the ending session's own `artisyn` + `claude` files (plus its `tool-calls` upload when the CLI tool wrapper recorded anything). Since hook `3.0.0` it hands this flush to the background uploader as a `session-end` job when that is up. Otherwise it runs in process and waits at most 800 ms for the lock (20 s before `3.0.0`); on a busy lock it writes a job for the uploader instead of waiting, so the session's files are not stranded. Since hook `3.2.0` it records one manifest entry (both `.claude-logs.sent` files): the ending session's own `claude` transcript, after a successful upload with no dropped line; before `3.2.0` it wrote none. |
 
 `tool-wrap-powershell.js` (hook `2.27.0`+) is the only `PreToolUse` entry, and only for the `PowerShell` tool. It is
 the PowerShell side of the CLI tool wrapper (Tools/MCP tab): the PowerShell tool does not read `$CLAUDE_ENV_FILE`, so
@@ -828,7 +829,8 @@ when no request has arrived for 60 s and some `<session-id>/*.jsonl` chunk is pe
 using the uploader that repo registered (or listed in `repos.json`); it does the same once more right before its idle exit.
 That run reads the project config, exits quietly when `serverUrl`/`apiKey` is missing, takes the shared upload lock
 (waiting at most 2 s — a busy lock means a real upload is already running, and the next minute retries), and
-uploads and deletes only the pending OTEL chunks. It writes no `.claude-logs.sent` entry, prunes nothing and does
+uploads and deletes only the pending OTEL chunks. It writes no `.claude-logs.sent` entry (since hook `3.2.0` it only
+removes the entries of uploads the server reports as failed, so the next `Stop` re-sends them), prunes nothing and does
 not re-arm the receiver; its result is one `otel-sweep done: …` line in `hook.log`. The receiver logs
 `sweep-spawn`, `sweep-skip` or `sweep-error` to `receiver.log`.
 

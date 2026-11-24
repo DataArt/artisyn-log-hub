@@ -5,7 +5,7 @@ description: "Core ER diagram and the cross-table rules the DDL cannot show: ses
 tags:
   - database
   - schema
-generated: { by: "ai:claude", at: "2026-11-21T22:36:45+04:00" }
+generated: { by: "ai:claude", at: "2026-11-23T18:50:00+04:00" }
 ---
 
 # Database Structure — current state
@@ -105,9 +105,23 @@ the OTEL facts (state row first, so a running writer finishes), `session_stats`,
 `session_okf_access`, `session_okf_event`, `session_okf_pointer`, `session_tool_usage`, `logs` (cascading `log_repositories` /
 `log_contexts`), orphan `contexts`, queued `upload_queue` rows, then clears the snapshot ids (and
 resets the OKF marker) and sweeps orphan `harness_snapshots` / `okf_snapshots`. The `sessions` row stays, so a re-upload of
-a deleted session is rejected. Child tables not in that list (`session_tool_stats`,
-`session_harness_usage`, `session_changed_paths`, `session_cause_stats`, `session_request_ids`,
-`logs_otel`, `otel_api_calls`, the attribution tables) stay until the hard delete cascades them.
+a deleted session is rejected. Since 2026-11-23-session-logs-streaming (DD-28) the purge also
+deletes the former **survivors** — `logs_otel`, `otel_api_calls`, `session_request_ids`,
+`session_tool_stats`, `session_harness_usage`, `session_changed_paths`, `session_cause_stats`,
+`session_attribution`, `session_attribution_runs`, `session_prompt_watermark`, and
+`turn_end_advisor_runs` by the `session_id` string (no FK, so it never cascades). Only
+`upload_queue_measurements` is kept. `SessionsService.markSessionTreeDeleted(tx, rootPk,
+deletedByUserId)` marks the root and its live descendants deleted and writes their
+`deleted_session_log` rows; `deleteSession` (under the tree's ingest lock) and the cleanup below
+both call it, then `purgeSessionChildData`.
+
+`DeletedSessionCleanupService` (`sessions/deleted-session-cleanup.service.ts`, governed by
+`RebuildGovernor`, first pass on start, then every `DELETED_SESSION_CLEANUP_INTERVAL_MS`, default
+60 000; `DELETED_SESSION_CLEANUP_BATCH` = 200 sessions per step) converges older data: (1) a live
+sub-agent whose parent is a tombstone is deleted the same way (`deleted_by_user_id` NULL);
+(2) a `deleted` session that still owns survivor rows (deleted before DD-28) is purged.
+`descendantSessionsCte` / `getDescendantSessionIds` walk live descendants only (`deleted =
+false`); the hard-delete paths (retention, admin repository removal) pass `includeDeleted`.
 
 **Hard delete** (retention, admin family delete, account deletion): the same purge, then
 `DELETE FROM sessions`, which cascades every remaining child. `logs.session_id` has **no**
@@ -122,6 +136,23 @@ tree cost captured while the data still exists). The unique `session_pk` doubles
 `hardPurgeExpiredSessions()` inserts with `ON CONFLICT DO NOTHING`, so overlapping retention
 runs on several instances cannot purge one session twice. `deleted_by_user_id IS NULL` = the
 retention purge.
+
+Since migration 0096 the table is also the **tombstone** list: an upload, OTEL chunk or advisor
+run for a session whose id (or an ancestor's) has a row here, or a `sessions.deleted = true` row,
+is accepted and dropped (`SessionTombstoneService`). `repository_url` is the root's
+`repositories.repo_url` (lowest `repo_id` linked to its `artisyn` log; a sub-agent root falls
+back to its top ancestor's, then to its parent's tombstone row), copied to descendant rows.
+`owner_user_id` is the tree owner, written by both `deleteSession` and the retention purge
+(read from `logs` before the purge).
+
+**Fresh start** (DD-29, `clearSessionTombstones` in `sessions/session-tombstone.service.ts`):
+account deletion clears by `owner_user_id`, and admin `removeRepo` / team
+`removeTeamRepository` by `repository_url` — it hard-deletes the `deleted` `sessions` rows of
+those tombstones, then the tombstone rows, so a later upload of the same ids starts fresh. Rows
+written before 0096 have no `repository_url` and are not cleared by a repository deletion
+(accepted limitation). Indexes:
+`idx_deleted_session_log_session_id`, `idx_deleted_session_log_owner`,
+`idx_deleted_session_log_repo_url`.
 
 ### Other cascade rules
 
@@ -181,6 +212,37 @@ guarantee, which actually comes from the transcript views' `log_type` allow-list
 
 `contexts` / `log_contexts` hold the distinct `context` key/value pairs of newly inserted
 `artisyn` logs; orphans are removed on session purge.
+
+**Body revision, ingest hash and gzip copy (migration 0096).**
+
+- `body_rev` is a per-body revision from the sequence `logs_body_rev_seq`. It has gaps, so it is
+  compared only for equality or order. Rows written before 0096 keep `NULL` until the gzip
+  builder (`LogBodyGzService`) assigns one; a part's revision is then `body_rev`, or
+  `'u' + updated_at` micros while it is still `NULL`.
+- **Trigger `logs_body_guard`** (`BEFORE INSERT OR UPDATE OF body … FOR EACH ROW`, function
+  `logs_body_guard()`) — the repo's only plpgsql trigger, and `db_state.sql` does not dump
+  triggers or functions, so it is documented here:
+  - every body write sets `body_rev := nextval('logs_body_rev_seq')`;
+  - an `UPDATE` that changes neither `body_sha256` nor `body_received_at` clears `body_sha256`.
+    A writer that does not know the hash (zip import, an older server build) therefore never
+    leaves a stale one, while the ingest upsert re-writing the same hash with a new
+    `body_received_at` keeps it.
+  - It fires on the `DO UPDATE` arm of `INSERT … ON CONFLICT` when `body` is in the `SET` list;
+    an update that touches only `body_gz` / `body_gz_rev` / `body_rev` does not fire it.
+- `body_sha256` + `ingest_version` (`INGEST_VERSION`) let the server skip an identical re-upload
+  of `claude`, `claude-subagent` and `tool-calls` ([upload-queue.md](upload-queue.md)).
+- `body_received_at` is the `upload_queue.received_at` of the upload that wrote the body
+  (`now()` for zip import): the upsert's `DO UPDATE` lets an older upload never overwrite a newer
+  one. `NULL` (legacy) is always overwritable.
+- `body_gz` is the gzip (level 6) of `body::text`, with `STORAGE EXTERNAL` (already compressed,
+  so Postgres does not try to compress it again). It is valid only when `body_rev IS NOT NULL AND
+  body_gz_rev = body_rev`, and is kept only for `artisyn`, `claude` and `claude-subagent`. The
+  partial index `idx_logs_body_gz_pending` is the gzip builder's queue (missing or stale copy).
+- `edit_records_sha256` (`artisyn` rows) is the hash of the extracted edit-result records;
+  `stats_edit_sha256` (`claude` / `claude-subagent` rows) is the tree's value the stats were
+  extracted with (`''` = no edit records). A change of the `artisyn` value queues the tree root
+  in `session_reextract_queue`.
+- Never `SELECT` whole `logs` rows: besides `body`, a row now carries `body_gz`.
 
 ## Telemetry (OTEL)
 
@@ -283,6 +345,18 @@ at its default — row presence is **not** a "has transcript" signal.
   `list_flags_version`) are written for root transcripts only and back-filled at startup by
   `backfillSessionListFlags()` ([algorithms/session-list-flags.md](algorithms/session-list-flags.md)).
 - `work_time_ms` comes from the transcript (`computeWorkTime()`), not from hook events.
+- `workflows` / `workflows_version` (migration 0096) hold the workflow runs of the session's own
+  `claude` transcript, written at ingest so session readers never parse the body;
+  `workflows_version IS NULL` = not computed yet, and the partial index
+  `idx_session_stats_workflows_pending` is the backfill's queue (`WorkflowsBackfillService`).
+
+### session_reextract_queue
+
+One row per session tree root (`session_pk`, cascades with the session) whose `claude` /
+`claude-subagent` stats must be re-extracted because the tree's `artisyn` edit records changed.
+Written (upsert, `requested_at = now()`) by `LogsService` on `artisyn` ingest and drained by
+`SessionReextractService`. A row older than `DERIVED_LAG_MS` sets the parts manifest's
+`derivedLagging` flag.
 
 ### Cost tables
 
@@ -525,6 +599,10 @@ running version. See [system-info-and-cluster.md](system-info-and-cluster.md) (`
   sanitised sub-agent meta per plain upload or chunk (only for `claude-subagent`; `NULL`
   otherwise); the scheduler passes them to `LogsService.upsert`, which copies non-null values
   onto `sessions`.
+- **Integrity and feedback (migration 0096):** `content_sha256` is the hash the hook declared
+  (`contentSha256`, single upload or chunk 0); a mismatch with the staged body fails the row with
+  `content-hash-mismatch`. `failure_delivered` flips to `true` once a `failed` row with
+  `error_kind = 'server'` has been returned to the hook in `failedUploads`.
 
 See [upload-queue.md](upload-queue.md).
 
@@ -532,7 +610,11 @@ See [upload-queue.md](upload-queue.md).
 
 Append-only, one row per processing attempt, pruned after 7 days: a successful queue row is
 deleted and each cluster worker has its own scheduler, so only this table can report throughput.
-`finished_at` is deliberately its only index.
+`finished_at` is deliberately its only index. `outcome` is `success | failure | skipped |
+superseded`: `skipped` = the server hash skip found an identical body, `superseded` = a newer
+pending upload of the same `(user, session, log_type)` replaced the row (one measurement per
+dropped row). The admin stats filter on `success` / `failure`, so the two new outcomes do not
+change throughput or failure figures.
 
 ### export_import_jobs
 

@@ -77,8 +77,9 @@ export function PromptTurnItem({
         subagentLogsMap,
         agentParentMap,
         pricing,
+        subagentStats,
       ),
-    [turn, subagentLogsMap, agentParentMap, pricing],
+    [turn, subagentLogsMap, agentParentMap, pricing, subagentStats],
   );
 
   // Rough workflow agent cost: sum of tokens across all workflow runs × main session rate.
