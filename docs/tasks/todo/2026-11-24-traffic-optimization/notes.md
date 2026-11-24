@@ -53,3 +53,11 @@ Measured on the Pi, session `9fc6b5cc` (2026-11-24): `GET /api/v1/repositories/7
 → 200 in ~10.5 s, no `Content-Encoding`, 9.2 MB decoded: `spans` 8.6 MB (6264 spans), `calls`
 0.6 MB, the rest small. The server has no response compression for JSON (no `compression`
 middleware; only the log parts and precompressed static assets are served gzip).
+
+## 2026-11-24 — planning PoC (Part B)
+
+PoC [`docs/pocs/2026-11-24-1549-api-response-compression/`](../../../pocs/2026-11-24-1549-api-response-compression/README.md):
+the `compression` 1.8.2 middleware answers `br` to a browser (`gzip, deflate, br`) with no option to
+turn brotli off; a small middleware wrapping `res.json` with async `zlib.gzip` answers `gzip`, keeps
+`Vary`, honours `q=0` and the threshold, and leaves streamed and pre-gzipped answers alone by
+construction. The plan uses the `res.json` wrapper.

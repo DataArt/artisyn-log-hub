@@ -1,0 +1,8 @@
+{
+  "name": "poc-otel-events-capture",
+  "private": true,
+  "description": "PoC: capture the OTEL output of real Claude Code sessions to inventory events and attributes",
+  "dependencies": {
+    "@anthropic-ai/claude-code": "2.1.331"
+  }
+}
